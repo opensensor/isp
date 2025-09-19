@@ -69,20 +69,20 @@ static void __fill_v4l2_buffer(void *vb, struct v4l2_buffer *buf)
 // CRITICAL FIX: Safe implementation using proper struct member access instead of offset arithmetic
 int tx_isp_send_event_to_remote(struct v4l2_subdev *sd, unsigned int event, void *data)
 {
-    pr_info("*** tx_isp_send_event_to_remote: SAFE implementation - subdev=%p, event=0x%x ***\n", sd, event);
+    pr_debug("*** tx_isp_send_event_to_remote: SAFE implementation - subdev=%p, event=0x%x ***\n", sd, event);
 
     if (sd != NULL) {
         // SAFE: Use proper struct member access instead of unsafe offset arithmetic
         if (sd->ops != NULL) {
-            pr_info("*** EVENT: subdev ops found at %p ***\n", sd->ops);
+            pr_debug("*** EVENT: subdev ops found at %p ***\n", sd->ops);
             
             // SAFE: Check for core ops and event handler
             if (sd->ops->core != NULL && sd->ops->core->ioctl != NULL) {
-                pr_info("*** EVENT: core ioctl handler found at %p ***\n", sd->ops->core->ioctl);
+                pr_debug("*** EVENT: core ioctl handler found at %p ***\n", sd->ops->core->ioctl);
                 
                 // SAFE: Call the ioctl handler with proper parameters
                 int ret = sd->ops->core->ioctl(sd, event, data);
-                pr_info("*** EVENT: Core ioctl returned %d (0x%x) for event 0x%x ***\n", ret, ret, event);
+                pr_debug("*** EVENT: Core ioctl returned %d (0x%x) for event 0x%x ***\n", ret, ret, event);
                 
                 if (ret != -ENOIOCTLCMD) {
                     return ret;
@@ -91,10 +91,10 @@ int tx_isp_send_event_to_remote(struct v4l2_subdev *sd, unsigned int event, void
             
             // SAFE: Try video ops if available
             if (sd->ops->video != NULL && sd->ops->video->s_stream != NULL) {
-                pr_info("*** EVENT: video ops available ***\n");
+                pr_debug("*** EVENT: video ops available ***\n");
                 // For streaming events, call s_stream
                 if (event == 0x3000008 || event == 0x3000006) {
-                    pr_info("*** EVENT: Handling streaming event via s_stream ***\n");
+                    pr_debug("*** EVENT: Handling streaming event via s_stream ***\n");
                     int ret = sd->ops->video->s_stream(sd, 1);
                     return ret;
                 }
@@ -102,7 +102,7 @@ int tx_isp_send_event_to_remote(struct v4l2_subdev *sd, unsigned int event, void
         }
         
         // SAFE: If no ops available, try internal event handling
-        pr_info("*** EVENT: Using internal safe event handling ***\n");
+        pr_debug("*** EVENT: Using internal safe event handling ***\n");
         return 0; // Success - event handled safely
     }
     
@@ -124,7 +124,7 @@ static const struct file_operations fs_channel_ops = {
 int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
     int ret;
 
-    pr_info("Setting up default links\n");
+    pr_debug("Setting up default links\n");
 
     // Link sensor output -> CSI input
     if (dev->sensor_sd && dev->csi_dev) {
@@ -134,7 +134,7 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
             return -EINVAL;
         }
 
-        pr_info("Setting up sensor -> CSI link\n");
+        pr_debug("Setting up sensor -> CSI link\n");
         ret = dev->sensor_sd->ops->video->link_setup(
             &dev->sensor_sd->outpads[0],
             &dev->csi_dev->sd.inpads[0],
@@ -154,7 +154,7 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
             return -EINVAL;
         }
 
-        pr_info("Setting up CSI -> VIC link\n");
+        pr_debug("Setting up CSI -> VIC link\n");
         ret = dev->csi_dev->sd.ops->video->link_setup(
             &dev->csi_dev->sd.outpads[0],
             &dev->vic_dev->sd.inpads[0],
@@ -174,7 +174,7 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
             return -EINVAL;
         }
 
-        pr_info("Setting up VIC -> DDR link\n");
+        pr_debug("Setting up VIC -> DDR link\n");
         ret = dev->vic_dev->sd.ops->video->link_setup(
             &dev->vic_dev->sd.outpads[0],
             &dev->ddr_dev->sd->inpads[0],
@@ -187,7 +187,7 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
 
         // Link second VIC output if present
         if (dev->vic_dev->sd.num_outpads > 1) {
-            pr_info("Setting up second VIC -> DDR link\n");
+            pr_debug("Setting up second VIC -> DDR link\n");
             ret = dev->vic_dev->sd.ops->video->link_setup(
                 &dev->vic_dev->sd.outpads[1],
                 &dev->ddr_dev->sd->inpads[0],
@@ -200,7 +200,7 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
         }
     }
 
-    pr_info("All default links set up successfully\n");
+    pr_debug("All default links set up successfully\n");
     return 0;
 }
 
@@ -225,7 +225,7 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
 {
     struct tx_isp_dev *dev = ourISPdev;
     
-    pr_info("Starting subdev init for %s\n", pdev ? pdev->name : "unknown");
+    pr_debug("Starting subdev init for %s\n", pdev ? pdev->name : "unknown");
 
     /* CRITICAL FIX: Early validation to prevent unaligned access */
     if (!pdev || !sd) {
@@ -239,7 +239,7 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     }
 
     /* SAFE: Use proper struct member access instead of unsafe offset arithmetic */
-    pr_info("Initializing subdev structure\n");
+    pr_debug("Initializing subdev structure\n");
     
     /* SAFE: Store ops pointer using proper struct member access */
     sd->ops = ops;
@@ -248,12 +248,12 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     sd->isp = (void*)dev;
     
     /* SAFE: Simple initialization without unsafe hardware calls */
-    pr_info("Basic subdev initialization complete\n");
+    pr_debug("Basic subdev initialization complete\n");
 
     /* SAFE: Set platform data using standard kernel API */
     platform_set_drvdata(pdev, dev);
     
-    pr_info("*** SAFE: Subdev %s initialized successfully - no unaligned access risk ***\n", pdev->name);
+    pr_debug("*** SAFE: Subdev %s initialized successfully - no unaligned access risk ***\n", pdev->name);
     return 0;
 }
 EXPORT_SYMBOL(tx_isp_subdev_init);
@@ -313,7 +313,7 @@ int __init tx_isp_subdev_platform_init(void)
 {
     int ret;
     
-    pr_info("*** TX ISP SUBDEV PLATFORM DRIVERS REGISTRATION ***\n");
+    pr_debug("*** TX ISP SUBDEV PLATFORM DRIVERS REGISTRATION ***\n");
     
     /* Register CSI platform driver */
     ret = platform_driver_register(&tx_isp_csi_driver);
@@ -343,7 +343,7 @@ int __init tx_isp_subdev_platform_init(void)
         goto err_unregister_core;
     }
     
-    pr_info("All ISP subdev platform drivers registered successfully\n");
+    pr_debug("All ISP subdev platform drivers registered successfully\n");
     return 0;
     
 err_unregister_core:
@@ -357,7 +357,7 @@ err_unregister_csi:
 
 void __exit tx_isp_subdev_platform_exit(void)
 {
-    pr_info("*** TX ISP SUBDEV PLATFORM DRIVERS UNREGISTRATION ***\n");
+    pr_debug("*** TX ISP SUBDEV PLATFORM DRIVERS UNREGISTRATION ***\n");
     
     /* Unregister all platform drivers in reverse order */
     platform_driver_unregister(&tx_isp_vic_driver);
@@ -365,7 +365,7 @@ void __exit tx_isp_subdev_platform_exit(void)
     platform_driver_unregister(&tx_isp_vin_driver);
     platform_driver_unregister(&tx_isp_csi_driver);
     
-    pr_info("All ISP subdev platform drivers unregistered\n");
+    pr_debug("All ISP subdev platform drivers unregistered\n");
 }
 
 /* Export symbols for main module to call these functions */

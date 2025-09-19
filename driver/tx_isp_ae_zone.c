@@ -27,7 +27,7 @@ static struct {
 /* MCP Logging Helper */
 static void mcp_log_info(const char *method_name, const char *description, void *data)
 {
-    pr_info("MCP_LOG: %s: %s, data=%p\n", method_name, description, data);
+    pr_debug("MCP_LOG: %s: %s, data=%p\n", method_name, description, data);
 }
 
 /* tisp_ae_get_y_zone - Binary Ninja EXACT Implementation */

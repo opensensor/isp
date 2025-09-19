@@ -83,18 +83,18 @@ static ssize_t tx_isp_proc_w01_write(struct file *file, const char __user *buffe
         
     cmd[count] = '\0';
     
-    pr_info("ISP W01 proc command: %s\n", cmd);
+    pr_debug("ISP W01 proc command: %s\n", cmd);
     
     /* Handle common ISP commands that userspace might send */
     if (strncmp(cmd, "snapraw", 7) == 0) {
-        pr_info("ISP W01 snapraw command received\n");
+        pr_debug("ISP W01 snapraw command received\n");
         /* Handle raw snapshot command */
     } else if (strncmp(cmd, "enable", 6) == 0) {
-        pr_info("ISP W01 enable command received\n");
+        pr_debug("ISP W01 enable command received\n");
         if (isp)
             isp->streaming_enabled = true;
     } else if (strncmp(cmd, "disable", 7) == 0) {
-        pr_info("ISP W01 disable command received\n");
+        pr_debug("ISP W01 disable command received\n");
         if (isp)
             isp->streaming_enabled = false;
     }
@@ -157,18 +157,18 @@ static ssize_t tx_isp_proc_w02_write(struct file *file, const char __user *buffe
         
     cmd[count] = '\0';
     
-    pr_info("ISP W02 proc command: %s\n", cmd);
+    pr_debug("ISP W02 proc command: %s\n", cmd);
     
     /* Handle common ISP commands that userspace might send */
     if (strncmp(cmd, "snapraw", 7) == 0) {
-        pr_info("ISP W02 snapraw command received\n");
+        pr_debug("ISP W02 snapraw command received\n");
         /* Handle raw snapshot command */
     } else if (strncmp(cmd, "enable", 6) == 0) {
-        pr_info("ISP W02 enable command received\n");
+        pr_debug("ISP W02 enable command received\n");
         if (isp)
             isp->streaming_enabled = true;
     } else if (strncmp(cmd, "disable", 7) == 0) {
-        pr_info("ISP W02 disable command received\n");
+        pr_debug("ISP W02 disable command received\n");
         if (isp)
             isp->streaming_enabled = false;
     }
@@ -221,15 +221,15 @@ static ssize_t tx_isp_proc_fs_write(struct file *file, const char __user *buffer
         
     cmd[count] = '\0';
     
-    pr_info("ISP FS proc command: %s\n", cmd);
+    pr_debug("ISP FS proc command: %s\n", cmd);
     
     /* Handle FS-specific commands */
     if (strncmp(cmd, "enable", 6) == 0) {
-        pr_info("ISP FS enable command received\n");
+        pr_debug("ISP FS enable command received\n");
         if (isp)
             isp->streaming_enabled = true;
     } else if (strncmp(cmd, "disable", 7) == 0) {
-        pr_info("ISP FS disable command received\n");
+        pr_debug("ISP FS disable command received\n");
         if (isp)
             isp->streaming_enabled = false;
     }
@@ -282,15 +282,15 @@ static ssize_t tx_isp_proc_m0_write(struct file *file, const char __user *buffer
         
     cmd[count] = '\0';
     
-    pr_info("ISP M0 proc command: %s\n", cmd);
+    pr_debug("ISP M0 proc command: %s\n", cmd);
     
     /* Handle M0-specific commands */
     if (strncmp(cmd, "enable", 6) == 0) {
-        pr_info("ISP M0 enable command received\n");
+        pr_debug("ISP M0 enable command received\n");
         if (isp)
             isp->streaming_enabled = true;
     } else if (strncmp(cmd, "disable", 7) == 0) {
-        pr_info("ISP M0 disable command received\n");
+        pr_debug("ISP M0 disable command received\n");
         if (isp)
             isp->streaming_enabled = false;
     }
@@ -367,7 +367,7 @@ static struct proc_dir_entry *get_or_create_proc_dir(const char *name, struct pr
     if (dir) {
         /* Success - assume we created it for cleanup purposes */
         *created = true;
-        pr_info("Created or accessed proc directory: %s\n", name);
+        pr_debug("Created or accessed proc directory: %s\n", name);
         return dir;
     }
     
@@ -404,7 +404,7 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
 {
     struct proc_context *ctx;
 
-    pr_info("*** tx_isp_create_proc_entries: Creating proc entries to match reference driver ***\n");
+    pr_debug("*** tx_isp_create_proc_entries: Creating proc entries to match reference driver ***\n");
 
     ctx = kzalloc(sizeof(struct proc_context), GFP_KERNEL);
     if (!ctx) {
@@ -429,7 +429,7 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
         pr_err("Failed to create isp-w00 proc entry\n");
         goto error_remove_isp_dir;
     }
-    pr_info("Created proc entry: /proc/jz/isp/isp-w00\n");
+    pr_debug("Created proc entry: /proc/jz/isp/isp-w00\n");
 
     /* Create /proc/jz/isp/isp-w01 */
     ctx->isp_w01_entry = proc_create_data(TX_ISP_PROC_ISP_W01_FILE, 0644, ctx->isp_dir,
@@ -438,7 +438,7 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
         pr_err("Failed to create isp-w01 proc entry\n");
         goto error_remove_w00;
     }
-    pr_info("Created proc entry: /proc/jz/isp/isp-w01\n");
+    pr_debug("Created proc entry: /proc/jz/isp/isp-w01\n");
 
     /* Create /proc/jz/isp/isp-w02 - CRITICAL: This was missing! */
     ctx->isp_w02_entry = proc_create_data(TX_ISP_PROC_VIC_FILE, 0644, ctx->isp_dir,
@@ -447,7 +447,7 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
         pr_err("Failed to create isp-w02 proc entry\n");
         goto error_remove_w01;
     }
-    pr_info("*** CREATED PROC ENTRY: /proc/jz/isp/isp-w02 (CRITICAL FOR VIC FUNCTIONALITY) ***\n");
+    pr_debug("*** CREATED PROC ENTRY: /proc/jz/isp/isp-w02 (CRITICAL FOR VIC FUNCTIONALITY) ***\n");
 
     /* Create /proc/jz/isp/isp-fs - CRITICAL FOR REFERENCE DRIVER COMPATIBILITY */
     ctx->isp_fs_entry = proc_create_data(TX_ISP_PROC_ISP_FS_FILE, 0644, ctx->isp_dir,
@@ -456,7 +456,7 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
         pr_err("Failed to create isp-fs proc entry\n");
         goto error_remove_w02;
     }
-    pr_info("*** CREATED PROC ENTRY: /proc/jz/isp/isp-fs (CRITICAL FOR FS FUNCTIONALITY) ***\n");
+    pr_debug("*** CREATED PROC ENTRY: /proc/jz/isp/isp-fs (CRITICAL FOR FS FUNCTIONALITY) ***\n");
 
     /* Create /proc/jz/isp/isp-m0 - CRITICAL MISSING PIECE */
     ctx->isp_m0_entry = proc_create_data(TX_ISP_PROC_CSI_FILE, 0644, ctx->isp_dir,
@@ -465,7 +465,7 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
         pr_err("Failed to create isp-m0 proc entry\n");
         goto error_remove_fs;
     }
-    pr_info("*** CREATED PROC ENTRY: /proc/jz/isp/isp-m0 (CRITICAL FOR M0 FUNCTIONALITY) ***\n");
+    pr_debug("*** CREATED PROC ENTRY: /proc/jz/isp/isp-m0 (CRITICAL FOR M0 FUNCTIONALITY) ***\n");
 
     /* Create /proc/jz/isp/csi */
     ctx->csi_entry = proc_create_data("csi", 0644, ctx->isp_dir,
@@ -474,7 +474,7 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
         pr_err("Failed to create csi proc entry\n");
         goto error_remove_m0;
     }
-    pr_info("Created proc entry: /proc/jz/isp/csi\n");
+    pr_debug("Created proc entry: /proc/jz/isp/csi\n");
 
     /* Create /proc/jz/isp/vic */
     ctx->vic_entry = proc_create_data("vic", 0644, ctx->isp_dir,
@@ -483,10 +483,10 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
         pr_err("Failed to create vic proc entry\n");
         goto error_remove_csi;
     }
-    pr_info("Created proc entry: /proc/jz/isp/vic\n");
+    pr_debug("Created proc entry: /proc/jz/isp/vic\n");
 
-    pr_info("*** ALL PROC ENTRIES CREATED SUCCESSFULLY - MATCHES REFERENCE DRIVER LAYOUT ***\n");
-    pr_info("*** /proc/jz/isp/ now contains: isp-w00, isp-w01, isp-w02, isp-fs, isp-m0, csi, vic ***\n");
+    pr_debug("*** ALL PROC ENTRIES CREATED SUCCESSFULLY - MATCHES REFERENCE DRIVER LAYOUT ***\n");
+    pr_debug("*** /proc/jz/isp/ now contains: isp-w00, isp-w01, isp-w02, isp-fs, isp-m0, csi, vic ***\n");
 
     return 0;
 
@@ -519,7 +519,7 @@ void tx_isp_remove_proc_entries(void)
         return;
     }
     
-    pr_info("*** tx_isp_remove_proc_entries: Cleaning up proc entries ***\n");
+    pr_debug("*** tx_isp_remove_proc_entries: Cleaning up proc entries ***\n");
     
     if (ctx->vic_entry) {
         proc_remove(ctx->vic_entry);
@@ -549,7 +549,7 @@ void tx_isp_remove_proc_entries(void)
     kfree(ctx);
     tx_isp_proc_ctx = NULL;
     
-    pr_info("All proc entries removed\n");
+    pr_debug("All proc entries removed\n");
 }
 
 /* Export symbols */

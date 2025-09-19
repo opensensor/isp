@@ -67,7 +67,7 @@ static int tx_isp_v4l2_s_fmt_vid_cap(struct file *file, void *priv,
         return -EINVAL;
     }
     
-    pr_info("*** VIDIOC_S_FMT Channel %d: %dx%d pixfmt=0x%x ***\n",
+    pr_debug("*** VIDIOC_S_FMT Channel %d: %dx%d pixfmt=0x%x ***\n",
             dev->channel_num, 
             f->fmt.pix.width, f->fmt.pix.height, f->fmt.pix.pixelformat);
     
@@ -122,7 +122,7 @@ static int tx_isp_v4l2_s_fmt_vid_cap(struct file *file, void *priv,
     dev->format = *f;
     mutex_unlock(&dev->lock);
     
-    pr_info("*** Channel %d: S_FMT SUCCESS - Format configured %dx%d ***\n",
+    pr_debug("*** Channel %d: S_FMT SUCCESS - Format configured %dx%d ***\n",
             dev->channel_num, f->fmt.pix.width, f->fmt.pix.height);
     
     return 0;
@@ -138,7 +138,7 @@ static int tx_isp_v4l2_g_fmt_vid_cap(struct file *file, void *priv,
         return -EINVAL;
     }
     
-    pr_info("Channel %d: VIDIOC_G_FMT\n", dev->channel_num);
+    pr_debug("Channel %d: VIDIOC_G_FMT\n", dev->channel_num);
     
     mutex_lock(&dev->lock);
     *f = dev->format;
@@ -181,7 +181,7 @@ static int tx_isp_v4l2_reqbufs(struct file *file, void *priv,
         return -EINVAL;
     }
 
-    pr_info("*** V4L2 Channel %d: REQBUFS count=%d ***\n",
+    pr_debug("*** V4L2 Channel %d: REQBUFS count=%d ***\n",
             dev->channel_num, rb->count);
 
     /* Create a fake file structure for frame_channel_unlocked_ioctl */
@@ -191,7 +191,7 @@ static int tx_isp_v4l2_reqbufs(struct file *file, void *priv,
     /* Route to frame_channel_unlocked_ioctl with channel context */
     ret = frame_channel_unlocked_ioctl(&fake_file, 0xc0145608, (unsigned long)rb);
 
-    pr_info("*** V4L2 Channel %d: REQBUFS result=%d ***\n",
+    pr_debug("*** V4L2 Channel %d: REQBUFS result=%d ***\n",
             dev->channel_num, ret);
     
     return ret;
@@ -210,7 +210,7 @@ static int tx_isp_v4l2_qbuf(struct file *file, void *priv,
         return -EINVAL;
     }
 
-    pr_info("*** V4L2 Channel %d: QBUF index=%d ***\n",
+    pr_debug("*** V4L2 Channel %d: QBUF index=%d ***\n",
             dev->channel_num, buf->index);
 
     /* Create a fake file structure for frame_channel_unlocked_ioctl */
@@ -220,7 +220,7 @@ static int tx_isp_v4l2_qbuf(struct file *file, void *priv,
     /* Route to frame_channel_unlocked_ioctl QBUF (0xc044560f) */
     ret = frame_channel_unlocked_ioctl(&fake_file, 0xc044560f, (unsigned long)buf);
 
-    pr_info("*** V4L2 Channel %d: QBUF result=%d ***\n",
+    pr_debug("*** V4L2 Channel %d: QBUF result=%d ***\n",
             dev->channel_num, ret);
 
     return ret;
@@ -238,7 +238,7 @@ static int tx_isp_v4l2_dqbuf(struct file *file, void *priv,
         return -EINVAL;
     }
 
-    pr_info("*** V4L2 Channel %d: DQBUF ***\n", dev->channel_num);
+    pr_debug("*** V4L2 Channel %d: DQBUF ***\n", dev->channel_num);
 
     /* Create a fake file structure for frame_channel_unlocked_ioctl */
     memset(&fake_file, 0, sizeof(fake_file));
@@ -247,7 +247,7 @@ static int tx_isp_v4l2_dqbuf(struct file *file, void *priv,
     /* Route to frame_channel_unlocked_ioctl DQBUF (0xc0445611) */
     ret = frame_channel_unlocked_ioctl(&fake_file, 0xc0445611, (unsigned long)buf);
 
-    pr_info("*** V4L2 Channel %d: DQBUF result=%d, index=%d ***\n",
+    pr_debug("*** V4L2 Channel %d: DQBUF result=%d, index=%d ***\n",
             dev->channel_num, ret, (ret == 0) ? buf->index : -1);
 
     return ret;
@@ -265,7 +265,7 @@ static int tx_isp_v4l2_streamon(struct file *file, void *priv,
         return -EINVAL;
     }
 
-    pr_info("*** V4L2 Channel %d: STREAMON type=%d ***\n",
+    pr_debug("*** V4L2 Channel %d: STREAMON type=%d ***\n",
             dev->channel_num, type);
 
     /* Create a fake file structure for frame_channel_unlocked_ioctl */
@@ -275,7 +275,7 @@ static int tx_isp_v4l2_streamon(struct file *file, void *priv,
     /* Route to frame_channel_unlocked_ioctl STREAMON (0x80045612) */
     ret = frame_channel_unlocked_ioctl(&fake_file, 0x80045612, (unsigned long)&type);
 
-    pr_info("*** V4L2 Channel %d: STREAMON result=%d ***\n",
+    pr_debug("*** V4L2 Channel %d: STREAMON result=%d ***\n",
             dev->channel_num, ret);
 
     /* Update V4L2 state based on frame channel result */
@@ -301,7 +301,7 @@ static int tx_isp_v4l2_streamoff(struct file *file, void *priv,
         return -EINVAL;
     }
 
-    pr_info("*** V4L2 Channel %d: STREAMOFF type=%d ***\n",
+    pr_debug("*** V4L2 Channel %d: STREAMOFF type=%d ***\n",
             dev->channel_num, type);
 
     /* Create a fake file structure for frame_channel_unlocked_ioctl */
@@ -311,7 +311,7 @@ static int tx_isp_v4l2_streamoff(struct file *file, void *priv,
     /* Route to frame_channel_unlocked_ioctl STREAMOFF (0x80045613) */
     ret = frame_channel_unlocked_ioctl(&fake_file, 0x80045613, (unsigned long)&type);
 
-    pr_info("*** V4L2 Channel %d: STREAMOFF result=%d ***\n",
+    pr_debug("*** V4L2 Channel %d: STREAMOFF result=%d ***\n",
             dev->channel_num, ret);
 
     /* Update V4L2 state based on frame channel result */
@@ -354,7 +354,7 @@ static int tx_isp_v4l2_enum_fmt_vid_cap(struct file *file, void *priv,
         return -EINVAL;
     }
     
-    pr_info("Channel %d: ENUM_FMT index=%d pixelformat=0x%x\n", 
+    pr_debug("Channel %d: ENUM_FMT index=%d pixelformat=0x%x\n",
             dev->channel_num, f->index, f->pixelformat);
     
     return 0;
@@ -379,7 +379,7 @@ static int tx_isp_v4l2_g_parm(struct file *file, void *priv,
     parm->parm.capture.timeperframe.denominator = 30; /* 30 FPS */
     parm->parm.capture.readbuffers = 4;
     
-    pr_info("Channel %d: G_PARM framerate=%d/%d FPS\n", 
+    pr_debug("Channel %d: G_PARM framerate=%d/%d FPS\n",
             dev->channel_num, 
             parm->parm.capture.timeperframe.denominator,
             parm->parm.capture.timeperframe.numerator);
@@ -401,7 +401,7 @@ static int tx_isp_v4l2_s_parm(struct file *file, void *priv,
         return -EINVAL;
     }
     
-    pr_info("Channel %d: S_PARM framerate=%d/%d FPS\n", 
+    pr_debug("Channel %d: S_PARM framerate=%d/%d FPS\n",
             dev->channel_num, 
             parm->parm.capture.timeperframe.denominator,
             parm->parm.capture.timeperframe.numerator);
@@ -446,7 +446,7 @@ static int tx_isp_v4l2_queryctrl(struct file *file, void *priv,
         return -EINVAL;
     }
     
-    pr_info("Channel %d: QUERYCTRL id=0x%x name=%s\n", 
+    pr_debug("Channel %d: QUERYCTRL id=0x%x name=%s\n",
             dev->channel_num, qc->id, qc->name);
     
     return 0;
@@ -480,7 +480,7 @@ static int tx_isp_v4l2_g_ctrl(struct file *file, void *priv,
         return -EINVAL;
     }
     
-    pr_info("Channel %d: G_CTRL id=0x%x value=%d\n", 
+    pr_debug("Channel %d: G_CTRL id=0x%x value=%d\n",
             dev->channel_num, ctrl->id, ctrl->value);
     
     return 0;
@@ -496,7 +496,7 @@ static int tx_isp_v4l2_s_ctrl(struct file *file, void *priv,
         return -EINVAL;
     }
     
-    pr_info("Channel %d: S_CTRL id=0x%x value=%d\n", 
+    pr_debug("Channel %d: S_CTRL id=0x%x value=%d\n",
             dev->channel_num, ctrl->id, ctrl->value);
     
     /* Accept control values for encoder compatibility */
@@ -538,7 +538,7 @@ static int tx_isp_v4l2_cropcap(struct file *file, void *priv,
     cap->pixelaspect.numerator = 1;
     cap->pixelaspect.denominator = 1;
     
-    pr_info("Channel %d: CROPCAP %dx%d\n", 
+    pr_debug("Channel %d: CROPCAP %dx%d\n",
             dev->channel_num, cap->bounds.width, cap->bounds.height);
     
     return 0;
@@ -587,7 +587,7 @@ static int tx_isp_v4l2_open(struct file *file)
         return -ENODEV;
     }
 
-    pr_info("*** V4L2 Channel %d opened ***\n", dev->channel_num);
+    pr_debug("*** V4L2 Channel %d opened ***\n", dev->channel_num);
 
     /* Let V4L2 set up its file handle */
     ret = v4l2_fh_open(file);
@@ -606,7 +606,7 @@ static int tx_isp_v4l2_release(struct file *file)
     struct tx_isp_v4l2_device *dev = video_drvdata(file);
     
     if (dev) {
-        pr_info("*** V4L2 Channel %d closed ***\n", dev->channel_num);
+        pr_debug("*** V4L2 Channel %d closed ***\n", dev->channel_num);
         
         /* Stop streaming if active */
         if (dev->streaming) {
@@ -638,7 +638,7 @@ static int tx_isp_v4l2_mmap(struct file *file, struct vm_area_struct *vma)
     size = vma->vm_end - vma->vm_start;
     offset = vma->vm_pgoff << PAGE_SHIFT;
 
-    pr_info("*** Channel %d: MMAP request - offset=0x%lx size=%lu ***\n",
+    pr_debug("*** Channel %d: MMAP request - offset=0x%lx size=%lu ***\n",
             dev->channel_num, offset, size);
 
     /* CRITICAL FIX: Get real buffer address from frame channel state */
@@ -664,7 +664,7 @@ static int tx_isp_v4l2_mmap(struct file *file, struct vm_area_struct *vma)
     /* For now, we'll get the address directly from the frame channel state */
     /* In the reference driver, this would use tisp_reg_map_get */
 
-    pr_info("*** Channel %d: MMAP mapping buffer[%d] offset=0x%lx size=%lu ***\n",
+    pr_debug("*** Channel %d: MMAP mapping buffer[%d] offset=0x%lx size=%lu ***\n",
             dev->channel_num, buffer_index, offset, size);
 
     /* Map the DMA buffer to userspace like reference driver subsection_map */
@@ -678,7 +678,7 @@ static int tx_isp_v4l2_mmap(struct file *file, struct vm_area_struct *vma)
         return -EAGAIN;
     }
 
-    pr_info("*** Channel %d: MMAP SUCCESS - mapped buffer[%d] to userspace ***\n",
+    pr_debug("*** Channel %d: MMAP SUCCESS - mapped buffer[%d] to userspace ***\n",
             dev->channel_num, buffer_index);
 
     return 0;
@@ -696,20 +696,20 @@ static long tx_isp_v4l2_unlocked_ioctl(struct file *file, unsigned int cmd, unsi
         return -EINVAL;
     }
     
-    pr_info("*** V4L2 Channel %d: IOCTL cmd=0x%x ***\n", dev->channel_num, cmd);
+    pr_debug("*** V4L2 Channel %d: IOCTL cmd=0x%x ***\n", dev->channel_num, cmd);
     
     /* First try standard V4L2 ioctl handling for operations we implement */
     ret = video_ioctl2(file, cmd, arg);
     
     /* If V4L2 handled it successfully, return that result */
     if (ret != -ENOTTY && ret != -EINVAL) {
-        pr_info("*** V4L2 Channel %d: IOCTL 0x%x handled by V4L2, result=%ld ***\n",
+        pr_debug("*** V4L2 Channel %d: IOCTL 0x%x handled by V4L2, result=%ld ***\n",
                 dev->channel_num, cmd, ret);
         return ret;
     }
     
     /* For unhandled ioctls or failures, route to frame_channel_unlocked_ioctl */
-    pr_info("*** V4L2 Channel %d: Routing IOCTL 0x%x to frame_channel_unlocked_ioctl ***\n",
+    pr_debug("*** V4L2 Channel %d: Routing IOCTL 0x%x to frame_channel_unlocked_ioctl ***\n",
             dev->channel_num, cmd);
     
     /* Create a fake file structure for frame_channel_unlocked_ioctl */
@@ -719,7 +719,7 @@ static long tx_isp_v4l2_unlocked_ioctl(struct file *file, unsigned int cmd, unsi
     /* Route to frame_channel_unlocked_ioctl */
     ret = frame_channel_unlocked_ioctl(&fake_file, cmd, arg);
     
-    pr_info("*** V4L2 Channel %d: frame_channel_unlocked_ioctl result=%ld for cmd=0x%x ***\n",
+    pr_debug("*** V4L2 Channel %d: frame_channel_unlocked_ioctl result=%ld for cmd=0x%x ***\n",
             dev->channel_num, ret, cmd);
     
     return ret;
@@ -740,7 +740,7 @@ static int tx_isp_create_v4l2_device(int channel)
     struct video_device *vdev;
     int ret;
     
-    pr_info("*** Creating V4L2 video device for channel %d ***\n", channel);
+    pr_debug("*** Creating V4L2 video device for channel %d ***\n", channel);
     
     /* Allocate device structure */
     dev = kzalloc(sizeof(struct tx_isp_v4l2_device), GFP_KERNEL);
@@ -814,7 +814,7 @@ static int tx_isp_create_v4l2_device(int channel)
     dev->vdev = vdev;
     v4l2_devices[channel] = dev;
     
-    pr_info("*** V4L2 video device created: /dev/video%d for channel %d ***\n",
+    pr_debug("*** V4L2 video device created: /dev/video%d for channel %d ***\n",
             vdev->num, channel);
     
     return 0;
@@ -837,7 +837,7 @@ static void tx_isp_destroy_v4l2_device(int channel)
         return;
     }
     
-    pr_info("Destroying V4L2 video device for channel %d\n", channel);
+    pr_debug("Destroying V4L2 video device for channel %d\n", channel);
     
     /* Unregister and free video device */
     if (dev->vdev) {
@@ -853,7 +853,7 @@ static void tx_isp_destroy_v4l2_device(int channel)
     kfree(dev);
     v4l2_devices[channel] = NULL;
     
-    pr_info("V4L2 video device for channel %d destroyed\n", channel);
+    pr_debug("V4L2 video device for channel %d destroyed\n", channel);
 }
 
 /* Initialize all V4L2 video devices */
@@ -861,7 +861,7 @@ int tx_isp_v4l2_init(void)
 {
     int ret, i;
     
-    pr_info("*** Initializing TX-ISP V4L2 video devices ***\n");
+    pr_debug("*** Initializing TX-ISP V4L2 video devices ***\n");
     
     for (i = 0; i < num_v4l2_devices; i++) {
         ret = tx_isp_create_v4l2_device(i);
@@ -871,7 +871,7 @@ int tx_isp_v4l2_init(void)
         }
     }
     
-    pr_info("*** TX-ISP V4L2 devices initialized successfully ***\n");
+    pr_debug("*** TX-ISP V4L2 devices initialized successfully ***\n");
     return 0;
     
 cleanup:
@@ -887,13 +887,13 @@ void tx_isp_v4l2_cleanup(void)
 {
     int i;
     
-    pr_info("Cleaning up TX-ISP V4L2 video devices\n");
+    pr_debug("Cleaning up TX-ISP V4L2 video devices\n");
     
     for (i = 0; i < num_v4l2_devices; i++) {
         tx_isp_destroy_v4l2_device(i);
     }
     
-    pr_info("TX-ISP V4L2 cleanup complete\n");
+    pr_debug("TX-ISP V4L2 cleanup complete\n");
 }
 
 /* Export functions */

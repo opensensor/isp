@@ -25,7 +25,7 @@
 /* MCP Logging Integration */
 #define mcp_log_info(msg, val) \
     do { \
-        pr_info("VIN: " msg " = 0x%x\n", val); \
+        pr_debug("VIN: " msg " = 0x%x\n", val); \
     } while(0)
 
 #define mcp_log_error(msg, val) \
@@ -61,11 +61,11 @@ int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev)
 
     /* CRITICAL FIX: Check if VIN device already exists to prevent double creation */
     if (isp_dev->vin_dev) {
-        pr_info("*** tx_isp_create_vin_device: VIN device already exists at %p ***\n", isp_dev->vin_dev);
+        pr_debug("*** tx_isp_create_vin_device: VIN device already exists at %p ***\n", isp_dev->vin_dev);
         return 0; /* Success - already created */
     }
 
-    pr_info("*** tx_isp_create_vin_device: Creating VIN device structure ***\n");
+    pr_debug("*** tx_isp_create_vin_device: Creating VIN device structure ***\n");
 
     /* Allocate VIN device structure */
     vin_dev = kzalloc(sizeof(struct tx_isp_vin_device), GFP_KERNEL);
@@ -91,7 +91,7 @@ int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev)
     /* This prevents memory mapping conflicts that cause crashes */
     if (isp_dev->core_regs) {
         vin_dev->base = isp_dev->core_regs;
-        pr_info("*** VIN USING ISP CORE REGISTERS: %p (no separate mapping needed) ***\n", vin_dev->base);
+        pr_debug("*** VIN USING ISP CORE REGISTERS: %p (no separate mapping needed) ***\n", vin_dev->base);
     } else {
         pr_err("tx_isp_create_vin_device: ISP core registers not available\n");
         ret = -ENOMEM;
@@ -108,15 +108,15 @@ int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev)
     
     /* CRITICAL FIX: Set VIN subdev operations - this was missing! */
     vin_dev->sd.ops = &vin_subdev_ops;
-    pr_info("*** VIN subdev operations set: %p ***\n", &vin_subdev_ops);
+    pr_debug("*** VIN subdev operations set: %p ***\n", &vin_subdev_ops);
 
     /* CRITICAL FIX: Connect VIN device to ISP device - this was missing! */
     isp_dev->vin_dev = vin_dev;
 
-    pr_info("*** VIN DEVICE CREATED AND CONNECTED TO ISP DEVICE ***\n");
-    pr_info("VIN device: %p, base: %p, irq: %d, state: %d\n",
+    pr_debug("*** VIN DEVICE CREATED AND CONNECTED TO ISP DEVICE ***\n");
+    pr_debug("VIN device: %p, base: %p, irq: %d, state: %d\n",
             vin_dev, vin_dev->base, vin_dev->irq, vin_dev->state);
-    pr_info("*** CRITICAL: isp_dev->vin_dev = %p (should not be null!) ***\n", isp_dev->vin_dev);
+    pr_debug("*** CRITICAL: isp_dev->vin_dev = %p (should not be null!) ***\n", isp_dev->vin_dev);
 
     return 0;
 

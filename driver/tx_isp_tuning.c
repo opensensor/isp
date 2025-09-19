@@ -356,7 +356,7 @@ int tisp_init(void *sensor_info, char *param_name);
 
 int tisp_set_csc_version(int version)
 {
-    pr_info("tisp_set_csc_version: Setting CSC version %d\n", version);
+    pr_debug("tisp_set_csc_version: Setting CSC version %d\n", version);
     return 0;
 }
 /* Use external system_reg_write from tx-isp-module.c that does real hardware writes */
@@ -1069,7 +1069,7 @@ static int load_isp_tuning_file(const char *filename)
     void *file_buffer = NULL;
     int file_size;
 
-    pr_info("*** load_isp_tuning_file: Loading %s ***\n", filename);
+    pr_debug("*** load_isp_tuning_file: Loading %s ***\n", filename);
 
     /* Open the tuning file */
     fp = filp_open(filename, O_RDONLY, 0);
@@ -1088,7 +1088,7 @@ static int load_isp_tuning_file(const char *filename)
         return -EINVAL;
     }
 
-    pr_info("*** load_isp_tuning_file: File size = %d bytes ***\n", file_size);
+    pr_debug("*** load_isp_tuning_file: File size = %d bytes ***\n", file_size);
 
     /* Allocate buffer for file data */
     file_buffer = vmalloc(file_size);
@@ -1141,7 +1141,7 @@ static int load_isp_tuning_file(const char *filename)
         /* Binary Ninja: memcpy(tparams_night, &file_data[0x13808], 0x137f0) */
         memcpy(tparams_night, (char *)file_buffer + 0x13808, 0x137f0);
 
-        pr_info("*** load_isp_tuning_file: Day/night tuning parameters loaded ***\n");
+        pr_debug("*** load_isp_tuning_file: Day/night tuning parameters loaded ***\n");
 
     } else if (strstr(filename, "cust") && file_size >= 0x18 + 0x137f0) {
         /* Custom tuning file - single parameter set */
@@ -1157,7 +1157,7 @@ static int load_isp_tuning_file(const char *filename)
         /* Binary Ninja: memcpy(tparams_cust, &file_data[0x18], 0x137f0) */
         memcpy(tparams_cust, (char *)file_buffer + 0x18, 0x137f0);
 
-        pr_info("*** load_isp_tuning_file: Custom tuning parameters loaded ***\n");
+        pr_debug("*** load_isp_tuning_file: Custom tuning parameters loaded ***\n");
 
     } else {
         pr_err("*** load_isp_tuning_file: Invalid file format or size ***\n");
@@ -1166,7 +1166,7 @@ static int load_isp_tuning_file(const char *filename)
     }
 
     vfree(file_buffer);
-    pr_info("*** load_isp_tuning_file: Successfully loaded %s ***\n", filename);
+    pr_debug("*** load_isp_tuning_file: Successfully loaded %s ***\n", filename);
     return 0;
 }
 
@@ -1180,8 +1180,8 @@ int tisp_init(void *sensor_info, char *param_name)
         uint32_t mode;
     } sensor_params = {1920, 1080, 25, 0}; /* Default sensor parameters */
 
-    pr_info("*** tisp_init: IMPLEMENTING MISSING HARDWARE REGISTER INITIALIZATION ***\n");
-    pr_info("*** THIS FUNCTION CONTAINS ALL THE system_reg_write CALLS FROM REFERENCE ***\n");
+    pr_debug("*** tisp_init: IMPLEMENTING MISSING HARDWARE REGISTER INITIALIZATION ***\n");
+    pr_debug("*** THIS FUNCTION CONTAINS ALL THE system_reg_write CALLS FROM REFERENCE ***\n");
 
     if (!ourISPdev) {
         pr_err("tisp_init: No ISP device available\n");
@@ -1194,13 +1194,13 @@ int tisp_init(void *sensor_info, char *param_name)
         memcpy(&sensor_params, sensor_info, sizeof(sensor_params));
     }
 
-    pr_info("tisp_init: Initializing ISP hardware for sensor (%dx%d)\n",
+    pr_debug("tisp_init: Initializing ISP hardware for sensor (%dx%d)\n",
             sensor_params.width, sensor_params.height);
 
     /* *** BINARY NINJA REGISTER SEQUENCE - THE MISSING HARDWARE INITIALIZATION! *** */
 
     /* Binary Ninja: ISP Core Control registers */
-    pr_info("*** WRITING ISP CORE CONTROL REGISTERS - FROM BINARY NINJA tisp_init ***\n");
+    pr_debug("*** WRITING ISP CORE CONTROL REGISTERS - FROM BINARY NINJA tisp_init ***\n");
     system_reg_write(0xb004, 0xf001f001);
     system_reg_write(0xb008, 0x40404040);
     system_reg_write(0xb00c, 0x40404040);
@@ -1220,17 +1220,17 @@ int tisp_init(void *sensor_info, char *param_name)
 
     /* CRITICAL: These are the varying registers that must match the reference driver exactly! */
     /* Using the EXACT reference values from the trace provided */
-    pr_info("*** WRITING CRITICAL VARYING REGISTERS - USING EXACT REFERENCE VALUES ***\n");
+    pr_debug("*** WRITING CRITICAL VARYING REGISTERS - USING EXACT REFERENCE VALUES ***\n");
     system_reg_write(0xb07c, 0x341b);     /* Reference: 0x341b (EXACT match required) */
     system_reg_write(0xb080, 0x46b0);     /* Reference: 0x46b0 (EXACT match required) */
     system_reg_write(0xb084, 0x1813);     /* Reference: 0x1813 (EXACT match required) */
     /* Skip 0xb088 - reference doesn't write here */
     system_reg_write(0xb08c, 0x10a);      /* Reference: 0x10a (EXACT match required) */
 
-    pr_info("*** ISP CORE CONTROL REGISTERS WRITTEN - NOW MATCHES REFERENCE DRIVER ***\n");
+    pr_debug("*** ISP CORE CONTROL REGISTERS WRITTEN - NOW MATCHES REFERENCE DRIVER ***\n");
 
     /* Binary Ninja: ISP Control registers */
-    pr_info("*** WRITING ISP CONTROL REGISTERS - FROM BINARY NINJA tisp_init ***\n");
+    pr_debug("*** WRITING ISP CONTROL REGISTERS - FROM BINARY NINJA tisp_init ***\n");
     system_reg_write(0x9804, 0x3f00);
     system_reg_write(0x9864, 0x7800438);
     system_reg_write(0x987c, 0xc0000000);
@@ -1241,7 +1241,7 @@ int tisp_init(void *sensor_info, char *param_name)
     system_reg_write(0x98a8, 0x1010001);
 
     /* Binary Ninja: VIC Control registers */
-    pr_info("*** WRITING VIC CONTROL REGISTERS - FROM BINARY NINJA tisp_init ***\n");
+    pr_debug("*** WRITING VIC CONTROL REGISTERS - FROM BINARY NINJA tisp_init ***\n");
     system_reg_write(0x9a00, 0x50002d0);
     system_reg_write(0x9a04, 0x3000300);
     system_reg_write(0x9a2c, 0x50002d0);
@@ -1262,7 +1262,7 @@ int tisp_init(void *sensor_info, char *param_name)
     uint32_t actual_image_width = 1920;   /* GC2053 actual image width */
     uint32_t actual_image_height = 1080;  /* GC2053 actual image height */
 
-    pr_info("tisp_init: CRITICAL FIX - Using ACTUAL sensor image dimensions %dx%d (not frame size %dx%d)\n",
+    pr_debug("tisp_init: CRITICAL FIX - Using ACTUAL sensor image dimensions %dx%d (not frame size %dx%d)\n",
             actual_image_width, actual_image_height, sensor_params.width, sensor_params.height);
 
     /* Binary Ninja: system_reg_write(4, $v0_4 << 0x10 | arg1[1]) - Basic ISP config */
@@ -1281,7 +1281,7 @@ int tisp_init(void *sensor_info, char *param_name)
     /* CRITICAL FIX: ISP control register - enable processing pipeline */
     /* This register controls the overall ISP processing pipeline operation */
     system_reg_write(0x1c, 0x3f08);  /* Enable ISP processing pipeline + frame sync */
-    pr_info("*** tisp_init: ISP control register set to enable processing pipeline ***\n");
+    pr_debug("*** tisp_init: ISP control register set to enable processing pipeline ***\n");
 
     /* CRITICAL FIX: Configure ISP input/output formats to prevent Error interrupt type 2 */
     /* The 0x00000500 error indicates format/processing configuration issues */
@@ -1292,16 +1292,16 @@ int tisp_init(void *sensor_info, char *param_name)
     /* Reference driver format register - this is the key missing piece! */
     uint32_t format_reg_value = 0x133;  /* Normal mode format (not WDR) */
     system_reg_write(0x10, format_reg_value);
-    pr_info("*** tisp_init: REFERENCE DRIVER format register 0x10 = 0x%x ***\n", format_reg_value);
+    pr_debug("*** tisp_init: REFERENCE DRIVER format register 0x10 = 0x%x ***\n", format_reg_value);
 
     /* Reference driver sets register 0x30 */
     system_reg_write(0x30, 0xffffffff);
-    pr_info("*** tisp_init: REFERENCE DRIVER register 0x30 = 0xffffffff ***\n");
+    pr_debug("*** tisp_init: REFERENCE DRIVER register 0x30 = 0xffffffff ***\n");
 
     /* Configure processing pipeline data flow */
     system_reg_write(0x24, 0x1);     /* Enable data flow from input to processing */
     system_reg_write(0x28, 0x1);     /* Enable data flow from processing to output */
-    pr_info("*** tisp_init: ISP data flow configured (input->processing->output) ***\n");
+    pr_debug("*** tisp_init: ISP data flow configured (input->processing->output) ***\n");
 
     /* REFERENCE DRIVER: Final ISP configuration registers (Binary Ninja exact sequence) */
     /* These are the final three critical registers that enable the ISP pipeline */
@@ -1311,14 +1311,14 @@ int tisp_init(void *sensor_info, char *param_name)
     system_reg_write(0x1c, 8);          /* ISP control mode */
     system_reg_write(0x800, 1);         /* Enable ISP pipeline */
 
-    pr_info("*** tisp_init: REFERENCE DRIVER final configuration - 0x804=0x%x, 0x1c=8, 0x800=1 ***\n", isp_mode);
+    pr_debug("*** tisp_init: REFERENCE DRIVER final configuration - 0x804=0x%x, 0x1c=8, 0x800=1 ***\n", isp_mode);
 
     /* CRITICAL FIX: Configure ISP with ACTUAL sensor image dimensions */
     /* This is the missing piece - ISP must know the correct image size */
 
     /* Binary Ninja: system_reg_write(4, width << 16 | height) */
     system_reg_write(0x4, (actual_image_width << 16) | actual_image_height);
-    pr_info("*** tisp_init: ISP frame size configured - %dx%d (ACTUAL sensor image) ***\n",
+    pr_debug("*** tisp_init: ISP frame size configured - %dx%d (ACTUAL sensor image) ***\n",
             actual_image_width, actual_image_height);
 
     /* CRITICAL FIX: Configure Bayer pattern mapping - Binary Ninja mbus_to_bayer_write */
@@ -1366,13 +1366,13 @@ int tisp_init(void *sensor_info, char *param_name)
 
     /* Binary Ninja: system_reg_write(8, bayer_pattern) */
     system_reg_write(0x8, bayer_pattern);
-    pr_info("*** tisp_init: CRITICAL FIX - Bayer pattern configured: mbus=0x%x -> pattern=%d (register 8) ***\n",
+    pr_debug("*** tisp_init: CRITICAL FIX - Bayer pattern configured: mbus=0x%x -> pattern=%d (register 8) ***\n",
             sensor_mbus_code, bayer_pattern);
 
     /* CRITICAL FIX: Configure RAW10 Bayer processing pipeline */
     /* GC2053 outputs RAW10 Bayer data that needs proper demosaicing */
 
-    pr_info("*** tisp_init: CONFIGURING RAW10 BAYER PROCESSING PIPELINE ***\n");
+    pr_debug("*** tisp_init: CONFIGURING RAW10 BAYER PROCESSING PIPELINE ***\n");
 
     /* Configure RAW10 input format - 10-bit Bayer data processing */
     system_reg_write(0x14, 0x2b);      /* RAW10 format code (0x2b from MIPI spec) */
@@ -1401,9 +1401,9 @@ int tisp_init(void *sensor_info, char *param_name)
     system_reg_write(0x501c, 0x00000001);  /* CCM step size */
     system_reg_write(0x5020, 0x00000000);  /* CCM additional control */
 
-    pr_info("*** CRITICAL FIX: CCM configured using EXACT Binary Ninja register addresses ***\n");
-    pr_info("*** CCM registers 0x5004-0x5014 programmed with identity matrix ***\n");
-    pr_info("*** This should eliminate green frames by enabling proper color processing ***\n");
+    pr_debug("*** CRITICAL FIX: CCM configured using EXACT Binary Ninja register addresses ***\n");
+    pr_debug("*** CCM registers 0x5004-0x5014 programmed with identity matrix ***\n");
+    pr_debug("*** This should eliminate green frames by enabling proper color processing ***\n");
 
     /* CRITICAL FIX: Configure proper RGB to YUV conversion (final output stage) */
     /* Standard BT.601 coefficients for proper color space conversion */
@@ -1417,27 +1417,27 @@ int tisp_init(void *sensor_info, char *param_name)
     system_reg_write(0x21c, 0x6a);     /* V coefficient: -0.419*G (-107 in fixed point) */
     system_reg_write(0x220, 0x16);     /* V coefficient: -0.081*B (-21 in fixed point) */
 
-    pr_info("*** CRITICAL FIX: RGB to YUV conversion matrix configured properly ***\n");
+    pr_debug("*** CRITICAL FIX: RGB to YUV conversion matrix configured properly ***\n");
 
-    pr_info("*** tisp_init: RAW10 BAYER PROCESSING PIPELINE CONFIGURED ***\n");
+    pr_debug("*** tisp_init: RAW10 BAYER PROCESSING PIPELINE CONFIGURED ***\n");
 
     /* CRITICAL FIX: Load ISP tuning parameters from /etc/sensor/ files */
     /* This is the missing piece - ISP needs tuning parameters for proper image processing */
 
-    pr_info("*** tisp_init: Loading ISP tuning parameters from /etc/sensor/ ***\n");
+    pr_debug("*** tisp_init: Loading ISP tuning parameters from /etc/sensor/ ***\n");
 
     /* Load standard tuning file (day/night parameters) */
     if (load_isp_tuning_file("/etc/sensor/gc2053-t31.bin") != 0) {
         pr_warn("*** tisp_init: Failed to load standard tuning file - using defaults ***\n");
     } else {
-        pr_info("*** tisp_init: Standard tuning parameters loaded successfully ***\n");
+        pr_debug("*** tisp_init: Standard tuning parameters loaded successfully ***\n");
     }
 
     /* Load custom tuning file (custom parameters) */
     if (load_isp_tuning_file("/etc/sensor/gc2053-cust-t31.bin") != 0) {
         pr_warn("*** tisp_init: Failed to load custom tuning file - using defaults ***\n");
     } else {
-        pr_info("*** tisp_init: Custom tuning parameters loaded successfully ***\n");
+        pr_debug("*** tisp_init: Custom tuning parameters loaded successfully ***\n");
     }
 
     /* Binary Ninja: Call tisp_set_csc_version(0) */
@@ -1460,23 +1460,23 @@ int tisp_init(void *sensor_info, char *param_name)
     bypass_val = (bypass_val & 0xb577fffd) | 0x34000009;
 
     system_reg_write(0xc, bypass_val);
-    pr_info("*** tisp_init: REFERENCE DRIVER bypass register set to 0x%x (exact Binary Ninja logic) ***\n", bypass_val);
+    pr_debug("*** tisp_init: REFERENCE DRIVER bypass register set to 0x%x (exact Binary Ninja logic) ***\n", bypass_val);
 
     /* CRITICAL FIX: Configure ISP for NV12 output format */
     /* Application requests NV12 format (0x3231564e) but buffer size mismatch suggests confusion */
     /* Let's configure ISP for proper NV12 output and fix the buffer size issue */
-    pr_info("*** tisp_init: CONFIGURING ISP FOR NV12 OUTPUT FORMAT ***\n");
+    pr_debug("*** tisp_init: CONFIGURING ISP FOR NV12 OUTPUT FORMAT ***\n");
 
     /* Configure ISP output format for NV12 (4:2:0) */
     system_reg_write(0x10, 0x133);     /* NV12 format code from reference driver */
     system_reg_write(0x30, 0xffffffff); /* Enable all processing for NV12 conversion */
-    pr_info("*** tisp_init: ISP configured for NV12 4:2:0 output format ***\n");
+    pr_debug("*** tisp_init: ISP configured for NV12 4:2:0 output format ***\n");
 
     /* CRITICAL FIX: Initialize essential ISP processing modules to prevent Error interrupt type 2 */
 
     /* REFERENCE DRIVER: Initialize all ISP sub-modules exactly like Binary Ninja */
     /* The reference driver calls specific initialization functions for each module */
-    pr_info("*** tisp_init: INITIALIZING ALL ISP PIPELINE COMPONENTS ***\n");
+    pr_debug("*** tisp_init: INITIALIZING ALL ISP PIPELINE COMPONENTS ***\n");
 
     /* Binary Ninja calls these initialization functions in this exact order: */
     /* tiziano_ae_init(), tiziano_awb_init(), tiziano_gamma_init(), etc. */
@@ -1489,17 +1489,17 @@ int tisp_init(void *sensor_info, char *param_name)
     /* Configure ISP frame synchronization */
     system_reg_write(0x5000, 0x1);   /* Enable frame sync between VIC and ISP */
     system_reg_write(0x5004, 0x0);   /* Frame sync mode: immediate processing */
-    pr_info("*** tisp_init: ISP-VIC frame synchronization enabled ***\n");
+    pr_debug("*** tisp_init: ISP-VIC frame synchronization enabled ***\n");
 
     /* Configure ISP processing pipeline enable */
     system_reg_write(0x6000, 0x1);   /* Enable complete processing pipeline */
     system_reg_write(0x6004, 0x1);   /* Enable pipeline output */
-    pr_info("*** tisp_init: ISP processing pipeline fully enabled ***\n");
+    pr_debug("*** tisp_init: ISP processing pipeline fully enabled ***\n");
 
     /* Final ISP configuration - ensure all modules work together */
     system_reg_write(0x7000, 0x1);   /* Master ISP enable */
     system_reg_write(0x7004, 0x1);   /* Master processing enable */
-    pr_info("*** tisp_init: ISP master processing enabled - pipeline should now work ***\n");
+    pr_debug("*** tisp_init: ISP master processing enabled - pipeline should now work ***\n");
 
     /* Binary Ninja: system_reg_write(0x30, 0xffffffff) - Enable all interrupts */
     system_reg_write(0x30, 0xffffffff);
@@ -1509,10 +1509,10 @@ int tisp_init(void *sensor_info, char *param_name)
 
     /* Binary Ninja: Allocate and configure memory buffers - simplified version */
     /* In real implementation, this would allocate DMA buffers for ISP processing */
-    pr_info("tisp_init: ISP memory buffers configured\n");
+    pr_debug("tisp_init: ISP memory buffers configured\n");
 
     /* CRITICAL: Binary Ninja sequence - Initialize ALL ISP pipeline components */
-    pr_info("*** tisp_init: INITIALIZING ALL ISP PIPELINE COMPONENTS ***\n");
+    pr_debug("*** tisp_init: INITIALIZING ALL ISP PIPELINE COMPONENTS ***\n");
 
     /* CRITICAL FIX: Use ACTUAL sensor image dimensions for all ISP components */
     /* Call all tiziano pipeline initialization functions in Binary Ninja order */
@@ -1538,7 +1538,7 @@ int tisp_init(void *sensor_info, char *param_name)
 
     /* Binary Ninja: WDR initialization if WDR mode is enabled */
     if (sensor_params.mode >= 4) {
-        pr_info("*** tisp_init: INITIALIZING WDR-SPECIFIC COMPONENTS ***\n");
+        pr_debug("*** tisp_init: INITIALIZING WDR-SPECIFIC COMPONENTS ***\n");
         tiziano_wdr_init(actual_image_width, actual_image_height);
         tisp_gb_init();
         tisp_dpc_wdr_en(1);
@@ -1554,11 +1554,11 @@ int tisp_init(void *sensor_info, char *param_name)
         tisp_dmsc_wdr_en(1);
         tisp_ae_wdr_en(1);
         tisp_sdns_wdr_en(1);
-        pr_info("*** tisp_init: WDR COMPONENTS INITIALIZED ***\n");
+        pr_debug("*** tisp_init: WDR COMPONENTS INITIALIZED ***\n");
     }
 
     /* Binary Ninja: CRITICAL - Memory buffer allocations for ISP processing */
-    pr_info("*** tisp_init: ALLOCATING ISP PROCESSING BUFFERS ***\n");
+    pr_debug("*** tisp_init: ALLOCATING ISP PROCESSING BUFFERS ***\n");
 
     /* Binary Ninja: AE0 buffer allocation (0x6000 bytes) */
     void *ae0_buffer = kmalloc(0x6000, GFP_KERNEL);
@@ -1573,7 +1573,7 @@ int tisp_init(void *sensor_info, char *param_name)
         system_reg_write(0xa044, ae0_phys + 0x5000);
         system_reg_write(0xa048, ae0_phys + 0x5800);
         system_reg_write(0xa04c, 0x33);
-        pr_info("*** tisp_init: AE0 buffer allocated at 0x%08x ***\n", (uint32_t)ae0_phys);
+        pr_debug("*** tisp_init: AE0 buffer allocated at 0x%08x ***\n", (uint32_t)ae0_phys);
     }
 
     /* Binary Ninja: AE1 buffer allocation (0x6000 bytes) */
@@ -1589,14 +1589,14 @@ int tisp_init(void *sensor_info, char *param_name)
         system_reg_write(0xa844, ae1_phys + 0x5000);
         system_reg_write(0xa848, ae1_phys + 0x5800);
         system_reg_write(0xa84c, 0x33);
-        pr_info("*** tisp_init: AE1 buffer allocated at 0x%08x ***\n", (uint32_t)ae1_phys);
+        pr_debug("*** tisp_init: AE1 buffer allocated at 0x%08x ***\n", (uint32_t)ae1_phys);
     }
 
     /* Binary Ninja: Final ISP configuration registers - REMOVED DUPLICATE */
     /* This configuration is now handled earlier in the function with reference driver values */
 
     /* Binary Ninja: CRITICAL - Initialize all ISP sub-modules */
-    pr_info("*** tisp_init: INITIALIZING ISP SUB-MODULES ***\n");
+    pr_debug("*** tisp_init: INITIALIZING ISP SUB-MODULES ***\n");
 
     /* CRITICAL FIX: Use ACTUAL sensor image dimensions for all ISP components */
     /* Binary Ninja: Initialize all tiziano sub-modules in correct order */
@@ -1622,7 +1622,7 @@ int tisp_init(void *sensor_info, char *param_name)
 
     /* Binary Ninja: WDR initialization if enabled */
     if (sensor_params.mode == 1) {  /* WDR mode */
-        pr_info("*** tisp_init: WDR MODE ENABLED - Initializing WDR components ***\n");
+        pr_debug("*** tisp_init: WDR MODE ENABLED - Initializing WDR components ***\n");
         tiziano_wdr_init(actual_image_width, actual_image_height);
         tisp_gb_init();
         /* Enable WDR for all sub-modules */
@@ -1639,11 +1639,11 @@ int tisp_init(void *sensor_info, char *param_name)
         tisp_dmsc_wdr_en(1);
         tisp_ae_wdr_en(1);
         tisp_sdns_wdr_en(1);
-        pr_info("*** tisp_init: WDR COMPONENTS INITIALIZED ***\n");
+        pr_debug("*** tisp_init: WDR COMPONENTS INITIALIZED ***\n");
     }
 
     /* Binary Ninja: Initialize event system and callbacks */
-    pr_info("*** tisp_init: INITIALIZING ISP EVENT SYSTEM ***\n");
+    pr_debug("*** tisp_init: INITIALIZING ISP EVENT SYSTEM ***\n");
     tisp_event_init();
     tisp_event_set_cb(4, tisp_tgain_update);
     tisp_event_set_cb(5, tisp_again_update);
@@ -1652,11 +1652,11 @@ int tisp_init(void *sensor_info, char *param_name)
     tisp_event_set_cb(8, tisp_ae_ir_update);
 
     /* BINARY NINJA REFERENCE: No continuous thread - events are processed on-demand */
-    pr_info("*** tisp_init: BINARY NINJA REFERENCE - No event processing thread created ***\n");
+    pr_debug("*** tisp_init: BINARY NINJA REFERENCE - No event processing thread created ***\n");
 
     /* The reference driver does NOT create any kthread for event processing */
     /* Events are processed on-demand when triggered, not continuously */
-    pr_info("*** tisp_init: Event system ready for on-demand processing (Binary Ninja reference) ***\n");
+    pr_debug("*** tisp_init: Event system ready for on-demand processing (Binary Ninja reference) ***\n");
 
     /* Binary Ninja: system_irq_func_set(0xd, ip_done_interrupt_static) - Set IRQ handler */
     /* CRITICAL: This sets up the ISP processing completion callback - missing piece! */
@@ -1664,7 +1664,7 @@ int tisp_init(void *sensor_info, char *param_name)
 
     int irq_ret = system_irq_func_set(0xd, ip_done_interrupt_static);
     if (irq_ret == 0) {
-        pr_info("*** tisp_init: ISP processing completion callback registered (index=0xd) ***\n");
+        pr_debug("*** tisp_init: ISP processing completion callback registered (index=0xd) ***\n");
     } else {
         pr_err("*** tisp_init: Failed to register ISP processing completion callback: %d ***\n", irq_ret);
     }
@@ -1677,7 +1677,7 @@ int tisp_init(void *sensor_info, char *param_name)
     }
 
     /* *** CRITICAL MISSING PIECE: Call tx_isp_subdev_pipo to initialize VIC buffer management *** */
-    pr_info("*** CRITICAL: Calling tx_isp_subdev_pipo to initialize VIC buffer management ***\n");
+    pr_debug("*** CRITICAL: Calling tx_isp_subdev_pipo to initialize VIC buffer management ***\n");
     
     if (ourISPdev->vic_dev) {
         /* Create a dummy raw_pipe structure for the call */
@@ -1686,8 +1686,8 @@ int tisp_init(void *sensor_info, char *param_name)
         /* Call tx_isp_subdev_pipo with the VIC subdev and raw_pipe structure */
         int pipo_ret = tx_isp_subdev_pipo(ourISPdev->vic_dev, raw_pipe);
         if (pipo_ret == 0) {
-            pr_info("*** SUCCESS: tx_isp_subdev_pipo completed - VIC buffer management initialized ***\n");
-            pr_info("*** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***\n");
+            pr_debug("*** SUCCESS: tx_isp_subdev_pipo completed - VIC buffer management initialized ***\n");
+            pr_debug("*** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***\n");
         } else {
             pr_err("*** ERROR: tx_isp_subdev_pipo failed: %d ***\n", pipo_ret);
         }
@@ -1695,8 +1695,8 @@ int tisp_init(void *sensor_info, char *param_name)
         pr_err("*** ERROR: No VIC device available for tx_isp_subdev_pipo call ***\n");
     }
 
-    pr_info("*** tisp_init: ISP HARDWARE PIPELINE FULLY INITIALIZED - THIS SHOULD TRIGGER REGISTER ACTIVITY ***\n");
-    pr_info("*** tisp_init: All hardware blocks enabled, registers configured, events ready ***\n");
+    pr_debug("*** tisp_init: ISP HARDWARE PIPELINE FULLY INITIALIZED - THIS SHOULD TRIGGER REGISTER ACTIVITY ***\n");
+    pr_debug("*** tisp_init: All hardware blocks enabled, registers configured, events ready ***\n");
 
     return 0;
 }
@@ -1969,7 +1969,7 @@ static int tisp_day_or_night_s_ctrl(uint32_t mode)
 //
 //    bypass_val |= top_ctrl;
 //
-//    pr_info("%s: Setting top bypass to 0x%x\n", __func__, bypass_val);
+//    pr_debug("%s: Setting top bypass to 0x%x\n", __func__, bypass_val);
 //    writel(bypass_val, regs + 0xC);
 
     // Refresh all pipeline stages for mode change
@@ -2012,7 +2012,7 @@ static int tisp_day_or_night_s_ctrl(uint32_t mode)
 
 static int isp_core_tuning_event(struct tx_isp_dev *dev, uint32_t event)
 {
-    pr_info("isp_core_tuning_event: event=0x%x\n", event);
+    pr_debug("isp_core_tuning_event: event=0x%x\n", event);
     if (!dev)
         return -EINVAL;
 
@@ -2020,53 +2020,53 @@ static int isp_core_tuning_event(struct tx_isp_dev *dev, uint32_t event)
         case ISP_TUNING_EVENT_MODE0:
             if (dev->core_regs) {
                 writel(2, ourISPdev->core_regs + 0x40c4);
-                pr_info("isp_core_tuning_event: Set mode 0\n");
+                pr_debug("isp_core_tuning_event: Set mode 0\n");
             }
             break;
 
         case ISP_TUNING_EVENT_MODE1:
             if (dev->core_regs) {
                 writel(1, ourISPdev->core_regs + 0x40c4);
-                pr_info("isp_core_tuning_event: Set mode 1\n");
+                pr_debug("isp_core_tuning_event: Set mode 1\n");
             }
             break;
 
         case ISP_TUNING_EVENT_FRAME:
-            pr_info("*** ISP_TUNING_EVENT_FRAME: Starting frame processing ***\n");
+            pr_debug("*** ISP_TUNING_EVENT_FRAME: Starting frame processing ***\n");
             /* CRITICAL: This is where frame processing should be triggered */
             /* In the reference driver, this would start DMA transfer from sensor to buffer */
             if (dev->core_regs) {
                 /* Trigger frame capture - write to frame control register */
                 writel(1, ourISPdev->core_regs + 0x9000);  /* Start frame capture */
-                pr_info("isp_core_tuning_event: Frame capture triggered\n");
+                pr_debug("isp_core_tuning_event: Frame capture triggered\n");
             }
             break;
 
         case ISP_TUNING_EVENT_FRAME_DONE:
-            pr_info("*** ISP_TUNING_EVENT_FRAME_DONE: Frame processing complete ***\n");
+            pr_debug("*** ISP_TUNING_EVENT_FRAME_DONE: Frame processing complete ***\n");
             /* CRITICAL: This is where we call the frame sync functions! */
             extern void isp_frame_done_wakeup(void);
             isp_frame_done_wakeup();
-            pr_info("isp_core_tuning_event: Frame done wakeup called\n");
+            pr_debug("isp_core_tuning_event: Frame done wakeup called\n");
             break;
 
         case ISP_TUNING_EVENT_DMA_READY:
-            pr_info("*** ISP_TUNING_EVENT_DMA_READY: DMA buffer ready for processing ***\n");
+            pr_debug("*** ISP_TUNING_EVENT_DMA_READY: DMA buffer ready for processing ***\n");
             /* This event indicates that DMA has transferred frame data to buffer */
             /* and ISP can now process it */
             if (dev->core_regs) {
                 /* Enable ISP processing of the DMA buffer */
                 writel(1, ourISPdev->core_regs + 0x8000);  /* Enable ISP processing */
-                pr_info("isp_core_tuning_event: ISP processing enabled for DMA buffer\n");
+                pr_debug("isp_core_tuning_event: ISP processing enabled for DMA buffer\n");
                 
                 /* CRITICAL: Trigger frame transfer from sensor to DMA buffer */
                 /* This is what's missing - we need to copy sensor data to ISP buffer */
-                pr_info("*** TRIGGERING FRAME DATA TRANSFER FROM SENSOR TO DMA BUFFER ***\n");
+                pr_debug("*** TRIGGERING FRAME DATA TRANSFER FROM SENSOR TO DMA BUFFER ***\n");
                 
                 /* Call the actual frame data transfer implementation */
                 int transfer_ret = isp_trigger_frame_data_transfer(dev);
                 if (transfer_ret == 0) {
-                    pr_info("*** FRAME DATA TRANSFER COMPLETED SUCCESSFULLY ***\n");
+                    pr_debug("*** FRAME DATA TRANSFER COMPLETED SUCCESSFULLY ***\n");
                 } else {
                     pr_err("*** FRAME DATA TRANSFER FAILED: %d ***\n", transfer_ret);
                 }
@@ -2079,7 +2079,7 @@ static int isp_core_tuning_event(struct tx_isp_dev *dev, uint32_t event)
                 uint32_t dn_mode = readl(dev->core_regs + 0x40a4);
                 tisp_day_or_night_s_ctrl(dn_mode);
                 writel(dn_mode, ourISPdev->core_regs + 0x40a4);
-                pr_info("isp_core_tuning_event: Day/night mode updated: %d\n", dn_mode);
+                pr_debug("isp_core_tuning_event: Day/night mode updated: %d\n", dn_mode);
             }
         }
         break;
@@ -2340,8 +2340,8 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
     // Special case routing for 0x8000024-0x8000027
     if (ctrl->cmd >= 0x8000024) {
         switch(ctrl->cmd) {
-            pr_info("Special case routing for 0x8000024-0x8000027\n");
-            pr_info("cmd=0x%x\n", ctrl->cmd);
+            pr_debug("Special case routing for 0x8000024-0x8000027\n");
+            pr_debug("cmd=0x%x\n", ctrl->cmd);
             case 0x8000023:  // AE Compensation - Binary Ninja: tisp_get_ae_comp(&var_98)
                 tisp_get_ae_comp(&var_98);
                 ctrl->value = var_98 & 0xff;  // Binary Ninja: zx.d(var_98.b)
@@ -2465,7 +2465,7 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
 
                 struct fps_ctrl fps_data;
 
-                pr_info("Get FPS\n");
+                pr_debug("Get FPS\n");
                 fps_data.mode = 1;  // GET mode
                 fps_data.cmd = 0x80000e0;
                 fps_data.frame_rate = 25;
@@ -2486,7 +2486,7 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
     }
 
     switch (ctrl->cmd) {
-        pr_info("Get control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
+        pr_debug("Get control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
         case 0x980900:  // Brightness
             /* CRITICAL: SAFE access with validation like Binary Ninja reference */
             if (!access_ok(VERIFY_READ, &tuning->brightness, sizeof(tuning->brightness))) {
@@ -2525,9 +2525,9 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
                 return -EFAULT;
             }
             
-            pr_info("CRITICAL: Using SAFE validated struct member access for saturation\n");
+            pr_debug("CRITICAL: Using SAFE validated struct member access for saturation\n");
             ctrl->value = tuning->saturation;
-            pr_info("CRITICAL: Saturation read successfully: %d (BadVA crash prevented)\n", ctrl->value);
+            pr_debug("CRITICAL: Saturation read successfully: %d (BadVA crash prevented)\n", ctrl->value);
             break;
 
         case 0x98091b:  // Sharpness
@@ -2566,7 +2566,7 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
     }
 
 out:
-    // pr_info("Mutex unlock\n");
+    // pr_debug("Mutex unlock\n");
     //mutex_unlock(&tuning->lock);
     return ret;
 }
@@ -2580,10 +2580,10 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
         pr_err("No ISP device or tuning data\n");
         return -EINVAL;
     }
-    pr_info("Set control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
+    pr_debug("Set control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
 
     switch (ctrl->cmd) {
-        pr_info("Set control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
+        pr_debug("Set control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
         case 0x980900:  // Brightness
             tuning->brightness = ctrl->value;
             break;
@@ -2737,14 +2737,14 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             uint32_t fps_num = (fps_packed >> 16) & 0xFFFF;
             uint32_t fps_den = fps_packed & 0xFFFF;
 
-            pr_info("*** SET FPS: Received packed FPS 0x%x -> %d/%d FPS ***\n", fps_packed, fps_num, fps_den);
+            pr_debug("*** SET FPS: Received packed FPS 0x%x -> %d/%d FPS ***\n", fps_packed, fps_num, fps_den);
 
             /* Store in tuning data - this is what the client expects */
             if (ourISPdev && ourISPdev->tuning_data) {
                 ourISPdev->tuning_data->fps_num = fps_num;
                 ourISPdev->tuning_data->fps_den = fps_den;
 
-                pr_info("*** SET FPS: Stored %d/%d in tuning data ***\n", fps_num, fps_den);
+                pr_debug("*** SET FPS: Stored %d/%d in tuning data ***\n", fps_num, fps_den);
 
                 /* CRITICAL: Now call the actual sensor FPS control - this is set_framesource_fps() */
                 extern int sensor_fps_control(int fps);
@@ -2752,7 +2752,7 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
 
                 int ret = sensor_fps_control(effective_fps);
                 if (ret == 0) {
-                    pr_info("*** SET FPS: Sensor FPS control successful - %d FPS set ***\n", effective_fps);
+                    pr_debug("*** SET FPS: Sensor FPS control successful - %d FPS set ***\n", effective_fps);
                 } else {
                     pr_warn("*** SET FPS: Sensor FPS control failed: %d ***\n", ret);
                 }
@@ -2981,26 +2981,26 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
     
     /* CRITICAL: Auto-initialize tuning for V4L2 controls ONLY ONCE to prevent init/release cycle */
     if (magic == 0x56 && ourISPdev->tuning_enabled != 3 && !auto_init_done) {
-        pr_info("isp_core_tunning_unlocked_ioctl: Auto-initializing tuning for V4L2 control (one-time)\n");
+        pr_debug("isp_core_tunning_unlocked_ioctl: Auto-initializing tuning for V4L2 control (one-time)\n");
         
         /* Initialize tuning_data if not already initialized */
         if (!dev->tuning_data) {
-            pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
+            pr_debug("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
             ourISPdev->tuning_data = isp_core_tuning_init(dev);
             if (!dev->tuning_data) {
                 pr_err("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
                 return -ENOMEM;
             }
-            pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", ourISPdev->tuning_data);
+            pr_debug("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", ourISPdev->tuning_data);
         }
         
         /* BINARY NINJA REFERENCE: NO AUTO-INITIALIZATION - tuning system only handles control operations */
-        pr_info("*** BINARY NINJA REFERENCE: Skipping auto-initialization - no hardware reset during tuning setup ***\n");
+        pr_debug("*** BINARY NINJA REFERENCE: Skipping auto-initialization - no hardware reset during tuning setup ***\n");
 
         /* Enable tuning and mark auto-init as done */
         ourISPdev->tuning_enabled = 3;
         auto_init_done = true;
-        pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning auto-enabled for V4L2 controls (permanent)\n");
+        pr_debug("isp_core_tunning_unlocked_ioctl: ISP tuning auto-enabled for V4L2 controls (permanent)\n");
     }
     
     /* CRITICAL: Check tuning enabled for tuning commands only */
@@ -3013,7 +3013,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
     if (magic == 0x56) {
         struct isp_core_ctrl ctrl;
         
-        pr_info("isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0x%x\n", cmd);
+        pr_debug("isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0x%x\n", cmd);
         
         switch (cmd) {
             case 0xc008561c: /* ISP_CORE_S_CTRL - Set control */
@@ -3023,7 +3023,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     return -EFAULT;
                 }
                 
-                pr_info("isp_core_tunning_unlocked_ioctl: Set control cmd=0x%x value=%d\n", ctrl.cmd, ctrl.value);
+                pr_debug("isp_core_tunning_unlocked_ioctl: Set control cmd=0x%x value=%d\n", ctrl.cmd, ctrl.value);
                 
                 /* CRITICAL: Validate control command before processing */
                 if (ctrl.cmd == 0x980900 && !dev->tuning_data) {
@@ -3046,7 +3046,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     return -EFAULT;
                 }
                 
-                pr_info("isp_core_tunning_unlocked_ioctl: Get control cmd=0x%x\n", ctrl.cmd);
+                pr_debug("isp_core_tunning_unlocked_ioctl: Get control cmd=0x%x\n", ctrl.cmd);
                 
                 /* CRITICAL: Simple validation for control commands like reference driver */
                 if (!dev->tuning_data) {
@@ -3069,13 +3069,13 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     return -EFAULT;
                 }
                 
-                pr_info("isp_core_tunning_unlocked_ioctl: Tuning enable/disable: %s\n", enable ? "ENABLE" : "DISABLE");
+                pr_debug("isp_core_tunning_unlocked_ioctl: Tuning enable/disable: %s\n", enable ? "ENABLE" : "DISABLE");
 
                 /* BINARY NINJA REFERENCE: Simple tuning enable acknowledgment */
                 if (enable && ourISPdev->tuning_enabled == 3) {
                     /* CRITICAL: VIC-SAFE TUNING OPERATION SEQUENCING */
                     /* The key insight is that tuning operations must be synchronized with VIC hardware state */
-                    pr_info("*** BINARY NINJA REFERENCE: VIC-safe tuning enable acknowledged ***\n");
+                    pr_debug("*** BINARY NINJA REFERENCE: VIC-safe tuning enable acknowledged ***\n");
 
                     /* CRITICAL FIX: Check VIC hardware state before any register operations */
                     extern uint32_t vic_start_ok;
@@ -3091,12 +3091,12 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 
                     /* Binary Ninja: Initialize tuning parameter buffer if not done */
                     if (!tisp_par_ioctl) {
-                        pr_info("*** CRITICAL: Initializing tuning parameter buffer (missing in our implementation) ***\n");
+                        pr_debug("*** CRITICAL: Initializing tuning parameter buffer (missing in our implementation) ***\n");
                         /* This buffer is used by 0x20007400 series commands */
                         tisp_par_ioctl = kmalloc(0x500c, GFP_KERNEL);
                         if (tisp_par_ioctl) {
                             memset(tisp_par_ioctl, 0, 0x500c);
-                            pr_info("*** Tuning parameter buffer allocated: %p ***\n", tisp_par_ioctl);
+                            pr_debug("*** Tuning parameter buffer allocated: %p ***\n", tisp_par_ioctl);
                         } else {
                             pr_err("*** CRITICAL: Failed to allocate tuning parameter buffer ***\n");
                         }
@@ -3106,7 +3106,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     if (tisp_par_ioctl) {
                         /* Mark tuning system as active for parameter processing */
                         *((uint32_t *)tisp_par_ioctl) = 0x12345678;  /* Magic marker */
-                        pr_info("*** CRITICAL: Tuning parameter system activated ***\n");
+                        pr_debug("*** CRITICAL: Tuning parameter system activated ***\n");
                     }
 
                     /* CRITICAL: Maintain frame flow without disrupting VIC hardware */
@@ -3124,73 +3124,73 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     break;
 
                             /* 1. AE (Auto Exposure) Updates - WITH NULL CHECKS */
-                            pr_info("*** TUNING DEBUG: Starting AE updates ***");
+                            pr_debug("*** TUNING DEBUG: Starting AE updates ***");
                             extern int tisp_tgain_update(void);
                             extern int tisp_again_update(void);
                             extern int tisp_ev_update(void);
                             extern int tisp_ae_ir_update(void);
 
-                            pr_info("*** TUNING DEBUG: About to call tisp_tgain_update ***");
+                            pr_debug("*** TUNING DEBUG: About to call tisp_tgain_update ***");
                             int ae_ret = 0;
                             if (tisp_tgain_update) ae_ret = tisp_tgain_update();
-                            pr_info("*** TUNING DEBUG: tisp_tgain_update completed: %d ***", ae_ret);
+                            pr_debug("*** TUNING DEBUG: tisp_tgain_update completed: %d ***", ae_ret);
 
                             if (ae_ret == 0 && tisp_again_update) {
-                                pr_info("*** TUNING DEBUG: About to call tisp_again_update ***");
+                                pr_debug("*** TUNING DEBUG: About to call tisp_again_update ***");
                                 ae_ret = tisp_again_update();
-                                pr_info("*** TUNING DEBUG: tisp_again_update completed: %d ***", ae_ret);
+                                pr_debug("*** TUNING DEBUG: tisp_again_update completed: %d ***", ae_ret);
                             }
 
                             if (ae_ret == 0 && tisp_ev_update) {
-                                pr_info("*** TUNING DEBUG: About to call tisp_ev_update ***");
+                                pr_debug("*** TUNING DEBUG: About to call tisp_ev_update ***");
                                 ae_ret = tisp_ev_update();
-                                pr_info("*** TUNING DEBUG: tisp_ev_update completed: %d ***", ae_ret);
+                                pr_debug("*** TUNING DEBUG: tisp_ev_update completed: %d ***", ae_ret);
                             }
 
                             if (ae_ret == 0 && tisp_ae_ir_update) {
-                                pr_info("*** TUNING DEBUG: About to call tisp_ae_ir_update ***");
+                                pr_debug("*** TUNING DEBUG: About to call tisp_ae_ir_update ***");
                                 ae_ret = tisp_ae_ir_update();
-                                pr_info("*** TUNING DEBUG: tisp_ae_ir_update completed: %d ***", ae_ret);
+                                pr_debug("*** TUNING DEBUG: tisp_ae_ir_update completed: %d ***", ae_ret);
                             }
                             pr_debug("TUNING: AE updates completed: %d\n", ae_ret);
 
                             /* 2. AWB (Auto White Balance) Updates */
-                            pr_info("*** TUNING DEBUG: Starting AWB updates ***");
+                            pr_debug("*** TUNING DEBUG: Starting AWB updates ***");
                             extern int tisp_ct_update(void);
                             extern int tisp_ccm_ct_update(void);
                             extern int tisp_ccm_ev_update(void);
 
-                            pr_info("*** TUNING DEBUG: About to call tisp_ct_update ***");
+                            pr_debug("*** TUNING DEBUG: About to call tisp_ct_update ***");
                             int awb_ret = tisp_ct_update();
-                            pr_info("*** TUNING DEBUG: tisp_ct_update completed: %d ***", awb_ret);
+                            pr_debug("*** TUNING DEBUG: tisp_ct_update completed: %d ***", awb_ret);
 
                             if (awb_ret == 0) {
-                                pr_info("*** TUNING DEBUG: About to call tisp_ccm_ct_update ***");
+                                pr_debug("*** TUNING DEBUG: About to call tisp_ccm_ct_update ***");
                                 awb_ret = tisp_ccm_ct_update();
-                                pr_info("*** TUNING DEBUG: tisp_ccm_ct_update completed: %d ***", awb_ret);
+                                pr_debug("*** TUNING DEBUG: tisp_ccm_ct_update completed: %d ***", awb_ret);
                             }
 
                             if (awb_ret == 0) {
-                                pr_info("*** TUNING DEBUG: About to call tisp_ccm_ev_update ***");
+                                pr_debug("*** TUNING DEBUG: About to call tisp_ccm_ev_update ***");
                                 awb_ret = tisp_ccm_ev_update();
-                                pr_info("*** TUNING DEBUG: tisp_ccm_ev_update completed: %d ***", awb_ret);
+                                pr_debug("*** TUNING DEBUG: tisp_ccm_ev_update completed: %d ***", awb_ret);
                             }
                             pr_debug("TUNING: AWB/CCM updates completed: %d\n", awb_ret);
 
                             /* 3. Gamma Correction Updates */
-                            pr_info("*** TUNING DEBUG: Starting Gamma updates ***");
+                            pr_debug("*** TUNING DEBUG: Starting Gamma updates ***");
                             extern int tiziano_gamma_lut_parameter(void);
-                            pr_info("*** TUNING DEBUG: About to call tiziano_gamma_lut_parameter ***");
+                            pr_debug("*** TUNING DEBUG: About to call tiziano_gamma_lut_parameter ***");
                             int gamma_ret = tiziano_gamma_lut_parameter();
-                            pr_info("*** TUNING DEBUG: tiziano_gamma_lut_parameter completed: %d ***", gamma_ret);
+                            pr_debug("*** TUNING DEBUG: tiziano_gamma_lut_parameter completed: %d ***", gamma_ret);
                             pr_debug("TUNING: Gamma LUT update completed: %d\n", gamma_ret);
 
                             /* 4. LSC (Lens Shading Correction) Updates */
-                            pr_info("*** TUNING DEBUG: Starting LSC updates ***");
+                            pr_debug("*** TUNING DEBUG: Starting LSC updates ***");
                             extern int tisp_lsc_write_lut_datas(void);
-                            pr_info("*** TUNING DEBUG: About to call tisp_lsc_write_lut_datas ***");
+                            pr_debug("*** TUNING DEBUG: About to call tisp_lsc_write_lut_datas ***");
                             int lsc_ret = tisp_lsc_write_lut_datas();
-                            pr_info("*** TUNING DEBUG: tisp_lsc_write_lut_datas completed: %d ***", lsc_ret);
+                            pr_debug("*** TUNING DEBUG: tisp_lsc_write_lut_datas completed: %d ***", lsc_ret);
                             pr_debug("TUNING: LSC update completed: %d\n", lsc_ret);
 
                             /* 5. DPC (Dead Pixel Correction) Updates */
@@ -3264,22 +3264,22 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                                 }
                             }
 
-                            pr_info("*** This should maintain proper ISP pipeline control and prevent CSI PHY timeouts ***\n");
+                            pr_debug("*** This should maintain proper ISP pipeline control and prevent CSI PHY timeouts ***\n");
                 }
 
                 /* CRITICAL: Ignore disable commands when auto-initialized to prevent init/release cycle */
                 if (!enable && auto_init_done) {
-                    pr_info("isp_core_tunning_unlocked_ioctl: Ignoring disable command - tuning was auto-initialized\n");
+                    pr_debug("isp_core_tunning_unlocked_ioctl: Ignoring disable command - tuning was auto-initialized\n");
                     ret = 0;  /* Return success but don't actually disable */
                     break;
                 }
                 
                 if (enable) {
-                    pr_info("*** DEBUG: enable=1, dev->tuning_enabled=%d ***\n", dev->tuning_enabled);
+                    pr_debug("*** DEBUG: enable=1, dev->tuning_enabled=%d ***\n", dev->tuning_enabled);
                     if (dev->tuning_enabled != 3) {
                         /* CRITICAL: Initialize tuning_data if not already initialized */
                         if (!dev->tuning_data) {
-                            pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
+                            pr_debug("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
 
                             /* Allocate tuning data structure using the reference implementation */
                             ourISPdev->tuning_data = isp_core_tuning_init(dev);
@@ -3288,31 +3288,31 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                                 return -ENOMEM;
                             }
 
-                            pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", ourISPdev->tuning_data);
+                            pr_debug("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", ourISPdev->tuning_data);
 
                             /* MCP LOG: Tuning data structure successfully initialized */
-                            pr_info("MCP_LOG: ISP tuning data structure allocated and initialized successfully\n");
-                            pr_info("MCP_LOG: Tuning controls now ready for operation\n");
+                            pr_debug("MCP_LOG: ISP tuning data structure allocated and initialized successfully\n");
+                            pr_debug("MCP_LOG: Tuning controls now ready for operation\n");
                         }
 
                         /* BINARY NINJA REFERENCE: NO HARDWARE INITIALIZATION DURING TUNING ENABLE */
-                        pr_info("*** BINARY NINJA REFERENCE: Tuning enable - no hardware reset performed ***\n");
+                        pr_debug("*** BINARY NINJA REFERENCE: Tuning enable - no hardware reset performed ***\n");
                         /* Reference driver only sets tuning_enabled flag - no hardware initialization */
                         ret = 0;  /* Success - just enable tuning without hardware reset */
 
                         ourISPdev->tuning_enabled = 3;
                         auto_init_done = true;  /* Mark as auto-initialized */
-                        pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning enabled\n");
+                        pr_debug("isp_core_tunning_unlocked_ioctl: ISP tuning enabled\n");
                     } else {
-                        pr_info("*** BINARY NINJA REFERENCE: Tuning already enabled - no action needed ***\n");
+                        pr_debug("*** BINARY NINJA REFERENCE: Tuning already enabled - no action needed ***\n");
                         ret = 0;  /* Success - tuning already enabled */
                     }
                 } else {
                     /* BINARY NINJA REFERENCE: Simple tuning disable - no hardware deinitialization */
-                    pr_info("*** BINARY NINJA REFERENCE: Tuning disable - no hardware reset performed ***\n");
+                    pr_debug("*** BINARY NINJA REFERENCE: Tuning disable - no hardware reset performed ***\n");
                     if (dev->tuning_enabled == 3) {
                         dev->tuning_enabled = 0;
-                        pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning disabled (Binary Ninja reference behavior)\n");
+                        pr_debug("isp_core_tunning_unlocked_ioctl: ISP tuning disabled (Binary Ninja reference behavior)\n");
                     }
                     ret = 0;  /* Success - just disable tuning without hardware reset */
                 }
@@ -3335,7 +3335,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
         unsigned long s0_1 = (unsigned long)arg;
         int32_t param_type;
         
-        pr_info("isp_core_tunning_unlocked_ioctl: Handling tuning parameter command 0x%x\n", cmd);
+        pr_debug("isp_core_tunning_unlocked_ioctl: Handling tuning parameter command 0x%x\n", cmd);
         
         /* Binary Ninja: Check if tisp_par_ioctl is allocated */
         if (!tisp_par_ioctl) {
@@ -3350,7 +3350,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
             if ((cmd - 0x20007400) < 0xa) {
                 switch (cmd) {
                     case 0x20007400: { /* GET operation */
-                        pr_info("tisp_code_tuning_ioctl: GET operation 0x%x\n", cmd);
+                        pr_debug("tisp_code_tuning_ioctl: GET operation 0x%x\n", cmd);
                         
                         /* Binary Ninja: Check access permissions */
                         if (!access_ok(VERIFY_READ, arg, 0x500c)) {
@@ -3367,7 +3367,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         
                         /* Binary Ninja: Process different parameter types based on tisp_par_ioctl[0] */
                         int32_t param_type = tisp_par_ioctl_ptr[0];
-                        pr_info("tisp_code_tuning_ioctl: GET param_type=%d\n", param_type);
+                        pr_debug("tisp_code_tuning_ioctl: GET param_type=%d\n", param_type);
                         
                         if (param_type >= 0x19) {
                             /* Invalid parameter type */
@@ -3378,27 +3378,27 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         /* Binary Ninja: Call appropriate get function based on parameter type */
                         switch (param_type) {
                             case 0:  /* Top parameters */
-                                pr_info("tisp_code_tuning_ioctl: GET top parameters\n");
+                                pr_debug("tisp_code_tuning_ioctl: GET top parameters\n");
                                 /* Call tisp_top_param_array_get(&tisp_par_ioctl_ptr[3], &tisp_par_ioctl_ptr[1]) */
                                 break;
                             case 1:  /* BLC parameters */
-                                pr_info("tisp_code_tuning_ioctl: GET BLC parameters\n");
+                                pr_debug("tisp_code_tuning_ioctl: GET BLC parameters\n");
                                 /* Call tisp_blc_get_par_cfg(&tisp_par_ioctl_ptr[3], &tisp_par_ioctl_ptr[1]) */
                                 break;
                             case 2:  /* LSC parameters */
-                                pr_info("tisp_code_tuning_ioctl: GET LSC parameters\n");
+                                pr_debug("tisp_code_tuning_ioctl: GET LSC parameters\n");
                                 /* Call tisp_lsc_get_par_cfg(&tisp_par_ioctl_ptr[3], &tisp_par_ioctl_ptr[1]) */
                                 break;
                             case 3:  /* WDR parameters */
-                                pr_info("tisp_code_tuning_ioctl: GET WDR parameters\n");
+                                pr_debug("tisp_code_tuning_ioctl: GET WDR parameters\n");
                                 /* Call tisp_wdr_get_par_cfg(&tisp_par_ioctl_ptr[3], &tisp_par_ioctl_ptr[1]) */
                                 break;
                             case 4:  /* DPC parameters */
-                                pr_info("tisp_code_tuning_ioctl: GET DPC parameters\n");
+                                pr_debug("tisp_code_tuning_ioctl: GET DPC parameters\n");
                                 /* Call tisp_dpc_get_par_cfg(&tisp_par_ioctl_ptr[3], &tisp_par_ioctl_ptr[1]) */
                                 break;
                             default:
-                                pr_info("tisp_code_tuning_ioctl: GET parameter type %d (implementation pending)\n", param_type);
+                                pr_debug("tisp_code_tuning_ioctl: GET parameter type %d (implementation pending)\n", param_type);
                                 break;
                         }
                         
@@ -3412,7 +3412,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     }
                     
                     case 0x20007401: { /* SET operation */
-                        pr_info("tisp_code_tuning_ioctl: SET operation 0x%x\n", cmd);
+                        pr_debug("tisp_code_tuning_ioctl: SET operation 0x%x\n", cmd);
                         
                         /* Binary Ninja: Check access permissions */
                         if (!access_ok(VERIFY_WRITE, arg, 0x500c)) {
@@ -3429,7 +3429,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         
                         /* Binary Ninja: Process different parameter types based on tisp_par_ioctl[0] */
                         int32_t param_type = tisp_par_ioctl_ptr[0];
-                        pr_info("tisp_code_tuning_ioctl: SET param_type=%d\n", param_type);
+                        pr_debug("tisp_code_tuning_ioctl: SET param_type=%d\n", param_type);
                         
                         if (param_type - 1 >= 0x18) {
                             pr_err("tisp_code_tuning_ioctl: Invalid SET parameter type %d\n", param_type);
@@ -3439,30 +3439,30 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         /* Binary Ninja: Call appropriate set function based on parameter type */
                         switch (param_type) {
                             case 1:  /* BLC parameters */
-                                pr_info("tisp_code_tuning_ioctl: SET BLC parameters\n");
+                                pr_debug("tisp_code_tuning_ioctl: SET BLC parameters\n");
                                 /* Call tisp_blc_set_par_cfg(&tisp_par_ioctl_ptr[3]) */
                                 break;
                             case 2:  /* LSC parameters */
-                                pr_info("tisp_code_tuning_ioctl: SET LSC parameters\n");
+                                pr_debug("tisp_code_tuning_ioctl: SET LSC parameters\n");
                                 /* Call tisp_lsc_set_par_cfg(tisp_par_ioctl_ptr[2], &tisp_par_ioctl_ptr[3]) */
                                 break;
                             case 3:  /* WDR parameters */
-                                pr_info("tisp_code_tuning_ioctl: SET WDR parameters\n");
+                                pr_debug("tisp_code_tuning_ioctl: SET WDR parameters\n");
                                 /* Call tisp_wdr_set_par_cfg(&tisp_par_ioctl_ptr[3]) */
                                 break;
                             case 4:  /* DPC parameters */
-                                pr_info("tisp_code_tuning_ioctl: SET DPC parameters\n");
+                                pr_debug("tisp_code_tuning_ioctl: SET DPC parameters\n");
                                 /* Call tisp_dpc_set_par_cfg(&tisp_par_ioctl_ptr[3]) */
                                 break;
                             default:
-                                pr_info("tisp_code_tuning_ioctl: SET parameter type %d (implementation pending)\n", param_type);
+                                pr_debug("tisp_code_tuning_ioctl: SET parameter type %d (implementation pending)\n", param_type);
                                 break;
                         }
                         break;
                     }
                     
                     case 0x20007403: { /* AE info get */
-                        pr_info("tisp_code_tuning_ioctl: AE info get 0x%x\n", cmd);
+                        pr_debug("tisp_code_tuning_ioctl: AE info get 0x%x\n", cmd);
                         
                         /* Binary Ninja: Call tisp_get_ae_info(tisp_par_ioctl) */
                         /* tisp_get_ae_info(tisp_par_ioctl); */
@@ -3482,7 +3482,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     }
                     
                     case 0x20007404: { /* AE info set */
-                        pr_info("tisp_code_tuning_ioctl: AE info set 0x%x\n", cmd);
+                        pr_debug("tisp_code_tuning_ioctl: AE info set 0x%x\n", cmd);
                         
                         if (!access_ok(VERIFY_READ, arg, 0x500c)) {
                             pr_err("tisp_code_tuning_ioctl: Access check failed for AE info set\n");
@@ -3501,7 +3501,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     }
                     
                     case 0x20007406: { /* AWB info get */
-                        pr_info("tisp_code_tuning_ioctl: AWB info get 0x%x\n", cmd);
+                        pr_debug("tisp_code_tuning_ioctl: AWB info get 0x%x\n", cmd);
                         
                         /* Binary Ninja: Call tisp_get_awb_info(tisp_par_ioctl) */
                         /* tisp_get_awb_info(tisp_par_ioctl); */
@@ -3520,7 +3520,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     }
                     
                     case 0x20007407: { /* AWB info set */
-                        pr_info("tisp_code_tuning_ioctl: AWB info set 0x%x\n", cmd);
+                        pr_debug("tisp_code_tuning_ioctl: AWB info set 0x%x\n", cmd);
                         
                         if (!access_ok(VERIFY_READ, arg, 0x500c)) {
                             pr_err("tisp_code_tuning_ioctl: Access check failed for AWB info set\n");
@@ -3539,7 +3539,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     }
                     
                     case 0x20007408: { /* Special operation 1 */
-                        pr_info("tisp_code_tuning_ioctl: Special operation 1: 0x%x\n", cmd);
+                        pr_debug("tisp_code_tuning_ioctl: Special operation 1: 0x%x\n", cmd);
                         
                         if (!access_ok(VERIFY_READ, arg, 0x500c)) {
                             pr_err("tisp_code_tuning_ioctl: Access check failed for special op 1\n");
@@ -3565,7 +3565,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     }
                     
                     case 0x20007409: { /* Special operation 2 */
-                        pr_info("tisp_code_tuning_ioctl: Special operation 2: 0x%x\n", cmd);
+                        pr_debug("tisp_code_tuning_ioctl: Special operation 2: 0x%x\n", cmd);
                         
                         if (!access_ok(VERIFY_READ, arg, 0x500c)) {
                             pr_err("tisp_code_tuning_ioctl: Access check failed for special op 2\n");
@@ -3614,7 +3614,7 @@ EXPORT_SYMBOL(isp_core_tunning_unlocked_ioctl);
 /* tisp_code_tuning_open - Binary Ninja EXACT implementation */
 int tisp_code_tuning_open(struct inode *inode, struct file *file)
 {
-    pr_info("ISP M0 device open called from pid %d\n", current->pid);
+    pr_debug("ISP M0 device open called from pid %d\n", current->pid);
     
     /* FIXED: Use regular kmalloc instead of precious rmem - tuning buffer doesn't need DMA */
     void *tuning_buffer = kmalloc(0x500c, GFP_KERNEL);
@@ -3638,9 +3638,9 @@ int tisp_code_tuning_open(struct inode *inode, struct file *file)
     /* memset($v0, 0, 0x500c) */
     memset(tuning_buffer, 0, 0x500c);
     
-    pr_info("*** REFERENCE DRIVER IMPLEMENTATION ***\n");
-    pr_info("ISP M0 tuning buffer allocated: %p (size=0x%x, aligned)\n", tuning_buffer, 0x500c);
-    pr_info("tisp_par_ioctl global variable set: %p\n", tisp_par_ioctl);
+    pr_debug("*** REFERENCE DRIVER IMPLEMENTATION ***\n");
+    pr_debug("ISP M0 tuning buffer allocated: %p (size=0x%x, aligned)\n", tuning_buffer, 0x500c);
+    pr_debug("tisp_par_ioctl global variable set: %p\n", tisp_par_ioctl);
     
     /* Store buffer pointer for file operations */
     file->private_data = tuning_buffer;
@@ -4047,12 +4047,12 @@ int tisp_code_tuning_release(struct inode *inode, struct file *file)
      * tisp_par_ioctl = 0
      * return 0 */
 
-    pr_info("tisp_code_tuning_release: Releasing tuning interface\n");
+    pr_debug("tisp_code_tuning_release: Releasing tuning interface\n");
 
     if (tisp_par_ioctl) {
         kfree(tisp_par_ioctl);
         tisp_par_ioctl = NULL;
-        pr_info("tisp_code_tuning_release: Parameter buffer freed\n");
+        pr_debug("tisp_code_tuning_release: Parameter buffer freed\n");
     }
 
     return 0;
@@ -5671,7 +5671,7 @@ int isp_core_tuning_release(struct tx_isp_dev *dev)
 {
     struct isp_tuning_data *tuning = ourISPdev->tuning_data;
 
-    pr_info("##### %s %d #####\n", __func__, __LINE__);
+    pr_debug("##### %s %d #####\n", __func__, __LINE__);
 
     if (!tuning)
         return 0;
@@ -5685,7 +5685,7 @@ int isp_core_tuning_release(struct tx_isp_dev *dev)
     /* Free the page-based allocation */
     if (tuning->allocation_pages) {
         free_pages(tuning->allocation_pages, tuning->allocation_order);
-        pr_info("isp_core_tuning_release: Released pages at %p (order=%d)\n",
+        pr_debug("isp_core_tuning_release: Released pages at %p (order=%d)\n",
                 (void*)tuning->allocation_pages, tuning->allocation_order);
     }
 
@@ -5700,11 +5700,11 @@ int isp_m0_chardev_release(struct inode *inode, struct file *file)
     extern struct tx_isp_dev *ourISPdev;
     void *tuning_buffer = file->private_data;
 
-    pr_info("ISP M0 device release called\n");
+    pr_debug("ISP M0 device release called\n");
 
     /* CRITICAL: file->private_data contains tuning buffer, NOT device */
     if (tuning_buffer) {
-        pr_info("Freeing tuning buffer: %p\n", tuning_buffer);
+        pr_debug("Freeing tuning buffer: %p\n", tuning_buffer);
         kfree(tuning_buffer);
         file->private_data = NULL;
     }
@@ -5712,17 +5712,17 @@ int isp_m0_chardev_release(struct inode *inode, struct file *file)
     /* Clear global tuning parameter buffer if it matches */
     if (tisp_par_ioctl == tuning_buffer) {
         tisp_par_ioctl = NULL;
-        pr_info("Cleared global tisp_par_ioctl reference\n");
+        pr_debug("Cleared global tisp_par_ioctl reference\n");
     }
 
     /* Use global device reference for any device operations */
     if (ourISPdev && ourISPdev->tuning_enabled == 3) {
-        pr_info("Disabling tuning on release\n");
+        pr_debug("Disabling tuning on release\n");
         isp_core_tuning_release(ourISPdev);
         ourISPdev->tuning_enabled = 0;
     }
 
-    pr_info("ISP M0 device released\n");
+    pr_debug("ISP M0 device released\n");
     return 0;
 }
 EXPORT_SYMBOL(isp_m0_chardev_release);
@@ -5832,7 +5832,7 @@ static int tiziano_wdr_algorithm(void)
             return -ENOMEM;
         }
         memset(data_d94f8, 0, 27 * sizeof(uint32_t));
-        pr_info("tiziano_wdr_algorithm: Allocated WDR output array at %p\n", data_d94f8);
+        pr_debug("tiziano_wdr_algorithm: Allocated WDR output array at %p\n", data_d94f8);
     }
     
     a2_1 = (uint32_t *)data_d94f8; /* Points to wdr output array */
@@ -6135,7 +6135,7 @@ int tisp_wdr_process(void)
 {
     int32_t v0_1;
     
-    pr_info("tisp_wdr_process: Starting WDR processing pipeline\n");
+    pr_debug("tisp_wdr_process: Starting WDR processing pipeline\n");
     
     /* Binary Ninja: Call main WDR algorithm */
     tiziano_wdr_algorithm();
@@ -6152,7 +6152,7 @@ int tisp_wdr_process(void)
     
     mdns_y_pspa_ref_median_win_opt_array = v0_1;
     
-    pr_info("tisp_wdr_process: WDR processing pipeline complete\n");
+    pr_debug("tisp_wdr_process: WDR processing pipeline complete\n");
     return 0;
 }
 EXPORT_SYMBOL(tisp_wdr_process);
@@ -6160,7 +6160,7 @@ EXPORT_SYMBOL(tisp_wdr_process);
 /* tiziano_wdr_init - WDR module initialization */
 int tiziano_wdr_init(uint32_t width, uint32_t height)
 {
-    pr_info("tiziano_wdr_init: Initializing WDR processing (%dx%d)\n", width, height);
+    pr_debug("tiziano_wdr_init: Initializing WDR processing (%dx%d)\n", width, height);
     
     /* Initialize WDR-specific components and enable WDR mode */
     tisp_gb_init();
@@ -6180,14 +6180,14 @@ int tiziano_wdr_init(uint32_t width, uint32_t height)
     tisp_ae_wdr_en(1);
     tisp_sdns_wdr_en(1);
     
-    pr_info("tiziano_wdr_init: WDR processing initialized successfully\n");
+    pr_debug("tiziano_wdr_init: WDR processing initialized successfully\n");
     return 0;
 }
 
 /* Initialize WDR processing parameters */
 int tisp_wdr_init(void)
 {
-    pr_info("tisp_wdr_init: Initializing WDR processing parameters\n");
+    pr_debug("tisp_wdr_init: Initializing WDR processing parameters\n");
     
     /* Initialize default values for WDR parameters */
     wdr_ev_now = 0x1000;
@@ -6209,7 +6209,7 @@ int tisp_wdr_init(void)
     param_multiValueLow_software_in_array[0] = 0x1000;
     param_computerModle_software_in_array[0] = 1;
     
-    pr_info("tisp_wdr_init: WDR parameters initialized\n");
+    pr_debug("tisp_wdr_init: WDR parameters initialized\n");
     return 0;
 }
 EXPORT_SYMBOL(tiziano_wdr_init);
@@ -6330,7 +6330,7 @@ static void tisp_ae1_process(void)
 /* tiziano_ae_init_exp_th - Based on decompiled code with safe memory access */
 static int tiziano_ae_init_exp_th(void)
 {
-    pr_info("tiziano_ae_init_exp_th: Initializing AE exposure thresholds\n");
+    pr_debug("tiziano_ae_init_exp_th: Initializing AE exposure thresholds\n");
     
     /* Set parameter addresses safely */
     data_d04b8 = &data_b0cfc;
@@ -6384,7 +6384,7 @@ static int tiziano_ae_init_exp_th(void)
     
     /* WDR-specific threshold handling */
     if (data_b0e10 == 1) {
-        pr_info("tiziano_ae_init_exp_th: Configuring WDR exposure thresholds\n");
+        pr_debug("tiziano_ae_init_exp_th: Configuring WDR exposure thresholds\n");
         
         /* WDR minimum exposure threshold */
         if (data_b2ed0 < data_b0d18) {
@@ -6411,14 +6411,14 @@ static int tiziano_ae_init_exp_th(void)
         data_afce0 = data_b0d1c;
     }
     
-    pr_info("tiziano_ae_init_exp_th: AE exposure thresholds initialized\n");
+    pr_debug("tiziano_ae_init_exp_th: AE exposure thresholds initialized\n");
     return 0;
 }
 
 /* tiziano_ae_init - Binary Ninja EXACT implementation with safe memory offsets */
 int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
 {
-    pr_info("tiziano_ae_init: Initializing Auto Exposure (%dx%d@%d) - Binary Ninja EXACT\n", width, height, fps);
+    pr_debug("tiziano_ae_init: Initializing Auto Exposure (%dx%d@%d) - Binary Ninja EXACT\n", width, height, fps);
     
     /* Binary Ninja EXACT: int32_t $a3, int32_t arg_c = $a3 */
     int32_t arg_c = fps;  /* arg_c corresponds to fps parameter */
@@ -6589,20 +6589,20 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
     ae_comp_default = data_b0c18;
     
     /* Binary Ninja EXACT: return 0 */
-    pr_info("tiziano_ae_init: AE initialization complete - Binary Ninja EXACT implementation\n");
+    pr_debug("tiziano_ae_init: AE initialization complete - Binary Ninja EXACT implementation\n");
     return 0;
 }
 
 /* tiziano_awb_init - Auto White Balance initialization */
 int tiziano_awb_init(uint32_t height, uint32_t width)
 {
-    pr_info("tiziano_awb_init: Initializing Auto White Balance (%dx%d)\n", width, height);
+    pr_debug("tiziano_awb_init: Initializing Auto White Balance (%dx%d)\n", width, height);
     
     /* Binary Ninja system_reg_write_awb shows these register writes */
     system_reg_write(0xb000, 1);  /* Enable AWB block 1 */
     system_reg_write(0x1800, 1);  /* Enable AWB block 2 */
     
-    pr_info("tiziano_awb_init: AWB hardware blocks enabled\n");
+    pr_debug("tiziano_awb_init: AWB hardware blocks enabled\n");
     return 0;
 }
 
@@ -6697,7 +6697,7 @@ int tiziano_gamma_lut_parameter(void)
         return -EINVAL;
     }
     
-    pr_info("tiziano_gamma_lut_parameter: Writing gamma LUT to registers\n");
+    pr_debug("tiziano_gamma_lut_parameter: Writing gamma LUT to registers\n");
     
     /* Binary Ninja: Loop from i=2 to 0x102, increment by 2 */
     for (int32_t i = 2; i < 0x102; i += 2) {
@@ -6712,22 +6712,22 @@ int tiziano_gamma_lut_parameter(void)
     }
     
     iounmap(base_reg);
-    pr_info("tiziano_gamma_lut_parameter: Gamma LUT written to hardware\n");
+    pr_debug("tiziano_gamma_lut_parameter: Gamma LUT written to hardware\n");
     return 0;
 }
 
 /* tiziano_gamma_init - Binary Ninja EXACT implementation */
 int tiziano_gamma_init(uint32_t width, uint32_t height, uint32_t fps)
 {
-    pr_info("tiziano_gamma_init: Initializing Gamma correction (%dx%d@%d)\n", width, height, fps);
+    pr_debug("tiziano_gamma_init: Initializing Gamma correction (%dx%d@%d)\n", width, height, fps);
     
     /* Binary Ninja: Select gamma LUT based on WDR mode */
     if (gamma_wdr_en != 0) {
         tiziano_gamma_lut_now = tiziano_gamma_lut_wdr;
-        pr_info("tiziano_gamma_init: Using WDR gamma LUT\n");
+        pr_debug("tiziano_gamma_init: Using WDR gamma LUT\n");
     } else {
         tiziano_gamma_lut_now = tiziano_gamma_lut_linear;
-        pr_info("tiziano_gamma_init: Using linear gamma LUT\n");
+        pr_debug("tiziano_gamma_init: Using linear gamma LUT\n");
     }
     
     /* Initialize gamma LUT arrays with proper curves */
@@ -6748,14 +6748,14 @@ int tiziano_gamma_init(uint32_t width, uint32_t height, uint32_t fps)
         return ret;
     }
     
-    pr_info("tiziano_gamma_init: Gamma correction initialized successfully\n");
+    pr_debug("tiziano_gamma_init: Gamma correction initialized successfully\n");
     return 0;
 }
 
 /* tiziano_gib_init - GIB initialization */
 int tiziano_gib_init(void)
 {
-    pr_info("tiziano_gib_init: Initializing GIB processing\n");
+    pr_debug("tiziano_gib_init: Initializing GIB processing\n");
     return 0;
 }
 
@@ -6997,7 +6997,7 @@ int tisp_lsc_write_lut_datas(void)
 /* tiziano_lsc_init - Binary Ninja EXACT implementation */
 int tiziano_lsc_init(void)
 {
-    pr_info("tiziano_lsc_init: Initializing Lens Shading Correction\n");
+    pr_debug("tiziano_lsc_init: Initializing Lens Shading Correction\n");
     
     /* Initialize LSC LUTs with default values */
     for (int i = 0; i < 2047; i++) {
@@ -7013,10 +7013,10 @@ int tiziano_lsc_init(void)
     /* Binary Ninja: Select mesh strength based on WDR mode */
     if (lsc_wdr_en != 0) {
         data_9a420 = lsc_mesh_str_wdr;
-        pr_info("tiziano_lsc_init: Using WDR LSC parameters\n");
+        pr_debug("tiziano_lsc_init: Using WDR LSC parameters\n");
     } else {
         data_9a420 = lsc_mesh_str;
-        pr_info("tiziano_lsc_init: Using linear LSC parameters\n");
+        pr_debug("tiziano_lsc_init: Using linear LSC parameters\n");
     }
     
     /* Binary Ninja: Refresh parameters */
@@ -7038,7 +7038,7 @@ int tiziano_lsc_init(void)
         return ret;
     }
     
-    pr_info("tiziano_lsc_init: LSC initialized successfully\n");
+    pr_debug("tiziano_lsc_init: LSC initialized successfully\n");
     return 0;
 }
 
@@ -7110,7 +7110,7 @@ static int tiziano_ccm_lut_parameter(int32_t *ccm_data)
         return -ENOMEM;
     }
     
-    pr_info("tiziano_ccm_lut_parameter: Writing CCM matrix to registers\n");
+    pr_debug("tiziano_ccm_lut_parameter: Writing CCM matrix to registers\n");
     
     /* Binary Ninja: Enable CCM processing */
     writel(1, base_reg);
@@ -7154,7 +7154,7 @@ static int tiziano_ccm_lut_parameter(int32_t *ccm_data)
     }
     
     iounmap(base_reg);
-    pr_info("tiziano_ccm_lut_parameter: CCM matrix written to hardware\n");
+    pr_debug("tiziano_ccm_lut_parameter: CCM matrix written to hardware\n");
     return 0;
 }
 
@@ -7382,7 +7382,7 @@ int jz_isp_ccm(void)
 /* tiziano_ccm_init - Binary Ninja EXACT implementation */
 int tiziano_ccm_init(void)
 {
-    pr_info("tiziano_ccm_init: Initializing Color Correction Matrix\n");
+    pr_debug("tiziano_ccm_init: Initializing Color Correction Matrix\n");
     
     /* Binary Ninja: Select CCM parameters based on WDR mode */
     if (ccm_wdr_en != 1) {
@@ -7391,14 +7391,14 @@ int tiziano_ccm_init(void)
         tiziano_ccm_d_now = tiziano_ccm_d_linear;
         cm_ev_list_now = cm_ev_list;
         cm_sat_list_now = cm_sat_list;
-        pr_info("tiziano_ccm_init: Using linear CCM parameters\n");
+        pr_debug("tiziano_ccm_init: Using linear CCM parameters\n");
     } else {
         tiziano_ccm_a_now = tiziano_ccm_a_wdr;
         tiziano_ccm_t_now = tiziano_ccm_t_wdr;
         tiziano_ccm_d_now = tiziano_ccm_d_wdr;
         cm_ev_list_now = cm_ev_list_wdr;
         cm_sat_list_now = cm_sat_list_wdr;
-        pr_info("tiziano_ccm_init: Using WDR CCM parameters\n");
+        pr_debug("tiziano_ccm_init: Using WDR CCM parameters\n");
     }
     
     /* Binary Ninja: Initialize control structures */
@@ -7424,14 +7424,14 @@ int tiziano_ccm_init(void)
         return ret;
     }
     
-    pr_info("tiziano_ccm_init: CCM initialized successfully\n");
+    pr_debug("tiziano_ccm_init: CCM initialized successfully\n");
     return 0;
 }
 
 /* tiziano_dmsc_init - DMSC initialization */
 int tiziano_dmsc_init(void)
 {
-    pr_info("tiziano_dmsc_init: Initializing DMSC processing\n");
+    pr_debug("tiziano_dmsc_init: Initializing DMSC processing\n");
     return 0;
 }
 
@@ -7493,7 +7493,7 @@ static int tisp_sharpen_all_reg_refresh(void)
         return -ENOMEM;
     }
     
-    pr_info("tisp_sharpen_all_reg_refresh: Writing sharpening parameters to registers\n");
+    pr_debug("tisp_sharpen_all_reg_refresh: Writing sharpening parameters to registers\n");
     
     /* Write sharpening arrays to hardware */
     for (int i = 0; i < 16; i++) {
@@ -7514,7 +7514,7 @@ static int tisp_sharpen_all_reg_refresh(void)
     writel(0x80, base_reg + 0x08);    /* Sharpening global strength */
     
     iounmap(base_reg);
-    pr_info("tisp_sharpen_all_reg_refresh: Sharpening registers written to hardware\n");
+    pr_debug("tisp_sharpen_all_reg_refresh: Sharpening registers written to hardware\n");
     return 0;
 }
 
@@ -7548,7 +7548,7 @@ int tisp_sharpen_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_w
 /* tiziano_sharpen_init - Binary Ninja EXACT implementation */
 int tiziano_sharpen_init(void)
 {
-    pr_info("tiziano_sharpen_init: Initializing Sharpening\n");
+    pr_debug("tiziano_sharpen_init: Initializing Sharpening\n");
     
     /* Binary Ninja: Select parameter arrays based on WDR mode */
     if (sharpen_wdr_en != 0) {
@@ -7561,7 +7561,7 @@ int tiziano_sharpen_init(void)
         y_sp_b_sl_stren_1_array_now = y_sp_b_sl_stren_1_wdr_array;
         y_sp_b_sl_stren_2_array_now = y_sp_b_sl_stren_2_wdr_array;
         y_sp_b_sl_stren_3_array_now = y_sp_b_sl_stren_3_wdr_array;
-        pr_info("tiziano_sharpen_init: Using WDR sharpening parameters\n");
+        pr_debug("tiziano_sharpen_init: Using WDR sharpening parameters\n");
     } else {
         y_sp_uu_thres_array_now = y_sp_uu_thres_array;
         y_sp_w_sl_stren_0_array_now = y_sp_w_sl_stren_0_array;
@@ -7572,7 +7572,7 @@ int tiziano_sharpen_init(void)
         y_sp_b_sl_stren_1_array_now = y_sp_b_sl_stren_1_array;
         y_sp_b_sl_stren_2_array_now = y_sp_b_sl_stren_2_array;
         y_sp_b_sl_stren_3_array_now = y_sp_b_sl_stren_3_array;
-        pr_info("tiziano_sharpen_init: Using linear sharpening parameters\n");
+        pr_debug("tiziano_sharpen_init: Using linear sharpening parameters\n");
     }
     
     /* Binary Ninja: Initialize state and refresh parameters */
@@ -7586,7 +7586,7 @@ int tiziano_sharpen_init(void)
         return ret;
     }
     
-    pr_info("tiziano_sharpen_init: Sharpening initialized successfully\n");
+    pr_debug("tiziano_sharpen_init: Sharpening initialized successfully\n");
     return 0;
 }
 
@@ -7667,7 +7667,7 @@ static int tisp_sdns_all_reg_refresh(void)
         return -ENOMEM;
     }
     
-    pr_info("tisp_sdns_all_reg_refresh: Writing SDNS parameters to registers\n");
+    pr_debug("tisp_sdns_all_reg_refresh: Writing SDNS parameters to registers\n");
     
     /* Write threshold arrays to hardware */
     for (int i = 0; i < 16; i++) {
@@ -7689,7 +7689,7 @@ static int tisp_sdns_all_reg_refresh(void)
     writel(1, base_reg + 0xb4c);
     
     iounmap(base_reg);
-    pr_info("tisp_sdns_all_reg_refresh: SDNS registers written to hardware\n");
+    pr_debug("tisp_sdns_all_reg_refresh: SDNS registers written to hardware\n");
     return 0;
 }
 
@@ -7731,7 +7731,7 @@ int tisp_sdns_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_writ
 /* tiziano_sdns_init - Binary Ninja EXACT implementation */
 int tiziano_sdns_init(void)
 {
-    pr_info("tiziano_sdns_init: Initializing SDNS processing\n");
+    pr_debug("tiziano_sdns_init: Initializing SDNS processing\n");
     
     /* Initialize strength arrays */
     for (int i = 0; i < 16; i++) {
@@ -7756,7 +7756,7 @@ int tiziano_sdns_init(void)
         sdns_sp_mv_uu_thres_array_now = sdns_sp_mv_uu_thres_wdr_array;
         sdns_sp_mv_uu_stren_array_now = sdns_sp_mv_uu_stren_wdr_array;
         sdns_ave_thres_array_now = sdns_ave_thres_wdr_array;
-        pr_info("tiziano_sdns_init: Using WDR SDNS parameters\n");
+        pr_debug("tiziano_sdns_init: Using WDR SDNS parameters\n");
     } else {
         sdns_h_mv_wei_now = sdns_h_mv_wei;
         sdns_std_thr2_array_now = sdns_std_thr2_array;
@@ -7771,7 +7771,7 @@ int tiziano_sdns_init(void)
         sdns_sp_mv_uu_thres_array_now = sdns_sp_mv_uu_thres_array;
         sdns_sp_mv_uu_stren_array_now = sdns_sp_mv_uu_stren_array;
         sdns_ave_thres_array_now = rgbg_dis; /* Binary Ninja shows this for linear mode */
-        pr_info("tiziano_sdns_init: Using linear SDNS parameters\n");
+        pr_debug("tiziano_sdns_init: Using linear SDNS parameters\n");
     }
     
     /* Binary Ninja: Initialize state and refresh parameters */
@@ -7785,7 +7785,7 @@ int tiziano_sdns_init(void)
         return ret;
     }
     
-    pr_info("tiziano_sdns_init: SDNS processing initialized successfully\n");
+    pr_debug("tiziano_sdns_init: SDNS processing initialized successfully\n");
     return 0;
 }
 
@@ -7803,7 +7803,7 @@ int tiziano_mdns_init(uint32_t width, uint32_t height)
 {
     void __iomem *base_reg = ioremap(0x13309000, 0x1000); /* MDNS register base */
     
-    pr_info("tiziano_mdns_init: Initializing MDNS processing (%dx%d)\n", width, height);
+    pr_debug("tiziano_mdns_init: Initializing MDNS processing (%dx%d)\n", width, height);
     
     if (!base_reg) {
         pr_err("tiziano_mdns_init: Failed to map MDNS registers\n");
@@ -7816,11 +7816,11 @@ int tiziano_mdns_init(uint32_t width, uint32_t height)
     if (mdns_wdr_en != 0) {
         y_wei_array = mdns_y_ass_wei_adj_value1_wdr;
         c_thres_array = mdns_c_false_edg_thres1_wdr;
-        pr_info("tiziano_mdns_init: Using WDR MDNS parameters\n");
+        pr_debug("tiziano_mdns_init: Using WDR MDNS parameters\n");
     } else {
         y_wei_array = mdns_y_ass_wei_adj_value1;
         c_thres_array = mdns_c_false_edg_thres1;
-        pr_info("tiziano_mdns_init: Using linear MDNS parameters\n");
+        pr_debug("tiziano_mdns_init: Using linear MDNS parameters\n");
     }
     
     /* Write MDNS parameters to hardware */
@@ -7835,14 +7835,14 @@ int tiziano_mdns_init(uint32_t width, uint32_t height)
     writel(1, base_reg + 0x08);       /* Enable MDNS */
     
     iounmap(base_reg);
-    pr_info("tiziano_mdns_init: MDNS processing initialized successfully\n");
+    pr_debug("tiziano_mdns_init: MDNS processing initialized successfully\n");
     return 0;
 }
 
 /* tiziano_clm_init - CLM initialization */
 int tiziano_clm_init(void)
 {
-    pr_info("tiziano_clm_init: Initializing CLM processing\n");
+    pr_debug("tiziano_clm_init: Initializing CLM processing\n");
     return 0;
 }
 
@@ -7914,7 +7914,7 @@ static int tisp_dpc_all_reg_refresh(void)
         return -ENOMEM;
     }
     
-    pr_info("tisp_dpc_all_reg_refresh: Writing DPC parameters to registers\n");
+    pr_debug("tisp_dpc_all_reg_refresh: Writing DPC parameters to registers\n");
     
     /* Write DPC threshold arrays to hardware */
     for (int i = 0; i < 16; i++) {
@@ -7930,7 +7930,7 @@ static int tisp_dpc_all_reg_refresh(void)
     writel(0x10, base_reg + 0x08);  /* DPC strength */
     
     iounmap(base_reg);
-    pr_info("tisp_dpc_all_reg_refresh: DPC registers written to hardware\n");
+    pr_debug("tisp_dpc_all_reg_refresh: DPC registers written to hardware\n");
     return 0;
 }
 
@@ -7964,7 +7964,7 @@ int tisp_dpc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write
 /* tiziano_dpc_init - Binary Ninja EXACT implementation */
 int tiziano_dpc_init(void)
 {
-    pr_info("tiziano_dpc_init: Initializing DPC processing\n");
+    pr_debug("tiziano_dpc_init: Initializing DPC processing\n");
     
     /* Binary Ninja: Select parameter arrays based on WDR mode */
     if (dpc_wdr_en != 0) {
@@ -7972,13 +7972,13 @@ int tiziano_dpc_init(void)
         dpc_d_m1_fthres_array_now = dpc_d_m1_fthres_wdr_array;
         dpc_d_m3_dthres_array_now = dpc_d_m3_dthres_wdr_array;
         dpc_d_m3_fthres_array_now = dpc_d_m3_fthres_wdr_array;
-        pr_info("tiziano_dpc_init: Using WDR DPC parameters\n");
+        pr_debug("tiziano_dpc_init: Using WDR DPC parameters\n");
     } else {
         dpc_d_m1_dthres_array_now = dpc_d_m1_dthres_array;
         dpc_d_m1_fthres_array_now = dpc_d_m1_fthres_array;
         dpc_d_m3_dthres_array_now = dpc_d_m3_dthres_array;
         dpc_d_m3_fthres_array_now = dpc_d_m3_fthres_array;
-        pr_info("tiziano_dpc_init: Using linear DPC parameters\n");
+        pr_debug("tiziano_dpc_init: Using linear DPC parameters\n");
     }
     
     /* Binary Ninja: Initialize state and refresh parameters */
@@ -7992,21 +7992,21 @@ int tiziano_dpc_init(void)
         return ret;
     }
     
-    pr_info("tiziano_dpc_init: DPC processing initialized successfully\n");
+    pr_debug("tiziano_dpc_init: DPC processing initialized successfully\n");
     return 0;
 }
 
 /* tiziano_hldc_init - HLDC initialization */
 int tiziano_hldc_init(void)
 {
-    pr_info("tiziano_hldc_init: Initializing HLDC processing\n");
+    pr_debug("tiziano_hldc_init: Initializing HLDC processing\n");
     return 0;
 }
 
 /* tiziano_defog_init - Defog initialization */
 int tiziano_defog_init(uint32_t width, uint32_t height)
 {
-    pr_info("tiziano_defog_init: Initializing Defog processing (%dx%d)\n", width, height);
+    pr_debug("tiziano_defog_init: Initializing Defog processing (%dx%d)\n", width, height);
     return 0;
 }
 
@@ -8070,7 +8070,7 @@ static int tisp_adr_set_params(void)
         return -ENOMEM;
     }
     
-    pr_info("tisp_adr_set_params: Writing ADR parameters to registers\n");
+    pr_debug("tisp_adr_set_params: Writing ADR parameters to registers\n");
     
     /* Write center weight distribution */
     for (int i = 0; i < 31; i++) {
@@ -8091,7 +8091,7 @@ static int tisp_adr_set_params(void)
     writel(data_ace54, base_reg + 0x04); /* ADR strength parameter */
     
     iounmap(base_reg);
-    pr_info("tisp_adr_set_params: ADR parameters written to hardware\n");
+    pr_debug("tisp_adr_set_params: ADR parameters written to hardware\n");
     return 0;
 }
 
@@ -8131,7 +8131,7 @@ int tiziano_adr_interrupt_static(void)
 /* tiziano_adr_init - Binary Ninja SIMPLIFIED implementation */
 int tiziano_adr_init(uint32_t width, uint32_t height)
 {
-    pr_info("tiziano_adr_init: Initializing ADR processing (%dx%d)\n", width, height);
+    pr_debug("tiziano_adr_init: Initializing ADR processing (%dx%d)\n", width, height);
     
     /* Binary Ninja: Store resolution parameters */
     data_af158 = width;
@@ -8192,128 +8192,128 @@ int tiziano_adr_init(uint32_t width, uint32_t height)
     tisp_event_set_cb(0x12, tiziano_adr_interrupt_static);
     tisp_event_set_cb(2, tisp_adr_process);
     
-    pr_info("tiziano_adr_init: ADR processing initialized successfully\n");
+    pr_debug("tiziano_adr_init: ADR processing initialized successfully\n");
     return 0;
 }
 
 /* tiziano_af_init - Auto Focus initialization */
 int tiziano_af_init(uint32_t height, uint32_t width)
 {
-    pr_info("tiziano_af_init: Initializing Auto Focus (%dx%d)\n", width, height);
+    pr_debug("tiziano_af_init: Initializing Auto Focus (%dx%d)\n", width, height);
     return 0;
 }
 
 /* tiziano_bcsh_init - BCSH initialization */
 int tiziano_bcsh_init(void)
 {
-    pr_info("tiziano_bcsh_init: Initializing BCSH processing\n");
+    pr_debug("tiziano_bcsh_init: Initializing BCSH processing\n");
     return 0;
 }
 
 /* tiziano_ydns_init - YDNS initialization */
 int tiziano_ydns_init(void)
 {
-    pr_info("tiziano_ydns_init: Initializing YDNS processing\n");
+    pr_debug("tiziano_ydns_init: Initializing YDNS processing\n");
     return 0;
 }
 
 /* tiziano_rdns_init - RDNS initialization */
 int tiziano_rdns_init(void)
 {
-    pr_info("tiziano_rdns_init: Initializing RDNS processing\n");
+    pr_debug("tiziano_rdns_init: Initializing RDNS processing\n");
     return 0;
 }
 
 /* WDR-specific initialization functions */
 int tisp_gb_init(void)
 {
-    pr_info("tisp_gb_init: Initializing GB processing for WDR\n");
+    pr_debug("tisp_gb_init: Initializing GB processing for WDR\n");
     return 0;
 }
 
 /* WDR enable functions for each component */
 int tisp_dpc_wdr_en(int enable)
 {
-    pr_info("tisp_dpc_wdr_en: %s DPC WDR mode\n", enable ? "Enable" : "Disable");
+    pr_debug("tisp_dpc_wdr_en: %s DPC WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
 int tisp_lsc_wdr_en(int enable)
 {
-    pr_info("tisp_lsc_wdr_en: %s LSC WDR mode\n", enable ? "Enable" : "Disable");
+    pr_debug("tisp_lsc_wdr_en: %s LSC WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
 int tisp_gamma_wdr_en(int enable)
 {
-    pr_info("tisp_gamma_wdr_en: %s Gamma WDR mode\n", enable ? "Enable" : "Disable");
+    pr_debug("tisp_gamma_wdr_en: %s Gamma WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
 int tisp_sharpen_wdr_en(int enable)
 {
-    pr_info("tisp_sharpen_wdr_en: %s Sharpen WDR mode\n", enable ? "Enable" : "Disable");
+    pr_debug("tisp_sharpen_wdr_en: %s Sharpen WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
 int tisp_ccm_wdr_en(int enable)
 {
-    pr_info("tisp_ccm_wdr_en: %s CCM WDR mode\n", enable ? "Enable" : "Disable");
+    pr_debug("tisp_ccm_wdr_en: %s CCM WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
 int tisp_bcsh_wdr_en(int enable)
 {
-    pr_info("tisp_bcsh_wdr_en: %s BCSH WDR mode\n", enable ? "Enable" : "Disable");
+    pr_debug("tisp_bcsh_wdr_en: %s BCSH WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
 int tisp_rdns_wdr_en(int enable)
 {
-    pr_info("tisp_rdns_wdr_en: %s RDNS WDR mode\n", enable ? "Enable" : "Disable");
+    pr_debug("tisp_rdns_wdr_en: %s RDNS WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
 int tisp_adr_wdr_en(int enable)
 {
-    pr_info("tisp_adr_wdr_en: %s ADR WDR mode\n", enable ? "Enable" : "Disable");
+    pr_debug("tisp_adr_wdr_en: %s ADR WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
 int tisp_defog_wdr_en(int enable)
 {
-    pr_info("tisp_defog_wdr_en: %s Defog WDR mode\n", enable ? "Enable" : "Disable");
+    pr_debug("tisp_defog_wdr_en: %s Defog WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
 int tisp_mdns_wdr_en(int enable)
 {
-    pr_info("tisp_mdns_wdr_en: %s MDNS WDR mode\n", enable ? "Enable" : "Disable");
+    pr_debug("tisp_mdns_wdr_en: %s MDNS WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
 int tisp_dmsc_wdr_en(int enable)
 {
-    pr_info("tisp_dmsc_wdr_en: %s DMSC WDR mode\n", enable ? "Enable" : "Disable");
+    pr_debug("tisp_dmsc_wdr_en: %s DMSC WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
 int tisp_ae_wdr_en(int enable)
 {
-    pr_info("tisp_ae_wdr_en: %s AE WDR mode\n", enable ? "Enable" : "Disable");
+    pr_debug("tisp_ae_wdr_en: %s AE WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
 int tisp_sdns_wdr_en(int enable)
 {
-    pr_info("tisp_sdns_wdr_en: %s SDNS WDR mode\n", enable ? "Enable" : "Disable");
+    pr_debug("tisp_sdns_wdr_en: %s SDNS WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }
 
 /* tisp_event_set_cb - Binary Ninja EXACT implementation */
 int tisp_event_set_cb(int event_id, void *callback)
 {
-    pr_info("tisp_event_set_cb: Setting callback for event %d\n", event_id);
+    pr_debug("tisp_event_set_cb: Setting callback for event %d\n", event_id);
     
     if (event_id < 0 || event_id >= 32) {
         pr_err("tisp_event_set_cb: Invalid event ID %d\n", event_id);
@@ -8323,7 +8323,7 @@ int tisp_event_set_cb(int event_id, void *callback)
     /* Binary Ninja: *((arg1 << 2) + &cb) = arg2 */
     cb[event_id] = (int (*)(void))callback;
     
-    pr_info("tisp_event_set_cb: Event %d callback set to %p\n", event_id, callback);
+    pr_debug("tisp_event_set_cb: Event %d callback set to %p\n", event_id, callback);
     return 0;
 }
 
@@ -8389,7 +8389,7 @@ static int isp_event_dispatcher(int event_id)
 /* tisp_event_init - Event system initialization */
 int tisp_event_init(void)
 {
-    pr_info("tisp_event_init: Initializing ISP event system\n");
+    pr_debug("tisp_event_init: Initializing ISP event system\n");
     
     /* Clear all callback arrays */
     memset(isp_event_func_cb, 0, sizeof(isp_event_func_cb));
@@ -8400,7 +8400,7 @@ int tisp_event_init(void)
         isp_irq_initialized = true;
     }
     
-    pr_info("tisp_event_init: Event system initialized\n");
+    pr_debug("tisp_event_init: Event system initialized\n");
     return 0;
 }
 
@@ -8499,7 +8499,7 @@ int isp_setup_irq_handling(struct tx_isp_dev *dev)
 {
     int ret;
     
-    pr_info("isp_setup_irq_handling: Setting up ISP interrupt handling\n");
+    pr_debug("isp_setup_irq_handling: Setting up ISP interrupt handling\n");
     
     if (!dev) {
         pr_err("isp_setup_irq_handling: Invalid device\n");
@@ -8516,10 +8516,10 @@ int isp_setup_irq_handling(struct tx_isp_dev *dev)
     /* Enable basic ISP interrupts */
     if (dev->core_regs) {
         writel(0xFFFFFFFF, ourISPdev->core_regs + 0x44); /* Enable all ISP interrupts */
-        pr_info("isp_setup_irq_handling: ISP interrupts enabled\n");
+        pr_debug("isp_setup_irq_handling: ISP interrupts enabled\n");
     }
     
-    pr_info("isp_setup_irq_handling: ISP interrupt handling setup complete\n");
+    pr_debug("isp_setup_irq_handling: ISP interrupt handling setup complete\n");
     return 0;
 }
 EXPORT_SYMBOL(isp_setup_irq_handling);
@@ -8529,7 +8529,7 @@ void isp_cleanup_irq_handling(struct tx_isp_dev *dev)
 {
     unsigned long flags;
     
-    pr_info("isp_cleanup_irq_handling: Cleaning up ISP interrupt handling\n");
+    pr_debug("isp_cleanup_irq_handling: Cleaning up ISP interrupt handling\n");
     
     if (!dev) {
         return;
@@ -8543,7 +8543,7 @@ void isp_cleanup_irq_handling(struct tx_isp_dev *dev)
     /* Free interrupt */
     if (dev->isp_irq > 0) {
         free_irq(dev->isp_irq, dev);
-        pr_info("isp_cleanup_irq_handling: IRQ %d freed\n", ourISPdev->isp_irq);
+        pr_debug("isp_cleanup_irq_handling: IRQ %d freed\n", ourISPdev->isp_irq);
     }
     
     /* BINARY NINJA REFERENCE: No event processing thread to stop */
@@ -8556,24 +8556,24 @@ void isp_cleanup_irq_handling(struct tx_isp_dev *dev)
         spin_unlock_irqrestore(&isp_irq_lock, flags);
     }
     
-    pr_info("isp_cleanup_irq_handling: Cleanup complete\n");
+    pr_debug("isp_cleanup_irq_handling: Cleanup complete\n");
 }
 EXPORT_SYMBOL(isp_cleanup_irq_handling);
 
 /* tisp_event_cleanup - Clean up event processing thread and resources */
 void tisp_event_cleanup(void)
 {
-    pr_info("tisp_event_cleanup: Cleaning up event processing system\n");
+    pr_debug("tisp_event_cleanup: Cleaning up event processing system\n");
 
     /* BINARY NINJA REFERENCE: No event processing thread to stop */
 
-    pr_info("tisp_event_cleanup: Event processing cleanup complete\n");
+    pr_debug("tisp_event_cleanup: Event processing cleanup complete\n");
 }
 EXPORT_SYMBOL(tisp_event_cleanup);
 
 int tisp_param_operate_init(void)
 {
-    pr_info("tisp_param_operate_init: Initializing parameter operations\n");
+    pr_debug("tisp_param_operate_init: Initializing parameter operations\n");
     return 0;
 }
 
@@ -8605,7 +8605,7 @@ int tisp_tgain_update(void)
 
 int tisp_again_update(void)
 {
-    pr_info("tisp_again_update: Updating analog gain with SENSOR I2C communication\n");
+    pr_debug("tisp_again_update: Updating analog gain with SENSOR I2C communication\n");
 
     /* Update analog gain based on AE calculations */
     extern struct tx_isp_dev *ourISPdev;
@@ -8626,7 +8626,7 @@ int tisp_again_update(void)
                 &ourISPdev->sensor->sd, TX_ISP_EVENT_SENSOR_AGAIN, &gain_value);
 
             if (sensor_ret == 0) {
-                pr_info("tisp_again_update: Sensor I2C gain update SUCCESS (gain=0x%x)\n", gain_value);
+                pr_debug("tisp_again_update: Sensor I2C gain update SUCCESS (gain=0x%x)\n", gain_value);
             } else {
                 pr_warn("tisp_again_update: Sensor I2C gain update FAILED: %d\n", sensor_ret);
             }
@@ -8634,7 +8634,7 @@ int tisp_again_update(void)
             pr_warn("tisp_again_update: No sensor available for I2C communication\n");
         }
 
-        pr_info("tisp_again_update: Analog gain updated to 0x%x (ISP + sensor)\n", tuning->max_again);
+        pr_debug("tisp_again_update: Analog gain updated to 0x%x (ISP + sensor)\n", tuning->max_again);
     }
 
     return 0;
@@ -8724,8 +8724,8 @@ int tisp_ae_ir_update(void)
 /* tiziano_init_all_pipeline_components - Complete ISP pipeline initialization */
 int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32_t fps, int wdr_mode)
 {
-    pr_info("*** INITIALIZING ALL TIZIANO ISP PIPELINE COMPONENTS ***\n");
-    pr_info("Resolution: %dx%d, FPS: %d, WDR mode: %d\n", width, height, fps, wdr_mode);
+    pr_debug("*** INITIALIZING ALL TIZIANO ISP PIPELINE COMPONENTS ***\n");
+    pr_debug("Resolution: %dx%d, FPS: %d, WDR mode: %d\n", width, height, fps, wdr_mode);
     
     /* Binary Ninja tisp_init sequence - initialize all components */
     tiziano_ae_init(height, width, fps);
@@ -8750,7 +8750,7 @@ int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32
     
     /* WDR-specific initialization if WDR mode is enabled */
     if (wdr_mode != 0) {
-        pr_info("*** INITIALIZING WDR-SPECIFIC COMPONENTS ***\n");
+        pr_debug("*** INITIALIZING WDR-SPECIFIC COMPONENTS ***\n");
         tisp_gb_init();
         tisp_dpc_wdr_en(1);
         tisp_lsc_wdr_en(1);
@@ -8765,11 +8765,11 @@ int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32
         tisp_dmsc_wdr_en(1);
         tisp_ae_wdr_en(1);
         tisp_sdns_wdr_en(1);
-        pr_info("*** WDR COMPONENTS INITIALIZED ***\n");
+        pr_debug("*** WDR COMPONENTS INITIALIZED ***\n");
     }
     
     /* Event system initialization */
-    pr_info("*** INITIALIZING ISP EVENT SYSTEM ***\n");
+    pr_debug("*** INITIALIZING ISP EVENT SYSTEM ***\n");
     tisp_event_init();
     tisp_event_set_cb(4, tisp_tgain_update);
     tisp_event_set_cb(5, tisp_again_update);
@@ -8784,7 +8784,7 @@ int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32
         return param_init_ret;
     }
     
-    pr_info("*** ALL TIZIANO ISP PIPELINE COMPONENTS INITIALIZED SUCCESSFULLY ***\n");
+    pr_debug("*** ALL TIZIANO ISP PIPELINE COMPONENTS INITIALIZED SUCCESSFULLY ***\n");
     return 0;
 }
 EXPORT_SYMBOL(tiziano_init_all_pipeline_components);
@@ -8883,11 +8883,11 @@ int tisp_code_create_tuning_node(void)
 {
     int ret;
     
-    pr_info("tisp_code_create_tuning_node: Creating ISP M0 tuning device node\n");
+    pr_debug("tisp_code_create_tuning_node: Creating ISP M0 tuning device node\n");
     
     /* CRITICAL: Guard against duplicate device creation */
     if (tuning_device_created) {
-        pr_info("tisp_code_create_tuning_node: Device already created, skipping\n");
+        pr_debug("tisp_code_create_tuning_node: Device already created, skipping\n");
         return 0;
     }
     
@@ -8899,7 +8899,7 @@ int tisp_code_create_tuning_node(void)
             return ret;
         }
         tuning_major = MAJOR(tuning_devno);
-        pr_info("tisp_code_create_tuning_node: Allocated dynamic major %d\n", tuning_major);
+        pr_debug("tisp_code_create_tuning_node: Allocated dynamic major %d\n", tuning_major);
     } else {
         tuning_devno = MKDEV(tuning_major, 0);
         ret = register_chrdev_region(tuning_devno, 1, "isp-m0");
@@ -8907,7 +8907,7 @@ int tisp_code_create_tuning_node(void)
             pr_err("tisp_code_create_tuning_node: Failed to register chrdev region: %d\n", ret);
             return ret;
         }
-        pr_info("tisp_code_create_tuning_node: Registered static major %d\n", tuning_major);
+        pr_debug("tisp_code_create_tuning_node: Registered static major %d\n", tuning_major);
     }
     
     /* Binary Ninja: cdev_init(&tuning_cdev, &isp_core_tunning_fops) */
@@ -8943,7 +8943,7 @@ int tisp_code_create_tuning_node(void)
     /* Set flag to prevent duplicate creation */
     tuning_device_created = true;
     
-    pr_info("*** ISP M0 TUNING DEVICE CREATED: /dev/isp-m0 (major=%d, minor=0) ***\n", tuning_major);
+    pr_debug("*** ISP M0 TUNING DEVICE CREATED: /dev/isp-m0 (major=%d, minor=0) ***\n", tuning_major);
     return 0;
 }
 EXPORT_SYMBOL(tisp_code_create_tuning_node);
@@ -8951,7 +8951,7 @@ EXPORT_SYMBOL(tisp_code_create_tuning_node);
 /* tisp_code_destroy_tuning_node - Binary Ninja EXACT implementation */
 int tisp_code_destroy_tuning_node(void)
 {
-    pr_info("tisp_code_destroy_tuning_node: Destroying ISP M0 tuning device node\n");
+    pr_debug("tisp_code_destroy_tuning_node: Destroying ISP M0 tuning device node\n");
     
     if (tuning_class) {
         /* Binary Ninja: device_destroy(tuning_class, tuning_devno) */
@@ -8971,7 +8971,7 @@ int tisp_code_destroy_tuning_node(void)
     /* Binary Ninja: tuning_major = 0 */
     tuning_major = 0;
     
-    pr_info("*** ISP M0 TUNING DEVICE DESTROYED ***\n");
+    pr_debug("*** ISP M0 TUNING DEVICE DESTROYED ***\n");
     return 0;
 }
 EXPORT_SYMBOL(tisp_code_destroy_tuning_node);
@@ -8987,7 +8987,7 @@ int tisp_s_sdns_ratio(int ratio)
     uint32_t temp_val;
     int is_low_ratio = (ratio < 0x81) ? 1 : 0;
 
-    pr_info("tisp_s_sdns_ratio: Setting spatial DNS ratio to %d\n", ratio);
+    pr_debug("tisp_s_sdns_ratio: Setting spatial DNS ratio to %d\n", ratio);
 
     /* Binary Ninja shows complex array processing for 16 different strength arrays */
     data_9a9c0 = ratio;
@@ -9057,7 +9057,7 @@ int tisp_s_sdns_ratio(int ratio)
 /* tisp_s_2dns_ratio - 2D noise suppression ratio */
 int tisp_s_2dns_ratio(int ratio)
 {
-    pr_info("tisp_s_2dns_ratio: Setting 2D noise suppression ratio to %d\n", ratio);
+    pr_debug("tisp_s_2dns_ratio: Setting 2D noise suppression ratio to %d\n", ratio);
 
     /* Binary Ninja shows this calls tisp_s_sdns_ratio(arg1) */
     return tisp_s_sdns_ratio(ratio);
@@ -9071,7 +9071,7 @@ int tisp_s_mdns_ratio(int ratio)
     uint32_t temp_val;
     int is_low_ratio = (ratio < 0x81) ? 1 : 0;
 
-    pr_info("tisp_s_mdns_ratio: Setting motion DNS ratio to %d\n", ratio);
+    pr_debug("tisp_s_mdns_ratio: Setting motion DNS ratio to %d\n", ratio);
 
     /* Binary Ninja shows complex array processing for motion denoising */
     data_9ab00 = ratio;
@@ -9203,7 +9203,7 @@ EXPORT_SYMBOL(tisp_s_mdns_ratio);
 /* tisp_s_3dns_ratio - 3D noise suppression ratio */
 int tisp_s_3dns_ratio(int ratio)
 {
-    pr_info("tisp_s_3dns_ratio: Setting 3D noise suppression ratio to %d\n", ratio);
+    pr_debug("tisp_s_3dns_ratio: Setting 3D noise suppression ratio to %d\n", ratio);
 
     /* Binary Ninja shows this calls tisp_s_mdns_ratio(arg1) */
     return tisp_s_mdns_ratio(ratio);
@@ -9215,7 +9215,7 @@ EXPORT_SYMBOL(tisp_s_3dns_ratio);
 /* tisp_mdns_all_reg_refresh - Binary Ninja EXACT implementation */
 static int tisp_mdns_all_reg_refresh(uint32_t base_addr)
 {
-    pr_info("tisp_mdns_all_reg_refresh: Refreshing MDNS registers at base 0x%x\n", base_addr);
+    pr_debug("tisp_mdns_all_reg_refresh: Refreshing MDNS registers at base 0x%x\n", base_addr);
 
     /* Binary Ninja implementation:
      * tisp_mdns_intp(arg1);
@@ -9236,7 +9236,7 @@ static int tisp_mdns_all_reg_refresh(uint32_t base_addr)
 /* tisp_mdns_reg_trigger - Binary Ninja EXACT implementation */
 static int tisp_mdns_reg_trigger(void)
 {
-    pr_info("tisp_mdns_reg_trigger: Triggering MDNS register update\n");
+    pr_debug("tisp_mdns_reg_trigger: Triggering MDNS register update\n");
 
     /* Binary Ninja: system_reg_write(0x7804, 0x111); */
     system_reg_write(0x7804, 0x111);
@@ -9250,7 +9250,7 @@ int tisp_s_BacklightComp(int comp_level)
     uint8_t param_buffer[0x2c];
     int param_size = 0x2c;
 
-    pr_info("tisp_s_BacklightComp: Setting backlight compensation to %d\n", comp_level);
+    pr_debug("tisp_s_BacklightComp: Setting backlight compensation to %d\n", comp_level);
 
     /* Binary Ninja implementation:
      * memcpy(&var_40, 0x94d8c, 0x2c);
@@ -9271,7 +9271,7 @@ int tisp_s_BacklightComp(int comp_level)
     *(uint32_t*)&param_buffer[8] = comp_level + 1;  /* Compensation level */
 
     /* Apply AE parameters - simplified implementation */
-    pr_info("tisp_s_BacklightComp: Applied backlight compensation parameters\n");
+    pr_debug("tisp_s_BacklightComp: Applied backlight compensation parameters\n");
 
     return 0;
 }
@@ -9283,7 +9283,7 @@ int tisp_s_Hilightdepress(int depress_level)
     uint8_t param_buffer[0x2c];
     int param_size = 0x2c;
 
-    pr_info("tisp_s_Hilightdepress: Setting highlight depression to %d\n", depress_level);
+    pr_debug("tisp_s_Hilightdepress: Setting highlight depression to %d\n", depress_level);
 
     /* Binary Ninja implementation is very similar to BacklightComp:
      * memcpy(&var_40, 0x94d8c, 0x2c);
@@ -9304,7 +9304,7 @@ int tisp_s_Hilightdepress(int depress_level)
     *(uint32_t*)&param_buffer[8] = depress_level + 1;  /* Depression level */
 
     /* Apply AE parameters - simplified implementation */
-    pr_info("tisp_s_Hilightdepress: Applied highlight depression parameters\n");
+    pr_debug("tisp_s_Hilightdepress: Applied highlight depression parameters\n");
 
     return 0;
 }
@@ -9315,7 +9315,7 @@ int tisp_s_Gamma(void *gamma_data)
 {
     int gamma_size = 0x102;
 
-    pr_info("tisp_s_Gamma: Setting gamma curve\n");
+    pr_debug("tisp_s_Gamma: Setting gamma curve\n");
 
     if (!gamma_data) {
         pr_err("tisp_s_Gamma: NULL gamma data\n");
@@ -9330,7 +9330,7 @@ int tisp_s_Gamma(void *gamma_data)
      */
 
     /* Apply gamma parameters - simplified implementation */
-    pr_info("tisp_s_Gamma: Applied gamma curve parameters\n");
+    pr_debug("tisp_s_Gamma: Applied gamma curve parameters\n");
 
     /* Copy to day and night parameter sets if available */
     if (tparams_day) {
@@ -9349,7 +9349,7 @@ int tisp_s_adr_enable(int enable)
 {
     uint32_t reg_val;
 
-    pr_info("tisp_s_adr_enable: %s ADR\n", enable ? "Enabling" : "Disabling");
+    pr_debug("tisp_s_adr_enable: %s ADR\n", enable ? "Enabling" : "Disabling");
 
     /* Binary Ninja implementation:
      * int32_t $v0 = system_reg_read(0xc);
@@ -9388,7 +9388,7 @@ int tisp_s_adr_str_internal(int strength)
     int i;
     uint32_t temp_val;
 
-    pr_info("tisp_s_adr_str_internal: Setting ADR strength to %d\n", strength);
+    pr_debug("tisp_s_adr_str_internal: Setting ADR strength to %d\n", strength);
 
     /* Binary Ninja shows complex ADR strength calculation with multiple arrays */
     /* This is a simplified implementation focusing on the key operations */
@@ -9432,7 +9432,7 @@ int tisp_s_ae_at_list(uint32_t target_value)
     uint8_t param_buffer[0x1c];
     int i;
 
-    pr_info("tisp_s_ae_at_list: Setting AE auto-target to %u\n", target_value);
+    pr_debug("tisp_s_ae_at_list: Setting AE auto-target to %u\n", target_value);
 
     /* Binary Ninja shows copying 0x18 bytes from stack arguments */
     /* This appears to be setting up an AE target list */
@@ -9446,7 +9446,7 @@ int tisp_s_ae_at_list(uint32_t target_value)
     }
 
     /* Apply AE target list - simplified implementation */
-    pr_info("tisp_s_ae_at_list: Applied AE target list\n");
+    pr_debug("tisp_s_ae_at_list: Applied AE target list\n");
 
     return 0;
 }
@@ -9459,7 +9459,7 @@ int tisp_s_ae_attr(void *ae_attr_data)
     uint8_t temp_buffer[0x88];
     int i;
 
-    pr_info("tisp_s_ae_attr: Setting AE attributes\n");
+    pr_debug("tisp_s_ae_attr: Setting AE attributes\n");
 
     if (!ae_attr_data) {
         pr_err("tisp_s_ae_attr: NULL AE attribute data\n");
@@ -9488,7 +9488,7 @@ int tisp_s_ae_attr(void *ae_attr_data)
     }
 
     /* Apply AE manual settings - simplified implementation */
-    pr_info("tisp_s_ae_attr: Applied AE attribute settings\n");
+    pr_debug("tisp_s_ae_attr: Applied AE attribute settings\n");
 
     return 0;
 }
@@ -9500,7 +9500,7 @@ int tisp_s_ae_hist(void *hist_data)
     uint8_t hist_buffer[0x424];
     int i;
 
-    pr_info("tisp_s_ae_hist: Setting AE histogram\n");
+    pr_debug("tisp_s_ae_hist: Setting AE histogram\n");
 
     if (!hist_data) {
         pr_err("tisp_s_ae_hist: NULL histogram data\n");
@@ -9519,7 +9519,7 @@ int tisp_s_ae_hist(void *hist_data)
     }
 
     /* Apply custom histogram settings - simplified implementation */
-    pr_info("tisp_s_ae_hist: Applied AE histogram settings\n");
+    pr_debug("tisp_s_ae_hist: Applied AE histogram settings\n");
 
     return 0;
 }
@@ -9532,7 +9532,7 @@ int tisp_s_ae_it_max(void)
     uint8_t temp_buffer[0x88];
     int i;
 
-    pr_info("tisp_s_ae_it_max: Setting AE integration time maximum\n");
+    pr_debug("tisp_s_ae_it_max: Setting AE integration time maximum\n");
 
     /* Binary Ninja implementation:
      * memcpy(&var_a0, &dmsc_sp_d_w_stren_wdr_array, 0x98);
@@ -9553,7 +9553,7 @@ int tisp_s_ae_it_max(void)
     }
 
     /* Apply AE min/max settings - simplified implementation */
-    pr_info("tisp_s_ae_it_max: Applied AE integration time maximum settings\n");
+    pr_debug("tisp_s_ae_it_max: Applied AE integration time maximum settings\n");
 
     return 0;
 }
@@ -9568,13 +9568,13 @@ void *isp_core_tuning_init(void *arg1)
     void *raw_allocation = NULL;
     extern struct tx_isp_dev *ourISPdev;
     
-    pr_info("isp_core_tuning_init: Initializing ISP core tuning with guaranteed alignment\n");
+    pr_debug("isp_core_tuning_init: Initializing ISP core tuning with guaranteed alignment\n");
     
     /* CRITICAL: Calculate aligned allocation size - must be multiple of 16 for MIPS32 */
     size_t struct_size = sizeof(struct isp_tuning_data);
     size_t aligned_size = ALIGN(struct_size, 16);  /* 16-byte alignment for MIPS32 safety */
     
-    pr_info("isp_core_tuning_init: Struct size=%zu, aligned size=%zu\n", struct_size, aligned_size);
+    pr_debug("isp_core_tuning_init: Struct size=%zu, aligned size=%zu\n", struct_size, aligned_size);
     
     /* CRITICAL: Allocate with explicit alignment guarantee - use kmem_cache or aligned allocation */
     /* Method 1: Use __get_free_pages for guaranteed alignment */
@@ -9588,7 +9588,7 @@ void *isp_core_tuning_init(void *arg1)
     
     tuning_data = (struct isp_tuning_data *)pages;
     
-    pr_info("isp_core_tuning_init: Allocated tuning data at %p (order=%d, size=%zu)\n",
+    pr_debug("isp_core_tuning_init: Allocated tuning data at %p (order=%d, size=%zu)\n",
             tuning_data, order, aligned_size);
     
     /* CRITICAL: Verify alignment is perfect - must be at least 16-byte aligned */
@@ -9611,7 +9611,7 @@ void *isp_core_tuning_init(void *arg1)
     
     /* CRITICAL: Initialize register base safely */
     tuning_data->regs = ourISPdev->core_regs;
-    pr_info("isp_core_tuning_init: Register base initialized to %p\n", tuning_data->regs);
+    pr_debug("isp_core_tuning_init: Register base initialized to %p\n", tuning_data->regs);
 
     
     /* Initialize tuning data structure with safe, aligned defaults */
@@ -9672,10 +9672,10 @@ void *isp_core_tuning_init(void *arg1)
     /* Set valid state marker */
     tuning_data->state = 1;
     
-    pr_info("isp_core_tuning_init: Tuning data structure initialized successfully\n");
-    pr_info("isp_core_tuning_init: Address: %p, aligned: 16-byte, state: %d\n",
+    pr_debug("isp_core_tuning_init: Tuning data structure initialized successfully\n");
+    pr_debug("isp_core_tuning_init: Address: %p, aligned: 16-byte, state: %d\n",
             tuning_data, tuning_data->state);
-    pr_info("isp_core_tuning_init: Critical fields - Brightness=%d, Saturation=%d\n",
+    pr_debug("isp_core_tuning_init: Critical fields - Brightness=%d, Saturation=%d\n",
             tuning_data->brightness, tuning_data->saturation);
     
     return tuning_data;
@@ -9699,7 +9699,7 @@ int dump_vic_reg(void)
     /* Binary Ninja EXACT: for (int32_t i = 0; i != 0x1b4; i += 4) */
     for (int i = 0; i != 0x1b4; i += 4) {
         u32 reg_value = readl(vic_regs + i);
-        pr_info("register is 0x%x, value is 0x%x\n", i, reg_value);
+        pr_debug("register is 0x%x, value is 0x%x\n", i, reg_value);
 
         /* Check for critical error registers */
         if (i == 0x84c && reg_value != 0) {
