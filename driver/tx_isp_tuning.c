@@ -8668,6 +8668,51 @@ int tisp_param_operate_init(void)
 }
 EXPORT_SYMBOL(tisp_param_operate_init);
 
+/* tisp_param_operate_deinit - EXACT Binary Ninja implementation */
+int tisp_param_operate_deinit(void)
+{
+    pr_debug("tisp_param_operate_deinit: Deinitializing parameter operations\n");
+
+    /* Binary Ninja: tisp_netlink_exit() */
+    tisp_netlink_exit();
+
+    /* Binary Ninja: uint32_t opmsg_1 = opmsg */
+    uint32_t opmsg_1 = (uint32_t)opmsg;
+
+    if (opmsg_1 != 0) {
+        /* Binary Ninja: private_kfree(opmsg_1) */
+        private_kfree((void*)opmsg_1);
+        /* Binary Ninja: opmsg = 0 */
+        opmsg = 0;
+    }
+
+    /* Binary Ninja: tisp_code_destroy_tuning_node() */
+    tisp_code_destroy_tuning_node();
+
+    return 0;
+}
+EXPORT_SYMBOL(tisp_param_operate_deinit);
+
+/* tisp_netlink_init - EXACT Binary Ninja implementation */
+int tisp_netlink_init(void)
+{
+    pr_debug("tisp_netlink_init: Initializing netlink communication\n");
+
+    /* Binary Ninja: uint32_t $v0 = private_netlink_kernel_create(init_net, 0x17, &nlcfg) */
+    uint32_t v0 = (uint32_t)private_netlink_kernel_create(&init_net, 0x17, &nlcfg);
+    nlsk = (void*)v0;
+
+    if (v0 != 0) {
+        /* Binary Ninja: return 0 */
+        return 0;
+    }
+
+    /* Binary Ninja: isp_printf(2, "Can not support this frame mode!!!\n", "tisp_netlink_init") */
+    isp_printf(2, "Can not support this frame mode!!!\n", "tisp_netlink_init");
+    return 0xffffffff;
+}
+EXPORT_SYMBOL(tisp_netlink_init);
+
 
 /* Update functions for event callbacks - Enhanced implementations */
 int tisp_tgain_update(void)
