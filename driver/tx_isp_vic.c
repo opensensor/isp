@@ -2307,20 +2307,111 @@ int dump_isp_vic_frd_open(struct inode *inode, struct file *file)
     return single_open_size(file, isp_vic_frd_show, PDE_DATA(inode), 0x400);
 }
 
-/* ISP VIC cmd set function - placeholder matching reference driver interface */
-long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg)
+/* vic_mdma_enable - EXACT Binary Ninja implementation */
+int vic_mdma_enable(struct tx_isp_vic_device *vic_dev, int channel, int dual_channel,
+                    int buffer_count, dma_addr_t base_addr, int format_type)
 {
-    struct tx_isp_subdev *sd = file->private_data;
-    
-    pr_info("isp_vic_cmd_set: cmd=0x%x, arg=0x%lx\n", cmd, arg);
-    
-    if (!sd) {
-        pr_err("isp_vic_cmd_set: No subdev in file private_data\n");
+    void __iomem *vic_regs;
+    u32 width, height, stride, frame_size;
+    u32 vic_control;
+
+    if (!vic_dev || !vic_dev->vic_regs) {
+        pr_err("vic_mdma_enable: Invalid VIC device\n");
         return -EINVAL;
     }
-    
-    /* Forward to the main VIC ioctl handler */
-    return vic_chardev_ioctl(file, cmd, arg);
+
+    vic_regs = vic_dev->vic_regs;
+    width = vic_dev->width;   /* Binary Ninja: *(arg1 + 0xdc) */
+    height = vic_dev->height; /* Binary Ninja: *(arg1 + 0xe0) */
+
+    pr_info("*** vic_mdma_enable: EXACT Binary Ninja implementation ***\n");
+    pr_info("vic_mdma_enable: width=%d, height=%d, buffers=%d, format=%d\n",
+            width, height, buffer_count, format_type);
+
+    /* Binary Ninja: Calculate stride based on format */
+    if (format_type != 7) {  /* Not NV12 format */
+        stride = width << 1;  /* RAW10 = 2 bytes/pixel */
+    } else {
+        stride = width;       /* NV12 = 1 byte/pixel for Y plane */
+    }
+
+    frame_size = stride * height;
+
+    /* Binary Ninja EXACT: Set global buffer indices */
+    /* These are referenced in the decompilation as global variables */
+    static u32 vic_mdma_ch0_set_buff_index = 4;
+    static u32 vic_mdma_ch1_set_buff_index = 4;
+    static u32 vic_mdma_ch0_sub_get_num = 0;
+    static u32 vic_mdma_ch1_sub_get_num = 0;
+
+    vic_mdma_ch0_set_buff_index = 4;
+    vic_mdma_ch1_set_buff_index = 4;
+    vic_mdma_ch0_sub_get_num = buffer_count;
+
+    if (dual_channel != 0) {
+        vic_mdma_ch1_sub_get_num = buffer_count;
+    }
+
+    /* Binary Ninja EXACT: Configure VIC MDMA registers */
+    writel(1, vic_regs + 0x308);                           /* Enable MDMA */
+    writel((width << 16) | height, vic_regs + 0x304);      /* Dimensions */
+    writel(stride, vic_regs + 0x310);                      /* Stride */
+    writel(stride, vic_regs + 0x314);                      /* Stride (duplicate) */
+
+    /* Binary Ninja EXACT: Program buffer addresses */
+    u32 buffer_offset = frame_size;
+    if (format_type == 7) {  /* NV12 format */
+        buffer_offset = frame_size << 1;  /* Double frame size for NV12 */
+    }
+
+    /* Channel 0 buffers */
+    writel(base_addr, vic_regs + 0x318);                                    /* Buffer 0 */
+
+    if (dual_channel == 0) {
+        /* Single channel mode */
+        writel(base_addr + frame_size, vic_regs + 0x31c);                   /* Buffer 1 */
+        writel(base_addr + (frame_size * 2), vic_regs + 0x320);             /* Buffer 2 */
+        writel(base_addr + (frame_size * 3), vic_regs + 0x324);             /* Buffer 3 */
+        writel(base_addr + (frame_size * 4), vic_regs + 0x328);             /* Buffer 4 */
+    } else {
+        /* Dual channel mode */
+        writel(base_addr + buffer_offset, vic_regs + 0x31c);                /* Buffer 1 */
+        writel(base_addr + (buffer_offset * 2), vic_regs + 0x320);          /* Buffer 2 */
+        writel(base_addr + (buffer_offset * 3), vic_regs + 0x324);          /* Buffer 3 */
+        writel(base_addr + (buffer_offset * 4), vic_regs + 0x328);          /* Buffer 4 */
+    }
+
+    /* Channel 1 buffers */
+    writel(base_addr + frame_size, vic_regs + 0x340);                       /* Ch1 Buffer 0 */
+    writel(base_addr + frame_size + buffer_offset, vic_regs + 0x344);       /* Ch1 Buffer 1 */
+    writel(base_addr + frame_size + (buffer_offset * 2), vic_regs + 0x348); /* Ch1 Buffer 2 */
+    writel(base_addr + frame_size + (buffer_offset * 3), vic_regs + 0x34c); /* Ch1 Buffer 3 */
+    writel(base_addr + frame_size + (buffer_offset * 4), vic_regs + 0x350); /* Ch1 Buffer 4 */
+
+    /* Binary Ninja EXACT: Additional buffers for format_type == 7 (NV12) */
+    if (format_type == 7) {
+        writel(base_addr + frame_size, vic_regs + 0x32c);                   /* Additional buffer */
+        writel(base_addr + frame_size + buffer_offset, vic_regs + 0x330);
+        writel(base_addr + frame_size + (buffer_offset * 2), vic_regs + 0x334);
+        writel(base_addr + frame_size + (buffer_offset * 3), vic_regs + 0x338);
+        writel(base_addr + frame_size + (buffer_offset * 4), vic_regs + 0x33c);
+    }
+
+    /* Binary Ninja EXACT: Calculate VIC control register value */
+    if (buffer_count < 8) {
+        vic_control = (buffer_count << 16) | 0x80000020 | format_type;
+    } else {
+        vic_control = 0x80080020 | format_type;
+    }
+
+    /* Binary Ninja EXACT: Write VIC control register */
+    writel(vic_control, vic_regs + 0x300);
+    wmb();
+
+    pr_info("*** vic_mdma_enable: VIC[0x300] = 0x%x (MDMA ENABLED) ***\n", vic_control);
+    pr_info("*** vic_mdma_enable: Frame size=%d, buffer_offset=%d ***\n", frame_size, buffer_offset);
+
+    return 0;
 }
 
 /* VIC activation function - matching reference driver */
