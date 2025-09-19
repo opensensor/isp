@@ -7775,10 +7775,7 @@ static long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, 
         return -EINVAL;
     }
 
-    subdev = tx_isp_get_subdevdata(sd);
-    if (!subdev) {
-        return -EINVAL;
-    }
+    subdev = sd;
 
     /* Handle sensor-specific IOCTLs */
     switch (cmd) {
