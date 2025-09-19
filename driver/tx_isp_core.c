@@ -994,39 +994,21 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         return IRQ_NONE;
     }
 
-    /* *** CRITICAL: Read from ISP core interrupt status registers for MIPI *** */
-    /* Prefer direct core_regs mapping; fall back to VIC-relative if needed */
+    /* Binary Ninja: int32_t $s1 = *($v0 + 0xb4); *($v0 + 0xb8) = $s1 */
+    /* SAFE: Use proper ISP core register access - prefer direct mapping */
     if (isp_dev->core_regs) {
         isp_regs = isp_dev->core_regs;
-    } else if (vic_dev && vic_dev->vic_regs) {
-        isp_regs = vic_dev->vic_regs - 0x9a00;
     } else {
-        return IRQ_NONE;
+        /* Fallback to VIC-relative mapping */
+        isp_regs = vic_regs - 0x9a00;
     }
-    /* Support both legacy (+0xb*) and new (+0x98b*) interrupt banks */
-    {
-        u32 status_legacy = readl(isp_regs + 0xb4);
-        u32 status_new    = readl(isp_regs + 0x98b4);
-        interrupt_status  = status_legacy ? status_legacy : status_new;
-        /* Clear pending in the corresponding bank(s) */
-        if (status_legacy)
-            writel(status_legacy, isp_regs + 0xb8);
-        if (status_new)
-            writel(status_new, isp_regs + 0x98b8);
-        wmb();
-        if (interrupt_status != 0) {
-            pr_info("*** ISP CORE INTERRUPT: bank=%s status=0x%08x (legacy=0x%08x new=0x%08x) ***\n",
-                    status_legacy ? "legacy(+0xb*)" : "new(+0x98b*)",
-                    interrupt_status, status_legacy, status_new);
-        } else if (isp_force_core_isr) {
-            pr_info("*** ISP CORE: FORCED FRAME DONE VIA VIC (no pending) ***\n");
-            interrupt_status = 1; /* Force Channel 0 frame-done path */
-        } else {
-            pr_info("*** ISP CORE INTERRUPT: no pending (legacy=0x%08x new=0x%08x) ***\n",
-                     status_legacy, status_new);
-            return IRQ_HANDLED; /* No interrupt to process */
-        }
-    }
+
+    /* Binary Ninja: Read interrupt status and clear it immediately */
+    interrupt_status = readl(isp_regs + 0xb4);
+    writel(interrupt_status, isp_regs + 0xb8);
+    wmb();
+
+    pr_info("*** ISP CORE INTERRUPT: status=0x%08x ***\n", interrupt_status);
 
     /* Binary Ninja: if (($s1 & 0x3f8) == 0) */
     if ((interrupt_status & 0x3f8) == 0) {
