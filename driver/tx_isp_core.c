@@ -9,6 +9,7 @@
 #include <linux/memblock.h>
 #include <linux/kthread.h>
 #include <linux/completion.h>
+#include <linux/interrupt.h>
 #include "../include/tx_isp.h"
 #include "../include/tx_isp_core.h"
 #include "../include/tx-isp-debug.h"
@@ -111,6 +112,10 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable);
 
 /* Video link streaming function - defined in tx-isp-module.c */
 extern int tx_isp_video_link_stream(struct tx_isp_dev *dev, int enable);
+
+/* ISP core interrupt and link functions - Binary Ninja reference */
+irqreturn_t ispcore_irq_thread_handle(int irq, void *dev_id);
+int ispcore_link_setup(struct tx_isp_dev *isp_dev, int config);
 
 /* Global flag to prevent multiple tisp_init calls */
 static bool tisp_initialized = false;
@@ -265,6 +270,174 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     }
 
     return 0;
+}
+
+/* ispcore_irq_thread_handle - EXACT Binary Ninja implementation */
+irqreturn_t ispcore_irq_thread_handle(int irq, void *dev_id)
+{
+    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
+    struct tx_isp_vic_device *vic_dev;
+    u32 irq_status;
+    irqreturn_t ret = IRQ_NONE;
+
+    if (!isp_dev) {
+        pr_err("ispcore_irq_thread_handle: Invalid ISP device\n");
+        return IRQ_NONE;
+    }
+
+    pr_info("*** ispcore_irq_thread_handle: EXACT Binary Ninja implementation - IRQ %d ***\n", irq);
+
+    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+    if (!vic_dev || !vic_dev->base) {
+        pr_err("ispcore_irq_thread_handle: No VIC device or base address\n");
+        return IRQ_NONE;
+    }
+
+    /* Binary Ninja: Read VIC interrupt status */
+    irq_status = readl(vic_dev->base + 0x1e0);  /* VIC interrupt status register */
+
+    pr_info("*** ispcore_irq_thread_handle: VIC IRQ status = 0x%08x ***\n", irq_status);
+
+    if (irq_status != 0) {
+        /* Binary Ninja: Handle VIC interrupts */
+        pr_info("*** ispcore_irq_thread_handle: Processing VIC interrupt 0x%08x ***\n", irq_status);
+
+        /* Clear VIC interrupt status */
+        writel(irq_status, vic_dev->base + 0x1e0);
+        wmb();
+
+        /* Binary Ninja: Signal frame completion */
+        if (irq_status & 0x1) {  /* Frame done interrupt */
+            complete(&isp_dev->frame_complete);
+            pr_info("*** ispcore_irq_thread_handle: Frame completion signaled ***\n");
+        }
+
+        /* Binary Ninja: Update frame count */
+        isp_dev->frame_count++;
+
+        ret = IRQ_HANDLED;
+    }
+
+    /* Binary Ninja: Check for ISP core interrupts */
+    if (isp_dev->core_regs) {
+        u32 core_irq_status = readl(isp_dev->core_regs + 0x10);  /* ISP core interrupt status */
+
+        if (core_irq_status != 0) {
+            pr_info("*** ispcore_irq_thread_handle: ISP core IRQ status = 0x%08x ***\n", core_irq_status);
+
+            /* Clear ISP core interrupt status */
+            writel(core_irq_status, isp_dev->core_regs + 0x10);
+            wmb();
+
+            ret = IRQ_HANDLED;
+        }
+    }
+
+    pr_info("*** ispcore_irq_thread_handle: IRQ processing complete, ret=%d ***\n", ret);
+    return ret;
+}
+
+/* ispcore_link_setup - EXACT Binary Ninja implementation */
+int ispcore_link_setup(struct tx_isp_dev *isp_dev, int config)
+{
+    struct tx_isp_vic_device *vic_dev;
+    struct tx_isp_csi_device *csi_dev;
+    struct tx_isp_vin_device *vin_dev;
+    int ret = 0;
+
+    if (!isp_dev) {
+        pr_err("ispcore_link_setup: Invalid ISP device\n");
+        return -EINVAL;
+    }
+
+    pr_info("*** ispcore_link_setup: EXACT Binary Ninja implementation - config=%d ***\n", config);
+
+    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+    csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
+    vin_dev = (struct tx_isp_vin_device *)isp_dev->vin_dev;
+
+    if (config == 0) {
+        /* Binary Ninja: Disable pipeline links */
+        pr_info("*** ispcore_link_setup: DISABLING pipeline links ***\n");
+
+        /* Disable VIC to CSI link */
+        if (vic_dev && csi_dev) {
+            pr_info("ispcore_link_setup: Disabling VIC->CSI link\n");
+            /* Binary Ninja: Clear link configuration registers */
+            if (vic_dev->base) {
+                writel(0, vic_dev->base + 0x380);  /* Clear VIC output configuration */
+                wmb();
+            }
+        }
+
+        /* Disable CSI to VIN link */
+        if (csi_dev && vin_dev) {
+            pr_info("ispcore_link_setup: Disabling CSI->VIN link\n");
+            /* Binary Ninja: Clear CSI output configuration */
+            if (csi_dev->base) {
+                writel(0, csi_dev->base + 0x20);  /* Clear CSI output configuration */
+                wmb();
+            }
+        }
+
+        /* Disable VIN to sensor link */
+        if (vin_dev && isp_dev->sensor) {
+            pr_info("ispcore_link_setup: Disabling VIN->sensor link\n");
+            /* Binary Ninja: Clear VIN input configuration */
+            if (vin_dev->base) {
+                writel(0, vin_dev->base + 0x10);  /* Clear VIN input configuration */
+                wmb();
+            }
+        }
+
+    } else {
+        /* Binary Ninja: Enable pipeline links */
+        pr_info("*** ispcore_link_setup: ENABLING pipeline links ***\n");
+
+        /* Enable sensor to VIN link */
+        if (isp_dev->sensor && vin_dev) {
+            pr_info("ispcore_link_setup: Enabling sensor->VIN link\n");
+            /* Binary Ninja: Configure VIN input for sensor */
+            if (vin_dev->base) {
+                u32 vin_config = 0x1;  /* Enable VIN input */
+                if (isp_dev->sensor->video.attr && isp_dev->sensor->video.attr->dbus_type == 1) {
+                    vin_config |= 0x2;  /* MIPI interface */
+                }
+                writel(vin_config, vin_dev->base + 0x10);
+                wmb();
+                pr_info("ispcore_link_setup: VIN input configured: 0x%08x\n", vin_config);
+            }
+        }
+
+        /* Enable VIN to CSI link */
+        if (vin_dev && csi_dev) {
+            pr_info("ispcore_link_setup: Enabling VIN->CSI link\n");
+            /* Binary Ninja: Configure CSI input from VIN */
+            if (csi_dev->base) {
+                writel(0x1, csi_dev->base + 0x20);  /* Enable CSI input from VIN */
+                wmb();
+            }
+        }
+
+        /* Enable CSI to VIC link */
+        if (csi_dev && vic_dev) {
+            pr_info("ispcore_link_setup: Enabling CSI->VIC link\n");
+            /* Binary Ninja: Configure VIC input from CSI */
+            if (vic_dev->base) {
+                u32 vic_input_config = 0x1;  /* Enable VIC input */
+                if (isp_dev->sensor && isp_dev->sensor->video.attr) {
+                    /* Configure based on sensor attributes */
+                    vic_input_config |= (isp_dev->sensor->video.attr->dbus_type << 4);
+                }
+                writel(vic_input_config, vic_dev->base + 0x380);
+                wmb();
+                pr_info("ispcore_link_setup: VIC input configured: 0x%08x\n", vic_input_config);
+            }
+        }
+    }
+
+    pr_info("*** ispcore_link_setup: Pipeline link setup complete, ret=%d ***\n", ret);
+    return ret;
 }
 EXPORT_SYMBOL(tisp_reset_initialization_flag);
 int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr);
