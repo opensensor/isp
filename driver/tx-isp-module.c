@@ -4951,8 +4951,16 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     /* Binary Ninja: *($v0 + 0xd4) = $v0 - Self-pointer for validation */
     /* Note: self_ptr member may not exist in current struct definition, skipping for now */
 
-    /* Binary Ninja: dump_isd = $v0 */
-    ourISPdev = isp_dev;  /* Set global main ISP device pointer */
+    /* CRITICAL FIX: Use existing ourISPdev instead of overwriting it */
+    if (ourISPdev) {
+        pr_info("*** PROBE: Using existing ourISPdev allocation: %p ***\n", ourISPdev);
+        /* Copy any needed fields from isp_dev to ourISPdev if necessary */
+        /* For now, just use the existing ourISPdev */
+    } else {
+        /* Fallback: if somehow ourISPdev is NULL, use the probe allocation */
+        pr_warn("*** PROBE: ourISPdev was NULL, using probe allocation ***\n");
+        ourISPdev = isp_dev;
+    }
 
     return 0;
 }
