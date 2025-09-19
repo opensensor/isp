@@ -341,7 +341,7 @@ static uint32_t data_b2e10 = 0;
 static uint32_t data_b2e14 = 0;
 
 /* GB (Green Balance) Variables */
-static uint32_t tisp_gb_dgain_shift = 0;  /* Changed from pointer to value for bit operations */
+/* tisp_gb_dgain_shift defined as array below */
 static uint32_t gb_init_flag = 0;
 static uint32_t data_aa3e8 = 0;
 static uint32_t data_aa3f0 = 0;
@@ -1812,7 +1812,7 @@ int tisp_init(void *sensor_info, char *param_name)
 
     /* CRITICAL FIX: Use ACTUAL sensor image dimensions for all ISP components */
     /* Binary Ninja: Initialize all tiziano sub-modules in correct order */
-    tiziano_ae_init(actual_image_height, actual_image_width, fps);
+    tiziano_ae_init(actual_image_height, actual_image_width, sensor_params.fps);
     tiziano_awb_init(actual_image_height, actual_image_width);
     tiziano_gamma_init();  /* Binary Ninja: takes no parameters */
     tiziano_gib_init();
