@@ -3503,6 +3503,45 @@ void private_kfree(void *p)
 {
     kfree(p);
 }
+EXPORT_SYMBOL(private_kmalloc);
+EXPORT_SYMBOL(private_kfree);
+
+/* Missing private_* functions */
+int private_platform_device_register(struct platform_device *pdev)
+{
+    return platform_device_register(pdev);
+}
+EXPORT_SYMBOL(private_platform_device_register);
+
+void private_platform_device_unregister(struct platform_device *pdev)
+{
+    platform_device_unregister(pdev);
+}
+EXPORT_SYMBOL(private_platform_device_unregister);
+
+uint32_t private_math_exp2(uint32_t val, uint32_t shift, uint32_t base)
+{
+    /* Call the non-private version */
+    return tisp_math_exp2(val, shift, base);
+}
+EXPORT_SYMBOL(private_math_exp2);
+
+uint32_t private_log2_fixed_to_fixed(uint32_t val, int in_fix_point, uint8_t out_fix_point)
+{
+    /* Call the non-private version */
+    return tisp_log2_fixed_to_fixed_tuning(val, in_fix_point, out_fix_point);
+}
+EXPORT_SYMBOL(private_log2_fixed_to_fixed);
+
+struct sock *private_netlink_kernel_create(struct net *net, int unit, struct netlink_kernel_cfg *cfg)
+{
+    return netlink_kernel_create(net, unit, cfg);
+}
+EXPORT_SYMBOL(private_netlink_kernel_create);
+
+/* Export saved_command_line - this is normally available from kernel but may need explicit export */
+extern char *saved_command_line;
+EXPORT_SYMBOL(saved_command_line);
 
 void private_i2c_del_driver(struct i2c_driver *driver)
 {

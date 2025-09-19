@@ -3007,6 +3007,20 @@ int tisp_hldc_param_array_get(int param_id, void *out_buf, int *size_buf);
 int tisp_ae_param_array_get(int param_id, void *out_buf, int *size_buf);
 int tisp_awb_param_array_get(int param_id, void *out_buf, int *size_buf);
 
+/* Export symbols for missing param array functions */
+EXPORT_SYMBOL(tisp_ccm_param_array_get);
+EXPORT_SYMBOL(tisp_gamma_param_array_get);
+EXPORT_SYMBOL(tisp_sharpen_param_array_get);
+EXPORT_SYMBOL(tisp_mdns_param_array_get);
+EXPORT_SYMBOL(tisp_defog_param_array_get);
+EXPORT_SYMBOL(tisp_rdns_param_array_get);
+EXPORT_SYMBOL(tisp_clm_param_array_get);
+EXPORT_SYMBOL(tisp_adr_param_array_get);
+EXPORT_SYMBOL(tisp_ydns_param_array_get);
+EXPORT_SYMBOL(tisp_af_param_array_get);
+EXPORT_SYMBOL(tisp_sdns_param_array_get);
+EXPORT_SYMBOL(tisp_bcsh_param_array_get);
+
 int tisp_rdns_get_par_cfg(void *out_buf, void *size_buf);
 int tisp_adr_get_par_cfg(void *out_buf, void *size_buf);
 int tisp_ccm_get_par_cfg(void *out_buf, void *size_buf);

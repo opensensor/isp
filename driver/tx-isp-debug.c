@@ -72,6 +72,7 @@ void private_vfree(const void *addr)
 {
 	vfree(addr);
 }
+EXPORT_SYMBOL(private_vfree);
 
 ktime_t private_ktime_set(const long secs, const unsigned long nsecs)
 {
