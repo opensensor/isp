@@ -602,9 +602,8 @@ irqreturn_t ae1_interrupt_static_wrapper(int irq, void *dev_id) {
 /* ===== MISSING SYMBOL IMPLEMENTATIONS - Binary Ninja Reference ===== */
 
 /* Global AE data structures - from Binary Ninja analysis */
-static uint32_t data_b2f3c = 0;  /* AE statistics buffer base */
+/* data_b2f3c and data_b2f54 already defined above */
 static uint32_t data_b2f48 = 0;  /* AE histogram buffer base */
-static uint32_t data_b2f54 = 0;  /* AE1 statistics buffer base */
 static uint32_t data_b2f60 = 0;  /* AE1 histogram buffer base */
 static uint32_t data_b0e00 = 0;  /* AE0 interrupt flag */
 static uint32_t data_b0e10 = 0;  /* AE histogram flag */
