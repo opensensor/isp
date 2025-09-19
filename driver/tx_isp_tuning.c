@@ -252,6 +252,14 @@ static int Tiziano_awb_set_gain(void *p1, uint32_t p2, void *p3) { return 0; }
 static int system_reg_write_gb(int p1, uint32_t addr, uint32_t value) { return 0; }
 static int tisp_gb_blc_again_interp(uint32_t p1, int p2) { return 0; }
 static int tisp_gb_params_refresh(void) { return 0; }
+static int tisp_wdr_param_array_set(uint32_t p1, void *p2, void *p3) { return 0; }
+static int tisp_netlink_init(void) { return 0; }
+static int tisp_netlink_exit(void) { return 0; }
+static int tisp_netlink_event_set_cb(void *cb) { return 0; }
+static int tisp_param_operate_process(void) { return 0; }
+static int tisp_code_create_tuning_node(void) { return 0; }
+static int tisp_code_destroy_tuning_node(void) { return 0; }
+static int tisp_event_exit(void) { return 0; }
 
 /* Missing variables referenced in functions */
 static uint32_t deir_en = 0;
@@ -335,7 +343,7 @@ static uint32_t data_b2e10 = 0;
 static uint32_t data_b2e14 = 0;
 
 /* GB (Green Balance) Variables */
-static uint32_t *tisp_gb_dgain_shift = NULL;
+static uint32_t tisp_gb_dgain_shift = 0;  /* Changed from pointer to value for bit operations */
 static uint32_t gb_init_flag = 0;
 static uint32_t data_aa3e8 = 0;
 static uint32_t data_aa3f0 = 0;
@@ -344,6 +352,39 @@ static uint32_t data_aa3d8 = 0;
 static uint32_t data_aa3e0 = 0;
 static uint32_t data_aa3dc = 0;
 static uint32_t tisp_gb_blc_ag = 0;
+
+/* Event and Data Variables */
+static uint32_t data_b33b0[16] = {0};  /* Array type for event data */
+static uint32_t *data_b33bc = NULL;
+static uint32_t data_b33b8 = 0;
+static uint32_t data_b2ff0 = 0;
+static struct completion tevent_info;  /* Completion structure for events */
+static struct lock_class_key event_wait_key;
+
+/* Operation and Netlink Variables */
+static void *opmsg = NULL;
+static void *nlcfg = NULL;
+static void *nlsk = NULL;
+
+/* Memory Management Variables */
+static uint32_t data_ca490 = 0;
+static uint32_t data_ca48c = 0;
+static uint32_t data_b2f3c = 0;
+static uint32_t data_b2f54 = 0;
+static uint32_t data_b2f6c = 0;
+static uint32_t data_b2f78 = 0;
+static uint32_t data_b2f84 = 0;
+static uint32_t data_b2f90 = 0;
+static uint32_t data_b2f9c = 0;
+
+/* AWB and AE Algorithm Variables */
+static uint32_t tawb_custom_en = 0;
+static uint32_t data_b0000 = 0;
+static uint32_t data_d0000 = 0;
+static uint32_t data_c46b0 = 0;
+static uint32_t data_c46bc = 0;
+static uint32_t data_c46c0 = 0;
+static void *dmsc_awb_gain = NULL;
 static uint32_t *mdns_y_sad_ass_thres_array_now = NULL;
 static uint32_t *mdns_y_sta_ass_thres_array_now = NULL;
 static uint32_t *mdns_y_ref_wei_b_min_array_now = NULL;
@@ -9465,8 +9506,8 @@ int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32
     pr_debug("Resolution: %dx%d, FPS: %d, WDR mode: %d\n", width, height, fps, wdr_mode);
     
     /* Binary Ninja tisp_init sequence - initialize all components */
-    tiziano_ae_init(actual_image_height, actual_image_width, fps);
-    tiziano_awb_init(actual_image_height, actual_image_width);
+    tiziano_ae_init(height, width, fps);  /* Use function parameters instead of undeclared variables */
+    tiziano_awb_init(height, width);
     tiziano_gamma_init();  /* Binary Ninja: takes no parameters */
     tiziano_gib_init();
     tiziano_lsc_init();
@@ -9474,13 +9515,13 @@ int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32
     tiziano_dmsc_init();
     tiziano_sharpen_init();
     tiziano_sdns_init();
-    tiziano_mdns_init();
+    tiziano_mdns_init(width, height);  /* Binary Ninja: takes width, height */
     tiziano_clm_init();
     tiziano_dpc_init();
     tiziano_hldc_init();
-    tiziano_defog_init();
+    tiziano_defog_init(width, height);  /* Binary Ninja: takes width, height */
     tiziano_adr_init(width, height);
-    tiziano_af_init();
+    tiziano_af_init(height, width);  /* Binary Ninja: takes height, width */
     tiziano_bcsh_init();
     tiziano_ydns_init();
     tiziano_rdns_init();
