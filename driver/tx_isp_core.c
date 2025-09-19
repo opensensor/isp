@@ -413,8 +413,8 @@ int ispcore_link_setup(struct tx_isp_dev *isp_dev, int config)
         if (vin_dev && csi_dev) {
             pr_info("ispcore_link_setup: Enabling VIN->CSI link\n");
             /* Binary Ninja: Configure CSI input from VIN */
-            if (csi_dev->base) {
-                writel(0x1, csi_dev->base + 0x20);  /* Enable CSI input from VIN */
+            if (csi_dev->csi_regs) {
+                writel(0x1, csi_dev->csi_regs + 0x20);  /* Enable CSI input from VIN */
                 wmb();
             }
         }
@@ -423,13 +423,13 @@ int ispcore_link_setup(struct tx_isp_dev *isp_dev, int config)
         if (csi_dev && vic_dev) {
             pr_info("ispcore_link_setup: Enabling CSI->VIC link\n");
             /* Binary Ninja: Configure VIC input from CSI */
-            if (vic_dev->base) {
+            if (vic_dev->vic_regs) {
                 u32 vic_input_config = 0x1;  /* Enable VIC input */
                 if (isp_dev->sensor && isp_dev->sensor->video.attr) {
                     /* Configure based on sensor attributes */
                     vic_input_config |= (isp_dev->sensor->video.attr->dbus_type << 4);
                 }
-                writel(vic_input_config, vic_dev->base + 0x380);
+                writel(vic_input_config, vic_dev->vic_regs + 0x380);
                 wmb();
                 pr_info("ispcore_link_setup: VIC input configured: 0x%08x\n", vic_input_config);
             }
@@ -666,6 +666,7 @@ static struct tx_isp_subdev_core_ops core_subdev_core_ops = {
 /* Core subdev video operations */
 static struct tx_isp_subdev_video_ops core_subdev_video_ops = {
     .s_stream = ispcore_video_s_stream,  /* CRITICAL: Wire in the video streaming function */
+    .link_setup = ispcore_link_setup,    /* CRITICAL: Wire in the link setup function */
 };
 
 /* Core subdev pad operations */
