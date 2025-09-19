@@ -8873,40 +8873,7 @@ int tisp_event_process(void)
 /* isp_setup_irq_handling removed - reference driver uses system_irq_func_set instead */
 
 
-/* Cleanup ISP interrupt handling */
-void isp_cleanup_irq_handling(struct tx_isp_dev *dev)
-{
-    unsigned long flags;
-    
-    pr_info("isp_cleanup_irq_handling: Cleaning up ISP interrupt handling\n");
-    
-    if (!dev) {
-        return;
-    }
-    
-    /* Disable ISP interrupts */
-    if (dev->core_regs) {
-        writel(0, ourISPdev->core_regs + 0x44); /* Disable all ISP interrupts */
-    }
-    
-    /* Free interrupt */
-    if (dev->isp_irq > 0) {
-        free_irq(dev->isp_irq, dev);
-        pr_info("isp_cleanup_irq_handling: IRQ %d freed\n", ourISPdev->isp_irq);
-    }
-    
-    /* BINARY NINJA REFERENCE: No event processing thread to stop */
-
-    /* Clear callback arrays */
-    if (isp_irq_initialized) {
-        spin_lock_irqsave(&isp_irq_lock, flags);
-        memset(isp_event_func_cb, 0, sizeof(isp_event_func_cb));
-        memset(cb, 0, sizeof(cb));
-        spin_unlock_irqrestore(&isp_irq_lock, flags);
-    }
-    
-    pr_info("isp_cleanup_irq_handling: Cleanup complete\n");
-}
+/* isp_cleanup_irq_handling removed - reference driver uses system_irq_func_set instead */
 
 
 /* tisp_event_cleanup - Clean up event processing thread and resources */
