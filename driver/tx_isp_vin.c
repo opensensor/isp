@@ -1034,7 +1034,7 @@ int tx_isp_vin_probe(struct platform_device *pdev)
     private_platform_set_drvdata(pdev, vin);
 
     /* Binary Ninja: *($v0 + 0x34) = &video_input_cmd_fops */
-    vin->sd.fops = &video_input_cmd_fops;
+    vin->sd.module.ops = &video_input_cmd_fops;
 
     /* Binary Ninja: *($v0 + 0xf4) = 1 */
     vin->state = TX_ISP_MODULE_SLAKE;  /* State = 1 (SLAKE) */
