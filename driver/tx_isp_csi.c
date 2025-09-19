@@ -839,7 +839,7 @@ int tx_isp_csi_probe(struct platform_device *pdev)
     tx_isp_set_subdev_nodeops(&csi_dev->sd, &isp_csi_fops);
 
     /* Binary Ninja: *($v0 + 0x138) = $v0_3 */
-    csi_dev->mem_resource = mem_resource;
+    csi_dev->phy_res = mem_resource;
 
     /* Binary Ninja: private_raw_mutex_init($v0 + 0x12c, "not support the gpio mode!\n", 0) */
     private_raw_mutex_init(&csi_dev->mlock, "not support the gpio mode!\n", 0);
