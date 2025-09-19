@@ -1874,14 +1874,23 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
                 /* Binary Ninja: Clock management loop */
                 /* int32_t $s2_2 = $s0_3 - 1; while (true) */
                 pr_info("ispcore_slake_module: Managing ISP clocks");
-                if (isp_dev->clks && isp_dev->clk_num > 0) {
-                    for (i = isp_dev->clk_num - 1; i >= 0; i--) {
-                        /* Binary Ninja: private_clk_disable(*$s0_5) */
-                        if (isp_dev->clks[i]) {
-                            clk_disable(isp_dev->clks[i]);
-                            pr_info("ispcore_slake_module: Disabled clock %d", i);
-                        }
-                    }
+
+                /* SAFE: Disable individual clocks instead of array access */
+                if (isp_dev->csi_clk) {
+                    clk_disable(isp_dev->csi_clk);
+                    pr_info("ispcore_slake_module: Disabled CSI clock");
+                }
+                if (isp_dev->ipu_clk) {
+                    clk_disable(isp_dev->ipu_clk);
+                    pr_info("ispcore_slake_module: Disabled IPU clock");
+                }
+                if (isp_dev->isp_clk) {
+                    clk_disable(isp_dev->isp_clk);
+                    pr_info("ispcore_slake_module: Disabled ISP clock");
+                }
+                if (isp_dev->cgu_isp) {
+                    clk_disable(isp_dev->cgu_isp);
+                    pr_info("ispcore_slake_module: Disabled CGU ISP clock");
                 }
             }
 
