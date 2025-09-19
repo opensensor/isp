@@ -3234,8 +3234,7 @@ long vic_chardev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 }
 EXPORT_SYMBOL(vic_chardev_ioctl);
 
-static struct tx_isp_vic_device *dump_vsd = NULL;
-static void *test_addr = NULL;
+/* Global variables already declared at top of file */
 
 /* tx_isp_vic_probe - EXACT Binary Ninja reference implementation */
 int tx_isp_vic_probe(struct platform_device *pdev)

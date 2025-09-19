@@ -361,7 +361,7 @@ int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count)
 
         /* Binary Ninja: *(arg1 + 0xbc) = $v0_1 */
         sd->clks = clk_array;
-        pr_debug("isp_subdev_init_clks: Successfully initialized %d clocks\n", i);
+        pr_debug("isp_subdev_init_clks: Successfully initialized %d clocks\n", clk_count);
     } else {
         /* Binary Ninja: *(arg1 + 0xbc) = 0 */
         sd->clks = NULL;
