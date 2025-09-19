@@ -2204,16 +2204,6 @@ void tisp_netlink_exit(void)
 }
 
 /**
- * tisp_code_destroy_tuning_node - TISP tuning node destruction stub
- * This function should destroy TISP tuning nodes
- */
-void tisp_code_destroy_tuning_node(void)
-{
-    pr_info("tisp_code_destroy_tuning_node: TISP tuning nodes destroyed");
-    /* Implementation would go here when available */
-}
-
-/**
  * tisp_event_push - TISP event push stub
  * This function should push events to the TISP event system
  */
