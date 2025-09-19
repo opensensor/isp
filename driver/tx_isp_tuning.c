@@ -550,7 +550,7 @@ int isp_core_tuning_release(struct tx_isp_dev *dev);
 
 /* Forward declaration for core tuning init function */
 void *isp_core_tuning_init(void *arg1);
-int isp_core_tuning_event(struct tx_isp_dev *dev, uint32_t event);  /* Binary Ninja function pointer */
+/* isp_core_tuning_event already declared above with correct signature */
 void isp_frame_done_wakeup(void);  /* Binary Ninja function */
 int tisp_day_or_night_s_ctrl(uint32_t mode);  /* Binary Ninja function */
 
