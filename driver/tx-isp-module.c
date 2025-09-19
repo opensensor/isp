@@ -7974,6 +7974,527 @@ static int csi_core_ops_init(struct v4l2_subdev *sd, u32 val)
 }
 EXPORT_SYMBOL(csi_core_ops_init);
 
+/* ispcore_video_s_stream - EXACT Binary Ninja implementation */
+static int ispcore_video_s_stream(struct v4l2_subdev *sd, int enable)
+{
+    struct tx_isp_core_device *core_dev;
+    unsigned long flags = 0;
+    int result = 0;
+    void **subdevs_ptr;
+    int i;
+
+    pr_debug("ispcore_video_s_stream: Stream %s\n", enable ? "ON" : "OFF");
+
+    /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
+    core_dev = (struct tx_isp_core_device *)tx_isp_get_subdevdata(sd);
+    if (!core_dev) {
+        return -EINVAL;
+    }
+
+    /* Binary Ninja: __private_spin_lock_irqsave($s0 + 0xdc, &var_28) */
+    __private_spin_lock_irqsave(&core_dev->slock, &flags);
+
+    /* Binary Ninja: if (*($s0 + 0xe8) s< 3) */
+    if (core_dev->state < 3) {
+        isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n");
+        private_spin_unlock_irqrestore(&core_dev->slock, flags);
+        return -EINVAL;
+    }
+
+    private_spin_unlock_irqrestore(&core_dev->slock, flags);
+
+    /* Binary Ninja: Reset frame counters */
+    core_dev->frame_count = 0;
+    core_dev->error_count = 0;
+    core_dev->drop_count = 0;
+    core_dev->total_frames = 0;
+
+    /* Binary Ninja: State management */
+    if (enable == 0) {
+        if (core_dev->state == 4) {
+            /* Stream OFF - disable frame channels */
+            for (i = 0; i < 3; i++) {
+                if (core_dev->frame_channels && core_dev->frame_channels[i].state == 4) {
+                    ispcore_frame_channel_streamoff(&core_dev->frame_channels[i]);
+                }
+            }
+            core_dev->state = 3;
+        }
+    } else {
+        /* Stream ON */
+        core_dev->state = 4;
+    }
+
+    /* Binary Ninja: Process subdevices */
+    subdevs_ptr = (void **)&core_dev->subdevs;
+
+    for (i = 0; i < 16; i++) {
+        void *subdev = subdevs_ptr[i];
+
+        if (subdev != NULL) {
+            struct tx_isp_subdev *sd_sub = (struct tx_isp_subdev *)subdev;
+
+            if (sd_sub->ops && sd_sub->ops->video && sd_sub->ops->video->s_stream) {
+                int subdev_result = sd_sub->ops->video->s_stream(subdev, enable);
+
+                if (subdev_result != 0 && subdev_result != 0xfffffdfd) {
+                    /* Error occurred, cleanup */
+                    result = subdev_result;
+                    break;
+                }
+            }
+        }
+    }
+
+    /* Binary Ninja: IRQ management */
+    if (core_dev->irq_enable == 1 || enable == 0) {
+        /* Disable IRQ */
+        if (core_dev->isp_regs) {
+            *(uint32_t *)((char *)core_dev->isp_regs + 0xb0) = 0;
+        }
+        tx_isp_disable_irq(ourISPdev);
+    } else {
+        /* Enable IRQ */
+        if (core_dev->isp_regs) {
+            *(uint32_t *)((char *)core_dev->isp_regs + 0xb0) = 0xffffffff;
+        }
+        tx_isp_enable_irq(ourISPdev);
+    }
+
+    if (result == 0xfffffdfd) {
+        return 0;
+    }
+
+    return result;
+}
+EXPORT_SYMBOL(ispcore_video_s_stream);
+
+/* vic_sensor_ops_sync_sensor_attr - VIC sensor attribute sync */
+static int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr)
+{
+    struct tx_isp_vic_device *vic_dev;
+
+    pr_debug("vic_sensor_ops_sync_sensor_attr: Syncing sensor attributes\n");
+
+    if (!sd || !attr) {
+        return -EINVAL;
+    }
+
+    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(&sd->sd);
+    if (!vic_dev) {
+        return -EINVAL;
+    }
+
+    /* Sync sensor attributes to VIC */
+    vic_dev->sensor_attr = attr;
+    vic_dev->width = attr->max_width;
+    vic_dev->height = attr->max_height;
+
+    /* Configure VIC based on sensor attributes */
+    if (attr->mipi.mode == 1) {
+        /* MIPI mode */
+        vic_dev->interface_mode = 1;
+    } else {
+        /* DVP mode */
+        vic_dev->interface_mode = attr->dvp.mode;
+    }
+
+    return 0;
+}
+EXPORT_SYMBOL(vic_sensor_ops_sync_sensor_attr);
+
+/* csi_sensor_ops_sync_sensor_attr - CSI sensor attribute sync */
+static int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr)
+{
+    struct tx_isp_csi_device *csi_dev;
+
+    pr_debug("csi_sensor_ops_sync_sensor_attr: Syncing sensor attributes\n");
+
+    if (!sd || !attr) {
+        return -EINVAL;
+    }
+
+    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(&sd->sd);
+    if (!csi_dev) {
+        return -EINVAL;
+    }
+
+    /* Sync sensor attributes to CSI */
+    csi_dev->sensor_attr = attr;
+
+    /* Configure CSI based on sensor attributes */
+    if (attr->mipi.mode == 1) {
+        /* Configure MIPI CSI */
+        csi_dev->mipi_lanes = attr->mipi.lanes;
+        csi_dev->mipi_settle_time = attr->mipi.settle_time;
+    }
+
+    return 0;
+}
+EXPORT_SYMBOL(csi_sensor_ops_sync_sensor_attr);
+
+/* csi_sensor_ops_ioctl - CSI sensor operations IOCTL */
+static long csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
+{
+    struct tx_isp_csi_device *csi_dev;
+
+    pr_debug("csi_sensor_ops_ioctl: cmd=0x%x\n", cmd);
+
+    if (!sd) {
+        return -EINVAL;
+    }
+
+    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(&sd->sd);
+    if (!csi_dev) {
+        return -EINVAL;
+    }
+
+    /* Handle CSI-specific IOCTLs */
+    switch (cmd) {
+        case 0x800010: /* CSI start */
+            csi_dev->state = 4;
+            return 0;
+
+        case 0x800011: /* CSI stop */
+            csi_dev->state = 3;
+            return 0;
+
+        case 0x800012: /* CSI reset */
+            if (csi_dev->csi_regs) {
+                *(uint32_t *)((char *)csi_dev->csi_regs + 0x0) = 0x0;
+                *(uint32_t *)((char *)csi_dev->csi_regs + 0x0) = 0x1;
+            }
+            return 0;
+
+        default:
+            pr_debug("csi_sensor_ops_ioctl: Unsupported cmd 0x%x\n", cmd);
+            return -ENOTTY;
+    }
+}
+EXPORT_SYMBOL(csi_sensor_ops_ioctl);
+
+/* ispcore_core_ops_init - ISP core operations initialization */
+static int ispcore_core_ops_init(struct v4l2_subdev *sd, u32 val)
+{
+    struct tx_isp_core_device *core_dev;
+
+    pr_debug("ispcore_core_ops_init: Initializing ISP core operations\n");
+
+    if (!sd) {
+        return -EINVAL;
+    }
+
+    core_dev = (struct tx_isp_core_device *)tx_isp_get_subdevdata(sd);
+    if (!core_dev) {
+        return -EINVAL;
+    }
+
+    /* Initialize ISP core operations */
+    core_dev->state = 3; /* INITIALIZED state */
+
+    /* Initialize ISP core hardware if needed */
+    if (core_dev->isp_regs) {
+        /* Basic ISP core initialization */
+        *(uint32_t *)((char *)core_dev->isp_regs + 0x0) = 0x1; /* Enable ISP core */
+        *(uint32_t *)((char *)core_dev->isp_regs + 0x10) = 0x133; /* ISP control */
+    }
+
+    return 0;
+}
+EXPORT_SYMBOL(ispcore_core_ops_init);
+
+/* ispcore_core_ops_ioctl - ISP core operations IOCTL */
+static long ispcore_core_ops_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
+{
+    struct tx_isp_core_device *core_dev;
+
+    pr_debug("ispcore_core_ops_ioctl: cmd=0x%x\n", cmd);
+
+    if (!sd) {
+        return -EINVAL;
+    }
+
+    core_dev = (struct tx_isp_core_device *)tx_isp_get_subdevdata(sd);
+    if (!core_dev) {
+        return -EINVAL;
+    }
+
+    /* Handle ISP core-specific IOCTLs */
+    switch (cmd) {
+        case 0x800020: /* ISP core start */
+            core_dev->state = 4;
+            return 0;
+
+        case 0x800021: /* ISP core stop */
+            core_dev->state = 3;
+            return 0;
+
+        case 0x800022: /* ISP core reset */
+            if (core_dev->isp_regs) {
+                *(uint32_t *)((char *)core_dev->isp_regs + 0x0) = 0x0;
+                *(uint32_t *)((char *)core_dev->isp_regs + 0x0) = 0x1;
+            }
+            return 0;
+
+        default:
+            pr_debug("ispcore_core_ops_ioctl: Unsupported cmd 0x%x\n", cmd);
+            return -ENOTTY;
+    }
+}
+EXPORT_SYMBOL(ispcore_core_ops_ioctl);
+
+/* ispcore_sensor_ops_release_all_sensor - Release all sensors */
+static int ispcore_sensor_ops_release_all_sensor(struct tx_isp_subdev *sd)
+{
+    pr_debug("ispcore_sensor_ops_release_all_sensor: Releasing all sensors\n");
+
+    if (!sd) {
+        return -EINVAL;
+    }
+
+    /* Release all sensor resources */
+    if (ourISPdev && ourISPdev->sensor) {
+        /* Reset sensor state */
+        ourISPdev->sensor->video.state = TX_ISP_MODULE_INIT;
+
+        /* Clear sensor attributes */
+        if (ourISPdev->sensor->video.attr) {
+            ourISPdev->sensor->video.attr = NULL;
+        }
+    }
+
+    return 0;
+}
+EXPORT_SYMBOL(ispcore_sensor_ops_release_all_sensor);
+
+/* subdev_sensor_ops_release_all_sensor - Subdev sensor release */
+static int subdev_sensor_ops_release_all_sensor(struct tx_isp_subdev *sd)
+{
+    pr_debug("subdev_sensor_ops_release_all_sensor: Releasing all sensors\n");
+
+    if (!sd) {
+        return -EINVAL;
+    }
+
+    /* Release sensor resources */
+    sd->vin_state = TX_ISP_MODULE_INIT;
+
+    return 0;
+}
+EXPORT_SYMBOL(subdev_sensor_ops_release_all_sensor);
+
+/* subdev_sensor_ops_enum_input - Enumerate sensor inputs */
+static int subdev_sensor_ops_enum_input(struct v4l2_subdev *sd, struct v4l2_input *input)
+{
+    pr_debug("subdev_sensor_ops_enum_input: Enumerating inputs\n");
+
+    if (!sd || !input) {
+        return -EINVAL;
+    }
+
+    /* Only support one input */
+    if (input->index > 0) {
+        return -EINVAL;
+    }
+
+    input->type = V4L2_INPUT_TYPE_CAMERA;
+    strcpy(input->name, "Camera");
+    input->std = 0;
+
+    return 0;
+}
+EXPORT_SYMBOL(subdev_sensor_ops_enum_input);
+
+/* subdev_sensor_ops_set_input - Set sensor input */
+static int subdev_sensor_ops_set_input(struct v4l2_subdev *sd, unsigned int input)
+{
+    pr_debug("subdev_sensor_ops_set_input: Setting input %u\n", input);
+
+    if (!sd) {
+        return -EINVAL;
+    }
+
+    /* Only support input 0 */
+    if (input > 0) {
+        return -EINVAL;
+    }
+
+    return 0;
+}
+EXPORT_SYMBOL(subdev_sensor_ops_set_input);
+
+/* ispcore_sensor_ops_ioctl - ISP core sensor operations IOCTL */
+static long ispcore_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
+{
+    pr_debug("ispcore_sensor_ops_ioctl: cmd=0x%x\n", cmd);
+
+    if (!sd) {
+        return -EINVAL;
+    }
+
+    /* Handle ISP core sensor-specific IOCTLs */
+    switch (cmd) {
+        case 0x800030: /* ISP core sensor start */
+            return sensor_start_changes(sd);
+
+        case 0x800031: /* ISP core sensor stop */
+            sd->vin_state = TX_ISP_MODULE_INIT;
+            return 0;
+
+        case 0x800032: /* ISP core sensor reset */
+            sd->vin_state = TX_ISP_MODULE_INIT;
+            return 0;
+
+        default:
+            pr_debug("ispcore_sensor_ops_ioctl: Unsupported cmd 0x%x\n", cmd);
+            return -ENOTTY;
+    }
+}
+EXPORT_SYMBOL(ispcore_sensor_ops_ioctl);
+
+/* param_ops_int - Parameter operations for integer values */
+static int param_ops_int(const char *val, const struct kernel_param *kp)
+{
+    int ret;
+    int value;
+
+    pr_debug("param_ops_int: Setting parameter value\n");
+
+    if (!val || !kp) {
+        return -EINVAL;
+    }
+
+    ret = kstrtoint(val, 0, &value);
+    if (ret) {
+        return ret;
+    }
+
+    *(int *)kp->arg = value;
+    return 0;
+}
+EXPORT_SYMBOL(param_ops_int);
+
+/* mips_dma_map_ops - MIPS DMA mapping operations */
+static dma_addr_t mips_dma_map_ops(struct device *dev, void *cpu_addr, size_t size, enum dma_data_direction dir, unsigned long attrs)
+{
+    dma_addr_t dma_addr;
+
+    pr_debug("mips_dma_map_ops: Mapping DMA address\n");
+
+    if (!dev || !cpu_addr) {
+        return DMA_MAPPING_ERROR;
+    }
+
+    /* Use kernel DMA mapping */
+    dma_addr = dma_map_single(dev, cpu_addr, size, dir);
+
+    if (dma_mapping_error(dev, dma_addr)) {
+        pr_err("mips_dma_map_ops: DMA mapping failed\n");
+        return DMA_MAPPING_ERROR;
+    }
+
+    return dma_addr;
+}
+EXPORT_SYMBOL(mips_dma_map_ops);
+
+/* apical_isp_core_ops_s_ctrl - Apical ISP core set control */
+static int apical_isp_core_ops_s_ctrl(struct v4l2_ctrl *ctrl)
+{
+    pr_debug("apical_isp_core_ops_s_ctrl: Setting control id=0x%x, value=%d\n", ctrl->id, ctrl->val);
+
+    if (!ctrl) {
+        return -EINVAL;
+    }
+
+    /* Handle Apical ISP core controls */
+    switch (ctrl->id) {
+        case V4L2_CID_BRIGHTNESS:
+            /* Set brightness */
+            tisp_set_brightness(ctrl->val);
+            return 0;
+
+        case V4L2_CID_CONTRAST:
+            /* Set contrast */
+            tisp_set_contrast(ctrl->val);
+            return 0;
+
+        case V4L2_CID_SATURATION:
+            /* Set saturation */
+            tisp_set_saturation(ctrl->val);
+            return 0;
+
+        case V4L2_CID_HUE:
+            /* Set hue */
+            tisp_set_bcsh_hue(ctrl->val);
+            return 0;
+
+        case V4L2_CID_AUTO_WHITE_BALANCE:
+            /* Set AWB */
+            if (ctrl->val) {
+                tisp_s_awb_start(128, 128); /* Default gains */
+            }
+            return 0;
+
+        case V4L2_CID_EXPOSURE:
+            /* Set exposure */
+            tisp_s_ev_start(ctrl->val);
+            return 0;
+
+        default:
+            pr_debug("apical_isp_core_ops_s_ctrl: Unsupported control id=0x%x\n", ctrl->id);
+            return -EINVAL;
+    }
+}
+EXPORT_SYMBOL(apical_isp_core_ops_s_ctrl);
+
+/* apical_isp_core_ops_g_ctrl - Apical ISP core get control */
+static int apical_isp_core_ops_g_ctrl(struct v4l2_ctrl *ctrl)
+{
+    pr_debug("apical_isp_core_ops_g_ctrl: Getting control id=0x%x\n", ctrl->id);
+
+    if (!ctrl) {
+        return -EINVAL;
+    }
+
+    /* Handle Apical ISP core controls */
+    switch (ctrl->id) {
+        case V4L2_CID_BRIGHTNESS:
+            /* Get brightness */
+            ctrl->val = 0; /* Default value */
+            return 0;
+
+        case V4L2_CID_CONTRAST:
+            /* Get contrast */
+            ctrl->val = 128; /* Default value */
+            return 0;
+
+        case V4L2_CID_SATURATION:
+            /* Get saturation */
+            ctrl->val = 128; /* Default value */
+            return 0;
+
+        case V4L2_CID_HUE:
+            /* Get hue */
+            ctrl->val = 0; /* Default value */
+            return 0;
+
+        case V4L2_CID_AUTO_WHITE_BALANCE:
+            /* Get AWB status */
+            ctrl->val = 1; /* Enabled by default */
+            return 0;
+
+        case V4L2_CID_EXPOSURE:
+            /* Get exposure */
+            ctrl->val = 0; /* Default value */
+            return 0;
+
+        default:
+            pr_debug("apical_isp_core_ops_g_ctrl: Unsupported control id=0x%x\n", ctrl->id);
+            return -EINVAL;
+    }
+}
+EXPORT_SYMBOL(apical_isp_core_ops_g_ctrl);
+
 /* tisp_set_ae1_ag - Set AE analog gain */
 static void tisp_set_ae1_ag(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4)
 {
