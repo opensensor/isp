@@ -244,8 +244,10 @@ extern struct tx_isp_dev *ourISPdev;
 int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count)
 {
     struct clk *cgu_isp_clk, *isp_clk, *csi_clk;
+    struct clk **clk_array = NULL;
     void __iomem *cpm_regs;
     int ret;
+    int i = 0;
 
     /* Binary Ninja: int32_t $s5 = *(arg1 + 0xc0) */
     /* Binary Ninja: int32_t $s1 = $s5 << 2 */
