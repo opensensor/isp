@@ -1879,9 +1879,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("tx_isp_vic_start: Linear mode enabled\n");
     }
 
-    /* Binary Ninja: 00010b84 - Set vic_start_ok */
-    vic_start_ok = 1;
-    pr_info("*** VIC start completed - vic_start_ok = 1 ***\n");
+    /* vic_start_ok will be set at the very end after all configuration is complete */
 
     /* CRITICAL FIX: Configure VIC DMA for frame capture */
     /* This is the missing piece that causes VIC[0x380] to remain 0x0 */
