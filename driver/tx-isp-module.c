@@ -384,11 +384,21 @@ static struct resource tx_isp_csi_resources[] = {
     },
 };
 
+/* CSI platform data - CRITICAL for tx_isp_subdev_init to work */
+static struct tx_isp_subdev_platform_data csi_pdata = {
+    .interface_type = 1,  /* MIPI interface */
+    .clk_num = 2,         /* Number of clocks needed */
+    .sensor_type = 0,     /* Default sensor type */
+};
+
 struct platform_device tx_isp_csi_platform_device = {
     .name = "tx-isp-csi",
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_csi_resources),
     .resource = tx_isp_csi_resources,
+    .dev = {
+        .platform_data = &csi_pdata,  /* CRITICAL: Provide platform data */
+    },
 };
 
 /* VIN platform device resources - MATCHES STOCK DRIVER EXACTLY */
@@ -406,11 +416,21 @@ static struct resource tx_isp_vin_resources[] = {
     },
 };
 
+/* VIN platform data - CRITICAL for tx_isp_subdev_init to work */
+static struct tx_isp_subdev_platform_data vin_pdata = {
+    .interface_type = 2,  /* VIN interface */
+    .clk_num = 1,         /* Number of clocks needed */
+    .sensor_type = 0,     /* Default sensor type */
+};
+
 struct platform_device tx_isp_vin_platform_device = {
     .name = "tx-isp-vin",
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_vin_resources),
     .resource = tx_isp_vin_resources,
+    .dev = {
+        .platform_data = &vin_pdata,  /* CRITICAL: Provide platform data */
+    },
 };
 
 /* Frame Source platform device resources - CORRECTED IRQ */
@@ -471,11 +491,21 @@ static struct resource tx_isp_core_resources[] = {
     },
 };
 
+/* CORE platform data - CRITICAL for tx_isp_subdev_init to work */
+static struct tx_isp_subdev_platform_data core_pdata = {
+    .interface_type = 1,  /* ISP Core interface */
+    .clk_num = 3,         /* Number of clocks needed (ISP, CSI, VPU) */
+    .sensor_type = 0,     /* Default sensor type */
+};
+
 struct platform_device tx_isp_core_platform_device = {
     .name = "tx-isp-core",
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_core_resources),
     .resource = tx_isp_core_resources,
+    .dev = {
+        .platform_data = &core_pdata,  /* CRITICAL: Provide platform data */
+    },
 };
 
 /* Forward declaration for VIC event handler */
