@@ -100,9 +100,12 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
 
         /* Binary Ninja: int32_t $v0_2 = *(dump_vsd_5 + 0x88) */
         /* Binary Ninja: $v0_2(dump_vsd_5 + 0x80) - this is disable_irq(irq_number) */
-        if (vic_dev->irq_num > 0) {
-            disable_irq(vic_dev->irq_num);
-            pr_info("*** tx_vic_disable_irq: Hardware IRQ %d DISABLED ***\n", vic_dev->irq_num);
+        if (vic_dev->irq_number > 0) {
+            disable_irq(vic_dev->irq_number);
+            pr_info("*** tx_vic_disable_irq: Hardware IRQ %d DISABLED ***\n", vic_dev->irq_number);
+        } else if (vic_dev->irq > 0) {
+            disable_irq(vic_dev->irq);
+            pr_info("*** tx_vic_disable_irq: Hardware IRQ %d DISABLED ***\n", vic_dev->irq);
         }
 
         pr_info("*** tx_vic_disable_irq: VIC interrupts DISABLED ***\n");
