@@ -136,14 +136,12 @@
 #define ISP_BYPASS_CTRL       0x0004  // Base + offset for bypass control
 #define ISP_ANTIFLICKER_CTRL  0x0008  // Base + offset for antiflicker
 
-#define ISP_CTRL_REG          0x00
 #define ISP_LINK_ENABLE_REG   0x04
 #define ISP_ROUTE_REG         0x08
 #define ISP_BYPASS_REG        0x0C
 
 
 /* ISP AF Zone register definitions */
-#define ISP_AF_ZONE_BASE      0x13380000   // Base address for AF zone registers
 #define ISP_AF_ZONE_METRICS   0x00         // Offset to zone metrics
 #define ISP_AF_ZONE_STATUS    0x40         // Offset to zone status
 #define ISP_AF_ZONE_CONFIG    0x44         // Offset to zone configuration
@@ -771,7 +769,6 @@ struct isp_channel_event {
 #endif
 
 // From OEM driver, netlink protocol setup
-#define ISP_NETLINK_PROTO 0x17
 #define ISP_NETLINK_GROUP 0xca624
 
 /* Frame States - must match libimp */
