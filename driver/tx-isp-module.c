@@ -3990,13 +3990,45 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     pr_info("ISP IOCTL: cmd=0x%x arg=0x%lx\n", cmd, arg);
 
     switch (cmd) {
-    case 0x40045626: {  // VIDIOC_GET_SENSOR_INFO - Simple success response
-        int __user *result = (int __user *)arg;
-        if (put_user(1, result)) {
-            pr_err("Failed to update sensor result\n");
+    case 0x40045626: {  // VIDIOC_GET_SENSOR_INFO - EXACT Binary Ninja reference implementation
+        int sensor_result = 0;
+        int i;
+
+        pr_info("*** 0x40045626: GET_SENSOR_INFO - Binary Ninja exact implementation ***\n");
+
+        /* Binary Ninja: Loop through subdevices ($s7 + 0x2c to $s7 + 0x6c) */
+        for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+            struct tx_isp_subdev *sd = isp_dev->subdevs[i];
+
+            if (sd != NULL) {
+                /* Binary Ninja: void* $v0_10 = *(*($a0_4 + 0xc4) + 0xc) */
+                if (sd->ops && sd->ops->sensor) {
+                    /* Binary Ninja: int32_t $v0_11 = *($v0_10 + 8) */
+                    if (sd->ops->sensor->ioctl) {
+                        /* Binary Ninja: int32_t $v0_13 = $v0_11($a0_4, 0x2000003, &var_98) */
+                        int ret = sd->ops->sensor->ioctl(sd, 0x2000003, &sensor_result);
+
+                        if (ret != 0 && ret != 0xfffffdfd) {
+                            pr_info("*** Sensor IOCTL 0x2000003 returned: %d ***\n", ret);
+                            return ret;
+                        }
+
+                        if (ret == 0) {
+                            pr_info("*** Found sensor, result=%d ***\n", sensor_result);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        /* Binary Ninja: if (private_copy_to_user(arg3, &var_98, 4) != 0) */
+        if (copy_to_user((void __user *)arg, &sensor_result, sizeof(sensor_result))) {
+            pr_err("Failed to copy sensor result to user\n");
             return -EFAULT;
         }
-        pr_info("Sensor info request: returning success (1)\n");
+
+        pr_info("*** GET_SENSOR_INFO: Returning sensor_result=%d ***\n", sensor_result);
         return 0;
     }
     case 0x805056c1: { // TX_ISP_SENSOR_REGISTER - FIXED to actually connect sensor to ISP device
