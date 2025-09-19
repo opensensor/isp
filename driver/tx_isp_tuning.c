@@ -8426,7 +8426,7 @@ int tiziano_ccm_init(void)
     tiziano_ccm_params_refresh();
 
     /* Binary Ninja: tiziano_ccm_lut_parameter() */
-    tiziano_ccm_lut_parameter();
+    tiziano_ccm_lut_parameter((int32_t *)ccm_coef_now);  /* Pass current CCM coefficients */
 
     return 0;
 }
