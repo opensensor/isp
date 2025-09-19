@@ -4176,33 +4176,36 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     strncpy(sensor->info.name, sensor_name, sizeof(sensor->info.name) - 1);
                     sensor->info.name[sizeof(sensor->info.name) - 1] = '\0';
                     
-                    /* SAFE ALLOCATION: Allocate sensor attributes with proper error checking */
-                    sensor->video.attr = kzalloc(sizeof(struct tx_isp_sensor_attribute), GFP_KERNEL);
-                    if (!sensor->video.attr) {
-                        pr_err("*** CRITICAL ERROR: Failed to allocate sensor attributes (size=%zu) ***\n", sizeof(struct tx_isp_sensor_attribute));
-                        kfree(sensor);
-                        return -ENOMEM;
-                    }
-                    pr_info("*** SENSOR ATTRIBUTES ALLOCATED: %p (size=%zu bytes) ***\n", sensor->video.attr, sizeof(struct tx_isp_sensor_attribute));
-                    
+                    /* CRITICAL FIX: Use real sensor attributes instead of allocating duplicates */
+                    /* Point to the embedded sensor attributes structure */
+                    sensor->video.attr = &sensor->attr;
+                    pr_info("*** SENSOR ATTRIBUTES: Using embedded attr structure at %p ***\n", sensor->video.attr);
+
                     /* SAFE INITIALIZATION: Set up basic sensor attributes for GC2053 */
                     if (strncmp(sensor_name, "gc2053", 6) == 0) {
-                        sensor->video.attr->chip_id = 0x2053;
-                        /* CRITICAL FIX: Use ACTUAL sensor output dimensions, not total dimensions */
-                        /* VIC must be configured to match what sensor actually outputs */
-                        sensor->video.attr->total_width = 1920;   /* Actual output width */
-                        sensor->video.attr->total_height = 1080;  /* Actual output height */
-                        sensor->video.attr->dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; /* MIPI = 1 (correct value from enum) */
-                        sensor->video.attr->integration_time = 1000;
-                        sensor->video.attr->max_again = 0x40000;
-                        sensor->video.attr->name = sensor_name; /* Safe pointer assignment */
+                        sensor->attr.chip_id = 0x2053;
+                        sensor->attr.name = sensor_name;
+                        sensor->attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; /* MIPI = 1 */
+                        sensor->attr.total_width = 2200;   /* GC2053 total frame width */
+                        sensor->attr.total_height = 1125;  /* GC2053 total frame height */
+                        sensor->attr.max_integration_time_native = 1125 - 8;
+                        sensor->attr.integration_time_limit = 1125 - 8;
+                        sensor->attr.max_integration_time = 1125 - 8;
+                        sensor->attr.integration_time_apply_delay = 2;
+                        sensor->attr.again_apply_delay = 2;
+                        sensor->attr.dgain_apply_delay = 0;
+                        sensor->attr.sensor_ctrl.alloc_again = 0;
+                        sensor->attr.sensor_ctrl.alloc_dgain = 0;
+                        sensor->attr.one_line_expr_in_us = 30;
+                        sensor->attr.fps = 25;
+                        sensor->attr.data_type = TX_SENSOR_DATA_TYPE_LINEAR;
 
                         pr_info("*** SENSOR ATTR INIT: Set dbus_type=%d (MIPI), dimensions=%dx%d ***\n",
-                                sensor->video.attr->dbus_type,
-                                sensor->video.attr->total_width,
-                                sensor->video.attr->total_height);
-                        pr_info("*** GC2053 SENSOR ATTRIBUTES CONFIGURED: %dx%d output (MIPI interface) ***\n",
-                                sensor->video.attr->total_width, sensor->video.attr->total_height);
+                                sensor->attr.dbus_type,
+                                sensor->attr.total_width,
+                                sensor->attr.total_height);
+                        pr_info("*** GC2053 SENSOR ATTRIBUTES CONFIGURED: %dx%d total (MIPI interface) ***\n",
+                                sensor->attr.total_width, sensor->attr.total_height);
                     }
                     
                     /* SAFE INITIALIZATION: Initialize subdev structure */
@@ -4225,7 +4228,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     /* SAFE CONNECTION: Verify ISP device before connecting */
                     if (!ourISPdev) {
                         pr_err("*** CRITICAL ERROR: ourISPdev is NULL! ***\n");
-                        kfree(sensor->video.attr);
+                        /* No need to free video.attr since it points to embedded sensor->attr */
                         kfree(sensor);
                         return -ENODEV;
                     }

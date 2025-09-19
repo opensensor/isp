@@ -108,8 +108,8 @@ struct tx_isp_vic_device {
     u32 stride;                                 /* Line stride */
     uint32_t pixel_format;                      /* Pixel format */
     
-    /* CRITICAL: Sensor attributes with proper alignment */
-    struct tx_isp_sensor_attribute sensor_attr __attribute__((aligned(4))); /* Sensor attributes */
+    /* REMOVED: VIC no longer maintains its own sensor attributes */
+    /* VIC will use the real sensor attributes from ourISPdev->sensor->video.attr */
     
     /* CRITICAL: Synchronization primitives with proper alignment */
     spinlock_t lock __attribute__((aligned(4)));                    /* General spinlock */

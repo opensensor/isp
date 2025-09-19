@@ -199,12 +199,9 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     /* Initialize empty lists - buffers allocated later when needed */
     pr_info("*** VIC: Buffer lists initialized - allocation deferred to prevent memory pressure ***\n");
     
-    /* Set up sensor attributes with defaults */
-    memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
-    vic_dev->sensor_attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; /* MIPI interface (correct value from enum) */
-    vic_dev->sensor_attr.total_width = 1920;
-    vic_dev->sensor_attr.total_height = 1080;
-    vic_dev->sensor_attr.data_type = 0x2b; /* Default RAW10 */
+    /* REMOVED: VIC no longer maintains its own sensor attributes */
+    /* VIC will use the real sensor attributes from ourISPdev->sensor->video.attr */
+    pr_info("*** VIC: Will use real sensor attributes instead of maintaining duplicates ***\n");
     
     /* *** CRITICAL: Link VIC device to ISP core *** */
     /* Store the VIC device properly - the subdev is PART of the VIC device */
@@ -1420,16 +1417,15 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
-    /* CRITICAL FIX: Get sensor attributes from the ACTUAL registered sensor */
+    /* CRITICAL FIX: Always use the REAL registered sensor attributes */
     if (ourISPdev && ourISPdev->sensor && ourISPdev->sensor->video.attr) {
         sensor_attr = ourISPdev->sensor->video.attr;
         pr_info("*** USING REAL SENSOR ATTRIBUTES: sensor_attr=%p, dbus_type=%d ***\n",
                 sensor_attr, sensor_attr->dbus_type);
     } else {
-        /* Fallback to VIC's own sensor attributes if no real sensor */
-        sensor_attr = &vic_dev->sensor_attr;
-        pr_info("*** FALLBACK: Using VIC sensor attributes: sensor_attr=%p, dbus_type=%d ***\n",
-                sensor_attr, sensor_attr->dbus_type);
+        pr_err("*** CRITICAL ERROR: No real sensor registered! Cannot start VIC ***\n");
+        pr_err("*** ourISPdev=%p, sensor=%p ***\n", ourISPdev, ourISPdev ? ourISPdev->sensor : NULL);
+        return -ENODEV;
     }
 
     /* DEBUG: Check if sensor_attr is properly initialized */
