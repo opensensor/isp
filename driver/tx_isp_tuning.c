@@ -8220,19 +8220,578 @@ int tiziano_bcsh_init(void)
     return 0;
 }
 
-/* tiziano_ydns_init - YDNS initialization */
+/* tiziano_ydns_init - EXACT Binary Ninja implementation */
 int tiziano_ydns_init(void)
 {
     pr_debug("tiziano_ydns_init: Initializing YDNS processing\n");
+
+    /* Binary Ninja: ydns_gain_old = 0xffffffff */
+    ydns_gain_old = 0xffffffff;
+
+    /* Binary Ninja: tiziano_ydns_params_refresh() */
+    tiziano_ydns_params_refresh();
+
+    /* Binary Ninja: tisp_ydns_par_refresh(isp_printf) */
+    tisp_ydns_par_refresh(isp_printf);
+
     return 0;
 }
+EXPORT_SYMBOL(tiziano_ydns_init);
 
-/* tiziano_rdns_init - RDNS initialization */
+/* tiziano_rdns_init - EXACT Binary Ninja implementation */
 int tiziano_rdns_init(void)
 {
     pr_debug("tiziano_rdns_init: Initializing RDNS processing\n");
+
+    /* Binary Ninja: WDR mode selection */
+    void *v0;
+    if (rdns_wdr_en != 0) {
+        /* Binary Ninja: $v0 = &rdns_text_base_thres_wdr_array */
+        v0 = &rdns_text_base_thres_wdr_array;
+    } else {
+        /* Binary Ninja: $v0 = &rdns_text_base_thres_array */
+        v0 = &rdns_text_base_thres_array;
+    }
+
+    /* Binary Ninja: rdns_text_base_thres_array_now = $v0 */
+    rdns_text_base_thres_array_now = v0;
+
+    /* Binary Ninja: rdns_gain_old = 0xffffffff */
+    rdns_gain_old = 0xffffffff;
+
+    /* Binary Ninja: tiziano_rdns_params_refresh() */
+    tiziano_rdns_params_refresh();
+
+    /* Binary Ninja: tisp_rdns_par_refresh(isp_printf, isp_printf, 1) */
+    tisp_rdns_par_refresh(isp_printf, isp_printf, 1);
+
     return 0;
 }
+EXPORT_SYMBOL(tiziano_rdns_init);
+
+/* tiziano_hldc_init - EXACT Binary Ninja implementation */
+int tiziano_hldc_init(void)
+{
+    pr_debug("tiziano_hldc_init: Initializing HLDC processing\n");
+
+    /* Binary Ninja: tiziano_hldc_params_refresh() */
+    tiziano_hldc_params_refresh();
+
+    /* Binary Ninja: tisp_hldc_con_par_cfg() */
+    tisp_hldc_con_par_cfg();
+
+    /* Binary Ninja: system_reg_write(0x9044, 3) */
+    system_reg_write(0x9044, 3);
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_hldc_init);
+
+/* tiziano_gamma_init - EXACT Binary Ninja implementation */
+int tiziano_gamma_init(void)
+{
+    pr_debug("tiziano_gamma_init: Initializing Gamma processing\n");
+
+    /* Binary Ninja: WDR mode selection */
+    void *v0;
+    if (gamma_wdr_en != 0) {
+        /* Binary Ninja: $v0 = &tiziano_gamma_lut_wdr */
+        v0 = &tiziano_gamma_lut_wdr;
+    } else {
+        /* Binary Ninja: $v0 = &tiziano_gamma_lut */
+        v0 = &tiziano_gamma_lut;
+    }
+
+    /* Binary Ninja: tiziano_gamma_lut_now = $v0 */
+    tiziano_gamma_lut_now = v0;
+
+    /* Binary Ninja: tiziano_gamma_lut_parameter() */
+    tiziano_gamma_lut_parameter();
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_gamma_init);
+
+/* tiziano_clm_init - EXACT Binary Ninja implementation */
+int tiziano_clm_init(void)
+{
+    pr_debug("tiziano_clm_init: Initializing CLM processing\n");
+
+    /* Binary Ninja: tiziano_clm_params_refresh() */
+    tiziano_clm_params_refresh();
+
+    /* Binary Ninja: tiziano_set_parameter_clm() */
+    tiziano_set_parameter_clm();
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_clm_init);
+
+/* tiziano_dpc_init - EXACT Binary Ninja implementation */
+int tiziano_dpc_init(void)
+{
+    pr_debug("tiziano_dpc_init: Initializing DPC processing\n");
+
+    /* Binary Ninja: WDR mode selection */
+    void *v0;
+    if (dpc_wdr_en != 0) {
+        /* Binary Ninja: dpc_d_m1_dthres_array_now = &dpc_d_m1_dthres_wdr_array */
+        dpc_d_m1_dthres_array_now = &dpc_d_m1_dthres_wdr_array;
+        /* Binary Ninja: dpc_d_m1_fthres_array_now = &dpc_d_m1_fthres_wdr_array */
+        dpc_d_m1_fthres_array_now = &dpc_d_m1_fthres_wdr_array;
+        /* Binary Ninja: dpc_d_m3_dthres_array_now = &dpc_d_m3_dthres_wdr_array */
+        dpc_d_m3_dthres_array_now = &dpc_d_m3_dthres_wdr_array;
+        /* Binary Ninja: $v0 = &dpc_d_m3_fthres_wdr_array */
+        v0 = &dpc_d_m3_fthres_wdr_array;
+    } else {
+        /* Binary Ninja: dpc_d_m1_dthres_array_now = &dpc_d_m1_dthres_array */
+        dpc_d_m1_dthres_array_now = &dpc_d_m1_dthres_array;
+        /* Binary Ninja: dpc_d_m1_fthres_array_now = &dpc_d_m1_fthres_array */
+        dpc_d_m1_fthres_array_now = &dpc_d_m1_fthres_array;
+        /* Binary Ninja: dpc_d_m3_dthres_array_now = &dpc_d_m3_dthres_array */
+        dpc_d_m3_dthres_array_now = &dpc_d_m3_dthres_array;
+        /* Binary Ninja: $v0 = &dpc_d_m3_fthres_array */
+        v0 = &dpc_d_m3_fthres_array;
+    }
+
+    /* Binary Ninja: dpc_d_m3_fthres_array_now = $v0 */
+    dpc_d_m3_fthres_array_now = v0;
+
+    /* Binary Ninja: data_9ab10 = 0xffffffff */
+    data_9ab10 = 0xffffffff;
+
+    /* Binary Ninja: tiziano_dpc_params_refresh() */
+    tiziano_dpc_params_refresh();
+
+    /* Binary Ninja: tisp_dpc_par_refresh(isp_printf, isp_printf, 1) */
+    tisp_dpc_par_refresh(isp_printf, isp_printf, 1);
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_dpc_init);
+
+/* tiziano_lsc_init - EXACT Binary Ninja implementation */
+int tiziano_lsc_init(void)
+{
+    pr_debug("tiziano_lsc_init: Initializing LSC processing\n");
+
+    /* Binary Ninja: WDR mode selection */
+    void *v0;
+    if (lsc_wdr_en != 0) {
+        /* Binary Ninja: $v0 = &lsc_mesh_str_wdr */
+        v0 = &lsc_mesh_str_wdr;
+    } else {
+        /* Binary Ninja: $v0 = &lsc_mesh_str */
+        v0 = &lsc_mesh_str;
+    }
+
+    /* Binary Ninja: data_9a420 = $v0 */
+    data_9a420 = (uint32_t)v0;
+
+    /* Binary Ninja: tiziano_lsc_params_refresh() */
+    tiziano_lsc_params_refresh();
+
+    /* Binary Ninja: system_reg_write(0x3800, lsc_mesh_size:4 << 0x10 | lsc_mesh_size.d) */
+    system_reg_write(0x3800, ((lsc_mesh_size >> 16) & 0xffff) << 0x10 | (lsc_mesh_size & 0xffff));
+
+    /* Binary Ninja: system_reg_write(0x3804, data_9a424 << 0x10 | lsc_mean_en << 0xf | lsc_mesh_scale) */
+    system_reg_write(0x3804, data_9a424 << 0x10 | lsc_mean_en << 0xf | lsc_mesh_scale);
+
+    /* Binary Ninja: data_9a404 = 5 */
+    data_9a404 = 5;
+
+    /* Binary Ninja: lsc_last_str = 0 */
+    lsc_last_str = 0;
+
+    /* Binary Ninja: data_9a400 = 1 */
+    data_9a400 = 1;
+
+    /* Binary Ninja: tisp_lsc_write_lut_datas() */
+    tisp_lsc_write_lut_datas();
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_lsc_init);
+
+/* tiziano_gib_init - EXACT Binary Ninja implementation */
+int tiziano_gib_init(void)
+{
+    pr_debug("tiziano_gib_init: Initializing GIB processing\n");
+
+    /* Binary Ninja: tiziano_gib_params_refresh() */
+    tiziano_gib_params_refresh();
+
+    /* Binary Ninja: uint32_t deir_en_1 = deir_en */
+    uint32_t deir_en_1 = deir_en;
+
+    if (deir_en_1 != 1) {
+        /* Binary Ninja: data_aa2fc = 0 */
+        data_aa2fc = 0;
+    } else if (day_night != 0) {
+        /* Binary Ninja: data_aa2fc = 0 */
+        data_aa2fc = 0;
+    } else {
+        /* Binary Ninja: data_aa2fc = deir_en_1 */
+        data_aa2fc = deir_en_1;
+    }
+
+    /* Binary Ninja: tiziano_gib_lut_parameter() */
+    tiziano_gib_lut_parameter();
+
+    /* Binary Ninja: tiziano_gib_deir_reg(&tiziano_gib_deir_r_m, &tiziano_gib_deir_g_m, &tiziano_gib_deir_b_m) */
+    tiziano_gib_deir_reg(&tiziano_gib_deir_r_m, &tiziano_gib_deir_g_m, &tiziano_gib_deir_b_m);
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_gib_init);
+
+/* tiziano_sharpen_init - EXACT Binary Ninja implementation */
+int tiziano_sharpen_init(void)
+{
+    pr_debug("tiziano_sharpen_init: Initializing Sharpen processing\n");
+
+    /* Binary Ninja: WDR mode selection */
+    void *v0;
+    if (sharpen_wdr_en != 0) {
+        /* Binary Ninja: y_sp_uu_thres_array_now = &y_sp_uu_thres_wdr_array */
+        y_sp_uu_thres_array_now = &y_sp_uu_thres_wdr_array;
+        /* Binary Ninja: y_sp_w_sl_stren_0_array_now = &y_sp_w_sl_stren_0_wdr_array */
+        y_sp_w_sl_stren_0_array_now = &y_sp_w_sl_stren_0_wdr_array;
+        /* Binary Ninja: y_sp_w_sl_stren_1_array_now = &y_sp_w_sl_stren_1_wdr_array */
+        y_sp_w_sl_stren_1_array_now = &y_sp_w_sl_stren_1_wdr_array;
+        /* Binary Ninja: y_sp_w_sl_stren_2_array_now = &y_sp_w_sl_stren_2_wdr_array */
+        y_sp_w_sl_stren_2_array_now = &y_sp_w_sl_stren_2_wdr_array;
+        /* Binary Ninja: y_sp_w_sl_stren_3_array_now = &y_sp_w_sl_stren_3_wdr_array */
+        y_sp_w_sl_stren_3_array_now = &y_sp_w_sl_stren_3_wdr_array;
+        /* Binary Ninja: y_sp_b_sl_stren_0_array_now = &y_sp_b_sl_stren_0_wdr_array */
+        y_sp_b_sl_stren_0_array_now = &y_sp_b_sl_stren_0_wdr_array;
+        /* Binary Ninja: y_sp_b_sl_stren_1_array_now = &y_sp_b_sl_stren_1_wdr_array */
+        y_sp_b_sl_stren_1_array_now = &y_sp_b_sl_stren_1_wdr_array;
+        /* Binary Ninja: y_sp_b_sl_stren_2_array_now = &y_sp_b_sl_stren_2_wdr_array */
+        y_sp_b_sl_stren_2_array_now = &y_sp_b_sl_stren_2_wdr_array;
+        /* Binary Ninja: $v0 = &y_sp_b_sl_stren_3_wdr_array */
+        v0 = &y_sp_b_sl_stren_3_wdr_array;
+    } else {
+        /* Binary Ninja: y_sp_uu_thres_array_now = &y_sp_uu_thres_array */
+        y_sp_uu_thres_array_now = &y_sp_uu_thres_array;
+        /* Binary Ninja: y_sp_w_sl_stren_0_array_now = &y_sp_w_sl_stren_0_array */
+        y_sp_w_sl_stren_0_array_now = &y_sp_w_sl_stren_0_array;
+        /* Binary Ninja: y_sp_w_sl_stren_1_array_now = &y_sp_w_sl_stren_1_array */
+        y_sp_w_sl_stren_1_array_now = &y_sp_w_sl_stren_1_array;
+        /* Binary Ninja: y_sp_w_sl_stren_2_array_now = &y_sp_w_sl_stren_2_array */
+        y_sp_w_sl_stren_2_array_now = &y_sp_w_sl_stren_2_array;
+        /* Binary Ninja: y_sp_w_sl_stren_3_array_now = &y_sp_w_sl_stren_3_array */
+        y_sp_w_sl_stren_3_array_now = &y_sp_w_sl_stren_3_array;
+        /* Binary Ninja: y_sp_b_sl_stren_0_array_now = &y_sp_b_sl_stren_0_array */
+        y_sp_b_sl_stren_0_array_now = &y_sp_b_sl_stren_0_array;
+        /* Binary Ninja: y_sp_b_sl_stren_1_array_now = &y_sp_b_sl_stren_1_array */
+        y_sp_b_sl_stren_1_array_now = &y_sp_b_sl_stren_1_array;
+        /* Binary Ninja: y_sp_b_sl_stren_2_array_now = &y_sp_b_sl_stren_2_array */
+        y_sp_b_sl_stren_2_array_now = &y_sp_b_sl_stren_2_array;
+        /* Binary Ninja: $v0 = &y_sp_b_sl_stren_3_array */
+        v0 = &y_sp_b_sl_stren_3_array;
+    }
+
+    /* Binary Ninja: y_sp_b_sl_stren_3_array_now = $v0 */
+    y_sp_b_sl_stren_3_array_now = v0;
+
+    /* Binary Ninja: data_9a920 = 0xffffffff */
+    data_9a920 = 0xffffffff;
+
+    /* Binary Ninja: tiziano_sharpen_params_refresh() */
+    tiziano_sharpen_params_refresh();
+
+    /* Binary Ninja: tisp_sharpen_par_refresh(isp_printf, isp_printf, 1) */
+    tisp_sharpen_par_refresh(isp_printf, isp_printf, 1);
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_sharpen_init);
+
+/* tiziano_dmsc_init - EXACT Binary Ninja implementation */
+int tiziano_dmsc_init(void)
+{
+    pr_debug("tiziano_dmsc_init: Initializing DMSC processing\n");
+
+    /* Binary Ninja: WDR mode selection */
+    void *v0;
+    if (dmsc_wdr_en != 0) {
+        /* Binary Ninja: dmsc_uu_thres_array_now = &dmsc_uu_thres_wdr_array */
+        dmsc_uu_thres_array_now = &dmsc_uu_thres_wdr_array;
+        /* Binary Ninja: dmsc_vv_thres_array_now = &dmsc_vv_thres_wdr_array */
+        dmsc_vv_thres_array_now = &dmsc_vv_thres_wdr_array;
+        /* Binary Ninja: dmsc_uu_slope_array_now = &dmsc_uu_slope_wdr_array */
+        dmsc_uu_slope_array_now = &dmsc_uu_slope_wdr_array;
+        /* Binary Ninja: $v0 = &dmsc_vv_slope_wdr_array */
+        v0 = &dmsc_vv_slope_wdr_array;
+    } else {
+        /* Binary Ninja: dmsc_uu_thres_array_now = &dmsc_uu_thres_array */
+        dmsc_uu_thres_array_now = &dmsc_uu_thres_array;
+        /* Binary Ninja: dmsc_vv_thres_array_now = &dmsc_vv_thres_array */
+        dmsc_vv_thres_array_now = &dmsc_vv_thres_array;
+        /* Binary Ninja: dmsc_uu_slope_array_now = &dmsc_uu_slope_array */
+        dmsc_uu_slope_array_now = &dmsc_uu_slope_array;
+        /* Binary Ninja: $v0 = &dmsc_vv_slope_array */
+        v0 = &dmsc_vv_slope_array;
+    }
+
+    /* Binary Ninja: dmsc_vv_slope_array_now = $v0 */
+    dmsc_vv_slope_array_now = v0;
+
+    /* Binary Ninja: data_9a6a0 = 0xffffffff */
+    data_9a6a0 = 0xffffffff;
+
+    /* Binary Ninja: tiziano_dmsc_params_refresh() */
+    tiziano_dmsc_params_refresh();
+
+    /* Binary Ninja: tisp_dmsc_par_refresh(isp_printf, isp_printf, 1) */
+    tisp_dmsc_par_refresh(isp_printf, isp_printf, 1);
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_dmsc_init);
+
+/* tiziano_sdns_init - EXACT Binary Ninja implementation */
+int tiziano_sdns_init(void)
+{
+    pr_debug("tiziano_sdns_init: Initializing SDNS processing\n");
+
+    /* Binary Ninja: WDR mode selection */
+    void *v0;
+    if (sdns_wdr_en != 0) {
+        /* Binary Ninja: $v0 = &sdns_text_base_thres_wdr_array */
+        v0 = &sdns_text_base_thres_wdr_array;
+    } else {
+        /* Binary Ninja: $v0 = &sdns_text_base_thres_array */
+        v0 = &sdns_text_base_thres_array;
+    }
+
+    /* Binary Ninja: sdns_text_base_thres_array_now = $v0 */
+    sdns_text_base_thres_array_now = v0;
+
+    /* Binary Ninja: sdns_gain_old = 0xffffffff */
+    sdns_gain_old = 0xffffffff;
+
+    /* Binary Ninja: tiziano_sdns_params_refresh() */
+    tiziano_sdns_params_refresh();
+
+    /* Binary Ninja: tisp_sdns_par_refresh(isp_printf, isp_printf, 1) */
+    tisp_sdns_par_refresh(isp_printf, isp_printf, 1);
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_sdns_init);
+
+/* tiziano_mdns_init - EXACT Binary Ninja implementation */
+int tiziano_mdns_init(void)
+{
+    pr_debug("tiziano_mdns_init: Initializing MDNS processing\n");
+
+    /* Binary Ninja: WDR mode selection */
+    void *v0;
+    if (mdns_wdr_en != 0) {
+        /* Binary Ninja: $v0 = &mdns_text_base_thres_wdr_array */
+        v0 = &mdns_text_base_thres_wdr_array;
+    } else {
+        /* Binary Ninja: $v0 = &mdns_text_base_thres_array */
+        v0 = &mdns_text_base_thres_array;
+    }
+
+    /* Binary Ninja: mdns_text_base_thres_array_now = $v0 */
+    mdns_text_base_thres_array_now = v0;
+
+    /* Binary Ninja: mdns_gain_old = 0xffffffff */
+    mdns_gain_old = 0xffffffff;
+
+    /* Binary Ninja: tiziano_mdns_params_refresh() */
+    tiziano_mdns_params_refresh();
+
+    /* Binary Ninja: tisp_mdns_par_refresh(isp_printf, isp_printf, 1) */
+    tisp_mdns_par_refresh(isp_printf, isp_printf, 1);
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_mdns_init);
+
+/* tiziano_wdr_params_init - EXACT Binary Ninja implementation */
+int tiziano_wdr_params_init(void)
+{
+    pr_debug("tiziano_wdr_params_init: Initializing WDR parameters\n");
+
+    /* Binary Ninja: tiziano_wdr_params_refresh() */
+    tiziano_wdr_params_refresh();
+
+    /* Binary Ninja: tisp_wdr_par_refresh(isp_printf, isp_printf, 1) */
+    tisp_wdr_par_refresh(isp_printf, isp_printf, 1);
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_wdr_params_init);
+
+/* tiziano_wdr_init - EXACT Binary Ninja implementation */
+int tiziano_wdr_init(void)
+{
+    pr_debug("tiziano_wdr_init: Initializing WDR processing\n");
+
+    /* Binary Ninja: tiziano_wdr_params_init() */
+    tiziano_wdr_params_init();
+
+    /* Binary Ninja: system_reg_write(0x2800, wdr_en << 0x1f | wdr_mode << 0x1c | wdr_short_th << 0x10 | wdr_long_th) */
+    system_reg_write(0x2800, wdr_en << 0x1f | wdr_mode << 0x1c | wdr_short_th << 0x10 | wdr_long_th);
+
+    /* Binary Ninja: system_reg_write(0x2804, wdr_combine_short_thr << 0x10 | wdr_combine_long_thr) */
+    system_reg_write(0x2804, wdr_combine_short_thr << 0x10 | wdr_combine_long_thr);
+
+    /* Binary Ninja: system_reg_write(0x2808, wdr_combine_min_weight << 0x10 | wdr_combine_max_weight) */
+    system_reg_write(0x2808, wdr_combine_min_weight << 0x10 | wdr_combine_max_weight);
+
+    /* Binary Ninja: system_reg_write(0x280c, wdr_pixel_avg_max_diff) */
+    system_reg_write(0x280c, wdr_pixel_avg_max_diff);
+
+    /* Binary Ninja: system_reg_write(0x2810, wdr_long_ch_mode << 0x1f | wdr_mdtlp_th << 0x10 | wdr_mdtl_th) */
+    system_reg_write(0x2810, wdr_long_ch_mode << 0x1f | wdr_mdtlp_th << 0x10 | wdr_mdtl_th);
+
+    /* Binary Ninja: system_reg_write(0x2814, wdr_mdtl_dif_th << 0x10 | wdr_pixel_avg_max_diff_th) */
+    system_reg_write(0x2814, wdr_mdtl_dif_th << 0x10 | wdr_pixel_avg_max_diff_th);
+
+    /* Binary Ninja: system_reg_write(0x2818, wdr_mdts_dif_th << 0x10 | wdr_mdts_th) */
+    system_reg_write(0x2818, wdr_mdts_dif_th << 0x10 | wdr_mdts_th);
+
+    /* Binary Ninja: system_reg_write(0x281c, wdr_mdtsp_th) */
+    system_reg_write(0x281c, wdr_mdtsp_th);
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_wdr_init);
+
+/* tiziano_ccm_init - EXACT Binary Ninja implementation */
+int tiziano_ccm_init(void)
+{
+    pr_debug("tiziano_ccm_init: Initializing CCM processing\n");
+
+    /* Binary Ninja: WDR mode selection */
+    void *v0;
+    if (ccm_wdr_en != 0) {
+        /* Binary Ninja: $v0 = &ccm_coef_wdr */
+        v0 = &ccm_coef_wdr;
+    } else {
+        /* Binary Ninja: $v0 = &ccm_coef */
+        v0 = &ccm_coef;
+    }
+
+    /* Binary Ninja: ccm_coef_now = $v0 */
+    ccm_coef_now = v0;
+
+    /* Binary Ninja: tiziano_ccm_params_refresh() */
+    tiziano_ccm_params_refresh();
+
+    /* Binary Ninja: tiziano_ccm_lut_parameter() */
+    tiziano_ccm_lut_parameter();
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_ccm_init);
+
+/* tiziano_bcsh_init - EXACT Binary Ninja implementation */
+int tiziano_bcsh_init(void)
+{
+    pr_debug("tiziano_bcsh_init: Initializing BCSH processing\n");
+
+    /* Binary Ninja: WDR mode selection */
+    void *v0;
+    if (bcsh_wdr_en != 0) {
+        /* Binary Ninja: $v0 = &bcsh_luma_wdr */
+        v0 = &bcsh_luma_wdr;
+    } else {
+        /* Binary Ninja: $v0 = &bcsh_luma */
+        v0 = &bcsh_luma;
+    }
+
+    /* Binary Ninja: bcsh_luma_now = $v0 */
+    bcsh_luma_now = v0;
+
+    /* Binary Ninja: tiziano_bcsh_params_refresh() */
+    tiziano_bcsh_params_refresh();
+
+    /* Binary Ninja: tiziano_bcsh_lut_parameter() */
+    tiziano_bcsh_lut_parameter();
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_bcsh_init);
+
+/* tiziano_defog_params_init - EXACT Binary Ninja implementation */
+int tiziano_defog_params_init(void)
+{
+    pr_debug("tiziano_defog_params_init: Initializing defog parameters\n");
+
+    /* Binary Ninja: tiziano_defog_params_refresh() */
+    tiziano_defog_params_refresh();
+
+    /* Binary Ninja: tisp_defog_par_refresh(isp_printf, isp_printf, 1) */
+    tisp_defog_par_refresh(isp_printf, isp_printf, 1);
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_defog_params_init);
+
+/* tiziano_defog_init - EXACT Binary Ninja implementation */
+int tiziano_defog_init(void)
+{
+    pr_debug("tiziano_defog_init: Initializing defog processing\n");
+
+    /* Binary Ninja: WDR mode selection */
+    void *v0;
+    if (defog_wdr_en != 0) {
+        /* Binary Ninja: $v0 = &defog_str_wdr_array */
+        v0 = &defog_str_wdr_array;
+    } else {
+        /* Binary Ninja: $v0 = &defog_str_array */
+        v0 = &defog_str_array;
+    }
+
+    /* Binary Ninja: defog_str_array_now = $v0 */
+    defog_str_array_now = v0;
+
+    /* Binary Ninja: data_9a7e0 = 0xffffffff */
+    data_9a7e0 = 0xffffffff;
+
+    /* Binary Ninja: tiziano_defog_params_init() */
+    tiziano_defog_params_init();
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_defog_init);
+
+/* tiziano_awb_init - EXACT Binary Ninja implementation */
+int tiziano_awb_init(void)
+{
+    pr_debug("tiziano_awb_init: Initializing AWB processing\n");
+
+    /* Binary Ninja: tiziano_awb_params_refresh() */
+    tiziano_awb_params_refresh();
+
+    /* Binary Ninja: tisp_awb_par_refresh(isp_printf, isp_printf, 1) */
+    tisp_awb_par_refresh(isp_printf, isp_printf, 1);
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_awb_init);
+
+/* tiziano_af_init - EXACT Binary Ninja implementation */
+int tiziano_af_init(void)
+{
+    pr_debug("tiziano_af_init: Initializing AF processing\n");
+
+    /* Binary Ninja: tiziano_af_params_refresh() */
+    tiziano_af_params_refresh();
+
+    /* Binary Ninja: tisp_af_par_refresh(isp_printf, isp_printf, 1) */
+    tisp_af_par_refresh(isp_printf, isp_printf, 1);
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_af_init);
 
 /* tisp_gb_init_reg - EXACT Binary Ninja implementation */
 int tisp_gb_init_reg(void)
