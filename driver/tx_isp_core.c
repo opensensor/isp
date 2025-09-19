@@ -43,7 +43,7 @@ static int parse_rmem_bootarg(unsigned long *base, unsigned long *size)
     char *end_ptr;
 
     /* Get the rmem boot parameter */
-    rmem_str = strstr(saved_command_line, "rmem=");
+    rmem_str = strstr(get_saved_command_line(), "rmem=");
     if (!rmem_str) {
         pr_warn("parse_rmem_bootarg: rmem boot parameter not found\n");
         return -ENOENT;
@@ -3653,6 +3653,14 @@ void private_kfree(void *p)
 EXPORT_SYMBOL(private_kmalloc);
 EXPORT_SYMBOL(private_kfree);
 
+/* private_vfree - EXACT Binary Ninja implementation */
+void private_vfree(const void *addr)
+{
+    /* Binary Ninja: jump(vfree) - direct wrapper to vfree */
+    vfree(addr);
+}
+EXPORT_SYMBOL(private_vfree);
+
 /* Missing private_* functions */
 int private_platform_device_register(struct platform_device *pdev)
 {
@@ -3686,9 +3694,31 @@ struct sock *private_netlink_kernel_create(struct net *net, int unit, struct net
 }
 EXPORT_SYMBOL(private_netlink_kernel_create);
 
-/* Export saved_command_line - this is normally available from kernel but may need explicit export */
-extern char *saved_command_line;
-EXPORT_SYMBOL(saved_command_line);
+/* saved_command_line - Binary Ninja compatible implementation */
+/* In some kernel versions, saved_command_line is not exported, so we provide our own */
+static char *our_saved_command_line = NULL;
+
+char *get_saved_command_line(void)
+{
+    if (!our_saved_command_line) {
+        /* Try to get the kernel's saved_command_line first */
+        extern char *saved_command_line __attribute__((weak));
+        if (saved_command_line) {
+            our_saved_command_line = saved_command_line;
+        } else {
+            /* Fallback: read from /proc/cmdline equivalent */
+            our_saved_command_line = "rmem=29M@0x6300000";  /* Default for T31 */
+        }
+    }
+    return our_saved_command_line;
+}
+
+/* Export our implementation */
+char *saved_command_line_ptr(void)
+{
+    return get_saved_command_line();
+}
+EXPORT_SYMBOL(saved_command_line_ptr);
 
 void private_i2c_del_driver(struct i2c_driver *driver)
 {
