@@ -10987,6 +10987,7 @@ uint32_t data_b2ee0(uint32_t log_val, int16_t *var_ptr)
     if (var_ptr) *var_ptr = 0;
     return log_val;
 }
+EXPORT_SYMBOL(data_b2ee0);
 
 uint32_t data_b2ee4(uint32_t log_val, void **var_ptr)
 {
