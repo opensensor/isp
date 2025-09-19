@@ -53,7 +53,7 @@ extern struct tx_isp_dev *ourISPdev;
 
 /* Forward declaration for frame channel wakeup function */
 extern void tx_isp_wakeup_frame_channels(void);
-
+int tisp_netlink_init(void);
 int isp_trigger_frame_data_transfer(struct tx_isp_dev *dev);
 /* ===== TIZIANO WDR PROCESSING PIPELINE - Binary Ninja Reference Implementation ===== */
 
@@ -473,7 +473,7 @@ int tiziano_dmsc_init(void);
 int tiziano_sharpen_init(void);
 
 /* Forward declarations for WDR functions */
-int tisp_gb_init(void);
+/* tisp_gb_init - removed forward declaration, implemented below */
 int tiziano_wdr_params_init(void);
 int tiziano_wdr_init(uint32_t width, uint32_t height);
 int tisp_wdr_init(void);
