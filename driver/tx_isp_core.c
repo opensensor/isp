@@ -362,6 +362,145 @@ struct tx_isp_dev *tx_isp_get_device(void)
 }
 EXPORT_SYMBOL(tx_isp_get_device);
 
+/**
+ * ispcore_core_ops_ioctl - EXACT Binary Ninja reference implementation
+ * This is the core IOCTL handler that routes commands to appropriate subdevices
+ *
+ * @sd: The subdev receiving the IOCTL
+ * @cmd: IOCTL command (0x1000000 or 0x1000001)
+ * @arg: IOCTL argument (unused in reference implementation)
+ *
+ * Binary Ninja analysis shows this function:
+ * 1. Handles cmd 0x1000000 by calling core->ioctl if available
+ * 2. Handles cmd 0x1000001 by calling sensor->ioctl if available
+ * 3. Iterates through subdevs array (offset 0x38) calling appropriate operations
+ * 4. Returns 0 on success, -ENOTSUPP (0xffffffed) on invalid subdev, -ENOTTY (0xfffffdfd) on unsupported
+ */
+static int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
+{
+    int result = -ENOTSUPP;  /* 0xffffffed - invalid subdev */
+    struct tx_isp_subdev_core_ops *core_ops;
+    struct tx_isp_subdev_sensor_ops *sensor_ops;
+    int (*callback_func)(void);
+    struct tx_isp_dev *isp_dev;
+    struct tx_isp_subdev **subdev_array;
+    struct tx_isp_subdev *current_subdev;
+    int i;
+
+    pr_debug("ispcore_core_ops_ioctl: cmd=0x%x, arg=%p\n", cmd, arg);
+
+    /* Binary Ninja: Check for valid subdev */
+    if (!sd) {
+        pr_err("ispcore_core_ops_ioctl: Invalid subdev\n");
+        return -ENOTSUPP;  /* 0xffffffed */
+    }
+
+    /* Handle the main subdev first */
+    if (cmd == 0x1000000) {
+        /* Binary Ninja: Call core operations ioctl */
+        if (sd->ops && sd->ops->core && sd->ops->core->ioctl) {
+            callback_func = (int (*)(void))sd->ops->core->ioctl;
+            if (callback_func) {
+                result = callback_func();
+                if (result != 0 && result != -ENOTTY) {
+                    pr_err("ispcore_core_ops_ioctl: Core ioctl failed with %d\n", result);
+                    return result;
+                }
+            } else {
+                result = -ENOTTY;  /* 0xfffffdfd */
+            }
+        } else {
+            result = -ENOTTY;  /* 0xfffffdfd */
+        }
+    } else if (cmd == 0x1000001) {
+        /* Binary Ninja: Call sensor operations ioctl */
+        if (sd->ops && sd->ops->sensor && sd->ops->sensor->ioctl) {
+            callback_func = (int (*)(void))sd->ops->sensor->ioctl;
+            if (callback_func) {
+                result = callback_func();
+                if (result != 0 && result != -ENOTTY) {
+                    pr_err("ispcore_core_ops_ioctl: Sensor ioctl failed with %d\n", result);
+                    return result;
+                }
+            } else {
+                result = -ENOTTY;  /* 0xfffffdfd */
+            }
+        } else {
+            result = -ENOTTY;  /* 0xfffffdfd */
+        }
+    } else {
+        result = 0;  /* Other commands return success */
+    }
+
+    /* Binary Ninja: Get ISP device from subdev to access subdevs array at offset 0x38 */
+    isp_dev = (struct tx_isp_dev *)((char *)sd - offsetof(struct tx_isp_dev, sd));
+    if (!isp_dev) {
+        pr_debug("ispcore_core_ops_ioctl: No ISP device found\n");
+        goto exit_check;
+    }
+
+    /* Binary Ninja: Iterate through subdevs array (offset 0x38 to 0x78 = 16 entries * 4 bytes) */
+    subdev_array = isp_dev->subdevs;
+    for (i = 0; i < 16; i++) {
+        current_subdev = subdev_array[i];
+        if (!current_subdev) {
+            continue;  /* Skip empty slots */
+        }
+
+        if (cmd == 0x1000000) {
+            /* Binary Ninja: Call core operations ioctl for each subdev */
+            if (current_subdev->ops && current_subdev->ops->core && current_subdev->ops->core->ioctl) {
+                callback_func = (int (*)(void))current_subdev->ops->core->ioctl;
+                if (callback_func) {
+                    result = callback_func();
+                    if (result == 0) {
+                        continue;  /* Success, continue to next subdev */
+                    } else if (result != -ENOTTY) {
+                        break;  /* Real error, stop iteration */
+                    }
+                    /* -ENOTTY means not supported, continue */
+                    result = -ENOTTY;
+                } else {
+                    result = -ENOTTY;
+                }
+            } else {
+                result = -ENOTTY;
+            }
+        } else if (cmd == 0x1000001) {
+            /* Binary Ninja: Call sensor operations ioctl for each subdev */
+            if (current_subdev->ops && current_subdev->ops->sensor && current_subdev->ops->sensor->ioctl) {
+                callback_func = (int (*)(void))current_subdev->ops->sensor->ioctl;
+                if (callback_func) {
+                    result = callback_func();
+                    if (result == 0) {
+                        continue;  /* Success, continue to next subdev */
+                    } else if (result != -ENOTTY) {
+                        break;  /* Real error, stop iteration */
+                    }
+                    /* -ENOTTY means not supported, continue */
+                    result = -ENOTTY;
+                } else {
+                    result = -ENOTTY;
+                }
+            } else {
+                result = -ENOTTY;
+            }
+        } else {
+            /* Other commands don't iterate through subdevs */
+            break;
+        }
+    }
+
+exit_check:
+    /* Binary Ninja: Convert -ENOTTY to success if we completed the iteration */
+    if (result == -ENOTTY) {
+        result = 0;
+    }
+
+    pr_debug("ispcore_core_ops_ioctl: cmd=0x%x completed with result=%d\n", cmd, result);
+    return result;
+}
+
 
 /* Core subdev operations structure - CRITICAL for proper initialization */
 static struct tx_isp_subdev_ops core_subdev_ops = {
