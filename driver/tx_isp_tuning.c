@@ -196,6 +196,16 @@ static uint32_t data_9a9d0 = 0;
 static uint32_t mdns_wdr_en = 0;
 static uint32_t *mdns_y_sad_ave_thres_array_now = NULL;
 static uint32_t *mdns_y_sta_ave_thres_array_now = NULL;
+
+/* RDNS (R-channel Denoise) Variables */
+static uint32_t rdns_wdr_en = 0;
+static uint32_t rdns_gain_old = 0xFFFFFFFF;
+static uint32_t *rdns_text_base_thres_array_now = NULL;
+static uint32_t rdns_text_base_thres_wdr_array[16] = {0};
+static uint32_t rdns_text_base_thres_array[16] = {0};
+
+/* YDNS (Y-channel Denoise) Variables */
+static uint32_t ydns_gain_old = 0xFFFFFFFF;
 static uint32_t *mdns_y_sad_ass_thres_array_now = NULL;
 static uint32_t *mdns_y_sta_ass_thres_array_now = NULL;
 static uint32_t *mdns_y_ref_wei_b_min_array_now = NULL;
@@ -6493,6 +6503,8 @@ static uint16_t tiziano_gamma_lut_wdr[256] = {
 
 static uint16_t *tiziano_gamma_lut_now = NULL;
 static int gamma_wdr_en = 0;
+static uint16_t tiziano_gamma_lut[256] = {0};  /* Linear gamma LUT */
+static uint16_t tiziano_gamma_lut_wdr[256] = {0};  /* WDR gamma LUT */
 
 /* tiziano_gamma_lut_parameter - Binary Ninja EXACT implementation */
 int tiziano_gamma_lut_parameter(void)
