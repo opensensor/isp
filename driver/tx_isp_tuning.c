@@ -11063,13 +11063,5 @@ int data_b2f08(uint32_t param, int flag)
 }
 EXPORT_SYMBOL(data_b2f08);
 
-uint32_t tisp_log2_fixed_to_fixed(void)
-{
-    /* Fixed point log2 conversion */
-    pr_debug("tisp_log2_fixed_to_fixed: Performing log2 conversion\n");
-    return 0x1000; /* Return default fixed point value */
-}
-EXPORT_SYMBOL(tisp_log2_fixed_to_fixed);
-
 /* REMOVED: Static stub system_reg_write - use external implementation from tx-isp-module.c */
 /* The real system_reg_write() that does actual hardware writes is declared extern */
