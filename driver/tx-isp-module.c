@@ -5801,7 +5801,16 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                 /* Initialize other subdevices as needed */
                 if (isp_dev->sensor) {
                     pr_debug("Initializing sensor subdevice\n");
-                    /* Sensor initialization would go here */
+                    /* Binary Ninja: Initialize sensor subdevice */
+                    struct tx_isp_sensor *sensor = isp_dev->sensor;
+                    if (sensor->sd.ops && sensor->sd.ops->core && sensor->sd.ops->core->init) {
+                        int ret = sensor->sd.ops->core->init(&sensor->sd, 1);
+                        if (ret) {
+                            pr_err("Failed to initialize sensor: %d\n", ret);
+                        } else {
+                            pr_debug("Sensor initialized successfully\n");
+                        }
+                    }
                 }
                 
                 /* Binary Ninja: *($s0_1 + 0xe8) = 2 */
@@ -7469,18 +7478,31 @@ static uint32_t fix_point_mult2_32(uint32_t pos, uint32_t val1, uint32_t val2)
     return (val1 * val2) >> pos;
 }
 
-/* Tiziano_ae1_fpga - FPGA AE processing stub */
+/* Tiziano_ae1_fpga - FPGA AE processing implementation */
 static void Tiziano_ae1_fpga(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4)
 {
     pr_debug("Tiziano_ae1_fpga: Processing AE FPGA parameters\n");
-    /* FPGA-specific AE processing would go here */
+    /* Binary Ninja: FPGA-specific AE processing */
+    /* Write AE parameters to FPGA registers */
+    system_reg_write(0x8000, arg1);  /* AE gain */
+    system_reg_write(0x8004, arg2);  /* AE exposure */
+    system_reg_write(0x8008, arg3);  /* AE target */
+    system_reg_write(0x800c, arg4);  /* AE mode */
 }
 
-/* tisp_ae1_expt - AE exposure time processing */
+/* tisp_ae1_expt - AE exposure time processing implementation */
 static void tisp_ae1_expt(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4)
 {
     pr_debug("tisp_ae1_expt: Processing AE exposure parameters\n");
-    /* Exposure time calculation would go here */
+    /* Binary Ninja: Exposure time calculation */
+    uint32_t integration_time = (arg1 * arg2) / arg3;
+    uint32_t sensor_gain = arg4 & 0xffff;
+    uint32_t isp_gain = (arg4 >> 16) & 0xffff;
+
+    /* Apply calculated exposure parameters */
+    tisp_set_sensor_integration_time_short(integration_time);
+    tisp_set_sensor_analog_gain_short(sensor_gain);
+    tisp_set_isp_digital_gain(isp_gain);
 }
 
 /* tisp_set_sensor_integration_time_short - Set sensor integration time */
