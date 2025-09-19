@@ -1199,7 +1199,6 @@ int tiziano_ae_set_hardware_param(int ae_id, uint8_t *param_array, int update_on
     pr_debug("tiziano_ae_set_hardware_param: Parameters written to AE%d\n", ae_id);
     return 0;
 }
-EXPORT_SYMBOL(tiziano_ae_set_hardware_param);
 
 /* ae0_interrupt_static - Binary Ninja EXACT implementation */
 int ae0_interrupt_static(void)
@@ -1250,7 +1249,6 @@ int tisp_ae0_process(void)
     pr_debug("tisp_ae0_process: AE0 processing completed\n");
     return 0;
 }
-EXPORT_SYMBOL(tisp_ae0_process);
 
 /* tisp_init - Binary Ninja EXACT implementation - THE MISSING HARDWARE INITIALIZER */
 /* ISP tuning file loading function - based on Binary Ninja tiziano_load_parameters */
@@ -3068,7 +3066,7 @@ static int (*cb[32])(void) = {NULL};
 
 /* ISP event callback function array - Binary Ninja reference */
 void (*isp_event_func_cb[32])(void) = {NULL};
-EXPORT_SYMBOL(isp_event_func_cb);
+
 
 /* ISP interrupt state */
 static spinlock_t isp_irq_lock;
@@ -3723,7 +3721,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
         return -EINVAL;
     }
 }
-EXPORT_SYMBOL(isp_core_tunning_unlocked_ioctl);
+
 
 /* tisp_code_tuning_open - Binary Ninja EXACT implementation */
 int tisp_code_tuning_open(struct inode *inode, struct file *file)
@@ -3762,7 +3760,7 @@ int tisp_code_tuning_open(struct inode *inode, struct file *file)
     /* return 0 */
     return 0;
 }
-EXPORT_SYMBOL(tisp_code_tuning_open);
+
 
 
 
@@ -4152,7 +4150,7 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
     pr_warn("tisp_code_tuning_ioctl: Invalid command family: 0x%x\n", cmd);
     return -EINVAL;
 }
-EXPORT_SYMBOL(tisp_code_tuning_ioctl);
+
 
 /* tisp_code_tuning_release - EXACT Binary Ninja reference implementation */
 int tisp_code_tuning_release(struct inode *inode, struct file *file)
@@ -4171,7 +4169,7 @@ int tisp_code_tuning_release(struct inode *inode, struct file *file)
 
     return 0;
 }
-EXPORT_SYMBOL(tisp_code_tuning_release);
+
 
 /* apical_isp_ae_g_roi.isra.77 - EXACT Binary Ninja reference implementation */
 int apical_isp_ae_g_roi(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
@@ -5264,8 +5262,8 @@ int tisp_g_af_zone(void)
 }
 
 /* Export symbols for kernel module loading */
-EXPORT_SYMBOL(data_b2e74);
-EXPORT_SYMBOL(tisp_g_af_zone);
+
+
 
 /* Probably stubs */
 int tisp_blc_set_par_cfg(void *in_buf) { return 0; }
@@ -5639,7 +5637,7 @@ int isp_m0_chardev_release(struct inode *inode, struct file *file)
     pr_debug("ISP M0 device released\n");
     return 0;
 }
-EXPORT_SYMBOL(isp_m0_chardev_release);
+
 
 /* ===== TIZIANO WDR PROCESSING IMPLEMENTATION - Binary Ninja Reference ===== */
 
@@ -6069,7 +6067,7 @@ int tisp_wdr_process(void)
     pr_debug("tisp_wdr_process: WDR processing pipeline complete\n");
     return 0;
 }
-EXPORT_SYMBOL(tisp_wdr_process);
+
 
 /* tiziano_wdr_init - WDR module initialization */
 int tiziano_wdr_init(uint32_t width, uint32_t height)
@@ -6126,7 +6124,7 @@ int tisp_wdr_init(void)
     pr_debug("tisp_wdr_init: WDR parameters initialized\n");
     return 0;
 }
-EXPORT_SYMBOL(tiziano_wdr_init);
+
 
 /* ===== MISSING TIZIANO ISP PIPELINE COMPONENTS - Binary Ninja Reference ===== */
 
@@ -8033,7 +8031,7 @@ int tiziano_ydns_init(void)
 
     return 0;
 }
-EXPORT_SYMBOL(tiziano_ydns_init);
+
 
 /* tiziano_rdns_init - EXACT Binary Ninja implementation */
 int tiziano_rdns_init(void)
@@ -8064,7 +8062,7 @@ int tiziano_rdns_init(void)
 
     return 0;
 }
-EXPORT_SYMBOL(tiziano_rdns_init);
+
 
 /* tiziano_hldc_init - EXACT Binary Ninja implementation */
 int tiziano_hldc_init(void)
@@ -8082,7 +8080,7 @@ int tiziano_hldc_init(void)
 
     return 0;
 }
-EXPORT_SYMBOL(tiziano_hldc_init);
+
 
 /* tiziano_gamma_init - EXACT Binary Ninja implementation */
 int tiziano_gamma_init(void)
@@ -8107,7 +8105,7 @@ int tiziano_gamma_init(void)
 
     return 0;
 }
-EXPORT_SYMBOL(tiziano_gamma_init);
+
 
 /* tiziano_clm_init - EXACT Binary Ninja implementation */
 int tiziano_clm_init(void)
@@ -8122,7 +8120,7 @@ int tiziano_clm_init(void)
 
     return 0;
 }
-EXPORT_SYMBOL(tiziano_clm_init);
+
 
 /* tiziano_dpc_init - EXACT Binary Ninja implementation */
 int tiziano_dpc_init(void)
@@ -8165,7 +8163,7 @@ int tiziano_dpc_init(void)
 
     return 0;
 }
-EXPORT_SYMBOL(tiziano_dpc_init);
+
 
 /* tiziano_lsc_init - EXACT Binary Ninja implementation */
 int tiziano_lsc_init(void)
@@ -8208,7 +8206,7 @@ int tiziano_lsc_init(void)
 
     return 0;
 }
-EXPORT_SYMBOL(tiziano_lsc_init);
+
 
 /* tiziano_gib_init - EXACT Binary Ninja implementation */
 int tiziano_gib_init(void)
@@ -8240,7 +8238,7 @@ int tiziano_gib_init(void)
 
     return 0;
 }
-EXPORT_SYMBOL(tiziano_gib_init);
+
 
 /* tiziano_sharpen_init - removed duplicate, using Binary Ninja implementation above */
 
@@ -8263,7 +8261,7 @@ int tiziano_wdr_params_init(void)
 
     return 0;
 }
-EXPORT_SYMBOL(tiziano_wdr_params_init);
+
 
 /* tiziano_wdr_init - removed duplicate, using Binary Ninja implementation above */
 
@@ -8284,7 +8282,7 @@ int tiziano_defog_params_init(void)
 
     return 0;
 }
-EXPORT_SYMBOL(tiziano_defog_params_init);
+
 
 /* tiziano_defog_init, tiziano_awb_init, tiziano_af_init - removed duplicates, using Binary Ninja implementations above */
 
@@ -8319,7 +8317,7 @@ int tiziano_s_awb_start(uint32_t r_gain, uint32_t b_gain)
     /* Binary Ninja: return Tiziano_awb_set_gain(&_awb_mf_para, _AwbPointPos_1, &_wb_static) __tailcall */
     return Tiziano_awb_set_gain(&_awb_mf_para, _AwbPointPos_1, &_wb_static);
 }
-EXPORT_SYMBOL(tiziano_s_awb_start);
+
 
 /* tiziano_g_awb_start - AWB get start function */
 int tiziano_g_awb_start(uint32_t *r_gain, uint32_t *b_gain)
@@ -8335,7 +8333,7 @@ int tiziano_g_awb_start(uint32_t *r_gain, uint32_t *b_gain)
 
     return 0;
 }
-EXPORT_SYMBOL(tiziano_g_awb_start);
+
 
 /* tisp_s_awb_start - ISP AWB start wrapper */
 int tisp_s_awb_start(uint32_t r_gain, uint32_t b_gain)
@@ -8343,7 +8341,7 @@ int tisp_s_awb_start(uint32_t r_gain, uint32_t b_gain)
     pr_debug("tisp_s_awb_start: Starting AWB with R=%u, B=%u\n", r_gain, b_gain);
     return tiziano_s_awb_start(r_gain, b_gain);
 }
-EXPORT_SYMBOL(tisp_s_awb_start);
+
 
 /* tisp_g_awb_start - ISP AWB get wrapper */
 int tisp_g_awb_start(uint32_t *r_gain, uint32_t *b_gain)
@@ -8351,7 +8349,7 @@ int tisp_g_awb_start(uint32_t *r_gain, uint32_t *b_gain)
     pr_debug("tisp_g_awb_start: Getting AWB gains\n");
     return tiziano_g_awb_start(r_gain, b_gain);
 }
-EXPORT_SYMBOL(tisp_g_awb_start);
+
 
 /* tiziano_ae_s_ev_start - AE exposure value start function */
 int tiziano_ae_s_ev_start(int32_t ev_value)
@@ -8366,7 +8364,7 @@ int tiziano_ae_s_ev_start(int32_t ev_value)
 
     return 0;
 }
-EXPORT_SYMBOL(tiziano_ae_s_ev_start);
+
 
 /* tisp_s_ev_start - ISP EV start wrapper */
 int tisp_s_ev_start(int32_t ev_value)
@@ -8374,7 +8372,7 @@ int tisp_s_ev_start(int32_t ev_value)
     pr_debug("tisp_s_ev_start: Starting EV with value %d\n", ev_value);
     return tiziano_ae_s_ev_start(ev_value);
 }
-EXPORT_SYMBOL(tisp_s_ev_start);
+
 
 /* tisp_channel_start - EXACT Binary Ninja implementation */
 int tisp_channel_start(int channel, void *attr)
@@ -8474,7 +8472,7 @@ int tisp_channel_start(int channel, void *attr)
     isp_printf(0, "sensor type is BT1120!\n");
     return 0;
 }
-EXPORT_SYMBOL(tisp_channel_start);
+
 
 /* tisp_gb_init_reg - EXACT Binary Ninja implementation */
 int tisp_gb_init_reg(void)
@@ -8506,7 +8504,7 @@ int tisp_gb_init_reg(void)
 
     return 0;
 }
-EXPORT_SYMBOL(tisp_gb_init_reg);
+
 
 /* tisp_gb_init - EXACT Binary Ninja implementation */
 int tisp_gb_init(void)
@@ -8519,7 +8517,7 @@ int tisp_gb_init(void)
 
     return 0;
 }
-EXPORT_SYMBOL(tisp_gb_init);
+
 
 /* tisp_s_wdr_init_en - EXACT Binary Ninja implementation */
 int tisp_s_wdr_init_en(int enable)
@@ -8578,7 +8576,7 @@ int tisp_s_wdr_init_en(int enable)
 
     return 0;
 }
-EXPORT_SYMBOL(tisp_s_wdr_init_en);
+
 
 /* WDR enable functions for each component */
 int tisp_dpc_wdr_en(int enable)
@@ -8799,7 +8797,7 @@ int isp_trigger_event(int event_id)
     pr_debug("isp_trigger_event: Triggering event %d\n", event_id);
     return isp_event_dispatcher(event_id);
 }
-EXPORT_SYMBOL(isp_trigger_event);
+
 
 /* tisp_event_process - BINARY NINJA EXACT implementation */
 int tisp_event_process(void)
@@ -8878,7 +8876,7 @@ int tisp_event_process(void)
     local_irq_restore(flags);
     return 0;
 }
-EXPORT_SYMBOL(tisp_event_process);
+
 
 /* BINARY NINJA REFERENCE: No tisp_event_process_thread function exists */
 /* Events are processed on-demand via tisp_event_process() when needed */
@@ -8911,7 +8909,7 @@ int isp_setup_irq_handling(struct tx_isp_dev *dev)
     pr_debug("isp_setup_irq_handling: ISP interrupt handling setup complete\n");
     return 0;
 }
-EXPORT_SYMBOL(isp_setup_irq_handling);
+
 
 /* Cleanup ISP interrupt handling */
 void isp_cleanup_irq_handling(struct tx_isp_dev *dev)
@@ -8947,7 +8945,7 @@ void isp_cleanup_irq_handling(struct tx_isp_dev *dev)
     
     pr_debug("isp_cleanup_irq_handling: Cleanup complete\n");
 }
-EXPORT_SYMBOL(isp_cleanup_irq_handling);
+
 
 /* tisp_event_cleanup - Clean up event processing thread and resources */
 void tisp_event_cleanup(void)
@@ -8958,7 +8956,7 @@ void tisp_event_cleanup(void)
 
     pr_debug("tisp_event_cleanup: Event processing cleanup complete\n");
 }
-EXPORT_SYMBOL(tisp_event_cleanup);
+
 
 /* tisp_param_operate_init - EXACT Binary Ninja implementation */
 int tisp_param_operate_init(void)
@@ -8986,7 +8984,7 @@ int tisp_param_operate_init(void)
 
     return 0;
 }
-EXPORT_SYMBOL(tisp_param_operate_init);
+
 
 /* tisp_param_operate_deinit - EXACT Binary Ninja implementation */
 int tisp_param_operate_deinit(void)
@@ -9011,7 +9009,7 @@ int tisp_param_operate_deinit(void)
 
     return 0;
 }
-EXPORT_SYMBOL(tisp_param_operate_deinit);
+
 
 /* tisp_netlink_init - EXACT Binary Ninja implementation */
 int tisp_netlink_init(void)
@@ -9031,7 +9029,7 @@ int tisp_netlink_init(void)
     isp_printf(2, "Can not support this frame mode!!!\n", "tisp_netlink_init");
     return 0xffffffff;
 }
-EXPORT_SYMBOL(tisp_netlink_init);
+
 
 /* tisp_deinit_free - EXACT Binary Ninja implementation */
 int tisp_deinit_free(void)
@@ -9060,7 +9058,7 @@ int tisp_deinit_free(void)
 
     return 0;
 }
-EXPORT_SYMBOL(tisp_deinit_free);
+
 
 /* tisp_deinit - EXACT Binary Ninja implementation */
 int tisp_deinit(void)
@@ -9140,7 +9138,7 @@ int tisp_deinit(void)
 
     return 0;
 }
-EXPORT_SYMBOL(tisp_deinit);
+
 
 /* tisp_awb_deinit - EXACT Binary Ninja implementation */
 int tisp_awb_deinit(void)
@@ -9155,7 +9153,7 @@ int tisp_awb_deinit(void)
 
     return 0;
 }
-EXPORT_SYMBOL(tisp_awb_deinit);
+
 
 /* tisp_awb_algo_init - EXACT Binary Ninja implementation */
 int tisp_awb_algo_init(int enable)
@@ -9168,7 +9166,7 @@ int tisp_awb_algo_init(int enable)
     /* Binary Ninja: return &data_b0000 */
     return (int)&data_b0000;
 }
-EXPORT_SYMBOL(tisp_awb_algo_init);
+
 
 /* tisp_awb_algo_deinit - EXACT Binary Ninja implementation */
 int tisp_awb_algo_deinit(void)
@@ -9178,7 +9176,7 @@ int tisp_awb_algo_deinit(void)
     /* Binary Ninja: return tisp_awb_deinit() __tailcall */
     return tisp_awb_deinit();
 }
-EXPORT_SYMBOL(tisp_awb_algo_deinit);
+
 
 /* tisp_ae_deinit - EXACT Binary Ninja implementation */
 int tisp_ae_deinit(void)
@@ -9194,7 +9192,7 @@ int tisp_ae_deinit(void)
     /* Binary Ninja: return &data_d0000 */
     return (int)&data_d0000;
 }
-EXPORT_SYMBOL(tisp_ae_deinit);
+
 
 /* tisp_ae_algo_init - EXACT Binary Ninja implementation */
 int tisp_ae_algo_init(int enable, void *arg2)
@@ -9276,7 +9274,7 @@ int tisp_ae_algo_init(int enable, void *arg2)
 
     return 0;
 }
-EXPORT_SYMBOL(tisp_ae_algo_init);
+
 
 /* tisp_ae_algo_deinit - EXACT Binary Ninja implementation */
 int tisp_ae_algo_deinit(void)
@@ -9286,7 +9284,7 @@ int tisp_ae_algo_deinit(void)
     /* Binary Ninja: return tisp_ae_deinit() __tailcall */
     return tisp_ae_deinit();
 }
-EXPORT_SYMBOL(tisp_ae_algo_deinit);
+
 
 
 /* Update functions for event callbacks - Enhanced implementations */
@@ -9498,7 +9496,7 @@ int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32
     pr_debug("*** ALL TIZIANO ISP PIPELINE COMPONENTS INITIALIZED SUCCESSFULLY ***\n");
     return 0;
 }
-EXPORT_SYMBOL(tiziano_init_all_pipeline_components);
+
 
 /* Export all the tiziano pipeline functions */
 /* Removed duplicate EXPORT_SYMBOL declarations - functions already exported after their implementations */
@@ -9589,7 +9587,7 @@ int tisp_code_create_tuning_node(void)
     pr_debug("*** ISP M0 TUNING DEVICE CREATED: /dev/isp-m0 (major=%d, minor=0) ***\n", tuning_major);
     return 0;
 }
-EXPORT_SYMBOL(tisp_code_create_tuning_node);
+
 
 /* tisp_code_destroy_tuning_node - Binary Ninja EXACT implementation */
 int tisp_code_destroy_tuning_node(void)
@@ -9617,7 +9615,7 @@ int tisp_code_destroy_tuning_node(void)
     pr_debug("*** ISP M0 TUNING DEVICE DESTROYED ***\n");
     return 0;
 }
-EXPORT_SYMBOL(tisp_code_destroy_tuning_node);
+
 
 /* Implementation of tisp_s_* functions based on Binary Ninja decompilation */
 
@@ -9705,7 +9703,7 @@ int tisp_s_2dns_ratio(int ratio)
     /* Binary Ninja shows this calls tisp_s_sdns_ratio(arg1) */
     return tisp_s_sdns_ratio(ratio);
 }
-EXPORT_SYMBOL(tisp_s_2dns_ratio);
+
 
 /* tisp_s_mdns_ratio - Motion denoising ratio - Binary Ninja EXACT implementation */
 int tisp_s_mdns_ratio(int ratio)
@@ -9841,7 +9839,7 @@ int tisp_s_mdns_ratio(int ratio)
     tisp_mdns_all_reg_refresh(data_9a9d0);
     return tisp_mdns_reg_trigger();
 }
-EXPORT_SYMBOL(tisp_s_mdns_ratio);
+
 
 /* tisp_s_3dns_ratio - 3D noise suppression ratio */
 int tisp_s_3dns_ratio(int ratio)
@@ -9851,7 +9849,7 @@ int tisp_s_3dns_ratio(int ratio)
     /* Binary Ninja shows this calls tisp_s_mdns_ratio(arg1) */
     return tisp_s_mdns_ratio(ratio);
 }
-EXPORT_SYMBOL(tisp_s_3dns_ratio);
+
 
 
 
@@ -9918,7 +9916,7 @@ int tisp_s_BacklightComp(int comp_level)
 
     return 0;
 }
-EXPORT_SYMBOL(tisp_s_BacklightComp);
+
 
 /* tisp_s_Hilightdepress - Highlight depression control */
 int tisp_s_Hilightdepress(int depress_level)
@@ -9951,7 +9949,7 @@ int tisp_s_Hilightdepress(int depress_level)
 
     return 0;
 }
-EXPORT_SYMBOL(tisp_s_Hilightdepress);
+
 
 /* tisp_s_Gamma - Gamma curve control */
 int tisp_s_Gamma(void *gamma_data)
@@ -9985,7 +9983,7 @@ int tisp_s_Gamma(void *gamma_data)
 
     return 0;
 }
-EXPORT_SYMBOL(tisp_s_Gamma);
+
 
 /* tisp_s_adr_enable - ADR (Adaptive Dynamic Range) enable/disable */
 int tisp_s_adr_enable(int enable)
@@ -10023,7 +10021,7 @@ int tisp_s_adr_enable(int enable)
     system_reg_write(0xc, reg_val);
     return 0;
 }
-EXPORT_SYMBOL(tisp_s_adr_enable);
+
 
 /* tisp_s_adr_str_internal - ADR strength internal control */
 int tisp_s_adr_str_internal(int strength)
@@ -10067,7 +10065,7 @@ int tisp_s_adr_str_internal(int strength)
 
     return 0;
 }
-EXPORT_SYMBOL(tisp_s_adr_str_internal);
+
 
 /* tisp_s_ae_at_list - AE auto-target list control */
 int tisp_s_ae_at_list(uint32_t target_value)
@@ -10093,7 +10091,7 @@ int tisp_s_ae_at_list(uint32_t target_value)
 
     return 0;
 }
-EXPORT_SYMBOL(tisp_s_ae_at_list);
+
 
 /* tisp_s_ae_attr - AE attribute control */
 int tisp_s_ae_attr(void *ae_attr_data)
@@ -10135,7 +10133,7 @@ int tisp_s_ae_attr(void *ae_attr_data)
 
     return 0;
 }
-EXPORT_SYMBOL(tisp_s_ae_attr);
+
 
 /* tisp_s_ae_hist - AE histogram control */
 int tisp_s_ae_hist(void *hist_data)
@@ -10166,7 +10164,7 @@ int tisp_s_ae_hist(void *hist_data)
 
     return 0;
 }
-EXPORT_SYMBOL(tisp_s_ae_hist);
+
 
 /* tisp_s_ae_it_max - AE integration time maximum control */
 int tisp_s_ae_it_max(void)
@@ -10200,7 +10198,7 @@ int tisp_s_ae_it_max(void)
 
     return 0;
 }
-EXPORT_SYMBOL(tisp_s_ae_it_max);
+
 
 
 
@@ -10244,7 +10242,7 @@ void *isp_core_tuning_init(void *arg1)
     /* Binary Ninja: return result */
     return result;
 
-EXPORT_SYMBOL(isp_core_tuning_init);
+
 
 /* isp_core_tuning_event - EXACT Binary Ninja reference implementation */
 int isp_core_tuning_event(void *arg1, int arg2)
@@ -10285,7 +10283,7 @@ int isp_core_tuning_event(void *arg1, int arg2)
     /* Binary Ninja: return 0 */
     return 0;
 }
-EXPORT_SYMBOL(isp_core_tuning_event);
+
 
 /* isp_core_tuning_deinit - EXACT Binary Ninja reference implementation */
 void isp_core_tuning_deinit(void *arg1)
@@ -10298,7 +10296,7 @@ void isp_core_tuning_deinit(void *arg1)
     /* Binary Ninja: return private_kfree() __tailcall */
     private_kfree(arg1);
 }
-EXPORT_SYMBOL(isp_core_tuning_deinit);
+
 
 /* Binary Ninja: dump_vic_reg() - EXACT implementation */
 int dump_vic_reg(void)
@@ -10639,7 +10637,7 @@ int tiziano_ae_params_refresh(void)
     pr_debug("tiziano_ae_params_refresh: AE parameters refreshed\n");
     return 0;
 }
-EXPORT_SYMBOL(tiziano_ae_params_refresh);
+
 
 /* tiziano_ae_para_addr - Binary Ninja EXACT implementation */
 void *tiziano_ae_para_addr(void)
@@ -10731,7 +10729,7 @@ void *tiziano_ae_para_addr(void)
     /* Binary Ninja: return &dmsc_nor_alias_thres_intp */
     return &dmsc_nor_alias_thres_intp;
 }
-EXPORT_SYMBOL(tiziano_ae_para_addr);
+
 
 /* Sensor control functions - Safe structure-based implementations */
 void tisp_set_sensor_integration_time(uint32_t time)
@@ -10793,7 +10791,6 @@ void tisp_set_sensor_analog_gain(void)
     uint32_t final_gain = v0_2 >> 6;
     pr_debug("tisp_set_sensor_analog_gain: Calculated gain = %u\n", final_gain);
 }
-EXPORT_SYMBOL(tisp_set_sensor_analog_gain);
 
 void tisp_set_sensor_integration_time_short(uint32_t time)
 {
@@ -10834,7 +10831,6 @@ void tisp_set_sensor_integration_time_short(uint32_t time)
         data_b2ef8((uint32_t)var_26, 0);
     }
 }
-EXPORT_SYMBOL(tisp_set_sensor_integration_time_short);
 
 void tisp_set_sensor_analog_gain_short(void)
 {
@@ -10855,7 +10851,6 @@ void tisp_set_sensor_analog_gain_short(void)
     uint32_t final_gain = v0_2 >> 6;
     pr_debug("tisp_set_sensor_analog_gain_short: Calculated short gain = %u\n", final_gain);
 }
-EXPORT_SYMBOL(tisp_set_sensor_analog_gain_short);
 
 /* System control functions - Binary Ninja EXACT implementations (already implemented above) */
 
@@ -10887,7 +10882,6 @@ int data_b2eec(uint32_t time, void **var_ptr)
     if (var_ptr) *var_ptr = NULL;
     return time;
 }
-EXPORT_SYMBOL(data_b2eec);
 
 int data_b2ef0(uint32_t time, void **var_ptr)
 {
