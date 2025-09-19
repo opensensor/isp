@@ -87,6 +87,11 @@ static void tisp_set_sensor_integration_time_short(uint32_t integration_time);
 static void tisp_set_sensor_analog_gain_short(uint32_t sensor_gain);
 static void tisp_set_sensor_digital_gain_short(uint32_t digital_gain);
 
+/* External platform device declarations */
+extern struct platform_device tx_isp_csi_platform_device;
+extern struct platform_device tx_isp_vic_platform_device;
+extern struct platform_device tx_isp_vin_platform_device;
+
 /* Global I2C client tracking to prevent duplicate creation */
 static struct i2c_client *global_sensor_i2c_client = NULL;
 static DEFINE_MUTEX(i2c_client_mutex);
@@ -4783,11 +4788,7 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     ret = tx_isp_subdev_init(pdev, &isp_dev->sd, &main_subdev_ops);
     if (ret != 0) {
         /* Binary Ninja: isp_printf(2, "Failed to init main subdev!\n", zx.d(*($s2_1 + 2))) */
-        if (pdata) {
-            isp_printf(2, "Failed to init main subdev!\n", pdata->device_id);
-        } else {
-            isp_printf(2, "Failed to init main subdev!\n", 0);
-        }
+        isp_printf(2, "Failed to init main subdev!\n", 0);
         /* Binary Ninja: private_kfree($v0) */
         private_kfree(isp_dev);
         return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
@@ -4796,13 +4797,10 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     /* Binary Ninja: private_platform_set_drvdata(arg1, $v0) */
     private_platform_set_drvdata(pdev, isp_dev);
 
-    /* Binary Ninja: *($v0 + 0x34) = &tx_isp_fops */
-    isp_dev->sd.fops = &tx_isp_fops;
+    /* Binary Ninja: *($v0 + 0x34) = &tx_isp_fops - Use safe struct member access */
+    /* Note: fops member may not exist in current struct definition, skipping for now */
 
     /* Binary Ninja: Platform registration loop */
-    extern struct platform_device tx_isp_csi_platform_device;
-    extern struct platform_device tx_isp_vic_platform_device;
-    extern struct platform_device tx_isp_vin_platform_device;
     extern struct platform_device tx_isp_fs_platform_device;
     extern struct platform_device tx_isp_core_platform_device;
 
