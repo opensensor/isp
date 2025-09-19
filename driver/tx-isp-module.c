@@ -422,10 +422,10 @@ static struct resource tx_isp_vin_resources[] = {
     },
 };
 
-/* VIN platform data - CRITICAL for tx_isp_subdev_init to work */
+/* VIN platform data - VIN is a logical device */
 static struct tx_isp_subdev_platform_data vin_pdata = {
     .interface_type = 2,  /* VIN interface */
-    .clk_num = 1,         /* Number of clocks needed */
+    .clk_num = 0,         /* No clocks needed - logical device */
     .sensor_type = 0,     /* Default sensor type */
 };
 
