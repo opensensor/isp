@@ -364,8 +364,8 @@ int ispcore_link_setup(struct tx_isp_dev *isp_dev, int config)
         if (vic_dev && csi_dev) {
             pr_info("ispcore_link_setup: Disabling VIC->CSI link\n");
             /* Binary Ninja: Clear link configuration registers */
-            if (vic_dev->base) {
-                writel(0, vic_dev->base + 0x380);  /* Clear VIC output configuration */
+            if (vic_dev->vic_regs) {
+                writel(0, vic_dev->vic_regs + 0x380);  /* Clear VIC output configuration */
                 wmb();
             }
         }
@@ -374,8 +374,8 @@ int ispcore_link_setup(struct tx_isp_dev *isp_dev, int config)
         if (csi_dev && vin_dev) {
             pr_info("ispcore_link_setup: Disabling CSI->VIN link\n");
             /* Binary Ninja: Clear CSI output configuration */
-            if (csi_dev->base) {
-                writel(0, csi_dev->base + 0x20);  /* Clear CSI output configuration */
+            if (csi_dev->csi_regs) {
+                writel(0, csi_dev->csi_regs + 0x20);  /* Clear CSI output configuration */
                 wmb();
             }
         }
