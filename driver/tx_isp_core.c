@@ -3183,20 +3183,23 @@ int tx_isp_core_probe(struct platform_device *pdev)
     /* Binary Ninja: if (tx_isp_subdev_init(arg1, $v0, &core_subdev_ops) == 0) */
     if (tx_isp_subdev_init(pdev, (struct tx_isp_subdev *)isp_dev, &core_subdev_ops) == 0) {
 
-        /* Binary Ninja: private_spin_lock_init(&$v0[0x37]) */
-        spin_lock_init((spinlock_t *)((char *)isp_dev + 0xdc));
+        /* SAFE: Initialize locks using proper struct members */
+        spin_lock_init(&isp_dev->lock);
+        mutex_init(&isp_dev->mutex);
 
-        /* Binary Ninja: private_raw_mutex_init(&$v0[0x37], "&core_dev->mlock", 0) */
-        mutex_init((struct mutex *)((char *)isp_dev + 0xdc));
+        /* SAFE: Get channel count from platform data or use default */
+        struct tx_isp_platform_data *pdata = (struct tx_isp_platform_data *)pdev->dev.platform_data;
+        if (pdata && pdata->channel_count > 0) {
+            channel_count = pdata->channel_count;
+        } else {
+            channel_count = ISP_MAX_CHAN;  /* Default channel count */
+        }
 
-        /* Binary Ninja: uint32_t $a0_4 = zx.d($v0[0x32].w) */
-        channel_count = *((uint32_t *)((char *)isp_dev + 0xc8));
+        /* SAFE: Store channel count using struct member */
+        isp_dev->channel_count = channel_count;
 
-        /* Binary Ninja: $v0[0x55] = $a0_4 */
-        *((uint32_t *)((char *)isp_dev + 0x154)) = channel_count;
-
-        /* Binary Ninja: $v0[0x4e] = $v0_3 */
-        *((void **)((char *)isp_dev + 0x138)) = pdev->dev.platform_data;
+        /* SAFE: Store platform data reference */
+        isp_dev->pdata = pdata;
 
         /* Binary Ninja: $v0_4, $a2_2 = private_kmalloc($a0_4 * 0xc4, 0xd0) */
         channel_array = private_kmalloc(channel_count * 0xc4, GFP_KERNEL);
