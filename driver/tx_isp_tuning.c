@@ -10465,7 +10465,6 @@ int ae1_interrupt_hist(void)
     pr_debug("ae1_interrupt_hist: AE1 histogram interrupt processed\n");
     return 2;
 }
-EXPORT_SYMBOL(ae1_interrupt_hist);
 
 /* tiziano_deflicker_expt - Binary Ninja EXACT implementation */
 int tiziano_deflicker_expt(uint32_t flicker_t, uint32_t param2, uint32_t param3, uint32_t param4, uint32_t *lut_array, uint32_t *nodes_count)
@@ -10534,7 +10533,6 @@ int tiziano_deflicker_expt(uint32_t flicker_t, uint32_t param2, uint32_t param3,
     pr_debug("tiziano_deflicker_expt: Generated %u LUT entries\n", *nodes_count);
     return 0;
 }
-EXPORT_SYMBOL(tiziano_deflicker_expt);
 
 /* tiziano_ae_params_refresh - Binary Ninja EXACT implementation */
 int tiziano_ae_params_refresh(void)
