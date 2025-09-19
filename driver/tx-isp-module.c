@@ -6021,6 +6021,11 @@ static irqreturn_t isp_irq_handle(int irq, void *dev_id)
     void *subdev_handler;
     int handler_result;
 
+    /* CRITICAL SAFETY: Check if system is shutting down */
+    if (isp_system_shutting_down) {
+        return IRQ_HANDLED;
+    }
+
     pr_info("*** isp_irq_handle: IRQ %d fired ***\n", irq);
 
     /* Binary Ninja: if (arg2 != 0x80) */
