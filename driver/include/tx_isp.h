@@ -360,7 +360,7 @@ extern int32_t *data_b33b8;
 extern int32_t data_b33b8_base;
 extern void **data_b33b4;
 extern void *data_b33b0;
-extern struct completion tevent_info;
+/* tevent_info is declared as static in tx_isp_core.c */
 
 void tx_isp_frame_chan_init(struct tx_isp_frame_channel *chan);
 void tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan);
