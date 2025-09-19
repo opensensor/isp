@@ -6444,10 +6444,7 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
             system_reg_write_ae(3, 0x1010, v0_8 << 0x10 | v0_8);
         }
     }
-    
-    /* Forward declarations for exported functions - removed, functions implemented below */
-    extern int tiziano_deflicker_expt(uint32_t flicker_t, uint32_t param2, uint32_t param3, uint32_t param4, uint32_t *lut_array, uint32_t *nodes_count);
-    extern void *tiziano_ae_para_addr(void);
+
 
     /* Binary Ninja EXACT: system_irq_func_set with proper wrappers */
     system_irq_func_set(0x1b, ae0_interrupt_hist_wrapper);
@@ -10799,6 +10796,7 @@ void tisp_set_sensor_analog_gain(void)
     uint32_t final_gain = v0_2 >> 6;
     pr_debug("tisp_set_sensor_analog_gain: Calculated gain = %u\n", final_gain);
 }
+EXPORT_SYMBOL(tisp_set_sensor_analog_gain);
 
 void tisp_set_sensor_integration_time_short(uint32_t time)
 {
@@ -11058,7 +11056,7 @@ int data_b2f08(uint32_t param, int flag)
     return 0;
 }
 
-static uint32_t tisp_log2_fixed_to_fixed(void)
+uint32_t tisp_log2_fixed_to_fixed(void)
 {
     /* Fixed point log2 conversion */
     pr_debug("tisp_log2_fixed_to_fixed: Performing log2 conversion\n");
