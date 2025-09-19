@@ -65,10 +65,6 @@ struct registered_sensor {
 
 // Simple global device instance
 struct tx_isp_dev *ourISPdev = NULL;
-
-/* CRITICAL: Protected device pointer for interrupt handlers */
-/* This stores a safe copy of the device pointer that won't get corrupted */
-static struct tx_isp_dev *protected_isp_dev = NULL;
 static LIST_HEAD(sensor_list);
 static DEFINE_MUTEX(sensor_list_mutex);
 static int sensor_count = 0;
@@ -1824,7 +1820,7 @@ static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev)
 /* isp_vic_interrupt_service_routine - EXACT Binary Ninja implementation */
 static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
-    struct tx_isp_dev *isp_dev = protected_isp_dev;  /* Use protected device pointer */
+    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;  /* Use dev_id parameter */
     struct tx_isp_vic_device *vic_dev;
     void __iomem *vic_regs;
     u32 v1_7, v1_10;
@@ -5304,16 +5300,13 @@ static int tx_isp_init(void)
         ourISPdev->isp_irq = 37;
     }
     
-    /* CRITICAL: Store protected copy of device pointer for interrupt safety */
-    protected_isp_dev = ourISPdev;
-
     /* Register IRQ 38 (isp-w02) - Secondary ISP channel */
     ret = request_threaded_irq(38,
                               isp_irq_handle,          /* Same handlers work for both IRQs */
                               isp_irq_thread_handle,
                               IRQF_SHARED,
                               "isp-w02",               /* Match stock driver name */
-                              protected_isp_dev);      /* Use protected copy */
+                              ourISPdev);              /* Use main device pointer */
     if (ret != 0) {
         pr_err("*** FAILED TO REQUEST IRQ 38 (isp-w02): %d ***\n", ret);
         pr_err("*** ONLY IRQ 37 WILL BE AVAILABLE ***\n");
