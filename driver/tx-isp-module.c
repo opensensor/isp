@@ -8019,28 +8019,7 @@ EXPORT_SYMBOL(ispcore_sensor_ops_ioctl);
 
 
 
-/* mips_dma_map_ops - MIPS DMA mapping operations */
-static dma_addr_t mips_dma_map_ops(struct device *dev, void *cpu_addr, size_t size, enum dma_data_direction dir, unsigned long attrs)
-{
-    dma_addr_t dma_addr;
 
-    pr_debug("mips_dma_map_ops: Mapping DMA address\n");
-
-    if (!dev || !cpu_addr) {
-        return DMA_MAPPING_ERROR;
-    }
-
-    /* Use kernel DMA mapping */
-    dma_addr = dma_map_single(dev, cpu_addr, size, dir);
-
-    if (dma_mapping_error(dev, dma_addr)) {
-        pr_err("mips_dma_map_ops: DMA mapping failed\n");
-        return DMA_MAPPING_ERROR;
-    }
-
-    return dma_addr;
-}
-EXPORT_SYMBOL(mips_dma_map_ops);
 
 /* apical_isp_core_ops_s_ctrl - Apical ISP core set control */
 static int apical_isp_core_ops_s_ctrl(struct v4l2_ctrl *ctrl)
