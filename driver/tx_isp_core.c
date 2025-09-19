@@ -3201,9 +3201,8 @@ int tx_isp_core_probe(struct platform_device *pdev)
         /* SAFE: Store platform data reference */
         isp_dev->pdata = pdata;
 
-        /* SAFE: Allocate channel array using proper size calculation */
-        size_t channel_struct_size = sizeof(struct tx_isp_frame_channel);
-        channel_array = private_kmalloc(channel_count * channel_struct_size, GFP_KERNEL);
+        /* SAFE: Allocate channel array using proper struct size */
+        channel_array = private_kmalloc(channel_count * sizeof(struct tx_isp_frame_channel), GFP_KERNEL);
 
         if (channel_array != NULL) {
             /* SAFE: Clear allocated memory */
