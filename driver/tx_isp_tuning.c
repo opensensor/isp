@@ -277,7 +277,7 @@ static int tisp_param_operate_process(void) { return 0; }
  * tisp_event_exit - EXACT Binary Ninja MCP implementation
  * Address: 0x2709c
  */
-static void tisp_event_exit(void)
+void tisp_event_exit(void)
 {
     /* Binary Ninja: int32_t var_30 = 0 */
     int32_t var_30 = 0;
