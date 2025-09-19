@@ -10740,7 +10740,7 @@ void *tiziano_ae_para_addr(void)
 EXPORT_SYMBOL(tiziano_ae_para_addr);
 
 /* Sensor control functions - Safe structure-based implementations */
-static void tisp_set_sensor_integration_time(uint32_t time)
+void tisp_set_sensor_integration_time(uint32_t time)
 {
     pr_debug("tisp_set_sensor_integration_time: Setting integration time to %u\n", time);
 
@@ -10781,7 +10781,7 @@ static void tisp_set_sensor_integration_time(uint32_t time)
     }
 }
 
-static void tisp_set_sensor_analog_gain(void)
+void tisp_set_sensor_analog_gain(void)
 {
     int16_t var_28;
 
@@ -10800,7 +10800,7 @@ static void tisp_set_sensor_analog_gain(void)
     pr_debug("tisp_set_sensor_analog_gain: Calculated gain = %u\n", final_gain);
 }
 
-static void tisp_set_sensor_integration_time_short(uint32_t time)
+void tisp_set_sensor_integration_time_short(uint32_t time)
 {
     void *var_38;
     int16_t var_26;
