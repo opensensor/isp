@@ -212,13 +212,10 @@ int tx_isp_core_start(struct tx_isp_subdev *sd)
     
     pr_info("*** tx_isp_core_start: Starting ISP core processing ***\n");
     
-    /* Initialize memory mappings if not already done */
+    /* Core registers should already be mapped by tx_isp_subdev_init */
     if (!isp_dev->core_regs) {
-        ret = tx_isp_init_memory_mappings(isp_dev);
-        if (ret < 0) {
-            pr_err("tx_isp_core_start: Failed to initialize memory mappings: %d\n", ret);
-            return ret;
-        }
+        pr_err("tx_isp_core_start: Core registers not mapped by subdev init\n");
+        return -ENODEV;
     }
     
     /* Configure clocks if not already done */
@@ -1042,57 +1039,8 @@ void tx_isp_frame_chan_init(struct tx_isp_frame_channel *chan)
 }
 
 
-/* Initialize memory mappings for ISP subsystems */
-int tx_isp_init_memory_mappings(struct tx_isp_dev *isp)
-{
-    pr_info("Initializing ISP memory mappings\n");
-    
-    /* Map ISP Core registers */
-    isp->core_regs = ioremap(0x13300000, 0x10000);
-    if (!isp->core_regs) {
-        pr_err("Failed to map ISP core registers\n");
-        return -ENOMEM;
-    }
-    pr_info("ISP core registers mapped at 0x13300000\n");
-    
-    /* Map VIC registers */
-    isp->vic_regs = ioremap(0x10023000, 0x1000);
-    if (!isp->vic_regs) {
-        pr_err("Failed to map VIC registers\n");
-        goto err_unmap_core;
-    }
-    pr_info("VIC registers mapped at 0x10023000\n");
-    
-    /* Map CSI registers - use a different variable to avoid conflicts */
-    isp->csi_regs = ioremap(0x10022000, 0x1000);
-    if (!isp->csi_regs) {
-        pr_err("Failed to map CSI registers\n");
-        goto err_unmap_vic;
-    }
-    pr_info("CSI registers mapped at 0x10022000\n");
-    
-    /* Map PHY registers */
-    isp->phy_base = ioremap(0x10021000, 0x1000);
-    if (!isp->phy_base) {
-        pr_err("Failed to map PHY registers\n");
-        goto err_unmap_csi;
-    }
-    pr_info("PHY registers mapped at 0x10021000\n");
-    
-    pr_info("All ISP memory mappings initialized successfully\n");
-    return 0;
-    
-err_unmap_csi:
-    iounmap(isp->csi_regs);
-    isp->csi_regs = NULL;
-err_unmap_vic:
-    iounmap(isp->vic_regs);
-    isp->vic_regs = NULL;
-err_unmap_core:
-    iounmap(isp->core_regs);
-    isp->core_regs = NULL;
-    return -ENOMEM;
-}
+/* REMOVED: tx_isp_init_memory_mappings - not part of reference driver */
+/* Memory mappings are handled by individual subdevices through tx_isp_subdev_init */
 
 /* Deinitialize memory mappings */
 static int tx_isp_deinit_memory_mappings(struct tx_isp_dev *isp)
