@@ -10891,7 +10891,7 @@ int data_b2eec(uint32_t time, void **var_ptr)
     return time;
 }
 
-static int data_b2ef0(uint32_t time, void **var_ptr)
+int data_b2ef0(uint32_t time, void **var_ptr)
 {
     /* Safe sensor short integration time allocation */
     pr_debug("data_b2ef0: Allocating short integration time %u\n", time);
