@@ -272,7 +272,7 @@ int tiziano_adr_init(uint32_t width, uint32_t height);
 int tiziano_af_init(uint32_t height, uint32_t width);  /* Binary Ninja: takes arg1, arg2 */
 int tiziano_ae_init_exp_th(void);
 int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps);
-int tiziano_awb_init(void);
+int tiziano_awb_init(uint32_t height, uint32_t width);  /* Binary Ninja: takes arg1, arg2 */
 int tiziano_ccm_init(void);
 int tiziano_bcsh_init(void);
 int tiziano_ydns_init(void);
@@ -6730,41 +6730,7 @@ int tiziano_gamma_lut_parameter(void)
     return 0;
 }
 
-/* tiziano_gamma_init - Binary Ninja EXACT implementation */
-int tiziano_gamma_init(uint32_t width, uint32_t height, uint32_t fps)
-{
-    pr_debug("tiziano_gamma_init: Initializing Gamma correction (%dx%d@%d)\n", width, height, fps);
-    
-    /* Binary Ninja: Select gamma LUT based on WDR mode */
-    if (gamma_wdr_en != 0) {
-        tiziano_gamma_lut_now = tiziano_gamma_lut_wdr;
-        pr_debug("tiziano_gamma_init: Using WDR gamma LUT\n");
-    } else {
-        tiziano_gamma_lut_now = tiziano_gamma_lut_linear;
-        pr_debug("tiziano_gamma_init: Using linear gamma LUT\n");
-    }
-    
-    /* Initialize gamma LUT arrays with proper curves */
-    for (int i = 0; i < 256; i++) {
-        if (gamma_wdr_en != 0) {
-            /* WDR gamma curve - more aggressive tone mapping */
-            tiziano_gamma_lut_wdr[i] = (i * i) >> 8;
-        } else {
-            /* Linear gamma curve */
-            tiziano_gamma_lut_linear[i] = i * 4;
-        }
-    }
-    
-    /* Binary Ninja: Call parameter function to write to hardware */
-    int ret = tiziano_gamma_lut_parameter();
-    if (ret) {
-        pr_err("tiziano_gamma_init: Failed to write gamma parameters: %d\n", ret);
-        return ret;
-    }
-    
-    pr_debug("tiziano_gamma_init: Gamma correction initialized successfully\n");
-    return 0;
-}
+/* tiziano_gamma_init - removed incorrect implementation, using Binary Ninja exact version below */
 
 /* tiziano_gib_init - removed duplicate, using Binary Ninja implementation below */
 
@@ -8718,39 +8684,7 @@ int tiziano_ae_init_exp_th(void)
 }
 EXPORT_SYMBOL(tiziano_ae_init_exp_th);
 
-/* tiziano_ae_init - EXACT Binary Ninja implementation */
-int tiziano_ae_init(void)
-{
-    pr_debug("tiziano_ae_init: Initializing AE processing\n");
-
-    /* Binary Ninja: WDR mode selection */
-    void *v0;
-    if (ae_wdr_en != 0) {
-        /* Binary Ninja: $v0 = &ae_target_wdr_array */
-        v0 = &ae_target_wdr_array;
-    } else {
-        /* Binary Ninja: $v0 = &ae_target_array */
-        v0 = &ae_target_array;
-    }
-
-    /* Binary Ninja: ae_target_array_now = $v0 */
-    ae_target_array_now = v0;
-
-    /* Binary Ninja: data_9a0a0 = 0xffffffff */
-    data_9a0a0 = 0xffffffff;
-
-    /* Binary Ninja: tiziano_ae_params_refresh() */
-    tiziano_ae_params_refresh();
-
-    /* Binary Ninja: tisp_ae_par_refresh(isp_printf, isp_printf, 1) */
-    tisp_ae_par_refresh(isp_printf, isp_printf, 1);
-
-    /* Binary Ninja: tiziano_ae_init_exp_th() */
-    tiziano_ae_init_exp_th();
-
-    return 0;
-}
-EXPORT_SYMBOL(tiziano_ae_init);
+/* tiziano_ae_init - removed incorrect implementation, using Binary Ninja exact version above */
 
 /* tiziano_adr_params_init - EXACT Binary Ninja implementation */
 int tiziano_adr_params_init(void)
