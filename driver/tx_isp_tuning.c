@@ -67,6 +67,8 @@ uint32_t data_9a454 = 0x10000;  /* Current EV value - global cache */
 uint32_t data_9a450 = 0x2700;   /* Current CT value - global cache */
 
 /* Global variables for ISP tuning parameters - Binary Ninja tiziano_load_parameters */
+static void *tparams_day = NULL;
+static void *tparams_night = NULL;
 static void *tparams_cust = NULL;
 
 /* WDR Global Data Structures - From Binary Ninja Analysis */
