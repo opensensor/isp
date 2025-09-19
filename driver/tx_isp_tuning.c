@@ -253,6 +253,13 @@ static int system_reg_write_gb(int p1, uint32_t addr, uint32_t value) { return 0
 static int tisp_gb_blc_again_interp(uint32_t p1, int p2) { return 0; }
 static int tisp_gb_params_refresh(void) { return 0; }
 static int tisp_wdr_param_array_set(uint32_t p1, void *p2, void *p3) { return 0; }
+
+/* TISP Global Variables - Must be declared before functions that use them */
+static void *opmsg = NULL;
+static void *nlsk = NULL;
+static uint32_t data_ca490 = 0;
+static uint32_t data_ca48c = 0;
+
 /**
  * tisp_netlink_exit - EXACT Binary Ninja MCP implementation
  * Address: 0x218fc
