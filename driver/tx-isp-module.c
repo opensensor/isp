@@ -6096,7 +6096,7 @@ static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
     pr_info("*** isp_irq_thread_handle: Binary Ninja threaded IRQ %d processed ***\n", irq);
     
     /* Binary Ninja: return 1 */
-    return 1;  /* IRQ_HANDLED */
+    return IRQ_HANDLED;
 }
 
 /* vic_mdma_irq_function - COMPLETE Binary Ninja exact implementation */
