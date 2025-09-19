@@ -109,12 +109,7 @@ enum tx_isp_subdev_id {
 #define INT_ERROR          BIT(2)
 #define INT_OVERFLOW       BIT(3)
 
-/* Format definitions */
-#define FMT_RAW8          0x00
-#define FMT_RAW10         0x01
-#define FMT_RAW12         0x02
-#define FMT_YUV422        0x03
-#define FMT_RGB888        0x04
+/* Format definitions - see tx_isp_vin.h for VIN-specific format constants */
 
 /* Status register bit definitions */
 #define STATUS_IDLE        BIT(0)
