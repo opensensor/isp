@@ -6204,12 +6204,12 @@ static uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uin
 static uint32_t tisp_math_exp2(uint32_t value, uint32_t precision, uint32_t shift);
 
 /* Sensor interface functions - Forward declarations */
-static int data_b2eec(uint32_t time, void **var_ptr);
-static int data_b2ef0(uint32_t time, void **var_ptr);
-static int data_b2ef4(uint32_t param, int flag);
-static int data_b2ef8(uint32_t param, int flag);
+int data_b2eec(uint32_t time, void **var_ptr);
+int data_b2ef0(uint32_t time, void **var_ptr);
+int data_b2ef4(uint32_t param, int flag);
+int data_b2ef8(uint32_t param, int flag);
 static uint32_t data_b2ee0(uint32_t log_val, int16_t *var_ptr);
-static uint32_t data_b2ee4(uint32_t log_val, void **var_ptr);
+uint32_t data_b2ee4(uint32_t log_val, void **var_ptr);
 int data_b2f04(uint32_t param, int flag);
 int data_b2f08(uint32_t param, int flag);
 uint32_t tisp_log2_fixed_to_fixed(void);
@@ -11013,7 +11013,6 @@ uint32_t data_b2ee4(uint32_t log_val, void **var_ptr)
     if (var_ptr) *var_ptr = NULL;
     return log_val;
 }
-EXPORT_SYMBOL(data_b2ee4);
 
 int data_b2f04(uint32_t param, int flag)
 {
