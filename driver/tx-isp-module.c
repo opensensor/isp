@@ -7221,23 +7221,11 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
                 int vin_ret = -ENODEV;
                 
-                /* CRITICAL FIX: Direct VIN streaming call without complex recursion */
-                pr_info("*** DEBUG: isp_dev=%p, ourISPdev=%p ***\n", isp_dev, ourISPdev);
-                if (isp_dev) {
-                    pr_info("*** DEBUG: isp_dev->vin_dev=%p ***\n", isp_dev->vin_dev);
-                } else {
-                    pr_err("*** DEBUG: isp_dev is NULL! ***\n");
-                }
-                if (ourISPdev) {
-                    pr_info("*** DEBUG: ourISPdev->vin_dev=%p ***\n", ourISPdev->vin_dev);
-                } else {
-                    pr_err("*** DEBUG: ourISPdev is NULL! ***\n");
-                }
+                /* CRITICAL FIX: Use global ourISPdev directly - no pointer confusion */
+                if (ourISPdev && ourISPdev->vin_dev) {
+                    struct tx_isp_vin_device *vin_device = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
 
-                if (isp_dev && isp_dev->vin_dev) {
-                    struct tx_isp_vin_device *vin_device = (struct tx_isp_vin_device *)isp_dev->vin_dev;
-
-                    pr_info("*** DEBUG: VIN device found at %p, state=%d ***\n", vin_device, vin_device->state);
+                    pr_info("*** VIN device found at %p, state=%d ***\n", vin_device, vin_device->state);
 
                     /* SIMPLIFIED: Just set VIN to streaming state directly */
                     if (vin_device->state == 3) {
@@ -7249,9 +7237,9 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
                         vin_ret = 0;
                     }
                 } else {
-                    pr_err("*** ERROR: ISP device or VIN not available ***\n");
-                    pr_err("*** DEBUG: isp_dev=%p, isp_dev->vin_dev=%p ***\n",
-                           isp_dev, isp_dev ? isp_dev->vin_dev : NULL);
+                    pr_err("*** ERROR: ourISPdev or VIN not available ***\n");
+                    pr_err("*** DEBUG: ourISPdev=%p, ourISPdev->vin_dev=%p ***\n",
+                           ourISPdev, ourISPdev ? ourISPdev->vin_dev : NULL);
                 }
 
                 pr_info("*** CRITICAL: VIN_S_STREAM RETURNED: %d ***\n", vin_ret);
