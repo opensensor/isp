@@ -38,7 +38,78 @@ static void debug_vic_start_ok_change(int new_value, const char *location, int l
     }
     vic_start_ok = new_value;
 }
-void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev);
+/* BINARY NINJA EXACT: tx_vic_enable_irq implementation */
+void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
+{
+    unsigned long flags;
+
+    pr_info("*** tx_vic_enable_irq: BINARY NINJA EXACT ***\n");
+
+    /* Binary Ninja: if (dump_vsd_5 == 0 || dump_vsd_5 u>= 0xfffff001) return */
+    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
+        pr_err("tx_vic_enable_irq: Invalid VIC device\n");
+        return;
+    }
+
+    /* Binary Ninja: __private_spin_lock_irqsave(dump_vsd_2 + 0x130, &var_18) */
+    spin_lock_irqsave(&vic_dev->irq_lock, flags);
+
+    /* Binary Ninja: if (*(dump_vsd_1 + 0x13c) != 0) */
+    if (vic_dev->irq_enabled == 0) {
+        /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 1 */
+        vic_dev->irq_enabled = 1;
+
+        /* Binary Ninja: int32_t $v0_1 = *(dump_vsd_5 + 0x84) */
+        /* Binary Ninja: if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
+        if (vic_dev->enable_irq_func) {
+            vic_dev->enable_irq_func(&vic_dev->irq_ops);
+        }
+
+        pr_info("*** tx_vic_enable_irq: VIC interrupts ENABLED ***\n");
+    } else {
+        pr_info("*** tx_vic_enable_irq: VIC interrupts already enabled ***\n");
+    }
+
+    /* Binary Ninja: private_spin_unlock_irqrestore(dump_vsd_3 + 0x130, var_18) */
+    spin_unlock_irqrestore(&vic_dev->irq_lock, flags);
+}
+
+/* BINARY NINJA EXACT: tx_vic_disable_irq implementation */
+void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
+{
+    unsigned long flags;
+
+    pr_info("*** tx_vic_disable_irq: BINARY NINJA EXACT ***\n");
+
+    /* Binary Ninja: if (dump_vsd_5 == 0 || dump_vsd_5 u>= 0xfffff001) return */
+    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
+        pr_err("tx_vic_disable_irq: Invalid VIC device\n");
+        return;
+    }
+
+    /* Binary Ninja: __private_spin_lock_irqsave(dump_vsd_2 + 0x130, &var_18) */
+    spin_lock_irqsave(&vic_dev->irq_lock, flags);
+
+    /* Binary Ninja: if (*(dump_vsd_1 + 0x13c) != 0) */
+    if (vic_dev->irq_enabled != 0) {
+        /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 0 */
+        vic_dev->irq_enabled = 0;
+
+        /* Binary Ninja: int32_t $v0_2 = *(dump_vsd_5 + 0x88) */
+        /* Binary Ninja: if ($v0_2 != 0) $v0_2(dump_vsd_5 + 0x80) */
+        if (vic_dev->disable_irq_func) {
+            vic_dev->disable_irq_func(&vic_dev->irq_ops);
+        }
+
+        pr_info("*** tx_vic_disable_irq: VIC interrupts DISABLED ***\n");
+    } else {
+        pr_info("*** tx_vic_disable_irq: VIC interrupts already disabled ***\n");
+    }
+
+    /* Binary Ninja: private_spin_unlock_irqrestore(dump_vsd_3 + 0x130, var_18) */
+    spin_unlock_irqrestore(&vic_dev->irq_lock, flags);
+}
+
 static int ispcore_activate_module(struct tx_isp_dev *isp_dev);
 static int tx_isp_vic_apply_full_config(struct tx_isp_vic_device *vic_dev);
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2);  /* Forward declaration */
