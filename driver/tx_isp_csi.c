@@ -820,17 +820,20 @@ int tx_isp_csi_probe(struct platform_device *pdev)
     /* Note: self_ptr member not present in current CSI device structure */
 
     /* CRITICAL: Copy register mapping from subdev to CSI device structure */
-    if (csi_dev->sd.base) {
-        csi_dev->csi_regs = csi_dev->sd.base;
+    if (csi_dev->sd.regs) {
+        csi_dev->csi_regs = csi_dev->sd.regs;
         pr_info("*** CSI PROBE: Copied register mapping from subdev: %p ***\n", csi_dev->csi_regs);
 
-        /* Also update global ISP device for compatibility */
-        if (ourISPdev && !ourISPdev->csi_regs) {
+        /* CRITICAL FIX: Link this properly initialized CSI device to the global ISP device */
+        if (ourISPdev) {
+            ourISPdev->csi_dev = csi_dev;
             ourISPdev->csi_regs = csi_dev->csi_regs;
-            pr_info("*** CSI PROBE: Updated global ISP device csi_regs: %p ***\n", ourISPdev->csi_regs);
+            pr_info("*** CSI PROBE: CRITICAL - Linked CSI device to ourISPdev->csi_dev: %p ***\n", ourISPdev->csi_dev);
+            pr_info("*** CSI PROBE: CRITICAL - Updated global ISP device csi_regs: %p ***\n", ourISPdev->csi_regs);
         }
     } else {
         pr_warn("*** CSI PROBE: No register mapping available from tx_isp_subdev_init ***\n");
+        pr_warn("*** CSI PROBE: sd.regs = %p, sd.mem_res = %p ***\n", csi_dev->sd.regs, csi_dev->sd.mem_res);
     }
 
     return 0;
