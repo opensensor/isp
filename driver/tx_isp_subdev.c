@@ -271,7 +271,7 @@ int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count)
         memset(clk_array, 0, clk_array_size);
 
         /* Use vic_start clock management pattern - get standard ISP clocks */
-        int i = 0;
+        i = 0;
 
         /* Binary Ninja: Clock 0 - CGU ISP */
         if (i < clk_count) {
