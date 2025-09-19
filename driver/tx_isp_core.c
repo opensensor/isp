@@ -1777,7 +1777,21 @@ int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute
     
     /* Start kernel thread - matches reference kthread_run */
     ISP_INFO("*** ispcore_core_ops_init: Starting ISP processing thread ***\n");
-    
+
+    /* CRITICAL: Create ISP firmware processing thread - EXACT Binary Ninja reference */
+    if (!isp->fw_thread) {
+        isp->fw_thread = kthread_run(isp_fw_process, isp, "isp_fw_process");
+        if (IS_ERR(isp->fw_thread)) {
+            int ret = PTR_ERR(isp->fw_thread);
+            ISP_ERROR("*** ispcore_core_ops_init: Failed to create ISP thread: %d ***\n", ret);
+            isp->fw_thread = NULL;
+            return ret;
+        }
+        ISP_INFO("*** ispcore_core_ops_init: ISP firmware thread created successfully ***\n");
+    } else {
+        ISP_INFO("*** ispcore_core_ops_init: ISP firmware thread already running ***\n");
+    }
+
     /* Set state to 3 (running) - matches reference */
     isp->vic_dev->state = 3;
     
