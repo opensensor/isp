@@ -318,7 +318,7 @@ void tisp_param_operate_deinit(void)
  * tisp_deinit_free - EXACT Binary Ninja MCP implementation
  * Address: 0x75af8
  */
-static void tisp_deinit_free(void)
+void tisp_deinit_free(void)
 {
     /* Binary Ninja: int32_t $a0 = data_ca490 */
     if (data_ca490 != 0) {
