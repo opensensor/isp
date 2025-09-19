@@ -1988,48 +1988,46 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
                 pr_err("Err [VIC_INT] : dma chid ovf  !!!\n");
             }
 
-        /* Binary Ninja: Error recovery sequence - focus on prevention, not recovery */
-        if ((v1_7 & 0xde00) != 0 && *vic_irq_enable_flag == 1) {
-            pr_info("*** VIC ERROR RECOVERY: Detected error condition 0x%x (control limit errors should be prevented by proper config) ***\n", v1_7);
-            pr_err("error handler!!!\n");
+            /* Binary Ninja: Error recovery sequence - if (($v1_7 & 0xde00) != 0 && zx.d(vic_start_ok) == 1) */
+            if ((v1_7 & 0xde00) != 0 && vic_start_ok == 1) {
+                pr_err("error handler!!!\n");
 
-            /* Binary Ninja: **($s0 + 0xb8) = 4 */
-            writel(4, vic_regs + 0x0);
-            wmb();
+                /* Binary Ninja: **($s0 + 0xb8) = 4 */
+                writel(4, vic_regs + 0x0);
+                wmb();
 
-            /* Binary Ninja: while (*$v0_70 != 0) */
-            timeout = 1000;
-            while (timeout-- > 0) {
-                addr_ctl = readl(vic_regs + 0x0);
-                if (addr_ctl == 0) {
-                    break;
+                /* Binary Ninja: while (*$v0_70 != 0) */
+                timeout = 1000;
+                while (timeout-- > 0) {
+                    addr_ctl = readl(vic_regs + 0x0);
+                    if (addr_ctl == 0) {
+                        break;
+                    }
+                    pr_err("addr ctl is 0x%x\n", addr_ctl);
+                    udelay(1);
                 }
-                pr_info("addr ctl is 0x%x\n", addr_ctl);
-                udelay(1);
+
+                /* Binary Ninja: Final recovery steps */
+                reg_val = readl(vic_regs + 0x104);
+                writel(reg_val, vic_regs + 0x104);  /* Self-write like Binary Ninja */
+
+                reg_val = readl(vic_regs + 0x108);
+                writel(reg_val, vic_regs + 0x108);  /* Self-write like Binary Ninja */
+
+                /* Binary Ninja: **($s0 + 0xb8) = 1 */
+                writel(1, vic_regs + 0x0);
+                wmb();
             }
 
-            /* Binary Ninja: Final recovery steps */
-            reg_val = readl(vic_regs + 0x104);
-            writel(reg_val, vic_regs + 0x104);  /* Self-write like Binary Ninja */
-
-            reg_val = readl(vic_regs + 0x108);
-            writel(reg_val, vic_regs + 0x108);  /* Self-write like Binary Ninja */
-
-            /* Binary Ninja: **($s0 + 0xb8) = 1 */
-            writel(1, vic_regs + 0x0);
-            wmb();
-        }
-
-        /* Wake up frame channels for all interrupt types */
-        for (i = 0; i < num_channels; i++) {
-            if (frame_channels[i].state.streaming) {
-                frame_channel_wakeup_waiters(&frame_channels[i]);
+            /* Wake up frame channels for all interrupt types */
+            for (i = 0; i < num_channels; i++) {
+                if (frame_channels[i].state.streaming) {
+                    frame_channel_wakeup_waiters(&frame_channels[i]);
+                }
             }
+        } else {
+            pr_warn("*** VIC INTERRUPT IGNORED: vic_start_ok=0, interrupts disabled (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
         }
-        
-    } else {
-        pr_warn("*** VIC INTERRUPT IGNORED: vic_start_ok=0, interrupts disabled (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
-        pr_warn("*** This means VIC interrupts are firing but being ignored! ***\n");
     }
     
     /* Binary Ninja: return 1 */
