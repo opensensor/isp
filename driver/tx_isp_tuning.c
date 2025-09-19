@@ -1228,7 +1228,6 @@ int ae0_interrupt_static(void)
     pr_debug("ae0_interrupt_static: AE0 static interrupt processed\n");
     return 1;
 }
-EXPORT_SYMBOL(ae0_interrupt_static);
 
 /* tisp_ae0_process - Binary Ninja EXACT implementation */
 int tisp_ae0_process(void)
@@ -2205,87 +2204,7 @@ int tisp_day_or_night_s_ctrl(uint32_t mode)
 #define ISP_TUNING_EVENT_FRAME_DONE 0x1004
 #define ISP_TUNING_EVENT_DMA_READY  0x1005
 
-int isp_core_tuning_event(struct tx_isp_dev *dev, uint32_t event)
-{
-    pr_debug("isp_core_tuning_event: event=0x%x\n", event);
-    if (!dev)
-        return -EINVAL;
-
-    switch (event) {
-        case ISP_TUNING_EVENT_MODE0:
-            if (dev->core_regs) {
-                writel(2, ourISPdev->core_regs + 0x40c4);
-                pr_debug("isp_core_tuning_event: Set mode 0\n");
-            }
-            break;
-
-        case ISP_TUNING_EVENT_MODE1:
-            if (dev->core_regs) {
-                writel(1, ourISPdev->core_regs + 0x40c4);
-                pr_debug("isp_core_tuning_event: Set mode 1\n");
-            }
-            break;
-
-        case ISP_TUNING_EVENT_FRAME:
-            pr_debug("*** ISP_TUNING_EVENT_FRAME: Starting frame processing ***\n");
-            /* CRITICAL: This is where frame processing should be triggered */
-            /* In the reference driver, this would start DMA transfer from sensor to buffer */
-            if (dev->core_regs) {
-                /* Trigger frame capture - write to frame control register */
-                writel(1, ourISPdev->core_regs + 0x9000);  /* Start frame capture */
-                pr_debug("isp_core_tuning_event: Frame capture triggered\n");
-            }
-            break;
-
-        case ISP_TUNING_EVENT_FRAME_DONE:
-            pr_debug("*** ISP_TUNING_EVENT_FRAME_DONE: Frame processing complete ***\n");
-            /* CRITICAL: This is where we call the frame sync functions! */
-            extern void isp_frame_done_wakeup(void);
-            isp_frame_done_wakeup();
-            pr_debug("isp_core_tuning_event: Frame done wakeup called\n");
-            break;
-
-        case ISP_TUNING_EVENT_DMA_READY:
-            pr_debug("*** ISP_TUNING_EVENT_DMA_READY: DMA buffer ready for processing ***\n");
-            /* This event indicates that DMA has transferred frame data to buffer */
-            /* and ISP can now process it */
-            if (dev->core_regs) {
-                /* Enable ISP processing of the DMA buffer */
-                writel(1, ourISPdev->core_regs + 0x8000);  /* Enable ISP processing */
-                pr_debug("isp_core_tuning_event: ISP processing enabled for DMA buffer\n");
-                
-                /* CRITICAL: Trigger frame transfer from sensor to DMA buffer */
-                /* This is what's missing - we need to copy sensor data to ISP buffer */
-                pr_debug("*** TRIGGERING FRAME DATA TRANSFER FROM SENSOR TO DMA BUFFER ***\n");
-                
-                /* Call the actual frame data transfer implementation */
-                int transfer_ret = isp_trigger_frame_data_transfer(dev);
-                if (transfer_ret == 0) {
-                    pr_debug("*** FRAME DATA TRANSFER COMPLETED SUCCESSFULLY ***\n");
-                } else {
-                    pr_err("*** FRAME DATA TRANSFER FAILED: %d ***\n", transfer_ret);
-                }
-            }
-            break;
-
-        case ISP_TUNING_EVENT_DN:
-        {
-            if (dev->core_regs) {
-                uint32_t dn_mode = readl(dev->core_regs + 0x40a4);
-                tisp_day_or_night_s_ctrl(dn_mode);
-                writel(dn_mode, ourISPdev->core_regs + 0x40a4);
-                pr_debug("isp_core_tuning_event: Day/night mode updated: %d\n", dn_mode);
-            }
-        }
-        break;
-
-        default:
-            pr_warn("isp_core_tuning_event: Unknown event 0x%x\n", event);
-            return -EINVAL;
-    }
-
-    return 0;
-}
+/* isp_core_tuning_event - removed duplicate implementation, using Binary Ninja exact version below */
 
 static int apical_isp_expr_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
 {
@@ -10501,7 +10420,6 @@ int ae0_interrupt_hist(void)
     pr_debug("ae0_interrupt_hist: AE0 histogram interrupt processed\n");
     return 2;
 }
-EXPORT_SYMBOL(ae0_interrupt_hist);
 
 /* ae1_interrupt_static - Binary Ninja EXACT implementation */
 int ae1_interrupt_static(void)
