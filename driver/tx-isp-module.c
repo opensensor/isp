@@ -7148,21 +7148,21 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
         if (enable) {
             /* CRITICAL FIX: Initialize VIN if not already initialized - WITH RECURSION PROTECTION */
-            if (isp_dev->vin_dev && !vin_init_in_progress) {
-                struct tx_isp_vin_device *vin_device = (struct tx_isp_vin_device *)isp_dev->vin_dev;
-                if (vin_device->state != 3 && vin_device->state != 5) {
+            if (ourISPdev->vin_dev && !vin_init_in_progress) {
+                struct tx_isp_vin_device *vin_device = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
+                if (vin_device->state != 3 && vin_device->state != 4) {
                     pr_info("*** CRITICAL: VIN NOT INITIALIZED (state=%d), INITIALIZING NOW ***\n", vin_device->state);
-                    
+
                     /* CRITICAL: Set flag to prevent infinite recursion */
                     vin_init_in_progress = 1;
-                    
+
                     /* CRITICAL FIX: Call the EXACT Binary Ninja VIN init function */
                     extern int tx_isp_vin_init(void* arg1, int32_t arg2);
                     ret = tx_isp_vin_init(vin_device, 1);
-                    
+
                     /* CRITICAL: Clear flag after init attempt */
                     vin_init_in_progress = 0;
-                    
+
                     if (ret && ret != 0xffffffff) {
                         pr_err("*** CRITICAL: VIN INITIALIZATION FAILED: %d ***\n", ret);
                         return ret;
@@ -7221,21 +7221,18 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
                 int vin_ret = -ENODEV;
                 
-                /* CRITICAL FIX: Use global ourISPdev directly - no pointer confusion */
+                /* CRITICAL FIX: Call VIN s_stream function directly - EXACT reference driver behavior */
                 if (ourISPdev && ourISPdev->vin_dev) {
                     struct tx_isp_vin_device *vin_device = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
 
                     pr_info("*** VIN device found at %p, state=%d ***\n", vin_device, vin_device->state);
 
-                    /* SIMPLIFIED: Just set VIN to streaming state directly */
-                    if (vin_device->state == 3) {
-                        vin_device->state = 5; /* Set to streaming state */
-                        pr_info("*** VIN STATE DIRECTLY SET TO STREAMING (5) ***\n");
-                        vin_ret = 0;
-                    } else {
-                        pr_info("*** VIN STATE ALREADY AT %d - NO CHANGE NEEDED ***\n", vin_device->state);
-                        vin_ret = 0;
-                    }
+                    /* CRITICAL: Call VIN s_stream function like reference driver */
+                    extern int vin_s_stream(struct tx_isp_subdev *sd, int enable);
+                    vin_ret = vin_s_stream(&vin_device->sd, 1);
+
+                    pr_info("*** VIN_S_STREAM returned: %d ***\n", vin_ret);
+                    pr_info("*** VIN state after s_stream: %d (should be 4) ***\n", vin_device->state);
                 } else {
                     pr_err("*** ERROR: ourISPdev or VIN not available ***\n");
                     pr_err("*** DEBUG: ourISPdev=%p, ourISPdev->vin_dev=%p ***\n",
@@ -7252,14 +7249,15 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* CRITICAL FIX: Simplified VIN streaming stop */
                 pr_info("*** CALLING VIN_S_STREAM TO STOP ***\n");
                 
-                if (isp_dev && isp_dev->vin_dev) {
-                    struct tx_isp_vin_device *vin_device = (struct tx_isp_vin_device *)isp_dev->vin_dev;
-                    
-                    /* SIMPLIFIED: Just set VIN to non-streaming state directly */
-                    if (vin_device->state == 5) {
-                        vin_device->state = 3; /* Set back to initialized but not streaming */
-                        pr_info("*** VIN STATE SET BACK TO INITIALIZED (3) ***\n");
-                    }
+                if (ourISPdev && ourISPdev->vin_dev) {
+                    struct tx_isp_vin_device *vin_device = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
+
+                    /* CRITICAL: Call VIN s_stream function to stop streaming */
+                    extern int vin_s_stream(struct tx_isp_subdev *sd, int enable);
+                    int vin_stop_ret = vin_s_stream(&vin_device->sd, 0);
+
+                    pr_info("*** VIN_S_STREAM(0) returned: %d ***\n", vin_stop_ret);
+                    pr_info("*** VIN state after stop: %d (should be 3) ***\n", vin_device->state);
                 }
                 
                 pr_info("*** VIN STREAMING STOP COMPLETED ***\n");
