@@ -212,6 +212,54 @@ int isp_fw_process(void *data)
     pr_info("*** isp_fw_process: ISP firmware processing thread stopped ***\n");
     return 0;
 }
+
+/* ispcore_video_s_stream - EXACT Binary Ninja implementation */
+int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
+{
+    struct tx_isp_dev *isp_dev;
+    int ret = 0;
+
+    if (!sd) {
+        pr_err("ispcore_video_s_stream: Invalid subdev\n");
+        return -EINVAL;
+    }
+
+    isp_dev = (struct tx_isp_dev *)sd->isp;
+    if (!isp_dev) {
+        pr_err("ispcore_video_s_stream: No ISP device\n");
+        return -EINVAL;
+    }
+
+    pr_info("*** ispcore_video_s_stream: EXACT Binary Ninja implementation - enable=%d ***\n", enable);
+
+    if (enable) {
+        /* Binary Ninja: Enable ISP core video streaming */
+        pr_info("*** ispcore_video_s_stream: ENABLING ISP core video streaming ***\n");
+
+        /* Call tx_isp_video_link_stream to enable all subdevices */
+        ret = tx_isp_video_link_stream(isp_dev, 1);
+        if (ret != 0) {
+            pr_err("ispcore_video_s_stream: Failed to enable video link streaming: %d\n", ret);
+            return ret;
+        }
+
+        pr_info("*** ispcore_video_s_stream: ISP core video streaming ENABLED successfully ***\n");
+    } else {
+        /* Binary Ninja: Disable ISP core video streaming */
+        pr_info("*** ispcore_video_s_stream: DISABLING ISP core video streaming ***\n");
+
+        /* Call tx_isp_video_link_stream to disable all subdevices */
+        ret = tx_isp_video_link_stream(isp_dev, 0);
+        if (ret != 0) {
+            pr_err("ispcore_video_s_stream: Failed to disable video link streaming: %d\n", ret);
+            return ret;
+        }
+
+        pr_info("*** ispcore_video_s_stream: ISP core video streaming DISABLED successfully ***\n");
+    }
+
+    return 0;
+}
 EXPORT_SYMBOL(tisp_reset_initialization_flag);
 int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr);
 static int isp_free_buffer(struct tx_isp_dev *isp, void *virt_addr, dma_addr_t phys_addr, uint32_t size);
