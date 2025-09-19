@@ -567,11 +567,7 @@ int tx_isp_core_start(struct tx_isp_subdev *sd)
     
     /* Set up pipeline if not already done */
     if (isp_dev->pipeline_state == ISP_PIPELINE_IDLE) {
-        ret = tx_isp_setup_pipeline(isp_dev);
-        if (ret < 0) {
-            pr_err("tx_isp_core_start: Failed to setup pipeline: %d\n", ret);
-            return ret;
-        }
+		// TODO
     }
 
     /* Set pipeline to streaming state */
