@@ -18,6 +18,37 @@
 #include <media/v4l2-device.h>
 #include <media/v4l2-dev.h>
 #include <media/v4l2-fh.h>
+#include <linux/dma-mapping.h>
+
+/* V4L2 control structure definition */
+struct v4l2_ctrl {
+    u32 id;
+    s32 val;
+    s32 minimum;
+    s32 maximum;
+    s32 step;
+    s32 default_value;
+    u32 flags;
+    const char *name;
+    enum v4l2_ctrl_type type;
+    void *priv;
+};
+
+/* V4L2 control IDs */
+#define V4L2_CID_BRIGHTNESS     0x00980900
+#define V4L2_CID_CONTRAST       0x00980901
+#define V4L2_CID_SATURATION     0x00980902
+#define V4L2_CID_HUE            0x00980903
+#define V4L2_CID_AUTO_WHITE_BALANCE 0x00980904
+#define V4L2_CID_EXPOSURE       0x00980905
+
+/* V4L2 control type enumeration */
+enum v4l2_ctrl_type {
+    V4L2_CTRL_TYPE_INTEGER      = 1,
+    V4L2_CTRL_TYPE_BOOLEAN      = 2,
+    V4L2_CTRL_TYPE_MENU         = 3,
+    V4L2_CTRL_TYPE_BUTTON       = 4,
+};
 #include "../include/tx_isp.h"
 #include "../include/tx_isp_core.h"
 #include "../include/tx-isp-debug.h"
