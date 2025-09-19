@@ -488,6 +488,52 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         }
     }
 
+    /* CRITICAL: Auto-link subdevices to global ISP device based on device name */
+    if (ourISPdev && pdev && pdev->name) {
+        const char *dev_name = pdev->name;
+
+        pr_info("*** tx_isp_subdev_init: Auto-linking device '%s' to ourISPdev ***\n", dev_name);
+
+        if (strcmp(dev_name, "tx-isp-csi") == 0) {
+            /* Link CSI device */
+            struct tx_isp_csi_device *csi_dev = container_of(sd, struct tx_isp_csi_device, sd);
+            ourISPdev->csi_dev = csi_dev;
+            if (sd->regs) {
+                ourISPdev->csi_regs = sd->regs;
+            }
+            pr_info("*** LINKED CSI device: %p, regs: %p ***\n", csi_dev, sd->regs);
+
+        } else if (strcmp(dev_name, "tx-isp-vic") == 0) {
+            /* Link VIC device */
+            struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
+            ourISPdev->vic_dev = (struct tx_isp_subdev *)vic_dev;
+            vic_dev->vic_regs = sd->regs;  /* Critical: Set VIC registers */
+            if (sd->regs) {
+                ourISPdev->vic_regs = sd->regs;
+            }
+            pr_info("*** LINKED VIC device: %p, regs: %p ***\n", vic_dev, sd->regs);
+
+        } else if (strcmp(dev_name, "tx-isp-vin") == 0) {
+            /* Link VIN device */
+            struct tx_isp_vin_device *vin_dev = container_of(sd, struct tx_isp_vin_device, sd);
+            ourISPdev->vin_dev = vin_dev;
+            pr_info("*** LINKED VIN device: %p ***\n", vin_dev);
+
+        } else if (strcmp(dev_name, "tx-isp-fs") == 0) {
+            /* Link FS device */
+            struct tx_isp_fs_device *fs_dev = container_of(sd, struct tx_isp_fs_device, subdev);
+            ourISPdev->fs_dev = fs_dev;
+            pr_info("*** LINKED FS device: %p ***\n", fs_dev);
+
+        } else if (strcmp(dev_name, "tx-isp-core") == 0) {
+            /* Core device is already linked in core probe */
+            if (sd->regs) {
+                ourISPdev->core_regs = sd->regs;
+            }
+            pr_info("*** LINKED CORE regs: %p ***\n", sd->regs);
+        }
+    }
+
     /* Binary Ninja: return 0 */
     return 0;
 
