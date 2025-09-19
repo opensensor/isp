@@ -353,9 +353,7 @@ extern void *opmsg;
 extern void *data_ca490;
 extern void *data_ca48c;
 extern void *nlsk;
-extern int major;
-extern struct cdev tisp_cdev;
-extern struct class *cls;
+/* major, tisp_cdev, cls are declared as static in tx_isp_tuning.c */
 extern int32_t *data_b33b8;
 extern int32_t data_b33b8_base;
 extern void **data_b33b4;

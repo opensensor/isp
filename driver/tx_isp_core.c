@@ -2121,9 +2121,7 @@ void *opmsg = NULL;
 void *data_ca490 = NULL;
 void *data_ca48c = NULL;
 void *nlsk = NULL;
-int major = 0;
-struct cdev tisp_cdev;
-struct class *cls = NULL;
+/* major, tisp_cdev, cls are declared as static in tx_isp_tuning.c */
 int32_t *data_b33b8 = NULL;
 int32_t data_b33b8_base = 0;
 void **data_b33b4 = NULL;
