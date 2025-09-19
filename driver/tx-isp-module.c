@@ -70,8 +70,10 @@ static DEFINE_MUTEX(sensor_list_mutex);
 static int sensor_count = 0;
 static int isp_memopt = 0; // Memory optimization flag like reference
 
-/* CRITICAL SAFETY: Global flag to prevent interrupt processing during shutdown */
+/* CRITICAL SAFETY: Global flags to prevent interrupt processing during corruption/shutdown */
 static volatile bool isp_system_shutting_down = false;
+static volatile bool isp_system_corrupted = false;
+static volatile int corruption_detection_count = 0;
 
 /* CRITICAL: VIC interrupt control flag - Binary Ninja reference */
 /* This is now declared as extern - the actual definition is in tx_isp_vic.c */
@@ -5253,8 +5255,8 @@ static int tx_isp_init(void)
 
     /* Register VIC subdev with proper ops structure */
     if (ourISPdev->vic_dev) {
-        struct tx_isp_vic_device *vic_dev = &ourISPdev->vic_dev;
-        
+        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+
         /* Set up VIC subdev with ops pointing to vic_subdev_ops */
         vic_dev->sd.ops = &vic_subdev_ops;
 
@@ -5272,8 +5274,8 @@ static int tx_isp_init(void)
     
     /* Register CSI subdev with proper ops structure */
     if (ourISPdev->csi_dev) {
-        struct tx_isp_csi_device *csi_dev = &ourISPdev->csi_dev;
-        
+        struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)ourISPdev->csi_dev;
+
         /* Set up CSI subdev with ops pointing to csi_subdev_ops */
         csi_dev->sd.ops = &csi_subdev_ops;
         // csi_dev->sd.isp = (void*)ourISPdev;
