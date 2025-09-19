@@ -29,6 +29,7 @@ int tx_isp_configure_clocks(struct tx_isp_dev *isp);
 /* Forward declarations */
 int tx_isp_init_memory_mappings(struct tx_isp_dev *isp);
 static int tx_isp_deinit_memory_mappings(struct tx_isp_dev *isp);
+int tisp_channel_start(int channel, void *attr);
 
 /* Parse rmem boot parameter - Linux 3.10 compatible */
 static int parse_rmem_bootarg(unsigned long *base, unsigned long *size)
