@@ -79,7 +79,6 @@ init_region
 ip_done_interrupt_static
 is_sequential_write
 is_valid_kernel_pointer
-isp_cleanup_irq_handling
 isp_core_tuning_deinit
 isp_core_tuning_event
 isp_core_tuning_release
@@ -97,8 +96,6 @@ isp_irq_thread_handle
 isp_m0_chardev_release
 isp_malloc_buffer
 isp_printf
-isp_read32
-isp_setup_irq_handling
 isp_subdev_init_clks
 isp_trigger_event
 isp_tuning_ioctl
@@ -110,6 +107,7 @@ isp_vic_interrupt_service_routine
 isp_write32
 ispcore_activate_module
 ispcore_core_ops_init
+ispcore_core_ops_ioctl
 ispcore_frame_channel_dqbuf
 ispcore_frame_channel_streamoff
 ispcore_interrupt_service_routine
@@ -245,6 +243,7 @@ tisp_ae_algo_init
 tisp_ae_deinit
 tisp_ae_exp_th_par_refresh
 tisp_ae_get_hist_custome
+tisp_ae_get_par_cfg
 tisp_ae_get_y_zone
 tisp_ae_ir_update
 tisp_ae_param_array_get
@@ -260,6 +259,7 @@ tisp_again_update
 tisp_awb_algo_deinit
 tisp_awb_algo_init
 tisp_awb_deinit
+tisp_awb_get_par_cfg
 tisp_awb_par_refresh
 tisp_awb_set_par_cfg
 tisp_bcsh_brightness
@@ -304,6 +304,7 @@ tisp_dma_cache_sync_helper
 tisp_dmsc_par_refresh
 tisp_dmsc_set_par_cfg
 tisp_dmsc_wdr_en
+tisp_dn_mode_get
 tisp_dn_mode_set
 tisp_dpc_all_reg_refresh
 tisp_dpc_get_par_cfg
@@ -346,8 +347,10 @@ tisp_get_awb_info
 tisp_get_defog_strength
 tisp_gib_set_par_cfg
 tisp_hldc_con_par_cfg
+tisp_hldc_get_par_cfg
 tisp_hldc_set_par_cfg
 tisp_init
+tisp_log2_fixed_to_fixed
 tisp_log2_fixed_to_fixed_tuning
 tisp_log2_int_to_fixed
 tisp_lsc_get_par_cfg
@@ -376,6 +379,7 @@ tisp_rdns_par_refresh
 tisp_rdns_param_array_get
 tisp_rdns_set_par_cfg
 tisp_rdns_wdr_en
+tisp_reg_map_get
 tisp_reg_map_set
 tisp_reset_initialization_flag
 tisp_s_2dns_ratio
@@ -541,7 +545,6 @@ tx_isp_csi_slake_subdev
 tx_isp_csi_start
 tx_isp_csi_stop
 tx_isp_debug_frame_capture_status
-tx_isp_deinit_memory_mappings
 tx_isp_destroy_v4l2_device
 tx_isp_detect_and_register_sensors
 tx_isp_disable_irq
@@ -549,6 +552,7 @@ tx_isp_enable_irq
 tx_isp_exit
 tx_isp_frame_chan_deinit
 tx_isp_frame_chan_init
+tx_isp_free_irq
 tx_isp_fs_probe
 tx_isp_fs_remove
 tx_isp_handle_sync_sensor_attr_event
@@ -556,13 +560,14 @@ tx_isp_hardware_frame_done_handler
 tx_isp_init
 tx_isp_init_csi_subdev
 tx_isp_init_hardware_interrupts
-tx_isp_init_memory_mappings
 tx_isp_init_sink_subdev
 tx_isp_init_source_subdev
 tx_isp_init_subdev_pads
 tx_isp_init_subdev_registry
 tx_isp_ispcore_activate_module_complete
 tx_isp_mipi_phy_status_check
+tx_isp_module_deinit
+tx_isp_module_init
 tx_isp_module_notify
 tx_isp_open
 tx_isp_phy_init
@@ -595,6 +600,7 @@ tx_isp_send_event_to_remote
 tx_isp_setup_default_links
 tx_isp_setup_media_links
 tx_isp_setup_pipeline
+tx_isp_subdev_auto_link
 tx_isp_subdev_deinit
 tx_isp_subdev_init
 tx_isp_subdev_pipo
@@ -695,3 +701,9 @@ vin_chardev_open
 vin_s_stream
 wdr_mode_show
 wdr_mode_store
+sensor_early_init
+sensor_end_changes
+tisp_ae0_get_statistics
+tisp_ae0_process
+tisp_ae0_process_impl
+tisp_ae1_ctrls_update

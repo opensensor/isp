@@ -2156,67 +2156,103 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
     int result = -ENOTSUPP;  /* 0xffffffed */
     void *callback_ptr;
-    int (*callback_func)(void);  /* Changed to int return type */
-    
-    pr_info("vic_core_ops_ioctl: cmd=0x%x, arg=%p\n", cmd, arg);
-    
-    /* CRITICAL FIX: Handle TX_ISP_EVENT_SYNC_SENSOR_ATTR specifically */
-    if (cmd == TX_ISP_EVENT_SYNC_SENSOR_ATTR) {
-        pr_info("*** CRITICAL FIX: TX_ISP_EVENT_SYNC_SENSOR_ATTR event received ***\n");
-        
-        /* Call the sensor sync function which will return -515 */
-        result = vic_sensor_ops_sync_sensor_attr(sd, (struct tx_isp_sensor_attribute *)arg);
-        
-        pr_info("*** TX_ISP_EVENT_SYNC_SENSOR_ATTR handled successfully, returning %d ***\n", result);
-        return result;
-    }
-    
-    if (cmd == 0x1000001) {
-        result = -ENOTSUPP;
+    int (*callback_func)(void);
+
+    pr_info("*** vic_core_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x%x, arg=%p ***\n", cmd, arg);
+
+    /* Binary Ninja EXACT: if (arg2 == 0x1000001) */
+    if (cmd == 0x1000001) {  /* TX_ISP_EVENT_SYNC_SENSOR_ATTR */
+        result = -ENOTSUPP;  /* 0xffffffed */
+
+        /* Binary Ninja: if (arg1 != 0) */
         if (sd != NULL) {
             /* Binary Ninja: void* $v0_2 = *(*(arg1 + 0xc4) + 0xc) */
+            /* arg1 + 0xc4 = sd->inpads, *(sd->inpads) = sd->inpads[0], +0xc = priv field */
             if (sd->inpads && sd->inpads[0].priv) {
                 callback_ptr = sd->inpads[0].priv;
-                if (callback_ptr != NULL) {
-                    /* Get function pointer at offset +4 in callback structure */
-                    callback_func = *((int (**)(void))((char *)callback_ptr + 4));
-                    if (callback_func != NULL) {
-                        pr_info("vic_core_ops_ioctl: Calling callback function for cmd 0x1000001\n");
-                        result = callback_func();  /* Call the function without casting */
-                    }
+
+                /* Binary Ninja: if ($v0_2 == 0) return 0 */
+                if (callback_ptr == NULL) {
+                    pr_info("vic_core_ops_ioctl: No callback pointer for cmd 0x1000001, returning 0\n");
+                    return 0;
                 }
+
+                /* Binary Ninja: $v0_3 = *($v0_2 + 4) */
+                callback_func = *((int (**)(void))((char *)callback_ptr + 4));
+
+                /* Binary Ninja: if ($v0_3 == 0) return 0 */
+                if (callback_func == NULL) {
+                    pr_info("vic_core_ops_ioctl: No callback function for cmd 0x1000001, returning 0\n");
+                    return 0;
+                }
+
+                /* Binary Ninja: result = $v0_3() */
+                pr_info("vic_core_ops_ioctl: Calling callback function for cmd 0x1000001\n");
+                result = callback_func();
+            } else {
+                pr_info("vic_core_ops_ioctl: No inpads for cmd 0x1000001, returning 0\n");
+                return 0;
             }
+        } else {
+            pr_info("vic_core_ops_ioctl: NULL sd for cmd 0x1000001, returning 0\n");
+            return 0;
         }
-    } else if (cmd == 0x3000009) {
+    }
+    /* Binary Ninja: else if (arg2 == 0x3000009) */
+    else if (cmd == 0x3000009) {
         pr_info("vic_core_ops_ioctl: tx_isp_subdev_pipo cmd=0x%x\n", cmd);
         result = tx_isp_subdev_pipo(sd, arg);
-    } else if (cmd == 0x1000000) {
-        result = -ENOTSUPP;
+    }
+    /* Binary Ninja: else if (arg2 != 0x1000000) return 0 */
+    else if (cmd != 0x1000000) {
+        pr_info("vic_core_ops_ioctl: Unknown cmd=0x%x, returning 0\n", cmd);
+        return 0;
+    }
+    /* Binary Ninja: Handle 0x1000000 case */
+    else {
+        result = -ENOTSUPP;  /* 0xffffffed */
+
+        /* Binary Ninja: if (arg1 != 0) */
         if (sd != NULL) {
             /* Binary Ninja: void* $v0_5 = **(arg1 + 0xc4) */
             if (sd->inpads && sd->inpads[0].priv) {
                 callback_ptr = sd->inpads[0].priv;
-                if (callback_ptr != NULL) {
-                    /* Get function pointer at offset +4 in callback structure */
-                    callback_func = *((int (**)(void))((char *)callback_ptr + 4));
-                    if (callback_func != NULL) {
-                        pr_info("vic_core_ops_ioctl: Calling callback function for cmd 0x1000000\n");
-                        result = callback_func();  /* Call the function without casting */
-                    }
+
+                /* Binary Ninja: if ($v0_5 == 0) return 0 */
+                if (callback_ptr == NULL) {
+                    pr_info("vic_core_ops_ioctl: No callback pointer for cmd 0x1000000, returning 0\n");
+                    return 0;
                 }
+
+                /* Binary Ninja: $v0_3 = *($v0_5 + 4) */
+                callback_func = *((int (**)(void))((char *)callback_ptr + 4));
+
+                /* Binary Ninja: if ($v0_3 == 0) return 0 */
+                if (callback_func == NULL) {
+                    pr_info("vic_core_ops_ioctl: No callback function for cmd 0x1000000, returning 0\n");
+                    return 0;
+                }
+
+                /* Binary Ninja: result = $v0_3() */
+                pr_info("vic_core_ops_ioctl: Calling callback function for cmd 0x1000000\n");
+                result = callback_func();
+            } else {
+                pr_info("vic_core_ops_ioctl: No inpads for cmd 0x1000000, returning 0\n");
+                return 0;
             }
+        } else {
+            pr_info("vic_core_ops_ioctl: NULL sd for cmd 0x1000000, returning 0\n");
+            return 0;
         }
-    } else {
-        pr_info("vic_core_ops_ioctl: Unknown cmd=0x%x, returning 0\n", cmd);
-        return 0;
     }
-    
+
     /* Binary Ninja: if (result == 0xfffffdfd) return 0 */
     if (result == -515) {  /* 0xfffffdfd */
         pr_info("vic_core_ops_ioctl: Result -515, returning 0\n");
         return 0;
     }
-    
+
+    pr_info("*** vic_core_ops_ioctl: EXACT Binary Ninja - returning result=%d ***\n", result);
     return result;
 }
 

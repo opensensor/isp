@@ -3641,19 +3641,25 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     vic_dev = isp_dev->vic_dev;
 
     
+    /* CRITICAL FIX: Work with real sensor attributes instead of VIC's copy */
+    if (!isp_dev->sensor || !isp_dev->sensor->video.attr) {
+        pr_err("ispcore_sync_sensor_attr: No real sensor available!\n");
+        return -ENODEV;
+    }
+
     /* Binary Ninja: if (arg2 == 0) */
     if (attr == NULL) {
-        /* Binary Ninja: memset($s0_1 + 0xec, arg2, 0x4c) */
-        memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
-        pr_info("ispcore_sync_sensor_attr: cleared sensor attributes\n");
+        /* Clear real sensor attributes */
+        memset(isp_dev->sensor->video.attr, 0, sizeof(struct tx_isp_sensor_attribute));
+        pr_info("ispcore_sync_sensor_attr: cleared REAL sensor attributes\n");
         return 0;
     }
-    
+
     /* Binary Ninja: memcpy($s0_1 + 0xec, arg2, 0x4c) */
-    memcpy(&vic_dev->sensor_attr, attr, sizeof(vic_dev->sensor_attr));
-    
+    memcpy(isp_dev->sensor->video.attr, attr, sizeof(struct tx_isp_sensor_attribute));
+
     /* Binary Ninja: Complex sensor attribute processing */
-    stored_attr = &vic_dev->sensor_attr;
+    stored_attr = isp_dev->sensor->video.attr;
     
     /* Binary Ninja: Extract and process sensor timing parameters */
     integration_time = stored_attr->integration_time;
