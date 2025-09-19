@@ -17,7 +17,7 @@ void system_reg_write(u32 reg, u32 value);
 static struct tx_isp_csi_device *dump_csd = NULL;  /* Global CSI device pointer */
 
 
-static void __iomem *tx_isp_core_regs = NULL;
+/* Manual register mappings removed - use subdev-managed registers per reference driver */
 
 /* isp_read32 removed - use system_reg_read from reference driver instead */
 
@@ -49,8 +49,7 @@ void vic_write32(u32 reg, u32 val)
     }
 }
 
-/* Similarly for CSI... */
-static void __iomem *tx_isp_csi_regs = NULL;
+/* CSI register mapping handled by subdev probe per reference driver */
 
 u32 csi_read32(u32 reg)
 {
