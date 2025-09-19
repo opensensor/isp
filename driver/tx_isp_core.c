@@ -318,11 +318,14 @@ static int core_subdev_core_init_bridge(struct tx_isp_subdev *sd, int enable)
     return ispcore_core_ops_init(isp, attr);
 }
 
+/* Forward declaration for ispcore_core_ops_ioctl */
+static int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+
 /* Core subdev operations - matches the pattern used by other devices */
 static struct tx_isp_subdev_core_ops core_subdev_core_ops = {
     .init = core_subdev_core_init_bridge,
     .reset = NULL,
-    .ioctl = NULL,
+    .ioctl = ispcore_core_ops_ioctl,  /* Wire in the IOCTL handler */
 };
 
 /* Core subdev video operations */
