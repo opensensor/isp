@@ -11013,6 +11013,7 @@ uint32_t data_b2ee4(uint32_t log_val, void **var_ptr)
     if (var_ptr) *var_ptr = NULL;
     return log_val;
 }
+EXPORT_SYMBOL(data_b2ee4);
 
 int data_b2f04(uint32_t param, int flag)
 {
@@ -11036,6 +11037,7 @@ int data_b2f04(uint32_t param, int flag)
     pr_debug("data_b2f04: No sensor set_analog_gain operation available\n");
     return 0;
 }
+EXPORT_SYMBOL(data_b2f04);
 
 int data_b2f08(uint32_t param, int flag)
 {
@@ -11059,6 +11061,7 @@ int data_b2f08(uint32_t param, int flag)
     pr_debug("data_b2f08: No sensor set_analog_gain_short operation available\n");
     return 0;
 }
+EXPORT_SYMBOL(data_b2f08);
 
 uint32_t tisp_log2_fixed_to_fixed(void)
 {

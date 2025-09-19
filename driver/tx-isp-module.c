@@ -7546,7 +7546,7 @@ static void tisp_set_sensor_integration_time_short(uint32_t integration_time)
 }
 
 /* tisp_set_sensor_analog_gain_short - EXACT Binary Ninja implementation */
-static void tisp_set_sensor_analog_gain_short(uint32_t sensor_gain)
+void tisp_set_sensor_analog_gain_short(uint32_t sensor_gain)
 {
     /* Binary Ninja: void var_28 */
     uint32_t var_28;
