@@ -2890,18 +2890,63 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* CRITICAL FIX: Do NOT call sensor initialization here - it's already done by the main driver */
                 /* The sensor s_stream will be called once by the main ISP driver, not by us */
                 
+                /* STEP 4: MISSING ISP PIPELINE CONFIGURATION - Add the missing registers from reference trace */
+                pr_debug("*** STEP 4: Adding missing ISP pipeline configuration from reference trace ***\n");
+
+                /* ISP Control registers (0x9800 range) - from reference trace lines 56-63 */
+                writel(0x3f00, main_isp_base + 0x9804);     /* ISP Control */
+                writel(0x7800438, main_isp_base + 0x9864);  /* ISP Control */
+                writel(0xc0000000, main_isp_base + 0x987c); /* ISP Control */
+                writel(0x1, main_isp_base + 0x9880);        /* ISP Control */
+                writel(0x1, main_isp_base + 0x9884);        /* ISP Control */
+                writel(0x1010001, main_isp_base + 0x9890);  /* ISP Control */
+                writel(0x1010001, main_isp_base + 0x989c);  /* ISP Control */
+                writel(0x1010001, main_isp_base + 0x98a8);  /* ISP Control */
+
+                /* VIC Control registers (0x9a00 range) - from reference trace lines 64-75 */
+                writel(0x50002d0, main_isp_base + 0x9a00);  /* VIC Control */
+                writel(0x3000300, main_isp_base + 0x9a04);  /* VIC Control */
+                writel(0x50002d0, main_isp_base + 0x9a2c);  /* VIC Control */
+                writel(0x1, main_isp_base + 0x9a34);        /* VIC Control */
+                writel(0x1, main_isp_base + 0x9a70);        /* VIC Control */
+                writel(0x1, main_isp_base + 0x9a7c);        /* VIC Control */
+                writel(0x500, main_isp_base + 0x9a80);      /* VIC Control */
+                writel(0x1, main_isp_base + 0x9a88);        /* VIC Control */
+                writel(0x1, main_isp_base + 0x9a94);        /* VIC Control */
+                writel(0x500, main_isp_base + 0x9a98);      /* VIC Control */
+                writel(0x200, main_isp_base + 0x9ac0);      /* VIC Control */
+                writel(0x200, main_isp_base + 0x9ac8);      /* VIC Control */
+
+                /* Core Control registers (0xb000 range) - from reference trace lines 76-91 */
+                writel(0xf001f001, main_isp_base + 0xb004); /* Core Control */
+                writel(0x40404040, main_isp_base + 0xb008); /* Core Control */
+                writel(0x40404040, main_isp_base + 0xb00c); /* Core Control */
+                writel(0x40404040, main_isp_base + 0xb010); /* Core Control */
+                writel(0x404040, main_isp_base + 0xb014);   /* Core Control */
+                writel(0x40404040, main_isp_base + 0xb018); /* Core Control */
+                writel(0x40404040, main_isp_base + 0xb01c); /* Core Control */
+                writel(0x40404040, main_isp_base + 0xb020); /* Core Control */
+                writel(0x404040, main_isp_base + 0xb024);   /* Core Control */
+                writel(0x1000080, main_isp_base + 0xb028);  /* Core Control */
+                writel(0x1000080, main_isp_base + 0xb02c);  /* Core Control */
+                writel(0x100, main_isp_base + 0xb030);      /* Core Control */
+                writel(0xffff0100, main_isp_base + 0xb034); /* Core Control */
+                writel(0x1ff00, main_isp_base + 0xb038);    /* Core Control */
+                writel(0x103, main_isp_base + 0xb04c);      /* Core Control */
+                writel(0x3, main_isp_base + 0xb050);        /* Core Control */
+                wmb();
+
                 /* STEP 5: Apply 280ms delta register changes AFTER sensor detection */
                 pr_debug("*** STEP 5: Applying 280ms delta register changes AFTER sensor detection ***\n");
                 /* Use the correct main_isp_base (0x13300000 = isp-m0) */
                 writel(0x0, main_isp_base + 0x9804);        /* 0x3f00 -> 0x0 */
                 writel(0x0, main_isp_base + 0x9ac0);        /* 0x200 -> 0x0 */
                 writel(0x0, main_isp_base + 0x9ac8);        /* 0x200 -> 0x0 */
-                /* CRITICAL FIX: Skip interrupt-related Core Control registers to preserve VIC interrupts */
-                pr_debug("*** 280ms DELTA: Skipping Core Control registers 0xb018-0xb024 to preserve interrupts ***\n");
-                /* writel(0x24242424, main_isp_base + 0xb018); // SKIPPED - kills VIC interrupts */
-                /* writel(0x24242424, main_isp_base + 0xb01c); // SKIPPED - kills VIC interrupts */
-                /* writel(0x24242424, main_isp_base + 0xb020); // SKIPPED - kills VIC interrupts */
-                /* writel(0x242424, main_isp_base + 0xb024);   // SKIPPED - kills VIC interrupts */
+                /* Apply Core Control delta changes from reference trace lines 100-114 */
+                writel(0x24242424, main_isp_base + 0xb018); /* Core Control delta */
+                writel(0x24242424, main_isp_base + 0xb01c);  /* Core Control delta */
+                writel(0x24242424, main_isp_base + 0xb020);  /* Core Control delta */
+                writel(0x242424, main_isp_base + 0xb024);    /* Core Control delta */
                 writel(0x10d0046, main_isp_base + 0xb028);  /* 0x1000080 -> 0x10d0046 */
                 writel(0xe8002f, main_isp_base + 0xb02c);   /* 0x1000080 -> 0xe8002f */
                 writel(0xc50100, main_isp_base + 0xb030);   /* 0x100 -> 0xc50100 */
