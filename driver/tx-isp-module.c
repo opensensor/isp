@@ -5178,6 +5178,9 @@ static int tx_isp_init(void)
         /* Set up VIC subdev with ops pointing to vic_subdev_ops */
         vic_dev->sd.ops = &vic_subdev_ops;
 
+        /* CRITICAL: Link VIC subdev to ISP device */
+        vic_dev->sd.isp = ourISPdev;
+
         /* SAFE: Add VIC to subdev array at index 0 using proper struct member */
         ourISPdev->subdevs[0] = &vic_dev->sd;
         
