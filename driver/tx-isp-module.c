@@ -1452,15 +1452,10 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
         goto err_free_dev;
     }
     
-    /* Binary Ninja: private_ioremap($a0_2, $v0_3[1] + 1 - $a0_2) */
-    csi_basic_regs = ioremap(0x10022000, 0x1000);
-    if (!csi_basic_regs) {
-        pr_err("csi_device_probe: Cannot map CSI basic registers\n");
-        ret = -ENOMEM;
-        goto err_release_mem;
-    }
-    
-    pr_info("*** CSI BASIC REGISTERS MAPPED: 0x10022000 -> %p ***\n", csi_basic_regs);
+    /* REMOVED: Manual ioremap - memory mapping handled by tx_isp_subdev_init per reference driver */
+    /* CSI registers will be mapped by the platform device probe function */
+    csi_basic_regs = NULL;  /* Will be set by platform device probe */
+    pr_info("*** CSI BASIC REGISTERS: Will be mapped by platform device probe ***\n");
     
     /* *** CRITICAL: Map ISP CSI registers - Binary Ninja offset +0x13c region *** */
     if (isp_dev->vic_regs) {
