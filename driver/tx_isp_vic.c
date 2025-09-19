@@ -23,6 +23,10 @@ int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 
+/* Binary Ninja reference global variables */
+static struct tx_isp_vic_device *dump_vsd = NULL;  /* Global VIC device pointer */
+static void *test_addr = NULL;  /* Test address pointer */
+
 /* system_reg_write is now defined in tx-isp-module.c - removed duplicate */
 
 /* Debug function to track vic_start_ok changes */
@@ -3224,69 +3228,70 @@ EXPORT_SYMBOL(vic_chardev_ioctl);
 static struct tx_isp_vic_device *dump_vsd = NULL;
 static void *test_addr = NULL;
 
-/* tx_isp_vic_probe - Matching binary flow with safe struct member access */
+/* tx_isp_vic_probe - EXACT Binary Ninja reference implementation */
 int tx_isp_vic_probe(struct platform_device *pdev)
 {
     struct tx_isp_vic_device *vic_dev;
-    struct tx_isp_subdev *sd;
-    struct resource *res;
+    struct tx_isp_platform_data *pdata;
     int ret;
 
-    pr_debug("*** tx_isp_vic_probe: Starting VIC device probe ***\n");
-
-    /* Binary allocates 0x21c (540) bytes, but we use proper struct size */
-    vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
+    /* Binary Ninja: private_kmalloc(0x21c, 0xd0) */
+    vic_dev = private_kmalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
     if (!vic_dev) {
-        pr_err("Failed to allocate vic device\n");
-        return -ENOMEM;  /* Binary returns -1 but -ENOMEM is cleaner */
+        /* Binary Ninja: isp_printf(2, "Failed to allocate vic device\n", $a2) */
+        isp_printf(2, "Failed to allocate vic device\n", sizeof(struct tx_isp_vic_device));
+        return -1;  /* Binary Ninja returns 0xffffffff */
     }
 
-    /* Binary explicitly zeros the structure */
+    /* Binary Ninja: memset($v0, 0, 0x21c) */
     memset(vic_dev, 0, sizeof(struct tx_isp_vic_device));
 
-    /* Get subdev pointer */
-    sd = &vic_dev->sd;
+    /* Binary Ninja: void* $s2_1 = arg1[0x16] */
+    pdata = pdev->dev.platform_data;
 
-    /* Get platform resource (binary uses this for error message) */
-    res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-
-    /* CRITICAL: Initialize subdev FIRST (matches binary flow) */
-    ret = tx_isp_subdev_init(pdev, sd, &vic_subdev_ops);
+    /* Binary Ninja: tx_isp_subdev_init(arg1, $v0, &vic_subdev_ops) */
+    ret = tx_isp_subdev_init(pdev, &vic_dev->sd, &vic_subdev_ops);
     if (ret != 0) {
-        pr_err("Failed to init isp module(%d.%d)\n",
-               res ? MAJOR(res->start) : 0,
-               res ? MINOR(res->start) : 0);
-        kfree(vic_dev);
-        return -EFAULT;  /* Binary returns -12 (EFAULT) */
+        /* Binary Ninja: isp_printf(2, "Failed to init isp module(%d.%d)\n", zx.d(*($s2_1 + 2))) */
+        if (pdata) {
+            isp_printf(2, "Failed to init isp module(%d.%d)\n", pdata->sensor_type);
+        } else {
+            isp_printf(2, "Failed to init isp module(%d.%d)\n", 0);
+        }
+        /* Binary Ninja: private_kfree($v0) */
+        private_kfree(vic_dev);
+        return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
     }
 
-    /* Set platform driver data after successful init */
-    platform_set_drvdata(pdev, vic_dev);
+    /* Binary Ninja: private_platform_set_drvdata(arg1, $v0) */
+    private_platform_set_drvdata(pdev, vic_dev);
 
-    /* Set file operations */
-    sd->ops = &isp_vic_frd_fops;
+    /* Binary Ninja: *($v0 + 0x34) = &isp_vic_frd_fops */
+    vic_dev->sd.fops = &isp_vic_frd_fops;
 
-    /* Initialize synchronization primitives (binary order) */
-    spin_lock_init(&vic_dev->lock);
-    mutex_init(&vic_dev->mlock);
-    init_completion(&vic_dev->frame_complete);
+    /* Binary Ninja: private_spin_lock_init($v0 + 0x130) */
+    private_spin_lock_init(&vic_dev->lock);
 
-    /* Set initial state to 1 (matches binary) */
+    /* Binary Ninja: private_raw_mutex_init($v0 + 0x130, "&vsd->mlock", 0) */
+    private_raw_mutex_init(&vic_dev->mlock, "&vsd->mlock", 0);
+
+    /* Binary Ninja: private_raw_mutex_init($v0 + 0x154, "&vsd->snap_mlock", 0) */
+    private_raw_mutex_init(&vic_dev->snap_mlock, "&vsd->snap_mlock", 0);
+
+    /* Binary Ninja: private_init_completion($v0 + 0x148) */
+    private_init_completion(&vic_dev->frame_complete);
+
+    /* Binary Ninja: *($v0 + 0x128) = 1 */
     vic_dev->state = 1;
 
-    /* Store global reference (binary uses 'dump_vsd' global) */
+    /* Binary Ninja: dump_vsd = $v0 */
     dump_vsd = vic_dev;
-    vic_dev->irq = 38;
 
-    /* Set test_addr to point to sensor_attr or appropriate member */
-    /* Binary points to offset 0x80 in the structure */
-    test_addr = &vic_dev->sensor_attr;  /* Or another member around offset 0x80 */
+    /* Binary Ninja: *($v0 + 0xd4) = $v0 */
+    vic_dev->self_ptr = vic_dev;  /* Self-pointer for validation */
 
-    pr_debug("*** tx_isp_vic_probe: VIC device initialized successfully ***\n");
-    pr_debug("VIC device: vic_dev=%p, size=%zu\n", vic_dev, sizeof(struct tx_isp_vic_device));
-    pr_debug("  sd: %p\n", sd);
-    pr_debug("  state: %d\n", vic_dev->state);
-    pr_debug("  test_addr: %p\n", test_addr);
+    /* Binary Ninja: test_addr = $v0 + 0x80 */
+    test_addr = (char *)vic_dev + 0x80;  /* Test address pointer */
 
     return 0;
 }
