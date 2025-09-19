@@ -41,14 +41,12 @@ u32 vic_read32(u32 reg)
 
 void vic_write32(u32 reg, u32 val)
 {
-    if (!tx_isp_vic_regs) {
-        tx_isp_vic_regs = ioremap(0x10023000, 0x1000);
-        if (!tx_isp_vic_regs) {
-            pr_err("Failed to map VIC registers\n");
-            return;
-        }
+    /* Use global ISP device VIC registers mapped by subdev probe */
+    if (ourISPdev && ourISPdev->vic_regs) {
+        writel(val, ourISPdev->vic_regs + reg);
+    } else {
+        pr_err("vic_write32: No VIC registers available\n");
     }
-    writel(val, tx_isp_vic_regs + reg);
 }
 
 /* Similarly for CSI... */
@@ -56,26 +54,22 @@ static void __iomem *tx_isp_csi_regs = NULL;
 
 u32 csi_read32(u32 reg)
 {
-    if (!tx_isp_csi_regs) {
-        tx_isp_csi_regs = ioremap(0x10022000, 0x1000);
-        if (!tx_isp_csi_regs) {
-            pr_err("Failed to map CSI registers\n");
-            return 0;
-        }
+    /* Use global ISP device CSI registers mapped by subdev probe */
+    if (ourISPdev && ourISPdev->csi_regs) {
+        return readl(ourISPdev->csi_regs + reg);
     }
-    return readl(tx_isp_csi_regs + reg);
+    pr_err("csi_read32: No CSI registers available\n");
+    return 0;
 }
 
 void csi_write32(u32 reg, u32 val)
 {
-    if (!tx_isp_csi_regs) {
-        tx_isp_csi_regs = ioremap(0x10022000, 0x1000);
-        if (!tx_isp_csi_regs) {
-            pr_err("Failed to map CSI registers\n");
-            return;
-        }
+    /* Use global ISP device CSI registers mapped by subdev probe */
+    if (ourISPdev && ourISPdev->csi_regs) {
+        writel(val, ourISPdev->csi_regs + reg);
+    } else {
+        pr_err("csi_write32: No CSI registers available\n");
     }
-    writel(val, tx_isp_csi_regs + reg);
 }
 
 /* CSI interrupt handler */
