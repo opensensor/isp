@@ -3737,10 +3737,6 @@ EXPORT_SYMBOL(tx_isp_vic_set_buffer);
 EXPORT_SYMBOL(tx_isp_vic_wait_frame_done);
 EXPORT_SYMBOL(vic_core_s_stream);  /* CRITICAL: Export the missing function */
 
-/* Export VIC platform init/exit for main module */
-EXPORT_SYMBOL(tx_isp_vic_platform_init);
-EXPORT_SYMBOL(tx_isp_vic_platform_exit);
-
 /**
  * tx_isp_vic_apply_full_config - Apply complete VIC configuration after sensor initialization
  * This function applies the full VIC register configuration that was deferred during initialization
