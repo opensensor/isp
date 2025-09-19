@@ -3183,71 +3183,80 @@ int tx_isp_core_probe(struct platform_device *pdev)
     /* Binary Ninja: if (tx_isp_subdev_init(arg1, $v0, &core_subdev_ops) == 0) */
     if (tx_isp_subdev_init(pdev, (struct tx_isp_subdev *)isp_dev, &core_subdev_ops) == 0) {
 
-        /* SAFE: Channel configuration using proper struct access */
-        channel_count = ISP_MAX_CHAN;  /* Use constant instead of dangerous offset access */
-        
-        pr_info("*** tx_isp_core_probe: Channel count = %d ***\n", channel_count);
+        /* Binary Ninja: private_spin_lock_init(&$v0[0x37]) */
+        spin_lock_init((spinlock_t *)((char *)isp_dev + 0xdc));
 
-        /* Binary Ninja: Channel array allocation */
-        channel_array = kzalloc(channel_count * 0xc4, GFP_KERNEL);
+        /* Binary Ninja: private_raw_mutex_init(&$v0[0x37], "&core_dev->mlock", 0) */
+        mutex_init((struct mutex *)((char *)isp_dev + 0xdc));
+
+        /* Binary Ninja: uint32_t $a0_4 = zx.d($v0[0x32].w) */
+        channel_count = *((uint32_t *)((char *)isp_dev + 0xc8));
+
+        /* Binary Ninja: $v0[0x55] = $a0_4 */
+        *((uint32_t *)((char *)isp_dev + 0x154)) = channel_count;
+
+        /* Binary Ninja: $v0[0x4e] = $v0_3 */
+        *((void **)((char *)isp_dev + 0x138)) = pdev->dev.platform_data;
+
+        /* Binary Ninja: $v0_4, $a2_2 = private_kmalloc($a0_4 * 0xc4, 0xd0) */
+        channel_array = private_kmalloc(channel_count * 0xc4, GFP_KERNEL);
+
         if (channel_array != NULL) {
+            /* Binary Ninja: memset($v0_4, 0, zx.d($v0[0x32].w) * 0xc4) */
             memset(channel_array, 0, channel_count * 0xc4);
 
-            /* SAFE: Channel initialization loop using proper struct access */
-            int channel_idx = 0;
-            struct tx_isp_frame_channel *current_channel = (struct tx_isp_frame_channel *)channel_array;
-            
-            while (channel_idx < channel_count) {
-                /* SAFE: Initialize channel using proper struct members from tx-isp-device.h */
-                /* tx_isp_frame_channel has: misc, name, pad, pad_id, slock, mlock, frame_done, state, active */
-                
-                /* Initialize channel state and basic fields */
-                current_channel->state = 1;  /* INIT state */
-                current_channel->active = 1; /* Active state */
-                current_channel->pad_id = channel_idx;
-                
-                /* Initialize channel name */
-                snprintf(current_channel->name, sizeof(current_channel->name), "framechan%d", channel_idx);
-                
-                /* Initialize synchronization primitives */
-                spin_lock_init(&current_channel->slock);
-                mutex_init(&current_channel->mlock);
-                init_completion(&current_channel->frame_done);
-                
-                /* SAFE: Set up event handler using isp_channel structure instead */
-                if (channel_idx < ISP_MAX_CHAN) {
-                    /* Use isp_channel structure which has the correct members */
-                    isp_dev->channels[channel_idx].channel_id = channel_idx;
-                    isp_dev->channels[channel_idx].enabled = true;
-                    isp_dev->channels[channel_idx].state = 1;  /* INIT state */
-                    isp_dev->channels[channel_idx].dev = &pdev->dev;
-                    
-                    /* Set up event handler using correct member name */
-                    isp_dev->channels[channel_idx].event_hdlr = (struct isp_event_handler *)ispcore_pad_event_handle;
-                    
-                    /* Channel-specific configuration */
-                    if (channel_idx == 0) {
-                        /* Channel 0 specific configuration */
-                        isp_dev->channels[channel_idx].width = 2624;   /* 0x0a40 */
-                        isp_dev->channels[channel_idx].height = 8;
-                        isp_dev->channels[channel_idx].fmt = 1;
-                    } else if (channel_idx == 1) {
-                        /* Channel 1 specific configuration */
-                        isp_dev->channels[channel_idx].width = 0x780;
-                        isp_dev->channels[channel_idx].height = 0x438;
-                        isp_dev->channels[channel_idx].fmt = channel_idx;
-                    }
-                }
-                
-                channel_idx++;
-                current_channel = (struct tx_isp_frame_channel *)((char*)current_channel + 0xc4);
-            }
-            
-            /* SAFE: Channel array is stored in the allocated memory, not as a struct member */
-            /* The channels[] array in tx_isp_dev is used directly, channel_array is just working memory */
+            /* Binary Ninja: Channel initialization loop */
+            int s2_2 = 0;
+            void *s1_1 = channel_array;
 
-            /* DEFERRED: Tuning initialization moved AFTER memory mappings */
-            void *tuning_dev = NULL;
+            while (s2_2 < channel_count) {
+                int s4_2 = s2_2 * 0x24;
+
+                /* Binary Ninja: *($s1_1 + 0x70) = $s2_2 */
+                *((int *)((char *)s1_1 + 0x70)) = s2_2;
+
+                /* Binary Ninja: *($s1_1 + 0x78) = $v0[0x33] + $s4_2 */
+                *((void **)((char *)s1_1 + 0x78)) = (char *)isp_dev + 0xcc + s4_2;
+
+                /* Binary Ninja: Channel-specific configuration */
+                if (s2_2 == 0) {
+                    /* Binary Ninja: __builtin_memcpy($s1_1 + 0x80, ..., 0x12) */
+                    memcpy((char *)s1_1 + 0x80, "\x40\x0a\x00\x00\x00\x08\x00\x00\x80\x00\x00\x00\x80\x00\x00\x00\x01\x00", 0x12);
+                } else if (s2_2 == 1) {
+                    /* Binary Ninja: *($s1_1 + 0x80) = 0x780 */
+                    *((uint32_t *)((char *)s1_1 + 0x80)) = 0x780;
+                    /* Binary Ninja: *($s1_1 + 0x84) = 0x438 */
+                    *((uint32_t *)((char *)s1_1 + 0x84)) = 0x438;
+                    /* Binary Ninja: *($s1_1 + 0x90) = $s2_2.b */
+                    *((uint8_t *)((char *)s1_1 + 0x90)) = (uint8_t)s2_2;
+                    /* Binary Ninja: *($s1_1 + 0x91) = $s2_2.b */
+                    *((uint8_t *)((char *)s1_1 + 0x91)) = (uint8_t)s2_2;
+                } else {
+                    /* Binary Ninja: *($s1_1 + 0x88) = 0x80 */
+                    *((uint32_t *)((char *)s1_1 + 0x88)) = 0x80;
+                }
+
+                /* Binary Ninja: *($s1_1 + 0x74) = 1 */
+                *((int *)((char *)s1_1 + 0x74)) = 1;
+
+                /* Binary Ninja: private_spin_lock_init($s1_1 + 0x9c) */
+                spin_lock_init((spinlock_t *)((char *)s1_1 + 0x9c));
+
+                /* Binary Ninja: *($s1_1 + 0x7c) = $v0 */
+                *((void **)((char *)s1_1 + 0x7c)) = isp_dev;
+
+                /* Binary Ninja: *($v0[0x33] + $s4_2 + 0x1c) = ispcore_pad_event_handle */
+                *((void **)((char *)isp_dev + 0xcc + s4_2 + 0x1c)) = ispcore_pad_event_handle;
+
+                /* Binary Ninja: *($v0[0x33] + $s4_2 + 0x20) = $s1_1 */
+                *((void **)((char *)isp_dev + 0xcc + s4_2 + 0x20)) = s1_1;
+
+                s2_2 += 1;
+                s1_1 = (char *)s1_1 + 0xc4;
+            }
+
+            /* Binary Ninja: $v0[0x54] = $v0_4 */
+            *((void **)((char *)isp_dev + 0x150)) = channel_array;
 
             /* Set basic platform data first */
             platform_set_drvdata(pdev, isp_dev);
