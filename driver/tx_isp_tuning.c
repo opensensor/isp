@@ -7008,53 +7008,7 @@ int tisp_lsc_write_lut_datas(void)
     return 0;
 }
 
-/* tiziano_lsc_init - Binary Ninja EXACT implementation */
-int tiziano_lsc_init(void)
-{
-    pr_debug("tiziano_lsc_init: Initializing Lens Shading Correction\n");
-    
-    /* Initialize LSC LUTs with default values */
-    for (int i = 0; i < 2047; i++) {
-        /* Simple radial falloff model for initialization */
-        uint32_t center_dist = (i % 17) * (i % 17) + (i / 17) * (i / 17);
-        uint32_t falloff = 0x800 + (center_dist * 0x100 / 289); /* Radial falloff */
-        
-        lsc_a_lut[i] = (falloff << 12) | falloff;      /* R/G or G/B packed */
-        lsc_t_lut[i] = ((falloff + 0x50) << 12) | (falloff + 0x30); /* Warmer */
-        lsc_d_lut[i] = ((falloff - 0x30) << 12) | (falloff - 0x50); /* Cooler */
-    }
-    
-    /* Binary Ninja: Select mesh strength based on WDR mode */
-    if (lsc_wdr_en != 0) {
-        data_9a420 = lsc_mesh_str_wdr;
-        pr_debug("tiziano_lsc_init: Using WDR LSC parameters\n");
-    } else {
-        data_9a420 = lsc_mesh_str;
-        pr_debug("tiziano_lsc_init: Using linear LSC parameters\n");
-    }
-    
-    /* Binary Ninja: Refresh parameters */
-    tiziano_lsc_params_refresh();
-    
-    /* Binary Ninja: Configure LSC hardware registers */
-    system_reg_write(0x3800, (lsc_mesh_size << 16) | lsc_mesh_size);
-    system_reg_write(0x3804, (data_9a424 << 16) | (lsc_mean_en << 15) | lsc_mesh_scale);
-    
-    /* Binary Ninja: Set initial state */
-    data_9a404 = 5;
-    lsc_last_str = 0;
-    data_9a400 = 1;
-    
-    /* Binary Ninja: Write initial LUT data */
-    int ret = tisp_lsc_write_lut_datas();
-    if (ret) {
-        pr_err("tiziano_lsc_init: Failed to write LSC LUT data: %d\n", ret);
-        return ret;
-    }
-    
-    pr_debug("tiziano_lsc_init: LSC initialized successfully\n");
-    return 0;
-}
+/* tiziano_lsc_init - removed duplicate, using Binary Ninja implementation below */
 
 /* CCM parameter arrays - Binary Ninja reference */
 static int32_t tiziano_ccm_a_linear[9] = {0x100, 0, 0, 0, 0x100, 0, 0, 0, 0x100}; /* Identity matrix */
