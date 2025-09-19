@@ -3078,7 +3078,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
     /* Initialize device pointer */
     isp_dev->dev = &pdev->dev;
-    platform_data = (struct tx_isp_platform_data *)pdev->dev.platform_data;
+    pdata = (struct tx_isp_platform_data *)pdev->dev.platform_data;
 
     /* SAFE: Create proper platform device array */
     pr_debug("*** tx_isp_core_probe: SAFE platform device setup ***\n");
@@ -3121,14 +3121,14 @@ int tx_isp_core_probe(struct platform_device *pdev)
     pr_debug("*** tx_isp_core_probe: Platform devices configured - count=%d ***\n", isp_dev->subdev_count);
 
     /* SAFE: Initialize platform data reference using proper struct member access */
-    if (!platform_data) {
+    if (!pdata) {
         /* Create proper platform data structure if none exists */
-        platform_data = kzalloc(sizeof(struct tx_isp_platform_data), GFP_KERNEL);
-        if (platform_data) {
-            platform_data->device_id = 1;  /* SAFE: Set device ID using struct member */
-            platform_data->flags = 0;
-            platform_data->version = 1;
-            pdev->dev.platform_data = platform_data;
+        pdata = kzalloc(sizeof(struct tx_isp_platform_data), GFP_KERNEL);
+        if (pdata) {
+            pdata->device_id = 1;  /* SAFE: Set device ID using struct member */
+            pdata->flags = 0;
+            pdata->version = 1;
+            pdev->dev.platform_data = pdata;
             pr_debug("*** tx_isp_core_probe: Created safe platform data structure ***\n");
         }
     }
