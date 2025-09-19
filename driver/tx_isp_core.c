@@ -338,7 +338,8 @@ irqreturn_t ispcore_irq_thread_handle(int irq, void *dev_id)
 }
 
 /* ispcore_link_setup - EXACT Binary Ninja implementation */
-int ispcore_link_setup(struct tx_isp_dev *isp_dev, int config)
+int ispcore_link_setup(const struct tx_isp_subdev_pad *local,
+                      const struct tx_isp_subdev_pad *remote, u32 flags)
 {
     struct tx_isp_vic_device *vic_dev;
     struct tx_isp_csi_device *csi_dev;
