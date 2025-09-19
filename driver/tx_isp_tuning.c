@@ -270,20 +270,33 @@ int tiziano_ccm_init(void);
 int tiziano_dmsc_init(void);
 int tiziano_sharpen_init(void);
 int tiziano_sdns_init(void);
-int tiziano_mdns_init(uint32_t width, uint32_t height);
+int tiziano_mdns_init(void);
 int tiziano_clm_init(void);
 int tiziano_dpc_init(void);
 int tiziano_hldc_init(void);
-int tiziano_defog_init(uint32_t width, uint32_t height);
+int tiziano_defog_params_init(void);
+int tiziano_defog_init(void);
+int tiziano_adr_params_init(void);
 int tiziano_adr_init(uint32_t width, uint32_t height);
-int tiziano_af_init(uint32_t height, uint32_t width);
+int tiziano_af_init(void);
+int tiziano_ae_init_exp_th(void);
+int tiziano_ae_init(void);
+int tiziano_awb_init(void);
+int tiziano_ccm_init(void);
 int tiziano_bcsh_init(void);
 int tiziano_ydns_init(void);
 int tiziano_rdns_init(void);
+int tiziano_sdns_init(void);
+int tiziano_lsc_init(void);
+int tiziano_gib_init(void);
+int tiziano_gamma_init(void);
+int tiziano_dmsc_init(void);
+int tiziano_sharpen_init(void);
 
 /* Forward declarations for WDR functions */
 int tisp_gb_init(void);
-int tiziano_wdr_init(uint32_t width, uint32_t height);
+int tiziano_wdr_params_init(void);
+int tiziano_wdr_init(void);
 int tisp_wdr_init(void);
 
 /* Forward declarations for WDR enable functions */
@@ -1526,22 +1539,22 @@ int tisp_init(void *sensor_info, char *param_name)
 
     /* CRITICAL FIX: Use ACTUAL sensor image dimensions for all ISP components */
     /* Call all tiziano pipeline initialization functions in Binary Ninja order */
-    tiziano_ae_init(actual_image_height, actual_image_width, sensor_params.fps);
-    tiziano_awb_init(actual_image_height, actual_image_width);
-    tiziano_gamma_init(actual_image_width, actual_image_height, sensor_params.fps);
+    tiziano_ae_init();
+    tiziano_awb_init();
+    tiziano_gamma_init();
     tiziano_gib_init();
     tiziano_lsc_init();
     tiziano_ccm_init();
     tiziano_dmsc_init();
     tiziano_sharpen_init();
     tiziano_sdns_init();
-    tiziano_mdns_init(actual_image_width, actual_image_height);
+    tiziano_mdns_init();
     tiziano_clm_init();
     tiziano_dpc_init();
     tiziano_hldc_init();
-    tiziano_defog_init(actual_image_width, actual_image_height);
+    tiziano_defog_init();
     tiziano_adr_init(actual_image_width, actual_image_height);
-    tiziano_af_init(actual_image_height, actual_image_width);
+    tiziano_af_init();
     tiziano_bcsh_init();
     tiziano_ydns_init();
     tiziano_rdns_init();
