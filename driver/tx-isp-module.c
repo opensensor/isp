@@ -1830,12 +1830,23 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         return IRQ_HANDLED;
     }
 
+    /* CRITICAL SAFETY: Validate isp_dev before accessing any members */
+    if (!isp_dev) {
+        pr_err("*** VIC IRQ: NULL isp_dev ***\n");
+        return IRQ_HANDLED;
+    }
+
     /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
     /* SAFE: Use proper struct member access instead of raw offset +0xd4 */
     vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
 
     /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
     if (vic_dev != NULL && (unsigned long)vic_dev < 0xfffff001) {
+        /* CRITICAL SAFETY: Validate vic_regs before accessing */
+        if (!vic_dev->vic_regs) {
+            pr_err("*** VIC IRQ: NULL vic_regs ***\n");
+            return IRQ_HANDLED;
+        }
         /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
         /* SAFE: Use proper struct member access instead of raw offset +0xb8 */
         vic_regs = vic_dev->vic_regs;
