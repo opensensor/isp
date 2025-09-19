@@ -93,9 +93,6 @@ int tx_isp_configure_format_propagation(struct tx_isp_dev *isp);
 /* REMOVED: tx_isp_vic_device_init, tx_isp_csi_device_deinit, tx_isp_vic_device_deinit - not in reference driver */
 int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev);
 
-/* Forward declaration for VIC device creation from tx_isp_vic.c */
-extern int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
-
 /* Critical ISP Core initialization functions - MISSING FROM LOGS! */
 int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr);
 

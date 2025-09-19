@@ -5483,6 +5483,17 @@ static void tx_isp_exit(void)
             free_irq(ourISPdev->isp_irq, ourISPdev);
             pr_info("Hardware interrupt %d freed\n", ourISPdev->isp_irq);
         }
+
+        /* Free secondary interrupt if initialized */
+        if (ourISPdev->isp_irq2 > 0) {
+            free_irq(ourISPdev->isp_irq2, ourISPdev);
+            pr_info("Hardware interrupt %d freed\n", ourISPdev->isp_irq2);
+        }
+
+        /* CRITICAL: Ensure all interrupts are completely finished before freeing memory */
+        synchronize_irq(37);
+        synchronize_irq(38);
+        pr_info("*** All interrupts synchronized - safe to free memory ***\n");
         
         /* Clean up VIC device directly */
         if (ourISPdev->vic_dev) {
