@@ -1123,7 +1123,8 @@ ssize_t video_input_cmd_set(struct file *file, const char __user *buffer, size_t
         pr_info("video_input_cmd_set: wdr mode params=%lu, %lu\n", wdr_param1, wdr_param2);
 
         /* Binary Ninja: Configure WDR mode */
-        if (vin_dev->vin_regs && isp_dev->sensor && isp_dev->sensor->ops.core && isp_dev->sensor->ops.core->ioctl) {
+        if (vin_dev->vin_regs && isp_dev->sensor && isp_dev->sensor->sd.ops &&
+            isp_dev->sensor->sd.ops->core && isp_dev->sensor->sd.ops->core->ioctl) {
             /* Enable WDR mode in VIN */
             u32 vin_ctrl = readl(vin_dev->vin_regs + VIN_CTRL_OFFSET);
             vin_ctrl |= VIN_CTRL_WDR_MODE;  /* Enable WDR mode */
@@ -1132,10 +1133,12 @@ ssize_t video_input_cmd_set(struct file *file, const char __user *buffer, size_t
 
             /* Call sensor WDR configuration */
             struct tx_isp_sensor_wdr_config wdr_config;
+            int sensor_ret;
+
             wdr_config.param1 = wdr_param1;
             wdr_config.param2 = wdr_param2;
 
-            int sensor_ret = isp_dev->sensor->ops.core->ioctl(&isp_dev->sensor->sd,
+            sensor_ret = isp_dev->sensor->sd.ops->core->ioctl(&isp_dev->sensor->sd,
                                                             TX_ISP_SENSOR_SET_WDR_MODE,
                                                             &wdr_config);
 
