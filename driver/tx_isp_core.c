@@ -1915,9 +1915,6 @@ static uint8_t sensor_info[0x60];
 static uint8_t ds0_attr[0x34];
 static uint8_t ds1_attr[0x34];
 static uint8_t ds2_attr[0x34];
-static void *tparams_day = NULL;
-static void *tparams_night = NULL;
-static void *tparams_cust = NULL;
 static uint32_t data_b2e74 = 0;  /* WDR mode flag */
 static uint32_t data_b2f34 = 0;  /* Frame height */
 static uint32_t deir_en = 0;     /* DEIR enable flag */
@@ -2194,13 +2191,24 @@ void tisp_deinit_free(void)
 }
 
 /**
- * tisp_netlink_exit - TISP netlink exit stub
- * This function should exit the TISP netlink communication system
+ * tisp_netlink_exit - EXACT Binary Ninja MCP implementation
+ * Address: 0x218fc
  */
 void tisp_netlink_exit(void)
 {
-    pr_info("tisp_netlink_exit: TISP netlink system exited");
-    /* Implementation would go here when available */
+    /* Binary Ninja: uint32_t nlsk_1 = nlsk */
+    extern void *nlsk;
+    if (nlsk != 0) {
+        /* Binary Ninja: int32_t $a0_1 = *(nlsk_1 + 0x130) */
+        int32_t *sock_ptr = (int32_t*)((char*)nlsk + 0x130);
+
+        if (*sock_ptr != 0) {
+            /* Binary Ninja: return private_sock_release($a0_1) __tailcall */
+            sock_release((struct socket*)*sock_ptr);
+        }
+    }
+
+    /* Binary Ninja: return nlsk_1 */
 }
 
 /**
