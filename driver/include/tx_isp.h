@@ -56,6 +56,14 @@ struct ddr_device {
 
 struct frame_source_device;
 
+/* Platform data structure - compatible with Binary Ninja reference implementation */
+struct tx_isp_platform_data {
+    uint16_t reserved;      /* Padding to offset 2 */
+    uint32_t sensor_type;   /* Sensor type at offset 2 */
+    uint32_t device_id;     /* Device ID */
+    uint32_t flags;         /* Additional flags */
+    uint32_t version;       /* Version info */
+} __attribute__((packed));
 
 // CSI device structure for MIPI interface (based on Binary Ninja analysis)
 struct tx_isp_csi_device {
