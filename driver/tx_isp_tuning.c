@@ -204,6 +204,18 @@ static uint32_t *rdns_text_base_thres_array_now = NULL;
 static uint32_t rdns_text_base_thres_wdr_array[16] = {0};
 static uint32_t rdns_text_base_thres_array[16] = {0};
 
+/* SDNS (S-channel Denoise) Variables */
+static uint32_t sdns_gain_old = 0xFFFFFFFF;
+static uint32_t *sdns_text_base_thres_array_now = NULL;
+static uint32_t sdns_text_base_thres_wdr_array[16] = {0};
+static uint32_t sdns_text_base_thres_array[16] = {0};
+
+/* MDNS (M-channel Denoise) Variables */
+static uint32_t mdns_gain_old = 0xFFFFFFFF;
+static uint32_t *mdns_text_base_thres_array_now = NULL;
+static uint32_t mdns_text_base_thres_wdr_array[16] = {0};
+static uint32_t mdns_text_base_thres_array[16] = {0};
+
 /* YDNS (Y-channel Denoise) Variables */
 static uint32_t ydns_gain_old = 0xFFFFFFFF;
 
@@ -235,6 +247,8 @@ static int tiziano_af_params_refresh(void) { return 0; }
 static int tisp_af_par_refresh(uint32_t p1, uint32_t p2, int p3) { return 0; }
 static int tisp_ae_exp_th_par_refresh(uint32_t p1, uint32_t p2, int p3) { return 0; }
 static int tisp_adr_par_refresh(uint32_t p1, uint32_t p2, int p3) { return 0; }
+static int tiziano_ae_exp_th_params_refresh(void) { return 0; }
+static int Tiziano_awb_set_gain(void *p1, uint32_t p2, void *p3) { return 0; }
 
 /* Missing variables referenced in functions */
 static uint32_t deir_en = 0;
@@ -294,6 +308,17 @@ static uint32_t wdr_mdtsp_th = 0;
 static uint32_t *ccm_coef_now = NULL;
 static uint32_t ccm_coef_wdr[9] = {0};
 static uint32_t ccm_coef[9] = {0};
+
+/* AWB Variables */
+static uint32_t data_a9f94 = 0;
+static uint32_t data_a9f9c = 0;
+static uint32_t data_a9f90 = 0;
+static uint32_t data_a9f98 = 0;
+static uint32_t _AwbPointPos = 0;
+static uint32_t _AwbPointPos_1 = 0;
+static uint32_t _awb_mf_para = 0;
+static uint32_t _wb_static = 0;
+static uint32_t ae_ev_value = 0;
 static uint32_t *mdns_y_sad_ass_thres_array_now = NULL;
 static uint32_t *mdns_y_sta_ass_thres_array_now = NULL;
 static uint32_t *mdns_y_ref_wei_b_min_array_now = NULL;
