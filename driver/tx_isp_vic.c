@@ -3284,7 +3284,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     private_raw_mutex_init(&vic_dev->mlock, "&vsd->mlock", 0);
 
     /* Binary Ninja: private_raw_mutex_init($v0 + 0x154, "&vsd->snap_mlock", 0) */
-    private_raw_mutex_init(&vic_dev->snap_mlock, "&vsd->snap_mlock", 0);
+    private_raw_mutex_init(&vic_dev->state_lock, "&vsd->state_lock", 0);
 
     /* Binary Ninja: private_init_completion($v0 + 0x148) */
     private_init_completion(&vic_dev->frame_complete);
