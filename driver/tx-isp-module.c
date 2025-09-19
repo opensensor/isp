@@ -5033,10 +5033,9 @@ static int tx_isp_init(void)
     /* CRITICAL FIX: Check if ourISPdev was already allocated by probe function */
     if (ourISPdev) {
         pr_info("*** USING EXISTING ISP DEVICE FROM PROBE: %p ***\n", ourISPdev);
-        /* Device already allocated and initialized by probe - just ensure it's properly set up */
-        if (!ourISPdev->lock.rlock.raw_lock.slock) {
-            spin_lock_init(&ourISPdev->lock);
-        }
+        /* Device already allocated and initialized by probe - just ensure basic fields are set */
+        ourISPdev->refcnt = 0;
+        ourISPdev->is_open = false;
     } else {
         /* Allocate ISP device structure only if not already done by probe */
         pr_info("*** ALLOCATING NEW ISP DEVICE (probe didn't run) ***\n");
