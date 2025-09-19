@@ -10916,7 +10916,7 @@ int data_b2ef0(uint32_t time, void **var_ptr)
     return time;
 }
 
-static int data_b2ef4(uint32_t param, int flag)
+int data_b2ef4(uint32_t param, int flag)
 {
     /* Safe sensor integration time setting */
     pr_debug("data_b2ef4: Setting sensor integration time %u, flag %d\n", param, flag);
@@ -10939,7 +10939,7 @@ static int data_b2ef4(uint32_t param, int flag)
     return 0;
 }
 
-static int data_b2ef8(uint32_t param, int flag)
+int data_b2ef8(uint32_t param, int flag)
 {
     /* Safe sensor short integration time setting */
     pr_debug("data_b2ef8: Setting sensor short integration time %u, flag %d\n", param, flag);
@@ -10962,7 +10962,7 @@ static int data_b2ef8(uint32_t param, int flag)
     return 0;
 }
 
-static uint32_t data_b2ee0(uint32_t log_val, int16_t *var_ptr)
+uint32_t data_b2ee0(uint32_t log_val, int16_t *var_ptr)
 {
     /* Safe sensor analog gain allocation */
     pr_debug("data_b2ee0: Allocating analog gain log_val %u\n", log_val);
@@ -10987,7 +10987,7 @@ static uint32_t data_b2ee0(uint32_t log_val, int16_t *var_ptr)
     return log_val;
 }
 
-static uint32_t data_b2ee4(uint32_t log_val, void **var_ptr)
+uint32_t data_b2ee4(uint32_t log_val, void **var_ptr)
 {
     /* Safe sensor short analog gain allocation */
     pr_debug("data_b2ee4: Allocating short analog gain log_val %u\n", log_val);
