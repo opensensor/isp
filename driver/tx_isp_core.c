@@ -115,7 +115,8 @@ extern int tx_isp_video_link_stream(struct tx_isp_dev *dev, int enable);
 
 /* ISP core interrupt and link functions - Binary Ninja reference */
 irqreturn_t ispcore_irq_thread_handle(int irq, void *dev_id);
-int ispcore_link_setup(struct tx_isp_dev *isp_dev, int config);
+int ispcore_link_setup(const struct tx_isp_subdev_pad *local,
+                      const struct tx_isp_subdev_pad *remote, u32 flags);
 
 /* Global flag to prevent multiple tisp_init calls */
 static bool tisp_initialized = false;
