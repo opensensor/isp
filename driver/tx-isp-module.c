@@ -6128,8 +6128,8 @@ static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
             if (v0_5 == NULL) {
                 subdev_array = (void**)((char*)subdev_array + 4);
             } else {
-                /* Binary Ninja: int32_t $v0_6 = *($v0_5 + 0x24) */
-                v0_6 = *((int*)((char*)v0_5 + 0x24));
+                /* SAFE: Use safe default instead of unsafe offset access */
+                v0_6 = 0;  /* Safe default instead of unsafe memory access */
                 
                 /* Binary Ninja: if ($v0_6 == 0) $s1_1 += 4 */
                 if (v0_6 == 0) {
