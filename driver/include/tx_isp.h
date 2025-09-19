@@ -334,6 +334,9 @@ int tisp_deinit(void);
 void tisp_param_operate_deinit(void);
 void tisp_event_exit(void);
 void tisp_deinit_free(void);
+void tisp_netlink_exit(void);
+void tisp_code_destroy_tuning_node(void);
+void tisp_event_push(void **event);
 
 /* TISP global data pointers - declared as extern in tisp_deinit */
 extern void *data_b2f3c;
@@ -346,6 +349,9 @@ extern void *data_b2f9c;
 extern void *tparams_day;
 extern void *tparams_night;
 extern void *tparams_cust;
+extern void *opmsg;
+extern void *data_ca490;
+extern void *data_ca48c;
 
 void tx_isp_frame_chan_init(struct tx_isp_frame_channel *chan);
 void tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan);
