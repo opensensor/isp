@@ -10270,17 +10270,7 @@ int isp_core_tuning_event(void *arg1, int arg2)
 }
 
 
-/* isp_core_tuning_deinit - EXACT Binary Ninja reference implementation */
-void isp_core_tuning_deinit(void *arg1)
-{
-    /* Binary Ninja: if (arg1 == 0) return */
-    if (arg1 == NULL) {
-        return;
-    }
 
-    /* Binary Ninja: return private_kfree() __tailcall */
-    private_kfree(arg1);
-}
 
 
 /* Binary Ninja: dump_vic_reg() - EXACT implementation */
