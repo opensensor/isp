@@ -1772,8 +1772,9 @@ int tisp_init(void *sensor_info, char *param_name)
     /* Binary Ninja: CRITICAL - Memory buffer allocations for ISP processing */
     pr_info("*** tisp_init: ALLOCATING ISP PROCESSING BUFFERS ***\n");
 
-    /* Binary Ninja: AE0 buffer allocation (0x6000 bytes) */
-    void *ae0_buffer = kmalloc(0x6000, GFP_KERNEL);
+    /* SAFE: AE0 buffer allocation using proper size define */
+    #define AE_BUFFER_SIZE 0x6000
+    void *ae0_buffer = kmalloc(AE_BUFFER_SIZE, GFP_KERNEL);
     if (ae0_buffer != NULL) {
         dma_addr_t ae0_phys = virt_to_phys(ae0_buffer);
         system_reg_write(0xa02c, ae0_phys);
@@ -1788,8 +1789,8 @@ int tisp_init(void *sensor_info, char *param_name)
         pr_info("*** tisp_init: AE0 buffer allocated at 0x%08x ***\n", (uint32_t)ae0_phys);
     }
 
-    /* Binary Ninja: AE1 buffer allocation (0x6000 bytes) */
-    void *ae1_buffer = kmalloc(0x6000, GFP_KERNEL);
+    /* SAFE: AE1 buffer allocation using proper size define */
+    void *ae1_buffer = kmalloc(AE_BUFFER_SIZE, GFP_KERNEL);
     if (ae1_buffer != NULL) {
         dma_addr_t ae1_phys = virt_to_phys(ae1_buffer);
         system_reg_write(0xa82c, ae1_phys);
@@ -3230,10 +3231,11 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     /* Binary Ninja: Initialize tuning parameter buffer if not done */
                     if (!tisp_par_ioctl) {
                         pr_info("*** CRITICAL: Initializing tuning parameter buffer (missing in our implementation) ***\n");
-                        /* This buffer is used by 0x20007400 series commands */
-                        tisp_par_ioctl = kmalloc(0x500c, GFP_KERNEL);
+                        /* SAFE: This buffer is used by 0x20007400 series commands */
+                        #define TUNING_PARAM_BUFFER_SIZE 0x500c
+                        tisp_par_ioctl = kmalloc(TUNING_PARAM_BUFFER_SIZE, GFP_KERNEL);
                         if (tisp_par_ioctl) {
-                            memset(tisp_par_ioctl, 0, 0x500c);
+                            memset(tisp_par_ioctl, 0, TUNING_PARAM_BUFFER_SIZE);
                             pr_info("*** Tuning parameter buffer allocated: %p ***\n", tisp_par_ioctl);
                         } else {
                             pr_err("*** CRITICAL: Failed to allocate tuning parameter buffer ***\n");
@@ -3754,12 +3756,12 @@ int tisp_code_tuning_open(struct inode *inode, struct file *file)
 {
     pr_info("ISP M0 device open called from pid %d\n", current->pid);
     
-    /* FIXED: Use regular kmalloc instead of precious rmem - tuning buffer doesn't need DMA */
-    void *tuning_buffer = kmalloc(0x500c, GFP_KERNEL);
-    
+    /* SAFE: Use regular kmalloc instead of precious rmem - tuning buffer doesn't need DMA */
+    void *tuning_buffer = kmalloc(TUNING_PARAM_BUFFER_SIZE, GFP_KERNEL);
+
     /* CRITICAL: Verify allocation success */
     if (!tuning_buffer) {
-        pr_err("tisp_code_tuning_open: Failed to allocate tuning buffer (0x%x bytes)\n", 0x500c);
+        pr_err("tisp_code_tuning_open: Failed to allocate tuning buffer (0x%x bytes)\n", TUNING_PARAM_BUFFER_SIZE);
         return -ENOMEM;
     }
     

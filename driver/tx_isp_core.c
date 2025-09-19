@@ -2326,12 +2326,12 @@ static int frame_channel_vidioc_get_fmt(void *channel_dev, void __user *arg)
     }
     
     /* Return default format for now */
-    memset(format_buf, 0, 0x70);
+    memset(format_buf, 0, sizeof(format_buf));
     *(uint32_t *)&format_buf[0x00] = 1; /* Format type */
     *(uint32_t *)&format_buf[0x04] = 4; /* Pixel format */
     *(uint32_t *)&format_buf[0x08] = 8; /* Data size */
-    
-    ret = copy_to_user(arg, format_buf, 0x70);
+
+    ret = copy_to_user(arg, format_buf, sizeof(format_buf));
     if (ret != 0) {
         return -EFAULT;
     }
@@ -3168,16 +3168,16 @@ int tx_isp_core_probe(struct platform_device *pdev)
     void *channel_array;
     void *tuning_dev;
 
-    /* Binary Ninja: private_kmalloc(0x218, 0xd0) - EXACT size match */
-    isp_dev = private_kmalloc(0x218, GFP_KERNEL);
+    /* SAFE: Use proper struct size instead of hardcoded 0x218 */
+    isp_dev = private_kmalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
     if (isp_dev == NULL) {
         /* Binary Ninja: isp_printf(2, "addr ctl is 0x%x\n", $a2) */
-        isp_printf(2, "addr ctl is 0x%x\n", 0x218);
+        isp_printf(2, "addr ctl is 0x%x\n", sizeof(struct tx_isp_dev));
         return 0xfffffff4;  /* Binary Ninja: return 0xfffffff4 */
     }
 
-    /* Binary Ninja: memset($v0, 0, 0x218) */
-    memset(isp_dev, 0, 0x218);
+    /* SAFE: Clear allocated memory using proper struct size */
+    memset(isp_dev, 0, sizeof(struct tx_isp_dev));
 
     /* Binary Ninja: void* $s2_1 = arg1[0x16] */
     /* Binary Ninja: if (tx_isp_subdev_init(arg1, $v0, &core_subdev_ops) == 0) */
@@ -3187,19 +3187,12 @@ int tx_isp_core_probe(struct platform_device *pdev)
         spin_lock_init(&isp_dev->lock);
         mutex_init(&isp_dev->mutex);
 
-        /* SAFE: Get channel count from platform data or use default */
+        /* SAFE: Get channel count - use default since platform data doesn't have channel_count */
         struct tx_isp_platform_data *pdata = (struct tx_isp_platform_data *)pdev->dev.platform_data;
-        if (pdata && pdata->channel_count > 0) {
-            channel_count = pdata->channel_count;
-        } else {
-            channel_count = ISP_MAX_CHAN;  /* Default channel count */
-        }
+        channel_count = ISP_MAX_CHAN;  /* Use default channel count */
 
-        /* SAFE: Store channel count using struct member */
-        isp_dev->channel_count = channel_count;
-
-        /* SAFE: Store platform data reference */
-        isp_dev->pdata = pdata;
+        /* SAFE: Store platform data reference in device structure */
+        platform_set_drvdata(pdev, isp_dev);
 
         /* SAFE: Allocate channel array using proper struct size */
         channel_array = private_kmalloc(channel_count * sizeof(struct tx_isp_frame_channel), GFP_KERNEL);
