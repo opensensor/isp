@@ -3384,15 +3384,9 @@ int tx_isp_core_probe(struct platform_device *pdev)
             /* Set basic platform data first */
             platform_set_drvdata(pdev, isp_dev);
 
-            /* CRITICAL: Create VIC device BEFORE sensor_early_init */
-            pr_info("*** tx_isp_core_probe: Creating VIC device ***\n");
-            result = tx_isp_create_vic_device(isp_dev);
-            if (result != 0) {
-                pr_err("*** tx_isp_core_probe: Failed to create VIC device: %d ***\n", result);
-                return result;
-            } else {
-                pr_info("*** tx_isp_core_probe: VIC device created successfully ***\n");
-            }
+            /* REMOVED: Manual VIC device creation - will be handled by platform driver system */
+            pr_info("*** tx_isp_core_probe: VIC device creation deferred to platform driver system ***\n");
+            pr_info("*** tx_isp_core_probe: Platform drivers will call tx_isp_subdev_init for proper initialization ***\n");
 
             /* Binary Ninja: sensor_early_init($v0) */
             pr_info("*** tx_isp_core_probe: Calling sensor_early_init ***\n");
