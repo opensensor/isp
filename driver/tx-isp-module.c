@@ -1852,7 +1852,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     vic_regs = vic_dev->vic_regs;
 
     /* SAFE: Use proper struct member access instead of raw offset */
-    vic_irq_enable_flag = &vic_dev->irq_enable_flag;
+    vic_irq_enable_flag = (uint32_t*)&vic_dev->irq_enabled;
     
     /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
     /* Binary Ninja: int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
