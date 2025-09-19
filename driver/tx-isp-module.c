@@ -5125,6 +5125,23 @@ static int tx_isp_init(void)
                 csi_dev->sd.ops->video->s_stream);
     }
 
+    /* *** CRITICAL FIX: Register VIN subdev - THIS WAS MISSING! *** */
+    if (ourISPdev->vin_dev) {
+        struct tx_isp_vin_device *vin_dev = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
+
+        /* Set up VIN subdev with ops pointing to vin_subdev_ops */
+        vin_dev->sd.ops = &vin_subdev_ops;
+        vin_dev->sd.isp = (void *)ourISPdev;
+
+        /* CRITICAL: Add VIN to subdev array at index 3 (after VIC=0, CSI=1, sensor=2) */
+        ourISPdev->subdevs[3] = &vin_dev->sd;
+
+        pr_info("*** REGISTERED VIN SUBDEV AT INDEX 3 WITH VIDEO OPS ***\n");
+        pr_info("VIN subdev: %p, ops: %p, video: %p, s_stream: %p\n",
+                &vin_dev->sd, vin_dev->sd.ops, vin_dev->sd.ops->video,
+                vin_dev->sd.ops->video ? vin_dev->sd.ops->video->s_stream : NULL);
+    }
+
     /* *** CRITICAL FIX: Platform devices are already registered in tx_isp_platform_probe() *** */
     /* The reference driver only registers platform devices ONCE during probe, not in init */
     pr_info("*** PLATFORM DEVICES ALREADY REGISTERED IN PROBE - SKIPPING DUPLICATE REGISTRATION ***\n");

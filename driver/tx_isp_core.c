@@ -1462,6 +1462,18 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
         vic_dev = isp->vic_dev;
         pr_info("ispcore_slake_module: VIC device created successfully");
     }
+
+    /* *** CRITICAL FIX: Create VIN device if not already created *** */
+    if (!isp->vin_dev) {
+        pr_info("ispcore_slake_module: No VIN device found - creating it now");
+        ret = tx_isp_create_vin_device(isp);
+        if (ret != 0) {
+            pr_err("ispcore_slake_module: Failed to create VIN device: %d", ret);
+            return ret;
+        }
+        pr_info("ispcore_slake_module: VIN device created successfully");
+        pr_info("*** CRITICAL: isp->vin_dev = %p (should not be null!) ***", isp->vin_dev);
+    }
     
     /* Binary Ninja: int32_t $v0 = *($s0_1 + 0xe8) */
     isp_state = vic_dev->state;

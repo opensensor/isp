@@ -697,6 +697,9 @@ vic_sensor_ops_sync_sensor_attr
 vic_snapraw
 vic_video_s_stream
 vic_write32
+video_input_cmd_open
+video_input_cmd_set
+video_input_cmd_show
 vin_chardev_ioctl
 vin_chardev_open
 vin_s_stream
