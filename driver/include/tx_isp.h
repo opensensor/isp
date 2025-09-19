@@ -335,7 +335,7 @@ void tisp_param_operate_deinit(void);
 void tisp_event_exit(void);
 void tisp_deinit_free(void);
 void tisp_netlink_exit(void);
-void tisp_code_destroy_tuning_node(void);
+int tisp_code_destroy_tuning_node(void);
 void tisp_event_push(void **event);
 
 /* TISP global data pointers - declared as extern in tisp_deinit */
