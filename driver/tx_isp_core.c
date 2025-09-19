@@ -671,7 +671,8 @@ static struct tx_isp_subdev_pad_ops core_pad_ops = {
     .s_fmt = NULL,  /* Will be filled when needed */
     .g_fmt = NULL,  /* Will be filled when needed */
     .streamon = NULL,
-    .streamoff = NULL
+    .streamoff = NULL,
+    .link_setup = ispcore_link_setup  /* CRITICAL: Wire in the link setup function */
 };
 
 
