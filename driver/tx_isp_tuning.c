@@ -258,6 +258,7 @@ static int tisp_netlink_event_set_cb(void *cb) { return 0; }
 static int tisp_param_operate_process(void) { return 0; }
 /* tisp_code_create_tuning_node, tisp_code_destroy_tuning_node - removed stubs, implemented below */
 static int tisp_event_exit(void) { return 0; }
+int tisp_gb_init_reg(void);
 
 /* Missing variables referenced in functions */
 static uint32_t deir_en = 0;
