@@ -685,21 +685,16 @@ int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes)
     csi_base = csi_dev->csi_regs;
     if (!csi_base) {
         pr_err("csi_set_on_lanes: CSI base is NULL\n");
-        
-        /* Try to initialize CSI registers if not already done */
-        if (!tx_isp_csi_regs) {
-            tx_isp_csi_regs = ioremap(0x10022000, 0x1000);
-            if (!tx_isp_csi_regs) {
-                pr_err("*** ERROR: CSI lane configuration failed: -22 ***\n");
-                return -EINVAL;
-            }
+
+        /* Use global ISP device CSI registers mapped by subdev probe */
+        if (ourISPdev && ourISPdev->csi_regs) {
+            csi_dev->csi_regs = ourISPdev->csi_regs;
+            csi_base = csi_dev->csi_regs;
+            pr_info("CSI base address from global ISP device: %p\n", csi_base);
+        } else {
+            pr_err("*** ERROR: CSI lane configuration failed: No CSI registers available ***\n");
+            return -EINVAL;
         }
-        
-        /* Update the CSI device structure */
-        csi_dev->csi_regs = tx_isp_csi_regs;
-        csi_base = csi_dev->csi_regs;
-        
-        pr_info("CSI base address initialized: %p\n", csi_base);
     }
 
     /* Binary Ninja: *($v1 + 4) = ((zx.d(arg2) - 1) & 3) | (*($v1 + 4) & 0xfffffffc) */
