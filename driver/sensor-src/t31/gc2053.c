@@ -1797,6 +1797,23 @@ static int sensor_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, v
 			if (arg)
 				ret = sensor_set_vflip(sd, *(int *) arg);
 			break;
+		case TX_ISP_EVENT_SENSOR_GET_INPUT: {
+			/* CRITICAL FIX: Handle TX_ISP_EVENT_SENSOR_GET_INPUT (0x2000003) */
+			struct tx_isp_sensor *sensor = sd_to_sensor_device(sd);
+			int *result = (int *)arg;
+
+			ISP_WARNING("*** TX_ISP_EVENT_SENSOR_GET_INPUT: Sensor detected and available ***\n");
+
+			if (result && sensor && sensor->video.attr) {
+				*result = 1; /* Sensor is available and detected */
+				ISP_WARNING("*** TX_ISP_EVENT_SENSOR_GET_INPUT: Returning 1 (sensor available) ***\n");
+			} else if (result) {
+				*result = 0; /* Sensor not properly initialized */
+				ISP_WARNING("*** TX_ISP_EVENT_SENSOR_GET_INPUT: Returning 0 (sensor not ready) ***\n");
+			}
+			ret = 0; /* Success */
+			break;
+		}
 		default:
 			break;
 	}
