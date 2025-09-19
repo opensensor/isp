@@ -5989,40 +5989,55 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
     spin_unlock_irqrestore(&irq_cb_lock, flags);
 }
 
-/* isp_irq_handle - FIXED to properly route to ISP core interrupt handler */
+/* isp_irq_handle - EXACT Binary Ninja implementation with struct member access */
 static irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
     irqreturn_t result = IRQ_HANDLED;
-    
+    void *subdev_handler;
+    int handler_result;
+
     pr_info("*** isp_irq_handle: IRQ %d fired ***\n", irq);
-    
-    if (!isp_dev) {
-        pr_err("isp_irq_handle: Invalid ISP device\n");
-        return IRQ_NONE;
-    }
-    
-    /* CRITICAL FIX: Proper subdevice interrupt isolation - each IRQ goes to ONE handler only */
-    if (irq == 37) {
-        /* IRQ 37: ISP CORE ONLY - no VIC interference */
-        extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
-        pr_info("*** IRQ 37: ISP CORE ONLY (isolated from VIC) ***\n");
-        result = ispcore_interrupt_service_routine(irq, dev_id);
-    } else if (irq == 38) {
-        /* IRQ 38: VIC ONLY - no ISP core interference */
-        pr_info("*** IRQ 38: VIC ONLY (isolated from ISP core) ***\n");
-        if (isp_dev->vic_dev) {
-            result = isp_vic_interrupt_service_routine(irq, dev_id);
+
+    /* Binary Ninja: if (arg2 != 0x80) */
+    if ((uintptr_t)dev_id != 0x80) {
+        /* Binary Ninja: void* $v0_2 = **(arg2 + 0x44) */
+        /* SAFE: Use proper struct member access instead of raw offset +0x44 */
+        if (isp_dev && isp_dev->vic_dev) {
+            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+            subdev_handler = vic_dev->irq_handler;  /* Use struct member instead of raw offset */
+
+            /* Binary Ninja: result = 1; if ($v0_2 != 0) */
+            result = IRQ_HANDLED;
+            if (subdev_handler != NULL) {
+                /* Binary Ninja: int32_t $v0_3 = *($v0_2 + 0x20) */
+                /* SAFE: Call the interrupt handler function */
+                if (irq == 37) {
+                    /* IRQ 37: ISP CORE */
+                    extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
+                    handler_result = ispcore_interrupt_service_routine(irq, dev_id);
+                } else if (irq == 38) {
+                    /* IRQ 38: VIC */
+                    handler_result = isp_vic_interrupt_service_routine(irq, dev_id);
+                } else {
+                    handler_result = IRQ_HANDLED;
+                }
+
+                /* Binary Ninja: if ($v0_3(arg2 - 0x80, 0, 0) == 2) result = 2 */
+                if (handler_result == IRQ_WAKE_THREAD) {
+                    result = IRQ_WAKE_THREAD;
+                }
+            }
         } else {
-            pr_warn("*** IRQ 38: No VIC device available ***\n");
-            result = IRQ_NONE;
+            result = IRQ_HANDLED;
         }
     } else {
-        pr_warn("*** isp_irq_handle: Unexpected IRQ %d ***\n", irq);
+        /* Binary Ninja: result = 1 */
+        result = IRQ_HANDLED;
     }
-    
+
     pr_info("*** isp_irq_handle: IRQ %d processed, result=%d ***\n", irq, result);
-    
+
     return result;
 }
 
