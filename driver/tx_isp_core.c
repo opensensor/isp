@@ -1709,7 +1709,14 @@ int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute
             if (isp_state == 3) {
                 /* Stop kernel thread - matches reference kthread_stop */
                 ISP_INFO("*** ispcore_core_ops_init: Stopping ISP thread (state 3) ***\n");
-                /* Thread stopping logic would go here */
+
+                /* CRITICAL: Stop ISP firmware processing thread */
+                if (isp->fw_thread) {
+                    int ret = kthread_stop(isp->fw_thread);
+                    isp->fw_thread = NULL;
+                    ISP_INFO("*** ispcore_core_ops_init: ISP firmware thread stopped: %d ***\n", ret);
+                }
+
                 isp->vic_dev->state = 2;
             }
             
