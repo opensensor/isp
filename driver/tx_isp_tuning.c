@@ -1539,13 +1539,13 @@ int tisp_init(void *sensor_info, char *param_name)
     tiziano_dmsc_init();
     tiziano_sharpen_init();
     tiziano_sdns_init();
-    tiziano_mdns_init();
+    tiziano_mdns_init(actual_image_width, actual_image_height);
     tiziano_clm_init();
     tiziano_dpc_init();
     tiziano_hldc_init();
-    tiziano_defog_init();
+    tiziano_defog_init(actual_image_width, actual_image_height);
     tiziano_adr_init(actual_image_width, actual_image_height);
-    tiziano_af_init();
+    tiziano_af_init(actual_image_height, actual_image_width);
     tiziano_bcsh_init();
     tiziano_ydns_init();
     tiziano_rdns_init();
@@ -1623,13 +1623,13 @@ int tisp_init(void *sensor_info, char *param_name)
     tiziano_dmsc_init();
     tiziano_sharpen_init();
     tiziano_sdns_init();
-    tiziano_mdns_init();
+    tiziano_mdns_init(actual_image_width, actual_image_height);
     tiziano_clm_init();
     tiziano_dpc_init();
     tiziano_hldc_init();
-    tiziano_defog_init();
+    tiziano_defog_init(actual_image_width, actual_image_height);
     tiziano_adr_init(actual_image_width, actual_image_height);
-    tiziano_af_init();
+    tiziano_af_init(actual_image_height, actual_image_width);
     tiziano_bcsh_init();
     tiziano_ydns_init();
     tiziano_rdns_init();
@@ -7970,40 +7970,7 @@ int tisp_dpc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write
     return 0;
 }
 
-/* tiziano_dpc_init - Binary Ninja EXACT implementation */
-int tiziano_dpc_init(void)
-{
-    pr_debug("tiziano_dpc_init: Initializing DPC processing\n");
-    
-    /* Binary Ninja: Select parameter arrays based on WDR mode */
-    if (dpc_wdr_en != 0) {
-        dpc_d_m1_dthres_array_now = dpc_d_m1_dthres_wdr_array;
-        dpc_d_m1_fthres_array_now = dpc_d_m1_fthres_wdr_array;
-        dpc_d_m3_dthres_array_now = dpc_d_m3_dthres_wdr_array;
-        dpc_d_m3_fthres_array_now = dpc_d_m3_fthres_wdr_array;
-        pr_debug("tiziano_dpc_init: Using WDR DPC parameters\n");
-    } else {
-        dpc_d_m1_dthres_array_now = dpc_d_m1_dthres_array;
-        dpc_d_m1_fthres_array_now = dpc_d_m1_fthres_array;
-        dpc_d_m3_dthres_array_now = dpc_d_m3_dthres_array;
-        dpc_d_m3_fthres_array_now = dpc_d_m3_fthres_array;
-        pr_debug("tiziano_dpc_init: Using linear DPC parameters\n");
-    }
-    
-    /* Binary Ninja: Initialize state and refresh parameters */
-    data_9ab10 = 0xFFFFFFFF;
-    tiziano_dpc_params_refresh();
-    
-    /* Binary Ninja: Initial parameter refresh with enable */
-    int ret = tisp_dpc_par_refresh(0, 0, 1);
-    if (ret) {
-        pr_err("tiziano_dpc_init: Failed to refresh DPC parameters: %d\n", ret);
-        return ret;
-    }
-    
-    pr_debug("tiziano_dpc_init: DPC processing initialized successfully\n");
-    return 0;
-}
+/* tiziano_dpc_init - removed duplicate, using Binary Ninja implementation below */
 
 /* tiziano_hldc_init - removed duplicate, using Binary Ninja implementation below */
 
