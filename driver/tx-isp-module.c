@@ -7904,75 +7904,9 @@ EXPORT_SYMBOL(csi_core_ops_init);
 
 
 
-/* ispcore_core_ops_init - ISP core operations initialization */
-static int ispcore_core_ops_init(struct v4l2_subdev *sd, u32 val)
-{
-    struct tx_isp_core_device *core_dev;
 
-    pr_debug("ispcore_core_ops_init: Initializing ISP core operations\n");
 
-    if (!sd) {
-        return -EINVAL;
-    }
 
-    core_dev = (struct tx_isp_core_device *)tx_isp_get_subdevdata(sd);
-    if (!core_dev) {
-        return -EINVAL;
-    }
-
-    /* Initialize ISP core operations */
-    core_dev->state = 3; /* INITIALIZED state */
-
-    /* Initialize ISP core hardware if needed */
-    if (core_dev->isp_regs) {
-        /* Basic ISP core initialization */
-        *(uint32_t *)((char *)core_dev->isp_regs + 0x0) = 0x1; /* Enable ISP core */
-        *(uint32_t *)((char *)core_dev->isp_regs + 0x10) = 0x133; /* ISP control */
-    }
-
-    return 0;
-}
-EXPORT_SYMBOL(ispcore_core_ops_init);
-
-/* ispcore_core_ops_ioctl - ISP core operations IOCTL */
-static long ispcore_core_ops_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
-{
-    struct tx_isp_core_device *core_dev;
-
-    pr_debug("ispcore_core_ops_ioctl: cmd=0x%x\n", cmd);
-
-    if (!sd) {
-        return -EINVAL;
-    }
-
-    core_dev = (struct tx_isp_core_device *)tx_isp_get_subdevdata(sd);
-    if (!core_dev) {
-        return -EINVAL;
-    }
-
-    /* Handle ISP core-specific IOCTLs */
-    switch (cmd) {
-        case 0x800020: /* ISP core start */
-            core_dev->state = 4;
-            return 0;
-
-        case 0x800021: /* ISP core stop */
-            core_dev->state = 3;
-            return 0;
-
-        case 0x800022: /* ISP core reset */
-            if (core_dev->isp_regs) {
-                *(uint32_t *)((char *)core_dev->isp_regs + 0x0) = 0x0;
-                *(uint32_t *)((char *)core_dev->isp_regs + 0x0) = 0x1;
-            }
-            return 0;
-
-        default:
-            pr_debug("ispcore_core_ops_ioctl: Unsupported cmd 0x%x\n", cmd);
-            return -ENOTTY;
-    }
-}
-EXPORT_SYMBOL(ispcore_core_ops_ioctl);
 
 /* ispcore_sensor_ops_release_all_sensor - Release all sensors */
 static int ispcore_sensor_ops_release_all_sensor(struct tx_isp_subdev *sd)
@@ -7986,7 +7920,7 @@ static int ispcore_sensor_ops_release_all_sensor(struct tx_isp_subdev *sd)
     /* Release all sensor resources */
     if (ourISPdev && ourISPdev->sensor) {
         /* Reset sensor state */
-        ourISPdev->sensor->video.state = TX_ISP_MODULE_INIT;
+        ourISPdev->sensor->video.vin_state = TX_ISP_MODULE_INIT;
 
         /* Clear sensor attributes */
         if (ourISPdev->sensor->video.attr) {
@@ -8083,27 +8017,7 @@ static long ispcore_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd,
 }
 EXPORT_SYMBOL(ispcore_sensor_ops_ioctl);
 
-/* param_ops_int - Parameter operations for integer values */
-static int param_ops_int(const char *val, const struct kernel_param *kp)
-{
-    int ret;
-    int value;
 
-    pr_debug("param_ops_int: Setting parameter value\n");
-
-    if (!val || !kp) {
-        return -EINVAL;
-    }
-
-    ret = kstrtoint(val, 0, &value);
-    if (ret) {
-        return ret;
-    }
-
-    *(int *)kp->arg = value;
-    return 0;
-}
-EXPORT_SYMBOL(param_ops_int);
 
 /* mips_dma_map_ops - MIPS DMA mapping operations */
 static dma_addr_t mips_dma_map_ops(struct device *dev, void *cpu_addr, size_t size, enum dma_data_direction dir, unsigned long attrs)
