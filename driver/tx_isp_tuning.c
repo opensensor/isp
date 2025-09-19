@@ -8793,6 +8793,70 @@ int tiziano_af_init(void)
 }
 EXPORT_SYMBOL(tiziano_af_init);
 
+/* tiziano_ae_init_exp_th - EXACT Binary Ninja implementation */
+int tiziano_ae_init_exp_th(void)
+{
+    pr_debug("tiziano_ae_init_exp_th: Initializing AE exposure thresholds\n");
+
+    /* Binary Ninja: tiziano_ae_exp_th_params_refresh() */
+    tiziano_ae_exp_th_params_refresh();
+
+    /* Binary Ninja: tisp_ae_exp_th_par_refresh(isp_printf, isp_printf, 1) */
+    tisp_ae_exp_th_par_refresh(isp_printf, isp_printf, 1);
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_ae_init_exp_th);
+
+/* tiziano_ae_init - EXACT Binary Ninja implementation */
+int tiziano_ae_init(void)
+{
+    pr_debug("tiziano_ae_init: Initializing AE processing\n");
+
+    /* Binary Ninja: WDR mode selection */
+    void *v0;
+    if (ae_wdr_en != 0) {
+        /* Binary Ninja: $v0 = &ae_target_wdr_array */
+        v0 = &ae_target_wdr_array;
+    } else {
+        /* Binary Ninja: $v0 = &ae_target_array */
+        v0 = &ae_target_array;
+    }
+
+    /* Binary Ninja: ae_target_array_now = $v0 */
+    ae_target_array_now = v0;
+
+    /* Binary Ninja: data_9a0a0 = 0xffffffff */
+    data_9a0a0 = 0xffffffff;
+
+    /* Binary Ninja: tiziano_ae_params_refresh() */
+    tiziano_ae_params_refresh();
+
+    /* Binary Ninja: tisp_ae_par_refresh(isp_printf, isp_printf, 1) */
+    tisp_ae_par_refresh(isp_printf, isp_printf, 1);
+
+    /* Binary Ninja: tiziano_ae_init_exp_th() */
+    tiziano_ae_init_exp_th();
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_ae_init);
+
+/* tiziano_adr_params_init - EXACT Binary Ninja implementation */
+int tiziano_adr_params_init(void)
+{
+    pr_debug("tiziano_adr_params_init: Initializing ADR parameters\n");
+
+    /* Binary Ninja: tiziano_adr_params_refresh() */
+    tiziano_adr_params_refresh();
+
+    /* Binary Ninja: tisp_adr_par_refresh(isp_printf, isp_printf, 1) */
+    tisp_adr_par_refresh(isp_printf, isp_printf, 1);
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_adr_params_init);
+
 /* tisp_gb_init_reg - EXACT Binary Ninja implementation */
 int tisp_gb_init_reg(void)
 {
