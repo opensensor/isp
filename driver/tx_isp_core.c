@@ -439,6 +439,8 @@ int ispcore_link_setup(struct tx_isp_dev *isp_dev, int config)
     pr_info("*** ispcore_link_setup: Pipeline link setup complete, ret=%d ***\n", ret);
     return ret;
 }
+EXPORT_SYMBOL(ispcore_irq_thread_handle);
+EXPORT_SYMBOL(ispcore_link_setup);
 EXPORT_SYMBOL(tisp_reset_initialization_flag);
 int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr);
 static int isp_free_buffer(struct tx_isp_dev *isp, void *virt_addr, dma_addr_t phys_addr, uint32_t size);
