@@ -46,7 +46,7 @@ static int parse_rmem_bootarg(unsigned long *base, unsigned long *size)
     char *end_ptr;
 
     /* Get the rmem boot parameter */
-    rmem_str = strstr(get_saved_command_line(), "rmem=");
+    rmem_str = strstr(saved_command_line, "rmem=");
     if (!rmem_str) {
         pr_warn("parse_rmem_bootarg: rmem boot parameter not found\n");
         return -ENOENT;
@@ -3655,6 +3655,13 @@ void private_kfree(void *p)
 }
 EXPORT_SYMBOL(private_kmalloc);
 EXPORT_SYMBOL(private_kfree);
+
+/* private_vfree - EXACT Binary Ninja implementation: jump(vfree) */
+void private_vfree(const void *addr)
+{
+    vfree(addr);
+}
+EXPORT_SYMBOL(private_vfree);
 
 
 
