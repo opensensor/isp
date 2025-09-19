@@ -8870,34 +8870,7 @@ int tisp_event_process(void)
 /* BINARY NINJA REFERENCE: No tisp_event_process_thread function exists */
 /* Events are processed on-demand via tisp_event_process() when needed */
 
-/* Setup ISP interrupt handling */
-int isp_setup_irq_handling(struct tx_isp_dev *dev)
-{
-    int ret;
-    
-    pr_info("isp_setup_irq_handling: Setting up ISP interrupt handling\n");
-    
-    if (!dev) {
-        pr_err("isp_setup_irq_handling: Invalid device\n");
-        return -EINVAL;
-    }
-    
-    /* Initialize event system first */
-    ret = tisp_event_init();
-    if (ret) {
-        pr_err("isp_setup_irq_handling: Failed to initialize event system: %d\n", ret);
-        return ret;
-    }
-    
-    /* Enable basic ISP interrupts */
-    if (dev->core_regs) {
-        writel(0xFFFFFFFF, ourISPdev->core_regs + 0x44); /* Enable all ISP interrupts */
-        pr_info("isp_setup_irq_handling: ISP interrupts enabled\n");
-    }
-    
-    pr_info("isp_setup_irq_handling: ISP interrupt handling setup complete\n");
-    return 0;
-}
+/* isp_setup_irq_handling removed - reference driver uses system_irq_func_set instead */
 
 
 /* Cleanup ISP interrupt handling */
