@@ -484,6 +484,8 @@ int tiziano_sharpen_init(void);
 int tiziano_wdr_params_init(void);
 int tiziano_wdr_init(uint32_t width, uint32_t height);
 int tisp_wdr_init(void);
+int tisp_gb_init_reg(void);
+int tisp_gb_init(void);
 
 /* Forward declarations for WDR enable functions */
 int tisp_dpc_wdr_en(int enable);
