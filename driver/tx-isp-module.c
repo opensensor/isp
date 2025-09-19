@@ -1834,14 +1834,25 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     int timeout;
     int i;
 
-    /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
+    /* CRITICAL SAFETY: Validate device pointers before any access */
+    if (!isp_dev || !isp_dev->vic_dev) {
+        pr_err("*** VIC IRQ: Invalid device pointers (isp_dev=%p, vic_dev=%p) ***\n",
+               isp_dev, isp_dev ? isp_dev->vic_dev : NULL);
+        return IRQ_NONE;
+    }
+
     vic_dev = isp_dev->vic_dev;
 
-    /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
+    /* CRITICAL SAFETY: Validate VIC registers before access */
+    if (!vic_dev->vic_regs) {
+        pr_err("*** VIC IRQ: Invalid VIC registers pointer ***\n");
+        return IRQ_NONE;
+    }
+
     vic_regs = vic_dev->vic_regs;
-    
-    /* Get VIC interrupt enable flag at offset +0x13c */
-    vic_irq_enable_flag = (uint32_t*)((char*)vic_dev + 0x13c);
+
+    /* SAFE: Use proper struct member access instead of raw offset */
+    vic_irq_enable_flag = &vic_dev->irq_enable_flag;
     
     /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
     /* Binary Ninja: int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
