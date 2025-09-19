@@ -89,7 +89,7 @@ int tisp_init(void *sensor_info, char *param_name);
 
 /* Forward declarations for sensor control functions */
 static void tisp_set_sensor_integration_time_short(uint32_t integration_time);
-static void tisp_set_sensor_analog_gain_short(uint32_t sensor_gain);
+void tisp_set_sensor_analog_gain_short(uint32_t sensor_gain);
 static void tisp_set_sensor_digital_gain_short(uint32_t digital_gain);
 
 /* External platform device declarations */

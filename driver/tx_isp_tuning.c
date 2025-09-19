@@ -6193,9 +6193,9 @@ static void tisp_ae1_process(void);
 /* AE processing functions - Forward declarations */
 /* tiziano_ae_init_exp_th already declared as non-static at line 273 */
 static void tisp_set_sensor_integration_time(uint32_t time);
-static void tisp_set_sensor_analog_gain(void);
+void tisp_set_sensor_analog_gain(void);
 static void tisp_set_sensor_integration_time_short(uint32_t time);
-static void tisp_set_sensor_analog_gain_short(void);
+void tisp_set_sensor_analog_gain_short(void);
 /* tiziano_deflicker_expt implemented as exported function below */
 static int system_reg_write_ae(int ae_id, uint32_t reg, uint32_t value);
 /* REMOVED: Conflicting static declaration - use extern from tx_isp_core.c */
@@ -10890,6 +10890,7 @@ int data_b2eec(uint32_t time, void **var_ptr)
     if (var_ptr) *var_ptr = NULL;
     return time;
 }
+EXPORT_SYMBOL(data_b2eec);
 
 int data_b2ef0(uint32_t time, void **var_ptr)
 {
