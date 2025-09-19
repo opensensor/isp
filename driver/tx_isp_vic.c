@@ -2732,9 +2732,9 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 
                 pr_info("*** CRITICAL: Following EXACT reference driver sub-device initialization sequence ***\n");
                 
-                /* SURGICAL FIX: Disable VIC interrupts during VIC DMA configuration to prevent conflicts */
-                pr_info("*** SURGICAL FIX: Disabling VIC interrupts during DMA configuration ***\n");
-                vic_start_ok = 0;  /* Disable interrupt processing during configuration */
+                /* SURGICAL FIX: Keep VIC interrupts enabled during DMA configuration */
+                pr_info("*** SURGICAL FIX: Keeping VIC interrupts enabled during DMA configuration ***\n");
+                /* Don't disable vic_start_ok - let interrupts continue processing */
                 /* CRITICAL FIX: Correct the register base mapping! */
                 /* vic_regs = 0x133e0000 = CSI PHY (isp-w02 in trace) */
                 /* isp_base = 0x13300000 = Main ISP (isp-m0 in trace) - NEEDS SEPARATE MAPPING */
@@ -3039,10 +3039,11 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     pr_info("*** APPLYING FULL VIC CONFIGURATION AFTER SENSOR INITIALIZATION ***\n");
                     tx_isp_vic_apply_full_config(vic_dev);
 
-                    /* DELAYED VIC HARDWARE ENABLE: Now that everything is configured and sensor is streaming */
-                    pr_info("*** DELAYED VIC HARDWARE ENABLE: Enabling VIC hardware after complete initialization ***\n");
+                    /* SURGICAL FIX: Skip VIC hardware enable during streaming restart to preserve CSI PHY config */
+                    pr_info("*** SURGICAL FIX: Skipping VIC hardware enable during streaming restart to preserve CSI PHY ***\n");
                     void __iomem *vic_regs = vic_dev->vic_regs;
-                    if (vic_regs) {
+                    if (vic_regs && vic_start_ok != 1) {
+                        /* Only do VIC hardware enable sequence if VIC is not already working */
                         /* BINARY NINJA EXACT: Hardware enable sequence */
                         /* Binary Ninja: **(arg1 + 0xb8) = 2; **(arg1 + 0xb8) = 4; while (*$v1_30 != 0) nop; **(arg1 + 0xb8) = 1 */
                         writel(0x2, vic_regs + 0x0);        /* Binary Ninja: Pre-enable state */
@@ -3060,6 +3061,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         writel(0x1, vic_regs + 0x0);        /* Binary Ninja: Final enable */
                         wmb();
                         pr_info("*** BINARY NINJA EXACT: Hardware enable sequence 2->4->wait->1 (waited %d us) ***\n", wait_count);
+                    } else if (vic_start_ok == 1) {
+                        pr_info("*** SURGICAL FIX: VIC already working (vic_start_ok=1), skipping hardware enable to preserve CSI PHY ***\n");
                     } else {
                         pr_err("*** ERROR: VIC registers not available for delayed enable ***\n");
                     }
