@@ -330,9 +330,10 @@ irqreturn_t tx_isp_core_irq_handler(int irq, void *dev_id);
 /* Note: tx_isp_enable_irq and tx_isp_disable_irq are declared in tx-isp-module.c */
 
 /* TISP (Tiziano ISP) function declarations */
-/* Note: Most TISP functions are declared as static in tx_isp_tuning.c */
-/* Only declare the main entry point that needs to be called from other files */
 int tisp_deinit(void);
+void tisp_param_operate_deinit(void);
+void tisp_event_exit(void);
+void tisp_deinit_free(void);
 
 /* Note: All TISP global variables are declared as static in tx_isp_tuning.c */
 

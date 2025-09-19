@@ -255,7 +255,7 @@ static int tisp_wdr_param_array_set(uint32_t p1, void *p2, void *p3) { return 0;
  * tisp_netlink_exit - EXACT Binary Ninja MCP implementation
  * Address: 0x218fc
  */
-static void tisp_netlink_exit(void)
+void tisp_netlink_exit(void)
 {
     /* Binary Ninja: uint32_t nlsk_1 = nlsk */
     if (nlsk != 0) {
