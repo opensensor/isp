@@ -381,6 +381,18 @@ struct tx_isp_subdev {
 };
 
 
+/* Global frame source device structure - 0xe8 bytes as per Binary Ninja */
+struct tx_isp_fs_device {
+	struct tx_isp_subdev subdev;            /* Base subdev structure */
+	void __iomem *base_regs;                /* Base register mapping +0xb8 */
+
+	void *channel_configs;                   /* channel config array */
+	void *channel_buffer;                    /* kmalloc'ed channel buffer */
+	uint32_t channel_count;                  /* number of channels */
+	uint32_t initialized;                    /* initialization flag */
+	void *self_ptr;                          /* Self-pointer for validation */
+} __attribute__((packed));
+
 
 /* Device structures */
 //struct isp_channel {
@@ -663,6 +675,9 @@ int tx_isp_reg_set(struct tx_isp_subdev *sd, unsigned int reg, int start, int en
 
 int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd, struct tx_isp_subdev_ops *ops);
 void tx_isp_subdev_deinit(struct tx_isp_subdev *sd);
+
+/* Auto-linking function to connect subdevices to global ISP device */
+void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev *sd);
 
 static inline void tx_isp_set_module_nodeops(struct tx_isp_module *module, struct file_operations *ops)
 {
