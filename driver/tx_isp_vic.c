@@ -70,7 +70,7 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     /* Initialize VIC device structure - Binary Ninja exact layout */
     
     /* SAFE: Initialize VIC device structure using proper struct member access */
-    spin_lock_init(&vic_dev->slock);
+    spin_lock_init(&vic_dev->lock);
     mutex_init(&vic_dev->mlock);
     init_completion(&vic_dev->frame_complete);
 
