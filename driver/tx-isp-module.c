@@ -323,18 +323,23 @@ static struct resource tx_isp_resources[] = {
     },
 };
 
-/* CRITICAL FIX: Reference driver doesn't register separate platform devices for subdevices */
-/* The stock driver already claims the memory regions, so we can't register conflicting devices */
-/* Instead, we create subdevices directly without platform device registration */
+/* Platform devices array for Binary Ninja compatibility - MATCHES STOCK DRIVER MEMORY LAYOUT */
+static struct platform_device *tx_isp_platform_devices[] = {
+    &tx_isp_csi_platform_device,
+    &tx_isp_vic_platform_device,
+    &tx_isp_vin_platform_device,
+    &tx_isp_fs_platform_device,
+    &tx_isp_core_platform_device
+};
 
 /* Platform data structure that matches reference driver expectations */
 static struct tx_isp_platform_data tx_isp_pdata = {
     .reserved = 0,
     .sensor_type = 0,
-    .device_id = 0,  /* Binary Ninja: No separate platform devices to register */
+    .device_id = 5,  /* Binary Ninja: Number of devices at offset 4 */
     .flags = 0,
     .version = 1,
-    .devices = NULL  /* No separate platform devices - subdevices created directly */
+    .devices = tx_isp_platform_devices  /* Binary Ninja: Platform devices array at offset 8 */
 };
 
 struct platform_device tx_isp_platform_device = {
