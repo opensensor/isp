@@ -57,11 +57,9 @@ static int tx_isp_create_misc_device(struct tx_isp_subdev_runtime *runtime);
 /* REMOVED: tx_isp_create_basic_pipeline - not in reference driver */
 static void *tx_isp_create_driver_data(struct tx_isp_subdev_desc *desc);
 
-/* Basic pipeline function declarations */
-int tx_isp_vic_device_init(struct tx_isp_dev *isp);
-int tx_isp_csi_device_deinit(struct tx_isp_dev *isp);
-int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
-int tx_isp_setup_pipeline(struct tx_isp_dev *isp);
+/* REMOVED: Basic pipeline function declarations - not in reference driver
+ * All device initialization should be done through probe functions and tx_isp_subdev_init
+ */
 void tx_isp_cleanup_subdev_graph(struct tx_isp_dev *isp);
 
 /* Frame channel device operation forward declarations */
