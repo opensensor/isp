@@ -1774,52 +1774,98 @@ static int tx_isp_vic_device_deinit(struct tx_isp_dev *isp)
 }
 
 /**
- * ispcore_slake_module - CRITICAL: ISP Core Module Slaking/Initialization
- * This is the EXACT implementation from Binary Ninja decompilation
+ * ispcore_slake_module - EXACT Binary Ninja implementation
+ * This function creates all subdevices and registers them properly
  */
 int ispcore_slake_module(struct tx_isp_dev *isp)
 {
+    struct tx_isp_vic_device *vic_dev;
+    struct tx_isp_csi_device *csi_dev;
+    struct tx_isp_vin_device *vin_dev;
     int ret = 0;
     int i;
-    struct tx_isp_vic_device *vic_dev;
     int isp_state;
-    
-    /* Add MCP logging for method entry */
-    pr_info("ispcore_slake_module: entry with isp=%p", isp);
-    
-    /* Binary Ninja: int32_t result = 0xffffffea; if (arg1 != 0) */
+
+    pr_info("*** ispcore_slake_module: EXACT Binary Ninja implementation ***");
+
+    /* Binary Ninja: Validate ISP device */
     if (!isp) {
         pr_err("ispcore_slake_module: Invalid ISP device");
         return -EINVAL;
     }
-    
-    /* Binary Ninja: if (arg1 u>= 0xfffff001) return 0xffffffea */
-    /* Skip this check as it's for kernel pointer validation */
-    
-    /* Binary Ninja: void* $s0_1 = arg1[0x35] */
-    vic_dev = isp->vic_dev;
+
+    /* STEP 1: Create all subdevices first */
+    pr_info("*** STEP 1: Creating ISP subdevices ***");
+
+    /* Create VIC device */
+    vic_dev = (struct tx_isp_vic_device *)isp->vic_dev;
     if (!vic_dev) {
-        pr_info("ispcore_slake_module: No VIC device found - creating it now");
+        pr_info("ispcore_slake_module: Creating VIC device");
         ret = tx_isp_create_vic_device(isp);
         if (ret != 0) {
             pr_err("ispcore_slake_module: Failed to create VIC device: %d", ret);
             return ret;
         }
-        vic_dev = isp->vic_dev;
-        pr_info("ispcore_slake_module: VIC device created successfully");
+        vic_dev = (struct tx_isp_vic_device *)isp->vic_dev;
+        pr_info("ispcore_slake_module: VIC device created at %p", vic_dev);
     }
 
-    /* *** CRITICAL FIX: Create VIN device if not already created *** */
-    if (!isp->vin_dev) {
-        pr_info("ispcore_slake_module: No VIN device found - creating it now");
+    /* Create VIN device */
+    vin_dev = (struct tx_isp_vin_device *)isp->vin_dev;
+    if (!vin_dev) {
+        pr_info("ispcore_slake_module: Creating VIN device");
         ret = tx_isp_create_vin_device(isp);
         if (ret != 0) {
             pr_err("ispcore_slake_module: Failed to create VIN device: %d", ret);
             return ret;
         }
-        pr_info("ispcore_slake_module: VIN device created successfully");
-        pr_info("*** CRITICAL: isp->vin_dev = %p (should not be null!) ***", isp->vin_dev);
+        vin_dev = (struct tx_isp_vin_device *)isp->vin_dev;
+        pr_info("ispcore_slake_module: VIN device created at %p", vin_dev);
     }
+
+    /* Get CSI device reference */
+    csi_dev = (struct tx_isp_csi_device *)isp->csi_dev;
+
+    /* STEP 2: Register all subdevices in the subdev array */
+    pr_info("*** STEP 2: Registering subdevices in subdev array ***");
+
+    /* Register VIC subdev at index 0 */
+    if (vic_dev) {
+        vic_dev->sd.ops = &vic_subdev_ops;
+        vic_dev->sd.isp = (void *)isp;
+        isp->subdevs[0] = &vic_dev->sd;
+        pr_info("*** REGISTERED VIC SUBDEV AT INDEX 0: %p ***", &vic_dev->sd);
+    }
+
+    /* Register CSI subdev at index 1 */
+    if (csi_dev) {
+        extern struct tx_isp_subdev_ops csi_subdev_ops;
+        csi_dev->sd.ops = &csi_subdev_ops;
+        csi_dev->sd.isp = (void *)isp;
+        isp->subdevs[1] = &csi_dev->sd;
+        pr_info("*** REGISTERED CSI SUBDEV AT INDEX 1: %p ***", &csi_dev->sd);
+    }
+
+    /* Register sensor subdev at index 2 (if available) */
+    if (isp->sensor) {
+        isp->subdevs[2] = &isp->sensor->sd;
+        pr_info("*** REGISTERED SENSOR SUBDEV AT INDEX 2: %p ***", &isp->sensor->sd);
+    }
+
+    /* Register VIN subdev at index 3 */
+    if (vin_dev) {
+        extern struct tx_isp_subdev_ops vin_subdev_ops;
+        vin_dev->sd.ops = &vin_subdev_ops;
+        vin_dev->sd.isp = (void *)isp;
+        isp->subdevs[3] = &vin_dev->sd;
+        pr_info("*** REGISTERED VIN SUBDEV AT INDEX 3: %p ***", &vin_dev->sd);
+    }
+
+    /* Register ISP core subdev at index 4 */
+    isp->sd.ops = &core_subdev_ops_full;
+    isp->sd.isp = (void *)isp;
+    isp->subdevs[4] = &isp->sd;
+    pr_info("*** REGISTERED ISP CORE SUBDEV AT INDEX 4: %p ***", &isp->sd);
     
     /* Binary Ninja: int32_t $v0 = *($s0_1 + 0xe8) */
     isp_state = vic_dev->state;
