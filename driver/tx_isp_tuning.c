@@ -159,8 +159,6 @@ static uint32_t adr_base_values[9] = {0x100, 0x120, 0x140, 0x160, 0x180, 0x1a0, 
 static uint32_t adr_min_thresholds[9] = {0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0, 0x100};
 
 /* Global parameter arrays */
-static void *tparams_day = NULL;
-static void *tparams_night = NULL;
 static void *dmsc_sp_d_w_stren_wdr_array = NULL;
 static void *sensor_info_ptr = NULL;
 static uint32_t data_b2e1c = 1080; /* Sensor height */

@@ -2122,33 +2122,72 @@ void *tparams_night = NULL;
 void *tparams_cust = NULL;
 
 /**
- * tisp_param_operate_deinit - TISP parameter operation deinit stub
- * This function should deinitialize TISP parameter operations
+ * tisp_param_operate_deinit - EXACT Binary Ninja MCP implementation
+ * Address: 0x24b54
  */
 void tisp_param_operate_deinit(void)
 {
-    pr_info("tisp_param_operate_deinit: TISP parameter operations deinitialized");
-    /* Implementation would go here when available */
+    /* Binary Ninja: tisp_netlink_exit() */
+    tisp_netlink_exit();
+
+    /* Binary Ninja: uint32_t opmsg_1 = opmsg */
+    extern void *opmsg;
+    if (opmsg != 0) {
+        /* Binary Ninja: private_kfree(opmsg_1) */
+        kfree(opmsg);
+        /* Binary Ninja: opmsg = 0 */
+        opmsg = 0;
+    }
+
+    /* Binary Ninja: tisp_code_destroy_tuning_node() */
+    tisp_code_destroy_tuning_node();
+
+    /* Binary Ninja: return 0 */
 }
 
 /**
- * tisp_event_exit - TISP event system exit stub
- * This function should exit the TISP event processing system
+ * tisp_event_exit - EXACT Binary Ninja MCP implementation
+ * Address: 0x2709c
  */
 void tisp_event_exit(void)
 {
-    pr_info("tisp_event_exit: TISP event system exited");
-    /* Implementation would go here when available */
+    /* Binary Ninja: int32_t var_30 = 0 */
+    int32_t var_30 = 0;
+
+    /* Binary Ninja: void var_38 */
+    void *var_38 = NULL;
+
+    /* Binary Ninja: tisp_event_push(&var_38) */
+    tisp_event_push(&var_38);
+
+    /* Binary Ninja: return 0 */
 }
 
 /**
- * tisp_deinit_free - TISP final cleanup stub
- * This function should perform final TISP cleanup operations
+ * tisp_deinit_free - EXACT Binary Ninja MCP implementation
+ * Address: 0x75af8
  */
 void tisp_deinit_free(void)
 {
-    pr_info("tisp_deinit_free: TISP final cleanup completed");
-    /* Implementation would go here when available */
+    /* Binary Ninja: int32_t $a0 = data_ca490 */
+    extern void *data_ca490;
+    if (data_ca490 != 0) {
+        /* Binary Ninja: private_kfree($a0) */
+        kfree(data_ca490);
+        /* Binary Ninja: data_ca490 = 0 */
+        data_ca490 = 0;
+    }
+
+    /* Binary Ninja: int32_t $a0_1 = data_ca48c */
+    extern void *data_ca48c;
+    if (data_ca48c != 0) {
+        /* Binary Ninja: private_kfree($a0_1) */
+        kfree(data_ca48c);
+        /* Binary Ninja: data_ca48c = 0 */
+        data_ca48c = 0;
+    }
+
+    /* Binary Ninja: return result */
 }
 
 
