@@ -329,6 +329,24 @@ irqreturn_t tx_isp_core_irq_handler(int irq, void *dev_id);
 /* Note: tx_isp_reg_set is declared in tx-isp-device.h */
 /* Note: tx_isp_enable_irq and tx_isp_disable_irq are declared in tx-isp-module.c */
 
+/* TISP (Tiziano ISP) function declarations */
+int tisp_deinit(void);
+void tisp_param_operate_deinit(void);
+void tisp_event_exit(void);
+void tisp_deinit_free(void);
+
+/* TISP global data pointers - declared as extern in tisp_deinit */
+extern void *data_b2f3c;
+extern void *data_b2f54;
+extern void *data_b2f6c;
+extern void *data_b2f78;
+extern void *data_b2f84;
+extern void *data_b2f90;
+extern void *data_b2f9c;
+extern void *tparams_day;
+extern void *tparams_night;
+extern void *tparams_cust;
+
 void tx_isp_frame_chan_init(struct tx_isp_frame_channel *chan);
 void tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan);
 int tx_isp_setup_default_links(struct tx_isp_dev *dev);
