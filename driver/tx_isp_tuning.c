@@ -258,8 +258,6 @@ static int tisp_netlink_event_set_cb(void *cb) { return 0; }
 static int tisp_param_operate_process(void) { return 0; }
 /* tisp_code_create_tuning_node, tisp_code_destroy_tuning_node - removed stubs, implemented below */
 static int tisp_event_exit(void) { return 0; }
-int tisp_gb_init_reg(void);
-int tisp_gb_init(void);
 
 /* Missing variables referenced in functions */
 static uint32_t deir_en = 0;
@@ -1723,7 +1721,7 @@ int tisp_init(void *sensor_info, char *param_name)
 
     /* CRITICAL FIX: Use ACTUAL sensor image dimensions for all ISP components */
     /* Call all tiziano pipeline initialization functions in Binary Ninja order */
-    tiziano_ae_init(actual_image_height, actual_image_width, fps);
+    tiziano_ae_init(actual_image_height, actual_image_width, sensor_params.fps);
     tiziano_awb_init(actual_image_height, actual_image_width);
     tiziano_gamma_init();  /* Binary Ninja: takes no parameters */
     tiziano_gib_init();
