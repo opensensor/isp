@@ -10434,7 +10434,6 @@ int ae1_interrupt_static(void)
     pr_debug("ae1_interrupt_static: AE1 static interrupt processed\n");
     return 1;
 }
-EXPORT_SYMBOL(ae1_interrupt_static);
 
 /* ae1_interrupt_hist - Binary Ninja EXACT implementation */
 int ae1_interrupt_hist(void)
