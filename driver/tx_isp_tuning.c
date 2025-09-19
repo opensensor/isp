@@ -8861,6 +8861,192 @@ int tiziano_adr_params_init(void)
 }
 EXPORT_SYMBOL(tiziano_adr_params_init);
 
+/* tiziano_s_awb_start - EXACT Binary Ninja implementation */
+int tiziano_s_awb_start(uint32_t r_gain, uint32_t b_gain)
+{
+    uint32_t tparams_day_1;
+    int _AwbPointPos_1;
+
+    pr_debug("tiziano_s_awb_start: Setting AWB gains R=%u, B=%u\n", r_gain, b_gain);
+
+    /* Binary Ninja: uint32_t tparams_day_1 = tparams_day */
+    tparams_day_1 = (uint32_t)&tparams_day;
+
+    /* Binary Ninja: Parameter assignments */
+    *(uint32_t *)(tparams_day_1 + 0x10e8) = r_gain;
+    *(uint32_t *)(tparams_day_1 + 0x10ec) = b_gain;
+    *(uint32_t *)(tparams_day_1 + 0x10f0) = r_gain;
+    *(uint32_t *)(tparams_day_1 + 0x10f4) = b_gain;
+
+    /* Binary Ninja: Global data assignments */
+    data_a9f94 = b_gain;
+    data_a9f9c = b_gain;
+    data_a9f90 = r_gain;
+    data_a9f98 = r_gain;
+
+    /* Binary Ninja: int32_t _AwbPointPos_1 = _AwbPointPos.d */
+    _AwbPointPos_1 = _AwbPointPos;
+
+    /* Binary Ninja: return Tiziano_awb_set_gain(&_awb_mf_para, _AwbPointPos_1, &_wb_static) __tailcall */
+    return Tiziano_awb_set_gain(&_awb_mf_para, _AwbPointPos_1, &_wb_static);
+}
+EXPORT_SYMBOL(tiziano_s_awb_start);
+
+/* tiziano_g_awb_start - AWB get start function */
+int tiziano_g_awb_start(uint32_t *r_gain, uint32_t *b_gain)
+{
+    pr_debug("tiziano_g_awb_start: Getting AWB gains\n");
+
+    if (r_gain) {
+        *r_gain = data_a9f90;
+    }
+    if (b_gain) {
+        *b_gain = data_a9f94;
+    }
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_g_awb_start);
+
+/* tisp_s_awb_start - ISP AWB start wrapper */
+int tisp_s_awb_start(uint32_t r_gain, uint32_t b_gain)
+{
+    pr_debug("tisp_s_awb_start: Starting AWB with R=%u, B=%u\n", r_gain, b_gain);
+    return tiziano_s_awb_start(r_gain, b_gain);
+}
+EXPORT_SYMBOL(tisp_s_awb_start);
+
+/* tisp_g_awb_start - ISP AWB get wrapper */
+int tisp_g_awb_start(uint32_t *r_gain, uint32_t *b_gain)
+{
+    pr_debug("tisp_g_awb_start: Getting AWB gains\n");
+    return tiziano_g_awb_start(r_gain, b_gain);
+}
+EXPORT_SYMBOL(tisp_g_awb_start);
+
+/* tiziano_ae_s_ev_start - AE exposure value start function */
+int tiziano_ae_s_ev_start(int32_t ev_value)
+{
+    pr_debug("tiziano_ae_s_ev_start: Setting EV value to %d\n", ev_value);
+
+    /* Store EV value in global AE parameters */
+    ae_ev_value = ev_value;
+
+    /* Apply EV compensation to AE algorithm */
+    tiziano_ae_params_refresh();
+
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_ae_s_ev_start);
+
+/* tisp_s_ev_start - ISP EV start wrapper */
+int tisp_s_ev_start(int32_t ev_value)
+{
+    pr_debug("tisp_s_ev_start: Starting EV with value %d\n", ev_value);
+    return tiziano_ae_s_ev_start(ev_value);
+}
+EXPORT_SYMBOL(tisp_s_ev_start);
+
+/* tisp_channel_start - EXACT Binary Ninja implementation */
+int tisp_channel_start(int channel, void *attr)
+{
+    uint32_t msca_ch_en_1, msca_dmaout_arb_1, msca_dmaout_arb_2;
+    uint32_t v0_1 = 0xe;
+    void *channel_attr;
+    int v0_2, tispinfo_1;
+    int s1_3, s3, a1_1;
+
+    pr_debug("tisp_channel_start: Starting channel %d\n", channel);
+
+    /* Binary Ninja: uint32_t msca_ch_en_1 = msca_ch_en */
+    msca_ch_en_1 = msca_ch_en;
+
+    /* Binary Ninja: if (not.d(msca_ch_en_1) == 0) msca_ch_en_1 = 0 */
+    if (msca_ch_en_1 == 0) {
+        msca_ch_en_1 = 0;
+    }
+
+    /* Binary Ninja: msca_ch_en = 1 << (arg1 & 0x1f) | msca_ch_en_1 */
+    msca_ch_en = (1 << (channel & 0x1f)) | msca_ch_en_1;
+
+    /* Binary Ninja: uint32_t msca_dmaout_arb_1 = msca_dmaout_arb */
+    msca_dmaout_arb_1 = msca_dmaout_arb;
+
+    /* Binary Ninja: if (not.d(msca_dmaout_arb_1) != 0) $v0_1 = msca_dmaout_arb_1 | 0xe */
+    if (msca_dmaout_arb_1 != 0) {
+        v0_1 = msca_dmaout_arb_1 | 0xe;
+    }
+
+    /* Binary Ninja: msca_dmaout_arb = $v0_1 */
+    msca_dmaout_arb = v0_1;
+
+    /* Binary Ninja: Channel attribute selection */
+    if (channel == 1) {
+        channel_attr = &ds1_attr;
+        msca_dmaout_arb_2 = msca_dmaout_arb;
+    } else if (channel == 2) {
+        channel_attr = &ds2_attr;
+        msca_dmaout_arb_2 = msca_dmaout_arb;
+    } else if (channel == 0) {
+        channel_attr = &ds0_attr;
+        msca_dmaout_arb_2 = msca_dmaout_arb;
+    } else {
+        isp_printf(2, "Can not support this frame mode!!!\n");
+        msca_dmaout_arb_2 = msca_dmaout_arb;
+    }
+
+    /* Binary Ninja: system_reg_write(0x9818, msca_dmaout_arb_2) */
+    system_reg_write(0x9818, msca_dmaout_arb_2);
+
+    /* Binary Ninja: Channel configuration logic */
+    uint32_t *attr_array = (uint32_t *)channel_attr;
+    if (attr_array && attr_array[8] != 1) {
+        tispinfo_1 = tispinfo;
+        v0_2 = data_b2f34;
+    } else {
+        tispinfo_1 = data_b2e10;
+        v0_2 = data_b2e14;
+    }
+
+    /* Binary Ninja: Resolution-based scaling configuration */
+    s3 = (channel + 0x98) << 8;
+    if (attr_array && (attr_array[1] << 1 < tispinfo_1 || attr_array[2] << 1 < v0_2)) {
+        /* Scaling enabled */
+        system_reg_write(s3 + 0x1c0, 0x40080);
+        system_reg_write(s3 + 0x1c4, 0x40080);
+        system_reg_write(s3 + 0x1c8, 0x40080);
+        system_reg_write(s3 + 0x1cc, 0x40080);
+        s1_3 = (1 << ((channel + 8) & 0x1f)) | (1 << ((channel + 0xb) & 0x1f)) | msca_ch_en;
+    } else {
+        /* No scaling */
+        system_reg_write(s3 + 0x1c0, 0x200);
+        system_reg_write(s3 + 0x1c4, 0);
+        system_reg_write(s3 + 0x1c8, 0x200);
+        system_reg_write(s3 + 0x1cc, 0);
+        s1_3 = (~((1 << ((channel + 8) & 0x1f)) | (1 << ((channel + 0xb) & 0x1f)))) & msca_ch_en;
+    }
+
+    /* Binary Ninja: Final channel enable */
+    msca_ch_en = s1_3;
+    a1_1 = 0xf0000 | msca_ch_en;
+    msca_ch_en = a1_1;
+    system_reg_write(0x9804, a1_1);
+
+    /* Binary Ninja: Read status registers for logging */
+    system_reg_read(0x9864);
+    system_reg_read(0x9860);
+    system_reg_read(s3 + 0x180);
+    system_reg_read(s3 + 0x198);
+    system_reg_read(s3 + 0x128);
+    system_reg_read(s3 + 0x12c);
+    system_reg_read(s3 + 0x104);
+    system_reg_read(s3 + 0x100);
+
+    isp_printf(0, "sensor type is BT1120!\n");
+    return 0;
+}
+EXPORT_SYMBOL(tisp_channel_start);
+
 /* tisp_gb_init_reg - EXACT Binary Ninja implementation */
 int tisp_gb_init_reg(void)
 {

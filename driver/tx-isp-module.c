@@ -7580,6 +7580,400 @@ static void tisp_set_sensor_digital_gain_short(uint32_t digital_gain)
     pr_debug("tisp_set_sensor_digital_gain_short: Applied digital gain 0x%x to ISP\n", final_gain);
 }
 
+/* vin_s_stream - EXACT Binary Ninja implementation */
+static int vin_s_stream(struct v4l2_subdev *sd, int enable)
+{
+    struct tx_isp_subdev *subdev;
+    void *subdev_ops_ptr;
+    int (**video_ops_ptr)(void *, int);
+    int (*s_stream_func)(void *, int);
+    int result = 0;
+    int v1, v0;
+
+    pr_debug("vin_s_stream: Stream %s\n", enable ? "ON" : "OFF");
+
+    if (!sd) {
+        return -EINVAL;
+    }
+
+    /* Binary Ninja: int32_t $v1 = *(arg1 + 0xf4) */
+    subdev = tx_isp_get_subdevdata(sd);
+    if (!subdev) {
+        return -EINVAL;
+    }
+
+    v1 = subdev->state;
+
+    /* Binary Ninja: Stream enable/disable logic */
+    if (enable != 0) {
+        if (v1 != 4) {
+            goto label_set_state;
+        }
+    } else if (v1 == 4) {
+        goto label_set_state;
+    }
+
+label_set_state:
+    /* Binary Ninja: void* $a0 = *(arg1 + 0xe4) */
+    subdev_ops_ptr = subdev->ops;
+
+    if (subdev_ops_ptr == NULL) {
+        /* Binary Ninja: Set state directly */
+        v0 = enable ? 4 : 3;
+        subdev->state = v0;
+        return 0;
+    }
+
+    /* Binary Ninja: int32_t* $v0_2 = *(*($a0 + 0xc4) + 4) */
+    video_ops_ptr = (int (**)(void *, int))&((struct tx_isp_subdev_ops *)subdev_ops_ptr)->video;
+
+    if (video_ops_ptr == NULL) {
+        return -ENOTSUPP;
+    }
+
+    /* Binary Ninja: int32_t $v1_1 = *$v0_2 */
+    s_stream_func = *video_ops_ptr;
+    result = -ENOTSUPP;
+
+    if (s_stream_func != NULL) {
+        result = s_stream_func(subdev_ops_ptr, enable);
+
+        if (result == 0) {
+            /* Binary Ninja: Set state on success */
+            v0 = enable ? 4 : 3;
+            subdev->state = v0;
+        }
+    }
+
+    return result;
+}
+EXPORT_SYMBOL(vin_s_stream);
+
+/* vic_core_s_stream - EXACT Binary Ninja implementation */
+static int vic_core_s_stream(struct v4l2_subdev *sd, int enable)
+{
+    struct tx_isp_vic_device *vic_dev;
+    int v0 = -EINVAL;
+    int v1_3;
+
+    pr_debug("vic_core_s_stream: Stream %s\n", enable ? "ON" : "OFF");
+
+    /* Binary Ninja: if (arg1 != 0) */
+    if (sd != NULL) {
+        /* Binary Ninja: if (arg1 u>= 0xfffff001) return 0xffffffea */
+        if ((uintptr_t)sd >= 0xfffff001) {
+            return -EINVAL;
+        }
+
+        /* Binary Ninja: void* $s1_1 = *(arg1 + 0xd4) */
+        vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+        v0 = -EINVAL;
+
+        /* Binary Ninja: if ($s1_1 != 0 && $s1_1 u< 0xfffff001) */
+        if (vic_dev != NULL && (uintptr_t)vic_dev < 0xfffff001) {
+            /* Binary Ninja: int32_t $v1_3 = *($s1_1 + 0x128) */
+            v1_3 = vic_dev->state;
+
+            if (enable == 0) {
+                /* Binary Ninja: Stream OFF */
+                v0 = 0;
+
+                /* Binary Ninja: if ($v1_3 == 4) *($s1_1 + 0x128) = 3 */
+                if (v1_3 == 4) {
+                    vic_dev->state = 3;
+                }
+            } else {
+                /* Binary Ninja: Stream ON */
+                v0 = 0;
+
+                /* Binary Ninja: if ($v1_3 != 4) */
+                if (v1_3 != 4) {
+                    /* Binary Ninja: tx_vic_disable_irq() */
+                    tx_vic_disable_irq();
+
+                    /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
+                    v0 = tx_isp_vic_start(vic_dev);
+
+                    /* Binary Ninja: *($s1_1 + 0x128) = 4 */
+                    vic_dev->state = 4;
+
+                    /* Binary Ninja: tx_vic_enable_irq() */
+                    tx_vic_enable_irq();
+
+                    return v0;
+                }
+            }
+        }
+    }
+
+    return v0;
+}
+EXPORT_SYMBOL(vic_core_s_stream);
+
+/* csi_video_s_stream - EXACT Binary Ninja implementation */
+static int csi_video_s_stream(struct v4l2_subdev *sd, int enable)
+{
+    struct tx_isp_csi_device *csi_dev;
+    int v0_4;
+
+    pr_debug("csi_video_s_stream: Stream %s\n", enable ? "ON" : "OFF");
+
+    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) */
+    if (sd == NULL || (uintptr_t)sd >= 0xfffff001) {
+        isp_printf(2, "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n", __func__, __LINE__);
+        return -EINVAL;
+    }
+
+    /* Binary Ninja: Get CSI device from subdev */
+    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+    if (!csi_dev || !csi_dev->sensor_attr) {
+        return 0;
+    }
+
+    /* Binary Ninja: if (*(*(arg1 + 0x110) + 0x14) != 1) return 0 */
+    if (csi_dev->sensor_attr->mipi.mode != 1) {
+        return 0;
+    }
+
+    /* Binary Ninja: int32_t $v0_4 = 4; if (arg2 == 0) $v0_4 = 3 */
+    v0_4 = enable ? 4 : 3;
+
+    /* Binary Ninja: *(arg1 + 0x128) = $v0_4 */
+    csi_dev->state = v0_4;
+
+    return 0;
+}
+EXPORT_SYMBOL(csi_video_s_stream);
+
+/* ispvic_frame_channel_s_stream - EXACT Binary Ninja implementation */
+static int ispvic_frame_channel_s_stream(struct v4l2_subdev *sd, int enable)
+{
+    struct tx_isp_vic_device *vic_dev = NULL;
+    unsigned long flags = 0;
+    const char *stream_state;
+
+    /* Binary Ninja: Parameter validation */
+    if (sd != NULL && (uintptr_t)sd < 0xfffff001) {
+        vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+    }
+
+    if (sd == NULL) {
+        isp_printf(2, "%s[%d]: invalid parameter\n", __func__, __LINE__);
+        return -EINVAL;
+    }
+
+    /* Binary Ninja: Stream state logging */
+    stream_state = enable ? "streamon" : "streamoff";
+    isp_printf(0, "%s[%d]: %s\n", __func__, __LINE__, stream_state);
+
+    /* Binary Ninja: if (arg2 == *($s0 + 0x210)) return 0 */
+    if (enable == vic_dev->frame_channel_state) {
+        return 0;
+    }
+
+    /* Binary Ninja: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
+    __private_spin_lock_irqsave(&vic_dev->frame_lock, &flags);
+
+    if (enable == 0) {
+        /* Binary Ninja: Stream OFF */
+        /* *(*($s0 + 0xb8) + 0x300) = 0 */
+        if (vic_dev->vic_regs) {
+            *(uint32_t *)((char *)vic_dev->vic_regs + 0x300) = 0;
+        }
+        /* *($s0 + 0x210) = 0 */
+        vic_dev->frame_channel_state = 0;
+    } else {
+        /* Binary Ninja: Stream ON */
+        /* vic_pipo_mdma_enable($s0) */
+        vic_pipo_mdma_enable(vic_dev);
+
+        /* *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
+        if (vic_dev->vic_regs) {
+            uint32_t reg_val = (vic_dev->frame_channel_id << 0x10) | 0x80000020;
+            *(uint32_t *)((char *)vic_dev->vic_regs + 0x300) = reg_val;
+        }
+        /* *($s0 + 0x210) = 1 */
+        vic_dev->frame_channel_state = 1;
+    }
+
+    /* Binary Ninja: private_spin_unlock_irqrestore($s0 + 0x1f4, var_18) */
+    private_spin_unlock_irqrestore(&vic_dev->frame_lock, flags);
+
+    return 0;
+}
+EXPORT_SYMBOL(ispvic_frame_channel_s_stream);
+
+/* sensor_start_changes - Sensor start changes function */
+static int sensor_start_changes(struct tx_isp_subdev *sd)
+{
+    pr_debug("sensor_start_changes: Applying sensor start changes\n");
+
+    if (!sd || !sd->ops || !sd->ops->sensor) {
+        return -EINVAL;
+    }
+
+    /* Apply sensor-specific start changes */
+    if (sd->ops->sensor->ioctl) {
+        /* Call sensor start IOCTL */
+        sd->ops->sensor->ioctl(&sd->sd, 0x980900, NULL);
+    }
+
+    return 0;
+}
+EXPORT_SYMBOL(sensor_start_changes);
+
+/* subdev_sensor_ops_ioctl - EXACT Binary Ninja implementation */
+static long subdev_sensor_ops_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
+{
+    struct tx_isp_subdev *subdev;
+
+    pr_debug("subdev_sensor_ops_ioctl: cmd=0x%x\n", cmd);
+
+    if (!sd) {
+        return -EINVAL;
+    }
+
+    subdev = tx_isp_get_subdevdata(sd);
+    if (!subdev) {
+        return -EINVAL;
+    }
+
+    /* Handle sensor-specific IOCTLs */
+    switch (cmd) {
+        case 0x980900: /* Sensor start */
+            return sensor_start_changes(subdev);
+
+        case 0x980901: /* Set integration time */
+            if (arg) {
+                uint32_t integration_time = *(uint32_t *)arg;
+                tisp_set_sensor_integration_time_short(integration_time);
+                return 0;
+            }
+            break;
+
+        case 0x980902: /* Set analog gain */
+            if (arg) {
+                uint32_t analog_gain = *(uint32_t *)arg;
+                tisp_set_sensor_analog_gain_short(analog_gain);
+                return 0;
+            }
+            break;
+
+        case 0x980903: /* Set digital gain */
+            if (arg) {
+                uint32_t digital_gain = *(uint32_t *)arg;
+                tisp_set_sensor_digital_gain_short(digital_gain);
+                return 0;
+            }
+            break;
+
+        default:
+            pr_debug("subdev_sensor_ops_ioctl: Unsupported cmd 0x%x\n", cmd);
+            return -ENOTTY;
+    }
+
+    return -EINVAL;
+}
+EXPORT_SYMBOL(subdev_sensor_ops_ioctl);
+
+/* vic_core_ops_init - VIC core operations initialization */
+static int vic_core_ops_init(struct v4l2_subdev *sd, u32 val)
+{
+    struct tx_isp_vic_device *vic_dev;
+
+    pr_debug("vic_core_ops_init: Initializing VIC core operations\n");
+
+    if (!sd) {
+        return -EINVAL;
+    }
+
+    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+    if (!vic_dev) {
+        return -EINVAL;
+    }
+
+    /* Initialize VIC core operations */
+    vic_dev->state = 3; /* INITIALIZED state */
+
+    /* Initialize VIC hardware if needed */
+    if (vic_dev->vic_regs) {
+        /* Basic VIC initialization */
+        *(uint32_t *)((char *)vic_dev->vic_regs + 0x0) = 0x2; /* Reset */
+        *(uint32_t *)((char *)vic_dev->vic_regs + 0x0) = 0x0; /* Clear reset */
+    }
+
+    return 0;
+}
+EXPORT_SYMBOL(vic_core_ops_init);
+
+/* vic_core_ops_ioctl - VIC core operations IOCTL */
+static long vic_core_ops_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
+{
+    struct tx_isp_vic_device *vic_dev;
+
+    pr_debug("vic_core_ops_ioctl: cmd=0x%x\n", cmd);
+
+    if (!sd) {
+        return -EINVAL;
+    }
+
+    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+    if (!vic_dev) {
+        return -EINVAL;
+    }
+
+    /* Handle VIC-specific IOCTLs */
+    switch (cmd) {
+        case 0x800001: /* VIC start */
+            return tx_isp_vic_start(vic_dev);
+
+        case 0x800002: /* VIC stop */
+            vic_dev->state = 3;
+            return 0;
+
+        case 0x800003: /* VIC reset */
+            if (vic_dev->vic_regs) {
+                *(uint32_t *)((char *)vic_dev->vic_regs + 0x0) = 0x2;
+                *(uint32_t *)((char *)vic_dev->vic_regs + 0x0) = 0x0;
+            }
+            return 0;
+
+        default:
+            pr_debug("vic_core_ops_ioctl: Unsupported cmd 0x%x\n", cmd);
+            return -ENOTTY;
+    }
+}
+EXPORT_SYMBOL(vic_core_ops_ioctl);
+
+/* csi_core_ops_init - CSI core operations initialization */
+static int csi_core_ops_init(struct v4l2_subdev *sd, u32 val)
+{
+    struct tx_isp_csi_device *csi_dev;
+
+    pr_debug("csi_core_ops_init: Initializing CSI core operations\n");
+
+    if (!sd) {
+        return -EINVAL;
+    }
+
+    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+    if (!csi_dev) {
+        return -EINVAL;
+    }
+
+    /* Initialize CSI core operations */
+    csi_dev->state = 3; /* INITIALIZED state */
+
+    /* Initialize CSI hardware if needed */
+    if (csi_dev->csi_regs) {
+        /* Basic CSI initialization */
+        *(uint32_t *)((char *)csi_dev->csi_regs + 0x0) = 0x1; /* Enable CSI */
+    }
+
+    return 0;
+}
+EXPORT_SYMBOL(csi_core_ops_init);
+
 /* tisp_set_ae1_ag - Set AE analog gain */
 static void tisp_set_ae1_ag(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4)
 {
