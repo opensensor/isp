@@ -5537,7 +5537,6 @@ static void tx_isp_exit(void)
         /* Free device structure */
         kfree(ourISPdev);
         ourISPdev = NULL;
-        protected_isp_dev = NULL;  /* Clear protected pointer */
     }
 
     /* Clean up sensor list */
