@@ -5142,6 +5142,22 @@ static int tx_isp_init(void)
                 vin_dev->sd.ops->video ? vin_dev->sd.ops->video->s_stream : NULL);
     }
 
+    /* *** CRITICAL FIX: Register ISP CORE subdev - THIS WAS MISSING! *** */
+    /* The ISP core subdev should be registered to handle core video streaming */
+    if (ourISPdev) {
+        /* Set up ISP core subdev with proper ops structure */
+        ourISPdev->sd.ops = &core_subdev_ops_full;  /* Use the full ops structure */
+        ourISPdev->sd.isp = (void *)ourISPdev;
+
+        /* CRITICAL: Add ISP CORE to subdev array at index 4 (after VIC=0, CSI=1, sensor=2, VIN=3) */
+        ourISPdev->subdevs[4] = &ourISPdev->sd;
+
+        pr_info("*** REGISTERED ISP CORE SUBDEV AT INDEX 4 WITH VIDEO OPS ***\n");
+        pr_info("ISP CORE subdev: %p, ops: %p, video: %p, s_stream: %p\n",
+                &ourISPdev->sd, ourISPdev->sd.ops, ourISPdev->sd.ops->video,
+                ourISPdev->sd.ops->video ? ourISPdev->sd.ops->video->s_stream : NULL);
+    }
+
     /* *** CRITICAL FIX: Platform devices are already registered in tx_isp_platform_probe() *** */
     /* The reference driver only registers platform devices ONCE during probe, not in init */
     pr_info("*** PLATFORM DEVICES ALREADY REGISTERED IN PROBE - SKIPPING DUPLICATE REGISTRATION ***\n");
