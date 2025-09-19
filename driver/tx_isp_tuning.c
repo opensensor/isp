@@ -287,7 +287,7 @@ int tiziano_sharpen_init(void);
 /* Forward declarations for WDR functions */
 int tisp_gb_init(void);
 int tiziano_wdr_params_init(void);
-int tiziano_wdr_init(void);
+int tiziano_wdr_init(uint32_t width, uint32_t height);
 int tisp_wdr_init(void);
 
 /* Forward declarations for WDR enable functions */
@@ -353,7 +353,7 @@ int isp_core_tuning_release(struct tx_isp_dev *dev);
 
 /* Forward declaration for core tuning init function */
 void *isp_core_tuning_init(void *arg1);
-int isp_core_tuning_event(void *arg1, int arg2);  /* Binary Ninja function pointer */
+int isp_core_tuning_event(struct tx_isp_dev *dev, uint32_t event);  /* Binary Ninja function pointer */
 void isp_frame_done_wakeup(void);  /* Binary Ninja function */
 void tisp_day_or_night_s_ctrl(unsigned int value);  /* Binary Ninja function */
 
@@ -6291,7 +6291,7 @@ static uint32_t data_b0b28, data_b0b2c, data_b0b30;
 static void tisp_ae1_process(void);
 
 /* AE processing functions - Forward declarations */
-static int tiziano_ae_init_exp_th(void);
+/* tiziano_ae_init_exp_th already declared as non-static at line 273 */
 static void tisp_set_sensor_integration_time(uint32_t time);
 static void tisp_set_sensor_analog_gain(void);
 static void tisp_set_sensor_integration_time_short(uint32_t time);
