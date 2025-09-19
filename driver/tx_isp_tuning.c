@@ -940,13 +940,14 @@ static struct completion tevent_info;
 
 /* BINARY NINJA REFERENCE: No event processing thread - events processed on-demand */
 
-/* Event queue structures - Binary Ninja EXACT */
+/* Event queue structures - SAFE dynamic allocation instead of hardcoded addresses */
 static uint32_t *data_b33b0 = NULL;  /* Pointer for linked list operations */
 static uint32_t data_b33b4 = 0;
 static uint32_t data_b33b8 = 0;
 static uint32_t *data_b33bc = NULL;
 static struct completion tevent_info;  /* Completion structure for events */
 static struct lock_class_key event_wait_key;
+static wait_queue_head_t event_wait_queue;  /* SAFE: Dynamic wait queue instead of hardcoded address */
 
 /* Helper functions - Forward declarations */
 /* private_dma_cache_sync declared in txx-funcs.h */
