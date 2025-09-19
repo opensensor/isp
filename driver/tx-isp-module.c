@@ -4056,7 +4056,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("*** TX_ISP_SENSOR_REGISTER: FIXED TO CREATE ACTUAL SENSOR CONNECTION ***\n");
         
         /* Binary Ninja: private_copy_from_user(&var_98, arg3, 0x50) */
-        if (copy_from_user(sensor_data, argp, 0x50)) {
+        /* CRITICAL FIX: Use sizeof instead of hardcoded 0x50 to prevent buffer overflow */
+        if (copy_from_user(sensor_data, argp, sizeof(sensor_data))) {
             pr_err("TX_ISP_SENSOR_REGISTER: Failed to copy sensor data\n");
             return -EFAULT;
         }
@@ -5720,7 +5721,8 @@ static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void
         /* SAFE: Use copy_from_user instead of memcpy for user space data */
         gpio_switch_state = 1;
         if (arg) {
-            if (copy_from_user(&gpio_info, arg, min(sizeof(gpio_info), 0x2aUL))) {
+            /* CRITICAL FIX: Remove hardcoded 0x2a size - use sizeof only */
+            if (copy_from_user(&gpio_info, arg, sizeof(gpio_info))) {
                 pr_err("vic_sensor_ops_ioctl: Failed to copy GPIO info from user space\n");
                 return -EFAULT;
             }
