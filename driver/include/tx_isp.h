@@ -330,35 +330,11 @@ irqreturn_t tx_isp_core_irq_handler(int irq, void *dev_id);
 /* Note: tx_isp_enable_irq and tx_isp_disable_irq are declared in tx-isp-module.c */
 
 /* TISP (Tiziano ISP) function declarations */
+/* Note: Most TISP functions are declared as static in tx_isp_tuning.c */
+/* Only declare the main entry point that needs to be called from other files */
 int tisp_deinit(void);
-void tisp_param_operate_deinit(void);
-void tisp_event_exit(void);
-void tisp_deinit_free(void);
-void tisp_netlink_exit(void);
-int tisp_code_destroy_tuning_node(void);
-void tisp_event_push(void **event);
 
-/* TISP global data pointers - declared as extern in tisp_deinit */
-extern void *data_b2f3c;
-extern void *data_b2f54;
-extern void *data_b2f6c;
-extern void *data_b2f78;
-extern void *data_b2f84;
-extern void *data_b2f90;
-extern void *data_b2f9c;
-extern void *tparams_day;
-extern void *tparams_night;
-extern void *tparams_cust;
-extern void *opmsg;
-extern void *data_ca490;
-extern void *data_ca48c;
-extern void *nlsk;
-/* major, tisp_cdev, cls are declared as static in tx_isp_tuning.c */
-extern int32_t *data_b33b8;
-extern int32_t data_b33b8_base;
-extern void **data_b33b4;
-extern void *data_b33b0;
-/* tevent_info is declared as static in tx_isp_core.c */
+/* Note: All TISP global variables are declared as static in tx_isp_tuning.c */
 
 void tx_isp_frame_chan_init(struct tx_isp_frame_channel *chan);
 void tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan);
