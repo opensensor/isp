@@ -4,6 +4,10 @@
 #include "include/tx_isp_sysfs.h"
 #include "../include/tx_isp.h"
 
+/* External system register functions from reference driver */
+extern void system_reg_write(u32 reg, u32 value);
+extern uint32_t system_reg_read(u32 reg);
+
 /* Helper function to show sensor info */
 static ssize_t sensor_info_show(struct device *dev,
                                struct device_attribute *attr, char *buf)

@@ -124,6 +124,7 @@ void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
 void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
 void *isp_mem_init(void);
 void system_reg_write(u32 reg, u32 value);
+uint32_t system_reg_read(u32 reg);  /* Add system_reg_read declaration */
 int tisp_lsc_write_lut_datas(void);
 irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 
