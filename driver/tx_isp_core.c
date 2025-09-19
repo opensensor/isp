@@ -3304,9 +3304,9 @@ int tx_isp_core_probe(struct platform_device *pdev)
             /* REMOVED: Global memory mapping - let each subdevice handle its own memory per reference driver */
             pr_info("*** tx_isp_core_probe: Skipping global memory mapping - subdevices will handle their own memory ***\n");
 
-            /* CRITICAL: Update global ISP device IMMEDIATELY */
-            ourISPdev = isp_dev;
-            pr_info("*** tx_isp_core_probe: Global ISP device updated ***\n");
+            /* CRITICAL FIX: Don't overwrite ourISPdev - it already has linked devices! */
+            pr_info("*** tx_isp_core_probe: Using existing ourISPdev with linked devices: %p ***\n", ourISPdev);
+            pr_info("*** tx_isp_core_probe: VIN device should still be linked: %p ***\n", ourISPdev ? ourISPdev->vin_dev : NULL);
 
             /* Initialize tuning system without global memory mappings */
             pr_info("*** tx_isp_core_probe: Calling isp_core_tuning_init (subdevices will map their own memory) ***\n");
