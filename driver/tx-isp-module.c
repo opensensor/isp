@@ -323,11 +323,30 @@ static struct resource tx_isp_resources[] = {
     },
 };
 
+/* Platform data structure that matches reference driver expectations */
+static struct tx_isp_platform_data tx_isp_pdata = {
+    .device_id = 1,
+    .flags = 0,
+    .version = 1,
+    /* Platform devices array - matches Binary Ninja probe function expectations */
+    .num_devices = 5,
+    .devices = {
+        &tx_isp_csi_platform_device,
+        &tx_isp_vic_platform_device,
+        &tx_isp_vin_platform_device,
+        &tx_isp_fs_platform_device,
+        &tx_isp_core_platform_device
+    }
+};
+
 struct platform_device tx_isp_platform_device = {
     .name = "tx-isp",
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_resources),
     .resource = tx_isp_resources,
+    .dev = {
+        .platform_data = &tx_isp_pdata,  /* Provide platform data */
+    },
 };
 
 /* VIC platform device resources - CORRECTED IRQ */
@@ -5021,58 +5040,9 @@ static int tx_isp_init(void)
                 csi_dev->sd.ops->video->s_stream);
     }
 
-    /* *** CRITICAL: Register platform devices with proper IRQ setup *** */
-    pr_debug("*** REGISTERING PLATFORM DEVICES FOR DUAL IRQ SETUP (37 + 38) ***\n");
-    
-    ret = platform_device_register(&tx_isp_csi_platform_device);
-    if (ret) {
-        pr_err("Failed to register CSI platform device (IRQ 38): %d\n", ret);
-        goto err_cleanup_base;
-    } else {
-        pr_debug("*** CSI platform device registered for IRQ 38 (isp-w02) ***\n");
-    }
-    
-    ret = platform_device_register(&tx_isp_vic_platform_device);
-    if (ret) {
-        pr_err("Failed to register VIC platform device (IRQ 37): %d\n", ret);
-        platform_device_unregister(&tx_isp_csi_platform_device);
-        goto err_cleanup_base;
-    } else {
-        pr_debug("*** VIC platform device registered for IRQ 37 (isp-m0) ***\n");
-    }
-    
-    ret = platform_device_register(&tx_isp_vin_platform_device);
-    if (ret) {
-        pr_err("Failed to register VIN platform device (IRQ 37): %d\n", ret);
-        platform_device_unregister(&tx_isp_vic_platform_device);
-        platform_device_unregister(&tx_isp_csi_platform_device);
-        goto err_cleanup_base;
-    } else {
-        pr_debug("*** VIN platform device registered for IRQ 37 (isp-m0) ***\n");
-    }
-    
-    ret = platform_device_register(&tx_isp_fs_platform_device);
-    if (ret) {
-        pr_err("Failed to register FS platform device (IRQ 38): %d\n", ret);
-        platform_device_unregister(&tx_isp_vin_platform_device);
-        platform_device_unregister(&tx_isp_vic_platform_device);
-        platform_device_unregister(&tx_isp_csi_platform_device);
-        goto err_cleanup_base;
-    } else {
-        pr_debug("*** FS platform device registered for IRQ 38 (isp-w02) ***\n");
-    }
-    
-    ret = platform_device_register(&tx_isp_core_platform_device);
-    if (ret) {
-        pr_err("Failed to register Core platform device (IRQ 37): %d\n", ret);
-        platform_device_unregister(&tx_isp_fs_platform_device);
-        platform_device_unregister(&tx_isp_vin_platform_device);
-        platform_device_unregister(&tx_isp_vic_platform_device);
-        platform_device_unregister(&tx_isp_csi_platform_device);
-        goto err_cleanup_base;
-    } else {
-        pr_debug("*** Core platform device registered for IRQ 37 (isp-m0) ***\n");
-    }
+    /* *** CRITICAL FIX: Platform devices are already registered in tx_isp_platform_probe() *** */
+    /* The reference driver only registers platform devices ONCE during probe, not in init */
+    pr_debug("*** PLATFORM DEVICES ALREADY REGISTERED IN PROBE - SKIPPING DUPLICATE REGISTRATION ***\n");
     
     pr_debug("*** ALL PLATFORM DEVICES REGISTERED - SHOULD SEE IRQ 37 + 38 IN /proc/interrupts ***\n");
 
