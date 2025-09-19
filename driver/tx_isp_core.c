@@ -323,7 +323,7 @@ static int core_subdev_core_init_bridge(struct tx_isp_subdev *sd, int enable)
 }
 
 /* Forward declaration for ispcore_core_ops_ioctl */
-static int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 
 /* Core subdev operations - matches the pattern used by other devices */
 static struct tx_isp_subdev_core_ops core_subdev_core_ops = {
@@ -380,7 +380,7 @@ EXPORT_SYMBOL(tx_isp_get_device);
  * 3. Iterates through subdevs array (offset 0x38) calling appropriate operations
  * 4. Returns 0 on success, -ENOTSUPP (0xffffffed) on invalid subdev, -ENOTTY (0xfffffdfd) on unsupported
  */
-static int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
+int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
     int result = -ENOTSUPP;  /* 0xffffffed - invalid subdev */
     struct tx_isp_subdev_core_ops *core_ops;
@@ -3944,6 +3944,7 @@ uint32_t tisp_math_exp2(uint32_t val, uint32_t shift, uint32_t base)
 
     return result;
 }
+EXPORT_SYMBOL(tisp_math_exp2);
 
 /* tiziano_sync_sensor_attr - EXACT Binary Ninja implementation */
 int tiziano_sync_sensor_attr(struct tx_isp_sensor_attribute *attr)
