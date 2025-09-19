@@ -2132,15 +2132,20 @@ int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sens
         return -EINVAL;
     }
     
-    /* Binary Ninja: $v0_1 = arg2 == 0 ? memset : memcpy */
-    if (attr == NULL) {
-        /* Clear sensor attribute */
-        memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
-        pr_info("vic_sensor_ops_sync_sensor_attr: cleared sensor attributes\n");
+    /* CRITICAL FIX: Work with real sensor attributes instead of VIC's copy */
+    if (ourISPdev && ourISPdev->sensor && ourISPdev->sensor->video.attr) {
+        if (attr == NULL) {
+            /* Clear real sensor attributes */
+            memset(ourISPdev->sensor->video.attr, 0, sizeof(struct tx_isp_sensor_attribute));
+            pr_info("vic_sensor_ops_sync_sensor_attr: cleared REAL sensor attributes\n");
+        } else {
+            /* Copy to real sensor attributes */
+            memcpy(ourISPdev->sensor->video.attr, attr, sizeof(struct tx_isp_sensor_attribute));
+            pr_info("vic_sensor_ops_sync_sensor_attr: copied to REAL sensor attributes\n");
+        }
     } else {
-        /* Copy sensor attribute */
-        memcpy(&vic_dev->sensor_attr, attr, sizeof(vic_dev->sensor_attr));
-        pr_info("vic_sensor_ops_sync_sensor_attr: copied sensor attributes\n");
+        pr_err("vic_sensor_ops_sync_sensor_attr: No real sensor available!\n");
+        return -ENODEV;
     }
     
     return 0;
