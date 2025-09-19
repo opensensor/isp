@@ -31,6 +31,10 @@ int tx_isp_init_memory_mappings(struct tx_isp_dev *isp);
 static int tx_isp_deinit_memory_mappings(struct tx_isp_dev *isp);
 int tisp_channel_start(int channel, void *attr);
 
+/* Binary Ninja math function forward declarations */
+uint32_t tisp_math_exp2(uint32_t val, uint32_t shift, uint32_t base);
+uint32_t tisp_log2_fixed_to_fixed_tuning(uint32_t val, int in_fix_point, uint8_t out_fix_point);
+
 /* Parse rmem boot parameter - Linux 3.10 compatible */
 static int parse_rmem_bootarg(unsigned long *base, unsigned long *size)
 {
@@ -3662,10 +3666,10 @@ void private_platform_device_unregister(struct platform_device *pdev)
 }
 EXPORT_SYMBOL(private_platform_device_unregister);
 
-uint32_t private_math_exp2(uint32_t val, uint32_t shift, uint32_t base)
+uint32_t private_math_exp2(uint32_t val, const unsigned char shift_in, const unsigned char shift_out)
 {
-    /* Call the non-private version */
-    return tisp_math_exp2(val, shift, base);
+    /* Call the non-private version with proper parameter conversion */
+    return tisp_math_exp2(val, (uint32_t)shift_in, (uint32_t)shift_out);
 }
 EXPORT_SYMBOL(private_math_exp2);
 

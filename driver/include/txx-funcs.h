@@ -200,7 +200,7 @@ uint8_t private_leading_one_position(const uint32_t in);
 uint32_t private_log2_int_to_fixed(const uint32_t val, const uint8_t out_precision, const uint8_t shift_out);
 uint32_t private_log2_fixed_to_fixed(const uint32_t val, const int in_fix_point, const uint8_t out_fix_point);
 int32_t private_log2_fixed_to_fixed_64(uint64_t val, int32_t in_fix_point, uint8_t out_fix_point);
-uint32_t private_math_exp2(uint32_t val, const unsigned char shift_in, const unsigned char shift_out);
+uint32_t private_math_exp2(uint32_t val, uint32_t shift, uint32_t base);
 
 /* platform interfaces */
 int private_platform_driver_register(struct platform_driver *drv);
