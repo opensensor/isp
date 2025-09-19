@@ -8500,7 +8500,7 @@ int tisp_gb_init_reg(void)
     pr_debug("tisp_gb_init_reg: Initializing GB registers\n");
 
     /* Binary Ninja: system_reg_write_gb(1, 0x1008, tisp_gb_dgain_shift:4 << 2 | tisp_gb_dgain_shift.d) */
-    system_reg_write_gb(1, 0x1008, (tisp_gb_dgain_shift >> 4) << 2 | (tisp_gb_dgain_shift & 0xf));
+    system_reg_write_gb(1, 0x1008, (tisp_gb_dgain_shift[0] >> 4) << 2 | (tisp_gb_dgain_shift[0] & 0xf));
 
     /* Binary Ninja: if (init.31768 == 0) */
     if (gb_init_flag == 0) {
