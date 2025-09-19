@@ -18,6 +18,7 @@
 #include <media/v4l2-device.h>
 #include <media/v4l2-dev.h>
 #include <media/v4l2-fh.h>
+#include <media/v4l2-ctrls.h>
 #include <linux/dma-mapping.h>
 
 /* V4L2 control IDs - use standard V4L2 control IDs */
