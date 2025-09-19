@@ -11037,7 +11037,6 @@ int data_b2f04(uint32_t param, int flag)
     pr_debug("data_b2f04: No sensor set_analog_gain operation available\n");
     return 0;
 }
-EXPORT_SYMBOL(data_b2f04);
 
 int data_b2f08(uint32_t param, int flag)
 {
@@ -11061,7 +11060,6 @@ int data_b2f08(uint32_t param, int flag)
     pr_debug("data_b2f08: No sensor set_analog_gain_short operation available\n");
     return 0;
 }
-EXPORT_SYMBOL(data_b2f08);
 
 /* REMOVED: Static stub system_reg_write - use external implementation from tx-isp-module.c */
 /* The real system_reg_write() that does actual hardware writes is declared extern */
