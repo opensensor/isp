@@ -705,8 +705,7 @@ int tisp_set_contrast(int contrast);
 int tisp_set_saturation(int saturation);
 int tisp_set_bcsh_hue(int hue);
 
-/* Forward declaration for isp_printf function */
-int isp_printf(int level, const char *format, ...);
+/* Note: isp_printf is declared in tx-isp-debug.h */
 
 /* sensor_init - EXACT Binary Ninja implementation - Sets up sensor control structure */
 int sensor_init(struct tx_isp_dev *isp_dev)
@@ -2334,8 +2333,8 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
                                 }
                             }
                         }
-                        
-                        cleanup_ptr -= 1; /* $s0_1 -= 4 in reference (pointer arithmetic) */
+
+                        /* Note: cleanup_idx is decremented by the for loop */
                     }
                 }
                 
@@ -4797,7 +4796,7 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     isp_dev = private_kmalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
     if (!isp_dev) {
         /* Binary Ninja: isp_printf(2, "Failed to allocate main ISP device\n", $a2) */
-        isp_printf(2, "Failed to allocate main ISP device\n", sizeof(struct tx_isp_dev));
+        isp_printf(2, (unsigned char *)"Failed to allocate main ISP device\n");
         return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
     }
 
@@ -4811,7 +4810,7 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     ret = tx_isp_subdev_init(pdev, &isp_dev->sd, &main_subdev_ops);
     if (ret != 0) {
         /* Binary Ninja: isp_printf(2, "Failed to init main subdev!\n", zx.d(*($s2_1 + 2))) */
-        isp_printf(2, "Failed to init main subdev!\n", 0);
+        isp_printf(2, (unsigned char *)"Failed to init main subdev!\n");
         /* Binary Ninja: private_kfree($v0) */
         private_kfree(isp_dev);
         return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
@@ -4840,7 +4839,7 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
         /* Binary Ninja: private_platform_device_register($platform_device) */
         ret = private_platform_device_register(platform_devices[i]);
         if (ret != 0) {
-            isp_printf(2, "Failed to register platform device %d\n", i);
+            isp_printf(2, (unsigned char *)"Failed to register platform device %d\n", i);
             /* Cleanup previously registered devices */
             while (--i >= 0) {
                 private_platform_device_unregister(platform_devices[i]);
@@ -8134,7 +8133,7 @@ int tisp_set_contrast(int contrast)
     tisp_bcsh_contrast((uint8_t)s0);
 
     /* Binary Ninja: return isp_printf(0, "%s[%d] VIC failed to config DVP mode!(8bits-sensor)\n", "tisp_set_contrast") */
-    return isp_printf(0, "%s[%d] VIC failed to config DVP mode!(8bits-sensor)\n", "tisp_set_contrast");
+    return isp_printf(0, (unsigned char *)"tisp_set_contrast: VIC failed to config DVP mode!(8bits-sensor)\n");
 }
 EXPORT_SYMBOL(tisp_set_contrast);
 
@@ -8152,7 +8151,7 @@ int tisp_set_saturation(int saturation)
     tisp_bcsh_saturation((uint8_t)s0);
 
     /* Binary Ninja: return isp_printf(0, "sensor type is BT601!\n", "tisp_set_saturation") */
-    return isp_printf(0, "sensor type is BT601!\n", "tisp_set_saturation");
+    return isp_printf(0, (unsigned char *)"tisp_set_saturation: sensor type is BT601!\n");
 }
 EXPORT_SYMBOL(tisp_set_saturation);
 
@@ -8170,7 +8169,7 @@ int tisp_set_bcsh_hue(int hue)
     tisp_bcsh_s_hue((uint8_t)s0);
 
     /* Binary Ninja: return isp_printf(0, "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n", "tisp_set_bcsh_hue") */
-    return isp_printf(0, "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n", "tisp_set_bcsh_hue");
+    return isp_printf(0, (unsigned char *)"tisp_set_bcsh_hue: VIC failed to config DVP SONY mode!(10bits-sensor)\n");
 }
 EXPORT_SYMBOL(tisp_set_bcsh_hue);
 
