@@ -3692,30 +3692,15 @@ struct sock *private_netlink_kernel_create(struct net *net, int unit, struct net
 EXPORT_SYMBOL(private_netlink_kernel_create);
 
 /* saved_command_line - Binary Ninja compatible implementation */
-/* In some kernel versions, saved_command_line is not exported, so we provide our own */
-static char *our_saved_command_line = NULL;
+/* Provide our own saved_command_line symbol since kernel doesn't export it */
+static char our_saved_command_line_storage[] = "rmem=29M@0x6300000";  /* Default for T31 */
+char *saved_command_line = our_saved_command_line_storage;
+EXPORT_SYMBOL(saved_command_line);
 
 char *get_saved_command_line(void)
 {
-    if (!our_saved_command_line) {
-        /* Try to get the kernel's saved_command_line first */
-        extern char *saved_command_line __attribute__((weak));
-        if (saved_command_line) {
-            our_saved_command_line = saved_command_line;
-        } else {
-            /* Fallback: read from /proc/cmdline equivalent */
-            our_saved_command_line = "rmem=29M@0x6300000";  /* Default for T31 */
-        }
-    }
-    return our_saved_command_line;
+    return saved_command_line;
 }
-
-/* Export our implementation */
-char *saved_command_line_ptr(void)
-{
-    return get_saved_command_line();
-}
-EXPORT_SYMBOL(saved_command_line_ptr);
 
 void private_i2c_del_driver(struct i2c_driver *driver)
 {
