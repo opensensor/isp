@@ -4987,12 +4987,9 @@ static int tx_isp_init(void)
         }
     }
 	
-    /* Step 2: Register platform device (matches reference) */
-    ret = platform_device_register(&tx_isp_platform_device);
-    if (ret != 0) {
-        pr_err("not support the gpio mode!\n");
-        goto err_free_dev;
-    }
+    /* REMOVED: Main ISP platform device - reference driver only uses individual subdevices */
+    /* Each subdevice will manage its own memory region per reference driver */
+    pr_info("*** REFERENCE DRIVER: Using individual subdevice platform devices only ***\n");
 
     /* Step 3: Register platform driver (matches reference) */
     ret = platform_driver_register(&tx_isp_driver);
