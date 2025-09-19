@@ -1980,7 +1980,7 @@ static int32_t tisp_log2_int_to_fixed(uint32_t value, char precision_bits, char 
            (normalized & 0x7fff) >> ((15 - shift) & 0x1f);
 }
 
-static int32_t tisp_log2_fixed_to_fixed_tuning(uint32_t input_val, int32_t in_precision, char out_precision)
+int32_t tisp_log2_fixed_to_fixed_tuning(uint32_t input_val, int32_t in_precision, char out_precision)
 {
     // Call helper directly with original param signature
     return tisp_log2_int_to_fixed(input_val, out_precision, 0);
@@ -6210,9 +6210,9 @@ static int data_b2ef4(uint32_t param, int flag);
 static int data_b2ef8(uint32_t param, int flag);
 static uint32_t data_b2ee0(uint32_t log_val, int16_t *var_ptr);
 static uint32_t data_b2ee4(uint32_t log_val, void **var_ptr);
-static int data_b2f04(uint32_t param, int flag);
-static int data_b2f08(uint32_t param, int flag);
-static uint32_t tisp_log2_fixed_to_fixed(void);
+int data_b2f04(uint32_t param, int flag);
+int data_b2f08(uint32_t param, int flag);
+uint32_t tisp_log2_fixed_to_fixed(void);
 /* Note: tisp_log2_fixed_to_fixed and system_reg_write already declared elsewhere */
 
 /* Remove duplicate declarations - using the struct versions defined earlier */
@@ -11069,6 +11069,7 @@ uint32_t tisp_log2_fixed_to_fixed(void)
     pr_debug("tisp_log2_fixed_to_fixed: Performing log2 conversion\n");
     return 0x1000; /* Return default fixed point value */
 }
+EXPORT_SYMBOL(tisp_log2_fixed_to_fixed);
 
 /* REMOVED: Static stub system_reg_write - use external implementation from tx-isp-module.c */
 /* The real system_reg_write() that does actual hardware writes is declared extern */
