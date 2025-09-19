@@ -5406,9 +5406,7 @@ static void tx_isp_exit(void)
         tx_isp_subdev_platform_exit();
         pr_info("*** SUBDEV PLATFORM DRIVERS CLEANED UP ***\n");
         
-        /* Unregister platform components */
-        platform_driver_unregister(&tx_isp_driver);
-        platform_device_unregister(&tx_isp_platform_device);
+        /* REMOVED: Main ISP platform driver/device cleanup - not registered */
         
         /* Free device structure */
         kfree(ourISPdev);
