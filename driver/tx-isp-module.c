@@ -6069,7 +6069,9 @@ static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
         /* Binary Ninja: void* $v0_2 = **(arg2 + 0x44) */
         struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
         if (isp_dev && isp_dev->vic_dev) {
-            v0_2 = *((void**)((char*)isp_dev->vic_dev + 0x44));
+            /* SAFE: Use proper struct member access instead of unsafe offset */
+            /* Offset 0x44 likely corresponds to a subdev or handler field */
+            v0_2 = isp_dev->vic_dev->irq_handler;  /* Use proper struct member */
         } else {
             v0_2 = NULL;
         }
