@@ -301,6 +301,12 @@ setup_complete:
     /* Binary Ninja: dump_fsd = $v0 */
     dump_fsd = fs_dev;
 
+    /* CRITICAL FIX: Link this properly initialized FS device to the global ISP device */
+    if (ourISPdev) {
+        ourISPdev->fs_dev = fs_dev;
+        pr_info("*** FS PROBE: CRITICAL - Linked FS device to ourISPdev->fs_dev: %p ***\n", ourISPdev->fs_dev);
+    }
+
     return 0;
 }
 

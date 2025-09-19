@@ -34,6 +34,7 @@
     } while(0)
 
 bool is_valid_kernel_pointer(const void *ptr);
+extern struct tx_isp_dev *ourISPdev;
 
 /* ========================================================================
  * VIN Device Creation Function - Matches VIC Pattern
