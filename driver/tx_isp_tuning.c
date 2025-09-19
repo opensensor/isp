@@ -45,7 +45,7 @@
 #include "../include/tx_isp_csi.h"
 #include "../include/tx_isp_vin.h"
 #include "../include/tx-isp-device.h"
-#include "../include/tx-isp_tuning.h"
+#include "../include/tx_isp_tuning.h"
 #include "../include/tx-libimp.h"
 
 /* Forward declaration for exported ISP event callback array */
