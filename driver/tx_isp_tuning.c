@@ -295,7 +295,7 @@ void tisp_event_exit(void)
  * tisp_param_operate_deinit - EXACT Binary Ninja MCP implementation
  * Address: 0x24b54
  */
-static void tisp_param_operate_deinit(void)
+void tisp_param_operate_deinit(void)
 {
     /* Binary Ninja: tisp_netlink_exit() */
     tisp_netlink_exit();
