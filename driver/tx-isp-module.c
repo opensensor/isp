@@ -1268,14 +1268,10 @@ int frame_channel_open(struct inode *inode, struct file *file)
     /* Binary Ninja shows frame_channel_unlocked_ioctl expects device at *(file + 0x70) */
     file->private_data = fcd;
     
-    /* CRITICAL FIX: Also store at offset 0x70 where Binary Ninja expects it */
-    /* This prevents the null pointer dereference crash */
-    if ((char*)file + 0x70 < (char*)file + sizeof(*file)) {
-        *((struct frame_channel_device**)((char*)file + 0x70)) = fcd;
-        pr_info("*** CRITICAL FIX: Frame channel device stored at file+0x70 to prevent crash ***\n");
-    } else {
-        pr_warn("*** WARNING: Cannot store at file+0x70 - using private_data only ***\n");
-    }
+    /* SAFE: Use proper file->private_data instead of unsafe offset access */
+    /* The Binary Ninja offset 0x70 corresponds to the private_data field */
+    /* file->private_data is already set above - no unsafe offset access needed */
+    pr_info("*** SAFE: Frame channel device stored in file->private_data ***\n");
     
     pr_info("*** FRAME CHANNEL %d OPENED SUCCESSFULLY - NOW READY FOR IOCTLS ***\n", fcd->channel_num);
     pr_info("Channel %d: Format %dx%d, pixfmt=0x%x, minor=%d\n",
