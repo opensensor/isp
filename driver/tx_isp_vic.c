@@ -59,10 +59,10 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 1 */
         vic_dev->irq_enabled = 1;
 
-        /* Binary Ninja: int32_t $v0_1 = *(dump_vsd_5 + 0x84) */
-        /* Binary Ninja: if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
-        if (vic_dev->irq_handler) {
-            vic_dev->irq_handler(vic_dev->irq_priv);
+        /* Binary Ninja: $v0_1(dump_vsd_5 + 0x80) - this is enable_irq(irq_number) */
+        if (vic_dev->irq_num > 0) {
+            enable_irq(vic_dev->irq_num);
+            pr_info("*** tx_vic_enable_irq: Hardware IRQ %d ENABLED ***\n", vic_dev->irq_num);
         }
 
         pr_info("*** tx_vic_enable_irq: VIC interrupts ENABLED ***\n");
@@ -96,9 +96,10 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
         vic_dev->irq_enabled = 0;
 
         /* Binary Ninja: int32_t $v0_2 = *(dump_vsd_5 + 0x88) */
-        /* Binary Ninja: if ($v0_2 != 0) $v0_2(dump_vsd_5 + 0x80) */
-        if (vic_dev->irq_disable) {
-            vic_dev->irq_disable(vic_dev->irq_priv);
+        /* Binary Ninja: $v0_2(dump_vsd_5 + 0x80) - this is disable_irq(irq_number) */
+        if (vic_dev->irq_num > 0) {
+            disable_irq(vic_dev->irq_num);
+            pr_info("*** tx_vic_disable_irq: Hardware IRQ %d DISABLED ***\n", vic_dev->irq_num);
         }
 
         pr_info("*** tx_vic_disable_irq: VIC interrupts DISABLED ***\n");
