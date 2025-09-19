@@ -527,7 +527,15 @@ void tx_isp_subdev_deinit(struct tx_isp_subdev *sd)
     if (!sd)
         return;
 
-    /* Nothing special to clean up currently */
+    /* Clean up secondary VIC register mapping if this is a VIC device */
+    if (ourISPdev && ourISPdev->vic_dev == sd) {
+        struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
+        if (vic_dev->vic_regs_secondary) {
+            iounmap(vic_dev->vic_regs_secondary);
+            vic_dev->vic_regs_secondary = NULL;
+            pr_info("*** Unmapped secondary VIC registers ***\n");
+        }
+    }
 }
 EXPORT_SYMBOL(tx_isp_subdev_deinit);
 
@@ -555,11 +563,21 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         /* Link VIC device - actual device name is "isp-w02" not "tx-isp-vic" */
         struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
         ourISPdev->vic_dev = (struct tx_isp_subdev *)vic_dev;
-        vic_dev->vic_regs = sd->regs;  /* Critical: Set VIC registers */
+        vic_dev->vic_regs = sd->regs;  /* Critical: Set primary VIC registers */
+
+        /* CRITICAL: Map secondary VIC register space (0x10023000) */
+        vic_dev->vic_regs_secondary = ioremap(0x10023000, 0x1000);
+        if (!vic_dev->vic_regs_secondary) {
+            pr_err("*** FAILED to map secondary VIC registers (0x10023000) ***\n");
+        } else {
+            pr_info("*** MAPPED secondary VIC registers: %p (0x10023000) ***\n", vic_dev->vic_regs_secondary);
+        }
+
         if (sd->regs) {
             ourISPdev->vic_regs = sd->regs;
         }
-        pr_info("*** LINKED VIC device: %p, regs: %p ***\n", vic_dev, sd->regs);
+        pr_info("*** LINKED VIC device: %p, primary_regs: %p, secondary_regs: %p ***\n",
+                vic_dev, sd->regs, vic_dev->vic_regs_secondary);
 
     } else if (strcmp(dev_name, "tx-isp-vin") == 0) {
         /* Link VIN device */

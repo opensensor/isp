@@ -3448,10 +3448,8 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 pr_info("*** tx_isp_core_probe: Frame sync work initialized at %p ***\n", &fs_work);
                 pr_info("*** tx_isp_core_probe: Frame sync work queue initialized with dedicated workqueue ***\n");
 
-                /* Test the work function directly to see if it works */
-                pr_info("*** tx_isp_core_probe: Testing frame sync work function directly ***\n");
-                ispcore_irq_fs_work(&fs_work);
-                pr_info("*** tx_isp_core_probe: Direct work function test completed ***\n");
+                /* REMOVED: Direct work function test - reference driver doesn't do this */
+                pr_info("*** tx_isp_core_probe: Frame sync work function ready for hardware interrupts ***\n");
 
                 /* CRITICAL: Now that core device is set up, call the key function that creates graph and nodes */
                 pr_info("*** tx_isp_core_probe: Calling tx_isp_create_graph_and_nodes ***\n");
