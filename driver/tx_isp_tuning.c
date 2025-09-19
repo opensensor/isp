@@ -1530,9 +1530,9 @@ int tisp_init(void *sensor_info, char *param_name)
 
     /* CRITICAL FIX: Use ACTUAL sensor image dimensions for all ISP components */
     /* Call all tiziano pipeline initialization functions in Binary Ninja order */
-    tiziano_ae_init();
-    tiziano_awb_init();
-    tiziano_gamma_init();
+    tiziano_ae_init(actual_image_height, actual_image_width, fps);
+    tiziano_awb_init(actual_image_height, actual_image_width);
+    tiziano_gamma_init();  /* Binary Ninja: takes no parameters */
     tiziano_gib_init();
     tiziano_lsc_init();
     tiziano_ccm_init();
