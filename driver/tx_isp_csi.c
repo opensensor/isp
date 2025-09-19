@@ -22,14 +22,8 @@ static void __iomem *tx_isp_core_regs = NULL;
 
 void isp_write32(u32 reg, u32 val)
 {
-    if (!tx_isp_core_regs) {
-        tx_isp_core_regs = ioremap(0x13300000, 0x10000);
-        if (!tx_isp_core_regs) {
-            pr_err("Failed to map core registers\n");
-            return;
-        }
-    }
-    writel(val, tx_isp_core_regs + reg);
+    /* Use system_reg_write from reference driver instead of manual mapping */
+    system_reg_write(reg, val);
 }
 
 static void __iomem *tx_isp_vic_regs = NULL;

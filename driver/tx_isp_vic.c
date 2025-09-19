@@ -85,35 +85,12 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     vic_dev->format_magic = 0x3231564e;  /* NV12 format magic number */
     pr_info("*** VIC DEVICE: Set NV12 format magic number 0x3231564e at offset 0xc ***\n");
     
-    /* *** CRITICAL FIX: Map BOTH VIC register spaces - dual VIC architecture *** */
-    pr_info("*** CRITICAL: Mapping DUAL VIC register spaces for complete VIC control ***\n");
+    /* REMOVED: Manual memory mapping - let tx_isp_subdev_init handle memory per reference driver */
+    pr_info("*** REFERENCE DRIVER: Memory mapping will be handled by tx_isp_subdev_init ***\n");
 
-    /* Primary VIC space (original CSI PHY shared space) */
-    vic_dev->vic_regs = ioremap(0x133e0000, 0x10000);
-    if (!vic_dev->vic_regs) {
-        pr_err("tx_isp_create_vic_device: Failed to map primary VIC registers at 0x133e0000\n");
-        kfree(vic_dev);
-        return -ENOMEM;
-    }
-    pr_info("*** Primary VIC registers mapped: %p (0x133e0000) ***\n", vic_dev->vic_regs);
-
-    /* Secondary VIC space (isp-w01 - CSI PHY coordination space) */
-    vic_dev->vic_regs_secondary = ioremap(0x10023000, 0x1000);
-    if (!vic_dev->vic_regs_secondary) {
-        pr_err("tx_isp_create_vic_device: Failed to map secondary VIC registers at 0x10023000\n");
-        iounmap(vic_dev->vic_regs);
-        kfree(vic_dev);
-        return -ENOMEM;
-    }
-    pr_info("*** Secondary VIC registers mapped: %p (0x10023000) ***\n", vic_dev->vic_regs_secondary);
-    
-    /* Also store in ISP device for compatibility */
-    if (!isp_dev->vic_regs) {
-        isp_dev->vic_regs = vic_dev->vic_regs;
-    }
-    if (!isp_dev->vic_regs2) {
-        isp_dev->vic_regs2 = vic_dev->vic_regs_secondary;
-    }
+    /* Initialize register pointers to NULL - will be set by tx_isp_subdev_init */
+    vic_dev->vic_regs = NULL;
+    vic_dev->vic_regs_secondary = NULL;
     
     /* Initialize VIC device dimensions - CRITICAL: Use actual sensor output dimensions */
     vic_dev->width = 1920;  /* GC2053 actual output width */
@@ -3301,6 +3278,20 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Binary Ninja: test_addr = $v0 + 0x80 */
     test_addr = (char *)vic_dev + 0x80;  /* Test address pointer */
 
+    /* CRITICAL: Copy register mapping from subdev to VIC device structure */
+    if (vic_dev->sd.base) {
+        vic_dev->vic_regs = vic_dev->sd.base;
+        pr_info("*** VIC PROBE: Copied register mapping from subdev: %p ***\n", vic_dev->vic_regs);
+
+        /* Also update global ISP device for compatibility */
+        if (ourISPdev && !ourISPdev->vic_regs) {
+            ourISPdev->vic_regs = vic_dev->vic_regs;
+            pr_info("*** VIC PROBE: Updated global ISP device vic_regs: %p ***\n", ourISPdev->vic_regs);
+        }
+    } else {
+        pr_warn("*** VIC PROBE: No register mapping available from tx_isp_subdev_init ***\n");
+    }
+
     return 0;
 }
 
@@ -3328,20 +3319,8 @@ int tx_isp_vic_remove(struct platform_device *pdev)
     if (res)
         release_mem_region(res->start, resource_size(res));
 
-    /* CRITICAL: Clean up BOTH VIC register mappings */
-    struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
-    if (vic_dev) {
-        if (vic_dev->vic_regs) {
-            pr_info("*** VIC REMOVE: Unmapping primary VIC registers ***\n");
-            iounmap(vic_dev->vic_regs);
-            vic_dev->vic_regs = NULL;
-        }
-        if (vic_dev->vic_regs_secondary) {
-            pr_info("*** VIC REMOVE: Unmapping secondary VIC registers ***\n");
-            iounmap(vic_dev->vic_regs_secondary);
-            vic_dev->vic_regs_secondary = NULL;
-        }
-    }
+    /* REMOVED: Manual memory unmapping - tx_isp_subdev_deinit handles memory per reference driver */
+    pr_info("*** VIC REMOVE: Memory cleanup handled by tx_isp_subdev_deinit ***\n");
 
     /* Clean up subdev */
     tx_isp_subdev_deinit(sd);
