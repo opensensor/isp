@@ -1841,15 +1841,33 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         return IRQ_HANDLED;
     }
 
+    /* MIPS SAFETY: Check isp_dev pointer alignment */
+    if ((unsigned long)isp_dev & 0x3) {
+        pr_err("*** VIC IRQ: MISALIGNED isp_dev pointer 0x%p ***\n", isp_dev);
+        return IRQ_HANDLED;
+    }
+
     /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
     /* SAFE: Use proper struct member access instead of raw offset +0xd4 */
     vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
 
     /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
     if (vic_dev != NULL && (unsigned long)vic_dev < 0xfffff001) {
+        /* MIPS SAFETY: Check vic_dev pointer alignment */
+        if ((unsigned long)vic_dev & 0x3) {
+            pr_err("*** VIC IRQ: MISALIGNED vic_dev pointer 0x%p ***\n", vic_dev);
+            return IRQ_HANDLED;
+        }
+
         /* CRITICAL SAFETY: Validate vic_regs before accessing */
         if (!vic_dev->vic_regs) {
             pr_err("*** VIC IRQ: NULL vic_regs ***\n");
+            return IRQ_HANDLED;
+        }
+
+        /* MIPS SAFETY: Check vic_regs pointer alignment */
+        if ((unsigned long)vic_dev->vic_regs & 0x3) {
+            pr_err("*** VIC IRQ: MISALIGNED vic_regs pointer 0x%p ***\n", vic_dev->vic_regs);
             return IRQ_HANDLED;
         }
         /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
@@ -5012,17 +5030,27 @@ static int tx_isp_init(void)
         return gpio_mode_check;
     }
 
-    /* Allocate ISP device structure */
-    ourISPdev = kzalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
-    if (!ourISPdev) {
-        pr_err("Failed to allocate ISP device\n");
-        return -ENOMEM;
-    }
+    /* CRITICAL FIX: Check if ourISPdev was already allocated by probe function */
+    if (ourISPdev) {
+        pr_info("*** USING EXISTING ISP DEVICE FROM PROBE: %p ***\n", ourISPdev);
+        /* Device already allocated and initialized by probe - just ensure it's properly set up */
+        if (!ourISPdev->lock.rlock.raw_lock.slock) {
+            spin_lock_init(&ourISPdev->lock);
+        }
+    } else {
+        /* Allocate ISP device structure only if not already done by probe */
+        pr_info("*** ALLOCATING NEW ISP DEVICE (probe didn't run) ***\n");
+        ourISPdev = kzalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
+        if (!ourISPdev) {
+            pr_err("Failed to allocate ISP device\n");
+            return -ENOMEM;
+        }
 
-    /* Initialize device structure */
-    spin_lock_init(&ourISPdev->lock);
-    ourISPdev->refcnt = 0;
-    ourISPdev->is_open = false;
+        /* Initialize device structure */
+        spin_lock_init(&ourISPdev->lock);
+        ourISPdev->refcnt = 0;
+        ourISPdev->is_open = false;
+    }
 
     /* Initialize frame generation work queue */
     INIT_DELAYED_WORK(&vic_frame_work, vic_frame_work_function);
@@ -6036,10 +6064,23 @@ static irqreturn_t isp_irq_handle(int irq, void *dev_id)
             return IRQ_HANDLED;
         }
 
+        /* MIPS SAFETY: Check isp_dev pointer alignment */
+        if ((unsigned long)isp_dev & 0x3) {
+            pr_err("*** isp_irq_handle: MISALIGNED isp_dev pointer 0x%p ***\n", isp_dev);
+            return IRQ_HANDLED;
+        }
+
         /* Binary Ninja: void* $v0_2 = **(arg2 + 0x44) */
         /* SAFE: Use proper struct member access instead of raw offset +0x44 */
         if (isp_dev->vic_dev) {
             struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+
+            /* MIPS SAFETY: Check vic_dev pointer alignment */
+            if ((unsigned long)vic_dev & 0x3) {
+                pr_err("*** isp_irq_handle: MISALIGNED vic_dev pointer 0x%p ***\n", vic_dev);
+                return IRQ_HANDLED;
+            }
+
             /* SAFE: Check if vic_dev has valid irq_handler member */
             subdev_handler = vic_dev ? vic_dev->irq_handler : NULL;
 
