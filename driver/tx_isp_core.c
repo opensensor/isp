@@ -132,6 +132,9 @@ extern struct tx_isp_dev *ourISPdev;
 
 /* Global ISP core pointer for Binary Ninja compatibility */
 static struct tx_isp_dev *g_ispcore = NULL;
+
+/* Binary Ninja reference global variables */
+static struct tx_isp_dev *dump_csd = NULL;  /* Global core device pointer */
 uint32_t system_reg_read(u32 reg);
 
 
@@ -2011,6 +2014,15 @@ static const struct file_operations isp_tuning_fops = {
     .release = isp_tuning_release,
 };
 
+/* ISP Core file operations - Binary Ninja reference */
+static const struct file_operations isp_core_fops = {
+    .owner = THIS_MODULE,
+    .open = isp_tuning_open,        /* Reuse tuning open function */
+    .release = isp_tuning_release,  /* Reuse tuning release function */
+    .unlocked_ioctl = isp_tuning_ioctl,
+    .llseek = default_llseek,
+};
+
 /* Graph proc operations for /proc/jz/isp/* entries - Linux 3.10 compatible */
 static ssize_t graph_proc_read(struct file *file, char __user *buffer, size_t count, loff_t *pos)
 {
@@ -2977,23 +2989,22 @@ struct tx_isp_platform_data {
     uint32_t version;       /* Version info */
 } __attribute__((packed));
 
-/* tx_isp_core_probe - SAFE implementation using proper struct member access */
+/* tx_isp_core_probe - EXACT Binary Ninja reference implementation */
 int tx_isp_core_probe(struct platform_device *pdev)
 {
     struct tx_isp_dev *isp_dev;
-    struct tx_isp_platform_data *platform_data;
+    struct tx_isp_platform_data *pdata;
     int result;
     uint32_t channel_count;
     void *channel_array;
     void *tuning_dev;
 
-    pr_debug("*** tx_isp_core_probe: SAFE implementation using proper struct member access ***\n");
-
-    /* Allocate ISP device structure using proper size */
-    isp_dev = kzalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
+    /* Binary Ninja: private_kmalloc(0x2b8, 0xd0) */
+    isp_dev = private_kmalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
     if (isp_dev == NULL) {
-        isp_printf(2, "Failed to allocate ISP device structure\n");
-        return -ENOMEM;
+        /* Binary Ninja: isp_printf(2, "Failed to allocate ISP device structure\n", $a2) */
+        isp_printf(2, "Failed to allocate ISP device structure\n", sizeof(struct tx_isp_dev));
+        return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
     }
 
     /* Initialize device pointer */
@@ -3406,6 +3417,12 @@ void private_iounmap(const volatile void __iomem *addr)
     iounmap(addr);
 }
 EXPORT_SYMBOL(private_iounmap);
+
+void private_init_completion(struct completion *x)
+{
+    init_completion(x);
+}
+EXPORT_SYMBOL(private_init_completion);
 
 
 

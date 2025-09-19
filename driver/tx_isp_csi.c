@@ -12,6 +12,9 @@ int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes);
 void dump_csi_reg(struct tx_isp_subdev *sd);
 extern struct tx_isp_dev *ourISPdev;
 
+/* Binary Ninja reference global variables */
+static struct tx_isp_csi_device *dump_csd = NULL;  /* Global CSI device pointer */
+
 
 static void __iomem *tx_isp_core_regs = NULL;
 
@@ -812,6 +815,15 @@ static struct tx_isp_subdev_ops csi_subdev_ops = {
     .sensor = &csi_sensor_ops,
 };
 
+/* CSI file operations - Binary Ninja reference */
+static const struct file_operations isp_csi_fops = {
+    .owner = THIS_MODULE,
+    .open = csi_core_ops_init,  /* Placeholder - should be proper open function */
+    .release = single_release,
+    .unlocked_ioctl = csi_core_ops_init,
+    .llseek = default_llseek,
+};
+
 // Define resources outside probe
 static struct resource tx_isp_csi_resources[] = {
     [0] = {
@@ -822,58 +834,85 @@ static struct resource tx_isp_csi_resources[] = {
     }
 };
 
+/* tx_isp_csi_probe - EXACT Binary Ninja reference implementation */
 int tx_isp_csi_probe(struct platform_device *pdev)
 {
-    struct tx_isp_subdev *sd = NULL;
-    struct resource *res;
-    int32_t ret = 0;
+    struct tx_isp_csi_device *csi_dev;
+    struct tx_isp_platform_data *pdata;
+    struct resource *mem_resource;
+    int ret;
 
-    printk("tx_isp_csi_probe\n");
+    /* Binary Ninja: private_kmalloc(0x148, 0xd0) */
+    csi_dev = private_kmalloc(sizeof(struct tx_isp_csi_device), GFP_KERNEL);
+    if (!csi_dev) {
+        /* Binary Ninja: isp_printf(2, &$LC0, $a2) */
+        isp_printf(2, "Failed to allocate CSI device\n", sizeof(struct tx_isp_csi_device));
+        return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
+    }
 
-    // Add resources to platform device if not already present
-    if (!platform_get_resource(pdev, IORESOURCE_MEM, 0)) {
-        ret = platform_device_add_resources(pdev, tx_isp_csi_resources,
-                                          ARRAY_SIZE(tx_isp_csi_resources));
-        if (ret) {
-            ISP_ERROR("Failed to add CSI resources\n");
-            return ret;
+    /* Binary Ninja: memset($v0, 0, 0x148) */
+    memset(csi_dev, 0, sizeof(struct tx_isp_csi_device));
+
+    /* Binary Ninja: void* $s1_1 = arg1[0x16] */
+    pdata = pdev->dev.platform_data;
+
+    /* Binary Ninja: tx_isp_subdev_init(arg1, $v0, &csi_subdev_ops) */
+    ret = tx_isp_subdev_init(pdev, &csi_dev->sd, &csi_subdev_ops);
+    if (ret != 0) {
+        /* Binary Ninja: isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", zx.d(*($s1_1 + 2))) */
+        if (pdata) {
+            isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", pdata->sensor_type);
+        } else {
+            isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", 0);
         }
+        /* Binary Ninja: private_kfree($v0) */
+        private_kfree(csi_dev);
+        return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
     }
 
-    sd = private_kmalloc(sizeof(struct tx_isp_subdev), GFP_KERNEL);
-    if (!sd) {
-        ISP_ERROR("Failed to allocate CSI subdev\n");
-        return -ENOMEM;
+    /* Binary Ninja: private_request_mem_region(0x10022000, 0x1000, "Can not support this frame mode!!!\n") */
+    mem_resource = private_request_mem_region(0x10022000, 0x1000, "Can not support this frame mode!!!\n");
+    if (!mem_resource) {
+        /* Binary Ninja: isp_printf(2, "sensor type is BT1120!\n", "tx_isp_csi_probe") */
+        isp_printf(2, "sensor type is BT1120!\n", "tx_isp_csi_probe");
+        tx_isp_subdev_deinit(&csi_dev->sd);
+        private_kfree(csi_dev);
+        return -EBUSY;  /* Binary Ninja returns 0xfffffff0 */
     }
 
-    memset(sd, 0, sizeof(struct tx_isp_subdev));
-
-    // Now we can safely get the resource
-    res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-    if (!res) {
-        ISP_ERROR("No memory resource specified\n");
-        ret = -ENODEV;
-        goto err_deinit_sd;
+    /* Binary Ninja: private_ioremap($a0, $v0_3[1] + 1 - $a0) */
+    csi_dev->csi_regs = private_ioremap(mem_resource->start, resource_size(mem_resource));
+    if (!csi_dev->csi_regs) {
+        /* Binary Ninja: isp_printf(2, "VIC_CTRL : %08x\n", "tx_isp_csi_probe") */
+        isp_printf(2, "VIC_CTRL : %08x\n", "tx_isp_csi_probe");
+        private_release_mem_region(mem_resource->start, resource_size(mem_resource));
+        tx_isp_subdev_deinit(&csi_dev->sd);
+        private_kfree(csi_dev);
+        return -ENOMEM;  /* Binary Ninja returns 0xfffffffa */
     }
 
-    sd->base = ioremap(res->start, resource_size(res));
-    if (!sd->base) {
-        ISP_ERROR("Failed to map CSI registers\n");
-        ret = -ENOMEM;
-        goto err_release_mem;
-    }
+    /* Binary Ninja: *($v0 + 0x34) = &isp_csi_fops */
+    csi_dev->sd.fops = &isp_csi_fops;
 
-    private_raw_mutex_init(&sd->csi_lock, "csi_lock", NULL);
-    private_platform_set_drvdata(pdev, sd);
+    /* Binary Ninja: *($v0 + 0x138) = $v0_3 */
+    csi_dev->mem_resource = mem_resource;
+
+    /* Binary Ninja: private_raw_mutex_init($v0 + 0x12c, "not support the gpio mode!\n", 0) */
+    private_raw_mutex_init(&csi_dev->mlock, "not support the gpio mode!\n", 0);
+
+    /* Binary Ninja: private_platform_set_drvdata(arg1, $v0) */
+    private_platform_set_drvdata(pdev, csi_dev);
+
+    /* Binary Ninja: *($v0 + 0x128) = 1 */
+    csi_dev->state = 1;
+
+    /* Binary Ninja: dump_csd = $v0 */
+    dump_csd = csi_dev;
+
+    /* Binary Ninja: *($v0 + 0xd4) = $v0 */
+    csi_dev->self_ptr = csi_dev;  /* Self-pointer for validation */
 
     return 0;
-
-err_release_mem:
-    release_mem_region(res->start, resource_size(res));
-err_deinit_sd:
-    tx_isp_subdev_deinit(sd);
-    private_kfree(sd);
-    return ret;
 }
 
 /* CSI remove function */

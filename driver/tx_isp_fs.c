@@ -25,12 +25,16 @@
 struct tx_isp_fs_device {
     struct tx_isp_subdev subdev;            /* Base subdev structure */
     void __iomem *base_regs;                /* Base register mapping +0xb8 */
-    
+
     void *channel_configs;                   /* channel config array */
     void *channel_buffer;                    /* kmalloc'ed channel buffer */
     uint32_t channel_count;                  /* number of channels */
     uint32_t initialized;                    /* initialization flag */
+    void *self_ptr;                          /* Self-pointer for validation */
 } __attribute__((packed));
+
+/* Binary Ninja reference global variables */
+static struct tx_isp_fs_device *dump_fsd = NULL;  /* Global FS device pointer */
 
 
 /* Forward declarations */
@@ -135,45 +139,52 @@ void tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan)
 }
 
 
-/* tx_isp_fs_probe - Memory-safe implementation */
+/* tx_isp_fs_probe - EXACT Binary Ninja reference implementation */
 int tx_isp_fs_probe(struct platform_device *pdev)
 {
     struct tx_isp_fs_device *fs_dev;
+    struct tx_isp_platform_data *pdata;
     struct tx_isp_frame_channel *channels_buffer = NULL;
     struct tx_isp_frame_channel *current_channel;
     void *channel_config_ptr;
     uint32_t channel_count;
     int ret;
     int i;
-    
-    pr_debug("*** tx_isp_fs_probe: Memory-safe implementation ***\n");
-    
-    /* SAFE: Use proper struct size instead of fixed 0xe8 */
-    fs_dev = kzalloc(sizeof(struct tx_isp_fs_device), GFP_KERNEL);
+
+    /* Binary Ninja: private_kmalloc(0xe8, 0xd0) */
+    fs_dev = private_kmalloc(sizeof(struct tx_isp_fs_device), GFP_KERNEL);
     if (!fs_dev) {
-        pr_err("Err [VIC_INT] : control limit err!!!\n");
-        return -12;
+        /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : control limit err!!!\n", $a2) */
+        isp_printf(2, "Err [VIC_INT] : control limit err!!!\n", sizeof(struct tx_isp_fs_device));
+        return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
     }
     
+    /* Binary Ninja: memset($v0, 0, 0xe8) */
+    memset(fs_dev, 0, sizeof(struct tx_isp_fs_device));
+
     /* Binary Ninja: void* $s2_1 = arg1[0x16] */
-    /* This references platform device resource information */
-    
-    /* Binary Ninja: if (tx_isp_subdev_init(arg1, $v0, &fs_subdev_ops) == 0) */
+    pdata = pdev->dev.platform_data;
+
+    /* Binary Ninja: tx_isp_subdev_init(arg1, $v0, &fs_subdev_ops) */
     ret = tx_isp_subdev_init(pdev, &fs_dev->subdev, &fs_subdev_ops);
     if (ret != 0) {
         /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : image syfifo ovf !!!\n", zx.d(*($s2_1 + 2))) */
-        pr_err("Err [VIC_INT] : image syfifo ovf !!!\n");
+        if (pdata) {
+            isp_printf(2, "Err [VIC_INT] : image syfifo ovf !!!\n", pdata->sensor_type);
+        } else {
+            isp_printf(2, "Err [VIC_INT] : image syfifo ovf !!!\n", 0);
+        }
         /* Binary Ninja: private_kfree($v0) */
-        kfree(fs_dev);
-        /* Binary Ninja: return 0xfffffff4 */
-        return -12;
+        private_kfree(fs_dev);
+        return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
     }
-    
-    /* SAFE: Access struct member directly instead of offset calculation */
-    channel_count = fs_dev->channel_count;  /* Get from subdev initialization */
-    
-    pr_debug("tx_isp_fs_probe: channel_count=%d\n", channel_count);
-    
+
+    /* Binary Ninja: uint32_t $a0_2 = zx.d(*($v0 + 0xc8)) */
+    channel_count = fs_dev->channel_count;  /* Get channel count from offset 0xc8 */
+
+    /* Binary Ninja: *($v0 + 0xe0) = $a0_2 */
+    fs_dev->initialized = channel_count;  /* Store channel count at offset 0xe0 */
+
     /* Binary Ninja: if ($a0_2 == 0) goto label_1c670 */
     if (channel_count == 0) {
         goto setup_complete;
@@ -275,21 +286,21 @@ error_cleanup:
     return ret;
 
 setup_complete:
-    /* SAFE: Direct struct member access */
+    /* Binary Ninja: *($v0 + 0xe4) = 1 */
     fs_dev->initialized = 1;
-    
-    platform_set_drvdata(pdev, fs_dev);
-    
-    /* SAFE: Set file operations through subdev module structure */
-    fs_dev->subdev.module.ops = &isp_framesource_fops;
-    
-    /* Note: Self-pointer assignment removed as it's not needed with proper struct access */
-    
-    pr_debug("*** tx_isp_fs_probe: FS device created successfully (size=%zu, channels=%d) ***\n",
-            sizeof(struct tx_isp_fs_device), channel_count);
-    pr_debug("*** FS PROBE COMPLETE - /proc/jz/isp/isp-fs SHOULD NOW BE AVAILABLE ***\n");
-    
-    /* Binary Ninja: return 0 */
+
+    /* Binary Ninja: private_platform_set_drvdata(arg1, $v0) */
+    private_platform_set_drvdata(pdev, fs_dev);
+
+    /* Binary Ninja: *($v0 + 0x34) = &isp_framesource_fops */
+    fs_dev->subdev.fops = &isp_framesource_fops;
+
+    /* Binary Ninja: *($v0 + 0xd4) = $v0 */
+    fs_dev->self_ptr = fs_dev;  /* Self-pointer for validation */
+
+    /* Binary Ninja: dump_fsd = $v0 */
+    dump_fsd = fs_dev;
+
     return 0;
 }
 

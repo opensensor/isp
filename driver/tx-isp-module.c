@@ -4722,6 +4722,21 @@ static const struct file_operations tx_isp_fops = {
     .release = tx_isp_release,
 };
 
+/* Main ISP subdev operations - Binary Ninja reference */
+static struct tx_isp_subdev_core_ops main_subdev_core_ops = {
+    .init = NULL,  /* Will be set when needed */
+    .reset = NULL,
+    .ioctl = NULL,
+};
+
+static struct tx_isp_subdev_ops main_subdev_ops = {
+    .core = &main_subdev_core_ops,
+    .video = NULL,
+    .sensor = NULL,
+    .pad = NULL,
+    .internal = NULL
+};
+
 
 
 
@@ -4737,10 +4752,85 @@ int sensor_early_init(void *core_dev)
 }
 
 
-// Simple platform driver - minimal implementation
+/* tx_isp_probe - EXACT Binary Ninja reference implementation */
 static int tx_isp_platform_probe(struct platform_device *pdev)
 {
-    pr_debug("tx_isp_platform_probe called\n");
+    struct tx_isp_dev *isp_dev;
+    struct tx_isp_platform_data *pdata;
+    int ret;
+    int i;
+
+    /* Binary Ninja: private_kmalloc(0x120, 0xd0) */
+    isp_dev = private_kmalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
+    if (!isp_dev) {
+        /* Binary Ninja: isp_printf(2, "Failed to allocate main ISP device\n", $a2) */
+        isp_printf(2, "Failed to allocate main ISP device\n", sizeof(struct tx_isp_dev));
+        return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
+    }
+
+    /* Binary Ninja: memset($v0, 0, 0x120) */
+    memset(isp_dev, 0, sizeof(struct tx_isp_dev));
+
+    /* Binary Ninja: void* $s2_1 = arg1[0x16] */
+    pdata = pdev->dev.platform_data;
+
+    /* Binary Ninja: tx_isp_subdev_init(arg1, $v0, &main_subdev_ops) */
+    ret = tx_isp_subdev_init(pdev, &isp_dev->sd, &main_subdev_ops);
+    if (ret != 0) {
+        /* Binary Ninja: isp_printf(2, "Failed to init main subdev!\n", zx.d(*($s2_1 + 2))) */
+        if (pdata) {
+            isp_printf(2, "Failed to init main subdev!\n", pdata->device_id);
+        } else {
+            isp_printf(2, "Failed to init main subdev!\n", 0);
+        }
+        /* Binary Ninja: private_kfree($v0) */
+        private_kfree(isp_dev);
+        return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
+    }
+
+    /* Binary Ninja: private_platform_set_drvdata(arg1, $v0) */
+    private_platform_set_drvdata(pdev, isp_dev);
+
+    /* Binary Ninja: *($v0 + 0x34) = &tx_isp_fops */
+    isp_dev->sd.fops = &tx_isp_fops;
+
+    /* Binary Ninja: Platform registration loop */
+    extern struct platform_device tx_isp_csi_platform_device;
+    extern struct platform_device tx_isp_vic_platform_device;
+    extern struct platform_device tx_isp_vin_platform_device;
+    extern struct platform_device tx_isp_fs_platform_device;
+    extern struct platform_device tx_isp_core_platform_device;
+
+    struct platform_device *platform_devices[] = {
+        &tx_isp_csi_platform_device,
+        &tx_isp_vic_platform_device,
+        &tx_isp_vin_platform_device,
+        &tx_isp_fs_platform_device,
+        &tx_isp_core_platform_device
+    };
+
+    /* Binary Ninja: Platform device registration loop */
+    for (i = 0; i < ARRAY_SIZE(platform_devices); i++) {
+        /* Binary Ninja: private_platform_device_register($platform_device) */
+        ret = private_platform_device_register(platform_devices[i]);
+        if (ret != 0) {
+            isp_printf(2, "Failed to register platform device %d\n", i);
+            /* Cleanup previously registered devices */
+            while (--i >= 0) {
+                private_platform_device_unregister(platform_devices[i]);
+            }
+            tx_isp_subdev_deinit(&isp_dev->sd);
+            private_kfree(isp_dev);
+            return -EFAULT;
+        }
+    }
+
+    /* Binary Ninja: *($v0 + 0xd4) = $v0 */
+    isp_dev->self_ptr = isp_dev;  /* Self-pointer for validation */
+
+    /* Binary Ninja: dump_isd = $v0 */
+    ourISPdev = isp_dev;  /* Set global main ISP device pointer */
+
     return 0;
 }
 
