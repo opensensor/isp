@@ -1866,16 +1866,19 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
     isp->sd.isp = (void *)isp;
     isp->subdevs[4] = &isp->sd;
     pr_info("*** REGISTERED ISP CORE SUBDEV AT INDEX 4: %p ***", &isp->sd);
-    
-    /* Binary Ninja: int32_t $v0 = *($s0_1 + 0xe8) */
+
+    /* STEP 3: Follow Binary Ninja state machine */
+    pr_info("*** STEP 3: Following Binary Ninja state machine ***");
+
+    /* Binary Ninja: Check VIC state */
     isp_state = vic_dev->state;
-    pr_info("ispcore_slake_module: Current ISP state = %d", isp_state);
-    
-    /* Binary Ninja: if ($v0 != 1) */
+    pr_info("ispcore_slake_module: Current VIC state = %d", isp_state);
+
+    /* Binary Ninja: if (state != 1) */
     if (isp_state != 1) {
-        /* Binary Ninja: if ($v0 s>= 3) */
+        /* Binary Ninja: if (state >= 3) */
         if (isp_state >= 3) {
-            pr_info("ispcore_slake_module: ISP state >= 3, calling ispcore_core_ops_init");
+            pr_info("ispcore_slake_module: VIC state >= 3, calling ispcore_core_ops_init");
 
             /* Get sensor attributes from the connected sensor */
             struct tx_isp_sensor_attribute *sensor_attr = NULL;
