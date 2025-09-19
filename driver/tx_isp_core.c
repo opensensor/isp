@@ -2112,22 +2112,7 @@ int tisp_deinit(void)
 
 
 
-/**
- * tisp_deinit_free - TISP final cleanup
- * Note: The actual implementation should be in tx_isp_tuning.c where static variables are defined
- */
-void tisp_deinit_free(void)
-{
-    pr_info("tisp_deinit_free: TISP final cleanup completed");
-    /*
-     * Binary Ninja shows this function should:
-     * 1. Free data_ca490 if not NULL and set to 0
-     * 2. Free data_ca48c if not NULL and set to 0
-     *
-     * However, since these variables are static in tx_isp_tuning.c,
-     * this function should be implemented there.
-     */
-}
+
 
 /**
  * tisp_netlink_exit - TISP netlink exit
