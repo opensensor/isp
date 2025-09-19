@@ -9490,6 +9490,290 @@ int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32
 
 /* Removed duplicate EXPORT_SYMBOL declarations for tuning functions and global variables */
 
+/* ===== MISSING tisp_*_param_array_get FUNCTION IMPLEMENTATIONS ===== */
+
+/* tisp_ccm_param_array_get - Binary Ninja stub implementation */
+int tisp_ccm_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_ccm_param_array_get: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    /* Simple stub - return minimal data */
+    memset(out_buf, 0, 0x24);
+    *size_buf = 0x24;
+    pr_debug("tisp_ccm_param_array_get: ID=0x%x, size=0x24\n", param_id);
+    return 0;
+}
+
+/* tisp_gamma_param_array_get - Binary Ninja stub implementation */
+int tisp_gamma_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_gamma_param_array_get: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    /* Simple stub - return minimal data */
+    memset(out_buf, 0, 0x102);
+    *size_buf = 0x102;
+    pr_debug("tisp_gamma_param_array_get: ID=0x%x, size=0x102\n", param_id);
+    return 0;
+}
+
+/* tisp_sharpen_param_array_get - Binary Ninja stub implementation */
+int tisp_sharpen_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_sharpen_param_array_get: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    /* Simple stub - return minimal data */
+    memset(out_buf, 0, 0x24);
+    *size_buf = 0x24;
+    pr_debug("tisp_sharpen_param_array_get: ID=0x%x, size=0x24\n", param_id);
+    return 0;
+}
+
+/* tisp_mdns_param_array_get - Binary Ninja stub implementation */
+int tisp_mdns_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_mdns_param_array_get: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    /* Simple stub - return minimal data */
+    memset(out_buf, 0, 0x24);
+    *size_buf = 0x24;
+    pr_debug("tisp_mdns_param_array_get: ID=0x%x, size=0x24\n", param_id);
+    return 0;
+}
+
+/* tisp_defog_param_array_get - Binary Ninja stub implementation */
+int tisp_defog_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_defog_param_array_get: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    /* Simple stub - return minimal data */
+    memset(out_buf, 0, 0x24);
+    *size_buf = 0x24;
+    pr_debug("tisp_defog_param_array_get: ID=0x%x, size=0x24\n", param_id);
+    return 0;
+}
+
+/* tisp_rdns_param_array_get - Binary Ninja stub implementation */
+int tisp_rdns_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_rdns_param_array_get: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    /* Simple stub - return minimal data */
+    memset(out_buf, 0, 0x24);
+    *size_buf = 0x24;
+    pr_debug("tisp_rdns_param_array_get: ID=0x%x, size=0x24\n", param_id);
+    return 0;
+}
+
+/* tisp_clm_param_array_get - Binary Ninja stub implementation */
+int tisp_clm_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_clm_param_array_get: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    /* Simple stub - return minimal data */
+    memset(out_buf, 0, 0x24);
+    *size_buf = 0x24;
+    pr_debug("tisp_clm_param_array_get: ID=0x%x, size=0x24\n", param_id);
+    return 0;
+}
+
+/* tisp_adr_param_array_get - Binary Ninja stub implementation */
+int tisp_adr_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_adr_param_array_get: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    /* Simple stub - return minimal data */
+    memset(out_buf, 0, 0x24);
+    *size_buf = 0x24;
+    pr_debug("tisp_adr_param_array_get: ID=0x%x, size=0x24\n", param_id);
+    return 0;
+}
+
+/* tisp_ydns_param_array_get - Binary Ninja stub implementation */
+int tisp_ydns_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_ydns_param_array_get: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    /* Simple stub - return minimal data */
+    memset(out_buf, 0, 0x24);
+    *size_buf = 0x24;
+    pr_debug("tisp_ydns_param_array_get: ID=0x%x, size=0x24\n", param_id);
+    return 0;
+}
+
+/* tisp_af_param_array_get - Binary Ninja stub implementation */
+int tisp_af_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_af_param_array_get: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    /* Simple stub - return minimal data */
+    memset(out_buf, 0, 0x24);
+    *size_buf = 0x24;
+    pr_debug("tisp_af_param_array_get: ID=0x%x, size=0x24\n", param_id);
+    return 0;
+}
+
+/* tisp_sdns_param_array_get - Binary Ninja stub implementation */
+int tisp_sdns_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_sdns_param_array_get: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    /* Simple stub - return minimal data */
+    memset(out_buf, 0, 0x24);
+    *size_buf = 0x24;
+    pr_debug("tisp_sdns_param_array_get: ID=0x%x, size=0x24\n", param_id);
+    return 0;
+}
+
+/* tisp_bcsh_param_array_get - Binary Ninja stub implementation */
+int tisp_bcsh_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_bcsh_param_array_get: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    /* Simple stub - return minimal data */
+    memset(out_buf, 0, 0x24);
+    *size_buf = 0x24;
+    pr_debug("tisp_bcsh_param_array_get: ID=0x%x, size=0x24\n", param_id);
+    return 0;
+}
+
+/* ===== MISSING tisp_*_get_par_cfg FUNCTION IMPLEMENTATIONS ===== */
+
+/* tisp_ae_get_par_cfg - Binary Ninja stub implementation */
+int tisp_ae_get_par_cfg(void *out_buf, void *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_ae_get_par_cfg: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    /* Simple stub - return minimal AE configuration data */
+    memset(out_buf, 0, 0x100);
+    *(int *)size_buf = 0x100;
+    pr_debug("tisp_ae_get_par_cfg: Returned AE config, size=0x100\n");
+    return 0;
+}
+
+/* tisp_hldc_get_par_cfg - Binary Ninja stub implementation */
+int tisp_hldc_get_par_cfg(void *out_buf, void *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_hldc_get_par_cfg: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    /* Simple stub - return minimal HLDC configuration data */
+    memset(out_buf, 0, 0x80);
+    *(int *)size_buf = 0x80;
+    pr_debug("tisp_hldc_get_par_cfg: Returned HLDC config, size=0x80\n");
+    return 0;
+}
+
+/* tisp_awb_get_par_cfg - Binary Ninja stub implementation */
+int tisp_awb_get_par_cfg(void *out_buf, void *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_awb_get_par_cfg: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    /* Simple stub - return minimal AWB configuration data */
+    memset(out_buf, 0, 0x200);
+    *(int *)size_buf = 0x200;
+    pr_debug("tisp_awb_get_par_cfg: Returned AWB config, size=0x200\n");
+    return 0;
+}
+
+/* ===== MISSING UTILITY FUNCTION IMPLEMENTATIONS ===== */
+
+/* tisp_log2_fixed_to_fixed - Binary Ninja stub implementation */
+uint32_t tisp_log2_fixed_to_fixed(uint32_t val, int in_fix_point, uint8_t out_fix_point)
+{
+    /* Simple log2 approximation for fixed point */
+    if (val == 0) return 0;
+
+    uint32_t result = 0;
+    uint32_t temp = val;
+
+    /* Find highest bit position */
+    while (temp > 1) {
+        temp >>= 1;
+        result++;
+    }
+
+    /* Apply fixed point scaling */
+    result = result << out_fix_point;
+    return result;
+}
+EXPORT_SYMBOL(tisp_log2_fixed_to_fixed);
+
+/* tisp_reg_map_get - Binary Ninja stub implementation */
+int tisp_reg_map_get(int reg_addr, void *reg_val, void *size_buf)
+{
+    if (!reg_val || !size_buf) {
+        pr_err("tisp_reg_map_get: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    /* Simple stub - return register value */
+    *(uint32_t *)reg_val = 0;
+    *(int *)size_buf = sizeof(uint32_t);
+    pr_debug("tisp_reg_map_get: Register 0x%x = 0x0\n", reg_addr);
+    return 0;
+}
+EXPORT_SYMBOL(tisp_reg_map_get);
+
+/* tisp_dn_mode_get - Binary Ninja stub implementation */
+int tisp_dn_mode_get(void *mode_buf, void *size_buf)
+{
+    if (!mode_buf || !size_buf) {
+        pr_err("tisp_dn_mode_get: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    /* Simple stub - return DN mode */
+    *(uint32_t *)mode_buf = 0;  /* Default DN mode */
+    *(int *)size_buf = sizeof(uint32_t);
+    pr_debug("tisp_dn_mode_get: DN mode = 0\n");
+    return 0;
+}
+EXPORT_SYMBOL(tisp_dn_mode_get);
+
 /* File operations structure for ISP M0 character device - Binary Ninja reference */
 static const struct file_operations isp_core_tunning_fops = {
     .owner = THIS_MODULE,

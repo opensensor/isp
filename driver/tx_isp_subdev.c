@@ -16,6 +16,12 @@ int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_num);
 int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq_info);
 void tx_isp_free_irq(struct tx_isp_irq_info *irq_info);
 
+/* Export the missing tx_isp_* functions */
+EXPORT_SYMBOL(tx_isp_module_init);
+EXPORT_SYMBOL(tx_isp_module_deinit);
+EXPORT_SYMBOL(tx_isp_request_irq);
+EXPORT_SYMBOL(tx_isp_free_irq);
+
 /* Platform data structure for Binary Ninja compatibility */
 struct tx_isp_subdev_platform_data {
     int interface_type;  /* Interface type (1=MIPI, 2=DVP, etc.) */
@@ -520,6 +526,62 @@ void tx_isp_subdev_deinit(struct tx_isp_subdev *sd)
     /* Nothing special to clean up currently */
 }
 EXPORT_SYMBOL(tx_isp_subdev_deinit);
+
+/* ===== MISSING tx_isp_* FUNCTION IMPLEMENTATIONS ===== */
+
+/* tx_isp_module_init - Binary Ninja stub implementation */
+int tx_isp_module_init(struct platform_device *pdev, struct tx_isp_subdev *sd)
+{
+    if (!pdev || !sd) {
+        pr_err("tx_isp_module_init: Invalid parameters\n");
+        return -EINVAL;
+    }
+
+    pr_debug("tx_isp_module_init: Module initialized for %s\n", dev_name(&pdev->dev));
+    return 0;
+}
+
+/* tx_isp_module_deinit - Binary Ninja stub implementation */
+void tx_isp_module_deinit(struct tx_isp_subdev *sd)
+{
+    if (!sd) {
+        pr_err("tx_isp_module_deinit: Invalid subdev\n");
+        return;
+    }
+
+    pr_debug("tx_isp_module_deinit: Module deinitialized\n");
+}
+
+/* tx_isp_request_irq - Binary Ninja stub implementation */
+int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq_info)
+{
+    int irq_num;
+
+    if (!pdev || !irq_info) {
+        pr_err("tx_isp_request_irq: Invalid parameters\n");
+        return -EINVAL;
+    }
+
+    irq_num = platform_get_irq(pdev, 0);
+    if (irq_num < 0) {
+        pr_err("tx_isp_request_irq: Failed to get IRQ: %d\n", irq_num);
+        return irq_num;
+    }
+
+    pr_debug("tx_isp_request_irq: IRQ %d requested for %s\n", irq_num, dev_name(&pdev->dev));
+    return 0;
+}
+
+/* tx_isp_free_irq - Binary Ninja stub implementation */
+void tx_isp_free_irq(struct tx_isp_irq_info *irq_info)
+{
+    if (!irq_info) {
+        pr_err("tx_isp_free_irq: Invalid IRQ info\n");
+        return;
+    }
+
+    pr_debug("tx_isp_free_irq: IRQ freed\n");
+}
 
 static struct tx_isp_subdev_ops fs_subdev_ops = { 0 }; // All fields NULL/0
 

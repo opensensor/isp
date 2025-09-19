@@ -1,5 +1,6 @@
 import re
 import os
+import sys
 from pathlib import Path
 
 def get_function_names_from_c_files(file_paths):
@@ -19,7 +20,6 @@ def get_function_names_from_c_files(file_paths):
         file_paths = list(Path(file_paths).glob("*.c"))
 
     # Regex pattern to match C function definitions
-    # Matches: return_type function_name(parameters) {
     function_pattern = re.compile(
         r'^(?:static\s+|extern\s+|inline\s+)*'  # Optional storage class specifiers
         r'(?:const\s+|volatile\s+)*'             # Optional type qualifiers
@@ -50,12 +50,12 @@ def get_function_names_from_c_files(file_paths):
 
 # Example usage:
 if __name__ == "__main__":
-    # Method 1: Pass a list of specific files
-    files = ["file1.c", "file2.c", "file3.c"]
-    functions = get_function_names_from_c_files(files)
+    if len(sys.argv) != 2:
+        print("Usage: python get_funcs.py <directory_or_file_path>")
+        sys.exit(1)
 
-    # Method 2: Pass a directory path (will find all .c files)
-    # functions = get_function_names_from_c_files("./src")
+    path = sys.argv[1]
+    functions = get_function_names_from_c_files(path)
 
     print(f"Found {len(functions)} unique functions:")
     for func in sorted(functions):
