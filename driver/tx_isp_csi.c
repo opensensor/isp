@@ -836,7 +836,7 @@ int tx_isp_csi_probe(struct platform_device *pdev)
     }
 
     /* Binary Ninja: *($v0 + 0x34) = &isp_csi_fops */
-    csi_dev->sd.fops = &isp_csi_fops;
+    tx_isp_set_subdev_nodeops(&csi_dev->sd, &isp_csi_fops);
 
     /* Binary Ninja: *($v0 + 0x138) = $v0_3 */
     csi_dev->mem_resource = mem_resource;
