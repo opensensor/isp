@@ -1494,7 +1494,7 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     return 0;
     
 err_release_mem:
-    release_mem_region(0x10022000, 0x1000);
+    /* REMOVED: Manual memory region release - handled by platform device system */
 err_free_dev:
     kfree(csi_dev);
     return ret;
