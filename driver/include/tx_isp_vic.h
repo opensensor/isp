@@ -99,6 +99,10 @@ struct tx_isp_vic_device {
     /* CRITICAL: Frame dimensions at expected offsets */
     uint32_t width;                             /* 0xdc: Frame width (Binary Ninja expects this) */
     uint32_t height;                            /* 0xe0: Frame height (Binary Ninja expects this) */
+
+    /* Binary Ninja compatibility members */
+    void *self_ptr;                             /* Self-pointer for validation */
+    uint32_t format_magic;                      /* NV12 format magic number (0x3231564e) */
     
     /* Device properties (properly aligned) */
     u32 stride;                                 /* Line stride */

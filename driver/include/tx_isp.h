@@ -81,6 +81,9 @@ struct tx_isp_csi_device {
     struct clk *clk;
     struct mutex mutex;       // Synchronization
     spinlock_t lock;         // Protect register access
+
+    // Binary Ninja compatibility members
+    struct tx_isp_sensor_attribute *sensor_attr;  // Binary Ninja: offset 0x110
 };
 
 /* Core ISP device structure */

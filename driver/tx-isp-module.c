@@ -2136,7 +2136,8 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
     rmb();
     
     /* Reference: $s4 = arg1 + 0x38 (get subdevs array pointer) */
-    subdevs_ptr = (void **)((char *)dev + 0x38);
+    /* SAFE: Use proper struct member access instead of dangerous offset */
+    subdevs_ptr = (void **)dev->subdev_graph;
     
     /* SAFETY: Validate subdevs array pointer */
     if (!is_valid_kernel_pointer(subdevs_ptr)) {
@@ -2201,8 +2202,9 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
             rmb();
             
             /* Reference: int32_t* $v0_3 = *(*($a0 + 0xc4) + 4) */
-            /* Step 1: $a0 + 0xc4 (get ops pointer location) */
-            ops_ptr = (void **)((char *)subdev + 0xc4);
+            /* SAFE: Use proper struct member access instead of dangerous offset */
+            struct tx_isp_subdev *sd = (struct tx_isp_subdev *)subdev;
+            ops_ptr = (void **)&sd->ops;
             
             /* SAFETY: Validate ops pointer location */
             if (!is_valid_kernel_pointer(ops_ptr)) {
@@ -2218,8 +2220,10 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
                 pr_debug("tx_isp_video_s_stream: Invalid ops structure for subdev %d: %p\n", i, *ops_ptr);
                 continue;
             }
-            
-            video_ops_ptr = (void **)((char *)*ops_ptr + 4);
+
+            /* SAFE: Use proper struct member access instead of dangerous offset */
+            struct tx_isp_subdev_ops *subdev_ops = (struct tx_isp_subdev_ops *)*ops_ptr;
+            video_ops_ptr = (void **)&subdev_ops->video;
             
             /* SAFETY: Validate video ops pointer location */
             if (!is_valid_kernel_pointer(video_ops_ptr)) {
@@ -2270,22 +2274,18 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
                 
                 /* Reference cleanup logic: rollback previously enabled subdevs */
                 if (enable) {
-                    void **cleanup_ptr = (void **)((char *)dev + 0x38 + (i * sizeof(void *)));
-                    
                     pr_debug("tx_isp_video_s_stream: Rolling back previously enabled subdevs\n");
-                    
-                    /* Reference: while (arg1 != $s0_1) - cleanup loop */
-                    while ((void **)((char *)dev + 0x38) != cleanup_ptr) {
-                        void *cleanup_subdev = *cleanup_ptr;
-                        
+
+                    /* SAFE: Use proper array indexing instead of dangerous pointer arithmetic */
+                    for (int cleanup_idx = i - 1; cleanup_idx >= 0; cleanup_idx--) {
+                        void *cleanup_subdev = dev->subdev_graph[cleanup_idx];
+
                         if (cleanup_subdev != 0 && is_valid_kernel_pointer(cleanup_subdev)) {
-                            /* Same logic as above but for disable */
-                            void **cleanup_ops_ptr = (void **)((char *)cleanup_subdev + 0xc4);
-                            
-                            if (is_valid_kernel_pointer(cleanup_ops_ptr) && 
-                                is_valid_kernel_pointer(*cleanup_ops_ptr)) {
-                                
-                                void **cleanup_video_ops_ptr = (void **)((char *)*cleanup_ops_ptr + 4);
+                            /* SAFE: Use proper struct member access */
+                            struct tx_isp_subdev *cleanup_sd = (struct tx_isp_subdev *)cleanup_subdev;
+
+                            if (cleanup_sd->ops && is_valid_kernel_pointer(cleanup_sd->ops)) {
+                                struct tx_isp_subdev_ops *cleanup_ops = cleanup_sd->ops;
                                 
                                 if (is_valid_kernel_pointer(cleanup_video_ops_ptr) &&
                                     is_valid_kernel_pointer(*cleanup_video_ops_ptr)) {

@@ -297,6 +297,13 @@ struct tx_isp_irq_device {
 	void (*disable_irq)(struct tx_isp_irq_device *irq_dev);
 };
 
+/* IRQ info structure for Binary Ninja compatibility */
+struct tx_isp_irq_info {
+	int irq;
+	void *handler;
+	void *data;
+};
+
 enum tx_isp_module_state {
 	TX_ISP_MODULE_UNDEFINE = 0,
 	TX_ISP_MODULE_SLAKE,
@@ -345,6 +352,10 @@ struct tx_isp_subdev {
 
 	/* Memory mappings */
 	void __iomem *base;         /* Common register base */
+	void __iomem *regs;         /* Binary Ninja: *(arg2 + 0xb8) register mapping */
+	struct resource *mem_res;   /* Binary Ninja: *(arg2 + 0xb4) memory resource */
+	struct tx_isp_irq_info irq_info;  /* Binary Ninja: arg2 + 0x80 IRQ information */
+	int clk_num;                /* Binary Ninja: *(arg2 + 0xc0) clock count */
 	void __iomem *isp;          /* ISP register base */
 	void __iomem *csi_base;     /* CSI register base */
 

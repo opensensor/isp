@@ -349,6 +349,9 @@ int isp_core_tuning_release(struct tx_isp_dev *dev);
 
 /* Forward declaration for core tuning init function */
 void *isp_core_tuning_init(void *arg1);
+int isp_core_tuning_event(void *arg1, int arg2);  /* Binary Ninja function pointer */
+void isp_frame_done_wakeup(void);  /* Binary Ninja function */
+void tisp_day_or_night_s_ctrl(unsigned int value);  /* Binary Ninja function */
 
 /* Forward declaration for tisp_init - Binary Ninja EXACT implementation */
 int tisp_init(void *sensor_info, char *param_name);
@@ -9561,126 +9564,101 @@ EXPORT_SYMBOL(tisp_s_ae_it_max);
 
 
 
-/* isp_core_tuning_init - Robust allocation with guaranteed alignment */
+/* isp_core_tuning_init - EXACT Binary Ninja reference implementation */
 void *isp_core_tuning_init(void *arg1)
 {
-    struct isp_tuning_data *tuning_data;
-    void *raw_allocation = NULL;
-    extern struct tx_isp_dev *ourISPdev;
-    
-    pr_debug("isp_core_tuning_init: Initializing ISP core tuning with guaranteed alignment\n");
-    
-    /* CRITICAL: Calculate aligned allocation size - must be multiple of 16 for MIPS32 */
-    size_t struct_size = sizeof(struct isp_tuning_data);
-    size_t aligned_size = ALIGN(struct_size, 16);  /* 16-byte alignment for MIPS32 safety */
-    
-    pr_debug("isp_core_tuning_init: Struct size=%zu, aligned size=%zu\n", struct_size, aligned_size);
-    
-    /* CRITICAL: Allocate with explicit alignment guarantee - use kmem_cache or aligned allocation */
-    /* Method 1: Use __get_free_pages for guaranteed alignment */
-    int order = get_order(aligned_size);
-    unsigned long pages = __get_free_pages(GFP_KERNEL | __GFP_ZERO | __GFP_DMA32, order);
-    
-    if (!pages) {
-        pr_err("isp_core_tuning_init: Failed to allocate aligned pages (order=%d, size=%zu)\n", order, aligned_size);
-        return NULL;
-    }
-    
-    tuning_data = (struct isp_tuning_data *)pages;
-    
-    pr_debug("isp_core_tuning_init: Allocated tuning data at %p (order=%d, size=%zu)\n",
-            tuning_data, order, aligned_size);
-    
-    /* CRITICAL: Verify alignment is perfect - must be at least 16-byte aligned */
-    if (((unsigned long)tuning_data & 0xF) != 0) {
-        pr_err("CRITICAL: Allocated tuning data not 16-byte aligned: %p - this should never happen with __get_free_pages\n", tuning_data);
-        free_pages(pages, order);
-        return NULL;
-    }
-    
-    /* CRITICAL: Verify kernel space address */
-    if ((unsigned long)tuning_data < 0x80000000) {
-        pr_err("CRITICAL: Allocated tuning data not in kernel space: %p\n", tuning_data);
-        free_pages(pages, order);
-        return NULL;
-    }
-    
-    /* Store allocation info for later cleanup */
-    tuning_data->allocation_order = order;
-    tuning_data->allocation_pages = pages;
-    
-    /* CRITICAL: Initialize register base safely */
-    tuning_data->regs = ourISPdev->core_regs;
-    pr_debug("isp_core_tuning_init: Register base initialized to %p\n", tuning_data->regs);
+    int32_t *result;
+    int32_t a2;
 
-    
-    /* Initialize tuning data structure with safe, aligned defaults */
-    tuning_data->brightness = 128;
-    tuning_data->contrast = 128;
-    tuning_data->saturation = 128;
-    tuning_data->sharpness = 128;
-    tuning_data->hflip = 0;
-    tuning_data->vflip = 0;
-    tuning_data->antiflicker = 0;
-    tuning_data->shading = 0;
-    tuning_data->move_state = 0;
-    tuning_data->ae_comp = 0;
-    tuning_data->max_again = 0x400;
-    tuning_data->max_dgain = 0x400;
-    tuning_data->defog_strength = 0;
-    tuning_data->dpc_strength = 0;
-    tuning_data->drc_strength = 0;
-    tuning_data->temper_strength = 0;
-    tuning_data->sinter_strength = 0;
-    tuning_data->running_mode = 0;
-    tuning_data->custom_mode = 0;
-    tuning_data->fps_num = 25;
-    tuning_data->fps_den = 1;
-    
-    /* Initialize BCSH arrays */
-    for (int i = 0; i < 9; i++) {
-        tuning_data->bcsh_au32EvList_now[i] = 0x1000 * (i + 1);
-        tuning_data->bcsh_au32SminListS_now[i] = 0x80 + (i * 0x10);
-        tuning_data->bcsh_au32SmaxListS_now[i] = 0x100 + (i * 0x10);
-        tuning_data->bcsh_au32SminListM_now[i] = 0x80 + (i * 0x08);
-        tuning_data->bcsh_au32SmaxListM_now[i] = 0x100 + (i * 0x08);
+    /* Binary Ninja: result, $a2 = private_kmalloc(0x40d0, 0xd0) */
+    result = private_kmalloc(0x40d0, 0xd0);
+
+    /* Binary Ninja: if (result == 0) */
+    if (result == NULL) {
+        /* Binary Ninja: isp_printf(2, "saveraw", $a2) */
+        isp_printf(2, "saveraw", a2);
+        return NULL;  /* Binary Ninja: return nullptr */
     }
-    
-    /* Initialize gain structures */
-    tuning_data->wb_gains.r = 0x100;
-    tuning_data->wb_gains.g = 0x100;
-    tuning_data->wb_gains.b = 0x100;
-    tuning_data->wb_temp = 0x2700;
-    
-    /* Initialize BCSH specific fields */
-    tuning_data->bcsh_hue = 128;
-    tuning_data->bcsh_brightness = 128;
-    tuning_data->bcsh_contrast = 128;
-    tuning_data->bcsh_saturation = 128;
-    tuning_data->bcsh_ev = 0x1000;
-    tuning_data->bcsh_saturation_value = 0x100;
-    tuning_data->bcsh_saturation_max = 0x100;
-    tuning_data->bcsh_saturation_min = 0x80;
-    tuning_data->bcsh_saturation_mult = 0x100;
-    tuning_data->exposure = 0x1000;
-    tuning_data->total_gain = 0x100;
-    
-    /* Initialize synchronization primitives */
-    spin_lock_init(&tuning_data->lock);
-    mutex_init(&tuning_data->mutex);
-    
-    /* Set valid state marker */
-    tuning_data->state = 1;
-    
-    pr_debug("isp_core_tuning_init: Tuning data structure initialized successfully\n");
-    pr_debug("isp_core_tuning_init: Address: %p, aligned: 16-byte, state: %d\n",
-            tuning_data, tuning_data->state);
-    pr_debug("isp_core_tuning_init: Critical fields - Brightness=%d, Saturation=%d\n",
-            tuning_data->brightness, tuning_data->saturation);
-    
-    return tuning_data;
-}
+
+    /* Binary Ninja: memset(result, 0, 0x40d0) */
+    memset(result, 0, 0x40d0);
+
+    /* Binary Ninja: *result = arg1 */
+    *result = (int32_t)arg1;
+
+    /* Binary Ninja: private_spin_lock_init(&result[0x102e]) */
+    spin_lock_init((spinlock_t*)&result[0x102e]);
+
+    /* Binary Ninja: private_raw_mutex_init(&result[0x102e], "width is %d, height is %d, imagesize is %d\n, save num is %d, buf size is %d", 0) */
+    mutex_init((struct mutex*)&result[0x102e]);
+
+    /* Binary Ninja: result[0x1031] = 1 */
+    result[0x1031] = 1;
+
+    /* Binary Ninja: result[0x1032] = &isp_core_tunning_fops */
+    result[0x1032] = (int32_t)&tisp_fops;  /* Use our file operations structure */
+
+    /* Binary Ninja: result[0x1033] = isp_core_tuning_event */
+    result[0x1033] = (int32_t)isp_core_tuning_event;  /* Function pointer */
+
+    /* Binary Ninja: return result */
+    return result;
+
 EXPORT_SYMBOL(isp_core_tuning_init);
+
+/* isp_core_tuning_event - EXACT Binary Ninja reference implementation */
+int isp_core_tuning_event(void *arg1, int arg2)
+{
+    /* Binary Ninja: if (arg2 == 0x4000001) */
+    if (arg2 == 0x4000001) {
+        /* Binary Ninja: *(arg1 + 0x40c4) = 1 */
+        *((int*)((char*)arg1 + 0x40c4)) = 1;
+    } else {
+        /* Binary Ninja: if (arg2 u>= 0x4000002) */
+        if ((unsigned int)arg2 >= 0x4000002) {
+            /* Binary Ninja: if (arg2 == 0x4000002) */
+            if (arg2 == 0x4000002) {
+                /* Binary Ninja: isp_frame_done_wakeup() */
+                isp_frame_done_wakeup();
+            } else if (arg2 == 0x4000003) {
+                /* Binary Ninja: uint32_t $s1_1 = *(arg1 + 0x40a4) */
+                unsigned int s1_1 = *((unsigned int*)((char*)arg1 + 0x40a4));
+
+                /* Binary Ninja: tisp_day_or_night_s_ctrl($s1_1) */
+                tisp_day_or_night_s_ctrl(s1_1);
+
+                /* Binary Ninja: *(arg1 + 0x40a4) = $s1_1 */
+                *((unsigned int*)((char*)arg1 + 0x40a4)) = s1_1;
+            }
+
+            /* Binary Ninja: return 0 */
+            return 0;
+        }
+
+        /* Binary Ninja: if (arg2 == 0x4000000) */
+        if (arg2 == 0x4000000) {
+            /* Binary Ninja: *(arg1 + 0x40c4) = 2 */
+            *((int*)((char*)arg1 + 0x40c4)) = 2;
+        }
+    }
+
+    /* Binary Ninja: return 0 */
+    return 0;
+}
+EXPORT_SYMBOL(isp_core_tuning_event);
+
+/* isp_core_tuning_deinit - EXACT Binary Ninja reference implementation */
+void isp_core_tuning_deinit(void *arg1)
+{
+    /* Binary Ninja: if (arg1 == 0) return */
+    if (arg1 == NULL) {
+        return;
+    }
+
+    /* Binary Ninja: return private_kfree() __tailcall */
+    private_kfree(arg1);
+}
+EXPORT_SYMBOL(isp_core_tuning_deinit);
 
 /* Binary Ninja: dump_vic_reg() - EXACT implementation */
 int dump_vic_reg(void)

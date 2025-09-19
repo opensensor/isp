@@ -490,16 +490,14 @@ int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sens
     return 0;
 }
 
-/* csi_core_ops_init - EXACT Binary Ninja implementation */
+/* csi_core_ops_init - EXACT Binary Ninja reference implementation */
 int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_csi_device *csi_dev;
     void __iomem *csi_base;
+    void __iomem *isp_csi_regs;
     struct tx_isp_sensor_attribute *sensor_attr;
-    int result = 0xffffffea; /* -EINVAL */
-
-    pr_debug("*** csi_core_ops_init: EXACT Binary Ninja implementation ***\n");
-    pr_debug("csi_core_ops_init: sd=%p, enable=%d\n", sd, enable);
+    int result = 0xffffffea; /* Binary Ninja: int32_t result = 0xffffffea */
 
     /* Binary Ninja: if (arg1 != 0) */
     if (sd != NULL) {
@@ -509,234 +507,180 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
         }
 
         /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
-        csi_dev = ourISPdev->csi_dev;
+        /* SAFE: Use proper struct member access instead of dangerous offset */
+        csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
         result = 0xffffffea;
 
         /* Binary Ninja: if ($s0_1 != 0 && $s0_1 u< 0xfffff001) */
         if (csi_dev != NULL && (unsigned long)csi_dev < 0xfffff001) {
             result = 0;
 
-            /* CRITICAL FIX: Ensure CSI device is activated before configuration */
-            if (csi_dev->state < 2) {
-                pr_debug("*** CSI ACTIVATION: State %d -> 2 (activating for configuration) ***\n", csi_dev->state);
-                csi_dev->state = 2; /* Activate CSI device for configuration */
-            }
-
             /* Binary Ninja: if (*($s0_1 + 0x128) s>= 2) */
-            pr_debug("*** CSI DEBUG: csi_dev->state = %d (need >= 2 for configuration) ***\n", csi_dev->state);
             if (csi_dev->state >= 2) {
                 int v0_17;
 
+                /* Binary Ninja: if (arg2 == 0) */
                 if (enable == 0) {
-                    /* Stream OFF */
-                    pr_debug("csi_core_ops_init: Disabling CSI (enable=0)\n");
+                    /* Binary Ninja: isp_printf(0, "%s[%d] VIC do not support this format %d\n", arg3) */
+                    isp_printf(0, "%s[%d] VIC do not support this format %d\n", enable);
 
                     /* Binary Ninja: void* $a0_21 = *($s0_1 + 0xb8) */
-                    /* *($a0_21 + 8) &= 0xfffffffe */
-                    u32 reg_val = readl(csi_dev->csi_regs + 8);
-                    writel(reg_val & 0xfffffffe, csi_dev->csi_regs + 8);
-                    wmb();
+                    csi_base = csi_dev->csi_regs;
 
-                    /* *($a0_22 + 0xc) &= 0xfffffffe */
-                    reg_val = readl(csi_dev->csi_regs + 0xc);
-                    writel(reg_val & 0xfffffffe, csi_dev->csi_regs + 0xc);
-                    wmb();
+                    /* Binary Ninja: *($a0_21 + 8) &= 0xfffffffe */
+                    writel(readl(csi_base + 8) & 0xfffffffe, csi_base + 8);
 
-                    /* *($a0_23 + 0x10) &= 0xfffffffe */
-                    reg_val = readl(csi_dev->csi_regs + 0x10);
-                    writel(reg_val & 0xfffffffe, csi_dev->csi_regs + 0x10);
-                    wmb();
+                    /* Binary Ninja: void* $a0_22 = *($s0_1 + 0xb8) */
+                    /* Binary Ninja: *($a0_22 + 0xc) &= 0xfffffffe */
+                    writel(readl(csi_base + 0xc) & 0xfffffffe, csi_base + 0xc);
+
+                    /* Binary Ninja: void* $a0_23 = *($s0_1 + 0xb8) */
+                    /* Binary Ninja: *($a0_23 + 0x10) &= 0xfffffffe */
+                    writel(readl(csi_base + 0x10) & 0xfffffffe, csi_base + 0x10);
 
                     v0_17 = 2;
                 } else {
-                    /* Stream ON */
-                    pr_debug("csi_core_ops_init: Enabling CSI (enable=1)\n");
-
-                    /* CRITICAL FIX: Use properly initialized sensor attributes from sensor device */
-                    /* Instead of uninitialized ourISPdev->sensor_attr, use sensor->video.attr */
-                    if (ourISPdev->sensor && ourISPdev->sensor->video.attr) {
-                        sensor_attr = ourISPdev->sensor->video.attr;
-                        pr_debug("CSI: Using sensor device attributes (dbus_type=%d)\n", sensor_attr->dbus_type);
-                    } else {
-                        /* Fallback: create minimal MIPI sensor attributes */
-                        static struct tx_isp_sensor_attribute default_mipi_attr = {
-                            .dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI,
-                            .mipi = { .lans = 2 },
-                            .total_width = 1920,
-                            .total_height = 1080
-                        };
-                        sensor_attr = &default_mipi_attr;
-                        pr_debug("CSI: Using default MIPI sensor attributes (dbus_type=%d)\n", sensor_attr->dbus_type);
-                    }
+                    /* Binary Ninja: void* $v1_5 = *($s0_1 + 0x110) */
+                    /* SAFE: Use proper struct member access instead of dangerous offset */
+                    sensor_attr = csi_dev->sensor_attr;
 
                     /* Binary Ninja: int32_t $s2_1 = *($v1_5 + 0x14) */
                     int interface_type = sensor_attr->dbus_type;
 
                     if (interface_type == 1) {
-                        /* MIPI interface configuration */
-                        pr_debug("*** CRITICAL: CSI MIPI interface configuration ***\n");
-
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 4) = zx.d(*($v1_5 + 0x24)) - 1 */
-                        int lanes = sensor_attr->mipi.lans;
-                        if (lanes == 0) lanes = 2; /* Default to 2 lanes */
-                        writel(lanes - 1, csi_dev->csi_regs + 4);
-                        wmb();
-                        pr_debug("CSI: Set lanes to %d (reg 0x4 = %d)\n", lanes, lanes - 1);
+                        writel(sensor_attr->mipi.lans - 1, csi_dev->csi_regs + 4);
 
                         /* Binary Ninja: void* $v0_2 = *($s0_1 + 0xb8) */
-                        /* *($v0_2 + 8) &= 0xfffffffe */
-                        u32 reg_val = readl(csi_dev->csi_regs + 8);
-                        writel(reg_val & 0xfffffffe, csi_dev->csi_regs + 8);
-                        wmb();
+                        csi_base = csi_dev->csi_regs;
+
+                        /* Binary Ninja: *($v0_2 + 8) &= 0xfffffffe */
+                        writel(readl(csi_base + 8) & 0xfffffffe, csi_base + 8);
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0xc) = 0 */
                         writel(0, csi_dev->csi_regs + 0xc);
-                        wmb();
 
                         /* Binary Ninja: private_msleep(1) */
-                        msleep(1);
+                        private_msleep(1);
 
+                        /* Binary Ninja: void* $v1_9 = *($s0_1 + 0xb8) */
                         /* Binary Ninja: *($v1_9 + 0x10) &= 0xfffffffe */
-                        reg_val = readl(csi_dev->csi_regs + 0x10);
-                        writel(reg_val & 0xfffffffe, csi_dev->csi_regs + 0x10);
-                        wmb();
+                        writel(readl(csi_dev->csi_regs + 0x10) & 0xfffffffe, csi_dev->csi_regs + 0x10);
 
                         /* Binary Ninja: private_msleep(1) */
-                        msleep(1);
+                        private_msleep(1);
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0xc) = $s2_1 */
                         writel(interface_type, csi_dev->csi_regs + 0xc);
-                        wmb();
 
                         /* Binary Ninja: private_msleep(1) */
-                        msleep(1);
+                        private_msleep(1);
 
-                        /* *** CRITICAL: PHY timing configuration based on frame rate *** */
                         /* Binary Ninja: void* $v0_7 = *($s0_1 + 0x110) */
-                        /* int32_t $v1_10 = *($v0_7 + 0x3c) */
-                        int frame_rate = 30; /* Default frame rate */
+                        /* Binary Ninja: int32_t $v1_10 = *($v0_7 + 0x3c) */
+                        int v1_10 = sensor_attr->fps;
+                        void *v0_8;
 
-                        /* Estimate frame rate from sensor configuration */
-                        if (ourISPdev->sensor_width > 0 && ourISPdev->sensor_height > 0) {
-                            u32 pixel_count = ourISPdev->sensor_width * ourISPdev->sensor_height;
-                            if (pixel_count <= (640 * 480)) {
-                                frame_rate = 60;
-                            } else if (pixel_count <= (1280 * 720)) {
-                                frame_rate = 45;
-                            } else if (pixel_count <= (1920 * 1080)) {
-                                frame_rate = 30;
+                        /* Binary Ninja: if ($v1_10 != 0) */
+                        if (v1_10 != 0) {
+                            /* Binary Ninja: $v0_8 = *($s0_1 + 0x13c) */
+                            /* SAFE: Use proper struct member access instead of dangerous offset */
+                            isp_csi_regs = csi_dev->csi_regs;
+                            v0_8 = isp_csi_regs;
+                        } else {
+                            /* Binary Ninja: int32_t $v0_9 = *($v0_7 + 0x1c) */
+                            int v0_9 = sensor_attr->total_width;
+
+                            /* Binary Ninja: Complex frame rate calculation based on width */
+                            if (v0_9 - 0x50 < 0x1e) {
+                                /* Binary Ninja: $a0_2 = *($s0_1 + 0x13c) */
+                                /* SAFE: Use proper struct member access instead of dangerous offset */
+                                isp_csi_regs = csi_dev->csi_regs;
                             } else {
-                                frame_rate = 15;
+                                v1_10 = 1;
+                                if (v0_9 - 0x6e >= 0x28) {
+                                    v1_10 = 2;
+                                    if (v0_9 - 0x96 >= 0x32) {
+                                        v1_10 = 3;
+                                        if (v0_9 - 0xc8 >= 0x32) {
+                                            v1_10 = 4;
+                                            if (v0_9 - 0xfa >= 0x32) {
+                                                v1_10 = 5;
+                                                if (v0_9 - 0x12c >= 0x64) {
+                                                    v1_10 = 6;
+                                                    if (v0_9 - 0x190 >= 0x64) {
+                                                        v1_10 = 7;
+                                                        if (v0_9 - 0x1f4 >= 0x64) {
+                                                            v1_10 = 8;
+                                                            if (v0_9 - 0x258 >= 0x64) {
+                                                                v1_10 = 9;
+                                                                if (v0_9 - 0x2bc >= 0x64) {
+                                                                    v1_10 = 0xa;
+                                                                    if (v0_9 - 0x320 >= 0xc8) {
+                                                                        v1_10 = 0xb;
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                /* SAFE: Use proper struct member access instead of dangerous offset */
+                                isp_csi_regs = csi_dev->csi_regs;
                             }
+
+                            /* Binary Ninja: int32_t $v0_14 = (*($a0_2 + 0x160) & 0xfffffff0) | $v1_10 */
+                            int v0_14 = (readl(isp_csi_regs + 0x160) & 0xfffffff0) | v1_10;
+                            writel(v0_14, isp_csi_regs + 0x160);
+                            writel(v0_14, isp_csi_regs + 0x1e0);
+                            writel(v0_14, isp_csi_regs + 0x260);
+                            v0_8 = isp_csi_regs;
                         }
 
-                        int phy_timing_value = 1; /* Default */
+                        /* Binary Ninja: *$v0_8 = 0x7d */
+                        writel(0x7d, v0_8);
 
-                        /* Binary Ninja: Frame rate to PHY timing mapping */
-                        if (frame_rate >= 80 && frame_rate < 110) {
-                            phy_timing_value = 1;
-                        } else if (frame_rate >= 110 && frame_rate < 150) {
-                            phy_timing_value = 2;
-                        } else if (frame_rate >= 150 && frame_rate < 200) {
-                            phy_timing_value = 3;
-                        } else if (frame_rate >= 200 && frame_rate < 250) {
-                            phy_timing_value = 4;
-                        } else if (frame_rate >= 250 && frame_rate < 300) {
-                            phy_timing_value = 5;
-                        } else if (frame_rate >= 300 && frame_rate < 400) {
-                            phy_timing_value = 6;
-                        } else if (frame_rate >= 400 && frame_rate < 500) {
-                            phy_timing_value = 7;
-                        } else if (frame_rate >= 500 && frame_rate < 600) {
-                            phy_timing_value = 8;
-                        } else if (frame_rate >= 600 && frame_rate < 700) {
-                            phy_timing_value = 9;
-                        } else if (frame_rate >= 700 && frame_rate < 800) {
-                            phy_timing_value = 10;
-                        } else if (frame_rate >= 800 && frame_rate < 1000) {
-                            phy_timing_value = 11;
-                        }
-
-                        pr_debug("*** CRITICAL: CSI PHY timing configuration - frame_rate=%d, phy_timing=%d ***\n",
-                                frame_rate, phy_timing_value);
-
-                        /* Binary Ninja: Configure PHY timing registers */
-                        void __iomem *phy_base = csi_dev->phy_regs;
-                        if (!phy_base) {
-                            /* Map PHY registers if not already mapped */
-                            phy_base = ioremap(0x13310000, 0x1000);
-                            csi_dev->phy_regs = phy_base;
-                        }
-
-                        if (phy_base) {
-                            /* Binary Ninja: Configure critical PHY timing registers */
-                            u32 current_val = readl(phy_base + 0x160);
-                            u32 new_val = (current_val & 0xfffffff0) | (phy_timing_value & 0xf);
-                            writel(new_val, phy_base + 0x160);
-                            wmb();
-
-                            /* Mirror to other PHY timing registers */
-                            writel(new_val, phy_base + 0x1e0);
-                            wmb();
-                            writel(new_val, phy_base + 0x260);
-                            wmb();
-
-                            pr_debug("*** CSI PHY timing configured: 0x160=0x%08x, 0x1e0=0x%08x, 0x260=0x%08x ***\n",
-                                    readl(phy_base + 0x160), readl(phy_base + 0x1e0), readl(phy_base + 0x260));
-
-                            /* Binary Ninja: Additional PHY configuration */
-                            /* *$v0_8 = 0x7d */
-                            writel(0x7d, phy_base + 0x0);
-                            wmb();
-
-                            /* *(*($s0_1 + 0x13c) + 0x128) = 0x3f */
-                            writel(0x3f, phy_base + 0x128);
-                            wmb();
-
-                            pr_debug("*** CSI PHY base configuration: 0x0=0x7d, 0x128=0x3f ***\n");
-                        }
+                        /* Binary Ninja: *(*($s0_1 + 0x13c) + 0x128) = 0x3f */
+                        writel(0x3f, isp_csi_regs + 0x128);
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0x10) = 1 */
                         writel(1, csi_dev->csi_regs + 0x10);
-                        wmb();
 
                         /* Binary Ninja: private_msleep(0xa) */
-                        msleep(10);
+                        private_msleep(0xa);
 
                         v0_17 = 3;
 
-                        pr_debug("*** CRITICAL: CSI MIPI configuration complete - control limit error should be FIXED ***\n");
-
-                    } else if (interface_type == 2) {
-                        /* DVP interface */
-                        pr_debug("CSI: DVP interface configuration\n");
-
-                        /* Binary Ninja: DVP configuration */
-                        writel(0, csi_dev->csi_regs + 0xc);
-                        wmb();
-                        writel(1, csi_dev->csi_regs + 0xc);
-                        wmb();
-
-                        if (csi_dev->phy_regs) {
-                            writel(0x7d, csi_dev->phy_regs + 0x0);
-                            wmb();
-                            writel(0x3e, csi_dev->phy_regs + 0x80);
-                            wmb();
-                            writel(1, csi_dev->phy_regs + 0x2cc);
-                            wmb();
-                        }
-
+                    } else if (interface_type != 2) {
+                        /* Binary Ninja: isp_printf(1, "%s[%d] VIC failed to config DVP mode!(10bits-sensor)\n", $s2_1) */
+                        isp_printf(1, "%s[%d] VIC failed to config DVP mode!(10bits-sensor)\n", interface_type);
                         v0_17 = 3;
                     } else {
-                        pr_err("CSI: Unsupported interface type %d\n", interface_type);
+                        /* Binary Ninja: DVP interface configuration */
+                        /* *(*($s0_1 + 0xb8) + 0xc) = 0 */
+                        writel(0, csi_dev->csi_regs + 0xc);
+
+                        /* *(*($s0_1 + 0xb8) + 0xc) = 1 */
+                        writel(1, csi_dev->csi_regs + 0xc);
+
+                        /* **($s0_1 + 0x13c) = 0x7d */
+                        writel(0x7d, isp_csi_regs);
+
+                        /* *(*($s0_1 + 0x13c) + 0x80) = 0x3e */
+                        writel(0x3e, isp_csi_regs + 0x80);
+
+                        /* *(*($s0_1 + 0x13c) + 0x2cc) = 1 */
+                        writel(1, isp_csi_regs + 0x2cc);
+
                         v0_17 = 3;
                     }
                 }
 
                 /* Binary Ninja: *($s0_1 + 0x128) = $v0_17 */
                 csi_dev->state = v0_17;
-                pr_debug("CSI: State updated to %d\n", v0_17);
-
                 return 0;
             }
         }

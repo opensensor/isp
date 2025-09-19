@@ -69,24 +69,20 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     
     /* Initialize VIC device structure - Binary Ninja exact layout */
     
-    /* Initialize spinlock at offset 0x130 */
-    spin_lock_init((spinlock_t *)((char *)vic_dev + 0x130));
-    
-    /* Initialize mutex at offset 0x154 */
-    mutex_init((struct mutex *)((char *)vic_dev + 0x154));
-    
-    /* Initialize completion at offset 0x148 */
-    init_completion((struct completion *)((char *)vic_dev + 0x148));
-    
-    /* Set initial state to 1 (INIT) at offset 0x128 */
-    *(uint32_t *)((char *)vic_dev + 0x128) = 1;
-    
-    /* Set self-pointer at offset 0xd4 */
-    *(void **)((char *)vic_dev + 0xd4) = vic_dev;
+    /* SAFE: Initialize VIC device structure using proper struct member access */
+    spin_lock_init(&vic_dev->slock);
+    mutex_init(&vic_dev->mlock);
+    init_completion(&vic_dev->frame_complete);
 
-    /* CRITICAL FIX: Set NV12 format magic number at offset 0xc to prevent control limit error */
-    /* The VIC interrupt handler checks for 0x3231564e (NV12) at offset 0xc */
-    *(uint32_t *)((char *)vic_dev + 0xc) = 0x3231564e;  /* NV12 format magic number */
+    /* Set initial state to 1 (INIT) */
+    vic_dev->state = 1;
+
+    /* Set self-pointer for validation */
+    vic_dev->self_ptr = vic_dev;
+
+    /* CRITICAL FIX: Set NV12 format magic number to prevent control limit error */
+    /* The VIC interrupt handler checks for 0x3231564e (NV12) */
+    vic_dev->format_magic = 0x3231564e;  /* NV12 format magic number */
     pr_debug("*** VIC DEVICE: Set NV12 format magic number 0x3231564e at offset 0xc ***\n");
     
     /* *** CRITICAL FIX: Map BOTH VIC register spaces - dual VIC architecture *** */
@@ -2227,43 +2223,56 @@ int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
     return 0;
 }
 
-/* VIC core operations initialization - matching reference driver */
+/* vic_core_ops_init - EXACT Binary Ninja reference implementation */
 int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vic_device *vic_dev;
-    int old_state;
-    
-    if (!sd)
-        return -EINVAL;
-    
-    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
-    if (!vic_dev) {
-        pr_err("VIC device is NULL\n");
-        return -EINVAL;
+    int current_state;
+    int result;
+
+    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) */
+    if (sd == NULL || (unsigned long)sd >= 0xfffff001) {
+        /* Binary Ninja: isp_printf(2, "The parameter is invalid!\n", arg3) */
+        isp_printf(2, "The parameter is invalid!\n", enable);
+        return 0xffffffea;  /* Binary Ninja: return 0xffffffea */
     }
-    
-    old_state = vic_dev->state;
-    
-    if (enable) {
-        /* Enable VIC processing */
-        if (old_state != 3) {
-            /* Enable VIC interrupts - placeholder register write */
-            pr_debug("VIC: Enabling interrupts (enable=%d)\n", enable);
-            vic_dev->state = 3; /* READY -> ACTIVE */
+
+    /* Binary Ninja: void* $s1_1 = *(arg1 + 0xd4) */
+    /* SAFE: Use proper struct member access instead of dangerous offset */
+    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+
+    /* Binary Ninja: int32_t $v0_2 = *($s1_1 + 0x128) */
+    current_state = vic_dev->state;
+
+    /* Binary Ninja: if (arg2 == 0) */
+    if (enable == 0) {
+        /* Binary Ninja: result = 0 */
+        result = 0;
+
+        /* Binary Ninja: if ($v0_2 != 2) */
+        if (current_state != 2) {
+            /* Binary Ninja: tx_vic_disable_irq() */
+            tx_vic_disable_irq(vic_dev);
+
+            /* Binary Ninja: *($s1_1 + 0x128) = 2 */
+            vic_dev->state = 2;
         }
     } else {
-        /* Disable VIC processing */
-        if (old_state != 2) {
-            /* Disable VIC interrupts - placeholder register write */
-            pr_debug("VIC: Disabling interrupts (enable=%d)\n", enable);
-            vic_dev->state = 2; /* ACTIVE -> READY */
+        /* Binary Ninja: result = 0 */
+        result = 0;
+
+        /* Binary Ninja: if ($v0_2 != 3) */
+        if (current_state != 3) {
+            /* Binary Ninja: tx_vic_enable_irq() */
+            tx_vic_enable_irq(vic_dev);
+
+            /* Binary Ninja: *($s1_1 + 0x128) = 3 */
+            vic_dev->state = 3;
         }
     }
-    
-    pr_debug("VIC core ops init: enable=%d, state %d -> %d\n",
-            enable, old_state, vic_dev->state);
-    
-    return 0;
+
+    /* Binary Ninja: return result */
+    return result;
 }
 
 /* VIC slake function - matching reference driver */

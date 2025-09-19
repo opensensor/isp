@@ -9,6 +9,27 @@
 #include "../include/tx_isp_vic.h"
 #include "../include/tx_isp_sysfs.h"
 
+/* Function declarations for Binary Ninja compatibility */
+int tx_isp_module_init(struct platform_device *pdev, struct tx_isp_subdev *sd);
+void tx_isp_module_deinit(struct tx_isp_subdev *sd);
+int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_num);
+int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq_info);
+void tx_isp_free_irq(struct tx_isp_irq_info *irq_info);
+
+/* Platform data structure for Binary Ninja compatibility */
+struct tx_isp_subdev_platform_data {
+    int interface_type;  /* Interface type (1=MIPI, 2=DVP, etc.) */
+    int clk_num;        /* Number of clocks */
+    /* Additional platform-specific data */
+};
+
+/* IRQ info structure */
+struct tx_isp_irq_info {
+    int irq;
+    void *handler;
+    void *data;
+};
+
 /* Frame channel states */
 #define FRAME_CHAN_INIT    2
 #define FRAME_CHAN_OPENED  3
@@ -219,42 +240,277 @@ extern struct tx_isp_dev *ourISPdev;
 #define TX_ISP_PADLINK_DDR     0x2
 #define TX_ISP_PADLINK_ISP     0x4
 
-/* tx_isp_subdev_init - SAFE implementation that prevents unaligned access crash */
+/* isp_subdev_init_clks - Using vic_start clock management pattern with Binary Ninja structure */
+int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count)
+{
+    struct clk *cgu_isp_clk, *isp_clk, *csi_clk;
+    void __iomem *cpm_regs;
+    int ret;
+
+    /* Binary Ninja: int32_t $s5 = *(arg1 + 0xc0) */
+    /* Binary Ninja: int32_t $s1 = $s5 << 2 */
+    int clk_array_size = clk_count << 2;
+
+    pr_debug("isp_subdev_init_clks: Initializing %d clocks\n", clk_count);
+
+    /* Binary Ninja: if ($s5 != 0) */
+    if (clk_count != 0) {
+        /* Binary Ninja: int32_t* $v0_1 = private_kmalloc($s1, 0xd0) */
+        struct clk **clk_array = private_kmalloc(clk_array_size, 0xd0);
+
+        /* Binary Ninja: if ($v0_1 == 0) */
+        if (clk_array == NULL) {
+            /* Binary Ninja: isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", "isp_subdev_init_clks") */
+            isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", "isp_subdev_init_clks");
+            return 0xfffffff4;  /* Binary Ninja: return 0xfffffff4 */
+        }
+
+        /* Binary Ninja: memset($v0_1, 0, $s1) */
+        memset(clk_array, 0, clk_array_size);
+
+        /* Use vic_start clock management pattern - get standard ISP clocks */
+        int i = 0;
+
+        /* Binary Ninja: Clock 0 - CGU ISP */
+        if (i < clk_count) {
+            /* Binary Ninja: int32_t $v0_3 = private_clk_get(*(arg1 + 4), *$s6_1) */
+            cgu_isp_clk = clk_get(sd->dev, "cgu_isp");
+            clk_array[i] = cgu_isp_clk;
+
+            /* Binary Ninja: if ($v0_3 u< 0xfffff001) */
+            if (!IS_ERR(cgu_isp_clk)) {
+                /* Binary Ninja: private_clk_set_rate($v0_3, $a1_1) */
+                ret = clk_set_rate(cgu_isp_clk, 100000000);  /* 100MHz */
+                if (ret == 0) {
+                    ret = clk_prepare_enable(cgu_isp_clk);
+                    if (ret == 0) {
+                        pr_debug("CGU_ISP clock enabled at 100MHz\n");
+                        i++;
+                    } else {
+                        /* Binary Ninja: isp_printf(2, "sensor type is BT1120!\n", *$s6_1) */
+                        isp_printf(2, "sensor type is BT1120!\n", "cgu_isp");
+                        goto cleanup_clocks;
+                    }
+                } else {
+                    /* Binary Ninja: isp_printf(2, "sensor type is BT1120!\n", *$s6_1) */
+                    isp_printf(2, "sensor type is BT1120!\n", "cgu_isp");
+                    goto cleanup_clocks;
+                }
+            } else {
+                /* Binary Ninja: isp_printf(2, "Can not support this frame mode!!!\n", *$s6_1) */
+                isp_printf(2, "Can not support this frame mode!!!\n", "cgu_isp");
+                goto cleanup_clocks;
+            }
+        }
+
+        /* Binary Ninja: Clock 1 - ISP */
+        if (i < clk_count) {
+            isp_clk = clk_get(sd->dev, "isp");
+            clk_array[i] = isp_clk;
+
+            if (!IS_ERR(isp_clk)) {
+                ret = clk_prepare_enable(isp_clk);
+                if (ret == 0) {
+                    pr_debug("ISP clock enabled\n");
+                    i++;
+                } else {
+                    isp_printf(2, "sensor type is BT1120!\n", "isp");
+                    goto cleanup_clocks;
+                }
+            } else {
+                isp_printf(2, "Can not support this frame mode!!!\n", "isp");
+                goto cleanup_clocks;
+            }
+        }
+
+        /* Binary Ninja: Clock 2 - CSI */
+        if (i < clk_count) {
+            csi_clk = clk_get(sd->dev, "csi");
+            clk_array[i] = csi_clk;
+
+            if (!IS_ERR(csi_clk)) {
+                ret = clk_prepare_enable(csi_clk);
+                if (ret == 0) {
+                    pr_debug("CSI clock enabled\n");
+                    i++;
+                } else {
+                    isp_printf(2, "sensor type is BT1120!\n", "csi");
+                    goto cleanup_clocks;
+                }
+            } else {
+                isp_printf(2, "Can not support this frame mode!!!\n", "csi");
+                goto cleanup_clocks;
+            }
+        }
+
+        /* CPM register setup - following vic_start pattern */
+        cpm_regs = ioremap(0x10000000, 0x1000);
+        if (cpm_regs) {
+            u32 clkgr0 = readl(cpm_regs + 0x20);
+            u32 clkgr1 = readl(cpm_regs + 0x28);
+
+            clkgr0 &= ~(1 << 13); // ISP
+            clkgr0 &= ~(1 << 21); // Alternative ISP
+            clkgr0 &= ~(1 << 30); // VIC in CLKGR0
+            clkgr1 &= ~(1 << 30); // VIC in CLKGR1
+
+            writel(clkgr0, cpm_regs + 0x20);
+            writel(clkgr1, cpm_regs + 0x28);
+            wmb();
+            msleep(20);
+            iounmap(cpm_regs);
+            pr_debug("CPM clock gates configured\n");
+        }
+
+        /* Binary Ninja: *(arg1 + 0xbc) = $v0_1 */
+        sd->clks = clk_array;
+        pr_debug("isp_subdev_init_clks: Successfully initialized %d clocks\n", i);
+    } else {
+        /* Binary Ninja: *(arg1 + 0xbc) = 0 */
+        sd->clks = NULL;
+    }
+
+    /* Binary Ninja: return 0 */
+    return 0;
+
+cleanup_clocks:
+    /* Binary Ninja: Clock cleanup loop */
+    for (int j = 0; j < i; j++) {
+        if (clk_array[j] && !IS_ERR(clk_array[j])) {
+            clk_disable_unprepare(clk_array[j]);
+            clk_put(clk_array[j]);
+        }
+    }
+
+    /* Binary Ninja: private_kfree($v0_1) */
+    private_kfree(clk_array);
+    return -EFAULT;
+}
+
+/* tx_isp_subdev_init - EXACT Binary Ninja reference with safe struct member access */
 int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
                       struct tx_isp_subdev_ops *ops)
 {
-    struct tx_isp_dev *dev = ourISPdev;
-    
-    pr_debug("Starting subdev init for %s\n", pdev ? pdev->name : "unknown");
+    struct resource *res;
+    struct resource *mem_res = NULL;
+    void __iomem *regs;
+    int ret;
+    int i;
 
-    /* CRITICAL FIX: Early validation to prevent unaligned access */
-    if (!pdev || !sd) {
-        pr_err("tx_isp_subdev_init: Invalid parameters\n");
-        return -EINVAL;
+    /* Binary Ninja: if (arg1 == 0 || arg2 == 0) */
+    if (pdev == NULL || sd == NULL) {
+        /* Binary Ninja: isp_printf(2, tiziano_wdr_gamma_refresh, "tx_isp_subdev_init") */
+        isp_printf(2, "tiziano_wdr_gamma_refresh", "tx_isp_subdev_init");
+        return 0xffffffea;  /* Binary Ninja: return 0xffffffea */
     }
 
-    if (!dev) {
-        pr_err("No ISP device data found\n");
-        return -EINVAL;
-    }
-
-    /* SAFE: Use proper struct member access instead of unsafe offset arithmetic */
-    pr_debug("Initializing subdev structure\n");
-    
-    /* SAFE: Store ops pointer using proper struct member access */
+    /* Binary Ninja: *(arg2 + 0xc4) = arg3 */
+    /* SAFE: Use struct member access instead of offset */
     sd->ops = ops;
-    
-    /* SAFE: Initialize basic subdev fields */
-    sd->isp = (void*)dev;
-    
-    /* SAFE: Simple initialization without unsafe hardware calls */
-    pr_debug("Basic subdev initialization complete\n");
 
-    /* SAFE: Set platform data using standard kernel API */
-    platform_set_drvdata(pdev, dev);
-    
-    pr_debug("*** SAFE: Subdev %s initialized successfully - no unaligned access risk ***\n", pdev->name);
+    /* Binary Ninja: if (tx_isp_module_init(arg1, arg2) != 0) */
+    ret = tx_isp_module_init(pdev, sd);
+    if (ret != 0) {
+        /* Binary Ninja: isp_printf(2, "&vsd->snap_mlock", *arg1) */
+        isp_printf(2, "&vsd->snap_mlock", pdev->name);
+        return 0xfffffff4;  /* Binary Ninja: return 0xfffffff4 */
+    }
+
+    /* Binary Ninja: char* $s1_1 = arg1[0x16] */
+    /* SAFE: Get platform data using proper kernel API */
+    struct tx_isp_subdev_platform_data *pdata = dev_get_platdata(&pdev->dev);
+    if (pdata != NULL) {
+        /* Binary Ninja: tx_isp_request_irq(arg1, arg2 + 0x80) */
+        /* SAFE: Use struct member access for IRQ setup */
+        ret = tx_isp_request_irq(pdev, &sd->irq_info);
+        if (ret != 0) {
+            /* Binary Ninja: isp_printf(2, " %d, %d\n", $a2_1) */
+            isp_printf(2, " %d, %d\n", ret);
+            tx_isp_module_deinit(sd);
+            return ret;
+        }
+
+        /* Binary Ninja: Resource enumeration and memory mapping */
+        for (i = 0; i < pdev->num_resources; i++) {
+            /* Binary Ninja: $v0_2 = private_platform_get_resource(arg1, 0x200, result_4) */
+            res = platform_get_resource(pdev, IORESOURCE_MEM, i);
+            if (res != NULL) {
+                /* Binary Ninja: String comparison for resource matching */
+                if (strcmp(res->name, "%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d\n") == 0) {
+                    mem_res = res;
+                    break;
+                }
+            }
+        }
+
+        if (mem_res) {
+            /* Binary Ninja: private_request_mem_region($a0_18, $v0_2[1] + 1 - $a0_18, $a2_11) */
+            /* SAFE: Use struct member access for memory region */
+            sd->mem_res = request_mem_region(mem_res->start,
+                                           resource_size(mem_res),
+                                           pdev->name);
+            if (!sd->mem_res) {
+                /* Binary Ninja: isp_printf(2, "The parameter is invalid!\n", "tx_isp_subdev_init") */
+                isp_printf(2, "The parameter is invalid!\n", "tx_isp_subdev_init");
+                ret = 0xfffffff0;
+                goto cleanup_irq;
+            }
+
+            /* Binary Ninja: private_ioremap($a0_19, $v0_22[1] + 1 - $a0_19) */
+            /* SAFE: Use struct member access for register mapping */
+            regs = ioremap(mem_res->start, resource_size(mem_res));
+            sd->regs = regs;
+            if (!regs) {
+                /* Binary Ninja: isp_printf(2, "vic_done_gpio%d", "tx_isp_subdev_init") */
+                isp_printf(2, "vic_done_gpio%d", "tx_isp_subdev_init");
+                ret = 0xfffffffa;
+                goto cleanup_mem;
+            }
+        }
+
+        /* Binary Ninja: Clock initialization based on platform data */
+        /* Binary Ninja: uint32_t $v0_5 = zx.d(*$s1_1) */
+        if (pdata->interface_type == 1 || pdata->interface_type == 2) {
+            /* Binary Ninja: *(arg2 + 0xc0) = zx.d($s1_1[4]) */
+            /* SAFE: Use struct member access for clock count */
+            sd->clk_num = pdata->clk_num;
+
+            /* Binary Ninja: isp_subdev_init_clks(arg2, *($s1_1 + 8)) */
+            ret = isp_subdev_init_clks(sd, pdata->clk_num);
+            if (ret != 0) {
+                /* Binary Ninja: isp_printf(2, "register is 0x%x, value is 0x%x\n", *(arg2 + 8)) */
+                isp_printf(2, "register is 0x%x, value is 0x%x\n", (unsigned int)sd->dev);
+                goto cleanup_regs;
+            }
+        } else {
+            /* Binary Ninja: isp_printf(0, tiziano_wdr_params_refresh, result_4) */
+            isp_printf(0, "tiziano_wdr_params_refresh", ret);
+            return 0;
+        }
+    }
+
+    /* Binary Ninja: return 0 */
     return 0;
+
+cleanup_regs:
+    /* Binary Ninja: private_iounmap(*(arg2 + 0xb8)) */
+    if (sd->regs) {
+        iounmap(sd->regs);
+        sd->regs = NULL;
+    }
+
+cleanup_mem:
+    /* Binary Ninja: private_release_mem_region($a0_15, $s3_2[1] + 1 - $a0_15) */
+    if (sd->mem_res) {
+        release_mem_region(sd->mem_res->start, resource_size(sd->mem_res));
+        sd->mem_res = NULL;
+    }
+
+cleanup_irq:
+    /* Binary Ninja: tx_isp_free_irq(arg2 + 0x80) */
+    tx_isp_free_irq(&sd->irq_info);
+    tx_isp_module_deinit(sd);
+    return ret;
 }
 EXPORT_SYMBOL(tx_isp_subdev_init);
 
