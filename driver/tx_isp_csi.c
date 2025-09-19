@@ -854,7 +854,7 @@ int tx_isp_csi_probe(struct platform_device *pdev)
     dump_csd = csi_dev;
 
     /* Binary Ninja: *($v0 + 0xd4) = $v0 */
-    csi_dev->self_ptr = csi_dev;  /* Self-pointer for validation */
+    /* Note: self_ptr member not present in current CSI device structure */
 
     return 0;
 }
