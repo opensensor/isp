@@ -8640,11 +8640,33 @@ void tisp_event_cleanup(void)
 }
 EXPORT_SYMBOL(tisp_event_cleanup);
 
+/* tisp_param_operate_init - EXACT Binary Ninja implementation */
 int tisp_param_operate_init(void)
 {
     pr_debug("tisp_param_operate_init: Initializing parameter operations\n");
+
+    /* Binary Ninja: uint32_t $v0 = private_kmalloc(&data_10004[0x14], 0xd0) */
+    uint32_t v0 = (uint32_t)private_kmalloc(0xd0, GFP_KERNEL);
+    opmsg = (void*)v0;
+
+    if (v0 == 0) {
+        /* Binary Ninja: isp_printf(2, "%s:%d::wdr mode\n", "tisp_param_operate_init") */
+        isp_printf(2, "%s:%d::wdr mode\n", "tisp_param_operate_init");
+        return 0xffffffff;
+    }
+
+    /* Binary Ninja: tisp_netlink_init() */
+    tisp_netlink_init();
+
+    /* Binary Ninja: tisp_netlink_event_set_cb(tisp_param_operate_process) */
+    tisp_netlink_event_set_cb(tisp_param_operate_process);
+
+    /* Binary Ninja: tisp_code_create_tuning_node() */
+    tisp_code_create_tuning_node();
+
     return 0;
 }
+EXPORT_SYMBOL(tisp_param_operate_init);
 
 
 /* Update functions for event callbacks - Enhanced implementations */
