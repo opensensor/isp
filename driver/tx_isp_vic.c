@@ -2414,6 +2414,164 @@ int vic_mdma_enable(struct tx_isp_vic_device *vic_dev, int channel, int dual_cha
     return 0;
 }
 
+/* ISP VIC cmd set function - EXACT Binary Ninja implementation */
+long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg)
+{
+    struct seq_file *seq = file->private_data;
+    struct tx_isp_dev *isp_dev;
+    struct tx_isp_vic_device *vic_dev = NULL;
+    char *cmd_buf;
+    char local_buf[32];
+    int ret = 0;
+    bool use_local_buf = false;
+
+    if (!seq || !seq->private) {
+        pr_err("isp_vic_cmd_set: Invalid file private data\n");
+        return -EINVAL;
+    }
+
+    isp_dev = (struct tx_isp_dev *)seq->private;
+    if (isp_dev && isp_dev->vic_dev) {
+        vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+    }
+
+    pr_info("*** isp_vic_cmd_set: EXACT Binary Ninja implementation ***\n");
+    pr_info("isp_vic_cmd_set: count=%lu\n", arg);
+
+    if (!vic_dev) {
+        return seq_printf(seq, "Can't ops the node!\n");
+    }
+
+    /* Binary Ninja: Allocate buffer for command */
+    if (arg < 0x21) {  /* Use local buffer for small commands */
+        cmd_buf = local_buf;
+        use_local_buf = true;
+    } else {
+        cmd_buf = kmalloc(arg + 1, GFP_KERNEL);
+        if (!cmd_buf) {
+            return -ENOMEM;
+        }
+        use_local_buf = false;
+    }
+
+    /* Binary Ninja: Copy command from user space */
+    if (copy_from_user(cmd_buf, (void __user *)cmd, arg) != 0) {
+        ret = -EFAULT;
+        goto cleanup;
+    }
+
+    cmd_buf[arg] = '\0';  /* Null terminate */
+
+    /* Binary Ninja EXACT: Check for "snapraw" command */
+    if (strncmp(cmd_buf, "snapraw", 7) == 0) {
+        pr_info("*** isp_vic_cmd_set: Processing 'snapraw' command ***\n");
+
+        /* Parse save number from command */
+        unsigned long save_num = 1;
+        if (arg > 8) {
+            save_num = simple_strtoull(&cmd_buf[8], NULL, 0);
+            if (save_num < 2) save_num = 1;
+        }
+
+        pr_info("isp_vic_cmd_set: snapraw save_num=%lu\n", save_num);
+
+        /* Binary Ninja: Check width limit */
+        if (vic_dev->width >= 0xa81) {
+            ret = seq_printf(seq, "Can't output the width(%d)!\n", vic_dev->width);
+            goto cleanup;
+        }
+
+        /* Binary Ninja: Call vic_mdma_enable to enable VIC MDMA */
+        if (vic_dev->buffer_addresses && vic_dev->buffer_addresses[0]) {
+            int format_type = 0;  /* Default to RAW format */
+            int dual_channel = 0; /* Single channel mode */
+
+            /* Check if NV12 format */
+            if (isp_dev && isp_dev->sensor && isp_dev->sensor->video.attr) {
+                /* Determine format from sensor attributes */
+                format_type = 0;  /* Keep as RAW for now */
+            }
+
+            pr_info("*** isp_vic_cmd_set: Calling vic_mdma_enable for snapraw ***\n");
+            ret = vic_mdma_enable(vic_dev, 0, dual_channel, save_num,
+                                vic_dev->buffer_addresses[0], format_type);
+
+            if (ret == 0) {
+                pr_info("*** isp_vic_cmd_set: vic_mdma_enable SUCCESS - VIC MDMA enabled for snapraw ***\n");
+                ret = arg;  /* Return success */
+            } else {
+                pr_err("isp_vic_cmd_set: vic_mdma_enable failed: %d\n", ret);
+            }
+        } else {
+            pr_err("isp_vic_cmd_set: No buffer addresses available for snapraw\n");
+            ret = -ENOMEM;
+        }
+    }
+    /* Binary Ninja EXACT: Check for "saveraw" command */
+    else if (strncmp(cmd_buf, "saveraw", 7) == 0) {
+        pr_info("*** isp_vic_cmd_set: Processing 'saveraw' command ***\n");
+
+        /* Parse save number from command */
+        unsigned long save_num = 1;
+        if (arg > 8) {
+            save_num = simple_strtoull(&cmd_buf[8], NULL, 0);
+            if (save_num < 2) save_num = 1;
+        }
+
+        pr_info("isp_vic_cmd_set: saveraw save_num=%lu\n", save_num);
+
+        /* Binary Ninja: Check width limit */
+        if (vic_dev->width >= 0xa81) {
+            ret = seq_printf(seq, "Can't output the width(%d)!\n", vic_dev->width);
+            goto cleanup;
+        }
+
+        /* Binary Ninja: Call vic_mdma_enable to enable VIC MDMA */
+        if (vic_dev->buffer_addresses && vic_dev->buffer_addresses[0]) {
+            int format_type = 0;  /* Default to RAW format */
+            int dual_channel = 0; /* Single channel mode */
+
+            pr_info("*** isp_vic_cmd_set: Calling vic_mdma_enable for saveraw ***\n");
+            ret = vic_mdma_enable(vic_dev, 0, dual_channel, save_num,
+                                vic_dev->buffer_addresses[0], format_type);
+
+            if (ret == 0) {
+                pr_info("*** isp_vic_cmd_set: vic_mdma_enable SUCCESS - VIC MDMA enabled for saveraw ***\n");
+                ret = arg;  /* Return success */
+            } else {
+                pr_err("isp_vic_cmd_set: vic_mdma_enable failed: %d\n", ret);
+            }
+        } else {
+            pr_err("isp_vic_cmd_set: No buffer addresses available for saveraw\n");
+            ret = -ENOMEM;
+        }
+    }
+    /* Binary Ninja EXACT: Check for "help" command */
+    else if (strncmp(cmd_buf, "help", 4) == 0) {
+        seq_printf(seq, "help:\n");
+        seq_printf(seq, "\t cmd:\n");
+        seq_printf(seq, "\t\t snapraw\n");
+        seq_printf(seq, "\t\t saveraw\n");
+        seq_printf(seq, "\t\t\t please use this cmd: \n");
+        seq_printf(seq, "\t\"echo snapraw savenum > /proc/jz/isp/isp-w02\"\n");
+        seq_printf(seq, "\t\"echo saveraw savenum > /proc/jz/isp/isp-w02\"\n");
+        seq_printf(seq, "\t\t\t \"savenum\" is the num of you save raw picture.\n");
+        ret = arg;
+    }
+    else {
+        pr_info("isp_vic_cmd_set: Unknown command: %s\n", cmd_buf);
+        ret = arg;  /* Return success for unknown commands */
+    }
+
+cleanup:
+    if (!use_local_buf && cmd_buf) {
+        kfree(cmd_buf);
+    }
+
+    pr_info("*** isp_vic_cmd_set: Completed with ret=%d ***\n", ret);
+    return ret;
+}
+
 /* VIC activation function - matching reference driver */
 int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
 {
