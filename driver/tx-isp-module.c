@@ -305,18 +305,15 @@ struct vic_event_callback {
 
 /* T31 ISP platform device with CORRECT IRQ resources - FIXED for stock driver compatibility */
 /* CRITICAL FIX: Stock driver uses TWO separate IRQs - 37 (isp-m0) and 38 (isp-w02) */
+/* FIXED: Main ISP device only claims IRQ resources, not memory regions */
+/* Individual subdevices manage their own memory regions to prevent conflicts */
 static struct resource tx_isp_resources[] = {
     [0] = {
-        .start = 0x13300000,           /* T31 ISP base address */
-        .end   = 0x133FFFFF,           /* T31 ISP end address */
-        .flags = IORESOURCE_MEM,
-    },
-    [1] = {
         .start = 37,                   /* T31 ISP IRQ 37 (isp-m0) - PRIMARY ISP PROCESSING */
         .end   = 37,
         .flags = IORESOURCE_IRQ,
     },
-    [2] = {
+    [1] = {
         .start = 38,                   /* T31 ISP IRQ 38 (isp-w02) - SECONDARY ISP CHANNEL */
         .end   = 38,
         .flags = IORESOURCE_IRQ,
@@ -4981,18 +4978,27 @@ static int tx_isp_init(void)
         }
     }
 	
-    /* REMOVED: Main ISP platform device - reference driver only uses individual subdevices */
-    /* Each subdevice will manage its own memory region per reference driver */
-    pr_info("*** REFERENCE DRIVER: Using individual subdevice platform devices only ***\n");
+    /* Step 2: Register platform device (matches reference) */
+    ret = platform_device_register(&tx_isp_platform_device);
+    if (ret != 0) {
+        pr_err("not support the gpio mode!\n");
+        goto err_free_dev;
+    }
 
-    /* REMOVED: Main ISP platform driver - reference driver only uses individual subdevice drivers */
-    /* Individual subdevice drivers will be registered separately per reference driver */
+    /* Step 3: Register platform driver (matches reference) */
+    ret = platform_driver_register(&tx_isp_driver);
+    if (ret != 0) {
+        pr_err("Failed to register platform driver: %d\n", ret);
+        platform_device_unregister(&tx_isp_platform_device);
+        goto err_free_dev;
+    }
 
     /* Step 4: Register misc device to create /dev/tx-isp */
     ret = misc_register(&tx_isp_miscdev);
     if (ret != 0) {
         pr_err("Failed to register misc device: %d\n", ret);
-        /* REMOVED: Main ISP platform driver/device cleanup - not registered */
+        platform_driver_unregister(&tx_isp_driver);
+        platform_device_unregister(&tx_isp_platform_device);
         goto err_free_dev;
     }
 
@@ -5292,7 +5298,8 @@ err_cleanup_platforms:
 err_cleanup_base:
     cleanup_i2c_infrastructure(ourISPdev);
     misc_deregister(&tx_isp_miscdev);
-    /* REMOVED: Main ISP platform driver/device cleanup - not registered */
+    platform_driver_unregister(&tx_isp_driver);
+    platform_device_unregister(&tx_isp_platform_device);
     
 err_free_dev:
     kfree(ourISPdev);
@@ -5400,7 +5407,9 @@ static void tx_isp_exit(void)
         tx_isp_subdev_platform_exit();
         pr_info("*** SUBDEV PLATFORM DRIVERS CLEANED UP ***\n");
         
-        /* REMOVED: Main ISP platform driver/device cleanup - not registered */
+        /* Unregister platform components */
+        platform_driver_unregister(&tx_isp_driver);
+        platform_device_unregister(&tx_isp_platform_device);
         
         /* Free device structure */
         kfree(ourISPdev);
