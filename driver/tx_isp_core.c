@@ -2114,23 +2114,7 @@ int tisp_deinit(void)
 
 
 
-/**
- * tisp_netlink_exit - TISP netlink exit
- * Note: The actual implementation should be in tx_isp_tuning.c where static variables are defined
- */
-void tisp_netlink_exit(void)
-{
-    pr_info("tisp_netlink_exit: TISP netlink system exited");
-    /*
-     * Binary Ninja shows this function should:
-     * 1. Check nlsk global variable
-     * 2. If not NULL, get socket pointer at offset 0x130
-     * 3. Call sock_release() on the socket
-     *
-     * However, since nlsk is static in tx_isp_tuning.c,
-     * this function should be implemented there.
-     */
-}
+
 
 /**
  * tisp_event_push - TISP event push
