@@ -5418,9 +5418,8 @@ err_cleanup_base:
     platform_device_unregister(&tx_isp_platform_device);
     
 err_free_dev:
-    /* CRITICAL FIX: Don't free ourISPdev here - it's allocated by probe function */
-    /* The probe function will handle cleanup of its own allocation */
-    pr_err("*** tx_isp_init FAILED - ourISPdev allocation managed by probe function ***\n");
+    kfree(ourISPdev);
+    ourISPdev = NULL;
     return ret;
 }
 
