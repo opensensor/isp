@@ -2120,6 +2120,15 @@ void *tparams_cust = NULL;
 void *opmsg = NULL;
 void *data_ca490 = NULL;
 void *data_ca48c = NULL;
+void *nlsk = NULL;
+int major = 0;
+struct cdev tisp_cdev;
+struct class *cls = NULL;
+int32_t *data_b33b8 = NULL;
+int32_t data_b33b8_base = 0;
+void **data_b33b4 = NULL;
+void *data_b33b0 = NULL;
+struct completion tevent_info;
 
 /**
  * tisp_param_operate_deinit - EXACT Binary Ninja MCP implementation
@@ -2212,13 +2221,89 @@ void tisp_netlink_exit(void)
 }
 
 /**
- * tisp_event_push - TISP event push stub
- * This function should push events to the TISP event system
+ * tisp_event_push - EXACT Binary Ninja MCP implementation
+ * Address: 0x26f58
  */
 void tisp_event_push(void **event)
 {
-    pr_info("tisp_event_push: TISP event pushed");
-    /* Implementation would go here when available */
+    /* Binary Ninja: int32_t $v0 = arch_local_irq_save() */
+    unsigned long flags;
+    local_irq_save(flags);
+
+    /* Binary Ninja: int32_t* $v0_1 = data_b33b8 */
+    extern int32_t *data_b33b8;
+    extern int32_t data_b33b8_base;
+
+    /* Binary Ninja: if ($v0_1 == &data_b33b8) */
+    if (data_b33b8 == &data_b33b8_base) {
+        /* Binary Ninja: isp_printf(1, "flags = 0x%08x, jzflags = %p,0x%08x", "tisp_event_push") */
+        pr_warn("tisp_event_push: flags = 0x%08lx, jzflags = %p,0x%08x", flags, data_b33b8, 0);
+
+        /* Binary Ninja: arch_local_irq_restore($v0) */
+        local_irq_restore(flags);
+
+        /* Binary Ninja: return 0xffffffff */
+        return;
+    }
+
+    /* Binary Ninja: Complex linked list manipulation */
+    /* void** $a0_1 = $v0_1[1] */
+    void **next_ptr = (void**)data_b33b8[1];
+
+    /* void* $a1_1 = *$v0_1 */
+    void *prev_ptr = (void*)data_b33b8[0];
+
+    /* *($a1_1 + 4) = $a0_1 */
+    *((void**)((char*)prev_ptr + 4)) = next_ptr;
+
+    /* *$a0_1 = $a1_1 */
+    *next_ptr = prev_ptr;
+
+    /* *$v0_1 = 0x100100 */
+    data_b33b8[0] = 0x100100;
+
+    /* $v0_1[1] = 0x200200 */
+    data_b33b8[1] = 0x200200;
+
+    /* Copy event data - Binary Ninja: $v0_1[2] = *(arg1 + 8) */
+    data_b33b8[2] = *((int32_t*)((char*)event + 8));
+
+    /* Binary Ninja: int32_t $a3_1 = *(arg1 + 0x14) */
+    int32_t val_14 = *((int32_t*)((char*)event + 0x14));
+    data_b33b8[4] = *((int32_t*)((char*)event + 0x10));
+    data_b33b8[5] = val_14;
+
+    /* Continue copying event data */
+    int32_t val_1c = *((int32_t*)((char*)event + 0x1c));
+    data_b33b8[6] = *((int32_t*)((char*)event + 0x18));
+    data_b33b8[7] = val_1c;
+
+    int32_t val_24 = *((int32_t*)((char*)event + 0x24));
+    data_b33b8[8] = *((int32_t*)((char*)event + 0x20));
+    data_b33b8[9] = val_24;
+
+    int32_t val_2c = *((int32_t*)((char*)event + 0x2c));
+    data_b33b8[0xa] = *((int32_t*)((char*)event + 0x28));
+    data_b33b8[0xb] = val_2c;
+
+    /* Binary Ninja: Complex linked list update */
+    extern void **data_b33b4;
+    extern void *data_b33b0;
+
+    void **old_b33b4 = data_b33b4;
+    data_b33b4 = (void**)data_b33b8;
+    data_b33b8[0] = (int32_t)&data_b33b0;
+    data_b33b8[1] = (int32_t)old_b33b4;
+    *old_b33b4 = data_b33b8;
+
+    /* Binary Ninja: private_complete(&tevent_info) */
+    extern struct completion tevent_info;
+    complete(&tevent_info);
+
+    /* Binary Ninja: arch_local_irq_restore($v0) */
+    local_irq_restore(flags);
+
+    /* Binary Ninja: return 0 */
 }
 
 

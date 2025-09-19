@@ -671,8 +671,7 @@ struct tx_isp_platform {
 #define tx_isp_sd_writel(sd, reg, value)	\
 	tx_isp_writel(((sd)->base), reg, value)
 
-int tx_isp_reg_set(struct tx_isp_dev *isp_dev, int reg_offset, int start_bit, int end_bit, int value);
-
+int tx_isp_reg_set(struct tx_isp_subdev *sd, unsigned int reg, int start, int end, int val);
 int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd, struct tx_isp_subdev_ops *ops);
 void tx_isp_subdev_deinit(struct tx_isp_subdev *sd);
 

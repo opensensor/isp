@@ -352,6 +352,15 @@ extern void *tparams_cust;
 extern void *opmsg;
 extern void *data_ca490;
 extern void *data_ca48c;
+extern void *nlsk;
+extern int major;
+extern struct cdev tisp_cdev;
+extern struct class *cls;
+extern int32_t *data_b33b8;
+extern int32_t data_b33b8_base;
+extern void **data_b33b4;
+extern void *data_b33b0;
+extern struct completion tevent_info;
 
 void tx_isp_frame_chan_init(struct tx_isp_frame_channel *chan);
 void tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan);
