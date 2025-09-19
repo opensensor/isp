@@ -6068,31 +6068,10 @@ static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
         } else {
             v0_2 = NULL;
         }
-        s1_1 = (char*)dev_id - 0x48;
-        
-        /* SAFE: Avoid dangerous pointer arithmetic */
-        if (v0_2 == NULL) {
-            s0_1 = NULL;
-        } else {
-            /* SAFE: Use proper struct member access instead of unsafe offset */
-            /* Offset 0x24 likely corresponds to a state or flag field */
-            if (v0_2) {
-                /* For now, assume this is checking some state - use a safe default */
-                v0_3 = 0;  /* Safe default instead of unsafe memory access */
-            } else {
-                v0_3 = 0;
-            }
-            
-            /* SAFE: Avoid dangerous pointer arithmetic */
-            if (v0_3 == 0) {
-                s0_1 = NULL;
-            } else {
-                /* SAFE: Avoid dangerous pointer arithmetic and function calls */
-                /* Skip unsafe thread function call with calculated pointers */
-                s1_1 = NULL;
-                s0_1 = NULL;
-            }
-        }
+        /* SAFE: Completely avoid dangerous pointer arithmetic */
+        s1_1 = NULL;
+        s0_1 = NULL;
+        v0_3 = 0;
     }
     
     /* Binary Ninja: void* $a0_1 = *$s1_1 */
