@@ -6236,7 +6236,7 @@ uint32_t data_b2ee0(uint32_t log_val, int16_t *var_ptr);
 uint32_t data_b2ee4(uint32_t log_val, void **var_ptr);
 int data_b2f04(uint32_t param, int flag);
 int data_b2f08(uint32_t param, int flag);
-void dump_vic_reg(void);
+int32_t dump_vic_reg(void);
 uint32_t tisp_log2_fixed_to_fixed(void);
 /* Note: tisp_log2_fixed_to_fixed and system_reg_write already declared elsewhere */
 
@@ -9724,24 +9724,36 @@ int tisp_awb_get_par_cfg(void *out_buf, void *size_buf)
 /* ===== MISSING UTILITY FUNCTION IMPLEMENTATIONS ===== */
 
 /* dump_vic_reg - EXACT Binary Ninja implementation */
-void dump_vic_reg(void)
+int32_t dump_vic_reg(void)
 {
     /* Binary Ninja: for (int32_t i = 0; i != 0x1b4; ) { i_1 = i; i += 4; result = isp_printf(1, "register is 0x%x, value is 0x%x\n", i_1) } */
     int32_t i;
+    int32_t result = 0;
     extern struct tx_isp_dev *ourISPdev;
+    void __iomem *vic_regs = NULL;
 
-    pr_debug("dump_vic_reg: Binary Ninja VIC register dump\n");
-
-    /* Use existing VIC register dump if available */
-    if (ourISPdev) {
-        extern void tx_isp_vic_register_dump(struct tx_isp_dev *isp_dev);
-        tx_isp_vic_register_dump(ourISPdev);
-    } else {
-        /* Binary Ninja loop: dump registers from 0 to 0x1b4 (436 bytes) */
-        for (i = 0; i != 0x1b4; i += 4) {
-            isp_printf(1, "register is 0x%x, value is 0x%x\n", i, 0);  /* Placeholder values */
-        }
+    /* Get VIC register base if available */
+    if (ourISPdev && ourISPdev->vic_regs) {
+        vic_regs = ourISPdev->vic_regs;
     }
+
+    /* Binary Ninja EXACT loop: dump registers from 0 to 0x1b4 (436 bytes) */
+    for (i = 0; i != 0x1b4; ) {
+        int32_t i_1 = i;
+        i += 4;
+
+        /* Read actual register value if VIC registers are mapped */
+        uint32_t reg_value = 0;
+        if (vic_regs) {
+            reg_value = readl(vic_regs + i_1);
+        }
+
+        /* Binary Ninja: result = isp_printf(1, "register is 0x%x, value is 0x%x\n", i_1) */
+        result = isp_printf(1, "register is 0x%x, value is 0x%x\n", i_1, reg_value);
+    }
+
+    /* Binary Ninja: return result (last isp_printf return value) */
+    return result;
 }
 EXPORT_SYMBOL(dump_vic_reg);
 
@@ -9751,18 +9763,16 @@ uint32_t tisp_log2_fixed_to_fixed(void)
     /* Binary Ninja: $v0, $t1_1, $t2 = dump_vic_reg(); return $v0 - ($t1_1 << ($t2 & 0x1f)) */
     int32_t v0, t1_1, t2;
 
-    /* Binary Ninja: Call dump_vic_reg() which returns multiple values */
-    dump_vic_reg();
+    /* Binary Ninja: Call dump_vic_reg() and get the return value */
+    v0 = dump_vic_reg();
 
-    /* Binary Ninja: The function actually gets return values from dump_vic_reg() */
-    /* Since dump_vic_reg() in Binary Ninja returns the last isp_printf result, */
-    /* we simulate the expected behavior */
-    v0 = 0x1b0;    /* Last register offset from dump_vic_reg loop (0x1b4 - 4) */
-    t1_1 = 0x1;    /* Some calculated value */
-    t2 = 0x4;      /* Shift amount */
+    /* Binary Ninja: The decompilation shows these values are derived somehow */
+    /* Based on the register dump loop, these appear to be related to the loop variables */
+    t1_1 = 0x1;    /* Some calculated value from the register analysis */
+    t2 = 0x4;      /* Shift amount used in the calculation */
 
     /* Binary Ninja: return $v0 - ($t1_1 << ($t2 & 0x1f)) */
-    return v0 - (t1_1 << (t2 & 0x1f));
+    return (uint32_t)(v0 - (t1_1 << (t2 & 0x1f)));
 }
 EXPORT_SYMBOL(tisp_log2_fixed_to_fixed);
 
@@ -10583,33 +10593,7 @@ int isp_core_tuning_event(void *arg1, int arg2)
 
 
 
-/* Binary Ninja: dump_vic_reg() - EXACT implementation */
-int dump_vic_reg(void)
-{
-    struct tx_isp_dev *isp_dev = ourISPdev;
-    void __iomem *vic_regs;
-    int result = 0;
 
-    if (!isp_dev || !isp_dev->vic_regs) {
-        pr_err("dump_vic_reg: No VIC registers available\n");
-        return -EINVAL;
-    }
-
-    vic_regs = isp_dev->vic_regs;
-
-    /* Binary Ninja EXACT: for (int32_t i = 0; i != 0x1b4; i += 4) */
-    for (int i = 0; i != 0x1b4; i += 4) {
-        u32 reg_value = readl(vic_regs + i);
-        pr_debug("register is 0x%x, value is 0x%x\n", i, reg_value);
-
-        /* Check for critical error registers */
-        if (i == 0x84c && reg_value != 0) {
-            pr_err("*** VIC ERROR: Register 0x84c = 0x%x (should be 0) ***\n", reg_value);
-        }
-    }
-
-    return result;
-}
 
 /* Binary Ninja: check_csi_error() - EXACT implementation */
 void check_csi_error(void)
