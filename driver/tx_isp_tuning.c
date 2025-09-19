@@ -6450,11 +6450,6 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
     extern void *tiziano_ae_para_addr(void);
 
     /* Binary Ninja EXACT: system_irq_func_set with proper wrappers */
-    extern irqreturn_t ae0_interrupt_hist_wrapper(int irq, void *dev_id);
-    extern irqreturn_t ae0_interrupt_static_wrapper(int irq, void *dev_id);
-    extern irqreturn_t ae1_interrupt_hist_wrapper(int irq, void *dev_id);
-    extern irqreturn_t ae1_interrupt_static_wrapper(int irq, void *dev_id);
-
     system_irq_func_set(0x1b, ae0_interrupt_hist_wrapper);
     system_irq_func_set(0x1a, ae0_interrupt_static_wrapper);
     system_irq_func_set(0x1d, ae1_interrupt_hist_wrapper);
