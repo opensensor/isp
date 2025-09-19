@@ -3495,8 +3495,13 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
             /* SAFE: Update buffer count */
             vic_dev->active_buffer_count = state->vbm_buffer_count;
 
+            /* CRITICAL: Set buffer addresses for vic_mdma_enable and isp_vic_cmd_set */
+            vic_dev->buffer_addresses = (dma_addr_t *)state->vbm_buffer_addresses;
+            vic_dev->buffer_address_count = state->vbm_buffer_count;
+
             pr_info("*** ispvic_frame_channel_qbuf: SAFE - Programmed %d VIC buffer addresses ***\n",
                     state->vbm_buffer_count);
+            pr_info("*** ispvic_frame_channel_qbuf: Set vic_dev->buffer_addresses for vic_mdma_enable ***\n");
 
             /* CRITICAL FIX: Write VIC[0x300] to actually start DMA capture */
             /* The reference driver writes VIC[0x300] during QBUF to start DMA */
