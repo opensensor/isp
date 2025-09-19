@@ -288,13 +288,13 @@ irqreturn_t ispcore_irq_thread_handle(int irq, void *dev_id)
     pr_info("*** ispcore_irq_thread_handle: EXACT Binary Ninja implementation - IRQ %d ***\n", irq);
 
     vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-    if (!vic_dev || !vic_dev->base) {
-        pr_err("ispcore_irq_thread_handle: No VIC device or base address\n");
+    if (!vic_dev || !vic_dev->vic_regs) {
+        pr_err("ispcore_irq_thread_handle: No VIC device or register base\n");
         return IRQ_NONE;
     }
 
     /* Binary Ninja: Read VIC interrupt status */
-    irq_status = readl(vic_dev->base + 0x1e0);  /* VIC interrupt status register */
+    irq_status = readl(vic_dev->vic_regs + 0x1e0);  /* VIC interrupt status register */
 
     pr_info("*** ispcore_irq_thread_handle: VIC IRQ status = 0x%08x ***\n", irq_status);
 
@@ -303,7 +303,7 @@ irqreturn_t ispcore_irq_thread_handle(int irq, void *dev_id)
         pr_info("*** ispcore_irq_thread_handle: Processing VIC interrupt 0x%08x ***\n", irq_status);
 
         /* Clear VIC interrupt status */
-        writel(irq_status, vic_dev->base + 0x1e0);
+        writel(irq_status, vic_dev->vic_regs + 0x1e0);
         wmb();
 
         /* Binary Ninja: Signal frame completion */
