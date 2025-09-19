@@ -1824,7 +1824,7 @@ static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev)
 /* isp_vic_interrupt_service_routine - EXACT Binary Ninja implementation */
 static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
-    struct tx_isp_dev *isp_dev = ourISPdev;
+    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;  /* Use saved dev_id reference */
     struct tx_isp_vic_device *vic_dev;
     void __iomem *vic_regs;
     u32 v1_7, v1_10;
@@ -1833,9 +1833,9 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     u32 reg_val;
     int timeout;
     int i;
-    
+
     /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
-    vic_dev = ourISPdev->vic_dev;
+    vic_dev = isp_dev->vic_dev;
 
     /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
     vic_regs = vic_dev->vic_regs;
