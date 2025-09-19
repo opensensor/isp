@@ -83,16 +83,14 @@ static int parse_rmem_bootarg(unsigned long *base, unsigned long *size)
 
     return 0;
 }
-int tx_isp_setup_pipeline(struct tx_isp_dev *isp);
+/* REMOVED: tx_isp_setup_pipeline and tx_isp_vic_device_init - not in reference driver */
 static int tx_isp_setup_media_links(struct tx_isp_dev *isp);
 static int tx_isp_init_subdev_pads(struct tx_isp_dev *isp);
 static int tx_isp_create_subdev_links(struct tx_isp_dev *isp);
 static int tx_isp_register_link(struct tx_isp_dev *isp, struct link_config *link);
 static int tx_isp_configure_default_links(struct tx_isp_dev *isp);
 int tx_isp_configure_format_propagation(struct tx_isp_dev *isp);
-static int tx_isp_vic_device_init(struct tx_isp_dev *isp);
-static int tx_isp_csi_device_deinit(struct tx_isp_dev *isp);
-static int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
+/* REMOVED: tx_isp_vic_device_init, tx_isp_csi_device_deinit, tx_isp_vic_device_deinit - not in reference driver */
 int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev);
 
 /* Forward declaration for VIC device creation from tx_isp_vic.c */
@@ -1530,43 +1528,10 @@ err_put_cgu_isp:
     return ret;
 }
 
-int tx_isp_setup_pipeline(struct tx_isp_dev *isp)
-{
-    int ret;
-    
-    pr_info("Setting up ISP processing pipeline: CSI -> VIC -> Output\n");
-    
-    /* Initialize the processing pipeline state */
-    isp->pipeline_state = ISP_PIPELINE_IDLE;
-    
-    /* Configure default data path settings */
-    if (isp->csi_dev) {
-        isp->csi_dev->state = 1; /* INIT state */
-        pr_info("CSI device ready for configuration\n");
-    }
-    
-    if (isp->vic_dev) {
-        isp->vic_dev->state = 1; /* INIT state */
-        pr_info("VIC device ready for configuration\n");
-    }
-    
-    /* Setup media entity links and pads */
-    ret = tx_isp_setup_media_links(isp);
-    if (ret < 0) {
-        pr_err("Failed to setup media links: %d\n", ret);
-        return ret;
-    }
-    
-    /* Configure default link routing */
-    ret = tx_isp_configure_default_links(isp);
-    if (ret < 0) {
-        pr_err("Failed to configure default links: %d\n", ret);
-        return ret;
-    }
-    
-    pr_info("ISP pipeline setup completed\n");
-    return 0;
-}
+/* REMOVED: tx_isp_setup_pipeline function - not in reference driver
+ * Pipeline setup should be handled by proper subdevice registration and linking
+ * through tx_isp_subdev_init and the subdevice registry system
+ */
 
 /* Setup media entity links and pads */
 static int tx_isp_setup_media_links(struct tx_isp_dev *isp)
@@ -1725,53 +1690,15 @@ int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
     return 0;
 }
 
-/* Initialize VIC device */
-static int tx_isp_vic_device_init(struct tx_isp_dev *isp)
-{
-    struct tx_isp_vic_device *vic_dev;
-    
-    pr_info("Initializing VIC device\n");
-    
-    /* Allocate VIC device structure if not already present */
-    if (!isp->vic_dev) {
-        vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
-        if (!vic_dev) {
-            pr_err("Failed to allocate VIC device\n");
-            return -ENOMEM;
-        }
-        
-        /* Initialize VIC device structure */
-        vic_dev->state = 1; /* INIT state */
-        mutex_init(&vic_dev->state_lock);
-        spin_lock_init(&vic_dev->lock);
-        init_completion(&vic_dev->frame_complete);
-        
-        isp->vic_dev = vic_dev;
-    }
-    
-    pr_info("VIC device initialized\n");
-    return 0;
-}
+/* REMOVED: tx_isp_vic_device_init function - not in reference driver
+ * VIC device should ONLY be created by tx_isp_vic_probe with proper register mapping
+ * This function was creating duplicate VIC devices that conflict with probe-based initialization
+ */
 
-/* Deinitialize CSI device */
-static int tx_isp_csi_device_deinit(struct tx_isp_dev *isp)
-{
-    if (isp->csi_dev) {
-        kfree(isp->csi_dev);
-        isp->csi_dev = NULL;
-    }
-    return 0;
-}
-
-/* Deinitialize VIC device */
-static int tx_isp_vic_device_deinit(struct tx_isp_dev *isp)
-{
-    if (isp->vic_dev) {
-        kfree(isp->vic_dev);
-        isp->vic_dev = NULL;
-    }
-    return 0;
-}
+/* REMOVED: tx_isp_csi_device_deinit and tx_isp_vic_device_deinit functions - not in reference driver
+ * Device cleanup should be handled by proper platform driver remove functions
+ * These functions were incorrectly freeing devices that should be managed by probe/remove
+ */
 
 /**
  * ispcore_slake_module - EXACT Binary Ninja MCP implementation with SAFE struct access
