@@ -3397,7 +3397,6 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
                 /* CRITICAL: Create the ISP M0 tuning device node /dev/isp-m0 */
                 pr_debug("*** tx_isp_core_probe: Creating ISP M0 tuning device node ***\n");
-                extern int tisp_code_create_tuning_node(void);
                 result = tisp_code_create_tuning_node();
                 if (result == 0) {
                     pr_debug("*** tx_isp_core_probe: ISP M0 tuning device node created successfully ***\n");
