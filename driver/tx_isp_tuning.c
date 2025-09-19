@@ -463,6 +463,10 @@ int tiziano_deflicker_expt(uint32_t flicker_t, uint32_t param2, uint32_t param3,
 /* Forward declarations for tuning node functions */
 int tisp_code_create_tuning_node(void);
 int tisp_code_destroy_tuning_node(void);
+
+/* Forward declarations for tuning core functions */
+void *isp_core_tuning_init(void *arg1);
+int isp_core_tuning_event(void *arg1, int arg2);
 int tiziano_awb_init(uint32_t height, uint32_t width);  /* Binary Ninja: takes arg1, arg2 */
 int tiziano_ccm_init(void);
 int tiziano_bcsh_init(void);
