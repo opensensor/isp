@@ -8234,12 +8234,49 @@ int tiziano_rdns_init(void)
     return 0;
 }
 
-/* WDR-specific initialization functions */
+/* tisp_gb_init_reg - EXACT Binary Ninja implementation */
+int tisp_gb_init_reg(void)
+{
+    pr_debug("tisp_gb_init_reg: Initializing GB registers\n");
+
+    /* Binary Ninja: system_reg_write_gb(1, 0x1008, tisp_gb_dgain_shift:4 << 2 | tisp_gb_dgain_shift.d) */
+    system_reg_write_gb(1, 0x1008, (tisp_gb_dgain_shift >> 4) << 2 | (tisp_gb_dgain_shift & 0xf));
+
+    /* Binary Ninja: if (init.31768 == 0) */
+    if (gb_init_flag == 0) {
+        /* Binary Ninja: system_reg_write_gb(1, 0x1000, data_aa3e8 << 0x10 | tisp_gb_dgain_rgbir_l) */
+        system_reg_write_gb(1, 0x1000, data_aa3e8 << 0x10 | tisp_gb_dgain_rgbir_l);
+        /* Binary Ninja: system_reg_write_gb(1, 0x1004, data_aa3f0 << 0x10 | data_aa3ec) */
+        system_reg_write_gb(1, 0x1004, data_aa3f0 << 0x10 | data_aa3ec);
+        /* Binary Ninja: system_reg_write_gb(1, 0x100c, data_aa3d8 << 0x10 | tisp_gb_dgain_rgbir_s) */
+        system_reg_write_gb(1, 0x100c, data_aa3d8 << 0x10 | tisp_gb_dgain_rgbir_s);
+        /* Binary Ninja: system_reg_write_gb(1, 0x1010, data_aa3e0 << 0x10 | data_aa3dc) */
+        system_reg_write_gb(1, 0x1010, data_aa3e0 << 0x10 | data_aa3dc);
+    }
+
+    /* Binary Ninja: tisp_gb_blc_again_interp(tisp_gb_blc_ag.d, 0) */
+    tisp_gb_blc_again_interp(tisp_gb_blc_ag & 0xffff, 0);
+    /* Binary Ninja: tisp_gb_blc_again_interp(tisp_gb_blc_ag:4, 1) */
+    tisp_gb_blc_again_interp((tisp_gb_blc_ag >> 16) & 0xffff, 1);
+
+    /* Binary Ninja: init.31768 = 1 */
+    gb_init_flag = 1;
+
+    return 0;
+}
+EXPORT_SYMBOL(tisp_gb_init_reg);
+
+/* tisp_gb_init - EXACT Binary Ninja implementation */
 int tisp_gb_init(void)
 {
     pr_debug("tisp_gb_init: Initializing GB processing for WDR\n");
+
+    /* Binary Ninja: tisp_reg_map_set(tisp_gb_params_refresh()) */
+    tisp_reg_map_set(tisp_gb_params_refresh());
+
     return 0;
 }
+EXPORT_SYMBOL(tisp_gb_init);
 
 /* tisp_s_wdr_init_en - EXACT Binary Ninja implementation */
 int tisp_s_wdr_init_en(int enable)
