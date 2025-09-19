@@ -6208,7 +6208,7 @@ int data_b2eec(uint32_t time, void **var_ptr);
 int data_b2ef0(uint32_t time, void **var_ptr);
 int data_b2ef4(uint32_t param, int flag);
 int data_b2ef8(uint32_t param, int flag);
-static uint32_t data_b2ee0(uint32_t log_val, int16_t *var_ptr);
+uint32_t data_b2ee0(uint32_t log_val, int16_t *var_ptr);
 uint32_t data_b2ee4(uint32_t log_val, void **var_ptr);
 int data_b2f04(uint32_t param, int flag);
 int data_b2f08(uint32_t param, int flag);
@@ -10987,7 +10987,6 @@ uint32_t data_b2ee0(uint32_t log_val, int16_t *var_ptr)
     if (var_ptr) *var_ptr = 0;
     return log_val;
 }
-EXPORT_SYMBOL(data_b2ee0);
 
 uint32_t data_b2ee4(uint32_t log_val, void **var_ptr)
 {
