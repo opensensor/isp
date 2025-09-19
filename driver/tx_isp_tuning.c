@@ -1049,7 +1049,7 @@ static int tisp_ae0_get_hist(void *buffer, int mode, int flag);
 static int tisp_ae1_get_hist(void *buffer);
 static int tisp_ae0_ctrls_update(void);
 static int tisp_ae0_process_impl(void);
-static int tisp_event_push(void *event);
+/* tisp_event_push implemented as non-static below */
 static int system_reg_write_ae(int ae_id, uint32_t reg, uint32_t value);
 
 /* Helper function implementations */
