@@ -258,7 +258,7 @@ int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count)
     /* Binary Ninja: if ($s5 != 0) */
     if (clk_count != 0) {
         /* Binary Ninja: int32_t* $v0_1 = private_kmalloc($s1, 0xd0) */
-        struct clk **clk_array = private_kmalloc(clk_array_size, 0xd0);
+        clk_array = private_kmalloc(clk_array_size, 0xd0);
 
         /* Binary Ninja: if ($v0_1 == 0) */
         if (clk_array == NULL) {
