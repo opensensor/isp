@@ -51,12 +51,12 @@ static ssize_t wdr_mode_store(struct device *dev,
     
     /* Update hardware if needed */
     if (isp->streaming_enabled) {
-        u32 ctrl = isp_read32(ISP_CTRL);
+        u32 ctrl = system_reg_read(ISP_CTRL);  /* Use system_reg_read from reference driver */
         if (mode)
             ctrl |= ISP_CTRL_WDR_EN;
         else
             ctrl &= ~ISP_CTRL_WDR_EN;
-        isp_write32(ISP_CTRL, ctrl);
+        system_reg_write(ISP_CTRL, ctrl);  /* Use system_reg_write from reference driver */
     }
 
     return count;
