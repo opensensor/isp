@@ -953,7 +953,7 @@ static uint32_t *data_b33b0 = NULL;  /* Pointer for linked list operations */
 static uint32_t data_b33b4 = 0;
 static uint32_t data_b33b8 = 0;
 static uint32_t *data_b33bc = NULL;
-static uint32_t data_b2ff0 = 0;  /* First node reference */
+/* data_b2ff0 already defined earlier in the file */
 static struct completion tevent_info;  /* Completion structure for events */
 static struct lock_class_key event_wait_key;
 static wait_queue_head_t event_wait_queue;  /* SAFE: Dynamic wait queue instead of hardcoded address */
