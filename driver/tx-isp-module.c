@@ -540,10 +540,6 @@ extern int tx_isp_init_subdev_registry(struct tx_isp_dev *isp,
 extern int tx_isp_create_subdev_graph(struct tx_isp_dev *isp);
 extern void tx_isp_cleanup_subdev_graph(struct tx_isp_dev *isp);
 
-/* Forward declaration for VIN device creation */
-int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev);
-
-
 /* Forward declarations for hardware initialization functions */
 static int tx_isp_hardware_init(struct tx_isp_dev *isp_dev);
 extern int sensor_init(struct tx_isp_dev *isp_dev);
