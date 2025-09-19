@@ -129,8 +129,23 @@ extern struct tx_isp_subdev_ops vin_subdev_ops;
 #define VIN_DMA_ADDR         0x18    /* VIN DMA Address Register */
 #define VIN_DMA_SIZE         0x1C    /* VIN DMA Size Register */
 
-/* REMOVED: VIN Control Register Bits - Use definitions from tx-isp-device.h instead */
-/* The bit definitions in tx-isp-device.h match the Binary Ninja reference driver */
+/* VIN Control Register Bits - For video_input_cmd_set functions */
+#define VIN_CTRL_OFFSET          0x00    /* VIN Control Register Offset */
+#define VIN_CTRL_BT601_MODE      BIT(4)  /* BT601 8-bit sensor mode */
+#define VIN_CTRL_WDR_MODE        BIT(5)  /* WDR mode enable */
+
+/* VIN register access helper */
+#define vin_readl(vin_dev, offset)        readl((vin_dev)->vin_regs + (offset))
+#define vin_writel(vin_dev, offset, val)  writel((val), (vin_dev)->vin_regs + (offset))
+
+/* WDR Configuration Structure - For video_input_cmd_set */
+struct tx_isp_sensor_wdr_config {
+    unsigned long param1;
+    unsigned long param2;
+};
+
+/* Sensor WDR IOCTL Command */
+#define TX_ISP_SENSOR_SET_WDR_MODE  0x2000020
 
 /* VIN Status Register Bits */
 #define STATUS_BUSY          BIT(0)  /* VIN Busy Status */

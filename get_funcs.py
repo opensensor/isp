@@ -59,4 +59,4 @@ if __name__ == "__main__":
 
     print(f"Found {len(functions)} unique functions:")
     for func in sorted(functions):
-        print(f"  {func}")
+        print(f"{func}")

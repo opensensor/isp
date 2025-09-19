@@ -685,6 +685,7 @@ vic_event_handler
 vic_frame_complete_buffer_management
 vic_frame_work_function
 vic_framedone_irq_function
+vic_mdma_enable
 vic_mdma_irq_function
 vic_pad_event_handler
 vic_pipo_mdma_enable
@@ -701,9 +702,3 @@ vin_chardev_open
 vin_s_stream
 wdr_mode_show
 wdr_mode_store
-sensor_early_init
-sensor_end_changes
-tisp_ae0_get_statistics
-tisp_ae0_process
-tisp_ae0_process_impl
-tisp_ae1_ctrls_update
