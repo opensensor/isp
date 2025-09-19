@@ -6011,11 +6011,18 @@ static irqreturn_t isp_irq_handle(int irq, void *dev_id)
 
     /* Binary Ninja: if (arg2 != 0x80) */
     if ((uintptr_t)dev_id != 0x80) {
+        /* CRITICAL SAFETY: Validate all pointers before access */
+        if (!isp_dev) {
+            pr_err("*** isp_irq_handle: NULL isp_dev ***\n");
+            return IRQ_HANDLED;
+        }
+
         /* Binary Ninja: void* $v0_2 = **(arg2 + 0x44) */
         /* SAFE: Use proper struct member access instead of raw offset +0x44 */
-        if (isp_dev && isp_dev->vic_dev) {
+        if (isp_dev->vic_dev) {
             struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-            subdev_handler = vic_dev->irq_handler;  /* Use struct member instead of raw offset */
+            /* SAFE: Check if vic_dev has valid irq_handler member */
+            subdev_handler = vic_dev ? vic_dev->irq_handler : NULL;
 
             /* Binary Ninja: result = 1; if ($v0_2 != 0) */
             result = IRQ_HANDLED;
@@ -6096,10 +6103,18 @@ static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
     /* If we have a valid ISP device, call the VIC interrupt handler directly */
     if (dev_id && dev_id != (void*)0x80) {
         struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
+        /* CRITICAL SAFETY: Validate all pointers before access */
         if (isp_dev && isp_dev->vic_dev) {
             struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-            pr_info("isp_irq_thread_handle: Calling VIC frame done handler\n");
-            vic_framedone_irq_function(vic_dev);
+            /* ADDITIONAL SAFETY: Validate vic_dev before calling functions */
+            if (vic_dev && vic_dev->vic_regs) {
+                pr_info("isp_irq_thread_handle: Calling VIC frame done handler\n");
+                vic_framedone_irq_function(vic_dev);
+            } else {
+                pr_err("*** isp_irq_thread_handle: Invalid vic_dev or vic_regs ***\n");
+            }
+        } else {
+            pr_err("*** isp_irq_thread_handle: Invalid isp_dev or vic_dev ***\n");
         }
     }
     
