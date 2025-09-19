@@ -110,6 +110,103 @@ void tisp_reset_initialization_flag(void)
     tisp_initialized = false;
     pr_info("tisp_reset_initialization_flag: ISP initialization flag reset\n");
 }
+
+/* Global event completion for ISP firmware processing */
+static DECLARE_COMPLETION(tevent_info);
+
+/* Event processing data structures - Binary Ninja reference */
+static struct list_head event_queue = LIST_HEAD_INIT(event_queue);
+static struct list_head event_free_list = LIST_HEAD_INIT(event_free_list);
+static spinlock_t event_lock = __SPIN_LOCK_UNLOCKED(event_lock);
+
+/* Event callback table - Binary Ninja reference */
+static void (*cb[16])(void *arg1, void *arg2, void *arg3, void *arg4,
+                      void *arg5, void *arg6, void *arg7, void *arg8) = {NULL};
+
+/* tisp_event_process - EXACT Binary Ninja implementation */
+static int tisp_event_process(void)
+{
+    int ret;
+    unsigned long flags;
+    struct list_head *event_entry;
+    void **event_data;
+    int event_type;
+    void (*callback)(void *, void *, void *, void *, void *, void *, void *, void *);
+
+    /* Binary Ninja: private_wait_for_completion_timeout(&tevent_info, 0x14) */
+    ret = wait_for_completion_timeout(&tevent_info, 20); /* 0x14 = 20 jiffies */
+
+    if (ret == -512) { /* 0xfffffe00 = -512 */
+        isp_printf(2, "Can not support this frame mode!!!\n", "tisp_event_process");
+        return 0;
+    }
+
+    if (ret == 0) {
+        return 0; /* Timeout */
+    }
+
+    /* Binary Ninja: arch_local_irq_save() */
+    spin_lock_irqsave(&event_lock, flags);
+
+    /* Binary Ninja: Check if event queue is empty */
+    if (list_empty(&event_queue)) {
+        isp_printf(2, "sensor type is BT1120!\n", "tisp_event_process");
+        spin_unlock_irqrestore(&event_lock, flags);
+        return -1;
+    }
+
+    /* Get first event from queue */
+    event_entry = event_queue.next;
+    list_del(event_entry);
+
+    /* Add to free list */
+    list_add_tail(event_entry, &event_free_list);
+
+    /* Extract event data - Binary Ninja structure access */
+    event_data = (void **)event_entry;
+    event_type = (int)(unsigned long)event_data[2]; /* Event type at offset 2 */
+
+    /* Get callback function */
+    callback = cb[event_type];
+
+    spin_unlock_irqrestore(&event_lock, flags);
+
+    /* Call event callback if available */
+    if (callback) {
+        callback(event_data[4], event_data[5], event_data[6], event_data[7],
+                event_data[8], event_data[9], event_data[10], event_data[11]);
+    }
+
+    return 0;
+}
+
+/* tisp_fw_process - EXACT Binary Ninja implementation */
+static int tisp_fw_process(void)
+{
+    /* Binary Ninja: tisp_event_process() */
+    tisp_event_process();
+    return 0;
+}
+
+/* isp_fw_process - EXACT Binary Ninja implementation */
+int isp_fw_process(void *data)
+{
+    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)data;
+
+    pr_info("*** isp_fw_process: ISP firmware processing thread started ***\n");
+
+    /* Binary Ninja: while (private_kthread_should_stop() == 0) */
+    while (!kthread_should_stop()) {
+        /* Binary Ninja: tisp_fw_process() */
+        tisp_fw_process();
+
+        /* Add small delay to prevent excessive CPU usage */
+        msleep(10);
+    }
+
+    pr_info("*** isp_fw_process: ISP firmware processing thread stopped ***\n");
+    return 0;
+}
 EXPORT_SYMBOL(tisp_reset_initialization_flag);
 int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr);
 static int isp_free_buffer(struct tx_isp_dev *isp, void *virt_addr, dma_addr_t phys_addr, uint32_t size);

@@ -118,6 +118,9 @@ struct tx_isp_dev {
     struct list_head periph_clocks;
     spinlock_t clock_lock;
 
+    /* ISP firmware processing thread */
+    struct task_struct *fw_thread;  /* ISP firmware processing kernel thread */
+
     int refcnt;
     //struct tx_isp_subdev_ops *ops;
 
