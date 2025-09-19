@@ -1170,14 +1170,25 @@ cleanup:
 /* Video input command file operations - Binary Ninja reference */
 static const struct file_operations video_input_cmd_fops = {
     .owner = THIS_MODULE,
-    .open = vin_chardev_open,
+    .open = video_input_cmd_open,
+    .write = video_input_cmd_set,
     .release = single_release,
-    .unlocked_ioctl = vin_chardev_ioctl,
-    .llseek = default_llseek,
+    .llseek = seq_lseek,
+    .read = seq_read,
 };
+
+/* Forward declarations for video input command functions */
+extern int video_input_cmd_open(struct inode *inode, struct file *file);
+extern ssize_t video_input_cmd_set(struct file *file, const char __user *buffer, size_t count, loff_t *ppos);
+extern int video_input_cmd_show(struct seq_file *seq, void *v);
 
 /* Export VIN subdev ops for external access */
 EXPORT_SYMBOL(vin_subdev_ops);
+
+/* Export video input command functions for external access */
+EXPORT_SYMBOL(video_input_cmd_open);
+EXPORT_SYMBOL(video_input_cmd_set);
+EXPORT_SYMBOL(video_input_cmd_show);
 
 /* ========================================================================
  * VIN Platform Driver Functions
@@ -1206,6 +1217,10 @@ int tx_isp_vin_probe(struct platform_device *pdev)
 
     /* Binary Ninja: memset($v0, 0, 0xfc) */
     memset(vin, 0, sizeof(struct tx_isp_vin_device));
+
+    /* Initialize VIN register base for video_input_cmd functions */
+    /* This will be set to the actual register base when hardware is mapped */
+    vin->vin_regs = NULL;  /* Will be set during hardware initialization */
 
     /* Binary Ninja: private_raw_mutex_init($v0 + 0xe8, "not support the gpio mode!\n", 0) */
     private_raw_mutex_init(&vin->mlock, "not support the gpio mode!\n", 0);

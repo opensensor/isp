@@ -22,6 +22,7 @@ struct tx_isp_vin_device {
     
     /* Hardware resources */
     void __iomem *base;             /* VIN register base */
+    void __iomem *vin_regs;         /* VIN register base (alias for video_input_cmd functions) */
     struct clk *vin_clk;            /* VIN clock */
     int irq;                        /* VIN interrupt */
     
