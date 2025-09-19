@@ -7612,7 +7612,7 @@ static void tisp_set_sensor_digital_gain_short(uint32_t digital_gain)
 }
 
 /* vin_s_stream - EXACT Binary Ninja implementation */
-static int vin_s_stream(struct v4l2_subdev *sd, int enable)
+int vin_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_subdev *subdev;
     void *subdev_ops_ptr;
@@ -7628,12 +7628,12 @@ static int vin_s_stream(struct v4l2_subdev *sd, int enable)
     }
 
     /* Binary Ninja: int32_t $v1 = *(arg1 + 0xf4) */
-    subdev = tx_isp_get_subdevdata(sd);
+    subdev = sd;
     if (!subdev) {
         return -EINVAL;
     }
 
-    v1 = subdev->state;
+    v1 = subdev->vin_state;
 
     /* Binary Ninja: Stream enable/disable logic */
     if (enable != 0) {
@@ -7651,7 +7651,7 @@ label_set_state:
     if (subdev_ops_ptr == NULL) {
         /* Binary Ninja: Set state directly */
         v0 = enable ? 4 : 3;
-        subdev->state = v0;
+        subdev->vin_state = v0;
         return 0;
     }
 
@@ -7672,7 +7672,7 @@ label_set_state:
         if (result == 0) {
             /* Binary Ninja: Set state on success */
             v0 = enable ? 4 : 3;
-            subdev->state = v0;
+            subdev->vin_state = v0;
         }
     }
 
@@ -7681,7 +7681,7 @@ label_set_state:
 EXPORT_SYMBOL(vin_s_stream);
 
 /* vic_core_s_stream - EXACT Binary Ninja implementation */
-static int vic_core_s_stream(struct v4l2_subdev *sd, int enable)
+int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vic_device *vic_dev;
     int v0 = -EINVAL;
