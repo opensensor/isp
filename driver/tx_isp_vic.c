@@ -3278,22 +3278,8 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Binary Ninja: test_addr = $v0 + 0x80 */
     test_addr = (char *)vic_dev + 0x80;  /* Test address pointer */
 
-    /* CRITICAL: Copy register mapping from subdev to VIC device structure */
-    if (vic_dev->sd.regs) {
-        vic_dev->vic_regs = vic_dev->sd.regs;
-        pr_info("*** VIC PROBE: Copied register mapping from subdev: %p ***\n", vic_dev->vic_regs);
-
-        /* CRITICAL FIX: Link this properly initialized VIC device to the global ISP device */
-        if (ourISPdev) {
-            ourISPdev->vic_dev = (struct tx_isp_subdev *)vic_dev;  /* Store the VIC device, not just the subdev */
-            ourISPdev->vic_regs = vic_dev->vic_regs;
-            pr_info("*** VIC PROBE: CRITICAL - Linked VIC device to ourISPdev->vic_dev: %p ***\n", ourISPdev->vic_dev);
-            pr_info("*** VIC PROBE: CRITICAL - Updated global ISP device vic_regs: %p ***\n", ourISPdev->vic_regs);
-        }
-    } else {
-        pr_warn("*** VIC PROBE: No register mapping available from tx_isp_subdev_init ***\n");
-        pr_warn("*** VIC PROBE: sd.regs = %p, sd.mem_res = %p ***\n", vic_dev->sd.regs, vic_dev->sd.mem_res);
-    }
+    /* REMOVED: Manual linking - now handled automatically by tx_isp_subdev_init */
+    pr_info("*** VIC PROBE: Device linking handled automatically by tx_isp_subdev_init ***\n");
 
     return 0;
 }

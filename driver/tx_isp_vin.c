@@ -1053,11 +1053,8 @@ int tx_isp_vin_probe(struct platform_device *pdev)
     /* Binary Ninja: *($v0 + 0xf4) = 1 */
     vin->state = TX_ISP_MODULE_SLAKE;  /* State = 1 (SLAKE) */
 
-    /* CRITICAL FIX: Link this properly initialized VIN device to the global ISP device */
-    if (ourISPdev) {
-        ourISPdev->vin_dev = vin;
-        pr_info("*** VIN PROBE: CRITICAL - Linked VIN device to ourISPdev->vin_dev: %p ***\n", ourISPdev->vin_dev);
-    }
+    /* REMOVED: Manual linking - now handled automatically by tx_isp_subdev_init */
+    pr_info("*** VIN PROBE: Device linking handled automatically by tx_isp_subdev_init ***\n");
 
     return 0;
 
