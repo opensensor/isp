@@ -409,6 +409,16 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     /* SAFE: Use struct member access instead of offset */
     sd->ops = ops;
 
+    /* CRITICAL: Link subdevices to main ISP device when they're created */
+    extern struct tx_isp_dev *ourISPdev;
+    if (ourISPdev && ops == &vic_subdev_ops) {
+        /* This is a VIC subdev - link the VIC device to ourISPdev */
+        struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
+        ourISPdev->vic_dev = vic_dev;
+        sd->isp = ourISPdev;
+        pr_info("*** tx_isp_subdev_init: VIC device linked to main ISP device ***\n");
+    }
+
     /* Binary Ninja: if (tx_isp_module_init(arg1, arg2) != 0) */
     ret = tx_isp_module_init(pdev, sd);
     if (ret != 0) {
