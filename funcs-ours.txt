@@ -113,6 +113,8 @@ ispcore_frame_channel_dqbuf
 ispcore_frame_channel_streamoff
 ispcore_interrupt_service_routine
 ispcore_irq_fs_work
+ispcore_irq_thread_handle
+ispcore_link_setup
 ispcore_pad_event_handle
 ispcore_sensor_ops_ioctl
 ispcore_sensor_ops_release_all_sensor
