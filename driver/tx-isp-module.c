@@ -70,6 +70,9 @@ static DEFINE_MUTEX(sensor_list_mutex);
 static int sensor_count = 0;
 static int isp_memopt = 0; // Memory optimization flag like reference
 
+/* CRITICAL SAFETY: Global flag to prevent interrupt processing during shutdown */
+static volatile bool isp_system_shutting_down = false;
+
 /* CRITICAL: VIC interrupt control flag - Binary Ninja reference */
 /* This is now declared as extern - the actual definition is in tx_isp_vic.c */
 extern uint32_t vic_start_ok;
@@ -7010,14 +7013,22 @@ static void vic_frame_work_function(struct work_struct *work)
 {
     struct tx_isp_vic_device *vic_dev;
 
+    /* CRITICAL SAFETY: Check if system is shutting down */
     if (!ourISPdev || !ourISPdev->vic_dev) {
+        pr_info("*** vic_frame_work_function: System shutting down, stopping work queue ***\n");
         return;
     }
 
     vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
 
+    /* CRITICAL SAFETY: Validate VIC device structure */
+    if (!vic_dev || !vic_dev->vic_regs) {
+        pr_warn("*** vic_frame_work_function: Invalid VIC device, stopping work queue ***\n");
+        return;
+    }
+
     // Simple frame generation without recursion
-    if (vic_dev && vic_dev->state == 2 && vic_dev->streaming) {
+    if (vic_dev->state == 2 && vic_dev->streaming) {
         int i;
 
         // Wake up waiting channels
@@ -7027,8 +7038,15 @@ static void vic_frame_work_function(struct work_struct *work)
             }
         }
 
-        // Schedule next frame
-        schedule_delayed_work(&vic_frame_work, msecs_to_jiffies(33));
+        /* CRITICAL SAFETY: Only reschedule if system is still valid */
+        if (ourISPdev && ourISPdev->vic_dev && vic_dev->streaming) {
+            schedule_delayed_work(&vic_frame_work, msecs_to_jiffies(33));
+        } else {
+            pr_info("*** vic_frame_work_function: System state changed, stopping work queue ***\n");
+        }
+    } else {
+        pr_info("*** vic_frame_work_function: VIC not streaming (state=%d, streaming=%d), stopping work queue ***\n",
+                vic_dev->state, vic_dev->streaming);
     }
 }
 
