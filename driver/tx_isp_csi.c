@@ -18,17 +18,7 @@ static struct tx_isp_csi_device *dump_csd = NULL;  /* Global CSI device pointer 
 
 static void __iomem *tx_isp_core_regs = NULL;
 
-u32 isp_read32(u32 reg)
-{
-    if (!tx_isp_core_regs) {
-        tx_isp_core_regs = ioremap(0x13300000, 0x10000);  // Core base from /proc/iomem
-        if (!tx_isp_core_regs) {
-            pr_err("Failed to map core registers\n");
-            return 0;
-        }
-    }
-    return readl(tx_isp_core_regs + reg);
-}
+/* isp_read32 removed - use system_reg_read from reference driver instead */
 
 void isp_write32(u32 reg, u32 val)
 {
