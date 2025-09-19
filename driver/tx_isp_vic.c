@@ -615,7 +615,7 @@ static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
 }
 
 /* VIC interrupt handler - EXACT Binary Ninja reference implementation */
-static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
+irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
     extern struct tx_isp_dev *ourISPdev;
     extern uint32_t vic_start_ok;
@@ -678,6 +678,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     /* Binary Ninja: return 1 */
     return IRQ_HANDLED;
 }
+EXPORT_SYMBOL(isp_vic_interrupt_service_routine);
 
 /* Stop VIC processing */
 int tx_isp_vic_stop(struct tx_isp_subdev *sd)
