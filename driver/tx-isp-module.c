@@ -4998,8 +4998,7 @@ static int tx_isp_init(void)
     ret = misc_register(&tx_isp_miscdev);
     if (ret != 0) {
         pr_err("Failed to register misc device: %d\n", ret);
-        platform_driver_unregister(&tx_isp_driver);
-        platform_device_unregister(&tx_isp_platform_device);
+        /* REMOVED: Main ISP platform driver/device cleanup - not registered */
         goto err_free_dev;
     }
 
