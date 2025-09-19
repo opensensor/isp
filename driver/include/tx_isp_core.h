@@ -10,6 +10,9 @@ int tx_isp_core_start(struct tx_isp_subdev *sd);
 int tx_isp_core_stop(struct tx_isp_subdev *sd);
 int tx_isp_core_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *config);
 
+/* Core IOCTL Operations */
+int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+
 /* Tiziano ISP Core Functions */
 int tiziano_isp_init(struct tx_isp_sensor_attribute *sensor_attr, char *param_name);
 int tiziano_sync_sensor_attr(struct tx_isp_sensor_attribute *attr);

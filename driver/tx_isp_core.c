@@ -500,6 +500,7 @@ exit_check:
     pr_debug("ispcore_core_ops_ioctl: cmd=0x%x completed with result=%d\n", cmd, result);
     return result;
 }
+EXPORT_SYMBOL(ispcore_core_ops_ioctl);
 
 
 /* Core subdev operations structure - CRITICAL for proper initialization */
