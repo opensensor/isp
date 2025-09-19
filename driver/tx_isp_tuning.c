@@ -271,7 +271,7 @@ int tiziano_adr_params_init(void);
 int tiziano_adr_init(uint32_t width, uint32_t height);
 int tiziano_af_init(void);
 int tiziano_ae_init_exp_th(void);
-int tiziano_ae_init(void);
+int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps);
 int tiziano_awb_init(void);
 int tiziano_ccm_init(void);
 int tiziano_bcsh_init(void);
@@ -355,7 +355,7 @@ int isp_core_tuning_release(struct tx_isp_dev *dev);
 void *isp_core_tuning_init(void *arg1);
 int isp_core_tuning_event(struct tx_isp_dev *dev, uint32_t event);  /* Binary Ninja function pointer */
 void isp_frame_done_wakeup(void);  /* Binary Ninja function */
-void tisp_day_or_night_s_ctrl(unsigned int value);  /* Binary Ninja function */
+int tisp_day_or_night_s_ctrl(uint32_t mode);  /* Binary Ninja function */
 
 /* Forward declaration for tisp_init - Binary Ninja EXACT implementation */
 int tisp_init(void *sensor_info, char *param_name);
@@ -1553,7 +1553,7 @@ int tisp_init(void *sensor_info, char *param_name)
     /* Binary Ninja: WDR initialization if WDR mode is enabled */
     if (sensor_params.mode >= 4) {
         pr_debug("*** tisp_init: INITIALIZING WDR-SPECIFIC COMPONENTS ***\n");
-        tiziano_wdr_init();
+        tiziano_wdr_init(actual_image_width, actual_image_height);
         tisp_gb_init();
         tisp_dpc_wdr_en(1);
         tisp_lsc_wdr_en(1);
@@ -1637,7 +1637,7 @@ int tisp_init(void *sensor_info, char *param_name)
     /* Binary Ninja: WDR initialization if enabled */
     if (sensor_params.mode == 1) {  /* WDR mode */
         pr_debug("*** tisp_init: WDR MODE ENABLED - Initializing WDR components ***\n");
-        tiziano_wdr_init();
+        tiziano_wdr_init(actual_image_width, actual_image_height);
         tisp_gb_init();
         /* Enable WDR for all sub-modules */
         tisp_dpc_wdr_en(1);
@@ -1942,7 +1942,7 @@ static struct tiziano_dn_params {
     uint32_t night_params[0x20]; // Night mode params
 } dn_params;
 
-static int tisp_day_or_night_s_ctrl(uint32_t mode)
+int tisp_day_or_night_s_ctrl(uint32_t mode)
 {
     //void __iomem *regs = ourISPdev->reg_base;
     uint32_t bypass_val, top_ctrl;
@@ -2024,7 +2024,7 @@ static int tisp_day_or_night_s_ctrl(uint32_t mode)
 #define ISP_TUNING_EVENT_FRAME_DONE 0x1004
 #define ISP_TUNING_EVENT_DMA_READY  0x1005
 
-static int isp_core_tuning_event(struct tx_isp_dev *dev, uint32_t event)
+int isp_core_tuning_event(struct tx_isp_dev *dev, uint32_t event)
 {
     pr_debug("isp_core_tuning_event: event=0x%x\n", event);
     if (!dev)
@@ -6342,7 +6342,7 @@ static void tisp_ae1_process(void)
 }
 
 /* tiziano_ae_init_exp_th - Based on decompiled code with safe memory access */
-static int tiziano_ae_init_exp_th(void)
+int tiziano_ae_init_exp_th(void)
 {
     pr_debug("tiziano_ae_init_exp_th: Initializing AE exposure thresholds\n");
     
@@ -8010,12 +8010,7 @@ int tiziano_dpc_init(void)
     return 0;
 }
 
-/* tiziano_hldc_init - HLDC initialization */
-int tiziano_hldc_init(void)
-{
-    pr_debug("tiziano_hldc_init: Initializing HLDC processing\n");
-    return 0;
-}
+/* tiziano_hldc_init - removed duplicate, using Binary Ninja implementation below */
 
 /* tiziano_defog_init - Defog initialization */
 int tiziano_defog_init(uint32_t width, uint32_t height)
