@@ -260,16 +260,7 @@ int Tiziano_wdr_fpga(void *struct_me, void *dev_para, void *ratio_para, void *x_
 int tiziano_wdr_soft_para_out(void);
 
 
-/* Forward declarations for ISP pipeline init functions */
-int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps);
-int tiziano_awb_init(uint32_t height, uint32_t width);
-int tiziano_gamma_init(uint32_t width, uint32_t height, uint32_t fps);
-int tiziano_gib_init(void);
-int tiziano_lsc_init(void);
-int tiziano_ccm_init(void);
-int tiziano_dmsc_init(void);
-int tiziano_sharpen_init(void);
-int tiziano_sdns_init(void);
+/* Forward declarations for ISP pipeline init functions - EXACT Binary Ninja signatures */
 int tiziano_mdns_init(void);
 int tiziano_clm_init(void);
 int tiziano_dpc_init(void);
@@ -1646,7 +1637,7 @@ int tisp_init(void *sensor_info, char *param_name)
     /* Binary Ninja: WDR initialization if enabled */
     if (sensor_params.mode == 1) {  /* WDR mode */
         pr_debug("*** tisp_init: WDR MODE ENABLED - Initializing WDR components ***\n");
-        tiziano_wdr_init(actual_image_width, actual_image_height);
+        tiziano_wdr_init();
         tisp_gb_init();
         /* Enable WDR for all sub-modules */
         tisp_dpc_wdr_en(1);
@@ -9832,22 +9823,22 @@ int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32
     pr_debug("Resolution: %dx%d, FPS: %d, WDR mode: %d\n", width, height, fps, wdr_mode);
     
     /* Binary Ninja tisp_init sequence - initialize all components */
-    tiziano_ae_init(height, width, fps);
-    tiziano_awb_init(height, width);
-    tiziano_gamma_init(width, height, fps);
+    tiziano_ae_init();
+    tiziano_awb_init();
+    tiziano_gamma_init();
     tiziano_gib_init();
     tiziano_lsc_init();
     tiziano_ccm_init();
     tiziano_dmsc_init();
     tiziano_sharpen_init();
     tiziano_sdns_init();
-    tiziano_mdns_init(width, height);
+    tiziano_mdns_init();
     tiziano_clm_init();
     tiziano_dpc_init();
     tiziano_hldc_init();
-    tiziano_defog_init(width, height);
+    tiziano_defog_init();
     tiziano_adr_init(width, height);
-    tiziano_af_init(height, width);
+    tiziano_af_init();
     tiziano_bcsh_init();
     tiziano_ydns_init();
     tiziano_rdns_init();
