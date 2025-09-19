@@ -11,6 +11,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable);
 int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes);
 void dump_csi_reg(struct tx_isp_subdev *sd);
 extern struct tx_isp_dev *ourISPdev;
+void system_reg_write(u32 reg, u32 value);
 
 /* Binary Ninja reference global variables */
 static struct tx_isp_csi_device *dump_csd = NULL;  /* Global CSI device pointer */
@@ -30,14 +31,12 @@ static void __iomem *tx_isp_vic_regs = NULL;
 
 u32 vic_read32(u32 reg)
 {
-    if (!tx_isp_vic_regs) {
-        tx_isp_vic_regs = ioremap(0x10023000, 0x1000);  // VIC base from /proc/iomem
-        if (!tx_isp_vic_regs) {
-            pr_err("Failed to map VIC registers\n");
-            return 0;
-        }
+    /* Use global ISP device VIC registers mapped by subdev probe */
+    if (ourISPdev && ourISPdev->vic_regs) {
+        return readl(ourISPdev->vic_regs + reg);
     }
-    return readl(tx_isp_vic_regs + reg);
+    pr_err("vic_read32: No VIC registers available\n");
+    return 0;
 }
 
 void vic_write32(u32 reg, u32 val)
