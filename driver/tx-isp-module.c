@@ -7757,7 +7757,7 @@ static int sensor_start_changes(struct tx_isp_subdev *sd)
     /* Apply sensor-specific start changes */
     if (sd->ops->sensor->ioctl) {
         /* Call sensor start IOCTL */
-        sd->ops->sensor->ioctl(&sd->sd, 0x980900, NULL);
+        sd->ops->sensor->ioctl(sd, 0x980900, NULL);
     }
 
     return 0;
@@ -7765,7 +7765,7 @@ static int sensor_start_changes(struct tx_isp_subdev *sd)
 EXPORT_SYMBOL(sensor_start_changes);
 
 /* subdev_sensor_ops_ioctl - EXACT Binary Ninja implementation */
-static long subdev_sensor_ops_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
+static long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
     struct tx_isp_subdev *subdev;
 
