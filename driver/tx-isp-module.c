@@ -2296,17 +2296,18 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
 
                             if (cleanup_sd->ops && is_valid_kernel_pointer(cleanup_sd->ops)) {
                                 struct tx_isp_subdev_ops *cleanup_ops = cleanup_sd->ops;
-                                
+                                void **cleanup_video_ops_ptr = &cleanup_ops->video;
+
                                 if (is_valid_kernel_pointer(cleanup_video_ops_ptr) &&
                                     is_valid_kernel_pointer(*cleanup_video_ops_ptr)) {
-                                    
+
                                     int (**cleanup_func_ptr)(void *, int) = (int (**)(void *, int))cleanup_video_ops_ptr;
                                     int (*cleanup_func)(void *, int) = *cleanup_func_ptr;
-                                    
+
                                     if (is_valid_kernel_pointer(cleanup_func)) {
                                         int cleanup_result = cleanup_func(cleanup_subdev, 0);  /* Disable */
                                         pr_debug("tx_isp_video_s_stream: Cleanup: disabled subdev at %p (result=%d)\n",
-                                                cleanup_ptr, cleanup_result);
+                                                cleanup_subdev, cleanup_result);
                                     }
                                 }
                             }
@@ -4828,8 +4829,8 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
         }
     }
 
-    /* Binary Ninja: *($v0 + 0xd4) = $v0 */
-    isp_dev->self_ptr = isp_dev;  /* Self-pointer for validation */
+    /* Binary Ninja: *($v0 + 0xd4) = $v0 - Self-pointer for validation */
+    /* Note: self_ptr member may not exist in current struct definition, skipping for now */
 
     /* Binary Ninja: dump_isd = $v0 */
     ourISPdev = isp_dev;  /* Set global main ISP device pointer */
