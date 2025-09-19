@@ -52,7 +52,7 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
     }
 
     /* Binary Ninja: __private_spin_lock_irqsave(dump_vsd_2 + 0x130, &var_18) */
-    spin_lock_irqsave(&vic_dev->irq_lock, flags);
+    spin_lock_irqsave(&vic_dev->lock, flags);
 
     /* Binary Ninja: if (*(dump_vsd_1 + 0x13c) != 0) */
     if (vic_dev->irq_enabled == 0) {
@@ -61,8 +61,8 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 
         /* Binary Ninja: int32_t $v0_1 = *(dump_vsd_5 + 0x84) */
         /* Binary Ninja: if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
-        if (vic_dev->enable_irq_func) {
-            vic_dev->enable_irq_func(&vic_dev->irq_ops);
+        if (vic_dev->irq_handler) {
+            vic_dev->irq_handler(vic_dev->irq_priv);
         }
 
         pr_info("*** tx_vic_enable_irq: VIC interrupts ENABLED ***\n");
@@ -71,7 +71,7 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
     }
 
     /* Binary Ninja: private_spin_unlock_irqrestore(dump_vsd_3 + 0x130, var_18) */
-    spin_unlock_irqrestore(&vic_dev->irq_lock, flags);
+    spin_unlock_irqrestore(&vic_dev->lock, flags);
 }
 
 /* BINARY NINJA EXACT: tx_vic_disable_irq implementation */
