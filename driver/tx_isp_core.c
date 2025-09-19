@@ -35,6 +35,9 @@ int tisp_channel_start(int channel, void *attr);
 uint32_t tisp_math_exp2(uint32_t val, uint32_t shift, uint32_t base);
 int32_t tisp_log2_fixed_to_fixed_tuning(uint32_t val, int32_t in_fix_point, char out_fix_point);
 
+/* Command line access function */
+char *get_saved_command_line(void);
+
 /* Parse rmem boot parameter - Linux 3.10 compatible */
 static int parse_rmem_bootarg(unsigned long *base, unsigned long *size)
 {
@@ -3653,13 +3656,7 @@ void private_kfree(void *p)
 EXPORT_SYMBOL(private_kmalloc);
 EXPORT_SYMBOL(private_kfree);
 
-/* private_vfree - EXACT Binary Ninja implementation */
-void private_vfree(const void *addr)
-{
-    /* Binary Ninja: jump(vfree) - direct wrapper to vfree */
-    vfree(addr);
-}
-EXPORT_SYMBOL(private_vfree);
+
 
 /* Missing private_* functions */
 int private_platform_device_register(struct platform_device *pdev)
