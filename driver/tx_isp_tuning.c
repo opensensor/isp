@@ -8052,7 +8052,7 @@ int tiziano_dpc_init(void)
     tiziano_dpc_params_refresh();
 
     /* Binary Ninja: tisp_dpc_par_refresh(isp_printf, isp_printf, 1) */
-    tisp_dpc_par_refresh(isp_printf, isp_printf, 1);
+    tisp_dpc_par_refresh(0, 0, 1);  /* Binary Ninja: pass uint32_t values, not function pointers */
 
     return 0;
 }
