@@ -3163,110 +3163,25 @@ static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
 int tx_isp_core_probe(struct platform_device *pdev)
 {
     struct tx_isp_dev *isp_dev;
-    struct tx_isp_platform_data *pdata;
     int result;
     uint32_t channel_count;
     void *channel_array;
     void *tuning_dev;
 
-    /* Binary Ninja: private_kmalloc(0x2b8, 0xd0) */
-    isp_dev = private_kmalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
+    /* Binary Ninja: private_kmalloc(0x218, 0xd0) - EXACT size match */
+    isp_dev = private_kmalloc(0x218, GFP_KERNEL);
     if (isp_dev == NULL) {
-        /* Binary Ninja: isp_printf(2, "Failed to allocate ISP device structure\n", $a2) */
-        isp_printf(2, "Failed to allocate ISP device structure\n", sizeof(struct tx_isp_dev));
-        return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
+        /* Binary Ninja: isp_printf(2, "addr ctl is 0x%x\n", $a2) */
+        isp_printf(2, "addr ctl is 0x%x\n", 0x218);
+        return 0xfffffff4;  /* Binary Ninja: return 0xfffffff4 */
     }
 
-    /* Initialize device pointer */
-    isp_dev->dev = &pdev->dev;
-    pdata = (struct tx_isp_platform_data *)pdev->dev.platform_data;
+    /* Binary Ninja: memset($v0, 0, 0x218) */
+    memset(isp_dev, 0, 0x218);
 
-    /* SAFE: Create proper platform device array */
-    pr_info("*** tx_isp_core_probe: SAFE platform device setup ***\n");
-    
-    /* Get the actual registered platform devices from the module */
-    extern struct platform_device tx_isp_csi_platform_device;
-    extern struct platform_device tx_isp_vic_platform_device;
-    extern struct platform_device tx_isp_vin_platform_device;
-    extern struct platform_device tx_isp_fs_platform_device;
-    extern struct platform_device tx_isp_core_platform_device;
-    
-    /* Set up platform device driver data DIRECTLY on the registered devices */
-    platform_set_drvdata(&tx_isp_csi_platform_device, &csi_subdev_data);
-    platform_set_drvdata(&tx_isp_vic_platform_device, &vic_subdev_data);
-    platform_set_drvdata(&tx_isp_vin_platform_device, &vin_subdev_data);
-    platform_set_drvdata(&tx_isp_fs_platform_device, &fs_subdev_data);
-    platform_set_drvdata(&tx_isp_core_platform_device, &core_subdev_data);
-    
-    /* SAFE: Set up subdev_count and subdev_list using proper struct members */
-    struct platform_device *platform_devices[] = {
-        &tx_isp_csi_platform_device,
-        &tx_isp_vic_platform_device,
-        &tx_isp_vin_platform_device,
-        &tx_isp_fs_platform_device,
-        &tx_isp_core_platform_device
-    };
-    
-    /* Allocate and set up the subdev_list array */
-    isp_dev->subdev_list = kzalloc(sizeof(platform_devices), GFP_KERNEL);
-    if (!isp_dev->subdev_list) {
-        pr_err("Failed to allocate subdev_list\n");
-        kfree(isp_dev);
-        return -ENOMEM;
-    }
-    memcpy(isp_dev->subdev_list, platform_devices, sizeof(platform_devices));
-    
-    /* SAFE: Set up using proper struct members instead of dangerous offsets */
-    isp_dev->subdev_count = ARRAY_SIZE(platform_devices);
-    
-    pr_info("*** tx_isp_core_probe: Platform devices configured - count=%d ***\n", isp_dev->subdev_count);
-
-    /* SAFE: Initialize platform data reference using proper struct member access */
-    if (!pdata) {
-        /* Create proper platform data structure if none exists */
-        pdata = kzalloc(sizeof(struct tx_isp_platform_data), GFP_KERNEL);
-        if (pdata) {
-            pdata->device_id = 1;  /* SAFE: Set device ID using struct member */
-            pdata->flags = 0;
-            pdata->version = 1;
-            pdev->dev.platform_data = pdata;
-            pr_info("*** tx_isp_core_probe: Created safe platform data structure ***\n");
-        }
-    }
-
-    /* Initialize basic device fields */
-    spin_lock_init(&isp_dev->lock);
-    mutex_init(&isp_dev->mutex);
-    spin_lock_init(&isp_dev->irq_lock);
-
-    /* CRITICAL: Initialize the core subdev with proper operations */
-    pr_info("*** tx_isp_core_probe: Initializing core subdev with operations ***\n");
-    
-    /* Set up the core subdev operations with our implemented functions */
-    core_subdev_core_ops.init = NULL;  /* Will be set when needed */
-    core_subdev_core_ops.reset = NULL; /* Will be set when needed */
-    core_subdev_core_ops.ioctl = NULL; /* Will be set when needed */
-    
-    /* Update the core subdev ops structure */
-    core_subdev_ops.core = &core_subdev_core_ops;
-    core_subdev_ops.video = &core_subdev_video_ops;
-    core_subdev_ops.pad = &core_pad_ops;
-    
-    /* Initialize the subdev that's already the first member of tx_isp_dev */
-    isp_dev->sd.isp = isp_dev;  /* Set back-reference */
-    isp_dev->sd.ops = &core_subdev_ops_full;  /* Set operations to the properly configured structure */
-    isp_dev->sd.vin_state = TX_ISP_MODULE_INIT;  /* Set initial state */
-    
-    /* Initialize subdev synchronization */
-    mutex_init(&isp_dev->sd.lock);
-    
-    pr_info("*** tx_isp_core_probe: Core subdev initialized with ops=%p ***\n", &core_subdev_ops);
-    pr_info("***   - Core ops: start=%p, stop=%p, set_format=%p ***\n",
-            tx_isp_core_start, tx_isp_core_stop, tx_isp_core_set_format);
-
+    /* Binary Ninja: void* $s2_1 = arg1[0x16] */
     /* Binary Ninja: if (tx_isp_subdev_init(arg1, $v0, &core_subdev_ops) == 0) */
-    if (tx_isp_subdev_init(pdev, &isp_dev->sd, &core_subdev_ops) == 0) {
-        pr_info("*** tx_isp_core_probe: Subdev init SUCCESS ***\n");
+    if (tx_isp_subdev_init(pdev, (struct tx_isp_subdev *)isp_dev, &core_subdev_ops) == 0) {
 
         /* SAFE: Channel configuration using proper struct access */
         channel_count = ISP_MAX_CHAN;  /* Use constant instead of dangerous offset access */
