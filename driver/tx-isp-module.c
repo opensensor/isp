@@ -4828,6 +4828,20 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     /* Binary Ninja: void* $s2_1 = arg1[0x16] */
     pdata = pdev->dev.platform_data;
 
+    /* Binary Ninja: Validate platform data exists and has valid device count */
+    if (pdata == NULL) {
+        isp_printf(2, (unsigned char *)"No platform data provided\n");
+        private_kfree(isp_dev);
+        return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
+    }
+
+    /* Binary Ninja: Check device count - zx.d(*($s2_1 + 4)) u>= 0x11 */
+    if (pdata->device_id >= 0x11) {
+        isp_printf(2, (unsigned char *)"saveraw\n");
+        private_kfree(isp_dev);
+        return -EFAULT;  /* Binary Ninja returns 0xffffffea */
+    }
+
     /* Binary Ninja: tx_isp_subdev_init(arg1, $v0, &main_subdev_ops) */
     ret = tx_isp_subdev_init(pdev, &isp_dev->sd, &main_subdev_ops);
     if (ret != 0) {
@@ -4844,27 +4858,29 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     /* Binary Ninja: *($v0 + 0x34) = &tx_isp_fops - Use safe struct member access */
     /* Note: fops member may not exist in current struct definition, skipping for now */
 
-    /* Binary Ninja: Platform registration loop */
-    extern struct platform_device tx_isp_fs_platform_device;
-    extern struct platform_device tx_isp_core_platform_device;
+    /* Binary Ninja: Platform device registration loop using platform data */
+    /* Binary Ninja: *(*($s2_1 + 8) + ($fp_1 << 2)) - Get platform device from array */
+    for (i = 0; i < pdata->device_id; i++) {
+        struct platform_device *platform_dev = pdata->devices[i];
 
-    struct platform_device *platform_devices[] = {
-        &tx_isp_csi_platform_device,
-        &tx_isp_vic_platform_device,
-        &tx_isp_vin_platform_device,
-        &tx_isp_fs_platform_device,
-        &tx_isp_core_platform_device
-    };
-
-    /* Binary Ninja: Platform device registration loop */
-    for (i = 0; i < ARRAY_SIZE(platform_devices); i++) {
-        /* Binary Ninja: private_platform_device_register($platform_device) */
-        ret = private_platform_device_register(platform_devices[i]);
-        if (ret != 0) {
-            isp_printf(2, (unsigned char *)"Failed to register platform device %d\n", i);
+        if (!platform_dev) {
+            isp_printf(2, (unsigned char *)"Invalid platform device at index %d\n", i);
             /* Cleanup previously registered devices */
             while (--i >= 0) {
-                private_platform_device_unregister(platform_devices[i]);
+                private_platform_device_unregister(pdata->devices[i]);
+            }
+            tx_isp_subdev_deinit(&isp_dev->sd);
+            private_kfree(isp_dev);
+            return -EFAULT;
+        }
+
+        /* Binary Ninja: private_platform_device_register($platform_device) */
+        ret = private_platform_device_register(platform_dev);
+        if (ret != 0) {
+            isp_printf(2, (unsigned char *)"width is %d, height is %d, imagesize is %d\n, save num is %d, buf size is %d\n", i);
+            /* Cleanup previously registered devices */
+            while (--i >= 0) {
+                private_platform_device_unregister(pdata->devices[i]);
             }
             tx_isp_subdev_deinit(&isp_dev->sd);
             private_kfree(isp_dev);
