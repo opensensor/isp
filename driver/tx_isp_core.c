@@ -109,6 +109,9 @@ int isp_fw_process(void *data);
 /* ISP core video streaming function - Binary Ninja reference */
 int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable);
 
+/* Video link streaming function - defined in tx-isp-module.c */
+extern int tx_isp_video_link_stream(struct tx_isp_dev *dev, int enable);
+
 /* Global flag to prevent multiple tisp_init calls */
 static bool tisp_initialized = false;
 

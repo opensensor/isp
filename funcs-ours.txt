@@ -88,6 +88,7 @@ isp_frame_done_get_count
 isp_frame_done_wait
 isp_frame_done_wakeup
 isp_free_buffer
+isp_fw_process
 isp_get_ae_state
 isp_get_af_zone
 isp_irq_dispatcher
@@ -117,6 +118,7 @@ ispcore_sensor_ops_ioctl
 ispcore_sensor_ops_release_all_sensor
 ispcore_slake_module
 ispcore_sync_sensor_attr
+ispcore_video_s_stream
 ispmodule_ip_done_irq_handler
 ispvic_frame_channel_clearbuf
 ispvic_frame_channel_qbuf
@@ -319,6 +321,7 @@ tisp_event_init
 tisp_event_process
 tisp_event_push
 tisp_event_set_cb
+tisp_fw_process
 tisp_g_ae_hist
 tisp_g_ae_zone
 tisp_g_ae_zone_internal
