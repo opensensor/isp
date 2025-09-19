@@ -2116,26 +2116,7 @@ int tisp_deinit(void)
 
 
 
-/**
- * tisp_event_push - TISP event push
- * Note: The actual implementation should be in tx_isp_tuning.c where static variables are defined
- */
-void tisp_event_push(void **event)
-{
-    pr_info("tisp_event_push: TISP event pushed");
-    /*
-     * Binary Ninja shows this function should:
-     * 1. Save IRQ flags with local_irq_save()
-     * 2. Check data_b33b8 global variable
-     * 3. Perform complex linked list manipulation
-     * 4. Copy event data to global structures
-     * 5. Signal completion with complete(&tevent_info)
-     * 6. Restore IRQ flags with local_irq_restore()
-     *
-     * However, since these variables are static in tx_isp_tuning.c,
-     * this function should be implemented there.
-     */
-}
+
 
 
 /**
