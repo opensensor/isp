@@ -1830,8 +1830,8 @@ void *isp_mem_init(void)
     /* Use actual reserved memory (rmem) system */
     extern struct reserved_mem *isp_rmem;
     if (isp_rmem) {
-        ispmem.ispmem_value = (int)isp_rmem->base;  /* Actual rmem base address */
-        data_b2a64 = (int)isp_rmem->size;           /* Actual rmem size */
+        ispmem.ispmem_value = (uint32_t)isp_rmem->base;  /* Actual rmem base address */
+        data_b2a64 = (uint32_t)isp_rmem->size;           /* Actual rmem size */
         pr_debug("isp_mem_init: Using rmem base=0x%08x, size=0x%08x\n",
                 ispmem.ispmem_value, data_b2a64);
     } else {
