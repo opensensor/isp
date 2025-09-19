@@ -206,6 +206,27 @@ static uint32_t rdns_text_base_thres_array[16] = {0};
 
 /* YDNS (Y-channel Denoise) Variables */
 static uint32_t ydns_gain_old = 0xFFFFFFFF;
+
+/* Missing function stubs - to be implemented based on Binary Ninja */
+static int tiziano_ydns_params_refresh(void) { return 0; }
+static int tisp_ydns_par_refresh(uint32_t param) { return 0; }
+static int tiziano_rdns_params_refresh(void) { return 0; }
+static int tisp_rdns_par_refresh(uint32_t p1, uint32_t p2, int p3) { return 0; }
+static int tiziano_hldc_params_refresh(void) { return 0; }
+static int tisp_hldc_con_par_cfg(void) { return 0; }
+static int tiziano_clm_params_refresh(void) { return 0; }
+static int tiziano_set_parameter_clm(void) { return 0; }
+static int tiziano_gib_params_refresh(void) { return 0; }
+static int tiziano_gib_lut_parameter(void) { return 0; }
+static int tiziano_gib_deir_reg(uint32_t *r, uint32_t *g, uint32_t *b) { return 0; }
+
+/* Missing variables referenced in functions */
+static uint32_t deir_en = 0;
+static uint32_t data_aa2fc = 0;
+static uint32_t day_night = 0;
+static uint32_t tiziano_gib_deir_r_m = 0;
+static uint32_t tiziano_gib_deir_g_m = 0;
+static uint32_t tiziano_gib_deir_b_m = 0;
 static uint32_t *mdns_y_sad_ass_thres_array_now = NULL;
 static uint32_t *mdns_y_sta_ass_thres_array_now = NULL;
 static uint32_t *mdns_y_ref_wei_b_min_array_now = NULL;
@@ -7920,7 +7941,7 @@ int tiziano_ydns_init(void)
     tiziano_ydns_params_refresh();
 
     /* Binary Ninja: tisp_ydns_par_refresh(isp_printf) */
-    tisp_ydns_par_refresh(isp_printf);
+    tisp_ydns_par_refresh(0);  /* Binary Ninja: pass uint32_t value, not function pointer */
 
     return 0;
 }
@@ -7951,7 +7972,7 @@ int tiziano_rdns_init(void)
     tiziano_rdns_params_refresh();
 
     /* Binary Ninja: tisp_rdns_par_refresh(isp_printf, isp_printf, 1) */
-    tisp_rdns_par_refresh(isp_printf, isp_printf, 1);
+    tisp_rdns_par_refresh(0, 0, 1);  /* Binary Ninja: pass uint32_t values, not function pointers */
 
     return 0;
 }
@@ -8074,7 +8095,7 @@ int tiziano_lsc_init(void)
     }
 
     /* Binary Ninja: data_9a420 = $v0 */
-    data_9a420 = (uint32_t)v0;
+    data_9a420 = v0;  /* Assign pointer directly */
 
     /* Binary Ninja: tiziano_lsc_params_refresh() */
     tiziano_lsc_params_refresh();
@@ -8190,7 +8211,7 @@ int tiziano_sharpen_init(void)
     tiziano_sharpen_params_refresh();
 
     /* Binary Ninja: tisp_sharpen_par_refresh(isp_printf, isp_printf, 1) */
-    tisp_sharpen_par_refresh(isp_printf, isp_printf, 1);
+    tisp_sharpen_par_refresh(0, 0, 1);  /* Binary Ninja: pass uint32_t values, not function pointers */
 
     return 0;
 }
@@ -8233,7 +8254,7 @@ int tiziano_dmsc_init(void)
     tiziano_dmsc_params_refresh();
 
     /* Binary Ninja: tisp_dmsc_par_refresh(isp_printf, isp_printf, 1) */
-    tisp_dmsc_par_refresh(isp_printf, isp_printf, 1);
+    tisp_dmsc_par_refresh(0, 0, 1);  /* Binary Ninja: pass uint32_t values, not function pointers */
 
     return 0;
 }
