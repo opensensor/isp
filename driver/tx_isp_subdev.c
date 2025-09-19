@@ -601,6 +601,39 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
 }
 EXPORT_SYMBOL(tx_isp_subdev_auto_link);
 
+/**
+ * tx_isp_reg_set - EXACT Binary Ninja MCP implementation
+ * Address: 0x1f580
+ * Sets register bits in a specific range for a subdevice
+ */
+int tx_isp_reg_set(struct tx_isp_subdev *sd, unsigned int reg, int start, int end, int val)
+{
+    int32_t mask = 0;
+    int32_t *reg_addr;
+
+    if (!sd || !sd->regs) {
+        pr_err("tx_isp_reg_set: Invalid subdev or registers not mapped");
+        return -EINVAL;
+    }
+
+    /* Binary Ninja: Build mask for bit range */
+    for (int i = 0; i < (end - start + 1); i++) {
+        mask += 1 << ((i + start) & 0x1f);
+    }
+
+    /* Binary Ninja: int32_t* $a1 = *(arg1 + 0xb8) + arg2 - SAFE: Get register address */
+    reg_addr = (int32_t*)((char*)sd->regs + reg);
+
+    /* Binary Ninja: *$a1 = arg5 << (arg3 & 0x1f) | (not.d($v0) & *$a1) */
+    *reg_addr = (val << (start & 0x1f)) | ((~mask) & *reg_addr);
+
+    pr_debug("tx_isp_reg_set: subdev=%p reg[0x%x] = 0x%x (bits %d-%d = %d)",
+             sd, reg, *reg_addr, start, end, val);
+
+    return 0;
+}
+EXPORT_SYMBOL(tx_isp_reg_set);
+
 /* ===== MISSING tx_isp_* FUNCTION IMPLEMENTATIONS ===== */
 
 /* tx_isp_module_init - Binary Ninja stub implementation */
