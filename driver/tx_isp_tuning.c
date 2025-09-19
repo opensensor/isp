@@ -10250,7 +10250,7 @@ void *isp_core_tuning_init(void *arg1)
 
     /* Binary Ninja: return result */
     return result;
-
+}
 
 
 /* isp_core_tuning_event - EXACT Binary Ninja reference implementation */
