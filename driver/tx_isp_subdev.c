@@ -22,12 +22,7 @@ EXPORT_SYMBOL(tx_isp_module_deinit);
 EXPORT_SYMBOL(tx_isp_request_irq);
 EXPORT_SYMBOL(tx_isp_free_irq);
 
-/* Platform data structure for Binary Ninja compatibility */
-struct tx_isp_subdev_platform_data {
-    int interface_type;  /* Interface type (1=MIPI, 2=DVP, etc.) */
-    int clk_num;        /* Number of clocks */
-    /* Additional platform-specific data */
-};
+/* Platform data structure moved to tx_isp.h for global access */
 
 /* IRQ info structure - defined in tx-isp-device.h */
 

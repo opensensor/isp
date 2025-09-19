@@ -23,6 +23,14 @@
 
 #include "tx-isp-common.h"
 
+/* Platform data structure for subdevices - Binary Ninja compatibility */
+struct tx_isp_subdev_platform_data {
+    int interface_type;  /* Interface type (1=MIPI, 2=DVP, etc.) */
+    int clk_num;        /* Number of clocks */
+    int sensor_type;    /* Sensor type */
+    /* Additional platform-specific data */
+};
+
 #define TX_ISP_LINKFLAG_ENABLED		(0x1)
 
 /* ISP subdevice types */
