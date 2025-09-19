@@ -3279,8 +3279,8 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     test_addr = (char *)vic_dev + 0x80;  /* Test address pointer */
 
     /* CRITICAL: Copy register mapping from subdev to VIC device structure */
-    if (vic_dev->sd.base) {
-        vic_dev->vic_regs = vic_dev->sd.base;
+    if (vic_dev->sd.regs) {
+        vic_dev->vic_regs = vic_dev->sd.regs;
         pr_info("*** VIC PROBE: Copied register mapping from subdev: %p ***\n", vic_dev->vic_regs);
 
         /* Also update global ISP device for compatibility */
@@ -3290,6 +3290,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         }
     } else {
         pr_warn("*** VIC PROBE: No register mapping available from tx_isp_subdev_init ***\n");
+        pr_warn("*** VIC PROBE: sd.regs = %p, sd.mem_res = %p ***\n", vic_dev->sd.regs, vic_dev->sd.mem_res);
     }
 
     return 0;

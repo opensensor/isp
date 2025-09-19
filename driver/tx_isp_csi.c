@@ -791,6 +791,7 @@ int tx_isp_csi_probe(struct platform_device *pdev)
         pr_info("*** CSI PROBE: Using register mapping from tx_isp_subdev_init: %p ***\n", csi_dev->csi_regs);
     } else {
         /* Binary Ninja: isp_printf(2, "sensor type is BT1120!\n", "tx_isp_csi_probe") */
+        pr_err("*** CSI PROBE: tx_isp_subdev_init failed to map registers ***\n");
         isp_printf(2, "sensor type is BT1120!\n", "tx_isp_csi_probe");
         tx_isp_subdev_deinit(&csi_dev->sd);
         private_kfree(csi_dev);

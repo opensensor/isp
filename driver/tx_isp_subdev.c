@@ -433,17 +433,14 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             return ret;
         }
 
-        /* Binary Ninja: Resource enumeration and memory mapping */
-        for (i = 0; i < pdev->num_resources; i++) {
-            /* Binary Ninja: $v0_2 = private_platform_get_resource(arg1, 0x200, result_4) */
-            res = platform_get_resource(pdev, IORESOURCE_MEM, i);
-            if (res != NULL) {
-                /* Binary Ninja: String comparison for resource matching */
-                if (strcmp(res->name, "%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d\n") == 0) {
-                    mem_res = res;
-                    break;
-                }
-            }
+        /* FIXED: Get first memory resource without string comparison */
+        mem_res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+        pr_info("tx_isp_subdev_init: platform_get_resource returned %p for device %s\n", mem_res, dev_name(&pdev->dev));
+        if (mem_res) {
+            pr_info("tx_isp_subdev_init: Memory resource found: start=0x%08x, end=0x%08x, size=0x%08x\n",
+                    (u32)mem_res->start, (u32)mem_res->end, (u32)resource_size(mem_res));
+        } else {
+            pr_err("tx_isp_subdev_init: No memory resource found for device %s\n", dev_name(&pdev->dev));
         }
 
         if (mem_res) {
