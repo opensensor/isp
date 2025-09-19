@@ -10840,7 +10840,7 @@ void tisp_set_sensor_integration_time_short(uint32_t time)
     }
 }
 
-static void tisp_set_sensor_analog_gain_short(void)
+void tisp_set_sensor_analog_gain_short(void)
 {
     void *var_28;
     int16_t var_1a;
@@ -10866,7 +10866,7 @@ static void tisp_set_sensor_analog_gain_short(void)
 /* The real system_irq_func_set with proper signature is in tx_isp_core.c */
 
 /* Sensor interface functions - Safe structure-based implementations */
-static int data_b2eec(uint32_t time, void **var_ptr)
+int data_b2eec(uint32_t time, void **var_ptr)
 {
     /* Safe sensor integration time allocation */
     pr_debug("data_b2eec: Allocating integration time %u\n", time);
