@@ -489,12 +489,13 @@ struct platform_device tx_isp_fs_platform_device = {
     },
 };
 
-/* ISP Core platform device resources - CORRECTED IRQ */
+/* ISP Core platform device resources - CORRECTED to match /proc/iomem */
 static struct resource tx_isp_core_resources[] = {
     [0] = {
-        .start = 0x13300000,           /* T31 ISP Core base address */
-        .end   = 0x133FFFFF,           /* T31 ISP Core end address */
+        .start = 0x13300000,           /* T31 ISP Core base address - MATCHES /proc/iomem */
+        .end   = 0x1330FFFF,           /* T31 ISP Core end address - MATCHES /proc/iomem (64KB) */
         .flags = IORESOURCE_MEM,
+        .name = "isp-device",          /* EXACT name from stock driver */
     },
     [1] = {
         .start = 37,                   /* T31 ISP Core IRQ 37 - MATCHES STOCK DRIVER isp-m0 */
