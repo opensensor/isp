@@ -6,6 +6,7 @@
 #include <linux/i2c.h>
 #include <linux/clk.h>
 #include <linux/vmalloc.h>
+#include <linux/of_reserved_mem.h>
 #include "../include/tx_isp.h"
 #include "../include/tx_isp_core.h"
 #include "../include/tx-isp-debug.h"
