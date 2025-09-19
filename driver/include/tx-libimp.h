@@ -778,15 +778,7 @@ struct isp_channel_event {
 #define FRAME_STATE_DONE     3  // In done queue
 #define FRAME_STATE_ERROR    4  // Error state
 
-/* ISP Event types */
-#define ISP_EVENT_BUFFER_REQUEST  0x1000
-#define ISP_EVENT_BUFFER_ENQUEUE  0x1001
-#define ISP_EVENT_BUFFER_DONE     0x1002
-#define ISP_EVENT_FRAME_DONE      0x1003
-#define ISP_EVENT_STATS_READY     0x1004
-#define ISP_EVENT_STREAM_START    0x1005
-#define ISP_EVENT_STREAM_CANCEL   0x1006
-#define ISP_EVENT_QUEUE_FREE      0x1007
+/* ISP Event types - using 0x3000xxx values defined earlier */
 
 /* Event handler function type */
 typedef int (*isp_event_cb)(void *priv, u32 event, void *data);
