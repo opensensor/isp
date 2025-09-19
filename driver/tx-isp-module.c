@@ -7755,9 +7755,9 @@ static int vic_core_ops_init(struct v4l2_subdev *sd, u32 val)
 
     /* Initialize VIC hardware if needed */
     if (vic_dev->vic_regs) {
-        /* Basic VIC initialization */
-        *(uint32_t *)((char *)vic_dev->vic_regs + 0x0) = 0x2; /* Reset */
-        *(uint32_t *)((char *)vic_dev->vic_regs + 0x0) = 0x0; /* Clear reset */
+        /* SAFE: Use proper register access instead of unsafe casting */
+        writel(0x2, vic_dev->vic_regs + 0x0); /* Reset */
+        writel(0x0, vic_dev->vic_regs + 0x0); /* Clear reset */
     }
 
     return 0;
