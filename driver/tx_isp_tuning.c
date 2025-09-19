@@ -256,8 +256,7 @@ static int tisp_wdr_param_array_set(uint32_t p1, void *p2, void *p3) { return 0;
 static int tisp_netlink_exit(void) { return 0; }
 static int tisp_netlink_event_set_cb(void *cb) { return 0; }
 static int tisp_param_operate_process(void) { return 0; }
-static int tisp_code_create_tuning_node(void) { return 0; }
-static int tisp_code_destroy_tuning_node(void) { return 0; }
+/* tisp_code_create_tuning_node, tisp_code_destroy_tuning_node - removed stubs, implemented below */
 static int tisp_event_exit(void) { return 0; }
 
 /* Missing variables referenced in functions */
@@ -369,6 +368,7 @@ static uint32_t data_b2f78 = 0;
 static uint32_t data_b2f84 = 0;
 static uint32_t data_b2f90 = 0;
 static uint32_t data_b2f9c = 0;
+static uint32_t data_b2ff0 = 0;
 
 /* AWB and AE Algorithm Variables */
 static uint32_t tawb_custom_en = 0;
@@ -6438,9 +6438,7 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
     /* Binary Ninja EXACT: memset(&ae_ctrls, 0, 0x10) */
     memset(&ae_ctrls, 0, 0x10);
     
-    /* Forward declarations for exported functions */
-    extern int tiziano_ae_params_refresh(void);
-    extern void *tiziano_ae_para_addr(void);
+    /* Forward declarations removed - functions implemented below */
 
     /* Binary Ninja EXACT: tiziano_ae_params_refresh() */
     tiziano_ae_params_refresh();
@@ -8862,7 +8860,7 @@ int tisp_event_init(void)
     uint32_t *v0 = (uint32_t*)&data_b2ff0;
 
     while (true) {
-        data_b33bc = (uint32_t)v0;
+        data_b33bc = v0;  /* Assign pointer directly */
         *v0 = (uint32_t)&data_b33b8;
         v0[1] = (uint32_t)a2_1;
         *a2_1 = v0;
