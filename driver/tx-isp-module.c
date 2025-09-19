@@ -8124,23 +8124,7 @@ int tisp_s_ev_start(int ev_value)
 }
 EXPORT_SYMBOL(tisp_s_ev_start);
 
-/* tiziano_s_awb_start - EXACT Binary Ninja implementation */
-int tiziano_s_awb_start(int r_gain, int b_gain)
-{
-    pr_debug("tiziano_s_awb_start: r_gain=%d, b_gain=%d\n", r_gain, b_gain);
 
-    /* Binary Ninja: Store AWB gains in multiple locations */
-    awb_r_gain = r_gain;
-    awb_b_gain = b_gain;
-
-    /* Binary Ninja: Set AWB parameters in tuning structure */
-    /* This would normally update the ISP AWB registers */
-    /* For now, just store the values */
-
-    pr_debug("tiziano_s_awb_start: AWB gains set - R=%d, B=%d\n", r_gain, b_gain);
-    return 0;
-}
-EXPORT_SYMBOL(tiziano_s_awb_start);
 
 /* tiziano_ae_s_ev_start - EXACT Binary Ninja implementation */
 int tiziano_ae_s_ev_start(int ev_value)
