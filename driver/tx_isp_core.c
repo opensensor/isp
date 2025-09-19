@@ -2120,6 +2120,9 @@ void *data_b2f9c = NULL;
 void *tparams_day = NULL;
 void *tparams_night = NULL;
 void *tparams_cust = NULL;
+void *opmsg = NULL;
+void *data_ca490 = NULL;
+void *data_ca48c = NULL;
 
 /**
  * tisp_param_operate_deinit - EXACT Binary Ninja MCP implementation
