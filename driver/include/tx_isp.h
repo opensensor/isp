@@ -60,9 +60,11 @@ struct frame_source_device;
 struct tx_isp_platform_data {
     uint16_t reserved;      /* Padding to offset 2 */
     uint32_t sensor_type;   /* Sensor type at offset 2 */
-    uint32_t device_id;     /* Device ID */
+    uint32_t device_id;     /* Device ID at offset 4 - Binary Ninja: zx.d(*($s2_1 + 4)) */
     uint32_t flags;         /* Additional flags */
     uint32_t version;       /* Version info */
+    /* Binary Ninja: Platform devices array at offset 8 - *($s2_1 + 8) */
+    struct platform_device **devices;  /* Array of platform device pointers */
 } __attribute__((packed));
 
 // CSI device structure for MIPI interface (based on Binary Ninja analysis)

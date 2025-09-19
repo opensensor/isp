@@ -323,20 +323,23 @@ static struct resource tx_isp_resources[] = {
     },
 };
 
+/* Platform devices array for Binary Ninja compatibility */
+static struct platform_device *tx_isp_platform_devices[] = {
+    &tx_isp_csi_platform_device,
+    &tx_isp_vic_platform_device,
+    &tx_isp_vin_platform_device,
+    &tx_isp_fs_platform_device,
+    &tx_isp_core_platform_device
+};
+
 /* Platform data structure that matches reference driver expectations */
 static struct tx_isp_platform_data tx_isp_pdata = {
-    .device_id = 1,
+    .reserved = 0,
+    .sensor_type = 0,
+    .device_id = 5,  /* Binary Ninja: Number of devices at offset 4 */
     .flags = 0,
     .version = 1,
-    /* Platform devices array - matches Binary Ninja probe function expectations */
-    .num_devices = 5,
-    .devices = {
-        &tx_isp_csi_platform_device,
-        &tx_isp_vic_platform_device,
-        &tx_isp_vin_platform_device,
-        &tx_isp_fs_platform_device,
-        &tx_isp_core_platform_device
-    }
+    .devices = tx_isp_platform_devices  /* Binary Ninja: Platform devices array at offset 8 */
 };
 
 struct platform_device tx_isp_platform_device = {
