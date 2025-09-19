@@ -1461,8 +1461,8 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
         return -ENOMEM;
     }
     
-    /* Binary Ninja: memset($v0, 0, 0x148) */
-    memset(csi_dev, 0, 0x148);
+    /* SAFE: Use sizeof instead of hardcoded size to prevent buffer overflow */
+    memset(csi_dev, 0, sizeof(struct tx_isp_csi_device));
     
     /* Initialize CSI subdev structure like Binary Ninja tx_isp_subdev_init */
     memset(&csi_dev->sd, 0, sizeof(csi_dev->sd));
@@ -5735,10 +5735,13 @@ static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void
         
     case 0x2000018:  /* Binary Ninja: GPIO state change */
         pr_info("vic_sensor_ops_ioctl: GPIO state change command\n");
-        /* Binary Ninja: gpio_switch_state = 1; memcpy(&gpio_info, arg3, 0x2a) */
+        /* SAFE: Use copy_from_user instead of memcpy for user space data */
         gpio_switch_state = 1;
         if (arg) {
-            memcpy(&gpio_info, arg, 0x2a);
+            if (copy_from_user(&gpio_info, arg, min(sizeof(gpio_info), 0x2aUL))) {
+                pr_err("vic_sensor_ops_ioctl: Failed to copy GPIO info from user space\n");
+                return -EFAULT;
+            }
         }
         return 0;
         
@@ -7900,7 +7903,8 @@ static int subdev_sensor_ops_enum_input(struct v4l2_subdev *sd, struct v4l2_inpu
     }
 
     input->type = V4L2_INPUT_TYPE_CAMERA;
-    strcpy(input->name, "Camera");
+    strncpy(input->name, "Camera", sizeof(input->name) - 1);
+    input->name[sizeof(input->name) - 1] = '\0';
     input->std = 0;
 
     return 0;
