@@ -2752,99 +2752,59 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
     /* Binary Ninja: int32_t $v1_3 = *($s1_1 + 0x128) */
     current_state = vic_dev->state;
 
-    /* REVERT: Ensure VIC registers are mapped to ORIGINAL working address */
-    vic_regs = vic_dev->vic_regs;
-    /* Calculate base addresses safely */
-    isp_base = vic_regs - 0x9a00;  /* Correct ISP base calculation */
-    csi_base = isp_base + 0x10000;
+    pr_info("*** vic_core_s_stream: BINARY NINJA EXACT - current_state=%d ***\n", current_state);
 
-    pr_info("vic_core_s_stream: vic_regs=%p, isp_base=%p, csi_base=%p\n", vic_regs, isp_base, csi_base);
+    /* Binary Ninja: if (arg2 == 0) */
+    if (enable == 0) {
+        /* Stream OFF */
+        pr_info("*** vic_core_s_stream: STREAM OFF ***\n");
 
-    if (sd != NULL) {
-        if ((unsigned long)sd >= 0xfffff001) {
-            pr_err("vic_core_s_stream: Invalid sd pointer\n");
-            return -EINVAL;
+        /* Binary Ninja: $v0 = 0 */
+        ret = 0;
+
+        /* Binary Ninja: if ($v1_3 == 4) *($s1_1 + 0x128) = 3 */
+        if (current_state == 4) {
+            vic_dev->state = 3;
+            pr_info("vic_core_s_stream: Stream OFF - state 4 -> 3\n");
         }
 
-        ret = -EINVAL;
+        return ret;
+    } else {
+        /* Stream ON */
+        pr_info("*** vic_core_s_stream: STREAM ON ***\n");
 
-        if (vic_dev != NULL && (unsigned long)vic_dev < 0xfffff001) {
-            int current_state = vic_dev->state;
+        /* Binary Ninja: $v0 = 0 */
+        ret = 0;
 
-            if (enable == 0) {
-                /* Stream OFF - BINARY NINJA REFERENCE: No adjustment function */
-                ret = 0;
-                ispvic_frame_channel_s_stream(vic_dev, 0);
-                if (current_state == 4) {
-                    vic_dev->state = 3;
-                    pr_info("vic_core_s_stream: Stream OFF - state 4 -> 3\n");
-                }
-            } else {
-                /* Stream ON - CRITICAL: Follow EXACT reference driver sub-device sequence */
-                ret = 0;
-                
-                pr_info("*** CRITICAL: Following EXACT reference driver sub-device initialization sequence ***\n");
-                
-                /* SURGICAL FIX: Disable VIC interrupts during VIC DMA configuration to prevent conflicts */
-                pr_info("*** SURGICAL FIX: Disabling VIC interrupts during DMA configuration ***\n");
-                vic_start_ok = 0;  /* Disable interrupt processing during configuration */
-                /* CRITICAL FIX: Correct the register base mapping! */
-                /* vic_regs = 0x133e0000 = CSI PHY (isp-w02 in trace) */
-                /* isp_base = 0x13300000 = Main ISP (isp-m0 in trace) - NEEDS SEPARATE MAPPING */
-                void __iomem *main_isp_base = ioremap(0x13300000, 0x100000);  /* Map main ISP separately */
-                void __iomem *vic_w01_base = ioremap(0x10023000, 0x1000);    /* Map isp-w01 separately */
-                
-                if (!main_isp_base || !vic_w01_base) {
-                    pr_err("*** CRITICAL: Failed to map ISP register bases ***\n");
-                    if (main_isp_base) iounmap(main_isp_base);
-                    if (vic_w01_base) iounmap(vic_w01_base);
-                    return -ENOMEM;
-                }
-                
-                /* STEP 1: ISP isp-w02 - Initial CSI PHY Control registers */
-                pr_info("*** STEP 1: ISP isp-w02 - Initial CSI PHY Control registers ***\n");
-                /* vic_regs IS the CSI PHY base (0x133e0000 = isp-w02) */
-                writel(0x7800438, vic_regs + 0x4);
-                writel(0x2, vic_regs + 0xc);
-                writel(0x2, vic_regs + 0x14);
-                writel(0xf00, vic_regs + 0x18);
-                writel(0x800800, vic_regs + 0x60);
-                writel(0x9d09d0, vic_regs + 0x64);
-                writel(0x6002, vic_regs + 0x70);
-                writel(0x7003, vic_regs + 0x74);
-                writel(0xeb8080, vic_regs + 0xc0);
-                writel(0x108080, vic_regs + 0xc4);
-                writel(0x29f06e, vic_regs + 0xc8);
-                writel(0x913622, vic_regs + 0xcc);
-                writel(0x515af0, vic_regs + 0xd0);
-                writel(0xaaa610, vic_regs + 0xd4);
-                writel(0xd21092, vic_regs + 0xd8);
-                writel(0x6acade, vic_regs + 0xdc);
-                writel(0xeb8080, vic_regs + 0xe0);
-                writel(0x108080, vic_regs + 0xe4);
-                writel(0x29f06e, vic_regs + 0xe8);
-                writel(0x913622, vic_regs + 0xec);
-                writel(0x515af0, vic_regs + 0xf0);
-                writel(0xaaa610, vic_regs + 0xf4);
-                writel(0xd21092, vic_regs + 0xf8);
-                writel(0x6acade, vic_regs + 0xfc);
-                writel(0x2d0, vic_regs + 0x100);
-                writel(0x2c000, vic_regs + 0x10c);
-                writel(0x7800000, vic_regs + 0x110);
-                writel(0x10, vic_regs + 0x120);
-                writel(0x100010, vic_regs + 0x1a4);
-                writel(0x4440, vic_regs + 0x1a8);
-                writel(0x10, vic_regs + 0x1b0);
-                wmb();
+        /* Binary Ninja: if ($v1_3 != 4) */
+        if (current_state != 4) {
+            pr_info("*** vic_core_s_stream: State != 4, calling VIC start sequence ***\n");
 
-                /* SURGICAL FIX: Keep VIC interrupts DISABLED during DMA configuration */
-                pr_info("*** SURGICAL FIX: Keeping VIC interrupts DISABLED during DMA configuration ***\n");
+            /* Binary Ninja: tx_vic_disable_irq() */
+            tx_vic_disable_irq();
 
-                /* Use vic_w01_base (0x10023000) for interrupt configuration */
-                if (vic_w01_base) {
-                    /* Clear any pending interrupts first */
-                    writel(0xffffffff, vic_w01_base + 0x1c);   /* Clear interrupt status */
-                    wmb();
+            /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
+            ret = tx_isp_vic_start(vic_dev);
+
+            /* Binary Ninja: *($s1_1 + 0x128) = 4 */
+            vic_dev->state = 4;
+
+            /* Binary Ninja: tx_vic_enable_irq() */
+            tx_vic_enable_irq();
+
+            pr_info("*** vic_core_s_stream: VIC start completed, ret=%d, state=4 ***\n", ret);
+
+            /* Binary Ninja: return $v0_1 */
+            return ret;
+        } else {
+            pr_info("*** vic_core_s_stream: Already in state 4, skipping VIC start ***\n");
+            return ret;
+        }
+    }
+}
+
+
+
 
                     /* KEEP INTERRUPTS DISABLED during VIC DMA configuration */
                     writel(0x0, vic_w01_base + 0x1e0);        /* Disable all interrupts during config */
