@@ -106,6 +106,9 @@ int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute
 /* ISP firmware processing thread function - Binary Ninja reference */
 int isp_fw_process(void *data);
 
+/* ISP core video streaming function - Binary Ninja reference */
+int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable);
+
 /* Global flag to prevent multiple tisp_init calls */
 static bool tisp_initialized = false;
 
@@ -484,7 +487,7 @@ static struct tx_isp_subdev_core_ops core_subdev_core_ops = {
 
 /* Core subdev video operations */
 static struct tx_isp_subdev_video_ops core_subdev_video_ops = {
-    .s_stream = NULL,  /* Will be set up when needed */
+    .s_stream = ispcore_video_s_stream,  /* CRITICAL: Wire in the video streaming function */
 };
 
 /* Core subdev pad operations */
