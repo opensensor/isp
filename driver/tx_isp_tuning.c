@@ -8492,21 +8492,61 @@ static int isp_event_dispatcher(int event_id)
     return 0;
 }
 
-/* tisp_event_init - Event system initialization */
+/* tisp_event_init - EXACT Binary Ninja implementation */
 int tisp_event_init(void)
 {
     pr_debug("tisp_event_init: Initializing ISP event system\n");
-    
-    /* Clear all callback arrays */
-    memset(isp_event_func_cb, 0, sizeof(isp_event_func_cb));
-    memset(cb, 0, sizeof(cb));
-    
-    if (!isp_irq_initialized) {
-        spin_lock_init(&isp_irq_lock);
-        isp_irq_initialized = true;
+
+    /* Binary Ninja: Complex linked list initialization */
+    /* Binary Ninja: data_b33b0 = &data_b33b0 */
+    data_b33b0 = (uint32_t)&data_b33b0;
+    /* Binary Ninja: data_b33b4 = &data_b33b0 */
+    data_b33b4 = (uint32_t)&data_b33b0;
+    /* Binary Ninja: data_b33b8 = &data_b33b8 */
+    data_b33b8 = (uint32_t)&data_b33b8;
+    /* Binary Ninja: data_b33bc = &data_b33b8 */
+    data_b33bc = (uint32_t)&data_b33b8;
+
+    /* Binary Ninja: Initialize event list structures */
+    uint32_t *a2 = (uint32_t*)&data_b2ff0;
+    data_b2ff0 = (uint32_t)&data_b2ff0;
+
+    /* Binary Ninja: Complex loop initialization */
+    while (true) {
+        a2[1] = (uint32_t)a2;
+        a2 = (uint32_t*)((char*)a2 + 0x30); /* 0xc * 4 = 0x30 */
+
+        if (a2 == (uint32_t*)&data_b33b0) {
+            break;
+        }
+
+        *a2 = (uint32_t)a2;
     }
-    
-    pr_debug("tisp_event_init: Event system initialized\n");
+
+    /* Binary Ninja: Second loop initialization */
+    uint32_t **a2_1 = (uint32_t**)data_b33bc;
+    uint32_t *v0 = (uint32_t*)&data_b2ff0;
+
+    while (true) {
+        data_b33bc = (uint32_t)v0;
+        *v0 = (uint32_t)&data_b33b8;
+        v0[1] = (uint32_t)a2_1;
+        *a2_1 = v0;
+        v0 = (uint32_t*)((char*)v0 + 0x30); /* 0xc * 4 = 0x30 */
+
+        if (v0 == (uint32_t*)&data_b33b0) {
+            break;
+        }
+
+        a2_1 = (uint32_t**)data_b33bc;
+    }
+
+    /* Binary Ninja: tevent_info = 0 */
+    tevent_info = 0;
+
+    /* Binary Ninja: __init_waitqueue_head(0xb2fe4, &$LC0, 0) */
+    __init_waitqueue_head((wait_queue_head_t*)0xb2fe4, &event_wait_key, 0);
+
     return 0;
 }
 
@@ -8749,6 +8789,261 @@ int tisp_netlink_init(void)
     return 0xffffffff;
 }
 EXPORT_SYMBOL(tisp_netlink_init);
+
+/* tisp_deinit_free - EXACT Binary Ninja implementation */
+int tisp_deinit_free(void)
+{
+    pr_debug("tisp_deinit_free: Freeing deinit resources\n");
+
+    /* Binary Ninja: int32_t $a0 = data_ca490 */
+    uint32_t a0 = data_ca490;
+
+    if (a0 != 0) {
+        /* Binary Ninja: private_kfree($a0) */
+        private_kfree((void*)a0);
+        /* Binary Ninja: data_ca490 = 0 */
+        data_ca490 = 0;
+    }
+
+    /* Binary Ninja: int32_t $a0_1 = data_ca48c */
+    uint32_t a0_1 = data_ca48c;
+
+    if (a0_1 != 0) {
+        /* Binary Ninja: private_kfree($a0_1) */
+        private_kfree((void*)a0_1);
+        /* Binary Ninja: data_ca48c = 0 */
+        data_ca48c = 0;
+    }
+
+    return 0;
+}
+EXPORT_SYMBOL(tisp_deinit_free);
+
+/* tisp_deinit - EXACT Binary Ninja implementation */
+int tisp_deinit(void)
+{
+    pr_debug("tisp_deinit: Deinitializing ISP system\n");
+
+    /* Binary Ninja: tisp_param_operate_deinit() */
+    tisp_param_operate_deinit();
+
+    /* Binary Ninja: tisp_event_exit() */
+    tisp_event_exit();
+
+    /* Binary Ninja: Free multiple data structures */
+    uint32_t a0 = data_b2f3c;
+    if (a0 != 0) {
+        private_kfree((void*)a0);
+        data_b2f3c = 0;
+    }
+
+    uint32_t a0_1 = data_b2f54;
+    if (a0_1 != 0) {
+        private_kfree((void*)a0_1);
+        data_b2f54 = 0;
+    }
+
+    uint32_t a0_2 = data_b2f6c;
+    if (a0_2 != 0) {
+        private_kfree((void*)a0_2);
+        data_b2f6c = 0;
+    }
+
+    uint32_t a0_3 = data_b2f78;
+    if (a0_3 != 0) {
+        private_kfree((void*)a0_3);
+        data_b2f78 = 0;
+    }
+
+    uint32_t a0_4 = data_b2f84;
+    if (a0_4 != 0) {
+        private_kfree((void*)a0_4);
+        data_b2f84 = 0;
+    }
+
+    uint32_t a0_5 = data_b2f90;
+    if (a0_5 != 0) {
+        private_kfree((void*)a0_5);
+        data_b2f90 = 0;
+    }
+
+    uint32_t a0_6 = data_b2f9c;
+    if (a0_6 != 0) {
+        private_kfree((void*)a0_6);
+        data_b2f9c = 0;
+    }
+
+    /* Binary Ninja: Free parameter structures */
+    uint32_t tparams_day_1 = (uint32_t)tparams_day;
+    if (tparams_day_1 != 0) {
+        private_vfree((void*)tparams_day_1);
+        tparams_day = 0;
+    }
+
+    uint32_t tparams_night_1 = (uint32_t)tparams_night;
+    if (tparams_night_1 != 0) {
+        private_vfree((void*)tparams_night_1);
+        tparams_night = 0;
+    }
+
+    uint32_t tparams_cust_1 = (uint32_t)tparams_cust;
+    if (tparams_cust_1 != 0) {
+        private_vfree((void*)tparams_cust_1);
+        tparams_cust = 0;
+    }
+
+    /* Binary Ninja: tisp_deinit_free() */
+    tisp_deinit_free();
+
+    return 0;
+}
+EXPORT_SYMBOL(tisp_deinit);
+
+/* tisp_awb_deinit - EXACT Binary Ninja implementation */
+int tisp_awb_deinit(void)
+{
+    pr_debug("tisp_awb_deinit: Deinitializing AWB\n");
+
+    /* Binary Ninja: if (tawb_custom_en == 1) */
+    if (tawb_custom_en == 1) {
+        /* Binary Ninja: tawb_custom_en = 0 */
+        tawb_custom_en = 0;
+    }
+
+    return 0;
+}
+EXPORT_SYMBOL(tisp_awb_deinit);
+
+/* tisp_awb_algo_init - EXACT Binary Ninja implementation */
+int tisp_awb_algo_init(int enable)
+{
+    pr_debug("tisp_awb_algo_init: Initializing AWB algorithm (enable=%d)\n", enable);
+
+    /* Binary Ninja: tawb_custom_en = arg1 */
+    tawb_custom_en = enable;
+
+    /* Binary Ninja: return &data_b0000 */
+    return (int)&data_b0000;
+}
+EXPORT_SYMBOL(tisp_awb_algo_init);
+
+/* tisp_awb_algo_deinit - EXACT Binary Ninja implementation */
+int tisp_awb_algo_deinit(void)
+{
+    pr_debug("tisp_awb_algo_deinit: Deinitializing AWB algorithm\n");
+
+    /* Binary Ninja: return tisp_awb_deinit() __tailcall */
+    return tisp_awb_deinit();
+}
+EXPORT_SYMBOL(tisp_awb_algo_deinit);
+
+/* tisp_ae_deinit - EXACT Binary Ninja implementation */
+int tisp_ae_deinit(void)
+{
+    pr_debug("tisp_ae_deinit: Deinitializing AE\n");
+
+    /* Binary Ninja: if (ta_custom_en == 1) */
+    if (ta_custom_en == 1) {
+        /* Binary Ninja: ta_custom_en = 0 */
+        ta_custom_en = 0;
+    }
+
+    /* Binary Ninja: return &data_d0000 */
+    return (int)&data_d0000;
+}
+EXPORT_SYMBOL(tisp_ae_deinit);
+
+/* tisp_ae_algo_init - EXACT Binary Ninja implementation */
+int tisp_ae_algo_init(int enable, void *arg2)
+{
+    pr_debug("tisp_ae_algo_init: Initializing AE algorithm (enable=%d)\n", enable);
+
+    /* Binary Ninja: void* $v0 = private_kmalloc(0x42c, 0xd0) */
+    void *v0 = private_kmalloc(0x42c, GFP_KERNEL);
+
+    /* Binary Ninja: ta_custom_en = arg1 */
+    ta_custom_en = enable;
+
+    if (enable == 1 && arg2 != NULL) {
+        /* Binary Ninja: Complex parameter initialization */
+        uint32_t *params = (uint32_t*)arg2;
+
+        /* Binary Ninja: *(arg2 + 8) = 0 */
+        params[2] = 0;
+        /* Binary Ninja: *(arg2 + 0xc) = data_c46b8 */
+        params[3] = data_c46b8;
+        /* Binary Ninja: *(arg2 + 0x10) = data_c46b0 */
+        params[4] = data_c46b0;
+        /* Binary Ninja: *(arg2 + 0x14) = 0x400 */
+        params[5] = 0x400;
+        /* Binary Ninja: *(arg2 + 0x18) = data_c46bc */
+        params[6] = data_c46bc;
+        /* Binary Ninja: *(arg2 + 0x3c) = data_c46f8 */
+        params[15] = data_c46f8;
+        /* Binary Ninja: *(arg2 + 0x44) = 0x400 */
+        params[17] = 0x400;
+        /* Binary Ninja: *(arg2 + 0x40) = dmsc_uu_thres_wdr_array */
+        params[16] = (uint32_t)dmsc_uu_thres_wdr_array;
+        /* Binary Ninja: *(arg2 + 0x34) = 0x400 */
+        params[13] = 0x400;
+        /* Binary Ninja: *(arg2 + 0x48) = dmsc_awb_gain */
+        params[18] = (uint32_t)dmsc_awb_gain;
+        /* Binary Ninja: *(arg2 + 0x64) = 0x400 */
+        params[25] = 0x400;
+        /* Binary Ninja: *(arg2 + 0x30) = data_c46c0 */
+        params[12] = data_c46c0;
+
+        /* Binary Ninja: Get histogram data */
+        tisp_ae_get_hist_custome(v0);
+
+        if (v0) {
+            /* Binary Ninja: Copy histogram parameters */
+            uint8_t *hist_data = (uint8_t*)v0;
+            uint8_t *param_data = (uint8_t*)arg2;
+
+            /* Binary Ninja: *(arg2 + 0x70) = (*($v0 + 0x414)).b */
+            param_data[0x70] = hist_data[0x414];
+            /* Binary Ninja: *(arg2 + 0x71) = (*($v0 + 0x418)).b */
+            param_data[0x71] = hist_data[0x418];
+            /* Binary Ninja: *(arg2 + 0x72) = (*($v0 + 0x41c)).b */
+            param_data[0x72] = hist_data[0x41c];
+            /* Binary Ninja: *(arg2 + 0x73) = (*($v0 + 0x420)).b */
+            param_data[0x73] = hist_data[0x420];
+
+            /* Binary Ninja: Copy word values */
+            uint16_t *param_words = (uint16_t*)param_data;
+            uint16_t *hist_words = (uint16_t*)hist_data;
+            param_words[0x3a] = hist_words[0x200]; /* *(arg2 + 0x74) = (*($v0 + 0x400)).w */
+            param_words[0x3b] = hist_words[0x202]; /* *(arg2 + 0x76) = (*($v0 + 0x404)).w */
+            param_words[0x3c] = hist_words[0x204]; /* *(arg2 + 0x78) = (*($v0 + 0x408)).w */
+            param_words[0x3d] = hist_words[0x206]; /* *(arg2 + 0x7a) = (*($v0 + 0x40c)).w */
+            param_words[0x3e] = hist_words[0x208]; /* *(arg2 + 0x7c) = (*($v0 + 0x410)).w */
+
+            /* Binary Ninja: *(arg2 + 0x7e) = (*($v0 + 0x424)).b */
+            param_data[0x7e] = hist_data[0x424];
+            /* Binary Ninja: *(arg2 + 0x7f) = (*($v0 + 0x428)).b */
+            param_data[0x7f] = hist_data[0x428];
+        }
+    }
+
+    /* Binary Ninja: return private_kfree($v0) __tailcall */
+    if (v0) {
+        private_kfree(v0);
+    }
+
+    return 0;
+}
+EXPORT_SYMBOL(tisp_ae_algo_init);
+
+/* tisp_ae_algo_deinit - EXACT Binary Ninja implementation */
+int tisp_ae_algo_deinit(void)
+{
+    pr_debug("tisp_ae_algo_deinit: Deinitializing AE algorithm\n");
+
+    /* Binary Ninja: return tisp_ae_deinit() __tailcall */
+    return tisp_ae_deinit();
+}
+EXPORT_SYMBOL(tisp_ae_algo_deinit);
 
 
 /* Update functions for event callbacks - Enhanced implementations */
