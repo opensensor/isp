@@ -352,13 +352,7 @@ static uint32_t data_aa3e0 = 0;
 static uint32_t data_aa3dc = 0;
 static uint32_t tisp_gb_blc_ag = 0;
 
-/* Event and Data Variables */
-static uint32_t data_b33b0[16] = {0};  /* Array type for event data */
-static uint32_t *data_b33bc = NULL;
-static uint32_t data_b33b8 = 0;
-static uint32_t data_b2ff0 = 0;
-static struct completion tevent_info;  /* Completion structure for events */
-static struct lock_class_key event_wait_key;
+/* Event and Data Variables - removed duplicate, using declarations below */
 
 /* Operation and Netlink Variables */
 static void *opmsg = NULL;
@@ -835,8 +829,8 @@ static uint32_t data_b0df8 = 0;    /* Initialization flag */
 
 /* GB (Green Balance) parameter arrays - Binary Ninja reference */
 static uint32_t tisp_gb_dgain_shift[2] = {0, 0};
-static uint32_t tisp_gb_dgain_rgbir_l[4] = {0x1000, 0x1000, 0x1000, 0x1000};
-static uint32_t tisp_gb_dgain_rgbir_s[4] = {0x1000, 0x1000, 0x1000, 0x1000};
+static uint32_t tisp_gb_dgain_rgbir_l = 0x1000;  /* Single value for bit operations */
+static uint32_t tisp_gb_dgain_rgbir_s = 0x1000;  /* Single value for bit operations */
 static uint32_t tisp_gb_blc_offset[0x48/4] = {0};  /* 0x48 bytes = 18 uint32_t values */
 static uint32_t tisp_gb_blc_min_en[2] = {0, 0};
 static uint32_t tisp_gb_blc_min[0x24/4] = {0};     /* 0x24 bytes = 9 uint32_t values */
@@ -927,10 +921,12 @@ static struct completion tevent_info;
 /* BINARY NINJA REFERENCE: No event processing thread - events processed on-demand */
 
 /* Event queue structures - Binary Ninja EXACT */
-static uint32_t data_b33b0[4];
-static uint32_t data_b33b4 = (uint32_t)&data_b33b0;
-static uint32_t data_b33b8 = (uint32_t)&data_b33b0;
-static uint32_t *data_b33bc = (uint32_t *)&data_b33b0;
+static uint32_t *data_b33b0 = NULL;  /* Pointer for linked list operations */
+static uint32_t data_b33b4 = 0;
+static uint32_t data_b33b8 = 0;
+static uint32_t *data_b33bc = NULL;
+static struct completion tevent_info;  /* Completion structure for events */
+static struct lock_class_key event_wait_key;
 
 /* Helper functions - Forward declarations */
 /* private_dma_cache_sync declared in txx-funcs.h */
@@ -4385,11 +4381,11 @@ int tisp_gb_param_array_get(int param_id, void *out_buf, int *size_buf)
             break;
         case 0x3f6:  /* tisp_gb_dgain_rgbir_l */
             source_ptr = &tisp_gb_dgain_rgbir_l;
-            data_size = 0x10;
+            data_size = 4;  /* Single uint32_t value */
             break;
         case 0x3f7:  /* tisp_gb_dgain_rgbir_s */
             source_ptr = &tisp_gb_dgain_rgbir_s;
-            data_size = 0x10;
+            data_size = 4;  /* Single uint32_t value */
             break;
         case 0x3f8:  /* BLC offset array 1 */
             source_ptr = &tisp_gb_blc_offset[0x24];
@@ -6637,6 +6633,41 @@ static uint16_t tiziano_gamma_lut_linear[256] = {
     0x7C0, 0x7C8, 0x7D0, 0x7D8, 0x7E0, 0x7E8, 0x7F0, 0x7F8
 };
 
+static uint16_t tiziano_gamma_lut[256] = {
+    0x000, 0x008, 0x010, 0x018, 0x020, 0x028, 0x030, 0x038,
+    0x040, 0x048, 0x050, 0x058, 0x060, 0x068, 0x070, 0x078,
+    0x080, 0x088, 0x090, 0x098, 0x0A0, 0x0A8, 0x0B0, 0x0B8,
+    0x0C0, 0x0C8, 0x0D0, 0x0D8, 0x0E0, 0x0E8, 0x0F0, 0x0F8,
+    0x100, 0x108, 0x110, 0x118, 0x120, 0x128, 0x130, 0x138,
+    0x140, 0x148, 0x150, 0x158, 0x160, 0x168, 0x170, 0x178,
+    0x180, 0x188, 0x190, 0x198, 0x1A0, 0x1A8, 0x1B0, 0x1B8,
+    0x1C0, 0x1C8, 0x1D0, 0x1D8, 0x1E0, 0x1E8, 0x1F0, 0x1F8,
+    0x200, 0x208, 0x210, 0x218, 0x220, 0x228, 0x230, 0x238,
+    0x240, 0x248, 0x250, 0x258, 0x260, 0x268, 0x270, 0x278,
+    0x280, 0x288, 0x290, 0x298, 0x2A0, 0x2A8, 0x2B0, 0x2B8,
+    0x2C0, 0x2C8, 0x2D0, 0x2D8, 0x2E0, 0x2E8, 0x2F0, 0x2F8,
+    0x300, 0x308, 0x310, 0x318, 0x320, 0x328, 0x330, 0x338,
+    0x340, 0x348, 0x350, 0x358, 0x360, 0x368, 0x370, 0x378,
+    0x380, 0x388, 0x390, 0x398, 0x3A0, 0x3A8, 0x3B0, 0x3B8,
+    0x3C0, 0x3C8, 0x3D0, 0x3D8, 0x3E0, 0x3E8, 0x3F0, 0x3F8,
+    0x400, 0x408, 0x410, 0x418, 0x420, 0x428, 0x430, 0x438,
+    0x440, 0x448, 0x450, 0x458, 0x460, 0x468, 0x470, 0x478,
+    0x480, 0x488, 0x490, 0x498, 0x4A0, 0x4A8, 0x4B0, 0x4B8,
+    0x4C0, 0x4C8, 0x4D0, 0x4D8, 0x4E0, 0x4E8, 0x4F0, 0x4F8,
+    0x500, 0x508, 0x510, 0x518, 0x520, 0x528, 0x530, 0x538,
+    0x540, 0x548, 0x550, 0x558, 0x560, 0x568, 0x570, 0x578,
+    0x580, 0x588, 0x590, 0x598, 0x5A0, 0x5A8, 0x5B0, 0x5B8,
+    0x5C0, 0x5C8, 0x5D0, 0x5D8, 0x5E0, 0x5E8, 0x5F0, 0x5F8,
+    0x600, 0x608, 0x610, 0x618, 0x620, 0x628, 0x630, 0x638,
+    0x640, 0x648, 0x650, 0x658, 0x660, 0x668, 0x670, 0x678,
+    0x680, 0x688, 0x690, 0x698, 0x6A0, 0x6A8, 0x6B0, 0x6B8,
+    0x6C0, 0x6C8, 0x6D0, 0x6D8, 0x6E0, 0x6E8, 0x6F0, 0x6F8,
+    0x700, 0x708, 0x710, 0x718, 0x720, 0x728, 0x730, 0x738,
+    0x740, 0x748, 0x750, 0x758, 0x760, 0x768, 0x770, 0x778,
+    0x780, 0x788, 0x790, 0x798, 0x7A0, 0x7A8, 0x7B0, 0x7B8,
+    0x7C0, 0x7C8, 0x7D0, 0x7D8, 0x7E0, 0x7E8, 0x7F0, 0x7F8
+};
+
 static uint16_t tiziano_gamma_lut_wdr[256] = {
     0x000, 0x006, 0x00C, 0x012, 0x018, 0x01E, 0x024, 0x02A,
     0x030, 0x036, 0x03C, 0x042, 0x048, 0x04E, 0x054, 0x05A,
@@ -8573,8 +8604,9 @@ int tisp_gb_init(void)
 {
     pr_debug("tisp_gb_init: Initializing GB processing for WDR\n");
 
-    /* Binary Ninja: tisp_reg_map_set(tisp_gb_params_refresh()) */
-    tisp_reg_map_set(tisp_gb_params_refresh());
+    /* Binary Ninja: tisp_gb_params_refresh() then tisp_reg_map_set() */
+    tisp_gb_params_refresh();
+    tisp_reg_map_set(NULL);  /* Binary Ninja: pass NULL or buffer pointer */
 
     return 0;
 }
@@ -8801,13 +8833,13 @@ int tisp_event_init(void)
 
     /* Binary Ninja: Complex linked list initialization */
     /* Binary Ninja: data_b33b0 = &data_b33b0 */
-    data_b33b0 = (uint32_t)&data_b33b0;
+    data_b33b0 = (uint32_t *)&data_b33b0;  /* Self-referencing pointer */
     /* Binary Ninja: data_b33b4 = &data_b33b0 */
-    data_b33b4 = (uint32_t)&data_b33b0;
+    data_b33b4 = (uint32_t)data_b33b0;
     /* Binary Ninja: data_b33b8 = &data_b33b8 */
     data_b33b8 = (uint32_t)&data_b33b8;
     /* Binary Ninja: data_b33bc = &data_b33b8 */
-    data_b33bc = (uint32_t)&data_b33b8;
+    data_b33bc = (uint32_t *)&data_b33b8;
 
     /* Binary Ninja: Initialize event list structures */
     uint32_t *a2 = (uint32_t*)&data_b2ff0;
@@ -8844,7 +8876,7 @@ int tisp_event_init(void)
     }
 
     /* Binary Ninja: tevent_info = 0 */
-    tevent_info = 0;
+    init_completion(&tevent_info);  /* Initialize completion structure */
 
     /* Binary Ninja: __init_waitqueue_head(0xb2fe4, &$LC0, 0) */
     __init_waitqueue_head((wait_queue_head_t*)0xb2fe4, &event_wait_key, 0);
