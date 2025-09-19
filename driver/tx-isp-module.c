@@ -8119,6 +8119,70 @@ static int apical_isp_core_ops_g_ctrl(struct v4l2_ctrl *ctrl)
 }
 EXPORT_SYMBOL(apical_isp_core_ops_g_ctrl);
 
+/* tisp_set_brightness - EXACT Binary Ninja implementation */
+int tisp_set_brightness(int brightness)
+{
+    pr_debug("tisp_set_brightness: Setting brightness to %d\n", brightness);
+
+    /* Binary Ninja: return tisp_bcsh_brightness(arg1) __tailcall */
+    return tisp_bcsh_brightness(brightness);
+}
+EXPORT_SYMBOL(tisp_set_brightness);
+
+/* tisp_set_contrast - EXACT Binary Ninja implementation */
+int tisp_set_contrast(int contrast)
+{
+    uint32_t s0;
+
+    pr_debug("tisp_set_contrast: Setting contrast to %d\n", contrast);
+
+    /* Binary Ninja: uint32_t $s0 = zx.d(arg1) */
+    s0 = (uint32_t)contrast;
+
+    /* Binary Ninja: tisp_bcsh_contrast($s0.b) */
+    tisp_bcsh_contrast((uint8_t)s0);
+
+    /* Binary Ninja: return isp_printf(0, "%s[%d] VIC failed to config DVP mode!(8bits-sensor)\n", "tisp_set_contrast") */
+    return isp_printf(0, "%s[%d] VIC failed to config DVP mode!(8bits-sensor)\n", "tisp_set_contrast");
+}
+EXPORT_SYMBOL(tisp_set_contrast);
+
+/* tisp_set_saturation - EXACT Binary Ninja implementation */
+int tisp_set_saturation(int saturation)
+{
+    uint32_t s0;
+
+    pr_debug("tisp_set_saturation: Setting saturation to %d\n", saturation);
+
+    /* Binary Ninja: uint32_t $s0 = zx.d(arg1) */
+    s0 = (uint32_t)saturation;
+
+    /* Binary Ninja: tisp_bcsh_saturation($s0.b) */
+    tisp_bcsh_saturation((uint8_t)s0);
+
+    /* Binary Ninja: return isp_printf(0, "sensor type is BT601!\n", "tisp_set_saturation") */
+    return isp_printf(0, "sensor type is BT601!\n", "tisp_set_saturation");
+}
+EXPORT_SYMBOL(tisp_set_saturation);
+
+/* tisp_set_bcsh_hue - EXACT Binary Ninja implementation */
+int tisp_set_bcsh_hue(int hue)
+{
+    uint32_t s0;
+
+    pr_debug("tisp_set_bcsh_hue: Setting hue to %d\n", hue);
+
+    /* Binary Ninja: uint32_t $s0 = zx.d(arg1) */
+    s0 = (uint32_t)hue;
+
+    /* Binary Ninja: tisp_bcsh_s_hue($s0.b) */
+    tisp_bcsh_s_hue((uint8_t)s0);
+
+    /* Binary Ninja: return isp_printf(0, "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n", "tisp_set_bcsh_hue") */
+    return isp_printf(0, "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n", "tisp_set_bcsh_hue");
+}
+EXPORT_SYMBOL(tisp_set_bcsh_hue);
+
 /* tisp_set_ae1_ag - Set AE analog gain */
 static void tisp_set_ae1_ag(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4)
 {
