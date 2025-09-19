@@ -2109,6 +2109,48 @@ int tisp_deinit(void)
     return 0;
 }
 
+/* TISP global data pointers - initialized to NULL */
+void *data_b2f3c = NULL;
+void *data_b2f54 = NULL;
+void *data_b2f6c = NULL;
+void *data_b2f78 = NULL;
+void *data_b2f84 = NULL;
+void *data_b2f90 = NULL;
+void *data_b2f9c = NULL;
+void *tparams_day = NULL;
+void *tparams_night = NULL;
+void *tparams_cust = NULL;
+
+/**
+ * tisp_param_operate_deinit - TISP parameter operation deinit stub
+ * This function should deinitialize TISP parameter operations
+ */
+void tisp_param_operate_deinit(void)
+{
+    pr_info("tisp_param_operate_deinit: TISP parameter operations deinitialized");
+    /* Implementation would go here when available */
+}
+
+/**
+ * tisp_event_exit - TISP event system exit stub
+ * This function should exit the TISP event processing system
+ */
+void tisp_event_exit(void)
+{
+    pr_info("tisp_event_exit: TISP event system exited");
+    /* Implementation would go here when available */
+}
+
+/**
+ * tisp_deinit_free - TISP final cleanup stub
+ * This function should perform final TISP cleanup operations
+ */
+void tisp_deinit_free(void)
+{
+    pr_info("tisp_deinit_free: TISP final cleanup completed");
+    /* Implementation would go here when available */
+}
+
 
 /**
  * tiziano_sync_sensor_attr_validate - Validate and sync sensor attributes
