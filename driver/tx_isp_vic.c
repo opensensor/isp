@@ -3275,7 +3275,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     private_platform_set_drvdata(pdev, vic_dev);
 
     /* Binary Ninja: *($v0 + 0x34) = &isp_vic_frd_fops */
-    vic_dev->sd.fops = &isp_vic_frd_fops;
+    tx_isp_set_subdev_nodeops(&vic_dev->sd, &isp_vic_frd_fops);
 
     /* Binary Ninja: private_spin_lock_init($v0 + 0x130) */
     private_spin_lock_init(&vic_dev->lock);
