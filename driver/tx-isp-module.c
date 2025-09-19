@@ -2070,7 +2070,7 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd);
 int tx_isp_vic_configure_dma(struct tx_isp_vic_device *vic_dev, dma_addr_t base_addr, u32 width, u32 height);
 
 /* tx_isp_video_link_stream - EXACT Binary Ninja reference implementation */
-static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
+int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
 {
     struct tx_isp_subdev **subdevs_ptr;    /* $s4 in reference: arg1 + 0x38 */
     int i;
