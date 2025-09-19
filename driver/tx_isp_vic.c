@@ -3234,7 +3234,14 @@ long vic_chardev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 }
 EXPORT_SYMBOL(vic_chardev_ioctl);
 
-/* Global variables already declared at top of file */
+/* Platform data structure for VIC - compatible with Binary Ninja */
+struct tx_isp_platform_data {
+    uint16_t reserved;      /* Padding to offset 2 */
+    uint32_t sensor_type;   /* Sensor type at offset 2 */
+    uint32_t device_id;     /* Device ID */
+    uint32_t flags;         /* Additional flags */
+    uint32_t version;       /* Version info */
+} __attribute__((packed));
 
 /* tx_isp_vic_probe - EXACT Binary Ninja reference implementation */
 int tx_isp_vic_probe(struct platform_device *pdev)
