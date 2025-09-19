@@ -5298,8 +5298,7 @@ err_cleanup_platforms:
 err_cleanup_base:
     cleanup_i2c_infrastructure(ourISPdev);
     misc_deregister(&tx_isp_miscdev);
-    platform_driver_unregister(&tx_isp_driver);
-    platform_device_unregister(&tx_isp_platform_device);
+    /* REMOVED: Main ISP platform driver/device cleanup - not registered */
     
 err_free_dev:
     kfree(ourISPdev);
