@@ -3578,7 +3578,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     ctrl_verify = ioread32(vic_dev->vic_regs + 0xc);
                     pr_info("Channel %d: VIC ctrl reg 0xc = 2 (MIPI mode), verify=0x%x\n", channel, ctrl_verify);
                     
-                    if (ctrl_verify == 3) {
+                    if (ctrl_verify == 2) {  /* FIXED: MIPI mode should be 2, not 3 */
                         pr_info("*** Channel %d: SUCCESS! VIC REGISTERS RESPONDING! ***\n", channel);
                         
                         // Continue with full configuration since registers are working
