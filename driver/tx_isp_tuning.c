@@ -8385,15 +8385,6 @@ int tiziano_ae_s_ev_start(int32_t ev_value)
     return 0;
 }
 
-
-/* tisp_s_ev_start - ISP EV start wrapper */
-int tisp_s_ev_start(int32_t ev_value)
-{
-    pr_debug("tisp_s_ev_start: Starting EV with value %d\n", ev_value);
-    return tiziano_ae_s_ev_start(ev_value);
-}
-
-
 /* tisp_channel_start - EXACT Binary Ninja implementation */
 int tisp_channel_start(int channel, void *attr)
 {
@@ -10851,31 +10842,6 @@ void tisp_set_sensor_integration_time_short(uint32_t time)
         data_b2ef8((uint32_t)var_26, 0);
     }
 }
-
-void tisp_set_sensor_analog_gain_short(void)
-{
-    void *var_28;
-    int16_t var_1a;
-
-    pr_debug("tisp_set_sensor_analog_gain_short: Setting short analog gain\n");
-
-    /* Binary Ninja: uint32_t $v0_2 = tisp_math_exp2(data_b2ee4(tisp_log2_fixed_to_fixed(), &var_28), 0x10, 0x10) */
-    uint32_t log_result = tisp_log2_fixed_to_fixed();
-    uint32_t gain_param = data_b2ee4(log_result, &var_28);
-    uint32_t v0_2 = tisp_math_exp2(gain_param, 0x10, 0x10);
-
-    /* Binary Ninja: data_b2f08(zx.d(var_1a), 0) */
-    data_b2f08((uint32_t)var_1a, 0);
-
-    /* Binary Ninja: return $v0_2 u>> 6 */
-    uint32_t final_gain = v0_2 >> 6;
-    pr_debug("tisp_set_sensor_analog_gain_short: Calculated short gain = %u\n", final_gain);
-}
-
-/* System control functions - Binary Ninja EXACT implementations (already implemented above) */
-
-/* REMOVED: Static system_irq_func_set implementation - use extern from tx_isp_core.c */
-/* The real system_irq_func_set with proper signature is in tx_isp_core.c */
 
 /* Sensor interface functions - Safe structure-based implementations */
 int data_b2eec(uint32_t time, void **var_ptr)

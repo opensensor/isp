@@ -959,12 +959,25 @@ struct tx_isp_subdev_ops vin_subdev_ops = {
     .internal = &vin_subdev_internal_ops,
 };
 
+/* VIN file operation wrapper functions */
+static int vin_chardev_open(struct inode *inode, struct file *file)
+{
+    pr_debug("VIN device opened\n");
+    return 0;
+}
+
+static long vin_chardev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+    pr_debug("VIN IOCTL: cmd=0x%x arg=0x%lx\n", cmd, arg);
+    return 0;
+}
+
 /* Video input command file operations - Binary Ninja reference */
 static const struct file_operations video_input_cmd_fops = {
     .owner = THIS_MODULE,
-    .open = vic_core_ops_ioctl,  /* Placeholder - should be proper open function */
+    .open = vin_chardev_open,
     .release = single_release,
-    .unlocked_ioctl = vic_core_ops_ioctl,
+    .unlocked_ioctl = vin_chardev_ioctl,
     .llseek = default_llseek,
 };
 

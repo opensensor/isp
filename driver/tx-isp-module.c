@@ -7857,47 +7857,6 @@ static long vic_core_ops_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *a
 }
 EXPORT_SYMBOL(vic_core_ops_ioctl);
 
-/* csi_core_ops_init - CSI core operations initialization */
-int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
-{
-    struct tx_isp_csi_device *csi_dev;
-
-    pr_debug("csi_core_ops_init: Initializing CSI core operations\n");
-
-    if (!sd) {
-        return -EINVAL;
-    }
-
-    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
-    if (!csi_dev) {
-        return -EINVAL;
-    }
-
-    /* Initialize CSI core operations */
-    csi_dev->state = enable ? 4 : 3;
-
-    /* Initialize CSI hardware if needed */
-    if (csi_dev->csi_regs) {
-        /* Basic CSI initialization */
-        *(uint32_t *)((char *)csi_dev->csi_regs + 0x0) = 0x1; /* Enable CSI */
-    }
-
-    return 0;
-}
-EXPORT_SYMBOL(csi_core_ops_init);
-
-
-
-
-
-
-
-
-
-
-
-
-
 /* ispcore_sensor_ops_release_all_sensor - Release all sensors */
 static int ispcore_sensor_ops_release_all_sensor(struct tx_isp_subdev *sd)
 {
