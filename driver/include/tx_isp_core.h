@@ -6,7 +6,6 @@ int tx_isp_core_remove(struct platform_device *pdev);
 int tx_isp_core_probe(struct platform_device *pdev);
 
 /* Core Operations */
-int tx_isp_core_start(struct tx_isp_subdev *sd);
 int tx_isp_core_stop(struct tx_isp_subdev *sd);
 int tx_isp_core_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *config);
 

@@ -530,54 +530,6 @@ static struct tx_isp_dev *g_ispcore = NULL;
 static struct tx_isp_dev *dump_csd = NULL;  /* Global core device pointer */
 uint32_t system_reg_read(u32 reg);
 
-
-/* Core subdev operations implementations */
-int tx_isp_core_start(struct tx_isp_subdev *sd)
-{
-    struct tx_isp_dev *isp_dev;
-    int ret = 0;
-    
-    if (!sd) {
-        pr_err("tx_isp_core_start: Invalid subdev\n");
-        return -EINVAL;
-    }
-    
-    isp_dev = sd->isp;
-    if (!isp_dev) {
-        pr_err("tx_isp_core_start: No ISP device\n");
-        return -EINVAL;
-    }
-    
-    pr_info("*** tx_isp_core_start: Starting ISP core processing ***\n");
-    
-    /* Core registers should already be mapped by tx_isp_subdev_init */
-    if (!isp_dev->core_regs) {
-        pr_err("tx_isp_core_start: Core registers not mapped by subdev init\n");
-        return -ENODEV;
-    }
-    
-    /* Configure clocks if not already done */
-//    if (!isp_dev->isp_clk) {
-//        ret = tx_isp_configure_clocks(isp_dev);
-//        if (ret < 0) {
-//            pr_err("tx_isp_core_start: Failed to configure clocks: %d\n", ret);
-//            return ret;
-//        }
-//    }
-    
-    /* Set up pipeline if not already done */
-    if (isp_dev->pipeline_state == ISP_PIPELINE_IDLE) {
-		// TODO
-    }
-
-    /* Set pipeline to streaming state */
-    isp_dev->pipeline_state = ISP_PIPELINE_STREAMING;
-    
-    pr_info("*** tx_isp_core_start: ISP core started successfully ***\n");
-    return 0;
-}
-EXPORT_SYMBOL(tx_isp_core_start);
-
 int tx_isp_core_stop(struct tx_isp_subdev *sd)
 {
     struct tx_isp_dev *isp_dev;
