@@ -3202,11 +3202,11 @@ int tx_isp_core_probe(struct platform_device *pdev)
             memset(channel_array, 0, channel_count * sizeof(struct tx_isp_frame_channel));
 
             /* SAFE: Channel initialization loop using proper struct access */
-            int channel_idx = 0;
+            int channel_idx;
             struct tx_isp_frame_channel *current_channel = (struct tx_isp_frame_channel *)channel_array;
 
-            while (channel_idx < channel_count) {
-                /* SAFE: Initialize channel using struct members */
+            for (channel_idx = 0; channel_idx < channel_count; channel_idx++) {
+                /* SAFE: Initialize channel using actual struct members */
                 current_channel->pad_id = channel_idx;
                 current_channel->state = 1;  /* INIT state */
                 current_channel->active = 1;
@@ -3216,24 +3216,15 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 mutex_init(&current_channel->mlock);
                 init_completion(&current_channel->frame_done);
 
-                /* SAFE: Set back-reference to ISP device */
-                current_channel->isp_dev = isp_dev;
+                /* SAFE: Initialize channel name */
+                snprintf(current_channel->name, sizeof(current_channel->name), "framechan%d", channel_idx);
 
-                /* SAFE: Channel-specific configuration using struct members */
-                if (channel_idx == 0) {
-                    /* Channel 0: Main capture channel */
-                    current_channel->width = 2624;   /* 0x0a40 */
-                    current_channel->height = 8;
-                    current_channel->format = 1;
-                } else if (channel_idx == 1) {
-                    /* Channel 1: Preview channel */
-                    current_channel->width = 0x780;
-                    current_channel->height = 0x438;
-                    current_channel->format = channel_idx;
-                } else {
-                    /* Other channels: Default configuration */
-                    current_channel->format = 0x80;
-                }
+                /* SAFE: Initialize queue management */
+                INIT_LIST_HEAD(&current_channel->queue_head);
+                INIT_LIST_HEAD(&current_channel->done_head);
+                current_channel->queued_count = 0;
+                current_channel->done_count = 0;
+                init_waitqueue_head(&current_channel->wait);
 
                 /* SAFE: Set up ISP device channel reference using array index */
                 if (channel_idx < ISP_MAX_CHAN) {
@@ -3241,15 +3232,13 @@ int tx_isp_core_probe(struct platform_device *pdev)
                     isp_dev->channels[channel_idx].enabled = true;
                     isp_dev->channels[channel_idx].state = 1;
                     isp_dev->channels[channel_idx].event_hdlr = (struct isp_event_handler *)ispcore_pad_event_handle;
-                    isp_dev->channels[channel_idx].frame_channel = current_channel;
                 }
 
-                channel_idx++;
                 current_channel++;
             }
 
-            /* SAFE: Store channel array reference using struct member */
-            isp_dev->frame_channels = (struct tx_isp_frame_channel *)channel_array;
+            /* SAFE: Store channel array reference using existing struct member */
+            isp_dev->frame_chans = (struct tx_isp_frame_channel *)channel_array;
 
             /* Set basic platform data first */
             platform_set_drvdata(pdev, isp_dev);
