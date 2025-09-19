@@ -8777,8 +8777,9 @@ int tisp_event_init(void)
     /* Binary Ninja: tevent_info = 0 */
     init_completion(&tevent_info);  /* Initialize completion structure */
 
-    /* Binary Ninja: __init_waitqueue_head(0xb2fe4, &$LC0, 0) */
-    __init_waitqueue_head((wait_queue_head_t*)0xb2fe4, &event_wait_key, 0);
+    /* SAFE: Use dynamic wait queue instead of hardcoded address 0xb2fe4 */
+    init_waitqueue_head(&event_wait_queue);
+    pr_info("tisp_event_init: SAFE wait queue initialized (no hardcoded addresses)\n");
 
     return 0;
 }
