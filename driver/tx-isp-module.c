@@ -1825,6 +1825,11 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     u32 addr_ctl, reg_val;
     int timeout, i;
 
+    /* CRITICAL SAFETY: Check if system is shutting down */
+    if (isp_system_shutting_down) {
+        return IRQ_HANDLED;
+    }
+
     /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
     if (dev_id == NULL || (unsigned long)dev_id >= 0xfffff001) {
         return IRQ_HANDLED;
@@ -5437,8 +5442,12 @@ static void tx_isp_exit(void)
 {
     struct registered_sensor *sensor, *tmp;
     int i;
-    
+
     pr_info("TX ISP driver exiting...\n");
+
+    /* CRITICAL SAFETY: Set shutdown flag to prevent interrupt processing */
+    isp_system_shutting_down = true;
+    pr_info("*** System shutdown flag set - interrupts will be ignored ***\n");
 
     /* Cancel frame generation work */
     cancel_delayed_work_sync(&vic_frame_work);
