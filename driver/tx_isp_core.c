@@ -341,17 +341,29 @@ irqreturn_t ispcore_irq_thread_handle(int irq, void *dev_id)
 int ispcore_link_setup(const struct tx_isp_subdev_pad *local,
                       const struct tx_isp_subdev_pad *remote, u32 flags)
 {
+    struct tx_isp_dev *isp_dev;
     struct tx_isp_vic_device *vic_dev;
     struct tx_isp_csi_device *csi_dev;
     struct tx_isp_vin_device *vin_dev;
     int ret = 0;
+    int config;
 
-    if (!isp_dev) {
-        pr_err("ispcore_link_setup: Invalid ISP device\n");
+    if (!local || !local->sd) {
+        pr_err("ispcore_link_setup: Invalid local pad or subdev\n");
         return -EINVAL;
     }
 
-    pr_info("*** ispcore_link_setup: EXACT Binary Ninja implementation - config=%d ***\n", config);
+    /* Get ISP device from subdev */
+    isp_dev = (struct tx_isp_dev *)local->sd->isp;
+    if (!isp_dev) {
+        pr_err("ispcore_link_setup: No ISP device\n");
+        return -EINVAL;
+    }
+
+    /* Convert flags to config: 0 = disable, 1 = enable */
+    config = (flags & 1) ? 1 : 0;
+
+    pr_info("*** ispcore_link_setup: EXACT Binary Ninja implementation - flags=0x%x, config=%d ***\n", flags, config);
 
     vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
     csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
