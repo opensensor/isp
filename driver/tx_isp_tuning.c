@@ -11012,7 +11012,7 @@ uint32_t data_b2ee4(uint32_t log_val, void **var_ptr)
     return log_val;
 }
 
-static int data_b2f04(uint32_t param, int flag)
+int data_b2f04(uint32_t param, int flag)
 {
     /* Safe sensor analog gain setting */
     pr_debug("data_b2f04: Setting sensor analog gain %u, flag %d\n", param, flag);
@@ -11035,7 +11035,7 @@ static int data_b2f04(uint32_t param, int flag)
     return 0;
 }
 
-static int data_b2f08(uint32_t param, int flag)
+int data_b2f08(uint32_t param, int flag)
 {
     /* Safe sensor short analog gain setting */
     pr_debug("data_b2f08: Setting sensor short analog gain %u, flag %d\n", param, flag);
