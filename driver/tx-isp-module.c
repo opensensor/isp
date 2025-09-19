@@ -7348,14 +7348,19 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
     if (ourISPdev) {
         pr_info("*** CRITICAL: CONNECTING SENSOR TO ISP DEVICE ***\n");
         pr_info("Before: ourISPdev->sensor=%p\n", ourISPdev->sensor);
-        
+
         /* Always set as primary sensor (replace any existing) */
         ourISPdev->sensor = sensor;
         pr_info("After: ourISPdev->sensor=%p (%s)\n", ourISPdev->sensor,
                 sensor->info.name[0] ? sensor->info.name : "(unnamed)");
-        
+
         /* Set the ISP reference in the sensor subdev */
         sd->isp = (void *)ourISPdev;
+
+        /* *** CRITICAL FIX: SET UP sensor->video.attr POINTER *** */
+        pr_info("*** CRITICAL: SETTING UP sensor->video.attr POINTER ***\n");
+        sensor->video.attr = &sensor->attr;
+        pr_info("*** sensor->video.attr = %p (points to sensor->attr) ***\n", sensor->video.attr);
 
         /* *** CRITICAL FIX: ADD SENSOR TO SUBDEV ARRAY FOR tx_isp_video_link_stream *** */
         pr_info("*** CRITICAL: ADDING SENSOR TO SUBDEV ARRAY AT INDEX 2 ***\n");
