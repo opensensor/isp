@@ -4833,15 +4833,9 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
         return -EFAULT;  /* Binary Ninja returns 0xffffffea */
     }
 
-    /* Binary Ninja: tx_isp_subdev_init(arg1, $v0, &main_subdev_ops) */
-    ret = tx_isp_subdev_init(pdev, &isp_dev->sd, &main_subdev_ops);
-    if (ret != 0) {
-        /* Binary Ninja: isp_printf(2, "Failed to init main subdev!\n", zx.d(*($s2_1 + 2))) */
-        isp_printf(2, (unsigned char *)"Failed to init main subdev!\n");
-        /* Binary Ninja: private_kfree($v0) */
-        private_kfree(isp_dev);
-        return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
-    }
+    /* REMOVED: Main ISP subdev init - reference driver only initializes individual subdevices */
+    /* Each subdevice will call tx_isp_subdev_init in its own probe function per reference driver */
+    pr_info("*** REFERENCE DRIVER: Individual subdevices will initialize their own memory regions ***\n");
 
     /* Binary Ninja: private_platform_set_drvdata(arg1, $v0) */
     private_platform_set_drvdata(pdev, isp_dev);
