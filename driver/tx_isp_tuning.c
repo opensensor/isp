@@ -8734,12 +8734,15 @@ static int isp_event_dispatcher(int event_id)
     return 0;
 }
 
-/* tisp_event_init - EXACT Binary Ninja implementation */
+/* tisp_event_init - SAFE implementation using proper data structures */
 int tisp_event_init(void)
 {
     pr_info("tisp_event_init: Initializing ISP event system\n");
 
-    /* Binary Ninja: Complex linked list initialization */
+    /* SAFE: Initialize event node array */
+    memset(event_nodes, 0, sizeof(event_nodes));
+
+    /* Binary Ninja: Complex linked list initialization - SAFE version */
     /* Binary Ninja: data_b33b0 = &data_b33b0 */
     data_b33b0 = (uint32_t *)&data_b33b0;  /* Self-referencing pointer */
     /* Binary Ninja: data_b33b4 = &data_b33b0 */
@@ -8749,34 +8752,41 @@ int tisp_event_init(void)
     /* Binary Ninja: data_b33bc = &data_b33b8 */
     data_b33bc = (uint32_t *)&data_b33b8;
 
-    /* Binary Ninja: Initialize event list structures */
-    uint32_t *a2 = (uint32_t*)&data_b2ff0;
-    data_b2ff0 = (uint32_t)&data_b2ff0;
+    /* Binary Ninja: Initialize event list structures - SAFE version */
+    uint32_t *a2 = (uint32_t*)&event_nodes[0];  /* Use safe array instead of hardcoded address */
+    data_b2ff0 = (uint32_t)&event_nodes[0];
 
-    /* Binary Ninja: Complex loop initialization */
-    while (true) {
-        a2[1] = (uint32_t)a2;
-        a2 = (uint32_t*)((char*)a2 + 0x30); /* 0xc * 4 = 0x30 */
-
-        if (a2 == (uint32_t*)&data_b33b0) {
+    /* Binary Ninja: Complex loop initialization - SAFE bounds checking */
+    int node_index = 0;
+    while (node_index < EVENT_NODE_COUNT) {
+        if (node_index + 1 < EVENT_NODE_COUNT) {
+            a2[1] = (uint32_t)a2;
+            a2 = (uint32_t*)&event_nodes[node_index + 1]; /* Move to next node safely */
+            node_index++;
+        } else {
+            /* Last node - break to prevent overflow */
             break;
         }
 
         *a2 = (uint32_t)a2;
     }
 
-    /* Binary Ninja: Second loop initialization */
+    /* Binary Ninja: Second loop initialization - SAFE version */
     uint32_t **a2_1 = (uint32_t**)data_b33bc;
-    uint32_t *v0 = (uint32_t*)&data_b2ff0;
+    uint32_t *v0 = (uint32_t*)&event_nodes[0];  /* Use safe array */
 
-    while (true) {
+    node_index = 0;
+    while (node_index < EVENT_NODE_COUNT) {
         data_b33bc = v0;  /* Assign pointer directly */
         *v0 = (uint32_t)&data_b33b8;
         v0[1] = (uint32_t)a2_1;
         *a2_1 = v0;
-        v0 = (uint32_t*)((char*)v0 + 0x30); /* 0xc * 4 = 0x30 */
 
-        if (v0 == (uint32_t*)&data_b33b0) {
+        if (node_index + 1 < EVENT_NODE_COUNT) {
+            v0 = (uint32_t*)&event_nodes[node_index + 1]; /* Move to next node safely */
+            node_index++;
+        } else {
+            /* Last node - break to prevent overflow */
             break;
         }
 
@@ -8788,7 +8798,7 @@ int tisp_event_init(void)
 
     /* SAFE: Use dynamic wait queue instead of hardcoded address 0xb2fe4 */
     init_waitqueue_head(&event_wait_queue);
-    pr_info("tisp_event_init: SAFE wait queue initialized (no hardcoded addresses)\n");
+    pr_info("tisp_event_init: SAFE event system initialized with %d nodes\n", EVENT_NODE_COUNT);
 
     return 0;
 }
