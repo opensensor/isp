@@ -111,9 +111,7 @@ enum tx_isp_subdev_id {
 
 /* Format definitions - see tx_isp_vin.h for VIN-specific format constants */
 
-/* Status register bit definitions */
-#define STATUS_IDLE        BIT(0)
-#define STATUS_BUSY        BIT(1)
+/* Status register bit definitions - see tx_isp_vin.h for VIN-specific status bits */
 #define STATUS_ERROR       BIT(2)
 
 struct isp_device_status {
