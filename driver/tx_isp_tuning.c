@@ -467,6 +467,12 @@ int tisp_code_destroy_tuning_node(void);
 /* Forward declarations for tuning core functions */
 void *isp_core_tuning_init(void *arg1);
 int isp_core_tuning_event(void *arg1, int arg2);
+
+/* Forward declarations for AE interrupt functions */
+int ae0_interrupt_hist(void);
+int ae0_interrupt_static(void);
+int ae1_interrupt_hist(void);
+int ae1_interrupt_static(void);
 int tiziano_awb_init(uint32_t height, uint32_t width);  /* Binary Ninja: takes arg1, arg2 */
 int tiziano_ccm_init(void);
 int tiziano_bcsh_init(void);
