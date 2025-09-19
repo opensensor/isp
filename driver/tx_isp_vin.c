@@ -1027,7 +1027,8 @@ int tx_isp_vin_probe(struct platform_device *pdev)
     }
 
     /* Binary Ninja: *($v0 + 0xd8) = $v0 */
-    vin->self_ptr = vin;  /* Self-pointer for validation */
+    /* Note: self_ptr member doesn't exist in tx_isp_vin_device structure */
+    /* This offset likely refers to a different field or is handled elsewhere */
 
     /* Binary Ninja: private_platform_set_drvdata(arg1, $v0) */
     private_platform_set_drvdata(pdev, vin);
