@@ -521,6 +521,8 @@ static uint32_t data_d9520 = 0;
 static uint32_t data_d9524 = 0;
 static uint32_t data_d9528 = 0;
 
+int tisp_event_push(void *event);
+
 /* Forward declarations for tiziano functions */
 int tisp_wdr_expTime_updata(void);
 int tisp_wdr_ev_calculate(void);
@@ -1204,7 +1206,7 @@ static int tisp_ae0_process_impl(void)
  * tisp_event_push - EXACT Binary Ninja MCP implementation
  * Address: 0x26f58
  */
-static int tisp_event_push(void *event)
+int tisp_event_push(void *event)
 {
     /* Binary Ninja: int32_t $v0 = arch_local_irq_save() */
     unsigned long flags;
