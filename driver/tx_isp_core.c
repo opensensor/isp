@@ -1042,32 +1042,8 @@ void tx_isp_frame_chan_init(struct tx_isp_frame_channel *chan)
 /* REMOVED: tx_isp_init_memory_mappings - not part of reference driver */
 /* Memory mappings are handled by individual subdevices through tx_isp_subdev_init */
 
-/* Deinitialize memory mappings */
-static int tx_isp_deinit_memory_mappings(struct tx_isp_dev *isp)
-{
-    if (isp->phy_base) {
-        iounmap(isp->phy_base);
-        isp->phy_base = NULL;
-    }
-    
-    if (isp->csi_regs) {
-        iounmap(isp->csi_regs);
-        isp->csi_regs = NULL;
-    }
-    
-    if (isp->vic_regs) {
-        iounmap(isp->vic_regs);
-        isp->vic_regs = NULL;
-    }
-    
-    if (isp->core_regs) {
-        iounmap(isp->core_regs);
-        isp->core_regs = NULL;
-    }
-    
-    pr_info("All ISP memory mappings cleaned up\n");
-    return 0;
-}
+/* REMOVED: tx_isp_deinit_memory_mappings - not part of reference driver */
+/* Memory cleanup is handled by individual subdevices */
 
 /* Configure ISP system clocks */
 int tx_isp_configure_clocks(struct tx_isp_dev *isp)
