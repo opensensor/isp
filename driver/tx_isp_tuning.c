@@ -8246,68 +8246,7 @@ int tiziano_gib_init(void)
 }
 EXPORT_SYMBOL(tiziano_gib_init);
 
-/* tiziano_sharpen_init - EXACT Binary Ninja implementation */
-int tiziano_sharpen_init(void)
-{
-    pr_debug("tiziano_sharpen_init: Initializing Sharpen processing\n");
-
-    /* Binary Ninja: WDR mode selection */
-    void *v0;
-    if (sharpen_wdr_en != 0) {
-        /* Binary Ninja: y_sp_uu_thres_array_now = &y_sp_uu_thres_wdr_array */
-        y_sp_uu_thres_array_now = &y_sp_uu_thres_wdr_array;
-        /* Binary Ninja: y_sp_w_sl_stren_0_array_now = &y_sp_w_sl_stren_0_wdr_array */
-        y_sp_w_sl_stren_0_array_now = &y_sp_w_sl_stren_0_wdr_array;
-        /* Binary Ninja: y_sp_w_sl_stren_1_array_now = &y_sp_w_sl_stren_1_wdr_array */
-        y_sp_w_sl_stren_1_array_now = &y_sp_w_sl_stren_1_wdr_array;
-        /* Binary Ninja: y_sp_w_sl_stren_2_array_now = &y_sp_w_sl_stren_2_wdr_array */
-        y_sp_w_sl_stren_2_array_now = &y_sp_w_sl_stren_2_wdr_array;
-        /* Binary Ninja: y_sp_w_sl_stren_3_array_now = &y_sp_w_sl_stren_3_wdr_array */
-        y_sp_w_sl_stren_3_array_now = &y_sp_w_sl_stren_3_wdr_array;
-        /* Binary Ninja: y_sp_b_sl_stren_0_array_now = &y_sp_b_sl_stren_0_wdr_array */
-        y_sp_b_sl_stren_0_array_now = &y_sp_b_sl_stren_0_wdr_array;
-        /* Binary Ninja: y_sp_b_sl_stren_1_array_now = &y_sp_b_sl_stren_1_wdr_array */
-        y_sp_b_sl_stren_1_array_now = &y_sp_b_sl_stren_1_wdr_array;
-        /* Binary Ninja: y_sp_b_sl_stren_2_array_now = &y_sp_b_sl_stren_2_wdr_array */
-        y_sp_b_sl_stren_2_array_now = &y_sp_b_sl_stren_2_wdr_array;
-        /* Binary Ninja: $v0 = &y_sp_b_sl_stren_3_wdr_array */
-        v0 = &y_sp_b_sl_stren_3_wdr_array;
-    } else {
-        /* Binary Ninja: y_sp_uu_thres_array_now = &y_sp_uu_thres_array */
-        y_sp_uu_thres_array_now = &y_sp_uu_thres_array;
-        /* Binary Ninja: y_sp_w_sl_stren_0_array_now = &y_sp_w_sl_stren_0_array */
-        y_sp_w_sl_stren_0_array_now = &y_sp_w_sl_stren_0_array;
-        /* Binary Ninja: y_sp_w_sl_stren_1_array_now = &y_sp_w_sl_stren_1_array */
-        y_sp_w_sl_stren_1_array_now = &y_sp_w_sl_stren_1_array;
-        /* Binary Ninja: y_sp_w_sl_stren_2_array_now = &y_sp_w_sl_stren_2_array */
-        y_sp_w_sl_stren_2_array_now = &y_sp_w_sl_stren_2_array;
-        /* Binary Ninja: y_sp_w_sl_stren_3_array_now = &y_sp_w_sl_stren_3_array */
-        y_sp_w_sl_stren_3_array_now = &y_sp_w_sl_stren_3_array;
-        /* Binary Ninja: y_sp_b_sl_stren_0_array_now = &y_sp_b_sl_stren_0_array */
-        y_sp_b_sl_stren_0_array_now = &y_sp_b_sl_stren_0_array;
-        /* Binary Ninja: y_sp_b_sl_stren_1_array_now = &y_sp_b_sl_stren_1_array */
-        y_sp_b_sl_stren_1_array_now = &y_sp_b_sl_stren_1_array;
-        /* Binary Ninja: y_sp_b_sl_stren_2_array_now = &y_sp_b_sl_stren_2_array */
-        y_sp_b_sl_stren_2_array_now = &y_sp_b_sl_stren_2_array;
-        /* Binary Ninja: $v0 = &y_sp_b_sl_stren_3_array */
-        v0 = &y_sp_b_sl_stren_3_array;
-    }
-
-    /* Binary Ninja: y_sp_b_sl_stren_3_array_now = $v0 */
-    y_sp_b_sl_stren_3_array_now = v0;
-
-    /* Binary Ninja: data_9a920 = 0xffffffff */
-    data_9a920 = 0xffffffff;
-
-    /* Binary Ninja: tiziano_sharpen_params_refresh() */
-    tiziano_sharpen_params_refresh();
-
-    /* Binary Ninja: tisp_sharpen_par_refresh(isp_printf, isp_printf, 1) */
-    tisp_sharpen_par_refresh(0, 0, 1);  /* Binary Ninja: pass uint32_t values, not function pointers */
-
-    return 0;
-}
-EXPORT_SYMBOL(tiziano_sharpen_init);
+/* tiziano_sharpen_init - removed duplicate, using Binary Ninja implementation above */
 
 /* tiziano_dmsc_init - EXACT Binary Ninja implementation */
 int tiziano_dmsc_init(void)
