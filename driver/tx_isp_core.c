@@ -3409,41 +3409,34 @@ int tx_isp_core_probe(struct platform_device *pdev)
             pr_info("***   - Channel count: %d ***\n", channel_count);
             pr_info("***   - Global ISP device set: %p ***\n", ourISPdev);
 
-            /* CRITICAL: Set up memory mappings for register access FIRST */
-            pr_info("*** tx_isp_core_probe: Setting up ISP memory mappings FIRST ***\n");
-            result = tx_isp_init_memory_mappings(isp_dev);
-                if (result == 0) {
-                    pr_info("*** tx_isp_core_probe: ISP memory mappings initialized successfully ***\n");
+            /* REMOVED: Global memory mapping - let each subdevice handle its own memory per reference driver */
+            pr_info("*** tx_isp_core_probe: Skipping global memory mapping - subdevices will handle their own memory ***\n");
 
-                    /* CRITICAL: Update global ISP device with register base IMMEDIATELY */
-                    ourISPdev = isp_dev;
-                    pr_info("*** tx_isp_core_probe: Global ISP device updated with register base ***\n");
+            /* CRITICAL: Update global ISP device IMMEDIATELY */
+            ourISPdev = isp_dev;
+            pr_info("*** tx_isp_core_probe: Global ISP device updated ***\n");
 
-                    /* NOW initialize tuning system AFTER memory mappings are available */
-                    pr_info("*** tx_isp_core_probe: Calling isp_core_tuning_init AFTER memory mappings ***\n");
-                    tuning_dev = (void*)isp_core_tuning_init(isp_dev);
+            /* Initialize tuning system without global memory mappings */
+            pr_info("*** tx_isp_core_probe: Calling isp_core_tuning_init (subdevices will map their own memory) ***\n");
+            tuning_dev = (void*)isp_core_tuning_init(isp_dev);
 
-                    /* SAFE: Store tuning device using proper member access */
-                    isp_dev->tuning_data = (struct isp_tuning_data *)tuning_dev;
+            /* SAFE: Store tuning device using proper member access */
+            isp_dev->tuning_data = (struct isp_tuning_data *)tuning_dev;
 
-                    if (tuning_dev != NULL) {
-                        pr_info("*** tx_isp_core_probe: Tuning init SUCCESS (with mapped registers) ***\n");
+            if (tuning_dev != NULL) {
+                pr_info("*** tx_isp_core_probe: Tuning init SUCCESS (subdevices will handle memory mapping) ***\n");
 
-                        /* SAFE: Use tuning_dev directly instead of adding dangerous offset */
-                        isp_dev->tuning_enabled = 1;
-                        pr_info("*** tx_isp_core_probe: SAFE tuning pointer - using tuning_dev=%p directly ***\n", tuning_dev);
+                /* SAFE: Use tuning_dev directly instead of adding dangerous offset */
+                isp_dev->tuning_enabled = 1;
+                pr_info("*** tx_isp_core_probe: SAFE tuning pointer - using tuning_dev=%p directly ***\n", tuning_dev);
 
-                        /* NOW we can report full success */
-                        pr_info("*** tx_isp_core_probe: SUCCESS - Core device fully initialized ***\n");
-                        pr_info("***   - Tuning device: %p ***\n", tuning_dev);
-                    } else {
-                        pr_err("*** tx_isp_core_probe: Tuning init FAILED even with mapped registers ***\n");
-                        return -ENOMEM;
-                    }
-                } else {
-                    pr_err("*** tx_isp_core_probe: Failed to initialize ISP memory mappings: %d ***\n", result);
-                    return result;
-                }
+                /* NOW we can report full success */
+                pr_info("*** tx_isp_core_probe: SUCCESS - Core device fully initialized ***\n");
+                pr_info("***   - Tuning device: %p ***\n", tuning_dev);
+            } else {
+                pr_err("*** tx_isp_core_probe: Tuning init FAILED ***\n");
+                return -ENOMEM;
+            }
 
                 /* CRITICAL: Create VIN device AFTER memory mappings are available */
                 pr_info("*** tx_isp_core_probe: Creating VIN device (after memory mappings) ***\n");
