@@ -1807,45 +1807,15 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
 /* Forward declaration for ISP core interrupt handler */
 extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 
-/* isp_vic_interrupt_service_routine - MINIMAL SAFE implementation to prevent crashes */
+/* isp_vic_interrupt_service_routine - EMERGENCY SAFE implementation */
 irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
-    /* CRITICAL: Minimal interrupt handler to prevent memory corruption */
-    /* Just acknowledge the interrupt and return - no complex processing */
+    /* EMERGENCY: Absolute minimal handler to prevent all crashes */
+    /* Do not access ANY device structures or registers */
 
-    extern uint32_t vic_start_ok;
-    extern struct tx_isp_dev *ourISPdev;
+    pr_info("VIC IRQ %d: Emergency handler - no processing\n", irq);
 
-    /* Basic validation */
-    if (!dev_id || !ourISPdev || !ourISPdev->vic_dev) {
-        return IRQ_HANDLED;
-    }
-
-    struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
-    void __iomem *vic_regs = vic_dev->vic_regs;
-
-    if (!vic_regs) {
-        return IRQ_HANDLED;
-    }
-
-    /* MINIMAL: Just read and clear interrupt status to acknowledge */
-    u32 int_status = readl(vic_regs + 0x1e0);
-    u32 mdma_status = readl(vic_regs + 0x1e4);
-
-    /* Clear interrupts by writing status back */
-    if (int_status) {
-        writel(int_status, vic_regs + 0x1f0);
-    }
-    if (mdma_status) {
-        writel(mdma_status, vic_regs + 0x1f4);
-    }
-
-    /* MINIMAL: Only increment frame count if frame done interrupt */
-    if (vic_start_ok && (int_status & 1)) {
-        vic_dev->frame_count++;
-        pr_info("VIC IRQ: Frame done - count=%d\n", vic_dev->frame_count);
-    }
-
+    /* Just return handled without touching any hardware or structures */
     return IRQ_HANDLED;
 }
 
