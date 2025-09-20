@@ -4894,36 +4894,11 @@ static int tx_isp_init(void)
     }
     pr_info("*** SUBDEVICE REGISTRY INITIALIZED - GRAPH CREATION SHOULD NOW SUCCEED ***\n");
 
-    /* *** CRITICAL FIX: Register individual subdev platform devices so their probe functions get called *** */
-    pr_info("*** REGISTERING INDIVIDUAL SUBDEV PLATFORM DEVICES FOR MEMORY MAPPING ***\n");
-    for (i = 0; i < 5; i++) {
-        /* Check if device is already registered to avoid "ALREADY REGISTERED" kernel warnings */
-        if (subdev_platforms[i]->dev.kobj.parent) {
-            pr_info("*** SUBDEV PLATFORM DEVICE %s ALREADY REGISTERED - SKIPPING ***\n",
-                    subdev_platforms[i]->name);
-            continue;
-        }
-
-        ret = platform_device_register(subdev_platforms[i]);
-        if (ret != 0) {
-            /* Handle -EEXIST (already exists) as success to avoid log spam */
-            if (ret == -EEXIST) {
-                pr_info("*** SUBDEV PLATFORM DEVICE %s ALREADY EXISTS - CONTINUING ***\n",
-                        subdev_platforms[i]->name);
-                continue;
-            }
-
-            pr_err("Failed to register subdev platform device %s: %d\n",
-                   subdev_platforms[i]->name, ret);
-            /* Cleanup previously registered devices */
-            while (--i >= 0) {
-                platform_device_unregister(subdev_platforms[i]);
-            }
-            goto err_cleanup_subdev_drivers;
-        }
-        pr_info("*** SUBDEV PLATFORM DEVICE %s REGISTERED - PROBE SHOULD BE CALLED ***\n",
-                subdev_platforms[i]->name);
-    }
+    /* *** ARCHITECTURAL FIX: DO NOT register individual subdev platform devices *** */
+    /* Multiple platform devices calling the same probe function causes corruption */
+    /* Instead, the main platform device probe will handle all subdevice initialization */
+    pr_info("*** SKIPPING INDIVIDUAL SUBDEV PLATFORM DEVICE REGISTRATION ***\n");
+    pr_info("*** MAIN PLATFORM DEVICE PROBE WILL HANDLE ALL SUBDEVICE INITIALIZATION ***\n");
 
     /* Step 2: Register platform device (matches reference) */
     /* Check if main platform device is already registered */
