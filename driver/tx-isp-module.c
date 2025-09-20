@@ -7264,9 +7264,11 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
     } else {
         pr_err("*** ERROR: NO REAL SENSOR DRIVER S_STREAM FUNCTION AVAILABLE! ***\n");
         pr_err("*** THIS IS WHY 0x3e=0x91 IS NOT BEING WRITTEN! ***\n");
+        vin_init_in_progress = 0; /* Clear recursion guard */
         return -ENODEV;
     }
 
+    vin_init_in_progress = 0; /* Clear recursion guard */
     return ret;
 }
 
