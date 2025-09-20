@@ -682,11 +682,12 @@ static struct tx_isp_subdev_sensor_ops csi_sensor_ops = {
 };
 
 /* Initialize the subdev ops structure with pointers to the operations */
-static struct tx_isp_subdev_ops csi_subdev_ops = {
+struct tx_isp_subdev_ops csi_subdev_ops = {
     .core = &csi_core_ops,
     .video = &csi_video_ops,
     .sensor = &csi_sensor_ops,
 };
+EXPORT_SYMBOL(csi_subdev_ops);
 
 /* Forward declarations for CSI file operations */
 static int dump_isp_csi_open(struct inode *inode, struct file *file);
