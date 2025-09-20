@@ -5594,9 +5594,14 @@ static void tx_isp_exit(void)
     isp_system_shutting_down = true;
     pr_info("*** System shutdown flag set - interrupts will be ignored ***\n");
 
+    /* CRITICAL: Set frame work shutdown flag and cancel work safely */
+    mutex_lock(&frame_work_mutex);
+    frame_work_shutdown = true;
+    mutex_unlock(&frame_work_mutex);
+
     /* Cancel frame generation work */
     cancel_delayed_work_sync(&vic_frame_work);
-    pr_info("*** Frame generation work cancelled ***\n");
+    pr_info("*** Frame generation work cancelled safely ***\n");
 
     if (ourISPdev) {
         /* Clean up subdevice graph */
@@ -7310,6 +7315,22 @@ static void vic_frame_work_function(struct work_struct *work)
     } else {
         pr_info("*** vic_frame_work_function: VIC not streaming (state=%d, streaming=%d), stopping work queue ***\n",
                 vic_dev->state, vic_dev->streaming);
+    }
+
+    mutex_unlock(&frame_work_mutex);
+}
+
+/* Safe function to start frame worker when streaming begins */
+static void tx_isp_start_frame_worker(void)
+{
+    mutex_lock(&frame_work_mutex);
+
+    if (!frame_work_shutdown && ourISPdev && ourISPdev->vic_dev) {
+        struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
+        if (vic_dev->streaming && vic_dev->state == 2) {
+            pr_info("*** tx_isp_start_frame_worker: Starting frame worker for streaming ***\n");
+            schedule_delayed_work(&vic_frame_work, msecs_to_jiffies(100));
+        }
     }
 
     mutex_unlock(&frame_work_mutex);
