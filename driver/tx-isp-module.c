@@ -7303,33 +7303,7 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
                 sensor->info.name, enable);
 
         if (enable) {
-            /* CRITICAL FIX: Initialize VIN if not already initialized - WITH RECURSION PROTECTION */
-            if (ourISPdev->vin_dev && !vin_init_in_progress) {
-                struct tx_isp_vin_device *vin_device = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
-                if (vin_device->state != 3 && vin_device->state != 4) {
-                    pr_info("*** CRITICAL: VIN NOT INITIALIZED (state=%d), INITIALIZING NOW ***\n", vin_device->state);
-
-                    /* CRITICAL: Set flag to prevent infinite recursion */
-                    vin_init_in_progress = 1;
-
-                    /* CRITICAL FIX: Call the EXACT Binary Ninja VIN init function */
-                    extern int tx_isp_vin_init(void* arg1, int32_t arg2);
-                    ret = tx_isp_vin_init(vin_device, 1);
-
-                    /* CRITICAL: Clear flag after init attempt */
-                    vin_init_in_progress = 0;
-
-                    if (ret && ret != 0xffffffff) {
-                        pr_err("*** CRITICAL: VIN INITIALIZATION FAILED: %d ***\n", ret);
-                        return ret;
-                    }
-                    pr_info("*** CRITICAL: VIN INITIALIZED SUCCESSFULLY - STATE NOW 3 ***\n");
-                } else {
-                    pr_info("*** VIN ALREADY INITIALIZED (state=%d) ***\n", vin_device->state);
-                }
-            } else if (vin_init_in_progress) {
-                pr_info("*** VIN INITIALIZATION ALREADY IN PROGRESS - SKIPPING TO PREVENT RECURSION ***\n");
-            }
+            /* VIN initialization should happen through normal subdev ops flow */
 
             /* Any ISP-specific sensor configuration */
             if (sensor->video.attr) {
