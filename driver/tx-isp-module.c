@@ -5954,81 +5954,40 @@ static irqreturn_t isp_irq_handle(int irq, void *dev_id)
     }
 }
 
-/* isp_irq_thread_handle - EXACT Binary Ninja implementation with CORRECT structure access */
+/* isp_irq_thread_handle - SAFE implementation without dangerous operations */
 static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
 {
-    void *s0_1;
-    void *s1_1;
-    void *v0_2;
-    int v0_3;
-    void **subdev_array;
-    void *a0_1;
-    void *v0_5;
-    int v0_6;
-    
-    pr_info("*** isp_irq_thread_handle: Threaded IRQ %d ***\n", irq);
-    
-    /* Binary Ninja: if (arg2 == 0x80) */
-    if ((uintptr_t)dev_id == 0x80) {
-        /* SAFE: Avoid dangerous pointer arithmetic - use proper device structure */
-        /* This appears to be a special case, use safe defaults */
-        s1_1 = NULL;
-        s0_1 = NULL;
+    struct tx_isp_dev *isp_dev;
+
+    /* CRITICAL SAFETY: Validate dev_id before accessing */
+    if (!dev_id || (uintptr_t)dev_id < 0x80000000 || (uintptr_t)dev_id > 0x9fffffff) {
+        pr_err("isp_irq_thread_handle: Invalid dev_id=%p for IRQ %d\n", dev_id, irq);
+        return IRQ_HANDLED;
+    }
+
+    /* CRITICAL: Detect corruption by comparing dev_id with ourISPdev */
+    extern struct tx_isp_dev *ourISPdev;
+    if (dev_id != ourISPdev) {
+        pr_err("THREAD IRQ %d: CORRUPTION DETECTED! dev_id=%p != ourISPdev=%p\n",
+               irq, dev_id, ourISPdev);
+
+        /* CRITICAL: If ourISPdev is NULL, someone called cleanup during streaming! */
+        if (ourISPdev == NULL) {
+            pr_err("THREAD IRQ %d: CRITICAL - ourISPdev is NULL! Cleanup called during streaming!\n", irq);
+            return IRQ_HANDLED;  /* Cannot recover - just exit safely */
+        }
+
+        isp_dev = ourISPdev;  /* Use known good pointer */
     } else {
-        /* Binary Ninja: void* $v0_2 = **(arg2 + 0x44) */
-        struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
-        if (isp_dev && isp_dev->vic_dev) {
-            /* SAFE: Use proper struct member access instead of unsafe offset */
-            /* Offset 0x44 likely corresponds to a subdev or handler field */
-            v0_2 = isp_dev->vic_dev->irq_handler;  /* Use proper struct member */
-        } else {
-            v0_2 = NULL;
-        }
-        /* SAFE: Completely avoid dangerous pointer arithmetic */
-        s1_1 = NULL;
-        s0_1 = NULL;
-        v0_3 = 0;
+        isp_dev = (struct tx_isp_dev *)dev_id;
     }
-    
-    /* SAFE: Skip the dangerous subdev array iteration entirely */
-    /* The Binary Ninja decompilation shows complex pointer arithmetic that's causing crashes */
-    /* Instead, just handle the interrupt in a safe way */
 
-    pr_info("isp_irq_thread_handle: Safely handling threaded interrupt without dangerous pointer arithmetic\n");
+    /* SAFE: Simple threaded interrupt processing without dangerous operations */
+    pr_debug("isp_irq_thread_handle: Processing threaded IRQ %d safely\n", irq);
 
-    /* If we have a valid ISP device, call the VIC interrupt handler directly */
-    if (dev_id && dev_id != (void*)0x80) {
-        struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
-        /* CRITICAL SAFETY: Validate all pointers before access */
-        if (isp_dev && isp_dev->vic_dev) {
-            /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
-            struct tx_isp_vic_device *vic_dev = isp_dev->vic_dev;
-            /* ADDITIONAL SAFETY: Validate vic_dev before calling functions */
-            if (vic_dev) {
-                /* EMERGENCY FIX: Ensure vic_regs is available */
-                if (!vic_dev->vic_regs) {
-                    pr_err("*** isp_irq_thread_handle: NULL vic_regs - EMERGENCY REMAP ***\n");
-                    vic_dev->vic_regs = ioremap(0x133e0000, 0x10000);
-                    if (vic_dev->vic_regs) {
-                        pr_info("*** isp_irq_thread_handle: EMERGENCY REMAP SUCCESS ***\n");
-                    } else {
-                        pr_err("*** isp_irq_thread_handle: EMERGENCY REMAP FAILED ***\n");
-                        return IRQ_HANDLED;
-                    }
-                }
-                pr_info("isp_irq_thread_handle: Calling VIC frame done handler\n");
-                vic_framedone_irq_function(vic_dev);
-            } else {
-                pr_err("*** isp_irq_thread_handle: Invalid vic_dev ***\n");
-            }
-        } else {
-            pr_err("*** isp_irq_thread_handle: Invalid isp_dev or vic_dev ***\n");
-        }
-    }
-    
-    pr_info("*** isp_irq_thread_handle: Binary Ninja threaded IRQ %d processed ***\n", irq);
-    
-    /* Binary Ninja: return 1 */
+    /* Most interrupt processing is done in the main handlers */
+    /* Threaded handler is mainly for cleanup and non-critical tasks */
+
     return IRQ_HANDLED;
 }
 
