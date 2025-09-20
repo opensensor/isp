@@ -411,15 +411,40 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         return 0xfffffff4;  /* Binary Ninja: return 0xfffffff4 */
     }
 
-    /* CRITICAL: Call subdevice core init method after module init - REFERENCE DRIVER PATTERN */
+    /* CRITICAL: Defer core->init call for sensor devices until after sensor association
+     * For sensor devices, the core->init function needs access to the sensor structure
+     * which is set up AFTER tx_isp_subdev_init returns via tx_isp_set_subdev_hostdata.
+     * For non-sensor devices (CSI, VIC, Core), call init immediately as they don't need sensor data.
+     *
+     * We detect sensor devices by checking if the platform device name contains known sensor names
+     * or if the device name is null (which happens with unregistered sensor platform devices).
+     */
     if (sd->ops && sd->ops->core && sd->ops->core->init) {
-        pr_info("*** tx_isp_subdev_init: Calling core->init for device %s ***\n", dev_name(&pdev->dev));
-        ret = sd->ops->core->init(sd, 1);  /* Enable = 1 for initialization */
-        if (ret != 0) {
-            pr_err("tx_isp_subdev_init: core->init failed for %s: %d\n", dev_name(&pdev->dev), ret);
-            /* Don't fail completely - some devices may not need init */
+        const char *dev_name_str = dev_name(&pdev->dev);
+        bool is_sensor_device = false;
+
+        /* Check if this is a sensor device */
+        if (!dev_name_str ||
+            strstr(dev_name_str, "gc2053") ||
+            strstr(dev_name_str, "imx307") ||
+            strstr(dev_name_str, "sensor")) {
+            is_sensor_device = true;
+        }
+
+        if (!is_sensor_device) {
+            /* Non-sensor device - safe to call init immediately */
+            pr_info("*** tx_isp_subdev_init: Calling core->init for device %s ***\n", dev_name_str ? dev_name_str : "(null)");
+            ret = sd->ops->core->init(sd, 1);  /* Enable = 1 for initialization */
+            if (ret != 0) {
+                pr_err("tx_isp_subdev_init: core->init failed for %s: %d\n", dev_name_str ? dev_name_str : "(null)", ret);
+                /* Don't fail completely - some devices may not need init */
+            } else {
+                pr_info("*** tx_isp_subdev_init: core->init SUCCESS for device %s ***\n", dev_name_str ? dev_name_str : "(null)");
+            }
         } else {
-            pr_info("*** tx_isp_subdev_init: core->init SUCCESS for device %s ***\n", dev_name(&pdev->dev));
+            /* Sensor device - defer init until after sensor association */
+            pr_info("*** tx_isp_subdev_init: Deferring core->init for sensor device %s ***\n", dev_name_str ? dev_name_str : "(null)");
+            pr_info("*** tx_isp_subdev_init: Sensor core->init will be called after sensor association ***\n");
         }
     }
 
@@ -732,6 +757,28 @@ void tx_isp_module_deinit(struct tx_isp_subdev *sd)
 
     pr_info("tx_isp_module_deinit: Module deinitialized\n");
 }
+
+/* tx_isp_sensor_complete_init - Complete sensor initialization after association */
+int tx_isp_sensor_complete_init(struct tx_isp_subdev *sd)
+{
+    int ret = 0;
+
+    if (!sd || !sd->ops || !sd->ops->core || !sd->ops->core->init) {
+        pr_err("tx_isp_sensor_complete_init: Invalid parameters\n");
+        return -EINVAL;
+    }
+
+    pr_info("*** tx_isp_sensor_complete_init: Calling deferred sensor core->init ***\n");
+    ret = sd->ops->core->init(sd, 1);  /* Enable = 1 for initialization */
+    if (ret != 0) {
+        pr_err("tx_isp_sensor_complete_init: sensor core->init failed: %d\n", ret);
+    } else {
+        pr_info("*** tx_isp_sensor_complete_init: Sensor core->init SUCCESS ***\n");
+    }
+
+    return ret;
+}
+EXPORT_SYMBOL(tx_isp_sensor_complete_init);
 
 /* tx_isp_request_irq - EXACT Binary Ninja reference implementation */
 int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq_info)

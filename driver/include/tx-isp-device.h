@@ -697,6 +697,7 @@ struct tx_isp_platform {
 int tx_isp_reg_set(struct tx_isp_subdev *sd, unsigned int reg, int start, int end, int val);
 int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd, struct tx_isp_subdev_ops *ops);
 void tx_isp_subdev_deinit(struct tx_isp_subdev *sd);
+int tx_isp_sensor_complete_init(struct tx_isp_subdev *sd);
 
 /* Auto-linking function to connect subdevices to global ISP device */
 void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev *sd);

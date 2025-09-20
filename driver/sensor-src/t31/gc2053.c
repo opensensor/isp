@@ -2091,11 +2091,18 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 	sensor->video.mbus.colorspace = wsize->colorspace;
 	sensor->video.fps = wsize->fps;
 	tx_isp_subdev_init(&sensor_platform_device, sd, &sensor_ops);
-	
+
 	/* CRITICAL: Associate I2C client with subdev */
 	tx_isp_set_subdevdata(sd, client);
 	tx_isp_set_subdev_hostdata(sd, sensor);
 	private_i2c_set_clientdata(client, sd);
+
+	/* Complete sensor initialization now that sensor association is done */
+	ret = tx_isp_sensor_complete_init(sd);
+	if (ret != 0) {
+		ISP_ERROR("Failed to complete sensor initialization: %d\n", ret);
+		/* Continue anyway - sensor might still work for basic operations */
+	}
 	
 	ISP_WARNING("sensor_probe: I2C client association complete\n");
 	ISP_WARNING("  sd=%p, client=%p, addr=0x%02x, adapter=%s\n",
