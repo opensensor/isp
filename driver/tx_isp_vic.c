@@ -3412,14 +3412,45 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         struct vic_buffer_entry *queue_buffer, *free_buffer;
         uint32_t buffer_addr, buffer_index;
 
+        /* CRITICAL SAFETY: Validate list heads before accessing */
+        if (list_empty(&vic_dev->queue_head)) {
+            pr_err("*** VIC IRQ: queue_head is empty - no buffers to process ***\n");
+            return IRQ_HANDLED;
+        }
+
+        if (list_empty(&vic_dev->free_head)) {
+            pr_err("*** VIC IRQ: free_head is empty - no free buffers available ***\n");
+            return IRQ_HANDLED;
+        }
+
+        /* CRITICAL SAFETY: Use spinlock to protect list operations in interrupt context */
+        unsigned long flags;
+        spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, flags);
+
         /* Binary Ninja: pop_buffer_fifo($s0 + 0x1f4) */
         queue_buffer = list_first_entry_or_null(&vic_dev->queue_head, struct vic_buffer_entry, list);
         if (queue_buffer) {
+            /* CRITICAL SAFETY: Validate buffer entry before using */
+            if ((unsigned long)queue_buffer < 0x80000000 || (unsigned long)queue_buffer >= 0xfffff000) {
+                pr_err("*** VIC IRQ: Invalid queue_buffer pointer 0x%p ***\n", queue_buffer);
+                spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
+                return IRQ_HANDLED;
+            }
+
             list_del(&queue_buffer->list);
 
             /* Get free buffer entry */
             free_buffer = list_first_entry_or_null(&vic_dev->free_head, struct vic_buffer_entry, list);
             if (free_buffer) {
+                /* CRITICAL SAFETY: Validate buffer entry before using */
+                if ((unsigned long)free_buffer < 0x80000000 || (unsigned long)free_buffer >= 0xfffff000) {
+                    pr_err("*** VIC IRQ: Invalid free_buffer pointer 0x%p ***\n", free_buffer);
+                    /* Put queue_buffer back */
+                    list_add_tail(&queue_buffer->list, &vic_dev->queue_head);
+                    spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
+                    return IRQ_HANDLED;
+                }
+
                 list_del(&free_buffer->list);
 
                 /* Binary Ninja: Extract buffer address from *($a3_1 + 8) */
@@ -3472,7 +3503,16 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
                 if (!arg2) {
                     kfree(queue_buffer);
                 }
+
+                /* CRITICAL SAFETY: Unlock spinlock after successful buffer processing */
+                spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
+            } else {
+                /* CRITICAL SAFETY: Unlock spinlock if free_buffer is NULL */
+                spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
             }
+        } else {
+            /* CRITICAL SAFETY: Unlock spinlock if queue_buffer is NULL */
+            spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
         }
     }
 

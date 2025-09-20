@@ -1805,13 +1805,18 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     u32 addr_ctl, reg_val;
     int timeout, i;
 
+    /* IMMEDIATE DEBUG: Log interrupt entry before ANY other operations */
+    printk(KERN_ALERT "*** VIC IRQ ENTRY: irq=%d, dev_id=%p ***\n", irq, dev_id);
+
     /* CRITICAL SAFETY: Check if system is shutting down */
     if (isp_system_shutting_down) {
+        printk(KERN_ALERT "*** VIC IRQ: System shutting down ***\n");
         return IRQ_HANDLED;
     }
 
     /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
     if (dev_id == NULL || (unsigned long)dev_id >= 0xfffff001) {
+        printk(KERN_ALERT "*** VIC IRQ: Invalid dev_id %p ***\n", dev_id);
         return IRQ_HANDLED;
     }
 
