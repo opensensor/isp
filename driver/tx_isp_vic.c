@@ -478,14 +478,23 @@ static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
         return -EINVAL;
     }
 
+    /* CRITICAL SAFETY: Validate vic_dev structure integrity before accessing any fields */
+    if (!virt_addr_valid(vic_dev) ||
+        !virt_addr_valid((char*)vic_dev + sizeof(struct tx_isp_vic_device) - 1)) {
+        pr_err("vic_mdma_irq_function: vic_dev structure spans invalid memory\n");
+        return -EINVAL;
+    }
+
+    /* CRITICAL SAFETY: Check if vic_dev structure is properly initialized */
+    if (vic_dev->width == 0 || vic_dev->height == 0 ||
+        vic_dev->width > 8192 || vic_dev->height > 8192) {
+        pr_err("vic_mdma_irq_function: Invalid dimensions %dx%d - vic_dev not properly initialized\n",
+               vic_dev->width, vic_dev->height);
+        return -EINVAL;
+    }
+
     /* Binary Ninja: if (*(arg1 + 0x214) == 0) */
     if (vic_dev->stream_state == 0) {
-        /* CRITICAL SAFETY: Validate width/height fields before access (offset 0xdc/0xe0) */
-        if (!virt_addr_valid(&vic_dev->width) || !virt_addr_valid(&vic_dev->height)) {
-            pr_err("vic_mdma_irq_function: Invalid width/height field addresses\n");
-            return -EINVAL;
-        }
-
         /* Binary Ninja: int32_t $s0_2 = *(arg1 + 0xdc) * *(arg1 + 0xe0) */
         frame_size = vic_dev->width * vic_dev->height;
 
