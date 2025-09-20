@@ -1809,35 +1809,19 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
 #define SAFE_WRITE_OFFSET(ptr, offset, val) \
     do { if (ptr) writel((val), (ptr) + (offset)); } while(0)
 
-/* isp_vic_interrupt_service_routine - EXACT Binary Ninja implementation with struct member access */
+/* isp_vic_interrupt_service_routine - EXACT Binary Ninja reference with struct member access */
 irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
     struct tx_isp_vic_device *vic_dev;
     void __iomem *vic_regs;
     u32 v1_7, v1_10;
-    u32 addr_ctl, reg_val;
-    int timeout, i;
+    extern uint32_t vic_start_ok;
 
-    /* CRITICAL: Validate dev_id IMMEDIATELY to prevent BadVA crashes */
-    if (dev_id == NULL) {
-        printk(KERN_ALERT "*** VIC IRQ: NULL dev_id - interrupt ignored ***\n");
+    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
+    if (dev_id == NULL || (unsigned long)dev_id >= 0xfffff001) {
         return IRQ_HANDLED;
     }
-
-    /* CRITICAL: Check if dev_id is in valid kernel memory range */
-    if ((unsigned long)dev_id < 0x80000000 || (unsigned long)dev_id >= 0xfffff000) {
-        printk(KERN_ALERT "*** VIC IRQ: Invalid dev_id 0x%p (outside kernel memory) - interrupt ignored ***\n", dev_id);
-        return IRQ_HANDLED;
-    }
-
-    /* CRITICAL: Validate dev_id points to valid memory */
-    if (!virt_addr_valid(dev_id)) {
-        printk(KERN_ALERT "*** VIC IRQ: dev_id 0x%p points to invalid memory - interrupt ignored ***\n", dev_id);
-        return IRQ_HANDLED;
-    }
-
-    printk(KERN_ALERT "*** VIC IRQ ENTRY: irq=%d, dev_id=%p (VALIDATED) ***\n", irq, dev_id);
 
     /* CRITICAL SAFETY: Validate isp_dev before accessing any members */
     if (!isp_dev) {
