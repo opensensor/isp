@@ -5626,16 +5626,25 @@ static void tx_isp_exit(void)
         /* Clean up I2C infrastructure */
         cleanup_i2c_infrastructure(ourISPdev);
         
+        /* CRITICAL: Store IRQ numbers before setting ourISPdev to NULL */
+        int isp_irq = ourISPdev->isp_irq;
+        int isp_irq2 = ourISPdev->isp_irq2;
+        struct tx_isp_dev *local_isp_dev = ourISPdev;
+
+        /* CRITICAL: Set ourISPdev to NULL BEFORE freeing interrupts to prevent race conditions */
+        ourISPdev = NULL;
+        pr_info("*** ourISPdev set to NULL - interrupt handlers will now safely exit ***\n");
+
         /* Free hardware interrupts if initialized */
-        if (ourISPdev->isp_irq > 0) {
-            free_irq(ourISPdev->isp_irq, ourISPdev);
-            pr_info("Hardware interrupt %d freed\n", ourISPdev->isp_irq);
+        if (isp_irq > 0) {
+            free_irq(isp_irq, local_isp_dev);
+            pr_info("Hardware interrupt %d freed\n", isp_irq);
         }
 
         /* Free secondary interrupt if initialized */
-        if (ourISPdev->isp_irq2 > 0) {
-            free_irq(ourISPdev->isp_irq2, ourISPdev);
-            pr_info("Hardware interrupt %d freed\n", ourISPdev->isp_irq2);
+        if (isp_irq2 > 0) {
+            free_irq(isp_irq2, local_isp_dev);
+            pr_info("Hardware interrupt %d freed\n", isp_irq2);
         }
 
         /* CRITICAL: Cancel frame sync work before freeing memory */
