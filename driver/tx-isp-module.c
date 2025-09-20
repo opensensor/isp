@@ -3920,7 +3920,8 @@ static int create_frame_channel_devices(void)
 
         /* Set VIC subdev reference if available */
         if (ourISPdev && ourISPdev->vic_dev) {
-            frame_channels[i].vic_subdev = &((struct tx_isp_vic_device *)ourISPdev->vic_dev)->sd;
+            /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+            frame_channels[i].vic_subdev = &(ourISPdev->vic_dev->sd);
         } else {
             frame_channels[i].vic_subdev = NULL;
         }
