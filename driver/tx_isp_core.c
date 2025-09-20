@@ -1366,7 +1366,6 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
             /* Binary Ninja: tx_isp_send_event_to_remote(*($s4_1 + 0x200), 0x3000006, &var_40) */
             if (s4_1) {
-                extern int tx_isp_send_event_to_remote(void *target, u32 event, void *data);
                 /* SAFE: Use proper struct member access instead of raw offset 0x200 */
                 /* Binary Ninja offset 0x200 likely refers to channel 2 callback pointer */
                 tx_isp_send_event_to_remote(s4_1, 0x3000006, &var_38_3);
