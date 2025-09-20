@@ -3433,31 +3433,55 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         unsigned long flags;
         spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, flags);
 
-        /* Binary Ninja: pop_buffer_fifo($s0 + 0x1f4) */
-        queue_buffer = list_first_entry_or_null(&vic_dev->queue_head, struct vic_buffer_entry, list);
-        if (queue_buffer) {
-            /* CRITICAL SAFETY: Validate buffer entry before using */
-            if ((unsigned long)queue_buffer < 0x80000000 || (unsigned long)queue_buffer >= 0xfffff000) {
-                pr_err("*** VIC IRQ: Invalid queue_buffer pointer 0x%p ***\n", queue_buffer);
-                spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
-                return IRQ_HANDLED;
-            }
+        /* CRITICAL SAFETY: Validate list heads before ANY list operations */
+        if (!vic_dev->queue_head.next || !vic_dev->queue_head.prev ||
+            (unsigned long)vic_dev->queue_head.next < 0x80000000 ||
+            (unsigned long)vic_dev->queue_head.prev < 0x80000000 ||
+            !vic_dev->free_head.next || !vic_dev->free_head.prev ||
+            (unsigned long)vic_dev->free_head.next < 0x80000000 ||
+            (unsigned long)vic_dev->free_head.prev < 0x80000000) {
+            pr_err("*** VIC IRQ: CORRUPTED LIST HEADS - queue(next=%p,prev=%p) free(next=%p,prev=%p) ***\n",
+                   vic_dev->queue_head.next, vic_dev->queue_head.prev,
+                   vic_dev->free_head.next, vic_dev->free_head.prev);
+            spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
+            return IRQ_HANDLED;
+        }
 
-            list_del(&queue_buffer->list);
+        /* CRITICAL SAFETY: Check if lists are empty BEFORE accessing */
+        if (list_empty(&vic_dev->queue_head) || list_empty(&vic_dev->free_head)) {
+            pr_err("*** VIC IRQ: Lists empty - queue_empty=%d, free_empty=%d ***\n",
+                   list_empty(&vic_dev->queue_head), list_empty(&vic_dev->free_head));
+            spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
+            return IRQ_HANDLED;
+        }
 
-            /* Get free buffer entry */
-            free_buffer = list_first_entry_or_null(&vic_dev->free_head, struct vic_buffer_entry, list);
-            if (free_buffer) {
-                /* CRITICAL SAFETY: Validate buffer entry before using */
-                if ((unsigned long)free_buffer < 0x80000000 || (unsigned long)free_buffer >= 0xfffff000) {
-                    pr_err("*** VIC IRQ: Invalid free_buffer pointer 0x%p ***\n", free_buffer);
-                    /* Put queue_buffer back */
-                    list_add_tail(&queue_buffer->list, &vic_dev->queue_head);
-                    spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
-                    return IRQ_HANDLED;
-                }
+        /* SAFE: Now we can safely get the first entries */
+        queue_buffer = list_first_entry(&vic_dev->queue_head, struct vic_buffer_entry, list);
+        free_buffer = list_first_entry(&vic_dev->free_head, struct vic_buffer_entry, list);
 
-                list_del(&free_buffer->list);
+        /* CRITICAL SAFETY: Validate both buffer entries before using */
+        if (!queue_buffer || (unsigned long)queue_buffer < 0x80000000 || (unsigned long)queue_buffer >= 0xfffff000 ||
+            !free_buffer || (unsigned long)free_buffer < 0x80000000 || (unsigned long)free_buffer >= 0xfffff000) {
+            pr_err("*** VIC IRQ: Invalid buffer pointers - queue=%p, free=%p ***\n", queue_buffer, free_buffer);
+            spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
+            return IRQ_HANDLED;
+        }
+
+        /* CRITICAL SAFETY: Validate buffer list pointers before deletion */
+        if (!queue_buffer->list.next || !queue_buffer->list.prev ||
+            (unsigned long)queue_buffer->list.next < 0x80000000 ||
+            (unsigned long)queue_buffer->list.prev < 0x80000000 ||
+            !free_buffer->list.next || !free_buffer->list.prev ||
+            (unsigned long)free_buffer->list.next < 0x80000000 ||
+            (unsigned long)free_buffer->list.prev < 0x80000000) {
+            pr_err("*** VIC IRQ: CORRUPTED BUFFER LIST POINTERS ***\n");
+            spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
+            return IRQ_HANDLED;
+        }
+
+        /* SAFE: Now we can safely delete from lists */
+        list_del(&queue_buffer->list);
+        list_del(&free_buffer->list);
 
                 /* Binary Ninja: Extract buffer address from *($a3_1 + 8) */
                 /* In the reference, this extracts the physical address from the buffer structure */
