@@ -269,160 +269,73 @@ static struct {
     uint8_t state;    /* GPIO state at offset 0x14 */
 } gpio_info[10];
 
-/* vic_framedone_irq_function - Updated to match BN MCP reference with safe struct access */
-int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
+/* vic_framedone_irq_function - EXACT Binary Ninja MCP implementation with SAFE struct access */
+int vic_framedone_irq_function(struct tx_isp_vic_device *arg1)
 {
-    void __iomem *vic_regs;
-    void *result = &data_b0000;  /* Return value matching reference */
+    void *result = &data_b0000;  /* Binary Ninja: void* result = &data_b0000 */
 
-    /* External declarations */
-    extern struct tx_isp_dev *ourISPdev;
-    extern struct frame_channel_device frame_channels[];
-    extern int num_channels;
-    extern int vic_frame_complete_buffer_management(struct tx_isp_vic_device *vic_dev, uint32_t buffer_addr);
-
-    pr_info("*** vic_framedone_irq_function: entry - vic_dev=%p ***\n", vic_dev);
-
-    /* Validate vic_dev first */
-    if (!vic_dev) {
-        pr_err("vic_framedone_irq_function: NULL vic_dev\n");
-        return 0;
-    }
-
-    /* CRITICAL SAFETY: Additional validation for interrupt context */
-    if ((unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff000) {
-        pr_err("vic_framedone_irq_function: Invalid vic_dev pointer 0x%p\n", vic_dev);
-        return 0;
-    }
-
-    if (!virt_addr_valid(vic_dev)) {
-        pr_err("vic_framedone_irq_function: vic_dev pointer 0x%p not valid virtual address\n", vic_dev);
-        return 0;
-    }
-
-    /* CRITICAL SAFETY: Validate vic_dev structure integrity before accessing any fields */
-    if (!virt_addr_valid((char*)vic_dev + sizeof(struct tx_isp_vic_device) - 1)) {
-        pr_err("vic_framedone_irq_function: vic_dev structure spans invalid memory\n");
-        return 0;
+    if (!arg1) {
+        return (int)(uintptr_t)result;
     }
 
 
 
     /* Binary Ninja: if (*(arg1 + 0x214) == 0) */
     /* SAFE: Use proper struct member 'processing' instead of offset 0x214 */
-    if (vic_dev->processing == 0) {
-        /* goto label_123f4 - GPIO handling section */
-        pr_info("vic_framedone_irq_function: Processing not active, going to GPIO section\n");
+    if (arg1->processing == 0) {
         goto label_123f4;
     } else {
         /* Binary Ninja: result = *(arg1 + 0x210) */
         /* SAFE: Use proper struct member 'stream_state' instead of offset 0x210 */
-        result = (void *)(uintptr_t)vic_dev->stream_state;
+        result = (void *)(uintptr_t)arg1->stream_state;
 
-        if (vic_dev->stream_state != 0) {
+        if (arg1->stream_state != 0) {
             /* Binary Ninja: void* $a3_1 = *(arg1 + 0xb8) */
             /* SAFE: Use vic_regs member instead of offset 0xb8 */
-            vic_regs = vic_dev->vic_regs;
+            void __iomem *a3_1 = arg1->vic_regs;
 
-            /* Binary Ninja EXACT: void** i_1 = *(arg1 + 0x204) */
-            int buffer_index = 0;    /* $a1_1 = 0 */
-            int high_bits = 0;       /* $v1_1 = 0 */
-            int match_found = 0;     /* $v0 = 0 */
+            /* Binary Ninja: void** i_1 = *(arg1 + 0x204) */
+            /* SAFE: Use done_head list instead of raw pointer *(arg1 + 0x204) */
+            struct list_head *i_1 = arg1->done_head.next;
+            int a1_1 = 0;  /* Buffer count */
+            int v1_1 = 0;  /* High bits */
+            int v0 = 0;    /* Match flag */
 
-            /* CRITICAL SAFETY: Validate vic_dev structure integrity before accessing ANY members */
-            if (!vic_dev || (unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff000) {
-                pr_err("vic_framedone_irq_function: CORRUPTED vic_dev pointer %p\n", vic_dev);
-                result = &data_b0000;
-                goto label_123f4;
-            }
-
-            /* CRITICAL SAFETY: Validate we can safely access done_head member */
-            if ((unsigned long)&vic_dev->done_head < 0x80000000 ||
-                (unsigned long)&vic_dev->done_head >= 0xfffff000) {
-                pr_err("vic_framedone_irq_function: Cannot safely access vic_dev->done_head member\n");
-                result = &data_b0000;
-                goto label_123f4;
-            }
-
-            /* SAFE: Now we can safely read the done_head list pointers */
-            struct list_head *done_head_next = vic_dev->done_head.next;
-            struct list_head *done_head_prev = vic_dev->done_head.prev;
-
-            /* CRITICAL SAFETY: Validate done_head list integrity after safe read */
-            if (!done_head_next || !done_head_prev ||
-                (unsigned long)done_head_next < 0x80000000 ||
-                (unsigned long)done_head_next >= 0xfffff000 ||
-                (unsigned long)done_head_prev < 0x80000000 ||
-                (unsigned long)done_head_prev >= 0xfffff000) {
-                pr_err("vic_framedone_irq_function: CORRUPTED done_head list (next=%p, prev=%p)\n",
-                       done_head_next, done_head_prev);
-                result = &data_b0000;
-                goto label_123f4;
-            }
-
-            /* CRITICAL SAFETY: Check if done_head list is empty using safe pointers */
-            if (done_head_next == &vic_dev->done_head) {
-                pr_info("vic_framedone_irq_function: done_head list is empty\n");
-                result = &data_b0000;
-                goto label_123f4;
-            }
-
-            /* SAFE: Use Linux kernel list APIs instead of dangerous pointer arithmetic */
-            /* This replaces the Binary Ninja raw pointer traversal with safe kernel APIs */
-            struct vic_buffer_entry *entry;
-            u32 current_frame_addr = 0;
-
-            /* Get current frame address from VIC register */
-            if (vic_regs) {
-                current_frame_addr = readl(vic_regs + 0x380);  /* *($a3_1 + 0x380) */
-            }
-
-            pr_info("vic_framedone_irq_function: Starting SAFE list traversal - current_frame=0x%x\n", current_frame_addr);
-
-            /* SAFE: Use list_for_each_entry instead of dangerous pointer arithmetic */
-            list_for_each_entry(entry, &vic_dev->done_head, list) {
-                /* CRITICAL SAFETY: Validate entry pointer */
-                if (!entry || (unsigned long)entry < 0x80000000 || (unsigned long)entry >= 0xfffff000) {
-                    pr_err("vic_framedone_irq_function: CORRUPTED entry pointer %p, breaking\n", entry);
-                    break;
-                }
-
+            /* Binary Ninja: for (; i_1 != arg1 + 0x204; i_1 = *i_1) */
+            while (i_1 != &arg1->done_head) {
                 /* Binary Ninja: $v1_1 += 0 u< $v0 ? 1 : 0 */
-                high_bits += (0 < match_found) ? 1 : 0;
+                v1_1 += (0 < v0) ? 1 : 0;
                 /* Binary Ninja: $a1_1 += 1 */
-                buffer_index += 1;
+                a1_1 += 1;
 
                 /* Binary Ninja: if (i_1[2] == *($a3_1 + 0x380)) */
-                /* SAFE: Compare entry's buffer address with current frame register */
-                if (entry->buffer_addr == current_frame_addr && current_frame_addr != 0) {
-                    match_found = 1;  /* $v0 = 1 */
-                    pr_info("vic_framedone_irq_function: MATCH FOUND - buffer=0x%x, frame=0x%x\n",
-                           entry->buffer_addr, current_frame_addr);
+                /* SAFE: Extract buffer address from list entry */
+                struct vic_buffer_entry *buffer = container_of(i_1, struct vic_buffer_entry, list);
+                u32 current_buffer = readl(a3_1 + 0x380);
+
+                if (buffer->buffer_addr == current_buffer) {
+                    v0 = 1;  /* Match found */
                 }
 
-                /* Safety limit to prevent infinite loops */
-                if (buffer_index >= 100) {
-                    pr_err("vic_framedone_irq_function: List traversal exceeded safety limit\n");
-                    break;
-                }
+                /* Move to next entry */
+                i_1 = i_1->next;
+
+                /* Safety limit */
+                if (a1_1 >= 100) break;
             }
 
             /* Binary Ninja: int32_t $v1_2 = $v1_1 << 0x10 */
-            int shifted_value = high_bits << 0x10;
+            int v1_2 = v1_1 << 0x10;
 
-            /* Binary Ninja: if ($v0 == 0) */
-            if (match_found == 0) {
-                /* $v1_2 = $a1_1 << 0x10 */
-                shifted_value = buffer_index << 0x10;
+            /* Binary Ninja: if ($v0 == 0) $v1_2 = $a1_1 << 0x10 */
+            if (v0 == 0) {
+                v1_2 = a1_1 << 0x10;
             }
 
             /* Binary Ninja: *($a3_1 + 0x300) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff) */
-            /* SAFE: Update VIC register 0x300 exactly as reference driver */
-            if (vic_regs) {
-                u32 reg_val = readl(vic_regs + 0x300);
-                u32 new_reg_val = shifted_value | (reg_val & 0xfff0ffff);
-                writel(new_reg_val, vic_regs + 0x300);
-                pr_info("vic_framedone_irq_function: Updated VIC[0x300] = 0x%x (EXACT Binary Ninja)\n", new_reg_val);
+            if (a3_1) {
+                u32 reg_val = readl(a3_1 + 0x300);
+                writel(v1_2 | (reg_val & 0xfff0ffff), a3_1 + 0x300);
             }
 
             /* Binary Ninja: result = &data_b0000 */
@@ -431,6 +344,8 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             goto label_123f4;
         }
     }
+
+
 
 
 

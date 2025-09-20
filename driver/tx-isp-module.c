@@ -1810,53 +1810,51 @@ extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 /* isp_vic_interrupt_service_routine - EXACT Binary Ninja MCP with SAFE struct member access */
 irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
-    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
-    struct tx_isp_vic_device *vic_dev;
-    void __iomem *vic_regs;
+    struct tx_isp_dev *arg1 = (struct tx_isp_dev *)dev_id;
+    struct tx_isp_vic_device *s0;
+    void __iomem *v0_4;
     u32 v1_7, v1_10;
     extern uint32_t vic_start_ok;
 
     /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
-    if (dev_id == NULL || (unsigned long)dev_id >= 0xfffff001) {
+    if (arg1 == NULL || (uintptr_t)arg1 >= 0xfffff001) {
         return IRQ_HANDLED;
     }
 
     /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
-    /* SAFE: Use proper struct member access instead of raw offset */
-    vic_dev = isp_dev->vic_dev;
-    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
+    /* SAFE: Use proper struct member access instead of *(arg1 + 0xd4) */
+    s0 = arg1->vic_dev;
+    if (s0 == NULL || (uintptr_t)s0 >= 0xfffff001) {
         return IRQ_HANDLED;
     }
 
     /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
-    /* SAFE: Use proper struct member access instead of raw offset */
-    vic_regs = isp_dev->vic_regs;
-    if (!vic_regs) {
+    /* SAFE: Use proper struct member access instead of *(arg1 + 0xb8) */
+    v0_4 = s0->vic_regs;
+    if (!v0_4) {
         return IRQ_HANDLED;
     }
 
     /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
     /* Binary Ninja: int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
-    v1_7 = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);
-    v1_10 = (~readl(vic_regs + 0x1ec)) & readl(vic_regs + 0x1e4);
+    v1_7 = (~readl(v0_4 + 0x1e8)) & readl(v0_4 + 0x1e0);
+    v1_10 = (~readl(v0_4 + 0x1ec)) & readl(v0_4 + 0x1e4);
 
     /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7 */
     /* Binary Ninja: *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
-    writel(v1_7, vic_regs + 0x1f0);
-    writel(v1_10, vic_regs + 0x1f4);
+    writel(v1_7, v0_4 + 0x1f0);
+    writel(v1_10, v0_4 + 0x1f4);
 
     /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
     if (vic_start_ok != 0) {
-        /* Binary Ninja: Process various interrupt types */
-
         /* Binary Ninja: if (($v1_7 & 1) != 0) */
         if ((v1_7 & 1) != 0) {
             /* Binary Ninja: *($s0 + 0x160) += 1 */
-            /* SAFE: Use proper struct member access instead of raw offset */
-            vic_dev->frame_count++;
+            /* SAFE: Use proper struct member access instead of *($s0 + 0x160) */
+            s0->frame_count++;
 
             /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
-            vic_framedone_irq_function(vic_dev);
+            vic_framedone_irq_function(s0);
         }
 
         /* Binary Ninja: Process error interrupts */
