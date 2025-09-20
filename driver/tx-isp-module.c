@@ -4131,6 +4131,24 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         reg_sensor->subdev = real_sensor_sd;
                         pr_info("*** SENSOR REGISTRY UPDATED WITH REAL SENSOR ***\n");
                     }
+
+                    /* CRITICAL: Initialize VIN now that sensor is connected */
+                    if (ourISPdev->vin_dev) {
+                        pr_info("*** INITIALIZING VIN FOR SENSOR STREAMING ***\n");
+                        extern int tx_isp_vin_init(void* arg1, int32_t arg2);
+                        int vin_init_ret = tx_isp_vin_init(ourISPdev->vin_dev, 1);
+
+                        struct tx_isp_vin_device *vin_device = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
+                        pr_info("*** VIN INIT RESULT: %d, VIN STATE: %d ***\n", vin_init_ret, vin_device->state);
+
+                        if (vin_device->state == 3) {
+                            pr_info("*** VIN SUCCESSFULLY INITIALIZED TO STATE 3 - READY FOR STREAMING ***\n");
+                        } else {
+                            pr_warn("*** VIN STATE IS %d, EXPECTED 3 - STREAMING MAY FAIL ***\n", vin_device->state);
+                        }
+                    } else {
+                        pr_err("*** NO VIN DEVICE AVAILABLE FOR INITIALIZATION ***\n");
+                    }
                 } else {
                     pr_err("*** FAILED TO CREATE I2C CLIENT FOR %s ***\n", sensor_name);
                 }
