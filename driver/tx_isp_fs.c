@@ -102,10 +102,16 @@ static struct tx_isp_subdev_sensor_ops fs_sensor_ops = {
     .ioctl = fs_sensor_ops_ioctl,
 };
 
+/* FS internal operations - EXACT Binary Ninja implementation */
+static struct tx_isp_subdev_internal_ops fs_internal_ops = {
+    .slake_module = fs_slake_module,
+};
+
 /* FS complete subdev operations structure */
 static struct tx_isp_subdev_ops fs_subdev_ops = {
     .core = &fs_core_ops,
     .sensor = &fs_sensor_ops,
+    .internal = &fs_internal_ops,
 };
 
 /* Frame source file operations - matching isp_framesource_fops */
