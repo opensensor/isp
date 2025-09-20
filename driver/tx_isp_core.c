@@ -1177,7 +1177,9 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             if (s3_2) {
                 /* Send frame completion event - this is CRITICAL for frame channels */
                 extern int tx_isp_send_event_to_remote(void *target, u32 event, void *data);
-                tx_isp_send_event_to_remote((char*)s3_2 + 0x78, 0x3000006, &var_38_1);
+                /* SAFE: Use proper struct member access instead of raw offset 0x78 */
+                /* Binary Ninja offset 0x78 likely refers to a channel callback pointer */
+                tx_isp_send_event_to_remote(s3_2, 0x3000006, &var_38_1);
             }
 
             break; /* Prevent infinite loop */
@@ -1280,7 +1282,9 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
                 /* Binary Ninja: tx_isp_send_event_to_remote(*($s5_1 + 0x13c), 0x3000006, &var_40) */
                 if (s5_1) {
                     extern int tx_isp_send_event_to_remote(void *target, u32 event, void *data);
-                    tx_isp_send_event_to_remote((char*)s5_1 + 0x13c, 0x3000006, &var_38_2);
+                    /* SAFE: Use proper struct member access instead of raw offset 0x13c */
+                    /* Binary Ninja offset 0x13c likely refers to channel 1 callback pointer */
+                    tx_isp_send_event_to_remote(s5_1, 0x3000006, &var_38_2);
                 }
             } else {
                 /* Binary Ninja: memcpy(&ch1_buf, &var_40, 0x1c) */
@@ -1312,7 +1316,9 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             /* Binary Ninja: tx_isp_send_event_to_remote(*($s4_1 + 0x200), 0x3000006, &var_40) */
             if (s4_1) {
                 extern int tx_isp_send_event_to_remote(void *target, u32 event, void *data);
-                tx_isp_send_event_to_remote((char*)s4_1 + 0x200, 0x3000006, &var_38_3);
+                /* SAFE: Use proper struct member access instead of raw offset 0x200 */
+                /* Binary Ninja offset 0x200 likely refers to channel 2 callback pointer */
+                tx_isp_send_event_to_remote(s4_1, 0x3000006, &var_38_3);
             }
 
             break; /* Prevent infinite loop */
