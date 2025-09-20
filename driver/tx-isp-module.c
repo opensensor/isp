@@ -7290,25 +7290,10 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
     pr_info("Sensor: %s (subdev=%p)\n",
             (sensor && sensor->info.name[0]) ? sensor->info.name : "(unnamed)", sd);
     
-    /* *** CRITICAL FIX: STORE ORIGINAL OPS BEFORE OVERWRITING *** */
-    if (sd->ops) {
-        stored_sensor_ops.original_ops = sd->ops;
-        stored_sensor_ops.sensor_sd = sd;
-        pr_info("*** STORED ORIGINAL SENSOR OPS FOR DELEGATION ***\n");
-        pr_info("*** DEBUG: original_ops=%p ***\n", stored_sensor_ops.original_ops);
-        pr_info("*** DEBUG: original_ops->core=%p ***\n", stored_sensor_ops.original_ops->core);
-        pr_info("*** DEBUG: original_ops->video=%p ***\n", stored_sensor_ops.original_ops->video);
-        pr_info("*** DEBUG: original_ops->sensor=%p ***\n", stored_sensor_ops.original_ops->sensor);
-        if (stored_sensor_ops.original_ops->sensor) {
-            pr_info("*** DEBUG: original_ops->sensor->ioctl=%p ***\n", stored_sensor_ops.original_ops->sensor->ioctl);
-        }
-    }
-    
-    /* *** CRITICAL FIX: SET UP PROPER SUBDEV OPS STRUCTURE *** */
-    pr_info("*** CRITICAL: SETTING UP SENSOR SUBDEV OPS STRUCTURE ***\n");
-    sd->ops = &sensor_subdev_ops;
-    pr_info("Sensor subdev ops setup: core=%p, video=%p, s_stream=%p\n",
-            sd->ops->core, sd->ops->video, 
+    /* CRITICAL FIX: DO NOT REPLACE SENSOR OPS - REFERENCE DRIVER USES ORIGINAL SENSOR OPS */
+    pr_info("*** CRITICAL: KEEPING ORIGINAL SENSOR OPS - NO ISP WRAPPER ***\n");
+    pr_info("Sensor subdev ops: core=%p, video=%p, s_stream=%p\n",
+            sd->ops->core, sd->ops->video,
             sd->ops->video ? sd->ops->video->s_stream : NULL);
     
     /* *** CRITICAL FIX: IMMEDIATELY CONNECT SENSOR TO ISP DEVICE *** */
