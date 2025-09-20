@@ -71,52 +71,34 @@ void csi_write32(u32 reg, u32 val)
     }
 }
 
-/* CSI interrupt handler - FIXED: Expect tx_isp_dev* like other interrupt handlers */
-static irqreturn_t tx_isp_csi_irq_handler(int irq, void *dev_id)
+/* CSI error checking function - called from VIC interrupt handler */
+void tx_isp_csi_check_errors(struct tx_isp_dev *isp_dev)
 {
-    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
     struct tx_isp_csi_device *csi_dev;
     void __iomem *csi_base;
-    u32 status, err1, err2, phy_state;
-    irqreturn_t ret = IRQ_NONE;
-    unsigned long flags;
-    static unsigned long last_interrupt_time = 0;
+    u32 err1, err2, phy_state;
+    static unsigned long last_check_time = 0;
     unsigned long current_time = jiffies;
 
-    /* CRITICAL: Log CSI interrupt activity to understand timing */
-    pr_info("*** CSI INTERRUPT: irq=%d, dev_id=%p, time_delta=%lu ms ***\n",
-            irq, dev_id, jiffies_to_msecs(current_time - last_interrupt_time));
-    last_interrupt_time = current_time;
-
-    /* CRITICAL: Validate dev_id IMMEDIATELY to prevent BadVA crashes */
     if (!isp_dev) {
-        pr_warn("*** CSI INTERRUPT: isp_dev is NULL - returning IRQ_NONE ***\n");
-        return IRQ_NONE;
-    }
-
-    /* CRITICAL: Check if dev_id is in valid kernel memory range */
-    if ((unsigned long)dev_id < 0x80000000 || (unsigned long)dev_id >= 0xfffff000) {
-        pr_warn("*** CSI INTERRUPT: Invalid dev_id 0x%p (outside kernel memory) - returning IRQ_NONE ***\n", dev_id);
-        return IRQ_NONE;
-    }
-
-    /* CRITICAL: Validate dev_id points to valid memory */
-    if (!virt_addr_valid(dev_id)) {
-        pr_warn("*** CSI INTERRUPT: dev_id 0x%p points to invalid memory - returning IRQ_NONE ***\n", dev_id);
-        return IRQ_NONE;
+        return;
     }
 
     csi_dev = isp_dev->csi_dev;
     if (!csi_dev) {
-        pr_warn("*** CSI INTERRUPT: csi_dev is NULL - returning IRQ_NONE ***\n");
-        return IRQ_NONE;
+        return;
     }
 
     csi_base = csi_dev->csi_regs;
     if (!csi_base) {
-        pr_warn("*** CSI INTERRUPT: csi_base is NULL - returning IRQ_NONE ***\n");
-        return IRQ_NONE;
+        return;
     }
+
+    /* Throttle error checking to avoid spam */
+    if (time_before(current_time, last_check_time + msecs_to_jiffies(100))) {
+        return;
+    }
+    last_check_time = current_time;
 
     spin_lock_irqsave(&csi_dev->lock, flags);
 
