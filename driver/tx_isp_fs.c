@@ -163,15 +163,17 @@ int tx_isp_fs_probe(struct platform_device *pdev)
         } else {
             isp_printf(2, "Err [VIC_INT] : image syfifo ovf !!!\n", 0);
         }
-        /* CRITICAL FIX: Get channel_count BEFORE freeing fs_dev to prevent BadVA 0xc8 crash */
-        channel_count = fs_dev->channel_count;  /* Get channel count from offset 0xc8 SAFELY */
-
         /* Binary Ninja: private_kfree($v0) */
         private_kfree(fs_dev);
         return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
     }
 
-    /* CRITICAL FIX: fs_dev is still valid here, safe to access */
+    /* CRITICAL FIX: Add NULL check to prevent BadVA 0xc8 crash */
+    if (!fs_dev) {
+        pr_err("tx_isp_fs_probe: fs_dev is NULL - PREVENTS BadVA 0xc8 crash\n");
+        return -ENOMEM;
+    }
+
     /* Binary Ninja: uint32_t $a0_2 = zx.d(*($v0 + 0xc8)) */
     channel_count = fs_dev->channel_count;  /* Get channel count from offset 0xc8 */
 
