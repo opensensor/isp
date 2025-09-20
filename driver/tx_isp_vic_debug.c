@@ -54,7 +54,9 @@ extern uint32_t vic_start_ok;  /* Global VIC interrupt enable flag declaration *
 
 /* GPIO switch state for frame done processing */
 static uint32_t gpio_switch_state = 0;
-static uint8_t gpio_info[20] = {0xff}; /* GPIO configuration array */
+/* CRITICAL FIX: Increase gpio_info size to prevent buffer overflow */
+/* Binary Ninja copies 0x2a (42) bytes, so we need at least 42 bytes */
+static uint8_t gpio_info[64] = {0xff}; /* GPIO configuration array - increased size for safety */
 
 int vic_mdma_irq_function(struct tx_isp_dev *isp_dev, int channel);
 
