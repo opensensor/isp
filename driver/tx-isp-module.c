@@ -5654,11 +5654,13 @@ static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void
         /* SAFE: Use copy_from_user instead of memcpy for user space data */
         gpio_switch_state = 1;
         if (arg) {
-            /* CRITICAL FIX: Remove hardcoded 0x2a size - use sizeof only */
-            if (copy_from_user(&gpio_info, arg, sizeof(gpio_info))) {
+            /* CRITICAL FIX: Prevent buffer overflow - only copy safe amount */
+            size_t safe_copy_size = min((size_t)0x2a, sizeof(gpio_info));
+            if (copy_from_user(&gpio_info, arg, safe_copy_size)) {
                 pr_err("vic_sensor_ops_ioctl: Failed to copy GPIO info from user space\n");
                 return -EFAULT;
             }
+            pr_info("vic_sensor_ops_ioctl: GPIO copied %zu bytes safely (prevented overflow)\n", safe_copy_size);
         }
         return 0;
         
