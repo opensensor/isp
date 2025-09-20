@@ -3271,7 +3271,9 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
     int ret = 0;
     uint8_t magic = (cmd >> 8) & 0xff;
     static bool auto_init_done = false;  /* CRITICAL: Prevent repeated auto-initialization */
-    
+    static DEFINE_SPINLOCK(tuning_lock);  /* CRITICAL: Prevent race with interrupt handlers */
+    unsigned long flags;
+
     /* CRITICAL: Binary Ninja reference implementation - FIXED g_ispcore -> ourISPdev */
     /* Reference: $s0 = *(*(*(arg1 + 0x70) + 0xc8) + 0x1bc) */
     /* FIXED: This dangerous pointer chain caused BadVA 0xc8 crashes */

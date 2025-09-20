@@ -1794,6 +1794,14 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     if (dev_id != ourISPdev) {
         pr_err("VIC IRQ %d: CORRUPTION DETECTED! dev_id=%p != ourISPdev=%p\n",
                irq, dev_id, ourISPdev);
+
+        /* CRITICAL: If ourISPdev is NULL, someone called cleanup during streaming! */
+        if (ourISPdev == NULL) {
+            pr_err("VIC IRQ %d: CRITICAL - ourISPdev is NULL! Cleanup called during streaming!\n", irq);
+            pr_err("VIC IRQ %d: This indicates cleanup/exit path executed while interrupts active\n", irq);
+            return IRQ_HANDLED;  /* Cannot recover - just exit safely */
+        }
+
         pr_err("VIC IRQ %d: Using ourISPdev instead of corrupted dev_id\n", irq);
         isp_dev = ourISPdev;  /* Use known good pointer */
     } else {
