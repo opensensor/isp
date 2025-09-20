@@ -127,11 +127,20 @@ struct tx_isp_vic_device {
     /* Buffer addresses for vic_mdma_enable and isp_vic_cmd_set */
     dma_addr_t *buffer_addresses;               /* Array of buffer addresses */
     int buffer_address_count;                   /* Number of buffer addresses */
-    
+
+    /* BINARY NINJA COMPATIBILITY: Additional members referenced in interrupt handler */
+    void *frame_channels;                       /* 0x150: Frame channel array pointer */
+    uint32_t frame_info;                        /* Frame information for channel processing */
+    void *callback_handler;                     /* 0x1bc: Callback handler pointer */
+    uint32_t day_night_state;                   /* 0x178: Day/night switching state */
+    uint32_t first_frame_flag;                  /* First frame processing flag */
+    uint32_t mbus_config;                       /* MBUS configuration */
+    uint32_t bayer_config;                      /* 0xf4: Bayer configuration */
+
     /* Error tracking (properly aligned) */
     uint32_t vic_errors[13] __attribute__((aligned(4)));            /* Error array (13 elements) */
     uint32_t total_errors __attribute__((aligned(4)));              /* Total error count */
-    uint32_t frame_count __attribute__((aligned(4)));               /* Frame counter */
+    uint32_t frame_count __attribute__((aligned(4)));               /* 0x160: Frame counter */
     
     /* Buffer management structures (properly aligned) */
     spinlock_t buffer_lock __attribute__((aligned(4)));             /* Buffer lock */
