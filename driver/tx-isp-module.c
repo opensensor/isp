@@ -5560,7 +5560,7 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
 }
 
 /* isp_irq_handle - SAFE struct member access implementation matching Binary Ninja behavior */
-static irqreturn_t isp_irq_handle(int irq, void *dev_id)
+irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
 
@@ -5599,7 +5599,7 @@ static irqreturn_t isp_irq_handle(int irq, void *dev_id)
 }
 
 /* isp_irq_thread_handle - SAFE implementation without dangerous operations */
-static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
+irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev;
 
