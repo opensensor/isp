@@ -1798,7 +1798,8 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
 /* isp_vic_interrupt_service_routine - EXACT Binary Ninja implementation with struct member access */
 irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
-    struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)dev_id;
+    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
+    struct tx_isp_vic_device *vic_dev;
     void __iomem *vic_regs;
     u32 v1_7, v1_10;
     u32 addr_ctl, reg_val;
@@ -1814,21 +1815,36 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         return IRQ_HANDLED;
     }
 
-    /* CRITICAL SAFETY: Validate vic_dev before accessing any members */
+    /* CRITICAL SAFETY: Validate isp_dev before accessing any members */
+    if (!isp_dev) {
+        pr_err("*** VIC IRQ: NULL isp_dev ***\n");
+        return IRQ_HANDLED;
+    }
+
+    /* MIPS SAFETY: Check isp_dev pointer alignment */
+    if ((unsigned long)isp_dev & 0x3) {
+        pr_err("*** VIC IRQ: MISALIGNED isp_dev pointer 0x%p ***\n", isp_dev);
+        return IRQ_HANDLED;
+    }
+
+    /* CRITICAL SAFETY: Validate isp_dev structure integrity */
+    if ((unsigned long)isp_dev < 0x80000000 || (unsigned long)isp_dev >= 0xfffff000) {
+        pr_err("*** VIC IRQ: Invalid isp_dev pointer 0x%p ***\n", isp_dev);
+        return IRQ_HANDLED;
+    }
+
+    /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
+    /* SAFE: Use proper struct member access instead of raw offset +0xd4 */
+    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+
+    /* CRITICAL SAFETY: Validate vic_dev pointer */
     if (!vic_dev) {
-        pr_err("*** VIC IRQ: NULL vic_dev ***\n");
+        pr_err("*** VIC IRQ: NULL vic_dev from isp_dev ***\n");
         return IRQ_HANDLED;
     }
 
-    /* MIPS SAFETY: Check vic_dev pointer alignment */
-    if ((unsigned long)vic_dev & 0x3) {
-        pr_err("*** VIC IRQ: MISALIGNED vic_dev pointer 0x%p ***\n", vic_dev);
-        return IRQ_HANDLED;
-    }
-
-    /* CRITICAL SAFETY: Validate vic_dev structure integrity */
     if ((unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff000) {
-        pr_err("*** VIC IRQ: Invalid vic_dev pointer 0x%p ***\n", vic_dev);
+        pr_err("*** VIC IRQ: Invalid vic_dev pointer 0x%p from isp_dev ***\n", vic_dev);
         return IRQ_HANDLED;
     }
 

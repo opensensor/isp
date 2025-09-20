@@ -3155,15 +3155,22 @@ int tx_isp_vic_register_interrupt(struct tx_isp_vic_device *vic_dev, struct plat
 
     vic_irq = platform_get_irq(pdev, 0);
     if (vic_irq > 0) {
-        /* CRITICAL FIX: Based on Binary Ninja analysis, pass VIC device directly as dev_id */
-        /* The reference driver expects the VIC device structure directly, not ISP device */
-        pr_info("*** VIC IRQ REGISTER: Registering interrupt AFTER full initialization with VIC device as dev_id = %p ***\n", vic_dev);
+        /* CRITICAL FIX: Based on Binary Ninja analysis, pass ISP device as dev_id */
+        /* The reference driver expects ISP device structure with VIC device at offset 0xd4 */
+        extern struct tx_isp_dev *ourISPdev;
+        if (!ourISPdev) {
+            pr_err("*** VIC IRQ REGISTER: No ISP device available ***\n");
+            return -ENODEV;
+        }
+
+        pr_info("*** VIC IRQ REGISTER: Registering interrupt with ISP device as dev_id = %p ***\n", ourISPdev);
+        pr_info("*** VIC IRQ REGISTER: ISP device vic_dev = %p ***\n", ourISPdev->vic_dev);
 
         /* CRITICAL: Disable the IRQ first to prevent premature interrupts during registration */
         disable_irq(vic_irq);
 
         ret = request_irq(vic_irq, isp_vic_interrupt_service_routine,
-                         IRQF_SHARED, "isp-w02-vic", vic_dev);
+                         IRQF_SHARED, "isp-w02-vic", ourISPdev);
         if (ret == 0) {
             vic_dev->irq_number = vic_irq;
             vic_dev->irq = vic_irq;
