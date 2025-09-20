@@ -3140,6 +3140,10 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Binary Ninja: void* $s2_1 = arg1[0x16] */
     pdata = pdev->dev.platform_data;
 
+    /* CRITICAL FIX: Store VIC device pointer in subdev private data BEFORE init */
+    tx_isp_set_subdevdata(&vic_dev->sd, vic_dev);
+    pr_info("*** VIC PROBE: Stored vic_dev pointer %p in subdev private data ***\n", vic_dev);
+
     /* Binary Ninja: tx_isp_subdev_init(arg1, $v0, &vic_subdev_ops) */
     ret = tx_isp_subdev_init(pdev, &vic_dev->sd, &vic_subdev_ops);
     if (ret != 0) {
