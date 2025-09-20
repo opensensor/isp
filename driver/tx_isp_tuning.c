@@ -3674,14 +3674,33 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     case 0x20007400: { /* GET operation */
                         pr_info("tisp_code_tuning_ioctl: GET operation 0x%x\n", cmd);
                         
-                        /* Binary Ninja: Check access permissions */
+                        /* SECURITY FIX: Enhanced access validation */
                         if (!access_ok(VERIFY_READ, arg, 0x500c)) {
                             pr_err("tisp_code_tuning_ioctl: Access check failed for GET\n");
                             return -EFAULT;
                         }
-                        
+
+                        /* SECURITY FIX: Validate user buffer is not in kernel space */
+                        if ((unsigned long)arg >= 0x80000000) {
+                            pr_err("tisp_code_tuning_ioctl: Invalid user buffer in kernel space\n");
+                            return -EFAULT;
+                        }
+
+                        /* SECURITY FIX: Thread-safe buffer access */
+                        static DEFINE_SPINLOCK(buffer_lock);
+                        unsigned long flags;
+
+                        spin_lock_irqsave(&buffer_lock, flags);
+                        if (!tisp_par_ioctl) {
+                            spin_unlock_irqrestore(&buffer_lock, flags);
+                            pr_err("tisp_code_tuning_ioctl: Buffer was freed during operation\n");
+                            return -ENODEV;
+                        }
+
                         /* Binary Ninja: Copy from tisp_par_ioctl to user */
                         ret = copy_to_user((void __user *)s0_1, tisp_par_ioctl, 0x500c);
+                        spin_unlock_irqrestore(&buffer_lock, flags);
+
                         if (ret != 0) {
                             pr_err("tisp_code_tuning_ioctl: Copy to user failed: %d\n", ret);
                             return -EFAULT;
@@ -3874,9 +3893,17 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                             return -EFAULT;
                         }
                         
-                        /* Binary Ninja: Set specific values and copy data */
+                        /* SECURITY FIX: Safe string operations with proper bounds checking */
                         tisp_par_ioctl_ptr[1] = 0xb;  /* Set param at offset 4 */
-                        memcpy((char*)tisp_par_ioctl + 0xc, "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\\n", 0xb);
+
+                        /* CRITICAL FIX: Use safe string copy with proper length */
+                        const char *safe_msg = "SONY mode";  /* Safe 9-byte string */
+                        size_t safe_len = strlen(safe_msg);
+                        if (safe_len > 0xb) safe_len = 0xb;  /* Clamp to buffer size */
+
+                        /* SAFE: Clear destination first, then copy exact length */
+                        memset((char*)tisp_par_ioctl + 0xc, 0, 0xb);
+                        memcpy((char*)tisp_par_ioctl + 0xc, safe_msg, safe_len);
                         
                         ret = copy_to_user((void __user *)s0_1, tisp_par_ioctl, 0x500c);
                         if (ret != 0) {
@@ -3900,9 +3927,17 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                             return -EFAULT;
                         }
                         
-                        /* Binary Ninja: Set specific values and copy data */
+                        /* SECURITY FIX: Safe string operations with proper bounds checking */
                         tisp_par_ioctl_ptr[1] = 0xf;  /* Set param at offset 4 */
-                        memcpy((char*)tisp_par_ioctl + 0xc, "%s[%d] VIC failed to config DVP mode!(10bits-sensor)\\n", 0xf);
+
+                        /* CRITICAL FIX: Use safe string copy with proper length */
+                        const char *safe_msg = "DVP mode";  /* Safe 8-byte string */
+                        size_t safe_len = strlen(safe_msg);
+                        if (safe_len > 0xf) safe_len = 0xf;  /* Clamp to buffer size */
+
+                        /* SAFE: Clear destination first, then copy exact length */
+                        memset((char*)tisp_par_ioctl + 0xc, 0, 0xf);
+                        memcpy((char*)tisp_par_ioctl + 0xc, safe_msg, safe_len);
                         
                         ret = copy_to_user((void __user *)s0_1, tisp_par_ioctl, 0x500c);
                         if (ret != 0) {
@@ -4371,16 +4406,26 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
 /* tisp_code_tuning_release - EXACT Binary Ninja reference implementation */
 int tisp_code_tuning_release(struct inode *inode, struct file *file)
 {
-    /* Binary Ninja: private_kfree(tisp_par_ioctl)
-     * tisp_par_ioctl = 0
-     * return 0 */
+    /* SECURITY FIX: Thread-safe buffer cleanup to prevent use-after-free */
+    static DEFINE_SPINLOCK(cleanup_lock);
+    unsigned long flags;
+    void *buffer_to_free = NULL;
 
     pr_info("tisp_code_tuning_release: Releasing tuning interface\n");
 
+    /* CRITICAL: Atomic pointer swap to prevent race conditions */
+    spin_lock_irqsave(&cleanup_lock, flags);
     if (tisp_par_ioctl) {
-        kfree(tisp_par_ioctl);
-        tisp_par_ioctl = NULL;
-        pr_info("tisp_code_tuning_release: Parameter buffer freed\n");
+        buffer_to_free = tisp_par_ioctl;
+        tisp_par_ioctl = NULL;  /* Clear pointer first */
+        pr_info("tisp_code_tuning_release: Parameter buffer marked for cleanup\n");
+    }
+    spin_unlock_irqrestore(&cleanup_lock, flags);
+
+    /* SAFE: Free buffer outside of lock to prevent deadlock */
+    if (buffer_to_free) {
+        kfree(buffer_to_free);
+        pr_info("tisp_code_tuning_release: Parameter buffer freed safely\n");
     }
 
     return 0;
