@@ -1287,17 +1287,17 @@ static int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
     
     /* Binary Ninja: private_spin_lock_init(arg2) */
     spin_lock_init((spinlock_t *)irq_info);
-    
-    /* CRITICAL FIX: Pass ISP device as dev_id, not irq_info */
+
+    /* *** CRITICAL: ISP Core IRQ is handled by main dispatcher in tx-isp-module.c *** */
+    /* No direct IRQ registration needed - dispatcher calls ispcore_interrupt_service_routine */
     extern struct tx_isp_dev *ourISPdev;
-    ret = request_threaded_irq(irq_number, tx_isp_core_irq_handle, tx_isp_core_irq_thread_handle,
-                               IRQF_SHARED, dev_name(&pdev->dev), ourISPdev);
-    if (ret != 0) {
-        pr_err("tx_isp_request_irq: Failed to request IRQ %d: %d\n", irq_number, ret);
-        return ret;
+    if (!ourISPdev) {
+        pr_err("tx_isp_request_irq: No ISP device available\n");
+        return -ENODEV;
     }
-    
-    pr_info("*** tx_isp_request_irq: IRQ %d registered successfully with dispatch system ***\n", irq_number);
+
+    pr_info("*** tx_isp_request_irq: ISP Core IRQ %d will be handled by main dispatcher ***\n", irq_number);
+    pr_info("*** tx_isp_request_irq: Dispatcher will call handler with dev_id = %p (ISP device) ***\n", ourISPdev);
     return 0;
 }
 
