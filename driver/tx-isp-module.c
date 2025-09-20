@@ -5661,7 +5661,8 @@ int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
         return -EINVAL;
     }
     
-    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+    /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+    vic_dev = isp_dev->vic_dev;
     
     pr_info("*** VIC VIDEO STREAMING %s - THIS SHOULD TRIGGER REGISTER WRITES! ***\n",
             enable ? "ENABLE" : "DISABLE");
