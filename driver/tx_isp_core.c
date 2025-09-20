@@ -799,13 +799,14 @@ EXPORT_SYMBOL(ispcore_core_ops_ioctl);
 
 
 /* Core subdev operations structure - CRITICAL for proper initialization */
-static struct tx_isp_subdev_ops core_subdev_ops = {
+struct tx_isp_subdev_ops core_subdev_ops = {
     .core = NULL,     /* Core operations */
-    .video = NULL,    /* Video operations */ 
+    .video = NULL,    /* Video operations */
     .pad = &core_pad_ops,  /* Pad operations */
     .sensor = NULL,   /* Sensor operations */
     .internal = NULL  /* Internal operations */
 };
+EXPORT_SYMBOL(core_subdev_ops);
 
 /* Global interrupt callback array - EXACT Binary Ninja implementation */
 static irqreturn_t (*irq_func_cb[32])(int irq, void *dev_id) = {0};
