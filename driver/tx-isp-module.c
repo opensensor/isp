@@ -508,6 +508,9 @@ struct platform_device tx_isp_core_platform_device = {
     },
 };
 
+/* Binary Ninja EXACT: Interrupt callback function array */
+static void *irq_func_cb[32] = {0};  /* 32 interrupt callback slots as per reference driver */
+
 /* Forward declaration for VIC event handler */
 
 /* Forward declarations - Using actual function names from reference driver */
@@ -5912,58 +5915,43 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
     spin_unlock_irqrestore(&irq_cb_lock, flags);
 }
 
-/* isp_irq_handle - SAFE implementation with proper null pointer checks */
+/* isp_irq_handle - SAFE struct member access implementation matching Binary Ninja behavior */
 static irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
-    irqreturn_t result = IRQ_HANDLED;
+    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
 
-    /* CRITICAL: Add comprehensive null pointer validation */
-
-    /* First, validate dev_id is not null and not the special 0x80 value */
-    if (!dev_id || (uintptr_t)dev_id == 0x80) {
+    /* CRITICAL SAFETY: Validate dev_id before accessing */
+    if (!dev_id || (uintptr_t)dev_id < 0x80000000 || (uintptr_t)dev_id > 0x9fffffff) {
         pr_err("isp_irq_handle: Invalid dev_id=%p for IRQ %d\n", dev_id, irq);
         return IRQ_HANDLED;
     }
 
-    /* Validate dev_id points to a valid memory range */
-    if ((uintptr_t)dev_id < 0x80000000 || (uintptr_t)dev_id > 0x9fffffff) {
-        pr_err("isp_irq_handle: dev_id=%p outside valid kernel memory range for IRQ %d\n", dev_id, irq);
-        return IRQ_HANDLED;
+    /* CRITICAL: Detect corruption by comparing dev_id with ourISPdev */
+    extern struct tx_isp_dev *ourISPdev;
+    if (dev_id != ourISPdev) {
+        pr_err("ISP IRQ %d: CORRUPTION DETECTED! dev_id=%p != ourISPdev=%p\n",
+               irq, dev_id, ourISPdev);
+
+        /* CRITICAL: If ourISPdev is NULL, someone called cleanup during streaming! */
+        if (ourISPdev == NULL) {
+            pr_err("ISP IRQ %d: CRITICAL - ourISPdev is NULL! Cleanup called during streaming!\n", irq);
+            return IRQ_HANDLED;  /* Cannot recover - just exit safely */
+        }
+
+        isp_dev = ourISPdev;  /* Use known good pointer */
     }
 
-    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
-
-    /* Validate isp_dev structure members before accessing */
-    if (!isp_dev) {
-        pr_err("isp_irq_handle: NULL isp_dev for IRQ %d\n", irq);
-        return IRQ_HANDLED;
-    }
-
-    /* Call the appropriate interrupt handler with validated pointers */
-    irqreturn_t handler_result = IRQ_HANDLED;
-
+    /* SAFE: Call appropriate interrupt service routine based on IRQ number */
     if (irq == 37) {
-        /* ISP Core interrupt */
-        pr_debug("isp_irq_handle: Calling ISP core handler for IRQ %d\n", irq);
-        handler_result = ispcore_interrupt_service_routine(irq, dev_id);
+        /* ISP Core interrupt - call our safe implementation */
+        return ispcore_interrupt_service_routine(irq, isp_dev);
     } else if (irq == 38) {
-        /* VIC interrupt */
-        pr_debug("isp_irq_handle: Calling VIC handler for IRQ %d\n", irq);
-        handler_result = isp_vic_interrupt_service_routine(irq, dev_id);
+        /* VIC interrupt - call our safe implementation */
+        return isp_vic_interrupt_service_routine(irq, isp_dev);
     } else {
-        /* Unknown IRQ */
         pr_warn("isp_irq_handle: Unknown IRQ %d\n", irq);
-        handler_result = IRQ_HANDLED;
+        return IRQ_HANDLED;
     }
-
-    /* Check if we need to wake the thread handler */
-    if (handler_result == IRQ_WAKE_THREAD) {
-        result = IRQ_WAKE_THREAD;
-    } else {
-        result = handler_result;
-    }
-
-    return result;
 }
 
 /* isp_irq_thread_handle - EXACT Binary Ninja implementation with CORRECT structure access */
