@@ -7190,6 +7190,13 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
     pr_info("*** ISP SENSOR WRAPPER s_stream: enable=%d ***\n", enable);
 
+    /* CRITICAL: Prevent infinite recursion */
+    if (vin_init_in_progress) {
+        pr_err("*** RECURSION DETECTED: ISP sensor wrapper already in progress, aborting ***\n");
+        return -EBUSY;
+    }
+    vin_init_in_progress = 1;
+
     /* STEP 1: Do the ISP's own sensor management work */
     sensor = isp_dev->sensor;
     if (sensor) {
@@ -7233,58 +7240,19 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
         pr_info("*** REAL SENSOR DRIVER S_STREAM RETURNED: %d ***\n", ret);
 
-        /* CRITICAL: Only update VIN state AFTER sensor streaming succeeds (T30 pattern) */
+        /* CRITICAL: Only update sensor state AFTER sensor streaming succeeds */
         if (ret == 0 || ret == -0x203) {
             if (enable) {
                 /* CRITICAL: Set sensor subdev state to RUNNING (this is what gets checked!) */
                 sd->vin_state = TX_ISP_MODULE_RUNNING;
                 pr_info("*** CRITICAL: SENSOR SUBDEV STATE SET TO RUNNING (5) ***\n");
-
-                /* CRITICAL FIX: SIMPLIFIED VIN S_STREAM CALL - NO RECURSION */
-                pr_info("*** CRITICAL: NOW CALLING VIN_S_STREAM - THIS SHOULD TRANSITION STATE TO 5! ***\n");
-
-                int vin_ret = -ENODEV;
-                
-                /* CRITICAL FIX: Call VIN s_stream function directly - EXACT reference driver behavior */
-                if (ourISPdev && ourISPdev->vin_dev) {
-                    struct tx_isp_vin_device *vin_device = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
-
-                    pr_info("*** VIN device found at %p, state=%d ***\n", vin_device, vin_device->state);
-
-                    /* CRITICAL: Call VIN s_stream function like reference driver */
-                    extern int vin_s_stream(struct tx_isp_subdev *sd, int enable);
-                    vin_ret = vin_s_stream(&vin_device->sd, 1);
-
-                    pr_info("*** VIN_S_STREAM returned: %d ***\n", vin_ret);
-                    pr_info("*** VIN state after s_stream: %d (should be 4) ***\n", vin_device->state);
-                } else {
-                    pr_err("*** ERROR: ourISPdev or VIN not available ***\n");
-                    pr_err("*** DEBUG: ourISPdev=%p, ourISPdev->vin_dev=%p ***\n",
-                           ourISPdev, ourISPdev ? ourISPdev->vin_dev : NULL);
-                }
-
-                pr_info("*** CRITICAL: VIN_S_STREAM RETURNED: %d ***\n", vin_ret);
-                pr_info("*** CRITICAL: VIN STATE SHOULD NOW BE 5 (RUNNING) ***\n");
+                pr_info("*** CRITICAL: SENSOR STREAMING ENABLED - VIN WILL HANDLE VIN STATE ***\n");
 
             } else {
                 /* ISP's work when disabling streaming */
                 sd->vin_state = TX_ISP_MODULE_INIT;
-                
-                /* CRITICAL FIX: Simplified VIN streaming stop */
-                pr_info("*** CALLING VIN_S_STREAM TO STOP ***\n");
-                
-                if (ourISPdev && ourISPdev->vin_dev) {
-                    struct tx_isp_vin_device *vin_device = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
-
-                    /* CRITICAL: Call VIN s_stream function to stop streaming */
-                    extern int vin_s_stream(struct tx_isp_subdev *sd, int enable);
-                    int vin_stop_ret = vin_s_stream(&vin_device->sd, 0);
-
-                    pr_info("*** VIN_S_STREAM(0) returned: %d ***\n", vin_stop_ret);
-                    pr_info("*** VIN state after stop: %d (should be 3) ***\n", vin_device->state);
-                }
-                
-                pr_info("*** VIN STREAMING STOP COMPLETED ***\n");
+                pr_info("*** CRITICAL: SENSOR SUBDEV STATE SET TO INIT (3) ***\n");
+                pr_info("*** CRITICAL: SENSOR STREAMING DISABLED - VIN WILL HANDLE VIN STATE ***\n");
             }
             
             /* Force success if sensor returned -0x203 */
