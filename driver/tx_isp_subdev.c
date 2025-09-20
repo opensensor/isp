@@ -644,6 +644,10 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
                 vin_dev->sd.ops->core, vin_dev->sd.ops->video,
                 vin_dev->sd.ops->video ? vin_dev->sd.ops->video->s_stream : NULL);
 
+        /* CRITICAL: Add VIN to subdev array at index 3 (after VIC=0, CSI=1, sensor=2) */
+        ourISPdev->subdevs[3] = &vin_dev->sd;
+        pr_info("*** REGISTERED VIN SUBDEV AT INDEX 3 WITH VIDEO OPS ***\n");
+
         /* CRITICAL FIX: Initialize VIN to state 3 immediately after ops setup */
         if (vin_dev->sd.ops && vin_dev->sd.ops->core && vin_dev->sd.ops->core->init) {
             pr_info("*** CRITICAL: INITIALIZING VIN TO STATE 3 DURING AUTO-LINK ***\n");
