@@ -4715,34 +4715,60 @@ int sensor_early_init(void *core_dev)
 }
 
 
-/* tx_isp_probe - PROPER ARCHITECTURE: Use existing global device */
+/* tx_isp_platform_probe - SUBDEVICE-SPECIFIC INITIALIZATION */
 static int tx_isp_platform_probe(struct platform_device *pdev)
 {
-    struct tx_isp_dev *isp_dev;
     struct tx_isp_platform_data *pdata;
-    int ret;
-    int i;
+    const char *device_name;
+    int ret = 0;
 
-    /* ARCHITECTURAL FIX: Check if global device already exists */
-    if (ourISPdev) {
-        pr_info("*** PROBE: Using existing global ISP device: %p ***\n", ourISPdev);
-        isp_dev = ourISPdev;  /* Use existing device - no allocation needed */
-    } else {
-        pr_info("*** PROBE: No global device - allocating new one ***\n");
+    /* Get platform data and device name */
+    pdata = pdev->dev.platform_data;
+    device_name = pdev->name ? pdev->name : "unknown";
 
-        /* Binary Ninja: private_kmalloc(0x120, 0xd0) */
-        isp_dev = private_kmalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
-        if (!isp_dev) {
-            /* Binary Ninja: isp_printf(2, "Failed to allocate main ISP device\n", $a2) */
-            isp_printf(2, (unsigned char *)"Failed to allocate main ISP device\n");
-            return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
+    pr_info("*** PROBE: Initializing subdevice: %s ***\n", device_name);
+
+    /* Ensure global ISP device exists */
+    if (!ourISPdev) {
+        pr_err("*** PROBE ERROR: Global ISP device not initialized - tx_isp_init() should run first ***\n");
+        return -EPROBE_DEFER;
+    }
+
+    /* Call appropriate subdevice probe based on device name */
+    if (strcmp(device_name, "isp-w02") == 0) {
+        pr_info("*** PROBE: Calling VIC probe for device %s ***\n", device_name);
+        ret = tx_isp_vic_probe(pdev);
+        if (ret == 0) {
+            pr_info("*** PROBE: VIC device initialized successfully ***\n");
+        } else {
+            pr_err("*** PROBE: VIC probe failed: %d ***\n", ret);
         }
-
-        /* Binary Ninja: memset($v0, 0, 0x120) */
-        memset(isp_dev, 0, sizeof(struct tx_isp_dev));
-
-        /* Set as global device */
-        ourISPdev = isp_dev;
+    } else if (strcmp(device_name, "tx-isp-csi") == 0) {
+        pr_info("*** PROBE: Calling CSI probe for device %s ***\n", device_name);
+        ret = tx_isp_csi_probe(pdev);
+        if (ret == 0) {
+            pr_info("*** PROBE: CSI device initialized successfully ***\n");
+        } else {
+            pr_err("*** PROBE: CSI probe failed: %d ***\n", ret);
+        }
+    } else if (strcmp(device_name, "tx-isp-vin") == 0) {
+        pr_info("*** PROBE: Calling VIN probe for device %s ***\n", device_name);
+        ret = tx_isp_vin_probe(pdev);
+        if (ret == 0) {
+            pr_info("*** PROBE: VIN device initialized successfully ***\n");
+        } else {
+            pr_err("*** PROBE: VIN probe failed: %d ***\n", ret);
+        }
+    } else if (strcmp(device_name, "tx-isp") == 0) {
+        pr_info("*** PROBE: Main ISP device - no additional initialization needed ***\n");
+        /* Main device probe - just link to global device */
+        platform_set_drvdata(pdev, ourISPdev);
+        ret = 0;
+    } else {
+        pr_info("*** PROBE: Unknown device %s - no specific initialization ***\n", device_name);
+        /* Unknown device - just link to global device */
+        platform_set_drvdata(pdev, ourISPdev);
+        ret = 0;
     }
 
     /* Binary Ninja: void* $s2_1 = arg1[0x16] */
