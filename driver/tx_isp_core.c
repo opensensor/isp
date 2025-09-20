@@ -1039,29 +1039,46 @@ irqreturn_t ip_done_interrupt_static(int irq, void *dev_id)
     return IRQ_HANDLED; /* Convert to standard Linux return value */
 }
 
-/* ispcore_interrupt_service_routine - MINIMAL SAFE implementation to prevent crashes */
+/* ispcore_interrupt_service_routine - SAFE implementation with null pointer checks */
 irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 {
-    /* CRITICAL: Minimal interrupt handler to prevent memory corruption */
-    /* Just acknowledge the interrupt and return - no complex processing */
-
     extern struct tx_isp_dev *ourISPdev;
 
-    /* Basic validation */
-    if (!dev_id || !ourISPdev || !ourISPdev->core_regs) {
+    /* CRITICAL: Comprehensive null pointer validation */
+    if (!dev_id) {
+        pr_err("ISP CORE IRQ %d: NULL dev_id\n", irq);
         return IRQ_HANDLED;
     }
 
-    struct tx_isp_dev *isp_dev = ourISPdev;
+    /* Validate dev_id points to valid memory */
+    if ((uintptr_t)dev_id < 0x80000000 || (uintptr_t)dev_id > 0x9fffffff) {
+        pr_err("ISP CORE IRQ %d: dev_id=%p outside valid memory range\n", irq, dev_id);
+        return IRQ_HANDLED;
+    }
+
+    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
+
+    /* Validate ISP device structure */
+    if (!isp_dev) {
+        pr_err("ISP CORE IRQ %d: NULL isp_dev\n", irq);
+        return IRQ_HANDLED;
+    }
+
+    /* Validate core registers are mapped */
+    if (!isp_dev->core_regs) {
+        pr_err("ISP CORE IRQ %d: NULL core_regs in isp_dev=%p\n", irq, isp_dev);
+        return IRQ_HANDLED;
+    }
+
     void __iomem *core_regs = isp_dev->core_regs;
 
-    /* MINIMAL: Just read and clear interrupt status to acknowledge */
+    /* SAFE: Now we can access hardware registers */
     u32 int_status = readl(core_regs + 0xb4);
 
     /* Clear interrupt by writing status back */
     if (int_status) {
         writel(int_status, core_regs + 0xb4);
-        pr_info("ISP CORE IRQ: Status=0x%x cleared\n", int_status);
+        pr_info("ISP CORE IRQ %d: Status=0x%x cleared\n", irq, int_status);
     }
 
     return IRQ_HANDLED;

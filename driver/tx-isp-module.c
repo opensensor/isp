@@ -1807,15 +1807,66 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
 /* Forward declaration for ISP core interrupt handler */
 extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 
-/* isp_vic_interrupt_service_routine - EMERGENCY SAFE implementation */
+/* isp_vic_interrupt_service_routine - SAFE implementation with null pointer checks */
 irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
-    /* EMERGENCY: Absolute minimal handler to prevent all crashes */
-    /* Do not access ANY device structures or registers */
+    extern uint32_t vic_start_ok;
+    extern struct tx_isp_dev *ourISPdev;
 
-    pr_info("VIC IRQ %d: Emergency handler - no processing\n", irq);
+    /* CRITICAL: Comprehensive null pointer validation */
+    if (!dev_id) {
+        pr_err("VIC IRQ %d: NULL dev_id\n", irq);
+        return IRQ_HANDLED;
+    }
 
-    /* Just return handled without touching any hardware or structures */
+    /* Validate dev_id points to valid memory */
+    if ((uintptr_t)dev_id < 0x80000000 || (uintptr_t)dev_id > 0x9fffffff) {
+        pr_err("VIC IRQ %d: dev_id=%p outside valid memory range\n", irq, dev_id);
+        return IRQ_HANDLED;
+    }
+
+    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
+
+    /* Validate ISP device structure */
+    if (!isp_dev) {
+        pr_err("VIC IRQ %d: NULL isp_dev\n", irq);
+        return IRQ_HANDLED;
+    }
+
+    /* Validate VIC device exists */
+    if (!isp_dev->vic_dev) {
+        pr_err("VIC IRQ %d: NULL vic_dev in isp_dev=%p\n", irq, isp_dev);
+        return IRQ_HANDLED;
+    }
+
+    struct tx_isp_vic_device *vic_dev = isp_dev->vic_dev;
+
+    /* Validate VIC registers are mapped */
+    if (!vic_dev->vic_regs) {
+        pr_err("VIC IRQ %d: NULL vic_regs in vic_dev=%p\n", irq, vic_dev);
+        return IRQ_HANDLED;
+    }
+
+    void __iomem *vic_regs = vic_dev->vic_regs;
+
+    /* SAFE: Now we can access hardware registers */
+    u32 int_status = readl(vic_regs + 0x1e0);
+    u32 mdma_status = readl(vic_regs + 0x1e4);
+
+    /* Clear interrupts by writing status back */
+    if (int_status) {
+        writel(int_status, vic_regs + 0x1f0);
+    }
+    if (mdma_status) {
+        writel(mdma_status, vic_regs + 0x1f4);
+    }
+
+    /* SAFE: Only increment frame count if frame done interrupt */
+    if (vic_start_ok && (int_status & 1)) {
+        vic_dev->frame_count++;
+        pr_info("VIC IRQ %d: Frame done - count=%d\n", irq, vic_dev->frame_count);
+    }
+
     return IRQ_HANDLED;
 }
 
@@ -5094,8 +5145,15 @@ static int tx_isp_init(void)
         pr_err("*** CRITICAL ERROR: ourISPdev IS NULL! ***\n");
     }
 
-    /* *** CRITICAL: Register BOTH IRQ handlers for complete interrupt support *** */
+    /* *** CRITICAL: Only register IRQ handlers if ourISPdev is valid *** */
+    if (!ourISPdev) {
+        pr_err("*** CRITICAL ERROR: Cannot register IRQ handlers - ourISPdev is NULL! ***\n");
+        pr_err("*** This would cause NULL pointer crashes in interrupt handlers ***\n");
+        return -ENODEV;
+    }
+
     pr_info("*** REGISTERING BOTH IRQ HANDLERS (37 + 38) FOR COMPLETE INTERRUPT SUPPORT ***\n");
+    pr_info("*** Using ourISPdev=%p as dev_id parameter ***\n", ourISPdev);
 
     /* Register IRQ 37 (isp-m0) - Primary ISP processing */
     ret = request_threaded_irq(37,
@@ -5107,7 +5165,7 @@ static int tx_isp_init(void)
     if (ret != 0) {
         pr_err("*** FAILED TO REQUEST IRQ 37 (isp-m0): %d ***\n", ret);
     } else {
-        pr_info("*** SUCCESS: IRQ 37 (isp-m0) REGISTERED ***\n");
+        pr_info("*** SUCCESS: IRQ 37 (isp-m0) REGISTERED with dev_id=%p ***\n", ourISPdev);
         ourISPdev->isp_irq = 37;
     }
 
@@ -5122,7 +5180,7 @@ static int tx_isp_init(void)
         pr_err("*** FAILED TO REQUEST IRQ 38 (isp-w02): %d ***\n", ret);
         pr_err("*** ONLY IRQ 37 WILL BE AVAILABLE ***\n");
     } else {
-        pr_info("*** SUCCESS: IRQ 38 (isp-w02) REGISTERED ***\n");
+        pr_info("*** SUCCESS: IRQ 38 (isp-w02) REGISTERED with dev_id=%p ***\n", ourISPdev);
         ourISPdev->isp_irq2 = 38;  /* Store secondary IRQ */
     }
     
@@ -5843,38 +5901,43 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
     spin_unlock_irqrestore(&irq_cb_lock, flags);
 }
 
-/* isp_irq_handle - EXACT Binary Ninja MCP implementation */
+/* isp_irq_handle - SAFE implementation with proper null pointer checks */
 static irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
-    int result = IRQ_HANDLED;
+    /* CRITICAL: Add comprehensive null pointer validation */
+
+    /* First, validate dev_id is not null and not the special 0x80 value */
+    if (!dev_id || (uintptr_t)dev_id == 0x80) {
+        pr_err("isp_irq_handle: Invalid dev_id=%p for IRQ %d\n", dev_id, irq);
+        return IRQ_HANDLED;
+    }
+
+    /* Validate dev_id points to a valid memory range */
+    if ((uintptr_t)dev_id < 0x80000000 || (uintptr_t)dev_id > 0x9fffffff) {
+        pr_err("isp_irq_handle: dev_id=%p outside valid kernel memory range for IRQ %d\n", dev_id, irq);
+        return IRQ_HANDLED;
+    }
+
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
 
-    /* Binary Ninja: if (arg2 != 0x80) */
-    if ((uintptr_t)dev_id != 0x80) {
-        /* Binary Ninja: void* $v0_2 = **(arg2 + 0x44) */
-        /* SAFE: Use proper struct member access instead of **(arg2 + 0x44) */
-        void *v0_2 = NULL;
+    /* Validate isp_dev structure members before accessing */
+    if (!isp_dev) {
+        pr_err("isp_irq_handle: NULL isp_dev for IRQ %d\n", irq);
+        return IRQ_HANDLED;
+    }
 
-        if (isp_dev && isp_dev->subdevs && isp_dev->subdevs[0]) {
-            v0_2 = isp_dev->subdevs[0]->ops;
-        }
+    /* Call the appropriate interrupt handler with validated pointers */
+    irqreturn_t handler_result = IRQ_HANDLED;
 
-        /* Binary Ninja: result = 1 */
-        result = IRQ_HANDLED;
-
-        if (v0_2 != NULL) {
-            /* Binary Ninja: int32_t $v0_3 = *($v0_2 + 0x20) */
-            /* Binary Ninja: if ($v0_3 == 0) result = 1 else result = 1 */
-            result = IRQ_HANDLED;
-
-            /* Binary Ninja: if ($v0_3(arg2 - 0x80, 0, 0) == 2) result = 2 */
-            /* Call the appropriate interrupt handler */
-            irqreturn_t handler_result;
-            if (irq == 37) {
-                handler_result = ispcore_interrupt_service_routine(irq, dev_id);
-            } else if (irq == 38) {
-                handler_result = isp_vic_interrupt_service_routine(irq, dev_id);
-            } else {
+    if (irq == 37) {
+        /* ISP Core interrupt */
+        pr_debug("isp_irq_handle: Calling ISP core handler for IRQ %d\n", irq);
+        handler_result = ispcore_interrupt_service_routine(irq, dev_id);
+    } else if (irq == 38) {
+        /* VIC interrupt */
+        pr_debug("isp_irq_handle: Calling VIC handler for IRQ %d\n", irq);
+        handler_result = isp_vic_interrupt_service_routine(irq, dev_id);
+    } else {
                 handler_result = IRQ_HANDLED;
             }
 
