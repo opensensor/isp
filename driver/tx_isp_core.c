@@ -811,14 +811,6 @@ static irqreturn_t (*irq_func_cb[32])(int irq, void *dev_id) = {0};
 /* Missing variable declarations for ISP core interrupt handling */
 static volatile int isp_force_core_isr = 0;  /* Force ISP core ISR flag */
 
-/* Frame sync work queue - CRITICAL for sensor I2C communication */
-static struct workqueue_struct *fs_workqueue = NULL;
-static struct work_struct fs_work;
-static void ispcore_irq_fs_work(struct work_struct *work);
-
-
-
-
 
 /* Binary Ninja: ispcore_sensor_ops_ioctl - iterate through subdevices safely */
 static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
@@ -1069,24 +1061,6 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         /* REFERENCE DRIVER: Use private_schedule_work like reference driver */
         /* Binary Ninja: private_schedule_work calls queue_work_on for CPU-specific scheduling */
         pr_info("*** ISP CORE: Using reference driver work scheduling ***\n");
-
-        if (fs_workqueue) {
-            pr_info("*** ISP CORE: fs_workqueue=%p, fs_work=%p ***\n", fs_workqueue, &fs_work);
-            /* REFERENCE DRIVER: Use queue_work_on for CPU 0 like private_schedule_work */
-            if (queue_work_on(0, fs_workqueue, &fs_work)) {
-                pr_info("*** ISP CORE: Work queued successfully on CPU 0 ***\n");
-            } else {
-                pr_info("*** ISP CORE: Work was already queued - acknowledging interrupt anyway ***\n");
-            }
-        } else {
-            pr_warn("*** ISP CORE: fs_workqueue is NULL - using system workqueue ***\n");
-            /* REFERENCE DRIVER: Use schedule_work_on for CPU 0 */
-            if (schedule_work_on(0, &fs_work)) {
-                pr_info("*** ISP CORE: Work scheduled successfully on CPU 0 ***\n");
-            } else {
-                pr_info("*** ISP CORE: Work was already scheduled - acknowledging interrupt anyway ***\n");
-            }
-        }
 
         /* Binary Ninja: Frame timing measurement */
         /* Complex timing measurement code would be here */
@@ -3355,22 +3329,6 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 /* REMOVED: VIN device creation - will be handled by subdevice probe per reference driver */
                 pr_info("*** tx_isp_core_probe: VIN device creation deferred to subdevice probe ***\n");
 
-                /* CRITICAL: Initialize frame sync work queue for sensor I2C communication */
-                pr_info("*** tx_isp_core_probe: About to create frame sync workqueue ***\n");
-                fs_workqueue = create_singlethread_workqueue("isp_frame_sync");
-                if (!fs_workqueue) {
-                    pr_err("*** tx_isp_core_probe: Failed to create frame sync workqueue ***\n");
-                    return -ENOMEM;
-                }
-                pr_info("*** tx_isp_core_probe: Frame sync workqueue created successfully at %p ***\n", fs_workqueue);
-
-                INIT_WORK(&fs_work, ispcore_irq_fs_work);
-                pr_info("*** tx_isp_core_probe: Frame sync work initialized at %p ***\n", &fs_work);
-                pr_info("*** tx_isp_core_probe: Frame sync work queue initialized with dedicated workqueue ***\n");
-
-                /* REMOVED: Direct work function test - reference driver doesn't do this */
-                pr_info("*** tx_isp_core_probe: Frame sync work function ready for hardware interrupts ***\n");
-
                 /* CRITICAL: Now that core device is set up, call the key function that creates graph and nodes */
                 pr_info("*** tx_isp_core_probe: Calling tx_isp_create_graph_and_nodes ***\n");
                 result = tx_isp_create_graph_and_nodes(isp_dev);
@@ -3429,14 +3387,6 @@ int tx_isp_core_remove(struct platform_device *pdev)
 
     /* Reset tisp initialization flag for clean restart */
     tisp_reset_initialization_flag();
-
-    /* Cleanup frame sync workqueue */
-    if (fs_workqueue) {
-        cancel_work_sync(&fs_work);
-        destroy_workqueue(fs_workqueue);
-        fs_workqueue = NULL;
-        pr_info("*** ISP CORE: Frame sync workqueue destroyed ***\n");
-    }
 
     if (core_dev) {
         isp_core_tuning_deinit(core_dev);

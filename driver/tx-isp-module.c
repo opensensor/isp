@@ -2980,7 +2980,22 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_warn("*** This may cause green frames - application should provide real buffer addresses! ***\n");
         }
 
-        pr_info("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x, size=%d ***\n",
+        /* CRITICAL MIPS SAFETY: Validate buffer address alignment */
+        if ((buffer_phys_addr & 0x3) != 0) {
+            pr_err("*** Channel %d: QBUF - MIPS ALIGNMENT ERROR: buffer address 0x%x not 4-byte aligned ***\n",
+                   channel, buffer_phys_addr);
+            pr_err("*** This will cause kernel panic with BadVA error! ***\n");
+            return -EINVAL;
+        }
+
+        /* CRITICAL: Validate buffer address is in valid memory range */
+        if (buffer_phys_addr < 0x6000000 || buffer_phys_addr >= 0x8000000) {
+            pr_err("*** Channel %d: QBUF - Invalid buffer address 0x%x (outside valid range) ***\n",
+                   channel, buffer_phys_addr);
+            return -EINVAL;
+        }
+
+        pr_info("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x, size=%d (VALIDATED) ***\n",
                 channel, buffer.index, buffer_phys_addr, buffer_size);
 
         /* CRITICAL: Store VBM buffer addresses for later use during streaming */
@@ -5630,14 +5645,6 @@ static void tx_isp_exit(void)
         if (isp_irq2 > 0) {
             free_irq(isp_irq2, local_isp_dev);
             pr_info("Hardware interrupt %d freed\n", isp_irq2);
-        }
-
-        /* CRITICAL: Cancel frame sync work before freeing memory */
-        extern struct workqueue_struct *fs_workqueue;
-        extern struct work_struct fs_work;
-        if (fs_workqueue) {
-            cancel_work_sync(&fs_work);
-            pr_info("*** Frame sync work cancelled ***\n");
         }
 
         /* CRITICAL: Ensure all interrupts are completely finished before freeing memory */
