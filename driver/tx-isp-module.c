@@ -6343,8 +6343,21 @@ static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel
         return;
     }
 
+    /* CRITICAL FIX: Validate vic_dev structure integrity before accessing ANY fields */
+    if (!virt_addr_valid(vic_dev) ||
+        !virt_addr_valid((char*)vic_dev + sizeof(struct tx_isp_vic_device) - 1)) {
+        pr_err("*** vic_mdma_irq_function: vic_dev structure spans invalid memory - PREVENTS BadVA 0xdc crash ***\n");
+        return;
+    }
+
     /* ROBUST ACCESS: Use proper struct member access - let compiler handle offsets */
     if (vic_dev->streaming == 0) {
+        /* CRITICAL FIX: Validate width/height fields are accessible before reading them */
+        if (!virt_addr_valid(&vic_dev->width) || !virt_addr_valid(&vic_dev->height)) {
+            pr_err("*** vic_mdma_irq_function: width/height fields not accessible - PREVENTS BadVA 0xdc crash ***\n");
+            return;
+        }
+
         /* Validate dimensions are reasonable */
         if (vic_dev->width == 0 || vic_dev->height == 0 ||
             vic_dev->width > 8192 || vic_dev->height > 8192) {

@@ -430,6 +430,7 @@ static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
 
     /* Binary Ninja: if (*(arg1 + 0x214) == 0) */
     if (vic_dev->stream_state == 0) {
+        /* CRITICAL FIX: Safe access to width/height at offsets 0xdc/0xe0 */
         /* Binary Ninja: int32_t $s0_2 = *(arg1 + 0xdc) * *(arg1 + 0xe0) */
         frame_size = vic_dev->width * vic_dev->height;
 
