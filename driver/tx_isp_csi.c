@@ -501,18 +501,18 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                     isp_printf(0, "%s[%d] VIC do not support this format %d\n", enable);
 
                     /* Binary Ninja: void* $a0_21 = *($s0_1 + 0xb8) */
-                    csi_base = csi_dev->csi_regs;
+                    csi_regs = csi_dev->csi_regs;
 
                     /* Binary Ninja: *($a0_21 + 8) &= 0xfffffffe */
-                    writel(readl(csi_base + 8) & 0xfffffffe, csi_base + 8);
+                    writel(readl(csi_regs + 8) & 0xfffffffe, csi_regs + 8);
 
                     /* Binary Ninja: void* $a0_22 = *($s0_1 + 0xb8) */
                     /* Binary Ninja: *($a0_22 + 0xc) &= 0xfffffffe */
-                    writel(readl(csi_base + 0xc) & 0xfffffffe, csi_base + 0xc);
+                    writel(readl(csi_regs + 0xc) & 0xfffffffe, csi_regs + 0xc);
 
                     /* Binary Ninja: void* $a0_23 = *($s0_1 + 0xb8) */
                     /* Binary Ninja: *($a0_23 + 0x10) &= 0xfffffffe */
-                    writel(readl(csi_base + 0x10) & 0xfffffffe, csi_base + 0x10);
+                    writel(readl(csi_regs + 0x10) & 0xfffffffe, csi_regs + 0x10);
 
                     v0_17 = 2;
                 } else {
