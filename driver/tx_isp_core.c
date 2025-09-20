@@ -1150,11 +1150,11 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             isp_dev->frame_count++;
         }
 
-        /* Binary Ninja: Complex frame processing loop */
-        while ((readl(vic_dev->vic_regs + 0x997c) & 1) == 0) {
-            u32 frame_buffer_addr = readl(vic_dev->vic_regs + 0x9974);
-            u32 frame_info1 = readl(vic_dev->vic_regs + 0x998c);
-            u32 frame_info2 = readl(vic_dev->vic_regs + 0x9990);
+        /* Binary Ninja: Complex frame processing loop - uses ISP registers */
+        while ((readl(isp_regs + 0x997c) & 1) == 0) {
+            u32 frame_buffer_addr = readl(isp_regs + 0x9974);
+            u32 frame_info1 = readl(isp_regs + 0x998c);
+            u32 frame_info2 = readl(isp_regs + 0x9990);
 
             pr_info("*** FRAME COMPLETION: addr=0x%x, info1=0x%x, info2=0x%x ***\n",
                    frame_buffer_addr, frame_info1, frame_info2);
