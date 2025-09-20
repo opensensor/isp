@@ -1849,24 +1849,28 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 
     pr_info("*** VIC IRQ: vic_dev=%p, vic_regs=%p - NEUTERED processing ***\n", vic_dev, vic_regs);
 
-    /* CRITICAL: Validate vic_regs points to valid I/O memory */
-    if ((unsigned long)vic_regs < 0x10000000 || (unsigned long)vic_regs >= 0x20000000) {
-        pr_err("*** VIC IRQ: vic_regs 0x%p outside expected I/O memory range ***\n", vic_regs);
-        pr_err("*** VIC IRQ: Expected range: 0x10000000-0x20000000 ***\n");
-        return IRQ_HANDLED;
-    }
+    /* NEUTERED: Just try to read and clear interrupt status safely */
+    pr_info("*** VIC IRQ: NEUTERED - Attempting to read interrupt status ***\n");
 
-    /* CRITICAL: All validations passed - proceed with interrupt processing */
-    {
-        /* Binary Ninja: Read and clear VIC interrupt status registers */
-        /* SAFE: Use proper register access with standard VIC interrupt register offsets */
-        v1_7 = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);   /* Main interrupt status */
-        v1_10 = (~readl(vic_regs + 0x1ec)) & readl(vic_regs + 0x1e4);  /* DMA interrupt status */
+    /* Try to read interrupt status - if this crashes, we know the register access is the problem */
+    v1_7 = 0;
+    v1_10 = 0;
 
-        /* Clear interrupt status by writing back the masked values */
-        writel(v1_7, vic_regs + 0x1f0);   /* Clear main interrupts */
-        writel(v1_10, vic_regs + 0x1f4);  /* Clear DMA interrupts */
+    /* VERY CAREFUL: Try to read just one register first */
+    if ((unsigned long)vic_regs >= 0x10000000 && (unsigned long)vic_regs < 0x20000000) {
+        pr_info("*** VIC IRQ: vic_regs %p looks valid, trying to read status ***\n", vic_regs);
+
+        /* Try reading interrupt status - this might be where it crashes */
+        v1_7 = readl(vic_regs + 0x1e0);  /* Just read enabled interrupts */
+        pr_info("*** VIC IRQ: Successfully read v1_7=0x%x ***\n", v1_7);
+
+        /* Try to clear interrupts */
+        writel(v1_7, vic_regs + 0x1f0);
         wmb();
+        pr_info("*** VIC IRQ: Successfully cleared interrupts ***\n");
+    } else {
+        pr_info("*** VIC IRQ: vic_regs %p looks invalid, skipping register access ***\n", vic_regs);
+    }
 
         /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
         if (vic_start_ok != 0) {
