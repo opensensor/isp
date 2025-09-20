@@ -1222,6 +1222,102 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         v0_36 = s1 & 2;
     }
 
+    /* Binary Ninja: int32_t $v0_39 = $s1 & 4 */
+    u32 v0_39 = s1 & 4;
+
+    /* Binary Ninja: CHANNEL 1 FRAME PROCESSING */
+    if (v0_36 != 0) {
+        /* Binary Ninja: void* $s5_1 = *($s0 + 0x150) */
+        void *s5_1 = s0 ? s0->frame_channels : NULL;
+
+        /* Binary Ninja: Channel 1 frame processing loop */
+        while ((readl(v0 + 0x9a7c) & 1) == 0) {
+            u32 var_38_2 = readl(v0 + 0x9a74);  /* Ch1 frame buffer */
+            u32 var_34_2 = readl(v0 + 0x9a8c);  /* Ch1 frame info 1 */
+            u32 var_30_2 = readl(v0 + 0x9a90);  /* Ch1 frame info 2 */
+            u32 var_28_2 = 0;
+            u32 var_2c_2 = 0;
+
+            /* Binary Ninja: Delayed dequeue handling */
+            extern int isp_ch1_dequeue_delay_time;
+            if (isp_ch1_dequeue_delay_time == 0) {
+                /* Binary Ninja: tx_isp_send_event_to_remote(*($s5_1 + 0x13c), 0x3000006, &var_40) */
+                if (s5_1) {
+                    extern int tx_isp_send_event_to_remote(void *target, u32 event, void *data);
+                    tx_isp_send_event_to_remote((char*)s5_1 + 0x13c, 0x3000006, &var_38_2);
+                }
+            } else {
+                /* Binary Ninja: memcpy(&ch1_buf, &var_40, 0x1c) */
+                extern struct work_struct ch1_frame_dequeue_delay;
+                extern char ch1_buf[0x1c];
+                memcpy(ch1_buf, &var_38_2, 0x1c);
+                schedule_work(&ch1_frame_dequeue_delay);
+            }
+
+            break; /* Prevent infinite loop */
+        }
+
+        v0_39 = s1 & 4;
+    }
+
+    /* Binary Ninja: CHANNEL 2 FRAME PROCESSING */
+    if (v0_39 != 0) {
+        /* Binary Ninja: void* $s4_1 = *($s0 + 0x150) */
+        void *s4_1 = s0 ? s0->frame_channels : NULL;
+
+        /* Binary Ninja: Channel 2 frame processing loop */
+        while ((readl(v0 + 0x9b7c) & 1) == 0) {
+            u32 var_38_3 = readl(v0 + 0x9b74);  /* Ch2 frame buffer */
+            u32 var_34_3 = readl(v0 + 0x9b8c);  /* Ch2 frame info 1 */
+            u32 var_30_3 = readl(v0 + 0x9b90);  /* Ch2 frame info 2 */
+            u32 var_28_3 = 0;
+            u32 var_2c_3 = 0;
+
+            /* Binary Ninja: tx_isp_send_event_to_remote(*($s4_1 + 0x200), 0x3000006, &var_40) */
+            if (s4_1) {
+                extern int tx_isp_send_event_to_remote(void *target, u32 event, void *data);
+                tx_isp_send_event_to_remote((char*)s4_1 + 0x200, 0x3000006, &var_38_3);
+            }
+
+            break; /* Prevent infinite loop */
+        }
+    }
+
+    /* Binary Ninja: FINAL CALLBACK LOOP - CRITICAL for proper interrupt handling */
+    /* Binary Ninja: void* $s2_1 = &irq_func_cb; int i = 0; int result = 1 */
+    extern void *irq_func_cb[32];  /* Array of 32 callback function pointers */
+    void **s2_1 = &irq_func_cb[0];
+    int i = 0;
+    result = IRQ_HANDLED;
+
+    /* Binary Ninja: do { ... } while (i != 0x20) */
+    do {
+        /* Binary Ninja: int32_t $v0_46 = 1 << (i & 0x1f) & $s1 */
+        u32 v0_46 = (1 << (i & 0x1f)) & s1;
+        i++;
+
+        if (v0_46 != 0) {
+            /* Binary Ninja: int32_t $v0_47 = *$s2_1 */
+            void *callback = *s2_1;
+
+            if (callback != NULL) {
+                /* Binary Ninja: int32_t result_1 = $v0_47() */
+                typedef int (*irq_callback_t)(void);
+                int result_1 = ((irq_callback_t)callback)();
+
+                if (result_1 != IRQ_HANDLED) {
+                    result = result_1;
+                }
+            }
+        }
+
+        s2_1++;
+    } while (i != 0x20);
+
+    /* Binary Ninja: return result */
+    return result;
+}
+
 /* ISP interrupt handler - now calls the proper dispatch system */
 irqreturn_t tx_isp_core_irq_handle(int irq, void *dev_id)
 {
