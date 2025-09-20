@@ -660,10 +660,13 @@ int tx_isp_vin_activate_subdev(void* arg1)
     extern struct tx_isp_dev *ourISPdev;
     struct tx_isp_vin_device *vin_dev;
 
-    pr_info("VIN: tx_isp_vin_activate_subdev: SAFE implementation without is_valid_kernel_pointer\n");
+    pr_info("VIN: tx_isp_vin_activate_subdev: CRITICAL FIX - ignore arg1, use global ISP only\n");
 
-    /* CRITICAL FIX: Avoid is_valid_kernel_pointer which might cause crashes */
-    /* Always use global ISP device for safety */
+    /* CRITICAL FIX: The arg1 parameter is GARBAGE when called from tuning IOCTL!
+     * tuning IOCTL passes &param_ptr[3] which is just a pointer to an int,
+     * NOT a VIN device pointer. This causes BadVA crashes when we try to
+     * access struct members. ALWAYS use global ISP device instead. */
+
     if (!ourISPdev) {
         pr_err("VIN: tx_isp_vin_activate_subdev: no global ISP device available\n");
         return -ENODEV;
@@ -676,11 +679,8 @@ int tx_isp_vin_activate_subdev(void* arg1)
 
     vin_dev = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
 
-    /* CRITICAL: Basic NULL check only - avoid is_valid_kernel_pointer */
-    if (!vin_dev) {
-        pr_err("VIN: tx_isp_vin_activate_subdev: VIN device is NULL\n");
-        return -EINVAL;
-    }
+    /* CRITICAL: Don't access arg1 at all - it's garbage from tuning IOCTL */
+    pr_info("VIN: tx_isp_vin_activate_subdev: using VIN device from global ISP: %p\n", vin_dev);
     
     /* SAFE: Use struct member access with basic error handling */
     if (mutex_lock_interruptible(&vin_dev->mlock)) {
