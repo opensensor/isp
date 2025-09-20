@@ -3279,6 +3279,18 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
     struct tx_isp_dev *dev = NULL;
     extern struct tx_isp_dev *ourISPdev;
 
+    /* CRITICAL: Validate ourISPdev is initialized before any access */
+    if (!ourISPdev) {
+        pr_err("*** TUNING IOCTL: ourISPdev is NULL - driver not fully initialized ***\n");
+        return -ENODEV;  /* Device not available */
+    }
+
+    /* CRITICAL: Validate ourISPdev is in valid kernel memory range */
+    if ((unsigned long)ourISPdev < 0x80000000 || (unsigned long)ourISPdev >= 0xfffff000) {
+        pr_err("*** TUNING IOCTL: Invalid ourISPdev pointer 0x%p - memory corruption ***\n", ourISPdev);
+        return -EFAULT;  /* Bad address */
+    }
+
     /* SAFE: Use global device reference - no dangerous pointer arithmetic */
     dev = ourISPdev;
     if (!dev) {

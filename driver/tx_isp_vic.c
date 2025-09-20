@@ -2656,14 +2656,32 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
     
     pr_info("*** ispvic_frame_channel_s_stream: RACE CONDITION FIX ***\n");
     pr_info("ispvic_frame_channel_s_stream: vic_dev=%p, enable=%d\n", arg1, arg2);
-    
+
+    /* CRITICAL: Comprehensive NULL pointer validation to prevent BadVA crashes */
+    if (!arg1) {
+        pr_err("*** ispvic_frame_channel_s_stream: NULL arg1 - CRITICAL ERROR ***\n");
+        return 0xffffffea; /* -EINVAL */
+    }
+
+    /* CRITICAL: Validate arg1 is in valid kernel memory range */
+    if ((unsigned long)arg1 < 0x80000000 || (unsigned long)arg1 >= 0xfffff000) {
+        pr_err("*** ispvic_frame_channel_s_stream: Invalid arg1 pointer 0x%p - memory corruption ***\n", arg1);
+        return 0xffffffea; /* -EINVAL */
+    }
+
     /* Binary Ninja EXACT: if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = *(arg1 + 0xd4) */
     if (arg1 != 0 && (unsigned long)arg1 < 0xfffff001) {
         /* CRITICAL FIX: arg1 IS the vic_dev structure directly - Binary Ninja uses it directly */
         vic_dev = (struct tx_isp_vic_device *)arg1;
         pr_info("ispvic_frame_channel_s_stream: vic_dev retrieved using SAFE access: %p\n", vic_dev);
+
+        /* CRITICAL: Validate vic_dev structure integrity before accessing any members */
+        if (!vic_dev->vic_regs) {
+            pr_err("*** ispvic_frame_channel_s_stream: NULL vic_regs - VIC not initialized ***\n");
+            return 0xffffffea; /* -EINVAL */
+        }
     }
-    
+
     /* Binary Ninja EXACT: if (arg1 == 0) return 0xffffffea */
     if (arg1 == 0) {
         pr_err("%s[%d]: invalid parameter\n", "ispvic_frame_channel_s_stream", __LINE__);

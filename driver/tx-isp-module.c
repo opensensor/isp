@@ -5976,12 +5976,25 @@ static irqreturn_t isp_irq_handle(int irq, void *dev_id)
 
     pr_info("*** isp_irq_handle: IRQ %d fired ***\n", irq);
 
+    /* CRITICAL: Validate ourISPdev is initialized before any processing */
+    extern struct tx_isp_dev *ourISPdev;
+    if (!ourISPdev) {
+        pr_err("*** ISP IRQ %d: ourISPdev is NULL - driver not fully initialized ***\n", irq);
+        return IRQ_HANDLED;  /* Handle gracefully during initialization */
+    }
+
     /* Binary Ninja: if (arg2 != 0x80) */
     if ((uintptr_t)dev_id != 0x80) {
         /* CRITICAL SAFETY: Validate all pointers before access */
         if (!isp_dev) {
             pr_err("*** isp_irq_handle: NULL isp_dev ***\n");
             return IRQ_HANDLED;
+        }
+
+        /* CRITICAL: Validate dev_id is in valid kernel memory range */
+        if ((unsigned long)dev_id < 0x80000000 || (unsigned long)dev_id >= 0xfffff000) {
+            pr_err("*** ISP IRQ %d: Invalid dev_id pointer 0x%p - memory corruption ***\n", irq, dev_id);
+            return IRQ_HANDLED;  /* Handle gracefully to prevent crash */
         }
 
         /* MIPS SAFETY: Check isp_dev pointer alignment */
