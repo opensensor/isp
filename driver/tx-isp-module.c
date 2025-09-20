@@ -4720,67 +4720,6 @@ int sensor_early_init(void *core_dev)
     return 0;
 }
 
-
-/* tx_isp_platform_probe - SUBDEVICE-SPECIFIC INITIALIZATION */
-static int tx_isp_platform_probe(struct platform_device *pdev)
-{
-    struct tx_isp_platform_data *pdata;
-    const char *device_name;
-    int ret = 0;
-
-    /* Get platform data and device name */
-    pdata = pdev->dev.platform_data;
-    device_name = pdev->name ? pdev->name : "unknown";
-
-    pr_info("*** PROBE: Initializing subdevice: %s ***\n", device_name);
-
-    /* Ensure global ISP device exists */
-    if (!ourISPdev) {
-        pr_err("*** PROBE ERROR: Global ISP device not initialized - tx_isp_init() should run first ***\n");
-        return -EPROBE_DEFER;
-    }
-
-    /* Call appropriate subdevice probe based on device name */
-    if (strcmp(device_name, "isp-w02") == 0) {
-        pr_info("*** PROBE: Calling VIC probe for device %s ***\n", device_name);
-        ret = tx_isp_vic_probe(pdev);
-        if (ret == 0) {
-            pr_info("*** PROBE: VIC device initialized successfully ***\n");
-        } else {
-            pr_err("*** PROBE: VIC probe failed: %d ***\n", ret);
-        }
-    } else if (strcmp(device_name, "tx-isp-csi") == 0) {
-        pr_info("*** PROBE: Calling CSI probe for device %s ***\n", device_name);
-        ret = tx_isp_csi_probe(pdev);
-        if (ret == 0) {
-            pr_info("*** PROBE: CSI device initialized successfully ***\n");
-        } else {
-            pr_err("*** PROBE: CSI probe failed: %d ***\n", ret);
-        }
-    } else if (strcmp(device_name, "tx-isp-vin") == 0) {
-        pr_info("*** PROBE: Calling VIN probe for device %s ***\n", device_name);
-        ret = tx_isp_vin_probe(pdev);
-        if (ret == 0) {
-            pr_info("*** PROBE: VIN device initialized successfully ***\n");
-        } else {
-            pr_err("*** PROBE: VIN probe failed: %d ***\n", ret);
-        }
-    } else if (strcmp(device_name, "tx-isp") == 0) {
-        pr_info("*** PROBE: Main ISP device - no additional initialization needed ***\n");
-        /* Main device probe - just link to global device */
-        platform_set_drvdata(pdev, ourISPdev);
-        ret = 0;
-    } else {
-        pr_info("*** PROBE: Unknown device %s - no specific initialization ***\n", device_name);
-        /* Unknown device - just link to global device */
-        platform_set_drvdata(pdev, ourISPdev);
-        ret = 0;
-    }
-
-    pr_info("*** PROBE: Device %s initialization complete (ret=%d) ***\n", device_name, ret);
-    return ret;
-}
-
 static int tx_isp_platform_remove(struct platform_device *pdev)
 {
     pr_info("tx_isp_platform_remove called\n");
