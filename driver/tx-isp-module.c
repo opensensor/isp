@@ -5077,7 +5077,7 @@ static int tx_isp_init(void)
 
     /* *** CRITICAL FIX: Register individual subdev platform devices so their probe functions get called *** */
     pr_info("*** REGISTERING INDIVIDUAL SUBDEV PLATFORM DEVICES FOR MEMORY MAPPING ***\n");
-    for (i = 0; i < 5; i++) {
+    for (int i = 0; i < 5; i++) {
         ret = platform_device_register(subdev_platforms[i]);
         if (ret != 0) {
             pr_err("Failed to register subdev platform device %s: %d\n",
