@@ -3291,14 +3291,27 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     {
         int vic_irq = platform_get_irq(pdev, 0);
         if (vic_irq > 0) {
-            ret = request_irq(vic_irq, isp_vic_interrupt_service_routine,
-                             IRQF_SHARED, "isp-w02-vic", vic_dev);
-            if (ret == 0) {
-                vic_dev->irq_number = vic_irq;
-                vic_dev->irq = vic_irq;
-                pr_info("*** VIC PROBE: VIC interrupt handler registered for IRQ %d ***\n", vic_irq);
+            /* CRITICAL FIX: Pass ISP device as dev_id, not VIC device */
+            /* The interrupt handler in tx-isp-module.c expects struct tx_isp_dev * as dev_id */
+            struct tx_isp_dev *isp_dev = vic_dev->sd.isp;
+            if (!isp_dev) {
+                /* Use global ISP device if subdev linking hasn't happened yet */
+                extern struct tx_isp_dev *ourISPdev;
+                isp_dev = ourISPdev;
+            }
+
+            if (isp_dev) {
+                ret = request_irq(vic_irq, isp_vic_interrupt_service_routine,
+                                 IRQF_SHARED, "isp-w02-vic", isp_dev);
+                if (ret == 0) {
+                    vic_dev->irq_number = vic_irq;
+                    vic_dev->irq = vic_irq;
+                    pr_info("*** VIC PROBE: VIC interrupt handler registered for IRQ %d with ISP device %p ***\n", vic_irq, isp_dev);
+                } else {
+                    pr_err("*** VIC PROBE: Failed to register VIC interrupt handler for IRQ %d: %d ***\n", vic_irq, ret);
+                }
             } else {
-                pr_err("*** VIC PROBE: Failed to register VIC interrupt handler for IRQ %d: %d ***\n", vic_irq, ret);
+                pr_err("*** VIC PROBE: No ISP device available for interrupt registration ***\n");
             }
         } else {
             pr_err("*** VIC PROBE: Failed to get VIC IRQ number: %d ***\n", vic_irq);
