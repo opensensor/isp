@@ -62,20 +62,36 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 1 */
         vic_dev->irq_enabled = 1;
 
-        /* CRITICAL FIX: Configure VIC hardware interrupt registers */
-        vic_regs = vic_dev->vic_regs;
-        if (vic_regs) {
-            /* Enable VIC frame done interrupt (bit 0) and error interrupts */
-            writel(0x1, vic_regs + 0x1e0);  /* Enable frame done interrupt */
-            writel(0x0, vic_regs + 0x1e8);  /* Clear interrupt mask */
+        /* CRITICAL FIX: Configure VIC hardware interrupt registers with COMPREHENSIVE configuration */
+        /* Use secondary VIC space if available, otherwise primary */
+        if (vic_dev->vic_regs_secondary) {
+            pr_info("*** tx_vic_enable_irq: Using SECONDARY VIC space for comprehensive interrupt config ***\n");
 
-            /* Enable VIC MDMA interrupts */
-            writel(0x3, vic_regs + 0x1e4);  /* Enable MDMA channel 0 and 1 interrupts */
-            writel(0x0, vic_regs + 0x1ec);  /* Clear MDMA interrupt mask */
+            /* Enable ALL VIC interrupts - comprehensive configuration */
+            writel(0x3FFFFFFF, vic_dev->vic_regs_secondary + 0x1e0);  /* Enable ALL VIC interrupts */
+            writel(0x0, vic_dev->vic_regs_secondary + 0x1e8);         /* Clear interrupt masks */
+            writel(0xF, vic_dev->vic_regs_secondary + 0x1e4);         /* Enable ALL MDMA interrupts */
+            writel(0x0, vic_dev->vic_regs_secondary + 0x1ec);         /* Clear MDMA masks */
             wmb();
 
-            pr_info("*** tx_vic_enable_irq: VIC hardware interrupt registers configured ***\n");
-            pr_info("*** tx_vic_enable_irq: reg 0x1e0=0x1, 0x1e8=0x0, 0x1e4=0x3, 0x1ec=0x0 ***\n");
+            pr_info("*** tx_vic_enable_irq: COMPREHENSIVE VIC interrupt registers configured in SECONDARY space ***\n");
+            pr_info("*** tx_vic_enable_irq: reg 0x1e0=0x3FFFFFFF, 0x1e8=0x0, 0x1e4=0xF, 0x1ec=0x0 ***\n");
+        } else {
+            /* Fallback to primary VIC space with comprehensive configuration */
+            vic_regs = vic_dev->vic_regs;
+            if (vic_regs) {
+                pr_info("*** tx_vic_enable_irq: Using PRIMARY VIC space for comprehensive interrupt config ***\n");
+
+                /* Enable ALL VIC interrupts - comprehensive configuration */
+                writel(0x3FFFFFFF, vic_regs + 0x1e0);  /* Enable ALL VIC interrupts */
+                writel(0x0, vic_regs + 0x1e8);         /* Clear interrupt masks */
+                writel(0xF, vic_regs + 0x1e4);         /* Enable ALL MDMA interrupts */
+                writel(0x0, vic_regs + 0x1ec);         /* Clear MDMA masks */
+                wmb();
+
+                pr_info("*** tx_vic_enable_irq: COMPREHENSIVE VIC interrupt registers configured in PRIMARY space ***\n");
+                pr_info("*** tx_vic_enable_irq: reg 0x1e0=0x3FFFFFFF, 0x1e8=0x0, 0x1e4=0xF, 0x1ec=0x0 ***\n");
+            }
         }
 
         /* Binary Ninja: $v0_1(dump_vsd_5 + 0x80) - this is enable_irq(irq_number) */
