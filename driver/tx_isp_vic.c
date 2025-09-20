@@ -237,11 +237,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             /* SAFE: Use vic_regs member instead of offset 0xb8 */
             vic_regs = vic_dev->vic_regs;
 
-            /* Binary Ninja: void** i_1 = *(arg1 + 0x204) */
-            /* SAFE: Use done_head list instead of offset 0x204 */
-            /* CRITICAL: The reference driver walks a linked list at offset 0x204 */
-            /* We need to simulate this with our done_head list */
-            struct list_head *i_1 = vic_dev->done_head.next;
+            /* Binary Ninja EXACT: void** i_1 = *(arg1 + 0x204) */
             int buffer_index = 0;    /* $a1_1 = 0 */
             int high_bits = 0;       /* $v1_1 = 0 */
             int match_found = 0;     /* $v0 = 0 */
