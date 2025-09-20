@@ -1882,6 +1882,7 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
                 pr_info("*** VIC FRAME DONE INTERRUPT: Frame completion detected (count=%u) ***\n", vic_dev->frame_count);
 
                 /* CRITICAL: Also increment main ISP frame counter for /proc/jz/isp/isp-w02 */
+                extern struct tx_isp_dev *ourISPdev;
                 if (ourISPdev) {
                     ourISPdev->frame_count++;
                     pr_info("*** ISP FRAME COUNT UPDATED: %u (for /proc/jz/isp/isp-w02) ***\n", ourISPdev->frame_count);
