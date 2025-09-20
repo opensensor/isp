@@ -384,12 +384,19 @@ struct tx_isp_subdev {
 };
 
 
+/* Channel configuration structure - SAFE replacement for raw offset access */
+struct tx_isp_channel_config {
+    void *reserved[7];                       /* +0x00-0x18: Reserved space (28 bytes) */
+    int (*event_handler)(void*);             /* +0x1c: Event handler function - SAFE ACCESS */
+    uint32_t padding[2];                     /* +0x20-0x24: Padding to 0x24 size */
+} __attribute__((packed, aligned(4)));
+
 /* Global frame source device structure - 0xe8 bytes as per Binary Ninja */
 struct tx_isp_fs_device {
 	struct tx_isp_subdev subdev;            /* Base subdev structure */
 	void __iomem *base_regs;                /* Base register mapping +0xb8 */
 
-	void *channel_configs;                   /* channel config array */
+	struct tx_isp_channel_config *channel_configs;  /* SAFE: Proper typed channel config array */
 	void *channel_buffer;                    /* kmalloc'ed channel buffer */
 	uint32_t channel_count;                  /* number of channels */
 	uint32_t initialized;                    /* initialization flag */
