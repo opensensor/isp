@@ -165,6 +165,14 @@ struct tx_isp_dev {
     struct tx_isp_csi_device *csi_dev;
     atomic_t csi_configured;
 
+    /* CRITICAL FIX: Move vic_dev to offset 0xd4 to match Binary Ninja expectations */
+    /* Calculate padding needed to reach offset 0xd4 (212 bytes from struct start) */
+    /* Current offset after csi_configured is approximately 0x70-0x80 */
+    /* Need padding to reach 0xd4 */
+    char padding_to_vic_dev[0x54];  /* Padding to reach offset 0xd4 */
+
+    struct tx_isp_vic_device *vic_dev;  /* 0xd4: CRITICAL - Binary Ninja expects vic_dev HERE */
+
     /* Status tracking */
     struct isp_device_status status;
     struct isp_device_link_state link_state;
@@ -231,7 +239,7 @@ struct tx_isp_dev {
     struct irq_handler_data *vic_irq_data;
     void __iomem *vic_regs;      /* Primary VIC register space (0x133e0000) */
     void __iomem *vic_regs2;     /* Secondary VIC register space (0x10023000) */
-    struct tx_isp_vic_device *vic_dev;
+    /* vic_dev moved to offset 0xd4 above - REMOVED duplicate declaration */
     struct ddr_device *ddr_dev;
     struct tx_isp_vin_device *vin_dev;
     struct frame_source_device *fs_dev;
