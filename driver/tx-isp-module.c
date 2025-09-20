@@ -3753,9 +3753,12 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 }
                 
                 vic_dev->streaming = 1;
-                
+
                 spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
-                
+
+                /* CRITICAL: Start frame worker now that streaming is enabled */
+                tx_isp_start_frame_worker();
+
                 pr_info("*** Channel %d: VIC NOW READY TO RECEIVE MIPI DATA FROM SENSOR ***\n", channel);
             }
         }
