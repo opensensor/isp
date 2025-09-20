@@ -3010,6 +3010,7 @@ struct tx_isp_subdev_ops vic_subdev_ops = {
     .internal = &vic_internal_ops,
 };
 EXPORT_SYMBOL(vic_subdev_ops);
+EXPORT_SYMBOL(tx_isp_vic_slake_subdev);
 
 
 /* VIC FRD file operations - EXACT Binary Ninja implementation */
