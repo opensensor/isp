@@ -4056,8 +4056,20 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                                     memset(sensor, 0, sizeof(struct tx_isp_sensor));
                                     /* Set up minimal sensor info */
                                     strcpy(sensor->info.name, sensor_name);
-                                    sensor->video.attr = NULL; /* Will be set when needed */
+
+                                    /* CRITICAL: Set up sensor->video.attr to point to sensor->attr */
+                                    sensor->video.attr = &sensor->attr;
+
+                                    /* Initialize basic sensor attributes for VIC compatibility */
+                                    sensor->attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;
+                                    sensor->attr.mipi.lans = 2; /* Default to 2 lanes */
+                                    sensor->attr.mipi.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10;
+                                    sensor->attr.total_width = 1920;  /* Default dimensions */
+                                    sensor->attr.total_height = 1080;
+                                    sensor->attr.integration_time = 1000; /* Default integration time */
+
                                     pr_info("*** CREATED MINIMAL SENSOR STRUCTURE FOR VIC COMPATIBILITY ***\n");
+                                    pr_info("*** sensor->video.attr=%p (points to sensor->attr) ***\n", sensor->video.attr);
                                 } else {
                                     pr_err("*** ERROR: Failed to allocate minimal sensor structure ***\n");
                                     return -ENOMEM;
