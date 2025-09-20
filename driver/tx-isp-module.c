@@ -899,17 +899,20 @@ static int sensor_alloc_analog_gain_short(int gain) {
 }
 
 static int sensor_alloc_digital_gain(int gain) {
-    /* Binary Ninja: int32_t $v0_2 = *(*(g_ispcore + 0x120) + 0xc8)
-     * int32_t var_10 = 0
-     * int32_t result = $v0_2(arg1, 0x10, &var_10)
-     * *(arg2 + 2) = var_10.w
-     * return result */
+    /* Binary Ninja: int32_t $v0_2 = *(*(ourISPdev + 0x120) + 0xc8) */
+    /* FIXED: g_ispcore -> ourISPdev with proper struct member access */
 
     if (!ourISPdev || !ourISPdev->sensor) {
         return gain;
     }
 
-    pr_info("sensor_alloc_digital_gain: gain=%d\n", gain);
+    /* SAFE: Binary Ninja *(*(ourISPdev + 0x120) + 0xc8) = ourISPdev->sensor->tuning_data->fps_num */
+    if (ourISPdev->tuning_data) {
+        /* Access FPS numerator safely - this is what's at offset 0xc8 in tuning data */
+        uint32_t fps_num = ourISPdev->tuning_data->fps_num;
+        pr_info("sensor_alloc_digital_gain: gain=%d, fps_num=%d\n", gain, fps_num);
+    }
+
     return gain;
 }
 

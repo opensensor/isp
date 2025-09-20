@@ -520,9 +520,6 @@ MODULE_PARM_DESC(isp_memopt, "isp memory optimize");
 static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
 extern struct tx_isp_dev *ourISPdev;
 
-/* Global ISP core pointer for Binary Ninja compatibility */
-static struct tx_isp_dev *g_ispcore = NULL;
-
 /* Binary Ninja reference global variables */
 static struct tx_isp_dev *dump_csd = NULL;  /* Global core device pointer */
 uint32_t system_reg_read(u32 reg);
