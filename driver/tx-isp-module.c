@@ -5088,6 +5088,25 @@ static int tx_isp_init(void)
     }
     pr_info("*** SUBDEV PLATFORM DRIVERS REGISTERED - VIC/CSI/VIN/CORE DRIVERS AVAILABLE ***\n");
 
+    /* *** CRITICAL FIX: Initialize subdevice registry BEFORE main platform device registration *** */
+    /* This ensures the registry is ready when tx_isp_core_probe tries to create the graph */
+    pr_info("*** CRITICAL: INITIALIZING SUBDEVICE REGISTRY BEFORE MAIN PLATFORM DEVICE ***\n");
+
+    /* Build platform device array for the registry system */
+    struct platform_device *subdev_platforms[5];
+    subdev_platforms[0] = &tx_isp_csi_platform_device;
+    subdev_platforms[1] = &tx_isp_vic_platform_device;
+    subdev_platforms[2] = &tx_isp_vin_platform_device;
+    subdev_platforms[3] = &tx_isp_fs_platform_device;
+    subdev_platforms[4] = &tx_isp_core_platform_device;
+
+    ret = tx_isp_init_subdev_registry(ourISPdev, subdev_platforms, 5);
+    if (ret) {
+        pr_err("Failed to initialize subdevice registry: %d\n", ret);
+        goto err_cleanup_subdev_drivers;
+    }
+    pr_info("*** SUBDEVICE REGISTRY INITIALIZED - GRAPH CREATION SHOULD NOW SUCCEED ***\n");
+
     /* Step 2: Register platform device (matches reference) */
     ret = platform_device_register(&tx_isp_platform_device);
     if (ret != 0) {
