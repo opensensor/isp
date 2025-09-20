@@ -84,52 +84,6 @@ static void __fill_v4l2_buffer(void *vb, struct v4l2_buffer *buf)
     memcpy(buf, &fbuf->v4l2_buf, sizeof(struct v4l2_buffer));
 }
 
-
-// TODO vic_event_handler
-// CRITICAL FIX: Safe implementation using proper struct member access instead of offset arithmetic
-int tx_isp_send_event_to_remote(struct v4l2_subdev *sd, unsigned int event, void *data)
-{
-    pr_info("*** tx_isp_send_event_to_remote: SAFE implementation - subdev=%p, event=0x%x ***\n", sd, event);
-
-    if (sd != NULL) {
-        // SAFE: Use proper struct member access instead of unsafe offset arithmetic
-        if (sd->ops != NULL) {
-            pr_info("*** EVENT: subdev ops found at %p ***\n", sd->ops);
-            
-            // SAFE: Check for core ops and event handler
-            if (sd->ops->core != NULL && sd->ops->core->ioctl != NULL) {
-                pr_info("*** EVENT: core ioctl handler found at %p ***\n", sd->ops->core->ioctl);
-                
-                // SAFE: Call the ioctl handler with proper parameters
-                int ret = sd->ops->core->ioctl(sd, event, data);
-                pr_info("*** EVENT: Core ioctl returned %d (0x%x) for event 0x%x ***\n", ret, ret, event);
-                
-                if (ret != -ENOIOCTLCMD) {
-                    return ret;
-                }
-            }
-            
-            // SAFE: Try video ops if available
-            if (sd->ops->video != NULL && sd->ops->video->s_stream != NULL) {
-                pr_info("*** EVENT: video ops available ***\n");
-                // For streaming events, call s_stream
-                if (event == 0x3000008 || event == 0x3000006) {
-                    pr_info("*** EVENT: Handling streaming event via s_stream ***\n");
-                    int ret = sd->ops->video->s_stream(sd, 1);
-                    return ret;
-                }
-            }
-        }
-        
-        // SAFE: If no ops available, try internal event handling
-        pr_info("*** EVENT: Using internal safe event handling ***\n");
-        return 0; // Success - event handled safely
-    }
-    
-    pr_err("*** EVENT: Invalid subdev pointer ***\n");
-    return -EINVAL; // -22 (proper error code instead of unsafe 0xfffffdfd)
-}
-
 /* Frame channel file operations */
 static const struct file_operations fs_channel_ops = {
     .owner = THIS_MODULE,
