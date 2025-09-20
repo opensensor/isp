@@ -6683,10 +6683,17 @@ static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
 /* VIC event handler function - handles ALL events including sensor registration */
 int vic_event_handler(void *subdev, int event_type, void *data)
 {
+    /* CRITICAL FIX: Validate pointer before casting to prevent corrupted pointer access */
+    if (!subdev || (unsigned long)subdev < 0x80000000 || (unsigned long)subdev >= 0xfffff000) {
+        pr_err("vic_event_handler: Invalid/corrupted subdev pointer 0x%p\n", subdev);
+        return 0xfffffdfd;
+    }
+
     struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)subdev;
-    
+
+    /* Additional validation after cast */
     if (!vic_dev) {
-        pr_err("vic_event_handler: Invalid VIC device\n");
+        pr_err("vic_event_handler: Invalid VIC device after cast\n");
         return 0xfffffdfd;
     }
     
