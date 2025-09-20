@@ -2858,8 +2858,10 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         vic_pipo_mdma_enable(vic_dev);
 
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
+        /* CRITICAL: Use proper struct member access instead of dangerous offset +0xb8 */
         vic_base = vic_dev->vic_regs;
         if (vic_base && (unsigned long)vic_base >= 0x80000000) {
+            /* CRITICAL: Use proper struct member access instead of dangerous offset +0x218 */
             pr_info("ispvic_frame_channel_s_stream: BEFORE - active_buffer_count=%d\n", vic_dev->active_buffer_count);
 
             /* CRITICAL FIX: Follow EXACT reference driver buffer management sequence */
