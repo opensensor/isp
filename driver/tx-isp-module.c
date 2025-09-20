@@ -1807,8 +1807,23 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     u32 addr_ctl, reg_val;
     int timeout, i;
 
-    /* IMMEDIATE DEBUG: Log interrupt entry before ANY other operations */
-    printk(KERN_ALERT "*** VIC IRQ ENTRY: irq=%d, dev_id=%p ***\n", irq, dev_id);
+    /* CRITICAL: Validate dev_id IMMEDIATELY to prevent BadVA crashes */
+    if (dev_id == NULL) {
+        printk(KERN_ALERT "*** VIC IRQ: NULL dev_id - interrupt ignored ***\n");
+        return IRQ_HANDLED;
+    }
+
+    /* CRITICAL: Check if dev_id is in valid kernel memory range */
+    if ((unsigned long)dev_id < 0x80000000 || (unsigned long)dev_id >= 0xfffff000) {
+        printk(KERN_ALERT "*** VIC IRQ: Invalid dev_id 0x%p (outside kernel memory) - interrupt ignored ***\n", dev_id);
+        return IRQ_HANDLED;
+    }
+
+    /* CRITICAL: Validate dev_id points to valid memory */
+    if (!virt_addr_valid(dev_id)) {
+        printk(KERN_ALERT "*** VIC IRQ: dev_id 0x%p points to invalid memory - interrupt ignored ***\n", dev_id);
+        return IRQ_HANDLED;
+    }
 
     /* CRITICAL SAFETY: Check if system is shutting down */
     if (isp_system_shutting_down) {
@@ -1816,11 +1831,7 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         return IRQ_HANDLED;
     }
 
-    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
-    if (dev_id == NULL || (unsigned long)dev_id >= 0xfffff001) {
-        printk(KERN_ALERT "*** VIC IRQ: Invalid dev_id %p ***\n", dev_id);
-        return IRQ_HANDLED;
-    }
+    printk(KERN_ALERT "*** VIC IRQ ENTRY: irq=%d, dev_id=%p (VALIDATED) ***\n", irq, dev_id);
 
     /* CRITICAL SAFETY: Validate isp_dev before accessing any members */
     if (!isp_dev) {
@@ -4994,15 +5005,17 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     /* Binary Ninja: *($v0 + 0xd4) = $v0 - Self-pointer for validation */
     /* Note: self_ptr member may not exist in current struct definition, skipping for now */
 
-    /* CRITICAL FIX: Use existing ourISPdev instead of overwriting it */
+    /* CRITICAL FIX: Use SINGLE consistent ISP device - avoid dual allocation */
     if (ourISPdev) {
-        pr_info("*** PROBE: Using existing ourISPdev allocation: %p ***\n", ourISPdev);
-        /* Copy any needed fields from isp_dev to ourISPdev if necessary */
-        /* For now, just use the existing ourISPdev */
+        pr_info("*** PROBE: Using existing ourISPdev: %p, freeing local allocation ***\n", ourISPdev);
+        /* Free the local allocation since we already have a global one */
+        kfree(isp_dev);
+        /* Use the existing global device */
+        platform_set_drvdata(pdev, ourISPdev);
     } else {
-        /* Fallback: if somehow ourISPdev is NULL, use the probe allocation */
-        pr_warn("*** PROBE: ourISPdev was NULL, using probe allocation ***\n");
-        ourISPdev = isp_dev;
+        pr_info("*** PROBE: Setting ourISPdev to local allocation: %p ***\n", isp_dev);
+        ourISPdev = isp_dev;  /* Make the local device the global one */
+        platform_set_drvdata(pdev, isp_dev);
     }
 
     return 0;

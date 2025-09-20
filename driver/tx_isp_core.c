@@ -3317,12 +3317,19 @@ int tx_isp_core_probe(struct platform_device *pdev)
             /* REMOVED: Global memory mapping - let each subdevice handle its own memory per reference driver */
             pr_info("*** tx_isp_core_probe: Skipping global memory mapping - subdevices will handle their own memory ***\n");
 
-            /* CRITICAL FIX: Don't overwrite ourISPdev - it already has linked devices! */
-            pr_info("*** tx_isp_core_probe: Using existing ourISPdev with linked devices: %p ***\n", ourISPdev);
-            pr_info("*** tx_isp_core_probe: VIN device should still be linked: %p ***\n", ourISPdev ? ourISPdev->vin_dev : NULL);
+            /* CRITICAL FIX: Use SINGLE consistent ISP device - don't mix isp_dev and ourISPdev */
+            if (ourISPdev) {
+                pr_info("*** tx_isp_core_probe: Using existing ourISPdev: %p ***\n", ourISPdev);
+                /* Free the local isp_dev since we're using the global one */
+                kfree(isp_dev);
+                isp_dev = ourISPdev;  /* Use the global device consistently */
+            } else {
+                pr_info("*** tx_isp_core_probe: Setting ourISPdev to local isp_dev: %p ***\n", isp_dev);
+                ourISPdev = isp_dev;  /* Make the local device the global one */
+            }
 
-            /* Initialize tuning system without global memory mappings */
-            pr_info("*** tx_isp_core_probe: Calling isp_core_tuning_init (subdevices will map their own memory) ***\n");
+            /* Initialize tuning system using the SINGLE consistent device */
+            pr_info("*** tx_isp_core_probe: Calling isp_core_tuning_init with consistent device %p ***\n", isp_dev);
             tuning_dev = (void*)isp_core_tuning_init(isp_dev);
 
             /* SAFE: Store tuning device using proper member access */
