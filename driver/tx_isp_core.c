@@ -1039,22 +1039,45 @@ irqreturn_t ip_done_interrupt_static(int irq, void *dev_id)
     return IRQ_HANDLED; /* Convert to standard Linux return value */
 }
 
-/* ispcore_interrupt_service_routine - ULTRA SAFE implementation to prevent all crashes */
+/* ispcore_interrupt_service_routine - WORKING implementation with corruption detection */
 irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 {
-    /* CRITICAL: Absolute maximum safety - do not access ANY pointers */
-    /* The crashes show that dev_id is corrupted, so we cannot trust any pointer access */
+    extern struct tx_isp_dev *ourISPdev;
+    struct tx_isp_dev *isp_dev;
+    void __iomem *core_regs;
+    u32 int_status;
 
-    static int crash_count = 0;
-    crash_count++;
+    /* CRITICAL: Detect corruption by comparing dev_id with ourISPdev */
+    if (dev_id != ourISPdev) {
+        pr_err("ISP CORE IRQ %d: CORRUPTION DETECTED! dev_id=%p != ourISPdev=%p\n",
+               irq, dev_id, ourISPdev);
+        pr_err("ISP CORE IRQ %d: Using ourISPdev instead of corrupted dev_id\n", irq);
+        isp_dev = ourISPdev;  /* Use known good pointer */
+    } else {
+        isp_dev = (struct tx_isp_dev *)dev_id;
+    }
 
-    /* Log the interrupt but do not access any structures */
-    pr_info("ISP CORE IRQ %d: Ultra-safe handler #%d - dev_id=%p (NOT ACCESSED)\n",
-            irq, crash_count, dev_id);
+    /* Validate the ISP device structure */
+    if (!isp_dev || (uintptr_t)isp_dev < 0x80000000 || (uintptr_t)isp_dev > 0x9fffffff) {
+        pr_err("ISP CORE IRQ %d: Invalid isp_dev=%p\n", irq, isp_dev);
+        return IRQ_HANDLED;
+    }
 
-    /* Do not access dev_id, ourISPdev, or any device structures */
-    /* Do not read or write any hardware registers */
-    /* Just acknowledge the interrupt and return */
+    /* Validate core registers are mapped */
+    core_regs = isp_dev->core_regs;
+    if (!core_regs || (uintptr_t)core_regs < 0x80000000) {
+        pr_err("ISP CORE IRQ %d: Invalid core_regs=%p in isp_dev=%p\n", irq, core_regs, isp_dev);
+        return IRQ_HANDLED;
+    }
+
+    /* NOW we can safely access hardware registers */
+    int_status = readl(core_regs + 0xb4);
+
+    /* Clear interrupt by writing status back */
+    if (int_status) {
+        writel(int_status, core_regs + 0xb4);
+        pr_info("ISP CORE IRQ %d: Status=0x%x cleared\n", irq, int_status);
+    }
 
     return IRQ_HANDLED;
 }
@@ -1627,9 +1650,9 @@ int ispcore_core_ops_init(struct tx_isp_dev *arg1, struct tx_isp_sensor_attribut
 
     pr_info("*** ispcore_core_ops_init: EXACT Binary Ninja MCP implementation ***");
 
-    /* *** TEMPORARILY DISABLED: Work structure initialization to prevent timer crashes *** */
-    /* INIT_WORK(&ispcore_fs_work, ispcore_irq_fs_work); */
-    pr_info("*** ispcore_core_ops_init: Frame sync work structure DISABLED for debugging ***");
+    /* CRITICAL: Initialize frame sync work structure - MUST be done before any interrupts */
+    INIT_WORK(&ispcore_fs_work, ispcore_irq_fs_work);
+    pr_info("*** ispcore_core_ops_init: Frame sync work structure initialized ***");
 
     /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) */
     if (arg1 != NULL && (unsigned long)arg1 < 0xfffff001) {
