@@ -2323,15 +2323,22 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
             rmb();
             
             /* Step 3: Get the s_stream function pointer */
-            s_stream_func_ptr = (int (**)(void *, int))video_ops_ptr;
-            
+            /* CRITICAL FIX: video_ops_ptr points to the video ops structure, not the function */
+            struct tx_isp_subdev_video_ops *video_ops = (struct tx_isp_subdev_video_ops *)*video_ops_ptr;
+
+            /* SAFETY: Validate video ops structure */
+            if (!video_ops || !is_valid_kernel_pointer(video_ops)) {
+                pr_info("tx_isp_video_s_stream: Invalid video ops structure for subdev %d: %p\n", i, video_ops);
+                continue;
+            }
+
             /* Reference: if ($v0_3 == 0) */
-            if (*s_stream_func_ptr == 0) {
+            if (video_ops->s_stream == 0) {
                 pr_info("tx_isp_video_s_stream: No s_stream function for subdev %d\n", i);
                 continue; /* i += 1 in reference */
             }
-            
-            s_stream_func = *s_stream_func_ptr;
+
+            s_stream_func = video_ops->s_stream;
             
             /* SAFETY: Validate function pointer */
             if (!is_valid_kernel_pointer(s_stream_func)) {
@@ -2379,8 +2386,10 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
                                 if (is_valid_kernel_pointer(cleanup_video_ops_ptr) &&
                                     is_valid_kernel_pointer(*cleanup_video_ops_ptr)) {
 
-                                    int (**cleanup_func_ptr)(void *, int) = (int (**)(void *, int))cleanup_video_ops_ptr;
-                                    int (*cleanup_func)(void *, int) = *cleanup_func_ptr;
+                                    /* CRITICAL FIX: Get the actual video ops structure */
+                                    struct tx_isp_subdev_video_ops *cleanup_video_ops =
+                                        (struct tx_isp_subdev_video_ops *)*cleanup_video_ops_ptr;
+                                    int (*cleanup_func)(void *, int) = cleanup_video_ops->s_stream;
 
                                     if (is_valid_kernel_pointer(cleanup_func)) {
                                         int cleanup_result = cleanup_func(cleanup_subdev, 0);  /* Disable */
@@ -5385,14 +5394,8 @@ static int tx_isp_init(void)
         pr_info("*** ISP M0 TUNING DEVICE NODE CREATED SUCCESSFULLY ***\n");
     }
 
-    /* *** REFACTORED: Use new subdevice graph creation system *** */
-    pr_info("*** CREATING SUBDEVICE GRAPH WITH NEW MANAGEMENT SYSTEM ***\n");
-    ret = tx_isp_create_subdev_graph(ourISPdev);
-    if (ret) {
-        pr_err("Failed to create ISP subdevice graph: %d\n", ret);
-        goto err_cleanup_platforms;
-    }
-    pr_info("*** SUBDEVICE GRAPH CREATED - FRAME DEVICES SHOULD NOW EXIST ***\n");
+    /* *** REMOVED: Duplicate graph creation - already created in tx_isp_core_probe() *** */
+    pr_info("*** SUBDEVICE GRAPH ALREADY CREATED IN PROBE - SKIPPING DUPLICATE CREATION ***\n");
 
     /* *** CRITICAL: Initialize V4L2 video devices for encoder compatibility *** */
     pr_info("*** INITIALIZING V4L2 VIDEO DEVICES FOR ENCODER SUPPORT ***\n");
