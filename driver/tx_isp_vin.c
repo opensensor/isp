@@ -647,19 +647,19 @@ int tx_isp_vin_activate_subdev(void* arg1)
         return -EINVAL;
     }
     
-    /* Binary Ninja: private_mutex_lock(arg1 + 0xe8) */
+    /* SAFE: Use struct member access instead of raw pointer arithmetic */
     mutex_lock(&vin_dev->mlock);
-    
-    /* Binary Ninja: if (*(arg1 + 0xf4) == 1) *(arg1 + 0xf4) = 2 */
+
+    /* SAFE: Check and update state using struct members */
     if (vin_dev->state == 1) {
         vin_dev->state = 2;
         mcp_log_info("tx_isp_vin_activate_subdev: state changed from 1 to 2", vin_dev->state);
     }
-    
-    /* Binary Ninja: private_mutex_unlock(arg1 + 0xe8) */
+
+    /* SAFE: Unlock mutex using struct member */
     mutex_unlock(&vin_dev->mlock);
-    
-    /* Binary Ninja: *(arg1 + 0xf8) += 1 */
+
+    /* SAFE: Increment reference count using struct member */
     vin_dev->refcnt += 1;
     mcp_log_info("tx_isp_vin_activate_subdev: refcnt incremented", vin_dev->refcnt);
     
