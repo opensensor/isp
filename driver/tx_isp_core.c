@@ -884,14 +884,7 @@ static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
 static void ispcore_irq_fs_work(struct work_struct *work)
 {
     extern struct tx_isp_dev *ourISPdev;
-    extern volatile bool isp_system_shutting_down;
     struct tx_isp_dev *isp_dev;
-
-    /* CRITICAL: Check shutdown flag first to prevent use-after-free */
-    if (isp_system_shutting_down) {
-        pr_info("*** ispcore_irq_fs_work: System shutting down, skipping work ***\n");
-        return;
-    }
 
     /* CRITICAL: Take local reference to prevent race condition */
     isp_dev = ourISPdev;

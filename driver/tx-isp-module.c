@@ -76,11 +76,6 @@ static DEFINE_MUTEX(sensor_list_mutex);
 static int sensor_count = 0;
 static int isp_memopt = 0; // Memory optimization flag like reference
 
-/* CRITICAL SAFETY: Global flags to prevent interrupt processing during corruption/shutdown */
-static volatile bool isp_system_shutting_down = false;
-static volatile bool isp_system_corrupted = false;
-static volatile int corruption_detection_count = 0;
-
 /* CRITICAL: VIC interrupt control flag - Binary Ninja reference */
 /* This is now declared as extern - the actual definition is in tx_isp_vic.c */
 extern uint32_t vic_start_ok;
@@ -1839,12 +1834,6 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     /* CRITICAL: Validate dev_id points to valid memory */
     if (!virt_addr_valid(dev_id)) {
         printk(KERN_ALERT "*** VIC IRQ: dev_id 0x%p points to invalid memory - interrupt ignored ***\n", dev_id);
-        return IRQ_HANDLED;
-    }
-
-    /* CRITICAL SAFETY: Check if system is shutting down */
-    if (isp_system_shutting_down) {
-        printk(KERN_ALERT "*** VIC IRQ: System shutting down ***\n");
         return IRQ_HANDLED;
     }
 
@@ -5592,10 +5581,6 @@ static void tx_isp_exit(void)
 
     pr_info("TX ISP driver exiting...\n");
 
-    /* CRITICAL SAFETY: Set shutdown flag to prevent interrupt processing */
-    isp_system_shutting_down = true;
-    pr_info("*** System shutdown flag set - interrupts will be ignored ***\n");
-
     /* REMOVED: Frame work shutdown - NOT in reference driver */
     /* Reference driver cleanup is purely interrupt and hardware based */
     pr_info("*** Using reference driver interrupt-based cleanup ***\n");
@@ -6204,11 +6189,6 @@ static irqreturn_t isp_irq_handle(int irq, void *dev_id)
     irqreturn_t result = IRQ_HANDLED;
     void *subdev_handler;
     int handler_result;
-
-    /* CRITICAL SAFETY: Check if system is shutting down */
-    if (isp_system_shutting_down) {
-        return IRQ_HANDLED;
-    }
 
     pr_info("*** isp_irq_handle: IRQ %d fired ***\n", irq);
 
