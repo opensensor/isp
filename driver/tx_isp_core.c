@@ -818,11 +818,13 @@ static irqreturn_t (*irq_func_cb[32])(int irq, void *dev_id) = {0};
 static volatile int isp_force_core_isr = 0;  /* Force ISP core ISR flag */
 
 
-/* Binary Ninja: ispcore_sensor_ops_ioctl - iterate through subdevices safely */
-static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
+/* Binary Ninja: ispcore_sensor_ops_iterate - iterate through subdevices safely */
+static int ispcore_sensor_ops_iterate(struct tx_isp_dev *isp_dev)
 {
     int result = 0;
     int i;
+    static int fps_value = (25 << 16) | 1;  /* Default 25/1 FPS in correct format */
+    static int expo_value = 0x300;  /* Default exposure value for AE */
 
     if (!isp_dev) {
         return -ENODEV;
@@ -838,7 +840,6 @@ static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
         pr_info("*** ispcore_sensor_ops_ioctl: Found real sensor device - calling sensor IOCTL ***\n");
 
         /* CRITICAL: Sensor expects FPS in format (fps_num << 16) | fps_den */
-        static int fps_value = (25 << 16) | 1;  /* Default 25/1 FPS in correct format */
 
         /* Update FPS from tuning data if available */
         if (isp_dev->tuning_data && isp_dev->tuning_data->fps_num > 0 && isp_dev->tuning_data->fps_den > 0) {
@@ -1618,56 +1619,23 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
     return result;
 }
 
-/* ispcore_core_ops_ioctl - EXACT Binary Ninja reference implementation */
-int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
+/* Duplicate function removed - using existing ispcore_core_ops_ioctl at line 664 */
+
+/* ispcore_sensor_ops_ioctl_new - EXACT Binary Ninja reference implementation */
+int ispcore_sensor_ops_ioctl_new(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
-    int result = -ENOTSUPP;
-
-    pr_info("*** ispcore_core_ops_ioctl: cmd=0x%08x ***\n", cmd);
-
-    /* Binary Ninja: Handle specific IOCTL commands */
-    switch (cmd) {
-    case 0x1000000:  /* Core operation */
-        pr_info("ispcore_core_ops_ioctl: Core operation 0x1000000\n");
-        if (sd && sd->ops && sd->ops->core && sd->ops->core->init) {
-            result = sd->ops->core->init(sd, 1);
-        }
-        break;
-    case 0x1000001:  /* Sensor operation */
-        pr_info("ispcore_core_ops_ioctl: Sensor operation 0x1000001\n");
-        if (sd && sd->ops && sd->ops->sensor && sd->ops->sensor->ioctl) {
-            result = sd->ops->sensor->ioctl(sd, cmd, arg);
-        }
-        break;
-    default:
-        pr_info("ispcore_core_ops_ioctl: Unknown command 0x%08x\n", cmd);
-        result = -ENOTTY;
-        break;
-    }
-
-    /* Binary Ninja: if (result == 0xfffffdfd) return 0 */
-    if (result == -ENOTTY) {
-        return 0;
-    }
-
-    return result;
-}
-
-/* ispcore_sensor_ops_ioctl - EXACT Binary Ninja reference implementation */
-int ispcore_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
-{
-    pr_info("*** ispcore_sensor_ops_ioctl: cmd=0x%08x ***\n", cmd);
+    pr_info("*** ispcore_sensor_ops_ioctl_new: cmd=0x%08x ***\n", cmd);
 
     /* Handle Core ISP-specific sensor IOCTL commands */
     switch (cmd) {
     case 0x1000000:  /* Core operation */
-        pr_info("ispcore_sensor_ops_ioctl: Core operation 0x1000000\n");
+        pr_info("ispcore_sensor_ops_ioctl_new: Core operation 0x1000000\n");
         return 0;
     case 0x1000001:  /* Sensor operation */
-        pr_info("ispcore_sensor_ops_ioctl: Sensor operation 0x1000001\n");
+        pr_info("ispcore_sensor_ops_ioctl_new: Sensor operation 0x1000001\n");
         return 0;
     default:
-        pr_info("ispcore_sensor_ops_ioctl: Unknown command 0x%08x\n", cmd);
+        pr_info("ispcore_sensor_ops_ioctl_new: Unknown command 0x%08x\n", cmd);
         return -ENOTTY;
     }
 }
