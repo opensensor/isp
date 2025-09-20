@@ -301,6 +301,11 @@ setup_complete:
         pr_info("*** CRITICAL: LINKING FS DEVICE TO ISP DEVICE ***\n");
         ourISPdev->fs_dev = (struct frame_source_device *)fs_dev;
         pr_info("*** FS DEVICE LINKED: ourISPdev->fs_dev = %p ***\n", ourISPdev->fs_dev);
+
+        /* *** CRITICAL FIX: ADD FS TO SUBDEV ARRAY FOR IOCTL ACCESS *** */
+        pr_info("*** CRITICAL: ADDING FS TO SUBDEV ARRAY AT INDEX 5 ***\n");
+        ourISPdev->subdevs[5] = &fs_dev->subdev;
+        pr_info("*** FS SUBDEV REGISTERED: subdevs[5]=%p ***\n", &fs_dev->subdev);
     } else {
         pr_err("*** ERROR: ourISPdev not available for FS device linking ***\n");
     }
