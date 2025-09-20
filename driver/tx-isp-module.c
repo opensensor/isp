@@ -33,6 +33,11 @@
 #include "../include/tx_isp_tuning.h"
 #include "../include/tx-isp-device.h"
 #include "../include/tx-libimp.h"
+
+/* CRITICAL: Magic number for frame channel validation */
+#ifndef FRAME_CHANNEL_MAGIC
+#define FRAME_CHANNEL_MAGIC 0xDEADBEEF
+#endif
 #include "../include/tx_isp_vic_buffer.h"
 
 /* CSI State constants - needed for proper state management */
@@ -2139,15 +2144,10 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
                 wmb();
             }
 
-            /* Wake up frame channels for all interrupt types - WITH VALIDATION */
-            for (i = 0; i < num_channels && i < 4; i++) {
-                /* CRITICAL: Validate frame channel before accessing */
-                if (frame_channels[i].magic == FRAME_CHANNEL_MAGIC &&
-                    frame_channels[i].state.streaming) {
+            /* Wake up frame channels for all interrupt types - SIMPLE APPROACH */
+            for (i = 0; i < num_channels; i++) {
+                if (frame_channels[i].state.streaming) {
                     frame_channel_wakeup_waiters(&frame_channels[i]);
-                } else if (frame_channels[i].magic != FRAME_CHANNEL_MAGIC) {
-                    pr_err("*** VIC IRQ: Corrupted frame channel %d (magic=0x%x) - skipping ***\n",
-                           i, frame_channels[i].magic);
                 }
             }
         } else {
@@ -2543,8 +2543,10 @@ static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int c
     
     pr_info("Hardware frame completion detected on channel %d\n", channel);
     
-    /* Wake up frame waiters with real hardware completion */
-    frame_channel_wakeup_waiters(&frame_channels[channel]);
+    /* Wake up frame waiters with real hardware completion - SIMPLE APPROACH */
+    if (channel >= 0 && channel < num_channels) {
+        frame_channel_wakeup_waiters(&frame_channels[channel]);
+    }
     
     /* Update frame count for statistics */
     isp_dev->frame_count++;
@@ -3943,7 +3945,8 @@ static int create_frame_channel_devices(void)
             goto cleanup;
         }
         
-        // Initialize frame channel structure
+        // Initialize frame channel structure - FOLLOWING REFERENCE DRIVER PATTERN
+        memset(&frame_channels[i], 0, sizeof(frame_channels[i])); /* Clear entire structure first */
         frame_channels[i].channel_num = i;
         frame_channels[i].miscdev.minor = MISC_DYNAMIC_MINOR;
         frame_channels[i].miscdev.name = device_name;
@@ -3952,7 +3955,7 @@ static int create_frame_channel_devices(void)
         // Initialize channel state
         memset(&frame_channels[i].state, 0, sizeof(frame_channels[i].state));
 
-        /* CRITICAL: Initialize magic number for corruption detection */
+        /* CRITICAL: Initialize magic number for corruption detection - SAFE ADDITION */
         frame_channels[i].magic = FRAME_CHANNEL_MAGIC;
 
         /* Initialize VBM buffer management fields */
@@ -7177,52 +7180,22 @@ static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
     }
 }
 
-/* Wake up waiters when frame is ready - matches reference driver pattern */
+/* Wake up waiters when frame is ready - SIMPLIFIED to match reference driver */
 static void frame_channel_wakeup_waiters(struct frame_channel_device *fcd)
 {
     unsigned long flags;
 
-    /* CRITICAL: Comprehensive validation to prevent BadVA crashes */
     if (!fcd) {
         return;
     }
 
-    /* CRITICAL: Check if fcd is in valid kernel memory range */
-    if ((unsigned long)fcd < 0x80000000 || (unsigned long)fcd >= 0xfffff000) {
-        pr_err("*** frame_channel_wakeup_waiters: Invalid fcd pointer 0x%p (outside kernel memory) ***\n", fcd);
-        return;
-    }
-
-    /* CRITICAL: Validate fcd points to valid memory */
-    if (!virt_addr_valid(fcd)) {
-        pr_err("*** frame_channel_wakeup_waiters: fcd 0x%p points to invalid memory ***\n", fcd);
-        return;
-    }
-
-    /* CRITICAL: Check magic number to detect structure corruption */
-    if (fcd->magic != FRAME_CHANNEL_MAGIC) {
-        pr_err("*** frame_channel_wakeup_waiters: CORRUPTED STRUCTURE - magic=0x%x, expected=0x%x ***\n",
-               fcd->magic, FRAME_CHANNEL_MAGIC);
-        return;
-    }
-
-    /* CRITICAL: Validate channel number is in valid range */
-    if (fcd->channel_num < 0 || fcd->channel_num >= 4) {
-        pr_err("*** frame_channel_wakeup_waiters: Invalid channel_num %d ***\n", fcd->channel_num);
-        return;
-    }
-
-    pr_info("Channel %d: Waking up frame waiters (VALIDATED)\n", fcd->channel_num);
-
-    /* CRITICAL: Use safe spinlock access */
+    /* Simple frame ready notification - following reference driver pattern */
     spin_lock_irqsave(&fcd->state.buffer_lock, flags);
     fcd->state.frame_ready = true;
     spin_unlock_irqrestore(&fcd->state.buffer_lock, flags);
 
     /* Wake up any threads waiting for frame completion */
     wake_up_interruptible(&fcd->state.frame_wait);
-
-    pr_info("Channel %d: Frame ready (SAFE)\n", fcd->channel_num);
 }
 
 /* Public function to wake up all streaming frame channels - for tuning system */
@@ -7278,23 +7251,20 @@ static void simulate_frame_completion(void)
     }
 }
 
-/* VIC frame generation work function */
+/* VIC frame generation work function - SIMPLIFIED */
 static void vic_frame_work_function(struct work_struct *work)
 {
     struct tx_isp_vic_device *vic_dev;
 
-    /* CRITICAL SAFETY: Check if system is shutting down */
+    /* Basic safety check */
     if (!ourISPdev || !ourISPdev->vic_dev) {
-        pr_info("*** vic_frame_work_function: System shutting down, stopping work queue ***\n");
         return;
     }
 
-    /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
     vic_dev = ourISPdev->vic_dev;
 
-    /* CRITICAL SAFETY: Validate VIC device structure */
+    /* Basic validation */
     if (!vic_dev || !vic_dev->vic_regs) {
-        pr_warn("*** vic_frame_work_function: Invalid VIC device, stopping work queue ***\n");
         return;
     }
 
@@ -7302,23 +7272,19 @@ static void vic_frame_work_function(struct work_struct *work)
     if (vic_dev->state == 2 && vic_dev->streaming) {
         int i;
 
-        // Wake up waiting channels - WITH VALIDATION
-        for (i = 0; i < num_channels && i < 4; i++) {
-            /* CRITICAL: Validate frame channel before accessing */
-            if (frame_channels[i].magic == FRAME_CHANNEL_MAGIC &&
-                frame_channels[i].state.streaming) {
+        // Wake up waiting channels - SIMPLE APPROACH
+        for (i = 0; i < num_channels; i++) {
+            if (frame_channels[i].state.streaming) {
                 frame_channel_wakeup_waiters(&frame_channels[i]);
-            } else if (frame_channels[i].magic != FRAME_CHANNEL_MAGIC) {
-                pr_err("*** vic_frame_work: Corrupted frame channel %d (magic=0x%x) - skipping ***\n",
-                       i, frame_channels[i].magic);
             }
         }
 
-        /* CRITICAL SAFETY: Only reschedule if system is still valid */
-        if (ourISPdev && ourISPdev->vic_dev && vic_dev->streaming) {
-            schedule_delayed_work(&vic_frame_work, msecs_to_jiffies(33));
+        /* CRITICAL SAFETY: Only reschedule if system is still valid and stable */
+        if (ourISPdev && ourISPdev->vic_dev && vic_dev->streaming && !in_atomic()) {
+            /* CRITICAL: Increase delay to reduce system load and prevent crashes */
+            schedule_delayed_work(&vic_frame_work, msecs_to_jiffies(100)); /* Reduced from 33ms to 100ms */
         } else {
-            pr_info("*** vic_frame_work_function: System state changed, stopping work queue ***\n");
+            pr_info("*** vic_frame_work_function: System state changed or atomic context, stopping work queue ***\n");
         }
     } else {
         pr_info("*** vic_frame_work_function: VIC not streaming (state=%d, streaming=%d), stopping work queue ***\n",
