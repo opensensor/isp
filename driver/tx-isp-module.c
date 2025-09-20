@@ -7016,8 +7016,15 @@ static int __enqueue_in_driver(void *buffer_struct)
 /* VIC event handler - manages buffer flow between frame channels and VIC */
 static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
 {
+    /* CRITICAL FIX: Validate pointer before casting to prevent corrupted pointer access */
+    if (!vic_subdev || (unsigned long)vic_subdev < 0x80000000 || (unsigned long)vic_subdev >= 0xfffff000) {
+        pr_err("tx_isp_vic_handle_event: Invalid/corrupted vic_subdev pointer 0x%p\n", vic_subdev);
+        return -EINVAL;
+    }
+
     struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)vic_subdev;
-    
+
+    /* Additional validation after cast */
     if (!vic_dev) {
         return -EINVAL;
     }
