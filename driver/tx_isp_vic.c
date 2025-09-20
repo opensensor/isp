@@ -242,26 +242,47 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             int high_bits = 0;       /* $v1_1 = 0 */
             int match_found = 0;     /* $v0 = 0 */
 
-            /* CRITICAL SAFETY: Validate done_head list integrity before traversal */
-            if (!vic_dev->done_head.next || !vic_dev->done_head.prev ||
-                (unsigned long)vic_dev->done_head.next < 0x80000000 ||
-                (unsigned long)vic_dev->done_head.prev < 0x80000000) {
-                pr_err("vic_framedone_irq_function: CORRUPTED done_head list (next=%p, prev=%p)\n",
-                       vic_dev->done_head.next, vic_dev->done_head.prev);
+            /* CRITICAL SAFETY: Validate vic_dev structure integrity before accessing ANY members */
+            if (!vic_dev || (unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff000) {
+                pr_err("vic_framedone_irq_function: CORRUPTED vic_dev pointer %p\n", vic_dev);
                 result = &data_b0000;
                 goto label_123f4;
             }
 
-            /* CRITICAL SAFETY: Check if done_head list is empty */
-            if (list_empty(&vic_dev->done_head)) {
+            /* CRITICAL SAFETY: Validate we can safely access done_head member */
+            if ((unsigned long)&vic_dev->done_head < 0x80000000 ||
+                (unsigned long)&vic_dev->done_head >= 0xfffff000) {
+                pr_err("vic_framedone_irq_function: Cannot safely access vic_dev->done_head member\n");
+                result = &data_b0000;
+                goto label_123f4;
+            }
+
+            /* SAFE: Now we can safely read the done_head list pointers */
+            struct list_head *done_head_next = vic_dev->done_head.next;
+            struct list_head *done_head_prev = vic_dev->done_head.prev;
+
+            /* CRITICAL SAFETY: Validate done_head list integrity after safe read */
+            if (!done_head_next || !done_head_prev ||
+                (unsigned long)done_head_next < 0x80000000 ||
+                (unsigned long)done_head_next >= 0xfffff000 ||
+                (unsigned long)done_head_prev < 0x80000000 ||
+                (unsigned long)done_head_prev >= 0xfffff000) {
+                pr_err("vic_framedone_irq_function: CORRUPTED done_head list (next=%p, prev=%p)\n",
+                       done_head_next, done_head_prev);
+                result = &data_b0000;
+                goto label_123f4;
+            }
+
+            /* CRITICAL SAFETY: Check if done_head list is empty using safe pointers */
+            if (done_head_next == &vic_dev->done_head) {
                 pr_info("vic_framedone_irq_function: done_head list is empty\n");
                 result = &data_b0000;
                 goto label_123f4;
             }
 
             /* Binary Ninja EXACT: for (; i_1 != arg1 + 0x204; i_1 = *i_1) */
-            /* CRITICAL SAFETY: Validate list head pointer before traversal */
-            void **i_1 = (void **)vic_dev->done_head.next;  /* *(arg1 + 0x204) = done_head */
+            /* CRITICAL SAFETY: Use safe list head pointer for traversal */
+            void **i_1 = (void **)done_head_next;  /* *(arg1 + 0x204) = done_head */
             void *list_head_addr = (void *)&vic_dev->done_head;  /* arg1 + 0x204 */
 
             /* CRITICAL SAFETY: Validate initial list pointer */
