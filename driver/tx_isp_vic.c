@@ -219,25 +219,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
         return 0;
     }
 
-    /* CRITICAL SAFETY: Ensure all critical list heads are initialized */
-    if (!vic_dev->done_head.next || !vic_dev->done_head.prev) {
-        pr_warn("vic_framedone_irq_function: done_head not initialized, initializing now\n");
-        INIT_LIST_HEAD(&vic_dev->done_head);
-    }
-    if (!vic_dev->queue_head.next || !vic_dev->queue_head.prev) {
-        pr_warn("vic_framedone_irq_function: queue_head not initialized, initializing now\n");
-        INIT_LIST_HEAD(&vic_dev->queue_head);
-    }
-    if (!vic_dev->free_head.next || !vic_dev->free_head.prev) {
-        pr_warn("vic_framedone_irq_function: free_head not initialized, initializing now\n");
-        INIT_LIST_HEAD(&vic_dev->free_head);
-    }
 
-    /* CRITICAL SAFETY: Initialize spinlock if not already done */
-    if (!spin_is_locked(&vic_dev->buffer_mgmt_lock) && !vic_dev->buffer_mgmt_lock.rlock.raw_lock.slock) {
-        pr_warn("vic_framedone_irq_function: buffer_mgmt_lock not initialized, initializing now\n");
-        spin_lock_init(&vic_dev->buffer_mgmt_lock);
-    }
 
     /* Binary Ninja: if (*(arg1 + 0x214) == 0) */
     /* SAFE: Use proper struct member 'processing' instead of offset 0x214 */
@@ -322,8 +304,8 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 
 
 
-
-    /* Binary Ninja: GPIO handling section (label_123f4 equivalent) */
+/* Binary Ninja: GPIO handling section (label_123f4 equivalent) */
+label_123f4:
     if (gpio_switch_state != 0) {
         /* Binary Ninja: void* $s1_1 = &gpio_info */
         struct {
@@ -359,16 +341,13 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 return gpio_result;
             }
 
-            pr_info("vic_framedone_irq_function: GPIO %d set to state %d\n", gpio_pin, gpio_state);
-
             /* Move to next GPIO info entry */
             gpio_ptr++;
         }
     }
 
-    pr_info("*** vic_framedone_irq_function: completed successfully ***\n");
     /* Binary Ninja: return result */
-    return 0;  /* Return 0 for success matching reference behavior */
+    return (int)(uintptr_t)result;
 }
 
 /* vic_mdma_irq_function - Binary Ninja implementation for MDMA channel interrupts */
