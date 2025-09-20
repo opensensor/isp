@@ -4104,11 +4104,10 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     sensor->type = 0;
                     INIT_LIST_HEAD(&sensor->list);
                     
-                    /* *** CRITICAL FIX: SET UP SENSOR SUBDEV OPS STRUCTURE *** */
-                    pr_info("*** CRITICAL: SETTING UP SENSOR SUBDEV OPS STRUCTURE ***\n");
-                    sensor->sd.ops = &sensor_subdev_ops;
-                    pr_info("*** SENSOR SUBDEV OPS CONFIGURED: core=%p, video=%p, s_stream=%p ***\n",
-                            sensor->sd.ops->core, sensor->sd.ops->video, 
+                    /* CRITICAL FIX: KEEP ORIGINAL SENSOR OPS - NO ISP WRAPPER */
+                    pr_info("*** CRITICAL: KEEPING ORIGINAL SENSOR SUBDEV OPS ***\n");
+                    pr_info("*** SENSOR SUBDEV OPS: core=%p, video=%p, s_stream=%p ***\n",
+                            sensor->sd.ops->core, sensor->sd.ops->video,
                             sensor->sd.ops->video ? sensor->sd.ops->video->s_stream : NULL);
                     
                     pr_info("*** SENSOR SUBDEV INITIALIZED WITH WORKING OPS STRUCTURE ***\n");
