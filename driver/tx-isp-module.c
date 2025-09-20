@@ -1827,8 +1827,24 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         return IRQ_HANDLED;
     }
 
+    /* CRITICAL DEBUG: Show what we received as dev_id */
+    pr_info("*** VIC IRQ: dev_id = %p, isp_dev = %p ***\n", dev_id, isp_dev);
+    pr_info("*** VIC IRQ: isp_dev->vic_dev = %p ***\n", isp_dev->vic_dev);
+
     /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
     /* SAFE: Use proper struct member access instead of raw offset +0xd4 */
+    /* CRITICAL SAFETY: Check if vic_dev pointer is valid before casting */
+    if (!isp_dev->vic_dev) {
+        pr_err("*** VIC IRQ: isp_dev->vic_dev is NULL ***\n");
+        return IRQ_HANDLED;
+    }
+
+    /* CRITICAL SAFETY: Validate vic_dev pointer before casting */
+    if ((unsigned long)isp_dev->vic_dev < 0x80000000 || (unsigned long)isp_dev->vic_dev >= 0xfffff000) {
+        pr_err("*** VIC IRQ: Invalid vic_dev pointer 0x%p ***\n", isp_dev->vic_dev);
+        return IRQ_HANDLED;
+    }
+
     vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
 
     /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */

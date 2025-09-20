@@ -3147,12 +3147,18 @@ int tx_isp_vic_probe(struct platform_device *pdev)
             }
 
             if (isp_dev) {
+                /* CRITICAL DEBUG: Show what we're registering */
+                pr_info("*** VIC PROBE: Registering interrupt with dev_id = %p ***\n", isp_dev);
+                pr_info("*** VIC PROBE: isp_dev->vic_dev = %p ***\n", isp_dev->vic_dev);
+                pr_info("*** VIC PROBE: vic_dev = %p ***\n", vic_dev);
+
                 ret = request_irq(vic_irq, isp_vic_interrupt_service_routine,
                                  IRQF_SHARED, "isp-w02-vic", isp_dev);
                 if (ret == 0) {
                     vic_dev->irq_number = vic_irq;
                     vic_dev->irq = vic_irq;
                     pr_info("*** VIC PROBE: VIC interrupt handler registered for IRQ %d with ISP device %p ***\n", vic_irq, isp_dev);
+                    pr_info("*** VIC PROBE: Interrupt will call handler with dev_id = %p ***\n", isp_dev);
                 } else {
                     pr_err("*** VIC PROBE: Failed to register VIC interrupt handler for IRQ %d: %d ***\n", vic_irq, ret);
                 }
