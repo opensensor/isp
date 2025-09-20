@@ -3082,7 +3082,8 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
     /* Binary Ninja: void* $s2_1 = arg1[0x16] */
     /* Binary Ninja: if (tx_isp_subdev_init(arg1, $v0, &core_subdev_ops) == 0) */
-    if (tx_isp_subdev_init(pdev, (struct tx_isp_subdev *)isp_dev, &core_subdev_ops) == 0) {
+    /* CRITICAL FIX: Use core_subdev_ops_full which has video ops for ispcore_video_s_stream */
+    if (tx_isp_subdev_init(pdev, (struct tx_isp_subdev *)isp_dev, &core_subdev_ops_full) == 0) {
 
         /* SAFE: Initialize locks using proper struct members */
         spin_lock_init(&isp_dev->lock);
