@@ -566,10 +566,10 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 
 /* Forward declaration for hardware initialization */
 static int tx_isp_hardware_init(struct tx_isp_dev *isp_dev);
-void system_reg_write(u32 reg, u32 value);
+void system_reg_write_unsafe(u32 reg, u32 value);  /* Unsafe version for tuning system */
 
-/* system_reg_write - Helper function to write ISP registers safely */
-void system_reg_write(u32 arg1, u32 arg2)
+/* system_reg_write_unsafe - UNSAFE hardware register write (used by tuning system) */
+void system_reg_write_unsafe(u32 arg1, u32 arg2)
 {
     /* Binary Ninja EXACT: *(*(mdns_y_pspa_cur_bi_wei0_array + 0xb8) + arg1) = arg2 */
     /* mdns_y_pspa_cur_bi_wei0_array is the ISP device structure (ourISPdev) */
