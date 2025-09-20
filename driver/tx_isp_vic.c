@@ -2221,7 +2221,25 @@ int vic_mdma_enable(struct tx_isp_vic_device *vic_dev, int channel, int dual_cha
         return -EINVAL;
     }
 
+    /* CRITICAL SAFETY: Additional validation for VIC device structure */
+    if ((unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff000) {
+        pr_err("vic_mdma_enable: Invalid vic_dev pointer 0x%p\n", vic_dev);
+        return -EINVAL;
+    }
+
+    if (!virt_addr_valid(vic_dev)) {
+        pr_err("vic_mdma_enable: vic_dev pointer 0x%p not valid virtual address\n", vic_dev);
+        return -EINVAL;
+    }
+
     vic_regs = vic_dev->vic_regs;
+
+    /* CRITICAL SAFETY: Validate width/height fields before access (offset 0xdc/0xe0) */
+    if (!virt_addr_valid(&vic_dev->width) || !virt_addr_valid(&vic_dev->height)) {
+        pr_err("vic_mdma_enable: Invalid width/height field addresses\n");
+        return -EINVAL;
+    }
+
     width = vic_dev->width;   /* Binary Ninja: *(arg1 + 0xdc) */
     height = vic_dev->height; /* Binary Ninja: *(arg1 + 0xe0) */
 
