@@ -1001,7 +1001,8 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     /* Binary Ninja: if (($s1 & 0x3f8) == 0) */
     if ((interrupt_status & 0x3f8) == 0) {
         /* Binary Ninja: $a0 = *($s0 + 0x15c) - VIC device field at offset 0x15c */
-        error_check = vic_dev->vic_start_ok;  /* This should be at offset 0x15c */
+        extern int vic_start_ok;
+        error_check = vic_start_ok;
     } else {
         /* Binary Ninja: Error interrupt processing */
         u32 error_reg_84c = readl(isp_regs + 0x84c);
@@ -1009,7 +1010,8 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
                 interrupt_status, (interrupt_status & 0x3f8) >> 3,
                 interrupt_status & 0x7, error_reg_84c);
         /* Binary Ninja: $a0 = *($s0 + 0x15c) */
-        error_check = vic_dev->vic_start_ok;
+        extern int vic_start_ok;
+        error_check = vic_start_ok;
     }
 
     /* Binary Ninja: if ($a0 == 1) return 1 */
