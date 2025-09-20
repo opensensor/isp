@@ -439,12 +439,13 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
         v1 = 2;
     }
     
-    /* Binary Ninja: *(arg1 + 0xf4) = $v1 */
-    /* SAFE: Use safe struct member access instead of raw offset 0xf4 */
-    /* Reuse vin_dev variable declared earlier */
-    if (vin_dev) {
+    /* SAFE: Set VIN state using safely obtained VIN device pointer */
+    /* vin_dev was safely obtained from global ISP device above */
+    if (vin_dev && is_valid_kernel_pointer(vin_dev)) {
         vin_dev->state = v1;
-        mcp_log_info("tx_isp_vin_init: *** VIN STATE SET ***", v1);
+        mcp_log_info("tx_isp_vin_init: *** VIN STATE SET SAFELY ***", v1);
+    } else {
+        mcp_log_error("tx_isp_vin_init: cannot set state - invalid VIN device", (u32)vin_dev);
     }
     
     /* Binary Ninja: return result */
