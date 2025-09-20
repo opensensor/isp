@@ -44,6 +44,7 @@ static void debug_vic_start_ok_change(int new_value, const char *location, int l
 void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 {
     unsigned long flags;
+    void __iomem *vic_regs;
 
     pr_info("*** tx_vic_enable_irq: BINARY NINJA EXACT ***\n");
 
@@ -60,6 +61,22 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
     if (vic_dev->irq_enabled == 0) {
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 1 */
         vic_dev->irq_enabled = 1;
+
+        /* CRITICAL FIX: Configure VIC hardware interrupt registers */
+        vic_regs = vic_dev->vic_regs;
+        if (vic_regs) {
+            /* Enable VIC frame done interrupt (bit 0) and error interrupts */
+            writel(0x1, vic_regs + 0x1e0);  /* Enable frame done interrupt */
+            writel(0x0, vic_regs + 0x1e8);  /* Clear interrupt mask */
+
+            /* Enable VIC MDMA interrupts */
+            writel(0x3, vic_regs + 0x1e4);  /* Enable MDMA channel 0 and 1 interrupts */
+            writel(0x0, vic_regs + 0x1ec);  /* Clear MDMA interrupt mask */
+            wmb();
+
+            pr_info("*** tx_vic_enable_irq: VIC hardware interrupt registers configured ***\n");
+            pr_info("*** tx_vic_enable_irq: reg 0x1e0=0x1, 0x1e8=0x0, 0x1e4=0x3, 0x1ec=0x0 ***\n");
+        }
 
         /* Binary Ninja: $v0_1(dump_vsd_5 + 0x80) - this is enable_irq(irq_number) */
         if (vic_dev->irq_number > 0) {
