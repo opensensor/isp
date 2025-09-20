@@ -2328,11 +2328,29 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     if (cmd == 0xc0445609) {
         pr_info("*** DQBUF DETECTED: This is a VIDIOC_DQBUF call ***\n");
     }
-    
+
+    /* CRITICAL: Comprehensive NULL pointer validation to prevent BadVA crashes */
+    if (!file) {
+        pr_err("*** frame_channel_unlocked_ioctl: NULL file pointer - CRITICAL ERROR ***\n");
+        return -EINVAL;
+    }
+
     /* MIPS ALIGNMENT CHECK: Validate file pointer */
-    if (!file || ((uintptr_t)file & 0x3) != 0) {
+    if (((uintptr_t)file & 0x3) != 0) {
         pr_err("*** MIPS ALIGNMENT ERROR: file pointer 0x%p not 4-byte aligned ***\n", file);
         return -EINVAL;
+    }
+
+    /* CRITICAL: Validate file->private_data before accessing */
+    if (!file->private_data) {
+        pr_err("*** frame_channel_unlocked_ioctl: NULL file->private_data - CRITICAL ERROR ***\n");
+        return -EINVAL;
+    }
+
+    /* CRITICAL: Validate private_data is in valid kernel memory range */
+    if ((unsigned long)file->private_data < 0x80000000 || (unsigned long)file->private_data >= 0xfffff000) {
+        pr_err("*** frame_channel_unlocked_ioctl: Invalid private_data pointer 0x%p - memory corruption ***\n", file->private_data);
+        return -EFAULT;
     }
     
     /* MIPS ALIGNMENT CHECK: Validate argp pointer */
