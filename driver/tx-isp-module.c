@@ -3283,8 +3283,13 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
 
         // *** CRITICAL: TRIGGER SENSOR HARDWARE INITIALIZATION AND STREAMING ***
-        if (channel == 0 && ourISPdev && ourISPdev->sensor) {
-            sensor = ourISPdev->sensor;
+        if (channel == 0 && ourISPdev && ourISPdev->subdevs[0]) {
+            /* CRITICAL FIX: Use the REAL sensor subdev from subdevs[0], not the wrapper sensor */
+            struct tx_isp_subdev *real_sensor_sd = ourISPdev->subdevs[0];
+            sensor = sd_to_sensor_device(real_sensor_sd);  /* Convert subdev to sensor structure */
+
+            pr_info("*** FIXED: Using REAL sensor subdev at %p instead of wrapper sensor ***\n", real_sensor_sd);
+            pr_info("*** FIXED: Real sensor structure at %p with ops=%p ***\n", sensor, sensor ? sensor->sd.ops : NULL);
             
             pr_info("*** CHANNEL %d STREAMON: INITIALIZING AND STARTING SENSOR HARDWARE ***\n", channel);
             pr_info("Channel %d: Found sensor %s for streaming\n",
