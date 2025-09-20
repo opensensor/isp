@@ -27,6 +27,7 @@ uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 /* Binary Ninja reference global variables */
 static struct tx_isp_vic_device *dump_vsd = NULL;  /* Global VIC device pointer */
 static void *test_addr = NULL;  /* Test address pointer */
+irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);
 
 /* system_reg_write is now defined in tx-isp-module.c - removed duplicate */
 
@@ -534,79 +535,8 @@ static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
     return 0;
 }
 
-/* VIC interrupt handler - EXACT Binary Ninja reference implementation */
-irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
-{
-    extern struct tx_isp_dev *ourISPdev;
-    extern uint32_t vic_start_ok;
-    struct tx_isp_vic_device *vic_dev;
-    void __iomem *vic_regs;
-    u32 v1_7, v1_10;
-
-    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
-    if (dev_id == NULL || (unsigned long)dev_id >= 0xfffff001) {
-        return IRQ_HANDLED;
-    }
-
-    /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
-    /* CRITICAL SAFETY: Check ourISPdev first */
-    if (!ourISPdev) {
-        pr_err("*** VIC IRQ: ourISPdev is NULL - system not initialized ***\n");
-        return IRQ_HANDLED;
-    }
-
-    vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-
-    /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
-    /* CRITICAL SAFETY: Enhanced vic_dev validation */
-    if (vic_dev != NULL && (unsigned long)vic_dev < 0xfffff001 &&
-        (unsigned long)vic_dev >= 0x80000000 && virt_addr_valid(vic_dev)) {
-        /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
-        vic_regs = vic_dev->vic_regs;
-
-        /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
-        v1_7 = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);
-
-        /* Binary Ninja: int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
-        v1_10 = (~readl(vic_regs + 0x1ec)) & readl(vic_regs + 0x1e4);
-
-        /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7 */
-        writel(v1_7, vic_regs + 0x1f0);
-
-        /* Binary Ninja: *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
-        writel(v1_10, vic_regs + 0x1f4);
-
-        /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
-        if (vic_start_ok != 0) {
-            /* Binary Ninja: if (($v1_7 & 1) != 0) */
-            if ((v1_7 & 1) != 0) {
-                /* Binary Ninja: *($s0 + 0x160) += 1 */
-                vic_dev->frame_count++;
-
-                /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
-                extern int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
-                vic_framedone_irq_function(vic_dev);
-            }
-
-            /* Handle various error conditions - Binary Ninja exact implementation */
-            if ((v1_7 & 0x200) != 0) {
-                static uint32_t data_b299c = 0;
-                data_b299c += 1;
-                isp_printf(1, "Err [VIC_INT] : frame asfifo ovf!!!!!\n", data_b299c);
-            }
-
-            if ((v1_7 & 0x200000) != 0) {
-                static uint32_t data_b2984 = 0;
-                data_b2984 += 1;
-                isp_printf(1, "Err [VIC_INT] : control limit err!!!\n", data_b2984);
-            }
-        }
-    }
-
-    /* Binary Ninja: return 1 */
-    return IRQ_HANDLED;
-}
-EXPORT_SYMBOL(isp_vic_interrupt_service_routine);
+/* REMOVED: Duplicate interrupt handler - using the one from tx-isp-module.c instead */
+/* The interrupt handler in tx-isp-module.c is the correct one that expects struct tx_isp_dev * as dev_id */
 
 /* Stop VIC processing */
 int tx_isp_vic_stop(struct tx_isp_subdev *sd)
