@@ -745,24 +745,7 @@ int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
     return 0;
 }
 
-/* csi_sensor_ops_ioctl - EXACT Binary Ninja reference implementation */
-int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
-{
-    pr_info("*** csi_sensor_ops_ioctl: cmd=0x%08x ***\n", cmd);
-
-    /* Handle CSI-specific sensor IOCTL commands */
-    switch (cmd) {
-    case 0x1000000:  /* Core operation */
-        pr_info("csi_sensor_ops_ioctl: Core operation 0x1000000\n");
-        return 0;
-    case 0x1000001:  /* Sensor operation */
-        pr_info("csi_sensor_ops_ioctl: Sensor operation 0x1000001\n");
-        return 0;
-    default:
-        pr_info("csi_sensor_ops_ioctl: Unknown command 0x%08x\n", cmd);
-        return -ENOTTY;
-    }
-}
+/* Duplicate function removed - using existing csi_sensor_ops_ioctl at line 406 */
 
 /* Define the core operations */
 static struct tx_isp_subdev_core_ops csi_core_ops = {
