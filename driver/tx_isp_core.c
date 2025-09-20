@@ -1065,19 +1065,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     }
 
     return IRQ_HANDLED;
-
-    /* Binary Ninja: if ($v0_9 != 0) */
-    if (v0_9 != 0) {
-        /* Binary Ninja: if (*($s0 + 0x17c) != 0) exception_handle() */
-        /* SAFE: Check VIC device state instead of raw offset access */
-        if (s0 && s0->state != 0) {
-            /* exception_handle() - skip for now */
-        }
-        /* Binary Ninja: data_ca574 += 1 */
-    }
-
-    /* Binary Ninja: int32_t $v0_14 = $s1 & 0x2000 */
-    u32 v0_14 = s1 & 0x2000;
+}
 
     /* Binary Ninja: Frame sync timing measurement */
     if (s3_1 != 0) {
