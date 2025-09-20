@@ -1921,12 +1921,13 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
             /* Binary Ninja: gpio_switch_state = 1, memcpy(&gpio_info, arg, 0x2a) */
             gpio_switch_state = 1;
             if (arg) {
-                /* CRITICAL FIX: Use copy_from_user instead of dangerous memcpy from userspace */
-                if (copy_from_user(&gpio_info, (void __user *)arg, 0x2a)) {
+                /* CRITICAL FIX: Prevent buffer overflow - only copy safe amount */
+                size_t safe_copy_size = min((size_t)0x2a, sizeof(gpio_info));
+                if (copy_from_user(&gpio_info, (void __user *)arg, safe_copy_size)) {
                     pr_err("vic_sensor_ops_ioctl: Failed to copy GPIO info from userspace\n");
                     return -EFAULT;
                 }
-                pr_info("vic_sensor_ops_ioctl: GPIO switch state enabled, info copied safely\n");
+                pr_info("vic_sensor_ops_ioctl: GPIO switch state enabled, copied %zu bytes safely (prevented overflow)\n", safe_copy_size);
             }
             return 0;
             
