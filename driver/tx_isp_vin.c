@@ -358,10 +358,17 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
     mcp_log_info("tx_isp_vin_init: EXACT Binary Ninja implementation", arg2);
     
     /* Binary Ninja: void* $a0 = *(arg1 + 0xe4) */
-    if (!ourISPdev || !ourISPdev->sensor) {
+    /* SAFE: Access sensor from VIN device structure using safe struct member access */
+    struct tx_isp_vin_device *vin_dev = (struct tx_isp_vin_device *)arg1;
+    if (!vin_dev || !is_valid_kernel_pointer(vin_dev)) {
         a0 = 0;
     } else {
-        a0 = ourISPdev->sensor;
+        /* SAFE: Get sensor from global ISP device instead of VIN device offset */
+        if (!ourISPdev || !ourISPdev->sensor) {
+            a0 = 0;
+        } else {
+            a0 = ourISPdev->sensor;
+        }
     }
     
     /* Binary Ninja: if ($a0 == 0) */
