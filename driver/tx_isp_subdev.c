@@ -804,18 +804,6 @@ void tx_isp_enable_irq(struct tx_isp_irq_info *irq_info)
     pr_info("*** tx_isp_enable_irq: IRQ %d ENABLED ***\n", irq_info->irq);
 }
 
-/* tx_isp_disable_irq - EXACT Binary Ninja reference implementation */
-void tx_isp_disable_irq(struct tx_isp_irq_info *irq_info)
-{
-    if (!irq_info || irq_info->irq <= 0) {
-        pr_err("tx_isp_disable_irq: Invalid IRQ info\n");
-        return;
-    }
-
-    disable_irq(irq_info->irq);
-    pr_info("*** tx_isp_disable_irq: IRQ %d DISABLED ***\n", irq_info->irq);
-}
-
 static struct tx_isp_subdev_ops fs_subdev_ops = { 0 }; // All fields NULL/0
 
 
