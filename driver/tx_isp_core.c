@@ -1156,6 +1156,38 @@ static int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
     return 0;
 }
 
+/* ISP Core interrupt enable function - MISSING from original implementation */
+void tx_isp_core_enable_irq(struct tx_isp_dev *isp_dev)
+{
+    void __iomem *core_regs;
+
+    pr_info("*** tx_isp_core_enable_irq: Enabling ISP Core hardware interrupts ***\n");
+
+    if (!isp_dev || !isp_dev->core_regs) {
+        pr_err("tx_isp_core_enable_irq: Invalid ISP device or core registers\n");
+        return;
+    }
+
+    core_regs = isp_dev->core_regs;
+
+    /* CRITICAL: Enable ISP core interrupt generation at hardware level */
+    /* Binary Ninja: system_reg_write(0x30, 0xffffffff) - Enable all interrupt sources */
+    writel(0xffffffff, core_regs + 0x30);
+
+    /* Binary Ninja: system_reg_write(0x10, 0x133) - Enable specific interrupt types */
+    writel(0x133, core_regs + 0x10);
+
+    /* Enable interrupt banks */
+    writel(0x3FFF, core_regs + 0xb0);
+    writel(0x3FFF, core_regs + 0xbc);
+    writel(0x3FFF, core_regs + 0x98b0);
+    writel(0x3FFF, core_regs + 0x98bc);
+    wmb();
+
+    pr_info("*** tx_isp_core_enable_irq: ISP Core hardware interrupt registers configured ***\n");
+    pr_info("*** tx_isp_core_enable_irq: reg 0x30=0xffffffff, 0x10=0x133, banks enabled ***\n");
+}
+
 /* Core ISP interrupt handler - now calls the dispatch system */
 irqreturn_t tx_isp_core_irq_handler(int irq, void *dev_id)
 {
