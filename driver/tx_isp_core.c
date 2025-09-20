@@ -885,6 +885,20 @@ static void ispcore_irq_fs_work(struct work_struct *work)
         return;
     }
 
+    /* CRITICAL: Check for memory corruption patterns (poison values) */
+    if ((unsigned long)isp_dev == 0x5aaa5aaa || (unsigned long)isp_dev == 0x6b6b6b6b ||
+        (unsigned long)isp_dev == 0xdeadbeef || (unsigned long)isp_dev == 0xbaadf00d) {
+        pr_err("*** ispcore_irq_fs_work: MEMORY CORRUPTION DETECTED - isp_dev contains poison pattern 0x%p ***\n", isp_dev);
+        pr_err("*** This indicates buffer overflow or use-after-free - ABORTING work ***\n");
+        return;
+    }
+
+    /* CRITICAL: Validate isp_dev pointer is in valid kernel memory range */
+    if ((unsigned long)isp_dev < 0x80000000 || (unsigned long)isp_dev >= 0xfffff000) {
+        pr_err("*** ispcore_irq_fs_work: Invalid isp_dev pointer 0x%p (outside kernel memory) ***\n", isp_dev);
+        return;
+    }
+
     /* Binary Ninja: Simple loop through 7 items, minimal processing */
     /* Reference driver does very little work here - just checks conditions */
 

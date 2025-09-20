@@ -669,14 +669,30 @@ int vic_saveraw(struct tx_isp_subdev *sd, unsigned int savenum)
         return -ENOMEM;
     }
 
-    // FIXED: Use regular DMA allocation instead of precious rmem
-    capture_buf = dma_alloc_coherent(sd->dev, buf_size, &dma_addr, GFP_KERNEL);
+    /* CRITICAL FIX: Ensure DMA buffer is properly aligned and sized to prevent corruption */
+    /* MIPS SAFETY: Add extra padding to prevent buffer overruns */
+    u32 padded_buf_size = buf_size + 4096; /* Add 4KB safety padding */
+
+    /* MIPS SAFETY: Ensure buffer size is aligned to cache line boundaries */
+    padded_buf_size = (padded_buf_size + 31) & ~31; /* 32-byte alignment for MIPS cache */
+
+    capture_buf = dma_alloc_coherent(sd->dev, padded_buf_size, &dma_addr, GFP_KERNEL | __GFP_ZERO);
     if (!capture_buf) {
-        pr_err("Failed to allocate DMA buffer\n");
+        pr_err("Failed to allocate DMA buffer (size=%u)\n", padded_buf_size);
         iounmap(vic_base);
         return -ENOMEM;
     }
-    pr_info("*** VIC: Using DMA buffer at virt=%p, phys=0x%08x (FIXED: no more rmem usage) ***\n", capture_buf, (uint32_t)dma_addr);
+
+    /* CRITICAL: Validate DMA address alignment */
+    if (dma_addr & 0x1f) {
+        pr_err("*** VIC DMA: ALIGNMENT ERROR - DMA address 0x%08x not 32-byte aligned ***\n", (uint32_t)dma_addr);
+        dma_free_coherent(sd->dev, padded_buf_size, capture_buf, dma_addr);
+        iounmap(vic_base);
+        return -EINVAL;
+    }
+
+    pr_info("*** VIC: Using ALIGNED DMA buffer at virt=%p, phys=0x%08x, size=%u (with safety padding) ***\n",
+            capture_buf, (uint32_t)dma_addr, padded_buf_size);
     // Read original register values
     vic_ctrl = readl(vic_base + 0x7810);
     vic_status = readl(vic_base + 0x7814);
@@ -786,15 +802,31 @@ int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum)
         return -ENOMEM;
     }
 
-    // FIXED: Use regular DMA allocation instead of precious rmem
-    capture_buf = dma_alloc_coherent(sd->dev, buf_size, &dma_addr, GFP_KERNEL);
+    /* CRITICAL FIX: Ensure DMA buffer is properly aligned and sized to prevent corruption */
+    /* MIPS SAFETY: Add extra padding to prevent buffer overruns */
+    u32 padded_buf_size = buf_size + 4096; /* Add 4KB safety padding */
+
+    /* MIPS SAFETY: Ensure buffer size is aligned to cache line boundaries */
+    padded_buf_size = (padded_buf_size + 31) & ~31; /* 32-byte alignment for MIPS cache */
+
+    capture_buf = dma_alloc_coherent(sd->dev, padded_buf_size, &dma_addr, GFP_KERNEL | __GFP_ZERO);
     if (!capture_buf) {
-        pr_err("Failed to allocate DMA buffer\n");
+        pr_err("Failed to allocate DMA buffer (size=%u)\n", padded_buf_size);
         iounmap(vic_base);
         return -ENOMEM;
     }
     using_rmem = false;
-    pr_info("*** VIC: Using DMA buffer at virt=%p, phys=0x%08x (FIXED: no more rmem usage) ***\n", capture_buf, (uint32_t)dma_addr);
+
+    /* CRITICAL: Validate DMA address alignment */
+    if (dma_addr & 0x1f) {
+        pr_err("*** VIC DMA: ALIGNMENT ERROR - DMA address 0x%08x not 32-byte aligned ***\n", (uint32_t)dma_addr);
+        dma_free_coherent(sd->dev, padded_buf_size, capture_buf, dma_addr);
+        iounmap(vic_base);
+        return -EINVAL;
+    }
+
+    pr_info("*** VIC: Using ALIGNED DMA buffer at virt=%p, phys=0x%08x, size=%u (with safety padding) ***\n",
+            capture_buf, (uint32_t)dma_addr, padded_buf_size);
 
     // Read original register values
     vic_ctrl = readl(vic_base + 0x7810);

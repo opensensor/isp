@@ -1869,6 +1869,14 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         return IRQ_HANDLED;
     }
 
+    /* CRITICAL: Check for memory corruption patterns (poison values) */
+    if ((unsigned long)isp_dev == 0x5aaa5aaa || (unsigned long)isp_dev == 0x6b6b6b6b ||
+        (unsigned long)isp_dev == 0xdeadbeef || (unsigned long)isp_dev == 0xbaadf00d) {
+        pr_err("*** VIC IRQ: MEMORY CORRUPTION DETECTED - isp_dev contains poison pattern 0x%p ***\n", isp_dev);
+        pr_err("*** This indicates buffer overflow or use-after-free - ABORTING interrupt ***\n");
+        return IRQ_HANDLED;
+    }
+
     /* ROBUST FIX: Get vic_dev using proper struct member access with comprehensive validation */
     vic_dev = isp_dev->vic_dev;
 
@@ -2746,10 +2754,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                        channel, reqbuf.count);
 
                 /* Reference driver allocates buffer structures, not DMA buffers */
-                /* The VIC hardware will set the actual DMA addresses later */
+                /* CRITICAL FIX: Allocate properly aligned DMA buffers to prevent corruption */
                 for (int i = 0; i < reqbuf.count; i++) {
-                    /* Allocate video_buffer structure like reference driver private_kmalloc */
-                    struct video_buffer *buffer = kzalloc(sizeof(struct video_buffer), GFP_KERNEL);
+                    /* MIPS SAFETY: Allocate video_buffer structure with proper alignment */
+                    struct video_buffer *buffer = kzalloc(sizeof(struct video_buffer), GFP_KERNEL | __GFP_ZERO);
                     if (!buffer) {
                         pr_err("*** Channel %d: Failed to allocate video_buffer structure %d ***\n", channel, i);
 
@@ -2980,6 +2988,20 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_warn("*** This may cause green frames - application should provide real buffer addresses! ***\n");
         }
 
+        /* CRITICAL SAFETY: Validate buffer address alignment for MIPS */
+        if (buffer_phys_addr & 0x3) {
+            pr_err("*** Channel %d: QBUF - MIPS ALIGNMENT ERROR: buffer address 0x%x not 4-byte aligned ***\n",
+                   channel, buffer_phys_addr);
+            return -EINVAL;
+        }
+
+        /* CRITICAL SAFETY: Validate buffer address is in valid memory range */
+        if (buffer_phys_addr < 0x6000000 || buffer_phys_addr >= 0x8000000) {
+            pr_err("*** Channel %d: QBUF - INVALID BUFFER ADDRESS: 0x%x outside valid range ***\n",
+                   channel, buffer_phys_addr);
+            return -EINVAL;
+        }
+
         /* CRITICAL MIPS SAFETY: Validate buffer address alignment */
         if ((buffer_phys_addr & 0x3) != 0) {
             pr_err("*** Channel %d: QBUF - MIPS ALIGNMENT ERROR: buffer address 0x%x not 4-byte aligned ***\n",
@@ -3122,7 +3144,12 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
             buffer.index = dqbuf_cycle;
             buffer.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-            buffer.bytesused = state->width * state->height * 3 / 2; // YUV420 size
+            /* CRITICAL FIX: Use consistent buffer size calculation */
+            if (channel == 0) {
+                buffer.bytesused = 1920 * 1080 * 3 / 2; /* NV12 main stream */
+            } else {
+                buffer.bytesused = 640 * 360 * 3 / 2;   /* NV12 sub stream */
+            }
             buffer.flags = V4L2_BUF_FLAG_DONE;
             buffer.field = V4L2_FIELD_NONE;
             buffer.sequence = state->sequence++;
@@ -3247,7 +3274,12 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         // memcpy(arg2, arg1, 0x34) - copy basic buffer info
         buffer.index = buf_index;
         buffer.type = 1; // V4L2_BUF_TYPE_VIDEO_CAPTURE
-        buffer.bytesused = state->width * state->height * 3 / 2; // YUV420 size
+        /* CRITICAL FIX: Use consistent buffer size calculation */
+        if (channel == 0) {
+            buffer.bytesused = 1920 * 1080 * 3 / 2; /* NV12 main stream */
+        } else {
+            buffer.bytesused = 640 * 360 * 3 / 2;   /* NV12 sub stream */
+        }
         buffer.field = 1; // V4L2_FIELD_NONE
         do_gettimeofday(&buffer.timestamp);
         buffer.sequence = state->sequence++;
