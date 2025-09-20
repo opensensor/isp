@@ -3267,8 +3267,8 @@ int tx_isp_vic_remove(struct platform_device *pdev)
     /* Stop VIC */
     tx_isp_vic_stop(sd);
 
-    /* Free interrupt */
-    free_irq(platform_get_irq(pdev, 0), sd);
+    /* *** CRITICAL: No free_irq needed - IRQ is managed by main dispatcher *** */
+    /* Main dispatcher in tx-isp-module.c handles IRQ registration/cleanup */
 
     remove_proc_entry("isp-w02", NULL);
     remove_proc_entry("jz/isp", NULL);
