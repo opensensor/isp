@@ -668,41 +668,19 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 /* csi_set_on_lanes - EXACT Binary Ninja implementation */
 int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes)
 {
-    void __iomem *csi_base;
+    void __iomem *csi_regs;
     u32 reg_val;
 
-    pr_info("*** csi_set_on_lanes: EXACT Binary Ninja implementation ***\n");
-    pr_info("csi_set_on_lanes: lanes=%d\n", lanes);
-
-    if (!csi_dev) {
-        pr_err("csi_set_on_lanes: CSI device is NULL\n");
-        return -EINVAL;
-    }
+    /* Binary Ninja: isp_printf(0, "Can't output the width(%d)!\n", "csi_set_on_lanes") */
+    isp_printf(0, "Can't output the width(%d)!\n", "csi_set_on_lanes");
 
     /* Binary Ninja: void* $v1 = *(arg1 + 0xb8) */
-    /* CRITICAL FIX: Ensure CSI base is properly initialized */
-    csi_base = csi_dev->csi_regs;
-    if (!csi_base) {
-        pr_err("csi_set_on_lanes: CSI base is NULL\n");
-
-        /* Use global ISP device CSI registers mapped by subdev probe */
-        if (ourISPdev && ourISPdev->csi_regs) {
-            csi_dev->csi_regs = ourISPdev->csi_regs;
-            csi_base = csi_dev->csi_regs;
-            pr_info("CSI base address from global ISP device: %p\n", csi_base);
-        } else {
-            pr_err("*** ERROR: CSI lane configuration failed: No CSI registers available ***\n");
-            return -EINVAL;
-        }
-    }
+    csi_regs = csi_dev->csi_regs;
 
     /* Binary Ninja: *($v1 + 4) = ((zx.d(arg2) - 1) & 3) | (*($v1 + 4) & 0xfffffffc) */
-    reg_val = readl(csi_base + 4);
+    reg_val = readl(csi_regs + 4);
     reg_val = (reg_val & 0xfffffffc) | ((lanes - 1) & 3);
-    writel(reg_val, csi_base + 4);
-    wmb();
-
-    pr_info("*** CSI lanes configured: %d lanes (reg 0x4 = 0x%08x) ***\n", lanes, reg_val);
+    writel(reg_val, csi_regs + 4);
 
     /* Binary Ninja: return 0 */
     return 0;
@@ -730,13 +708,70 @@ static struct tx_isp_subdev_ops csi_subdev_ops = {
     .sensor = &csi_sensor_ops,
 };
 
+/* Forward declarations for CSI file operations */
+static int dump_isp_csi_open(struct inode *inode, struct file *file);
+static int isp_csi_show(struct seq_file *m, void *v);
+
+/* dump_isp_csi_open - EXACT Binary Ninja implementation */
+static int dump_isp_csi_open(struct inode *inode, struct file *file)
+{
+    /* Binary Ninja: return private_single_open_size(arg2, isp_csi_show, PDE_DATA(), 0x400) __tailcall */
+    return single_open_size(file, isp_csi_show, PDE_DATA(inode), 0x400);
+}
+
+/* isp_csi_show - EXACT Binary Ninja implementation */
+static int isp_csi_show(struct seq_file *m, void *v)
+{
+    void *csi_data = m->private;
+    struct tx_isp_csi_device *csi_dev;
+    void __iomem *csi_regs;
+    u32 reg_20, reg_24;
+    int result = 0;
+
+    /* Binary Ninja: void* $v0 = *(arg1 + 0x3c) */
+    if (csi_data != NULL && (unsigned long)csi_data < 0xfffff001) {
+        /* Binary Ninja: void* $s1_1 = *($v0 + 0xd4) */
+        csi_dev = (struct tx_isp_csi_device *)csi_data;
+
+        if (csi_dev != NULL && (unsigned long)csi_dev < 0xfffff001) {
+            /* Binary Ninja: void* $v0_2 = *($s1_1 + 0xb8) */
+            csi_regs = csi_dev->csi_regs;
+
+            /* Binary Ninja: int32_t $v1_1 = *($v0_2 + 0x20) */
+            reg_20 = readl(csi_regs + 0x20);
+            /* Binary Ninja: int32_t $v0_4 = *($v0_2 + 0x24) */
+            reg_24 = readl(csi_regs + 0x24);
+
+            /* Binary Ninja: if ($v1_1 != 0) result = seq_printf(arg1, "sensor type is BT656!\n", $v1_1) */
+            if (reg_20 != 0) {
+                result = seq_printf(m, "sensor type is BT656!\n", reg_20);
+            }
+
+            /* Binary Ninja: if ($v0_4 != 0) result += seq_printf(arg1, "sensor type is BT601!\n", $v0_4) */
+            if (reg_24 != 0) {
+                result += seq_printf(m, "sensor type is BT601!\n", reg_24);
+            }
+
+            /* Binary Ninja: return result + seq_printf(arg1, "%s[%d] VIC failed to config DVP mode!(8bits-sensor)\n", *($v0_10 + 0x14)) */
+            if (reg_20 != 0 || reg_24 != 0) {
+                u32 reg_14 = readl(csi_regs + 0x14);
+                return result + seq_printf(m, "%s[%d] VIC failed to config DVP mode!(8bits-sensor)\n", reg_14);
+            }
+        }
+    }
+
+    /* Binary Ninja: isp_printf(2, "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n", entry_$a2) */
+    isp_printf(2, "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n", 0);
+    return 0;
+}
+
 /* CSI file operations - Binary Ninja reference */
 static const struct file_operations isp_csi_fops = {
     .owner = THIS_MODULE,
-    .open = csi_core_ops_init,  /* Placeholder - should be proper open function */
+    .open = dump_isp_csi_open,
+    .read = seq_read,
+    .llseek = seq_lseek,
     .release = single_release,
-    .unlocked_ioctl = csi_core_ops_init,
-    .llseek = default_llseek,
 };
 
 // Define resources outside probe
@@ -825,29 +860,65 @@ int tx_isp_csi_probe(struct platform_device *pdev)
     return 0;
 }
 
-/* CSI remove function */
+/* tx_isp_csi_remove - EXACT Binary Ninja implementation */
 int tx_isp_csi_remove(struct platform_device *pdev)
 {
-    struct tx_isp_subdev *sd = private_platform_get_drvdata(pdev);
-    struct resource *res = NULL;
+    struct tx_isp_subdev *sd;
+    struct tx_isp_csi_device *csi_dev;
+    void __iomem *csi_regs;
+    struct resource *phy_res;
 
-    if (!sd)
-        return -EINVAL;
+    /* Binary Ninja: void* $v0 = private_platform_get_drvdata() */
+    sd = private_platform_get_drvdata(pdev);
 
-    /* Free interrupt if it was requested */
-    res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
-    if (res)
-        free_irq(res->start, sd);
+    /* Binary Ninja: if ($v0 != 0) */
+    if (sd != NULL) {
+        /* Binary Ninja: int32_t $s0_1 = $v0 u< 0xfffff001 ? 1 : 0 */
+        if ((unsigned long)sd >= 0xfffff001) {
+            sd = NULL;
+        }
+    }
 
-    /* Disable CSI */
-    tx_isp_csi_stop(sd);
+    if (!sd) {
+        return 0;
+    }
 
-    res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-    private_iounmap(sd->csi_base);
-    private_release_mem_region(res->start, resource_size(res));
+    /* Get CSI device from subdev */
+    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+
+    /* Binary Ninja: void* $v1 = *($s0 + 0xb8) */
+    csi_regs = csi_dev->csi_regs;
+
+    /* Binary Ninja: int32_t* $s2 = *($s0 + 0x138) */
+    phy_res = csi_dev->phy_res;
+
+    /* Binary Ninja: *($v1 + 0x10) &= 0xfffffffe */
+    writel(readl(csi_regs + 0x10) & 0xfffffffe, csi_regs + 0x10);
+
+    /* Binary Ninja: void* $v1_1 = *($s0 + 0xb8) */
+    /* Binary Ninja: *($v1_1 + 0x10) |= 1 */
+    writel(readl(csi_regs + 0x10) | 1, csi_regs + 0x10);
+
+    /* Binary Ninja: private_platform_set_drvdata(arg1, 0) */
+    private_platform_set_drvdata(pdev, NULL);
+
+    /* Binary Ninja: private_iounmap(*($s0 + 0x13c)) */
+    private_iounmap(csi_dev->csi_regs);
+
+    /* Binary Ninja: int32_t $a0_2 = *$s2 */
+    /* Binary Ninja: private_release_mem_region($a0_2, $s2[1] + 1 - $a0_2) */
+    if (phy_res) {
+        private_release_mem_region(phy_res->start, resource_size(phy_res));
+    }
+
+    /* Binary Ninja: tx_isp_subdev_deinit($s1) */
     tx_isp_subdev_deinit(sd);
-    private_kfree(sd);
-return 0;
+
+    /* Binary Ninja: private_kfree($s0) */
+    private_kfree(csi_dev);
+
+    /* Binary Ninja: return 0 */
+    return 0;
 }
 
 /* CSI register dump function for debugging */
