@@ -562,7 +562,7 @@ extern int tx_isp_fs_probe(struct platform_device *pdev);
 static int tx_isp_platform_probe(struct platform_device *pdev);
 static int tx_isp_module_init(struct tx_isp_dev *isp_dev);
 static int tx_isp_create_proc_entries(struct tx_isp_dev *isp_dev);
-static int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp_dev);
+int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp_dev);
 
 /* V4L2 video device functions */
 extern int tx_isp_v4l2_init(void);
@@ -4886,7 +4886,7 @@ static int tx_isp_create_proc_entries(struct tx_isp_dev *isp_dev)
 }
 
 /* tx_isp_create_graph_and_nodes - EXACT Binary Ninja reference implementation */
-static int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp_dev)
+int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp_dev)
 {
     int ret;
     struct tx_isp_platform_data *pdata;
