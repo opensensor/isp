@@ -7526,21 +7526,7 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
             pr_info("*** SENSOR s_stream FUNCTION: %p ***\n", sd->ops->video->s_stream);
         }
 
-        /* *** CRITICAL: INITIALIZE VIN NOW THAT SENSOR IS AVAILABLE *** */
-        if (ourISPdev->vin_dev) {
-            struct tx_isp_vin_device *vin_device = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
-            pr_info("*** CRITICAL: INITIALIZING VIN TO STATE 3 AFTER SENSOR REGISTRATION ***\n");
-
-            /* Call VIN init function now that sensor is available */
-            extern int tx_isp_vin_init(void* arg1, int32_t arg2);
-            int vin_ret = tx_isp_vin_init(vin_device, 1);
-            if (vin_ret == 0) {
-                pr_info("*** CRITICAL: VIN INITIALIZED SUCCESSFULLY AFTER SENSOR REGISTRATION ***\n");
-            } else {
-                pr_info("*** VIN INIT RETURNED %d BUT STATE SHOULD BE SET TO 3 ***\n", vin_ret);
-            }
-            pr_info("*** VIN CURRENT STATE: %d (should be 3) ***\n", vin_device->state);
-        }
+        /* VIN initialization should happen through normal subdev ops flow */
         
         /* Check if any channel is already streaming and set state accordingly */
         sd->vin_state = TX_ISP_MODULE_INIT;  // Default to INIT
