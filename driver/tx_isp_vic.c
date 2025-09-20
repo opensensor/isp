@@ -270,39 +270,37 @@ static struct {
 } gpio_info[10];
 
 /* vic_framedone_irq_function - EXACT Binary Ninja MCP implementation with SAFE struct access */
-int vic_framedone_irq_function(struct tx_isp_vic_device *arg1)
+int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 {
     void *result = &data_b0000;  /* Binary Ninja: void* result = &data_b0000 */
 
-    if (!arg1) {
+    if (!vic_dev) {
         return (int)(uintptr_t)result;
     }
 
-
-
     /* Binary Ninja: if (*(arg1 + 0x214) == 0) */
     /* SAFE: Use proper struct member 'processing' instead of offset 0x214 */
-    if (arg1->processing == 0) {
+    if (vic_dev->processing == 0) {
         goto label_123f4;
     } else {
         /* Binary Ninja: result = *(arg1 + 0x210) */
         /* SAFE: Use proper struct member 'stream_state' instead of offset 0x210 */
-        result = (void *)(uintptr_t)arg1->stream_state;
+        result = (void *)(uintptr_t)vic_dev->stream_state;
 
-        if (arg1->stream_state != 0) {
+        if (vic_dev->stream_state != 0) {
             /* Binary Ninja: void* $a3_1 = *(arg1 + 0xb8) */
             /* SAFE: Use vic_regs member instead of offset 0xb8 */
-            void __iomem *a3_1 = arg1->vic_regs;
+            void __iomem *vic_regs = vic_dev->vic_regs;
 
             /* Binary Ninja: void** i_1 = *(arg1 + 0x204) */
             /* SAFE: Use done_head list instead of raw pointer *(arg1 + 0x204) */
-            struct list_head *i_1 = arg1->done_head.next;
+            struct list_head *i_1 = vic_dev->done_head.next;
             int a1_1 = 0;  /* Buffer count */
             int v1_1 = 0;  /* High bits */
             int v0 = 0;    /* Match flag */
 
             /* Binary Ninja: for (; i_1 != arg1 + 0x204; i_1 = *i_1) */
-            while (i_1 != &arg1->done_head) {
+            while (i_1 != &vic_dev->done_head) {
                 /* Binary Ninja: $v1_1 += 0 u< $v0 ? 1 : 0 */
                 v1_1 += (0 < v0) ? 1 : 0;
                 /* Binary Ninja: $a1_1 += 1 */
@@ -311,7 +309,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *arg1)
                 /* Binary Ninja: if (i_1[2] == *($a3_1 + 0x380)) */
                 /* SAFE: Extract buffer address from list entry */
                 struct vic_buffer_entry *buffer = container_of(i_1, struct vic_buffer_entry, list);
-                u32 current_buffer = readl(a3_1 + 0x380);
+                u32 current_buffer = readl(vic_regs + 0x380);
 
                 if (buffer->buffer_addr == current_buffer) {
                     v0 = 1;  /* Match found */
@@ -333,9 +331,9 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *arg1)
             }
 
             /* Binary Ninja: *($a3_1 + 0x300) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff) */
-            if (a3_1) {
-                u32 reg_val = readl(a3_1 + 0x300);
-                writel(v1_2 | (reg_val & 0xfff0ffff), a3_1 + 0x300);
+            if (vic_regs) {
+                u32 reg_val = readl(vic_regs + 0x300);
+                writel(v1_2 | (reg_val & 0xfff0ffff), vic_regs + 0x300);
             }
 
             /* Binary Ninja: result = &data_b0000 */
