@@ -583,7 +583,13 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
 
     } else if (strcmp(dev_name, "isp-w02") == 0) {
         /* Link VIC device - actual device name is "isp-w02" not "tx-isp-vic" */
-        struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
+        /* CRITICAL FIX: Use direct pointer storage instead of container_of to avoid corruption */
+        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+        if (!vic_dev || (unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff000) {
+            pr_err("*** VIC DEVICE LINKING FAILED: Invalid vic_dev pointer %p ***\n", vic_dev);
+            return;
+        }
+
         /* CRITICAL FIX: Store VIC device pointer correctly - NOT cast to subdev! */
         ourISPdev->vic_dev = vic_dev;  /* vic_dev field expects struct tx_isp_vic_device * */
         vic_dev->vic_regs = sd->regs;  /* Critical: Set primary VIC registers */

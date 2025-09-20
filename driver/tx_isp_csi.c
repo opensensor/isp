@@ -528,26 +528,26 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         writel(sensor_attr->mipi.lans - 1, csi_dev->csi_regs + 4);
 
                         /* Binary Ninja: void* $v0_2 = *($s0_1 + 0xb8) */
-                        csi_base = csi_dev->csi_regs;
+                        csi_regs = csi_dev->csi_regs;
 
                         /* Binary Ninja: *($v0_2 + 8) &= 0xfffffffe */
-                        writel(readl(csi_base + 8) & 0xfffffffe, csi_base + 8);
+                        writel(readl(csi_regs + 8) & 0xfffffffe, csi_regs + 8);
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0xc) = 0 */
-                        writel(0, csi_dev->csi_regs + 0xc);
+                        writel(0, csi_regs + 0xc);
 
                         /* Binary Ninja: private_msleep(1) */
                         private_msleep(1);
 
                         /* Binary Ninja: void* $v1_9 = *($s0_1 + 0xb8) */
                         /* Binary Ninja: *($v1_9 + 0x10) &= 0xfffffffe */
-                        writel(readl(csi_dev->csi_regs + 0x10) & 0xfffffffe, csi_dev->csi_regs + 0x10);
+                        writel(readl(csi_regs + 0x10) & 0xfffffffe, csi_regs + 0x10);
 
                         /* Binary Ninja: private_msleep(1) */
                         private_msleep(1);
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0xc) = $s2_1 */
-                        writel(interface_type, csi_dev->csi_regs + 0xc);
+                        writel(interface_type, csi_regs + 0xc);
 
                         /* Binary Ninja: private_msleep(1) */
                         private_msleep(1);
