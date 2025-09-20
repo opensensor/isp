@@ -4783,27 +4783,11 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     /* Binary Ninja: *($v0 + 0xd4) = $v0 - Self-pointer for validation */
     /* Note: self_ptr member may not exist in current struct definition, skipping for now */
 
-    /* ARCHITECTURAL FIX: Probe should NOT allocate new ISP device */
-    if (ourISPdev) {
-        pr_info("*** PROBE: Using existing global ISP device: %p ***\n", ourISPdev);
+    /* Set platform driver data to the ISP device (whether existing or newly allocated) */
+    platform_set_drvdata(pdev, isp_dev);
 
-        /* CRITICAL: Free the unnecessary local allocation */
-        kfree(isp_dev);
-
-        /* Use the existing global device for this platform device */
-        platform_set_drvdata(pdev, ourISPdev);
-
-        pr_info("*** PROBE: Platform device %s linked to global ISP device ***\n",
-                pdev->name ? pdev->name : "unknown");
-    } else {
-        pr_err("*** PROBE ERROR: ourISPdev is NULL - tx_isp_init() should have allocated it ***\n");
-        pr_err("*** PROBE ERROR: This indicates initialization order problem ***\n");
-
-        /* Emergency fallback - use the local allocation */
-        ourISPdev = isp_dev;
-        platform_set_drvdata(pdev, isp_dev);
-        pr_warn("*** PROBE: Emergency fallback - using local allocation: %p ***\n", isp_dev);
-    }
+    pr_info("*** PROBE: Platform device %s linked to ISP device %p ***\n",
+            pdev->name ? pdev->name : "unknown", isp_dev);
 
     return 0;
 }
