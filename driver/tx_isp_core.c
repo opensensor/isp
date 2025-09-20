@@ -1255,7 +1255,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             v1_10 = s0 ? s0->day_night_state : 0;
         } else {
             /* Binary Ninja: Day/night switch processing */
-            if (a0_1 && /* check callback condition */) {
+            if (a0_1 != NULL) {
                 data_ca570 = 0;
             } else {
                 /* Binary Ninja: system_reg_write(0x6030, 0xff00ff00) */
