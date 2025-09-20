@@ -5596,14 +5596,9 @@ static void tx_isp_exit(void)
     isp_system_shutting_down = true;
     pr_info("*** System shutdown flag set - interrupts will be ignored ***\n");
 
-    /* CRITICAL: Set frame work shutdown flag and cancel work safely */
-    mutex_lock(&frame_work_mutex);
-    frame_work_shutdown = true;
-    mutex_unlock(&frame_work_mutex);
-
-    /* Cancel frame generation work */
-    cancel_delayed_work_sync(&vic_frame_work);
-    pr_info("*** Frame generation work cancelled safely ***\n");
+    /* REMOVED: Frame work shutdown - NOT in reference driver */
+    /* Reference driver cleanup is purely interrupt and hardware based */
+    pr_info("*** Using reference driver interrupt-based cleanup ***\n");
 
     if (ourISPdev) {
         /* Clean up subdevice graph */
