@@ -1196,8 +1196,8 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     /* Binary Ninja: Channel 2 frame completion */
     if (interrupt_status & 4) {
         pr_info("ISP CORE: Channel 2 frame done\n");
-        /* Similar processing for channel 2 */
-        while ((readl(vic_dev->vic_regs + 0x9b7c) & 1) == 0) {
+        /* Similar processing for channel 2 - uses ISP registers */
+        while ((readl(isp_regs + 0x9b7c) & 1) == 0) {
             /* Channel 2 frame processing */
             if (isp_core_channels[2].state.streaming) {
                 frame_channel_wakeup_waiters(&isp_core_channels[2]);
