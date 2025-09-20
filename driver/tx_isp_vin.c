@@ -650,49 +650,25 @@ label_132f4:
  */
 int tx_isp_vin_activate_subdev(void* arg1)
 {
-    extern struct tx_isp_dev *ourISPdev;
-    struct tx_isp_vin_device *vin_dev;
+    struct tx_isp_vin_device *vin_dev = (struct tx_isp_vin_device *)arg1;
 
-    pr_info("VIN: tx_isp_vin_activate_subdev: CRITICAL FIX - ignore arg1, use global ISP only\n");
+    /* EXACT Binary Ninja reference implementation */
+    /* private_mutex_lock(arg1 + 0xe8) */
+    mutex_lock(&vin_dev->mlock);
 
-    /* CRITICAL FIX: The arg1 parameter is GARBAGE when called from tuning IOCTL!
-     * tuning IOCTL passes &param_ptr[3] which is just a pointer to an int,
-     * NOT a VIN device pointer. This causes BadVA crashes when we try to
-     * access struct members. ALWAYS use global ISP device instead. */
-
-    if (!ourISPdev) {
-        pr_err("VIN: tx_isp_vin_activate_subdev: no global ISP device available\n");
-        return -ENODEV;
-    }
-
-    if (!ourISPdev->vin_dev) {
-        pr_err("VIN: tx_isp_vin_activate_subdev: no VIN device in global ISP\n");
-        return -ENODEV;
-    }
-
-    vin_dev = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
-
-    /* CRITICAL: Don't access arg1 at all - it's garbage from tuning IOCTL */
-    pr_info("VIN: tx_isp_vin_activate_subdev: using VIN device from global ISP: %p\n", vin_dev);
-    
-    /* SAFE: Use struct member access with basic error handling */
-    if (mutex_lock_interruptible(&vin_dev->mlock)) {
-        pr_err("VIN: tx_isp_vin_activate_subdev: mutex lock interrupted\n");
-        return -EINTR;
-    }
-
-    /* SAFE: Check and update state using struct members */
+    /* if (*(arg1 + 0xf4) == 1) *(arg1 + 0xf4) = 2 */
     if (vin_dev->state == 1) {
         vin_dev->state = 2;
-        pr_info("VIN: tx_isp_vin_activate_subdev: state changed from 1 to 2 = 0x%x\n", vin_dev->state);
     }
 
-    /* SAFE: Unlock mutex using struct member */
+    /* private_mutex_unlock(arg1 + 0xe8) */
     mutex_unlock(&vin_dev->mlock);
 
-    /* SAFE: Increment reference count using struct member */
+    /* *(arg1 + 0xf8) += 1 */
     vin_dev->refcnt += 1;
-    pr_info("VIN: tx_isp_vin_activate_subdev: refcnt incremented = 0x%x\n", vin_dev->refcnt);
+
+    /* return 0 */
+    return 0;
     
     /* Binary Ninja: return 0 */
     return 0;
