@@ -263,32 +263,64 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 goto label_123f4;
             }
 
-            /* SAFE: Use safe list traversal instead of dangerous pointer arithmetic */
-            struct vic_buffer_entry *entry, *tmp;
-            list_for_each_entry_safe(entry, tmp, &vic_dev->done_head, list) {
-                /* CRITICAL SAFETY: Validate entry pointer */
-                if (!entry || (unsigned long)entry < 0x80000000 || (unsigned long)entry >= 0xfffff000) {
-                    pr_err("vic_framedone_irq_function: Invalid entry pointer %p, breaking\n", entry);
-                    break;
-                }
+            /* Binary Ninja EXACT: for (; i_1 != arg1 + 0x204; i_1 = *i_1) */
+            /* CRITICAL SAFETY: Validate list head pointer before traversal */
+            void **i_1 = (void **)vic_dev->done_head.next;  /* *(arg1 + 0x204) = done_head */
+            void *list_head_addr = (void *)&vic_dev->done_head;  /* arg1 + 0x204 */
 
+            /* CRITICAL SAFETY: Validate initial list pointer */
+            if (!i_1 || (unsigned long)i_1 < 0x80000000 || (unsigned long)i_1 >= 0xfffff000) {
+                pr_err("vic_framedone_irq_function: CORRUPTED initial list pointer i_1=%p\n", i_1);
+                result = &data_b0000;
+                goto label_123f4;
+            }
+
+            pr_info("vic_framedone_irq_function: Starting list traversal - i_1=%p, list_head=%p\n", i_1, list_head_addr);
+
+            /* Binary Ninja EXACT: for (; i_1 != arg1 + 0x204; i_1 = *i_1) */
+            int iteration_count = 0;
+            while (i_1 != list_head_addr && iteration_count < 100) {  /* Safety limit */
                 /* Binary Ninja: $v1_1 += 0 u< $v0 ? 1 : 0 */
                 high_bits += (0 < match_found) ? 1 : 0;
                 /* Binary Ninja: $a1_1 += 1 */
                 buffer_index += 1;
 
+                /* CRITICAL SAFETY: Validate i_1 before dereferencing */
+                if (!i_1 || (unsigned long)i_1 < 0x80000000 || (unsigned long)i_1 >= 0xfffff000) {
+                    pr_err("vic_framedone_irq_function: CORRUPTED list pointer i_1=%p at iteration %d\n", i_1, iteration_count);
+                    break;
+                }
+
                 /* Binary Ninja: if (i_1[2] == *($a3_1 + 0x380)) */
-                /* SAFE: Check if buffer address matches current frame register */
+                /* CRITICAL SAFETY: Validate i_1[2] access before reading */
+                if ((unsigned long)(i_1 + 2) < 0x80000000 || (unsigned long)(i_1 + 2) >= 0xfffff000) {
+                    pr_err("vic_framedone_irq_function: Cannot safely access i_1[2] at %p\n", i_1 + 2);
+                    break;
+                }
+
+                u32 buffer_addr = (u32)i_1[2];  /* i_1[2] = buffer address */
                 if (vic_regs) {
-                    u32 current_frame_addr = readl(vic_regs + 0x380);
-                    /* SAFE: Compare entry's buffer address with current frame register */
-                    if (entry->buffer_addr == current_frame_addr && current_frame_addr != 0) {
+                    u32 current_frame_addr = readl(vic_regs + 0x380);  /* *($a3_1 + 0x380) */
+                    if (buffer_addr == current_frame_addr) {
                         match_found = 1;  /* $v0 = 1 */
-                        pr_info("vic_framedone_irq_function: Found matching buffer addr=0x%x\n", current_frame_addr);
+                        pr_info("vic_framedone_irq_function: MATCH FOUND - buffer=0x%x, frame=0x%x\n",
+                               buffer_addr, current_frame_addr);
                     }
                 }
 
-                /* SAFE: list_for_each_entry_safe handles iteration automatically */
+                /* Binary Ninja: i_1 = *i_1 */
+                /* CRITICAL SAFETY: Validate *i_1 before following the pointer */
+                if ((unsigned long)(*i_1) < 0x80000000 || (unsigned long)(*i_1) >= 0xfffff000) {
+                    pr_err("vic_framedone_irq_function: CORRUPTED next pointer *i_1=%p\n", *i_1);
+                    break;
+                }
+
+                i_1 = (void **)*i_1;  /* Follow next pointer */
+                iteration_count++;
+            }
+
+            if (iteration_count >= 100) {
+                pr_err("vic_framedone_irq_function: List traversal exceeded safety limit - possible circular list\n");
             }
 
             /* Binary Ninja: int32_t $v1_2 = $v1_1 << 0x10 */
