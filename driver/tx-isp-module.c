@@ -1807,55 +1807,46 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
 /* Forward declaration for ISP core interrupt handler */
 extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 
-/* isp_vic_interrupt_service_routine - EXACT Binary Ninja MCP with SAFE struct member access */
+/* isp_vic_interrupt_service_routine - MINIMAL SAFE implementation to prevent crashes */
 irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
-    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
-    struct tx_isp_vic_device *vic_dev;
-    void __iomem *vic_regs;
-    u32 v1_7, v1_10;
+    /* CRITICAL: Minimal interrupt handler to prevent memory corruption */
+    /* Just acknowledge the interrupt and return - no complex processing */
+
     extern uint32_t vic_start_ok;
+    extern struct tx_isp_dev *ourISPdev;
 
-    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
-    if (isp_dev == NULL || (uintptr_t)isp_dev >= 0xfffff001) {
+    /* Basic validation */
+    if (!dev_id || !ourISPdev || !ourISPdev->vic_dev) {
         return IRQ_HANDLED;
     }
 
-    /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
-    /* SAFE: Use proper struct member access instead of *(arg1 + 0xd4) */
-    vic_dev = isp_dev->vic_dev;
-    if (vic_dev == NULL || (uintptr_t)vic_dev >= 0xfffff001) {
-        return IRQ_HANDLED;
-    }
+    struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
+    void __iomem *vic_regs = vic_dev->vic_regs;
 
-    /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
-    /* SAFE: Use proper struct member access instead of *(arg1 + 0xb8) */
-    vic_regs = vic_dev->vic_regs;
     if (!vic_regs) {
         return IRQ_HANDLED;
     }
 
-    /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
-    /* Binary Ninja: int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
-    v1_7 = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);
-    v1_10 = (~readl(vic_regs + 0x1ec)) & readl(vic_regs + 0x1e4);
+    /* MINIMAL: Just read and clear interrupt status to acknowledge */
+    u32 int_status = readl(vic_regs + 0x1e0);
+    u32 mdma_status = readl(vic_regs + 0x1e4);
 
-    /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7 */
-    /* Binary Ninja: *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
-    writel(v1_7, vic_regs + 0x1f0);
-    writel(v1_10, vic_regs + 0x1f4);
+    /* Clear interrupts by writing status back */
+    if (int_status) {
+        writel(int_status, vic_regs + 0x1f0);
+    }
+    if (mdma_status) {
+        writel(mdma_status, vic_regs + 0x1f4);
+    }
 
-    /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
-    if (vic_start_ok != 0) {
-        /* Binary Ninja: if (($v1_7 & 1) != 0) */
-        if ((v1_7 & 1) != 0) {
-            /* Binary Ninja: *($s0 + 0x160) += 1 */
-            /* SAFE: Use proper struct member access instead of *($s0 + 0x160) */
-            vic_dev->frame_count++;
+    /* MINIMAL: Only increment frame count if frame done interrupt */
+    if (vic_start_ok && (int_status & 1)) {
+        vic_dev->frame_count++;
+        pr_info("VIC IRQ: Frame done - count=%d\n", vic_dev->frame_count);
+    }
 
-            /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
-            vic_framedone_irq_function(vic_dev);
-        }
+    return IRQ_HANDLED;
 
         /* Binary Ninja: Process error interrupts */
         if ((v1_7 & 0x200) != 0) {
