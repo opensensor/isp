@@ -391,6 +391,13 @@ struct tx_isp_channel_config {
     uint32_t padding[2];                     /* +0x20-0x24: Padding to 0x24 size */
 } __attribute__((packed, aligned(4)));
 
+/* Netlink socket structure - SAFE replacement for raw offset access at 0x130 */
+struct tx_isp_netlink_socket {
+    char reserved[0x130];                    /* +0x00-0x12F: Reserved space */
+    struct socket *socket_ptr;               /* +0x130: Socket pointer - SAFE ACCESS */
+    uint32_t padding[4];                     /* Additional padding */
+} __attribute__((packed, aligned(4)));
+
 /* Global frame source device structure - 0xe8 bytes as per Binary Ninja */
 struct tx_isp_fs_device {
 	struct tx_isp_subdev subdev;            /* Base subdev structure */

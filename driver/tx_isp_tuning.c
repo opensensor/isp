@@ -269,12 +269,13 @@ void tisp_netlink_exit(void)
 {
     /* Binary Ninja: uint32_t nlsk_1 = nlsk */
     if (nlsk != 0) {
-        /* Binary Ninja: int32_t $a0_1 = *(nlsk_1 + 0x130) */
-        int32_t *sock_ptr = (int32_t*)((char*)nlsk + 0x130);
+        /* SAFE: Use proper struct member access instead of raw offset 0x130 */
+        struct tx_isp_netlink_socket *nl_sock = (struct tx_isp_netlink_socket *)nlsk;
 
-        if (*sock_ptr != 0) {
+        if (nl_sock->socket_ptr != NULL) {
             /* Binary Ninja: return private_sock_release($a0_1) __tailcall */
-            sock_release((struct socket*)*sock_ptr);
+            sock_release(nl_sock->socket_ptr);
+            nl_sock->socket_ptr = NULL;  /* Clear pointer after release */
         }
     }
 
