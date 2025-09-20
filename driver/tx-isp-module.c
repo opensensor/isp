@@ -5869,7 +5869,8 @@ static void tx_vic_disable_irq_complete(struct tx_isp_dev *isp_dev)
         return;
     }
     
-    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+    /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+    vic_dev = isp_dev->vic_dev;
     
     pr_info("*** IMPLEMENTING tx_vic_disable_irq FROM BINARY NINJA ***\n");
     
