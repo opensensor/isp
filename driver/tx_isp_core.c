@@ -891,6 +891,26 @@ void system_reg_write(u32 reg, u32 val);
 void mbus_to_bayer_write(u32 config);
 void tisp_top_sel(void);
 
+/* Stub implementations for Binary Ninja compatibility functions */
+int tx_isp_send_event_to_remote(void *target, u32 event, void *data)
+{
+    /* Binary Ninja: Send event to remote frame channel */
+    pr_info("tx_isp_send_event_to_remote: target=%p, event=0x%x, data=%p\n", target, event, data);
+    return 0;
+}
+
+void mbus_to_bayer_write(u32 config)
+{
+    /* Binary Ninja: Configure MBUS to Bayer conversion */
+    pr_info("mbus_to_bayer_write: config=0x%x\n", config);
+}
+
+void tisp_top_sel(void)
+{
+    /* Binary Ninja: Select ISP top configuration */
+    pr_info("tisp_top_sel: ISP top configuration selected\n");
+}
+
 /* Frame sync work function - RACE CONDITION SAFE Binary Ninja reference implementation */
 static void ispcore_irq_fs_work(struct work_struct *work)
 {
