@@ -354,13 +354,13 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
     int32_t result;
     int32_t v1;
     extern struct tx_isp_dev *ourISPdev;
-    
-    pr_info("VIN: tx_isp_vin_init: SAFE implementation without is_valid_kernel_pointer = 0x%x\n", arg2);
 
-    /* CRITICAL FIX: Handle parameter type mismatch safely */
-    /* When called from subdev ops: arg1 is struct tx_isp_subdev *sd */
-    /* When called directly: arg1 might be VIN device */
-    /* Always use global ISP device for safety to avoid segfaults */
+    pr_info("VIN: tx_isp_vin_init: CRITICAL FIX - ignore arg1, use global ISP only = 0x%x\n", arg2);
+
+    /* CRITICAL FIX: The arg1 parameter can be GARBAGE!
+     * When called from subdev ops: arg1 is struct tx_isp_subdev *sd
+     * When called from tuning IOCTL: arg1 might be garbage pointer
+     * ALWAYS use global ISP device to avoid BadVA crashes */
     struct tx_isp_vin_device *vin_dev = NULL;
 
     if (!ourISPdev) {
@@ -374,12 +374,7 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
     }
 
     vin_dev = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
-
-    /* CRITICAL: Basic NULL check only - avoid is_valid_kernel_pointer */
-    if (!vin_dev) {
-        pr_err("VIN: tx_isp_vin_init: VIN device is NULL\n");
-        return -EINVAL;
-    }
+    pr_info("VIN: tx_isp_vin_init: using VIN device from global ISP: %p\n", vin_dev);
 
     /* SAFE: Always use global ISP device sensor to avoid pointer confusion */
     if (!ourISPdev->sensor) {
