@@ -598,10 +598,23 @@ int tx_isp_init_subdev_registry(struct tx_isp_dev *isp,
     isp->subdev_list = platform_devices;
     memset(isp->subdev_graph, 0, sizeof(isp->subdev_graph));
 
+    /* Check if devices are already linked directly - if so, skip registry creation */
+    int already_linked = 0;
+    if (isp->vic_dev) already_linked++;
+    if (isp->csi_dev) already_linked++;
+    if (isp->vin_dev) already_linked++;
+    if (isp->fs_dev) already_linked++;
+
+    if (already_linked > 0) {
+        pr_info("tx_isp_init_subdev_registry: %d devices already linked directly - skipping registry creation\n", already_linked);
+        pr_info("*** USING DIRECT DEVICE LINKING INSTEAD OF REGISTRY SYSTEM ***\n");
+        return 0;  /* Success - use existing direct links */
+    }
+
     /* Register each subdevice */
     for (i = 0; i < count && i < NUM_ISP_SUBDEVS; i++) {
         struct tx_isp_subdev_desc *desc = &isp_subdev_descriptors[i];
-        
+
         /* Create driver data based on device type */
         void *driver_data = tx_isp_create_driver_data(desc);
         if (!driver_data) {
