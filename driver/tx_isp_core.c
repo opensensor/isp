@@ -1267,9 +1267,10 @@ static int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
     /* Binary Ninja: private_spin_lock_init(arg2) */
     spin_lock_init((spinlock_t *)irq_info);
     
-    /* Binary Ninja: private_request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, 0x2000, *arg1, arg2) */
-    ret = request_threaded_irq(irq_number, tx_isp_core_irq_handle, tx_isp_core_irq_thread_handle, 
-                               IRQF_SHARED, dev_name(&pdev->dev), irq_info);
+    /* CRITICAL FIX: Pass ISP device as dev_id, not irq_info */
+    extern struct tx_isp_dev *ourISPdev;
+    ret = request_threaded_irq(irq_number, tx_isp_core_irq_handle, tx_isp_core_irq_thread_handle,
+                               IRQF_SHARED, dev_name(&pdev->dev), ourISPdev);
     if (ret != 0) {
         pr_err("tx_isp_request_irq: Failed to request IRQ %d: %d\n", irq_number, ret);
         return ret;
