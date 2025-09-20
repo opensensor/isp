@@ -280,64 +280,44 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 goto label_123f4;
             }
 
-            /* Binary Ninja EXACT: for (; i_1 != arg1 + 0x204; i_1 = *i_1) */
-            /* CRITICAL SAFETY: Use safe list head pointer for traversal */
-            void **i_1 = (void **)done_head_next;  /* *(arg1 + 0x204) = done_head */
-            void *list_head_addr = (void *)&vic_dev->done_head;  /* arg1 + 0x204 */
+            /* SAFE: Use Linux kernel list APIs instead of dangerous pointer arithmetic */
+            /* This replaces the Binary Ninja raw pointer traversal with safe kernel APIs */
+            struct vic_buffer_entry *entry;
+            u32 current_frame_addr = 0;
 
-            /* CRITICAL SAFETY: Validate initial list pointer */
-            if (!i_1 || (unsigned long)i_1 < 0x80000000 || (unsigned long)i_1 >= 0xfffff000) {
-                pr_err("vic_framedone_irq_function: CORRUPTED initial list pointer i_1=%p\n", i_1);
-                result = &data_b0000;
-                goto label_123f4;
+            /* Get current frame address from VIC register */
+            if (vic_regs) {
+                current_frame_addr = readl(vic_regs + 0x380);  /* *($a3_1 + 0x380) */
             }
 
-            pr_info("vic_framedone_irq_function: Starting list traversal - i_1=%p, list_head=%p\n", i_1, list_head_addr);
+            pr_info("vic_framedone_irq_function: Starting SAFE list traversal - current_frame=0x%x\n", current_frame_addr);
 
-            /* Binary Ninja EXACT: for (; i_1 != arg1 + 0x204; i_1 = *i_1) */
-            int iteration_count = 0;
-            while (i_1 != list_head_addr && iteration_count < 100) {  /* Safety limit */
+            /* SAFE: Use list_for_each_entry instead of dangerous pointer arithmetic */
+            list_for_each_entry(entry, &vic_dev->done_head, list) {
+                /* CRITICAL SAFETY: Validate entry pointer */
+                if (!entry || (unsigned long)entry < 0x80000000 || (unsigned long)entry >= 0xfffff000) {
+                    pr_err("vic_framedone_irq_function: CORRUPTED entry pointer %p, breaking\n", entry);
+                    break;
+                }
+
                 /* Binary Ninja: $v1_1 += 0 u< $v0 ? 1 : 0 */
                 high_bits += (0 < match_found) ? 1 : 0;
                 /* Binary Ninja: $a1_1 += 1 */
                 buffer_index += 1;
 
-                /* CRITICAL SAFETY: Validate i_1 before dereferencing */
-                if (!i_1 || (unsigned long)i_1 < 0x80000000 || (unsigned long)i_1 >= 0xfffff000) {
-                    pr_err("vic_framedone_irq_function: CORRUPTED list pointer i_1=%p at iteration %d\n", i_1, iteration_count);
-                    break;
-                }
-
                 /* Binary Ninja: if (i_1[2] == *($a3_1 + 0x380)) */
-                /* CRITICAL SAFETY: Validate i_1[2] access before reading */
-                if ((unsigned long)(i_1 + 2) < 0x80000000 || (unsigned long)(i_1 + 2) >= 0xfffff000) {
-                    pr_err("vic_framedone_irq_function: Cannot safely access i_1[2] at %p\n", i_1 + 2);
+                /* SAFE: Compare entry's buffer address with current frame register */
+                if (entry->buffer_addr == current_frame_addr && current_frame_addr != 0) {
+                    match_found = 1;  /* $v0 = 1 */
+                    pr_info("vic_framedone_irq_function: MATCH FOUND - buffer=0x%x, frame=0x%x\n",
+                           entry->buffer_addr, current_frame_addr);
+                }
+
+                /* Safety limit to prevent infinite loops */
+                if (buffer_index >= 100) {
+                    pr_err("vic_framedone_irq_function: List traversal exceeded safety limit\n");
                     break;
                 }
-
-                u32 buffer_addr = (u32)i_1[2];  /* i_1[2] = buffer address */
-                if (vic_regs) {
-                    u32 current_frame_addr = readl(vic_regs + 0x380);  /* *($a3_1 + 0x380) */
-                    if (buffer_addr == current_frame_addr) {
-                        match_found = 1;  /* $v0 = 1 */
-                        pr_info("vic_framedone_irq_function: MATCH FOUND - buffer=0x%x, frame=0x%x\n",
-                               buffer_addr, current_frame_addr);
-                    }
-                }
-
-                /* Binary Ninja: i_1 = *i_1 */
-                /* CRITICAL SAFETY: Validate *i_1 before following the pointer */
-                if ((unsigned long)(*i_1) < 0x80000000 || (unsigned long)(*i_1) >= 0xfffff000) {
-                    pr_err("vic_framedone_irq_function: CORRUPTED next pointer *i_1=%p\n", *i_1);
-                    break;
-                }
-
-                i_1 = (void **)*i_1;  /* Follow next pointer */
-                iteration_count++;
-            }
-
-            if (iteration_count >= 100) {
-                pr_err("vic_framedone_irq_function: List traversal exceeded safety limit - possible circular list\n");
             }
 
             /* Binary Ninja: int32_t $v1_2 = $v1_1 << 0x10 */
@@ -3108,6 +3088,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     int ret;
 
     /* Binary Ninja: private_kmalloc(0x21c, 0xd0) */
+    /* SAFE: Use proper sizeof() instead of hardcoded size */
     vic_dev = private_kmalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
     if (!vic_dev) {
         /* Binary Ninja: isp_printf(2, "Failed to allocate vic device\n", $a2) */
@@ -3116,6 +3097,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     }
 
     /* Binary Ninja: memset($v0, 0, 0x21c) */
+    /* SAFE: Use proper sizeof() instead of hardcoded size */
     memset(vic_dev, 0, sizeof(struct tx_isp_vic_device));
 
     /* CRITICAL FIX: Initialize VIC device dimensions to prevent interrupt handler crashes */
