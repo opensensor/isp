@@ -674,43 +674,6 @@ int tx_isp_vin_activate_subdev(void* arg1)
     return 0;
 }
 
-/**
- * tx_isp_vin_slake_subdev - Deactivate VIN subdevice
- * @sd: Subdev structure
- *
- * Based on T30 reference implementation
- */
-int tx_isp_vin_slake_subdev(struct tx_isp_subdev *sd)
-{
-    struct tx_isp_vin_device *vin = sd_to_vin_device(sd);
-    
-    if (vin->refcnt > 0) {
-        vin->refcnt--;
-    }
-    
-    mcp_log_info("vin_slake: refcnt decremented", vin->refcnt);
-    
-    if (!vin->refcnt) {
-        /* Stop streaming if running */
-        if (vin->state == TX_ISP_MODULE_RUNNING) {
-            vin_s_stream(sd, 0);
-        }
-        
-        /* Deinitialize if initialized */
-        if (vin->state == TX_ISP_MODULE_INIT) {
-            tx_isp_vin_init(vin, 0);  /* FIXED: Pass VIN device, not subdev */
-        }
-        
-        mutex_lock(&vin->mlock);
-        if (vin->state == TX_ISP_MODULE_ACTIVATE) {
-            vin->state = TX_ISP_MODULE_SLAKE;
-            mcp_log_info("vin_slake: state changed to slake", vin->state);
-        }
-        mutex_unlock(&vin->mlock);
-    }
-    
-    return 0;
-}
 
 /**
  * vic_core_ops_ioctl - VIN core ioctl handler
