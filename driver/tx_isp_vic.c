@@ -1921,9 +1921,12 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
             /* Binary Ninja: gpio_switch_state = 1, memcpy(&gpio_info, arg, 0x2a) */
             gpio_switch_state = 1;
             if (arg) {
-                /* Copy GPIO info structure */
-                memcpy(&gpio_info, arg, 0x2a);
-                pr_info("vic_sensor_ops_ioctl: GPIO switch state enabled, info copied\n");
+                /* CRITICAL FIX: Use copy_from_user instead of dangerous memcpy from userspace */
+                if (copy_from_user(&gpio_info, (void __user *)arg, 0x2a)) {
+                    pr_err("vic_sensor_ops_ioctl: Failed to copy GPIO info from userspace\n");
+                    return -EFAULT;
+                }
+                pr_info("vic_sensor_ops_ioctl: GPIO switch state enabled, info copied safely\n");
             }
             return 0;
             

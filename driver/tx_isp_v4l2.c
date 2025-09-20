@@ -268,9 +268,17 @@ static int tx_isp_v4l2_streamon(struct file *file, void *priv,
     pr_info("*** V4L2 Channel %d: STREAMON type=%d ***\n",
             dev->channel_num, type);
 
-    /* Create a fake file structure for frame_channel_unlocked_ioctl */
+    /* CRITICAL FIX: Create proper fake file structure with valid frame_channel_device */
     memset(&fake_file, 0, sizeof(fake_file));
-    fake_file.private_data = (void *)(unsigned long)dev->channel_num;
+
+    /* Get the actual frame_channel_device for this channel */
+    extern struct frame_channel_device frame_channels[];
+    if (dev->channel_num >= 0 && dev->channel_num < 4) {
+        fake_file.private_data = &frame_channels[dev->channel_num];
+    } else {
+        pr_err("*** V4L2 STREAMON: Invalid channel number %d ***\n", dev->channel_num);
+        return -EINVAL;
+    }
 
     /* Route to frame_channel_unlocked_ioctl STREAMON (0x80045612) */
     ret = frame_channel_unlocked_ioctl(&fake_file, 0x80045612, (unsigned long)&type);
@@ -304,9 +312,17 @@ static int tx_isp_v4l2_streamoff(struct file *file, void *priv,
     pr_info("*** V4L2 Channel %d: STREAMOFF type=%d ***\n",
             dev->channel_num, type);
 
-    /* Create a fake file structure for frame_channel_unlocked_ioctl */
+    /* CRITICAL FIX: Create proper fake file structure with valid frame_channel_device */
     memset(&fake_file, 0, sizeof(fake_file));
-    fake_file.private_data = (void *)(unsigned long)dev->channel_num;
+
+    /* Get the actual frame_channel_device for this channel */
+    extern struct frame_channel_device frame_channels[];
+    if (dev->channel_num >= 0 && dev->channel_num < 4) {
+        fake_file.private_data = &frame_channels[dev->channel_num];
+    } else {
+        pr_err("*** V4L2 STREAMOFF: Invalid channel number %d ***\n", dev->channel_num);
+        return -EINVAL;
+    }
 
     /* Route to frame_channel_unlocked_ioctl STREAMOFF (0x80045613) */
     ret = frame_channel_unlocked_ioctl(&fake_file, 0x80045613, (unsigned long)&type);
