@@ -3782,8 +3782,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         // Stop channel streaming
         state->streaming = false;
 
-        /* CRITICAL: Stop frame worker when streaming ends */
-        tx_isp_stop_frame_worker();
+        /* REMOVED: Frame worker stop - NOT in reference driver */
+        /* Reference driver cleanup is interrupt-driven */
 
         // Stop the actual sensor hardware streaming
         if (channel == 0 && ourISPdev && ourISPdev->sensor) {
