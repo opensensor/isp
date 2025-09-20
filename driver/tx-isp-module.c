@@ -4014,89 +4014,50 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     pr_info("*** I2C CLIENT: %s at 0x%x on %s ***\n",
                            client->name, client->addr, client->adapter->name);
                            
-                    /* *** CRITICAL FIX: CREATE ACTUAL SENSOR STRUCTURE AND CONNECT TO ISP *** */
-                    pr_info("*** CREATING ACTUAL SENSOR STRUCTURE FOR %s ***\n", sensor_name);
-                    
-                    /* SAFE ALLOCATION: Allocate sensor structure with proper error checking */
-                    sensor = kzalloc(sizeof(struct tx_isp_sensor), GFP_KERNEL);
-                    if (!sensor) {
-                        pr_err("*** CRITICAL ERROR: Failed to allocate sensor structure (size=%zu) ***\n", sizeof(struct tx_isp_sensor));
-                        return -ENOMEM;
+                    /* *** CRITICAL FIX: FIND AND USE REAL SENSOR FROM SENSOR MODULE *** */
+                    pr_info("*** LOOKING FOR REAL SENSOR REGISTERED BY %s MODULE ***\n", sensor_name);
+
+                    /* The sensor module (stock-gc2053.c) should have registered a sensor via I2C */
+                    /* We need to find that sensor and connect it to the ISP device */
+                    struct tx_isp_subdev *real_sensor_sd = NULL;
+                    struct tx_isp_sensor *real_sensor = NULL;
+
+                    /* The I2C client should have the sensor subdev as client data */
+                    real_sensor_sd = private_i2c_get_clientdata(client);
+                    if (real_sensor_sd) {
+                        real_sensor = tx_isp_get_subdev_hostdata(real_sensor_sd);
+                        pr_info("*** FOUND REAL SENSOR: sd=%p, sensor=%p ***\n", real_sensor_sd, real_sensor);
+
+                        if (real_sensor && real_sensor_sd->ops) {
+                            pr_info("*** REAL SENSOR OPS: core=%p, video=%p, sensor=%p ***\n",
+                                   real_sensor_sd->ops->core,
+                                   real_sensor_sd->ops->video,
+                                   real_sensor_sd->ops->sensor);
+                            sensor = real_sensor; /* Use the real sensor */
+                        } else {
+                            pr_err("*** ERROR: Real sensor found but ops are NULL ***\n");
+                            return -ENODEV;
+                        }
+                    } else {
+                        pr_err("*** ERROR: I2C client exists but no sensor subdev found ***\n");
+                        return -ENODEV;
                     }
-                    pr_info("*** SENSOR STRUCTURE ALLOCATED: %p (size=%zu bytes) ***\n", sensor, sizeof(struct tx_isp_sensor));
-                    
-                    /* SAFE INITIALIZATION: Initialize sensor info first */
-                    memset(&sensor->info, 0, sizeof(sensor->info));
-                    strncpy(sensor->info.name, sensor_name, sizeof(sensor->info.name) - 1);
-                    sensor->info.name[sizeof(sensor->info.name) - 1] = '\0';
-                    
-                    /* CRITICAL FIX: Use real sensor attributes instead of allocating duplicates */
-                    /* Point to the embedded sensor attributes structure */
-                    sensor->video.attr = &sensor->attr;
-                    pr_info("*** SENSOR ATTRIBUTES: Using embedded attr structure at %p ***\n", sensor->video.attr);
 
-                    /* SAFE INITIALIZATION: Set up basic sensor attributes for GC2053 */
-                    if (strncmp(sensor_name, "gc2053", 6) == 0) {
-                        sensor->attr.chip_id = 0x2053;
-                        sensor->attr.name = sensor_name;
-                        sensor->attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; /* MIPI = 1 */
-                        sensor->attr.total_width = 2200;   /* GC2053 total frame width */
-                        sensor->attr.total_height = 1125;  /* GC2053 total frame height */
-                        sensor->attr.max_integration_time_native = 1125 - 8;
-                        sensor->attr.integration_time_limit = 1125 - 8;
-                        sensor->attr.max_integration_time = 1125 - 8;
-                        sensor->attr.integration_time_apply_delay = 2;
-                        sensor->attr.again_apply_delay = 2;
-                        sensor->attr.dgain_apply_delay = 0;
-                        sensor->attr.sensor_ctrl.alloc_again = 0;
-                        sensor->attr.sensor_ctrl.alloc_dgain = 0;
-                        sensor->attr.one_line_expr_in_us = 30;
-                        sensor->attr.fps = 25;
-                        sensor->attr.data_type = TX_SENSOR_DATA_TYPE_LINEAR;
-
-                        pr_info("*** SENSOR ATTR INIT: Set dbus_type=%d (MIPI), dimensions=%dx%d ***\n",
-                                sensor->attr.dbus_type,
-                                sensor->attr.total_width,
-                                sensor->attr.total_height);
-                        pr_info("*** GC2053 SENSOR ATTRIBUTES CONFIGURED: %dx%d total (MIPI interface) ***\n",
-                                sensor->attr.total_width, sensor->attr.total_height);
-                    }
-                    
-                    /* CRITICAL FIX: DON'T ZERO OUT SUBDEV - PRESERVE SENSOR DRIVER INITIALIZATION */
-                    /* The sensor driver already called tx_isp_subdev_init() which set up sd->ops */
-                    /* We only need to set ISP-specific fields without destroying sensor ops */
-                    sensor->sd.isp = (void *)isp_dev;
-                    sensor->sd.vin_state = TX_ISP_MODULE_INIT;
-                    sensor->index = 0;
-                    sensor->type = 0;
-                    INIT_LIST_HEAD(&sensor->list);
-
-                    /* CRITICAL FIX: SENSOR OPS PRESERVED FROM SENSOR DRIVER */
-                    pr_info("*** CRITICAL: SENSOR SUBDEV OPS PRESERVED FROM SENSOR DRIVER ***\n");
-                    pr_info("*** SENSOR SUBDEV OPS: core=%p, video=%p, s_stream=%p ***\n",
-                            sensor->sd.ops ? sensor->sd.ops->core : NULL,
-                            sensor->sd.ops ? sensor->sd.ops->video : NULL,
-                            (sensor->sd.ops && sensor->sd.ops->video) ? sensor->sd.ops->video->s_stream : NULL);
-                    
-                    pr_info("*** SENSOR SUBDEV INITIALIZED WITH WORKING OPS STRUCTURE ***\n");
-                    
                     /* SAFE CONNECTION: Verify ISP device before connecting */
                     if (!ourISPdev) {
                         pr_err("*** CRITICAL ERROR: ourISPdev is NULL! ***\n");
-                        /* No need to free video.attr since it points to embedded sensor->attr */
-                        kfree(sensor);
                         return -ENODEV;
                     }
-                    
-                    /* *** CRITICAL FIX: CONNECT SENSOR TO ISP DEVICE *** */
-                    pr_info("*** CONNECTING SENSOR TO ISP DEVICE ***\n");
-                    pr_info("Current: ourISPdev=%p, ourISPdev->sensor=%p\n", ourISPdev, ourISPdev->sensor);
-                    pr_info("New sensor: sensor=%p (%s)\n", sensor, sensor->info.name);
 
-                    /* Connect sensor to ISP device */
+                    /* *** CRITICAL FIX: CONNECT REAL SENSOR TO ISP DEVICE *** */
+                    pr_info("*** CONNECTING REAL SENSOR TO ISP DEVICE ***\n");
+                    pr_info("Current: ourISPdev=%p, ourISPdev->sensor=%p\n", ourISPdev, ourISPdev->sensor);
+                    pr_info("Real sensor: sensor=%p, subdev=%p\n", sensor, real_sensor_sd);
+
+                    /* Connect the real sensor to ISP device */
                     ourISPdev->sensor = sensor;
 
-                    /* CRITICAL: Register sensor subdevice in subdevs array for GET_SENSOR_INFO IOCTL */
+                    /* CRITICAL: Register real sensor subdevice in subdevs array for GET_SENSOR_INFO IOCTL */
                     int subdev_slot = -1;
                     for (int j = 0; j < ISP_MAX_SUBDEVS; j++) {
                         if (ourISPdev->subdevs[j] == NULL) {
@@ -4106,18 +4067,18 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     }
 
                     if (subdev_slot >= 0) {
-                        ourISPdev->subdevs[subdev_slot] = &sensor->sd;
-                        pr_info("*** SENSOR SUBDEV REGISTERED IN SLOT %d FOR GET_SENSOR_INFO IOCTL ***\n", subdev_slot);
+                        ourISPdev->subdevs[subdev_slot] = real_sensor_sd;
+                        pr_info("*** REAL SENSOR SUBDEV REGISTERED IN SLOT %d FOR GET_SENSOR_INFO IOCTL ***\n", subdev_slot);
                     } else {
-                        pr_warn("*** WARNING: No free subdev slot for sensor registration ***\n");
+                        pr_warn("*** WARNING: No free subdev slot for real sensor registration ***\n");
                     }
 
-                    pr_info("*** SENSOR CONNECTED TO ISP DEVICE SUCCESSFULLY ***\n");
-                    
-                    /* SAFE UPDATE: Update registry with actual subdev pointer */
+                    pr_info("*** REAL SENSOR CONNECTED TO ISP DEVICE SUCCESSFULLY ***\n");
+
+                    /* SAFE UPDATE: Update registry with real sensor subdev pointer */
                     if (reg_sensor) {
-                        reg_sensor->subdev = &sensor->sd;
-                        pr_info("*** SENSOR REGISTRY UPDATED ***\n");
+                        reg_sensor->subdev = real_sensor_sd;
+                        pr_info("*** SENSOR REGISTRY UPDATED WITH REAL SENSOR ***\n");
                     }
                 } else {
                     pr_err("*** FAILED TO CREATE I2C CLIENT FOR %s ***\n", sensor_name);
