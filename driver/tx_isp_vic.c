@@ -3226,7 +3226,19 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* CRITICAL FIX: Initialize VIC device dimensions to prevent interrupt handler crashes */
     vic_dev->width = 1920;   /* Default sensor width */
     vic_dev->height = 1080;  /* Default sensor height */
-    pr_info("*** VIC PROBE: Initialized default dimensions %dx%d ***\n", vic_dev->width, vic_dev->height);
+    vic_dev->stream_state = 0;  /* Initialize stream state */
+    vic_dev->processing = 0;    /* Initialize processing flag */
+    vic_dev->frame_count = 0;   /* Initialize frame counter */
+
+    /* Initialize list heads for buffer management */
+    INIT_LIST_HEAD(&vic_dev->queue_head);
+    INIT_LIST_HEAD(&vic_dev->done_head);
+    INIT_LIST_HEAD(&vic_dev->free_head);
+
+    /* Initialize spinlock for buffer management */
+    spin_lock_init(&vic_dev->buffer_mgmt_lock);
+
+    pr_info("*** VIC PROBE: Initialized default dimensions %dx%d and critical fields ***\n", vic_dev->width, vic_dev->height);
 
     /* Binary Ninja: void* $s2_1 = arg1[0x16] */
     pdata = pdev->dev.platform_data;
