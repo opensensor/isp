@@ -558,6 +558,12 @@ extern int tx_isp_fs_platform_init(void);
 extern void tx_isp_fs_platform_exit(void);
 extern int tx_isp_fs_probe(struct platform_device *pdev);
 
+/* Forward declarations for Binary Ninja reference implementation */
+static int tx_isp_platform_probe(struct platform_device *pdev);
+static int tx_isp_module_init(struct tx_isp_dev *isp_dev);
+static int tx_isp_create_proc_entries(struct tx_isp_dev *isp_dev);
+static int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp_dev);
+
 /* V4L2 video device functions */
 extern int tx_isp_v4l2_init(void);
 extern void tx_isp_v4l2_cleanup(void);
