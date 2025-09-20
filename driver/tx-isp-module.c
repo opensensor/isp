@@ -6283,40 +6283,24 @@ static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel
     void **a0_7;
     void *v1_1;
     
-    /* CRITICAL FIX: Comprehensive NULL and corruption checks to prevent BadVA : 000000dc crash */
+    /* ROBUST VALIDATION: Simple but effective validation */
     if (!vic_dev) {
         pr_err("vic_mdma_irq_function: NULL vic_dev parameter\n");
         return;
     }
 
-    /* CRITICAL FIX: Validate vic_dev pointer range to prevent corrupted pointer access */
+    /* Validate vic_dev pointer is reasonable */
     if ((unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff000) {
         pr_err("vic_mdma_irq_function: Invalid vic_dev pointer 0x%p\n", vic_dev);
         return;
     }
 
-    /* CRITICAL FIX: Validate we can safely access vic_dev members before ANY access */
-    if (!virt_addr_valid(vic_dev) ||
-        !virt_addr_valid((char*)vic_dev + sizeof(struct tx_isp_vic_device) - 1)) {
-        pr_err("vic_mdma_irq_function: vic_dev structure spans invalid memory\n");
-        return;
-    }
-
-    /* CRITICAL FIX: Validate specific members we're about to access */
-    if (!virt_addr_valid(&vic_dev->streaming) ||
-        !virt_addr_valid(&vic_dev->width) ||
-        !virt_addr_valid(&vic_dev->height)) {
-        pr_err("vic_mdma_irq_function: Cannot safely access vic_dev members (streaming/width/height)\n");
-        return;
-    }
-
-    /* Binary Ninja: if (*(arg1 + 0x214) == 0) */
+    /* ROBUST ACCESS: Use proper struct member access - let compiler handle offsets */
     if (vic_dev->streaming == 0) {
-        /* Binary Ninja: int32_t $s0_2 = *(arg1 + 0xdc) * *(arg1 + 0xe0) */
-        /* CRITICAL FIX: Additional validation before accessing width/height */
+        /* Validate dimensions are reasonable */
         if (vic_dev->width == 0 || vic_dev->height == 0 ||
             vic_dev->width > 8192 || vic_dev->height > 8192) {
-            pr_err("vic_mdma_irq_function: Invalid dimensions %dx%d - vic_dev not properly initialized\n",
+            pr_err("vic_mdma_irq_function: Invalid dimensions %dx%d\n",
                    vic_dev->width, vic_dev->height);
             return;
         }
