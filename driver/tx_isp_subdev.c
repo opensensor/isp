@@ -372,8 +372,20 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         sd->isp = ourISPdev;
         pr_info("*** tx_isp_subdev_init: VIC device linked to main ISP device ***\n");
 
-        pr_info("*** tx_isp_subdev_init: VIC device linked to main ISP device ***\n");
+        /* CRITICAL: Register VIC subdev in subdevs array at index 1 */
+        ourISPdev->subdevs[1] = sd;
+        pr_info("*** tx_isp_subdev_init: VIC subdev registered at index 1 ***\n");
+
         pr_info("*** tx_isp_subdev_init: Interrupt registration deferred until after module init ***\n");
+    }
+
+    /* CRITICAL: Register CSI subdev when it's created */
+    extern struct tx_isp_subdev_ops csi_subdev_ops;
+    if (ourISPdev && ops == &csi_subdev_ops) {
+        /* This is a CSI subdev - register it in subdevs array */
+        ourISPdev->subdevs[3] = sd;  /* CSI at index 3 based on reference */
+        sd->isp = ourISPdev;
+        pr_info("*** tx_isp_subdev_init: CSI subdev registered at index 3 ***\n");
     }
 
     /* Binary Ninja: if (tx_isp_module_init(arg1, arg2) != 0) */
