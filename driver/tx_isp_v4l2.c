@@ -711,11 +711,21 @@ static long tx_isp_v4l2_unlocked_ioctl(struct file *file, unsigned int cmd, unsi
     /* For unhandled ioctls or failures, route to frame_channel_unlocked_ioctl */
     pr_info("*** V4L2 Channel %d: Routing IOCTL 0x%x to frame_channel_unlocked_ioctl ***\n",
             dev->channel_num, cmd);
-    
-    /* Create a fake file structure for frame_channel_unlocked_ioctl */
+
+    /* CRITICAL FIX: Create proper fake file structure with valid frame_channel_device */
     memset(&fake_file, 0, sizeof(fake_file));
-    fake_file.private_data = (void *)(unsigned long)dev->channel_num;
-    
+
+    /* Get the actual frame_channel_device for this channel */
+    extern struct frame_channel_device frame_channels[];
+    if (dev->channel_num >= 0 && dev->channel_num < 4) {
+        fake_file.private_data = &frame_channels[dev->channel_num];
+        pr_info("*** V4L2 Channel %d: Using proper frame_channel_device at %p ***\n",
+                dev->channel_num, fake_file.private_data);
+    } else {
+        pr_err("*** V4L2 Channel %d: Invalid channel number, cannot route IOCTL ***\n", dev->channel_num);
+        return -EINVAL;
+    }
+
     /* Route to frame_channel_unlocked_ioctl */
     ret = frame_channel_unlocked_ioctl(&fake_file, cmd, arg);
     
