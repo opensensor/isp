@@ -2284,7 +2284,8 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
 
     /* CRITICAL FIX: Configure VIC DMA during STREAMON when everything is ready */
     if (enable && dev->vic_dev) {
-        struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)dev->vic_dev;
+        /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+        struct tx_isp_vic_device *vic = dev->vic_dev;
         extern struct frame_channel_device frame_channels[];
         extern int num_channels;
 
@@ -2765,7 +2766,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
             /* CRITICAL: Update VIC active_buffer_count for streaming */
             if (ourISPdev && ourISPdev->vic_dev) {
-                struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+                struct tx_isp_vic_device *vic = ourISPdev->vic_dev;
                 vic->active_buffer_count = reqbuf.count;
                 pr_info("*** Channel %d: VIC active_buffer_count set to %d ***\n",
                         channel, vic->active_buffer_count);
@@ -2803,7 +2805,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
             /* CRITICAL: Clear VIC active_buffer_count */
             if (ourISPdev && ourISPdev->vic_dev) {
-                struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+                struct tx_isp_vic_device *vic = ourISPdev->vic_dev;
                 vic->active_buffer_count = 0;
                 pr_info("*** Channel %d: VIC active_buffer_count cleared ***\n", channel);
             }
@@ -2885,7 +2888,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         /* Binary Ninja: EXACT event call - tx_isp_send_event_to_remote(*($s0 + 0x2bc), 0x3000008, &var_78) */
         if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
-            struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+            /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+            struct tx_isp_vic_device *vic_dev_buf = ourISPdev->vic_dev;
 
             pr_info("*** Channel %d: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***\n", channel);
 
@@ -5974,7 +5978,8 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                     /* Binary Ninja: void* $v0_6 = $a3_1 + *($s0_1 + 0x150) */
                     /* For our implementation, check if we have valid subdevices */
                     if (a2_1 == 0 && isp_dev->vic_dev) {
-                        struct tx_isp_vic_device *check_vic = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+                        /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+                        struct tx_isp_vic_device *check_vic = isp_dev->vic_dev;
                         
                         /* Binary Ninja: if (*($v0_6 + 0x74) != 1) */
                         if (check_vic->state != 1) {
@@ -6134,7 +6139,8 @@ static irqreturn_t isp_irq_handle(int irq, void *dev_id)
         /* Binary Ninja: void* $v0_2 = **(arg2 + 0x44) */
         /* SAFE: Use proper struct member access instead of raw offset +0x44 */
         if (isp_dev->vic_dev) {
-            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+            /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+            struct tx_isp_vic_device *vic_dev = isp_dev->vic_dev;
 
             /* MIPS SAFETY: Check vic_dev pointer alignment */
             if ((unsigned long)vic_dev & 0x3) {
@@ -6226,7 +6232,8 @@ static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
         struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
         /* CRITICAL SAFETY: Validate all pointers before access */
         if (isp_dev && isp_dev->vic_dev) {
-            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+            /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+            struct tx_isp_vic_device *vic_dev = isp_dev->vic_dev;
             /* ADDITIONAL SAFETY: Validate vic_dev before calling functions */
             if (vic_dev && vic_dev->vic_regs) {
                 pr_info("isp_irq_thread_handle: Calling VIC frame done handler\n");
