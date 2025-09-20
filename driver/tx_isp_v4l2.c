@@ -655,7 +655,6 @@ static int tx_isp_v4l2_mmap(struct file *file, struct vm_area_struct *vma)
     /* This simulates tisp_reg_map_get functionality */
     struct file fake_file;
     memset(&fake_file, 0, sizeof(fake_file));
-    fake_file.private_data = (void *)(unsigned long)dev->channel_num;
 
     /* CRITICAL FIX: Get proper frame channel device instead of fake file */
     extern struct frame_channel_device frame_channels[];
