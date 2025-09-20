@@ -1166,6 +1166,8 @@ int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
 /* VIC continuous frame generation work queue */
 static struct delayed_work vic_frame_work;
 static void vic_frame_work_function(struct work_struct *work);
+static bool frame_work_shutdown = false;  /* Shutdown flag for frame worker */
+static DEFINE_MUTEX(frame_work_mutex);     /* Mutex to protect frame worker access */
 
 // ISP Tuning IOCTLs from reference (0x20007400 series)
 #define ISP_TUNING_GET_PARAM    0x20007400
@@ -5143,6 +5145,7 @@ static int tx_isp_init(void)
 
     /* Initialize frame generation work queue */
     INIT_DELAYED_WORK(&vic_frame_work, vic_frame_work_function);
+    frame_work_shutdown = false;  /* Reset shutdown flag */
     pr_info("*** Frame generation work queue initialized ***\n");
     
     /* *** REMOVED DUPLICATE VIC DEVICE CREATION *** */
@@ -7251,20 +7254,37 @@ static void simulate_frame_completion(void)
     }
 }
 
-/* VIC frame generation work function - SIMPLIFIED */
+/* VIC frame generation work function - RACE CONDITION SAFE */
 static void vic_frame_work_function(struct work_struct *work)
 {
     struct tx_isp_vic_device *vic_dev;
+    struct tx_isp_dev *isp_dev;
 
-    /* Basic safety check */
-    if (!ourISPdev || !ourISPdev->vic_dev) {
+    /* CRITICAL: Use mutex to prevent race conditions with cleanup */
+    if (!mutex_trylock(&frame_work_mutex)) {
+        pr_info("*** vic_frame_work_function: Mutex busy, skipping this cycle ***\n");
         return;
     }
 
-    vic_dev = ourISPdev->vic_dev;
+    /* CRITICAL: Check shutdown flag first */
+    if (frame_work_shutdown) {
+        pr_info("*** vic_frame_work_function: Shutdown flag set, stopping work queue ***\n");
+        mutex_unlock(&frame_work_mutex);
+        return;
+    }
 
-    /* Basic validation */
+    /* CRITICAL: Take local reference to prevent use-after-free */
+    isp_dev = ourISPdev;
+    if (!isp_dev) {
+        pr_info("*** vic_frame_work_function: ourISPdev is NULL, stopping work queue ***\n");
+        mutex_unlock(&frame_work_mutex);
+        return;
+    }
+
+    vic_dev = isp_dev->vic_dev;
     if (!vic_dev || !vic_dev->vic_regs) {
+        pr_info("*** vic_frame_work_function: VIC device invalid, stopping work queue ***\n");
+        mutex_unlock(&frame_work_mutex);
         return;
     }
 
@@ -7280,7 +7300,8 @@ static void vic_frame_work_function(struct work_struct *work)
         }
 
         /* CRITICAL SAFETY: Only reschedule if system is still valid and stable */
-        if (ourISPdev && ourISPdev->vic_dev && vic_dev->streaming && !in_atomic()) {
+        if (!frame_work_shutdown && isp_dev == ourISPdev && isp_dev->vic_dev &&
+            vic_dev->streaming && !in_atomic()) {
             /* CRITICAL: Increase delay to reduce system load and prevent crashes */
             schedule_delayed_work(&vic_frame_work, msecs_to_jiffies(100)); /* Reduced from 33ms to 100ms */
         } else {
@@ -7290,6 +7311,8 @@ static void vic_frame_work_function(struct work_struct *work)
         pr_info("*** vic_frame_work_function: VIC not streaming (state=%d, streaming=%d), stopping work queue ***\n",
                 vic_dev->state, vic_dev->streaming);
     }
+
+    mutex_unlock(&frame_work_mutex);
 }
 
 
