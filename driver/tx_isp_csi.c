@@ -100,32 +100,31 @@ void tx_isp_csi_check_errors(struct tx_isp_dev *isp_dev)
     }
     last_check_time = current_time;
 
+    unsigned long flags;
+
     spin_lock_irqsave(&csi_dev->lock, flags);
 
-    /* Read interrupt status registers */
+    /* Read CSI error registers */
     err1 = readl(csi_base + 0x20);  /* ERR1 register */
     err2 = readl(csi_base + 0x24);  /* ERR2 register */
     phy_state = readl(csi_base + 0x14);  /* PHY_STATE register */
 
-    /* CRITICAL: Log all CSI register states for analysis */
-    pr_info("*** CSI INTERRUPT STATUS: err1=0x%08x, err2=0x%08x, phy_state=0x%08x ***\n",
-            err1, err2, phy_state);
-
-
+    /* Only log if there are actual errors */
     if (err1 || err2) {
-        ret = IRQ_HANDLED;
+        pr_info("*** CSI ERROR CHECK: err1=0x%08x, err2=0x%08x, phy_state=0x%08x ***\n",
+                err1, err2, phy_state);
 
         /* Handle protocol errors (ERR1) */
         if (err1) {
-            ISP_ERROR("CSI Protocol errors (ERR1): 0x%08x\n", err1);
+            pr_err("CSI Protocol errors (ERR1): 0x%08x\n", err1);
 
-            if (err1 & 0x1) ISP_ERROR("  - SOT Sync Error\n");
-            if (err1 & 0x2) ISP_ERROR("  - SOTHS Sync Error\n");
-            if (err1 & 0x4) ISP_ERROR("  - ECC Single-bit Error (corrected)\n");
-            if (err1 & 0x8) ISP_ERROR("  - ECC Multi-bit Error (uncorrectable)\n");
-            if (err1 & 0x10) ISP_ERROR("  - CRC Error\n");
-            if (err1 & 0x20) ISP_ERROR("  - Packet Size Error\n");
-            if (err1 & 0x40) ISP_ERROR("  - EoTp Error\n");
+            if (err1 & 0x1) pr_err("  - SOT Sync Error\n");
+            if (err1 & 0x2) pr_err("  - SOTHS Sync Error\n");
+            if (err1 & 0x4) pr_err("  - ECC Single-bit Error (corrected)\n");
+            if (err1 & 0x8) pr_err("  - ECC Multi-bit Error (uncorrectable)\n");
+            if (err1 & 0x10) pr_err("  - CRC Error\n");
+            if (err1 & 0x20) pr_err("  - Packet Size Error\n");
+            if (err1 & 0x40) pr_err("  - EoTp Error\n");
 
             /* Clear errors by writing back the status */
             writel(err1, csi_base + 0x20);
@@ -134,12 +133,12 @@ void tx_isp_csi_check_errors(struct tx_isp_dev *isp_dev)
 
         /* Handle application errors (ERR2) */
         if (err2) {
-            ISP_ERROR("CSI Application errors (ERR2): 0x%08x\n", err2);
+            pr_err("CSI Application errors (ERR2): 0x%08x\n", err2);
 
-            if (err2 & 0x1) ISP_ERROR("  - Data ID Error\n");
-            if (err2 & 0x2) ISP_ERROR("  - Frame Sync Error\n");
-            if (err2 & 0x4) ISP_ERROR("  - Frame Data Error\n");
-            if (err2 & 0x8) ISP_ERROR("  - Frame Sequence Error\n");
+            if (err2 & 0x1) pr_err("  - Data ID Error\n");
+            if (err2 & 0x2) pr_err("  - Frame Sync Error\n");
+            if (err2 & 0x4) pr_err("  - Frame Data Error\n");
+            if (err2 & 0x8) pr_err("  - Frame Sequence Error\n");
 
             /* Clear errors by writing back the status */
             writel(err2, csi_base + 0x24);
@@ -152,21 +151,7 @@ void tx_isp_csi_check_errors(struct tx_isp_dev *isp_dev)
         }
     }
 
-    /* Check for PHY state changes */
-    if (phy_state & 0x111) { /* Clock lane or data lanes in stop state */
-        /* This is normal during idle periods, only log if debugging */
-        pr_info("CSI PHY lanes in stop state: 0x%08x\n", phy_state);
-    }
-
-    /* CRITICAL: Log CSI interrupt completion status */
-    if (ret == IRQ_HANDLED) {
-        pr_info("*** CSI INTERRUPT: Handled successfully - errors processed ***\n");
-    } else {
-        pr_info("*** CSI INTERRUPT: No action taken - no errors detected ***\n");
-    }
-
     spin_unlock_irqrestore(&csi_dev->lock, flags);
-    return ret;
 }
 
 /* Initialize CSI hardware */
