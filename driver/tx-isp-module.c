@@ -53,12 +53,7 @@ extern struct tx_isp_dev *ourISPdev;
 
 /* Remove duplicate - tx_isp_sensor_attribute already defined in SDK */
 
-/* CRITICAL FIX: Store original sensor ops for proper delegation - moved to top for global access */
-struct sensor_ops_storage {
-    struct tx_isp_subdev_ops *original_ops;
-    struct tx_isp_subdev *sensor_sd;
-};
-static struct sensor_ops_storage stored_sensor_ops;
+/* REMOVED: sensor_ops_storage - Reference driver uses original sensor ops directly */
 
 // Simple sensor registration structure
 struct registered_sensor {
