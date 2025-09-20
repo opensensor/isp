@@ -875,6 +875,22 @@ static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
 /* CRITICAL: Frame sync work structure - MUST match reference driver */
 static struct work_struct ispcore_fs_work;
 
+/* BINARY NINJA COMPATIBILITY: Additional work structures and globals */
+struct work_struct pre_frame_dequeue;
+struct work_struct ch1_frame_dequeue_delay;
+char ch1_buf[0x1c];
+int isp_ch0_pre_dequeue_time = 0;
+int isp_ch1_dequeue_delay_time = 0;
+uint8_t isp_day_night_switch_drop_frame_num = 0;
+uint8_t isp_day_night_switch_drop_frame_cnt = 0;
+void *irq_func_cb[32] = {0};  /* Array of 32 interrupt callback function pointers */
+
+/* Forward declarations for Binary Ninja compatibility */
+int tx_isp_send_event_to_remote(void *target, u32 event, void *data);
+void system_reg_write(u32 reg, u32 val);
+void mbus_to_bayer_write(u32 config);
+void tisp_top_sel(void);
+
 /* Frame sync work function - RACE CONDITION SAFE Binary Ninja reference implementation */
 static void ispcore_irq_fs_work(struct work_struct *work)
 {
