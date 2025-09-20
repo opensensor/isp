@@ -355,29 +355,34 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
     int32_t v1;
     extern struct tx_isp_dev *ourISPdev;
     
-    mcp_log_info("tx_isp_vin_init: EXACT Binary Ninja implementation", arg2);
-    
+    pr_info("VIN: tx_isp_vin_init: SAFE implementation without is_valid_kernel_pointer = 0x%x\n", arg2);
+
     /* CRITICAL FIX: Handle parameter type mismatch safely */
     /* When called from subdev ops: arg1 is struct tx_isp_subdev *sd */
     /* When called directly: arg1 might be VIN device */
     /* Always use global ISP device for safety to avoid segfaults */
     struct tx_isp_vin_device *vin_dev = NULL;
 
-    if (!ourISPdev || !ourISPdev->vin_dev) {
-        mcp_log_error("tx_isp_vin_init: no global ISP device or VIN device available", 0);
+    if (!ourISPdev) {
+        pr_err("VIN: tx_isp_vin_init: no global ISP device available\n");
+        return -ENODEV;
+    }
+
+    if (!ourISPdev->vin_dev) {
+        pr_err("VIN: tx_isp_vin_init: no VIN device in global ISP\n");
         return -ENODEV;
     }
 
     vin_dev = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
 
-    /* CRITICAL: Validate VIN device pointer before any access */
-    if (!vin_dev || !is_valid_kernel_pointer(vin_dev)) {
-        mcp_log_error("tx_isp_vin_init: invalid VIN device pointer", (u32)vin_dev);
+    /* CRITICAL: Basic NULL check only - avoid is_valid_kernel_pointer */
+    if (!vin_dev) {
+        pr_err("VIN: tx_isp_vin_init: VIN device is NULL\n");
         return -EINVAL;
     }
 
     /* SAFE: Always use global ISP device sensor to avoid pointer confusion */
-    if (!ourISPdev->sensor || !is_valid_kernel_pointer(ourISPdev->sensor)) {
+    if (!ourISPdev->sensor) {
         a0 = 0;
     } else {
         a0 = ourISPdev->sensor;
@@ -386,22 +391,22 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
     /* Binary Ninja: if ($a0 == 0) */
     if (a0 == 0) {
         /* Binary Ninja: isp_printf(1, &$LC0, 0x158) */
-        mcp_log_info("tx_isp_vin_init: no sensor available", 0x158);
+        pr_info("VIN: tx_isp_vin_init: no sensor available = 0x%x\n", 0x158);
         /* Binary Ninja: result = 0xffffffff */
         result = 0xffffffff;
     } else {
-        /* SAFE: Access sensor with validation to prevent segfaults */
+        /* SAFE: Access sensor with basic validation to prevent segfaults */
         struct tx_isp_sensor *sensor = (struct tx_isp_sensor *)a0;
 
-        /* CRITICAL: Validate sensor pointer before any access */
-        if (!sensor || !is_valid_kernel_pointer(sensor)) {
-            mcp_log_error("tx_isp_vin_init: invalid sensor pointer", (u32)sensor);
+        /* CRITICAL: Basic NULL checks only - avoid is_valid_kernel_pointer */
+        if (!sensor) {
+            pr_err("VIN: tx_isp_vin_init: sensor is NULL\n");
             v0_1 = 0;
-        } else if (!sensor->sd.ops || !is_valid_kernel_pointer(sensor->sd.ops)) {
-            mcp_log_error("tx_isp_vin_init: invalid sensor ops", (u32)sensor->sd.ops);
+        } else if (!sensor->sd.ops) {
+            pr_err("VIN: tx_isp_vin_init: sensor ops is NULL\n");
             v0_1 = 0;
-        } else if (!sensor->sd.ops->core || !is_valid_kernel_pointer(sensor->sd.ops->core)) {
-            mcp_log_error("tx_isp_vin_init: invalid sensor core ops", (u32)sensor->sd.ops->core);
+        } else if (!sensor->sd.ops->core) {
+            pr_err("VIN: tx_isp_vin_init: sensor core ops is NULL\n");
             v0_1 = 0;
         } else {
             v0_1 = sensor->sd.ops->core;
@@ -412,15 +417,15 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
             /* Binary Ninja: result = 0 */
             result = 0;
         } else {
-            /* SAFE: Access core ops with validation */
+            /* SAFE: Access core ops with basic validation */
             struct tx_isp_subdev_core_ops *core_ops = (struct tx_isp_subdev_core_ops *)v0_1;
 
-            /* CRITICAL: Validate core ops and init function pointer */
-            if (!core_ops || !is_valid_kernel_pointer(core_ops)) {
-                mcp_log_error("tx_isp_vin_init: invalid core ops pointer", (u32)core_ops);
+            /* CRITICAL: Basic NULL checks only - avoid is_valid_kernel_pointer */
+            if (!core_ops) {
+                pr_err("VIN: tx_isp_vin_init: core ops is NULL\n");
                 v0_2 = 0;
-            } else if (!core_ops->init || !is_valid_kernel_pointer(core_ops->init)) {
-                mcp_log_info("tx_isp_vin_init: no sensor init function available", 0);
+            } else if (!core_ops->init) {
+                pr_info("VIN: tx_isp_vin_init: no sensor init function available\n");
                 v0_2 = 0;
             } else {
                 v0_2 = (int32_t)core_ops->init;
@@ -431,11 +436,11 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
                 /* Binary Ninja: result = 0 */
                 result = 0;
             } else {
-                /* SAFE: Call sensor init function with validation */
+                /* SAFE: Call sensor init function with basic validation */
                 int (*init_func)(struct tx_isp_subdev *, int) = (int (*)(struct tx_isp_subdev *, int))v0_2;
                 struct tx_isp_sensor *sensor = (struct tx_isp_sensor *)a0;  /* Re-cast for safety */
 
-                mcp_log_info("tx_isp_vin_init: calling sensor init function", arg2);
+                pr_info("VIN: tx_isp_vin_init: calling sensor init function = 0x%x\n", arg2);
                 result = init_func(&sensor->sd, arg2);
 
                 /* Binary Ninja: if (result == 0xfffffdfd) */
@@ -443,7 +448,7 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
                     /* Binary Ninja: result = 0 */
                     result = 0;
                 }
-                mcp_log_info("tx_isp_vin_init: sensor init returned", result);
+                pr_info("VIN: tx_isp_vin_init: sensor init returned = 0x%x\n", result);
             }
         }
     }
@@ -655,32 +660,38 @@ int tx_isp_vin_activate_subdev(void* arg1)
     extern struct tx_isp_dev *ourISPdev;
     struct tx_isp_vin_device *vin_dev;
 
-    mcp_log_info("tx_isp_vin_activate_subdev: EXACT Binary Ninja implementation", 0);
+    pr_info("VIN: tx_isp_vin_activate_subdev: SAFE implementation without is_valid_kernel_pointer\n");
 
-    /* CRITICAL FIX: Handle both parameter types safely */
-    /* When called from tuning IOCTL, arg1 is &param_ptr[3] (not a VIN device) */
-    /* When called from internal ops, arg1 should be VIN device */
+    /* CRITICAL FIX: Avoid is_valid_kernel_pointer which might cause crashes */
     /* Always use global ISP device for safety */
-    if (!ourISPdev || !ourISPdev->vin_dev) {
-        mcp_log_error("tx_isp_vin_activate_subdev: no VIN device available", 0);
+    if (!ourISPdev) {
+        pr_err("VIN: tx_isp_vin_activate_subdev: no global ISP device available\n");
+        return -ENODEV;
+    }
+
+    if (!ourISPdev->vin_dev) {
+        pr_err("VIN: tx_isp_vin_activate_subdev: no VIN device in global ISP\n");
         return -ENODEV;
     }
 
     vin_dev = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
 
-    /* CRITICAL: Validate VIN device pointer before use */
-    if (!vin_dev || !is_valid_kernel_pointer(vin_dev)) {
-        mcp_log_error("tx_isp_vin_activate_subdev: invalid VIN device pointer", (u32)vin_dev);
+    /* CRITICAL: Basic NULL check only - avoid is_valid_kernel_pointer */
+    if (!vin_dev) {
+        pr_err("VIN: tx_isp_vin_activate_subdev: VIN device is NULL\n");
         return -EINVAL;
     }
     
-    /* SAFE: Use struct member access instead of raw pointer arithmetic */
-    mutex_lock(&vin_dev->mlock);
+    /* SAFE: Use struct member access with basic error handling */
+    if (mutex_lock_interruptible(&vin_dev->mlock)) {
+        pr_err("VIN: tx_isp_vin_activate_subdev: mutex lock interrupted\n");
+        return -EINTR;
+    }
 
     /* SAFE: Check and update state using struct members */
     if (vin_dev->state == 1) {
         vin_dev->state = 2;
-        mcp_log_info("tx_isp_vin_activate_subdev: state changed from 1 to 2", vin_dev->state);
+        pr_info("VIN: tx_isp_vin_activate_subdev: state changed from 1 to 2 = 0x%x\n", vin_dev->state);
     }
 
     /* SAFE: Unlock mutex using struct member */
@@ -688,7 +699,7 @@ int tx_isp_vin_activate_subdev(void* arg1)
 
     /* SAFE: Increment reference count using struct member */
     vin_dev->refcnt += 1;
-    mcp_log_info("tx_isp_vin_activate_subdev: refcnt incremented", vin_dev->refcnt);
+    pr_info("VIN: tx_isp_vin_activate_subdev: refcnt incremented = 0x%x\n", vin_dev->refcnt);
     
     /* Binary Ninja: return 0 */
     return 0;
