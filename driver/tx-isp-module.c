@@ -6571,7 +6571,8 @@ static int tx_isp_module_notify(struct tx_isp_module *module, unsigned int notif
         
         /* Get VIC device from ISP device */
         if (ourISPdev && ourISPdev->vic_dev) {
-            vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+            /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+            vic_dev = ourISPdev->vic_dev;
             ret = tx_isp_vic_notify(vic_dev, notification, data);
         } else {
             /* Fallback: call handler directly */
