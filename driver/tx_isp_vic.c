@@ -44,7 +44,6 @@ static void debug_vic_start_ok_change(int new_value, const char *location, int l
 void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 {
     unsigned long flags;
-    void __iomem *vic_regs;
 
     pr_info("*** tx_vic_enable_irq: BINARY NINJA EXACT ***\n");
 
@@ -61,38 +60,6 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
     if (vic_dev->irq_enabled == 0) {
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 1 */
         vic_dev->irq_enabled = 1;
-
-        /* CRITICAL FIX: Configure VIC hardware interrupt registers with COMPREHENSIVE configuration */
-        /* Use secondary VIC space if available, otherwise primary */
-        if (vic_dev->vic_regs_secondary) {
-            pr_info("*** tx_vic_enable_irq: Using SECONDARY VIC space for comprehensive interrupt config ***\n");
-
-            /* Enable ALL VIC interrupts - comprehensive configuration */
-            writel(0x3FFFFFFF, vic_dev->vic_regs_secondary + 0x1e0);  /* Enable ALL VIC interrupts */
-            writel(0x0, vic_dev->vic_regs_secondary + 0x1e8);         /* Clear interrupt masks */
-            writel(0xF, vic_dev->vic_regs_secondary + 0x1e4);         /* Enable ALL MDMA interrupts */
-            writel(0x0, vic_dev->vic_regs_secondary + 0x1ec);         /* Clear MDMA masks */
-            wmb();
-
-            pr_info("*** tx_vic_enable_irq: COMPREHENSIVE VIC interrupt registers configured in SECONDARY space ***\n");
-            pr_info("*** tx_vic_enable_irq: reg 0x1e0=0x3FFFFFFF, 0x1e8=0x0, 0x1e4=0xF, 0x1ec=0x0 ***\n");
-        } else {
-            /* Fallback to primary VIC space with comprehensive configuration */
-            vic_regs = vic_dev->vic_regs;
-            if (vic_regs) {
-                pr_info("*** tx_vic_enable_irq: Using PRIMARY VIC space for comprehensive interrupt config ***\n");
-
-                /* Enable ALL VIC interrupts - comprehensive configuration */
-                writel(0x3FFFFFFF, vic_regs + 0x1e0);  /* Enable ALL VIC interrupts */
-                writel(0x0, vic_regs + 0x1e8);         /* Clear interrupt masks */
-                writel(0xF, vic_regs + 0x1e4);         /* Enable ALL MDMA interrupts */
-                writel(0x0, vic_regs + 0x1ec);         /* Clear MDMA masks */
-                wmb();
-
-                pr_info("*** tx_vic_enable_irq: COMPREHENSIVE VIC interrupt registers configured in PRIMARY space ***\n");
-                pr_info("*** tx_vic_enable_irq: reg 0x1e0=0x3FFFFFFF, 0x1e8=0x0, 0x1e4=0xF, 0x1ec=0x0 ***\n");
-            }
-        }
 
         /* Binary Ninja: $v0_1(dump_vsd_5 + 0x80) - this is enable_irq(irq_number) */
         if (vic_dev->irq_number > 0) {
@@ -1688,31 +1655,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: system_reg_write(0x1c, 8) - Set ISP control mode */
         writel(8, core + 0x1c);
 
-        /* *** CRITICAL: Enable interrupt generation at hardware level *** */
-        pr_info("*** ENABLING COMPREHENSIVE HARDWARE INTERRUPT GENERATION ***\n");
-
-        /* CRITICAL FIX: Enable VIC interrupts using SECONDARY VIC registers (0x10023000) */
-        if (vic_dev->vic_regs_secondary) {
-            pr_info("*** WRITING VIC INTERRUPT ENABLE REGISTERS TO SECONDARY SPACE ***\n");
-
-            /* Enable VIC interrupts - from reference driver using secondary space */
-            writel(0x3FFFFFFF, vic_dev->vic_regs_secondary + 0x1e0);  /* Enable all VIC interrupts */
-            writel(0x0, vic_dev->vic_regs_secondary + 0x1e8);         /* Clear interrupt masks */
-            writel(0xF, vic_dev->vic_regs_secondary + 0x1e4);         /* Enable MDMA interrupts */
-            writel(0x0, vic_dev->vic_regs_secondary + 0x1ec);         /* Clear MDMA masks */
-            wmb();
-
-            pr_info("*** VIC INTERRUPT REGISTERS ENABLED IN SECONDARY SPACE - INTERRUPTS SHOULD NOW FIRE! ***\n");
-        } else {
-            pr_warn("*** VIC secondary registers not available - using primary space ***\n");
-            /* Fallback to primary VIC space */
-            writel(0x3FFFFFFF, vic_regs + 0x1e0);  /* Enable all VIC interrupts */
-            writel(0x0, vic_regs + 0x1e8);         /* Clear interrupt masks */
-            writel(0xF, vic_regs + 0x1e4);         /* Enable MDMA interrupts */
-            writel(0x0, vic_regs + 0x1ec);         /* Clear MDMA masks */
-            wmb();
-        }
-
         /* CRITICAL: Enable ISP core interrupt generation at hardware level */
         /* Binary Ninja: system_reg_write(0x30, 0xffffffff) - Enable all interrupt sources */
         writel(0xffffffff, core + 0x30);
@@ -1720,24 +1662,12 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: system_reg_write(0x10, 0x133) - Enable specific interrupt types */
         writel(0x133, core + 0x10);
 
-        /* CRITICAL FIX: Enable ISP core interrupts at both possible banks (legacy +0xb* and new +0x98b*) */
-        pr_info("*** ENABLING ISP CORE INTERRUPT REGISTERS FOR MIPI DATA ***\n");
-
-        /* Legacy bank - reuse existing variables */
-        pend_legacy = readl(core + 0xb4);
-        writel(pend_legacy, core + 0xb8);  /* Clear any pending */
-        writel(0x3FFF, core + 0xb0);       /* INT_EN */
-        writel(0x3FFF, core + 0xbc);       /* INT_MASK/UNMASK */
-
-        /* New bank - reuse existing variables */
-        pend_new = readl(core + 0x98b4);
-        writel(pend_new, core + 0x98b8);   /* Clear any pending */
-        writel(0x3FFF, core + 0x98b0);     /* INT_EN */
-        writel(0x3FFF, core + 0x98bc);     /* INT_MASK/UNMASK */
+        /* Enable interrupt banks */
+        writel(0x3FFF, core + 0xb0);
+        writel(0x3FFF, core + 0xbc);
+        writel(0x3FFF, core + 0x98b0);
+        writel(0x3FFF, core + 0x98bc);
         wmb();
-
-        pr_info("*** ISP CORE INTERRUPT REGISTERS ENABLED at legacy(+0xb*) and new(+0x98b*) ***\n");
-        pr_info("*** BOTH VIC AND ISP CORE INTERRUPTS NOW ENABLED! ***\n");
 
         pr_info("*** ISP PIPELINE: VIC->ISP connection ENABLED (0x800=1, 0x804=0x1c, 0x1c=8) ***\n");
         pr_info("*** ISP CORE: Hardware interrupt generation ENABLED during VIC init ***\n");

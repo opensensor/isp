@@ -382,22 +382,6 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
         pr_info("CSI streaming disabled - state=%d (DISABLED)\n", csi_dev->state);
     }
 
-    /* CRITICAL SAFETY: Add memory barrier and validation before return */
-    mb(); /* Memory barrier to ensure all operations complete */
-
-    /* SAFETY: Validate all pointers are still valid before return */
-    if (!sd || !is_valid_kernel_pointer(sd)) {
-        pr_err("*** CRITICAL: CSI subdev became invalid during streaming - PREVENTING CRASH ***\n");
-        return -EFAULT;
-    }
-
-    if (!csi_dev || !is_valid_kernel_pointer(csi_dev)) {
-        pr_err("*** CRITICAL: CSI device became invalid during streaming - PREVENTING CRASH ***\n");
-        return -EFAULT;
-    }
-
-    pr_info("*** csi_video_s_stream: STREAMING OPERATION COMPLETE - RETURNING SUCCESS ***\n");
-
     /* Binary Ninja: return 0 */
     return 0;
 }
