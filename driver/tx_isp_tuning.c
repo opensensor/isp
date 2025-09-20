@@ -3782,14 +3782,14 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 
                         spin_lock_irqsave(&tuning_buffer_lock_set, buffer_flags_set);
                         if (!tisp_par_ioctl) {
-                            spin_unlock_irqrestore(&tuning_buffer_lock, buffer_flags);
+                            spin_unlock_irqrestore(&tuning_buffer_lock_set, buffer_flags_set);
                             pr_err("tisp_code_tuning_ioctl: Buffer was freed during SET operation\n");
                             return -ENODEV;
                         }
 
                         /* Binary Ninja: Copy from user to tisp_par_ioctl */
                         ret = copy_from_user(tisp_par_ioctl, (void __user *)s0_1, 0x500c);
-                        spin_unlock_irqrestore(&tuning_buffer_lock, buffer_flags);
+                        spin_unlock_irqrestore(&tuning_buffer_lock_set, buffer_flags_set);
 
                         if (ret != 0) {
                             pr_err("tisp_code_tuning_ioctl: Copy from user failed: %d\n", ret);
