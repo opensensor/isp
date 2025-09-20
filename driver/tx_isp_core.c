@@ -891,24 +891,69 @@ void system_reg_write(u32 reg, u32 val);
 void mbus_to_bayer_write(u32 config);
 void tisp_top_sel(void);
 
-/* Stub implementations for Binary Ninja compatibility functions */
+/* EXACT Binary Ninja implementations for compatibility functions */
 int tx_isp_send_event_to_remote(void *target, u32 event, void *data)
 {
-    /* Binary Ninja: Send event to remote frame channel */
-    pr_info("tx_isp_send_event_to_remote: target=%p, event=0x%x, data=%p\n", target, event, data);
-    return 0;
+    /* Binary Ninja: if (arg1 != 0) */
+    if (target != 0) {
+        /* Binary Ninja: void* $a0 = *(arg1 + 0xc) */
+        void *a0 = *((void**)((char*)target + 0xc));
+
+        if (a0 != 0) {
+            /* Binary Ninja: int32_t $t9_1 = *($a0 + 0x1c) */
+            void *callback = *((void**)((char*)a0 + 0x1c));
+
+            if (callback != 0) {
+                /* Binary Ninja: jump($t9_1) - Call the callback function */
+                typedef int (*event_callback_t)(void *target, u32 event, void *data);
+                return ((event_callback_t)callback)(target, event, data);
+            }
+        }
+    }
+
+    /* Binary Ninja: return 0xfffffdfd */
+    return 0xfffffdfd;  /* -515 error code */
 }
 
 void mbus_to_bayer_write(u32 config)
 {
-    /* Binary Ninja: Configure MBUS to Bayer conversion */
-    pr_info("mbus_to_bayer_write: config=0x%x\n", config);
+    /* Binary Ninja: if (arg1 - 0x3001 u>= 0x14) */
+    if ((config - 0x3001) >= 0x14) {
+        /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch2 vcomp err !!!\n", "mbus_to_bayer_write") */
+        pr_err("Err [VIC_INT] : mipi ch2 vcomp err !!! in mbus_to_bayer_write\n");
+    } else {
+        /* Binary Ninja: Complex switch statement for MBUS format conversion */
+        u32 bayer_mode;
+
+        switch (config) {
+            case 0x3001: case 0x3003: case 0x3004: case 0x3005:
+            case 0x3006: case 0x3007: case 0x3008: case 0x300b:
+                bayer_mode = 1;  /* RGGB */
+                break;
+            case 0x3002: case 0x3009: case 0x300a: case 0x3011:
+                bayer_mode = 2;  /* GRBG */
+                break;
+            case 0x300c: case 0x300e: case 0x3010: case 0x3013:
+                bayer_mode = 3;  /* GBRG */
+                break;
+            case 0x300d: case 0x300f: case 0x3012: case 0x3014:
+                bayer_mode = 0;  /* BGGR */
+                break;
+            default:
+                bayer_mode = 0;
+                break;
+        }
+
+        /* Binary Ninja: system_reg_write(8, $a1_1) */
+        system_reg_write(8, bayer_mode);
+    }
 }
 
 void tisp_top_sel(void)
 {
-    /* Binary Ninja: Select ISP top configuration */
-    pr_info("tisp_top_sel: ISP top configuration selected\n");
+    /* Binary Ninja: return system_reg_write(0xc, system_reg_read(0xc) | 0x80000000) __tailcall */
+    u32 reg_val = system_reg_read(0xc);
+    system_reg_write(0xc, reg_val | 0x80000000);
 }
 
 /* Frame sync work function - RACE CONDITION SAFE Binary Ninja reference implementation */

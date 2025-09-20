@@ -1804,6 +1804,9 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
 #define SAFE_WRITE_OFFSET(ptr, offset, val) \
     do { if (ptr) writel((val), (ptr) + (offset)); } while(0)
 
+/* Forward declaration for ISP core interrupt handler */
+extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
+
 /* isp_vic_interrupt_service_routine - EXACT Binary Ninja MCP with SAFE struct member access */
 irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
