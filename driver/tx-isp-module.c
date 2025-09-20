@@ -7526,39 +7526,45 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
             pr_info("*** SENSOR s_stream FUNCTION: %p ***\n", sd->ops->video->s_stream);
         }
 
-        /* *** CRITICAL: CALL TUNING IOCTL TO ACTIVATE VIN - EXACT BINARY NINJA REFERENCE *** */
-        pr_info("*** CRITICAL: CALLING TUNING IOCTL TO ACTIVATE VIN (PARAMETER TYPE 8) ***\n");
+        /* *** CRITICAL: VALIDATE VIN DEVICE BEFORE CALLING TUNING IOCTL *** */
+        pr_info("*** CRITICAL: CHECKING VIN DEVICE BEFORE TUNING IOCTL ***\n");
 
-        /* Prepare parameter buffer for tuning IOCTL call */
-        int tuning_param_buffer[0x500c / sizeof(int)];
-        memset(tuning_param_buffer, 0, sizeof(tuning_param_buffer));
-        tuning_param_buffer[0] = 8;  /* Parameter type 8 = VIN activation */
+        if (!ourISPdev) {
+            pr_err("*** FATAL: ourISPdev is NULL - cannot activate VIN ***\n");
+            return -ENODEV;
+        }
 
-        /* Call tuning IOCTL with GET operation and parameter type 8 */
-        extern long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
-        long tuning_ret = tisp_code_tuning_ioctl(NULL, 0x20007400, (unsigned long)tuning_param_buffer);
+        if (!ourISPdev->vin_dev) {
+            pr_err("*** FATAL: ourISPdev->vin_dev is NULL - VIN not linked yet ***\n");
+            pr_err("*** This means VIN device creation/linking failed ***\n");
+            return -ENODEV;
+        }
 
-        if (tuning_ret == 0) {
-            pr_info("*** CRITICAL: TUNING IOCTL VIN ACTIVATION SUCCESSFUL ***\n");
+        pr_info("*** VIN DEVICE VALIDATION: ourISPdev=%p, vin_dev=%p ***\n", ourISPdev, ourISPdev->vin_dev);
+
+        /* CRITICAL: Don't call tuning IOCTL - it's causing crashes */
+        /* Instead, call VIN activate directly with the correct pointer */
+        extern int tx_isp_vin_activate_subdev(void* arg1);
+        int activate_ret = tx_isp_vin_activate_subdev(ourISPdev->vin_dev);
+
+        if (activate_ret == 0) {
+            pr_info("*** CRITICAL: VIN ACTIVATION SUCCESSFUL ***\n");
 
             /* Check VIN state after activation */
-            if (ourISPdev->vin_dev) {
-                struct tx_isp_vin_device *vin_device = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
-                pr_info("*** VIN STATE AFTER TUNING ACTIVATION: %d (should be 2) ***\n", vin_device->state);
+            struct tx_isp_vin_device *vin_device = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
+            pr_info("*** VIN STATE AFTER ACTIVATION: %d (should be 2) ***\n", vin_device->state);
 
-                /* Now call VIN init to transition from state 2 to state 3 */
-                if (vin_device->sd.ops->core && vin_device->sd.ops->core->init) {
-                    int init_ret = vin_device->sd.ops->core->init(&vin_device->sd, 1);
-                    if (init_ret == 0) {
-                        pr_info("*** CRITICAL: VIN INITIALIZED SUCCESSFULLY - STATE NOW 3 ***\n");
-                    } else {
-                        pr_info("*** VIN INIT RETURNED %d BUT STATE SHOULD BE SET TO 3 ***\n", init_ret);
-                    }
-                    pr_info("*** VIN FINAL STATE: %d (should be 3) ***\n", vin_device->state);
-                }
+            /* Now call VIN init to transition from state 2 to state 3 */
+            extern int tx_isp_vin_init(void* arg1, int32_t arg2);
+            int init_ret = tx_isp_vin_init(ourISPdev->vin_dev, 1);
+            if (init_ret == 0) {
+                pr_info("*** CRITICAL: VIN INITIALIZED SUCCESSFULLY - STATE NOW 3 ***\n");
+            } else {
+                pr_info("*** VIN INIT RETURNED %d BUT STATE SHOULD BE SET TO 3 ***\n", init_ret);
             }
+            pr_info("*** VIN FINAL STATE: %d (should be 3) ***\n", vin_device->state);
         } else {
-            pr_err("*** TUNING IOCTL VIN ACTIVATION FAILED: %ld ***\n", tuning_ret);
+            pr_err("*** VIN ACTIVATION FAILED: %d ***\n", activate_ret);
         }
         
         /* Check if any channel is already streaming and set state accordingly */
