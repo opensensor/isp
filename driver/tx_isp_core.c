@@ -800,8 +800,8 @@ EXPORT_SYMBOL(ispcore_core_ops_ioctl);
 
 /* Core subdev operations structure - CRITICAL for proper initialization */
 struct tx_isp_subdev_ops core_subdev_ops = {
-    .core = NULL,     /* Core operations */
-    .video = NULL,    /* Video operations */
+    .core = &core_subdev_core_ops,     /* Core operations */
+    .video = &core_subdev_video_ops,    /* Video operations */
     .pad = &core_pad_ops,  /* Pad operations */
     .sensor = NULL,   /* Sensor operations */
     .internal = NULL  /* Internal operations */
