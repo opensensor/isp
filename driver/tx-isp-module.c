@@ -4923,40 +4923,9 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     /* Binary Ninja: *($v0 + 0x34) = &tx_isp_fops - Use safe struct member access */
     /* Note: fops member may not exist in current struct definition, skipping for now */
 
-    /* Binary Ninja: Platform device registration loop using platform data */
-    /* Binary Ninja: *(*($s2_1 + 8) + ($fp_1 << 2)) - Get platform device from array */
-    pr_info("*** REGISTERING PLATFORM DEVICES TO CLAIM MEMORY REGIONS LIKE STOCK DRIVER ***\n");
-    pr_info("*** NOTE: Stock driver must be unloaded first to avoid memory conflicts ***\n");
-
-    for (i = 0; i < pdata->device_id; i++) {
-        struct platform_device *platform_dev = pdata->devices[i];
-
-        if (!platform_dev) {
-            isp_printf(2, (unsigned char *)"Invalid platform device at index %d\n", i);
-            /* Cleanup previously registered devices */
-            while (--i >= 0) {
-                private_platform_device_unregister(pdata->devices[i]);
-            }
-            tx_isp_subdev_deinit(&isp_dev->sd);
-            private_kfree(isp_dev);
-            return -EFAULT;
-        }
-
-        /* Binary Ninja: private_platform_device_register($platform_device) */
-        ret = private_platform_device_register(platform_dev);
-        if (ret != 0) {
-            isp_printf(2, (unsigned char *)"Failed to register platform device %d (%s): %d\n", i, platform_dev->name, ret);
-            /* Cleanup previously registered devices */
-            while (--i >= 0) {
-                private_platform_device_unregister(pdata->devices[i]);
-            }
-            tx_isp_subdev_deinit(&isp_dev->sd);
-            private_kfree(isp_dev);
-            return -EFAULT;
-        }
-
-        pr_info("*** PLATFORM DEVICE %d (%s) REGISTERED SUCCESSFULLY ***\n", i, platform_dev->name);
-    }
+    /* *** CRITICAL FIX: Platform devices are already registered in tx_isp_init() *** */
+    /* Removing duplicate platform device registration from probe function */
+    pr_info("*** PLATFORM DEVICES ALREADY REGISTERED IN INIT - SKIPPING DUPLICATE REGISTRATION ***\n");
 
     /* Binary Ninja: Set up subdev count for compatibility */
     /* *($v0 + 0x80) = $v0_5 - Store device count at offset 0x80 */
