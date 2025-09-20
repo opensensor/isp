@@ -1362,16 +1362,32 @@ int tiziano_ae_set_hardware_param(int ae_id, uint8_t *param_array, int update_on
     return 0;
 }
 
-/* ae0_interrupt_static - Binary Ninja EXACT implementation */
+/* ae0_interrupt_static - CRITICAL FIX: Prevent DMA to kernel stack */
 int ae0_interrupt_static(void)
 {
     pr_info("ae0_interrupt_static: Processing AE0 static interrupt\n");
 
+    /* CRITICAL FIX: data_b2f3c is 0, causing DMA to kernel stack! */
     /* Binary Ninja: Read AE0 status and calculate buffer offset */
     uint32_t ae0_status = system_reg_read(0xa050);
+
+    /* CRITICAL SAFETY: Validate data_b2f3c is initialized before using it */
+    if (data_b2f3c == 0) {
+        pr_err("*** CRITICAL: data_b2f3c is 0 - this would cause DMA to kernel stack! ***\n");
+        pr_err("*** AE0 interrupt DISABLED to prevent stack corruption ***\n");
+        return 0;  /* Skip processing to prevent crash */
+    }
+
     void *buffer_addr = (void *)((ae0_status << 8) & 0x3000) + data_b2f3c;
 
-    /* Binary Ninja: DMA cache sync */
+    /* CRITICAL SAFETY: Validate calculated buffer address is in valid memory range */
+    if ((unsigned long)buffer_addr < 0x80000000 || (unsigned long)buffer_addr >= 0xfffff000) {
+        pr_err("*** CRITICAL: AE0 buffer_addr 0x%p outside kernel memory - ABORTING ***\n", buffer_addr);
+        pr_err("*** This would cause DMA to invalid memory and crash the system! ***\n");
+        return 0;  /* Skip processing to prevent crash */
+    }
+
+    /* Binary Ninja: DMA cache sync - now safe */
     tisp_dma_cache_sync_helper(0, buffer_addr, 0x1000, 0);
 
     /* Binary Ninja: Get AE0 statistics */
