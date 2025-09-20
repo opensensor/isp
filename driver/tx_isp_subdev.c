@@ -633,7 +633,29 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         /* Link VIN device */
         struct tx_isp_vin_device *vin_dev = container_of(sd, struct tx_isp_vin_device, sd);
         ourISPdev->vin_dev = vin_dev;
+
+        /* CRITICAL FIX: Set up VIN subdev ops structure immediately after linking */
+        extern struct tx_isp_subdev_ops vin_subdev_ops;
+        vin_dev->sd.ops = &vin_subdev_ops;
+        vin_dev->sd.isp = (void *)ourISPdev;
+
         pr_info("*** LINKED VIN device: %p ***\n", vin_dev);
+        pr_info("*** VIN SUBDEV OPS CONFIGURED: core=%p, video=%p, s_stream=%p ***\n",
+                vin_dev->sd.ops->core, vin_dev->sd.ops->video,
+                vin_dev->sd.ops->video ? vin_dev->sd.ops->video->s_stream : NULL);
+
+        /* CRITICAL FIX: Initialize VIN to state 3 immediately after ops setup */
+        if (vin_dev->sd.ops && vin_dev->sd.ops->core && vin_dev->sd.ops->core->init) {
+            pr_info("*** CRITICAL: INITIALIZING VIN TO STATE 3 DURING AUTO-LINK ***\n");
+            int ret = vin_dev->sd.ops->core->init(&vin_dev->sd, 1);
+            if (ret) {
+                pr_err("*** CRITICAL: VIN INITIALIZATION FAILED DURING AUTO-LINK: %d ***\n", ret);
+            } else {
+                pr_info("*** CRITICAL: VIN INITIALIZED TO STATE 3 DURING AUTO-LINK - READY FOR STREAMING ***\n");
+            }
+        } else {
+            pr_err("*** CRITICAL: NO VIN INIT FUNCTION AVAILABLE DURING AUTO-LINK ***\n");
+        }
 
     } else if (strcmp(dev_name, "tx-isp-fs") == 0) {
         /* Link FS device */

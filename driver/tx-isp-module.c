@@ -5092,33 +5092,8 @@ static int tx_isp_init(void)
     pr_info("*** VIN DEVICE CREATION DEFERRED TO tx_isp_core_probe (after memory mappings) ***\n");
     pr_info("*** This fixes the 'ISP core registers not available' error ***\n");
     
-    /* *** CRITICAL FIX: Set up VIN subdev operations structure *** */
-    if (ourISPdev->vin_dev) {
-        struct tx_isp_vin_device *vin_device = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
-        
-        /* CRITICAL: Set up VIN subdev with proper ops structure */
-        vin_device->sd.ops = &vin_subdev_ops;
-        vin_device->sd.isp = (void *)ourISPdev;
-        
-        pr_info("*** VIN SUBDEV OPS CONFIGURED: core=%p, video=%p, s_stream=%p ***\n",
-                vin_device->sd.ops->core, vin_device->sd.ops->video,
-                vin_device->sd.ops->video ? vin_device->sd.ops->video->s_stream : NULL);
-        
-        pr_info("*** VIN DEVICE FULLY INITIALIZED AND READY FOR STREAMING ***\n");
-        
-        /* *** CRITICAL FIX: Initialize VIN immediately to state 3 *** */
-        pr_info("*** CRITICAL: INITIALIZING VIN TO STATE 3 DURING STARTUP ***\n");
-        if (vin_device->sd.ops && vin_device->sd.ops->core && vin_device->sd.ops->core->init) {
-            ret = vin_device->sd.ops->core->init(&vin_device->sd, 1);
-            if (ret) {
-                pr_err("*** CRITICAL: VIN INITIALIZATION FAILED DURING STARTUP: %d ***\n", ret);
-            } else {
-                pr_info("*** CRITICAL: VIN INITIALIZED TO STATE 3 DURING STARTUP - READY FOR STREAMING ***\n");
-            }
-        } else {
-            pr_err("*** CRITICAL: NO VIN INIT FUNCTION AVAILABLE DURING STARTUP ***\n");
-        }
-    }
+    /* *** VIN setup now handled in tx_isp_subdev_auto_link function *** */
+    pr_info("*** VIN SUBDEV OPS AND INITIALIZATION DEFERRED TO AUTO-LINK PHASE ***\n");
 
     /* *** CRITICAL FIX: Register subdev platform drivers BEFORE main platform device *** */
     /* This ensures VIC/CSI/VIN drivers are available when main probe function runs */
