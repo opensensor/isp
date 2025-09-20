@@ -1897,7 +1897,17 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 
     /* CRITICAL SAFETY: Validate vic_regs before accessing */
     if (!vic_regs) {
-        pr_err("*** VIC IRQ: NULL vic_regs from BOTH isp_dev AND vic_dev ***\n");
+        pr_err("*** VIC IRQ: NULL vic_regs from BOTH isp_dev AND vic_dev - REMAPPING ***\n");
+
+        /* EMERGENCY FIX: Remap VIC registers if they're NULL */
+        vic_regs = ioremap(0x133e0000, 0x10000);
+        if (vic_regs) {
+            pr_info("*** VIC IRQ: EMERGENCY REMAP SUCCESS - vic_regs = %p ***\n", vic_regs);
+            /* Update both sources so this doesn't happen again */
+            isp_dev->vic_regs = vic_regs;
+            vic_dev->vic_regs = vic_regs;
+        } else {
+            pr_err("*** VIC IRQ: EMERGENCY REMAP FAILED - cannot access VIC registers ***\n");
         pr_err("*** VIC IRQ: isp_dev->vic_regs = %p ***\n", isp_dev->vic_regs);
         pr_err("*** VIC IRQ: vic_dev->vic_regs = %p ***\n", vic_dev->vic_regs);
         pr_err("*** VIC IRQ: This means VIC registers were not mapped during probe ***\n");

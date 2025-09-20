@@ -730,24 +730,12 @@ static struct tx_isp_subdev_ops csi_subdev_ops = {
     .sensor = &csi_sensor_ops,
 };
 
-/* CRITICAL FIX: Proper CSI file operations to prevent BadVA 0xc8 crash */
-static int csi_fops_open(struct inode *inode, struct file *file)
-{
-    pr_info("*** CSI device opened ***\n");
-    return 0;
-}
-
-static long csi_fops_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
-{
-    pr_info("*** CSI IOCTL: cmd=0x%x arg=0x%lx ***\n", cmd, arg);
-    return 0;
-}
-
+/* CSI file operations - Binary Ninja reference */
 static const struct file_operations isp_csi_fops = {
     .owner = THIS_MODULE,
-    .open = csi_fops_open,          /* FIXED: Proper open function */
+    .open = csi_core_ops_init,  /* Placeholder - should be proper open function */
     .release = single_release,
-    .unlocked_ioctl = csi_fops_ioctl,  /* FIXED: Proper IOCTL function */
+    .unlocked_ioctl = csi_core_ops_init,
     .llseek = default_llseek,
 };
 

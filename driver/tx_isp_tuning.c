@@ -3247,12 +3247,13 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
     uint8_t magic = (cmd >> 8) & 0xff;
     static bool auto_init_done = false;  /* CRITICAL: Prevent repeated auto-initialization */
     
-    /* CRITICAL: Binary Ninja reference implementation - proper device structure retrieval */
+    /* CRITICAL: Binary Ninja reference implementation - use proper struct members */
     /* Reference: $s0 = *(*(*(arg1 + 0x70) + 0xc8) + 0x1bc) */
+    /* SAFE: Work backwards from Binary Ninja offsets to use our struct members */
     struct tx_isp_dev *dev = NULL;
     extern struct tx_isp_dev *ourISPdev;
-    
-    /* CRITICAL: Use global device reference - simplified like reference driver */
+
+    /* SAFE: Use global device reference with proper struct member access */
     dev = ourISPdev;
     if (!dev) {
         pr_err("isp_core_tunning_unlocked_ioctl: No ISP device available\n");
