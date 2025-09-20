@@ -3844,7 +3844,7 @@ static struct tx_isp_subdev_video_ops csi_video_ops = {
     .s_stream = csi_video_s_stream_impl,
 };
 
-/* CRITICAL FIX: stored_sensor_ops moved to top of file for global access */
+/* REMOVED: stored_sensor_ops - Reference driver uses original sensor ops directly */
 
 /* REMOVED: sensor_subdev_sensor_ioctl - Reference driver uses original sensor ops directly */
 
@@ -4096,19 +4096,21 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                                 sensor->attr.total_width, sensor->attr.total_height);
                     }
                     
-                    /* SAFE INITIALIZATION: Initialize subdev structure */
-                    memset(&sensor->sd, 0, sizeof(sensor->sd));
+                    /* CRITICAL FIX: DON'T ZERO OUT SUBDEV - PRESERVE SENSOR DRIVER INITIALIZATION */
+                    /* The sensor driver already called tx_isp_subdev_init() which set up sd->ops */
+                    /* We only need to set ISP-specific fields without destroying sensor ops */
                     sensor->sd.isp = (void *)isp_dev;
                     sensor->sd.vin_state = TX_ISP_MODULE_INIT;
                     sensor->index = 0;
                     sensor->type = 0;
                     INIT_LIST_HEAD(&sensor->list);
-                    
-                    /* CRITICAL FIX: KEEP ORIGINAL SENSOR OPS - NO ISP WRAPPER */
-                    pr_info("*** CRITICAL: KEEPING ORIGINAL SENSOR SUBDEV OPS ***\n");
+
+                    /* CRITICAL FIX: SENSOR OPS PRESERVED FROM SENSOR DRIVER */
+                    pr_info("*** CRITICAL: SENSOR SUBDEV OPS PRESERVED FROM SENSOR DRIVER ***\n");
                     pr_info("*** SENSOR SUBDEV OPS: core=%p, video=%p, s_stream=%p ***\n",
-                            sensor->sd.ops->core, sensor->sd.ops->video,
-                            sensor->sd.ops->video ? sensor->sd.ops->video->s_stream : NULL);
+                            sensor->sd.ops ? sensor->sd.ops->core : NULL,
+                            sensor->sd.ops ? sensor->sd.ops->video : NULL,
+                            (sensor->sd.ops && sensor->sd.ops->video) ? sensor->sd.ops->video->s_stream : NULL);
                     
                     pr_info("*** SENSOR SUBDEV INITIALIZED WITH WORKING OPS STRUCTURE ***\n");
                     
