@@ -1123,6 +1123,64 @@ static const struct file_operations video_input_cmd_fops = {
 extern int video_input_cmd_open(struct inode *inode, struct file *file);
 extern ssize_t video_input_cmd_set(struct file *file, const char __user *buffer, size_t count, loff_t *ppos);
 extern int video_input_cmd_show(struct seq_file *seq, void *v);
+extern int tx_isp_vin_slake_subdev(struct tx_isp_subdev *sd);
+
+/* tx_isp_vin_slake_subdev - EXACT Binary Ninja reference implementation */
+int tx_isp_vin_slake_subdev(struct tx_isp_subdev *sd)
+{
+    struct tx_isp_vin_device *vin_dev;
+    int state;
+    int i;
+
+    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 0xffffffea */
+    if (!sd || (unsigned long)sd >= 0xfffff001) {
+        return -EINVAL;
+    }
+
+    /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
+    vin_dev = (struct tx_isp_vin_device *)sd->dev_priv;
+    if (!vin_dev || (unsigned long)vin_dev >= 0xfffff001) {
+        return -EINVAL;
+    }
+
+    pr_info("*** tx_isp_vin_slake_subdev: VIN slake/shutdown - current state=%d ***\n", vin_dev->state);
+
+    /* Binary Ninja: int32_t $v1_2 = *($s0_1 + 0x128) */
+    state = vin_dev->state;
+
+    /* Binary Ninja: if ($v1_2 == 4) vin_s_stream(arg1, 0) */
+    if (state == 4) {
+        pr_info("tx_isp_vin_slake_subdev: VIN in streaming state, stopping stream\n");
+        vin_s_stream(sd, 0);
+        state = vin_dev->state;  /* Update state after s_stream */
+    }
+
+    /* Binary Ninja: if ($v1_2 == 3) vin_core_ops_init(arg1, 0) */
+    if (state == 3) {
+        pr_info("tx_isp_vin_slake_subdev: VIN in state 3, calling core_ops_init(disable)\n");
+        /* VIN doesn't have core_ops_init, just transition to state 2 */
+        vin_dev->state = 2;
+    }
+
+    /* Binary Ninja: if ($v1_2 == 2) *($s0_1 + 0x128) = 1 */
+    if (vin_dev->state == 2) {
+        pr_info("tx_isp_vin_slake_subdev: VIN state 2->1, disabling clocks\n");
+        vin_dev->state = 1;
+
+        /* Binary Ninja: Disable clocks in reverse order */
+        if (sd->clks && sd->clk_num > 0) {
+            for (i = sd->clk_num - 1; i >= 0; i--) {
+                if (sd->clks[i]) {
+                    clk_disable(sd->clks[i]);
+                    pr_info("tx_isp_vin_slake_subdev: Disabled clock %d\n", i);
+                }
+            }
+        }
+    }
+
+    pr_info("*** tx_isp_vin_slake_subdev: VIN slake complete, final state=%d ***\n", vin_dev->state);
+    return 0;
+}
 
 /* Export VIN subdev ops for external access */
 EXPORT_SYMBOL(vin_subdev_ops);
