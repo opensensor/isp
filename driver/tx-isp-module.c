@@ -5229,23 +5229,8 @@ static int tx_isp_init(void)
     }
     pr_info("*** FS PLATFORM DRIVER INITIALIZED - /proc/jz/isp/isp-fs SHOULD NOW EXIST ***\n");
 
-    /* *** SUBDEV PLATFORM DRIVERS ALREADY REGISTERED EARLIER *** */
-    pr_info("*** SUBDEV PLATFORM DRIVERS ALREADY AVAILABLE - SKIPPING DUPLICATE REGISTRATION ***\n");
-
-    /* Build platform device array for the new management system */
-    subdev_platforms[0] = &tx_isp_csi_platform_device;
-    subdev_platforms[1] = &tx_isp_vic_platform_device;
-    subdev_platforms[2] = &tx_isp_vin_platform_device;
-    subdev_platforms[3] = &tx_isp_fs_platform_device;
-    subdev_platforms[4] = &tx_isp_core_platform_device;
-
-    /* *** NEW: Initialize subdevice registry with cleaner management *** */
-    ret = tx_isp_init_subdev_registry(ourISPdev, subdev_platforms, 5);
-    if (ret) {
-        pr_err("Failed to initialize subdevice registry: %d\n", ret);
-        goto err_cleanup_platforms;
-    }
-    pr_info("*** SUBDEVICE REGISTRY INITIALIZED SUCCESSFULLY ***\n");
+    /* *** SUBDEV PLATFORM DRIVERS AND REGISTRY ALREADY INITIALIZED EARLIER *** */
+    pr_info("*** SUBDEV PLATFORM DRIVERS AND REGISTRY ALREADY AVAILABLE - SKIPPING DUPLICATE INITIALIZATION ***\n");
     
     /* Initialize CSI */
     ret = tx_isp_init_csi_subdev(ourISPdev);
