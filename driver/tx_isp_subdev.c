@@ -401,6 +401,9 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         ourISPdev->subdevs[4] = sd;  /* Core at index 4 based on reference */
         sd->isp = ourISPdev;
         pr_info("*** tx_isp_subdev_init: Core ISP subdev registered at index 4 ***\n");
+        pr_info("*** DEBUG: Core ISP ops=%p, video=%p, s_stream=%p ***\n",
+                sd->ops, sd->ops ? sd->ops->video : NULL,
+                (sd->ops && sd->ops->video) ? sd->ops->video->s_stream : NULL);
     }
 
     /* Binary Ninja: if (tx_isp_module_init(arg1, arg2) != 0) */
