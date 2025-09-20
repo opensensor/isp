@@ -387,16 +387,12 @@ struct tx_isp_subdev {
 /* Global frame source device structure - 0xe8 bytes as per Binary Ninja */
 struct tx_isp_fs_device {
 	struct tx_isp_subdev subdev;            /* Base subdev structure */
-
-	/* CRITICAL: Padding to match Binary Ninja exact offsets */
-	char padding_to_0xc8[0xc8 - sizeof(struct tx_isp_subdev)];
-
-	uint32_t channel_count;                  /* 0xc8: number of channels - EXACT Binary Ninja offset */
-	char padding_to_0xe0[0xe0 - 0xc8 - sizeof(uint32_t)];
-	uint32_t initialized;                    /* 0xe0: initialization flag - EXACT Binary Ninja offset */
+	void __iomem *base_regs;                /* Base register mapping +0xb8 */
 
 	void *channel_configs;                   /* channel config array */
 	void *channel_buffer;                    /* kmalloc'ed channel buffer */
+	uint32_t channel_count;                  /* number of channels */
+	uint32_t initialized;                    /* initialization flag */
 	void *self_ptr;                          /* Self-pointer for validation */
 } __attribute__((packed));
 

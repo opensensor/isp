@@ -168,19 +168,11 @@ int tx_isp_fs_probe(struct platform_device *pdev)
         return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
     }
 
-    /* CRITICAL FIX: Add NULL check to prevent BadVA 0xc8 crash */
-    if (!fs_dev) {
-        pr_err("*** CRITICAL: fs_dev is NULL - PREVENTS BadVA 0xc8 CRASH ***\n");
-        return -EFAULT;
-    }
-
     /* Binary Ninja: uint32_t $a0_2 = zx.d(*($v0 + 0xc8)) */
-    /* SAFE: Use proper struct member access - struct now has correct Binary Ninja offsets */
-    channel_count = fs_dev->channel_count;  /* Get channel count from offset 0xc8 - SAFE struct access */
+    channel_count = fs_dev->channel_count;  /* Get channel count from offset 0xc8 */
 
     /* Binary Ninja: *($v0 + 0xe0) = $a0_2 */
-    /* SAFE: Use proper struct member access - struct now has correct Binary Ninja offsets */
-    fs_dev->initialized = channel_count;  /* Store channel count at offset 0xe0 - SAFE struct access */
+    fs_dev->initialized = channel_count;  /* Store channel count at offset 0xe0 */
 
     /* Binary Ninja: if ($a0_2 == 0) goto label_1c670 */
     if (channel_count == 0) {
