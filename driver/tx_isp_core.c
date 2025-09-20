@@ -3203,14 +3203,8 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 /* REMOVED: VIN device creation - will be handled by subdevice probe per reference driver */
                 pr_info("*** tx_isp_core_probe: VIN device creation deferred to subdevice probe ***\n");
 
-                /* CRITICAL: Now that core device is set up, call the key function that creates graph and nodes */
-                pr_info("*** tx_isp_core_probe: Calling tx_isp_create_graph_and_nodes ***\n");
-                result = tx_isp_create_graph_and_nodes(isp_dev);
-                if (result == 0) {
-                    pr_info("*** tx_isp_core_probe: tx_isp_create_graph_and_nodes SUCCESS ***\n");
-                } else {
-                    pr_err("*** tx_isp_core_probe: tx_isp_create_graph_and_nodes FAILED: %d ***\n", result);
-                }
+                /* REMOVED: tx_isp_create_graph_and_nodes call - already called in tx_isp_module_init */
+                pr_info("*** tx_isp_core_probe: Graph and nodes already created in tx_isp_module_init ***\n");
                 
                 /* CRITICAL: Create frame channel devices (/dev/isp-fs*) */
                 pr_info("*** tx_isp_core_probe: Creating frame channel devices ***\n");
