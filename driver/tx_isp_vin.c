@@ -682,7 +682,7 @@ int tx_isp_vin_slake_subdev(struct tx_isp_subdev *sd)
         
         /* Deinitialize if initialized */
         if (vin->state == TX_ISP_MODULE_INIT) {
-            tx_isp_vin_init(sd, 0);
+            tx_isp_vin_init(vin, 0);  /* FIXED: Pass VIN device, not subdev */
         }
         
         mutex_lock(&vin->mlock);
@@ -1217,7 +1217,7 @@ int tx_isp_vin_remove(struct platform_device *pdev)
 
     /* Deinitialize if initialized */
     if (vin->state >= TX_ISP_MODULE_INIT) {
-        tx_isp_vin_init(&vin->sd, 0);
+        tx_isp_vin_init(vin, 0);  /* FIXED: Pass VIN device, not subdev */
     }
 
     /* Cleanup subdev */
