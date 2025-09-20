@@ -1599,7 +1599,8 @@ static int tx_isp_activate_vic_subdev(struct tx_isp_dev *isp_dev)
         return -EINVAL;
     }
     
-    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+    /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+    vic_dev = isp_dev->vic_dev;
     
     mutex_lock(&vic_dev->mlock);
     
