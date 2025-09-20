@@ -987,64 +987,31 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     u32 a0;
     int result = IRQ_HANDLED;
 
-    /* CRITICAL: Validate dev_id is actually an ISP device structure */
-    if (!dev_id) {
-        pr_err("ispcore_interrupt_service_routine: NULL dev_id\n");
-        return IRQ_NONE;
-    }
+    /* Binary Ninja: void* $v0 = *(arg1 + 0xb8) */
+    v0 = isp_dev->core_regs;
 
-    /* CRITICAL: Check if dev_id looks like a valid ISP device pointer */
-    if ((unsigned long)dev_id < 0x80000000 || (unsigned long)dev_id >= 0xfffff000) {
-        pr_err("ispcore_interrupt_service_routine: Invalid dev_id pointer: %p\n", dev_id);
-        return IRQ_NONE;
-    }
+    /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
+    s0 = (struct tx_isp_vic_device *)isp_dev->vic_dev;
 
-    if (!isp_dev) {
-        pr_err("ispcore_interrupt_service_routine: ISP device cast failed\n");
-        return IRQ_NONE;
-    }
+    /* Binary Ninja: int32_t $s1 = *($v0 + 0xb4) */
+    s1 = readl(v0 + 0xb4);
 
-    /* Binary Ninja: void* $v0 = *(arg1 + 0xb8) - ISP core registers */
-    isp_regs = isp_dev->core_regs;
-    if (!isp_regs) {
-        pr_err("ispcore_interrupt_service_routine: No ISP core registers - EMERGENCY REMAP\n");
-
-        /* EMERGENCY FIX: Remap ISP core registers if they're NULL */
-        isp_regs = ioremap(0x13300000, 0x10000);
-        if (isp_regs) {
-            pr_info("*** ISP CORE IRQ: EMERGENCY REMAP SUCCESS - isp_regs = %p ***\n", isp_regs);
-            isp_dev->core_regs = isp_regs;
-        } else {
-            pr_err("*** ISP CORE IRQ: EMERGENCY REMAP FAILED ***\n");
-            return IRQ_NONE;
-        }
-    }
-
-    /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) - VIC device */
-    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-    if (!vic_dev) {
-        pr_err("ispcore_interrupt_service_routine: No VIC device\n");
-        return IRQ_NONE;
-    }
-
-    /* Binary Ninja: int32_t $s1 = *($v0 + 0xb4); *($v0 + 0xb8) = $s1 */
-    interrupt_status = readl(isp_regs + 0xb4);
-    writel(interrupt_status, isp_regs + 0xb8);
+    /* Binary Ninja: *($v0 + 0xb8) = $s1 */
+    writel(s1, v0 + 0xb8);
 
     /* Binary Ninja: if (($s1 & 0x3f8) == 0) */
-    if ((interrupt_status & 0x3f8) == 0) {
-        /* Binary Ninja: $a0 = *($s0 + 0x15c) - VIC device field at offset 0x15c */
-        extern uint32_t vic_start_ok;
-        error_check = vic_start_ok;
-    } else {
-        /* Binary Ninja: Error interrupt processing */
-        u32 error_reg_84c = readl(isp_regs + 0x84c);
-        pr_info("ispcore: irq-status 0x%08x, err is 0x%x,0x%x,084c is 0x%x\n",
-                interrupt_status, (interrupt_status & 0x3f8) >> 3,
-                interrupt_status & 0x7, error_reg_84c);
+    if ((s1 & 0x3f8) == 0) {
         /* Binary Ninja: $a0 = *($s0 + 0x15c) */
-        extern uint32_t vic_start_ok;
-        error_check = vic_start_ok;
+        a0 = *(u32 *)((char *)s0 + 0x15c);
+    } else {
+        /* Binary Ninja: Error processing with debug output */
+        u32 var_44_1 = readl(v0 + 0x84c);
+        u32 var_48_1 = 0x3f8;
+        printk("ispcore: irq-status 0x%08x, err is 0x%x,0x%x,084c is 0x%x\n",
+               s1, var_48_1, var_44_1);
+        /* Binary Ninja: data_ca57c += 1 */
+        /* Binary Ninja: $a0 = *($s0 + 0x15c) */
+        a0 = *(u32 *)((char *)s0 + 0x15c);
     }
 
     /* Binary Ninja: if ($a0 == 1) return 1 */
