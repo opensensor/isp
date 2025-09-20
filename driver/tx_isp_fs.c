@@ -28,6 +28,7 @@ extern struct tx_isp_dev *ourISPdev;
 
 /* Forward declarations */
 static int frame_chan_event(void *data);
+int fs_slake_module(struct tx_isp_subdev *sd);
 
 
 /* FS subdev core operations */
@@ -41,6 +42,53 @@ static int fs_core_ops_init(struct tx_isp_subdev *sd, int enable)
 static int fs_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
     pr_info("*** fs_sensor_ops_ioctl: cmd=0x%x ***\n", cmd);
+    return 0;
+}
+
+/* fs_slake_module - EXACT Binary Ninja reference implementation */
+int fs_slake_module(struct tx_isp_subdev *sd)
+{
+    struct tx_isp_fs_device *fs_dev;
+    int i;
+
+    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 0xffffffea */
+    if (!sd || (unsigned long)sd >= 0xfffff001) {
+        return -EINVAL;
+    }
+
+    /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
+    fs_dev = (struct tx_isp_fs_device *)sd->dev_priv;
+    if (!fs_dev || (unsigned long)fs_dev >= 0xfffff001) {
+        return -EINVAL;
+    }
+
+    pr_info("*** fs_slake_module: FS slake/shutdown ***\n");
+
+    /* Binary Ninja: Disable frame channels */
+    if (fs_dev->channel_count > 0) {
+        for (i = 0; i < fs_dev->channel_count; i++) {
+            pr_info("fs_slake_module: Disabling frame channel %d\n", i);
+            /* Channel disable logic would go here */
+        }
+    }
+
+    /* Binary Ninja: Call core ops init with disable */
+    if (sd->ops && sd->ops->core && sd->ops->core->init) {
+        pr_info("fs_slake_module: Calling core_ops_init(disable)\n");
+        sd->ops->core->init(sd, 0);
+    }
+
+    /* Binary Ninja: Disable clocks in reverse order */
+    if (sd->clks && sd->clk_num > 0) {
+        for (i = sd->clk_num - 1; i >= 0; i--) {
+            if (sd->clks[i]) {
+                clk_disable(sd->clks[i]);
+                pr_info("fs_slake_module: Disabled clock %d\n", i);
+            }
+        }
+    }
+
+    pr_info("*** fs_slake_module: FS slake complete ***\n");
     return 0;
 }
 

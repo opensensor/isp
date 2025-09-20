@@ -3022,11 +3022,17 @@ struct tx_isp_subdev_core_ops vic_core_ops = {
     .ioctl = vic_core_ops_ioctl,  /* MISSING from original! */
 };
 
+/* VIC internal operations - EXACT Binary Ninja implementation */
+static struct tx_isp_subdev_internal_ops vic_internal_ops = {
+    .slake_module = tx_isp_vic_slake_subdev,
+};
+
 /* Complete VIC subdev ops structure - MISSING sensor ops registration */
 struct tx_isp_subdev_ops vic_subdev_ops = {
     .core = &vic_core_ops,
     .video = &vic_video_ops,
     .sensor = &vic_sensor_ops,    /* MISSING from original! */
+    .internal = &vic_internal_ops,
 };
 EXPORT_SYMBOL(vic_subdev_ops);
 

@@ -779,11 +779,17 @@ static struct tx_isp_subdev_sensor_ops csi_sensor_ops = {
     .ioctl = csi_sensor_ops_ioctl,
 };
 
+/* CSI internal operations - EXACT Binary Ninja implementation */
+static struct tx_isp_subdev_internal_ops csi_internal_ops = {
+    .slake_module = tx_isp_csi_slake_subdev,
+};
+
 /* Initialize the subdev ops structure with pointers to the operations */
 struct tx_isp_subdev_ops csi_subdev_ops = {
     .core = &csi_core_ops,
     .video = &csi_video_ops,
     .sensor = &csi_sensor_ops,
+    .internal = &csi_internal_ops,
 };
 EXPORT_SYMBOL(csi_subdev_ops);
 
