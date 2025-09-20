@@ -872,6 +872,9 @@ static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
     return (result == -ENOIOCTLCMD) ? 0 : result;
 }
 
+/* CRITICAL: Frame sync work structure - MUST match reference driver */
+static struct work_struct ispcore_fs_work;
+
 /* Frame sync work function - RACE CONDITION SAFE Binary Ninja reference implementation */
 static void ispcore_irq_fs_work(struct work_struct *work)
 {
@@ -1074,7 +1077,14 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
         /* REFERENCE DRIVER: Use private_schedule_work like reference driver */
         /* Binary Ninja: private_schedule_work calls queue_work_on for CPU-specific scheduling */
-        pr_info("*** ISP CORE: Using reference driver work scheduling ***\n");
+        pr_info("*** ISP CORE: Scheduling frame sync work ***\n");
+
+        /* CRITICAL: Actually schedule the work - this was missing! */
+        if (!schedule_work(&ispcore_fs_work)) {
+            pr_info("*** ISP CORE: Frame sync work already queued ***\n");
+        } else {
+            pr_info("*** ISP CORE: Frame sync work scheduled successfully ***\n");
+        }
 
         /* Binary Ninja: Frame timing measurement */
         /* Complex timing measurement code would be here */
@@ -1806,6 +1816,10 @@ int ispcore_core_ops_init(struct tx_isp_dev *arg1, struct tx_isp_sensor_attribut
     int ret;
 
     pr_info("*** ispcore_core_ops_init: EXACT Binary Ninja MCP implementation ***");
+
+    /* CRITICAL: Initialize frame sync work structure - MUST be done before any interrupts */
+    INIT_WORK(&ispcore_fs_work, ispcore_irq_fs_work);
+    pr_info("*** ispcore_core_ops_init: Frame sync work structure initialized ***");
 
     /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) */
     if (arg1 != NULL && (unsigned long)arg1 < 0xfffff001) {
