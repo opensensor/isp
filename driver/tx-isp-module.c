@@ -5527,10 +5527,6 @@ static int tx_isp_init(void)
                 }
             }
             pr_info("*** BOTH VIC AND ISP CORE INTERRUPTS NOW ENABLED! ***\n");
-            
-            /* Set global VIC interrupt enable flag - FIXED: Binary Ninja shows this should be 1 */
-            vic_start_ok = 1;
-            pr_info("*** vic_start_ok SET TO 1 - INTERRUPTS WILL NOW BE PROCESSED! ***\n");
         }
     }
 
