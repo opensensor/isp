@@ -71,10 +71,10 @@ void csi_write32(u32 reg, u32 val)
     }
 }
 
-/* CSI interrupt handler */
+/* CSI interrupt handler - FIXED: Expect tx_isp_dev* like other interrupt handlers */
 static irqreturn_t tx_isp_csi_irq_handler(int irq, void *dev_id)
 {
-    struct tx_isp_subdev *sd = dev_id;
+    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
     struct tx_isp_csi_device *csi_dev;
     void __iomem *csi_base;
     u32 status, err1, err2, phy_state;
@@ -88,12 +88,25 @@ static irqreturn_t tx_isp_csi_irq_handler(int irq, void *dev_id)
             irq, dev_id, jiffies_to_msecs(current_time - last_interrupt_time));
     last_interrupt_time = current_time;
 
-    if (!sd) {
-        pr_warn("*** CSI INTERRUPT: sd is NULL - returning IRQ_NONE ***\n");
+    /* CRITICAL: Validate dev_id IMMEDIATELY to prevent BadVA crashes */
+    if (!isp_dev) {
+        pr_warn("*** CSI INTERRUPT: isp_dev is NULL - returning IRQ_NONE ***\n");
         return IRQ_NONE;
     }
 
-    csi_dev = ourISPdev->csi_dev;
+    /* CRITICAL: Check if dev_id is in valid kernel memory range */
+    if ((unsigned long)dev_id < 0x80000000 || (unsigned long)dev_id >= 0xfffff000) {
+        pr_warn("*** CSI INTERRUPT: Invalid dev_id 0x%p (outside kernel memory) - returning IRQ_NONE ***\n", dev_id);
+        return IRQ_NONE;
+    }
+
+    /* CRITICAL: Validate dev_id points to valid memory */
+    if (!virt_addr_valid(dev_id)) {
+        pr_warn("*** CSI INTERRUPT: dev_id 0x%p points to invalid memory - returning IRQ_NONE ***\n", dev_id);
+        return IRQ_NONE;
+    }
+
+    csi_dev = isp_dev->csi_dev;
     if (!csi_dev) {
         pr_warn("*** CSI INTERRUPT: csi_dev is NULL - returning IRQ_NONE ***\n");
         return IRQ_NONE;
