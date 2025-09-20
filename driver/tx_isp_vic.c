@@ -281,17 +281,14 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 /* SAFE: Check if buffer address matches current frame register */
                 if (vic_regs) {
                     u32 current_frame_addr = readl(vic_regs + 0x380);
-                    /* SAFE: The reference driver accesses i_1[2] which is 8 bytes from i_1 */
-                    /* This corresponds to a buffer address in our buffer entry structure */
-                    /* For now, just check if we have a valid frame address */
-                    if (current_frame_addr != 0) {
+                    /* SAFE: Compare entry's buffer address with current frame register */
+                    if (entry->buffer_addr == current_frame_addr && current_frame_addr != 0) {
                         match_found = 1;  /* $v0 = 1 */
+                        pr_info("vic_framedone_irq_function: Found matching buffer addr=0x%x\n", current_frame_addr);
                     }
                 }
 
-                /* Binary Ninja: i_1 = *i_1 */
-                /* SAFE: Move to next list entry */
-                i_1 = i_1->next;
+                /* SAFE: list_for_each_entry_safe handles iteration automatically */
             }
 
             /* Binary Ninja: int32_t $v1_2 = $v1_1 << 0x10 */
