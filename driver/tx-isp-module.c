@@ -5918,7 +5918,8 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
         }
         
         /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
-        vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+        /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+        vic_dev = isp_dev->vic_dev;
         result = 0xffffffea;
         
         /* Binary Ninja: if ($s0_1 != 0 && $s0_1 u< 0xfffff001) */
