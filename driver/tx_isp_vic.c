@@ -246,12 +246,29 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             int high_bits = 0;       /* $v1_1 = 0 */
             int match_found = 0;     /* $v0 = 0 */
 
-            /* Binary Ninja: for (; i_1 != arg1 + 0x204; i_1 = *i_1) */
-            /* SAFE: Walk the list like the reference driver but with safe checks */
-            while (i_1 != &vic_dev->done_head) {
-                /* CRITICAL SAFETY: Validate list pointer before dereferencing */
-                if (!i_1 || (unsigned long)i_1 < 0x80000000 || (unsigned long)i_1 >= 0xfffff000) {
-                    pr_err("vic_framedone_irq_function: Invalid list pointer %p, breaking\n", i_1);
+            /* CRITICAL SAFETY: Validate done_head list integrity before traversal */
+            if (!vic_dev->done_head.next || !vic_dev->done_head.prev ||
+                (unsigned long)vic_dev->done_head.next < 0x80000000 ||
+                (unsigned long)vic_dev->done_head.prev < 0x80000000) {
+                pr_err("vic_framedone_irq_function: CORRUPTED done_head list (next=%p, prev=%p)\n",
+                       vic_dev->done_head.next, vic_dev->done_head.prev);
+                result = &data_b0000;
+                goto label_123f4;
+            }
+
+            /* CRITICAL SAFETY: Check if done_head list is empty */
+            if (list_empty(&vic_dev->done_head)) {
+                pr_info("vic_framedone_irq_function: done_head list is empty\n");
+                result = &data_b0000;
+                goto label_123f4;
+            }
+
+            /* SAFE: Use safe list traversal instead of dangerous pointer arithmetic */
+            struct vic_buffer_entry *entry, *tmp;
+            list_for_each_entry_safe(entry, tmp, &vic_dev->done_head, list) {
+                /* CRITICAL SAFETY: Validate entry pointer */
+                if (!entry || (unsigned long)entry < 0x80000000 || (unsigned long)entry >= 0xfffff000) {
+                    pr_err("vic_framedone_irq_function: Invalid entry pointer %p, breaking\n", entry);
                     break;
                 }
 
