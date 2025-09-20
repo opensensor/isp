@@ -7518,9 +7518,9 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
                 sensor->attr.mipi.image_twidth, sensor->attr.mipi.image_theight);
 
         /* *** CRITICAL FIX: ADD SENSOR TO SUBDEV ARRAY FOR tx_isp_video_link_stream *** */
-        pr_info("*** CRITICAL: ADDING SENSOR TO SUBDEV ARRAY AT INDEX 2 ***\n");
-        ourISPdev->subdevs[2] = sd;  /* Sensor should be subdev 2 (after VIC=0, CSI=1) */
-        pr_info("*** SENSOR SUBDEV REGISTERED: subdevs[2]=%p, ops=%p ***\n",
+        pr_info("*** CRITICAL: ADDING SENSOR TO SUBDEV ARRAY AT INDEX 3 ***\n");
+        ourISPdev->subdevs[3] = sd;  /* Sensor should be subdev 3 (after VIC=0, CSI=1, VIN=2) */
+        pr_info("*** SENSOR SUBDEV REGISTERED: subdevs[3]=%p, ops=%p ***\n",
                 sd, sd->ops);
         if (sd->ops && sd->ops->video) {
             pr_info("*** SENSOR s_stream FUNCTION: %p ***\n", sd->ops->video->s_stream);
