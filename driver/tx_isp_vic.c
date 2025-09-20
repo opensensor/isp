@@ -16,6 +16,7 @@
 #include "../include/tx_isp_tuning.h"
 #include "../include/tx-isp-device.h"
 #include "../include/tx-libimp.h"
+#include "../include/tx_isp_vic_buffer.h"
 #include <linux/platform_device.h>
 #include <linux/device.h>
 
@@ -2515,15 +2516,15 @@ int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
         if (list_empty(&vic_dev->free_head)) {
             pr_info("*** VIC ACTIVATION: Replenishing free buffer pool ***\n");
             for (int i = 0; i < 5; i++) {
-                struct list_head *free_buffer = kzalloc(sizeof(struct list_head) + 64, GFP_KERNEL);
+                /* FIXED: Use shared aligned buffer structure */
+                struct vic_buffer_entry *free_buffer = VIC_BUFFER_ALLOC();
                 if (free_buffer) {
-                    uint32_t *buffer_data = (uint32_t *)((char *)free_buffer + sizeof(struct list_head));
-                    buffer_data[0] = 0;  /* Buffer address placeholder */
-                    buffer_data[1] = i + 100;  /* Buffer index (activation batch) */
-                    buffer_data[2] = 0;  /* Buffer status */
-                    
-                    list_add_tail(free_buffer, &vic_dev->free_head);
-                    pr_info("*** VIC ACTIVATION: Added free buffer %d ***\n", i);
+                    free_buffer->buffer_addr = 0;  /* Buffer address placeholder */
+                    free_buffer->buffer_index = i + 100;  /* Buffer index (activation batch) */
+                    free_buffer->buffer_status = VIC_BUFFER_STATUS_FREE;  /* Buffer status */
+
+                    list_add_tail(&free_buffer->list, &vic_dev->free_head);
+                    pr_info("*** VIC ACTIVATION: Added free buffer %d (aligned struct) ***\n", i);
                 }
             }
             pr_info("*** VIC ACTIVATION: Free buffer pool replenished - no more 'bank no free' ***\n");
@@ -3454,18 +3455,17 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         /* CRITICAL FIX: Create a dummy buffer entry if none exists but we have free buffers */
         /* This simulates the case where framechan ioctl queued a buffer but it wasn't passed through events */
         if (list_empty(&vic_dev->queue_head) && !list_empty(&vic_dev->free_head)) {
-            /* Create a temporary buffer entry to simulate a queued buffer */
-            struct list_head *temp_buffer = kzalloc(sizeof(struct list_head) + 64, GFP_ATOMIC);
+            /* FIXED: Use shared aligned buffer structure */
+            struct vic_buffer_entry *temp_buffer = VIC_BUFFER_ALLOC_ATOMIC();
             if (temp_buffer) {
                 /* Initialize with a valid buffer address */
-                uint32_t *temp_data = (uint32_t *)((char *)temp_buffer + sizeof(struct list_head));
-                temp_data[0] = 0x30000000 + (vic_dev->active_buffer_count * 0x100000);  /* Valid physical address */
-                temp_data[1] = vic_dev->active_buffer_count;  /* Buffer index */
-                temp_data[2] = 0;  /* Buffer status */
-                
+                temp_buffer->buffer_addr = 0x30000000 + (vic_dev->active_buffer_count * 0x100000);  /* Valid physical address */
+                temp_buffer->buffer_index = vic_dev->active_buffer_count;  /* Buffer index */
+                temp_buffer->buffer_status = VIC_BUFFER_STATUS_QUEUED;  /* Buffer status */
+
                 /* Add to queue */
-                list_add_tail(temp_buffer, &vic_dev->queue_head);
-                pr_info("*** VIC QBUF: Created pending buffer entry with addr 0x%x ***\n", temp_data[0]);
+                list_add_tail(&temp_buffer->list, &vic_dev->queue_head);
+                pr_info("*** VIC QBUF: Created pending buffer entry with addr 0x%x ***\n", temp_buffer->buffer_addr);
             }
         }
     }
@@ -3482,37 +3482,34 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
     }
     else {
         /* *** CRITICAL FIX: Process the queued buffer *** */
-        struct list_head *queue_buffer, *free_buffer;
-        uint32_t *buffer_data;
+        struct vic_buffer_entry *queue_buffer, *free_buffer;
         uint32_t buffer_addr, buffer_index;
-        
+
         /* Binary Ninja: pop_buffer_fifo($s0 + 0x1f4) */
-        queue_buffer = vic_dev->queue_head.next;
-        if (queue_buffer != &vic_dev->queue_head) {
-            list_del(queue_buffer);
-            
+        queue_buffer = list_first_entry_or_null(&vic_dev->queue_head, struct vic_buffer_entry, list);
+        if (queue_buffer) {
+            list_del(&queue_buffer->list);
+
             /* Get free buffer entry */
-            free_buffer = vic_dev->free_head.next;
-            if (free_buffer != &vic_dev->free_head) {
-                list_del(free_buffer);
-                
+            free_buffer = list_first_entry_or_null(&vic_dev->free_head, struct vic_buffer_entry, list);
+            if (free_buffer) {
+                list_del(&free_buffer->list);
+
                 /* Binary Ninja: Extract buffer address from *($a3_1 + 8) */
                 /* In the reference, this extracts the physical address from the buffer structure */
-                buffer_data = (uint32_t *)((char *)queue_buffer + sizeof(struct list_head));
-                buffer_addr = buffer_data[0];  /* Get the actual buffer address */
-                
+                buffer_addr = queue_buffer->buffer_addr;  /* Get the actual buffer address */
+
                 /* Ensure we have a valid buffer address */
                 if (buffer_addr == 0) {
                     buffer_addr = 0x30000000 + (vic_dev->active_buffer_count * 0x100000);  /* Valid physical address */
                     pr_info("*** VIC QBUF: Generated buffer address 0x%x ***\n", buffer_addr);
                 }
-                
+
                 /* Binary Ninja: $v1_1 = $v0_5[4] - get buffer index */
                 buffer_index = vic_dev->active_buffer_count % 5;  /* VIC has 5 buffer slots */
-                
+
                 /* Binary Ninja: $v0_5[2] = $a1_2 - store buffer address in free buffer */
-                uint32_t *free_data = (uint32_t *)((char *)free_buffer + sizeof(struct list_head));
-                free_data[2] = buffer_addr;
+                free_buffer->buffer_addr = buffer_addr;
                 
                 /* Binary Ninja EXACT: *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2 */
                 /* This is the CRITICAL hardware programming step! */
@@ -3630,17 +3627,24 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
             }
             
             /* SAFE: Create proper buffer entries and add to free list */
-            struct list_head *buffer_entry = kzalloc(sizeof(struct list_head) + 32, GFP_KERNEL);
+            struct vic_buffer_entry {
+                struct list_head list;
+                uint32_t buffer_addr;    /* Offset 0x8 from Binary Ninja */
+                uint32_t buffer_index;   /* Buffer index */
+                uint32_t buffer_status;  /* Buffer status */
+                uint32_t reserved[13];   /* Padding to match reference driver size */
+            } __attribute__((aligned(4)));
+
+            struct vic_buffer_entry *buffer_entry = kzalloc(sizeof(struct vic_buffer_entry), GFP_KERNEL);
             if (buffer_entry) {
                 /* Initialize buffer data */
-                uint32_t *buffer_data = (uint32_t *)((char *)buffer_entry + sizeof(struct list_head));
-                buffer_data[0] = 0;  /* Buffer address */
-                buffer_data[1] = i;  /* Buffer index */
-                buffer_data[2] = 0;  /* Buffer status */
-                
+                buffer_entry->buffer_addr = 0;  /* Buffer address */
+                buffer_entry->buffer_index = i;  /* Buffer index */
+                buffer_entry->buffer_status = 0;  /* Buffer status */
+
                 /* Add to free list using safe Linux API */
-                list_add_tail(buffer_entry, &vic_dev->free_head);
-                pr_info("tx_isp_subdev_pipo: added buffer entry %d to free list\n", i);
+                list_add_tail(&buffer_entry->list, &vic_dev->free_head);
+                pr_info("tx_isp_subdev_pipo: added buffer entry %d to free list (aligned struct)\n", i);
             }
             
             /* SAFE: Clear VIC register using validated register access */
