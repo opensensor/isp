@@ -598,14 +598,30 @@ static int core_subdev_core_init_bridge(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_dev *isp = sd ? (struct tx_isp_dev *)sd->isp : NULL;
     struct tx_isp_sensor_attribute *attr = NULL;
+
     if (!isp) {
-        ISP_ERROR("core_subdev_core_init_bridge: invalid isp\n");
+        pr_info("core_subdev_core_init_bridge: No ISP device linked to subdev, using global ourISPdev\n");
+        extern struct tx_isp_dev *ourISPdev;
+        isp = ourISPdev;
+    }
+
+    if (!isp) {
+        pr_err("core_subdev_core_init_bridge: No ISP device available\n");
         return -EINVAL;
     }
+
+    /* CRITICAL: Check if VIC device is available - if not, defer initialization */
+    if (enable && !isp->vic_dev) {
+        pr_info("core_subdev_core_init_bridge: VIC device not ready yet, deferring Core ISP init\n");
+        return 0;  /* Return success but don't actually initialize yet */
+    }
+
     /* When enabling, pass current sensor attributes; when disabling, pass NULL like reference */
     if (enable && isp->sensor && isp->sensor->video.attr) {
         attr = isp->sensor->video.attr;
     }
+
+    pr_info("core_subdev_core_init_bridge: Calling ispcore_core_ops_init with isp=%p, attr=%p\n", isp, attr);
     return ispcore_core_ops_init(isp, attr);
 }
 

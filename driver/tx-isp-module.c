@@ -1890,18 +1890,38 @@ int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
 
     pr_info("*** BINARY NINJA EXACT: Iterating through 16 subdevices at offset 0x38 ***\n");
 
-    /* DEBUG: Print all subdev array entries to identify corruption */
-    pr_info("*** DEBUG: Subdev array contents: ***\n");
-    for (i = 0; i < 16; i++) {
-        pr_info("*** DEBUG: subdevs[%d] = %p ***\n", i, subdevs_ptr[i]);
-    }
-
     /* Binary Ninja: for (int32_t i = 0; i != 0x10; ) */
     for (i = 0; i != 0x10; i++) {
         struct tx_isp_subdev *subdev = subdevs_ptr[i];
 
         /* Binary Ninja: void* $a0 = *$s4 */
         if (subdev != 0) {
+            pr_info("*** DEBUG: subdev %d = %p ***\n", i, subdev);
+
+            /* CRITICAL: Validate ops pointer before dereferencing */
+            if (!subdev->ops) {
+                pr_err("*** ERROR: subdev %d has NULL ops pointer! ***\n", i);
+                continue;
+            }
+            if (!is_valid_kernel_pointer(subdev->ops)) {
+                pr_err("*** ERROR: subdev %d has invalid ops pointer %p! ***\n", i, subdev->ops);
+                continue;
+            }
+
+            pr_info("*** DEBUG: subdev %d ops = %p ***\n", i, subdev->ops);
+
+            /* CRITICAL: Validate video ops pointer before dereferencing */
+            if (!subdev->ops->video) {
+                pr_info("*** INFO: subdev %d has NULL video ops, skipping ***\n", i);
+                continue;
+            }
+            if (!is_valid_kernel_pointer(subdev->ops->video)) {
+                pr_err("*** ERROR: subdev %d has invalid video ops pointer %p! ***\n", i, subdev->ops->video);
+                continue;
+            }
+
+            pr_info("*** DEBUG: subdev %d video ops = %p ***\n", i, subdev->ops->video);
+
             /* Binary Ninja: void* $v0_3 = *(*($a0 + 0xc4) + 4) */
             if (subdev->ops && subdev->ops->video) {
                 /* Binary Ninja: int32_t $v0_4 = *($v0_3 + 4) */
