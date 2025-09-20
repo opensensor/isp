@@ -2120,9 +2120,6 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         }
     }
 
-    /* CRITICAL: End of interrupt processing block */
-    }
-
     /* Binary Ninja: return 1 */
     return IRQ_HANDLED;
 }
