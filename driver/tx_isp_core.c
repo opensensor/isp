@@ -978,19 +978,34 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     int i;
     int result = IRQ_HANDLED;
 
+    /* CRITICAL: Validate dev_id is actually an ISP device structure */
+    if (!dev_id) {
+        pr_err("ispcore_interrupt_service_routine: NULL dev_id\n");
+        return IRQ_NONE;
+    }
+
+    /* CRITICAL: Check if dev_id looks like a valid ISP device pointer */
+    if ((unsigned long)dev_id < 0x80000000 || (unsigned long)dev_id >= 0xfffff000) {
+        pr_err("ispcore_interrupt_service_routine: Invalid dev_id pointer: %p\n", dev_id);
+        return IRQ_NONE;
+    }
+
     if (!isp_dev) {
+        pr_err("ispcore_interrupt_service_routine: ISP device cast failed\n");
         return IRQ_NONE;
     }
 
     /* Binary Ninja: void* $v0 = *(arg1 + 0xb8) - ISP core registers */
     isp_regs = isp_dev->core_regs;
     if (!isp_regs) {
+        pr_err("ispcore_interrupt_service_routine: No ISP core registers\n");
         return IRQ_NONE;
     }
 
     /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) - VIC device */
     vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
     if (!vic_dev) {
+        pr_err("ispcore_interrupt_service_routine: No VIC device\n");
         return IRQ_NONE;
     }
 

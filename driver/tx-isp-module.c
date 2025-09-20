@@ -1869,6 +1869,8 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     /* COMPREHENSIVE VALIDATION: Check vic_dev before ANY access */
     if (!vic_dev) {
         pr_err("*** VIC IRQ: NULL vic_dev from isp_dev - interrupt ignored ***\n");
+        pr_err("*** VIC IRQ: This means VIC device was not properly linked during probe ***\n");
+        pr_err("*** VIC IRQ: Check VIC probe function and subdev linking ***\n");
         return IRQ_HANDLED;
     }
 
@@ -1884,24 +1886,37 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         return IRQ_HANDLED;
     }
 
-    /* ROBUST ACCESS: Use vic_dev with proper validation */
-    if (vic_dev != NULL && (unsigned long)vic_dev < 0xfffff001) {
-        /* SAFE: Use VIC registers from ISP device structure */
-        /* Binary Ninja accesses VIC registers from both ISP device and VIC device */
-        /* We'll use the ISP device's vic_regs as the primary source */
-        vic_regs = isp_dev->vic_regs;
+    /* CRITICAL FIX: Check BOTH VIC register sources and provide detailed diagnostics */
+    vic_regs = isp_dev->vic_regs;  /* Primary source */
 
-        /* CRITICAL SAFETY: Validate vic_regs before accessing */
-        if (!vic_regs) {
-            pr_err("*** VIC IRQ: NULL vic_regs from ISP device ***\n");
-            return IRQ_HANDLED;
-        }
+    if (!vic_regs) {
+        /* Try secondary source */
+        vic_regs = vic_dev->vic_regs;
+        pr_warn("*** VIC IRQ: Using vic_dev->vic_regs as fallback: %p ***\n", vic_regs);
+    }
 
-        /* MIPS SAFETY: Check vic_regs pointer alignment */
-        if ((unsigned long)vic_regs & 0x3) {
-            pr_err("*** VIC IRQ: MISALIGNED vic_regs pointer 0x%p ***\n", vic_regs);
-            return IRQ_HANDLED;
-        }
+    /* CRITICAL SAFETY: Validate vic_regs before accessing */
+    if (!vic_regs) {
+        pr_err("*** VIC IRQ: NULL vic_regs from BOTH isp_dev AND vic_dev ***\n");
+        pr_err("*** VIC IRQ: isp_dev->vic_regs = %p ***\n", isp_dev->vic_regs);
+        pr_err("*** VIC IRQ: vic_dev->vic_regs = %p ***\n", vic_dev->vic_regs);
+        pr_err("*** VIC IRQ: This means VIC registers were not mapped during probe ***\n");
+        pr_err("*** VIC IRQ: Check tx_isp_subdev_init and ioremap calls ***\n");
+        return IRQ_HANDLED;
+    }
+
+    /* MIPS SAFETY: Check vic_regs pointer alignment */
+    if ((unsigned long)vic_regs & 0x3) {
+        pr_err("*** VIC IRQ: MISALIGNED vic_regs pointer 0x%p ***\n", vic_regs);
+        return IRQ_HANDLED;
+    }
+
+    /* CRITICAL: Validate vic_regs points to valid I/O memory */
+    if ((unsigned long)vic_regs < 0x10000000 || (unsigned long)vic_regs >= 0x20000000) {
+        pr_err("*** VIC IRQ: vic_regs 0x%p outside expected I/O memory range ***\n", vic_regs);
+        pr_err("*** VIC IRQ: Expected range: 0x10000000-0x20000000 ***\n");
+        return IRQ_HANDLED;
+    }
 
         /* Binary Ninja: Read and clear VIC interrupt status registers */
         /* SAFE: Use proper register access with standard VIC interrupt register offsets */
@@ -5340,6 +5355,34 @@ static int tx_isp_init(void)
         pr_warn("No sensors detected, continuing with basic initialization: %d\n", ret);
     }
     
+    /* *** CRITICAL: Comprehensive VIC register mapping diagnostics *** */
+    pr_info("*** VIC REGISTER MAPPING DIAGNOSTICS ***\n");
+    pr_info("*** ourISPdev = %p ***\n", ourISPdev);
+    if (ourISPdev) {
+        pr_info("*** ourISPdev->vic_dev = %p ***\n", ourISPdev->vic_dev);
+        pr_info("*** ourISPdev->vic_regs = %p ***\n", ourISPdev->vic_regs);
+
+        if (ourISPdev->vic_dev) {
+            struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
+            pr_info("*** vic_dev->vic_regs = %p ***\n", vic_dev->vic_regs);
+            pr_info("*** vic_dev->vic_regs_secondary = %p ***\n", vic_dev->vic_regs_secondary);
+
+            if (!vic_dev->vic_regs && !ourISPdev->vic_regs) {
+                pr_err("*** CRITICAL ERROR: NO VIC REGISTERS MAPPED! ***\n");
+                pr_err("*** This will cause BadVA crashes in interrupt handler ***\n");
+                pr_err("*** Check VIC probe function and tx_isp_subdev_init ***\n");
+            } else {
+                pr_info("*** VIC REGISTERS SUCCESSFULLY MAPPED ***\n");
+            }
+        } else {
+            pr_err("*** CRITICAL ERROR: VIC DEVICE NOT LINKED! ***\n");
+            pr_err("*** This will cause NULL pointer crashes in interrupt handler ***\n");
+            pr_err("*** Check VIC probe function and subdev linking ***\n");
+        }
+    } else {
+        pr_err("*** CRITICAL ERROR: ourISPdev IS NULL! ***\n");
+    }
+
     /* *** CRITICAL: Register BOTH IRQ handlers for complete interrupt support *** */
     pr_info("*** REGISTERING BOTH IRQ HANDLERS (37 + 38) FOR COMPLETE INTERRUPT SUPPORT ***\n");
 
