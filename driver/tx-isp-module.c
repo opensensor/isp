@@ -4050,8 +4050,18 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                                 sensor = real_sensor; /* Use the real sensor */
                             } else {
                                 pr_info("*** SUCCESS: Real sensor subdev with ops found (hostdata NULL) ***\n");
-                                /* We can still use the subdev even without the sensor structure */
-                                sensor = NULL; /* We'll handle this case below */
+                                /* Create a minimal sensor structure to satisfy VIC requirements */
+                                sensor = private_kmalloc(sizeof(struct tx_isp_sensor), GFP_KERNEL);
+                                if (sensor) {
+                                    memset(sensor, 0, sizeof(struct tx_isp_sensor));
+                                    /* Set up minimal sensor info */
+                                    strcpy(sensor->info.name, sensor_name);
+                                    sensor->video.attr = NULL; /* Will be set when needed */
+                                    pr_info("*** CREATED MINIMAL SENSOR STRUCTURE FOR VIC COMPATIBILITY ***\n");
+                                } else {
+                                    pr_err("*** ERROR: Failed to allocate minimal sensor structure ***\n");
+                                    return -ENOMEM;
+                                }
                             }
                         } else {
                             pr_err("*** ERROR: Real sensor subdev found but ops are NULL ***\n");
