@@ -205,6 +205,17 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
         return 0;
     }
 
+    /* CRITICAL SAFETY: Additional validation for interrupt context */
+    if ((unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff000) {
+        pr_err("vic_framedone_irq_function: Invalid vic_dev pointer 0x%p\n", vic_dev);
+        return 0;
+    }
+
+    if (!virt_addr_valid(vic_dev)) {
+        pr_err("vic_framedone_irq_function: vic_dev pointer 0x%p not valid virtual address\n", vic_dev);
+        return 0;
+    }
+
     /* Binary Ninja: if (*(arg1 + 0x214) == 0) */
     /* SAFE: Use proper struct member 'processing' instead of offset 0x214 */
 //    if (vic_dev->processing == 0) {
