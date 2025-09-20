@@ -566,6 +566,7 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
     const char *dev_name = pdev->name;
 
     pr_info("*** tx_isp_subdev_auto_link: Auto-linking device '%s' to ourISPdev ***\n", dev_name);
+    pr_info("*** DEBUG: Device name comparison - checking '%s' ***\n", dev_name);
 
     if (strcmp(dev_name, "tx-isp-csi") == 0) {
         /* Link CSI device */
@@ -631,6 +632,7 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
 
     } else if (strcmp(dev_name, "tx-isp-vin") == 0) {
         /* Link VIN device */
+        pr_info("*** DEBUG: VIN device name matched! Setting up VIN device ***\n");
         struct tx_isp_vin_device *vin_dev = container_of(sd, struct tx_isp_vin_device, sd);
         ourISPdev->vin_dev = vin_dev;
 
