@@ -3835,18 +3835,7 @@ static void destroy_frame_channel_devices(void)
 /* Forward declarations for streaming functions */
 /* csi_video_s_stream_impl declaration moved to top of file */
 
-/* Forward declarations for sensor ops structures */
-static int sensor_subdev_core_init(struct tx_isp_subdev *sd, int enable);
-static int sensor_subdev_core_reset(struct tx_isp_subdev *sd, int reset);
-static int sensor_subdev_core_g_chip_ident(struct tx_isp_subdev *sd, struct tx_isp_chip_ident *chip);
-static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable);
-
-/* Sensor subdev core operations */
-static struct tx_isp_subdev_core_ops sensor_subdev_core_ops = {
-    .init = sensor_subdev_core_init,
-    .reset = sensor_subdev_core_reset,
-    .g_chip_ident = sensor_subdev_core_g_chip_ident,
-};
+/* REMOVED: sensor subdev wrapper functions - Reference driver uses original sensor ops directly */
 
 /* REMOVED: sensor_subdev_video_ops - Reference driver uses original sensor ops directly */
 
