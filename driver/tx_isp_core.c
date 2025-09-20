@@ -857,8 +857,6 @@ static int ispcore_sensor_ops_iterate(struct tx_isp_dev *isp_dev)
         /* The GC2053 sensor doesn't support TX_ISP_EVENT_SENSOR_FPS, causing -515 errors */
         /* Frame sync work should do Auto Exposure (AE) operations instead */
 
-        static int expo_value = 0x300;  /* Default exposure value for AE */
-
         pr_info("*** ispcore_sensor_ops_ioctl: Calling sensor with EXPO=0x%x (AE operation) ***\n", expo_value);
 
         /* Call the real sensor's IOCTL with supported EXPO command - this triggers I2C communication */
