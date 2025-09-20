@@ -1078,7 +1078,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     /* Reference driver: if (($s1 & 0x3f8) != 0) { read 0x84c, print, increment counter } */
     if ((interrupt_status & 0x3f8) != 0) {
         /* Binary Ninja: int32_t var_44_1 = *(*(arg1 + 0xb8) + 0x84c) */
-        u32 error_reg_84c = readl(vic_regs + 0x84c);
+        u32 error_reg_84c = readl(isp_regs + 0x84c);
 
         /* Binary Ninja: isp_printf(1, "ispcore: irq-status 0x%08x, err is 0x%x,0x%x,084c is 0x%x\n", $s1) */
         /* This is already done above in our existing log */
