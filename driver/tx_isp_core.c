@@ -1741,6 +1741,10 @@ int ispcore_core_ops_init(struct tx_isp_dev *arg1, struct tx_isp_sensor_attribut
     INIT_WORK(&ispcore_fs_work, ispcore_irq_fs_work);
     pr_info("*** ispcore_core_ops_init: Frame sync work structure initialized ***");
 
+    /* CRITICAL: Enable ISP Core hardware interrupts */
+    tx_isp_core_enable_irq(arg1);
+    pr_info("*** ispcore_core_ops_init: ISP Core hardware interrupts enabled ***");
+
     /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) */
     if (arg1 != NULL && (unsigned long)arg1 < 0xfffff001) {
         /* Binary Ninja: $s0 = *(arg1 + 0xd4) - SAFE: Get VIC device */
