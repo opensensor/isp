@@ -241,14 +241,13 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 
     /* Binary Ninja: if (*(arg1 + 0x214) == 0) */
     /* SAFE: Use proper struct member 'processing' instead of offset 0x214 */
-//    if (vic_dev->processing == 0) {
-//        /* goto label_123f4 - GPIO handling section */
-//        pr_info("vic_framedone_irq_function: Processing not active, skipping frame handling\n");
-//        goto label_123f4;
-//    } else {
+    if (vic_dev->processing == 0) {
+        /* goto label_123f4 - GPIO handling section */
+        pr_info("vic_framedone_irq_function: Processing not active, going to GPIO section\n");
+        goto label_123f4;
+    } else {
         /* Binary Ninja: result = *(arg1 + 0x210) */
         /* SAFE: Use proper struct member 'stream_state' instead of offset 0x210 */
-        pr_info("vic_framedone_irq_function: Stream state: %d\n", vic_dev->stream_state);
         result = (void *)(uintptr_t)vic_dev->stream_state;
 
         if (vic_dev->stream_state != 0) {
@@ -256,40 +255,21 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             /* SAFE: Use vic_regs member instead of offset 0xb8 */
             vic_regs = vic_dev->vic_regs;
 
-            /* CRITICAL SAFETY: Check if done_head list is properly initialized */
-            if (!vic_dev->done_head.next || !vic_dev->done_head.prev) {
-                pr_err("vic_framedone_irq_function: done_head list not initialized!\n");
-                /* Initialize the list if it's not already initialized */
-                INIT_LIST_HEAD(&vic_dev->done_head);
-                pr_info("vic_framedone_irq_function: Emergency list initialization completed\n");
-            }
-
-            /* CRITICAL SAFETY: Validate list integrity before iteration */
-            if (vic_dev->done_head.next == NULL ||
-                vic_dev->done_head.prev == NULL ||
-                (unsigned long)vic_dev->done_head.next < 0x80000000 ||
-                (unsigned long)vic_dev->done_head.prev < 0x80000000) {
-                pr_err("vic_framedone_irq_function: Corrupted done_head list pointers!\n");
-                pr_err("done_head.next = %p, done_head.prev = %p\n",
-                       vic_dev->done_head.next, vic_dev->done_head.prev);
-                /* Re-initialize the corrupted list */
-                INIT_LIST_HEAD(&vic_dev->done_head);
-                pr_info("vic_framedone_irq_function: Corrupted list re-initialized\n");
-            }
-
             /* Binary Ninja: void** i_1 = *(arg1 + 0x204) */
             /* SAFE: Use done_head list instead of offset 0x204 */
-            struct list_head *pos, *tmp;
+            /* CRITICAL: The reference driver walks a linked list at offset 0x204 */
+            /* We need to simulate this with our done_head list */
+            struct list_head *i_1 = vic_dev->done_head.next;
             int buffer_index = 0;    /* $a1_1 = 0 */
             int high_bits = 0;       /* $v1_1 = 0 */
             int match_found = 0;     /* $v0 = 0 */
 
             /* Binary Ninja: for (; i_1 != arg1 + 0x204; i_1 = *i_1) */
-            /* SAFE: Iterate through done_head list with safe iteration */
-            list_for_each_safe(pos, tmp, &vic_dev->done_head) {
-                /* CRITICAL SAFETY: Validate each list entry before accessing */
-                if (!pos || (unsigned long)pos < 0x80000000 || (unsigned long)pos >= 0xfffff000) {
-                    pr_err("vic_framedone_irq_function: Invalid list entry %p, breaking iteration\n", pos);
+            /* SAFE: Walk the list like the reference driver but with safe checks */
+            while (i_1 != &vic_dev->done_head) {
+                /* CRITICAL SAFETY: Validate list pointer before dereferencing */
+                if (!i_1 || (unsigned long)i_1 < 0x80000000 || (unsigned long)i_1 >= 0xfffff000) {
+                    pr_err("vic_framedone_irq_function: Invalid list pointer %p, breaking\n", i_1);
                     break;
                 }
 
@@ -299,21 +279,20 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 buffer_index += 1;
 
                 /* Binary Ninja: if (i_1[2] == *($a3_1 + 0x380)) */
-                /* Check if buffer address matches current frame register */
+                /* SAFE: Check if buffer address matches current frame register */
                 if (vic_regs) {
                     u32 current_frame_addr = readl(vic_regs + 0x380);
-
-                    /* CRITICAL SAFETY: Only access buffer entry if we can validate the structure */
-                    /* For now, skip the buffer matching since the list might be empty or corrupted */
-                    /* This prevents the unaligned access crash */
-                    pr_info("vic_framedone_irq_function: VIC[0x380] = 0x%x, buffer_index = %d\n",
-                            current_frame_addr, buffer_index);
-
-                    /* SIMPLIFIED: Just mark as found to avoid complex buffer matching for now */
+                    /* SAFE: The reference driver accesses i_1[2] which is 8 bytes from i_1 */
+                    /* This corresponds to a buffer address in our buffer entry structure */
+                    /* For now, just check if we have a valid frame address */
                     if (current_frame_addr != 0) {
                         match_found = 1;  /* $v0 = 1 */
                     }
                 }
+
+                /* Binary Ninja: i_1 = *i_1 */
+                /* SAFE: Move to next list entry */
+                i_1 = i_1->next;
             }
 
             /* Binary Ninja: int32_t $v1_2 = $v1_1 << 0x10 */
@@ -325,141 +304,23 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 shifted_value = buffer_index << 0x10;
             }
 
-            /* CRITICAL FIX: Preserve buffer count AND control bits when updating current buffer index */
-            /* The bug was clearing buffer count bits 16-19, but we need to preserve total buffer count */
+            /* Binary Ninja: *($a3_1 + 0x300) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff) */
+            /* SAFE: Update VIC register 0x300 exactly as reference driver */
             if (vic_regs) {
                 u32 reg_val = readl(vic_regs + 0x300);
-                u32 total_buffer_count = (reg_val >> 16) & 0xf;  /* Extract current buffer count (bits 16-19) */
-                u32 control_bits = reg_val & 0x8000ffff;         /* Preserve control bits and low bits */
-
-                /* PRESERVE total buffer count, only update current buffer index within that count */
-                /* Don't clear buffer count - preserve it and just cycle through available buffers */
-                u32 current_buffer_index = buffer_index % total_buffer_count;  /* Cycle within available buffers */
-                u32 new_reg_val = control_bits | (total_buffer_count << 16);   /* Preserve buffer count */
-
-                /* FORCE control bits if they were lost */
-                if ((new_reg_val & 0x80000020) != 0x80000020) {
-                    new_reg_val |= 0x80000020;  /* Force control bits back on */
-                    pr_warn("*** VIC FRAME DONE: FORCED control bits 0x80000020 back on! ***\n");
-                }
-
+                u32 new_reg_val = shifted_value | (reg_val & 0xfff0ffff);
                 writel(new_reg_val, vic_regs + 0x300);
-
-                pr_info("*** VIC FRAME DONE: Updated VIC[0x300] = 0x%x (BUFFER COUNT PRESERVED: %d) ***\n",
-                        new_reg_val, total_buffer_count);
-                pr_info("vic_framedone_irq_function: Updated VIC[0x300] = 0x%x (buffers: current=%d, total=%d, match=%d)\n",
-                        new_reg_val, current_buffer_index, total_buffer_count, match_found);
+                pr_info("vic_framedone_irq_function: Updated VIC[0x300] = 0x%x (EXACT Binary Ninja)\n", new_reg_val);
             }
 
-            /* REFERENCE DRIVER: VIC frame done processing complete */
-            /* The reference driver does NOT manually trigger ISP core interrupts */
-            /* ISP core interrupts should be triggered automatically by hardware */
-            pr_info("*** VIC FRAME DONE: Processing complete - hardware should trigger ISP interrupts ***\n");
-
-            /* CRITICAL FIX: Move buffer from queued to completed queue */
-            if (vic_regs) {
-                u32 completed_buffer_addr = readl(vic_regs + 0x380); /* Get current frame buffer address */
-
-                /* CRITICAL FIX: If VIC register 0x380 is 0x0, use REAL VBM buffer addresses */
-                if (completed_buffer_addr == 0x0) {
-                    if (ourISPdev) {
-                        /* Get the frame channel state to access VBM buffer addresses */
-
-                        if (num_channels > 0) {
-                            struct tx_isp_channel_state *state = &frame_channels[0].state;
-
-                            /* DEBUG: Show current VBM buffer state */
-                            pr_info("*** VIC BUFFER DEBUG: vbm_buffer_addresses=%p, vbm_buffer_count=%d ***\n",
-                                    state->vbm_buffer_addresses, state->vbm_buffer_count);
-
-                            /* CRITICAL: Only call ispvic_frame_channel_qbuf when VIC[0x380] is 0x0 */
-                            /* This prevents excessive calls and matches reference driver behavior */
-                            u32 vic_status = readl(vic_regs + 0x380);
-                            static int qbuf_call_count = 0;
-
-                            /* VIC buffer programming moved to STREAMON where it belongs */
-                            pr_info("*** VIC INTERRUPT: VIC[0x380]=0x%x - VIC hardware is working! ***\n", vic_status);
-
-                            /* Use REAL VBM buffer addresses that were stored during QBUF */
-                            if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
-                                static uint32_t vbm_buffer_cycle = 0;
-                                completed_buffer_addr = state->vbm_buffer_addresses[vbm_buffer_cycle];
-                                vbm_buffer_cycle = (vbm_buffer_cycle + 1) % state->vbm_buffer_count;
-
-                                pr_info("*** VIC BUFFER MGMT: VIC[0x380]=0x0, using REAL VBM buffer addr=0x%x ***\n", completed_buffer_addr);
-                                pr_err("*** CRITICAL: VIC[0x380] should contain current buffer address from hardware ***\n");
-                                pr_err("*** VIC[0x380]=0x0 means VIC DMA is NOT writing frame data to buffers ***\n");
-                                pr_err("*** This indicates VIC DMA is not properly configured ***\n");
-
-                                /* DO NOT configure VIC DMA in interrupt handler - Binary Ninja reference shows */
-                                /* VIC DMA should be configured during STREAMON via ispvic_frame_channel_s_stream */
-                                /* The fact that VIC[0x380] is 0x0 means VIC DMA was not configured during STREAMON */
-                                pr_err("*** VIC DMA ERROR: VIC hardware not capturing frames - DMA should be configured during STREAMON ***\n");
-
-                                u32 frame_size = state->width * state->height * 2;  /* RAW10 = 2 bytes/pixel */
-
-                                /* CRITICAL DMA SYNC: Synchronize completed buffer for CPU access */
-                                mips_dma_cache_sync(completed_buffer_addr, frame_size, DMA_FROM_DEVICE);
-
-                                /* CRITICAL DEBUG: Check if buffer contains actual sensor data */
-                                static int buffer_check_count = 0;
-                                if (buffer_check_count < 5) {  /* Only check first 5 frames */
-                                    void *virt_addr = phys_to_virt(completed_buffer_addr);
-                                    if (virt_addr) {
-                                        u32 *data = (u32 *)virt_addr;
-                                        u32 first_pixels = data[0];
-                                        u32 mid_pixels = data[frame_size/8];  /* Check middle of frame */
-                                        u32 last_pixels = data[frame_size/4 - 1];  /* Check end of frame */
-
-                                        pr_info("*** BUFFER DATA CHECK: Frame %d ***\n", buffer_check_count);
-                                        pr_info("First pixels: 0x%08x, Mid pixels: 0x%08x, Last pixels: 0x%08x\n",
-                                               first_pixels, mid_pixels, last_pixels);
-
-                                        if (first_pixels == 0 && mid_pixels == 0 && last_pixels == 0) {
-                                            pr_err("*** BUFFER IS ALL ZEROS - NO SENSOR DATA! ***\n");
-                                            pr_err("*** This confirms MIPI CSI PHY is not routing sensor data to VIC ***\n");
-                                        } else {
-                                            pr_info("*** BUFFER CONTAINS DATA - MIPI data is reaching VIC ***\n");
-                                        }
-                                        buffer_check_count++;
-                                    }
-                                }
-
-                                /* CRITICAL: VIC register 0x380 is a HARDWARE STATUS register - DO NOT WRITE TO IT */
-                                /* The hardware will populate 0x380 with the completed buffer address when DMA finishes */
-                                pr_info("*** VIC BUFFER MGMT: VIC DMA configured to write to buffer 0x%x ***\n", completed_buffer_addr);
-                            } else {
-                                /* Fallback to hardcoded addresses if VBM addresses not available */
-                                static uint32_t vbm_buffer_cycle = 0;
-                                completed_buffer_addr = 0x6300000 + (vbm_buffer_cycle * (1920 * 1080 * 2));
-                                vbm_buffer_cycle = (vbm_buffer_cycle + 1) % 4;
-
-                                pr_warn("*** VIC BUFFER MGMT: No VBM addresses, using fallback addr=0x%x ***\n", completed_buffer_addr);
-                            }
-                        }
-                    }
-                }
-
-                pr_info("*** VIC BUFFER MGMT: Frame complete for buffer_addr=0x%x ***\n", completed_buffer_addr);
-
-                /* CRITICAL FIX: Also wake up frame waiters directly for immediate DQBUF response */
-                if (num_channels > 0) {
-                    struct tx_isp_channel_state *state = &frame_channels[0].state;
-
-                    /* Mark frame as ready for immediate DQBUF processing */
-                    unsigned long flags;
-                    spin_lock_irqsave(&state->buffer_lock, flags);
-                    state->frame_ready = true;
-                    spin_unlock_irqrestore(&state->buffer_lock, flags);
-
-                    /* Wake up waiting DQBUF processes immediately */
-                    wake_up_interruptible(&state->frame_wait);
-                    pr_info("*** VIC BUFFER MGMT: Frame ready signaled for immediate DQBUF ***\n");
-                }
-
-                vic_frame_complete_buffer_management(vic_dev, completed_buffer_addr);
-            }
+            /* Binary Ninja: result = &data_b0000 */
+            result = &data_b0000;
+            /* Binary Ninja: goto label_123f4 */
+            goto label_123f4;
         }
+    }
+
+
 
 
     /* Binary Ninja: GPIO handling section (label_123f4 equivalent) */
