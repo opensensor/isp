@@ -738,9 +738,6 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
 
     /* Binary Ninja: if ($v0_1 s>= 0) */
     if (irq_num >= 0) {
-        /* Binary Ninja: private_spin_lock_init(arg2) */
-        spin_lock_init(&irq_info->lock);
-
         /* Binary Ninja: private_request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, 0x2000, *arg1, arg2) */
         ret = request_threaded_irq(irq_num,
                                    isp_irq_handle,
@@ -753,23 +750,23 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
             /* Binary Ninja: isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", "tx_isp_request_irq") */
             isp_printf(2, "tx_isp_request_irq: request_threaded_irq failed: %d\n", ret);
             /* Binary Ninja: *arg2 = 0 */
-            irq_info->irq_number = 0;
+            irq_info->irq = 0;
             return -EBUSY;
         }
 
         /* Binary Ninja: *arg2 = $v0_1 */
-        irq_info->irq_number = irq_num;
+        irq_info->irq = irq_num;
         /* Binary Ninja: arg2[1] = tx_isp_enable_irq */
-        irq_info->irq_enable_func = NULL;  /* Function pointers set by main ISP device */
+        irq_info->handler = isp_irq_handle;
         /* Binary Ninja: arg2[2] = tx_isp_disable_irq */
-        irq_info->irq_disable_func = NULL;  /* Function pointers set by main ISP device */
+        irq_info->data = irq_info;  /* Store self-reference for callbacks */
         /* Binary Ninja: tx_isp_disable_irq(arg2) - initially disable IRQ */
         disable_irq(irq_num);
 
         pr_info("*** tx_isp_request_irq: IRQ %d registered successfully for %s ***\n", irq_num, dev_name(&pdev->dev));
     } else {
         /* Binary Ninja: *arg2 = 0 */
-        irq_info->irq_number = 0;
+        irq_info->irq = 0;
         pr_err("tx_isp_request_irq: Failed to get IRQ: %d\n", irq_num);
         return irq_num;
     }
