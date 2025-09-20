@@ -1163,13 +1163,8 @@ int vic_frame_complete_buffer_management(struct tx_isp_vic_device *vic_dev, uint
 struct frame_channel_device frame_channels[4]; /* Support up to 4 video channels */
 int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
 
-/* VIC continuous frame generation work queue */
-static struct delayed_work vic_frame_work;
-static void vic_frame_work_function(struct work_struct *work);
-static void tx_isp_start_frame_worker(void);  /* Forward declaration */
-static void tx_isp_stop_frame_worker(void);   /* Forward declaration */
-static bool frame_work_shutdown = false;  /* Shutdown flag for frame worker */
-static DEFINE_MUTEX(frame_work_mutex);     /* Mutex to protect frame worker access */
+/* REMOVED: VIC continuous frame generation work queue - NOT in reference driver */
+/* Reference driver is purely interrupt-driven, no continuous polling */
 
 // ISP Tuning IOCTLs from reference (0x20007400 series)
 #define ISP_TUNING_GET_PARAM    0x20007400
@@ -5151,10 +5146,9 @@ static int tx_isp_init(void)
         ourISPdev->is_open = false;
     }
 
-    /* Initialize frame generation work queue */
-    INIT_DELAYED_WORK(&vic_frame_work, vic_frame_work_function);
-    frame_work_shutdown = false;  /* Reset shutdown flag */
-    pr_info("*** Frame generation work queue initialized ***\n");
+    /* REMOVED: Frame generation work queue - NOT in reference driver */
+    /* Reference driver uses pure interrupt-driven frame processing */
+    pr_info("*** Using reference driver interrupt-driven frame processing ***\n");
     
     /* *** REMOVED DUPLICATE VIC DEVICE CREATION *** */
     /* VIC device will be created by tx_isp_vic_probe with proper register mapping */
