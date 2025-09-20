@@ -170,11 +170,13 @@ int tx_isp_vic_stop_streaming(struct tx_isp_dev *isp_dev)
     pr_info("*** SKIPPING VIC hardware disable (register 0x0) to preserve interrupt configuration ***\n");
     /* writel(0, vic_regs + 0x0); // REMOVED - this was disabling VIC hardware */
     /* wmb(); */
-    
-    /* Disable VIC interrupts - keep original approach */
-    writel(0x0, vic_regs + 0x1e0);
-    writel(0xffffffff, vic_regs + 0x1e8);
-    wmb();
+
+    /* CRITICAL FIX: Don't disable VIC hardware interrupt registers - reference driver doesn't do this */
+    /* Binary Ninja shows tx_vic_disable_irq only calls disable_irq(), not hardware register writes */
+    pr_info("*** SKIPPING VIC hardware interrupt disable - reference driver doesn't disable hardware registers ***\n");
+    /* writel(0x0, vic_regs + 0x1e0);        // REMOVED - reference driver doesn't do this */
+    /* writel(0xffffffff, vic_regs + 0x1e8); // REMOVED - reference driver doesn't do this */
+    /* wmb(); */
     
     pr_info("*** tx_isp_vic_stop_streaming: VIC streaming stopped ***\n");
     
