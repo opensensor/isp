@@ -319,6 +319,14 @@ int tx_isp_create_subdev_graph(struct tx_isp_dev *isp)
         }
 
         pr_info("tx_isp_create_subdev_graph: Found %d directly linked devices - proceeding\n", device_count);
+
+        /* Create basic proc entries and frame channels for compatibility */
+        ret = tx_isp_create_proc_entries(isp);
+        if (ret < 0) {
+            pr_warn("tx_isp_create_subdev_graph: Failed to create proc entries: %d\n", ret);
+            /* Continue anyway - proc entries are not critical */
+        }
+
         ret = 0;  /* Success - devices are linked directly */
         goto unlock;
     }
