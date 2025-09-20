@@ -1327,7 +1327,8 @@ static void* find_subdev_link_pad(struct tx_isp_dev *isp_dev, char *name)
     
     if (strstr(name, "vic") && isp_dev->vic_dev) {
         pr_info("Found VIC device\n");
-        return &((struct tx_isp_vic_device *)isp_dev->vic_dev)->sd; // Return VIC subdev pointer
+        /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+        return &(isp_dev->vic_dev->sd); // Return VIC subdev pointer
     }
     
     pr_info("Subdev %s not found\n", name);
@@ -8605,7 +8606,8 @@ int vic_frame_complete_buffer_management(struct tx_isp_vic_device *vic_dev, uint
             int next_index = (buffer_index + 1) % state->vbm_buffer_count;
             extern struct tx_isp_dev *ourISPdev;
             if (ourISPdev && ourISPdev->vic_dev) {
-                struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+                struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
                 if (vic_dev->vic_regs) {
                     writel(state->vbm_buffer_addresses[next_index], vic_dev->vic_regs + 0x380);
                     wmb();
