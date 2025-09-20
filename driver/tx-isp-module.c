@@ -4772,31 +4772,26 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     /* Binary Ninja: *($v0 + 0xd4) = $v0 - Self-pointer for validation */
     /* Note: self_ptr member may not exist in current struct definition, skipping for now */
 
-    /* CRITICAL BUG FIX: Never free device structures that may have active references */
+    /* ARCHITECTURAL FIX: Probe should NOT allocate new ISP device */
     if (ourISPdev) {
-        pr_warn("*** PROBE: ourISPdev already exists: %p ***\n", ourISPdev);
-        pr_warn("*** PROBE: This indicates multiple probe calls - using FIRST device ***\n");
+        pr_info("*** PROBE: Using existing global ISP device: %p ***\n", ourISPdev);
 
-        /* CRITICAL: DO NOT FREE isp_dev - other code may have references to it */
-        /* Instead, copy essential data from existing device to new device */
-        if (ourISPdev->core_regs) {
-            isp_dev->core_regs = ourISPdev->core_regs;
-        }
-        if (ourISPdev->vic_dev) {
-            isp_dev->vic_dev = ourISPdev->vic_dev;
-        }
-        if (ourISPdev->vic_regs) {
-            isp_dev->vic_regs = ourISPdev->vic_regs;
-        }
+        /* CRITICAL: Free the unnecessary local allocation */
+        kfree(isp_dev);
 
-        /* Use the NEW device as the global one (safer than freeing) */
+        /* Use the existing global device for this platform device */
+        platform_set_drvdata(pdev, ourISPdev);
+
+        pr_info("*** PROBE: Platform device %s linked to global ISP device ***\n",
+                pdev->name ? pdev->name : "unknown");
+    } else {
+        pr_err("*** PROBE ERROR: ourISPdev is NULL - tx_isp_init() should have allocated it ***\n");
+        pr_err("*** PROBE ERROR: This indicates initialization order problem ***\n");
+
+        /* Emergency fallback - use the local allocation */
         ourISPdev = isp_dev;
         platform_set_drvdata(pdev, isp_dev);
-        pr_info("*** PROBE: Updated ourISPdev to new allocation: %p ***\n", isp_dev);
-    } else {
-        pr_info("*** PROBE: Setting ourISPdev to local allocation: %p ***\n", isp_dev);
-        ourISPdev = isp_dev;  /* Make the local device the global one */
-        platform_set_drvdata(pdev, isp_dev);
+        pr_warn("*** PROBE: Emergency fallback - using local allocation: %p ***\n", isp_dev);
     }
 
     return 0;
