@@ -1890,6 +1890,12 @@ int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
 
     pr_info("*** BINARY NINJA EXACT: Iterating through 16 subdevices at offset 0x38 ***\n");
 
+    /* DEBUG: Print all subdev array entries to identify corruption */
+    pr_info("*** DEBUG: Subdev array contents: ***\n");
+    for (i = 0; i < 16; i++) {
+        pr_info("*** DEBUG: subdevs[%d] = %p ***\n", i, subdevs_ptr[i]);
+    }
+
     /* Binary Ninja: for (int32_t i = 0; i != 0x10; ) */
     for (i = 0; i != 0x10; i++) {
         struct tx_isp_subdev *subdev = subdevs_ptr[i];
