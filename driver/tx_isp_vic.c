@@ -3222,13 +3222,27 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     vic_dev->processing = 0;    /* Initialize processing flag */
     vic_dev->frame_count = 0;   /* Initialize frame counter */
 
-    /* Initialize list heads for buffer management */
+    /* CRITICAL: Initialize list heads for buffer management FIRST */
     INIT_LIST_HEAD(&vic_dev->queue_head);
     INIT_LIST_HEAD(&vic_dev->done_head);
     INIT_LIST_HEAD(&vic_dev->free_head);
 
-    /* Initialize spinlock for buffer management */
+    /* CRITICAL: Initialize spinlock for buffer management */
     spin_lock_init(&vic_dev->buffer_mgmt_lock);
+    spin_lock_init(&vic_dev->lock);
+
+    /* CRITICAL: Initialize buffer management immediately to prevent interrupt crashes */
+    /* This ensures the lists are ready before any interrupts can fire */
+    {
+        void *raw_pipe[8] = {NULL}; /* 8 function pointers as per Binary Ninja */
+        int pipo_ret = tx_isp_subdev_pipo(vic_dev, raw_pipe);
+        if (pipo_ret == 0) {
+            pr_info("*** VIC PROBE: Buffer management initialized successfully ***\n");
+        } else {
+            pr_err("*** VIC PROBE: Buffer management initialization failed: %d ***\n", pipo_ret);
+            /* Continue anyway - the lists are at least initialized */
+        }
+    }
 
     pr_info("*** VIC PROBE: Initialized default dimensions %dx%d and critical fields ***\n", vic_dev->width, vic_dev->height);
 

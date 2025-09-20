@@ -1866,6 +1866,15 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 
         /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
         if (vic_start_ok != 0) {
+            /* CRITICAL SAFETY: Additional check that VIC device is fully initialized */
+            if (!vic_dev->done_head.next || !vic_dev->done_head.prev ||
+                !vic_dev->queue_head.next || !vic_dev->queue_head.prev ||
+                !vic_dev->free_head.next || !vic_dev->free_head.prev) {
+                pr_err("*** VIC IRQ: VIC device not fully initialized - skipping interrupt processing ***\n");
+                pr_err("*** This prevents unaligned access crashes ***\n");
+                return IRQ_HANDLED;
+            }
+
             pr_info("*** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
 
             /* Binary Ninja: if (($v1_7 & 1) != 0) */
