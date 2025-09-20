@@ -3116,18 +3116,9 @@ int tx_isp_core_probe(struct platform_device *pdev)
     /* CRITICAL FIX: Use the subdev member of isp_dev, not the entire isp_dev structure */
     if (tx_isp_subdev_init(pdev, &isp_dev->sd, &core_subdev_ops) == 0) {
 
-        /* CRITICAL FIX: Register Core ISP subdev properly in the main device's subdevs array */
-        if (ourISPdev && ourISPdev != isp_dev) {
-            /* This is a separate Core ISP device - register its subdev member as subdev 4 */
-            ourISPdev->subdevs[4] = &isp_dev->sd;
-            isp_dev->sd.isp = ourISPdev;
-            pr_info("*** tx_isp_core_probe: Core ISP subdev registered as subdev 4 in main device ***\n");
-        } else if (ourISPdev == isp_dev) {
-            /* This IS the main device - register its subdev structure as subdev 4 */
-            ourISPdev->subdevs[4] = &isp_dev->sd;
-            isp_dev->sd.isp = ourISPdev;
-            pr_info("*** tx_isp_core_probe: Main ISP device subdev registered as subdev 4 ***\n");
-        }
+        /* REMOVED: Duplicate Core ISP subdev registration - tx_isp_subdev_init already handles this */
+        /* The Core ISP subdev is already registered at index 4 by tx_isp_subdev_init */
+        pr_info("*** tx_isp_core_probe: Core ISP subdev registration handled by tx_isp_subdev_init ***\n");
 
         /* SAFE: Initialize locks using proper struct members */
         spin_lock_init(&isp_dev->lock);
