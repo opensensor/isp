@@ -3361,7 +3361,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         
         // Update VIC frame dimensions based on channel
         if (ourISPdev && ourISPdev->vic_dev) {
-            struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+            /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+            struct tx_isp_vic_device *vic = ourISPdev->vic_dev;
             if (channel == 0) {
                 vic->width = 1920;
                 vic->height = 1080;
