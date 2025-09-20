@@ -660,8 +660,27 @@ int tisp_set_csc_version(int version)
     pr_info("tisp_set_csc_version: Setting CSC version %d\n", version);
     return 0;
 }
-/* Use external system_reg_write from tx-isp-module.c that does real hardware writes */
-extern void system_reg_write(u32 reg, u32 value);
+/* SECURITY WRAPPER: Protected system_reg_write to prevent corruption */
+extern void system_reg_write_unsafe(u32 reg, u32 value);  /* Original unsafe version */
+
+/* SECURITY: Safe wrapper that prevents hardware access during streaming */
+static void system_reg_write(u32 reg, u32 value)
+{
+    extern uint32_t vic_start_ok;
+    static DEFINE_SPINLOCK(hw_access_lock);
+    unsigned long flags;
+
+    /* CRITICAL: Block hardware writes during streaming to prevent corruption */
+    if (vic_start_ok == 1) {
+        pr_warn("SECURITY: Blocked register write 0x%x=0x%x during streaming\n", reg, value);
+        return;  /* Silently ignore to prevent corruption */
+    }
+
+    /* SAFE: Allow hardware access only when not streaming */
+    spin_lock_irqsave(&hw_access_lock, flags);
+    system_reg_write_unsafe(reg, value);  /* Call original function */
+    spin_unlock_irqrestore(&hw_access_lock, flags);
+}
 
 /* External system_irq_func_set from tx_isp_core.c */
 extern int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
@@ -3265,14 +3284,23 @@ void (*isp_event_func_cb[32])(void) = {NULL};
 static spinlock_t isp_irq_lock;
 static bool isp_irq_initialized = false;
 
-/* ISP M0 IOCTL handler - Binary Ninja EXACT reference implementation */
+/* ISP M0 IOCTL handler - SECURITY LOCKDOWN VERSION */
 int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __user *arg)
 {
     int ret = 0;
     uint8_t magic = (cmd >> 8) & 0xff;
     static bool auto_init_done = false;  /* CRITICAL: Prevent repeated auto-initialization */
     static DEFINE_SPINLOCK(tuning_lock);  /* CRITICAL: Prevent race with interrupt handlers */
+    static bool hardware_access_disabled = true;  /* SECURITY: Disable dangerous hardware access */
     unsigned long flags;
+
+    /* SECURITY LOCKDOWN: Disable all hardware register access during streaming */
+    extern uint32_t vic_start_ok;
+    if (vic_start_ok == 1 && hardware_access_disabled) {
+        pr_warn("TUNING SECURITY: Hardware access disabled during streaming to prevent corruption\n");
+        pr_warn("TUNING SECURITY: Command 0x%x blocked for safety\n", cmd);
+        return -EBUSY;  /* Device busy - try again later */
+    }
 
     /* CRITICAL: Binary Ninja reference implementation - FIXED g_ispcore -> ourISPdev */
     /* Reference: $s0 = *(*(*(arg1 + 0x70) + 0xc8) + 0x1bc) */
@@ -3755,14 +3783,30 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     case 0x20007401: { /* SET operation */
                         pr_info("tisp_code_tuning_ioctl: SET operation 0x%x\n", cmd);
                         
-                        /* Binary Ninja: Check access permissions */
+                        /* SECURITY FIX: Enhanced access validation for SET operation */
                         if (!access_ok(VERIFY_WRITE, arg, 0x500c)) {
                             pr_err("tisp_code_tuning_ioctl: Access check failed for SET\n");
                             return -EFAULT;
                         }
-                        
+
+                        /* SECURITY FIX: Validate user buffer is not in kernel space */
+                        if ((unsigned long)arg >= 0x80000000) {
+                            pr_err("tisp_code_tuning_ioctl: Invalid user buffer in kernel space for SET\n");
+                            return -EFAULT;
+                        }
+
+                        /* SECURITY FIX: Thread-safe buffer access for SET */
+                        spin_lock_irqsave(&buffer_lock, flags);
+                        if (!tisp_par_ioctl) {
+                            spin_unlock_irqrestore(&buffer_lock, flags);
+                            pr_err("tisp_code_tuning_ioctl: Buffer was freed during SET operation\n");
+                            return -ENODEV;
+                        }
+
                         /* Binary Ninja: Copy from user to tisp_par_ioctl */
                         ret = copy_from_user(tisp_par_ioctl, (void __user *)s0_1, 0x500c);
+                        spin_unlock_irqrestore(&buffer_lock, flags);
+
                         if (ret != 0) {
                             pr_err("tisp_code_tuning_ioctl: Copy from user failed: %d\n", ret);
                             return -EFAULT;
