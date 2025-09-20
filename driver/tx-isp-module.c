@@ -5924,15 +5924,12 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
     spin_unlock_irqrestore(&irq_cb_lock, flags);
 }
 
-/* isp_irq_handle - EXACT Binary Ninja implementation with struct member access */
+/* isp_irq_handle - EXACT Binary Ninja MCP implementation */
 static irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
-    irqreturn_t result = IRQ_HANDLED;
-    void *subdev_handler;
-    int handler_result;
-
-    pr_info("*** isp_irq_handle: IRQ %d fired ***\n", irq);
+    int result;
+    irqreturn_t handler_result;
 
     /* CRITICAL: Validate ourISPdev is initialized before any processing */
     extern struct tx_isp_dev *ourISPdev;
