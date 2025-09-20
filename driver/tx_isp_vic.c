@@ -2413,31 +2413,6 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
     return result;
 }
 
-/* VIC slake function - matching reference driver */
-int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
-{
-    struct tx_isp_vic_device *vic_dev;
-    
-    if (!sd)
-        return -EINVAL;
-        
-    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
-    if (!vic_dev) {
-        pr_err("VIC device is NULL\n");
-        return -EINVAL;
-    }
-    
-    mutex_lock(&vic_dev->state_lock);
-    
-    if (vic_dev->state > 1) {
-        vic_dev->state = 1; /* Back to INIT state */
-        pr_info("VIC slaked: state -> 1 (INIT)\n");
-    }
-    
-    mutex_unlock(&vic_dev->state_lock);
-    return 0;
-}
-
 /* VIC PIPO MDMA Enable function - EXACT Binary Ninja implementation */
 static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 {
