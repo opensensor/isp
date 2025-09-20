@@ -967,37 +967,32 @@ irqreturn_t ip_done_interrupt_static(int irq, void *dev_id)
     return IRQ_HANDLED; /* Convert to standard Linux return value */
 }
 
-/* ispcore_interrupt_service_routine - EXACT Binary Ninja implementation with struct member access */
+/* ispcore_interrupt_service_routine - EXACT Binary Ninja implementation */
 irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
     struct tx_isp_vic_device *vic_dev;
     void __iomem *isp_regs;
-    void __iomem *vic_regs;
     u32 interrupt_status;
     u32 error_check;
     int i;
+    int result = IRQ_HANDLED;
 
     if (!isp_dev) {
-        pr_err("ispcore_interrupt_service_routine: Invalid ISP device (NULL)\n");
         return IRQ_NONE;
     }
 
-    /* CRITICAL FIX: Validate VIC device pointer before accessing it */
+    /* Binary Ninja: void* $v0 = *(arg1 + 0xb8) */
+    isp_regs = isp_dev->core_regs;
+    if (!isp_regs) {
+        return IRQ_NONE;
+    }
+
+    /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
     vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
     if (!vic_dev) {
-        pr_err("ispcore_interrupt_service_routine: VIC device is NULL (isp_dev=%p)\n", isp_dev);
         return IRQ_NONE;
     }
-
-    /* CRITICAL FIX: Validate VIC registers pointer before accessing offset 0xc8 */
-    vic_regs = vic_dev->vic_regs;
-    if (!vic_regs) {
-        pr_err("ispcore_interrupt_service_routine: VIC registers are NULL (vic_dev=%p)\n", vic_dev);
-        return IRQ_NONE;
-    }
-
-    pr_info("*** ISP INTERRUPT: isp_dev=%p, vic_dev=%p, vic_regs=%p ***\n", isp_dev, vic_dev, vic_regs);
 
     /* Binary Ninja: int32_t $s1 = *($v0 + 0xb4); *($v0 + 0xb8) = $s1 */
     /* SAFE: Use proper ISP core register access - prefer direct mapping */
