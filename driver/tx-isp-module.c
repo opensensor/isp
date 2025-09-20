@@ -7526,7 +7526,40 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
             pr_info("*** SENSOR s_stream FUNCTION: %p ***\n", sd->ops->video->s_stream);
         }
 
-        /* VIN initialization should happen through normal subdev ops flow */
+        /* *** CRITICAL: CALL TUNING IOCTL TO ACTIVATE VIN - EXACT BINARY NINJA REFERENCE *** */
+        pr_info("*** CRITICAL: CALLING TUNING IOCTL TO ACTIVATE VIN (PARAMETER TYPE 8) ***\n");
+
+        /* Prepare parameter buffer for tuning IOCTL call */
+        int tuning_param_buffer[0x500c / sizeof(int)];
+        memset(tuning_param_buffer, 0, sizeof(tuning_param_buffer));
+        tuning_param_buffer[0] = 8;  /* Parameter type 8 = VIN activation */
+
+        /* Call tuning IOCTL with GET operation and parameter type 8 */
+        extern long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+        long tuning_ret = tisp_code_tuning_ioctl(NULL, 0x20007400, (unsigned long)tuning_param_buffer);
+
+        if (tuning_ret == 0) {
+            pr_info("*** CRITICAL: TUNING IOCTL VIN ACTIVATION SUCCESSFUL ***\n");
+
+            /* Check VIN state after activation */
+            if (ourISPdev->vin_dev) {
+                struct tx_isp_vin_device *vin_device = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
+                pr_info("*** VIN STATE AFTER TUNING ACTIVATION: %d (should be 2) ***\n", vin_device->state);
+
+                /* Now call VIN init to transition from state 2 to state 3 */
+                if (vin_device->sd.ops->core && vin_device->sd.ops->core->init) {
+                    int init_ret = vin_device->sd.ops->core->init(&vin_device->sd, 1);
+                    if (init_ret == 0) {
+                        pr_info("*** CRITICAL: VIN INITIALIZED SUCCESSFULLY - STATE NOW 3 ***\n");
+                    } else {
+                        pr_info("*** VIN INIT RETURNED %d BUT STATE SHOULD BE SET TO 3 ***\n", init_ret);
+                    }
+                    pr_info("*** VIN FINAL STATE: %d (should be 3) ***\n", vin_device->state);
+                }
+            }
+        } else {
+            pr_err("*** TUNING IOCTL VIN ACTIVATION FAILED: %ld ***\n", tuning_ret);
+        }
         
         /* Check if any channel is already streaming and set state accordingly */
         sd->vin_state = TX_ISP_MODULE_INIT;  // Default to INIT
