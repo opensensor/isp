@@ -567,6 +567,7 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
 
     pr_info("*** tx_isp_subdev_auto_link: Auto-linking device '%s' to ourISPdev ***\n", dev_name);
     pr_info("*** DEBUG: Device name comparison - checking '%s' ***\n", dev_name);
+    pr_info("*** DEBUG: About to check device name matches ***\n");
 
     if (strcmp(dev_name, "tx-isp-csi") == 0) {
         /* Link CSI device */
@@ -650,18 +651,8 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         ourISPdev->subdevs[3] = &vin_dev->sd;
         pr_info("*** REGISTERED VIN SUBDEV AT INDEX 3 WITH VIDEO OPS ***\n");
 
-        /* CRITICAL FIX: Initialize VIN to state 3 immediately after ops setup */
-        if (vin_dev->sd.ops && vin_dev->sd.ops->core && vin_dev->sd.ops->core->init) {
-            pr_info("*** CRITICAL: INITIALIZING VIN TO STATE 3 DURING AUTO-LINK ***\n");
-            int ret = vin_dev->sd.ops->core->init(&vin_dev->sd, 1);
-            if (ret) {
-                pr_err("*** CRITICAL: VIN INITIALIZATION FAILED DURING AUTO-LINK: %d ***\n", ret);
-            } else {
-                pr_info("*** CRITICAL: VIN INITIALIZED TO STATE 3 DURING AUTO-LINK - READY FOR STREAMING ***\n");
-            }
-        } else {
-            pr_err("*** CRITICAL: NO VIN INIT FUNCTION AVAILABLE DURING AUTO-LINK ***\n");
-        }
+        /* VIN initialization now happens during sensor registration for proper timing */
+        pr_info("*** VIN INITIALIZATION DEFERRED TO SENSOR REGISTRATION PHASE ***\n");
 
     } else if (strcmp(dev_name, "tx-isp-fs") == 0) {
         /* Link FS device */
