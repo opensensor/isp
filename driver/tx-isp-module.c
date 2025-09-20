@@ -3881,11 +3881,7 @@ static int sensor_subdev_sensor_ioctl(struct tx_isp_subdev *sd, unsigned int cmd
     return -ENOIOCTLCMD;
 }
 
-/* Sensor operations structure that delegates to original sensor */
-static struct tx_isp_subdev_sensor_ops sensor_subdev_sensor_ops = {
-    .ioctl = sensor_subdev_sensor_ioctl,
-    .sync_sensor_attr = NULL,  /* Will add if needed */
-};
+/* REMOVED: sensor_subdev_sensor_ops - Reference driver uses original sensor ops directly */
 
 /* vic_subdev_ops is defined in tx_isp_vic.c - use external reference */
 extern struct tx_isp_subdev_ops vic_subdev_ops;
@@ -7057,105 +7053,7 @@ static void simulate_frame_completion(void)
 
 
 
-/* Sensor subdev operation implementations - FIXED TO DELEGATE TO REAL SENSOR DRIVER */
-static int sensor_subdev_core_init(struct tx_isp_subdev *sd, int enable)
-{
-    struct tx_isp_sensor *sensor;
-    int ret = 0;
-
-    pr_info("*** ISP SENSOR WRAPPER init: enable=%d ***\n", enable);
-
-    /* STEP 1: Do ISP's initialization work */
-    if (sd && sd->isp) {
-        sensor = ((struct tx_isp_dev*)sd->isp)->sensor;
-        if (sensor) {
-            pr_info("*** ISP: Initializing ISP-side for sensor %s enable=%d ***\n",
-                    sensor->info.name, enable);
-
-            if (enable) {
-                /* ISP initialization for this sensor */
-                if (sensor->video.attr) {
-                    pr_info("ISP INIT: Configuring %s (chip_id=0x%x, %dx%d)\n",
-                            sensor->info.name, sensor->video.attr->chip_id,
-                            sensor->video.attr->total_width, sensor->video.attr->total_height);
-                    /* Configure ISP for this sensor's resolution, format, etc */
-                }
-                sd->vin_state = TX_ISP_MODULE_INIT;
-            } else {
-                /* ISP deinitialization */
-                pr_info("ISP INIT: Deinitializing %s\n", sensor->info.name);
-                sd->vin_state = TX_ISP_MODULE_SLAKE;
-            }
-        }
-    }
-
-    /* STEP 2: Now delegate to real sensor driver */
-    pr_info("*** ISP DELEGATING TO REAL SENSOR_INIT: enable=%d ***\n", enable);
-
-    if (stored_sensor_ops.original_ops &&
-        stored_sensor_ops.original_ops->core &&
-        stored_sensor_ops.original_ops->core->init) {
-
-        pr_info("*** CALLING REAL SENSOR DRIVER INIT - THIS WRITES THE REGISTERS! ***\n");
-
-        ret = stored_sensor_ops.original_ops->core->init(stored_sensor_ops.sensor_sd, enable);
-
-        pr_info("*** REAL SENSOR DRIVER INIT RETURNED: %d ***\n", ret);
-
-        if (ret < 0 && enable) {
-            /* If sensor init failed, rollback ISP state */
-            sd->vin_state = TX_ISP_MODULE_SLAKE;
-            pr_err("*** Sensor init failed, rolled back ISP state ***\n");
-        }
-    } else {
-        pr_err("*** ERROR: NO REAL SENSOR DRIVER INIT FUNCTION AVAILABLE! ***\n");
-        return -ENODEV;
-    }
-
-    return ret;
-}
-
-static int sensor_subdev_core_reset(struct tx_isp_subdev *sd, int reset)
-{
-    pr_info("*** ISP DELEGATING TO REAL SENSOR_RESET: reset=%d ***\n", reset);
-    
-    /* CRITICAL FIX: Delegate to the actual sensor driver's reset function */
-    if (stored_sensor_ops.original_ops && 
-        stored_sensor_ops.original_ops->core && 
-        stored_sensor_ops.original_ops->core->reset) {
-        
-        return stored_sensor_ops.original_ops->core->reset(stored_sensor_ops.sensor_sd, reset);
-    } else {
-        pr_warn("*** NO REAL SENSOR DRIVER RESET FUNCTION AVAILABLE ***\n");
-        return 0; /* Non-critical, return success */
-    }
-}
-
-static int sensor_subdev_core_g_chip_ident(struct tx_isp_subdev *sd, struct tx_isp_chip_ident *chip)
-{
-    pr_info("*** ISP DELEGATING TO REAL SENSOR_G_CHIP_IDENT ***\n");
-
-    int ret = tx_isp_vic_start(ourISPdev->vic_dev);
-    if (ret != 0) {
-        pr_err("tx_isp_vic_start failed: %d\n", ret);
-    }
-    
-    /* CRITICAL FIX: Delegate to the actual sensor driver's g_chip_ident function */
-    if (stored_sensor_ops.original_ops && 
-        stored_sensor_ops.original_ops->core && 
-        stored_sensor_ops.original_ops->core->g_chip_ident) {
-        
-        pr_info("*** CALLING REAL SENSOR DRIVER G_CHIP_IDENT ***\n");
-        
-        int result = stored_sensor_ops.original_ops->core->g_chip_ident(stored_sensor_ops.sensor_sd, chip);
-        
-        pr_info("*** REAL SENSOR DRIVER G_CHIP_IDENT RETURNED: %d ***\n", result);
-        return result;
-    } else {
-        pr_err("*** ERROR: NO REAL SENSOR DRIVER G_CHIP_IDENT FUNCTION AVAILABLE! ***\n");
-        return -ENODEV;
-    }
-}
+/* REMOVED: All sensor wrapper functions - Reference driver uses original sensor ops directly */
 
 /* REMOVED: sensor_subdev_video_s_stream - This function does not exist in reference driver
  * VIN s_stream calls sensor s_stream directly without any ISP wrapper */
