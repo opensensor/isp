@@ -4912,19 +4912,10 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp_dev)
     /* Binary Ninja: Iterate through device list and register each platform device */
     for (i = 0; i < pdata->device_id; i++) {
         /* Binary Ninja: Register platform device from platform data */
-        pr_info("*** Registering platform device %d from platform data ***\n", i);
+        pr_info("*** Platform device %d already registered during main probe ***\n", i);
 
-        /* Register the actual platform device so its probe function gets called */
-        if (i < ARRAY_SIZE(tx_isp_platform_devices) && tx_isp_platform_devices[i]) {
-            int ret = platform_device_register(tx_isp_platform_devices[i]);
-            if (ret != 0) {
-                pr_err("Failed to register platform device %d (%s): %d\n",
-                       i, tx_isp_platform_devices[i]->name, ret);
-            } else {
-                pr_info("*** Platform device %d (%s) registered successfully ***\n",
-                        i, tx_isp_platform_devices[i]->name);
-            }
-        }
+        /* Platform devices are already registered during main driver probe */
+        /* No need to register them again here - this would cause duplicate registration */
     }
 
     /* Binary Ninja: Set globe_ispdev = isp_dev */
