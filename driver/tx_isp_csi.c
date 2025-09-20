@@ -792,6 +792,7 @@ struct tx_isp_subdev_ops csi_subdev_ops = {
     .internal = &csi_internal_ops,
 };
 EXPORT_SYMBOL(csi_subdev_ops);
+EXPORT_SYMBOL(tx_isp_csi_slake_subdev);
 
 /* Forward declarations for CSI file operations */
 static int dump_isp_csi_open(struct inode *inode, struct file *file);
