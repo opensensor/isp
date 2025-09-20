@@ -5946,25 +5946,30 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
 /* isp_irq_handle - EXACT Binary Ninja MCP implementation */
 static irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
-    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
-    int result;
-    irqreturn_t handler_result;
+    int result = IRQ_HANDLED;
 
     /* Binary Ninja: if (arg2 != 0x80) */
     if ((uintptr_t)dev_id != 0x80) {
         /* Binary Ninja: void* $v0_2 = **(arg2 + 0x44) */
+        /* SAFE: Use proper struct member access instead of **(arg2 + 0x44) */
+        struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
         void *v0_2 = NULL;
-        result = IRQ_HANDLED;
 
         if (isp_dev && isp_dev->subdevs && isp_dev->subdevs[0]) {
             v0_2 = isp_dev->subdevs[0]->ops;
         }
 
+        /* Binary Ninja: result = 1 */
+        result = IRQ_HANDLED;
+
         if (v0_2 != NULL) {
             /* Binary Ninja: int32_t $v0_3 = *($v0_2 + 0x20) */
+            /* Binary Ninja: if ($v0_3 == 0) result = 1 else result = 1 */
             result = IRQ_HANDLED;
 
-            /* Call appropriate handler */
+            /* Binary Ninja: if ($v0_3(arg2 - 0x80, 0, 0) == 2) result = 2 */
+            /* Call the appropriate interrupt handler */
+            irqreturn_t handler_result;
             if (irq == 37) {
                 handler_result = ispcore_interrupt_service_routine(irq, dev_id);
             } else if (irq == 38) {
@@ -5973,7 +5978,6 @@ static irqreturn_t isp_irq_handle(int irq, void *dev_id)
                 handler_result = IRQ_HANDLED;
             }
 
-            /* Binary Ninja: if ($v0_3(arg2 - 0x80, 0, 0) == 2) result = 2 */
             if (handler_result == IRQ_WAKE_THREAD) {
                 result = IRQ_WAKE_THREAD;
             }
