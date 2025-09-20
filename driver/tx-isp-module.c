@@ -1852,7 +1852,8 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 
     /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
     /* SAFE: Use proper struct member access instead of raw offset +0xd4 */
-    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+    /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+    vic_dev = isp_dev->vic_dev;
 
     pr_info("*** VIC IRQ DEBUG: vic_dev from isp_dev = %p ***\n", vic_dev);
     pr_info("*** VIC IRQ DEBUG: isp_dev->vic_regs = %p ***\n", isp_dev->vic_regs);
