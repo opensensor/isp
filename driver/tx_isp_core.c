@@ -998,8 +998,17 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     /* Binary Ninja: void* $v0 = *(arg1 + 0xb8) - ISP core registers */
     isp_regs = isp_dev->core_regs;
     if (!isp_regs) {
-        pr_err("ispcore_interrupt_service_routine: No ISP core registers\n");
-        return IRQ_NONE;
+        pr_err("ispcore_interrupt_service_routine: No ISP core registers - EMERGENCY REMAP\n");
+
+        /* EMERGENCY FIX: Remap ISP core registers if they're NULL */
+        isp_regs = ioremap(0x13300000, 0x10000);
+        if (isp_regs) {
+            pr_info("*** ISP CORE IRQ: EMERGENCY REMAP SUCCESS - isp_regs = %p ***\n", isp_regs);
+            isp_dev->core_regs = isp_regs;
+        } else {
+            pr_err("*** ISP CORE IRQ: EMERGENCY REMAP FAILED ***\n");
+            return IRQ_NONE;
+        }
     }
 
     /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) - VIC device */

@@ -1797,6 +1797,13 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
 
 
 
+/* CRITICAL SAFETY MACRO: Prevent BadVA 0xc8 crashes */
+#define SAFE_READ_OFFSET(ptr, offset, default_val) \
+    ((ptr) ? readl((ptr) + (offset)) : (default_val))
+
+#define SAFE_WRITE_OFFSET(ptr, offset, val) \
+    do { if (ptr) writel((val), (ptr) + (offset)); } while(0)
+
 /* isp_vic_interrupt_service_routine - EXACT Binary Ninja implementation with struct member access */
 irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
