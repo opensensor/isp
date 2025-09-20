@@ -1269,9 +1269,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         /* Binary Ninja: Day/night state processing */
         if (v1_10 == 1) {
             /* Binary Ninja: Frame drop counter management */
-            extern uint8_t isp_day_night_switch_drop_frame_num;
-            extern uint8_t isp_day_night_switch_drop_frame_cnt;
-
+            /* Use already declared global variables - no extern needed */
             isp_day_night_switch_drop_frame_cnt = isp_day_night_switch_drop_frame_num;
 
             /* Binary Ninja: Complex callback and register write logic */
