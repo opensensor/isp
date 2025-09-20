@@ -1372,8 +1372,8 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* Binary Ninja: FINAL CALLBACK LOOP - CRITICAL for proper interrupt handling */
     /* Binary Ninja: void* $s2_1 = &irq_func_cb; int i = 0; int result = 1 */
-    extern void *irq_func_cb[32];  /* Array of 32 callback function pointers */
-    void **s2_1 = &irq_func_cb[0];
+    /* Use the already declared irq_func_cb array with proper type */
+    irqreturn_t (**s2_1)(int, void*) = &irq_func_cb[0];
     int i = 0;
     result = IRQ_HANDLED;
 
@@ -1385,12 +1385,12 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
         if (v0_46 != 0) {
             /* Binary Ninja: int32_t $v0_47 = *$s2_1 */
-            void *callback = *s2_1;
+            irqreturn_t (*callback)(int, void*) = *s2_1;
 
             if (callback != NULL) {
                 /* Binary Ninja: int32_t result_1 = $v0_47() */
-                typedef int (*irq_callback_t)(void);
-                int result_1 = ((irq_callback_t)callback)();
+                /* Call the callback with proper signature */
+                int result_1 = callback(irq, dev_id);
 
                 if (result_1 != IRQ_HANDLED) {
                     result = result_1;
