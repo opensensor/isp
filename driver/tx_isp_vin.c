@@ -434,7 +434,7 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
     
     /* Binary Ninja: *(arg1 + 0xf4) = $v1 */
     /* SAFE: Use safe struct member access instead of raw offset 0xf4 */
-    struct tx_isp_vin_device *vin_dev = (struct tx_isp_vin_device *)arg1;
+    /* Reuse vin_dev variable declared earlier */
     if (vin_dev) {
         vin_dev->state = v1;
         mcp_log_info("tx_isp_vin_init: *** VIN STATE SET ***", v1);
