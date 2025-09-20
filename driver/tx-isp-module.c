@@ -1167,6 +1167,7 @@ int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
 static struct delayed_work vic_frame_work;
 static void vic_frame_work_function(struct work_struct *work);
 static void tx_isp_start_frame_worker(void);  /* Forward declaration */
+static void tx_isp_stop_frame_worker(void);   /* Forward declaration */
 static bool frame_work_shutdown = false;  /* Shutdown flag for frame worker */
 static DEFINE_MUTEX(frame_work_mutex);     /* Mutex to protect frame worker access */
 
@@ -3785,7 +3786,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         
         // Stop channel streaming
         state->streaming = false;
-        
+
+        /* CRITICAL: Stop frame worker when streaming ends */
+        tx_isp_stop_frame_worker();
+
         // Stop the actual sensor hardware streaming
         if (channel == 0 && ourISPdev && ourISPdev->sensor) {
             sensor = ourISPdev->sensor;
@@ -7336,6 +7340,18 @@ static void tx_isp_start_frame_worker(void)
             schedule_delayed_work(&vic_frame_work, msecs_to_jiffies(100));
         }
     }
+
+    mutex_unlock(&frame_work_mutex);
+}
+
+/* Safe function to stop frame worker when streaming ends */
+static void tx_isp_stop_frame_worker(void)
+{
+    mutex_lock(&frame_work_mutex);
+
+    pr_info("*** tx_isp_stop_frame_worker: Stopping frame worker ***\n");
+    /* Cancel any pending work */
+    cancel_delayed_work(&vic_frame_work);
 
     mutex_unlock(&frame_work_mutex);
 }
