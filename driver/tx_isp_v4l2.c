@@ -661,6 +661,9 @@ static int tx_isp_v4l2_mmap(struct file *file, struct vm_area_struct *vma)
     if (dev->channel_num >= 0 && dev->channel_num < 4) {
         struct frame_channel_device *fcd = &frame_channels[dev->channel_num];
 
+        /* Fix the fake file to use proper frame channel device */
+        fake_file.private_data = fcd;
+
         /* Create a custom IOCTL to get buffer address - simulate tisp_reg_map_get */
         map_request.buffer_index = buffer_index;
         map_request.buffer_addr = 0;
