@@ -3163,8 +3163,29 @@ int tx_isp_vic_register_interrupt(struct tx_isp_vic_device *vic_dev, struct plat
             return -ENODEV;
         }
 
-        pr_info("*** VIC IRQ REGISTER: Registering interrupt with ISP device as dev_id = %p ***\n", ourISPdev);
-        pr_info("*** VIC IRQ REGISTER: ISP device vic_dev = %p ***\n", ourISPdev->vic_dev);
+        pr_info("*** VIC IRQ REGISTER: DEBUG - ISP device = %p ***\n", ourISPdev);
+        pr_info("*** VIC IRQ REGISTER: DEBUG - ISP device vic_dev = %p ***\n", ourISPdev->vic_dev);
+        pr_info("*** VIC IRQ REGISTER: DEBUG - ISP device vic_regs = %p ***\n", ourISPdev->vic_regs);
+        pr_info("*** VIC IRQ REGISTER: DEBUG - VIC device vic_regs = %p ***\n", vic_dev->vic_regs);
+
+        /* CRITICAL SAFETY: Validate all pointers before registering interrupt */
+        if (!ourISPdev->vic_dev) {
+            pr_err("*** VIC IRQ REGISTER: ISP device vic_dev is NULL ***\n");
+            return -EINVAL;
+        }
+
+        if (!ourISPdev->vic_regs) {
+            pr_err("*** VIC IRQ REGISTER: ISP device vic_regs is NULL ***\n");
+            return -EINVAL;
+        }
+
+        if ((unsigned long)ourISPdev->vic_regs < 0x80000000 ||
+            (unsigned long)ourISPdev->vic_regs >= 0xfffff000) {
+            pr_err("*** VIC IRQ REGISTER: ISP device vic_regs is invalid: %p ***\n", ourISPdev->vic_regs);
+            return -EINVAL;
+        }
+
+        pr_info("*** VIC IRQ REGISTER: All pointers validated, registering interrupt ***\n");
 
         /* CRITICAL: Disable the IRQ first to prevent premature interrupts during registration */
         disable_irq(vic_irq);
