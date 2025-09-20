@@ -879,8 +879,7 @@ static struct work_struct ispcore_fs_work;
 struct work_struct pre_frame_dequeue;
 struct work_struct ch1_frame_dequeue_delay;
 char ch1_buf[0x1c];
-/* Note: isp_ch0_pre_dequeue_time, isp_ch1_dequeue_delay_time, and day/night variables are already declared as module parameters above */
-void *irq_func_cb[32] = {0};  /* Array of 32 interrupt callback function pointers */
+/* Note: isp_ch0_pre_dequeue_time, isp_ch1_dequeue_delay_time, day/night variables, and irq_func_cb are already declared above */
 
 /* VIC event callback structure for Binary Ninja compatibility */
 struct vic_event_callback {
