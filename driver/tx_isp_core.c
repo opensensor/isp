@@ -630,15 +630,7 @@ static struct tx_isp_subdev_pad_ops core_pad_ops = {
 };
 
 
-/* Update the core subdev ops to include the core ops */
-struct tx_isp_subdev_ops core_subdev_ops_full = {
-    .core = &core_subdev_core_ops,
-    .video = &core_subdev_video_ops,
-    .pad = &core_pad_ops,
-    .sensor = NULL,
-    .internal = NULL
-};
-EXPORT_SYMBOL(core_subdev_ops_full);
+
 
 /**
  * tx_isp_get_device - CRITICAL: Get global ISP device pointer
