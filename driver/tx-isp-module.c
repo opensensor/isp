@@ -5145,11 +5145,32 @@ static int tx_isp_init(void)
         pr_err("*** CRITICAL ERROR: ourISPdev IS NULL! ***\n");
     }
 
-    /* *** CRITICAL: Only register IRQ handlers if ourISPdev is valid *** */
+    /* *** CRITICAL: Comprehensive validation before IRQ registration *** */
     if (!ourISPdev) {
         pr_err("*** CRITICAL ERROR: Cannot register IRQ handlers - ourISPdev is NULL! ***\n");
         pr_err("*** This would cause NULL pointer crashes in interrupt handlers ***\n");
         return -ENODEV;
+    }
+
+    /* Validate critical structure members that interrupt handlers will access */
+    pr_info("*** VALIDATING ISP DEVICE STRUCTURE FOR IRQ REGISTRATION ***\n");
+    pr_info("*** ourISPdev = %p ***\n", ourISPdev);
+    pr_info("*** ourISPdev->core_regs = %p ***\n", ourISPdev->core_regs);
+    pr_info("*** ourISPdev->vic_dev = %p ***\n", ourISPdev->vic_dev);
+
+    if (ourISPdev->vic_dev) {
+        pr_info("*** ourISPdev->vic_dev->vic_regs = %p ***\n", ourISPdev->vic_dev->vic_regs);
+    }
+
+    /* Initialize any missing critical members */
+    if (!ourISPdev->core_regs) {
+        pr_warn("*** WARNING: core_regs is NULL - ISP core interrupts may fail ***\n");
+    }
+
+    if (!ourISPdev->vic_dev) {
+        pr_warn("*** WARNING: vic_dev is NULL - VIC interrupts may fail ***\n");
+    } else if (!ourISPdev->vic_dev->vic_regs) {
+        pr_warn("*** WARNING: vic_regs is NULL - VIC interrupts may fail ***\n");
     }
 
     pr_info("*** REGISTERING BOTH IRQ HANDLERS (37 + 38) FOR COMPLETE INTERRUPT SUPPORT ***\n");
