@@ -388,6 +388,15 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         pr_info("*** tx_isp_subdev_init: CSI subdev registered at index 3 ***\n");
     }
 
+    /* CRITICAL: Register Core ISP subdev when it's created */
+    extern struct tx_isp_subdev_ops core_subdev_ops;
+    if (ourISPdev && ops == &core_subdev_ops) {
+        /* This is the Core ISP subdev - register it in subdevs array */
+        ourISPdev->subdevs[4] = sd;  /* Core at index 4 based on reference */
+        sd->isp = ourISPdev;
+        pr_info("*** tx_isp_subdev_init: Core ISP subdev registered at index 4 ***\n");
+    }
+
     /* Binary Ninja: if (tx_isp_module_init(arg1, arg2) != 0) */
     ret = tx_isp_module_init(pdev, sd);
     if (ret != 0) {
