@@ -566,14 +566,22 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 
 /* Forward declaration for hardware initialization */
 static int tx_isp_hardware_init(struct tx_isp_dev *isp_dev);
-void system_reg_write_unsafe(u32 reg, u32 value);  /* Unsafe version for tuning system */
+void system_reg_write(u32 reg, u32 value);
 
-/* system_reg_write_unsafe - UNSAFE hardware register write (used by tuning system) */
-void system_reg_write_unsafe(u32 arg1, u32 arg2)
+/* system_reg_write - Binary Ninja reference implementation with streaming protection */
+void system_reg_write(u32 arg1, u32 arg2)
 {
     /* Binary Ninja EXACT: *(*(mdns_y_pspa_cur_bi_wei0_array + 0xb8) + arg1) = arg2 */
     /* mdns_y_pspa_cur_bi_wei0_array is the ISP device structure (ourISPdev) */
     /* +0xb8 is the register base address offset in the device structure */
+
+    extern uint32_t vic_start_ok;
+
+    /* CRITICAL: Block hardware writes during streaming to prevent corruption */
+    if (vic_start_ok == 1) {
+        pr_warn("system_reg_write: BLOCKED register write 0x%x=0x%x during streaming\n", arg1, arg2);
+        return;  /* Prevent corruption by blocking tuning system writes during streaming */
+    }
 
     if (!ourISPdev) {
         pr_warn("system_reg_write: No ISP device available for reg=0x%x val=0x%x\n", arg1, arg2);
