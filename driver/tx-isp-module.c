@@ -6283,11 +6283,22 @@ static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
             /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
             struct tx_isp_vic_device *vic_dev = isp_dev->vic_dev;
             /* ADDITIONAL SAFETY: Validate vic_dev before calling functions */
-            if (vic_dev && vic_dev->vic_regs) {
+            if (vic_dev) {
+                /* EMERGENCY FIX: Ensure vic_regs is available */
+                if (!vic_dev->vic_regs) {
+                    pr_err("*** isp_irq_thread_handle: NULL vic_regs - EMERGENCY REMAP ***\n");
+                    vic_dev->vic_regs = ioremap(0x133e0000, 0x10000);
+                    if (vic_dev->vic_regs) {
+                        pr_info("*** isp_irq_thread_handle: EMERGENCY REMAP SUCCESS ***\n");
+                    } else {
+                        pr_err("*** isp_irq_thread_handle: EMERGENCY REMAP FAILED ***\n");
+                        return IRQ_HANDLED;
+                    }
+                }
                 pr_info("isp_irq_thread_handle: Calling VIC frame done handler\n");
                 vic_framedone_irq_function(vic_dev);
             } else {
-                pr_err("*** isp_irq_thread_handle: Invalid vic_dev or vic_regs ***\n");
+                pr_err("*** isp_irq_thread_handle: Invalid vic_dev ***\n");
             }
         } else {
             pr_err("*** isp_irq_thread_handle: Invalid isp_dev or vic_dev ***\n");
