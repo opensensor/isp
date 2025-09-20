@@ -460,8 +460,25 @@ static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
         return -EINVAL;
     }
 
+    /* CRITICAL SAFETY: Additional validation for interrupt context */
+    if ((unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff000) {
+        pr_err("vic_mdma_irq_function: Invalid vic_dev pointer 0x%p\n", vic_dev);
+        return -EINVAL;
+    }
+
+    if (!virt_addr_valid(vic_dev)) {
+        pr_err("vic_mdma_irq_function: vic_dev pointer 0x%p not valid virtual address\n", vic_dev);
+        return -EINVAL;
+    }
+
     /* Binary Ninja: if (*(arg1 + 0x214) == 0) */
     if (vic_dev->stream_state == 0) {
+        /* CRITICAL SAFETY: Validate width/height fields before access (offset 0xdc/0xe0) */
+        if (!virt_addr_valid(&vic_dev->width) || !virt_addr_valid(&vic_dev->height)) {
+            pr_err("vic_mdma_irq_function: Invalid width/height field addresses\n");
+            return -EINVAL;
+        }
+
         /* Binary Ninja: int32_t $s0_2 = *(arg1 + 0xdc) * *(arg1 + 0xe0) */
         frame_size = vic_dev->width * vic_dev->height;
 
