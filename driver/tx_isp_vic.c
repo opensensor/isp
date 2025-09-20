@@ -3236,24 +3236,17 @@ int tx_isp_vic_register_interrupt(struct tx_isp_vic_device *vic_dev, struct plat
             return -EINVAL;
         }
 
-        pr_info("*** VIC IRQ REGISTER: All pointers validated, registering interrupt ***\n");
+        pr_info("*** VIC IRQ REGISTER: All pointers validated ***\n");
 
-        /* CRITICAL: Disable the IRQ first to prevent premature interrupts during registration */
-        disable_irq(vic_irq);
-
-        ret = request_irq(vic_irq, isp_vic_interrupt_service_routine,
-                         IRQF_SHARED, "isp-w02-vic", ourISPdev);
-        if (ret == 0) {
-            vic_dev->irq_number = vic_irq;
-            vic_dev->irq = vic_irq;
-            vic_dev->irq_enabled = 0;  /* Mark as disabled initially */
-            pr_info("*** VIC IRQ REGISTER: VIC interrupt handler registered for IRQ %d with ISP device %p (DISABLED) ***\n", vic_irq, ourISPdev);
-            pr_info("*** VIC IRQ REGISTER: Interrupt will call handler with dev_id = %p (ISP device) ***\n", ourISPdev);
-            pr_info("*** VIC IRQ REGISTER: Handler will get VIC device from isp_dev->vic_dev = %p ***\n", ourISPdev->vic_dev);
-            pr_info("*** VIC IRQ REGISTER: IRQ will be enabled later during streaming start ***\n");
-        } else {
-            pr_err("*** VIC IRQ REGISTER: Failed to register VIC interrupt handler for IRQ %d: %d ***\n", vic_irq, ret);
-        }
+        /* *** CRITICAL: VIC IRQ is handled by main dispatcher in tx-isp-module.c *** */
+        /* No direct IRQ registration needed - dispatcher calls isp_vic_interrupt_service_routine */
+        vic_dev->irq_number = vic_irq;
+        vic_dev->irq = vic_irq;
+        vic_dev->irq_enabled = 0;  /* Mark as disabled initially */
+        pr_info("*** VIC IRQ REGISTER: VIC IRQ %d will be handled by main dispatcher ***\n", vic_irq);
+        pr_info("*** VIC IRQ REGISTER: Dispatcher will call handler with dev_id = %p (ISP device) ***\n", ourISPdev);
+        pr_info("*** VIC IRQ REGISTER: Handler will get VIC device from isp_dev->vic_dev = %p ***\n", ourISPdev->vic_dev);
+        ret = 0;  /* Success - no direct registration needed */
     } else {
         pr_err("*** VIC IRQ REGISTER: Failed to get VIC IRQ number: %d ***\n", vic_irq);
         ret = -ENODEV;
