@@ -165,13 +165,8 @@ struct tx_isp_dev {
     struct tx_isp_csi_device *csi_dev;
     atomic_t csi_configured;
 
-    /* CRITICAL FIX: Move vic_dev to offset 0xd4 to match Binary Ninja expectations */
-    /* Calculate padding needed to reach offset 0xd4 (212 bytes from struct start) */
-    /* Current offset after csi_configured is approximately 0x70-0x80 */
-    /* Need padding to reach 0xd4 */
-    char padding_to_vic_dev[0x54];  /* Padding to reach offset 0xd4 */
-
-    struct tx_isp_vic_device *vic_dev;  /* 0xd4: CRITICAL - Binary Ninja expects vic_dev HERE */
+    /* VIC device - positioned for proper struct member access */
+    struct tx_isp_vic_device *vic_dev;
 
     /* Status tracking */
     struct isp_device_status status;
