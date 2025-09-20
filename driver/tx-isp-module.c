@@ -3913,12 +3913,7 @@ static struct tx_isp_subdev_ops csi_subdev_ops = {
 };
 
 
-/* Complete sensor subdev ops structure */
-static struct tx_isp_subdev_ops sensor_subdev_ops = {
-    .core = &sensor_subdev_core_ops,
-    .video = &sensor_subdev_video_ops,
-    .sensor = &sensor_subdev_sensor_ops,  /* Now points to delegation structure */
-};
+/* REMOVED: sensor_subdev_ops - Reference driver uses original sensor ops directly */
 
 // Basic IOCTL handler matching reference behavior
 static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
