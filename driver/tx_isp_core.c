@@ -629,14 +629,14 @@ static int core_subdev_core_init_bridge(struct tx_isp_subdev *sd, int enable)
 int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 
 /* Core subdev operations - matches the pattern used by other devices */
-static struct tx_isp_subdev_core_ops core_subdev_core_ops = {
+struct tx_isp_subdev_core_ops core_subdev_core_ops = {
     .init = core_subdev_core_init_bridge,
     .reset = NULL,
     .ioctl = ispcore_core_ops_ioctl,  /* Wire in the IOCTL handler */
 };
 
-/* Core subdev video operations */
-static struct tx_isp_subdev_video_ops core_subdev_video_ops = {
+/* Core subdev video operations - GLOBAL to ensure proper accessibility */
+struct tx_isp_subdev_video_ops core_subdev_video_ops = {
     .s_stream = ispcore_video_s_stream,  /* CRITICAL: Wire in the video streaming function */
     .link_setup = ispcore_link_setup,    /* CRITICAL: Wire in the link setup function */
 };
