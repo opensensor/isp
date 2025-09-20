@@ -1166,6 +1166,7 @@ int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
 /* VIC continuous frame generation work queue */
 static struct delayed_work vic_frame_work;
 static void vic_frame_work_function(struct work_struct *work);
+static void tx_isp_start_frame_worker(void);  /* Forward declaration */
 static bool frame_work_shutdown = false;  /* Shutdown flag for frame worker */
 static DEFINE_MUTEX(frame_work_mutex);     /* Mutex to protect frame worker access */
 
