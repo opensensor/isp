@@ -1229,7 +1229,6 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             /* Binary Ninja: tx_isp_send_event_to_remote(*($s3_2 + 0x78), 0x3000006, &var_40) */
             if (s3_2) {
                 /* Send frame completion event - this is CRITICAL for frame channels */
-                extern int tx_isp_send_event_to_remote(void *target, u32 event, void *data);
                 /* SAFE: Use proper struct member access instead of raw offset 0x78 */
                 /* Binary Ninja offset 0x78 likely refers to a channel callback pointer */
                 tx_isp_send_event_to_remote(s3_2, 0x3000006, &var_38_1);
@@ -1334,7 +1333,6 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             if (isp_ch1_dequeue_delay_time == 0) {
                 /* Binary Ninja: tx_isp_send_event_to_remote(*($s5_1 + 0x13c), 0x3000006, &var_40) */
                 if (s5_1) {
-                    extern int tx_isp_send_event_to_remote(void *target, u32 event, void *data);
                     /* SAFE: Use proper struct member access instead of raw offset 0x13c */
                     /* Binary Ninja offset 0x13c likely refers to channel 1 callback pointer */
                     tx_isp_send_event_to_remote(s5_1, 0x3000006, &var_38_2);
