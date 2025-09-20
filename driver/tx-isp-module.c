@@ -1818,113 +1818,36 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     u32 v1_7, v1_10;
     extern uint32_t vic_start_ok;
 
-    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
+    /* NEUTERED INTERRUPT HANDLER - Minimal processing for debugging */
+    pr_info("*** VIC IRQ %d: NEUTERED - Just acknowledging interrupt ***\n", irq);
+
+    /* Basic validation only */
     if (dev_id == NULL || (unsigned long)dev_id >= 0xfffff001) {
+        pr_info("*** VIC IRQ: Invalid dev_id, returning ***\n");
         return IRQ_HANDLED;
     }
 
-    /* CRITICAL SAFETY: Validate isp_dev before accessing any members */
     if (!isp_dev) {
-        pr_err("*** VIC IRQ: NULL isp_dev ***\n");
+        pr_info("*** VIC IRQ: NULL isp_dev, returning ***\n");
         return IRQ_HANDLED;
     }
 
-    /* MIPS SAFETY: Check isp_dev pointer alignment */
-    if ((unsigned long)isp_dev & 0x3) {
-        pr_err("*** VIC IRQ: MISALIGNED isp_dev pointer 0x%p ***\n", isp_dev);
-        return IRQ_HANDLED;
-    }
+    pr_info("*** VIC IRQ: dev_id=%p, isp_dev=%p - NEUTERED HANDLER ***\n", dev_id, isp_dev);
 
-    /* CRITICAL SAFETY: Validate isp_dev structure integrity */
-    if ((unsigned long)isp_dev < 0x80000000 || (unsigned long)isp_dev >= 0xfffff000) {
-        pr_err("*** VIC IRQ: Invalid isp_dev pointer 0x%p ***\n", isp_dev);
-        return IRQ_HANDLED;
-    }
-
-    /* DEBUG: Log all pointer values at interrupt entry */
-    pr_info("*** VIC IRQ DEBUG: Entry - dev_id = %p ***\n", dev_id);
-    pr_info("*** VIC IRQ DEBUG: isp_dev = %p ***\n", isp_dev);
-
-    /* CRITICAL SAFETY: Validate ISP device structure integrity before accessing ANY members */
-    /* Check if we can safely read the vic_dev member */
-    if ((unsigned long)&isp_dev->vic_dev < 0x80000000 ||
-        (unsigned long)&isp_dev->vic_dev >= 0xfffff000) {
-        pr_err("*** VIC IRQ: Cannot safely access isp_dev->vic_dev member ***\n");
-        return IRQ_HANDLED;
-    }
-
-    /* CRITICAL: Check for memory corruption patterns (poison values) */
-    if ((unsigned long)isp_dev == 0x5aaa5aaa || (unsigned long)isp_dev == 0x6b6b6b6b ||
-        (unsigned long)isp_dev == 0xdeadbeef || (unsigned long)isp_dev == 0xbaadf00d) {
-        pr_err("*** VIC IRQ: MEMORY CORRUPTION DETECTED - isp_dev contains poison pattern 0x%p ***\n", isp_dev);
-        pr_err("*** This indicates buffer overflow or use-after-free - ABORTING interrupt ***\n");
-        return IRQ_HANDLED;
-    }
-
-    /* ROBUST FIX: Get vic_dev using proper struct member access with comprehensive validation */
+    /* NEUTERED: Skip all complex processing, just try to get vic_regs safely */
     vic_dev = isp_dev->vic_dev;
-
-    /* COMPREHENSIVE VALIDATION: Check vic_dev before ANY access */
     if (!vic_dev) {
-        pr_err("*** VIC IRQ: NULL vic_dev from isp_dev - interrupt ignored ***\n");
-        pr_err("*** VIC IRQ: This means VIC device was not properly linked during probe ***\n");
-        pr_err("*** VIC IRQ: Check VIC probe function and subdev linking ***\n");
+        pr_info("*** VIC IRQ: NULL vic_dev - NEUTERED handler returning ***\n");
         return IRQ_HANDLED;
     }
 
-    /* Validate vic_dev pointer range */
-    if ((unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff000) {
-        pr_err("*** VIC IRQ: Invalid vic_dev pointer 0x%p - interrupt ignored ***\n", vic_dev);
-        return IRQ_HANDLED;
-    }
-
-    /* Validate vic_dev structure integrity */
-    if (!virt_addr_valid(vic_dev)) {
-        pr_err("*** VIC IRQ: vic_dev points to invalid memory - interrupt ignored ***\n");
-        return IRQ_HANDLED;
-    }
-
-    /* CRITICAL FIX: Check BOTH VIC register sources and provide detailed diagnostics */
-    vic_regs = isp_dev->vic_regs;  /* Primary source */
-
+    vic_regs = isp_dev->vic_regs;
     if (!vic_regs) {
-        /* Try secondary source */
-        vic_regs = vic_dev->vic_regs;
-        pr_warn("*** VIC IRQ: Using vic_dev->vic_regs as fallback: %p ***\n", vic_regs);
-    }
-
-    /* CRITICAL SAFETY: Validate vic_regs before accessing */
-    if (!vic_regs) {
-        pr_err("*** VIC IRQ: NULL vic_regs from BOTH isp_dev AND vic_dev - REMAPPING ***\n");
-
-        /* EMERGENCY FIX: Remap VIC registers if they're NULL */
-        vic_regs = ioremap(0x133e0000, 0x10000);
-        if (vic_regs) {
-            pr_info("*** VIC IRQ: EMERGENCY REMAP SUCCESS - vic_regs = %p ***\n", vic_regs);
-            /* Update both sources so this doesn't happen again */
-            isp_dev->vic_regs = vic_regs;
-            vic_dev->vic_regs = vic_regs;
-        } else {
-            pr_err("*** VIC IRQ: EMERGENCY REMAP FAILED - cannot access VIC registers ***\n");
-            pr_err("*** VIC IRQ: isp_dev->vic_regs = %p ***\n", isp_dev->vic_regs);
-            pr_err("*** VIC IRQ: vic_dev->vic_regs = %p ***\n", vic_dev->vic_regs);
-            pr_err("*** VIC IRQ: This means VIC registers were not mapped during probe ***\n");
-            pr_err("*** VIC IRQ: Check tx_isp_subdev_init and ioremap calls ***\n");
-            return IRQ_HANDLED;
-        }
-    }
-
-    /* Final validation that vic_regs is now valid */
-    if (!vic_regs) {
-        pr_err("*** VIC IRQ: vic_regs is still NULL after all attempts ***\n");
+        pr_info("*** VIC IRQ: NULL vic_regs - NEUTERED handler returning ***\n");
         return IRQ_HANDLED;
     }
 
-    /* MIPS SAFETY: Check vic_regs pointer alignment */
-    if ((unsigned long)vic_regs & 0x3) {
-        pr_err("*** VIC IRQ: MISALIGNED vic_regs pointer 0x%p ***\n", vic_regs);
-        return IRQ_HANDLED;
-    }
+    pr_info("*** VIC IRQ: vic_dev=%p, vic_regs=%p - NEUTERED processing ***\n", vic_dev, vic_regs);
 
     /* CRITICAL: Validate vic_regs points to valid I/O memory */
     if ((unsigned long)vic_regs < 0x10000000 || (unsigned long)vic_regs >= 0x20000000) {
