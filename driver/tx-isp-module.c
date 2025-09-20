@@ -5931,78 +5931,63 @@ static irqreturn_t isp_irq_handle(int irq, void *dev_id)
     int result;
     irqreturn_t handler_result;
 
-    /* CRITICAL: Validate ourISPdev is initialized before any processing */
-    extern struct tx_isp_dev *ourISPdev;
-    if (!ourISPdev) {
-        pr_err("*** ISP IRQ %d: ourISPdev is NULL - driver not fully initialized ***\n", irq);
-        return IRQ_HANDLED;  /* Handle gracefully during initialization */
-    }
-
     /* Binary Ninja: if (arg2 != 0x80) */
     if ((uintptr_t)dev_id != 0x80) {
-        /* CRITICAL SAFETY: Validate all pointers before access */
-        if (!isp_dev) {
-            pr_err("*** isp_irq_handle: NULL isp_dev ***\n");
-            return IRQ_HANDLED;
-        }
-
-        /* CRITICAL: Validate dev_id is in valid kernel memory range */
-        if ((unsigned long)dev_id < 0x80000000 || (unsigned long)dev_id >= 0xfffff000) {
-            pr_err("*** ISP IRQ %d: Invalid dev_id pointer 0x%p - memory corruption ***\n", irq, dev_id);
-            return IRQ_HANDLED;  /* Handle gracefully to prevent crash */
-        }
-
-        /* MIPS SAFETY: Check isp_dev pointer alignment */
-        if ((unsigned long)isp_dev & 0x3) {
-            pr_err("*** isp_irq_handle: MISALIGNED isp_dev pointer 0x%p ***\n", isp_dev);
-            return IRQ_HANDLED;
-        }
-
         /* Binary Ninja: void* $v0_2 = **(arg2 + 0x44) */
-        /* SAFE: Use proper struct member access instead of raw offset +0x44 */
-        if (isp_dev->vic_dev) {
-            /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
-            struct tx_isp_vic_device *vic_dev = isp_dev->vic_dev;
+        void *v0_2 = NULL;
+        result = IRQ_HANDLED;
 
-            /* MIPS SAFETY: Check vic_dev pointer alignment */
-            if ((unsigned long)vic_dev & 0x3) {
-                pr_err("*** isp_irq_handle: MISALIGNED vic_dev pointer 0x%p ***\n", vic_dev);
-                return IRQ_HANDLED;
+        if (isp_dev && isp_dev->subdevs && isp_dev->subdevs[0]) {
+            v0_2 = isp_dev->subdevs[0]->ops;
+        }
+
+        if (v0_2 != NULL) {
+            /* Binary Ninja: int32_t $v0_3 = *($v0_2 + 0x20) */
+            result = IRQ_HANDLED;
+
+            /* Call appropriate handler */
+            if (irq == 37) {
+                handler_result = ispcore_interrupt_service_routine(irq, dev_id);
+            } else if (irq == 38) {
+                handler_result = isp_vic_interrupt_service_routine(irq, dev_id);
+            } else {
+                handler_result = IRQ_HANDLED;
             }
 
-            /* SAFE: Check if vic_dev has valid irq_handler member */
-            subdev_handler = vic_dev ? vic_dev->irq_handler : NULL;
-
-            /* Binary Ninja: result = 1; if ($v0_2 != 0) */
-            result = IRQ_HANDLED;
-            if (subdev_handler != NULL) {
-                /* Binary Ninja: int32_t $v0_3 = *($v0_2 + 0x20) */
-                /* SAFE: Call the interrupt handler function */
-                if (irq == 37) {
-                    /* IRQ 37: ISP CORE */
-                    extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
-                    handler_result = ispcore_interrupt_service_routine(irq, dev_id);
-                } else if (irq == 38) {
-                    /* IRQ 38: VIC */
-                    handler_result = isp_vic_interrupt_service_routine(irq, dev_id);
-                } else {
-                    handler_result = IRQ_HANDLED;
-                }
-
-                /* Binary Ninja: if ($v0_3(arg2 - 0x80, 0, 0) == 2) result = 2 */
-                if (handler_result == IRQ_WAKE_THREAD) {
-                    result = IRQ_WAKE_THREAD;
-                }
+            /* Binary Ninja: if ($v0_3(arg2 - 0x80, 0, 0) == 2) result = 2 */
+            if (handler_result == IRQ_WAKE_THREAD) {
+                result = IRQ_WAKE_THREAD;
             }
-        } else {
-            result = IRQ_HANDLED;
         }
     } else {
         /* Binary Ninja: result = 1 */
         result = IRQ_HANDLED;
     }
 
-    pr_info("*** isp_irq_handle: IRQ %d processed, result=%d ***\n", irq, result);
+    /* Binary Ninja: Loop through subdev array from arg2-0x48 to arg2-8 */
+    if (isp_dev && isp_dev->subdevs) {
+        struct tx_isp_subdev **s2 = &isp_dev->subdevs[0];  /* arg2 - 0x48 */
+        struct tx_isp_subdev **end = &isp_dev->subdevs[16]; /* arg2 - 8 */
+
+        while (s2 < end) {
+            struct tx_isp_subdev *a0_1 = *s2;
+            if (a0_1 == NULL) {
+                s2++;
+            } else {
+                /* Binary Ninja: void* $v0_6 = **($a0_1 + 0xc4) */
+                void *v0_6 = (a0_1->ops) ? a0_1->ops : NULL;
+
+                if (v0_6 == NULL) {
+                    s2++;
+                } else {
+                    /* Binary Ninja: int32_t $v0_7 = *($v0_6 + 0x20) */
+                    /* Binary Ninja: if ($v0_7 != 0 && $v0_7() == 2) result = 2 */
+                    /* Skip subdev processing for now */
+                    s2++;
+                }
+            }
+        }
+    }
 
     return result;
 }
