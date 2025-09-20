@@ -951,29 +951,62 @@ void dump_csi_reg(struct tx_isp_subdev *sd)
     isp_printf(0, "count is %d\n", readl(csi_regs + 0x34));
 }
 
-/* CSI activation function - matching reference driver */
+/* tx_isp_csi_activate_subdev - EXACT Binary Ninja implementation */
 int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
 {
     struct tx_isp_csi_device *csi_dev;
-    
-    if (!sd)
-        return -EINVAL;
-    
-    csi_dev = ourISPdev->csi_dev;
-    if (!csi_dev) {
-        pr_err("CSI device is NULL\n");
-        return -EINVAL;
+    struct clk **clks;
+    int clk_count;
+    int i;
+    int result = 0xffffffea; /* Binary Ninja: int32_t result = 0xffffffea */
+
+    /* Binary Ninja: if (arg1 != 0) */
+    if (sd != NULL) {
+        /* Binary Ninja: if (arg1 u>= 0xfffff001) return 0xffffffea */
+        if ((unsigned long)sd >= 0xfffff001) {
+            return 0xffffffea;
+        }
+
+        /* Binary Ninja: void* $s1_1 = *(arg1 + 0xd4) */
+        csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+        result = 0xffffffea;
+
+        /* Binary Ninja: if ($s1_1 != 0 && $s1_1 u< 0xfffff001) */
+        if (csi_dev != NULL && (unsigned long)csi_dev < 0xfffff001) {
+            /* Binary Ninja: private_mutex_lock($s1_1 + 0x12c) */
+            mutex_lock(&csi_dev->mlock);
+
+            /* Binary Ninja: if (*($s1_1 + 0x128) == 1) */
+            if (csi_dev->state == 1) {
+                /* Binary Ninja: *($s1_1 + 0x128) = 2 */
+                csi_dev->state = 2;
+
+                /* Binary Ninja: int32_t* $s1_2 = *(arg1 + 0xbc) */
+                clks = sd->clks;
+
+                /* Binary Ninja: if ($s1_2 != 0) */
+                if (clks != NULL) {
+                    /* Binary Ninja: if ($s1_2 u< 0xfffff001) */
+                    if ((unsigned long)clks < 0xfffff001) {
+                        /* Binary Ninja: while (i u< *(arg1 + 0xc0)) */
+                        clk_count = sd->clk_num;
+                        for (i = 0; i < clk_count; i++) {
+                            /* Binary Ninja: private_clk_enable(*$s1_2) */
+                            clk_enable(clks[i]);
+                        }
+                    }
+                }
+            }
+
+            /* Binary Ninja: private_mutex_unlock($s1_1 + 0x12c) */
+            mutex_unlock(&csi_dev->mlock);
+            /* Binary Ninja: return 0 */
+            return 0;
+        }
     }
-    
-    mutex_lock(&csi_dev->mutex);
-    
-    if (csi_dev->state == 1) {
-        csi_dev->state = 2; /* INIT -> READY */
-        pr_info("CSI activated: state %d -> 2 (READY)\n", 1);
-    }
-    
-    mutex_unlock(&csi_dev->mutex);
-    return 0;
+
+    /* Binary Ninja: return result */
+    return result;
 }
 
 /* CSI slake function - matching reference driver */
