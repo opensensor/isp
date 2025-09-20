@@ -5062,7 +5062,6 @@ static int tx_isp_init(void)
     pr_info("*** CRITICAL: INITIALIZING SUBDEVICE REGISTRY BEFORE MAIN PLATFORM DEVICE ***\n");
 
     /* Build platform device array for the registry system */
-    struct platform_device *subdev_platforms[5];
     subdev_platforms[0] = &tx_isp_csi_platform_device;
     subdev_platforms[1] = &tx_isp_vic_platform_device;
     subdev_platforms[2] = &tx_isp_vin_platform_device;
