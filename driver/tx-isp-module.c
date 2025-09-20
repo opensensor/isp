@@ -5580,7 +5580,8 @@ static void tx_isp_exit(void)
         
         /* Clean up VIC device directly */
         if (ourISPdev->vic_dev) {
-            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+            /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+            struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
             
             // Clean up any remaining buffers
             if (!list_empty(&vic_dev->queue_head)) {
