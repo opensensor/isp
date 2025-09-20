@@ -657,8 +657,12 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
     } else if (strcmp(dev_name, "tx-isp-fs") == 0) {
         /* Link FS device */
         struct tx_isp_fs_device *fs_dev = container_of(sd, struct tx_isp_fs_device, subdev);
-        ourISPdev->fs_dev = fs_dev;
+        ourISPdev->fs_dev = (struct frame_source_device *)fs_dev;
         pr_info("*** LINKED FS device: %p ***\n", fs_dev);
+
+        /* CRITICAL: Add FS to subdev array at index 5 (after VIC=0, CSI=1, VIN=2, sensor=3, core=4) */
+        ourISPdev->subdevs[5] = &fs_dev->subdev;
+        pr_info("*** REGISTERED FS SUBDEV AT INDEX 5 WITH SUBDEV OPS ***\n");
 
     } else if (strcmp(dev_name, "tx-isp-core") == 0) {
         /* Core device is already linked in core probe */
