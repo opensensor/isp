@@ -11,6 +11,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable);
 int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes);
 void dump_csi_reg(struct tx_isp_subdev *sd);
 extern struct tx_isp_dev *ourISPdev;
+extern bool is_valid_kernel_pointer(const void *ptr);
 void system_reg_write(u32 reg, u32 value);
 
 /* Binary Ninja reference global variables */
@@ -378,6 +379,22 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
         csi_dev->state = 3;  /* 3 = DISABLED (Binary Ninja reference) */
         pr_info("CSI streaming disabled - state=%d (DISABLED)\n", csi_dev->state);
     }
+
+    /* CRITICAL SAFETY: Add memory barrier and validation before return */
+    mb(); /* Memory barrier to ensure all operations complete */
+
+    /* SAFETY: Validate all pointers are still valid before return */
+    if (!sd || !is_valid_kernel_pointer(sd)) {
+        pr_err("*** CRITICAL: CSI subdev became invalid during streaming - PREVENTING CRASH ***\n");
+        return -EFAULT;
+    }
+
+    if (!csi_dev || !is_valid_kernel_pointer(csi_dev)) {
+        pr_err("*** CRITICAL: CSI device became invalid during streaming - PREVENTING CRASH ***\n");
+        return -EFAULT;
+    }
+
+    pr_info("*** csi_video_s_stream: STREAMING OPERATION COMPLETE - RETURNING SUCCESS ***\n");
 
     /* Binary Ninja: return 0 */
     return 0;

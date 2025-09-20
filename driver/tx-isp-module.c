@@ -1979,6 +1979,17 @@ int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
 
     pr_info("*** BINARY NINJA: All 16 subdevices processed successfully ***\n");
 
+    /* CRITICAL SAFETY: Add memory barrier and validation before return */
+    mb(); /* Memory barrier to ensure all operations complete */
+
+    /* SAFETY: Validate ISP device is still valid before return */
+    if (!isp_dev || !is_valid_kernel_pointer(isp_dev)) {
+        pr_err("*** CRITICAL: ISP device became invalid during streaming - PREVENTING CRASH ***\n");
+        return -EFAULT;
+    }
+
+    pr_info("*** tx_isp_video_link_stream: STREAMING SETUP COMPLETE - RETURNING SUCCESS ***\n");
+
     /* Binary Ninja: return 0 */
     return 0;
 }
