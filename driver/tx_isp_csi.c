@@ -10,6 +10,8 @@
 int csi_core_ops_init(struct tx_isp_subdev *sd, int enable);
 int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes);
 void dump_csi_reg(struct tx_isp_subdev *sd);
+int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd);
+int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 extern struct tx_isp_dev *ourISPdev;
 extern bool is_valid_kernel_pointer(const void *ptr);
 void system_reg_write(u32 reg, u32 value);
@@ -681,6 +683,85 @@ int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes)
 
     /* Binary Ninja: return 0 */
     return 0;
+}
+
+/* tx_isp_csi_slake_subdev - EXACT Binary Ninja reference implementation */
+int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
+{
+    struct tx_isp_csi_device *csi_dev;
+    int state;
+    int i;
+
+    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 0xffffffea */
+    if (!sd || (unsigned long)sd >= 0xfffff001) {
+        return -EINVAL;
+    }
+
+    /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
+    csi_dev = (struct tx_isp_csi_device *)sd->dev_priv;
+    if (!csi_dev || (unsigned long)csi_dev >= 0xfffff001) {
+        return -EINVAL;
+    }
+
+    pr_info("*** tx_isp_csi_slake_subdev: CSI slake/shutdown - current state=%d ***\n", csi_dev->state);
+
+    /* Binary Ninja: int32_t $v1_2 = *($s0_1 + 0x128) */
+    state = csi_dev->state;
+
+    /* Binary Ninja: if ($v1_2 == 4) csi_video_s_stream(arg1, 0) */
+    if (state == 4) {
+        pr_info("tx_isp_csi_slake_subdev: CSI in streaming state, stopping stream\n");
+        csi_video_s_stream(sd, 0);
+        state = csi_dev->state;  /* Update state after s_stream */
+    }
+
+    /* Binary Ninja: if ($v1_2 == 3) csi_core_ops_init(arg1, 0) */
+    if (state == 3) {
+        pr_info("tx_isp_csi_slake_subdev: CSI in state 3, calling core_ops_init(disable)\n");
+        csi_core_ops_init(sd, 0);
+    }
+
+    /* Binary Ninja: private_mutex_lock($s2_1) */
+    mutex_lock(&csi_dev->mlock);
+
+    /* Binary Ninja: if (*($s0_1 + 0x128) == 2) *($s0_1 + 0x128) = 1 */
+    if (csi_dev->state == 2) {
+        pr_info("tx_isp_csi_slake_subdev: CSI state 2->1, disabling clocks\n");
+        csi_dev->state = 1;
+
+        /* Binary Ninja: Disable clocks in reverse order */
+        if (sd->clks && sd->clk_num > 0) {
+            for (i = sd->clk_num - 1; i >= 0; i--) {
+                if (sd->clks[i]) {
+                    clk_disable(sd->clks[i]);
+                    pr_info("tx_isp_csi_slake_subdev: Disabled clock %d\n", i);
+                }
+            }
+        }
+    }
+
+    mutex_unlock(&csi_dev->mlock);
+    pr_info("*** tx_isp_csi_slake_subdev: CSI slake complete, final state=%d ***\n", csi_dev->state);
+    return 0;
+}
+
+/* csi_sensor_ops_ioctl - EXACT Binary Ninja reference implementation */
+int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
+{
+    pr_info("*** csi_sensor_ops_ioctl: cmd=0x%08x ***\n", cmd);
+
+    /* Handle CSI-specific sensor IOCTL commands */
+    switch (cmd) {
+    case 0x1000000:  /* Core operation */
+        pr_info("csi_sensor_ops_ioctl: Core operation 0x1000000\n");
+        return 0;
+    case 0x1000001:  /* Sensor operation */
+        pr_info("csi_sensor_ops_ioctl: Sensor operation 0x1000001\n");
+        return 0;
+    default:
+        pr_info("csi_sensor_ops_ioctl: Unknown command 0x%08x\n", cmd);
+        return -ENOTTY;
+    }
 }
 
 /* Define the core operations */

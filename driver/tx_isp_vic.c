@@ -2953,11 +2953,62 @@ extern int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void
 extern int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
 extern int vic_core_ops_init(struct tx_isp_subdev *sd, int enable);
 extern int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+extern int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd);
 extern long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
 extern int dump_isp_vic_frd_open(struct inode *inode, struct file *file);
 extern int vic_chardev_open(struct inode *inode, struct file *file);
 extern int vic_chardev_release(struct inode *inode, struct file *file);
 extern ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos);
+
+/* tx_isp_vic_slake_subdev - EXACT Binary Ninja reference implementation */
+int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
+{
+    struct tx_isp_vic_device *vic_dev;
+    int state;
+    int i;
+
+    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 0xffffffea */
+    if (!sd || (unsigned long)sd >= 0xfffff001) {
+        return -EINVAL;
+    }
+
+    /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
+    vic_dev = (struct tx_isp_vic_device *)sd->dev_priv;
+    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
+        return -EINVAL;
+    }
+
+    pr_info("*** tx_isp_vic_slake_subdev: VIC slake/shutdown - current state=%d ***\n", vic_dev->state);
+
+    /* Binary Ninja: int32_t $v1_2 = *($s0_1 + 0xe8) */
+    state = vic_dev->state;
+
+    /* Binary Ninja: if ($v1_2 == 4) vic_video_s_stream(arg1, 0) */
+    if (state == 4) {
+        pr_info("tx_isp_vic_slake_subdev: VIC in streaming state, stopping stream\n");
+        vic_core_s_stream(sd, 0);
+        state = vic_dev->state;  /* Update state after s_stream */
+    }
+
+    /* Binary Ninja: if ($v1_2 == 3) vic_core_ops_init(arg1, 0) */
+    if (state == 3) {
+        pr_info("tx_isp_vic_slake_subdev: VIC in state 3, calling core_ops_init(disable)\n");
+        vic_core_ops_init(sd, 0);
+    }
+
+    /* Binary Ninja: Disable clocks in reverse order */
+    if (sd->clks && sd->clk_num > 0) {
+        for (i = sd->clk_num - 1; i >= 0; i--) {
+            if (sd->clks[i]) {
+                clk_disable(sd->clks[i]);
+                pr_info("tx_isp_vic_slake_subdev: Disabled clock %d\n", i);
+            }
+        }
+    }
+
+    pr_info("*** tx_isp_vic_slake_subdev: VIC slake complete, final state=%d ***\n", vic_dev->state);
+    return 0;
+}
 
 /* VIC sensor operations structure - MISSING from original implementation */
 struct tx_isp_subdev_sensor_ops vic_sensor_ops = {
