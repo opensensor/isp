@@ -3627,20 +3627,12 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
             }
             
             /* SAFE: Create proper buffer entries and add to free list */
-            struct vic_buffer_entry {
-                struct list_head list;
-                uint32_t buffer_addr;    /* Offset 0x8 from Binary Ninja */
-                uint32_t buffer_index;   /* Buffer index */
-                uint32_t buffer_status;  /* Buffer status */
-                uint32_t reserved[13];   /* Padding to match reference driver size */
-            } __attribute__((aligned(4)));
-
-            struct vic_buffer_entry *buffer_entry = kzalloc(sizeof(struct vic_buffer_entry), GFP_KERNEL);
+            struct vic_buffer_entry *buffer_entry = VIC_BUFFER_ALLOC();
             if (buffer_entry) {
                 /* Initialize buffer data */
                 buffer_entry->buffer_addr = 0;  /* Buffer address */
                 buffer_entry->buffer_index = i;  /* Buffer index */
-                buffer_entry->buffer_status = 0;  /* Buffer status */
+                buffer_entry->buffer_status = VIC_BUFFER_STATUS_FREE;  /* Buffer status */
 
                 /* Add to free list using safe Linux API */
                 list_add_tail(&buffer_entry->list, &vic_dev->free_head);

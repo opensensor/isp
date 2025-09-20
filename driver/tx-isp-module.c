@@ -33,6 +33,7 @@
 #include "../include/tx_isp_tuning.h"
 #include "../include/tx-isp-device.h"
 #include "../include/tx-libimp.h"
+#include "../include/tx_isp_vic_buffer.h"
 
 /* CSI State constants - needed for proper state management */
 #define CSI_STATE_OFF       0
@@ -281,14 +282,7 @@ static irqreturn_t (*irq_func_cb[MAX_IRQ_HANDLERS])(int irq, void *dev_id);
 static void (*event_func_cb[MAX_EVENT_HANDLERS])(void *data);
 static DEFINE_SPINLOCK(irq_cb_lock);
 
-/* Buffer management structures for VIC MDMA - Binary Ninja reference */
-struct vic_buffer_entry {
-    struct list_head list;
-    struct list_head *prev_entry;   /* prev pointer */
-    uint32_t buffer_addr;           /* Physical buffer address */
-    uint32_t buffer_index;          /* Buffer index in VIC */
-    uint32_t channel;               /* Channel number (0 or 1) */
-};
+/* REMOVED: Duplicate vic_buffer_entry definition - use shared header instead */
 
 /* VIC MDMA channel state - Binary Ninja global variables */
 static uint32_t vic_mdma_ch0_sub_get_num = 0;
@@ -6955,11 +6949,13 @@ static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
             
             pr_info("VIC: Queue buffer event for channel %d\n", channel);
             
-            // Create a dummy buffer entry for the queue
-            buffer_entry = kmalloc(sizeof(struct list_head), GFP_ATOMIC);
+            // FIXED: Create proper buffer entry structure
+            struct vic_buffer_entry *buffer_entry = VIC_BUFFER_ALLOC_ATOMIC();
             if (buffer_entry) {
-                INIT_LIST_HEAD(buffer_entry);
-                ispvic_frame_channel_qbuf(vic_dev, buffer_entry);
+                buffer_entry->buffer_addr = 0x30000000 + (channel * 0x100000);  /* Valid physical address */
+                buffer_entry->buffer_index = channel;
+                buffer_entry->buffer_status = VIC_BUFFER_STATUS_QUEUED;
+                ispvic_frame_channel_qbuf(vic_dev, &buffer_entry->list);
             }
         }
         return 0;
