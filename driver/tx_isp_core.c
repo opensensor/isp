@@ -1211,8 +1211,9 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
         /* Binary Ninja: Frame timing measurement */
         static uint32_t data_ca554_local = 0;
+        static struct timeval data_ca560_local;
         if (data_ca554_local == 2) {
-            do_gettimeofday(&data_ca560);
+            do_gettimeofday(&data_ca560_local);
             data_ca554_local = 3;
         }
 
