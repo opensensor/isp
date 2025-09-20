@@ -3853,10 +3853,7 @@ static struct tx_isp_subdev_core_ops sensor_subdev_core_ops = {
     .g_chip_ident = sensor_subdev_core_g_chip_ident,
 };
 
-/* Sensor subdev video operations */
-static struct tx_isp_subdev_video_ops sensor_subdev_video_ops = {
-    .s_stream = sensor_subdev_video_s_stream,
-};
+/* REMOVED: sensor_subdev_video_ops - Reference driver uses original sensor ops directly */
 
 /* CSI video operations structure - CRITICAL for tx_isp_video_link_stream */
 static struct tx_isp_subdev_video_ops csi_video_ops = {
