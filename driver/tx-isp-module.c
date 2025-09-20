@@ -1852,22 +1852,26 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         return IRQ_HANDLED;
     }
 
-    /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
-    /* SAFE: Use proper struct member access instead of raw offset +0xd4 */
-    /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+    /* ROBUST FIX: Get vic_dev using proper struct member access with comprehensive validation */
     vic_dev = isp_dev->vic_dev;
 
-    pr_info("*** VIC IRQ DEBUG: vic_dev from isp_dev = %p ***\n", vic_dev);
-    pr_info("*** VIC IRQ DEBUG: isp_dev->vic_regs = %p ***\n", isp_dev->vic_regs);
-
-    /* CRITICAL SAFETY: Validate vic_dev pointer */
+    /* COMPREHENSIVE VALIDATION: Check vic_dev before ANY access */
     if (!vic_dev) {
-        pr_err("*** VIC IRQ: NULL vic_dev from isp_dev ***\n");
+        pr_err("*** VIC IRQ: NULL vic_dev from isp_dev - interrupt ignored ***\n");
         return IRQ_HANDLED;
     }
 
+    /* Validate vic_dev pointer range */
     if ((unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff000) {
-        pr_err("*** VIC IRQ: Invalid vic_dev pointer 0x%p from isp_dev ***\n", vic_dev);
+        pr_err("*** VIC IRQ: Invalid vic_dev pointer 0x%p - interrupt ignored ***\n", vic_dev);
+        return IRQ_HANDLED;
+    }
+
+    /* Validate vic_dev structure integrity */
+    if (!virt_addr_valid(vic_dev)) {
+        pr_err("*** VIC IRQ: vic_dev points to invalid memory - interrupt ignored ***\n");
+        return IRQ_HANDLED;
+    }
         return IRQ_HANDLED;
     }
 
