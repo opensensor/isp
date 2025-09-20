@@ -6983,7 +6983,8 @@ static int __enqueue_in_driver(void *buffer_struct)
     /* Binary Ninja: int32_t result = tx_isp_send_event_to_remote(*($s1 + 0x298), 0x3000005, arg1 + 0x68) */
     if (s1 && ourISPdev && ourISPdev->vic_dev) {
         /* Get VIC subdev for event routing */
-        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+        /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+        struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
         /* SAFE: Use proper struct member instead of unsafe offset */
         void *event_data = buffer_struct;  /* Use the buffer struct itself as event data */
         
@@ -7153,7 +7154,8 @@ static void vic_frame_work_function(struct work_struct *work)
         return;
     }
 
-    vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+    /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+    vic_dev = ourISPdev->vic_dev;
 
     /* CRITICAL SAFETY: Validate VIC device structure */
     if (!vic_dev || !vic_dev->vic_regs) {
