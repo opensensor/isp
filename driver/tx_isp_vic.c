@@ -510,10 +510,18 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     }
 
     /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
+    /* CRITICAL SAFETY: Check ourISPdev first */
+    if (!ourISPdev) {
+        pr_err("*** VIC IRQ: ourISPdev is NULL - system not initialized ***\n");
+        return IRQ_HANDLED;
+    }
+
     vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
 
     /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
-    if (vic_dev != NULL && (unsigned long)vic_dev < 0xfffff001) {
+    /* CRITICAL SAFETY: Enhanced vic_dev validation */
+    if (vic_dev != NULL && (unsigned long)vic_dev < 0xfffff001 &&
+        (unsigned long)vic_dev >= 0x80000000 && virt_addr_valid(vic_dev)) {
         /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
         vic_regs = vic_dev->vic_regs;
 

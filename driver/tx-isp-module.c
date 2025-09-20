@@ -5075,6 +5075,23 @@ static int tx_isp_init(void)
     }
     pr_info("*** SUBDEVICE REGISTRY INITIALIZED - GRAPH CREATION SHOULD NOW SUCCEED ***\n");
 
+    /* *** CRITICAL FIX: Register individual subdev platform devices so their probe functions get called *** */
+    pr_info("*** REGISTERING INDIVIDUAL SUBDEV PLATFORM DEVICES FOR MEMORY MAPPING ***\n");
+    for (i = 0; i < 5; i++) {
+        ret = platform_device_register(subdev_platforms[i]);
+        if (ret != 0) {
+            pr_err("Failed to register subdev platform device %s: %d\n",
+                   subdev_platforms[i]->name, ret);
+            /* Cleanup previously registered devices */
+            while (--i >= 0) {
+                platform_device_unregister(subdev_platforms[i]);
+            }
+            goto err_cleanup_subdev_drivers;
+        }
+        pr_info("*** SUBDEV PLATFORM DEVICE %s REGISTERED - PROBE SHOULD BE CALLED ***\n",
+                subdev_platforms[i]->name);
+    }
+
     /* Step 2: Register platform device (matches reference) */
     ret = platform_device_register(&tx_isp_platform_device);
     if (ret != 0) {
