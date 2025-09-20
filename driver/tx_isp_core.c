@@ -792,13 +792,6 @@ exit_check:
     return result;
 }
 EXPORT_SYMBOL(ispcore_core_ops_ioctl);
-EXPORT_SYMBOL(ispcore_sensor_ops_ioctl);
-EXPORT_SYMBOL(subdev_sensor_ops_ioctl);
-EXPORT_SYMBOL(tx_isp_csi_slake_subdev);
-EXPORT_SYMBOL(tx_isp_vic_slake_subdev);
-EXPORT_SYMBOL(tx_isp_vin_slake_subdev);
-EXPORT_SYMBOL(fs_slake_module);
-EXPORT_SYMBOL(ispcore_slake_module);
 
 
 /* Core subdev operations structure - CRITICAL for proper initialization */
@@ -1656,9 +1649,6 @@ int subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *ar
         return -ENOTTY;
     }
 }
-
-
-EXPORT_SYMBOL(ispcore_slake_module);
 
 
 /* Global variables for tisp_init - Binary Ninja exact data structures */
