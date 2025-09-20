@@ -530,6 +530,9 @@ static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev);
 static struct vic_buffer_entry *pop_buffer_fifo(struct list_head *fifo_head);
 static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entry *buffer);
 
+/* CSI error checking function - called from VIC interrupt handler */
+extern void tx_isp_csi_check_errors(struct tx_isp_dev *isp_dev);
+
 /* Forward declarations for new subdevice management functions */
 extern int tx_isp_init_subdev_registry(struct tx_isp_dev *isp,
                                       struct platform_device **platform_devices,
@@ -2146,6 +2149,9 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             pr_warn("*** VIC INTERRUPT IGNORED: vic_start_ok=0, interrupts disabled (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
         }
     }
+
+    /* CRITICAL: Check CSI errors since CSI and VIC share IRQ 38 */
+    tx_isp_csi_check_errors(isp_dev);
 
     /* Binary Ninja: return 1 */
     return IRQ_HANDLED;
