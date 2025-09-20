@@ -3363,62 +3363,79 @@ int tx_isp_vic_remove(struct platform_device *pdev)
 /* Forward declarations for callback functions referenced in pipo */
 static int ispvic_frame_channel_clearbuf(void);
 
-/* ispvic_frame_channel_qbuf - FIXED: Handle event-based QBUF calls with pending buffer queue */
+/* ispvic_frame_channel_qbuf - EXACT Binary Ninja MCP implementation */
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 {
-    struct tx_isp_vic_device *vic_dev = NULL;
+    struct tx_isp_vic_device *s0 = NULL;
     unsigned long var_18 = 0;
-    uint32_t buffer_addr, buffer_index;
 
-    pr_info("*** ispvic_frame_channel_qbuf: SAFE VBM buffer queue - arg1=%p, arg2=%p ***\n", arg1, arg2);
-
-    /* SAFE: Use global ISP device reference instead of unsafe pointer arithmetic */
-    if (!ourISPdev || !ourISPdev->vic_dev) {
-        pr_info("ispvic_frame_channel_qbuf: qbuffer null - no ISP device\n");
-        return 0;
-    }
-
-    vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-    if (!vic_dev || !vic_dev->vic_regs) {
-        pr_info("ispvic_frame_channel_qbuf: qbuffer null - no VIC device\n");
-        return 0;
-    }
-    
-    /* Binary Ninja EXACT: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
-    __private_spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, &var_18);
-
-    /* CRITICAL: Program VIC buffer addresses using VBM buffers */
-    extern struct frame_channel_device frame_channels[];
-    extern int num_channels;
-
-    if (num_channels > 0) {
-        struct tx_isp_channel_state *state = &frame_channels[0].state;
-
-        /* CRITICAL: Use ISP DMA buffer addresses instead of VBM buffer addresses */
-        /* The OSD flicker suggests sensor data is captured but routed to wrong buffers */
+    /* Binary Ninja: void* $s0 = nullptr */
+    /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = *(arg1 + 0xd4) */
+    if (arg1 != 0 && (uintptr_t)arg1 < 0xfffff001) {
+        /* SAFE: Use global ISP device instead of unsafe offset access */
         extern struct tx_isp_dev *ourISPdev;
-        if (ourISPdev && ourISPdev->dma_addr && ourISPdev->dma_size > 0) {
-            /* Use ISP DMA buffer address - this is where VIC should write frame data */
-            u32 isp_dma_addr = (u32)ourISPdev->dma_addr;
-            u32 frame_size = 1920 * 1080 * 2;  /* RAW10 = 2 bytes per pixel */
+        if (ourISPdev && ourISPdev->vic_dev) {
+            s0 = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+        }
+    }
 
-            pr_info("*** ispvic_frame_channel_qbuf: Using ISP DMA buffer instead of VBM buffers ***\n");
-            pr_info("*** ISP DMA: addr=0x%x, size=%d, frame_size=%d ***\n",
-                    isp_dma_addr, ourISPdev->dma_size, frame_size);
+    if (!s0) {
+        return 0;
+    }
 
-            /* Program multiple VIC buffer addresses using ISP DMA buffer with offsets */
-            int i;
-            for (i = 0; i < 4 && i < 8; i++) {
-                /* Binary Ninja EXACT: *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2 */
-                u32 buffer_reg_offset = (i + 0xc6) << 2;
-                buffer_addr = isp_dma_addr + (i * frame_size);  /* Offset each buffer */
+    /* Binary Ninja: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
+    __private_spin_lock_irqsave(&s0->buffer_mgmt_lock, &var_18);
 
-                pr_info("*** ispvic_frame_channel_qbuf: ISP DMA VIC buffer[%d] reg[0x%x] = 0x%x ***\n",
-                        i, buffer_reg_offset, buffer_addr);
+    /* Binary Ninja: int32_t** $v0_2 = *($s0 + 0x1f8) */
+    /* Binary Ninja: *($s0 + 0x1f8) = arg2 */
+    /* Binary Ninja: *arg2 = $s0 + 0x1f4 */
+    /* Binary Ninja: arg2[1] = $v0_2 */
+    /* Binary Ninja: *$v0_2 = arg2 */
 
-                /* SAFE: Write to VIC register using proper I/O */
-                writel(buffer_addr, vic_dev->vic_regs + buffer_reg_offset);
-                wmb();
+    /* SAFE: Use proper list management instead of raw pointer manipulation */
+    if (arg2) {
+        list_add_tail((struct list_head *)arg2, &s0->queue_head);
+    }
+
+    /* Binary Ninja: if ($s0 + 0x1fc == *($s0 + 0x1fc)) */
+    if (list_empty(&s0->free_head)) {
+        /* Binary Ninja: isp_printf(0, "bank no free\n", $s0 + 0x1fc) */
+        pr_info("bank no free\n");
+        goto unlock_exit;
+    }
+    /* Binary Ninja: else if ($s0 + 0x1f4 == *($s0 + 0x1f4)) */
+    else if (list_empty(&s0->queue_head)) {
+        /* Binary Ninja: isp_printf(0, "qbuffer null\n", $s0 + 0x1fc) */
+        pr_info("qbuffer null\n");
+        goto unlock_exit;
+    }
+    else {
+        /* Binary Ninja: pop_buffer_fifo($s0 + 0x1f4) */
+        struct list_head *queue_entry = s0->queue_head.next;
+        struct list_head *free_entry = s0->free_head.next;
+
+        if (queue_entry && free_entry) {
+            /* Binary Ninja: int32_t $a1_2 = *($a3_1 + 8) */
+            /* Binary Ninja: int32_t $v1_1 = $v0_5[4] */
+            /* Binary Ninja: $v0_5[2] = $a1_2 */
+            /* Binary Ninja: *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2 */
+
+            /* SAFE: Extract buffer address from queue entry */
+            struct vic_buffer_entry *buffer = container_of(queue_entry, struct vic_buffer_entry, list);
+            u32 buffer_addr = buffer->buffer_addr;
+            u32 buffer_index = buffer->buffer_index;
+
+            /* Write buffer address to VIC register */
+            u32 buffer_reg_offset = (buffer_index + 0xc6) << 2;
+            writel(buffer_addr, s0->vic_regs + buffer_reg_offset);
+
+            /* Move from queue to done list */
+            list_del(queue_entry);
+            list_add_tail(queue_entry, &s0->done_head);
+
+            /* Binary Ninja: *($s0 + 0x218) += 1 */
+            s0->active_buffer_count += 1;
+        }
             }
 
             /* Update buffer count to match ISP DMA buffers */

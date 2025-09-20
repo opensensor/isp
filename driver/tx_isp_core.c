@@ -895,31 +895,6 @@ void system_reg_write(u32 reg, u32 val);
 void mbus_to_bayer_write(u32 config);
 void tisp_top_sel(void);
 
-/* EXACT Binary Ninja implementations with SAFE struct member access */
-int tx_isp_send_event_to_remote(void *target, u32 event, void *data)
-{
-    /* Binary Ninja: if (arg1 != 0) */
-    if (target != 0) {
-        /* Binary Ninja: void* $a0 = *(arg1 + 0xc) */
-        /* SAFE: Use proper struct member access instead of raw offset 0xc */
-        struct vic_event_callback *event_target = (struct vic_event_callback *)target;
-
-        /* The offset 0xc points to reserved[3] which contains the callback context */
-        void *callback_ctx = event_target->reserved[3];
-
-        if (callback_ctx != 0) {
-            /* Binary Ninja: int32_t $t9_1 = *($a0 + 0x1c) */
-            /* SAFE: Use proper struct member access for event handler at offset 0x1c */
-            if (event_target->event_handler != 0) {
-                /* Binary Ninja: jump($t9_1) - Call the callback function */
-                return event_target->event_handler(target, event, data);
-            }
-        }
-    }
-
-    /* Binary Ninja: return 0xfffffdfd */
-    return 0xfffffdfd;  /* -515 error code */
-}
 
 void mbus_to_bayer_write(u32 config)
 {
