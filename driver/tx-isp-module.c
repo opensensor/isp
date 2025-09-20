@@ -1867,14 +1867,14 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             return IRQ_HANDLED;
         }
 
-        /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
-        /* Binary Ninja: int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
-        v1_7 = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);
-        v1_10 = (~readl(vic_regs + 0x1ec)) & readl(vic_regs + 0x1e4);
+        /* Binary Ninja: Read and clear VIC interrupt status registers */
+        /* SAFE: Use proper register access with standard VIC interrupt register offsets */
+        v1_7 = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);   /* Main interrupt status */
+        v1_10 = (~readl(vic_regs + 0x1ec)) & readl(vic_regs + 0x1e4);  /* DMA interrupt status */
 
-        /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7; *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
-        writel(v1_7, vic_regs + 0x1f0);
-        writel(v1_10, vic_regs + 0x1f4);
+        /* Clear interrupt status by writing back the masked values */
+        writel(v1_7, vic_regs + 0x1f0);   /* Clear main interrupts */
+        writel(v1_10, vic_regs + 0x1f4);  /* Clear DMA interrupts */
         wmb();
 
         /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
