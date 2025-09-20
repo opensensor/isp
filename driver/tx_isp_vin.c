@@ -412,28 +412,38 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
             /* Binary Ninja: result = 0 */
             result = 0;
         } else {
-            /* Binary Ninja: int32_t $v0_2 = *($v0_1 + 4) */
+            /* SAFE: Access core ops with validation */
             struct tx_isp_subdev_core_ops *core_ops = (struct tx_isp_subdev_core_ops *)v0_1;
-            if (!core_ops->init) {
+
+            /* CRITICAL: Validate core ops and init function pointer */
+            if (!core_ops || !is_valid_kernel_pointer(core_ops)) {
+                mcp_log_error("tx_isp_vin_init: invalid core ops pointer", (u32)core_ops);
+                v0_2 = 0;
+            } else if (!core_ops->init || !is_valid_kernel_pointer(core_ops->init)) {
+                mcp_log_info("tx_isp_vin_init: no sensor init function available", 0);
                 v0_2 = 0;
             } else {
                 v0_2 = (int32_t)core_ops->init;
             }
-            
+
             /* Binary Ninja: if ($v0_2 == 0) */
             if (v0_2 == 0) {
                 /* Binary Ninja: result = 0 */
                 result = 0;
             } else {
-                /* Binary Ninja: result = $v0_2() */
+                /* SAFE: Call sensor init function with validation */
                 int (*init_func)(struct tx_isp_subdev *, int) = (int (*)(struct tx_isp_subdev *, int))v0_2;
+                struct tx_isp_sensor *sensor = (struct tx_isp_sensor *)a0;  /* Re-cast for safety */
+
+                mcp_log_info("tx_isp_vin_init: calling sensor init function", arg2);
                 result = init_func(&sensor->sd, arg2);
-                
+
                 /* Binary Ninja: if (result == 0xfffffdfd) */
                 if (result == 0xfffffdfd) {
                     /* Binary Ninja: result = 0 */
                     result = 0;
                 }
+                mcp_log_info("tx_isp_vin_init: sensor init returned", result);
             }
         }
     }
