@@ -1804,97 +1804,113 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
 #define SAFE_WRITE_OFFSET(ptr, offset, val) \
     do { if (ptr) writel((val), (ptr) + (offset)); } while(0)
 
-/* isp_vic_interrupt_service_routine - EXACT Binary Ninja reference with struct member access */
+/* isp_vic_interrupt_service_routine - EXACT Binary Ninja MCP with SAFE struct member access */
 irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
     struct tx_isp_vic_device *vic_dev;
     void __iomem *vic_regs;
     u32 v1_7, v1_10;
-    u32 addr_ctl, reg_val;
-    int timeout, i;
     extern uint32_t vic_start_ok;
-    extern struct frame_channel_device frame_channels[];
-    extern int num_channels;
 
-    /* NEUTERED INTERRUPT HANDLER - Minimal processing for debugging */
-    pr_info("*** VIC IRQ %d: NEUTERED - Just acknowledging interrupt ***\n", irq);
-
-    /* Basic validation only */
+    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
     if (dev_id == NULL || (unsigned long)dev_id >= 0xfffff001) {
-        pr_info("*** VIC IRQ: Invalid dev_id, returning ***\n");
         return IRQ_HANDLED;
     }
 
-    if (!isp_dev) {
-        pr_info("*** VIC IRQ: NULL isp_dev, returning ***\n");
-        return IRQ_HANDLED;
-    }
-
-    pr_info("*** VIC IRQ: dev_id=%p, isp_dev=%p - NEUTERED HANDLER ***\n", dev_id, isp_dev);
-
-    /* NEUTERED: Skip all complex processing, just try to get vic_regs safely */
+    /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
+    /* SAFE: Use proper struct member access instead of raw offset */
     vic_dev = isp_dev->vic_dev;
-    if (!vic_dev) {
-        pr_info("*** VIC IRQ: NULL vic_dev - NEUTERED handler returning ***\n");
+    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
         return IRQ_HANDLED;
     }
 
+    /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
+    /* SAFE: Use proper struct member access instead of raw offset */
     vic_regs = isp_dev->vic_regs;
     if (!vic_regs) {
-        pr_info("*** VIC IRQ: NULL vic_regs - NEUTERED handler returning ***\n");
         return IRQ_HANDLED;
     }
 
-    pr_info("*** VIC IRQ: vic_dev=%p, vic_regs=%p - NEUTERED processing ***\n", vic_dev, vic_regs);
+    /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
+    /* Binary Ninja: int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
+    v1_7 = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);
+    v1_10 = (~readl(vic_regs + 0x1ec)) & readl(vic_regs + 0x1e4);
 
-    /* NEUTERED: Just acknowledge the interrupt and return */
-    pr_info("*** VIC IRQ %d: NEUTERED - Just acknowledging interrupt ***\n", irq);
+    /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7 */
+    /* Binary Ninja: *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
+    writel(v1_7, vic_regs + 0x1f0);
+    writel(v1_10, vic_regs + 0x1f4);
 
-    /* Set safe defaults */
-    v1_7 = 0;
-    v1_10 = 0;
-
-    /* VERY CAREFUL: Try to read just one register if vic_regs looks valid */
-    if ((unsigned long)vic_regs >= 0x10000000 && (unsigned long)vic_regs < 0x20000000) {
-        pr_info("*** VIC IRQ: vic_regs %p looks valid, trying minimal register access ***\n", vic_regs);
-
-        /* Try reading interrupt status - this might be where it crashes */
-        v1_7 = readl(vic_regs + 0x1e0);  /* Just read enabled interrupts */
-        pr_info("*** VIC IRQ: Successfully read v1_7=0x%x ***\n", v1_7);
-
-        /* Try to clear interrupts */
-        writel(v1_7, vic_regs + 0x1f0);
-        wmb();
-        pr_info("*** VIC IRQ: Successfully cleared interrupts ***\n");
-    } else {
-        pr_info("*** VIC IRQ: vic_regs %p looks invalid, skipping register access ***\n", vic_regs);
-    }
-
-    /* NEUTERED: Skip all complex interrupt processing */
-    pr_info("*** VIC IRQ: NEUTERED - Skipping all complex processing ***\n");
-
-    /* NEUTERED: Skip vic_start_ok check and all complex processing */
+    /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
     if (vic_start_ok != 0) {
-        pr_info("*** VIC IRQ: vic_start_ok=1, but NEUTERED - minimal processing only ***\n");
+        /* Binary Ninja: Process various interrupt types */
 
-        /* NEUTERED: Just log the interrupt status, no complex processing */
-        if (v1_7 != 0) {
-            pr_info("*** VIC IRQ: NEUTERED - interrupt status v1_7=0x%x (would normally process) ***\n", v1_7);
+        /* Binary Ninja: if (($v1_7 & 1) != 0) */
+        if ((v1_7 & 1) != 0) {
+            /* Binary Ninja: *($s0 + 0x160) += 1 */
+            /* SAFE: Use proper struct member access instead of raw offset */
+            vic_dev->frame_count++;
+
+            /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
+            vic_framedone_irq_function(vic_dev);
         }
 
-        /* NEUTERED: Skip all error handling and DMA processing */
-        pr_info("*** VIC IRQ: NEUTERED - Skipping all error handling and DMA processing ***\n");
+        /* Binary Ninja: Process error interrupts */
+        if ((v1_7 & 0x200) != 0) {
+            /* Binary Ninja: data_b299c += 1 */
+            pr_info("VIC IRQ: Frame ASFIFO overflow error\n");
+        }
 
-    } else {
-        pr_info("*** VIC IRQ: vic_start_ok=0, NEUTERED - not processing ***\n");
+        if ((v1_7 & 0x400) != 0) {
+            /* Binary Ninja: vic_err += 1 */
+            pr_info("VIC IRQ: Horizontal error ch0 - reg 0x3a8 = 0x%08x\n",
+                    readl(vic_regs + 0x3a8));
+        }
+
+        /* Binary Ninja: Process additional error conditions */
+        if ((v1_7 & 0x200000) != 0) {
+            /* Binary Ninja: data_b2984 += 1 */
+            pr_info("VIC IRQ: Control limit error\n");
+        }
+
+        /* Binary Ninja: Process MDMA interrupts */
+        if ((v1_10 & 1) != 0) {
+            /* Binary Ninja: entry_$a2 = vic_mdma_irq_function($s0, 0) */
+            vic_mdma_irq_function(vic_dev, 0);
+        }
+
+        if ((v1_10 & 2) != 0) {
+            /* Binary Ninja: entry_$a2 = vic_mdma_irq_function($s0, 1) */
+            vic_mdma_irq_function(vic_dev, 1);
+        }
+
+        /* Binary Ninja: Error recovery section */
+        if ((v1_7 & 0xde00) != 0 && vic_start_ok == 1) {
+            pr_info("VIC IRQ: Error handler triggered\n");
+
+            /* Binary Ninja: **($s0 + 0xb8) = 4 */
+            /* SAFE: Use proper struct member access instead of raw offset */
+            writel(4, vic_regs + 0x0);
+
+            /* Binary Ninja: Wait for address control to clear */
+            u32 addr_ctl;
+            do {
+                addr_ctl = readl(vic_regs + 0x0);
+                pr_info("VIC IRQ: addr ctl is 0x%x\n", addr_ctl);
+            } while (addr_ctl != 0);
+
+            /* Binary Ninja: Restore register values */
+            u32 reg_val = readl(vic_regs + 0x104);
+            writel(reg_val, vic_regs + 0x104);
+
+            reg_val = readl(vic_regs + 0x108);
+            writel(reg_val, vic_regs + 0x108);
+
+            /* Binary Ninja: **($s0 + 0xb8) = 1 */
+            writel(1, vic_regs + 0x0);
+        }
     }
-
-    /* NEUTERED: Skip all recovery steps and frame channel wakeup */
-    pr_info("*** VIC IRQ: NEUTERED - Skipping recovery and frame channel processing ***\n");
-
-    /* CRITICAL: Check CSI errors since CSI and VIC share IRQ 38 */
-    tx_isp_csi_check_errors(isp_dev);
 
     /* Binary Ninja: return 1 */
     return IRQ_HANDLED;
