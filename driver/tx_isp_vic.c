@@ -164,12 +164,7 @@ static void mips_dma_cache_sync(dma_addr_t addr, size_t size, int direction)
 static char data_b0000_array[1] = {0};
 static void *data_b0000 = &data_b0000_array[0];  /* Return value for vic_framedone_irq_function */
 
-/* VIC buffer entry structure for safe list handling */
-struct vic_buffer_entry {
-    struct list_head list;
-    u32 reserved;
-    u32 buffer_addr;
-};
+/* REMOVED: Conflicting vic_buffer_entry definition - use shared header instead */
 
 /* Helper functions - removed conflicting declarations as they're already in SDK headers */
 /* __private_spin_lock_irqsave and private_spin_unlock_irqrestore are defined in txx-funcs.h */
@@ -3621,13 +3616,16 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
         
         /* SAFE: Initialize buffer structures using proper struct members */
         for (i = 0; i < 5; i++) {
+            struct vic_buffer_entry *buffer_entry;  /* C90 compliance: declare at top */
+            uint32_t reg_offset;  /* C90 compliance: declare at top */
+
             /* SAFE: Use proper buffer index array instead of unsafe pointer arithmetic */
             if (i < sizeof(vic_dev->buffer_index) / sizeof(vic_dev->buffer_index[0])) {
                 vic_dev->buffer_index[i] = i;
             }
-            
+
             /* SAFE: Create proper buffer entries and add to free list */
-            struct vic_buffer_entry *buffer_entry = VIC_BUFFER_ALLOC();
+            buffer_entry = VIC_BUFFER_ALLOC();
             if (buffer_entry) {
                 /* Initialize buffer data */
                 buffer_entry->buffer_addr = 0;  /* Buffer address */
@@ -3638,9 +3636,9 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
                 list_add_tail(&buffer_entry->list, &vic_dev->free_head);
                 pr_info("tx_isp_subdev_pipo: added buffer entry %d to free list (aligned struct)\n", i);
             }
-            
+
             /* SAFE: Clear VIC register using validated register access */
-            uint32_t reg_offset = (i + 0xc6) << 2;
+            reg_offset = (i + 0xc6) << 2;
             if (vic_dev->vic_regs && reg_offset < 0x1000) {
                 writel(0, vic_dev->vic_regs + reg_offset);
                 pr_info("tx_isp_subdev_pipo: cleared VIC register at offset 0x%x for buffer %d\n", reg_offset, i);
