@@ -1944,7 +1944,15 @@ int tisp_init(void *sensor_info, char *param_name)
         system_reg_write(0xa044, ae0_phys + 0x5000);
         system_reg_write(0xa048, ae0_phys + 0x5800);
         system_reg_write(0xa04c, 0x33);
+
+        /* CRITICAL FIX: Initialize data_b2f3c to point to AE0 buffer */
+        /* This prevents DMA operations from targeting kernel stack! */
+        data_b2f3c = (uint32_t)ae0_buffer;
         pr_info("*** tisp_init: AE0 buffer allocated at 0x%08x ***\n", (uint32_t)ae0_phys);
+        pr_info("*** CRITICAL FIX: data_b2f3c initialized to 0x%x (prevents stack corruption) ***\n", data_b2f3c);
+    } else {
+        pr_err("*** CRITICAL: Failed to allocate AE0 buffer - data_b2f3c remains 0! ***\n");
+        pr_err("*** AE0 interrupts will be disabled to prevent stack corruption ***\n");
     }
 
     /* SAFE: AE1 buffer allocation using proper size define */
