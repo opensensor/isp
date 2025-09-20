@@ -7256,94 +7256,16 @@ static void simulate_frame_completion(void)
     }
 }
 
-/* VIC frame generation work function - RACE CONDITION SAFE */
-static void vic_frame_work_function(struct work_struct *work)
-{
-    struct tx_isp_vic_device *vic_dev;
-    struct tx_isp_dev *isp_dev;
-
-    /* CRITICAL: Use mutex to prevent race conditions with cleanup */
-    if (!mutex_trylock(&frame_work_mutex)) {
-        pr_info("*** vic_frame_work_function: Mutex busy, skipping this cycle ***\n");
-        return;
-    }
-
-    /* CRITICAL: Check shutdown flag first */
-    if (frame_work_shutdown) {
-        pr_info("*** vic_frame_work_function: Shutdown flag set, stopping work queue ***\n");
-        mutex_unlock(&frame_work_mutex);
-        return;
-    }
-
-    /* CRITICAL: Take local reference to prevent use-after-free */
-    isp_dev = ourISPdev;
-    if (!isp_dev) {
-        pr_info("*** vic_frame_work_function: ourISPdev is NULL, stopping work queue ***\n");
-        mutex_unlock(&frame_work_mutex);
-        return;
-    }
-
-    vic_dev = isp_dev->vic_dev;
-    if (!vic_dev || !vic_dev->vic_regs) {
-        pr_info("*** vic_frame_work_function: VIC device invalid, stopping work queue ***\n");
-        mutex_unlock(&frame_work_mutex);
-        return;
-    }
-
-    // Simple frame generation without recursion
-    if (vic_dev->state == 2 && vic_dev->streaming) {
-        int i;
-
-        // Wake up waiting channels - SIMPLE APPROACH
-        for (i = 0; i < num_channels; i++) {
-            if (frame_channels[i].state.streaming) {
-                frame_channel_wakeup_waiters(&frame_channels[i]);
-            }
-        }
-
-        /* CRITICAL SAFETY: Only reschedule if system is still valid and stable */
-        if (!frame_work_shutdown && isp_dev == ourISPdev && isp_dev->vic_dev &&
-            vic_dev->streaming && !in_atomic()) {
-            /* CRITICAL: Increase delay to reduce system load and prevent crashes */
-            schedule_delayed_work(&vic_frame_work, msecs_to_jiffies(100)); /* Reduced from 33ms to 100ms */
-        } else {
-            pr_info("*** vic_frame_work_function: System state changed or atomic context, stopping work queue ***\n");
-        }
-    } else {
-        pr_info("*** vic_frame_work_function: VIC not streaming (state=%d, streaming=%d), stopping work queue ***\n",
-                vic_dev->state, vic_dev->streaming);
-    }
-
-    mutex_unlock(&frame_work_mutex);
-}
-
-/* Safe function to start frame worker when streaming begins */
-static void tx_isp_start_frame_worker(void)
-{
-    mutex_lock(&frame_work_mutex);
-
-    if (!frame_work_shutdown && ourISPdev && ourISPdev->vic_dev) {
-        struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
-        if (vic_dev->streaming && vic_dev->state == 2) {
-            pr_info("*** tx_isp_start_frame_worker: Starting frame worker for streaming ***\n");
-            schedule_delayed_work(&vic_frame_work, msecs_to_jiffies(100));
-        }
-    }
-
-    mutex_unlock(&frame_work_mutex);
-}
-
-/* Safe function to stop frame worker when streaming ends */
-static void tx_isp_stop_frame_worker(void)
-{
-    mutex_lock(&frame_work_mutex);
-
-    pr_info("*** tx_isp_stop_frame_worker: Stopping frame worker ***\n");
-    /* Cancel any pending work */
-    cancel_delayed_work(&vic_frame_work);
-
-    mutex_unlock(&frame_work_mutex);
-}
+/* REMOVED: VIC frame generation work functions - NOT in reference driver
+ *
+ * The reference driver is purely interrupt-driven and does NOT use continuous
+ * work queues for frame generation. Frame processing happens only when:
+ * 1. Hardware VIC interrupts fire (bit 0 = frame done)
+ * 2. vic_framedone_irq_function is called from interrupt handler
+ * 3. Frame sync work (ispcore_irq_fs_work) is triggered by frame sync interrupts
+ *
+ * The continuous polling approach was causing race conditions and memory corruption.
+ */
 
 
 
