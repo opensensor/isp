@@ -1652,9 +1652,9 @@ int ispcore_core_ops_init(struct tx_isp_dev *arg1, struct tx_isp_sensor_attribut
 
     pr_info("*** ispcore_core_ops_init: EXACT Binary Ninja MCP implementation ***");
 
-    /* CRITICAL: Initialize frame sync work structure - MUST be done before any interrupts */
-    INIT_WORK(&ispcore_fs_work, ispcore_irq_fs_work);
-    pr_info("*** ispcore_core_ops_init: Frame sync work structure initialized ***");
+    /* *** TEMPORARILY DISABLED: Work structure initialization to prevent timer crashes *** */
+    /* INIT_WORK(&ispcore_fs_work, ispcore_irq_fs_work); */
+    pr_info("*** ispcore_core_ops_init: Frame sync work structure DISABLED for debugging ***");
 
     /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) */
     if (arg1 != NULL && (unsigned long)arg1 < 0xfffff001) {
