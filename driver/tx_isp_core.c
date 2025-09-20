@@ -995,44 +995,27 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     }
 
     /* Binary Ninja: int32_t $s1 = *($v0 + 0xb4); *($v0 + 0xb8) = $s1 */
-    /* SAFE: Use proper ISP core register access - prefer direct mapping */
-    if (isp_dev->core_regs) {
-        isp_regs = isp_dev->core_regs;
-    } else {
-        /* Fallback to VIC-relative mapping */
-        isp_regs = vic_regs - 0x9a00;
-    }
-
-    /* Binary Ninja: Read interrupt status and clear it immediately */
     interrupt_status = readl(isp_regs + 0xb4);
     writel(interrupt_status, isp_regs + 0xb8);
-    wmb();
 
-    pr_info("*** ISP CORE INTERRUPT: status=0x%08x ***\n", interrupt_status);
+    /* CRITICAL FIX: Validate VIC registers before accessing offset 0x15c */
+    if (!vic_dev->vic_regs) {
+        pr_err("ispcore_interrupt_service_routine: VIC registers NULL, cannot process interrupt\n");
+        return IRQ_NONE;
+    }
 
     /* Binary Ninja: if (($s1 & 0x3f8) == 0) */
     if ((interrupt_status & 0x3f8) == 0) {
         /* Binary Ninja: $a0 = *($s0 + 0x15c) */
-        /* SAFE: Use proper struct member access instead of raw offset +0x15c */
-        error_check = readl(isp_regs + 0xc) & 0x40;
-        if (error_check == 0) {
-            /* Binary Ninja: tisp_lsc_write_lut_datas() - LSC LUT processing */
-            pr_info("ISP interrupt: LSC LUT processing\n");
-        }
+        error_check = readl(vic_dev->vic_regs + 0x15c);
     } else {
-        /* Binary Ninja: Error interrupt processing - EXACT reference behavior */
-        /* Binary Ninja: int32_t var_44_1 = *(*(arg1 + 0xb8) + 0x84c) */
-        u32 error_reg_84c = readl(vic_regs + 0x84c);
-        /* Binary Ninja: isp_printf(1, "ispcore: irq-status 0x%08x, err is 0x%x,0x%x,084c is 0x%x\n", $s1) */
+        /* Binary Ninja: Error interrupt processing */
+        u32 error_reg_84c = readl(isp_regs + 0x84c);
         pr_info("ispcore: irq-status 0x%08x, err is 0x%x,0x%x,084c is 0x%x\n",
                 interrupt_status, (interrupt_status & 0x3f8) >> 3,
                 interrupt_status & 0x7, error_reg_84c);
-
-        /* Binary Ninja: data_ca57c += 1 - increment error counter */
-        /* Error counter increment would be here */
-
         /* Binary Ninja: $a0 = *($s0 + 0x15c) */
-        error_check = readl(isp_regs + 0xc) & 0x40;
+        error_check = readl(vic_dev->vic_regs + 0x15c);
     }
 
     /* Binary Ninja: if ($a0 == 1) return 1 */
