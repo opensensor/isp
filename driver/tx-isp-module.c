@@ -4875,6 +4875,9 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     /* *($v0 + 0x80) = $v0_5 - Store device count at offset 0x80 */
     isp_dev->subdev_count = pdata->device_id;
 
+    /* Store platform device pointer for graph creation */
+    isp_dev->pdev = pdev;
+
     /* Set global device pointer */
     ourISPdev = isp_dev;
 
