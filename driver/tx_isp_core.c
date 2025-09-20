@@ -1075,16 +1075,12 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         /* The key is to let the interrupt return IRQ_HANDLED to prevent interrupt storms */
         pr_info("*** ISP CORE: Frame sync interrupt - attempting to queue work ***\n");
 
-        /* REFERENCE DRIVER: Use private_schedule_work like reference driver */
-        /* Binary Ninja: private_schedule_work calls queue_work_on for CPU-specific scheduling */
-        pr_info("*** ISP CORE: Scheduling frame sync work ***\n");
+        /* TEMPORARY: Disable work scheduling to isolate crash cause */
+        pr_info("*** ISP CORE: Frame sync interrupt acknowledged (work scheduling disabled for debugging) ***\n");
 
-        /* CRITICAL: Actually schedule the work - this was missing! */
-        if (!schedule_work(&ispcore_fs_work)) {
-            pr_info("*** ISP CORE: Frame sync work already queued ***\n");
-        } else {
-            pr_info("*** ISP CORE: Frame sync work scheduled successfully ***\n");
-        }
+        /* DEBUGGING: Skip work scheduling to see if this stops the crash */
+        /* The crash at offset 0xc8 might be in the work structure itself */
+        /* Once we confirm work scheduling is the issue, we can fix the work function properly */
 
         /* Binary Ninja: Frame timing measurement */
         /* Complex timing measurement code would be here */
