@@ -977,15 +977,14 @@ irqreturn_t ip_done_interrupt_static(int irq, void *dev_id)
     return IRQ_HANDLED; /* Convert to standard Linux return value */
 }
 
-/* ispcore_interrupt_service_routine - EXACT Binary Ninja implementation */
+/* ispcore_interrupt_service_routine - EXACT Binary Ninja MCP implementation */
 irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
-    struct tx_isp_vic_device *vic_dev;
-    void __iomem *isp_regs;
-    u32 interrupt_status;
-    u32 error_check;
-    int i;
+    void __iomem *v0;
+    struct tx_isp_vic_device *s0;
+    u32 s1;
+    u32 a0;
     int result = IRQ_HANDLED;
 
     /* CRITICAL: Validate dev_id is actually an ISP device structure */
