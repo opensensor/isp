@@ -513,6 +513,8 @@ int isp_day_night_switch_drop_frame_num;
 module_param(isp_day_night_switch_drop_frame_num, int, S_IRUGO);
 MODULE_PARM_DESC(isp_day_night_switch_drop_frame_num, "isp day night switch drop frame number");
 
+int isp_day_night_switch_drop_frame_cnt = 0;  /* Current frame drop counter */
+
 int isp_memopt;
 module_param(isp_memopt, int, S_IRUGO);
 MODULE_PARM_DESC(isp_memopt, "isp memory optimize");
