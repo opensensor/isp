@@ -4769,6 +4769,16 @@ static int tx_isp_init(void)
         return ret;
     }
 
+    /* CRITICAL: Register subdevice platform drivers so their probe functions get called */
+    extern int tx_isp_subdev_platform_init(void);
+    ret = tx_isp_subdev_platform_init();
+    if (ret != 0) {
+        pr_err("Failed to register subdevice platform drivers: %d\n", ret);
+        platform_driver_unregister(&tx_isp_driver);
+        platform_device_unregister(&tx_isp_platform_device);
+        return ret;
+    }
+
     pr_info("TX ISP driver initialized successfully - probe will handle complex initialization\n");
     return 0;
 }
