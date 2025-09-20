@@ -1962,8 +1962,8 @@ int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, d
         return -ENOMEM;
     }
     
-    /* Clear the allocated memory */
-    memset(virt, 0, size);
+    /* TEMPORARY: Skip memset to prevent potential buffer overflow */
+    pr_info("*** DEBUGGING: memset disabled to prevent potential buffer overflow ***\n");
     
     /* Get physical address for DMA operations */
     phys = virt_to_phys(virt);
