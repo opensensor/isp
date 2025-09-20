@@ -296,8 +296,14 @@ setup_complete:
     /* Binary Ninja: dump_fsd = $v0 */
     dump_fsd = fs_dev;
 
-    /* REMOVED: Manual linking - now handled automatically by tx_isp_subdev_init */
-    pr_info("*** FS PROBE: Device linking handled automatically by tx_isp_subdev_init ***\n");
+    /* *** CRITICAL FIX: LINK FS DEVICE TO ISP DEVICE LIKE OTHER COMPONENTS *** */
+    if (ourISPdev) {
+        pr_info("*** CRITICAL: LINKING FS DEVICE TO ISP DEVICE ***\n");
+        ourISPdev->fs_dev = (struct frame_source_device *)fs_dev;
+        pr_info("*** FS DEVICE LINKED: ourISPdev->fs_dev = %p ***\n", ourISPdev->fs_dev);
+    } else {
+        pr_err("*** ERROR: ourISPdev not available for FS device linking ***\n");
+    }
 
     return 0;
 }
