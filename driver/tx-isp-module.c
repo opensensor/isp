@@ -1847,65 +1847,6 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     }
 
     return IRQ_HANDLED;
-
-        /* Binary Ninja: Process error interrupts */
-        if ((v1_7 & 0x200) != 0) {
-            /* Binary Ninja: data_b299c += 1 */
-            pr_info("VIC IRQ: Frame ASFIFO overflow error\n");
-        }
-
-        if ((v1_7 & 0x400) != 0) {
-            /* Binary Ninja: vic_err += 1 */
-            pr_info("VIC IRQ: Horizontal error ch0 - reg 0x3a8 = 0x%08x\n",
-                    readl(vic_regs + 0x3a8));
-        }
-
-        /* Binary Ninja: Process additional error conditions */
-        if ((v1_7 & 0x200000) != 0) {
-            /* Binary Ninja: data_b2984 += 1 */
-            pr_info("VIC IRQ: Control limit error\n");
-        }
-
-        /* Binary Ninja: Process MDMA interrupts */
-        if ((v1_10 & 1) != 0) {
-            /* Binary Ninja: entry_$a2 = vic_mdma_irq_function($s0, 0) */
-            vic_mdma_irq_function(vic_dev, 0);
-        }
-
-        if ((v1_10 & 2) != 0) {
-            /* Binary Ninja: entry_$a2 = vic_mdma_irq_function($s0, 1) */
-            vic_mdma_irq_function(vic_dev, 1);
-        }
-
-        /* Binary Ninja: Error recovery section */
-        if ((v1_7 & 0xde00) != 0 && vic_start_ok == 1) {
-            pr_info("VIC IRQ: Error handler triggered\n");
-
-            /* Binary Ninja: **($s0 + 0xb8) = 4 */
-            /* SAFE: Use proper struct member access instead of raw offset */
-            writel(4, vic_regs + 0x0);
-
-            /* Binary Ninja: Wait for address control to clear */
-            u32 addr_ctl;
-            do {
-                addr_ctl = readl(vic_regs + 0x0);
-                pr_info("VIC IRQ: addr ctl is 0x%x\n", addr_ctl);
-            } while (addr_ctl != 0);
-
-            /* Binary Ninja: Restore register values */
-            u32 reg_val = readl(vic_regs + 0x104);
-            writel(reg_val, vic_regs + 0x104);
-
-            reg_val = readl(vic_regs + 0x108);
-            writel(reg_val, vic_regs + 0x108);
-
-            /* Binary Ninja: **($s0 + 0xb8) = 1 */
-            writel(1, vic_regs + 0x0);
-        }
-    }
-
-    /* Binary Ninja: return 1 */
-    return IRQ_HANDLED;
 }
 
 static int tx_isp_video_link_destroy_impl(struct tx_isp_dev *isp_dev)
