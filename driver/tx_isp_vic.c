@@ -3424,11 +3424,13 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
             /* Update buffer count to match ISP DMA buffers */
             vic_dev->active_buffer_count = 4;
 
-            /* TEMPORARY: Disable DMA buffer configuration to prevent memory corruption */
-            pr_info("*** DEBUGGING: DMA buffer configuration disabled to isolate corruption ***\n");
+            /* Create ISP DMA buffer address array */
+            static dma_addr_t isp_dma_buffers[4];
+            for (int j = 0; j < 4; j++) {
+                isp_dma_buffers[j] = isp_dma_addr + (j * frame_size);
+            }
 
-            /* The overlapping buffer addresses were likely causing DMA to write to wrong memory */
-            /* This could explain the severe kernel memory corruption we're seeing */
+            /* Set VIC device buffer addresses to ISP DMA buffers */
             vic_dev->buffer_addresses = isp_dma_buffers;
             vic_dev->buffer_address_count = 4;
             pr_info("*** ispvic_frame_channel_qbuf: Set vic_dev->buffer_addresses for ISP DMA ***\n");
