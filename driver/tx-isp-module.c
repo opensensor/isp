@@ -1729,69 +1729,42 @@ void tx_isp_disable_irq(struct tx_isp_dev *isp_dev)
     pr_info("*** tx_isp_disable_irq: Kernel IRQ %d DISABLED ***\n", isp_dev->isp_irq);
 }
 
-/* tx_isp_request_irq - EXACT Binary Ninja implementation */
+/* tx_isp_request_irq - DISABLED to prevent double IRQ registration */
 static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *isp_dev)
 {
     int irq_num;
-    int ret;
-    
-    /* Binary Ninja: if (arg1 == 0 || arg2 == 0) */
+
+    /* CRITICAL FIX: This function was causing double IRQ registration */
+    /* The main dispatcher in tx_isp_init() already registers IRQs 37 and 38 */
+    /* This function was being called from subdev initialization and registering the same IRQs again */
+
     if (!pdev || !isp_dev) {
-        /* Binary Ninja: isp_printf(2, &$LC0, "tx_isp_request_irq") */
         pr_err("tx_isp_request_irq: Invalid parameters\n");
-        /* Binary Ninja: return 0xffffffea */
-        return 0xffffffea;
+        return -EINVAL;
     }
-    
-    pr_info("*** tx_isp_request_irq: EXACT Binary Ninja implementation ***\n");
-    
-    /* Binary Ninja: int32_t $v0_1 = private_platform_get_irq(arg1, 0) */
+
     irq_num = platform_get_irq(pdev, 0);
-    
-    /* Binary Ninja: if ($v0_1 s>= 0) */
+
     if (irq_num >= 0) {
-        pr_info("*** Platform IRQ found: %d ***\n", irq_num);
-        
-        /* CRITICAL FIX: Store IRQ number FIRST before any operations that might fail */
-        isp_dev->isp_irq = irq_num;  /* Store IRQ number immediately */
-        
-        /* Binary Ninja: private_spin_lock_init(arg2) */
+        pr_info("*** tx_isp_request_irq: IRQ %d found but NOT registering (main dispatcher handles this) ***\n", irq_num);
+
+        /* Just store the IRQ number but don't register it */
+        isp_dev->isp_irq = irq_num;
+
+        /* Initialize the lock */
         spin_lock_init(&isp_dev->lock);
-        
-        /* Binary Ninja: if (private_request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, IRQF_SHARED, *arg1, arg2) != 0) */
-        ret = request_threaded_irq(irq_num, 
-                                  isp_irq_handle,          /* Binary Ninja: isp_irq_handle */
-                                  isp_irq_thread_handle,   /* Binary Ninja: isp_irq_thread_handle */
-                                  IRQF_SHARED,             /* FIXED: Use only IRQF_SHARED to match existing IRQ registration */
-                                  dev_name(&pdev->dev),    /* Binary Ninja: *arg1 */
-                                  isp_dev);                /* Binary Ninja: arg2 */
-        
-        if (ret != 0) {
-            /* Binary Ninja: int32_t var_18_2 = $v0_1; isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", "tx_isp_request_irq") */
-            pr_err("*** tx_isp_request_irq: flags = 0x%08x, irq = %d, ret = 0x%08x ***\n",
-                   IRQF_SHARED | IRQF_ONESHOT, irq_num, ret);
-            /* Binary Ninja: *arg2 = 0 */
-            /* Binary Ninja: return 0xfffffffc */
-            return 0xfffffffc;
-        }
-        
-        /* Binary Ninja: arg2[1] = tx_isp_enable_irq; *arg2 = $v0_1; arg2[2] = tx_isp_disable_irq */
-        isp_dev->irq_enable_func = tx_isp_enable_irq;   /* arg2[1] = tx_isp_enable_irq */
-        /* isp_dev->isp_irq already set above */         /* *arg2 = $v0_1 */
-        isp_dev->irq_disable_func = tx_isp_disable_irq; /* arg2[2] = tx_isp_disable_irq */
-        
-        /* Binary Ninja: tx_isp_disable_irq(arg2) */
-        //tx_isp_disable_irq(isp_dev);
-        
-        pr_info("*** tx_isp_request_irq: IRQ %d registered and stored in isp_dev->isp_irq ***\n", irq_num);
-        
+
+        /* Set up function pointers */
+        isp_dev->irq_enable_func = tx_isp_enable_irq;
+        isp_dev->irq_disable_func = tx_isp_disable_irq;
+
+        pr_info("*** tx_isp_request_irq: IRQ %d stored but registration handled by main dispatcher ***\n", irq_num);
+
     } else {
-        /* Binary Ninja: *arg2 = 0 */
         isp_dev->isp_irq = 0;
         pr_err("*** tx_isp_request_irq: Platform IRQ not available (ret=%d) ***\n", irq_num);
     }
-    
-    /* Binary Ninja: return 0 */
+
     return 0;
 }
 
