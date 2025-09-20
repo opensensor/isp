@@ -508,9 +508,6 @@ struct platform_device tx_isp_core_platform_device = {
     },
 };
 
-/* Binary Ninja EXACT: Interrupt callback function array */
-static void *irq_func_cb[32] = {0};  /* 32 interrupt callback slots as per reference driver */
-
 /* Forward declaration for VIC event handler */
 
 /* Forward declarations - Using actual function names from reference driver */
