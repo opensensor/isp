@@ -1849,23 +1849,23 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     }
 
     /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
-    /* Note: In the reference driver, $s0 is the VIC device, which is now our vic_dev parameter */
     if (vic_dev != NULL && (unsigned long)vic_dev < 0xfffff001) {
+        /* SAFE: Use VIC registers from ISP device structure */
+        /* Binary Ninja accesses VIC registers from both ISP device and VIC device */
+        /* We'll use the ISP device's vic_regs as the primary source */
+        vic_regs = isp_dev->vic_regs;
+
         /* CRITICAL SAFETY: Validate vic_regs before accessing */
-        if (!vic_dev->vic_regs) {
-            pr_err("*** VIC IRQ: NULL vic_regs ***\n");
+        if (!vic_regs) {
+            pr_err("*** VIC IRQ: NULL vic_regs from ISP device ***\n");
             return IRQ_HANDLED;
         }
 
         /* MIPS SAFETY: Check vic_regs pointer alignment */
-        if ((unsigned long)vic_dev->vic_regs & 0x3) {
-            pr_err("*** VIC IRQ: MISALIGNED vic_regs pointer 0x%p ***\n", vic_dev->vic_regs);
+        if ((unsigned long)vic_regs & 0x3) {
+            pr_err("*** VIC IRQ: MISALIGNED vic_regs pointer 0x%p ***\n", vic_regs);
             return IRQ_HANDLED;
         }
-
-        /* Binary Ninja: void* $v0_4 = *($s0 + 0xb8) */
-        /* SAFE: Use proper struct member access instead of raw offset +0xb8 */
-        vic_regs = vic_dev->vic_regs;
 
         /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
         /* Binary Ninja: int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
