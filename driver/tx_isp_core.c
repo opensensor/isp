@@ -1860,6 +1860,10 @@ int ispcore_core_ops_init(struct tx_isp_dev *arg1, struct tx_isp_sensor_attribut
                     vic_dev->state = 2;
                 }
 
+                /* CRITICAL: Cancel any pending frame sync work before deinit */
+                pr_info("ispcore_core_ops_init: Canceling frame sync work during deinit");
+                cancel_work_sync(&ispcore_fs_work);
+
                 /* Binary Ninja: tisp_deinit() */
                 tisp_deinit();
 
@@ -3415,6 +3419,11 @@ int tx_isp_core_remove(struct platform_device *pdev)
 
     /* Reset tisp initialization flag for clean restart */
     tisp_reset_initialization_flag();
+
+    /* CRITICAL: Cancel any pending frame sync work to prevent use-after-free */
+    pr_info("*** tx_isp_core_remove: Canceling frame sync work ***\n");
+    cancel_work_sync(&ispcore_fs_work);
+    pr_info("*** tx_isp_core_remove: Frame sync work canceled successfully ***\n");
 
     if (core_dev) {
         isp_core_tuning_deinit(core_dev);
