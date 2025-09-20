@@ -19,6 +19,12 @@ int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_num);
 int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq_info);
 void tx_isp_free_irq(struct tx_isp_irq_info *irq_info);
 
+/* Binary Ninja interrupt handlers - EXACT reference implementation */
+irqreturn_t isp_irq_handle(int irq, void *dev_id);
+irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
+void tx_isp_enable_irq(struct tx_isp_irq_info *irq_info);
+void tx_isp_disable_irq(struct tx_isp_irq_info *irq_info);
+
 /* Export the missing tx_isp_* functions */
 EXPORT_SYMBOL(tx_isp_module_init);
 EXPORT_SYMBOL(tx_isp_module_deinit);
