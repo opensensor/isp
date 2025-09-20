@@ -29,6 +29,7 @@ extern uint32_t vic_start_ok;  /* Global VIC interrupt enable flag declaration *
 /* VIC Functions */
 int tx_isp_vic_probe(struct platform_device *pdev);
 int tx_isp_vic_remove(struct platform_device *pdev);
+int tx_isp_vic_register_interrupt(struct tx_isp_vic_device *vic_dev, struct platform_device *pdev);
 
 /* VIC interrupt enable/disable functions (matching reference driver names) */
 void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev);

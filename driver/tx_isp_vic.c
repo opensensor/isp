@@ -3133,33 +3133,53 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Binary Ninja: test_addr = $v0 + 0x80 */
     test_addr = (char *)vic_dev + 0x80;  /* Test address pointer */
 
-    /* CRITICAL: Register VIC interrupt handler for IRQ 38 */
-    {
-        int vic_irq = platform_get_irq(pdev, 0);
-        if (vic_irq > 0) {
-            /* CRITICAL FIX: Based on Binary Ninja analysis, pass VIC device directly as dev_id */
-            /* The reference driver expects the VIC device structure directly, not ISP device */
-            pr_info("*** VIC PROBE: Registering interrupt with VIC device as dev_id = %p ***\n", vic_dev);
-
-            ret = request_irq(vic_irq, isp_vic_interrupt_service_routine,
-                             IRQF_SHARED, "isp-w02-vic", vic_dev);
-            if (ret == 0) {
-                vic_dev->irq_number = vic_irq;
-                vic_dev->irq = vic_irq;
-                pr_info("*** VIC PROBE: VIC interrupt handler registered for IRQ %d with VIC device %p ***\n", vic_irq, vic_dev);
-                pr_info("*** VIC PROBE: Interrupt will call handler with dev_id = %p ***\n", vic_dev);
-            } else {
-                pr_err("*** VIC PROBE: Failed to register VIC interrupt handler for IRQ %d: %d ***\n", vic_irq, ret);
-            }
-        } else {
-            pr_err("*** VIC PROBE: Failed to get VIC IRQ number: %d ***\n", vic_irq);
-        }
-    }
+    /* INTERRUPT REGISTRATION MOVED TO SEPARATE FUNCTION - called after full initialization */
+    pr_info("*** VIC PROBE: Interrupt registration deferred to tx_isp_vic_register_interrupt() ***\n");
 
     /* REMOVED: Manual linking - now handled automatically by tx_isp_subdev_init */
     pr_info("*** VIC PROBE: Device linking handled automatically by tx_isp_subdev_init ***\n");
 
     return 0;
+}
+
+/* VIC interrupt registration function - called after full initialization */
+int tx_isp_vic_register_interrupt(struct tx_isp_vic_device *vic_dev, struct platform_device *pdev)
+{
+    int ret = 0;
+    int vic_irq;
+
+    if (!vic_dev || !pdev) {
+        pr_err("*** VIC IRQ REGISTER: Invalid parameters ***\n");
+        return -EINVAL;
+    }
+
+    vic_irq = platform_get_irq(pdev, 0);
+    if (vic_irq > 0) {
+        /* CRITICAL FIX: Based on Binary Ninja analysis, pass VIC device directly as dev_id */
+        /* The reference driver expects the VIC device structure directly, not ISP device */
+        pr_info("*** VIC IRQ REGISTER: Registering interrupt AFTER full initialization with VIC device as dev_id = %p ***\n", vic_dev);
+
+        /* CRITICAL: Disable the IRQ first to prevent premature interrupts during registration */
+        disable_irq(vic_irq);
+
+        ret = request_irq(vic_irq, isp_vic_interrupt_service_routine,
+                         IRQF_SHARED, "isp-w02-vic", vic_dev);
+        if (ret == 0) {
+            vic_dev->irq_number = vic_irq;
+            vic_dev->irq = vic_irq;
+            vic_dev->irq_enabled = 0;  /* Mark as disabled initially */
+            pr_info("*** VIC IRQ REGISTER: VIC interrupt handler registered for IRQ %d with VIC device %p (DISABLED) ***\n", vic_irq, vic_dev);
+            pr_info("*** VIC IRQ REGISTER: Interrupt will call handler with dev_id = %p ***\n", vic_dev);
+            pr_info("*** VIC IRQ REGISTER: IRQ will be enabled later during streaming start ***\n");
+        } else {
+            pr_err("*** VIC IRQ REGISTER: Failed to register VIC interrupt handler for IRQ %d: %d ***\n", vic_irq, ret);
+        }
+    } else {
+        pr_err("*** VIC IRQ REGISTER: Failed to get VIC IRQ number: %d ***\n", vic_irq);
+        ret = -ENODEV;
+    }
+
+    return ret;
 }
 
 /* VIC remove function */

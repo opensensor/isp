@@ -417,6 +417,15 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         ourISPdev->vic_dev = vic_dev;
         sd->isp = ourISPdev;
         pr_info("*** tx_isp_subdev_init: VIC device linked to main ISP device ***\n");
+
+        /* CRITICAL: Now that VIC device is fully linked, register the interrupt handler */
+        extern int tx_isp_vic_register_interrupt(struct tx_isp_vic_device *vic_dev, struct platform_device *pdev);
+        int irq_ret = tx_isp_vic_register_interrupt(vic_dev, pdev);
+        if (irq_ret == 0) {
+            pr_info("*** tx_isp_subdev_init: VIC interrupt handler registered successfully ***\n");
+        } else {
+            pr_err("*** tx_isp_subdev_init: Failed to register VIC interrupt handler: %d ***\n", irq_ret);
+        }
     }
 
     /* Binary Ninja: if (tx_isp_module_init(arg1, arg2) != 0) */
