@@ -2139,10 +2139,15 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
                 wmb();
             }
 
-            /* Wake up frame channels for all interrupt types */
-            for (i = 0; i < num_channels; i++) {
-                if (frame_channels[i].state.streaming) {
+            /* Wake up frame channels for all interrupt types - WITH VALIDATION */
+            for (i = 0; i < num_channels && i < 4; i++) {
+                /* CRITICAL: Validate frame channel before accessing */
+                if (frame_channels[i].magic == FRAME_CHANNEL_MAGIC &&
+                    frame_channels[i].state.streaming) {
                     frame_channel_wakeup_waiters(&frame_channels[i]);
+                } else if (frame_channels[i].magic != FRAME_CHANNEL_MAGIC) {
+                    pr_err("*** VIC IRQ: Corrupted frame channel %d (magic=0x%x) - skipping ***\n",
+                           i, frame_channels[i].magic);
                 }
             }
         } else {
@@ -3946,6 +3951,9 @@ static int create_frame_channel_devices(void)
 
         // Initialize channel state
         memset(&frame_channels[i].state, 0, sizeof(frame_channels[i].state));
+
+        /* CRITICAL: Initialize magic number for corruption detection */
+        frame_channels[i].magic = FRAME_CHANNEL_MAGIC;
 
         /* Initialize VBM buffer management fields */
         frame_channels[i].state.vbm_buffer_addresses = NULL;
@@ -7174,13 +7182,39 @@ static void frame_channel_wakeup_waiters(struct frame_channel_device *fcd)
 {
     unsigned long flags;
 
+    /* CRITICAL: Comprehensive validation to prevent BadVA crashes */
     if (!fcd) {
         return;
     }
 
-    pr_info("Channel %d: Waking up frame waiters\n", fcd->channel_num);
+    /* CRITICAL: Check if fcd is in valid kernel memory range */
+    if ((unsigned long)fcd < 0x80000000 || (unsigned long)fcd >= 0xfffff000) {
+        pr_err("*** frame_channel_wakeup_waiters: Invalid fcd pointer 0x%p (outside kernel memory) ***\n", fcd);
+        return;
+    }
 
-    /* Mark frame as ready and wake up waiters */
+    /* CRITICAL: Validate fcd points to valid memory */
+    if (!virt_addr_valid(fcd)) {
+        pr_err("*** frame_channel_wakeup_waiters: fcd 0x%p points to invalid memory ***\n", fcd);
+        return;
+    }
+
+    /* CRITICAL: Check magic number to detect structure corruption */
+    if (fcd->magic != FRAME_CHANNEL_MAGIC) {
+        pr_err("*** frame_channel_wakeup_waiters: CORRUPTED STRUCTURE - magic=0x%x, expected=0x%x ***\n",
+               fcd->magic, FRAME_CHANNEL_MAGIC);
+        return;
+    }
+
+    /* CRITICAL: Validate channel number is in valid range */
+    if (fcd->channel_num < 0 || fcd->channel_num >= 4) {
+        pr_err("*** frame_channel_wakeup_waiters: Invalid channel_num %d ***\n", fcd->channel_num);
+        return;
+    }
+
+    pr_info("Channel %d: Waking up frame waiters (VALIDATED)\n", fcd->channel_num);
+
+    /* CRITICAL: Use safe spinlock access */
     spin_lock_irqsave(&fcd->state.buffer_lock, flags);
     fcd->state.frame_ready = true;
     spin_unlock_irqrestore(&fcd->state.buffer_lock, flags);
@@ -7188,7 +7222,7 @@ static void frame_channel_wakeup_waiters(struct frame_channel_device *fcd)
     /* Wake up any threads waiting for frame completion */
     wake_up_interruptible(&fcd->state.frame_wait);
 
-    pr_info("Channel %d: Frame ready\n", fcd->channel_num);
+    pr_info("Channel %d: Frame ready (SAFE)\n", fcd->channel_num);
 }
 
 /* Public function to wake up all streaming frame channels - for tuning system */
@@ -7268,10 +7302,15 @@ static void vic_frame_work_function(struct work_struct *work)
     if (vic_dev->state == 2 && vic_dev->streaming) {
         int i;
 
-        // Wake up waiting channels
-        for (i = 0; i < num_channels; i++) {
-            if (frame_channels[i].state.streaming) {
+        // Wake up waiting channels - WITH VALIDATION
+        for (i = 0; i < num_channels && i < 4; i++) {
+            /* CRITICAL: Validate frame channel before accessing */
+            if (frame_channels[i].magic == FRAME_CHANNEL_MAGIC &&
+                frame_channels[i].state.streaming) {
                 frame_channel_wakeup_waiters(&frame_channels[i]);
+            } else if (frame_channels[i].magic != FRAME_CHANNEL_MAGIC) {
+                pr_err("*** vic_frame_work: Corrupted frame channel %d (magic=0x%x) - skipping ***\n",
+                       i, frame_channels[i].magic);
             }
         }
 
