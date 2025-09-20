@@ -880,14 +880,23 @@ static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
     return (result == -ENOIOCTLCMD) ? 0 : result;
 }
 
-/* Frame sync work function - EXACT Binary Ninja reference implementation */
+/* Frame sync work function - RACE CONDITION SAFE Binary Ninja reference implementation */
 static void ispcore_irq_fs_work(struct work_struct *work)
 {
     extern struct tx_isp_dev *ourISPdev;
-    struct tx_isp_dev *isp_dev = ourISPdev;
+    extern volatile bool isp_system_shutting_down;
+    struct tx_isp_dev *isp_dev;
 
-    /* Binary Ninja: void* $s5 = *(mdns_y_pspa_cur_bi_wei0_array + 0xd4) */
+    /* CRITICAL: Check shutdown flag first to prevent use-after-free */
+    if (isp_system_shutting_down) {
+        pr_info("*** ispcore_irq_fs_work: System shutting down, skipping work ***\n");
+        return;
+    }
+
+    /* CRITICAL: Take local reference to prevent race condition */
+    isp_dev = ourISPdev;
     if (!isp_dev) {
+        pr_info("*** ispcore_irq_fs_work: ourISPdev is NULL, skipping work ***\n");
         return;
     }
 
@@ -899,6 +908,8 @@ static void ispcore_irq_fs_work(struct work_struct *work)
 
     /* CRITICAL: Reference driver behavior - minimal work, no continuous operations */
     /* The reference driver's frame sync work is very lightweight */
+
+    pr_info("*** ispcore_irq_fs_work: Frame sync work completed safely ***\n");
 }
 
 /* Forward declarations for frame channel functions - avoid naming conflicts */

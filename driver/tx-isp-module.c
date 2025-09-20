@@ -5638,6 +5638,14 @@ static void tx_isp_exit(void)
             pr_info("Hardware interrupt %d freed\n", ourISPdev->isp_irq2);
         }
 
+        /* CRITICAL: Cancel frame sync work before freeing memory */
+        extern struct workqueue_struct *fs_workqueue;
+        extern struct work_struct fs_work;
+        if (fs_workqueue) {
+            cancel_work_sync(&fs_work);
+            pr_info("*** Frame sync work cancelled ***\n");
+        }
+
         /* CRITICAL: Ensure all interrupts are completely finished before freeing memory */
         synchronize_irq(37);
         synchronize_irq(38);
