@@ -3076,6 +3076,19 @@ int tx_isp_core_probe(struct platform_device *pdev)
     /* Binary Ninja: if (tx_isp_subdev_init(arg1, $v0, &core_subdev_ops) == 0) */
     if (tx_isp_subdev_init(pdev, (struct tx_isp_subdev *)isp_dev, &core_subdev_ops) == 0) {
 
+        /* CRITICAL FIX: Register Core ISP as subdev in the main device's subdevs array */
+        if (ourISPdev && ourISPdev != isp_dev) {
+            /* This is a separate Core ISP device - register it as subdev 4 */
+            ourISPdev->subdevs[4] = (struct tx_isp_subdev *)isp_dev;
+            ((struct tx_isp_subdev *)isp_dev)->isp = ourISPdev;
+            pr_info("*** tx_isp_core_probe: Core ISP registered as subdev 4 in main device ***\n");
+        } else if (ourISPdev == isp_dev) {
+            /* This IS the main device - register its subdev structure as subdev 4 */
+            ourISPdev->subdevs[4] = &isp_dev->sd;
+            isp_dev->sd.isp = ourISPdev;
+            pr_info("*** tx_isp_core_probe: Main ISP device registered its subdev as subdev 4 ***\n");
+        }
+
         /* SAFE: Initialize locks using proper struct members */
         spin_lock_init(&isp_dev->lock);
         mutex_init(&isp_dev->mutex);
