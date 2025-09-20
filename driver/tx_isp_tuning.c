@@ -3777,7 +3777,10 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         }
 
                         /* SECURITY FIX: Thread-safe buffer access for SET */
-                        spin_lock_irqsave(&tuning_buffer_lock, buffer_flags);
+                        static DEFINE_SPINLOCK(tuning_buffer_lock_set);
+                        unsigned long buffer_flags_set;
+
+                        spin_lock_irqsave(&tuning_buffer_lock_set, buffer_flags_set);
                         if (!tisp_par_ioctl) {
                             spin_unlock_irqrestore(&tuning_buffer_lock, buffer_flags);
                             pr_err("tisp_code_tuning_ioctl: Buffer was freed during SET operation\n");
