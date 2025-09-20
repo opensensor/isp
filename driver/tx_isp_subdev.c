@@ -675,6 +675,8 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
             ourISPdev->core_regs = sd->regs;
         }
         pr_info("*** LINKED CORE regs: %p ***\n", sd->regs);
+    } else {
+        pr_info("*** DEBUG: Unknown device name '%s' - no specific auto-link handling ***\n", dev_name);
     }
 }
 EXPORT_SYMBOL(tx_isp_subdev_auto_link);
