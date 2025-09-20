@@ -357,23 +357,30 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
     
     mcp_log_info("tx_isp_vin_init: EXACT Binary Ninja implementation", arg2);
     
-    /* Binary Ninja: void* $a0 = *(arg1 + 0xe4) */
-    /* SAFE: Access sensor using safe struct member access instead of raw offset */
-    struct tx_isp_vin_device *vin_dev = (struct tx_isp_vin_device *)arg1;
-    if (!vin_dev) {
+    /* CRITICAL FIX: Handle parameter type mismatch safely */
+    /* When called from subdev ops: arg1 is struct tx_isp_subdev *sd */
+    /* When called directly: arg1 might be VIN device */
+    /* Always use global ISP device for safety to avoid segfaults */
+    struct tx_isp_vin_device *vin_dev = NULL;
+
+    if (!ourISPdev || !ourISPdev->vin_dev) {
+        mcp_log_error("tx_isp_vin_init: no global ISP device or VIN device available", 0);
+        return -ENODEV;
+    }
+
+    vin_dev = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
+
+    /* CRITICAL: Validate VIN device pointer before any access */
+    if (!vin_dev || !is_valid_kernel_pointer(vin_dev)) {
+        mcp_log_error("tx_isp_vin_init: invalid VIN device pointer", (u32)vin_dev);
+        return -EINVAL;
+    }
+
+    /* SAFE: Always use global ISP device sensor to avoid pointer confusion */
+    if (!ourISPdev->sensor || !is_valid_kernel_pointer(ourISPdev->sensor)) {
         a0 = 0;
     } else {
-        /* SAFE: Use VIN device's active sensor field instead of raw offset 0xe4 */
-        if (vin_dev->active) {
-            a0 = vin_dev->active;
-        } else {
-            /* FALLBACK: Use global ISP device sensor if VIN doesn't have active sensor */
-            if (!ourISPdev || !ourISPdev->sensor) {
-                a0 = 0;
-            } else {
-                a0 = ourISPdev->sensor;
-            }
-        }
+        a0 = ourISPdev->sensor;
     }
     
     /* Binary Ninja: if ($a0 == 0) */
