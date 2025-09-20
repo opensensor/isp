@@ -7902,10 +7902,13 @@ static long vic_core_ops_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *a
         return -EINVAL;
     }
 
-    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
-    if (!vic_dev) {
+    /* CRITICAL FIX: Use safe member access instead of dangerous cast from tx_isp_get_subdevdata */
+    /* tx_isp_get_subdevdata() returns corrupted pointer - use ourISPdev->vic_dev instead */
+    if (!ourISPdev || !ourISPdev->vic_dev) {
+        pr_err("*** VIC CORE IOCTL: No VIC device available ***\n");
         return -EINVAL;
     }
+    vic_dev = ourISPdev->vic_dev;
 
     /* Handle VIC-specific IOCTLs */
     switch (cmd) {
