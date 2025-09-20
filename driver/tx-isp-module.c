@@ -7869,10 +7869,13 @@ static int vic_core_ops_init(struct v4l2_subdev *sd, u32 val)
         return -EINVAL;
     }
 
-    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
-    if (!vic_dev) {
+    /* CRITICAL FIX: Use safe member access instead of dangerous cast from tx_isp_get_subdevdata */
+    /* tx_isp_get_subdevdata() returns corrupted pointer - use ourISPdev->vic_dev instead */
+    if (!ourISPdev || !ourISPdev->vic_dev) {
+        pr_err("*** VIC CORE INIT: No VIC device available ***\n");
         return -EINVAL;
     }
+    vic_dev = ourISPdev->vic_dev;
 
     /* Initialize VIC core operations */
     vic_dev->state = 3; /* INITIALIZED state */
