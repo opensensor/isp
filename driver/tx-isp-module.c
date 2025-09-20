@@ -1918,6 +1918,8 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         return IRQ_HANDLED;
     }
 
+    /* CRITICAL: All validations passed - proceed with interrupt processing */
+    {
         /* Binary Ninja: Read and clear VIC interrupt status registers */
         /* SAFE: Use proper register access with standard VIC interrupt register offsets */
         v1_7 = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);   /* Main interrupt status */
