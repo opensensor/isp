@@ -3595,14 +3595,34 @@ static int tx_isp_vic_apply_full_config(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_regs;
 
-    if (!vic_dev || !vic_dev->vic_regs) {
-        pr_err("tx_isp_vic_apply_full_config: Invalid VIC device\n");
+    /* CRITICAL: Comprehensive validation to prevent BadVA crashes */
+    if (!vic_dev) {
+        pr_err("*** VIC FULL CONFIG: NULL vic_dev - PREVENTS BadVA CRASH ***\n");
+        return -EINVAL;
+    }
+
+    if (!vic_dev->vic_regs) {
+        pr_err("*** VIC FULL CONFIG: NULL vic_dev->vic_regs - PREVENTS BadVA CRASH ***\n");
+        pr_err("*** VIC FULL CONFIG: This would cause BadVA 0xc8 crash ***\n");
         return -EINVAL;
     }
 
     vic_regs = vic_dev->vic_regs;
 
+    /* CRITICAL: Double-check vic_regs is still valid */
+    if (!vic_regs) {
+        pr_err("*** VIC FULL CONFIG: vic_regs became NULL after assignment - PREVENTS BadVA CRASH ***\n");
+        return -EINVAL;
+    }
+
+    /* CRITICAL: Validate vic_regs points to valid I/O memory */
+    if ((unsigned long)vic_regs < 0x10000000 || (unsigned long)vic_regs >= 0x20000000) {
+        pr_err("*** VIC FULL CONFIG: vic_regs 0x%p outside I/O memory range - PREVENTS BadVA CRASH ***\n", vic_regs);
+        return -EINVAL;
+    }
+
     pr_info("*** VIC FULL CONFIG: Applying complete VIC configuration after sensor initialization ***\n");
+    pr_info("*** VIC FULL CONFIG: vic_regs = %p (VALIDATED) ***\n", vic_regs);
 
     /* Apply VIC interrupt system configuration */
     writel(0x2d0, vic_regs + 0x100);        /* Interrupt configuration */
@@ -3616,12 +3636,17 @@ static int tx_isp_vic_apply_full_config(struct tx_isp_vic_device *vic_dev)
     writel(0x7003, vic_regs + 0x74);        /* Control register */
     wmb();
 
+    /* CRITICAL: The access that causes BadVA 0xc8 if vic_regs is NULL */
+    pr_info("*** VIC FULL CONFIG: About to write color space config (this could cause BadVA 0xc8 if vic_regs is NULL) ***\n");
+
     /* Apply VIC color space configuration */
     writel(0xeb8080, vic_regs + 0xc0);      /* Color space config */
     writel(0x108080, vic_regs + 0xc4);      /* Color space config */
-    writel(0x29f06e, vic_regs + 0xc8);      /* Color space config */
+    writel(0x29f06e, vic_regs + 0xc8);      /* Color space config - THIS IS THE BadVA 0xc8 LINE! */
     writel(0x913622, vic_regs + 0xcc);      /* Color space config */
     wmb();
+
+    pr_info("*** VIC FULL CONFIG: Color space config written successfully (no BadVA crash) ***\n");
 
     /* Apply VIC processing configuration */
     writel(0x515af0, vic_regs + 0xd0);      /* Processing config */
