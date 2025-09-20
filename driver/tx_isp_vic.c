@@ -3137,23 +3137,12 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     {
         int vic_irq = platform_get_irq(pdev, 0);
         if (vic_irq > 0) {
-            /* CRITICAL FIX: Pass ISP device as dev_id, not VIC device */
-            /* The interrupt handler in tx-isp-module.c expects struct tx_isp_dev * as dev_id */
-            struct tx_isp_dev *isp_dev = vic_dev->sd.isp;
-            if (!isp_dev) {
-                /* Use global ISP device if subdev linking hasn't happened yet */
-                extern struct tx_isp_dev *ourISPdev;
-                isp_dev = ourISPdev;
-            }
+            /* CRITICAL FIX: Based on Binary Ninja analysis, pass VIC device directly as dev_id */
+            /* The reference driver expects the VIC device structure directly, not ISP device */
+            pr_info("*** VIC PROBE: Registering interrupt with VIC device as dev_id = %p ***\n", vic_dev);
 
-            if (isp_dev) {
-                /* CRITICAL DEBUG: Show what we're registering */
-                pr_info("*** VIC PROBE: Registering interrupt with dev_id = %p ***\n", isp_dev);
-                pr_info("*** VIC PROBE: isp_dev->vic_dev = %p ***\n", isp_dev->vic_dev);
-                pr_info("*** VIC PROBE: vic_dev = %p ***\n", vic_dev);
-
-                ret = request_irq(vic_irq, isp_vic_interrupt_service_routine,
-                                 IRQF_SHARED, "isp-w02-vic", isp_dev);
+            ret = request_irq(vic_irq, isp_vic_interrupt_service_routine,
+                             IRQF_SHARED, "isp-w02-vic", vic_dev);
                 if (ret == 0) {
                     vic_dev->irq_number = vic_irq;
                     vic_dev->irq = vic_irq;
