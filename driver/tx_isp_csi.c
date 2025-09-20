@@ -470,7 +470,7 @@ int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sens
 int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_csi_device *csi_dev;
-    void __iomem *csi_base;
+    void __iomem *csi_regs;
     void __iomem *isp_csi_regs;
     struct tx_isp_sensor_attribute *sensor_attr;
     int result = 0xffffffea; /* Binary Ninja: int32_t result = 0xffffffea */
