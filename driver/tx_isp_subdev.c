@@ -423,34 +423,13 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
      * We detect sensor devices by checking if the platform device name contains known sensor names
      * or if the device name is null (which happens with unregistered sensor platform devices).
      */
-    if (sd->ops && sd->ops->core && sd->ops->core->init) {
-        const char *dev_name_str = dev_name(&pdev->dev);
-        bool is_sensor_device = false;
-
-        /* Check if this is a sensor device */
-        if (!dev_name_str ||
-            strstr(dev_name_str, "gc2053") ||
-            strstr(dev_name_str, "imx307") ||
-            strstr(dev_name_str, "sensor")) {
-            is_sensor_device = true;
-        }
-
-        if (!is_sensor_device) {
-            /* Non-sensor device - safe to call init immediately */
-            pr_info("*** tx_isp_subdev_init: Calling core->init for device %s ***\n", dev_name_str ? dev_name_str : "(null)");
-            ret = sd->ops->core->init(sd, 1);  /* Enable = 1 for initialization */
-            if (ret != 0) {
-                pr_err("tx_isp_subdev_init: core->init failed for %s: %d\n", dev_name_str ? dev_name_str : "(null)", ret);
-                /* Don't fail completely - some devices may not need init */
-            } else {
-                pr_info("*** tx_isp_subdev_init: core->init SUCCESS for device %s ***\n", dev_name_str ? dev_name_str : "(null)");
-            }
-        } else {
-            /* Sensor device - defer init until after sensor association */
-            pr_info("*** tx_isp_subdev_init: Deferring core->init for sensor device %s ***\n", dev_name_str ? dev_name_str : "(null)");
-            pr_info("*** tx_isp_subdev_init: Sensor core->init will be called after sensor association ***\n");
-        }
-    }
+    /* CRITICAL FIX: Don't call core->init during driver loading - matches reference driver behavior
+     * In the reference driver, core->init is only called when streaming starts, not during subdev initialization.
+     * This was causing premature VIC interrupt enabling and hardware configuration before sensors were ready.
+     */
+    const char *dev_name_str = dev_name(&pdev->dev);
+    pr_info("*** tx_isp_subdev_init: Deferring core->init for device %s until streaming starts (matches reference driver) ***\n",
+            dev_name_str ? dev_name_str : "(null)");
 
     /* VIC interrupt registration moved to auto-linking function where registers are actually mapped */
     pr_info("*** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***\n");
