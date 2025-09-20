@@ -2584,12 +2584,27 @@ int tisp_channel_attr_set(uint32_t channel_id, void* attr)
  */
 int tisp_channel_fifo_clear(uint32_t channel_id)
 {
+    /* CRITICAL SAFETY: Validate channel_id to prevent BadVA crashes */
+    if (channel_id >= 16) {  /* Max 16 channels */
+        pr_err("tisp_channel_fifo_clear: Invalid channel_id %u (max 15)\n", channel_id);
+        return -EINVAL;
+    }
+
     int32_t s1 = ((channel_id + 0x98) << 8);
+
+    /* CRITICAL SAFETY: Validate calculated register address */
+    if (s1 < 0x9800 || s1 > 0xa700) {  /* Reasonable register range */
+        pr_err("tisp_channel_fifo_clear: Invalid register base 0x%x for channel %u\n", s1, channel_id);
+        return -EINVAL;
+    }
+
+    /* SAFE: Now we can safely write to registers */
     system_reg_write(s1 + 0x19c, 1);
     system_reg_write(s1 + 0x1a0, 1);
     system_reg_write(s1 + 0x1a4, 1);
     system_reg_write(s1 + 0x1a8, 1);
-    
+
+    pr_info("tisp_channel_fifo_clear: Cleared FIFOs for channel %u (base=0x%x)\n", channel_id, s1);
     return 0;
 }
 

@@ -329,13 +329,16 @@ struct tx_isp_subdev {
 	struct tx_isp_irq_device irqdev;
 	struct tx_isp_chip_ident chip;
 
+	/* CRITICAL: Fixed padding to match Binary Ninja offsets */
+	char padding_to_0xc0[0x40];
+
 	/* Basic device info */
-	struct device *dev;
-	struct platform_device *pdev;
-	struct resource *res;
-	struct tx_isp_subdev_ops *ops;
-	void *dev_priv;
-	void *host_priv;
+	struct device *dev;                 /* 0xc0: Device pointer */
+	struct platform_device *pdev;      /* 0xc4: Platform device */
+	struct resource *res;               /* 0xc8: Resource */
+	struct tx_isp_subdev_ops *ops;      /* 0xcc: Operations */
+	void *dev_priv;                     /* 0xd0: Private data */
+	void *host_priv;                    /* 0xd4: Host private data */
 
 	/* Memory mappings */
 	void __iomem *base;         /* Common register base */
