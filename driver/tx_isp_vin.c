@@ -390,9 +390,18 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
         /* Binary Ninja: result = 0xffffffff */
         result = 0xffffffff;
     } else {
-        /* Binary Ninja: void* $v0_1 = **($a0 + 0xc4) */
+        /* SAFE: Access sensor with validation to prevent segfaults */
         struct tx_isp_sensor *sensor = (struct tx_isp_sensor *)a0;
-        if (!sensor->sd.ops || !sensor->sd.ops->core) {
+
+        /* CRITICAL: Validate sensor pointer before any access */
+        if (!sensor || !is_valid_kernel_pointer(sensor)) {
+            mcp_log_error("tx_isp_vin_init: invalid sensor pointer", (u32)sensor);
+            v0_1 = 0;
+        } else if (!sensor->sd.ops || !is_valid_kernel_pointer(sensor->sd.ops)) {
+            mcp_log_error("tx_isp_vin_init: invalid sensor ops", (u32)sensor->sd.ops);
+            v0_1 = 0;
+        } else if (!sensor->sd.ops->core || !is_valid_kernel_pointer(sensor->sd.ops->core)) {
+            mcp_log_error("tx_isp_vin_init: invalid sensor core ops", (u32)sensor->sd.ops->core);
             v0_1 = 0;
         } else {
             v0_1 = sensor->sd.ops->core;
