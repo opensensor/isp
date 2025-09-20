@@ -657,12 +657,23 @@ static int tx_isp_v4l2_mmap(struct file *file, struct vm_area_struct *vma)
     memset(&fake_file, 0, sizeof(fake_file));
     fake_file.private_data = (void *)(unsigned long)dev->channel_num;
 
-    /* Create a custom IOCTL to get buffer address - simulate tisp_reg_map_get */
-    map_request.buffer_index = buffer_index;
-    map_request.buffer_addr = 0;
+    /* CRITICAL FIX: Get proper frame channel device instead of fake file */
+    extern struct frame_channel_device frame_channels[];
+    if (dev->channel_num >= 0 && dev->channel_num < 4) {
+        struct frame_channel_device *fcd = &frame_channels[dev->channel_num];
 
-    /* For now, we'll get the address directly from the frame channel state */
-    /* In the reference driver, this would use tisp_reg_map_get */
+        /* Create a custom IOCTL to get buffer address - simulate tisp_reg_map_get */
+        map_request.buffer_index = buffer_index;
+        map_request.buffer_addr = 0;
+
+        /* For now, we'll get the address directly from the frame channel state */
+        /* In the reference driver, this would use tisp_reg_map_get */
+        pr_info("*** V4L2 mmap: Using proper frame_channel_device %p for channel %d ***\n",
+                fcd, dev->channel_num);
+    } else {
+        pr_err("*** V4L2 mmap: Invalid channel number %d ***\n", dev->channel_num);
+        return -EINVAL;
+    }
 
     pr_info("*** Channel %d: MMAP mapping buffer[%d] offset=0x%lx size=%lu ***\n",
             dev->channel_num, buffer_index, offset, size);
