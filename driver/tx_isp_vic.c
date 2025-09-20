@@ -3223,6 +3223,11 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Binary Ninja: memset($v0, 0, 0x21c) */
     memset(vic_dev, 0, sizeof(struct tx_isp_vic_device));
 
+    /* CRITICAL FIX: Initialize VIC device dimensions to prevent interrupt handler crashes */
+    vic_dev->width = 1920;   /* Default sensor width */
+    vic_dev->height = 1080;  /* Default sensor height */
+    pr_info("*** VIC PROBE: Initialized default dimensions %dx%d ***\n", vic_dev->width, vic_dev->height);
+
     /* Binary Ninja: void* $s2_1 = arg1[0x16] */
     pdata = pdev->dev.platform_data;
 
