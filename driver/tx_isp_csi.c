@@ -1086,4 +1086,3 @@ EXPORT_SYMBOL(tx_isp_csi_stop);
 EXPORT_SYMBOL(tx_isp_csi_set_format);
 EXPORT_SYMBOL(dump_csi_reg);
 EXPORT_SYMBOL(tx_isp_csi_activate_subdev);
-EXPORT_SYMBOL(tx_isp_csi_slake_subdev);
