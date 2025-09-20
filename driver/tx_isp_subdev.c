@@ -418,14 +418,8 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         sd->isp = ourISPdev;
         pr_info("*** tx_isp_subdev_init: VIC device linked to main ISP device ***\n");
 
-        /* CRITICAL: Now that VIC device is fully linked, register the interrupt handler */
-        extern int tx_isp_vic_register_interrupt(struct tx_isp_vic_device *vic_dev, struct platform_device *pdev);
-        int irq_ret = tx_isp_vic_register_interrupt(vic_dev, pdev);
-        if (irq_ret == 0) {
-            pr_info("*** tx_isp_subdev_init: VIC interrupt handler registered successfully ***\n");
-        } else {
-            pr_err("*** tx_isp_subdev_init: Failed to register VIC interrupt handler: %d ***\n", irq_ret);
-        }
+        pr_info("*** tx_isp_subdev_init: VIC device linked to main ISP device ***\n");
+        pr_info("*** tx_isp_subdev_init: Interrupt registration deferred until after module init ***\n");
     }
 
     /* Binary Ninja: if (tx_isp_module_init(arg1, arg2) != 0) */
@@ -434,6 +428,25 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         /* Binary Ninja: isp_printf(2, "&vsd->snap_mlock", *arg1) */
         isp_printf(2, "&vsd->snap_mlock", pdev->name);
         return 0xfffffff4;  /* Binary Ninja: return 0xfffffff4 */
+    }
+
+    /* CRITICAL: Register VIC interrupt handler AFTER module init when sd->regs is set */
+    if (ourISPdev && ops == &vic_subdev_ops) {
+        struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
+
+        /* Now sd->regs should be set by tx_isp_module_init() */
+        if (sd->regs) {
+            pr_info("*** tx_isp_subdev_init: sd->regs is set, registering VIC interrupt handler ***\n");
+            extern int tx_isp_vic_register_interrupt(struct tx_isp_vic_device *vic_dev, struct platform_device *pdev);
+            int irq_ret = tx_isp_vic_register_interrupt(vic_dev, pdev);
+            if (irq_ret == 0) {
+                pr_info("*** tx_isp_subdev_init: VIC interrupt handler registered successfully ***\n");
+            } else {
+                pr_err("*** tx_isp_subdev_init: Failed to register VIC interrupt handler: %d ***\n", irq_ret);
+            }
+        } else {
+            pr_err("*** tx_isp_subdev_init: sd->regs is NULL after module init - cannot register interrupt ***\n");
+        }
     }
 
     /* Binary Ninja: char* $s1_1 = arg1[0x16] */

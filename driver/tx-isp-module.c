@@ -1833,6 +1833,14 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         return IRQ_HANDLED;
     }
 
+    /* CRITICAL SAFETY: Validate ISP device structure integrity before accessing ANY members */
+    /* Check if we can safely read the vic_dev member */
+    if ((unsigned long)&isp_dev->vic_dev < 0x80000000 ||
+        (unsigned long)&isp_dev->vic_dev >= 0xfffff000) {
+        pr_err("*** VIC IRQ: Cannot safely access isp_dev->vic_dev member ***\n");
+        return IRQ_HANDLED;
+    }
+
     /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
     /* SAFE: Use proper struct member access instead of raw offset +0xd4 */
     vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
@@ -1845,6 +1853,13 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 
     if ((unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff000) {
         pr_err("*** VIC IRQ: Invalid vic_dev pointer 0x%p from isp_dev ***\n", vic_dev);
+        return IRQ_HANDLED;
+    }
+
+    /* CRITICAL SAFETY: Validate we can safely access vic_dev members */
+    if ((unsigned long)&vic_dev->frame_count < 0x80000000 ||
+        (unsigned long)&vic_dev->frame_count >= 0xfffff000) {
+        pr_err("*** VIC IRQ: Cannot safely access vic_dev members ***\n");
         return IRQ_HANDLED;
     }
 
