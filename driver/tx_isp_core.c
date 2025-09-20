@@ -1065,59 +1065,6 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     }
 
     return IRQ_HANDLED;
-    s1 = readl(v0 + 0xb4);
-
-    /* Binary Ninja: *($v0 + 0xb8) = $s1 - Write status back to clear */
-    writel(s1, v0 + 0xb8);
-
-    /* Binary Ninja: if (($s1 & 0x3f8) == 0) */
-    if ((s1 & 0x3f8) == 0) {
-        /* Binary Ninja: $a0 = *($s0 + 0x15c) - SAFE: Use global vic_start_ok instead of raw offset */
-        extern uint32_t vic_start_ok;
-        a0 = vic_start_ok;
-    } else {
-        /* Binary Ninja: Error processing with debug output */
-        u32 var_44_1 = readl(v0 + 0x84c);
-        u32 var_48_1 = 0x3f8;
-        printk("ispcore: irq-status 0x%08x, err is 0x%x,0x%x,084c is 0x%x\n",
-               s1, var_48_1, var_44_1);
-        /* Binary Ninja: data_ca57c += 1 */
-        /* Binary Ninja: $a0 = *($s0 + 0x15c) - SAFE: Use global vic_start_ok */
-        extern uint32_t vic_start_ok;
-        a0 = vic_start_ok;
-    }
-
-    /* Binary Ninja: if ($a0 == 1) return 1 */
-    if (a0 == 1) {
-        return IRQ_HANDLED;
-    }
-
-    /* Binary Ninja: int32_t $s3_1 = $s1 & 0x1000 */
-    u32 s3_1 = s1 & 0x1000;
-
-    /* Binary Ninja: int32_t $v0_5 = $s1 & 0x200 */
-    u32 v0_5 = s1 & 0x200;
-
-    /* Binary Ninja: if ($s3_1 != 0) */
-    if (s3_1 != 0) {
-        /* Binary Ninja: private_schedule_work(&fs_work) */
-        schedule_work(&ispcore_fs_work);
-        v0_5 = s1 & 0x200;
-    }
-
-    /* Binary Ninja: int32_t $v0_9 = $s1 & 0x100 */
-    u32 v0_9 = s1 & 0x100;
-
-    /* Binary Ninja: if ($v0_5 != 0) */
-    if (v0_5 != 0) {
-        /* Binary Ninja: if (*($s0 + 0x17c) != 0) exception_handle() */
-        /* SAFE: Check VIC device state instead of raw offset access */
-        if (s0 && s0->state != 0) {
-            /* exception_handle() - skip for now */
-        }
-        /* Binary Ninja: data_ca578 += 1 */
-        v0_9 = s1 & 0x100;
-    }
 
     /* Binary Ninja: if ($v0_9 != 0) */
     if (v0_9 != 0) {
