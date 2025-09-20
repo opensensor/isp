@@ -2625,8 +2625,8 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         if (isp_dev->dma_buf && isp_dev->dma_size > 0) {
             pr_info("*** CRITICAL DMA SYNC: Synchronizing ISP DMA buffer for coherency ***\n");
 
-            /* Sync the main ISP DMA buffer */
-            mips_dma_cache_sync(isp_dev->dma_addr, isp_dev->dma_size, DMA_FROM_DEVICE);
+            /* TEMPORARY: Disable DMA cache sync to prevent corruption */
+            pr_info("*** DEBUGGING: DMA cache sync disabled to isolate corruption ***\n");
 
             pr_info("*** DMA SYNC: ISP buffer addr=0x%x size=%d synced for device ***\n",
                     isp_dev->dma_addr, isp_dev->dma_size);
@@ -3424,12 +3424,11 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
             /* Update buffer count to match ISP DMA buffers */
             vic_dev->active_buffer_count = 4;
 
-            /* CRITICAL: Set buffer addresses for vic_mdma_enable and isp_vic_cmd_set */
-            /* Create a temporary array with ISP DMA buffer addresses */
-            static dma_addr_t isp_dma_buffers[4];
-            for (int j = 0; j < 4; j++) {
-                isp_dma_buffers[j] = isp_dma_addr + (j * frame_size);
-            }
+            /* TEMPORARY: Disable DMA buffer configuration to prevent memory corruption */
+            pr_info("*** DEBUGGING: DMA buffer configuration disabled to isolate corruption ***\n");
+
+            /* The overlapping buffer addresses were likely causing DMA to write to wrong memory */
+            /* This could explain the severe kernel memory corruption we're seeing */
             vic_dev->buffer_addresses = isp_dma_buffers;
             vic_dev->buffer_address_count = 4;
             pr_info("*** ispvic_frame_channel_qbuf: Set vic_dev->buffer_addresses for ISP DMA ***\n");
