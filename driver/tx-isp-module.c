@@ -1908,10 +1908,17 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             vic_dev->vic_regs = vic_regs;
         } else {
             pr_err("*** VIC IRQ: EMERGENCY REMAP FAILED - cannot access VIC registers ***\n");
-        pr_err("*** VIC IRQ: isp_dev->vic_regs = %p ***\n", isp_dev->vic_regs);
-        pr_err("*** VIC IRQ: vic_dev->vic_regs = %p ***\n", vic_dev->vic_regs);
-        pr_err("*** VIC IRQ: This means VIC registers were not mapped during probe ***\n");
-        pr_err("*** VIC IRQ: Check tx_isp_subdev_init and ioremap calls ***\n");
+            pr_err("*** VIC IRQ: isp_dev->vic_regs = %p ***\n", isp_dev->vic_regs);
+            pr_err("*** VIC IRQ: vic_dev->vic_regs = %p ***\n", vic_dev->vic_regs);
+            pr_err("*** VIC IRQ: This means VIC registers were not mapped during probe ***\n");
+            pr_err("*** VIC IRQ: Check tx_isp_subdev_init and ioremap calls ***\n");
+            return IRQ_HANDLED;
+        }
+    }
+
+    /* Final validation that vic_regs is now valid */
+    if (!vic_regs) {
+        pr_err("*** VIC IRQ: vic_regs is still NULL after all attempts ***\n");
         return IRQ_HANDLED;
     }
 
