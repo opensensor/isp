@@ -4088,15 +4088,31 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         return -ENODEV;
                     }
                     
-                    /* *** CRITICAL FIX: DO NOT OVERWRITE REAL SENSOR WITH DUMMY STRUCTURE *** */
-                    pr_info("*** SKIPPING SENSOR CONNECTION - REAL SENSOR ALREADY CONNECTED ***\n");
-                    pr_info("Current: ourISPdev=%p, ourISPdev->sensor=%p (REAL SENSOR)\n", ourISPdev, ourISPdev->sensor);
-                    pr_info("Dummy: sensor=%p (%s) - NOT CONNECTING TO PRESERVE REAL SENSOR\n", sensor, sensor->info.name);
-                    pr_info("*** REAL SENSOR PRESERVED - FRAME SYNC WILL WORK CORRECTLY ***\n");
+                    /* *** CRITICAL FIX: CONNECT SENSOR TO ISP DEVICE *** */
+                    pr_info("*** CONNECTING SENSOR TO ISP DEVICE ***\n");
+                    pr_info("Current: ourISPdev=%p, ourISPdev->sensor=%p\n", ourISPdev, ourISPdev->sensor);
+                    pr_info("New sensor: sensor=%p (%s)\n", sensor, sensor->info.name);
 
-                    /* Free the dummy sensor structure since we're not using it */
-                    kfree(sensor);
-                    sensor = (struct tx_isp_sensor *)ourISPdev->sensor; /* Use real sensor for remaining operations */
+                    /* Connect sensor to ISP device */
+                    ourISPdev->sensor = sensor;
+
+                    /* CRITICAL: Register sensor subdevice in subdevs array for GET_SENSOR_INFO IOCTL */
+                    int subdev_slot = -1;
+                    for (int j = 0; j < ISP_MAX_SUBDEVS; j++) {
+                        if (ourISPdev->subdevs[j] == NULL) {
+                            subdev_slot = j;
+                            break;
+                        }
+                    }
+
+                    if (subdev_slot >= 0) {
+                        ourISPdev->subdevs[subdev_slot] = &sensor->sd;
+                        pr_info("*** SENSOR SUBDEV REGISTERED IN SLOT %d FOR GET_SENSOR_INFO IOCTL ***\n", subdev_slot);
+                    } else {
+                        pr_warn("*** WARNING: No free subdev slot for sensor registration ***\n");
+                    }
+
+                    pr_info("*** SENSOR CONNECTED TO ISP DEVICE SUCCESSFULLY ***\n");
                     
                     /* SAFE UPDATE: Update registry with actual subdev pointer */
                     if (reg_sensor) {
