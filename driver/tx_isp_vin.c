@@ -1184,6 +1184,7 @@ int tx_isp_vin_slake_subdev(struct tx_isp_subdev *sd)
 
 /* Export VIN subdev ops for external access */
 EXPORT_SYMBOL(vin_subdev_ops);
+EXPORT_SYMBOL(tx_isp_vin_slake_subdev);
 
 /* Export video input command functions for external access */
 EXPORT_SYMBOL(video_input_cmd_open);

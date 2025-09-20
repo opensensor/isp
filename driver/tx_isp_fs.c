@@ -91,6 +91,7 @@ int fs_slake_module(struct tx_isp_subdev *sd)
     pr_info("*** fs_slake_module: FS slake complete ***\n");
     return 0;
 }
+EXPORT_SYMBOL(fs_slake_module);
 
 /* FS subdev core operations structure */
 static struct tx_isp_subdev_core_ops fs_core_ops = {
