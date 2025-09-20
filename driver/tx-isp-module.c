@@ -4715,7 +4715,7 @@ int sensor_early_init(void *core_dev)
 }
 
 
-/* tx_isp_probe - EXACT Binary Ninja reference implementation */
+/* tx_isp_probe - PROPER ARCHITECTURE: Use existing global device */
 static int tx_isp_platform_probe(struct platform_device *pdev)
 {
     struct tx_isp_dev *isp_dev;
@@ -4723,16 +4723,27 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     int ret;
     int i;
 
-    /* Binary Ninja: private_kmalloc(0x120, 0xd0) */
-    isp_dev = private_kmalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
-    if (!isp_dev) {
-        /* Binary Ninja: isp_printf(2, "Failed to allocate main ISP device\n", $a2) */
-        isp_printf(2, (unsigned char *)"Failed to allocate main ISP device\n");
-        return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
-    }
+    /* ARCHITECTURAL FIX: Check if global device already exists */
+    if (ourISPdev) {
+        pr_info("*** PROBE: Using existing global ISP device: %p ***\n", ourISPdev);
+        isp_dev = ourISPdev;  /* Use existing device - no allocation needed */
+    } else {
+        pr_info("*** PROBE: No global device - allocating new one ***\n");
 
-    /* Binary Ninja: memset($v0, 0, 0x120) */
-    memset(isp_dev, 0, sizeof(struct tx_isp_dev));
+        /* Binary Ninja: private_kmalloc(0x120, 0xd0) */
+        isp_dev = private_kmalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
+        if (!isp_dev) {
+            /* Binary Ninja: isp_printf(2, "Failed to allocate main ISP device\n", $a2) */
+            isp_printf(2, (unsigned char *)"Failed to allocate main ISP device\n");
+            return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
+        }
+
+        /* Binary Ninja: memset($v0, 0, 0x120) */
+        memset(isp_dev, 0, sizeof(struct tx_isp_dev));
+
+        /* Set as global device */
+        ourISPdev = isp_dev;
+    }
 
     /* Binary Ninja: void* $s2_1 = arg1[0x16] */
     pdata = pdev->dev.platform_data;
