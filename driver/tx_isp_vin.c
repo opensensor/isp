@@ -627,16 +627,25 @@ int tx_isp_vin_activate_subdev(void* arg1)
 {
     extern struct tx_isp_dev *ourISPdev;
     struct tx_isp_vin_device *vin_dev;
-    
+
     mcp_log_info("tx_isp_vin_activate_subdev: EXACT Binary Ninja implementation", 0);
-    
-    /* Get VIN device from global ISP device */
+
+    /* CRITICAL FIX: Handle both parameter types safely */
+    /* When called from tuning IOCTL, arg1 is &param_ptr[3] (not a VIN device) */
+    /* When called from internal ops, arg1 should be VIN device */
+    /* Always use global ISP device for safety */
     if (!ourISPdev || !ourISPdev->vin_dev) {
         mcp_log_error("tx_isp_vin_activate_subdev: no VIN device available", 0);
         return -ENODEV;
     }
-    
+
     vin_dev = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
+
+    /* CRITICAL: Validate VIN device pointer before use */
+    if (!vin_dev || !is_valid_kernel_pointer(vin_dev)) {
+        mcp_log_error("tx_isp_vin_activate_subdev: invalid VIN device pointer", (u32)vin_dev);
+        return -EINVAL;
+    }
     
     /* Binary Ninja: private_mutex_lock(arg1 + 0xe8) */
     mutex_lock(&vin_dev->mlock);
