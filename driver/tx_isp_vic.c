@@ -212,6 +212,12 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
         return 0;
     }
 
+    /* CRITICAL SAFETY: Validate vic_dev structure integrity before accessing any fields */
+    if (!virt_addr_valid((char*)vic_dev + sizeof(struct tx_isp_vic_device) - 1)) {
+        pr_err("vic_framedone_irq_function: vic_dev structure spans invalid memory\n");
+        return 0;
+    }
+
     /* Binary Ninja: if (*(arg1 + 0x214) == 0) */
     /* SAFE: Use proper struct member 'processing' instead of offset 0x214 */
 //    if (vic_dev->processing == 0) {
