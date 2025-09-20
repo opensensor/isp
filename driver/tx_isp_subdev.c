@@ -916,35 +916,35 @@ int __init tx_isp_subdev_platform_init(void)
         pr_err("Failed to register CSI platform driver: %d\n", ret);
         return ret;
     }
-    
+
+    /* Register VIC platform driver BEFORE Core ISP - CRITICAL for initialization order */
+    ret = platform_driver_register(&tx_isp_vic_driver);
+    if (ret) {
+        pr_err("Failed to register VIC platform driver: %d\n", ret);
+        goto err_unregister_csi;
+    }
+
     /* Register VIN platform driver */
     ret = platform_driver_register(&tx_isp_vin_driver);
     if (ret) {
         pr_err("Failed to register VIN platform driver: %d\n", ret);
-        goto err_unregister_csi;
+        goto err_unregister_vic;
     }
-    
-    /* Register CORE platform driver */
+
+    /* Register CORE platform driver AFTER VIC - CRITICAL for initialization order */
     ret = platform_driver_register(&tx_isp_core_driver);
     if (ret) {
         pr_err("Failed to register CORE platform driver: %d\n", ret);
         goto err_unregister_vin;
     }
     
-    /* Register VIC platform driver */
-    ret = platform_driver_register(&tx_isp_vic_driver);
-    if (ret) {
-        pr_err("Failed to register VIC platform driver: %d\n", ret);
-        goto err_unregister_core;
-    }
-    
     pr_info("All ISP subdev platform drivers registered successfully\n");
     return 0;
-    
-err_unregister_core:
-    platform_driver_unregister(&tx_isp_core_driver);
+
 err_unregister_vin:
     platform_driver_unregister(&tx_isp_vin_driver);
+err_unregister_vic:
+    platform_driver_unregister(&tx_isp_vic_driver);
 err_unregister_csi:
     platform_driver_unregister(&tx_isp_csi_driver);
     return ret;
@@ -955,9 +955,9 @@ void __exit tx_isp_subdev_platform_exit(void)
     pr_info("*** TX ISP SUBDEV PLATFORM DRIVERS UNREGISTRATION ***\n");
     
     /* Unregister all platform drivers in reverse order */
-    platform_driver_unregister(&tx_isp_vic_driver);
     platform_driver_unregister(&tx_isp_core_driver);
     platform_driver_unregister(&tx_isp_vin_driver);
+    platform_driver_unregister(&tx_isp_vic_driver);
     platform_driver_unregister(&tx_isp_csi_driver);
     
     pr_info("All ISP subdev platform drivers unregistered\n");
