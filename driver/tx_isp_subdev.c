@@ -778,16 +778,16 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
 /* tx_isp_free_irq - EXACT Binary Ninja reference implementation */
 void tx_isp_free_irq(struct tx_isp_irq_info *irq_info)
 {
-    if (!irq_info || irq_info->irq_number <= 0) {
+    if (!irq_info || irq_info->irq <= 0) {
         pr_err("tx_isp_free_irq: Invalid IRQ info\n");
         return;
     }
 
     /* Free the registered interrupt */
-    free_irq(irq_info->irq_number, irq_info);
-    irq_info->irq_number = 0;
-    irq_info->irq_enable_func = NULL;
-    irq_info->irq_disable_func = NULL;
+    free_irq(irq_info->irq, irq_info);
+    irq_info->irq = 0;
+    irq_info->handler = NULL;
+    irq_info->data = NULL;
 
     pr_info("tx_isp_free_irq: IRQ freed\n");
 }
@@ -795,25 +795,25 @@ void tx_isp_free_irq(struct tx_isp_irq_info *irq_info)
 /* tx_isp_enable_irq - EXACT Binary Ninja reference implementation */
 void tx_isp_enable_irq(struct tx_isp_irq_info *irq_info)
 {
-    if (!irq_info || irq_info->irq_number <= 0) {
+    if (!irq_info || irq_info->irq <= 0) {
         pr_err("tx_isp_enable_irq: Invalid IRQ info\n");
         return;
     }
 
-    enable_irq(irq_info->irq_number);
-    pr_info("*** tx_isp_enable_irq: IRQ %d ENABLED ***\n", irq_info->irq_number);
+    enable_irq(irq_info->irq);
+    pr_info("*** tx_isp_enable_irq: IRQ %d ENABLED ***\n", irq_info->irq);
 }
 
 /* tx_isp_disable_irq - EXACT Binary Ninja reference implementation */
 void tx_isp_disable_irq(struct tx_isp_irq_info *irq_info)
 {
-    if (!irq_info || irq_info->irq_number <= 0) {
+    if (!irq_info || irq_info->irq <= 0) {
         pr_err("tx_isp_disable_irq: Invalid IRQ info\n");
         return;
     }
 
-    disable_irq(irq_info->irq_number);
-    pr_info("*** tx_isp_disable_irq: IRQ %d DISABLED ***\n", irq_info->irq_number);
+    disable_irq(irq_info->irq);
+    pr_info("*** tx_isp_disable_irq: IRQ %d DISABLED ***\n", irq_info->irq);
 }
 
 static struct tx_isp_subdev_ops fs_subdev_ops = { 0 }; // All fields NULL/0
