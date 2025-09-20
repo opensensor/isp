@@ -4023,23 +4023,44 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     struct tx_isp_sensor *real_sensor = NULL;
 
                     /* The I2C client should have the sensor subdev as client data */
-                    real_sensor_sd = private_i2c_get_clientdata(client);
-                    if (real_sensor_sd) {
-                        real_sensor = tx_isp_get_subdev_hostdata(real_sensor_sd);
-                        pr_info("*** FOUND REAL SENSOR: sd=%p, sensor=%p ***\n", real_sensor_sd, real_sensor);
+                    /* Wait a bit for the sensor probe function to complete */
+                    pr_info("*** WAITING FOR SENSOR PROBE TO COMPLETE ***\n");
+                    msleep(200);
 
-                        if (real_sensor && real_sensor_sd->ops) {
-                            pr_info("*** REAL SENSOR OPS: core=%p, video=%p, sensor=%p ***\n",
+                    real_sensor_sd = private_i2c_get_clientdata(client);
+                    pr_info("*** I2C CLIENT DATA: %p ***\n", real_sensor_sd);
+
+                    if (real_sensor_sd) {
+                        pr_info("*** CHECKING SENSOR SUBDEV: sd=%p ***\n", real_sensor_sd);
+                        pr_info("*** SENSOR SUBDEV OPS: %p ***\n", real_sensor_sd->ops);
+
+                        if (real_sensor_sd->ops) {
+                            pr_info("*** SENSOR OPS STRUCTURE: core=%p, video=%p, sensor=%p ***\n",
                                    real_sensor_sd->ops->core,
                                    real_sensor_sd->ops->video,
                                    real_sensor_sd->ops->sensor);
-                            sensor = real_sensor; /* Use the real sensor */
+                        }
+
+                        real_sensor = tx_isp_get_subdev_hostdata(real_sensor_sd);
+                        pr_info("*** SENSOR HOSTDATA: %p ***\n", real_sensor);
+
+                        if (real_sensor_sd->ops) {
+                            if (real_sensor) {
+                                pr_info("*** SUCCESS: Real sensor with ops and hostdata found ***\n");
+                                sensor = real_sensor; /* Use the real sensor */
+                            } else {
+                                pr_info("*** SUCCESS: Real sensor subdev with ops found (hostdata NULL) ***\n");
+                                /* We can still use the subdev even without the sensor structure */
+                                sensor = NULL; /* We'll handle this case below */
+                            }
                         } else {
-                            pr_err("*** ERROR: Real sensor found but ops are NULL ***\n");
+                            pr_err("*** ERROR: Real sensor subdev found but ops are NULL ***\n");
+                            pr_err("*** This means the sensor probe function hasn't been called or failed ***\n");
                             return -ENODEV;
                         }
                     } else {
                         pr_err("*** ERROR: I2C client exists but no sensor subdev found ***\n");
+                        pr_err("*** This means private_i2c_set_clientdata was never called ***\n");
                         return -ENODEV;
                     }
 
