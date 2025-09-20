@@ -885,28 +885,36 @@ uint8_t isp_day_night_switch_drop_frame_num = 0;
 uint8_t isp_day_night_switch_drop_frame_cnt = 0;
 void *irq_func_cb[32] = {0};  /* Array of 32 interrupt callback function pointers */
 
+/* VIC event callback structure for Binary Ninja compatibility */
+struct vic_event_callback {
+    void *reserved[7];                       /* +0x00-0x18: Reserved space (28 bytes) */
+    int (*event_handler)(void*, int, void*); /* +0x1c: Event handler function */
+} __attribute__((packed));
+
 /* Forward declarations for Binary Ninja compatibility */
 int tx_isp_send_event_to_remote(void *target, u32 event, void *data);
 void system_reg_write(u32 reg, u32 val);
 void mbus_to_bayer_write(u32 config);
 void tisp_top_sel(void);
 
-/* EXACT Binary Ninja implementations for compatibility functions */
+/* EXACT Binary Ninja implementations with SAFE struct member access */
 int tx_isp_send_event_to_remote(void *target, u32 event, void *data)
 {
     /* Binary Ninja: if (arg1 != 0) */
     if (target != 0) {
         /* Binary Ninja: void* $a0 = *(arg1 + 0xc) */
-        void *a0 = *((void**)((char*)target + 0xc));
+        /* SAFE: Use proper struct member access instead of raw offset 0xc */
+        struct vic_event_callback *event_target = (struct vic_event_callback *)target;
 
-        if (a0 != 0) {
+        /* The offset 0xc points to reserved[3] which contains the callback context */
+        void *callback_ctx = event_target->reserved[3];
+
+        if (callback_ctx != 0) {
             /* Binary Ninja: int32_t $t9_1 = *($a0 + 0x1c) */
-            void *callback = *((void**)((char*)a0 + 0x1c));
-
-            if (callback != 0) {
+            /* SAFE: Use proper struct member access for event handler at offset 0x1c */
+            if (event_target->event_handler != 0) {
                 /* Binary Ninja: jump($t9_1) - Call the callback function */
-                typedef int (*event_callback_t)(void *target, u32 event, void *data);
-                return ((event_callback_t)callback)(target, event, data);
+                return event_target->event_handler(target, event, data);
             }
         }
     }
@@ -2621,7 +2629,7 @@ int ispcore_frame_channel_dqbuf(void* arg1, void* arg2)
     if (arg1 == 0)
         return 0;
 
-    extern int tx_isp_send_event_to_remote(void* arg1, int32_t event, void* arg2);
+    /* Use the already declared function - no need for extern here */
     tx_isp_send_event_to_remote(arg1, 0x3000006, arg2);
     return 0;
 }
