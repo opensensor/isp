@@ -430,24 +430,8 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         return 0xfffffff4;  /* Binary Ninja: return 0xfffffff4 */
     }
 
-    /* CRITICAL: Register VIC interrupt handler AFTER module init when sd->regs is set */
-    if (ourISPdev && ops == &vic_subdev_ops) {
-        struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
-
-        /* Now sd->regs should be set by tx_isp_module_init() */
-        if (sd->regs) {
-            pr_info("*** tx_isp_subdev_init: sd->regs is set, registering VIC interrupt handler ***\n");
-            extern int tx_isp_vic_register_interrupt(struct tx_isp_vic_device *vic_dev, struct platform_device *pdev);
-            int irq_ret = tx_isp_vic_register_interrupt(vic_dev, pdev);
-            if (irq_ret == 0) {
-                pr_info("*** tx_isp_subdev_init: VIC interrupt handler registered successfully ***\n");
-            } else {
-                pr_err("*** tx_isp_subdev_init: Failed to register VIC interrupt handler: %d ***\n", irq_ret);
-            }
-        } else {
-            pr_err("*** tx_isp_subdev_init: sd->regs is NULL after module init - cannot register interrupt ***\n");
-        }
-    }
+    /* VIC interrupt registration moved to auto-linking function where registers are actually mapped */
+    pr_info("*** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***\n");
 
     /* Binary Ninja: char* $s1_1 = arg1[0x16] */
     /* SAFE: Get platform data using proper kernel API */
