@@ -2671,12 +2671,24 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
 
     /* Binary Ninja EXACT: if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = *(arg1 + 0xd4) */
     if (arg1 != 0 && (unsigned long)arg1 < 0xfffff001) {
-        /* CRITICAL FIX: arg1 IS the vic_dev structure directly - Binary Ninja uses it directly */
-        vic_dev = (struct tx_isp_vic_device *)arg1;
-        pr_info("ispvic_frame_channel_s_stream: vic_dev retrieved using SAFE access: %p\n", vic_dev);
+        /* CRITICAL FIX: Binary Ninja does *(arg1 + 0xd4) - this is sd->host_priv! */
+        /* arg1 could be either a tx_isp_subdev or tx_isp_vic_device */
+        /* Try to get vic_dev from subdev->host_priv first (offset 0xd4) */
+        struct tx_isp_subdev *sd = (struct tx_isp_subdev *)arg1;
+
+        /* Check if arg1 is a subdev by looking for the host_priv field */
+        if (sd->host_priv && (unsigned long)sd->host_priv >= 0x80000000 && (unsigned long)sd->host_priv < 0xfffff000) {
+            /* Binary Ninja: $s0 = *(arg1 + 0xd4) - get vic_dev from subdev->host_priv */
+            vic_dev = (struct tx_isp_vic_device *)sd->host_priv;
+            pr_info("ispvic_frame_channel_s_stream: vic_dev retrieved from subdev->host_priv: %p\n", vic_dev);
+        } else {
+            /* Fallback: assume arg1 is vic_dev directly */
+            vic_dev = (struct tx_isp_vic_device *)arg1;
+            pr_info("ispvic_frame_channel_s_stream: vic_dev retrieved as direct cast: %p\n", vic_dev);
+        }
 
         /* CRITICAL: Validate vic_dev structure integrity before accessing any members */
-        if (!vic_dev->vic_regs) {
+        if (!vic_dev || !vic_dev->vic_regs) {
             pr_err("*** ispvic_frame_channel_s_stream: NULL vic_regs - VIC not initialized ***\n");
             return 0xffffffea; /* -EINVAL */
         }
