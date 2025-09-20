@@ -1872,17 +1872,8 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         pr_err("*** VIC IRQ: vic_dev points to invalid memory - interrupt ignored ***\n");
         return IRQ_HANDLED;
     }
-        return IRQ_HANDLED;
-    }
 
-    /* CRITICAL SAFETY: Validate we can safely access vic_dev members */
-    if ((unsigned long)&vic_dev->frame_count < 0x80000000 ||
-        (unsigned long)&vic_dev->frame_count >= 0xfffff000) {
-        pr_err("*** VIC IRQ: Cannot safely access vic_dev members ***\n");
-        return IRQ_HANDLED;
-    }
-
-    /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
+    /* ROBUST ACCESS: Use vic_dev with proper validation */
     if (vic_dev != NULL && (unsigned long)vic_dev < 0xfffff001) {
         /* SAFE: Use VIC registers from ISP device structure */
         /* Binary Ninja accesses VIC registers from both ISP device and VIC device */
