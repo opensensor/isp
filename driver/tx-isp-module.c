@@ -1780,22 +1780,66 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
 /* Forward declaration for ISP core interrupt handler */
 extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 
-/* isp_vic_interrupt_service_routine - ULTRA SAFE implementation to prevent all crashes */
+/* isp_vic_interrupt_service_routine - WORKING implementation with corruption detection */
 irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
-    /* CRITICAL: Absolute maximum safety - do not access ANY pointers */
-    /* The crashes show that dev_id is corrupted, so we cannot trust any pointer access */
+    extern uint32_t vic_start_ok;
+    extern struct tx_isp_dev *ourISPdev;
+    struct tx_isp_dev *isp_dev;
+    struct tx_isp_vic_device *vic_dev;
+    void __iomem *vic_regs;
+    u32 int_status, mdma_status;
 
-    static int crash_count = 0;
-    crash_count++;
+    /* CRITICAL: Detect corruption by comparing dev_id with ourISPdev */
+    if (dev_id != ourISPdev) {
+        pr_err("VIC IRQ %d: CORRUPTION DETECTED! dev_id=%p != ourISPdev=%p\n",
+               irq, dev_id, ourISPdev);
+        pr_err("VIC IRQ %d: Using ourISPdev instead of corrupted dev_id\n", irq);
+        isp_dev = ourISPdev;  /* Use known good pointer */
+    } else {
+        isp_dev = (struct tx_isp_dev *)dev_id;
+    }
 
-    /* Log the interrupt but do not access any structures */
-    pr_info("VIC IRQ %d: Ultra-safe handler #%d - dev_id=%p (NOT ACCESSED)\n",
-            irq, crash_count, dev_id);
+    /* Validate the ISP device structure */
+    if (!isp_dev || (uintptr_t)isp_dev < 0x80000000 || (uintptr_t)isp_dev > 0x9fffffff) {
+        pr_err("VIC IRQ %d: Invalid isp_dev=%p\n", irq, isp_dev);
+        return IRQ_HANDLED;
+    }
 
-    /* Do not access dev_id, ourISPdev, or any device structures */
-    /* Do not read or write any hardware registers */
-    /* Just acknowledge the interrupt and return */
+    /* Validate VIC device exists */
+    vic_dev = isp_dev->vic_dev;
+    if (!vic_dev || (uintptr_t)vic_dev < 0x80000000 || (uintptr_t)vic_dev > 0x9fffffff) {
+        pr_err("VIC IRQ %d: Invalid vic_dev=%p in isp_dev=%p\n", irq, vic_dev, isp_dev);
+        return IRQ_HANDLED;
+    }
+
+    /* Validate VIC registers are mapped */
+    vic_regs = vic_dev->vic_regs;
+    if (!vic_regs || (uintptr_t)vic_regs < 0x80000000) {
+        pr_err("VIC IRQ %d: Invalid vic_regs=%p in vic_dev=%p\n", irq, vic_regs, vic_dev);
+        return IRQ_HANDLED;
+    }
+
+    /* NOW we can safely access hardware registers */
+    int_status = readl(vic_regs + 0x1e0);
+    mdma_status = readl(vic_regs + 0x1e4);
+
+    /* Clear interrupts by writing status back */
+    if (int_status) {
+        writel(int_status, vic_regs + 0x1f0);
+    }
+    if (mdma_status) {
+        writel(mdma_status, vic_regs + 0x1f4);
+    }
+
+    /* Process frame done interrupt */
+    if (vic_start_ok && (int_status & 1)) {
+        vic_dev->frame_count++;
+        pr_info("VIC IRQ %d: Frame done - count=%d\n", irq, vic_dev->frame_count);
+
+        /* Call frame done handler */
+        vic_framedone_irq_function(vic_dev);
+    }
 
     return IRQ_HANDLED;
 }
