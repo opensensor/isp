@@ -5423,6 +5423,12 @@ err_cleanup_base:
     platform_device_unregister(&tx_isp_platform_device);
 
 err_cleanup_subdev_drivers:
+    /* Cleanup individual subdev platform devices */
+    for (i = 0; i < 5; i++) {
+        if (subdev_platforms[i]) {
+            platform_device_unregister(subdev_platforms[i]);
+        }
+    }
     tx_isp_subdev_platform_exit();
 
 err_free_dev:
