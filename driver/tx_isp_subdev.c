@@ -396,6 +396,7 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
 
     /* CRITICAL: Register Core ISP subdev when it's created */
     extern struct tx_isp_subdev_ops core_subdev_ops;
+    extern struct tx_isp_subdev_ops vic_subdev_ops;
     if (ourISPdev && ops == &core_subdev_ops) {
         /* This is the Core ISP subdev - register it in subdevs array */
         ourISPdev->subdevs[4] = sd;  /* Core at index 4 based on reference */
@@ -423,13 +424,29 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
      * We detect sensor devices by checking if the platform device name contains known sensor names
      * or if the device name is null (which happens with unregistered sensor platform devices).
      */
-    /* CRITICAL FIX: Don't call core->init during driver loading - matches reference driver behavior
-     * In the reference driver, core->init is only called when streaming starts, not during subdev initialization.
-     * This was causing premature VIC interrupt enabling and hardware configuration before sensors were ready.
+    /* CRITICAL FIX: Only defer VIC core->init - other devices need basic initialization during driver loading
+     * VIC interrupts should only be enabled when streaming starts, but other devices need basic setup.
      */
-    const char *dev_name_str = dev_name(&pdev->dev);
-    pr_info("*** tx_isp_subdev_init: Deferring core->init for device %s until streaming starts (matches reference driver) ***\n",
-            dev_name_str ? dev_name_str : "(null)");
+    if (sd->ops && sd->ops->core && sd->ops->core->init) {
+        const char *dev_name_str = dev_name(&pdev->dev);
+        bool is_vic_device = (ops == &vic_subdev_ops);
+
+        if (is_vic_device) {
+            /* VIC device - defer init until streaming starts to prevent premature interrupt enabling */
+            pr_info("*** tx_isp_subdev_init: Deferring core->init for VIC device %s until streaming starts ***\n",
+                    dev_name_str ? dev_name_str : "(null)");
+        } else {
+            /* Non-VIC device - safe to call init immediately for basic setup */
+            pr_info("*** tx_isp_subdev_init: Calling core->init for device %s ***\n", dev_name_str ? dev_name_str : "(null)");
+            ret = sd->ops->core->init(sd, 1);  /* Enable = 1 for initialization */
+            if (ret != 0) {
+                pr_err("tx_isp_subdev_init: core->init failed for %s: %d\n", dev_name_str ? dev_name_str : "(null)", ret);
+                /* Don't fail completely - some devices may not need init */
+            } else {
+                pr_info("*** tx_isp_subdev_init: core->init SUCCESS for device %s ***\n", dev_name_str ? dev_name_str : "(null)");
+            }
+        }
+    }
 
     /* VIC interrupt registration moved to auto-linking function where registers are actually mapped */
     pr_info("*** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***\n");

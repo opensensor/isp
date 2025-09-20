@@ -3242,6 +3242,11 @@ int tx_isp_core_probe(struct platform_device *pdev)
             /* CRITICAL FIX: Use SINGLE consistent ISP device - don't mix isp_dev and ourISPdev */
             if (ourISPdev) {
                 pr_info("*** tx_isp_core_probe: Using existing ourISPdev: %p ***\n", ourISPdev);
+                /* CRITICAL: Copy the properly initialized subdev ops from local isp_dev to ourISPdev */
+                if (isp_dev->sd.ops && !ourISPdev->sd.ops) {
+                    ourISPdev->sd.ops = isp_dev->sd.ops;
+                    pr_info("*** tx_isp_core_probe: Copied subdev ops from local to global device ***\n");
+                }
                 /* Free the local isp_dev since we're using the global one */
                 kfree(isp_dev);
                 isp_dev = ourISPdev;  /* Use the global device consistently */
