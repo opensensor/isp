@@ -567,6 +567,9 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         ourISPdev->csi_dev = csi_dev;
         if (sd->regs) {
             ourISPdev->csi_regs = sd->regs;
+            /* CRITICAL FIX: Set CSI device's basic registers from mapped registers */
+            csi_dev->csi_regs = sd->regs;
+            pr_info("*** CSI BASIC REGISTERS SET: %p (from tx_isp_subdev_init) ***\n", sd->regs);
         }
         pr_info("*** LINKED CSI device: %p, regs: %p ***\n", csi_dev, sd->regs);
 

@@ -1475,10 +1475,14 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     /* Memory region will be requested by the platform device probe function */
     mem_resource = NULL;  /* Will be set by platform device probe */
     
-    /* REMOVED: Manual ioremap - memory mapping handled by tx_isp_subdev_init per reference driver */
-    /* CSI registers will be mapped by the platform device probe function */
-    csi_basic_regs = NULL;  /* Will be set by platform device probe */
-    pr_info("*** CSI BASIC REGISTERS: Will be mapped by platform device probe ***\n");
+    /* CRITICAL FIX: Get CSI registers from the linked CSI device */
+    if (isp_dev->csi_dev && isp_dev->csi_regs) {
+        csi_basic_regs = isp_dev->csi_regs;
+        pr_info("*** CSI BASIC REGISTERS: Using mapped registers from CSI device: %p ***\n", csi_basic_regs);
+    } else {
+        csi_basic_regs = NULL;
+        pr_info("*** CSI BASIC REGISTERS: Not available yet (will be set by platform device probe) ***\n");
+    }
     
     /* *** CRITICAL: Map ISP CSI registers - Binary Ninja offset +0x13c region *** */
     if (isp_dev->vic_regs) {
