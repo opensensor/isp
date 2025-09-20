@@ -1816,7 +1816,11 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     struct tx_isp_vic_device *vic_dev;
     void __iomem *vic_regs;
     u32 v1_7, v1_10;
+    u32 addr_ctl, reg_val;
+    int timeout, i;
     extern uint32_t vic_start_ok;
+    extern struct frame_channel_device frame_channels[];
+    extern int num_channels;
 
     /* NEUTERED INTERRUPT HANDLER - Minimal processing for debugging */
     pr_info("*** VIC IRQ %d: NEUTERED - Just acknowledging interrupt ***\n", irq);
@@ -1849,16 +1853,16 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 
     pr_info("*** VIC IRQ: vic_dev=%p, vic_regs=%p - NEUTERED processing ***\n", vic_dev, vic_regs);
 
-    /* NEUTERED: Just try to read and clear interrupt status safely */
-    pr_info("*** VIC IRQ: NEUTERED - Attempting to read interrupt status ***\n");
+    /* NEUTERED: Just acknowledge the interrupt and return */
+    pr_info("*** VIC IRQ %d: NEUTERED - Just acknowledging interrupt ***\n", irq);
 
-    /* Try to read interrupt status - if this crashes, we know the register access is the problem */
+    /* Set safe defaults */
     v1_7 = 0;
     v1_10 = 0;
 
-    /* VERY CAREFUL: Try to read just one register first */
+    /* VERY CAREFUL: Try to read just one register if vic_regs looks valid */
     if ((unsigned long)vic_regs >= 0x10000000 && (unsigned long)vic_regs < 0x20000000) {
-        pr_info("*** VIC IRQ: vic_regs %p looks valid, trying to read status ***\n", vic_regs);
+        pr_info("*** VIC IRQ: vic_regs %p looks valid, trying minimal register access ***\n", vic_regs);
 
         /* Try reading interrupt status - this might be where it crashes */
         v1_7 = readl(vic_regs + 0x1e0);  /* Just read enabled interrupts */
@@ -1872,195 +1876,27 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         pr_info("*** VIC IRQ: vic_regs %p looks invalid, skipping register access ***\n", vic_regs);
     }
 
-        /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
-        if (vic_start_ok != 0) {
-            /* CRITICAL SAFETY: Additional check that VIC device is fully initialized */
-            if (!vic_dev->done_head.next || !vic_dev->done_head.prev ||
-                !vic_dev->queue_head.next || !vic_dev->queue_head.prev ||
-                !vic_dev->free_head.next || !vic_dev->free_head.prev) {
-                pr_err("*** VIC IRQ: VIC device not fully initialized - skipping interrupt processing ***\n");
-                pr_err("*** This prevents unaligned access crashes ***\n");
-                return IRQ_HANDLED;
-            }
+    /* NEUTERED: Skip all complex interrupt processing */
+    pr_info("*** VIC IRQ: NEUTERED - Skipping all complex processing ***\n");
 
-            pr_info("*** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
+    /* NEUTERED: Skip vic_start_ok check and all complex processing */
+    if (vic_start_ok != 0) {
+        pr_info("*** VIC IRQ: vic_start_ok=1, but NEUTERED - minimal processing only ***\n");
 
-            /* Binary Ninja: if (($v1_7 & 1) != 0) */
-            if ((v1_7 & 1) != 0) {
-                /* Binary Ninja: *($s0 + 0x160) += 1 */
-                /* SAFE: Use proper struct member access instead of raw offset +0x160 */
-                vic_dev->frame_count++;
-                pr_info("*** VIC FRAME DONE INTERRUPT: Frame completion detected (count=%u) ***\n", vic_dev->frame_count);
-
-                /* CRITICAL: Also increment main ISP frame counter for /proc/jz/isp/isp-w02 */
-                extern struct tx_isp_dev *ourISPdev;
-                if (ourISPdev) {
-                    ourISPdev->frame_count++;
-                    pr_info("*** ISP FRAME COUNT UPDATED: %u (for /proc/jz/isp/isp-w02) ***\n", ourISPdev->frame_count);
-                }
-
-                /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
-                vic_framedone_irq_function(vic_dev);
-            }
-
-            /* Binary Ninja: Error handling for frame asfifo overflow */
-            if ((v1_7 & 0x200) != 0) {
-                pr_err("Err [VIC_INT] : frame asfifo ovf!!!!!\n");
-            }
-
-            /* Binary Ninja: Error handling for horizontal errors */
-            if ((v1_7 & 0x400) != 0) {
-                u32 reg_3a8 = readl(vic_regs + 0x3a8);
-                pr_err("Err [VIC_INT] : hor err ch0 !!!!! 0x3a8 = 0x%08x\n", reg_3a8);
-            }
-
-            if ((v1_7 & 0x800) != 0) {
-                pr_err("Err [VIC_INT] : hor err ch1 !!!!!\n");
-            }
-
-            if ((v1_7 & 0x1000) != 0) {
-                pr_err("Err [VIC_INT] : hor err ch2 !!!!!\n");
-            }
-
-            if ((v1_7 & 0x2000) != 0) {
-                pr_err("Err [VIC_INT] : hor err ch3 !!!!!\n");
-            }
-
-            /* Binary Ninja: Error handling for vertical errors */
-            if ((v1_7 & 0x4000) != 0) {
-                pr_err("Err [VIC_INT] : ver err ch0 !!!!!\n");
-            }
-
-            if ((v1_7 & 0x8000) != 0) {
-                pr_err("Err [VIC_INT] : ver err ch1 !!!!!\n");
-            }
-
-            if ((v1_7 & 0x10000) != 0) {
-                pr_err("Err [VIC_INT] : ver err ch2 !!!!!\n");
-            }
-
-            if ((v1_7 & 0x20000) != 0) {
-                pr_err("Err [VIC_INT] : ver err ch3 !!!!!\n");
-            }
-
-            /* Binary Ninja: Additional error handling */
-            if ((v1_7 & 0x40000) != 0) {
-                pr_err("Err [VIC_INT] : hvf err !!!!!\n");
-            }
-
-            if ((v1_7 & 0x80000) != 0) {
-                pr_err("Err [VIC_INT] : dvp hcomp err!!!!\n");
-            }
-
-            if ((v1_7 & 0x100000) != 0) {
-                pr_err("Err [VIC_INT] : dma syfifo ovf!!!\n");
-            }
-
-            if ((v1_7 & 0x200000) != 0) {
-                pr_err("Err2 [VIC_INT] : control limit err!!!\n");
-            }
-
-            if ((v1_7 & 0x400000) != 0) {
-                pr_err("Err [VIC_INT] : image syfifo ovf !!!\n");
-            }
-
-            if ((v1_7 & 0x800000) != 0) {
-                pr_err("Err [VIC_INT] : mipi fid asfifo ovf!!!\n");
-            }
-
-            if ((v1_7 & 0x1000000) != 0) {
-                pr_err("Err [VIC_INT] : mipi ch0 hcomp err !!!\n");
-            }
-
-            if ((v1_7 & 0x2000000) != 0) {
-                pr_err("Err [VIC_INT] : mipi ch1 hcomp err !!!\n");
-            }
-
-            if ((v1_7 & 0x4000000) != 0) {
-                pr_err("Err [VIC_INT] : mipi ch2 hcomp err !!!\n");
-            }
-
-            if ((v1_7 & 0x8000000) != 0) {
-                pr_err("Err [VIC_INT] : mipi ch3 hcomp err !!!\n");
-            }
-
-            if ((v1_7 & 0x10000000) != 0) {
-                pr_err("Err [VIC_INT] : mipi ch0 vcomp err !!!\n");
-            }
-
-            if ((v1_7 & 0x20000000) != 0) {
-                pr_err("Err [VIC_INT] : mipi ch1 vcomp err !!!\n");
-            }
-
-            if ((v1_7 & 0x40000000) != 0) {
-                pr_err("Err [VIC_INT] : mipi ch2 vcomp err !!!\n");
-            }
-
-            if ((v1_7 & 0x80000000) != 0) {
-                pr_err("Err [VIC_INT] : mipi ch3 vcomp err !!!\n");
-            }
-
-            /* Binary Ninja: if (($v1_10 & 1) != 0) */
-            if ((v1_10 & 1) != 0) {
-                /* Binary Ninja: entry_$a2 = vic_mdma_irq_function($s0, 0) */
-                vic_mdma_irq_function(vic_dev, 0);
-            }
-
-            /* Binary Ninja: if (($v1_10 & 2) != 0) */
-            if ((v1_10 & 2) != 0) {
-                /* Binary Ninja: entry_$a2 = vic_mdma_irq_function($s0, 1) */
-                vic_mdma_irq_function(vic_dev, 1);
-            }
-
-            if ((v1_10 & 4) != 0) {
-                pr_err("Err [VIC_INT] : dma arb trans done ovf!!!\n");
-            }
-
-            if ((v1_10 & 8) != 0) {
-                pr_err("Err [VIC_INT] : dma chid ovf  !!!\n");
-            }
-
-            /* Binary Ninja: Error recovery sequence - if (($v1_7 & 0xde00) != 0 && zx.d(vic_start_ok) == 1) */
-            if ((v1_7 & 0xde00) != 0 && vic_start_ok == 1) {
-                pr_err("error handler!!!\n");
-
-                /* Binary Ninja: **($s0 + 0xb8) = 4 */
-                writel(4, vic_regs + 0x0);
-                wmb();
-
-                /* Binary Ninja: while (*$v0_70 != 0) */
-                timeout = 1000;
-                while (timeout-- > 0) {
-                    addr_ctl = readl(vic_regs + 0x0);
-                    if (addr_ctl == 0) {
-                        break;
-                    }
-                    pr_err("addr ctl is 0x%x\n", addr_ctl);
-                    udelay(1);
-                }
-
-                /* Binary Ninja: Final recovery steps */
-                reg_val = readl(vic_regs + 0x104);
-                writel(reg_val, vic_regs + 0x104);  /* Self-write like Binary Ninja */
-
-                reg_val = readl(vic_regs + 0x108);
-                writel(reg_val, vic_regs + 0x108);  /* Self-write like Binary Ninja */
-
-                /* Binary Ninja: **($s0 + 0xb8) = 1 */
-                writel(1, vic_regs + 0x0);
-                wmb();
-            }
-
-            /* Wake up frame channels for all interrupt types - SIMPLE APPROACH */
-            for (i = 0; i < num_channels; i++) {
-                if (frame_channels[i].state.streaming) {
-                    frame_channel_wakeup_waiters(&frame_channels[i]);
-                }
-            }
-        } else {
-            pr_warn("*** VIC INTERRUPT IGNORED: vic_start_ok=0, interrupts disabled (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
+        /* NEUTERED: Just log the interrupt status, no complex processing */
+        if (v1_7 != 0) {
+            pr_info("*** VIC IRQ: NEUTERED - interrupt status v1_7=0x%x (would normally process) ***\n", v1_7);
         }
+
+        /* NEUTERED: Skip all error handling and DMA processing */
+        pr_info("*** VIC IRQ: NEUTERED - Skipping all error handling and DMA processing ***\n");
+
+    } else {
+        pr_info("*** VIC IRQ: vic_start_ok=0, NEUTERED - not processing ***\n");
     }
+
+    /* NEUTERED: Skip all recovery steps and frame channel wakeup */
+    pr_info("*** VIC IRQ: NEUTERED - Skipping recovery and frame channel processing ***\n");
 
     /* CRITICAL: Check CSI errors since CSI and VIC share IRQ 38 */
     tx_isp_csi_check_errors(isp_dev);
