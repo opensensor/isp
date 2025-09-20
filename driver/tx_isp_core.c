@@ -610,10 +610,10 @@ static int core_subdev_core_init_bridge(struct tx_isp_subdev *sd, int enable)
         return -EINVAL;
     }
 
-    /* CRITICAL: Check if VIC device is available - if not, defer initialization */
+    /* CRITICAL: Check if VIC device is available - if not, return error like reference driver */
     if (enable && !isp->vic_dev) {
-        pr_info("core_subdev_core_init_bridge: VIC device not ready yet, deferring Core ISP init\n");
-        return 0;  /* Return success but don't actually initialize yet */
+        pr_err("core_subdev_core_init_bridge: VIC device not ready yet, Core ISP init FAILED\n");
+        return -EINVAL;  /* Return error like reference driver when VIC is not available */
     }
 
     /* When enabling, pass current sensor attributes; when disabling, pass NULL like reference */
