@@ -4772,13 +4772,27 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     /* Binary Ninja: *($v0 + 0xd4) = $v0 - Self-pointer for validation */
     /* Note: self_ptr member may not exist in current struct definition, skipping for now */
 
-    /* CRITICAL FIX: Use SINGLE consistent ISP device - avoid dual allocation */
+    /* CRITICAL BUG FIX: Never free device structures that may have active references */
     if (ourISPdev) {
-        pr_info("*** PROBE: Using existing ourISPdev: %p, freeing local allocation ***\n", ourISPdev);
-        /* Free the local allocation since we already have a global one */
-        kfree(isp_dev);
-        /* Use the existing global device */
-        platform_set_drvdata(pdev, ourISPdev);
+        pr_warn("*** PROBE: ourISPdev already exists: %p ***\n", ourISPdev);
+        pr_warn("*** PROBE: This indicates multiple probe calls - using FIRST device ***\n");
+
+        /* CRITICAL: DO NOT FREE isp_dev - other code may have references to it */
+        /* Instead, copy essential data from existing device to new device */
+        if (ourISPdev->core_regs) {
+            isp_dev->core_regs = ourISPdev->core_regs;
+        }
+        if (ourISPdev->vic_dev) {
+            isp_dev->vic_dev = ourISPdev->vic_dev;
+        }
+        if (ourISPdev->vic_regs) {
+            isp_dev->vic_regs = ourISPdev->vic_regs;
+        }
+
+        /* Use the NEW device as the global one (safer than freeing) */
+        ourISPdev = isp_dev;
+        platform_set_drvdata(pdev, isp_dev);
+        pr_info("*** PROBE: Updated ourISPdev to new allocation: %p ***\n", isp_dev);
     } else {
         pr_info("*** PROBE: Setting ourISPdev to local allocation: %p ***\n", isp_dev);
         ourISPdev = isp_dev;  /* Make the local device the global one */
@@ -5350,23 +5364,6 @@ static void tx_isp_exit(void)
         /* CRITICAL: Store IRQ numbers before setting ourISPdev to NULL */
         int isp_irq = ourISPdev->isp_irq;
         int isp_irq2 = ourISPdev->isp_irq2;
-        struct tx_isp_dev *local_isp_dev = ourISPdev;
-
-        /* CRITICAL: Set ourISPdev to NULL BEFORE freeing interrupts to prevent race conditions */
-        ourISPdev = NULL;
-        pr_info("*** ourISPdev set to NULL - interrupt handlers will now safely exit ***\n");
-
-        /* Free hardware interrupts if initialized */
-        if (isp_irq > 0) {
-            free_irq(isp_irq, local_isp_dev);
-            pr_info("Hardware interrupt %d freed\n", isp_irq);
-        }
-
-        /* Free secondary interrupt if initialized */
-        if (isp_irq2 > 0) {
-            free_irq(isp_irq2, local_isp_dev);
-            pr_info("Hardware interrupt %d freed\n", isp_irq2);
-        }
 
         /* CRITICAL: Ensure all interrupts are completely finished before freeing memory */
         synchronize_irq(37);
