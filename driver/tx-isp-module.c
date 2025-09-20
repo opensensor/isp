@@ -4771,51 +4771,8 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
         ret = 0;
     }
 
-    /* Binary Ninja: void* $s2_1 = arg1[0x16] */
-    pdata = pdev->dev.platform_data;
-
-    /* Binary Ninja: Validate platform data exists and has valid device count */
-    if (pdata == NULL) {
-        isp_printf(2, (unsigned char *)"No platform data provided\n");
-        private_kfree(isp_dev);
-        return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
-    }
-
-    /* Binary Ninja: Check device count - zx.d(*($s2_1 + 4)) u>= 0x11 */
-    if (pdata->device_id >= 0x11) {
-        isp_printf(2, (unsigned char *)"saveraw\n");
-        private_kfree(isp_dev);
-        return -EFAULT;  /* Binary Ninja returns 0xffffffea */
-    }
-
-    /* REMOVED: Main ISP subdev init - reference driver only initializes individual subdevices */
-    /* Each subdevice will call tx_isp_subdev_init in its own probe function per reference driver */
-    pr_info("*** REFERENCE DRIVER: Individual subdevices will initialize their own memory regions ***\n");
-
-    /* Binary Ninja: private_platform_set_drvdata(arg1, $v0) */
-    private_platform_set_drvdata(pdev, isp_dev);
-
-    /* Binary Ninja: *($v0 + 0x34) = &tx_isp_fops - Use safe struct member access */
-    /* Note: fops member may not exist in current struct definition, skipping for now */
-
-    /* *** CRITICAL FIX: Platform devices are already registered in tx_isp_init() *** */
-    /* Removing duplicate platform device registration from probe function */
-    pr_info("*** PLATFORM DEVICES ALREADY REGISTERED IN INIT - SKIPPING DUPLICATE REGISTRATION ***\n");
-
-    /* Binary Ninja: Set up subdev count for compatibility */
-    /* *($v0 + 0x80) = $v0_5 - Store device count at offset 0x80 */
-    isp_dev->subdev_count = pdata->device_id;
-
-    /* Binary Ninja: *($v0 + 0xd4) = $v0 - Self-pointer for validation */
-    /* Note: self_ptr member may not exist in current struct definition, skipping for now */
-
-    /* Set platform driver data to the ISP device (whether existing or newly allocated) */
-    platform_set_drvdata(pdev, isp_dev);
-
-    pr_info("*** PROBE: Platform device %s linked to ISP device %p ***\n",
-            pdev->name ? pdev->name : "unknown", isp_dev);
-
-    return 0;
+    pr_info("*** PROBE: Device %s initialization complete (ret=%d) ***\n", device_name, ret);
+    return ret;
 }
 
 static int tx_isp_platform_remove(struct platform_device *pdev)
