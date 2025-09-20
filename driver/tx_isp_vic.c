@@ -3196,8 +3196,9 @@ int tx_isp_vic_register_interrupt(struct tx_isp_vic_device *vic_dev, struct plat
             vic_dev->irq_number = vic_irq;
             vic_dev->irq = vic_irq;
             vic_dev->irq_enabled = 0;  /* Mark as disabled initially */
-            pr_info("*** VIC IRQ REGISTER: VIC interrupt handler registered for IRQ %d with VIC device %p (DISABLED) ***\n", vic_irq, vic_dev);
-            pr_info("*** VIC IRQ REGISTER: Interrupt will call handler with dev_id = %p ***\n", vic_dev);
+            pr_info("*** VIC IRQ REGISTER: VIC interrupt handler registered for IRQ %d with ISP device %p (DISABLED) ***\n", vic_irq, ourISPdev);
+            pr_info("*** VIC IRQ REGISTER: Interrupt will call handler with dev_id = %p (ISP device) ***\n", ourISPdev);
+            pr_info("*** VIC IRQ REGISTER: Handler will get VIC device from isp_dev->vic_dev = %p ***\n", ourISPdev->vic_dev);
             pr_info("*** VIC IRQ REGISTER: IRQ will be enabled later during streaming start ***\n");
         } else {
             pr_err("*** VIC IRQ REGISTER: Failed to register VIC interrupt handler for IRQ %d: %d ***\n", vic_irq, ret);
