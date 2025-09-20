@@ -1707,14 +1707,14 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* CRITICAL FIX: Enable ISP core interrupts at both possible banks (legacy +0xb* and new +0x98b*) */
         pr_info("*** ENABLING ISP CORE INTERRUPT REGISTERS FOR MIPI DATA ***\n");
 
-        /* Legacy bank */
-        u32 pend_legacy = readl(core + 0xb4);
+        /* Legacy bank - reuse existing variables */
+        pend_legacy = readl(core + 0xb4);
         writel(pend_legacy, core + 0xb8);  /* Clear any pending */
         writel(0x3FFF, core + 0xb0);       /* INT_EN */
         writel(0x3FFF, core + 0xbc);       /* INT_MASK/UNMASK */
 
-        /* New bank */
-        u32 pend_new = readl(core + 0x98b4);
+        /* New bank - reuse existing variables */
+        pend_new = readl(core + 0x98b4);
         writel(pend_new, core + 0x98b8);   /* Clear any pending */
         writel(0x3FFF, core + 0x98b0);     /* INT_EN */
         writel(0x3FFF, core + 0x98bc);     /* INT_MASK/UNMASK */
