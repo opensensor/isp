@@ -6945,10 +6945,9 @@ static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
         /* Queue buffer for VIC processing */
         if (data) {
             int channel = *(int*)data;
-            struct list_head *buffer_entry;
-            
+
             pr_info("VIC: Queue buffer event for channel %d\n", channel);
-            
+
             // FIXED: Create proper buffer entry structure
             struct vic_buffer_entry *buffer_entry = VIC_BUFFER_ALLOC_ATOMIC();
             if (buffer_entry) {
