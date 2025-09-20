@@ -3378,7 +3378,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         // *** CRITICAL: SETUP VIC BUFFERS BEFORE STREAMING (Binary Ninja reference) ***
         if (ourISPdev && ourISPdev->vic_dev) {
-            struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+            /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+            struct tx_isp_vic_device *vic = ourISPdev->vic_dev;
 
             pr_info("*** CHANNEL %d STREAMON: CHECKING VIC BUFFER SETUP ***\n", channel);
 
@@ -3548,7 +3549,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             
             // *** CRITICAL: TRIGGER VIC STREAMING CHAIN - THIS GENERATES THE REGISTER ACTIVITY! ***
             if (ourISPdev && ourISPdev->vic_dev) {
-                struct tx_isp_vic_device *vic_streaming = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+                struct tx_isp_vic_device *vic_streaming = ourISPdev->vic_dev;
                 
                 pr_info("*** Channel %d: NOW CALLING VIC STREAMING CHAIN - THIS SHOULD GENERATE REGISTER ACTIVITY! ***\n", channel);
                 
@@ -3595,7 +3597,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         
         // Get VIC device
         if (ourISPdev && ourISPdev->vic_dev) {
-            vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+            /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+            vic_dev = ourISPdev->vic_dev;
             
             // Activate VIC if needed
             if (vic_dev->state != 2) {
@@ -5216,7 +5219,8 @@ static int tx_isp_init(void)
 
     /* Register VIC subdev with proper ops structure */
     if (ourISPdev->vic_dev) {
-        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+        /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+        struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
         
         /* Set up VIC subdev with ops pointing to vic_subdev_ops */
         vic_dev->sd.ops = &vic_subdev_ops;
@@ -5312,7 +5316,8 @@ static int tx_isp_init(void)
 
     /* Register VIC subdev with proper ops structure */
     if (ourISPdev->vic_dev) {
-        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+        /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+        struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
 
         /* Set up VIC subdev with ops pointing to vic_subdev_ops */
         vic_dev->sd.ops = &vic_subdev_ops;
@@ -5399,7 +5404,8 @@ static int tx_isp_init(void)
     /* *** CRITICAL: Enable interrupt generation at hardware level *** */
     pr_info("*** ENABLING HARDWARE INTERRUPT GENERATION ***\n");
     if (ourISPdev->vic_dev) {
-        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+        /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+        struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
         if (vic_dev->vic_regs) {
             void __iomem *isp_regs = vic_dev->vic_regs - 0x9a00;  /* Get ISP base from VIC base */
             
