@@ -4087,6 +4087,13 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
                     /* Connect the real sensor to ISP device */
                     ourISPdev->sensor = sensor;
+                    pr_info("*** SENSOR CONNECTION: ourISPdev->sensor=%p ***\n", ourISPdev->sensor);
+
+                    /* CRITICAL: Link sensor to its subdev for VIC operations */
+                    if (sensor && real_sensor_sd) {
+                        sensor->sd = real_sensor_sd;
+                        pr_info("*** SENSOR-SUBDEV LINK: sensor->sd=%p ***\n", sensor->sd);
+                    }
 
                     /* CRITICAL: Register real sensor subdevice in subdevs array for GET_SENSOR_INFO IOCTL */
                     int subdev_slot = -1;
