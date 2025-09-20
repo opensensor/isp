@@ -411,6 +411,18 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         return 0xfffffff4;  /* Binary Ninja: return 0xfffffff4 */
     }
 
+    /* CRITICAL: Call subdevice core init method after module init - REFERENCE DRIVER PATTERN */
+    if (sd->ops && sd->ops->core && sd->ops->core->init) {
+        pr_info("*** tx_isp_subdev_init: Calling core->init for device %s ***\n", dev_name(&pdev->dev));
+        ret = sd->ops->core->init(sd, 1);  /* Enable = 1 for initialization */
+        if (ret != 0) {
+            pr_err("tx_isp_subdev_init: core->init failed for %s: %d\n", dev_name(&pdev->dev), ret);
+            /* Don't fail completely - some devices may not need init */
+        } else {
+            pr_info("*** tx_isp_subdev_init: core->init SUCCESS for device %s ***\n", dev_name(&pdev->dev));
+        }
+    }
+
     /* VIC interrupt registration moved to auto-linking function where registers are actually mapped */
     pr_info("*** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***\n");
 
