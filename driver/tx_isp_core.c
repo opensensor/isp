@@ -982,13 +982,13 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         return IRQ_NONE;
     }
 
-    /* Binary Ninja: void* $v0 = *(arg1 + 0xb8) */
+    /* Binary Ninja: void* $v0 = *(arg1 + 0xb8) - ISP core registers */
     isp_regs = isp_dev->core_regs;
     if (!isp_regs) {
         return IRQ_NONE;
     }
 
-    /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
+    /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) - VIC device */
     vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
     if (!vic_dev) {
         return IRQ_NONE;
@@ -998,16 +998,10 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     interrupt_status = readl(isp_regs + 0xb4);
     writel(interrupt_status, isp_regs + 0xb8);
 
-    /* CRITICAL FIX: Validate VIC registers before accessing offset 0x15c */
-    if (!vic_dev->vic_regs) {
-        pr_err("ispcore_interrupt_service_routine: VIC registers NULL, cannot process interrupt\n");
-        return IRQ_NONE;
-    }
-
     /* Binary Ninja: if (($s1 & 0x3f8) == 0) */
     if ((interrupt_status & 0x3f8) == 0) {
-        /* Binary Ninja: $a0 = *($s0 + 0x15c) */
-        error_check = readl(vic_dev->vic_regs + 0x15c);
+        /* Binary Ninja: $a0 = *($s0 + 0x15c) - VIC device field at offset 0x15c */
+        error_check = vic_dev->vic_start_ok;  /* This should be at offset 0x15c */
     } else {
         /* Binary Ninja: Error interrupt processing */
         u32 error_reg_84c = readl(isp_regs + 0x84c);
@@ -1015,7 +1009,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
                 interrupt_status, (interrupt_status & 0x3f8) >> 3,
                 interrupt_status & 0x7, error_reg_84c);
         /* Binary Ninja: $a0 = *($s0 + 0x15c) */
-        error_check = readl(vic_dev->vic_regs + 0x15c);
+        error_check = vic_dev->vic_start_ok;
     }
 
     /* Binary Ninja: if ($a0 == 1) return 1 */
