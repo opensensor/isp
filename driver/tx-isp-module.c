@@ -6614,7 +6614,8 @@ static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
     /* MIPS SAFE: Determine target device - use global ISP device if subdev is VIC-related */
     if (ourISPdev && ((uintptr_t)ourISPdev & 0x3) == 0) {
         if (ourISPdev->vic_dev && ((uintptr_t)ourISPdev->vic_dev & 0x3) == 0) {
-            vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+            /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+            vic_dev = ourISPdev->vic_dev;
             
             /* MIPS SAFE: Validate VIC device structure alignment */
             if (vic_dev && ((uintptr_t)vic_dev & 0x3) == 0) {
