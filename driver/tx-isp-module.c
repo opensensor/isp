@@ -1093,11 +1093,6 @@ int sensor_fps_control(int fps) {
         pr_info("sensor_fps_control: Stored %d/1 FPS in tuning data\n", fps);
     }
 
-    /* CRITICAL: Call the registered sensor's FPS IOCTL through the established connection */
-    /* This is the proper way to communicate with the loaded gc2053.ko sensor module */
-    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
-    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
-
     if (sensor && sensor->sd.ops &&
         sensor->sd.ops->sensor &&
         sensor->sd.ops->sensor->ioctl) {
@@ -2906,8 +2901,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
         
         // Check if real sensor is connected and active
-        if (ourISPdev && ourISPdev->sensor) {
-            active_sensor = ourISPdev->sensor;
+        extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+        struct tx_isp_sensor *sensor_check = tx_isp_get_sensor();
+        if (sensor_check) {
+            active_sensor = sensor_check;
             if (active_sensor && active_sensor->sd.vin_state == TX_ISP_MODULE_RUNNING) {
                 sensor_active = true;
                 pr_info("Channel %d: Real sensor %s is ACTIVE\n", channel, active_sensor->info.name);
@@ -3236,15 +3233,16 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     }
                 }
 
-                /* Check again after auto-linking attempt */
-                if (!ourISPdev->sensor) {
+                /* Check again after search attempt */
+                sensor_check = tx_isp_get_sensor();
+                if (!sensor_check) {
                     state->streaming = false;
                     return -ENODEV;
                 }
             }
 
-            /* Binary Ninja: Use the properly registered sensor from ourISPdev->sensor */
-            sensor = ourISPdev->sensor;
+            /* Binary Ninja: Use the properly registered sensor from helper function */
+            sensor = tx_isp_get_sensor();
 
             pr_info("*** BINARY NINJA: Using registered sensor at %p ***\n", sensor);
 
