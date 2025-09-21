@@ -3242,7 +3242,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
 
             /* Binary Ninja: Use the properly registered sensor from helper function */
-            sensor = tx_isp_get_sensor();
+            sensor = sensor_check;
 
             pr_info("*** BINARY NINJA: Using registered sensor at %p ***\n", sensor);
 
