@@ -1095,14 +1095,14 @@ static int tisp_ae0_get_statistics(void *buffer, uint32_t flags)
     }
 
     extern struct tx_isp_dev *ourISPdev;
-    if (!ourISPdev || !ourISPdev->core_regs) {
+    if (!ourISPdev || !ourISPdev->core_dev || !ourISPdev->core_dev->core_regs) {
         return -ENODEV;
     }
 
     /* Read AE0 statistics from hardware registers */
     uint32_t *stats = (uint32_t *)buffer;
     for (int i = 0; i < 256; i++) {
-        stats[i] = readl(ourISPdev->core_regs + 0xa000 + (i * 4));
+        stats[i] = readl(ourISPdev->core_dev->core_regs + 0xa000 + (i * 4));
     }
 
     pr_info("AE0 statistics collected with flags=0x%x\n", flags);
@@ -1117,14 +1117,14 @@ static int tisp_ae1_get_statistics(void *buffer, uint32_t flags)
     }
 
     extern struct tx_isp_dev *ourISPdev;
-    if (!ourISPdev || !ourISPdev->core_regs) {
+    if (!ourISPdev || !ourISPdev->core_dev || !ourISPdev->core_dev->core_regs) {
         return -ENODEV;
     }
 
     /* Read AE1 statistics from hardware registers */
     uint32_t *stats = (uint32_t *)buffer;
     for (int i = 0; i < 256; i++) {
-        stats[i] = readl(ourISPdev->core_regs + 0xa800 + (i * 4));
+        stats[i] = readl(ourISPdev->core_dev->core_regs + 0xa800 + (i * 4));
     }
 
     pr_info("AE1 statistics collected with flags=0x%x\n", flags);
@@ -1139,14 +1139,14 @@ static int tisp_ae0_get_hist(void *buffer, int mode, int flag)
     }
 
     extern struct tx_isp_dev *ourISPdev;
-    if (!ourISPdev || !ourISPdev->core_regs) {
+    if (!ourISPdev || !ourISPdev->core_dev || !ourISPdev->core_dev->core_regs) {
         return -ENODEV;
     }
 
     /* Read AE0 histogram from hardware registers */
     uint32_t *hist = (uint32_t *)buffer;
     for (int i = 0; i < 512; i++) {
-        hist[i] = readl(ourISPdev->core_regs + 0xa400 + (i * 4));
+        hist[i] = readl(ourISPdev->core_dev->core_regs + 0xa400 + (i * 4));
     }
 
     pr_info("AE0 histogram collected: mode=%d, flag=%d\n", mode, flag);
@@ -1161,14 +1161,14 @@ static int tisp_ae1_get_hist(void *buffer)
     }
 
     extern struct tx_isp_dev *ourISPdev;
-    if (!ourISPdev || !ourISPdev->core_regs) {
+    if (!ourISPdev || !ourISPdev->core_dev || !ourISPdev->core_dev->core_regs) {
         return -ENODEV;
     }
 
     /* Read AE1 histogram from hardware registers */
     uint32_t *hist = (uint32_t *)buffer;
     for (int i = 0; i < 512; i++) {
-        hist[i] = readl(ourISPdev->core_regs + 0xac00 + (i * 4));
+        hist[i] = readl(ourISPdev->core_dev->core_regs + 0xac00 + (i * 4));
     }
 
     pr_info("AE1 histogram collected\n");
