@@ -4019,7 +4019,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                                     struct tx_isp_sensor *real_sensor_for_attr = (struct tx_isp_sensor *)real_sensor_sd->host_priv;
                                     if (real_sensor_for_attr && real_sensor_for_attr->video.attr) {
                                         /* Copy the real sensor attributes from GC2053 module */
-                                        memcpy(&sensor->attr, real_sensor->video.attr, sizeof(struct tx_isp_sensor_attribute));
+                                        memcpy(&sensor->attr, real_sensor_for_attr->video.attr, sizeof(struct tx_isp_sensor_attribute));
                                         pr_info("*** COPIED REAL SENSOR ATTRIBUTES FROM GC2053 MODULE ***\n");
                                         pr_info("*** Real sensor attr: dbus_type=%d, width=%d, height=%d ***\n",
                                                 sensor->attr.dbus_type, sensor->attr.total_width, sensor->attr.total_height);
@@ -4086,6 +4086,11 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
                     if (subdev_slot >= 0) {
                         ourISPdev->subdevs[subdev_slot] = real_sensor_sd;
+
+                        /* CRITICAL FIX: Set host_priv so tx_isp_get_sensor() can find the sensor */
+                        real_sensor_sd->host_priv = sensor;
+                        pr_info("*** CRITICAL FIX: Set subdev[%d]->host_priv=%p ***\n", subdev_slot, real_sensor_sd->host_priv);
+
                         pr_info("*** REAL SENSOR SUBDEV REGISTERED IN SLOT %d FOR GET_SENSOR_INFO IOCTL ***\n", subdev_slot);
                     } else {
                         pr_warn("*** WARNING: No free subdev slot for real sensor registration ***\n");

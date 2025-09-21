@@ -1,372 +1,279 @@
-[   48.605747] TX ISP driver initializing with new subdevice management system...
-[   48.605760] *** Using reference driver interrupt-driven frame processing ***
-[   48.605766] *** VIC DEVICE CREATION DEFERRED TO PLATFORM DRIVER PROBE ***
-[   48.605771] *** VIN DEVICE CREATION DEFERRED TO tx_isp_core_probe (after memory mappings) ***
-[   48.605777] *** This fixes the 'ISP core registers not available' error ***
-[   48.605782] *** VIN SUBDEV OPS AND INITIALIZATION DEFERRED TO AUTO-LINK PHASE ***
-[   48.605787] *** CRITICAL: REGISTERING SUBDEV PLATFORM DRIVERS FIRST ***
-[   48.605793] *** TX ISP SUBDEV PLATFORM DRIVERS REGISTRATION ***
-[   48.619415] All ISP subdev platform drivers registered successfully
-[   48.619429] *** SUBDEV PLATFORM DRIVERS REGISTERED - VIC/CSI/VIN/CORE DRIVERS AVAILABLE ***
-[   48.619435] *** CRITICAL: INITIALIZING SUBDEVICE REGISTRY BEFORE MAIN PLATFORM DEVICE ***
-[   48.619440] *** CRITICAL: Registering main platform driver ***
-[   48.621883] *** Main platform driver registered successfully ***
-[   48.621895] *** REFERENCE DRIVER: Subdev platform devices will be registered by tx_isp_create_graph_and_nodes ***
-[   48.625927] *** PROBE: tx_isp_platform_probe CALLED for device tx-isp ***
-[   48.625945] *** PROBE: ISP device allocated successfully: 85f24000 ***
-[   48.625961] *** PROBE: Platform data: c068bcf0 ***
-[   48.625966] *** PROBE: Platform data validation passed ***
-[   48.625971] *** REFERENCE DRIVER: Individual subdevices will initialize their own memory regions ***
-[   48.625977] *** PLATFORM DEVICES ALREADY REGISTERED IN INIT - SKIPPING DUPLICATE REGISTRATION ***
-[   48.625983] *** tx_isp_module_init: EXACT Binary Ninja reference implementation ***
-[   48.630701] *** tx_isp_create_graph_and_nodes: EXACT Binary Ninja reference implementation ***
-[   48.630715] *** Registering platform device 0 from platform data ***
-[   48.636055] *** tx_isp_subdev_init: CSI subdev registered at index 0 ***
-[   48.636069] tx_isp_module_init: Module initialized for tx-isp-csi
-[   48.636075] *** tx_isp_subdev_init: Deferring core->init for device tx-isp-csi to prevent hangs ***
-[   48.636081] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
-[   48.636089] *** tx_isp_request_irq: IRQ 38 handled by main dispatcher - skipping duplicate registration ***
-[   48.636095] *** tx_isp_request_irq: IRQ 38 info stored for tx-isp-csi ***
-[   48.636103] tx_isp_subdev_init: platform_get_resource returned c068babc for device tx-isp-csi
-[   48.636111] tx_isp_subdev_init: Memory resource found: start=0x10022000, end=0x10022fff, size=0x00001000
-[   48.636120] isp_subdev_init_clks: Initializing 2 clocks
-[   48.636135] CGU_ISP clock enabled at 100MHz
-[   48.636143] ISP clock enabled
-[   48.638997] ISP isp-w02: [CSI PHY Control] write at offset 0x4: 0x0 -> 0x7800438 (delta: 0.000 ms)
-[   48.639011] ISP isp-w02: [CSI PHY Control] write at offset 0xc: 0x0 -> 0x2 (delta: 0.000 ms)
-[   48.639021] ISP isp-w02: [CSI PHY Control] write at offset 0x14: 0x0 -> 0x2 (delta: 0.000 ms)
-[   48.639030] ISP isp-w02: [CSI PHY Control] write at offset 0x18: 0x0 -> 0xf00 (delta: 0.000 ms)
-[   48.639042] ISP isp-w02: [CSI PHY Control] write at offset 0x60: 0x0 -> 0x800800 (delta: 0.000 ms)
-[   48.639051] ISP isp-w02: [CSI PHY Control] write at offset 0x64: 0x0 -> 0x9d09d0 (delta: 0.000 ms)
-[   48.639061] ISP isp-w02: [CSI PHY Control] write at offset 0x70: 0x0 -> 0x6002 (delta: 0.000 ms)
-[   48.639070] ISP isp-w02: [CSI PHY Control] write at offset 0x74: 0x0 -> 0x7003 (delta: 0.000 ms)
-[   48.639083] ISP isp-w02: [CSI PHY Control] write at offset 0xc0: 0x0 -> 0xeb8080 (delta: 0.000 ms)
-[   48.639092] ISP isp-w02: [CSI PHY Control] write at offset 0xc4: 0x0 -> 0x108080 (delta: 0.000 ms)
-[   48.639101] ISP isp-w02: [CSI PHY Control] write at offset 0xc8: 0x0 -> 0x29f06e (delta: 0.000 ms)
-[   48.639111] ISP isp-w02: [CSI PHY Control] write at offset 0xcc: 0x0 -> 0x913622 (delta: 0.000 ms)
-[   48.639120] ISP isp-w02: [CSI PHY Control] write at offset 0xd0: 0x0 -> 0x515af0 (delta: 0.000 ms)
-[   48.639129] ISP isp-w02: [CSI PHY Control] write at offset 0xd4: 0x0 -> 0xaaa610 (delta: 0.000 ms)
-[   48.639139] ISP isp-w02: [CSI PHY Control] write at offset 0xd8: 0x0 -> 0xd21092 (delta: 0.000 ms)
-[   48.639148] ISP isp-w02: [CSI PHY Control] write at offset 0xdc: 0x0 -> 0x6acade (delta: 0.000 ms)
-[   48.639157] ISP isp-w02: [CSI PHY Control] write at offset 0xe0: 0x0 -> 0xeb8080 (delta: 0.000 ms)
-[   48.639167] ISP isp-w02: [CSI PHY Control] write at offset 0xe4: 0x0 -> 0x108080 (delta: 0.000 ms)
-[   48.639175] ISP isp-w02: [CSI PHY Control] write at offset 0xe8: 0x0 -> 0x29f06e (delta: 0.000 ms)
-[   48.639309] ISP isp-w02: [CSI PHY Control] write at offset 0xec: 0x0 -> 0x913622 (delta: 0.000 ms)
-[   48.639321] ISP isp-w02: [CSI PHY Control] write at offset 0xf0: 0x0 -> 0x515af0 (delta: 0.000 ms)
-[   48.639330] ISP isp-w02: [CSI PHY Control] write at offset 0xf4: 0x0 -> 0xaaa610 (delta: 0.000 ms)
-[   48.639339] ISP isp-w02: [CSI PHY Control] write at offset 0xf8: 0x0 -> 0xd21092 (delta: 0.000 ms)
-[   48.639349] ISP isp-w02: [CSI PHY Control] write at offset 0xfc: 0x0 -> 0x6acade (delta: 0.000 ms)
-[   48.639358] ISP isp-w02: [CSI PHY Config] write at offset 0x100: 0x0 -> 0x2d0 (delta: 0.000 ms)
-[   48.639368] ISP isp-w02: [CSI PHY Config] write at offset 0x10c: 0x0 -> 0x2c000 (delta: 0.000 ms)
-[   48.639377] ISP isp-w02: [CSI PHY Config] write at offset 0x110: 0x0 -> 0x7800000 (delta: 0.000 ms)
-[   48.639393] ISP isp-w02: [CSI PHY Config] write at offset 0x1a4: 0x0 -> 0x100010 (delta: 0.000 ms)
-[   48.639402] ISP isp-w02: [CSI PHY Config] write at offset 0x1a8: 0x0 -> 0x4440 (delta: 0.000 ms)
-[   48.639411] ISP isp-w02: [CSI PHY Config] write at offset 0x1b0: 0x0 -> 0x10 (delta: 0.000 ms)
-[   48.642489] ISP isp-m0: [CSI PHY Control] write at offset 0x0: 0x0 -> 0x54560031 (delta: 0.000 ms)
-[   48.642501] ISP isp-m0: [CSI PHY Control] write at offset 0x4: 0x0 -> 0x7800438 (delta: 0.000 ms)
-[   48.642510] ISP isp-m0: [CSI PHY Control] write at offset 0x8: 0x0 -> 0x1 (delta: 0.000 ms)
-[   48.642519] ISP isp-m0: [CSI PHY Control] write at offset 0xc: 0x0 -> 0x80700008 (delta: 0.000 ms)
-[   48.642529] ISP isp-m0: [CSI PHY Control] write at offset 0x28: 0x0 -> 0x1 (delta: 0.000 ms)
-[   48.642539] ISP isp-m0: [CSI PHY Control] write at offset 0x2c: 0x0 -> 0x400040 (delta: 0.000 ms)
-[   48.642552] ISP isp-m0: [CSI PHY Control] write at offset 0x90: 0x0 -> 0x1 (delta: 0.000 ms)
-[   48.642561] ISP isp-m0: [CSI PHY Control] write at offset 0x94: 0x0 -> 0x1 (delta: 0.000 ms)
-[   48.642571] ISP isp-m0: [CSI PHY Control] write at offset 0x98: 0x0 -> 0x30000 (delta: 0.000 ms)
-[   48.642580] ISP isp-m0: [CSI PHY Control] write at offset 0xa8: 0x0 -> 0x58050000 (delta: 0.000 ms)
-[   48.642589] ISP isp-m0: [CSI PHY Control] write at offset 0xac: 0x0 -> 0x58050000 (delta: 0.000 ms)
-[   48.642600] ISP isp-m0: [CSI PHY Control] write at offset 0xc4: 0x0 -> 0x40000 (delta: 0.000 ms)
-[   48.642609] ISP isp-m0: [CSI PHY Control] write at offset 0xc8: 0x0 -> 0x400040 (delta: 0.000 ms)
-[   48.642618] ISP isp-m0: [CSI PHY Control] write at offset 0xcc: 0x0 -> 0x100 (delta: 0.000 ms)
-[   48.642627] ISP isp-m0: [CSI PHY Control] write at offset 0xd4: 0x0 -> 0xc (delta: 0.000 ms)
-[   48.642637] ISP isp-m0: [CSI PHY Control] write at offset 0xd8: 0x0 -> 0xffffff (delta: 0.000 ms)
-[   48.642646] ISP isp-m0: [CSI PHY Control] write at offset 0xe0: 0x0 -> 0x100 (delta: 0.000 ms)
-[   48.642655] ISP isp-m0: [CSI PHY Control] write at offset 0xe4: 0x0 -> 0x400040 (delta: 0.000 ms)
-[   48.642665] ISP isp-m0: [CSI PHY Control] write at offset 0xf0: 0x0 -> 0xff808000 (delta: 0.000 ms)
-[   48.642675] ISP isp-m0: [CSI PHY Config] write at offset 0x110: 0x0 -> 0x80007000 (delta: 0.000 ms)
-[   48.642685] ISP isp-m0: [CSI PHY Config] write at offset 0x114: 0x0 -> 0x777111 (delta: 0.000 ms)
-[   48.644509] ISP isp-m0: [ISP Control] write at offset 0x9804: 0x0 -> 0x3f00 (delta: 0.000 ms)
-[   48.644523] ISP isp-m0: [ISP Control] write at offset 0x9864: 0x0 -> 0x7800438 (delta: 0.000 ms)
-[   48.644533] ISP isp-m0: [ISP Control] write at offset 0x987c: 0x0 -> 0xc0000000 (delta: 0.000 ms)
-[   48.644542] ISP isp-m0: [ISP Control] write at offset 0x9880: 0x0 -> 0x1 (delta: 0.000 ms)
-[   48.644551] ISP isp-m0: [ISP Control] write at offset 0x9884: 0x0 -> 0x1 (delta: 0.000 ms)
-[   48.644560] ISP isp-m0: [ISP Control] write at offset 0x9890: 0x0 -> 0x1010001 (delta: 0.000 ms)
-[   48.644570] ISP isp-m0: [ISP Control] write at offset 0x989c: 0x0 -> 0x1010001 (delta: 0.000 ms)
-[   48.644579] ISP isp-m0: [ISP Control] write at offset 0x98a8: 0x0 -> 0x1010001 (delta: 0.000 ms)
-[   48.644605] ISP isp-m0: [VIC Control] write at offset 0x9a00: 0x0 -> 0x50002d0 (delta: 0.000 ms)
-[   48.644614] ISP isp-m0: [VIC Control] write at offset 0x9a04: 0x0 -> 0x3000300 (delta: 0.000 ms)
-[   48.644625] ISP isp-m0: [VIC Control] write at offset 0x9a2c: 0x0 -> 0x50002d0 (delta: 0.000 ms)
-[   48.644635] ISP isp-m0: [VIC Control] write at offset 0x9a34: 0x0 -> 0x1 (delta: 0.000 ms)
-[   48.644646] ISP isp-m0: [VIC Control] write at offset 0x9a70: 0x0 -> 0x1 (delta: 0.000 ms)
-[   48.644655] ISP isp-m0: [VIC Control] write at offset 0x9a7c: 0x0 -> 0x1 (delta: 0.000 ms)
-[   48.644664] ISP isp-m0: [VIC Control] write at offset 0x9a80: 0x0 -> 0x500 (delta: 0.000 ms)
-[   48.644673] ISP isp-m0: [VIC Control] write at offset 0x9a88: 0x0 -> 0x1 (delta: 0.000 ms)
-[   48.644683] ISP isp-m0: [VIC Control] write at offset 0x9a94: 0x0 -> 0x1 (delta: 0.000 ms)
-[   48.644692] ISP isp-m0: [VIC Control] write at offset 0x9a98: 0x0 -> 0x500 (delta: 0.000 ms)
-[   48.644703] ISP isp-m0: [VIC Control] write at offset 0x9ac0: 0x0 -> 0x200 (delta: 0.000 ms)
-[   48.644712] ISP isp-m0: [VIC Control] write at offset 0x9ac8: 0x0 -> 0x200 (delta: 0.000 ms)
-[   48.644966] ISP isp-m0: [Core Control] write at offset 0xb004: 0x0 -> 0xf001f001 (delta: 0.000 ms)
-[   48.644975] ISP isp-m0: [Core Control] write at offset 0xb008: 0x0 -> 0x40404040 (delta: 0.000 ms)
-[   48.644985] ISP isp-m0: [Core Control] write at offset 0xb00c: 0x0 -> 0x40404040 (delta: 0.000 ms)
-[   48.644994] ISP isp-m0: [Core Control] write at offset 0xb010: 0x0 -> 0x40404040 (delta: 0.000 ms)
-[   48.645003] ISP isp-m0: [Core Control] write at offset 0xb014: 0x0 -> 0x404040 (delta: 0.000 ms)
-[   48.645013] ISP isp-m0: [Core Control] write at offset 0xb018: 0x0 -> 0x40404040 (delta: 0.000 ms)
-[   48.645022] ISP isp-m0: [Core Control] write at offset 0xb01c: 0x0 -> 0x40404040 (delta: 0.000 ms)
-[   48.645031] ISP isp-m0: [Core Control] write at offset 0xb020: 0x0 -> 0x40404040 (delta: 0.000 ms)
-[   48.645041] ISP isp-m0: [Core Control] write at offset 0xb024: 0x0 -> 0x404040 (delta: 0.000 ms)
-[   48.645050] ISP isp-m0: [Core Control] write at offset 0xb028: 0x0 -> 0x1000080 (delta: 0.000 ms)
-[   48.645059] ISP isp-m0: [Core Control] write at offset 0xb02c: 0x0 -> 0x1000080 (delta: 0.000 ms)
-[   48.645069] ISP isp-m0: [Core Control] write at offset 0xb030: 0x0 -> 0x100 (delta: 0.000 ms)
-[   48.645078] ISP isp-m0: [Core Control] write at offset 0xb034: 0x0 -> 0xffff0100 (delta: 0.000 ms)
-[   48.645087] ISP isp-m0: [Core Control] write at offset 0xb038: 0x0 -> 0x1ff00 (delta: 0.000 ms)
-[   48.645097] ISP isp-m0: [Core Control] write at offset 0xb04c: 0x0 -> 0x103 (delta: 0.000 ms)
-[   48.645106] ISP isp-m0: [Core Control] write at offset 0xb050: 0x0 -> 0x3 (delta: 0.000 ms)
-[   48.645117] ISP isp-m0: [Core Control] write at offset 0xb07c: 0x0 -> 0x1fffff (delta: 0.000 ms)
-[   48.645127] ISP isp-m0: [Core Control] write at offset 0xb080: 0x0 -> 0x1fffff (delta: 0.000 ms)
-[   48.645136] ISP isp-m0: [Core Control] write at offset 0xb084: 0x0 -> 0x1fffff (delta: 0.000 ms)
-[   48.645145] ISP isp-m0: [Core Control] write at offset 0xb088: 0x0 -> 0x1fdeff (delta: 0.000 ms)
-[   48.645155] ISP isp-m0: [Core Control] write at offset 0xb08c: 0x0 -> 0x1fff (delta: 0.000 ms)
-[   48.659239] CPM clock gates configured
-[   48.659252] isp_subdev_init_clks: Successfully initialized 2 clocks
-[   48.659261] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-csi' to ourISPdev ***
-[   48.659267] *** DEBUG: Device name comparison - checking 'tx-isp-csi' ***
-[   48.659272] *** DEBUG: About to check device name matches ***
-[   48.659279] *** CSI BASIC REGISTERS SET: b0022000 (from tx_isp_subdev_init) ***
-[   48.659286] *** LINKED CSI device: 85205c00, regs: b0022000 ***
-[   48.659293] *** CSI PROBE: Using register mapping from tx_isp_subdev_init: b0022000 ***
-[   48.659299] *** CSI PROBE: Device linking handled automatically by tx_isp_subdev_init ***
-[   48.659321] *** Platform device 0 (tx-isp-csi) registered successfully ***
-[   48.659328] *** Registering platform device 1 from platform data ***
-[   48.666401] *** VIC PROBE: IRQ handler pointers set to NULL (reference driver uses main dispatcher) ***
-[   48.666415] *** tx_isp_subdev_pipo: SAFE struct member access implementation ***
-[   48.666423] tx_isp_subdev_pipo: entry - sd=85de4000, arg=85bb7ac0
-[   48.666429] tx_isp_subdev_pipo: vic_dev retrieved:   (null)
-[   48.666434] tx_isp_subdev_pipo: vic_dev is NULL
-[   48.666439] *** VIC PROBE: Buffer management initialized successfully ***
-[   48.666446] *** VIC PROBE: Initialized default dimensions 1920x1080 and critical fields ***
-[   48.666452] *** VIC PROBE: Stored vic_dev pointer 85de4000 in subdev private data ***
-[   48.666458] *** VIC PROBE: Callback structure setup deferred - avoiding memory corruption ***
-[   48.666464] *** tx_isp_subdev_init: VIC device linked to main ISP device ***
-[   48.666469] *** tx_isp_subdev_init: VIC subdev registered at index 1 ***
-[   48.666475] *** tx_isp_subdev_init: Interrupt registration deferred until after module init ***
-[   48.666481] *** tx_isp_subdev_init: VIC device linked and registered at index 1 ***
-[   48.666487] tx_isp_module_init: Module initialized for isp-w02
-[   48.666493] *** tx_isp_subdev_init: Deferring core->init for device isp-w02 to prevent hangs ***
-[   48.666499] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
-[   48.666506] *** tx_isp_request_irq: IRQ 38 handled by main dispatcher - skipping duplicate registration ***
-[   48.666512] *** tx_isp_request_irq: IRQ 38 info stored for isp-w02 ***
-[   48.666519] tx_isp_subdev_init: platform_get_resource returned c068bbdc for device isp-w02
-[   48.666527] tx_isp_subdev_init: Memory resource found: start=0x133e0000, end=0x133effff, size=0x00010000
-[   48.666537] isp_subdev_init_clks: Initializing 2 clocks
-[   48.666545] CGU_ISP clock enabled at 100MHz
-[   48.666552] ISP clock enabled
-[   48.689230] CPM clock gates configured
-[   48.689244] isp_subdev_init_clks: Successfully initialized 2 clocks
-[   48.689253] *** tx_isp_subdev_auto_link: Auto-linking device 'isp-w02' to ourISPdev ***
-[   48.689259] *** DEBUG: Device name comparison - checking 'isp-w02' ***
-[   48.689263] *** DEBUG: About to check device name matches ***
-[   48.689271] *** MAPPED secondary VIC registers: b0023000 (0x10023000) ***
-[   48.689279] *** LINKED VIC device: 85de4000, primary_regs: b33e0000, secondary_regs: b0023000 ***
-[   48.689285] *** VIC AUTO-LINK: Registers are mapped, registering interrupt handler ***
-[   48.689292] *** VIC PROBE: Device linking handled automatically by tx_isp_subdev_init ***
-[   48.689315] *** Platform device 1 (isp-w02) registered successfully ***
-[   48.689322] *** Registering platform device 2 from platform data ***
-[   48.696727] tx_isp_module_init: Module initialized for tx-isp-vin
-[   48.696741] *** tx_isp_subdev_init: Deferring core->init for device tx-isp-vin to prevent hangs ***
-[   48.696747] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
-[   48.696754] *** tx_isp_request_irq: IRQ 37 handled by main dispatcher - skipping duplicate registration ***
-[   48.696761] *** tx_isp_request_irq: IRQ 37 info stored for tx-isp-vin ***
-[   48.696768] tx_isp_subdev_init: platform_get_resource returned   (null) for device tx-isp-vin
-[   48.696774] tx_isp_subdev_init: No memory resource for device tx-isp-vin (logical device - OK)
-[   48.696780] isp_subdev_init_clks: Initializing 0 clocks
-[   48.696787] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-vin' to ourISPdev ***
-[   48.696793] *** DEBUG: Device name comparison - checking 'tx-isp-vin' ***
-[   48.696798] *** DEBUG: About to check device name matches ***
-[   48.696803] *** DEBUG: VIN device name matched! Setting up VIN device ***
-[   48.696810] *** LINKED VIN device: 85de4400 ***
-[   48.696817] *** VIN SUBDEV OPS CONFIGURED: core=c068cef4, video=c068cee8, s_stream=c066c90c ***
-[   48.696823] *** REGISTERED VIN SUBDEV AT INDEX 2 WITH VIDEO OPS ***
-[   48.696828] *** VIN INITIALIZATION DEFERRED TO SENSOR REGISTRATION PHASE ***
-[   48.696835] *** VIN PROBE: Device linking handled automatically by tx_isp_subdev_init ***
-[   48.696853] *** Platform device 2 (tx-isp-vin) registered successfully ***
-[   48.696860] *** Registering platform device 3 from platform data ***
-[   48.699410] *** Platform device 3 (tx-isp-fs) registered successfully ***
-[   48.699421] *** Registering platform device 4 from platform data ***
-[   48.701935] *** tx_isp_core_probe: NEW ARCHITECTURE - Creating separate core device ***
-[   48.701948] *** tx_isp_create_core_device: Creating ISP core device ***
-[   48.701957] *** tx_isp_create_core_device: Core device created successfully: 85de4800 ***
-[   48.701964] *** tx_isp_subdev_init: Core ISP subdev registration handled by core device ***
-[   48.701971] tx_isp_module_init: Module initialized for tx-isp-core
-[   48.701977] *** tx_isp_subdev_init: Deferring core->init for device tx-isp-core to prevent hangs ***
-[   48.701983] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
-[   48.701991] *** tx_isp_request_irq: IRQ 37 handled by main dispatcher - skipping duplicate registration ***
-[   48.701998] *** tx_isp_request_irq: IRQ 37 info stored for tx-isp-core ***
-[   48.702005] tx_isp_subdev_init: platform_get_resource returned c068b724 for device tx-isp-core
-[   48.702013] tx_isp_subdev_init: Memory resource found: start=0x13300000, end=0x1330ffff, size=0x00010000
-[   48.702023] isp_subdev_init_clks: Initializing 3 clocks
-[   48.702031] CGU_ISP clock enabled at 100MHz
-[   48.702038] ISP clock enabled
-[   48.702045] CSI clock enabled
-[   48.712393] ISP isp-w01: [CSI PHY Control] write at offset 0x0: 0x0 -> 0x3130322a (delta: 0.000 ms)
-[   48.712407] ISP isp-w01: [CSI PHY Control] write at offset 0x4: 0x0 -> 0x1 (delta: 0.000 ms)
-[   48.712417] ISP isp-w01: [CSI PHY Control] write at offset 0x14: 0x0 -> 0x200 (delta: 0.000 ms)
-[   48.729235] CPM clock gates configured
-[   48.729248] isp_subdev_init_clks: Successfully initialized 3 clocks
-[   48.729257] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-core' to ourISPdev ***
-[   48.729263] *** DEBUG: Device name comparison - checking 'tx-isp-core' ***
-[   48.729267] *** DEBUG: About to check device name matches ***
-[   48.729274] *** CORE device not yet linked - regs will be mapped later ***
-[   48.729280] *** tx_isp_core_probe: Core subdev initialized successfully ***
-[   48.729288] *** tx_isp_core_device_init: Initializing core device: 85de4800 ***
-[   48.729300] *** tx_isp_core_device_init: Core device initialized successfully ***
-[   48.729308] *** tx_isp_link_core_device: Linking core device 85de4800 to ISP device 85f24000 ***
-[   48.729313] *** tx_isp_link_core_device: Core device linked successfully ***
-[   48.729319] *** Core subdev registered at index 4: 85de4800 ***
-[   48.729333] *** tx_isp_core_probe: VIC device creation deferred to platform driver system ***
-[   48.729339] *** tx_isp_core_probe: Platform drivers will call tx_isp_subdev_init for proper initialization ***
-[   48.729345] *** tx_isp_core_probe: Calling sensor_early_init ***
-[   48.729350] sensor_early_init: Preparing sensor infrastructure
-[   48.729355] *** tx_isp_core_probe: Core device setup complete ***
-[   48.729361] ***   - Core device: 85de4800 ***
-[   48.729366] ***   - Channel count: 6 ***
-[   48.729371] ***   - Linked to ISP device: 85f24000 ***
-[   48.729377] *** tx_isp_core_probe: Initializing core tuning system ***
-[   48.729398] *** tx_isp_core_probe: Tuning init SUCCESS ***
-[   48.729403] *** tx_isp_core_probe: SUCCESS - Core device fully initialized ***
-[   48.729409] ***   - Core device: 85de4800 ***
-[   48.729415] ***   - Tuning device: 80520000 ***
-[   48.729420] *** tx_isp_core_probe: Creating frame channel devices ***
-[   48.729425] *** tx_isp_create_framechan_devices: Creating frame channel devices ***
-[   48.737151] *** Created frame channel device: /dev/framechan0 (major=10, minor=54) ***
-[   48.739423] *** Created frame channel device: /dev/framechan1 (major=10, minor=53) ***
-[   48.742389] *** Created frame channel device: /dev/framechan2 (major=10, minor=52) ***
-[   48.744940] *** Created frame channel device: /dev/framechan3 (major=10, minor=51) ***
-[   48.744950] *** tx_isp_create_framechan_devices: All frame channel devices created ***
-[   48.744956] *** tx_isp_core_probe: Frame channel devices created successfully ***
-[   48.744961] *** tx_isp_core_probe: Creating ISP M0 tuning device node ***
-[   48.744967] tisp_code_create_tuning_node: Creating ISP M0 tuning device node
-[   48.744975] tisp_code_create_tuning_node: Allocated dynamic major 251
-[   48.757398] *** ISP M0 TUNING DEVICE CREATED: /dev/isp-m0 (major=251, minor=0) ***
-[   48.757409] *** tx_isp_core_probe: ISP M0 tuning device node created successfully ***
-[   48.757415] *** tx_isp_core_probe: Core probe completed successfully ***
-[   48.757435] *** Platform device 4 (tx-isp-core) registered successfully ***
-[   48.757441] *** tx_isp_create_graph_and_nodes: Binary Ninja reference implementation complete ***
-[   48.757447] *** tx_isp_module_init: Binary Ninja reference implementation complete ***
-[   48.757453] *** PROBE: Binary Ninja reference implementation complete ***
-[   48.757463] *** SUCCESS: ourISPdev allocated by probe function: 85f24000 ***
-[   48.757469] *** INITIALIZING SUBDEVICE REGISTRY WITH ALLOCATED ourISPdev ***
-[   48.757474] *** tx_isp_init_subdev_registry: Initializing subdevice registry ***
-[   48.757481] tx_isp_init_subdev_registry: 3 devices already linked directly - skipping registry creation
-[   48.757487] *** USING DIRECT DEVICE LINKING INSTEAD OF REGISTRY SYSTEM ***
-[   48.757492] *** SUBDEVICE REGISTRY INITIALIZED - GRAPH CREATION SHOULD NOW SUCCEED ***
-[   48.757497] *** CRITICAL: Registering main interrupt dispatcher for IRQ 37 and 38 ***
-[   48.759361] *** MAIN DISPATCHER: IRQ 37 registered successfully ***
-[   48.760161] *** MAIN DISPATCHER: IRQ 38 registered successfully ***
-[   48.760171] *** MAIN DISPATCHER: Both IRQ 37 and 38 registered with main dispatcher ***
-[   48.760177] TX ISP driver initialized successfully - probe function will handle device setup
-[   53.701344] ISP opened successfully
-[   53.701676] ISP IOCTL: cmd=0x805056c1 arg=0x775e3d60
-[   53.701685] *** TX_ISP_SENSOR_REGISTER: FIXED TO CREATE ACTUAL SENSOR CONNECTION ***
-[   53.701692] Sensor register: gc2053
-[   53.701697] *** HANDLING SENSOR REGISTRATION WITH SAFE STRUCT ACCESS ***
-[   53.701703] Sensor registration complete, final_result=0x0
-[   53.701709] *** ADDING SUCCESSFULLY REGISTERED SENSOR TO LIST: gc2053 ***
-[   53.701717] *** SENSOR ADDED TO LIST: index=0 name=gc2053 ***
-[   53.701722] *** CREATING I2C DEVICE FOR SENSOR gc2053 ***
-[   53.701730] *** CREATING I2C CLIENT: name=gc2053, addr=0x37, adapter=i2c0 ***
-[   53.701736] *** isp_i2c_new_subdev_board: MIPS-SAFE implementation - FIXED CRASH ***
-[   53.701744] Creating I2C subdev: type=gc2053 addr=0x37 on adapter i2c0 (MIPS-safe)
-[   53.701750] *** MIPS-SAFE: Requesting sensor module gc2053 ***
-[   53.704540] *** MIPS-SAFE: Valid I2C address 0x37, creating device ***
-[   53.709562] tx_isp_module_init: Module initialized for (null)
-[   53.709575] *** tx_isp_subdev_init: Deferring core->init for device (null) to prevent hangs ***
-[   53.709581] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
-[   53.709588] *** tx_isp_subdev_auto_link: Auto-linking device 'gc2053' to ourISPdev ***
-[   53.709594] *** DEBUG: Device name comparison - checking 'gc2053' ***
-[   53.709599] *** DEBUG: About to check device name matches ***
-[   53.709606] *** DEBUG: Unknown device name 'gc2053' - no specific auto-link handling ***
-[   53.709626] *** MIPS-SAFE: I2C device created successfully at 0x8553ec00 ***
-[   53.709633] *** MIPS-SAFE: Module reference acquired for gc2053 ***
-[   53.709639] *** MIPS-SAFE: Sensor subdev data found, device ready ***
-[   53.709646] *** I2C DEVICE READY: gc2053 at 0x37 (MIPS-safe) ***
-[   53.709652] *** SUCCESS: I2C CLIENT CREATED - SENSOR PROBE SHOULD BE CALLED! ***
-[   53.709658] *** I2C CLIENT: gc2053 at 0x37 on i2c0 ***
-[   53.709664] *** LOOKING FOR REAL SENSOR REGISTERED BY gc2053 MODULE ***
-[   53.709669] *** WAITING FOR SENSOR PROBE TO COMPLETE ***
-[   53.919347] *** I2C CLIENT DATA: 8116c400 ***
-[   53.919359] *** CHECKING SENSOR SUBDEV: sd=8116c400 ***
-[   53.919366] *** SENSOR SUBDEV OPS: c06a9638 ***
-[   53.919374] *** SENSOR OPS STRUCTURE: core=c06a9664, video=c06a9658, sensor=c06a964c ***
-[   53.919380] *** SENSOR HOSTDATA:   (null) ***
-[   53.919385] *** SUCCESS: Real sensor subdev with ops found (hostdata NULL) ***
-[   53.919394] *** CREATED MINIMAL SENSOR STRUCTURE FOR VIC COMPATIBILITY ***
-[   53.919400] *** sensor->video.attr=8116ca08 (points to sensor->attr) ***
-[   53.919405] *** CONNECTING REAL SENSOR TO ISP DEVICE ***
-[   53.919412] Current: ourISPdev=85f24000, current_sensor=  (null)
-[   53.919418] Real sensor: sensor=8116c800, subdev=8116c400
-[   53.919424] *** SENSOR CONNECTION: sensor=8116c800 already in subdev array ***
-[   53.919431] *** SENSOR STRUCTURE: sensor=8116c800, sensor->sd at 8116c800 ***
-[   53.919438] *** REAL SENSOR SUBDEV REGISTERED IN SLOT 3 FOR GET_SENSOR_INFO IOCTL ***
-[   53.919443] *** REAL SENSOR CONNECTED TO ISP DEVICE SUCCESSFULLY ***
-[   53.919448] *** SENSOR REGISTRY UPDATED WITH REAL SENSOR ***
-[   53.919453] *** INITIALIZING VIN FOR SENSOR STREAMING ***
-[   53.919460] VIN: tx_isp_vin_init: CRITICAL FIX - ignore arg1, use global ISP only = 0x1
-[   53.919466] VIN: tx_isp_vin_init: using VIN device from global ISP: 85de4400
-[   53.919472] VIN: tx_isp_vin_init: no sensor available = 0x158
-[   53.919477] VIN: tx_isp_vin_init: *** VIN STATE SET SAFELY *** = 0x3
-[   53.919483] VIN: tx_isp_vin_init: EXACT Binary Ninja result = 0xffffffff
-[   53.919489] *** VIN INIT RESULT: -1, VIN STATE: 3 ***
-[   53.919494] *** VIN SUCCESSFULLY INITIALIZED TO STATE 3 - READY FOR STREAMING ***
-[   53.919500] *** SENSOR CONNECTED - Core initialization will be triggered by STREAMON event ***
-[   53.919515] ISP IOCTL: cmd=0xc050561a arg=0x7fb47108
-[   53.919520] *** TX_ISP_SENSOR_ENUM_INPUT: MEMORY SAFE implementation ***
-[   53.919526] Sensor enumeration: requesting index 0
-[   53.919533] *** FOUND SENSOR: index=0 name=gc2053 ***
-[   53.919539] Sensor enumeration: index=0 name=gc2053
-[   53.919547] ISP IOCTL: cmd=0xc050561a arg=0x7fb47108
-[   53.919552] *** TX_ISP_SENSOR_ENUM_INPUT: MEMORY SAFE implementation ***
-[   53.919558] Sensor enumeration: requesting index 1
-[   53.919564] No sensor found at index 1 (total registered: 1)
-[   53.919572] ISP IOCTL: cmd=0xc0045627 arg=0x7fb47160
-[   53.919578] Sensor input set to index 0 (gc2053)
-[   53.919585] ISP IOCTL: cmd=0x800856d5 arg=0x7fb47158
-[   53.919592] ISP buffer calculation: width=1920 height=1080 memopt=0
-[   53.919597] *** BUFFER FIX: Using RAW10 calculation instead of incorrect YUV calculation ***
-[   53.919604] *** RAW10 BUFFER: 2073600 pixels -> 2592000 bytes -> 2592000 aligned ***
-[   53.919611] ISP calculated buffer size: 2592000 bytes (0x278d00)
-[   53.994843] ISP IOCTL: cmd=0x800856d4 arg=0x7fb47158
-[   53.994857] ISP set buffer: addr=0x6300000 size=2592000
-[   53.994863] Configuring main frame buffer: 0x6300000 stride=1920
-[   53.994870] Full buffer mode: YUV stride=64 size=35328
-[   53.999403] ISP IOCTL: cmd=0x40045626 arg=0x7fb47170
-[   53.999415] *** 0x40045626: GET_SENSOR_INFO - Binary Ninja exact implementation ***
-[   53.999422] *** csi_sensor_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x2000003 ***
-[   53.999428] *** Found sensor, result=0 ***
-[   53.999434] *** GET_SENSOR_INFO: Returning sensor_result=0 ***
-[   53.999441] ISP IOCTL: cmd=0x80045612 arg=0x0
-[   53.999448] *** tx_isp_video_s_stream: EXACT Binary Ninja implementation - enable=1 ***
-[   53.999455] *** BINARY NINJA: Calling subdev 0 s_stream (enable=1) ***
-[   53.999464] *** DEBUG: subdev=85205c00, ops=c068c000, video=c068c028, s_stream=c066241c ***
-[   53.999470] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
-[   53.999477] csi_video_s_stream: sd=85205c00, enable=1
-[   53.999482] csi_video_s_stream: CSI device state=1 < 2, returning 0
-[   53.999488] tx_isp_video_s_stream: Subdev 0 s_stream returned success
-[   53.999495] *** BINARY NINJA: Calling subdev 1 s_stream (enable=1) ***
-[   53.999503] *** DEBUG: subdev=85de4000, ops=c068bf90, video=c068bfe0, s_stream=c0661d90 ***
-[   53.999510] *** vic_core_s_stream: BINARY NINJA EXACT - sd=85de4000, enable=1 ***
-[   53.999516] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=1 ***
-[   53.999521] *** vic_core_s_stream: STREAM ON ***
-[   53.999526] *** vic_core_s_stream: State != 4, calling VIC start sequence ***
-[   53.999532] *** tx_vic_disable_irq: BINARY NINJA EXACT ***
-[   53.999537] *** tx_vic_disable_irq: VIC interrupts already disabled ***
-[   53.999543] *** tx_isp_vic_start: EXACT Binary Ninja reference implementation ***
-[   53.999549] tx_isp_vic_start: No sensor attributes available
-[   53.999554] *** tx_vic_enable_irq: BINARY NINJA EXACT ***
-[   53.999560] *** tx_vic_enable_irq: VIC interrupts ENABLED ***
-[   53.999565] *** vic_core_s_stream: VIC start completed, ret=-19, state=4 ***
-[   53.999572] tx_isp_video_s_stream: Subdev 1 s_stream failed: -19
-[   53.999577] *** BINARY NINJA: Rolling back subdev 0 ***
-[   53.999583] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
-[   53.999589] csi_video_s_stream: sd=85205c00, enable=0
-[   53.999595] csi_video_s_stream: CSI device state=1 < 2, returning 0
-[   54.001387] ISP released (refcnt=0)
+[   54.856982] TX ISP driver initializing with new subdevice management system...
+[   54.856995] *** Using reference driver interrupt-driven frame processing ***
+[   54.857000] *** VIC DEVICE CREATION DEFERRED TO PLATFORM DRIVER PROBE ***
+[   54.857006] *** VIN DEVICE CREATION DEFERRED TO tx_isp_core_probe (after memory mappings) ***
+[   54.857012] *** This fixes the 'ISP core registers not available' error ***
+[   54.857017] *** VIN SUBDEV OPS AND INITIALIZATION DEFERRED TO AUTO-LINK PHASE ***
+[   54.857022] *** CRITICAL: REGISTERING SUBDEV PLATFORM DRIVERS FIRST ***
+[   54.857028] *** TX ISP SUBDEV PLATFORM DRIVERS REGISTRATION ***
+[   54.866952] All ISP subdev platform drivers registered successfully
+[   54.866964] *** SUBDEV PLATFORM DRIVERS REGISTERED - VIC/CSI/VIN/CORE DRIVERS AVAILABLE ***
+[   54.866970] *** CRITICAL: INITIALIZING SUBDEVICE REGISTRY BEFORE MAIN PLATFORM DEVICE ***
+[   54.866976] *** CRITICAL: Registering main platform driver ***
+[   54.869365] *** Main platform driver registered successfully ***
+[   54.869378] *** REFERENCE DRIVER: Subdev platform devices will be registered by tx_isp_create_graph_and_nodes ***
+[   54.871963] *** PROBE: tx_isp_platform_probe CALLED for device tx-isp ***
+[   54.871982] *** PROBE: ISP device allocated successfully: 85dcc000 ***
+[   54.872000] *** PROBE: Platform data: c0684f00 ***
+[   54.872005] *** PROBE: Platform data validation passed ***
+[   54.872010] *** REFERENCE DRIVER: Individual subdevices will initialize their own memory regions ***
+[   54.872016] *** PLATFORM DEVICES ALREADY REGISTERED IN INIT - SKIPPING DUPLICATE REGISTRATION ***
+[   54.872022] *** tx_isp_module_init: EXACT Binary Ninja reference implementation ***
+[   54.874637] *** tx_isp_create_graph_and_nodes: EXACT Binary Ninja reference implementation ***
+[   54.874651] *** Registering platform device 0 from platform data ***
+[   54.877162] *** tx_isp_subdev_init: CSI subdev registered at index 0 ***
+[   54.877177] tx_isp_module_init: Module initialized for tx-isp-csi
+[   54.877184] *** tx_isp_subdev_init: Deferring core->init for device tx-isp-csi to prevent hangs ***
+[   54.877190] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
+[   54.877197] *** tx_isp_request_irq: IRQ 38 handled by main dispatcher - skipping duplicate registration ***
+[   54.877204] *** tx_isp_request_irq: IRQ 38 info stored for tx-isp-csi ***
+[   54.877212] tx_isp_subdev_init: platform_get_resource returned c0684ccc for device tx-isp-csi
+[   54.877220] tx_isp_subdev_init: Memory resource found: start=0x10022000, end=0x10022fff, size=0x00001000
+[   54.877229] isp_subdev_init_clks: Initializing 2 clocks
+[   54.877240] CGU_ISP clock enabled at 100MHz
+[   54.877249] ISP clock enabled
+[   54.899161] CPM clock gates configured
+[   54.899174] isp_subdev_init_clks: Successfully initialized 2 clocks
+[   54.899182] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-csi' to ourISPdev ***
+[   54.899188] *** DEBUG: Device name comparison - checking 'tx-isp-csi' ***
+[   54.899193] *** DEBUG: About to check device name matches ***
+[   54.899200] *** CSI BASIC REGISTERS SET: b0022000 (from tx_isp_subdev_init) ***
+[   54.899207] *** LINKED CSI device: 85209800, regs: b0022000 ***
+[   54.899214] *** CSI PROBE: Using register mapping from tx_isp_subdev_init: b0022000 ***
+[   54.899220] *** CSI PROBE: Device linking handled automatically by tx_isp_subdev_init ***
+[   54.899241] *** Platform device 0 (tx-isp-csi) registered successfully ***
+[   54.899248] *** Registering platform device 1 from platform data ***
+[   54.899586] *** VIC PROBE: IRQ handler pointers set to NULL (reference driver uses main dispatcher) ***
+[   54.899600] *** tx_isp_subdev_pipo: SAFE struct member access implementation ***
+[   54.899608] tx_isp_subdev_pipo: entry - sd=85f68000, arg=85dc7ac0
+[   54.899615] tx_isp_subdev_pipo: vic_dev retrieved:   (null)
+[   54.899620] tx_isp_subdev_pipo: vic_dev is NULL
+[   54.899625] *** VIC PROBE: Buffer management initialized successfully ***
+[   54.899632] *** VIC PROBE: Initialized default dimensions 1920x1080 and critical fields ***
+[   54.899638] *** VIC PROBE: Stored vic_dev pointer 85f68000 in subdev private data ***
+[   54.899644] *** VIC PROBE: Callback structure setup deferred - avoiding memory corruption ***
+[   54.899650] *** tx_isp_subdev_init: VIC device linked to main ISP device ***
+[   54.899655] *** tx_isp_subdev_init: VIC subdev registered at index 1 ***
+[   54.899661] *** tx_isp_subdev_init: Interrupt registration deferred until after module init ***
+[   54.899667] *** tx_isp_subdev_init: VIC device linked and registered at index 1 ***
+[   54.899673] tx_isp_module_init: Module initialized for isp-w02
+[   54.899679] *** tx_isp_subdev_init: Deferring core->init for device isp-w02 to prevent hangs ***
+[   54.899684] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
+[   54.899692] *** tx_isp_request_irq: IRQ 38 handled by main dispatcher - skipping duplicate registration ***
+[   54.899698] *** tx_isp_request_irq: IRQ 38 info stored for isp-w02 ***
+[   54.899706] tx_isp_subdev_init: platform_get_resource returned c0684dec for device isp-w02
+[   54.899714] tx_isp_subdev_init: Memory resource found: start=0x133e0000, end=0x133effff, size=0x00010000
+[   54.899723] isp_subdev_init_clks: Initializing 2 clocks
+[   54.899732] CGU_ISP clock enabled at 100MHz
+[   54.899739] ISP clock enabled
+[   54.929147] CPM clock gates configured
+[   54.929160] isp_subdev_init_clks: Successfully initialized 2 clocks
+[   54.929169] *** tx_isp_subdev_auto_link: Auto-linking device 'isp-w02' to ourISPdev ***
+[   54.929174] *** DEBUG: Device name comparison - checking 'isp-w02' ***
+[   54.929180] *** DEBUG: About to check device name matches ***
+[   54.929187] *** MAPPED secondary VIC registers: b0023000 (0x10023000) ***
+[   54.929195] *** LINKED VIC device: 85f68000, primary_regs: b33e0000, secondary_regs: b0023000 ***
+[   54.929201] *** VIC AUTO-LINK: Registers are mapped, registering interrupt handler ***
+[   54.929208] *** VIC PROBE: Device linking handled automatically by tx_isp_subdev_init ***
+[   54.929230] *** Platform device 1 (isp-w02) registered successfully ***
+[   54.929236] *** Registering platform device 2 from platform data ***
+[   54.929544] tx_isp_module_init: Module initialized for tx-isp-vin
+[   54.929558] *** tx_isp_subdev_init: Deferring core->init for device tx-isp-vin to prevent hangs ***
+[   54.929564] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
+[   54.929572] *** tx_isp_request_irq: IRQ 37 handled by main dispatcher - skipping duplicate registration ***
+[   54.929578] *** tx_isp_request_irq: IRQ 37 info stored for tx-isp-vin ***
+[   54.929586] tx_isp_subdev_init: platform_get_resource returned   (null) for device tx-isp-vin
+[   54.929592] tx_isp_subdev_init: No memory resource for device tx-isp-vin (logical device - OK)
+[   54.929598] isp_subdev_init_clks: Initializing 0 clocks
+[   54.929604] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-vin' to ourISPdev ***
+[   54.929610] *** DEBUG: Device name comparison - checking 'tx-isp-vin' ***
+[   54.929616] *** DEBUG: About to check device name matches ***
+[   54.929621] *** DEBUG: VIN device name matched! Setting up VIN device ***
+[   54.929628] *** LINKED VIN device: 85f68400 ***
+[   54.929635] *** VIN SUBDEV OPS CONFIGURED: core=c0686104, video=c06860f8, s_stream=c06659b4 ***
+[   54.929640] *** REGISTERED VIN SUBDEV AT INDEX 2 WITH VIDEO OPS ***
+[   54.929646] *** VIN INITIALIZATION DEFERRED TO SENSOR REGISTRATION PHASE ***
+[   54.929652] *** VIN PROBE: Device linking handled automatically by tx_isp_subdev_init ***
+[   54.929671] *** Platform device 2 (tx-isp-vin) registered successfully ***
+[   54.929678] *** Registering platform device 3 from platform data ***
+[   54.932155] *** Platform device 3 (tx-isp-fs) registered successfully ***
+[   54.932167] *** Registering platform device 4 from platform data ***
+[   54.934761] *** tx_isp_core_probe: NEW ARCHITECTURE - Creating separate core device ***
+[   54.934774] *** tx_isp_create_core_device: Creating ISP core device ***
+[   54.934784] *** tx_isp_create_core_device: Core device created successfully: 85f68800 ***
+[   54.934790] *** tx_isp_subdev_init: Core ISP subdev registration handled by core device ***
+[   54.934798] tx_isp_module_init: Module initialized for tx-isp-core
+[   54.934804] *** tx_isp_subdev_init: Deferring core->init for device tx-isp-core to prevent hangs ***
+[   54.934810] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
+[   54.934818] *** tx_isp_request_irq: IRQ 37 handled by main dispatcher - skipping duplicate registration ***
+[   54.934824] *** tx_isp_request_irq: IRQ 37 info stored for tx-isp-core ***
+[   54.934831] tx_isp_subdev_init: platform_get_resource returned c0684934 for device tx-isp-core
+[   54.934839] tx_isp_subdev_init: Memory resource found: start=0x13300000, end=0x1330ffff, size=0x00010000
+[   54.934849] isp_subdev_init_clks: Initializing 3 clocks
+[   54.934858] CGU_ISP clock enabled at 100MHz
+[   54.934872] ISP clock enabled
+[   54.934879] CSI clock enabled
+[   54.959155] CPM clock gates configured
+[   54.959168] isp_subdev_init_clks: Successfully initialized 3 clocks
+[   54.959176] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-core' to ourISPdev ***
+[   54.959182] *** DEBUG: Device name comparison - checking 'tx-isp-core' ***
+[   54.959187] *** DEBUG: About to check device name matches ***
+[   54.959194] *** CORE device not yet linked - regs will be mapped later ***
+[   54.959200] *** tx_isp_core_probe: Core subdev initialized successfully ***
+[   54.959208] *** tx_isp_core_device_init: Initializing core device: 85f68800 ***
+[   54.959220] *** tx_isp_core_device_init: Core device initialized successfully ***
+[   54.959228] *** tx_isp_link_core_device: Linking core device 85f68800 to ISP device 85dcc000 ***
+[   54.959234] *** tx_isp_link_core_device: Core device linked successfully ***
+[   54.959240] *** Core subdev registered at index 4: 85f68800 ***
+[   54.959254] *** tx_isp_core_probe: VIC device creation deferred to platform driver system ***
+[   54.959260] *** tx_isp_core_probe: Platform drivers will call tx_isp_subdev_init for proper initialization ***
+[   54.959266] *** tx_isp_core_probe: Calling sensor_early_init ***
+[   54.959271] sensor_early_init: Preparing sensor infrastructure
+[   54.959276] *** tx_isp_core_probe: Core device setup complete ***
+[   54.959282] ***   - Core device: 85f68800 ***
+[   54.959287] ***   - Channel count: 6 ***
+[   54.959292] ***   - Linked to ISP device: 85dcc000 ***
+[   54.959298] *** tx_isp_core_probe: Initializing core tuning system ***
+[   54.959320] *** tx_isp_core_probe: Tuning init SUCCESS ***
+[   54.959326] *** tx_isp_core_probe: SUCCESS - Core device fully initialized ***
+[   54.959332] ***   - Core device: 85f68800 ***
+[   54.959338] ***   - Tuning device: 85f60000 ***
+[   54.959343] *** tx_isp_core_probe: Creating frame channel devices ***
+[   54.959348] *** tx_isp_create_framechan_devices: Creating frame channel devices ***
+[   54.959748] *** Created frame channel device: /dev/framechan0 (major=10, minor=54) ***
+[   54.962276] *** Created frame channel device: /dev/framechan1 (major=10, minor=53) ***
+[   54.964884] *** Created frame channel device: /dev/framechan2 (major=10, minor=52) ***
+[   54.967428] *** Created frame channel device: /dev/framechan3 (major=10, minor=51) ***
+[   54.967438] *** tx_isp_create_framechan_devices: All frame channel devices created ***
+[   54.967444] *** tx_isp_core_probe: Frame channel devices created successfully ***
+[   54.967449] *** tx_isp_core_probe: Creating ISP M0 tuning device node ***
+[   54.967455] tisp_code_create_tuning_node: Creating ISP M0 tuning device node
+[   54.967464] tisp_code_create_tuning_node: Allocated dynamic major 251
+[   54.972497] *** ISP M0 TUNING DEVICE CREATED: /dev/isp-m0 (major=251, minor=0) ***
+[   54.972508] *** tx_isp_core_probe: ISP M0 tuning device node created successfully ***
+[   54.972514] *** tx_isp_core_probe: Core probe completed successfully ***
+[   54.972535] *** Platform device 4 (tx-isp-core) registered successfully ***
+[   54.972542] *** tx_isp_create_graph_and_nodes: Binary Ninja reference implementation complete ***
+[   54.972548] *** tx_isp_module_init: Binary Ninja reference implementation complete ***
+[   54.972553] *** PROBE: Binary Ninja reference implementation complete ***
+[   54.972563] *** SUCCESS: ourISPdev allocated by probe function: 85dcc000 ***
+[   54.972569] *** INITIALIZING SUBDEVICE REGISTRY WITH ALLOCATED ourISPdev ***
+[   54.972574] *** tx_isp_init_subdev_registry: Initializing subdevice registry ***
+[   54.972582] tx_isp_init_subdev_registry: 3 devices already linked directly - skipping registry creation
+[   54.972588] *** USING DIRECT DEVICE LINKING INSTEAD OF REGISTRY SYSTEM ***
+[   54.972593] *** SUBDEVICE REGISTRY INITIALIZED - GRAPH CREATION SHOULD NOW SUCCEED ***
+[   54.972598] *** CRITICAL: Registering main interrupt dispatcher for IRQ 37 and 38 ***
+[   54.975016] *** MAIN DISPATCHER: IRQ 37 registered successfully ***
+[   54.975100] *** MAIN DISPATCHER: IRQ 38 registered successfully ***
+[   54.975107] *** MAIN DISPATCHER: Both IRQ 37 and 38 registered with main dispatcher ***
+[   54.975112] TX ISP driver initialized successfully - probe function will handle device setup
+[   58.642534] ISP opened successfully
+[   58.643131] ISP IOCTL: cmd=0x805056c1 arg=0x77993d60
+[   58.643141] *** TX_ISP_SENSOR_REGISTER: FIXED TO CREATE ACTUAL SENSOR CONNECTION ***
+[   58.643147] Sensor register: gc2053
+[   58.643153] *** HANDLING SENSOR REGISTRATION WITH SAFE STRUCT ACCESS ***
+[   58.643159] Sensor registration complete, final_result=0x0
+[   58.643165] *** ADDING SUCCESSFULLY REGISTERED SENSOR TO LIST: gc2053 ***
+[   58.643173] *** SENSOR ADDED TO LIST: index=0 name=gc2053 ***
+[   58.643178] *** CREATING I2C DEVICE FOR SENSOR gc2053 ***
+[   58.643187] *** CREATING I2C CLIENT: name=gc2053, addr=0x37, adapter=i2c0 ***
+[   58.643192] *** isp_i2c_new_subdev_board: MIPS-SAFE implementation - FIXED CRASH ***
+[   58.643199] Creating I2C subdev: type=gc2053 addr=0x37 on adapter i2c0 (MIPS-safe)
+[   58.643205] *** MIPS-SAFE: Requesting sensor module gc2053 ***
+[   58.646711] *** MIPS-SAFE: Valid I2C address 0x37, creating device ***
+[   58.647233] tx_isp_module_init: Module initialized for (null)
+[   58.647246] *** tx_isp_subdev_init: Deferring core->init for device (null) to prevent hangs ***
+[   58.647252] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
+[   58.647259] *** tx_isp_subdev_auto_link: Auto-linking device 'gc2053' to ourISPdev ***
+[   58.647265] *** DEBUG: Device name comparison - checking 'gc2053' ***
+[   58.647269] *** DEBUG: About to check device name matches ***
+[   58.647277] *** DEBUG: Unknown device name 'gc2053' - no specific auto-link handling ***
+[   58.647297] *** MIPS-SAFE: I2C device created successfully at 0x84885600 ***
+[   58.647304] *** MIPS-SAFE: Module reference acquired for gc2053 ***
+[   58.647309] *** MIPS-SAFE: Sensor subdev data found, device ready ***
+[   58.647317] *** I2C DEVICE READY: gc2053 at 0x37 (MIPS-safe) ***
+[   58.647322] *** SUCCESS: I2C CLIENT CREATED - SENSOR PROBE SHOULD BE CALLED! ***
+[   58.647329] *** I2C CLIENT: gc2053 at 0x37 on i2c0 ***
+[   58.647335] *** LOOKING FOR REAL SENSOR REGISTERED BY gc2053 MODULE ***
+[   58.647339] *** WAITING FOR SENSOR PROBE TO COMPLETE ***
+[   58.849160] *** I2C CLIENT DATA: 85f69000 ***
+[   58.849172] *** CHECKING SENSOR SUBDEV: sd=85f69000 ***
+[   58.849178] *** SENSOR SUBDEV OPS: c06a2638 ***
+[   58.849186] *** SENSOR OPS STRUCTURE: core=c06a2664, video=c06a2658, sensor=c06a264c ***
+[   58.849192] *** SENSOR HOSTDATA:   (null) ***
+[   58.849197] *** SUCCESS: Real sensor subdev with ops found (hostdata NULL) ***
+[   58.849205] *** USING DEFAULT SENSOR ATTRIBUTES (real sensor attrs not available) ***
+[   58.849211] *** CREATED MINIMAL SENSOR STRUCTURE FOR VIC COMPATIBILITY ***
+[   58.849217] *** sensor->video.attr=85f69608 (points to sensor->attr) ***
+[   58.849222] *** CONNECTING REAL SENSOR TO ISP DEVICE ***
+[   58.849229] Current: ourISPdev=85dcc000, current_sensor=  (null)
+[   58.849236] Real sensor: sensor=85f69400, subdev=85f69000
+[   58.849242] *** SENSOR CONNECTION: sensor=85f69400 already in subdev array ***
+[   58.849248] *** SENSOR STRUCTURE: sensor=85f69400, sensor->sd at 85f69400 ***
+[   58.849255] *** REAL SENSOR SUBDEV REGISTERED IN SLOT 3 FOR GET_SENSOR_INFO IOCTL ***
+[   58.849260] *** REAL SENSOR CONNECTED TO ISP DEVICE SUCCESSFULLY ***
+[   58.849265] *** SENSOR REGISTRY UPDATED WITH REAL SENSOR ***
+[   58.849270] *** INITIALIZING VIN FOR SENSOR STREAMING ***
+[   58.849277] VIN: tx_isp_vin_init: CRITICAL FIX - ignore arg1, use global ISP only = 0x1
+[   58.849283] VIN: tx_isp_vin_init: using VIN device from global ISP: 85f68400
+[   58.849289] VIN: tx_isp_vin_init: no sensor available = 0x158
+[   58.849295] VIN: tx_isp_vin_init: *** VIN STATE SET SAFELY *** = 0x3
+[   58.849301] VIN: tx_isp_vin_init: EXACT Binary Ninja result = 0xffffffff
+[   58.849307] *** VIN INIT RESULT: -1, VIN STATE: 3 ***
+[   58.849312] *** VIN SUCCESSFULLY INITIALIZED TO STATE 3 - READY FOR STREAMING ***
+[   58.849318] *** SENSOR CONNECTED - Core initialization will be triggered by STREAMON event ***
+[   58.849332] ISP IOCTL: cmd=0xc050561a arg=0x7fdc5e88
+[   58.849338] *** TX_ISP_SENSOR_ENUM_INPUT: MEMORY SAFE implementation ***
+[   58.849344] Sensor enumeration: requesting index 0
+[   58.849351] *** FOUND SENSOR: index=0 name=gc2053 ***
+[   58.849358] Sensor enumeration: index=0 name=gc2053
+[   58.849365] ISP IOCTL: cmd=0xc050561a arg=0x7fdc5e88
+[   58.849370] *** TX_ISP_SENSOR_ENUM_INPUT: MEMORY SAFE implementation ***
+[   58.849376] Sensor enumeration: requesting index 1
+[   58.849382] No sensor found at index 1 (total registered: 1)
+[   58.849390] ISP IOCTL: cmd=0xc0045627 arg=0x7fdc5ee0
+[   58.849396] Sensor input set to index 0 (gc2053)
+[   58.849403] ISP IOCTL: cmd=0x800856d5 arg=0x7fdc5ed8
+[   58.849410] ISP buffer calculation: width=1920 height=1080 memopt=0
+[   58.849416] *** BUFFER FIX: Using RAW10 calculation instead of incorrect YUV calculation ***
+[   58.849423] *** RAW10 BUFFER: 2073600 pixels -> 2592000 bytes -> 2592000 aligned ***
+[   58.849429] ISP calculated buffer size: 2592000 bytes (0x278d00)
+[   58.888624] ISP IOCTL: cmd=0x800856d4 arg=0x7fdc5ed8
+[   58.888638] ISP set buffer: addr=0x6300000 size=2592000
+[   58.888644] Configuring main frame buffer: 0x6300000 stride=1920
+[   58.888651] Full buffer mode: YUV stride=64 size=35328
+[   58.888878] ISP IOCTL: cmd=0x40045626 arg=0x7fdc5ef0
+[   58.888888] *** 0x40045626: GET_SENSOR_INFO - Binary Ninja exact implementation ***
+[   58.888896] *** csi_sensor_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x2000003 ***
+[   58.888902] *** Found sensor, result=0 ***
+[   58.888907] *** GET_SENSOR_INFO: Returning sensor_result=0 ***
+[   58.888915] ISP IOCTL: cmd=0x80045612 arg=0x0
+[   58.888921] *** tx_isp_video_s_stream: EXACT Binary Ninja implementation - enable=1 ***
+[   58.888928] *** BINARY NINJA: Calling subdev 0 s_stream (enable=1) ***
+[   58.888937] *** DEBUG: subdev=85209800, ops=c0685210, video=c0685238, s_stream=c065b4c4 ***
+[   58.888943] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[   58.888950] csi_video_s_stream: sd=85209800, enable=1
+[   58.888956] csi_video_s_stream: CSI device state=1 < 2, returning 0
+[   58.888962] tx_isp_video_s_stream: Subdev 0 s_stream returned success
+[   58.888968] *** BINARY NINJA: Calling subdev 1 s_stream (enable=1) ***
+[   58.888976] *** DEBUG: subdev=85f68000, ops=c06851a0, video=c06851f0, s_stream=c065ae38 ***
+[   58.888984] *** vic_core_s_stream: BINARY NINJA EXACT - sd=85f68000, enable=1 ***
+[   58.888990] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=1 ***
+[   58.888995] *** vic_core_s_stream: STREAM ON ***
+[   58.889000] *** vic_core_s_stream: State != 4, calling VIC start sequence ***
+[   58.889006] *** tx_vic_disable_irq: BINARY NINJA EXACT ***
+[   58.889012] *** tx_vic_disable_irq: VIC interrupts already disabled ***
+[   58.889017] *** tx_isp_vic_start: EXACT Binary Ninja reference implementation ***
+[   58.889023] tx_isp_vic_start: No sensor attributes available
+[   58.889028] tx_isp_vic_start: sensor is NULL
+[   58.889033] *** tx_vic_enable_irq: BINARY NINJA EXACT ***
+[   58.889039] *** tx_vic_enable_irq: VIC interrupts ENABLED ***
+[   58.889045] *** vic_core_s_stream: VIC start completed, ret=-19, state=4 ***
+[   58.889051] tx_isp_video_s_stream: Subdev 1 s_stream failed: -19
+[   58.889057] *** BINARY NINJA: Rolling back subdev 0 ***
+[   58.889062] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[   58.889069] csi_video_s_stream: sd=85209800, enable=0
+[   58.889074] csi_video_s_stream: CSI device state=1 < 2, returning 0
+[   58.893270] ISP released (refcnt=0)
 [1]+  Aborted                    prudynt
 root@ing-wyze-cam3-a000 ~# 
