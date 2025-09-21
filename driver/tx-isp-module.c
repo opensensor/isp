@@ -3437,10 +3437,15 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
 
         /* Binary Ninja EXACT: var_94 = $a2_10, var_98 = 0, $s6_1 = 0 */
-        var_98.as_uint32 = 0;  /* Binary Ninja: var_98 = 0 */
+        /* CRITICAL FIX: Return proper physical address instead of 0 */
+        if (isp_dev->rmem_addr != 0) {
+            var_98.as_uint32 = (uint32_t)isp_dev->rmem_addr;  /* Use reserved memory base address */
+        } else {
+            var_98.as_uint32 = 0x6300000;  /* Default T31 ISP memory base from rmem */
+        }
         s6_1 = 0;
 
-        pr_info("TX_ISP_GET_BUF: Returning buffer size=%d, addr=0x%x\n", var_94, var_98.as_uint32);
+        pr_info("TX_ISP_GET_BUF: Returning buffer size=%d, paddr=0x%x\n", var_94, var_98.as_uint32);
 
         /* Binary Ninja: if (private_copy_to_user(arg3, &var_98, 8) != 0) */
         if (copy_to_user((void __user *)arg, &var_98, 8) != 0) {
