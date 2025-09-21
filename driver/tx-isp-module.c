@@ -5103,13 +5103,8 @@ static void tx_isp_exit(void)
         ourISPdev = NULL;
         pr_info("*** ourISPdev set to NULL - interrupt handlers will now safely exit ***\n");
 
-        /* CRITICAL: Free main dispatcher IRQs first */
-        pr_info("*** CLEANUP: Freeing main dispatcher IRQs ***\n");
-        /* Don't free IRQ 37 since we didn't register it */
-        if (local_isp_dev->vic_dev) {
-            free_irq(38, local_isp_dev);  /* VIC IRQ uses ISP device as dev_id */
-        }
-        pr_info("*** Main dispatcher IRQ 38 freed ***\n");
+        /* CRITICAL: No IRQs to free since main dispatcher was disabled */
+        pr_info("*** CLEANUP: No main dispatcher IRQs to free ***\n");
 
         /* Free hardware interrupts if initialized (legacy cleanup) */
         if (isp_irq > 0 && isp_irq != 37 && isp_irq != 38) {
