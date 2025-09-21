@@ -272,6 +272,10 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     int ret;
     int i;
 
+    pr_info("*** tx_isp_subdev_init: CALLED for device '%s' ***\n", pdev ? pdev->name : "NULL");
+    pr_info("*** tx_isp_subdev_init: pdev=%p, sd=%p, ops=%p ***\n", pdev, sd, ops);
+    pr_info("*** tx_isp_subdev_init: ourISPdev=%p ***\n", ourISPdev);
+
     /* Binary Ninja: if (arg1 == 0 || arg2 == 0) */
     if (pdev == NULL || sd == NULL) {
         /* Binary Ninja: isp_printf(2, tiziano_wdr_gamma_refresh, "tx_isp_subdev_init") */
