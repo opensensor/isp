@@ -513,7 +513,6 @@ struct platform_device tx_isp_core_platform_device = {
 
 /* Forward declarations - Using actual function names from reference driver */
 static void frame_channel_wakeup_waiters(struct frame_channel_device *fcd);
-static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data);
 int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 irqreturn_t isp_irq_handle(int irq, void *dev_id);
@@ -6295,78 +6294,6 @@ static int __enqueue_in_driver(void *buffer_struct)
     
     /* Binary Ninja: return result */
     return result;
-}
-
-
-/* VIC event handler - manages buffer flow between frame channels and VIC */
-static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
-{
-    /* CRITICAL FIX: Validate pointer before casting to prevent corrupted pointer access */
-    if (!vic_subdev || (unsigned long)vic_subdev < 0x80000000 || (unsigned long)vic_subdev >= 0xfffff000) {
-        pr_err("tx_isp_vic_handle_event: Invalid/corrupted vic_subdev pointer 0x%p\n", vic_subdev);
-        return -EINVAL;
-    }
-
-    struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)vic_subdev;
-
-    /* Additional validation after cast */
-    if (!vic_dev) {
-        return -EINVAL;
-    }
-    
-    switch (event_type) {
-    case TX_ISP_EVENT_FRAME_QBUF: {
-        /* Queue buffer for VIC processing */
-        if (data) {
-            int channel = *(int*)data;
-
-            pr_info("VIC: Queue buffer event for channel %d\n", channel);
-
-            // FIXED: Create proper buffer entry structure
-            struct vic_buffer_entry *buffer_entry = VIC_BUFFER_ALLOC_ATOMIC();
-            if (buffer_entry) {
-                buffer_entry->buffer_addr = 0x30000000 + (channel * 0x100000);  /* Valid physical address */
-                buffer_entry->buffer_index = channel;
-                buffer_entry->buffer_status = VIC_BUFFER_STATUS_QUEUED;
-                ispvic_frame_channel_qbuf(vic_dev, &buffer_entry->list);
-            }
-        }
-        return 0;
-    }
-    case TX_ISP_EVENT_FRAME_DQBUF: {
-        /* Handle buffer completion - this would normally be called by interrupt */
-        int channel = data ? *(int*)data : 0;
-        pr_info("VIC: Dequeue buffer event for channel %d\n", channel);
-        
-        // Simulate frame completion
-        vic_framedone_irq_function(vic_dev);
-        return 0;
-    }
-    case TX_ISP_EVENT_FRAME_STREAMON: {
-        /* Enable VIC streaming */
-        pr_info("VIC: Stream ON event - activating frame pipeline\n");
-        
-        // Activate VIC
-        if (vic_dev->state == 1) {
-            vic_dev->state = 2;
-            // TODO call other activation functions here
-    		int ret = tx_isp_activate_csi_subdev(ourISPdev);
-    		if (ret) {
-        		pr_err("Failed to activate CSI subdev: %d\n", ret);
-                return ret;
-    		}
-            pr_info("VIC: Pipeline activated\n");
-        }
-        
-        // Don't trigger work queue here to avoid deadlock
-        pr_info("VIC: Stream ON event completed\n");
-
-        return 0;
-    }
-    default:
-        pr_info("VIC: Unknown event type: 0x%x\n", event_type);
-        return -0x203; /* 0xfffffdfd */
-    }
 }
 
 /* Wake up waiters when frame is ready - SIMPLIFIED to match reference driver */
