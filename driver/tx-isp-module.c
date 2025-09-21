@@ -4907,8 +4907,8 @@ void tisp_set_sensor_analog_gain_short(uint32_t sensor_gain)
 
     /* Binary Ninja: Simplified implementation - direct gain calculation */
     /* The Binary Ninja decompilation shows complex math, but we'll use a simplified approach */
-    log_result = log2_fixed_to_fixed(sensor_gain, 16, 16);
-    v0_2 = math_exp2(log_result, 0x10, 0x10);
+    log_result = private_log2_fixed_to_fixed(sensor_gain, 16, 16);
+    v0_2 = private_math_exp2(log_result, 0x10, 0x10);
 
     /* Binary Ninja: int16_t var_1a */
     var_1a = (int16_t)(v0_2 >> 6);
@@ -4940,8 +4940,8 @@ static void tisp_set_sensor_digital_gain_short(uint32_t digital_gain)
 
     /* Binary Ninja: Simplified implementation - direct gain calculation */
     /* The Binary Ninja decompilation shows complex math, but we'll use a simplified approach */
-    log_result = log2_fixed_to_fixed(digital_gain, 16, 16);
-    v0_2 = math_exp2(log_result, 0x10, 0x10);
+    log_result = private_log2_fixed_to_fixed(digital_gain, 16, 16);
+    v0_2 = private_math_exp2(log_result, 0x10, 0x10);
 
     /* Binary Ninja: int16_t var_26 */
     var_26 = (int16_t)(v0_2 >> 6);

@@ -3082,6 +3082,15 @@ void private_spin_unlock_irqrestore(spinlock_t *lock, unsigned long flags)
     spin_unlock_irqrestore(lock, flags);
 }
 
+/* Forward declaration for frame channel structure with proper layout */
+struct frame_channel_binary_ninja {
+    char padding_to_0x74[0x74];     /* 0x00-0x73: Padding to reach state field */
+    uint32_t state;                 /* 0x74: Channel state field */
+    char padding_to_0x9c[0x24];     /* 0x78-0x9b: Padding to reach spinlock */
+    spinlock_t lock;                /* 0x9c: Spinlock for synchronization */
+    /* Additional fields follow... */
+} __attribute__((packed));
+
 /**
  * ispcore_frame_channel_streamoff - EXACT Binary Ninja implementation
  * This function handles channel stream off operations
