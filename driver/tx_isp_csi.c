@@ -33,25 +33,6 @@ void isp_write32(u32 reg, u32 val)
 
 static void __iomem *tx_isp_vic_regs = NULL;
 
-u32 vic_read32(u32 reg)
-{
-    /* Use VIC device registers */
-    if (ourISPdev && ourISPdev->vic_dev && ourISPdev->vic_dev->vic_regs) {
-        return readl(ourISPdev->vic_dev->vic_regs + reg);
-    }
-    pr_err("vic_read32: No VIC registers available\n");
-    return 0;
-}
-
-void vic_write32(u32 reg, u32 val)
-{
-    /* Use VIC device registers */
-    if (ourISPdev && ourISPdev->vic_dev && ourISPdev->vic_dev->vic_regs) {
-        writel(val, ourISPdev->vic_dev->vic_regs + reg);
-    } else {
-        pr_err("vic_write32: No VIC registers available\n");
-    }
-}
 
 /* CSI register mapping handled by subdev probe per reference driver */
 

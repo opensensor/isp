@@ -598,8 +598,6 @@ tx_isp_release
 tx_isp_remove_proc_entries
 tx_isp_request_irq
 tx_isp_send_event_to_remote
-tx_isp_sensor_complete_init
-tx_isp_setup_default_links
 tx_isp_setup_media_links
 tx_isp_subdev_auto_link
 tx_isp_subdev_deinit
@@ -610,7 +608,6 @@ tx_isp_subdev_unregister
 tx_isp_sync_sensor_attr
 tx_isp_sysfs_exit
 tx_isp_sysfs_init
-tx_isp_unlink_core_device
 tx_isp_unlocked_ioctl
 tx_isp_unregister_sensor_subdev
 tx_isp_v4l2_cleanup
@@ -647,20 +644,16 @@ tx_isp_vic_remove
 tx_isp_vic_set_buffer
 tx_isp_vic_slake_subdev
 tx_isp_vic_start
-tx_isp_vic_stop
 tx_isp_vic_wait_frame_done
 tx_isp_vic_write_csi_phy_sequence
 tx_isp_video_link_destroy_impl
 tx_isp_video_link_stream
 tx_isp_video_s_stream
 tx_isp_vin_activate_subdev
-tx_isp_vin_disable_irq
-tx_isp_vin_enable_irq
 tx_isp_vin_init
 tx_isp_vin_probe
 tx_isp_vin_remove
 tx_isp_vin_reset
-tx_isp_vin_set_format
 tx_isp_vin_slake_subdev
 tx_isp_vin_start
 tx_isp_vin_stop

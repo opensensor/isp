@@ -473,22 +473,6 @@ int tx_isp_vic_configure_dma(struct tx_isp_vic_device *vic_dev, dma_addr_t base_
     return 0;
 }
 
-/* Configure VIC frame buffer */
-int tx_isp_vic_set_buffer(struct tx_isp_subdev *sd, dma_addr_t addr, u32 size)
-{
-    if (!sd || !sd->isp)
-        return -EINVAL;
-
-    mutex_lock(&sd->vic_frame_end_lock);
-
-    /* Set frame buffer address and size */
-    vic_write32(VIC_BUFFER_ADDR, addr);
-    vic_write32(VIC_FRAME_SIZE, size);
-
-    mutex_unlock(&sd->vic_frame_end_lock);
-    return 0;
-}
-
 /* Wait for frame completion */
 int tx_isp_vic_wait_frame_done(struct tx_isp_subdev *sd, int channel, int timeout_ms)
 {
