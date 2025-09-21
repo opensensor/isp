@@ -698,44 +698,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     return 0;
 }
 
-/* VIC sensor operations sync_sensor_attr - EXACT Binary Ninja implementation */
-int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr)
-{
-    struct tx_isp_vic_device *vic_dev;
-    
-    pr_info("vic_sensor_ops_sync_sensor_attr: sd=%p, attr=%p\n", sd, attr);
-    
-    if (!sd || (unsigned long)sd >= 0xfffff001) {
-        pr_err("The parameter is invalid!\n");
-        return -EINVAL;
-    }
-    
-    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
-    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
-        pr_err("The parameter is invalid!\n");
-        return -EINVAL;
-    }
-    
-    /* CRITICAL FIX: Work with real sensor attributes instead of VIC's copy */
-    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
-    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
-    if (sensor && sensor->video.attr) {
-        if (attr == NULL) {
-            /* Clear real sensor attributes */
-            memset(sensor->video.attr, 0, sizeof(struct tx_isp_sensor_attribute));
-            pr_info("vic_sensor_ops_sync_sensor_attr: cleared REAL sensor attributes\n");
-        } else {
-            /* Copy to real sensor attributes */
-            memcpy(sensor->video.attr, attr, sizeof(struct tx_isp_sensor_attribute));
-            pr_info("vic_sensor_ops_sync_sensor_attr: copied to REAL sensor attributes\n");
-        }
-    } else {
-        pr_err("vic_sensor_ops_sync_sensor_attr: No real sensor available!\n");
-        return -ENODEV;
-    }
-    
-    return 0;
-}
+/* VIC sensor operations sync_sensor_attr - REMOVED
+ * Modern hardware supports multiple sensors, so VIC doesn't store sensor attributes
+ * Sensor attributes are managed by the sensor subdevices themselves in the subdev array
+ */
 
 /* VIC core operations ioctl - EXACT Binary Ninja implementation */
 int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
