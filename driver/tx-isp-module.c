@@ -1743,8 +1743,10 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
     if (irq_num >= 0) {
         pr_info("*** tx_isp_request_irq: IRQ %d found but NOT registering (main dispatcher handles this) ***\n", irq_num);
 
-        /* Just store the IRQ number but don't register it */
-        isp_dev->isp_irq = irq_num;
+        /* Store the IRQ number in core device if available */
+        if (isp_dev->core_dev) {
+            isp_dev->core_dev->irq = irq_num;
+        }
 
         /* Initialize the lock */
         spin_lock_init(&isp_dev->lock);
@@ -1756,7 +1758,10 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
         pr_info("*** tx_isp_request_irq: IRQ %d stored but registration handled by main dispatcher ***\n", irq_num);
 
     } else {
-        isp_dev->isp_irq = 0;
+        /* Clear IRQ in core device if available */
+        if (isp_dev->core_dev) {
+            isp_dev->core_dev->irq = 0;
+        }
         pr_err("*** tx_isp_request_irq: Platform IRQ not available (ret=%d) ***\n", irq_num);
     }
 
@@ -5236,7 +5241,9 @@ static int tx_isp_init(void)
         pr_err("*** FAILED TO REQUEST IRQ 37 (isp-m0): %d ***\n", ret);
     } else {
         pr_info("*** SUCCESS: IRQ 37 (isp-m0) REGISTERED with dev_id=%p ***\n", ourISPdev);
-        ourISPdev->isp_irq = 37;
+        if (ourISPdev->core_dev) {
+            ourISPdev->core_dev->irq = 37;
+        }
     }
 
     /* Register IRQ 38 (isp-w02) - Secondary ISP channel */
@@ -5251,7 +5258,7 @@ static int tx_isp_init(void)
         pr_err("*** ONLY IRQ 37 WILL BE AVAILABLE ***\n");
     } else {
         pr_info("*** SUCCESS: IRQ 38 (isp-w02) REGISTERED with dev_id=%p ***\n", ourISPdev);
-        ourISPdev->isp_irq2 = 38;  /* Store secondary IRQ */
+        /* Note: Secondary IRQ not stored in new architecture */
     }
     
     /* *** CRITICAL: Enable interrupt generation at hardware level *** */
@@ -5480,10 +5487,10 @@ static void tx_isp_exit(void)
         pr_info("*** ISP M0 TUNING DEVICE NODE DESTROYED ***\n");
         
         /* Clean up clocks properly using Linux Clock Framework */
-        if (ourISPdev->isp_clk) {
-            clk_disable_unprepare(ourISPdev->isp_clk);
-            clk_put(ourISPdev->isp_clk);
-            ourISPdev->isp_clk = NULL;
+        if (ourISPdev->core_dev && ourISPdev->core_dev->core_clk) {
+            clk_disable_unprepare(ourISPdev->core_dev->core_clk);
+            clk_put(ourISPdev->core_dev->core_clk);
+            ourISPdev->core_dev->core_clk = NULL;
             pr_info("ISP clock disabled and released\n");
         }
         
@@ -5494,8 +5501,8 @@ static void tx_isp_exit(void)
         cleanup_i2c_infrastructure(ourISPdev);
         
         /* CRITICAL: Store IRQ numbers before setting ourISPdev to NULL */
-        int isp_irq = ourISPdev->isp_irq;
-        int isp_irq2 = ourISPdev->isp_irq2;
+        int isp_irq = (ourISPdev->core_dev) ? ourISPdev->core_dev->irq : -1;
+        int isp_irq2 = -1;  /* IRQ2 not used in new architecture */
         struct tx_isp_dev *local_isp_dev = ourISPdev;
 
         /* CRITICAL: Set ourISPdev to NULL BEFORE freeing interrupts to prevent race conditions */
@@ -5895,18 +5902,18 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                 pr_info("*** CLOCK CONFIGURATION SECTION ***\n");
                 
                 /* For our implementation, we'll use the ISP device's clock array */
-                if (isp_dev->isp_clk) {
+                if (isp_dev->core_dev && isp_dev->core_dev->core_clk) {
                     /* Binary Ninja: if (private_clk_get_rate(*$s2_1) != 0xffff) */
-                    unsigned long current_rate = clk_get_rate(isp_dev->isp_clk);
+                    unsigned long current_rate = clk_get_rate(isp_dev->core_dev->core_clk);
                     if (current_rate != 0xffff) {
                         /* Binary Ninja: private_clk_set_rate(*$s2_1, isp_clk) */
                         /* Set ISP clock to appropriate rate */
-                        clk_set_rate(isp_dev->isp_clk, 100000000); /* 100MHz ISP clock */
+                        clk_set_rate(isp_dev->core_dev->core_clk, 100000000); /* 100MHz ISP clock */
                         pr_info("ISP clock set to 100MHz\n");
                     }
-                    
+
                     /* Binary Ninja: private_clk_enable(*$s2_1) */
-                    clk_prepare_enable(isp_dev->isp_clk);
+                    clk_prepare_enable(isp_dev->core_dev->core_clk);
                     pr_info("ISP clock enabled\n");
                 }
                 
@@ -6394,7 +6401,7 @@ static irqreturn_t ispmodule_ip_done_irq_handler(int irq, void *dev_id)
 //    }
     
     /* Update frame processing statistics */
-    isp_dev->frame_count++;
+    isp_dev->frame_complete++;
     
     /* Wake up frame channel waiters */
 //    int i;
