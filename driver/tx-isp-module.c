@@ -1607,54 +1607,6 @@ void tx_isp_enable_irq(void *arg1)
     pr_info("*** tx_isp_enable_irq: IRQ %d ENABLED ***\n", irq_num);
 }
 
-/* tx_isp_request_irq - DISABLED to prevent double IRQ registration */
-static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *isp_dev)
-{
-    int irq_num;
-
-    /* CRITICAL FIX: This function was causing double IRQ registration */
-    /* The main dispatcher in tx_isp_init() already registers IRQs 37 and 38 */
-    /* This function was being called from subdev initialization and registering the same IRQs again */
-
-    if (!pdev || !isp_dev) {
-        pr_err("tx_isp_request_irq: Invalid parameters\n");
-        return -EINVAL;
-    }
-
-    irq_num = platform_get_irq(pdev, 0);
-
-    if (irq_num >= 0) {
-        pr_info("*** tx_isp_request_irq: IRQ %d found but NOT registering (main dispatcher handles this) ***\n", irq_num);
-
-        /* Store the IRQ number in core device if available */
-        if (isp_dev->core_dev) {
-            isp_dev->core_dev->irq = irq_num;
-        }
-
-        /* Initialize the lock */
-        spin_lock_init(&isp_dev->lock);
-
-        /* Set up function pointers in core device */
-        if (isp_dev->core_dev) {
-            /* Use the reference driver IRQ handler function */
-            extern irqreturn_t isp_irq_handle(int irq, void *dev_id);
-            isp_dev->core_dev->irq_handler = isp_irq_handle;
-        }
-
-        pr_info("*** tx_isp_request_irq: IRQ %d stored but registration handled by main dispatcher ***\n", irq_num);
-
-    } else {
-        /* Clear IRQ in core device if available */
-        if (isp_dev->core_dev) {
-            isp_dev->core_dev->irq = 0;
-        }
-        pr_err("*** tx_isp_request_irq: Platform IRQ not available (ret=%d) ***\n", irq_num);
-    }
-
-    return 0;
-}
-
-
 
 /* CRITICAL SAFETY MACRO: Prevent BadVA 0xc8 crashes */
 #define SAFE_READ_OFFSET(ptr, offset, default_val) \

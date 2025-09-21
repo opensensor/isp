@@ -1819,7 +1819,7 @@ irqreturn_t tx_isp_core_irq_thread_handle(int irq, void *dev_id)
 }
 
 /* tx_isp_request_irq - EXACT Binary Ninja implementation */
-static int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
+int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
 {
     extern struct tx_isp_dev *ourISPdev;
     int irq_number;
