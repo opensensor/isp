@@ -3365,7 +3365,6 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     /* CRITICAL: Maintain frame flow without disrupting VIC hardware */
                     if (ourISPdev->vic_dev) {
                         /* Gentle frame processing trigger that doesn't disrupt VIC */
-                        extern void isp_frame_done_wakeup(void);
                         isp_frame_done_wakeup();
                         
                         /* Update frame counter for userspace */
@@ -10591,14 +10590,6 @@ int isp_core_tuning_event(void *arg1, int arg2)
 
     /* Binary Ninja: return 0 */
     return 0;
-}
-
-/* isp_frame_done_wakeup - Binary Ninja function implementation */
-void isp_frame_done_wakeup(void)
-{
-    pr_info("isp_frame_done_wakeup: Frame processing complete\n");
-    /* This function would typically wake up waiting processes */
-    /* For now, just log the event */
 }
 
 /* tisp_day_or_night_s_ctrl - Binary Ninja function implementation */
