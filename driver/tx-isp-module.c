@@ -3408,862 +3408,92 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         return s6_1;
     }
-            
-            /* SAFE FIX: Instead of unsafe offset access, check if we have sensor registration capability */
-            /* This is where we would normally access the module's subdev and ops */
-            /* For now, we'll handle sensor registration more directly through our registered sensor system */
-            
-            /* Try to call a sensor function if this module supports it */
-            /* This replaces the complex Binary Ninja pointer traversal with safer logic */
-            
-            pr_info("Checking module at index %d: %p\n", graph_index, module);
-            
-            /* SAFE: Instead of complex pointer dereferencing, we'll use a simpler approach */
-            /* Check if this might be a sensor-related module by trying to call it */
-            if (module) {
-                /* Simplified sensor registration call - much safer than Binary Ninja approach */
-                final_result = 0; /* Assume success for direct registration */
-                
-                pr_info("Processed sensor registration via direct ISP device integration\n");
-                break; /* Success - exit loop */
-            }
+
+    /* Binary Ninja: Handle other IOCTL commands with similar patterns */
+
+    /* Binary Ninja: Handle 0x805056c2 - TX_ISP_SENSOR_RELEASE */
+    if (cmd == 0x805056c2) {
+        void **s0_5 = (void **)&isp_dev->subdevs[0];
+
+        /* Binary Ninja: if (private_copy_from_user(&var_98, arg3, 0x50) != 0) */
+        if (copy_from_user(&var_98, (void __user *)arg, 0x50) != 0) {
+            pr_err("TX_ISP_SENSOR_RELEASE: Failed to copy sensor data\n");
+            return -EFAULT;
         }
-        
-        pr_info("Sensor registration complete, final_result=0x%x\n", final_result);
-        
-        /* *** CRITICAL: Add sensor to enumeration list AND create actual sensor connection *** */
-        if (final_result == 0 && sensor_name[0] != '\0') {
-            pr_info("*** ADDING SUCCESSFULLY REGISTERED SENSOR TO LIST: %s ***\n", sensor_name);
-            
-            /* Add to our sensor enumeration list */
-            reg_sensor = kzalloc(sizeof(struct registered_sensor), GFP_KERNEL);
-            if (reg_sensor) {
-                strncpy(reg_sensor->name, sensor_name, sizeof(reg_sensor->name) - 1);
-                reg_sensor->name[sizeof(reg_sensor->name) - 1] = '\0';
-                
-                mutex_lock(&sensor_list_mutex);
-                reg_sensor->index = sensor_count++;
-                list_add_tail(&reg_sensor->list, &sensor_list);
-                mutex_unlock(&sensor_list_mutex);
-                
-                pr_info("*** SENSOR ADDED TO LIST: index=%d name=%s ***\n",
-                       reg_sensor->index, reg_sensor->name);
-            }
-            
-            /* *** CRITICAL: Create I2C device for sensor *** */
-            pr_info("*** CREATING I2C DEVICE FOR SENSOR %s ***\n", sensor_name);
-            
-            /* Get I2C adapter - try i2c-0 first */
-            i2c_adapter = i2c_get_adapter(0);
-            if (!i2c_adapter) {
-                pr_warn("I2C adapter 0 not found, trying adapter 1\n");
-                i2c_adapter = i2c_get_adapter(1);
-            }
-            
-            if (i2c_adapter) {
-                /* Set up I2C board info for the sensor */
-                memset(&board_info, 0, sizeof(board_info));
-                strncpy(board_info.type, sensor_name, I2C_NAME_SIZE - 1);
-                board_info.type[I2C_NAME_SIZE - 1] = '\0';
-                
-                /* Common sensor I2C addresses - try GC2053 first */
-                if (strncmp(sensor_name, "gc2053", 6) == 0) {
-                    board_info.addr = 0x37; /* GC2053 I2C address */
-                } else if (strncmp(sensor_name, "imx307", 6) == 0) {
-                    board_info.addr = 0x1a; /* IMX307 I2C address */
-                } else {
-                    board_info.addr = 0x37; /* Default address */
-                }
-                
-                pr_info("*** CREATING I2C CLIENT: name=%s, addr=0x%x, adapter=%s ***\n",
-                       board_info.type, board_info.addr, i2c_adapter->name);
-                
-                /* Create the I2C device */
-                client = isp_i2c_new_subdev_board(i2c_adapter, &board_info);
-                if (client) {
-                    pr_info("*** SUCCESS: I2C CLIENT CREATED - SENSOR PROBE SHOULD BE CALLED! ***\n");
-                    pr_info("*** I2C CLIENT: %s at 0x%x on %s ***\n",
-                           client->name, client->addr, client->adapter->name);
-                           
-                    /* *** CRITICAL FIX: FIND AND USE REAL SENSOR FROM SENSOR MODULE *** */
-                    pr_info("*** LOOKING FOR REAL SENSOR REGISTERED BY %s MODULE ***\n", sensor_name);
 
-                    /* The sensor module (gc2053.c) should have registered a sensor via I2C */
-                    /* We need to find that sensor and connect it to the ISP device */
-                    struct tx_isp_subdev *real_sensor_sd = NULL;
-                    struct tx_isp_sensor *real_sensor = NULL;
+        /* Binary Ninja: Loop through subdevices exactly as reference */
+        struct tx_isp_subdev *sd = (struct tx_isp_subdev *)*s0_5;
 
-                    /* The I2C client should have the sensor subdev as client data */
-                    /* Wait a bit for the sensor probe function to complete */
-                    pr_info("*** WAITING FOR SENSOR PROBE TO COMPLETE ***\n");
-                    msleep(200);
+        while (true) {
+            if (sd != NULL) {
+                /* Binary Ninja: void* $v0_28 = *(*($a0_12 + 0xc4) + 0xc) */
+                if (sd->ops && sd->ops->sensor) {
+                    /* Binary Ninja: int32_t $v0_29 = *($v0_28 + 8) */
+                    if (sd->ops->sensor->ioctl) {
+                        /* Binary Ninja: int32_t $v0_30 = $v0_29() */
+                        int32_t ret = sd->ops->sensor->ioctl(sd, 0x2000001, &var_98);
+                        s6_1 = ret;
 
-                    real_sensor_sd = private_i2c_get_clientdata(client);
-                    pr_info("*** I2C CLIENT DATA: %p ***\n", real_sensor_sd);
-
-                    if (real_sensor_sd) {
-                        pr_info("*** CHECKING SENSOR SUBDEV: sd=%p ***\n", real_sensor_sd);
-                        pr_info("*** SENSOR SUBDEV OPS: %p ***\n", real_sensor_sd->ops);
-
-                        if (real_sensor_sd->ops) {
-                            pr_info("*** SENSOR OPS STRUCTURE: core=%p, video=%p, sensor=%p ***\n",
-                                   real_sensor_sd->ops->core,
-                                   real_sensor_sd->ops->video,
-                                   real_sensor_sd->ops->sensor);
-                        }
-
-                        real_sensor = tx_isp_get_subdev_hostdata(real_sensor_sd);
-                        pr_info("*** SENSOR HOSTDATA: %p ***\n", real_sensor);
-
-                        if (real_sensor_sd->ops) {
-                            if (real_sensor) {
-                                pr_info("*** SUCCESS: Real sensor with ops and hostdata found ***\n");
-                                sensor = real_sensor; /* Use the real sensor */
-                            } else {
-                                pr_info("*** SUCCESS: Real sensor subdev with ops found (hostdata NULL) ***\n");
-                                /* Create a minimal sensor structure to satisfy VIC requirements */
-                                sensor = private_kmalloc(sizeof(struct tx_isp_sensor), GFP_KERNEL);
-                                if (sensor) {
-                                    memset(sensor, 0, sizeof(struct tx_isp_sensor));
-                                    /* Set up minimal sensor info */
-                                    strcpy(sensor->info.name, sensor_name);
-
-                                    /* CRITICAL: Set up sensor->video.attr to point to sensor->attr */
-                                    sensor->video.attr = &sensor->attr;
-
-                                    /* CRITICAL FIX: Copy real sensor attributes from GC2053 module */
-                                    struct tx_isp_sensor *real_sensor_for_attr = (struct tx_isp_sensor *)real_sensor_sd->host_priv;
-                                    if (real_sensor_for_attr && real_sensor_for_attr->video.attr) {
-                                        /* Copy the real sensor attributes from GC2053 module */
-                                        memcpy(&sensor->attr, real_sensor_for_attr->video.attr, sizeof(struct tx_isp_sensor_attribute));
-                                        pr_info("*** COPIED REAL SENSOR ATTRIBUTES FROM GC2053 MODULE ***\n");
-                                        pr_info("*** Real sensor attr: dbus_type=%d, width=%d, height=%d ***\n",
-                                                sensor->attr.dbus_type, sensor->attr.total_width, sensor->attr.total_height);
-                                    } else {
-                                        /* Fallback: Initialize basic sensor attributes for VIC compatibility */
-                                        sensor->attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;
-                                        sensor->attr.mipi.lans = 2; /* Default to 2 lanes */
-                                        sensor->attr.mipi.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10;
-                                        sensor->attr.total_width = 1920;  /* Default dimensions */
-                                        sensor->attr.total_height = 1080;
-                                        sensor->attr.integration_time = 1000; /* Default integration time */
-                                        pr_info("*** USING DEFAULT SENSOR ATTRIBUTES (real sensor attrs not available) ***\n");
-                                    }
-
-                                    pr_info("*** CREATED MINIMAL SENSOR STRUCTURE FOR VIC COMPATIBILITY ***\n");
-                                    pr_info("*** sensor->video.attr=%p (points to sensor->attr) ***\n", sensor->video.attr);
-                                } else {
-                                    pr_err("*** ERROR: Failed to allocate minimal sensor structure ***\n");
-                                    return -ENOMEM;
-                                }
+                        if (ret == 0) {
+                            s0_5++;
+                        } else {
+                            s0_5++;
+                            if (ret != 0xfffffdfd) {
+                                break;
                             }
-                        } else {
-                            pr_err("*** ERROR: Real sensor subdev found but ops are NULL ***\n");
-                            pr_err("*** This means the sensor probe function hasn't been called or failed ***\n");
-                            return -ENODEV;
                         }
                     } else {
-                        pr_err("*** ERROR: I2C client exists but no sensor subdev found ***\n");
-                        pr_err("*** This means private_i2c_set_clientdata was never called ***\n");
-                        return -ENODEV;
+                        s0_5++;
                     }
-
-                    /* SAFE CONNECTION: Verify ISP device before connecting */
-                    if (!ourISPdev) {
-                        pr_err("*** CRITICAL ERROR: ourISPdev is NULL! ***\n");
-                        return -ENODEV;
-                    }
-
-                    /* *** CRITICAL FIX: CONNECT REAL SENSOR TO ISP DEVICE *** */
-                    pr_info("*** CONNECTING REAL SENSOR TO ISP DEVICE ***\n");
-                    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
-                    struct tx_isp_sensor *current_sensor = tx_isp_get_sensor();
-                    pr_info("Current: ourISPdev=%p, current_sensor=%p\n", ourISPdev, current_sensor);
-                    pr_info("Real sensor: sensor=%p, subdev=%p\n", sensor, real_sensor_sd);
-
-                    /* Sensor is already connected via subdev array - no need to assign */
-                    pr_info("*** SENSOR CONNECTION: sensor=%p already in subdev array ***\n", sensor);
-
-                    /* NOTE: sensor->sd is already part of the sensor struct, no need to assign */
-                    /* The sensor structure contains the subdev as its first member */
-                    if (sensor) {
-                        pr_info("*** SENSOR STRUCTURE: sensor=%p, sensor->sd at %p ***\n",
-                               sensor, &sensor->sd);
-                    }
-
-                    /* CRITICAL: Register real sensor subdevice in subdevs array for GET_SENSOR_INFO IOCTL */
-                    int subdev_slot = -1;
-                    for (int j = 0; j < ISP_MAX_SUBDEVS; j++) {
-                        if (ourISPdev->subdevs[j] == NULL) {
-                            subdev_slot = j;
-                            break;
-                        }
-                    }
-
-                    if (subdev_slot >= 0) {
-                        ourISPdev->subdevs[subdev_slot] = real_sensor_sd;
-
-                        /* CRITICAL FIX: Set host_priv so tx_isp_get_sensor() can find the sensor */
-                        real_sensor_sd->host_priv = sensor;
-                        pr_info("*** CRITICAL FIX: Set subdev[%d]->host_priv=%p ***\n", subdev_slot, real_sensor_sd->host_priv);
-
-                        pr_info("*** REAL SENSOR SUBDEV REGISTERED IN SLOT %d FOR GET_SENSOR_INFO IOCTL ***\n", subdev_slot);
-                    } else {
-                        pr_warn("*** WARNING: No free subdev slot for real sensor registration ***\n");
-                    }
-
-                    pr_info("*** REAL SENSOR CONNECTED TO ISP DEVICE SUCCESSFULLY ***\n");
-
-                    /* CRITICAL FIX: Link sensor to VIN device for vin_s_stream to work */
-                    if (ourISPdev->vin_dev) {
-                        struct tx_isp_vin_device *vin_dev = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
-                        vin_dev->active = sensor;  /* Set active sensor for VIN s_stream */
-                        pr_info("*** SENSOR LINKED TO VIN DEVICE: vin_dev->active = %p ***\n", sensor);
-                    } else {
-                        pr_warn("*** WARNING: No VIN device available for sensor linking ***\n");
-                    }
-
-                    /* SAFE UPDATE: Update registry with real sensor subdev pointer */
-                    if (reg_sensor) {
-                        reg_sensor->subdev = real_sensor_sd;
-                        pr_info("*** SENSOR REGISTRY UPDATED WITH REAL SENSOR ***\n");
-                    }
-
-                    /* CRITICAL: Initialize VIN now that sensor is connected */
-                    if (ourISPdev->vin_dev) {
-                        pr_info("*** INITIALIZING VIN FOR SENSOR STREAMING ***\n");
-                        extern int tx_isp_vin_init(void* arg1, int32_t arg2);
-                        int vin_init_ret = tx_isp_vin_init(ourISPdev->vin_dev, 1);
-
-                        struct tx_isp_vin_device *vin_device = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
-                        pr_info("*** VIN INIT RESULT: %d, VIN STATE: %d ***\n", vin_init_ret, vin_device->state);
-
-                        if (vin_device->state == 3) {
-                            pr_info("*** VIN SUCCESSFULLY INITIALIZED TO STATE 3 - READY FOR STREAMING ***\n");
-                        } else {
-                            pr_warn("*** VIN STATE IS %d, EXPECTED 3 - STREAMING MAY FAIL ***\n", vin_device->state);
-                        }
-                    } else {
-                        pr_err("*** NO VIN DEVICE AVAILABLE FOR INITIALIZATION ***\n");
-                    }
-
-                    /* Core initialization now handled by STREAMON event in tx_isp_send_event_to_remote */
-                    pr_info("*** SENSOR CONNECTED - Core initialization will be triggered by STREAMON event ***\n");
                 } else {
-                    pr_err("*** FAILED TO CREATE I2C CLIENT FOR %s ***\n", sensor_name);
+                    s0_5++;
                 }
-                
-                i2c_put_adapter(i2c_adapter);
             } else {
-                pr_err("*** NO I2C ADAPTER AVAILABLE FOR SENSOR %s ***\n", sensor_name);
-            }
-        }
-        
-        return final_result;
-    }
-    case 0xc050561a: { // TX_ISP_SENSOR_ENUM_INPUT - MEMORY SAFE implementation
-        struct sensor_enum_data {
-            int index;
-            char name[32];
-            int padding[4];  /* Extra padding to match 0x50 size */
-        } input_data;
-        int sensor_found = 0;
-        
-        pr_info("*** TX_ISP_SENSOR_ENUM_INPUT: MEMORY SAFE implementation ***\n");
-        
-        /* SAFE: Use properly aligned structure for user data copy */
-        if (copy_from_user(&input_data, argp, sizeof(input_data))) {
-            pr_err("TX_ISP_SENSOR_ENUM_INPUT: Failed to copy input data\n");
-            return -EFAULT;
-        }
-        
-        /* Validate input index to prevent array bounds issues */
-        if (input_data.index < 0 || input_data.index > 16) {
-            pr_warn("TX_ISP_SENSOR_ENUM_INPUT: Invalid sensor index %d (valid range: 0-16)\n", 
-                    input_data.index);
-            return -EINVAL;
-        }
-        
-        pr_info("Sensor enumeration: requesting index %d\n", input_data.index);
-        
-        /* SAFE: Check our registered sensor list first */
-        struct registered_sensor *sensor;
-        mutex_lock(&sensor_list_mutex);
-        list_for_each_entry(sensor, &sensor_list, list) {
-            if (sensor->index == input_data.index) {
-                strncpy(input_data.name, sensor->name, sizeof(input_data.name) - 1);
-                input_data.name[sizeof(input_data.name) - 1] = '\0';
-                sensor_found = 1;
-                pr_info("*** FOUND SENSOR: index=%d name=%s ***\n",
-                       input_data.index, input_data.name);
-                break;
-            }
-        }
-        mutex_unlock(&sensor_list_mutex);
-        
-        /* SAFE: If not found in registered list, check if we have a fallback sensor */
-        extern struct tx_isp_sensor *tx_isp_get_sensor(void);
-        struct tx_isp_sensor *active_sensor = tx_isp_get_sensor();
-        if (!sensor_found && active_sensor && input_data.index == 0) {
-            /* Special case: if requesting index 0 and we have a connected sensor */
-            if (active_sensor && active_sensor->info.name[0] != '\0') {
-                strncpy(input_data.name, active_sensor->info.name, sizeof(input_data.name) - 1);
-                input_data.name[sizeof(input_data.name) - 1] = '\0';
-                sensor_found = 1;
-                pr_info("*** FOUND ACTIVE SENSOR: index=%d name=%s ***\n",
-                       input_data.index, input_data.name);
-            }
-        }
-        
-        /* SAFE: Early return for invalid sensor index to prevent crashes */
-        if (!sensor_found) {
-            pr_info("No sensor found at index %d (total registered: %d)\n",
-                    input_data.index, sensor_count);
-            return -EINVAL;
-        }
-        
-        /* SAFE: Copy result back to user with proper alignment */
-        if (copy_to_user(argp, &input_data, sizeof(input_data))) {
-            pr_err("TX_ISP_SENSOR_ENUM_INPUT: Failed to copy result to user\n");
-            return -EFAULT;
-        }
-        
-        pr_info("Sensor enumeration: index=%d name=%s\n", input_data.index, input_data.name);
-        return 0;
-    }
-    case 0xc0045627: { // TX_ISP_SENSOR_SET_INPUT - Set active sensor input
-        int input_index;
-        struct registered_sensor *sensor;
-        int found = 0;
-        
-        if (copy_from_user(&input_index, argp, sizeof(input_index)))
-            return -EFAULT;
-            
-        // Validate sensor exists
-        mutex_lock(&sensor_list_mutex);
-        
-        list_for_each_entry(sensor, &sensor_list, list) {
-            if (sensor->index == input_index) {
-                found = 1;
-                break;
-            }
-        }
-        mutex_unlock(&sensor_list_mutex);
-        
-        if (!found) {
-            pr_err("No sensor at index %d for set input\n", input_index);
-            return -EINVAL;
-        }
-        
-        pr_info("Sensor input set to index %d (%s)\n", input_index, sensor->name);
-        return 0;
-    }
-    case 0x805056c2: { // TX_ISP_SENSOR_RELEASE_SENSOR - Release/unregister sensor
-        struct tx_isp_sensor_register_info {
-            char name[32];
-            // Other fields would be here in real struct
-        } unreg_info;
-        struct registered_sensor *sensor, *tmp;
-        int found = 0;
-        
-        if (copy_from_user(&unreg_info, argp, sizeof(unreg_info)))
-            return -EFAULT;
-            
-        mutex_lock(&sensor_list_mutex);
-        
-        // Find and remove sensor from list
-        
-        list_for_each_entry_safe(sensor, tmp, &sensor_list, list) {
-            if (strncmp(sensor->name, unreg_info.name, sizeof(sensor->name)) == 0) {
-                list_del(&sensor->list);
-                kfree(sensor);
-                found = 1;
-                break;
-            }
-        }
-        
-        mutex_unlock(&sensor_list_mutex);
-        
-        if (found) {
-            pr_info("Sensor released: %s\n", unreg_info.name);
-        } else {
-            pr_info("Sensor not found for release: %s\n", unreg_info.name);
-        }
-        
-        return 0;
-    }
-    case 0x8038564f: { // TX_ISP_SENSOR_S_REGISTER - Set sensor register
-        struct sensor_reg_write {
-            uint32_t addr;
-            uint32_t val;
-            uint32_t size;
-            // Additional fields from reference
-            uint32_t reserved[10];
-        } reg_write;
-        
-        if (copy_from_user(&reg_write, argp, sizeof(reg_write)))
-            return -EFAULT;
-        
-        pr_info("Sensor register write: addr=0x%x val=0x%x size=%d\n",
-                reg_write.addr, reg_write.val, reg_write.size);
-        
-        // In real implementation, this would write to sensor via I2C
-        // Following reference pattern of calling sensor ops
-        
-        return 0;
-    }
-    case 0xc0385650: { // TX_ISP_SENSOR_G_REGISTER - Get sensor register
-        struct sensor_reg_read {
-            uint32_t addr;
-            uint32_t val;    // Will be filled by driver
-            uint32_t size;
-            // Additional fields from reference
-            uint32_t reserved[10];
-        } reg_read;
-        
-        if (copy_from_user(&reg_read, argp, sizeof(reg_read)))
-            return -EFAULT;
-        
-        pr_info("Sensor register read: addr=0x%x size=%d\n",
-                reg_read.addr, reg_read.size);
-        
-        // In real implementation, this would read from sensor via I2C
-        // For now, return dummy data
-        reg_read.val = 0x5A; // Dummy sensor data
-        
-        if (copy_to_user(argp, &reg_read, sizeof(reg_read)))
-            return -EFAULT;
-        
-        pr_info("Sensor register read result: addr=0x%x val=0x%x\n",
-                reg_read.addr, reg_read.val);
-        
-        return 0;
-    }
-    case 0x800856d5: { // TX_ISP_GET_BUF - Calculate required buffer size
-        struct isp_buf_result {
-            uint32_t addr;   // Physical address (usually 0)
-            uint32_t size;   // Calculated buffer size
-        } buf_result;
-        uint32_t width = 1920;   // Default HD width
-        uint32_t height = 1080;  // Default HD height
-        uint32_t stride_factor;
-        uint32_t main_buf;
-        uint32_t total_main;
-        uint32_t yuv_stride;
-        uint32_t total_size;
-        
-        pr_info("ISP buffer calculation: width=%d height=%d memopt=%d\n",
-                width, height, isp_memopt);
-
-        // CRITICAL FIX: Use correct RAW10 buffer calculation instead of YUV
-        // RAW10 format: 10 bits per pixel = 1.25 bytes per pixel
-        // Formula: width * height * 1.25 (with proper alignment)
-
-        pr_info("*** BUFFER FIX: Using RAW10 calculation instead of incorrect YUV calculation ***\n");
-
-        // RAW10: 10 bits per pixel, packed format
-        // Each 4 pixels = 5 bytes (4 * 10 bits = 40 bits = 5 bytes)
-        // So: (width * height * 5) / 4
-        uint32_t raw10_pixels = width * height;
-        uint32_t raw10_bytes = (raw10_pixels * 5) / 4;  // 10 bits per pixel = 1.25 bytes
-
-        // Add alignment padding (align to 64-byte boundaries for DMA)
-        uint32_t aligned_size = (raw10_bytes + 63) & ~63;
-
-        total_size = aligned_size;
-
-        pr_info("*** RAW10 BUFFER: %d pixels -> %d bytes -> %d aligned ***\n",
-                raw10_pixels, raw10_bytes, aligned_size);
-        
-        pr_info("ISP calculated buffer size: %d bytes (0x%x)\n", total_size, total_size);
-        
-        // Set result: address=0, size=calculated
-        buf_result.addr = 0;
-        buf_result.size = total_size;
-        
-        if (copy_to_user(argp, &buf_result, sizeof(buf_result)))
-            return -EFAULT;
-            
-        return 0;
-    }
-    case 0x800856d4: { // TX_ISP_SET_BUF - Set buffer addresses and configure DMA
-        struct isp_buf_setup {
-            uint32_t addr;   // Physical buffer address
-            uint32_t size;   // Buffer size
-        } buf_setup;
-        uint32_t width = 1920;
-        uint32_t height = 1080;
-        uint32_t stride;
-        uint32_t frame_size;
-        uint32_t uv_offset;
-        uint32_t yuv_stride;
-        uint32_t yuv_size;
-        
-        if (copy_from_user(&buf_setup, argp, sizeof(buf_setup)))
-            return -EFAULT;
-        
-        pr_info("ISP set buffer: addr=0x%x size=%d\n", buf_setup.addr, buf_setup.size);
-        
-        // Calculate stride and buffer offsets like reference
-        stride = ((width + 7) >> 3) << 3;  // Aligned stride
-        frame_size = stride * height;
-        
-        // Validate buffer size
-        if (buf_setup.size < frame_size) {
-            pr_err("Buffer too small: need %d, got %d\n", frame_size, buf_setup.size);
-            return -EFAULT;
-        }
-        
-        // Configure main frame buffers (system registers like reference)
-        // These would be actual register writes in hardware implementation
-        pr_info("Configuring main frame buffer: 0x%x stride=%d\n", buf_setup.addr, stride);
-        
-        // UV buffer offset calculation
-        uv_offset = frame_size + (frame_size >> 1);
-        if (buf_setup.size >= uv_offset) {
-            pr_info("Configuring UV buffer: 0x%x\n", buf_setup.addr + frame_size);
-        }
-        
-        // YUV420 additional buffer configuration
-        yuv_stride = ((((width + 0x1f) >> 5) + 7) >> 3) << 3;
-        yuv_size = yuv_stride * ((((height + 0xf) >> 4) + 1) << 3);
-        
-        if (!isp_memopt) {
-            // Full buffer mode - configure all planes
-            pr_info("Full buffer mode: YUV stride=%d size=%d\n", yuv_stride, yuv_size);
-        } else {
-            // Memory optimized mode
-            pr_info("Memory optimized mode\n");
-        }
-        
-        return 0;
-    }
-    case 0x800856d6: { // TX_ISP_WDR_SET_BUF - WDR buffer setup
-        struct wdr_buf_setup {
-            uint32_t addr;   // WDR buffer address
-            uint32_t size;   // WDR buffer size
-        } wdr_setup;
-        uint32_t wdr_width = 1920;
-        uint32_t wdr_height = 1080;
-        uint32_t wdr_mode = 1; // Linear mode by default
-        uint32_t required_size;
-        uint32_t stride_lines;
-        
-        if (copy_from_user(&wdr_setup, argp, sizeof(wdr_setup)))
-            return -EFAULT;
-        
-        pr_info("WDR buffer setup: addr=0x%x size=%d\n", wdr_setup.addr, wdr_setup.size);
-        
-        if (wdr_mode == 1) {
-            // Linear mode calculation
-            stride_lines = wdr_height;
-            required_size = (stride_lines * wdr_width) << 1; // 16-bit per pixel
-        } else if (wdr_mode == 2) {
-            // WDR mode calculation - different formula
-            required_size = wdr_width * wdr_height * 2; // Different calculation for WDR
-            stride_lines = required_size / (wdr_width << 1);
-        } else {
-            pr_err("Unsupported WDR mode: %d\n", wdr_mode);
-            return -EINVAL;
-        }
-        
-        pr_info("WDR mode %d: required_size=%d stride_lines=%d\n",
-                wdr_mode, required_size, stride_lines);
-        
-        if (wdr_setup.size < required_size) {
-            pr_err("WDR buffer too small: need %d, got %d\n", required_size, wdr_setup.size);
-            return -EFAULT;
-        }
-        
-        // Configure WDR registers (like reference 0x2004, 0x2008, 0x200c)
-        pr_info("Configuring WDR registers: addr=0x%x stride=%d lines=%d\n",
-                wdr_setup.addr, wdr_width << 1, stride_lines);
-        
-        return 0;
-    }
-    case 0x800856d7: { // TX_ISP_WDR_GET_BUF - Get WDR buffer size
-        struct wdr_buf_result {
-            uint32_t addr;   // WDR buffer address (usually 0)
-            uint32_t size;   // Calculated WDR buffer size
-        } wdr_result;
-        uint32_t wdr_width = 1920;
-        uint32_t wdr_height = 1080;
-        uint32_t wdr_mode = 1; // Linear mode
-        uint32_t wdr_size;
-        
-        pr_info("WDR buffer calculation: width=%d height=%d mode=%d\n",
-                wdr_width, wdr_height, wdr_mode);
-        
-        if (wdr_mode == 1) {
-            // Linear mode: ($s1_13 * *($s2_23 + 0x124)) << 1
-            wdr_size = (wdr_height * wdr_width) << 1;
-        } else if (wdr_mode == 2) {
-            // WDR mode: different calculation
-            wdr_size = wdr_width * wdr_height * 2;
-        } else {
-            pr_err("WDR mode not supported\n");
-            return -EINVAL;
-        }
-        
-        pr_info("WDR calculated buffer size: %d bytes (0x%x)\n", wdr_size, wdr_size);
-        
-        wdr_result.addr = 0;
-        wdr_result.size = wdr_size;
-        
-        if (copy_to_user(argp, &wdr_result, sizeof(wdr_result)))
-            return -EFAULT;
-        
-        return 0;
-    }
-    case 0x800456d0: { // TX_ISP_VIDEO_LINK_SETUP - Video link configuration
-        int link_config;
-        int i, ret = 0;
-
-        if (copy_from_user(&link_config, argp, sizeof(link_config)))
-            return -EFAULT;
-
-        if (link_config >= 2) {
-            pr_err("Invalid video link config: %d (valid: 0-1)\n", link_config);
-            return -EINVAL;
-        }
-
-        pr_info("Video link setup: config=%d\n", link_config);
-
-        /* Binary Ninja: Check if config is different from current */
-        if (link_config != isp_dev->link_config) {
-            int link_count = link_config_counts[link_config];
-            struct tx_isp_link_config *config = link_configs[link_config];
-
-            pr_info("tx_isp_video_link_setup: Setting up %d links for config %d\n", link_count, link_config);
-
-            /* Binary Ninja: Loop through all links in configuration */
-            for (i = 0; i < link_count; i++) {
-                struct tx_isp_video_pad *src_pad, *dst_pad;
-
-                /* Find source and destination pads */
-                src_pad = find_subdev_link_pad(isp_dev, &config[i]);
-                dst_pad = find_subdev_link_pad(isp_dev, &config[i]);
-
-                if (!src_pad || !dst_pad) {
-                    pr_warn("tx_isp_video_link_setup: Could not find pads for link %d (%s->%s)\n",
-                            i, config[i].src.name, config[i].dst.name);
-                    continue;
-                }
-
-                /* Binary Ninja: Check pad compatibility and flags */
-                if ((src_pad->flags & dst_pad->flags & config[i].flag) == 0) {
-                    pr_err("tx_isp_video_link_setup: Incompatible pad flags for link %d\n", i);
-                    return -EINVAL;
-                }
-
-                /* Binary Ninja: Check pad states */
-                if (src_pad->state == 4 || dst_pad->state == 4) {
-                    pr_err("tx_isp_video_link_setup: Invalid pad state for link %d\n", i);
-                    return -EINVAL;
-                }
-
-                /* Binary Ninja: Setup the link */
-                src_pad->link_src = src_pad;
-                src_pad->link_dst = dst_pad;
-                src_pad->link_src_pad = src_pad;
-                src_pad->link_dst_pad = dst_pad;
-                src_pad->link_flags = config[i].flag | 1;  /* Enable link */
-                src_pad->state = 3;  /* Connected */
-
-                dst_pad->link_src = dst_pad;
-                dst_pad->link_dst = src_pad;
-                dst_pad->link_src_pad = dst_pad;
-                dst_pad->link_dst_pad = src_pad;
-                dst_pad->link_flags = config[i].flag | 1;  /* Enable link */
-                dst_pad->state = 3;  /* Connected */
-
-                pr_info("tx_isp_video_link_setup: Configured link %s->%s\n",
-                        config[i].src.name, config[i].dst.name);
+                s0_5++;
             }
 
-            /* Binary Ninja: Store config in device structure at offset 0x10c */
-            isp_dev->link_config = link_config;
-
-            pr_info("tx_isp_video_link_setup: Link configuration %d applied successfully\n", link_config);
-        }
-
-        return ret;
-    }
-    case 0x800456d1: { // TX_ISP_VIDEO_LINK_DESTROY - Destroy video links
-        pr_info("Video link destroy requested\n");
-        return tx_isp_video_link_destroy(isp_dev);
-    }
-    case 0x800456d2: { // TX_ISP_VIDEO_LINK_STREAM_ON - Enable video link streaming
-        return tx_isp_video_link_stream(isp_dev, 1);
-    }
-    case 0x800456d3: { // TX_ISP_VIDEO_LINK_STREAM_OFF - Disable video link streaming
-        return tx_isp_video_link_stream(isp_dev, 0);
-    }
-    case 0x80045612: { // VIDIOC_STREAMON - Start video streaming
-        /* Binary Ninja reference: Simple loop through all subdevices for init */
-        pr_info("*** VIDIOC_STREAMON: Initializing all subdevices (Binary Ninja loop pattern) ***\n");
-
-        /* CRITICAL SAFETY: Initialize only the CORE subdev, skip dangerous VIN init */
-        /* The core needs to be initialized to state 3 for streaming to work */
-        pr_info("*** VIDIOC_STREAMON: Initializing CORE subdev only (skipping dangerous VIN init) ***\n");
-
-        for (int init_i = 0; init_i < 0x10; init_i++) {
-            struct tx_isp_subdev *init_sd = isp_dev->subdevs[init_i];
-            if (init_sd && init_sd->ops && init_sd->ops->core && init_sd->ops->core->init) {
-
-                /* CRITICAL SAFETY: Only initialize CORE subdev, skip VIN and others */
-                /* Check if this is the core subdev by looking for core device */
-                if (init_sd == &isp_dev->core_dev->sd) {
-                    pr_info("*** VIDIOC_STREAMON: Found CORE subdev at index %d - initializing ***\n", init_i);
-                    int core_init_ret = init_sd->ops->core->init(init_sd, 1);
-                    if (core_init_ret == 0) {
-                        pr_info("*** VIDIOC_STREAMON: CORE init SUCCESS - core should be in state 3 ***\n");
-                    } else {
-                        pr_warn("*** VIDIOC_STREAMON: CORE init failed: %d ***\n", core_init_ret);
-                    }
-                    break;  /* Found and initialized core, stop looking */
-                } else {
-                    pr_info("*** VIDIOC_STREAMON: Skipping non-core subdev %d to prevent crashes ***\n", init_i);
-                }
+            if ((void *)s0_5 == (void *)&isp_dev->subdevs[ISP_MAX_SUBDEVS]) {
+                return 0;
             }
+
+            sd = (struct tx_isp_subdev *)*s0_5;
         }
 
+        return s6_1;
+    }
+
+    /* Binary Ninja: Handle streaming commands */
+    if (cmd == 0x80045612) {
+        /* VIDIOC_STREAMON */
         return tx_isp_video_s_stream(isp_dev, 1);
     }
-    case 0x80045613: { // VIDIOC_STREAMOFF - Stop video streaming
+
+    if (cmd == 0x80045613) {
+        /* VIDIOC_STREAMOFF */
         return tx_isp_video_s_stream(isp_dev, 0);
     }
-    case 0x800456d8: { // TX_ISP_WDR_ENABLE - Enable WDR mode
-        int wdr_enable = 1;
-        
-        pr_info("WDR mode ENABLE\n");
-        
-        // Configure WDR enable (matches reference logic)
-        // In reference: *($s2_24 + 0x17c) = 1
-        // and calls tisp_s_wdr_en(1)
-        
-        return 0;
-    }
-    case 0x800456d9: { // TX_ISP_WDR_DISABLE - Disable WDR mode
-        int wdr_disable = 0;
-        
-        pr_info("WDR mode DISABLE\n");
-        
-        // Configure WDR disable (matches reference logic)
-        // In reference: *($s2_23 + 0x17c) = 0
-        // and calls tisp_s_wdr_en(0)
-        
-        return 0;
-    }
-    case 0xc008561b: { // TX_ISP_SENSOR_GET_CONTROL - Get sensor control value
-        struct sensor_control_arg {
-            uint32_t cmd;
-            uint32_t value;
-        } control_arg;
-        
-        if (copy_from_user(&control_arg, argp, sizeof(control_arg)))
-            return -EFAULT;
-        
-        pr_info("Sensor get control: cmd=0x%x\n", control_arg.cmd);
-        
-        // Route to sensor IOCTL handler if available
-        extern struct tx_isp_sensor *tx_isp_get_sensor(void);
-        struct tx_isp_sensor *sensor = tx_isp_get_sensor();
-        if (sensor && sensor->sd.ops &&
-            sensor->sd.ops->sensor && sensor->sd.ops->sensor->ioctl) {
-            ret = sensor->sd.ops->sensor->ioctl(&sensor->sd,
-                                               control_arg.cmd, &control_arg.value);
-            if (ret == 0) {
-                if (copy_to_user(argp, &control_arg, sizeof(control_arg)))
-                    return -EFAULT;
-            }
-        } else {
-            // Default value
-            control_arg.value = 128; // Default middle value
-            if (copy_to_user(argp, &control_arg, sizeof(control_arg)))
-                return -EFAULT;
-        }
-        
-        return 0;
-    }
-    case 0xc008561c: { // TX_ISP_SENSOR_SET_CONTROL - Set sensor control value  
-        struct sensor_control_arg {
-            uint32_t cmd;
-            uint32_t value;
-        } control_arg;
-        
-        if (copy_from_user(&control_arg, argp, sizeof(control_arg)))
-            return -EFAULT;
-        
-        pr_info("Sensor set control: cmd=0x%x value=%d\n", control_arg.cmd, control_arg.value);
-        
-        // Route to sensor IOCTL handler if available
-        extern struct tx_isp_sensor *tx_isp_get_sensor(void);
-        struct tx_isp_sensor *sensor = tx_isp_get_sensor();
-        if (sensor && sensor->sd.ops &&
-            sensor->sd.ops->sensor && sensor->sd.ops->sensor->ioctl) {
-            ret = sensor->sd.ops->sensor->ioctl(&sensor->sd,
-                                               control_arg.cmd, &control_arg.value);
-        } else {
-            pr_warn("No sensor IOCTL handler available for cmd=0x%x\n", control_arg.cmd);
-            ret = 0; // Return success to avoid breaking callers
-        }
-        
-        return ret;
-    }
-    case 0xc00c56c6: { // TX_ISP_SENSOR_TUNING_OPERATION - Advanced sensor tuning
-        struct sensor_tuning_arg {
-            uint32_t mode;      // 0=SET, 1=GET
-            uint32_t cmd;       // Tuning command
-            void *data_ptr;     // Data pointer (user space)
-        } tuning_arg;
-        
-        if (copy_from_user(&tuning_arg, argp, sizeof(tuning_arg)))
-            return -EFAULT;
-        
-        pr_info("Sensor tuning: mode=%d cmd=0x%x data_ptr=%p\n",
-                tuning_arg.mode, tuning_arg.cmd, tuning_arg.data_ptr);
-        
-        // Route tuning operations to sensor
-        extern struct tx_isp_sensor *tx_isp_get_sensor(void);
-        struct tx_isp_sensor *sensor = tx_isp_get_sensor();
-        if (sensor && sensor->sd.ops &&
-            sensor->sd.ops->sensor && sensor->sd.ops->sensor->ioctl) {
 
-            // For GET operations, prepare buffer
-            if (tuning_arg.mode == 1) {
-                // GET operation - sensor should fill the value
-                uint32_t result_value = 0;
-                ret = sensor->sd.ops->sensor->ioctl(&sensor->sd,
-                                                   tuning_arg.cmd, &result_value);
-                if (ret == 0 && tuning_arg.data_ptr) {
-                    // Copy result back to user
-                    if (copy_to_user(tuning_arg.data_ptr, &result_value, sizeof(result_value)))
-                        return -EFAULT;
-                }
-            } else {
-                // SET operation - get value from user
-                uint32_t set_value = 0;
-                if (tuning_arg.data_ptr) {
-                    if (copy_from_user(&set_value, tuning_arg.data_ptr, sizeof(set_value)))
-                        return -EFAULT;
-                }
-                ret = sensor->sd.ops->sensor->ioctl(&sensor->sd,
-                                                   tuning_arg.cmd, &set_value);
-            }
-        } else {
-            pr_warn("No sensor available for tuning operation\n");
-            ret = 0; // Don't fail - return success for compatibility
+    /* Binary Ninja: Handle video link commands */
+    if (cmd >= 0x800456d1) {
+        if (cmd == 0x800456d2) {
+            /* TX_ISP_VIDEO_LINK_STREAM_ON */
+            return tx_isp_video_link_stream(isp_dev, 1);
+        } else if (cmd < 0x800456d2) {
+            /* TX_ISP_VIDEO_LINK_DESTROY */
+            return tx_isp_video_link_destroy(isp_dev);
+        } else if (cmd == 0x800456d3) {
+            /* TX_ISP_VIDEO_LINK_STREAM_OFF */
+            return tx_isp_video_link_stream(isp_dev, 0);
         }
-        
-        return ret;
-    }
-    default:
-        pr_info("Unhandled ioctl cmd: 0x%x\n", cmd);
-        return -ENOTTY;
+        return 0;
     }
 
-    return ret;
+    /* Binary Ninja: Default case */
+    s6_1 = 0;
+
+    /* Handle other commands that don't match the main patterns */
+    pr_info("Unhandled ioctl cmd: 0x%x\n", cmd);
+    return -ENOTTY;
 }
 
 // CRITICAL FIX: Safe open handler that prevents dangerous initialization chains
