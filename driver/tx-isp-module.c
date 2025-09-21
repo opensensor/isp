@@ -1466,23 +1466,46 @@ static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev)
     struct tx_isp_subdev *sensor_subdev;
     int sensor_found = 0;
     int ret = 0;
-    
+
     if (!isp_dev) {
         return -EINVAL;
     }
-    
-    pr_info("Preparing sensor subdev infrastructure...\n");
-    
-    // In kernel 3.10, we prepare the subdev infrastructure for when sensors register
-    // Sensors will register themselves via the enhanced IOCTL 0x805056c1
-    
-    // Create placeholder sensor subdev structure for common sensors
-    // This will be populated when actual sensor modules call the registration IOCTL
-    
-    pr_info("Sensor subdev infrastructure prepared for dynamic registration\n");
-    pr_info("Sensors will register via IOCTL 0x805056c1 when loaded\n");
-    
-    // Always return success - sensors will register dynamically
+
+    pr_info("*** CRITICAL: Creating I2C sensor devices during ISP initialization ***\n");
+
+    /* CRITICAL FIX: Create I2C sensor device immediately during ISP init */
+    /* This matches the reference driver behavior where sensors are detected early */
+
+    /* Get I2C adapter 0 (standard for embedded systems) */
+    struct i2c_adapter *adapter = i2c_get_adapter(0);
+    if (!adapter) {
+        pr_err("*** Failed to get I2C adapter 0 for sensor detection ***\n");
+        return -ENODEV;
+    }
+
+    /* Create I2C board info for gc2053 sensor */
+    struct i2c_board_info sensor_board_info;
+    memset(&sensor_board_info, 0, sizeof(sensor_board_info));
+    strncpy(sensor_board_info.type, "gc2053", I2C_NAME_SIZE);
+    sensor_board_info.addr = 0x37; /* GC2053 I2C address */
+
+    pr_info("*** Creating I2C sensor device during init: %s at 0x%02x ***\n",
+            sensor_board_info.type, sensor_board_info.addr);
+
+    /* Call our I2C subdev creation function */
+    struct i2c_client *client = isp_i2c_new_subdev_board(adapter, &sensor_board_info);
+
+    i2c_put_adapter(adapter);
+
+    if (client) {
+        pr_info("*** I2C sensor device created successfully during init: %s at 0x%02x ***\n",
+                client->name, client->addr);
+        sensor_found = 1;
+    } else {
+        pr_err("*** Failed to create I2C sensor device during init ***\n");
+    }
+
+    pr_info("Sensor detection complete - found %d sensors\n", sensor_found);
     return 0;
 }
 
