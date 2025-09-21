@@ -49,6 +49,7 @@ struct tx_isp_subdev_platform_data {
 /* Forward declarations */
 struct tx_isp_subdev;
 struct tx_isp_core;
+struct tx_isp_core_device;
 struct isp_tuning_data;
 struct isp_tuning_state;
 struct ae_info;
@@ -104,10 +105,9 @@ struct tx_isp_csi_device {
     struct tx_isp_sensor_attribute *sensor_attr;  // Binary Ninja: offset 0x110
 };
 
-/* Core ISP device structure */
+/* Core ISP device structure - Global ISP device management only */
 struct tx_isp_dev {
-    struct tx_isp_subdev sd;        // Base subdev at offset 0
-    /* Core device info */
+    /* Global device info (core subdev moved to separate core_dev) */
     struct device *dev;
     struct device *tisp_device;
     struct miscdevice miscdev;
@@ -168,6 +168,9 @@ struct tx_isp_dev {
     /* VIC device - positioned for proper struct member access */
     struct tx_isp_vic_device *vic_dev;
 
+    /* Core device - separate subdevice like VIC/VIN/CSI */
+    struct tx_isp_core_device *core_dev;
+
     /* Status tracking */
     struct isp_device_status status;
     struct isp_device_link_state link_state;
@@ -183,14 +186,11 @@ struct tx_isp_dev {
     struct platform_device *core_pdev;
     struct platform_device *fs_pdev;
 
-    /* Clocks */
-    struct clk *cgu_isp;
-    struct clk *isp_clk;
-    struct clk *ipu_clk;
-    struct clk *csi_clk;
-    
-    /* Centralized register mappings */
-    void __iomem *core_regs;     /* ISP core registers */
+    /* Global clocks (core-specific clocks moved to core_dev) */
+    struct clk *cgu_isp;         /* Global CGU ISP clock */
+    struct clk *csi_clk;         /* CSI clock (CSI-specific) */
+
+    /* Global register mappings (core-specific registers moved to core_dev) */
     void __iomem *csi_regs;      /* CSI registers */
     /* vic_regs is already declared above at line 209 */
     /* phy_base is already declared above at line 214 */
@@ -208,22 +208,9 @@ struct tx_isp_dev {
     struct tx_isp_subdev_ops *sensor_subdev_ops;  /* Sensor subdev operations */
     bool sensor_ops_initialized;                  /* Sensor operations initialization flag */
 
-    /* IRQs */
-    int isp_irq;
-    int isp_irq2;
-    spinlock_t irq_lock;
-    volatile u32 irq_enabled;
-    void (*irq_handler)(void *);
-    void (*irq_disable)(void *);
-    void *irq_priv;
-    
-    /* Binary Ninja interrupt function pointers */
-    void (*irq_enable_func)(struct tx_isp_dev *);   /* arg2[1] = tx_isp_enable_irq */
-    void (*irq_disable_func)(struct tx_isp_dev *);  /* arg2[2] = tx_isp_disable_irq */
-    struct irq_handler_data *isp_irq_data;
-    struct completion frame_complete;
-    struct task_struct *fw_thread;
-    uint32_t frame_count;
+    /* Global IRQ management (core-specific IRQs moved to core_dev) */
+    spinlock_t irq_lock;         /* Global IRQ lock */
+    struct completion frame_complete;  /* Global frame completion */
 
     /* VIC IRQ */
     int vic_irq;
@@ -262,22 +249,12 @@ struct tx_isp_dev {
     void (*ae_algo_cb)(void *priv, int, int);
     void *ae_priv_data;
 
-    /* Tuning attributes */
-    uint32_t g_isp_deamon_info;
-    struct isp_tuning_data *tuning_data;
-    struct isp_tuning_state *tuning_state;
-    int tuning_enabled;
-    bool streaming_enabled;
-    bool bypass_enabled;
-    bool links_enabled;
-    u32 instance;
-    struct ae_info *ae_info;
-    struct awb_info *awb_info;
-    uint32_t wdr_mode;
-    uint32_t day_night;
-    uint32_t custom_mode;
-    uint32_t poll_state;
-    wait_queue_head_t poll_wait;
+    /* Global device attributes (core-specific tuning moved to core_dev) */
+    bool streaming_enabled;      /* Global streaming state */
+    bool links_enabled;          /* Global link state */
+    u32 instance;               /* Device instance */
+    uint32_t poll_state;        /* Global poll state */
+    wait_queue_head_t poll_wait; /* Global poll wait queue */
     
     /* Pipeline state management */
     int pipeline_state;

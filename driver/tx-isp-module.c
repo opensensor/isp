@@ -3284,15 +3284,18 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_info("Channel %d: Found sensor %s for streaming\n",
                     channel, sensor ? sensor->info.name : "(unnamed)");
 
-            // core ops init
-            if (ourISPdev->sd.ops && ourISPdev->sd.ops->core && ourISPdev->sd.ops->core->init) {
-                pr_info("*** Channel %d: CALLING CORE INIT - WRITING INITIALIZATION REGISTERS ***\n", channel);
-                ret = ourISPdev->sd.ops->core->init(&ourISPdev->sd, 1);
+            // core ops init using core device
+            if (ourISPdev->core_dev && ourISPdev->core_dev->sd.ops &&
+                ourISPdev->core_dev->sd.ops->core && ourISPdev->core_dev->sd.ops->core->init) {
+                pr_info("*** Channel %d: CALLING CORE INIT VIA CORE DEVICE ***\n", channel);
+                ret = ourISPdev->core_dev->sd.ops->core->init(&ourISPdev->core_dev->sd, 1);
                 if (ret) {
                     pr_err("Channel %d: CORE INIT FAILED: %d\n", channel, ret);
                 } else {
                     pr_info("*** Channel %d: CORE INIT SUCCESS - INITIALIZATION REGISTERS WRITTEN ***\n", channel);
                 }
+            } else {
+                pr_warn("*** Channel %d: Core device not available for init ***\n", channel);
             }
             
             // *** STEP 1: TRIGGER SENSOR HARDWARE INITIALIZATION (sensor_init) ***
@@ -3405,17 +3408,19 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_err("*** Channel %d: NO VIC DEVICE - CANNOT TRIGGER HARDWARE STREAMING! ***\n", channel);
             }
 
-            // Trigger core ops streaming
-            if (ourISPdev && ourISPdev->sd.ops && ourISPdev->sd.ops->video &&
-                ourISPdev->sd.ops->video->s_stream) {
+            // Trigger core ops streaming using core device
+            if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->sd.ops &&
+                ourISPdev->core_dev->sd.ops->video && ourISPdev->core_dev->sd.ops->video->s_stream) {
 
-                pr_info("*** Channel %d: NOW CALLING CORE STREAMING - THIS SHOULD TRIGGER MORE REGISTER ACTIVITY! ***\n", channel);
-                ret = ourISPdev->sd.ops->video->s_stream(&ourISPdev->sd, 1);
+                pr_info("*** Channel %d: NOW CALLING CORE STREAMING VIA CORE DEVICE ***\n", channel);
+                ret = ourISPdev->core_dev->sd.ops->video->s_stream(&ourISPdev->core_dev->sd, 1);
                 if (ret) {
                     pr_err("Channel %d: CORE STREAMING FAILED: %d\n", channel, ret);
                 } else {
                     pr_info("*** Channel %d: CORE STREAMING SUCCESS - ALL HARDWARE SHOULD BE ACTIVE! ***\n", channel);
                 }
+            } else {
+                pr_warn("*** Channel %d: Core device not available for streaming ***\n", channel);
             }
 
             // Trigger Core Streaming - using ourISPdev directly as it contains the core functionality
@@ -5074,21 +5079,10 @@ static int tx_isp_init(void)
     /* *** VIN subdev registration now handled in tx_isp_subdev_auto_link function *** */
     pr_info("*** VIN SUBDEV REGISTRATION DEFERRED TO AUTO-LINK PHASE ***\n");
 
-    /* *** CRITICAL FIX: Register ISP CORE subdev - THIS WAS MISSING! *** */
-    /* The ISP core subdev should be registered to handle core video streaming */
-    if (ourISPdev) {
-        /* Set up ISP core subdev with proper ops structure */
-        ourISPdev->sd.ops = &core_subdev_ops_full;  /* Use the full ops structure */
-        ourISPdev->sd.isp = (void *)ourISPdev;
-
-        /* CRITICAL: Add ISP CORE to subdev array at index 4 (after VIC=0, CSI=1, sensor=2, VIN=3) */
-        ourISPdev->subdevs[4] = &ourISPdev->sd;
-
-        pr_info("*** REGISTERED ISP CORE SUBDEV AT INDEX 4 WITH VIDEO OPS ***\n");
-        pr_info("ISP CORE subdev: %p, ops: %p, video: %p, s_stream: %p\n",
-                &ourISPdev->sd, ourISPdev->sd.ops, ourISPdev->sd.ops->video,
-                ourISPdev->sd.ops->video ? ourISPdev->sd.ops->video->s_stream : NULL);
-    }
+    /* *** REMOVED: Core subdev registration - now handled by core device probe *** */
+    /* The ISP core subdev is now registered by tx_isp_core_probe when the core device is created */
+    pr_info("*** CORE SUBDEV REGISTRATION DEFERRED TO CORE DEVICE PROBE ***\n");
+    pr_info("*** Core subdev will be registered at index 4 when core device is linked ***\n");
 
     /* *** CRITICAL FIX: Platform devices are already registered in tx_isp_platform_probe() *** */
     /* The reference driver only registers platform devices ONCE during probe, not in init */

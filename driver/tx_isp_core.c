@@ -19,6 +19,7 @@
 #include "../include/tx_isp_vin.h"
 #include "../include/tx_isp_tuning.h"
 #include "../include/tx-isp-device.h"
+#include "../include/tx_isp_core_device.h"
 #include "../include/tx-libimp.h"
 #include <linux/platform_device.h>
 #include <linux/device.h>
@@ -200,12 +201,17 @@ static int tisp_fw_process(void)
     return 0;
 }
 
-/* isp_fw_process - EXACT Binary Ninja implementation */
+/* isp_fw_process - Updated for core device architecture */
 int isp_fw_process(void *data)
 {
-    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)data;
+    struct tx_isp_core_device *core_dev = (struct tx_isp_core_device *)data;
 
-    pr_info("*** isp_fw_process: ISP firmware processing thread started ***\n");
+    if (!tx_isp_core_device_is_valid(core_dev)) {
+        pr_err("isp_fw_process: Invalid core device\n");
+        return -EINVAL;
+    }
+
+    pr_info("*** isp_fw_process: ISP firmware processing thread started (core_dev=%p) ***\n", core_dev);
 
     /* Binary Ninja: while (private_kthread_should_stop() == 0) */
     while (!kthread_should_stop()) {
@@ -320,15 +326,15 @@ irqreturn_t ispcore_irq_thread_handle(int irq, void *dev_id)
         ret = IRQ_HANDLED;
     }
 
-    /* Binary Ninja: Check for ISP core interrupts */
-    if (isp_dev->core_regs) {
-        u32 core_irq_status = readl(isp_dev->core_regs + 0x10);  /* ISP core interrupt status */
+    /* Binary Ninja: Check for ISP core interrupts using core device */
+    if (isp_dev->core_dev && isp_dev->core_dev->core_regs) {
+        u32 core_irq_status = readl(isp_dev->core_dev->core_regs + 0x10);  /* ISP core interrupt status */
 
         if (core_irq_status != 0) {
             pr_info("*** ispcore_irq_thread_handle: ISP core IRQ status = 0x%08x ***\n", core_irq_status);
 
             /* Clear ISP core interrupt status */
-            writel(core_irq_status, isp_dev->core_regs + 0x10);
+            writel(core_irq_status, isp_dev->core_dev->core_regs + 0x10);
             wmb();
 
             ret = IRQ_HANDLED;
@@ -1641,6 +1647,7 @@ EXPORT_SYMBOL(data_b2e14);
  */
 int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 {
+    struct tx_isp_core_device *core_dev;
     struct tx_isp_dev *isp_dev;
     struct tx_isp_sensor_attribute *sensor_attr = NULL;
     void* s0 = NULL;
@@ -1650,7 +1657,21 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
     int32_t vic_state;
     int ret;
 
-    pr_info("*** ispcore_core_ops_init: EXACT Binary Ninja MCP implementation ***");
+    pr_info("*** ispcore_core_ops_init: NEW ARCHITECTURE - Using core device ***");
+
+    /* Get core device from subdev */
+    core_dev = tx_isp_subdev_to_core_device(sd);
+    if (!tx_isp_core_device_is_valid(core_dev)) {
+        pr_err("ispcore_core_ops_init: Invalid core device\n");
+        return -EINVAL;
+    }
+
+    /* Get ISP device from core device */
+    isp_dev = core_dev->isp_dev;
+    if (!isp_dev) {
+        pr_err("ispcore_core_ops_init: No ISP device linked to core\n");
+        return -EINVAL;
+    }
 
     /* CRITICAL: Initialize frame sync work structure - MUST be done before any interrupts */
     INIT_WORK(&ispcore_fs_work, ispcore_irq_fs_work);
@@ -1710,6 +1731,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 /* Binary Ninja: if ($v1_55 == 3) - Stop kernel thread if in state 3 */
                 if (vic_state == 3) {
                     /* Binary Ninja: private_kthread_stop(*($s0 + 0x1b8)) */
+                    /* Note: fw_thread is now managed by global ISP device, not core device */
                     if (isp_dev->fw_thread) {
                         kthread_stop(isp_dev->fw_thread);
                         isp_dev->fw_thread = NULL;
@@ -3062,59 +3084,67 @@ static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
 
 /* Platform data structure defined in tx_isp.h */
 
-/* tx_isp_core_probe - EXACT Binary Ninja reference implementation */
+/* tx_isp_core_probe - NEW ARCHITECTURE: Create separate core device */
 int tx_isp_core_probe(struct platform_device *pdev)
 {
-    struct tx_isp_dev *isp_dev;
+    struct tx_isp_core_device *core_dev;
     int result;
     uint32_t channel_count;
     void *channel_array;
     void *tuning_dev;
 
-    /* SAFE: Use proper struct size instead of hardcoded 0x218 */
-    isp_dev = private_kmalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
-    if (isp_dev == NULL) {
-        /* Binary Ninja: isp_printf(2, "addr ctl is 0x%x\n", $a2) */
-        isp_printf(2, "addr ctl is 0x%x\n", sizeof(struct tx_isp_dev));
-        return 0xfffffff4;  /* Binary Ninja: return 0xfffffff4 */
+    pr_info("*** tx_isp_core_probe: NEW ARCHITECTURE - Creating separate core device ***\n");
+
+    /* Create separate core device instead of embedding in main device */
+    core_dev = tx_isp_create_core_device(pdev);
+    if (!core_dev) {
+        pr_err("tx_isp_core_probe: Failed to create core device\n");
+        return -ENOMEM;
     }
 
-    /* SAFE: Clear allocated memory using proper struct size */
-    memset(isp_dev, 0, sizeof(struct tx_isp_dev));
+    /* Initialize core subdev using the new core device's subdev */
+    if (tx_isp_subdev_init(pdev, &core_dev->sd, &core_subdev_ops_full) == 0) {
 
-    /* Binary Ninja: void* $s2_1 = arg1[0x16] */
-    /* Binary Ninja: if (tx_isp_subdev_init(arg1, $v0, &core_subdev_ops) == 0) */
-    /* CRITICAL FIX: Use the subdev member of isp_dev, not the entire isp_dev structure */
-    if (tx_isp_subdev_init(pdev, &isp_dev->sd, &core_subdev_ops) == 0) {
+        pr_info("*** tx_isp_core_probe: Core subdev initialized successfully ***\n");
 
-        /* REMOVED: Duplicate Core ISP subdev registration - tx_isp_subdev_init already handles this */
-        /* The Core ISP subdev is already registered at index 4 by tx_isp_subdev_init */
-        pr_info("*** tx_isp_core_probe: Core ISP subdev registration handled by tx_isp_subdev_init ***\n");
+        /* Initialize core device hardware */
+        result = tx_isp_core_device_init(core_dev);
+        if (result != 0) {
+            pr_err("tx_isp_core_probe: Failed to initialize core device: %d\n", result);
+            tx_isp_destroy_core_device(core_dev);
+            return result;
+        }
 
-        /* SAFE: Initialize locks using proper struct members */
-        spin_lock_init(&isp_dev->lock);
-        mutex_init(&isp_dev->mutex);
+        /* Link core device to global ISP device */
+        if (!ourISPdev) {
+            pr_err("tx_isp_core_probe: Global ISP device not available\n");
+            tx_isp_destroy_core_device(core_dev);
+            return -EPROBE_DEFER;
+        }
 
-        /* SAFE: Get channel count - use default since platform data doesn't have channel_count */
-        struct tx_isp_platform_data *pdata = (struct tx_isp_platform_data *)pdev->dev.platform_data;
-        channel_count = ISP_MAX_CHAN;  /* Use default channel count */
+        result = tx_isp_link_core_device(ourISPdev, core_dev);
+        if (result != 0) {
+            pr_err("tx_isp_core_probe: Failed to link core device: %d\n", result);
+            tx_isp_destroy_core_device(core_dev);
+            return result;
+        }
 
-        /* SAFE: Store platform data reference in device structure */
-        platform_set_drvdata(pdev, isp_dev);
+        /* Set platform driver data to core device */
+        platform_set_drvdata(pdev, core_dev);
 
-        /* SAFE: Allocate channel array using proper struct size */
+        /* Get channel count for frame channels */
+        channel_count = ISP_MAX_CHAN;
+
+        /* Allocate frame channels for core device */
         channel_array = private_kmalloc(channel_count * sizeof(struct tx_isp_frame_channel), GFP_KERNEL);
-
         if (channel_array != NULL) {
-            /* SAFE: Clear allocated memory */
             memset(channel_array, 0, channel_count * sizeof(struct tx_isp_frame_channel));
 
-            /* SAFE: Channel initialization loop using proper struct access */
+            /* Initialize channels */
             int channel_idx;
             struct tx_isp_frame_channel *current_channel = (struct tx_isp_frame_channel *)channel_array;
 
             for (channel_idx = 0; channel_idx < channel_count; channel_idx++) {
-                /* SAFE: Initialize channel using actual struct members */
                 current_channel->pad_id = channel_idx;
                 current_channel->state = 1;  /* INIT state */
                 current_channel->active = 1;
@@ -3160,118 +3190,120 @@ int tx_isp_core_probe(struct platform_device *pdev)
             pr_info("*** tx_isp_core_probe: Calling sensor_early_init ***\n");
             sensor_early_init(isp_dev);
 
-            /* Binary Ninja: Clock initialization */
-            uint32_t isp_clk_1 = 0; /* get_isp_clk() would be called here */
-            if (isp_clk_1 == 0)
-                isp_clk_1 = isp_clk;
-            isp_clk = isp_clk_1;
+            /* Store channel array in core device */
+            core_dev->frame_channels = channel_array;
+            core_dev->channel_count = channel_count;
+            core_dev->channel_array = channel_array;  /* Binary Ninja compatibility */
 
-            pr_info("*** tx_isp_core_probe: Basic initialization complete ***\n");
-            pr_info("***   - Core device size: %zu bytes ***\n", sizeof(struct tx_isp_dev));
+            pr_info("*** tx_isp_core_probe: Core device setup complete ***\n");
+            pr_info("***   - Core device: %p ***\n", core_dev);
             pr_info("***   - Channel count: %d ***\n", channel_count);
-            pr_info("***   - Global ISP device set: %p ***\n", ourISPdev);
+            pr_info("***   - Linked to ISP device: %p ***\n", ourISPdev);
 
-            /* REMOVED: Global memory mapping - let each subdevice handle its own memory per reference driver */
-            pr_info("*** tx_isp_core_probe: Skipping global memory mapping - subdevices will handle their own memory ***\n");
-
-            /* SIMPLIFIED FIX: Just use the first device created as the global device */
-            if (!ourISPdev) {
-                pr_info("*** tx_isp_core_probe: Setting ourISPdev to isp_dev: %p ***\n", isp_dev);
-                ourISPdev = isp_dev;  /* Make this device the global one */
-            } else {
-                pr_info("*** tx_isp_core_probe: ourISPdev already set: %p, current device: %p ***\n", ourISPdev, isp_dev);
-                /* Keep the existing global device, free the local one */
-                kfree(isp_dev);
-                isp_dev = ourISPdev;
-            }
-
-            /* Initialize tuning system using the SINGLE consistent device */
-            pr_info("*** tx_isp_core_probe: Calling isp_core_tuning_init with consistent device %p ***\n", isp_dev);
-            tuning_dev = (void*)isp_core_tuning_init(isp_dev);
-
-            /* SAFE: Store tuning device using proper member access */
-            isp_dev->tuning_data = (struct isp_tuning_data *)tuning_dev;
+            /* Initialize tuning system for core device */
+            pr_info("*** tx_isp_core_probe: Initializing core tuning system ***\n");
+            tuning_dev = (void*)isp_core_tuning_init(core_dev);
 
             if (tuning_dev != NULL) {
-                pr_info("*** tx_isp_core_probe: Tuning init SUCCESS (subdevices will handle memory mapping) ***\n");
+                pr_info("*** tx_isp_core_probe: Tuning init SUCCESS ***\n");
 
-                /* SAFE: Use tuning_dev directly instead of adding dangerous offset */
-                isp_dev->tuning_enabled = 1;
-                pr_info("*** tx_isp_core_probe: SAFE tuning pointer - using tuning_dev=%p directly ***\n", tuning_dev);
+                /* Store tuning device in core device */
+                core_dev->tuning_dev = tuning_dev;
+                core_dev->tuning_enabled = true;
 
-                /* NOW we can report full success */
                 pr_info("*** tx_isp_core_probe: SUCCESS - Core device fully initialized ***\n");
+                pr_info("***   - Core device: %p ***\n", core_dev);
                 pr_info("***   - Tuning device: %p ***\n", tuning_dev);
             } else {
                 pr_err("*** tx_isp_core_probe: Tuning init FAILED ***\n");
+                tx_isp_unlink_core_device(ourISPdev);
+                tx_isp_destroy_core_device(core_dev);
+                kfree(channel_array);
                 return -ENOMEM;
             }
 
-                /* REMOVED: VIN device creation - will be handled by subdevice probe per reference driver */
-                pr_info("*** tx_isp_core_probe: VIN device creation deferred to subdevice probe ***\n");
+            /* Create frame channel devices using global ISP device */
+            pr_info("*** tx_isp_core_probe: Creating frame channel devices ***\n");
+            result = tx_isp_create_framechan_devices(ourISPdev);
+            if (result == 0) {
+                pr_info("*** tx_isp_core_probe: Frame channel devices created successfully ***\n");
+            } else {
+                pr_err("*** tx_isp_core_probe: Failed to create frame channel devices: %d ***\n", result);
+            }
 
-                /* REMOVED: tx_isp_create_graph_and_nodes call - already called in tx_isp_module_init */
-                pr_info("*** tx_isp_core_probe: Graph and nodes already created in tx_isp_module_init ***\n");
-                
-                /* CRITICAL: Create frame channel devices (/dev/isp-fs*) */
-                pr_info("*** tx_isp_core_probe: Creating frame channel devices ***\n");
-                result = tx_isp_create_framechan_devices(isp_dev);
-                if (result == 0) {
-                    pr_info("*** tx_isp_core_probe: Frame channel devices created successfully ***\n");
-                } else {
-                    pr_err("*** tx_isp_core_probe: Failed to create frame channel devices: %d ***\n", result);
-                }
+            /* Create proc entries using global ISP device */
+            pr_info("*** tx_isp_core_probe: Creating ISP proc entries ***\n");
+            result = tx_isp_create_proc_entries(ourISPdev);
+            if (result == 0) {
+                pr_info("*** tx_isp_core_probe: ISP proc entries created successfully ***\n");
+            } else {
+                pr_err("*** tx_isp_core_probe: Failed to create ISP proc entries: %d ***\n", result);
+            }
 
-                /* CRITICAL: Create proper proc directories (/proc/jz/isp/*) */
-                pr_info("*** tx_isp_core_probe: Creating ISP proc entries ***\n");
-                result = tx_isp_create_proc_entries(isp_dev);
-                if (result == 0) {
-                    pr_info("*** tx_isp_core_probe: ISP proc entries created successfully ***\n");
-                } else {
-                    pr_err("*** tx_isp_core_probe: Failed to create ISP proc entries: %d ***\n", result);
-                }
+            /* Create the ISP M0 tuning device node */
+            pr_info("*** tx_isp_core_probe: Creating ISP M0 tuning device node ***\n");
+            result = tisp_code_create_tuning_node();
+            if (result == 0) {
+                pr_info("*** tx_isp_core_probe: ISP M0 tuning device node created successfully ***\n");
+            } else {
+                pr_err("*** tx_isp_core_probe: Failed to create ISP M0 tuning device node: %d ***\n", result);
+            }
 
-                /* CRITICAL: Create the ISP M0 tuning device node /dev/isp-m0 */
-                pr_info("*** tx_isp_core_probe: Creating ISP M0 tuning device node ***\n");
-                result = tisp_code_create_tuning_node();
-                if (result == 0) {
-                    pr_info("*** tx_isp_core_probe: ISP M0 tuning device node created successfully ***\n");
-                } else {
-                    pr_err("*** tx_isp_core_probe: Failed to create ISP M0 tuning device node: %d ***\n", result);
-                }
+            pr_info("*** tx_isp_core_probe: Core probe completed successfully ***\n");
+            return 0;
 
-                return 0;
-
-            kfree(channel_array);
         } else {
-            isp_printf(2, "Failed to init output channels!\n");
+            pr_err("tx_isp_core_probe: Failed to allocate channel array\n");
+            tx_isp_unlink_core_device(ourISPdev);
+            tx_isp_destroy_core_device(core_dev);
+            return -ENOMEM;
         }
     } else {
-        isp_printf(2, "Failed to init isp subdev!\n");
+        pr_err("tx_isp_core_probe: Failed to initialize core subdev\n");
+        tx_isp_destroy_core_device(core_dev);
+        return -ENOMEM;
     }
-
-    kfree(isp_dev);
-    return -ENOMEM;
 }
 
 
-/* Core remove function */
+/* Core remove function - NEW ARCHITECTURE */
 int tx_isp_core_remove(struct platform_device *pdev)
 {
-    void *core_dev = platform_get_drvdata(pdev);
+    struct tx_isp_core_device *core_dev = platform_get_drvdata(pdev);
+
+    pr_info("*** tx_isp_core_remove: NEW ARCHITECTURE - Removing core device ***\n");
 
     /* Reset tisp initialization flag for clean restart */
     tisp_reset_initialization_flag();
 
-    /* CRITICAL: Cancel any pending frame sync work to prevent use-after-free */
+    /* Cancel any pending frame sync work to prevent use-after-free */
     pr_info("*** tx_isp_core_remove: Canceling frame sync work ***\n");
     cancel_work_sync(&ispcore_fs_work);
     pr_info("*** tx_isp_core_remove: Frame sync work canceled successfully ***\n");
 
-    if (core_dev) {
-        isp_core_tuning_deinit(core_dev);
-        kfree(core_dev);
+    if (tx_isp_core_device_is_valid(core_dev)) {
+        /* Deinitialize tuning system */
+        if (core_dev->tuning_dev) {
+            isp_core_tuning_deinit(core_dev->tuning_dev);
+            core_dev->tuning_dev = NULL;
+        }
+
+        /* Free channel array */
+        if (core_dev->channel_array) {
+            kfree(core_dev->channel_array);
+            core_dev->channel_array = NULL;
+        }
+
+        /* Unlink from global ISP device */
+        if (core_dev->isp_dev) {
+            tx_isp_unlink_core_device(core_dev->isp_dev);
+        }
+
+        /* Destroy core device */
+        tx_isp_destroy_core_device(core_dev);
     }
+
+    pr_info("*** tx_isp_core_remove: Core device removed successfully ***\n");
     return 0;
 }
 

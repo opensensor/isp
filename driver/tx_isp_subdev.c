@@ -395,15 +395,14 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     }
 
     /* SIMPLIFIED: Register subdevices in the global ISP device */
-    extern struct tx_isp_subdev_ops core_subdev_ops;
+    extern struct tx_isp_subdev_ops core_subdev_ops_full;
     extern struct tx_isp_subdev_ops vic_subdev_ops;
 
     if (ourISPdev) {
-        if (ops == &core_subdev_ops) {
-            /* This is the Core ISP subdev - register it in subdevs array */
-            ourISPdev->subdevs[4] = sd;  /* Core at index 4 based on reference */
-            sd->isp = ourISPdev;
-            pr_info("*** tx_isp_subdev_init: Core ISP subdev registered at index 4 ***\n");
+        if (ops == &core_subdev_ops_full) {
+            /* This is the Core ISP subdev - registration handled by core device linking */
+            pr_info("*** tx_isp_subdev_init: Core ISP subdev registration handled by core device ***\n");
+            /* The actual registration is done in tx_isp_link_core_device() */
         } else if (ops == &vic_subdev_ops) {
             /* This is a VIC subdev - link the VIC device to ourISPdev */
             struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
@@ -679,11 +678,13 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         pr_info("*** REGISTERED FS SUBDEV AT INDEX 5 WITH SUBDEV OPS ***\n");
 
     } else if (strcmp(dev_name, "tx-isp-core") == 0) {
-        /* Core device is already linked in core probe */
-        if (sd->regs) {
-            ourISPdev->core_regs = sd->regs;
+        /* Core device register mapping - store in core device */
+        if (ourISPdev && ourISPdev->core_dev && sd->regs) {
+            ourISPdev->core_dev->core_regs = sd->regs;
+            pr_info("*** LINKED CORE regs to core device: %p ***\n", sd->regs);
+        } else {
+            pr_info("*** CORE device not yet linked - regs will be mapped later ***\n");
         }
-        pr_info("*** LINKED CORE regs: %p ***\n", sd->regs);
     } else {
         pr_info("*** DEBUG: Unknown device name '%s' - no specific auto-link handling ***\n", dev_name);
     }
