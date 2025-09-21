@@ -5065,7 +5065,7 @@ static int tx_isp_init(void)
 err_cleanup_irqs:
     pr_info("*** CLEANUP: Freeing main dispatcher IRQs ***\n");
     if (ourISPdev && ourISPdev->vic_dev) {
-        free_irq(38, ourISPdev->vic_dev);  /* VIC IRQ uses VIC device as dev_id */
+        free_irq(38, ourISPdev);  /* VIC IRQ uses ISP device as dev_id */
     }
     free_irq(37, ourISPdev);  /* Core IRQ uses ISP device as dev_id */
 err_cleanup_platform_device:
