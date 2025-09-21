@@ -1647,10 +1647,10 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
 }
 
 int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
-/* VIC sensor operations structure - MISSING from original implementation */
+/* VIC sensor operations structure - UPDATED for modern multi-sensor support */
 struct tx_isp_subdev_sensor_ops vic_sensor_ops = {
     .ioctl = vic_sensor_ops_ioctl,                    /* From tx-isp-module.c */
-    .sync_sensor_attr = vic_sensor_ops_sync_sensor_attr, /* From tx-isp-module.c */
+    .sync_sensor_attr = NULL, /* REMOVED: VIC doesn't store sensor attributes in modern implementation */
 };
 
 /* VIC core operations structure - MISSING ioctl registration */
