@@ -5817,38 +5817,25 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
 }
 
 
-/* isp_irq_thread_handle - SAFE implementation with correct dev_id handling */
+/* isp_irq_thread_handle - Reference driver compatible: dev_id is irq_info */
 irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
 {
+    struct tx_isp_irq_info *irq_info = (struct tx_isp_irq_info *)dev_id;
     extern struct tx_isp_dev *ourISPdev;
 
     /* CRITICAL SAFETY: Validate dev_id before accessing */
-    if (!dev_id || (uintptr_t)dev_id < 0x80000000 || (uintptr_t)dev_id > 0x9fffffff) {
-        pr_err("isp_irq_thread_handle: Invalid dev_id=%p for IRQ %d\n", dev_id, irq);
+    if (!irq_info || !ourISPdev) {
+        pr_err("isp_irq_thread_handle: Invalid irq_info=%p or ourISPdev=%p for IRQ %d\n", irq_info, ourISPdev, irq);
         return IRQ_HANDLED;
     }
 
     /* Handle thread-level processing based on IRQ type */
     if (irq == 37) {
-        /* ISP Core thread processing - dev_id is ISP device */
-        struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
-
-        if (dev_id != ourISPdev && ourISPdev) {
-            pr_err("CORE THREAD IRQ %d: Using ourISPdev instead of dev_id=%p\n", irq, dev_id);
-            isp_dev = ourISPdev;
-        }
-
+        /* ISP Core thread processing */
         pr_debug("isp_irq_thread_handle: Core thread IRQ %d processed\n", irq);
 
     } else if (irq == 38) {
-        /* VIC thread processing - dev_id is ISP device */
-        struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
-
-        if (!isp_dev || (uintptr_t)isp_dev < 0x80000000) {
-            pr_err("VIC THREAD IRQ %d: Invalid ISP device=%p\n", irq, isp_dev);
-            return IRQ_HANDLED;
-        }
-
+        /* VIC thread processing */
         pr_debug("isp_irq_thread_handle: VIC thread IRQ %d processed\n", irq);
 
     } else {
