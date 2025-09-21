@@ -356,9 +356,14 @@ setup_complete:
         pr_info("*** FS DEVICE LINKED: ourISPdev->fs_dev = %p ***\n", ourISPdev->fs_dev);
 
         /* *** CRITICAL FIX: ADD FS TO SUBDEV ARRAY FOR IOCTL ACCESS *** */
-        pr_info("*** CRITICAL: ADDING FS TO SUBDEV ARRAY AT INDEX 5 ***\n");
-        ourISPdev->subdevs[5] = &fs_dev->subdev;
-        pr_info("*** FS SUBDEV REGISTERED: subdevs[5]=%p ***\n", &fs_dev->subdev);
+        /* Use index 3 to match tx_isp_subdev.c registration */
+        pr_info("*** CRITICAL: ADDING FS TO SUBDEV ARRAY AT INDEX 3 ***\n");
+        if (ourISPdev->subdevs[3] == NULL) {
+            ourISPdev->subdevs[3] = &fs_dev->subdev;
+            pr_info("*** FS SUBDEV REGISTERED: subdevs[3]=%p ***\n", &fs_dev->subdev);
+        } else {
+            pr_warn("*** FS subdev slot (index 3) already occupied by %p ***\n", ourISPdev->subdevs[3]);
+        }
     } else {
         pr_err("*** ERROR: ourISPdev not available for FS device linking ***\n");
     }
