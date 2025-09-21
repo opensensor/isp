@@ -3219,7 +3219,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     if (cmd == 0x800856d7) {
         /* TX_ISP_WDR_GET_BUF - Binary Ninja exact implementation */
         void *core_dev = isp_dev->core_dev;
-        var_98 = 0;
+        var_98.as_uint32 = 0;
         var_94 = 0;
 
         if (core_dev) {
