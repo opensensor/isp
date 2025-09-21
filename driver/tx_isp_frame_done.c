@@ -13,6 +13,7 @@
 
 /* Frame done tracking variables */
 atomic64_t frame_done_cnt = ATOMIC64_INIT(0);
+EXPORT_SYMBOL(frame_done_cnt);
 static int frame_done_cond = 0;
 static DECLARE_WAIT_QUEUE_HEAD(frame_done_wait);
 

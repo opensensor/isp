@@ -1,3 +1,10 @@
+/*
+ * tx_isp_core_device.c - ISP Core Device Management
+ *
+ * This file implements the ISP Core as a separate subdevice,
+ * following the same pattern as VIC, VIN, CSI, and FS devices.
+ */
+
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/miscdevice.h>
@@ -10,6 +17,7 @@
 #include <linux/kthread.h>
 #include <linux/completion.h>
 #include <linux/interrupt.h>
+#include <linux/workqueue.h>
 #include "../include/tx_isp.h"
 #include "../include/tx_isp_core.h"
 #include "../include/tx-isp-debug.h"
@@ -23,6 +31,13 @@
 #include "../include/tx-libimp.h"
 #include <linux/platform_device.h>
 #include <linux/device.h>
+
+/* External declarations */
+extern struct tx_isp_dev *ourISPdev;
+extern struct tx_isp_subdev_ops core_subdev_ops_full;
+
+/* Core device magic number */
+#define TX_ISP_CORE_MAGIC 0x434F5245  /* 'CORE' */
 
 
 static int print_level = ISP_WARN_LEVEL;
@@ -3866,5 +3881,358 @@ EXPORT_SYMBOL(private_dma_cache_sync);
 /* Frame synchronization - using implementation from tx_isp_frame_done.c */
 
 
+
+/**
+ * tx_isp_create_core_device - Create and initialize a new core device
+ * @pdev: Platform device
+ *
+ * Returns: Pointer to core device or NULL on failure
+ */
+struct tx_isp_core_device *tx_isp_create_core_device(struct platform_device *pdev)
+{
+    struct tx_isp_core_device *core_dev;
+    int ret;
+
+    pr_info("*** tx_isp_create_core_device: Creating ISP core device ***\n");
+
+    /* Allocate core device structure */
+    core_dev = kzalloc(sizeof(struct tx_isp_core_device), GFP_KERNEL);
+    if (!core_dev) {
+        pr_err("tx_isp_create_core_device: Failed to allocate core device\n");
+        return NULL;
+    }
+
+    /* Initialize core device structure */
+    memset(core_dev, 0, sizeof(struct tx_isp_core_device));
+
+    /* Set up validation fields */
+    core_dev->self_ptr = core_dev;
+    core_dev->magic = TX_ISP_CORE_MAGIC;
+
+    /* Initialize device linkage */
+    core_dev->dev = &pdev->dev;
+    core_dev->pdev = pdev;
+
+    /* Initialize state */
+    core_dev->state = 1;  /* INIT state */
+    core_dev->streaming = 0;  /* Not streaming */
+    core_dev->is_initialized = false;
+    core_dev->tuning_enabled = false;
+    core_dev->tisp_initialized = false;
+
+    /* Initialize locks */
+    mutex_init(&core_dev->mlock);
+    spin_lock_init(&core_dev->lock);
+
+    /* Initialize processing counter */
+    atomic_set(&core_dev->processing_counter, 0);
+
+    /* Initialize subdev structure */
+    memset(&core_dev->sd, 0, sizeof(struct tx_isp_subdev));
+    core_dev->sd.ops = &core_subdev_ops_full;
+    core_dev->sd.dev = &pdev->dev;
+    core_dev->sd.pdev = pdev;
+
+    pr_info("*** tx_isp_create_core_device: Core device created successfully: %p ***\n", core_dev);
+    return core_dev;
+}
+EXPORT_SYMBOL(tx_isp_create_core_device);
+
+/**
+ * tx_isp_destroy_core_device - Destroy a core device
+ * @core_dev: Core device to destroy
+ */
+void tx_isp_destroy_core_device(struct tx_isp_core_device *core_dev)
+{
+    if (!tx_isp_core_device_is_valid(core_dev)) {
+        pr_err("tx_isp_destroy_core_device: Invalid core device\n");
+        return;
+    }
+
+    pr_info("*** tx_isp_destroy_core_device: Destroying core device: %p ***\n", core_dev);
+
+    /* Deinitialize if needed */
+    if (core_dev->is_initialized) {
+        tx_isp_core_device_deinit(core_dev);
+    }
+
+    /* Clean up clocks */
+    if (core_dev->core_clk) {
+        clk_put(core_dev->core_clk);
+        core_dev->core_clk = NULL;
+    }
+    if (core_dev->ipu_clk) {
+        clk_put(core_dev->ipu_clk);
+        core_dev->ipu_clk = NULL;
+    }
+
+    /* Clean up register mappings */
+    if (core_dev->core_regs) {
+        iounmap(core_dev->core_regs);
+        core_dev->core_regs = NULL;
+    }
+    if (core_dev->tuning_regs) {
+        iounmap(core_dev->tuning_regs);
+        core_dev->tuning_regs = NULL;
+    }
+
+    /* Clear validation fields */
+    core_dev->self_ptr = NULL;
+    core_dev->magic = 0;
+
+    /* Free the structure */
+    kfree(core_dev);
+    pr_info("*** tx_isp_destroy_core_device: Core device destroyed ***\n");
+}
+EXPORT_SYMBOL(tx_isp_destroy_core_device);
+
+/**
+ * tx_isp_core_device_init - Initialize core device hardware
+ * @core_dev: Core device to initialize
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+int tx_isp_core_device_init(struct tx_isp_core_device *core_dev)
+{
+    int ret;
+
+    if (!tx_isp_core_device_is_valid(core_dev)) {
+        pr_err("tx_isp_core_device_init: Invalid core device\n");
+        return -EINVAL;
+    }
+
+    if (core_dev->is_initialized) {
+        pr_info("tx_isp_core_device_init: Core device already initialized\n");
+        return 0;
+    }
+
+    pr_info("*** tx_isp_core_device_init: Initializing core device: %p ***\n", core_dev);
+
+    /* Initialize clocks */
+    core_dev->core_clk = clk_get(core_dev->dev, "isp");
+    if (IS_ERR(core_dev->core_clk)) {
+        pr_warn("tx_isp_core_device_init: Failed to get ISP clock\n");
+        core_dev->core_clk = NULL;
+    }
+
+    core_dev->ipu_clk = clk_get(core_dev->dev, "ipu");
+    if (IS_ERR(core_dev->ipu_clk)) {
+        pr_warn("tx_isp_core_device_init: Failed to get IPU clock\n");
+        core_dev->ipu_clk = NULL;
+    }
+
+    /* Set state to ready */
+    core_dev->state = 2;  /* READY state */
+    core_dev->is_initialized = true;
+
+    pr_info("*** tx_isp_core_device_init: Core device initialized successfully ***\n");
+    return 0;
+}
+EXPORT_SYMBOL(tx_isp_core_device_init);
+
+/**
+ * tx_isp_core_device_deinit - Deinitialize core device
+ * @core_dev: Core device to deinitialize
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+int tx_isp_core_device_deinit(struct tx_isp_core_device *core_dev)
+{
+    if (!tx_isp_core_device_is_valid(core_dev)) {
+        pr_err("tx_isp_core_device_deinit: Invalid core device\n");
+        return -EINVAL;
+    }
+
+    pr_info("*** tx_isp_core_device_deinit: Deinitializing core device: %p ***\n", core_dev);
+
+    /* Stop streaming if active */
+    if (core_dev->streaming) {
+        tx_isp_core_device_stop_streaming(core_dev);
+    }
+
+    /* Set state back to init */
+    core_dev->state = 1;  /* INIT state */
+    core_dev->is_initialized = false;
+
+    pr_info("*** tx_isp_core_device_deinit: Core device deinitialized ***\n");
+    return 0;
+}
+EXPORT_SYMBOL(tx_isp_core_device_deinit);
+
+/**
+ * tx_isp_link_core_device - Link core device to main ISP device
+ * @isp_dev: Main ISP device
+ * @core_dev: Core device to link
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+int tx_isp_link_core_device(struct tx_isp_dev *isp_dev, struct tx_isp_core_device *core_dev)
+{
+    if (!isp_dev || !tx_isp_core_device_is_valid(core_dev)) {
+        pr_err("tx_isp_link_core_device: Invalid parameters\n");
+        return -EINVAL;
+    }
+
+    pr_info("*** tx_isp_link_core_device: Linking core device %p to ISP device %p ***\n",
+            core_dev, isp_dev);
+
+    /* Set up bidirectional linking */
+    isp_dev->core_dev = core_dev;
+    core_dev->isp_dev = isp_dev;
+    core_dev->sd.isp = isp_dev;
+
+    /* Register core subdev in subdevs array at index 4 */
+    isp_dev->subdevs[4] = &core_dev->sd;
+
+    pr_info("*** tx_isp_link_core_device: Core device linked successfully ***\n");
+    pr_info("*** Core subdev registered at index 4: %p ***\n", &core_dev->sd);
+
+    return 0;
+}
+EXPORT_SYMBOL(tx_isp_link_core_device);
+
+/**
+ * tx_isp_unlink_core_device - Unlink core device from main ISP device
+ * @isp_dev: Main ISP device
+ */
+void tx_isp_unlink_core_device(struct tx_isp_dev *isp_dev)
+{
+    if (!isp_dev || !isp_dev->core_dev) {
+        return;
+    }
+
+    pr_info("*** tx_isp_unlink_core_device: Unlinking core device ***\n");
+
+    /* Clear subdev registration */
+    isp_dev->subdevs[4] = NULL;
+
+    /* Clear bidirectional linking */
+    isp_dev->core_dev->isp_dev = NULL;
+    isp_dev->core_dev->sd.isp = NULL;
+    isp_dev->core_dev = NULL;
+
+    pr_info("*** tx_isp_unlink_core_device: Core device unlinked ***\n");
+}
+EXPORT_SYMBOL(tx_isp_unlink_core_device);
+
+/**
+ * tx_isp_core_device_set_state - Set core device state
+ * @core_dev: Core device
+ * @state: New state
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+int tx_isp_core_device_set_state(struct tx_isp_core_device *core_dev, int state)
+{
+    if (!tx_isp_core_device_is_valid(core_dev)) {
+        return -EINVAL;
+    }
+
+    pr_info("tx_isp_core_device_set_state: Changing state from %d to %d\n",
+            core_dev->state, state);
+
+    core_dev->state = state;
+    return 0;
+}
+EXPORT_SYMBOL(tx_isp_core_device_set_state);
+
+/**
+ * tx_isp_core_device_get_state - Get core device state
+ * @core_dev: Core device
+ *
+ * Returns: Current state or negative error code
+ */
+int tx_isp_core_device_get_state(struct tx_isp_core_device *core_dev)
+{
+    if (!tx_isp_core_device_is_valid(core_dev)) {
+        return -EINVAL;
+    }
+
+    return core_dev->state;
+}
+EXPORT_SYMBOL(tx_isp_core_device_get_state);
+
+/**
+ * tx_isp_core_device_start_streaming - Start core device streaming
+ * @core_dev: Core device
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+int tx_isp_core_device_start_streaming(struct tx_isp_core_device *core_dev)
+{
+    if (!tx_isp_core_device_is_valid(core_dev)) {
+        pr_err("tx_isp_core_device_start_streaming: Invalid core device\n");
+        return -EINVAL;
+    }
+
+    if (core_dev->streaming) {
+        pr_info("tx_isp_core_device_start_streaming: Already streaming\n");
+        return 0;
+    }
+
+    pr_info("*** tx_isp_core_device_start_streaming: Starting core streaming ***\n");
+
+    /* Set streaming state */
+    core_dev->streaming = 1;
+    core_dev->state = 4;  /* STREAMING state */
+
+    pr_info("*** tx_isp_core_device_start_streaming: Core streaming started ***\n");
+    return 0;
+}
+EXPORT_SYMBOL(tx_isp_core_device_start_streaming);
+
+/**
+ * tx_isp_core_device_stop_streaming - Stop core device streaming
+ * @core_dev: Core device
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+int tx_isp_core_device_stop_streaming(struct tx_isp_core_device *core_dev)
+{
+    if (!tx_isp_core_device_is_valid(core_dev)) {
+        pr_err("tx_isp_core_device_stop_streaming: Invalid core device\n");
+        return -EINVAL;
+    }
+
+    if (!core_dev->streaming) {
+        pr_info("tx_isp_core_device_stop_streaming: Not streaming\n");
+        return 0;
+    }
+
+    pr_info("*** tx_isp_core_device_stop_streaming: Stopping core streaming ***\n");
+
+    /* Clear streaming state */
+    core_dev->streaming = 0;
+    core_dev->state = 3;  /* ACTIVE state */
+
+    pr_info("*** tx_isp_core_device_stop_streaming: Core streaming stopped ***\n");
+    return 0;
+}
+EXPORT_SYMBOL(tx_isp_core_device_stop_streaming);
+
+/**
+ * tx_isp_core_device_set_sensor_attr - Set sensor attributes for core device
+ * @core_dev: Core device
+ * @attr: Sensor attributes
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+int tx_isp_core_device_set_sensor_attr(struct tx_isp_core_device *core_dev,
+                                       struct tx_isp_sensor_attribute *attr)
+{
+    if (!tx_isp_core_device_is_valid(core_dev) || !attr) {
+        pr_err("tx_isp_core_device_set_sensor_attr: Invalid parameters\n");
+        return -EINVAL;
+    }
+
+    pr_info("*** tx_isp_core_device_set_sensor_attr: Setting sensor attributes ***\n");
+
+    /* Store sensor attributes */
+    core_dev->sensor_attr = attr;
+
+    pr_info("*** tx_isp_core_device_set_sensor_attr: Sensor attributes set ***\n");
+    return 0;
+}
+EXPORT_SYMBOL(tx_isp_core_device_set_sensor_attr);
 
 
