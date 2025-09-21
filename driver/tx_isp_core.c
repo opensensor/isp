@@ -281,8 +281,8 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         /* Binary Ninja: Stream OFF - if (arg2 == 0) */
         if (core_dev->state == 4) {
             /* Binary Ninja: Stop frame channels if streaming */
-            for (i = 0; i < ISP_MAX_FRAME_CHANNELS; i++) {
-                if (core_dev->frame_channels[i].state == 4) {
+            for (i = 0; i < ISP_MAX_CHAN; i++) {
+                if (core_dev->frame_channels && core_dev->frame_channels[i].state == 4) {
                     /* Binary Ninja: ispcore_frame_channel_streamoff */
                     core_dev->frame_channels[i].state = 3;
                     pr_info("ispcore_video_s_stream: Frame channel %d stopped\n", i);
