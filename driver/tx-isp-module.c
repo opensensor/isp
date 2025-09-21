@@ -1711,7 +1711,8 @@ static volatile bool subdev_init_complete = false;
 
 /* Forward declaration for tx_isp_video_s_stream */
 int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable);
-int tx_isp_vic_configure_dma(struct tx_isp_vic_device *vic_dev, dma_addr_t base_addr, u32 width, u32 height);
+/* REMOVED: tx_isp_vic_configure_dma - function doesn't exist in reference driver */
+/* Use vic_pipo_mdma_enable instead, which is called during streaming */
 
 /* Video link pad structure for Binary Ninja compatibility */
 struct tx_isp_video_pad {
