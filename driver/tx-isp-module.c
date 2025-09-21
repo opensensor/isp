@@ -5253,9 +5253,12 @@ static int subdev_sensor_ops_set_input(struct tx_isp_subdev *sd, unsigned int cm
     pr_info("subdev_sensor_ops_set_input: Skipping current sensor stop logic - proceeding to sensor selection\n");
 
     /* Binary Ninja: if (*arg2 == 0xffffffff) return 0 */
+    pr_info("subdev_sensor_ops_set_input: Checking input_index %d against 0xffffffff\n", input_index);
     if (input_index == 0xffffffff) {
+        pr_info("subdev_sensor_ops_set_input: input_index is 0xffffffff, returning early\n");
         return 0;
     }
+    pr_info("subdev_sensor_ops_set_input: input_index is valid, proceeding to sensor search\n");
 
     /* Binary Ninja: private_mutex_lock(arg1 + 0xe8) */
     mutex_lock(&isp_dev->mutex);
