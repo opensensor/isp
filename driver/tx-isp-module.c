@@ -2094,66 +2094,7 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
         return -EINVAL;
     }
 
-    /* CRITICAL: Initialize all subdevices before streaming */
-    if (arg2 == 1) {  /* Stream ON */
-        pr_info("*** tx_isp_video_s_stream: Initializing all subdevices before streaming ***\n");
-
-        /* First, initialize all subdevices EXCEPT VIC (VIC will be handled by core init) */
-        for (int init_i = 0; init_i < 0x10; init_i++) {
-            struct tx_isp_subdev *init_sd = arg1->subdevs[init_i];
-            if (init_sd && init_sd->ops && init_sd->ops->core && init_sd->ops->core->init) {
-                /* CRITICAL: Skip VIC init - core init will handle VIC state transition from 2->3 */
-                if (init_i == 1) {  /* VIC is at index 1 */
-                    pr_info("*** tx_isp_video_s_stream: Skipping VIC init (index %d) - core will handle it ***\n", init_i);
-                    continue;
-                }
-
-                pr_info("*** tx_isp_video_s_stream: Calling subdev %d init ***\n", init_i);
-                int subdev_init_ret = init_sd->ops->core->init(init_sd, 1);
-                if (subdev_init_ret == 0) {
-                    pr_info("*** tx_isp_video_s_stream: Subdev %d init SUCCESS ***\n", init_i);
-                } else {
-                    pr_warn("*** tx_isp_video_s_stream: Subdev %d init failed: %d ***\n", init_i, subdev_init_ret);
-                }
-            }
-        }
-
-        /* CRITICAL: Activate all subdevices to state 2 before core initialization */
-        for (int activate_i = 0; activate_i < 0x10; activate_i++) {
-            struct tx_isp_subdev *activate_sd = arg1->subdevs[activate_i];
-            if (activate_sd) {
-                /* Check if this is VIC subdev (index 1) and activate it */
-                if (activate_i == 1 && arg1->vic_dev) {
-                    struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)arg1->vic_dev;
-                    if (vic_dev->state == 1) {
-                        pr_info("*** tx_isp_video_s_stream: Activating VIC (subdev %d) from state 1 to 2 ***\n", activate_i);
-                        vic_dev->state = 2;  /* Activate VIC to ready state */
-                        pr_info("*** tx_isp_video_s_stream: VIC activated to state 2 ***\n");
-                    }
-                }
-                /* Add activation for other subdevices as needed */
-                /* CSI, VIN, etc. may also need activation from state 1 to 2 */
-            }
-        }
-
-        /* Then, initialize core (transition from state 2 to 3) */
-        if (arg1->core_dev && arg1->core_dev->sd.ops &&
-            arg1->core_dev->sd.ops->core && arg1->core_dev->sd.ops->core->init) {
-
-            pr_info("*** tx_isp_video_s_stream: Calling core init to transition from state 2 to 3 ***\n");
-            int core_init_ret = arg1->core_dev->sd.ops->core->init(&arg1->core_dev->sd, 1);
-
-            if (core_init_ret == 0) {
-                pr_info("*** tx_isp_video_s_stream: Core initialized successfully - state should be 3 ***\n");
-                pr_info("*** CORE STATE AFTER INIT: %d (should be 3) ***\n", arg1->core_dev->state);
-            } else {
-                pr_err("*** tx_isp_video_s_stream: Core initialization failed: %d ***\n", core_init_ret);
-                return core_init_ret;
-            }
-        } else {
-            pr_warn("*** tx_isp_video_s_stream: Core device not available for initialization ***\n");
-        }
-    }
+    /* REMOVED: Custom initialization logic - following Binary Ninja reference exactly */
 
     /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
     s4 = &arg1->subdevs[0];  /* subdevs array at offset 0x38 */
