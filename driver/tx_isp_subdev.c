@@ -680,11 +680,14 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
         /* Reference driver behavior: Register all IRQs normally without special handling */
 
         /* Binary Ninja: request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, 0x2000, *arg1, arg2) */
-        /* CRITICAL FIX: Pass ourISPdev as dev_id - interrupt handlers expect struct tx_isp_dev * */
+        /* CRITICAL FIX: Register the proper interrupt handlers that contain the real processing logic */
         extern struct tx_isp_dev *ourISPdev;
+        extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
+        extern irqreturn_t ispcore_irq_thread_handle(int irq, void *dev_id);
+
         ret = request_threaded_irq(irq_num,
-                                   isp_irq_handle,
-                                   isp_irq_thread_handle,
+                                   ispcore_interrupt_service_routine,  /* FIXED: Use the real handler */
+                                   ispcore_irq_thread_handle,          /* FIXED: Use the real thread handler */
                                    IRQF_SHARED,  /* 0x2000 = IRQF_SHARED */
                                    dev_name(&pdev->dev),  /* *arg1 = device name */
                                    ourISPdev);  /* CRITICAL: Pass ourISPdev - handlers expect tx_isp_dev * */
@@ -700,7 +703,7 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
         /* Binary Ninja: *arg2 = $v0_1 */
         irq_info->irq = irq_num;
         /* Binary Ninja: arg2[1] = tx_isp_enable_irq */
-        irq_info->handler = isp_irq_handle;
+        irq_info->handler = ispcore_interrupt_service_routine;  /* FIXED: Store the real handler */
         /* Binary Ninja: arg2[2] = tx_isp_disable_irq */
         irq_info->data = irq_info;  /* Store self-reference for callbacks */
         /* Binary Ninja: tx_isp_disable_irq(arg2) - initially disable IRQ */
