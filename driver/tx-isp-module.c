@@ -4577,6 +4577,41 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         return tx_isp_video_link_stream(isp_dev, 0);
     }
     case 0x80045612: { // VIDIOC_STREAMON - Start video streaming
+        /* CRITICAL: Initialize all subdevices before streaming (Binary Ninja reference pattern) */
+        pr_info("*** VIDIOC_STREAMON: Initializing all subdevices before streaming ***\n");
+
+        /* First, initialize all subdevices (Binary Ninja loop pattern) */
+        for (int init_i = 0; init_i < 0x10; init_i++) {
+            struct tx_isp_subdev *init_sd = isp_dev->subdevs[init_i];
+            if (init_sd && init_sd->ops && init_sd->ops->core && init_sd->ops->core->init) {
+                pr_info("*** VIDIOC_STREAMON: Calling subdev %d init ***\n", init_i);
+                int subdev_init_ret = init_sd->ops->core->init(init_sd, 1);
+                if (subdev_init_ret == 0) {
+                    pr_info("*** VIDIOC_STREAMON: Subdev %d init SUCCESS ***\n", init_i);
+                } else {
+                    pr_warn("*** VIDIOC_STREAMON: Subdev %d init failed: %d ***\n", init_i, subdev_init_ret);
+                }
+            }
+        }
+
+        /* Then, initialize core (transition from state 2 to 3) */
+        if (isp_dev && isp_dev->core_dev && isp_dev->core_dev->sd.ops &&
+            isp_dev->core_dev->sd.ops->core && isp_dev->core_dev->sd.ops->core->init) {
+
+            pr_info("*** VIDIOC_STREAMON: Calling core init to transition from state 2 to 3 ***\n");
+            int core_init_ret = isp_dev->core_dev->sd.ops->core->init(&isp_dev->core_dev->sd, 1);
+
+            if (core_init_ret == 0) {
+                pr_info("*** VIDIOC_STREAMON: Core initialized successfully - state should be 3 ***\n");
+                pr_info("*** CORE STATE AFTER INIT: %d (should be 3) ***\n", isp_dev->core_dev->state);
+            } else {
+                pr_err("*** VIDIOC_STREAMON: Core initialization failed: %d ***\n", core_init_ret);
+                return core_init_ret;
+            }
+        } else {
+            pr_warn("*** VIDIOC_STREAMON: Core device not available for initialization ***\n");
+        }
+
         return tx_isp_video_s_stream(isp_dev, 1);
     }
     case 0x80045613: { // VIDIOC_STREAMOFF - Stop video streaming
