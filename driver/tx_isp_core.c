@@ -283,33 +283,61 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     private_spin_unlock_irqrestore(&core_dev->lock, var_28);
 
     /* Binary Ninja: Reset frame counters */
+    /* *($s0 + 0x164) = 0 */
     core_dev->frame_count = 0;
+    /* *($s0 + 0x168) = 0 */
     core_dev->error_count = 0;
+    /* *($s0 + 0x170) = 0 */
     core_dev->drop_count = 0;
+    /* *($s0 + 0x160) = 0 */
     core_dev->total_frames = 0;
 
+    /* Binary Ninja: int32_t $v0_3 = *($s0 + 0xe8) */
+    int v0_3 = core_dev->state;
+
+    /* Binary Ninja: if (arg2 == 0) */
     if (enable == 0) {
-        /* Binary Ninja: Stream OFF - if (arg2 == 0) */
-        if (core_dev->state == 4) {
-            /* Binary Ninja: Stop frame channels if streaming */
-            for (i = 0; i < ISP_MAX_CHAN; i++) {
-                if (core_dev->frame_channels && core_dev->frame_channels[i].state == 4) {
-                    /* Binary Ninja: ispcore_frame_channel_streamoff */
-                    core_dev->frame_channels[i].state = 3;
-                    pr_info("ispcore_video_s_stream: Frame channel %d stopped\n", i);
+        /* Binary Ninja: $s3_1 = &arg1[0xe] */
+        s3_1 = &isp_dev->subdevs[0];
+
+        /* Binary Ninja: if ($v0_3 == 4) */
+        if (v0_3 == 4) {
+            /* Binary Ninja: Frame channel loop */
+            int s2_1 = 0;
+            void *v0_5 = core_dev->frame_channels;
+
+            while (true) {
+                void *v0_6 = (char*)v0_5 + s2_1;
+                s2_1 += 0xc4;  /* sizeof(frame_channel) */
+
+                /* Binary Ninja: if (*($v0_6 + 0x74) == 4) */
+                if (((struct frame_channel_device*)v0_6)->state == 4) {
+                    /* Binary Ninja: ispcore_frame_channel_streamoff(*($v0_6 + 0x78)) */
+                    ispcore_frame_channel_streamoff(((struct frame_channel_device*)v0_6)->channel_num);
                 }
+
+                /* Binary Ninja: if ($s2_1 == 0x24c) break */
+                if (s2_1 == 0x24c) {
+                    break;
+                }
+
+                /* Binary Ninja: $v0_5 = *($s0 + 0x150) */
+                v0_5 = core_dev->frame_channels;
             }
+
+            /* Binary Ninja: *($s0 + 0xe8) = 3 */
+            core_dev->state = 3;
         }
-        core_dev->state = 3;  /* Set to configured state */
+        /* Binary Ninja: $s3_1 = &arg1[0xe] */
+        s3_1 = &isp_dev->subdevs[0];
+    } else if (v0_3 != 3) {
+        /* Binary Ninja: $s3_1 = &arg1[0xe] */
+        s3_1 = &isp_dev->subdevs[0];
     } else {
-        /* Binary Ninja: Stream ON - else if ($v0_3 != 3) */
-        if (core_dev->state != 3) {
-            pr_err("ispcore_video_s_stream: Invalid state %d for stream on\n", core_dev->state);
-            spin_unlock_irqrestore(&core_dev->lock, flags);
-            return -EINVAL;
-        }
-        pr_info("*** ispcore_video_s_stream: Transitioning core from state 3 to 4 (streaming) ***\n");
-        core_dev->state = 4;  /* Set to streaming state */
+        /* Binary Ninja: *($s0 + 0xe8) = 4 */
+        core_dev->state = 4;
+        /* Binary Ninja: $s3_1 = &arg1[0xe] */
+        s3_1 = &isp_dev->subdevs[0];
     }
 
     /* Binary Ninja: Iterate through core's internal subdevices */
