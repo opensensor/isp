@@ -5879,7 +5879,7 @@ int tisp_g_drc_strength(uint32_t *value)
 
 int isp_core_tuning_release(struct tx_isp_dev *dev)
 {
-    struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+    struct isp_tuning_data *tuning = (struct isp_tuning_data *)ourISPdev->core_dev->tuning_data;
 
     pr_info("##### %s %d #####\n", __func__, __LINE__);
 
@@ -5900,7 +5900,9 @@ int isp_core_tuning_release(struct tx_isp_dev *dev)
     }
 
     /* Clear the tuning data reference */
-    ourISPdev->tuning_data = NULL;
+    if (ourISPdev->core_dev) {
+        ourISPdev->core_dev->tuning_data = NULL;
+    }
 
     return 0;
 }
@@ -5926,10 +5928,10 @@ int isp_m0_chardev_release(struct inode *inode, struct file *file)
     }
 
     /* Use global device reference for any device operations */
-    if (ourISPdev && ourISPdev->tuning_enabled == 3) {
+    if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->tuning_enabled == 3) {
         pr_info("Disabling tuning on release\n");
         isp_core_tuning_release(ourISPdev);
-        ourISPdev->tuning_enabled = 0;
+        ourISPdev->core_dev->tuning_enabled = 0;
     }
 
     pr_info("ISP M0 device released\n");
@@ -7378,7 +7380,7 @@ int tisp_ccm_ct_update(void)
         return 0;
     }
 
-    int32_t current_ct = ourISPdev->core_dev->tuning_data->wb_temp;
+    int32_t current_ct = ((struct isp_tuning_data *)ourISPdev->core_dev->tuning_data)->wb_temp;
 
     /* Check if CT has changed significantly */
     uint32_t ct_diff = (data_c52f4 >= current_ct) ?
@@ -7417,7 +7419,7 @@ int tisp_ccm_ev_update(void)
     }
 
     /* Get current EV value from tuning data */
-    uint32_t current_ev = ourISPdev->core_dev->tuning_data->exposure >> 10;
+    uint32_t current_ev = ((struct isp_tuning_data *)ourISPdev->core_dev->tuning_data)->exposure >> 10;
 
     /* Check if EV has changed significantly */
     uint32_t ev_diff = (data_c52ec >= current_ev) ?
