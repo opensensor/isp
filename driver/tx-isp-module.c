@@ -3790,6 +3790,21 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     /* Binary Ninja: Handle streaming commands */
     if (cmd == 0x80045612) {
         /* VIDIOC_STREAMON */
+        pr_info("*** VIDIOC_STREAMON: Activating subdev modules before streaming ***\n");
+
+        /* CRITICAL: Call activate_module on each subdev before streaming */
+        for (int i = 0; i < 16; i++) {
+            struct tx_isp_subdev *sd = isp_dev->subdevs[i];
+            if (sd && sd->ops && sd->ops->internal && sd->ops->internal->activate_module) {
+                pr_info("*** STREAMON: Calling activate_module on subdev %d ***\n", i);
+                int ret = sd->ops->internal->activate_module(sd);
+                if (ret != 0 && ret != -ENOIOCTLCMD) {
+                    pr_err("STREAMON: activate_module failed on subdev %d: %d\n", i, ret);
+                    /* Continue with other subdevs - don't fail the entire operation */
+                }
+            }
+        }
+
         return tx_isp_video_s_stream(isp_dev, 1);
     }
 
