@@ -3200,6 +3200,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         // In real implementation, this would configure DMA banks/buffers
         state->enabled = true; // Mark channel as properly configured
 
+        // Binary Ninja: SET_BANKS should set state to 3 (ready for streaming)
+        state->state = 3;
+        pr_info("*** Channel %d: SET_BANKS - State set to 3 (ready for streaming) ***\n", channel);
+
         return 0;
     }
     case 0x80045612: { // VIDIOC_STREAMON - Binary Ninja EXACT implementation
@@ -4315,6 +4319,48 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp_dev)
 
     /* Binary Ninja: Set globe_ispdev = isp_dev */
     ourISPdev = isp_dev;
+
+    /* CRITICAL: Initialize frame channels with proper Binary Ninja state values */
+    pr_info("*** tx_isp_create_graph_and_nodes: Initializing frame channels ***\n");
+    for (i = 0; i < num_channels; i++) {
+        memset(&frame_channels[i], 0, sizeof(frame_channels[i]));
+
+        /* Initialize channel device */
+        frame_channels[i].channel_num = i;
+        frame_channels[i].magic = FRAME_CHANNEL_MAGIC;
+
+        /* Initialize channel state with Binary Ninja values */
+        frame_channels[i].state.enabled = false;
+        frame_channels[i].state.streaming = false;
+        frame_channels[i].state.state = 2;  /* Binary Ninja initial state */
+        frame_channels[i].state.flags = 0;  /* Binary Ninja initial flags */
+        frame_channels[i].state.format = 0x32315659; /* NV12 format */
+        frame_channels[i].state.width = (i == 0) ? 1920 : 640;   /* CH0=1920, CH1=640 */
+        frame_channels[i].state.height = (i == 0) ? 1080 : 360;  /* CH0=1080, CH1=360 */
+        frame_channels[i].state.buffer_count = 4;
+        frame_channels[i].state.sequence = 0;
+
+        /* Initialize synchronization objects */
+        init_waitqueue_head(&frame_channels[i].state.frame_wait);
+        spin_lock_init(&frame_channels[i].state.buffer_lock);
+        spin_lock_init(&frame_channels[i].state.queue_lock);
+        spin_lock_init(&frame_channels[i].state.vbm_lock);
+
+        /* Initialize buffer lists */
+        INIT_LIST_HEAD(&frame_channels[i].state.queued_buffers);
+        INIT_LIST_HEAD(&frame_channels[i].state.completed_buffers);
+
+        /* Initialize Binary Ninja buffer management fields */
+        mutex_init(&frame_channels[i].buffer_mutex);
+        spin_lock_init(&frame_channels[i].buffer_queue_lock);
+        frame_channels[i].streaming_flags = 0;
+        frame_channels[i].vic_subdev = isp_dev; /* Link to ISP device */
+        frame_channels[i].buffer_type = 1; /* V4L2_BUF_TYPE_VIDEO_CAPTURE */
+
+        pr_info("*** Frame channel %d initialized: %dx%d, state=%d ***\n",
+                i, frame_channels[i].state.width, frame_channels[i].state.height,
+                frame_channels[i].state.state);
+    }
 
     pr_info("*** tx_isp_create_graph_and_nodes: Binary Ninja reference implementation complete ***\n");
     return 0;
