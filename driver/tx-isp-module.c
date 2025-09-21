@@ -4454,7 +4454,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
                 if (!src_pad || !dst_pad) {
                     pr_warn("tx_isp_video_link_setup: Could not find pads for link %d (%s->%s)\n",
-                            i, config[i].src_name, config[i].dst_name);
+                            i, config[i].src.name, config[i].dst.name);
                     continue;
                 }
 
