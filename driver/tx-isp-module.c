@@ -3729,20 +3729,36 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     }
     case 0x800456c5: { // Set banks IOCTL (critical for channel enable from decompiled code)
         uint32_t bank_config;
-        
+
         if (copy_from_user(&bank_config, argp, sizeof(bank_config)))
             return -EFAULT;
-            
+
         pr_info("Channel %d: Set banks config=0x%x\n", channel, bank_config);
-        
+
         // This IOCTL is critical for channel enable - from decompiled IMP_FrameSource_EnableChn
         // The decompiled code shows: ioctl($a0_41, 0x800456c5, &var_70)
         // Failure here causes "does not support set banks" error
-        
+
+        // CRITICAL: Set banks should trigger core ops init according to Binary Ninja reference
+        if (ourISPdev && ourISPdev->core_dev &&
+            ourISPdev->core_dev->sd.ops && ourISPdev->core_dev->sd.ops->core &&
+            ourISPdev->core_dev->sd.ops->core->init) {
+
+            pr_info("*** Channel %d: SET_BANKS - CALLING CORE OPS INIT ***\n", channel);
+            int core_init_ret = ourISPdev->core_dev->sd.ops->core->init(&ourISPdev->core_dev->sd, 1);
+
+            if (core_init_ret != 0) {
+                pr_err("Channel %d: SET_BANKS - Core ops init failed: %d\n", channel, core_init_ret);
+                return core_init_ret; // Fail set banks if core init fails
+            } else {
+                pr_info("*** Channel %d: SET_BANKS - Core ops init SUCCESS ***\n", channel);
+            }
+        }
+
         // Store bank configuration in channel state
         // In real implementation, this would configure DMA banks/buffers
         state->enabled = true; // Mark channel as properly configured
-        
+
         return 0;
     }
     default:
