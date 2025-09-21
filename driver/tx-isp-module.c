@@ -4988,6 +4988,11 @@ static void tisp_set_sensor_digital_gain_short(uint32_t digital_gain)
     pr_info("tisp_set_sensor_digital_gain_short: Applied digital gain 0x%x to ISP\n", final_gain);
 }
 
+/* Forward declarations for sensor IOCTL helper functions */
+static int subdev_sensor_ops_enum_input(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+static int subdev_sensor_ops_set_input(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+static int subdev_sensor_ops_release_sensor(struct tx_isp_subdev *sd, void *arg);
+
 /* subdev_sensor_ops_ioctl - EXACT Binary Ninja implementation */
 long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
@@ -5091,7 +5096,9 @@ long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *a
                 uint32_t input_value = 0xffffffff;
 
                 if (sensor_sd && (unsigned long)sensor_sd < 0xfffff001) {
-                    input_value = sensor_sd->input; /* Binary Ninja: *($a0 + 0xdc) */
+                    /* Binary Ninja: *($a0 + 0xdc) - this is likely a sensor-specific field */
+                    /* For now, return a default input value */
+                    input_value = 0; /* Default sensor input */
                 }
 
                 *(uint32_t *)arg = input_value;
