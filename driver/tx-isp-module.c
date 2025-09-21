@@ -1147,7 +1147,7 @@ static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
 
 /* Forward declaration for sensor registration handler */
 /* VIC sensor operations IOCTL - EXACT Binary Ninja implementation */
-static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 /* VIC core s_stream - EXACT Binary Ninja implementation */
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable);
 
@@ -4321,7 +4321,7 @@ static void tx_isp_exit(void)
 }
 
 /* vic_sensor_ops_ioctl - FIXED with proper struct member access */
-static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
+int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
     struct tx_isp_vic_device *vic_dev = NULL;
     struct tx_isp_dev *isp_dev = NULL;
