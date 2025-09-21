@@ -740,8 +740,15 @@ int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg
         }
 
         if (cmd == 0x1000000) {
-            /* CRITICAL FIX: Call core operations ioctl with proper parameters */
+            /* CRITICAL FIX: Prevent infinite recursion - don't call core->ioctl if it points to this function */
             if (current_subdev->ops && current_subdev->ops->core && current_subdev->ops->core->ioctl) {
+                /* CRITICAL: Check if this would cause infinite recursion */
+                if (current_subdev->ops->core->ioctl == ispcore_core_ops_ioctl) {
+                    pr_info("ispcore_core_ops_ioctl: Subdev %d core->ioctl points to self - skipping to prevent recursion\n", i);
+                    result = 0;  /* Success - handled locally */
+                    continue;
+                }
+
                 /* Call with proper parameters: subdev, cmd, arg */
                 result = current_subdev->ops->core->ioctl(current_subdev, cmd, arg);
                 if (result == 0) {
