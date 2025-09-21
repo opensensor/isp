@@ -3761,9 +3761,8 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                     *((uint32_t*)(base_addr + offset + 0x996c)) = a0_13;
                     *((uint32_t*)(base_addr + offset + 0x9984)) = *((uint32_t*)arg3 + 3);
                     
-                    /* SAFE: Use struct member access for spinlock instead of (char*)s1_2 + 0x9c */
-                    struct frame_channel_binary_ninja *channel_s1 = (struct frame_channel_binary_ninja *)s1_2;
-                    spin_unlock_irqrestore(&channel_s1->lock, var_58);
+                    /* SAFE: Use the same struct variable for unlock */
+                    spin_unlock_irqrestore(&channel_s1_2->lock, var_58);
                     ISP_INFO("ispcore_pad_event_handle: buffer queued successfully");
                 }
             } else {
