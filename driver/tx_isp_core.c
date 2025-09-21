@@ -2157,7 +2157,7 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
             return -EINVAL;
         }
 
-        /* CRITICAL FIX: Use safe struct member access instead of dangerous offset *(arg1 + 0xd4) */
+        /* SAFE: Use proper struct member access instead of dangerous offset arithmetic */
         /* MIPS ALIGNMENT CHECK: Ensure isp_dev is properly aligned before accessing */
         if (((unsigned long)isp_dev & 0x3) != 0) {
             pr_err("*** CRITICAL: isp_dev pointer 0x%p not 4-byte aligned - would cause unaligned access crash! ***\n", isp_dev);
@@ -4893,5 +4893,3 @@ int tx_isp_core_device_set_sensor_attr(struct tx_isp_core_device *core_dev,
     return 0;
 }
 EXPORT_SYMBOL(tx_isp_core_device_set_sensor_attr);
-
-
