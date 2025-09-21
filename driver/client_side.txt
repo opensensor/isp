@@ -1,243 +1,205 @@
-[   19.538998] TX ISP driver initializing with new subdevice management system...
-[   19.539011] *** Using reference driver interrupt-driven frame processing ***
-[   19.539016] *** VIC DEVICE CREATION DEFERRED TO PLATFORM DRIVER PROBE ***
-[   19.539022] *** VIN DEVICE CREATION DEFERRED TO tx_isp_core_probe (after memory mappings) ***
-[   19.539027] *** This fixes the 'ISP core registers not available' error ***
-[   19.539033] *** VIN SUBDEV OPS AND INITIALIZATION DEFERRED TO AUTO-LINK PHASE ***
-[   19.539038] *** CRITICAL: REGISTERING SUBDEV PLATFORM DRIVERS FIRST ***
-[   19.539044] *** TX ISP SUBDEV PLATFORM DRIVERS REGISTRATION ***
-[   19.549078] All ISP subdev platform drivers registered successfully
-[   19.549090] *** SUBDEV PLATFORM DRIVERS REGISTERED - VIC/CSI/VIN/CORE DRIVERS AVAILABLE ***
-[   19.549096] *** CRITICAL: INITIALIZING SUBDEVICE REGISTRY BEFORE MAIN PLATFORM DEVICE ***
-[   19.549102] *** CRITICAL: Registering main platform driver ***
-[   19.552146] *** Main platform driver registered successfully ***
-[   19.552158] *** REFERENCE DRIVER: Subdev platform devices will be registered by tx_isp_create_graph_and_nodes ***
-[   19.556562] *** PROBE: tx_isp_platform_probe CALLED for device tx-isp ***
-[   19.556582] *** PROBE: ISP device allocated successfully: 85fc8000 ***
-[   19.556604] parse_rmem_bootarg: Found rmem=29M@0x06300000 (size=0x01d00000)
-[   19.556611] *** PROBE: Initialized rmem_addr=0x06300000, size=0x01d00000 ***
-[   19.556617] *** PROBE: Platform data: c0678538 ***
-[   19.556622] *** PROBE: Platform data validation passed ***
-[   19.556628] *** REFERENCE DRIVER: Individual subdevices will initialize their own memory regions ***
-[   19.556634] *** PLATFORM DEVICES ALREADY REGISTERED IN INIT - SKIPPING DUPLICATE REGISTRATION ***
-[   19.556639] *** tx_isp_module_init: EXACT Binary Ninja reference implementation ***
-[   19.559267] *** tx_isp_create_graph_and_nodes: EXACT Binary Ninja reference implementation ***
-[   19.559281] *** Registering platform device 0 from platform data ***
-[   19.562666] *** CSI PROBE: Set host_priv to csi_dev 85207800 for Binary Ninja compatibility ***
-[   19.562678] *** tx_isp_subdev_init: CSI subdev registered at index 0 ***
-[   19.562685] tx_isp_module_init: Module initialized for tx-isp-csi
-[   19.562691] *** tx_isp_subdev_init: Deferring core->init for device tx-isp-csi to prevent hangs ***
-[   19.562697] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
-[   19.562702] *** CSI: Skipping IRQ request - CSI uses register mapping only ***
-[   19.562710] tx_isp_subdev_init: platform_get_resource returned c0678324 for device tx-isp-csi
-[   19.562718] tx_isp_subdev_init: Memory resource found: start=0x10022000, end=0x10022fff, size=0x00001000
-[   19.562727] isp_subdev_init_clks: Initializing 2 clocks
-[   19.562738] CGU_ISP clock enabled at 100MHz
-[   19.562746] ISP clock enabled
-[   19.589138] CPM clock gates configured
-[   19.589151] isp_subdev_init_clks: Successfully initialized 2 clocks
-[   19.589160] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-csi' to ourISPdev ***
-[   19.589166] *** DEBUG: Device name comparison - checking 'tx-isp-csi' ***
-[   19.589170] *** DEBUG: About to check device name matches ***
-[   19.589178] *** CSI BASIC REGISTERS SET: b0022000 (from tx_isp_subdev_init) ***
-[   19.589185] *** LINKED CSI device: 85207800, regs: b0022000 ***
-[   19.589192] *** CSI PROBE: Using register mapping from tx_isp_subdev_init: b0022000 ***
-[   19.589198] *** CSI PROBE: Device linking handled automatically by tx_isp_subdev_init ***
-[   19.589219] *** Platform device 0 (tx-isp-csi) registered successfully ***
-[   19.589226] *** Registering platform device 1 from platform data ***
-[   19.589548] *** VIC PROBE: IRQ numbers initialized to 38 ***
-[   19.589562] *** VIC PROBE: Primary VIC registers mapped at 0x133e0000 -> b33e0000 ***
-[   19.589568] *** VIC PROBE: Secondary VIC registers mapped at 0x10023000 -> b0023000 ***
-[   19.589574] *** VIC PROBE: IRQ handler pointers set to NULL (reference driver uses main dispatcher) ***
-[   19.589580] *** EMERGENCY: VIC buffer management DISABLED to prevent kernel panic ***
-[   19.589585] *** VIC will operate in minimal mode without complex buffer operations ***
-[   19.589591] *** EMERGENCY: VIC basic initialization complete - complex buffer management SKIPPED ***
-[   19.589598] *** VIC PROBE: Initialized default dimensions 1920x1080 and critical fields ***
-[   19.589604] *** VIC PROBE: Stored vic_dev pointer 85fc0000 in subdev private data ***
-[   19.589610] *** VIC PROBE: Set host_priv to vic_dev 85fc0000 for Binary Ninja compatibility ***
-[   19.589616] *** VIC PROBE: Callback structure setup deferred - avoiding memory corruption ***
-[   19.589622] *** tx_isp_subdev_init: VIC device linked and registered at index 1 ***
-[   19.589629] tx_isp_module_init: Module initialized for isp-w02
-[   19.589635] *** tx_isp_subdev_init: Deferring core->init for device isp-w02 to prevent hangs ***
-[   19.589640] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
-[   19.589648] *** tx_isp_request_irq: Using main ISP device as dev_id for IRQ 38 (device: isp-w02) ***
-[   19.591904] *** tx_isp_disable_irq: EXACT Binary Ninja - disabling IRQ 38 ***
-[   19.591916] *** tx_isp_disable_irq: IRQ 38 DISABLED ***
-[   19.591924] *** tx_isp_request_irq: IRQ 38 registered successfully for isp-w02 ***
-[   19.591932] tx_isp_subdev_init: platform_get_resource returned c0678424 for device isp-w02
-[   19.591940] tx_isp_subdev_init: Memory resource found: start=0x133e0000, end=0x133effff, size=0x00010000
-[   19.591950] isp_subdev_init_clks: Initializing 2 clocks
-[   19.591959] CGU_ISP clock enabled at 100MHz
-[   19.591966] ISP clock enabled
-[   19.619162] CPM clock gates configured
-[   19.619176] isp_subdev_init_clks: Successfully initialized 2 clocks
-[   19.619184] *** tx_isp_subdev_auto_link: Auto-linking device 'isp-w02' to ourISPdev ***
-[   19.619190] *** DEBUG: Device name comparison - checking 'isp-w02' ***
-[   19.619194] *** DEBUG: About to check device name matches ***
-[   19.619202] *** MAPPED secondary VIC registers: b0023000 (0x10023000) ***
-[   19.619209] *** LINKED VIC device: 85fc0000, primary_regs: b33e0000, secondary_regs: b0023000 ***
-[   19.619215] *** VIC AUTO-LINK: Registers are mapped, registering interrupt handler ***
-[   19.619222] *** VIC PROBE: Device linking handled automatically by tx_isp_subdev_init ***
-[   19.619244] *** Platform device 1 (isp-w02) registered successfully ***
-[   19.619251] *** Registering platform device 2 from platform data ***
-[   19.619560] tx_isp_module_init: Module initialized for tx-isp-vin
-[   19.619573] *** tx_isp_subdev_init: Deferring core->init for device tx-isp-vin to prevent hangs ***
-[   19.619579] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
-[   19.619586] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-vin' to ourISPdev ***
-[   19.619592] *** DEBUG: Device name comparison - checking 'tx-isp-vin' ***
-[   19.619597] *** DEBUG: About to check device name matches ***
-[   19.619602] *** DEBUG: VIN device name matched! Setting up VIN device ***
-[   19.619609] *** LINKED VIN device: 85465e00 ***
-[   19.619617] *** VIN SUBDEV OPS CONFIGURED: core=c0679694, video=c0679688, s_stream=c065c42c ***
-[   19.619622] *** REGISTERED VIN SUBDEV AT INDEX 2 WITH VIDEO OPS ***
-[   19.619628] *** VIN INITIALIZATION DEFERRED TO SENSOR REGISTRATION PHASE ***
-[   19.619634] *** VIN PROBE: Device linking handled automatically by tx_isp_subdev_init ***
-[   19.619652] *** Platform device 2 (tx-isp-vin) registered successfully ***
-[   19.619659] *** Registering platform device 3 from platform data ***
-[   19.622213] *** Platform device 3 (tx-isp-fs) registered successfully ***
-[   19.622224] *** Registering platform device 4 from platform data ***
-[   19.624806] *** tx_isp_core_probe: NEW ARCHITECTURE - Creating separate core device ***
-[   19.624819] *** tx_isp_create_core_device: Creating ISP core device ***
-[   19.624828] *** tx_isp_create_core_device: Core device created successfully: 85fc0400 ***
-[   19.624835] *** tx_isp_subdev_init: Core ISP subdev registration handled by core device ***
-[   19.624842] tx_isp_module_init: Module initialized for tx-isp-core
-[   19.624848] *** tx_isp_subdev_init: Deferring core->init for device tx-isp-core to prevent hangs ***
-[   19.624854] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
-[   19.624862] *** tx_isp_request_irq: Using main ISP device as dev_id for IRQ 37 (device: tx-isp-core) ***
-[   19.627125] *** tx_isp_disable_irq: EXACT Binary Ninja - disabling IRQ 37 ***
-[   19.627138] *** tx_isp_disable_irq: IRQ 37 DISABLED ***
-[   19.627144] *** tx_isp_request_irq: IRQ 37 registered successfully for tx-isp-core ***
-[   19.627153] tx_isp_subdev_init: platform_get_resource returned c0677fd4 for device tx-isp-core
-[   19.627161] tx_isp_subdev_init: Memory resource found: start=0x13300000, end=0x1330ffff, size=0x00010000
-[   19.627171] isp_subdev_init_clks: Initializing 3 clocks
-[   19.627180] CGU_ISP clock enabled at 100MHz
-[   19.627187] ISP clock enabled
-[   19.627194] CSI clock enabled
-[   19.649191] CPM clock gates configured
-[   19.649202] isp_subdev_init_clks: Successfully initialized 3 clocks
-[   19.649210] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-core' to ourISPdev ***
-[   19.649216] *** DEBUG: Device name comparison - checking 'tx-isp-core' ***
-[   19.649221] *** DEBUG: About to check device name matches ***
-[   19.649228] *** CORE device not yet linked - regs will be mapped later ***
-[   19.649234] *** tx_isp_core_probe: Core subdev initialized successfully ***
-[   19.649241] *** tx_isp_core_device_init: Initializing core device: 85fc0400 ***
-[   19.649252] *** tx_isp_core_device_init: Core device initialized successfully ***
-[   19.649260] *** tx_isp_link_core_device: Linking core device 85fc0400 to ISP device 85fc8000 ***
-[   19.649265] *** tx_isp_link_core_device: Core device linked successfully ***
-[   19.649271] *** Core subdev registered at index 4: 85fc0400 ***
-[   19.649284] *** tx_isp_core_probe: VIC device creation deferred to platform driver system ***
-[   19.649290] *** tx_isp_core_probe: Platform drivers will call tx_isp_subdev_init for proper initialization ***
-[   19.649296] *** tx_isp_core_probe: Calling sensor_early_init ***
-[   19.649301] sensor_early_init: Preparing sensor infrastructure
-[   19.649306] *** tx_isp_core_probe: Core device setup complete ***
-[   19.649312] ***   - Core device: 85fc0400 ***
-[   19.649317] ***   - Channel count: 6 ***
-[   19.649322] ***   - Linked to ISP device: 85fc8000 ***
-[   19.649328] *** tx_isp_core_probe: Initializing core tuning system ***
-[   19.649351] *** tx_isp_core_probe: Tuning init SUCCESS ***
-[   19.649357] *** tx_isp_core_probe: SUCCESS - Core device fully initialized ***
-[   19.649363] ***   - Core device: 85fc0400 ***
-[   19.649368] ***   - Tuning device: 85f78000 ***
-[   19.649374] *** tx_isp_core_probe: Creating frame channel devices ***
-[   19.649379] *** tx_isp_create_framechan_devices: Creating frame channel devices ***
-[   19.649724] *** Created frame channel device: /dev/framechan0 (major=10, minor=54) ***
-[   19.652516] *** Created frame channel device: /dev/framechan1 (major=10, minor=53) ***
-[   19.655134] *** Created frame channel device: /dev/framechan2 (major=10, minor=52) ***
-[   19.657658] *** Created frame channel device: /dev/framechan3 (major=10, minor=51) ***
-[   19.657669] *** tx_isp_create_framechan_devices: All frame channel devices created ***
-[   19.657674] *** tx_isp_core_probe: Frame channel devices created successfully ***
-[   19.657680] *** tx_isp_core_probe: Creating ISP M0 tuning device node ***
-[   19.657686] tisp_code_create_tuning_node: Creating ISP M0 tuning device node
-[   19.657694] tisp_code_create_tuning_node: Allocated dynamic major 251
-[   19.662785] *** ISP M0 TUNING DEVICE CREATED: /dev/isp-m0 (major=251, minor=0) ***
-[   19.662796] *** tx_isp_core_probe: ISP M0 tuning device node created successfully ***
-[   19.662802] *** tx_isp_core_probe: Core probe completed successfully ***
-[   19.662823] *** Platform device 4 (tx-isp-core) registered successfully ***
-[   19.662830] *** tx_isp_create_graph_and_nodes: Binary Ninja reference implementation complete ***
-[   19.662836] *** tx_isp_module_init: Binary Ninja reference implementation complete ***
-[   19.662842] *** PROBE: Binary Ninja reference implementation complete ***
-[   19.662852] *** SUCCESS: ourISPdev allocated by probe function: 85fc8000 ***
-[   19.662858] *** Following reference driver: IRQ registration handled by tx_isp_request_irq ***
-[   19.662864] TX ISP driver initialized successfully - probe function will handle device setup
-[   26.004600] *** tx_isp_open: SAFE IMPLEMENTATION - preventing dangerous initialization chains ***
-[   26.004613] *** tx_isp_open: SAFE MODE - no hardware initialization during open ***
-[   26.004618] *** tx_isp_open: Background processing disabled to prevent delayed crashes ***
-[   26.004624] *** tx_isp_open: ISP opened safely - no dangerous operations triggered ***
-[   26.005204] ISP IOCTL: cmd=0x805056c1 arg=0x77a11d60
-[   26.005214] *** DEBUG: Subdev array contents before IOCTL processing ***
-[   26.005224] *** DEBUG: subdevs[0] = 85207800 (valid=YES, aligned=YES) ***
-[   26.005231] *** DEBUG: subdevs[1] = 85fc0000 (valid=YES, aligned=YES) ***
-[   26.005238] *** DEBUG: subdevs[2] = 85465e00 (valid=YES, aligned=YES) ***
-[   26.005245] *** DEBUG: subdevs[4] = 85fc0400 (valid=YES, aligned=YES) ***
-[   26.005257] ISP IOCTL: cmd=0xc050561a arg=0x7fb9bbd8
-[   26.005263] TX_ISP_SENSOR_ENUM_INPUT: Enumerating sensor at index 0
-[   26.005270] TX_ISP_SENSOR_ENUM_INPUT: Returning sensor 'gc2053' at index 0
-[   26.005277] ISP IOCTL: cmd=0xc050561a arg=0x7fb9bbd8
-[   26.005282] TX_ISP_SENSOR_ENUM_INPUT: Enumerating sensor at index 1
-[   26.005288] TX_ISP_SENSOR_ENUM_INPUT: No sensor at index 1 - returning error to end enumeration
-[   26.005296] ISP IOCTL: cmd=0xc0045627 arg=0x7fb9bc30
-[   26.005304] ISP IOCTL: cmd=0x800856d5 arg=0x7fb9bc28
-[   26.005309] TX_ISP_GET_BUF: IOCTL handler called
-[   26.005316] TX_ISP_GET_BUF: core_dev=85fc0400, isp_dev=85fc8000
-[   26.005322] TX_ISP_GET_BUF: Using dimensions 1920x1080 from core device
-[   26.005328] TX_ISP_GET_BUF: Returning buffer size=0, paddr=0x6300000
-[   26.050050] ISP released (refcnt=0)
-[1]+  Aborted                    prudynt
-root@ing-wyze-cam3-a000 ~# 
-root@ing-wyze-cam3-a000 ~# logcat
-I/ao( 2039): AO Enable: 0
-I/ao( 2039): AO Ch Enable: 0:0
-I/ao( 2039): EXIT AO Ch Enable: 0:0
-I/ao( 2039): AO Set Vol: 60
-I/ao( 2039): AO Get Gain: 20
-I/OSD( 2000): IMP_OSD_SetPoolSize:1048576
-I/LIBIMP_CONTROL( 2000): Version: Aug 28 2025_05:46:40_ dlsym
-E/IMP-ISP( 2000): Cannot open /dev/tx-isp
-I/OSD( 2259): IMP_OSD_SetPoolSize:1048576
-D/IMP-ISP( 2259): ~~~~~~ IMP_ISP_Open[331] ~~~~~~~
-I/IMP-ISP( 2259): IMP_ISP_AddSensor,480: paddr = 0x6300000, size = 0x30326367
-I/Alloc Manager( 2259): MEM Alloc Method is kmalloc
-D/KMEM Method( 2259): CMD Line Rmem Size:30408704, Addr:0x06300000
-D/KMEM Method( 2259): alloc->mem_alloc.method = kmalloc
- 			alloc->mem_alloc.vaddr = 0x7552f000
- 			alloc->mem_alloc.paddr = 0x06300000
- 			alloc->mem_alloc.length = 30408704
-I/Alloc Manager( 2259): MEM Manager Method is continuous
-E/Continuous Alloc( 2259): space isn't enough, t_info:used=0,addr=0x7552f000,size=30408704
-E/Continuous Alloc( 2259): Can't alloc memery: 808608615
-I/Continuous Alloc( 2259): 
-================ continuous dump info ============
-I/Continuous Alloc( 2259): 
-info->addr = 0x7552f000
-I/Continuous Alloc( 2259): info->size = 30408704
-I/Continuous Alloc( 2259): info->used = 0
-I/Continuous Alloc( 2259): 
-Mem Total Size: 30408704
-I/Continuous Alloc( 2259): Mem Used  Size: 0
-I/Continuous Alloc( 2259): Mem Free  Size: 30408704
-I/Continuous Alloc( 2259): Mem Usage Rate: 0%
-I/Continuous Alloc( 2259): 
-=============== continuous dump info End ============
-E/Alloc Manager( 2259): allocMem mem_manager->alloc is failed
-E/IMP Alloc APIs( 2259): g_alloc.alloc_mem failed
-I/Continuous Alloc( 2259): 
-================ continuous dump info ============
-I/Continuous Alloc( 2259): 
-info->addr = 0x7552f000
-I/Continuous Alloc( 2259): info->size = 30408704
-I/Continuous Alloc( 2259): info->used = 0
-I/Continuous Alloc( 2259): 
-Mem Total Size: 30408704
-I/Continuous Alloc( 2259): Mem Used  Size: 0
-I/Continuous Alloc( 2259): Mem Free  Size: 30408704
-I/Continuous Alloc( 2259): Mem Usage Rate: 0%
-I/Continuous Alloc( 2259): 
-=============== continuous dump info End ============
-I/Alloc Manager( 2259): 
-info->n_info = 0
-I/Alloc Manager( 2259): info->owner = 
-I/Alloc Manager( 2259): info->vaddr = 0x00000000
-I/Alloc Manager( 2259): info->paddr = 0x00000000
-I/Alloc Manager( 2259): info->length = 0
-I/Alloc Manager( 2259): info->ref_cnt = 0
-I/Alloc Manager( 2259): info->mem_attr = 0
+0009bd6c    int32_t IMP_ISP_AddSensor(char* arg1)
+
+0009bd84        uint32_t gISPdev_1 = gISPdev
+0009bdac        int32_t var_ac_1
+0009bdac        int32_t var_a4_1
+0009bdac        int32_t var_a0
+0009bdac        int32_t var_9c
+0009bdac        int32_t var_98
+0009bdac        int32_t var_94
+0009bdac        int32_t $v0_8
+0009bdac        int32_t $v1_1
+0009bdac        
+0009bdac        if (gISPdev_1 == 0)
+0009c3d0            $v0_8 = IMP_Log_Get_Option()
+0009c3e8            var_a4_1 = 0xfa884  {"ISPDEV cannot open\n"}
+0009c3f4            int32_t var_a8_7 = 0xfc984  {"IMP_ISP_AddSensor"}
+0009c3fc            $v1_1 = 0x19d
+0009beb8        label_9beb8:
+0009beb8            var_ac_1 = $v1_1
+0009bec8            int32_t var_b0_1 =
+0009bec8                0xfa4b0  {"/home/user/git/proj/sdk-lv3/src/imp/isp/isp_tseries.c"}
+0009bee0        label_9bee0:
+0009bedc            imp_log_fun(6, $v0_8, 2, 0xfa498, 0xfa4b0, var_ac_1, 0xfc984, var_a4_1, var_a0, 
+0009bedc                var_9c, var_98, var_94, &_gp)  {"IMP-ISP"}  {"
+0009bedc                /home/user/git/proj/sdk-lv3/src/imp/isp/isp_tseries.c"}  {"IMP_ISP_AddSensor"}
+0009bf0c            return 0xffffffff
+0009bf0c        
+0009bdbc        if (*(gISPdev_1 + 0x24) u>= 2)
+0009be8c            $v0_8 = IMP_Log_Get_Option()
+0009bea4            var_a4_1 =
+0009bea4                0xfa818  {"Sensor is runing, please Call 'EmuISP_DisableSensor' firstly\n"}
+0009beb0            int32_t var_a8_1 = 0xfc984  {"IMP_ISP_AddSensor"}
+0009beb4            $v1_1 = 0x1a2
+0009beb4            goto label_9beb8
+0009beb4        
+0009bddc        if (ioctl(*(gISPdev_1 + 0x20), 0x805056c1, arg1) != 0)
+0009c2c4            int32_t var_a8_4 = 0xfc984  {"IMP_ISP_AddSensor"}
+0009c234            imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfa498, 0xfa4b0, 0x1a7, 0xfc984, 
+0009c234                0xfa898, arg1)  {"IMP-ISP"}  {"
+0009c234                /home/user/git/proj/sdk-lv3/src/imp/isp/isp_tseries.c"}  {"
+0009c234                VIDIOC_REGISTER_SENSOR(%s) error!\n"}  {"IMP_ISP_AddSensor"}
+0009c240            return 0xffffffff
+0009c240        
+0009bde8        uint32_t bpath_1 = bpath
+0009bdec        int32_t result
+0009bdec        
+0009bdec        if (bpath_1 != 0)
+0009be14            result = ioctl(*(gISPdev_1 + 0x20), 0xc00456c7, bpath_1)
+0009be10            free(ptr: bpath)
+0009be20            bpath = 0
+0009be20        
+0009be1c        if (bpath_1 != 0 && result != 0)
+0009bf0c            return result
+0009bf0c        
+0009be2c        int32_t result_1 = 0xffffffff
+0009be30        int32_t result_4 = 0
+0009be4c        char (* str2)[0x4c]
+0009be4c        
+0009be4c        while (true)
+0009be58            char var_84[0x4c]
+0009be58            str2 = &var_84
+0009be58            
+0009be60            if (ioctl(*(gISPdev_1 + 0x20), 0xc050561a, &result_4) != 0)
+0009be60                break
+0009be60            
+0009be70            if (strcmp(str1: arg1, str2) == 0)
+0009bf14                int32_t result_3 = result_4
+0009bf18                result_1 = result_3
+0009bf24                result_4 = result_3 + 1
+0009be70            else
+0009be84                result_4 += 1
+0009be84        
+0009bf28        result = result_1
+0009bf28        
+0009bf30        if (result == 0xffffffff)
+0009c324            imp_log_fun(6, IMP_Log_Get_Option(arg1, str2), 2, 0xfa498, 0xfa4b0, 0x1c0, 
+0009c324                0xfc984, 0xfa8bc, arg1)  {"IMP-ISP"}  {"
+0009c324                /home/user/git/proj/sdk-lv3/src/imp/isp/isp_tseries.c"}  {"
+0009c324                sensor[%s] hasn't been added!\n"}  {"IMP_ISP_AddSensor"}
+0009bf0c            return result
+0009bf0c        
+0009bf4c        if (ioctl(*(gISPdev_1 + 0x20), 0xc0045627, &result_1) != 0)
+0009c20c            int32_t var_a8_2 = 0xfc984  {"IMP_ISP_AddSensor"}
+0009c234            imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfa498, 0xfa4b0, 0x1c6, 0xfc984, 
+0009c234                0xfa8dc, arg1)  {"IMP-ISP"}  {"
+0009c234                /home/user/git/proj/sdk-lv3/src/imp/isp/isp_tseries.c"}  {"
+0009c234                Failed to select sensor[%s]!\n"}  {"IMP_ISP_AddSensor"}
+0009c240            return 0xffffffff
+0009c240        
+0009bf54        char* i = arg1
+0009bf58        void* $v0_12 = gISPdev_1 + 0x28
+0009bf58        
+0009bfa4        do
+0009bf60            _setLeftPart32(leftpart: *i)
+0009bf64            _setLeftPart32(leftpart: *(i + 4))
+0009bf68            _setLeftPart32(leftpart: *(i + 8))
+0009bf6c            _setLeftPart32(leftpart: *(i + 0xc))
+0009bf70            uint32_t $a3_2 = _setRightPart32(rightpart: *i)
+0009bf74            uint32_t $a2_5 = _setRightPart32(rightpart: *(i + 4))
+0009bf78            uint32_t $v1_3 = _setRightPart32(rightpart: *(i + 0xc))
+0009bf7c            uint32_t $a1_3 = _setRightPart32(rightpart: *(i + 8))
+0009bf84            *$v0_12 = $a3_2
+0009bf8c            *($v0_12 + 4) = $a2_5
+0009bf94            *($v0_12 + 8) = $a1_3
+0009bf98            i = &i[0x10]
+0009bfa0            *($v0_12 + 0xc) = $v1_3
+0009bfa8            $v0_12 += 0x10
+0009bfa4        while (i != &arg1[0x50])
+0009bfa4        
+0009bfcc        int32_t var_38
+0009bfcc        
+0009bfcc        if (ioctl(*(gISPdev_1 + 0x20), 0x800856d5, &var_38) != 0)
+0009c244            $v0_8 = IMP_Log_Get_Option()
+0009c25c            var_a4_1 = 0xfa8fc  {"VIDIOC_GET_BUF_INFO() error!\n"}
+0009c268            int32_t var_a8_3 = 0xfc984  {"IMP_ISP_AddSensor"}
+0009c270            $v1_1 = 0x1dc
+0009c26c            goto label_9beb8
+0009c26c        
+0009bfd8        int32_t $v0_14 = IMP_Log_Get_Option()
+0009bff8        int32_t var_34
+0009bff8        var_94 = var_34
+0009c010        var_98 = var_38
+0009c014        var_9c = 0x1e0
+0009c02c        var_a0 = 0xfc984  {"IMP_ISP_AddSensor"}
+0009c038        imp_log_fun(4, $v0_14, 2, 0xfa498, 0xfa4b0, 0x1e0, 0xfc984, 0xfa91c, 0xfc984, 
+0009c038            0x1e0, var_98, var_94, &_gp)  {"IMP-ISP"}  {"
+0009c038            /home/user/git/proj/sdk-lv3/src/imp/isp/isp_tseries.c"}  {"
+0009c038            %s,%d: paddr = 0x%x, size = 0x%x\n"}  {"IMP_ISP_AddSensor"}
+0009c048        void* $v0_15 = malloc(size: 0x94)
+0009c054        int32_t $a2_11
+0009c054        
+0009c054        if ($v0_15 == 0)
+0009c370            $a2_11 = 0x1e3
+0009c054        else
+0009c074            int32_t $a2_10
+0009c074            
+0009c074            if (IMP_Alloc($v0_15, var_34, 0xfa95c) != 0)  {"ncubuf"}
+0009c278                $a2_10 = 0x1e8
+0009c284            label_9c284:
+0009c288                printf(0xfa964, 0xfc984, $a2_10)  {"error(%s,%d): IMP_Alloc\n"}  {"
+0009c288                    IMP_ISP_AddSensor"}
+0009bf0c                return 0xffffffff
+0009bf0c            
+0009c07c            int32_t $v0_17 = *($v0_15 + 0x84)
+0009c084            int32_t $a0_10 = *(gISPdev_1 + 0x20)
+0009c088            *(gISPdev_1 + 0xac) = $v0_15
+0009c098            var_38 = $v0_17
+0009c094            int32_t result_2 = ioctl($a0_10, 0x800856d4, &var_38)
+0009c09c            result = result_2
+0009c09c            
+0009c0a0            if (result_2 != 0)
+0009c338                $v0_8 = IMP_Log_Get_Option()
+0009c344                int32_t var_a8_5 = 0xfc984  {"IMP_ISP_AddSensor"}
+0009c348                int32_t var_b0_2 =
+0009c348                    0xfa4b0  {"/home/user/git/proj/sdk-lv3/src/imp/isp/isp_tseries.c"}
+0009c35c                var_a4_1 = 0xfa980  {"VIDIOC_SET_BUF_INFO() error!\n"}
+0009c368                var_ac_1 = 0x1ee
+0009c364                goto label_9bee0
+0009c364            
+0009c0b0            if (*(gISPdev_1 + 0xb0) != 1)
+0009bf0c                return result
+0009bf0c            
+0009c0bc            int32_t $a0_11 = *(gISPdev_1 + 0x20)
+0009c0c0            var_38 = 0
+0009c0c4            int32_t var_34_1 = 0
+0009c0c4            
+0009c0d8            if (ioctl($a0_11, 0x800856d7, &var_38) != 0)
+0009c39c                $v0_8 = IMP_Log_Get_Option()
+0009c3a8                int32_t var_a8_6 = 0xfc984  {"IMP_ISP_AddSensor"}
+0009c3ac                int32_t var_b0_3 =
+0009c3ac                    0xfa4b0  {"/home/user/git/proj/sdk-lv3/src/imp/isp/isp_tseries.c"}
+0009c3c0                var_a4_1 = 0xfa9a0  {"VIDIOC_GET_WDR_BUF_INFO() error!\n"}
+0009c3cc                var_ac_1 = 0x1f6
+0009c3c8                goto label_9bee0
+0009c3c8            
+0009c128            imp_log_fun(4, IMP_Log_Get_Option(), 2, 0xfa498, 0xfa4b0, 0x1fa, 0xfc984, 
+0009c128                0xfa91c, 0xfc984, 0x1fa, var_38, var_34_1)  {"IMP-ISP"}  {"
+0009c128                /home/user/git/proj/sdk-lv3/src/imp/isp/isp_tseries.c"}  {"
+0009c128                %s,%d: paddr = 0x%x, size = 0x%x\n"}  {"IMP_ISP_AddSensor"}
+0009c138            void* $v0_20 = malloc(size: 0x94)
+0009c138            
+0009c144            if ($v0_20 != 0)
+0009c164                if (IMP_Alloc($v0_20, var_34_1, 0xfa9c4) != 0)  {"wdrbuf"}
+0009c398                    $a2_10 = 0x202
+0009c394                    goto label_9c284
+0009c394                
+0009c16c                int32_t $v0_22 = *($v0_20 + 0x84)
+0009c174                int32_t $a0_15 = *(gISPdev_1 + 0x20)
+0009c178                *(gISPdev_1 + 0xb4) = $v0_20
+0009c188                var_38 = $v0_22
+0009c188                
+0009c18c                if (ioctl($a0_15, 0x800856d6, &var_38) != 0)
+0009c19c                    result = 0xffffffff
+0009c1d0                    imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfa498, 0xfa4b0, 0x208, 
+0009c1d0                        0xfc984, 0xfa9cc)  {"IMP-ISP"}  {"
+0009c1d0                        /home/user/git/proj/sdk-lv3/src/imp/isp/isp_tseries.c"}  {"
+0009c1d0                        VIDIOC_SET_WDR_BUF_INFO() error!\n"}  {"IMP_ISP_AddSensor"}
+0009c1d0                
+0009bf0c                return result
+0009bf0c            
+0009c408            $a2_11 = 0x1fd
+0009c408        
+0009c380        printf(0xfa940, 0xfc984, $a2_11)  {"error(%s,%d): maloc err\n"}  {"
+0009c380            IMP_ISP_AddSensor"}
+0009bf0c        return 0xffffffff

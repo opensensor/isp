@@ -3450,8 +3450,18 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         pr_info("TX_ISP_GET_BUF: Returning buffer size=%d, paddr=0x%x\n", var_94, var_98.as_uint32);
 
+        /* CRITICAL FIX: Create proper 8-byte structure for userspace */
+        /* Userspace expects: [paddr (4 bytes)][size (4 bytes)] */
+        struct {
+            uint32_t paddr;  /* Physical address */
+            uint32_t size;   /* Buffer size */
+        } __attribute__((packed)) result;
+
+        result.paddr = var_98.as_uint32;
+        result.size = var_94;
+
         /* Binary Ninja: if (private_copy_to_user(arg3, &var_98, 8) != 0) */
-        if (copy_to_user((void __user *)arg, &var_98, 8) != 0) {
+        if (copy_to_user((void __user *)arg, &result, 8) != 0) {
             pr_err("TX_ISP_GET_BUF: Failed to copy buffer result\n");
             return -EFAULT;
         }
