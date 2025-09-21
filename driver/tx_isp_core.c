@@ -94,7 +94,7 @@ int tx_isp_configure_format_propagation(struct tx_isp_dev *isp);
 int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev);
 
 /* Critical ISP Core initialization functions - MISSING FROM LOGS! */
-int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr);
+int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on);
 int ispcore_slake_module(struct tx_isp_dev *isp_dev);
 int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 int ispcore_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
@@ -1516,7 +1516,9 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
                     /* Binary Ninja: isp_printf(0, "Err [VIC_INT] : dma chid ovf  !!!\n", "ispcore_slake_module") */
                     isp_printf(0, (unsigned char*)"Err [VIC_INT] : dma chid ovf  !!!\n", "ispcore_slake_module");
                     /* Binary Ninja: ispcore_core_ops_init(arg1, 0) */
-                    ispcore_core_ops_init(isp_dev, NULL);
+                    if (isp_dev->subdevs[4]) {
+                        ispcore_core_ops_init(isp_dev->subdevs[4], 0);
+                    }
                 }
 
                 /* Binary Ninja: Channel initialization loop */
@@ -1695,22 +1697,22 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
         /* Binary Ninja: if ($v0_3 != 1) */
         if (vic_state != 1) {
             /* Binary Ninja: if (arg2 == 0) - Deinitialize if no sensor attributes */
-            if (arg2 == NULL) {
-                pr_info("ispcore_core_ops_init: Deinitializing (arg2=NULL)");
+            if (sensor_attr == NULL) {
+                pr_info("ispcore_core_ops_init: Deinitializing (sensor_attr=NULL)");
 
                 /* Binary Ninja: Check current state and handle streaming */
                 if (vic_state == 4) {
                     /* Binary Ninja: ispcore_video_s_stream(arg1, 0) */
-                    ispcore_video_s_stream(arg1, 0);
+                    ispcore_video_s_stream(sd, 0);
                     vic_state = vic_dev->state;  /* Update state after s_stream */
                 }
 
                 /* Binary Ninja: if ($v1_55 == 3) - Stop kernel thread if in state 3 */
                 if (vic_state == 3) {
                     /* Binary Ninja: private_kthread_stop(*($s0 + 0x1b8)) */
-                    if (arg1->fw_thread) {
-                        kthread_stop(arg1->fw_thread);
-                        arg1->fw_thread = NULL;
+                    if (isp_dev->fw_thread) {
+                        kthread_stop(isp_dev->fw_thread);
+                        isp_dev->fw_thread = NULL;
                     }
                     /* Binary Ninja: *($s0 + 0xe8) = 2 */
                     vic_dev->state = 2;
@@ -1735,6 +1737,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
     pr_info("ispcore_core_ops_init: Complete, result=%d", result);
     return result;
 }
+EXPORT_SYMBOL(ispcore_core_ops_init);
 
 /**
  * tiziano_sync_sensor_attr_validate - Validate and sync sensor attributes
