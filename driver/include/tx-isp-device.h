@@ -699,10 +699,6 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd, s
 void tx_isp_subdev_deinit(struct tx_isp_subdev *sd);
 int tx_isp_sensor_complete_init(struct tx_isp_subdev *sd);
 
-/* Sensor registration functions */
-int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, const char *sensor_name, struct i2c_client *client);
-int tx_isp_unregister_sensor_subdev(struct tx_isp_subdev *sd);
-
 /* Auto-linking function to connect subdevices to global ISP device */
 void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev *sd);
 

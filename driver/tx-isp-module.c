@@ -3555,6 +3555,33 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         pr_debug("Sensor registration complete, final_result=0x%x\n", final_result);
 
+        /* CRITICAL FIX: Actually register the sensor in the sensor list! */
+        /* This is what was missing - the sensor was never added to the enumeration list */
+        if (final_result == 0 && sensor_name[0] != '\0') {
+            pr_debug("*** REGISTERING SENSOR IN ENUMERATION LIST: %s ***\n", sensor_name);
+
+            /* Add to our sensor enumeration list */
+            reg_sensor = kzalloc(sizeof(struct registered_sensor), GFP_KERNEL);
+            if (reg_sensor) {
+                strncpy(reg_sensor->name, sensor_name, sizeof(reg_sensor->name) - 1);
+                reg_sensor->name[sizeof(reg_sensor->name) - 1] = '\0';
+                reg_sensor->subdev = NULL;  /* Will be set when actual sensor module loads */
+                reg_sensor->client = NULL;
+
+                mutex_lock(&sensor_list_mutex);
+                reg_sensor->index = sensor_count;
+                list_add_tail(&reg_sensor->list, &sensor_list);
+                sensor_count++;
+                mutex_unlock(&sensor_list_mutex);
+
+                pr_info("*** SENSOR REGISTERED FOR ENUMERATION: index=%d name=%s ***\n",
+                       reg_sensor->index, reg_sensor->name);
+            } else {
+                pr_err("Failed to allocate memory for sensor registration\n");
+                final_result = -ENOMEM;
+            }
+        }
+
         return final_result;
     }
 
@@ -4836,84 +4863,6 @@ static int __enqueue_in_driver(void *buffer_struct)
     /* Binary Ninja: return result */
     return result;
 }
-
-/* Allow sensor drivers to register with the ISP system */
-int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, const char *sensor_name, struct i2c_client *client)
-{
-    struct registered_sensor *sensor;
-
-    if (!sd || !sensor_name) {
-        return -EINVAL;
-    }
-
-    /* Check if sensor is already registered */
-    mutex_lock(&sensor_list_mutex);
-    list_for_each_entry(sensor, &sensor_list, list) {
-        if (sensor->subdev == sd || (client && sensor->client == client)) {
-            pr_info("tx_isp_register_sensor_subdev: Sensor '%s' already registered\n", sensor_name);
-            mutex_unlock(&sensor_list_mutex);
-            return 0;  /* Already registered */
-        }
-    }
-    mutex_unlock(&sensor_list_mutex);
-
-    /* Create new sensor entry */
-    sensor = kzalloc(sizeof(*sensor), GFP_KERNEL);
-    if (!sensor) {
-        return -ENOMEM;
-    }
-
-    strncpy(sensor->name, sensor_name, sizeof(sensor->name) - 1);
-    sensor->name[sizeof(sensor->name) - 1] = '\0';
-    sensor->subdev = sd;
-    sensor->client = client;
-    sensor->index = sensor_count;
-
-    /* Add to sensor list */
-    mutex_lock(&sensor_list_mutex);
-    list_add_tail(&sensor->list, &sensor_list);
-    sensor_count++;
-    mutex_unlock(&sensor_list_mutex);
-
-    pr_info("tx_isp_register_sensor_subdev: Registered sensor '%s' at index %d\n",
-            sensor_name, sensor->index);
-
-    return 0;
-}
-EXPORT_SYMBOL(tx_isp_register_sensor_subdev);
-
-/* Allow sensor drivers to unregister */
-int tx_isp_unregister_sensor_subdev(struct tx_isp_subdev *sd)
-{
-    struct registered_sensor *sensor, *tmp;
-
-    mutex_lock(&sensor_register_mutex);
-    registered_sensor_subdev = NULL;
-    mutex_unlock(&sensor_register_mutex);
-
-    mutex_lock(&sensor_list_mutex);
-    list_for_each_entry_safe(sensor, tmp, &sensor_list, list) {
-        if (sensor->subdev == sd) {
-            list_del(&sensor->list);
-            kfree(sensor);
-            sensor_count--;
-            break;
-        }
-    }
-    mutex_unlock(&sensor_list_mutex);
-
-    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
-    struct tx_isp_sensor *isp_sensor = tx_isp_get_sensor();
-    if (isp_sensor && &isp_sensor->sd == sd) {
-        /* Sensor is being unregistered - clear from subdev array */
-        if (ourISPdev && ourISPdev->subdevs[3] && ourISPdev->subdevs[3]->host_priv == isp_sensor) {
-            ourISPdev->subdevs[3] = NULL;
-        }
-    }
-
-    return 0;
-}
-EXPORT_SYMBOL(tx_isp_unregister_sensor_subdev);
 
 /* Removed compatibility wrapper - using Binary Ninja reference implementation instead */
 
