@@ -21,7 +21,6 @@
 #include <linux/platform_device.h>
 #include <linux/device.h>
 
-int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 
@@ -1923,61 +1922,6 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
     return 0;
 }
 
-/* VIC event callback structure - matching reference driver layout 
- * CRITICAL: Must be exactly 32 bytes total with function pointer at offset 0x1c */
-struct vic_callback_struct {
-    char padding[28];           /* Exact 28 bytes padding to reach offset 0x1c */
-    void *event_callback;       /* Function pointer at offset 0x1c */
-} __attribute__((packed));
-
-/* VIC event callback handler for QBUF events */
-static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd, void *data)
-{
-    struct tx_isp_subdev *sd;
-    struct tx_isp_vic_device *vic_dev;
-    int ret = 0;
-    
-    if (!pad || !pad->sd) {
-        pr_err("VIC event callback: Invalid pad or subdev\n");
-        return -EINVAL;
-    }
-    
-    sd = pad->sd;
-    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
-    if (!vic_dev) {
-        pr_err("VIC event callback: No vic_dev\n");
-        return -EINVAL;
-    }
-    
-    pr_info("*** VIC EVENT CALLBACK: cmd=0x%x, data=%p ***\n", cmd, data);
-    
-    switch (cmd) {
-        case 0x3000008: /* QBUF event */
-            pr_info("*** VIC: Processing QBUF event 0x3000008 ***\n");
-            
-            /* Handle QBUF event - trigger frame processing */
-            if (vic_dev->state == 4) { /* Streaming state */
-                /* Signal frame completion to wake up waiting processes */
-                complete(&vic_dev->frame_complete);
-                pr_info("*** VIC: QBUF event processed - frame completion signaled ***\n");
-                ret = 0;
-            } else {
-                pr_info("VIC: QBUF event received but not streaming (state=%d) - allowing anyway\n", vic_dev->state);
-                complete(&vic_dev->frame_complete);
-                ret = 0;
-            }
-            break;
-            
-        default:
-            pr_info("VIC: Unknown event cmd=0x%x\n", cmd);
-            ret = -ENOIOCTLCMD;
-            break;
-    }
-    
-    pr_info("*** VIC EVENT CALLBACK: returning %d ***\n", ret);
-    return ret;
-}
-
 /* BINARY NINJA EXACT: vic_core_s_stream implementation */
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 {
@@ -2064,7 +2008,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
 /* Define VIC video operations */
 static struct tx_isp_subdev_video_ops vic_video_ops = {
-    .s_stream = vic_core_s_stream,  /* CRITICAL FIX: Use vic_core_s_stream instead of vic_video_s_stream */
+    .s_stream = vic_core_s_stream,
 };
 
 /* Forward declarations removed - functions are defined earlier in the file */

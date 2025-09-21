@@ -5284,63 +5284,6 @@ static void tx_isp_exit(void)
     pr_info("TX ISP driver removed\n");
 }
 
-/* VIC video streaming function - CRITICAL for register activity */
-int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
-{
-    struct tx_isp_dev *isp_dev;
-    struct tx_isp_vic_device *vic_dev;
-    int ret;
-    
-    if (!sd) {
-        return -EINVAL;
-    }
-    
-    isp_dev = (struct tx_isp_dev *)sd->isp;
-    if (!isp_dev || !isp_dev->vic_dev) {
-        return -EINVAL;
-    }
-    
-    /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
-    vic_dev = isp_dev->vic_dev;
-    
-    pr_info("*** VIC VIDEO STREAMING %s - THIS SHOULD TRIGGER REGISTER WRITES! ***\n",
-            enable ? "ENABLE" : "DISABLE");
-    
-    if (enable) {
-        /* Call vic_core_s_stream which calls tx_isp_vic_start */
-        ret = vic_core_s_stream(sd, enable);
-        pr_info("*** VIC VIDEO STREAMING ENABLE RETURNED %d ***\n", ret);
-        return ret;
-    } else {
-        return vic_core_s_stream(sd, enable);
-    }
-}
-
-/* CSI video streaming function - MIPS-SAFE implementation */
-int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable)
-{
-    pr_info("*** CSI VIDEO STREAMING %s - MIPS-SAFE implementation ***\n", enable ? "ENABLE" : "DISABLE");
-    
-    if (enable) {
-        struct tx_isp_csi_device *csi_dev = ourISPdev->csi_dev;
-        /* CRITICAL FIX: State 4 doesn't exist! Use CSI_STATE_ACTIVE (2) for streaming */
-        csi_dev->state = CSI_STATE_ACTIVE; /* 2 = ACTIVE, not 4 (invalid) */
-        pr_info("*** MIPS-SAFE: CSI device state set to ACTIVE (%d) ***\n", csi_dev->state);
-    } else {
-        pr_info("*** MIPS-SAFE: CSI streaming disable ***\n");
-        
-        /* MIPS SAFE: Disable CSI streaming state */
-            struct tx_isp_csi_device *csi_dev = ourISPdev->csi_dev;
-            /* CRITICAL FIX: State 3 = CSI_STATE_ERROR! Use CSI_STATE_IDLE (1) for disable */
-            csi_dev->state = CSI_STATE_IDLE; /* 1 = IDLE, not 3 = ERROR */
-            pr_info("*** MIPS-SAFE: CSI device state set to IDLE (%d) ***\n", csi_dev->state);
-
-    }
-    
-    pr_info("*** CSI VIDEO STREAMING: MIPS-SAFE completion - no dangerous register access ***\n");
-    return 0; /* Always return success to prevent cascade failures */
-}
-
 /* vic_sensor_ops_ioctl - FIXED with proper struct member access */
 static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
