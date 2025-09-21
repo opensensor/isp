@@ -157,30 +157,3 @@ static struct attribute *tx_isp_attrs[] = {
 static const struct attribute_group tx_isp_attr_group = {
     .attrs = tx_isp_attrs,
 };
-
-/* Initialize sysfs interface */
-int tx_isp_sysfs_init(struct tx_isp_dev *isp)
-{
-    int ret;
-
-    if (!isp || !isp->dev)
-        return -EINVAL;
-
-    /* Create sysfs group */
-    ret = sysfs_create_group(&isp->dev->kobj, &tx_isp_attr_group);
-    if (ret) {
-        ISP_ERROR("Failed to create sysfs group\n");
-        return ret;
-    }
-
-    return 0;
-}
-
-/* Cleanup sysfs interface */
-void tx_isp_sysfs_exit(struct tx_isp_dev *isp)
-{
-    if (!isp || !isp->dev)
-        return;
-
-    sysfs_remove_group(&isp->dev->kobj, &tx_isp_attr_group);
-}

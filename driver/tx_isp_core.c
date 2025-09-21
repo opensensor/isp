@@ -1143,26 +1143,6 @@ static int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
     return 0;
 }
 
-
-void tx_isp_frame_chan_init(struct tx_isp_frame_channel *chan)
-{
-    /* Initialize channel state */
-    pr_info("Initializing frame channel\n");
-    if (chan) {
-        chan->active = false;
-        spin_lock_init(&chan->slock);
-        mutex_init(&chan->mlock);
-        init_completion(&chan->frame_done);
-    }
-}
-
-
-/* REMOVED: tx_isp_init_memory_mappings - not part of reference driver */
-/* Memory mappings are handled by individual subdevices through tx_isp_subdev_init */
-
-/* REMOVED: tx_isp_deinit_memory_mappings - not part of reference driver */
-/* Memory cleanup is handled by individual subdevices */
-
 /* Configure ISP system clocks */
 int tx_isp_configure_clocks(struct tx_isp_dev *isp)
 {
