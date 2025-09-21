@@ -3367,7 +3367,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             struct tx_isp_core_device *core = (struct tx_isp_core_device *)core_dev;
             /* Binary Ninja: Complex buffer setup with system register writes */
             /* This would involve actual hardware register programming */
-            pr_info("TX_ISP_SET_BUF: addr=0x%x size=%d\n", var_98, var_94);
+            pr_info("TX_ISP_SET_BUF: addr=0x%x size=%d\n", var_98.as_uint32, var_94);
         }
 
         return 0;
