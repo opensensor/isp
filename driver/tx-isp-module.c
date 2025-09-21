@@ -1131,12 +1131,14 @@ EXPORT_SYMBOL(sensor_fps_control);
 static int sensor_get_id(void) {
     /* Binary Ninja: return zx.d(*(*(g_ispcore + 0x120) + 4)) */
 
-    if (!ourISPdev || !ourISPdev->sensor || !ourISPdev->sensor->video.attr) {
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor || !sensor->video.attr) {
         return 0x2053; /* Default GC2053 chip ID */
     }
 
     /* Return sensor chip ID from attributes */
-    return ourISPdev->sensor->video.attr->chip_id;
+    return sensor->video.attr->chip_id;
 }
 
 static int sensor_disable_isp(void) {
