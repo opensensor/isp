@@ -3278,17 +3278,17 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 return -EFAULT;
             }
 
-            pr_info("TX_ISP_SENSOR_ENUM_INPUT: Requested index=%d\n", var_98.index);
+            pr_info("TX_ISP_SENSOR_ENUM_INPUT: Requested index=%d\n", var_98.as_input.index);
 
             /* Call the reference implementation directly with var_98 */
-            int result = subdev_sensor_ops_enum_input((struct v4l2_subdev *)isp_dev, &var_98);
+            int result = subdev_sensor_ops_enum_input((struct v4l2_subdev *)isp_dev, &var_98.as_input);
 
             if (result == 0) {
                 pr_info("TX_ISP_SENSOR_ENUM_INPUT: Found sensor '%s' at index %d\n",
-                        var_98.name, var_98.index);
+                        var_98.as_input.name, var_98.as_input.index);
             } else {
                 pr_info("TX_ISP_SENSOR_ENUM_INPUT: No sensor found at index %d (result=%d)\n",
-                        var_98.index, result);
+                        var_98.as_input.index, result);
                 return result;
             }
 
