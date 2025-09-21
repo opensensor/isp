@@ -311,43 +311,18 @@ label_132f4:
     /* This was the root cause of the infinite loop! */
     /* Binary Ninja: int32_t $v0 = 4; if (arg2 == 0) $v0 = 3 */
     /* Binary Ninja: *($s0_1 + 0xf4) = $v0 */
-    if (enable) {
-        /* CRITICAL FIX: Set state to 4 for active streaming (not 5!) */
-        vin->state = 4;
-        mcp_log_info("vin_s_stream: *** VIN STATE SET TO 4 (ACTIVE STREAMING) ***", vin->state);
-        
-        /* Start VIN hardware */
-        if (vin->base) {
-            ctrl_val = readl(vin->base + VIN_CTRL);
-            ctrl_val |= VIN_CTRL_START;
-            writel(ctrl_val, vin->base + VIN_CTRL);
-            pr_info("VIN: vin_s_stream: VIN hardware started = 0x%x\n", ctrl_val);
-        }
-    } else {
-        /* Set state to 3 for streaming disable */
-        vin->state = 3;
-        pr_info("VIN: vin_s_stream: *** VIN STATE SET TO 3 (NON-STREAMING) *** = 0x%x\n", vin->state);
-
-        /* Stop VIN hardware */
-        if (vin->base) {
-            ctrl_val = readl(vin->base + VIN_CTRL);
-            ctrl_val &= ~VIN_CTRL_START;
-            ctrl_val |= VIN_CTRL_STOP;
-            writel(ctrl_val, vin->base + VIN_CTRL);
-            
-            /* Wait for stop to complete */
-            int timeout = 1000;
-            while ((readl(vin->base + VIN_STATUS) & STATUS_BUSY) && timeout-- > 0) {
-                udelay(10);
-            }
-            mcp_log_info("vin_s_stream: VIN hardware stopped", ctrl_val);
-        }
+    /* Binary Ninja: int32_t $v0 = 4; if (arg2 == 0) $v0 = 3 */
+    int32_t new_state = 4;
+    if (enable == 0) {
+        new_state = 3;
     }
 
+    /* Binary Ninja: *($s0_1 + 0xf4) = $v0 */
+    vin_dev->state = new_state;
+
+    pr_info("vin_s_stream: VIN state set to %d (Binary Ninja exact)\n", new_state);
+
     /* Binary Ninja: return 0 */
-    mcp_log_info("vin_s_stream: final VIN state", vin->state);
-    
-    /* CRITICAL: Prevent infinite recursion by returning immediately after state change */
     return 0;
 }
 
