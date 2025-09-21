@@ -1651,6 +1651,38 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
                 pr_debug("VIC frame done interrupt\n");
             }
+
+            /* Handle error conditions - simplified for safety */
+            if ((v1_7 & 0x200000) != 0) {
+                pr_debug("VIC control limit error\n");
+            }
+
+            /* Binary Ninja: if (($v1_7 & 0xde00) != 0 && zx.d(vic_start_ok) == 1) */
+            if ((v1_7 & 0xde00) != 0 && vic_start_ok == 1) {
+                pr_debug("VIC error handler\n");
+                /* Binary Ninja: **($s0 + 0xb8) = 4 */
+                writel(4, vic_regs + 0x0);
+                wmb();
+
+                /* Binary Ninja: while (*$v0_70 != 0) */
+                int timeout = 1000;
+                while (timeout-- > 0) {
+                    u32 addr_ctl = readl(vic_regs + 0x0);
+                    if (addr_ctl == 0) {
+                        break;
+                    }
+                    udelay(1);
+                }
+
+                /* Binary Ninja: **($s0 + 0xb8) = 1 */
+                writel(1, vic_regs + 0x0);
+                wmb();
+            }
+        }
+    }
+
+    /* Binary Ninja: return 1 */
+    return IRQ_HANDLED;
     }
 
     /* CRITICAL SAFETY: Validate vic_regs before any access */
