@@ -641,7 +641,6 @@ tx_isp_vic_notify
 tx_isp_vic_probe
 tx_isp_vic_register_interrupt
 tx_isp_vic_remove
-tx_isp_vic_set_buffer
 tx_isp_vic_slake_subdev
 tx_isp_vic_start
 tx_isp_vic_wait_frame_done
@@ -676,13 +675,11 @@ vic_mdma_irq_function
 vic_pad_event_handler
 vic_pipo_mdma_enable
 vic_proc_write
-vic_read32
 vic_saveraw
 vic_sensor_ops_ioctl
 vic_sensor_ops_sync_sensor_attr
 vic_snapraw
 vic_video_s_stream
-vic_write32
 video_input_cmd_open
 video_input_cmd_set
 video_input_cmd_show

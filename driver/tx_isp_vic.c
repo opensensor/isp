@@ -279,24 +279,36 @@ static struct {
     uint8_t state;    /* GPIO state at offset 0x14 */
 } gpio_info[10];
 
-/* vic_framedone_irq_function - MINIMAL SAFE implementation to prevent crashes */
+/* vic_framedone_irq_function - PROPER VBM buffer management implementation */
 int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 {
-    /* CRITICAL: Minimal frame done handler to prevent memory corruption */
-    /* Just return success without complex buffer management */
+    u32 current_buffer_addr = 0;
 
     if (!vic_dev) {
         return 0;
     }
 
-    /* MINIMAL: Just log frame completion */
-    pr_info("VIC: Frame done - minimal handler\n");
+    pr_info("*** VIC FRAME DONE: Processing frame completion ***\n");
+
+    /* CRITICAL: Get current buffer address from VIC register 0x380 for VBM buffer management */
+    if (vic_dev->vic_regs) {
+        current_buffer_addr = readl(vic_dev->vic_regs + 0x380);
+        pr_info("*** VIC FRAME DONE: Current buffer addr=0x%x from VIC[0x380] ***\n", current_buffer_addr);
+    }
+
+    /* CRITICAL: Call proper VBM buffer management function from main branch */
+    extern int vic_frame_complete_buffer_management(struct tx_isp_vic_device *vic_dev, uint32_t buffer_addr);
+    int ret = vic_frame_complete_buffer_management(vic_dev, current_buffer_addr);
+    if (ret != 0) {
+        pr_warn("*** VIC FRAME DONE: Buffer management returned %d ***\n", ret);
+    }
+
+    /* Signal frame completion for waiting processes */
+    complete(&vic_dev->frame_complete);
+    pr_info("*** VIC FRAME DONE: Frame completion signaled ***\n");
 
     /* Binary Ninja: return result */
     return (int)(uintptr_t)&data_b0000;
-
-
-
 }
 
 /* vic_mdma_irq_function - Binary Ninja implementation for MDMA channel interrupts */
