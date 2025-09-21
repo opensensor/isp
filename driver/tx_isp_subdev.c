@@ -6,6 +6,7 @@
 #include "../include/tx_isp_csi.h"
 #include "../include/tx_isp_vin.h"
 #include "../include/tx_isp_core.h"
+#include "../include/tx_isp_core_device.h"
 #include "../include/tx_isp_vic.h"
 #include "../include/tx_isp_sysfs.h"
 
