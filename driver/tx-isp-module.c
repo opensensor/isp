@@ -4556,10 +4556,12 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("Sensor set control: cmd=0x%x value=%d\n", control_arg.cmd, control_arg.value);
         
         // Route to sensor IOCTL handler if available
-        if (isp_dev->sensor && isp_dev->sensor->sd.ops &&
-            isp_dev->sensor->sd.ops->sensor && isp_dev->sensor->sd.ops->sensor->ioctl) {
-            ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
-                                                        control_arg.cmd, &control_arg.value);
+        extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+        struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+        if (sensor && sensor->sd.ops &&
+            sensor->sd.ops->sensor && sensor->sd.ops->sensor->ioctl) {
+            ret = sensor->sd.ops->sensor->ioctl(&sensor->sd,
+                                               control_arg.cmd, &control_arg.value);
         } else {
             pr_warn("No sensor IOCTL handler available for cmd=0x%x\n", control_arg.cmd);
             ret = 0; // Return success to avoid breaking callers
@@ -4581,15 +4583,17 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 tuning_arg.mode, tuning_arg.cmd, tuning_arg.data_ptr);
         
         // Route tuning operations to sensor
-        if (isp_dev->sensor && isp_dev->sensor->sd.ops && 
-            isp_dev->sensor->sd.ops->sensor && isp_dev->sensor->sd.ops->sensor->ioctl) {
-            
+        extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+        struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+        if (sensor && sensor->sd.ops &&
+            sensor->sd.ops->sensor && sensor->sd.ops->sensor->ioctl) {
+
             // For GET operations, prepare buffer
             if (tuning_arg.mode == 1) {
                 // GET operation - sensor should fill the value
                 uint32_t result_value = 0;
-                ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
-                                                           tuning_arg.cmd, &result_value);
+                ret = sensor->sd.ops->sensor->ioctl(&sensor->sd,
+                                                   tuning_arg.cmd, &result_value);
                 if (ret == 0 && tuning_arg.data_ptr) {
                     // Copy result back to user
                     if (copy_to_user(tuning_arg.data_ptr, &result_value, sizeof(result_value)))
@@ -4602,8 +4606,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     if (copy_from_user(&set_value, tuning_arg.data_ptr, sizeof(set_value)))
                         return -EFAULT;
                 }
-                ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
-                                                           tuning_arg.cmd, &set_value);
+                ret = sensor->sd.ops->sensor->ioctl(&sensor->sd,
+                                                   tuning_arg.cmd, &set_value);
             }
         } else {
             pr_warn("No sensor available for tuning operation\n");
@@ -5231,12 +5235,14 @@ static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void
         
         /* Get ISP device to access sensor */
         isp_dev = (struct tx_isp_dev *)sd->isp;
-        if (!isp_dev || !isp_dev->sensor || !isp_dev->sensor->video.attr) {
+        extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+        struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+        if (!isp_dev || !sensor || !sensor->video.attr) {
             pr_err("vic_sensor_ops_ioctl: No sensor available for VIC start\n");
             return -ENODEV;
         }
-        
-        sensor_attr = isp_dev->sensor->video.attr;
+
+        sensor_attr = sensor->video.attr;
         /* VIC start now only called from vic_core_s_stream - reference driver behavior */
         pr_info("*** vic_sensor_ops_ioctl: VIC start deferred to vic_core_s_stream ***\n");
         return 0;
@@ -5491,10 +5497,11 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                 }
                 
                 /* Initialize other subdevices as needed */
-                if (isp_dev->sensor) {
+                extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+                struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+                if (sensor) {
                     pr_info("Initializing sensor subdevice\n");
                     /* Binary Ninja: Initialize sensor subdevice */
-                    struct tx_isp_sensor *sensor = isp_dev->sensor;
                     if (sensor->sd.ops && sensor->sd.ops->core && sensor->sd.ops->core->init) {
                         int ret = sensor->sd.ops->core->init(&sensor->sd, 1);
                         if (ret) {
