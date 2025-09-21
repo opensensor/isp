@@ -1613,14 +1613,23 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
 
     /* CRITICAL SAFETY: Comprehensive parameter validation to prevent kernel panic */
     if (arg1 == NULL || (uintptr_t)arg1 >= 0xfffff001) {
+        pr_debug("*** VIC IRQ: NULL or invalid arg1 pointer ***\n");
         return IRQ_HANDLED;
     }
 
     /* CRITICAL SAFETY: Validate isp_dev structure integrity */
-    if (!virt_addr_valid(isp_dev) || 
-        (unsigned long)isp_dev < 0x80000000 || 
+    if (!virt_addr_valid(isp_dev) ||
+        (unsigned long)isp_dev < 0x80000000 ||
         (unsigned long)isp_dev >= 0xfffff000) {
         pr_err("*** VIC IRQ: Invalid isp_dev pointer 0x%p - preventing crash ***\n", isp_dev);
+        return IRQ_HANDLED;
+    }
+
+    /* CRITICAL SAFETY: Verify this is actually a tx_isp_dev structure */
+    /* Check if ourISPdev matches to ensure we have the right structure type */
+    extern struct tx_isp_dev *ourISPdev;
+    if (isp_dev != ourISPdev) {
+        pr_err("*** VIC IRQ: dev_id mismatch - expected ourISPdev=%p, got %p ***\n", ourISPdev, isp_dev);
         return IRQ_HANDLED;
     }
 

@@ -685,28 +685,15 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
         extern irqreturn_t isp_irq_handle(int irq, void *dev_id);
         extern irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
 
-        /* CRITICAL FIX: Pass correct dev_id based on device type to prevent kernel panic */
-        void *correct_dev_id = ourISPdev;  /* Default to main ISP device */
+        /* CRITICAL FIX: Always pass main ISP device as dev_id to prevent kernel panic */
+        /* The interrupt handlers expect tx_isp_dev*, not subdevice structures */
+        void *correct_dev_id = ourISPdev;  /* Always use main ISP device */
         const char *dev_name_str = dev_name(&pdev->dev);
 
-        /* For VIC device (isp-w02), pass the VIC device structure */
-        if (strcmp(dev_name_str, "isp-w02") == 0 && ourISPdev && ourISPdev->vic_dev) {
-            correct_dev_id = ourISPdev->vic_dev;
-            pr_info("*** tx_isp_request_irq: Using VIC device as dev_id for IRQ %d ***\n", irq_num);
-        }
-        /* For Core device (tx-isp-core), pass the Core device structure */
-        else if (strcmp(dev_name_str, "tx-isp-core") == 0 && ourISPdev && ourISPdev->core_dev) {
-            correct_dev_id = ourISPdev->core_dev;
-            pr_info("*** tx_isp_request_irq: Using Core device as dev_id for IRQ %d ***\n", irq_num);
-        }
-        /* For VIN device (tx-isp-vin), pass the VIN device structure */
-        else if (strcmp(dev_name_str, "tx-isp-vin") == 0 && ourISPdev && ourISPdev->vin_dev) {
-            correct_dev_id = ourISPdev->vin_dev;
-            pr_info("*** tx_isp_request_irq: Using VIN device as dev_id for IRQ %d ***\n", irq_num);
-        }
-        else {
-            pr_info("*** tx_isp_request_irq: Using main ISP device as dev_id for IRQ %d ***\n", irq_num);
-        }
+        /* FIXED: All interrupt handlers expect tx_isp_dev* as dev_id */
+        /* Passing subdevice structures (vic_dev, core_dev, vin_dev) causes type mismatch crashes */
+        pr_info("*** tx_isp_request_irq: Using main ISP device as dev_id for IRQ %d (device: %s) ***\n",
+                irq_num, dev_name_str);
 
         ret = request_threaded_irq(irq_num,
                                    isp_irq_handle,      /* Main dispatcher handles all IRQs */
