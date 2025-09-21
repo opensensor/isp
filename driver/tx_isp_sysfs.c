@@ -3,6 +3,7 @@
 #include <linux/slab.h>
 #include "include/tx_isp_sysfs.h"
 #include "../include/tx_isp.h"
+#include "../include/tx_isp_core_device.h"
 
 /* External system register functions from reference driver */
 extern void system_reg_write(u32 reg, u32 value);
