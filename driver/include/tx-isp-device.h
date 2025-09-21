@@ -791,10 +791,21 @@ struct isp_tuning_data {
 	spinlock_t lock;                     /* 0x04: Tuning lock */
 	struct mutex mutex;                  /* 0x08: Tuning mutex (32-bit aligned) */
 	uint32_t state;                      /* 0x0c: Tuning state */
-	
+
 	/* Page allocation tracking for proper cleanup */
 	unsigned long allocation_pages;      /* 0x10: Pages allocated via __get_free_pages */
 	int allocation_order;                /* 0x14: Allocation order for cleanup */
+
+	/* Tuning parameter values - CRITICAL: These prevent BadVA crashes */
+	uint32_t brightness;                 /* 0x18: Brightness value (0-255) */
+	uint32_t contrast;                   /* 0x1c: Contrast value (0-255) */
+	uint32_t saturation;                 /* 0x20: Saturation value (0-255) */
+	uint32_t sharpness;                  /* 0x24: Sharpness value (0-255) */
+
+	/* CRITICAL: Padding to reach offset 0x15c where the crash occurs */
+	/* Binary Ninja accesses *(pointer + 0x15c) = *(pointer + 0x57*4) */
+	uint32_t padding[0x57 - 10];        /* 0x28-0x158: Padding to reach 0x15c */
+	uint32_t mode_flag;                  /* 0x15c: Mode flag (checked against 1) - PREVENTS BadVA CRASH */
 	
 	/* Control values - CRITICAL: saturation must be at offset +0x68 */
 	uint32_t reserved1[20];              /* 0x18-0x67: Reserved for proper alignment (reduced by 2) */
