@@ -3535,18 +3535,18 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 
                             /* 5. DPC (Dead Pixel Correction) Updates */
                             extern int tisp_dpc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write);
-                            int dpc_ret = tisp_dpc_par_refresh(dev->tuning_data ? ourISPdev->tuning_data->exposure >> 10 : 0x100, 0x20, 0);
+                            int dpc_ret = tisp_dpc_par_refresh((dev->core_dev && dev->core_dev->tuning_data) ? ((struct isp_tuning_data *)ourISPdev->core_dev->tuning_data)->exposure >> 10 : 0x100, 0x20, 0);
                             pr_info("TUNING: DPC refresh completed: %d\n", dpc_ret);
 
                             /* 6. Sharpening Updates */
                             extern int tisp_sharpen_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write);
-                            int sharpen_ret = tisp_sharpen_par_refresh(dev->tuning_data ? ourISPdev->tuning_data->exposure >> 10 : 0x100, 0x20, 0);
+                            int sharpen_ret = tisp_sharpen_par_refresh((dev->core_dev && dev->core_dev->tuning_data) ? ((struct isp_tuning_data *)ourISPdev->core_dev->tuning_data)->exposure >> 10 : 0x100, 0x20, 0);
                             pr_info("TUNING: Sharpening refresh completed: %d\n", sharpen_ret);
 
                             /* 7. SDNS (Spatial Denoising) Updates */
                             extern int tisp_sdns_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write);
                             extern int tisp_s_sdns_ratio(int ratio);
-                            int sdns_ret = tisp_sdns_par_refresh(dev->tuning_data ? ourISPdev->tuning_data->exposure >> 10 : 0x100, 0x20, 0);
+                            int sdns_ret = tisp_sdns_par_refresh((dev->core_dev && dev->core_dev->tuning_data) ? ((struct isp_tuning_data *)ourISPdev->core_dev->tuning_data)->exposure >> 10 : 0x100, 0x20, 0);
                             if (sdns_ret == 0) sdns_ret = tisp_s_sdns_ratio(128);
                             pr_info("TUNING: SDNS updates completed: %d\n", sdns_ret);
 
