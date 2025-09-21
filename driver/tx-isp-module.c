@@ -4459,7 +4459,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 }
 
                 /* Binary Ninja: Check pad compatibility and flags */
-                if ((src_pad->flags & dst_pad->flags & config[i].flags) == 0) {
+                if ((src_pad->flags & dst_pad->flags & config[i].flag) == 0) {
                     pr_err("tx_isp_video_link_setup: Incompatible pad flags for link %d\n", i);
                     return -EINVAL;
                 }
@@ -4475,18 +4475,18 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 src_pad->link_dst = dst_pad;
                 src_pad->link_src_pad = src_pad;
                 src_pad->link_dst_pad = dst_pad;
-                src_pad->link_flags = config[i].flags | 1;  /* Enable link */
+                src_pad->link_flags = config[i].flag | 1;  /* Enable link */
                 src_pad->state = 3;  /* Connected */
 
                 dst_pad->link_src = dst_pad;
                 dst_pad->link_dst = src_pad;
                 dst_pad->link_src_pad = dst_pad;
                 dst_pad->link_dst_pad = src_pad;
-                dst_pad->link_flags = config[i].flags | 1;  /* Enable link */
+                dst_pad->link_flags = config[i].flag | 1;  /* Enable link */
                 dst_pad->state = 3;  /* Connected */
 
                 pr_info("tx_isp_video_link_setup: Configured link %s->%s\n",
-                        config[i].src_name, config[i].dst_name);
+                        config[i].src.name, config[i].dst.name);
             }
 
             /* Binary Ninja: Store config in device structure at offset 0x10c */
