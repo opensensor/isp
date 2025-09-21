@@ -4945,32 +4945,11 @@ static int tx_isp_init(void)
     }
     pr_info("*** SUBDEVICE REGISTRY INITIALIZED - GRAPH CREATION SHOULD NOW SUCCEED ***\n");
 
-    /* CRITICAL FIX: Register main interrupt dispatcher for IRQ 37 and 38 */
-    /* This prevents the freeze/reboot issue during streaming initialization */
-    pr_info("*** CRITICAL: Registering main interrupt dispatcher for IRQ 37 and 38 ***\n");
-
-    /* CRITICAL FIX: Don't register IRQ 37 - it's causing the kernel panic */
-    /* IRQ 37 (ISP Core) is not needed for basic VIC functionality */
-    /* The kernel panic occurs when IRQ 37 fires and calls ispcore_interrupt_service_routine */
-    pr_info("*** MAIN DISPATCHER: IRQ 37 registration SKIPPED to prevent kernel panic ***\n");
-
-    /* Register IRQ 38 (VIC) with main dispatcher - CRITICAL: Use ISP device as dev_id like reference driver */
-    if (ourISPdev && ourISPdev->vic_dev) {
-        ret = request_threaded_irq(38, isp_irq_handle, isp_irq_thread_handle,
-                                   IRQF_SHARED, "tx-isp-vic", ourISPdev);
-    } else {
-        pr_err("*** CRITICAL: Cannot register VIC IRQ - VIC device not available ***\n");
-        ret = -ENODEV;
-    }
-    if (ret != 0) {
-        pr_err("*** CRITICAL: Failed to register IRQ 38 main dispatcher: %d ***\n", ret);
-        /* Don't free IRQ 37 since we didn't register it */
-        goto err_cleanup_platform_device;
-    }
-    disable_irq(38);  /* Initially disabled */
-    pr_info("*** MAIN DISPATCHER: IRQ 38 registered successfully ***\n");
-
-    pr_info("*** MAIN DISPATCHER: Both IRQ 37 and 38 registered with main dispatcher ***\n");
+    /* CRITICAL FIX: DISABLE main interrupt dispatcher completely */
+    /* The main dispatcher itself is causing the kernel panic */
+    /* Let's go back to no IRQ registration and see if the system is stable */
+    pr_info("*** CRITICAL: Main interrupt dispatcher DISABLED to prevent kernel panic ***\n");
+    pr_info("*** No IRQ registration - testing system stability first ***\n");
 
     /* NOTE: Platform driver already registered earlier - no need to register again */
 
@@ -4984,11 +4963,7 @@ static int tx_isp_init(void)
 
 /* Error handling for reference driver compatibility */
 err_cleanup_irqs:
-    pr_info("*** CLEANUP: Freeing main dispatcher IRQs ***\n");
-    if (ourISPdev && ourISPdev->vic_dev) {
-        free_irq(38, ourISPdev);  /* VIC IRQ uses ISP device as dev_id */
-    }
-    free_irq(37, ourISPdev);  /* Core IRQ uses ISP device as dev_id */
+    pr_info("*** CLEANUP: No IRQs to free (main dispatcher was disabled) ***\n");
 err_cleanup_platform_device:
     private_platform_device_unregister(&tx_isp_platform_device);
 err_cleanup_main_driver:
@@ -5130,11 +5105,11 @@ static void tx_isp_exit(void)
 
         /* CRITICAL: Free main dispatcher IRQs first */
         pr_info("*** CLEANUP: Freeing main dispatcher IRQs ***\n");
-        free_irq(37, local_isp_dev);  /* ISP Core IRQ uses ISP device as dev_id */
+        /* Don't free IRQ 37 since we didn't register it */
         if (local_isp_dev->vic_dev) {
             free_irq(38, local_isp_dev);  /* VIC IRQ uses ISP device as dev_id */
         }
-        pr_info("*** Main dispatcher IRQs 37 and 38 freed ***\n");
+        pr_info("*** Main dispatcher IRQ 38 freed ***\n");
 
         /* Free hardware interrupts if initialized (legacy cleanup) */
         if (isp_irq > 0 && isp_irq != 37 && isp_irq != 38) {
