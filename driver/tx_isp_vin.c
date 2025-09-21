@@ -451,19 +451,6 @@ struct tx_isp_subdev_ops vin_subdev_ops = {
     .internal = &vin_subdev_internal_ops,
 };
 
-/* VIN file operation wrapper functions */
-static int vin_chardev_open(struct inode *inode, struct file *file)
-{
-    pr_info("VIN device opened\n");
-    return 0;
-}
-
-static long vin_chardev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
-{
-    pr_info("VIN IOCTL: cmd=0x%x arg=0x%lx\n", cmd, arg);
-    return 0;
-}
-
 /* Global buffer for video input commands - matching Binary Ninja reference */
 static char video_input_cmd_buf[128];
 
