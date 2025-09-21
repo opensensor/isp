@@ -2648,7 +2648,16 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                     if ((uintptr_t)v0_10 >= 0xfffff001)
                         return 0xffffffea;
                     
-                    void* s4_1 = (void*)(*((uint32_t*)v0_10 + 0x35)); /* *(v0_10 + 0xd4) */
+                    /* CRITICAL FIX: Use safe struct member access instead of dangerous offset *(v0_10 + 0xd4) */
+                    /* MIPS ALIGNMENT CHECK: Ensure v0_10 is properly aligned before accessing */
+                    if (((unsigned long)v0_10 & 0x3) != 0) {
+                        pr_err("*** CRITICAL: v0_10 pointer 0x%p not 4-byte aligned - would cause unaligned access crash! ***\n", v0_10);
+                        return 0xffffffea;
+                    }
+
+                    /* SAFE: Use proper struct member access instead of offset arithmetic */
+                    struct tx_isp_subdev *sd_10 = (struct tx_isp_subdev *)v0_10;
+                    void* s4_1 = sd_10->host_priv;  /* SAFE: Access host_priv field directly */
                     
                     if (s4_1 != 0 && (uintptr_t)s4_1 < 0xfffff001) {
                         void* s3_1 = (void*)arg1[8];
@@ -2734,7 +2743,16 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                 if (v1_6 == 0) {
                     var_58 = 0;
                 } else if ((uintptr_t)v1_6 < 0xfffff001) {
-                    v0_13 = (void*)(*((uint32_t*)v1_6 + 0x35)); /* *(v1_6 + 0xd4) */
+                    /* CRITICAL FIX: Use safe struct member access instead of dangerous offset *(v1_6 + 0xd4) */
+                    /* MIPS ALIGNMENT CHECK: Ensure v1_6 is properly aligned before accessing */
+                    if (((unsigned long)v1_6 & 0x3) != 0) {
+                        pr_err("*** CRITICAL: v1_6 pointer 0x%p not 4-byte aligned - would cause unaligned access crash! ***\n", v1_6);
+                        return 0xffffffea;
+                    }
+
+                    /* SAFE: Use proper struct member access instead of offset arithmetic */
+                    struct tx_isp_subdev *sd_6 = (struct tx_isp_subdev *)v1_6;
+                    v0_13 = sd_6->host_priv;  /* SAFE: Access host_priv field directly */
                     var_58 = 0;
                 } else {
                     var_58 = 0;
@@ -2798,7 +2816,16 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                 if (s3_4 == 0) {
                     var_58 = 0;
                 } else if ((uintptr_t)s3_4 < 0xfffff001) {
-                    v0_21 = (void*)(*((uint32_t*)s3_4 + 0x35)); /* *(s3_4 + 0xd4) */
+                    /* CRITICAL FIX: Use safe struct member access instead of dangerous offset *(s3_4 + 0xd4) */
+                    /* MIPS ALIGNMENT CHECK: Ensure s3_4 is properly aligned before accessing */
+                    if (((unsigned long)s3_4 & 0x3) != 0) {
+                        pr_err("*** CRITICAL: s3_4 pointer 0x%p not 4-byte aligned - would cause unaligned access crash! ***\n", s3_4);
+                        return 0xffffffea;
+                    }
+
+                    /* SAFE: Use proper struct member access instead of offset arithmetic */
+                    struct tx_isp_subdev *sd_34 = (struct tx_isp_subdev *)s3_4;
+                    v0_21 = sd_34->host_priv;  /* SAFE: Access host_priv field directly */
                     var_58 = 0;
                 } else {
                     var_58 = 0;
