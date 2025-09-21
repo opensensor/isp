@@ -1667,9 +1667,10 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
 
                 vic_dev->frame_count += 1;
 
-                /* SAFE: Signal frame completion without dangerous operations */
-                complete(&vic_dev->frame_complete);
-                pr_debug("VIC frame done interrupt - count=%d\n", vic_dev->frame_count);
+                /* CRITICAL FIX: Disable complete() call to prevent deadlock */
+                /* The complete() call can cause scheduling which leads to deadlock */
+                /* complete(&vic_dev->frame_complete); */
+                pr_debug("VIC frame done interrupt - count=%d (complete() disabled to prevent deadlock)\n", vic_dev->frame_count);
             } else {
                 pr_err("*** VIC IRQ: CORRUPTED vic_dev pointer 0x%p - preventing crash ***\n", vic_dev);
             }
