@@ -2503,20 +2503,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_info("*** Channel %d: VIC active_buffer_count set to %d ***\n",
                         channel, vic->active_buffer_count);
 
-                /* CRITICAL FIX: Configure VIC DMA during REQBUFS when buffers are allocated */
-                /* This is the proper place to configure VIC DMA - when we know buffers exist */
-                if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
-                    /* Configure VIC DMA with the first available buffer */
-                    dma_addr_t first_buffer = state->vbm_buffer_addresses[0];
-                    int ret_dma = tx_isp_vic_configure_dma(vic, first_buffer, vic->width, vic->height);
-                    if (ret_dma == 0) {
-                        pr_info("*** REQBUFS: Successfully configured VIC DMA during buffer allocation ***\n");
-                    } else {
-                        pr_err("*** REQBUFS: Failed to configure VIC DMA: %d ***\n", ret_dma);
-                    }
-                } else {
-                    pr_info("*** REQBUFS: VBM buffers not yet available - VIC DMA will be configured during QBUF ***\n");
-                }
+                /* REMOVED: VIC DMA configuration during REQBUFS */
+                /* Reference driver configures VIC DMA during streaming via vic_pipo_mdma_enable */
+                /* This happens automatically in ispvic_frame_channel_s_stream when streaming starts */
+                pr_info("*** REQBUFS: VIC DMA will be configured during streaming via vic_pipo_mdma_enable ***\n");
             }
 
             pr_info("*** Channel %d: MEMORY-AWARE REQBUFS SUCCESS - %d buffers ***\n",
