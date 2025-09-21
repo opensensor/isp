@@ -1612,6 +1612,8 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     int timeout;
     int i;
 
+    pr_info("*** VIC IRQ ENTRY: IRQ %d, dev_id=%p ***\n", irq, dev_id);
+
     /* CRITICAL SAFETY: Use the dev_id parameter passed by the interrupt dispatcher */
     isp_dev = (struct tx_isp_dev *)dev_id;
     if (!isp_dev) {
