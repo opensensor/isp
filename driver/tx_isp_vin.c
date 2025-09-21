@@ -261,6 +261,20 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
         }
     }
 
+    /* Binary Ninja: void* $a0 = *(arg1 + 0xe4) */
+    /* FIXED: Get sensor from subdev index 3 where it's actually registered */
+    if (ourISPdev->subdevs[3] && ourISPdev->subdevs[3]->host_priv) {
+        sensor = (struct tx_isp_sensor *)ourISPdev->subdevs[3]->host_priv;
+    } else {
+        sensor = NULL;
+    }
+
+    if (!sensor) {
+        /* Binary Ninja: if ($a0 == 0) goto label_132f4 */
+        pr_err("VIN: vin_s_stream: no active sensor at subdev index 3\n");
+        goto label_132f4;
+    }
+
     /* Binary Ninja: int32_t* $v0_2 = *(*($a0 + 0xc4) + 4) */
     /* Binary Ninja reference: Access function pointer directly from sensor structure */
     if (sensor && sensor->sd.ops && sensor->sd.ops->video && sensor->sd.ops->video->s_stream) {
