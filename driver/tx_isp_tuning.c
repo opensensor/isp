@@ -3596,10 +3596,10 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                                 /* These registers contain the working CSI PHY configuration that must be preserved */
                             } else {
                                 /* Only allow CSI PHY register maintenance when not streaming */
-                                if (ourISPdev->core_regs) {
+                                if (ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
                                     /* Safe register refresh when VIC is not streaming */
-                                    u32 current_val = readl(ourISPdev->core_regs + 0x10);
-                                    writel(current_val, ourISPdev->core_regs + 0x10);  /* Refresh interrupt enable */
+                                    u32 current_val = readl(ourISPdev->core_dev->core_regs + 0x10);
+                                    writel(current_val, ourISPdev->core_dev->core_regs + 0x10);  /* Refresh interrupt enable */
                                     wmb();
                                 }
                             }
@@ -3615,20 +3615,20 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 }
                 
                 if (enable) {
-                    pr_info("*** DEBUG: enable=1, dev->tuning_enabled=%d ***\n", dev->tuning_enabled);
-                    if (dev->tuning_enabled != 3) {
+                    pr_info("*** DEBUG: enable=1, dev->core_dev->tuning_enabled=%d ***\n", dev->core_dev ? dev->core_dev->tuning_enabled : -1);
+                    if (dev->core_dev && dev->core_dev->tuning_enabled != 3) {
                         /* CRITICAL: Initialize tuning_data if not already initialized */
-                        if (!dev->tuning_data) {
+                        if (!dev->core_dev->tuning_data) {
                             pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
 
                             /* Allocate tuning data structure using the reference implementation */
-                            ourISPdev->tuning_data = isp_core_tuning_init(dev);
-                            if (!dev->tuning_data) {
+                            ourISPdev->core_dev->tuning_data = isp_core_tuning_init(dev);
+                            if (!dev->core_dev->tuning_data) {
                                 pr_err("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
                                 return -ENOMEM;
                             }
 
-                            pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", ourISPdev->tuning_data);
+                            pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", ourISPdev->core_dev->tuning_data);
 
                             /* MCP LOG: Tuning data structure successfully initialized */
                             pr_info("MCP_LOG: ISP tuning data structure allocated and initialized successfully\n");
@@ -3640,7 +3640,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         /* Reference driver only sets tuning_enabled flag - no hardware initialization */
                         ret = 0;  /* Success - just enable tuning without hardware reset */
 
-                        ourISPdev->tuning_enabled = 3;
+                        ourISPdev->core_dev->tuning_enabled = 3;
                         auto_init_done = true;  /* Mark as auto-initialized */
                         pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning enabled\n");
                     } else {
@@ -3650,8 +3650,8 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 } else {
                     /* BINARY NINJA REFERENCE: Simple tuning disable - no hardware deinitialization */
                     pr_info("*** BINARY NINJA REFERENCE: Tuning disable - no hardware reset performed ***\n");
-                    if (dev->tuning_enabled == 3) {
-                        dev->tuning_enabled = 0;
+                    if (dev->core_dev && dev->core_dev->tuning_enabled == 3) {
+                        dev->core_dev->tuning_enabled = 0;
                         pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning disabled (Binary Ninja reference behavior)\n");
                     }
                     ret = 0;  /* Success - just disable tuning without hardware reset */
