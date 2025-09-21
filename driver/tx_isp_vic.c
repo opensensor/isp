@@ -29,17 +29,6 @@ static struct tx_isp_vic_device *dump_vsd = NULL;  /* Global VIC device pointer 
 static void *test_addr = NULL;  /* Test address pointer */
 irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);
 
-/* system_reg_write is now defined in tx-isp-module.c - removed duplicate */
-
-/* Debug function to track vic_start_ok changes */
-static void debug_vic_start_ok_change(int new_value, const char *location, int line)
-{
-    if (vic_start_ok != new_value) {
-        pr_info("*** VIC_START_OK CHANGE: %d -> %d at %s:%d ***\n",
-                vic_start_ok, new_value, location, line);
-    }
-    vic_start_ok = new_value;
-}
 /* BINARY NINJA EXACT: tx_vic_enable_irq implementation */
 void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 {

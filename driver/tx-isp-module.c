@@ -512,7 +512,6 @@ struct platform_device tx_isp_core_platform_device = {
 /* Forward declaration for VIC event handler */
 
 /* Forward declarations - Using actual function names from reference driver */
-static void frame_channel_wakeup_waiters(struct frame_channel_device *fcd);
 int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 irqreturn_t isp_irq_handle(int irq, void *dev_id);
@@ -520,7 +519,6 @@ irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
 int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data);
 static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev);
 static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const char *sensor_name);
-static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int channel);
 static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev);
 static struct vic_buffer_entry *pop_buffer_fifo(struct list_head *fifo_head);
 static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entry *buffer);
@@ -2216,33 +2214,6 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
 }
 
 EXPORT_SYMBOL(tx_isp_video_s_stream);
-
-/* Real hardware frame completion detection - SDK compatible */
-static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int channel)
-{
-
-	pr_info("tx_isp_hardware_frame_done_handler: channel=%d\n", channel);
-    if (!isp_dev || channel < 0 || channel >= num_channels) {
-        return;
-    }
-    
-    pr_info("Hardware frame completion detected on channel %d\n", channel);
-    
-    /* Wake up frame waiters with real hardware completion - SIMPLE APPROACH */
-    if (channel >= 0 && channel < num_channels) {
-        frame_channel_wakeup_waiters(&frame_channels[channel]);
-    }
-    
-    /* Update frame completion count for statistics */
-    /* Note: frame_count moved to frame_complete in new architecture */
-    
-    /* Complete frame operation if completion is available */
-//    if (isp_dev->frame_complete.done == 0) {
-//        complete(&isp_dev->frame_complete);
-//    }
-}
-
-/* Frame channel implementations removed - handled by FS probe instead */
 
 // Destroy ISP tuning device node (reference: tisp_code_destroy_tuning_node)
 static void destroy_isp_tuning_device(void)
@@ -5982,23 +5953,11 @@ static irqreturn_t ispmodule_ip_done_irq_handler(int irq, void *dev_id)
     
     pr_info("*** ISP IP DONE INTERRUPT: Processing complete ***\n");
     
-//    /* Handle ISP processing completion - wake up any waiters */
-//    if (isp_dev->frame_complete.done == 0) {
-//        complete(&isp_dev->frame_complete);
-//    }
-    
     /* Update frame processing statistics */
     /* Use external frame counter since frame_complete is a completion struct */
     extern atomic64_t frame_done_cnt;
     atomic64_inc(&frame_done_cnt);
-    
-    /* Wake up frame channel waiters */
-//    int i;
-//    for (i = 0; i < num_channels; i++) {
-//        if (frame_channels[i].state.streaming) {
-//            frame_channel_wakeup_waiters(&frame_channels[i]);
-//        }
-//    }
+
     
     return IRQ_HANDLED;
 }
@@ -6213,24 +6172,6 @@ static int __enqueue_in_driver(void *buffer_struct)
     
     /* Binary Ninja: return result */
     return result;
-}
-
-/* Wake up waiters when frame is ready - SIMPLIFIED to match reference driver */
-static void frame_channel_wakeup_waiters(struct frame_channel_device *fcd)
-{
-    unsigned long flags;
-
-    if (!fcd) {
-        return;
-    }
-
-    /* Simple frame ready notification - following reference driver pattern */
-    spin_lock_irqsave(&fcd->state.buffer_lock, flags);
-    fcd->state.frame_ready = true;
-    spin_unlock_irqrestore(&fcd->state.buffer_lock, flags);
-
-    /* Wake up any threads waiting for frame completion */
-    wake_up_interruptible(&fcd->state.frame_wait);
 }
 
 /* Allow sensor drivers to unregister */

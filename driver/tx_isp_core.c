@@ -1003,16 +1003,6 @@ struct isp_core_channel {
 
 static struct isp_core_channel isp_core_channels[3] = {0};  /* Channel 0, 1, 2 */
 
-/* Frame channel wakeup function - placeholder implementation */
-static void frame_channel_wakeup_waiters(struct isp_core_channel *channel)
-{
-    if (channel) {
-        pr_info("frame_channel_wakeup_waiters: Waking up waiters for channel\n");
-        /* In full implementation, this would wake up waiting processes */
-        isp_frame_done_wakeup();  /* Call the main frame done wakeup */
-    }
-}
-
 /* system_irq_func_set - EXACT Binary Ninja implementation */
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id))
 {
