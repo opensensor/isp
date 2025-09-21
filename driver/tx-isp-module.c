@@ -866,7 +866,9 @@ static int sensor_alloc_analog_gain(int gain) {
      * *arg2 = var_10.w
      * return result */
 
-    if (!ourISPdev || !ourISPdev->sensor) {
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor) {
         return gain; /* Return input gain as fallback */
     }
 
@@ -6180,10 +6182,10 @@ int tx_isp_unregister_sensor_subdev(struct tx_isp_subdev *sd)
     mutex_unlock(&sensor_list_mutex);
     
     extern struct tx_isp_sensor *tx_isp_get_sensor(void);
-    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
-    if (sensor && &sensor->sd == sd) {
+    struct tx_isp_sensor *isp_sensor = tx_isp_get_sensor();
+    if (isp_sensor && &isp_sensor->sd == sd) {
         /* Sensor is being unregistered - clear from subdev array */
-        if (ourISPdev && ourISPdev->subdevs[3] && ourISPdev->subdevs[3]->host_priv == sensor) {
+        if (ourISPdev && ourISPdev->subdevs[3] && ourISPdev->subdevs[3]->host_priv == isp_sensor) {
             ourISPdev->subdevs[3] = NULL;
         }
     }
@@ -6285,12 +6287,14 @@ static void tisp_set_sensor_integration_time_short(uint32_t integration_time)
     pr_info("tisp_set_sensor_integration_time_short: Setting integration time to %u\n", integration_time);
     
     /* CRITICAL: This would normally write to sensor via I2C */
-    if (ourISPdev && ourISPdev->sensor && ourISPdev->sensor->sd.ops &&
-        ourISPdev->sensor->sd.ops->sensor && ourISPdev->sensor->sd.ops->sensor->ioctl) {
-        
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (sensor && sensor->sd.ops &&
+        sensor->sd.ops->sensor && sensor->sd.ops->sensor->ioctl) {
+
         /* Call sensor IOCTL to set integration time */
-        ourISPdev->sensor->sd.ops->sensor->ioctl(&ourISPdev->sensor->sd,
-                                                0x980901, &integration_time);
+        sensor->sd.ops->sensor->ioctl(&sensor->sd,
+                                     0x980901, &integration_time);
     }
 }
 
@@ -6314,12 +6318,14 @@ void tisp_set_sensor_analog_gain_short(uint32_t sensor_gain)
     final_gain = (uint32_t)var_1a;
 
     /* CRITICAL: Apply gain to sensor via I2C */
-    if (ourISPdev && ourISPdev->sensor && ourISPdev->sensor->sd.ops &&
-        ourISPdev->sensor->sd.ops->sensor && ourISPdev->sensor->sd.ops->sensor->ioctl) {
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (sensor && sensor->sd.ops &&
+        sensor->sd.ops->sensor && sensor->sd.ops->sensor->ioctl) {
 
         /* Call sensor IOCTL to set analog gain */
-        ourISPdev->sensor->sd.ops->sensor->ioctl(&ourISPdev->sensor->sd,
-                                                0x980902, &final_gain);
+        sensor->sd.ops->sensor->ioctl(&sensor->sd,
+                                     0x980902, &final_gain);
     }
 
     pr_info("tisp_set_sensor_analog_gain_short: Applied analog gain 0x%x to sensor\n", final_gain);
