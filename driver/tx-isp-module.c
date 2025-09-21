@@ -2094,6 +2094,26 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
         return -EINVAL;
     }
 
+    /* CRITICAL: Initialize core before streaming (transition from state 2 to 3) */
+    if (arg2 == 1) {  /* Stream ON */
+        if (arg1->core_dev && arg1->core_dev->sd.ops &&
+            arg1->core_dev->sd.ops->core && arg1->core_dev->sd.ops->core->init) {
+
+            pr_info("*** tx_isp_video_s_stream: Calling core init to transition from state 2 to 3 ***\n");
+            int core_init_ret = arg1->core_dev->sd.ops->core->init(&arg1->core_dev->sd, 1);
+
+            if (core_init_ret == 0) {
+                pr_info("*** tx_isp_video_s_stream: Core initialized successfully - state should be 3 ***\n");
+                pr_info("*** CORE STATE AFTER INIT: %d (should be 3) ***\n", arg1->core_dev->state);
+            } else {
+                pr_err("*** tx_isp_video_s_stream: Core initialization failed: %d ***\n", core_init_ret);
+                return core_init_ret;
+            }
+        } else {
+            pr_warn("*** tx_isp_video_s_stream: Core device not available for initialization ***\n");
+        }
+    }
+
     /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
     s4 = &arg1->subdevs[0];  /* subdevs array at offset 0x38 */
 
