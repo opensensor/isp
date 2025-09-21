@@ -518,7 +518,6 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id);
 irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
 int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data);
 static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev);
-static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const char *sensor_name);
 static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev);
 static struct vic_buffer_entry *pop_buffer_fifo(struct list_head *fifo_head);
 static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entry *buffer);
@@ -1343,37 +1342,6 @@ static void* find_subdev_link_pad(struct tx_isp_dev *isp_dev, char *name)
     return NULL;
 }
 
-// Sensor synchronization matching reference ispcore_sync_sensor_attr - SDK compatible
-static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sensor_attribute *sensor_attr)
-{
-    if (!isp_dev || !sensor_attr) {
-        pr_err("Invalid parameters for sensor sync\n");
-        return -EINVAL;
-    }
-    
-    // Work with actual SDK sensor structure
-    if (isp_dev->sensor) {
-        // Copy sensor attributes to device sensor
-        memcpy(&isp_dev->sensor->attr, sensor_attr, sizeof(struct tx_isp_sensor_attribute));
-        pr_info("Sensor attr sync completed for %s\n", sensor_attr->name);
-        
-        // Update device sensor info
-        strncpy(isp_dev->sensor_name, sensor_attr->name, sizeof(isp_dev->sensor_name) - 1);
-        /* CRITICAL FIX: Use ACTUAL sensor output dimensions, not total dimensions */
-        /* The real sensor driver provides total dimensions (2200x1418) but VIC needs output dimensions (1920x1080) */
-        isp_dev->sensor_width = 1920;   /* ACTUAL sensor output width */
-        isp_dev->sensor_height = 1080;  /* ACTUAL sensor output height */
-        pr_info("*** DIMENSION FIX: Set global sensor dimensions to ACTUAL output %dx%d (not total %dx%d) ***\n",
-                isp_dev->sensor_width, isp_dev->sensor_height,
-                sensor_attr->total_width, sensor_attr->total_height);
-        
-        return 0;
-    }
-    
-    pr_info("No active sensor for sync\n");
-    return -ENODEV;
-}
-
 // Simplified VIC registration - removed complex platform device array
 static int vic_registered = 0;
 
@@ -1603,57 +1571,6 @@ static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev)
     pr_info("Sensors will register via IOCTL 0x805056c1 when loaded\n");
     
     // Always return success - sensors will register dynamically
-    return 0;
-}
-
-// Activate sensor pipeline - connects sensor -> CSI -> VIC -> ISP chain - SDK compatible
-static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const char *sensor_name)
-{
-    int ret = 0;
-    
-    if (!isp_dev || !sensor_name) {
-        return -EINVAL;
-    }
-    
-    pr_info("Activating %s sensor pipeline: Sensor->CSI->VIC->Core\n", sensor_name);
-    
-    // Configure pipeline connections with actual SDK devices
-    if (isp_dev->csi_dev) {
-        pr_info("Connecting %s sensor to CSI\n", sensor_name);
-        // Configure CSI for sensor input
-        if (isp_dev->csi_dev->state < 2) {
-            isp_dev->csi_dev->state = 2; // Mark as enabled
-        }
-    }
-    
-    if (isp_dev->vic_dev) {
-        pr_info("Connecting CSI to VIC\n");
-        // Configure VIC for CSI input
-        if (isp_dev->vic_dev->state < 2) {
-            isp_dev->vic_dev->state = 2; // Mark as enabled
-        }
-    }
-    
-    // Sync sensor attributes to ISP core
-    if (isp_dev->sensor) {
-        // Create sensor attributes for pipeline activation
-        struct tx_isp_sensor_attribute sensor_attr = {0};
-        sensor_attr.name = sensor_name;
-        sensor_attr.chip_id = 0x2053; // GC2053 ID
-        sensor_attr.total_width = 1920;
-        sensor_attr.total_height = 1080;
-        sensor_attr.integration_time = 1000; // Default integration time
-        sensor_attr.max_again = 0x40000; // Default gain (format .16)
-        
-        ret = tx_isp_sync_sensor_attr(isp_dev, &sensor_attr);
-        if (ret) {
-            pr_warn("Failed to sync %s sensor attributes: %d\n", sensor_name, ret);
-        } else {
-            pr_info("Synced %s sensor attributes to ISP core\n", sensor_name);
-        }
-    }
-    
-    pr_info("Sensor pipeline activation complete\n");
     return 0;
 }
 
