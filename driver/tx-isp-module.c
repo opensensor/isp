@@ -4015,13 +4015,24 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                                     /* CRITICAL: Set up sensor->video.attr to point to sensor->attr */
                                     sensor->video.attr = &sensor->attr;
 
-                                    /* Initialize basic sensor attributes for VIC compatibility */
-                                    sensor->attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;
-                                    sensor->attr.mipi.lans = 2; /* Default to 2 lanes */
-                                    sensor->attr.mipi.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10;
-                                    sensor->attr.total_width = 1920;  /* Default dimensions */
-                                    sensor->attr.total_height = 1080;
-                                    sensor->attr.integration_time = 1000; /* Default integration time */
+                                    /* CRITICAL FIX: Copy real sensor attributes from GC2053 module */
+                                    struct tx_isp_sensor *real_sensor = (struct tx_isp_sensor *)sensor_sd->host_priv;
+                                    if (real_sensor && real_sensor->video.attr) {
+                                        /* Copy the real sensor attributes from GC2053 module */
+                                        memcpy(&sensor->attr, real_sensor->video.attr, sizeof(struct tx_isp_sensor_attribute));
+                                        pr_info("*** COPIED REAL SENSOR ATTRIBUTES FROM GC2053 MODULE ***\n");
+                                        pr_info("*** Real sensor attr: dbus_type=%d, width=%d, height=%d ***\n",
+                                                sensor->attr.dbus_type, sensor->attr.total_width, sensor->attr.total_height);
+                                    } else {
+                                        /* Fallback: Initialize basic sensor attributes for VIC compatibility */
+                                        sensor->attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;
+                                        sensor->attr.mipi.lans = 2; /* Default to 2 lanes */
+                                        sensor->attr.mipi.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10;
+                                        sensor->attr.total_width = 1920;  /* Default dimensions */
+                                        sensor->attr.total_height = 1080;
+                                        sensor->attr.integration_time = 1000; /* Default integration time */
+                                        pr_info("*** USING DEFAULT SENSOR ATTRIBUTES (real sensor attrs not available) ***\n");
+                                    }
 
                                     pr_info("*** CREATED MINIMAL SENSOR STRUCTURE FOR VIC COMPATIBILITY ***\n");
                                     pr_info("*** sensor->video.attr=%p (points to sensor->attr) ***\n", sensor->video.attr);

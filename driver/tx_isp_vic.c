@@ -662,8 +662,15 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     struct tx_isp_sensor *sensor = tx_isp_get_sensor();
     if (sensor && sensor->video.attr) {
         sensor_attr = sensor->video.attr;
+        pr_info("tx_isp_vic_start: Found sensor attributes: dbus_type=%d, width=%d, height=%d\n",
+                sensor_attr->dbus_type, sensor_attr->total_width, sensor_attr->total_height);
     } else {
         pr_err("tx_isp_vic_start: No sensor attributes available\n");
+        if (sensor) {
+            pr_err("tx_isp_vic_start: sensor=%p, sensor->video.attr=%p\n", sensor, sensor->video.attr);
+        } else {
+            pr_err("tx_isp_vic_start: sensor is NULL\n");
+        }
         return -ENODEV;
     }
 
