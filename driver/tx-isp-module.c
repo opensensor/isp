@@ -4722,11 +4722,30 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         /* Binary Ninja reference: Simple loop through all subdevices for init */
         pr_info("*** VIDIOC_STREAMON: Initializing all subdevices (Binary Ninja loop pattern) ***\n");
 
-        /* CRITICAL SAFETY: Skip the dangerous subdev init loop entirely */
-        /* This loop calls tx_isp_vin_init which has unsafe pointer operations that cause kernel panics */
-        /* The VIN, CSI, and VIC devices are already initialized during probe - no need to re-init */
-        pr_info("*** VIDIOC_STREAMON: SKIPPING dangerous subdev init loop to prevent kernel panic ***\n");
-        pr_info("*** VIDIOC_STREAMON: All subdevices already initialized during probe ***\n");
+        /* CRITICAL SAFETY: Initialize only the CORE subdev, skip dangerous VIN init */
+        /* The core needs to be initialized to state 3 for streaming to work */
+        pr_info("*** VIDIOC_STREAMON: Initializing CORE subdev only (skipping dangerous VIN init) ***\n");
+
+        for (int init_i = 0; init_i < 0x10; init_i++) {
+            struct tx_isp_subdev *init_sd = isp_dev->subdevs[init_i];
+            if (init_sd && init_sd->ops && init_sd->ops->core && init_sd->ops->core->init) {
+
+                /* CRITICAL SAFETY: Only initialize CORE subdev, skip VIN and others */
+                /* Check if this is the core subdev by looking for core device */
+                if (init_sd == &isp_dev->core_dev->sd) {
+                    pr_info("*** VIDIOC_STREAMON: Found CORE subdev at index %d - initializing ***\n", init_i);
+                    int core_init_ret = init_sd->ops->core->init(init_sd, 1);
+                    if (core_init_ret == 0) {
+                        pr_info("*** VIDIOC_STREAMON: CORE init SUCCESS - core should be in state 3 ***\n");
+                    } else {
+                        pr_warn("*** VIDIOC_STREAMON: CORE init failed: %d ***\n", core_init_ret);
+                    }
+                    break;  /* Found and initialized core, stop looking */
+                } else {
+                    pr_info("*** VIDIOC_STREAMON: Skipping non-core subdev %d to prevent crashes ***\n", init_i);
+                }
+            }
+        }
 
         return tx_isp_video_s_stream(isp_dev, 1);
     }
