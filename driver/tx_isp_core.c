@@ -1102,7 +1102,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     /* Handlers registered via system_irq_func_set() are stored but not invoked by any dispatcher */
     /* The reference driver uses direct function calls instead of callback arrays */
 
-    return ret;
+    return IRQ_HANDLED;
 }
 
 /* ISP interrupt thread handler - for threaded IRQ processing */
