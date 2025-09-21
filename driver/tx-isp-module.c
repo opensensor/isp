@@ -3273,42 +3273,39 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -EFAULT;
         }
 
-        /* Binary Ninja: Loop through subdevices exactly as reference */
-        void* $a0_2 = *(void **)$s0_3;
+        /* SAFE: Loop through subdevices with proper pointer validation */
+        for (int i = 0; i < ISP_MAX_SUBDEVS; i++) {
+            struct tx_isp_subdev *sd = isp_dev->subdevs[i];
 
-        while (true) {
-            if ($a0_2 != NULL) {
-                struct tx_isp_subdev *sd = (struct tx_isp_subdev *)$a0_2;
-                /* Binary Ninja: void* $v0_6 = *(*($a0_2 + 0xc4) + 0xc) */
-                if (sd->ops && sd->ops->sensor) {
-                    /* Binary Ninja: int32_t $v0_7 = *($v0_6 + 8) */
-                    if (sd->ops->sensor->ioctl) {
-                        /* Binary Ninja: int32_t $v0_8 = $v0_7() - NO COMMAND PARAMETER! */
-                        int32_t ret = sd->ops->sensor->ioctl(sd, 0, &var_98);
-
-                        if (ret == 0) {
-                            $s0_3 = (char *)$s0_3 + 4;
-                        } else {
-                            $s0_3 = (char *)$s0_3 + 4;
-                            if (ret != 0xfffffdfd) {
-                                return ret;
-                            }
-                        }
-                    } else {
-                        $s0_3 = (char *)$s0_3 + 4;
-                    }
-                } else {
-                    $s0_3 = (char *)$s0_3 + 4;
-                }
-            } else {
-                $s0_3 = (char *)$s0_3 + 4;
+            if (sd == NULL) {
+                continue; /* Skip empty slots */
             }
 
-            if ((void *)$s0_3 == (void *)&isp_dev->subdevs[ISP_MAX_SUBDEVS]) {
-                break;
+            /* CRITICAL SAFETY: Validate sd pointer before ANY access */
+            if (!virt_addr_valid(sd) ||
+                (unsigned long)sd < 0x80000000 ||
+                (unsigned long)sd >= 0xfffff000) {
+                pr_err("*** TX_ISP_SENSOR_ENUM_INPUT: Invalid subdev pointer 0x%p at index %d - SKIPPING ***\n", sd, i);
+                continue; /* Skip invalid pointers */
             }
 
-            $a0_2 = *(void **)$s0_3;
+            /* CRITICAL SAFETY: Check MIPS alignment before accessing struct members */
+            if (((unsigned long)sd & 0x3) != 0) {
+                pr_err("*** TX_ISP_SENSOR_ENUM_INPUT: Unaligned subdev pointer 0x%p at index %d - SKIPPING ***\n", sd, i);
+                continue; /* Skip unaligned pointers that would cause BadVA crash */
+            }
+
+            /* SAFE: Check if this is a valid subdev with proper null checks */
+            if (!sd->ops || !sd->ops->sensor || !sd->ops->sensor->ioctl) {
+                continue; /* Skip subdevs without sensor IOCTL */
+            }
+
+            /* SAFE: Call sensor IOCTL with proper error handling */
+            int32_t ret = sd->ops->sensor->ioctl(sd, 0, &var_98);
+
+            if (ret != 0 && ret != 0xfffffdfd) {
+                return ret; /* Stop on error (except 0xfffffdfd which means continue) */
+            }
         }
 
         s6_1 = 0;
@@ -3479,13 +3476,27 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         sensor_name[sizeof(sensor_name) - 1] = '\0';
         pr_debug("TX_ISP_SENSOR_REGISTER: Registering sensor '%s'\n", sensor_name);
 
-        /* SAFE: Loop through subdevices with proper bounds checking */
+        /* SAFE: Loop through subdevices with proper bounds checking and pointer validation */
         s6_1 = 0;
         for (int i = 0; i < ISP_MAX_SUBDEVS; i++) {
             struct tx_isp_subdev *sd = isp_dev->subdevs[i];
 
             if (sd == NULL) {
                 continue; /* Skip empty slots */
+            }
+
+            /* CRITICAL SAFETY: Validate sd pointer before ANY access */
+            if (!virt_addr_valid(sd) ||
+                (unsigned long)sd < 0x80000000 ||
+                (unsigned long)sd >= 0xfffff000) {
+                pr_err("*** TX_ISP_SENSOR_REGISTER: Invalid subdev pointer 0x%p at index %d - SKIPPING ***\n", sd, i);
+                continue; /* Skip invalid pointers */
+            }
+
+            /* CRITICAL SAFETY: Check MIPS alignment before accessing struct members */
+            if (((unsigned long)sd & 0x3) != 0) {
+                pr_err("*** TX_ISP_SENSOR_REGISTER: Unaligned subdev pointer 0x%p at index %d - SKIPPING ***\n", sd, i);
+                continue; /* Skip unaligned pointers that would cause BadVA crash */
             }
 
             /* SAFE: Check if this is a valid subdev with proper null checks */

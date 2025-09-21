@@ -372,7 +372,7 @@ unlock:
 /**
  * tx_isp_init_source_subdev - Initialize a source subdevice
  */
-static int tx_isp_init_source_subdev(struct tx_isp_dev *isp, 
+static int tx_isp_init_source_subdev(struct tx_isp_dev *isp,
                                     struct tx_isp_subdev_runtime *runtime)
 {
     struct tx_isp_subdev_desc *desc = runtime->desc;
@@ -383,11 +383,38 @@ static int tx_isp_init_source_subdev(struct tx_isp_dev *isp,
         return 0;
     }
 
-    /* Store in ISP device graph array for compatibility */
+    /* CRITICAL FIX: Only store tx_isp_subdev* in subdev_graph, not arbitrary driver_data */
+    /* Check if driver_data is actually a tx_isp_subdev structure */
     if (desc->dst_index < ISP_MAX_SUBDEVS) {
-        isp->subdev_graph[desc->dst_index] = driver_data;
-        pr_info("tx_isp_init_source_subdev: %s stored at index %d\n",
-                desc->name, desc->dst_index);
+        /* Try to extract tx_isp_subdev from driver_data if it's a device structure */
+        struct tx_isp_subdev *sd = NULL;
+
+        /* For CSI device, extract subdev from csi_device structure */
+        if (strcmp(desc->name, "tx-isp-csi") == 0) {
+            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)driver_data;
+            if (csi_dev) {
+                sd = &csi_dev->sd;
+            }
+        }
+        /* For VIC device, extract subdev from vic_device structure */
+        else if (strcmp(desc->name, "isp-w02") == 0) {
+            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)driver_data;
+            if (vic_dev) {
+                sd = &vic_dev->sd;
+            }
+        }
+        /* For other devices, assume driver_data is already a subdev */
+        else {
+            sd = (struct tx_isp_subdev *)driver_data;
+        }
+
+        if (sd) {
+            isp->subdev_graph[desc->dst_index] = sd;  /* Store tx_isp_subdev*, not driver_data */
+            pr_info("tx_isp_init_source_subdev: %s subdev stored at index %d\n",
+                    desc->name, desc->dst_index);
+        } else {
+            pr_warn("tx_isp_init_source_subdev: Could not extract subdev from %s driver_data\n", desc->name);
+        }
     }
 
     runtime->initialized = true;
