@@ -7676,39 +7676,6 @@ static int subdev_sensor_ops_set_input(struct v4l2_subdev *sd, unsigned int inpu
 }
 EXPORT_SYMBOL(subdev_sensor_ops_set_input);
 
-/* ispcore_sensor_ops_ioctl - ISP core sensor operations IOCTL */
-static long ispcore_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
-{
-    pr_info("ispcore_sensor_ops_ioctl: cmd=0x%x\n", cmd);
-
-    if (!sd) {
-        return -EINVAL;
-    }
-
-    /* Handle ISP core sensor-specific IOCTLs */
-    switch (cmd) {
-        case 0x800030: /* ISP core sensor start */
-            return sensor_start_changes();
-
-        case 0x800031: /* ISP core sensor stop */
-            sd->vin_state = TX_ISP_MODULE_INIT;
-            return 0;
-
-        case 0x800032: /* ISP core sensor reset */
-            sd->vin_state = TX_ISP_MODULE_INIT;
-            return 0;
-
-        default:
-            pr_info("ispcore_sensor_ops_ioctl: Unsupported cmd 0x%x\n", cmd);
-            return -ENOTTY;
-    }
-}
-EXPORT_SYMBOL(ispcore_sensor_ops_ioctl);
-
-
-
-
-
 /* apical_isp_core_ops_s_ctrl - Apical ISP core set control */
 static int apical_isp_core_ops_s_ctrl(struct v4l2_ctrl *ctrl)
 {

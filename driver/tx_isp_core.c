@@ -604,7 +604,7 @@ int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg
 
 /* Core subdev operations - matches the pattern used by other devices */
 struct tx_isp_subdev_core_ops core_subdev_core_ops = {
-    .init = core_subdev_core_init_bridge,
+    .init = NULL, // TODO
     .reset = NULL,
     .ioctl = ispcore_core_ops_ioctl,  /* Wire in the IOCTL handler */
 };
