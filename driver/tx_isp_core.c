@@ -3245,15 +3245,15 @@ int tx_isp_core_probe(struct platform_device *pdev)
             /* REMOVED: Global memory mapping - let each subdevice handle its own memory per reference driver */
             pr_info("*** tx_isp_core_probe: Skipping global memory mapping - subdevices will handle their own memory ***\n");
 
-            /* CRITICAL FIX: Don't switch devices - this causes hangs and corruption */
-            /* The Core ISP subdev should remain separate from the main ISP device */
-            if (ourISPdev) {
-                pr_info("*** tx_isp_core_probe: Using existing ourISPdev: %p, Core ISP device: %p ***\n", ourISPdev, isp_dev);
-                /* Don't free or switch devices - keep them separate as intended */
-                pr_info("*** tx_isp_core_probe: Keeping Core ISP device separate to prevent hangs ***\n");
+            /* SIMPLIFIED FIX: Just use the first device created as the global device */
+            if (!ourISPdev) {
+                pr_info("*** tx_isp_core_probe: Setting ourISPdev to isp_dev: %p ***\n", isp_dev);
+                ourISPdev = isp_dev;  /* Make this device the global one */
             } else {
-                pr_info("*** tx_isp_core_probe: Setting ourISPdev to local isp_dev: %p ***\n", isp_dev);
-                ourISPdev = isp_dev;  /* Make the local device the global one */
+                pr_info("*** tx_isp_core_probe: ourISPdev already set: %p, current device: %p ***\n", ourISPdev, isp_dev);
+                /* Keep the existing global device, free the local one */
+                kfree(isp_dev);
+                isp_dev = ourISPdev;
             }
 
             /* Initialize tuning system using the SINGLE consistent device */
