@@ -1777,49 +1777,14 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
             /* Binary Ninja: tx_isp_send_event_to_remote(*($s3_2 + 0x78), 0x3000006, &var_40) */
             /* This is the CRITICAL event that notifies frame channels of completion */
-            if (vic_dev) {
-                /* Wake up channel 0 waiters */
-                if (isp_core_channels[0].state.streaming) {
-                    frame_channel_wakeup_waiters(&isp_core_channels[0]);
-                }
-            }
+			// TODO
         }
 
         /* Binary Ninja: Additional callback processing */
         /* Complex callback and state management would be here */
     }
 
-    /* *** CRITICAL: CHANNEL 1 FRAME COMPLETION PROCESSING *** */
-    if (interrupt_status & 2) {  /* Channel 1 frame done */
-        pr_debug("*** ISP CORE: CHANNEL 1 FRAME DONE INTERRUPT ***\n");
-
-        /* Binary Ninja: Similar processing for channel 1 */
-        while ((readl(vic_regs + 0x9a7c) & 1) == 0) {
-            u32 frame_buffer_addr = readl(vic_regs + 0x9a74);
-            u32 frame_info1 = readl(vic_regs + 0x9a8c);
-            u32 frame_info2 = readl(vic_regs + 0x9a90);
-
-            pr_debug("*** CH1 FRAME COMPLETION: addr=0x%x, info1=0x%x, info2=0x%x ***\n",
-                   frame_buffer_addr, frame_info1, frame_info2);
-
-            /* Wake up channel 1 waiters */
-            if (isp_core_channels[1].state.streaming) {
-                frame_channel_wakeup_waiters(&isp_core_channels[1]);
-            }
-        }
-    }
-
-    /* Binary Ninja: Channel 2 frame completion */
-    if (interrupt_status & 4) {
-        pr_debug("ISP CORE: Channel 2 frame done\n");
-        /* Similar processing for channel 2 */
-        while ((readl(vic_regs + 0x9b7c) & 1) == 0) {
-            /* Channel 2 frame processing */
-            if (isp_core_channels[2].state.streaming) {
-                frame_channel_wakeup_waiters(&isp_core_channels[2]);
-            }
-        }
-    }
+	// TODO
 
     /* Binary Ninja: IRQ callback array processing */
     /* Binary Ninja: for (int i = 0; i != 0x20; i++) */
