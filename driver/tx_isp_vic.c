@@ -296,13 +296,6 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
         pr_info("*** VIC FRAME DONE: Current buffer addr=0x%x from VIC[0x380] ***\n", current_buffer_addr);
     }
 
-    /* CRITICAL: Call proper VBM buffer management function from main branch */
-    extern int vic_frame_complete_buffer_management(struct tx_isp_vic_device *vic_dev, uint32_t buffer_addr);
-    int ret = vic_frame_complete_buffer_management(vic_dev, current_buffer_addr);
-    if (ret != 0) {
-        pr_warn("*** VIC FRAME DONE: Buffer management returned %d ***\n", ret);
-    }
-
     /* Signal frame completion for waiting processes */
     complete(&vic_dev->frame_complete);
     pr_info("*** VIC FRAME DONE: Frame completion signaled ***\n");

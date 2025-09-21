@@ -569,7 +569,6 @@ tx_isp_ispcore_activate_module_complete
 tx_isp_link_core_device
 tx_isp_module_deinit
 tx_isp_module_init
-tx_isp_module_notify
 tx_isp_open
 tx_isp_phy_init
 tx_isp_platform_probe
@@ -637,7 +636,6 @@ tx_isp_vic_device_deinit
 tx_isp_vic_device_init
 tx_isp_vic_frame_done
 tx_isp_vic_handle_event
-tx_isp_vic_notify
 tx_isp_vic_probe
 tx_isp_vic_remove
 tx_isp_vic_slake_subdev
@@ -652,16 +650,11 @@ tx_isp_vin_remove
 tx_isp_vin_reset
 tx_isp_vin_slake_subdev
 tx_vic_disable_irq
-tx_vic_disable_irq_complete
 tx_vic_enable_irq
 update_af_zone_data
-vic_chardev_ioctl
-vic_chardev_open
-vic_chardev_release
 vic_core_ops_init
 vic_core_ops_ioctl
 vic_core_s_stream
-vic_event_handler
 vic_frame_complete_buffer_management
 vic_framedone_irq_function
 vic_mdma_enable
