@@ -5158,12 +5158,6 @@ static int tx_isp_init(void)
 
 /* Error handling for reference driver compatibility */
 err_cleanup_irqs:
-    pr_info("*** CLEANUP: Freeing main dispatcher IRQs ***\n");
-    if (ourISPdev) {
-        private_free_irq(38, ourISPdev);
-        private_free_irq(37, ourISPdev);
-        pr_info("*** Main dispatcher IRQs 37 and 38 freed ***\n");
-    }
 err_cleanup_platform_device:
     private_platform_device_unregister(&tx_isp_platform_device);
 err_cleanup_main_driver:
@@ -5303,11 +5297,8 @@ static void tx_isp_exit(void)
         ourISPdev = NULL;
         pr_info("*** ourISPdev set to NULL - interrupt handlers will now safely exit ***\n");
 
-        /* CRITICAL: Free main dispatcher IRQs that were registered in tx_isp_init */
-        pr_info("*** CLEANUP: Freeing main dispatcher IRQs 37 and 38 ***\n");
-        private_free_irq(38, local_isp_dev);  /* VIC IRQ */
-        private_free_irq(37, local_isp_dev);  /* ISP Core IRQ */
-        pr_info("*** Main dispatcher IRQs 37 and 38 freed ***\n");
+        /* Reference driver approach: IRQs freed by tx_isp_free_irq in subdevice cleanup */
+        pr_info("*** Following reference driver: IRQ cleanup handled by tx_isp_free_irq ***\n");
 
         /* Free hardware interrupts if initialized (legacy cleanup) */
         if (isp_irq > 0 && isp_irq != 37 && isp_irq != 38) {

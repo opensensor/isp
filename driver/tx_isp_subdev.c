@@ -673,25 +673,14 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
     if (irq_num >= 0) {
         /* Reference driver behavior: Register all IRQs normally without special handling */
 
-        /* CRITICAL FIX: For other IRQs, register normally but NEVER pass irq_info as dev_id */
-        extern struct tx_isp_dev *ourISPdev;
-
-        /* CRITICAL FIX: Never pass irq_info as dev_id - it causes BadVA crashes at 0xc8/0xdc */
-        /* The interrupt handlers expect tx_isp_dev*, not tx_isp_irq_info* */
-        if (!ourISPdev) {
-            pr_err("*** CRITICAL: Cannot register IRQ %d - ourISPdev is NULL! ***\n", irq_num);
-            pr_err("*** This would cause BadVA crashes at offsets 0xc8/0xdc ***\n");
-            pr_err("*** IRQ registration SKIPPED to prevent kernel panic ***\n");
-            return -ENODEV;
-        }
-
         /* Binary Ninja: request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, 0x2000, *arg1, arg2) */
+        /* Reference driver passes irq_info as dev_id, not ourISPdev */
         ret = request_threaded_irq(irq_num,
                                    isp_irq_handle,
                                    isp_irq_thread_handle,
                                    IRQF_SHARED,  /* 0x2000 = IRQF_SHARED */
                                    dev_name(&pdev->dev),  /* *arg1 = device name */
-                                   ourISPdev);  /* CRITICAL FIX: Always use ourISPdev, never irq_info */
+                                   irq_info);  /* arg2 = irq_info as per reference driver */
 
         if (ret != 0) {
             /* Binary Ninja: isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", "tx_isp_request_irq") */
