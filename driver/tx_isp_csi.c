@@ -34,18 +34,6 @@ void isp_write32(u32 reg, u32 val)
 static void __iomem *tx_isp_vic_regs = NULL;
 
 
-/* CSI register mapping handled by subdev probe per reference driver */
-
-u32 csi_read32(u32 reg)
-{
-    /* Use CSI device registers */
-    if (ourISPdev && ourISPdev->csi_dev && ourISPdev->csi_dev->csi_regs) {
-        return readl(ourISPdev->csi_dev->csi_regs + reg);
-    }
-    pr_err("csi_read32: No CSI registers available\n");
-    return 0;
-}
-
 void csi_write32(u32 reg, u32 val)
 {
     /* Use CSI device registers */
@@ -154,54 +142,6 @@ static int tx_isp_csi_hw_init(struct tx_isp_subdev *sd)
     csi_write32(CSI_INT_STATUS, 0xFFFFFFFF);
     csi_write32(CSI_INT_MASK, 0xFFFFFFFF);
 
-    return 0;
-}
-
-/* CSI start operation */
-int tx_isp_csi_start(struct tx_isp_subdev *sd)
-{
-    u32 ctrl;
-    int ret;
-
-    if (!sd)
-        return -EINVAL;
-
-    mutex_lock(&sd->csi_lock);
-
-    /* CRITICAL FIX: DON'T register duplicate IRQ handler - IRQ 38 already registered in tx-isp-module.c */
-    /* The main module already registers IRQ 38 with proper routing to CSI handler */
-    pr_info("*** CSI INTERRUPT: IRQ 38 already registered by main module - skipping duplicate registration ***\n");
-
-    /* Enable CSI */
-    ctrl = csi_read32(CSI_CTRL);
-    ctrl |= CSI_CTRL_EN;
-    csi_write32(CSI_CTRL, ctrl);
-
-    /* Enable interrupts */
-    csi_write32(CSI_INT_MASK, ~(INT_ERROR | INT_FRAME_DONE));
-
-    pr_info("*** CSI INTERRUPT: CSI started with interrupts enabled (mask=0x%08x) ***\n",
-            ~(INT_ERROR | INT_FRAME_DONE));
-
-    mutex_unlock(&sd->csi_lock);
-    return 0;
-}
-
-/* CSI stop operation */
-int tx_isp_csi_stop(struct tx_isp_subdev *sd)
-{
-    if (!sd)
-        return -EINVAL;
-
-    mutex_lock(&sd->csi_lock);
-
-    /* Disable CSI */
-    csi_write32(CSI_CTRL, 0);
-
-    /* Mask all interrupts */
-    csi_write32(CSI_INT_MASK, 0xFFFFFFFF);
-
-    mutex_unlock(&sd->csi_lock);
     return 0;
 }
 
@@ -1047,8 +987,6 @@ int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
 /* Duplicate function removed - using existing tx_isp_csi_slake_subdev at line 689 */
 
 /* Export symbols for use by other parts of the driver */
-EXPORT_SYMBOL(tx_isp_csi_start);
-EXPORT_SYMBOL(tx_isp_csi_stop);
 EXPORT_SYMBOL(tx_isp_csi_set_format);
 EXPORT_SYMBOL(dump_csi_reg);
 EXPORT_SYMBOL(tx_isp_csi_activate_subdev);
