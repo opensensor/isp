@@ -3268,16 +3268,19 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     /* Binary Ninja: Main conditional structure - FIXED ORDER */
     if (cmd == 0xc050561a) { // TX_ISP_SENSOR_ENUM_INPUT - EXACT Binary Ninja reference
         /* CRITICAL FIX: This IOCTL is used to enumerate sensors by index */
-        /* The userspace passes an index in the first 4 bytes, we return sensor name */
+        /* The userspace passes a structure with index at offset 0, expects sensor name back */
         uint32_t sensor_index;
         static const char* sensor_names[] = {"gc2053", NULL}; /* Add more sensors as needed */
+        char result_buffer[0x50]; /* 80-byte buffer to match userspace expectation */
 
-        /* Copy the sensor index from userspace */
-        if (copy_from_user(&sensor_index, (void __user *)arg, sizeof(uint32_t)) != 0) {
-            pr_err("TX_ISP_SENSOR_ENUM_INPUT: Failed to copy sensor index\n");
+        /* Copy the entire structure from userspace first */
+        if (copy_from_user(result_buffer, (void __user *)arg, 0x50) != 0) {
+            pr_err("TX_ISP_SENSOR_ENUM_INPUT: Failed to copy input structure\n");
             return -EFAULT;
         }
 
+        /* Extract sensor index from the structure (first 4 bytes) */
+        sensor_index = *(uint32_t*)result_buffer;
         pr_info("TX_ISP_SENSOR_ENUM_INPUT: Enumerating sensor at index %d\n", sensor_index);
 
         /* Check if the requested index is valid */
@@ -3287,15 +3290,15 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -EINVAL; /* No more sensors - this breaks the userspace loop */
         }
 
-        /* Clear the buffer and copy sensor name */
-        memset(&var_98, 0, sizeof(var_98));
-        strncpy((char*)&var_98, sensor_names[sensor_index], 0x4c - 1);
+        /* Clear the buffer and copy sensor name to the beginning */
+        memset(result_buffer, 0, sizeof(result_buffer));
+        strncpy(result_buffer, sensor_names[sensor_index], 0x4c - 1);
 
         pr_info("TX_ISP_SENSOR_ENUM_INPUT: Returning sensor '%s' at index %d\n",
                  sensor_names[sensor_index], sensor_index);
 
         /* Copy result back to userspace */
-        if (copy_to_user((void __user *)arg, &var_98, 0x50) != 0) {
+        if (copy_to_user((void __user *)arg, result_buffer, 0x50) != 0) {
             pr_err("TX_ISP_SENSOR_ENUM_INPUT: Failed to copy result to user\n");
             return -EFAULT;
         }
