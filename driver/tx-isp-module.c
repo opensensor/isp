@@ -5794,9 +5794,15 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
 }
 
 
-/* isp_irq_thread_handle - BULLETPROOF implementation to prevent kernel panic */
+/* isp_irq_thread_handle - EMERGENCY MINIMAL implementation to prevent kernel panic */
 irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
 {
+    static int thread_call_count = 0;
+    thread_call_count++;
+
+    /* EMERGENCY: Print every call to see if this thread handler is being called */
+    pr_info("*** EMERGENCY: isp_irq_thread_handle called #%d - IRQ %d, dev_id=%p ***\n", thread_call_count, irq, dev_id);
+
     /* CRITICAL SAFETY: Validate all parameters before any processing */
     if (irq < 0 || irq > 255) {
         pr_err("*** CRITICAL: isp_irq_thread_handle called with invalid IRQ %d ***\n", irq);
@@ -5809,18 +5815,11 @@ irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
         return IRQ_HANDLED;  /* Still return HANDLED to prevent system issues */
     }
 
-    pr_debug("*** isp_irq_thread_handle: BULLETPROOF SAFE - IRQ %d, dev_id=%p ***\n", irq, dev_id);
+    /* EMERGENCY: Absolutely minimal processing - just return */
+    pr_info("*** EMERGENCY: isp_irq_thread_handle IRQ %d processed safely ***\n", irq);
 
-    /* CRITICAL: Just acknowledge the thread interrupt and return - no complex processing */
-    /* This prevents any potential crashes in the threaded interrupt handler */
-
-    if (irq == 37) {
-        pr_debug("*** isp_irq_thread_handle: ISP Core thread IRQ 37 acknowledged ***\n");
-    } else if (irq == 38) {
-        pr_debug("*** isp_irq_thread_handle: VIC thread IRQ 38 acknowledged ***\n");
-    } else {
-        pr_debug("*** isp_irq_thread_handle: Thread IRQ %d acknowledged ***\n", irq);
-    }
+    /* Return IRQ_HANDLED to indicate we processed the interrupt */
+    return IRQ_HANDLED;
 
     /* Return IRQ_HANDLED to indicate we processed the thread interrupt */
     return IRQ_HANDLED;
