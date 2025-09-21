@@ -3241,15 +3241,23 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
 
         // *** BINARY NINJA REFERENCE: Use sensor from ourISPdev->sensor ***
-        if (channel == 0 && ourISPdev && ourISPdev->sensor) {
+        if (channel == 0 && ourISPdev) {
+            if (!ourISPdev->sensor) {
+                pr_err("*** Channel %d: CRITICAL ERROR - ourISPdev->sensor is NULL ***\n", channel);
+                pr_err("*** This indicates sensor registration failed or sensor module not loaded ***\n");
+                pr_err("*** Check if gc2053.ko is loaded and properly registered ***\n");
+                state->streaming = false;
+                return -ENODEV;
+            }
+
             /* Binary Ninja: Use the properly registered sensor from ourISPdev->sensor */
             sensor = ourISPdev->sensor;
 
             pr_info("*** BINARY NINJA: Using registered sensor at %p ***\n", sensor);
 
             /* Binary Ninja: Validate sensor structure before proceeding */
-            if (!sensor || !sensor->sd.ops) {
-                pr_err("*** Channel %d: CRITICAL ERROR - sensor structure invalid ***\n", channel);
+            if (!sensor->sd.ops) {
+                pr_err("*** Channel %d: CRITICAL ERROR - sensor->sd.ops is NULL ***\n", channel);
                 state->streaming = false;
                 return -ENODEV;
             }
