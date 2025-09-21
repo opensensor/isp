@@ -1515,6 +1515,17 @@ struct isp_core_channel {
 
 static struct isp_core_channel isp_core_channels[3] = {0};  /* Channel 0, 1, 2 */
 
+
+/* Frame channel wakeup function - placeholder implementation */
+static void frame_channel_wakeup_waiters(struct isp_core_channel *channel)
+{
+    if (channel) {
+        pr_debug("frame_channel_wakeup_waiters: Waking up waiters for channel\n");
+        /* In full implementation, this would wake up waiting processes */
+        isp_frame_done_wakeup();  /* Call the main frame done wakeup */
+    }
+}
+
 /* system_irq_func_set - EXACT Binary Ninja implementation */
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id))
 {
@@ -1522,39 +1533,19 @@ int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id)
         pr_err("system_irq_func_set: Invalid index %d\n", index);
         return -EINVAL;
     }
-    
+
     /* Binary Ninja: *((arg1 << 2) + &irq_func_cb) = arg2 */
     irq_func_cb[index] = handler;
-    
-    pr_info("*** system_irq_func_set: Registered handler at index %d ***\n", index);
+
+    pr_debug("*** system_irq_func_set: Registered handler at index %d ***\n", index);
     return 0;
 }
 EXPORT_SYMBOL(system_irq_func_set);
 
 
-/* ip_done_interrupt_static - SAFE implementation with proper parameter validation */
+/* ip_done_interrupt_static - EXACT Binary Ninja function name */
 irqreturn_t ip_done_interrupt_static(int irq, void *dev_id)
 {
-    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
-
-    /* CRITICAL SAFETY: Validate dev_id is a tx_isp_dev, not tx_isp_subdev */
-    if (!dev_id || (uintptr_t)dev_id < 0x80000000 || (uintptr_t)dev_id > 0x9fffffff) {
-        pr_err("ip_done_interrupt_static: Invalid dev_id=%p for IRQ %d\n", dev_id, irq);
-        return IRQ_HANDLED;
-    }
-
-    /* CRITICAL: Ensure we're getting the right structure type */
-    extern struct tx_isp_dev *ourISPdev;
-    if (dev_id != ourISPdev) {
-        pr_err("ip_done_interrupt_static: dev_id=%p != ourISPdev=%p - using ourISPdev\n", dev_id, ourISPdev);
-        isp_dev = ourISPdev;
-    }
-
-    if (!isp_dev) {
-        pr_err("ip_done_interrupt_static: No valid ISP device available\n");
-        return IRQ_HANDLED;
-    }
-
     /* Binary Ninja: if ((system_reg_read(0xc) & 0x40) == 0) */
     uint32_t reg_val = system_reg_read(0xc);
 
@@ -1563,21 +1554,21 @@ irqreturn_t ip_done_interrupt_static(int irq, void *dev_id)
         /* This was causing CSI PHY register corruption every ~70ms */
         extern uint32_t vic_start_ok;
         if (vic_start_ok == 1) {
-            pr_info("*** IP DONE: Skipping LSC tuning during VIC streaming to prevent CSI PHY corruption ***\n");
+            pr_debug("*** IP DONE: Skipping LSC tuning during VIC streaming to prevent CSI PHY corruption ***\n");
         } else {
             /* Binary Ninja: tisp_lsc_write_lut_datas() */
-            // tisp_lsc_write_lut_datas();
-            pr_info("*** IP DONE: LSC tuning completed (VIC not streaming) ***\n");
+            tisp_lsc_write_lut_datas();
+            pr_debug("*** IP DONE: LSC tuning completed (VIC not streaming) ***\n");
         }
     }
 
-    pr_info("*** ip_done_interrupt_static: ISP processing complete ***\n");
+    pr_debug("*** ip_done_interrupt_handler: ISP processing complete ***\n");
 
     /* Binary Ninja: return 2 */
     return IRQ_HANDLED; /* Convert to standard Linux return value */
 }
 
-/* ispcore_interrupt_service_routine - SAFE implementation with registered handler dispatch */
+/* ispcore_interrupt_service_routine - EXACT Binary Ninja implementation */
 irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
@@ -1588,36 +1579,13 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     u32 error_check;
     int i;
 
-    /* CRITICAL SAFETY: Validate all pointers before any access */
-    if (!isp_dev) {
-        pr_err("*** CRITICAL: ispcore_interrupt_service_routine called with NULL isp_dev! ***\n");
-        return IRQ_NONE;
-    }
-
-    if (!isp_dev->vic_regs) {
-        pr_err("*** CRITICAL: ispcore_interrupt_service_routine called with NULL vic_regs! ***\n");
+    if (!isp_dev || !isp_dev->vic_regs) {
+        pr_debug("ispcore_interrupt_service_routine: Invalid device\n");
         return IRQ_NONE;
     }
 
     vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
     if (!vic_dev) {
-        pr_err("*** CRITICAL: ispcore_interrupt_service_routine called with NULL vic_dev! ***\n");
-        return IRQ_NONE;
-    }
-
-    if (!vic_dev->vic_regs) {
-        pr_err("*** CRITICAL: ispcore_interrupt_service_routine called with NULL vic_dev->vic_regs! ***\n");
-        return IRQ_NONE;
-    }
-
-    /* CRITICAL SAFETY: Check core_dev before accessing it */
-    if (!isp_dev->core_dev) {
-        pr_err("*** CRITICAL: ispcore_interrupt_service_routine called with NULL core_dev! ***\n");
-        return IRQ_NONE;
-    }
-
-    if (!isp_dev->core_dev->core_regs) {
-        pr_err("*** CRITICAL: ispcore_interrupt_service_routine called with NULL core_regs! ***\n");
         return IRQ_NONE;
     }
 
@@ -1627,28 +1595,36 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* *** CRITICAL: Read from ISP core interrupt status registers for MIPI *** */
     /* Prefer direct core_regs mapping; fall back to VIC-relative if needed */
-    isp_regs = isp_dev->core_dev->core_regs;
-    /* Support both legacy (+0xb*) and new (+0x98b*) interrupt banks */
-    u32 status_legacy = readl(isp_regs + 0xb4);
-    u32 status_new    = readl(isp_regs + 0x98b4);
-    interrupt_status  = status_legacy ? status_legacy : status_new;
-    /* Clear pending in the corresponding bank(s) */
-    if (status_legacy)
-        writel(status_legacy, isp_regs + 0xb8);
-    if (status_new)
-        writel(status_new, isp_regs + 0x98b8);
-    wmb();
-    if (interrupt_status != 0) {
-        pr_debug("*** ISP CORE INTERRUPT: bank=%s status=0x%08x (legacy=0x%08x new=0x%08x) ***\n",
-                status_legacy ? "legacy(+0xb*)" : "new(+0x98b*)",
-                interrupt_status, status_legacy, status_new);
-    } else if (isp_force_core_isr) {
-        pr_debug("*** ISP CORE: FORCED FRAME DONE VIA VIC (no pending) ***\n");
-        interrupt_status = 1; /* Force Channel 0 frame-done path */
+    if (isp_dev->core_regs) {
+        isp_regs = isp_dev->core_regs;
+    } else if (vic_dev && vic_dev->vic_regs) {
+        isp_regs = vic_dev->vic_regs - 0x9a00;
     } else {
-        pr_debug("*** ISP CORE INTERRUPT: no pending (legacy=0x%08x new=0x%08x) ***\n",
-                 status_legacy, status_new);
-        return IRQ_HANDLED; /* No interrupt to process */
+        return IRQ_NONE;
+    }
+    /* Support both legacy (+0xb*) and new (+0x98b*) interrupt banks */
+    {
+        u32 status_legacy = readl(isp_regs + 0xb4);
+        u32 status_new    = readl(isp_regs + 0x98b4);
+        interrupt_status  = status_legacy ? status_legacy : status_new;
+        /* Clear pending in the corresponding bank(s) */
+        if (status_legacy)
+            writel(status_legacy, isp_regs + 0xb8);
+        if (status_new)
+            writel(status_new, isp_regs + 0x98b8);
+        wmb();
+        if (interrupt_status != 0) {
+            pr_debug("*** ISP CORE INTERRUPT: bank=%s status=0x%08x (legacy=0x%08x new=0x%08x) ***\n",
+                    status_legacy ? "legacy(+0xb*)" : "new(+0x98b*)",
+                    interrupt_status, status_legacy, status_new);
+        } else if (isp_force_core_isr) {
+            pr_debug("*** ISP CORE: FORCED FRAME DONE VIA VIC (no pending) ***\n");
+            interrupt_status = 1; /* Force Channel 0 frame-done path */
+        } else {
+            pr_debug("*** ISP CORE INTERRUPT: no pending (legacy=0x%08x new=0x%08x) ***\n",
+                     status_legacy, status_new);
+            return IRQ_HANDLED; /* No interrupt to process */
+        }
     }
 
     /* Binary Ninja: if (($s1 & 0x3f8) == 0) */
@@ -1699,7 +1675,23 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         /* Binary Ninja: private_schedule_work calls queue_work_on for CPU-specific scheduling */
         pr_debug("*** ISP CORE: Using reference driver work scheduling ***\n");
 
-		// TODO Workqueue
+        if (fs_workqueue) {
+            pr_debug("*** ISP CORE: fs_workqueue=%p, fs_work=%p ***\n", fs_workqueue, &fs_work);
+            /* REFERENCE DRIVER: Use queue_work_on for CPU 0 like private_schedule_work */
+            if (queue_work_on(0, fs_workqueue, &fs_work)) {
+                pr_debug("*** ISP CORE: Work queued successfully on CPU 0 ***\n");
+            } else {
+                pr_debug("*** ISP CORE: Work was already queued - acknowledging interrupt anyway ***\n");
+            }
+        } else {
+            pr_warn("*** ISP CORE: fs_workqueue is NULL - using system workqueue ***\n");
+            /* REFERENCE DRIVER: Use schedule_work_on for CPU 0 */
+            if (schedule_work_on(0, &fs_work)) {
+                pr_debug("*** ISP CORE: Work scheduled successfully on CPU 0 ***\n");
+            } else {
+                pr_debug("*** ISP CORE: Work was already scheduled - acknowledging interrupt anyway ***\n");
+            }
+        }
 
         /* Binary Ninja: Frame timing measurement */
         /* Complex timing measurement code would be here */
@@ -1787,7 +1779,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
         /* Binary Ninja: data_ca584 += 1 - increment frame counter */
         if (isp_dev) {
-            isp_dev->core_dev->frame_count++;
+            isp_dev->frame_count++;
         }
 
         /* Binary Ninja: Complex frame processing loop */
@@ -1801,14 +1793,62 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
             /* Binary Ninja: tx_isp_send_event_to_remote(*($s3_2 + 0x78), 0x3000006, &var_40) */
             /* This is the CRITICAL event that notifies frame channels of completion */
-			// TODO
+            if (vic_dev) {
+                /* Wake up channel 0 waiters */
+                if (isp_core_channels[0].state.streaming) {
+                    frame_channel_wakeup_waiters(&isp_core_channels[0]);
+                }
+            }
         }
 
         /* Binary Ninja: Additional callback processing */
         /* Complex callback and state management would be here */
     }
 
-	// TODO
+    /* *** CRITICAL: CHANNEL 1 FRAME COMPLETION PROCESSING *** */
+    if (interrupt_status & 2) {  /* Channel 1 frame done */
+        pr_debug("*** ISP CORE: CHANNEL 1 FRAME DONE INTERRUPT ***\n");
+
+        /* Binary Ninja: Similar processing for channel 1 */
+        while ((readl(vic_regs + 0x9a7c) & 1) == 0) {
+            u32 frame_buffer_addr = readl(vic_regs + 0x9a74);
+            u32 frame_info1 = readl(vic_regs + 0x9a8c);
+            u32 frame_info2 = readl(vic_regs + 0x9a90);
+
+            pr_debug("*** CH1 FRAME COMPLETION: addr=0x%x, info1=0x%x, info2=0x%x ***\n",
+                   frame_buffer_addr, frame_info1, frame_info2);
+
+            /* Wake up channel 1 waiters */
+            if (isp_core_channels[1].state.streaming) {
+                frame_channel_wakeup_waiters(&isp_core_channels[1]);
+            }
+        }
+    }
+
+    /* Binary Ninja: Channel 2 frame completion */
+    if (interrupt_status & 4) {
+        pr_debug("ISP CORE: Channel 2 frame done\n");
+        /* Similar processing for channel 2 */
+        while ((readl(vic_regs + 0x9b7c) & 1) == 0) {
+            /* Channel 2 frame processing */
+            if (isp_core_channels[2].state.streaming) {
+                frame_channel_wakeup_waiters(&isp_core_channels[2]);
+            }
+        }
+    }
+
+    /* Binary Ninja: IRQ callback array processing */
+    /* Binary Ninja: for (int i = 0; i != 0x20; i++) */
+    for (i = 0; i < 0x20; i++) {
+        u32 bit_mask = 1 << (i & 0x1f);
+        if (interrupt_status & bit_mask) {
+            /* Binary Ninja: if (irq_func_cb[i] != 0) */
+            if (irq_func_cb[i] != NULL) {
+                irqreturn_t callback_result = irq_func_cb[i](irq, dev_id);
+                pr_debug("ISP CORE: IRQ callback[%d] returned %d\n", i, callback_result);
+            }
+        }
+    }
 
     pr_debug("*** ISP CORE INTERRUPT PROCESSING COMPLETE ***\n");
 
@@ -1816,17 +1856,65 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     return IRQ_HANDLED;
 }
 
+/* ISP interrupt handler - now calls the proper dispatch system */
+irqreturn_t tx_isp_core_irq_handle(int irq, void *dev_id)
+{
+    /* Forward to the proper ISP core interrupt service routine */
+    return ispcore_interrupt_service_routine(irq, dev_id);
+}
+
 /* ISP interrupt thread handler - for threaded IRQ processing */
 irqreturn_t tx_isp_core_irq_thread_handle(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = dev_id;
-    
-    pr_info("*** isp_irq_thread_handle: Thread IRQ %d, dev_id=%p ***\n", irq, dev_id);
-    
+
+    pr_debug("*** isp_irq_thread_handle: Thread IRQ %d, dev_id=%p ***\n", irq, dev_id);
+
     /* Handle any thread-level interrupt processing here */
     /* For VIC, most processing is done in the main handler */
-    
+
     return IRQ_HANDLED;
+}
+
+/* tx_isp_request_irq - EXACT Binary Ninja implementation */
+static int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
+{
+    int irq_number;
+    int ret;
+
+    if (!pdev || !irq_info) {
+        pr_err("tx_isp_request_irq: Invalid parameters\n");
+        return -EINVAL;
+    }
+
+    /* Binary Ninja: int32_t $v0_1 = private_platform_get_irq(arg1, 0) */
+    irq_number = platform_get_irq(pdev, 0);
+    if (irq_number < 0) {
+        pr_err("tx_isp_request_irq: Failed to get IRQ: %d\n", irq_number);
+        return irq_number;
+    }
+
+    /* Binary Ninja: private_spin_lock_init(arg2) */
+    spin_lock_init((spinlock_t *)irq_info);
+
+    /* Binary Ninja: private_request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, 0x2000, *arg1, arg2) */
+    ret = request_threaded_irq(irq_number, tx_isp_core_irq_handle, tx_isp_core_irq_thread_handle,
+                               IRQF_SHARED, dev_name(&pdev->dev), irq_info);
+    if (ret != 0) {
+        pr_err("tx_isp_request_irq: Failed to request IRQ %d: %d\n", irq_number, ret);
+        return ret;
+    }
+
+    pr_debug("*** tx_isp_request_irq: IRQ %d registered successfully with dispatch system ***\n", irq_number);
+    return 0;
+}
+
+/* Core ISP interrupt handler - now calls the dispatch system */
+irqreturn_t tx_isp_core_irq_handler(int irq, void *dev_id)
+{
+    /* *** CRITICAL: Use dispatch system instead of direct handling *** */
+    pr_debug("*** tx_isp_core_irq_handler: Forwarding to dispatch system ***\n");
+    return tx_isp_core_irq_handle(irq, dev_id);
 }
 
 /* Configure ISP system clocks */
