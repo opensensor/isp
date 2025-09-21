@@ -3413,7 +3413,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         if (core_dev) {
             /* Binary Ninja: WDR buffer configuration with register writes */
-            pr_info("TX_ISP_WDR_SET_BUF: addr=0x%x size=%d\n", var_98, var_94);
+            pr_info("TX_ISP_WDR_SET_BUF: addr=0x%x size=%d\n", var_98.as_uint32, var_94);
         }
 
         return 0;
