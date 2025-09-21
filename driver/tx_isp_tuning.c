@@ -10481,44 +10481,44 @@ int tisp_s_ae_it_max(void)
 
 
 
-/* isp_core_tuning_init - FIXED: Use proper struct instead of raw memory access */
+/* isp_core_tuning_init - SAFE: Use proper struct instead of dangerous offset access */
 void *isp_core_tuning_init(void *arg1)
 {
     struct isp_tuning_data *tuning_data;
 
     pr_info("isp_core_tuning_init: Initializing tuning data structure\n");
 
-    /* CRITICAL FIX: Use proper struct allocation instead of raw 0x40d0 bytes */
+    /* SAFE: Use proper struct allocation instead of dangerous raw 0x40d0 bytes */
     tuning_data = kzalloc(sizeof(struct isp_tuning_data), GFP_KERNEL);
     if (!tuning_data) {
         pr_err("isp_core_tuning_init: Failed to allocate tuning data structure\n");
         return NULL;
     }
 
-    /* CRITICAL FIX: Verify alignment for MIPS - must be 4-byte aligned */
+    /* SAFE: Verify alignment for MIPS - must be 4-byte aligned */
     if ((unsigned long)tuning_data & 0x3) {
         pr_err("CRITICAL: Tuning data not 4-byte aligned: %p\n", tuning_data);
         kfree(tuning_data);
         return NULL;
     }
 
-    /* Initialize the structure properly */
+    /* SAFE: Initialize the structure properly using struct members */
     tuning_data->regs = arg1;  /* Store the device pointer */
     spin_lock_init(&tuning_data->lock);
     mutex_init(&tuning_data->mutex);
-    tuning_data->state = 1;  /* Binary Ninja: result[0x1031] = 1 */
+    tuning_data->state = 1;  /* SAFE: Use struct member instead of result[0x1031] = 1 */
 
-    /* Initialize page allocation tracking */
+    /* SAFE: Initialize page allocation tracking */
     tuning_data->allocation_pages = 0;
     tuning_data->allocation_order = 0;
 
-    /* Initialize tuning parameters to safe defaults */
+    /* SAFE: Initialize tuning parameters to safe defaults */
     tuning_data->brightness = 128;  /* Default brightness */
     tuning_data->contrast = 128;    /* Default contrast */
     tuning_data->saturation = 128;  /* Default saturation */
     tuning_data->sharpness = 128;   /* Default sharpness */
 
-    /* Initialize additional control parameters */
+    /* SAFE: Initialize additional control parameters */
     tuning_data->hflip = 0;         /* No horizontal flip */
     tuning_data->vflip = 0;         /* No vertical flip */
     tuning_data->shading = 0;       /* Shading disabled */
@@ -10529,13 +10529,12 @@ void *isp_core_tuning_init(void *arg1)
     tuning_data->antiflicker = 0;   /* Anti-flicker disabled */
     tuning_data->bypass = 0;        /* Bypass disabled */
 
-    /* CRITICAL FIX: Initialize the mode_flag at offset 0x15c to prevent BadVA crash */
-    tuning_data->mode_flag = 1;     /* Binary Ninja: This field is checked against 1 */
+    /* SAFE: Initialize the mode_flag using struct member instead of dangerous offset */
+    tuning_data->mode_flag = 1;     /* SAFE: Use struct member instead of *(ptr + 0x15c) = 1 */
 
     pr_info("isp_core_tuning_init: Tuning data structure initialized at %p\n", tuning_data);
     pr_info("isp_core_tuning_init: Structure size: %zu bytes (vs Binary Ninja 0x40d0)\n", sizeof(struct isp_tuning_data));
-    pr_info("*** CRITICAL FIX: mode_flag at offset 0x%lx set to 1 (prevents BadVA crash) ***\n",
-            offsetof(struct isp_tuning_data, mode_flag));
+    pr_info("*** SAFE: mode_flag properly initialized using struct member access ***\n");
 
     return tuning_data;
 }
