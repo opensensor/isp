@@ -484,6 +484,8 @@ int ispcore_link_setup(const struct tx_isp_subdev_pad *local,
         pr_info("*** ispcore_link_setup: ENABLING pipeline links ***\n");
 
         /* Enable sensor to VIN link */
+        extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+        struct tx_isp_sensor *sensor = tx_isp_get_sensor();
         if (sensor && vin_dev) {
             pr_info("ispcore_link_setup: Enabling sensor->VIN link\n");
             /* Binary Ninja: Configure VIN input for sensor */
@@ -870,16 +872,16 @@ struct tx_isp_subdev_ops core_subdev_ops = {
 EXPORT_SYMBOL(core_subdev_ops);
 
 /* Global variables for ISP core functionality - from Binary Ninja reference */
-static uint32_t isp_ch1_dequeue_delay_time = 5000;  /* Default 5ms delay */
-static uint32_t isp_ch0_pre_dequeue_time = 3000;    /* Default 3ms delay */
+static int isp_ch1_dequeue_delay_time = 5000;  /* Default 5ms delay */
+static int isp_ch0_pre_dequeue_time = 3000;    /* Default 3ms delay */
 static uint32_t isp_core_debug_type = 0;
 static uint32_t data_ca554 = 0;
 static uint32_t data_ca568 = 0;
 static uint32_t data_ca558 = 0;
 static uint32_t data_ca55c = 0;
-static uint32_t frame_done_cnt = 0;
+static atomic64_t frame_done_cnt_local = ATOMIC64_INIT(0);
 static uint32_t tispPollValue = 0;
-static uint32_t ch1_buf = 0;
+static char ch1_buf_data[0x1c];
 
 /* External references from Binary Ninja */
 extern void *mdns_y_pspa_cur_bi_wei0_array;
@@ -891,7 +893,7 @@ extern void *mdns_y_pspa_cur_bi_wei0_array;
 void isp_ch1_frame_dequeue_delay(void)
 {
     extern struct tx_isp_dev *ourISPdev;
-    struct timespec64 delay_time;
+    struct timespec delay_time;
     uint32_t delay_ms = isp_ch1_dequeue_delay_time;
 
     /* Binary Ninja: private_ktime_set(&var_10, delay_time / 1000, (delay_time % 1000) * 1000000) */
@@ -998,12 +1000,12 @@ int isp_core_tunning_open(struct inode *inode, struct file *file)
 
     /* Binary Ninja: Check state at offset 0x40c4 */
     /* In our implementation, we'll use a simple state check */
-    if (ourISPdev->state != 2)  /* Not in ready state */
+    if (ourISPdev->status != 2)  /* Not in ready state */
         return -EBUSY;
 
     /* Binary Ninja: Reset frame done counter and set state to 3 */
-    frame_done_cnt = 0;
-    ourISPdev->state = 3;  /* Tuning state */
+    atomic64_set(&frame_done_cnt_local, 0);
+    ourISPdev->status = 3;  /* Tuning state */
 
     pr_info("isp_core_tunning_open: Tuning interface opened\n");
     return 0;
@@ -1024,10 +1026,10 @@ int isp_core_tunning_release(struct inode *inode, struct file *file)
         return 0;
 
     /* Binary Ninja: Check state and free buffer if needed */
-    if (ourISPdev->state != 2) {
+    if (ourISPdev->status != 2) {
         /* Binary Ninja: Check buffer at offset 0x40ac */
         /* In our implementation, we'll just reset state */
-        ourISPdev->state = 2;  /* Back to ready state */
+        ourISPdev->status = 2;  /* Back to ready state */
     }
 
     return 0;
@@ -1041,7 +1043,7 @@ EXPORT_SYMBOL(isp_core_tunning_release);
 int isp_pre_frame_dequeue(void)
 {
     extern struct tx_isp_dev *ourISPdev;
-    struct timespec64 delay_time;
+    struct timespec delay_time;
     uint32_t delay_ms = isp_ch0_pre_dequeue_time;
     uint32_t frame_info = 0;
 
@@ -1160,8 +1162,8 @@ int isp_info_show_isra_0(struct seq_file *seq)
                         1920, 1080, 1920*1080, 1, 1920*1080);  /* Default values */
 
     /* Binary Ninja: Check ISP state and show various status information */
-    if (ourISPdev->state >= 4) {
-        result += seq_printf(seq, "Can't output the width(%d)!\n", ourISPdev->state);
+    if (ourISPdev->status >= 4) {
+        result += seq_printf(seq, "Can't output the width(%d)!\n", ourISPdev->status);
     }
 
     /* Binary Ninja: Show sensor type information */
@@ -1386,7 +1388,7 @@ static struct work_struct ispcore_fs_work;
 /* BINARY NINJA COMPATIBILITY: Additional work structures and globals */
 struct work_struct pre_frame_dequeue;
 struct work_struct ch1_frame_dequeue_delay;
-char ch1_buf[0x1c];
+/* ch1_buf already defined as ch1_buf_data above */
 /* Note: isp_ch0_pre_dequeue_time, isp_ch1_dequeue_delay_time, day/night variables, and irq_func_cb are already declared above */
 
 /* VIC event callback structure for Binary Ninja compatibility */
@@ -2260,9 +2262,11 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 }
 
                 /* Binary Ninja: Call tisp_init() with sensor attributes */
-                if (sensor && sensor->video.attr) {
+                extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+                struct tx_isp_sensor *init_sensor = tx_isp_get_sensor();
+                if (init_sensor && init_sensor->video.attr) {
                     pr_info("*** ispcore_core_ops_init: Calling tisp_init with sensor attributes ***");
-                    ret = tisp_init(sensor->video.attr, NULL);
+                    ret = tisp_init(init_sensor->video.attr, NULL);
                     if (ret != 0) {
                         pr_err("ispcore_core_ops_init: tisp_init failed: %d\n", ret);
                         return ret;
