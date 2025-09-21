@@ -5160,29 +5160,11 @@ static int tx_isp_init(void)
     }
     pr_info("*** SUBDEVICE REGISTRY INITIALIZED - GRAPH CREATION SHOULD NOW SUCCEED ***\n");
 
-    /* CRITICAL FIX: RE-ENABLE main interrupt dispatcher after fixing VIC initialization */
-    /* The root cause was tx_isp_vic_start being commented out, which is now fixed */
-    /* Now we can safely enable the main dispatcher with proper VIC hardware initialization */
-    pr_info("*** CRITICAL: Main interrupt dispatcher RE-ENABLED after fixing VIC initialization ***\n");
-    pr_info("*** Root cause fixed: tx_isp_vic_start now properly initializes VIC hardware before enabling interrupts ***\n");
-
-    /* Register main interrupt dispatcher for IRQs 37 and 38 */
-    ret = request_threaded_irq(37, isp_irq_handle, isp_irq_thread_handle,
-                               IRQF_SHARED, "tx-isp-core", ourISPdev);
-    if (ret) {
-        pr_err("Failed to register IRQ 37: %d\n", ret);
-        goto err_cleanup_platform_device;
-    }
-
-    ret = request_threaded_irq(38, isp_irq_handle, isp_irq_thread_handle,
-                               IRQF_SHARED, "tx-isp-vic", ourISPdev);
-    if (ret) {
-        pr_err("Failed to register IRQ 38: %d\n", ret);
-        free_irq(37, ourISPdev);
-        goto err_cleanup_platform_device;
-    }
-
-    pr_info("*** Main interrupt dispatcher registered: IRQ 37 (ISP core) and IRQ 38 (VIC) ***\n");
+    /* CRITICAL FIX: REMOVE main interrupt dispatcher - Binary Ninja reference uses per-subdevice IRQ registration */
+    /* The Binary Ninja reference driver shows that each subdevice registers its own interrupt */
+    /* There is NO central main dispatcher in the reference driver */
+    pr_info("*** CRITICAL: Following Binary Ninja reference - NO main dispatcher, each subdevice registers its own IRQ ***\n");
+    pr_info("*** This eliminates the double registration problem that was causing kernel panics ***\n");
 
     /* NOTE: Platform driver already registered earlier - no need to register again */
 
@@ -5336,11 +5318,9 @@ static void tx_isp_exit(void)
         ourISPdev = NULL;
         pr_info("*** ourISPdev set to NULL - interrupt handlers will now safely exit ***\n");
 
-        /* CRITICAL: Free main dispatcher IRQs since they are now enabled */
-        pr_info("*** CLEANUP: Freeing main dispatcher IRQs 37 and 38 ***\n");
-        free_irq(37, local_isp_dev);
-        free_irq(38, local_isp_dev);
-        pr_info("*** Main dispatcher IRQs freed ***\n");
+        /* CRITICAL: No main dispatcher IRQs to free - following Binary Ninja reference */
+        /* Each subdevice frees its own IRQ during subdevice cleanup */
+        pr_info("*** CLEANUP: No main dispatcher IRQs to free - subdevices handle their own IRQs ***\n");
 
         /* Free hardware interrupts if initialized (legacy cleanup) */
         if (isp_irq > 0 && isp_irq != 37 && isp_irq != 38) {

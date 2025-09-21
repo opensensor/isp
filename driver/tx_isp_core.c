@@ -1818,40 +1818,6 @@ irqreturn_t tx_isp_core_irq_thread_handle(int irq, void *dev_id)
     return IRQ_HANDLED;
 }
 
-/* tx_isp_request_irq - EXACT Binary Ninja implementation */
-int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
-{
-    extern struct tx_isp_dev *ourISPdev;
-    int irq_number;
-    int ret;
-
-    if (!pdev || !irq_info) {
-        pr_err("tx_isp_request_irq: Invalid parameters\n");
-        return -EINVAL;
-    }
-    
-    /* Binary Ninja: int32_t $v0_1 = private_platform_get_irq(arg1, 0) */
-    irq_number = platform_get_irq(pdev, 0);
-    if (irq_number < 0) {
-        pr_err("tx_isp_request_irq: Failed to get IRQ: %d\n", irq_number);
-        return irq_number;
-    }
-    
-    /* Binary Ninja: private_spin_lock_init(arg2) */
-    spin_lock_init((spinlock_t *)irq_info);
-
-    /* *** CRITICAL: ISP Core IRQ is handled by main dispatcher in tx-isp-module.c *** */
-    /* No direct IRQ registration needed - dispatcher calls ispcore_interrupt_service_routine */
-    if (!ourISPdev) {
-        pr_err("tx_isp_request_irq: No ISP device available\n");
-        return -ENODEV;
-    }
-
-    pr_info("*** tx_isp_request_irq: ISP Core IRQ %d will be handled by main dispatcher ***\n", irq_number);
-    pr_info("*** tx_isp_request_irq: Dispatcher will call handler with dev_id = %p (ISP device) ***\n", ourISPdev);
-    return 0;
-}
-
 /* Configure ISP system clocks */
 int tx_isp_configure_clocks(struct tx_isp_dev *isp)
 {
