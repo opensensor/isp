@@ -4024,17 +4024,6 @@ static int tx_isp_init(void)
     /* REMOVED: Frame generation work queue - NOT in reference driver */
     /* Reference driver uses pure interrupt-driven frame processing */
     pr_info("*** Using reference driver interrupt-driven frame processing ***\n");
-    
-    /* *** REMOVED DUPLICATE VIC DEVICE CREATION *** */
-    /* VIC device will be created by tx_isp_vic_probe with proper register mapping */
-    pr_info("*** VIC DEVICE CREATION DEFERRED TO PLATFORM DRIVER PROBE ***\n");
-    
-    /* *** CRITICAL FIX: VIN device creation MUST be deferred until after memory mappings *** */
-    pr_info("*** VIN DEVICE CREATION DEFERRED TO tx_isp_core_probe (after memory mappings) ***\n");
-    pr_info("*** This fixes the 'ISP core registers not available' error ***\n");
-    
-    /* *** VIN setup now handled in tx_isp_subdev_auto_link function *** */
-    pr_info("*** VIN SUBDEV OPS AND INITIALIZATION DEFERRED TO AUTO-LINK PHASE ***\n");
 
     /* *** CRITICAL FIX: Register subdev platform drivers BEFORE main platform device *** */
     /* This ensures VIC/CSI/VIN drivers are available when main probe function runs */
