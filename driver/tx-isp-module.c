@@ -3312,14 +3312,12 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             /* Special case: if requesting index 0 and we have a connected sensor subdev */
             struct tx_isp_subdev *sensor_sd = ourISPdev->sensor_sd;
             if (sensor_sd && sensor_sd->active_sensor && sensor_sd->active_sensor->info.name[0] != '\0') {
-            	if (active_sensor && active_sensor->info.name[0] != '\0') {
-                	strncpy(input_data.name, active_sensor->info.name, sizeof(input_data.name) - 1);
-                	input_data.name[sizeof(input_data.name) - 1] = '\0';
-                	sensor_found = 1;
-                	pr_debug("*** FOUND ACTIVE SENSOR: index=%d name=%s ***\n",
+                strncpy(input_data.name, sensor_sd->active_sensor->info.name, sizeof(input_data.name) - 1);
+                input_data.name[sizeof(input_data.name) - 1] = '\0';
+                sensor_found = 1;
+                pr_debug("*** FOUND ACTIVE SENSOR: index=%d name=%s ***\n",
                        input_data.index, input_data.name);
-	            }
-			}
+            }
         }
         
         /* SAFE: Early return for invalid sensor index to prevent crashes */
