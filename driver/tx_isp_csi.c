@@ -743,7 +743,11 @@ int tx_isp_csi_probe(struct platform_device *pdev)
     /* Binary Ninja: void* $s1_1 = arg1[0x16] */
     pdata = pdev->dev.platform_data;
 
-    /* CRITICAL FIX: Set host_priv to CSI device for Binary Ninja compatibility */
+    /* CRITICAL FIX: Set both dev_priv and host_priv to CSI device */
+    /* csi_video_s_stream() uses tx_isp_get_subdevdata() which reads dev_priv */
+    tx_isp_set_subdevdata(&csi_dev->sd, csi_dev);
+    pr_info("*** CSI PROBE: Set dev_priv to csi_dev %p for csi_video_s_stream() ***\n", csi_dev);
+
     /* Binary Ninja expects CSI device at offset 0xd4 (host_priv field) */
     tx_isp_set_subdev_hostdata(&csi_dev->sd, csi_dev);
     pr_info("*** CSI PROBE: Set host_priv to csi_dev %p for Binary Ninja compatibility ***\n", csi_dev);
