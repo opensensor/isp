@@ -249,7 +249,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     int var_28 = 0;
     int a0_4;
 
-    pr_info("*** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=%d ***\n", enable);
+    pr_info("*** ispcore_video_s_stream: FIXED Binary Ninja MCP implementation - enable=%d ***\n", enable);
 
     if (!sd) {
         pr_err("ispcore_video_s_stream: Invalid subdev\n");
@@ -350,59 +350,17 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         s3_1 = &isp_dev->subdevs[0];
     }
 
+    /* CRITICAL FIX: Remove recursive subdev loop that causes infinite recursion */
+    /* The main tx_isp_video_s_stream function already handles calling s_stream on all subdevs */
+    /* The core's s_stream should only handle core-specific operations, not call other subdevs */
+
+    pr_info("*** ispcore_video_s_stream: FIXED - removed recursive subdev loop ***\n");
+
     /* Binary Ninja: int32_t result = 0 */
     result = 0;
 
-    /* Binary Ninja: Subdev loop */
-    while (true) {
-        /* Binary Ninja: void* $a0_5 = *$s3_1 */
-        struct tx_isp_subdev *a0_5 = *s3_1;
-
-        if (a0_5 != NULL) {
-            /* Binary Ninja: int32_t* $v0_7 = *(*($a0_5 + 0xc4) + 4) */
-            struct tx_isp_subdev_video_ops *video_ops = a0_5->ops ? a0_5->ops->video : NULL;
-
-            if (video_ops != NULL) {
-                /* Binary Ninja: int32_t $v0_8 = *$v0_7 */
-                int (*s_stream_func)(struct tx_isp_subdev *, int) = video_ops->s_stream;
-
-                if (s_stream_func == NULL) {
-                    /* Binary Ninja: result = 0xfffffdfd */
-                    result = -ENOIOCTLCMD;
-                } else {
-                    /* Binary Ninja: int32_t result_1 = $v0_8($a0_5, arg2) */
-                    int result_1 = s_stream_func(a0_5, enable);
-                    result = result_1;
-
-                    if (result_1 != 0) {
-                        /* Binary Ninja: if (result_1 != 0xfffffdfd) */
-                        if (result_1 != -ENOIOCTLCMD) {
-                            /* Binary Ninja: $a0_4 = *($s0 + 0x15c) */
-                            a0_4 = core_dev->irq_enabled;
-                            break;
-                        }
-                        /* Binary Ninja: result = 0xfffffdfd */
-                        result = -ENOIOCTLCMD;
-                    }
-                }
-            } else {
-                /* Binary Ninja: result = 0xfffffdfd */
-                result = -ENOIOCTLCMD;
-            }
-            /* Binary Ninja: $s3_1 += 4 */
-            s3_1 += 1;
-        } else {
-            /* Binary Ninja: $s3_1 += 4 */
-            s3_1 += 1;
-        }
-
-        /* Binary Ninja: if (&arg1[0x1e] == $s3_1) */
-        if (&isp_dev->subdevs[ISP_MAX_SUBDEVS] == s3_1) {
-            /* Binary Ninja: $a0_4 = *($s0 + 0x15c) */
-            a0_4 = core_dev->irq_enabled;
-            break;
-        }
-    }
+    /* Binary Ninja: $a0_4 = *($s0 + 0x15c) */
+    a0_4 = core_dev->irq_enabled;
 
     /* Binary Ninja: void* $v0_10 = arg1[0x2e] */
     /* FIXED: Access IRQ info from the core device's subdev structure */
