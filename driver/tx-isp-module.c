@@ -4525,10 +4525,12 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("Sensor get control: cmd=0x%x\n", control_arg.cmd);
         
         // Route to sensor IOCTL handler if available
-        if (isp_dev->sensor && isp_dev->sensor->sd.ops &&
-            isp_dev->sensor->sd.ops->sensor && isp_dev->sensor->sd.ops->sensor->ioctl) {
-            ret = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd,
-                                                        control_arg.cmd, &control_arg.value);
+        extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+        struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+        if (sensor && sensor->sd.ops &&
+            sensor->sd.ops->sensor && sensor->sd.ops->sensor->ioctl) {
+            ret = sensor->sd.ops->sensor->ioctl(&sensor->sd,
+                                               control_arg.cmd, &control_arg.value);
             if (ret == 0) {
                 if (copy_to_user(argp, &control_arg, sizeof(control_arg)))
                     return -EFAULT;
