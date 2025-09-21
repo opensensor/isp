@@ -563,6 +563,22 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
 
         pr_info("*** DEBUG: ourISPdev->vic_dev set to: %p ***\n", ourISPdev->vic_dev);
 
+        /* CRITICAL FIX: Register VIC IRQ immediately after successful linking */
+        if (vic_dev->sd.irq_info.irq == 0) {
+            extern int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq_info);
+            struct platform_device *vic_pdev = to_platform_device(vic_dev->sd.dev);
+
+            pr_info("*** VIC AUTO-LINK: Registering VIC IRQ immediately after device linking ***\n");
+            int irq_ret = tx_isp_request_irq(vic_pdev, &vic_dev->sd.irq_info);
+            if (irq_ret != 0) {
+                pr_err("*** VIC AUTO-LINK: Failed to register VIC IRQ: %d ***\n", irq_ret);
+            } else {
+                pr_info("*** VIC AUTO-LINK: VIC IRQ registered successfully ***\n");
+            }
+        } else {
+            pr_info("*** VIC AUTO-LINK: VIC IRQ already registered (irq=%d) ***\n", vic_dev->sd.irq_info.irq);
+        }
+
         /* CRITICAL: Map secondary VIC register space (0x10023000) */
         vic_dev->vic_regs_secondary = ioremap(0x10023000, 0x1000);
         if (!vic_dev->vic_regs_secondary) {
