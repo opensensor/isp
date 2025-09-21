@@ -1163,7 +1163,10 @@ int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
         return -EINVAL;
     }
     
-    mutex_lock(&vic_dev->state_lock);
+    /* CRITICAL FIX: Use spinlock instead of mutex to prevent "sleeping in atomic context" */
+    /* mutex_lock() can sleep, but this function can be called from atomic context */
+    unsigned long flags;
+    spin_lock_irqsave(&vic_dev->lock, flags);
     
     if (vic_dev->state == 1) {
         vic_dev->state = 2; /* INIT -> READY */
@@ -1196,7 +1199,8 @@ int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
         }
     }
     
-    mutex_unlock(&vic_dev->state_lock);
+    /* CRITICAL FIX: Use spinlock instead of mutex to prevent "sleeping in atomic context" */
+    spin_unlock_irqrestore(&vic_dev->lock, flags);
     return 0;
 }
 
