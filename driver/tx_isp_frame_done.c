@@ -26,12 +26,11 @@ void isp_frame_done_wakeup(void)
     /* Increment frame done counter */
     atomic64_inc(&frame_done_cnt);
 
-    /* CRITICAL FIX: Also increment main ISP frame counter for /proc/jz/isp/isp-w02 */
+    /* CRITICAL FIX: Frame counter now managed by frame_done_cnt only */
     extern struct tx_isp_dev *ourISPdev;
     if (ourISPdev) {
-        ourISPdev->frame_count++;
-        pr_info("*** FRAME SYNC: ISP frame count = %u (internal count = %lld) ***\n",
-                ourISPdev->frame_count, atomic64_read(&frame_done_cnt));
+        pr_info("*** FRAME SYNC: Frame done count = %lld ***\n",
+                atomic64_read(&frame_done_cnt));
     }
 
     /* Set condition flag */
