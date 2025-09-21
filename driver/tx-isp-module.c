@@ -572,9 +572,14 @@ void system_reg_write(u32 reg, u32 value);
 /* system_reg_write - Binary Ninja reference implementation with streaming protection */
 void system_reg_write(u32 arg1, u32 arg2)
 {
-    /* Binary Ninja EXACT: *(*(mdns_y_pspa_cur_bi_wei0_array + 0xb8) + arg1) = arg2 */
-    /* mdns_y_pspa_cur_bi_wei0_array is the ISP device structure (ourISPdev) */
-    /* +0xb8 is the register base address offset in the device structure */
+    /* CRITICAL FIX: Use safe struct member access instead of dangerous offset *(ourISPdev + 0xb8) */
+    /* MIPS ALIGNMENT CHECK: Ensure ourISPdev is properly aligned before accessing */
+    if (ourISPdev && ((unsigned long)ourISPdev & 0x3) != 0) {
+        pr_err("*** CRITICAL: ourISPdev pointer 0x%p not 4-byte aligned - would cause unaligned access crash! ***\n", ourISPdev);
+        return;
+    }
+
+    /* SAFE: Use proper struct member access instead of offset arithmetic */
 
     extern uint32_t vic_start_ok;
 
@@ -5377,8 +5382,14 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
             return 0xffffffea;
         }
         
-        /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
-        /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+        /* CRITICAL FIX: Use safe struct member access instead of dangerous offset *(arg1 + 0xd4) */
+        /* MIPS ALIGNMENT CHECK: Ensure isp_dev is properly aligned before accessing */
+        if (((unsigned long)isp_dev & 0x3) != 0) {
+            pr_err("*** CRITICAL: isp_dev pointer 0x%p not 4-byte aligned - would cause unaligned access crash! ***\n", isp_dev);
+            return -EINVAL;
+        }
+
+        /* SAFE: Use proper struct member access instead of offset arithmetic */
         vic_dev = isp_dev->vic_dev;
         result = 0xffffffea;
         
