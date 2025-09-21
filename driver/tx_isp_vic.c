@@ -626,15 +626,29 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: Additional control registers */
         writel(0x0, vic_regs + 0x1a0);     /* Frame config */
         
-        /* CRITICAL FIX: Skip dangerous VIC unlock sequence that causes kernel panics */
-        /* The VIC unlock sequence was causing hardware corruption and kernel panics */
-        /* when the hardware didn't respond properly to the unlock commands */
-        pr_info("*** tx_isp_vic_start: SKIPPING dangerous VIC unlock sequence to prevent kernel panic ***\n");
-        pr_info("*** VIC unlock sequence was causing hardware corruption - using safe initialization ***\n");
-
-        /* SAFE: Direct VIC enable without dangerous unlock sequence */
-        writel(1, vic_regs + 0x0);
-        pr_info("*** tx_isp_vic_start: VIC enabled safely (skipped unlock sequence) ***\n");
+        /* Binary Ninja EXACT: VIC unlock sequence for MIPI interface */
+        /* **(arg1 + 0xb8) = 2 */
+        writel(2, vic_regs + 0x0);
+        pr_info("*** tx_isp_vic_start: Step 1 - VIC unlock sequence: wrote 2 to reg 0x0 ***\n");
+        
+        /* **(arg1 + 0xb8) = 4 */
+        writel(4, vic_regs + 0x0);
+        pr_info("*** tx_isp_vic_start: Step 2 - VIC unlock sequence: wrote 4 to reg 0x0 ***\n");
+        
+        /* Binary Ninja: while (*$v1_30 != 0) nop */
+        u32 timeout = 10000;
+        u32 vic_status;
+        while ((vic_status = readl(vic_regs + 0x0)) != 0 && timeout-- > 0) {
+            /* nop - just wait */
+            udelay(1);
+        }
+        
+        if (timeout == 0) {
+            pr_err("*** tx_isp_vic_start: VIC unlock timeout! Final status=0x%x ***\n", vic_status);
+            return -ETIMEDOUT;
+        }
+        
+        pr_info("*** tx_isp_vic_start: Step 3 - VIC unlock completed, status=0x%x, timeout_remaining=%d ***\n", vic_status, timeout);
 
     } else {
         /* Non-MIPI interfaces (DVP, etc.) */
@@ -647,9 +661,14 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x4440, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
 
-        /* Enable VIC */
-        writel(1, vic_regs + 0x0);
+        /* Binary Ninja: For non-MIPI, write 2 then 1 */
+        writel(2, vic_regs + 0x0);
+        pr_info("tx_isp_vic_start: Non-MIPI: wrote 2 to reg 0x0\n");
     }
+
+    /* Binary Ninja EXACT: Final VIC enable - *$v0_47 = 1 */
+    writel(1, vic_regs + 0x0);
+    pr_info("*** tx_isp_vic_start: Step 4 - VIC enabled: wrote 1 to reg 0x0 ***\n");
 
     /* Binary Ninja: Final configuration - Enable ISP pipeline */
     if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
@@ -669,10 +688,12 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("tx_isp_vic_start: ISP pipeline enabled\n");
     }
 
-    /* CRITICAL FIX: Don't set vic_start_ok here - let tx_vic_enable_irq handle it */
-    /* This prevents race conditions between hardware init and interrupt enable */
-    pr_info("tx_isp_vic_start: VIC hardware initialization completed\n");
+    /* Binary Ninja EXACT: vic_start_ok = 1 */
+    extern uint32_t vic_start_ok;
+    vic_start_ok = 1;
+    pr_info("*** tx_isp_vic_start: vic_start_ok set to 1 ***\n");
 
+    pr_info("*** tx_isp_vic_start: VIC hardware initialization completed successfully ***\n");
     return 0;
 }
 
