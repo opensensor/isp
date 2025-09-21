@@ -314,9 +314,12 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
                 s2_1 += 0xc4;  /* sizeof(frame_channel) */
 
                 /* Binary Ninja: if (*($v0_6 + 0x74) == 4) */
-                if (((struct frame_channel_device*)v0_6)->state == 4) {
+                /* FIXED: Check if channel state indicates streaming (state 4) */
+                struct frame_channel_device *channel_dev = (struct frame_channel_device*)v0_6;
+                if (channel_dev->state.streaming) {  /* Check streaming state instead of comparing to 4 */
                     /* Binary Ninja: ispcore_frame_channel_streamoff(*($v0_6 + 0x78)) */
-                    ispcore_frame_channel_streamoff(((struct frame_channel_device*)v0_6)->channel_num);
+                    /* FIXED: Pass pointer to channel_num as expected by function signature */
+                    ispcore_frame_channel_streamoff(&channel_dev->channel_num);
                 }
 
                 /* Binary Ninja: if ($s2_1 == 0x24c) break */
@@ -398,8 +401,9 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     }
 
     /* Binary Ninja: void* $v0_10 = arg1[0x2e] */
-    /* This appears to be accessing isp_dev at a different offset - likely the IRQ info */
-    struct tx_isp_irq_info *irq_info = &core_dev->irq_info;
+    /* FIXED: Access IRQ info from the main ISP device, not core device */
+    extern struct tx_isp_dev *ourISPdev;
+    struct tx_isp_irq_info *irq_info = &ourISPdev->irq_info;
 
     /* Binary Ninja: IRQ enable/disable logic */
     if (a0_4 == 1 || enable == 0) {
