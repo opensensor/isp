@@ -1,132 +1,32 @@
-elcome to Thingino firmware!
-ing-wyze-cam3-a000 login: [   42.560802] Unhandled kernel unaligned access[#1]:
-[   42.565805] CPU 0 Unable to handle kernel paging request at virtual address 000000c0, epc == 80054a04, ra == 8005e2c8
-[   42.576754] Oops[#2]:
-[   42.579092] CPU: 0 PID: 0 Comm:  Tainted: G           O 3.10.14__isvp_swan_1.0__ #1
-[   42.586995] task: afb00014 ti: 855f6000 task.ti:   (null)
-[   42.592555] $ 0   : 00000000 10001c00 0000000b 00000000
-[   42.597949] $ 4   : 804c5b00 00000001 855f7fa8 ffffffff
-[   42.603340] $ 8   : 10001c00 1000001e 00000000 ffffffe0
-[   42.608736] $12   : 00000023 855fde48 00000000 6e67696c
-[   42.614128] $16   : 804c5b00 00000001 855f7fa8 ffffffff
-[   42.619515] $20   : 8001b1a4 855f8028 00030000 00000000
-[   42.624912] $24   : 00000001 80065d98
-[   42.630301] $28   : 855f8000 855f7f48 80450000 8005e2c8
-[   42.635686] Hi    : 00000000
-[   42.638645] Lo    : 00000000
-[   42.641612] epc   : 80054a04 0x80054a04
-[   42.645568]     Tainted: G           O
-[   42.649436] ra    : 8005e2c8 0x8005e2c8
-[   42.653384] Status: 10001c02 KERNEL EXL
-[   42.657432] Cause : 40808008
-[   42.660392] BadVA : 000000c0
-[   42.663352] PrId  : 00d00100 (Ingenic Xburst)
-[   42.667839] Modules linked in: sensor_gc2053_t31(O) tx_isp_t31(O) 8189fs(O) pwm_hal(O) pwm_core(O) gpio_userkeys(O) avpu(O) audio(O) cp210x ch341 usbserial exfat(O) jzmmc_v12
-[   42.683907] Process  (pid: 0, threadinfo=855f6000, task=afb00014, tls=afb50028)
-[   42.691449] Stack : 00604825 00a7402b 1500ff96 70e84020 00000000 10001c00 00000000 855f8028
-          803ea3f8 80024270 8001b1a4 8005e320 10001c00 1000001e 00000000 ffffffe0
-          00000000 855fde48 00000000 8005e86c 804531a8 8007bc40 80024270 8001b1a4
-          855f8028 803ea3f8 00000000 00000004 0000000b 855f8028 fffffff2 8001f854
-          8001b1a4 8001b1a4 855f8028 800241f8 00000004 0000000b 8e5500dc fffffff2
-          ...
-[   42.728094] Call Trace:[<80024270>] 0x80024270
-[   42.732674] [<8001b1a4>] 0x8001b1a4  
-[   42.736268] [<8005e320>] 0x8005e320  
-[   42.739860] [<8005e86c>] 0x8005e86c  
-[   42.743456] [<8007bc40>] 0x8007bc40  
-[   42.747050] [<80024270>] 0x80024270  
-[   42.750644] [<8001b1a4>] 0x8001b1a4  
-[   42.754241] [<8001f854>] 0x8001f854  
-[   42.757831] [<8001b1a4>] 0x8001b1a4  
-
-[   42.757831] [<8001b1a4>] 0x8001b1a4  
-[   42.761425] [<8001b1a4>] 0x8001b1a4
-[   42.765020] [<800241f8>] 0x800241f8
-[   42.768612] [<80024270>] 0x80024270
-[   42.772210] [<80021464>] 0x80021464
-[   42.775804]
-[   42.777333]
-Code: 00000000  00000000  8f830000 <8c6200c0> 24420001  03e00008  ac6200c0  03e00008  00000000
-[   42.787620] CPU 0 Unable to handle kernel paging request at virtual address 000000c8, epc == 80064e40, ra == 80044e94
-[   42.798574] Oops[#3]:
-[   42.800912] CPU: 0 PID: 0 Comm:  Tainted: G      D    O 3.10.14__isvp_swan_1.0__ #1
-[   42.808813] task: afb00014 ti: 855f6000 task.ti:   (null)
-[   42.814375] $ 0   : 00000000 10001c00 00000000 00000001
-[   42.819768] $ 4   : 03b40000 00010000 00000001 00000001
-[   42.825152] $ 8   : 00000000 00000000 07aa04ef 68cf98d4
-[   42.830538] $12   : 00000000 804c0000 00000000 00000000
-[   42.835930] $16   : 00000001 80452880 afb00014 00000004
-[   42.841322] $20   : 80072ec8 80451e30 ffffffff 80450000
-[   42.846708] $24   : 00000000 800662b8
-[   42.852104] $28   : 855f6000 855f7af0 80450000 80044e94
-[   42.857493] Hi    : 00000000
-[   42.860456] Lo    : 00000000
-[   42.863422] epc   : 80064e40 0x80064e40
-[   42.867370]     Tainted: G      D    O
-[   42.871226] ra    : 80044e94 0x80044e94
-[   42.875174] Status: 10001c02 KERNEL EXL
-[   42.879228] Cause : 40808408
-[   42.882196] BadVA : 000000c8
-[   42.885162] PrId  : 00d00100 (Ingenic Xburst)
-[   42.889655] Modules linked in: sensor_gc2053_t31(O) tx_isp_t31(O) 8189fs(O) pwm_hal(O) pwm_core(O) gpio_userkeys(O) avpu(O) audio(O) cp210x ch341 usbserial exfat(O) jzmmc_v12
-[   42.905745] Process  (pid: 0, threadinfo=855f6000, task=afb00014, tls=afb50028)
-[   42.913279] Stack : 80450000 80072d78 00000001 8401fa00 848f1ec4 00000000 afb00014 2e66e371
-          0000002a 80044e94 855f7ce8 80453000 855f7ce8 2e66e371 0000002a 80453000
-          855f7ce8 80072f14 804c5d70 80451e60 80453000 8005b658 00000009 848f1e88
-          2e66e371 0000002a 80453000 80453000 0000002a 80451e60 855f7bb0 8005bac0
-          8045446c 0000000b 0000000b 00000000 2e669551 0000002a 3b9aca00 00000003
-          ...
-[   42.949956] Call Trace:[<80072d78>] 0x80072d78
-[   42.954544] [<80044e94>] 0x80044e94
-[   42.958128] [<80072f14>] 0x80072f14
-[   42.961720] [<8005b658>] 0x8005b658
-[   42.965307] [<8005bac0>] 0x8005bac0
-[   42.968896] [<8005c8cc>] 0x8005c8cc
-[   42.972483] [<801aca54>] 0x801aca54
-[   42.976083] [<8001409c>] 0x8001409c
-
-[   42.983259] [<80084618>] 0x80084618
-[   42.986853] [<8001b1a4>] 0x8001b1a4
-[   42.990448] [<8008484c>] 0x8008484c
-[   42.994030] [<801ae2b4>] 0x801ae2b4
-[   42.997620] [<80037e80>] 0x80037e80
-[   43.001216] [<800873e8>] 0x800873e8
-[   43.004804] [<800840c0>] 0x800840c0
-[   43.008401] [<8001d1e8>] 0x8001d1e8
-[   43.011995] [<8001896c>] 0x8001896c
-[   43.015590] [<8001b1a0>] 0x8001b1a0
-[   43.019184] [<80054a04>] 0x80054a04
-[   43.022776] [<8001b1a4>] 0x8001b1a4
-[   43.026367] [<80065d98>] 0x80065d98
-[   43.029953] [<8001f8c8>] 0x8001f8c8
-[   43.033549] [<8001f8dc>] 0x8001f8dc
-[   43.037147] [<8002463c>] 0x8002463c
-[   43.040734] [<80054a04>] 0x80054a04
-[   43.044330] [<8005e2c8>] 0x8005e2c8
-[   43.047924] [<800241f8>] 0x800241f8
-[   43.051519] [<800242bc>] 0x800242bc
-[   43.055117] [<8001b1a4>] 0x8001b1a4
-[   43.058709] [<8001b1a4>] 0x8001b1a4
-[   43.062309] [<8001b1a4>] 0x8001b1a4
-[   43.065905] [<80065d98>] 0x80065d98
-[   43.069505] [<8005e2c8>] 0x8005e2c8
-[   43.073101] [<80054a04>] 0x80054a04
-[   43.076693] [<80024270>] 0x80024270
-[   43.080281] [<8001b1a4>] 0x8001b1a4
-[   43.083874] [<8005e320>] 0x8005e320
-[   43.087472] [<8005e86c>] 0x8005e86c
-[   43.091062] [<8007bc40>] 0x8007bc40
-[   43.094654] [<80024270>] 0x80024270
-[   43.098251] [<8001b1a4>] 0x8001b1a4
-[   43.101844] [<8001f854>] 0x8001f854
-[   43.105435] [<8001b1a4>] 0x8001b1a4
-[   43.109029] [<8001b1a4>] 0x8001b1a4
-[   43.112626] [<800241f8>] 0x800241f8
-[   43.116214] [<80024270>] 0x80024270
-[   43.119811] [<80021464>] 0x80021464
-[   43.123405]
-[   43.124933]
-Code: 8e430178  00671821  ae430178 <8c4300c8> 10600010  00000000  8f830014  24630001  af830014
-[   43.135199] ---[ end trace 21a17c32036b4ebd ]---
-[   43.139953] Kernel panic - not syncing: Fatal exception in interrupt
-[   43.146503] Rebooting in 10 seconds..      
+[   24.488333] TX ISP driver initializing with new subdevice management system...
+[   24.488346] *** Using reference driver interrupt-driven frame processing ***
+[   24.488352] *** VIC DEVICE CREATION DEFERRED TO PLATFORM DRIVER PROBE ***
+[   24.488357] *** VIN DEVICE CREATION DEFERRED TO tx_isp_core_probe (after memory mappings) ***
+[   24.488363] *** This fixes the 'ISP core registers not available' error ***
+[   24.488368] *** VIN SUBDEV OPS AND INITIALIZATION DEFERRED TO AUTO-LINK PHASE ***
+[   24.488373] *** CRITICAL: REGISTERING SUBDEV PLATFORM DRIVERS FIRST ***
+[   24.488379] *** TX ISP SUBDEV PLATFORM DRIVERS REGISTRATION ***
+[   24.498337] All ISP subdev platform drivers registered successfully
+[   24.498349] *** SUBDEV PLATFORM DRIVERS REGISTERED - VIC/CSI/VIN/CORE DRIVERS AVAILABLE ***
+[   24.498355] *** CRITICAL: INITIALIZING SUBDEVICE REGISTRY BEFORE MAIN PLATFORM DEVICE ***
+[   24.498361] *** REFERENCE DRIVER: Subdev platform devices will be registered by tx_isp_create_graph_and_nodes ***
+[   24.500884] *** CRITICAL: ourISPdev is NULL after platform device registration! ***
+[   24.500896] *** This indicates platform probe function failed or didn't run ***
+[   24.503388] *** TX ISP SUBDEV PLATFORM DRIVERS UNREGISTRATION ***
+[   24.513212] All ISP subdev platform drivers unregistered
+[   24.524807] TX ISP driver initializing with new subdevice management system...
+[   24.524819] *** Using reference driver interrupt-driven frame processing ***
+[   24.524825] *** VIC DEVICE CREATION DEFERRED TO PLATFORM DRIVER PROBE ***
+[   24.524830] *** VIN DEVICE CREATION DEFERRED TO tx_isp_core_probe (after memory mappings) ***
+[   24.524835] *** This fixes the 'ISP core registers not available' error ***
+[   24.524841] *** VIN SUBDEV OPS AND INITIALIZATION DEFERRED TO AUTO-LINK PHASE ***
+[   24.524846] *** CRITICAL: REGISTERING SUBDEV PLATFORM DRIVERS FIRST ***
+[   24.524851] *** TX ISP SUBDEV PLATFORM DRIVERS REGISTRATION ***
+[   24.535276] All ISP subdev platform drivers registered successfully
+[   24.535288] *** SUBDEV PLATFORM DRIVERS REGISTERED - VIC/CSI/VIN/CORE DRIVERS AVAILABLE ***
+[   24.535294] *** CRITICAL: INITIALIZING SUBDEVICE REGISTRY BEFORE MAIN PLATFORM DEVICE ***
+[   24.535300] *** REFERENCE DRIVER: Subdev platform devices will be registered by tx_isp_create_graph_and_nodes ***
+[   24.537761] *** CRITICAL: ourISPdev is NULL after platform device registration! ***
+[   24.537773] *** This indicates platform probe function failed or didn't run ***
+[   24.540502] *** TX ISP SUBDEV PLATFORM DRIVERS UNREGISTRATION ***
+[   24.550465] All ISP subdev platform drivers unregistered

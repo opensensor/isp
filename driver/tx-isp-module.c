@@ -4869,6 +4869,15 @@ static int tx_isp_init(void)
     /* NOTE: Subdev registry initialization will be done after platform device registration */
     /* when ourISPdev is available from the probe function */
 
+    /* *** CRITICAL: Register main platform driver BEFORE platform device *** */
+    pr_info("*** CRITICAL: Registering main platform driver ***\n");
+    ret = platform_driver_register(&tx_isp_driver);
+    if (ret != 0) {
+        pr_err("Failed to register main platform driver: %d\n", ret);
+        goto err_cleanup_subdev_drivers;
+    }
+    pr_info("*** Main platform driver registered successfully ***\n");
+
     /* *** REFERENCE DRIVER: Individual subdev platform devices are registered by tx_isp_create_graph_and_nodes *** */
     pr_info("*** REFERENCE DRIVER: Subdev platform devices will be registered by tx_isp_create_graph_and_nodes ***\n");
 
@@ -4876,7 +4885,7 @@ static int tx_isp_init(void)
     ret = private_platform_device_register(&tx_isp_platform_device);
     if (ret != 0) {
         pr_err("not support the gpio mode!\n");
-        goto err_cleanup_subdev_drivers;
+        goto err_cleanup_main_driver;
     }
 
     /* CRITICAL: Check if platform probe function ran and set ourISPdev */
@@ -4950,6 +4959,8 @@ err_cleanup_irqs:
     free_irq(37, ourISPdev);
 err_cleanup_platform_device:
     private_platform_device_unregister(&tx_isp_platform_device);
+err_cleanup_main_driver:
+    platform_driver_unregister(&tx_isp_driver);
 err_cleanup_subdev_drivers:
     tx_isp_subdev_platform_exit();
 err_free_dev:
