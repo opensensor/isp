@@ -2061,7 +2061,7 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
         spin_lock_init(&vic_dev->buffer_mgmt_lock);
         pr_info("tx_isp_subdev_pipo: initialized spinlock\n");
         
-        /* SAFE: Set function pointers using proper array indexing */  TODO
+        /* SAFE: Set function pointers using proper array indexing */  // TODO
         //raw_pipe[0] = (void *)ispvic_frame_channel_qbuf;
         //raw_pipe[2] = (void *)ispvic_frame_channel_clearbuf;  /* offset 8 / 4 = index 2 */
         //raw_pipe[3] = (void *)ispvic_frame_channel_s_stream;  /* offset 0xc / 4 = index 3 */
