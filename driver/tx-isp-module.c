@@ -3290,12 +3290,12 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -EFAULT;
         }
 
-        pr_debug("TX_ISP_SENSOR_ENUM_INPUT: Enumerating sensor at index %d\n", sensor_index);
+        pr_info("TX_ISP_SENSOR_ENUM_INPUT: Enumerating sensor at index %d\n", sensor_index);
 
         /* Check if the requested index is valid */
         if (sensor_index >= (sizeof(sensor_names) / sizeof(sensor_names[0]) - 1) ||
             sensor_names[sensor_index] == NULL) {
-            pr_debug("TX_ISP_SENSOR_ENUM_INPUT: No sensor at index %d - returning error to end enumeration\n", sensor_index);
+            pr_info("TX_ISP_SENSOR_ENUM_INPUT: No sensor at index %d - returning error to end enumeration\n", sensor_index);
             return -EINVAL; /* No more sensors - this breaks the userspace loop */
         }
 
@@ -3303,7 +3303,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         memset(&var_98, 0, sizeof(var_98));
         strncpy((char*)&var_98, sensor_names[sensor_index], 0x4c - 1);
 
-        pr_debug("TX_ISP_SENSOR_ENUM_INPUT: Returning sensor '%s' at index %d\n",
+        pr_info("TX_ISP_SENSOR_ENUM_INPUT: Returning sensor '%s' at index %d\n",
                  sensor_names[sensor_index], sensor_index);
 
         /* Copy result back to userspace */
