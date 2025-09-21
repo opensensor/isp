@@ -1682,11 +1682,11 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     }
 
     /* Binary Ninja: Read interrupt status registers */
-    /* int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
-    int_status = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);
+    /* TEMPORARY: Simplified status reading to debug crash */
+    int_status = readl(vic_regs + 0x1e0);
+    mdma_status = readl(vic_regs + 0x1e4);
 
-    /* int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
-    mdma_status = (~readl(vic_regs + 0x1ec)) & readl(vic_regs + 0x1e4);
+    pr_info("VIC IRQ %d: Raw status=0x%x, mdma=0x%x\n", irq, int_status, mdma_status);
 
     /* Binary Ninja: Clear interrupts by writing status back */
     /* *($v0_4 + 0x1f0) = $v1_7 */
@@ -5049,9 +5049,14 @@ static int tx_isp_init(void)
     disable_irq(37);  /* Initially disabled */
     pr_info("*** MAIN DISPATCHER: IRQ 37 registered successfully ***\n");
 
-    /* Register IRQ 38 (VIC) with main dispatcher */
-    ret = request_threaded_irq(38, isp_irq_handle, isp_irq_thread_handle,
-                               IRQF_SHARED, "tx-isp-vic", ourISPdev);
+    /* Register IRQ 38 (VIC) with main dispatcher - CRITICAL: Use VIC device as dev_id */
+    if (ourISPdev && ourISPdev->vic_dev) {
+        ret = request_threaded_irq(38, isp_irq_handle, isp_irq_thread_handle,
+                                   IRQF_SHARED, "tx-isp-vic", ourISPdev->vic_dev);
+    } else {
+        pr_err("*** CRITICAL: Cannot register VIC IRQ - VIC device not available ***\n");
+        ret = -ENODEV;
+    }
     if (ret != 0) {
         pr_err("*** CRITICAL: Failed to register IRQ 38 main dispatcher: %d ***\n", ret);
         free_irq(37, ourISPdev);
