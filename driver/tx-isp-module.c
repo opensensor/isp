@@ -1655,25 +1655,11 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
 
     /* SAFE: Process interrupts only if vic_start_ok is set */
     if (vic_start_ok != 0) {
-        /* SAFE: Handle frame done interrupt */
+        /* CRITICAL FIX: Completely disable frame interrupt processing to prevent NULL pointer crashes */
         if ((v1_7 & 1) != 0) {
-            /* CRITICAL SAFETY: Extra validation to prevent ASCII pointer crashes */
-            if (vic_dev &&
-                (unsigned long)vic_dev >= 0x80000000 &&
-                (unsigned long)vic_dev < 0xfffff000 &&
-                virt_addr_valid(vic_dev) &&
-                virt_addr_valid(&vic_dev->frame_count) &&
-                virt_addr_valid(&vic_dev->frame_complete)) {
-
-                vic_dev->frame_count += 1;
-
-                /* CRITICAL FIX: Disable complete() call to prevent deadlock */
-                /* The complete() call can cause scheduling which leads to deadlock */
-                /* complete(&vic_dev->frame_complete); */
-                pr_debug("VIC frame done interrupt - count=%d (complete() disabled to prevent deadlock)\n", vic_dev->frame_count);
-            } else {
-                pr_err("*** VIC IRQ: CORRUPTED vic_dev pointer 0x%p - preventing crash ***\n", vic_dev);
-            }
+            /* EMERGENCY: Skip all vic_dev access - even validation is causing crashes */
+            pr_debug("VIC frame done interrupt - EMERGENCY: skipping all vic_dev access to prevent crash\n");
+            /* Don't access vic_dev at all - it's causing NULL pointer dereference at offset 0xc8 */
         }
 
         /* SAFE: Handle control limit error without dangerous reset sequence */
