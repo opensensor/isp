@@ -56,30 +56,35 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
     int32_t v1;
     extern struct tx_isp_dev *ourISPdev;
 
-    pr_info("VIN: tx_isp_vin_init: EMERGENCY SAFETY - returning success without dangerous operations = 0x%x\n", arg2);
+    pr_info("VIN: tx_isp_vin_init: EXACT Binary Ninja implementation with safety checks = 0x%x\n", arg2);
 
-    /* CRITICAL SAFETY: This function has dangerous pointer operations that cause kernel panics */
-    /* Skip all the unsafe pointer dereferencing and just return success */
-    /* VIN device is already properly initialized during probe */
-
-    if (!ourISPdev || !ourISPdev->vin_dev) {
-        pr_err("VIN: tx_isp_vin_init: No VIN device available\n");
-        return -ENODEV;
+    /* CRITICAL SAFETY: Validate arg1 before any access */
+    if (!arg1) {
+        pr_err("VIN: tx_isp_vin_init: arg1 is NULL\n");
+        return -EINVAL;
     }
 
-    /* Set VIN state safely */
-    struct tx_isp_vin_device *vin_dev = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
-    v1 = arg2 ? 3 : 2;  /* Binary Ninja: v1 = 3 if enable, 2 if disable */
-    vin_dev->state = v1;
+    /* CRITICAL SAFETY: Validate arg1 is in valid kernel memory range */
+    if ((uintptr_t)arg1 < 0x80000000 || (uintptr_t)arg1 >= 0xfffff000) {
+        pr_err("VIN: tx_isp_vin_init: arg1 %p is not in valid kernel memory range\n", arg1);
+        return -EINVAL;
+    }
 
-    pr_info("VIN: tx_isp_vin_init: SAFE - VIN state set to %d\n", v1);
-    return 0;  /* Return success */
+    /* CRITICAL SAFETY: Validate arg1 is properly aligned */
+    if (((uintptr_t)arg1 & 0x3) != 0) {
+        pr_err("VIN: tx_isp_vin_init: arg1 %p is not 4-byte aligned\n", arg1);
+        return -EINVAL;
+    }
 
-    /* CRITICAL FIX: The arg1 parameter can be GARBAGE!
-     * When called from subdev ops: arg1 is struct tx_isp_subdev *sd
-     * When called from tuning IOCTL: arg1 might be garbage pointer
-     * ALWAYS use global ISP device to avoid BadVA crashes */
-    struct tx_isp_vin_device *vin_dev = NULL;
+    /* Binary Ninja: void* $a0 = *(arg1 + 0xe4) */
+    /* SAFE: Access with bounds checking */
+    if (!virt_addr_valid((char*)arg1 + 0xe4)) {
+        pr_err("VIN: tx_isp_vin_init: arg1+0xe4 is not valid virtual address\n");
+        return -EINVAL;
+    }
+    a0 = *((void**)((char*)arg1 + 0xe4));
+
+    pr_info("VIN: tx_isp_vin_init: a0 (sensor) = %p\n", a0);
 
     if (!ourISPdev) {
         pr_err("VIN: tx_isp_vin_init: no global ISP device available\n");
