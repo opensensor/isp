@@ -2058,12 +2058,12 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
         struct tx_isp_subdev *a0 = *s4;
 
         if (a0 != 0) {
-            /* CRITICAL: Call activate_module before s_stream if streaming is being enabled */
-            if (arg2 == 1 && a0->ops && a0->ops->internal && a0->ops->internal->activate_module) {
-                pr_info("*** tx_isp_video_s_stream: Calling activate_module on subdev %d ***\n", i);
+            /* CRITICAL: Call activate_module ONLY on core device (index 4) before s_stream */
+            if (arg2 == 1 && i == 4 && a0->ops && a0->ops->internal && a0->ops->internal->activate_module) {
+                pr_info("*** tx_isp_video_s_stream: Calling activate_module on CORE device (subdev %d) ***\n", i);
                 int activate_ret = a0->ops->internal->activate_module(a0);
                 if (activate_ret != 0 && activate_ret != -ENOIOCTLCMD) {
-                    pr_err("tx_isp_video_s_stream: activate_module failed on subdev %d: %d\n", i, activate_ret);
+                    pr_err("tx_isp_video_s_stream: activate_module failed on core device: %d\n", activate_ret);
                     /* Continue - don't fail the entire streaming operation */
                 }
             }
