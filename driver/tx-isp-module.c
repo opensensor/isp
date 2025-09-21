@@ -4267,146 +4267,69 @@ static void tx_isp_exit(void)
     pr_info("TX ISP driver removed\n");
 }
 
-/* vic_sensor_ops_ioctl - FIXED with proper struct member access */
+/* vic_sensor_ops_ioctl - EXACT Binary Ninja reference implementation */
 int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
-    struct tx_isp_vic_device *vic_dev = NULL;
-    struct tx_isp_dev *isp_dev = NULL;
-    struct tx_isp_sensor_attribute *sensor_attr;
-    
-    pr_info("*** vic_sensor_ops_ioctl: FIXED implementation - cmd=0x%x ***\n", cmd);
-    
-    /* FIXED: Use proper struct member access instead of raw pointer arithmetic */
-    /* Binary Ninja: void* $a0 = *(arg1 + 0xd4) - this is sd->host_priv */
-    /* Get VIC device from subdev->host_priv (Binary Ninja offset 0xd4) */
-    pr_info("*** vic_sensor_ops_ioctl: DEBUG - sd=%p, sd->host_priv=%p ***\n", sd, sd ? sd->host_priv : NULL);
+    int32_t result = 0;
 
-    if (!sd) {
-        pr_err("*** vic_sensor_ops_ioctl: Invalid subdev (NULL) ***\n");
-        return 0;
-    }
+    /* Binary Ninja EXACT: if (arg1 != 0 && arg1 u< 0xfffff001) */
+    if (sd != 0 && (unsigned long)sd < 0xfffff001) {
+        /* Binary Ninja EXACT: void* $a0 = *(arg1 + 0xd4) */
+        void *vic_dev = sd->host_priv;  /* offset 0xd4 is host_priv */
 
-    if (!sd->host_priv) {
-        pr_err("*** vic_sensor_ops_ioctl: host_priv is NULL - trying container_of approach ***\n");
-        /* Fallback: try to get VIC device using container_of */
-        vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
-        pr_info("*** vic_sensor_ops_ioctl: Using container_of - vic_dev=%p ***\n", vic_dev);
-    } else {
-        /* Binary Ninja expects VIC device at sd->host_priv */
-        vic_dev = (struct tx_isp_vic_device *)sd->host_priv;
-        pr_info("*** vic_sensor_ops_ioctl: Using host_priv - vic_dev=%p ***\n", vic_dev);
-    }
-
-    /* Validate VIC device structure */
-    if (!vic_dev || (unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff000) {
-        pr_err("*** vic_sensor_ops_ioctl: Invalid VIC device pointer: %p ***\n", vic_dev);
-        return 0;
-    }
-
-    /* Check if VIC device has valid register mapping */
-    if (!vic_dev->vic_regs) {
-        pr_err("*** vic_sensor_ops_ioctl: VIC device has no register mapping ***\n");
-        return 0;
-    }
-
-    /* Also get ISP device for additional operations */
-    isp_dev = ourISPdev;
-    if (!isp_dev) {
-        pr_err("*** vic_sensor_ops_ioctl: No ISP device available ***\n");
-        return 0;
-    }
-
-    pr_info("*** vic_sensor_ops_ioctl: subdev=%p, isp_dev=%p, vic_dev=%p, vic_regs=%p ***\n",
-            sd, isp_dev, vic_dev, vic_dev->vic_regs);
-    
-    /* Binary Ninja: Handle command 0x2000000 first - sensor registration */
-    if (cmd == 0x2000000) {
-        pr_info("*** vic_sensor_ops_ioctl: SENSOR REGISTRATION cmd=0x2000000 ***\n");
-        /* This is the sensor registration command - should return success */
-        return 0;
-    }
-
-    /* Binary Ninja: if (arg2 - 0x200000c u>= 0xd) return 0 */
-    if (cmd - 0x200000c >= 0xd) {
-        pr_info("vic_sensor_ops_ioctl: Command outside valid range\n");
-        return 0;
-    }
-    
-    /* Binary Ninja: Switch on IOCTL command */
-    switch (cmd) {
-    case 0x200000c:  /* Binary Ninja: VIC start command 1 */
-    case 0x200000f:  /* Binary Ninja: VIC start command 2 */
-        pr_info("*** vic_sensor_ops_ioctl: IOCTL 0x%x - CALLING tx_isp_vic_start ***\n", cmd);
-        
-        /* Get ISP device to access sensor */
-        isp_dev = (struct tx_isp_dev *)sd->isp;
-        extern struct tx_isp_sensor *tx_isp_get_sensor(void);
-        struct tx_isp_sensor *sensor = tx_isp_get_sensor();
-        if (!isp_dev || !sensor || !sensor->video.attr) {
-            pr_err("vic_sensor_ops_ioctl: No sensor available for VIC start\n");
-            return -ENODEV;
-        }
-
-        sensor_attr = sensor->video.attr;
-        /* VIC start now only called from vic_core_s_stream - reference driver behavior */
-        pr_info("*** vic_sensor_ops_ioctl: VIC start deferred to vic_core_s_stream ***\n");
-        return 0;
-        
-    case 0x200000d:  /* Binary Ninja: case 0x200000d */
-    case 0x2000010:  /* Binary Ninja: case 0x2000010 */
-    case 0x2000011:  /* Binary Ninja: case 0x2000011 */
-    case 0x2000012:  /* Binary Ninja: case 0x2000012 */
-    case 0x2000014:  /* Binary Ninja: case 0x2000014 */
-    case 0x2000015:  /* Binary Ninja: case 0x2000015 */
-    case 0x2000016:  /* Binary Ninja: case 0x2000016 */
-        pr_info("vic_sensor_ops_ioctl: Standard command 0x%x\n", cmd);
-        /* Binary Ninja: return 0 */
-        return 0;
-        
-    case 0x200000e:  /* Binary Ninja: case 0x200000e */
-        pr_info("vic_sensor_ops_ioctl: VIC register write command\n");
-        /* Binary Ninja: **($a0 + 0xb8) = 0x10 */
-        if (vic_dev->vic_regs) {
-            writel(0x10, vic_dev->vic_regs + 0x0);
-            wmb();
-        }
-        return 0;
-        
-    case 0x2000013:  /* Binary Ninja: case 0x2000013 */
-        pr_info("vic_sensor_ops_ioctl: VIC reset sequence command\n");
-        /* Binary Ninja: **($a0 + 0xb8) = 0; **($a0 + 0xb8) = 4 */
-        if (vic_dev->vic_regs) {
-            writel(0, vic_dev->vic_regs + 0x0);
-            wmb();
-            writel(4, vic_dev->vic_regs + 0x0);
-            wmb();
-        }
-        return 0;
-        
-    case 0x2000017:  /* Binary Ninja: GPIO configuration */
-        pr_info("vic_sensor_ops_ioctl: GPIO configuration command\n");
-        /* Binary Ninja implementation for GPIO setup - complex, return success for now */
-        return 0;
-        
-    case 0x2000018:  /* Binary Ninja: GPIO state change */
-        pr_info("vic_sensor_ops_ioctl: GPIO state change command\n");
-        /* SAFE: Use copy_from_user instead of memcpy for user space data */
-        gpio_switch_state = 1;
-        if (arg) {
-            /* CRITICAL FIX: Prevent buffer overflow - only copy safe amount */
-            size_t safe_copy_size = min((size_t)0x2a, sizeof(gpio_info));
-            if (copy_from_user(&gpio_info, arg, safe_copy_size)) {
-                pr_err("vic_sensor_ops_ioctl: Failed to copy GPIO info from user space\n");
-                return -EFAULT;
+        /* Binary Ninja EXACT: if ($a0 != 0 && $a0 u< 0xfffff001) */
+        if (vic_dev != 0 && (unsigned long)vic_dev < 0xfffff001) {
+            /* Binary Ninja EXACT: if (arg2 - 0x200000c u>= 0xd) return 0 */
+            if (cmd - 0x200000c >= 0xd) {
+                return 0;
             }
-            pr_info("vic_sensor_ops_ioctl: GPIO copied %zu bytes safely (prevented overflow)\n", safe_copy_size);
+
+            /* Binary Ninja EXACT: Switch on IOCTL command */
+            switch (cmd) {
+            case 0x200000c:  /* Binary Ninja: case 0x200000c */
+            case 0x200000f:  /* Binary Ninja: case 0x200000f */
+                /* Binary Ninja EXACT: return tx_isp_vic_start($a0) */
+                return tx_isp_vic_start(vic_dev);
+
+            case 0x200000d:  /* Binary Ninja: case 0x200000d */
+            case 0x2000010:  /* Binary Ninja: case 0x2000010 */
+            case 0x2000011:  /* Binary Ninja: case 0x2000011 */
+            case 0x2000012:  /* Binary Ninja: case 0x2000012 */
+            case 0x2000014:  /* Binary Ninja: case 0x2000014 */
+            case 0x2000015:  /* Binary Ninja: case 0x2000015 */
+            case 0x2000016:  /* Binary Ninja: case 0x2000016 */
+                /* Binary Ninja EXACT: return 0 */
+                return 0;
+
+            case 0x200000e:  /* Binary Ninja: case 0x200000e */
+                /* Binary Ninja EXACT: **($a0 + 0xb8) = 0x10 */
+                **(int32_t **)(vic_dev + 0xb8) = 0x10;
+                return 0;
+
+            case 0x2000013:  /* Binary Ninja: case 0x2000013 */
+                /* Binary Ninja EXACT: **($a0 + 0xb8) = 0 */
+                **(int32_t **)(vic_dev + 0xb8) = 0;
+                /* Binary Ninja EXACT: **($a0 + 0xb8) = 4 */
+                **(int32_t **)(vic_dev + 0xb8) = 4;
+                return 0;
+
+            case 0x2000017:  /* Binary Ninja: case 0x2000017 - GPIO configuration */
+                /* Binary Ninja EXACT: Complex GPIO setup implementation */
+                /* Simplified for now - Binary Ninja has complex GPIO loop */
+                return 0;
+
+            case 0x2000018:  /* Binary Ninja: case 0x2000018 - GPIO state change */
+                /* Binary Ninja EXACT: gpio_switch_state = 1 */
+                gpio_switch_state = 1;
+                /* Binary Ninja EXACT: memcpy(&gpio_info, arg3, 0x2a) */
+                memcpy(&gpio_info, arg, 0x2a);
+                return 0;
+            }
         }
-        return 0;
-        
-    default:
-        pr_info("vic_sensor_ops_ioctl: Unhandled IOCTL 0x%x\n", cmd);
-        return 0; /* Binary Ninja returns 0 for unhandled commands */
     }
+
+    /* Binary Ninja EXACT: return result */
+    return result;
 }
 
 /* ===== REFERENCE DRIVER FUNCTION IMPLEMENTATIONS ===== */
