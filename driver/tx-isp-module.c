@@ -374,18 +374,13 @@ struct platform_device tx_isp_vic_platform_device = {
     },
 };
 
-/* CSI platform device resources - CORRECTED IRQ */
+/* CSI platform device resources - NO IRQ (CSI doesn't need separate IRQ) */
 static struct resource tx_isp_csi_resources[] = {
     [0] = {
         .start = 0x10022000,           /* T31 CSI base address */
         .end   = 0x10022FFF,           /* T31 CSI end address */
         .flags = IORESOURCE_MEM,
         .name = "mipi-phy",            /* EXACT name from stock driver */
-    },
-    [1] = {
-        .start = 38,                   /* T31 CSI IRQ 38 - MATCHES STOCK DRIVER isp-w02 */
-        .end   = 38,
-        .flags = IORESOURCE_IRQ,
     },
 };
 
@@ -406,13 +401,9 @@ struct platform_device tx_isp_csi_platform_device = {
     },
 };
 
-/* VIN platform device resources - VIN is a logical device, no memory region needed */
+/* VIN platform device resources - VIN is a logical device, no IRQ needed */
 static struct resource tx_isp_vin_resources[] = {
-    [0] = {
-        .start = 37,                   /* T31 VIN IRQ 37 - MATCHES STOCK DRIVER isp-m0 */
-        .end   = 37,
-        .flags = IORESOURCE_IRQ,
-    },
+    /* No resources - VIN is a logical device */
 };
 
 /* VIN platform data - VIN is a logical device */
@@ -432,17 +423,12 @@ struct platform_device tx_isp_vin_platform_device = {
     },
 };
 
-/* Frame Source platform device resources - CORRECTED IRQ */
+/* Frame Source platform device resources - NO IRQ (FS doesn't need separate IRQ) */
 static struct resource tx_isp_fs_resources[] = {
     [0] = {
         .start = 0x13310000,           /* T31 FS base address */
         .end   = 0x1331FFFF,           /* T31 FS end address */
         .flags = IORESOURCE_MEM,
-    },
-    [1] = {
-        .start = 38,                   /* T31 FS IRQ 38 - MATCHES STOCK DRIVER isp-w02 */
-        .end   = 38,
-        .flags = IORESOURCE_IRQ,
     },
 };
 
