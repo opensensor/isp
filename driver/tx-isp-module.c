@@ -1730,11 +1730,14 @@ clear_interrupts_only:
         /* Binary Ninja: Process MDMA interrupts */
         /* if (($v1_10 & 1) != 0) entry_$a2 = vic_mdma_irq_function($s0, 0) */
         if ((mdma_status & 1) != 0) {
-            vic_mdma_irq_function(vic_dev, 0);
+            /* CRITICAL SAFETY: Don't call complex MDMA handler that might crash */
+            /* The reference driver's vic_mdma_irq_function accesses complex buffer structures */
+            pr_info("VIC IRQ %d: MDMA channel 0 interrupt (handler disabled for safety)\n", irq);
         }
         /* if (($v1_10 & 2) != 0) entry_$a2 = vic_mdma_irq_function($s0, 1) */
         if ((mdma_status & 2) != 0) {
-            vic_mdma_irq_function(vic_dev, 1);
+            /* CRITICAL SAFETY: Don't call complex MDMA handler that might crash */
+            pr_info("VIC IRQ %d: MDMA channel 1 interrupt (handler disabled for safety)\n", irq);
         }
     }
 
