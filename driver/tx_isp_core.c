@@ -1393,7 +1393,23 @@ struct tx_isp_sensor *tx_isp_get_sensor(void)
     extern struct tx_isp_dev *ourISPdev;
 
     if (!ourISPdev) {
+        pr_err("*** tx_isp_get_sensor: ourISPdev is NULL ***\n");
         return NULL;
+    }
+
+    pr_info("*** tx_isp_get_sensor: Searching subdev array for sensors ***\n");
+
+    /* Debug: Show what's in the entire subdev array */
+    for (int i = 0; i < ISP_MAX_SUBDEVS; i++) {
+        struct tx_isp_subdev *sd = ourISPdev->subdevs[i];
+        if (sd) {
+            pr_info("*** tx_isp_get_sensor: subdevs[%d] = %p, ops = %p ***\n", i, sd, sd->ops);
+            if (sd->ops) {
+                pr_info("*** tx_isp_get_sensor: subdevs[%d] ops->sensor = %p ***\n", i, sd->ops->sensor);
+            }
+        } else {
+            pr_info("*** tx_isp_get_sensor: subdevs[%d] = NULL ***\n", i);
+        }
     }
 
     /* Search for first available sensor starting at index 4 */
@@ -1408,6 +1424,7 @@ struct tx_isp_sensor *tx_isp_get_sensor(void)
         }
     }
 
+    pr_err("*** tx_isp_get_sensor: No sensor found in subdev array ***\n");
     /* No sensor found - return NULL as per stock driver behavior */
     return NULL;
 }
