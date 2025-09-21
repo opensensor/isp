@@ -145,42 +145,6 @@ static int tx_isp_csi_hw_init(struct tx_isp_subdev *sd)
     return 0;
 }
 
-/* CSI format configuration */
-int tx_isp_csi_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *config)
-{
-    u32 ctrl;
-
-    if (!sd || !config)
-        return -EINVAL;
-
-    if (config->lane_num < CSI_MIN_LANES || config->lane_num > CSI_MAX_LANES)
-        return -EINVAL;
-
-    mutex_lock(&sd->csi_lock);
-
-    /* Configure lane count */
-    ctrl = csi_read32(CSI_CTRL);
-    ctrl &= ~(3 << 2); /* Clear lane bits */
-    switch (config->lane_num) {
-    case 1:
-        ctrl |= CSI_CTRL_LANES_1;
-        break;
-    case 2:
-        ctrl |= CSI_CTRL_LANES_2;
-        break;
-    case 4:
-        ctrl |= CSI_CTRL_LANES_4;
-        break;
-    default:
-        mutex_unlock(&sd->csi_lock);
-        return -EINVAL;
-    }
-    csi_write32(CSI_CTRL, ctrl);
-
-    mutex_unlock(&sd->csi_lock);
-    return 0;
-}
-
 /* CSI video streaming control - FIXED: MIPS memory alignment */
 int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
 {
@@ -984,9 +948,5 @@ int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
     return result;
 }
 
-/* Duplicate function removed - using existing tx_isp_csi_slake_subdev at line 689 */
-
-/* Export symbols for use by other parts of the driver */
-EXPORT_SYMBOL(tx_isp_csi_set_format);
 EXPORT_SYMBOL(dump_csi_reg);
 EXPORT_SYMBOL(tx_isp_csi_activate_subdev);
