@@ -78,7 +78,10 @@ struct tx_isp_vic_device {
     /* CRITICAL: Base subdev structure MUST be first for container_of() to work */
     struct tx_isp_subdev sd;                    /* 0x00: Base subdev structure */
 
-    
+    /* CRITICAL: Padding to ensure vic_regs is at exactly offset 0xb8 from VIC device base */
+    /* Calculate required padding: 0xb8 - sizeof(struct tx_isp_subdev) */
+    char padding_to_vic_regs[0xb8 - sizeof(struct tx_isp_subdev)];
+
     /* CRITICAL: VIC register bases - dual VIC architecture */
     void __iomem *vic_regs;                     /* 0xb8: Primary VIC register base (0x133e0000) */
     void __iomem *vic_regs_secondary;           /* 0xbc: Secondary VIC register base (0x10023000) */
