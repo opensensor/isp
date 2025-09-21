@@ -3123,21 +3123,28 @@ void ispcore_frame_channel_streamoff(int32_t* arg1)
         uint32_t s5_1 = (uint32_t)(*(arg1 + 7));  /* zx.d(*(arg1 + 7)) */
 
         if (s5_1 == 4) {
-            __private_spin_lock_irqsave((char*)s2 + 0x9c, &var_28);
+            /* CRITICAL FIX: Use safe struct member access instead of unsafe offset arithmetic */
+            struct frame_channel_binary_ninja *channel = (struct frame_channel_binary_ninja *)s2;
+
+            /* SAFE: Use struct member access for spinlock instead of (char*)s2 + 0x9c */
+            __private_spin_lock_irqsave(&channel->lock, &var_28);
             int32_t a1_2 = var_28;
 
-            if (*((int32_t*)((char*)s2 + 0x74)) == s5_1) {  /* *(s2 + 0x74) == s5_1 */
-                spin_unlock_irqrestore((char*)s2 + 0x9c, a1_2);
+            /* SAFE: Use struct member access for state field instead of *(s2 + 0x74) */
+            if (channel->state == s5_1) {
+                spin_unlock_irqrestore(&channel->lock, a1_2);
                 extern int tisp_channel_stop(uint32_t channel_id);
                 tisp_channel_stop((uint32_t)(arg1[1]) & 0xff);  /* zx.d(arg1[1].b) */
-                *((int32_t*)((char*)s2 + 0x74)) = 3;  /* *(s2 + 0x74) = 3 */
+
+                /* SAFE: Use struct member access instead of raw offset arithmetic */
+                channel->state = 3;        /* *(s2 + 0x74) = 3 */
                 *(arg1 + 7) = 3;
                 memset(s2, 0, 0x70);
                 *((int32_t*)((char*)s3 + 0x9c)) = 0;  /* *(s3 + 0x9c) = 0 */
                 *((int32_t*)((char*)s3 + 0xac)) = 0;  /* *(s3 + 0xac) = 0 */
                 *((int32_t*)((char*)s0 + 0x17c)) = 0; /* *(s0 + 0x17c) = 0 */
             } else {
-                spin_unlock_irqrestore((char*)s2 + 0x9c, a1_2);
+                spin_unlock_irqrestore(&channel->lock, a1_2);
             }
         }
     } else {
