@@ -401,6 +401,8 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         /* This is the Core ISP subdev - register it in subdevs array */
         ourISPdev->subdevs[4] = sd;  /* Core at index 4 based on reference */
         sd->isp = ourISPdev;
+        /* CRITICAL: Ensure ops pointer is properly set and won't be corrupted */
+        sd->ops = &core_subdev_ops;  /* Ensure ops pointer is valid */
         pr_info("*** tx_isp_subdev_init: Core ISP subdev registered at index 4 ***\n");
         pr_info("*** DEBUG: Core ISP subdev address=%p, stored at subdevs[4]=%p ***\n", sd, ourISPdev->subdevs[4]);
         pr_info("*** DEBUG: Core ISP ops=%p, video=%p, s_stream=%p ***\n",

@@ -3245,23 +3245,12 @@ int tx_isp_core_probe(struct platform_device *pdev)
             /* REMOVED: Global memory mapping - let each subdevice handle its own memory per reference driver */
             pr_info("*** tx_isp_core_probe: Skipping global memory mapping - subdevices will handle their own memory ***\n");
 
-            /* CRITICAL FIX: Use SINGLE consistent ISP device - don't mix isp_dev and ourISPdev */
+            /* CRITICAL FIX: Don't switch devices - this causes hangs and corruption */
+            /* The Core ISP subdev should remain separate from the main ISP device */
             if (ourISPdev) {
-                pr_info("*** tx_isp_core_probe: Using existing ourISPdev: %p ***\n", ourISPdev);
-                /* CRITICAL: Copy the properly initialized subdev ops from local isp_dev to ourISPdev */
-                if (isp_dev->sd.ops && !ourISPdev->sd.ops) {
-                    ourISPdev->sd.ops = isp_dev->sd.ops;
-                    pr_info("*** tx_isp_core_probe: Copied subdev ops from local to global device ***\n");
-                }
-                /* CRITICAL: Update the Core ISP subdev registration to point to the global device */
-                if (ourISPdev->subdevs[4] == &isp_dev->sd) {
-                    ourISPdev->subdevs[4] = &ourISPdev->sd;  /* Point to global device's subdev */
-                    ourISPdev->sd.isp = ourISPdev;  /* Ensure proper back-reference */
-                    pr_info("*** tx_isp_core_probe: Updated Core ISP subdev registration to global device ***\n");
-                }
-                /* Free the local isp_dev since we're using the global one */
-                kfree(isp_dev);
-                isp_dev = ourISPdev;  /* Use the global device consistently */
+                pr_info("*** tx_isp_core_probe: Using existing ourISPdev: %p, Core ISP device: %p ***\n", ourISPdev, isp_dev);
+                /* Don't free or switch devices - keep them separate as intended */
+                pr_info("*** tx_isp_core_probe: Keeping Core ISP device separate to prevent hangs ***\n");
             } else {
                 pr_info("*** tx_isp_core_probe: Setting ourISPdev to local isp_dev: %p ***\n", isp_dev);
                 ourISPdev = isp_dev;  /* Make the local device the global one */
