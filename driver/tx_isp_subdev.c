@@ -316,6 +316,12 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             /* CRITICAL FIX: This is a REAL sensor subdev (not CSI which also has sensor ops) */
             pr_info("*** tx_isp_subdev_init: DETECTED SENSOR SUBDEV - ops=%p, ops->sensor=%p ***\n", ops, ops->sensor);
 
+            /* CRITICAL FIX: Set up the module notify function for TX_ISP_EVENT_SYNC_SENSOR_ATTR */
+            extern int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
+            extern int tx_isp_module_notify_handler(struct tx_isp_module *module, unsigned int cmd, void *arg);
+            sd->module.notify = tx_isp_module_notify_handler;
+            pr_info("*** tx_isp_subdev_init: Set up sensor module notify handler ***\n");
+
             /* Find next available slot starting from index 5 (after CSI=0, VIC=1, VIN=2, FS=3, Core=4) */
             int sensor_index = -1;
             for (int i = 5; i < ISP_MAX_SUBDEVS; i++) {
