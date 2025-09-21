@@ -1461,6 +1461,13 @@ struct tx_isp_sensor *tx_isp_get_sensor(void)
                     }
                 }
 
+                /* CRITICAL FIX: Link sensor to VIN device's active field - Binary Ninja MCP reference */
+                if (ourISPdev->vin_dev && !ourISPdev->vin_dev->active) {
+                    pr_info("*** tx_isp_get_sensor: Linking sensor to VIN device active field ***\n");
+                    ourISPdev->vin_dev->active = sensor;
+                    pr_info("*** tx_isp_get_sensor: VIN device active sensor set to %p ***\n", sensor);
+                }
+
                 return sensor;
             } else {
                 pr_info("*** tx_isp_get_sensor: Skipping Core device at index %d (not a real sensor) ***\n", i);
