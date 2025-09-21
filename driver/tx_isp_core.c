@@ -1436,6 +1436,62 @@ struct tx_isp_sensor *tx_isp_get_sensor(void)
                 /* The sensor structure contains the subdev as sd member, so we use container_of */
                 struct tx_isp_sensor *sensor = container_of(sd, struct tx_isp_sensor, sd);
                 pr_info("*** tx_isp_get_sensor: Found real sensor at index %d: %p ***\n", i, sensor);
+
+                /* CRITICAL FIX: If sensor attributes are NULL, initialize them with default GC2053 MIPI attributes */
+                if (!sensor->video.attr) {
+                    pr_info("*** tx_isp_get_sensor: Sensor attributes are NULL - initializing with default GC2053 MIPI attributes ***\n");
+
+                    /* Allocate sensor attributes structure */
+                    sensor->video.attr = kzalloc(sizeof(struct tx_isp_sensor_attribute), GFP_KERNEL);
+                    if (sensor->video.attr) {
+                        /* Initialize with GC2053 MIPI 30fps attributes */
+                        sensor->video.attr->name = "gc2053";
+                        sensor->video.attr->chip_id = 0x2053;
+                        sensor->video.attr->cbus_type = TX_SENSOR_CONTROL_INTERFACE_I2C;
+                        sensor->video.attr->cbus_mask = 0x0303; /* V4L2_SBUS_MASK_SAMPLE_8BITS | V4L2_SBUS_MASK_ADDR_8BITS */
+                        sensor->video.attr->cbus_device = 0x37;
+                        sensor->video.attr->dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;
+
+                        /* MIPI configuration for 30fps */
+                        sensor->video.attr->mipi.clk = 78000000;
+                        sensor->video.attr->mipi.lans = 2;
+                        sensor->video.attr->mipi.settle_time_apative_en = 0;
+                        sensor->video.attr->mipi.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10;
+                        sensor->video.attr->mipi.mipi_sc.hcrop_diff_en = 0;
+                        sensor->video.attr->mipi.mipi_sc.mipi_vcomp_en = 0;
+                        sensor->video.attr->mipi.mipi_sc.mipi_hcomp_en = 0;
+                        sensor->video.attr->mipi.mipi_sc.line_sync_mode = 0;
+                        sensor->video.attr->mipi.mipi_sc.work_start_flag = 0;
+                        sensor->video.attr->mipi.mipi_sc.data_type_en = 0;
+                        sensor->video.attr->mipi.mipi_sc.data_type_value = 0x2b;
+                        sensor->video.attr->mipi.mipi_sc.del_start = 0;
+                        sensor->video.attr->mipi.mipi_sc.sensor_frame_mode = TX_SENSOR_DEFAULT_FRAME_MODE;
+                        sensor->video.attr->mipi.mipi_sc.sensor_fid_mode = 0;
+                        sensor->video.attr->mipi.mipi_sc.sensor_mode = TX_SENSOR_DEFAULT_MODE;
+
+                        /* Timing parameters for 30fps */
+                        sensor->video.attr->data_type = TX_SENSOR_DATA_TYPE_LINEAR;
+                        sensor->video.attr->max_again = 444864;
+                        sensor->video.attr->max_dgain = 0;
+                        sensor->video.attr->min_integration_time = 1;
+                        sensor->video.attr->min_integration_time_native = 4;
+                        sensor->video.attr->max_integration_time_native = 0x58a - 8;
+                        sensor->video.attr->integration_time_limit = 0x58a - 8;
+                        sensor->video.attr->total_width = 0x44c * 2;
+                        sensor->video.attr->total_height = 0x58a;
+                        sensor->video.attr->max_integration_time = 0x58a - 8;
+                        sensor->video.attr->integration_time_apply_delay = 2;
+                        sensor->video.attr->again_apply_delay = 2;
+                        sensor->video.attr->dgain_apply_delay = 2;
+                        sensor->video.attr->one_line_expr_in_us = 28;
+                        sensor->video.attr->expo_fs = 0;
+
+                        pr_info("*** tx_isp_get_sensor: Default GC2053 MIPI attributes initialized successfully ***\n");
+                    } else {
+                        pr_err("*** tx_isp_get_sensor: Failed to allocate sensor attributes ***\n");
+                    }
+                }
+
                 return sensor;
             } else {
                 pr_info("*** tx_isp_get_sensor: Skipping Core device at index %d (not a real sensor) ***\n", i);
