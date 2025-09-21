@@ -1669,7 +1669,7 @@ extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 /* isp_vic_interrupt_service_routine - BULLETPROOF minimal implementation */
 irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
-    struct tx_isp_dev *isp_dev = ourISPdev;
+    struct tx_isp_dev *isp_dev;
     struct tx_isp_vic_device *vic_dev;
     void __iomem *vic_regs;
     u32 v1_7, v1_10;
@@ -1679,11 +1679,29 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     int timeout;
     int i;
 
+    /* CRITICAL SAFETY: Validate ourISPdev before any access */
+    if (!ourISPdev) {
+        pr_err("*** CRITICAL: isp_vic_interrupt_service_routine called with NULL ourISPdev! ***\n");
+        return IRQ_NONE;
+    }
+
+    isp_dev = ourISPdev;
+
+    /* CRITICAL SAFETY: Validate vic_dev before any access */
     /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
     vic_dev = ourISPdev->vic_dev;
+    if (!vic_dev) {
+        pr_err("*** CRITICAL: isp_vic_interrupt_service_routine called with NULL vic_dev! ***\n");
+        return IRQ_NONE;
+    }
 
+    /* CRITICAL SAFETY: Validate vic_regs before any access */
     /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
     vic_regs = vic_dev->vic_regs;
+    if (!vic_regs) {
+        pr_err("*** CRITICAL: isp_vic_interrupt_service_routine called with NULL vic_regs! ***\n");
+        return IRQ_NONE;
+    }
 
     /* Get VIC interrupt enable flag at offset +0x13c */
     vic_irq_enable_flag = (uint32_t*)((char*)vic_dev + 0x13c);
@@ -5190,11 +5208,29 @@ static int tx_isp_init(void)
     }
     pr_info("*** SUBDEVICE REGISTRY INITIALIZED - GRAPH CREATION SHOULD NOW SUCCEED ***\n");
 
-    /* CRITICAL FIX: DISABLE main interrupt dispatcher completely */
-    /* The main dispatcher itself is causing the kernel panic */
-    /* Let's go back to no IRQ registration and see if the system is stable */
-    pr_info("*** CRITICAL: Main interrupt dispatcher DISABLED to prevent kernel panic ***\n");
-    pr_info("*** No IRQ registration - testing system stability first ***\n");
+    /* CRITICAL FIX: RE-ENABLE main interrupt dispatcher after fixing VIC initialization */
+    /* The root cause was tx_isp_vic_start being commented out, which is now fixed */
+    /* Now we can safely enable the main dispatcher with proper VIC hardware initialization */
+    pr_info("*** CRITICAL: Main interrupt dispatcher RE-ENABLED after fixing VIC initialization ***\n");
+    pr_info("*** Root cause fixed: tx_isp_vic_start now properly initializes VIC hardware before enabling interrupts ***\n");
+
+    /* Register main interrupt dispatcher for IRQs 37 and 38 */
+    ret = request_threaded_irq(37, isp_irq_handle, isp_irq_thread_handle,
+                               IRQF_SHARED, "tx-isp-core", ourISPdev);
+    if (ret) {
+        pr_err("Failed to register IRQ 37: %d\n", ret);
+        goto err_cleanup_platform_device;
+    }
+
+    ret = request_threaded_irq(38, isp_irq_handle, isp_irq_thread_handle,
+                               IRQF_SHARED, "tx-isp-vic", ourISPdev);
+    if (ret) {
+        pr_err("Failed to register IRQ 38: %d\n", ret);
+        free_irq(37, ourISPdev);
+        goto err_cleanup_platform_device;
+    }
+
+    pr_info("*** Main interrupt dispatcher registered: IRQ 37 (ISP core) and IRQ 38 (VIC) ***\n");
 
     /* NOTE: Platform driver already registered earlier - no need to register again */
 
@@ -5348,8 +5384,11 @@ static void tx_isp_exit(void)
         ourISPdev = NULL;
         pr_info("*** ourISPdev set to NULL - interrupt handlers will now safely exit ***\n");
 
-        /* CRITICAL: No IRQs to free since main dispatcher was disabled */
-        pr_info("*** CLEANUP: No main dispatcher IRQs to free ***\n");
+        /* CRITICAL: Free main dispatcher IRQs since they are now enabled */
+        pr_info("*** CLEANUP: Freeing main dispatcher IRQs 37 and 38 ***\n");
+        free_irq(37, local_isp_dev);
+        free_irq(38, local_isp_dev);
+        pr_info("*** Main dispatcher IRQs freed ***\n");
 
         /* Free hardware interrupts if initialized (legacy cleanup) */
         if (isp_irq > 0 && isp_irq != 37 && isp_irq != 38) {

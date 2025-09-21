@@ -1909,13 +1909,19 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             tx_vic_disable_irq(vic_dev);
 
             /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
-            // ret = tx_isp_vic_start(vic_dev); // TODO
-			ret = 0;
+            pr_info("*** vic_core_s_stream: CRITICAL FIX - Calling tx_isp_vic_start to properly initialize VIC hardware ***\n");
+            ret = tx_isp_vic_start(vic_dev);
+            if (ret != 0) {
+                pr_err("*** vic_core_s_stream: tx_isp_vic_start FAILED: %d - VIC hardware not initialized! ***\n", ret);
+                return ret;
+            }
+            pr_info("*** vic_core_s_stream: tx_isp_vic_start SUCCESS - VIC hardware properly initialized ***\n");
 
             /* Binary Ninja: *($s1_1 + 0x128) = 4 */
             vic_dev->state = 4;
 
             /* Binary Ninja: tx_vic_enable_irq() */
+            pr_info("*** vic_core_s_stream: Now enabling VIC interrupts after hardware initialization ***\n");
             tx_vic_enable_irq(vic_dev);
 
             pr_info("*** vic_core_s_stream: VIC start completed, ret=%d, state=4 ***\n", ret);
