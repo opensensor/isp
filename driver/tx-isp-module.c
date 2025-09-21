@@ -5727,15 +5727,19 @@ static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel
                 a2_9 = vic_dev->vic_regs;
                 
                 if (a2_9) {
+                    /* CRITICAL FIX: Declare variables at the beginning to avoid C90 mixed declaration warning */
+                    u32 buffer_reg_offset;
+                    u32 new_buffer_reg_offset;
+
                     /* Binary Ninja: int32_t $s0_5 = $s0_3 + *($a2_9 + ((vic_mdma_ch1_set_buff_index_1 + 0xc6) << 2)) */
-                    u32 buffer_reg_offset = (vic_mdma_ch1_set_buff_index + 0xc6) << 2;
+                    buffer_reg_offset = (vic_mdma_ch1_set_buff_index + 0xc6) << 2;
                     s0_5 = s0_3 + readl((void __iomem*)a2_9 + buffer_reg_offset);
-                    
+
                     /* Binary Ninja: vic_mdma_ch1_set_buff_index = $hi_2 */
                     vic_mdma_ch1_set_buff_index = hi_2;
-                    
+
                     /* Binary Ninja: *($a2_9 + (($hi_2 + 0xc6) << 2)) = $s0_5 */
-                    u32 new_buffer_reg_offset = (hi_2 + 0xc6) << 2;
+                    new_buffer_reg_offset = (hi_2 + 0xc6) << 2;
                     writel(s0_5, (void __iomem*)a2_9 + new_buffer_reg_offset);
                     wmb();
                     
