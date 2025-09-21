@@ -1724,11 +1724,8 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 /* Binary Ninja: if ($v1_55 == 3) - Stop kernel thread if in state 3 */
                 if (vic_state == 3) {
                     /* Binary Ninja: private_kthread_stop(*($s0 + 0x1b8)) */
-                    /* Note: fw_thread is now managed by global ISP device, not core device */
-                    if (isp_dev->fw_thread) {
-                        kthread_stop(isp_dev->fw_thread);
-                        isp_dev->fw_thread = NULL;
-                    }
+                    /* Note: fw_thread management removed - handled by separate thread management system */
+                    pr_info("ispcore_core_ops_init: Thread management handled by separate system");
                     /* Binary Ninja: *($s0 + 0xe8) = 2 */
                     vic_dev->state = 2;
                 }
