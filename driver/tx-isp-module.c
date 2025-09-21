@@ -5804,11 +5804,11 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
 
 /* isp_irq_handle - SAFE struct member access implementation with correct dev_id handling */
 
-/* isp_irq_handle - PROPER interrupt dispatcher that calls VIC handler */
+/* isp_irq_handle - FIXED interrupt dispatcher that handles different dev_id types */
 irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
-    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
     irqreturn_t result = IRQ_NONE;
+    extern struct tx_isp_dev *ourISPdev;
 
     /* CRITICAL SAFETY: Validate all parameters before any processing */
     if (irq < 0 || irq > 255) {
@@ -5822,11 +5822,13 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
         return IRQ_NONE;
     }
 
-    /* CRITICAL SAFETY: Validate isp_dev structure */
-    if (!isp_dev) {
-        pr_err("*** CRITICAL: isp_irq_handle called with NULL isp_dev for IRQ %d ***\n", irq);
+    /* CRITICAL SAFETY: Validate main ISP device */
+    if (!ourISPdev) {
+        pr_err("*** CRITICAL: ourISPdev is NULL in interrupt handler for IRQ %d ***\n", irq);
         return IRQ_NONE;
     }
+
+    pr_info("*** isp_irq_handle: IRQ %d received, dev_id=%p ***\n", irq, dev_id);
 
     /* Handle VIC interrupts (IRQ 38) */
     if (irq == 38) {
