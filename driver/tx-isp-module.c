@@ -3428,7 +3428,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
 
         /* Binary Ninja: uint32_t $a2_4 = var_98 */
-        uint32_t link_config = var_98;
+        uint32_t link_config = var_98.as_uint32;
 
         /* Binary Ninja: if ($a2_4 u>= 2) */
         if (link_config >= 2) {
