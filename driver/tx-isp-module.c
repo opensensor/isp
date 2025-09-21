@@ -1776,21 +1776,21 @@ static struct tx_isp_video_pad *find_subdev_link_pad(struct tx_isp_dev *isp_dev,
             memset(&pad, 0, sizeof(pad));
             pad.sd = sd;
             pad.pad_type = 1;  /* Source pad */
-            pad.pad_index = config->src_pad;
-            pad.flags = config->flags;
+            pad.pad_index = config->src.index;
+            pad.flags = config->flag;
             pad.state = 2;  /* Initially disconnected */
             return &pad;
         }
 
         /* Compare subdev name with config destination name */
-        if (strcmp(sd->name, config->dst_name) == 0) {
+        if (strcmp(sd->module.name, config->dst.name) == 0) {
             /* Found matching subdev - create/return pad structure */
             static struct tx_isp_video_pad pad;
             memset(&pad, 0, sizeof(pad));
             pad.sd = sd;
             pad.pad_type = 2;  /* Sink pad */
-            pad.pad_index = config->dst_pad;
-            pad.flags = config->flags;
+            pad.pad_index = config->dst.index;
+            pad.flags = config->flag;
             pad.state = 2;  /* Initially disconnected */
             return &pad;
         }
@@ -1901,7 +1901,7 @@ static int tx_isp_video_link_destroy(struct tx_isp_dev *isp_dev)
                 }
 
                 pr_info("tx_isp_video_link_destroy: Destroyed link %s->%s\n",
-                        config[i].src_name, config[i].dst_name);
+                        config[i].src.name, config[i].dst.name);
             }
         }
 
