@@ -127,16 +127,6 @@ irqreturn_t ispcore_irq_thread_handle(int irq, void *dev_id);
 int ispcore_link_setup(const struct tx_isp_subdev_pad *local,
                       const struct tx_isp_subdev_pad *remote, u32 flags);
 
-/* Global flag to prevent multiple tisp_init calls */
-static bool tisp_initialized = false;
-
-/* Function to reset tisp initialization flag (for cleanup) */
-void tisp_reset_initialization_flag(void)
-{
-    tisp_initialized = false;
-    pr_info("tisp_reset_initialization_flag: ISP initialization flag reset\n");
-}
-
 /* Global event completion for ISP firmware processing */
 static DECLARE_COMPLETION(tevent_info);
 
@@ -477,10 +467,8 @@ int ispcore_link_setup(const struct tx_isp_subdev_pad *local,
 }
 EXPORT_SYMBOL(ispcore_irq_thread_handle);
 EXPORT_SYMBOL(ispcore_link_setup);
-EXPORT_SYMBOL(tisp_reset_initialization_flag);
 int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr);
 static int isp_free_buffer(struct tx_isp_dev *isp, void *virt_addr, dma_addr_t phys_addr, uint32_t size);
-static int tiziano_sync_sensor_attr_validate(struct tx_isp_sensor_attribute *sensor_attr);
 irqreturn_t ip_done_interrupt_static(int irq, void *dev_id);
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
 int sensor_init(struct tx_isp_dev *isp_dev);
@@ -1722,54 +1710,6 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
     return result;
 }
 EXPORT_SYMBOL(ispcore_core_ops_init);
-
-/**
- * tiziano_sync_sensor_attr_validate - Validate and sync sensor attributes
- * This prevents the memory corruption seen in logs (268442625x49968@0)
- */
-static int tiziano_sync_sensor_attr_validate(struct tx_isp_sensor_attribute *sensor_attr)
-{
-    if (!sensor_attr) {
-        ISP_ERROR("tiziano_sync_sensor_attr_validate: Invalid sensor attributes\n");
-        return -EINVAL;
-    }
-    
-    ISP_INFO("*** tiziano_sync_sensor_attr_validate: Validating sensor attributes ***\n");
-    
-    /* Validate dimensions */
-    if (sensor_attr->total_width < 100 || sensor_attr->total_width > 8192 ||
-        sensor_attr->total_height < 100 || sensor_attr->total_height > 8192) {
-        ISP_ERROR("*** INVALID DIMENSIONS: %dx%d ***\n", 
-                  sensor_attr->total_width, sensor_attr->total_height);
-        
-        /* Default to common HD resolution */
-        sensor_attr->total_width = 1920;  /* GC2053 total width */
-        sensor_attr->total_height = 1080; /* GC2053 total height - FIXED to match sensor */
-        
-        ISP_INFO("*** CORRECTED DIMENSIONS: %dx%d ***\n",
-                 sensor_attr->total_width, sensor_attr->total_height);
-    }
-    
-    /* Validate interface type */
-    if (sensor_attr->dbus_type > 5) {
-        ISP_ERROR("*** INVALID INTERFACE TYPE: %d ***\n", sensor_attr->dbus_type);
-        sensor_attr->dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; /* Default to MIPI (correct value from enum) */
-        ISP_INFO("*** CORRECTED INTERFACE TYPE: %d (MIPI) ***\n", sensor_attr->dbus_type);
-    }
-    
-    /* Validate chip ID */
-    if (sensor_attr->chip_id == 0) {
-        ISP_ERROR("*** INVALID CHIP ID: 0x%x ***\n", sensor_attr->chip_id);
-        sensor_attr->chip_id = 0x2053; /* Default to GC2053 */
-        ISP_INFO("*** CORRECTED CHIP ID: 0x%x ***\n", sensor_attr->chip_id);
-    }
-    
-    ISP_INFO("*** Final sensor attributes: %dx%d, interface=%d, chip_id=0x%x ***\n",
-             sensor_attr->total_width, sensor_attr->total_height,
-             sensor_attr->dbus_type, sensor_attr->chip_id);
-    
-    return 0;
-}
 
 /**
  * isp_malloc_buffer - FIXED: Use regular kernel memory instead of precious rmem
@@ -3222,10 +3162,7 @@ int tx_isp_core_remove(struct platform_device *pdev)
 {
     struct tx_isp_core_device *core_dev = platform_get_drvdata(pdev);
 
-    pr_info("*** tx_isp_core_remove: NEW ARCHITECTURE - Removing core device ***\n");
-
-    /* Reset tisp initialization flag for clean restart */
-    tisp_reset_initialization_flag();
+    pr_info("*** tx_isp_core_remove: Removing core device ***\n");
 
     /* Cancel any pending frame sync work to prevent use-after-free */
     pr_info("*** tx_isp_core_remove: Canceling frame sync work ***\n");

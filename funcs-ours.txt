@@ -1,644 +1,661 @@
-JZ_Isp_Ae_Dg2reg
-Tiziano_ae1_fpga
-Tiziano_awb_set_gain
-Tiziano_wdr_fpga
-ae0_interrupt_hist
-ae0_interrupt_hist_wrapper
-ae0_interrupt_static
-ae0_interrupt_static_wrapper
-ae1_interrupt_hist
-ae1_interrupt_hist_wrapper
-ae1_interrupt_static
-ae1_interrupt_static_wrapper
-apical_isp_ae_g_roi
-apical_isp_ae_zone_g_ctrl
-apical_isp_af_zone_g_ctrl
-apical_isp_core_ops_g_ctrl
-apical_isp_core_ops_s_ctrl
-apical_isp_ev_g_attr
-apical_isp_expr_g_ctrl
-apical_isp_max_again_g_ctrl
-apical_isp_max_dgain_g_ctrl
-check_csi_error
-check_region_changes
-cleanup_i2c_infrastructure
-cleanup_region
-cm_control
-csi_core_ops_init
-csi_device_probe
-csi_sensor_ops_ioctl
-csi_sensor_ops_sync_sensor_attr
-csi_set_on_lanes
-csi_video_s_stream
-csi_write32
-data_b2ee0
-data_b2ee4
-data_b2eec
-data_b2ef0
-data_b2ef4
-data_b2ef8
-data_b2f04
-data_b2f08
-destroy_isp_tuning_device
-dump_csi_reg
-dump_isp_csi_open
-dump_isp_vic_frd_open
-dump_vic_reg
-end_sequence
-fix_point_div_32
-fix_point_div_64
-fix_point_mult2_32
-fix_point_mult3_32
-frame_chan_event
-frame_channel_open
-frame_channel_release
-frame_channel_unlocked_ioctl
-frame_channel_vidioc_get_fmt
-frame_channel_vidioc_set_fmt
-fs_chardev_ioctl
-fs_chardev_open
-fs_chardev_release
-fs_slake_module
-get_isp_clk
-get_reg_type
-graph_proc_open
-graph_proc_read
-graph_proc_show
-init_region
-int
-ip_done_interrupt_static
-irqreturn_t
-is_sequential_write
-is_valid_kernel_pointer
-isp_core_tuning_deinit
-isp_core_tuning_event
-isp_core_tuning_release
-isp_core_tunning_unlocked_ioctl
-isp_csi_show
-isp_event_dispatcher
-isp_frame_done_get_count
-isp_frame_done_wait
-isp_frame_done_wakeup
-isp_free_buffer
-isp_fw_process
-isp_get_ae_state
-isp_get_af_zone
-isp_i2c_new_subdev_board
-isp_irq_dispatcher
-isp_irq_handle
-isp_irq_thread_handle
-isp_m0_chardev_release
-isp_malloc_buffer
-isp_monitor_exit
-isp_monitor_init
-isp_printf
-isp_subdev_init_clks
-isp_trigger_event
-isp_tuning_ioctl
-isp_tuning_open
-isp_tuning_release
-isp_vic_cmd_set
-isp_vic_frd_show
-isp_vic_interrupt_service_routine
-isp_write32
-ispcore_activate_module
-ispcore_core_ops_init
-ispcore_core_ops_ioctl
-ispcore_frame_channel_dqbuf
-ispcore_frame_channel_streamoff
-ispcore_interrupt_service_routine
-ispcore_irq_fs_work
-ispcore_irq_thread_handle
-ispcore_link_setup
-ispcore_pad_event_handle
-ispcore_sensor_ops_ioctl
-ispcore_sensor_ops_release_all_sensor
-ispcore_slake_module
-ispcore_sync_sensor_attr
-ispcore_video_s_stream
-ispmodule_ip_done_irq_handler
-ispvic_frame_channel_clearbuf
-ispvic_frame_channel_qbuf
-ispvic_frame_channel_s_stream
-jz_isp_ccm
-jz_isp_ccm_para2reg
-jz_isp_ccm_parameter_convert
-ktime_get_real_ns
-load_isp_tuning_file
-mbus_to_bayer_write
-mcp_log_info
-mips_dma_cache_sync
-parse_rmem_bootarg
-prepare_i2c_infrastructure
-private_capable
-private_clk_disable
-private_clk_enable
-private_clk_get
-private_clk_put
-private_clk_set_rate
-private_complete
-private_dma_cache_sync
-private_dma_sync_single_for_device
-private_do_gettimeofday
-private_driver_get_interface
-private_free_irq
-private_get_driver_interface
-private_gpio_direction_output
-private_gpio_free
-private_gpio_request
-private_i2c_add_driver
-private_i2c_del_driver
-private_i2c_set_clientdata
-private_i2c_transfer
-private_init_completion
-private_ioremap
-private_iounmap
-private_jzgpio_set_func
-private_kfree
-private_kmalloc
-private_ktime_set
-private_log2_fixed_to_fixed
-private_math_exp2
-private_msleep
-private_mutex_init
-private_platform_device_register
-private_platform_device_unregister
-private_platform_get_drvdata
-private_platform_get_irq
-private_platform_get_resource
-private_platform_set_drvdata
-private_raw_mutex_init
-private_release_mem_region
-private_request_mem_region
-private_reset_tx_isp_module
-private_schedule_hrtimeout
-private_schedule_work
-private_set_current_state
-private_spin_lock_init
-private_spin_unlock_irqrestore
-private_vfree
-push_buffer_fifo
-sensor_alloc_analog_gain
-sensor_alloc_analog_gain_short
-sensor_alloc_digital_gain
-sensor_alloc_integration_time
-sensor_alloc_integration_time_short
-sensor_disable_isp
-sensor_early_init
-sensor_end_changes
-sensor_fps_control
-sensor_get_id
-sensor_get_lines_per_second
-sensor_get_normal_fps
-sensor_hw_reset_disable
-sensor_hw_reset_enable
-sensor_info_show
-sensor_init
-sensor_read_black_pedestal
-sensor_set_analog_gain
-sensor_set_analog_gain_short
-sensor_set_digital_gain
-sensor_set_integration_time
-sensor_set_integration_time_short
-sensor_set_mode
-sensor_set_wdr_mode
-sensor_start_changes
-start_sequence
-statistics_show
-streaming_show
-streaming_store
-subdev_sensor_ops_enum_input
-subdev_sensor_ops_ioctl
-subdev_sensor_ops_release_all_sensor
-subdev_sensor_ops_set_input
-subdev_video_destroy_link
-system_irq_func_set
-system_reg_read
-system_reg_write
-system_reg_write_ae
-system_reg_write_af
-system_reg_write_awb
-system_reg_write_clm
-system_reg_write_gb
-system_reg_write_gib
-tisp_adr_get_par_cfg
-tisp_adr_par_refresh
-tisp_adr_param_array_get
-tisp_adr_process
-tisp_adr_set_par_cfg
-tisp_adr_set_params
-tisp_adr_wdr_en
-tisp_ae0_ctrls_update
-tisp_ae0_get_hist
-tisp_ae0_get_statistics
-tisp_ae0_process
-tisp_ae0_process_impl
-tisp_ae1_ctrls_update
-tisp_ae1_expt
-tisp_ae1_get_hist
-tisp_ae1_get_statistics
-tisp_ae1_process
-tisp_ae1_process_impl
-tisp_ae_algo_deinit
-tisp_ae_algo_init
-tisp_ae_deinit
-tisp_ae_exp_th_par_refresh
-tisp_ae_get_hist_custome
-tisp_ae_get_par_cfg
-tisp_ae_get_y_zone
-tisp_ae_ir_update
-tisp_ae_param_array_get
-tisp_ae_set_par_cfg
-tisp_ae_update_zone_data
-tisp_ae_wdr_en
-tisp_af_get_par_cfg
-tisp_af_get_zone
-tisp_af_par_refresh
-tisp_af_param_array_get
-tisp_af_set_par_cfg
-tisp_again_update
-tisp_awb_algo_deinit
-tisp_awb_algo_init
-tisp_awb_deinit
-tisp_awb_get_par_cfg
-tisp_awb_par_refresh
-tisp_awb_set_par_cfg
-tisp_bcsh_brightness
-tisp_bcsh_contrast
-tisp_bcsh_get_par_cfg
-tisp_bcsh_param_array_get
-tisp_bcsh_s_hue
-tisp_bcsh_saturation
-tisp_bcsh_set_par_cfg
-tisp_bcsh_wdr_en
-tisp_blc_get_par_cfg
-tisp_blc_set_par_cfg
-tisp_ccm_ct_update
-tisp_ccm_ev_update
-tisp_ccm_get_par_cfg
-tisp_ccm_is_initialized
-tisp_ccm_param_array_get
-tisp_ccm_set_par_cfg
-tisp_ccm_wdr_en
-tisp_channel_attr_set
-tisp_channel_fifo_clear
-tisp_channel_start
-tisp_channel_stop
-tisp_clm_get_par_cfg
-tisp_clm_param_array_get
-tisp_clm_set_par_cfg
-tisp_code_create_tuning_node
-tisp_code_destroy_tuning_node
-tisp_code_tuning_ioctl
-tisp_code_tuning_open
-tisp_code_tuning_release
-tisp_ct_update
-tisp_day_or_night_s_ctrl
-tisp_defog_get_par_cfg
-tisp_defog_par_refresh
-tisp_defog_param_array_get
-tisp_defog_set_par_cfg
-tisp_defog_wdr_en
-tisp_deinit
-tisp_deinit_free
-tisp_dma_cache_sync_helper
-tisp_dmsc_par_refresh
-tisp_dmsc_set_par_cfg
-tisp_dmsc_wdr_en
-tisp_dn_mode_get
-tisp_dn_mode_set
-tisp_dpc_all_reg_refresh
-tisp_dpc_get_par_cfg
-tisp_dpc_par_refresh
-tisp_dpc_param_array_get
-tisp_dpc_set_par_cfg
-tisp_dpc_wdr_en
-tisp_ev_update
-tisp_event_cleanup
-tisp_event_exit
-tisp_event_init
-tisp_event_process
-tisp_event_push
-tisp_event_set_cb
-tisp_fw_process
-tisp_g_ae_hist
-tisp_g_ae_zone
-tisp_g_ae_zone_internal
-tisp_g_aeroi_weight
-tisp_g_aezone_weight
-tisp_g_af_zone
-tisp_g_af_zone_buffer
-tisp_g_dpc_strength
-tisp_g_drc_strength
-tisp_g_ev_attr
-tisp_g_fcrop_control
-tisp_g_wdr_en
-tisp_gamma_get_par_cfg
-tisp_gamma_param_array_get
-tisp_gamma_set_par_cfg
-tisp_gamma_wdr_en
-tisp_gb_blc_again_interp
-tisp_gb_init
-tisp_gb_init_reg
-tisp_gb_param_array_get
-tisp_gb_params_refresh
-tisp_get_ae_comp
-tisp_get_ae_info
-tisp_get_ae_state
-tisp_get_awb_info
-tisp_get_defog_strength
-tisp_gib_set_par_cfg
-tisp_hldc_con_par_cfg
-tisp_hldc_get_par_cfg
-tisp_hldc_set_par_cfg
-tisp_init
-tisp_log2_fixed_to_fixed
-tisp_log2_fixed_to_fixed_tuning
-tisp_log2_int_to_fixed
-tisp_lsc_get_par_cfg
-tisp_lsc_judge_ct_update_flag
-tisp_lsc_judge_gain_update_flag
-tisp_lsc_param_array_get
-tisp_lsc_set_par_cfg
-tisp_lsc_wdr_en
-tisp_lsc_write_lut_datas
-tisp_math_exp2
-tisp_mdns_all_reg_refresh
-tisp_mdns_get_par_cfg
-tisp_mdns_par_refresh
-tisp_mdns_param_array_get
-tisp_mdns_reg_trigger
-tisp_mdns_set_par_cfg
-tisp_mdns_wdr_en
-tisp_netlink_event_set_cb
-tisp_netlink_exit
-tisp_netlink_init
-tisp_param_operate_deinit
-tisp_param_operate_init
-tisp_param_operate_process
-tisp_rdns_get_par_cfg
-tisp_rdns_par_refresh
-tisp_rdns_param_array_get
-tisp_rdns_set_par_cfg
-tisp_rdns_wdr_en
-tisp_reg_map_get
-tisp_reg_map_set
-tisp_reset_initialization_flag
-tisp_s_2dns_ratio
-tisp_s_3dns_ratio
-tisp_s_BacklightComp
-tisp_s_Gamma
-tisp_s_Hilightdepress
-tisp_s_adr_enable
-tisp_s_adr_str_internal
-tisp_s_ae_at_list
-tisp_s_ae_attr
-tisp_s_ae_hist
-tisp_s_ae_it_max
-tisp_s_awb_start
-tisp_s_ev_start
-tisp_s_fcrop_control
-tisp_s_mdns_ratio
-tisp_s_sdns_ratio
-tisp_s_wdr_init_en
-tisp_sdns_all_reg_refresh
-tisp_sdns_get_par_cfg
-tisp_sdns_intp_reg_refresh
-tisp_sdns_par_refresh
-tisp_sdns_param_array_get
-tisp_sdns_set_par_cfg
-tisp_sdns_wdr_en
-tisp_set_ae1_ag
-tisp_set_ae_info
-tisp_set_awb_info
-tisp_set_bcsh_hue
-tisp_set_brightness
-tisp_set_contrast
-tisp_set_csc_version
-tisp_set_saturation
-tisp_set_sensor_analog_gain
-tisp_set_sensor_analog_gain_short
-tisp_set_sensor_digital_gain_short
-tisp_set_sensor_integration_time
-tisp_set_sensor_integration_time_short
-tisp_sharpen_all_reg_refresh
-tisp_sharpen_par_refresh
-tisp_sharpen_param_array_get
-tisp_sharpen_wdr_en
-tisp_tgain_update
-tisp_top_param_array_get
-tisp_top_sel
-tisp_wdr_ev_calculate
-tisp_wdr_expTime_updata
-tisp_wdr_get_par_cfg
-tisp_wdr_init
-tisp_wdr_par_refresh
-tisp_wdr_param_array_get
-tisp_wdr_param_array_get_extended
-tisp_wdr_param_array_set
-tisp_wdr_process
-tisp_wdr_set_par_cfg
-tisp_ydns_get_par_cfg
-tisp_ydns_par_refresh
-tisp_ydns_param_array_get
-tisp_ydns_set_par_cfg
-tisp_ysp_get_par_cfg
-tisp_ysp_set_par_cfg
-tiziano_adr_init
-tiziano_adr_interrupt_static
-tiziano_adr_params_init
-tiziano_adr_params_refresh
-tiziano_ae_exp_th_params_refresh
-tiziano_ae_init
-tiziano_ae_init_exp_th
-tiziano_ae_params_refresh
-tiziano_ae_s_ev_start
-tiziano_ae_set_hardware_param
-tiziano_af_init
-tiziano_af_params_refresh
-tiziano_awb_init
-tiziano_awb_params_refresh
-tiziano_bcsh_init
-tiziano_bcsh_lut_parameter
-tiziano_bcsh_params_refresh
-tiziano_bcsh_update
-tiziano_ccm_init
-tiziano_ccm_lut_parameter
-tiziano_ccm_params_refresh
-tiziano_clm_init
-tiziano_clm_params_refresh
-tiziano_ct_ccm_interpolation
-tiziano_deflicker_expt
-tiziano_defog_init
-tiziano_defog_params_init
-tiziano_defog_params_refresh
-tiziano_dmsc_init
-tiziano_dmsc_params_refresh
-tiziano_dpc_init
-tiziano_dpc_params_refresh
-tiziano_g_awb_start
-tiziano_gamma_init
-tiziano_gamma_lut_parameter
-tiziano_gib_deir_reg
-tiziano_gib_init
-tiziano_gib_lut_parameter
-tiziano_gib_params_refresh
-tiziano_hldc_init
-tiziano_hldc_params_refresh
-tiziano_lsc_init
-tiziano_lsc_params_refresh
-tiziano_mdns_init
-tiziano_mdns_params_refresh
-tiziano_rdns_init
-tiziano_rdns_params_refresh
-tiziano_s_awb_start
-tiziano_sdns_init
-tiziano_sdns_params_refresh
-tiziano_set_parameter_clm
-tiziano_sharpen_init
-tiziano_sharpen_params_refresh
-tiziano_sync_sensor_attr
-tiziano_sync_sensor_attr_validate
-tiziano_wdr_algorithm
-tiziano_wdr_fusion1_curve_block_mean1
-tiziano_wdr_init
-tiziano_wdr_params_init
-tiziano_wdr_params_refresh
-tiziano_wdr_soft_para_out
-tiziano_ydns_init
-tiziano_ydns_params_refresh
-tx_isp_activate_csi_subdev
-tx_isp_check_reset_status
-tx_isp_cleanup_subdev_graph
-tx_isp_configure_clocks
-tx_isp_configure_default_links
-tx_isp_configure_format_propagation
-tx_isp_core_device_deinit
-tx_isp_core_device_get_state
-tx_isp_core_device_init
-tx_isp_core_device_set_sensor_attr
-tx_isp_core_device_set_state
-tx_isp_core_device_start_streaming
-tx_isp_core_device_stop_streaming
-tx_isp_core_irq_thread_handle
-tx_isp_core_probe
-tx_isp_core_remove
-tx_isp_core_set_format
-tx_isp_core_stop
-tx_isp_create_framechan_devices
-tx_isp_create_graph_and_nodes
-tx_isp_create_misc_device
-tx_isp_create_subdev_graph
-tx_isp_create_subdev_link
-tx_isp_create_subdev_links
-tx_isp_create_v4l2_device
-tx_isp_csi_activate_subdev
-tx_isp_csi_check_errors
-tx_isp_csi_device_deinit
-tx_isp_csi_device_init
-tx_isp_csi_hw_init
-tx_isp_csi_probe
-tx_isp_csi_remove
-tx_isp_csi_slake_subdev
-tx_isp_destroy_core_device
-tx_isp_destroy_v4l2_device
-tx_isp_detect_and_register_sensors
-tx_isp_disable_irq
-tx_isp_enable_irq
-tx_isp_exit
-tx_isp_frame_chan_deinit
-tx_isp_free_irq
-tx_isp_fs_platform_exit
-tx_isp_fs_platform_init
-tx_isp_fs_probe
-tx_isp_fs_remove
-tx_isp_handle_sync_sensor_attr_event
-tx_isp_init
-tx_isp_init_csi_subdev
-tx_isp_init_sink_subdev
-tx_isp_init_source_subdev
-tx_isp_init_subdev_pads
-tx_isp_init_subdev_registry
-tx_isp_ispcore_activate_module_complete
-tx_isp_link_core_device
-tx_isp_module_deinit
-tx_isp_module_init
-tx_isp_open
-tx_isp_platform_probe
-tx_isp_platform_remove
-tx_isp_reg_set
-tx_isp_register_link
-tx_isp_release
-tx_isp_request_irq
-tx_isp_send_event_to_remote
-tx_isp_setup_media_links
-tx_isp_subdev_auto_link
-tx_isp_subdev_deinit
-tx_isp_subdev_init
-tx_isp_subdev_pipo
-tx_isp_subdev_platform_exit
-tx_isp_subdev_platform_init
-tx_isp_subdev_register
-tx_isp_subdev_unregister
-tx_isp_unlocked_ioctl
-tx_isp_unregister_sensor_subdev
-tx_isp_v4l2_cleanup
-tx_isp_v4l2_cropcap
-tx_isp_v4l2_dqbuf
-tx_isp_v4l2_enum_fmt_vid_cap
-tx_isp_v4l2_g_ctrl
-tx_isp_v4l2_g_fmt_vid_cap
-tx_isp_v4l2_g_parm
-tx_isp_v4l2_init
-tx_isp_v4l2_mmap
-tx_isp_v4l2_open
-tx_isp_v4l2_qbuf
-tx_isp_v4l2_querycap
-tx_isp_v4l2_queryctrl
-tx_isp_v4l2_release
-tx_isp_v4l2_reqbufs
-tx_isp_v4l2_s_ctrl
-tx_isp_v4l2_s_fmt_vid_cap
-tx_isp_v4l2_s_parm
-tx_isp_v4l2_streamoff
-tx_isp_v4l2_streamon
-tx_isp_v4l2_unlocked_ioctl
-tx_isp_vic_activate_subdev
-tx_isp_vic_configure_dma
-tx_isp_vic_device_deinit
-tx_isp_vic_device_init
-tx_isp_vic_frame_done
-tx_isp_vic_probe
-tx_isp_vic_remove
-tx_isp_vic_slake_subdev
-tx_isp_vic_start
-tx_isp_video_link_destroy
-tx_isp_video_link_stream
-tx_isp_video_s_stream
-tx_isp_vin_activate_subdev
-tx_isp_vin_init
-tx_isp_vin_probe
-tx_isp_vin_remove
-tx_isp_vin_reset
-tx_isp_vin_slake_subdev
-tx_vic_disable_irq
-tx_vic_enable_irq
-update_af_zone_data
-vic_core_ops_init
-vic_core_ops_ioctl
-vic_core_s_stream
-vic_framedone_irq_function
-vic_mdma_enable
-vic_mdma_irq_function
-vic_pipo_mdma_enable
-vic_saveraw
-vic_sensor_ops_ioctl
-vic_sensor_ops_sync_sensor_attr
-vic_snapraw
-video_input_cmd_open
-video_input_cmd_set
-video_input_cmd_show
-vin_s_stream
-void
-wdr_mode_show
-wdr_mode_store
+  JZ_Isp_Ae_Dg2reg
+  Tiziano_ae1_fpga
+  Tiziano_awb_set_gain
+  Tiziano_wdr_fpga
+  __enqueue_in_driver
+  __fill_v4l2_buffer
+  __frame_channel_vb2_streamoff
+  __private_spin_lock_irqsave
+  ae0_interrupt_hist
+  ae0_interrupt_hist_wrapper
+  ae0_interrupt_static
+  ae0_interrupt_static_wrapper
+  ae1_interrupt_hist
+  ae1_interrupt_hist_wrapper
+  ae1_interrupt_static
+  ae1_interrupt_static_wrapper
+  apical_isp_ae_g_roi
+  apical_isp_ae_zone_g_ctrl
+  apical_isp_af_zone_g_ctrl
+  apical_isp_core_ops_g_ctrl
+  apical_isp_core_ops_s_ctrl
+  apical_isp_ev_g_attr
+  apical_isp_expr_g_ctrl
+  apical_isp_max_again_g_ctrl
+  apical_isp_max_dgain_g_ctrl
+  check_csi_error
+  check_region_changes
+  cleanup_i2c_infrastructure
+  cleanup_region
+  cm_control
+  csi_core_ops_init
+  csi_device_probe
+  csi_sensor_ops_ioctl
+  csi_sensor_ops_sync_sensor_attr
+  csi_set_on_lanes
+  csi_video_s_stream
+  csi_write32
+  data_b2ee0
+  data_b2ee4
+  data_b2eec
+  data_b2ef0
+  data_b2ef4
+  data_b2ef8
+  data_b2f04
+  data_b2f08
+  destroy_isp_tuning_device
+  dump_csi_reg
+  dump_isp_csi_open
+  dump_isp_vic_frd_open
+  dump_vic_reg
+  end_sequence
+  find_subdev_link_pad
+  fix_point_div_32
+  fix_point_div_64
+  fix_point_mult2_32
+  fix_point_mult3_32
+  frame_chan_event
+  frame_channel_open
+  frame_channel_release
+  frame_channel_unlocked_ioctl
+  frame_channel_vidioc_get_fmt
+  frame_channel_vidioc_set_fmt
+  fs_chardev_ioctl
+  fs_chardev_open
+  fs_chardev_release
+  fs_slake_module
+  get_isp_clk
+  get_reg_type
+  get_saved_command_line
+  graph_proc_open
+  graph_proc_read
+  graph_proc_show
+  init_region
+  int
+  ip_done_interrupt_static
+  irqreturn_t
+  is_sequential_write
+  is_valid_kernel_pointer
+  isp_core_tuning_deinit
+  isp_core_tuning_event
+  isp_core_tuning_init
+  isp_core_tuning_release
+  isp_core_tunning_unlocked_ioctl
+  isp_csi_show
+  isp_event_dispatcher
+  isp_frame_done_get_count
+  isp_frame_done_wait
+  isp_frame_done_wakeup
+  isp_free_buffer
+  isp_fw_process
+  isp_get_ae_state
+  isp_get_af_zone
+  isp_i2c_new_subdev_board
+  isp_irq_dispatcher
+  isp_irq_handle
+  isp_irq_thread_handle
+  isp_m0_chardev_release
+  isp_malloc_buffer
+  isp_mem_init
+  isp_monitor_exit
+  isp_monitor_init
+  isp_printf
+  isp_subdev_init_clks
+  isp_trigger_event
+  isp_tuning_ioctl
+  isp_tuning_open
+  isp_tuning_release
+  isp_vic_cmd_set
+  isp_vic_frd_show
+  isp_vic_interrupt_service_routine
+  isp_write32
+  ispcore_activate_module
+  ispcore_core_ops_init
+  ispcore_core_ops_ioctl
+  ispcore_frame_channel_dqbuf
+  ispcore_frame_channel_streamoff
+  ispcore_interrupt_service_routine
+  ispcore_irq_fs_work
+  ispcore_irq_thread_handle
+  ispcore_link_setup
+  ispcore_pad_event_handle
+  ispcore_sensor_ops_ioctl
+  ispcore_sensor_ops_release_all_sensor
+  ispcore_slake_module
+  ispcore_sync_sensor_attr
+  ispcore_video_s_stream
+  ispmodule_ip_done_irq_handler
+  ispvic_frame_channel_clearbuf
+  ispvic_frame_channel_qbuf
+  ispvic_frame_channel_s_stream
+  jz_isp_ccm
+  jz_isp_ccm_para2reg
+  jz_isp_ccm_parameter_convert
+  ktime_get_real_ns
+  list_for_each
+  list_for_each_entry
+  list_for_each_entry_safe
+  list_for_each_safe
+  load_isp_tuning_file
+  mbus_to_bayer_write
+  mcp_log_info
+  mips_dma_cache_sync
+  parse_rmem_bootarg
+  pop_buffer_fifo
+  prepare_i2c_infrastructure
+  private_capable
+  private_clk_disable
+  private_clk_enable
+  private_clk_get
+  private_clk_put
+  private_clk_set_rate
+  private_complete
+  private_dma_cache_sync
+  private_dma_sync_single_for_device
+  private_do_gettimeofday
+  private_driver_get_interface
+  private_free_irq
+  private_get_driver_interface
+  private_gpio_direction_output
+  private_gpio_free
+  private_gpio_request
+  private_i2c_add_driver
+  private_i2c_del_driver
+  private_i2c_get_clientdata
+  private_i2c_set_clientdata
+  private_i2c_transfer
+  private_init_completion
+  private_ioremap
+  private_iounmap
+  private_jzgpio_set_func
+  private_kfree
+  private_kmalloc
+  private_ktime_set
+  private_log2_fixed_to_fixed
+  private_math_exp2
+  private_msleep
+  private_mutex_init
+  private_netlink_kernel_create
+  private_platform_device_register
+  private_platform_device_unregister
+  private_platform_get_drvdata
+  private_platform_get_irq
+  private_platform_get_resource
+  private_platform_set_drvdata
+  private_raw_mutex_init
+  private_release_mem_region
+  private_request_mem_region
+  private_reset_tx_isp_module
+  private_schedule_hrtimeout
+  private_schedule_work
+  private_set_current_state
+  private_spin_lock_init
+  private_spin_unlock_irqrestore
+  private_vfree
+  private_vmalloc
+  push_buffer_fifo
+  sensor_alloc_analog_gain
+  sensor_alloc_analog_gain_short
+  sensor_alloc_digital_gain
+  sensor_alloc_integration_time
+  sensor_alloc_integration_time_short
+  sensor_disable_isp
+  sensor_early_init
+  sensor_end_changes
+  sensor_fps_control
+  sensor_get_id
+  sensor_get_lines_per_second
+  sensor_get_normal_fps
+  sensor_hw_reset_disable
+  sensor_hw_reset_enable
+  sensor_info_show
+  sensor_init
+  sensor_read_black_pedestal
+  sensor_set_analog_gain
+  sensor_set_analog_gain_short
+  sensor_set_digital_gain
+  sensor_set_integration_time
+  sensor_set_integration_time_short
+  sensor_set_mode
+  sensor_set_wdr_mode
+  sensor_start_changes
+  start_sequence
+  statistics_show
+  streaming_show
+  streaming_store
+  subdev_sensor_ops_enum_input
+  subdev_sensor_ops_ioctl
+  subdev_sensor_ops_release_all_sensor
+  subdev_sensor_ops_set_input
+  subdev_video_destroy_link
+  system_irq_func_set
+  system_reg_read
+  system_reg_write
+  system_reg_write_ae
+  system_reg_write_af
+  system_reg_write_awb
+  system_reg_write_clm
+  system_reg_write_gb
+  system_reg_write_gib
+  tisp_adr_get_par_cfg
+  tisp_adr_par_refresh
+  tisp_adr_param_array_get
+  tisp_adr_process
+  tisp_adr_set_par_cfg
+  tisp_adr_set_params
+  tisp_adr_wdr_en
+  tisp_ae0_ctrls_update
+  tisp_ae0_get_hist
+  tisp_ae0_get_statistics
+  tisp_ae0_process
+  tisp_ae0_process_impl
+  tisp_ae1_ctrls_update
+  tisp_ae1_expt
+  tisp_ae1_get_hist
+  tisp_ae1_get_statistics
+  tisp_ae1_process
+  tisp_ae1_process_impl
+  tisp_ae_algo_deinit
+  tisp_ae_algo_init
+  tisp_ae_deinit
+  tisp_ae_exp_th_par_refresh
+  tisp_ae_get_hist_custome
+  tisp_ae_get_par_cfg
+  tisp_ae_get_y_zone
+  tisp_ae_ir_update
+  tisp_ae_param_array_get
+  tisp_ae_set_par_cfg
+  tisp_ae_update_zone_data
+  tisp_ae_wdr_en
+  tisp_af_get_par_cfg
+  tisp_af_get_zone
+  tisp_af_par_refresh
+  tisp_af_param_array_get
+  tisp_af_set_par_cfg
+  tisp_again_update
+  tisp_awb_algo_deinit
+  tisp_awb_algo_init
+  tisp_awb_deinit
+  tisp_awb_get_par_cfg
+  tisp_awb_par_refresh
+  tisp_awb_set_par_cfg
+  tisp_bcsh_brightness
+  tisp_bcsh_contrast
+  tisp_bcsh_get_par_cfg
+  tisp_bcsh_param_array_get
+  tisp_bcsh_s_hue
+  tisp_bcsh_saturation
+  tisp_bcsh_set_par_cfg
+  tisp_bcsh_wdr_en
+  tisp_blc_get_par_cfg
+  tisp_blc_set_par_cfg
+  tisp_ccm_ct_update
+  tisp_ccm_ev_update
+  tisp_ccm_get_par_cfg
+  tisp_ccm_is_initialized
+  tisp_ccm_param_array_get
+  tisp_ccm_set_par_cfg
+  tisp_ccm_wdr_en
+  tisp_channel_attr_set
+  tisp_channel_fifo_clear
+  tisp_channel_start
+  tisp_channel_stop
+  tisp_clm_get_par_cfg
+  tisp_clm_param_array_get
+  tisp_clm_set_par_cfg
+  tisp_code_create_tuning_node
+  tisp_code_destroy_tuning_node
+  tisp_code_tuning_ioctl
+  tisp_code_tuning_open
+  tisp_code_tuning_release
+  tisp_ct_update
+  tisp_day_or_night_s_ctrl
+  tisp_defog_get_par_cfg
+  tisp_defog_par_refresh
+  tisp_defog_param_array_get
+  tisp_defog_set_par_cfg
+  tisp_defog_wdr_en
+  tisp_deinit
+  tisp_deinit_free
+  tisp_dma_cache_sync_helper
+  tisp_dmsc_par_refresh
+  tisp_dmsc_set_par_cfg
+  tisp_dmsc_wdr_en
+  tisp_dn_mode_get
+  tisp_dn_mode_set
+  tisp_dpc_all_reg_refresh
+  tisp_dpc_get_par_cfg
+  tisp_dpc_par_refresh
+  tisp_dpc_param_array_get
+  tisp_dpc_set_par_cfg
+  tisp_dpc_wdr_en
+  tisp_ev_update
+  tisp_event_cleanup
+  tisp_event_exit
+  tisp_event_init
+  tisp_event_process
+  tisp_event_push
+  tisp_event_set_cb
+  tisp_fw_process
+  tisp_g_ae_hist
+  tisp_g_ae_zone
+  tisp_g_ae_zone_internal
+  tisp_g_aeroi_weight
+  tisp_g_aezone_weight
+  tisp_g_af_zone
+  tisp_g_af_zone_buffer
+  tisp_g_dpc_strength
+  tisp_g_drc_strength
+  tisp_g_ev_attr
+  tisp_g_fcrop_control
+  tisp_g_wdr_en
+  tisp_gamma_get_par_cfg
+  tisp_gamma_param_array_get
+  tisp_gamma_set_par_cfg
+  tisp_gamma_wdr_en
+  tisp_gb_blc_again_interp
+  tisp_gb_init
+  tisp_gb_init_reg
+  tisp_gb_param_array_get
+  tisp_gb_params_refresh
+  tisp_get_ae_comp
+  tisp_get_ae_info
+  tisp_get_ae_state
+  tisp_get_awb_info
+  tisp_get_defog_strength
+  tisp_gib_set_par_cfg
+  tisp_hldc_con_par_cfg
+  tisp_hldc_get_par_cfg
+  tisp_hldc_set_par_cfg
+  tisp_init
+  tisp_log2_fixed_to_fixed
+  tisp_log2_fixed_to_fixed_tuning
+  tisp_log2_int_to_fixed
+  tisp_lsc_get_par_cfg
+  tisp_lsc_judge_ct_update_flag
+  tisp_lsc_judge_gain_update_flag
+  tisp_lsc_param_array_get
+  tisp_lsc_set_par_cfg
+  tisp_lsc_wdr_en
+  tisp_lsc_write_lut_datas
+  tisp_math_exp2
+  tisp_mdns_all_reg_refresh
+  tisp_mdns_get_par_cfg
+  tisp_mdns_par_refresh
+  tisp_mdns_param_array_get
+  tisp_mdns_reg_trigger
+  tisp_mdns_set_par_cfg
+  tisp_mdns_wdr_en
+  tisp_netlink_event_set_cb
+  tisp_netlink_exit
+  tisp_netlink_init
+  tisp_param_operate_deinit
+  tisp_param_operate_init
+  tisp_param_operate_process
+  tisp_rdns_get_par_cfg
+  tisp_rdns_par_refresh
+  tisp_rdns_param_array_get
+  tisp_rdns_set_par_cfg
+  tisp_rdns_wdr_en
+  tisp_reg_map_get
+  tisp_reg_map_set
+  tisp_reset_initialization_flag
+  tisp_s_2dns_ratio
+  tisp_s_3dns_ratio
+  tisp_s_BacklightComp
+  tisp_s_Gamma
+  tisp_s_Hilightdepress
+  tisp_s_adr_enable
+  tisp_s_adr_str_internal
+  tisp_s_ae_at_list
+  tisp_s_ae_attr
+  tisp_s_ae_hist
+  tisp_s_ae_it_max
+  tisp_s_awb_start
+  tisp_s_ev_start
+  tisp_s_fcrop_control
+  tisp_s_mdns_ratio
+  tisp_s_sdns_ratio
+  tisp_s_wdr_init_en
+  tisp_sdns_all_reg_refresh
+  tisp_sdns_get_par_cfg
+  tisp_sdns_intp_reg_refresh
+  tisp_sdns_par_refresh
+  tisp_sdns_param_array_get
+  tisp_sdns_set_par_cfg
+  tisp_sdns_wdr_en
+  tisp_set_ae1_ag
+  tisp_set_ae_info
+  tisp_set_awb_info
+  tisp_set_bcsh_hue
+  tisp_set_brightness
+  tisp_set_contrast
+  tisp_set_csc_version
+  tisp_set_saturation
+  tisp_set_sensor_analog_gain
+  tisp_set_sensor_analog_gain_short
+  tisp_set_sensor_digital_gain_short
+  tisp_set_sensor_integration_time
+  tisp_set_sensor_integration_time_short
+  tisp_sharpen_all_reg_refresh
+  tisp_sharpen_par_refresh
+  tisp_sharpen_param_array_get
+  tisp_sharpen_wdr_en
+  tisp_tgain_update
+  tisp_top_param_array_get
+  tisp_top_sel
+  tisp_wdr_ev_calculate
+  tisp_wdr_expTime_updata
+  tisp_wdr_get_par_cfg
+  tisp_wdr_init
+  tisp_wdr_par_refresh
+  tisp_wdr_param_array_get
+  tisp_wdr_param_array_get_extended
+  tisp_wdr_param_array_set
+  tisp_wdr_process
+  tisp_wdr_set_par_cfg
+  tisp_ydns_get_par_cfg
+  tisp_ydns_par_refresh
+  tisp_ydns_param_array_get
+  tisp_ydns_set_par_cfg
+  tisp_ysp_get_par_cfg
+  tisp_ysp_set_par_cfg
+  tiziano_adr_init
+  tiziano_adr_interrupt_static
+  tiziano_adr_params_init
+  tiziano_adr_params_refresh
+  tiziano_ae_exp_th_params_refresh
+  tiziano_ae_init
+  tiziano_ae_init_exp_th
+  tiziano_ae_para_addr
+  tiziano_ae_params_refresh
+  tiziano_ae_s_ev_start
+  tiziano_ae_set_hardware_param
+  tiziano_af_init
+  tiziano_af_params_refresh
+  tiziano_awb_init
+  tiziano_awb_params_refresh
+  tiziano_bcsh_init
+  tiziano_bcsh_lut_parameter
+  tiziano_bcsh_params_refresh
+  tiziano_bcsh_update
+  tiziano_ccm_init
+  tiziano_ccm_lut_parameter
+  tiziano_ccm_params_refresh
+  tiziano_clm_init
+  tiziano_clm_params_refresh
+  tiziano_ct_ccm_interpolation
+  tiziano_deflicker_expt
+  tiziano_defog_init
+  tiziano_defog_params_init
+  tiziano_defog_params_refresh
+  tiziano_dmsc_init
+  tiziano_dmsc_params_refresh
+  tiziano_dpc_init
+  tiziano_dpc_params_refresh
+  tiziano_g_awb_start
+  tiziano_gamma_init
+  tiziano_gamma_lut_parameter
+  tiziano_gib_deir_reg
+  tiziano_gib_init
+  tiziano_gib_lut_parameter
+  tiziano_gib_params_refresh
+  tiziano_hldc_init
+  tiziano_hldc_params_refresh
+  tiziano_lsc_init
+  tiziano_lsc_params_refresh
+  tiziano_mdns_init
+  tiziano_mdns_params_refresh
+  tiziano_rdns_init
+  tiziano_rdns_params_refresh
+  tiziano_s_awb_start
+  tiziano_sdns_init
+  tiziano_sdns_params_refresh
+  tiziano_set_parameter_clm
+  tiziano_sharpen_init
+  tiziano_sharpen_params_refresh
+  tiziano_sync_sensor_attr
+  tiziano_sync_sensor_attr_validate
+  tiziano_wdr_algorithm
+  tiziano_wdr_fusion1_curve_block_mean1
+  tiziano_wdr_init
+  tiziano_wdr_params_init
+  tiziano_wdr_params_refresh
+  tiziano_wdr_soft_para_out
+  tiziano_ydns_init
+  tiziano_ydns_params_refresh
+  tx_isp_activate_csi_subdev
+  tx_isp_check_reset_status
+  tx_isp_cleanup_subdev_graph
+  tx_isp_configure_clocks
+  tx_isp_configure_default_links
+  tx_isp_configure_format_propagation
+  tx_isp_core_device_deinit
+  tx_isp_core_device_get_state
+  tx_isp_core_device_init
+  tx_isp_core_device_set_sensor_attr
+  tx_isp_core_device_set_state
+  tx_isp_core_device_start_streaming
+  tx_isp_core_device_stop_streaming
+  tx_isp_core_irq_thread_handle
+  tx_isp_core_probe
+  tx_isp_core_remove
+  tx_isp_core_set_format
+  tx_isp_core_stop
+  tx_isp_create_core_device
+  tx_isp_create_driver_data
+  tx_isp_create_framechan_devices
+  tx_isp_create_graph_and_nodes
+  tx_isp_create_misc_device
+  tx_isp_create_subdev_graph
+  tx_isp_create_subdev_link
+  tx_isp_create_subdev_links
+  tx_isp_create_v4l2_device
+  tx_isp_csi_activate_subdev
+  tx_isp_csi_check_errors
+  tx_isp_csi_device_init
+  tx_isp_csi_hw_init
+  tx_isp_csi_probe
+  tx_isp_csi_remove
+  tx_isp_csi_slake_subdev
+  tx_isp_destroy_core_device
+  tx_isp_destroy_v4l2_device
+  tx_isp_detect_and_register_sensors
+  tx_isp_disable_irq
+  tx_isp_enable_irq
+  tx_isp_exit
+  tx_isp_frame_chan_deinit
+  tx_isp_free_irq
+  tx_isp_fs_platform_exit
+  tx_isp_fs_platform_init
+  tx_isp_fs_probe
+  tx_isp_fs_remove
+  tx_isp_get_device
+  tx_isp_handle_sync_sensor_attr_event
+  tx_isp_init
+  tx_isp_init_csi_subdev
+  tx_isp_init_sink_subdev
+  tx_isp_init_source_subdev
+  tx_isp_init_subdev_pads
+  tx_isp_init_subdev_registry
+  tx_isp_ispcore_activate_module_complete
+  tx_isp_link_core_device
+  tx_isp_module_deinit
+  tx_isp_module_init
+  tx_isp_open
+  tx_isp_platform_probe
+  tx_isp_platform_remove
+  tx_isp_reg_set
+  tx_isp_register_link
+  tx_isp_release
+  tx_isp_request_irq
+  tx_isp_send_event_to_remote
+  tx_isp_setup_media_links
+  tx_isp_subdev_auto_link
+  tx_isp_subdev_deinit
+  tx_isp_subdev_init
+  tx_isp_subdev_pipo
+  tx_isp_subdev_platform_exit
+  tx_isp_subdev_platform_init
+  tx_isp_subdev_register
+  tx_isp_subdev_unregister
+  tx_isp_unlocked_ioctl
+  tx_isp_unregister_sensor_subdev
+  tx_isp_v4l2_cleanup
+  tx_isp_v4l2_cropcap
+  tx_isp_v4l2_dqbuf
+  tx_isp_v4l2_enum_fmt_vid_cap
+  tx_isp_v4l2_g_ctrl
+  tx_isp_v4l2_g_fmt_vid_cap
+  tx_isp_v4l2_g_parm
+  tx_isp_v4l2_init
+  tx_isp_v4l2_mmap
+  tx_isp_v4l2_open
+  tx_isp_v4l2_qbuf
+  tx_isp_v4l2_querycap
+  tx_isp_v4l2_queryctrl
+  tx_isp_v4l2_release
+  tx_isp_v4l2_reqbufs
+  tx_isp_v4l2_s_ctrl
+  tx_isp_v4l2_s_fmt_vid_cap
+  tx_isp_v4l2_s_parm
+  tx_isp_v4l2_streamoff
+  tx_isp_v4l2_streamon
+  tx_isp_v4l2_unlocked_ioctl
+  tx_isp_vic_activate_subdev
+  tx_isp_vic_frame_done
+  tx_isp_vic_probe
+  tx_isp_vic_remove
+  tx_isp_vic_slake_subdev
+  tx_isp_vic_start
+  tx_isp_video_link_destroy
+  tx_isp_video_link_stream
+  tx_isp_video_s_stream
+  tx_isp_vin_activate_subdev
+  tx_isp_vin_init
+  tx_isp_vin_probe
+  tx_isp_vin_remove
+  tx_isp_vin_reset
+  tx_isp_vin_slake_subdev
+  tx_vic_disable_irq
+  tx_vic_enable_irq
+  update_af_zone_data
+  vic_core_ops_init
+  vic_core_ops_ioctl
+  vic_core_s_stream
+  vic_framedone_irq_function
+  vic_mdma_enable
+  vic_mdma_irq_function
+  vic_pipo_mdma_enable
+  vic_saveraw
+  vic_sensor_ops_ioctl
+  vic_sensor_ops_sync_sensor_attr
+  vic_snapraw
+  video_input_cmd_open
+  video_input_cmd_set
+  video_input_cmd_show
+  vin_core_ops_ioctl
+  vin_s_stream
+  void
+  wdr_mode_show
+  wdr_mode_store
