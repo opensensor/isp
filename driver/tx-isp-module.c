@@ -1463,8 +1463,6 @@ err_free_dev:
 // Detect and register loaded sensor modules into subdev infrastructure - Kernel 3.10 compatible
 static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev)
 {
-    struct tx_isp_subdev *sensor_subdev;
-    int sensor_found = 0;
     int ret = 0;
 
     if (!isp_dev) {
@@ -1473,40 +1471,54 @@ static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev)
 
     pr_info("*** CRITICAL: Creating I2C sensor devices during ISP initialization ***\n");
 
-    /* CRITICAL FIX: Create I2C sensor device immediately during ISP init */
-    /* This matches the reference driver behavior where sensors are detected early */
+    /* CRITICAL FIX: Use the proper IOCTL to create I2C sensor device */
+    /* This matches the reference driver behavior where sensors are detected via IOCTL 0x2000000 */
 
-    /* Get I2C adapter 0 (standard for embedded systems) */
-    struct i2c_adapter *adapter = i2c_get_adapter(0);
-    if (!adapter) {
-        pr_err("*** Failed to get I2C adapter 0 for sensor detection ***\n");
-        return -ENODEV;
+    /* Prepare sensor data structure for IOCTL 0x2000000 */
+    uint32_t sensor_data[0x14]; /* 0x50 bytes / 4 = 0x14 uint32_t elements */
+    memset(sensor_data, 0, sizeof(sensor_data));
+
+    /* Set up sensor data according to Binary Ninja reference */
+    sensor_data[8] = 1;    /* Interface type: 1 = I2C */
+    sensor_data[0xf] = 0;  /* I2C adapter number: 0 */
+    sensor_data[0xe] = 0x37; /* I2C address: 0x37 for GC2053 */
+
+    /* Copy sensor name to data[9] onwards (Binary Ninja: memcpy(&var_40, &arg3[9], 0x14)) */
+    strncpy((char*)&sensor_data[9], "gc2053", 20);
+
+    pr_info("*** Calling subdev_sensor_ops_ioctl with IOCTL 0x2000000 to create I2C sensor device ***\n");
+
+    /* Find a subdev that has sensor ops to call the IOCTL on */
+    struct tx_isp_subdev *target_subdev = NULL;
+    for (int i = 0; i < ISP_MAX_SUBDEVS; i++) {
+        struct tx_isp_subdev *sd = isp_dev->subdevs[i];
+        if (sd && sd->ops && sd->ops->sensor) {
+            target_subdev = sd;
+            break;
+        }
     }
 
-    /* Create I2C board info for gc2053 sensor */
-    struct i2c_board_info sensor_board_info;
-    memset(&sensor_board_info, 0, sizeof(sensor_board_info));
-    strncpy(sensor_board_info.type, "gc2053", I2C_NAME_SIZE);
-    sensor_board_info.addr = 0x37; /* GC2053 I2C address */
+    if (!target_subdev) {
+        /* If no subdev with sensor ops exists, use CSI subdev which also has sensor ops */
+        target_subdev = isp_dev->subdevs[0]; /* CSI is at index 0 */
+    }
 
-    pr_info("*** Creating I2C sensor device during init: %s at 0x%02x ***\n",
-            sensor_board_info.type, sensor_board_info.addr);
+    if (target_subdev && target_subdev->ops && target_subdev->ops->sensor && target_subdev->ops->sensor->ioctl) {
+        pr_info("*** Calling sensor IOCTL 0x2000000 on subdev %p ***\n", target_subdev);
+        ret = target_subdev->ops->sensor->ioctl(target_subdev, 0x2000000, sensor_data);
 
-    /* Call our I2C subdev creation function */
-    struct i2c_client *client = isp_i2c_new_subdev_board(adapter, &sensor_board_info);
-
-    i2c_put_adapter(adapter);
-
-    if (client) {
-        pr_info("*** I2C sensor device created successfully during init: %s at 0x%02x ***\n",
-                client->name, client->addr);
-        sensor_found = 1;
+        if (ret == 0) {
+            pr_info("*** I2C sensor device created successfully via IOCTL ***\n");
+            return 0;
+        } else {
+            pr_err("*** Failed to create I2C sensor device via IOCTL: %d ***\n", ret);
+        }
     } else {
-        pr_err("*** Failed to create I2C sensor device during init ***\n");
+        pr_err("*** No subdev with sensor IOCTL available for sensor device creation ***\n");
     }
 
-    pr_info("Sensor detection complete - found %d sensors\n", sensor_found);
-    return 0;
+    pr_info("Sensor detection complete - result: %d\n", ret);
+    return ret ? ret : -ENODEV;
 }
 
 /* tx_isp_disable_irq - EXACT Binary Ninja implementation with correct parameter */
