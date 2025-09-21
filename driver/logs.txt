@@ -1082,3 +1082,33 @@ root@ing-wyze-cam3-a000 ~# cat /proc/interrupts
 ERR:          0
 root@ing-wyze-cam3-a000 ~# 
 
+545): IMP_OSD_CreateRgn(1227) create handle=0 success
+I/OSD( 2545): IMP_OSD_CreateRgn(1227) create handle=1 success
+I/OSD( 2545): IMP_OSD_CreateRgn(1227) create handle=2 success
+I/OSD( 2545): IMP_OSD_CreateRgn(1227) create handle=3 success
+D/System( 2545): system_bind(): bind DST-OSD-0(4.0.0) to SRC-Framesource-0(0.0.0)
+D/System( 2545): system_bind(): bind DST-Encoder-0(1.0.0) to SRC-OSD-0(4.0.0)
+I/Framesource( 2545): [chn0]: width = 1920 height = 1080
+I/VBM( 2545): VBMCreatePool()-0: w=1920 h=1080 f=842094158 nrVBs=4
+I/VBM( 2545): VBMCreatePool()-0: pool->config.fmt.fmt.pix.sizeimage=0 sizeimage=3133440
+E/Framesource( 2545): IMP_FrameSource_GetPool(3294):chnNum: 0 not bind pool
+E/VBM( 2545): VBMCreatePool()-0: sizeimage=3133440
+I/VBM( 2545): PoolId:0, frame=0x74f767a0, frame->priv=0x74f767cc, frame[0].virAddr=75e83000, frame[0].phyAddr=70d9000
+I/VBM( 2545): PoolId:0, frame=0x74f76bc8, frame->priv=0x74f76bf4, frame[1].virAddr=76180000, frame[1].phyAddr=73d6000
+I/VBM( 2545): PoolId:0, frame=0x74f76ff0, frame->priv=0x74f7701c, frame[2].virAddr=7647d000, frame[2].phyAddr=76d3000
+I/VBM( 2545): PoolId:0, frame=0x74f77418, frame->priv=0x74f77444, frame[3].virAddr=7677a000, frame[3].phyAddr=79d0000
+E/Framesource( 2545): [chn0] VIDIOC_STREAMON failed
+E/MemPool( 2545): IMP_Encoder_GetPool(64):chnNum: 2 not bind pool
+I/Encoder( 2545): encChn=2,srcFrameCnt=2,srcFrameSize=3133440
+I/Encoder( 2545): encChn=2,srcStreamCnt=0,enc_chn->stream_frame_size=0
+I/OSD( 2545): IMP_OSD_SetPoolSize:1048576
+E/IMP-ISP( 2545): err:fopen /proc/jz/isp/isp-w02
+E/IMP-ISP( 2545): err:fopen /proc/jz/isp/isp-w02
+E/IMP-ISP( 2545): err:fopen /proc/jz/isp/isp-w02
+E/IMP-ISP( 2545): err:fopen /proc/jz/isp/isp-w02
+E/IMP-ISP( 2545): err:fopen /proc/jz/isp/isp-w02
+E/IMP-ISP( 2545): err:fopen /proc/jz/isp/isp-w02
+E/IMP-ISP( 2545): err:fopen /proc/jz/isp/isp-w02
+E/IMP-ISP( 2545): err:fopen /proc/jz/isp/isp-w02
+E/IMP-ISP( 2545): err:fopen /proc/jz/isp/isp-w02
+E/IMP-ISP( 2545): err:fopen /proc/jz/isp/isp-w02
