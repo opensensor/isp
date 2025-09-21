@@ -401,22 +401,20 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     }
 
     /* Binary Ninja: void* $v0_10 = arg1[0x2e] */
-    /* FIXED: IRQ enable/disable logic without accessing non-existent irq_info */
-    extern struct tx_isp_dev *ourISPdev;
+    /* FIXED: Access IRQ info from the core device's subdev structure */
+    struct tx_isp_irq_info *irq_info = &core_dev->sd.irq_info;
 
     /* Binary Ninja: IRQ enable/disable logic */
     if (a0_4 == 1 || enable == 0) {
         /* Binary Ninja: *($v0_10 + 0xb0) = 0 */
         core_dev->irq_enabled = 0;
         /* Binary Ninja: $v0_11 = tx_isp_disable_irq */
-        /* FIXED: IRQ disable logic - simplified since we don't have direct IRQ info access */
-        pr_info("ISP Core: IRQ disabled\n");
+        tx_isp_disable_irq(irq_info);
     } else {
         /* Binary Ninja: *($v0_10 + 0xb0) = 0xffffffff */
         core_dev->irq_enabled = 1;
         /* Binary Ninja: $v0_11 = tx_isp_enable_irq */
-        /* FIXED: IRQ enable logic - simplified since we don't have direct IRQ info access */
-        pr_info("ISP Core: IRQ enabled\n");
+        tx_isp_enable_irq(irq_info);
     }
 
     /* Binary Ninja: if (result == 0xfffffdfd) return 0 */
