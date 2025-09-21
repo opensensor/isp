@@ -269,7 +269,7 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
     }
 
     /* Binary Ninja: label_132e4: void* $a0 = *(arg1 + 0xe4) */
-    sensor_ptr = vin_dev->sensor;  /* Use struct member instead of offset 0xe4 */
+    sensor_ptr = vin_dev->sensors;  /* Use struct member instead of offset 0xe4 */
 
     if (sensor_ptr == 0) {
         /* Binary Ninja: if ($a0 == 0) goto label_132f4 */
