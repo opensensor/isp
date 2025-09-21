@@ -3574,8 +3574,9 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         /* Reference driver cleanup is interrupt-driven */
 
         // Stop the actual sensor hardware streaming
-        if (channel == 0 && ourISPdev && ourISPdev->sensor) {
-            sensor = ourISPdev->sensor;
+        extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+        if (channel == 0) {
+            sensor = tx_isp_get_sensor();
             if (sensor && sensor->sd.ops && sensor->sd.ops->video &&
                 sensor->sd.ops->video->s_stream) {
                 pr_info("Channel %d: Stopping sensor hardware streaming\n", channel);
