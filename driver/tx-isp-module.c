@@ -4297,14 +4297,27 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
         pr_info("*** vic_sensor_ops_ioctl: Using host_priv - vic_dev=%p ***\n", vic_dev);
     }
 
+    /* Validate VIC device structure */
+    if (!vic_dev || (unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff000) {
+        pr_err("*** vic_sensor_ops_ioctl: Invalid VIC device pointer: %p ***\n", vic_dev);
+        return 0;
+    }
+
+    /* Check if VIC device has valid register mapping */
+    if (!vic_dev->vic_regs) {
+        pr_err("*** vic_sensor_ops_ioctl: VIC device has no register mapping ***\n");
+        return 0;
+    }
+
     /* Also get ISP device for additional operations */
     isp_dev = ourISPdev;
     if (!isp_dev) {
         pr_err("*** vic_sensor_ops_ioctl: No ISP device available ***\n");
         return 0;
     }
-    
-    pr_info("*** vic_sensor_ops_ioctl: subdev=%p, isp_dev=%p, vic_dev=%p ***\n", sd, isp_dev, vic_dev);
+
+    pr_info("*** vic_sensor_ops_ioctl: subdev=%p, isp_dev=%p, vic_dev=%p, vic_regs=%p ***\n",
+            sd, isp_dev, vic_dev, vic_dev->vic_regs);
     
     /* Binary Ninja: Handle command 0x2000000 first - sensor registration */
     if (cmd == 0x2000000) {
