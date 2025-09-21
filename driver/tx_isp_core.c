@@ -3712,12 +3712,16 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                     /* SAFE: Use proper struct member access instead of offset arithmetic */
                     struct tx_isp_subdev *sd_10 = (struct tx_isp_subdev *)v0_10;
                     void* s4_1 = sd_10->host_priv;  /* SAFE: Access host_priv field directly */
-                    
+
                     if (s4_1 != 0 && (uintptr_t)s4_1 < 0xfffff001) {
                         void* s3_1 = (void*)arg1[8];
                         void* s2 = (char*)v0_10 + 0x38;
-                        
-                        if (*((uint32_t*)s4_1 + 0x57) == 1) { /* *(s4_1 + 0x15c) == 1 */
+
+                        /* SAFE FIX: Replace dangerous offset access *(s4_1 + 0x15c) with struct access */
+                        struct tx_isp_core_device *host_dev = (struct tx_isp_core_device *)s4_1;
+                        bool is_streaming_mode = (host_dev->state == 4);  /* Check if in streaming state */
+
+                        if (is_streaming_mode) { /* SAFE: Use streaming state instead of raw offset */
                             memset((char*)s4_1 + 0x1c0, 0, 0x18);
                             *((void**)((char*)s4_1 + 0x1d4)) = arg1;
                             *((void**)((char*)s4_1 + 0x1c4)) = ispcore_frame_channel_dqbuf;
