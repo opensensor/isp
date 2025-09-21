@@ -8,6 +8,7 @@
 #include <linux/vmalloc.h>
 #include "../include/tx_isp.h"
 #include "../include/tx_isp_core.h"
+#include "../include/tx_isp_core_device.h"
 #include "../include/tx-isp-debug.h"
 #include "../include/tx_isp_sysfs.h"
 #include "../include/tx_isp_vic.h"
@@ -1653,10 +1654,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* CRITICAL: Enable ISP core interrupt generation - EXACT Binary Ninja reference */
     /* This was the missing piece that caused interrupts to stall out */
     pr_info("*** DEBUG: ourISPdev=%p, core_regs=%p ***\n",
-            ourISPdev, ourISPdev ? ourISPdev->core_regs : NULL);
+            ourISPdev, (ourISPdev && ourISPdev->core_dev) ? ourISPdev->core_dev->core_regs : NULL);
 
-    if (ourISPdev && ourISPdev->core_regs) {
-        void __iomem *core = ourISPdev->core_regs;
+    if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
+        void __iomem *core = ourISPdev->core_dev->core_regs;
 
         /* Clear any pending interrupts first */
         u32 pend_legacy = readl(core + 0xb4);
@@ -1743,7 +1744,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
             /* Update global mapping for future use */
             if (ourISPdev) {
-                ourISPdev->core_regs = core_fallback;
+                if (ourISPdev->core_dev) {
+                    ourISPdev->core_dev->core_regs = core_fallback;
+                }
                 pr_info("*** ISP CORE IRQ: Updated global core_regs mapping ***\n");
             }
         } else {
@@ -1752,9 +1755,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
 
     /* Also enable the kernel IRQ line if it was registered earlier */
-    if (ourISPdev && ourISPdev->isp_irq > 0) {
-        enable_irq(ourISPdev->isp_irq);
-        pr_info("*** ISP CORE IRQ: enable_irq(%d) called ***\n", ourISPdev->isp_irq);
+    if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->irq > 0) {
+        enable_irq(ourISPdev->core_dev->irq);
+        pr_info("*** ISP CORE IRQ: enable_irq(%d) called ***\n", ourISPdev->core_dev->irq);
     }
 
     /* Binary Ninja: vic_start_ok = 1 - Set at the very end after all configuration */
