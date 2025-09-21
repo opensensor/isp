@@ -54,7 +54,6 @@ extern void (*isp_event_func_cb[32])(void);
 extern struct tx_isp_dev *ourISPdev;
 
 /* Forward declaration for frame channel wakeup function */
-extern void tx_isp_wakeup_frame_channels(void);
 int tisp_netlink_init(void);
 int isp_trigger_frame_data_transfer(struct tx_isp_dev *dev);
 /* ===== TIZIANO WDR PROCESSING PIPELINE - Binary Ninja Reference Implementation ===== */

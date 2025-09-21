@@ -426,58 +426,6 @@ static int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *
     return ret;
 }
 
-/**
- * tx_isp_vin_start - Start VIN operation
- * @sd: Subdev structure
- */
-int tx_isp_vin_start(struct tx_isp_subdev *sd)
-{
-    struct tx_isp_vin_device *vin = sd_to_vin_device(sd);
-    u32 ctrl;
-
-    if (!vin) {
-        return -EINVAL;
-    }
-
-    mutex_lock(&vin->mlock);
-
-    /* Enable VIN */
-    ctrl = VIN_CTRL_EN | VIN_CTRL_START;
-    writel(ctrl, vin->base + VIN_CTRL);
-    mcp_log_info("vin_start: VIN started", ctrl);
-
-    mutex_unlock(&vin->mlock);
-    return 0;
-}
-
-/**
- * tx_isp_vin_stop - Stop VIN operation
- * @sd: Subdev structure
- */
-int tx_isp_vin_stop(struct tx_isp_subdev *sd)
-{
-    struct tx_isp_vin_device *vin = sd_to_vin_device(sd);
-
-    if (!vin) {
-        return -EINVAL;
-    }
-
-    mutex_lock(&vin->mlock);
-
-    /* Stop VIN */
-    writel(VIN_CTRL_STOP, vin->base + VIN_CTRL);
-    mcp_log_info("vin_stop: stop command issued", VIN_CTRL_STOP);
-
-    /* Wait for stop to complete */
-    while (readl(vin->base + VIN_STATUS) & STATUS_BUSY) {
-        udelay(10);
-    }
-
-    mcp_log_info("vin_stop: VIN stopped", 0);
-    mutex_unlock(&vin->mlock);
-    return 0;
-}
-
 /* ========================================================================
  * VIN Subdev Operations Structure
  * ======================================================================== */

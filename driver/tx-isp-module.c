@@ -6716,30 +6716,6 @@ static void frame_channel_wakeup_waiters(struct frame_channel_device *fcd)
     wake_up_interruptible(&fcd->state.frame_wait);
 }
 
-/* Public function to wake up all streaming frame channels - for tuning system */
-void tx_isp_wakeup_frame_channels(void)
-{
-    int i;
-
-    pr_info("*** Waking up all streaming frame channels ***\n");
-
-    for (i = 0; i < num_channels; i++) {
-        struct frame_channel_device *fcd = &frame_channels[i];
-        if (fcd && fcd->state.streaming) {
-            unsigned long flags;
-
-            /* Mark frame as ready and wake up waiters */
-            spin_lock_irqsave(&fcd->state.buffer_lock, flags);
-            if (!fcd->state.frame_ready) {
-                fcd->state.frame_ready = true;
-                wake_up_interruptible(&fcd->state.frame_wait);
-                pr_info("*** Woke up channel %d for frame processing ***\n", i);
-            }
-            spin_unlock_irqrestore(&fcd->state.buffer_lock, flags);
-        }
-    }
-}
-
 /* Allow sensor drivers to unregister */
 int tx_isp_unregister_sensor_subdev(struct tx_isp_subdev *sd)
 {
@@ -7648,9 +7624,6 @@ EXPORT_SYMBOL(tx_isp_vic_platform_device);
 EXPORT_SYMBOL(tx_isp_vin_platform_device);
 EXPORT_SYMBOL(tx_isp_fs_platform_device);
 EXPORT_SYMBOL(tx_isp_core_platform_device);
-
-/* Export frame channel wakeup function for tuning system */
-EXPORT_SYMBOL(tx_isp_wakeup_frame_channels);
 
 /* CRITICAL: VIC frame completion buffer management - moves buffer from queued to completed */
 int vic_frame_complete_buffer_management(struct tx_isp_vic_device *vic_dev, uint32_t buffer_addr)
