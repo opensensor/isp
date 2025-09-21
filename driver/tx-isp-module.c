@@ -5005,12 +5005,38 @@ static int tx_isp_init(void)
         goto err_cleanup_subdev_drivers;
     }
 
+    /* CRITICAL FIX: Register main interrupt dispatcher for IRQ 37 and 38 */
+    /* This prevents the freeze/reboot issue during streaming initialization */
+    pr_info("*** CRITICAL: Registering main interrupt dispatcher for IRQ 37 and 38 ***\n");
+
+    /* Register IRQ 37 (ISP Core) with main dispatcher */
+    ret = request_threaded_irq(37, isp_irq_handle, isp_irq_thread_handle,
+                               IRQF_SHARED, "tx-isp-core", ourISPdev);
+    if (ret != 0) {
+        pr_err("*** CRITICAL: Failed to register IRQ 37 main dispatcher: %d ***\n", ret);
+        goto err_cleanup_platform_device;
+    }
+    disable_irq(37);  /* Initially disabled */
+    pr_info("*** MAIN DISPATCHER: IRQ 37 registered successfully ***\n");
+
+    /* Register IRQ 38 (VIC) with main dispatcher */
+    ret = request_threaded_irq(38, isp_irq_handle, isp_irq_thread_handle,
+                               IRQF_SHARED, "tx-isp-vic", ourISPdev);
+    if (ret != 0) {
+        pr_err("*** CRITICAL: Failed to register IRQ 38 main dispatcher: %d ***\n", ret);
+        free_irq(37, ourISPdev);
+        goto err_cleanup_platform_device;
+    }
+    disable_irq(38);  /* Initially disabled */
+    pr_info("*** MAIN DISPATCHER: IRQ 38 registered successfully ***\n");
+
+    pr_info("*** MAIN DISPATCHER: Both IRQ 37 and 38 registered with main dispatcher ***\n");
+
     /* Step 3: Register platform driver (matches reference driver exactly) */
     ret = platform_driver_register(&tx_isp_driver);
     if (ret != 0) {
         pr_err("Failed to register platform driver: %d\n", ret);
-        private_platform_device_unregister(&tx_isp_platform_device);
-        goto err_cleanup_subdev_drivers;
+        goto err_cleanup_irqs;
     }
 
     /* Reference driver: misc device registration happens in tx_isp_module_init, not here */
@@ -5022,6 +5048,12 @@ static int tx_isp_init(void)
     return 0;
 
 /* Error handling for reference driver compatibility */
+err_cleanup_irqs:
+    pr_info("*** CLEANUP: Freeing main dispatcher IRQs ***\n");
+    free_irq(38, ourISPdev);
+    free_irq(37, ourISPdev);
+err_cleanup_platform_device:
+    private_platform_device_unregister(&tx_isp_platform_device);
 err_cleanup_subdev_drivers:
     tx_isp_subdev_platform_exit();
 err_free_dev:
@@ -5177,14 +5209,20 @@ static void tx_isp_exit(void)
         ourISPdev = NULL;
         pr_info("*** ourISPdev set to NULL - interrupt handlers will now safely exit ***\n");
 
-        /* Free hardware interrupts if initialized */
-        if (isp_irq > 0) {
+        /* CRITICAL: Free main dispatcher IRQs first */
+        pr_info("*** CLEANUP: Freeing main dispatcher IRQs ***\n");
+        free_irq(37, local_isp_dev);  /* ISP Core IRQ */
+        free_irq(38, local_isp_dev);  /* VIC IRQ */
+        pr_info("*** Main dispatcher IRQs 37 and 38 freed ***\n");
+
+        /* Free hardware interrupts if initialized (legacy cleanup) */
+        if (isp_irq > 0 && isp_irq != 37 && isp_irq != 38) {
             free_irq(isp_irq, local_isp_dev);
             pr_info("Hardware interrupt %d freed\n", isp_irq);
         }
 
-        /* Free secondary interrupt if initialized */
-        if (isp_irq2 > 0) {
+        /* Free secondary interrupt if initialized (legacy cleanup) */
+        if (isp_irq2 > 0 && isp_irq2 != 37 && isp_irq2 != 38) {
             free_irq(isp_irq2, local_isp_dev);
             pr_info("Hardware interrupt %d freed\n", isp_irq2);
         }

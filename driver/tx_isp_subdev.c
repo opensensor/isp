@@ -100,92 +100,6 @@ static const struct file_operations fs_channel_ops = {
 };
 
 
-
-
-int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
-    int ret;
-
-    pr_info("Setting up default links\n");
-
-    // Link sensor output -> CSI input
-    if (dev->sensor_sd && dev->csi_dev) {
-        if (!dev->sensor_sd->ops || !dev->sensor_sd->ops->video ||
-            !dev->sensor_sd->ops->video->link_setup) {
-            pr_err("Sensor subdev missing required ops\n");
-            return -EINVAL;
-        }
-
-        pr_info("Setting up sensor -> CSI link\n");
-        ret = dev->sensor_sd->ops->video->link_setup(
-            &dev->sensor_sd->outpads[0],
-            &dev->csi_dev->sd.inpads[0],
-            TX_ISP_LINKFLAG_ENABLED
-        );
-        if (ret && ret != -ENOIOCTLCMD) {
-            pr_err("Failed to setup sensor->CSI link: %d\n", ret);
-            return ret;
-        }
-    }
-
-    // Link CSI output -> VIC input
-    if (dev->csi_dev && dev->vic_dev) {
-        if (!dev->vic_dev->sd.ops || !dev->vic_dev->sd.ops->video ||
-            !dev->vic_dev->sd.ops->video->link_setup) {
-            pr_err("CSI subdev missing required ops\n");
-            return -EINVAL;
-        }
-
-        pr_info("Setting up CSI -> VIC link\n");
-        ret = dev->csi_dev->sd.ops->video->link_setup(
-            &dev->csi_dev->sd.outpads[0],
-            &dev->vic_dev->sd.inpads[0],
-            TX_ISP_LINKFLAG_ENABLED
-        );
-        if (ret && ret != -ENOIOCTLCMD) {
-            pr_err("Failed to setup CSI->VIC link: %d\n", ret);
-            return ret;
-        }
-    }
-
-    // Link VIC outputs to DDR device if present
-    if (dev->vic_dev && dev->ddr_dev && dev->ddr_dev->sd) {
-        if (!dev->vic_dev->sd.ops || !dev->vic_dev->sd.ops->video ||
-            !dev->vic_dev->sd.ops->video->link_setup) {
-            pr_err("VIC subdev missing required ops\n");
-            return -EINVAL;
-        }
-
-        pr_info("Setting up VIC -> DDR link\n");
-        ret = dev->vic_dev->sd.ops->video->link_setup(
-            &dev->vic_dev->sd.outpads[0],
-            &dev->ddr_dev->sd->inpads[0],
-            TX_ISP_LINKFLAG_ENABLED
-        );
-        if (ret && ret != -ENOIOCTLCMD) {
-            pr_err("Failed to setup VIC->DDR link 0: %d\n", ret);
-            return ret;
-        }
-
-        // Link second VIC output if present
-        if (dev->vic_dev->sd.num_outpads > 1) {
-            pr_info("Setting up second VIC -> DDR link\n");
-            ret = dev->vic_dev->sd.ops->video->link_setup(
-                &dev->vic_dev->sd.outpads[1],
-                &dev->ddr_dev->sd->inpads[0],
-                TX_ISP_LINKFLAG_ENABLED
-            );
-            if (ret && ret != -ENOIOCTLCMD) {
-                pr_err("Failed to setup VIC->DDR link 1: %d\n", ret);
-                return ret;
-            }
-        }
-    }
-
-    pr_info("All default links set up successfully\n");
-    return 0;
-}
-
-
 extern struct tx_isp_dev *ourISPdev;
 
 /* No external function dependencies needed - using safe direct implementation */
@@ -749,28 +663,6 @@ void tx_isp_module_deinit(struct tx_isp_subdev *sd)
 
     pr_info("tx_isp_module_deinit: Module deinitialized\n");
 }
-
-/* tx_isp_sensor_complete_init - Complete sensor initialization after association */
-int tx_isp_sensor_complete_init(struct tx_isp_subdev *sd)
-{
-    int ret = 0;
-
-    if (!sd || !sd->ops || !sd->ops->core || !sd->ops->core->init) {
-        pr_err("tx_isp_sensor_complete_init: Invalid parameters\n");
-        return -EINVAL;
-    }
-
-    pr_info("*** tx_isp_sensor_complete_init: Calling deferred sensor core->init ***\n");
-    ret = sd->ops->core->init(sd, 1);  /* Enable = 1 for initialization */
-    if (ret != 0) {
-        pr_err("tx_isp_sensor_complete_init: sensor core->init failed: %d\n", ret);
-    } else {
-        pr_info("*** tx_isp_sensor_complete_init: Sensor core->init SUCCESS ***\n");
-    }
-
-    return ret;
-}
-EXPORT_SYMBOL(tx_isp_sensor_complete_init);
 
 /* tx_isp_request_irq - EXACT Binary Ninja reference implementation */
 int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq_info)
