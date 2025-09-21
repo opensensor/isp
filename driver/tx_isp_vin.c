@@ -285,26 +285,12 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
         return 0xfffffdfd;  /* -ENOIOCTLCMD */
     }
 
-    /* Binary Ninja: int32_t $v1_1 = *$v0_2 */
-    int (*sensor_s_stream_func)(struct tx_isp_subdev *, int) = sensor->sd.ops->video->s_stream;
-
-    if (sensor_s_stream_func == 0) {
-        /* Binary Ninja: if ($v1_1 == 0) result = 0xfffffdfd */
-        pr_info("vin_s_stream: No sensor s_stream function, returning -ENOIOCTLCMD\n");
-        result = 0xfffffdfd;  /* -ENOIOCTLCMD */
-    } else {
-        /* Binary Ninja: result = $v1_1($a0, arg2) */
-        pr_info("vin_s_stream: Calling sensor s_stream function\n");
-        result = sensor_s_stream_func(&sensor->sd, enable);
-
-        /* Binary Ninja: if (result == 0) goto label_132f4 */
-        if (result == 0) {
-            goto label_132f4;
-        }
-    }
-
-    /* Binary Ninja: return result (if not 0) */
-    return result;
+    /* FIXED: Don't call sensor s_stream - let the core loop handle it independently */
+    pr_info("vin_s_stream: VIN processing complete - sensor will be handled by core loop\n");
+    
+    /* VIN just manages its own state, doesn't call sensor directly */
+    result = 0;  /* VIN processing successful */
+    goto label_132f4;
 
 label_132f4:
     /* CRITICAL FIX: Binary Ninja shows int32_t $v0 = 4; if (arg2 == 0) $v0 = 3 */
