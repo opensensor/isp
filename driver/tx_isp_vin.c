@@ -234,54 +234,37 @@ int tx_isp_vin_reset(struct tx_isp_subdev *sd, int on)
  */
 int vin_s_stream(struct tx_isp_subdev *sd, int enable)
 {
-    struct tx_isp_vin_device *vin = NULL;
-    struct tx_isp_sensor *sensor = NULL;
-    extern struct tx_isp_dev *ourISPdev;
-    int ret = 0;
-    u32 ctrl_val;
+    struct tx_isp_vin_device *vin_dev;
+    void *sensor_ptr;
+    int result = 0;
+    int32_t vin_state;
 
-    mcp_log_info("vin_s_stream: called", enable);
+    pr_info("*** vin_s_stream: EXACT Binary Ninja implementation - sd=%p, enable=%d ***\n", sd, enable);
 
-    /* SAFE: Use global ISP device reference instead of subdev traversal */
-    if (!ourISPdev) {
-        mcp_log_error("vin_s_stream: no global ISP device available", 0);
-        return -ENODEV;
+    /* Binary Ninja: Cast sd to VIN device - arg1 is the VIN subdev */
+    vin_dev = container_of(sd, struct tx_isp_vin_device, sd);
+    if (!vin_dev) {
+        pr_err("vin_s_stream: Invalid VIN device\n");
+        return -EINVAL;
     }
-
-    /* SAFE: Get VIN device from global ISP device */
-    vin = ourISPdev->vin_dev;
-    if (!vin) {
-        pr_err("VIN: vin_s_stream: no VIN device in global ISP\n");
-        return -ENODEV;
-    }
-
-    mcp_log_info("vin_s_stream: VIN device from global ISP", (u32)vin);
-    mcp_log_info("vin_s_stream: current VIN state", vin->state);
 
     /* Binary Ninja: int32_t $v1 = *(arg1 + 0xf4) */
-    int32_t vin_state = vin->state;
-    
+    vin_state = vin_dev->state;
+
+    pr_info("vin_s_stream: VIN state = %d, enable = %d\n", vin_state, enable);
+
     /* Binary Ninja: if (arg2 != 0) */
     if (enable != 0) {
-        /* CRITICAL FIX: VIN can transition from state 3 to 4 for streaming */
-        /* The init function sets state to 3, then streaming sets it to 4 */
         /* Binary Ninja: if ($v1 != 4) goto label_132e4 */
-        if (vin_state != 4 && vin_state != 3) {
-            /* CRITICAL: VIN must be in state 3 or 4 for streaming enable */
-            mcp_log_error("vin_s_stream: VIN not in state 3 or 4 for streaming enable", vin_state);
-            mcp_log_info("vin_s_stream: Expected state 3 or 4, got state", vin_state);
-            return -EINVAL;
+        if (vin_state != 4) {
+            /* Continue to label_132e4 - sensor handling */
+            pr_info("vin_s_stream: VIN state %d != 4, proceeding to sensor handling\n", vin_state);
         }
-        /* Allow streaming from state 3 (after init) or state 4 (already streaming) */
-        mcp_log_info("vin_s_stream: VIN streaming enable from state", vin_state);
     } else {
         /* Binary Ninja: else if ($v1 == 4) */
         if (vin_state == 4) {
-            /* Streaming disable from state 4 is allowed */
-            mcp_log_info("vin_s_stream: VIN streamoff from state 4", vin_state);
-        } else {
-            mcp_log_info("vin_s_stream: VIN not in streaming state", vin_state);
-            return 0;  /* Already stopped */
+            /* Continue to label_132e4 - sensor handling */
+            pr_info("vin_s_stream: VIN disable from state 4, proceeding to sensor handling\n");
         }
     }
 
