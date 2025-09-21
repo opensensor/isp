@@ -2390,6 +2390,17 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     tx_isp_set_subdevdata(&vic_dev->sd, vic_dev);
     pr_info("*** VIC PROBE: Stored vic_dev pointer %p in subdev private data ***\n", vic_dev);
 
+    /* CRITICAL: Set up event callback structure for tx_isp_send_event_to_remote */
+    static struct vic_callback_struct vic_callback;
+    vic_callback.event_callback = (void*)vic_pad_event_handler;
+
+    /* Set the callback structure pointer at offset 0xc in the subdev structure */
+    /* This is where tx_isp_send_event_to_remote expects to find the callback structure */
+    *((void**)((char*)&vic_dev->sd + 0xc)) = &vic_callback;
+
+    pr_info("*** VIC PROBE: Event callback structure set up at offset 0xc ***\n");
+    pr_info("*** VIC PROBE: Callback struct: %p, handler: %p ***\n", &vic_callback, vic_callback.event_callback);
+
     /* Binary Ninja: tx_isp_subdev_init(arg1, $v0, &vic_subdev_ops) */
     ret = tx_isp_subdev_init(pdev, &vic_dev->sd, &vic_subdev_ops);
     if (ret != 0) {

@@ -5526,41 +5526,6 @@ static int private_reset_tx_isp_module(int arg)
     return -ETIMEDOUT; /* Binary Ninja: return 0xffffffff */
 }
 
-/* COMPLETE VIC INTERRUPT DISABLE FUNCTION - FROM tx_vic_disable_irq BINARY NINJA */
-static void tx_vic_disable_irq_complete(struct tx_isp_dev *isp_dev)
-{
-    struct tx_isp_vic_device *vic_dev;
-    unsigned long flags;
-    
-    if (!isp_dev || !isp_dev->vic_dev) {
-        pr_info("VIC interrupt disable: no VIC device\n");
-        return;
-    }
-    
-    /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
-    vic_dev = isp_dev->vic_dev;
-    
-    pr_info("*** IMPLEMENTING tx_vic_disable_irq FROM BINARY NINJA ***\n");
-    
-    /* From Binary Ninja: spinlock irqsave at offset +0x130 */
-    /* This is simplified since we don't have exact vic_dev structure */
-    local_irq_save(flags);
-    
-    /* From Binary Ninja: Clear interrupt enable flag at offset +0x13c */
-    /* Simulate clearing interrupt enable state */
-    if (vic_dev) {
-        vic_dev->state = 0; /* Mark as interrupt-disabled state */
-        
-        /* From Binary Ninja: Call function pointer at offset +0x88 if exists */
-        /* This would be a VIC-specific interrupt disable callback */
-        pr_info("VIC interrupt state cleared, device in safe config mode\n");
-    }
-    
-    local_irq_restore(flags);
-    
-    pr_info("*** tx_vic_disable_irq COMPLETE - VIC INTERRUPTS DISABLED ***\n");
-}
-
 /* ispcore_activate_module - EXACT Binary Ninja implementation that triggers register writes */
 int ispcore_activate_module(struct tx_isp_dev *isp_dev)
 {
@@ -6123,86 +6088,6 @@ static irqreturn_t ispmodule_ip_done_irq_handler(int irq, void *dev_id)
 }
 
 /* tx_isp_handle_sync_sensor_attr_event is now defined in tx_isp_core.c */
-
-/* tx_isp_vic_notify - VIC-specific notify function that handles TX_ISP_EVENT_SYNC_SENSOR_ATTR */
-static int tx_isp_vic_notify(struct tx_isp_vic_device *vic_dev, unsigned int notification, void *data)
-{
-    struct tx_isp_sensor_attribute *sensor_attr;
-    int ret = 0;
-    
-    pr_info("*** tx_isp_vic_notify: VIC notify function - notification=0x%x ***\n", notification);
-    
-    if (!vic_dev) {
-        pr_err("tx_isp_vic_notify: Invalid VIC device\n");
-        return -EINVAL;
-    }
-    
-    switch (notification) {
-    case TX_ISP_EVENT_SYNC_SENSOR_ATTR: {
-        pr_info("*** VIC TX_ISP_EVENT_SYNC_SENSOR_ATTR: Processing sensor attribute sync ***\n");
-        
-        sensor_attr = (struct tx_isp_sensor_attribute *)data;
-        if (!sensor_attr) {
-            pr_err("VIC TX_ISP_EVENT_SYNC_SENSOR_ATTR: No sensor attributes provided\n");
-            return -EINVAL;
-        }
-        
-        /* Call the FIXED handler that converts -515 to 0 */
-        ret = tx_isp_handle_sync_sensor_attr_event(&vic_dev->sd, sensor_attr);
-        
-        pr_info("*** VIC TX_ISP_EVENT_SYNC_SENSOR_ATTR: FIXED Handler returned %d ***\n", ret);
-        return ret;
-    }
-    default:
-        pr_info("tx_isp_vic_notify: Unhandled notification 0x%x\n", notification);
-        return -ENOIOCTLCMD;
-    }
-}
-
-/* tx_isp_module_notify - Main module notify handler that routes events properly */
-static int tx_isp_module_notify(struct tx_isp_module *module, unsigned int notification, void *data)
-{
-    struct tx_isp_subdev *sd;
-    struct tx_isp_vic_device *vic_dev;
-    int ret = 0;
-    
-    pr_info("*** tx_isp_module_notify: MAIN notify handler - notification=0x%x ***\n", notification);
-    
-    if (!module) {
-        pr_err("tx_isp_module_notify: Invalid module\n");
-        return -EINVAL;
-    }
-    
-    /* Get subdev from module */
-    sd = module_to_subdev(module);
-    if (!sd) {
-        pr_err("tx_isp_module_notify: Cannot get subdev from module\n");
-        return -EINVAL;
-    }
-    
-    /* Route to appropriate handler based on notification type */
-    switch (notification) {
-    case TX_ISP_EVENT_SYNC_SENSOR_ATTR: {
-        pr_info("*** MODULE NOTIFY: TX_ISP_EVENT_SYNC_SENSOR_ATTR - routing to VIC handler ***\n");
-        
-        /* Get VIC device from ISP device */
-        if (ourISPdev && ourISPdev->vic_dev) {
-            /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
-            vic_dev = ourISPdev->vic_dev;
-            ret = tx_isp_vic_notify(vic_dev, notification, data);
-        } else {
-            /* Fallback: call handler directly */
-            ret = tx_isp_handle_sync_sensor_attr_event(sd, (struct tx_isp_sensor_attribute *)data);
-        }
-        
-        pr_info("*** MODULE NOTIFY: TX_ISP_EVENT_SYNC_SENSOR_ATTR returned %d ***\n", ret);
-        return ret;
-    }
-    default:
-        pr_info("tx_isp_module_notify: Unhandled notification 0x%x\n", notification);
-        return -ENOIOCTLCMD;
-    }
-}
 
 /* tx_isp_send_event_to_remote - EXACT Binary Ninja MCP implementation */
 int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
