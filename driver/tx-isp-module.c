@@ -4198,8 +4198,12 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
 
     /* CRITICAL FIX: Register VIC interrupt at the VERY END of global init */
     /* This ensures all structures are fully initialized before interrupts can fire */
+    pr_info("*** tx_isp_module_init: Checking VIC device linkage - isp_dev->vic_dev = %p ***\n", isp_dev->vic_dev);
+
     if (isp_dev->vic_dev) {
         struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+        pr_info("*** tx_isp_module_init: VIC device found, checking IRQ info ***\n");
+
         if (vic_dev->sd.irq_info.irq == 0) {
             extern int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq_info);
             struct platform_device *vic_pdev = to_platform_device(vic_dev->sd.dev);
@@ -4212,6 +4216,21 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
                 return ret;
             }
             pr_info("*** tx_isp_module_init: VIC IRQ registered successfully at END of init ***\n");
+        } else {
+            pr_info("*** tx_isp_module_init: VIC IRQ already registered (irq=%d) ***\n", vic_dev->sd.irq_info.irq);
+        }
+    } else {
+        pr_err("*** CRITICAL: tx_isp_module_init: isp_dev->vic_dev is NULL - VIC device not linked! ***\n");
+        pr_err("*** This indicates a failure in VIC probe or device linking process ***\n");
+
+        /* Debug: Check if VIC subdev exists in subdev array */
+        int i;
+        for (i = 0; i < TX_ISP_SUBDEV_MAX; i++) {
+            if (isp_dev->subdevs[i]) {
+                pr_info("*** DEBUG: subdevs[%d] = %p (name: %s) ***\n",
+                        i, isp_dev->subdevs[i],
+                        isp_dev->subdevs[i]->name ? isp_dev->subdevs[i]->name : "NULL");
+            }
         }
     }
 

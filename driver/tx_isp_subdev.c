@@ -499,13 +499,28 @@ EXPORT_SYMBOL(tx_isp_subdev_deinit);
 /* Auto-linking function to connect subdevices to global ISP device */
 void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev *sd)
 {
-    if (!ourISPdev || !pdev || !pdev->name || !sd) {
+    pr_info("*** tx_isp_subdev_auto_link: ENTRY - pdev=%p, sd=%p, ourISPdev=%p ***\n", pdev, sd, ourISPdev);
+
+    if (!ourISPdev) {
+        pr_err("*** CRITICAL: tx_isp_subdev_auto_link: ourISPdev is NULL! ***\n");
+        return;
+    }
+    if (!pdev) {
+        pr_err("*** CRITICAL: tx_isp_subdev_auto_link: pdev is NULL! ***\n");
+        return;
+    }
+    if (!pdev->name) {
+        pr_err("*** CRITICAL: tx_isp_subdev_auto_link: pdev->name is NULL! ***\n");
+        return;
+    }
+    if (!sd) {
+        pr_err("*** CRITICAL: tx_isp_subdev_auto_link: sd is NULL! ***\n");
         return;
     }
 
     const char *dev_name = pdev->name;
 
-    pr_info("*** tx_isp_subdev_auto_link: Auto-linking device '%s' to ourISPdev ***\n", dev_name);
+    pr_info("*** tx_isp_subdev_auto_link: Auto-linking device '%s' to ourISPdev=%p ***\n", dev_name, ourISPdev);
     pr_info("*** DEBUG: Device name comparison - checking '%s' ***\n", dev_name);
     pr_info("*** DEBUG: About to check device name matches ***\n");
 
@@ -522,17 +537,26 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         pr_info("*** LINKED CSI device: %p, regs: %p ***\n", csi_dev, sd->regs);
 
     } else if (strcmp(dev_name, "isp-w02") == 0) {
+        pr_info("*** DEBUG: VIC DEVICE NAME MATCHED! Processing VIC device linking ***\n");
+
         /* Link VIC device - actual device name is "isp-w02" not "tx-isp-vic" */
         /* CRITICAL FIX: Use direct pointer storage instead of container_of to avoid corruption */
         struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+        pr_info("*** DEBUG: Retrieved vic_dev from subdev data: %p ***\n", vic_dev);
+
         if (!vic_dev || (unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff000) {
             pr_err("*** VIC DEVICE LINKING FAILED: Invalid vic_dev pointer %p ***\n", vic_dev);
             return;
         }
 
+        pr_info("*** DEBUG: About to set ourISPdev->vic_dev = %p ***\n", vic_dev);
+        pr_info("*** DEBUG: ourISPdev before linking: %p ***\n", ourISPdev);
+
         /* CRITICAL FIX: Store VIC device pointer correctly - NOT cast to subdev! */
         ourISPdev->vic_dev = vic_dev;  /* vic_dev field expects struct tx_isp_vic_device * */
         vic_dev->vic_regs = sd->regs;  /* Critical: Set primary VIC registers */
+
+        pr_info("*** DEBUG: ourISPdev->vic_dev set to: %p ***\n", ourISPdev->vic_dev);
 
         /* CRITICAL: Map secondary VIC register space (0x10023000) */
         vic_dev->vic_regs_secondary = ioremap(0x10023000, 0x1000);
