@@ -263,6 +263,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     spin_lock_irqsave(&core_dev->lock, flags);
 
     /* Binary Ninja: Check core state - if (*($s0 + 0xe8) s< 3) */
+    pr_info("*** ispcore_video_s_stream: Current core state = %d ***\n", core_dev->state);
     if (core_dev->state < 3) {
         pr_err("ispcore_video_s_stream: Core state %d < 3, cannot stream\n", core_dev->state);
         spin_unlock_irqrestore(&core_dev->lock, flags);
@@ -294,8 +295,10 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         /* Binary Ninja: Stream ON - else if ($v0_3 != 3) */
         if (core_dev->state != 3) {
             pr_err("ispcore_video_s_stream: Invalid state %d for stream on\n", core_dev->state);
+            spin_unlock_irqrestore(&core_dev->lock, flags);
             return -EINVAL;
         }
+        pr_info("*** ispcore_video_s_stream: Transitioning core from state 3 to 4 (streaming) ***\n");
         core_dev->state = 4;  /* Set to streaming state */
     }
 
