@@ -1406,6 +1406,14 @@ static int sensor_init(struct tx_isp_subdev *sd, int enable) {
 	if (!enable)
 		return ISP_SUCCESS;
 
+	/* CRITICAL FIX: Ensure sensor attributes are set up if probe wasn't called */
+	if (!sensor->video.attr) {
+		pr_info("*** SENSOR_INIT: Setting up sensor attributes (probe wasn't called) ***\n");
+		sensor->video.attr = &sensor_attr;
+		sensor->video.vi_max_width = wsize->width;
+		sensor->video.vi_max_height = wsize->height;
+	}
+
 	sensor->video.mbus.width = wsize->width;
 	sensor->video.mbus.height = wsize->height;
 	sensor->video.mbus.code = wsize->mbus_code;
