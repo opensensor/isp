@@ -1755,9 +1755,10 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
         /* Initialize the lock */
         spin_lock_init(&isp_dev->lock);
 
-        /* Set up function pointers */
-        isp_dev->irq_enable_func = tx_isp_enable_irq;
-        isp_dev->irq_disable_func = tx_isp_disable_irq;
+        /* Set up function pointers in core device */
+        if (isp_dev->core_dev) {
+            isp_dev->core_dev->irq_handler = tx_isp_core_irq_handle;
+        }
 
         pr_info("*** tx_isp_request_irq: IRQ %d stored but registration handled by main dispatcher ***\n", irq_num);
 
