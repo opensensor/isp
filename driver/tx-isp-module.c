@@ -933,7 +933,9 @@ static int sensor_alloc_integration_time(int time) {
 static int sensor_alloc_integration_time_short(int time) {
     /* Binary Ninja: Similar to above but uses offset 0xd4 and stores at arg2 + 0x12 */
 
-    if (!ourISPdev || !ourISPdev->sensor) {
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor) {
         return time;
     }
 
@@ -944,7 +946,9 @@ static int sensor_alloc_integration_time_short(int time) {
 static int sensor_set_integration_time(int time) {
     /* Binary Ninja shows this updates sensor timing and ISP flags */
 
-    if (!ourISPdev || !ourISPdev->sensor) {
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor) {
         return -ENODEV;
     }
 
@@ -1033,8 +1037,10 @@ static int sensor_read_black_pedestal(void) {
 static int sensor_set_mode(int mode) {
     /* Binary Ninja: Complex function that calls ISP IOCTL and copies sensor parameters */
 
-    if (!ourISPdev || !ourISPdev->sensor) {
-        pr_info("sensor_set_mode: No ISP device available\n");
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor) {
+        pr_info("sensor_set_mode: No sensor available\n");
         return -1;
     }
 
@@ -1069,21 +1075,24 @@ int sensor_fps_control(int fps) {
 
     /* CRITICAL: Call the registered sensor's FPS IOCTL through the established connection */
     /* This is the proper way to communicate with the loaded gc2053.ko sensor module */
-    if (ourISPdev->sensor->sd.ops &&
-        ourISPdev->sensor->sd.ops->sensor &&
-        ourISPdev->sensor->sd.ops->sensor->ioctl) {
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+
+    if (sensor && sensor->sd.ops &&
+        sensor->sd.ops->sensor &&
+        sensor->sd.ops->sensor->ioctl) {
 
         /* Pack FPS in the format the sensor expects: (fps_num << 16) | fps_den */
         int fps_value = (fps << 16) | 1;  /* fps/1 format */
 
         pr_info("sensor_fps_control: Calling registered sensor (%s) IOCTL with FPS=0x%x (%d/1)\n",
-                ourISPdev->sensor->info.name, fps_value, fps);
+                sensor->info.name, fps_value, fps);
 
         /* Call the registered sensor's FPS IOCTL - this communicates with gc2053.ko */
         /* The delegation function will automatically use the correct original sensor subdev */
-        result = ourISPdev->sensor->sd.ops->sensor->ioctl(&ourISPdev->sensor->sd,
-                                                          TX_ISP_EVENT_SENSOR_FPS,
-                                                          &fps_value);
+        result = sensor->sd.ops->sensor->ioctl(&sensor->sd,
+                                               TX_ISP_EVENT_SENSOR_FPS,
+                                               &fps_value);
 
         if (result == 0) {
             pr_info("sensor_fps_control: Registered sensor FPS set successfully to %d FPS\n", fps);

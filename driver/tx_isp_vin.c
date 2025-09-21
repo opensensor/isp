@@ -262,12 +262,9 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
     }
 
     /* Binary Ninja: void* $a0 = *(arg1 + 0xe4) */
-    /* FIXED: Get sensor from subdev index 3 where it's actually registered */
-    if (ourISPdev->subdevs[3] && ourISPdev->subdevs[3]->host_priv) {
-        sensor = (struct tx_isp_sensor *)ourISPdev->subdevs[3]->host_priv;
-    } else {
-        sensor = NULL;
-    }
+    /* FIXED: Get sensor from correct subdev index using helper function */
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    sensor = tx_isp_get_sensor();
 
     if (!sensor) {
         /* Binary Ninja: if ($a0 == 0) goto label_132f4 */
