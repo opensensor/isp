@@ -1381,40 +1381,7 @@ int isp_framesource_show(struct seq_file *seq, void *v)
 }
 EXPORT_SYMBOL(isp_framesource_show);
 
-/**
- * tx_isp_create_test_sensor - Create a test sensor for development/testing
- * This creates a minimal sensor structure for testing VIC functionality
- */
-static struct tx_isp_sensor *tx_isp_create_test_sensor(void)
-{
-    struct tx_isp_sensor *sensor;
-    struct tx_isp_subdev *sd;
 
-    /* Allocate sensor structure */
-    sensor = kzalloc(sizeof(struct tx_isp_sensor), GFP_KERNEL);
-    if (!sensor) {
-        pr_err("Failed to allocate test sensor\n");
-        return NULL;
-    }
-
-    /* Initialize sensor attributes for GC2053 */
-    sensor->video.attr = &sensor->attr;
-    sensor->attr.name = "gc2053";
-    sensor->attr.chip_id = 0x2053;
-    sensor->attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;
-    sensor->attr.total_width = 1920;
-    sensor->attr.total_height = 1080;
-    sensor->attr.mipi.lans = 2;
-    sensor->attr.mipi.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10;
-
-    /* Initialize video structure */
-    sensor->video.mbus.width = 1920;
-    sensor->video.mbus.height = 1080;
-    sensor->video.fps = 30;
-
-    pr_info("*** tx_isp_create_test_sensor: Created test sensor with MIPI interface ***\n");
-    return sensor;
-}
 
 /**
  * tx_isp_get_sensor - Get sensor from subdev array starting at index 4
