@@ -5546,25 +5546,6 @@ int tisp_s_ev_start(int ev_value)
 }
 EXPORT_SYMBOL(tisp_s_ev_start);
 
-/* tiziano_s_awb_start - EXACT Binary Ninja implementation */
-int tiziano_s_awb_start(int r_gain, int b_gain)
-{
-    pr_info("tiziano_s_awb_start: r_gain=%d, b_gain=%d\n", r_gain, b_gain);
-
-    /* Binary Ninja: awb_r_gain = arg1 */
-    awb_r_gain = r_gain;
-
-    /* Binary Ninja: awb_b_gain = arg2 */
-    awb_b_gain = b_gain;
-
-    pr_info("tiziano_s_awb_start: AWB initialized - r_gain=%d, b_gain=%d\n",
-             awb_r_gain, awb_b_gain);
-
-    /* Binary Ninja: return 0 */
-    return 0;
-}
-EXPORT_SYMBOL(tiziano_s_awb_start);
-
 /* tiziano_ae_s_ev_start - EXACT Binary Ninja implementation */
 int tiziano_ae_s_ev_start(int ev_value)
 {
