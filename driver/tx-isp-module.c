@@ -5833,34 +5833,6 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
 
     /* For other IRQs, return handled */
     return IRQ_HANDLED;
-
-    /* Handle VIC interrupts (IRQ 38) */
-    if (irq == 38) {
-        pr_info("*** isp_irq_handle: VIC IRQ %d received, dev_id=%p ***\n", irq, dev_id);
-
-        /* CRITICAL SAFETY: Check if VIC is ready for interrupt processing */
-        if (!ourISPdev->vic_dev || !ourISPdev->vic_dev->vic_regs) {
-            pr_warn("*** isp_irq_handle: VIC IRQ %d received but VIC not ready - ignoring ***\n", irq);
-            return IRQ_HANDLED;  /* Acknowledge but don't process */
-        }
-
-        /* CRITICAL FIX: Pass ourISPdev to VIC handler, not the dev_id */
-        /* The VIC handler expects tx_isp_dev * and accesses isp_dev->vic_dev */
-        result = isp_vic_interrupt_service_routine(irq, ourISPdev);
-        pr_info("*** isp_irq_handle: VIC IRQ %d handled, result=%d ***\n", irq, result);
-        return result;
-    }
-
-    /* Handle Core interrupts (IRQ 37) */
-    if (irq == 37) {
-        /* For now, just acknowledge core interrupts */
-        pr_debug("*** isp_irq_handle: Core IRQ %d acknowledged ***\n", irq);
-        return IRQ_HANDLED;
-    }
-
-    /* Unknown IRQ */
-    pr_debug("*** isp_irq_handle: Unknown IRQ %d, returning IRQ_NONE ***\n", irq);
-    return IRQ_NONE;
 }
 
 
