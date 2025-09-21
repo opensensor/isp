@@ -53,6 +53,13 @@ int tisp_channel_start(int channel, void *attr);
 uint32_t tisp_math_exp2(uint32_t val, uint32_t shift, uint32_t base);
 int32_t tisp_log2_fixed_to_fixed_tuning(uint32_t val, int32_t in_fix_point, char out_fix_point);
 
+
+/* Frame sync work queue - CRITICAL for sensor I2C communication */
+static struct workqueue_struct *fs_workqueue = NULL;
+static struct work_struct fs_work;
+static void ispcore_irq_fs_work(struct work_struct *work);
+
+
 /* Command line access function */
 char *get_saved_command_line(void);
 
