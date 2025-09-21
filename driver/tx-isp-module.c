@@ -5720,7 +5720,7 @@ static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel
                 /* MIPS ALIGNMENT CHECK: Ensure vic_dev is properly aligned before accessing */
                 if (((unsigned long)vic_dev & 0x3) != 0) {
                     pr_err("*** CRITICAL: vic_dev pointer 0x%p not 4-byte aligned - would cause unaligned access crash! ***\n", vic_dev);
-                    return IRQ_HANDLED;
+                    return;  /* void function - just return without value */
                 }
 
                 /* SAFE: Use proper struct member access instead of offset arithmetic */
@@ -5756,7 +5756,7 @@ label_12898:
             /* MIPS ALIGNMENT CHECK: Ensure vic_dev is properly aligned before accessing */
             if (((unsigned long)vic_dev & 0x3) != 0) {
                 pr_err("*** CRITICAL: vic_dev pointer 0x%p not 4-byte aligned - would cause unaligned access crash! ***\n", vic_dev);
-                return IRQ_HANDLED;
+                return;  /* void function - just return without value */
             }
 
             /* SAFE: Use proper struct member access instead of offset arithmetic */
