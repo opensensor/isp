@@ -468,7 +468,9 @@ int ispcore_link_setup(const struct tx_isp_subdev_pad *local,
         }
 
         /* Disable VIN to sensor link */
-        if (vin_dev && isp_dev->sensor) {
+        extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+        struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+        if (vin_dev && sensor) {
             pr_info("ispcore_link_setup: Disabling VIN->sensor link\n");
             /* Binary Ninja: Clear VIN input configuration */
             if (vin_dev->base) {
@@ -482,12 +484,12 @@ int ispcore_link_setup(const struct tx_isp_subdev_pad *local,
         pr_info("*** ispcore_link_setup: ENABLING pipeline links ***\n");
 
         /* Enable sensor to VIN link */
-        if (isp_dev->sensor && vin_dev) {
+        if (sensor && vin_dev) {
             pr_info("ispcore_link_setup: Enabling sensor->VIN link\n");
             /* Binary Ninja: Configure VIN input for sensor */
             if (vin_dev->base) {
                 u32 vin_config = 0x1;  /* Enable VIN input */
-                if (isp_dev->sensor->video.attr && isp_dev->sensor->video.attr->dbus_type == 1) {
+                if (sensor->video.attr && sensor->video.attr->dbus_type == 1) {
                     vin_config |= 0x2;  /* MIPI interface */
                 }
                 writel(vin_config, vin_dev->base + 0x10);
@@ -512,9 +514,9 @@ int ispcore_link_setup(const struct tx_isp_subdev_pad *local,
             /* Binary Ninja: Configure VIC input from CSI */
             if (vic_dev->vic_regs) {
                 u32 vic_input_config = 0x1;  /* Enable VIC input */
-                if (isp_dev->sensor && isp_dev->sensor->video.attr) {
+                if (sensor && sensor->video.attr) {
                     /* Configure based on sensor attributes */
-                    vic_input_config |= (isp_dev->sensor->video.attr->dbus_type << 4);
+                    vic_input_config |= (sensor->video.attr->dbus_type << 4);
                 }
                 writel(vic_input_config, vic_dev->vic_regs + 0x380);
                 wmb();
@@ -1332,9 +1334,11 @@ int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
     pr_info("*** ispcore_sensor_ops_ioctl: Looking for actual sensor device ***\n");
 
     /* CRITICAL: Don't iterate through subdevs - call the real sensor directly */
-    /* The real sensor is stored in isp_dev->sensor, not in the subdevs array */
-    if (isp_dev->sensor && isp_dev->sensor->sd.ops &&
-        isp_dev->sensor->sd.ops->sensor && isp_dev->sensor->sd.ops->sensor->ioctl) {
+    /* The real sensor is accessed via helper function */
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (sensor && sensor->sd.ops &&
+        sensor->sd.ops->sensor && sensor->sd.ops->sensor->ioctl) {
 
         pr_info("*** ispcore_sensor_ops_ioctl: Found real sensor device - calling sensor IOCTL ***\n");
 
@@ -1359,7 +1363,7 @@ int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
         pr_info("*** ispcore_sensor_ops_ioctl: Calling sensor with EXPO=0x%x (AE operation) ***\n", expo_value);
 
         /* Call the real sensor's IOCTL with supported EXPO command - this triggers I2C communication */
-        result = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd, TX_ISP_EVENT_SENSOR_EXPO, &expo_value);
+        result = sensor->sd.ops->sensor->ioctl(&sensor->sd, TX_ISP_EVENT_SENSOR_EXPO, &expo_value);
 
         pr_info("*** ispcore_sensor_ops_ioctl: Real sensor IOCTL result: %d ***\n", result);
 
@@ -4148,7 +4152,9 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
 
     
     /* CRITICAL FIX: Work with real sensor attributes instead of VIC's copy */
-    if (!isp_dev->sensor || !isp_dev->sensor->video.attr) {
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor || !sensor->video.attr) {
         pr_err("ispcore_sync_sensor_attr: No real sensor available!\n");
         return -ENODEV;
     }
@@ -4156,16 +4162,16 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     /* Binary Ninja: if (arg2 == 0) */
     if (attr == NULL) {
         /* Clear real sensor attributes */
-        memset(isp_dev->sensor->video.attr, 0, sizeof(struct tx_isp_sensor_attribute));
+        memset(sensor->video.attr, 0, sizeof(struct tx_isp_sensor_attribute));
         pr_info("ispcore_sync_sensor_attr: cleared REAL sensor attributes\n");
         return 0;
     }
 
     /* Binary Ninja: memcpy($s0_1 + 0xec, arg2, 0x4c) */
-    memcpy(isp_dev->sensor->video.attr, attr, sizeof(struct tx_isp_sensor_attribute));
+    memcpy(sensor->video.attr, attr, sizeof(struct tx_isp_sensor_attribute));
 
     /* Binary Ninja: Complex sensor attribute processing */
-    stored_attr = isp_dev->sensor->video.attr;
+    stored_attr = sensor->video.attr;
     
     /* Binary Ninja: Extract and process sensor timing parameters */
     integration_time = stored_attr->integration_time;
