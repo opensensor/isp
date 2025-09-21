@@ -5210,7 +5210,10 @@ static int tx_isp_init(void)
     /* Validate critical structure members that interrupt handlers will access */
     pr_info("*** VALIDATING ISP DEVICE STRUCTURE FOR IRQ REGISTRATION ***\n");
     pr_info("*** ourISPdev = %p ***\n", ourISPdev);
-    pr_info("*** ourISPdev->core_regs = %p ***\n", ourISPdev->core_regs);
+    pr_info("*** ourISPdev->core_dev = %p ***\n", ourISPdev->core_dev);
+    if (ourISPdev->core_dev) {
+        pr_info("*** ourISPdev->core_dev->core_regs = %p ***\n", ourISPdev->core_dev->core_regs);
+    }
     pr_info("*** ourISPdev->vic_dev = %p ***\n", ourISPdev->vic_dev);
 
     if (ourISPdev->vic_dev) {
@@ -5218,7 +5221,7 @@ static int tx_isp_init(void)
     }
 
     /* Initialize any missing critical members */
-    if (!ourISPdev->core_regs) {
+    if (!ourISPdev->core_dev || !ourISPdev->core_dev->core_regs) {
         pr_warn("*** WARNING: core_regs is NULL - ISP core interrupts may fail ***\n");
     }
 
@@ -5283,8 +5286,8 @@ static int tx_isp_init(void)
             
             /* CRITICAL FIX: Enable ISP core interrupts too! Use core_regs if available */
             pr_info("*** ENABLING ISP CORE INTERRUPT REGISTERS FOR MIPI DATA ***\n");
-            if (ourISPdev->core_regs) {
-                void __iomem *core = ourISPdev->core_regs;
+            if (ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
+                void __iomem *core = ourISPdev->core_dev->core_regs;
                 /* Enable/unmask core interrupts at both possible banks (legacy +0xb* and new +0x98b*) */
                 /* Legacy bank */
                 u32 pend_legacy = readl(core + 0xb4);
