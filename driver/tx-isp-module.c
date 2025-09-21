@@ -5241,48 +5241,16 @@ static int subdev_sensor_ops_set_input(struct tx_isp_subdev *sd, unsigned int cm
     struct tx_isp_sensor *current_sensor_struct = tx_isp_get_sensor();
     struct tx_isp_subdev *current_sensor = current_sensor_struct ? &current_sensor_struct->sd : NULL;
 
-    if (current_sensor != NULL) {
-        /* Binary Ninja: if (*arg2 == *($s1_1 + 0xdc)) return 0 */
-        /* Check if requested input matches current sensor input */
-        /* For now, assume sensor input is stored at offset 0xdc in sensor structure */
-        /* This would be a sensor-specific field - simplified to always match for input 0 */
-        if (input_index == 0) {
-            return 0; /* Already set to requested input */
-        }
+    /* CRITICAL FIX: Don't return early - we need to properly set up the sensor even if it appears to be "current" */
+    /* The tx_isp_get_sensor() function may return the Core device instead of the real sensor */
+    /* So we always need to go through the proper sensor selection process */
+    pr_info("subdev_sensor_ops_set_input: Current sensor from tx_isp_get_sensor: %p\n", current_sensor);
+    pr_info("subdev_sensor_ops_set_input: Requested input_index: %d\n", input_index);
 
-        /* Binary Ninja: if (*(arg1 + 0xf4) == 4) */
-        /* Check some ISP state - simplified */
-        if (isp_dev->pipeline_state == 4) {
-            pr_info("subdev_sensor_ops_set_input: Pipeline in special state\n");
-            return 0xffffffff;
-        }
-
-        /* Binary Ninja: int32_t $v0_2 = *(arg1 + 0x7c) */
-        /* This would be some function pointer in ISP device - simplified */
-        /* For now, assume we need to stop current sensor */
-        if (current_sensor->ops && current_sensor->ops->sensor && current_sensor->ops->sensor->ioctl) {
-            int32_t ret = current_sensor->ops->sensor->ioctl(current_sensor, 0x1000000, &var_20);
-            result = ret;
-
-            if (ret == 0) {
-                /* Binary Ninja: *(arg1 + 0xe4) = 0 */
-                /* Note: We can't set sensor_sd to NULL since we removed that member */
-                /* The helper function will handle sensor management */
-
-                /* Binary Ninja: int32_t $v0_13 = *($s1_1 + 0x7c) */
-                /* Call sensor stop function */
-                if (current_sensor->ops->sensor->ioctl) {
-                    int32_t ret2 = current_sensor->ops->sensor->ioctl(current_sensor, 0x1000001, NULL);
-                    result = ret2;
-                    if (ret2 != 0) {
-                        pr_err("subdev_sensor_ops_set_input: Failed to stop current sensor\n");
-                    }
-                }
-            } else {
-                pr_err("subdev_sensor_ops_set_input: Failed to prepare sensor stop\n");
-            }
-        }
-    }
+    /* CRITICAL FIX: Skip the current sensor stop logic - it's causing issues */
+    /* The tx_isp_get_sensor() is returning the Core device, not a real sensor */
+    /* We should go directly to the sensor selection process */
+    pr_info("subdev_sensor_ops_set_input: Skipping current sensor stop logic - proceeding to sensor selection\n");
 
     /* Binary Ninja: if (*arg2 == 0xffffffff) return 0 */
     if (input_index == 0xffffffff) {
@@ -5300,12 +5268,16 @@ static int subdev_sensor_ops_set_input(struct tx_isp_subdev *sd, unsigned int cm
 
     /* Binary Ninja: while ($s1_3 + 0xe4 != arg1 + 0xdc) */
     /* Search for sensor at requested index */
+    pr_info("subdev_sensor_ops_set_input: Searching for sensor at input_index %d\n", input_index);
     for (int i = 5; i < ISP_MAX_SUBDEVS; i++) {
         struct tx_isp_subdev *sensor_sd = isp_dev->subdevs[i];
         if (sensor_sd && sensor_sd->ops && sensor_sd->ops->sensor) {
+            pr_info("subdev_sensor_ops_set_input: Found sensor at subdev[%d], current_index=%d, target=%d\n",
+                    i, current_index, input_index);
             /* Binary Ninja: if (*($s1_3 + 0xdc) == *arg2) break */
             if (current_index == input_index) {
                 found_sensor = sensor_sd;
+                pr_info("subdev_sensor_ops_set_input: Selected sensor at subdev[%d]: %p\n", i, sensor_sd);
                 break;
             }
             current_index++;
