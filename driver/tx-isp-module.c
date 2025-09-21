@@ -52,9 +52,7 @@ extern struct tx_isp_dev *ourISPdev;
 #include <linux/platform_device.h>
 #include <linux/device.h>
 
-/* Remove duplicate - tx_isp_sensor_attribute already defined in SDK */
-
-/* REMOVED: sensor_ops_storage - Reference driver uses original sensor ops directly */
+int subdev_sensor_ops_enum_input(struct v4l2_subdev *sd, struct v4l2_input *input);
 
 // Simple sensor registration structure
 struct registered_sensor {
@@ -3277,9 +3275,6 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
             pr_info("TX_ISP_SENSOR_ENUM_INPUT: Requested index=%d\n", *(int*)&var_98);
 
-            /* Binary Ninja: Call subdev_sensor_ops_enum_input exactly as reference */
-            extern int subdev_sensor_ops_enum_input(struct v4l2_subdev *sd, struct v4l2_input *input);
-
             /* Create v4l2_input structure from the data */
             struct v4l2_input input;
             memset(&input, 0, sizeof(input));
@@ -5098,7 +5093,7 @@ static int subdev_sensor_ops_release_all_sensor(struct tx_isp_subdev *sd)
 EXPORT_SYMBOL(subdev_sensor_ops_release_all_sensor);
 
 /* subdev_sensor_ops_enum_input - Enumerate sensor inputs */
-static int subdev_sensor_ops_enum_input(struct v4l2_subdev *sd, struct v4l2_input *input)
+int subdev_sensor_ops_enum_input(struct v4l2_subdev *sd, struct v4l2_input *input)
 {
     pr_info("subdev_sensor_ops_enum_input: Enumerating inputs\n");
 
