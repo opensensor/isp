@@ -270,7 +270,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     }
 
     /* Binary Ninja: __private_spin_lock_irqsave($s0 + 0xdc, &var_28) */
-    __spin_lock_irqsave(&core_dev->lock, &var_28);
+    __private_spin_lock_irqsave(&core_dev->lock, &var_28);
 
     /* Binary Ninja: if (*($s0 + 0xe8) s< 3) */
     if (core_dev->state < 3) {
@@ -3754,7 +3754,9 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                     *((uint32_t*)(base_addr + offset + 0x996c)) = a0_13;
                     *((uint32_t*)(base_addr + offset + 0x9984)) = *((uint32_t*)arg3 + 3);
                     
-                    spin_unlock_irqrestore((char*)s1_2 + 0x9c, var_58);
+                    /* SAFE: Use struct member access for spinlock instead of (char*)s1_2 + 0x9c */
+                    struct frame_channel_binary_ninja *channel_s1 = (struct frame_channel_binary_ninja *)s1_2;
+                    spin_unlock_irqrestore(&channel_s1->lock, var_58);
                     ISP_INFO("ispcore_pad_event_handle: buffer queued successfully");
                 }
             } else {
