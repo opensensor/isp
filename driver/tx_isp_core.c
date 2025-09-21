@@ -314,9 +314,13 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
                 s2_1 += 0xc4;  /* sizeof(frame_channel) */
 
                 /* Binary Ninja: if (*($v0_6 + 0x74) == 4) */
-                /* FIXED: Check if channel state indicates streaming (state 4) */
+                /* FIXED: The Binary Ninja code is checking a state field at offset 0x74 */
+                /* In our struct, this likely corresponds to checking if streaming is active */
                 struct frame_channel_device *channel_dev = (struct frame_channel_device*)v0_6;
-                if (channel_dev->state.streaming) {  /* Check streaming state instead of comparing to 4 */
+
+                /* Binary Ninja compares state to 4 - this likely means "streaming state" */
+                /* In our implementation, we check the streaming boolean field */
+                if (channel_dev->state.streaming) {
                     /* Binary Ninja: ispcore_frame_channel_streamoff(*($v0_6 + 0x78)) */
                     /* FIXED: Pass pointer to channel_num as expected by function signature */
                     ispcore_frame_channel_streamoff(&channel_dev->channel_num);
