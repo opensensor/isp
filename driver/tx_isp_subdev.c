@@ -673,12 +673,13 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
         if (irq_num == 37 || irq_num == 38) {
             pr_info("*** tx_isp_request_irq: IRQ %d handled by main dispatcher - skipping duplicate registration ***\n", irq_num);
 
-            /* Store IRQ info for reference but don't register */
-            irq_info->irq = irq_num;
-            irq_info->handler = isp_irq_handle;
-            irq_info->data = irq_info;
+            /* CRITICAL FIX: Don't store IRQ number if we're not registering it! */
+            /* This prevents later enable_irq() calls on unregistered IRQs */
+            irq_info->irq = 0;          /* Mark as no IRQ */
+            irq_info->handler = NULL;   /* No handler */
+            irq_info->data = NULL;      /* No data */
 
-            pr_info("*** tx_isp_request_irq: IRQ %d info stored for %s ***\n", irq_num, dev_name(&pdev->dev));
+            pr_info("*** tx_isp_request_irq: IRQ %d NOT stored - main dispatcher handles it ***\n", irq_num);
             return 0;
         }
 
@@ -752,12 +753,36 @@ void tx_isp_free_irq(struct tx_isp_irq_info *irq_info)
 void tx_isp_enable_irq(struct tx_isp_irq_info *irq_info)
 {
     if (!irq_info || irq_info->irq <= 0) {
-        pr_err("tx_isp_enable_irq: Invalid IRQ info\n");
+        pr_err("tx_isp_enable_irq: Invalid IRQ info (irq=%d)\n", irq_info ? irq_info->irq : -1);
+        return;
+    }
+
+    /* CRITICAL FIX: Don't enable IRQs 37 or 38 - main dispatcher manages them */
+    if (irq_info->irq == 37 || irq_info->irq == 38) {
+        pr_info("*** tx_isp_enable_irq: IRQ %d managed by main dispatcher - ignoring enable request ***\n", irq_info->irq);
         return;
     }
 
     enable_irq(irq_info->irq);
     pr_info("*** tx_isp_enable_irq: IRQ %d ENABLED ***\n", irq_info->irq);
+}
+
+/* tx_isp_disable_irq - EXACT Binary Ninja reference implementation */
+void tx_isp_disable_irq(struct tx_isp_irq_info *irq_info)
+{
+    if (!irq_info || irq_info->irq <= 0) {
+        pr_err("tx_isp_disable_irq: Invalid IRQ info (irq=%d)\n", irq_info ? irq_info->irq : -1);
+        return;
+    }
+
+    /* CRITICAL FIX: Don't disable IRQs 37 or 38 - main dispatcher manages them */
+    if (irq_info->irq == 37 || irq_info->irq == 38) {
+        pr_info("*** tx_isp_disable_irq: IRQ %d managed by main dispatcher - ignoring disable request ***\n", irq_info->irq);
+        return;
+    }
+
+    disable_irq(irq_info->irq);
+    pr_info("*** tx_isp_disable_irq: IRQ %d DISABLED ***\n", irq_info->irq);
 }
 
 static struct tx_isp_subdev_ops fs_subdev_ops = { 0 }; // All fields NULL/0
