@@ -2380,13 +2380,29 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             uint32_t capabilities;
             uint32_t reserved[1];
         } reqbuf;
-        
+
         if (copy_from_user(&reqbuf, argp, sizeof(reqbuf)))
             return -EFAULT;
-            
+
         pr_info("*** Channel %d: REQBUFS - MEMORY-AWARE implementation ***\n", channel);
         pr_info("Channel %d: Request %d buffers, type=%d memory=%d\n",
                 channel, reqbuf.count, reqbuf.type, reqbuf.memory);
+
+        // CRITICAL: REQBUFS should trigger core ops init according to Binary Ninja reference
+        if (reqbuf.count > 0 && ourISPdev && ourISPdev->core_dev &&
+            ourISPdev->core_dev->sd.ops && ourISPdev->core_dev->sd.ops->core &&
+            ourISPdev->core_dev->sd.ops->core->init) {
+
+            pr_info("*** Channel %d: REQBUFS - CALLING CORE OPS INIT ***\n", channel);
+            int core_init_ret = ourISPdev->core_dev->sd.ops->core->init(&ourISPdev->core_dev->sd, 1);
+
+            if (core_init_ret != 0) {
+                pr_err("Channel %d: REQBUFS - Core ops init failed: %d\n", channel, core_init_ret);
+                // Don't fail REQBUFS for init failure - continue with buffer allocation
+            } else {
+                pr_info("*** Channel %d: REQBUFS - Core ops init SUCCESS ***\n", channel);
+            }
+        }
         
         /* CRITICAL: Check available memory before allocation */
         if (reqbuf.count > 0) {
@@ -2596,6 +2612,22 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
 
         pr_info("*** Channel %d: QBUF - Queue buffer index=%d ***\n", channel, buffer.index);
+
+        // CRITICAL: QBUF should trigger core ops init according to Binary Ninja reference
+        if (ourISPdev && ourISPdev->core_dev &&
+            ourISPdev->core_dev->sd.ops && ourISPdev->core_dev->sd.ops->core &&
+            ourISPdev->core_dev->sd.ops->core->init) {
+
+            pr_info("*** Channel %d: QBUF - CALLING CORE OPS INIT ***\n", channel);
+            int core_init_ret = ourISPdev->core_dev->sd.ops->core->init(&ourISPdev->core_dev->sd, 1);
+
+            if (core_init_ret != 0) {
+                pr_err("Channel %d: QBUF - Core ops init failed: %d\n", channel, core_init_ret);
+                // Don't fail QBUF for init failure - continue with buffer queuing
+            } else {
+                pr_info("*** Channel %d: QBUF - Core ops init SUCCESS ***\n", channel);
+            }
+        }
 
         /* SAFE: Use our buffer array instead of unsafe pointer arithmetic */
         if (buffer.index >= 64) {
