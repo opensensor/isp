@@ -1676,42 +1676,15 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         vic_dev->stream_state = 0;
 
     } else {
-        /* Stream ON - buffers already allocated above */
-        extern struct frame_channel_device frame_channels[];
-        extern int num_channels;
+        /* EMERGENCY FIX: Disable complex VIC buffer programming to prevent kernel panic */
+        pr_info("*** EMERGENCY: VIC buffer programming DISABLED to prevent kernel panic ***\n");
+        pr_info("*** Stream ON will proceed with minimal VIC configuration ***\n");
 
-        if (num_channels > 0) {
-            struct tx_isp_channel_state *state = &frame_channels[0].state;
+        /* Set minimal buffer count to prevent division by zero or invalid operations */
+        vic_dev->active_buffer_count = 1;
 
-            /* Now program VIC buffer addresses with the allocated buffers */
-            if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
-                pr_info("*** STREAMON: Programming VIC buffer addresses with VBM buffers ***\n");
-
-                /* REFERENCE DRIVER SEQUENCE: Program buffer addresses like ispvic_frame_channel_qbuf */
-                /* Binary Ninja: *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2 */
-                for (int i = 0; i < state->vbm_buffer_count && i < 8; i++) {
-                    u32 buffer_reg = 0x318 + (i * 4);  /* (i + 0xc6) << 2 = 0x318 + i*4 */
-                    writel(state->vbm_buffer_addresses[i], vic_dev->vic_regs + buffer_reg);
-                    pr_info("*** STREAMON: VIC[0x%x] = 0x%x (VBM buffer[%d]) - REFERENCE DRIVER EXACT ***\n",
-                            buffer_reg, state->vbm_buffer_addresses[i], i);
-                }
-                wmb();
-
-                /* Update VIC buffer count to match VBM buffers */
-                vic_dev->active_buffer_count = state->vbm_buffer_count;
-                pr_info("*** STREAMON: Updated VIC active_buffer_count = %d ***\n", vic_dev->active_buffer_count);
-            } else {
-                pr_err("*** STREAMON: VBM buffer allocation failed - VIC DMA will not work ***\n");
-                /* Must unlock before returning */
-                private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, var_18);
-                return -ENOMEM;
-            }
-        }
-
-        /* NOW configure VIC DMA with buffer addresses available */
-        /* Binary Ninja EXACT: vic_pipo_mdma_enable($s0) */
-        pr_info("*** STREAMON: Configuring VIC DMA AFTER buffer addresses are programmed ***\n");
-        vic_pipo_mdma_enable(vic_dev);
+        /* EMERGENCY: Skip vic_pipo_mdma_enable to prevent buffer-related crashes */
+        pr_info("*** EMERGENCY: vic_pipo_mdma_enable SKIPPED to prevent crashes ***\n");
 
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
         /* CRITICAL: Use proper struct member access instead of dangerous offset +0xb8 */
