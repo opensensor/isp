@@ -203,7 +203,6 @@ struct tx_isp_dev {
     struct i2c_client *sensor_i2c_client;
     struct i2c_adapter *i2c_adapter;
     struct tx_isp_subdev *sensor_sd;
-    struct tx_isp_sensor *sensor;
     /* REMOVED: sensor_attr - use vic_dev->sensor_attr or sensor->video.attr instead */
     struct tx_isp_subdev_ops *sensor_subdev_ops;  /* Sensor subdev operations */
     bool sensor_ops_initialized;                  /* Sensor operations initialization flag */

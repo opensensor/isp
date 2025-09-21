@@ -572,27 +572,8 @@ void system_reg_write(u32 reg, u32 value);
 /* system_reg_write - Binary Ninja reference implementation with streaming protection */
 void system_reg_write(u32 arg1, u32 arg2)
 {
-    /* CRITICAL FIX: Use safe struct member access instead of dangerous offset *(ourISPdev + 0xb8) */
-    /* MIPS ALIGNMENT CHECK: Ensure ourISPdev is properly aligned before accessing */
-    if (ourISPdev && ((unsigned long)ourISPdev & 0x3) != 0) {
-        pr_err("*** CRITICAL: ourISPdev pointer 0x%p not 4-byte aligned - would cause unaligned access crash! ***\n", ourISPdev);
-        return;
-    }
-
     /* SAFE: Use proper struct member access instead of offset arithmetic */
-
     extern uint32_t vic_start_ok;
-
-    /* CRITICAL: Block hardware writes during streaming to prevent corruption */
-    if (vic_start_ok == 1) {
-        pr_warn("system_reg_write: BLOCKED register write 0x%x=0x%x during streaming\n", arg1, arg2);
-        return;  /* Prevent corruption by blocking tuning system writes during streaming */
-    }
-
-    if (!ourISPdev) {
-        pr_warn("system_reg_write: No ISP device available for reg=0x%x val=0x%x\n", arg1, arg2);
-        return;
-    }
 
     /* Binary Ninja: Get register base from ISP device structure at offset 0xb8 */
     void __iomem *reg_base = ourISPdev->vic_regs;  /* This is at offset 0xb8 in the structure */

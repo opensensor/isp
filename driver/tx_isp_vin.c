@@ -261,15 +261,6 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
         }
     }
 
-    /* Binary Ninja: void* $a0 = *(arg1 + 0xe4) */
-    /* SAFE: Get active sensor from global ISP device */
-    sensor = ourISPdev->sensor;
-    if (!sensor) {
-        /* Binary Ninja: if ($a0 == 0) goto label_132f4 */
-        pr_err("VIN: vin_s_stream: no active sensor in global ISP\n");
-        goto label_132f4;
-    }
-
     /* Binary Ninja: int32_t* $v0_2 = *(*($a0 + 0xc4) + 4) */
     /* Binary Ninja reference: Access function pointer directly from sensor structure */
     if (sensor && sensor->sd.ops && sensor->sd.ops->video && sensor->sd.ops->video->s_stream) {
