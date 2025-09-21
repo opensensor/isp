@@ -310,6 +310,8 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             /* The actual registration is done in tx_isp_link_core_device() */
         } else if (ops && ops->sensor && ops != &csi_subdev_ops) {
             /* CRITICAL FIX: This is a REAL sensor subdev (not CSI which also has sensor ops) */
+            pr_info("*** tx_isp_subdev_init: DETECTED SENSOR SUBDEV - ops=%p, ops->sensor=%p ***\n", ops, ops->sensor);
+
             /* Find next available slot starting from index 4 (after CSI=0, VIC=1, VIN=2, FS=3) */
             int sensor_index = -1;
             for (int i = 4; i < ISP_MAX_SUBDEVS; i++) {
@@ -322,9 +324,15 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             if (sensor_index != -1) {
                 ourISPdev->subdevs[sensor_index] = sd;
                 sd->isp = ourISPdev;
-                pr_info("*** tx_isp_subdev_init: SENSOR subdev registered at index %d ***\n", sensor_index);
+                pr_info("*** tx_isp_subdev_init: SENSOR subdev registered at index %d, sd=%p ***\n", sensor_index, sd);
+                pr_info("*** tx_isp_subdev_init: SENSOR ops=%p, ops->sensor=%p ***\n", sd->ops, sd->ops->sensor);
             } else {
                 pr_err("*** tx_isp_subdev_init: No available slot for sensor subdev ***\n");
+            }
+        } else {
+            pr_info("*** tx_isp_subdev_init: NOT A SENSOR - ops=%p ***\n", ops);
+            if (ops) {
+                pr_info("*** tx_isp_subdev_init: ops->sensor=%p, csi_subdev_ops=%p ***\n", ops->sensor, &csi_subdev_ops);
             }
         }
     }
