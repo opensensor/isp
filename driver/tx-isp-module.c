@@ -2094,8 +2094,25 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
         return -EINVAL;
     }
 
-    /* CRITICAL: Initialize core before streaming (transition from state 2 to 3) */
+    /* CRITICAL: Initialize all subdevices before streaming */
     if (arg2 == 1) {  /* Stream ON */
+        pr_info("*** tx_isp_video_s_stream: Initializing all subdevices before streaming ***\n");
+
+        /* First, initialize all subdevices (transition from state 1 to 2) */
+        for (int init_i = 0; init_i < 0x10; init_i++) {
+            struct tx_isp_subdev *init_sd = arg1->subdevs[init_i];
+            if (init_sd && init_sd->ops && init_sd->ops->core && init_sd->ops->core->init) {
+                pr_info("*** tx_isp_video_s_stream: Calling subdev %d init ***\n", init_i);
+                int subdev_init_ret = init_sd->ops->core->init(init_sd, 1);
+                if (subdev_init_ret == 0) {
+                    pr_info("*** tx_isp_video_s_stream: Subdev %d init SUCCESS ***\n", init_i);
+                } else {
+                    pr_warn("*** tx_isp_video_s_stream: Subdev %d init failed: %d ***\n", init_i, subdev_init_ret);
+                }
+            }
+        }
+
+        /* Then, initialize core (transition from state 2 to 3) */
         if (arg1->core_dev && arg1->core_dev->sd.ops &&
             arg1->core_dev->sd.ops->core && arg1->core_dev->sd.ops->core->init) {
 
