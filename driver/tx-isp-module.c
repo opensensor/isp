@@ -5211,7 +5211,7 @@ static void tx_isp_exit(void)
         pr_info("*** CLEANUP: Freeing main dispatcher IRQs ***\n");
         free_irq(37, local_isp_dev);  /* ISP Core IRQ uses ISP device as dev_id */
         if (local_isp_dev->vic_dev) {
-            free_irq(38, local_isp_dev->vic_dev);  /* VIC IRQ uses VIC device as dev_id */
+            free_irq(38, local_isp_dev);  /* VIC IRQ uses ISP device as dev_id */
         }
         pr_info("*** Main dispatcher IRQs 37 and 38 freed ***\n");
 
@@ -5762,11 +5762,11 @@ irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
         pr_debug("isp_irq_thread_handle: Core thread IRQ %d processed\n", irq);
 
     } else if (irq == 38) {
-        /* VIC thread processing - dev_id is VIC device */
-        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)dev_id;
+        /* VIC thread processing - dev_id is ISP device */
+        struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
 
-        if (!vic_dev || (uintptr_t)vic_dev < 0x80000000) {
-            pr_err("VIC THREAD IRQ %d: Invalid VIC device=%p\n", irq, vic_dev);
+        if (!isp_dev || (uintptr_t)isp_dev < 0x80000000) {
+            pr_err("VIC THREAD IRQ %d: Invalid ISP device=%p\n", irq, isp_dev);
             return IRQ_HANDLED;
         }
 
