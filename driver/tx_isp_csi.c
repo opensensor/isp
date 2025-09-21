@@ -272,44 +272,53 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     return 0;
 }
 
-/* CSI sensor operations IOCTL handler */
+/* CSI sensor operations IOCTL handler - EXACT Binary Ninja reference implementation */
 int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
     struct tx_isp_csi_device *csi_dev;
 
-    if (!sd)
-        return -EINVAL;
+    pr_info("*** csi_sensor_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x%x ***\n", cmd);
 
-    /* Get the CSI device from the subdevice */
-    csi_dev = ourISPdev->csi_dev;
-    if (!csi_dev) {
-        pr_err("CSI device is NULL\n");
-        return -EINVAL;
+    /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) */
+    if (sd != NULL && (unsigned long)sd < 0xfffff001) {
+        /* Get the CSI device from the subdevice */
+        csi_dev = ourISPdev->csi_dev;
+        if (!csi_dev) {
+            pr_err("CSI device is NULL\n");
+            return 0;  /* Binary Ninja returns 0 on error */
+        }
+
+        /* Binary Ninja: if (arg2 != 0x200000e) */
+        if (cmd != 0x200000e) {
+            /* Binary Ninja: if (arg2 != 0x200000f) */
+            if (cmd != 0x200000f) {
+                /* Binary Ninja: if (arg2 == 0x200000c) */
+                if (cmd == 0x200000c) {
+                    pr_info("csi_sensor_ops_ioctl: Handling cmd 0x200000c - CSI init\n");
+                    /* Binary Ninja: csi_core_ops_init(arg1, 1, 0x200000f) */
+                    csi_core_ops_init(sd, 1);
+                }
+            } else {
+                /* Binary Ninja: else if (*(*(arg1 + 0x110) + 0x14) == 1) */
+                /* Check if CSI device interface type is 1 (MIPI) */
+                if (csi_dev->interface_type == 1) {
+                    pr_info("csi_sensor_ops_ioctl: Handling cmd 0x200000f - set state 4\n");
+                    /* Binary Ninja: *(arg1 + 0x128) = 4 */
+                    csi_dev->state = 4;  /* Set to streaming_on state */
+                }
+            }
+        } else {
+            /* Binary Ninja: else if (*(*(arg1 + 0x110) + 0x14) == 1) */
+            /* Check if CSI device interface type is 1 (MIPI) */
+            if (csi_dev->interface_type == 1) {
+                pr_info("csi_sensor_ops_ioctl: Handling cmd 0x200000e - set state 3\n");
+                /* Binary Ninja: *(arg1 + 0x128) = 3 */
+                csi_dev->state = 3;  /* Set to streaming_off state */
+            }
+        }
     }
 
-    switch (cmd) {
-    case TX_ISP_EVENT_SENSOR_RESIZE:  /* This is the correct event for reset */
-        /* Reset CSI */
-        /* CRITICAL FIX: Don't set to ERROR state (3)! Reset to IDLE (1) */
-        if (csi_dev->state >= CSI_STATE_ACTIVE) {
-            csi_dev->state = CSI_STATE_IDLE;  /* 1 = IDLE, not 3 = ERROR */
-            pr_info("CSI reset to IDLE state due to sensor resize\n");
-        }
-        break;
-    case TX_ISP_EVENT_SENSOR_FPS:
-        /* Update FPS */
-        /* CRITICAL FIX: Don't check for ERROR state (3)! Check for ACTIVE (2) */
-        if (csi_dev->state >= CSI_STATE_ACTIVE) {
-            /* Stay in ACTIVE state for FPS changes */
-            pr_info("CSI FPS update while in ACTIVE state\n");
-        }
-        break;
-    case TX_ISP_EVENT_SENSOR_PREPARE_CHANGE:  /* This is the correct event for start */
-        /* Start CSI */
-        csi_core_ops_init(sd, 1);
-        break;
-    }
-
+    /* Binary Ninja: return 0 */
     return 0;
 }
 

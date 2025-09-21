@@ -381,6 +381,97 @@ int tx_isp_vin_activate_subdev(void* arg1)
     return 0;
 }
 
+/* VIN core operations ioctl - Binary Ninja reference implementation */
+int vin_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
+{
+    int result = -ENOTSUPP;  /* 0xffffffed */
+    void *callback_ptr;
+    int (*callback_func)(void);
+
+    pr_info("*** vin_core_ops_ioctl: Binary Ninja implementation - cmd=0x%x, arg=%p ***\n", cmd, arg);
+
+    /* Binary Ninja: Handle TX_ISP_EVENT_SYNC_SENSOR_ATTR */
+    if (cmd == 0x1000001) {  /* TX_ISP_EVENT_SYNC_SENSOR_ATTR */
+        result = -ENOTSUPP;  /* 0xffffffed */
+
+        /* Binary Ninja: if (arg1 != 0) */
+        if (sd != NULL) {
+            /* Binary Ninja: Check for callback in inpads */
+            if (sd->inpads && sd->inpads[0].priv) {
+                callback_ptr = sd->inpads[0].priv;
+
+                if (callback_ptr == NULL) {
+                    pr_info("vin_core_ops_ioctl: No callback pointer for cmd 0x1000001, returning 0\n");
+                    return 0;
+                }
+
+                /* Binary Ninja: Get callback function */
+                callback_func = *((int (**)(void))((char *)callback_ptr + 4));
+
+                if (callback_func == NULL) {
+                    pr_info("vin_core_ops_ioctl: No callback function for cmd 0x1000001, returning 0\n");
+                    return 0;
+                }
+
+                /* Binary Ninja: Call callback function */
+                pr_info("vin_core_ops_ioctl: Calling callback function for cmd 0x1000001\n");
+                result = callback_func();
+            } else {
+                pr_info("vin_core_ops_ioctl: No inpads for cmd 0x1000001, returning 0\n");
+                return 0;
+            }
+        } else {
+            pr_info("vin_core_ops_ioctl: NULL sd for cmd 0x1000001, returning 0\n");
+            return 0;
+        }
+    }
+    /* Binary Ninja: Handle other VIN-specific commands */
+    else if (cmd == 0x1000000) {  /* Another VIN event */
+        result = -ENOTSUPP;  /* 0xffffffed */
+
+        if (sd != NULL) {
+            if (sd->inpads && sd->inpads[0].priv) {
+                callback_ptr = sd->inpads[0].priv;
+
+                if (callback_ptr == NULL) {
+                    pr_info("vin_core_ops_ioctl: No callback pointer for cmd 0x1000000, returning 0\n");
+                    return 0;
+                }
+
+                callback_func = *((int (**)(void))((char *)callback_ptr + 4));
+
+                if (callback_func == NULL) {
+                    pr_info("vin_core_ops_ioctl: No callback function for cmd 0x1000000, returning 0\n");
+                    return 0;
+                }
+
+                pr_info("vin_core_ops_ioctl: Calling callback function for cmd 0x1000000\n");
+                result = callback_func();
+            } else {
+                pr_info("vin_core_ops_ioctl: No inpads for cmd 0x1000000, returning 0\n");
+                return 0;
+            }
+        } else {
+            pr_info("vin_core_ops_ioctl: NULL sd for cmd 0x1000000, returning 0\n");
+            return 0;
+        }
+    }
+    /* Binary Ninja: Handle unknown commands */
+    else {
+        pr_info("vin_core_ops_ioctl: Unknown cmd=0x%x, returning 0\n", cmd);
+        return 0;
+    }
+
+    /* Binary Ninja: Handle special return code */
+    if (result == -515) {  /* 0xfffffdfd */
+        pr_info("vin_core_ops_ioctl: Result -515, returning 0\n");
+        return 0;
+    }
+
+    pr_info("*** vin_core_ops_ioctl: Binary Ninja - returning result=%d ***\n", result);
+    return result;
+}
+
 /* ========================================================================
  * VIN Subdev Operations Structure
  * ======================================================================== */
@@ -393,7 +484,7 @@ static struct tx_isp_subdev_internal_ops vin_subdev_internal_ops = {
 static struct tx_isp_subdev_core_ops vin_subdev_core_ops = {
     .init = tx_isp_vin_init,
     .reset = tx_isp_vin_reset,
-    .ioctl = vic_core_ops_ioctl,
+    .ioctl = vin_core_ops_ioctl,  /* VIN core IOCTL handler - Binary Ninja reference implementation */
 };
 
 static struct tx_isp_subdev_video_ops vin_subdev_video_ops = {

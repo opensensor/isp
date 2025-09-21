@@ -99,14 +99,12 @@ static int parse_rmem_bootarg(unsigned long *base, unsigned long *size)
 
     return 0;
 }
-/* REMOVED: tx_isp_setup_pipeline and tx_isp_vic_device_init - not in reference driver */
 static int tx_isp_setup_media_links(struct tx_isp_dev *isp);
 static int tx_isp_init_subdev_pads(struct tx_isp_dev *isp);
 static int tx_isp_create_subdev_links(struct tx_isp_dev *isp);
 static int tx_isp_register_link(struct tx_isp_dev *isp, struct link_config *link);
 static int tx_isp_configure_default_links(struct tx_isp_dev *isp);
 int tx_isp_configure_format_propagation(struct tx_isp_dev *isp);
-/* REMOVED: tx_isp_vic_device_init, tx_isp_csi_device_deinit, tx_isp_vic_device_deinit - not in reference driver */
 int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev);
 
 /* Critical ISP Core initialization functions - MISSING FROM LOGS! */
@@ -1449,16 +1447,6 @@ int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
     pr_info("Format propagation configured\n");
     return 0;
 }
-
-/* REMOVED: tx_isp_vic_device_init function - not in reference driver
- * VIC device should ONLY be created by tx_isp_vic_probe with proper register mapping
- * This function was creating duplicate VIC devices that conflict with probe-based initialization
- */
-
-/* REMOVED: tx_isp_csi_device_deinit and tx_isp_vic_device_deinit functions - not in reference driver
- * Device cleanup should be handled by proper platform driver remove functions
- * These functions were incorrectly freeing devices that should be managed by probe/remove
- */
 
 /**
  * ispcore_slake_module - EXACT Binary Ninja MCP implementation with SAFE struct access
