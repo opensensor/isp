@@ -4,6 +4,7 @@
 #include <linux/interrupt.h>
 #include "../include/tx_isp.h"
 #include "../include/tx_isp_csi.h"
+#include "../include/tx_isp_vic.h"
 #include "../include/tx-isp-device.h"
 
 /* Forward declarations */
