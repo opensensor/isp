@@ -233,7 +233,13 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
     isp_dev = (struct tx_isp_dev *)sd->isp;
     if (!isp_dev) {
-        pr_err("ispcore_video_s_stream: No ISP device\n");
+        /* Fallback: Use global ourISPdev if sd->isp is not set */
+        extern struct tx_isp_dev *ourISPdev;
+        isp_dev = ourISPdev;
+        pr_info("ispcore_video_s_stream: Using global ourISPdev as fallback: %p\n", isp_dev);
+    }
+    if (!isp_dev) {
+        pr_err("ispcore_video_s_stream: No ISP device available\n");
         return -EINVAL;
     }
 
@@ -3246,6 +3252,12 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 if (isp_dev->sd.ops && !ourISPdev->sd.ops) {
                     ourISPdev->sd.ops = isp_dev->sd.ops;
                     pr_info("*** tx_isp_core_probe: Copied subdev ops from local to global device ***\n");
+                }
+                /* CRITICAL: Update the Core ISP subdev registration to point to the global device */
+                if (ourISPdev->subdevs[4] == &isp_dev->sd) {
+                    ourISPdev->subdevs[4] = &ourISPdev->sd;  /* Point to global device's subdev */
+                    ourISPdev->sd.isp = ourISPdev;  /* Ensure proper back-reference */
+                    pr_info("*** tx_isp_core_probe: Updated Core ISP subdev registration to global device ***\n");
                 }
                 /* Free the local isp_dev since we're using the global one */
                 kfree(isp_dev);
