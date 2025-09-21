@@ -570,7 +570,6 @@ tx_isp_link_core_device
 tx_isp_module_deinit
 tx_isp_module_init
 tx_isp_open
-tx_isp_phy_init
 tx_isp_platform_probe
 tx_isp_platform_remove
 tx_isp_proc_csi_open
@@ -635,7 +634,6 @@ tx_isp_vic_configure_dma
 tx_isp_vic_device_deinit
 tx_isp_vic_device_init
 tx_isp_vic_frame_done
-tx_isp_vic_handle_event
 tx_isp_vic_probe
 tx_isp_vic_remove
 tx_isp_vic_slake_subdev
@@ -655,13 +653,11 @@ update_af_zone_data
 vic_core_ops_init
 vic_core_ops_ioctl
 vic_core_s_stream
-vic_frame_complete_buffer_management
 vic_framedone_irq_function
 vic_mdma_enable
 vic_mdma_irq_function
 vic_pad_event_handler
 vic_pipo_mdma_enable
-vic_proc_write
 vic_saveraw
 vic_sensor_ops_ioctl
 vic_sensor_ops_sync_sensor_attr
