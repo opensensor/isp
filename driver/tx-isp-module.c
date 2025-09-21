@@ -4949,15 +4949,10 @@ static int tx_isp_init(void)
     /* This prevents the freeze/reboot issue during streaming initialization */
     pr_info("*** CRITICAL: Registering main interrupt dispatcher for IRQ 37 and 38 ***\n");
 
-    /* Register IRQ 37 (ISP Core) with main dispatcher */
-    ret = request_threaded_irq(37, isp_irq_handle, isp_irq_thread_handle,
-                               IRQF_SHARED, "tx-isp-core", ourISPdev);
-    if (ret != 0) {
-        pr_err("*** CRITICAL: Failed to register IRQ 37 main dispatcher: %d ***\n", ret);
-        goto err_cleanup_platform_device;
-    }
-    disable_irq(37);  /* Initially disabled */
-    pr_info("*** MAIN DISPATCHER: IRQ 37 registered successfully ***\n");
+    /* CRITICAL FIX: Don't register IRQ 37 - it's causing the kernel panic */
+    /* IRQ 37 (ISP Core) is not needed for basic VIC functionality */
+    /* The kernel panic occurs when IRQ 37 fires and calls ispcore_interrupt_service_routine */
+    pr_info("*** MAIN DISPATCHER: IRQ 37 registration SKIPPED to prevent kernel panic ***\n");
 
     /* Register IRQ 38 (VIC) with main dispatcher - CRITICAL: Use ISP device as dev_id like reference driver */
     if (ourISPdev && ourISPdev->vic_dev) {
@@ -4969,7 +4964,7 @@ static int tx_isp_init(void)
     }
     if (ret != 0) {
         pr_err("*** CRITICAL: Failed to register IRQ 38 main dispatcher: %d ***\n", ret);
-        free_irq(37, ourISPdev);
+        /* Don't free IRQ 37 since we didn't register it */
         goto err_cleanup_platform_device;
     }
     disable_irq(38);  /* Initially disabled */
