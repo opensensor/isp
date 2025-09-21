@@ -4016,8 +4016,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                                     sensor->video.attr = &sensor->attr;
 
                                     /* CRITICAL FIX: Copy real sensor attributes from GC2053 module */
-                                    struct tx_isp_sensor *real_sensor = (struct tx_isp_sensor *)sensor_sd->host_priv;
-                                    if (real_sensor && real_sensor->video.attr) {
+                                    struct tx_isp_sensor *real_sensor_for_attr = (struct tx_isp_sensor *)real_sensor_sd->host_priv;
+                                    if (real_sensor_for_attr && real_sensor_for_attr->video.attr) {
                                         /* Copy the real sensor attributes from GC2053 module */
                                         memcpy(&sensor->attr, real_sensor->video.attr, sizeof(struct tx_isp_sensor_attribute));
                                         pr_info("*** COPIED REAL SENSOR ATTRIBUTES FROM GC2053 MODULE ***\n");
