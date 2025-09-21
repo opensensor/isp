@@ -156,21 +156,11 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     pr_info("*** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***\n");
     pr_info("csi_video_s_stream: sd=%p, enable=%d\n", sd, enable);
 
-    /* CRITICAL FIX: Use safe struct member access instead of dangerous offset 0xd4 */
-    csi_dev = ourISPdev->csi_dev;
+    /* CRITICAL FIX: Get CSI device from subdev private data (set during probe) */
+    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
     if (!csi_dev) {
-        pr_err("CSI device is NULL\n");
-
-        /* Try to get the CSI device from ourISPdev as a fallback */
-        if (ourISPdev && ourISPdev->csi_dev) {
-            csi_dev = ourISPdev->csi_dev;
-            pr_info("Using CSI device from ourISPdev: %p\n", csi_dev);
-
-            /* Update the subdevice data with the CSI device */
-            tx_isp_set_subdevdata(sd, csi_dev);
-        } else {
-            return 0xffffffea;
-        }
+        pr_err("CSI device is NULL from subdev private data\n");
+        return 0xffffffea;
     }
 
     /* CRITICAL FIX: Binary Ninja exact check - if (*(*(arg1 + 0x110) + 0x14) != 1) return 0 */
