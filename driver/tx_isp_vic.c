@@ -2962,17 +2962,7 @@ static struct tx_isp_subdev_video_ops vic_video_ops = {
     .s_stream = vic_core_s_stream,  /* CRITICAL FIX: Use vic_core_s_stream instead of vic_video_s_stream */
 };
 
-/* Forward declarations for functions used in structures */
-extern int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
-extern int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
-extern int vic_core_ops_init(struct tx_isp_subdev *sd, int enable);
-extern int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
-extern int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd);
-extern long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
-extern int dump_isp_vic_frd_open(struct inode *inode, struct file *file);
-extern int vic_chardev_open(struct inode *inode, struct file *file);
-extern int vic_chardev_release(struct inode *inode, struct file *file);
-extern ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos);
+/* Forward declarations removed - functions are defined earlier in the file */
 
 /* tx_isp_vic_slake_subdev - EXACT Binary Ninja reference implementation */
 int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
