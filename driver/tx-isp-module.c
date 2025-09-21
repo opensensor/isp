@@ -5795,9 +5795,10 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
 
     /* Handle VIC interrupts (IRQ 38) */
     if (irq == 38) {
+        pr_info("*** isp_irq_handle: VIC IRQ %d received, dev_id=%p ***\n", irq, dev_id);
         /* Call VIC interrupt service routine */
         result = isp_vic_interrupt_service_routine(irq, dev_id);
-        pr_debug("*** isp_irq_handle: VIC IRQ %d handled, result=%d ***\n", irq, result);
+        pr_info("*** isp_irq_handle: VIC IRQ %d handled, result=%d ***\n", irq, result);
         return result;
     }
 
