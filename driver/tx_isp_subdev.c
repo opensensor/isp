@@ -287,6 +287,11 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     /* SAFE: Use struct member access instead of offset */
     sd->ops = ops;
 
+    /* CRITICAL FIX: Set device pointers that are needed for IRQ registration */
+    sd->dev = &pdev->dev;        /* Device pointer for to_platform_device() */
+    sd->pdev = pdev;             /* Platform device pointer */
+    pr_info("*** tx_isp_subdev_init: Set sd->dev=%p, sd->pdev=%p ***\n", sd->dev, sd->pdev);
+
     /* CRITICAL: Link subdevices to main ISP device when they're created */
     extern struct tx_isp_dev *ourISPdev;
 
