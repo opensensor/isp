@@ -658,8 +658,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
 
     /* Binary Ninja: void* $v1 = *(arg1 + 0x110) - Get sensor attributes */
-    if (ourISPdev && ourISPdev->sensor && ourISPdev->sensor->video.attr) {
-        sensor_attr = ourISPdev->sensor->video.attr;
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (sensor && sensor->video.attr) {
+        sensor_attr = sensor->video.attr;
     } else {
         pr_err("tx_isp_vic_start: No sensor attributes available\n");
         return -ENODEV;
@@ -897,14 +899,16 @@ int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sens
     }
     
     /* CRITICAL FIX: Work with real sensor attributes instead of VIC's copy */
-    if (ourISPdev && ourISPdev->sensor && ourISPdev->sensor->video.attr) {
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (sensor && sensor->video.attr) {
         if (attr == NULL) {
             /* Clear real sensor attributes */
-            memset(ourISPdev->sensor->video.attr, 0, sizeof(struct tx_isp_sensor_attribute));
+            memset(sensor->video.attr, 0, sizeof(struct tx_isp_sensor_attribute));
             pr_info("vic_sensor_ops_sync_sensor_attr: cleared REAL sensor attributes\n");
         } else {
             /* Copy to real sensor attributes */
-            memcpy(ourISPdev->sensor->video.attr, attr, sizeof(struct tx_isp_sensor_attribute));
+            memcpy(sensor->video.attr, attr, sizeof(struct tx_isp_sensor_attribute));
             pr_info("vic_sensor_ops_sync_sensor_attr: copied to REAL sensor attributes\n");
         }
     } else {
@@ -1269,7 +1273,9 @@ long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg)
             int dual_channel = 0; /* Single channel mode */
 
             /* Check if NV12 format */
-            if (isp_dev && isp_dev->sensor && isp_dev->sensor->video.attr) {
+            extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+            struct tx_isp_sensor *cmd_sensor = tx_isp_get_sensor();
+            if (cmd_sensor && cmd_sensor->video.attr) {
                 /* Determine format from sensor attributes */
                 format_type = 0;  /* Keep as RAW for now */
             }
