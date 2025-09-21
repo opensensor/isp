@@ -7025,53 +7025,6 @@ void tx_isp_wakeup_frame_channels(void)
     }
 }
 
-/* Simulate frame completion for testing - in real hardware this comes from interrupts */
-static void simulate_frame_completion(void)
-{
-    struct tx_isp_sensor *sensor = NULL;
-    int i;
-    
-    /* Check if we have an active sensor that should be generating frames */
-    if (ourISPdev && ourISPdev->sensor) {
-        sensor = ourISPdev->sensor;
-        if (sensor->sd.vin_state == TX_ISP_MODULE_RUNNING) {
-            /* Sensor is running - generate proper frame data */
-            pr_info("Generating frame from active sensor %s\n", sensor->info.name);
-        }
-    }
-    
-    /* CRITICAL: Increment ISP frame counter for video drop detection */
-    if (ourISPdev) {
-        ourISPdev->frame_count++;
-        pr_info("Simulated frame: frame_count=%u\n", ourISPdev->frame_count);
-    }
-    
-    /* Trigger frame completion on all active channels */
-    for (i = 0; i < num_channels; i++) {
-        if (frame_channels[i].state.streaming) {
-            frame_channel_wakeup_waiters(&frame_channels[i]);
-        }
-    }
-}
-
-/* REMOVED: VIC frame generation work functions - NOT in reference driver
- *
- * The reference driver is purely interrupt-driven and does NOT use continuous
- * work queues for frame generation. Frame processing happens only when:
- * 1. Hardware VIC interrupts fire (bit 0 = frame done)
- * 2. vic_framedone_irq_function is called from interrupt handler
- * 3. Frame sync work (ispcore_irq_fs_work) is triggered by frame sync interrupts
- *
- * The continuous polling approach was causing race conditions and memory corruption.
- */
-
-
-
-/* REMOVED: All sensor wrapper functions - Reference driver uses original sensor ops directly */
-
-/* REMOVED: sensor_subdev_video_s_stream - This function does not exist in reference driver
- * VIN s_stream calls sensor s_stream directly without any ISP wrapper */
-
 /* Kernel interface for sensor drivers to register their subdev */
 int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor *sensor)
 {
