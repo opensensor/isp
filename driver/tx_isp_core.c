@@ -1639,6 +1639,8 @@ EXPORT_SYMBOL(data_b2e14);
  */
 int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 {
+    struct tx_isp_dev *isp_dev;
+    struct tx_isp_sensor_attribute *sensor_attr = NULL;
     void* s0 = NULL;
     int32_t var_18 = 0;
     int32_t result = -EINVAL;
@@ -1652,10 +1654,33 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
     INIT_WORK(&ispcore_fs_work, ispcore_irq_fs_work);
     pr_info("*** ispcore_core_ops_init: Frame sync work structure initialized ***");
 
+    /* Get ISP device from subdev */
+    if (!sd) {
+        pr_err("ispcore_core_ops_init: Invalid subdev\n");
+        return -EINVAL;
+    }
+
+    isp_dev = (struct tx_isp_dev *)sd->isp;
+    if (!isp_dev) {
+        pr_err("ispcore_core_ops_init: No ISP device associated with subdev\n");
+        return -EINVAL;
+    }
+
+    /* Convert 'on' parameter to sensor_attr for Binary Ninja compatibility */
+    if (on == 0) {
+        sensor_attr = NULL;  /* Disable/deinit */
+    } else {
+        /* For enable, try to get sensor attributes if available */
+        if (isp_dev->sensor && isp_dev->sensor->sensor_attr) {
+            sensor_attr = isp_dev->sensor->sensor_attr;
+        }
+        /* sensor_attr can be NULL for initial core init */
+    }
+
     /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) */
-    if (arg1 != NULL && (unsigned long)arg1 < 0xfffff001) {
+    if (isp_dev != NULL && (unsigned long)isp_dev < 0xfffff001) {
         /* Binary Ninja: $s0 = *(arg1 + 0xd4) - SAFE: Get VIC device */
-        vic_dev = (struct tx_isp_vic_device *)arg1->vic_dev;
+        vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
         s0 = (void*)vic_dev;
     }
 
