@@ -96,7 +96,7 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
         return -ENODEV;
     }
 
-    vin_dev = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
+    struct tx_isp_vin_device *vin_dev = ourISPdev->vin_dev;
     pr_info("VIN: tx_isp_vin_init: using VIN device from global ISP: %p\n", vin_dev);
 
     /* SAFE: Always use global ISP device sensor to avoid pointer confusion */
