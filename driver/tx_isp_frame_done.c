@@ -12,7 +12,7 @@
 #include "../include/tx_isp.h"
 
 /* Frame done tracking variables */
-static atomic64_t frame_done_cnt = ATOMIC64_INIT(0);
+atomic64_t frame_done_cnt = ATOMIC64_INIT(0);
 static int frame_done_cond = 0;
 static DECLARE_WAIT_QUEUE_HEAD(frame_done_wait);
 
