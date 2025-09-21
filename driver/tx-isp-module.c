@@ -1772,13 +1772,15 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         /* Binary Ninja: if (($v1_10 & 1) != 0) */
         if ((v1_10 & 1) != 0) {
             /* Binary Ninja: entry_$a2 = vic_mdma_irq_function($s0, 0) */
-            //vic_mdma_irq_function(vic_dev, 0);
+            /* MDMA function is static in tx_isp_vic.c - skip for now to prevent link errors */
+            pr_debug("*** VIC MDMA IRQ: Channel 0 interrupt detected ***\n");
         }
 
         /* Binary Ninja: if (($v1_10 & 2) != 0) */
         if ((v1_10 & 2) != 0) {
             /* Binary Ninja: entry_$a2 = vic_mdma_irq_function($s0, 1) */
-            //vic_mdma_irq_function(vic_dev, 1);
+            /* MDMA function is static in tx_isp_vic.c - skip for now to prevent link errors */
+            pr_debug("*** VIC MDMA IRQ: Channel 1 interrupt detected ***\n");
         }
 
         if ((v1_10 & 4) != 0) {
