@@ -8967,56 +8967,54 @@ static irqreturn_t isp_irq_dispatcher(int irq, void *dev_id)
     unsigned long flags;
     int handled = 0;
     
-    if (!dev || !dev->core_dev || !dev->core_dev->core_regs) {
+    if (!dev || !dev->core_regs) {
         pr_err("isp_irq_dispatcher: Invalid device or register base\n");
         return IRQ_NONE;
     }
 
     /* Read ISP interrupt status */
-    irq_status = readl(dev->core_dev->core_regs + 0x40);
-    
+    irq_status = readl(dev->core_regs + 0x40);
+
     if (!irq_status) {
         return IRQ_NONE; /* Not our interrupt */
     }
-    
-    pr_info("isp_irq_dispatcher: IRQ status 0x%x\n", irq_status);
-    
+
+    pr_debug("isp_irq_dispatcher: IRQ status 0x%x\n", irq_status);
+
     spin_lock_irqsave(&isp_irq_lock, flags);
-    
+
     /* Process each set interrupt bit */
     for (int i = 0; i < 32; i++) {
         if ((irq_status & (1 << i)) && isp_event_func_cb[i]) {
-            pr_info("isp_irq_dispatcher: Calling IRQ handler %d\n", i);
+            pr_debug("isp_irq_dispatcher: Calling IRQ handler %d\n", i);
             isp_event_func_cb[i]();
             handled = 1;
         }
     }
-    
+
     spin_unlock_irqrestore(&isp_irq_lock, flags);
-    
+
     /* Clear handled interrupts */
-    if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
-        writel(irq_status, ourISPdev->core_dev->core_regs + 0x40);
-    }
-    
+    writel(irq_status, ourISPdev->core_regs + 0x40);
+
     return handled ? IRQ_HANDLED : IRQ_NONE;
 }
 
 /* ISP event dispatcher - calls registered event callbacks */
 static int isp_event_dispatcher(int event_id)
 {
-    pr_info("isp_event_dispatcher: Processing event %d\n", event_id);
-    
+    pr_debug("isp_event_dispatcher: Processing event %d\n", event_id);
+
     if (event_id < 0 || event_id >= 32) {
         pr_err("isp_event_dispatcher: Invalid event ID %d\n", event_id);
         return -EINVAL;
     }
-    
+
     if (cb[event_id]) {
-        pr_info("isp_event_dispatcher: Calling event callback %d\n", event_id);
+        pr_debug("isp_event_dispatcher: Calling event callback %d\n", event_id);
         return cb[event_id]();
     }
-    
+
     return 0;
 }
 
