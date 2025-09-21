@@ -3187,7 +3187,7 @@ static const struct file_operations frame_channel_fops = {
 /* lock and mutex interfaces */
 void __private_spin_lock_irqsave(spinlock_t *lock, unsigned long *flags)
 {
-    raw_spin_lock_irqsave(spinlock_check(lock), *flags);
+    spin_lock_irqsave(lock, *flags);
 }
 
 void private_spin_unlock_irqrestore(spinlock_t *lock, unsigned long flags)
