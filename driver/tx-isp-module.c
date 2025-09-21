@@ -3203,8 +3203,13 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         return -ENODEV;
     }
 
-    /* Binary Ninja variables */
-    struct v4l2_input var_98;  /* Input structure for IOCTL data */
+    /* Binary Ninja variables - union for different IOCTL data types */
+    union {
+        uint32_t as_uint32;           /* For 4-byte integer IOCTLs */
+        uint64_t as_uint64;           /* For 8-byte buffer IOCTLs */
+        struct v4l2_input as_input;   /* For 0x50-byte input enumeration */
+        uint8_t as_buffer[0x50];      /* For generic buffer operations */
+    } var_98;
     int32_t var_94;
     int32_t s6_1 = 0;
 
