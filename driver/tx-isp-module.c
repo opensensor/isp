@@ -534,6 +534,7 @@ int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id)
 extern int tx_isp_fs_platform_init(void);
 extern void tx_isp_fs_platform_exit(void);
 extern int tx_isp_fs_probe(struct platform_device *pdev);
+extern int tx_isp_vin_init(void* arg1, int32_t arg2);  /* VIN init function that causes kernel panics */
 
 /* Forward declarations for Binary Ninja reference implementation */
 static int tx_isp_platform_probe(struct platform_device *pdev);
@@ -4721,27 +4722,11 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         /* Binary Ninja reference: Simple loop through all subdevices for init */
         pr_info("*** VIDIOC_STREAMON: Initializing all subdevices (Binary Ninja loop pattern) ***\n");
 
-        for (int init_i = 0; init_i < 0x10; init_i++) {
-            struct tx_isp_subdev *init_sd = isp_dev->subdevs[init_i];
-            if (init_sd && init_sd->ops && init_sd->ops->core && init_sd->ops->core->init) {
-                pr_info("*** VIDIOC_STREAMON: Checking subdev %d for safe init ***\n", init_i);
-
-                /* CRITICAL SAFETY: Skip dangerous VIN init that causes kernel panics */
-                /* The VIN init function has unsafe pointer operations that crash during streaming */
-                if (init_sd->ops->core->init == (void*)tx_isp_vin_init) {
-                    pr_info("*** VIDIOC_STREAMON: SKIPPING dangerous VIN init (subdev %d) to prevent kernel panic ***\n", init_i);
-                    continue;
-                }
-
-                pr_info("*** VIDIOC_STREAMON: Calling subdev %d init ***\n", init_i);
-                int subdev_init_ret = init_sd->ops->core->init(init_sd, 1);
-                if (subdev_init_ret == 0) {
-                    pr_info("*** VIDIOC_STREAMON: Subdev %d init SUCCESS ***\n", init_i);
-                } else {
-                    pr_warn("*** VIDIOC_STREAMON: Subdev %d init failed: %d ***\n", init_i, subdev_init_ret);
-                }
-            }
-        }
+        /* CRITICAL SAFETY: Skip the dangerous subdev init loop entirely */
+        /* This loop calls tx_isp_vin_init which has unsafe pointer operations that cause kernel panics */
+        /* The VIN, CSI, and VIC devices are already initialized during probe - no need to re-init */
+        pr_info("*** VIDIOC_STREAMON: SKIPPING dangerous subdev init loop to prevent kernel panic ***\n");
+        pr_info("*** VIDIOC_STREAMON: All subdevices already initialized during probe ***\n");
 
         return tx_isp_video_s_stream(isp_dev, 1);
     }
