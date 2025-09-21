@@ -299,24 +299,17 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         pr_info("*** tx_isp_subdev_init: Interrupt registration deferred until after module init ***\n");
     }
 
-    /* CRITICAL: Register CSI subdev when it's created */
-    extern struct tx_isp_subdev_ops csi_subdev_ops;
-    if (ourISPdev && ops == &csi_subdev_ops) {
-        /* This is a CSI subdev - register it in subdevs array */
-        ourISPdev->subdevs[0] = sd;  /* CSI at index 0 - VIC is at 1, VIN at 2, sensor at 3 */
-        sd->isp = ourISPdev;
-        pr_info("*** tx_isp_subdev_init: CSI subdev registered at index 0 ***\n");
-    }
-
-    /* CRITICAL: Register sensor subdevices in the global ISP device */
+    /* CRITICAL: Register subdevices in the global ISP device with proper if-else logic */
     extern struct tx_isp_subdev_ops core_subdev_ops_full;
     extern struct tx_isp_subdev_ops vic_subdev_ops;
+    extern struct tx_isp_subdev_ops csi_subdev_ops;
 
     if (ourISPdev) {
-        if (ops == &core_subdev_ops_full) {
-            /* This is the Core ISP subdev - registration handled by core device linking */
-            pr_info("*** tx_isp_subdev_init: Core ISP subdev registration handled by core device ***\n");
-            /* The actual registration is done in tx_isp_link_core_device() */
+        if (ops == &csi_subdev_ops) {
+            /* This is a CSI subdev - register it in subdevs array */
+            ourISPdev->subdevs[0] = sd;  /* CSI at index 0 */
+            sd->isp = ourISPdev;
+            pr_info("*** tx_isp_subdev_init: CSI subdev registered at index 0 ***\n");
         } else if (ops == &vic_subdev_ops) {
             /* This is a VIC subdev - link the VIC device to ourISPdev */
             struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
@@ -324,8 +317,12 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             ourISPdev->subdevs[1] = sd;
             sd->isp = ourISPdev;
             pr_info("*** tx_isp_subdev_init: VIC device linked and registered at index 1 ***\n");
-        } else if (ops && ops->sensor) {
-            /* CRITICAL FIX: This is a sensor subdev - register it in subdevs array */
+        } else if (ops == &core_subdev_ops_full) {
+            /* This is the Core ISP subdev - registration handled by core device linking */
+            pr_info("*** tx_isp_subdev_init: Core ISP subdev registration handled by core device ***\n");
+            /* The actual registration is done in tx_isp_link_core_device() */
+        } else if (ops && ops->sensor && ops != &csi_subdev_ops) {
+            /* CRITICAL FIX: This is a REAL sensor subdev (not CSI which also has sensor ops) */
             /* Find next available slot starting from index 4 (after CSI=0, VIC=1, VIN=2, FS=3) */
             int sensor_index = -1;
             for (int i = 4; i < ISP_MAX_SUBDEVS; i++) {
