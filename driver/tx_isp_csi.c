@@ -279,6 +279,13 @@ int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 
     pr_info("*** csi_sensor_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x%x ***\n", cmd);
 
+    /* Binary Ninja: Handle command 0x2000000 first - sensor registration */
+    if (cmd == 0x2000000) {
+        pr_info("*** csi_sensor_ops_ioctl: SENSOR REGISTRATION cmd=0x2000000 ***\n");
+        /* This is the sensor registration command - should return success */
+        return 0;
+    }
+
     /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) */
     if (sd != NULL && (unsigned long)sd < 0xfffff001) {
         /* Get the CSI device from the subdevice */
