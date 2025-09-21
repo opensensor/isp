@@ -4196,6 +4196,25 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
         return ret;
     }
 
+    /* CRITICAL FIX: Register VIC interrupt at the VERY END of global init */
+    /* This ensures all structures are fully initialized before interrupts can fire */
+    if (isp_dev->vic_dev) {
+        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+        if (vic_dev->sd && vic_dev->sd->irq_info.irq == 0) {
+            extern int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq_info);
+            struct platform_device *vic_pdev = to_platform_device(vic_dev->dev);
+
+            pr_info("*** tx_isp_module_init: Registering VIC IRQ at END of global init ***\n");
+            ret = tx_isp_request_irq(vic_pdev, &vic_dev->sd->irq_info);
+            if (ret != 0) {
+                pr_err("tx_isp_module_init: Failed to register VIC IRQ: %d\n", ret);
+                misc_deregister(&tx_isp_miscdev);
+                return ret;
+            }
+            pr_info("*** tx_isp_module_init: VIC IRQ registered successfully at END of init ***\n");
+        }
+    }
+
     pr_info("*** tx_isp_module_init: Binary Ninja reference implementation complete ***\n");
     return 0;
 }
