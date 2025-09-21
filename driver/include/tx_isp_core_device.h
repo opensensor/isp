@@ -40,6 +40,7 @@ struct tx_isp_core_device {
     
     /* Core tuning system */
     void *tuning_dev;                          /* Tuning device pointer */
+    void *tuning_data;                         /* Tuning data structure */
     bool tuning_enabled;                       /* Tuning system enabled flag */
     
     /* Core processing */

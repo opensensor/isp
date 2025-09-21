@@ -920,10 +920,10 @@ static int sensor_alloc_digital_gain(int gain) {
     }
 
     /* SAFE: Binary Ninja *(*(ourISPdev + 0x120) + 0xc8) = ourISPdev->sensor->tuning_data->fps_num */
-    if (ourISPdev->core_dev && ourISPdev->core_dev->tuning_dev) {
+    if (ourISPdev->core_dev && ourISPdev->core_dev->tuning_data) {
         /* Access FPS numerator safely via core device tuning data */
-        /* Note: tuning_dev structure access needs to be defined */
-        uint32_t fps_num = 30;  /* Default FPS for now */
+        /* Note: tuning_data structure access needs proper casting */
+        uint32_t fps_num = 30;  /* Default FPS for now - TODO: access actual tuning_data */
         pr_info("sensor_alloc_digital_gain: gain=%d, fps_num=%d\n", gain, fps_num);
     }
 
