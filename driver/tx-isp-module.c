@@ -5095,12 +5095,6 @@ long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *a
                 struct tx_isp_subdev *sensor_sd = (struct tx_isp_subdev *)tx_isp_get_subdev_hostdata(sd);
                 uint32_t input_value = 0xffffffff;
 
-                if (sensor_sd && (unsigned long)sensor_sd < 0xfffff001) {
-                    /* Binary Ninja: *($a0 + 0xdc) - this is likely a sensor-specific field */
-                    /* For now, return a default input value */
-                    input_value = 0; /* Default sensor input */
-                }
-
                 *(uint32_t *)arg = input_value;
                 return 0;
             }
