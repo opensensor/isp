@@ -1,1217 +1,310 @@
-[  501.222560] TX ISP driver initializing with new subdevice management system...
-[  501.222574] *** Using reference driver interrupt-driven frame processing ***
-[  501.222580] *** VIC DEVICE CREATION DEFERRED TO PLATFORM DRIVER PROBE ***
-[  501.222585] *** VIN DEVICE CREATION DEFERRED TO tx_isp_core_probe (after memory mappings) ***
-[  501.222591] *** This fixes the 'ISP core registers not available' error ***
-[  501.222596] *** VIN SUBDEV OPS AND INITIALIZATION DEFERRED TO AUTO-LINK PHASE ***
-[  501.222602] *** CRITICAL: REGISTERING SUBDEV PLATFORM DRIVERS FIRST ***
-[  501.222608] *** TX ISP SUBDEV PLATFORM DRIVERS REGISTRATION ***
-[  501.232674] All ISP subdev platform drivers registered successfully
-[  501.232688] *** SUBDEV PLATFORM DRIVERS REGISTERED - VIC/CSI/VIN/CORE DRIVERS AVAILABLE ***
-[  501.232693] *** CRITICAL: INITIALIZING SUBDEVICE REGISTRY BEFORE MAIN PLATFORM DEVICE ***
-[  501.232699] *** CRITICAL: Registering main platform driver ***
-[  501.235208] *** Main platform driver registered successfully ***
-[  501.235220] *** REFERENCE DRIVER: Subdev platform devices will be registered by tx_isp_create_graph_and_nodes ***
-[  501.237645] *** PROBE: tx_isp_platform_probe CALLED for device tx-isp ***
-[  501.237664] *** PROBE: ISP device allocated successfully: 85bb4000 ***
-[  501.237680] *** PROBE: Platform data: c067fd90 ***
-[  501.237686] *** PROBE: Platform data validation passed ***
-[  501.237691] *** REFERENCE DRIVER: Individual subdevices will initialize their own memory regions ***
-[  501.237698] *** PLATFORM DEVICES ALREADY REGISTERED IN INIT - SKIPPING DUPLICATE REGISTRATION ***
-[  501.237704] *** tx_isp_module_init: EXACT Binary Ninja reference implementation ***
-[  501.240340] *** tx_isp_create_graph_and_nodes: EXACT Binary Ninja reference implementation ***
-[  501.240354] *** Registering platform device 0 from platform data ***
-[  501.242950] *** tx_isp_subdev_init: CSI subdev registered at index 0 ***
-[  501.242964] tx_isp_module_init: Module initialized for tx-isp-csi
-[  501.242971] *** tx_isp_subdev_init: Deferring core->init for device tx-isp-csi to prevent hangs ***
-[  501.242977] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
-[  501.242984] *** tx_isp_request_irq: IRQ 38 handled by main dispatcher - skipping duplicate registration ***
-[  501.242992] *** tx_isp_request_irq: IRQ 38 info stored for tx-isp-csi ***
-[  501.243000] tx_isp_subdev_init: platform_get_resource returned c067fb5c for device tx-isp-csi
-[  501.243008] tx_isp_subdev_init: Memory resource found: start=0x10022000, end=0x10022fff, size=0x00001000
-[  501.243017] isp_subdev_init_clks: Initializing 2 clocks
-[  501.243028] CGU_ISP clock enabled at 100MHz
-[  501.243036] ISP clock enabled
-[  501.269988] CPM clock gates configured
-[  501.270005] isp_subdev_init_clks: Successfully initialized 2 clocks
-[  501.270014] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-csi' to ourISPdev ***
-[  501.270020] *** DEBUG: Device name comparison - checking 'tx-isp-csi' ***
-[  501.270026] *** DEBUG: About to check device name matches ***
-[  501.270034] *** CSI BASIC REGISTERS SET: b0022000 (from tx_isp_subdev_init) ***
-[  501.270040] *** LINKED CSI device: 85c1a000, regs: b0022000 ***
-[  501.270048] *** CSI PROBE: Using register mapping from tx_isp_subdev_init: b0022000 ***
-[  501.270054] *** CSI PROBE: Device linking handled automatically by tx_isp_subdev_init ***
-[  501.270081] *** Platform device 0 (tx-isp-csi) registered successfully ***
-[  501.270088] *** Registering platform device 1 from platform data ***
-[  501.270475] *** VIC PROBE: IRQ handler pointers set to NULL (reference driver uses main dispatcher) ***
-[  501.270490] *** tx_isp_subdev_pipo: SAFE struct member access implementation ***
-[  501.270498] tx_isp_subdev_pipo: entry - sd=85c1a400, arg=8560bac0
-[  501.270504] tx_isp_subdev_pipo: vic_dev retrieved:   (null)
-[  501.270510] tx_isp_subdev_pipo: vic_dev is NULL
-[  501.270515] *** VIC PROBE: Buffer management initialized successfully ***
-[  501.270522] *** VIC PROBE: Initialized default dimensions 1920x1080 and critical fields ***
-[  501.270528] *** VIC PROBE: Stored vic_dev pointer 85c1a400 in subdev private data ***
-[  501.270534] *** VIC PROBE: Callback structure setup deferred - avoiding memory corruption ***
-[  501.270541] *** tx_isp_subdev_init: VIC device linked to main ISP device ***
-[  501.270546] *** tx_isp_subdev_init: VIC subdev registered at index 1 ***
-[  501.270552] *** tx_isp_subdev_init: Interrupt registration deferred until after module init ***
-[  501.270558] *** tx_isp_subdev_init: VIC device linked and registered at index 1 ***
-[  501.270564] tx_isp_module_init: Module initialized for isp-w02
-[  501.270570] *** tx_isp_subdev_init: Deferring core->init for device isp-w02 to prevent hangs ***
-[  501.270576] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
-[  501.270584] *** tx_isp_request_irq: IRQ 38 handled by main dispatcher - skipping duplicate registration ***
-[  501.270591] *** tx_isp_request_irq: IRQ 38 info stored for isp-w02 ***
-[  501.270598] tx_isp_subdev_init: platform_get_resource returned c067fc7c for device isp-w02
-[  501.270606] tx_isp_subdev_init: Memory resource found: start=0x133e0000, end=0x133effff, size=0x00010000
-[  501.270616] isp_subdev_init_clks: Initializing 2 clocks
-[  501.270632] CGU_ISP clock enabled at 100MHz
-[  501.270639] ISP clock enabled
-[  501.299673] CPM clock gates configured
-[  501.299687] isp_subdev_init_clks: Successfully initialized 2 clocks
-[  501.299696] *** tx_isp_subdev_auto_link: Auto-linking device 'isp-w02' to ourISPdev ***
-[  501.299702] *** DEBUG: Device name comparison - checking 'isp-w02' ***
-[  501.299707] *** DEBUG: About to check device name matches ***
-[  501.299715] *** MAPPED secondary VIC registers: b0023000 (0x10023000) ***
-[  501.299723] *** LINKED VIC device: 85c1a400, primary_regs: b33e0000, secondary_regs: b0023000 ***
-[  501.299729] *** VIC AUTO-LINK: Registers are mapped, registering interrupt handler ***
-[  501.299736] *** VIC PROBE: Device linking handled automatically by tx_isp_subdev_init ***
-[  501.299759] *** Platform device 1 (isp-w02) registered successfully ***
-[  501.299766] *** Registering platform device 2 from platform data ***
-[  501.300088] tx_isp_module_init: Module initialized for tx-isp-vin
-[  501.300101] *** tx_isp_subdev_init: Deferring core->init for device tx-isp-vin to prevent hangs ***
-[  501.300107] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
-[  501.300115] *** tx_isp_request_irq: IRQ 37 handled by main dispatcher - skipping duplicate registration ***
-[  501.300122] *** tx_isp_request_irq: IRQ 37 info stored for tx-isp-vin ***
-[  501.300129] tx_isp_subdev_init: platform_get_resource returned   (null) for device tx-isp-vin
-[  501.300136] tx_isp_subdev_init: No memory resource for device tx-isp-vin (logical device - OK)
-[  501.300142] isp_subdev_init_clks: Initializing 0 clocks
-[  501.300149] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-vin' to ourISPdev ***
-[  501.300155] *** DEBUG: Device name comparison - checking 'tx-isp-vin' ***
-[  501.300160] *** DEBUG: About to check device name matches ***
-[  501.300166] *** DEBUG: VIN device name matched! Setting up VIN device ***
-[  501.300172] *** LINKED VIN device: 85c1a800 ***
-[  501.300180] *** VIN SUBDEV OPS CONFIGURED: core=c0680f94, video=c0680f88, s_stream=c066167c ***
-[  501.300186] *** REGISTERED VIN SUBDEV AT INDEX 2 WITH VIDEO OPS ***
-[  501.300192] *** VIN INITIALIZATION DEFERRED TO SENSOR REGISTRATION PHASE ***
-[  501.300198] *** VIN PROBE: Device linking handled automatically by tx_isp_subdev_init ***
-[  501.300216] *** Platform device 2 (tx-isp-vin) registered successfully ***
-[  501.300223] *** Registering platform device 3 from platform data ***
-[  501.302791] *** Platform device 3 (tx-isp-fs) registered successfully ***
-[  501.302803] *** Registering platform device 4 from platform data ***
-[  501.305280] *** tx_isp_core_probe: NEW ARCHITECTURE - Creating separate core device ***
-[  501.305293] *** tx_isp_create_core_device: Creating ISP core device ***
-[  501.305303] *** tx_isp_create_core_device: Core device created successfully: 85c1ac00 ***
-[  501.305310] *** tx_isp_subdev_init: Core ISP subdev registration handled by core device ***
-[  501.305317] tx_isp_module_init: Module initialized for tx-isp-core
-[  501.305323] *** tx_isp_subdev_init: Deferring core->init for device tx-isp-core to prevent hangs ***
-[  501.305330] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
-[  501.305337] *** tx_isp_request_irq: IRQ 37 handled by main dispatcher - skipping duplicate registration ***
-[  501.305344] *** tx_isp_request_irq: IRQ 37 info stored for tx-isp-core ***
-[  501.305351] tx_isp_subdev_init: platform_get_resource returned c067f7c4 for device tx-isp-core
-[  501.305360] tx_isp_subdev_init: Memory resource found: start=0x13300000, end=0x1330ffff, size=0x00010000
-[  501.305369] isp_subdev_init_clks: Initializing 3 clocks
-[  501.305379] CGU_ISP clock enabled at 100MHz
-[  501.305386] ISP clock enabled
-[  501.305393] CSI clock enabled
-[  501.329698] CPM clock gates configured
-[  501.329712] isp_subdev_init_clks: Successfully initialized 3 clocks
-[  501.329721] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-core' to ourISPdev ***
-[  501.329727] *** DEBUG: Device name comparison - checking 'tx-isp-core' ***
-[  501.329732] *** DEBUG: About to check device name matches ***
-[  501.329740] *** CORE device not yet linked - regs will be mapped later ***
-[  501.329746] *** tx_isp_core_probe: Core subdev initialized successfully ***
-[  501.329754] *** tx_isp_core_device_init: Initializing core device: 85c1ac00 ***
-[  501.329766] *** tx_isp_core_device_init: Core device initialized successfully ***
-[  501.329774] *** tx_isp_link_core_device: Linking core device 85c1ac00 to ISP device 85bb4000 ***
-[  501.329779] *** tx_isp_link_core_device: Core device linked successfully ***
-[  501.329786] *** Core subdev registered at index 4: 85c1ac00 ***
-[  501.329799] *** tx_isp_core_probe: VIC device creation deferred to platform driver system ***
-[  501.329805] *** tx_isp_core_probe: Platform drivers will call tx_isp_subdev_init for proper initialization ***
-[  501.329810] *** tx_isp_core_probe: Calling sensor_early_init ***
-[  501.329816] sensor_early_init: Preparing sensor infrastructure
-[  501.329822] *** tx_isp_core_probe: Core device setup complete ***
-[  501.329828] ***   - Core device: 85c1ac00 ***
-[  501.329833] ***   - Channel count: 6 ***
-[  501.329839] ***   - Linked to ISP device: 85bb4000 ***
-[  501.329844] *** tx_isp_core_probe: Initializing core tuning system ***
-[  501.329869] *** tx_isp_core_probe: Tuning init SUCCESS ***
-[  501.329875] *** tx_isp_core_probe: SUCCESS - Core device fully initialized ***
-[  501.329881] ***   - Core device: 85c1ac00 ***
-[  501.329887] ***   - Tuning device: 85f40000 ***
-[  501.329892] *** tx_isp_core_probe: Creating frame channel devices ***
-[  501.329898] *** tx_isp_create_framechan_devices: Creating frame channel devices ***
-[  501.330252] *** Created frame channel device: /dev/framechan0 (major=10, minor=54) ***
-[  501.332882] *** Created frame channel device: /dev/framechan1 (major=10, minor=53) ***
-[  501.335493] *** Created frame channel device: /dev/framechan2 (major=10, minor=52) ***
-[  501.338007] *** Created frame channel device: /dev/framechan3 (major=10, minor=51) ***
-[  501.338018] *** tx_isp_create_framechan_devices: All frame channel devices created ***
-[  501.338023] *** tx_isp_core_probe: Frame channel devices created successfully ***
-[  501.338029] *** tx_isp_core_probe: Creating ISP M0 tuning device node ***
-[  501.338035] tisp_code_create_tuning_node: Creating ISP M0 tuning device node
-[  501.338044] tisp_code_create_tuning_node: Allocated dynamic major 251
-[  501.343190] *** ISP M0 TUNING DEVICE CREATED: /dev/isp-m0 (major=251, minor=0) ***
-[  501.343201] *** tx_isp_core_probe: ISP M0 tuning device node created successfully ***
-[  501.343207] *** tx_isp_core_probe: Core probe completed successfully ***
-[  501.343228] *** Platform device 4 (tx-isp-core) registered successfully ***
-[  501.343235] *** tx_isp_create_graph_and_nodes: Binary Ninja reference implementation complete ***
-[  501.343242] *** tx_isp_module_init: Binary Ninja reference implementation complete ***
-[  501.343247] *** PROBE: Binary Ninja reference implementation complete ***
-[  501.343257] *** SUCCESS: ourISPdev allocated by probe function: 85bb4000 ***
-[  501.343263] *** INITIALIZING SUBDEVICE REGISTRY WITH ALLOCATED ourISPdev ***
-[  501.343269] *** tx_isp_init_subdev_registry: Initializing subdevice registry ***
-[  501.343276] tx_isp_init_subdev_registry: 3 devices already linked directly - skipping registry creation
-[  501.343282] *** USING DIRECT DEVICE LINKING INSTEAD OF REGISTRY SYSTEM ***
-[  501.343288] *** SUBDEVICE REGISTRY INITIALIZED - GRAPH CREATION SHOULD NOW SUCCEED ***
-[  501.343294] *** CRITICAL: Registering main interrupt dispatcher for IRQ 37 and 38 ***
-[  501.345573] *** MAIN DISPATCHER: IRQ 37 registered successfully ***
-[  501.345655] *** MAIN DISPATCHER: IRQ 38 registered successfully ***
-[  501.345662] *** MAIN DISPATCHER: Both IRQ 37 and 38 registered with main dispatcher ***
-[  501.345668] TX ISP driver initialized successfully - probe function will handle device setup
-root@ing-wyze-cam3-a000 ~# prudynt &
-root@ing-wyze-cam3-a000 ~# [INFO:Config.cpp]: Loaded configuration from /etc/prudynt.cfg
-[INFO:main.cpp]: PRUDYNT-T Next-Gen Video Daemon: Aug 28 2025 05:46:40_f5514583
-[INFO:main.cpp]: Starting Prudynt Video Server.
-[INFO:IMPSystem.cpp]: LIBIMP Version IMP-1.1.6
-[INFO:IMPSystem.cpp]: SYSUTILS Version: SYSUTILS-1.1.6
-[INFO:IMPSystem.cpp]: CPU Information: T31-X
-[INFO:IMPSystem.cpp]: Sensor: gc2053
-root@ing-wyze-cam3-a000 ~# dmesg 
-[  504.978891] VIN: vin_s_stream: sensor has no valid s_stream function = 0x0
-[  504.978897] tx_isp_video_link_stream: Subdev 2 returned ENOIOCTLCMD, continuing
-[  504.978903] *** DEBUG: subdev 3 = 85c1b400 ***
-[  504.978910] *** DEBUG: subdev 3 ops = c069d638 ***
-[  504.978916] *** DEBUG: subdev 3 video ops = c069d658 ***
-[  504.978923] *** BINARY NINJA: Calling subdev 3 s_stream (enable=1) ***
-[  504.978931] *** DEBUG: subdev=85c1b400, ops=c069d638, video=c069d658, s_stream=c069bcd4 ***
-[  504.978937] gc2053 stream on
-[  504.978942] *** BINARY NINJA: Subdev 3 s_stream SUCCESS ***
-[  504.978949] *** DEBUG: subdev 4 = 85c1ac00 ***
-[  504.978955] *** DEBUG: subdev 4 ops = c067fe6c ***
-[  504.978961] *** DEBUG: subdev 4 video ops = c067fe80 ***
-[  504.978967] *** BINARY NINJA: Calling subdev 4 s_stream (enable=1) ***
-[  504.978976] *** DEBUG: subdev=85c1ac00, ops=c067fe6c, video=c067fe80, s_stream=c06527ac ***
-[  504.978982] *** ispcore_video_s_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.978988] *** ispcore_video_s_stream: ENABLING ISP core video streaming ***
-[  504.978994] *** tx_isp_video_link_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.979000] *** BINARY NINJA EXACT: Iterating through 16 subdevices at offset 0x38 ***
-[  504.979007] *** DEBUG: subdev 0 = 85c1a000 ***
-[  504.979013] *** DEBUG: subdev 0 ops = c06800a0 ***
-[  504.979019] *** DEBUG: subdev 0 video ops = c06800c8 ***
-[  504.979025] *** BINARY NINJA: Calling subdev 0 s_stream (enable=1) ***
-[  504.979034] *** DEBUG: subdev=85c1a000, ops=c06800a0, video=c06800c8, s_stream=c0657178 ***
-[  504.979039] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
-[  504.979046] csi_video_s_stream: sd=85c1a000, enable=1
-[  504.979052] csi_video_s_stream: CSI device state=1 < 2, returning 0
-[  504.979058] *** BINARY NINJA: Subdev 0 s_stream SUCCESS ***
-[  504.979064] *** DEBUG: subdev 1 = 85c1a400 ***
-[  504.979070] *** DEBUG: subdev 1 ops = c0680030 ***
-[  504.979077] *** DEBUG: subdev 1 video ops = c0680080 ***
-[  504.979083] *** BINARY NINJA: Calling subdev 1 s_stream (enable=1) ***
-[  504.979091] *** DEBUG: subdev=85c1a400, ops=c0680030, video=c0680080, s_stream=c0656af8 ***
-[  504.979099] *** vic_core_s_stream: BINARY NINJA EXACT - sd=85c1a400, enable=1 ***
-[  504.979105] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
-[  504.979110] *** vic_core_s_stream: STREAM ON ***
-[  504.979115] *** vic_core_s_stream: Already in state 4, skipping VIC start ***
-[  504.979121] *** BINARY NINJA: Subdev 1 s_stream SUCCESS ***
-[  504.979127] *** DEBUG: subdev 2 = 85c1a800 ***
-[  504.979133] *** DEBUG: subdev 2 ops = c0680f74 ***
-[  504.979140] *** DEBUG: subdev 2 video ops = c0680f88 ***
-[  504.979146] *** BINARY NINJA: Calling subdev 2 s_stream (enable=1) ***
-[  504.979155] *** DEBUG: subdev=85c1a800, ops=c0680f74, video=c0680f88, s_stream=c066167c ***
-[  504.979161] VIN: vin_s_stream: called = 0x1
-[  504.979167] VIN: vin_s_stream: VIN device from global ISP = 0x85c1a800
-[  504.979172] VIN: vin_s_stream: current VIN state = 0x3
-[  504.979178] VIN: vin_s_stream: VIN streaming enable from state = 0x3
-[  504.979183] VIN: vin_s_stream: sensor has no valid s_stream function
-[  504.979189] VIN: vin_s_stream: sensor has no valid s_stream function = 0x0
-[  504.979195] tx_isp_video_link_stream: Subdev 2 returned ENOIOCTLCMD, continuing
-[  504.979202] *** DEBUG: subdev 3 = 85c1b400 ***
-[  504.979208] *** DEBUG: subdev 3 ops = c069d638 ***
-[  504.979215] *** DEBUG: subdev 3 video ops = c069d658 ***
-[  504.979221] *** BINARY NINJA: Calling subdev 3 s_stream (enable=1) ***
-[  504.979229] *** DEBUG: subdev=85c1b400, ops=c069d638, video=c069d658, s_stream=c069bcd4 ***
-[  504.979235] gc2053 stream on
-[  504.979241] *** BINARY NINJA: Subdev 3 s_stream SUCCESS ***
-[  504.979247] *** DEBUG: subdev 4 = 85c1ac00 ***
-[  504.979253] *** DEBUG: subdev 4 ops = c067fe6c ***
-[  504.979259] *** DEBUG: subdev 4 video ops = c067fe80 ***
-[  504.979266] *** BINARY NINJA: Calling subdev 4 s_stream (enable=1) ***
-[  504.979275] *** DEBUG: subdev=85c1ac00, ops=c067fe6c, video=c067fe80, s_stream=c06527ac ***
-[  504.979281] *** ispcore_video_s_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.979287] *** ispcore_video_s_stream: ENABLING ISP core video streaming ***
-[  504.979293] *** tx_isp_video_link_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.979299] *** BINARY NINJA EXACT: Iterating through 16 subdevices at offset 0x38 ***
-[  504.979305] *** DEBUG: subdev 0 = 85c1a000 ***
-[  504.979311] *** DEBUG: subdev 0 ops = c06800a0 ***
-[  504.979317] *** DEBUG: subdev 0 video ops = c06800c8 ***
-[  504.979324] *** BINARY NINJA: Calling subdev 0 s_stream (enable=1) ***
-[  504.979333] *** DEBUG: subdev=85c1a000, ops=c06800a0, video=c06800c8, s_stream=c0657178 ***
-[  504.979338] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
-[  504.979345] csi_video_s_stream: sd=85c1a000, enable=1
-[  504.979351] csi_video_s_stream: CSI device state=1 < 2, returning 0
-[  504.979357] *** BINARY NINJA: Subdev 0 s_stream SUCCESS ***
-[  504.979363] *** DEBUG: subdev 1 = 85c1a400 ***
-[  504.979369] *** DEBUG: subdev 1 ops = c0680030 ***
-[  504.979375] *** DEBUG: subdev 1 video ops = c0680080 ***
-[  504.979382] *** BINARY NINJA: Calling subdev 1 s_stream (enable=1) ***
-[  504.979391] *** DEBUG: subdev=85c1a400, ops=c0680030, video=c0680080, s_stream=c0656af8 ***
-[  504.979397] *** vic_core_s_stream: BINARY NINJA EXACT - sd=85c1a400, enable=1 ***
-[  504.979403] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
-[  504.979409] *** vic_core_s_stream: STREAM ON ***
-[  504.979414] *** vic_core_s_stream: Already in state 4, skipping VIC start ***
-[  504.979420] *** BINARY NINJA: Subdev 1 s_stream SUCCESS ***
-[  504.979426] *** DEBUG: subdev 2 = 85c1a800 ***
-[  504.979433] *** DEBUG: subdev 2 ops = c0680f74 ***
-[  504.979439] *** DEBUG: subdev 2 video ops = c0680f88 ***
-[  504.979445] *** BINARY NINJA: Calling subdev 2 s_stream (enable=1) ***
-[  504.979454] *** DEBUG: subdev=85c1a800, ops=c0680f74, video=c0680f88, s_stream=c066167c ***
-[  504.979459] VIN: vin_s_stream: called = 0x1
-[  504.979465] VIN: vin_s_stream: VIN device from global ISP = 0x85c1a800
-[  504.979471] VIN: vin_s_stream: current VIN state = 0x3
-[  504.979477] VIN: vin_s_stream: VIN streaming enable from state = 0x3
-[  504.979483] VIN: vin_s_stream: sensor has no valid s_stream function
-[  504.979489] VIN: vin_s_stream: sensor has no valid s_stream function = 0x0
-[  504.979495] tx_isp_video_link_stream: Subdev 2 returned ENOIOCTLCMD, continuing
-[  504.979501] *** DEBUG: subdev 3 = 85c1b400 ***
-[  504.979507] *** DEBUG: subdev 3 ops = c069d638 ***
-[  504.979513] *** DEBUG: subdev 3 video ops = c069d658 ***
-[  504.979520] *** BINARY NINJA: Calling subdev 3 s_stream (enable=1) ***
-[  504.979529] *** DEBUG: subdev=85c1b400, ops=c069d638, video=c069d658, s_stream=c069bcd4 ***
-[  504.979534] gc2053 stream on
-[  504.979540] *** BINARY NINJA: Subdev 3 s_stream SUCCESS ***
-[  504.979546] *** DEBUG: subdev 4 = 85c1ac00 ***
-[  504.979552] *** DEBUG: subdev 4 ops = c067fe6c ***
-[  504.979559] *** DEBUG: subdev 4 video ops = c067fe80 ***
-[  504.979565] *** BINARY NINJA: Calling subdev 4 s_stream (enable=1) ***
-[  504.979573] *** DEBUG: subdev=85c1ac00, ops=c067fe6c, video=c067fe80, s_stream=c06527ac ***
-[  504.979580] *** ispcore_video_s_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.979585] *** ispcore_video_s_stream: ENABLING ISP core video streaming ***
-[  504.979592] *** tx_isp_video_link_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.979597] *** BINARY NINJA EXACT: Iterating through 16 subdevices at offset 0x38 ***
-[  504.979604] *** DEBUG: subdev 0 = 85c1a000 ***
-[  504.979610] *** DEBUG: subdev 0 ops = c06800a0 ***
-[  504.979617] *** DEBUG: subdev 0 video ops = c06800c8 ***
-[  504.979623] *** BINARY NINJA: Calling subdev 0 s_stream (enable=1) ***
-[  504.979631] *** DEBUG: subdev=85c1a000, ops=c06800a0, video=c06800c8, s_stream=c0657178 ***
-[  504.979637] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
-[  504.979644] csi_video_s_stream: sd=85c1a000, enable=1
-[  504.979649] csi_video_s_stream: CSI device state=1 < 2, returning 0
-[  504.979655] *** BINARY NINJA: Subdev 0 s_stream SUCCESS ***
-[  504.979661] *** DEBUG: subdev 1 = 85c1a400 ***
-[  504.979668] *** DEBUG: subdev 1 ops = c0680030 ***
-[  504.979674] *** DEBUG: subdev 1 video ops = c0680080 ***
-[  504.979681] *** BINARY NINJA: Calling subdev 1 s_stream (enable=1) ***
-[  504.979689] *** DEBUG: subdev=85c1a400, ops=c0680030, video=c0680080, s_stream=c0656af8 ***
-[  504.979696] *** vic_core_s_stream: BINARY NINJA EXACT - sd=85c1a400, enable=1 ***
-[  504.979702] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
-[  504.979707] *** vic_core_s_stream: STREAM ON ***
-[  504.979713] *** vic_core_s_stream: Already in state 4, skipping VIC start ***
-[  504.979719] *** BINARY NINJA: Subdev 1 s_stream SUCCESS ***
-[  504.979725] *** DEBUG: subdev 2 = 85c1a800 ***
-[  504.979731] *** DEBUG: subdev 2 ops = c0680f74 ***
-[  504.979737] *** DEBUG: subdev 2 video ops = c0680f88 ***
-[  504.979744] *** BINARY NINJA: Calling subdev 2 s_stream (enable=1) ***
-[  504.979753] *** DEBUG: subdev=85c1a800, ops=c0680f74, video=c0680f88, s_stream=c066167c ***
-[  504.979758] VIN: vin_s_stream: called = 0x1
-[  504.979764] VIN: vin_s_stream: VIN device from global ISP = 0x85c1a800
-[  504.979770] VIN: vin_s_stream: current VIN state = 0x3
-[  504.979776] VIN: vin_s_stream: VIN streaming enable from state = 0x3
-[  504.979781] VIN: vin_s_stream: sensor has no valid s_stream function
-[  504.979787] VIN: vin_s_stream: sensor has no valid s_stream function = 0x0
-[  504.979793] tx_isp_video_link_stream: Subdev 2 returned ENOIOCTLCMD, continuing
-[  504.979799] *** DEBUG: subdev 3 = 85c1b400 ***
-[  504.979806] *** DEBUG: subdev 3 ops = c069d638 ***
-[  504.979844] *** DEBUG: subdev 3 video ops = c069d658 ***
-[  504.979852] *** BINARY NINJA: Calling subdev 3 s_stream (enable=1) ***
-[  504.979861] *** DEBUG: subdev=85c1b400, ops=c069d638, video=c069d658, s_stream=c069bcd4 ***
-[  504.979868] gc2053 stream on
-[  504.979873] *** BINARY NINJA: Subdev 3 s_stream SUCCESS ***
-[  504.979879] *** DEBUG: subdev 4 = 85c1ac00 ***
-[  504.979886] *** DEBUG: subdev 4 ops = c067fe6c ***
-[  504.979893] *** DEBUG: subdev 4 video ops = c067fe80 ***
-[  504.979899] *** BINARY NINJA: Calling subdev 4 s_stream (enable=1) ***
-[  504.979907] *** DEBUG: subdev=85c1ac00, ops=c067fe6c, video=c067fe80, s_stream=c06527ac ***
-[  504.979914] *** ispcore_video_s_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.979919] *** ispcore_video_s_stream: ENABLING ISP core video streaming ***
-[  504.979926] *** tx_isp_video_link_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.979932] *** BINARY NINJA EXACT: Iterating through 16 subdevices at offset 0x38 ***
-[  504.979939] *** DEBUG: subdev 0 = 85c1a000 ***
-[  504.979945] *** DEBUG: subdev 0 ops = c06800a0 ***
-[  504.979951] *** DEBUG: subdev 0 video ops = c06800c8 ***
-[  504.979957] *** BINARY NINJA: Calling subdev 0 s_stream (enable=1) ***
-[  504.979966] *** DEBUG: subdev=85c1a000, ops=c06800a0, video=c06800c8, s_stream=c0657178 ***
-[  504.979972] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
-[  504.979979] csi_video_s_stream: sd=85c1a000, enable=1
-[  504.979984] csi_video_s_stream: CSI device state=1 < 2, returning 0
-[  504.979990] *** BINARY NINJA: Subdev 0 s_stream SUCCESS ***
-[  504.979997] *** DEBUG: subdev 1 = 85c1a400 ***
-[  504.980003] *** DEBUG: subdev 1 ops = c0680030 ***
-[  504.980009] *** DEBUG: subdev 1 video ops = c0680080 ***
-[  504.980015] *** BINARY NINJA: Calling subdev 1 s_stream (enable=1) ***
-[  504.980024] *** DEBUG: subdev=85c1a400, ops=c0680030, video=c0680080, s_stream=c0656af8 ***
-[  504.980031] *** vic_core_s_stream: BINARY NINJA EXACT - sd=85c1a400, enable=1 ***
-[  504.980037] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
-[  504.980042] *** vic_core_s_stream: STREAM ON ***
-[  504.980047] *** vic_core_s_stream: Already in state 4, skipping VIC start ***
-[  504.980053] *** BINARY NINJA: Subdev 1 s_stream SUCCESS ***
-[  504.980060] *** DEBUG: subdev 2 = 85c1a800 ***
-[  504.980066] *** DEBUG: subdev 2 ops = c0680f74 ***
-[  504.980073] *** DEBUG: subdev 2 video ops = c0680f88 ***
-[  504.980079] *** BINARY NINJA: Calling subdev 2 s_stream (enable=1) ***
-[  504.980087] *** DEBUG: subdev=85c1a800, ops=c0680f74, video=c0680f88, s_stream=c066167c ***
-[  504.980093] VIN: vin_s_stream: called = 0x1
-[  504.980099] VIN: vin_s_stream: VIN device from global ISP = 0x85c1a800
-[  504.980105] VIN: vin_s_stream: current VIN state = 0x3
-[  504.980111] VIN: vin_s_stream: VIN streaming enable from state = 0x3
-[  504.980117] VIN: vin_s_stream: sensor has no valid s_stream function
-[  504.980122] VIN: vin_s_stream: sensor has no valid s_stream function = 0x0
-[  504.980129] tx_isp_video_link_stream: Subdev 2 returned ENOIOCTLCMD, continuing
-[  504.980135] *** DEBUG: subdev 3 = 85c1b400 ***
-[  504.980141] *** DEBUG: subdev 3 ops = c069d638 ***
-[  504.980147] *** DEBUG: subdev 3 video ops = c069d658 ***
-[  504.980154] *** BINARY NINJA: Calling subdev 3 s_stream (enable=1) ***
-[  504.980162] *** DEBUG: subdev=85c1b400, ops=c069d638, video=c069d658, s_stream=c069bcd4 ***
-[  504.980168] gc2053 stream on
-[  504.980173] *** BINARY NINJA: Subdev 3 s_stream SUCCESS ***
-[  504.980180] *** DEBUG: subdev 4 = 85c1ac00 ***
-[  504.980186] *** DEBUG: subdev 4 ops = c067fe6c ***
-[  504.980193] *** DEBUG: subdev 4 video ops = c067fe80 ***
-[  504.980199] *** BINARY NINJA: Calling subdev 4 s_stream (enable=1) ***
-[  504.980207] *** DEBUG: subdev=85c1ac00, ops=c067fe6c, video=c067fe80, s_stream=c06527ac ***
-[  504.980214] *** ispcore_video_s_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.980219] *** ispcore_video_s_stream: ENABLING ISP core video streaming ***
-[  504.980225] *** tx_isp_video_link_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.980231] *** BINARY NINJA EXACT: Iterating through 16 subdevices at offset 0x38 ***
-[  504.980238] *** DEBUG: subdev 0 = 85c1a000 ***
-[  504.980244] *** DEBUG: subdev 0 ops = c06800a0 ***
-[  504.980251] *** DEBUG: subdev 0 video ops = c06800c8 ***
-[  504.980257] *** BINARY NINJA: Calling subdev 0 s_stream (enable=1) ***
-[  504.980265] *** DEBUG: subdev=85c1a000, ops=c06800a0, video=c06800c8, s_stream=c0657178 ***
-[  504.980271] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
-[  504.980278] csi_video_s_stream: sd=85c1a000, enable=1
-[  504.980283] csi_video_s_stream: CSI device state=1 < 2, returning 0
-[  504.980289] *** BINARY NINJA: Subdev 0 s_stream SUCCESS ***
-[  504.980296] *** DEBUG: subdev 1 = 85c1a400 ***
-[  504.980302] *** DEBUG: subdev 1 ops = c0680030 ***
-[  504.980309] *** DEBUG: subdev 1 video ops = c0680080 ***
-[  504.980315] *** BINARY NINJA: Calling subdev 1 s_stream (enable=1) ***
-[  504.980323] *** DEBUG: subdev=85c1a400, ops=c0680030, video=c0680080, s_stream=c0656af8 ***
-[  504.980330] *** vic_core_s_stream: BINARY NINJA EXACT - sd=85c1a400, enable=1 ***
-[  504.980336] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
-[  504.980341] *** vic_core_s_stream: STREAM ON ***
-[  504.980347] *** vic_core_s_stream: Already in state 4, skipping VIC start ***
-[  504.980353] *** BINARY NINJA: Subdev 1 s_stream SUCCESS ***
-[  504.980359] *** DEBUG: subdev 2 = 85c1a800 ***
-[  504.980365] *** DEBUG: subdev 2 ops = c0680f74 ***
-[  504.980371] *** DEBUG: subdev 2 video ops = c0680f88 ***
-[  504.980378] *** BINARY NINJA: Calling subdev 2 s_stream (enable=1) ***
-[  504.980386] *** DEBUG: subdev=85c1a800, ops=c0680f74, video=c0680f88, s_stream=c066167c ***
-[  504.980392] VIN: vin_s_stream: called = 0x1
-[  504.980398] VIN: vin_s_stream: VIN device from global ISP = 0x85c1a800
-[  504.980404] VIN: vin_s_stream: current VIN state = 0x3
-[  504.980409] VIN: vin_s_stream: VIN streaming enable from state = 0x3
-[  504.980415] VIN: vin_s_stream: sensor has no valid s_stream function
-[  504.980421] VIN: vin_s_stream: sensor has no valid s_stream function = 0x0
-[  504.980427] tx_isp_video_link_stream: Subdev 2 returned ENOIOCTLCMD, continuing
-[  504.980433] *** DEBUG: subdev 3 = 85c1b400 ***
-[  504.980439] *** DEBUG: subdev 3 ops = c069d638 ***
-[  504.980446] *** DEBUG: subdev 3 video ops = c069d658 ***
-[  504.980452] *** BINARY NINJA: Calling subdev 3 s_stream (enable=1) ***
-[  504.980461] *** DEBUG: subdev=85c1b400, ops=c069d638, video=c069d658, s_stream=c069bcd4 ***
-[  504.980467] gc2053 stream on
-[  504.980472] *** BINARY NINJA: Subdev 3 s_stream SUCCESS ***
-[  504.980479] *** DEBUG: subdev 4 = 85c1ac00 ***
-[  504.980485] *** DEBUG: subdev 4 ops = c067fe6c ***
-[  504.980491] *** DEBUG: subdev 4 video ops = c067fe80 ***
-[  504.980497] *** BINARY NINJA: Calling subdev 4 s_stream (enable=1) ***
-[  504.980506] *** DEBUG: subdev=85c1ac00, ops=c067fe6c, video=c067fe80, s_stream=c06527ac ***
-[  504.980512] *** ispcore_video_s_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.980518] *** ispcore_video_s_stream: ENABLING ISP core video streaming ***
-[  504.980524] *** tx_isp_video_link_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.980529] *** BINARY NINJA EXACT: Iterating through 16 subdevices at offset 0x38 ***
-[  504.980536] *** DEBUG: subdev 0 = 85c1a000 ***
-[  504.980543] *** DEBUG: subdev 0 ops = c06800a0 ***
-[  504.980549] *** DEBUG: subdev 0 video ops = c06800c8 ***
-[  504.980555] *** BINARY NINJA: Calling subdev 0 s_stream (enable=1) ***
-[  504.980563] *** DEBUG: subdev=85c1a000, ops=c06800a0, video=c06800c8, s_stream=c0657178 ***
-[  504.980569] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
-[  504.980576] csi_video_s_stream: sd=85c1a000, enable=1
-[  504.980582] csi_video_s_stream: CSI device state=1 < 2, returning 0
-[  504.980587] *** BINARY NINJA: Subdev 0 s_stream SUCCESS ***
-[  504.980594] *** DEBUG: subdev 1 = 85c1a400 ***
-[  504.980600] *** DEBUG: subdev 1 ops = c0680030 ***
-[  504.980607] *** DEBUG: subdev 1 video ops = c0680080 ***
-[  504.980613] *** BINARY NINJA: Calling subdev 1 s_stream (enable=1) ***
-[  504.980621] *** DEBUG: subdev=85c1a400, ops=c0680030, video=c0680080, s_stream=c0656af8 ***
-[  504.980628] *** vic_core_s_stream: BINARY NINJA EXACT - sd=85c1a400, enable=1 ***
-[  504.980635] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
-[  504.980639] *** vic_core_s_stream: STREAM ON ***
-[  504.980645] *** vic_core_s_stream: Already in state 4, skipping VIC start ***
-[  504.980651] *** BINARY NINJA: Subdev 1 s_stream SUCCESS ***
-[  504.980657] *** DEBUG: subdev 2 = 85c1a800 ***
-[  504.980663] *** DEBUG: subdev 2 ops = c0680f74 ***
-[  504.980670] *** DEBUG: subdev 2 video ops = c0680f88 ***
-[  504.980676] *** BINARY NINJA: Calling subdev 2 s_stream (enable=1) ***
-[  504.980685] *** DEBUG: subdev=85c1a800, ops=c0680f74, video=c0680f88, s_stream=c066167c ***
-[  504.980690] VIN: vin_s_stream: called = 0x1
-[  504.980696] VIN: vin_s_stream: VIN device from global ISP = 0x85c1a800
-[  504.980702] VIN: vin_s_stream: current VIN state = 0x3
-[  504.980708] VIN: vin_s_stream: VIN streaming enable from state = 0x3
-[  504.980713] VIN: vin_s_stream: sensor has no valid s_stream function
-[  504.980719] VIN: vin_s_stream: sensor has no valid s_stream function = 0x0
-[  504.980725] tx_isp_video_link_stream: Subdev 2 returned ENOIOCTLCMD, continuing
-[  504.980731] *** DEBUG: subdev 3 = 85c1b400 ***
-[  504.980738] *** DEBUG: subdev 3 ops = c069d638 ***
-[  504.980744] *** DEBUG: subdev 3 video ops = c069d658 ***
-[  504.980751] *** BINARY NINJA: Calling subdev 3 s_stream (enable=1) ***
-[  504.980759] *** DEBUG: subdev=85c1b400, ops=c069d638, video=c069d658, s_stream=c069bcd4 ***
-[  504.980765] gc2053 stream on
-[  504.980771] *** BINARY NINJA: Subdev 3 s_stream SUCCESS ***
-[  504.980777] *** DEBUG: subdev 4 = 85c1ac00 ***
-[  504.980783] *** DEBUG: subdev 4 ops = c067fe6c ***
-[  504.980789] *** DEBUG: subdev 4 video ops = c067fe80 ***
-[  504.980795] *** BINARY NINJA: Calling subdev 4 s_stream (enable=1) ***
-[  504.980804] *** DEBUG: subdev=85c1ac00, ops=c067fe6c, video=c067fe80, s_stream=c06527ac ***
-[  504.980811] *** ispcore_video_s_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.980816] *** ispcore_video_s_stream: ENABLING ISP core video streaming ***
-[  504.980822] *** tx_isp_video_link_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.980828] *** BINARY NINJA EXACT: Iterating through 16 subdevices at offset 0x38 ***
-[  504.980835] *** DEBUG: subdev 0 = 85c1a000 ***
-[  504.980841] *** DEBUG: subdev 0 ops = c06800a0 ***
-[  504.980847] *** DEBUG: subdev 0 video ops = c06800c8 ***
-[  504.980853] *** BINARY NINJA: Calling subdev 0 s_stream (enable=1) ***
-[  504.980862] *** DEBUG: subdev=85c1a000, ops=c06800a0, video=c06800c8, s_stream=c0657178 ***
-[  504.980868] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
-[  504.980875] csi_video_s_stream: sd=85c1a000, enable=1
-[  504.980880] csi_video_s_stream: CSI device state=1 < 2, returning 0
-[  504.980886] *** BINARY NINJA: Subdev 0 s_stream SUCCESS ***
-[  504.980893] *** DEBUG: subdev 1 = 85c1a400 ***
-[  504.980899] *** DEBUG: subdev 1 ops = c0680030 ***
-[  504.980905] *** DEBUG: subdev 1 video ops = c0680080 ***
-[  504.980911] *** BINARY NINJA: Calling subdev 1 s_stream (enable=1) ***
-[  504.980920] *** DEBUG: subdev=85c1a400, ops=c0680030, video=c0680080, s_stream=c0656af8 ***
-[  504.980927] *** vic_core_s_stream: BINARY NINJA EXACT - sd=85c1a400, enable=1 ***
-[  504.980933] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
-[  504.980938] *** vic_core_s_stream: STREAM ON ***
-[  504.980943] *** vic_core_s_stream: Already in state 4, skipping VIC start ***
-[  504.980949] *** BINARY NINJA: Subdev 1 s_stream SUCCESS ***
-[  504.980955] *** DEBUG: subdev 2 = 85c1a800 ***
-[  504.980962] *** DEBUG: subdev 2 ops = c0680f74 ***
-[  504.980968] *** DEBUG: subdev 2 video ops = c0680f88 ***
-[  504.980975] *** BINARY NINJA: Calling subdev 2 s_stream (enable=1) ***
-[  504.980983] *** DEBUG: subdev=85c1a800, ops=c0680f74, video=c0680f88, s_stream=c066167c ***
-[  504.980989] VIN: vin_s_stream: called = 0x1
-[  504.980995] VIN: vin_s_stream: VIN device from global ISP = 0x85c1a800
-[  504.981001] VIN: vin_s_stream: current VIN state = 0x3
-[  504.981006] VIN: vin_s_stream: VIN streaming enable from state = 0x3
-[  504.981011] VIN: vin_s_stream: sensor has no valid s_stream function
-[  504.981017] VIN: vin_s_stream: sensor has no valid s_stream function = 0x0
-[  504.981023] tx_isp_video_link_stream: Subdev 2 returned ENOIOCTLCMD, continuing
-[  504.981030] *** DEBUG: subdev 3 = 85c1b400 ***
-[  504.981037] *** DEBUG: subdev 3 ops = c069d638 ***
-[  504.981043] *** DEBUG: subdev 3 video ops = c069d658 ***
-[  504.981049] *** BINARY NINJA: Calling subdev 3 s_stream (enable=1) ***
-[  504.981057] *** DEBUG: subdev=85c1b400, ops=c069d638, video=c069d658, s_stream=c069bcd4 ***
-[  504.981063] gc2053 stream on
-[  504.981069] *** BINARY NINJA: Subdev 3 s_stream SUCCESS ***
-[  504.981075] *** DEBUG: subdev 4 = 85c1ac00 ***
-[  504.981081] *** DEBUG: subdev 4 ops = c067fe6c ***
-[  504.981088] *** DEBUG: subdev 4 video ops = c067fe80 ***
-[  504.981094] *** BINARY NINJA: Calling subdev 4 s_stream (enable=1) ***
-[  504.981103] *** DEBUG: subdev=85c1ac00, ops=c067fe6c, video=c067fe80, s_stream=c06527ac ***
-[  504.981109] *** ispcore_video_s_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.981115] *** ispcore_video_s_stream: ENABLING ISP core video streaming ***
-[  504.981121] *** tx_isp_video_link_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.981127] *** BINARY NINJA EXACT: Iterating through 16 subdevices at offset 0x38 ***
-[  504.981133] *** DEBUG: subdev 0 = 85c1a000 ***
-[  504.981139] *** DEBUG: subdev 0 ops = c06800a0 ***
-[  504.981145] *** DEBUG: subdev 0 video ops = c06800c8 ***
-[  504.981152] *** BINARY NINJA: Calling subdev 0 s_stream (enable=1) ***
-[  504.981160] *** DEBUG: subdev=85c1a000, ops=c06800a0, video=c06800c8, s_stream=c0657178 ***
-[  504.981166] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
-[  504.981173] csi_video_s_stream: sd=85c1a000, enable=1
-[  504.981179] csi_video_s_stream: CSI device state=1 < 2, returning 0
-[  504.981184] *** BINARY NINJA: Subdev 0 s_stream SUCCESS ***
-[  504.981191] *** DEBUG: subdev 1 = 85c1a400 ***
-[  504.981197] *** DEBUG: subdev 1 ops = c0680030 ***
-[  504.981203] *** DEBUG: subdev 1 video ops = c0680080 ***
-[  504.981209] *** BINARY NINJA: Calling subdev 1 s_stream (enable=1) ***
-[  504.981218] *** DEBUG: subdev=85c1a400, ops=c0680030, video=c0680080, s_stream=c0656af8 ***
-[  504.981225] *** vic_core_s_stream: BINARY NINJA EXACT - sd=85c1a400, enable=1 ***
-[  504.981231] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
-[  504.981237] *** vic_core_s_stream: STREAM ON ***
-[  504.981241] *** vic_core_s_stream: Already in state 4, skipping VIC start ***
-[  504.981247] *** BINARY NINJA: Subdev 1 s_stream SUCCESS ***
-[  504.981254] *** DEBUG: subdev 2 = 85c1a800 ***
-[  504.981260] *** DEBUG: subdev 2 ops = c0680f74 ***
-[  504.981267] *** DEBUG: subdev 2 video ops = c0680f88 ***
-[  504.981273] *** BINARY NINJA: Calling subdev 2 s_stream (enable=1) ***
-[  504.981281] *** DEBUG: subdev=85c1a800, ops=c0680f74, video=c0680f88, s_stream=c066167c ***
-[  504.981287] VIN: vin_s_stream: called = 0x1
-[  504.981293] VIN: vin_s_stream: VIN device from global ISP = 0x85c1a800
-[  504.981299] VIN: vin_s_stream: current VIN state = 0x3
-[  504.981305] VIN: vin_s_stream: VIN streaming enable from state = 0x3
-[  504.981310] VIN: vin_s_stream: sensor has no valid s_stream function
-[  504.981316] VIN: vin_s_stream: sensor has no valid s_stream function = 0x0
-[  504.981322] tx_isp_video_link_stream: Subdev 2 returned ENOIOCTLCMD, continuing
-[  504.981329] *** DEBUG: subdev 3 = 85c1b400 ***
-[  504.981335] *** DEBUG: subdev 3 ops = c069d638 ***
-[  504.981341] *** DEBUG: subdev 3 video ops = c069d658 ***
-[  504.981347] *** BINARY NINJA: Calling subdev 3 s_stream (enable=1) ***
-[  504.981356] *** DEBUG: subdev=85c1b400, ops=c069d638, video=c069d658, s_stream=c069bcd4 ***
-[  504.981361] gc2053 stream on
-[  504.981367] *** BINARY NINJA: Subdev 3 s_stream SUCCESS ***
-[  504.981373] *** DEBUG: subdev 4 = 85c1ac00 ***
-[  504.981380] *** DEBUG: subdev 4 ops = c067fe6c ***
-[  504.981386] *** DEBUG: subdev 4 video ops = c067fe80 ***
-[  504.981393] *** BINARY NINJA: Calling subdev 4 s_stream (enable=1) ***
-[  504.981401] *** DEBUG: subdev=85c1ac00, ops=c067fe6c, video=c067fe80, s_stream=c06527ac ***
-[  504.981407] *** ispcore_video_s_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.981413] *** ispcore_video_s_stream: ENABLING ISP core video streaming ***
-[  504.981419] *** tx_isp_video_link_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.981425] *** BINARY NINJA EXACT: Iterating through 16 subdevices at offset 0x38 ***
-[  504.981431] *** DEBUG: subdev 0 = 85c1a000 ***
-[  504.981437] *** DEBUG: subdev 0 ops = c06800a0 ***
-[  504.981444] *** DEBUG: subdev 0 video ops = c06800c8 ***
-[  504.981450] *** BINARY NINJA: Calling subdev 0 s_stream (enable=1) ***
-[  504.981459] *** DEBUG: subdev=85c1a000, ops=c06800a0, video=c06800c8, s_stream=c0657178 ***
-[  504.981465] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
-[  504.981471] csi_video_s_stream: sd=85c1a000, enable=1
-[  504.981477] csi_video_s_stream: CSI device state=1 < 2, returning 0
-[  504.981483] *** BINARY NINJA: Subdev 0 s_stream SUCCESS ***
-[  504.981489] *** DEBUG: subdev 1 = 85c1a400 ***
-[  504.981495] *** DEBUG: subdev 1 ops = c0680030 ***
-[  504.981501] *** DEBUG: subdev 1 video ops = c0680080 ***
-[  504.981508] *** BINARY NINJA: Calling subdev 1 s_stream (enable=1) ***
-[  504.981516] *** DEBUG: subdev=85c1a400, ops=c0680030, video=c0680080, s_stream=c0656af8 ***
-[  504.981523] *** vic_core_s_stream: BINARY NINJA EXACT - sd=85c1a400, enable=1 ***
-[  504.981529] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
-[  504.981535] *** vic_core_s_stream: STREAM ON ***
-[  504.981540] *** vic_core_s_stream: Already in state 4, skipping VIC start ***
-[  504.981546] *** BINARY NINJA: Subdev 1 s_stream SUCCESS ***
-[  504.981552] *** DEBUG: subdev 2 = 85c1a800 ***
-[  504.981558] *** DEBUG: subdev 2 ops = c0680f74 ***
-[  504.981565] *** DEBUG: subdev 2 video ops = c0680f88 ***
-[  504.981571] *** BINARY NINJA: Calling subdev 2 s_stream (enable=1) ***
-[  504.981579] *** DEBUG: subdev=85c1a800, ops=c0680f74, video=c0680f88, s_stream=c066167c ***
-[  504.981585] VIN: vin_s_stream: called = 0x1
-[  504.981591] VIN: vin_s_stream: VIN device from global ISP = 0x85c1a800
-[  504.981597] VIN: vin_s_stream: current VIN state = 0x3
-[  504.981603] VIN: vin_s_stream: VIN streaming enable from state = 0x3
-[  504.981608] VIN: vin_s_stream: sensor has no valid s_stream function
-[  504.981614] VIN: vin_s_stream: sensor has no valid s_stream function = 0x0
-[  504.981620] tx_isp_video_link_stream: Subdev 2 returned ENOIOCTLCMD, continuing
-[  504.981627] *** DEBUG: subdev 3 = 85c1b400 ***
-[  504.981633] *** DEBUG: subdev 3 ops = c069d638 ***
-[  504.981639] *** DEBUG: subdev 3 video ops = c069d658 ***
-[  504.981645] *** BINARY NINJA: Calling subdev 3 s_stream (enable=1) ***
-[  504.981654] *** DEBUG: subdev=85c1b400, ops=c069d638, video=c069d658, s_stream=c069bcd4 ***
-[  504.981659] gc2053 stream on
-[  504.981665] *** BINARY NINJA: Subdev 3 s_stream SUCCESS ***
-[  504.981671] *** DEBUG: subdev 4 = 85c1ac00 ***
-[  504.981677] *** DEBUG: subdev 4 ops = c067fe6c ***
-[  504.981684] *** DEBUG: subdev 4 video ops = c067fe80 ***
-[  504.981691] *** BINARY NINJA: Calling subdev 4 s_stream (enable=1) ***
-[  504.981699] *** DEBUG: subdev=85c1ac00, ops=c067fe6c, video=c067fe80, s_stream=c06527ac ***
-[  504.981705] *** ispcore_video_s_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.981711] *** ispcore_video_s_stream: ENABLING ISP core video streaming ***
-[  504.981717] *** tx_isp_video_link_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.981723] *** BINARY NINJA EXACT: Iterating through 16 subdevices at offset 0x38 ***
-[  504.981729] *** DEBUG: subdev 0 = 85c1a000 ***
-[  504.981735] *** DEBUG: subdev 0 ops = c06800a0 ***
-[  504.981742] *** DEBUG: subdev 0 video ops = c06800c8 ***
-[  504.981749] *** BINARY NINJA: Calling subdev 0 s_stream (enable=1) ***
-[  504.981757] *** DEBUG: subdev=85c1a000, ops=c06800a0, video=c06800c8, s_stream=c0657178 ***
-[  504.981763] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
-[  504.981769] csi_video_s_stream: sd=85c1a000, enable=1
-[  504.981775] csi_video_s_stream: CSI device state=1 < 2, returning 0
-[  504.981781] *** BINARY NINJA: Subdev 0 s_stream SUCCESS ***
-[  504.981787] *** DEBUG: subdev 1 = 85c1a400 ***
-[  504.981793] *** DEBUG: subdev 1 ops = c0680030 ***
-[  504.981800] *** DEBUG: subdev 1 video ops = c0680080 ***
-[  504.981806] *** BINARY NINJA: Calling subdev 1 s_stream (enable=1) ***
-[  504.981815] *** DEBUG: subdev=85c1a400, ops=c0680030, video=c0680080, s_stream=c0656af8 ***
-[  504.981821] *** vic_core_s_stream: BINARY NINJA EXACT - sd=85c1a400, enable=1 ***
-[  504.981827] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
-[  504.981833] *** vic_core_s_stream: STREAM ON ***
-[  504.981838] *** vic_core_s_stream: Already in state 4, skipping VIC start ***
-[  504.981844] *** BINARY NINJA: Subdev 1 s_stream SUCCESS ***
-[  504.981850] *** DEBUG: subdev 2 = 85c1a800 ***
-[  504.981857] *** DEBUG: subdev 2 ops = c0680f74 ***
-[  504.981863] *** DEBUG: subdev 2 video ops = c0680f88 ***
-[  504.981869] *** BINARY NINJA: Calling subdev 2 s_stream (enable=1) ***
-[  504.981877] *** DEBUG: subdev=85c1a800, ops=c0680f74, video=c0680f88, s_stream=c066167c ***
-[  504.981883] VIN: vin_s_stream: called = 0x1
-[  504.981889] VIN: vin_s_stream: VIN device from global ISP = 0x85c1a800
-[  504.981895] VIN: vin_s_stream: current VIN state = 0x3
-[  504.981901] VIN: vin_s_stream: VIN streaming enable from state = 0x3
-[  504.981906] VIN: vin_s_stream: sensor has no valid s_stream function
-[  504.981912] VIN: vin_s_stream: sensor has no valid s_stream function = 0x0
-[  504.981918] tx_isp_video_link_stream: Subdev 2 returned ENOIOCTLCMD, continuing
-[  504.981925] *** DEBUG: subdev 3 = 85c1b400 ***
-[  504.981931] *** DEBUG: subdev 3 ops = c069d638 ***
-[  504.981937] *** DEBUG: subdev 3 video ops = c069d658 ***
-[  504.981943] *** BINARY NINJA: Calling subdev 3 s_stream (enable=1) ***
-[  504.981952] *** DEBUG: subdev=85c1b400, ops=c069d638, video=c069d658, s_stream=c069bcd4 ***
-[  504.981958] gc2053 stream on
-[  504.981963] *** BINARY NINJA: Subdev 3 s_stream SUCCESS ***
-[  504.981969] *** DEBUG: subdev 4 = 85c1ac00 ***
-[  504.981976] *** DEBUG: subdev 4 ops = c067fe6c ***
-[  504.981982] *** DEBUG: subdev 4 video ops = c067fe80 ***
-[  504.981989] *** BINARY NINJA: Calling subdev 4 s_stream (enable=1) ***
-[  504.981997] *** DEBUG: subdev=85c1ac00, ops=c067fe6c, video=c067fe80, s_stream=c06527ac ***
-[  504.982003] *** ispcore_video_s_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.982009] *** ispcore_video_s_stream: ENABLING ISP core video streaming ***
-[  504.982015] *** tx_isp_video_link_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.982021] *** BINARY NINJA EXACT: Iterating through 16 subdevices at offset 0x38 ***
-[  504.982027] *** DEBUG: subdev 0 = 85c1a000 ***
-[  504.982033] *** DEBUG: subdev 0 ops = c06800a0 ***
-[  504.982040] *** DEBUG: subdev 0 video ops = c06800c8 ***
-[  504.982046] *** BINARY NINJA: Calling subdev 0 s_stream (enable=1) ***
-[  504.982055] *** DEBUG: subdev=85c1a000, ops=c06800a0, video=c06800c8, s_stream=c0657178 ***
-[  504.982061] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
-[  504.982067] csi_video_s_stream: sd=85c1a000, enable=1
-[  504.982073] csi_video_s_stream: CSI device state=1 < 2, returning 0
-[  504.982079] *** BINARY NINJA: Subdev 0 s_stream SUCCESS ***
-[  504.982085] *** DEBUG: subdev 1 = 85c1a400 ***
-[  504.982091] *** DEBUG: subdev 1 ops = c0680030 ***
-[  504.982097] *** DEBUG: subdev 1 video ops = c0680080 ***
-[  504.982104] *** BINARY NINJA: Calling subdev 1 s_stream (enable=1) ***
-[  504.982113] *** DEBUG: subdev=85c1a400, ops=c0680030, video=c0680080, s_stream=c0656af8 ***
-[  504.982119] *** vic_core_s_stream: BINARY NINJA EXACT - sd=85c1a400, enable=1 ***
-[  504.982125] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
-[  504.982131] *** vic_core_s_stream: STREAM ON ***
-[  504.982136] *** vic_core_s_stream: Already in state 4, skipping VIC start ***
-[  504.982142] *** BINARY NINJA: Subdev 1 s_stream SUCCESS ***
-[  504.982148] *** DEBUG: subdev 2 = 85c1a800 ***
-[  504.982154] *** DEBUG: subdev 2 ops = c0680f74 ***
-[  504.982161] *** DEBUG: subdev 2 video ops = c0680f88 ***
-[  504.982167] *** BINARY NINJA: Calling subdev 2 s_stream (enable=1) ***
-[  504.982175] *** DEBUG: subdev=85c1a800, ops=c0680f74, video=c0680f88, s_stream=c066167c ***
-[  504.982181] VIN: vin_s_stream: called = 0x1
-[  504.982187] VIN: vin_s_stream: VIN device from global ISP = 0x85c1a800
-[  504.982193] VIN: vin_s_stream: current VIN state = 0x3
-[  504.982199] VIN: vin_s_stream: VIN streaming enable from state = 0x3
-[  504.982204] VIN: vin_s_stream: sensor has no valid s_stream function
-[  504.982210] VIN: vin_s_stream: sensor has no valid s_stream function = 0x0
-[  504.982216] tx_isp_video_link_stream: Subdev 2 returned ENOIOCTLCMD, continuing
-[  504.982223] *** DEBUG: subdev 3 = 85c1b400 ***
-[  504.982229] *** DEBUG: subdev 3 ops = c069d638 ***
-[  504.982235] *** DEBUG: subdev 3 video ops = c069d658 ***
-[  504.982241] *** BINARY NINJA: Calling subdev 3 s_stream (enable=1) ***
-[  504.982250] *** DEBUG: subdev=85c1b400, ops=c069d638, video=c069d658, s_stream=c069bcd4 ***
-[  504.982256] gc2053 stream on
-[  504.982261] *** BINARY NINJA: Subdev 3 s_stream SUCCESS ***
-[  504.982267] *** DEBUG: subdev 4 = 85c1ac00 ***
-[  504.982274] *** DEBUG: subdev 4 ops = c067fe6c ***
-[  504.982280] *** DEBUG: subdev 4 video ops = c067fe80 ***
-[  504.982287] *** BINARY NINJA: Calling subdev 4 s_stream (enable=1) ***
-[  504.982295] *** DEBUG: subdev=85c1ac00, ops=c067fe6c, video=c067fe80, s_stream=c06527ac ***
-[  504.982301] *** ispcore_video_s_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.982307] *** ispcore_video_s_stream: ENABLING ISP core video streaming ***
-[  504.982313] *** tx_isp_video_link_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.982319] *** BINARY NINJA EXACT: Iterating through 16 subdevices at offset 0x38 ***
-[  504.982325] *** DEBUG: subdev 0 = 85c1a000 ***
-[  504.982332] *** DEBUG: subdev 0 ops = c06800a0 ***
-[  504.982338] *** DEBUG: subdev 0 video ops = c06800c8 ***
-[  504.982345] *** BINARY NINJA: Calling subdev 0 s_stream (enable=1) ***
-[  504.982353] *** DEBUG: subdev=85c1a000, ops=c06800a0, video=c06800c8, s_stream=c0657178 ***
-[  504.982359] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
-[  504.982365] csi_video_s_stream: sd=85c1a000, enable=1
-[  504.982371] csi_video_s_stream: CSI device state=1 < 2, returning 0
-[  504.982377] *** BINARY NINJA: Subdev 0 s_stream SUCCESS ***
-[  504.982383] *** DEBUG: subdev 1 = 85c1a400 ***
-[  504.982389] *** DEBUG: subdev 1 ops = c0680030 ***
-[  504.982396] *** DEBUG: subdev 1 video ops = c0680080 ***
-[  504.982402] *** BINARY NINJA: Calling subdev 1 s_stream (enable=1) ***
-[  504.982411] *** DEBUG: subdev=85c1a400, ops=c0680030, video=c0680080, s_stream=c0656af8 ***
-[  504.982417] *** vic_core_s_stream: BINARY NINJA EXACT - sd=85c1a400, enable=1 ***
-[  504.982423] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
-[  504.982429] *** vic_core_s_stream: STREAM ON ***
-[  504.982434] *** vic_core_s_stream: Already in state 4, skipping VIC start ***
-[  504.982440] *** BINARY NINJA: Subdev 1 s_stream SUCCESS ***
-[  504.982446] *** DEBUG: subdev 2 = 85c1a800 ***
-[  504.982453] *** DEBUG: subdev 2 ops = c0680f74 ***
-[  504.982459] *** DEBUG: subdev 2 video ops = c0680f88 ***
-[  504.982465] *** BINARY NINJA: Calling subdev 2 s_stream (enable=1) ***
-[  504.982474] *** DEBUG: subdev=85c1a800, ops=c0680f74, video=c0680f88, s_stream=c066167c ***
-[  504.982479] VIN: vin_s_stream: called = 0x1
-[  504.982485] VIN: vin_s_stream: VIN device from global ISP = 0x85c1a800
-[  504.982491] VIN: vin_s_stream: current VIN state = 0x3
-[  504.982497] VIN: vin_s_stream: VIN streaming enable from state = 0x3
-[  504.982502] VIN: vin_s_stream: sensor has no valid s_stream function
-[  504.982508] VIN: vin_s_stream: sensor has no valid s_stream function = 0x0
-[  504.982514] tx_isp_video_link_stream: Subdev 2 returned ENOIOCTLCMD, continuing
-[  504.982521] *** DEBUG: subdev 3 = 85c1b400 ***
-[  504.982527] *** DEBUG: subdev 3 ops = c069d638 ***
-[  504.982533] *** DEBUG: subdev 3 video ops = c069d658 ***
-[  504.982539] *** BINARY NINJA: Calling subdev 3 s_stream (enable=1) ***
-[  504.982548] *** DEBUG: subdev=85c1b400, ops=c069d638, video=c069d658, s_stream=c069bcd4 ***
-[  504.982554] gc2053 stream on
-[  504.982559] *** BINARY NINJA: Subdev 3 s_stream SUCCESS ***
-[  504.982566] *** DEBUG: subdev 4 = 85c1ac00 ***
-[  504.982572] *** DEBUG: subdev 4 ops = c067fe6c ***
-[  504.982578] *** DEBUG: subdev 4 video ops = c067fe80 ***
-[  504.982585] *** BINARY NINJA: Calling subdev 4 s_stream (enable=1) ***
-[  504.982593] *** DEBUG: subdev=85c1ac00, ops=c067fe6c, video=c067fe80, s_stream=c06527ac ***
-[  504.982599] *** ispcore_video_s_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.982605] *** ispcore_video_s_stream: ENABLING ISP core video streaming ***
-[  504.982611] *** tx_isp_video_link_stream: EXACT Binary Ninja implementation - enable=1 ***
-[  504.982617] *** BINARY NINJA EXACT: Iterating through 16 subdevices at offset 0x38 ***
-[  504.982624] *** DEBUG: subdev 0 = 85c1a000 ***
-[  504.982630] *** DEBUG: subdev 0 ops = c06800a0 ***
-[  504.982637] *** DEBUG: subdev 0 video ops = c06800c8 ***
-[  504.982643] *** BINARY NINJA: Calling subdev 0 s_stream (enable=1) ***
-[  504.982651] *** DEBUG: subdev=85c1a000, ops=c06800a0, video=c06800c8, s_stream=c0657178 ***
-[  504.982657] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
-[  504.982664] csi_video_s_stream: sd=85c1a000, enable=1
-[  504.982669] csi_video_s_stream: CSI device state=1 < 2, returning 0
-[  504.982675] *** BINARY NINJA: Subdev 0 s_stream SUCCESS ***
-[  504.982681] *** DEBUG: subdev 1 = 85c1a400 ***
-[  504.982688] *** DEBUG: subdev 1 ops = c0680030 ***
-[  504.982694] *** DEBUG: subdev 1 video ops = c0680080 ***
-[  504.982701] *** BINARY NINJA: Calling subdev 1 s_stream (enable=1) ***
-[  504.982709] *** DEBUG: subdev=85c1a400, ops=c0680030, video=c0680080, s_stream=c0656af8 ***
-[  504.982716] *** vic_core_s_stream: BINARY NINJA EXACT - sd=85c1a400, enable=1 ***
-[  504.982750] CPU 0 Unable to handle kernel paging request at virtual address 77bbd6a4, epc == 80024270, ra == 8001b1a4
-[  504.993740] Oops[#1]:
-[  504.996084] CPU: 0 PID: 2048 Comm: ao-_ao_play_thr Tainted: G           O 3.10.14__isvp_swan_1.0__ #1
-[  505.005601] task: 841f1b00 ti: 85b92000 task.ti: 85b92000
-[  505.011165] $ 0   : 00000000 10001c00 00000000 3ffcd001
-[  505.016562] $ 4   : 85b94128 00000000 77bbd6a4 00000eb4
-[  505.021957] $ 8   : 10001c01 1000001e 00000000 ffffffe0
-[  505.027358] $12   : 00000023 85b96008 00000000 00000068
-[  505.032746] $16   : 8e0200c0 323636f9 77bbd5c8 80000000
-[  505.038157] $20   : 803bb450 85b960b0 00030000 00000000
-[  505.043553] $24   : 00000000 80065d98                  
-[  505.048941] $28   : 85b94000 85b94050 80450000 8001b1a4
-[  505.054338] Hi    : 00000000
-[  505.057303] Lo    : 0000005a
-[  505.060269] epc   : 80024270 0x80024270
-[  505.064223]     Tainted: G           O
-[  505.068084] ra    : 8001b1a4 0x8001b1a4
-[  505.072031] Status: 10001c03	KERNEL EXL IE 
-[  505.076343] Cause : 40808008
-[  505.079311] BadVA : 77bbd6a4
-[  505.082269] PrId  : 00d00100 (Ingenic Xburst)
-[  505.086755] Modules linked in: sensor_gc2053_t31(O) tx_isp_t31(O) 8189fs(O) pwm_hal(O) pwm_core(O) gpio_userkeys(O) avpu(O) audio(O) cp210x ch341 usbserial exfat(O) jzmmc_v12
-[  505.102839] Process ao-_ao_play_thr (pid: 2048, threadinfo=85b92000, task=841f1b00, tls=770aedf4)
-[  505.111998] Stack : 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
-[  505.111998] 	  00000000 00000000 00000000 00030001 00000000 00000000 00000000 00000000
-[  505.111998] 	  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
-[  505.111998] 	  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
-[  505.111998] 	  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
-[  505.111998] 	  ...
-[  505.148639] Call Trace:[<803bb450>] 0x803bb450
-[  505.153227] [<8001b1a4>] 0x8001b1a4
-[  505.156822] [<803bb450>] 0x803bb450
-[  505.160417] [<80065d98>] 0x80065d98
-[  505.164006] [<8001b1a4>] 0x8001b1a4
-[  505.167593] [<80024270>] 0x80024270
-[  505.171185] [<803bb450>] 0x803bb450
-[  505.174782] [<8001b1a4>] 0x8001b1a4
-[  505.178381] [<803bb450>] 0x803bb450
-[  505.181980] [<80065d98>] 0x80065d98
-[  505.185569] [<8001b1a4>] 0x8001b1a4
-[  505.189168] [<80024270>] 0x80024270
-[  505.192759] [<803bb450>] 0x803bb450
-[  505.196346] [<8001b1a4>] 0x8001b1a4
-[  505.199935] [<803bb450>] 0x803bb450
-[  505.203522] [<80065d98>] 0x80065d98
-[  505.207111] [<8001b1a4>] 0x8001b1a4
-[  505.210696] [<80024270>] 0x80024270
-[  505.214286] [<803bb450>] 0x803bb450
-[  505.217884] [<8001b1a4>] 0x8001b1a4
-[  505.221474] [<803bb450>] 0x803bb450
-[  505.225062] [<80065d98>] 0x80065d98
-[  505.228651] [<8001b1a4>] 0x8001b1a4
-[  505.232238] [<80024270>] 0x80024270
-[  505.235828] [<803bb450>] 0x803bb450
-[  505.239421] [<8001b1a4>] 0x8001b1a4
-[  505.243012] [<803bb450>] 0x803bb450
-[  505.246598] [<80065d98>] 0x80065d98
-[  505.250186] [<8001b1a4>] 0x8001b1a4
-[  505.253784] [<80024270>] 0x80024270
-[  505.257374] [<803bb450>] 0x803bb450
-[  505.260972] [<8001b1a4>] 0x8001b1a4
-[  505.264562] [<803bb450>] 0x803bb450
-[  505.268149] [<80065d98>] 0x80065d98
-[  505.271738] [<8001b1a4>] 0x8001b1a4
-[  505.275325] [<80024270>] 0x80024270
-[  505.278924] [<803bb450>] 0x803bb450
-[  505.282511] [<8001b1a4>] 0x8001b1a4
-[  505.286101] [<803bb450>] 0x803bb450
-[  505.289688] [<80065d98>] 0x80065d98
-[  505.293276] [<8001b1a4>] 0x8001b1a4
-[  505.296864] [<80024270>] 0x80024270
-[  505.300464] [<803bb450>] 0x803bb450
-[  505.304061] [<8001b1a4>] 0x8001b1a4
-[  505.307650] [<803bb450>] 0x803bb450
-[  505.311248] [<80065d98>] 0x80065d98
-[  505.314848] [<8001b1a4>] 0x8001b1a4
-[  505.318431] [<80024270>] 0x80024270
-[  505.322017] [<803bb450>] 0x803bb450
-[  505.325610] [<8001b1a4>] 0x8001b1a4
-[  505.329196] [<803bb450>] 0x803bb450
-[  505.332783] [<80065d98>] 0x80065d98
-[  505.336371] [<8001b1a4>] 0x8001b1a4
-[  505.339954] [<80024270>] 0x80024270
-[  505.343542] [<803bb450>] 0x803bb450
-[  505.347140] [<8001b1a4>] 0x8001b1a4
-[  505.350732] [<803bb450>] 0x803bb450
-[  505.354330] [<80065d98>] 0x80065d98
-[  505.357919] [<8001b1a4>] 0x8001b1a4
-[  505.361506] [<80024270>] 0x80024270
-[  505.365096] [<803bb450>] 0x803bb450
-[  505.368692] [<8001b1a4>] 0x8001b1a4
-[  505.372280] [<803bb450>] 0x803bb450
-[  505.375866] [<80065d98>] 0x80065d98
-[  505.379455] [<8001b1a4>] 0x8001b1a4
-[  505.383042] [<80024270>] 0x80024270
-[  505.386632] [<803bb450>] 0x803bb450
-[  505.390230] [<8001b1a4>] 0x8001b1a4
-[  505.393820] [<803bb450>] 0x803bb450
-[  505.397408] [<80065d98>] 0x80065d98
-[  505.400996] [<8001b1a4>] 0x8001b1a4
-[  505.404583] [<80024270>] 0x80024270
-[  505.408172] [<803bb450>] 0x803bb450
-[  505.411769] [<8001b1a4>] 0x8001b1a4
-[  505.415360] [<803bb450>] 0x803bb450
-[  505.418959] [<80065d98>] 0x80065d98
-[  505.422550] [<8001b1a4>] 0x8001b1a4
-[  505.426135] [<80024270>] 0x80024270
-[  505.429728] [<803bb450>] 0x803bb450
-[  505.433320] [<8001b1a4>] 0x8001b1a4
-[  505.436911] [<803bb450>] 0x803bb450
-[  505.440508] [<80065d98>] 0x80065d98
-[  505.444098] [<8001b1a4>] 0x8001b1a4
-[  505.447686] [<80024270>] 0x80024270
-[  505.451277] [<803bb450>] 0x803bb450
-[  505.454874] [<8001b1a4>] 0x8001b1a4
-[  505.458464] [<803bb450>] 0x803bb450
-[  505.462052] [<80065d98>] 0x80065d98
-[  505.465640] [<8001b1a4>] 0x8001b1a4
-[  505.469226] [<80024270>] 0x80024270
-[  505.472816] [<803bb450>] 0x803bb450
-[  505.476402] [<8001b1a4>] 0x8001b1a4
-[  505.479993] [<803bb450>] 0x803bb450
-[  505.483580] [<80065d98>] 0x80065d98
-[  505.487166] [<8001b1a4>] 0x8001b1a4
-[  505.490754] [<80024270>] 0x80024270
-[  505.494344] [<803bb450>] 0x803bb450
-[  505.497940] [<8001b1a4>] 0x8001b1a4
-[  505.501532] [<803bb450>] 0x803bb450
-[  505.505130] [<80065d98>] 0x80065d98
-[  505.508728] [<8001b1a4>] 0x8001b1a4
-[  505.512328] [<80024270>] 0x80024270
-[  505.515919] [<803bb450>] 0x803bb450
-[  505.519516] [<8001b1a4>] 0x8001b1a4
-[  505.523107] [<803bb450>] 0x803bb450
-[  505.526705] [<80065d98>] 0x80065d98
-[  505.530294] [<8001b1a4>] 0x8001b1a4
-[  505.533879] [<80024270>] 0x80024270
-[  505.537467] [<803bb450>] 0x803bb450
-[  505.541066] [<8001b1a4>] 0x8001b1a4
-[  505.544656] [<803bb450>] 0x803bb450
-[  505.548243] [<80065d98>] 0x80065d98
-[  505.551833] [<8001b1a4>] 0x8001b1a4
-[  505.555419] [<80024270>] 0x80024270
-[  505.559010] [<803bb450>] 0x803bb450
-[  505.562604] [<8001b1a4>] 0x8001b1a4
-[  505.566192] [<803bb450>] 0x803bb450
-[  505.569778] [<80065d98>] 0x80065d98
-[  505.573367] [<8001b1a4>] 0x8001b1a4
-[  505.576949] [<80024270>] 0x80024270
-[  505.580551] [<8008ccf0>] 0x8008ccf0
-[  505.584138] [<803bb450>] 0x803bb450
-[  505.587733] [<8001b1a4>] 0x8001b1a4
-[  505.591322] 
-[  505.592846] 
-[  505.592846] Code: 00c21021  3463d001  0043102b <8e5500dc> 00808825  10400015  00c08025  3c038046  8c63f0ac 
-[  505.603183] ---[ end trace cd23fe92a6352ef2 ]---
-[  505.607955] note: ao-_ao_play_thr[2048] exited with preempt_count 1
-[  505.614906] Unhandled kernel unaligned access[#2]:
-[  505.619860] CPU: 0 PID: 2048 Comm: ao-_ao_play_thr Tainted: G      D    O 3.10.14__isvp_swan_1.0__ #1
-[  505.629370] task: 841f1b00 ti: 85b92000 task.ti: 85b92000
-[  505.634934] $ 0   : 00000000 804b0000 40000000 00010000
-[  505.640331] $ 4   : 10001c01 842bd440 10001c00 ffff00fe
-[  505.645726] $ 8   : 85b97fe0 00001c00 00000000 b8fed072
-[  505.651122] $12   : 00000075 f085a2c9 00000000 9ee38e3a
-[  505.656516] $16   : 841121c0 80452410 840e1780 00000001
-[  505.661907] $20   : 80450000 803c1dd0 00000000 85fb1180
-[  505.667311] $24   : 00000000 80065d98                  
-[  505.672706] $28   : 85b96000 85b93de8 00000010 803bb6d8
-[  505.678108] Hi    : 00000000
-[  505.681074] Lo    : 00000000
-[  505.684040] epc   : 8006138c 0x8006138c
-[  505.687997]     Tainted: G      D    O
-[  505.691853] ra    : 803bb6d8 0x803bb6d8
-[  505.695802] Status: 10001c02	KERNEL EXL 
-[  505.699840] Cause : 40808010
-[  505.702808] BadVA : 10001c05
-[  505.705768] PrId  : 00d00100 (Ingenic Xburst)
-[  505.710254] Modules linked in: sensor_gc2053_t31(O) tx_isp_t31(O) 8189fs(O) pwm_hal(O) pwm_core(O) gpio_userkeys(O) avpu(O) audio(O) cp210x ch341 usbserial exfat(O) jzmmc_v12
-[  505.726323] Process ao-_ao_play_thr (pid: 2048, threadinfo=85b92000, task=841f1b00, tls=770aedf4)
-[  505.735479] Stack : 803c1dd0 800659c4 8003a18c 841f1b00 841f1b00 842bd440 80452410 842bd5cc
-[  505.735479] 	  841f2f40 803bb6d8 841f1b00 841f1b00 80453c20 00000001 804c69f0 80082b84
-[  505.735479] 	  841f1b00 00000001 841f1af8 85b93e60 00000006 00000020 841f1c10 841f21c0
-[  505.735479] 	  00000010 8003b1f0 00030000 841f1cd8 00000800 00000001 85b93e60 85b93e60
-[  505.735479] 	  841f2318 80065d98 841f1c10 85b93e8c 85b93fa0 803e9de0 0000000b 00000000
-[  505.735479] 	  ...
-[  505.772188] Call Trace:[<800659c4>] 0x800659c4
-[  505.776766] [<8003a18c>] 0x8003a18c
-[  505.780359] [<803bb6d8>] 0x803bb6d8
-[  505.783956] [<80082b84>] 0x80082b84
-[  505.787542] [<8003b1f0>] 0x8003b1f0
-[  505.791136] [<80065d98>] 0x80065d98
-[  505.794730] [<803bb450>] 0x803bb450
-[  505.798328] [<8001f96c>] 0x8001f96c
-[  505.801918] [<8002463c>] 0x8002463c
-[  505.805506] [<80024270>] 0x80024270
-[  505.809094] [<8001b1a4>] 0x8001b1a4
-[  505.812683] [<800224bc>] 0x800224bc
-[  505.816276] [<803bb450>] 0x803bb450
-[  505.819868] [<8001b1a4>] 0x8001b1a4
-[  505.823457] 
-[  505.824989] 
-[  505.824989] Code: 00808025  8f840000  3c024000 <8c830004> 8c631fc8  00431824  1060000a  00000000  40116000 
-[  505.835290] ---[ end trace cd23fe92a6352ef3 ]---
-[  505.840067] Fixing recursive fault but reboot is needed!
-[  505.848744] Unhandled kernel unaligned access[#3]:
-[  505.853700] CPU: 0 PID: 2048 Comm: ao-_ao_play_thr Tainted: G      D    O 3.10.14__isvp_swan_1.0__ #1
-[  505.863213] task: 841f1b00 ti: 85b92000 task.ti: 85b92000
-[  505.868779] $ 0   : 00000000 804b0000 40000000 00010000
-[  505.874171] $ 4   : 10001c01 842bd440 10001c00 ffff00fe
-[  505.879559] $ 8   : 85b97fe0 00001c00 00000000 c6eee15e
-[  505.884951] $12   : 00000075 97305e3c 00000000 00000007
-[  505.890339] $16   : 842be1c0 80452410 00000000 00000002
-[  505.895734] $20   : 80450000 803c1dd0 00000000 85fb1180
-[  505.901136] $24   : 00000000 80065d98                  
-[  505.906531] $28   : 85b96000 85b93c20 00000010 803bb6d8
-[  505.911931] Hi    : 00000000
-[  505.914894] Lo    : 00000000
-[  505.917861] epc   : 8006138c 0x8006138c
-[  505.921815]     Tainted: G      D    O
-[  505.925670] ra    : 803bb6d8 0x803bb6d8
-[  505.929621] Status: 10001c02	KERNEL EXL 
-[  505.933659] Cause : 40808010
-[  505.936623] BadVA : 10001c05
-[  505.939581] PrId  : 00d00100 (Ingenic Xburst)
-[  505.944071] Modules linked in: sensor_gc2053_t31(O) tx_isp_t31(O) 8189fs(O) pwm_hal(O) pwm_core(O) gpio_userkeys(O) avpu(O) audio(O) cp210x ch341 usbserial exfat(O) jzmmc_v12
-[  505.960147] Process ao-_ao_play_thr (pid: 2048, threadinfo=85b92000, task=841f1b00, tls=770aedf4)
-[  505.969305] Stack : 803c1dd0 800659c4 804b3142 0000002c 841f1b00 842bd440 80452410 842bd5cc
-[  505.969305] 	  841f2f40 803bb6d8 803bb6d8 85b93d38 00000000 85fb1180 00000010 803b4664
-[  505.969305] 	  841f1b00 0000000b 0000000b 80000000 803bb6d8 85b93d38 00000000 85fb1180
-[  505.969305] 	  00000010 8003abdc 00000000 00005430 00000000 00000f73 00000000 85fb1180
-[  505.969305] 	  00000000 80065d98 803eb600 85b93cc4 85b93d38 803ea3f8 0000000b 80000000
-[  505.969305] 	  ...
-[  506.005979] Call Trace:[<800659c4>] 0x800659c4
-[  506.010561] [<803bb6d8>] 0x803bb6d8
-[  506.014151] [<803bb6d8>] 0x803bb6d8
-[  506.017744] [<803b4664>] 0x803b4664
-[  506.021333] [<803bb6d8>] 0x803bb6d8
-[  506.024923] [<8003abdc>] 0x8003abdc
-[  506.028507] [<80065d98>] 0x80065d98
-[  506.032106] [<803bb6d8>] 0x803bb6d8
-[  506.035697] [<8001f96c>] 0x8001f96c
-[  506.039287] [<8006138c>] 0x8006138c
-[  506.042875] [<80021464>] 0x80021464
-[  506.046473] [<8001b1a4>] 0x8001b1a4
-[  506.050065] [<800e0d00>] 0x800e0d00
-[  506.053663] [<80065d98>] 0x80065d98
-[  506.057251] [<803bb6d8>] 0x803bb6d8
-[  506.060849] [<8006138c>] 0x8006138c
-[  506.064435] [<800659c4>] 0x800659c4
-[  506.068029] [<8003a18c>] 0x8003a18c
-[  506.071625] [<803bb6d8>] 0x803bb6d8
-[  506.075220] [<80082b84>] 0x80082b84
-[  506.078805] [<8003b1f0>] 0x8003b1f0
-[  506.082396] [<80065d98>] 0x80065d98
-[  506.085991] [<803bb450>] 0x803bb450
-[  506.089577] [<8001f96c>] 0x8001f96c
-[  506.093161] [<8002463c>] 0x8002463c
-[  506.096751] [<80024270>] 0x80024270
-[  506.100337] [<8001b1a4>] 0x8001b1a4
-[  506.103935] [<800224bc>] 0x800224bc
-[  506.107526] [<803bb450>] 0x803bb450
-[  506.111119] [<8001b1a4>] 0x8001b1a4
-[  506.114707] 
-[  506.116238] 
-[  506.116238] Code: 00808025  8f840000  3c024000 <8c830004> 8c631fc8  00431824  1060000a  00000000  40116000 
-[  506.126601] ---[ end trace cd23fe92a6352ef4 ]---
-[  506.131381] Fixing recursive fault but reboot is needed!
-[  506.137265] Unhandled kernel unaligned access[#4]:
-[  506.142208] CPU: 0 PID: 2048 Comm: ao-_ao_play_thr Tainted: G      D    O 3.10.14__isvp_swan_1.0__ #1
-[  506.151731] task: 841f1b00 ti: 85b92000 task.ti: 85b92000
-[  506.157295] $ 0   : 00000000 804b0000 40000000 00010000
-[  506.162695] $ 4   : 10001c01 842bd440 10001c00 ffff00fe
-[  506.168090] $ 8   : 85b97fe0 00001c00 00000000 d82168cb
-[  506.173486] $12   : 00000075 85b93868 00000000 00000050
-[  506.178875] $16   : 842be1c0 80452410 00000000 00000002
-[  506.184269] $20   : 80450000 803c1dd0 00000000 85fb1180
-[  506.189672] $24   : 00000018 80065d98                  
-[  506.195065] $28   : 85b96000 85b93a58 00000010 803bb6d8
-[  506.200469] Hi    : 00000000
-[  506.203429] Lo    : 00000000
-[  506.206394] epc   : 8006138c 0x8006138c
-[  506.210349]     Tainted: G      D    O
-[  506.214208] ra    : 803bb6d8 0x803bb6d8
-[  506.218157] Status: 10001c02	KERNEL EXL 
-[  506.222194] Cause : 40808010
-[  506.225157] BadVA : 10001c05
-[  506.228117] PrId  : 00d00100 (Ingenic Xburst)
-[  506.232608] Modules linked in: sensor_gc2053_t31(O) tx_isp_t31(O) 8189fs(O) pwm_hal(O) pwm_core(O) gpio_userkeys(O) avpu(O) audio(O) cp210x ch341 usbserial exfat(O) jzmmc_v12
-[  506.248693] Process ao-_ao_play_thr (pid: 2048, threadinfo=85b92000, task=841f1b00, tls=770aedf4)
-[  506.257846] Stack : 803c1dd0 800659c4 804b3142 0000002c 841f1b00 842bd440 80452410 842bd5cc
-[  506.257846] 	  841f2f40 803bb6d8 803bb6d8 85b93b70 00000000 85fb1180 00000010 803b4664
-[  506.257846] 	  841f1b00 0000000b 0000000b 80000000 803bb6d8 85b93b70 00000000 85fb1180
-[  506.257846] 	  00000010 8003abdc 00000000 00006100 00000000 00000fac 00000000 85fb1180
-[  506.257846] 	  00000000 80065d98 803eb600 85b93afc 85b93b70 803ea3f8 0000000b 80000000
-[  506.257846] 	  ...
-[  506.294535] Call Trace:[<800659c4>] 0x800659c4
-[  506.299109] [<803bb6d8>] 0x803bb6d8
-[  506.302701] [<803bb6d8>] 0x803bb6d8
-[  506.306299] [<803b4664>] 0x803b4664
-[  506.309884] [<803bb6d8>] 0x803bb6d8
-[  506.313472] [<8003abdc>] 0x8003abdc
-[  506.317061] [<80065d98>] 0x80065d98
-[  506.320657] [<803bb6d8>] 0x803bb6d8
-[  506.324255] [<8001f96c>] 0x8001f96c
-[  506.327844] [<8006138c>] 0x8006138c
-[  506.331433] [<80021464>] 0x80021464
-[  506.335029] [<80036d24>] 0x80036d24
-[  506.338621] [<8001b1a4>] 0x8001b1a4
-[  506.342214] [<80065d98>] 0x80065d98
-[  506.345801] [<803bb6d8>] 0x803bb6d8
-[  506.349389] [<8006138c>] 0x8006138c
-[  506.352975] [<800659c4>] 0x800659c4
-[  506.356569] [<803bb6d8>] 0x803bb6d8
-[  506.360162] [<803bb6d8>] 0x803bb6d8
-[  506.363747] [<803b4664>] 0x803b4664
-[  506.367337] [<803bb6d8>] 0x803bb6d8
-[  506.370921] [<8003abdc>] 0x8003abdc
-[  506.374520] [<80065d98>] 0x80065d98
-[  506.378116] [<803bb6d8>] 0x803bb6d8
-[  506.381709] [<8001f96c>] 0x8001f96c
-[  506.385298] [<8006138c>] 0x8006138c
-[  506.388891] [<80021464>] 0x80021464
-[  506.392489] [<8001b1a4>] 0x8001b1a4
-[  506.396085] [<800e0d00>] 0x800e0d00
-[  506.399683] [<80065d98>] 0x80065d98
-[  506.403269] [<803bb6d8>] 0x803bb6d8
-[  506.406865] [<8006138c>] 0x8006138c
-[  506.410461] [<800659c4>] 0x800659c4
-[  506.414055] [<8003a18c>] 0x8003a18c
-[  506.417652] [<803bb6d8>] 0x803bb6d8
-[  506.421249] [<80082b84>] 0x80082b84
-[  506.424837] [<8003b1f0>] 0x8003b1f0
-[  506.428426] [<80065d98>] 0x80065d98
-[  506.432017] [<803bb450>] 0x803bb450
-[  506.435614] [<8001f96c>] 0x8001f96c
-[  506.439199] [<8002463c>] 0x8002463c
-[  506.442790] [<80024270>] 0x80024270
-[  506.446378] [<8001b1a4>] 0x8001b1a4
-[  506.449974] [<800224bc>] 0x800224bc
-[  506.453565] [<803bb450>] 0x803bb450
-[  506.457159] [<8001b1a4>] 0x8001b1a4
-[  506.460745] 
-[  506.462274] 
-[  506.462274] Code: 00808025  8f840000  3c024000 <8c830004> 8c631fc8  00431824  1060000a  00000000  40116000 
-[  506.472663] ---[ end trace cd23fe92a6352ef5 ]---
-[  506.477430] Fixing recursive fault but reboot is needed!
-[  506.484113] Unhandled kernel unaligned access[#5]:
-[  506.489064] CPU: 0 PID: 2048 Comm: ao-_ao_play_thr Tainted: G      D    O 3.10.14__isvp_swan_1.0__ #1
-[  506.498581] task: 841f1b00 ti: 85b92000 task.ti: 85b92000
-[  506.504143] $ 0   : 00000000 804b0000 40000000 00010000
-[  506.509534] $ 4   : 10001c01 842bd440 10001c00 ffff00fe
-[  506.514945] $ 8   : 85b97fe0 00001c00 00000000 eccdd23a
-[  506.520339] $12   : 00000075 77b1f000 00000000 0000000a
-[  506.525726] $16   : 84110d80 80452410 8471bd80 00000002
-[  506.531127] $20   : 80450000 803c1dd0 00000000 85fb1180
-[  506.536531] $24   : 00000000 80065d98                  
-[  506.541927] $28   : 85b96000 85b93890 00000010 803bb6d8
-[  506.547330] Hi    : 00000000
-[  506.550295] Lo    : 00000000
-[  506.553260] epc   : 8006138c 0x8006138c
-[  506.557215]     Tainted: G      D    O
-[  506.561072] ra    : 803bb6d8 0x803bb6d8
-[  506.565023] Status: 10001c02	KERNEL EXL 
-[  506.569064] Cause : 40808010
-[  506.572021] BadVA : 10001c05
-[  506.574980] PrId  : 00d00100 (Ingenic Xburst)
-[  506.579469] Modules linked in: sensor_gc2053_t31(O) tx_isp_t31(O) 8189fs(O) pwm_hal(O) pwm_core(O) gpio_userkeys(O) avpu(O) audio(O) cp210x ch341 usbserial exfat(O) jzmmc_v12
-[  506.595570] Process ao-_ao_play_thr (pid: 2048, threadinfo=85b92000, task=841f1b00, tls=770aedf4)
-[  506.604729] Stack : 803c1dd0 800659c4 804b3142 0000002c 841f1b00 842bd440 80452410 842bd5cc
-[  506.604729] 	  841f2f40 803bb6d8 803bb6d8 85b939a8 00000000 85fb1180 00000010 803b4664
-[  506.604729] 	  841f1b00 0000000b 0000000b 80000000 803bb6d8 85b939a8 00000000 85fb1180
-[  506.604729] 	  00000010 8003abdc 00000000 00007050 00000000 00000ff5 00000000 85fb1180
-[  506.604729] 	  00000000 80065d98 803eb600 85b93934 85b939a8 803ea3f8 0000000b 80000000
-[  506.604729] 	  ...
-[  506.641395] Call Trace:[<800659c4>] 0x800659c4
-[  506.645978] [<803bb6d8>] 0x803bb6d8
-[  506.649569] [<803bb6d8>] 0x803bb6d8
-[  506.653160] [<803b4664>] 0x803b4664
-[  506.656747] [<803bb6d8>] 0x803bb6d8
-[  506.660338] [<8003abdc>] 0x8003abdc
-[  506.663924] [<80065d98>] 0x80065d98
-[  506.667520] [<803bb6d8>] 0x803bb6d8
-[  506.671119] [<8001f96c>] 0x8001f96c
-[  506.674706] [<8006138c>] 0x8006138c
-[  506.678295] [<80021464>] 0x80021464
-[  506.681893] [<80036d24>] 0x80036d24
-[  506.685482] [<8001b1a4>] 0x8001b1a4
-[  506.689076] [<80065d98>] 0x80065d98
-[  506.692673] [<803bb6d8>] 0x803bb6d8
-[  506.696260] [<8006138c>] 0x8006138c
-[  506.699847] [<800659c4>] 0x800659c4
-[  506.703442] [<803bb6d8>] 0x803bb6d8
-[  506.707035] [<803bb6d8>] 0x803bb6d8
-[  506.710632] [<803b4664>] 0x803b4664
-[  506.714218] [<803bb6d8>] 0x803bb6d8
-[  506.717808] [<8003abdc>] 0x8003abdc
-[  506.721398] [<80065d98>] 0x80065d98
-[  506.724992] [<803bb6d8>] 0x803bb6d8
-[  506.728591] [<8001f96c>] 0x8001f96c
-[  506.732177] [<8006138c>] 0x8006138c
-[  506.735770] [<80021464>] 0x80021464
-[  506.739368] [<80036d24>] 0x80036d24
-[  506.742959] [<8001b1a4>] 0x8001b1a4
-[  506.746554] [<80065d98>] 0x80065d98
-[  506.750152] [<803bb6d8>] 0x803bb6d8
-[  506.753740] [<8006138c>] 0x8006138c
-[  506.757338] [<800659c4>] 0x800659c4
-[  506.760933] [<803bb6d8>] 0x803bb6d8
-[  506.764527] [<803bb6d8>] 0x803bb6d8
-[  506.768124] [<803b4664>] 0x803b4664
-[  506.771709] [<803bb6d8>] 0x803bb6d8
-[  506.775298] [<8003abdc>] 0x8003abdc
-[  506.778888] [<80065d98>] 0x80065d98
-[  506.782482] [<803bb6d8>] 0x803bb6d8
-[  506.786080] [<8001f96c>] 0x8001f96c
-[  506.789669] [<8006138c>] 0x8006138c
-[  506.793262] [<80021464>] 0x80021464
-[  506.796860] [<8001b1a4>] 0x8001b1a4
-[  506.800456] [<800e0d00>] 0x800e0d00
-[  506.804052] [<80065d98>] 0x80065d98
-[  506.807640] [<803bb6d8>] 0x803bb6d8
-[  506.811238] [<8006138c>] 0x8006138c
-[  506.814823] [<800659c4>] 0x800659c4
-[  506.818420] [<8003a18c>] 0x8003a18c
-[  506.822016] [<803bb6d8>] 0x803bb6d8
-[  506.825612] [<80082b84>] 0x80082b84
-[  506.829199] [<8003b1f0>] 0x8003b1f0
-[  506.832790] [<80065d98>] 0x80065d98
-[  506.836387] [<803bb450>] 0x803bb450
-[  506.839982] [<8001f96c>] 0x8001f96c
-[  506.843569] [<8002463c>] 0x8002463c
-[  506.847158] [<80024270>] 0x80024270
-[  506.850745] [<8001b1a4>] 0x8001b1a4
-[  506.854338] [<800224bc>] 0x800224bc
-[  506.857932] [<803bb450>] 0x803bb450
-[  506.861525] [<8001b1a4>] 0x8001b1a4
-[  506.865115] 
-[  506.866640] 
-[  506.866640] Code: 00808025  8f840000  3c024000 <8c830004> 8c631fc8  00431824  1060000a  00000000  40116000 
-[  506.876946] ---[ end trace cd23fe92a6352ef6 ]---
-[  506.881721] Fixing recursive fault but reboot is needed!
+[   17.542194] TX ISP driver initializing with new subdevice management system...
+[   17.542207] *** Using reference driver interrupt-driven frame processing ***
+[   17.542213] *** VIC DEVICE CREATION DEFERRED TO PLATFORM DRIVER PROBE ***
+[   17.542218] *** VIN DEVICE CREATION DEFERRED TO tx_isp_core_probe (after memory mappings) ***
+[   17.542223] *** This fixes the 'ISP core registers not available' error ***
+[   17.542229] *** VIN SUBDEV OPS AND INITIALIZATION DEFERRED TO AUTO-LINK PHASE ***
+[   17.542234] *** CRITICAL: REGISTERING SUBDEV PLATFORM DRIVERS FIRST ***
+[   17.542239] *** TX ISP SUBDEV PLATFORM DRIVERS REGISTRATION ***
+[   17.552135] All ISP subdev platform drivers registered successfully
+[   17.552148] *** SUBDEV PLATFORM DRIVERS REGISTERED - VIC/CSI/VIN/CORE DRIVERS AVAILABLE ***
+[   17.552154] *** CRITICAL: INITIALIZING SUBDEVICE REGISTRY BEFORE MAIN PLATFORM DEVICE ***
+[   17.552159] *** CRITICAL: Registering main platform driver ***
+[   17.554673] *** Main platform driver registered successfully ***
+[   17.554685] *** REFERENCE DRIVER: Subdev platform devices will be registered by tx_isp_create_graph_and_nodes ***
+[   17.557121] *** PROBE: tx_isp_platform_probe CALLED for device tx-isp ***
+[   17.557141] *** PROBE: ISP device allocated successfully: 85f3c000 ***
+[   17.557157] *** PROBE: Platform data: c06801e0 ***
+[   17.557163] *** PROBE: Platform data validation passed ***
+[   17.557168] *** REFERENCE DRIVER: Individual subdevices will initialize their own memory regions ***
+[   17.557175] *** PLATFORM DEVICES ALREADY REGISTERED IN INIT - SKIPPING DUPLICATE REGISTRATION ***
+[   17.557180] *** tx_isp_module_init: EXACT Binary Ninja reference implementation ***
+[   17.559873] *** tx_isp_create_graph_and_nodes: EXACT Binary Ninja reference implementation ***
+[   17.559886] *** Registering platform device 0 from platform data ***
+[   17.562400] *** tx_isp_subdev_init: CSI subdev registered at index 0 ***
+[   17.562415] tx_isp_module_init: Module initialized for tx-isp-csi
+[   17.562421] *** tx_isp_subdev_init: Deferring core->init for device tx-isp-csi to prevent hangs ***
+[   17.562427] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
+[   17.562434] *** tx_isp_request_irq: IRQ 38 handled by main dispatcher - skipping duplicate registration ***
+[   17.562441] *** tx_isp_request_irq: IRQ 38 info stored for tx-isp-csi ***
+[   17.562449] tx_isp_subdev_init: platform_get_resource returned c067ffac for device tx-isp-csi
+[   17.562457] tx_isp_subdev_init: Memory resource found: start=0x10022000, end=0x10022fff, size=0x00001000
+[   17.562465] isp_subdev_init_clks: Initializing 2 clocks
+[   17.562477] CGU_ISP clock enabled at 100MHz
+[   17.562485] ISP clock enabled
+[   17.589175] CPM clock gates configured
+[   17.589189] isp_subdev_init_clks: Successfully initialized 2 clocks
+[   17.589197] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-csi' to ourISPdev ***
+[   17.589203] *** DEBUG: Device name comparison - checking 'tx-isp-csi' ***
+[   17.589208] *** DEBUG: About to check device name matches ***
+[   17.589215] *** CSI BASIC REGISTERS SET: b0022000 (from tx_isp_subdev_init) ***
+[   17.589222] *** LINKED CSI device: 85205800, regs: b0022000 ***
+[   17.589229] *** CSI PROBE: Using register mapping from tx_isp_subdev_init: b0022000 ***
+[   17.589235] *** CSI PROBE: Device linking handled automatically by tx_isp_subdev_init ***
+[   17.589258] *** Platform device 0 (tx-isp-csi) registered successfully ***
+[   17.589265] *** Registering platform device 1 from platform data ***
+[   17.589589] *** VIC PROBE: IRQ handler pointers set to NULL (reference driver uses main dispatcher) ***
+[   17.589603] *** tx_isp_subdev_pipo: SAFE struct member access implementation ***
+[   17.589611] tx_isp_subdev_pipo: entry - sd=85f46000, arg=85f2dac0
+[   17.589617] tx_isp_subdev_pipo: vic_dev retrieved:   (null)
+[   17.589622] tx_isp_subdev_pipo: vic_dev is NULL
+[   17.589627] *** VIC PROBE: Buffer management initialized successfully ***
+[   17.589634] *** VIC PROBE: Initialized default dimensions 1920x1080 and critical fields ***
+[   17.589640] *** VIC PROBE: Stored vic_dev pointer 85f46000 in subdev private data ***
+[   17.589646] *** VIC PROBE: Callback structure setup deferred - avoiding memory corruption ***
+[   17.589651] *** tx_isp_subdev_init: VIC device linked to main ISP device ***
+[   17.589657] *** tx_isp_subdev_init: VIC subdev registered at index 1 ***
+[   17.589663] *** tx_isp_subdev_init: Interrupt registration deferred until after module init ***
+[   17.589668] *** tx_isp_subdev_init: VIC device linked and registered at index 1 ***
+[   17.589675] tx_isp_module_init: Module initialized for isp-w02
+[   17.589680] *** tx_isp_subdev_init: Deferring core->init for device isp-w02 to prevent hangs ***
+[   17.589686] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
+[   17.589693] *** tx_isp_request_irq: IRQ 38 handled by main dispatcher - skipping duplicate registration ***
+[   17.589699] *** tx_isp_request_irq: IRQ 38 info stored for isp-w02 ***
+[   17.589707] tx_isp_subdev_init: platform_get_resource returned c06800cc for device isp-w02
+[   17.589714] tx_isp_subdev_init: Memory resource found: start=0x133e0000, end=0x133effff, size=0x00010000
+[   17.589724] isp_subdev_init_clks: Initializing 2 clocks
+[   17.589733] CGU_ISP clock enabled at 100MHz
+[   17.589739] ISP clock enabled
+[   17.619189] CPM clock gates configured
+[   17.619203] isp_subdev_init_clks: Successfully initialized 2 clocks
+[   17.619211] *** tx_isp_subdev_auto_link: Auto-linking device 'isp-w02' to ourISPdev ***
+[   17.619217] *** DEBUG: Device name comparison - checking 'isp-w02' ***
+[   17.619221] *** DEBUG: About to check device name matches ***
+[   17.619229] *** MAPPED secondary VIC registers: b0023000 (0x10023000) ***
+[   17.619237] *** LINKED VIC device: 85f46000, primary_regs: b33e0000, secondary_regs: b0023000 ***
+[   17.619243] *** VIC AUTO-LINK: Registers are mapped, registering interrupt handler ***
+[   17.619250] *** VIC PROBE: Device linking handled automatically by tx_isp_subdev_init ***
+[   17.619283] *** Platform device 1 (isp-w02) registered successfully ***
+[   17.619290] *** Registering platform device 2 from platform data ***
+[   17.619615] tx_isp_module_init: Module initialized for tx-isp-vin
+[   17.619629] *** tx_isp_subdev_init: Deferring core->init for device tx-isp-vin to prevent hangs ***
+[   17.619635] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
+[   17.619642] *** tx_isp_request_irq: IRQ 37 handled by main dispatcher - skipping duplicate registration ***
+[   17.619649] *** tx_isp_request_irq: IRQ 37 info stored for tx-isp-vin ***
+[   17.619656] tx_isp_subdev_init: platform_get_resource returned   (null) for device tx-isp-vin
+[   17.619662] tx_isp_subdev_init: No memory resource for device tx-isp-vin (logical device - OK)
+[   17.619668] isp_subdev_init_clks: Initializing 0 clocks
+[   17.619675] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-vin' to ourISPdev ***
+[   17.619681] *** DEBUG: Device name comparison - checking 'tx-isp-vin' ***
+[   17.619685] *** DEBUG: About to check device name matches ***
+[   17.619691] *** DEBUG: VIN device name matched! Setting up VIN device ***
+[   17.619697] *** LINKED VIN device: 85f46400 ***
+[   17.619705] *** VIN SUBDEV OPS CONFIGURED: core=c06813e4, video=c06813d8, s_stream=c066193c ***
+[   17.619710] *** REGISTERED VIN SUBDEV AT INDEX 2 WITH VIDEO OPS ***
+[   17.619715] *** VIN INITIALIZATION DEFERRED TO SENSOR REGISTRATION PHASE ***
+[   17.619721] *** VIN PROBE: Device linking handled automatically by tx_isp_subdev_init ***
+[   17.619740] *** Platform device 2 (tx-isp-vin) registered successfully ***
+[   17.619747] *** Registering platform device 3 from platform data ***
+[   17.622249] *** Platform device 3 (tx-isp-fs) registered successfully ***
+[   17.622261] *** Registering platform device 4 from platform data ***
+[   17.624851] *** tx_isp_core_probe: NEW ARCHITECTURE - Creating separate core device ***
+[   17.624864] *** tx_isp_create_core_device: Creating ISP core device ***
+[   17.624873] *** tx_isp_create_core_device: Core device created successfully: 85f46800 ***
+[   17.624880] *** tx_isp_subdev_init: Core ISP subdev registration handled by core device ***
+[   17.624887] tx_isp_module_init: Module initialized for tx-isp-core
+[   17.624893] *** tx_isp_subdev_init: Deferring core->init for device tx-isp-core to prevent hangs ***
+[   17.624899] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
+[   17.624907] *** tx_isp_request_irq: IRQ 37 handled by main dispatcher - skipping duplicate registration ***
+[   17.624913] *** tx_isp_request_irq: IRQ 37 info stored for tx-isp-core ***
+[   17.624920] tx_isp_subdev_init: platform_get_resource returned c067fc14 for device tx-isp-core
+[   17.624928] tx_isp_subdev_init: Memory resource found: start=0x13300000, end=0x1330ffff, size=0x00010000
+[   17.624937] isp_subdev_init_clks: Initializing 3 clocks
+[   17.624946] CGU_ISP clock enabled at 100MHz
+[   17.624953] ISP clock enabled
+[   17.624959] CSI clock enabled
+[   17.649255] CPM clock gates configured
+[   17.649268] isp_subdev_init_clks: Successfully initialized 3 clocks
+[   17.649277] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-core' to ourISPdev ***
+[   17.649283] *** DEBUG: Device name comparison - checking 'tx-isp-core' ***
+[   17.649288] *** DEBUG: About to check device name matches ***
+[   17.649295] *** CORE device not yet linked - regs will be mapped later ***
+[   17.649300] *** tx_isp_core_probe: Core subdev initialized successfully ***
+[   17.649308] *** tx_isp_core_device_init: Initializing core device: 85f46800 ***
+[   17.649320] *** tx_isp_core_device_init: Core device initialized successfully ***
+[   17.649328] *** tx_isp_link_core_device: Linking core device 85f46800 to ISP device 85f3c000 ***
+[   17.649333] *** tx_isp_link_core_device: Core device linked successfully ***
+[   17.649339] *** Core subdev registered at index 4: 85f46800 ***
+[   17.649353] *** tx_isp_core_probe: VIC device creation deferred to platform driver system ***
+[   17.649359] *** tx_isp_core_probe: Platform drivers will call tx_isp_subdev_init for proper initialization ***
+[   17.649364] *** tx_isp_core_probe: Calling sensor_early_init ***
+[   17.649369] sensor_early_init: Preparing sensor infrastructure
+[   17.649375] *** tx_isp_core_probe: Core device setup complete ***
+[   17.649380] ***   - Core device: 85f46800 ***
+[   17.649385] ***   - Channel count: 6 ***
+[   17.649391] ***   - Linked to ISP device: 85f3c000 ***
+[   17.649396] *** tx_isp_core_probe: Initializing core tuning system ***
+[   17.649420] *** tx_isp_core_probe: Tuning init SUCCESS ***
+[   17.649425] *** tx_isp_core_probe: SUCCESS - Core device fully initialized ***
+[   17.649431] ***   - Core device: 85f46800 ***
+[   17.649437] ***   - Tuning device: 81128000 ***
+[   17.649442] *** tx_isp_core_probe: Creating frame channel devices ***
+[   17.649447] *** tx_isp_create_framechan_devices: Creating frame channel devices ***
+[   17.649802] *** Created frame channel device: /dev/framechan0 (major=10, minor=54) ***
+[   17.652326] *** Created frame channel device: /dev/framechan1 (major=10, minor=53) ***
+[   17.654934] *** Created frame channel device: /dev/framechan2 (major=10, minor=52) ***
+[   17.657651] *** Created frame channel device: /dev/framechan3 (major=10, minor=51) ***
+[   17.657662] *** tx_isp_create_framechan_devices: All frame channel devices created ***
+[   17.657667] *** tx_isp_core_probe: Frame channel devices created successfully ***
+[   17.657673] *** tx_isp_core_probe: Creating ISP M0 tuning device node ***
+[   17.657679] tisp_code_create_tuning_node: Creating ISP M0 tuning device node
+[   17.657687] tisp_code_create_tuning_node: Allocated dynamic major 251
+[   17.662751] *** ISP M0 TUNING DEVICE CREATED: /dev/isp-m0 (major=251, minor=0) ***
+[   17.662762] *** tx_isp_core_probe: ISP M0 tuning device node created successfully ***
+[   17.662767] *** tx_isp_core_probe: Core probe completed successfully ***
+[   17.662788] *** Platform device 4 (tx-isp-core) registered successfully ***
+[   17.662795] *** tx_isp_create_graph_and_nodes: Binary Ninja reference implementation complete ***
+[   17.662801] *** tx_isp_module_init: Binary Ninja reference implementation complete ***
+[   17.662806] *** PROBE: Binary Ninja reference implementation complete ***
+[   17.662816] *** SUCCESS: ourISPdev allocated by probe function: 85f3c000 ***
+[   17.662821] *** INITIALIZING SUBDEVICE REGISTRY WITH ALLOCATED ourISPdev ***
+[   17.662827] *** tx_isp_init_subdev_registry: Initializing subdevice registry ***
+[   17.662835] tx_isp_init_subdev_registry: 3 devices already linked directly - skipping registry creation
+[   17.662840] *** USING DIRECT DEVICE LINKING INSTEAD OF REGISTRY SYSTEM ***
+[   17.662846] *** SUBDEVICE REGISTRY INITIALIZED - GRAPH CREATION SHOULD NOW SUCCEED ***
+[   17.662851] *** CRITICAL: Registering main interrupt dispatcher for IRQ 37 and 38 ***
+[   17.665229] *** MAIN DISPATCHER: IRQ 37 registered successfully ***
+[   17.665311] *** MAIN DISPATCHER: IRQ 38 registered successfully ***
+[   17.665317] *** MAIN DISPATCHER: Both IRQ 37 and 38 registered with main dispatcher ***
+[   17.665323] TX ISP driver initialized successfully - probe function will handle device setup
+[   21.813895] ISP opened successfully
+[   21.814494] ISP IOCTL: cmd=0x805056c1 arg=0x771ebd60
+[   21.814505] *** TX_ISP_SENSOR_REGISTER: FIXED TO CREATE ACTUAL SENSOR CONNECTION ***
+[   21.814511] Sensor register: gc2053
+[   21.814516] *** HANDLING SENSOR REGISTRATION WITH SAFE STRUCT ACCESS ***
+[   21.814522] Sensor registration complete, final_result=0x0
+[   21.814528] *** ADDING SUCCESSFULLY REGISTERED SENSOR TO LIST: gc2053 ***
+[   21.814536] *** SENSOR ADDED TO LIST: index=0 name=gc2053 ***
+[   21.814541] *** CREATING I2C DEVICE FOR SENSOR gc2053 ***
+[   21.814550] *** CREATING I2C CLIENT: name=gc2053, addr=0x37, adapter=i2c0 ***
+[   21.814555] *** isp_i2c_new_subdev_board: MIPS-SAFE implementation - FIXED CRASH ***
+[   21.814563] Creating I2C subdev: type=gc2053 addr=0x37 on adapter i2c0 (MIPS-safe)
+[   21.814569] *** MIPS-SAFE: Requesting sensor module gc2053 ***
+[   21.822603] *** MIPS-SAFE: Valid I2C address 0x37, creating device ***
+[   21.824397] tx_isp_module_init: Module initialized for (null)
+[   21.824411] *** tx_isp_subdev_init: Deferring core->init for device (null) to prevent hangs ***
+[   21.824417] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
+[   21.824424] *** tx_isp_subdev_auto_link: Auto-linking device 'gc2053' to ourISPdev ***
+[   21.824429] *** DEBUG: Device name comparison - checking 'gc2053' ***
+[   21.824435] *** DEBUG: About to check device name matches ***
+[   21.824441] *** DEBUG: Unknown device name 'gc2053' - no specific auto-link handling ***
+[   21.824463] *** MIPS-SAFE: I2C device created successfully at 0x8558fd00 ***
+[   21.824470] *** MIPS-SAFE: Module reference acquired for gc2053 ***
+[   21.824476] *** MIPS-SAFE: Sensor subdev data found, device ready ***
+[   21.824483] *** I2C DEVICE READY: gc2053 at 0x37 (MIPS-safe) ***
+[   21.824489] *** SUCCESS: I2C CLIENT CREATED - SENSOR PROBE SHOULD BE CALLED! ***
+[   21.824495] *** I2C CLIENT: gc2053 at 0x37 on i2c0 ***
+[   21.824501] *** LOOKING FOR REAL SENSOR REGISTERED BY gc2053 MODULE ***
+[   21.824506] *** WAITING FOR SENSOR PROBE TO COMPLETE ***
+[   22.029220] *** I2C CLIENT DATA: 85f47000 ***
+[   22.029232] *** CHECKING SENSOR SUBDEV: sd=85f47000 ***
+[   22.029238] *** SENSOR SUBDEV OPS: c069d638 ***
+[   22.029245] *** SENSOR OPS STRUCTURE: core=c069d664, video=c069d658, sensor=c069d64c ***
+[   22.029252] *** SENSOR HOSTDATA:   (null) ***
+[   22.029257] *** SUCCESS: Real sensor subdev with ops found (hostdata NULL) ***
+[   22.029265] *** CREATED MINIMAL SENSOR STRUCTURE FOR VIC COMPATIBILITY ***
+[   22.029271] *** sensor->video.attr=85f47a08 (points to sensor->attr) ***
+[   22.029277] *** CONNECTING REAL SENSOR TO ISP DEVICE ***
+[   22.029283] Current: ourISPdev=85f3c000, ourISPdev->sensor=  (null)
+[   22.029290] Real sensor: sensor=85f47800, subdev=85f47000
+[   22.029296] *** SENSOR CONNECTION: ourISPdev->sensor=85f47800 ***
+[   22.029302] *** SENSOR STRUCTURE: sensor=85f47800, sensor->sd at 85f47800 ***
+[   22.029308] *** REAL SENSOR SUBDEV REGISTERED IN SLOT 3 FOR GET_SENSOR_INFO IOCTL ***
+[   22.029314] *** REAL SENSOR CONNECTED TO ISP DEVICE SUCCESSFULLY ***
+[   22.029319] *** SENSOR REGISTRY UPDATED WITH REAL SENSOR ***
+[   22.029324] *** INITIALIZING VIN FOR SENSOR STREAMING ***
+[   22.029330] VIN: tx_isp_vin_init: CRITICAL FIX - ignore arg1, use global ISP only = 0x1
+[   22.029337] VIN: tx_isp_vin_init: using VIN device from global ISP: 85f46400
+[   22.029342] VIN: tx_isp_vin_init: sensor ops is NULL
+[   22.029348] VIN: tx_isp_vin_init: *** VIN STATE SET SAFELY *** = 0x3
+[   22.029353] VIN: tx_isp_vin_init: EXACT Binary Ninja result = 0x0
+[   22.029359] *** VIN INIT RESULT: 0, VIN STATE: 3 ***
+[   22.029364] *** VIN SUCCESSFULLY INITIALIZED TO STATE 3 - READY FOR STREAMING ***
+[   22.029380] ISP IOCTL: cmd=0xc050561a arg=0x7fe10158
+[   22.029385] *** TX_ISP_SENSOR_ENUM_INPUT: MEMORY SAFE implementation ***
+[   22.029391] Sensor enumeration: requesting index 0
+[   22.029398] *** FOUND SENSOR: index=0 name=gc2053 ***
+[   22.029404] Sensor enumeration: index=0 name=gc2053
+[   22.029412] ISP IOCTL: cmd=0xc050561a arg=0x7fe10158
+[   22.029417] *** TX_ISP_SENSOR_ENUM_INPUT: MEMORY SAFE implementation ***
+[   22.029422] Sensor enumeration: requesting index 1
+[   22.029429] No sensor found at index 1 (total registered: 1)
+[   22.029436] ISP IOCTL: cmd=0xc0045627 arg=0x7fe101b0
+[   22.029443] Sensor input set to index 0 (gc2053)
+[   22.029450] ISP IOCTL: cmd=0x800856d5 arg=0x7fe101a8
+[   22.029456] ISP buffer calculation: width=1920 height=1080 memopt=0
+[   22.029462] *** BUFFER FIX: Using RAW10 calculation instead of incorrect YUV calculation ***
+[   22.029469] *** RAW10 BUFFER: 2073600 pixels -> 2592000 bytes -> 2592000 aligned ***
+[   22.029476] ISP calculated buffer size: 2592000 bytes (0x278d00)
+[   22.096115] ISP IOCTL: cmd=0x800856d4 arg=0x7fe101a8
+[   22.096128] ISP set buffer: addr=0x6300000 size=2592000
+[   22.096135] Configuring main frame buffer: 0x6300000 stride=1920
+[   22.096141] Full buffer mode: YUV stride=64 size=35328
+[   22.098930] ISP IOCTL: cmd=0x40045626 arg=0x7fe101c0
+[   22.098942] *** 0x40045626: GET_SENSOR_INFO - Binary Ninja exact implementation ***
+[   22.098949] *** csi_sensor_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x2000003 ***
+[   22.098955] *** Found sensor, result=0 ***
+[   22.098961] *** GET_SENSOR_INFO: Returning sensor_result=0 ***
+[   22.098968] ISP IOCTL: cmd=0x80045612 arg=0x0
+[   22.098975] *** tx_isp_video_s_stream: EXACT Binary Ninja implementation - enable=1 ***
+[   22.098982] *** BINARY NINJA: Calling subdev 0 s_stream (enable=1) ***
+[   22.098991] *** DEBUG: subdev=85205800, ops=c06804f0, video=c0680518, s_stream=c0657438 ***
+[   22.098997] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[   22.099003] csi_video_s_stream: sd=85205800, enable=1
+[   22.099009] csi_video_s_stream: CSI device state=1 < 2, returning 0
+[   22.099015] tx_isp_video_s_stream: Subdev 0 s_stream returned success
+[   22.099022] *** BINARY NINJA: Calling subdev 1 s_stream (enable=1) ***
+[   22.099030] *** DEBUG: subdev=85f46000, ops=c0680480, video=c06804d0, s_stream=c0656db8 ***
+[   22.099037] *** vic_core_s_stream: BINARY NINJA EXACT - sd=85f46000, enable=1 ***
+[   22.099043] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=1 ***
+[   22.099048] *** vic_core_s_stream: STREAM ON ***
+[   22.099053] *** vic_core_s_stream: State != 4, calling VIC start sequence ***
+[   22.099058] *** tx_vic_disable_irq: BINARY NINJA EXACT ***
+[   22.099064] *** tx_vic_disable_irq: VIC interrupts already disabled ***
+[   22.099070] *** tx_isp_vic_start: EXACT Binary Ninja reference implementation ***
+[   22.099076] tx_isp_vic_start: MIPI interface detected
+[   22.099081] tx_isp_vic_start: Sensor flags match - normal MIPI config
+[   22.118003] tx_isp_vic_start: VIC enabled (timeout remaining: -1)
+[   22.118014] tx_isp_vic_start: VIC start completed
+[   22.118020] *** tx_vic_enable_irq: BINARY NINJA EXACT ***
+[   22.118026] *** tx_vic_enable_irq: VIC interrupts ENABLED ***
+[   22.118032] *** vic_core_s_stream: VIC start completed, ret=0, state=4 ***
+[   22.118038] tx_isp_video_s_stream: Subdev 1 s_stream returned success
+[   22.118045] *** BINARY NINJA: Calling subdev 2 s_stream (enable=1) ***
+[   22.118054] *** DEBUG: subdev=85f46400, ops=c06813c4, video=c06813d8, s_stream=c066193c ***
+[   22.118060] VIN: vin_s_stream: called = 0x1
+[   22.118066] VIN: vin_s_stream: VIN device from global ISP = 0x85f46400
+[   22.118072] VIN: vin_s_stream: current VIN state = 0x3
+[   22.118078] VIN: vin_s_stream: VIN streaming enable from state = 0x3
+[   22.118083] VIN: vin_s_stream: sensor has no valid s_stream function
+[   22.118089] VIN: vin_s_stream: sensor has no valid s_stream function = 0x0
+[   22.118095] tx_isp_video_s_stream: Subdev 2 returned ENOIOCTLCMD, continuing
+[   22.118102] *** BINARY NINJA: Calling subdev 3 s_stream (enable=1) ***
+[   22.118110] *** DEBUG: subdev=85f47000, ops=c069d638, video=c069d658, s_stream=c069bcd4 ***
+[   22.118118] gc2053 stream on
+[   22.118123] tx_isp_video_s_stream: Subdev 3 s_stream returned success
+[   22.118130] *** BINARY NINJA: Calling subdev 4 s_stream (enable=1) ***
+[   22.118138] *** DEBUG: subdev=85f46800, ops=c06802bc, video=c06802d0, s_stream=c06527ac ***
+[   22.118145] *** ispcore_video_s_stream: EXACT Binary Ninja implementation - enable=1 ***
+[   22.118150] ispcore_video_s_stream: Core state 2 < 3, cannot stream
+[   22.118157] tx_isp_video_s_stream: Subdev 4 s_stream failed: -22
+[   22.118162] *** BINARY NINJA: Rolling back subdev 3 ***
+[   22.118168] gc2053 stream off
+[   22.118173] *** BINARY NINJA: Rolling back subdev 2 ***
+[   22.118178] VIN: vin_s_stream: called = 0x0
+[   22.118184] VIN: vin_s_stream: VIN device from global ISP = 0x85f46400
+[   22.118190] VIN: vin_s_stream: current VIN state = 0x3
+[   22.118196] VIN: vin_s_stream: VIN not in streaming state = 0x3
+[   22.118201] *** BINARY NINJA: Rolling back subdev 1 ***
+[   22.118208] *** vic_core_s_stream: BINARY NINJA EXACT - sd=85f46000, enable=0 ***
+[   22.118214] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
+[   22.118219] *** vic_core_s_stream: STREAM OFF ***
+[   22.118224] vic_core_s_stream: Stream OFF - state 4 -> 3
+[   22.118230] *** BINARY NINJA: Rolling back subdev 0 ***
+[   22.118236] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[   22.118242] csi_video_s_stream: sd=85205800, enable=0
+[   22.118248] csi_video_s_stream: CSI device state=1 < 2, returning 0
+[   22.127097] ISP released (refcnt=0)
+[1]+  Aborted                    prudynt
 root@ing-wyze-cam3-a000 ~# 
+

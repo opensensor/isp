@@ -4045,6 +4045,21 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     } else {
                         pr_err("*** NO VIN DEVICE AVAILABLE FOR INITIALIZATION ***\n");
                     }
+
+                    /* CRITICAL: Initialize ISP CORE now that sensor is connected */
+                    if (ourISPdev->core_dev && ourISPdev->core_dev->sd.ops &&
+                        ourISPdev->core_dev->sd.ops->core && ourISPdev->core_dev->sd.ops->core->init) {
+                        pr_info("*** INITIALIZING ISP CORE FOR SENSOR STREAMING ***\n");
+                        int core_init_ret = ourISPdev->core_dev->sd.ops->core->init(&ourISPdev->core_dev->sd, 1);
+                        if (core_init_ret == 0) {
+                            pr_info("*** ISP CORE INITIALIZED SUCCESSFULLY - STATE SHOULD BE 3 ***\n");
+                            pr_info("*** CORE STATE: %d (should be 3 for streaming) ***\n", ourISPdev->core_dev->state);
+                        } else {
+                            pr_err("*** ISP CORE INITIALIZATION FAILED: %d ***\n", core_init_ret);
+                        }
+                    } else {
+                        pr_err("*** NO ISP CORE DEVICE AVAILABLE FOR INITIALIZATION ***\n");
+                    }
                 } else {
                     pr_err("*** FAILED TO CREATE I2C CLIENT FOR %s ***\n", sensor_name);
                 }
