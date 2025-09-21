@@ -709,9 +709,16 @@ int tx_isp_module_notify_handler(struct tx_isp_module *module, unsigned int cmd,
     switch (cmd) {
         case TX_ISP_EVENT_SYNC_SENSOR_ATTR:
             pr_info("*** tx_isp_module_notify_handler: Processing TX_ISP_EVENT_SYNC_SENSOR_ATTR ***\n");
-            /* Call the sync sensor attribute handler */
-            extern int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
-            return tx_isp_handle_sync_sensor_attr_event(sd, (struct tx_isp_sensor_attribute *)arg);
+            /* The sensor calls with &sensor->video, so arg is struct tx_isp_video_in * */
+            struct tx_isp_video_in *video = (struct tx_isp_video_in *)arg;
+            if (video && video->attr) {
+                pr_info("*** tx_isp_module_notify_handler: Found video attributes, calling sync handler ***\n");
+                extern int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
+                return tx_isp_handle_sync_sensor_attr_event(sd, video->attr);
+            } else {
+                pr_err("*** tx_isp_module_notify_handler: No video attributes available ***\n");
+                return -EINVAL;
+            }
 
         default:
             pr_info("*** tx_isp_module_notify_handler: Unsupported event 0x%x ***\n", cmd);
