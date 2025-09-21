@@ -697,7 +697,7 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
             return -ENODEV;
         }
 
-        /* Binary Ninja: private_request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, 0x2000, *arg1, arg2) */
+        /* Binary Ninja: request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, 0x2000, *arg1, arg2) */
         ret = request_threaded_irq(irq_num,
                                    isp_irq_handle,
                                    isp_irq_thread_handle,

@@ -5152,7 +5152,7 @@ static int tx_isp_init(void)
     pr_info("*** CRITICAL: Registering main interrupt dispatcher for IRQ 37 and 38 ***\n");
 
     /* Register IRQ 37 (ISP Core) */
-    ret = private_request_threaded_irq(37,
+    ret = request_threaded_irq(37,
                                        isp_irq_handle,
                                        isp_irq_thread_handle,
                                        IRQF_SHARED,
@@ -5165,7 +5165,7 @@ static int tx_isp_init(void)
     pr_info("*** Main dispatcher registered for IRQ 37 (ISP Core) ***\n");
 
     /* Register IRQ 38 (VIC) */
-    ret = private_request_threaded_irq(38,
+    ret = request_threaded_irq(38,
                                        isp_irq_handle,
                                        isp_irq_thread_handle,
                                        IRQF_SHARED,
