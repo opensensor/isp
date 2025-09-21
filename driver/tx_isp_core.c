@@ -270,20 +270,20 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     }
 
     /* Binary Ninja: __private_spin_lock_irqsave($s0 + 0xdc, &var_28) */
-    __private_spin_lock_irqsave(&core_dev->lock, &var_28);
+    __spin_lock_irqsave(&core_dev->lock, &var_28);
 
     /* Binary Ninja: if (*($s0 + 0xe8) s< 3) */
     if (core_dev->state < 3) {
         /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream") */
         isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream");
         /* Binary Ninja: private_spin_unlock_irqrestore($s0 + 0xdc, var_28) */
-        private_spin_unlock_irqrestore(&core_dev->lock, var_28);
+        spin_unlock_irqrestore(&core_dev->lock, var_28);
         /* Binary Ninja: return 0xffffffff */
         return -1;
     }
 
     /* Binary Ninja: private_spin_unlock_irqrestore($s0 + 0xdc, var_28) */
-    private_spin_unlock_irqrestore(&core_dev->lock, var_28);
+    spin_unlock_irqrestore(&core_dev->lock, var_28);
 
     /* Binary Ninja: Reset frame counters */
     /* *($s0 + 0x164) = 0 */
@@ -2720,7 +2720,7 @@ void *isp_mem_init(void)
 
     /* Binary Ninja: void* $v0 = find_new_buffer() */
     if (data_b2bfc == NULL) {
-        data_b2bfc = private_kmalloc(32, GFP_KERNEL);  /* Allocate buffer structure */
+        data_b2bfc = kmalloc(32, GFP_KERNEL);  /* Allocate buffer structure */
         if (!data_b2bfc) {
             return NULL;
         }
@@ -3118,7 +3118,7 @@ void ispcore_frame_channel_streamoff(int32_t* arg1)
             int32_t a1_2 = var_28;
 
             if (*((int32_t*)((char*)s2 + 0x74)) == s5_1) {  /* *(s2 + 0x74) == s5_1 */
-                private_spin_unlock_irqrestore((char*)s2 + 0x9c, a1_2);
+                spin_unlock_irqrestore((char*)s2 + 0x9c, a1_2);
                 extern int tisp_channel_stop(uint32_t channel_id);
                 tisp_channel_stop((uint32_t)(arg1[1]) & 0xff);  /* zx.d(arg1[1].b) */
                 *((int32_t*)((char*)s2 + 0x74)) = 3;  /* *(s2 + 0x74) = 3 */
@@ -3128,7 +3128,7 @@ void ispcore_frame_channel_streamoff(int32_t* arg1)
                 *((int32_t*)((char*)s3 + 0xac)) = 0;  /* *(s3 + 0xac) = 0 */
                 *((int32_t*)((char*)s0 + 0x17c)) = 0; /* *(s0 + 0x17c) = 0 */
             } else {
-                private_spin_unlock_irqrestore((char*)s2 + 0x9c, a1_2);
+                spin_unlock_irqrestore((char*)s2 + 0x9c, a1_2);
             }
         }
     } else {
@@ -3656,7 +3656,7 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                 uint32_t a1_6 = var_58;
                 arg1[7] = 4;
                 result = 0;
-                private_spin_unlock_irqrestore((char*)s2_1 + 0x9c, a1_6);
+                spin_unlock_irqrestore((char*)s2_1 + 0x9c, a1_6);
                 ISP_INFO("ispcore_pad_event_handle: channel started successfully");
             } else {
                 arch_local_irq_restore(var_58);
@@ -3738,7 +3738,7 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                     *((uint32_t*)(base_addr + offset + 0x996c)) = a0_13;
                     *((uint32_t*)(base_addr + offset + 0x9984)) = *((uint32_t*)arg3 + 3);
                     
-                    private_spin_unlock_irqrestore((char*)s1_2 + 0x9c, var_58);
+                    spin_unlock_irqrestore((char*)s1_2 + 0x9c, var_58);
                     ISP_INFO("ispcore_pad_event_handle: buffer queued successfully");
                 }
             } else {
@@ -3805,7 +3805,7 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                     __private_spin_lock_irqsave((char*)s0_2 + 0x9c, &var_58);
                     tisp_channel_fifo_clear((uint32_t)arg1[1] & 0xff); /* zx.d(arg1[1].b) */
                     result = 0;
-                    private_spin_unlock_irqrestore((char*)s0_2 + 0x9c, var_58);
+                    spin_unlock_irqrestore((char*)s0_2 + 0x9c, var_58);
                     ISP_INFO("ispcore_pad_event_handle: channel fifo cleared");
                 }
             }
@@ -3993,7 +3993,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
         channel_count = ISP_MAX_CHAN;
 
         /* Allocate frame channels for core device */
-        channel_array = private_kmalloc(channel_count * sizeof(struct tx_isp_frame_channel), GFP_KERNEL);
+        channel_array = kmalloc(channel_count * sizeof(struct tx_isp_frame_channel), GFP_KERNEL);
         if (channel_array != NULL) {
             memset(channel_array, 0, channel_count * sizeof(struct tx_isp_frame_channel));
 

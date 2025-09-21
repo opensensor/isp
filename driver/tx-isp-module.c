@@ -3830,7 +3830,7 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     pr_info("*** PROBE: tx_isp_platform_probe CALLED for device %s ***\n", pdev->name);
 
     /* Binary Ninja: private_kmalloc(0x120, 0xd0) */
-    isp_dev = private_kmalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
+    isp_dev = kmalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
     if (!isp_dev) {
         /* Binary Ninja: isp_printf(2, "Failed to allocate main ISP device\n", $a2) */
         pr_err("*** PROBE: Failed to allocate main ISP device ***\n");
@@ -3850,7 +3850,7 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     if (pdata == NULL) {
         pr_err("*** PROBE: No platform data provided - FAILING ***\n");
         isp_printf(2, (unsigned char *)"No platform data provided\n");
-        private_kfree(isp_dev);
+        kfree(isp_dev);
         return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
     }
     pr_info("*** PROBE: Platform data validation passed ***\n");
@@ -3858,7 +3858,7 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     /* Binary Ninja: Check device count - zx.d(*($s2_1 + 4)) u>= 0x11 */
     if (pdata->device_id >= 0x11) {
         isp_printf(2, (unsigned char *)"saveraw\n");
-        private_kfree(isp_dev);
+        kfree(isp_dev);
         return -EFAULT;  /* Binary Ninja returns 0xffffffea */
     }
 
@@ -3867,7 +3867,7 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     pr_info("*** REFERENCE DRIVER: Individual subdevices will initialize their own memory regions ***\n");
 
     /* Binary Ninja: private_platform_set_drvdata(arg1, $v0) */
-    private_platform_set_drvdata(pdev, isp_dev);
+    platform_set_drvdata(pdev, isp_dev);
 
     /* Binary Ninja: *($v0 + 0x34) = &tx_isp_fops - Use safe struct member access */
     /* Note: fops member may not exist in current struct definition, skipping for now */
@@ -3890,7 +3890,7 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     ret = tx_isp_module_init(isp_dev);
     if (ret != 0) {
         pr_err("tx_isp_module_init failed: %d\n", ret);
-        private_kfree(isp_dev);
+        kfree(isp_dev);
         ourISPdev = NULL;
         return ret;
     }
@@ -3993,7 +3993,7 @@ static int tx_isp_init(void)
     pr_info("*** REFERENCE DRIVER: Subdev platform devices will be registered by tx_isp_create_graph_and_nodes ***\n");
 
     /* Step 2: Register main platform device (matches reference driver exactly) */
-    ret = private_platform_device_register(&tx_isp_platform_device);
+    ret = platform_device_register(&tx_isp_platform_device);
     if (ret != 0) {
         pr_err("not support the gpio mode!\n");
         goto err_cleanup_main_driver;
@@ -4024,7 +4024,7 @@ static int tx_isp_init(void)
 /* Error handling for reference driver compatibility */
 err_cleanup_irqs:
 err_cleanup_platform_device:
-    private_platform_device_unregister(&tx_isp_platform_device);
+    platform_device_unregister(&tx_isp_platform_device);
 err_cleanup_main_driver:
     platform_driver_unregister(&tx_isp_driver);
 err_cleanup_subdev_drivers:
@@ -4091,7 +4091,7 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp_dev)
                 continue;
             }
 
-            ret = private_platform_device_register(tx_isp_platform_devices[i]);
+            ret = platform_device_register(tx_isp_platform_devices[i]);
             if (ret != 0) {
                 pr_err("Failed to register platform device %d (%s): %d\n",
                        i, tx_isp_platform_devices[i]->name, ret);
@@ -4099,7 +4099,7 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp_dev)
                 /* Cleanup previously registered devices */
                 while (--i >= 0) {
                     if (tx_isp_platform_devices[i] && tx_isp_platform_devices[i]->dev.kobj.parent) {
-                        private_platform_device_unregister(tx_isp_platform_devices[i]);
+                        platform_device_unregister(tx_isp_platform_devices[i]);
                     }
                 }
                 return ret;
@@ -4907,8 +4907,8 @@ void tisp_set_sensor_analog_gain_short(uint32_t sensor_gain)
 
     /* Binary Ninja: Simplified implementation - direct gain calculation */
     /* The Binary Ninja decompilation shows complex math, but we'll use a simplified approach */
-    log_result = private_log2_fixed_to_fixed(sensor_gain, 16, 16);
-    v0_2 = private_math_exp2(log_result, 0x10, 0x10);
+    log_result = log2_fixed_to_fixed(sensor_gain, 16, 16);
+    v0_2 = math_exp2(log_result, 0x10, 0x10);
 
     /* Binary Ninja: int16_t var_1a */
     var_1a = (int16_t)(v0_2 >> 6);
@@ -4940,8 +4940,8 @@ static void tisp_set_sensor_digital_gain_short(uint32_t digital_gain)
 
     /* Binary Ninja: Simplified implementation - direct gain calculation */
     /* The Binary Ninja decompilation shows complex math, but we'll use a simplified approach */
-    log_result = private_log2_fixed_to_fixed(digital_gain, 16, 16);
-    v0_2 = private_math_exp2(log_result, 0x10, 0x10);
+    log_result = log2_fixed_to_fixed(digital_gain, 16, 16);
+    v0_2 = math_exp2(log_result, 0x10, 0x10);
 
     /* Binary Ninja: int16_t var_26 */
     var_26 = (int16_t)(v0_2 >> 6);
