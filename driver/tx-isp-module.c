@@ -4820,26 +4820,18 @@ static int tx_isp_init(void)
         return gpio_mode_check;
     }
 
-    /* CRITICAL FIX: Check if ourISPdev was already allocated by probe function */
-    if (ourISPdev) {
-        pr_info("*** USING EXISTING ISP DEVICE FROM PROBE: %p ***\n", ourISPdev);
-        /* Device already allocated and initialized by probe - just ensure basic fields are set */
-        ourISPdev->refcnt = 0;
-        ourISPdev->is_open = false;
-    } else {
-        /* Allocate ISP device structure only if not already done by probe */
-        pr_info("*** ALLOCATING NEW ISP DEVICE (probe didn't run) ***\n");
-        ourISPdev = kzalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
-        if (!ourISPdev) {
-            pr_err("Failed to allocate ISP device\n");
-            return -ENOMEM;
-        }
-
-        /* Initialize device structure */
-        spin_lock_init(&ourISPdev->lock);
-        ourISPdev->refcnt = 0;
-        ourISPdev->is_open = false;
+    /* CRITICAL FIX: ourISPdev should ONLY be allocated by the platform probe function */
+    /* The module init should not allocate the device - that's the probe function's job */
+    if (!ourISPdev) {
+        pr_err("*** CRITICAL: ourISPdev is NULL - platform probe function didn't run! ***\n");
+        pr_err("*** This indicates platform device registration failed ***\n");
+        return -ENODEV;
     }
+
+    pr_info("*** USING ISP DEVICE FROM PROBE: %p ***\n", ourISPdev);
+    /* Device already allocated and initialized by probe - just ensure basic fields are set */
+    ourISPdev->refcnt = 0;
+    ourISPdev->is_open = false;
 
     /* REMOVED: Frame generation work queue - NOT in reference driver */
     /* Reference driver uses pure interrupt-driven frame processing */
