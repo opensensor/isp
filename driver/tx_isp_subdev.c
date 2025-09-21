@@ -424,26 +424,36 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
      * We detect sensor devices by checking if the platform device name contains known sensor names
      * or if the device name is null (which happens with unregistered sensor platform devices).
      */
-    /* CRITICAL FIX: Only defer VIC core->init - other devices need basic initialization during driver loading
-     * VIC interrupts should only be enabled when streaming starts, but other devices need basic setup.
+    /* CRITICAL FIX: Defer core->init for VIC and sensor devices - only call for platform devices
+     * VIC interrupts should only be enabled when streaming starts.
+     * Sensor devices need special initialization after sensor association.
+     * Only platform devices (CSI, VIN, Core, FS) should have core->init called during driver loading.
      */
     if (sd->ops && sd->ops->core && sd->ops->core->init) {
         const char *dev_name_str = dev_name(&pdev->dev);
         bool is_vic_device = (ops == &vic_subdev_ops);
+        bool is_sensor_device = (!dev_name_str ||
+                                strstr(dev_name_str, "gc2053") ||
+                                strstr(dev_name_str, "imx307") ||
+                                strstr(dev_name_str, "sensor"));
 
         if (is_vic_device) {
             /* VIC device - defer init until streaming starts to prevent premature interrupt enabling */
             pr_info("*** tx_isp_subdev_init: Deferring core->init for VIC device %s until streaming starts ***\n",
                     dev_name_str ? dev_name_str : "(null)");
+        } else if (is_sensor_device) {
+            /* Sensor device - defer init until after sensor association */
+            pr_info("*** tx_isp_subdev_init: Deferring core->init for sensor device %s until after sensor association ***\n",
+                    dev_name_str ? dev_name_str : "(null)");
         } else {
-            /* Non-VIC device - safe to call init immediately for basic setup */
-            pr_info("*** tx_isp_subdev_init: Calling core->init for device %s ***\n", dev_name_str ? dev_name_str : "(null)");
+            /* Platform device (CSI, VIN, Core, FS) - safe to call init immediately for basic setup */
+            pr_info("*** tx_isp_subdev_init: Calling core->init for platform device %s ***\n", dev_name_str ? dev_name_str : "(null)");
             ret = sd->ops->core->init(sd, 1);  /* Enable = 1 for initialization */
             if (ret != 0) {
                 pr_err("tx_isp_subdev_init: core->init failed for %s: %d\n", dev_name_str ? dev_name_str : "(null)", ret);
                 /* Don't fail completely - some devices may not need init */
             } else {
-                pr_info("*** tx_isp_subdev_init: core->init SUCCESS for device %s ***\n", dev_name_str ? dev_name_str : "(null)");
+                pr_info("*** tx_isp_subdev_init: core->init SUCCESS for platform device %s ***\n", dev_name_str ? dev_name_str : "(null)");
             }
         }
     }
