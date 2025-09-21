@@ -1669,12 +1669,222 @@ extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 /* isp_vic_interrupt_service_routine - BULLETPROOF minimal implementation */
 irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
-    /* BULLETPROOF: Absolute minimal interrupt handler to prevent kernel panic */
-    /* Do NOTHING except return IRQ_HANDLED - no memory access, no function calls */
+    struct tx_isp_dev *isp_dev = ourISPdev;
+    struct tx_isp_vic_device *vic_dev;
+    void __iomem *vic_regs;
+    u32 v1_7, v1_10;
+    uint32_t *vic_irq_enable_flag;
+    u32 addr_ctl;
+    u32 reg_val;
+    int timeout;
+    int i;
 
-    /* Just acknowledge the interrupt and return immediately */
+    /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
+    vic_dev = ourISPdev->vic_dev;
+
+    /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
+    vic_regs = vic_dev->vic_regs;
+
+    /* Get VIC interrupt enable flag at offset +0x13c */
+    vic_irq_enable_flag = (uint32_t*)((char*)vic_dev + 0x13c);
+
+    /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
+    /* Binary Ninja: int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
+    v1_7 = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);
+    v1_10 = (~readl(vic_regs + 0x1ec)) & readl(vic_regs + 0x1e4);
+
+    /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7 */
+    writel(v1_7, vic_regs + 0x1f0);
+    /* Binary Ninja: *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
+    writel(v1_10, vic_regs + 0x1f4);
+    wmb();
+
+    /* CRITICAL: Binary Ninja global vic_start_ok flag check */
+    /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
+    if (vic_start_ok != 0) {
+        pr_debug("*** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
+
+        /* Binary Ninja: if (($v1_7 & 1) != 0) */
+        if ((v1_7 & 1) != 0) {
+            /* Binary Ninja: *($s0 + 0x160) += 1 */
+            vic_dev->frame_count++;
+            pr_debug("*** 2VIC FRAME DONE INTERRUPT: Frame completion detected (count=%u) ***\n", vic_dev->frame_count);
+
+            /* CRITICAL: Also increment main ISP frame counter for /proc/jz/isp/isp-w02 */
+            if (ourISPdev) {
+                ourISPdev->frame_count++;
+                pr_debug("*** ISP FRAME COUNT UPDATED: %u (for /proc/jz/isp/isp-w02) ***\n", ourISPdev->frame_count);
+            }
+
+            /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
+            vic_framedone_irq_function(vic_dev);
+        }
+
+        /* Binary Ninja: Error handling for frame asfifo overflow */
+        if ((v1_7 & 0x200) != 0) {
+            pr_err("Err [VIC_INT] : frame asfifo ovf!!!!!\n");
+        }
+
+        /* Binary Ninja: Error handling for horizontal errors */
+        if ((v1_7 & 0x400) != 0) {
+            u32 reg_3a8 = readl(vic_regs + 0x3a8);
+            pr_err("Err [VIC_INT] : hor err ch0 !!!!! 0x3a8 = 0x%08x\n", reg_3a8);
+        }
+
+        if ((v1_7 & 0x800) != 0) {
+            pr_err("Err [VIC_INT] : hor err ch1 !!!!!\n");
+        }
+
+        if ((v1_7 & 0x1000) != 0) {
+            pr_err("Err [VIC_INT] : hor err ch2 !!!!!\n");
+        }
+
+        if ((v1_7 & 0x2000) != 0) {
+            pr_err("Err [VIC_INT] : hor err ch3 !!!!!\n");
+        }
+
+        /* Binary Ninja: Error handling for vertical errors */
+        if ((v1_7 & 0x4000) != 0) {
+            pr_err("Err [VIC_INT] : ver err ch0 !!!!!\n");
+        }
+
+        if ((v1_7 & 0x8000) != 0) {
+            pr_err("Err [VIC_INT] : ver err ch1 !!!!!\n");
+        }
+
+        if ((v1_7 & 0x10000) != 0) {
+            pr_err("Err [VIC_INT] : ver err ch2 !!!!!\n");
+        }
+
+        if ((v1_7 & 0x20000) != 0) {
+            pr_err("Err [VIC_INT] : ver err ch3 !!!!!\n");
+        }
+
+        /* Binary Ninja: Additional error handling */
+        if ((v1_7 & 0x40000) != 0) {
+            pr_err("Err [VIC_INT] : hvf err !!!!!\n");
+        }
+
+        if ((v1_7 & 0x80000) != 0) {
+            pr_err("Err [VIC_INT] : dvp hcomp err!!!!\n");
+        }
+
+        if ((v1_7 & 0x100000) != 0) {
+            pr_err("Err [VIC_INT] : dma syfifo ovf!!!\n");
+        }
+
+        if ((v1_7 & 0x200000) != 0) {
+            pr_err("Err2 [VIC_INT] : control limit err!!!\n");
+        }
+
+        if ((v1_7 & 0x400000) != 0) {
+            pr_err("Err [VIC_INT] : image syfifo ovf !!!\n");
+        }
+
+        if ((v1_7 & 0x800000) != 0) {
+            pr_err("Err [VIC_INT] : mipi fid asfifo ovf!!!\n");
+        }
+
+        if ((v1_7 & 0x1000000) != 0) {
+            pr_err("Err [VIC_INT] : mipi ch0 hcomp err !!!\n");
+        }
+
+        if ((v1_7 & 0x2000000) != 0) {
+            pr_err("Err [VIC_INT] : mipi ch1 hcomp err !!!\n");
+        }
+
+        if ((v1_7 & 0x4000000) != 0) {
+            pr_err("Err [VIC_INT] : mipi ch2 hcomp err !!!\n");
+        }
+
+        if ((v1_7 & 0x8000000) != 0) {
+            pr_err("Err [VIC_INT] : mipi ch3 hcomp err !!!\n");
+        }
+
+        if ((v1_7 & 0x10000000) != 0) {
+            pr_err("Err [VIC_INT] : mipi ch0 vcomp err !!!\n");
+        }
+
+        if ((v1_7 & 0x20000000) != 0) {
+            pr_err("Err [VIC_INT] : mipi ch1 vcomp err !!!\n");
+        }
+
+        if ((v1_7 & 0x40000000) != 0) {
+            pr_err("Err [VIC_INT] : mipi ch2 vcomp err !!!\n");
+        }
+
+        if ((v1_7 & 0x80000000) != 0) {
+            pr_err("Err [VIC_INT] : mipi ch3 vcomp err !!!\n");
+        }
+
+        /* Binary Ninja: if (($v1_10 & 1) != 0) */
+        if ((v1_10 & 1) != 0) {
+            /* Binary Ninja: entry_$a2 = vic_mdma_irq_function($s0, 0) */
+            //vic_mdma_irq_function(vic_dev, 0);
+        }
+
+        /* Binary Ninja: if (($v1_10 & 2) != 0) */
+        if ((v1_10 & 2) != 0) {
+            /* Binary Ninja: entry_$a2 = vic_mdma_irq_function($s0, 1) */
+            //vic_mdma_irq_function(vic_dev, 1);
+        }
+
+        if ((v1_10 & 4) != 0) {
+            pr_err("Err [VIC_INT] : dma arb trans done ovf!!!\n");
+        }
+
+        if ((v1_10 & 8) != 0) {
+            pr_err("Err [VIC_INT] : dma chid ovf  !!!\n");
+        }
+
+        /* Binary Ninja: Error recovery sequence - focus on prevention, not recovery */
+        if ((v1_7 & 0xde00) != 0 && *vic_irq_enable_flag == 1) {
+            pr_debug("*** VIC ERROR RECOVERY: Detected error condition 0x%x (control limit errors should be prevented by proper config) ***\n", v1_7);
+            pr_err("error handler!!!\n");
+
+            /* Binary Ninja: **($s0 + 0xb8) = 4 */
+            writel(4, vic_regs + 0x0);
+            wmb();
+
+            /* Binary Ninja: while (*$v0_70 != 0) */
+            timeout = 1000;
+            while (timeout-- > 0) {
+                addr_ctl = readl(vic_regs + 0x0);
+                if (addr_ctl == 0) {
+                    break;
+                }
+                pr_debug("addr ctl is 0x%x\n", addr_ctl);
+                udelay(1);
+            }
+
+            /* Binary Ninja: Final recovery steps */
+            reg_val = readl(vic_regs + 0x104);
+            writel(reg_val, vic_regs + 0x104);  /* Self-write like Binary Ninja */
+
+            reg_val = readl(vic_regs + 0x108);
+            writel(reg_val, vic_regs + 0x108);  /* Self-write like Binary Ninja */
+
+            /* Binary Ninja: **($s0 + 0xb8) = 1 */
+            writel(1, vic_regs + 0x0);
+            wmb();
+        }
+
+        /* Wake up frame channels for all interrupt types */
+        for (i = 0; i < num_channels; i++) {
+            if (frame_channels[i].state.streaming) {
+                frame_channel_wakeup_waiters(&frame_channels[i]);
+            }
+        }
+
+    } else {
+        pr_warn("*** VIC INTERRUPT IGNORED: vic_start_ok=0, interrupts disabled (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
+        pr_warn("*** This means VIC interrupts are firing but being ignored! ***\n");
+    }
+
+    /* Binary Ninja: return 1 */
     return IRQ_HANDLED;
 }
+
 
 /* RACE CONDITION SAFE: Global initialization lock for subdev array access */
 static DEFINE_MUTEX(subdev_init_lock);
@@ -5619,44 +5829,44 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
 }
 
 /* isp_irq_handle - SAFE struct member access implementation with correct dev_id handling */
+
+/* isp_irq_handle - FIXED to properly route to ISP core interrupt handler */
 irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
-    extern struct tx_isp_dev *ourISPdev;
+    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
+    irqreturn_t result = IRQ_HANDLED;
 
-    /* CRITICAL SAFETY: Validate dev_id before accessing */
-    if (!dev_id || (uintptr_t)dev_id < 0x80000000 || (uintptr_t)dev_id > 0x9fffffff) {
-        pr_err("isp_irq_handle: Invalid dev_id=%p for IRQ %d\n", dev_id, irq);
-        return IRQ_HANDLED;
+    pr_debug("*** isp_irq_handle: IRQ %d fired ***\n", irq);
+
+    if (!isp_dev) {
+        pr_err("isp_irq_handle: Invalid ISP device\n");
+        return IRQ_NONE;
     }
 
-    /* SAFE: Call appropriate interrupt service routine based on IRQ number */
+    /* CRITICAL FIX: Proper subdevice interrupt isolation - each IRQ goes to ONE handler only */
     if (irq == 37) {
-        /* ISP Core interrupt - dev_id should be ISP device */
-        struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
-
-        /* Validate this is actually the ISP device */
-        if (dev_id != ourISPdev) {
-            pr_err("ISP CORE IRQ %d: dev_id=%p != ourISPdev=%p\n", irq, dev_id, ourISPdev);
-            if (ourISPdev) {
-                isp_dev = ourISPdev;  /* Use known good pointer */
-            } else {
-                return IRQ_HANDLED;
-            }
-        }
-
-        return ispcore_interrupt_service_routine(irq, isp_dev);
-
+        /* IRQ 37: ISP CORE ONLY - no VIC interference */
+        extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
+        pr_debug("*** IRQ 37: ISP CORE ONLY (isolated from VIC) ***\n");
+        result = ispcore_interrupt_service_routine(irq, dev_id);
     } else if (irq == 38) {
-        /* VIC interrupt - BULLETPROOF minimal handling */
-        /* Don't call any functions, don't access any memory - just return */
-        pr_info("VIC IRQ %d: Minimal handler - just acknowledging\n", irq);
-        return IRQ_HANDLED;
-
+        /* IRQ 38: VIC ONLY - no ISP core interference */
+        pr_debug("*** IRQ 38: VIC ONLY (isolated from ISP core) ***\n");
+        if (isp_dev->vic_dev) {
+            result = isp_vic_interrupt_service_routine(irq, dev_id);
+        } else {
+            pr_warn("*** IRQ 38: No VIC device available ***\n");
+            result = IRQ_NONE;
+        }
     } else {
-        pr_warn("isp_irq_handle: Unknown IRQ %d\n", irq);
-        return IRQ_HANDLED;
+        pr_warn("*** isp_irq_handle: Unexpected IRQ %d ***\n", irq);
     }
+
+    pr_debug("*** isp_irq_handle: IRQ %d processed, result=%d ***\n", irq, result);
+
+    return result;
 }
+
 
 /* isp_irq_thread_handle - SAFE implementation with correct dev_id handling */
 irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
