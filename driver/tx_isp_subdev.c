@@ -316,9 +316,9 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             /* CRITICAL FIX: This is a REAL sensor subdev (not CSI which also has sensor ops) */
             pr_info("*** tx_isp_subdev_init: DETECTED SENSOR SUBDEV - ops=%p, ops->sensor=%p ***\n", ops, ops->sensor);
 
-            /* Find next available slot starting from index 4 (after CSI=0, VIC=1, VIN=2, FS=3) */
+            /* Find next available slot starting from index 5 (after CSI=0, VIC=1, VIN=2, FS=3, Core=4) */
             int sensor_index = -1;
-            for (int i = 4; i < ISP_MAX_SUBDEVS; i++) {
+            for (int i = 5; i < ISP_MAX_SUBDEVS; i++) {
                 if (ourISPdev->subdevs[i] == NULL) {
                     sensor_index = i;
                     break;
