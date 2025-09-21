@@ -1711,9 +1711,9 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             pr_debug("*** 2VIC FRAME DONE INTERRUPT: Frame completion detected (count=%u) ***\n", vic_dev->frame_count);
 
             /* CRITICAL: Also increment main ISP frame counter for /proc/jz/isp/isp-w02 */
-            if (ourISPdev) {
-                ourISPdev->frame_count++;
-                pr_debug("*** ISP FRAME COUNT UPDATED: %u (for /proc/jz/isp/isp-w02) ***\n", ourISPdev->frame_count);
+            if (ourISPdev && ourISPdev->vic_dev) {
+                ourISPdev->vic_dev->frame_count++;
+                pr_debug("*** ISP FRAME COUNT UPDATED: %u (for /proc/jz/isp/isp-w02) ***\n", ourISPdev->vic_dev->frame_count);
             }
 
             /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
