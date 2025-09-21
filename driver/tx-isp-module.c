@@ -5223,17 +5223,20 @@ static int subdev_sensor_ops_set_input(struct tx_isp_subdev *sd, unsigned int cm
 
     /* Binary Ninja: if (arg1 != 0 && arg2 != 0) */
     if (!sd || !arg) {
+        pr_err("subdev_sensor_ops_set_input: Invalid parameters - sd=%p, arg=%p\n", sd, arg);
         return -EINVAL;
     }
 
     /* Get ISP device from subdev */
     isp_dev = (struct tx_isp_dev *)sd->isp;
     if (!isp_dev) {
+        pr_err("subdev_sensor_ops_set_input: No ISP device found\n");
         return -EINVAL;
     }
 
     input_arg = (uint32_t *)arg;
     input_index = *input_arg;
+    pr_info("subdev_sensor_ops_set_input: Processing input_index=%d from arg=%p\n", input_index, arg);
 
     /* Binary Ninja: void* $s1_1 = *(arg1 + 0xe4) */
     /* Use helper function to get current sensor */
