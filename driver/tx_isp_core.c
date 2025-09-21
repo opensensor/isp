@@ -4793,6 +4793,10 @@ struct tx_isp_core_device *tx_isp_create_core_device(struct platform_device *pde
     core_dev->sd.dev = &pdev->dev;
     core_dev->sd.pdev = pdev;
 
+    /* Initialize default image dimensions for Binary Ninja compatibility */
+    core_dev->width = 1920;   /* Default width at offset 0xec */
+    core_dev->height = 1080;  /* Default height at offset 0xf0 */
+
     pr_info("*** tx_isp_create_core_device: Core device created successfully: %p ***\n", core_dev);
     return core_dev;
 }
