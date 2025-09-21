@@ -4937,12 +4937,7 @@ static int tx_isp_init(void)
 
     pr_info("*** MAIN DISPATCHER: Both IRQ 37 and 38 registered with main dispatcher ***\n");
 
-    /* Step 3: Register platform driver (matches reference driver exactly) */
-    ret = platform_driver_register(&tx_isp_driver);
-    if (ret != 0) {
-        pr_err("Failed to register platform driver: %d\n", ret);
-        goto err_cleanup_irqs;
-    }
+    /* NOTE: Platform driver already registered earlier - no need to register again */
 
     /* Reference driver: misc device registration happens in tx_isp_module_init, not here */
 
