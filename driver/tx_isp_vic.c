@@ -2717,12 +2717,6 @@ int tx_isp_vic_remove(struct platform_device *pdev)
     if (!sd)
         return -EINVAL;
 
-    /* Stop VIC */
-    tx_isp_vic_stop(sd);
-
-    /* *** CRITICAL: No free_irq needed - IRQ is managed by main dispatcher *** */
-    /* Main dispatcher in tx-isp-module.c handles IRQ registration/cleanup */
-
     remove_proc_entry("isp-w02", NULL);
     remove_proc_entry("jz/isp", NULL);
 
@@ -2851,11 +2845,7 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
 }
 EXPORT_SYMBOL(tx_isp_subdev_pipo);
 
-/* REMOVED: Duplicate VIC platform driver - using reference driver from tx_isp_subdev.c instead */
-/* The reference driver uses name "isp-w02" and is registered by tx_isp_subdev_platform_init() */
-
 /* Export symbols for use by other parts of the driver */
-EXPORT_SYMBOL(tx_isp_vic_stop);
 EXPORT_SYMBOL(tx_isp_vic_set_buffer);
 EXPORT_SYMBOL(tx_isp_vic_wait_frame_done);
 EXPORT_SYMBOL(vic_core_s_stream);  /* CRITICAL: Export the missing function */
