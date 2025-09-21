@@ -2324,16 +2324,7 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
                                             int rollback_index = s0_1 - &arg1->subdevs[0];
                                             pr_info("*** BINARY NINJA: Rolling back subdev %d ***\n", rollback_index);
 
-                                            /* CRITICAL SAFETY: Skip dangerous s_stream functions during rollback */
-                                            if (v0_7 == (void*)vin_s_stream) {
-                                                pr_info("*** SAFETY: Skipping dangerous VIN s_stream during rollback for subdev %d ***\n", rollback_index);
-                                                continue;
-                                            }
-
-                                            if (v0_7 == (void*)sensor_s_stream) {
-                                                pr_info("*** SAFETY: Skipping dangerous sensor s_stream during rollback for subdev %d ***\n", rollback_index);
-                                                continue;
-                                            }
+                                            /* Binary Ninja: NO SAFETY CHECKS during rollback */
 
                                             /* Binary Ninja: $v0_7($a0_1, arg2 u< 1 ? 1 : 0) */
                                             int rollback_enable = (arg2 < 1) ? 1 : 0;
