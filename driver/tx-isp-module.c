@@ -5182,7 +5182,7 @@ int subdev_sensor_ops_enum_input(struct v4l2_subdev *sd, struct v4l2_input *inpu
 
     /* Binary Ninja: Loop through sensor list structure */
     list_for_each_entry(sensor, &sensor_list, list) {
-        if (current_index == (input->index - 1)) { /* Offset by 1 since gc2053 is at index 0 */
+        if (current_index == (input->index - 2)) { /* Offset by 2 since gc2053 is at index 0 and active sensor at index 1 */
             input->type = V4L2_INPUT_TYPE_CAMERA;
             strncpy((char *)input->name, sensor->name, sizeof(input->name) - 1);
             input->name[sizeof(input->name) - 1] = '\0';
@@ -5202,10 +5202,9 @@ int subdev_sensor_ops_enum_input(struct v4l2_subdev *sd, struct v4l2_input *inpu
         return 0;
     }
 
-    /* No sensor found at this index - return empty name to stop enumeration */
-    pr_info("subdev_sensor_ops_enum_input: No sensor found at index %d, returning empty name\n", input->index);
-    memset(input->name, 0, sizeof(input->name));
-    return 0;  /* Return success but with empty name to stop enumeration */
+    /* CRITICAL FIX: No sensor found at this index - return error to stop enumeration */
+    pr_info("subdev_sensor_ops_enum_input: No sensor found at index %d, returning EINVAL to stop enumeration\n", input->index);
+    return -EINVAL;  /* Return error to signal end of enumeration */
 }
 EXPORT_SYMBOL(subdev_sensor_ops_enum_input);
 
