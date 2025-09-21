@@ -1,745 +1,205 @@
-000aecf8    int32_t IMP_FrameSource_EnableChn(int32_t arg1)
+0009bd6c    int32_t IMP_ISP_AddSensor(char* arg1)
 
-000aed40        int32_t var_70 = 0
-000aed40        
-000aed3c        if (arg1 s>= 5)
-000afc20            imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfcaec, 0xfcb0c, 0x752, 0xfe5a8, 
-000afc20                0xfcf24, 0xfe5a8, arg1)  {"Framesource"}  {"
-000afc20                /home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries.c"}  {"
-000afc20                %s(): Invalid chnNum %d\n"}  {"IMP_FrameSource_EnableChn"}
-000afc2c            return 0xffffffff
-000afc2c        
-000aed48        uint32_t gFramesource_1 = gFramesource
-000aed50        int32_t $s3_1 = arg1 << 3
-000aed4c        int32_t var_184_1
-000aed4c        int32_t var_180_1
-000aed4c        int32_t var_17c
-000aed4c        int32_t var_178
-000aed4c        int32_t $v0_132
-000aed4c        int32_t $v1_43
-000aed4c        
-000aed4c        if (gFramesource_1 == 0)
-000b00d4            $v0_132 = IMP_Log_Get_Option()
-000b00f4            var_180_1 = 0xfe5a8  {"IMP_FrameSource_EnableChn"}
-000b00f8            int32_t var_188_12 = 0xfe5a8  {"IMP_FrameSource_EnableChn"}
-000b00fc            var_184_1 =
-000b00fc                0xfcff8  {"%s(): FrameSource is invalid,maybe system was not inited yet.\n"}
-000b0104            $v1_43 = 0x759
-000aed4c        else
-000aed54            int32_t $s4_1 = arg1 << 5
-000aed64            int32_t $v0_2 = gFramesource_1 + ($s4_1 - $s3_1) * 0x1f
-000aed68            int32_t $a0 = *($v0_2 + 0x1c)
-000aed68            
-000aed70            if ($a0 == 2)
-000afb20                imp_log_fun(5, IMP_Log_Get_Option($a0), 2, 0xfcaec, 0xfcb0c, 0x75f, 
-000afb20                    0xfe5a8, 0xfd5f8, 0xfe5a8, 0x75f, arg1)  {"Framesource"}  {"
-000afb20                    /home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries.c"}  {"
-000afb20                    %s(%d):chn=%d, channel->state is run\n"}  {"IMP_FrameSource_EnableChn"}
-000afb2c                return 0
-000afb2c            
-000aed78            if (arg1 == 0)
-000aefc8                if (*(gFramesource_1 + 0x58) == 0)
-000aefc8                    goto label_aefd0
-000aefc8                
-000affec                imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfcaec, 0xfcb0c, 0x764, 0xfe5a8, 
-000affec                    0xfcf78, 0, *(gFramesource_1 + 0x58), 0)  {"Framesource"}  {"
-000affec                    /home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries.c"}  {"
-000affec                    chnNum=%d type=%d must be set to FS_PHY_CHANNEL(%d)\n"}  {"
-000affec                    IMP_FrameSource_EnableChn"}
-000afff8                return 0xffffffff
-000afff8            
-000aed84            int32_t str
-000aed84            
-000aed84            if (*($v0_2 + 0x58) == 0)
-000aefd0            label_aefd0:
-000aeff8                sprintf(&str, "/dev/framechan%d", 
-000aeff8                    *(gFramesource_1 + ($s4_1 - $s3_1) * 0x1f + 0x18))
-000af000                int32_t $s6_2 = 0x101
-000af000                
-000af030                while (true)
-000af030                    int32_t $v0_36 = open(&str, 0x80002, 0)
-000af03c                    $s6_2 -= 1
-000af03c                    
-000af040                    if ($v0_36 s>= 0)
-000af05c                        *(gFramesource_1 + ($s4_1 - $s3_1) * 0x1f + 0x1c4) = $v0_36
-000af058                        break
-000af058                    
-000af010                    if ($s6_2 == 0)
-000afbb8                        imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfcaec, 0xfcb0c, 0x770, 
-000afbb8                            0xfe5a8, 0xfda00, arg1, strerror(err: *__errno_location()))  {"
-000afbb8                            Framesource"}  {"
-000afbb8                        "/home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries."
-000afbb8                        "c"}  {"Failed to open channel num%d:%s\n"}  {"
-000afbb8                            IMP_FrameSource_EnableChn"}
-000afbc4                        return 0xffffffff
-000afbc4                    
-000af018                    usleep(0x2710)
-000af018            
-000aed8c            int32_t $v0_4 = *($v0_2 + 0x2c)
-000aed90            int32_t $a3_1 = *($v0_2 + 0x58)
-000aed9c            int32_t $v0_5 = *($v0_2 + 0x30)
-000aedac            int32_t $v0_6 = *($v0_2 + 0x34)
-000aedbc            int32_t $v0_7 = *($v0_2 + 0x38)
-000aedc0            int32_t $s7_1 = *($v0_2 + 0x20)
-000aedc4            int32_t $s6_1 = *($v0_2 + 0x24)
-000aedcc            int32_t $v0_8 = *($v0_2 + 0x3c)
-000aedd0            int32_t $fp_1 = *($v0_2 + 0x28)
-000aedd8            int32_t $v0_9 = *($v0_2 + 0x40)
-000aede0            int32_t $v0_10 = *($v0_2 + 0x44)
-000aede8            int32_t $v0_11 = *($v0_2 + 0x48)
-000aedf0            int32_t $v0_12 = *($v0_2 + 0x5c)
-000aedf8            int32_t $v0_13 = *($v0_2 + 0x60)
-000aee00            int32_t $v0_14 = *($v0_2 + 0x64)
-000aee08            int32_t $v0_15 = *($v0_2 + 0x68)
-000aee10            int32_t $v0_16 = *($v0_2 + 0x6c)
-000aee14            memset(&str, c: 0, n: 0x70)
-000aee1c            int32_t $a3_2 = $a3_1
-000aee24            int32_t var_190
-000aee24            int32_t var_18c
-000aee24            int32_t var_188
-000aee24            int32_t var_184
-000aee24            int32_t var_180
-000aee24            int32_t var_15c
-000aee24            int32_t var_158
-000aee24            char var_12c
-000aee24            int32_t str_3
-000aee24            int32_t $s3_5
-000aee24            
-000aee24            if ($a3_2 != 0)
-000af064                str = 1
-000af068                var_15c = $s7_1
-000af070                var_158 = $s6_1
-000af070                
-000af06c                if ($fp_1 == 0x22)
-000af88c                    int32_t var_154_4 = $fp_1
-000af890                    str_3 = 1
-000af89c                    *(gFramesource_1 + ($s4_1 - $s3_1) * 0x1f + 0x1bc) =
-000af89c                        ($s7_1 * $s6_1) << 1
-000af06c                else if ($fp_1 == 0x23 || $fp_1 == 0xf)
-000af45c                    int32_t var_154_3 = $fp_1
-000af460                    str_3 = 1
-000af46c                    *(gFramesource_1 + ($s4_1 - $s3_1) * 0x1f + 0x1bc) =
-000af46c                        ($s7_1 * $s6_1) << 2
-000af084                else
-000af090                    int32_t $v1_19
-000af090                    
-000af090                    if ($fp_1 - 1 u>= 0x1d)
-000afb34                        int32_t var_154_5 = 0xffffffff
-000afb3c                        $v1_19 = 0
-000af090                    else
-000af09c                        int32_t $v1_17 = ($fp_1 - 1) << 2
-000af0b8                        int32_t $a0_11 = *($v1_17 + 0xfe2cc)
-000af0d0                        int32_t var_154_2 = *($v1_17 + 0xfe258)  {"YUYVUYVY"}
-000af0d0                        
-000af0d8                        if ($a0_11 == 0)
-000af0d8                            trap(0)
-000af0d8                        
-000af0dc                        $v1_19 = $s7_1 * $s6_1 * *($v1_17 + 0xfe340) s/ $a0_11
-000af0dc                    
-000af0f0                    *(gFramesource_1 + ($s4_1 - $s3_1) * 0x1f + 0x1bc) = $v1_19
-000af0f4                    str_3 = 1
-000aee24            else
-000aee2c                int32_t var_184_3
-000aee2c                int32_t $v0_156
-000aee2c                int32_t $v1_64
-000aee2c                
-000aee2c                if ($fp_1 != 0x22)
-000aee40                    if ($fp_1 == 0x23 || $fp_1 == 0xf)
-000b0000                        $v0_156 = IMP_Log_Get_Option()
-000b001c                        var_184_3 = 0xfd678  {"FS_PHY_CHANNEL do not support HSV == 0 !\n"}
-000b002c                        int32_t var_188_9 = 0xfe55c  {"do_reset_channel_attr"}
-000b0030                        $v1_64 = 0x660
-000b0030                        goto label_b0048
-000b0030                    
-000aee50                    int32_t $a2_1
-000aee50                    
-000aee50                    if ($fp_1 - 1 u< 0x1d)
-000af3e0                        int32_t $v0_75 = ($fp_1 - 1) << 2
-000af40c                        $a2_1 = *($v0_75 + 0xfe258)  {"YUYVUYVY"}
-000af410                        $a3_2 = *($v0_75 + 0xfe2cc)
-000af410                        
-000af428                        if ($a3_2 == 0)
-000af428                            trap(0)
-000af428                        
-000af430                        *(gFramesource_1 + ($s4_1 - $s3_1) * 0x1f + 0x1bc) =
-000af430                            $s7_1 * $s6_1 * *($v0_75 + 0xfe340) s/ $a3_2
-000af438                        str = 1
-000af43c                        var_15c = $s7_1
-000af444                        var_158 = $s6_1
-000aee50                    else
-000aee68                        *(gFramesource_1 + ($s4_1 - $s3_1) * 0x1f + 0x1bc) = 0
-000aee70                        $a2_1 = 0xffffffff
-000aee74                        str = 1
-000aee78                        var_15c = $s7_1
-000aee7c                        var_158 = $s6_1
-000aee7c                    
-000aee88                    int32_t var_154_1 = $a2_1
-000aee8c                    int32_t var_128_1 = $v0_6
-000aee9c                    int32_t var_124_1 = $v0_5
-000aeeac                    int32_t var_120_1 = $v0_7
-000aeeb8                    char var_118_1 = (0 u< $v0_9 ? 1 : 0).b
-000aeebc                    int32_t var_11c_1 = $v0_8
-000aeec8                    var_12c = (0 u< $v0_4 ? 1 : 0).b
-000aeecc                    int32_t var_100_1 = $v0_14
-000aeed4                    int32_t var_114_1 = $v0_10
-000aeedc                    int32_t var_fc_1 = $v0_13
-000aeee4                    char var_104_1 = (0 u< $v0_12 ? 1 : 0).b
-000aeee8                    int32_t var_110_1 = $v0_11
-000aeeec                    int32_t var_f8_1 = $v0_15
-000aeef4                    int32_t var_f4_1 = $v0_16
-000aeef4                    goto label_aeef8
-000aeef4                
-000af8ac                int32_t $a3_18 = gFramesource_1 + ($s4_1 - $s3_1) * 0x1f
-000af8b4                int32_t var_174
-000af8b4                int32_t var_170
-000af8b4                int32_t var_16c
-000af8b4                
-000af8b4                if (*($a3_18 + 0x18) != 0)
-000b0098                    $v0_156 = IMP_Log_Get_Option()
-000b00b4                    var_184_3 = 0xfd634  {"RAW is only channel == 0 !\n"}
-000b00c4                    int32_t var_188_11 = 0xfe55c  {"do_reset_channel_attr"}
-000b00cc                    $v1_64 = 0x651
-000b0048                label_b0048:
-000b0048                    imp_log_fun(6, $v0_156, 2, 0xfcaec, 0xfcb0c, $v1_64, 0xfe55c, var_184_3)
-000b0048                        {"Framesource"}  {"/home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries.c"
-000b0048                        }  {"do_reset_channel_attr"}
-000afe74                label_afe74:
-000afe74                    $s3_5 = $s4_1 - $s3_1
-000afeb8                    imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfcaec, 0xfcb0c, 0x779, 
-000afeb8                        0xfe5a8, 0xfda24, 0xfe5a8, arg1, var_178, var_174, var_170, 
-000afeb8                        var_16c, &_gp)  {"Framesource"}  {"/home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries.c"
-000afeb8                        }  {"%s(): chn %d reset channel attr error\n"}  {"
-000afeb8                        IMP_FrameSource_EnableChn"}
-000afaa8                label_afaa8:
-000afaa8                    int32_t $s2_1 = gFramesource_1 + $s3_5 * 0x1f
-000afab0                    close(*($s2_1 + 0x1c4))
-000afab8                    *($s2_1 + 0x1c4) = 0
-000afac0                    return 0xffffffff
-000afac0                
-000af8c0                str = 1
-000af8e4                $a3_2 = $a3_18
-000af8e4                
-000af8e0                if (ioctl(*($a3_18 + 0x1c4), 0x407056c4, &str) != 0)
-000b0274                    puts(str: "***** Failed to get format of fr! *****")
-000b0284                    goto label_afe74
-000b0284                
-000af8ec                $s7_1 = var_15c
-000af8f0                $s6_1 = var_158
-000af8f4                int32_t var_154
-000af8f4                $fp_1 = var_154
-000af8fc                int32_t var_148
-000af8fc                *($a3_2 + 0x1bc) = var_148
-000aeef8            label_aeef8:
-000aef08                int32_t var_144_1 = 8
-000aef10                int32_t $t0_3 = gFramesource_1 + ($s4_1 - $s3_1) * 0x1f
-000aef14                int32_t var_10c_1 = 0
-000aef18                int32_t var_108_1 = 1
-000aef18                
-000aef3c                if (ioctl(*($t0_3 + 0x1c4), 0xc07056c3, &str, $a3_2) != 0)
-000afc7c                    int32_t var_68_5 = 0xfe55c  {"do_reset_channel_attr"}
-000afc94                    imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfcaec, 0xfcb0c, 0x684, 
-000afc94                        0xfe55c, 0xfd6c8, *($t0_3 + 0x18))  {"Framesource"}  {"/home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries.c"
-000afc94                        }  {"[chn%d]: VIDIOC_S_FMT error\n"}  {"do_reset_channel_attr"}
-000afcf8                    imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfcaec, 0xfcb0c, 0x686, 
-000afcf8                        var_68_5, 0xfd6e8, *($t0_3 + 0x18), $s7_1, $s6_1, $fp_1)  {"Framesource"
-000afcf8                        }  {"/home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries.c"
-000afcf8                        }  {"[chn%d]: chn_attr.picWidth=%d, chn_attr.picHeight=%d, chn_attr."
-000afcf8                    "pixFmt=%d\n"}
-000afd78                    imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfcaec, 0xfcb0c, 0x688, 
-000afd78                        var_68_5, 0xfd734, *($t0_3 + 0x18), $v0_4, $v0_6, $v0_5, $v0_7, 
-000afd78                        $v0_8, &_gp)  {"Framesource"}  {"/home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries.c"
-000afd78                        }  {"[chn%d]: chn_attr.crop.enable=%d, chn_attr.crop.top=%d, chn_attr."
-000afd78                    "crop.left=%d, chn_attr.crop.width=%d, chn_attr.crop.height=%d\n"}
-000afd9c                    var_16c = $v0_16
-000afdac                    var_170 = $v0_15
-000afdf4                    imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfcaec, 0xfcb0c, 0x68a, 
-000afdf4                        var_68_5, 0xfd7b4, *($t0_3 + 0x18), $v0_12, $v0_14, $v0_13, 
-000afdf4                        var_170, var_16c)  {"Framesource"}  {"/home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries.c"
-000afdf4                        }  {"[chn%d]: chn_attr.fcrop.enable=%d, chn_attr.fcrop.top=%d, chn_attr."
-000afdf4                    "fcrop.left=%d, chn_attr.fcrop.width=%d, chn_attr.fcrop.height=%d\n"
-000afdf4                        }
-000afe18                    var_174 = $v0_11
-000afe28                    var_178 = $v0_10
-000afe60                    imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfcaec, 0xfcb0c, 0x68c, 
-000afe60                        var_68_5, 0xfd83c, *($t0_3 + 0x18), $v0_9, var_178, var_174)  {"
-000afe60                        Framesource"}  {"/home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries.c"
-000afe60                        }  {"[chn%d]: chn_attr.scaler.enable=%d, chn_attr.scaler.outwidth=%d, "
-000afe60                    "chn_attr.scaler.outheight=%d\n"}
-000afe68                    goto label_afe74
-000afe68                
-000aef48                int32_t $v0_31 = IMP_Log_Get_Option()
-000aef5c                var_178 = var_158
-000aef6c                var_17c = var_15c
-000aef7c                var_180 = *($t0_3 + 0x18)
-000aef90                var_184 = 0xfd6a4  {"[chn%d]: width = %d height = %d\n"}
-000aef9c                var_188 = 0xfe55c  {"do_reset_channel_attr"}
-000aefa4                var_18c = 0x682
-000aefb4                var_190 = 0xfcb0c  {"
-000aefb4                    /home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries.c"}
-000aefb0                imp_log_fun(4, $v0_31, 2, 0xfcaec, 0xfcb0c, 0x682, 0xfe55c, 0xfd6a4, 
-000aefb0                    var_180, var_17c, var_178)  {"Framesource"}  {"
-000aefb0                    /home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries.c"}  {"
-000aefb0                    [chn%d]: width = %d height = %d\n"}  {"do_reset_channel_attr"}
-000aefc0                str_3 = str
-000aefc0            
-000af108            int32_t* i = &str
-000af10c            int32_t* $v0_47 = gFramesource_1 + ($s4_1 - $s3_1) * 0x1f + 0x70
-000af138            void var_f0
-000af138            
-000af138            do
-000af114                int32_t $t0_6 = *i
-000af118                int32_t $a3_3 = i[1]
-000af11c                int32_t $a2_4 = i[2]
-000af120                int32_t $a1_4 = i[3]
-000af124                i = &i[4]
-000af128                *$v0_47 = $t0_6
-000af12c                $v0_47[1] = $a3_3
-000af130                $v0_47[2] = $a2_4
-000af134                $v0_47[3] = $a1_4
-000af13c                $v0_47 = &$v0_47[4]
-000af138            while (i != &var_f0)
-000af138            
-000af14c            int32_t $v0_50 = gFramesource_1 + ($s4_1 - $s3_1) * 0x1f
-000af150            *($v0_50 + 0xe0) = str_3
-000af154            int32_t* i_1 = &var_15c
-000af158            int32_t* $v0_51 = $v0_50 + 0xe4
-000af158            
-000af184            do
-000af160                int32_t $t0_7 = *i_1
-000af164                int32_t $a3_4 = i_1[1]
-000af168                int32_t $a2_5 = i_1[2]
-000af16c                int32_t $a1_5 = i_1[3]
-000af170                i_1 = &i_1[4]
-000af174                *$v0_51 = $t0_7
-000af178                $v0_51[1] = $a3_4
-000af17c                $v0_51[2] = $a2_5
-000af180                $v0_51[3] = $a1_5
-000af188                $v0_51 = &$v0_51[4]
-000af184            while (i_1 != &var_12c)
-000af184            
-000af198            int32_t $s6_6 = gFramesource_1 + ($s4_1 - $s3_1) * 0x1f
-000af19c            int32_t $s7_2 = *($s6_6 + 0x258)
-000af1a0            int32_t var_94_2
-000af1a0            
-000af1a0            if ($s7_2 == 0)
-000af1b0                int32_t* i_2 = $s6_6 + 0xe0
-000af1b0                
-000af1ac                if (*($s6_6 + 0x58) == 0)
-000af7c8                    int32_t* $v1_39 = &str
-000af7c8                    
-000af7f4                    do
-000af7d0                        int32_t $a3_14 = *i_2
-000af7d4                        int32_t $a2_17 = i_2[1]
-000af7d8                        int32_t $a1_18 = i_2[2]
-000af7dc                        int32_t $a0_37 = i_2[3]
-000af7e0                        i_2 = &i_2[4]
-000af7e4                        *$v1_39 = $a3_14
-000af7e8                        $v1_39[1] = $a2_17
-000af7ec                        $v1_39[2] = $a1_18
-000af7f0                        $v1_39[3] = $a0_37
-000af7f8                        $v1_39 = &$v1_39[4]
-000af7f4                    while (i_2 != $s6_6 + 0x1a0)
-000af7f4                    
-000af800                    int32_t $a2_18 = i_2[1]
-000af804                    int32_t $a1_19 = i_2[2]
-000af814                    *$v1_39 = *i_2
-000af818                    $v1_39[1] = $a2_18
-000af81c                    $v1_39[2] = $a1_19
-000af82c                    var_94_2 = *(gFramesource_1 + ($s4_1 - $s3_1) * 0x1f + 0x54)
-000af828                    goto label_af59c
-000af828                
-000af1b4                int32_t* $v1_22 = &str
-000af1b4                
-000af1e0                do
-000af1bc                    int32_t $a3_5 = *i_2
-000af1c0                    int32_t $a2_6 = i_2[1]
-000af1c4                    int32_t $a1_6 = i_2[2]
-000af1c8                    int32_t $a0_13 = i_2[3]
-000af1cc                    i_2 = &i_2[4]
-000af1d0                    *$v1_22 = $a3_5
-000af1d4                    $v1_22[1] = $a2_6
-000af1d8                    $v1_22[2] = $a1_6
-000af1dc                    $v1_22[3] = $a0_13
-000af1e4                    $v1_22 = &$v1_22[4]
-000af1e0                while (i_2 != $s6_6 + 0x1a0)
-000af1e0                
-000af1ec                int32_t $a2_7 = i_2[1]
-000af1f0                int32_t $a1_7 = i_2[2]
-000af200                *$v1_22 = *i_2
-000af204                $v1_22[1] = $a2_7
-000af208                $v1_22[2] = $a1_7
-000af20c                int32_t $v0_56 = gFramesource_1 + ($s4_1 - $s3_1) * 0x1f
-000af214                int32_t var_94_1 = *($v0_56 + 0x54)
-000af21c                var_15c = *($v0_56 + 0x20)
-000af224                int32_t var_158_1 = *($v0_56 + 0x24)
-000af224                goto label_af238
-000af224            
-000af514            int32_t $v0_94 = fifo_alloc($s7_2 + 1, 4)
-000af524            *($s6_6 + 0x254) = $v0_94
-000af524            
-000af520            if ($v0_94 == 0)
-000b0310                $v0_132 = IMP_Log_Get_Option()
-000b031c                var_180_1 = arg1
-000b032c                var_184_1 = 0xfd89c  {"Failed to fifo_alloc chn:%d\n"}
-000b0338                int32_t var_188_13 = 0xfe5a8  {"IMP_FrameSource_EnableChn"}
-000b0340                $v1_43 = 0x781
-000af520            else
-000af530                int32_t* i_3 = $s6_6 + 0xe0
-000af52c                int32_t var_90
-000af52c                
-000af52c                if (*($s6_6 + 0x58) != 0)
-000af74c                    int32_t* $v1_37 = &str
-000af74c                    
-000af778                    do
-000af754                        int32_t $a3_12 = *i_3
-000af758                        int32_t $a2_15 = i_3[1]
-000af75c                        int32_t $a1_16 = i_3[2]
-000af760                        int32_t $a0_34 = i_3[3]
-000af764                        i_3 = &i_3[4]
-000af768                        *$v1_37 = $a3_12
-000af76c                        $v1_37[1] = $a2_15
-000af770                        $v1_37[2] = $a1_16
-000af774                        $v1_37[3] = $a0_34
-000af77c                        $v1_37 = &$v1_37[4]
-000af778                    while (i_3 != $s6_6 + 0x1a0)
-000af778                    
-000af784                    int32_t $a2_16 = i_3[1]
-000af788                    int32_t $a1_17 = i_3[2]
-000af798                    *$v1_37 = *i_3
-000af79c                    $v1_37[1] = $a2_16
-000af7a0                    $v1_37[2] = $a1_17
-000af7a4                    int32_t $v0_117 = gFramesource_1 + ($s4_1 - $s3_1) * 0x1f
-000af7ac                    int32_t $v1_38 = *($v0_117 + 0x54)
-000af7b0                    var_15c = *($v0_117 + 0x20)
-000af7bc                    int32_t var_94_3 = $s7_2 + $v1_38
-000af7c4                    int32_t var_158_3 = *($v0_117 + 0x24)
-000af238                label_af238:
-000af238                    var_90 = 0xa97f0
-000af254                    int32_t var_8c_1 = 0xa9888
-000af254                    
-000af258                    if (VBMCreatePool(arg1, &str, &var_90, gFramesource_1, var_190, 
-000af258                            var_18c, var_188, var_184, var_180, var_17c, var_178) s>= 0)
-000af26c                        int32_t $s0_6 = gFramesource_1 + ($s4_1 - $s3_1) * 0x1f
-000af27c                        int32_t $s1_3 = (*($s0_6 + 0x54) + 3) << 2
-000af280                        void* str_1 = malloc(size: $s1_3)
-000af290                        *($s0_6 + 0x23c) = str_1
-000af290                        
-000af28c                        if (str_1 == 0)
-000b015c                            imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfcaec, 0xfcb0c, 
-000b015c                                0x7f9, 0xfe5a8, 0xfd9b0, 0xfe5a8)  {"Framesource"}  {"
-000b015c                            "/home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries."
-000b015c                            "c"}  {"%s(): malloc ext_buffer failed\n"}  {"
-000b015c                                IMP_FrameSource_EnableChn"}
-000af28c                        else
-000af2a0                            memset(str: str_1, c: 0, n: $s1_3)
-000af2b8                            **($s0_6 + 0x23c) = *($s0_6 + 0x54)
-000af2bc                            *($s0_6 + 0x22c) = 0
-000af2c4                            *($s0_6 + 0x230) = 0
-000af2c0                            int32_t $v0_61 = get_cpu_id()
-000af2c8                            int32_t $v0_63
-000af2c8                            size_t size
-000af2c8                            
-000af2c8                            if ($v0_61 s>= 0)
-000af2dc                                $v0_63 = get_cpu_id() s< 3 ? 1 : 0
-000af2e8                                size = 0x6ea0
-000af2e8                            
-000af2e4                            if ($v0_61 s< 0 || $v0_63 == 0)
-000af2f8                                int32_t $v0_65 = get_cpu_id() s< 3 ? 1 : 0
-000af2fc                                int32_t $v0_67
-000af2fc                                
-000af2fc                                if ($v0_65 == 0)
-000af310                                    $v0_67 = get_cpu_id() s< 6 ? 1 : 0
-000af310                                
-000af314                                if ($v0_65 != 0 || $v0_67 == 0)
-000af47c                                    int32_t $v0_83 = get_cpu_id() s< 6 ? 1 : 0
-000af480                                    int32_t $v0_85
-000af480                                    
-000af480                                    if ($v0_83 == 0)
-000af494                                        $v0_85 = get_cpu_id() s< 0xb ? 1 : 0
-000af494                                    
-000af498                                    if ($v0_83 == 0 && $v0_85 != 0)
-000af50c                                        size = 0xd4e0
-000af498                                    else
-000af4ac                                        int32_t $v0_87 = get_cpu_id() s< 0xb ? 1 : 0
-000af4b0                                        int32_t $v0_89
-000af4b0                                        
-000af4b0                                        if ($v0_87 == 0)
-000af4c4                                            $v0_89 = get_cpu_id() s< 0xf ? 1 : 0
-000af4c4                                        
-000af4c8                                        if ($v0_87 == 0 && $v0_89 != 0)
-000af31c                                            size = 0x8d40
-000af4c8                                        else
-000af4dc                                            int32_t $v0_91 = get_cpu_id() s< 0xf ? 1 : 0
-000af4e0                                            int32_t $v0_93
-000af4e0                                            
-000af4e0                                            if ($v0_91 == 0)
-000af4fc                                                $v0_93 = get_cpu_id() s< 0x18 ? 1 : 0
-000af4fc                                            
-000af500                                            if ($v0_91 != 0 || $v0_93 == 0)
-000af4ec                                                size = 0xfa0
-000af500                                            else
-000af50c                                                size = 0xd4e0
-000af314                                else
-000af31c                                    size = 0x8d40
-000af31c                            
-000af330                            int32_t $s0_9 = gFramesource_1 + ($s4_1 - $s3_1) * 0x1f
-000af340                            *(*($s0_9 + 0x23c) + 4) = malloc(size)
-000af344                            void* $s1_5 = *($s0_9 + 0x23c)
-000af34c                            int32_t $s3_6
-000af34c                            
-000af34c                            if (*($s1_5 + 4) == 0)
-000b02dc                                imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfcaec, 0xfcb0c, 
-000b02dc                                    0x816, 0xfe5a8, 0xfd9b0, 0xfe5a8)  {"Framesource"}  {"
-000b02dc                                "/home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries."
-000b02dc                                "c"}  {"%s(): malloc ext_buffer failed\n"}  {"
-000b02dc                                    IMP_FrameSource_EnableChn"}
-000b02e8                                $s3_6 = $s4_1 - $s3_1
-000af34c                            else
-000af354                                int32_t $v0_71 = *($s0_9 + 0x28)
-000af354                                
-000af364                                if ($v0_71 != 0x23 && $v0_71 != 0xf)
-000af35c                                    goto label_af36c
-000af35c                                
-000af84c                                int32_t $s0_13 = gFramesource_1 + ($s4_1 - $s3_1) * 0x1f
-000af850                                *($s1_5 + 8) = malloc(size: 0x94)
-000af858                                void* str_2 = *(*($s0_13 + 0x23c) + 8)
-000af858                                
-000af85c                                if (str_2 != 0)
-000af868                                    memset(str: str_2, c: 0, n: 0x94)
-000af36c                                label_af36c:
-000af374                                    int32_t $s3_3 = ($s4_1 - $s3_1) * 0x1f
-000af388                                    sem_init(gFramesource_1 + $s3_3 + 0x244, 0, 1)
-000af398                                    *(gFramesource_1 + $s3_3 + 0x1c) = 2
-000af3a8                                    *(gFramesource_1 + 0x14) += 2
-000af3d4                                    return 0
-000af3d4                                
-000b034c                                $s3_6 = $s4_1 - $s3_1
-000b0398                                imp_log_fun(6, IMP_Log_Get_Option(str_2), 2, 0xfcaec, 
-000b0398                                    0xfcb0c, 0x81d, 0xfe5a8, 0xfd9d0, 0xfe5a8)  {"Framesource"}
-000b0398                                    {"
-000b0398                                "/home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries."
-000b0398                                "c"}  {"%s(): malloc ext resize frame buffer failed\n"}
-000b0398                                    {"IMP_FrameSource_EnableChn"}
-000b03ac                                free(ptr: *(*($s0_13 + 0x23c) + 4))
-000b03ac                            
-000b02fc                            free(ptr: *(gFramesource_1 + $s3_6 * 0x1f + 0x23c))
-000b02fc                        
-000b016c                        VBMDestroyPool(arg1)
-000b0178                        return 0xffffffff
-000b0178                    
-000af9a4                    $v0_132 = IMP_Log_Get_Option()
-000af9c4                    var_180_1 = 0xfe5a8  {"IMP_FrameSource_EnableChn"}
-000af9c8                    int32_t var_188_2 = 0xfe5a8  {"IMP_FrameSource_EnableChn"}
-000af9cc                    var_184_1 = 0xfd8bc  {"%s(): Failed to VBMCreatePool!\n"}
-000af9d4                    $v1_43 = 0x7f2
-000af52c                else
-000af534                    int32_t* $v1_30 = &str
-000af534                    
-000af560                    do
-000af53c                        int32_t $a3_8 = *i_3
-000af540                        int32_t $a2_10 = i_3[1]
-000af544                        int32_t $a1_13 = i_3[2]
-000af548                        int32_t $a0_23 = i_3[3]
-000af54c                        i_3 = &i_3[4]
-000af550                        *$v1_30 = $a3_8
-000af554                        $v1_30[1] = $a2_10
-000af558                        $v1_30[2] = $a1_13
-000af55c                        $v1_30[3] = $a0_23
-000af564                        $v1_30 = &$v1_30[4]
-000af560                    while (i_3 != $s6_6 + 0x1a0)
-000af560                    
-000af56c                    int32_t $a2_11 = i_3[1]
-000af570                    int32_t $a1_14 = i_3[2]
-000af580                    *$v1_30 = *i_3
-000af584                    $v1_30[1] = $a2_11
-000af588                    $v1_30[2] = $a1_14
-000af598                    var_94_2 = *(gFramesource_1 + ($s4_1 - $s3_1) * 0x1f + 0x54) + $s7_2
-000af59c                label_af59c:
-000af5a8                    int32_t $v0_103 = gFramesource_1 + ($s4_1 - $s3_1) * 0x1f
-000af5a8                    
-000af5b4                    if (*($v0_103 + 0x28) == 0x22)
-000af900                        *($v0_103 + 0x20) = var_15c
-000af90c                        *($v0_103 + 0x24) = var_158
-000af5b4                    else
-000af5c0                        var_15c = *($v0_103 + 0x20)
-000af5c8                        int32_t var_158_2 = *($v0_103 + 0x24)
-000af5c8                    
-000af5dc                    int32_t var_7c = 0xa9f30
-000af5f8                    int32_t var_78_1 = 0xa9c74
-000af5f8                    
-000af5fc                    if (VBMCreatePool(arg1, &str, &var_7c, gFramesource_1, var_190, 
-000af5fc                            var_18c, var_188, var_184, var_180, var_17c, var_178) s>= 0)
-000af618                        int32_t var_84_1 = 0
-000af61c                        int32_t var_80_1 = 0
-000af620                        var_90 = var_94_2
-000af628                        int32_t var_8c_2 = 1
-000af630                        int32_t var_88_1 = 2
-000af634                        int32_t $s1_8 = gFramesource_1 + ($s4_1 - $s3_1) * 0x1f
-000af634                        
-000af654                        if (ioctl(*($s1_8 + 0x1c4), 0xc0145608, &var_90) == 0xffffffff)
-000b01d0                            imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfcaec, 0xfcb0c, 
-000b01d0                                0x7a6, 0xfe5a8, 0xfd8dc, arg1)  {"Framesource"}  {"
-000b01d0                            "/home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries."
-000b01d0                            "c"}  {"[chn%d] does not support user memory\n"}  {"
-000b01d0                                IMP_FrameSource_EnableChn"}
-000af654                        else
-000af65c                            int32_t $v0_135
-000af65c                            
-000af65c                            if ($s7_2 != 0)
-000af9dc                                int32_t $a0_41 = *($s1_8 + 0x1c4)
-000af9f0                                var_70 = *($s1_8 + 0x54)
-000af9ec                                $v0_135 = ioctl($a0_41, 0x800456c5, &var_70)
-000af9ec                            
-000af9f4                            if ($s7_2 == 0 || $v0_135 != 0xffffffff)
-000af670                                if (var_90 u< var_94_2)
-000afef4                                    int32_t var_188_8 =
-000afef4                                        0xfe5a8  {"IMP_FrameSource_EnableChn"}
-000afa50                                    imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfcaec, 
-000afa50                                        0xfcb0c, 0x7b3, 0xfe5a8, 0xfd928, arg1)  {"Framesource"}
-000afa50                                        {"
-000afa50                                    "/home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries."
-000afa50                                    "c"}  {"Insufficient buffer memory on chn%d\n"}  {"
-000afa50                                        IMP_FrameSource_EnableChn"}
-000af670                                else
-000af680                                    int32_t $s1_10 = ($s4_1 - $s3_1) * 0x1f
-000af684                                    int32_t $s7_3 = gFramesource_1 + $s1_10
-000af688                                    *($s7_3 + 0x22c) = 0
-000af68c                                    *($s7_3 + 0x230) = 0
-000af68c                                    
-000af698                                    if (VBMFillPool(arg1) s< 0)
-000b0080                                        int32_t var_188_10 =
-000b0080                                            0xfe5a8  {"IMP_FrameSource_EnableChn"}
-000afa50                                        imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfcaec, 
-000afa50                                            0xfcb0c, 0x7bc, 0xfe5a8, 0xfd950, 0xfe5a8)  {"
-000afa50                                            Framesource"}  {"
-000afa50                                        "/home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries."
-000afa50                                        "c"}  {"%s(): Failed to VBMFillPool!\n"}  {"
-000afa50                                            IMP_FrameSource_EnableChn"}
-000af698                                    else
-000af6b8                                        int32_t err = pthread_create(
-000af6b8                                            gFramesource_1 + $s1_10 + 0x1c0, 0, 0xa9acc, 
-000af6b8                                            $v0_2 + 0x18)
-000af6b8                                        
-000af6c4                                        if (err != 0)
-000aff6c                                            imp_log_fun(6, IMP_Log_Get_Option(), 2, 
-000aff6c                                                0xfcaec, 0xfcb0c, 0x7c4, 0xfe5a8, 0xfd970, 
-000aff6c                                                err, strerror(err))  {"Framesource"}  {"
-000aff6c                                            "/home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries."
-000aff6c                                            "c"}  {"thread create error,ret=%d:%s\n"}  {"
-000aff6c                                                IMP_FrameSource_EnableChn"}
-000af6c4                                        else
-000af6d0                                            int32_t $a0_31 = *($s7_3 + 0x1c4)
-000af6e8                                            int32_t var_74 = 1
-000af6e8                                            
-000af6f0                                            if (ioctl($a0_31, 0x80045612, &var_74)
-000af6f0                                                    != 0xffffffff)
-000af6fc                                                *($s7_3 + 0x1c) = 2
-000af710                                                int32_t $v1_36 =
-000af710                                                    *(gFramesource_1 + 0x10) + 1
-000af714                                                *(gFramesource_1 + 0x14) += 2
-000af718                                                *(gFramesource_1 + 0x10) = $v1_36
-000af744                                                return 0
-000af744                                            
-000b0234                                            imp_log_fun(6, IMP_Log_Get_Option(), 2, 
-000b0234                                                0xfcaec, 0xfcb0c, 0x7cb, 0xfe5a8, 0xfd990, 
-000b0234                                                arg1)  {"Framesource"}  {"
-000b0234                                            "/home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries."
-000b0234                                            "c"}  {"[chn%d] VIDIOC_STREAMON failed\n"}  {"
-000b0234                                                IMP_FrameSource_EnableChn"}
-000b0244                                            pthread_cancel(*($s7_3 + 0x1c0))
-000b0258                                            pthread_join(*($s7_3 + 0x1c0), 0)
-000b0258                                        
-000aff7c                                        VBMFlushFrame(arg1)
-000af9f4                            else
-000afa28                                int32_t var_188_3 = 0xfe5a8  {"IMP_FrameSource_EnableChn"}
-000afa50                                imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfcaec, 0xfcb0c, 
-000afa50                                    0x7ad, 0xfe5a8, 0xfd904, arg1)  {"Framesource"}  {"
-000afa50                                "/home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries."
-000afa50                                "c"}  {"[chn%d] does not support set banks\n"}  {"
-000afa50                                    IMP_FrameSource_EnableChn"}
-000afa50                            
-000afa68                            var_90 = 0
-000afa80                            ioctl(*(gFramesource_1 + ($s4_1 - $s3_1) * 0x1f + 0x1c4), 
-000afa80                                0xc0145608, &var_90)
-000afa80                        
-000afa90                        VBMDestroyPool(arg1)
-000afa9c                        $s3_5 = $s4_1 - $s3_1
-000afa9c                        goto label_afaa8
-000afa9c                    
-000af914                    $v0_132 = IMP_Log_Get_Option()
-000af934                    var_180_1 = 0xfe5a8  {"IMP_FrameSource_EnableChn"}
-000af938                    int32_t var_188_1 = 0xfe5a8  {"IMP_FrameSource_EnableChn"}
-000af93c                    var_184_1 = 0xfd8bc  {"%s(): Failed to VBMCreatePool!\n"}
-000af940                    $v1_43 = 0x79c
-000af940        
-000af964        imp_log_fun(6, $v0_132, 2, 0xfcaec, 0xfcb0c, $v1_43, 0xfe5a8, var_184_1, var_180_1, 
-000af964            var_17c, var_178)  {"Framesource"}  {"
-000af964            /home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries.c"}  {"
-000af964            IMP_FrameSource_EnableChn"}
-000af998        return 0xffffffff
-
-T000a9c74    int32_t release_Frame(int32_t* arg1, void* arg2)
-
-000a9ccc        int32_t $s5 = arg1[1]
-000a9cc8        int32_t str
-000a9cc8        memset(&str, c: 0, n: 0x44)
-000a9ce0        int32_t result = 0
-000a9ce0
-000a9cdc        if (zx.d(arg1[0xf9].b) != 2)
-000a9ce4            int32_t str_1 = *arg1
-000a9ce8            int32_t $a0_1 = arg1[6]
-000a9cec            int32_t $v0_1 = arg1[5]
-000a9cf8            int32_t var_40_1 = 2
-000a9cfc            str = str_1
-000a9d00            int32_t var_3c_1 = $a0_1
-000a9d04            int32_t $s2 = $s5 << 3
-000a9d08            int32_t $s1_1 = $s5 << 5
-000a9d0c            int32_t var_6c_1 = 1
-000a9d14            int32_t var_38_1 = $v0_1
-000a9d10            int32_t $v0_2 = Rtos_GetTime($a0_1, str_1, 1)
-000a9d2c            arg1[0xfd] = $v0_2
-000a9d30            arg1[0xfe] = $v0_2 s>> 0x1f
-000a9d3c            int32_t var_9c
-000a9d3c            int32_t var_98
-000a9d3c
-000a9d3c            if (zx.d(*(arg2 + ($s1_1 - $s2) * 0x1f + 0x2ec)) != 0)
-000a9e28                int32_t $v0_13 = IMP_Log_Get_Option()
-000a9e30                int32_t $v1_4 = arg1[0xfd]
-000a9e34                int32_t $a2_2 = arg1[0xfb]
-000a9e3c                int32_t $a3_1 = arg1[0xfe]
-000a9e40                int32_t $t0_1 = $v1_4 - $a2_2
-000a9e44                int32_t $a1_2 = arg1[0xfc]
-000a9e58                int32_t var_88_1 = $v1_4
-000a9e88                int32_t var_7c_1 = $a3_1 - $a1_2 - ($v1_4 u< $t0_1 ? 1 : 0)
-000a9e8c                int32_t var_84_1 = $a3_1
-000a9e90                int32_t var_90_1 = $a2_2
-000a9e94                int32_t var_8c_1 = $a1_2
-000a9e98                int32_t var_80_1 = $t0_1
-000a9e9c                var_98 = arg1[3]
-000a9ea0                var_9c = arg1[2]
-000a9ec0                imp_log_fun(3, $v0_13, 2, 0xfcaec, 0xfcb0c, 0x157, 0xfe580, 0xfcb6c, *arg1,
-000a9ec0                    var_9c, var_98)  {"Framesource"}  {"
-000a9ec0                    /home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries.c"}  {"
-000a9ec0                    FRAME TIME:frame-%d,width=%d,height=%d,dq=%lld,q=%lld,dq2q=%lld\n"}  {"
-000a9ec0                    release_Frame"}
-000a9ec0
-000a9d64            void* $s1_4 = arg2 + ($s1_1 - $s2) * 0x1f
-000a9d80            result = ioctl(*($s1_4 + 0x1c4), 0xc044560f, &str)
-000a9d80
-000a9d88            if (result == 0xffffffff)
-000a9f20                imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfcaec, 0xfcb0c, 0x15a, 0xfe580,
-000a9f20                    0xfcbb0, 0xfe580, arg1[1], str)  {"Framesource"}  {"
-000a9f20                    /home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries.c"}  {"
-000a9f20                    %s: VIDIOC_QBUF failed, poolid = %d index = %d\n"}  {"release_Frame"}
-000a9d88            else
-000a9d98                result = 0
-000a9da4                *($s1_4 + 0x22c) += 1
-000a9de0                imp_log_fun(2, IMP_Log_Get_Option(), 2, 0xfcaec, 0xfcb0c, 0x160, 0xfe580,
-000a9de0                    0xfcbe0, str, var_9c, var_98)  {"Framesource"}  {"
-000a9de0                    /home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries.c"}  {"
-000a9de0                    release cluster:%d \n"}  {"release_Frame"}
-000a9df0                arg1[0xf7] += 1
-000a9df0
-000a9e1c        return result
-
-
+0009bd84        uint32_t gISPdev_1 = gISPdev
+0009bdac        int32_t var_ac_1
+0009bdac        int32_t var_a4_1
+0009bdac        int32_t var_a0
+0009bdac        int32_t var_9c
+0009bdac        int32_t var_98
+0009bdac        int32_t var_94
+0009bdac        int32_t $v0_8
+0009bdac        int32_t $v1_1
+0009bdac        
+0009bdac        if (gISPdev_1 == 0)
+0009c3d0            $v0_8 = IMP_Log_Get_Option()
+0009c3e8            var_a4_1 = 0xfa884  {"ISPDEV cannot open\n"}
+0009c3f4            int32_t var_a8_7 = 0xfc984  {"IMP_ISP_AddSensor"}
+0009c3fc            $v1_1 = 0x19d
+0009beb8        label_9beb8:
+0009beb8            var_ac_1 = $v1_1
+0009bec8            int32_t var_b0_1 =
+0009bec8                0xfa4b0  {"/home/user/git/proj/sdk-lv3/src/imp/isp/isp_tseries.c"}
+0009bee0        label_9bee0:
+0009bedc            imp_log_fun(6, $v0_8, 2, 0xfa498, 0xfa4b0, var_ac_1, 0xfc984, var_a4_1, var_a0, 
+0009bedc                var_9c, var_98, var_94, &_gp)  {"IMP-ISP"}  {"
+0009bedc                /home/user/git/proj/sdk-lv3/src/imp/isp/isp_tseries.c"}  {"IMP_ISP_AddSensor"}
+0009bf0c            return 0xffffffff
+0009bf0c        
+0009bdbc        if (*(gISPdev_1 + 0x24) u>= 2)
+0009be8c            $v0_8 = IMP_Log_Get_Option()
+0009bea4            var_a4_1 =
+0009bea4                0xfa818  {"Sensor is runing, please Call 'EmuISP_DisableSensor' firstly\n"}
+0009beb0            int32_t var_a8_1 = 0xfc984  {"IMP_ISP_AddSensor"}
+0009beb4            $v1_1 = 0x1a2
+0009beb4            goto label_9beb8
+0009beb4        
+0009bddc        if (ioctl(*(gISPdev_1 + 0x20), 0x805056c1, arg1) != 0)
+0009c2c4            int32_t var_a8_4 = 0xfc984  {"IMP_ISP_AddSensor"}
+0009c234            imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfa498, 0xfa4b0, 0x1a7, 0xfc984, 
+0009c234                0xfa898, arg1)  {"IMP-ISP"}  {"
+0009c234                /home/user/git/proj/sdk-lv3/src/imp/isp/isp_tseries.c"}  {"
+0009c234                VIDIOC_REGISTER_SENSOR(%s) error!\n"}  {"IMP_ISP_AddSensor"}
+0009c240            return 0xffffffff
+0009c240        
+0009bde8        uint32_t bpath_1 = bpath
+0009bdec        int32_t result
+0009bdec        
+0009bdec        if (bpath_1 != 0)
+0009be14            result = ioctl(*(gISPdev_1 + 0x20), 0xc00456c7, bpath_1)
+0009be10            free(ptr: bpath)
+0009be20            bpath = 0
+0009be20        
+0009be1c        if (bpath_1 != 0 && result != 0)
+0009bf0c            return result
+0009bf0c        
+0009be2c        int32_t result_1 = 0xffffffff
+0009be30        int32_t result_4 = 0
+0009be4c        char (* str2)[0x4c]
+0009be4c        
+0009be4c        while (true)
+0009be58            char var_84[0x4c]
+0009be58            str2 = &var_84
+0009be58            
+0009be60            if (ioctl(*(gISPdev_1 + 0x20), 0xc050561a, &result_4) != 0)
+0009be60                break
+0009be60            
+0009be70            if (strcmp(str1: arg1, str2) == 0)
+0009bf14                int32_t result_3 = result_4
+0009bf18                result_1 = result_3
+0009bf24                result_4 = result_3 + 1
+0009be70            else
+0009be84                result_4 += 1
+0009be84        
+0009bf28        result = result_1
+0009bf28        
+0009bf30        if (result == 0xffffffff)
+0009c324            imp_log_fun(6, IMP_Log_Get_Option(arg1, str2), 2, 0xfa498, 0xfa4b0, 0x1c0, 
+0009c324                0xfc984, 0xfa8bc, arg1)  {"IMP-ISP"}  {"
+0009c324                /home/user/git/proj/sdk-lv3/src/imp/isp/isp_tseries.c"}  {"
+0009c324                sensor[%s] hasn't been added!\n"}  {"IMP_ISP_AddSensor"}
+0009bf0c            return result
+0009bf0c        
+0009bf4c        if (ioctl(*(gISPdev_1 + 0x20), 0xc0045627, &result_1) != 0)
+0009c20c            int32_t var_a8_2 = 0xfc984  {"IMP_ISP_AddSensor"}
+0009c234            imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfa498, 0xfa4b0, 0x1c6, 0xfc984, 
+0009c234                0xfa8dc, arg1)  {"IMP-ISP"}  {"
+0009c234                /home/user/git/proj/sdk-lv3/src/imp/isp/isp_tseries.c"}  {"
+0009c234                Failed to select sensor[%s]!\n"}  {"IMP_ISP_AddSensor"}
+0009c240            return 0xffffffff
+0009c240        
+0009bf54        char* i = arg1
+0009bf58        void* $v0_12 = gISPdev_1 + 0x28
+0009bf58        
+0009bfa4        do
+0009bf60            _setLeftPart32(leftpart: *i)
+0009bf64            _setLeftPart32(leftpart: *(i + 4))
+0009bf68            _setLeftPart32(leftpart: *(i + 8))
+0009bf6c            _setLeftPart32(leftpart: *(i + 0xc))
+0009bf70            uint32_t $a3_2 = _setRightPart32(rightpart: *i)
+0009bf74            uint32_t $a2_5 = _setRightPart32(rightpart: *(i + 4))
+0009bf78            uint32_t $v1_3 = _setRightPart32(rightpart: *(i + 0xc))
+0009bf7c            uint32_t $a1_3 = _setRightPart32(rightpart: *(i + 8))
+0009bf84            *$v0_12 = $a3_2
+0009bf8c            *($v0_12 + 4) = $a2_5
+0009bf94            *($v0_12 + 8) = $a1_3
+0009bf98            i = &i[0x10]
+0009bfa0            *($v0_12 + 0xc) = $v1_3
+0009bfa8            $v0_12 += 0x10
+0009bfa4        while (i != &arg1[0x50])
+0009bfa4        
+0009bfcc        int32_t var_38
+0009bfcc        
+0009bfcc        if (ioctl(*(gISPdev_1 + 0x20), 0x800856d5, &var_38) != 0)
+0009c244            $v0_8 = IMP_Log_Get_Option()
+0009c25c            var_a4_1 = 0xfa8fc  {"VIDIOC_GET_BUF_INFO() error!\n"}
+0009c268            int32_t var_a8_3 = 0xfc984  {"IMP_ISP_AddSensor"}
+0009c270            $v1_1 = 0x1dc
+0009c26c            goto label_9beb8
+0009c26c        
+0009bfd8        int32_t $v0_14 = IMP_Log_Get_Option()
+0009bff8        int32_t var_34
+0009bff8        var_94 = var_34
+0009c010        var_98 = var_38
+0009c014        var_9c = 0x1e0
+0009c02c        var_a0 = 0xfc984  {"IMP_ISP_AddSensor"}
+0009c038        imp_log_fun(4, $v0_14, 2, 0xfa498, 0xfa4b0, 0x1e0, 0xfc984, 0xfa91c, 0xfc984, 
+0009c038            0x1e0, var_98, var_94, &_gp)  {"IMP-ISP"}  {"
+0009c038            /home/user/git/proj/sdk-lv3/src/imp/isp/isp_tseries.c"}  {"
+0009c038            %s,%d: paddr = 0x%x, size = 0x%x\n"}  {"IMP_ISP_AddSensor"}
+0009c048        void* $v0_15 = malloc(size: 0x94)
+0009c054        int32_t $a2_11
+0009c054        
+0009c054        if ($v0_15 == 0)
+0009c370            $a2_11 = 0x1e3
+0009c054        else
+0009c074            int32_t $a2_10
+0009c074            
+0009c074            if (IMP_Alloc($v0_15, var_34, 0xfa95c) != 0)  {"ncubuf"}
+0009c278                $a2_10 = 0x1e8
+0009c284            label_9c284:
+0009c288                printf(0xfa964, 0xfc984, $a2_10)  {"error(%s,%d): IMP_Alloc\n"}  {"
+0009c288                    IMP_ISP_AddSensor"}
+0009bf0c                return 0xffffffff
+0009bf0c            
+0009c07c            int32_t $v0_17 = *($v0_15 + 0x84)
+0009c084            int32_t $a0_10 = *(gISPdev_1 + 0x20)
+0009c088            *(gISPdev_1 + 0xac) = $v0_15
+0009c098            var_38 = $v0_17
+0009c094            int32_t result_2 = ioctl($a0_10, 0x800856d4, &var_38)
+0009c09c            result = result_2
+0009c09c            
+0009c0a0            if (result_2 != 0)
+0009c338                $v0_8 = IMP_Log_Get_Option()
+0009c344                int32_t var_a8_5 = 0xfc984  {"IMP_ISP_AddSensor"}
+0009c348                int32_t var_b0_2 =
+0009c348                    0xfa4b0  {"/home/user/git/proj/sdk-lv3/src/imp/isp/isp_tseries.c"}
+0009c35c                var_a4_1 = 0xfa980  {"VIDIOC_SET_BUF_INFO() error!\n"}
+0009c368                var_ac_1 = 0x1ee
+0009c364                goto label_9bee0
+0009c364            
+0009c0b0            if (*(gISPdev_1 + 0xb0) != 1)
+0009bf0c                return result
+0009bf0c            
+0009c0bc            int32_t $a0_11 = *(gISPdev_1 + 0x20)
+0009c0c0            var_38 = 0
+0009c0c4            int32_t var_34_1 = 0
+0009c0c4            
+0009c0d8            if (ioctl($a0_11, 0x800856d7, &var_38) != 0)
+0009c39c                $v0_8 = IMP_Log_Get_Option()
+0009c3a8                int32_t var_a8_6 = 0xfc984  {"IMP_ISP_AddSensor"}
+0009c3ac                int32_t var_b0_3 =
+0009c3ac                    0xfa4b0  {"/home/user/git/proj/sdk-lv3/src/imp/isp/isp_tseries.c"}
+0009c3c0                var_a4_1 = 0xfa9a0  {"VIDIOC_GET_WDR_BUF_INFO() error!\n"}
+0009c3cc                var_ac_1 = 0x1f6
+0009c3c8                goto label_9bee0
+0009c3c8            
+0009c128            imp_log_fun(4, IMP_Log_Get_Option(), 2, 0xfa498, 0xfa4b0, 0x1fa, 0xfc984, 
+0009c128                0xfa91c, 0xfc984, 0x1fa, var_38, var_34_1)  {"IMP-ISP"}  {"
+0009c128                /home/user/git/proj/sdk-lv3/src/imp/isp/isp_tseries.c"}  {"
+0009c128                %s,%d: paddr = 0x%x, size = 0x%x\n"}  {"IMP_ISP_AddSensor"}
+0009c138            void* $v0_20 = malloc(size: 0x94)
+0009c138            
+0009c144            if ($v0_20 != 0)
+0009c164                if (IMP_Alloc($v0_20, var_34_1, 0xfa9c4) != 0)  {"wdrbuf"}
+0009c398                    $a2_10 = 0x202
+0009c394                    goto label_9c284
+0009c394                
+0009c16c                int32_t $v0_22 = *($v0_20 + 0x84)
+0009c174                int32_t $a0_15 = *(gISPdev_1 + 0x20)
+0009c178                *(gISPdev_1 + 0xb4) = $v0_20
+0009c188                var_38 = $v0_22
+0009c188                
+0009c18c                if (ioctl($a0_15, 0x800856d6, &var_38) != 0)
+0009c19c                    result = 0xffffffff
+0009c1d0                    imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfa498, 0xfa4b0, 0x208, 
+0009c1d0                        0xfc984, 0xfa9cc)  {"IMP-ISP"}  {"
+0009c1d0                        /home/user/git/proj/sdk-lv3/src/imp/isp/isp_tseries.c"}  {"
+0009c1d0                        VIDIOC_SET_WDR_BUF_INFO() error!\n"}  {"IMP_ISP_AddSensor"}
+0009c1d0                
+0009bf0c                return result
+0009bf0c            
+0009c408            $a2_11 = 0x1fd
+0009c408        
+0009c380        printf(0xfa940, 0xfc984, $a2_11)  {"error(%s,%d): maloc err\n"}  {"
+0009c380            IMP_ISP_AddSensor"}
+0009bf0c        return 0xffffffff

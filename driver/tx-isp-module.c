@@ -3329,11 +3329,10 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             /* The userspace application expects specific data in the response */
             memset(&var_98, 0, 0x50);  /* Clear the structure */
 
-            /* Set up a basic sensor input enumeration response */
-            uint32_t *response = (uint32_t *)&var_98;
-            response[0] = 0;  /* Input index */
-            response[1] = 1;  /* Input count or status */
-            strcpy((char *)&response[2], "gc2053");  /* Sensor name */
+            /* Set up sensor enumeration response - client expects sensor name at start of structure */
+            char *sensor_name_ptr = (char *)&var_98;
+            strncpy(sensor_name_ptr, "gc2053", 0x4c);  /* Copy sensor name safely */
+            sensor_name_ptr[0x4b] = '\0';  /* Ensure null termination */
 
             /* Binary Ninja: void* $a0_2 = *$s0_3 */
             struct tx_isp_subdev *a0_2 = (struct tx_isp_subdev *)*s0_3;
