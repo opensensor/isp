@@ -3157,19 +3157,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         channel, vic->width, vic->height);
             }
 
-            /* CRITICAL FIX: Configure VIC DMA during STREAMON when everything is ready */
-            /* This ensures VIC DMA is configured with proper dimensions and buffer addresses */
-            if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
-                dma_addr_t first_buffer = state->vbm_buffer_addresses[0];
-                int ret_dma = tx_isp_vic_configure_dma(vic, first_buffer, vic->width, vic->height);
-                if (ret_dma == 0) {
-                    pr_info("*** STREAMON: Successfully configured VIC DMA for streaming ***\n");
-                } else {
-                    pr_err("*** STREAMON: Failed to configure VIC DMA: %d ***\n", ret_dma);
-                }
-            } else {
-                pr_warn("*** STREAMON: No VBM buffers available for VIC DMA configuration ***\n");
-            }
+            /* REMOVED: Manual VIC DMA configuration during STREAMON */
+            /* Reference driver handles VIC DMA configuration automatically via vic_pipo_mdma_enable */
+            /* This is called from ispvic_frame_channel_s_stream during the streaming process */
+            pr_info("*** STREAMON: VIC DMA configuration handled by vic_pipo_mdma_enable in streaming ***\n");
 
             pr_info("*** VIC STATE: state=%d, stream_state=%d, active_buffer_count=%d ***\n",
                     vic->state, vic->stream_state, vic->active_buffer_count);

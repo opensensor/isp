@@ -164,7 +164,8 @@ struct tx_isp_vic_device {
 } __attribute__((aligned(4), packed));
 
 /* VIC function declarations */
-int tx_isp_vic_configure_dma(struct tx_isp_vic_device *vic_dev, dma_addr_t addr, u32 width, u32 height);
+/* REMOVED: tx_isp_vic_configure_dma - function doesn't exist in reference driver */
+/* Use vic_pipo_mdma_enable instead, which is called during streaming */
 int vic_mdma_enable(struct tx_isp_vic_device *vic_dev, int channel, int dual_channel,
                     int buffer_count, dma_addr_t base_addr, int format_type);
 
