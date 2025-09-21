@@ -602,53 +602,9 @@ EXPORT_SYMBOL(tx_isp_core_set_format);
 /* Forward declaration for ispcore_core_ops_ioctl */
 int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 
-/**
- * core_subdev_core_init_bridge - Bridge function for core subdev init
- * @sd: The subdev being initialized
- * @on: Enable/disable flag (1 = enable, 0 = disable)
- *
- * This function bridges the subdev core init interface to the ispcore_core_ops_init
- * function, converting the subdev parameters to the expected ISP device parameters.
- */
-static int core_subdev_core_init_bridge(struct tx_isp_subdev *sd, int on)
-{
-    struct tx_isp_dev *isp_dev;
-    struct tx_isp_sensor_attribute *sensor_attr = NULL;
-
-    pr_info("core_subdev_core_init_bridge: Called with sd=%p, on=%d\n", sd, on);
-
-    if (!sd) {
-        pr_err("core_subdev_core_init_bridge: Invalid subdev\n");
-        return -EINVAL;
-    }
-
-    /* Get the ISP device from the subdev */
-    isp_dev = (struct tx_isp_dev *)sd->isp;
-    if (!isp_dev) {
-        pr_err("core_subdev_core_init_bridge: No ISP device associated with subdev\n");
-        return -EINVAL;
-    }
-
-    /* For disable (on=0), pass NULL sensor attributes to trigger deinit */
-    if (on == 0) {
-        sensor_attr = NULL;
-    } else {
-        /* For enable (on=1), try to get sensor attributes if available */
-        if (isp_dev->sensor && isp_dev->sensor->sensor_attr) {
-            sensor_attr = isp_dev->sensor->sensor_attr;
-        }
-        /* Note: sensor_attr can be NULL for initial core init - ispcore_core_ops_init handles this */
-    }
-
-    pr_info("core_subdev_core_init_bridge: Calling ispcore_core_ops_init with isp=%p, attr=%p\n",
-            isp_dev, sensor_attr);
-
-    return ispcore_core_ops_init(isp_dev, sensor_attr);
-}
-
 /* Core subdev operations - matches the pattern used by other devices */
 struct tx_isp_subdev_core_ops core_subdev_core_ops = {
-    .init = core_subdev_core_init_bridge,
+    .init = ispcore_core_ops_init,
     .reset = NULL,
     .ioctl = ispcore_core_ops_ioctl,  /* Wire in the IOCTL handler */
 };
@@ -854,7 +810,7 @@ static volatile int isp_force_core_isr = 0;  /* Force ISP core ISR flag */
 
 
 /* Binary Ninja: ispcore_sensor_ops_ioctl - iterate through subdevices safely */
-static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
+int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
 {
     int result = 0;
     int i;
@@ -1681,7 +1637,7 @@ EXPORT_SYMBOL(data_b2e14);
  * Address: 0x789dc
  * This is the massive and complex initialization function from the reference driver
  */
-int ispcore_core_ops_init(struct tx_isp_dev *arg1, struct tx_isp_sensor_attribute *arg2)
+int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 {
     void* s0 = NULL;
     int32_t var_18 = 0;
