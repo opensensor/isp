@@ -4972,36 +4972,8 @@ static int tx_isp_init(void)
     }
     pr_info("*** SUBDEVICE REGISTRY INITIALIZED - GRAPH CREATION SHOULD NOW SUCCEED ***\n");
 
-    /* *** CRITICAL FIX: Register individual subdev platform devices so their probe functions get called *** */
-    pr_info("*** REGISTERING INDIVIDUAL SUBDEV PLATFORM DEVICES FOR MEMORY MAPPING ***\n");
-    for (i = 0; i < 5; i++) {
-        /* Check if device is already registered to avoid "ALREADY REGISTERED" kernel warnings */
-        if (subdev_platforms[i]->dev.kobj.parent) {
-            pr_info("*** SUBDEV PLATFORM DEVICE %s ALREADY REGISTERED - SKIPPING ***\n",
-                    subdev_platforms[i]->name);
-            continue;
-        }
-
-        ret = platform_device_register(subdev_platforms[i]);
-        if (ret != 0) {
-            /* Handle -EEXIST (already exists) as success to avoid log spam */
-            if (ret == -EEXIST) {
-                pr_info("*** SUBDEV PLATFORM DEVICE %s ALREADY EXISTS - CONTINUING ***\n",
-                        subdev_platforms[i]->name);
-                continue;
-            }
-
-            pr_err("Failed to register subdev platform device %s: %d\n",
-                   subdev_platforms[i]->name, ret);
-            /* Cleanup previously registered devices */
-            while (--i >= 0) {
-                platform_device_unregister(subdev_platforms[i]);
-            }
-            goto err_cleanup_subdev_drivers;
-        }
-        pr_info("*** SUBDEV PLATFORM DEVICE %s REGISTERED - PROBE SHOULD BE CALLED ***\n",
-                subdev_platforms[i]->name);
-    }
+    /* *** REFERENCE DRIVER: Individual subdev platform devices are registered by tx_isp_create_graph_and_nodes *** */
+    pr_info("*** REFERENCE DRIVER: Subdev platform devices will be registered by tx_isp_create_graph_and_nodes ***\n");
 
     /* Step 2: Register platform device (matches reference) */
     /* Check if main platform device is already registered */
@@ -5435,9 +5407,9 @@ static int tx_isp_create_proc_entries(struct tx_isp_dev *isp_dev)
 /* tx_isp_create_graph_and_nodes - EXACT Binary Ninja reference implementation */
 int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp_dev)
 {
-    int ret;
     struct tx_isp_platform_data *pdata;
     int i;
+    int ret;
 
     pr_info("*** tx_isp_create_graph_and_nodes: EXACT Binary Ninja reference implementation ***\n");
 
@@ -5448,21 +5420,33 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp_dev)
         return -EINVAL;
     }
 
-    /* Binary Ninja: Iterate through device list and register each platform device */
+    /* Binary Ninja: Register platform devices from platform data */
     for (i = 0; i < pdata->device_id; i++) {
-        /* Binary Ninja: Register platform device from platform data */
         pr_info("*** Registering platform device %d from platform data ***\n", i);
 
-        /* Register the actual platform device so its probe function gets called */
         if (i < ARRAY_SIZE(tx_isp_platform_devices) && tx_isp_platform_devices[i]) {
-            int ret = platform_device_register(tx_isp_platform_devices[i]);
+            /* Check if device is already registered to avoid double registration */
+            if (tx_isp_platform_devices[i]->dev.kobj.parent) {
+                pr_info("*** Platform device %d (%s) already registered - skipping ***\n",
+                        i, tx_isp_platform_devices[i]->name);
+                continue;
+            }
+
+            ret = private_platform_device_register(tx_isp_platform_devices[i]);
             if (ret != 0) {
                 pr_err("Failed to register platform device %d (%s): %d\n",
                        i, tx_isp_platform_devices[i]->name, ret);
-            } else {
-                pr_info("*** Platform device %d (%s) registered successfully ***\n",
-                        i, tx_isp_platform_devices[i]->name);
+
+                /* Cleanup previously registered devices */
+                while (--i >= 0) {
+                    if (tx_isp_platform_devices[i] && tx_isp_platform_devices[i]->dev.kobj.parent) {
+                        private_platform_device_unregister(tx_isp_platform_devices[i]);
+                    }
+                }
+                return ret;
             }
+            pr_info("*** Platform device %d (%s) registered successfully ***\n",
+                    i, tx_isp_platform_devices[i]->name);
         }
     }
 
