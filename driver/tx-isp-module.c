@@ -1701,10 +1701,12 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             pr_err("VIC IRQ %d: Control limit error\n", irq);
         }
 
-        /* Process MDMA interrupts */
+        /* Binary Ninja: Process MDMA interrupts */
+        /* if (($v1_10 & 1) != 0) entry_$a2 = vic_mdma_irq_function($s0, 0) */
         if ((mdma_status & 1) != 0) {
             vic_mdma_irq_function(vic_dev, 0);
         }
+        /* if (($v1_10 & 2) != 0) entry_$a2 = vic_mdma_irq_function($s0, 1) */
         if ((mdma_status & 2) != 0) {
             vic_mdma_irq_function(vic_dev, 1);
         }
