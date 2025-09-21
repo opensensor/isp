@@ -1870,11 +1870,11 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         }
 
         /* Wake up frame channels for all interrupt types */
-        for (i = 0; i < num_channels; i++) {
-            if (frame_channels[i].state.streaming) {
-                frame_channel_wakeup_waiters(&frame_channels[i]);
-            }
-        }
+        //for (i = 0; i < num_channels; i++) {
+        //    if (frame_channels[i].state.streaming) {
+                //frame_channel_wakeup_waiters(&frame_channels[i]);
+        //    }
+        //}
 
     } else {
         pr_warn("*** VIC INTERRUPT IGNORED: vic_start_ok=0, interrupts disabled (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
