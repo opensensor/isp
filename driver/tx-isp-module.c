@@ -5807,31 +5807,32 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
 
 /* isp_irq_handle - SAFE struct member access implementation with correct dev_id handling */
 
-/* isp_irq_handle - FIXED interrupt dispatcher that handles different dev_id types */
+/* isp_irq_handle - EXACT Binary Ninja reference implementation */
 irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
-    irqreturn_t result = IRQ_NONE;
-    extern struct tx_isp_dev *ourISPdev;
+    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
+    irqreturn_t result = IRQ_HANDLED;  /* Binary Ninja: result = 1 */
 
-    /* CRITICAL SAFETY: Validate all parameters before any processing */
-    if (irq < 0 || irq > 255) {
-        pr_err("*** CRITICAL: isp_irq_handle called with invalid IRQ %d ***\n", irq);
+    /* CRITICAL SAFETY: Basic validation */
+    if (!dev_id) {
+        pr_err("*** CRITICAL: isp_irq_handle called with NULL dev_id ***\n");
         return IRQ_NONE;
     }
 
-    /* CRITICAL SAFETY: Validate dev_id pointer range */
-    if (!dev_id || (uintptr_t)dev_id < 0x80000000 || (uintptr_t)dev_id > 0x9fffffff) {
-        pr_err("*** CRITICAL: isp_irq_handle called with invalid dev_id=%p for IRQ %d ***\n", dev_id, irq);
-        return IRQ_NONE;
+    pr_debug("*** isp_irq_handle: IRQ %d received, dev_id=%p ***\n", irq, dev_id);
+
+    /* Binary Ninja reference shows this is the main interrupt processing function */
+    /* It handles VIC interrupts directly, not through a dispatcher */
+
+    /* For VIC interrupts (IRQ 38), call the VIC handler directly */
+    if (irq == 38) {
+        /* Binary Ninja: Call VIC interrupt service routine with ISP device */
+        result = isp_vic_interrupt_service_routine(isp_dev);
+        return result;
     }
 
-    /* CRITICAL SAFETY: Validate main ISP device */
-    if (!ourISPdev) {
-        pr_err("*** CRITICAL: ourISPdev is NULL in interrupt handler for IRQ %d ***\n", irq);
-        return IRQ_NONE;
-    }
-
-    pr_info("*** isp_irq_handle: IRQ %d received, dev_id=%p ***\n", irq, dev_id);
+    /* For other IRQs, return handled */
+    return IRQ_HANDLED;
 
     /* Handle VIC interrupts (IRQ 38) */
     if (irq == 38) {
