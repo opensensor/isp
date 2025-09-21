@@ -3395,11 +3395,34 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         if (core_dev) {
             struct tx_isp_core_device *core = (struct tx_isp_core_device *)core_dev;
-            /* Binary Ninja: Complex buffer size calculation */
-            /* Default calculation for buffer requirements */
-            int width = 1920;
-            int height = 1080;
-            var_94 = (width * height * 3) / 2; // YUV420 calculation
+            /* Binary Ninja EXACT: Read width/height from core device structure */
+            /* Binary Ninja: int32_t $v0_83 = *($v1_14 + 0xec) */
+            /* Binary Ninja: int32_t $a2_9 = *($v1_14 + 0xf0) */
+            int width = core->width;   /* offset 0xec in Binary Ninja */
+            int height = core->height; /* offset 0xf0 in Binary Ninja */
+
+            /* Binary Ninja EXACT: Complex buffer calculation */
+            /* int32_t $t0_3 = $a2_9 << 3 */
+            /* int32_t $a0_29 = (($v0_83 + 7) u>> 3) * $t0_3 */
+            /* int32_t $a3_2 = ($a0_29 u>> 1) + $a0_29 */
+            int t0_3 = height << 3;
+            int a0_29 = ((width + 7) >> 3) * t0_3;
+            int a3_2 = (a0_29 >> 1) + a0_29;
+
+            /* Binary Ninja EXACT: Additional buffer calculations */
+            /* int32_t $a0_37 = (((($v0_83 + 0x1f) u>> 5) + 7) u>> 3) * (((($a2_9 + 0xf) u>> 4) + 1) << 3) */
+            int a0_37 = ((((width + 0x1f) >> 5) + 7) >> 3) * ((((height + 0xf) >> 4) + 1) << 3);
+            int a2_10 = a3_2 + a0_37;
+
+            /* Binary Ninja EXACT: Check isp_memopt flag for additional calculations */
+            if (isp_memopt == 0) {
+                /* int32_t $a1_55 = ((($v0_83 u>> 1) + 7) u>> 3) * $t0_3 */
+                int a1_55 = (((width >> 1) + 7) >> 3) * t0_3;
+                /* $a2_10 = ($a0_37 << 2) + ((((($v0_83 u>> 5) + 7) u>> 3) * $t0_3) u>> 5) + ($a1_55 u>> 1) + $a3_2 + $a1_55 */
+                a2_10 = (a0_37 << 2) + (((((width >> 5) + 7) >> 3) * t0_3) >> 5) + (a1_55 >> 1) + a3_2 + a1_55;
+            }
+
+            var_94 = a2_10;
         }
 
         s6_1 = 0;
