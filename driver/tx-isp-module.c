@@ -3267,51 +3267,40 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         /* Binary Ninja: Handle 0xc050561a - TX_ISP_SENSOR_ENUM_INPUT */
         if (cmd == 0xc050561a) {
-            pr_info("*** TX_ISP_SENSOR_ENUM_INPUT: FIXED implementation ***\n");
-
-            /* Structure expected by client: index + sensor name */
-            struct {
-                int index;
-                char name[0x4c];
-            } enum_input;
+            pr_info("*** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***\n");
 
             /* Binary Ninja: if (private_copy_from_user(&var_98, arg3, 0x50) != 0) */
-            if (copy_from_user(&enum_input, (void __user *)arg, 0x50) != 0) {
+            if (copy_from_user(&var_98, (void __user *)arg, 0x50) != 0) {
                 pr_err("TX_ISP_SENSOR_ENUM_INPUT: copy_from_user failed\n");
                 return -EFAULT;
             }
 
-            pr_info("TX_ISP_SENSOR_ENUM_INPUT: Requested index=%d\n", enum_input.index);
+            pr_info("TX_ISP_SENSOR_ENUM_INPUT: Requested index=%d\n", *(int*)&var_98);
 
-            /* Use the registered sensor list instead of subdevs array */
-            struct registered_sensor *sensor_entry = NULL;
-            int current_index = 0;
-            bool found = false;
+            /* Binary Ninja: Call subdev_sensor_ops_enum_input exactly as reference */
+            extern int subdev_sensor_ops_enum_input(struct v4l2_subdev *sd, struct v4l2_input *input);
 
-            mutex_lock(&sensor_list_mutex);
-            list_for_each_entry(sensor_entry, &sensor_list, list) {
-                if (current_index == enum_input.index) {
-                    /* Found the sensor at the requested index */
-                    strncpy(enum_input.name, sensor_entry->name, 0x4b);
-                    enum_input.name[0x4b] = '\0';
-                    pr_info("TX_ISP_SENSOR_ENUM_INPUT: Found registered sensor '%s' at index %d\n",
-                            sensor_entry->name, enum_input.index);
-                    found = true;
-                    break;
-                }
-                current_index++;
-            }
-            mutex_unlock(&sensor_list_mutex);
+            /* Create v4l2_input structure from the data */
+            struct v4l2_input input;
+            memset(&input, 0, sizeof(input));
+            input.index = *(int*)&var_98;
 
-            if (!found) {
-                /* No sensor found at the requested index */
-                pr_info("TX_ISP_SENSOR_ENUM_INPUT: No registered sensor found at index %d (total sensors: %d)\n",
-                        enum_input.index, sensor_count);
-                return -EINVAL;
+            /* Call the reference implementation */
+            int result = subdev_sensor_ops_enum_input((struct v4l2_subdev *)isp_dev, &input);
+
+            if (result == 0) {
+                /* Copy the sensor name back to the output buffer */
+                memcpy(&var_98[4], input.name, 0x4c);
+                pr_info("TX_ISP_SENSOR_ENUM_INPUT: Found sensor '%s' at index %d\n",
+                        input.name, input.index);
+            } else {
+                pr_info("TX_ISP_SENSOR_ENUM_INPUT: No sensor found at index %d (result=%d)\n",
+                        input.index, result);
+                return result;
             }
 
             /* Binary Ninja: if (private_copy_to_user(arg3, &var_98, 0x50) != 0) */
-            if (copy_to_user((void __user *)arg, &enum_input, 0x50) != 0) {
+            if (copy_to_user((void __user *)arg, &var_98, 0x50) != 0) {
                 pr_err("TX_ISP_SENSOR_ENUM_INPUT: copy_to_user failed\n");
                 return -EFAULT;
             }
