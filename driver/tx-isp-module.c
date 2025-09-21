@@ -5037,6 +5037,52 @@ static long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, 
 
     /* Handle sensor-specific IOCTLs */
     switch (cmd) {
+        case 0x2000000: /* CRITICAL: Sensor I2C device creation - EXACT Binary Ninja reference */
+            {
+                pr_info("*** subdev_sensor_ops_ioctl: IOCTL 0x2000000 - Creating I2C sensor device ***\n");
+
+                if (!arg) {
+                    pr_err("subdev_sensor_ops_ioctl: No sensor data provided for I2C device creation\n");
+                    return -EINVAL;
+                }
+
+                /* Binary Ninja: Get I2C adapter number from sensor data */
+                uint32_t *sensor_data = (uint32_t *)arg;
+                int i2c_adapter_num = sensor_data[0xf]; /* Binary Ninja: arg3[0xf] */
+
+                pr_info("*** Creating I2C sensor device on adapter %d ***\n", i2c_adapter_num);
+
+                /* Binary Ninja: private_i2c_get_adapter(arg3[0xf]) */
+                struct i2c_adapter *adapter = i2c_get_adapter(i2c_adapter_num);
+                if (!adapter) {
+                    pr_err("*** Failed to get I2C adapter %d ***\n", i2c_adapter_num);
+                    return -ENODEV;
+                }
+
+                /* Create I2C board info for gc2053 sensor */
+                struct i2c_board_info sensor_board_info;
+                memset(&sensor_board_info, 0, sizeof(sensor_board_info));
+                strncpy(sensor_board_info.type, "gc2053", I2C_NAME_SIZE);
+                sensor_board_info.addr = 0x37; /* GC2053 I2C address */
+
+                pr_info("*** Creating I2C device: %s at 0x%02x ***\n",
+                        sensor_board_info.type, sensor_board_info.addr);
+
+                /* Call our I2C subdev creation function */
+                struct i2c_client *client = isp_i2c_new_subdev_board(adapter, &sensor_board_info);
+
+                i2c_put_adapter(adapter);
+
+                if (client) {
+                    pr_info("*** I2C sensor device created successfully: %s at 0x%02x ***\n",
+                            client->name, client->addr);
+                    return 0;
+                } else {
+                    pr_err("*** Failed to create I2C sensor device ***\n");
+                    return -ENODEV;
+                }
+            }
+
         case 0x980900: /* Sensor start */
             return sensor_start_changes();
 
