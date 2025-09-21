@@ -3388,10 +3388,14 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
     /* Binary Ninja: Handle 0x800856d5 - TX_ISP_GET_BUF */
     if (cmd == 0x800856d5) {
+        pr_info("TX_ISP_GET_BUF: IOCTL handler called\n");
+
         /* Binary Ninja: void* $v1_14 = *(*($s7 + 0x2c) + 0xd4) */
         void *core_dev = isp_dev->core_dev;
         var_98.as_uint32 = 0;
         var_94 = 0;
+
+        pr_info("TX_ISP_GET_BUF: core_dev=%p, isp_dev=%p\n", core_dev, isp_dev);
 
         if (core_dev) {
             struct tx_isp_core_device *core = (struct tx_isp_core_device *)core_dev;
@@ -3400,6 +3404,13 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             /* Binary Ninja: int32_t $a2_9 = *($v1_14 + 0xf0) */
             int width = core->width;   /* offset 0xec in Binary Ninja */
             int height = core->height; /* offset 0xf0 in Binary Ninja */
+
+            pr_info("TX_ISP_GET_BUF: Using dimensions %dx%d from core device\n", width, height);
+        } else {
+            /* Use default dimensions if core_dev is NULL */
+            int width = 1920;
+            int height = 1080;
+            pr_info("TX_ISP_GET_BUF: core_dev is NULL, using default dimensions %dx%d\n", width, height);
 
             /* Binary Ninja EXACT: Complex buffer calculation */
             /* int32_t $t0_3 = $a2_9 << 3 */
