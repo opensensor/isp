@@ -5147,6 +5147,37 @@ static int tx_isp_init(void)
     ourISPdev->refcnt = 0;
     ourISPdev->is_open = false;
 
+    /* CRITICAL FIX: Register main interrupt dispatcher for IRQ 37 and 38 */
+    /* The tx_isp_request_irq function skips these IRQs, so we need to register them here */
+    pr_info("*** CRITICAL: Registering main interrupt dispatcher for IRQ 37 and 38 ***\n");
+
+    /* Register IRQ 37 (ISP Core) */
+    ret = private_request_threaded_irq(37,
+                                       isp_irq_handle,
+                                       isp_irq_thread_handle,
+                                       IRQF_SHARED,
+                                       "tx-isp-core",
+                                       ourISPdev);  /* Pass ourISPdev as dev_id */
+    if (ret != 0) {
+        pr_err("*** CRITICAL: Failed to register main dispatcher for IRQ 37: %d ***\n", ret);
+        goto err_cleanup_platform_device;
+    }
+    pr_info("*** Main dispatcher registered for IRQ 37 (ISP Core) ***\n");
+
+    /* Register IRQ 38 (VIC) */
+    ret = private_request_threaded_irq(38,
+                                       isp_irq_handle,
+                                       isp_irq_thread_handle,
+                                       IRQF_SHARED,
+                                       "tx-isp-vic",
+                                       ourISPdev);  /* Pass ourISPdev as dev_id */
+    if (ret != 0) {
+        pr_err("*** CRITICAL: Failed to register main dispatcher for IRQ 38: %d ***\n", ret);
+        private_free_irq(37, ourISPdev);
+        goto err_cleanup_platform_device;
+    }
+    pr_info("*** Main dispatcher registered for IRQ 38 (VIC) ***\n");
+
     /* Reference driver: All complex initialization happens in probe function */
     pr_info("TX ISP driver initialized successfully - probe function will handle device setup\n");
 
@@ -5155,7 +5186,12 @@ static int tx_isp_init(void)
 
 /* Error handling for reference driver compatibility */
 err_cleanup_irqs:
-    pr_info("*** CLEANUP: No IRQs to free (main dispatcher was disabled) ***\n");
+    pr_info("*** CLEANUP: Freeing main dispatcher IRQs ***\n");
+    if (ourISPdev) {
+        private_free_irq(38, ourISPdev);
+        private_free_irq(37, ourISPdev);
+        pr_info("*** Main dispatcher IRQs 37 and 38 freed ***\n");
+    }
 err_cleanup_platform_device:
     private_platform_device_unregister(&tx_isp_platform_device);
 err_cleanup_main_driver:
@@ -5295,9 +5331,11 @@ static void tx_isp_exit(void)
         ourISPdev = NULL;
         pr_info("*** ourISPdev set to NULL - interrupt handlers will now safely exit ***\n");
 
-        /* CRITICAL: No main dispatcher IRQs to free - following Binary Ninja reference */
-        /* Each subdevice frees its own IRQ during subdevice cleanup */
-        pr_info("*** CLEANUP: No main dispatcher IRQs to free - subdevices handle their own IRQs ***\n");
+        /* CRITICAL: Free main dispatcher IRQs that were registered in tx_isp_init */
+        pr_info("*** CLEANUP: Freeing main dispatcher IRQs 37 and 38 ***\n");
+        private_free_irq(38, local_isp_dev);  /* VIC IRQ */
+        private_free_irq(37, local_isp_dev);  /* ISP Core IRQ */
+        pr_info("*** Main dispatcher IRQs 37 and 38 freed ***\n");
 
         /* Free hardware interrupts if initialized (legacy cleanup) */
         if (isp_irq > 0 && isp_irq != 37 && isp_irq != 38) {
