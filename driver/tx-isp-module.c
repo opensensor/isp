@@ -4724,6 +4724,15 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         for (int init_i = 0; init_i < 0x10; init_i++) {
             struct tx_isp_subdev *init_sd = isp_dev->subdevs[init_i];
             if (init_sd && init_sd->ops && init_sd->ops->core && init_sd->ops->core->init) {
+                pr_info("*** VIDIOC_STREAMON: Checking subdev %d for safe init ***\n", init_i);
+
+                /* CRITICAL SAFETY: Skip dangerous VIN init that causes kernel panics */
+                /* The VIN init function has unsafe pointer operations that crash during streaming */
+                if (init_sd->ops->core->init == (void*)tx_isp_vin_init) {
+                    pr_info("*** VIDIOC_STREAMON: SKIPPING dangerous VIN init (subdev %d) to prevent kernel panic ***\n", init_i);
+                    continue;
+                }
+
                 pr_info("*** VIDIOC_STREAMON: Calling subdev %d init ***\n", init_i);
                 int subdev_init_ret = init_sd->ops->core->init(init_sd, 1);
                 if (subdev_init_ret == 0) {
