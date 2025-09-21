@@ -335,16 +335,16 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         pr_info("ispcore_video_s_stream: IRQ disabled\n");
 
         /* CRITICAL FIX: Call tx_isp_disable_irq when disabling */
-        extern void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
-        tx_isp_disable_irq(isp_dev);
+        extern void tx_isp_disable_irq(void *arg1);
+        tx_isp_disable_irq(sd);  /* Binary Ninja: pass subdev as arg1 */
     } else {
         /* Binary Ninja: Enable IRQ */
         core_dev->irq_mask = 0xffffffff;
         pr_info("ispcore_video_s_stream: IRQ enabled\n");
 
         /* CRITICAL FIX: Call tx_isp_enable_irq when enabling */
-        extern void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
-        tx_isp_enable_irq(isp_dev);
+        extern void tx_isp_enable_irq(void *arg1);
+        tx_isp_enable_irq(sd);  /* Binary Ninja: pass subdev as arg1 */
     }
 
     /* Binary Ninja: Return 0 if ENOIOCTLCMD, otherwise return result */

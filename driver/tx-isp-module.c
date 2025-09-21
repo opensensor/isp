@@ -83,8 +83,8 @@ static DEFINE_MUTEX(sensor_register_mutex);
 int __init tx_isp_subdev_platform_init(void);
 void __exit tx_isp_subdev_platform_exit(void);
 void isp_process_frame_statistics(struct tx_isp_dev *dev);
-void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
-void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
+void tx_isp_enable_irq(void *arg1);
+void tx_isp_disable_irq(void *arg1);
 int tisp_init(void *sensor_info, char *param_name);
 
 /* Forward declarations for sensor control functions */
@@ -1553,42 +1553,58 @@ static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev)
     return 0;
 }
 
-/* tx_isp_disable_irq - CORRECTED Binary Ninja exact implementation */
-void tx_isp_disable_irq(struct tx_isp_dev *isp_dev)
+/* tx_isp_disable_irq - EXACT Binary Ninja implementation with correct parameter */
+void tx_isp_disable_irq(void *arg1)
 {
-    if (!isp_dev || !isp_dev->core_dev || isp_dev->core_dev->irq <= 0) {
-        pr_err("tx_isp_disable_irq: Invalid parameters (dev=%p, core_dev=%p, irq=%d)\n",
-               isp_dev, isp_dev ? isp_dev->core_dev : NULL,
-               (isp_dev && isp_dev->core_dev) ? isp_dev->core_dev->irq : -1);
+    /* Binary Ninja: return private_disable_irq(*arg1) __tailcall
+     * This means: disable_irq(*(int*)arg1) - the first int in the structure */
+
+    if (!arg1) {
+        pr_err("tx_isp_disable_irq: NULL parameter\n");
         return;
     }
-    
-    pr_info("*** tx_isp_disable_irq: CORRECTED Binary Ninja implementation ***\n");
-    
-    /* Binary Ninja: return private_disable_irq(*arg1) __tailcall
-     * This means: disable_irq(isp_dev->isp_irq) */
-    disable_irq(isp_dev->core_dev->irq);
 
-    pr_info("*** tx_isp_disable_irq: Kernel IRQ %d DISABLED ***\n", isp_dev->core_dev->irq);
+    /* Binary Ninja: *arg1 is the IRQ number (first field in structure) */
+    int irq_num = *(int*)arg1;
+
+    if (irq_num <= 0) {
+        pr_err("tx_isp_disable_irq: Invalid IRQ number %d\n", irq_num);
+        return;
+    }
+
+    pr_info("*** tx_isp_disable_irq: EXACT Binary Ninja - disabling IRQ %d ***\n", irq_num);
+
+    /* CRITICAL FIX: Call kernel disable_irq directly to prevent recursion */
+    disable_irq(irq_num);
+
+    pr_info("*** tx_isp_disable_irq: IRQ %d DISABLED ***\n", irq_num);
 }
 
-/* tx_isp_enable_irq - CORRECTED Binary Ninja exact implementation */
-void tx_isp_enable_irq(struct tx_isp_dev *isp_dev)
+/* tx_isp_enable_irq - EXACT Binary Ninja implementation with correct parameter */
+void tx_isp_enable_irq(void *arg1)
 {
-    if (!isp_dev || !isp_dev->core_dev || isp_dev->core_dev->irq <= 0) {
-        pr_err("tx_isp_enable_irq: Invalid parameters (dev=%p, core_dev=%p, irq=%d)\n",
-               isp_dev, isp_dev ? isp_dev->core_dev : NULL,
-               (isp_dev && isp_dev->core_dev) ? isp_dev->core_dev->irq : -1);
+    /* Binary Ninja: return private_enable_irq(*arg1) __tailcall
+     * This means: enable_irq(*(int*)arg1) - the first int in the structure */
+
+    if (!arg1) {
+        pr_err("tx_isp_enable_irq: NULL parameter\n");
         return;
     }
 
-    pr_info("*** tx_isp_enable_irq: CORRECTED Binary Ninja implementation ***\n");
+    /* Binary Ninja: *arg1 is the IRQ number (first field in structure) */
+    int irq_num = *(int*)arg1;
 
-    /* Binary Ninja: return private_enable_irq(*arg1) __tailcall
-     * This means: enable_irq(isp_dev->isp_irq) */
-    enable_irq(isp_dev->core_dev->irq);
+    if (irq_num <= 0) {
+        pr_err("tx_isp_enable_irq: Invalid IRQ number %d\n", irq_num);
+        return;
+    }
 
-    pr_info("*** tx_isp_enable_irq: Kernel IRQ %d ENABLED ***\n", isp_dev->core_dev->irq);
+    pr_info("*** tx_isp_enable_irq: EXACT Binary Ninja - enabling IRQ %d ***\n", irq_num);
+
+    /* CRITICAL FIX: Call kernel enable_irq directly to prevent recursion */
+    enable_irq(irq_num);
+
+    pr_info("*** tx_isp_enable_irq: IRQ %d ENABLED ***\n", irq_num);
 }
 
 /* tx_isp_request_irq - DISABLED to prevent double IRQ registration */
