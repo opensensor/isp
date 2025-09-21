@@ -326,9 +326,9 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             pr_info("*** tx_isp_subdev_init: VIC device linked and registered at index 1 ***\n");
         } else if (ops && ops->sensor) {
             /* CRITICAL FIX: This is a sensor subdev - register it in subdevs array */
-            /* Find next available slot starting from index 3 (after CSI=0, VIC=1, VIN=2) */
+            /* Find next available slot starting from index 4 (after CSI=0, VIC=1, VIN=2, FS=3) */
             int sensor_index = -1;
-            for (int i = 3; i < ISP_MAX_SUBDEVS; i++) {
+            for (int i = 4; i < ISP_MAX_SUBDEVS; i++) {
                 if (ourISPdev->subdevs[i] == NULL) {
                     sensor_index = i;
                     break;
@@ -599,20 +599,12 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         ourISPdev->fs_dev = (struct frame_source_device *)fs_dev;
         pr_info("*** LINKED FS device: %p ***\n", fs_dev);
 
-        /* CRITICAL: Add FS to subdev array at next available index (after sensors) */
-        int fs_index = -1;
-        for (int i = 3; i < ISP_MAX_SUBDEVS; i++) {
-            if (ourISPdev->subdevs[i] == NULL) {
-                fs_index = i;
-                break;
-            }
-        }
-
-        if (fs_index != -1) {
-            ourISPdev->subdevs[fs_index] = &fs_dev->subdev;
-            pr_info("*** REGISTERED FS SUBDEV AT INDEX %d WITH SUBDEV OPS ***\n", fs_index);
+        /* CRITICAL: Add FS to subdev array at index 3 (after CSI=0, VIC=1, VIN=2, before sensors) */
+        if (ourISPdev->subdevs[3] == NULL) {
+            ourISPdev->subdevs[3] = &fs_dev->subdev;
+            pr_info("*** REGISTERED FS SUBDEV AT INDEX 3 WITH SUBDEV OPS ***\n");
         } else {
-            pr_err("*** No available slot for FS subdev ***\n");
+            pr_err("*** FS subdev slot (index 3) already occupied ***\n");
         }
 
     } else if (strcmp(dev_name, "tx-isp-core") == 0) {
