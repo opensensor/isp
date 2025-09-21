@@ -1655,10 +1655,12 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         return IRQ_HANDLED;
     }
 
-    /* SAFE: Use struct member access for VIC registers */
-    vic_regs = vic_dev->vic_regs;
+    /* CRITICAL FIX: Use secondary VIC registers for interrupt status */
+    /* The interrupt status registers are in the secondary VIC space (0x10023000) */
+    vic_regs = vic_dev->vic_regs_secondary;
     if (!vic_regs || (uintptr_t)vic_regs < 0x80000000) {
-        pr_err("VIC IRQ %d: Invalid vic_regs=%p in vic_dev=%p\n", irq, vic_regs, vic_dev);
+        pr_err("VIC IRQ %d: Invalid vic_regs_secondary=%p in vic_dev=%p\n", irq, vic_regs, vic_dev);
+        pr_err("VIC IRQ %d: Interrupt registers are in secondary VIC space, not primary\n", irq);
         return IRQ_HANDLED;
     }
 
