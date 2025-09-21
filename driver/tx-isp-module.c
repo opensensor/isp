@@ -535,6 +535,7 @@ extern int tx_isp_fs_platform_init(void);
 extern void tx_isp_fs_platform_exit(void);
 extern int tx_isp_fs_probe(struct platform_device *pdev);
 extern int tx_isp_vin_init(void* arg1, int32_t arg2);  /* VIN init function that causes kernel panics */
+extern int vin_s_stream(struct tx_isp_subdev *sd, int enable);  /* VIN s_stream function that can cause kernel panics */
 
 /* Forward declarations for Binary Ninja reference implementation */
 static int tx_isp_platform_probe(struct platform_device *pdev);
@@ -2270,6 +2271,13 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
                     /* SAFETY: Validate function pointer */
                     if (!is_valid_kernel_pointer(v0_4)) {
                         pr_info("tx_isp_video_s_stream: Invalid s_stream function pointer for subdev %d\n", i);
+                        i += 1;
+                        goto next_iteration;
+                    }
+
+                    /* CRITICAL SAFETY: Skip dangerous VIN s_stream that can cause kernel panics */
+                    if (v0_4 == (void*)vin_s_stream) {
+                        pr_info("*** SAFETY: Skipping dangerous VIN s_stream for subdev %d to prevent kernel panic ***\n", i);
                         i += 1;
                         goto next_iteration;
                     }
