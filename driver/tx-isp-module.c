@@ -5779,16 +5779,17 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
 
 /* isp_irq_handle - SAFE struct member access implementation with correct dev_id handling */
 
-/* isp_irq_handle - FIXED to properly route to ISP core interrupt handler */
+/* isp_irq_handle - Reference driver compatible: dev_id is irq_info, not isp_dev */
 irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
-    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
+    struct tx_isp_irq_info *irq_info = (struct tx_isp_irq_info *)dev_id;
+    extern struct tx_isp_dev *ourISPdev;
     irqreturn_t result = IRQ_HANDLED;
 
-    pr_debug("*** isp_irq_handle: IRQ %d fired ***\n", irq);
+    pr_debug("*** isp_irq_handle: IRQ %d fired, dev_id=%p ***\n", irq, dev_id);
 
-    if (!isp_dev) {
-        pr_err("isp_irq_handle: Invalid ISP device\n");
+    if (!irq_info || !ourISPdev) {
+        pr_err("isp_irq_handle: Invalid irq_info=%p or ourISPdev=%p\n", irq_info, ourISPdev);
         return IRQ_NONE;
     }
 
@@ -5796,12 +5797,12 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
     if (irq == 37) {
         /* IRQ 37: ISP CORE ONLY - no VIC interference */
         pr_debug("*** IRQ 37: ISP CORE ONLY (isolated from VIC) ***\n");
-        result = ispcore_interrupt_service_routine(irq, dev_id);
+        result = ispcore_interrupt_service_routine(irq, ourISPdev);
     } else if (irq == 38) {
         /* IRQ 38: VIC ONLY - no ISP core interference */
         pr_debug("*** IRQ 38: VIC ONLY (isolated from ISP core) ***\n");
-        if (isp_dev->vic_dev) {
-            result = isp_vic_interrupt_service_routine(irq, dev_id);
+        if (ourISPdev->vic_dev) {
+            result = isp_vic_interrupt_service_routine(irq, ourISPdev);
         } else {
             pr_warn("*** IRQ 38: No VIC device available ***\n");
             result = IRQ_NONE;
