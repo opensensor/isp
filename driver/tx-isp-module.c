@@ -3361,59 +3361,53 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         return s6_1;
     }
-    case 0x805056c1: { // TX_ISP_SENSOR_REGISTER - FIXED to actually connect sensor to ISP device
-        char sensor_data[0x50];
-        void **i_2;
-        void *module;
-        void *subdev;
-        void *ops;
-        int (*sensor_func)(void*, int, void*);
-        int result;
-        int final_result = 0;
-        char sensor_name[32];
-        struct registered_sensor *reg_sensor;
-        struct i2c_adapter *i2c_adapter = NULL;
-        struct i2c_board_info board_info;
-        struct i2c_client *client = NULL;
-        struct tx_isp_sensor *sensor = NULL;
-        
-        pr_info("*** TX_ISP_SENSOR_REGISTER: FIXED TO CREATE ACTUAL SENSOR CONNECTION ***\n");
-        
-        /* Binary Ninja: private_copy_from_user(&var_98, arg3, 0x50) */
-        /* CRITICAL FIX: Use sizeof instead of hardcoded 0x50 to prevent buffer overflow */
-        if (copy_from_user(sensor_data, argp, sizeof(sensor_data))) {
+
+    /* Binary Ninja: Handle 0x805056c1 - TX_ISP_SENSOR_REGISTER */
+    if (cmd == 0x805056c1) {
+        void **i_2 = (void **)&isp_dev->subdevs[0];
+
+        /* Binary Ninja: if (private_copy_from_user(&var_98, arg3, 0x50) != 0) */
+        if (copy_from_user(&var_98, (void __user *)arg, 0x50) != 0) {
             pr_err("TX_ISP_SENSOR_REGISTER: Failed to copy sensor data\n");
             return -EFAULT;
         }
-        
-        strncpy(sensor_name, sensor_data, sizeof(sensor_name) - 1);
-        sensor_name[sizeof(sensor_name) - 1] = '\0';
-        pr_info("Sensor register: %s\n", sensor_name);
-        
-        /* *** FIXED: Use proper struct member access instead of unsafe offsets *** */
-        pr_info("*** HANDLING SENSOR REGISTRATION WITH SAFE STRUCT ACCESS ***\n");
-        
-        /* SAFE FIX: Check if subdev_graph is properly initialized */
-        if (!isp_dev || !isp_dev->subdev_graph) {
-            pr_err("TX_ISP_SENSOR_REGISTER: Invalid ISP device structure\n");
-            return -ENODEV;
-        }
-        
-        /* SAFE FIX: Use proper struct member instead of raw pointer arithmetic */
-        /* Loop through subdev_graph array using proper bounds */
-        int graph_index;
-        for (graph_index = 0; graph_index < ISP_MAX_SUBDEVS; graph_index++) {
-            module = isp_dev->subdev_graph[graph_index];
-            
-            /* SAFE FIX: Validate module pointer before accessing */
-            if (module == NULL) {
-                continue; /* Skip empty slots */
+
+        /* Binary Ninja: Loop through subdevices exactly as reference */
+        do {
+            struct tx_isp_subdev *sd = (struct tx_isp_subdev *)*i_2;
+
+            if (sd != NULL) {
+                /* Binary Ninja: void* $v0_22 = *(*($a0_10 + 0xc4) + 0xc) */
+                if (sd->ops && sd->ops->sensor) {
+                    /* Binary Ninja: int32_t $v0_23 = *($v0_22 + 8) */
+                    if (sd->ops->sensor->ioctl) {
+                        /* Binary Ninja: int32_t $v0_25 = $v0_23($a0_10, 0x2000000, &var_98) */
+                        int32_t ret = sd->ops->sensor->ioctl(sd, 0x2000000, &var_98);
+                        s6_1 = ret;
+
+                        if (ret == 0) {
+                            i_2++;
+                        } else {
+                            i_2++;
+                            if (ret != 0xfffffdfd) {
+                                break;
+                            }
+                        }
+                    } else {
+                        i_2++;
+                    }
+                } else {
+                    i_2++;
+                }
+            } else {
+                i_2++;
             }
-            
-            if ((uintptr_t)module >= 0xfffff001) {
-                pr_err("TX_ISP_SENSOR_REGISTER: Invalid module pointer %p at index %d\n", module, graph_index);
-                continue;
-            }
+
+            s6_1 = 0;
+        } while ((void *)i_2 != (void *)&isp_dev->subdevs[ISP_MAX_SUBDEVS]);
+
+        return s6_1;
+    }
             
             /* SAFE FIX: Instead of unsafe offset access, check if we have sensor registration capability */
             /* This is where we would normally access the module's subdev and ops */
