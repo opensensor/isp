@@ -3417,7 +3417,9 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_warn("*** Channel %d: NO SENSOR AVAILABLE FOR STREAMING ***\n", channel);
                 pr_warn("Channel %d: ourISPdev=%p\n", channel, ourISPdev);
                 if (ourISPdev) {
-                    pr_warn("Channel %d: ourISPdev->sensor=%p\n", channel, ourISPdev->sensor);
+                    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+                    struct tx_isp_sensor *debug_sensor = tx_isp_get_sensor();
+                    pr_warn("Channel %d: sensor=%p\n", channel, debug_sensor);
                 }
                 pr_warn("Channel %d: VIDEO WILL BE GREEN WITHOUT SENSOR!\n", channel);
             }
