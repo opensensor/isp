@@ -2218,7 +2218,17 @@ void ispcore_frame_channel_streamoff(int32_t* arg1)
     void* s0 = NULL;
 
     if (v0 != 0 && (uintptr_t)v0 < 0xfffff001) {
-        s0 = *((void**)((char*)v0 + 0xd4));  /* *(v0 + 0xd4) */
+        /* CRITICAL FIX: Prevent unaligned memory access that causes BadVA crashes */
+        /* MIPS ALIGNMENT CHECK: Ensure v0 is properly aligned before accessing */
+        if (((unsigned long)v0 & 0x3) != 0) {
+            pr_err("*** CRITICAL: v0 pointer 0x%p not 4-byte aligned - would cause unaligned access crash! ***\n", v0);
+            return 0xffffffea;
+        }
+
+        /* CRITICAL FIX: Use safe struct member access instead of dangerous offset *(v0 + 0xd4) */
+        /* This is accessing host_priv field - use proper struct access */
+        struct tx_isp_subdev *sd = (struct tx_isp_subdev *)v0;
+        s0 = sd->host_priv;  /* SAFE: Use struct member access instead of offset arithmetic */
     }
 
     int32_t v1_2 = *((int32_t*)((char*)s0 + 0x15c));  /* *(s0 + 0x15c) */
