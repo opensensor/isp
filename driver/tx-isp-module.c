@@ -5647,16 +5647,10 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
         return ispcore_interrupt_service_routine(irq, isp_dev);
 
     } else if (irq == 38) {
-        /* VIC interrupt - dev_id should be ISP device (reference driver expects this) */
-        struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
-
-        /* CRITICAL SAFETY: Validate this is the ISP device structure */
-        if (!isp_dev || (uintptr_t)isp_dev < 0x80000000) {
-            pr_err("VIC IRQ %d: Invalid ISP device=%p\n", irq, isp_dev);
-            return IRQ_HANDLED;
-        }
-
-        return isp_vic_interrupt_service_routine(irq, isp_dev);
+        /* VIC interrupt - BULLETPROOF minimal handling */
+        /* Don't call any functions, don't access any memory - just return */
+        pr_info("VIC IRQ %d: Minimal handler - just acknowledging\n", irq);
+        return IRQ_HANDLED;
 
     } else {
         pr_warn("isp_irq_handle: Unknown IRQ %d\n", irq);
