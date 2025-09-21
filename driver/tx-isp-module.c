@@ -1602,52 +1602,55 @@ void tx_isp_enable_irq(void *arg1)
 /* Forward declaration for ISP core interrupt handler */
 extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 
-/* isp_vic_interrupt_service_routine - BULLETPROOF minimal implementation */
-irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
+/* isp_vic_interrupt_service_routine - EXACT Binary Ninja reference implementation */
+irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
 {
-    struct tx_isp_dev *isp_dev;
+    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)arg1;
     struct tx_isp_vic_device *vic_dev;
     void __iomem *vic_regs;
     u32 v1_7, v1_10;
-    uint32_t *vic_irq_enable_flag;
-    u32 addr_ctl;
-    u32 reg_val;
-    int timeout;
-    int i;
+    extern uint32_t vic_start_ok;
 
-    pr_info("*** VIC IRQ ENTRY: IRQ %d, dev_id=%p ***\n", irq, dev_id);
-
-    /* CRITICAL SAFETY: Comprehensive parameter validation to prevent kernel panic */
-    if (irq != 38) {
-        pr_err("*** CRITICAL: VIC handler called with wrong IRQ %d (expected 38) ***\n", irq);
-        return IRQ_NONE;
+    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
+    if (arg1 == NULL || (uintptr_t)arg1 >= 0xfffff001) {
+        return IRQ_HANDLED;
     }
 
-    /* CRITICAL SAFETY: Use the dev_id parameter passed by the interrupt dispatcher */
-    isp_dev = (struct tx_isp_dev *)dev_id;
-    if (!dev_id) {
-        pr_err("*** CRITICAL: VIC handler called with NULL dev_id! ***\n");
-        return IRQ_NONE;
-    }
-
-    /* CRITICAL SAFETY: Validate dev_id is a valid kernel pointer */
-    if (!virt_addr_valid(dev_id)) {
-        pr_err("*** CRITICAL: VIC handler called with invalid dev_id=%p (not valid virtual address) ***\n", dev_id);
-        return IRQ_NONE;
-    }
-
-    /* CRITICAL SAFETY: Validate isp_dev pointer range */
-    if ((uintptr_t)isp_dev < 0x80000000 || (uintptr_t)isp_dev > 0x9fffffff) {
-        pr_err("*** CRITICAL: VIC handler called with invalid isp_dev=%p (out of range) ***\n", isp_dev);
-        return IRQ_NONE;
-    }
-
-    /* CRITICAL SAFETY: Validate vic_dev before any access */
     /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
     vic_dev = isp_dev->vic_dev;
-    if (!vic_dev) {
-        pr_err("*** CRITICAL: isp_vic_interrupt_service_routine called with NULL vic_dev! ***\n");
-        return IRQ_NONE;
+
+    /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
+    if (vic_dev != NULL && (uintptr_t)vic_dev < 0xfffff001) {
+        /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
+        vic_regs = isp_dev->vic_regs;
+
+        if (!vic_regs) {
+            pr_err("*** VIC IRQ: No VIC registers mapped ***\n");
+            return IRQ_HANDLED;
+        }
+
+        /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
+        /* Binary Ninja: int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
+        v1_7 = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);
+        v1_10 = (~readl(vic_regs + 0x1ec)) & readl(vic_regs + 0x1e4);
+
+        /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7 */
+        /* Binary Ninja: *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
+        writel(v1_7, vic_regs + 0x1f0);
+        writel(v1_10, vic_regs + 0x1f4);
+        wmb();
+
+        /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
+        if (vic_start_ok != 0) {
+            /* Process VIC interrupts according to Binary Ninja reference */
+
+            /* Binary Ninja: if (($v1_7 & 1) != 0) */
+            if ((v1_7 & 1) != 0) {
+                /* Binary Ninja: *($s0 + 0x160) += 1 */
+                vic_dev->frame_count += 1;
+                /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
+                pr_debug("VIC frame done interrupt\n");
+            }
     }
 
     /* CRITICAL SAFETY: Validate vic_regs before any access */
