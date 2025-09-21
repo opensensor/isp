@@ -3246,8 +3246,36 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_err("*** Channel %d: CRITICAL ERROR - ourISPdev->sensor is NULL ***\n", channel);
                 pr_err("*** This indicates sensor registration failed or sensor module not loaded ***\n");
                 pr_err("*** Check if gc2053.ko is loaded and properly registered ***\n");
-                state->streaming = false;
-                return -ENODEV;
+
+                /* DEBUG: Check if sensor is available in subdevs array */
+                pr_err("*** DEBUG: Checking subdevs array for sensor ***\n");
+                for (int i = 0; i < ISP_MAX_SUBDEVS; i++) {
+                    if (ourISPdev->subdevs[i]) {
+                        pr_err("*** DEBUG: subdevs[%d] = %p, ops = %p ***\n",
+                               i, ourISPdev->subdevs[i], ourISPdev->subdevs[i]->ops);
+                        if (ourISPdev->subdevs[i]->ops && ourISPdev->subdevs[i]->ops->sensor) {
+                            pr_err("*** DEBUG: Found sensor ops at subdevs[%d] ***\n", i);
+
+                            /* CRITICAL FIX: Try to get sensor structure from subdev */
+                            struct tx_isp_subdev *sensor_sd = ourISPdev->subdevs[i];
+                            if (sensor_sd && sensor_sd->host_priv) {
+                                struct tx_isp_sensor *found_sensor = (struct tx_isp_sensor *)sensor_sd->host_priv;
+                                pr_err("*** DEBUG: Found sensor structure at %p ***\n", found_sensor);
+
+                                /* Link the sensor to ourISPdev */
+                                ourISPdev->sensor = found_sensor;
+                                pr_err("*** CRITICAL FIX: Linked sensor %p to ourISPdev->sensor ***\n", found_sensor);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                /* Check again after auto-linking attempt */
+                if (!ourISPdev->sensor) {
+                    state->streaming = false;
+                    return -ENODEV;
+                }
             }
 
             /* Binary Ninja: Use the properly registered sensor from ourISPdev->sensor */
