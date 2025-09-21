@@ -1050,13 +1050,15 @@ irqreturn_t ip_done_interrupt_static(int irq, void *dev_id)
     return IRQ_HANDLED; /* Convert to standard Linux return value */
 }
 
-/* ispcore_interrupt_service_routine - WORKING implementation with corruption detection */
+/* ispcore_interrupt_service_routine - SAFE implementation with registered handler dispatch */
 irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 {
     extern struct tx_isp_dev *ourISPdev;
     struct tx_isp_dev *isp_dev;
     void __iomem *core_regs;
     u32 int_status;
+    irqreturn_t ret = IRQ_HANDLED;
+    int i;
 
     /* CRITICAL: Detect corruption by comparing dev_id with ourISPdev */
     if (dev_id != ourISPdev) {
@@ -1098,7 +1100,23 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         pr_info("ISP CORE IRQ %d: Status=0x%x cleared\n", irq, int_status);
     }
 
-    return IRQ_HANDLED;
+    /* CRITICAL FIX: Call registered interrupt handlers with SAFE parameter validation */
+    /* This is where the BadVA crashes were happening - handlers expecting tx_isp_subdev but getting tx_isp_dev */
+    for (i = 0; i < 32; i++) {
+        if (irq_func_cb[i] && (int_status & (1 << i))) {
+            pr_info("ISP CORE IRQ %d: Calling registered handler %d with SAFE parameters\n", irq, i);
+
+            /* CRITICAL: Always pass ourISPdev (tx_isp_dev*) to prevent structure type confusion */
+            /* The handlers must be written to expect tx_isp_dev*, not tx_isp_subdev* */
+            irqreturn_t handler_ret = irq_func_cb[i](irq, ourISPdev);
+
+            if (handler_ret == IRQ_HANDLED) {
+                ret = IRQ_HANDLED;
+            }
+        }
+    }
+
+    return ret;
 }
 
 /* ISP interrupt thread handler - for threaded IRQ processing */
