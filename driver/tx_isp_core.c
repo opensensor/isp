@@ -2898,7 +2898,16 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                 if (v1_17 == 0) {
                     var_58 = 0;
                 } else if ((uintptr_t)v1_17 < 0xfffff001) {
-                    v0_13 = (void*)(*((uint32_t*)v1_17 + 0x35)); /* *(v1_17 + 0xd4) */
+                    /* CRITICAL FIX: Use safe struct member access instead of dangerous offset *(v1_17 + 0xd4) */
+                    /* MIPS ALIGNMENT CHECK: Ensure v1_17 is properly aligned before accessing */
+                    if (((unsigned long)v1_17 & 0x3) != 0) {
+                        pr_err("*** CRITICAL: v1_17 pointer 0x%p not 4-byte aligned - would cause unaligned access crash! ***\n", v1_17);
+                        return 0xffffffea;
+                    }
+
+                    /* SAFE: Use proper struct member access instead of offset arithmetic */
+                    struct tx_isp_subdev *sd_17 = (struct tx_isp_subdev *)v1_17;
+                    v0_13 = sd_17->host_priv;  /* SAFE: Access host_priv field directly */
                     var_58 = 0;
                 } else {
                     var_58 = 0;
