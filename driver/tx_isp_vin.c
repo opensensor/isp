@@ -78,10 +78,12 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
     pr_info("VIN: tx_isp_vin_init: using VIN device from global ISP: %p\n", vin_dev);
 
     /* SAFE: Always use global ISP device sensor to avoid pointer confusion */
-    if (!ourISPdev->sensor) {
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor) {
         a0 = 0;
     } else {
-        a0 = ourISPdev->sensor;
+        a0 = sensor;
     }
     
     /* Binary Ninja: if ($a0 == 0) */
@@ -649,8 +651,10 @@ ssize_t video_input_cmd_set(struct file *file, const char __user *buffer, size_t
         pr_info("video_input_cmd_set: wdr mode params=%lu, %lu\n", wdr_param1, wdr_param2);
 
         /* Binary Ninja: Configure WDR mode */
-        if (vin_dev->vin_regs && isp_dev->sensor && isp_dev->sensor->sd.ops &&
-            isp_dev->sensor->sd.ops->core && isp_dev->sensor->sd.ops->core->ioctl) {
+        extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+        struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+        if (vin_dev->vin_regs && sensor && sensor->sd.ops &&
+            sensor->sd.ops->core && sensor->sd.ops->core->ioctl) {
             /* Enable WDR mode in VIN */
             u32 vin_ctrl = readl(vin_dev->vin_regs + VIN_CTRL_OFFSET);
             vin_ctrl |= VIN_CTRL_WDR_MODE;  /* Enable WDR mode */
@@ -664,9 +668,9 @@ ssize_t video_input_cmd_set(struct file *file, const char __user *buffer, size_t
             wdr_config.param1 = wdr_param1;
             wdr_config.param2 = wdr_param2;
 
-            sensor_ret = isp_dev->sensor->sd.ops->core->ioctl(&isp_dev->sensor->sd,
-                                                            TX_ISP_SENSOR_SET_WDR_MODE,
-                                                            &wdr_config);
+            sensor_ret = sensor->sd.ops->core->ioctl(&sensor->sd,
+                                                   TX_ISP_SENSOR_SET_WDR_MODE,
+                                                   &wdr_config);
 
             if (sensor_ret == 0) {
                 pr_info("*** video_input_cmd_set: WDR mode configured successfully ***\n");
