@@ -1683,7 +1683,14 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 
     /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) */
     if (isp_dev != NULL && (unsigned long)isp_dev < 0xfffff001) {
-        /* Binary Ninja: $s0 = *(arg1 + 0xd4) - SAFE: Get VIC device */
+        /* CRITICAL FIX: Use safe struct member access instead of dangerous offset *(arg1 + 0xd4) */
+        /* MIPS ALIGNMENT CHECK: Ensure isp_dev is properly aligned before accessing */
+        if (((unsigned long)isp_dev & 0x3) != 0) {
+            pr_err("*** CRITICAL: isp_dev pointer 0x%p not 4-byte aligned - would cause unaligned access crash! ***\n", isp_dev);
+            return -EINVAL;
+        }
+
+        /* SAFE: Use proper struct member access instead of offset arithmetic */
         vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
         s0 = (void*)vic_dev;
     }
