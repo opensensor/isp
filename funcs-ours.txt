@@ -643,7 +643,6 @@ tx_isp_vic_register_interrupt
 tx_isp_vic_remove
 tx_isp_vic_slake_subdev
 tx_isp_vic_start
-tx_isp_vic_wait_frame_done
 tx_isp_vic_write_csi_phy_sequence
 tx_isp_video_link_destroy_impl
 tx_isp_video_link_stream
@@ -654,9 +653,6 @@ tx_isp_vin_probe
 tx_isp_vin_remove
 tx_isp_vin_reset
 tx_isp_vin_slake_subdev
-tx_isp_vin_start
-tx_isp_vin_stop
-tx_isp_wakeup_frame_channels
 tx_vic_disable_irq
 tx_vic_disable_irq_complete
 tx_vic_enable_irq

@@ -533,7 +533,6 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         /* CRITICAL: Register VIC interrupt handler NOW that registers are mapped */
         if (sd->regs && ourISPdev->vic_regs) {
             pr_info("*** VIC AUTO-LINK: Registers are mapped, registering interrupt handler ***\n");
-            extern int tx_isp_vic_register_interrupt(struct tx_isp_vic_device *vic_dev, struct platform_device *pdev);
 
             /* Find the VIC platform device */
             struct platform_device *vic_pdev = NULL;
@@ -543,17 +542,6 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
                 /* Find VIC platform device from registry */
                 extern struct platform_device tx_isp_vic_platform_device;
                 vic_pdev = &tx_isp_vic_platform_device;
-            }
-
-            if (vic_pdev) {
-                int irq_ret = tx_isp_vic_register_interrupt(vic_dev, vic_pdev);
-                if (irq_ret == 0) {
-                    pr_info("*** VIC AUTO-LINK: VIC interrupt handler registered successfully ***\n");
-                } else {
-                    pr_err("*** VIC AUTO-LINK: Failed to register VIC interrupt handler: %d ***\n", irq_ret);
-                }
-            } else {
-                pr_err("*** VIC AUTO-LINK: No VIC platform device found ***\n");
             }
         } else {
             pr_err("*** VIC AUTO-LINK: Registers not mapped - cannot register interrupt ***\n");

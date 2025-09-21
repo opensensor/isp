@@ -6204,94 +6204,42 @@ static int tx_isp_module_notify(struct tx_isp_module *module, unsigned int notif
     }
 }
 
-/* tx_isp_send_event_to_remote - MIPS-SAFE implementation with VIC event handler integration */
+/* tx_isp_send_event_to_remote - EXACT Binary Ninja MCP implementation */
 int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
 {
-    struct tx_isp_vic_device *vic_dev = NULL;
-    struct tx_isp_subdev *sd = (struct tx_isp_subdev *)subdev;
-    int result = 0;
-    
-    pr_info("*** tx_isp_send_event_to_remote: MIPS-SAFE with VIC handler - event=0x%x ***\n", event_type);
-    
-    /* CRITICAL MIPS FIX: Never access ANY pointers that could be unaligned or corrupted */
-    /* The crash at BadVA: 0x5f4942b3 was caused by unaligned memory access on MIPS */
-    
-    /* MIPS ALIGNMENT CHECK: Validate pointer alignment before ANY access */
-    if (subdev && ((uintptr_t)subdev & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: subdev pointer 0x%p not 4-byte aligned ***\n", subdev);
-        return 0; /* Return success to prevent cascade failures */
-    }
-    
-    if (data && ((uintptr_t)data & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: data pointer 0x%p not 4-byte aligned ***\n", data);
-        return 0; /* Return success to prevent cascade failures */
-    }
-    
-    /* MIPS SAFE: Determine target device - use global ISP device if subdev is VIC-related */
-    if (ourISPdev && ((uintptr_t)ourISPdev & 0x3) == 0) {
-        if (ourISPdev->vic_dev && ((uintptr_t)ourISPdev->vic_dev & 0x3) == 0) {
-            /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
-            vic_dev = ourISPdev->vic_dev;
-            
-            /* MIPS SAFE: Validate VIC device structure alignment */
-            if (vic_dev && ((uintptr_t)vic_dev & 0x3) == 0) {
-                pr_info("*** ROUTING EVENT 0x%x TO VIC_EVENT_HANDLER ***\n", event_type);
-                
-                /* MIPS SAFE: Call vic_event_handler with proper alignment checks */
-                result = vic_event_handler(vic_dev, event_type, data);
-                
-                pr_info("*** VIC_EVENT_HANDLER RETURNED: %d ***\n", result);
-                
-                /* MIPS SAFE: Handle special VIC return codes */
-                if (result == 0xfffffdfd) {
-                    pr_info("*** VIC HANDLER: No callback available for event 0x%x ***\n", event_type);
-                    return 0xfffffdfd; /* Pass through the "no handler" code */
-                } else if (result == 0) {
-                    pr_info("*** VIC HANDLER: Event 0x%x processed successfully ***\n", event_type);
-                    return 0; /* Success */
-                } else {
-                    pr_info("*** VIC HANDLER: Event 0x%x returned code %d ***\n", event_type, result);
-                    return result; /* Pass through the result */
-                }
-            } else {
-                pr_warn("*** VIC device not properly aligned (0x%p) - skipping VIC handler ***\n", vic_dev);
+    pr_info("*** tx_isp_send_event_to_remote: EXACT Binary Ninja - event=0x%x ***\n", event_type);
+
+    /* Binary Ninja: if (arg1 != 0) */
+    if (subdev != 0) {
+        /* Binary Ninja: void* $a0 = *(arg1 + 0xc) */
+        void *callback_struct = *((void**)((char*)subdev + 0xc));
+
+        pr_info("*** tx_isp_send_event_to_remote: callback_struct at +0xc = %p ***\n", callback_struct);
+
+        /* Binary Ninja: if ($a0 != 0) */
+        if (callback_struct != 0) {
+            /* Binary Ninja: int32_t $t9_1 = *($a0 + 0x1c) */
+            void *event_handler_func = *((void**)((char*)callback_struct + 0x1c));
+
+            pr_info("*** tx_isp_send_event_to_remote: event_handler at +0x1c = %p ***\n", event_handler_func);
+
+            /* Binary Ninja: if ($t9_1 != 0) jump($t9_1) */
+            if (event_handler_func != 0) {
+                pr_info("*** tx_isp_send_event_to_remote: Calling event handler function ***\n");
+
+                /* Call the function pointer - cast to proper function signature */
+                int (*handler)(void*, int, void*) = (int (*)(void*, int, void*))event_handler_func;
+                int result = handler(subdev, event_type, data);
+
+                pr_info("*** tx_isp_send_event_to_remote: Handler returned %d ***\n", result);
+                return result;
             }
-        } else {
-            pr_warn("*** VIC device pointer not aligned or NULL - skipping VIC handler ***\n");
         }
-    } else {
-        pr_warn("*** ISP device not properly aligned or NULL - skipping VIC handler ***\n");
     }
-    
-    /* MIPS SAFE: Fallback processing for specific critical events */
-    switch (event_type) {
-    case 0x3000008: /* TX_ISP_EVENT_FRAME_QBUF */
-        pr_info("*** QBUF EVENT: MIPS-safe fallback processing ***\n");
-        
-        /* MIPS SAFE: Basic frame count increment as fallback */
-        if (vic_dev && ((uintptr_t)&vic_dev->frame_count & 0x3) == 0) {
-            vic_dev->frame_count++;
-            pr_info("*** QBUF: Frame count incremented safely (count=%u) ***\n", vic_dev->frame_count);
-        }
-        return 0;
-        
-    case 0x3000006: /* TX_ISP_EVENT_FRAME_DQBUF */
-        pr_info("*** DQBUF EVENT: MIPS-safe fallback processing ***\n");
-        return 0;
-        
-    case 0x3000003: /* TX_ISP_EVENT_FRAME_STREAMON */
-        pr_info("*** STREAMON EVENT: MIPS-safe fallback processing ***\n");
-        return 0;
-        
-    case 0x200000c: /* VIC sensor registration events */
-    case 0x200000f:
-        pr_info("*** VIC SENSOR EVENT 0x%x: MIPS-safe fallback processing ***\n", event_type);
-        return 0;
-        
-    default:
-        pr_info("*** EVENT 0x%x: MIPS-safe completion - no specific handler ***\n", event_type);
-        return 0xfffffdfd; /* Return "no handler" code for unknown events */
-    }
+
+    /* Binary Ninja: return 0xfffffdfd */
+    pr_info("*** tx_isp_send_event_to_remote: No handler found - returning 0xfffffdfd ***\n");
+    return 0xfffffdfd;
 }
 
 /* VIC event handler function - handles ALL events including sensor registration */
