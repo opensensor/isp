@@ -2696,9 +2696,15 @@ int tx_isp_vic_register_interrupt(struct tx_isp_vic_device *vic_dev, struct plat
         vic_dev->irq_number = vic_irq;
         vic_dev->irq = vic_irq;
         vic_dev->irq_enabled = 0;  /* Mark as disabled initially */
+
+        /* CRITICAL FIX: Disable VIC interrupt at hardware level to prevent crashes */
+        disable_irq(vic_irq);
+        pr_info("*** VIC IRQ REGISTER: Hardware IRQ %d DISABLED to prevent crashes ***\n", vic_irq);
+
         pr_info("*** VIC IRQ REGISTER: VIC IRQ %d will be handled by main dispatcher ***\n", vic_irq);
         pr_info("*** VIC IRQ REGISTER: Dispatcher will call handler with dev_id = %p (ISP device) ***\n", ourISPdev);
         pr_info("*** VIC IRQ REGISTER: Handler will get VIC device from isp_dev->vic_dev = %p ***\n", ourISPdev->vic_dev);
+        pr_info("*** VIC IRQ REGISTER: Interrupt will be enabled when streaming starts ***\n");
         ret = 0;  /* Success - no direct registration needed */
     } else {
         pr_err("*** VIC IRQ REGISTER: Failed to get VIC IRQ number: %d ***\n", vic_irq);
