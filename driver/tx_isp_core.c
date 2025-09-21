@@ -67,7 +67,7 @@ static void ispcore_irq_fs_work(struct work_struct *work);
 char *get_saved_command_line(void);
 
 /* Parse rmem boot parameter - Linux 3.10 compatible */
-static int parse_rmem_bootarg(unsigned long *base, unsigned long *size)
+int parse_rmem_bootarg(unsigned long *base, unsigned long *size)
 {
     char *rmem_str;
     char *size_str, *base_str;

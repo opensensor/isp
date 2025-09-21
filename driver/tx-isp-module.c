@@ -86,6 +86,7 @@ int tisp_init(void *sensor_info, char *param_name);
 static void tisp_set_sensor_integration_time_short(uint32_t integration_time);
 void tisp_set_sensor_analog_gain_short(uint32_t sensor_gain);
 static void tisp_set_sensor_digital_gain_short(uint32_t digital_gain);
+int parse_rmem_bootarg(unsigned long *base, unsigned long *size);
 
 /* External platform device declarations */
 extern struct platform_device tx_isp_csi_platform_device;
@@ -3896,7 +3897,6 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
 
     /* Initialize reserved memory information */
     unsigned long rmem_base, rmem_size;
-    extern int parse_rmem_bootarg(unsigned long *base, unsigned long *size);
     if (parse_rmem_bootarg(&rmem_base, &rmem_size) == 0) {
         isp_dev->rmem_addr = (dma_addr_t)rmem_base;
         isp_dev->rmem_size = rmem_size;

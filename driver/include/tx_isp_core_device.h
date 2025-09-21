@@ -117,8 +117,11 @@ int tx_isp_core_device_start_streaming(struct tx_isp_core_device *core_dev);
 int tx_isp_core_device_stop_streaming(struct tx_isp_core_device *core_dev);
 
 /* Core device sensor interface */
-int tx_isp_core_device_set_sensor_attr(struct tx_isp_core_device *core_dev, 
+int tx_isp_core_device_set_sensor_attr(struct tx_isp_core_device *core_dev,
                                        struct tx_isp_sensor_attribute *attr);
+
+/* Memory management functions */
+int parse_rmem_bootarg(unsigned long *base, unsigned long *size);
 
 /* Core device register access */
 static inline void tx_isp_core_reg_write(struct tx_isp_core_device *core_dev, 
