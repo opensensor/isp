@@ -50,7 +50,6 @@
 #include "../include/tx-libimp.h"
 
 /* Forward declaration for exported ISP event callback array */
-extern void (*isp_event_func_cb[32])(void);
 extern struct tx_isp_dev *ourISPdev;
 
 /* Forward declaration for frame channel wakeup function */
@@ -8984,14 +8983,7 @@ static irqreturn_t isp_irq_dispatcher(int irq, void *dev_id)
     spin_lock_irqsave(&isp_irq_lock, flags);
 
     /* Process each set interrupt bit */
-    for (int i = 0; i < 32; i++) {
-        if ((irq_status & (1 << i)) && isp_event_func_cb[i]) {
-            pr_debug("isp_irq_dispatcher: Calling IRQ handler %d\n", i);
-            isp_event_func_cb[i]();
-            handled = 1;
-        }
-    }
-
+	// TODO
     spin_unlock_irqrestore(&isp_irq_lock, flags);
 
     /* Clear handled interrupts */
