@@ -2404,7 +2404,7 @@ static int apical_isp_expr_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *
         int32_t enabled;
     } expr_data;
 
-    int ret = tisp_g_ev_attr(ev_buffer, ourISPdev->tuning_data);
+    int ret = tisp_g_ev_attr(ev_buffer, (ourISPdev && ourISPdev->core_dev) ? ourISPdev->core_dev->tuning_data : NULL);
     if (ret)
         return ret;
 
@@ -2428,7 +2428,7 @@ static int apical_isp_ev_g_attr(struct tx_isp_dev *dev, struct isp_core_ctrl *ct
         int32_t val[6];  // Based on how many values are copied in decompiled
     } ev_data;
 
-    int ret = tisp_g_ev_attr(ev_buffer, ourISPdev->tuning_data);
+    int ret = tisp_g_ev_attr(ev_buffer, (ourISPdev && ourISPdev->core_dev) ? ourISPdev->core_dev->tuning_data : NULL);
     if (ret)
         return ret;
 
@@ -2624,7 +2624,7 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
     }
 
     /* Get tuning data from device - Binary Ninja reference */
-    tuning = dev->tuning_data;
+    tuning = (dev->core_dev) ? (struct isp_tuning_data *)dev->core_dev->tuning_data : NULL;
     if (!tuning) {
         pr_err("apical_isp_core_ops_g_ctrl: No tuning data available\n");
         return -EINVAL;
@@ -2837,7 +2837,7 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             break;
 
         case 0x8000164:  // ISP_CTRL_BYPASS
-            ctrl->value = ourISPdev->bypass_enabled;
+            ctrl->value = (ourISPdev && ourISPdev->core_dev) ? ourISPdev->core_dev->bypass_enabled : 0;
             break;
 
         case 0x980918:  // ISP_CTRL_ANTIFLICKER
@@ -2868,7 +2868,7 @@ out:
 static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
 {
     int ret = 0;
-    struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+    struct isp_tuning_data *tuning = (ourISPdev && ourISPdev->core_dev) ? (struct isp_tuning_data *)ourISPdev->core_dev->tuning_data : NULL;
 
     if (!dev || !tuning) {
         pr_err("No ISP device or tuning data\n");
@@ -2915,7 +2915,9 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             break;
 
         case 0x8000164:  // ISP_CTRL_BYPASS
-            ourISPdev->bypass_enabled = !!ctrl->value;
+            if (ourISPdev && ourISPdev->core_dev) {
+                ourISPdev->core_dev->bypass_enabled = !!ctrl->value;
+            }
             break;
 
         case 0x980918:  // ISP_CTRL_ANTIFLICKER
@@ -3032,9 +3034,9 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             pr_info("*** SET FPS: Received packed FPS 0x%x -> %d/%d FPS ***\n", fps_packed, fps_num, fps_den);
 
             /* Store in tuning data - this is what the client expects */
-            if (ourISPdev && ourISPdev->tuning_data) {
-                ourISPdev->tuning_data->fps_num = fps_num;
-                ourISPdev->tuning_data->fps_den = fps_den;
+            if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->tuning_data) {
+                ((struct isp_tuning_data *)ourISPdev->core_dev->tuning_data)->fps_num = fps_num;
+                ((struct isp_tuning_data *)ourISPdev->core_dev->tuning_data)->fps_den = fps_den;
 
                 pr_info("*** SET FPS: Stored %d/%d in tuning data ***\n", fps_num, fps_den);
 
@@ -3456,7 +3458,8 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         isp_frame_done_wakeup();
                         
                         /* Update frame counter for userspace */
-                        ourISPdev->frame_count++;
+                        extern atomic64_t frame_done_cnt;
+                        atomic64_inc(&frame_done_cnt);
                     }
 
                     /* BINARY NINJA REFERENCE: Acknowledge tuning enable without heavy operations */

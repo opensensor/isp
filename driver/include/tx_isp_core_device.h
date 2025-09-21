@@ -42,6 +42,7 @@ struct tx_isp_core_device {
     void *tuning_dev;                          /* Tuning device pointer */
     void *tuning_data;                         /* Tuning data structure */
     bool tuning_enabled;                       /* Tuning system enabled flag */
+    bool bypass_enabled;                       /* ISP bypass mode enabled flag */
     
     /* Core processing */
     struct work_struct fs_work;                /* Frame sync work structure */
