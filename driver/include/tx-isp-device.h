@@ -15,12 +15,6 @@
 #include "tx-libimp.h"
 
 
-enum tx_isp_subdev_id {
-	TX_ISP_CORE_SUBDEV_ID,
-	TX_ISP_MAX_SUBDEV_ID,
-};
-
-
 #define ISP_MAX_CHAN 6
 #define VIC_MAX_CHAN 6
 #define WDR_SHADOW_SIZE (64 * 1024)

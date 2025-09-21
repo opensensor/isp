@@ -397,7 +397,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         }
 
         /* Binary Ninja: if (&arg1[0x1e] == $s3_1) */
-        if (&isp_dev->subdevs[16] == s3_1) {
+        if (&isp_dev->subdevs[ISP_MAX_SUBDEVS] == s3_1) {
             /* Binary Ninja: $a0_4 = *($s0 + 0x15c) */
             a0_4 = core_dev->irq_enabled;
             break;
