@@ -691,6 +691,34 @@ void tx_isp_module_deinit(struct tx_isp_subdev *sd)
     pr_info("tx_isp_module_deinit: Module deinitialized\n");
 }
 
+/* tx_isp_module_notify_handler - Handle module notification events */
+int tx_isp_module_notify_handler(struct tx_isp_module *module, unsigned int cmd, void *arg)
+{
+    struct tx_isp_subdev *sd;
+
+    if (!module) {
+        pr_err("tx_isp_module_notify_handler: Invalid module\n");
+        return -EINVAL;
+    }
+
+    /* Get the subdev that contains this module */
+    sd = container_of(module, struct tx_isp_subdev, module);
+
+    pr_info("*** tx_isp_module_notify_handler: cmd=0x%x, arg=%p ***\n", cmd, arg);
+
+    switch (cmd) {
+        case TX_ISP_EVENT_SYNC_SENSOR_ATTR:
+            pr_info("*** tx_isp_module_notify_handler: Processing TX_ISP_EVENT_SYNC_SENSOR_ATTR ***\n");
+            /* Call the sync sensor attribute handler */
+            extern int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
+            return tx_isp_handle_sync_sensor_attr_event(sd, (struct tx_isp_sensor_attribute *)arg);
+
+        default:
+            pr_info("*** tx_isp_module_notify_handler: Unsupported event 0x%x ***\n", cmd);
+            return -ENOIOCTLCMD;
+    }
+}
+
 /* tx_isp_request_irq - EXACT Binary Ninja reference implementation */
 int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq_info)
 {
