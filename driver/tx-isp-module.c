@@ -1020,7 +1020,9 @@ static int sensor_set_analog_gain_short(int gain) {
 static int sensor_set_digital_gain(int gain) {
     /* Binary Ninja: Sets digital gain */
 
-    if (!ourISPdev || !ourISPdev->sensor) {
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor) {
         return -ENODEV;
     }
 
