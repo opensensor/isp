@@ -1136,7 +1136,6 @@ static int sensor_get_lines_per_second(void) {
 }
 
 /* CSI function forward declarations */
-static int csi_device_probe(struct tx_isp_dev *isp_dev);
 int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd);
 int csi_core_ops_init(struct tx_isp_subdev *sd, int enable);
 static int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *sensor_attr);
@@ -1346,19 +1345,6 @@ static void* find_subdev_link_pad(struct tx_isp_dev *isp_dev, char *name)
 static int vic_registered = 0;
 
 
-// Initialize CSI subdev - Use Binary Ninja tx_isp_csi_probe
-static int tx_isp_init_csi_subdev(struct tx_isp_dev *isp_dev)
-{
-    if (!isp_dev) {
-        return -EINVAL;
-    }
-    
-    pr_info("*** INITIALIZING CSI AS PROPER SUBDEV FOR MIPI INTERFACE ***\n");
-    
-    /* Use Binary Ninja csi_device_probe method */
-    return csi_device_probe(isp_dev);
-}
-
 // Activate CSI subdev - Use Binary Ninja tx_isp_csi_activate_subdev
 static int tx_isp_activate_csi_subdev(struct tx_isp_dev *isp_dev)
 {
@@ -1408,99 +1394,6 @@ static int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_i
     csi_dev->lanes = (sensor_attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) ? 2 : 1; /* MIPI=1 uses 2 lanes, DVP=2 uses 1 lane */
     
     return 0;
-}
-
-/* csi_device_probe - EXACT Binary Ninja implementation (tx_isp_csi_probe) */
-static int csi_device_probe(struct tx_isp_dev *isp_dev)
-{
-    struct tx_isp_csi_device *csi_dev;
-    void __iomem *csi_basic_regs = NULL;
-    void __iomem *isp_csi_regs = NULL;
-    struct resource *mem_resource = NULL;
-    int ret = 0;
-    
-    if (!isp_dev) {
-        pr_err("csi_device_probe: Invalid ISP device\n");
-        return -EINVAL;
-    }
-    
-    pr_info("*** csi_device_probe: EXACT Binary Ninja tx_isp_csi_probe implementation ***\n");
-    
-    /* Binary Ninja: private_kmalloc(0x148, 0xd0) */
-    csi_dev = kzalloc(sizeof(struct tx_isp_csi_device), GFP_KERNEL);
-    if (!csi_dev) {
-        pr_err("csi_device_probe: Failed to allocate CSI device (0x148 bytes)\n");
-        return -ENOMEM;
-    }
-    
-    /* SAFE: Use sizeof instead of hardcoded size to prevent buffer overflow */
-    memset(csi_dev, 0, sizeof(struct tx_isp_csi_device));
-    
-    /* Initialize CSI subdev structure like Binary Ninja tx_isp_subdev_init */
-    memset(&csi_dev->sd, 0, sizeof(csi_dev->sd));
-    csi_dev->sd.isp = isp_dev;
-    csi_dev->sd.ops = NULL;  /* Would be &csi_subdev_ops in full implementation */
-    csi_dev->sd.vin_state = TX_ISP_MODULE_INIT;
-    
-    /* REMOVED: Manual memory region request - handled by tx_isp_subdev_init per reference driver */
-    /* Memory region will be requested by the platform device probe function */
-    mem_resource = NULL;  /* Will be set by platform device probe */
-    
-    /* CRITICAL FIX: Get CSI registers from the linked CSI device */
-    if (isp_dev->csi_dev && isp_dev->csi_regs) {
-        csi_basic_regs = isp_dev->csi_regs;
-        pr_info("*** CSI BASIC REGISTERS: Using mapped registers from CSI device: %p ***\n", csi_basic_regs);
-    } else {
-        csi_basic_regs = NULL;
-        pr_info("*** CSI BASIC REGISTERS: Not available yet (will be set by platform device probe) ***\n");
-    }
-    
-    /* *** CRITICAL: Map ISP CSI registers - Binary Ninja offset +0x13c region *** */
-    if (isp_dev->vic_regs) {
-        /* Binary Ninja shows *($s0_1 + 0x13c) points to ISP CSI register region */
-        /* This is the MIPI-specific CSI control registers within ISP */
-        isp_csi_regs = isp_dev->vic_regs - 0x9a00 + 0x10000; /* ISP base + CSI offset */
-        pr_info("*** ISP CSI REGISTERS MAPPED: %p (Binary Ninja +0x13c region) ***\n", isp_csi_regs);
-    }
-    
-    /* Binary Ninja: Store register addresses at correct offsets */
-    /* *($v0 + 0xb8) = csi_basic_regs (basic CSI control) */
-    csi_dev->csi_regs = csi_basic_regs;
-    
-    /* SAFE: Use proper struct members instead of unsafe offset access */
-    /* These offsets should correspond to actual struct members in tx_isp_csi_device */
-    /* For now, store in the main csi_regs field - the reference driver will handle proper mapping */
-    csi_dev->csi_regs = isp_csi_regs;  /* Use primary register field */
-    /* mem_resource is already stored in the platform device structure */
-    
-    /* Binary Ninja: private_raw_mutex_init($v0 + 0x12c) */
-    mutex_init(&csi_dev->mlock);
-    
-    /* Binary Ninja: *($v0 + 0x128) = 1 (initial state) */
-    csi_dev->state = 1;
-    
-    /* Binary Ninja: dump_csd = $v0 (global CSI device pointer) */
-    /* Store globally for debug access */
-    
-    pr_info("*** CSI device structure initialized: ***\n");
-    pr_info("  Size: 0x148 bytes\n");
-    pr_info("  Basic regs (+0xb8): %p (0x10022000)\n", csi_basic_regs);
-    pr_info("  ISP CSI regs (+0x13c): %p\n", isp_csi_regs);
-    pr_info("  State (+0x128): %d\n", csi_dev->state);
-
-    /* *** CRITICAL FIX: LINK CSI DEVICE TO ISP DEVICE *** */
-    pr_info("*** CRITICAL: LINKING CSI DEVICE TO ISP DEVICE ***\n");
-    isp_dev->csi_dev = csi_dev;
-    pr_info("*** CSI DEVICE LINKED: isp_dev->csi_dev = %p ***\n", isp_dev->csi_dev);
-    
-    pr_info("*** csi_device_probe: Binary Ninja CSI device created successfully ***\n");
-    return 0;
-    
-err_release_mem:
-    /* REMOVED: Manual memory region release - handled by platform device system */
-err_free_dev:
-    kfree(csi_dev);
-    return ret;
 }
 
 /* csi_video_s_stream - Binary Ninja exact implementation */

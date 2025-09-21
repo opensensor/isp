@@ -480,7 +480,6 @@ tiziano_gib_lut_parameter
 tiziano_gib_params_refresh
 tiziano_hldc_init
 tiziano_hldc_params_refresh
-tiziano_init_all_pipeline_components
 tiziano_lsc_init
 tiziano_lsc_params_refresh
 tiziano_mdns_init
@@ -504,7 +503,6 @@ tiziano_wdr_soft_para_out
 tiziano_ydns_init
 tiziano_ydns_params_refresh
 tx_isp_activate_csi_subdev
-tx_isp_activate_sensor_pipeline
 tx_isp_check_reset_status
 tx_isp_cleanup_subdev_graph
 tx_isp_configure_clocks
@@ -547,7 +545,6 @@ tx_isp_disable_irq
 tx_isp_enable_irq
 tx_isp_exit
 tx_isp_frame_chan_deinit
-tx_isp_frame_chan_init
 tx_isp_free_irq
 tx_isp_fs_probe
 tx_isp_fs_remove
@@ -577,9 +574,6 @@ tx_isp_subdev_init
 tx_isp_subdev_pipo
 tx_isp_subdev_register
 tx_isp_subdev_unregister
-tx_isp_sync_sensor_attr
-tx_isp_sysfs_exit
-tx_isp_sysfs_init
 tx_isp_unlocked_ioctl
 tx_isp_unregister_sensor_subdev
 tx_isp_v4l2_cleanup
@@ -638,8 +632,6 @@ vic_snapraw
 video_input_cmd_open
 video_input_cmd_set
 video_input_cmd_show
-vin_chardev_ioctl
-vin_chardev_open
 vin_s_stream
 wdr_mode_show
 wdr_mode_store
