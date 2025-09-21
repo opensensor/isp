@@ -2222,7 +2222,7 @@ void ispcore_frame_channel_streamoff(int32_t* arg1)
         /* MIPS ALIGNMENT CHECK: Ensure v0 is properly aligned before accessing */
         if (((unsigned long)v0 & 0x3) != 0) {
             pr_err("*** CRITICAL: v0 pointer 0x%p not 4-byte aligned - would cause unaligned access crash! ***\n", v0);
-            return 0xffffffea;
+            return;  /* void function - just return without value */
         }
 
         /* CRITICAL FIX: Use safe struct member access instead of dangerous offset *(v0 + 0xd4) */
