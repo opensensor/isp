@@ -381,9 +381,14 @@ int tx_isp_vic_stop(struct tx_isp_subdev *sd)
     ctrl |= VIC_CTRL_STOP;
     vic_write32(VIC_CTRL, ctrl);
 
-    /* Wait for stop to complete */
-    while (vic_read32(VIC_STATUS) & STATUS_BUSY) {
+    /* Wait for stop to complete with timeout to prevent infinite loop */
+    int timeout = 1000;
+    while ((vic_read32(VIC_STATUS) & STATUS_BUSY) && timeout-- > 0) {
         udelay(10);
+    }
+
+    if (timeout <= 0) {
+        pr_warn("VIC: Stop timeout - hardware may be stuck\n");
     }
 
     mutex_unlock(&sd->vic_frame_end_lock);
