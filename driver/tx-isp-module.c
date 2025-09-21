@@ -2058,6 +2058,16 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
         struct tx_isp_subdev *a0 = *s4;
 
         if (a0 != 0) {
+            /* CRITICAL: Call activate_module before s_stream if streaming is being enabled */
+            if (arg2 == 1 && a0->ops && a0->ops->internal && a0->ops->internal->activate_module) {
+                pr_info("*** tx_isp_video_s_stream: Calling activate_module on subdev %d ***\n", i);
+                int activate_ret = a0->ops->internal->activate_module(a0);
+                if (activate_ret != 0 && activate_ret != -ENOIOCTLCMD) {
+                    pr_err("tx_isp_video_s_stream: activate_module failed on subdev %d: %d\n", i, activate_ret);
+                    /* Continue - don't fail the entire streaming operation */
+                }
+            }
+
             /* Binary Ninja: void* $v0_3 = *(*($a0 + 0xc4) + 4) */
             struct tx_isp_subdev_video_ops *v0_3 = a0->ops ? a0->ops->video : NULL;
 
@@ -3790,21 +3800,6 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     /* Binary Ninja: Handle streaming commands */
     if (cmd == 0x80045612) {
         /* VIDIOC_STREAMON */
-        pr_info("*** VIDIOC_STREAMON: Activating subdev modules before streaming ***\n");
-
-        /* CRITICAL: Call activate_module on each subdev before streaming */
-        for (int i = 0; i < 16; i++) {
-            struct tx_isp_subdev *sd = isp_dev->subdevs[i];
-            if (sd && sd->ops && sd->ops->internal && sd->ops->internal->activate_module) {
-                pr_info("*** STREAMON: Calling activate_module on subdev %d ***\n", i);
-                int ret = sd->ops->internal->activate_module(sd);
-                if (ret != 0 && ret != -ENOIOCTLCMD) {
-                    pr_err("STREAMON: activate_module failed on subdev %d: %d\n", i, ret);
-                    /* Continue with other subdevs - don't fail the entire operation */
-                }
-            }
-        }
-
         return tx_isp_video_s_stream(isp_dev, 1);
     }
 
