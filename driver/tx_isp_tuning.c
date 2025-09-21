@@ -1179,12 +1179,12 @@ static int tisp_ae0_ctrls_update(void)
 {
     /* AE0 controls update - updates AE0 control registers */
     extern struct tx_isp_dev *ourISPdev;
-    if (!ourISPdev || !ourISPdev->core_regs) {
+    if (!ourISPdev || !ourISPdev->core_dev || !ourISPdev->core_dev->core_regs) {
         return -ENODEV;
     }
 
     /* Update AE0 control registers based on current parameters */
-    writel(0x1, ourISPdev->core_regs + 0xa000);  /* Enable AE0 */
+    writel(0x1, ourISPdev->core_dev->core_regs + 0xa000);  /* Enable AE0 */
 
     pr_info("AE0 controls updated\n");
     return 0;
@@ -1194,12 +1194,12 @@ static int tisp_ae0_process_impl(void)
 {
     /* AE0 processing implementation - performs AE0 algorithm processing */
     extern struct tx_isp_dev *ourISPdev;
-    if (!ourISPdev || !ourISPdev->core_regs) {
+    if (!ourISPdev || !ourISPdev->core_dev || !ourISPdev->core_dev->core_regs) {
         return -ENODEV;
     }
 
     /* Trigger AE0 processing */
-    writel(0x1, ourISPdev->core_regs + 0xa004);  /* Trigger AE0 processing */
+    writel(0x1, ourISPdev->core_dev->core_regs + 0xa004);  /* Trigger AE0 processing */
 
     pr_info("AE0 processing completed\n");
     return 0;
