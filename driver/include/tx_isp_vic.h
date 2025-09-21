@@ -94,10 +94,9 @@ struct tx_isp_vic_device {
     u32 stride;                                 /* Line stride */
     uint32_t pixel_format;                      /* Pixel format */
     
-    /* COMPATIBILITY: Add sensor_attr member for external SDK compatibility */
-    /* NOTE: VIC should use real sensor attributes from ourISPdev->sensor->video.attr */
-    /* This member is kept for compatibility with external SDK code that expects it */
-    struct tx_isp_sensor_attribute sensor_attr __attribute__((aligned(4)));
+    /* REMOVED: sensor_attr member - modern hardware supports multiple sensors
+     * VIC should get sensor attributes from subdev array starting at index 4
+     * via tx_isp_get_sensor() which now properly searches the subdev array */
     
     /* CRITICAL: Synchronization primitives with proper alignment */
     spinlock_t lock __attribute__((aligned(4)));                    /* General spinlock */
