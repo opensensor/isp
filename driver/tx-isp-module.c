@@ -3496,7 +3496,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_debug("*** TX_ISP_SENSOR_REGISTER: EXACT Binary Ninja reference implementation ***\n");
 
         /* Binary Ninja: private_copy_from_user(&var_98, arg3, 0x50) */
-        if (copy_from_user(sensor_data, argp, 0x50)) {
+        if (copy_from_user(sensor_data, (void __user *)arg, 0x50)) {
             pr_err("TX_ISP_SENSOR_REGISTER: Failed to copy sensor data\n");
             return -EFAULT;
         }
