@@ -5752,7 +5752,14 @@ label_12898:
             /* Binary Ninja: uint32_t $hi_1 = (vic_mdma_ch0_set_buff_index_1 + 1) u% 5 */
             hi_1 = (vic_mdma_ch0_set_buff_index + 1) % 5;
             
-            /* Binary Ninja: void* $a2_8 = *(arg1 + 0xb8) */
+            /* CRITICAL FIX: Use safe struct member access instead of dangerous offset *(arg1 + 0xb8) */
+            /* MIPS ALIGNMENT CHECK: Ensure vic_dev is properly aligned before accessing */
+            if (((unsigned long)vic_dev & 0x3) != 0) {
+                pr_err("*** CRITICAL: vic_dev pointer 0x%p not 4-byte aligned - would cause unaligned access crash! ***\n", vic_dev);
+                return IRQ_HANDLED;
+            }
+
+            /* SAFE: Use proper struct member access instead of offset arithmetic */
             a2_8 = vic_dev->vic_regs;
             
             if (a2_8) {
