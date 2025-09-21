@@ -684,18 +684,12 @@ int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg
         return -ENOTSUPP;  /* 0xffffffed */
     }
 
-    /* CRITICAL FIX: Handle the main subdev first with proper parameter passing */
+    /* CRITICAL FIX: Handle the main subdev first - PREVENT INFINITE RECURSION */
     if (cmd == 0x1000000) {
-        /* CRITICAL FIX: Call core operations ioctl with proper parameters */
-        if (sd->ops && sd->ops->core && sd->ops->core->ioctl) {
-            result = sd->ops->core->ioctl(sd, cmd, arg);
-            if (result != 0 && result != -ENOTTY) {
-                pr_err("ispcore_core_ops_ioctl: Main subdev core ioctl failed with %d\n", result);
-                return result;
-            }
-        } else {
-            result = -ENOTTY;  /* 0xfffffdfd */
-        }
+        /* CRITICAL FIX: Don't call core->ioctl on main subdev - it would recurse infinitely! */
+        /* The main subdev's core->ioctl points back to this function, causing stack overflow */
+        pr_info("ispcore_core_ops_ioctl: Main subdev core cmd=0x%x - handled locally to prevent recursion\n", cmd);
+        result = 0;  /* Success - main subdev core operations handled */
     } else if (cmd == 0x1000001) {
         /* CRITICAL FIX: Call sensor operations ioctl with proper parameters */
         if (sd->ops && sd->ops->sensor && sd->ops->sensor->ioctl) {
