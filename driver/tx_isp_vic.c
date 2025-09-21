@@ -564,7 +564,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
-    /* Binary Ninja: void* $v1 = *(arg1 + 0x110) - Get sensor attributes */
+    /* Binary Ninja: void* $v1 = *(arg1 + 0x110) - Get sensor attributes
+     * FIXED: Modern implementation gets sensor from subdev array starting at index 4 */
     extern struct tx_isp_sensor *tx_isp_get_sensor(void);
     struct tx_isp_sensor *sensor = tx_isp_get_sensor();
     if (sensor && sensor->video.attr) {
