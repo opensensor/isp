@@ -1813,6 +1813,11 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     tx_isp_set_subdevdata(&vic_dev->sd, vic_dev);
     pr_info("*** VIC PROBE: Stored vic_dev pointer %p in subdev private data ***\n", vic_dev);
 
+    /* CRITICAL FIX: Set host_priv to VIC device for Binary Ninja compatibility */
+    /* Binary Ninja expects VIC device at offset 0xd4 (host_priv field) */
+    tx_isp_set_subdev_hostdata(&vic_dev->sd, vic_dev);
+    pr_info("*** VIC PROBE: Set host_priv to vic_dev %p for Binary Ninja compatibility ***\n", vic_dev);
+
     /* REMOVED: Dangerous callback structure setup that was corrupting memory */
     /* The reference driver's callback mechanism needs to be implemented differently */
     pr_info("*** VIC PROBE: Callback structure setup deferred - avoiding memory corruption ***\n");

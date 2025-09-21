@@ -4277,17 +4277,20 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     pr_info("*** vic_sensor_ops_ioctl: FIXED implementation - cmd=0x%x ***\n", cmd);
     
     /* FIXED: Use proper struct member access instead of raw pointer arithmetic */
-    /* Get ISP device from subdev first */
-    isp_dev = ourISPdev;
-    if (!isp_dev) {
-        pr_err("*** vic_sensor_ops_ioctl: No ISP device in subdev->isp ***\n");
+    /* Binary Ninja: void* $a0 = *(arg1 + 0xd4) - this is sd->host_priv */
+    /* Get VIC device from subdev->host_priv (Binary Ninja offset 0xd4) */
+    if (!sd || !sd->host_priv) {
+        pr_err("*** vic_sensor_ops_ioctl: Invalid subdev or host_priv is NULL ***\n");
         return 0;
     }
-    
-    /* Get VIC device through proper ISP device structure */
-    vic_dev = isp_dev->vic_dev;
-    if (!vic_dev) {
-        pr_err("*** vic_sensor_ops_ioctl: No VIC device in isp_dev->vic_dev ***\n");
+
+    /* Binary Ninja expects VIC device at sd->host_priv */
+    vic_dev = (struct tx_isp_vic_device *)sd->host_priv;
+
+    /* Also get ISP device for additional operations */
+    isp_dev = ourISPdev;
+    if (!isp_dev) {
+        pr_err("*** vic_sensor_ops_ioctl: No ISP device available ***\n");
         return 0;
     }
     
