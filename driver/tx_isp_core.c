@@ -232,21 +232,26 @@ int isp_fw_process(void *data)
 /* ispcore_video_s_stream - EXACT Binary Ninja implementation */
 int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
 {
+    struct tx_isp_core_device *core_dev;
     struct tx_isp_dev *isp_dev;
-    int ret = 0;
+    struct tx_isp_subdev **subdev_ptr;
+    int result = 0;
+    int i;
+    unsigned long flags;
 
     if (!sd) {
         pr_err("ispcore_video_s_stream: Invalid subdev\n");
         return -EINVAL;
     }
 
-    isp_dev = (struct tx_isp_dev *)sd->isp;
-    if (!isp_dev) {
-        /* Fallback: Use global ourISPdev if sd->isp is not set */
-        extern struct tx_isp_dev *ourISPdev;
-        isp_dev = ourISPdev;
-        pr_info("ispcore_video_s_stream: Using global ourISPdev as fallback: %p\n", isp_dev);
+    /* Binary Ninja: void* $s0 = arg1[0x35] - get core device from subdev */
+    core_dev = container_of(sd, struct tx_isp_core_device, sd);
+    if (!core_dev) {
+        pr_err("ispcore_video_s_stream: No core device available\n");
+        return -EINVAL;
     }
+
+    isp_dev = core_dev->isp_dev;
     if (!isp_dev) {
         pr_err("ispcore_video_s_stream: No ISP device available\n");
         return -EINVAL;
@@ -254,33 +259,89 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
     pr_info("*** ispcore_video_s_stream: EXACT Binary Ninja implementation - enable=%d ***\n", enable);
 
-    if (enable) {
-        /* Binary Ninja: Enable ISP core video streaming */
-        pr_info("*** ispcore_video_s_stream: ENABLING ISP core video streaming ***\n");
+    /* Binary Ninja: Lock with spinlock */
+    spin_lock_irqsave(&core_dev->lock, flags);
 
-        /* Call tx_isp_video_link_stream to enable all subdevices */
-        ret = tx_isp_video_link_stream(isp_dev, 1);
-        if (ret != 0) {
-            pr_err("ispcore_video_s_stream: Failed to enable video link streaming: %d\n", ret);
-            return ret;
-        }
-
-        pr_info("*** ispcore_video_s_stream: ISP core video streaming ENABLED successfully ***\n");
-    } else {
-        /* Binary Ninja: Disable ISP core video streaming */
-        pr_info("*** ispcore_video_s_stream: DISABLING ISP core video streaming ***\n");
-
-        /* Call tx_isp_video_link_stream to disable all subdevices */
-        ret = tx_isp_video_link_stream(isp_dev, 0);
-        if (ret != 0) {
-            pr_err("ispcore_video_s_stream: Failed to disable video link streaming: %d\n", ret);
-            return ret;
-        }
-
-        pr_info("*** ispcore_video_s_stream: ISP core video streaming DISABLED successfully ***\n");
+    /* Binary Ninja: Check core state - if (*($s0 + 0xe8) s< 3) */
+    if (core_dev->state < 3) {
+        pr_err("ispcore_video_s_stream: Core state %d < 3, cannot stream\n", core_dev->state);
+        spin_unlock_irqrestore(&core_dev->lock, flags);
+        return -EINVAL;
     }
 
-    return 0;
+    spin_unlock_irqrestore(&core_dev->lock, flags);
+
+    /* Binary Ninja: Reset frame counters */
+    core_dev->frame_count = 0;
+    core_dev->error_count = 0;
+    core_dev->drop_count = 0;
+    core_dev->total_frames = 0;
+
+    if (enable == 0) {
+        /* Binary Ninja: Stream OFF - if (arg2 == 0) */
+        if (core_dev->state == 4) {
+            /* Binary Ninja: Stop frame channels if streaming */
+            for (i = 0; i < ISP_MAX_FRAME_CHANNELS; i++) {
+                if (core_dev->frame_channels[i].state == 4) {
+                    /* Binary Ninja: ispcore_frame_channel_streamoff */
+                    core_dev->frame_channels[i].state = 3;
+                    pr_info("ispcore_video_s_stream: Frame channel %d stopped\n", i);
+                }
+            }
+        }
+        core_dev->state = 3;  /* Set to configured state */
+    } else {
+        /* Binary Ninja: Stream ON - else if ($v0_3 != 3) */
+        if (core_dev->state != 3) {
+            pr_err("ispcore_video_s_stream: Invalid state %d for stream on\n", core_dev->state);
+            return -EINVAL;
+        }
+        core_dev->state = 4;  /* Set to streaming state */
+    }
+
+    /* Binary Ninja: Iterate through core's internal subdevices */
+    /* Binary Ninja: $s3_1 = &arg1[0xe] to &arg1[0x1e] */
+    subdev_ptr = &isp_dev->subdevs[0];  /* Start from first subdev */
+
+    for (i = 0; i < 16; i++) {  /* Binary Ninja: iterate to &arg1[0x1e] */
+        struct tx_isp_subdev *subdev = subdev_ptr[i];
+
+        if (subdev != NULL && subdev != sd) {  /* Don't call ourselves */
+            if (subdev->ops && subdev->ops->video && subdev->ops->video->s_stream) {
+                pr_info("*** ispcore_video_s_stream: Calling subdev %d s_stream (enable=%d) ***\n", i, enable);
+
+                result = subdev->ops->video->s_stream(subdev, enable);
+
+                if (result != 0) {
+                    if (result != -ENOIOCTLCMD) {
+                        pr_err("ispcore_video_s_stream: Subdev %d failed: %d\n", i, result);
+                        break;
+                    }
+                    result = -ENOIOCTLCMD;  /* Continue on ENOIOCTLCMD */
+                }
+            } else {
+                result = -ENOIOCTLCMD;
+            }
+        }
+    }
+
+    /* Binary Ninja: IRQ management at end */
+    if (core_dev->irq_enabled == 1 || enable == 0) {
+        /* Binary Ninja: Disable IRQ */
+        core_dev->irq_mask = 0;
+        pr_info("ispcore_video_s_stream: IRQ disabled\n");
+    } else {
+        /* Binary Ninja: Enable IRQ */
+        core_dev->irq_mask = 0xffffffff;
+        pr_info("ispcore_video_s_stream: IRQ enabled\n");
+    }
+
+    /* Binary Ninja: Return 0 if ENOIOCTLCMD, otherwise return result */
+    if (result == -ENOIOCTLCMD) {
+        return 0;
+    }
+
+    return result;
 }
 
 /* ispcore_irq_thread_handle - EXACT Binary Ninja implementation */
