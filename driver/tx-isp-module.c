@@ -4241,6 +4241,15 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
                     pr_info("*** REAL SENSOR CONNECTED TO ISP DEVICE SUCCESSFULLY ***\n");
 
+                    /* CRITICAL FIX: Link sensor to VIN device for vin_s_stream to work */
+                    if (ourISPdev->vin_dev) {
+                        struct tx_isp_vin_device *vin_dev = (struct tx_isp_vin_device *)ourISPdev->vin_dev;
+                        vin_dev->active = sensor;  /* Set active sensor for VIN s_stream */
+                        pr_info("*** SENSOR LINKED TO VIN DEVICE: vin_dev->active = %p ***\n", sensor);
+                    } else {
+                        pr_warn("*** WARNING: No VIN device available for sensor linking ***\n");
+                    }
+
                     /* SAFE UPDATE: Update registry with real sensor subdev pointer */
                     if (reg_sensor) {
                         reg_sensor->subdev = real_sensor_sd;
