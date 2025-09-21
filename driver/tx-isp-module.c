@@ -3289,9 +3289,19 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             } else {
                 pr_info("TX_ISP_SENSOR_ENUM_INPUT: No sensor found at index %d (result=%d)\n",
                         var_98.as_input.index, result);
-                /* According to client_side.txt analysis: userspace expects IOCTL to return non-zero
-                 * when enumeration is complete, which breaks the enumeration loop */
-                return result;
+
+                /* CRITICAL: Based on reference driver Binary Ninja analysis, when sensor enumeration
+                 * fails, we should return the error directly. However, let's check if prudynt expects
+                 * a different behavior by clearing the sensor name and returning success. */
+                if (result == -EINVAL) {
+                    /* Clear the sensor name to indicate no sensor found */
+                    memset(var_98.as_input.name, 0, sizeof(var_98.as_input.name));
+                    pr_info("TX_ISP_SENSOR_ENUM_INPUT: Returning success with empty name for index %d\n",
+                            var_98.as_input.index);
+                } else {
+                    /* For other errors, return the error as per reference driver */
+                    return result;
+                }
             }
 
             /* Binary Ninja: if (private_copy_to_user(arg3, &var_98, 0x50) != 0) */
