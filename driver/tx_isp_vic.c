@@ -485,25 +485,6 @@ int tx_isp_vic_configure_dma(struct tx_isp_vic_device *vic_dev, dma_addr_t base_
     return 0;
 }
 
-/* Wait for frame completion */
-int tx_isp_vic_wait_frame_done(struct tx_isp_subdev *sd, int channel, int timeout_ms)
-{
-    int ret;
-
-    if (!sd || channel >= VIC_MAX_CHAN) {
-        pr_err("Invalid subdev or channel\n");
-        return -EINVAL;
-    }
-
-    ret = wait_for_completion_timeout(
-        &sd->vic_frame_end_completion[channel],
-        msecs_to_jiffies(timeout_ms)
-    );
-
-    return ret ? 0 : -ETIMEDOUT;
-}
-
-
 int vic_saveraw(struct tx_isp_subdev *sd, unsigned int savenum)
 {
     uint32_t vic_ctrl, vic_status, vic_intr, vic_addr;
@@ -2857,7 +2838,5 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
 EXPORT_SYMBOL(tx_isp_subdev_pipo);
 
 /* Export symbols for use by other parts of the driver */
-EXPORT_SYMBOL(tx_isp_vic_set_buffer);
-EXPORT_SYMBOL(tx_isp_vic_wait_frame_done);
 EXPORT_SYMBOL(vic_core_s_stream);  /* CRITICAL: Export the missing function */
 
