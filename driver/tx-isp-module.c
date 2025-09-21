@@ -3463,48 +3463,61 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
     /* Binary Ninja: Handle 0x805056c1 - TX_ISP_SENSOR_REGISTER */
     if (cmd == 0x805056c1) {
-        void **i_2 = (void **)&isp_dev->subdevs[0];
+        char sensor_data[0x50];
+
+        pr_debug("*** TX_ISP_SENSOR_REGISTER: SAFE STRUCT ACCESS implementation ***\n");
 
         /* Binary Ninja: if (private_copy_from_user(&var_98, arg3, 0x50) != 0) */
-        if (copy_from_user(&var_98, (void __user *)arg, 0x50) != 0) {
+        if (copy_from_user(sensor_data, (void __user *)arg, 0x50) != 0) {
             pr_err("TX_ISP_SENSOR_REGISTER: Failed to copy sensor data\n");
             return -EFAULT;
         }
 
-        /* Binary Ninja: Loop through subdevices exactly as reference */
-        do {
-            struct tx_isp_subdev *sd = (struct tx_isp_subdev *)*i_2;
+        /* Extract sensor name from data */
+        char sensor_name[32];
+        strncpy(sensor_name, sensor_data, sizeof(sensor_name) - 1);
+        sensor_name[sizeof(sensor_name) - 1] = '\0';
+        pr_debug("TX_ISP_SENSOR_REGISTER: Registering sensor '%s'\n", sensor_name);
 
-            if (sd != NULL) {
-                /* Binary Ninja: void* $v0_22 = *(*($a0_10 + 0xc4) + 0xc) */
-                if (sd->ops && sd->ops->sensor) {
-                    /* Binary Ninja: int32_t $v0_23 = *($v0_22 + 8) */
-                    if (sd->ops->sensor->ioctl) {
-                        /* Binary Ninja: int32_t $v0_25 = $v0_23($a0_10, 0x2000000, &var_98) */
-                        int32_t ret = sd->ops->sensor->ioctl(sd, 0x2000000, &var_98);
-                        s6_1 = ret;
+        /* SAFE: Loop through subdevices with proper bounds checking */
+        s6_1 = 0;
+        for (int i = 0; i < ISP_MAX_SUBDEVS; i++) {
+            struct tx_isp_subdev *sd = isp_dev->subdevs[i];
 
-                        if (ret == 0) {
-                            i_2++;
-                        } else {
-                            i_2++;
-                            if (ret != 0xfffffdfd) {
-                                break;
-                            }
-                        }
-                    } else {
-                        i_2++;
-                    }
-                } else {
-                    i_2++;
-                }
-            } else {
-                i_2++;
+            if (sd == NULL) {
+                continue; /* Skip empty slots */
             }
 
-            s6_1 = 0;
-        } while ((void *)i_2 != (void *)&isp_dev->subdevs[ISP_MAX_SUBDEVS]);
+            /* SAFE: Check if this is a valid subdev with proper null checks */
+            if (!sd->ops) {
+                continue; /* Skip subdevs without ops */
+            }
 
+            /* SAFE: Check if this subdev has sensor operations */
+            if (!sd->ops->sensor) {
+                continue; /* Skip non-sensor subdevs */
+            }
+
+            /* SAFE: Check if sensor has IOCTL function */
+            if (!sd->ops->sensor->ioctl) {
+                continue; /* Skip sensors without IOCTL */
+            }
+
+            /* SAFE: Call sensor IOCTL with proper error handling */
+            pr_debug("TX_ISP_SENSOR_REGISTER: Calling sensor IOCTL for subdev at index %d\n", i);
+            int32_t ret = sd->ops->sensor->ioctl(sd, 0x2000000, sensor_data);
+
+            if (ret == 0) {
+                pr_debug("TX_ISP_SENSOR_REGISTER: Sensor IOCTL succeeded for subdev %d\n", i);
+                s6_1 = 0; /* Success */
+            } else if (ret != 0xfffffdfd) {
+                pr_debug("TX_ISP_SENSOR_REGISTER: Sensor IOCTL returned error 0x%x for subdev %d\n", ret, i);
+                s6_1 = ret;
+                break; /* Stop on error (except 0xfffffdfd which means continue) */
+            }
+        }
+
+        pr_debug("TX_ISP_SENSOR_REGISTER: Completed with result 0x%x\n", s6_1);
         return s6_1;
     }
 
