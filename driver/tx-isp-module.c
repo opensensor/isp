@@ -3207,7 +3207,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             extern struct tx_isp_sensor *tx_isp_get_sensor(void);
             struct tx_isp_sensor *sensor_check = tx_isp_get_sensor();
             if (!sensor_check) {
-                pr_err("*** Channel %d: CRITICAL ERROR - ourISPdev->sensor is NULL ***\n", channel);
+                pr_err("*** Channel %d: CRITICAL ERROR - no sensor available ***\n", channel);
                 pr_err("*** This indicates sensor registration failed or sensor module not loaded ***\n");
                 pr_err("*** Check if gc2053.ko is loaded and properly registered ***\n");
 
@@ -4001,12 +4001,13 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
                     /* *** CRITICAL FIX: CONNECT REAL SENSOR TO ISP DEVICE *** */
                     pr_info("*** CONNECTING REAL SENSOR TO ISP DEVICE ***\n");
-                    pr_info("Current: ourISPdev=%p, ourISPdev->sensor=%p\n", ourISPdev, ourISPdev->sensor);
+                    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+                    struct tx_isp_sensor *current_sensor = tx_isp_get_sensor();
+                    pr_info("Current: ourISPdev=%p, current_sensor=%p\n", ourISPdev, current_sensor);
                     pr_info("Real sensor: sensor=%p, subdev=%p\n", sensor, real_sensor_sd);
 
-                    /* Connect the real sensor to ISP device */
-                    ourISPdev->sensor = sensor;
-                    pr_info("*** SENSOR CONNECTION: ourISPdev->sensor=%p ***\n", ourISPdev->sensor);
+                    /* Sensor is already connected via subdev array - no need to assign */
+                    pr_info("*** SENSOR CONNECTION: sensor=%p already in subdev array ***\n", sensor);
 
                     /* NOTE: sensor->sd is already part of the sensor struct, no need to assign */
                     /* The sensor structure contains the subdev as its first member */
