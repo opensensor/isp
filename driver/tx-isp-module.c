@@ -5127,9 +5127,9 @@ long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *a
                     return -EINVAL;
                 }
 
-                /* Binary Ninja: Call sensor's internal ops if available */
-                if (sensor_sd->ops && sensor_sd->ops->internal && sensor_sd->ops->internal->ioctl) {
-                    return sensor_sd->ops->internal->ioctl(sensor_sd, arg, 0x19f);
+                /* Binary Ninja: Call sensor's core ops if available (internal ops don't have ioctl) */
+                if (sensor_sd->ops && sensor_sd->ops->core && sensor_sd->ops->core->ioctl) {
+                    return sensor_sd->ops->core->ioctl(sensor_sd, 0x2000011, arg);
                 }
                 return 0;
             }
