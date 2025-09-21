@@ -791,13 +791,61 @@ static struct tx_isp_subdev_sensor_ops core_sensor_ops = {
     .release_all_sensor = NULL
 };
 
+/* Core activate module function - calls ispcore_core_ops_init to transition state 2->3 */
+static int ispcore_activate_module_subdev(struct tx_isp_subdev *sd)
+{
+    pr_info("*** ispcore_activate_module_subdev: Activating core device ***\n");
+
+    if (!sd) {
+        pr_err("ispcore_activate_module_subdev: Invalid subdev\n");
+        return -EINVAL;
+    }
+
+    /* Call ispcore_core_ops_init with on=1 to transition from state 2 to 3 */
+    int ret = ispcore_core_ops_init(sd, 1);
+    if (ret == 0) {
+        pr_info("*** ispcore_activate_module_subdev: Core device activated successfully ***\n");
+    } else {
+        pr_err("ispcore_activate_module_subdev: Core activation failed: %d\n", ret);
+    }
+
+    return ret;
+}
+
+/* Core slake module function - calls ispcore_core_ops_init to deinitialize */
+static int ispcore_slake_module_subdev(struct tx_isp_subdev *sd)
+{
+    pr_info("*** ispcore_slake_module_subdev: Deactivating core device ***\n");
+
+    if (!sd) {
+        pr_err("ispcore_slake_module_subdev: Invalid subdev\n");
+        return -EINVAL;
+    }
+
+    /* Call ispcore_core_ops_init with on=0 to deinitialize */
+    int ret = ispcore_core_ops_init(sd, 0);
+    if (ret == 0) {
+        pr_info("*** ispcore_slake_module_subdev: Core device deactivated successfully ***\n");
+    } else {
+        pr_err("ispcore_slake_module_subdev: Core deactivation failed: %d\n", ret);
+    }
+
+    return ret;
+}
+
+/* Core internal operations - CRITICAL: Missing from original implementation */
+static struct tx_isp_subdev_internal_ops core_internal_ops = {
+    .activate_module = ispcore_activate_module_subdev,
+    .slake_module = ispcore_slake_module_subdev,
+};
+
 /* Update the core subdev ops to include the core ops */
 struct tx_isp_subdev_ops core_subdev_ops = {
     .core = &core_subdev_core_ops,
     .video = &core_subdev_video_ops,
     .pad = &core_pad_ops,
     .sensor = &core_sensor_ops,  /* Core handles sensor registration */
-    .internal = NULL
+    .internal = &core_internal_ops  /* CRITICAL: Wire in the internal ops */
 };
 EXPORT_SYMBOL(core_subdev_ops);
 
