@@ -3425,6 +3425,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             var_94 = a2_10;
         }
 
+        /* Binary Ninja EXACT: var_94 = $a2_10, var_98 = 0, $s6_1 = 0 */
+        var_98.as_uint32 = 0;  /* Binary Ninja: var_98 = 0 */
         s6_1 = 0;
 
         /* Binary Ninja: if (private_copy_to_user(arg3, &var_98, 8) != 0) */
