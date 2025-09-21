@@ -1277,10 +1277,14 @@ int tx_isp_configure_clocks(struct tx_isp_dev *isp)
 
     pr_info("Clock configuration completed. Rates:\n");
     pr_info("  CSI Core: %lu Hz\n", clk_get_rate(isp->csi_clk));
-    pr_info("  ISP Core: %lu Hz\n", clk_get_rate(isp->isp_clk));
+    if (isp->core_dev && isp->core_dev->core_clk) {
+        pr_info("  ISP Core: %lu Hz\n", clk_get_rate(isp->core_dev->core_clk));
+    }
     pr_info("  CGU ISP: %lu Hz\n", clk_get_rate(isp->cgu_isp));
     pr_info("  CSI: %lu Hz\n", clk_get_rate(isp->csi_clk));
-    pr_info("  IPU: %lu Hz\n", clk_get_rate(isp->ipu_clk));
+    if (isp->core_dev && isp->core_dev->ipu_clk) {
+        pr_info("  IPU: %lu Hz\n", clk_get_rate(isp->core_dev->ipu_clk));
+    }
 
     return 0;
 
