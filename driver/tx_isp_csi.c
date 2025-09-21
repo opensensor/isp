@@ -267,16 +267,13 @@ int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
     struct tx_isp_csi_device *csi_dev;
 
-    /* Binary Ninja: EXACT implementation - no debug prints to avoid alignment issues */
-
     /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) */
     if (sd != NULL && (unsigned long)sd < 0xfffff001) {
 
-        /* CRITICAL FIX: Get CSI device from subdev private data, not global ourISPdev */
-        /* Binary Ninja: *(arg1 + 0x110) - this is the CSI device pointer at offset 0x110 in subdev */
+        /* Binary Ninja: *(arg1 + 0x110) - get CSI device from subdev private data */
         csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
         if (!csi_dev) {
-            /* Binary Ninja: return 0 on error - no error logging to avoid alignment issues */
+            /* Binary Ninja: return 0 on error */
             return 0;
         }
 
