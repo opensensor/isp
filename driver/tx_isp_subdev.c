@@ -682,9 +682,17 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
             return 0;
         }
 
-        /* For other IRQs, register normally */
+        /* CRITICAL FIX: For other IRQs, register normally but NEVER pass irq_info as dev_id */
         extern struct tx_isp_dev *ourISPdev;
-        void *dev_id_param = ourISPdev ? ourISPdev : irq_info;
+
+        /* CRITICAL FIX: Never pass irq_info as dev_id - it causes BadVA crashes at 0xc8/0xdc */
+        /* The interrupt handlers expect tx_isp_dev*, not tx_isp_irq_info* */
+        if (!ourISPdev) {
+            pr_err("*** CRITICAL: Cannot register IRQ %d - ourISPdev is NULL! ***\n", irq_num);
+            pr_err("*** This would cause BadVA crashes at offsets 0xc8/0xdc ***\n");
+            pr_err("*** IRQ registration SKIPPED to prevent kernel panic ***\n");
+            return -ENODEV;
+        }
 
         /* Binary Ninja: private_request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, 0x2000, *arg1, arg2) */
         ret = request_threaded_irq(irq_num,
@@ -692,7 +700,7 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
                                    isp_irq_thread_handle,
                                    IRQF_SHARED,  /* 0x2000 = IRQF_SHARED */
                                    dev_name(&pdev->dev),  /* *arg1 = device name */
-                                   dev_id_param);  /* FIXED: Use ourISPdev as dev_id */
+                                   ourISPdev);  /* CRITICAL FIX: Always use ourISPdev, never irq_info */
 
         if (ret != 0) {
             /* Binary Ninja: isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", "tx_isp_request_irq") */
