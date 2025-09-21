@@ -3179,7 +3179,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
             /* Binary Ninja: sensor_early_init($v0) */
             pr_info("*** tx_isp_core_probe: Calling sensor_early_init ***\n");
-            sensor_early_init(isp_dev);
+            sensor_early_init(ourISPdev);
 
             /* Store channel array in core device */
             core_dev->frame_channels = channel_array;
