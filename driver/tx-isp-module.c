@@ -65,7 +65,7 @@ struct registered_sensor {
 // Simple global device instance
 struct tx_isp_dev *ourISPdev = NULL;
 static int sensor_count = 0;
-static int isp_memopt = 0; // Memory optimization flag like reference
+extern int isp_memopt; // Memory optimization flag from tx_isp_core.c
 
 /* CRITICAL: VIC interrupt control flag - Binary Ninja reference */
 /* This is now declared as extern - the actual definition is in tx_isp_vic.c */
