@@ -1424,7 +1424,6 @@ static struct tx_isp_sensor *tx_isp_create_test_sensor(void)
 struct tx_isp_sensor *tx_isp_get_sensor(void)
 {
     extern struct tx_isp_dev *ourISPdev;
-    static struct tx_isp_sensor *test_sensor = NULL;
 
     if (!ourISPdev) {
         return NULL;
@@ -1442,15 +1441,8 @@ struct tx_isp_sensor *tx_isp_get_sensor(void)
         }
     }
 
-    /* TEMPORARY: If no real sensor found, create a test sensor for development */
-    if (!test_sensor) {
-        test_sensor = tx_isp_create_test_sensor();
-        if (test_sensor) {
-            pr_info("*** tx_isp_get_sensor: Using test sensor for development ***\n");
-        }
-    }
-
-    return test_sensor;
+    /* No sensor found - return NULL as per stock driver behavior */
+    return NULL;
 }
 EXPORT_SYMBOL(tx_isp_get_sensor);
 
