@@ -3337,7 +3337,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         /* Binary Ninja: int32_t $v0_7 = *($v0_6 + 8) */
                         if (ops->sensor && ops->sensor->ioctl) {
                             /* Binary Ninja: int32_t $v0_8 = $v0_7() */
-                            int32_t v0_8 = ops->sensor->ioctl(a0_2, TX_ISP_EVENT_SENSOR_ENUM_INPUT, &var_98);
+                            /* EXACT Binary Ninja: sensor ioctl called WITHOUT parameters */
+                            int32_t v0_8 = ((int32_t (*)(void))ops->sensor->ioctl)();
 
                             if (v0_8 == 0) {
                                 s0_3++;
