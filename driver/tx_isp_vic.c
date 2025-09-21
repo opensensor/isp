@@ -1681,17 +1681,17 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                 case 0x200000e:
                     /* Binary Ninja: **($a0 + 0xb8) = 0x10 */
                     /* Set VIC register to 0x10 */
-                    if (vic_dev->primary_regs) {
-                        writel(0x10, vic_dev->primary_regs + 0xb8);
+                    if (vic_dev->vic_regs) {
+                        writel(0x10, vic_dev->vic_regs + 0xb8);
                     }
                     return 0;
 
                 case 0x2000013:
                     /* Binary Ninja: **($a0 + 0xb8) = 0, then = 4 */
                     /* Set VIC register to 0, then 4 */
-                    if (vic_dev->primary_regs) {
-                        writel(0, vic_dev->primary_regs + 0xb8);
-                        writel(4, vic_dev->primary_regs + 0xb8);
+                    if (vic_dev->vic_regs) {
+                        writel(0, vic_dev->vic_regs + 0xb8);
+                        writel(4, vic_dev->vic_regs + 0xb8);
                     }
                     return 0;
 
