@@ -3265,20 +3265,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         return s6_1;
     }
 
-    /* Binary Ninja: Main conditional structure */
-    if (cmd >= 0x800856d8) {
-        /* Handle high-range commands */
-        if (cmd == 0xc00456e2) {
-            /* TX_ISP_SET_AWB_ALGO_HANDLE */
-            if (copy_from_user(&var_98, (void __user *)arg, 0x18) != 0) {
-                pr_err("Failed to copy AWB algo data\n");
-                return -EFAULT;
-            }
-            s6_1 = 0;
-            /* Binary Ninja: if (var_90 == 1) tisp_awb_algo_handle(&var_98) */
-            return s6_1;
-        }
-    } else if (cmd == 0xc050561a) { // TX_ISP_SENSOR_ENUM_INPUT - EXACT Binary Ninja reference
+    /* Binary Ninja: Main conditional structure - FIXED ORDER */
+    if (cmd == 0xc050561a) { // TX_ISP_SENSOR_ENUM_INPUT - EXACT Binary Ninja reference
         /* CRITICAL FIX: This IOCTL is used to enumerate sensors by index */
         /* The userspace passes an index in the first 4 bytes, we return sensor name */
         uint32_t sensor_index;
