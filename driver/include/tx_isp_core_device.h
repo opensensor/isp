@@ -37,27 +37,35 @@ struct tx_isp_core_device {
     /* Core interrupt handling */
     int irq;                                   /* Core interrupt number */
     irqreturn_t (*irq_handler)(int irq, void *dev_id);  /* Core IRQ handler */
-    
+    int irq_enabled;                           /* IRQ enabled flag */
+    uint32_t irq_mask;                         /* IRQ mask register */
+
     /* Core tuning system */
     void *tuning_dev;                          /* Tuning device pointer */
     void *tuning_data;                         /* Tuning data structure */
     bool tuning_enabled;                       /* Tuning system enabled flag */
     bool bypass_enabled;                       /* ISP bypass mode enabled flag */
-    
+
     /* Core processing */
     struct work_struct fs_work;                /* Frame sync work structure */
     atomic_t processing_counter;               /* Processing counter */
     bool tisp_initialized;                     /* TISP initialization flag */
-    
+
     /* Core sensor interface */
     struct tx_isp_sensor_attribute *sensor_attr;  /* Current sensor attributes */
 
     /* Core image processing settings */
     uint32_t wdr_mode;                             /* WDR mode setting */
-    
+
     /* Core frame channels */
-    void *frame_channels;                      /* Frame channel array */
-    uint32_t channel_count;                    /* Number of channels */
+    struct tx_isp_frame_channel *frame_channels;   /* Frame channel array */
+    uint32_t channel_count;                        /* Number of channels */
+
+    /* Core statistics */
+    uint32_t frame_count;                      /* Frame counter */
+    uint32_t error_count;                      /* Error counter */
+    uint32_t drop_count;                       /* Drop counter */
+    uint32_t total_frames;                     /* Total frame counter */
     
     /* Core memory management */
     void *channel_array;                       /* Binary Ninja channel array */
