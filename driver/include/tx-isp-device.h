@@ -574,6 +574,10 @@ struct tx_isp_channel_state {
     int buffer_count;
     uint32_t sequence;           /* Frame sequence counter */
 
+    /* Binary Ninja state fields - EXACT offsets from decompiled code */
+    int state;                   /* Offset 0x2d0 - *($s0 + 0x2d0) - channel state (3=ready, 4=streaming) */
+    uint32_t flags;              /* Offset 0x230 - *($s0 + 0x230) - streaming flags (bit 0 = streaming) */
+
     /* CRITICAL FIX: Store buffer structures like reference driver */
     uint32_t *buffer_addresses;  /* Array of buffer structure pointers */
 
