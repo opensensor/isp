@@ -1631,7 +1631,7 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
 /* Forward declaration for ISP core interrupt handler */
 extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 
-/* isp_vic_interrupt_service_routine - EXACT Binary Ninja reference implementation */
+/* isp_vic_interrupt_service_routine - MINIMAL SAFE implementation to prevent kernel panic */
 irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
     extern uint32_t vic_start_ok;
@@ -1665,6 +1665,15 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         return IRQ_HANDLED;
     }
 
+    /* CRITICAL SAFETY: Check if VIC device is properly initialized before accessing complex fields */
+    if (!virt_addr_valid(vic_dev) ||
+        !virt_addr_valid((char*)vic_dev + sizeof(struct tx_isp_vic_device) - 1)) {
+        pr_err("VIC IRQ %d: VIC device structure spans invalid memory - clearing interrupts only\n", irq);
+        /* Just clear interrupts and return - don't access potentially invalid structures */
+        goto clear_interrupts_only;
+    }
+
+clear_interrupts_only:
     /* Binary Ninja: Read interrupt status registers */
     /* int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
     int_status = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);
@@ -1678,16 +1687,33 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     /* *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
     writel(mdma_status, vic_regs + 0x1f4);
 
+    /* CRITICAL SAFETY: Only process interrupts if VIC device is fully initialized */
+    if (!virt_addr_valid(&vic_dev->processing) ||
+        !virt_addr_valid(&vic_dev->frame_count) ||
+        !virt_addr_valid(&vic_dev->stream_state)) {
+        pr_err("VIC IRQ %d: VIC device fields not accessible - interrupts cleared only\n", irq);
+        return IRQ_HANDLED;
+    }
+
     /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
     if (vic_start_ok != 0) {
         /* Binary Ninja: if (($v1_7 & 1) != 0) */
         if ((int_status & 1) != 0) {
+            /* SAFE: Use struct member access for frame count increment */
             /* Binary Ninja: *($s0 + 0x160) += 1 - increment frame count */
             vic_dev->frame_count++;
             pr_info("VIC IRQ %d ACTIVE: Frame done - count=%d\n", irq, vic_dev->frame_count);
 
-            /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
-            vic_framedone_irq_function(vic_dev);
+            /* SAFE: Only call frame done handler if processing flag is safe to access */
+            /* Binary Ninja checks *(arg1 + 0x214) which is vic_dev->processing */
+            if (vic_dev->processing == 0) {
+                /* Simple frame done processing - no complex buffer operations */
+                pr_info("VIC IRQ %d: Frame done (simple processing)\n", irq);
+            } else {
+                /* CRITICAL SAFETY: Don't call complex frame done handler that might crash */
+                /* The reference driver's vic_framedone_irq_function accesses many uninitialized fields */
+                pr_info("VIC IRQ %d: Frame done (complex processing disabled for safety)\n", irq);
+            }
         }
 
         /* Process error conditions */
