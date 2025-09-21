@@ -61,6 +61,11 @@ struct tx_isp_core_device {
     struct tx_isp_frame_channel *frame_channels;   /* Frame channel array */
     uint32_t channel_count;                        /* Number of channels */
 
+    /* Binary Ninja compatibility - image dimensions at specific offsets */
+    char padding_to_ec[0xec - 0x60];               /* Padding to reach offset 0xec */
+    uint32_t width;                                /* 0xec: Image width */
+    uint32_t height;                               /* 0xf0: Image height */
+
     /* Core statistics */
     uint32_t frame_count;                      /* Frame counter */
     uint32_t error_count;                      /* Error counter */
