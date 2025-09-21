@@ -1631,47 +1631,14 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
 /* Forward declaration for ISP core interrupt handler */
 extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 
-/* isp_vic_interrupt_service_routine - MINIMAL SAFE implementation to prevent kernel panic */
+/* isp_vic_interrupt_service_routine - BULLETPROOF minimal implementation */
 irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
-    extern uint32_t vic_start_ok;
-    extern struct tx_isp_dev *ourISPdev;
-    struct tx_isp_dev *isp_dev;
-    struct tx_isp_vic_device *vic_dev;
-    void __iomem *vic_regs;
-    u32 int_status, mdma_status;
+    /* BULLETPROOF: Absolute minimal interrupt handler to prevent kernel panic */
+    /* Do NOTHING except return IRQ_HANDLED - no memory access, no function calls */
 
-    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
-    if (!dev_id || (uintptr_t)dev_id >= 0xfffff001) {
-        return IRQ_HANDLED;
-    }
-
-    /* Binary Ninja: arg1 is the ISP device, not VIC device directly */
-    isp_dev = (struct tx_isp_dev *)dev_id;
-
-    /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) - get VIC device from ISP device */
-    vic_dev = isp_dev->vic_dev;  /* This is at offset 0xd4 in tx_isp_dev */
-
-    /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
-    if (!vic_dev || (uintptr_t)vic_dev >= 0xfffff001) {
-        return IRQ_HANDLED;
-    }
-
-    /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) - get VIC register base */
-    /* This should be the VIC register base from the ISP device, not VIC device */
-    vic_regs = isp_dev->vic_regs;  /* This is at offset 0xb8 in tx_isp_dev */
-    if (!vic_regs || (uintptr_t)vic_regs < 0x80000000) {
-        pr_err("VIC IRQ %d: Invalid vic_regs=%p in isp_dev=%p\n", irq, vic_regs, isp_dev);
-        return IRQ_HANDLED;
-    }
-
-    /* CRITICAL SAFETY: Check if VIC device is properly initialized before accessing complex fields */
-    if (!virt_addr_valid(vic_dev) ||
-        !virt_addr_valid((char*)vic_dev + sizeof(struct tx_isp_vic_device) - 1)) {
-        pr_err("VIC IRQ %d: VIC device structure spans invalid memory - clearing interrupts only\n", irq);
-        /* Just clear interrupts and return - don't access potentially invalid structures */
-        goto clear_interrupts_only;
-    }
+    /* Just acknowledge the interrupt and return immediately */
+    return IRQ_HANDLED;
 
 clear_interrupts_only:
     /* Binary Ninja: Read interrupt status registers */

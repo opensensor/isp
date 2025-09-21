@@ -100,15 +100,16 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 0 */
         vic_dev->irq_enabled = 0;
 
-        /* Binary Ninja: int32_t $v0_2 = *(dump_vsd_5 + 0x88) */
-        /* Binary Ninja: $v0_2(dump_vsd_5 + 0x80) - this is disable_irq(irq_number) */
-        if (vic_dev->irq_number > 0) {
-            disable_irq(vic_dev->irq_number);
-            pr_info("*** tx_vic_disable_irq: Hardware IRQ %d DISABLED ***\n", vic_dev->irq_number);
-        } else if (vic_dev->irq > 0) {
-            disable_irq(vic_dev->irq);
-            pr_info("*** tx_vic_disable_irq: Hardware IRQ %d DISABLED ***\n", vic_dev->irq);
-        }
+        /* CRITICAL FIX: Don't call disable_irq() - main dispatcher manages hardware IRQ 38 */
+        /* The main dispatcher controls when IRQ 38 is enabled/disabled */
+        /* Calling disable_irq() here would interfere with the main dispatcher's IRQ management */
+        pr_info("*** tx_vic_disable_irq: VIC software interrupt flag DISABLED ***\n");
+        pr_info("*** tx_vic_disable_irq: Hardware IRQ 38 managed by main dispatcher ***\n");
+
+        /* Clear the global vic_start_ok flag to stop interrupt processing */
+        extern uint32_t vic_start_ok;
+        vic_start_ok = 0;
+        pr_info("*** tx_vic_disable_irq: vic_start_ok flag set to 0 ***\n");
 
         pr_info("*** tx_vic_disable_irq: VIC interrupts DISABLED ***\n");
     } else {
