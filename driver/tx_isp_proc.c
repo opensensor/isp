@@ -131,15 +131,13 @@ static int tx_isp_proc_w02_show(struct seq_file *m, void *v)
     /* CRITICAL: Output exact format as reference driver:
      * Line 1: " frame_count, 0"
      * Line 2: "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0"
-     * Use frame_complete count as frame counter
+     * The frame_count increments to show ISP is processing frames
      */
-    extern atomic64_t frame_done_cnt;
-    uint32_t frame_count = (uint32_t)atomic64_read(&frame_done_cnt);
-    seq_printf(m, " %u, 0\n", frame_count);
+    seq_printf(m, " %u, 0\n", isp->frame_count);
     seq_printf(m, "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0\n");
 
     /* Debug: Log what we're outputting */
-    pr_info("isp-w02 proc: outputting frame_count=%u\n", frame_count);
+    pr_info("isp-w02 proc: outputting frame_count=%u\n", isp->frame_count);
 
     return 0;
 }
