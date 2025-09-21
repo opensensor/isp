@@ -5094,6 +5094,18 @@ long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *a
             /* Call subdev_sensor_ops_set_input function */
             return 0; /* Simplified implementation - sensor input set successfully */
 
+        case 0x2000001: /* Sensor release */
+            pr_info("subdev_sensor_ops_ioctl: IOCTL 0x2000001 - Sensor release\n");
+            return 0; /* Simplified implementation */
+
+        case 0x2000011: /* Sensor control operation */
+            pr_info("subdev_sensor_ops_ioctl: IOCTL 0x2000011 - Sensor control\n");
+            return 0; /* Simplified implementation */
+
+        case 0x2000012: /* Sensor register operation */
+            pr_info("subdev_sensor_ops_ioctl: IOCTL 0x2000012 - Sensor register\n");
+            return 0; /* Simplified implementation */
+
         default:
             pr_info("subdev_sensor_ops_ioctl: Unsupported cmd 0x%x\n", cmd);
             return -ENOTTY;
