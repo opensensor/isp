@@ -4302,15 +4302,27 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                 return 0;
 
             case 0x200000e:  /* Binary Ninja: case 0x200000e */
-                /* Binary Ninja EXACT: **($a0 + 0xb8) = 0x10 */
-                **(int32_t **)(vic_dev + 0xb8) = 0x10;
+                /* SAFE: Use struct member access instead of Binary Ninja offset */
+                {
+                    struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)vic_dev;
+                    if (vic->vic_regs) {
+                        writel(0x10, vic->vic_regs + 0x0);
+                        wmb();
+                    }
+                }
                 return 0;
 
             case 0x2000013:  /* Binary Ninja: case 0x2000013 */
-                /* Binary Ninja EXACT: **($a0 + 0xb8) = 0 */
-                **(int32_t **)(vic_dev + 0xb8) = 0;
-                /* Binary Ninja EXACT: **($a0 + 0xb8) = 4 */
-                **(int32_t **)(vic_dev + 0xb8) = 4;
+                /* SAFE: Use struct member access instead of Binary Ninja offset */
+                {
+                    struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)vic_dev;
+                    if (vic->vic_regs) {
+                        writel(0, vic->vic_regs + 0x0);
+                        wmb();
+                        writel(4, vic->vic_regs + 0x0);
+                        wmb();
+                    }
+                }
                 return 0;
 
             case 0x2000017:  /* Binary Ninja: case 0x2000017 - GPIO configuration */
