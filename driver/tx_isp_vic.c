@@ -1132,161 +1132,57 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
-    /* STEP 1: Enable clocks - Critical for VIC operation */
-    cgu_isp_clk = clk_get(NULL, "cgu_isp");
-    if (!IS_ERR(cgu_isp_clk)) {
-        clk_set_rate(cgu_isp_clk, 100000000);
-        ret = clk_prepare_enable(cgu_isp_clk);
-        if (ret == 0) {
-            pr_info("CGU_ISP clock enabled at 100MHz\n");
-        }
-    }
+    /* Binary Ninja: if ($v0 == 1) - MIPI interface */
+    if (interface_type == 1) {  /* MIPI interface */
+        pr_info("tx_isp_vic_start: MIPI interface detected\n");
 
-    isp_clk = clk_get(NULL, "isp");
-    if (!IS_ERR(isp_clk)) {
-        clk_prepare_enable(isp_clk);
-    }
-
-    csi_clk = clk_get(NULL, "csi");
-    if (!IS_ERR(csi_clk)) {
-        clk_prepare_enable(csi_clk);
-    }
-
-    /* STEP 2: CPM register setup */
-    cpm_regs = ioremap(0x10000000, 0x1000);
-    if (cpm_regs) {
-        u32 clkgr0 = readl(cpm_regs + 0x20);
-        u32 clkgr1 = readl(cpm_regs + 0x28);
-        
-        clkgr0 &= ~(1 << 13); // ISP
-        clkgr0 &= ~(1 << 21); // Alternative ISP
-        clkgr0 &= ~(1 << 30); // VIC in CLKGR0
-        clkgr1 &= ~(1 << 30); // VIC in CLKGR1
-        
-        writel(clkgr0, cpm_regs + 0x20);
-        writel(clkgr1, cpm_regs + 0x28);
-        wmb();
-        msleep(20);
-        iounmap(cpm_regs);
-    }
-
-    /* Binary Ninja: Branch on interface type at 00010250 */
-    /* CRITICAL FIX: Use correct enum values - MIPI=1, DVP=2 */
-    if (interface_type == TX_SENSOR_DATA_INTERFACE_MIPI) {  /* MIPI = 1 */
-        /* MIPI interface - Binary Ninja 00010688-00010a50 */
-        pr_info("MIPI interface configuration\n");
-        
-        /* Binary Ninja: Check flags at 00010260 */
+        /* Binary Ninja: Check sensor flags and configure accordingly */
         if (sensor_attr->dbus_type != interface_type) {
+            pr_info("tx_isp_vic_start: Sensor flags mismatch\n");
             writel(0xa000a, vic_regs + 0x1a4);
         } else {
+            pr_info("tx_isp_vic_start: Sensor flags match - normal MIPI config\n");
             writel(0x20000, vic_regs + 0x10);
             writel(0x100010, vic_regs + 0x1a4);
         }
-        
-        /* Calculate buffer size - Binary Ninja 000102b8-00010308 */
-        u32 stride_mult = 8;
-        if (sensor_format == 1) stride_mult = 0xa;
-        else if (sensor_format == 2) stride_mult = 0xc;
-        else if (sensor_format == 7) stride_mult = 0x10;
-        
-        u32 buffer_calc = stride_mult * sensor_attr->integration_time;
-        writel((buffer_calc >> 5) + ((buffer_calc & 0x1f) ? 1 : 0), vic_regs + 0x100);
-        
-        /* Binary Ninja: Core DVP registers 00010310-00010338 */
-        /* CRITICAL FIX: Use mode 2 consistently to prevent control limit errors */
-        writel(2, vic_regs + 0xc);  /* Mode 2 prevents control limit errors */
-        writel(sensor_format, vic_regs + 0x14);
-        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
-        
-        /* Frame mode based on WDR - Binary Ninja 00010414-00010478 */
-        u32 wdr_mode = sensor_attr->wdr_cache;
-        u32 frame_mode = (wdr_mode == 0) ? 0x4440 : 
-                        (wdr_mode == 1) ? 0x4140 : 0x4240;
-        writel(frame_mode, vic_regs + 0x1ac);
-        writel(frame_mode, vic_regs + 0x1a8);
-        writel(0x10, vic_regs + 0x1b0);
-        
-        /* VIC interrupt initialization moved to END of function after CSI PHY setup */
-        pr_info("*** VIC INTERRUPT INIT: VIC interrupt setup deferred until after CSI PHY writes ***\n");
 
-        /* REFERENCE DRIVER EXACT: VIC unlock sequence - Binary Ninja 00010484-00010490 */
-        pr_info("*** VIC UNLOCK SEQUENCE: Starting EXACT reference driver unlock sequence ***\n");
+        /* Binary Ninja: Basic VIC configuration */
+        writel(2, vic_regs + 0xc);  /* VIC mode */
+        writel(sensor_attr->dbus_type, vic_regs + 0x14);  /* Interface type */
+        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);  /* Dimensions */
 
-        /* Binary Ninja: **(arg1 + 0xb8) = 2 */
-        writel(2, vic_regs + 0x0);
-        wmb();
+        /* Binary Ninja: Frame mode configuration */
+        writel(0x4440, vic_regs + 0x1ac);  /* Default frame mode */
+        writel(0x4440, vic_regs + 0x1a8);  /* Frame mode copy */
+        writel(0x10, vic_regs + 0x1b0);    /* Frame control */
+        
+        /* Binary Ninja: VIC unlock sequence */
+        writel(2, vic_regs + 0x0);  /* Set to wait state */
+        writel(4, vic_regs + 0x0);  /* Unlock command */
 
-        /* Binary Ninja: **(arg1 + 0xb8) = 4 */
-        writel(4, vic_regs + 0x0);
-        wmb();
-
-        /* Binary Ninja: while (*$v1_30 != 0) nop */
-        timeout = 10000;  /* 10ms timeout */
-        while (readl(vic_regs + 0x0) != 0) {
+        /* Binary Ninja: while (*$v1_30 != 0) nop - Wait for unlock */
+        u32 timeout = 10000;
+        while (readl(vic_regs + 0x0) != 0 && timeout-- > 0) {
             udelay(1);
-            if (--timeout == 0) {
-                pr_err("*** VIC UNLOCK TIMEOUT: Register stuck at 0x%x ***\n", readl(vic_regs + 0x0));
-                break;  /* Continue anyway to prevent infinite hang */
-            }
         }
 
-        pr_info("*** VIC UNLOCK: Hardware ready, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
-
-        /* Binary Ninja: 000107d4 - Enable VIC */
-        pr_info("*** VIC UNLOCK: Enabling VIC (writing 1 to register 0x0) ***\n");
+        /* Binary Ninja: Enable VIC */
         writel(1, vic_regs + 0x0);
-        wmb();
-        pr_info("*** VIC UNLOCK: VIC enabled, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
+        pr_info("tx_isp_vic_start: VIC enabled\n");
 
-    } else if (interface_type == TX_SENSOR_DATA_INTERFACE_MIPI) {  /* MIPI = 1 in our enum */
-        /* MIPI interface - Binary Ninja 000107ec-00010b04 */
-        pr_info("MIPI interface configuration\n");
+    } else {
+        /* Non-MIPI interfaces (DVP, etc.) */
+        pr_info("tx_isp_vic_start: Non-MIPI interface type %d\n", interface_type);
 
-        /* CRITICAL: VIC hardware should already be initialized by platform driver */
-        pr_info("*** VIC hardware should be ready - proceeding with unlock sequence ***\n");
-
-        /* Binary Ninja: EXACT reference driver MIPI mode configuration */
-        /* Binary Ninja: 000107ec - Set CSI mode */
-        writel(3, vic_regs + 0xc);  /* BINARY NINJA EXACT: VIC mode = 3 for MIPI interface */
-        wmb();
-        pr_info("*** VIC: Set MIPI mode (3) to VIC control register 0xc - BINARY NINJA EXACT ***\n");
-
-        /* BINARY NINJA EXACT: All missing register configurations */
-
-        /* 1. Register 0x4 - Dimensions (Binary Ninja exact) */
-        u32 width = 1920;   /* sensor output width */
-        u32 height = 1080;  /* sensor output height */
-        writel((width << 16) | height, vic_regs + 0x4);
-        pr_info("*** BINARY NINJA: reg 0x4 = 0x%x (dimensions %dx%d) ***\n", (width << 16) | height, width, height);
-
-        /* 2. Register 0x14 - Interrupt config (from sensor attributes) */
-        /* SURGICAL FIX: Don't write 0x0 to register 0x14 - preserve working CSI PHY config */
-        /* writel(0x0, vic_regs + 0x14);  // REMOVED - this was corrupting CSI PHY register */
-        pr_info("*** BINARY NINJA: reg 0x14 preserved (interrupt config) ***\n");
-
-        /* 3. Register 0x100 - Complex calculation for MIPI */
-        u32 reg_100_value = 0x1;  /* Basic value for MIPI RAW10 */
-        writel(reg_100_value, vic_regs + 0x100);
-        pr_info("*** BINARY NINJA: reg 0x100 = 0x%x (MIPI calculation) ***\n", reg_100_value);
-
-        /* 4. Register 0x10c - Use hardware-expected value instead of 0x0 */
-        u32 reg_10c_value = 0x2c000;  /* Hardware auto-correction shows this is the expected value */
-        writel(reg_10c_value, vic_regs + 0x10c);
-        pr_info("*** BINARY NINJA: reg 0x10c = 0x%x (hardware-expected value) ***\n", reg_10c_value);
-
-        /* 5. Registers 0x110-0x11c - Use hardware-expected values */
-        writel(0x7800000, vic_regs + 0x110);  /* Hardware auto-correction shows this is expected */
-        writel(0x0, vic_regs + 0x114);
-        writel(0x0, vic_regs + 0x118);
-        writel(0x0, vic_regs + 0x11c);
-        pr_info("*** BINARY NINJA: regs 0x110-0x11c configured with hardware-expected values ***\n");
-
-        /* 6. Frame mode registers */
-        writel(0x4440, vic_regs + 0x1ac);  /* Binary Ninja default for interface type 1 */
+        /* Binary Ninja: Basic configuration for other interfaces */
+        writel(2, vic_regs + 0xc);  /* DVP mode */
+        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
+        writel(0x4440, vic_regs + 0x1ac);
         writel(0x4440, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
-        pr_info("*** BINARY NINJA: frame mode regs configured (0x4440, 0x4440, 0x10) ***\n");
+
+        /* Enable VIC */
+        writel(1, vic_regs + 0x0);
 
         /* 7. Register 0x1a0 - Additional frame config */
         writel(0x0, vic_regs + 0x1a0);  /* Binary Ninja: frame config */
