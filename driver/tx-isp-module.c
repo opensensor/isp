@@ -5322,7 +5322,9 @@ static int subdev_sensor_ops_set_input(struct tx_isp_subdev *sd, unsigned int cm
     }
 
     /* Binary Ninja: *(arg1 + 0xe4) = $s1_3 */
-    isp_dev->sensor_sd = found_sensor;
+    /* Note: We can't set sensor_sd since we removed that member */
+    /* The sensor selection is managed through the subdev array and helper functions */
+    pr_info("subdev_sensor_ops_set_input: Found sensor at index %d: %p\n", input_index, found_sensor);
     result = -2; /* 0xfffffffe */
 
     if (found_sensor != NULL) {
