@@ -1763,7 +1763,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
         /* Binary Ninja: data_ca584 += 1 - increment frame counter */
         if (isp_dev) {
-            isp_dev->frame_count++;
+            isp_dev->core_dev->frame_count++;
         }
 
         /* Binary Ninja: Complex frame processing loop */
