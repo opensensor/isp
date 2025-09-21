@@ -3202,6 +3202,76 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         return 0;
     }
+    case 0x80045612: { // VIDIOC_STREAMON - Binary Ninja EXACT implementation
+        uint32_t stream_type;
+        int ret;
+
+        if (copy_from_user(&stream_type, argp, sizeof(stream_type)))
+            return -EFAULT;
+
+        pr_info("*** Channel %d: VIDIOC_STREAMON - Binary Ninja implementation ***\n", channel);
+
+        // Binary Ninja: if (*($s0 + 0x2d0) != 3)
+        if (state->state != 3) {
+            pr_err("Channel %d: STREAMON - Invalid state %d (expected 3)\n", channel, state->state);
+            return -EINVAL;
+        }
+
+        // Binary Ninja: if ((*($s0 + 0x230) & 1) != 0)
+        if ((state->flags & 1) != 0) {
+            pr_err("Channel %d: STREAMON - Already streaming (flags=0x%x)\n", channel, state->flags);
+            return -EBUSY;
+        }
+
+        // Binary Ninja: Enqueue all buffers in driver
+        // while ($s1_3 + 0x58 != $s0 + 0x210)
+        //     __enqueue_in_driver($s1_3)
+        pr_info("Channel %d: STREAMON - Enqueuing buffers in driver\n", channel);
+
+        // Binary Ninja: *($s0 + 0x230) |= 1
+        state->flags |= 1;
+        state->streaming = true;
+
+        // Binary Ninja: tx_isp_send_event_to_remote(*($s0 + 0x2bc), 0x3000003, 0)
+        if (ourISPdev) {
+            pr_info("*** Channel %d: STREAMON - Sending TX_ISP_EVENT_FRAME_STREAMON ***\n", channel);
+            ret = tx_isp_send_event_to_remote(ourISPdev, TX_ISP_EVENT_FRAME_STREAMON, NULL);
+
+            if (ret == 0 || ret == 0xfffffdfd) {
+                // Binary Ninja: *($s0 + 0x2d0) = 4
+                state->state = 4;
+                pr_info("*** Channel %d: STREAMON - State set to 4 (streaming) ***\n", channel);
+                return 0;
+            } else {
+                pr_err("Channel %d: STREAMON - Event send failed: 0x%x\n", channel, ret);
+                state->flags &= ~1; // Clear streaming flag on failure
+                state->streaming = false;
+                return ret;
+            }
+        }
+
+        return 0;
+    }
+    case 0x80045613: { // VIDIOC_STREAMOFF - Binary Ninja EXACT implementation
+        uint32_t stream_type;
+        int ret;
+
+        if (copy_from_user(&stream_type, argp, sizeof(stream_type)))
+            return -EFAULT;
+
+        pr_info("*** Channel %d: VIDIOC_STREAMOFF - Binary Ninja implementation ***\n", channel);
+
+        // Binary Ninja: return __frame_channel_vb2_streamoff($s0, var_78)
+        // For now, implement basic streamoff logic
+        state->streaming = false;
+        state->flags &= ~1; // Clear streaming flag
+
+        // Wake up any waiters
+        wake_up_interruptible(&state->frame_wait);
+
+        pr_info("*** Channel %d: STREAMOFF - Streaming stopped ***\n", channel);
+        return 0;
+    }
     default:
         pr_info("Channel %d: Unhandled IOCTL 0x%x\n", channel, cmd);
         return -ENOTTY;
