@@ -2098,10 +2098,16 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
     if (arg2 == 1) {  /* Stream ON */
         pr_info("*** tx_isp_video_s_stream: Initializing all subdevices before streaming ***\n");
 
-        /* First, initialize all subdevices (transition from state 1 to 2) */
+        /* First, initialize all subdevices EXCEPT VIC (VIC will be handled by core init) */
         for (int init_i = 0; init_i < 0x10; init_i++) {
             struct tx_isp_subdev *init_sd = arg1->subdevs[init_i];
             if (init_sd && init_sd->ops && init_sd->ops->core && init_sd->ops->core->init) {
+                /* CRITICAL: Skip VIC init - core init will handle VIC state transition from 2->3 */
+                if (init_i == 1) {  /* VIC is at index 1 */
+                    pr_info("*** tx_isp_video_s_stream: Skipping VIC init (index %d) - core will handle it ***\n", init_i);
+                    continue;
+                }
+
                 pr_info("*** tx_isp_video_s_stream: Calling subdev %d init ***\n", init_i);
                 int subdev_init_ret = init_sd->ops->core->init(init_sd, 1);
                 if (subdev_init_ret == 0) {
