@@ -1255,8 +1255,10 @@ int tx_isp_configure_clocks(struct tx_isp_dev *isp)
 
     /* Store clocks in ISP device structure */
     isp->cgu_isp = cgu_isp;
-    isp->isp_clk = isp_clk;
-    isp->ipu_clk = ipu_clk;
+    if (isp->core_dev) {
+        isp->core_dev->core_clk = isp_clk;
+        isp->core_dev->ipu_clk = ipu_clk;
+    }
     isp->csi_clk = csi_clk;
 
     /* Allow clocks to stabilize before proceeding - critical for CSI PHY */
