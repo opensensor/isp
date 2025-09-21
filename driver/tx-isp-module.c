@@ -4703,7 +4703,17 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
         return result;
     }
 
+    /* CRITICAL FIX: For Core interrupts (IRQ 37), call the core handler */
+    if (irq == 37) {
+        /* Binary Ninja: Call ISP core interrupt service routine with ISP device */
+        extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
+        result = ispcore_interrupt_service_routine(irq, isp_dev);
+        pr_debug("*** isp_irq_handle: Core IRQ %d processed, result=%d ***\n", irq, result);
+        return result;
+    }
+
     /* For other IRQs, return handled */
+    pr_debug("*** isp_irq_handle: Unknown IRQ %d, returning handled ***\n", irq);
     return IRQ_HANDLED;
 }
 
