@@ -5076,35 +5076,72 @@ long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *a
             }
             break;
 
-        case 0x2000002: /* Sensor enum input */
+        case 0x2000002: /* Sensor enum input - EXACT Binary Ninja implementation */
             pr_info("subdev_sensor_ops_ioctl: IOCTL 0x2000002 - Sensor enum input\n");
-            /* Call subdev_sensor_ops_enum_input function */
-            return 0; /* Simplified implementation */
+            return subdev_sensor_ops_enum_input(sd, cmd, arg);
 
-        case 0x2000003: /* Get sensor input */
+        case 0x2000003: /* Get sensor input - EXACT Binary Ninja implementation */
             pr_info("subdev_sensor_ops_ioctl: IOCTL 0x2000003 - Get sensor input\n");
-            if (arg) {
-                *(uint32_t *)arg = 0; /* Return input 0 */
+            if (!sd || !arg) {
+                return -EINVAL;
+            }
+            /* Binary Ninja: Get sensor from subdev host data */
+            {
+                struct tx_isp_subdev *sensor_sd = (struct tx_isp_subdev *)tx_isp_get_subdev_hostdata(sd);
+                uint32_t input_value = 0xffffffff;
+
+                if (sensor_sd && (unsigned long)sensor_sd < 0xfffff001) {
+                    input_value = sensor_sd->input; /* Binary Ninja: *($a0 + 0xdc) */
+                }
+
+                *(uint32_t *)arg = input_value;
                 return 0;
             }
-            break;
 
-        case 0x2000004: /* Set sensor input */
+        case 0x2000004: /* Set sensor input - EXACT Binary Ninja implementation */
             pr_info("subdev_sensor_ops_ioctl: IOCTL 0x2000004 - Set sensor input\n");
-            /* Call subdev_sensor_ops_set_input function */
-            return 0; /* Simplified implementation - sensor input set successfully */
+            return subdev_sensor_ops_set_input(sd, cmd, arg);
 
-        case 0x2000001: /* Sensor release */
+        case 0x2000001: /* Sensor release - EXACT Binary Ninja implementation */
             pr_info("subdev_sensor_ops_ioctl: IOCTL 0x2000001 - Sensor release\n");
-            return 0; /* Simplified implementation */
+            if (!sd || !arg) {
+                return -EINVAL;
+            }
+            /* Binary Ninja: Complex sensor release logic with mutex locking */
+            /* This involves removing sensor from linked list and cleanup */
+            return subdev_sensor_ops_release_sensor(sd, arg);
 
-        case 0x2000011: /* Sensor control operation */
+        case 0x2000011: /* Sensor control operation - EXACT Binary Ninja implementation */
             pr_info("subdev_sensor_ops_ioctl: IOCTL 0x2000011 - Sensor control\n");
-            return 0; /* Simplified implementation */
+            {
+                struct tx_isp_subdev *sensor_sd = (struct tx_isp_subdev *)tx_isp_get_subdev_hostdata(sd);
+                if (!sensor_sd) {
+                    pr_err("subdev_sensor_ops_ioctl: No sensor subdev for control operation\n");
+                    return -EINVAL;
+                }
 
-        case 0x2000012: /* Sensor register operation */
+                /* Binary Ninja: Call sensor's internal ops if available */
+                if (sensor_sd->ops && sensor_sd->ops->internal && sensor_sd->ops->internal->ioctl) {
+                    return sensor_sd->ops->internal->ioctl(sensor_sd, arg, 0x19f);
+                }
+                return 0;
+            }
+
+        case 0x2000012: /* Sensor register operation - EXACT Binary Ninja implementation */
             pr_info("subdev_sensor_ops_ioctl: IOCTL 0x2000012 - Sensor register\n");
-            return 0; /* Simplified implementation */
+            {
+                struct tx_isp_subdev *sensor_sd = (struct tx_isp_subdev *)tx_isp_get_subdev_hostdata(sd);
+                if (!sensor_sd) {
+                    pr_err("subdev_sensor_ops_ioctl: No sensor subdev for register operation\n");
+                    return -EINVAL;
+                }
+
+                /* Binary Ninja: Call sensor's core register ops if available */
+                if (sensor_sd->ops && sensor_sd->ops->core && sensor_sd->ops->core->s_register) {
+                    return sensor_sd->ops->core->s_register(sensor_sd, arg);
+                }
+                return 0;
+            }
 
         default:
             pr_info("subdev_sensor_ops_ioctl: Unsupported cmd 0x%x\n", cmd);
