@@ -524,10 +524,6 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
 /* CSI error checking function - called from VIC interrupt handler */
 extern void tx_isp_csi_check_errors(struct tx_isp_dev *isp_dev);
 
-/* Forward declarations for new subdevice management functions */
-extern int tx_isp_init_subdev_registry(struct tx_isp_dev *isp,
-                                      struct platform_device **platform_devices,
-                                      int count);
 extern int tx_isp_create_subdev_graph(struct tx_isp_dev *isp);
 extern void tx_isp_cleanup_subdev_graph(struct tx_isp_dev *isp);
 
@@ -5150,25 +5146,6 @@ static int tx_isp_init(void)
     /* Device already allocated and initialized by probe - just ensure basic fields are set */
     ourISPdev->refcnt = 0;
     ourISPdev->is_open = false;
-
-    /* *** NOW initialize subdevice registry with the allocated ourISPdev *** */
-    pr_info("*** INITIALIZING SUBDEVICE REGISTRY WITH ALLOCATED ourISPdev ***\n");
-    ret = tx_isp_init_subdev_registry(ourISPdev, subdev_platforms, 5);
-    if (ret) {
-        pr_err("Failed to initialize subdevice registry: %d\n", ret);
-        goto err_cleanup_platform_device;
-    }
-    pr_info("*** SUBDEVICE REGISTRY INITIALIZED - GRAPH CREATION SHOULD NOW SUCCEED ***\n");
-
-    /* CRITICAL FIX: REMOVE main interrupt dispatcher - Binary Ninja reference uses per-subdevice IRQ registration */
-    /* The Binary Ninja reference driver shows that each subdevice registers its own interrupt */
-    /* There is NO central main dispatcher in the reference driver */
-    pr_info("*** CRITICAL: Following Binary Ninja reference - NO main dispatcher, each subdevice registers its own IRQ ***\n");
-    pr_info("*** This eliminates the double registration problem that was causing kernel panics ***\n");
-
-    /* NOTE: Platform driver already registered earlier - no need to register again */
-
-    /* Reference driver: misc device registration happens in tx_isp_module_init, not here */
 
     /* Reference driver: All complex initialization happens in probe function */
     pr_info("TX ISP driver initialized successfully - probe function will handle device setup\n");

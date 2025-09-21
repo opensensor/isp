@@ -558,73 +558,6 @@ void tx_isp_cleanup_subdev_graph(struct tx_isp_dev *isp)
 }
 
 /**
- * tx_isp_init_subdev_registry - Initialize the subdevice management system
- * @isp: ISP device
- * @platform_devices: Array of platform devices to register
- * @count: Number of platform devices
- * 
- * This replaces the complex platform device registration in the init function
- * with a cleaner approach that builds the subdevice list properly.
- */
-int tx_isp_init_subdev_registry(struct tx_isp_dev *isp,
-                               struct platform_device **platform_devices,
-                               int count)
-{
-    int ret = 0;
-    int i;
-
-    pr_info("*** tx_isp_init_subdev_registry: Initializing subdevice registry ***\n");
-
-    if (!isp || !platform_devices) {
-        pr_err("tx_isp_init_subdev_registry: Invalid parameters\n");
-        return -EINVAL;
-    }
-
-    /* Initialize ISP device subdev fields for Binary Ninja compatibility */
-    isp->subdev_count = count;
-    isp->subdev_list = platform_devices;
-    memset(isp->subdev_graph, 0, sizeof(isp->subdev_graph));
-
-    /* Check if devices are already linked directly - if so, skip registry creation */
-    int already_linked = 0;
-    if (isp->vic_dev) already_linked++;
-    if (isp->csi_dev) already_linked++;
-    if (isp->vin_dev) already_linked++;
-    if (isp->fs_dev) already_linked++;
-
-    if (already_linked > 0) {
-        pr_info("tx_isp_init_subdev_registry: %d devices already linked directly - skipping registry creation\n", already_linked);
-        pr_info("*** USING DIRECT DEVICE LINKING INSTEAD OF REGISTRY SYSTEM ***\n");
-        return 0;  /* Success - use existing direct links */
-    }
-
-    /* Register each subdevice */
-    for (i = 0; i < count && i < NUM_ISP_SUBDEVS; i++) {
-        struct tx_isp_subdev_desc *desc = &isp_subdev_descriptors[i];
-
-        /* Create driver data based on device type */
-        void *driver_data = tx_isp_create_driver_data(desc);
-        if (!driver_data) {
-            pr_err("Failed to create driver data for %s\n", desc->name);
-            continue;
-        }
-
-        ret = tx_isp_subdev_register(desc, platform_devices[i], driver_data);
-        if (ret < 0) {
-            pr_err("Failed to register subdevice %s: %d\n", desc->name, ret);
-            kfree(driver_data);
-            continue;
-        }
-
-        pr_info("Registered subdevice: %s (pdev=%p)\n", desc->name, platform_devices[i]);
-    }
-
-    pr_info("*** tx_isp_init_subdev_registry: Registry initialized with %d subdevices ***\n",
-            subdev_count);
-    return 0;
-}
-
-/**
  * tx_isp_create_driver_data - Create appropriate driver data structure for subdevice
  */
 static void *tx_isp_create_driver_data(struct tx_isp_subdev_desc *desc)
@@ -676,5 +609,4 @@ static void *tx_isp_create_driver_data(struct tx_isp_subdev_desc *desc)
 EXPORT_SYMBOL(tx_isp_subdev_register);
 EXPORT_SYMBOL(tx_isp_subdev_unregister);
 EXPORT_SYMBOL(tx_isp_create_subdev_graph);
-EXPORT_SYMBOL(tx_isp_init_subdev_registry);
 EXPORT_SYMBOL(tx_isp_cleanup_subdev_graph);
