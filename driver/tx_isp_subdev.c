@@ -361,14 +361,20 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     /* SAFE: Get platform data using proper kernel API */
     struct tx_isp_subdev_platform_data *pdata = dev_get_platdata(&pdev->dev);
     if (pdata != NULL) {
-        /* Binary Ninja: tx_isp_request_irq(arg1, arg2 + 0x80) */
-        /* SAFE: Use struct member access for IRQ setup */
-        ret = tx_isp_request_irq(pdev, &sd->irq_info);
-        if (ret != 0) {
-            /* Binary Ninja: isp_printf(2, " %d, %d\n", $a2_1) */
-            isp_printf(2, " %d, %d\n", ret);
-            tx_isp_module_deinit(sd);
-            return ret;
+        /* CRITICAL: Skip IRQ request for CSI - it needs platform data for registers but no IRQ */
+        const char *dev_name_str = dev_name(&pdev->dev);
+        if (strcmp(dev_name_str, "tx-isp-csi") != 0) {
+            /* Binary Ninja: tx_isp_request_irq(arg1, arg2 + 0x80) */
+            /* SAFE: Use struct member access for IRQ setup */
+            ret = tx_isp_request_irq(pdev, &sd->irq_info);
+            if (ret != 0) {
+                /* Binary Ninja: isp_printf(2, " %d, %d\n", $a2_1) */
+                isp_printf(2, " %d, %d\n", ret);
+                tx_isp_module_deinit(sd);
+                return ret;
+            }
+        } else {
+            pr_info("*** CSI: Skipping IRQ request - CSI uses register mapping only ***\n");
         }
 
         /* FIXED: Get first memory resource without string comparison */

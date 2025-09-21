@@ -397,7 +397,7 @@ struct platform_device tx_isp_csi_platform_device = {
     .num_resources = ARRAY_SIZE(tx_isp_csi_resources),
     .resource = tx_isp_csi_resources,
     .dev = {
-        .platform_data = NULL,  /* CSI doesn't need platform data - no IRQ needed */
+        .platform_data = &csi_pdata,  /* CSI needs platform data for register mapping */
     },
 };
 
