@@ -789,13 +789,17 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
 
     /* Binary Ninja: if ($v0_1 s>= 0) */
     if (irq_num >= 0) {
+        /* CRITICAL FIX: Pass ourISPdev as dev_id to match interrupt handler expectations */
+        extern struct tx_isp_dev *ourISPdev;
+        void *dev_id_param = ourISPdev ? ourISPdev : irq_info;
+
         /* Binary Ninja: private_request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, 0x2000, *arg1, arg2) */
         ret = request_threaded_irq(irq_num,
                                    isp_irq_handle,
                                    isp_irq_thread_handle,
                                    IRQF_SHARED,  /* 0x2000 = IRQF_SHARED */
                                    dev_name(&pdev->dev),  /* *arg1 = device name */
-                                   irq_info);  /* arg2 = dev_id */
+                                   dev_id_param);  /* FIXED: Use ourISPdev as dev_id */
 
         if (ret != 0) {
             /* Binary Ninja: isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", "tx_isp_request_irq") */

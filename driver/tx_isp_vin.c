@@ -36,52 +36,6 @@
 bool is_valid_kernel_pointer(const void *ptr);
 extern struct tx_isp_dev *ourISPdev;
 
-/**
- * tx_isp_vin_enable_irq - Enable VIN interrupts (T31: No separate IRQ)
- * @vin: VIN device structure
- * 
- * On T31, VIN interrupts are handled by the main ISP core interrupt handler.
- * This function just enables VIN interrupt generation in hardware.
- */
-int tx_isp_vin_enable_irq(struct tx_isp_vin_device *vin)
-{
-    if (!vin || !vin->base) {
-        return -EINVAL;
-    }
-    
-    /* CRITICAL FIX: Don't register separate IRQ handler for T31 VIN */
-    /* VIN interrupts are handled by ISP core IRQ handler */
-    mcp_log_info("vin_enable_irq: VIN interrupts handled by ISP core (no separate IRQ)", 0);
-    
-    /* Just enable VIN interrupt generation in hardware */
-    /* The ISP core interrupt handler will process them */
-    writel(VIN_INT_FRAME_END | VIN_INT_OVERFLOW | VIN_INT_SYNC_ERR | VIN_INT_DMA_ERR, 
-           vin->base + VIN_INT_MASK);
-    mcp_log_info("vin_enable_irq: VIN interrupt mask configured", VIN_INT_FRAME_END | VIN_INT_OVERFLOW);
-    
-    return 0;
-}
-
-/**
- * tx_isp_vin_disable_irq - Disable VIN interrupts (T31: No separate IRQ)
- * @vin: VIN device structure
- * 
- * On T31, just disable VIN interrupt generation in hardware.
- */
-int tx_isp_vin_disable_irq(struct tx_isp_vin_device *vin)
-{
-    if (!vin || !vin->base) {
-        return -EINVAL;
-    }
-    
-    /* CRITICAL FIX: Don't free IRQ that was never registered */
-    /* Just disable VIN interrupt generation in hardware */
-    writel(0, vin->base + VIN_INT_MASK);
-    mcp_log_info("vin_disable_irq: VIN interrupts disabled in hardware", 0);
-    
-    return 0;
-}
-
 /* ========================================================================
  * VIN Core Operations - Based on T30 Reference
  * ======================================================================== */
@@ -470,72 +424,6 @@ static int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *
 
     mcp_log_info("vin_ioctl: command result", ret);
     return ret;
-}
-
-/* ========================================================================
- * VIN Format and Control Operations
- * ======================================================================== */
-
-/**
- * tx_isp_vin_set_format - Set VIN format configuration
- * @sd: Subdev structure
- * @config: Format configuration
- */
-int tx_isp_vin_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *config)
-{
-    struct tx_isp_vin_device *vin = sd_to_vin_device(sd);
-    u32 format = 0;
-
-    if (!vin || !config) {
-        return -EINVAL;
-    }
-
-    if (config->width < VIN_MIN_WIDTH || config->width > VIN_MAX_WIDTH ||
-        config->height < VIN_MIN_HEIGHT || config->height > VIN_MAX_HEIGHT) {
-        mcp_log_error("vin_set_format: invalid dimensions", 
-                      (config->height << 16) | config->width);
-        return -EINVAL;
-    }
-
-    mutex_lock(&vin->mlock);
-
-    /* Set frame size */
-    writel((config->height << 16) | config->width, vin->base + VIN_FRAME_SIZE);
-    mcp_log_info("vin_set_format: frame size set", (config->height << 16) | config->width);
-
-    /* Set format */
-    switch (config->format) {
-    case FMT_YUV422:
-        format = VIN_FMT_YUV422;
-        break;
-    case FMT_RGB888:
-        format = VIN_FMT_RGB888;
-        break;
-    case FMT_RAW8:
-        format = VIN_FMT_RAW8;
-        break;
-    case FMT_RAW10:
-        format = VIN_FMT_RAW10;
-        break;
-    case FMT_RAW12:
-        format = VIN_FMT_RAW12;
-        break;
-    default:
-        mutex_unlock(&vin->mlock);
-        mcp_log_error("vin_set_format: unsupported format", config->format);
-        return -EINVAL;
-    }
-    
-    writel(format, vin->base + VIN_FORMAT);
-    mcp_log_info("vin_set_format: format set", format);
-
-    /* Update device state */
-    vin->width = config->width;
-    vin->height = config->height;
-    vin->format = format;
-
-    mutex_unlock(&vin->mlock);
-    return 0;
 }
 
 /**

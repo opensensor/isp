@@ -362,39 +362,6 @@ static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
     return 0;
 }
 
-/* REMOVED: Duplicate interrupt handler - using the one from tx-isp-module.c instead */
-/* The interrupt handler in tx-isp-module.c is the correct one that expects struct tx_isp_dev * as dev_id */
-
-/* Stop VIC processing */
-int tx_isp_vic_stop(struct tx_isp_subdev *sd)
-{
-    u32 ctrl;
-
-    if (!sd || !sd->isp)
-        return -EINVAL;
-
-    mutex_lock(&sd->vic_frame_end_lock);
-
-    /* Stop processing */
-    ctrl = vic_read32(VIC_CTRL);
-    ctrl &= ~VIC_CTRL_START;
-    ctrl |= VIC_CTRL_STOP;
-    vic_write32(VIC_CTRL, ctrl);
-
-    /* Wait for stop to complete with timeout to prevent infinite loop */
-    int timeout = 1000;
-    while ((vic_read32(VIC_STATUS) & STATUS_BUSY) && timeout-- > 0) {
-        udelay(10);
-    }
-
-    if (timeout <= 0) {
-        pr_warn("VIC: Stop timeout - hardware may be stuck\n");
-    }
-
-    mutex_unlock(&sd->vic_frame_end_lock);
-    return 0;
-}
-
 /* Configure VIC DMA for frame capture - EXACT Binary Ninja vic_mdma_enable implementation */
 int tx_isp_vic_configure_dma(struct tx_isp_vic_device *vic_dev, dma_addr_t base_addr, u32 width, u32 height)
 {
