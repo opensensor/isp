@@ -9157,27 +9157,6 @@ int tisp_event_process(void)
     return 0;
 }
 
-
-/* BINARY NINJA REFERENCE: No tisp_event_process_thread function exists */
-/* Events are processed on-demand via tisp_event_process() when needed */
-
-/* isp_setup_irq_handling removed - reference driver uses system_irq_func_set instead */
-
-
-/* isp_cleanup_irq_handling removed - reference driver uses system_irq_func_set instead */
-
-
-/* tisp_event_cleanup - Clean up event processing thread and resources */
-void tisp_event_cleanup(void)
-{
-    pr_info("tisp_event_cleanup: Cleaning up event processing system\n");
-
-    /* BINARY NINJA REFERENCE: No event processing thread to stop */
-
-    pr_info("tisp_event_cleanup: Event processing cleanup complete\n");
-}
-
-
 /* tisp_param_operate_init - EXACT Binary Ninja implementation */
 int tisp_param_operate_init(void)
 {
