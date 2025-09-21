@@ -536,6 +536,7 @@ extern void tx_isp_fs_platform_exit(void);
 extern int tx_isp_fs_probe(struct platform_device *pdev);
 extern int tx_isp_vin_init(void* arg1, int32_t arg2);  /* VIN init function that causes kernel panics */
 extern int vin_s_stream(struct tx_isp_subdev *sd, int enable);  /* VIN s_stream function that can cause kernel panics */
+extern int sensor_s_stream(struct tx_isp_subdev *sd, int enable);  /* Sensor s_stream function that can cause kernel panics */
 
 /* Forward declarations for Binary Ninja reference implementation */
 static int tx_isp_platform_probe(struct platform_device *pdev);
@@ -2275,9 +2276,15 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
                         goto next_iteration;
                     }
 
-                    /* CRITICAL SAFETY: Skip dangerous VIN s_stream that can cause kernel panics */
+                    /* CRITICAL SAFETY: Skip dangerous s_stream functions that can cause kernel panics */
                     if (v0_4 == (void*)vin_s_stream) {
                         pr_info("*** SAFETY: Skipping dangerous VIN s_stream for subdev %d to prevent kernel panic ***\n", i);
+                        i += 1;
+                        goto next_iteration;
+                    }
+
+                    if (v0_4 == (void*)sensor_s_stream) {
+                        pr_info("*** SAFETY: Skipping dangerous sensor s_stream for subdev %d to prevent kernel panic ***\n", i);
                         i += 1;
                         goto next_iteration;
                     }
@@ -2334,6 +2341,17 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
                                         } else {
                                             int rollback_index = s0_1 - &arg1->subdevs[0];
                                             pr_info("*** BINARY NINJA: Rolling back subdev %d ***\n", rollback_index);
+
+                                            /* CRITICAL SAFETY: Skip dangerous s_stream functions during rollback */
+                                            if (v0_7 == (void*)vin_s_stream) {
+                                                pr_info("*** SAFETY: Skipping dangerous VIN s_stream during rollback for subdev %d ***\n", rollback_index);
+                                                continue;
+                                            }
+
+                                            if (v0_7 == (void*)sensor_s_stream) {
+                                                pr_info("*** SAFETY: Skipping dangerous sensor s_stream during rollback for subdev %d ***\n", rollback_index);
+                                                continue;
+                                            }
 
                                             /* Binary Ninja: $v0_7($a0_1, arg2 u< 1 ? 1 : 0) */
                                             int rollback_enable = (arg2 < 1) ? 1 : 0;
