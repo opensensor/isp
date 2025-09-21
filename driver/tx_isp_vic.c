@@ -627,15 +627,33 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: Additional control registers */
         writel(0x0, vic_regs + 0x1a0);     /* Frame config */
         
-        /* CRITICAL FIX: Skip dangerous VIC unlock sequence that causes hardware lockup */
-        pr_info("*** tx_isp_vic_start: SKIPPING VIC unlock sequence to prevent hardware lockup ***\n");
-        pr_info("*** tx_isp_vic_start: Using minimal VIC initialization instead ***\n");
+        /* Binary Ninja EXACT: VIC unlock sequence for MIPI interface */
+        /* **(arg1 + 0xb8) = 2 */
+        writel(2, vic_regs + 0x0);
+        pr_info("*** tx_isp_vic_start: Step 1 - VIC unlock sequence: wrote 2 to reg 0x0 ***\n");
 
-        /* SAFE: Minimal VIC initialization without dangerous polling loops */
-        /* Just set VIC to a known state without waiting for hardware response */
-        writel(0, vic_regs + 0x0);  /* Reset VIC control */
-        wmb();
-        pr_info("*** tx_isp_vic_start: VIC control reset to 0 ***\n");
+        /* **(arg1 + 0xb8) = 4 */
+        writel(4, vic_regs + 0x0);
+        pr_info("*** tx_isp_vic_start: Step 2 - VIC unlock sequence: wrote 4 to reg 0x0 ***\n");
+
+        /* Binary Ninja EXACT: while (*$v1_30 != 0) nop */
+        /* CRITICAL FIX: Add timeout to prevent infinite loop hardware lockup */
+        u32 timeout_count = 100000;  /* Much larger timeout */
+        u32 vic_status;
+        pr_info("*** tx_isp_vic_start: Step 3 - Waiting for VIC unlock (with timeout) ***\n");
+
+        while ((vic_status = readl(vic_regs + 0x0)) != 0 && timeout_count-- > 0) {
+            /* Reference driver: nop (just wait) */
+            cpu_relax();  /* Equivalent to nop but prevents compiler optimization */
+        }
+
+        if (timeout_count == 0) {
+            pr_err("*** tx_isp_vic_start: VIC unlock timeout! Final status=0x%x ***\n", vic_status);
+            pr_err("*** This indicates VIC hardware is not responding - check register mapping ***\n");
+            return -ETIMEDOUT;
+        }
+
+        pr_info("*** tx_isp_vic_start: Step 3 - VIC unlock completed, status=0x%x, remaining_timeout=%d ***\n", vic_status, timeout_count);
 
     } else {
         /* Non-MIPI interfaces (DVP, etc.) */
