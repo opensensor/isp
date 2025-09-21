@@ -1057,8 +1057,6 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     struct tx_isp_dev *isp_dev;
     void __iomem *core_regs;
     u32 int_status;
-    irqreturn_t ret = IRQ_HANDLED;
-    int i;
 
     /* CRITICAL: Detect corruption by comparing dev_id with ourISPdev */
     if (dev_id != ourISPdev) {
