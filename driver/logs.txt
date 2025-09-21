@@ -1,132 +1,208 @@
-[   27.467309] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467314] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467320] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467325] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.467330] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.467337] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467342] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467348] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467353] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.467358] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.467365] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467370] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467376] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467381] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.467386] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.467393] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467398] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467404] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467409] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.467414] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.467421] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467426] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467432] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467437] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.467442] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.467449] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467454] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467460] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467465] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.467470] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.467477] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467482] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467488] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467493] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.467498] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.467505] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467510] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467516] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467521] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.467526] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.467533] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467538] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467544] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467549] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.467554] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.467561] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467566] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467572] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467577] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.467582] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.467589] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467594] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467600] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467605] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.467610] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.467617] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467622] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467628] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467633] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.467638] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.467645] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467650] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467656] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467661] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.467666] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.467673] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467678] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467684] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467689] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.467694] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.467701] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467706] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467712] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467717] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.467722] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.467729] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467734] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467740] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467745] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.467750] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.467757] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467762] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467768] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467773] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.467778] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.467785] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467790] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467796] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467801] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.467806] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.467813] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467818] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467824] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467829] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.467834] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.467841] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467846] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467852] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467857] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.467862] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.467869] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467874] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467880] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467885] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.467890] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.467897] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467902] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467908] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467913] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.467918] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.467925] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467930] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467936] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467941] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.467946] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.467953] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467958] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467964] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467969] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.467974] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.467981] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.467986] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.467992] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.467997] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.468002] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.468009] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.468014] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   27.468020] TX_ISP_SENSOR_ENUM_INPUT: Found sensor subdev, setting success
-[   27.468025] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
-[   27.468030] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   27.468037] ISP IOCTL: cmd=0xc050561a arg=0x7fbfc468
-[   27.468042] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
+[   13.859170] codec_set_device: set device: speaker...
+[   27.228023] TX ISP driver initializing with new subdevice management system...
+[   27.228036] *** Using reference driver interrupt-driven frame processing ***
+[   27.228042] *** VIC DEVICE CREATION DEFERRED TO PLATFORM DRIVER PROBE ***
+[   27.228047] *** VIN DEVICE CREATION DEFERRED TO tx_isp_core_probe (after memory mappings) ***
+[   27.228053] *** This fixes the 'ISP core registers not available' error ***
+[   27.228058] *** VIN SUBDEV OPS AND INITIALIZATION DEFERRED TO AUTO-LINK PHASE ***
+[   27.228063] *** CRITICAL: REGISTERING SUBDEV PLATFORM DRIVERS FIRST ***
+[   27.228069] *** TX ISP SUBDEV PLATFORM DRIVERS REGISTRATION ***
+[   27.237951] All ISP subdev platform drivers registered successfully
+[   27.237963] *** SUBDEV PLATFORM DRIVERS REGISTERED - VIC/CSI/VIN/CORE DRIVERS AVAILABLE ***
+[   27.237969] *** CRITICAL: INITIALIZING SUBDEVICE REGISTRY BEFORE MAIN PLATFORM DEVICE ***
+[   27.237975] *** CRITICAL: Registering main platform driver ***
+[   27.240580] *** Main platform driver registered successfully ***
+[   27.240591] *** REFERENCE DRIVER: Subdev platform devices will be registered by tx_isp_create_graph_and_nodes ***
+[   27.243094] *** PROBE: tx_isp_platform_probe CALLED for device tx-isp ***
+[   27.243113] *** PROBE: ISP device allocated successfully: 85f20000 ***
+[   27.243130] *** PROBE: Platform data: c0677e88 ***
+[   27.243135] *** PROBE: Platform data validation passed ***
+[   27.243141] *** REFERENCE DRIVER: Individual subdevices will initialize their own memory regions ***
+[   27.243147] *** PLATFORM DEVICES ALREADY REGISTERED IN INIT - SKIPPING DUPLICATE REGISTRATION ***
+[   27.243153] *** tx_isp_module_init: EXACT Binary Ninja reference implementation ***
+[   27.245651] *** tx_isp_create_graph_and_nodes: EXACT Binary Ninja reference implementation ***
+[   27.245664] *** Registering platform device 0 from platform data ***
+[   27.248176] *** tx_isp_subdev_init: CSI subdev registered at index 0 ***
+[   27.248191] tx_isp_module_init: Module initialized for tx-isp-csi
+[   27.248197] *** tx_isp_subdev_init: Deferring core->init for device tx-isp-csi to prevent hangs ***
+[   27.248203] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
+[   27.248209] *** CSI: Skipping IRQ request - CSI uses register mapping only ***
+[   27.248217] tx_isp_subdev_init: platform_get_resource returned c0677c74 for device tx-isp-csi
+[   27.248225] tx_isp_subdev_init: Memory resource found: start=0x10022000, end=0x10022fff, size=0x00001000
+[   27.248234] isp_subdev_init_clks: Initializing 2 clocks
+[   27.248245] CGU_ISP clock enabled at 100MHz
+[   27.248253] ISP clock enabled
+[   27.269150] CPM clock gates configured
+[   27.269163] isp_subdev_init_clks: Successfully initialized 2 clocks
+[   27.269171] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-csi' to ourISPdev ***
+[   27.269177] *** DEBUG: Device name comparison - checking 'tx-isp-csi' ***
+[   27.269182] *** DEBUG: About to check device name matches ***
+[   27.269189] *** CSI BASIC REGISTERS SET: b0022000 (from tx_isp_subdev_init) ***
+[   27.269196] *** LINKED CSI device: 85205400, regs: b0022000 ***
+[   27.269203] *** CSI PROBE: Using register mapping from tx_isp_subdev_init: b0022000 ***
+[   27.269209] *** CSI PROBE: Device linking handled automatically by tx_isp_subdev_init ***
+[   27.269231] *** Platform device 0 (tx-isp-csi) registered successfully ***
+[   27.269238] *** Registering platform device 1 from platform data ***
+[   27.269602] *** VIC PROBE: IRQ numbers initialized to 38 ***
+[   27.269616] *** VIC PROBE: Primary VIC registers mapped at 0x133e0000 -> b33e0000 ***
+[   27.269623] *** VIC PROBE: Secondary VIC registers mapped at 0x10023000 -> b0023000 ***
+[   27.269629] *** VIC PROBE: IRQ handler pointers set to NULL (reference driver uses main dispatcher) ***
+[   27.269634] *** EMERGENCY: VIC buffer management DISABLED to prevent kernel panic ***
+[   27.269640] *** VIC will operate in minimal mode without complex buffer operations ***
+[   27.269645] *** EMERGENCY: VIC basic initialization complete - complex buffer management SKIPPED ***
+[   27.269653] *** VIC PROBE: Initialized default dimensions 1920x1080 and critical fields ***
+[   27.269659] *** VIC PROBE: Stored vic_dev pointer 85f18000 in subdev private data ***
+[   27.269665] *** VIC PROBE: Callback structure setup deferred - avoiding memory corruption ***
+[   27.269671] *** tx_isp_subdev_init: VIC device linked to main ISP device ***
+[   27.269676] *** tx_isp_subdev_init: VIC subdev registered at index 1 ***
+[   27.269681] *** tx_isp_subdev_init: Interrupt registration deferred until after module init ***
+[   27.269687] *** tx_isp_subdev_init: VIC device linked and registered at index 1 ***
+[   27.269694] tx_isp_module_init: Module initialized for isp-w02
+[   27.269699] *** tx_isp_subdev_init: Deferring core->init for device isp-w02 to prevent hangs ***
+[   27.269705] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
+[   27.269713] *** tx_isp_request_irq: Using main ISP device as dev_id for IRQ 38 (device: isp-w02) ***
+[   27.272023] *** tx_isp_disable_irq: EXACT Binary Ninja - disabling IRQ 38 ***
+[   27.272035] *** tx_isp_disable_irq: IRQ 38 DISABLED ***
+[   27.272043] *** tx_isp_request_irq: IRQ 38 registered successfully for isp-w02 ***
+[   27.272051] tx_isp_subdev_init: platform_get_resource returned c0677d74 for device isp-w02
+[   27.272059] tx_isp_subdev_init: Memory resource found: start=0x133e0000, end=0x133effff, size=0x00010000
+[   27.272069] isp_subdev_init_clks: Initializing 2 clocks
+[   27.272078] CGU_ISP clock enabled at 100MHz
+[   27.272086] ISP clock enabled
+[   27.299183] CPM clock gates configured
+[   27.299196] isp_subdev_init_clks: Successfully initialized 2 clocks
+[   27.299204] *** tx_isp_subdev_auto_link: Auto-linking device 'isp-w02' to ourISPdev ***
+[   27.299210] *** DEBUG: Device name comparison - checking 'isp-w02' ***
+[   27.299215] *** DEBUG: About to check device name matches ***
+[   27.299222] *** MAPPED secondary VIC registers: b0023000 (0x10023000) ***
+[   27.299230] *** LINKED VIC device: 85f18000, primary_regs: b33e0000, secondary_regs: b0023000 ***
+[   27.299236] *** VIC AUTO-LINK: Registers are mapped, registering interrupt handler ***
+[   27.299243] *** VIC PROBE: Device linking handled automatically by tx_isp_subdev_init ***
+[   27.299266] *** Platform device 1 (isp-w02) registered successfully ***
+[   27.299273] *** Registering platform device 2 from platform data ***
+[   27.299595] tx_isp_module_init: Module initialized for tx-isp-vin
+[   27.299608] *** tx_isp_subdev_init: Deferring core->init for device tx-isp-vin to prevent hangs ***
+[   27.299614] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
+[   27.299621] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-vin' to ourISPdev ***
+[   27.299627] *** DEBUG: Device name comparison - checking 'tx-isp-vin' ***
+[   27.299632] *** DEBUG: About to check device name matches ***
+[   27.299637] *** DEBUG: VIN device name matched! Setting up VIN device ***
+[   27.299644] *** LINKED VIN device: 85f18400 ***
+[   27.299652] *** VIN SUBDEV OPS CONFIGURED: core=c0678ff4, video=c0678fe8, s_stream=c065be90 ***
+[   27.299657] *** REGISTERED VIN SUBDEV AT INDEX 2 WITH VIDEO OPS ***
+[   27.299663] *** VIN INITIALIZATION DEFERRED TO SENSOR REGISTRATION PHASE ***
+[   27.299669] *** VIN PROBE: Device linking handled automatically by tx_isp_subdev_init ***
+[   27.299688] *** Platform device 2 (tx-isp-vin) registered successfully ***
+[   27.299695] *** Registering platform device 3 from platform data ***
+[   27.302277] *** Platform device 3 (tx-isp-fs) registered successfully ***
+[   27.302289] *** Registering platform device 4 from platform data ***
+[   27.304843] *** tx_isp_core_probe: NEW ARCHITECTURE - Creating separate core device ***
+[   27.304857] *** tx_isp_create_core_device: Creating ISP core device ***
+[   27.304866] *** tx_isp_create_core_device: Core device created successfully: 85f18800 ***
+[   27.304873] *** tx_isp_subdev_init: Core ISP subdev registration handled by core device ***
+[   27.304880] tx_isp_module_init: Module initialized for tx-isp-core
+[   27.304886] *** tx_isp_subdev_init: Deferring core->init for device tx-isp-core to prevent hangs ***
+[   27.304892] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
+[   27.304900] *** tx_isp_request_irq: Using main ISP device as dev_id for IRQ 37 (device: tx-isp-core) ***
+[   27.307166] *** tx_isp_disable_irq: EXACT Binary Ninja - disabling IRQ 37 ***
+[   27.307179] *** tx_isp_disable_irq: IRQ 37 DISABLED ***
+[   27.307186] *** tx_isp_request_irq: IRQ 37 registered successfully for tx-isp-core ***
+[   27.307194] tx_isp_subdev_init: platform_get_resource returned c0677924 for device tx-isp-core
+[   27.307202] tx_isp_subdev_init: Memory resource found: start=0x13300000, end=0x1330ffff, size=0x00010000
+[   27.307212] isp_subdev_init_clks: Initializing 3 clocks
+[   27.307222] CGU_ISP clock enabled at 100MHz
+[   27.307229] ISP clock enabled
+[   27.307236] CSI clock enabled
+[   27.329196] CPM clock gates configured
+[   27.329207] isp_subdev_init_clks: Successfully initialized 3 clocks
+[   27.329215] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-core' to ourISPdev ***
+[   27.329221] *** DEBUG: Device name comparison - checking 'tx-isp-core' ***
+[   27.329226] *** DEBUG: About to check device name matches ***
+[   27.329232] *** CORE device not yet linked - regs will be mapped later ***
+[   27.329238] *** tx_isp_core_probe: Core subdev initialized successfully ***
+[   27.329246] *** tx_isp_core_device_init: Initializing core device: 85f18800 ***
+[   27.329257] *** tx_isp_core_device_init: Core device initialized successfully ***
+[   27.329265] *** tx_isp_link_core_device: Linking core device 85f18800 to ISP device 85f20000 ***
+[   27.329270] *** tx_isp_link_core_device: Core device linked successfully ***
+[   27.329276] *** Core subdev registered at index 4: 85f18800 ***
+[   27.329290] *** tx_isp_core_probe: VIC device creation deferred to platform driver system ***
+[   27.329296] *** tx_isp_core_probe: Platform drivers will call tx_isp_subdev_init for proper initialization ***
+[   27.329302] *** tx_isp_core_probe: Calling sensor_early_init ***
+[   27.329307] sensor_early_init: Preparing sensor infrastructure
+[   27.329312] *** tx_isp_core_probe: Core device setup complete ***
+[   27.329318] ***   - Core device: 85f18800 ***
+[   27.329323] ***   - Channel count: 6 ***
+[   27.329329] ***   - Linked to ISP device: 85f20000 ***
+[   27.329334] *** tx_isp_core_probe: Initializing core tuning system ***
+[   27.329356] *** tx_isp_core_probe: Tuning init SUCCESS ***
+[   27.329363] *** tx_isp_core_probe: SUCCESS - Core device fully initialized ***
+[   27.329369] ***   - Core device: 85f18800 ***
+[   27.329375] ***   - Tuning device: 85fb8000 ***
+[   27.329380] *** tx_isp_core_probe: Creating frame channel devices ***
+[   27.329385] *** tx_isp_create_framechan_devices: Creating frame channel devices ***
+[   27.329732] *** Created frame channel device: /dev/framechan0 (major=10, minor=54) ***
+[   27.332358] *** Created frame channel device: /dev/framechan1 (major=10, minor=53) ***
+[   27.334906] *** Created frame channel device: /dev/framechan2 (major=10, minor=52) ***
+[   27.337431] *** Created frame channel device: /dev/framechan3 (major=10, minor=51) ***
+[   27.337441] *** tx_isp_create_framechan_devices: All frame channel devices created ***
+[   27.337447] *** tx_isp_core_probe: Frame channel devices created successfully ***
+[   27.337452] *** tx_isp_core_probe: Creating ISP M0 tuning device node ***
+[   27.337458] tisp_code_create_tuning_node: Creating ISP M0 tuning device node
+[   27.337467] tisp_code_create_tuning_node: Allocated dynamic major 251
+[   27.342594] *** ISP M0 TUNING DEVICE CREATED: /dev/isp-m0 (major=251, minor=0) ***
+[   27.342606] *** tx_isp_core_probe: ISP M0 tuning device node created successfully ***
+[   27.342611] *** tx_isp_core_probe: Core probe completed successfully ***
+[   27.342632] *** Platform device 4 (tx-isp-core) registered successfully ***
+[   27.342638] *** tx_isp_create_graph_and_nodes: Binary Ninja reference implementation complete ***
+[   27.342644] *** tx_isp_module_init: Binary Ninja reference implementation complete ***
+[   27.342650] *** PROBE: Binary Ninja reference implementation complete ***
+[   27.342660] *** SUCCESS: ourISPdev allocated by probe function: 85f20000 ***
+[   27.342665] *** Following reference driver: IRQ registration handled by tx_isp_request_irq ***
+[   27.342671] TX ISP driver initialized successfully - probe function will handle device setup
+[   30.022687] *** tx_isp_open: SAFE IMPLEMENTATION - preventing dangerous initialization chains ***
+[   30.022701] *** tx_isp_open: SAFE MODE - no hardware initialization during open ***
+[   30.022706] *** tx_isp_open: Background processing disabled to prevent delayed crashes ***
+[   30.022711] *** tx_isp_open: ISP opened safely - no dangerous operations triggered ***
+[   30.023290] ISP IOCTL: cmd=0x805056c1 arg=0x77ab0d60
+[   30.023303] ISP IOCTL: cmd=0xc050561a arg=0x7fc81408
+[   30.023309] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
+[   30.023316] *** csi_sensor_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x2000002 ***
+[   30.023325] *** vic_sensor_ops_ioctl: cmd=0x2000002, arg=85f3feb0 ***
+[   30.023331] *** vic_sensor_ops_ioctl: Retrieved vic_dev using SAFE access: 85f18000 ***
+[   30.023337] vic_sensor_ops_ioctl: cmd out of range, returning 0
+[   30.023343] TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back
+[   30.023349] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
+[   30.023359] Reserved instruction in kernel code[#1]:
+[   30.028487] CPU: 0 PID: 2257 Comm: prudynt Tainted: G           O 3.10.14__isvp_swan_1.0__ #1
+[   30.037279] task: 840df600 ti: 85f3e000 task.ti: 85f3e000
+[   30.042843] $ 0   : 00000000 10001c00 00000000 80450490
+[   30.048244] $ 4   : 10001c01 00007ca8 00000000 000001b0
+[   30.053634] $ 8   : 00000079 000001b0 00000000 ffffffe0
+[   30.059025] $12   : 00000023 85f3fc48 00000000 00000050
+[   30.064416] $16   : 203a726f 00000000 77b892b0 7fc81424
+[   30.069824] $20   : 00000006 30326367 77003335 77b82650
+[   30.075231] $24   : 00000003 77af0680                  
+[   30.080629] $28   : 85f3e000 85f3fee0 77ab0ef0 7fc8143c
+[   30.086042] Hi    : 00000000
+[   30.089000] Lo    : 00000014
+[   30.091958] epc   : 7fc81440 0x7fc81440
+[   30.095907]     Tainted: G           O
+[   30.099773] ra    : 7fc8143c 0x7fc8143c
+[   30.103728] Status: 10001c03	KERNEL EXL IE 
+[   30.108038] Cause : 40808028
+[   30.111008] PrId  : 00d00100 (Ingenic Xburst)
+[   30.115490] Modules linked in: sensor_gc2053_t31(O) tx_isp_t31(O) 8189fs(O) pwm_hal(O) pwm_core(O) gpio_userkeys(O) avpu(O) audio(O) cp210x ch341 usbserial exfat(O) jzmmc_v12
+[   30.131560] Process prudynt (pid: 2257, threadinfo=85f3e000, task=840df600, tls=772e6ef0)
+[   30.139990] Stack : 0000000d 53504d49 65747379 70632e6d 77610070 7fc81454 0000000e 736e6553
+[   30.139990] 	  854ca4bc 00000000 00000000 7740f510 7fc814d8 77ab0d60 c050561a 7fc81408
+[   30.139990] 	  77b82650 00000005 77bca450 800224bc 00000012 00000000 7fc59d78 00000000
+[   30.139990] 	  00000000 00000000 00000000 10001c00 00000fd6 7fc813d8 00000005 c050561a
+[   30.139990] 	  7fc81408 00000000 00000001 7fc81528 77b80330 fd8665de 00000006 972fc790
+[   30.139990] 	  ...
+[   30.176658] Call Trace:[<800224bc>] 0x800224bc
+[   30.181241] 
+[   30.182774] 
+[   30.182774] Code: 7fc8143c  0000000d  53504d49 <65747379> 70632e6d  77610070  7fc81454  0000000e  736e6553 
+[   30.193512] ---[ end trace 9d9aff0b0828d4b3 ]---
+[   30.199954] ISP released (refcnt=0)
+root@ing-wyze-cam3-a000 ~# 
