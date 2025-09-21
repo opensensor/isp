@@ -671,19 +671,7 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
 
     /* Binary Ninja: if ($v0_1 s>= 0) */
     if (irq_num >= 0) {
-        /* CRITICAL FIX: Don't register duplicate IRQs - main dispatcher handles IRQ 37 and 38 */
-        if (irq_num == 37 || irq_num == 38) {
-            pr_info("*** tx_isp_request_irq: IRQ %d handled by main dispatcher - skipping duplicate registration ***\n", irq_num);
-
-            /* CRITICAL FIX: Don't store IRQ number if we're not registering it! */
-            /* This prevents later enable_irq() calls on unregistered IRQs */
-            irq_info->irq = 0;          /* Mark as no IRQ */
-            irq_info->handler = NULL;   /* No handler */
-            irq_info->data = NULL;      /* No data */
-
-            pr_info("*** tx_isp_request_irq: IRQ %d NOT stored - main dispatcher handles it ***\n", irq_num);
-            return 0;
-        }
+        /* Reference driver behavior: Register all IRQs normally without special handling */
 
         /* CRITICAL FIX: For other IRQs, register normally but NEVER pass irq_info as dev_id */
         extern struct tx_isp_dev *ourISPdev;
