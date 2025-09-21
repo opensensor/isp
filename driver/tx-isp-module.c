@@ -2269,25 +2269,7 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
                 if (v0_4 == 0) {
                     i += 1;
                 } else {
-                    /* SAFETY: Validate function pointer */
-                    if (!is_valid_kernel_pointer(v0_4)) {
-                        pr_info("tx_isp_video_s_stream: Invalid s_stream function pointer for subdev %d\n", i);
-                        i += 1;
-                        goto next_iteration;
-                    }
-
-                    /* CRITICAL SAFETY: Skip dangerous s_stream functions that can cause kernel panics */
-                    if (v0_4 == (void*)vin_s_stream) {
-                        pr_info("*** SAFETY: Skipping dangerous VIN s_stream for subdev %d to prevent kernel panic ***\n", i);
-                        i += 1;
-                        goto next_iteration;
-                    }
-
-                    if (v0_4 == (void*)sensor_s_stream) {
-                        pr_info("*** SAFETY: Skipping dangerous sensor s_stream for subdev %d to prevent kernel panic ***\n", i);
-                        i += 1;
-                        goto next_iteration;
-                    }
+                    /* Binary Ninja: NO SAFETY CHECKS - just call the function directly */
 
                     pr_info("*** BINARY NINJA: Calling subdev %d s_stream (enable=%d) ***\n", i, arg2);
                     pr_info("*** DEBUG: subdev=%p, ops=%p, video=%p, s_stream=%p ***\n",
