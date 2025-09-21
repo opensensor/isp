@@ -4820,18 +4820,8 @@ static int tx_isp_init(void)
         return gpio_mode_check;
     }
 
-    /* CRITICAL FIX: ourISPdev should ONLY be allocated by the platform probe function */
-    /* The module init should not allocate the device - that's the probe function's job */
-    if (!ourISPdev) {
-        pr_err("*** CRITICAL: ourISPdev is NULL - platform probe function didn't run! ***\n");
-        pr_err("*** This indicates platform device registration failed ***\n");
-        return -ENODEV;
-    }
-
-    pr_info("*** USING ISP DEVICE FROM PROBE: %p ***\n", ourISPdev);
-    /* Device already allocated and initialized by probe - just ensure basic fields are set */
-    ourISPdev->refcnt = 0;
-    ourISPdev->is_open = false;
+    /* NOTE: ourISPdev will be set by the platform probe function after device registration */
+    /* We'll check for it after registering the platform device */
 
     /* REMOVED: Frame generation work queue - NOT in reference driver */
     /* Reference driver uses pure interrupt-driven frame processing */
@@ -4869,12 +4859,8 @@ static int tx_isp_init(void)
     subdev_platforms[3] = &tx_isp_fs_platform_device;
     subdev_platforms[4] = &tx_isp_core_platform_device;
 
-    ret = tx_isp_init_subdev_registry(ourISPdev, subdev_platforms, 5);
-    if (ret) {
-        pr_err("Failed to initialize subdevice registry: %d\n", ret);
-        goto err_cleanup_subdev_drivers;
-    }
-    pr_info("*** SUBDEVICE REGISTRY INITIALIZED - GRAPH CREATION SHOULD NOW SUCCEED ***\n");
+    /* NOTE: Subdev registry initialization will be done after platform device registration */
+    /* when ourISPdev is available from the probe function */
 
     /* *** REFERENCE DRIVER: Individual subdev platform devices are registered by tx_isp_create_graph_and_nodes *** */
     pr_info("*** REFERENCE DRIVER: Subdev platform devices will be registered by tx_isp_create_graph_and_nodes ***\n");
@@ -4885,6 +4871,28 @@ static int tx_isp_init(void)
         pr_err("not support the gpio mode!\n");
         goto err_cleanup_subdev_drivers;
     }
+
+    /* CRITICAL: Check if platform probe function ran and set ourISPdev */
+    if (!ourISPdev) {
+        pr_err("*** CRITICAL: ourISPdev is NULL after platform device registration! ***\n");
+        pr_err("*** This indicates platform probe function failed or didn't run ***\n");
+        ret = -ENODEV;
+        goto err_cleanup_platform_device;
+    }
+
+    pr_info("*** SUCCESS: ourISPdev allocated by probe function: %p ***\n", ourISPdev);
+    /* Device already allocated and initialized by probe - just ensure basic fields are set */
+    ourISPdev->refcnt = 0;
+    ourISPdev->is_open = false;
+
+    /* *** NOW initialize subdevice registry with the allocated ourISPdev *** */
+    pr_info("*** INITIALIZING SUBDEVICE REGISTRY WITH ALLOCATED ourISPdev ***\n");
+    ret = tx_isp_init_subdev_registry(ourISPdev, subdev_platforms, 5);
+    if (ret) {
+        pr_err("Failed to initialize subdevice registry: %d\n", ret);
+        goto err_cleanup_platform_device;
+    }
+    pr_info("*** SUBDEVICE REGISTRY INITIALIZED - GRAPH CREATION SHOULD NOW SUCCEED ***\n");
 
     /* CRITICAL FIX: Register main interrupt dispatcher for IRQ 37 and 38 */
     /* This prevents the freeze/reboot issue during streaming initialization */
