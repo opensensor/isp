@@ -1631,7 +1631,7 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
 /* Forward declaration for ISP core interrupt handler */
 extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 
-/* isp_vic_interrupt_service_routine - ENHANCED with NULL pointer protection */
+/* isp_vic_interrupt_service_routine - EXACT Binary Ninja reference implementation */
 irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
     extern uint32_t vic_start_ok;
@@ -1641,17 +1641,14 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     void __iomem *vic_regs;
     u32 int_status, mdma_status;
 
-    /* CRITICAL SAFETY: Comprehensive NULL pointer validation */
-    if (!dev_id) {
-        pr_err("VIC IRQ %d: NULL dev_id - CRITICAL ERROR\n", irq);
+    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
+    if (!dev_id || (uintptr_t)dev_id >= 0xfffff001) {
+        pr_err("VIC IRQ %d: Invalid dev_id=%p\n", irq, dev_id);
         return IRQ_HANDLED;
     }
 
-    /* CRITICAL SAFETY: Validate dev_id is in valid kernel memory range */
-    if ((unsigned long)dev_id < 0x80000000 || (unsigned long)dev_id >= 0xfffff000) {
-        pr_err("VIC IRQ %d: Invalid dev_id pointer 0x%p - memory corruption\n", irq, dev_id);
-        return IRQ_HANDLED;
-    }
+    /* CRITICAL: Use ourISPdev as the main device structure */
+    isp_dev = (struct tx_isp_dev *)dev_id;
 
     /* CRITICAL: Detect corruption by comparing dev_id with ourISPdev */
     if (dev_id != ourISPdev) {
@@ -1661,55 +1658,74 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         /* CRITICAL: If ourISPdev is NULL, someone called cleanup during streaming! */
         if (ourISPdev == NULL) {
             pr_err("VIC IRQ %d: CRITICAL - ourISPdev is NULL! Cleanup called during streaming!\n", irq);
-            pr_err("VIC IRQ %d: This indicates cleanup/exit path executed while interrupts active\n", irq);
             return IRQ_HANDLED;  /* Cannot recover - just exit safely */
         }
 
         pr_err("VIC IRQ %d: Using ourISPdev instead of corrupted dev_id\n", irq);
         isp_dev = ourISPdev;  /* Use known good pointer */
-    } else {
-        isp_dev = (struct tx_isp_dev *)dev_id;
     }
 
-    /* Validate the ISP device structure */
-    if (!isp_dev || (uintptr_t)isp_dev < 0x80000000 || (uintptr_t)isp_dev > 0x9fffffff) {
-        pr_err("VIC IRQ %d: Invalid isp_dev=%p\n", irq, isp_dev);
-        return IRQ_HANDLED;
-    }
-
-    /* Validate VIC device exists */
+    /* Binary Ninja: $s0 = *(arg1 + 0xd4) - Get VIC device from main ISP device */
     vic_dev = isp_dev->vic_dev;
-    if (!vic_dev || (uintptr_t)vic_dev < 0x80000000 || (uintptr_t)vic_dev > 0x9fffffff) {
+
+    /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
+    if (!vic_dev || (uintptr_t)vic_dev >= 0xfffff001) {
         pr_err("VIC IRQ %d: Invalid vic_dev=%p in isp_dev=%p\n", irq, vic_dev, isp_dev);
         return IRQ_HANDLED;
     }
 
-    /* Validate VIC registers are mapped */
-    vic_regs = vic_dev->vic_regs;
+    /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) - Get VIC registers from main ISP device */
+    vic_regs = isp_dev->vic_regs;  /* Use VIC registers from main ISP device */
     if (!vic_regs || (uintptr_t)vic_regs < 0x80000000) {
-        pr_err("VIC IRQ %d: Invalid vic_regs=%p in vic_dev=%p\n", irq, vic_regs, vic_dev);
+        pr_err("VIC IRQ %d: Invalid vic_regs=%p in isp_dev=%p\n", irq, vic_regs, isp_dev);
         return IRQ_HANDLED;
     }
 
-    /* NOW we can safely access hardware registers */
-    int_status = readl(vic_regs + 0x1e0);
-    mdma_status = readl(vic_regs + 0x1e4);
+    /* Binary Ninja: Read interrupt status registers */
+    /* int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
+    int_status = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);
 
-    /* Clear interrupts by writing status back */
-    if (int_status) {
-        writel(int_status, vic_regs + 0x1f0);
-    }
-    if (mdma_status) {
-        writel(mdma_status, vic_regs + 0x1f4);
-    }
+    /* int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
+    mdma_status = (~readl(vic_regs + 0x1ec)) & readl(vic_regs + 0x1e4);
 
-    /* Process frame done interrupt */
-    if (vic_start_ok && (int_status & 1)) {
-        vic_dev->frame_count++;
-        pr_info("VIC IRQ %d: Frame done - count=%d\n", irq, vic_dev->frame_count);
+    /* Binary Ninja: Clear interrupts by writing status back */
+    /* *($v0_4 + 0x1f0) = $v1_7 */
+    writel(int_status, vic_regs + 0x1f0);
 
-        /* Call frame done handler */
-        vic_framedone_irq_function(vic_dev);
+    /* *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
+    writel(mdma_status, vic_regs + 0x1f4);
+
+    /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
+    if (vic_start_ok != 0) {
+        /* Binary Ninja: if (($v1_7 & 1) != 0) */
+        if ((int_status & 1) != 0) {
+            /* *($s0 + 0x160) += 1 - Increment frame count */
+            vic_dev->frame_count++;
+            pr_info("VIC IRQ %d ACTIVE: Frame done - count=%d\n", irq, vic_dev->frame_count);
+
+            /* entry_$a2 = vic_framedone_irq_function($s0) */
+            vic_framedone_irq_function(vic_dev);
+        }
+
+        /* Binary Ninja: Process error conditions */
+        if ((int_status & 0x200) != 0) {
+            pr_err("VIC IRQ %d: Frame ASFIFO overflow error\n", irq);
+        }
+        if ((int_status & 0x400) != 0) {
+            pr_err("VIC IRQ %d: Horizontal error ch0 - reg[0x3a8] = 0x%08x\n",
+                   irq, readl(vic_regs + 0x3a8));
+        }
+        if ((int_status & 0x200000) != 0) {
+            pr_err("VIC IRQ %d: Control limit error\n", irq);
+        }
+
+        /* Binary Ninja: Process MDMA interrupts */
+        if ((mdma_status & 1) != 0) {
+            vic_mdma_irq_function(vic_dev, 0);
+        }
+        if ((mdma_status & 2) != 0) {
+            vic_mdma_irq_function(vic_dev, 1);
+        }
     }
 
     return IRQ_HANDLED;
