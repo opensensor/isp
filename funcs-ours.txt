@@ -639,11 +639,9 @@ tx_isp_vic_frame_done
 tx_isp_vic_handle_event
 tx_isp_vic_notify
 tx_isp_vic_probe
-tx_isp_vic_register_interrupt
 tx_isp_vic_remove
 tx_isp_vic_slake_subdev
 tx_isp_vic_start
-tx_isp_vic_write_csi_phy_sequence
 tx_isp_video_link_destroy_impl
 tx_isp_video_link_stream
 tx_isp_video_s_stream

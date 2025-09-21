@@ -2326,61 +2326,6 @@ const struct file_operations isp_vic_frd_fops = {
     .release = single_release,          /* private_single_release from hex dump */
 };
 
-/* VIC W02 proc file operations - FIXED for proper proc interface */
-const struct file_operations isp_w02_proc_fops = {
-    .owner = THIS_MODULE,
-    .open = vic_chardev_open,
-    .release = vic_chardev_release,
-    .write = vic_proc_write,
-    .llseek = default_llseek,
-};
-
-/* Implementation of the open/release functions */
-/* Implementation of the open/release functions */
-int vic_chardev_open(struct inode *inode, struct file *file)
-{
-    struct tx_isp_subdev *sd = PDE_DATA(inode);  // Get data set during proc_create_data
-
-    pr_info("VIC device open called from pid %d\n", current->pid);
-    file->private_data = sd;
-
-    return 0;
-}
-EXPORT_SYMBOL(vic_chardev_open);
-
-int vic_chardev_release(struct inode *inode, struct file *file)
-{
-    struct tx_isp_subdev *sd = file->private_data;
-
-    if (!sd) {
-        return -EINVAL;
-    }
-
-    file->private_data = NULL;
-    pr_info("VIC device released\n");
-    return 0;
-}
-EXPORT_SYMBOL(vic_chardev_release);
-
-
-long vic_chardev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
-{
-    struct tx_isp_subdev *sd = file->private_data;
-    int ret = 0;
-
-    pr_info("VIC IOCTL called: cmd=0x%x arg=0x%lx\n", cmd, arg);
-
-    if (!sd) {
-        pr_err("VIC: no private data in file\n");
-        return -EINVAL;
-    }
-
-    return ret;
-}
-EXPORT_SYMBOL(vic_chardev_ioctl);
-
-/* Platform data structure defined in tx_isp.h */
-
 /* tx_isp_vic_probe - EXACT Binary Ninja reference implementation */
 int tx_isp_vic_probe(struct platform_device *pdev)
 {
