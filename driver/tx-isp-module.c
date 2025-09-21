@@ -3377,7 +3377,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     if (cmd == 0x800856d5) {
         /* Binary Ninja: void* $v1_14 = *(*($s7 + 0x2c) + 0xd4) */
         void *core_dev = isp_dev->core_dev;
-        var_98 = 0;
+        var_98.as_uint32 = 0;
         var_94 = 0;
 
         if (core_dev) {
