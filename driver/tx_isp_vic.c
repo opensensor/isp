@@ -45,12 +45,21 @@ static void debug_vic_start_ok_change(int new_value, const char *location, int l
 void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 {
     unsigned long flags;
+    extern struct tx_isp_dev *ourISPdev;
 
     pr_info("*** tx_vic_enable_irq: BINARY NINJA EXACT ***\n");
 
     /* Binary Ninja: if (dump_vsd_5 == 0 || dump_vsd_5 u>= 0xfffff001) return */
     if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
         pr_err("tx_vic_enable_irq: Invalid VIC device\n");
+        return;
+    }
+
+    /* CRITICAL SAFETY: Ensure VIC device is properly linked before enabling interrupt */
+    if (!ourISPdev || ourISPdev->vic_dev != vic_dev) {
+        pr_err("tx_vic_enable_irq: VIC device not properly linked to ISP device\n");
+        pr_err("  ourISPdev = %p, ourISPdev->vic_dev = %p, vic_dev = %p\n",
+               ourISPdev, ourISPdev ? ourISPdev->vic_dev : NULL, vic_dev);
         return;
     }
 
