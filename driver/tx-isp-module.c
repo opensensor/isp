@@ -1306,10 +1306,6 @@ static const struct file_operations frame_channel_fops = {
     .compat_ioctl = frame_channel_unlocked_ioctl,
 };
 
-// Simplified VIC registration - removed complex platform device array
-static int vic_registered = 0;
-
-
 // Initialize CSI subdev - Use Binary Ninja tx_isp_csi_probe
 static int tx_isp_init_csi_subdev(struct tx_isp_dev *isp_dev)
 {
@@ -1489,7 +1485,9 @@ static int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     }
     
     /* Binary Ninja: if (*(*(arg1 + 0x110) + 0x14) != 1) return 0 */
-    sensor_attr = isp_dev->sensor ? isp_dev->sensor->video.attr : NULL;
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    sensor_attr = sensor ? sensor->video.attr : NULL;
     if (!sensor_attr || sensor_attr->dbus_type != 1) {
         pr_info("csi_video_s_stream: Not DVP interface, skipping\n");
         return 0;
@@ -6172,9 +6170,13 @@ int tx_isp_unregister_sensor_subdev(struct tx_isp_subdev *sd)
     }
     mutex_unlock(&sensor_list_mutex);
     
-    if (ourISPdev && ourISPdev->sensor &&
-        &ourISPdev->sensor->sd == sd) {
-        ourISPdev->sensor = NULL;
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (sensor && &sensor->sd == sd) {
+        /* Sensor is being unregistered - clear from subdev array */
+        if (ourISPdev && ourISPdev->subdevs[3] && ourISPdev->subdevs[3]->host_priv == sensor) {
+            ourISPdev->subdevs[3] = NULL;
+        }
     }
     
     return 0;
@@ -6400,13 +6402,15 @@ static int ispcore_sensor_ops_release_all_sensor(struct tx_isp_subdev *sd)
     }
 
     /* Release all sensor resources */
-    if (ourISPdev && ourISPdev->sensor) {
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (sensor) {
         /* Reset sensor state */
-        ourISPdev->sensor->sd.vin_state = TX_ISP_MODULE_INIT;
+        sensor->sd.vin_state = TX_ISP_MODULE_INIT;
 
         /* Clear sensor attributes */
-        if (ourISPdev->sensor->video.attr) {
-            ourISPdev->sensor->video.attr = NULL;
+        if (sensor->video.attr) {
+            sensor->video.attr = NULL;
         }
     }
 
@@ -6789,13 +6793,15 @@ static void tisp_set_ae1_ag(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_
     pr_info("tisp_set_ae1_ag: Setting AE analog gain\n");
     
     /* CRITICAL: This would normally write to sensor via I2C */
-    if (ourISPdev && ourISPdev->sensor && ourISPdev->sensor->sd.ops &&
-        ourISPdev->sensor->sd.ops->sensor && ourISPdev->sensor->sd.ops->sensor->ioctl) {
-        
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (sensor && sensor->sd.ops &&
+        sensor->sd.ops->sensor && sensor->sd.ops->sensor->ioctl) {
+
         uint32_t gain_value = data_d04ac;
         /* Call sensor IOCTL to set analog gain */
-        ourISPdev->sensor->sd.ops->sensor->ioctl(&ourISPdev->sensor->sd,
-                                                0x980902, &gain_value);
+        sensor->sd.ops->sensor->ioctl(&sensor->sd,
+                                     0x980902, &gain_value);
     }
 }
 
