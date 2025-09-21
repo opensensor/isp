@@ -3290,15 +3290,16 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -EINVAL; /* No more sensors - this breaks the userspace loop */
         }
 
-        /* Clear the buffer and write sensor name starting at offset 4 (after index) */
+        /* CRITICAL: Don't overwrite the index! Only write sensor name at offset 4 */
         memset(sensor_buffer + 4, 0, 0x50 - 4);
         strncpy(sensor_buffer + 4, sensor_names[sensor_index], 0x4c - 1);
 
         pr_info("TX_ISP_SENSOR_ENUM_INPUT: Returning sensor '%s' at index %d\n",
                  sensor_names[sensor_index], sensor_index);
 
-        /* Copy the modified structure back to userspace */
-        if (copy_to_user((void __user *)arg, sensor_buffer, 0x50) != 0) {
+        /* CRITICAL FIX: Only copy back the sensor name part (offset 4 onwards)
+         * to avoid corrupting the index counter in userspace */
+        if (copy_to_user((void __user *)arg + 4, sensor_buffer + 4, 0x50 - 4) != 0) {
             pr_err("TX_ISP_SENSOR_ENUM_INPUT: Failed to copy result to user\n");
             return -EFAULT;
         }
