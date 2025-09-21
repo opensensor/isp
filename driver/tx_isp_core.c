@@ -1687,8 +1687,8 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
         sensor_attr = NULL;  /* Disable/deinit */
     } else {
         /* For enable, try to get sensor attributes if available */
-        if (isp_dev->sensor && isp_dev->sensor->sensor_attr) {
-            sensor_attr = isp_dev->sensor->sensor_attr;
+        if (isp_dev->sensor && isp_dev->sensor->info.sensor_attr) {
+            sensor_attr = isp_dev->sensor->info.sensor_attr;
         }
         /* sensor_attr can be NULL for initial core init */
     }
