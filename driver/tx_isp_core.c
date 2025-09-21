@@ -1477,7 +1477,14 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
             return -EINVAL;
         }
 
-        /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) - SAFE: Get VIC device */
+        /* CRITICAL FIX: Use safe struct member access instead of dangerous offset *(arg1 + 0xd4) */
+        /* MIPS ALIGNMENT CHECK: Ensure isp_dev is properly aligned before accessing */
+        if (((unsigned long)isp_dev & 0x3) != 0) {
+            pr_err("*** CRITICAL: isp_dev pointer 0x%p not 4-byte aligned - would cause unaligned access crash! ***\n", isp_dev);
+            return -EINVAL;
+        }
+
+        /* SAFE: Use proper struct member access instead of offset arithmetic */
         vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
         result = -EINVAL;
 

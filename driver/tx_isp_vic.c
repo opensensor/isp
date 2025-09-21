@@ -124,9 +124,15 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
     struct tx_isp_vic_device *s0 = NULL;
     unsigned long var_18 = 0;
 
-    /* Binary Ninja: void* $s0 = nullptr */
-    /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = *(arg1 + 0xd4) */
+    /* CRITICAL FIX: Use safe struct member access instead of dangerous offset *(arg1 + 0xd4) */
     if (arg1 != 0 && (uintptr_t)arg1 < 0xfffff001) {
+        /* CRITICAL FIX: Prevent unaligned memory access that causes BadVA crashes */
+        /* MIPS ALIGNMENT CHECK: Ensure arg1 is properly aligned before accessing */
+        if (((unsigned long)arg1 & 0x3) != 0) {
+            pr_err("*** CRITICAL: arg1 pointer 0x%p not 4-byte aligned - would cause unaligned access crash! ***\n", arg1);
+            return 0;
+        }
+
         /* SAFE: Use global ISP device instead of unsafe offset access *(arg1 + 0xd4) */
         extern struct tx_isp_dev *ourISPdev;
         if (ourISPdev && ourISPdev->vic_dev) {
@@ -1579,11 +1585,16 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         return 0xffffffea; /* -EINVAL */
     }
 
-    /* Binary Ninja EXACT: if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = *(arg1 + 0xd4) */
+    /* CRITICAL FIX: Use safe struct member access instead of dangerous offset *(arg1 + 0xd4) */
     if (arg1 != 0 && (unsigned long)arg1 < 0xfffff001) {
-        /* CRITICAL FIX: Binary Ninja does *(arg1 + 0xd4) - this is sd->host_priv! */
-        /* arg1 could be either a tx_isp_subdev or tx_isp_vic_device */
-        /* Try to get vic_dev from subdev->host_priv first (offset 0xd4) */
+        /* CRITICAL FIX: Prevent unaligned memory access that causes BadVA crashes */
+        /* MIPS ALIGNMENT CHECK: Ensure arg1 is properly aligned before accessing */
+        if (((unsigned long)arg1 & 0x3) != 0) {
+            pr_err("*** CRITICAL: arg1 pointer 0x%p not 4-byte aligned - would cause unaligned access crash! ***\n", arg1);
+            return 0xffffffea;
+        }
+
+        /* SAFE: Use proper struct member access instead of offset arithmetic */
         struct tx_isp_subdev *sd = (struct tx_isp_subdev *)arg1;
 
         /* Check if arg1 is a subdev by looking for the host_priv field */
