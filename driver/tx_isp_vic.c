@@ -1146,15 +1146,27 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             writel(0x100010, vic_regs + 0x1a4);
         }
 
-        /* Binary Ninja: Basic VIC configuration */
+        /* Binary Ninja: Essential VIC configuration for MIPI */
         writel(2, vic_regs + 0xc);  /* VIC mode */
         writel(sensor_attr->dbus_type, vic_regs + 0x14);  /* Interface type */
         writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);  /* Dimensions */
+
+        /* Binary Ninja: Buffer size calculation - simplified */
+        writel(0x1, vic_regs + 0x100);  /* Buffer calculation result */
+
+        /* Binary Ninja: Additional MIPI registers */
+        writel(0x7800000, vic_regs + 0x110);  /* MIPI config 1 */
+        writel(0x0, vic_regs + 0x114);        /* MIPI config 2 */
+        writel(0x0, vic_regs + 0x118);        /* MIPI config 3 */
+        writel(0x0, vic_regs + 0x11c);        /* MIPI config 4 */
 
         /* Binary Ninja: Frame mode configuration */
         writel(0x4440, vic_regs + 0x1ac);  /* Default frame mode */
         writel(0x4440, vic_regs + 0x1a8);  /* Frame mode copy */
         writel(0x10, vic_regs + 0x1b0);    /* Frame control */
+
+        /* Binary Ninja: Additional control registers */
+        writel(0x0, vic_regs + 0x1a0);     /* Frame config */
         
         /* Binary Ninja: VIC unlock sequence */
         writel(2, vic_regs + 0x0);  /* Set to wait state */
@@ -1185,7 +1197,23 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(1, vic_regs + 0x0);
     }
 
-    /* Binary Ninja: Final configuration */
+    /* Binary Ninja: Final configuration - Enable ISP pipeline */
+    if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
+        void __iomem *core = ourISPdev->core_dev->core_regs;
+
+        /* Clear any pending interrupts */
+        u32 pend_legacy = readl(core + 0xb4);
+        u32 pend_new = readl(core + 0x98b4);
+        writel(pend_legacy, core + 0xb8);
+        writel(pend_new, core + 0x98b8);
+
+        /* Enable ISP pipeline connection */
+        writel(1, core + 0x800);
+        writel(0x1c, core + 0x804);
+        writel(8, core + 0x1c);
+
+        pr_info("tx_isp_vic_start: ISP pipeline enabled\n");
+    }
 
     /* Binary Ninja: vic_start_ok = 1 */
     vic_start_ok = 1;
