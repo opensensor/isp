@@ -3233,9 +3233,9 @@ void ispcore_frame_channel_streamoff(int32_t* arg1)
         s0 = sd->host_priv;  /* SAFE: Use struct member access instead of offset arithmetic */
     }
 
-    /* CRITICAL FIX: Validate s0 pointer before accessing offset 0x15c */
+    /* CRITICAL FIX: Use safe struct member access instead of dangerous offset 0x15c */
     if (!s0) {
-        pr_err("*** CRITICAL: s0 (host_priv) is NULL - cannot access offset 0x15c ***\n");
+        pr_err("*** CRITICAL: s0 (host_priv) is NULL - cannot access device structure ***\n");
         return;
     }
 
@@ -3260,10 +3260,18 @@ void ispcore_frame_channel_streamoff(int32_t* arg1)
         return;
     }
 
-    int32_t v1_2 = *((int32_t*)((char*)s0 + 0x15c));  /* *(s0 + 0x15c) */
+    /* SAFE FIX: Use struct member access instead of dangerous offset *(s0 + 0x15c) */
+    /* Binary Ninja expects this field to be 1 for normal operation, 0 for special handling */
+    struct tx_isp_core_device *core_dev = (struct tx_isp_core_device *)s0;
+    int32_t v1_2 = (core_dev->state == 4) ? 1 : 0;  /* Use streaming state as mode flag */
+
     void* s2 = (void*)arg1[8];
-    void* s3 = *((void**)((char*)s0 + 0x120));  /* *(s0 + 0x120) */
+    /* SAFE FIX: Use struct member access instead of dangerous offset *(s0 + 0x120) */
+    void* s3 = core_dev->frame_channels;  /* Use frame_channels instead of raw offset */
     int32_t var_28 = 0;
+
+    pr_debug("ispcore_frame_channel_streamoff: core_dev=%p, state=%d, v1_2=%d\n",
+             core_dev, core_dev->state, v1_2);
 
     if (v1_2 != 1) {
         uint32_t s5_1 = (uint32_t)(*(arg1 + 7));  /* zx.d(*(arg1 + 7)) */
