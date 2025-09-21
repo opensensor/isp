@@ -1631,95 +1631,73 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
 /* Forward declaration for ISP core interrupt handler */
 extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 
-/* isp_vic_interrupt_service_routine - EXACT Binary Ninja reference implementation */
+/* isp_vic_interrupt_service_routine - SAFE struct member access implementation */
 irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
     extern uint32_t vic_start_ok;
     extern struct tx_isp_dev *ourISPdev;
-    struct tx_isp_dev *isp_dev;
     struct tx_isp_vic_device *vic_dev;
     void __iomem *vic_regs;
     u32 int_status, mdma_status;
 
-    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
-    if (!dev_id || (uintptr_t)dev_id >= 0xfffff001) {
+    /* CRITICAL SAFETY: Validate dev_id is a VIC device pointer */
+    if (!dev_id || (uintptr_t)dev_id < 0x80000000 || (uintptr_t)dev_id >= 0xfffff001) {
         pr_err("VIC IRQ %d: Invalid dev_id=%p\n", irq, dev_id);
         return IRQ_HANDLED;
     }
 
-    /* CRITICAL: Use ourISPdev as the main device structure */
-    isp_dev = (struct tx_isp_dev *)dev_id;
+    /* CRITICAL: dev_id should now be the VIC device itself */
+    vic_dev = (struct tx_isp_vic_device *)dev_id;
 
-    /* CRITICAL: Detect corruption by comparing dev_id with ourISPdev */
-    if (dev_id != ourISPdev) {
-        pr_err("VIC IRQ %d: CORRUPTION DETECTED! dev_id=%p != ourISPdev=%p\n",
-               irq, dev_id, ourISPdev);
-
-        /* CRITICAL: If ourISPdev is NULL, someone called cleanup during streaming! */
-        if (ourISPdev == NULL) {
-            pr_err("VIC IRQ %d: CRITICAL - ourISPdev is NULL! Cleanup called during streaming!\n", irq);
-            return IRQ_HANDLED;  /* Cannot recover - just exit safely */
-        }
-
-        pr_err("VIC IRQ %d: Using ourISPdev instead of corrupted dev_id\n", irq);
-        isp_dev = ourISPdev;  /* Use known good pointer */
-    }
-
-    /* Binary Ninja: $s0 = *(arg1 + 0xd4) - Get VIC device from main ISP device */
-    vic_dev = isp_dev->vic_dev;
-
-    /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
-    if (!vic_dev || (uintptr_t)vic_dev >= 0xfffff001) {
-        pr_err("VIC IRQ %d: Invalid vic_dev=%p in isp_dev=%p\n", irq, vic_dev, isp_dev);
+    /* CRITICAL SAFETY: Validate VIC device structure */
+    if (!vic_dev || (uintptr_t)vic_dev < 0x80000000 || (uintptr_t)vic_dev >= 0xfffff001) {
+        pr_err("VIC IRQ %d: Invalid vic_dev=%p\n", irq, vic_dev);
         return IRQ_HANDLED;
     }
 
-    /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) - Get VIC registers from main ISP device */
-    vic_regs = isp_dev->vic_regs;  /* Use VIC registers from main ISP device */
+    /* SAFE: Use struct member access for VIC registers */
+    vic_regs = vic_dev->vic_regs;
     if (!vic_regs || (uintptr_t)vic_regs < 0x80000000) {
-        pr_err("VIC IRQ %d: Invalid vic_regs=%p in isp_dev=%p\n", irq, vic_regs, isp_dev);
+        pr_err("VIC IRQ %d: Invalid vic_regs=%p in vic_dev=%p\n", irq, vic_regs, vic_dev);
         return IRQ_HANDLED;
     }
 
-    /* Binary Ninja: Read interrupt status registers */
-    /* TEMPORARY: Simplified status reading to debug crash */
+    /* SAFE: Read interrupt status registers with error checking */
     int_status = readl(vic_regs + 0x1e0);
     mdma_status = readl(vic_regs + 0x1e4);
 
-    pr_info("VIC IRQ %d: Raw status=0x%x, mdma=0x%x\n", irq, int_status, mdma_status);
+    /* Clear interrupts by writing status back */
+    if (int_status) {
+        writel(int_status, vic_regs + 0x1f0);
+    }
+    if (mdma_status) {
+        writel(mdma_status, vic_regs + 0x1f4);
+    }
 
-    /* Binary Ninja: Clear interrupts by writing status back */
-    /* *($v0_4 + 0x1f0) = $v1_7 */
-    writel(int_status, vic_regs + 0x1f0);
-
-    /* *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
-    writel(mdma_status, vic_regs + 0x1f4);
-
-    /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
+    /* Process interrupts only if VIC is started */
     if (vic_start_ok != 0) {
-        /* Binary Ninja: if (($v1_7 & 1) != 0) */
+        /* Process frame done interrupt */
         if ((int_status & 1) != 0) {
-            /* *($s0 + 0x160) += 1 - Increment frame count */
+            /* SAFE: Use struct member access for frame count */
             vic_dev->frame_count++;
             pr_info("VIC IRQ %d ACTIVE: Frame done - count=%d\n", irq, vic_dev->frame_count);
 
-            /* entry_$a2 = vic_framedone_irq_function($s0) */
+            /* Call frame done handler */
             vic_framedone_irq_function(vic_dev);
         }
 
-        /* Binary Ninja: Process error conditions */
+        /* Process error conditions */
         if ((int_status & 0x200) != 0) {
             pr_err("VIC IRQ %d: Frame ASFIFO overflow error\n", irq);
         }
         if ((int_status & 0x400) != 0) {
-            pr_err("VIC IRQ %d: Horizontal error ch0 - reg[0x3a8] = 0x%08x\n",
-                   irq, readl(vic_regs + 0x3a8));
+            pr_err("VIC IRQ %d: Horizontal error ch0\n", irq);
         }
         if ((int_status & 0x200000) != 0) {
             pr_err("VIC IRQ %d: Control limit error\n", irq);
         }
 
-        /* Binary Ninja: Process MDMA interrupts */
+        /* Process MDMA interrupts */
         if ((mdma_status & 1) != 0) {
             vic_mdma_irq_function(vic_dev, 0);
         }
@@ -5080,8 +5058,10 @@ static int tx_isp_init(void)
 /* Error handling for reference driver compatibility */
 err_cleanup_irqs:
     pr_info("*** CLEANUP: Freeing main dispatcher IRQs ***\n");
-    free_irq(38, ourISPdev);
-    free_irq(37, ourISPdev);
+    if (ourISPdev && ourISPdev->vic_dev) {
+        free_irq(38, ourISPdev->vic_dev);  /* VIC IRQ uses VIC device as dev_id */
+    }
+    free_irq(37, ourISPdev);  /* Core IRQ uses ISP device as dev_id */
 err_cleanup_platform_device:
     private_platform_device_unregister(&tx_isp_platform_device);
 err_cleanup_main_driver:
@@ -5223,8 +5203,10 @@ static void tx_isp_exit(void)
 
         /* CRITICAL: Free main dispatcher IRQs first */
         pr_info("*** CLEANUP: Freeing main dispatcher IRQs ***\n");
-        free_irq(37, local_isp_dev);  /* ISP Core IRQ */
-        free_irq(38, local_isp_dev);  /* VIC IRQ */
+        free_irq(37, local_isp_dev);  /* ISP Core IRQ uses ISP device as dev_id */
+        if (local_isp_dev->vic_dev) {
+            free_irq(38, local_isp_dev->vic_dev);  /* VIC IRQ uses VIC device as dev_id */
+        }
         pr_info("*** Main dispatcher IRQs 37 and 38 freed ***\n");
 
         /* Free hardware interrupts if initialized (legacy cleanup) */
@@ -5704,10 +5686,10 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
     spin_unlock_irqrestore(&irq_cb_lock, flags);
 }
 
-/* isp_irq_handle - SAFE struct member access implementation matching Binary Ninja behavior */
+/* isp_irq_handle - SAFE struct member access implementation with correct dev_id handling */
 irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
-    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
+    extern struct tx_isp_dev *ourISPdev;
 
     /* CRITICAL SAFETY: Validate dev_id before accessing */
     if (!dev_id || (uintptr_t)dev_id < 0x80000000 || (uintptr_t)dev_id > 0x9fffffff) {
@@ -5715,38 +5697,45 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
         return IRQ_HANDLED;
     }
 
-    /* CRITICAL: Detect corruption by comparing dev_id with ourISPdev */
-    extern struct tx_isp_dev *ourISPdev;
-    if (dev_id != ourISPdev) {
-        pr_err("ISP IRQ %d: CORRUPTION DETECTED! dev_id=%p != ourISPdev=%p\n",
-               irq, dev_id, ourISPdev);
-
-        /* CRITICAL: If ourISPdev is NULL, someone called cleanup during streaming! */
-        if (ourISPdev == NULL) {
-            pr_err("ISP IRQ %d: CRITICAL - ourISPdev is NULL! Cleanup called during streaming!\n", irq);
-            return IRQ_HANDLED;  /* Cannot recover - just exit safely */
-        }
-
-        isp_dev = ourISPdev;  /* Use known good pointer */
-    }
-
     /* SAFE: Call appropriate interrupt service routine based on IRQ number */
     if (irq == 37) {
-        /* ISP Core interrupt - call our safe implementation */
+        /* ISP Core interrupt - dev_id should be ISP device */
+        struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
+
+        /* Validate this is actually the ISP device */
+        if (dev_id != ourISPdev) {
+            pr_err("ISP CORE IRQ %d: dev_id=%p != ourISPdev=%p\n", irq, dev_id, ourISPdev);
+            if (ourISPdev) {
+                isp_dev = ourISPdev;  /* Use known good pointer */
+            } else {
+                return IRQ_HANDLED;
+            }
+        }
+
         return ispcore_interrupt_service_routine(irq, isp_dev);
+
     } else if (irq == 38) {
-        /* VIC interrupt - call our safe implementation */
-        return isp_vic_interrupt_service_routine(irq, isp_dev);
+        /* VIC interrupt - dev_id should be VIC device */
+        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)dev_id;
+
+        /* CRITICAL SAFETY: Validate this is a VIC device structure */
+        if (!vic_dev || (uintptr_t)vic_dev < 0x80000000) {
+            pr_err("VIC IRQ %d: Invalid VIC device=%p\n", irq, vic_dev);
+            return IRQ_HANDLED;
+        }
+
+        return isp_vic_interrupt_service_routine(irq, vic_dev);
+
     } else {
         pr_warn("isp_irq_handle: Unknown IRQ %d\n", irq);
         return IRQ_HANDLED;
     }
 }
 
-/* isp_irq_thread_handle - SAFE implementation without dangerous operations */
+/* isp_irq_thread_handle - SAFE implementation with correct dev_id handling */
 irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
 {
-    struct tx_isp_dev *isp_dev;
+    extern struct tx_isp_dev *ourISPdev;
 
     /* CRITICAL SAFETY: Validate dev_id before accessing */
     if (!dev_id || (uintptr_t)dev_id < 0x80000000 || (uintptr_t)dev_id > 0x9fffffff) {
@@ -5754,28 +5743,32 @@ irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
         return IRQ_HANDLED;
     }
 
-    /* CRITICAL: Detect corruption by comparing dev_id with ourISPdev */
-    extern struct tx_isp_dev *ourISPdev;
-    if (dev_id != ourISPdev) {
-        pr_err("THREAD IRQ %d: CORRUPTION DETECTED! dev_id=%p != ourISPdev=%p\n",
-               irq, dev_id, ourISPdev);
+    /* Handle thread-level processing based on IRQ type */
+    if (irq == 37) {
+        /* ISP Core thread processing - dev_id is ISP device */
+        struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
 
-        /* CRITICAL: If ourISPdev is NULL, someone called cleanup during streaming! */
-        if (ourISPdev == NULL) {
-            pr_err("THREAD IRQ %d: CRITICAL - ourISPdev is NULL! Cleanup called during streaming!\n", irq);
-            return IRQ_HANDLED;  /* Cannot recover - just exit safely */
+        if (dev_id != ourISPdev && ourISPdev) {
+            pr_err("CORE THREAD IRQ %d: Using ourISPdev instead of dev_id=%p\n", irq, dev_id);
+            isp_dev = ourISPdev;
         }
 
-        isp_dev = ourISPdev;  /* Use known good pointer */
+        pr_debug("isp_irq_thread_handle: Core thread IRQ %d processed\n", irq);
+
+    } else if (irq == 38) {
+        /* VIC thread processing - dev_id is VIC device */
+        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)dev_id;
+
+        if (!vic_dev || (uintptr_t)vic_dev < 0x80000000) {
+            pr_err("VIC THREAD IRQ %d: Invalid VIC device=%p\n", irq, vic_dev);
+            return IRQ_HANDLED;
+        }
+
+        pr_debug("isp_irq_thread_handle: VIC thread IRQ %d processed\n", irq);
+
     } else {
-        isp_dev = (struct tx_isp_dev *)dev_id;
+        pr_warn("isp_irq_thread_handle: Unknown thread IRQ %d\n", irq);
     }
-
-    /* SAFE: Simple threaded interrupt processing without dangerous operations */
-    pr_debug("isp_irq_thread_handle: Processing threaded IRQ %d safely\n", irq);
-
-    /* Most interrupt processing is done in the main handlers */
-    /* Threaded handler is mainly for cleanup and non-critical tasks */
 
     return IRQ_HANDLED;
 }
