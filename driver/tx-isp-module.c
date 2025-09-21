@@ -5764,14 +5764,11 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
 
 /* isp_irq_handle - SAFE struct member access implementation with correct dev_id handling */
 
-/* isp_irq_handle - EMERGENCY MINIMAL implementation to prevent kernel panic */
+/* isp_irq_handle - PROPER interrupt dispatcher that calls VIC handler */
 irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
-    static int call_count = 0;
-    call_count++;
-
-    /* EMERGENCY: Print every call to see if this handler is being called */
-    pr_info("*** EMERGENCY: isp_irq_handle called #%d - IRQ %d, dev_id=%p ***\n", call_count, irq, dev_id);
+    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
+    irqreturn_t result = IRQ_NONE;
 
     /* CRITICAL SAFETY: Validate all parameters before any processing */
     if (irq < 0 || irq > 255) {
@@ -5782,14 +5779,33 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
     /* CRITICAL SAFETY: Validate dev_id pointer range */
     if (!dev_id || (uintptr_t)dev_id < 0x80000000 || (uintptr_t)dev_id > 0x9fffffff) {
         pr_err("*** CRITICAL: isp_irq_handle called with invalid dev_id=%p for IRQ %d ***\n", dev_id, irq);
-        return IRQ_HANDLED;  /* Still return HANDLED to prevent system issues */
+        return IRQ_NONE;
     }
 
-    /* EMERGENCY: Absolutely minimal processing - just return */
-    pr_info("*** EMERGENCY: isp_irq_handle IRQ %d processed safely ***\n", irq);
+    /* CRITICAL SAFETY: Validate isp_dev structure */
+    if (!isp_dev) {
+        pr_err("*** CRITICAL: isp_irq_handle called with NULL isp_dev for IRQ %d ***\n", irq);
+        return IRQ_NONE;
+    }
 
-    /* Return IRQ_HANDLED to indicate we processed the interrupt */
-    return IRQ_HANDLED;
+    /* Handle VIC interrupts (IRQ 38) */
+    if (irq == 38) {
+        /* Call VIC interrupt service routine */
+        result = isp_vic_interrupt_service_routine(irq, dev_id);
+        pr_debug("*** isp_irq_handle: VIC IRQ %d handled, result=%d ***\n", irq, result);
+        return result;
+    }
+
+    /* Handle Core interrupts (IRQ 37) */
+    if (irq == 37) {
+        /* For now, just acknowledge core interrupts */
+        pr_debug("*** isp_irq_handle: Core IRQ %d acknowledged ***\n", irq);
+        return IRQ_HANDLED;
+    }
+
+    /* Unknown IRQ */
+    pr_debug("*** isp_irq_handle: Unknown IRQ %d, returning IRQ_NONE ***\n", irq);
+    return IRQ_NONE;
 }
 
 
