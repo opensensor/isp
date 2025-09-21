@@ -3301,6 +3301,18 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
 
         return 0; /* Success */
+    } else if (cmd >= 0x800856d8) {
+        /* Handle high-range commands */
+        if (cmd == 0xc00456e2) {
+            /* TX_ISP_SET_AWB_ALGO_HANDLE */
+            if (copy_from_user(&var_98, (void __user *)arg, 0x18) != 0) {
+                pr_err("Failed to copy AWB algo data\n");
+                return -EFAULT;
+            }
+            s6_1 = 0;
+            /* Binary Ninja: if (var_90 == 1) tisp_awb_algo_handle(&var_98) */
+            return s6_1;
+        }
     }
 
     /* Binary Ninja: Handle 0x40045626 - GET_SENSOR_INFO */
