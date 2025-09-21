@@ -3212,6 +3212,20 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
     pr_info("ISP IOCTL: cmd=0x%x arg=0x%lx\n", cmd, arg);
 
+    /* DEBUG: Log subdev array contents for crash debugging */
+    if (cmd == 0x805056c1) {  /* Only for sensor register IOCTL */
+        pr_info("*** DEBUG: Subdev array contents before IOCTL processing ***\n");
+        for (int i = 0; i < 8; i++) {  /* Check first 8 slots */
+            struct tx_isp_subdev *sd = isp_dev->subdevs[i];
+            if (sd != NULL) {
+                pr_info("*** DEBUG: subdevs[%d] = %p (valid=%s, aligned=%s) ***\n",
+                        i, sd,
+                        (virt_addr_valid(sd) && (unsigned long)sd >= 0x80000000 && (unsigned long)sd < 0xfffff000) ? "YES" : "NO",
+                        (((unsigned long)sd & 0x3) == 0) ? "YES" : "NO");
+            }
+        }
+    }
+
     /* Binary Ninja: Main switch structure exactly as decompiled */
     if (cmd == 0x800856d7) {
         /* TX_ISP_WDR_GET_BUF - Binary Ninja exact implementation */
