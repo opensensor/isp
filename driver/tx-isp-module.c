@@ -3284,14 +3284,34 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
 
         // *** CRITICAL: TRIGGER SENSOR HARDWARE INITIALIZATION AND STREAMING ***
-        if (channel == 0 && ourISPdev && ourISPdev->subdevs[0]) {
-            /* CRITICAL FIX: Use the REAL sensor subdev from subdevs[0], not the wrapper sensor */
-            struct tx_isp_subdev *real_sensor_sd = ourISPdev->subdevs[0];
+        if (channel == 0 && ourISPdev && ourISPdev->subdevs[3]) {
+            /* CRITICAL FIX: Use the REAL sensor subdev from subdevs[3], not subdevs[0] */
+            struct tx_isp_subdev *real_sensor_sd = ourISPdev->subdevs[3];
             sensor = sd_to_sensor_device(real_sensor_sd);  /* Convert subdev to sensor structure */
 
-            pr_info("*** FIXED: Using REAL sensor subdev at %p instead of wrapper sensor ***\n", real_sensor_sd);
+            pr_info("*** FIXED: Using REAL sensor subdev at %p from subdevs[3] instead of subdevs[0] ***\n", real_sensor_sd);
             pr_info("*** FIXED: Real sensor structure at %p with ops=%p ***\n", sensor, sensor ? sensor->sd.ops : NULL);
-            
+
+            /* CRITICAL: Validate sensor structure before proceeding */
+            if (!sensor) {
+                pr_err("*** Channel %d: CRITICAL ERROR - sensor structure is NULL ***\n", channel);
+                state->streaming = false;
+                return -ENODEV;
+            }
+
+            if (!sensor->sd.ops || !sensor->sd.ops->video || !sensor->sd.ops->video->s_stream) {
+                pr_err("*** Channel %d: CRITICAL ERROR - sensor ops or s_stream is NULL ***\n", channel);
+                pr_err("*** Channel %d: sensor->sd.ops=%p ***\n", channel, sensor->sd.ops);
+                if (sensor->sd.ops) {
+                    pr_err("*** Channel %d: sensor->sd.ops->video=%p ***\n", channel, sensor->sd.ops->video);
+                    if (sensor->sd.ops->video) {
+                        pr_err("*** Channel %d: sensor->sd.ops->video->s_stream=%p ***\n", channel, sensor->sd.ops->video->s_stream);
+                    }
+                }
+                state->streaming = false;
+                return -ENODEV;
+            }
+
             pr_info("*** CHANNEL %d STREAMON: INITIALIZING AND STARTING SENSOR HARDWARE ***\n", channel);
             pr_info("Channel %d: Found sensor %s for streaming\n",
                     channel, sensor ? sensor->info.name : "(unnamed)");

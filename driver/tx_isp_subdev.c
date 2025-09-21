@@ -390,9 +390,9 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     extern struct tx_isp_subdev_ops csi_subdev_ops;
     if (ourISPdev && ops == &csi_subdev_ops) {
         /* This is a CSI subdev - register it in subdevs array */
-        ourISPdev->subdevs[3] = sd;  /* CSI at index 3 based on reference */
+        ourISPdev->subdevs[0] = sd;  /* CSI at index 0 - VIC is at 1, VIN at 2, sensor at 3 */
         sd->isp = ourISPdev;
-        pr_info("*** tx_isp_subdev_init: CSI subdev registered at index 3 ***\n");
+        pr_info("*** tx_isp_subdev_init: CSI subdev registered at index 0 ***\n");
     }
 
     /* SIMPLIFIED: Register subdevices in the global ISP device */
