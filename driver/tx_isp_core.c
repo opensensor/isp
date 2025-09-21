@@ -3233,6 +3233,33 @@ void ispcore_frame_channel_streamoff(int32_t* arg1)
         s0 = sd->host_priv;  /* SAFE: Use struct member access instead of offset arithmetic */
     }
 
+    /* CRITICAL FIX: Validate s0 pointer before accessing offset 0x15c */
+    if (!s0) {
+        pr_err("*** CRITICAL: s0 (host_priv) is NULL - cannot access offset 0x15c ***\n");
+        return;
+    }
+
+    /* CRITICAL: Check for memory corruption patterns in s0 */
+    if ((unsigned long)s0 == 0x6d617266 || (unsigned long)s0 == 0x66617266 ||
+        (unsigned long)s0 == 0x5aaa5aaa || (unsigned long)s0 == 0x6b6b6b6b ||
+        (unsigned long)s0 == 0xdeadbeef || (unsigned long)s0 == 0xbaadf00d) {
+        pr_err("*** CRITICAL: s0 pointer 0x%p contains corruption pattern - ABORTING ***\n", s0);
+        pr_err("*** This indicates string data or poison values overwrote the pointer ***\n");
+        return;
+    }
+
+    /* CRITICAL: Validate s0 is in valid kernel memory range */
+    if ((unsigned long)s0 < 0x80000000 || (unsigned long)s0 >= 0xfffff000) {
+        pr_err("*** CRITICAL: s0 pointer 0x%p outside kernel memory - ABORTING ***\n", s0);
+        return;
+    }
+
+    /* CRITICAL: Validate s0 is properly aligned */
+    if ((unsigned long)s0 & 0x3) {
+        pr_err("*** CRITICAL: s0 pointer 0x%p not 4-byte aligned - ABORTING ***\n", s0);
+        return;
+    }
+
     int32_t v1_2 = *((int32_t*)((char*)s0 + 0x15c));  /* *(s0 + 0x15c) */
     void* s2 = (void*)arg1[8];
     void* s3 = *((void**)((char*)s0 + 0x120));  /* *(s0 + 0x120) */
@@ -3624,6 +3651,16 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
             
             if (arg3 != 0 && a1_3 != 0) {
                 void* v0_38 = (void*)(*((uint32_t*)a1_3 + 0x1f)); /* a1_3 + 0x7c */
+
+                /* CRITICAL: Validate v0_38 before accessing offset 0x15c */
+                if (!v0_38 || (unsigned long)v0_38 < 0x80000000 || (unsigned long)v0_38 >= 0xfffff000 ||
+                    ((unsigned long)v0_38 & 0x3) != 0) {
+                    pr_err("*** CRITICAL: v0_38 pointer 0x%p invalid - skipping 0x15c access ***\n", v0_38);
+                    memcpy(arg3, a1_3, 0x70);
+                    ISP_INFO("ispcore_pad_event_handle: copied format data (0x70 bytes) - v0_38 invalid");
+                    return 0;
+                }
+
                 if (*((uint32_t*)v0_38 + 0x57) != 1) { /* *(*(a1_3 + 0x7c) + 0x15c) != 1 */
                     memcpy(arg3, a1_3, 0x70);
                     ISP_INFO("ispcore_pad_event_handle: copied format data (0x70 bytes)");
