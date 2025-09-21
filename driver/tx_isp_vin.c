@@ -381,51 +381,6 @@ int tx_isp_vin_activate_subdev(void* arg1)
     return 0;
 }
 
-
-/**
- * vic_core_ops_ioctl - VIN core ioctl handler
- * @sd: Subdev structure
- * @cmd: Command
- * @arg: Argument
- */
-static int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
-{
-    struct tx_isp_vin_device *vin = sd_to_vin_device(sd);
-    struct tx_isp_sensor *sensor = vin->active;
-    int ret = 0;
-
-    mcp_log_info("vin_ioctl: command received", cmd);
-
-    switch (cmd) {
-    case TX_ISP_EVENT_SUBDEV_INIT:
-        if (sensor && is_valid_kernel_pointer(sensor)) {
-            if (sensor->sd.ops && sensor->sd.ops->core && sensor->sd.ops->core->init) {
-                ret = sensor->sd.ops->core->init(&sensor->sd, *(int*)arg);
-                if (ret == -0x203) {
-                    ret = 0;
-                }
-            }
-        }
-        break;
-    case 0x2000000: /* Special command from binary analysis - changed to avoid duplicate */
-        if (sensor && is_valid_kernel_pointer(sensor)) {
-            if (sensor->sd.ops && sensor->sd.ops->core && sensor->sd.ops->core->init) {
-                ret = sensor->sd.ops->core->init(&sensor->sd, 1);
-                if (ret == -0x203) {
-                    ret = 0;
-                }
-            }
-        }
-        break;
-    default:
-        ret = -ENOIOCTLCMD;
-        break;
-    }
-
-    mcp_log_info("vin_ioctl: command result", ret);
-    return ret;
-}
-
 /* ========================================================================
  * VIN Subdev Operations Structure
  * ======================================================================== */

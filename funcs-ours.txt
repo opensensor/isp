@@ -2,10 +2,6 @@ JZ_Isp_Ae_Dg2reg
 Tiziano_ae1_fpga
 Tiziano_awb_set_gain
 Tiziano_wdr_fpga
-__enqueue_in_driver
-__fill_v4l2_buffer
-__frame_channel_vb2_streamoff
-__private_spin_lock_irqsave
 ae0_interrupt_hist
 ae0_interrupt_hist_wrapper
 ae0_interrupt_static
@@ -28,10 +24,8 @@ check_region_changes
 cleanup_i2c_infrastructure
 cleanup_region
 cm_control
-create_frame_channel_devices
 csi_core_ops_init
 csi_device_probe
-csi_read32
 csi_sensor_ops_ioctl
 csi_sensor_ops_sync_sensor_attr
 csi_set_on_lanes
@@ -45,14 +39,12 @@ data_b2ef4
 data_b2ef8
 data_b2f04
 data_b2f08
-destroy_frame_channel_devices
 destroy_isp_tuning_device
 dump_csi_reg
 dump_isp_csi_open
 dump_isp_vic_frd_open
 dump_vic_reg
 end_sequence
-find_subdev_link_pad
 fix_point_div_32
 fix_point_div_64
 fix_point_mult2_32
@@ -68,11 +60,14 @@ fs_chardev_open
 fs_chardev_release
 fs_slake_module
 get_isp_clk
+get_reg_type
 graph_proc_open
 graph_proc_read
 graph_proc_show
 init_region
+int
 ip_done_interrupt_static
+irqreturn_t
 is_sequential_write
 is_valid_kernel_pointer
 isp_core_tuning_deinit
@@ -88,11 +83,14 @@ isp_free_buffer
 isp_fw_process
 isp_get_ae_state
 isp_get_af_zone
+isp_i2c_new_subdev_board
 isp_irq_dispatcher
 isp_irq_handle
 isp_irq_thread_handle
 isp_m0_chardev_release
 isp_malloc_buffer
+isp_monitor_exit
+isp_monitor_init
 isp_printf
 isp_subdev_init_clks
 isp_trigger_event
@@ -135,6 +133,7 @@ prepare_i2c_infrastructure
 private_capable
 private_clk_disable
 private_clk_enable
+private_clk_get
 private_clk_put
 private_clk_set_rate
 private_complete
@@ -143,6 +142,7 @@ private_dma_sync_single_for_device
 private_do_gettimeofday
 private_driver_get_interface
 private_free_irq
+private_get_driver_interface
 private_gpio_direction_output
 private_gpio_free
 private_gpio_request
@@ -151,6 +151,7 @@ private_i2c_del_driver
 private_i2c_set_clientdata
 private_i2c_transfer
 private_init_completion
+private_ioremap
 private_iounmap
 private_jzgpio_set_func
 private_kfree
@@ -164,9 +165,11 @@ private_platform_device_register
 private_platform_device_unregister
 private_platform_get_drvdata
 private_platform_get_irq
+private_platform_get_resource
 private_platform_set_drvdata
 private_raw_mutex_init
 private_release_mem_region
+private_request_mem_region
 private_reset_tx_isp_module
 private_schedule_hrtimeout
 private_schedule_work
@@ -208,6 +211,8 @@ subdev_sensor_ops_enum_input
 subdev_sensor_ops_ioctl
 subdev_sensor_ops_release_all_sensor
 subdev_sensor_ops_set_input
+subdev_video_destroy_link
+system_irq_func_set
 system_reg_read
 system_reg_write
 system_reg_write_ae
@@ -534,10 +539,7 @@ tx_isp_csi_device_init
 tx_isp_csi_hw_init
 tx_isp_csi_probe
 tx_isp_csi_remove
-tx_isp_csi_set_format
 tx_isp_csi_slake_subdev
-tx_isp_csi_start
-tx_isp_csi_stop
 tx_isp_destroy_core_device
 tx_isp_destroy_v4l2_device
 tx_isp_detect_and_register_sensors
@@ -546,6 +548,8 @@ tx_isp_enable_irq
 tx_isp_exit
 tx_isp_frame_chan_deinit
 tx_isp_free_irq
+tx_isp_fs_platform_exit
+tx_isp_fs_platform_init
 tx_isp_fs_probe
 tx_isp_fs_remove
 tx_isp_handle_sync_sensor_attr_event
@@ -572,6 +576,8 @@ tx_isp_subdev_auto_link
 tx_isp_subdev_deinit
 tx_isp_subdev_init
 tx_isp_subdev_pipo
+tx_isp_subdev_platform_exit
+tx_isp_subdev_platform_init
 tx_isp_subdev_register
 tx_isp_subdev_unregister
 tx_isp_unlocked_ioctl
@@ -606,7 +612,7 @@ tx_isp_vic_probe
 tx_isp_vic_remove
 tx_isp_vic_slake_subdev
 tx_isp_vic_start
-tx_isp_video_link_destroy_impl
+tx_isp_video_link_destroy
 tx_isp_video_link_stream
 tx_isp_video_s_stream
 tx_isp_vin_activate_subdev
@@ -633,5 +639,6 @@ video_input_cmd_open
 video_input_cmd_set
 video_input_cmd_show
 vin_s_stream
+void
 wdr_mode_show
 wdr_mode_store

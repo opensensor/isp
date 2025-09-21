@@ -1311,36 +1311,6 @@ static const struct file_operations frame_channel_fops = {
     .compat_ioctl = frame_channel_unlocked_ioctl,
 };
 
-// Helper functions matching reference driver patterns - SDK compatible
-static void* find_subdev_link_pad(struct tx_isp_dev *isp_dev, char *name)
-{
-    if (!isp_dev || !name) {
-        return NULL;
-    }
-    
-    pr_info("find_subdev_link_pad: searching for %s\n", name);
-    
-    // Work with actual SDK structure - check individual device pointers
-    if (strstr(name, "sensor") && isp_dev->sensor) {
-        pr_info("Found sensor device\n");
-        return &isp_dev->sensor->sd; // Return sensor subdev
-    }
-    
-    if (strstr(name, "csi") && isp_dev->csi_dev) {
-        pr_info("Found CSI device\n");
-        return &((struct tx_isp_csi_device *)isp_dev->csi_dev)->sd; // Return CSI subdev pointer
-    }
-    
-    if (strstr(name, "vic") && isp_dev->vic_dev) {
-        pr_info("Found VIC device\n");
-        /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
-        return &(isp_dev->vic_dev->sd); // Return VIC subdev pointer
-    }
-    
-    pr_info("Subdev %s not found\n", name);
-    return NULL;
-}
-
 // Simplified VIC registration - removed complex platform device array
 static int vic_registered = 0;
 
@@ -1735,22 +1705,6 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     return IRQ_HANDLED;
 }
 
-static int tx_isp_video_link_destroy_impl(struct tx_isp_dev *isp_dev)
-{
-    // Reference: tx_isp_video_link_destroy.isra.5
-    // Gets link_config from offset 0x118, destroys links, sets to -1
-    
-    pr_info("Video link destroy: cleaning up pipeline connections\n");
-    
-    // In full implementation:
-    // 1. Get link_config from isp_dev->link_config (offset 0x118)
-    // 2. Iterate through configs array
-    // 3. Call find_subdev_link_pad() and subdev_video_destroy_link()
-    // 4. Set link_config to -1
-    
-    return 0;
-}
-
 /* RACE CONDITION SAFE: Global initialization lock for subdev array access */
 static DEFINE_MUTEX(subdev_init_lock);
 static volatile bool subdev_init_complete = false;
@@ -1758,6 +1712,214 @@ static volatile bool subdev_init_complete = false;
 /* Forward declaration for tx_isp_video_s_stream */
 int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable);
 int tx_isp_vic_configure_dma(struct tx_isp_vic_device *vic_dev, dma_addr_t base_addr, u32 width, u32 height);
+
+/* Video link pad structure for Binary Ninja compatibility */
+struct tx_isp_video_pad {
+    struct tx_isp_subdev *sd;
+    int pad_type;  /* 1 = source, 2 = sink */
+    int pad_index;
+    int flags;
+    int state;     /* 2 = disconnected, 3 = connected */
+    void *link_src;
+    void *link_dst;
+    void *link_src_pad;
+    void *link_dst_pad;
+    int link_flags;
+};
+
+/* Configuration structure for video links - Binary Ninja reference */
+struct tx_isp_link_config {
+    char src_name[16];
+    char dst_name[16];
+    int src_pad;
+    int dst_pad;
+    int flags;
+};
+
+/* Global link configurations - Binary Ninja reference at 0x7ad50 and configs array */
+static struct tx_isp_link_config link_configs[][2] = {
+    /* Config 0 - Basic pipeline */
+    {
+        {"tx-isp-csi", "isp-w02", 0, 0, 0x1},
+        {"isp-w02", "tx-isp-vin", 0, 0, 0x1}
+    },
+    /* Config 1 - Alternative pipeline */
+    {
+        {"tx-isp-csi", "tx-isp-vin", 0, 0, 0x1},
+        {"tx-isp-vin", "isp-w02", 0, 0, 0x1}
+    }
+};
+
+static int link_config_counts[] = {2, 2};  /* Number of links per config */
+
+/**
+ * find_subdev_link_pad - Find subdev pad by name and type
+ * @isp_dev: ISP device
+ * @config: Link configuration entry
+ * Returns: Pointer to pad structure or NULL if not found
+ *
+ * Binary Ninja reference implementation
+ */
+static struct tx_isp_video_pad *find_subdev_link_pad(struct tx_isp_dev *isp_dev,
+                                                    struct tx_isp_link_config *config)
+{
+    int i;
+
+    if (!isp_dev || !config) {
+        return NULL;
+    }
+
+    /* Search through subdevices for matching name */
+    for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+        struct tx_isp_subdev *sd = isp_dev->subdevs[i];
+        if (!sd || !sd->name) {
+            continue;
+        }
+
+        /* Compare subdev name with config source name */
+        if (strcmp(sd->name, config->src_name) == 0) {
+            /* Found matching subdev - create/return pad structure */
+            static struct tx_isp_video_pad pad;
+            memset(&pad, 0, sizeof(pad));
+            pad.sd = sd;
+            pad.pad_type = 1;  /* Source pad */
+            pad.pad_index = config->src_pad;
+            pad.flags = config->flags;
+            pad.state = 2;  /* Initially disconnected */
+            return &pad;
+        }
+
+        /* Compare subdev name with config destination name */
+        if (strcmp(sd->name, config->dst_name) == 0) {
+            /* Found matching subdev - create/return pad structure */
+            static struct tx_isp_video_pad pad;
+            memset(&pad, 0, sizeof(pad));
+            pad.sd = sd;
+            pad.pad_type = 2;  /* Sink pad */
+            pad.pad_index = config->dst_pad;
+            pad.flags = config->flags;
+            pad.state = 2;  /* Initially disconnected */
+            return &pad;
+        }
+    }
+
+    return NULL;
+}
+
+/**
+ * subdev_video_destroy_link - Destroy a single video link
+ * @link_pad: Pointer to link pad structure
+ * Returns: 0 on success
+ *
+ * Binary Ninja reference implementation
+ */
+static int subdev_video_destroy_link(struct tx_isp_video_pad *link_pad)
+{
+    if (!link_pad) {
+        return 0;
+    }
+
+    /* Binary Ninja: if (arg1[3] != 0) - check if link is active */
+    if (link_pad->link_flags != 0) {
+        void *src_pad = link_pad->link_src;
+        void *dst_pad = link_pad->link_dst;
+        void *src_pad_ptr = link_pad->link_src_pad;
+        void *dst_pad_ptr = link_pad->link_dst_pad;
+
+        /* Clear link structure */
+        link_pad->link_src = NULL;
+        link_pad->link_dst = NULL;
+        link_pad->link_src_pad = NULL;
+        link_pad->link_dst_pad = NULL;
+        link_pad->link_flags = 0;
+
+        /* Set pad state to disconnected */
+        link_pad->state = 2;
+
+        /* Clear destination pad if it exists */
+        if (dst_pad_ptr) {
+            struct tx_isp_video_pad *dst = (struct tx_isp_video_pad *)dst_pad_ptr;
+            dst->link_src = NULL;
+            dst->link_dst = NULL;
+            dst->link_src_pad = NULL;
+            dst->link_dst_pad = NULL;
+            dst->link_flags = 0;
+            dst->state = 2;
+        }
+
+        /* Set source pad state to disconnected if it exists */
+        if (src_pad) {
+            struct tx_isp_video_pad *src = (struct tx_isp_video_pad *)src_pad;
+            src->state = 2;
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * tx_isp_video_link_destroy - Destroy all video links
+ * @isp_dev: ISP device
+ * Returns: 0 on success, negative error code on failure
+ *
+ * Binary Ninja reference implementation
+ */
+static int tx_isp_video_link_destroy(struct tx_isp_dev *isp_dev)
+{
+    int current_config;
+    int i, ret = 0;
+
+    if (!isp_dev) {
+        pr_err("tx_isp_video_link_destroy: No ISP device\n");
+        return -ENODEV;
+    }
+
+    /* Binary Ninja: int32_t $v1_1 = *(arg1 + 0x118) - get current link config */
+    current_config = isp_dev->link_config;  /* Stored at offset 0x10c in Binary Ninja */
+
+    pr_info("tx_isp_video_link_destroy: Destroying links for config %d\n", current_config);
+
+    /* Binary Ninja: if ($v1_1 s>= 0) - check if valid config */
+    if (current_config >= 0 && current_config < ARRAY_SIZE(link_configs)) {
+        int link_count = link_config_counts[current_config];
+        struct tx_isp_link_config *config = link_configs[current_config];
+
+        /* Binary Ninja: Loop through all links in current configuration */
+        for (i = 0; i < link_count; i++) {
+            struct tx_isp_video_pad *src_pad, *dst_pad;
+
+            /* Find source and destination pads */
+            src_pad = find_subdev_link_pad(isp_dev, &config[i]);
+            dst_pad = find_subdev_link_pad(isp_dev, &config[i]);
+
+            if (src_pad && dst_pad) {
+                /* Destroy the link between these pads */
+                ret = subdev_video_destroy_link(src_pad);
+                if (ret != 0 && ret != -ENOTCONN) {  /* -ENOTCONN = 0xfffffdfd */
+                    pr_err("tx_isp_video_link_destroy: Failed to destroy link %d: %d\n", i, ret);
+                    break;
+                }
+
+                /* Also destroy the reverse link */
+                ret = subdev_video_destroy_link(dst_pad);
+                if (ret != 0 && ret != -ENOTCONN) {
+                    pr_err("tx_isp_video_link_destroy: Failed to destroy reverse link %d: %d\n", i, ret);
+                    break;
+                }
+
+                pr_info("tx_isp_video_link_destroy: Destroyed link %s->%s\n",
+                        config[i].src_name, config[i].dst_name);
+            }
+        }
+
+        /* Binary Ninja: *(arg1 + 0x118) = 0xffffffff - mark config as destroyed */
+        isp_dev->link_config = -1;
+
+        pr_info("tx_isp_video_link_destroy: All links destroyed, config reset to -1\n");
+    }
+
+    return ret;
+}
 
 /* tx_isp_video_link_stream - EXACT Binary Ninja reference implementation */
 int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
@@ -4349,31 +4511,81 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     }
     case 0x800456d0: { // TX_ISP_VIDEO_LINK_SETUP - Video link configuration
         int link_config;
-        
+        int i, ret = 0;
+
         if (copy_from_user(&link_config, argp, sizeof(link_config)))
             return -EFAULT;
-        
+
         if (link_config >= 2) {
             pr_err("Invalid video link config: %d (valid: 0-1)\n", link_config);
             return -EINVAL;
         }
-        
+
         pr_info("Video link setup: config=%d\n", link_config);
-        
-        // Reference implementation configures subdev links and pads
-        // In full implementation, this would:
-        // 1. Find subdev pads using find_subdev_link_pad()
-        // 2. Setup media pipeline connections
-        // 3. Configure link properties based on config value
-        // 4. Store config in device structure at offset 0x10c
-        
-        // For now, acknowledge the link setup
-        // isp_dev->link_config = link_config; // Would store at offset 0x10c
-        
-        return 0;
+
+        /* Binary Ninja: Check if config is different from current */
+        if (link_config != isp_dev->link_config) {
+            int link_count = link_config_counts[link_config];
+            struct tx_isp_link_config *config = link_configs[link_config];
+
+            pr_info("tx_isp_video_link_setup: Setting up %d links for config %d\n", link_count, link_config);
+
+            /* Binary Ninja: Loop through all links in configuration */
+            for (i = 0; i < link_count; i++) {
+                struct tx_isp_video_pad *src_pad, *dst_pad;
+
+                /* Find source and destination pads */
+                src_pad = find_subdev_link_pad(isp_dev, &config[i]);
+                dst_pad = find_subdev_link_pad(isp_dev, &config[i]);
+
+                if (!src_pad || !dst_pad) {
+                    pr_warn("tx_isp_video_link_setup: Could not find pads for link %d (%s->%s)\n",
+                            i, config[i].src_name, config[i].dst_name);
+                    continue;
+                }
+
+                /* Binary Ninja: Check pad compatibility and flags */
+                if ((src_pad->flags & dst_pad->flags & config[i].flags) == 0) {
+                    pr_err("tx_isp_video_link_setup: Incompatible pad flags for link %d\n", i);
+                    return -EINVAL;
+                }
+
+                /* Binary Ninja: Check pad states */
+                if (src_pad->state == 4 || dst_pad->state == 4) {
+                    pr_err("tx_isp_video_link_setup: Invalid pad state for link %d\n", i);
+                    return -EINVAL;
+                }
+
+                /* Binary Ninja: Setup the link */
+                src_pad->link_src = src_pad;
+                src_pad->link_dst = dst_pad;
+                src_pad->link_src_pad = src_pad;
+                src_pad->link_dst_pad = dst_pad;
+                src_pad->link_flags = config[i].flags | 1;  /* Enable link */
+                src_pad->state = 3;  /* Connected */
+
+                dst_pad->link_src = dst_pad;
+                dst_pad->link_dst = src_pad;
+                dst_pad->link_src_pad = dst_pad;
+                dst_pad->link_dst_pad = src_pad;
+                dst_pad->link_flags = config[i].flags | 1;  /* Enable link */
+                dst_pad->state = 3;  /* Connected */
+
+                pr_info("tx_isp_video_link_setup: Configured link %s->%s\n",
+                        config[i].src_name, config[i].dst_name);
+            }
+
+            /* Binary Ninja: Store config in device structure at offset 0x10c */
+            isp_dev->link_config = link_config;
+
+            pr_info("tx_isp_video_link_setup: Link configuration %d applied successfully\n", link_config);
+        }
+
+        return ret;
     }
     case 0x800456d1: { // TX_ISP_VIDEO_LINK_DESTROY - Destroy video links
-        return tx_isp_video_link_destroy_impl(isp_dev);
+        pr_info("Video link destroy requested\n");
+        return tx_isp_video_link_destroy(isp_dev);
     }
     case 0x800456d2: { // TX_ISP_VIDEO_LINK_STREAM_ON - Enable video link streaming
         return tx_isp_video_link_stream(isp_dev, 1);
@@ -6227,82 +6439,6 @@ static long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, 
     return -EINVAL;
 }
 EXPORT_SYMBOL(subdev_sensor_ops_ioctl);
-
-/* vic_core_ops_init - VIC core operations initialization */
-static int vic_core_ops_init(struct v4l2_subdev *sd, u32 val)
-{
-    struct tx_isp_vic_device *vic_dev;
-
-    pr_info("vic_core_ops_init: Initializing VIC core operations\n");
-
-    if (!sd) {
-        return -EINVAL;
-    }
-
-    /* CRITICAL FIX: Use safe member access instead of dangerous cast from tx_isp_get_subdevdata */
-    /* tx_isp_get_subdevdata() returns corrupted pointer - use ourISPdev->vic_dev instead */
-    if (!ourISPdev || !ourISPdev->vic_dev) {
-        pr_err("*** VIC CORE INIT: No VIC device available ***\n");
-        return -EINVAL;
-    }
-    vic_dev = ourISPdev->vic_dev;
-
-    /* Initialize VIC core operations */
-    vic_dev->state = 3; /* INITIALIZED state */
-
-    /* Initialize VIC hardware if needed */
-    if (vic_dev->vic_regs) {
-        /* SAFE: Use proper register access instead of unsafe casting */
-        writel(0x2, vic_dev->vic_regs + 0x0); /* Reset */
-        writel(0x0, vic_dev->vic_regs + 0x0); /* Clear reset */
-    }
-
-    return 0;
-}
-EXPORT_SYMBOL(vic_core_ops_init);
-
-/* vic_core_ops_ioctl - VIC core operations IOCTL */
-static long vic_core_ops_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
-{
-    struct tx_isp_vic_device *vic_dev;
-
-    pr_info("vic_core_ops_ioctl: cmd=0x%x\n", cmd);
-
-    if (!sd) {
-        return -EINVAL;
-    }
-
-    /* CRITICAL FIX: Use safe member access instead of dangerous cast from tx_isp_get_subdevdata */
-    /* tx_isp_get_subdevdata() returns corrupted pointer - use ourISPdev->vic_dev instead */
-    if (!ourISPdev || !ourISPdev->vic_dev) {
-        pr_err("*** VIC CORE IOCTL: No VIC device available ***\n");
-        return -EINVAL;
-    }
-    vic_dev = ourISPdev->vic_dev;
-
-    /* Handle VIC-specific IOCTLs */
-    switch (cmd) {
-        case 0x800001: /* VIC start */
-            return tx_isp_vic_start(vic_dev);
-
-        case 0x800002: /* VIC stop */
-            vic_dev->state = 3;
-            return 0;
-
-        case 0x800003: /* VIC reset */
-            if (vic_dev->vic_regs) {
-                /* SAFE: Use proper register access */
-                writel(0x2, vic_dev->vic_regs + 0x0);
-                writel(0x0, vic_dev->vic_regs + 0x0);
-            }
-            return 0;
-
-        default:
-            pr_info("vic_core_ops_ioctl: Unsupported cmd 0x%x\n", cmd);
-            return -ENOTTY;
-    }
-}
-EXPORT_SYMBOL(vic_core_ops_ioctl);
 
 /* ispcore_sensor_ops_release_all_sensor - Release all sensors */
 static int ispcore_sensor_ops_release_all_sensor(struct tx_isp_subdev *sd)

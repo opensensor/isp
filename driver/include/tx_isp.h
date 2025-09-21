@@ -267,6 +267,9 @@ struct tx_isp_dev {
     
     /* CRITICAL: Binary Ninja subdev array at offset 0x38 - tx_isp_video_link_stream depends on this */
     struct tx_isp_subdev *subdevs[16];       /* Subdev array at offset 0x38 for tx_isp_video_link_stream */
+
+    /* Video link configuration - Binary Ninja reference at offset 0x10c */
+    int link_config;                         /* Current link configuration (-1 = destroyed, 0-1 = valid configs) */
     
     /* Frame channel devices - needed for tx_isp_create_framechan_devices */
     struct miscdevice *fs_miscdevs[4];       /* Frame source misc devices (/dev/isp-fs*) */
