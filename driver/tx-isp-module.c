@@ -1007,7 +1007,9 @@ static int sensor_set_analog_gain(int gain) {
 static int sensor_set_analog_gain_short(int gain) {
     /* Binary Ninja: Sets short exposure analog gain for WDR mode */
 
-    if (!ourISPdev || !ourISPdev->sensor) {
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor) {
         return -ENODEV;
     }
 
