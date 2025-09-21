@@ -3287,9 +3287,9 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_info("TX_ISP_SENSOR_ENUM_INPUT: Found sensor '%s' at index %d\n",
                         var_98.as_input.name, var_98.as_input.index);
             } else {
-                pr_info("TX_ISP_SENSOR_ENUM_INPUT: No sensor found at index %d, clearing name\n",
+                pr_info("TX_ISP_SENSOR_ENUM_INPUT: No sensor found at index %d, returning empty name\n",
                         var_98.as_input.index);
-                /* Clear sensor name to indicate no sensor - userspace checks name */
+                /* Clear sensor name - userspace will see empty name and stop enumeration */
                 memset(var_98.as_input.name, 0, sizeof(var_98.as_input.name));
             }
 
