@@ -30,21 +30,6 @@ extern struct tx_isp_dev *ourISPdev;
 static int frame_chan_event(void *data);
 int fs_slake_module(struct tx_isp_subdev *sd);
 
-
-/* FS subdev core operations */
-static int fs_core_ops_init(struct tx_isp_subdev *sd, int enable)
-{
-    pr_info("*** fs_core_ops_init: enable=%d ***\n", enable);
-    return 0;
-}
-
-/* FS subdev sensor operations */
-static int fs_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
-{
-    pr_info("*** fs_sensor_ops_ioctl: cmd=0x%x ***\n", cmd);
-    return 0;
-}
-
 /* fs_slake_module - EXACT Binary Ninja reference implementation */
 int fs_slake_module(struct tx_isp_subdev *sd)
 {
@@ -95,12 +80,12 @@ EXPORT_SYMBOL(fs_slake_module);
 
 /* FS subdev core operations structure */
 static struct tx_isp_subdev_core_ops fs_core_ops = {
-    .init = fs_core_ops_init,
+    .init = NULL,
 };
 
 /* FS subdev sensor operations structure */
 static struct tx_isp_subdev_sensor_ops fs_sensor_ops = {
-    .ioctl = fs_sensor_ops_ioctl,
+    .ioctl = NULL,
 };
 
 /* FS internal operations - EXACT Binary Ninja implementation */
