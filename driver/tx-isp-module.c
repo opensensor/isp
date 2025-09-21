@@ -65,6 +65,9 @@ struct registered_sensor {
 // Simple global device instance
 struct tx_isp_dev *ourISPdev = NULL;
 static int sensor_count = 0;
+
+/* Global current sensor index - tracks which sensor is currently selected */
+static int current_sensor_index = -1; /* -1 means no sensor selected */
 extern int isp_memopt; // Memory optimization flag from tx_isp_core.c
 
 /* CRITICAL: VIC interrupt control flag - Binary Ninja reference */
@@ -5344,6 +5347,9 @@ static int subdev_sensor_ops_set_input(struct tx_isp_subdev *sd, unsigned int cm
 
     if (result == 0) {
         pr_info("subdev_sensor_ops_set_input: Sensor input set successfully to index %d\n", input_index);
+        /* CRITICAL FIX: Store the current sensor index for Get sensor input IOCTL */
+        current_sensor_index = input_index;
+        pr_info("subdev_sensor_ops_set_input: Stored current_sensor_index = %d\n", current_sensor_index);
     } else {
         pr_err("subdev_sensor_ops_set_input: Failed to set sensor input to index %d, result=%d\n", input_index, result);
     }
