@@ -549,7 +549,6 @@ irqreturn_t ip_done_interrupt_static(int irq, void *dev_id);
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
 int sensor_init(struct tx_isp_dev *isp_dev);
 void *isp_core_tuning_init(void *arg1);
-void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
 void *isp_mem_init(void);
 void system_reg_write(u32 reg, u32 value);
 uint32_t system_reg_read(u32 reg);  /* Add system_reg_read declaration */
