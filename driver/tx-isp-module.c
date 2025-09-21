@@ -4990,14 +4990,7 @@ static int tx_isp_init(void)
         goto err_cleanup_subdev_drivers;
     }
 
-    /* Step 4: Register misc device to create /dev/tx-isp */
-    ret = misc_register(&tx_isp_miscdev);
-    if (ret != 0) {
-        pr_err("Failed to register misc device: %d\n", ret);
-        platform_driver_unregister(&tx_isp_driver);
-        platform_device_unregister(&tx_isp_platform_device);
-        goto err_free_dev;
-    }
+    /* Reference driver: misc device registration happens in tx_isp_module_init, not here */
 
     pr_info("TX ISP driver initialized successfully\n");
     pr_info("Device nodes created:\n");
