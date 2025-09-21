@@ -8967,13 +8967,13 @@ static irqreturn_t isp_irq_dispatcher(int irq, void *dev_id)
     unsigned long flags;
     int handled = 0;
     
-    if (!dev || !dev->core_regs) {
+    if (!dev || !dev->core_dev || !dev->core_dev->core_regs) {
         pr_err("isp_irq_dispatcher: Invalid device or register base\n");
         return IRQ_NONE;
     }
 
     /* Read ISP interrupt status */
-    irq_status = readl(dev->core_regs + 0x40);
+    irq_status = readl(dev->core_dev->core_regs + 0x40);
 
     if (!irq_status) {
         return IRQ_NONE; /* Not our interrupt */
@@ -8995,7 +8995,7 @@ static irqreturn_t isp_irq_dispatcher(int irq, void *dev_id)
     spin_unlock_irqrestore(&isp_irq_lock, flags);
 
     /* Clear handled interrupts */
-    writel(irq_status, ourISPdev->core_regs + 0x40);
+    writel(irq_status, dev->core_dev->core_regs + 0x40);
 
     return handled ? IRQ_HANDLED : IRQ_NONE;
 }
