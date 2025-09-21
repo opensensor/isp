@@ -3664,15 +3664,20 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
             if ((arg1[7] & 0xff) != 3) /* zx.d(*(arg1 + 7)) != 3 */
                 return 0;
             
-            __private_spin_lock_irqsave((char*)s2_1 + 0x9c, &var_58);
-            
-            if (*((uint32_t*)s2_1 + 0x1d) != 4) { /* *(s2_1 + 0x74) != 4 */
+            /* CRITICAL FIX: Use safe struct member access instead of unsafe offset arithmetic */
+            struct frame_channel_binary_ninja *channel_s2 = (struct frame_channel_binary_ninja *)s2_1;
+
+            /* SAFE: Use struct member access for spinlock instead of (char*)s2_1 + 0x9c */
+            __private_spin_lock_irqsave(&channel_s2->lock, &var_58);
+
+            /* SAFE: Use struct member access for state field instead of *(s2_1 + 0x74) */
+            if (channel_s2->state != 4) {
                 tisp_channel_start((uint32_t)arg1[1] & 0xff, NULL); /* zx.d(arg1[1].b) */
-                *((uint32_t*)s2_1 + 0x1d) = 4; /* *(s2_1 + 0x74) = 4 */
+                channel_s2->state = 4; /* *(s2_1 + 0x74) = 4 */
                 uint32_t a1_6 = var_58;
                 arg1[7] = 4;
                 result = 0;
-                spin_unlock_irqrestore((char*)s2_1 + 0x9c, a1_6);
+                spin_unlock_irqrestore(&channel_s2->lock, a1_6);
                 ISP_INFO("ispcore_pad_event_handle: channel started successfully");
             } else {
                 arch_local_irq_restore(var_58);
@@ -3733,7 +3738,9 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                     }
                     
                     *((uint32_t*)arg3 - 7) = 4;  /* *(arg3 - 0x1c) = 4 */
-                    __private_spin_lock_irqsave((char*)s1_2 + 0x9c, &var_58);
+                    /* SAFE: Use struct member access for spinlock instead of (char*)s1_2 + 0x9c */
+                    struct frame_channel_binary_ninja *channel_s1_2 = (struct frame_channel_binary_ninja *)s1_2;
+                    __private_spin_lock_irqsave(&channel_s1_2->lock, &var_58);
                     
                     if (*((uint32_t*)s1_2 + 3) != 0x3231564e) { /* *(s1_2 + 0xc) != 0x3231564e */
                         isp_printf(2, "Err [VIC_INT] : control limit err!!!\n");
