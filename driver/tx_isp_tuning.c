@@ -7373,12 +7373,12 @@ int tisp_ccm_ct_update(void)
     /* SAFE: Use global ISP device instead of complex parameter conversion */
     extern struct tx_isp_dev *ourISPdev;
 
-    if (!ourISPdev || !ourISPdev->tuning_data) {
+    if (!ourISPdev || !ourISPdev->core_dev || !ourISPdev->core_dev->tuning_data) {
         pr_info("tisp_ccm_ct_update: No ISP device or tuning data available\n");
         return 0;
     }
 
-    int32_t current_ct = ourISPdev->tuning_data->wb_temp;
+    int32_t current_ct = ourISPdev->core_dev->tuning_data->wb_temp;
 
     /* Check if CT has changed significantly */
     uint32_t ct_diff = (data_c52f4 >= current_ct) ?
@@ -7392,9 +7392,9 @@ int tisp_ccm_ct_update(void)
         data_c52f4 = current_ct;
 
         /* Simple CCM update - write basic values to hardware */
-        if (ourISPdev->core_regs) {
-            writel(0x100, ourISPdev->core_regs + 0x2800);  /* CCM enable */
-            writel(current_ct, ourISPdev->core_regs + 0x2804);  /* CT value */
+        if (ourISPdev->core_dev->core_regs) {
+            writel(0x100, ourISPdev->core_dev->core_regs + 0x2800);  /* CCM enable */
+            writel(current_ct, ourISPdev->core_dev->core_regs + 0x2804);  /* CT value */
         }
 
         return 1;  /* CT updated */
@@ -7411,13 +7411,13 @@ int tisp_ccm_ev_update(void)
     /* SAFE: Use global ISP device for EV access */
     extern struct tx_isp_dev *ourISPdev;
 
-    if (!ourISPdev || !ourISPdev->tuning_data) {
+    if (!ourISPdev || !ourISPdev->core_dev || !ourISPdev->core_dev->tuning_data) {
         pr_info("tisp_ccm_ev_update: No ISP device or tuning data available\n");
         return 0;
     }
 
     /* Get current EV value from tuning data */
-    uint32_t current_ev = ourISPdev->tuning_data->exposure >> 10;
+    uint32_t current_ev = ourISPdev->core_dev->tuning_data->exposure >> 10;
 
     /* Check if EV has changed significantly */
     uint32_t ev_diff = (data_c52ec >= current_ev) ?
@@ -7440,9 +7440,9 @@ int tisp_ccm_ev_update(void)
         }
 
         /* Simple hardware update instead of complex CCM operations */
-        if (ourISPdev->core_regs) {
-            writel(data_c52fc, ourISPdev->core_regs + 0x2808);  /* Saturation register */
-            writel(current_ev, ourISPdev->core_regs + 0x280c);  /* EV register */
+        if (ourISPdev->core_dev->core_regs) {
+            writel(data_c52fc, ourISPdev->core_dev->core_regs + 0x2808);  /* Saturation register */
+            writel(current_ev, ourISPdev->core_dev->core_regs + 0x280c);  /* EV register */
         }
 
         return 1;  /* EV updated */
