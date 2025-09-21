@@ -1767,8 +1767,8 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
         /* Binary Ninja: if ($v0_3 != 1) */
         if (vic_state != 1) {
             /* Binary Ninja: if (arg2 == 0) - Deinitialize if no sensor attributes */
-            if (sensor_attr == NULL) {
-                pr_info("ispcore_core_ops_init: Deinitializing (sensor_attr=NULL)");
+            if (sensor_attr == NULL && on == 0) {
+                pr_info("ispcore_core_ops_init: Deinitializing (sensor_attr=NULL, on=0)");
 
                 /* Binary Ninja: Check current state and handle streaming */
                 if (vic_state == 4) {
@@ -1798,6 +1798,45 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 /* Clear internal data structures */
 
                 return 0;
+            }
+
+            /* CRITICAL: Handle initialization case (on=1) */
+            if (on == 1) {
+                pr_info("*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***");
+
+                /* Binary Ninja: Check VIC state is 2 (ready) before init */
+                if (vic_state != 2) {
+                    pr_err("ispcore_core_ops_init: VIC state %d != 2, cannot initialize\n", vic_state);
+                    return -EINVAL;
+                }
+
+                /* Binary Ninja: Call tisp_init() with sensor attributes */
+                if (isp_dev->sensor && isp_dev->sensor->video.attr) {
+                    pr_info("*** ispcore_core_ops_init: Calling tisp_init with sensor attributes ***");
+                    ret = tisp_init(isp_dev->sensor->video.attr, NULL);
+                    if (ret != 0) {
+                        pr_err("ispcore_core_ops_init: tisp_init failed: %d\n", ret);
+                        return ret;
+                    }
+                    pr_info("*** ispcore_core_ops_init: tisp_init SUCCESS ***");
+                } else {
+                    pr_info("*** ispcore_core_ops_init: No sensor attributes, calling tisp_init with NULL ***");
+                    ret = tisp_init(NULL, NULL);
+                    if (ret != 0) {
+                        pr_err("ispcore_core_ops_init: tisp_init failed: %d\n", ret);
+                        return ret;
+                    }
+                }
+
+                /* CRITICAL: Binary Ninja: *($s0 + 0xe8) = 3 - Set VIC state to 3 (ACTIVE) */
+                vic_dev->state = 3;
+                pr_info("*** ispcore_core_ops_init: VIC state set to 3 (ACTIVE) - CORE READY FOR STREAMING ***");
+
+                /* CRITICAL: Also set core device state to 3 */
+                core_dev->state = 3;
+                pr_info("*** ispcore_core_ops_init: Core device state set to 3 (ACTIVE) ***");
+
+                result = 0;
             }
         }
     }
