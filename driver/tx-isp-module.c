@@ -3552,6 +3552,205 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         return s6_1;
     }
+
+    /* Binary Ninja: Handle 0xc050561a - TX_ISP_SENSOR_ENUM_INPUT */
+    if (cmd == 0xc050561a) {
+        void **s0_3 = (void **)&isp_dev->subdevs[0];
+
+        /* Binary Ninja: if (private_copy_from_user(&var_98, arg3, 0x50) != 0) */
+        if (copy_from_user(&var_98, (void __user *)arg, 0x50) != 0) {
+            pr_err("TX_ISP_SENSOR_ENUM_INPUT: Failed to copy input data\n");
+            return -EFAULT;
+        }
+
+        /* Binary Ninja: Loop through subdevices exactly as reference */
+        struct tx_isp_subdev *sd = (struct tx_isp_subdev *)*s0_3;
+
+        while (true) {
+            if (sd != NULL) {
+                /* Binary Ninja: void* $v0_6 = *(*($a0_2 + 0xc4) + 0xc) */
+                if (sd->ops && sd->ops->sensor) {
+                    /* Binary Ninja: int32_t $v0_7 = *($v0_6 + 8) */
+                    if (sd->ops->sensor->ioctl) {
+                        /* Binary Ninja: int32_t $v0_8 = $v0_7() */
+                        int32_t ret = sd->ops->sensor->ioctl(sd, 0x2000002, &var_98);
+
+                        if (ret == 0) {
+                            s0_3++;
+                        } else {
+                            s0_3++;
+                            if (ret != 0xfffffdfd) {
+                                return ret;
+                            }
+                        }
+                    } else {
+                        s0_3++;
+                    }
+                } else {
+                    s0_3++;
+                }
+            } else {
+                s0_3++;
+            }
+
+            if ((void *)s0_3 == (void *)&isp_dev->subdevs[ISP_MAX_SUBDEVS]) {
+                break;
+            }
+
+            sd = (struct tx_isp_subdev *)*s0_3;
+        }
+
+        s6_1 = 0;
+
+        /* Binary Ninja: if (private_copy_to_user(arg3, &var_98, 0x50) != 0) */
+        if (copy_to_user((void __user *)arg, &var_98, 0x50) != 0) {
+            pr_err("TX_ISP_SENSOR_ENUM_INPUT: Failed to copy result\n");
+            return -EFAULT;
+        }
+
+        return s6_1;
+    }
+
+    /* Binary Ninja: Handle 0xc0045627 - TX_ISP_SENSOR_SET_INPUT */
+    if (cmd == 0xc0045627) {
+        void **s0_4 = (void **)&isp_dev->subdevs[0];
+
+        /* Binary Ninja: if (private_copy_from_user(&var_98, arg3, 4) != 0) */
+        if (copy_from_user(&var_98, (void __user *)arg, 4) != 0) {
+            pr_err("TX_ISP_SENSOR_SET_INPUT: Failed to copy input data\n");
+            return -EFAULT;
+        }
+
+        /* Binary Ninja: Loop through subdevices exactly as reference */
+        struct tx_isp_subdev *sd = (struct tx_isp_subdev *)*s0_4;
+
+        while (true) {
+            if (sd != NULL) {
+                /* Binary Ninja: void* $v0_17 = *(*($a0_7 + 0xc4) + 0xc) */
+                if (sd->ops && sd->ops->sensor) {
+                    /* Binary Ninja: int32_t $v0_18 = *($v0_17 + 8) */
+                    if (sd->ops->sensor->ioctl) {
+                        /* Binary Ninja: int32_t $v0_19 = $v0_18() */
+                        int32_t ret = sd->ops->sensor->ioctl(sd, 0x2000004, &var_98);
+
+                        if (ret == 0) {
+                            s0_4++;
+                        } else {
+                            s0_4++;
+                            if (ret != 0xfffffdfd) {
+                                return ret;
+                            }
+                        }
+                    } else {
+                        s0_4++;
+                    }
+                } else {
+                    s0_4++;
+                }
+            } else {
+                s0_4++;
+            }
+
+            if ((void *)s0_4 == (void *)&isp_dev->subdevs[ISP_MAX_SUBDEVS]) {
+                break;
+            }
+
+            sd = (struct tx_isp_subdev *)*s0_4;
+        }
+
+        s6_1 = 0;
+
+        /* Binary Ninja: if (private_copy_to_user(arg3, &var_98, 4) != 0) */
+        if (copy_to_user((void __user *)arg, &var_98, 4) != 0) {
+            pr_err("TX_ISP_SENSOR_SET_INPUT: Failed to copy result\n");
+            return -EFAULT;
+        }
+
+        return s6_1;
+    }
+
+    /* Binary Ninja: Handle 0x8038564f - TX_ISP_SENSOR_S_REGISTER */
+    if (cmd == 0x8038564f) {
+        /* Binary Ninja: if (private_copy_from_user(&var_98, arg3, 0x38) != 0) */
+        if (copy_from_user(&var_98, (void __user *)arg, 0x38) != 0) {
+            pr_err("TX_ISP_SENSOR_S_REGISTER: Failed to copy register data\n");
+            return -EFAULT;
+        }
+
+        /* Binary Ninja: Loop through subdevices for sensor register write */
+        void **s0_6 = (void **)&isp_dev->subdevs[0];
+        struct tx_isp_subdev *sd = (struct tx_isp_subdev *)*s0_6;
+
+        while (true) {
+            if (sd != NULL) {
+                /* Binary Ninja: void* $v0_54 = *(*($a0_21 + 0xc4) + 0xc) */
+                if (sd->ops && sd->ops->sensor) {
+                    /* Binary Ninja: int32_t $v0_55 = *($v0_54 + 8) */
+                    if (sd->ops->sensor->ioctl) {
+                        /* Binary Ninja: int32_t $v0_56 = $v0_55() */
+                        int32_t ret = sd->ops->sensor->ioctl(sd, 0x2000005, &var_98);
+                        s6_1 = ret;
+
+                        if (ret == 0) {
+                            s0_6++;
+                        } else {
+                            s0_6++;
+                            if (ret != 0xfffffdfd) {
+                                break;
+                            }
+                        }
+                    } else {
+                        s0_6++;
+                    }
+                } else {
+                    s0_6++;
+                }
+            } else {
+                s0_6++;
+            }
+
+            if ((void *)s0_6 == (void *)&isp_dev->subdevs[ISP_MAX_SUBDEVS]) {
+                return 0;
+            }
+
+            sd = (struct tx_isp_subdev *)*s0_6;
+        }
+
+        return s6_1;
+    }
+
+    /* Binary Ninja: Handle streaming commands */
+    if (cmd == 0x80045612) {
+        /* VIDIOC_STREAMON */
+        return tx_isp_video_s_stream(isp_dev, 1);
+    }
+
+    if (cmd == 0x80045613) {
+        /* VIDIOC_STREAMOFF */
+        return tx_isp_video_s_stream(isp_dev, 0);
+    }
+
+    /* Binary Ninja: Handle video link commands */
+    if (cmd >= 0x800456d1) {
+        if (cmd == 0x800456d2) {
+            /* TX_ISP_VIDEO_LINK_STREAM_ON */
+            return tx_isp_video_link_stream(isp_dev, 1);
+        } else if (cmd < 0x800456d2) {
+            /* TX_ISP_VIDEO_LINK_DESTROY */
+            return tx_isp_video_link_destroy(isp_dev);
+        } else if (cmd == 0x800456d3) {
+            /* TX_ISP_VIDEO_LINK_STREAM_OFF */
+            return tx_isp_video_link_stream(isp_dev, 0);
+        }
+        return 0;
+    }
+
+    /* Binary Ninja: Default case */
+    s6_1 = 0;
+
+    /* Handle other commands that don't match the main patterns */
+    pr_info("Unhandled ioctl cmd: 0x%x\n", cmd);
+    return -ENOTTY;
 }
 
 // CRITICAL FIX: Safe open handler that prevents dangerous initialization chains
