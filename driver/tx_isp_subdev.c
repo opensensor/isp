@@ -23,8 +23,6 @@ void tx_isp_free_irq(struct tx_isp_irq_info *irq_info);
 /* Binary Ninja interrupt handlers - EXACT reference implementation */
 irqreturn_t isp_irq_handle(int irq, void *dev_id);
 irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
-void tx_isp_enable_irq(struct tx_isp_irq_info *irq_info);
-void tx_isp_disable_irq(struct tx_isp_irq_info *irq_info);
 
 /* Export the missing tx_isp_* functions */
 EXPORT_SYMBOL(tx_isp_module_init);
@@ -749,41 +747,6 @@ void tx_isp_free_irq(struct tx_isp_irq_info *irq_info)
     pr_info("tx_isp_free_irq: IRQ freed\n");
 }
 
-/* tx_isp_enable_irq - EXACT Binary Ninja reference implementation */
-void tx_isp_enable_irq(struct tx_isp_irq_info *irq_info)
-{
-    if (!irq_info || irq_info->irq <= 0) {
-        pr_err("tx_isp_enable_irq: Invalid IRQ info (irq=%d)\n", irq_info ? irq_info->irq : -1);
-        return;
-    }
-
-    /* CRITICAL FIX: Don't enable IRQs 37 or 38 - main dispatcher manages them */
-    if (irq_info->irq == 37 || irq_info->irq == 38) {
-        pr_info("*** tx_isp_enable_irq: IRQ %d managed by main dispatcher - ignoring enable request ***\n", irq_info->irq);
-        return;
-    }
-
-    enable_irq(irq_info->irq);
-    pr_info("*** tx_isp_enable_irq: IRQ %d ENABLED ***\n", irq_info->irq);
-}
-
-/* tx_isp_disable_irq - EXACT Binary Ninja reference implementation */
-void tx_isp_disable_irq(struct tx_isp_irq_info *irq_info)
-{
-    if (!irq_info || irq_info->irq <= 0) {
-        pr_err("tx_isp_disable_irq: Invalid IRQ info (irq=%d)\n", irq_info ? irq_info->irq : -1);
-        return;
-    }
-
-    /* CRITICAL FIX: Don't disable IRQs 37 or 38 - main dispatcher manages them */
-    if (irq_info->irq == 37 || irq_info->irq == 38) {
-        pr_info("*** tx_isp_disable_irq: IRQ %d managed by main dispatcher - ignoring disable request ***\n", irq_info->irq);
-        return;
-    }
-
-    disable_irq(irq_info->irq);
-    pr_info("*** tx_isp_disable_irq: IRQ %d DISABLED ***\n", irq_info->irq);
-}
 
 static struct tx_isp_subdev_ops fs_subdev_ops = { 0 }; // All fields NULL/0
 
