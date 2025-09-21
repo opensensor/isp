@@ -4222,16 +4222,6 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
     } else {
         pr_err("*** CRITICAL: tx_isp_module_init: isp_dev->vic_dev is NULL - VIC device not linked! ***\n");
         pr_err("*** This indicates a failure in VIC probe or device linking process ***\n");
-
-        /* Debug: Check if VIC subdev exists in subdev array */
-        int i;
-        for (i = 0; i < TX_ISP_SUBDEV_MAX; i++) {
-            if (isp_dev->subdevs[i]) {
-                pr_info("*** DEBUG: subdevs[%d] = %p (name: %s) ***\n",
-                        i, isp_dev->subdevs[i],
-                        isp_dev->subdevs[i]->name ? isp_dev->subdevs[i]->name : "NULL");
-            }
-        }
     }
 
     pr_info("*** tx_isp_module_init: Binary Ninja reference implementation complete ***\n");
