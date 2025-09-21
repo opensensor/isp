@@ -1393,10 +1393,13 @@ EXPORT_SYMBOL(isp_framesource_show);
 
 
 
+/* Forward declaration for core subdev ops comparison */
+extern struct tx_isp_subdev_ops core_subdev_ops;
+
 /**
- * tx_isp_get_sensor - Get sensor from subdev array starting at index 4
- * Modern hardware supports multiple sensors, so search from index 4 onwards
- * Subdev array layout: 0=CSI, 1=VIC, 2=VIN, 3=FS, 4+=SENSORS
+ * tx_isp_get_sensor - Get sensor from subdev array starting at index 5
+ * Modern hardware supports multiple sensors, so search from index 5 onwards
+ * Subdev array layout: 0=CSI, 1=VIC, 2=VIN, 3=FS, 4=CORE, 5+=REAL_SENSORS
  */
 struct tx_isp_sensor *tx_isp_get_sensor(void)
 {
@@ -1422,19 +1425,25 @@ struct tx_isp_sensor *tx_isp_get_sensor(void)
         }
     }
 
-    /* Search for first available sensor starting at index 4 */
-    for (int i = 4; i < ISP_MAX_SUBDEVS; i++) {
+    /* CRITICAL FIX: Search for REAL sensors starting at index 5 (skip Core device at index 4) */
+    for (int i = 5; i < ISP_MAX_SUBDEVS; i++) {
         struct tx_isp_subdev *sd = ourISPdev->subdevs[i];
         if (sd && sd->ops && sd->ops->sensor) {
-            /* This is a sensor subdev - get the sensor structure that contains this subdev */
-            /* The sensor structure contains the subdev as sd member, so we use container_of */
-            struct tx_isp_sensor *sensor = container_of(sd, struct tx_isp_sensor, sd);
-            pr_info("*** tx_isp_get_sensor: Found real sensor at index %d: %p ***\n", i, sensor);
-            return sensor;
+            /* CRITICAL: Check if this is a REAL sensor subdev, not the Core device */
+            /* The Core device has sensor ops for registration but is not a real sensor */
+            if (sd->ops != &core_subdev_ops) {
+                /* This is a real sensor subdev - get the sensor structure that contains this subdev */
+                /* The sensor structure contains the subdev as sd member, so we use container_of */
+                struct tx_isp_sensor *sensor = container_of(sd, struct tx_isp_sensor, sd);
+                pr_info("*** tx_isp_get_sensor: Found real sensor at index %d: %p ***\n", i, sensor);
+                return sensor;
+            } else {
+                pr_info("*** tx_isp_get_sensor: Skipping Core device at index %d (not a real sensor) ***\n", i);
+            }
         }
     }
 
-    pr_err("*** tx_isp_get_sensor: No sensor found in subdev array ***\n");
+    pr_err("*** tx_isp_get_sensor: No real sensor found in subdev array ***\n");
     /* No sensor found - return NULL as per stock driver behavior */
     return NULL;
 }
