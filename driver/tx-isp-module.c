@@ -2058,61 +2058,40 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
     int i;
     int result;
 
-    pr_info("*** tx_isp_video_s_stream: EXACT Binary Ninja implementation - enable=%d ***\n", arg2);
-
-    if (!arg1) {
-        pr_err("tx_isp_video_s_stream: Invalid ISP device\n");
-        return -EINVAL;
-    }
-
-    /* REMOVED: Custom initialization logic - following Binary Ninja reference exactly */
+    pr_info("*** tx_isp_video_s_stream: EXACT Binary Ninja MCP implementation - enable=%d ***\n", arg2);
 
     /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
-    s4 = &arg1->subdevs[0];  /* subdevs array at offset 0x38 */
+    s4 = arg1->subdevs;  /* subdevs array at offset 0x38 */
 
     /* Binary Ninja: for (int32_t i = 0; i != 0x10; ) */
     for (i = 0; i != 0x10; ) {
         /* Binary Ninja: void* $a0 = *$s4 */
         struct tx_isp_subdev *a0 = *s4;
 
-        /* Binary Ninja: if ($a0 != 0) */
         if (a0 != 0) {
-            /* Binary Ninja: int32_t* $v0_3 = *(*($a0 + 0xc4) + 4) */
-            /* $a0 + 0xc4 = ops, *($a0 + 0xc4) = ops pointer, *(*($a0 + 0xc4) + 4) = ops->video */
-            struct tx_isp_subdev_video_ops *v0_3 = NULL;
-            if (a0->ops && a0->ops->video) {
-                v0_3 = a0->ops->video;
-            }
+            /* Binary Ninja: void* $v0_3 = *(*($a0 + 0xc4) + 4) */
+            struct tx_isp_subdev_video_ops *v0_3 = a0->ops ? a0->ops->video : NULL;
 
-            /* Binary Ninja: if ($v0_3 == 0) i += 1 */
             if (v0_3 == 0) {
+                /* Binary Ninja: i += 1 */
                 i += 1;
             } else {
-                /* Binary Ninja: int32_t $v0_4 = *$v0_3 */
-                /* $v0_3 is video ops, *$v0_3 is s_stream function pointer */
+                /* Binary Ninja: int32_t $v0_4 = *($v0_3 + 4) */
                 int (*v0_4)(struct tx_isp_subdev *, int) = v0_3->s_stream;
 
-                /* Binary Ninja: if ($v0_4 == 0) i += 1 */
                 if (v0_4 == 0) {
+                    /* Binary Ninja: i += 1 */
                     i += 1;
                 } else {
-                    /* Binary Ninja: NO SAFETY CHECKS - just call the function directly */
-
-                    pr_info("*** BINARY NINJA: Calling subdev %d s_stream (enable=%d) ***\n", i, arg2);
-                    pr_info("*** DEBUG: subdev=%p, ops=%p, video=%p, s_stream=%p ***\n",
-                            a0, a0->ops, a0->ops->video, v0_4);
-
                     /* Binary Ninja: int32_t result = $v0_4($a0, arg2) */
                     result = v0_4(a0, arg2);
 
-                    /* Binary Ninja: if (result == 0) i += 1 */
                     if (result == 0) {
-                        pr_info("tx_isp_video_s_stream: Subdev %d s_stream returned success\n", i);
+                        /* Binary Ninja: i += 1 */
                         i += 1;
                     } else {
                         /* Binary Ninja: if (result != 0xfffffdfd) */
-                        if (result != -ENOIOCTLCMD) {  /* 0xfffffdfd = -515 = -ENOIOCTLCMD */
-                            pr_err("tx_isp_video_s_stream: Subdev %d s_stream failed: %d\n", i, result);
+                        if (result != -ENOIOCTLCMD) {
 
                             /* Binary Ninja rollback: void* $s0_1 = arg1 + (i << 2) */
                             /* Roll back all previous subdevices */
