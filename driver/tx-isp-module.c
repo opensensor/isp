@@ -5846,7 +5846,6 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
     /* CRITICAL FIX: Proper subdevice interrupt isolation - each IRQ goes to ONE handler only */
     if (irq == 37) {
         /* IRQ 37: ISP CORE ONLY - no VIC interference */
-        extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
         pr_debug("*** IRQ 37: ISP CORE ONLY (isolated from VIC) ***\n");
         result = ispcore_interrupt_service_routine(irq, dev_id);
     } else if (irq == 38) {
