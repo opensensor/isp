@@ -349,21 +349,7 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         return 0xfffffff4;  /* Binary Ninja: return 0xfffffff4 */
     }
 
-    /* CRITICAL: Defer core->init call for sensor devices until after sensor association
-     * For sensor devices, the core->init function needs access to the sensor structure
-     * which is set up AFTER tx_isp_subdev_init returns via tx_isp_set_subdev_hostdata.
-     * For non-sensor devices (CSI, VIC, Core), call init immediately as they don't need sensor data.
-     *
-     * We detect sensor devices by checking if the platform device name contains known sensor names
-     * or if the device name is null (which happens with unregistered sensor platform devices).
-     */
-    /* CRITICAL FIX: Don't call core->init during tx_isp_subdev_init to prevent hangs
-     * The original reference driver doesn't call core->init here - it's called later during streaming
-     * This was causing system hangs during sensor initialization
-     */
     const char *dev_name_str = dev_name(&pdev->dev);
-    pr_info("*** tx_isp_subdev_init: Deferring core->init for device %s to prevent hangs ***\n",
-            dev_name_str ? dev_name_str : "(null)");
 
     /* VIC interrupt registration moved to auto-linking function where registers are actually mapped */
     pr_info("*** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***\n");
@@ -610,6 +596,30 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
             pr_info("*** LINKED CORE regs to core device: %p ***\n", sd->regs);
         } else {
             pr_info("*** CORE device not yet linked - regs will be mapped later ***\n");
+        }
+    } else if (strcmp(dev_name, "gc2053") == 0 || strstr(dev_name, "sensor") != NULL) {
+        /* CRITICAL: This is a sensor device - register it in the subdev array */
+        pr_info("*** DETECTED SENSOR DEVICE: '%s' - registering in subdev array ***\n", dev_name);
+
+        /* Find next available slot starting from index 5 (after CSI=0, VIC=1, VIN=2, FS=3, Core=4) */
+        int sensor_index = -1;
+        for (int i = 5; i < ISP_MAX_SUBDEVS; i++) {
+            if (ourISPdev->subdevs[i] == NULL) {
+                sensor_index = i;
+                break;
+            }
+        }
+
+        if (sensor_index != -1) {
+            ourISPdev->subdevs[sensor_index] = sd;
+            sd->isp = ourISPdev;
+            pr_info("*** SENSOR '%s' registered at subdev index %d ***\n", dev_name, sensor_index);
+            pr_info("*** SENSOR subdev: %p, ops: %p ***\n", sd, sd->ops);
+            if (sd->ops && sd->ops->sensor) {
+                pr_info("*** SENSOR ops->sensor: %p ***\n", sd->ops->sensor);
+            }
+        } else {
+            pr_err("*** No available slot for sensor '%s' ***\n", dev_name);
         }
     } else {
         pr_info("*** DEBUG: Unknown device name '%s' - no specific auto-link handling ***\n", dev_name);

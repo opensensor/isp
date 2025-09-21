@@ -781,9 +781,12 @@ static struct tx_isp_subdev_pad_ops core_pad_ops = {
 };
 
 
+/* Forward declaration */
+extern long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+
 /* Core sensor operations - handles main sensor registration */
 static struct tx_isp_subdev_sensor_ops core_sensor_ops = {
-    .ioctl = NULL,  /* Will be set to subdev_sensor_ops_ioctl */
+    .ioctl = subdev_sensor_ops_ioctl,  /* Set directly to sensor IOCTL handler */
     .sync_sensor_attr = NULL,
     .release_all_sensor = NULL
 };
@@ -4924,9 +4927,6 @@ int tx_isp_core_device_init(struct tx_isp_core_device *core_dev)
         pr_warn("tx_isp_core_device_init: Failed to get IPU clock\n");
         core_dev->ipu_clk = NULL;
     }
-
-    /* Set up core sensor IOCTL handler for sensor registration */
-    core_sensor_ops.ioctl = subdev_sensor_ops_ioctl;
 
     /* Set state to ready */
     core_dev->state = 2;  /* READY state */
