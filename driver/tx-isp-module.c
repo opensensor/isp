@@ -5032,10 +5032,10 @@ static int tx_isp_init(void)
     disable_irq(37);  /* Initially disabled */
     pr_info("*** MAIN DISPATCHER: IRQ 37 registered successfully ***\n");
 
-    /* Register IRQ 38 (VIC) with main dispatcher - CRITICAL: Use VIC device as dev_id */
+    /* Register IRQ 38 (VIC) with main dispatcher - CRITICAL: Use ISP device as dev_id like reference driver */
     if (ourISPdev && ourISPdev->vic_dev) {
         ret = request_threaded_irq(38, isp_irq_handle, isp_irq_thread_handle,
-                                   IRQF_SHARED, "tx-isp-vic", ourISPdev->vic_dev);
+                                   IRQF_SHARED, "tx-isp-vic", ourISPdev);
     } else {
         pr_err("*** CRITICAL: Cannot register VIC IRQ - VIC device not available ***\n");
         ret = -ENODEV;
