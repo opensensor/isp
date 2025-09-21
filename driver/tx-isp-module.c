@@ -3210,7 +3210,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     int32_t var_94;
     int32_t s6_1 = 0;
 
-    // pr_info("ISP IOCTL: cmd=0x%x arg=0x%lx\n", cmd, arg);
+    pr_info("ISP IOCTL: cmd=0x%x arg=0x%lx\n", cmd, arg);
 
     /* Binary Ninja: Main switch structure exactly as decompiled */
     if (cmd == 0x800856d7) {
