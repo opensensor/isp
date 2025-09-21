@@ -37,52 +37,6 @@ bool is_valid_kernel_pointer(const void *ptr);
 extern struct tx_isp_dev *ourISPdev;
 
 /**
- * tx_isp_vin_process_interrupts - Process VIN interrupts (called by ISP core)
- * @vin: VIN device structure
- * @int_status: Interrupt status from ISP core
- * 
- * This function is called by the main ISP interrupt handler to process
- * VIN-specific interrupts. It does not register its own IRQ handler.
- */
-int tx_isp_vin_process_interrupts(struct tx_isp_vin_device *vin, u32 int_status)
-{
-    unsigned long flags;
-    
-    if (!vin) {
-        return -EINVAL;
-    }
-    
-    /* Only process if we have VIN-related interrupts */
-    if (!(int_status & (VIN_INT_FRAME_END | VIN_INT_OVERFLOW | VIN_INT_SYNC_ERR | VIN_INT_DMA_ERR))) {
-        return 0;
-    }
-    
-    spin_lock_irqsave(&vin->frame_lock, flags);
-    
-    if (int_status & VIN_INT_FRAME_END) {
-        vin->frame_count++;
-        complete(&vin->frame_complete);
-        mcp_log_info("vin_irq: frame end", vin->frame_count);
-    }
-    
-    if (int_status & VIN_INT_OVERFLOW) {
-        mcp_log_error("vin_irq: buffer overflow", int_status);
-    }
-    
-    if (int_status & VIN_INT_SYNC_ERR) {
-        mcp_log_error("vin_irq: sync error", int_status);
-    }
-    
-    if (int_status & VIN_INT_DMA_ERR) {
-        mcp_log_error("vin_irq: DMA error", int_status);
-    }
-    
-    spin_unlock_irqrestore(&vin->frame_lock, flags);
-    
-    return 1; /* Processed VIN interrupts */
-}
-
-/**
  * tx_isp_vin_enable_irq - Enable VIN interrupts (T31: No separate IRQ)
  * @vin: VIN device structure
  * 
@@ -1100,6 +1054,3 @@ EXPORT_SYMBOL(tx_isp_vin_driver);
 /* Export the missing VIN functions that were causing the "NO VIN INIT FUNCTION AVAILABLE" error */
 EXPORT_SYMBOL(tx_isp_vin_init);
 EXPORT_SYMBOL(tx_isp_vin_activate_subdev);
-
-/* Export VIN interrupt processing function for ISP core */
-EXPORT_SYMBOL(tx_isp_vin_process_interrupts);
