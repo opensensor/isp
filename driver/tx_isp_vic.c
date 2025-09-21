@@ -2047,6 +2047,13 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     vic_dev->processing = 0;    /* Initialize processing flag */
     vic_dev->frame_count = 0;   /* Initialize frame counter */
 
+    /* CRITICAL FIX: Initialize IRQ numbers to prevent enable_irq(0) calls */
+    vic_dev->irq = 38;          /* VIC uses IRQ 38 */
+    vic_dev->irq_number = 38;   /* VIC uses IRQ 38 */
+    vic_dev->irq_enabled = 0;   /* Initially disabled */
+    vic_dev->hw_irq_enabled = 0; /* Hardware interrupt initially disabled */
+    pr_info("*** VIC PROBE: IRQ numbers initialized to 38 ***\n");
+
     /* CRITICAL: Initialize list heads for buffer management FIRST */
     INIT_LIST_HEAD(&vic_dev->queue_head);
     INIT_LIST_HEAD(&vic_dev->done_head);
