@@ -2175,6 +2175,13 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
         return -EINVAL;
     }
 
+    /* CRITICAL FIX: Initialize vic_dev to prevent BadVA crash at 0x00000318 */
+    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+    if (!vic_dev) {
+        pr_err("ispcore_core_ops_init: No VIC device available\n");
+        return -EINVAL;
+    }
+
     /* CRITICAL: Initialize frame sync work structure - MUST be done before any interrupts */
     INIT_WORK(&ispcore_fs_work, ispcore_irq_fs_work);
     pr_info("*** ispcore_core_ops_init: Frame sync work structure initialized ***");
