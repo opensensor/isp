@@ -3204,7 +3204,9 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         // *** BINARY NINJA REFERENCE: Use sensor from ourISPdev->sensor ***
         if (channel == 0 && ourISPdev) {
-            if (!ourISPdev->sensor) {
+            extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+            struct tx_isp_sensor *sensor_check = tx_isp_get_sensor();
+            if (!sensor_check) {
                 pr_err("*** Channel %d: CRITICAL ERROR - ourISPdev->sensor is NULL ***\n", channel);
                 pr_err("*** This indicates sensor registration failed or sensor module not loaded ***\n");
                 pr_err("*** Check if gc2053.ko is loaded and properly registered ***\n");
@@ -3224,9 +3226,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                                 struct tx_isp_sensor *found_sensor = (struct tx_isp_sensor *)sensor_sd->host_priv;
                                 pr_err("*** DEBUG: Found sensor structure at %p ***\n", found_sensor);
 
-                                /* Link the sensor to ourISPdev */
-                                ourISPdev->sensor = found_sensor;
-                                pr_err("*** CRITICAL FIX: Linked sensor %p to ourISPdev->sensor ***\n", found_sensor);
+                                /* Sensor found in subdev array */
+                                pr_err("*** DEBUG: Found sensor %p in subdev array ***\n", found_sensor);
                                 break;
                             }
                         }
