@@ -272,8 +272,8 @@ static void cleanup_i2c_infrastructure(struct tx_isp_dev *dev)
 #define MAX_IRQ_HANDLERS    32
 #define MAX_EVENT_HANDLERS  32
 
-/* IRQ function callback array - Binary Ninja: irq_func_cb */
-static irqreturn_t (*irq_func_cb[MAX_IRQ_HANDLERS])(int irq, void *dev_id);
+/* REMOVED: Conflicting IRQ callback array - using the one in tx_isp_core.c instead */
+/* The authoritative irq_func_cb array is in tx_isp_core.c and managed by system_irq_func_set() */
 static void (*event_func_cb[MAX_EVENT_HANDLERS])(void *data);
 static DEFINE_SPINLOCK(irq_cb_lock);
 

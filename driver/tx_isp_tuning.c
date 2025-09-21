@@ -6507,8 +6507,9 @@ static uint32_t data_c46b8 = 0;       /* Integration time cache */
 static uint32_t data_c46f8 = 0;       /* Short integration time cache */
 static uint32_t data_c470c = 0;       /* Short exposure mode flag */
 
-/* IRQ callback function table */
-static void (*irq_func_cb[32])(void) = {NULL};
+/* REMOVED: Conflicting IRQ callback function table that was causing symbol collision */
+/* The real irq_func_cb array is in tx_isp_core.c with proper signature: irqreturn_t (*)(int irq, void *dev_id) */
+/* This conflicting array with signature void (*)(void) was never used and caused confusion */
 
 /* AE parameter addresses - Safe structure-based access */
 static uint32_t *data_d04b8 = &data_b0cfc;

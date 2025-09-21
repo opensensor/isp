@@ -1100,21 +1100,9 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         pr_info("ISP CORE IRQ %d: Status=0x%x cleared\n", irq, int_status);
     }
 
-    /* CRITICAL FIX: Call registered interrupt handlers with SAFE parameter validation */
-    /* This is where the BadVA crashes were happening - handlers expecting tx_isp_subdev but getting tx_isp_dev */
-    for (i = 0; i < 32; i++) {
-        if (irq_func_cb[i] && (int_status & (1 << i))) {
-            pr_info("ISP CORE IRQ %d: Calling registered handler %d with SAFE parameters\n", irq, i);
-
-            /* CRITICAL: Always pass ourISPdev (tx_isp_dev*) to prevent structure type confusion */
-            /* The handlers must be written to expect tx_isp_dev*, not tx_isp_subdev* */
-            irqreturn_t handler_ret = irq_func_cb[i](irq, ourISPdev);
-
-            if (handler_ret == IRQ_HANDLED) {
-                ret = IRQ_HANDLED;
-            }
-        }
-    }
+    /* NOTE: The irq_func_cb array is never actually called in the reference driver */
+    /* Handlers registered via system_irq_func_set() are stored but not invoked by any dispatcher */
+    /* The reference driver uses direct function calls instead of callback arrays */
 
     return ret;
 }
