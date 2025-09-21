@@ -39,6 +39,7 @@
 #include <asm/page.h>
 #include "../include/tx_isp.h"
 #include "../include/tx_isp_core.h"
+#include "../include/tx_isp_core_device.h"
 #include "../include/tx-isp-debug.h"
 #include "../include/tx_isp_sysfs.h"
 #include "../include/tx_isp_vic.h"
@@ -9450,16 +9451,16 @@ int tisp_tgain_update(void)
 
     /* Update total gain based on current sensor conditions */
     extern struct tx_isp_dev *ourISPdev;
-    if (ourISPdev && ourISPdev->tuning_data) {
-        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+    if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->tuning_data) {
+        struct isp_tuning_data *tuning = ourISPdev->core_dev->tuning_data;
 
         /* Calculate total gain from analog and digital components */
         uint32_t total_gain = (tuning->max_again * tuning->max_dgain) >> 10;
         tuning->total_gain = total_gain;
 
         /* Update hardware gain registers */
-        if (ourISPdev->core_regs) {
-            writel(total_gain, ourISPdev->core_regs + 0xa004);  /* Total gain register */
+        if (ourISPdev->core_dev->core_regs) {
+            writel(total_gain, ourISPdev->core_dev->core_regs + 0xa004);  /* Total gain register */
         }
 
         pr_info("tisp_tgain_update: Total gain updated to 0x%x\n", total_gain);
@@ -9474,12 +9475,12 @@ int tisp_again_update(void)
 
     /* Update analog gain based on AE calculations */
     extern struct tx_isp_dev *ourISPdev;
-    if (ourISPdev && ourISPdev->tuning_data) {
-        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+    if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->tuning_data) {
+        struct isp_tuning_data *tuning = ourISPdev->core_dev->tuning_data;
 
         /* Update hardware analog gain register */
-        if (ourISPdev->core_regs) {
-            writel(tuning->max_again, ourISPdev->core_regs + 0xa008);  /* Analog gain register */
+        if (ourISPdev->core_dev->core_regs) {
+            writel(tuning->max_again, ourISPdev->core_dev->core_regs + 0xa008);  /* Analog gain register */
         }
 
         /* CRITICAL: Send analog gain update to sensor via I2C */
@@ -9512,15 +9513,15 @@ int tisp_ev_update(void)
     /* Update exposure value and trigger dependent updates */
     extern struct tx_isp_dev *ourISPdev;
 
-    if (ourISPdev && ourISPdev->tuning_data) {
-        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+    if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->tuning_data) {
+        struct isp_tuning_data *tuning = ourISPdev->core_dev->tuning_data;
 
         /* Update global EV cache for other modules */
         data_9a454 = tuning->exposure;
 
         /* Update hardware exposure register */
-        if (ourISPdev->core_regs) {
-            writel(tuning->exposure, ourISPdev->core_regs + 0xa00c);  /* Exposure register */
+        if (ourISPdev->core_dev->core_regs) {
+            writel(tuning->exposure, ourISPdev->core_dev->core_regs + 0xa00c);  /* Exposure register */
         }
 
         pr_info("tisp_ev_update: Exposure updated to 0x%x\n", tuning->exposure);
@@ -9536,18 +9537,18 @@ int tisp_ct_update(void)
     /* Update color temperature - SAFE VERSION without CCM calls */
     extern struct tx_isp_dev *ourISPdev;
 
-    if (ourISPdev && ourISPdev->tuning_data) {
-        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+    if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->tuning_data) {
+        struct isp_tuning_data *tuning = ourISPdev->core_dev->tuning_data;
 
         /* Update global CT cache for other modules */
         data_9a450 = tuning->wb_temp;
 
         /* Update hardware WB registers directly instead of calling problematic CCM functions */
-        if (ourISPdev->core_regs) {
-            writel(tuning->wb_gains.r, ourISPdev->core_regs + 0x1100);  /* R gain */
-            writel(tuning->wb_gains.g, ourISPdev->core_regs + 0x1104);  /* G gain */
-            writel(tuning->wb_gains.b, ourISPdev->core_regs + 0x1108);  /* B gain */
-            writel(tuning->wb_temp, ourISPdev->core_regs + 0x110c);     /* Color temp */
+        if (ourISPdev->core_dev->core_regs) {
+            writel(tuning->wb_gains.r, ourISPdev->core_dev->core_regs + 0x1100);  /* R gain */
+            writel(tuning->wb_gains.g, ourISPdev->core_dev->core_regs + 0x1104);  /* G gain */
+            writel(tuning->wb_gains.b, ourISPdev->core_dev->core_regs + 0x1108);  /* B gain */
+            writel(tuning->wb_temp, ourISPdev->core_dev->core_regs + 0x110c);     /* Color temp */
         }
 
         pr_info("tisp_ct_update: Color temperature updated to %dK (R:%x G:%x B:%x)\n",
