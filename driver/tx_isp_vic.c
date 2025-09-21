@@ -27,7 +27,7 @@ uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 /* Binary Ninja reference global variables */
 static struct tx_isp_vic_device *dump_vsd = NULL;  /* Global VIC device pointer */
 static void *test_addr = NULL;  /* Test address pointer */
-irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);
+irqreturn_t isp_vic_interrupt_service_routine(void *arg1);
 
 /* BINARY NINJA EXACT: tx_vic_enable_irq implementation */
 void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)

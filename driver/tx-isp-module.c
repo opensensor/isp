@@ -526,7 +526,7 @@ static struct tx_isp_subdev_ops csi_subdev_ops;
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);  /* FIXED: Correct signature to match tx_isp_vic.c */
 int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable);  /* FIXED: Forward declaration for CSI streaming */
 void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev);
-irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);
+irqreturn_t isp_vic_interrupt_service_routine(void *arg1);
 static int private_reset_tx_isp_module(int arg);
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
 
