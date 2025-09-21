@@ -928,7 +928,9 @@ static int sensor_alloc_integration_time(int time) {
      *     *(arg2 + 0x10) = arg1.w
      * return result */
 
-    if (!ourISPdev || !ourISPdev->sensor) {
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor) {
         return time; /* Return input time as fallback */
     }
 
@@ -968,7 +970,9 @@ static int sensor_set_integration_time(int time) {
 static int sensor_set_integration_time_short(int time) {
     /* Binary Ninja: Sets short integration time for WDR mode */
 
-    if (!ourISPdev || !ourISPdev->sensor) {
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor) {
         return -ENODEV;
     }
 
@@ -989,7 +993,9 @@ static int sensor_end_changes(void) {
 static int sensor_set_analog_gain(int gain) {
     /* Binary Ninja shows this updates sensor gain and ISP control flags */
 
-    if (!ourISPdev || !ourISPdev->sensor) {
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor) {
         return -ENODEV;
     }
 
@@ -5157,12 +5163,16 @@ static void tx_isp_exit(void)
         }
         
         /* Clean up sensor if present */
-        if (ourISPdev->sensor) {
-            struct tx_isp_sensor *sensor = ourISPdev->sensor;
+        extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+        struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+        if (sensor) {
             if (sensor->sd.ops && sensor->sd.ops->core && sensor->sd.ops->core->reset) {
                 sensor->sd.ops->core->reset(&sensor->sd, 1);
             }
-            ourISPdev->sensor = NULL;
+            /* Clear sensor from subdev array */
+            if (ourISPdev && ourISPdev->subdevs[3]) {
+                ourISPdev->subdevs[3] = NULL;
+            }
         }
         
         /* Unregister misc device */
