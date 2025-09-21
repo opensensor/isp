@@ -5765,9 +5765,15 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
 
 /* isp_irq_handle - SAFE struct member access implementation with correct dev_id handling */
 
-/* isp_irq_handle - BULLETPROOF implementation to prevent kernel panic */
+/* isp_irq_handle - EMERGENCY MINIMAL implementation to prevent kernel panic */
 irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
+    static int call_count = 0;
+    call_count++;
+
+    /* EMERGENCY: Print every call to see if this handler is being called */
+    pr_info("*** EMERGENCY: isp_irq_handle called #%d - IRQ %d, dev_id=%p ***\n", call_count, irq, dev_id);
+
     /* CRITICAL SAFETY: Validate all parameters before any processing */
     if (irq < 0 || irq > 255) {
         pr_err("*** CRITICAL: isp_irq_handle called with invalid IRQ %d ***\n", irq);
@@ -5780,18 +5786,8 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
         return IRQ_HANDLED;  /* Still return HANDLED to prevent system issues */
     }
 
-    pr_debug("*** isp_irq_handle: BULLETPROOF SAFE - IRQ %d, dev_id=%p ***\n", irq, dev_id);
-
-    /* CRITICAL: Just acknowledge the interrupt and return - no complex processing */
-    /* This prevents the "Aiee, killing interrupt handler!" kernel panic */
-
-    if (irq == 37) {
-        pr_debug("*** isp_irq_handle: ISP Core IRQ 37 acknowledged ***\n");
-    } else if (irq == 38) {
-        pr_debug("*** isp_irq_handle: VIC IRQ 38 acknowledged ***\n");
-    } else {
-        pr_debug("*** isp_irq_handle: IRQ %d acknowledged ***\n", irq);
-    }
+    /* EMERGENCY: Absolutely minimal processing - just return */
+    pr_info("*** EMERGENCY: isp_irq_handle IRQ %d processed safely ***\n", irq);
 
     /* Return IRQ_HANDLED to indicate we processed the interrupt */
     return IRQ_HANDLED;
