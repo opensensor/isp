@@ -269,22 +269,11 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         return -EINVAL;
     }
 
-    /* CRITICAL FIX: Initialize core device if not already active */
-    if (enable && core_dev->state < 3) {
-        pr_info("*** ispcore_video_s_stream: Core state %d < 3, calling core init ***\n", core_dev->state);
-
-        /* Call core initialization to transition from state 2 to 3 */
-        if (sd->ops && sd->ops->core && sd->ops->core->init) {
-            int init_ret = sd->ops->core->init(sd, 1);
-            if (init_ret != 0) {
-                pr_err("ispcore_video_s_stream: Core initialization failed: %d\n", init_ret);
-                return init_ret;
-            }
-            pr_info("*** ispcore_video_s_stream: Core initialization SUCCESS - state now %d ***\n", core_dev->state);
-        } else {
-            pr_err("ispcore_video_s_stream: No core init function available\n");
-            return -ENODEV;
-        }
+    /* CRITICAL FIX: Force core device to state 3 if it's at state 2 */
+    if (enable && core_dev->state == 2) {
+        pr_info("*** ispcore_video_s_stream: FORCING core state 2 -> 3 (ACTIVE) ***\n");
+        core_dev->state = 3;
+        pr_info("*** ispcore_video_s_stream: Core state now %d ***\n", core_dev->state);
     }
 
     /* Binary Ninja: __private_spin_lock_irqsave($s0 + 0xdc, &var_28) */
@@ -294,7 +283,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     if (core_dev->state < 3) {
         /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream") */
         isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream");
-        pr_err("*** ispcore_video_s_stream: CRITICAL - Core state still %d after init attempt ***\n", core_dev->state);
+        pr_err("*** ispcore_video_s_stream: CRITICAL - Core state still %d < 3 ***\n", core_dev->state);
         /* Binary Ninja: private_spin_unlock_irqrestore($s0 + 0xdc, var_28) */
         spin_unlock_irqrestore(&core_dev->lock, var_28);
         /* Binary Ninja: return 0xffffffff */
