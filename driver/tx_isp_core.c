@@ -1294,6 +1294,22 @@ int isp_framesource_show(struct seq_file *seq, void *v)
 }
 EXPORT_SYMBOL(isp_framesource_show);
 
+/**
+ * tx_isp_get_sensor - Get sensor from correct subdev index
+ * Helper function to get sensor from subdev index 3 where it's actually registered
+ */
+struct tx_isp_sensor *tx_isp_get_sensor(void)
+{
+    extern struct tx_isp_dev *ourISPdev;
+
+    if (!ourISPdev || !ourISPdev->subdevs[3] || !ourISPdev->subdevs[3]->host_priv) {
+        return NULL;
+    }
+
+    return (struct tx_isp_sensor *)ourISPdev->subdevs[3]->host_priv;
+}
+EXPORT_SYMBOL(tx_isp_get_sensor);
+
 /* Global interrupt callback array - EXACT Binary Ninja implementation */
 static irqreturn_t (*irq_func_cb[32])(int irq, void *dev_id) = {0};
 
