@@ -4708,7 +4708,7 @@ int sensor_early_init(void *core_dev)
 }
 
 
-/* tx_isp_probe - EXACT Binary Ninja reference implementation */
+/* tx_isp_probe - EXACT Binary Ninja reference implementation with DEBUG */
 static int tx_isp_platform_probe(struct platform_device *pdev)
 {
     struct tx_isp_dev *isp_dev;
@@ -4716,26 +4716,33 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     int ret;
     int i;
 
+    pr_info("*** PROBE: tx_isp_platform_probe CALLED for device %s ***\n", pdev->name);
+
     /* Binary Ninja: private_kmalloc(0x120, 0xd0) */
     isp_dev = private_kmalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
     if (!isp_dev) {
         /* Binary Ninja: isp_printf(2, "Failed to allocate main ISP device\n", $a2) */
+        pr_err("*** PROBE: Failed to allocate main ISP device ***\n");
         isp_printf(2, (unsigned char *)"Failed to allocate main ISP device\n");
         return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
     }
+    pr_info("*** PROBE: ISP device allocated successfully: %p ***\n", isp_dev);
 
     /* Binary Ninja: memset($v0, 0, 0x120) */
     memset(isp_dev, 0, sizeof(struct tx_isp_dev));
 
     /* Binary Ninja: void* $s2_1 = arg1[0x16] */
     pdata = pdev->dev.platform_data;
+    pr_info("*** PROBE: Platform data: %p ***\n", pdata);
 
     /* Binary Ninja: Validate platform data exists and has valid device count */
     if (pdata == NULL) {
+        pr_err("*** PROBE: No platform data provided - FAILING ***\n");
         isp_printf(2, (unsigned char *)"No platform data provided\n");
         private_kfree(isp_dev);
         return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
     }
+    pr_info("*** PROBE: Platform data validation passed ***\n");
 
     /* Binary Ninja: Check device count - zx.d(*($s2_1 + 4)) u>= 0x11 */
     if (pdata->device_id >= 0x11) {
