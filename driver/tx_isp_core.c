@@ -1108,9 +1108,10 @@ irqreturn_t tx_isp_core_irq_thread_handle(int irq, void *dev_id)
 /* tx_isp_request_irq - EXACT Binary Ninja implementation */
 static int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
 {
+    extern struct tx_isp_dev *ourISPdev;
     int irq_number;
     int ret;
-    
+
     if (!pdev || !irq_info) {
         pr_err("tx_isp_request_irq: Invalid parameters\n");
         return -EINVAL;
@@ -1128,7 +1129,6 @@ static int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
 
     /* *** CRITICAL: ISP Core IRQ is handled by main dispatcher in tx-isp-module.c *** */
     /* No direct IRQ registration needed - dispatcher calls ispcore_interrupt_service_routine */
-    extern struct tx_isp_dev *ourISPdev;
     if (!ourISPdev) {
         pr_err("tx_isp_request_irq: No ISP device available\n");
         return -ENODEV;
