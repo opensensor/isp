@@ -48,6 +48,7 @@ int tx_isp_configure_clocks(struct tx_isp_dev *isp);
 /* Forward declarations */
 /* REMOVED: Memory mapping functions - handled by subdevices */
 int tisp_channel_start(int channel, void *attr);
+void ispcore_frame_channel_streamoff(int32_t* arg1);
 
 /* Binary Ninja math function forward declarations */
 uint32_t tisp_math_exp2(uint32_t val, uint32_t shift, uint32_t base);
@@ -394,30 +395,29 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         }
     }
 
-    /* Binary Ninja: IRQ management at end */
-    if (core_dev->irq_enabled == 1 || enable == 0) {
-        /* Binary Ninja: Disable IRQ */
-        core_dev->irq_mask = 0;
-        pr_info("ispcore_video_s_stream: IRQ disabled\n");
+    /* Binary Ninja: void* $v0_10 = arg1[0x2e] */
+    /* This appears to be accessing isp_dev at a different offset - likely the IRQ info */
+    struct tx_isp_irq_info *irq_info = &core_dev->irq_info;
 
-        /* CRITICAL FIX: Call tx_isp_disable_irq when disabling */
-        extern void tx_isp_disable_irq(void *arg1);
-        tx_isp_disable_irq(sd);  /* Binary Ninja: pass subdev as arg1 */
+    /* Binary Ninja: IRQ enable/disable logic */
+    if (a0_4 == 1 || enable == 0) {
+        /* Binary Ninja: *($v0_10 + 0xb0) = 0 */
+        core_dev->irq_enabled = 0;
+        /* Binary Ninja: $v0_11 = tx_isp_disable_irq */
+        tx_isp_disable_irq(irq_info);
     } else {
-        /* Binary Ninja: Enable IRQ */
-        core_dev->irq_mask = 0xffffffff;
-        pr_info("ispcore_video_s_stream: IRQ enabled\n");
-
-        /* CRITICAL FIX: Call tx_isp_enable_irq when enabling */
-        extern void tx_isp_enable_irq(void *arg1);
-        tx_isp_enable_irq(sd);  /* Binary Ninja: pass subdev as arg1 */
+        /* Binary Ninja: *($v0_10 + 0xb0) = 0xffffffff */
+        core_dev->irq_enabled = 1;
+        /* Binary Ninja: $v0_11 = tx_isp_enable_irq */
+        tx_isp_enable_irq(irq_info);
     }
 
-    /* Binary Ninja: Return 0 if ENOIOCTLCMD, otherwise return result */
+    /* Binary Ninja: if (result == 0xfffffdfd) return 0 */
     if (result == -ENOIOCTLCMD) {
         return 0;
     }
 
+    /* Binary Ninja: return result */
     return result;
 }
 
