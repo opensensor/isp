@@ -23,12 +23,16 @@ void tx_isp_free_irq(struct tx_isp_irq_info *irq_info);
 /* Binary Ninja interrupt handlers - EXACT reference implementation */
 irqreturn_t isp_irq_handle(int irq, void *dev_id);
 irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
+void tx_isp_enable_irq(struct tx_isp_irq_info *irq_info);
+void tx_isp_disable_irq(struct tx_isp_irq_info *irq_info);
 
 /* Export the missing tx_isp_* functions */
 EXPORT_SYMBOL(tx_isp_module_init);
 EXPORT_SYMBOL(tx_isp_module_deinit);
 EXPORT_SYMBOL(tx_isp_request_irq);
 EXPORT_SYMBOL(tx_isp_free_irq);
+EXPORT_SYMBOL(tx_isp_enable_irq);
+EXPORT_SYMBOL(tx_isp_disable_irq);
 
 /* Platform data structure moved to tx_isp.h for global access */
 
@@ -716,7 +720,7 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
         /* Binary Ninja: arg2[2] = tx_isp_disable_irq */
         irq_info->data = irq_info;  /* Store self-reference for callbacks */
         /* Binary Ninja: tx_isp_disable_irq(arg2) - initially disable IRQ */
-        disable_irq(irq_num);
+        tx_isp_disable_irq(irq_info);
 
         pr_info("*** tx_isp_request_irq: IRQ %d registered successfully for %s ***\n", irq_num, dev_name(&pdev->dev));
     } else {
