@@ -681,7 +681,20 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
 
     /* Binary Ninja: if ($v0_1 s>= 0) */
     if (irq_num >= 0) {
-        /* CRITICAL FIX: Pass ourISPdev as dev_id to match interrupt handler expectations */
+        /* CRITICAL FIX: Don't register duplicate IRQs - main dispatcher handles IRQ 37 and 38 */
+        if (irq_num == 37 || irq_num == 38) {
+            pr_info("*** tx_isp_request_irq: IRQ %d handled by main dispatcher - skipping duplicate registration ***\n", irq_num);
+
+            /* Store IRQ info for reference but don't register */
+            irq_info->irq = irq_num;
+            irq_info->handler = isp_irq_handle;
+            irq_info->data = irq_info;
+
+            pr_info("*** tx_isp_request_irq: IRQ %d info stored for %s ***\n", irq_num, dev_name(&pdev->dev));
+            return 0;
+        }
+
+        /* For other IRQs, register normally */
         extern struct tx_isp_dev *ourISPdev;
         void *dev_id_param = ourISPdev ? ourISPdev : irq_info;
 
