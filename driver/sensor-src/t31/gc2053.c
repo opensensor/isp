@@ -1854,6 +1854,14 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 	tx_isp_set_subdevdata(sd, client);
 	tx_isp_set_subdev_hostdata(sd, sensor);
 	private_i2c_set_clientdata(client, sd);
+
+	/* Register sensor with ISP system for enumeration */
+	ret = tx_isp_register_sensor_subdev(sd, SENSOR_NAME, client);
+	if (ret) {
+		ISP_ERROR("Failed to register sensor with ISP system: %d\n", ret);
+		goto err_set_sensor_data_interface;
+	}
+
 	pr_debug("probe ok ------->%s\n", SENSOR_NAME);
 	return 0;
 
