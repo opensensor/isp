@@ -1678,15 +1678,15 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     /* *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
     writel(mdma_status, vic_regs + 0x1f4);
 
-    /* Process interrupts only if VIC is started */
+    /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
     if (vic_start_ok != 0) {
-        /* Process frame done interrupt */
+        /* Binary Ninja: if (($v1_7 & 1) != 0) */
         if ((int_status & 1) != 0) {
-            /* SAFE: Use struct member access for frame count */
+            /* Binary Ninja: *($s0 + 0x160) += 1 - increment frame count */
             vic_dev->frame_count++;
             pr_info("VIC IRQ %d ACTIVE: Frame done - count=%d\n", irq, vic_dev->frame_count);
 
-            /* Call frame done handler */
+            /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
             vic_framedone_irq_function(vic_dev);
         }
 
