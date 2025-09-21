@@ -33,6 +33,7 @@
 #include "../include/tx_isp_tuning.h"
 #include "../include/tx-isp-device.h"
 #include "../include/tx-libimp.h"
+#include "../include/tx_isp_core_device.h"
 
 /* CRITICAL: Magic number for frame channel validation */
 #ifndef FRAME_CHANNEL_MAGIC
@@ -6401,7 +6402,9 @@ static irqreturn_t ispmodule_ip_done_irq_handler(int irq, void *dev_id)
 //    }
     
     /* Update frame processing statistics */
-    isp_dev->frame_complete++;
+    /* Use external frame counter since frame_complete is a completion struct */
+    extern atomic64_t frame_done_cnt;
+    atomic64_inc(&frame_done_cnt);
     
     /* Wake up frame channel waiters */
 //    int i;
