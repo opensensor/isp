@@ -9520,12 +9520,14 @@ int tisp_again_update(void)
         }
 
         /* CRITICAL: Send analog gain update to sensor via I2C */
-        if (ourISPdev->sensor && ourISPdev->sensor->sd.ops &&
-            ourISPdev->sensor->sd.ops->sensor && ourISPdev->sensor->sd.ops->sensor->ioctl) {
+        extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+        struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+        if (sensor && sensor->sd.ops &&
+            sensor->sd.ops->sensor && sensor->sd.ops->sensor->ioctl) {
 
             int gain_value = tuning->max_again;
-            int sensor_ret = ourISPdev->sensor->sd.ops->sensor->ioctl(
-                &ourISPdev->sensor->sd, TX_ISP_EVENT_SENSOR_AGAIN, &gain_value);
+            int sensor_ret = sensor->sd.ops->sensor->ioctl(
+                &sensor->sd, TX_ISP_EVENT_SENSOR_AGAIN, &gain_value);
 
             if (sensor_ret == 0) {
                 pr_info("tisp_again_update: Sensor I2C gain update SUCCESS (gain=0x%x)\n", gain_value);

@@ -76,21 +76,28 @@
   irqreturn_t
   is_sequential_write
   is_valid_kernel_pointer
+  isp_ch1_frame_dequeue_delay
+  isp_core_cmd_set
+  isp_core_debug_show
   isp_core_tuning_deinit
   isp_core_tuning_event
   isp_core_tuning_init
   isp_core_tuning_release
+  isp_core_tunning_open
+  isp_core_tunning_release
   isp_core_tunning_unlocked_ioctl
   isp_csi_show
   isp_event_dispatcher
   isp_frame_done_get_count
   isp_frame_done_wait
   isp_frame_done_wakeup
+  isp_framesource_show
   isp_free_buffer
   isp_fw_process
   isp_get_ae_state
   isp_get_af_zone
   isp_i2c_new_subdev_board
+  isp_info_show_isra_0
   isp_irq_dispatcher
   isp_irq_handle
   isp_irq_thread_handle
@@ -99,12 +106,16 @@
   isp_mem_init
   isp_monitor_exit
   isp_monitor_init
+  isp_pre_frame_dequeue
   isp_printf
   isp_subdev_init_clks
+  isp_subdev_release_clks
   isp_trigger_event
   isp_tuning_ioctl
   isp_tuning_open
   isp_tuning_release
+  isp_tunning_poll
+  isp_tunning_read
   isp_vic_cmd_set
   isp_vic_frd_show
   isp_vic_interrupt_service_routine
@@ -208,7 +219,6 @@
   sensor_get_normal_fps
   sensor_hw_reset_disable
   sensor_hw_reset_enable
-  sensor_info_show
   sensor_init
   sensor_read_black_pedestal
   sensor_set_analog_gain
@@ -220,9 +230,6 @@
   sensor_set_wdr_mode
   sensor_start_changes
   start_sequence
-  statistics_show
-  streaming_show
-  streaming_store
   subdev_sensor_ops_enum_input
   subdev_sensor_ops_ioctl
   subdev_sensor_ops_release_all_sensor
@@ -330,7 +337,6 @@
   tisp_dpc_set_par_cfg
   tisp_dpc_wdr_en
   tisp_ev_update
-  tisp_event_cleanup
   tisp_event_exit
   tisp_event_init
   tisp_event_process
@@ -399,7 +405,6 @@
   tisp_rdns_wdr_en
   tisp_reg_map_get
   tisp_reg_map_set
-  tisp_reset_initialization_flag
   tisp_s_2dns_ratio
   tisp_s_3dns_ratio
   tisp_s_BacklightComp
@@ -515,7 +520,6 @@
   tiziano_sharpen_init
   tiziano_sharpen_params_refresh
   tiziano_sync_sensor_attr
-  tiziano_sync_sensor_attr_validate
   tiziano_wdr_algorithm
   tiziano_wdr_fusion1_curve_block_mean1
   tiziano_wdr_init
@@ -571,6 +575,7 @@
   tx_isp_fs_probe
   tx_isp_fs_remove
   tx_isp_get_device
+  tx_isp_get_sensor
   tx_isp_handle_sync_sensor_attr_event
   tx_isp_init
   tx_isp_init_csi_subdev
@@ -657,5 +662,3 @@
   vin_core_ops_ioctl
   vin_s_stream
   void
-  wdr_mode_show
-  wdr_mode_store
