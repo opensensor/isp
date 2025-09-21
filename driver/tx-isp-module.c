@@ -3894,6 +3894,22 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     /* Binary Ninja: memset($v0, 0, 0x120) */
     memset(isp_dev, 0, sizeof(struct tx_isp_dev));
 
+    /* Initialize reserved memory information */
+    unsigned long rmem_base, rmem_size;
+    extern int parse_rmem_bootarg(unsigned long *base, unsigned long *size);
+    if (parse_rmem_bootarg(&rmem_base, &rmem_size) == 0) {
+        isp_dev->rmem_addr = (dma_addr_t)rmem_base;
+        isp_dev->rmem_size = rmem_size;
+        pr_info("*** PROBE: Initialized rmem_addr=0x%08x, size=0x%08x ***\n",
+                (uint32_t)isp_dev->rmem_addr, (uint32_t)isp_dev->rmem_size);
+    } else {
+        /* Fallback to default T31 values */
+        isp_dev->rmem_addr = 0x6300000;
+        isp_dev->rmem_size = 29 * 1024 * 1024;
+        pr_info("*** PROBE: Using default rmem_addr=0x%08x, size=0x%08x ***\n",
+                (uint32_t)isp_dev->rmem_addr, (uint32_t)isp_dev->rmem_size);
+    }
+
     /* Binary Ninja: void* $s2_1 = arg1[0x16] */
     pdata = pdev->dev.platform_data;
     pr_info("*** PROBE: Platform data: %p ***\n", pdata);
