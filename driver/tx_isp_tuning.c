@@ -3321,14 +3321,16 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
     }
     
     /* CRITICAL: Auto-initialize tuning for V4L2 controls ONLY ONCE to prevent init/release cycle */
-    if (magic == 0x56 && ourISPdev->tuning_enabled != 3 && !auto_init_done) {
+    if (magic == 0x56 && (!ourISPdev->core_dev || ourISPdev->core_dev->tuning_enabled != 3) && !auto_init_done) {
         pr_info("isp_core_tunning_unlocked_ioctl: Auto-initializing tuning for V4L2 control (one-time)\n");
-        
+
         /* Initialize tuning_data if not already initialized */
-        if (!dev->tuning_data) {
+        if (!dev->core_dev || !dev->core_dev->tuning_data) {
             pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
-            ourISPdev->tuning_data = isp_core_tuning_init(dev);
-            if (!dev->tuning_data) {
+            if (ourISPdev->core_dev) {
+                ourISPdev->core_dev->tuning_data = isp_core_tuning_init(dev);
+            }
+            if (!dev->core_dev || !dev->core_dev->tuning_data) {
                 pr_err("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
                 return -ENOMEM;
             }
