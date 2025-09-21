@@ -671,7 +671,6 @@ int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg
     int result = -ENOTSUPP;  /* 0xffffffed - invalid subdev */
     struct tx_isp_subdev_core_ops *core_ops;
     struct tx_isp_subdev_sensor_ops *sensor_ops;
-    int (*callback_func)(void);
     struct tx_isp_dev *isp_dev;
     struct tx_isp_subdev **subdev_array;
     struct tx_isp_subdev *current_subdev;
@@ -685,35 +684,25 @@ int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg
         return -ENOTSUPP;  /* 0xffffffed */
     }
 
-    /* Handle the main subdev first */
+    /* CRITICAL FIX: Handle the main subdev first with proper parameter passing */
     if (cmd == 0x1000000) {
-        /* Binary Ninja: Call core operations ioctl */
+        /* CRITICAL FIX: Call core operations ioctl with proper parameters */
         if (sd->ops && sd->ops->core && sd->ops->core->ioctl) {
-            callback_func = (int (*)(void))sd->ops->core->ioctl;
-            if (callback_func) {
-                result = callback_func();
-                if (result != 0 && result != -ENOTTY) {
-                    pr_err("ispcore_core_ops_ioctl: Core ioctl failed with %d\n", result);
-                    return result;
-                }
-            } else {
-                result = -ENOTTY;  /* 0xfffffdfd */
+            result = sd->ops->core->ioctl(sd, cmd, arg);
+            if (result != 0 && result != -ENOTTY) {
+                pr_err("ispcore_core_ops_ioctl: Main subdev core ioctl failed with %d\n", result);
+                return result;
             }
         } else {
             result = -ENOTTY;  /* 0xfffffdfd */
         }
     } else if (cmd == 0x1000001) {
-        /* Binary Ninja: Call sensor operations ioctl */
+        /* CRITICAL FIX: Call sensor operations ioctl with proper parameters */
         if (sd->ops && sd->ops->sensor && sd->ops->sensor->ioctl) {
-            callback_func = (int (*)(void))sd->ops->sensor->ioctl;
-            if (callback_func) {
-                result = callback_func();
-                if (result != 0 && result != -ENOTTY) {
-                    pr_err("ispcore_core_ops_ioctl: Sensor ioctl failed with %d\n", result);
-                    return result;
-                }
-            } else {
-                result = -ENOTTY;  /* 0xfffffdfd */
+            result = sd->ops->sensor->ioctl(sd, cmd, arg);
+            if (result != 0 && result != -ENOTTY) {
+                pr_err("ispcore_core_ops_ioctl: Main subdev sensor ioctl failed with %d\n", result);
+                return result;
             }
         } else {
             result = -ENOTTY;  /* 0xfffffdfd */
@@ -743,41 +732,48 @@ int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg
             continue;  /* Skip empty slots */
         }
 
+        /* CRITICAL FIX: Validate subdev structure is properly initialized before accessing members */
+        if ((uintptr_t)current_subdev < 0x80000000 || (uintptr_t)current_subdev >= 0xfffff000) {
+            pr_err("ispcore_core_ops_ioctl: Invalid subdev pointer %p at index %d - skipping\n", current_subdev, i);
+            continue;
+        }
+
+        /* CRITICAL FIX: Validate subdev structure members before accessing */
+        if (!virt_addr_valid(current_subdev) ||
+            !virt_addr_valid((char*)current_subdev + sizeof(struct tx_isp_subdev) - 1)) {
+            pr_err("ispcore_core_ops_ioctl: Subdev structure at %p spans invalid memory - skipping\n", current_subdev);
+            continue;
+        }
+
         if (cmd == 0x1000000) {
-            /* Binary Ninja: Call core operations ioctl for each subdev */
+            /* CRITICAL FIX: Call core operations ioctl with proper parameters */
             if (current_subdev->ops && current_subdev->ops->core && current_subdev->ops->core->ioctl) {
-                callback_func = (int (*)(void))current_subdev->ops->core->ioctl;
-                if (callback_func) {
-                    result = callback_func();
-                    if (result == 0) {
-                        continue;  /* Success, continue to next subdev */
-                    } else if (result != -ENOTTY) {
-                        break;  /* Real error, stop iteration */
-                    }
-                    /* -ENOTTY means not supported, continue */
-                    result = -ENOTTY;
-                } else {
-                    result = -ENOTTY;
+                /* Call with proper parameters: subdev, cmd, arg */
+                result = current_subdev->ops->core->ioctl(current_subdev, cmd, arg);
+                if (result == 0) {
+                    continue;  /* Success, continue to next subdev */
+                } else if (result != -ENOTTY) {
+                    pr_err("ispcore_core_ops_ioctl: Core ioctl failed for subdev %d: %d\n", i, result);
+                    break;  /* Real error, stop iteration */
                 }
+                /* -ENOTTY means not supported, continue */
+                result = -ENOTTY;
             } else {
                 result = -ENOTTY;
             }
         } else if (cmd == 0x1000001) {
-            /* Binary Ninja: Call sensor operations ioctl for each subdev */
+            /* CRITICAL FIX: Call sensor operations ioctl with proper parameters */
             if (current_subdev->ops && current_subdev->ops->sensor && current_subdev->ops->sensor->ioctl) {
-                callback_func = (int (*)(void))current_subdev->ops->sensor->ioctl;
-                if (callback_func) {
-                    result = callback_func();
-                    if (result == 0) {
-                        continue;  /* Success, continue to next subdev */
-                    } else if (result != -ENOTTY) {
-                        break;  /* Real error, stop iteration */
-                    }
-                    /* -ENOTTY means not supported, continue */
-                    result = -ENOTTY;
-                } else {
-                    result = -ENOTTY;
+                /* Call with proper parameters: subdev, cmd, arg */
+                result = current_subdev->ops->sensor->ioctl(current_subdev, cmd, arg);
+                if (result == 0) {
+                    continue;  /* Success, continue to next subdev */
+                } else if (result != -ENOTTY) {
+                    pr_err("ispcore_core_ops_ioctl: Sensor ioctl failed for subdev %d: %d\n", i, result);
+                    break;  /* Real error, stop iteration */
                 }
+                /* -ENOTTY means not supported, continue */
+                result = -ENOTTY;
             } else {
                 result = -ENOTTY;
             }
