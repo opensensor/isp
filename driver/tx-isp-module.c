@@ -3267,17 +3267,20 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
     /* Binary Ninja: Main conditional structure - FIXED ORDER */
     if (cmd == 0xc050561a) { // TX_ISP_SENSOR_ENUM_INPUT - EXACT Binary Ninja reference
-        /* CRITICAL FIX: Userspace passes POINTER TO INDEX, not a structure! */
-        /* The arg points to result_4 (the index counter), we must NOT overwrite it */
+        /* CRITICAL FIX: IOCTL 0xc050561a is _IOWR('V', 0x1a, 0x50) - 80 bytes read/write */
+        /* The userspace passes a structure that we need to read from and write to */
+        char sensor_buffer[0x50]; /* 80-byte buffer matching IOCTL size */
         uint32_t sensor_index;
         static const char* sensor_names[] = {"gc2053", NULL}; /* Add more sensors as needed */
 
-        /* Read the sensor index from userspace (arg points to result_4) */
-        if (copy_from_user(&sensor_index, (void __user *)arg, sizeof(uint32_t)) != 0) {
-            pr_err("TX_ISP_SENSOR_ENUM_INPUT: Failed to copy sensor index\n");
+        /* Read the entire structure from userspace */
+        if (copy_from_user(sensor_buffer, (void __user *)arg, 0x50) != 0) {
+            pr_err("TX_ISP_SENSOR_ENUM_INPUT: Failed to copy sensor structure\n");
             return -EFAULT;
         }
 
+        /* Extract sensor index from first 4 bytes */
+        sensor_index = *(uint32_t*)sensor_buffer;
         pr_info("TX_ISP_SENSOR_ENUM_INPUT: Enumerating sensor at index %d\n", sensor_index);
 
         /* Check if the requested index is valid */
@@ -3287,14 +3290,19 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -EINVAL; /* No more sensors - this breaks the userspace loop */
         }
 
-        /* The userspace expects the sensor name to be written to var_84, but we can't
-         * overwrite result_4! The userspace logic suggests this IOCTL should work differently.
-         * Looking at the decompiled code more carefully... */
+        /* Clear the buffer and write sensor name starting at offset 4 (after index) */
+        memset(sensor_buffer + 4, 0, 0x50 - 4);
+        strncpy(sensor_buffer + 4, sensor_names[sensor_index], 0x4c - 1);
 
-        pr_info("TX_ISP_SENSOR_ENUM_INPUT: Found sensor '%s' at index %d\n",
+        pr_info("TX_ISP_SENSOR_ENUM_INPUT: Returning sensor '%s' at index %d\n",
                  sensor_names[sensor_index], sensor_index);
 
-        /* Don't copy anything back - just return success for valid indices */
+        /* Copy the modified structure back to userspace */
+        if (copy_to_user((void __user *)arg, sensor_buffer, 0x50) != 0) {
+            pr_err("TX_ISP_SENSOR_ENUM_INPUT: Failed to copy result to user\n");
+            return -EFAULT;
+        }
+
         return 0; /* Success */
     } else if (cmd >= 0x800856d8) {
         /* Handle high-range commands */
