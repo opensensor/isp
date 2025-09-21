@@ -3284,17 +3284,26 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -EFAULT;
         }
 
-        /* Validate input index to prevent array bounds issues */
-        if (input_data.index < 0 || input_data.index > 16) {
-            pr_warn("TX_ISP_SENSOR_ENUM_INPUT: Invalid sensor index %d (valid range: 0-16)\n",
+        /* Validate input index - negative indices are invalid */
+        if (input_data.index < 0) {
+            pr_warn("TX_ISP_SENSOR_ENUM_INPUT: Invalid sensor index %d (must be >= 0)\n",
                     input_data.index);
             return -EINVAL;
         }
 
         pr_debug("Sensor enumeration: requesting index %d\n", input_data.index);
 
-        /* SAFE: Check our registered sensor list first */
+        /* CRITICAL FIX: Check if requested index is beyond available sensors */
+        /* This is what userspace expects to break the enumeration loop */
         mutex_lock(&sensor_list_mutex);
+        if (input_data.index >= sensor_count) {
+            mutex_unlock(&sensor_list_mutex);
+            pr_debug("TX_ISP_SENSOR_ENUM_INPUT: Index %d beyond available sensors (%d total) - BREAKING LOOP\n",
+                    input_data.index, sensor_count);
+            return -EINVAL;  /* This breaks the userspace loop */
+        }
+
+        /* SAFE: Check our registered sensor list */
         list_for_each_entry(sensor, &sensor_list, list) {
             if (sensor->index == input_data.index) {
                 strncpy(input_data.name, sensor->name, sizeof(input_data.name) - 1);
@@ -3319,12 +3328,12 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                        input_data.index, input_data.name);
             }
         }
-        
-        /* SAFE: Early return for invalid sensor index to prevent crashes */
+
+        /* CRITICAL FIX: If sensor not found at valid index, return error to break loop */
         if (!sensor_found) {
-            pr_debug("No sensor found at index %d (total registered: %d)\n",
+            pr_debug("No sensor found at index %d (total registered: %d) - BREAKING LOOP\n",
                     input_data.index, sensor_count);
-            return -EINVAL;
+            return -EINVAL;  /* This breaks the userspace loop */
         }
         
         /* SAFE: Copy result back to user with proper alignment */
