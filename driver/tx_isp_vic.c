@@ -816,9 +816,17 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             udelay(1);
         }
 
+        // CRITICAL FIX: Check if VIC unlock timeout occurred
+        if (timeout <= 0) {
+            u32 final_status = readl(vic_regs + 0x0);
+            pr_err("tx_isp_vic_start: VIC unlock TIMEOUT - hardware not responding! status=0x%x\n", final_status);
+            pr_err("tx_isp_vic_start: VIC hardware may be in bad state - continuing anyway\n");
+            // Continue anyway - some hardware may not respond to unlock sequence
+        }
+
         /* Binary Ninja: Enable VIC */
         writel(1, vic_regs + 0x0);
-        pr_info("tx_isp_vic_start: VIC enabled\n");
+        pr_info("tx_isp_vic_start: VIC enabled (timeout remaining: %d)\n", timeout);
 
     } else {
         /* Non-MIPI interfaces (DVP, etc.) */

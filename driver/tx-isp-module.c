@@ -3374,8 +3374,17 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     int timeout = 1000;
                     u32 vic_status;
                     u32 ctrl_verify;
-                    
+
                     pr_info("*** Channel %d: VIC REFERENCE ENABLEMENT SEQUENCE (STREAMON) ***\n", channel);
+
+                    // CRITICAL SAFETY: Validate VIC register mapping before hardware access
+                    if ((unsigned long)vic_dev->vic_regs < 0x80000000) {
+                        pr_err("*** Channel %d: INVALID VIC register mapping %p - aborting streaming ***\n",
+                               channel, vic_dev->vic_regs);
+                        spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
+                        state->streaming = false;
+                        return -EFAULT;
+                    }
                     
                     // STEP 1: Enable VIC register access mode (write 2 to register 0x0)
                     iowrite32(2, vic_dev->vic_regs + 0x0);
