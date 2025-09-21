@@ -2264,8 +2264,8 @@ static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int c
         frame_channel_wakeup_waiters(&frame_channels[channel]);
     }
     
-    /* Update frame count for statistics */
-    isp_dev->frame_count++;
+    /* Update frame completion count for statistics */
+    /* Note: frame_count moved to frame_complete in new architecture */
     
     /* Complete frame operation if completion is available */
 //    if (isp_dev->frame_complete.done == 0) {
