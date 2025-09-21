@@ -1629,9 +1629,9 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         return IRQ_HANDLED;
     }
 
-    /* CRITICAL SAFETY: Validate VIC registers before access */
-    vic_regs = isp_dev->vic_regs;
-    if (!vic_regs || 
+    /* CRITICAL FIX: Get VIC registers from vic_dev, not isp_dev */
+    vic_regs = vic_dev->vic_regs;
+    if (!vic_regs ||
         (unsigned long)vic_regs < 0x80000000 ||
         (unsigned long)vic_regs >= 0xfffff000) {
         pr_debug("*** VIC IRQ: No VIC registers mapped - safe exit ***\n");
