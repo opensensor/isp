@@ -1036,7 +1036,9 @@ static int sensor_get_normal_fps(void) {
      * int32_t $v0_1 = $v0 & 0xffff
      * return zx.d(((($v1 u% $v0_1) << 8) u/ $v0_1).w + (($v1 u/ $v0_1) << 8).w) */
 
-    if (!ourISPdev || !ourISPdev->sensor) {
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor) {
         return 25; /* Default 25 FPS */
     }
 
@@ -1074,7 +1076,9 @@ int sensor_fps_control(int fps) {
     /* Binary Ninja: Copies sensor parameters and returns FPS control value */
     int result = 0;
 
-    if (!ourISPdev || !ourISPdev->sensor) {
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor) {
         pr_warn("sensor_fps_control: No ISP device or sensor available\n");
         return -ENODEV;
     }
