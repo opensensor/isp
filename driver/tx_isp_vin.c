@@ -268,50 +268,43 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
         }
     }
 
-    /* Binary Ninja: void* $a0 = *(arg1 + 0xe4) */
-    /* FIXED: Get sensor from correct subdev index using helper function */
-    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
-    sensor = tx_isp_get_sensor();
+    /* Binary Ninja: label_132e4: void* $a0 = *(arg1 + 0xe4) */
+    sensor_ptr = vin_dev->sensor;  /* Use struct member instead of offset 0xe4 */
 
-    if (!sensor) {
+    if (sensor_ptr == 0) {
         /* Binary Ninja: if ($a0 == 0) goto label_132f4 */
-        pr_err("VIN: vin_s_stream: no active sensor at subdev index 3\n");
+        pr_info("vin_s_stream: No sensor available, going to label_132f4\n");
         goto label_132f4;
     }
 
     /* Binary Ninja: int32_t* $v0_2 = *(*($a0 + 0xc4) + 4) */
-    /* Binary Ninja reference: Access function pointer directly from sensor structure */
-    if (sensor && sensor->sd.ops && sensor->sd.ops->video && sensor->sd.ops->video->s_stream) {
+    struct tx_isp_sensor *sensor = (struct tx_isp_sensor *)sensor_ptr;
+    if (!sensor->sd.ops || !sensor->sd.ops->video) {
+        /* Binary Ninja: if ($v0_2 == 0) return 0xfffffdfd */
+        pr_info("vin_s_stream: No sensor video ops, returning -ENOIOCTLCMD\n");
+        return 0xfffffdfd;  /* -ENOIOCTLCMD */
+    }
 
-        /* Binary Ninja: int32_t $v1_1 = *$v0_2 */
+    /* Binary Ninja: int32_t $v1_1 = *$v0_2 */
+    int (*sensor_s_stream_func)(struct tx_isp_subdev *, int) = sensor->sd.ops->video->s_stream;
+
+    if (sensor_s_stream_func == 0) {
+        /* Binary Ninja: if ($v1_1 == 0) result = 0xfffffdfd */
+        pr_info("vin_s_stream: No sensor s_stream function, returning -ENOIOCTLCMD\n");
+        result = 0xfffffdfd;  /* -ENOIOCTLCMD */
+    } else {
         /* Binary Ninja: result = $v1_1($a0, arg2) */
-        mcp_log_info("vin_s_stream: calling sensor s_stream", enable);
-        pr_info("VIN: Calling sensor s_stream - sensor=%p, enable=%d\n", sensor, enable);
-
-        ret = sensor->sd.ops->video->s_stream(&sensor->sd, enable);
-
-        pr_info("VIN: sensor s_stream returned: %d\n", ret);
-        mcp_log_info("vin_s_stream: sensor s_stream completed", ret);
+        pr_info("vin_s_stream: Calling sensor s_stream function\n");
+        result = sensor_s_stream_func(&sensor->sd, enable);
 
         /* Binary Ninja: if (result == 0) goto label_132f4 */
-        if (ret == 0) {
+        if (result == 0) {
             goto label_132f4;
         }
-
-        /* Binary Ninja: return result */
-        if (ret != -0x203) {  /* Ignore specific error code */
-            mcp_log_error("vin_s_stream: sensor streaming failed", ret);
-            return ret;
-        }
-
-        /* Treat -0x203 as success and continue */
-        ret = 0;
-    } else {
-        /* Binary Ninja: if ($v0_2 == 0) return 0xfffffdfd */
-        pr_err("VIN: vin_s_stream: sensor has no valid s_stream function\n");
-        mcp_log_error("vin_s_stream: sensor has no valid s_stream function", 0);
-        return -0x203;  /* Return specific error code like reference */
     }
+
+    /* Binary Ninja: return result (if not 0) */
+    return result;
 
 label_132f4:
     /* CRITICAL FIX: Binary Ninja shows int32_t $v0 = 4; if (arg2 == 0) $v0 = 3 */
