@@ -43,13 +43,13 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         return;
     }
 
-    /* CRITICAL SAFETY: Ensure VIC device is properly linked before enabling interrupt */
-    if (!ourISPdev || ourISPdev->vic_dev != vic_dev) {
-        pr_err("tx_vic_enable_irq: VIC device not properly linked to ISP device\n");
-        pr_err("  ourISPdev = %p, ourISPdev->vic_dev = %p, vic_dev = %p\n",
-               ourISPdev, ourISPdev ? ourISPdev->vic_dev : NULL, vic_dev);
+    /* CRITICAL SAFETY: Basic validation only - don't block interrupt enable */
+    if (!ourISPdev) {
+        pr_err("tx_vic_enable_irq: ourISPdev is NULL\n");
         return;
     }
+
+    pr_info("*** tx_vic_enable_irq: ourISPdev=%p, vic_dev=%p ***\n", ourISPdev, vic_dev);
 
     /* Binary Ninja: __private_spin_lock_irqsave(dump_vsd_2 + 0x130, &var_18) */
     spin_lock_irqsave(&vic_dev->lock, flags);
@@ -681,9 +681,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("tx_isp_vic_start: ISP pipeline enabled\n");
     }
 
-    /* Binary Ninja: vic_start_ok = 1 */
-    vic_start_ok = 1;
-    pr_info("tx_isp_vic_start: VIC start completed\n");
+    /* CRITICAL FIX: Don't set vic_start_ok here - let tx_vic_enable_irq handle it */
+    /* This prevents race conditions between hardware init and interrupt enable */
+    pr_info("tx_isp_vic_start: VIC hardware initialization completed\n");
 
     return 0;
 }
@@ -1689,23 +1689,26 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             pr_info("*** vic_core_s_stream: State != 4, calling VIC start sequence ***\n");
 
             /* Binary Ninja: tx_vic_disable_irq() */
+            pr_info("*** vic_core_s_stream: Step 1 - Disabling VIC interrupts ***\n");
             tx_vic_disable_irq(vic_dev);
 
             /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
-            pr_info("*** vic_core_s_stream: CRITICAL FIX - Calling tx_isp_vic_start to properly initialize VIC hardware ***\n");
+            pr_info("*** vic_core_s_stream: Step 2 - Calling tx_isp_vic_start to initialize VIC hardware ***\n");
             ret = tx_isp_vic_start(vic_dev);
             if (ret != 0) {
                 pr_err("*** vic_core_s_stream: tx_isp_vic_start FAILED: %d - VIC hardware not initialized! ***\n", ret);
                 return ret;
             }
-            pr_info("*** vic_core_s_stream: tx_isp_vic_start SUCCESS - VIC hardware properly initialized ***\n");
+            pr_info("*** vic_core_s_stream: Step 3 - tx_isp_vic_start SUCCESS - VIC hardware initialized ***\n");
 
             /* Binary Ninja: *($s1_1 + 0x128) = 4 */
             vic_dev->state = 4;
+            pr_info("*** vic_core_s_stream: Step 4 - VIC state set to 4 (streaming) ***\n");
 
             /* Binary Ninja: tx_vic_enable_irq() */
-            pr_info("*** vic_core_s_stream: Now enabling VIC interrupts after hardware initialization ***\n");
+            pr_info("*** vic_core_s_stream: Step 5 - Enabling VIC interrupts ***\n");
             tx_vic_enable_irq(vic_dev);
+            pr_info("*** vic_core_s_stream: Step 6 - VIC interrupts enabled ***\n");
 
             pr_info("*** vic_core_s_stream: VIC start completed, ret=%d, state=4 ***\n", ret);
 

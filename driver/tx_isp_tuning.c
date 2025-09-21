@@ -3639,23 +3639,6 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                             tiziano_adr_params_refresh();
                             pr_info("TUNING: All parameter refresh functions completed\n");
 
-                            /* 12. SURGICAL FIX: Protect CSI PHY registers from tuning system overwrites */
-                            /* The tuning system was writing 0x0 to critical CSI PHY registers, breaking streaming */
-                            extern uint32_t vic_start_ok;
-                            if (vic_start_ok == 1) {
-                                pr_info("*** TUNING: Skipping CSI PHY register maintenance during streaming to prevent corruption ***\n");
-                                /* Don't write to CSI PHY registers 0x1c, 0xc, 0x100, 0x104, 0x108, 0x10c during streaming */
-                                /* These registers contain the working CSI PHY configuration that must be preserved */
-                            } else {
-                                /* Only allow CSI PHY register maintenance when not streaming */
-                                if (ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
-                                    /* Safe register refresh when VIC is not streaming */
-                                    u32 current_val = readl(ourISPdev->core_dev->core_regs + 0x10);
-                                    writel(current_val, ourISPdev->core_dev->core_regs + 0x10);  /* Refresh interrupt enable */
-                                    wmb();
-                                }
-                            }
-
                             pr_info("*** This should maintain proper ISP pipeline control and prevent CSI PHY timeouts ***\n");
                 }
 

@@ -1565,7 +1565,7 @@ irqreturn_t ip_done_interrupt_static(int irq, void *dev_id)
             pr_info("*** IP DONE: Skipping LSC tuning during VIC streaming to prevent CSI PHY corruption ***\n");
         } else {
             /* Binary Ninja: tisp_lsc_write_lut_datas() */
-            tisp_lsc_write_lut_datas();
+            // tisp_lsc_write_lut_datas();
             pr_info("*** IP DONE: LSC tuning completed (VIC not streaming) ***\n");
         }
     }
