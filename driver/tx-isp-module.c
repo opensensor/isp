@@ -885,7 +885,9 @@ static int sensor_alloc_analog_gain_short(int gain) {
      * *(arg2 + 0xe) = var_10.w
      * return result */
 
-    if (!ourISPdev || !ourISPdev->sensor) {
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor) {
         return gain;
     }
 
