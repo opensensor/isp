@@ -34,7 +34,8 @@ static int tx_isp_proc_w00_show(struct seq_file *m, void *v)
     }
 
     /* Reference driver outputs single integer for vic frame counter */
-    seq_printf(m, "%u", isp->frame_count);
+    extern atomic64_t frame_done_cnt;
+    seq_printf(m, "%llu", (unsigned long long)atomic64_read(&frame_done_cnt));
     
     return 0;
 }
@@ -63,7 +64,8 @@ static int tx_isp_proc_w01_show(struct seq_file *m, void *v)
     }
 
     /* Reference driver outputs single integer for vic frame counter */
-    seq_printf(m, "%u", isp->frame_count);
+    extern atomic64_t frame_done_cnt;
+    seq_printf(m, "%llu", (unsigned long long)atomic64_read(&frame_done_cnt));
     
     return 0;
 }
@@ -119,6 +121,7 @@ static const struct file_operations tx_isp_proc_w01_fops = {
 /* ISP-W02 file operations - CRITICAL: Match reference driver output format */
 static int tx_isp_proc_w02_show(struct seq_file *m, void *v)
 {
+    extern atomic64_t frame_done_cnt;
     struct tx_isp_dev *isp = m->private;
 
     if (!isp) {
@@ -133,7 +136,6 @@ static int tx_isp_proc_w02_show(struct seq_file *m, void *v)
      * Line 2: "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0"
      * Use frame_done_cnt as frame counter since frame_count was removed
      */
-    extern atomic64_t frame_done_cnt;
     uint32_t frame_count = (uint32_t)atomic64_read(&frame_done_cnt);
     seq_printf(m, " %u, 0\n", frame_count);
     seq_printf(m, "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0\n");
@@ -203,7 +205,8 @@ static int tx_isp_proc_fs_show(struct seq_file *m, void *v)
     }
 
     /* FS proc entry for Frame Source status */
-    seq_printf(m, "%u", isp->frame_count);
+    extern atomic64_t frame_done_cnt;
+    seq_printf(m, "%llu", (unsigned long long)atomic64_read(&frame_done_cnt));
     
     return 0;
 }
@@ -264,7 +267,8 @@ static int tx_isp_proc_m0_show(struct seq_file *m, void *v)
     }
 
     /* M0 proc entry for main ISP core status */
-    seq_printf(m, "%u", isp->frame_count);
+    extern atomic64_t frame_done_cnt;
+    seq_printf(m, "%llu", (unsigned long long)atomic64_read(&frame_done_cnt));
     
     return 0;
 }
