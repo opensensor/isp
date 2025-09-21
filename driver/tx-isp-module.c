@@ -1614,16 +1614,28 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 
     pr_info("*** VIC IRQ ENTRY: IRQ %d, dev_id=%p ***\n", irq, dev_id);
 
+    /* CRITICAL SAFETY: Comprehensive parameter validation to prevent kernel panic */
+    if (irq != 38) {
+        pr_err("*** CRITICAL: VIC handler called with wrong IRQ %d (expected 38) ***\n", irq);
+        return IRQ_NONE;
+    }
+
     /* CRITICAL SAFETY: Use the dev_id parameter passed by the interrupt dispatcher */
     isp_dev = (struct tx_isp_dev *)dev_id;
-    if (!isp_dev) {
-        pr_err("*** CRITICAL: isp_vic_interrupt_service_routine called with NULL dev_id! ***\n");
+    if (!dev_id) {
+        pr_err("*** CRITICAL: VIC handler called with NULL dev_id! ***\n");
+        return IRQ_NONE;
+    }
+
+    /* CRITICAL SAFETY: Validate dev_id is a valid kernel pointer */
+    if (!virt_addr_valid(dev_id)) {
+        pr_err("*** CRITICAL: VIC handler called with invalid dev_id=%p (not valid virtual address) ***\n", dev_id);
         return IRQ_NONE;
     }
 
     /* CRITICAL SAFETY: Validate isp_dev pointer range */
     if ((uintptr_t)isp_dev < 0x80000000 || (uintptr_t)isp_dev > 0x9fffffff) {
-        pr_err("*** CRITICAL: isp_vic_interrupt_service_routine called with invalid isp_dev=%p ***\n", isp_dev);
+        pr_err("*** CRITICAL: VIC handler called with invalid isp_dev=%p (out of range) ***\n", isp_dev);
         return IRQ_NONE;
     }
 
@@ -5798,6 +5810,13 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
     /* Handle VIC interrupts (IRQ 38) */
     if (irq == 38) {
         pr_info("*** isp_irq_handle: VIC IRQ %d received, dev_id=%p ***\n", irq, dev_id);
+
+        /* CRITICAL SAFETY: Check if VIC is ready for interrupt processing */
+        if (!isp_dev->vic_dev || !isp_dev->vic_dev->vic_regs) {
+            pr_warn("*** isp_irq_handle: VIC IRQ %d received but VIC not ready - ignoring ***\n", irq);
+            return IRQ_HANDLED;  /* Acknowledge but don't process */
+        }
+
         /* Call VIC interrupt service routine */
         result = isp_vic_interrupt_service_routine(irq, dev_id);
         pr_info("*** isp_irq_handle: VIC IRQ %d handled, result=%d ***\n", irq, result);
