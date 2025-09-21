@@ -1765,12 +1765,12 @@ static struct tx_isp_video_pad *find_subdev_link_pad(struct tx_isp_dev *isp_dev,
     /* Search through subdevices for matching name */
     for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
         struct tx_isp_subdev *sd = isp_dev->subdevs[i];
-        if (!sd || !sd->name) {
+        if (!sd || !sd->module.name) {
             continue;
         }
 
         /* Compare subdev name with config source name */
-        if (strcmp(sd->name, config->src_name) == 0) {
+        if (strcmp(sd->module.name, config->src.name) == 0) {
             /* Found matching subdev - create/return pad structure */
             static struct tx_isp_video_pad pad;
             memset(&pad, 0, sizeof(pad));
