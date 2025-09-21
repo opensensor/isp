@@ -3289,6 +3289,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             } else {
                 pr_info("TX_ISP_SENSOR_ENUM_INPUT: No sensor found at index %d (result=%d)\n",
                         var_98.as_input.index, result);
+                /* According to client_side.txt analysis: userspace expects IOCTL to return non-zero
+                 * when enumeration is complete, which breaks the enumeration loop */
                 return result;
             }
 
