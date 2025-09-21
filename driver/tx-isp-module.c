@@ -5721,16 +5721,16 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
         return ispcore_interrupt_service_routine(irq, isp_dev);
 
     } else if (irq == 38) {
-        /* VIC interrupt - dev_id should be VIC device */
-        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)dev_id;
+        /* VIC interrupt - dev_id should be ISP device (reference driver expects this) */
+        struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
 
-        /* CRITICAL SAFETY: Validate this is a VIC device structure */
-        if (!vic_dev || (uintptr_t)vic_dev < 0x80000000) {
-            pr_err("VIC IRQ %d: Invalid VIC device=%p\n", irq, vic_dev);
+        /* CRITICAL SAFETY: Validate this is the ISP device structure */
+        if (!isp_dev || (uintptr_t)isp_dev < 0x80000000) {
+            pr_err("VIC IRQ %d: Invalid ISP device=%p\n", irq, isp_dev);
             return IRQ_HANDLED;
         }
 
-        return isp_vic_interrupt_service_routine(irq, vic_dev);
+        return isp_vic_interrupt_service_routine(irq, isp_dev);
 
     } else {
         pr_warn("isp_irq_handle: Unknown IRQ %d\n", irq);
