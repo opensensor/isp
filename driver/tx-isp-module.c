@@ -4112,9 +4112,10 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         mutex_unlock(&sensor_list_mutex);
         
         /* SAFE: If not found in registered list, check if we have a fallback sensor */
-        if (!sensor_found && ourISPdev && ourISPdev->sensor && input_data.index == 0) {
+        extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+        struct tx_isp_sensor *active_sensor = tx_isp_get_sensor();
+        if (!sensor_found && active_sensor && input_data.index == 0) {
             /* Special case: if requesting index 0 and we have a connected sensor */
-            struct tx_isp_sensor *active_sensor = ourISPdev->sensor;
             if (active_sensor && active_sensor->info.name[0] != '\0') {
                 strncpy(input_data.name, active_sensor->info.name, sizeof(input_data.name) - 1);
                 input_data.name[sizeof(input_data.name) - 1] = '\0';
