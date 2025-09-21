@@ -1875,8 +1875,6 @@ static struct tx_isp_subdev_ops sensor_ops = {
 	.sensor = &sensor_sensor_ops,
 };
 
-/* External ISP framework registration function */
-extern int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor *sensor);
 
 /* It's the sensor device */
 static u64 tx_isp_module_dma_mask = ~(u64) 0;
