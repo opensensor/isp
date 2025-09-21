@@ -10540,7 +10540,7 @@ void *isp_core_tuning_init(void *arg1)
 }
 
 
-/* isp_core_tuning_event - FIXED: Use proper struct instead of raw memory access */
+/* isp_core_tuning_event - SAFE: Use proper struct instead of dangerous offset access */
 int isp_core_tuning_event(void *arg1, int arg2)
 {
     struct isp_tuning_data *tuning_data = (struct isp_tuning_data *)arg1;
@@ -10554,8 +10554,8 @@ int isp_core_tuning_event(void *arg1, int arg2)
 
     /* Binary Ninja: if (arg2 == 0x4000001) */
     if (arg2 == 0x4000001) {
-        /* FIXED: Use proper struct member instead of raw offset */
-        tuning_data->state = 1;  /* Binary Ninja: *(arg1 + 0x40c4) = 1 */
+        /* SAFE: Use proper struct member instead of dangerous *(arg1 + 0x40c4) = 1 */
+        tuning_data->state = 1;
         pr_info("isp_core_tuning_event: Set tuning state to active\n");
     } else {
         /* Binary Ninja: if (arg2 u>= 0x4000002) */
@@ -10566,8 +10566,7 @@ int isp_core_tuning_event(void *arg1, int arg2)
                 isp_frame_done_wakeup();
                 pr_info("isp_core_tuning_event: Frame done wakeup called\n");
             } else if (arg2 == 0x4000003) {
-                /* FIXED: Use struct member instead of raw offset access */
-                /* Binary Ninja accesses offset 0x40a4 for day/night mode */
+                /* SAFE: Use struct member instead of dangerous *(arg1 + 0x40a4) access */
                 unsigned int day_night_mode = tuning_data->brightness;  /* Use brightness as day/night mode storage */
 
                 /* Binary Ninja: tisp_day_or_night_s_ctrl($s1_1) */
@@ -10581,8 +10580,8 @@ int isp_core_tuning_event(void *arg1, int arg2)
 
         /* Binary Ninja: if (arg2 == 0x4000000) */
         if (arg2 == 0x4000000) {
-            /* FIXED: Use proper struct member instead of raw offset */
-            tuning_data->state = 2;  /* Binary Ninja: *(arg1 + 0x40c4) = 2 */
+            /* SAFE: Use proper struct member instead of dangerous *(arg1 + 0x40c4) = 2 */
+            tuning_data->state = 2;
             pr_info("isp_core_tuning_event: Set tuning state to 2\n");
         }
     }
