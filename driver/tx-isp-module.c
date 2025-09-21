@@ -4046,20 +4046,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         pr_err("*** NO VIN DEVICE AVAILABLE FOR INITIALIZATION ***\n");
                     }
 
-                    /* CRITICAL: Initialize ISP CORE now that sensor is connected */
-                    if (ourISPdev->core_dev && ourISPdev->core_dev->sd.ops &&
-                        ourISPdev->core_dev->sd.ops->core && ourISPdev->core_dev->sd.ops->core->init) {
-                        pr_info("*** INITIALIZING ISP CORE FOR SENSOR STREAMING ***\n");
-                        int core_init_ret = ourISPdev->core_dev->sd.ops->core->init(&ourISPdev->core_dev->sd, 1);
-                        if (core_init_ret == 0) {
-                            pr_info("*** ISP CORE INITIALIZED SUCCESSFULLY - STATE SHOULD BE 3 ***\n");
-                            pr_info("*** CORE STATE: %d (should be 3 for streaming) ***\n", ourISPdev->core_dev->state);
-                        } else {
-                            pr_err("*** ISP CORE INITIALIZATION FAILED: %d ***\n", core_init_ret);
-                        }
-                    } else {
-                        pr_err("*** NO ISP CORE DEVICE AVAILABLE FOR INITIALIZATION ***\n");
-                    }
+                    /* Core initialization now handled by STREAMON event in tx_isp_send_event_to_remote */
+                    pr_info("*** SENSOR CONNECTED - Core initialization will be triggered by STREAMON event ***\n");
                 } else {
                     pr_err("*** FAILED TO CREATE I2C CLIENT FOR %s ***\n", sensor_name);
                 }
@@ -5972,8 +5960,27 @@ int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
         return 0;
 
     case 0x3000003: /* TX_ISP_EVENT_FRAME_STREAMON */
-        pr_info("*** tx_isp_send_event_to_remote: STREAMON event - safe handling ***\n");
-        return 0;
+        pr_info("*** tx_isp_send_event_to_remote: STREAMON event - TRIGGERING CORE INITIALIZATION ***\n");
+
+        /* CRITICAL: This event should trigger core initialization according to Binary Ninja reference */
+        if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->sd.ops &&
+            ourISPdev->core_dev->sd.ops->core && ourISPdev->core_dev->sd.ops->core->init) {
+
+            pr_info("*** STREAMON EVENT: Calling core init to transition from state 2 to 3 ***\n");
+            int core_init_ret = ourISPdev->core_dev->sd.ops->core->init(&ourISPdev->core_dev->sd, 1);
+
+            if (core_init_ret == 0) {
+                pr_info("*** STREAMON EVENT: Core initialized successfully - state should be 3 ***\n");
+                pr_info("*** CORE STATE AFTER INIT: %d (should be 3) ***\n", ourISPdev->core_dev->state);
+                return 0;
+            } else {
+                pr_err("*** STREAMON EVENT: Core initialization failed: %d ***\n", core_init_ret);
+                return core_init_ret;
+            }
+        } else {
+            pr_err("*** STREAMON EVENT: No core device available for initialization ***\n");
+            return 0xfffffdfd;
+        }
 
     default:
         pr_info("*** tx_isp_send_event_to_remote: Unknown event 0x%x - safe return ***\n", event_type);
