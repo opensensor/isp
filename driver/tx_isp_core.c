@@ -1090,13 +1090,6 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     return IRQ_HANDLED;
 }
 
-/* ISP interrupt handler - now calls the proper dispatch system */
-irqreturn_t tx_isp_core_irq_handle(int irq, void *dev_id)
-{
-    /* Forward to the proper ISP core interrupt service routine */
-    return ispcore_interrupt_service_routine(irq, dev_id);
-}
-
 /* ISP interrupt thread handler - for threaded IRQ processing */
 irqreturn_t tx_isp_core_irq_thread_handle(int irq, void *dev_id)
 {
@@ -1142,14 +1135,6 @@ static int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
     pr_info("*** tx_isp_request_irq: ISP Core IRQ %d will be handled by main dispatcher ***\n", irq_number);
     pr_info("*** tx_isp_request_irq: Dispatcher will call handler with dev_id = %p (ISP device) ***\n", ourISPdev);
     return 0;
-}
-
-/* Core ISP interrupt handler - now calls the dispatch system */
-irqreturn_t tx_isp_core_irq_handler(int irq, void *dev_id)
-{
-    /* *** CRITICAL: Use dispatch system instead of direct handling *** */
-    pr_info("*** tx_isp_core_irq_handler: Forwarding to dispatch system ***\n");
-    return tx_isp_core_irq_handle(irq, dev_id);
 }
 
 
