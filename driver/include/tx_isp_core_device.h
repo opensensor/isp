@@ -50,6 +50,9 @@ struct tx_isp_core_device {
     
     /* Core sensor interface */
     struct tx_isp_sensor_attribute *sensor_attr;  /* Current sensor attributes */
+
+    /* Core image processing settings */
+    uint32_t wdr_mode;                             /* WDR mode setting */
     
     /* Core frame channels */
     void *frame_channels;                      /* Frame channel array */

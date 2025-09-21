@@ -33,7 +33,11 @@ static ssize_t wdr_mode_show(struct device *dev,
     if (!isp)
         return -EINVAL;
 
-    return sprintf(buf, "%d\n", isp->wdr_mode);
+    if (isp->core_dev) {
+        return sprintf(buf, "%d\n", isp->core_dev->wdr_mode);
+    } else {
+        return sprintf(buf, "0\n");  /* Default WDR mode */
+    }
 }
 
 static ssize_t wdr_mode_store(struct device *dev,
@@ -51,8 +55,13 @@ static ssize_t wdr_mode_store(struct device *dev,
     if (ret)
         return ret;
 
-    /* Update WDR mode */
-    isp->wdr_mode = mode;
+    /* Update WDR mode in core device */
+    if (isp->core_dev) {
+        isp->core_dev->wdr_mode = mode;
+    } else {
+        pr_err("wdr_mode_store: No core device available\n");
+        return -ENODEV;
+    }
     
     /* Update hardware if needed */
     if (isp->streaming_enabled) {
@@ -123,7 +132,8 @@ static ssize_t statistics_show(struct device *dev,
         return -EINVAL;
 
     spin_lock_irqsave(&isp->ae_lock, flags);
-    len += sprintf(buf + len, "Frame Count: %u\n", isp->frame_count);
+    extern atomic64_t frame_done_cnt;
+    len += sprintf(buf + len, "Frame Count: %llu\n", (unsigned long long)atomic64_read(&frame_done_cnt));
     if (isp->ae_valid) {
         len += sprintf(buf + len, "AE Enabled: %d\n", isp->ae_algo_enabled);
         /* Add more statistics as needed */
