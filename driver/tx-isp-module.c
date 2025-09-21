@@ -5098,15 +5098,18 @@ long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *a
             if (!sd || !arg) {
                 return -EINVAL;
             }
-            /* Binary Ninja: Get sensor from subdev host data */
+            /* CRITICAL FIX: Return the stored current sensor index */
             {
-                struct tx_isp_subdev *sensor_sd = (struct tx_isp_subdev *)tx_isp_get_subdev_hostdata(sd);
-                uint32_t input_value = 0xffffffff;
+                uint32_t input_value;
 
-                if (sensor_sd && (unsigned long)sensor_sd < 0xfffff001) {
-                    /* Binary Ninja: *($a0 + 0xdc) - this is likely a sensor-specific field */
-                    /* For now, return a default input value */
-                    input_value = 0; /* Default sensor input */
+                if (current_sensor_index >= 0) {
+                    /* A sensor is currently selected */
+                    input_value = (uint32_t)current_sensor_index;
+                    pr_info("subdev_sensor_ops_ioctl: Returning current sensor index %d\n", current_sensor_index);
+                } else {
+                    /* No sensor is currently selected */
+                    input_value = 0xffffffff;
+                    pr_info("subdev_sensor_ops_ioctl: No sensor selected, returning 0xffffffff\n");
                 }
 
                 *(uint32_t *)arg = input_value;
