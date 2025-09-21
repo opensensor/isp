@@ -145,21 +145,17 @@ static int tx_isp_csi_hw_init(struct tx_isp_subdev *sd)
     return 0;
 }
 
-/* CSI video streaming control - FIXED: MIPS memory alignment */
+/* CSI video streaming control - EXACT Binary Ninja implementation */
 int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
 {
-    struct tx_isp_sensor_attribute *attr;
     struct tx_isp_csi_device *csi_dev;
-    void __iomem *csi_base;
-    int ret = 0;
 
     pr_info("*** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***\n");
     pr_info("csi_video_s_stream: sd=%p, enable=%d\n", sd, enable);
 
-    /* CRITICAL FIX: Get CSI device from subdev private data (set during probe) */
-    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
-    if (!csi_dev) {
-        pr_err("CSI device is NULL from subdev private data\n");
+    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 0xffffffea */
+    if (!sd || (unsigned long)sd >= 0xfffff001) {
+        pr_err("csi_video_s_stream: Invalid subdev pointer\n");
         return 0xffffffea;
     }
 
@@ -170,6 +166,13 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     if (!sensor || !sensor->video.attr || sensor->video.attr->dbus_type != TX_SENSOR_DATA_INTERFACE_MIPI) {
         pr_info("csi_video_s_stream: Sensor interface type is not MIPI (1), returning 0\n");
         return 0;
+    }
+
+    /* Get CSI device from subdev private data */
+    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+    if (!csi_dev) {
+        pr_err("CSI device is NULL from subdev private data\n");
+        return 0xffffffea;
     }
 
     /* CRITICAL FIX: Use safe struct member access instead of dangerous offset 0x13c */
