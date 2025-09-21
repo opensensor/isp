@@ -5070,6 +5070,14 @@ int tx_isp_core_device_set_sensor_attr(struct tx_isp_core_device *core_dev,
     /* Store sensor attributes */
     core_dev->sensor_attr = attr;
 
+    /* Update core device dimensions from sensor attributes */
+    if (attr->total_width > 0 && attr->total_height > 0) {
+        core_dev->width = attr->total_width;
+        core_dev->height = attr->total_height;
+        pr_info("*** tx_isp_core_device_set_sensor_attr: Updated dimensions to %dx%d ***\n",
+                core_dev->width, core_dev->height);
+    }
+
     pr_info("*** tx_isp_core_device_set_sensor_attr: Sensor attributes set ***\n");
     return 0;
 }
