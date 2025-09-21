@@ -803,29 +803,25 @@ struct isp_tuning_data {
 	uint32_t sharpness;                  /* 0x24: Sharpness value (0-255) */
 
 	/* Additional tuning parameters accessed by control functions */
-	uint32_t hflip;                      /* 0x28: Horizontal flip */
-	uint32_t vflip;                      /* 0x2c: Vertical flip */
+
 	uint32_t shading;                    /* 0x30: Shading control */
 	uint32_t running_mode;               /* 0x34: ISP running mode */
 	uint32_t custom_mode;                /* 0x38: ISP custom mode */
 	uint32_t gamma;                      /* 0x3c: Gamma value */
 	uint32_t dpc;                        /* 0x40: Dead pixel correction */
-	uint32_t antiflicker;                /* 0x44: Anti-flicker mode */
 	uint32_t bypass;                     /* 0x48: Bypass mode */
 
 	/* CRITICAL: Padding to reach offset 0x15c where the crash occurs */
 	/* Binary Ninja accesses *(pointer + 0x15c) = *(pointer + 0x57*4) */
 	uint32_t mode_flag;                  /* 0x15c: Mode flag (checked against 1) - PREVENTS BadVA CRASH */
-	
+
 	/* Additional controls */
 	uint32_t hflip;                      /* 0x70: Horizontal flip (cmd 0x980914) */
 	uint32_t vflip;                      /* 0x74: Vertical flip (cmd 0x980915) */
 	uint32_t antiflicker;                /* 0x78: Anti-flicker (cmd 0x980918) */
 	uint32_t shading;                    /* 0x7c: Shading control */
-	
+
 	/* Extended controls */
-	uint32_t running_mode;               /* 0x80: ISP running mode */
-	uint32_t custom_mode;                /* 0x84: ISP custom mode */
 	uint32_t move_state;                 /* 0x88: Move state */
 	uint32_t ae_comp;                    /* 0x8c: AE compensation */
 	
