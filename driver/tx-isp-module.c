@@ -80,7 +80,6 @@ bool is_valid_kernel_pointer(const void *ptr);
 /* Kernel symbol export for sensor drivers to register */
 static struct tx_isp_subdev *registered_sensor_subdev = NULL;
 static DEFINE_MUTEX(sensor_register_mutex);
-static void destroy_frame_channel_devices(void);
 int __init tx_isp_subdev_platform_init(void);
 void __exit tx_isp_subdev_platform_exit(void);
 void isp_process_frame_statistics(struct tx_isp_dev *dev);
@@ -3648,127 +3647,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     return 0;
 }
 
-// Create frame channel devices - based on reference tx_isp_fs_probe  
-static int create_frame_channel_devices(void)
-{
-    int ret, i;
-    char *device_name;
-    
-    pr_info("Creating %d frame channel devices...\n", num_channels);
-
-    for (i = 0; i < num_channels; i++) {
-        // Reference creates devices like "num0", "num1" etc. based on framesource error
-        // IMP_FrameSource_EnableChn looks for /dev/framechan%d devices (from decompiled code)
-        device_name = kasprintf(GFP_KERNEL, "framechan%d", i);
-        if (!device_name) {
-            pr_err("Failed to allocate name for channel %d\n", i);
-            ret = -ENOMEM;
-            goto cleanup;
-        }
-        
-        // Initialize frame channel structure - FOLLOWING REFERENCE DRIVER PATTERN
-        memset(&frame_channels[i], 0, sizeof(frame_channels[i])); /* Clear entire structure first */
-        frame_channels[i].channel_num = i;
-        frame_channels[i].miscdev.minor = MISC_DYNAMIC_MINOR;
-        frame_channels[i].miscdev.name = device_name;
-        frame_channels[i].miscdev.fops = &frame_channel_fops;
-
-        // Initialize channel state
-        memset(&frame_channels[i].state, 0, sizeof(frame_channels[i].state));
-
-        /* CRITICAL: Initialize magic number for corruption detection - SAFE ADDITION */
-        frame_channels[i].magic = FRAME_CHANNEL_MAGIC;
-
-        /* Initialize VBM buffer management fields */
-        frame_channels[i].state.vbm_buffer_addresses = NULL;
-        frame_channels[i].state.vbm_buffer_count = 0;
-        frame_channels[i].state.vbm_buffer_size = 0;
-        spin_lock_init(&frame_channels[i].state.vbm_lock);
-
-        /* Initialize buffer queue management */
-        INIT_LIST_HEAD(&frame_channels[i].state.queued_buffers);
-        INIT_LIST_HEAD(&frame_channels[i].state.completed_buffers);
-        spin_lock_init(&frame_channels[i].state.queue_lock);
-        spin_lock_init(&frame_channels[i].state.buffer_lock);
-        init_waitqueue_head(&frame_channels[i].state.frame_wait);
-        frame_channels[i].state.queued_count = 0;
-        frame_channels[i].state.completed_count = 0;
-        frame_channels[i].state.frame_ready = false;
-
-        /* Initialize Binary Ninja buffer management fields */
-        mutex_init(&frame_channels[i].buffer_mutex);
-        spin_lock_init(&frame_channels[i].buffer_queue_lock);
-        frame_channels[i].buffer_queue_head = &frame_channels[i].buffer_queue_base;
-        frame_channels[i].buffer_queue_base = &frame_channels[i].buffer_queue_base;
-        frame_channels[i].buffer_queue_count = 0;
-        frame_channels[i].streaming_flags = 0;
-        frame_channels[i].buffer_type = 1;  /* V4L2_BUF_TYPE_VIDEO_CAPTURE */
-        frame_channels[i].field = 1;        /* V4L2_FIELD_NONE */
-        memset(frame_channels[i].buffer_array, 0, sizeof(frame_channels[i].buffer_array));
-
-        /* Set VIC subdev reference if available */
-        if (ourISPdev && ourISPdev->vic_dev) {
-            /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
-            frame_channels[i].vic_subdev = &(ourISPdev->vic_dev->sd);
-        } else {
-            frame_channels[i].vic_subdev = NULL;
-        }
-        
-        ret = misc_register(&frame_channels[i].miscdev);
-        if (ret < 0) {
-            pr_err("Failed to register frame channel %d: %d\n", i, ret);
-            kfree(device_name);
-            goto cleanup;
-        }
-        
-        pr_info("Frame channel device created: /dev/%s (minor=%d)\n",
-                device_name, frame_channels[i].miscdev.minor);
-    }
-    
-    return 0;
-    
-cleanup:
-    // Clean up already created devices
-    destroy_frame_channel_devices();
-    return ret;
-}
-
-/* CRITICAL: Destroy frame channel devices - MISSING function that caused EEXIST */
-static void destroy_frame_channel_devices(void)
-{
-    int i;
-    
-    for (i = 0; i < num_channels; i++) {
-        if (frame_channels[i].miscdev.name) {
-            misc_deregister(&frame_channels[i].miscdev);
-            kfree(frame_channels[i].miscdev.name);
-            frame_channels[i].miscdev.name = NULL;
-            pr_info("Frame channel device %d destroyed\n", i);
-        }
-    }
-}
-
-
-
-/* ===== VIC SENSOR OPERATIONS - EXACT BINARY NINJA IMPLEMENTATIONS ===== */
-
-/* Forward declarations for streaming functions */
-/* csi_video_s_stream_impl declaration moved to top of file */
-
-/* REMOVED: sensor subdev wrapper functions - Reference driver uses original sensor ops directly */
-
-/* REMOVED: sensor_subdev_video_ops - Reference driver uses original sensor ops directly */
-
 /* CSI video operations structure - CRITICAL for tx_isp_video_link_stream */
 static struct tx_isp_subdev_video_ops csi_video_ops = {
     .s_stream = csi_video_s_stream_impl,
 };
-
-/* REMOVED: stored_sensor_ops - Reference driver uses original sensor ops directly */
-
-/* REMOVED: sensor_subdev_sensor_ioctl - Reference driver uses original sensor ops directly */
-
-/* REMOVED: sensor_subdev_sensor_ops - Reference driver uses original sensor ops directly */
 
 /* vic_subdev_ops is defined in tx_isp_vic.c - use external reference */
 extern struct tx_isp_subdev_ops vic_subdev_ops;
@@ -3778,9 +3660,6 @@ static struct tx_isp_subdev_ops csi_subdev_ops = {
     .sensor = NULL,
     .core = NULL,
 };
-
-
-/* REMOVED: sensor_subdev_ops - Reference driver uses original sensor ops directly */
 
 // Basic IOCTL handler matching reference behavior
 static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
