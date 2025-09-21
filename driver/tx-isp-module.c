@@ -5930,7 +5930,7 @@ label_12898:
         /* Binary Ninja: if (vic_mdma_ch1_sub_get_num_1 == 0) return private_complete(arg1 + 0x148) */
         if (vic_mdma_ch1_sub_get_num == 0) {
             complete(&vic_dev->frame_complete);
-            return;
+            return 0;
         }
         
     } else {
