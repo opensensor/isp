@@ -2032,11 +2032,12 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     spin_lock_init(&vic_dev->buffer_mgmt_lock);
     spin_lock_init(&vic_dev->lock);
 
-    /* CRITICAL FIX: Initialize IRQ handler function pointer to prevent NULL access crash */
-    vic_dev->irq_handler = (void (*)(void *))isp_vic_interrupt_service_routine;
+    /* CRITICAL FIX: Remove dangerous function pointer cast that doesn't exist in reference driver */
+    /* The reference driver doesn't use irq_handler function pointers - all IRQs go through main dispatcher */
+    vic_dev->irq_handler = NULL;  /* Initialize to NULL - not used in reference driver */
     vic_dev->irq_disable = NULL;  /* Initialize to NULL for safety */
-    vic_dev->irq_priv = vic_dev;  /* Set private data to vic_dev itself */
-    pr_info("*** VIC PROBE: IRQ handler function pointer initialized to prevent crash ***\n");
+    vic_dev->irq_priv = NULL;     /* Initialize to NULL - not used in reference driver */
+    pr_info("*** VIC PROBE: IRQ handler pointers set to NULL (reference driver uses main dispatcher) ***\n");
 
     /* CRITICAL: Initialize buffer management immediately to prevent interrupt crashes */
     /* This ensures the lists are ready before any interrupts can fire */
