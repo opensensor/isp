@@ -1602,8 +1602,8 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* *** CRITICAL: Read from ISP core interrupt status registers for MIPI *** */
     /* Prefer direct core_regs mapping; fall back to VIC-relative if needed */
-    if (isp_dev->core_regs) {
-        isp_regs = isp_dev->core_regs;
+    if (isp_dev->core_dev && isp_dev->core_dev->core_regs) {
+        isp_regs = isp_dev->core_dev->core_regs;
     } else if (vic_dev && vic_dev->vic_regs) {
         isp_regs = vic_dev->vic_regs - 0x9a00;
     } else {
@@ -1785,8 +1785,8 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         pr_debug("*** ISP CORE: CHANNEL 0 FRAME DONE INTERRUPT ***\n");
 
         /* Binary Ninja: data_ca584 += 1 - increment frame counter */
-        if (isp_dev) {
-            isp_dev->frame_count++;
+        if (isp_dev && isp_dev->core_dev) {
+            isp_dev->core_dev->frame_count++;
         }
 
         /* Binary Ninja: Complex frame processing loop */
