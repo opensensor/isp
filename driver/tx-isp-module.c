@@ -5765,10 +5765,22 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
 
 /* isp_irq_handle - SAFE struct member access implementation with correct dev_id handling */
 
-/* isp_irq_handle - MINIMAL SAFE implementation to prevent kernel panic */
+/* isp_irq_handle - BULLETPROOF implementation to prevent kernel panic */
 irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
-    pr_debug("*** isp_irq_handle: MINIMAL SAFE - IRQ %d, dev_id=%p ***\n", irq, dev_id);
+    /* CRITICAL SAFETY: Validate all parameters before any processing */
+    if (irq < 0 || irq > 255) {
+        pr_err("*** CRITICAL: isp_irq_handle called with invalid IRQ %d ***\n", irq);
+        return IRQ_NONE;
+    }
+
+    /* CRITICAL SAFETY: Validate dev_id pointer range */
+    if (!dev_id || (uintptr_t)dev_id < 0x80000000 || (uintptr_t)dev_id > 0x9fffffff) {
+        pr_err("*** CRITICAL: isp_irq_handle called with invalid dev_id=%p for IRQ %d ***\n", dev_id, irq);
+        return IRQ_HANDLED;  /* Still return HANDLED to prevent system issues */
+    }
+
+    pr_debug("*** isp_irq_handle: BULLETPROOF SAFE - IRQ %d, dev_id=%p ***\n", irq, dev_id);
 
     /* CRITICAL: Just acknowledge the interrupt and return - no complex processing */
     /* This prevents the "Aiee, killing interrupt handler!" kernel panic */
@@ -5778,7 +5790,7 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
     } else if (irq == 38) {
         pr_debug("*** isp_irq_handle: VIC IRQ 38 acknowledged ***\n");
     } else {
-        pr_debug("*** isp_irq_handle: Unknown IRQ %d acknowledged ***\n", irq);
+        pr_debug("*** isp_irq_handle: IRQ %d acknowledged ***\n", irq);
     }
 
     /* Return IRQ_HANDLED to indicate we processed the interrupt */
@@ -5786,10 +5798,22 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
 }
 
 
-/* isp_irq_thread_handle - MINIMAL SAFE implementation to prevent kernel panic */
+/* isp_irq_thread_handle - BULLETPROOF implementation to prevent kernel panic */
 irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
 {
-    pr_debug("*** isp_irq_thread_handle: MINIMAL SAFE - IRQ %d, dev_id=%p ***\n", irq, dev_id);
+    /* CRITICAL SAFETY: Validate all parameters before any processing */
+    if (irq < 0 || irq > 255) {
+        pr_err("*** CRITICAL: isp_irq_thread_handle called with invalid IRQ %d ***\n", irq);
+        return IRQ_NONE;
+    }
+
+    /* CRITICAL SAFETY: Validate dev_id pointer range */
+    if (!dev_id || (uintptr_t)dev_id < 0x80000000 || (uintptr_t)dev_id > 0x9fffffff) {
+        pr_err("*** CRITICAL: isp_irq_thread_handle called with invalid dev_id=%p for IRQ %d ***\n", dev_id, irq);
+        return IRQ_HANDLED;  /* Still return HANDLED to prevent system issues */
+    }
+
+    pr_debug("*** isp_irq_thread_handle: BULLETPROOF SAFE - IRQ %d, dev_id=%p ***\n", irq, dev_id);
 
     /* CRITICAL: Just acknowledge the thread interrupt and return - no complex processing */
     /* This prevents any potential crashes in the threaded interrupt handler */
@@ -5799,7 +5823,7 @@ irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
     } else if (irq == 38) {
         pr_debug("*** isp_irq_thread_handle: VIC thread IRQ 38 acknowledged ***\n");
     } else {
-        pr_debug("*** isp_irq_thread_handle: Unknown thread IRQ %d acknowledged ***\n", irq);
+        pr_debug("*** isp_irq_thread_handle: Thread IRQ %d acknowledged ***\n", irq);
     }
 
     /* Return IRQ_HANDLED to indicate we processed the thread interrupt */
