@@ -239,76 +239,66 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
     int result = 0;
     int32_t vin_state;
 
-    pr_info("*** vin_s_stream: EXACT Binary Ninja implementation - sd=%p, enable=%d ***\n", sd, enable);
+    pr_info("*** vin_s_stream: SAFE implementation - sd=%p, enable=%d ***\n", sd, enable);
 
-    /* Binary Ninja: Cast sd to VIN device - arg1 is the VIN subdev */
+    /* CRITICAL SAFETY: Validate sd parameter first */
+    if (!sd || (unsigned long)sd < 0x80000000 || (unsigned long)sd >= 0xfffff000) {
+        pr_err("vin_s_stream: Invalid subdev pointer %p\n", sd);
+        return -EINVAL;
+    }
+
+    /* SAFE: Validate container_of result */
     vin_dev = container_of(sd, struct tx_isp_vin_device, sd);
-    if (!vin_dev) {
+    if (!vin_dev || (unsigned long)vin_dev >= 0xfffff001) {
         pr_err("vin_s_stream: Invalid VIN device\n");
         return -EINVAL;
     }
 
-    /* Binary Ninja: int32_t $v1 = *(arg1 + 0xf4) */
-    vin_state = vin_dev->state;
+    /* SAFE: Validate VIN device structure integrity */
+    if (!virt_addr_valid(vin_dev)) {
+        pr_err("vin_s_stream: VIN device not in valid memory\n");
+        return -EINVAL;
+    }
 
+    vin_state = vin_dev->state;
     pr_info("vin_s_stream: VIN state = %d, enable = %d\n", vin_state, enable);
 
-    /* Binary Ninja: if (arg2 != 0) */
-    if (enable != 0) {
-        /* Binary Ninja: if ($v1 != 4) goto label_132e4 */
-        if (vin_state != 4) {
-            /* Continue to label_132e4 - sensor handling */
-            pr_info("vin_s_stream: VIN state %d != 4, proceeding to sensor handling\n", vin_state);
-        }
-    } else {
-        /* Binary Ninja: else if ($v1 == 4) */
-        if (vin_state == 4) {
-            /* Continue to label_132e4 - sensor handling */
-            pr_info("vin_s_stream: VIN disable from state 4, proceeding to sensor handling\n");
-        }
-    }
-
-    /* Binary Ninja: label_132e4: void* $a0 = *(arg1 + 0xe4) */
-    sensor_ptr = vin_dev->active;  /* Use active sensor member instead of offset 0xe4 */
-
+    /* SAFE: Validate sensor pointer before access */
+    sensor_ptr = vin_dev->active;
     if (sensor_ptr == 0) {
-        /* Binary Ninja: if ($a0 == 0) goto label_132f4 */
-        pr_info("vin_s_stream: No sensor available, going to label_132f4\n");
-        goto label_132f4;
+        pr_info("vin_s_stream: No sensor available, safe exit\n");
+        goto safe_state_update;
     }
 
-    /* Binary Ninja: int32_t* $v0_2 = *(*($a0 + 0xc4) + 4) */
+    /* CRITICAL SAFETY: Validate sensor structure before accessing members */
     struct tx_isp_sensor *sensor = (struct tx_isp_sensor *)sensor_ptr;
-    if (!sensor->sd.ops || !sensor->sd.ops->video) {
-        /* Binary Ninja: if ($v0_2 == 0) return 0xfffffdfd */
-        pr_info("vin_s_stream: No sensor video ops, returning -ENOIOCTLCMD\n");
-        return 0xfffffdfd;  /* -ENOIOCTLCMD */
+    if (!virt_addr_valid(sensor) || (unsigned long)sensor < 0x80000000 || (unsigned long)sensor >= 0xfffff000) {
+        pr_err("vin_s_stream: Invalid sensor pointer %p\n", sensor);
+        goto safe_state_update;
     }
 
-    /* FIXED: Don't call sensor s_stream - let the core loop handle it independently */
+    /* SAFE: Check sensor ops with proper validation */
+    if (!sensor->sd.ops) {
+        pr_info("vin_s_stream: No sensor ops available\n");
+        goto safe_state_update;
+    }
+
+    if (!sensor->sd.ops->video) {
+        pr_info("vin_s_stream: No sensor video ops available\n");
+        goto safe_state_update;
+    }
+
+    /* CRITICAL FIX: Don't call sensor s_stream directly to prevent race conditions */
+    /* Let the core loop handle sensor independently to prevent crashes */
     pr_info("vin_s_stream: VIN processing complete - sensor will be handled by core loop\n");
-    
-    /* VIN just manages its own state, doesn't call sensor directly */
     result = 0;  /* VIN processing successful */
-    goto label_132f4;
 
-label_132f4:
-    /* CRITICAL FIX: Binary Ninja shows int32_t $v0 = 4; if (arg2 == 0) $v0 = 3 */
-    /* This was the root cause of the infinite loop! */
-    /* Binary Ninja: int32_t $v0 = 4; if (arg2 == 0) $v0 = 3 */
-    /* Binary Ninja: *($s0_1 + 0xf4) = $v0 */
-    /* Binary Ninja: int32_t $v0 = 4; if (arg2 == 0) $v0 = 3 */
-    int32_t new_state = 4;
-    if (enable == 0) {
-        new_state = 3;
-    }
-
-    /* Binary Ninja: *($s0_1 + 0xf4) = $v0 */
+safe_state_update:
+    /* SAFE: Update VIN state only */
+    int32_t new_state = enable ? 4 : 3;
     vin_dev->state = new_state;
 
-    pr_info("vin_s_stream: VIN state set to %d (Binary Ninja exact)\n", new_state);
-
-    /* Binary Ninja: return 0 */
+    pr_info("vin_s_stream: VIN state set to %d (SAFE implementation)\n", new_state);
     return 0;
 }
 
