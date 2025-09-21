@@ -59,18 +59,21 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 1 */
         vic_dev->irq_enabled = 1;
 
-        /* CRITICAL FIX: Enable VIC hardware interrupts - THIS WAS MISSING! */
-        if (vic_dev->vic_regs) {
-            /* Binary Ninja reference: Enable VIC interrupt sources at hardware level */
-            writel(0xffffffff, vic_dev->vic_regs + 0x1e0);  /* Enable all VIC interrupt sources */
-            writel(0xffffffff, vic_dev->vic_regs + 0x1e4);  /* Enable secondary VIC interrupt sources */
-
-            /* Clear any pending interrupts before enabling */
-            writel(0xffffffff, vic_dev->vic_regs + 0x1f0);  /* Clear primary interrupt status */
-            writel(0xffffffff, vic_dev->vic_regs + 0x1f4);  /* Clear secondary interrupt status */
-            wmb();  /* Ensure register writes complete */
-
-            pr_info("*** tx_vic_enable_irq: VIC hardware interrupt registers ENABLED ***\n");
+        /* CRITICAL FIX: Call hardware interrupt enable function - Binary Ninja reference */
+        /* Binary Ninja: $v0_1 = *(dump_vsd_5 + 0x84); if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
+        if (vic_dev->irq_handler) {
+            vic_dev->irq_handler(vic_dev->irq_priv);
+            pr_info("*** tx_vic_enable_irq: Called hardware interrupt enable function ***\n");
+        } else {
+            /* Fallback: Direct hardware register enable */
+            if (vic_dev->vic_regs) {
+                writel(0xffffffff, vic_dev->vic_regs + 0x1e0);  /* Enable all VIC interrupt sources */
+                writel(0xffffffff, vic_dev->vic_regs + 0x1e4);  /* Enable secondary VIC interrupt sources */
+                writel(0xffffffff, vic_dev->vic_regs + 0x1f0);  /* Clear primary interrupt status */
+                writel(0xffffffff, vic_dev->vic_regs + 0x1f4);  /* Clear secondary interrupt status */
+                wmb();
+                pr_info("*** tx_vic_enable_irq: Direct hardware interrupt enable (fallback) ***\n");
+            }
         }
 
         /* Set the global vic_start_ok flag to allow interrupt processing */
@@ -108,11 +111,20 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 0 */
         vic_dev->irq_enabled = 0;
 
-        /* CRITICAL FIX: Don't call disable_irq() - main dispatcher manages hardware IRQ 38 */
-        /* The main dispatcher controls when IRQ 38 is enabled/disabled */
-        /* Calling disable_irq() here would interfere with the main dispatcher's IRQ management */
-        pr_info("*** tx_vic_disable_irq: VIC software interrupt flag DISABLED ***\n");
-        pr_info("*** tx_vic_disable_irq: Hardware IRQ 38 managed by main dispatcher ***\n");
+        /* CRITICAL FIX: Call hardware interrupt disable function - Binary Ninja reference */
+        /* Binary Ninja: $v0_2 = *(dump_vsd_5 + 0x88); if ($v0_2 != 0) $v0_2(dump_vsd_5 + 0x80) */
+        if (vic_dev->irq_disable) {
+            vic_dev->irq_disable(vic_dev->irq_priv);
+            pr_info("*** tx_vic_disable_irq: Called hardware interrupt disable function ***\n");
+        } else {
+            /* Fallback: Direct hardware register disable */
+            if (vic_dev->vic_regs) {
+                writel(0, vic_dev->vic_regs + 0x1e0);  /* Disable all VIC interrupt sources */
+                writel(0, vic_dev->vic_regs + 0x1e4);  /* Disable secondary VIC interrupt sources */
+                wmb();
+                pr_info("*** tx_vic_disable_irq: Direct hardware interrupt disable (fallback) ***\n");
+            }
+        }
 
         /* Clear the global vic_start_ok flag to stop interrupt processing */
         extern uint32_t vic_start_ok;
