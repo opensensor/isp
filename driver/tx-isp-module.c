@@ -2118,6 +2118,24 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
             }
         }
 
+        /* CRITICAL: Activate all subdevices to state 2 before core initialization */
+        for (int activate_i = 0; activate_i < 0x10; activate_i++) {
+            struct tx_isp_subdev *activate_sd = arg1->subdevs[activate_i];
+            if (activate_sd) {
+                /* Check if this is VIC subdev (index 1) and activate it */
+                if (activate_i == 1 && arg1->vic_dev) {
+                    struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)arg1->vic_dev;
+                    if (vic_dev->state == 1) {
+                        pr_info("*** tx_isp_video_s_stream: Activating VIC (subdev %d) from state 1 to 2 ***\n", activate_i);
+                        vic_dev->state = 2;  /* Activate VIC to ready state */
+                        pr_info("*** tx_isp_video_s_stream: VIC activated to state 2 ***\n");
+                    }
+                }
+                /* Add activation for other subdevices as needed */
+                /* CSI, VIN, etc. may also need activation from state 1 to 2 */
+            }
+        }
+
         /* Then, initialize core (transition from state 2 to 3) */
         if (arg1->core_dev && arg1->core_dev->sd.ops &&
             arg1->core_dev->sd.ops->core && arg1->core_dev->sd.ops->core->init) {
