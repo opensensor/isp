@@ -364,9 +364,10 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     /* SAFE: Get platform data using proper kernel API */
     struct tx_isp_subdev_platform_data *pdata = dev_get_platdata(&pdev->dev);
     if (pdata != NULL) {
-        /* CRITICAL: Skip IRQ request for CSI - it needs platform data for registers but no IRQ */
+        /* CRITICAL: Skip IRQ request for CSI and VIC during probe */
+        /* VIC IRQ will be registered at the END of global init to prevent early interrupts */
         const char *dev_name_str = dev_name(&pdev->dev);
-        if (strcmp(dev_name_str, "tx-isp-csi") != 0) {
+        if (strcmp(dev_name_str, "tx-isp-csi") != 0 && strcmp(dev_name_str, "isp-w02") != 0) {
             /* Binary Ninja: tx_isp_request_irq(arg1, arg2 + 0x80) */
             /* SAFE: Use struct member access for IRQ setup */
             ret = tx_isp_request_irq(pdev, &sd->irq_info);
@@ -376,6 +377,12 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
                 tx_isp_module_deinit(sd);
                 return ret;
             }
+        } else if (strcmp(dev_name_str, "isp-w02") == 0) {
+            pr_info("*** tx_isp_subdev_init: VIC IRQ registration DEFERRED to end of global init ***\n");
+            /* Initialize IRQ info structure but don't register interrupt yet */
+            sd->irq_info.irq = 0;
+            sd->irq_info.handler = NULL;
+            sd->irq_info.data = NULL;
         } else {
             pr_info("*** CSI: Skipping IRQ request - CSI uses register mapping only ***\n");
         }
