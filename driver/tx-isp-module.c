@@ -5069,7 +5069,7 @@ static void tisp_set_sensor_digital_gain_short(uint32_t digital_gain)
 }
 
 /* subdev_sensor_ops_ioctl - EXACT Binary Ninja implementation */
-static long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
+long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
     struct tx_isp_subdev *subdev;
 

@@ -122,7 +122,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on);
 int ispcore_slake_module(struct tx_isp_dev *isp_dev);
 int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev);
-int subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 
 /* ISP firmware processing thread function - Binary Ninja reference */
 int isp_fw_process(void *data);
@@ -4926,7 +4926,6 @@ int tx_isp_core_device_init(struct tx_isp_core_device *core_dev)
     }
 
     /* Set up core sensor IOCTL handler for sensor registration */
-    extern long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
     core_sensor_ops.ioctl = subdev_sensor_ops_ioctl;
 
     /* Set state to ready */
