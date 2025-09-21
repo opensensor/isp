@@ -1744,7 +1744,7 @@ static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *i
 /* Forward declaration for ISP core interrupt handler */
 extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 
-/* isp_vic_interrupt_service_routine - WORKING implementation with corruption detection */
+/* isp_vic_interrupt_service_routine - ENHANCED with NULL pointer protection */
 irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
     extern uint32_t vic_start_ok;
@@ -1753,6 +1753,18 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     struct tx_isp_vic_device *vic_dev;
     void __iomem *vic_regs;
     u32 int_status, mdma_status;
+
+    /* CRITICAL SAFETY: Comprehensive NULL pointer validation */
+    if (!dev_id) {
+        pr_err("VIC IRQ %d: NULL dev_id - CRITICAL ERROR\n", irq);
+        return IRQ_HANDLED;
+    }
+
+    /* CRITICAL SAFETY: Validate dev_id is in valid kernel memory range */
+    if ((unsigned long)dev_id < 0x80000000 || (unsigned long)dev_id >= 0xfffff000) {
+        pr_err("VIC IRQ %d: Invalid dev_id pointer 0x%p - memory corruption\n", irq, dev_id);
+        return IRQ_HANDLED;
+    }
 
     /* CRITICAL: Detect corruption by comparing dev_id with ourISPdev */
     if (dev_id != ourISPdev) {
