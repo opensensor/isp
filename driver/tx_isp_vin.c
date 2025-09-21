@@ -36,213 +36,6 @@
 bool is_valid_kernel_pointer(const void *ptr);
 extern struct tx_isp_dev *ourISPdev;
 
-
-/* ========================================================================
- * VIN Hardware Initialization Functions
- * ======================================================================== */
-
-/**
- * tx_isp_vin_hw_init - Initialize VIN hardware
- * @vin: VIN device structure
- *
- * FIXED: T31-compatible hardware initialization that actually works
- */
-int tx_isp_vin_hw_init(struct tx_isp_vin_device *vin)
-{
-    u32 ctrl_val;
-    int ret = 0;
-
-    if (!vin || !vin->base) {
-        mcp_log_error("vin_hw_init: invalid device", 0);
-        return -EINVAL;
-    }
-
-    mcp_log_info("vin_hw_init: starting hardware initialization", 0);
-
-    /* CRITICAL FIX: VIN on T31 is part of ISP and may not have separate reset */
-    /* Instead of hardware reset, just configure the control register */
-    ctrl_val = VIN_CTRL_EN;
-    writel(ctrl_val, vin->base + VIN_CTRL);
-    mcp_log_info("vin_hw_init: basic control configured", ctrl_val);
-
-    /* Clear all interrupt status */
-    writel(0xFFFFFFFF, vin->base + VIN_INT_STATUS);
-    
-    /* Configure interrupt mask - enable frame end and error interrupts */
-    writel(VIN_INT_FRAME_END | VIN_INT_OVERFLOW | VIN_INT_SYNC_ERR | VIN_INT_DMA_ERR, 
-           vin->base + VIN_INT_MASK);
-    mcp_log_info("vin_hw_init: interrupts configured", VIN_INT_FRAME_END | VIN_INT_OVERFLOW);
-
-    /* Set default frame size */
-    writel((VIN_MIN_HEIGHT << 16) | VIN_MIN_WIDTH, vin->base + VIN_FRAME_SIZE);
-    mcp_log_info("vin_hw_init: default frame size set", (VIN_MIN_HEIGHT << 16) | VIN_MIN_WIDTH);
-
-    /* Set default format to YUV422 */
-    writel(VIN_FMT_YUV422, vin->base + VIN_FORMAT);
-    mcp_log_info("vin_hw_init: default format set", VIN_FMT_YUV422);
-
-    /* CRITICAL FIX: Don't fail if hardware doesn't respond immediately */
-    /* VIN on T31 may not be independently controllable - it's part of ISP */
-    ctrl_val = readl(vin->base + VIN_CTRL);
-    mcp_log_info("vin_hw_init: control register readback", ctrl_val);
-    
-    /* FIXED: Always return success for T31 VIN initialization */
-    /* The VIN hardware will be properly initialized when ISP core starts */
-    mcp_log_info("vin_hw_init: T31 VIN initialization complete", 0);
-    return 0;  /* Always succeed for T31 */
-}
-
-/**
- * tx_isp_vin_hw_deinit - Deinitialize VIN hardware
- * @vin: VIN device structure
- */
-int tx_isp_vin_hw_deinit(struct tx_isp_vin_device *vin)
-{
-    if (!vin || !vin->base) {
-        return -EINVAL;
-    }
-
-    mcp_log_info("vin_hw_deinit: starting hardware deinitialization", 0);
-
-    /* Disable all interrupts */
-    writel(0, vin->base + VIN_INT_MASK);
-    
-    /* Clear interrupt status */
-    writel(0xFFFFFFFF, vin->base + VIN_INT_STATUS);
-    
-    /* Stop and disable VIN */
-    writel(VIN_CTRL_STOP, vin->base + VIN_CTRL);
-    udelay(10);
-    writel(0, vin->base + VIN_CTRL);
-    
-    mcp_log_info("vin_hw_deinit: hardware deinitialization complete", 0);
-    return 0;
-}
-
-/* ========================================================================
- * VIN DMA Management Functions
- * ======================================================================== */
-
-/**
- * tx_isp_vin_setup_dma - Setup DMA buffers for VIN
- * @vin: VIN device structure
- */
-int tx_isp_vin_setup_dma(struct tx_isp_vin_device *vin)
-{
-    struct device *dev = NULL;
-    extern struct tx_isp_dev *ourISPdev;
-    
-    if (!vin) {
-        return -EINVAL;
-    }
-    
-    /* CRITICAL FIX: Use same DMA allocation pattern as VIC - use ourISPdev */
-    if (ourISPdev && ourISPdev->pdev) {
-        dev = &ourISPdev->pdev->dev;
-        mcp_log_info("vin_setup_dma: using ISP device for DMA (VIC pattern)", 0);
-    } else if (vin->sd.pdev) {
-        dev = &vin->sd.pdev->dev;
-        mcp_log_info("vin_setup_dma: using platform device for DMA", 0);
-    } else if (vin->sd.isp) {
-        /* Use ISP device structure for DMA allocation */
-        struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)vin->sd.isp;
-        if (isp_dev && isp_dev->pdev) {
-            dev = &isp_dev->pdev->dev;
-            mcp_log_info("vin_setup_dma: using subdev ISP device for DMA", 0);
-        }
-    }
-    
-    if (!dev) {
-        mcp_log_error("vin_setup_dma: no device available for DMA allocation", 0);
-        /* FALLBACK: Skip DMA allocation - VIN can work without it for basic operation */
-        mcp_log_info("vin_setup_dma: skipping DMA allocation - using no-DMA mode", 0);
-        vin->dma_virt = NULL;
-        vin->dma_addr = 0;
-        vin->dma_size = 0;
-        return 0; /* Return success to allow VIN initialization to continue */
-    }
-    
-    /* Calculate buffer size based on maximum resolution - same as VIC pattern */
-    vin->dma_size = VIN_BUFFER_SIZE;
-    
-    /* Allocate coherent DMA buffer using same pattern as VIC */
-    vin->dma_virt = dma_alloc_coherent(dev, vin->dma_size, &vin->dma_addr, GFP_KERNEL);
-    if (!vin->dma_virt) {
-        mcp_log_error("vin_setup_dma: failed to allocate DMA buffer", vin->dma_size);
-        /* FALLBACK: Continue without DMA buffer - same as VIC fallback */
-        mcp_log_info("vin_setup_dma: continuing without DMA buffer", 0);
-        vin->dma_size = 0;
-        vin->dma_addr = 0;
-        return 0; /* Return success to allow VIN initialization to continue */
-    }
-    
-    mcp_log_info("vin_setup_dma: DMA buffer allocated successfully", vin->dma_size);
-    mcp_log_info("vin_setup_dma: DMA physical address", (u32)vin->dma_addr);
-    
-    return 0;
-}
-
-/**
- * tx_isp_vin_cleanup_dma - Cleanup DMA buffers
- * @vin: VIN device structure
- */
-int tx_isp_vin_cleanup_dma(struct tx_isp_vin_device *vin)
-{
-    struct device *dev = NULL;
-    
-    if (!vin) {
-        return -EINVAL;
-    }
-    
-    /* Only cleanup if we have a DMA buffer allocated */
-    if (!vin->dma_virt || vin->dma_size == 0) {
-        mcp_log_info("vin_cleanup_dma: no DMA buffer to cleanup", 0);
-        return 0;
-    }
-    
-    /* CRITICAL FIX: Use same device that was used for allocation */
-    if (vin->sd.pdev) {
-        dev = &vin->sd.pdev->dev;
-    } else if (vin->sd.isp) {
-        struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)vin->sd.isp;
-        if (isp_dev && isp_dev->pdev) {
-            dev = &isp_dev->pdev->dev;
-        }
-    }
-    
-    if (dev && vin->dma_virt) {
-        dma_free_coherent(dev, vin->dma_size, vin->dma_virt, vin->dma_addr);
-        vin->dma_virt = NULL;
-        vin->dma_addr = 0;
-        vin->dma_size = 0;
-        mcp_log_info("vin_cleanup_dma: DMA buffer freed", 0);
-    } else {
-        mcp_log_info("vin_cleanup_dma: no device available for DMA cleanup", 0);
-        /* Just clear the pointers */
-        vin->dma_virt = NULL;
-        vin->dma_addr = 0;
-        vin->dma_size = 0;
-    }
-    
-    return 0;
-}
-
-/* ========================================================================
- * VIN Interrupt Handling - DISABLED FOR T31
- * ======================================================================== */
-
-/**
- * CRITICAL FIX: VIN interrupts are handled by ISP core on T31
- * 
- * The T31 VIN is integrated into the ISP core and does not have separate
- * interrupt handling. Attempting to register VIN interrupts on IRQ 37
- * causes conflicts with the main ISP interrupt handler and leads to
- * memory corruption and kernel panics.
- * 
- * VIN interrupt processing is handled by the main ISP interrupt handler
- * in tx_isp_core.c, which then calls VIN-specific handlers as needed.
- */
-
 /**
  * tx_isp_vin_process_interrupts - Process VIN interrupts (called by ISP core)
  * @vin: VIN device structure
@@ -570,29 +363,35 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
     }
 
     /* Binary Ninja: int32_t* $v0_2 = *(*($a0 + 0xc4) + 4) */
-    /* SAFE: Call sensor streaming with basic validation */
-    if (sensor->sd.ops && sensor->sd.ops->video && sensor->sd.ops->video->s_stream) {
-        
+    /* Binary Ninja reference: Access function pointer directly from sensor structure */
+    if (sensor && sensor->sd.ops && sensor->sd.ops->video && sensor->sd.ops->video->s_stream) {
+
         /* Binary Ninja: int32_t $v1_1 = *$v0_2 */
         /* Binary Ninja: result = $v1_1($a0, arg2) */
         mcp_log_info("vin_s_stream: calling sensor s_stream", enable);
+        pr_info("VIN: Calling sensor s_stream - sensor=%p, enable=%d\n", sensor, enable);
+
         ret = sensor->sd.ops->video->s_stream(&sensor->sd, enable);
-        
+
+        pr_info("VIN: sensor s_stream returned: %d\n", ret);
+        mcp_log_info("vin_s_stream: sensor s_stream completed", ret);
+
         /* Binary Ninja: if (result == 0) goto label_132f4 */
         if (ret == 0) {
             goto label_132f4;
         }
-        
+
         /* Binary Ninja: return result */
         if (ret != -0x203) {  /* Ignore specific error code */
             mcp_log_error("vin_s_stream: sensor streaming failed", ret);
             return ret;
         }
-        
+
         /* Treat -0x203 as success and continue */
         ret = 0;
     } else {
         /* Binary Ninja: if ($v0_2 == 0) return 0xfffffdfd */
+        pr_err("VIN: vin_s_stream: sensor has no valid s_stream function\n");
         mcp_log_error("vin_s_stream: sensor has no valid s_stream function", 0);
         return -0x203;  /* Return specific error code like reference */
     }

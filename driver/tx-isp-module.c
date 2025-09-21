@@ -1589,49 +1589,6 @@ static int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     return 0;
 }
 
-/* CSI video streaming control - Updated to use standalone methods */
-static int tx_isp_csi_s_stream(struct tx_isp_dev *isp_dev, int enable)
-{
-    struct tx_isp_csi_device *csi_dev;
-    
-    if (!isp_dev || !isp_dev->csi_dev) {
-        pr_err("CSI s_stream: No CSI device\n");
-        return -EINVAL;
-    }
-    
-    csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
-    
-    pr_info("*** CSI STREAMING %s ***\n", enable ? "ENABLE" : "DISABLE");
-    
-    /* Call Binary Ninja reference method */
-    return csi_video_s_stream(&csi_dev->sd, enable);
-}
-
-// Activate VIC subdev like reference tx_isp_vic_activate_subdev
-static int tx_isp_activate_vic_subdev(struct tx_isp_dev *isp_dev)
-{
-    struct tx_isp_vic_device *vic_dev;
-    int ret = 0;
-    
-    if (!isp_dev || !isp_dev->vic_dev) {
-        return -EINVAL;
-    }
-    
-    /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
-    vic_dev = isp_dev->vic_dev;
-    
-    mutex_lock(&vic_dev->mlock);
-    
-    // Activate VIC if in initialized state (like reference)
-    if (vic_dev->state == 1) {
-        vic_dev->state = 2; // 2 = activated
-        pr_info("VIC subdev activated\n");
-    }
-    
-    mutex_unlock(&vic_dev->mlock);
-    return ret;
-}
-
 // Detect and register loaded sensor modules into subdev infrastructure - Kernel 3.10 compatible
 static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev)
 {
@@ -3283,18 +3240,16 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_info("*** CHANNEL %d STREAMON: VIC streaming started successfully ***\n", channel);
         }
 
-        // *** CRITICAL: TRIGGER SENSOR HARDWARE INITIALIZATION AND STREAMING ***
-        if (channel == 0 && ourISPdev && ourISPdev->subdevs[3]) {
-            /* CRITICAL FIX: Use the REAL sensor subdev from subdevs[3], not subdevs[0] */
-            struct tx_isp_subdev *real_sensor_sd = ourISPdev->subdevs[3];
-            sensor = sd_to_sensor_device(real_sensor_sd);  /* Convert subdev to sensor structure */
+        // *** BINARY NINJA REFERENCE: Use sensor from ourISPdev->sensor ***
+        if (channel == 0 && ourISPdev && ourISPdev->sensor) {
+            /* Binary Ninja: Use the properly registered sensor from ourISPdev->sensor */
+            sensor = ourISPdev->sensor;
 
-            pr_info("*** FIXED: Using REAL sensor subdev at %p from subdevs[3] instead of subdevs[0] ***\n", real_sensor_sd);
-            pr_info("*** FIXED: Real sensor structure at %p with ops=%p ***\n", sensor, sensor ? sensor->sd.ops : NULL);
+            pr_info("*** BINARY NINJA: Using registered sensor at %p ***\n", sensor);
 
-            /* CRITICAL: Validate sensor structure before proceeding */
-            if (!sensor) {
-                pr_err("*** Channel %d: CRITICAL ERROR - sensor structure is NULL ***\n", channel);
+            /* Binary Ninja: Validate sensor structure before proceeding */
+            if (!sensor || !sensor->sd.ops) {
+                pr_err("*** Channel %d: CRITICAL ERROR - sensor structure invalid ***\n", channel);
                 state->streaming = false;
                 return -ENODEV;
             }
