@@ -4141,6 +4141,15 @@ int tx_isp_core_probe(struct platform_device *pdev)
         return -ENOMEM;
     }
 
+    /* CRITICAL FIX: Set core device pointers in subdev BEFORE init */
+    tx_isp_set_subdevdata(&core_dev->sd, core_dev);
+    pr_info("*** CORE PROBE: Set dev_priv to core_dev %p ***\n", core_dev);
+
+    /* CRITICAL FIX: Set host_priv to core device for Binary Ninja compatibility */
+    /* This prevents BadVA crashes when accessing *(host_priv + 0x15c) */
+    tx_isp_set_subdev_hostdata(&core_dev->sd, core_dev);
+    pr_info("*** CORE PROBE: Set host_priv to core_dev %p - PREVENTS BadVA CRASH ***\n", core_dev);
+
     /* Initialize core subdev using the new core device's subdev */
     if (tx_isp_subdev_init(pdev, &core_dev->sd, &core_subdev_ops) == 0) {
 
