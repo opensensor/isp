@@ -1550,11 +1550,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
     }
 
     /* Binary Ninja: void* $s1_1 = *(arg1 + 0xd4) */
-    if (!sd->isp) {
-        pr_err("vic_core_s_stream: sd->isp is NULL\n");
-        return -EINVAL;
-    }
-    vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+    /* FIXED: Get VIC device from subdev host_priv as Binary Ninja expects */
+    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdev_hostdata(sd);
 
     /* Binary Ninja: if ($s1_1 != 0 && $s1_1 u< 0xfffff001) */
     if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
