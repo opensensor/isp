@@ -236,15 +236,17 @@ int isp_fw_process(void *data)
     return 0;
 }
 
-/* ispcore_video_s_stream - EXACT Binary Ninja implementation */
+/* ispcore_video_s_stream - EXACT Binary Ninja MCP implementation */
 int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_core_device *core_dev;
     struct tx_isp_dev *isp_dev;
-    struct tx_isp_subdev **subdev_ptr;
+    struct tx_isp_subdev **s3_1;
     int result = 0;
-    int i;
-    unsigned long flags;
+    int var_28 = 0;
+    int a0_4;
+
+    pr_info("*** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=%d ***\n", enable);
 
     if (!sd) {
         pr_err("ispcore_video_s_stream: Invalid subdev\n");
@@ -264,20 +266,21 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         return -EINVAL;
     }
 
-    pr_info("*** ispcore_video_s_stream: EXACT Binary Ninja implementation - enable=%d ***\n", enable);
+    /* Binary Ninja: __private_spin_lock_irqsave($s0 + 0xdc, &var_28) */
+    __private_spin_lock_irqsave(&core_dev->lock, &var_28);
 
-    /* Binary Ninja: Lock with spinlock */
-    spin_lock_irqsave(&core_dev->lock, flags);
-
-    /* Binary Ninja: Check core state - if (*($s0 + 0xe8) s< 3) */
-    pr_info("*** ispcore_video_s_stream: Current core state = %d ***\n", core_dev->state);
+    /* Binary Ninja: if (*($s0 + 0xe8) s< 3) */
     if (core_dev->state < 3) {
-        pr_err("ispcore_video_s_stream: Core state %d < 3, cannot stream\n", core_dev->state);
-        spin_unlock_irqrestore(&core_dev->lock, flags);
-        return -EINVAL;
+        /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream") */
+        isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream");
+        /* Binary Ninja: private_spin_unlock_irqrestore($s0 + 0xdc, var_28) */
+        private_spin_unlock_irqrestore(&core_dev->lock, var_28);
+        /* Binary Ninja: return 0xffffffff */
+        return -1;
     }
 
-    spin_unlock_irqrestore(&core_dev->lock, flags);
+    /* Binary Ninja: private_spin_unlock_irqrestore($s0 + 0xdc, var_28) */
+    private_spin_unlock_irqrestore(&core_dev->lock, var_28);
 
     /* Binary Ninja: Reset frame counters */
     core_dev->frame_count = 0;
