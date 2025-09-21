@@ -2557,7 +2557,7 @@ static int isp_get_ae_state(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
     return 0;
 }
 
-// Helper functions to update AF zone data  
+// Helper functions to update AF zone data
 static void update_af_zone_data(struct af_zone_info *info)
 {
     info->zone_status = af_zone_data.status;
@@ -9594,81 +9594,6 @@ int tisp_ae_ir_update(void)
 
     return 0;
 }
-
-/* tiziano_init_all_pipeline_components - Complete ISP pipeline initialization */
-int tiziano_init_all_pipeline_components(uint32_t width, uint32_t height, uint32_t fps, int wdr_mode)
-{
-    pr_info("*** INITIALIZING ALL TIZIANO ISP PIPELINE COMPONENTS ***\n");
-    pr_info("Resolution: %dx%d, FPS: %d, WDR mode: %d\n", width, height, fps, wdr_mode);
-    
-    /* Binary Ninja tisp_init sequence - initialize all components */
-    tiziano_ae_init(height, width, fps);  /* Use function parameters instead of undeclared variables */
-    tiziano_awb_init(height, width);
-    tiziano_gamma_init();  /* Binary Ninja: takes no parameters */
-    tiziano_gib_init();
-    tiziano_lsc_init();
-    tiziano_ccm_init();
-    tiziano_dmsc_init();
-    tiziano_sharpen_init();
-    tiziano_sdns_init();
-    tiziano_mdns_init(width, height);  /* Binary Ninja: takes width, height */
-    tiziano_clm_init();
-    tiziano_dpc_init();
-    tiziano_hldc_init();
-    tiziano_defog_init(width, height);  /* Binary Ninja: takes width, height */
-    tiziano_adr_init(width, height);
-    tiziano_af_init(height, width);  /* Binary Ninja: takes height, width */
-    tiziano_bcsh_init();
-    tiziano_ydns_init();
-    tiziano_rdns_init();
-    
-    /* WDR-specific initialization if WDR mode is enabled */
-    if (wdr_mode != 0) {
-        pr_info("*** INITIALIZING WDR-SPECIFIC COMPONENTS ***\n");
-        tisp_gb_init();
-        tisp_dpc_wdr_en(1);
-        tisp_lsc_wdr_en(1);
-        tisp_gamma_wdr_en(1);
-        tisp_sharpen_wdr_en(1);
-        tisp_ccm_wdr_en(1);
-        tisp_bcsh_wdr_en(1);
-        tisp_rdns_wdr_en(1);
-        tisp_adr_wdr_en(1);
-        tisp_defog_wdr_en(1);
-        tisp_mdns_wdr_en(1);
-        tisp_dmsc_wdr_en(1);
-        tisp_ae_wdr_en(1);
-        tisp_sdns_wdr_en(1);
-        pr_info("*** WDR COMPONENTS INITIALIZED ***\n");
-    }
-    
-    /* Event system initialization */
-    pr_info("*** INITIALIZING ISP EVENT SYSTEM ***\n");
-    tisp_event_init();
-    tisp_event_set_cb(4, tisp_tgain_update);
-    tisp_event_set_cb(5, tisp_again_update);
-    tisp_event_set_cb(7, tisp_ev_update);
-    tisp_event_set_cb(9, tisp_ct_update);
-    tisp_event_set_cb(8, tisp_ae_ir_update);
-    
-    /* Parameter operation initialization */
-    int param_init_ret = tisp_param_operate_init();
-    if (param_init_ret != 0) {
-        pr_err("tisp_param_operate_init failed: %d\n", param_init_ret);
-        return param_init_ret;
-    }
-    
-    pr_info("*** ALL TIZIANO ISP PIPELINE COMPONENTS INITIALIZED SUCCESSFULLY ***\n");
-    return 0;
-}
-
-
-/* Export all the tiziano pipeline functions */
-/* Removed duplicate EXPORT_SYMBOL declarations - functions already exported after their implementations */
-
-/* Removed duplicate EXPORT_SYMBOL declarations for tuning functions and global variables */
-
-/* ===== MISSING tisp_*_param_array_get FUNCTION IMPLEMENTATIONS ===== */
 
 /* tisp_ccm_param_array_get - Binary Ninja stub implementation */
 int tisp_ccm_param_array_get(int param_id, void *out_buf, int *size_buf)
