@@ -308,7 +308,7 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         pr_info("*** tx_isp_subdev_init: CSI subdev registered at index 0 ***\n");
     }
 
-    /* SIMPLIFIED: Register subdevices in the global ISP device */
+    /* CRITICAL: Register sensor subdevices in the global ISP device */
     extern struct tx_isp_subdev_ops core_subdev_ops_full;
     extern struct tx_isp_subdev_ops vic_subdev_ops;
 
@@ -324,6 +324,24 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             ourISPdev->subdevs[1] = sd;
             sd->isp = ourISPdev;
             pr_info("*** tx_isp_subdev_init: VIC device linked and registered at index 1 ***\n");
+        } else if (ops && ops->sensor) {
+            /* CRITICAL FIX: This is a sensor subdev - register it in subdevs array */
+            /* Find next available slot starting from index 3 (after CSI=0, VIC=1, VIN=2) */
+            int sensor_index = -1;
+            for (int i = 3; i < ISP_MAX_SUBDEVS; i++) {
+                if (ourISPdev->subdevs[i] == NULL) {
+                    sensor_index = i;
+                    break;
+                }
+            }
+
+            if (sensor_index != -1) {
+                ourISPdev->subdevs[sensor_index] = sd;
+                sd->isp = ourISPdev;
+                pr_info("*** tx_isp_subdev_init: SENSOR subdev registered at index %d ***\n", sensor_index);
+            } else {
+                pr_err("*** tx_isp_subdev_init: No available slot for sensor subdev ***\n");
+            }
         }
     }
 
@@ -581,9 +599,21 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         ourISPdev->fs_dev = (struct frame_source_device *)fs_dev;
         pr_info("*** LINKED FS device: %p ***\n", fs_dev);
 
-        /* CRITICAL: Add FS to subdev array at index 5 (after VIC=0, CSI=1, VIN=2, sensor=3, core=4) */
-        ourISPdev->subdevs[5] = &fs_dev->subdev;
-        pr_info("*** REGISTERED FS SUBDEV AT INDEX 5 WITH SUBDEV OPS ***\n");
+        /* CRITICAL: Add FS to subdev array at next available index (after sensors) */
+        int fs_index = -1;
+        for (int i = 3; i < ISP_MAX_SUBDEVS; i++) {
+            if (ourISPdev->subdevs[i] == NULL) {
+                fs_index = i;
+                break;
+            }
+        }
+
+        if (fs_index != -1) {
+            ourISPdev->subdevs[fs_index] = &fs_dev->subdev;
+            pr_info("*** REGISTERED FS SUBDEV AT INDEX %d WITH SUBDEV OPS ***\n", fs_index);
+        } else {
+            pr_err("*** No available slot for FS subdev ***\n");
+        }
 
     } else if (strcmp(dev_name, "tx-isp-core") == 0) {
         /* Core device register mapping - store in core device */

@@ -3283,8 +3283,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 if (sd->ops && sd->ops->sensor) {
                     /* Binary Ninja: int32_t $v0_7 = *($v0_6 + 8) */
                     if (sd->ops->sensor->ioctl) {
-                        /* Binary Ninja: int32_t $v0_8 = $v0_7() */
-                        int32_t ret = sd->ops->sensor->ioctl(sd, 0x2000001, &var_98);
+                        /* Binary Ninja: int32_t $v0_8 = $v0_7() - NO COMMAND PARAMETER! */
+                        int32_t ret = sd->ops->sensor->ioctl(sd, 0, &var_98);
 
                         if (ret == 0) {
                             $s0_3 = (char *)$s0_3 + 4;
