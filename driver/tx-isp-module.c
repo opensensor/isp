@@ -3949,6 +3949,11 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     /* Binary Ninja: memset($v0, 0, 0x120) */
     memset(isp_dev, 0, sizeof(struct tx_isp_dev));
 
+    /* CRITICAL FIX: Initialize mutex that was missing */
+    mutex_init(&isp_dev->mutex);
+    spin_lock_init(&isp_dev->lock);
+    pr_info("*** PROBE: ISP device mutex and spinlock initialized ***\n");
+
     /* Initialize reserved memory information */
     unsigned long rmem_base, rmem_size;
     if (parse_rmem_bootarg(&rmem_base, &rmem_size) == 0) {
