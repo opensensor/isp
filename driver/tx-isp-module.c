@@ -52,7 +52,6 @@ extern struct tx_isp_dev *ourISPdev;
 #include <linux/platform_device.h>
 #include <linux/device.h>
 
-int subdev_sensor_ops_enum_input(struct v4l2_subdev *sd, struct v4l2_input *input);
 
 // Simple sensor registration structure
 struct registered_sensor {
@@ -65,8 +64,6 @@ struct registered_sensor {
 
 // Simple global device instance
 struct tx_isp_dev *ourISPdev = NULL;
-static LIST_HEAD(sensor_list);
-static DEFINE_MUTEX(sensor_list_mutex);
 static int sensor_count = 0;
 static int isp_memopt = 0; // Memory optimization flag like reference
 
@@ -4243,15 +4240,6 @@ static void tx_isp_exit(void)
         ourISPdev = NULL;
     }
 
-    /* Clean up sensor list */
-    mutex_lock(&sensor_list_mutex);
-    list_for_each_entry_safe(sensor, tmp, &sensor_list, list) {
-        list_del(&sensor->list);
-        kfree(sensor);
-    }
-    sensor_count = 0;
-    mutex_unlock(&sensor_list_mutex);
-
     pr_info("TX ISP driver removed\n");
 }
 
@@ -5044,77 +5032,6 @@ static int subdev_sensor_ops_release_all_sensor(struct tx_isp_subdev *sd)
     return 0;
 }
 EXPORT_SYMBOL(subdev_sensor_ops_release_all_sensor);
-
-/* subdev_sensor_ops_enum_input - FIXED implementation for sensor enumeration */
-int subdev_sensor_ops_enum_input(struct v4l2_subdev *sd, struct v4l2_input *input)
-{
-    struct registered_sensor *sensor;
-    int current_index = 0;
-    int found = 0;
-
-    /* Binary Ninja: if (arg1 == 0 || arg2 == 0) return 0xffffffea */
-    if (sd == NULL || input == NULL) {
-        return 0xffffffea;  /* -EINVAL */
-    }
-
-    pr_info("subdev_sensor_ops_enum_input: Enumerating inputs\n");
-
-    /* CRITICAL FIX: Always provide gc2053 sensor at index 0 since it's loaded */
-    if (input->index == 0) {
-        input->type = V4L2_INPUT_TYPE_CAMERA;
-        strncpy((char *)input->name, "gc2053", sizeof(input->name) - 1);
-        input->name[sizeof(input->name) - 1] = '\0';
-        input->std = 0;
-        
-        pr_info("subdev_sensor_ops_enum_input: Providing gc2053 sensor at index 0\n");
-        return 0;
-    }
-
-    /* CRITICAL FIX: Check for available sensor modules */
-    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
-    struct tx_isp_sensor *active_sensor = tx_isp_get_sensor();
-
-    /* If we have an active sensor and it's not index 0, return it */
-    if (input->index == 1 && active_sensor && active_sensor->info.name[0] != '\0') {
-        input->type = V4L2_INPUT_TYPE_CAMERA;
-        strncpy((char *)input->name, active_sensor->info.name, sizeof(input->name) - 1);
-        input->name[sizeof(input->name) - 1] = '\0';
-        input->std = 0;
-        
-        pr_info("subdev_sensor_ops_enum_input: Found active sensor '%s' at index 1\n", input->name);
-        return 0;
-    }
-
-    /* Check registered sensor list for higher indices */
-    mutex_lock(&sensor_list_mutex);
-
-    /* Binary Ninja: Loop through sensor list structure */
-    list_for_each_entry(sensor, &sensor_list, list) {
-        if (current_index == (input->index - 2)) { /* Offset by 2 since gc2053 is at index 0 and active sensor at index 1 */
-            input->type = V4L2_INPUT_TYPE_CAMERA;
-            strncpy((char *)input->name, sensor->name, sizeof(input->name) - 1);
-            input->name[sizeof(input->name) - 1] = '\0';
-            input->std = 0;
-
-            found = 1;
-            break;
-        }
-        current_index++;
-    }
-
-    mutex_unlock(&sensor_list_mutex);
-
-    if (found) {
-        pr_info("subdev_sensor_ops_enum_input: Found registered sensor '%s' at index %d\n",
-                input->name, input->index);
-        return 0;
-    }
-
-    /* CRITICAL FIX: No sensor found at this index - return error to stop enumeration */
-    pr_info("subdev_sensor_ops_enum_input: No sensor found at index %d, returning EINVAL to stop enumeration\n", input->index);
-    return -EINVAL;  /* Return error to signal end of enumeration */
-}
-EXPORT_SYMBOL(subdev_sensor_ops_enum_input);
 
 /* subdev_sensor_ops_set_input - Set sensor input */
 static int subdev_sensor_ops_set_input(struct v4l2_subdev *sd, unsigned int input)

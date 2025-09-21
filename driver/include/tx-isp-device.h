@@ -375,10 +375,6 @@ struct tx_isp_subdev {
 	struct tx_isp_sensor *active_sensor;  /* Replaces sensor field */
 	int vin_state;                        /* Replaces state field */
 
-     /* Sensor list management */
-    struct list_head sensor_list;       /* Head of the sensor list */
-    struct list_head sensor_list_next;  /* Next entry in sensor list */
-
     struct tx_isp_frame_channel *frame_chans;
     int num_channels;
 };
