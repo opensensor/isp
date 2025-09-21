@@ -514,7 +514,7 @@ extern int sensor_init(struct tx_isp_dev *isp_dev);
 
 /* Forward declarations for subdev ops structures */
 extern struct tx_isp_subdev_ops vic_subdev_ops;
-extern struct tx_isp_subdev_ops core_subdev_ops_full;  /* ISP core subdev ops */
+extern struct tx_isp_subdev_ops core_subdev_ops;  /* ISP core subdev ops */
 static struct tx_isp_subdev_ops csi_subdev_ops;
 
 /* Reference driver function declarations - Binary Ninja exact names */

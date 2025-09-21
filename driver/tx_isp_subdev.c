@@ -285,22 +285,9 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
 
     /* CRITICAL: Link subdevices to main ISP device when they're created */
     extern struct tx_isp_dev *ourISPdev;
-    if (ourISPdev && ops == &vic_subdev_ops) {
-        /* This is a VIC subdev - link the VIC device to ourISPdev */
-        struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
-        ourISPdev->vic_dev = vic_dev;
-        sd->isp = ourISPdev;
-        pr_info("*** tx_isp_subdev_init: VIC device linked to main ISP device ***\n");
-
-        /* CRITICAL: Register VIC subdev in subdevs array at index 1 */
-        ourISPdev->subdevs[1] = sd;
-        pr_info("*** tx_isp_subdev_init: VIC subdev registered at index 1 ***\n");
-
-        pr_info("*** tx_isp_subdev_init: Interrupt registration deferred until after module init ***\n");
-    }
 
     /* CRITICAL: Register subdevices in the global ISP device with proper if-else logic */
-    extern struct tx_isp_subdev_ops core_subdev_ops_full;
+    extern struct tx_isp_subdev_ops core_subdev_ops;
     extern struct tx_isp_subdev_ops vic_subdev_ops;
     extern struct tx_isp_subdev_ops csi_subdev_ops;
 
@@ -317,7 +304,7 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             ourISPdev->subdevs[1] = sd;
             sd->isp = ourISPdev;
             pr_info("*** tx_isp_subdev_init: VIC device linked and registered at index 1 ***\n");
-        } else if (ops == &core_subdev_ops_full) {
+        } else if (ops == &core_subdev_ops) {
             /* This is the Core ISP subdev - registration handled by core device linking */
             pr_info("*** tx_isp_subdev_init: Core ISP subdev registration handled by core device ***\n");
             /* The actual registration is done in tx_isp_link_core_device() */

@@ -34,7 +34,7 @@
 
 /* External declarations */
 extern struct tx_isp_dev *ourISPdev;
-extern struct tx_isp_subdev_ops core_subdev_ops_full;
+extern struct tx_isp_subdev_ops core_subdev_ops;
 
 /* Core device magic number */
 #define TX_ISP_CORE_MAGIC 0x434F5245  /* 'CORE' */
@@ -782,14 +782,14 @@ static struct tx_isp_subdev_pad_ops core_pad_ops = {
 
 
 /* Update the core subdev ops to include the core ops */
-struct tx_isp_subdev_ops core_subdev_ops_full = {
+struct tx_isp_subdev_ops core_subdev_ops = {
     .core = &core_subdev_core_ops,
     .video = &core_subdev_video_ops,
     .pad = &core_pad_ops,
     .sensor = NULL,
     .internal = NULL
 };
-EXPORT_SYMBOL(core_subdev_ops_full);
+EXPORT_SYMBOL(core_subdev_ops);
 
 /**
  * tx_isp_get_device - CRITICAL: Get global ISP device pointer
@@ -944,17 +944,6 @@ exit_check:
     return result;
 }
 EXPORT_SYMBOL(ispcore_core_ops_ioctl);
-
-
-/* Core subdev operations structure - CRITICAL for proper initialization */
-struct tx_isp_subdev_ops core_subdev_ops = {
-    .core = &core_subdev_core_ops,     /* Core operations */
-    .video = &core_subdev_video_ops,    /* Video operations */
-    .pad = &core_pad_ops,  /* Pad operations */
-    .sensor = NULL,   /* Sensor operations */
-    .internal = NULL  /* Internal operations */
-};
-EXPORT_SYMBOL(core_subdev_ops);
 
 /* Global variables for ISP core functionality - from Binary Ninja reference */
 /* Use the global declarations from earlier in the file */
@@ -3971,7 +3960,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
     }
 
     /* Initialize core subdev using the new core device's subdev */
-    if (tx_isp_subdev_init(pdev, &core_dev->sd, &core_subdev_ops_full) == 0) {
+    if (tx_isp_subdev_init(pdev, &core_dev->sd, &core_subdev_ops) == 0) {
 
         pr_info("*** tx_isp_core_probe: Core subdev initialized successfully ***\n");
 
@@ -4774,7 +4763,7 @@ struct tx_isp_core_device *tx_isp_create_core_device(struct platform_device *pde
 
     /* Initialize subdev structure */
     memset(&core_dev->sd, 0, sizeof(struct tx_isp_subdev));
-    core_dev->sd.ops = &core_subdev_ops_full;
+    core_dev->sd.ops = &core_subdev_ops;
     core_dev->sd.dev = &pdev->dev;
     core_dev->sd.pdev = pdev;
 
