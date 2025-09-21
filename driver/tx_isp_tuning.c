@@ -9565,20 +9565,20 @@ int tisp_ae_ir_update(void)
     /* Update AE IR (infrared) parameters for day/night transitions */
     extern struct tx_isp_dev *ourISPdev;
 
-    if (ourISPdev && ourISPdev->tuning_data) {
-        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+    if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->tuning_data) {
+        struct isp_tuning_data *tuning = ourISPdev->core_dev->tuning_data;
 
         /* Update IR cut filter based on light conditions */
         if (tuning->exposure > 0x8000) {  /* Low light threshold */
             /* Night mode - disable IR cut filter */
-            if (ourISPdev->core_regs) {
-                writel(0, ourISPdev->core_regs + 0xa010);  /* IR cut disable */
+            if (ourISPdev->core_dev->core_regs) {
+                writel(0, ourISPdev->core_dev->core_regs + 0xa010);  /* IR cut disable */
             }
             pr_info("tisp_ae_ir_update: Night mode - IR cut disabled\n");
         } else {
             /* Day mode - enable IR cut filter */
-            if (ourISPdev->core_regs) {
-                writel(1, ourISPdev->core_regs + 0xa010);  /* IR cut enable */
+            if (ourISPdev->core_dev->core_regs) {
+                writel(1, ourISPdev->core_dev->core_regs + 0xa010);  /* IR cut enable */
             }
             pr_info("tisp_ae_ir_update: Day mode - IR cut enabled\n");
         }
