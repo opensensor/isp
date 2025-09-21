@@ -3222,7 +3222,6 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 pr_info("***   - Tuning device: %p ***\n", tuning_dev);
             } else {
                 pr_err("*** tx_isp_core_probe: Tuning init FAILED ***\n");
-                tx_isp_unlink_core_device(ourISPdev);
                 tx_isp_destroy_core_device(core_dev);
                 kfree(channel_array);
                 return -ENOMEM;
@@ -3260,7 +3259,6 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
         } else {
             pr_err("tx_isp_core_probe: Failed to allocate channel array\n");
-            tx_isp_unlink_core_device(ourISPdev);
             tx_isp_destroy_core_device(core_dev);
             return -ENOMEM;
         }
@@ -3298,11 +3296,6 @@ int tx_isp_core_remove(struct platform_device *pdev)
         if (core_dev->channel_array) {
             kfree(core_dev->channel_array);
             core_dev->channel_array = NULL;
-        }
-
-        /* Unlink from global ISP device */
-        if (core_dev->isp_dev) {
-            tx_isp_unlink_core_device(core_dev->isp_dev);
         }
 
         /* Destroy core device */
@@ -4090,30 +4083,6 @@ int tx_isp_link_core_device(struct tx_isp_dev *isp_dev, struct tx_isp_core_devic
     return 0;
 }
 EXPORT_SYMBOL(tx_isp_link_core_device);
-
-/**
- * tx_isp_unlink_core_device - Unlink core device from main ISP device
- * @isp_dev: Main ISP device
- */
-void tx_isp_unlink_core_device(struct tx_isp_dev *isp_dev)
-{
-    if (!isp_dev || !isp_dev->core_dev) {
-        return;
-    }
-
-    pr_info("*** tx_isp_unlink_core_device: Unlinking core device ***\n");
-
-    /* Clear subdev registration */
-    isp_dev->subdevs[4] = NULL;
-
-    /* Clear bidirectional linking */
-    isp_dev->core_dev->isp_dev = NULL;
-    isp_dev->core_dev->sd.isp = NULL;
-    isp_dev->core_dev = NULL;
-
-    pr_info("*** tx_isp_unlink_core_device: Core device unlinked ***\n");
-}
-EXPORT_SYMBOL(tx_isp_unlink_core_device);
 
 /**
  * tx_isp_core_device_set_state - Set core device state
