@@ -3279,58 +3279,40 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return s6_1;
         }
     } else if (cmd == 0xc050561a) { // TX_ISP_SENSOR_ENUM_INPUT - EXACT Binary Ninja reference
-        void* $s0_3 = (void *)&isp_dev->subdevs[0];
+        /* CRITICAL FIX: This IOCTL is used to enumerate sensors by index */
+        /* The userspace passes an index in the first 4 bytes, we return sensor name */
+        uint32_t sensor_index;
+        static const char* sensor_names[] = {"gc2053", NULL}; /* Add more sensors as needed */
 
-        /* Binary Ninja: if (private_copy_from_user(&var_98, arg3, 0x50) != 0) */
-        if (copy_from_user(&var_98, (void __user *)arg, 0x50) != 0) {
-            pr_err("TX_ISP_SENSOR_ENUM_INPUT: Failed to copy input data\n");
+        /* Copy the sensor index from userspace */
+        if (copy_from_user(&sensor_index, (void __user *)arg, sizeof(uint32_t)) != 0) {
+            pr_err("TX_ISP_SENSOR_ENUM_INPUT: Failed to copy sensor index\n");
             return -EFAULT;
         }
 
-        /* SAFE: Loop through subdevices with proper pointer validation */
-        for (int i = 0; i < ISP_MAX_SUBDEVS; i++) {
-            struct tx_isp_subdev *sd = isp_dev->subdevs[i];
+        pr_debug("TX_ISP_SENSOR_ENUM_INPUT: Enumerating sensor at index %d\n", sensor_index);
 
-            if (sd == NULL) {
-                continue; /* Skip empty slots */
-            }
-
-            /* CRITICAL SAFETY: Validate sd pointer before ANY access */
-            if (!virt_addr_valid(sd) ||
-                (unsigned long)sd < 0x80000000 ||
-                (unsigned long)sd >= 0xfffff000) {
-                pr_err("*** TX_ISP_SENSOR_ENUM_INPUT: Invalid subdev pointer 0x%p at index %d - SKIPPING ***\n", sd, i);
-                continue; /* Skip invalid pointers */
-            }
-
-            /* CRITICAL SAFETY: Check MIPS alignment before accessing struct members */
-            if (((unsigned long)sd & 0x3) != 0) {
-                pr_err("*** TX_ISP_SENSOR_ENUM_INPUT: Unaligned subdev pointer 0x%p at index %d - SKIPPING ***\n", sd, i);
-                continue; /* Skip unaligned pointers that would cause BadVA crash */
-            }
-
-            /* SAFE: Check if this is a valid subdev with proper null checks */
-            if (!sd->ops || !sd->ops->sensor || !sd->ops->sensor->ioctl) {
-                continue; /* Skip subdevs without sensor IOCTL */
-            }
-
-            /* SAFE: Call sensor IOCTL with proper error handling */
-            int32_t ret = sd->ops->sensor->ioctl(sd, 0, &var_98);
-
-            if (ret != 0 && ret != 0xfffffdfd) {
-                return ret; /* Stop on error (except 0xfffffdfd which means continue) */
-            }
+        /* Check if the requested index is valid */
+        if (sensor_index >= (sizeof(sensor_names) / sizeof(sensor_names[0]) - 1) ||
+            sensor_names[sensor_index] == NULL) {
+            pr_debug("TX_ISP_SENSOR_ENUM_INPUT: No sensor at index %d - returning error to end enumeration\n", sensor_index);
+            return -EINVAL; /* No more sensors - this breaks the userspace loop */
         }
 
-        s6_1 = 0;
+        /* Clear the buffer and copy sensor name */
+        memset(&var_98, 0, sizeof(var_98));
+        strncpy((char*)&var_98, sensor_names[sensor_index], 0x4c - 1);
 
-        /* Binary Ninja: if (private_copy_to_user(arg3, &var_98, 0x50) != 0) */
+        pr_debug("TX_ISP_SENSOR_ENUM_INPUT: Returning sensor '%s' at index %d\n",
+                 sensor_names[sensor_index], sensor_index);
+
+        /* Copy result back to userspace */
         if (copy_to_user((void __user *)arg, &var_98, 0x50) != 0) {
             pr_err("TX_ISP_SENSOR_ENUM_INPUT: Failed to copy result to user\n");
             return -EFAULT;
         }
 
-        return s6_1;
+        return 0; /* Success */
     }
 
     /* Binary Ninja: Handle 0x40045626 - GET_SENSOR_INFO */
