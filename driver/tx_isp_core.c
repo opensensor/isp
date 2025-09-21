@@ -2207,25 +2207,18 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 
     /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) */
     if (isp_dev != NULL && (unsigned long)isp_dev < 0xfffff001) {
-        /* CRITICAL FIX: Use safe struct member access instead of dangerous offset *(arg1 + 0xd4) */
-        /* MIPS ALIGNMENT CHECK: Ensure isp_dev is properly aligned before accessing */
-        if (((unsigned long)isp_dev & 0x3) != 0) {
-            pr_err("*** CRITICAL: isp_dev pointer 0x%p not 4-byte aligned - would cause unaligned access crash! ***\n", isp_dev);
-            return -EINVAL;
-        }
-
-        /* SAFE: Use proper struct member access instead of offset arithmetic */
-        vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-        s0 = (void*)vic_dev;
+        /* Binary Ninja: $s0 = arg1[0x35] - Get core device from ISP device */
+        core_dev = isp_dev->core_dev;
+        s0 = (void*)core_dev;
     }
 
     /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
     if (s0 != NULL && (unsigned long)s0 < 0xfffff001) {
-        /* Binary Ninja: int32_t $v0_3 = *($s0 + 0xe8) - SAFE: Get VIC state */
-        vic_state = vic_dev->state;
+        /* Binary Ninja: int32_t $v0_3 = *($s0 + 0xe8) - Get CORE state, not VIC state */
+        vic_state = core_dev->state;  /* This is actually core state, not VIC state */
         result = 0;
 
-        pr_info("ispcore_core_ops_init: VIC device=%p, state=%d", vic_dev, vic_state);
+        pr_info("ispcore_core_ops_init: Core device=%p, state=%d", core_dev, vic_state);
 
         /* Binary Ninja: if ($v0_3 != 1) */
         if (vic_state != 1) {
@@ -2237,7 +2230,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 if (vic_state == 4) {
                     /* Binary Ninja: ispcore_video_s_stream(arg1, 0) */
                     ispcore_video_s_stream(sd, 0);
-                    vic_state = vic_dev->state;  /* Update state after s_stream */
+                    vic_state = core_dev->state;  /* Update core state after s_stream */
                 }
 
                 /* Binary Ninja: if ($v1_55 == 3) - Stop kernel thread if in state 3 */
@@ -2246,7 +2239,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                     /* Note: fw_thread management removed - handled by separate thread management system */
                     pr_info("ispcore_core_ops_init: Thread management handled by separate system");
                     /* Binary Ninja: *($s0 + 0xe8) = 2 */
-                    vic_dev->state = 2;
+                    core_dev->state = 2;
                 }
 
                 /* CRITICAL: Cancel any pending frame sync work before deinit */
@@ -2267,9 +2260,9 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
             if (on == 1) {
                 pr_info("*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***");
 
-                /* Binary Ninja: Check VIC state is 2 (ready) before init */
+                /* Binary Ninja: Check CORE state is 2 (ready) before init */
                 if (vic_state != 2) {
-                    pr_err("ispcore_core_ops_init: VIC state %d != 2, cannot initialize\n", vic_state);
+                    pr_err("ispcore_core_ops_init: Core state %d != 2, cannot initialize\n", vic_state);
                     return -EINVAL;
                 }
 
