@@ -59,18 +59,26 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 1 */
         vic_dev->irq_enabled = 1;
 
-        /* CRITICAL FIX: Don't call enable_irq() - main dispatcher manages hardware IRQ 38 */
-        /* The main dispatcher already registered IRQ 38 and controls when it's enabled */
-        /* Calling enable_irq() here would interfere with the main dispatcher's IRQ management */
-        pr_info("*** tx_vic_enable_irq: VIC software interrupt flag ENABLED ***\n");
-        pr_info("*** tx_vic_enable_irq: Hardware IRQ 38 managed by main dispatcher ***\n");
+        /* CRITICAL FIX: Enable VIC hardware interrupts - THIS WAS MISSING! */
+        if (vic_dev->vic_regs) {
+            /* Binary Ninja reference: Enable VIC interrupt sources at hardware level */
+            writel(0xffffffff, vic_dev->vic_regs + 0x1e0);  /* Enable all VIC interrupt sources */
+            writel(0xffffffff, vic_dev->vic_regs + 0x1e4);  /* Enable secondary VIC interrupt sources */
+
+            /* Clear any pending interrupts before enabling */
+            writel(0xffffffff, vic_dev->vic_regs + 0x1f0);  /* Clear primary interrupt status */
+            writel(0xffffffff, vic_dev->vic_regs + 0x1f4);  /* Clear secondary interrupt status */
+            wmb();  /* Ensure register writes complete */
+
+            pr_info("*** tx_vic_enable_irq: VIC hardware interrupt registers ENABLED ***\n");
+        }
 
         /* Set the global vic_start_ok flag to allow interrupt processing */
         extern uint32_t vic_start_ok;
         vic_start_ok = 1;
         pr_info("*** tx_vic_enable_irq: vic_start_ok flag set to 1 ***\n");
 
-        pr_info("*** tx_vic_enable_irq: VIC interrupts ENABLED ***\n");
+        pr_info("*** tx_vic_enable_irq: VIC interrupts ENABLED (software + hardware) ***\n");
     } else {
         pr_info("*** tx_vic_enable_irq: VIC interrupts already enabled ***\n");
     }
