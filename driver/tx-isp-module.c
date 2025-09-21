@@ -4982,11 +4982,11 @@ static int tx_isp_init(void)
         goto err_cleanup_subdev_drivers;
     }
 
-    /* Step 3: Register platform driver (matches reference) */
-    ret = platform_driver_register(&tx_isp_driver);
+    /* Step 3: Register platform driver (matches reference driver exactly) */
+    ret = private_platform_driver_register(&tx_isp_driver);
     if (ret != 0) {
         pr_err("Failed to register platform driver: %d\n", ret);
-        platform_device_unregister(&tx_isp_platform_device);
+        private_platform_device_unregister(&tx_isp_platform_device);
         goto err_cleanup_subdev_drivers;
     }
 
