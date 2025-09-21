@@ -680,13 +680,14 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
         /* Reference driver behavior: Register all IRQs normally without special handling */
 
         /* Binary Ninja: request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, 0x2000, *arg1, arg2) */
-        /* Reference driver passes irq_info as dev_id, not ourISPdev */
+        /* CRITICAL FIX: Pass ourISPdev as dev_id - interrupt handlers expect struct tx_isp_dev * */
+        extern struct tx_isp_dev *ourISPdev;
         ret = request_threaded_irq(irq_num,
                                    isp_irq_handle,
                                    isp_irq_thread_handle,
                                    IRQF_SHARED,  /* 0x2000 = IRQF_SHARED */
                                    dev_name(&pdev->dev),  /* *arg1 = device name */
-                                   irq_info);  /* arg2 = irq_info as per reference driver */
+                                   ourISPdev);  /* CRITICAL: Pass ourISPdev - handlers expect tx_isp_dev * */
 
         if (ret != 0) {
             /* Binary Ninja: isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", "tx_isp_request_irq") */
@@ -725,8 +726,9 @@ void tx_isp_free_irq(struct tx_isp_irq_info *irq_info)
         return;
     }
 
-    /* Free the registered interrupt */
-    free_irq(irq_info->irq, irq_info);
+    /* CRITICAL FIX: Use ourISPdev as dev_id to match request_threaded_irq call */
+    extern struct tx_isp_dev *ourISPdev;
+    free_irq(irq_info->irq, ourISPdev);
     irq_info->irq = 0;
     irq_info->handler = NULL;
     irq_info->data = NULL;
