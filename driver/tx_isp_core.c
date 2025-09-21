@@ -1005,9 +1005,29 @@ int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id)
 EXPORT_SYMBOL(system_irq_func_set);
 
 
-/* ip_done_interrupt_static - EXACT Binary Ninja function name */
+/* ip_done_interrupt_static - SAFE implementation with proper parameter validation */
 irqreturn_t ip_done_interrupt_static(int irq, void *dev_id)
 {
+    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
+
+    /* CRITICAL SAFETY: Validate dev_id is a tx_isp_dev, not tx_isp_subdev */
+    if (!dev_id || (uintptr_t)dev_id < 0x80000000 || (uintptr_t)dev_id > 0x9fffffff) {
+        pr_err("ip_done_interrupt_static: Invalid dev_id=%p for IRQ %d\n", dev_id, irq);
+        return IRQ_HANDLED;
+    }
+
+    /* CRITICAL: Ensure we're getting the right structure type */
+    extern struct tx_isp_dev *ourISPdev;
+    if (dev_id != ourISPdev) {
+        pr_err("ip_done_interrupt_static: dev_id=%p != ourISPdev=%p - using ourISPdev\n", dev_id, ourISPdev);
+        isp_dev = ourISPdev;
+    }
+
+    if (!isp_dev) {
+        pr_err("ip_done_interrupt_static: No valid ISP device available\n");
+        return IRQ_HANDLED;
+    }
+
     /* Binary Ninja: if ((system_reg_read(0xc) & 0x40) == 0) */
     uint32_t reg_val = system_reg_read(0xc);
 
@@ -1024,7 +1044,7 @@ irqreturn_t ip_done_interrupt_static(int irq, void *dev_id)
         }
     }
 
-    pr_info("*** ip_done_interrupt_handler: ISP processing complete ***\n");
+    pr_info("*** ip_done_interrupt_static: ISP processing complete ***\n");
 
     /* Binary Ninja: return 2 */
     return IRQ_HANDLED; /* Convert to standard Linux return value */
