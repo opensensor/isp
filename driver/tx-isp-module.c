@@ -3429,6 +3429,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         var_98.as_uint32 = 0;  /* Binary Ninja: var_98 = 0 */
         s6_1 = 0;
 
+        pr_info("TX_ISP_GET_BUF: Returning buffer size=%d, addr=0x%x\n", var_94, var_98.as_uint32);
+
         /* Binary Ninja: if (private_copy_to_user(arg3, &var_98, 8) != 0) */
         if (copy_to_user((void __user *)arg, &var_98, 8) != 0) {
             pr_err("TX_ISP_GET_BUF: Failed to copy buffer result\n");
