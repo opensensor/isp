@@ -561,7 +561,6 @@ extern int tx_isp_fs_probe(struct platform_device *pdev);
 /* Forward declarations for Binary Ninja reference implementation */
 static int tx_isp_platform_probe(struct platform_device *pdev);
 static int tx_isp_module_init(struct tx_isp_dev *isp_dev);
-static int tx_isp_create_proc_entries(struct tx_isp_dev *isp_dev);
 int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp_dev);
 
 /* V4L2 video device functions */
@@ -5072,14 +5071,6 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
         return ret;
     }
 
-    /* Binary Ninja: Create proc entries */
-    ret = tx_isp_create_proc_entries(isp_dev);
-    if (ret != 0) {
-        pr_err("Failed to create proc entries: %d\n", ret);
-        misc_deregister(&tx_isp_miscdev);
-        return ret;
-    }
-
     /* Binary Ninja: Call tx_isp_create_graph_and_nodes() */
     ret = tx_isp_create_graph_and_nodes(isp_dev);
     if (ret != 0) {
@@ -5089,18 +5080,6 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
     }
 
     pr_info("*** tx_isp_module_init: Binary Ninja reference implementation complete ***\n");
-    return 0;
-}
-
-/* tx_isp_create_proc_entries - EXACT Binary Ninja reference implementation */
-static int tx_isp_create_proc_entries(struct tx_isp_dev *isp_dev)
-{
-    pr_info("*** tx_isp_create_proc_entries: Creating /proc/jz/isp/ entries ***\n");
-
-    /* Binary Ninja: Create /proc/jz/isp/isp-w02 */
-    /* This matches the reference driver proc entry creation */
-
-    pr_info("*** /proc/jz/isp/isp-w02 created (stub implementation) ***\n");
     return 0;
 }
 

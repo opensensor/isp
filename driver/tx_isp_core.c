@@ -487,7 +487,6 @@ irqreturn_t ip_done_interrupt_static(int irq, void *dev_id);
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
 int sensor_init(struct tx_isp_dev *isp_dev);
 void *isp_core_tuning_init(void *arg1);
-int tx_isp_create_proc_entries(struct tx_isp_dev *isp);
 void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
 void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
 void *isp_mem_init(void);
@@ -3234,15 +3233,6 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 pr_info("*** tx_isp_core_probe: Frame channel devices created successfully ***\n");
             } else {
                 pr_err("*** tx_isp_core_probe: Failed to create frame channel devices: %d ***\n", result);
-            }
-
-            /* Create proc entries using global ISP device */
-            pr_info("*** tx_isp_core_probe: Creating ISP proc entries ***\n");
-            result = tx_isp_create_proc_entries(ourISPdev);
-            if (result == 0) {
-                pr_info("*** tx_isp_core_probe: ISP proc entries created successfully ***\n");
-            } else {
-                pr_err("*** tx_isp_core_probe: Failed to create ISP proc entries: %d ***\n", result);
             }
 
             /* Create the ISP M0 tuning device node */

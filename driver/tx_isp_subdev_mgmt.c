@@ -52,7 +52,6 @@ static int tx_isp_init_sink_subdev(struct tx_isp_dev *isp,
                                   struct tx_isp_subdev_runtime *runtime);
 static int tx_isp_create_subdev_link(void *src_subdev, void *dst_subdev,
                                     struct tx_isp_subdev_desc *desc);
-int tx_isp_create_proc_entries(struct tx_isp_dev *isp);
 static int tx_isp_create_misc_device(struct tx_isp_subdev_runtime *runtime);
 /* REMOVED: tx_isp_create_basic_pipeline - not in reference driver */
 static void *tx_isp_create_driver_data(struct tx_isp_subdev_desc *desc);
@@ -318,15 +317,6 @@ int tx_isp_create_subdev_graph(struct tx_isp_dev *isp)
             goto unlock;
         }
 
-        pr_info("tx_isp_create_subdev_graph: Found %d directly linked devices - proceeding\n", device_count);
-
-        /* Create basic proc entries and frame channels for compatibility */
-        ret = tx_isp_create_proc_entries(isp);
-        if (ret < 0) {
-            pr_warn("tx_isp_create_subdev_graph: Failed to create proc entries: %d\n", ret);
-            /* Continue anyway - proc entries are not critical */
-        }
-
         ret = 0;  /* Success - devices are linked directly */
         goto unlock;
     }
@@ -468,9 +458,6 @@ static int tx_isp_create_subdev_link(void *src_subdev, void *dst_subdev,
     
     return 0;
 }
-
-/* tx_isp_create_proc_entries is implemented in tx_isp_proc.c */
-extern int tx_isp_create_proc_entries(struct tx_isp_dev *isp);
 
 /**
  * tx_isp_create_misc_device - Create a misc device for a subdevice
