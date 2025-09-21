@@ -2100,18 +2100,18 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     vic_dev->irq_priv = NULL;     /* Initialize to NULL - not used in reference driver */
     pr_info("*** VIC PROBE: IRQ handler pointers set to NULL (reference driver uses main dispatcher) ***\n");
 
-    /* CRITICAL: Initialize buffer management immediately to prevent interrupt crashes */
-    /* This ensures the lists are ready before any interrupts can fire */
-    {
-        void *raw_pipe[8] = {NULL}; /* 8 function pointers as per Binary Ninja */
-        int pipo_ret = tx_isp_subdev_pipo(vic_dev, raw_pipe);
-        if (pipo_ret == 0) {
-            pr_info("*** VIC PROBE: Buffer management initialized successfully ***\n");
-        } else {
-            pr_err("*** VIC PROBE: Buffer management initialization failed: %d ***\n", pipo_ret);
-            /* Continue anyway - the lists are at least initialized */
-        }
-    }
+    /* EMERGENCY FIX: Disable complex buffer management to prevent kernel panic */
+    /* Initialize only the absolute minimum required for basic operation */
+    pr_info("*** EMERGENCY: VIC buffer management DISABLED to prevent kernel panic ***\n");
+    pr_info("*** VIC will operate in minimal mode without complex buffer operations ***\n");
+
+    /* Initialize basic fields only */
+    vic_dev->active_buffer_count = 0;
+    vic_dev->buffer_count = 0;
+    vic_dev->processing = 0;
+    vic_dev->stream_state = 0;
+
+    pr_info("*** EMERGENCY: VIC basic initialization complete - complex buffer management SKIPPED ***\n");
 
     pr_info("*** VIC PROBE: Initialized default dimensions %dx%d and critical fields ***\n", vic_dev->width, vic_dev->height);
 
