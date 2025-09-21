@@ -3235,7 +3235,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 }
 
                 /* Check again after search attempt */
-                sensor_check = tx_isp_get_sensor();
                 if (!sensor_check) {
                     state->streaming = false;
                     return -ENODEV;
