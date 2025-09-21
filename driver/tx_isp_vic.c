@@ -1682,6 +1682,7 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
     return 0;
 }
 
+int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 /* VIC sensor operations structure - MISSING from original implementation */
 struct tx_isp_subdev_sensor_ops vic_sensor_ops = {
     .ioctl = vic_sensor_ops_ioctl,                    /* From tx-isp-module.c */
