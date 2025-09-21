@@ -175,92 +175,15 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
         return 0xffffffea;
     }
 
-    /* CRITICAL FIX: Use safe struct member access instead of dangerous offset 0x13c */
-    csi_base = csi_dev->csi_regs; /* Use struct member instead of *(void **)(((char *)csi_dev) + 0x13c) */
-    if (!csi_base) {
-        pr_err("CSI base address is NULL\n");
-        return 0xffffffea;
-    }
-
-    /* Create a default sensor attribute if none exists */
-    if (sd->active_sensor) {
-        attr = &sd->active_sensor->attr;
-    } else if (ourISPdev && ourISPdev->sensor_sd && ourISPdev->sensor_sd->active_sensor) {
-        /* Try to get the sensor attribute from ourISPdev as a fallback */
-        attr = &ourISPdev->sensor_sd->active_sensor->attr;
-        pr_info("Using sensor attribute from ourISPdev\n");
-
-        /* Copy the sensor to our subdevice */
-        sd->active_sensor = ourISPdev->sensor_sd->active_sensor;
-    } else if (ourISPdev && ourISPdev->sensor_width > 0 && ourISPdev->sensor_height > 0) {
-        /* Create a default sensor if we have dimensions */
-        struct tx_isp_sensor *sensor = kzalloc(sizeof(struct tx_isp_sensor), GFP_ATOMIC);
-        if (!sensor) {
-            pr_err("Failed to allocate sensor structure\n");
-            return -ENOMEM;
-        }
-
-        /* Initialize with default values */
-        sensor->attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;
-        sensor->attr.mipi.lans = 2; /* Default to 2 lanes */
-        sensor->attr.mipi.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10; /* Default to RAW10 */
-        sensor->attr.total_width = ourISPdev->sensor_width;
-        sensor->attr.total_height = ourISPdev->sensor_height;
-
-        /* Store in subdevice */
-        sd->active_sensor = sensor;
-        attr = &sensor->attr;
-
-        pr_info("Created default sensor attribute: %dx%d, MIPI, RAW10, 2 lanes\n",
-                attr->total_width, attr->total_height);
+    /* Binary Ninja: int32_t $v0_4 = 4 */
+    /* Binary Ninja: if (arg2 == 0) $v0_4 = 3 */
+    /* Binary Ninja: *(arg1 + 0x128) = $v0_4 */
+    if (enable == 0) {
+        csi_dev->state = 3;
+        pr_info("csi_video_s_stream: Stream OFF - CSI state set to 3\n");
     } else {
-        /* Create a default sensor with hardcoded values */
-        struct tx_isp_sensor *sensor = kzalloc(sizeof(struct tx_isp_sensor), GFP_ATOMIC);
-        if (!sensor) {
-            pr_err("Failed to allocate sensor structure\n");
-            return -ENOMEM;
-        }
-
-        /* Initialize with default values */
-        sensor->attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;
-        sensor->attr.mipi.lans = 2; /* Default to 2 lanes */
-        sensor->attr.mipi.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10; /* Default to RAW10 */
-        sensor->attr.total_width = 1920;  /* Default to 1418p */
-        sensor->attr.total_height = 1080;
-
-        /* Store in subdevice */
-        sd->active_sensor = sensor;
-        attr = &sensor->attr;
-
-        pr_info("Created default sensor attribute: 2200x1418, MIPI, RAW10, 2 lanes\n");
-    }
-
-    /* Only handle MIPI sensors */
-    if (attr->dbus_type != TX_SENSOR_DATA_INTERFACE_MIPI)
-        return 0;
-
-    /* Initialize CSI hardware if needed */
-    if (enable && csi_dev->state < 3) {
-        ret = csi_core_ops_init(sd, 1);
-        if (ret) {
-            pr_err("Failed to initialize CSI hardware: %d\n", ret);
-            return ret;
-        }
-    }
-
-    /* Binary Ninja: int32_t $v0_4 = 4, if (arg2 == 0) $v0_4 = 3 */
-    if (enable) {
-        /* Binary Ninja: *(arg1 + 0x128) = 4 */
-        /* CRITICAL FIX: Use CORRECT Binary Ninja state 4 for streaming! */
-        csi_dev->state = 4;  /* 4 = STREAMING (Binary Ninja reference) */
-        pr_info("CSI streaming enabled - state=%d (STREAMING)\n", csi_dev->state);
-    } else {
-        pr_info("*** CSI VIDEO STREAMING DISABLE ***\n");
-
-        /* Binary Ninja: *(arg1 + 0x128) = 3 */
-        /* CRITICAL FIX: Use CORRECT Binary Ninja state 3 for disable */
-        csi_dev->state = 3;  /* 3 = DISABLED (Binary Ninja reference) */
-        pr_info("CSI streaming disabled - state=%d (DISABLED)\n", csi_dev->state);
+        csi_dev->state = 4;
+        pr_info("csi_video_s_stream: Stream ON - CSI state set to 4\n");
     }
 
     /* Binary Ninja: return 0 */
