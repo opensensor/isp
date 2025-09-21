@@ -3204,7 +3204,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     }
 
     /* Binary Ninja variables */
-    uint8_t var_98[0x50];  /* Buffer for IOCTL data - 80 bytes */
+    struct v4l2_input var_98;  /* Input structure for IOCTL data */
     int32_t var_94;
     int32_t s6_1 = 0;
 
