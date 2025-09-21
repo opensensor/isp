@@ -3330,20 +3330,20 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 pr_err("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
                 return -ENOMEM;
             }
-            pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", ourISPdev->tuning_data);
+            pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", ourISPdev->core_dev->tuning_data);
         }
-        
+
         /* BINARY NINJA REFERENCE: NO AUTO-INITIALIZATION - tuning system only handles control operations */
         pr_info("*** BINARY NINJA REFERENCE: Skipping auto-initialization - no hardware reset during tuning setup ***\n");
 
         /* Enable tuning and mark auto-init as done */
-        ourISPdev->tuning_enabled = 3;
+        ourISPdev->core_dev->tuning_enabled = 3;
         auto_init_done = true;
         pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning auto-enabled for V4L2 controls (permanent)\n");
     }
     
     /* CRITICAL: Check tuning enabled for tuning commands only */
-    if (magic == 0x74 && ourISPdev->tuning_enabled != 3) {
+    if (magic == 0x74 && (!ourISPdev->core_dev || ourISPdev->core_dev->tuning_enabled != 3)) {
         pr_err("isp_core_tunning_unlocked_ioctl: Tuning commands require explicit enable (cmd=0x%x)\n", cmd);
         return -ENODEV;
     }
@@ -3365,7 +3365,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 pr_info("isp_core_tunning_unlocked_ioctl: Set control cmd=0x%x value=%d\n", ctrl.cmd, ctrl.value);
                 
                 /* CRITICAL: Validate control command before processing */
-                if (ctrl.cmd == 0x980900 && !dev->tuning_data) {
+                if (ctrl.cmd == 0x980900 && (!dev->core_dev || !dev->core_dev->tuning_data)) {
                     pr_err("isp_core_tunning_unlocked_ioctl: Brightness control attempted with NULL tuning data\n");
                     return -ENODEV;
                 }
@@ -3388,7 +3388,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 pr_info("isp_core_tunning_unlocked_ioctl: Get control cmd=0x%x\n", ctrl.cmd);
                 
                 /* CRITICAL: Simple validation for control commands like reference driver */
-                if (!dev->tuning_data) {
+                if (!dev->core_dev || !dev->core_dev->tuning_data) {
                     return -ENODEV;
                 }
                 
@@ -3411,7 +3411,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 pr_info("isp_core_tunning_unlocked_ioctl: Tuning enable/disable: %s\n", enable ? "ENABLE" : "DISABLE");
 
                 /* BINARY NINJA REFERENCE: Simple tuning enable acknowledgment */
-                if (enable && ourISPdev->tuning_enabled == 3) {
+                if (enable && ourISPdev->core_dev && ourISPdev->core_dev->tuning_enabled == 3) {
                     /* CRITICAL: VIC-SAFE TUNING OPERATION SEQUENCING */
                     /* The key insight is that tuning operations must be synchronized with VIC hardware state */
                     pr_info("*** BINARY NINJA REFERENCE: VIC-safe tuning enable acknowledged ***\n");
