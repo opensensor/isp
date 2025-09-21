@@ -2057,6 +2057,26 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     vic_dev->hw_irq_enabled = 0; /* Hardware interrupt initially disabled */
     pr_info("*** VIC PROBE: IRQ numbers initialized to 38 ***\n");
 
+    /* CRITICAL FIX: Map VIC register spaces - THIS WAS MISSING! */
+    /* Primary VIC register space (0x133e0000) - main VIC control */
+    vic_dev->vic_regs = ioremap(0x133e0000, 0x1000);
+    if (!vic_dev->vic_regs) {
+        pr_err("*** VIC PROBE: CRITICAL - Failed to map primary VIC registers at 0x133e0000 ***\n");
+        private_kfree(vic_dev);
+        return -ENOMEM;
+    }
+    pr_info("*** VIC PROBE: Primary VIC registers mapped at 0x133e0000 -> %p ***\n", vic_dev->vic_regs);
+
+    /* Secondary VIC register space (0x10023000) - for specific operations */
+    vic_dev->vic_regs_secondary = ioremap(0x10023000, 0x1000);
+    if (!vic_dev->vic_regs_secondary) {
+        pr_err("*** VIC PROBE: CRITICAL - Failed to map secondary VIC registers at 0x10023000 ***\n");
+        iounmap(vic_dev->vic_regs);
+        private_kfree(vic_dev);
+        return -ENOMEM;
+    }
+    pr_info("*** VIC PROBE: Secondary VIC registers mapped at 0x10023000 -> %p ***\n", vic_dev->vic_regs_secondary);
+
     /* CRITICAL: Initialize list heads for buffer management FIRST */
     INIT_LIST_HEAD(&vic_dev->queue_head);
     INIT_LIST_HEAD(&vic_dev->done_head);
@@ -2153,13 +2173,31 @@ int tx_isp_vic_probe(struct platform_device *pdev)
 int tx_isp_vic_remove(struct platform_device *pdev)
 {
     struct tx_isp_subdev *sd = platform_get_drvdata(pdev);
+    struct tx_isp_vic_device *vic_dev;
     struct resource *res;
 
     if (!sd)
         return -EINVAL;
 
+    /* Get VIC device from subdev */
+    vic_dev = tx_isp_get_subdevdata(sd);
+
     remove_proc_entry("isp-w02", NULL);
     remove_proc_entry("jz/isp", NULL);
+
+    /* CRITICAL FIX: Unmap VIC register spaces that we mapped in probe */
+    if (vic_dev) {
+        if (vic_dev->vic_regs) {
+            iounmap(vic_dev->vic_regs);
+            vic_dev->vic_regs = NULL;
+            pr_info("*** VIC REMOVE: Primary VIC registers unmapped ***\n");
+        }
+        if (vic_dev->vic_regs_secondary) {
+            iounmap(vic_dev->vic_regs_secondary);
+            vic_dev->vic_regs_secondary = NULL;
+            pr_info("*** VIC REMOVE: Secondary VIC registers unmapped ***\n");
+        }
+    }
 
     /* Unmap and release memory */
     iounmap(sd->base);
