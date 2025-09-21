@@ -3332,6 +3332,29 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     pr_err("isp_core_tunning_unlocked_ioctl: Brightness control attempted with NULL tuning data\n");
                     return -ENODEV;
                 }
+
+                /* CRITICAL: Additional validation for tuning data structure integrity */
+                if (dev->core_dev && dev->core_dev->tuning_data) {
+                    struct isp_tuning_data *tuning = (struct isp_tuning_data *)dev->core_dev->tuning_data;
+
+                    /* Validate the structure is properly initialized */
+                    if ((unsigned long)tuning < 0x80000000 || (unsigned long)tuning >= 0xfffff000) {
+                        pr_err("*** CRITICAL: tuning_data pointer 0x%p outside kernel memory - ABORTING ***\n", tuning);
+                        return -EFAULT;
+                    }
+
+                    /* Validate alignment */
+                    if ((unsigned long)tuning & 0x3) {
+                        pr_err("*** CRITICAL: tuning_data pointer 0x%p not 4-byte aligned - ABORTING ***\n", tuning);
+                        return -EFAULT;
+                    }
+
+                    /* Validate the critical mode_flag field */
+                    if (tuning->mode_flag != 1) {
+                        pr_warn("*** WARNING: tuning_data->mode_flag is %u, should be 1 - FIXING ***\n", tuning->mode_flag);
+                        tuning->mode_flag = 1;  /* Fix it to prevent BadVA crash */
+                    }
+                }
                 
                 ret = apical_isp_core_ops_s_ctrl(dev, &ctrl);
                 
@@ -10568,6 +10591,17 @@ void *isp_core_tuning_init(void *arg1)
     tuning_data->contrast = 128;    /* Default contrast */
     tuning_data->saturation = 128;  /* Default saturation */
     tuning_data->sharpness = 128;   /* Default sharpness */
+
+    /* Initialize additional control parameters */
+    tuning_data->hflip = 0;         /* No horizontal flip */
+    tuning_data->vflip = 0;         /* No vertical flip */
+    tuning_data->shading = 0;       /* Shading disabled */
+    tuning_data->running_mode = 0;  /* Default running mode */
+    tuning_data->custom_mode = 0;   /* Default custom mode */
+    tuning_data->gamma = 128;       /* Default gamma */
+    tuning_data->dpc = 0;           /* DPC disabled */
+    tuning_data->antiflicker = 0;   /* Anti-flicker disabled */
+    tuning_data->bypass = 0;        /* Bypass disabled */
 
     /* CRITICAL FIX: Initialize the mode_flag at offset 0x15c to prevent BadVA crash */
     tuning_data->mode_flag = 1;     /* Binary Ninja: This field is checked against 1 */
