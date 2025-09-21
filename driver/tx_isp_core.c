@@ -1810,26 +1810,6 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
 	// TODO
 
-    /* Binary Ninja: IRQ callback array processing */
-    /* Binary Ninja: for (int i = 0; i != 0x20; i++) */
-    for (i = 0; i < 0x20; i++) {
-        u32 bit_mask = 1 << (i & 0x1f);
-        if (interrupt_status & bit_mask) {
-            /* Binary Ninja: if (irq_func_cb[i] != 0) */
-            if (irq_func_cb[i] != NULL) {
-                /* CRITICAL SAFETY: Validate callback function pointer before calling */
-                if ((uintptr_t)irq_func_cb[i] < 0xc0000000 || (uintptr_t)irq_func_cb[i] > 0xc0ffffff) {
-                    pr_err("*** CRITICAL: Invalid callback function pointer at index %d: %p ***\n", i, irq_func_cb[i]);
-                    continue;
-                }
-
-                pr_debug("ISP CORE: Calling IRQ callback[%d] = %p\n", i, irq_func_cb[i]);
-                irqreturn_t callback_result = irq_func_cb[i](irq, dev_id);
-                pr_debug("ISP CORE: IRQ callback[%d] returned %d\n", i, callback_result);
-            }
-        }
-    }
-
     pr_debug("*** ISP CORE INTERRUPT PROCESSING COMPLETE ***\n");
 
     /* Binary Ninja: return 1 */
