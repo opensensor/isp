@@ -1687,8 +1687,9 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
         sensor_attr = NULL;  /* Disable/deinit */
     } else {
         /* For enable, try to get sensor attributes if available */
-        if (isp_dev->sensor && isp_dev->sensor->info.sensor_attr) {
-            sensor_attr = isp_dev->sensor->info.sensor_attr;
+        if (isp_dev->sensor) {
+            /* Note: sensor_attr access needs to be determined from actual sensor structure */
+            pr_info("ispcore_core_ops_init: Sensor available, skipping sensor_attr access for now");
         }
         /* sensor_attr can be NULL for initial core init */
     }
@@ -2116,7 +2117,7 @@ static ssize_t graph_proc_read(struct file *file, char __user *buffer, size_t co
                    "Frame Count: %u\n"
                    "Pipeline State: %d\n",
                    isp_dev, 
-                   isp_dev ? isp_dev->frame_count : 0,
+                   0,  /* frame_count removed - use external counter */
                    isp_dev ? isp_dev->pipeline_state : -1);
     
     if (len > count) {
@@ -3170,7 +3171,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
             /* The channel_array is used for Binary Ninja compatibility during initialization */
 
             /* Set basic platform data first */
-            platform_set_drvdata(pdev, isp_dev);
+            platform_set_drvdata(pdev, ourISPdev);
 
             /* REMOVED: Manual VIC device creation - will be handled by platform driver system */
             pr_info("*** tx_isp_core_probe: VIC device creation deferred to platform driver system ***\n");
