@@ -1141,10 +1141,6 @@ static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
 
 /* Use existing frame_buffer structure from tx-libimp.h */
 
-/* Forward declaration for sensor registration handler */
-/* VIC sensor operations IOCTL - EXACT Binary Ninja implementation */
-int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
-/* VIC core s_stream - EXACT Binary Ninja implementation */
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable);
 
 /* Frame channel device instances - make non-static so they can be accessed from other files */
@@ -4371,82 +4367,6 @@ static void tx_isp_exit(void)
     pr_info("TX ISP driver removed\n");
 }
 
-/* vic_sensor_ops_ioctl - EXACT Binary Ninja reference implementation */
-int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
-{
-    int32_t result = 0;
-
-    /* Binary Ninja EXACT: if (arg1 != 0 && arg1 u< 0xfffff001) */
-    if (sd != 0 && (unsigned long)sd < 0xfffff001) {
-        /* Binary Ninja EXACT: void* $a0 = *(arg1 + 0xd4) */
-        void *vic_dev = sd->host_priv;  /* offset 0xd4 is host_priv */
-
-        /* Binary Ninja EXACT: if ($a0 != 0 && $a0 u< 0xfffff001) */
-        if (vic_dev != 0 && (unsigned long)vic_dev < 0xfffff001) {
-            /* Binary Ninja EXACT: if (arg2 - 0x200000c u>= 0xd) return 0 */
-            if (cmd - 0x200000c >= 0xd) {
-                return 0;
-            }
-
-            /* Binary Ninja EXACT: Switch on IOCTL command */
-            switch (cmd) {
-            case 0x200000c:  /* Binary Ninja: case 0x200000c */
-            case 0x200000f:  /* Binary Ninja: case 0x200000f */
-                /* Binary Ninja EXACT: return tx_isp_vic_start($a0) */
-                return tx_isp_vic_start(vic_dev);
-
-            case 0x200000d:  /* Binary Ninja: case 0x200000d */
-            case 0x2000010:  /* Binary Ninja: case 0x2000010 */
-            case 0x2000011:  /* Binary Ninja: case 0x2000011 */
-            case 0x2000012:  /* Binary Ninja: case 0x2000012 */
-            case 0x2000014:  /* Binary Ninja: case 0x2000014 */
-            case 0x2000015:  /* Binary Ninja: case 0x2000015 */
-            case 0x2000016:  /* Binary Ninja: case 0x2000016 */
-                /* Binary Ninja EXACT: return 0 */
-                return 0;
-
-            case 0x200000e:  /* Binary Ninja: case 0x200000e */
-                /* SAFE: Use struct member access instead of Binary Ninja offset */
-                {
-                    struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)vic_dev;
-                    if (vic->vic_regs) {
-                        writel(0x10, vic->vic_regs + 0x0);
-                        wmb();
-                    }
-                }
-                return 0;
-
-            case 0x2000013:  /* Binary Ninja: case 0x2000013 */
-                /* SAFE: Use struct member access instead of Binary Ninja offset */
-                {
-                    struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)vic_dev;
-                    if (vic->vic_regs) {
-                        writel(0, vic->vic_regs + 0x0);
-                        wmb();
-                        writel(4, vic->vic_regs + 0x0);
-                        wmb();
-                    }
-                }
-                return 0;
-
-            case 0x2000017:  /* Binary Ninja: case 0x2000017 - GPIO configuration */
-                /* Binary Ninja EXACT: Complex GPIO setup implementation */
-                /* Simplified for now - Binary Ninja has complex GPIO loop */
-                return 0;
-
-            case 0x2000018:  /* Binary Ninja: case 0x2000018 - GPIO state change */
-                /* Binary Ninja EXACT: gpio_switch_state = 1 */
-                gpio_switch_state = 1;
-                /* Binary Ninja EXACT: memcpy(&gpio_info, arg3, 0x2a) */
-                memcpy(&gpio_info, arg, 0x2a);
-                return 0;
-            }
-        }
-    }
-
-    /* Binary Ninja EXACT: return result */
-    return result;
-}
 
 /* ===== REFERENCE DRIVER FUNCTION IMPLEMENTATIONS ===== */
 
