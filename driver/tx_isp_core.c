@@ -2260,9 +2260,9 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 }
 
                 /* Binary Ninja: Call tisp_init() with sensor attributes */
-                if (isp_dev->sensor && isp_dev->sensor->video.attr) {
+                if (sensor && sensor->video.attr) {
                     pr_info("*** ispcore_core_ops_init: Calling tisp_init with sensor attributes ***");
-                    ret = tisp_init(isp_dev->sensor->video.attr, NULL);
+                    ret = tisp_init(sensor->video.attr, NULL);
                     if (ret != 0) {
                         pr_err("ispcore_core_ops_init: tisp_init failed: %d\n", ret);
                         return ret;
