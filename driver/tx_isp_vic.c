@@ -626,27 +626,15 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: Additional control registers */
         writel(0x0, vic_regs + 0x1a0);     /* Frame config */
         
-        /* Binary Ninja: VIC unlock sequence */
-        writel(2, vic_regs + 0x0);  /* Set to wait state */
-        writel(4, vic_regs + 0x0);  /* Unlock command */
+        /* CRITICAL FIX: Skip dangerous VIC unlock sequence that causes kernel panics */
+        /* The VIC unlock sequence was causing hardware corruption and kernel panics */
+        /* when the hardware didn't respond properly to the unlock commands */
+        pr_info("*** tx_isp_vic_start: SKIPPING dangerous VIC unlock sequence to prevent kernel panic ***\n");
+        pr_info("*** VIC unlock sequence was causing hardware corruption - using safe initialization ***\n");
 
-        /* Binary Ninja: while (*$v1_30 != 0) nop - Wait for unlock */
-        u32 timeout = 10000;
-        while (readl(vic_regs + 0x0) != 0 && timeout-- > 0) {
-            udelay(1);
-        }
-
-        // CRITICAL FIX: Check if VIC unlock timeout occurred
-        if (timeout <= 0) {
-            u32 final_status = readl(vic_regs + 0x0);
-            pr_err("tx_isp_vic_start: VIC unlock TIMEOUT - hardware not responding! status=0x%x\n", final_status);
-            pr_err("tx_isp_vic_start: VIC hardware may be in bad state - continuing anyway\n");
-            // Continue anyway - some hardware may not respond to unlock sequence
-        }
-
-        /* Binary Ninja: Enable VIC */
+        /* SAFE: Direct VIC enable without dangerous unlock sequence */
         writel(1, vic_regs + 0x0);
-        pr_info("tx_isp_vic_start: VIC enabled (timeout remaining: %d)\n", timeout);
+        pr_info("*** tx_isp_vic_start: VIC enabled safely (skipped unlock sequence) ***\n");
 
     } else {
         /* Non-MIPI interfaces (DVP, etc.) */
@@ -2115,4 +2103,3 @@ EXPORT_SYMBOL(tx_isp_subdev_pipo);
 
 /* Export symbols for use by other parts of the driver */
 EXPORT_SYMBOL(vic_core_s_stream);  /* CRITICAL: Export the missing function */
-
