@@ -3151,10 +3151,10 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
                 /* SAFE: Set up ISP device channel reference using array index */
                 if (channel_idx < ISP_MAX_CHAN) {
-                    isp_dev->channels[channel_idx].channel_id = channel_idx;
-                    isp_dev->channels[channel_idx].enabled = true;
-                    isp_dev->channels[channel_idx].state = 1;
-                    isp_dev->channels[channel_idx].event_hdlr = (struct isp_event_handler *)ispcore_pad_event_handle;
+                    ourISPdev->channels[channel_idx].channel_id = channel_idx;
+                    ourISPdev->channels[channel_idx].enabled = true;
+                    ourISPdev->channels[channel_idx].state = 1;
+                    ourISPdev->channels[channel_idx].event_hdlr = (struct isp_event_handler *)ispcore_pad_event_handle;
                 }
 
                 current_channel++;
