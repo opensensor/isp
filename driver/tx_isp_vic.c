@@ -1694,22 +1694,39 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     } else {
         pr_warn("*** ISP CORE IRQ: core_regs not mapped; unable to enable core interrupts here ***\n");
 
-        /* FALLBACK: Try to map ISP core registers directly if global mapping failed */
-        pr_info("*** ISP CORE IRQ: Attempting direct mapping fallback ***\n");
-        void __iomem *core_fallback = ioremap(0x13300000, 0x10000);
-        if (core_fallback) {
-            pr_info("*** ISP CORE IRQ: Direct mapping successful at %p ***\n", core_fallback);
+        /* FALLBACK: Try to access ISP core registers via core device */
+        pr_info("*** ISP CORE IRQ: Attempting core device access ***\n");
+        if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
+            void __iomem *core_regs = ourISPdev->core_dev->core_regs;
+            pr_info("*** ISP CORE IRQ: Using core device registers at %p ***\n", core_regs);
 
             /* Clear any pending interrupts first */
-            u32 pend_legacy = readl(core_fallback + 0xb4);
-            u32 pend_new    = readl(core_fallback + 0x98b4);
-            writel(pend_legacy, core_fallback + 0xb8);
-            writel(pend_new,    core_fallback + 0x98b8);
+            u32 pend_legacy = readl(core_regs + 0xb4);
+            u32 pend_new    = readl(core_regs + 0x98b4);
+            writel(pend_legacy, core_regs + 0xb8);
+            writel(pend_new,    core_regs + 0x98b8);
 
             /* CRITICAL: Enable ISP pipeline connection */
-            writel(1, core_fallback + 0x800);
-            writel(0x1c, core_fallback + 0x804);
-            writel(8, core_fallback + 0x1c);
+            writel(1, core_regs + 0x800);
+            writel(0x1c, core_regs + 0x804);
+            writel(8, core_regs + 0x1c);
+        } else {
+            /* Last resort: Try direct mapping fallback */
+            pr_info("*** ISP CORE IRQ: Core device not available, attempting direct mapping fallback ***\n");
+            void __iomem *core_fallback = ioremap(0x13300000, 0x10000);
+            if (core_fallback) {
+                pr_info("*** ISP CORE IRQ: Direct mapping successful at %p ***\n", core_fallback);
+
+                /* Clear any pending interrupts first */
+                u32 pend_legacy = readl(core_fallback + 0xb4);
+                u32 pend_new    = readl(core_fallback + 0x98b4);
+                writel(pend_legacy, core_fallback + 0xb8);
+                writel(pend_new,    core_fallback + 0x98b8);
+
+                /* CRITICAL: Enable ISP pipeline connection */
+                writel(1, core_fallback + 0x800);
+                writel(0x1c, core_fallback + 0x804);
+                writel(8, core_fallback + 0x1c);
 
             /* CRITICAL: Enable ISP core interrupt generation at hardware level */
             writel(0xffffffff, core_fallback + 0x30);

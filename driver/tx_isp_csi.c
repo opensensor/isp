@@ -34,9 +34,9 @@ static void __iomem *tx_isp_vic_regs = NULL;
 
 u32 vic_read32(u32 reg)
 {
-    /* Use global ISP device VIC registers mapped by subdev probe */
-    if (ourISPdev && ourISPdev->vic_regs) {
-        return readl(ourISPdev->vic_regs + reg);
+    /* Use VIC device registers */
+    if (ourISPdev && ourISPdev->vic_dev && ourISPdev->vic_dev->vic_regs) {
+        return readl(ourISPdev->vic_dev->vic_regs + reg);
     }
     pr_err("vic_read32: No VIC registers available\n");
     return 0;
@@ -44,9 +44,9 @@ u32 vic_read32(u32 reg)
 
 void vic_write32(u32 reg, u32 val)
 {
-    /* Use global ISP device VIC registers mapped by subdev probe */
-    if (ourISPdev && ourISPdev->vic_regs) {
-        writel(val, ourISPdev->vic_regs + reg);
+    /* Use VIC device registers */
+    if (ourISPdev && ourISPdev->vic_dev && ourISPdev->vic_dev->vic_regs) {
+        writel(val, ourISPdev->vic_dev->vic_regs + reg);
     } else {
         pr_err("vic_write32: No VIC registers available\n");
     }
@@ -56,9 +56,9 @@ void vic_write32(u32 reg, u32 val)
 
 u32 csi_read32(u32 reg)
 {
-    /* Use global ISP device CSI registers mapped by subdev probe */
-    if (ourISPdev && ourISPdev->csi_regs) {
-        return readl(ourISPdev->csi_regs + reg);
+    /* Use CSI device registers */
+    if (ourISPdev && ourISPdev->csi_dev && ourISPdev->csi_dev->csi_regs) {
+        return readl(ourISPdev->csi_dev->csi_regs + reg);
     }
     pr_err("csi_read32: No CSI registers available\n");
     return 0;
@@ -66,9 +66,9 @@ u32 csi_read32(u32 reg)
 
 void csi_write32(u32 reg, u32 val)
 {
-    /* Use global ISP device CSI registers mapped by subdev probe */
-    if (ourISPdev && ourISPdev->csi_regs) {
-        writel(val, ourISPdev->csi_regs + reg);
+    /* Use CSI device registers */
+    if (ourISPdev && ourISPdev->csi_dev && ourISPdev->csi_dev->csi_regs) {
+        writel(val, ourISPdev->csi_dev->csi_regs + reg);
     } else {
         pr_err("csi_write32: No CSI registers available\n");
     }
