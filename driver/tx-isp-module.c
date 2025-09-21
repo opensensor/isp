@@ -1488,33 +1488,31 @@ static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev)
 
     pr_info("*** Calling subdev_sensor_ops_ioctl with IOCTL 0x2000000 to create I2C sensor device ***\n");
 
-    /* Find a subdev that has sensor ops to call the IOCTL on */
-    struct tx_isp_subdev *target_subdev = NULL;
-    for (int i = 0; i < ISP_MAX_SUBDEVS; i++) {
-        struct tx_isp_subdev *sd = isp_dev->subdevs[i];
-        if (sd && sd->ops && sd->ops->sensor) {
-            target_subdev = sd;
-            break;
-        }
-    }
+    /* Use Core subdev which has sensor ops that can handle 0x2000000 */
+    struct tx_isp_subdev *core_subdev = isp_dev->subdevs[4]; /* Core is at index 4 */
 
-    if (!target_subdev) {
-        /* If no subdev with sensor ops exists, use CSI subdev which also has sensor ops */
-        target_subdev = isp_dev->subdevs[0]; /* CSI is at index 0 */
-    }
-
-    if (target_subdev && target_subdev->ops && target_subdev->ops->sensor && target_subdev->ops->sensor->ioctl) {
-        pr_info("*** Calling sensor IOCTL 0x2000000 on subdev %p ***\n", target_subdev);
-        ret = target_subdev->ops->sensor->ioctl(target_subdev, 0x2000000, sensor_data);
+    if (core_subdev && core_subdev->ops && core_subdev->ops->sensor && core_subdev->ops->sensor->ioctl) {
+        pr_info("*** Calling sensor IOCTL 0x2000000 on Core subdev %p ***\n", core_subdev);
+        ret = core_subdev->ops->sensor->ioctl(core_subdev, 0x2000000, sensor_data);
 
         if (ret == 0) {
-            pr_info("*** I2C sensor device created successfully via IOCTL ***\n");
+            pr_info("*** I2C sensor device created successfully via Core sensor IOCTL ***\n");
             return 0;
         } else {
-            pr_err("*** Failed to create I2C sensor device via IOCTL: %d ***\n", ret);
+            pr_err("*** Failed to create I2C sensor device via Core sensor IOCTL: %d ***\n", ret);
         }
     } else {
-        pr_err("*** No subdev with sensor IOCTL available for sensor device creation ***\n");
+        pr_err("*** Core subdev sensor IOCTL not available for sensor device creation ***\n");
+        pr_err("*** core_subdev=%p ***\n", core_subdev);
+        if (core_subdev) {
+            pr_err("*** core_subdev->ops=%p ***\n", core_subdev->ops);
+            if (core_subdev->ops) {
+                pr_err("*** core_subdev->ops->sensor=%p ***\n", core_subdev->ops->sensor);
+                if (core_subdev->ops->sensor) {
+                    pr_err("*** core_subdev->ops->sensor->ioctl=%p ***\n", core_subdev->ops->sensor->ioctl);
+                }
+            }
+        }
     }
 
     pr_info("Sensor detection complete - result: %d\n", ret);

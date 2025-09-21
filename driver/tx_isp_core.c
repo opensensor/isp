@@ -781,12 +781,19 @@ static struct tx_isp_subdev_pad_ops core_pad_ops = {
 };
 
 
+/* Core sensor operations - handles main sensor registration */
+static struct tx_isp_subdev_sensor_ops core_sensor_ops = {
+    .ioctl = NULL,  /* Will be set to subdev_sensor_ops_ioctl */
+    .sync_sensor_attr = NULL,
+    .release_all_sensor = NULL
+};
+
 /* Update the core subdev ops to include the core ops */
 struct tx_isp_subdev_ops core_subdev_ops = {
     .core = &core_subdev_core_ops,
     .video = &core_subdev_video_ops,
     .pad = &core_pad_ops,
-    .sensor = NULL,
+    .sensor = &core_sensor_ops,  /* Core handles sensor registration */
     .internal = NULL
 };
 EXPORT_SYMBOL(core_subdev_ops);
@@ -4918,11 +4925,16 @@ int tx_isp_core_device_init(struct tx_isp_core_device *core_dev)
         core_dev->ipu_clk = NULL;
     }
 
+    /* Set up core sensor IOCTL handler for sensor registration */
+    extern long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+    core_sensor_ops.ioctl = subdev_sensor_ops_ioctl;
+
     /* Set state to ready */
     core_dev->state = 2;  /* READY state */
     core_dev->is_initialized = true;
 
     pr_info("*** tx_isp_core_device_init: Core device initialized successfully ***\n");
+    pr_info("*** tx_isp_core_device_init: Core sensor IOCTL handler set for sensor registration ***\n");
     return 0;
 }
 EXPORT_SYMBOL(tx_isp_core_device_init);
