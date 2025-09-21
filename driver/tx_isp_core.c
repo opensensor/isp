@@ -1587,13 +1587,36 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     u32 error_check;
     int i;
 
-    if (!isp_dev || !isp_dev->vic_regs) {
-        pr_debug("ispcore_interrupt_service_routine: Invalid device\n");
+    /* CRITICAL SAFETY: Validate all pointers before any access */
+    if (!isp_dev) {
+        pr_err("*** CRITICAL: ispcore_interrupt_service_routine called with NULL isp_dev! ***\n");
+        return IRQ_NONE;
+    }
+
+    if (!isp_dev->vic_regs) {
+        pr_err("*** CRITICAL: ispcore_interrupt_service_routine called with NULL vic_regs! ***\n");
         return IRQ_NONE;
     }
 
     vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
     if (!vic_dev) {
+        pr_err("*** CRITICAL: ispcore_interrupt_service_routine called with NULL vic_dev! ***\n");
+        return IRQ_NONE;
+    }
+
+    if (!vic_dev->vic_regs) {
+        pr_err("*** CRITICAL: ispcore_interrupt_service_routine called with NULL vic_dev->vic_regs! ***\n");
+        return IRQ_NONE;
+    }
+
+    /* CRITICAL SAFETY: Check core_dev before accessing it */
+    if (!isp_dev->core_dev) {
+        pr_err("*** CRITICAL: ispcore_interrupt_service_routine called with NULL core_dev! ***\n");
+        return IRQ_NONE;
+    }
+
+    if (!isp_dev->core_dev->core_regs) {
+        pr_err("*** CRITICAL: ispcore_interrupt_service_routine called with NULL core_regs! ***\n");
         return IRQ_NONE;
     }
 
