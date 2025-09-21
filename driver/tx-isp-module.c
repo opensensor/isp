@@ -1727,26 +1727,19 @@ struct tx_isp_video_pad {
     int link_flags;
 };
 
-/* Configuration structure for video links - Binary Ninja reference */
-struct tx_isp_link_config {
-    char src_name[16];
-    char dst_name[16];
-    int src_pad;
-    int dst_pad;
-    int flags;
-};
+/* Use tx_isp_link_config from header file - removed duplicate definition */
 
 /* Global link configurations - Binary Ninja reference at 0x7ad50 and configs array */
 static struct tx_isp_link_config link_configs[][2] = {
     /* Config 0 - Basic pipeline */
     {
-        {"tx-isp-csi", "isp-w02", 0, 0, 0x1},
-        {"isp-w02", "tx-isp-vin", 0, 0, 0x1}
+        {{"tx-isp-csi", 0, 0}, {"isp-w02", 0, 0}, 0x1},
+        {{"isp-w02", 0, 0}, {"tx-isp-vin", 0, 0}, 0x1}
     },
     /* Config 1 - Alternative pipeline */
     {
-        {"tx-isp-csi", "tx-isp-vin", 0, 0, 0x1},
-        {"tx-isp-vin", "isp-w02", 0, 0, 0x1}
+        {{"tx-isp-csi", 0, 0}, {"tx-isp-vin", 0, 0}, 0x1},
+        {{"tx-isp-vin", 0, 0}, {"isp-w02", 0, 0}, 0x1}
     }
 };
 
