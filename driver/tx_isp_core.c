@@ -1382,18 +1382,28 @@ int isp_framesource_show(struct seq_file *seq, void *v)
 EXPORT_SYMBOL(isp_framesource_show);
 
 /**
- * tx_isp_get_sensor - Get sensor from correct subdev index
- * Helper function to get sensor from subdev index 3 where it's actually registered
+ * tx_isp_get_sensor - Get sensor from subdev array starting at index 4
+ * Modern hardware supports multiple sensors, so search from index 4 onwards
+ * Subdev array layout: 0=CSI, 1=VIC, 2=VIN, 3=FS, 4+=SENSORS
  */
 struct tx_isp_sensor *tx_isp_get_sensor(void)
 {
     extern struct tx_isp_dev *ourISPdev;
 
-    if (!ourISPdev || !ourISPdev->subdevs[3] || !ourISPdev->subdevs[3]->host_priv) {
+    if (!ourISPdev) {
         return NULL;
     }
 
-    return (struct tx_isp_sensor *)ourISPdev->subdevs[3]->host_priv;
+    /* Search for first available sensor starting at index 4 */
+    for (int i = 4; i < ISP_MAX_SUBDEVS; i++) {
+        struct tx_isp_subdev *sd = ourISPdev->subdevs[i];
+        if (sd && sd->ops && sd->ops->sensor && sd->host_priv) {
+            /* This is a sensor subdev with valid sensor data */
+            return (struct tx_isp_sensor *)sd->host_priv;
+        }
+    }
+
+    return NULL;
 }
 EXPORT_SYMBOL(tx_isp_get_sensor);
 
