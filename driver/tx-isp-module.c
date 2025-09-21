@@ -4293,6 +4293,13 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     
     pr_info("*** vic_sensor_ops_ioctl: subdev=%p, isp_dev=%p, vic_dev=%p ***\n", sd, isp_dev, vic_dev);
     
+    /* Binary Ninja: Handle command 0x2000000 first - sensor registration */
+    if (cmd == 0x2000000) {
+        pr_info("*** vic_sensor_ops_ioctl: SENSOR REGISTRATION cmd=0x2000000 ***\n");
+        /* This is the sensor registration command - should return success */
+        return 0;
+    }
+
     /* Binary Ninja: if (arg2 - 0x200000c u>= 0xd) return 0 */
     if (cmd - 0x200000c >= 0xd) {
         pr_info("vic_sensor_ops_ioctl: Command outside valid range\n");

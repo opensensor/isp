@@ -1,1049 +1,208 @@
-[   18.910245] TX ISP driver initializing with new subdevice management system...
-[   18.910257] *** Using reference driver interrupt-driven frame processing ***
-[   18.910263] *** VIC DEVICE CREATION DEFERRED TO PLATFORM DRIVER PROBE ***
-[   18.910269] *** VIN DEVICE CREATION DEFERRED TO tx_isp_core_probe (after memory mappings) ***
-[   18.910274] *** This fixes the 'ISP core registers not available' error ***
-[   18.910279] *** VIN SUBDEV OPS AND INITIALIZATION DEFERRED TO AUTO-LINK PHASE ***
-[   18.910285] *** CRITICAL: REGISTERING SUBDEV PLATFORM DRIVERS FIRST ***
-[   18.910290] *** TX ISP SUBDEV PLATFORM DRIVERS REGISTRATION ***
-[   18.920297] All ISP subdev platform drivers registered successfully
-[   18.920310] *** SUBDEV PLATFORM DRIVERS REGISTERED - VIC/CSI/VIN/CORE DRIVERS AVAILABLE ***
-[   18.920316] *** CRITICAL: INITIALIZING SUBDEVICE REGISTRY BEFORE MAIN PLATFORM DEVICE ***
-[   18.920321] *** CRITICAL: Registering main platform driver ***
-[   18.922755] *** Main platform driver registered successfully ***
-[   18.922767] *** REFERENCE DRIVER: Subdev platform devices will be registered by tx_isp_create_graph_and_nodes ***
-[   18.925208] *** PROBE: tx_isp_platform_probe CALLED for device tx-isp ***
-[   18.925227] *** PROBE: ISP device allocated successfully: 85f7c000 ***
-[   18.925243] *** PROBE: Platform data: c0678328 ***
-[   18.925249] *** PROBE: Platform data validation passed ***
-[   18.925254] *** REFERENCE DRIVER: Individual subdevices will initialize their own memory regions ***
-[   18.925260] *** PLATFORM DEVICES ALREADY REGISTERED IN INIT - SKIPPING DUPLICATE REGISTRATION ***
-[   18.925265] *** tx_isp_module_init: EXACT Binary Ninja reference implementation ***
-[   18.927705] *** tx_isp_create_graph_and_nodes: EXACT Binary Ninja reference implementation ***
-[   18.927719] *** Registering platform device 0 from platform data ***
-[   18.929869] *** tx_isp_subdev_init: CSI subdev registered at index 0 ***
-[   18.929885] tx_isp_module_init: Module initialized for tx-isp-csi
-[   18.929891] *** tx_isp_subdev_init: Deferring core->init for device tx-isp-csi to prevent hangs ***
-[   18.929897] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
-[   18.929903] *** CSI: Skipping IRQ request - CSI uses register mapping only ***
-[   18.929911] tx_isp_subdev_init: platform_get_resource returned c0678114 for device tx-isp-csi
-[   18.929919] tx_isp_subdev_init: Memory resource found: start=0x10022000, end=0x10022fff, size=0x00001000
-[   18.929928] isp_subdev_init_clks: Initializing 2 clocks
-[   18.929940] CGU_ISP clock enabled at 100MHz
-[   18.929947] ISP clock enabled
-[   18.959165] CPM clock gates configured
-[   18.959179] isp_subdev_init_clks: Successfully initialized 2 clocks
-[   18.959187] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-csi' to ourISPdev ***
-[   18.959193] *** DEBUG: Device name comparison - checking 'tx-isp-csi' ***
-[   18.959198] *** DEBUG: About to check device name matches ***
-[   18.959205] *** CSI BASIC REGISTERS SET: b0022000 (from tx_isp_subdev_init) ***
-[   18.959212] *** LINKED CSI device: 85207c00, regs: b0022000 ***
-[   18.959219] *** CSI PROBE: Using register mapping from tx_isp_subdev_init: b0022000 ***
-[   18.959225] *** CSI PROBE: Device linking handled automatically by tx_isp_subdev_init ***
-[   18.959247] *** Platform device 0 (tx-isp-csi) registered successfully ***
-[   18.959255] *** Registering platform device 1 from platform data ***
-[   18.959575] *** VIC PROBE: IRQ numbers initialized to 38 ***
-[   18.959590] *** VIC PROBE: Primary VIC registers mapped at 0x133e0000 -> b33e0000 ***
-[   18.959597] *** VIC PROBE: Secondary VIC registers mapped at 0x10023000 -> b0023000 ***
-[   18.959602] *** VIC PROBE: IRQ handler pointers set to NULL (reference driver uses main dispatcher) ***
-[   18.959608] *** EMERGENCY: VIC buffer management DISABLED to prevent kernel panic ***
-[   18.959613] *** VIC will operate in minimal mode without complex buffer operations ***
-[   18.959619] *** EMERGENCY: VIC basic initialization complete - complex buffer management SKIPPED ***
-[   18.959626] *** VIC PROBE: Initialized default dimensions 1920x1080 and critical fields ***
-[   18.959632] *** VIC PROBE: Stored vic_dev pointer 82008000 in subdev private data ***
-[   18.959637] *** VIC PROBE: Callback structure setup deferred - avoiding memory corruption ***
-[   18.959643] *** tx_isp_subdev_init: VIC device linked to main ISP device ***
-[   18.959649] *** tx_isp_subdev_init: VIC subdev registered at index 1 ***
-[   18.959655] *** tx_isp_subdev_init: Interrupt registration deferred until after module init ***
-[   18.959660] *** tx_isp_subdev_init: VIC device linked and registered at index 1 ***
-[   18.959667] tx_isp_module_init: Module initialized for isp-w02
-[   18.959673] *** tx_isp_subdev_init: Deferring core->init for device isp-w02 to prevent hangs ***
-[   18.959678] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
-[   18.959686] *** tx_isp_request_irq: Using main ISP device as dev_id for IRQ 38 (device: isp-w02) ***
-[   18.962040] *** tx_isp_disable_irq: EXACT Binary Ninja - disabling IRQ 38 ***
-[   18.962053] *** tx_isp_disable_irq: IRQ 38 DISABLED ***
-[   18.962060] *** tx_isp_request_irq: IRQ 38 registered successfully for isp-w02 ***
-[   18.962068] tx_isp_subdev_init: platform_get_resource returned c0678214 for device isp-w02
-[   18.962076] tx_isp_subdev_init: Memory resource found: start=0x133e0000, end=0x133effff, size=0x00010000
-[   18.962087] isp_subdev_init_clks: Initializing 2 clocks
-[   18.962096] CGU_ISP clock enabled at 100MHz
-[   18.962103] ISP clock enabled
-[   18.989185] CPM clock gates configured
-[   18.989197] isp_subdev_init_clks: Successfully initialized 2 clocks
-[   18.989205] *** tx_isp_subdev_auto_link: Auto-linking device 'isp-w02' to ourISPdev ***
-[   18.989210] *** DEBUG: Device name comparison - checking 'isp-w02' ***
-[   18.989215] *** DEBUG: About to check device name matches ***
-[   18.989223] *** MAPPED secondary VIC registers: b0023000 (0x10023000) ***
-[   18.989230] *** LINKED VIC device: 82008000, primary_regs: b33e0000, secondary_regs: b0023000 ***
-[   18.989235] *** VIC AUTO-LINK: Registers are mapped, registering interrupt handler ***
-[   18.989243] *** VIC PROBE: Device linking handled automatically by tx_isp_subdev_init ***
-[   18.989264] *** Platform device 1 (isp-w02) registered successfully ***
-[   18.989271] *** Registering platform device 2 from platform data ***
-[   18.989583] tx_isp_module_init: Module initialized for tx-isp-vin
-[   18.989596] *** tx_isp_subdev_init: Deferring core->init for device tx-isp-vin to prevent hangs ***
-[   18.989602] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
-[   18.989608] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-vin' to ourISPdev ***
-[   18.989614] *** DEBUG: Device name comparison - checking 'tx-isp-vin' ***
-[   18.989619] *** DEBUG: About to check device name matches ***
-[   18.989625] *** DEBUG: VIN device name matched! Setting up VIN device ***
-[   18.989631] *** LINKED VIN device: 82008400 ***
-[   18.989639] *** VIN SUBDEV OPS CONFIGURED: core=c06794b4, video=c06794a8, s_stream=c065c1dc ***
-[   18.989645] *** REGISTERED VIN SUBDEV AT INDEX 2 WITH VIDEO OPS ***
-[   18.989650] *** VIN INITIALIZATION DEFERRED TO SENSOR REGISTRATION PHASE ***
-[   18.989656] *** VIN PROBE: Device linking handled automatically by tx_isp_subdev_init ***
-[   18.989676] *** Platform device 2 (tx-isp-vin) registered successfully ***
-[   18.989683] *** Registering platform device 3 from platform data ***
-[   18.992273] *** Platform device 3 (tx-isp-fs) registered successfully ***
-[   18.992285] *** Registering platform device 4 from platform data ***
-[   18.994774] *** tx_isp_core_probe: NEW ARCHITECTURE - Creating separate core device ***
-[   18.994787] *** tx_isp_create_core_device: Creating ISP core device ***
-[   18.994797] *** tx_isp_create_core_device: Core device created successfully: 82008800 ***
-[   18.994803] *** tx_isp_subdev_init: Core ISP subdev registration handled by core device ***
-[   18.994811] tx_isp_module_init: Module initialized for tx-isp-core
-[   18.994817] *** tx_isp_subdev_init: Deferring core->init for device tx-isp-core to prevent hangs ***
-[   18.994823] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
-[   18.994831] *** tx_isp_request_irq: Using main ISP device as dev_id for IRQ 37 (device: tx-isp-core) ***
-[   18.997103] *** tx_isp_disable_irq: EXACT Binary Ninja - disabling IRQ 37 ***
-[   18.997116] *** tx_isp_disable_irq: IRQ 37 DISABLED ***
-[   18.997123] *** tx_isp_request_irq: IRQ 37 registered successfully for tx-isp-core ***
-[   18.997131] tx_isp_subdev_init: platform_get_resource returned c0677dc4 for device tx-isp-core
-[   18.997139] tx_isp_subdev_init: Memory resource found: start=0x13300000, end=0x1330ffff, size=0x00010000
-[   18.997149] isp_subdev_init_clks: Initializing 3 clocks
-[   18.997159] CGU_ISP clock enabled at 100MHz
-[   18.997166] ISP clock enabled
-[   18.997173] CSI clock enabled
-[   19.019219] CPM clock gates configured
-[   19.019231] isp_subdev_init_clks: Successfully initialized 3 clocks
-[   19.019239] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-core' to ourISPdev ***
-[   19.019245] *** DEBUG: Device name comparison - checking 'tx-isp-core' ***
-[   19.019250] *** DEBUG: About to check device name matches ***
-[   19.019257] *** CORE device not yet linked - regs will be mapped later ***
-[   19.019263] *** tx_isp_core_probe: Core subdev initialized successfully ***
-[   19.019270] *** tx_isp_core_device_init: Initializing core device: 82008800 ***
-[   19.019283] *** tx_isp_core_device_init: Core device initialized successfully ***
-[   19.019291] *** tx_isp_link_core_device: Linking core device 82008800 to ISP device 85f7c000 ***
-[   19.019296] *** tx_isp_link_core_device: Core device linked successfully ***
-[   19.019302] *** Core subdev registered at index 4: 82008800 ***
-[   19.019316] *** tx_isp_core_probe: VIC device creation deferred to platform driver system ***
-[   19.019322] *** tx_isp_core_probe: Platform drivers will call tx_isp_subdev_init for proper initialization ***
-[   19.019327] *** tx_isp_core_probe: Calling sensor_early_init ***
-[   19.019333] sensor_early_init: Preparing sensor infrastructure
-[   19.019338] *** tx_isp_core_probe: Core device setup complete ***
-[   19.019343] ***   - Core device: 82008800 ***
-[   19.019349] ***   - Channel count: 6 ***
-[   19.019355] ***   - Linked to ISP device: 85f7c000 ***
-[   19.019359] *** tx_isp_core_probe: Initializing core tuning system ***
-[   19.019383] *** tx_isp_core_probe: Tuning init SUCCESS ***
-[   19.019389] *** tx_isp_core_probe: SUCCESS - Core device fully initialized ***
-[   19.019394] ***   - Core device: 82008800 ***
-[   19.019399] ***   - Tuning device: 85f48000 ***
-[   19.019405] *** tx_isp_core_probe: Creating frame channel devices ***
-[   19.019410] *** tx_isp_create_framechan_devices: Creating frame channel devices ***
-[   19.019750] *** Created frame channel device: /dev/framechan0 (major=10, minor=54) ***
-[   19.022356] *** Created frame channel device: /dev/framechan1 (major=10, minor=53) ***
-[   19.024875] *** Created frame channel device: /dev/framechan2 (major=10, minor=52) ***
-[   19.027402] *** Created frame channel device: /dev/framechan3 (major=10, minor=51) ***
-[   19.027412] *** tx_isp_create_framechan_devices: All frame channel devices created ***
-[   19.027418] *** tx_isp_core_probe: Frame channel devices created successfully ***
-[   19.027423] *** tx_isp_core_probe: Creating ISP M0 tuning device node ***
-[   19.027429] tisp_code_create_tuning_node: Creating ISP M0 tuning device node
-[   19.027437] tisp_code_create_tuning_node: Allocated dynamic major 251
-[   19.032595] *** ISP M0 TUNING DEVICE CREATED: /dev/isp-m0 (major=251, minor=0) ***
-[   19.032606] *** tx_isp_core_probe: ISP M0 tuning device node created successfully ***
-[   19.032612] *** tx_isp_core_probe: Core probe completed successfully ***
-[   19.032633] *** Platform device 4 (tx-isp-core) registered successfully ***
-[   19.032639] *** tx_isp_create_graph_and_nodes: Binary Ninja reference implementation complete ***
-[   19.032645] *** tx_isp_module_init: Binary Ninja reference implementation complete ***
-[   19.032651] *** PROBE: Binary Ninja reference implementation complete ***
-[   19.032661] *** SUCCESS: ourISPdev allocated by probe function: 85f7c000 ***
-[   19.032666] *** Following reference driver: IRQ registration handled by tx_isp_request_irq ***
-[   19.032672] TX ISP driver initialized successfully - probe function will handle device setup
-root@ing-wyze-cam3-a000 ~# prudynt &
-root@ing-wyze-cam3-a000 ~# [INFO:Config.cpp]: Loaded configuration from /etc/prudynt.cfg
-[INFO:main.cpp]: PRUDYNT-T Next-Gen Video Daemon: Aug 28 2025 05:46:40_f5514583
-[INFO:main.cpp]: Starting Prudynt Video Server.
-[INFO:IMPSystem.cpp]: LIBIMP Version IMP-1.1.6
-[INFO:IMPSystem.cpp]: SYSUTILS Version: SYSUTILS-1.1.6
-[INFO:IMPSystem.cpp]: CPU Information: T31-X
-[INFO:IMPSystem.cpp]: Sensor: gc2053
-root@ing-wyze-cam3-a000 ~# dmesg 
-[   23.242327] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19248
-[   23.242332] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.242338] subdev_sensor_ops_enum_input: No sensor found at index 19248, returning empty name
-[   23.242344] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19248
-[   23.242350] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.242356] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.242362] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.242368] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19249
-[   23.242373] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.242379] subdev_sensor_ops_enum_input: No sensor found at index 19249, returning empty name
-[   23.242385] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19249
-[   23.242390] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.242397] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.242402] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.242408] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19250
-[   23.242414] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.242420] subdev_sensor_ops_enum_input: No sensor found at index 19250, returning empty name
-[   23.242426] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19250
-[   23.242431] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.242438] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.242443] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.242449] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19251
-[   23.242454] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.242460] subdev_sensor_ops_enum_input: No sensor found at index 19251, returning empty name
-[   23.242466] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19251
-[   23.242472] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.242478] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.242484] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.242490] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19252
-[   23.242495] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.242501] subdev_sensor_ops_enum_input: No sensor found at index 19252, returning empty name
-[   23.242507] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19252
-[   23.242512] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.242519] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.242524] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.242530] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19253
-[   23.242535] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.242542] subdev_sensor_ops_enum_input: No sensor found at index 19253, returning empty name
-[   23.242548] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19253
-[   23.242553] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.242560] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.242565] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.242571] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19254
-[   23.242576] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.242582] subdev_sensor_ops_enum_input: No sensor found at index 19254, returning empty name
-[   23.242588] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19254
-[   23.242594] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.242600] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.242606] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.242612] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19255
-[   23.242616] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.242622] subdev_sensor_ops_enum_input: No sensor found at index 19255, returning empty name
-[   23.242629] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19255
-[   23.242634] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.242641] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.242646] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.242652] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19256
-[   23.242657] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.242664] subdev_sensor_ops_enum_input: No sensor found at index 19256, returning empty name
-[   23.242670] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19256
-[   23.242675] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.242682] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.242687] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.242693] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19257
-[   23.242698] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.242704] subdev_sensor_ops_enum_input: No sensor found at index 19257, returning empty name
-[   23.242710] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19257
-[   23.242716] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.242722] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.242728] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.242734] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19258
-[   23.242738] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.242745] subdev_sensor_ops_enum_input: No sensor found at index 19258, returning empty name
-[   23.242751] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19258
-[   23.242756] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.242763] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.242768] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.242774] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19259
-[   23.242779] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.242785] subdev_sensor_ops_enum_input: No sensor found at index 19259, returning empty name
-[   23.242792] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19259
-[   23.242797] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.242804] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.242809] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.242815] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19260
-[   23.242820] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.242826] subdev_sensor_ops_enum_input: No sensor found at index 19260, returning empty name
-[   23.242832] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19260
-[   23.242838] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.242844] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.242850] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.242856] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19261
-[   23.242861] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.242867] subdev_sensor_ops_enum_input: No sensor found at index 19261, returning empty name
-[   23.242873] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19261
-[   23.242878] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.242885] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.242890] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.242896] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19262
-[   23.242902] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.242908] subdev_sensor_ops_enum_input: No sensor found at index 19262, returning empty name
-[   23.242914] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19262
-[   23.242919] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.242926] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.242931] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.242937] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19263
-[   23.242942] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.242948] subdev_sensor_ops_enum_input: No sensor found at index 19263, returning empty name
-[   23.242954] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19263
-[   23.242960] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.242966] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.242972] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.242978] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19264
-[   23.242983] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.242989] subdev_sensor_ops_enum_input: No sensor found at index 19264, returning empty name
-[   23.242996] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19264
-[   23.243001] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243008] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243013] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243018] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19265
-[   23.243024] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.243030] subdev_sensor_ops_enum_input: No sensor found at index 19265, returning empty name
-[   23.243036] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19265
-[   23.243041] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243048] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243053] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243059] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19266
-[   23.243064] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.243070] subdev_sensor_ops_enum_input: No sensor found at index 19266, returning empty name
-[   23.243077] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19266
-[   23.243082] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243089] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243094] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243100] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19267
-[   23.243105] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.243111] subdev_sensor_ops_enum_input: No sensor found at index 19267, returning empty name
-[   23.243118] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19267
-[   23.243123] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243130] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243135] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243140] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19268
-[   23.243146] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.243152] subdev_sensor_ops_enum_input: No sensor found at index 19268, returning empty name
-[   23.243158] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19268
-[   23.243163] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243170] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243176] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243181] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19269
-[   23.243186] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.243192] subdev_sensor_ops_enum_input: No sensor found at index 19269, returning empty name
-[   23.243199] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19269
-[   23.243204] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243211] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243216] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243222] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19270
-[   23.243227] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.243233] subdev_sensor_ops_enum_input: No sensor found at index 19270, returning empty name
-[   23.243240] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19270
-[   23.243244] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243251] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243256] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243262] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19271
-[   23.243268] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.243274] subdev_sensor_ops_enum_input: No sensor found at index 19271, returning empty name
-[   23.243280] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19271
-[   23.243285] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243292] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243297] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243303] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19272
-[   23.243308] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.243314] subdev_sensor_ops_enum_input: No sensor found at index 19272, returning empty name
-[   23.243320] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19272
-[   23.243326] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243332] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243338] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243344] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19273
-[   23.243349] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.243355] subdev_sensor_ops_enum_input: No sensor found at index 19273, returning empty name
-[   23.243362] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19273
-[   23.243366] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243374] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243378] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243384] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19274
-[   23.243390] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.243396] subdev_sensor_ops_enum_input: No sensor found at index 19274, returning empty name
-[   23.243402] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19274
-[   23.243408] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243414] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243420] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243425] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19275
-[   23.243430] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.243436] subdev_sensor_ops_enum_input: No sensor found at index 19275, returning empty name
-[   23.243443] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19275
-[   23.243448] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243455] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243460] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243466] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19276
-[   23.243471] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.243477] subdev_sensor_ops_enum_input: No sensor found at index 19276, returning empty name
-[   23.243484] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19276
-[   23.243488] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243496] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243501] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243506] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19277
-[   23.243512] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.243518] subdev_sensor_ops_enum_input: No sensor found at index 19277, returning empty name
-[   23.243524] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19277
-[   23.243530] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243536] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243542] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243547] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19278
-[   23.243552] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.243558] subdev_sensor_ops_enum_input: No sensor found at index 19278, returning empty name
-[   23.243565] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19278
-[   23.243570] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243577] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243582] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243588] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19279
-[   23.243593] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.243599] subdev_sensor_ops_enum_input: No sensor found at index 19279, returning empty name
-[   23.243606] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19279
-[   23.243611] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243618] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243623] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243629] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19280
-[   23.243634] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.243640] subdev_sensor_ops_enum_input: No sensor found at index 19280, returning empty name
-[   23.243646] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19280
-[   23.243652] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243658] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243664] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243670] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19281
-[   23.243674] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.243680] subdev_sensor_ops_enum_input: No sensor found at index 19281, returning empty name
-[   23.243687] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19281
-[   23.243692] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243699] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243704] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243710] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19282
-[   23.243715] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.243721] subdev_sensor_ops_enum_input: No sensor found at index 19282, returning empty name
-[   23.243728] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19282
-[   23.243733] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243740] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243745] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243751] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19283
-[   23.243756] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.243762] subdev_sensor_ops_enum_input: No sensor found at index 19283, returning empty name
-[   23.243768] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19283
-[   23.243774] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243780] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243786] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243792] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19284
-[   23.243796] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.243802] subdev_sensor_ops_enum_input: No sensor found at index 19284, returning empty name
-[   23.243809] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19284
-[   23.243814] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243821] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243826] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243832] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19285
-[   23.243837] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.243843] subdev_sensor_ops_enum_input: No sensor found at index 19285, returning empty name
-[   23.243850] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19285
-[   23.243855] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243862] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243867] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243872] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19286
-[   23.243878] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.243884] subdev_sensor_ops_enum_input: No sensor found at index 19286, returning empty name
-[   23.243890] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19286
-[   23.243896] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243902] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243907] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243913] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19287
-[   23.243918] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.243924] subdev_sensor_ops_enum_input: No sensor found at index 19287, returning empty name
-[   23.243931] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19287
-[   23.243936] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243943] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243948] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243954] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19288
-[   23.243959] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.243965] subdev_sensor_ops_enum_input: No sensor found at index 19288, returning empty name
-[   23.243972] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19288
-[   23.243977] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.243984] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.243989] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.243994] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19289
-[   23.244000] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244006] subdev_sensor_ops_enum_input: No sensor found at index 19289, returning empty name
-[   23.244012] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19289
-[   23.244018] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.244024] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.244030] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.244035] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19290
-[   23.244040] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244046] subdev_sensor_ops_enum_input: No sensor found at index 19290, returning empty name
-[   23.244053] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19290
-[   23.244058] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.244065] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.244070] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.244076] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19291
-[   23.244081] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244087] subdev_sensor_ops_enum_input: No sensor found at index 19291, returning empty name
-[   23.244094] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19291
-[   23.244099] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.244106] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.244110] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.244116] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19292
-[   23.244122] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244128] subdev_sensor_ops_enum_input: No sensor found at index 19292, returning empty name
-[   23.244134] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19292
-[   23.244139] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.244146] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.244151] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.244157] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19293
-[   23.244162] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244168] subdev_sensor_ops_enum_input: No sensor found at index 19293, returning empty name
-[   23.244174] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19293
-[   23.244180] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.244186] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.244192] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.244198] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19294
-[   23.244203] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244209] subdev_sensor_ops_enum_input: No sensor found at index 19294, returning empty name
-[   23.244215] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19294
-[   23.244220] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.244227] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.244232] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.244238] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19295
-[   23.244244] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244250] subdev_sensor_ops_enum_input: No sensor found at index 19295, returning empty name
-[   23.244256] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19295
-[   23.244261] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.244268] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.244273] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.244279] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19296
-[   23.244284] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244290] subdev_sensor_ops_enum_input: No sensor found at index 19296, returning empty name
-[   23.244297] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19296
-[   23.244302] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.244309] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.244314] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.244320] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19297
-[   23.244325] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244331] subdev_sensor_ops_enum_input: No sensor found at index 19297, returning empty name
-[   23.244338] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19297
-[   23.244342] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.244350] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.244354] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.244360] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19298
-[   23.244366] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244372] subdev_sensor_ops_enum_input: No sensor found at index 19298, returning empty name
-[   23.244378] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19298
-[   23.244383] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.244390] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.244395] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.244401] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19299
-[   23.244406] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244412] subdev_sensor_ops_enum_input: No sensor found at index 19299, returning empty name
-[   23.244418] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19299
-[   23.244424] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.244430] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.244436] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.244442] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19300
-[   23.244446] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244453] subdev_sensor_ops_enum_input: No sensor found at index 19300, returning empty name
-[   23.244459] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19300
-[   23.244464] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.244471] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.244476] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.244482] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19301
-[   23.244487] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244494] subdev_sensor_ops_enum_input: No sensor found at index 19301, returning empty name
-[   23.244500] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19301
-[   23.244505] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.244512] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.244517] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.244523] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19302
-[   23.244528] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244534] subdev_sensor_ops_enum_input: No sensor found at index 19302, returning empty name
-[   23.244540] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19302
-[   23.244546] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.244552] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.244558] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.244564] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19303
-[   23.244568] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244574] subdev_sensor_ops_enum_input: No sensor found at index 19303, returning empty name
-[   23.244581] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19303
-[   23.244586] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.244593] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.244598] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.244604] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19304
-[   23.244609] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244615] subdev_sensor_ops_enum_input: No sensor found at index 19304, returning empty name
-[   23.244622] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19304
-[   23.244627] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.244634] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.244639] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.244644] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19305
-[   23.244650] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244656] subdev_sensor_ops_enum_input: No sensor found at index 19305, returning empty name
-[   23.244662] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19305
-[   23.244668] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.244674] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.244680] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.244685] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19306
-[   23.244690] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244696] subdev_sensor_ops_enum_input: No sensor found at index 19306, returning empty name
-[   23.244703] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19306
-[   23.244708] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.244715] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.244720] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.244726] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19307
-[   23.244731] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244737] subdev_sensor_ops_enum_input: No sensor found at index 19307, returning empty name
-[   23.244744] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19307
-[   23.244749] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.244756] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.244761] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.244766] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19308
-[   23.244772] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244778] subdev_sensor_ops_enum_input: No sensor found at index 19308, returning empty name
-[   23.244784] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19308
-[   23.244790] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.244796] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.244802] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.244807] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19309
-[   23.244812] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244818] subdev_sensor_ops_enum_input: No sensor found at index 19309, returning empty name
-[   23.244825] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19309
-[   23.244830] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.244837] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.244842] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.244848] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19310
-[   23.244853] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244859] subdev_sensor_ops_enum_input: No sensor found at index 19310, returning empty name
-[   23.244866] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19310
-[   23.244871] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.244878] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.244883] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.244888] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19311
-[   23.244894] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244900] subdev_sensor_ops_enum_input: No sensor found at index 19311, returning empty name
-[   23.244906] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19311
-[   23.244912] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.244918] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.244924] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.244929] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19312
-[   23.244934] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244940] subdev_sensor_ops_enum_input: No sensor found at index 19312, returning empty name
-[   23.244947] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19312
-[   23.244952] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.244959] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.244964] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.244970] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19313
-[   23.244975] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.244981] subdev_sensor_ops_enum_input: No sensor found at index 19313, returning empty name
-[   23.244988] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19313
-[   23.244993] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245000] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245005] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245010] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19314
-[   23.245016] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245022] subdev_sensor_ops_enum_input: No sensor found at index 19314, returning empty name
-[   23.245028] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19314
-[   23.245034] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245040] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245046] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245051] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19315
-[   23.245056] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245062] subdev_sensor_ops_enum_input: No sensor found at index 19315, returning empty name
-[   23.245069] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19315
-[   23.245074] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245081] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245086] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245092] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19316
-[   23.245097] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245103] subdev_sensor_ops_enum_input: No sensor found at index 19316, returning empty name
-[   23.245110] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19316
-[   23.245115] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245122] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245126] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245132] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19317
-[   23.245138] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245144] subdev_sensor_ops_enum_input: No sensor found at index 19317, returning empty name
-[   23.245150] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19317
-[   23.245155] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245162] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245167] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245173] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19318
-[   23.245178] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245184] subdev_sensor_ops_enum_input: No sensor found at index 19318, returning empty name
-[   23.245191] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19318
-[   23.245196] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245203] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245208] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245214] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19319
-[   23.245219] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245225] subdev_sensor_ops_enum_input: No sensor found at index 19319, returning empty name
-[   23.245232] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19319
-[   23.245236] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245244] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245249] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245255] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19320
-[   23.245260] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245266] subdev_sensor_ops_enum_input: No sensor found at index 19320, returning empty name
-[   23.245272] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19320
-[   23.245278] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245284] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245290] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245296] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19321
-[   23.245300] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245306] subdev_sensor_ops_enum_input: No sensor found at index 19321, returning empty name
-[   23.245313] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19321
-[   23.245318] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245325] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245330] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245336] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19322
-[   23.245341] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245347] subdev_sensor_ops_enum_input: No sensor found at index 19322, returning empty name
-[   23.245354] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19322
-[   23.245359] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245366] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245370] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245376] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19323
-[   23.245382] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245388] subdev_sensor_ops_enum_input: No sensor found at index 19323, returning empty name
-[   23.245394] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19323
-[   23.245399] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245406] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245411] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245417] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19324
-[   23.245422] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245428] subdev_sensor_ops_enum_input: No sensor found at index 19324, returning empty name
-[   23.245435] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19324
-[   23.245440] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245446] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245452] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245458] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19325
-[   23.245463] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245469] subdev_sensor_ops_enum_input: No sensor found at index 19325, returning empty name
-[   23.245475] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19325
-[   23.245480] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245487] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245492] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245498] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19326
-[   23.245504] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245510] subdev_sensor_ops_enum_input: No sensor found at index 19326, returning empty name
-[   23.245516] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19326
-[   23.245521] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245528] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245533] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245539] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19327
-[   23.245544] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245550] subdev_sensor_ops_enum_input: No sensor found at index 19327, returning empty name
-[   23.245557] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19327
-[   23.245562] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245569] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245574] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245580] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19328
-[   23.245585] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245591] subdev_sensor_ops_enum_input: No sensor found at index 19328, returning empty name
-[   23.245598] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19328
-[   23.245603] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245610] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245614] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245620] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19329
-[   23.245626] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245632] subdev_sensor_ops_enum_input: No sensor found at index 19329, returning empty name
-[   23.245638] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19329
-[   23.245643] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245650] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245655] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245661] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19330
-[   23.245666] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245672] subdev_sensor_ops_enum_input: No sensor found at index 19330, returning empty name
-[   23.245679] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19330
-[   23.245684] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245691] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245696] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245702] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19331
-[   23.245707] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245713] subdev_sensor_ops_enum_input: No sensor found at index 19331, returning empty name
-[   23.245719] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19331
-[   23.245724] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245731] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245736] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245742] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19332
-[   23.245747] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245754] subdev_sensor_ops_enum_input: No sensor found at index 19332, returning empty name
-[   23.245760] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19332
-[   23.245765] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245772] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245777] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245783] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19333
-[   23.245788] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245794] subdev_sensor_ops_enum_input: No sensor found at index 19333, returning empty name
-[   23.245800] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19333
-[   23.245806] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245812] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245818] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245824] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19334
-[   23.245828] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245835] subdev_sensor_ops_enum_input: No sensor found at index 19334, returning empty name
-[   23.245841] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19334
-[   23.245846] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245853] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245858] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245864] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19335
-[   23.245869] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245876] subdev_sensor_ops_enum_input: No sensor found at index 19335, returning empty name
-[   23.245882] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19335
-[   23.245887] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245894] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245899] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245905] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19336
-[   23.245910] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245916] subdev_sensor_ops_enum_input: No sensor found at index 19336, returning empty name
-[   23.245922] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19336
-[   23.245928] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245934] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245940] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245946] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19337
-[   23.245950] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245956] subdev_sensor_ops_enum_input: No sensor found at index 19337, returning empty name
-[   23.245963] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19337
-[   23.245968] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.245975] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.245980] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.245986] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19338
-[   23.245991] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.245998] subdev_sensor_ops_enum_input: No sensor found at index 19338, returning empty name
-[   23.246004] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19338
-[   23.246009] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246016] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246021] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246027] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19339
-[   23.246032] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.246038] subdev_sensor_ops_enum_input: No sensor found at index 19339, returning empty name
-[   23.246044] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19339
-[   23.246050] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246056] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246062] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246068] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19340
-[   23.246072] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.246078] subdev_sensor_ops_enum_input: No sensor found at index 19340, returning empty name
-[   23.246085] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19340
-[   23.246090] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246097] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246102] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246108] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19341
-[   23.246113] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.246119] subdev_sensor_ops_enum_input: No sensor found at index 19341, returning empty name
-[   23.246126] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19341
-[   23.246131] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246138] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246142] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246148] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19342
-[   23.246154] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.246160] subdev_sensor_ops_enum_input: No sensor found at index 19342, returning empty name
-[   23.246166] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19342
-[   23.246171] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246178] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246183] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246189] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19343
-[   23.246194] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.246200] subdev_sensor_ops_enum_input: No sensor found at index 19343, returning empty name
-[   23.246206] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19343
-[   23.246212] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246218] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246224] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246230] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19344
-[   23.246234] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.246240] subdev_sensor_ops_enum_input: No sensor found at index 19344, returning empty name
-[   23.246247] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19344
-[   23.246252] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246259] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246264] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246270] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19345
-[   23.246275] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.246281] subdev_sensor_ops_enum_input: No sensor found at index 19345, returning empty name
-[   23.246288] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19345
-[   23.246293] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246300] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246304] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246310] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19346
-[   23.246316] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.246322] subdev_sensor_ops_enum_input: No sensor found at index 19346, returning empty name
-[   23.246328] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19346
-[   23.246333] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246340] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246345] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246351] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19347
-[   23.246356] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.246362] subdev_sensor_ops_enum_input: No sensor found at index 19347, returning empty name
-[   23.246368] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19347
-[   23.246374] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246380] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246386] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246392] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19348
-[   23.246396] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.246402] subdev_sensor_ops_enum_input: No sensor found at index 19348, returning empty name
-[   23.246409] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19348
-[   23.246414] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246421] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246426] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246432] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19349
-[   23.246437] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.246443] subdev_sensor_ops_enum_input: No sensor found at index 19349, returning empty name
-[   23.246450] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19349
-[   23.246455] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246462] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246466] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246472] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19350
-[   23.246478] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.246484] subdev_sensor_ops_enum_input: No sensor found at index 19350, returning empty name
-[   23.246490] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19350
-[   23.246495] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246502] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246507] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246513] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19351
-[   23.246518] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.246524] subdev_sensor_ops_enum_input: No sensor found at index 19351, returning empty name
-[   23.246530] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19351
-[   23.246536] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246542] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246548] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246554] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19352
-[   23.246558] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.246564] subdev_sensor_ops_enum_input: No sensor found at index 19352, returning empty name
-[   23.246571] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19352
-[   23.246576] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246583] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246588] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246594] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19353
-[   23.246599] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.246605] subdev_sensor_ops_enum_input: No sensor found at index 19353, returning empty name
-[   23.246612] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19353
-[   23.246616] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246624] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246628] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246634] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19354
-[   23.246640] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.246646] subdev_sensor_ops_enum_input: No sensor found at index 19354, returning empty name
-[   23.246652] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19354
-[   23.246657] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246664] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246669] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246675] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19355
-[   23.246680] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.246686] subdev_sensor_ops_enum_input: No sensor found at index 19355, returning empty name
-[   23.246692] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19355
-[   23.246698] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246704] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246710] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246716] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19356
-[   23.246720] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.246726] subdev_sensor_ops_enum_input: No sensor found at index 19356, returning empty name
-[   23.246733] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19356
-[   23.246738] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246745] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246750] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246756] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19357
-[   23.246761] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.246767] subdev_sensor_ops_enum_input: No sensor found at index 19357, returning empty name
-[   23.246774] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19357
-[   23.246778] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246786] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246790] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246796] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19358
-[   23.246802] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.246808] subdev_sensor_ops_enum_input: No sensor found at index 19358, returning empty name
-[   23.246814] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19358
-[   23.246819] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246826] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246831] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246837] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19359
-[   23.246842] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.246848] subdev_sensor_ops_enum_input: No sensor found at index 19359, returning empty name
-[   23.246854] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19359
-[   23.246860] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246866] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246872] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246878] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19360
-[   23.246882] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.246888] subdev_sensor_ops_enum_input: No sensor found at index 19360, returning empty name
-[   23.246895] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19360
-[   23.246900] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246907] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246912] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246918] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19361
-[   23.246923] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.246929] subdev_sensor_ops_enum_input: No sensor found at index 19361, returning empty name
-[   23.246936] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19361
-[   23.246940] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246948] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246952] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246958] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19362
-[   23.246964] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.246970] subdev_sensor_ops_enum_input: No sensor found at index 19362, returning empty name
-[   23.246976] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19362
-[   23.246981] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.246988] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.246993] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.246999] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19363
-[   23.247004] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.247010] subdev_sensor_ops_enum_input: No sensor found at index 19363, returning empty name
-[   23.247016] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19363
-[   23.247022] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.247028] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.247034] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.247040] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19364
-[   23.247044] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.247050] subdev_sensor_ops_enum_input: No sensor found at index 19364, returning empty name
-[   23.247057] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19364
-[   23.247062] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.247069] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.247074] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.247080] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19365
-[   23.247085] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.247091] subdev_sensor_ops_enum_input: No sensor found at index 19365, returning empty name
-[   23.247098] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19365
-[   23.247102] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.247110] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.247114] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.247120] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19366
-[   23.247126] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.247132] subdev_sensor_ops_enum_input: No sensor found at index 19366, returning empty name
-[   23.247138] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19366
-[   23.247143] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.247150] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.247155] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.247161] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19367
-[   23.247166] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.247172] subdev_sensor_ops_enum_input: No sensor found at index 19367, returning empty name
-[   23.247178] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19367
-[   23.247184] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.247190] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.247196] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.247202] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19368
-[   23.247206] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.247212] subdev_sensor_ops_enum_input: No sensor found at index 19368, returning empty name
-[   23.247219] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19368
-[   23.247224] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.247231] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.247236] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.247242] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19369
-[   23.247247] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.247253] subdev_sensor_ops_enum_input: No sensor found at index 19369, returning empty name
-[   23.247260] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19369
-[   23.247264] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.247272] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.247276] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.247282] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19370
-[   23.247288] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.247294] subdev_sensor_ops_enum_input: No sensor found at index 19370, returning empty name
-[   23.247300] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19370
-[   23.247305] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.247312] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.247317] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.247323] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19371
-[   23.247328] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.247334] subdev_sensor_ops_enum_input: No sensor found at index 19371, returning empty name
-[   23.247340] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19371
-[   23.247346] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.247352] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.247358] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.247364] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19372
-[   23.247368] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.247374] subdev_sensor_ops_enum_input: No sensor found at index 19372, returning empty name
-[   23.247381] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19372
-[   23.247386] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
-[   23.247393] ISP IOCTL: cmd=0xc050561a arg=0x7fa449d8
-[   23.247398] *** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***
-[   23.247404] TX_ISP_SENSOR_ENUM_INPUT: Requested index=19373
-[   23.247409] subdev_sensor_ops_enum_input: Enumerating inputs
-[   23.247415] subdev_sensor_ops_enum_input: No sensor found at index 19373, returning empty name
-[   23.247422] TX_ISP_SENSOR_ENUM_INPUT: Found sensor '' at index 19373
-[   23.247426] TX_ISP_SENSOR_ENUM_INPUT: Completed successfully
+[  546.612927] TX ISP driver initializing with new subdevice management system...
+[  546.612940] *** Using reference driver interrupt-driven frame processing ***
+[  546.612946] *** VIC DEVICE CREATION DEFERRED TO PLATFORM DRIVER PROBE ***
+[  546.612951] *** VIN DEVICE CREATION DEFERRED TO tx_isp_core_probe (after memory mappings) ***
+[  546.612956] *** This fixes the 'ISP core registers not available' error ***
+[  546.612962] *** VIN SUBDEV OPS AND INITIALIZATION DEFERRED TO AUTO-LINK PHASE ***
+[  546.612968] *** CRITICAL: REGISTERING SUBDEV PLATFORM DRIVERS FIRST ***
+[  546.612974] *** TX ISP SUBDEV PLATFORM DRIVERS REGISTRATION ***
+[  546.622956] All ISP subdev platform drivers registered successfully
+[  546.622969] *** SUBDEV PLATFORM DRIVERS REGISTERED - VIC/CSI/VIN/CORE DRIVERS AVAILABLE ***
+[  546.622975] *** CRITICAL: INITIALIZING SUBDEVICE REGISTRY BEFORE MAIN PLATFORM DEVICE ***
+[  546.622980] *** CRITICAL: Registering main platform driver ***
+[  546.625606] *** Main platform driver registered successfully ***
+[  546.625618] *** REFERENCE DRIVER: Subdev platform devices will be registered by tx_isp_create_graph_and_nodes ***
+[  546.628176] *** PROBE: tx_isp_platform_probe CALLED for device tx-isp ***
+[  546.628196] *** PROBE: ISP device allocated successfully: 85b98000 ***
+[  546.628213] *** PROBE: Platform data: c06784f8 ***
+[  546.628218] *** PROBE: Platform data validation passed ***
+[  546.628224] *** REFERENCE DRIVER: Individual subdevices will initialize their own memory regions ***
+[  546.628231] *** PLATFORM DEVICES ALREADY REGISTERED IN INIT - SKIPPING DUPLICATE REGISTRATION ***
+[  546.628236] *** tx_isp_module_init: EXACT Binary Ninja reference implementation ***
+[  546.630754] *** tx_isp_create_graph_and_nodes: EXACT Binary Ninja reference implementation ***
+[  546.630768] *** Registering platform device 0 from platform data ***
+[  546.633253] *** tx_isp_subdev_init: CSI subdev registered at index 0 ***
+[  546.633268] tx_isp_module_init: Module initialized for tx-isp-csi
+[  546.633274] *** tx_isp_subdev_init: Deferring core->init for device tx-isp-csi to prevent hangs ***
+[  546.633280] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
+[  546.633286] *** CSI: Skipping IRQ request - CSI uses register mapping only ***
+[  546.633294] tx_isp_subdev_init: platform_get_resource returned c06782e4 for device tx-isp-csi
+[  546.633303] tx_isp_subdev_init: Memory resource found: start=0x10022000, end=0x10022fff, size=0x00001000
+[  546.633312] isp_subdev_init_clks: Initializing 2 clocks
+[  546.633324] CGU_ISP clock enabled at 100MHz
+[  546.633332] ISP clock enabled
+[  546.657147] CPM clock gates configured
+[  546.657160] isp_subdev_init_clks: Successfully initialized 2 clocks
+[  546.657169] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-csi' to ourISPdev ***
+[  546.657176] *** DEBUG: Device name comparison - checking 'tx-isp-csi' ***
+[  546.657181] *** DEBUG: About to check device name matches ***
+[  546.657188] *** CSI BASIC REGISTERS SET: b0022000 (from tx_isp_subdev_init) ***
+[  546.657196] *** LINKED CSI device: 85209400, regs: b0022000 ***
+[  546.657202] *** CSI PROBE: Using register mapping from tx_isp_subdev_init: b0022000 ***
+[  546.657209] *** CSI PROBE: Device linking handled automatically by tx_isp_subdev_init ***
+[  546.657231] *** Platform device 0 (tx-isp-csi) registered successfully ***
+[  546.657238] *** Registering platform device 1 from platform data ***
+[  546.657570] *** VIC PROBE: IRQ numbers initialized to 38 ***
+[  546.657586] *** VIC PROBE: Primary VIC registers mapped at 0x133e0000 -> b33e0000 ***
+[  546.657592] *** VIC PROBE: Secondary VIC registers mapped at 0x10023000 -> b0023000 ***
+[  546.657598] *** VIC PROBE: IRQ handler pointers set to NULL (reference driver uses main dispatcher) ***
+[  546.657604] *** EMERGENCY: VIC buffer management DISABLED to prevent kernel panic ***
+[  546.657610] *** VIC will operate in minimal mode without complex buffer operations ***
+[  546.657616] *** EMERGENCY: VIC basic initialization complete - complex buffer management SKIPPED ***
+[  546.657622] *** VIC PROBE: Initialized default dimensions 1920x1080 and critical fields ***
+[  546.657629] *** VIC PROBE: Stored vic_dev pointer 85e78000 in subdev private data ***
+[  546.657635] *** VIC PROBE: Callback structure setup deferred - avoiding memory corruption ***
+[  546.657641] *** tx_isp_subdev_init: VIC device linked to main ISP device ***
+[  546.657646] *** tx_isp_subdev_init: VIC subdev registered at index 1 ***
+[  546.657652] *** tx_isp_subdev_init: Interrupt registration deferred until after module init ***
+[  546.657658] *** tx_isp_subdev_init: VIC device linked and registered at index 1 ***
+[  546.657665] tx_isp_module_init: Module initialized for isp-w02
+[  546.657671] *** tx_isp_subdev_init: Deferring core->init for device isp-w02 to prevent hangs ***
+[  546.657677] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
+[  546.657685] *** tx_isp_request_irq: Using main ISP device as dev_id for IRQ 38 (device: isp-w02) ***
+[  546.659954] *** tx_isp_disable_irq: EXACT Binary Ninja - disabling IRQ 38 ***
+[  546.659966] *** tx_isp_disable_irq: IRQ 38 DISABLED ***
+[  546.659974] *** tx_isp_request_irq: IRQ 38 registered successfully for isp-w02 ***
+[  546.659982] tx_isp_subdev_init: platform_get_resource returned c06783e4 for device isp-w02
+[  546.659990] tx_isp_subdev_init: Memory resource found: start=0x133e0000, end=0x133effff, size=0x00010000
+[  546.660001] isp_subdev_init_clks: Initializing 2 clocks
+[  546.660017] CGU_ISP clock enabled at 100MHz
+[  546.660024] ISP clock enabled
+[  546.687168] CPM clock gates configured
+[  546.687181] isp_subdev_init_clks: Successfully initialized 2 clocks
+[  546.687189] *** tx_isp_subdev_auto_link: Auto-linking device 'isp-w02' to ourISPdev ***
+[  546.687195] *** DEBUG: Device name comparison - checking 'isp-w02' ***
+[  546.687200] *** DEBUG: About to check device name matches ***
+[  546.687207] *** MAPPED secondary VIC registers: b0023000 (0x10023000) ***
+[  546.687216] *** LINKED VIC device: 85e78000, primary_regs: b33e0000, secondary_regs: b0023000 ***
+[  546.687221] *** VIC AUTO-LINK: Registers are mapped, registering interrupt handler ***
+[  546.687229] *** VIC PROBE: Device linking handled automatically by tx_isp_subdev_init ***
+[  546.687250] *** Platform device 1 (isp-w02) registered successfully ***
+[  546.687257] *** Registering platform device 2 from platform data ***
+[  546.687569] tx_isp_module_init: Module initialized for tx-isp-vin
+[  546.687582] *** tx_isp_subdev_init: Deferring core->init for device tx-isp-vin to prevent hangs ***
+[  546.687589] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
+[  546.687596] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-vin' to ourISPdev ***
+[  546.687602] *** DEBUG: Device name comparison - checking 'tx-isp-vin' ***
+[  546.687607] *** DEBUG: About to check device name matches ***
+[  546.687613] *** DEBUG: VIN device name matched! Setting up VIN device ***
+[  546.687620] *** LINKED VIN device: 85e78400 ***
+[  546.687628] *** VIN SUBDEV OPS CONFIGURED: core=c0679684, video=c0679678, s_stream=c065c42c ***
+[  546.687633] *** REGISTERED VIN SUBDEV AT INDEX 2 WITH VIDEO OPS ***
+[  546.687639] *** VIN INITIALIZATION DEFERRED TO SENSOR REGISTRATION PHASE ***
+[  546.687645] *** VIN PROBE: Device linking handled automatically by tx_isp_subdev_init ***
+[  546.687664] *** Platform device 2 (tx-isp-vin) registered successfully ***
+[  546.687672] *** Registering platform device 3 from platform data ***
+[  546.690373] *** Platform device 3 (tx-isp-fs) registered successfully ***
+[  546.690385] *** Registering platform device 4 from platform data ***
+[  546.692880] *** tx_isp_core_probe: NEW ARCHITECTURE - Creating separate core device ***
+[  546.692893] *** tx_isp_create_core_device: Creating ISP core device ***
+[  546.692903] *** tx_isp_create_core_device: Core device created successfully: 85e78800 ***
+[  546.692910] *** tx_isp_subdev_init: Core ISP subdev registration handled by core device ***
+[  546.692917] tx_isp_module_init: Module initialized for tx-isp-core
+[  546.692924] *** tx_isp_subdev_init: Deferring core->init for device tx-isp-core to prevent hangs ***
+[  546.692930] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
+[  546.692938] *** tx_isp_request_irq: Using main ISP device as dev_id for IRQ 37 (device: tx-isp-core) ***
+[  546.695282] *** tx_isp_disable_irq: EXACT Binary Ninja - disabling IRQ 37 ***
+[  546.695294] *** tx_isp_disable_irq: IRQ 37 DISABLED ***
+[  546.695301] *** tx_isp_request_irq: IRQ 37 registered successfully for tx-isp-core ***
+[  546.695310] tx_isp_subdev_init: platform_get_resource returned c0677f94 for device tx-isp-core
+[  546.695318] tx_isp_subdev_init: Memory resource found: start=0x13300000, end=0x1330ffff, size=0x00010000
+[  546.695328] isp_subdev_init_clks: Initializing 3 clocks
+[  546.695338] CGU_ISP clock enabled at 100MHz
+[  546.695345] ISP clock enabled
+[  546.695352] CSI clock enabled
+[  546.717201] CPM clock gates configured
+[  546.717212] isp_subdev_init_clks: Successfully initialized 3 clocks
+[  546.717220] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-core' to ourISPdev ***
+[  546.717226] *** DEBUG: Device name comparison - checking 'tx-isp-core' ***
+[  546.717232] *** DEBUG: About to check device name matches ***
+[  546.717238] *** CORE device not yet linked - regs will be mapped later ***
+[  546.717244] *** tx_isp_core_probe: Core subdev initialized successfully ***
+[  546.717252] *** tx_isp_core_device_init: Initializing core device: 85e78800 ***
+[  546.717263] *** tx_isp_core_device_init: Core device initialized successfully ***
+[  546.717271] *** tx_isp_link_core_device: Linking core device 85e78800 to ISP device 85b98000 ***
+[  546.717277] *** tx_isp_link_core_device: Core device linked successfully ***
+[  546.717283] *** Core subdev registered at index 4: 85e78800 ***
+[  546.717298] *** tx_isp_core_probe: VIC device creation deferred to platform driver system ***
+[  546.717304] *** tx_isp_core_probe: Platform drivers will call tx_isp_subdev_init for proper initialization ***
+[  546.717310] *** tx_isp_core_probe: Calling sensor_early_init ***
+[  546.717315] sensor_early_init: Preparing sensor infrastructure
+[  546.717320] *** tx_isp_core_probe: Core device setup complete ***
+[  546.717326] ***   - Core device: 85e78800 ***
+[  546.717332] ***   - Channel count: 6 ***
+[  546.717338] ***   - Linked to ISP device: 85b98000 ***
+[  546.717343] *** tx_isp_core_probe: Initializing core tuning system ***
+[  546.717366] *** tx_isp_core_probe: Tuning init SUCCESS ***
+[  546.717372] *** tx_isp_core_probe: SUCCESS - Core device fully initialized ***
+[  546.717378] ***   - Core device: 85e78800 ***
+[  546.717384] ***   - Tuning device: 85f20000 ***
+[  546.717389] *** tx_isp_core_probe: Creating frame channel devices ***
+[  546.717394] *** tx_isp_create_framechan_devices: Creating frame channel devices ***
+[  546.717744] *** Created frame channel device: /dev/framechan0 (major=10, minor=54) ***
+[  546.720269] *** Created frame channel device: /dev/framechan1 (major=10, minor=53) ***
+[  546.722800] *** Created frame channel device: /dev/framechan2 (major=10, minor=52) ***
+[  546.725428] *** Created frame channel device: /dev/framechan3 (major=10, minor=51) ***
+[  546.725460] *** tx_isp_create_framechan_devices: All frame channel devices created ***
+[  546.725466] *** tx_isp_core_probe: Frame channel devices created successfully ***
+[  546.725472] *** tx_isp_core_probe: Creating ISP M0 tuning device node ***
+[  546.725478] tisp_code_create_tuning_node: Creating ISP M0 tuning device node
+[  546.725486] tisp_code_create_tuning_node: Allocated dynamic major 251
+[  546.730545] *** ISP M0 TUNING DEVICE CREATED: /dev/isp-m0 (major=251, minor=0) ***
+[  546.730557] *** tx_isp_core_probe: ISP M0 tuning device node created successfully ***
+[  546.730562] *** tx_isp_core_probe: Core probe completed successfully ***
+[  546.730584] *** Platform device 4 (tx-isp-core) registered successfully ***
+[  546.730590] *** tx_isp_create_graph_and_nodes: Binary Ninja reference implementation complete ***
+[  546.730596] *** tx_isp_module_init: Binary Ninja reference implementation complete ***
+[  546.730602] *** PROBE: Binary Ninja reference implementation complete ***
+[  546.730612] *** SUCCESS: ourISPdev allocated by probe function: 85b98000 ***
+[  546.730618] *** Following reference driver: IRQ registration handled by tx_isp_request_irq ***
+[  546.730624] TX ISP driver initialized successfully - probe function will handle device setup
+[  549.791939] *** tx_isp_open: SAFE IMPLEMENTATION - preventing dangerous initialization chains ***
+[  549.791953] *** tx_isp_open: SAFE MODE - no hardware initialization during open ***
+[  549.791959] *** tx_isp_open: Background processing disabled to prevent delayed crashes ***
+[  549.791965] *** tx_isp_open: ISP opened safely - no dangerous operations triggered ***
+[  549.792549] ISP IOCTL: cmd=0x805056c1 arg=0x77a3ed60
+[  549.792562] *** csi_sensor_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x2000000 ***
+[  549.792570] *** vic_sensor_ops_ioctl: FIXED implementation - cmd=0x2000000 ***
+[  549.792579] *** vic_sensor_ops_ioctl: subdev=85e78000, isp_dev=85b98000, vic_dev=85e78000 ***
+[  549.792585] vic_sensor_ops_ioctl: Command outside valid range
+[  549.792603] CPU 0 Unable to handle kernel paging request at virtual address ff000014, epc == c06497bc, ra == c06497dc
+[  549.804109] Oops[#1]:
+[  549.806457] CPU: 0 PID: 2461 Comm: prudynt Tainted: G           O 3.10.14__isvp_swan_1.0__ #1
+[  549.815247] task: 840f5b00 ti: 85bbc000 task.ti: 85bbc000
+[  549.820817] $ 0   : 00000000 10001c00 ff000008 80450490
+[  549.826207] $ 4   : 85f8ff80 00007b98 00000000 000001ac
+[  549.831607] $ 8   : 65646973 000001ac 00000000 ffffffe0
+[  549.837004] $12   : 00000023 85bbdbd8 00000000 00000058
+[  549.842394] $16   : 85b9b36c fffffdfd 803b462c 85b9b334
+[  549.847795] $20   : 02000000 00000000 77b82000 77b92580
+[  549.853196] $24   : 00000000 77a7e680                  
+[  549.858593] $28   : 85bbc000 85bbde58 7ff89ffc c06497dc
+[  549.863993] Hi    : 00000000
+[  549.866956] Lo    : 00000046
+[  549.869922] epc   : c06497bc 0xc06497bc
+[  549.873878]     Tainted: G           O
+[  549.877735] ra    : c06497dc 0xc06497dc
+[  549.881686] Status: 10001c03	KERNEL EXL IE 
+[  549.885995] Cause : 40808008
+[  549.888959] BadVA : ff000014
+[  549.891921] PrId  : 00d00100 (Ingenic Xburst)
+[  549.896409] Modules linked in: sensor_gc2053_t31(O) tx_isp_t31(O) 8189fs(O) pwm_hal(O) pwm_core(O) gpio_userkeys(O) avpu(O) audio(O) cp210x ch341 usbserial exfat(O) jzmmc_v12
+[  549.912483] Process prudynt (pid: 2461, threadinfo=85bbc000, task=840f5b00, tls=77274ef0)
+[  549.920925] Stack : 77b92580 805056c1 77a3ed60 77a3ed60 30326367 00003335 00000000 00000000
+[  549.920925] 	  00000000 00000000 00000000 00000000 00000001 30326367 00003335 00000000
+[  549.920925] 	  00000000 00000000 00000037 00000000 00000000 00000000 00000000 00000000
+[  549.920925] 	  85205f00 fffffff7 00000005 805056c1 77a3ed60 00000000 77b82000 77b92580
+[  549.920925] 	  7ff89ffc 800dadb0 77a3ed60 00000000 77b82000 77b92580 7ff89ffc 800dbbb8
+[  549.920925] 	  ...
+[  549.957609] Call Trace:[<800dadb0>] 0x800dadb0
+[  549.962191] [<800dbbb8>] 0x800dbbb8
+[  549.965786] [<800cafdc>] 0x800cafdc
+[  549.969384] [<800224bc>] 0x800224bc
+[  549.972971] 
+[  549.974500] 
+[  549.974500] Code: 8c8200c0  1040fffa  00000000 <8c42000c> 1040fff7  00000000  8c420008  1040fff4  27a60010 
+[  549.985146] ---[ end trace 349be0156a564f59 ]---
+[  549.991385] ISP released (refcnt=0)
+[1]+  Segmentation fault         prudynt
