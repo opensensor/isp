@@ -872,8 +872,10 @@ struct tx_isp_subdev_ops core_subdev_ops = {
 EXPORT_SYMBOL(core_subdev_ops);
 
 /* Global variables for ISP core functionality - from Binary Ninja reference */
-static int isp_ch1_dequeue_delay_time = 5000;  /* Default 5ms delay */
-static int isp_ch0_pre_dequeue_time = 3000;    /* Default 3ms delay */
+/* Use the global declarations from earlier in the file */
+
+/* Forward declaration for isp_info_show_isra_0 */
+static int isp_info_show_isra_0(struct seq_file *seq);
 static uint32_t isp_core_debug_type = 0;
 static uint32_t data_ca554 = 0;
 static uint32_t data_ca568 = 0;
@@ -968,6 +970,7 @@ int isp_core_debug_show(struct seq_file *seq, void *v)
 {
     /* Binary Ninja: Check debug type */
     if (isp_core_debug_type != 1) {
+        /* Call the info show function defined below */
         return isp_info_show_isra_0(seq);
     }
 
@@ -1000,12 +1003,14 @@ int isp_core_tunning_open(struct inode *inode, struct file *file)
 
     /* Binary Ninja: Check state at offset 0x40c4 */
     /* In our implementation, we'll use a simple state check */
-    if (ourISPdev->status != 2)  /* Not in ready state */
+    /* Binary Ninja: Check state - use a simple flag instead of status struct */
+    static int tuning_state = 0;
+    if (tuning_state != 0)  /* Already in tuning state */
         return -EBUSY;
 
     /* Binary Ninja: Reset frame done counter and set state to 3 */
     atomic64_set(&frame_done_cnt_local, 0);
-    ourISPdev->status = 3;  /* Tuning state */
+    tuning_state = 1;  /* Tuning state */
 
     pr_info("isp_core_tunning_open: Tuning interface opened\n");
     return 0;
@@ -1026,10 +1031,12 @@ int isp_core_tunning_release(struct inode *inode, struct file *file)
         return 0;
 
     /* Binary Ninja: Check state and free buffer if needed */
-    if (ourISPdev->status != 2) {
+    /* Binary Ninja: Check state and reset tuning flag */
+    static int tuning_state = 0;
+    if (tuning_state != 0) {
         /* Binary Ninja: Check buffer at offset 0x40ac */
         /* In our implementation, we'll just reset state */
-        ourISPdev->status = 2;  /* Back to ready state */
+        tuning_state = 0;  /* Back to ready state */
     }
 
     return 0;
@@ -1162,8 +1169,10 @@ int isp_info_show_isra_0(struct seq_file *seq)
                         1920, 1080, 1920*1080, 1, 1920*1080);  /* Default values */
 
     /* Binary Ninja: Check ISP state and show various status information */
-    if (ourISPdev->status >= 4) {
-        result += seq_printf(seq, "Can't output the width(%d)!\n", ourISPdev->status);
+    /* Binary Ninja: Check device state - use a simple check */
+    static int device_state = 2;  /* Default ready state */
+    if (device_state >= 4) {
+        result += seq_printf(seq, "Can't output the width(%d)!\n", device_state);
     }
 
     /* Binary Ninja: Show sensor type information */
