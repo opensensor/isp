@@ -1406,14 +1406,6 @@ static int sensor_init(struct tx_isp_subdev *sd, int enable) {
 	if (!enable)
 		return ISP_SUCCESS;
 
-	/* CRITICAL FIX: Ensure sensor attributes are set up if probe wasn't called */
-	if (!sensor->video.attr) {
-		pr_info("*** SENSOR_INIT: Setting up sensor attributes (probe wasn't called) ***\n");
-		sensor->video.attr = &sensor_attr;
-		sensor->video.vi_max_width = wsize->width;
-		sensor->video.vi_max_height = wsize->height;
-	}
-
 	sensor->video.mbus.width = wsize->width;
 	sensor->video.mbus.height = wsize->height;
 	sensor->video.mbus.code = wsize->mbus_code;
@@ -1731,11 +1723,6 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 	struct tx_isp_video_in *video;
 	struct tx_isp_sensor *sensor;
 	int ret;
-
-	pr_info("*** SENSOR_PROBE: GC2053 probe function called! client=%p, id=%p ***\n", client, id);
-	if (client) {
-		pr_info("*** SENSOR_PROBE: I2C client name='%s', addr=0x%02x ***\n", client->name, client->addr);
-	}
 	sensor = (struct tx_isp_sensor *) kzalloc(sizeof(*sensor), GFP_KERNEL);
 	if (!sensor) {
 		ISP_ERROR("Failed to allocate sensor subdev.\n");
@@ -1855,7 +1842,6 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 	video = &sensor->video;
 	sensor->video.shvflip = shvflip;
 	sensor->video.attr = &sensor_attr;
-	pr_info("*** SENSOR_PROBE: sensor->video.attr set to %p (sensor_attr address) ***\n", &sensor_attr);
 	sensor->video.vi_max_width = wsize->width;
 	sensor->video.vi_max_height = wsize->height;
 	sensor->video.mbus.width = wsize->width;
@@ -1915,7 +1901,6 @@ static struct i2c_driver sensor_driver = {
 
 static __init int init_sensor(void) {
 	int ret = 0;
-	pr_info("*** SENSOR_INIT: GC2053 sensor module initializing ***\n");
         sensor_common_init(&sensor_info);
 
 	ret = private_driver_get_interface();
