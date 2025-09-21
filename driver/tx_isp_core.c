@@ -312,20 +312,9 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         if (subdev != NULL && subdev != sd) {  /* Don't call ourselves */
             if (subdev->ops && subdev->ops->video && subdev->ops->video->s_stream) {
 
-                /* CRITICAL SAFETY: Skip dangerous s_stream functions that can cause kernel panics */
-                extern int vin_s_stream(struct tx_isp_subdev *sd, int enable);
-                extern int sensor_s_stream(struct tx_isp_subdev *sd, int enable);
-
-                if (subdev->ops->video->s_stream == (void*)vin_s_stream) {
-                    pr_info("*** SAFETY: Skipping dangerous VIN s_stream for subdev %d to prevent kernel panic ***\n", i);
-                    result = -ENOIOCTLCMD;  /* Continue with next subdev */
-                } else if (subdev->ops->video->s_stream == (void*)sensor_s_stream) {
-                    pr_info("*** SAFETY: Skipping dangerous sensor s_stream for subdev %d to prevent kernel panic ***\n", i);
-                    result = -ENOIOCTLCMD;  /* Continue with next subdev */
-                } else {
-                    pr_info("*** ispcore_video_s_stream: Calling subdev %d s_stream (enable=%d) ***\n", i, enable);
-                    result = subdev->ops->video->s_stream(subdev, enable);
-                }
+                /* Binary Ninja: NO SAFETY CHECKS - just call the function directly */
+                pr_info("*** ispcore_video_s_stream: Calling subdev %d s_stream (enable=%d) ***\n", i, enable);
+                result = subdev->ops->video->s_stream(subdev, enable);
 
                 if (result != 0) {
                     if (result != -ENOIOCTLCMD) {
