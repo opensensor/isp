@@ -5804,12 +5804,6 @@ irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
 
     /* Return IRQ_HANDLED to indicate we processed the thread interrupt */
     return IRQ_HANDLED;
-
-    } else {
-        pr_warn("isp_irq_thread_handle: Unknown thread IRQ %d\n", irq);
-    }
-
-    return IRQ_HANDLED;
 }
 
 /* ip_done_interrupt_handler - Binary Ninja ISP processing complete interrupt (renamed local to avoid SDK symbol clash) */
