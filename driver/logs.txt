@@ -175,3 +175,22 @@
 [   22.143597] TX_ISP_SENSOR_ENUM_INPUT: No sensor at index 808608616 - returning error to end enumeration
 [   22.145838] ISP released (refcnt=0)
 [1]+  Aborted                    prudynt
+[   22.143570] TX_ISP_SENSOR_ENUM_INPUT: Enumerating sensor at index 0
+[   22.143576] TX_ISP_SENSOR_ENUM_INPUT: Returning sensor 'gc2053' at index 0
+[   22.143584] ISP IOCTL: cmd=0xc050561a arg=0x7fbff088
+[   22.143590] TX_ISP_SENSOR_ENUM_INPUT: Enumerating sensor at index 808608616
+[   22.143597] TX_ISP_SENSOR_ENUM_INPUT: No sensor at index 808608616 - returning error to end enumeration
+[   22.145838] ISP released (refcnt=0)
+[1]+  Aborted                    prudynt
+root@ing-wyze-cam3-a000 ~# logcat
+I/ao( 2040): AO Enable: 0
+I/ao( 2040): AO Ch Enable: 0:0
+I/ao( 2040): EXIT AO Ch Enable: 0:0
+I/ao( 2040): AO Set Vol: 60
+I/ao( 2040): AO Get Gain: 20
+I/OSD( 2000): IMP_OSD_SetPoolSize:1048576
+I/LIBIMP_CONTROL( 2000): Version: Aug 28 2025_05:46:40_ dlsym
+E/IMP-ISP( 2000): Cannot open /dev/tx-isp
+I/OSD( 2143): IMP_OSD_SetPoolSize:1048576
+D/IMP-ISP( 2143): ~~~~~~ IMP_ISP_Open[331] ~~~~~~~
+E/IMP-ISP( 2143): sensor[gc2053] hasn't been added!
