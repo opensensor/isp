@@ -3317,7 +3317,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_info("*** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***\n");
 
             /* Binary Ninja: void* $s0_3 = $s7 + 0x2c */
-            void **s0_3 = (void **)&isp_dev->subdevs[0];
+            struct tx_isp_subdev **s0_3 = &isp_dev->subdevs[0];
 
             /* Binary Ninja: if (private_copy_from_user(&var_98, arg3, 0x50) != 0) */
             if (copy_from_user(&var_98, (void __user *)arg, 0x50) != 0) {
@@ -3326,29 +3326,32 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
 
             /* Binary Ninja: void* $a0_2 = *$s0_3 */
-            struct tx_isp_subdev *a0_2 = (struct tx_isp_subdev *)*s0_3;
+            struct tx_isp_subdev *a0_2 = *s0_3;
 
             /* Binary Ninja: EXACT loop structure from reference */
             while (true) {
                 if (a0_2 != NULL) {
                     /* Binary Ninja: void* $v0_6 = *(*($a0_2 + 0xc4) + 0xc) */
-                    struct tx_isp_subdev_ops *ops = a0_2->ops;
-                    if (ops != NULL) {
+                    if (a0_2->ops != NULL) {
                         /* Binary Ninja: int32_t $v0_7 = *($v0_6 + 8) */
-                        if (ops->sensor && ops->sensor->ioctl) {
+                        if (a0_2->ops->sensor != NULL) {
                             /* Binary Ninja: int32_t $v0_8 = $v0_7() */
-                            /* EXACT Binary Ninja: sensor ioctl called WITHOUT parameters */
-                            int32_t v0_8 = ((int32_t (*)(void))ops->sensor->ioctl)();
+                            if (a0_2->ops->sensor->ioctl != NULL) {
+                                /* Call sensor ioctl - but it will return -ENOIOCTLCMD for ENUM_INPUT */
+                                int32_t v0_8 = a0_2->ops->sensor->ioctl(a0_2, TX_ISP_EVENT_SENSOR_ENUM_INPUT, &var_98);
 
-                            if (v0_8 == 0) {
-                                s0_3++;
+                                if (v0_8 == 0) {
+                                    s0_3++;
+                                } else {
+                                    s0_3++;
+                                    /* Binary Ninja: if ($v0_8 != 0xfffffdfd) return $v0_8 */
+                                    if (v0_8 != -ENOIOCTLCMD) {
+                                        pr_info("TX_ISP_SENSOR_ENUM_INPUT: sensor returned %d, returning\n", v0_8);
+                                        return v0_8;
+                                    }
+                                }
                             } else {
                                 s0_3++;
-                                /* Binary Ninja: if ($v0_8 != 0xfffffdfd) return $v0_8 */
-                                if (v0_8 != -ENOIOCTLCMD) {
-                                    pr_info("TX_ISP_SENSOR_ENUM_INPUT: sensor returned %d, returning\n", v0_8);
-                                    return v0_8;
-                                }
                             }
                         } else {
                             s0_3++;
@@ -3361,12 +3364,12 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 }
 
                 /* Binary Ninja: if ($s7 + 0x6c == $s0_3) break */
-                if ((void *)s0_3 == (void *)&isp_dev->subdevs[ISP_MAX_SUBDEVS]) {
+                if (s0_3 == &isp_dev->subdevs[ISP_MAX_SUBDEVS]) {
                     break;
                 }
 
                 /* Binary Ninja: $a0_2 = *$s0_3 */
-                a0_2 = (struct tx_isp_subdev *)*s0_3;
+                a0_2 = *s0_3;
             }
 
             /* Binary Ninja: $s6_1 = 0 */
