@@ -4804,25 +4804,71 @@ static int __enqueue_in_driver(void *buffer_struct)
     return result;
 }
 
+/* Allow sensor drivers to register with the ISP system */
+int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, const char *sensor_name, struct i2c_client *client)
+{
+    struct registered_sensor *sensor;
+
+    if (!sd || !sensor_name) {
+        return -EINVAL;
+    }
+
+    /* Check if sensor is already registered */
+    mutex_lock(&sensor_list_mutex);
+    list_for_each_entry(sensor, &sensor_list, list) {
+        if (sensor->subdev == sd || (client && sensor->client == client)) {
+            pr_info("tx_isp_register_sensor_subdev: Sensor '%s' already registered\n", sensor_name);
+            mutex_unlock(&sensor_list_mutex);
+            return 0;  /* Already registered */
+        }
+    }
+    mutex_unlock(&sensor_list_mutex);
+
+    /* Create new sensor entry */
+    sensor = kzalloc(sizeof(*sensor), GFP_KERNEL);
+    if (!sensor) {
+        return -ENOMEM;
+    }
+
+    strncpy(sensor->name, sensor_name, sizeof(sensor->name) - 1);
+    sensor->name[sizeof(sensor->name) - 1] = '\0';
+    sensor->subdev = sd;
+    sensor->client = client;
+    sensor->index = sensor_count;
+
+    /* Add to sensor list */
+    mutex_lock(&sensor_list_mutex);
+    list_add_tail(&sensor->list, &sensor_list);
+    sensor_count++;
+    mutex_unlock(&sensor_list_mutex);
+
+    pr_info("tx_isp_register_sensor_subdev: Registered sensor '%s' at index %d\n",
+            sensor_name, sensor->index);
+
+    return 0;
+}
+EXPORT_SYMBOL(tx_isp_register_sensor_subdev);
+
 /* Allow sensor drivers to unregister */
 int tx_isp_unregister_sensor_subdev(struct tx_isp_subdev *sd)
 {
     struct registered_sensor *sensor, *tmp;
-    
+
     mutex_lock(&sensor_register_mutex);
     registered_sensor_subdev = NULL;
     mutex_unlock(&sensor_register_mutex);
-    
+
     mutex_lock(&sensor_list_mutex);
     list_for_each_entry_safe(sensor, tmp, &sensor_list, list) {
         if (sensor->subdev == sd) {
             list_del(&sensor->list);
             kfree(sensor);
+            sensor_count--;
             break;
         }
     }
     mutex_unlock(&sensor_list_mutex);
-    
+
     extern struct tx_isp_sensor *tx_isp_get_sensor(void);
     struct tx_isp_sensor *isp_sensor = tx_isp_get_sensor();
     if (isp_sensor && &isp_sensor->sd == sd) {
@@ -4831,7 +4877,7 @@ int tx_isp_unregister_sensor_subdev(struct tx_isp_subdev *sd)
             ourISPdev->subdevs[3] = NULL;
         }
     }
-    
+
     return 0;
 }
 EXPORT_SYMBOL(tx_isp_unregister_sensor_subdev);
