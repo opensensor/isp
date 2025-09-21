@@ -512,7 +512,7 @@ struct platform_device tx_isp_core_platform_device = {
 
 /* Forward declarations - Using actual function names from reference driver */
 int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
-static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
+static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 irqreturn_t isp_irq_handle(int irq, void *dev_id);
 irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
 int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data);
@@ -5777,7 +5777,7 @@ irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
 }
 
 /* vic_mdma_irq_function - COMPLETE Binary Ninja exact implementation */
-static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
+static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
 {
     int s0_2, s0_3, s0_4, s0_5;
     u32 hi_1, hi_2;
@@ -5796,20 +5796,20 @@ static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel
     /* ROBUST VALIDATION: Simple but effective validation */
     if (!vic_dev) {
         pr_err("vic_mdma_irq_function: NULL vic_dev parameter\n");
-        return;
+        return -EINVAL;
     }
 
     /* Validate vic_dev pointer is reasonable */
     if ((unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff000) {
         pr_err("vic_mdma_irq_function: Invalid vic_dev pointer 0x%p\n", vic_dev);
-        return;
+        return -EINVAL;
     }
 
     /* CRITICAL FIX: Validate vic_dev structure integrity before accessing ANY fields */
     if (!virt_addr_valid(vic_dev) ||
         !virt_addr_valid((char*)vic_dev + sizeof(struct tx_isp_vic_device) - 1)) {
         pr_err("*** vic_mdma_irq_function: vic_dev structure spans invalid memory - PREVENTS BadVA 0xdc crash ***\n");
-        return;
+        return -EINVAL;
     }
 
     /* ROBUST ACCESS: Use proper struct member access - let compiler handle offsets */
@@ -5817,7 +5817,7 @@ static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel
         /* CRITICAL FIX: Validate width/height fields are accessible before reading them */
         if (!virt_addr_valid(&vic_dev->width) || !virt_addr_valid(&vic_dev->height)) {
             pr_err("*** vic_mdma_irq_function: width/height fields not accessible - PREVENTS BadVA 0xdc crash ***\n");
-            return;
+            return -EINVAL;
         }
 
         /* Validate dimensions are reasonable */
@@ -5825,7 +5825,7 @@ static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel
             vic_dev->width > 8192 || vic_dev->height > 8192) {
             pr_err("vic_mdma_irq_function: Invalid dimensions %dx%d\n",
                    vic_dev->width, vic_dev->height);
-            return;
+            return -EINVAL;
         }
         s0_2 = vic_dev->width * vic_dev->height;
         
@@ -5848,7 +5848,7 @@ static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel
                 /* MIPS ALIGNMENT CHECK: Ensure vic_dev is properly aligned before accessing */
                 if (((unsigned long)vic_dev & 0x3) != 0) {
                     pr_err("*** CRITICAL: vic_dev pointer 0x%p not 4-byte aligned - would cause unaligned access crash! ***\n", vic_dev);
-                    return;  /* void function - just return without value */
+                    return -EINVAL;  /* int function - return error value */
                 }
 
                 /* SAFE: Use proper struct member access instead of offset arithmetic */
@@ -5888,7 +5888,7 @@ label_12898:
             /* MIPS ALIGNMENT CHECK: Ensure vic_dev is properly aligned before accessing */
             if (((unsigned long)vic_dev & 0x3) != 0) {
                 pr_err("*** CRITICAL: vic_dev pointer 0x%p not 4-byte aligned - would cause unaligned access crash! ***\n", vic_dev);
-                return;  /* void function - just return without value */
+                return -EINVAL;  /* int function - return error value */
             }
 
             /* SAFE: Use proper struct member access instead of offset arithmetic */
@@ -6035,6 +6035,7 @@ label_12898:
     }
     
     pr_info("vic_mdma_irq_function: Channel %d MDMA interrupt processing complete\n", channel);
+    return 0;
 }
 
 /* ip_done_interrupt_handler - Binary Ninja ISP processing complete interrupt (renamed local to avoid SDK symbol clash) */
