@@ -5091,26 +5091,60 @@ static int subdev_sensor_ops_release_all_sensor(struct tx_isp_subdev *sd)
 }
 EXPORT_SYMBOL(subdev_sensor_ops_release_all_sensor);
 
-/* subdev_sensor_ops_enum_input - Enumerate sensor inputs */
+/* subdev_sensor_ops_enum_input - EXACT Binary Ninja MCP implementation */
 int subdev_sensor_ops_enum_input(struct v4l2_subdev *sd, struct v4l2_input *input)
 {
-    pr_info("subdev_sensor_ops_enum_input: Enumerating inputs\n");
+    struct registered_sensor *sensor;
+    int current_index = 0;
+    int found = 0;
 
-    if (!sd || !input) {
-        return -EINVAL;
+    /* Binary Ninja: if (arg1 == 0 || arg2 == 0) return 0xffffffea */
+    if (sd == NULL || input == NULL) {
+        return 0xffffffea;  /* -EINVAL */
     }
 
-    /* Only support one input */
-    if (input->index > 0) {
-        return -EINVAL;
+    /* Binary Ninja: private_mutex_lock(arg1 + 0xe8) */
+    /* Note: In our implementation, we use the global sensor list mutex */
+    mutex_lock(&sensor_list_mutex);
+
+    /* Binary Ninja: Loop through sensor list structure */
+    /* void* $s0_1 = *(arg1 + 0xdc) - 0xe4 */
+    /* This iterates through a linked list of sensors */
+    list_for_each_entry(sensor, &sensor_list, list) {
+        /* Binary Ninja: *($s0_1 + 0xdc) = $v0 (set current index) */
+        /* Binary Ninja: if ($a0_1 == *arg2) - check if current index matches requested */
+        if (current_index == input->index) {
+            /* Binary Ninja: Copy sensor name to input structure */
+            /* void* $v1_3 = $s0_1 + 0xec (sensor name offset) */
+            /* arg2[9] = *($s0_1 + 0xe0) (set input type) */
+            input->type = V4L2_INPUT_TYPE_CAMERA;
+
+            /* Binary Ninja: Copy sensor name byte by byte with length limit */
+            /* int32_t i = 0x20; do { ... } while (i != 0) */
+            strncpy((char *)input->name, sensor->name, sizeof(input->name) - 1);
+            input->name[sizeof(input->name) - 1] = '\0';
+            input->std = 0;
+
+            found = 1;
+            break;
+        }
+
+        /* Binary Ninja: $v0 += 1 (increment index) */
+        current_index++;
     }
 
-    input->type = V4L2_INPUT_TYPE_CAMERA;
-    strncpy(input->name, "Camera", sizeof(input->name) - 1);
-    input->name[sizeof(input->name) - 1] = '\0';
-    input->std = 0;
+    /* Binary Ninja: private_mutex_unlock(arg1 + 0xe8) */
+    mutex_unlock(&sensor_list_mutex);
 
-    return 0;
+    /* Binary Ninja: if (*($s0_1 + 0xdc) == *arg2) return 0 */
+    /* Binary Ninja: return 0xffffffea */
+    if (found) {
+        pr_info("subdev_sensor_ops_enum_input: Found sensor '%s' at index %d\n",
+                input->name, input->index);
+        return 0;
+    } else {
+        return 0xffffffea;  /* -EINVAL - sensor not found at this index */
+    }
 }
 EXPORT_SYMBOL(subdev_sensor_ops_enum_input);
 
