@@ -4975,20 +4975,11 @@ static int tx_isp_init(void)
     /* *** REFERENCE DRIVER: Individual subdev platform devices are registered by tx_isp_create_graph_and_nodes *** */
     pr_info("*** REFERENCE DRIVER: Subdev platform devices will be registered by tx_isp_create_graph_and_nodes ***\n");
 
-    /* Step 2: Register platform device (matches reference) */
-    /* Check if main platform device is already registered */
-    if (tx_isp_platform_device.dev.kobj.parent) {
-        pr_info("*** MAIN PLATFORM DEVICE ALREADY REGISTERED - SKIPPING ***\n");
-    } else {
-        ret = platform_device_register(&tx_isp_platform_device);
-        if (ret != 0) {
-            if (ret == -EEXIST) {
-                pr_info("*** MAIN PLATFORM DEVICE ALREADY EXISTS - CONTINUING ***\n");
-            } else {
-                pr_err("not support the gpio mode!\n");
-                goto err_cleanup_subdev_drivers;
-            }
-        }
+    /* Step 2: Register main platform device (matches reference driver exactly) */
+    ret = private_platform_device_register(&tx_isp_platform_device);
+    if (ret != 0) {
+        pr_err("not support the gpio mode!\n");
+        goto err_cleanup_subdev_drivers;
     }
 
     /* Step 3: Register platform driver (matches reference) */
