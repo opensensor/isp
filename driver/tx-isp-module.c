@@ -1986,17 +1986,6 @@ int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
 
     pr_info("*** BINARY NINJA: All 16 subdevices processed successfully ***\n");
 
-    /* CRITICAL SAFETY: Add memory barrier and validation before return */
-    mb(); /* Memory barrier to ensure all operations complete */
-
-    /* SAFETY: Validate ISP device is still valid before return */
-    if (!isp_dev || !is_valid_kernel_pointer(isp_dev)) {
-        pr_err("*** CRITICAL: ISP device became invalid during streaming - PREVENTING CRASH ***\n");
-        return -EFAULT;
-    }
-
-    pr_info("*** tx_isp_video_link_stream: STREAMING SETUP COMPLETE - RETURNING SUCCESS ***\n");
-
     /* Binary Ninja: return 0 */
     return 0;
 }
@@ -4789,80 +4778,14 @@ int sensor_early_init(void *core_dev)
     return 0;
 }
 
-static int tx_isp_platform_remove(struct platform_device *pdev)
-{
-    pr_info("tx_isp_platform_remove called\n");
-    return 0;
-}
 
-static struct platform_driver tx_isp_driver = {
-    .probe = tx_isp_platform_probe,
-    .remove = tx_isp_platform_remove,
-    .driver = {
-        .name = "tx-isp",
-        .owner = THIS_MODULE,
-    },
-};
-
-// Misc device for creating /dev/tx-isp
-static struct miscdevice tx_isp_miscdev = {
-    .minor = MISC_DYNAMIC_MINOR,
-    .name = "tx-isp",
-    .fops = &tx_isp_fops,
-};
-
-// Main initialization function - EXACT Binary Ninja reference implementation
-static int tx_isp_init(void)
-{
-    int ret;
-    int gpio_mode_check;
-
-    pr_info("TX ISP driver initializing - EXACT Binary Ninja reference...\n");
-
-    /* Binary Ninja: private_driver_get_interface() */
-    gpio_mode_check = 0;  // Always return success for standard kernel
-    if (gpio_mode_check != 0) {
-        pr_err("VIC_CTRL : %08x\n", gpio_mode_check);
-        return gpio_mode_check;
-    }
-
-    /* Binary Ninja: private_platform_device_register(&tx_isp_platform_device) */
-    ret = platform_device_register(&tx_isp_platform_device);
-    if (ret != 0) {
-        pr_err("not support the gpio mode!\n");
-        return ret;
-    }
-
-    /* Binary Ninja: private_platform_driver_register(&tx_isp_driver) */
-    ret = platform_driver_register(&tx_isp_driver);
-    if (ret != 0) {
-        platform_device_unregister(&tx_isp_platform_device);
-        return ret;
-    }
-
-    /* CRITICAL: Register subdevice platform drivers so their probe functions get called */
-    extern int tx_isp_subdev_platform_init(void);
-    ret = tx_isp_subdev_platform_init();
-    if (ret != 0) {
-        pr_err("Failed to register subdevice platform drivers: %d\n", ret);
-        platform_driver_unregister(&tx_isp_driver);
-        platform_device_unregister(&tx_isp_platform_device);
-        return ret;
-    }
-
-    pr_info("TX ISP driver initialized successfully - probe will handle complex initialization\n");
-    return 0;
-}
-
-/* tx_isp_platform_probe - EXACT Binary Ninja reference implementation */
+/* tx_isp_probe - EXACT Binary Ninja reference implementation */
 static int tx_isp_platform_probe(struct platform_device *pdev)
 {
     struct tx_isp_dev *isp_dev;
     struct tx_isp_platform_data *pdata;
     int ret;
     int i;
-
-    pr_info("*** PROBE: EXACT Binary Ninja reference implementation ***\n");
 
     /* Binary Ninja: private_kmalloc(0x120, 0xd0) */
     isp_dev = private_kmalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
@@ -4892,8 +4815,19 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
         return -EFAULT;  /* Binary Ninja returns 0xffffffea */
     }
 
+    /* REMOVED: Main ISP subdev init - reference driver only initializes individual subdevices */
+    /* Each subdevice will call tx_isp_subdev_init in its own probe function per reference driver */
+    pr_info("*** REFERENCE DRIVER: Individual subdevices will initialize their own memory regions ***\n");
+
     /* Binary Ninja: private_platform_set_drvdata(arg1, $v0) */
     private_platform_set_drvdata(pdev, isp_dev);
+
+    /* Binary Ninja: *($v0 + 0x34) = &tx_isp_fops - Use safe struct member access */
+    /* Note: fops member may not exist in current struct definition, skipping for now */
+
+    /* *** CRITICAL FIX: Platform devices are already registered in tx_isp_init() *** */
+    /* Removing duplicate platform device registration from probe function */
+    pr_info("*** PLATFORM DEVICES ALREADY REGISTERED IN INIT - SKIPPING DUPLICATE REGISTRATION ***\n");
 
     /* Binary Ninja: Set up subdev count for compatibility */
     /* *($v0 + 0x80) = $v0_5 - Store device count at offset 0x80 */
@@ -4916,6 +4850,529 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
 
     pr_info("*** PROBE: Binary Ninja reference implementation complete ***\n");
     return 0;
+}
+
+
+static int tx_isp_platform_remove(struct platform_device *pdev)
+{
+    pr_info("tx_isp_platform_remove called\n");
+    return 0;
+}
+
+static struct platform_driver tx_isp_driver = {
+    .probe = tx_isp_platform_probe,
+    .remove = tx_isp_platform_remove,
+    .driver = {
+        .name = "tx-isp",
+        .owner = THIS_MODULE,
+    },
+};
+
+// Misc device for creating /dev/tx-isp
+static struct miscdevice tx_isp_miscdev = {
+    .minor = MISC_DYNAMIC_MINOR,
+    .name = "tx-isp",
+    .fops = &tx_isp_fops,
+};
+
+// Main initialization function - REFACTORED to use new subdevice management system
+static int tx_isp_init(void)
+{
+    int ret, i;
+    int gpio_mode_check;
+    struct platform_device *subdev_platforms[5];
+
+    pr_info("TX ISP driver initializing with new subdevice management system...\n");
+
+    /* Step 1: Check driver interface (matches reference) */
+    gpio_mode_check = 0;  // Always return success for standard kernel
+    if (gpio_mode_check != 0) {
+        pr_err("VIC_CTRL : %08x\n", gpio_mode_check);
+        return gpio_mode_check;
+    }
+
+    /* CRITICAL FIX: Check if ourISPdev was already allocated by probe function */
+    if (ourISPdev) {
+        pr_info("*** USING EXISTING ISP DEVICE FROM PROBE: %p ***\n", ourISPdev);
+        /* Device already allocated and initialized by probe - just ensure basic fields are set */
+        ourISPdev->refcnt = 0;
+        ourISPdev->is_open = false;
+    } else {
+        /* Allocate ISP device structure only if not already done by probe */
+        pr_info("*** ALLOCATING NEW ISP DEVICE (probe didn't run) ***\n");
+        ourISPdev = kzalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
+        if (!ourISPdev) {
+            pr_err("Failed to allocate ISP device\n");
+            return -ENOMEM;
+        }
+
+        /* Initialize device structure */
+        spin_lock_init(&ourISPdev->lock);
+        ourISPdev->refcnt = 0;
+        ourISPdev->is_open = false;
+    }
+
+    /* REMOVED: Frame generation work queue - NOT in reference driver */
+    /* Reference driver uses pure interrupt-driven frame processing */
+    pr_info("*** Using reference driver interrupt-driven frame processing ***\n");
+    
+    /* *** REMOVED DUPLICATE VIC DEVICE CREATION *** */
+    /* VIC device will be created by tx_isp_vic_probe with proper register mapping */
+    pr_info("*** VIC DEVICE CREATION DEFERRED TO PLATFORM DRIVER PROBE ***\n");
+    
+    /* *** CRITICAL FIX: VIN device creation MUST be deferred until after memory mappings *** */
+    pr_info("*** VIN DEVICE CREATION DEFERRED TO tx_isp_core_probe (after memory mappings) ***\n");
+    pr_info("*** This fixes the 'ISP core registers not available' error ***\n");
+    
+    /* *** VIN setup now handled in tx_isp_subdev_auto_link function *** */
+    pr_info("*** VIN SUBDEV OPS AND INITIALIZATION DEFERRED TO AUTO-LINK PHASE ***\n");
+
+    /* *** CRITICAL FIX: Register subdev platform drivers BEFORE main platform device *** */
+    /* This ensures VIC/CSI/VIN drivers are available when main probe function runs */
+    pr_info("*** CRITICAL: REGISTERING SUBDEV PLATFORM DRIVERS FIRST ***\n");
+    ret = tx_isp_subdev_platform_init();
+    if (ret) {
+        pr_err("Failed to initialize subdev platform drivers: %d\n", ret);
+        goto err_free_dev;
+    }
+    pr_info("*** SUBDEV PLATFORM DRIVERS REGISTERED - VIC/CSI/VIN/CORE DRIVERS AVAILABLE ***\n");
+
+    /* *** CRITICAL FIX: Initialize subdevice registry BEFORE main platform device registration *** */
+    /* This ensures the registry is ready when tx_isp_core_probe tries to create the graph */
+    pr_info("*** CRITICAL: INITIALIZING SUBDEVICE REGISTRY BEFORE MAIN PLATFORM DEVICE ***\n");
+
+    /* Build platform device array for the registry system */
+    subdev_platforms[0] = &tx_isp_csi_platform_device;
+    subdev_platforms[1] = &tx_isp_vic_platform_device;
+    subdev_platforms[2] = &tx_isp_vin_platform_device;
+    subdev_platforms[3] = &tx_isp_fs_platform_device;
+    subdev_platforms[4] = &tx_isp_core_platform_device;
+
+    ret = tx_isp_init_subdev_registry(ourISPdev, subdev_platforms, 5);
+    if (ret) {
+        pr_err("Failed to initialize subdevice registry: %d\n", ret);
+        goto err_cleanup_subdev_drivers;
+    }
+    pr_info("*** SUBDEVICE REGISTRY INITIALIZED - GRAPH CREATION SHOULD NOW SUCCEED ***\n");
+
+    /* *** CRITICAL FIX: Register individual subdev platform devices so their probe functions get called *** */
+    pr_info("*** REGISTERING INDIVIDUAL SUBDEV PLATFORM DEVICES FOR MEMORY MAPPING ***\n");
+    for (i = 0; i < 5; i++) {
+        /* Check if device is already registered to avoid "ALREADY REGISTERED" kernel warnings */
+        if (subdev_platforms[i]->dev.kobj.parent) {
+            pr_info("*** SUBDEV PLATFORM DEVICE %s ALREADY REGISTERED - SKIPPING ***\n",
+                    subdev_platforms[i]->name);
+            continue;
+        }
+
+        ret = platform_device_register(subdev_platforms[i]);
+        if (ret != 0) {
+            /* Handle -EEXIST (already exists) as success to avoid log spam */
+            if (ret == -EEXIST) {
+                pr_info("*** SUBDEV PLATFORM DEVICE %s ALREADY EXISTS - CONTINUING ***\n",
+                        subdev_platforms[i]->name);
+                continue;
+            }
+
+            pr_err("Failed to register subdev platform device %s: %d\n",
+                   subdev_platforms[i]->name, ret);
+            /* Cleanup previously registered devices */
+            while (--i >= 0) {
+                platform_device_unregister(subdev_platforms[i]);
+            }
+            goto err_cleanup_subdev_drivers;
+        }
+        pr_info("*** SUBDEV PLATFORM DEVICE %s REGISTERED - PROBE SHOULD BE CALLED ***\n",
+                subdev_platforms[i]->name);
+    }
+
+    /* Step 2: Register platform device (matches reference) */
+    /* Check if main platform device is already registered */
+    if (tx_isp_platform_device.dev.kobj.parent) {
+        pr_info("*** MAIN PLATFORM DEVICE ALREADY REGISTERED - SKIPPING ***\n");
+    } else {
+        ret = platform_device_register(&tx_isp_platform_device);
+        if (ret != 0) {
+            if (ret == -EEXIST) {
+                pr_info("*** MAIN PLATFORM DEVICE ALREADY EXISTS - CONTINUING ***\n");
+            } else {
+                pr_err("not support the gpio mode!\n");
+                goto err_cleanup_subdev_drivers;
+            }
+        }
+    }
+
+    /* Step 3: Register platform driver (matches reference) */
+    ret = platform_driver_register(&tx_isp_driver);
+    if (ret != 0) {
+        pr_err("Failed to register platform driver: %d\n", ret);
+        platform_device_unregister(&tx_isp_platform_device);
+        goto err_cleanup_subdev_drivers;
+    }
+
+    /* Step 4: Register misc device to create /dev/tx-isp */
+    ret = misc_register(&tx_isp_miscdev);
+    if (ret != 0) {
+        pr_err("Failed to register misc device: %d\n", ret);
+        platform_driver_unregister(&tx_isp_driver);
+        platform_device_unregister(&tx_isp_platform_device);
+        goto err_free_dev;
+    }
+
+    pr_info("TX ISP driver initialized successfully\n");
+    pr_info("Device nodes created:\n");
+    pr_info("  /dev/tx-isp (major=10, minor=dynamic)\n");
+    pr_info("  /proc/jz/isp/isp-w02\n");
+    
+    /* Prepare I2C infrastructure for dynamic sensor registration */
+    ret = prepare_i2c_infrastructure(ourISPdev);
+    if (ret) {
+        pr_warn("Failed to prepare I2C infrastructure: %d\n", ret);
+    }
+    
+    /* *** CRITICAL: PROPERLY REGISTER SUBDEVICES FOR tx_isp_video_link_stream *** */
+    pr_info("*** INITIALIZING SUBDEVICE MANAGEMENT SYSTEM ***\n");
+    pr_info("*** REGISTERING SUBDEVICES AT OFFSET 0x38 FOR tx_isp_video_link_stream ***\n");
+
+    /* Register VIC subdev with proper ops structure */
+    if (ourISPdev->vic_dev) {
+        /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+        struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
+        
+        /* Set up VIC subdev with ops pointing to vic_subdev_ops */
+        vic_dev->sd.ops = &vic_subdev_ops;
+
+        /* CRITICAL: Link VIC subdev to ISP device */
+        vic_dev->sd.isp = ourISPdev;
+
+        /* SAFE: Add VIC to subdev array at index 0 using proper struct member */
+        ourISPdev->subdevs[0] = &vic_dev->sd;
+        
+        pr_info("*** REGISTERED VIC SUBDEV AT INDEX 0 WITH VIDEO OPS ***\n");
+        pr_info("VIC subdev: %p, ops: %p, video: %p, s_stream: %p\n",
+                &vic_dev->sd, vic_dev->sd.ops, vic_dev->sd.ops->video,
+                vic_dev->sd.ops->video->s_stream);
+    }
+    
+    /* Register CSI subdev with proper ops structure */
+    if (ourISPdev->csi_dev) {
+        struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)ourISPdev->csi_dev;
+        
+        /* Set up CSI subdev with ops pointing to csi_subdev_ops */
+        csi_dev->sd.ops = &csi_subdev_ops;
+        csi_dev->sd.isp = (void*)ourISPdev;
+        
+        /* SAFE: Add CSI to subdev array at index 1 using proper struct member */
+        ourISPdev->subdevs[1] = &csi_dev->sd;
+        
+        pr_info("*** REGISTERED CSI SUBDEV AT INDEX 1 WITH VIDEO OPS ***\n");
+        pr_info("CSI subdev: %p, ops: %p, video: %p, s_stream: %p\n",
+                &csi_dev->sd, csi_dev->sd.ops, csi_dev->sd.ops->video,
+                csi_dev->sd.ops->video->s_stream);
+    }
+
+    /* *** VIN subdev registration now handled in tx_isp_subdev_auto_link function *** */
+    pr_info("*** VIN SUBDEV REGISTRATION DEFERRED TO AUTO-LINK PHASE ***\n");
+
+    /* *** CRITICAL FIX: Register ISP CORE subdev - THIS WAS MISSING! *** */
+    /* The ISP core subdev should be registered to handle core video streaming */
+    if (ourISPdev) {
+        /* Set up ISP core subdev with proper ops structure */
+        ourISPdev->sd.ops = &core_subdev_ops_full;  /* Use the full ops structure */
+        ourISPdev->sd.isp = (void *)ourISPdev;
+
+        /* CRITICAL: Add ISP CORE to subdev array at index 4 (after VIC=0, CSI=1, sensor=2, VIN=3) */
+        ourISPdev->subdevs[4] = &ourISPdev->sd;
+
+        pr_info("*** REGISTERED ISP CORE SUBDEV AT INDEX 4 WITH VIDEO OPS ***\n");
+        pr_info("ISP CORE subdev: %p, ops: %p, video: %p, s_stream: %p\n",
+                &ourISPdev->sd, ourISPdev->sd.ops, ourISPdev->sd.ops->video,
+                ourISPdev->sd.ops->video ? ourISPdev->sd.ops->video->s_stream : NULL);
+    }
+
+    /* *** CRITICAL FIX: Platform devices are already registered in tx_isp_platform_probe() *** */
+    /* The reference driver only registers platform devices ONCE during probe, not in init */
+    pr_info("*** PLATFORM DEVICES ALREADY REGISTERED IN PROBE - SKIPPING DUPLICATE REGISTRATION ***\n");
+    
+    pr_info("*** ALL PLATFORM DEVICES REGISTERED - SHOULD SEE IRQ 37 + 38 IN /proc/interrupts ***\n");
+
+    /* *** CRITICAL: Initialize FS platform driver (creates /proc/jz/isp/isp-fs like reference) *** */
+    ret = tx_isp_fs_platform_init();
+    if (ret) {
+        pr_err("Failed to initialize FS platform driver: %d\n", ret);
+        goto err_cleanup_platforms;
+    }
+    pr_info("*** FS PLATFORM DRIVER INITIALIZED - /proc/jz/isp/isp-fs SHOULD NOW EXIST ***\n");
+
+    /* *** SUBDEV PLATFORM DRIVERS AND REGISTRY ALREADY INITIALIZED EARLIER *** */
+    pr_info("*** SUBDEV PLATFORM DRIVERS AND REGISTRY ALREADY AVAILABLE - SKIPPING DUPLICATE INITIALIZATION ***\n");
+    
+    /* Initialize CSI */
+    ret = tx_isp_init_csi_subdev(ourISPdev);
+    if (ret) {
+        pr_err("Failed to initialize CSI subdev: %d\n", ret);
+        goto err_cleanup_platforms;
+    }
+    
+    /* *** FIXED: USE PROPER STRUCT MEMBER ACCESS INSTEAD OF DANGEROUS OFFSETS *** */
+    pr_info("*** POPULATING SUBDEV ARRAY USING SAFE STRUCT MEMBER ACCESS ***\n");
+
+    /* Register VIC subdev with proper ops structure */
+    if (ourISPdev->vic_dev) {
+        /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+        struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
+
+        /* Set up VIC subdev with ops pointing to vic_subdev_ops */
+        vic_dev->sd.ops = &vic_subdev_ops;
+
+        /* CRITICAL: Link VIC subdev to ISP device */
+        vic_dev->sd.isp = ourISPdev;
+
+        /* SAFE: Add VIC to subdev array at index 0 using proper struct member */
+        ourISPdev->subdevs[0] = &vic_dev->sd;
+        
+        pr_info("*** REGISTERED VIC SUBDEV AT INDEX 0 WITH VIDEO OPS ***\n");
+//        pr_info("VIC subdev: %p, ops: %p, video: %p, s_stream: %p\n",
+//                &vic_dev->sd, vic_dev->sd.ops, vic_dev->sd.ops->video,
+//                vic_dev->sd.ops->video->s_stream);
+    }
+    
+    /* Register CSI subdev with proper ops structure */
+    if (ourISPdev->csi_dev) {
+        struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)ourISPdev->csi_dev;
+
+        /* Set up CSI subdev with ops pointing to csi_subdev_ops */
+        csi_dev->sd.ops = &csi_subdev_ops;
+        // csi_dev->sd.isp = (void*)ourISPdev;
+        
+        /* SAFE: Add CSI to subdev array at index 1 using proper struct member */
+        ourISPdev->subdevs[1] = &csi_dev->sd;
+        
+        pr_info("*** REGISTERED CSI SUBDEV AT INDEX 1 WITH VIDEO OPS ***\n");
+        pr_info("CSI subdev: %p, ops: %p, video: %p, s_stream: %p\n",
+                &csi_dev->sd, csi_dev->sd.ops, csi_dev->sd.ops->video,
+                csi_dev->sd.ops->video->s_stream);
+    }
+    
+    pr_info("*** SUBDEV ARRAY POPULATED SAFELY - tx_isp_video_link_stream SHOULD NOW WORK! ***\n");
+    
+    /* RACE CONDITION FIX: Mark subdev initialization as complete */
+    mutex_lock(&subdev_init_lock);
+    subdev_init_complete = true;
+    mutex_unlock(&subdev_init_lock);
+    
+    pr_info("*** RACE CONDITION FIX: SUBDEV INITIALIZATION MARKED COMPLETE ***\n");
+    pr_info("*** tx_isp_video_link_stream CALLS WILL NOW PROCEED SAFELY ***\n");
+    
+    pr_info("Device subsystem initialization complete\n");
+
+    /* Initialize real sensor detection and hardware integration */
+    ret = tx_isp_detect_and_register_sensors(ourISPdev);
+    if (ret) {
+        pr_warn("No sensors detected, continuing with basic initialization: %d\n", ret);
+    }
+    
+    /* *** CRITICAL: Comprehensive VIC register mapping diagnostics *** */
+    pr_info("*** VIC REGISTER MAPPING DIAGNOSTICS ***\n");
+    pr_info("*** ourISPdev = %p ***\n", ourISPdev);
+    if (ourISPdev) {
+        pr_info("*** ourISPdev->vic_dev = %p ***\n", ourISPdev->vic_dev);
+        pr_info("*** ourISPdev->vic_regs = %p ***\n", ourISPdev->vic_regs);
+
+        if (ourISPdev->vic_dev) {
+            struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
+            pr_info("*** vic_dev->vic_regs = %p ***\n", vic_dev->vic_regs);
+            pr_info("*** vic_dev->vic_regs_secondary = %p ***\n", vic_dev->vic_regs_secondary);
+
+            if (!vic_dev->vic_regs && !ourISPdev->vic_regs) {
+                pr_err("*** CRITICAL ERROR: NO VIC REGISTERS MAPPED! ***\n");
+                pr_err("*** This will cause BadVA crashes in interrupt handler ***\n");
+                pr_err("*** Check VIC probe function and tx_isp_subdev_init ***\n");
+            } else {
+                pr_info("*** VIC REGISTERS SUCCESSFULLY MAPPED ***\n");
+            }
+        } else {
+            pr_err("*** CRITICAL ERROR: VIC DEVICE NOT LINKED! ***\n");
+            pr_err("*** This will cause NULL pointer crashes in interrupt handler ***\n");
+            pr_err("*** Check VIC probe function and subdev linking ***\n");
+        }
+    } else {
+        pr_err("*** CRITICAL ERROR: ourISPdev IS NULL! ***\n");
+    }
+
+    /* *** CRITICAL: Comprehensive validation before IRQ registration *** */
+    if (!ourISPdev) {
+        pr_err("*** CRITICAL ERROR: Cannot register IRQ handlers - ourISPdev is NULL! ***\n");
+        pr_err("*** This would cause NULL pointer crashes in interrupt handlers ***\n");
+        return -ENODEV;
+    }
+
+    /* Validate critical structure members that interrupt handlers will access */
+    pr_info("*** VALIDATING ISP DEVICE STRUCTURE FOR IRQ REGISTRATION ***\n");
+    pr_info("*** ourISPdev = %p ***\n", ourISPdev);
+    pr_info("*** ourISPdev->core_regs = %p ***\n", ourISPdev->core_regs);
+    pr_info("*** ourISPdev->vic_dev = %p ***\n", ourISPdev->vic_dev);
+
+    if (ourISPdev->vic_dev) {
+        pr_info("*** ourISPdev->vic_dev->vic_regs = %p ***\n", ourISPdev->vic_dev->vic_regs);
+    }
+
+    /* Initialize any missing critical members */
+    if (!ourISPdev->core_regs) {
+        pr_warn("*** WARNING: core_regs is NULL - ISP core interrupts may fail ***\n");
+    }
+
+    if (!ourISPdev->vic_dev) {
+        pr_warn("*** WARNING: vic_dev is NULL - VIC interrupts may fail ***\n");
+    } else if (!ourISPdev->vic_dev->vic_regs) {
+        pr_warn("*** WARNING: vic_regs is NULL - VIC interrupts may fail ***\n");
+    }
+
+    pr_info("*** REGISTERING BOTH IRQ HANDLERS (37 + 38) FOR COMPLETE INTERRUPT SUPPORT ***\n");
+    pr_info("*** Using ourISPdev=%p as dev_id parameter ***\n", ourISPdev);
+
+    /* Register IRQ 37 (isp-m0) - Primary ISP processing */
+    ret = request_threaded_irq(37,
+                              isp_irq_handle,
+                              isp_irq_thread_handle,
+                              IRQF_SHARED,
+                              "isp-m0",                /* Match stock driver name */
+                              ourISPdev);
+    if (ret != 0) {
+        pr_err("*** FAILED TO REQUEST IRQ 37 (isp-m0): %d ***\n", ret);
+    } else {
+        pr_info("*** SUCCESS: IRQ 37 (isp-m0) REGISTERED with dev_id=%p ***\n", ourISPdev);
+        ourISPdev->isp_irq = 37;
+    }
+
+    /* Register IRQ 38 (isp-w02) - Secondary ISP channel */
+    ret = request_threaded_irq(38,
+                              isp_irq_handle,          /* Same handlers work for both IRQs */
+                              isp_irq_thread_handle,
+                              IRQF_SHARED,
+                              "isp-w02",               /* Match stock driver name */
+                              ourISPdev);              /* Use main device pointer */
+    if (ret != 0) {
+        pr_err("*** FAILED TO REQUEST IRQ 38 (isp-w02): %d ***\n", ret);
+        pr_err("*** ONLY IRQ 37 WILL BE AVAILABLE ***\n");
+    } else {
+        pr_info("*** SUCCESS: IRQ 38 (isp-w02) REGISTERED with dev_id=%p ***\n", ourISPdev);
+        ourISPdev->isp_irq2 = 38;  /* Store secondary IRQ */
+    }
+    
+    /* *** CRITICAL: Enable interrupt generation at hardware level *** */
+    pr_info("*** ENABLING HARDWARE INTERRUPT GENERATION ***\n");
+    if (ourISPdev->vic_dev) {
+        /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+        struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
+        if (vic_dev->vic_regs) {
+            void __iomem *isp_regs = vic_dev->vic_regs - 0x9a00;  /* Get ISP base from VIC base */
+            
+            pr_info("*** WRITING VIC INTERRUPT ENABLE REGISTERS ***\n");
+            
+            /* Enable VIC interrupts - from reference driver */
+            writel(0x3FFFFFFF, vic_dev->vic_regs_secondary + 0x1e0);  /* Enable all VIC interrupts */
+            writel(0x0, vic_dev->vic_regs_secondary + 0x1e8);         /* Clear interrupt masks */
+            writel(0xF, vic_dev->vic_regs_secondary + 0x1e4);         /* Enable MDMA interrupts */
+            writel(0x0, vic_dev->vic_regs_secondary + 0x1ec);         /* Clear MDMA masks */
+            wmb();
+            
+            pr_info("*** VIC INTERRUPT REGISTERS ENABLED - INTERRUPTS SHOULD NOW FIRE! ***\n");
+            
+            /* CRITICAL FIX: Enable ISP core interrupts too! Use core_regs if available */
+            pr_info("*** ENABLING ISP CORE INTERRUPT REGISTERS FOR MIPI DATA ***\n");
+            if (ourISPdev->core_regs) {
+                void __iomem *core = ourISPdev->core_regs;
+                /* Enable/unmask core interrupts at both possible banks (legacy +0xb* and new +0x98b*) */
+                /* Legacy bank */
+                u32 pend_legacy = readl(core + 0xb4);
+                writel(pend_legacy, core + 0xb8);  /* Clear any pending */
+                writel(0x3FFF, core + 0xb0);       /* INT_EN */
+                writel(0x3FFF, core + 0xbc);       /* INT_MASK/UNMASK */
+                /* New bank */
+                u32 pend_new = readl(core + 0x98b4);
+                writel(pend_new, core + 0x98b8);   /* Clear any pending */
+                writel(0x3FFF, core + 0x98b0);     /* INT_EN */
+                writel(0x3FFF, core + 0x98bc);     /* INT_MASK/UNMASK */
+                wmb();
+                pr_info("*** ISP CORE INTERRUPT REGISTERS ENABLED at legacy(+0xb*) and new(+0x98b*) ***\n");
+            } else {
+                /* Fallback to VIC-relative base if core_regs not mapped */
+                void __iomem *fallback = vic_dev->vic_regs ? (vic_dev->vic_regs - 0x9a00) : NULL;
+                if (fallback) {
+                    /* Legacy bank */
+                    u32 pend_legacy = readl(fallback + 0xb4);
+                    writel(pend_legacy, fallback + 0xb8);
+                    writel(0x3FFF, fallback + 0xb0);
+                    writel(0x3FFF, fallback + 0xbc);
+                    /* New bank */
+                    u32 pend_new = readl(fallback + 0x98b4);
+                    writel(pend_new, fallback + 0x98b8);
+                    writel(0x3FFF, fallback + 0x98b0);
+                    writel(0x3FFF, fallback + 0x98bc);
+                    wmb();
+                    pr_info("*** ISP CORE INTERRUPTS ENABLED via VIC-relative base (legacy+new) ***\n");
+                } else {
+                    pr_warn("*** Unable to enable ISP core interrupts: no valid base ***\n");
+                }
+            }
+            pr_info("*** BOTH VIC AND ISP CORE INTERRUPTS NOW ENABLED! ***\n");
+        }
+    }
+
+    /* Create ISP M0 tuning device node */
+    ret = tisp_code_create_tuning_node();
+    if (ret) {
+        pr_err("Failed to create ISP M0 tuning device: %d\n", ret);
+        /* Continue anyway - tuning is optional */
+    } else {
+        pr_info("*** ISP M0 TUNING DEVICE NODE CREATED SUCCESSFULLY ***\n");
+    }
+
+    /* *** REMOVED: Duplicate graph creation - already created in tx_isp_core_probe() *** */
+    pr_info("*** SUBDEVICE GRAPH ALREADY CREATED IN PROBE - SKIPPING DUPLICATE CREATION ***\n");
+
+    /* *** CRITICAL: Initialize V4L2 video devices for encoder compatibility *** */
+    pr_info("*** INITIALIZING V4L2 VIDEO DEVICES FOR ENCODER SUPPORT ***\n");
+    ret = tx_isp_v4l2_init();
+    if (ret) {
+        pr_err("Failed to initialize V4L2 video devices: %d\n", ret);
+        goto err_cleanup_graph;
+    }
+    pr_info("*** V4L2 VIDEO DEVICES CREATED - /dev/video0, /dev/video1 NOW AVAILABLE ***\n");
+
+    pr_info("TX ISP driver ready with new subdevice management system\n");
+    return 0;
+
+err_cleanup_graph:
+    tx_isp_cleanup_subdev_graph(ourISPdev);
+    
+err_cleanup_platforms:
+    /* Clean up in reverse order */
+    platform_device_unregister(&tx_isp_core_platform_device);
+    platform_device_unregister(&tx_isp_fs_platform_device);
+    platform_device_unregister(&tx_isp_vin_platform_device);
+    platform_device_unregister(&tx_isp_vic_platform_device);
+    platform_device_unregister(&tx_isp_csi_platform_device);
+err_cleanup_base:
+    cleanup_i2c_infrastructure(ourISPdev);
+    misc_deregister(&tx_isp_miscdev);
+    platform_driver_unregister(&tx_isp_driver);
+    platform_device_unregister(&tx_isp_platform_device);
+
+err_cleanup_subdev_drivers:
+    /* Cleanup individual subdev platform devices */
+    for (i = 0; i < 5; i++) {
+        if (subdev_platforms[i]) {
+            platform_device_unregister(subdev_platforms[i]);
+        }
+    }
+    tx_isp_subdev_platform_exit();
+
+err_free_dev:
+    kfree(ourISPdev);
+    ourISPdev = NULL;
+    return ret;
 }
 
 /* tx_isp_module_init - EXACT Binary Ninja reference implementation */
@@ -5045,6 +5502,23 @@ static void tx_isp_exit(void)
         /* CRITICAL: Store IRQ numbers before setting ourISPdev to NULL */
         int isp_irq = ourISPdev->isp_irq;
         int isp_irq2 = ourISPdev->isp_irq2;
+        struct tx_isp_dev *local_isp_dev = ourISPdev;
+
+        /* CRITICAL: Set ourISPdev to NULL BEFORE freeing interrupts to prevent race conditions */
+        ourISPdev = NULL;
+        pr_info("*** ourISPdev set to NULL - interrupt handlers will now safely exit ***\n");
+
+        /* Free hardware interrupts if initialized */
+        if (isp_irq > 0) {
+            free_irq(isp_irq, local_isp_dev);
+            pr_info("Hardware interrupt %d freed\n", isp_irq);
+        }
+
+        /* Free secondary interrupt if initialized */
+        if (isp_irq2 > 0) {
+            free_irq(isp_irq2, local_isp_dev);
+            pr_info("Hardware interrupt %d freed\n", isp_irq2);
+        }
 
         /* CRITICAL: Ensure all interrupts are completely finished before freeing memory */
         synchronize_irq(37);

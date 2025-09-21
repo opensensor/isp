@@ -599,38 +599,6 @@ int tx_isp_core_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *confi
 }
 EXPORT_SYMBOL(tx_isp_core_set_format);
 
-/* Bridge init to reference ispcore_core_ops_init so it actually runs */
-static int core_subdev_core_init_bridge(struct tx_isp_subdev *sd, int enable)
-{
-    struct tx_isp_dev *isp = sd ? (struct tx_isp_dev *)sd->isp : NULL;
-    struct tx_isp_sensor_attribute *attr = NULL;
-
-    if (!isp) {
-        pr_info("core_subdev_core_init_bridge: No ISP device linked to subdev, using global ourISPdev\n");
-        extern struct tx_isp_dev *ourISPdev;
-        isp = ourISPdev;
-    }
-
-    if (!isp) {
-        pr_err("core_subdev_core_init_bridge: No ISP device available\n");
-        return -EINVAL;
-    }
-
-    /* CRITICAL: Check if VIC device is available - if not, return error like reference driver */
-    if (enable && !isp->vic_dev) {
-        pr_err("core_subdev_core_init_bridge: VIC device not ready yet, Core ISP init FAILED\n");
-        return -EINVAL;  /* Return error like reference driver when VIC is not available */
-    }
-
-    /* When enabling, pass current sensor attributes; when disabling, pass NULL like reference */
-    if (enable && isp->sensor && isp->sensor->video.attr) {
-        attr = isp->sensor->video.attr;
-    }
-
-    pr_info("core_subdev_core_init_bridge: Calling ispcore_core_ops_init with isp=%p, attr=%p\n", isp, attr);
-    return ispcore_core_ops_init(isp, attr);
-}
-
 /* Forward declaration for ispcore_core_ops_ioctl */
 int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 
@@ -656,7 +624,15 @@ static struct tx_isp_subdev_pad_ops core_pad_ops = {
 };
 
 
-
+/* Update the core subdev ops to include the core ops */
+struct tx_isp_subdev_ops core_subdev_ops_full = {
+    .core = &core_subdev_core_ops,
+    .video = &core_subdev_video_ops,
+    .pad = &core_pad_ops,
+    .sensor = NULL,
+    .internal = NULL
+};
+EXPORT_SYMBOL(core_subdev_ops_full);
 
 /**
  * tx_isp_get_device - CRITICAL: Get global ISP device pointer
@@ -833,8 +809,8 @@ static irqreturn_t (*irq_func_cb[32])(int irq, void *dev_id) = {0};
 static volatile int isp_force_core_isr = 0;  /* Force ISP core ISR flag */
 
 
-/* Binary Ninja: ispcore_sensor_ops_iterate - iterate through subdevices safely */
-static int ispcore_sensor_ops_iterate(struct tx_isp_dev *isp_dev)
+/* Binary Ninja: ispcore_sensor_ops_ioctl - iterate through subdevices safely */
+static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
 {
     int result = 0;
     int i;
@@ -1160,38 +1136,6 @@ static int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
     pr_info("*** tx_isp_request_irq: ISP Core IRQ %d will be handled by main dispatcher ***\n", irq_number);
     pr_info("*** tx_isp_request_irq: Dispatcher will call handler with dev_id = %p (ISP device) ***\n", ourISPdev);
     return 0;
-}
-
-/* ISP Core interrupt enable function - MISSING from original implementation */
-void tx_isp_core_enable_irq(struct tx_isp_dev *isp_dev)
-{
-    void __iomem *core_regs;
-
-    pr_info("*** tx_isp_core_enable_irq: Enabling ISP Core hardware interrupts ***\n");
-
-    if (!isp_dev || !isp_dev->core_regs) {
-        pr_err("tx_isp_core_enable_irq: Invalid ISP device or core registers\n");
-        return;
-    }
-
-    core_regs = isp_dev->core_regs;
-
-    /* CRITICAL: Enable ISP core interrupt generation at hardware level */
-    /* Binary Ninja: system_reg_write(0x30, 0xffffffff) - Enable all interrupt sources */
-    writel(0xffffffff, core_regs + 0x30);
-
-    /* Binary Ninja: system_reg_write(0x10, 0x133) - Enable specific interrupt types */
-    writel(0x133, core_regs + 0x10);
-
-    /* Enable interrupt banks */
-    writel(0x3FFF, core_regs + 0xb0);
-    writel(0x3FFF, core_regs + 0xbc);
-    writel(0x3FFF, core_regs + 0x98b0);
-    writel(0x3FFF, core_regs + 0x98bc);
-    wmb();
-
-    pr_info("*** tx_isp_core_enable_irq: ISP Core hardware interrupt registers configured ***\n");
-    pr_info("*** tx_isp_core_enable_irq: reg 0x30=0xffffffff, 0x10=0x133, banks enabled ***\n");
 }
 
 /* Core ISP interrupt handler - now calls the dispatch system */
@@ -1664,45 +1608,6 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
     return result;
 }
 
-/* Duplicate function removed - using existing ispcore_core_ops_ioctl at line 664 */
-
-/* ispcore_sensor_ops_ioctl_new - EXACT Binary Ninja reference implementation */
-int ispcore_sensor_ops_ioctl_new(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
-{
-    pr_info("*** ispcore_sensor_ops_ioctl_new: cmd=0x%08x ***\n", cmd);
-
-    /* Handle Core ISP-specific sensor IOCTL commands */
-    switch (cmd) {
-    case 0x1000000:  /* Core operation */
-        pr_info("ispcore_sensor_ops_ioctl_new: Core operation 0x1000000\n");
-        return 0;
-    case 0x1000001:  /* Sensor operation */
-        pr_info("ispcore_sensor_ops_ioctl_new: Sensor operation 0x1000001\n");
-        return 0;
-    default:
-        pr_info("ispcore_sensor_ops_ioctl_new: Unknown command 0x%08x\n", cmd);
-        return -ENOTTY;
-    }
-}
-
-/* subdev_sensor_ops_ioctl - EXACT Binary Ninja reference implementation */
-int subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
-{
-    pr_info("*** subdev_sensor_ops_ioctl: cmd=0x%08x ***\n", cmd);
-
-    /* Handle generic subdev sensor IOCTL commands */
-    switch (cmd) {
-    case 0x1000000:  /* Core operation */
-        pr_info("subdev_sensor_ops_ioctl: Core operation 0x1000000\n");
-        return 0;
-    case 0x1000001:  /* Sensor operation */
-        pr_info("subdev_sensor_ops_ioctl: Sensor operation 0x1000001\n");
-        return 0;
-    default:
-        pr_info("subdev_sensor_ops_ioctl: Unknown command 0x%08x\n", cmd);
-        return -ENOTTY;
-    }
-}
 
 
 /* Global variables for tisp_init - Binary Ninja exact data structures */
@@ -1746,10 +1651,6 @@ int ispcore_core_ops_init(struct tx_isp_dev *arg1, struct tx_isp_sensor_attribut
     /* CRITICAL: Initialize frame sync work structure - MUST be done before any interrupts */
     INIT_WORK(&ispcore_fs_work, ispcore_irq_fs_work);
     pr_info("*** ispcore_core_ops_init: Frame sync work structure initialized ***");
-
-    /* CRITICAL: Enable ISP Core hardware interrupts */
-    tx_isp_core_enable_irq(arg1);
-    pr_info("*** ispcore_core_ops_init: ISP Core hardware interrupts enabled ***");
 
     /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) */
     if (arg1 != NULL && (unsigned long)arg1 < 0xfffff001) {

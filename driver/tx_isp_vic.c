@@ -875,7 +875,7 @@ void tx_isp_vic_write_csi_phy_sequence(void)
     writel(0xc5, csi_base + 0x114);
     writel(0x3, csi_base + 0x118);
     writel(0x20, csi_base + 0x11c);
-    writel(0xf, csi_base + 0x120);
+    writel(0x10, csi_base + 0x120);  /* CORRECTED: 0x10 to match reference trace */
     writel(0x48, csi_base + 0x124);
     writel(0x3f, csi_base + 0x128);  /* CORRECTED: Should be 0x3f to match reference */
     writel(0xf, csi_base + 0x12c);
@@ -918,6 +918,11 @@ void tx_isp_vic_write_csi_phy_sequence(void)
     writel(0x7f, csi_base + 0x1e8);
     writel(0x4b, csi_base + 0x1ec);
     writel(0x3, csi_base + 0x1f4);
+
+    /* MISSING WRITES: Add the missing isp-w02 CSI PHY Config writes from reference trace */
+    writel(0x100010, csi_base + 0x1a4);  /* Missing from reference trace */
+    writel(0x4440, csi_base + 0x1a8);    /* Missing from reference trace */
+    writel(0x10, csi_base + 0x1b0);      /* Missing from reference trace */
     wmb();
     
     pr_info("*** CSI PHY SEQUENCE: Step 2 - CSI Lane Config registers (0x200-0x2f4) ***\n");
@@ -983,6 +988,20 @@ void tx_isp_vic_write_csi_phy_sequence(void)
     wmb();
     
     pr_info("*** CRITICAL: CSI PHY SEQUENCE COMPLETE - NOW MATCHES REFERENCE DRIVER ORDER! ***\n");
+
+    /* STEP 4: isp-w01 CSI PHY Control writes - MISSING from our implementation */
+    pr_info("*** CSI PHY SEQUENCE: Step 4 - isp-w01 CSI PHY Control registers ***\n");
+
+    /* These are the missing isp-w01 writes from the reference trace */
+    /* isp-w01 base is at a different offset - calculate from VIC base */
+    void __iomem *isp_w01_base = ourISPdev->vic_regs - 0x9a00 + 0x10000;  /* isp-w01 offset */
+
+    writel(0x3130322a, isp_w01_base + 0x0);   /* isp-w01 CSI PHY Control 0x0 */
+    writel(0x1, isp_w01_base + 0x4);          /* isp-w01 CSI PHY Control 0x4 */
+    writel(0x200, isp_w01_base + 0x14);       /* isp-w01 CSI PHY Control 0x14 */
+    wmb();
+
+    pr_info("*** CSI PHY SEQUENCE: isp-w01 writes complete ***\n");
 }
 
 int tx_isp_phy_init(struct tx_isp_dev *isp_dev)
