@@ -4279,13 +4279,23 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     /* FIXED: Use proper struct member access instead of raw pointer arithmetic */
     /* Binary Ninja: void* $a0 = *(arg1 + 0xd4) - this is sd->host_priv */
     /* Get VIC device from subdev->host_priv (Binary Ninja offset 0xd4) */
-    if (!sd || !sd->host_priv) {
-        pr_err("*** vic_sensor_ops_ioctl: Invalid subdev or host_priv is NULL ***\n");
+    pr_info("*** vic_sensor_ops_ioctl: DEBUG - sd=%p, sd->host_priv=%p ***\n", sd, sd ? sd->host_priv : NULL);
+
+    if (!sd) {
+        pr_err("*** vic_sensor_ops_ioctl: Invalid subdev (NULL) ***\n");
         return 0;
     }
 
-    /* Binary Ninja expects VIC device at sd->host_priv */
-    vic_dev = (struct tx_isp_vic_device *)sd->host_priv;
+    if (!sd->host_priv) {
+        pr_err("*** vic_sensor_ops_ioctl: host_priv is NULL - trying container_of approach ***\n");
+        /* Fallback: try to get VIC device using container_of */
+        vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
+        pr_info("*** vic_sensor_ops_ioctl: Using container_of - vic_dev=%p ***\n", vic_dev);
+    } else {
+        /* Binary Ninja expects VIC device at sd->host_priv */
+        vic_dev = (struct tx_isp_vic_device *)sd->host_priv;
+        pr_info("*** vic_sensor_ops_ioctl: Using host_priv - vic_dev=%p ***\n", vic_dev);
+    }
 
     /* Also get ISP device for additional operations */
     isp_dev = ourISPdev;
