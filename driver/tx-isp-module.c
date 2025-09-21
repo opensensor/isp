@@ -1612,17 +1612,22 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     int timeout;
     int i;
 
-    /* CRITICAL SAFETY: Validate ourISPdev before any access */
-    if (!ourISPdev) {
-        pr_err("*** CRITICAL: isp_vic_interrupt_service_routine called with NULL ourISPdev! ***\n");
+    /* CRITICAL SAFETY: Use the dev_id parameter passed by the interrupt dispatcher */
+    isp_dev = (struct tx_isp_dev *)dev_id;
+    if (!isp_dev) {
+        pr_err("*** CRITICAL: isp_vic_interrupt_service_routine called with NULL dev_id! ***\n");
         return IRQ_NONE;
     }
 
-    isp_dev = ourISPdev;
+    /* CRITICAL SAFETY: Validate isp_dev pointer range */
+    if ((uintptr_t)isp_dev < 0x80000000 || (uintptr_t)isp_dev > 0x9fffffff) {
+        pr_err("*** CRITICAL: isp_vic_interrupt_service_routine called with invalid isp_dev=%p ***\n", isp_dev);
+        return IRQ_NONE;
+    }
 
     /* CRITICAL SAFETY: Validate vic_dev before any access */
     /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
-    vic_dev = ourISPdev->vic_dev;
+    vic_dev = isp_dev->vic_dev;
     if (!vic_dev) {
         pr_err("*** CRITICAL: isp_vic_interrupt_service_routine called with NULL vic_dev! ***\n");
         return IRQ_NONE;
