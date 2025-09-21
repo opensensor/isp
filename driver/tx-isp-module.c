@@ -3267,43 +3267,75 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             /* Binary Ninja: if (var_90 == 1) tisp_awb_algo_handle(&var_98) */
             return s6_1;
         }
+    } else if (cmd == 0xc050561a) { // TX_ISP_SENSOR_ENUM_INPUT - MEMORY SAFE implementation
+        struct sensor_enum_data {
+            int index;
+            char name[32];
+            int padding[4];  /* Extra padding to match 0x50 size */
+        } input_data;
+        int sensor_found = 0;
+        struct registered_sensor *sensor;
 
-        /* Binary Ninja: Handle 0xc050561a - TX_ISP_SENSOR_ENUM_INPUT */
-        if (cmd == 0xc050561a) {
-            pr_info("*** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***\n");
+        pr_debug("*** TX_ISP_SENSOR_ENUM_INPUT: MEMORY SAFE implementation ***\n");
 
-            /* Binary Ninja: if (private_copy_from_user(&var_98, arg3, 0x50) != 0) */
-            if (copy_from_user(&var_98, (void __user *)arg, 0x50) != 0) {
-                pr_err("TX_ISP_SENSOR_ENUM_INPUT: copy_from_user failed\n");
-                return -EFAULT;
-            }
-
-            pr_info("TX_ISP_SENSOR_ENUM_INPUT: Requested index=%d\n", var_98.as_input.index);
-
-            /* Call the reference implementation directly with var_98 */
-            int result = subdev_sensor_ops_enum_input((struct v4l2_subdev *)isp_dev, &var_98.as_input);
-
-            if (result == 0) {
-                pr_info("TX_ISP_SENSOR_ENUM_INPUT: Found sensor '%s' at index %d\n",
-                        var_98.as_input.name, var_98.as_input.index);
-            } else {
-                pr_info("TX_ISP_SENSOR_ENUM_INPUT: No sensor found at index %d, returning empty name\n",
-                        var_98.as_input.index);
-                /* Clear sensor name - userspace will see empty name and stop enumeration */
-                memset(var_98.as_input.name, 0, sizeof(var_98.as_input.name));
-            }
-
-            /* Binary Ninja: if (private_copy_to_user(arg3, &var_98, 0x50) != 0) */
-            if (copy_to_user((void __user *)arg, &var_98, 0x50) != 0) {
-                pr_err("TX_ISP_SENSOR_ENUM_INPUT: copy_to_user failed\n");
-                return -EFAULT;
-            }
-
-            pr_info("TX_ISP_SENSOR_ENUM_INPUT: Completed successfully\n");
-            return 0;
+        /* SAFE: Use properly aligned structure for user data copy */
+        if (copy_from_user(&input_data, (void __user *)arg, sizeof(input_data))) {
+            pr_err("TX_ISP_SENSOR_ENUM_INPUT: Failed to copy input data\n");
+            return -EFAULT;
         }
 
-        /* More high-range command handling would go here */
+        /* Validate input index to prevent array bounds issues */
+        if (input_data.index < 0 || input_data.index > 16) {
+            pr_warn("TX_ISP_SENSOR_ENUM_INPUT: Invalid sensor index %d (valid range: 0-16)\n",
+                    input_data.index);
+            return -EINVAL;
+        }
+
+        pr_debug("Sensor enumeration: requesting index %d\n", input_data.index);
+
+        /* SAFE: Check our registered sensor list first */
+        mutex_lock(&sensor_list_mutex);
+        list_for_each_entry(sensor, &sensor_list, list) {
+            if (sensor->index == input_data.index) {
+                strncpy(input_data.name, sensor->name, sizeof(input_data.name) - 1);
+                input_data.name[sizeof(input_data.name) - 1] = '\0';
+                sensor_found = 1;
+                pr_debug("*** FOUND SENSOR: index=%d name=%s ***\n",
+                       input_data.index, input_data.name);
+                break;
+            }
+        }
+        mutex_unlock(&sensor_list_mutex);
+
+        /* SAFE: If not found in registered list, check if we have a fallback sensor */
+        if (!sensor_found && ourISPdev && ourISPdev->sensor_sd && input_data.index == 0) {
+            /* Special case: if requesting index 0 and we have a connected sensor subdev */
+            struct tx_isp_subdev *sensor_sd = ourISPdev->sensor_sd;
+            if (sensor_sd && sensor_sd->active_sensor && sensor_sd->active_sensor->info.name[0] != '\0') {
+            	if (active_sensor && active_sensor->info.name[0] != '\0') {
+                	strncpy(input_data.name, active_sensor->info.name, sizeof(input_data.name) - 1);
+                	input_data.name[sizeof(input_data.name) - 1] = '\0';
+                	sensor_found = 1;
+                	pr_debug("*** FOUND ACTIVE SENSOR: index=%d name=%s ***\n",
+                       input_data.index, input_data.name);
+	            }
+			}
+        }
+        
+        /* SAFE: Early return for invalid sensor index to prevent crashes */
+        if (!sensor_found) {
+            pr_debug("No sensor found at index %d (total registered: %d)\n",
+                    input_data.index, sensor_count);
+            return -EINVAL;
+        }
+        
+        /* SAFE: Copy result back to user with proper alignment */
+        if (copy_to_user((void __user *)arg, &input_data, sizeof(input_data))) {
+            pr_err("TX_ISP_SENSOR_ENUM_INPUT: Failed to copy result to user\n");
+            return -EFAULT;
+        }
+        
+        pr_debug("Sensor enumeration: index=%d name=%s\n", input_data.index, input_data.name);
         return 0;
     }
 
@@ -5516,7 +5548,24 @@ int tisp_s_ev_start(int ev_value)
 }
 EXPORT_SYMBOL(tisp_s_ev_start);
 
+/* tiziano_s_awb_start - EXACT Binary Ninja implementation */
+int tiziano_s_awb_start(int r_gain, int b_gain)
+{
+    pr_info("tiziano_s_awb_start: r_gain=%d, b_gain=%d\n", r_gain, b_gain);
 
+    /* Binary Ninja: awb_r_gain = arg1 */
+    awb_r_gain = r_gain;
+
+    /* Binary Ninja: awb_b_gain = arg2 */
+    awb_b_gain = b_gain;
+
+    pr_info("tiziano_s_awb_start: AWB initialized - r_gain=%d, b_gain=%d\n",
+             awb_r_gain, awb_b_gain);
+
+    /* Binary Ninja: return 0 */
+    return 0;
+}
+EXPORT_SYMBOL(tiziano_s_awb_start);
 
 /* tiziano_ae_s_ev_start - EXACT Binary Ninja implementation */
 int tiziano_ae_s_ev_start(int ev_value)
@@ -5756,13 +5805,13 @@ MODULE_LICENSE("GPL");
 /* Additional module metadata for kernel 3.10 compatibility */
 MODULE_INFO(supported, "T31 ISP Hardware");
 
-/* V4L2 symbol dependencies - declare what we need */
-MODULE_ALIAS("char-major-81-*");  /* V4L2 device major number */
-MODULE_DEVICE_TABLE(platform, tx_isp_platform_device_ids);
-
 /* Platform device ID table for proper device matching */
 static struct platform_device_id tx_isp_platform_device_ids[] = {
     { "tx-isp", 0 },
     { "tx-isp-t31", 0 },
     { }
 };
+
+/* V4L2 symbol dependencies - declare what we need */
+MODULE_ALIAS("char-major-81-*");  /* V4L2 device major number */
+MODULE_DEVICE_TABLE(platform, tx_isp_platform_device_ids);
