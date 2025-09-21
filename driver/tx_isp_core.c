@@ -256,27 +256,10 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         return -EINVAL;
     }
 
-    /* DEBUG: Check subdev ops structure */
-    pr_info("*** ispcore_video_s_stream: DEBUG - sd=%p, sd->ops=%p ***\n", sd, sd->ops);
-    if (sd->ops) {
-        pr_info("*** ispcore_video_s_stream: DEBUG - sd->ops->core=%p ***\n", sd->ops->core);
-        pr_info("*** ispcore_video_s_stream: DEBUG - sd->ops->video=%p ***\n", sd->ops->video);
-        if (sd->ops->core) {
-            pr_info("*** ispcore_video_s_stream: DEBUG - sd->ops->core->init=%p ***\n", sd->ops->core->init);
-        }
-    }
-
     /* Binary Ninja: void* $s0 = arg1[0x35] - get core device from subdev */
     core_dev = container_of(sd, struct tx_isp_core_device, sd);
     if (!core_dev) {
         pr_err("ispcore_video_s_stream: No core device available\n");
-        return -EINVAL;
-    }
-
-    /* DEBUG: Validate core device structure */
-    pr_info("*** ispcore_video_s_stream: DEBUG - core_dev=%p ***\n", core_dev);
-    if (!tx_isp_core_device_is_valid(core_dev)) {
-        pr_err("ispcore_video_s_stream: Core device validation failed\n");
         return -EINVAL;
     }
 
@@ -286,21 +269,13 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         return -EINVAL;
     }
 
-    /* DEBUG: Add detailed pointer validation and state checking */
-    pr_info("*** ispcore_video_s_stream: DEBUG - core_dev=%p, state=%d ***\n", core_dev, core_dev->state);
-    pr_info("*** ispcore_video_s_stream: DEBUG - isp_dev=%p ***\n", isp_dev);
-    pr_info("*** ispcore_video_s_stream: DEBUG - About to check lock at %p ***\n", &core_dev->lock);
-
     /* Binary Ninja: __private_spin_lock_irqsave($s0 + 0xdc, &var_28) */
     __private_spin_lock_irqsave(&core_dev->lock, &var_28);
-
-    pr_info("*** ispcore_video_s_stream: DEBUG - Lock acquired, checking state %d ***\n", core_dev->state);
 
     /* Binary Ninja: if (*($s0 + 0xe8) s< 3) */
     if (core_dev->state < 3) {
         /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream") */
         isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream");
-        pr_err("*** ispcore_video_s_stream: Core state %d < 3, need to initialize core first ***\n", core_dev->state);
         /* Binary Ninja: private_spin_unlock_irqrestore($s0 + 0xdc, var_28) */
         spin_unlock_irqrestore(&core_dev->lock, var_28);
         /* Binary Ninja: return 0xffffffff */

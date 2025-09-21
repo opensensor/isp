@@ -1657,13 +1657,21 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
     if (vic_start_ok != 0) {
         /* SAFE: Handle frame done interrupt */
         if ((v1_7 & 1) != 0) {
-            /* CRITICAL SAFETY: Validate frame_count field before increment */
-            if (virt_addr_valid(&vic_dev->frame_count)) {
+            /* CRITICAL SAFETY: Extra validation to prevent ASCII pointer crashes */
+            if (vic_dev &&
+                (unsigned long)vic_dev >= 0x80000000 &&
+                (unsigned long)vic_dev < 0xfffff000 &&
+                virt_addr_valid(vic_dev) &&
+                virt_addr_valid(&vic_dev->frame_count) &&
+                virt_addr_valid(&vic_dev->frame_complete)) {
+
                 vic_dev->frame_count += 1;
-                
+
                 /* SAFE: Signal frame completion without dangerous operations */
                 complete(&vic_dev->frame_complete);
                 pr_debug("VIC frame done interrupt - count=%d\n", vic_dev->frame_count);
+            } else {
+                pr_err("*** VIC IRQ: CORRUPTED vic_dev pointer 0x%p - preventing crash ***\n", vic_dev);
             }
         }
 
