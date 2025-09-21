@@ -3820,10 +3820,12 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
             if ((arg1[5] & 0x20) == 0) {
                 void* s0_2 = (void*)arg1[8];
                 if (s0_2 != 0) {
-                    __private_spin_lock_irqsave((char*)s0_2 + 0x9c, &var_58);
+                    /* SAFE: Use struct member access for spinlock instead of (char*)s0_2 + 0x9c */
+                    struct frame_channel_binary_ninja *channel_s0 = (struct frame_channel_binary_ninja *)s0_2;
+                    __private_spin_lock_irqsave(&channel_s0->lock, &var_58);
                     tisp_channel_fifo_clear((uint32_t)arg1[1] & 0xff); /* zx.d(arg1[1].b) */
                     result = 0;
-                    spin_unlock_irqrestore((char*)s0_2 + 0x9c, var_58);
+                    spin_unlock_irqrestore(&channel_s0->lock, var_58);
                     ISP_INFO("ispcore_pad_event_handle: channel fifo cleared");
                 }
             }
