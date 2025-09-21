@@ -1100,104 +1100,37 @@ int tx_isp_phy_init(struct tx_isp_dev *isp_dev)
 }
 
 
-/* tx_isp_vic_start - Following EXACT Binary Ninja flow with reference driver sequences */
+/* tx_isp_vic_start - EXACT Binary Ninja reference implementation */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_regs;
     struct tx_isp_sensor_attribute *sensor_attr;
-    u32 interface_type, sensor_format;
-    u32 timeout = 10000;
-    struct clk *isp_clk, *cgu_isp_clk, *csi_clk, *ipu_clk;
-    void __iomem *cpm_regs;
-    int ret;
+    u32 interface_type;
+    int ret = 0;
 
-    /* CRITICAL FIX: Define actual sensor dimensions for consistent use throughout function */
-    u32 actual_width, actual_height;
+    pr_info("*** tx_isp_vic_start: EXACT Binary Ninja reference implementation ***\n");
 
-    pr_info("*** tx_isp_vic_start: Following EXACT Binary Ninja flow ***\n");
-
-    /* Binary Ninja: 00010244 void* $v1 = *(arg1 + 0x110) */
+    /* Binary Ninja: Basic validation only */
     if (!vic_dev) {
-        pr_err("*** CRITICAL: Invalid vic_dev pointer ***\n");
         return -EINVAL;
     }
 
-    /* CRITICAL SAFETY: Ensure VIC device is fully initialized before starting */
-    if (!vic_dev->done_head.next || !vic_dev->done_head.prev) {
-        pr_err("*** CRITICAL: VIC device not properly initialized - done_head list invalid ***\n");
-        pr_err("*** This would cause interrupt handler crashes - aborting start ***\n");
-        return -ENODEV;
-    }
-
-    /* CRITICAL SAFETY: Ensure all critical structures are initialized */
-    if (!vic_dev->queue_head.next || !vic_dev->queue_head.prev ||
-        !vic_dev->free_head.next || !vic_dev->free_head.prev) {
-        pr_err("*** CRITICAL: VIC device buffer lists not initialized - aborting start ***\n");
-        return -ENODEV;
-    }
-
-    pr_info("*** VIC SAFETY CHECK: All critical structures properly initialized ***\n");
-
-    /* CRITICAL FIX: Always use the REAL registered sensor attributes */
+    /* Binary Ninja: void* $v1 = *(arg1 + 0x110) - Get sensor attributes */
     if (ourISPdev && ourISPdev->sensor && ourISPdev->sensor->video.attr) {
         sensor_attr = ourISPdev->sensor->video.attr;
-        pr_info("*** USING REAL SENSOR ATTRIBUTES: sensor_attr=%p, dbus_type=%d ***\n",
-                sensor_attr, sensor_attr->dbus_type);
     } else {
-        pr_err("*** CRITICAL ERROR: No real sensor registered! Cannot start VIC ***\n");
-        pr_err("*** ourISPdev=%p, sensor=%p ***\n", ourISPdev, ourISPdev ? ourISPdev->sensor : NULL);
+        pr_err("tx_isp_vic_start: No sensor attributes available\n");
         return -ENODEV;
     }
 
-    /* DEBUG: Check if sensor_attr is properly initialized */
-    pr_info("*** DEBUG: sensor_attr=%p, dbus_type=%d ***\n", sensor_attr, sensor_attr ? sensor_attr->dbus_type : -1);
-
-    /* CRITICAL FIX: Use ACTUAL sensor output dimensions, not total dimensions */
-    /* GC2053 sensor outputs 1920x1080 but reports total dimensions 2200x1418 */
-    actual_width = 1920;   /* ACTUAL sensor output width */
-    actual_height = 1080;  /* ACTUAL sensor output height */
-
-    pr_info("*** DIMENSION FIX: Using ACTUAL sensor output dimensions %dx%d for VIC configuration ***\n",
-            actual_width, actual_height);
-    pr_info("*** CRITICAL: VIC configured for sensor OUTPUT, not sensor TOTAL dimensions ***\n");
-
-    /* Binary Ninja: 0001024c int32_t $v0 = *($v1 + 0x14) - interface type at offset 0x14 */
+    /* Binary Ninja: int32_t $v0 = *($v1 + 0x14) - Get interface type */
     interface_type = sensor_attr->dbus_type;
 
-    pr_info("*** VIC INTERFACE DETECTION: interface_type=%d (MIPI=1, DVP=2) ***\n", interface_type);
-    pr_info("*** SENSOR ATTRIBUTE: dbus_type=%d ***\n", sensor_attr->dbus_type);
-
-    /* CRITICAL FIX: Use CSI format instead of data_type for RAW10 */
-    /* sensor_attr->data_type = TX_SENSOR_DATA_TYPE_LINEAR (not what we need) */
-    /* sensor_attr->mipi.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10 (this is what we need) */
-
-    /* SAFETY: Check if sensor_attr is valid before accessing nested structures */
-    if (!sensor_attr) {
-        pr_err("*** CRITICAL: sensor_attr is NULL ***\n");
-        return -EINVAL;
-    }
-
-    /* SAFETY: Use default RAW10 format if sensor_attr access fails */
-    sensor_format = 0x2b;  /* Default to RAW10 MIPI data type value */
-
-    /* Try to get actual sensor format, but use default if it fails */
-    if (sensor_attr) {
-        /* For now, just use the default RAW10 format to avoid potential crashes */
-        pr_info("*** SAFETY: Using default RAW10 format (0x2b) to avoid sensor_attr access issues ***\n");
-    }
-
-    pr_info("*** Interface type: %d, Format: 0x%x (RAW10) ***\n", interface_type, sensor_format);
-
-    /* Get VIC register base - offset 0xb8 in Binary Ninja */
+    /* Get VIC register base */
     vic_regs = vic_dev->vic_regs;
     if (!vic_regs) {
-        pr_err("*** CRITICAL: No VIC register base ***\n");
         return -EINVAL;
     }
-
-    /* Calculate base addresses for register blocks */
-    void __iomem *main_isp_base = vic_regs - 0x9a00;
-    void __iomem *csi_base = main_isp_base + 0x10000;
 
     /* STEP 1: Enable clocks - Critical for VIC operation */
     cgu_isp_clk = clk_get(NULL, "cgu_isp");
