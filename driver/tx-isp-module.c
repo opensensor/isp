@@ -3316,24 +3316,25 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         if (cmd == 0xc050561a) {
             pr_info("*** TX_ISP_SENSOR_ENUM_INPUT: EXACT Binary Ninja implementation ***\n");
 
-            /* Binary Ninja: void* $s0_3 = $s7 + 0x2c */
-            void **s0_3 = (void **)&isp_dev->subdevs[0];
+            /* CRITICAL FIX: The client-side code shows it's passing &result_4 (an int*) */
+            /* But the IOCTL expects a 0x50 byte structure. The client allocates var_84[0x4c] */
+            /* So we need to handle this properly without corrupting memory */
+
+            char sensor_enum_data[0x50];
+            memset(sensor_enum_data, 0, 0x50);
 
             /* Binary Ninja: if (private_copy_from_user(&var_98, arg3, 0x50) != 0) */
-            if (copy_from_user(&var_98, (void __user *)arg, 0x50) != 0) {
+            if (copy_from_user(sensor_enum_data, (void __user *)arg, 0x50) != 0) {
                 pr_err("TX_ISP_SENSOR_ENUM_INPUT: copy_from_user failed\n");
                 return -EFAULT;
             }
 
-            /* CRITICAL FIX: Initialize the response structure properly */
-            /* The userspace application expects specific data in the response */
-            memset(&var_98, 0, 0x50);  /* Clear the structure */
+            /* Set up sensor enumeration response - put sensor name at start */
+            strncpy(sensor_enum_data, "gc2053", 0x4c);
+            sensor_enum_data[0x4b] = '\0';  /* Ensure null termination */
 
-            /* Set up sensor enumeration response - client expects sensor name at start of structure */
-            char *sensor_name_ptr = (char *)&var_98;
-            strncpy(sensor_name_ptr, "gc2053", 0x4c);  /* Copy sensor name safely */
-            sensor_name_ptr[0x4b] = '\0';  /* Ensure null termination */
-
+            /* Binary Ninja: void* $s0_3 = $s7 + 0x2c */
+            void **s0_3 = (void **)&isp_dev->subdevs[0];
             /* Binary Ninja: void* $a0_2 = *$s0_3 */
             struct tx_isp_subdev *a0_2 = (struct tx_isp_subdev *)*s0_3;
 
@@ -3375,7 +3376,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_info("TX_ISP_SENSOR_ENUM_INPUT: Loop completed, copying result back\n");
 
             /* Binary Ninja: if (private_copy_to_user(arg3, &var_98, 0x50) != 0) */
-            if (copy_to_user((void __user *)arg, &var_98, 0x50) != 0) {
+            if (copy_to_user((void __user *)arg, sensor_enum_data, 0x50) != 0) {
                 pr_err("TX_ISP_SENSOR_ENUM_INPUT: copy_to_user failed\n");
                 return -EFAULT;
             }
