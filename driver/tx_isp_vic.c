@@ -1653,57 +1653,10 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         /* Skip all buffer allocation - this was likely causing the crash */
     }
 
-    /* CRITICAL FIX: Allocate VBM buffers OUTSIDE spinlock to avoid sleeping in atomic context */
+    /* EMERGENCY FIX: Disable duplicate VBM buffer allocation to prevent kernel panic */
     if (arg2 != 0) {
-        /* Stream ON - allocate buffers BEFORE acquiring spinlock */
-        extern struct frame_channel_device frame_channels[];
-        extern int num_channels;
-
-        if (num_channels > 0) {
-            struct tx_isp_channel_state *state = &frame_channels[0].state;
-
-            pr_info("*** STREAMON: Checking/allocating VBM buffers (OUTSIDE spinlock) ***\n");
-            pr_info("*** Current VBM buffer addresses: %p, count: %d ***\n",
-                    state->vbm_buffer_addresses, state->vbm_buffer_count);
-
-            /* CRITICAL: Allocate VBM buffers if they don't exist - OUTSIDE spinlock */
-            if (!state->vbm_buffer_addresses || state->vbm_buffer_count == 0) {
-                pr_info("*** STREAMON: Allocating VBM buffers OUTSIDE spinlock (sleeping allowed) ***\n");
-
-                /* Calculate buffer size: 1920x1080 NV12 = 1920*1080*1.5 = 3110400 bytes */
-                u32 frame_size = 1920 * 1080 * 3 / 2;  /* NV12 format */
-                u32 buffer_count = 4;  /* Standard VBM buffer count */
-
-                /* Allocate VBM buffer addresses array */
-                state->vbm_buffer_addresses = kmalloc(buffer_count * sizeof(u32), GFP_KERNEL);
-                if (!state->vbm_buffer_addresses) {
-                    pr_err("*** STREAMON: Failed to allocate VBM buffer addresses array ***\n");
-                    return -ENOMEM;
-                }
-
-                /* Allocate actual frame buffers */
-                for (int i = 0; i < buffer_count; i++) {
-                    dma_addr_t dma_addr;
-                    void *virt_addr = dma_alloc_coherent(NULL, frame_size, &dma_addr, GFP_KERNEL);
-                    if (!virt_addr) {
-                        pr_err("*** STREAMON: Failed to allocate VBM buffer[%d] ***\n", i);
-                        /* Clean up previously allocated buffers */
-                        for (int j = 0; j < i; j++) {
-                            dma_free_coherent(NULL, frame_size, phys_to_virt(state->vbm_buffer_addresses[j]), state->vbm_buffer_addresses[j]);
-                        }
-                        kfree(state->vbm_buffer_addresses);
-                        state->vbm_buffer_addresses = NULL;
-                        return -ENOMEM;
-                    }
-                    state->vbm_buffer_addresses[i] = dma_addr;
-                    pr_info("*** STREAMON: Allocated VBM buffer[%d] = 0x%x (size=%d) ***\n",
-                            i, dma_addr, frame_size);
-                }
-
-                state->vbm_buffer_count = buffer_count;
-                pr_info("*** STREAMON: VBM buffer allocation complete - %d buffers allocated ***\n", buffer_count);
-            }
-        }
+        pr_info("*** EMERGENCY: Duplicate VBM buffer allocation DISABLED ***\n");
+        /* Skip duplicate buffer allocation code */
     }
 
     /* Binary Ninja EXACT: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
