@@ -3915,6 +3915,19 @@ void isp_core_tuning_deinit(void *core_dev)
 int sensor_early_init(void *core_dev)
 {
     pr_info("sensor_early_init: Preparing sensor infrastructure\n");
+
+    /* CRITICAL: Call sensor detection during early init to create I2C sensor devices */
+    if (ourISPdev) {
+        pr_info("sensor_early_init: Calling tx_isp_detect_and_register_sensors\n");
+        int ret = tx_isp_detect_and_register_sensors(ourISPdev);
+        if (ret != 0) {
+            pr_err("sensor_early_init: Failed to detect and register sensors: %d\n", ret);
+            /* Don't fail initialization - sensors might be registered later */
+        }
+    } else {
+        pr_err("sensor_early_init: ourISPdev is NULL - cannot detect sensors\n");
+    }
+
     return 0;
 }
 
