@@ -164,9 +164,11 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     }
 
     /* CRITICAL FIX: Binary Ninja exact check - if (*(*(arg1 + 0x110) + 0x14) != 1) return 0 */
-    /* Replace dangerous offset arithmetic with safe struct member access */
-    if (csi_dev->state < 2) { /* Use struct member instead of *(*(arg1 + 0x110) + 0x14) */
-        pr_info("csi_video_s_stream: CSI device state=%d < 2, returning 0\n", csi_dev->state);
+    /* This checks if sensor interface type is MIPI (1) - if not MIPI, return 0 */
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor || !sensor->video.attr || sensor->video.attr->dbus_type != TX_SENSOR_DATA_INTERFACE_MIPI) {
+        pr_info("csi_video_s_stream: Sensor interface type is not MIPI (1), returning 0\n");
         return 0;
     }
 
