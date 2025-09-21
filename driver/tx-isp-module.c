@@ -899,7 +899,9 @@ static int sensor_alloc_digital_gain(int gain) {
     /* Binary Ninja: int32_t $v0_2 = *(*(ourISPdev + 0x120) + 0xc8) */
     /* FIXED: g_ispcore -> ourISPdev with proper struct member access */
 
-    if (!ourISPdev || !ourISPdev->sensor) {
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor) {
         return gain;
     }
 
