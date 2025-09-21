@@ -5809,14 +5809,10 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
 }
 
 
-/* isp_irq_thread_handle - EMERGENCY MINIMAL implementation to prevent kernel panic */
+/* isp_irq_thread_handle - Thread handler for deferred interrupt processing */
 irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
 {
-    static int thread_call_count = 0;
-    thread_call_count++;
-
-    /* EMERGENCY: Print every call to see if this thread handler is being called */
-    pr_info("*** EMERGENCY: isp_irq_thread_handle called #%d - IRQ %d, dev_id=%p ***\n", thread_call_count, irq, dev_id);
+    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
 
     /* CRITICAL SAFETY: Validate all parameters before any processing */
     if (irq < 0 || irq > 255) {
@@ -5827,17 +5823,32 @@ irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
     /* CRITICAL SAFETY: Validate dev_id pointer range */
     if (!dev_id || (uintptr_t)dev_id < 0x80000000 || (uintptr_t)dev_id > 0x9fffffff) {
         pr_err("*** CRITICAL: isp_irq_thread_handle called with invalid dev_id=%p for IRQ %d ***\n", dev_id, irq);
-        return IRQ_HANDLED;  /* Still return HANDLED to prevent system issues */
+        return IRQ_NONE;
     }
 
-    /* EMERGENCY: Absolutely minimal processing - just return */
-    pr_info("*** EMERGENCY: isp_irq_thread_handle IRQ %d processed safely ***\n", irq);
+    /* CRITICAL SAFETY: Validate isp_dev structure */
+    if (!isp_dev) {
+        pr_err("*** CRITICAL: isp_irq_thread_handle called with NULL isp_dev for IRQ %d ***\n", irq);
+        return IRQ_NONE;
+    }
 
-    /* Return IRQ_HANDLED to indicate we processed the interrupt */
-    return IRQ_HANDLED;
+    /* Thread-level processing for VIC interrupts */
+    if (irq == 38) {
+        pr_debug("*** isp_irq_thread_handle: VIC IRQ %d thread processing ***\n", irq);
+        /* Most VIC processing is done in the main handler, minimal thread work needed */
+        return IRQ_HANDLED;
+    }
 
-    /* Return IRQ_HANDLED to indicate we processed the thread interrupt */
-    return IRQ_HANDLED;
+    /* Thread-level processing for Core interrupts */
+    if (irq == 37) {
+        pr_debug("*** isp_irq_thread_handle: Core IRQ %d thread processing ***\n", irq);
+        /* Core interrupt thread processing if needed */
+        return IRQ_HANDLED;
+    }
+
+    /* Unknown IRQ */
+    pr_debug("*** isp_irq_thread_handle: Unknown IRQ %d in thread handler ***\n", irq);
+    return IRQ_NONE;
 }
 
 /* ip_done_interrupt_handler - Binary Ninja ISP processing complete interrupt (renamed local to avoid SDK symbol clash) */
