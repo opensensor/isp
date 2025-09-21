@@ -819,7 +819,6 @@ struct isp_tuning_data {
 	uint32_t hflip;                      /* 0x70: Horizontal flip (cmd 0x980914) */
 	uint32_t vflip;                      /* 0x74: Vertical flip (cmd 0x980915) */
 	uint32_t antiflicker;                /* 0x78: Anti-flicker (cmd 0x980918) */
-	uint32_t shading;                    /* 0x7c: Shading control */
 
 	/* Extended controls */
 	uint32_t move_state;                 /* 0x88: Move state */
