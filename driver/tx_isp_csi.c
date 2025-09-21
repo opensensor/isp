@@ -277,7 +277,7 @@ int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
     struct tx_isp_csi_device *csi_dev;
 
-    pr_info("*** csi_sensor_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x%x ***\n", cmd);
+    /* Binary Ninja: EXACT implementation - no debug prints to avoid alignment issues */
 
     /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) */
     if (sd != NULL && (unsigned long)sd < 0xfffff001) {
@@ -286,8 +286,8 @@ int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
         /* Binary Ninja: *(arg1 + 0x110) - this is the CSI device pointer at offset 0x110 in subdev */
         csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
         if (!csi_dev) {
-            pr_err("CSI device is NULL from subdev private data\n");
-            return 0;  /* Binary Ninja returns 0 on error */
+            /* Binary Ninja: return 0 on error - no error logging to avoid alignment issues */
+            return 0;
         }
 
         /* Binary Ninja: if (arg2 != 0x200000e) */
@@ -296,7 +296,6 @@ int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
             if (cmd != 0x200000f) {
                 /* Binary Ninja: if (arg2 == 0x200000c) */
                 if (cmd == 0x200000c) {
-                    pr_info("csi_sensor_ops_ioctl: Handling cmd 0x200000c - CSI init\n");
                     /* Binary Ninja: csi_core_ops_init(arg1, 1, 0x200000f) */
                     csi_core_ops_init(sd, 1);
                 }
@@ -305,7 +304,6 @@ int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                 /* Check if CSI device interface type is 1 (MIPI) */
                 /* 0x14 offset in CSI device structure is interface_type */
                 if (csi_dev->interface_type == 1) {
-                    pr_info("csi_sensor_ops_ioctl: Handling cmd 0x200000f - set state 4\n");
                     /* Binary Ninja: *(arg1 + 0x128) = 4 */
                     /* CRITICAL FIX: Set state in CSI device, not subdev */
                     csi_dev->state = 4;  /* Set to streaming_on state */
@@ -315,7 +313,6 @@ int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
             /* Binary Ninja: else if (*(*(arg1 + 0x110) + 0x14) == 1) */
             /* Check if CSI device interface type is 1 (MIPI) */
             if (csi_dev->interface_type == 1) {
-                pr_info("csi_sensor_ops_ioctl: Handling cmd 0x200000e - set state 3\n");
                 /* Binary Ninja: *(arg1 + 0x128) = 3 */
                 /* CRITICAL FIX: Set state in CSI device, not subdev */
                 csi_dev->state = 3;  /* Set to streaming_off state */
