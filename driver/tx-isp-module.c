@@ -2362,22 +2362,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("*** Channel %d: REQBUFS - MEMORY-AWARE implementation ***\n", channel);
         pr_info("Channel %d: Request %d buffers, type=%d memory=%d\n",
                 channel, reqbuf.count, reqbuf.type, reqbuf.memory);
-
-        // CRITICAL: REQBUFS should trigger core ops init according to Binary Ninja reference
-        if (reqbuf.count > 0 && ourISPdev && ourISPdev->core_dev &&
-            ourISPdev->core_dev->sd.ops && ourISPdev->core_dev->sd.ops->core &&
-            ourISPdev->core_dev->sd.ops->core->init) {
-
-            pr_info("*** Channel %d: REQBUFS - CALLING CORE OPS INIT ***\n", channel);
-            int core_init_ret = ourISPdev->core_dev->sd.ops->core->init(&ourISPdev->core_dev->sd, 1);
-
-            if (core_init_ret != 0) {
-                pr_err("Channel %d: REQBUFS - Core ops init failed: %d\n", channel, core_init_ret);
-                // Don't fail REQBUFS for init failure - continue with buffer allocation
-            } else {
-                pr_info("*** Channel %d: REQBUFS - Core ops init SUCCESS ***\n", channel);
-            }
-        }
         
         /* CRITICAL: Check available memory before allocation */
         if (reqbuf.count > 0) {
