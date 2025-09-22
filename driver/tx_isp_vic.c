@@ -98,21 +98,38 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
                 pr_err("*** CRITICAL: VIC interrupt enables didn't stick! Expected 0x1e8=0x1, 0x1ec=0x3 ***\n");
                 pr_err("*** VIC secondary register mapping at 0x10023000 may be incorrect! ***\n");
 
-                /* Try alternative VIC interrupt register addresses */
-                pr_info("*** Trying alternative VIC interrupt register addresses ***\n");
+                /* CRITICAL FIX: Use PRIMARY VIC registers instead of secondary */
+                pr_info("*** SWITCHING TO PRIMARY VIC REGISTERS for interrupt enable ***\n");
 
-                /* Try primary VIC registers for interrupt enable */
                 if (vic_dev->vic_regs) {
+                    /* Clear any pending interrupts in primary VIC registers */
+                    u32 prim_pending1 = readl(vic_dev->vic_regs + 0x1e0);
+                    u32 prim_pending2 = readl(vic_dev->vic_regs + 0x1e4);
+                    if (prim_pending1 || prim_pending2) {
+                        writel(prim_pending1, vic_dev->vic_regs + 0x1f0);
+                        writel(prim_pending2, vic_dev->vic_regs + 0x1f4);
+                        wmb();
+                        pr_info("*** Cleared primary VIC pending: 0x%08x, 0x%08x ***\n", prim_pending1, prim_pending2);
+                    }
+
+                    /* Enable interrupts using primary VIC registers */
                     writel(0x1, vic_dev->vic_regs + 0x1e8);
                     writel(0x3, vic_dev->vic_regs + 0x1ec);
                     wmb();
 
-                    u32 alt_en1 = readl(vic_dev->vic_regs + 0x1e8);
-                    u32 alt_en2 = readl(vic_dev->vic_regs + 0x1ec);
-                    pr_info("*** Alternative VIC primary regs: 0x1e8=%08x, 0x1ec=%08x ***\n", alt_en1, alt_en2);
+                    /* Verify primary VIC register writes */
+                    u32 prim_en1 = readl(vic_dev->vic_regs + 0x1e8);
+                    u32 prim_en2 = readl(vic_dev->vic_regs + 0x1ec);
+                    pr_info("*** PRIMARY VIC interrupt enables: 0x1e8=%08x, 0x1ec=%08x ***\n", prim_en1, prim_en2);
+
+                    if (prim_en1 == 0x1 && prim_en2 == 0x3) {
+                        pr_info("*** SUCCESS: PRIMARY VIC interrupt enables are working! ***\n");
+                    } else {
+                        pr_err("*** FAILED: Even primary VIC registers don't work! ***\n");
+                    }
                 }
             } else {
-                pr_info("*** GOOD: VIC interrupt enables are set correctly ***\n");
+                pr_info("*** GOOD: VIC secondary interrupt enables are set correctly ***\n");
             }
         }
 
