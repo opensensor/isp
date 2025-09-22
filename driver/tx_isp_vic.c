@@ -245,85 +245,41 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
 
 static int ispcore_activate_module(struct tx_isp_dev *isp_dev);
 
-/* CRITICAL MISSING FUNCTION: tx_isp_vic_hw_init from working irqs-start-stop tag */
-int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
+/* VIC interrupt restoration function - EXACT copy from working irqs-start-stop tag */
+void tx_isp_vic_restore_interrupts(void)
 {
-    struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
-    void __iomem *vic_base;
+    extern struct tx_isp_dev *ourISPdev;
+    void __iomem *vic_interrupt_base;
 
+    if (!ourISPdev || !ourISPdev->vic_dev || vic_start_ok != 1) {
+        return; /* VIC not active */
+    }
+
+    pr_info("*** VIC INTERRUPT RESTORE: Restoring VIC interrupt registers in PRIMARY VIC space ***\n");
+
+    /* CRITICAL: Use PRIMARY VIC space for interrupt control (0x133e0000) */
+    struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)container_of(ourISPdev->vic_dev, struct tx_isp_vic_device, sd);
     if (!vic_dev || !vic_dev->vic_regs) {
-        pr_err("tx_isp_vic_hw_init: No primary VIC registers available\n");
-        return -EINVAL;
+        pr_err("*** VIC INTERRUPT RESTORE: No primary VIC registers available ***\n");
+        return;
     }
 
-    // CRITICAL: Use PRIMARY VIC space for interrupt configuration
-    vic_base = vic_dev->vic_regs;  // Use primary VIC space (0x133e0000)
-    pr_info("*** VIC HW INIT: Using PRIMARY VIC space for interrupt configuration ***\n");
+    /* Restore VIC interrupt register values using WORKING ISP-activates configuration */
+    pr_info("*** VIC INTERRUPT RESTORE: Using WORKING ISP-activates configuration (0x1e8/0x1ec) ***\n");
 
-    // CRITICAL FIX: Use the EXACT working interrupt registers from irqs-start-stop tag
-    pr_info("*** VIC HW INIT: Using WORKING interrupt registers (0x1e8/0x1f0/0x1f4) ***\n");
-
-    // Step 1: Clear pending interrupts using WORKING registers
-    writel(0xFFFFFFFF, vic_base + 0x1f0);  /* Clear main interrupt status */
-    writel(0xFFFFFFFF, vic_base + 0x1f4);  /* Clear MDMA interrupt status */
+    /* Clear pending interrupts first */
+    writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main interrupt status */
+    writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
     wmb();
-    pr_info("*** VIC HW INIT: Cleared interrupt status registers ***\n");
 
-    // Step 2: Enable interrupts using WORKING register (0x1e8)
-    writel(0xFFFFFFFE, vic_base + 0x1e8);  /* Enable frame done interrupt */
+    /* Restore working interrupt masks - FOCUS ON MAIN INTERRUPT ONLY */
+    writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);  /* Enable frame done interrupt */
+    /* SKIP MDMA register 0x1ec - it doesn't work correctly */
     wmb();
-    pr_info("*** VIC HW INIT: WORKING interrupt mask applied (0xFFFFFFFE to 0x1e8) ***\n");
 
-    // Step 3: Verify the interrupt configuration took effect
-    u32 verify_mask = readl(vic_base + 0x1e8);
-    u32 verify_status1 = readl(vic_base + 0x1f0);
-    u32 verify_status2 = readl(vic_base + 0x1f4);
-    pr_info("*** VIC HW INIT: Verification - mask=0x%x, status1=0x%x, status2=0x%x ***\n",
-            verify_mask, verify_status1, verify_status2);
-
-    pr_info("*** VIC HW INIT: Interrupt configuration applied to PRIMARY VIC space ***\n");
-
-    /* CRITICAL MISSING STEP: Initialize secondary VIC registers - THIS WAS THE MISSING STEP! */
-    if (vic_dev->vic_regs_secondary) {
-        pr_info("*** CRITICAL FIX: Initializing secondary VIC registers (MISSING from our driver!) ***\n");
-
-        /* Reference trace: ISP isp-w01: write at offset 0x0: 0x0 -> 0x3130322a */
-        writel(0x3130322a, vic_dev->vic_regs_secondary + 0x0);
-        wmb();
-        pr_info("*** VIC SECONDARY: Wrote 0x3130322a to offset 0x0 ***\n");
-
-        /* Reference trace: ISP isp-w01: write at offset 0x4: 0x0 -> 0x1 */
-        writel(0x1, vic_dev->vic_regs_secondary + 0x4);
-        wmb();
-        pr_info("*** VIC SECONDARY: Wrote 0x1 to offset 0x4 ***\n");
-
-        /* Reference trace: ISP isp-w01: write at offset 0x14: 0x0 -> 0x200 */
-        writel(0x200, vic_dev->vic_regs_secondary + 0x14);
-        wmb();
-        pr_info("*** VIC SECONDARY: Wrote 0x200 to offset 0x14 ***\n");
-
-        pr_info("*** CRITICAL FIX: Secondary VIC registers initialized - VIC should now generate interrupts! ***\n");
-    } else {
-        pr_err("*** CRITICAL ERROR: No secondary VIC registers - cannot initialize VIC interrupt generation! ***\n");
-        return -EINVAL;
-    }
-
-    /* CRITICAL: Register the VIC interrupt handler - THIS WAS MISSING! */
-    int irq = 38;  /* VIC uses IRQ 38 (isp-w02) */
-    int ret = request_irq(irq, isp_vic_interrupt_service_routine, IRQF_SHARED, "tx-isp-vic", sd);
-    if (ret == 0) {
-        pr_info("*** VIC HW INIT: Interrupt handler registered for IRQ %d ***\n", irq);
-    } else {
-        pr_err("*** VIC HW INIT: Failed to register interrupt handler for IRQ %d: %d ***\n", irq, ret);
-        return ret;
-    }
-
-    /* Enable the interrupt at hardware level */
-    enable_irq(irq);
-    pr_info("*** VIC HW INIT: Hardware interrupt enabled for IRQ %d ***\n", irq);
-
-    return 0;
+    pr_info("*** VIC INTERRUPT RESTORE: WORKING configuration restored (MainMask=0xFFFFFFFE) ***\n");
 }
+EXPORT_SYMBOL(tx_isp_vic_restore_interrupts);
 
 /* VIC frame completion handler */
 static void tx_isp_vic_frame_done(struct tx_isp_subdev *sd, int channel)
