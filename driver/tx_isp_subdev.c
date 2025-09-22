@@ -705,15 +705,6 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
             } else {
                 pr_info("*** LINKED CORE device: %p ***\n", core_dev);
                 pr_info("*** CORE SUBDEV REGISTERED AT INDEX 4 ***\n");
-
-                /* Now call ispcore_core_ops_init since the core is linked to ISP device */
-                pr_info("*** CORE AUTO-LINK: Calling ispcore_core_ops_init to initialize core ***\n");
-                int init_ret = ispcore_core_ops_init(&core_dev->sd, 1);
-                if (init_ret != 0) {
-                    pr_err("*** CORE AUTO-LINK: ispcore_core_ops_init failed: %d ***\n", init_ret);
-                } else {
-                    pr_info("*** CORE AUTO-LINK: Core initialization SUCCESS - ready for streaming ***\n");
-                }
             }
         } else {
             pr_err("*** CRITICAL ERROR: Core device not found in subdev private data ***\n");
