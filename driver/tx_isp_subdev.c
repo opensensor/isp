@@ -689,12 +689,25 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         }
 
     } else if (strcmp(dev_name, "tx-isp-core") == 0) {
-        /* Core device register mapping - store in core device */
-        if (ourISPdev && ourISPdev->core_dev && sd->regs) {
-            ourISPdev->core_dev->core_regs = sd->regs;
-            pr_info("*** LINKED CORE regs to core device: %p ***\n", sd->regs);
+        /* Core device register mapping - CRITICAL FIX */
+        if (sd->regs) {
+            /* CRITICAL: Get core device from subdev private data */
+            struct tx_isp_core_device *core_dev = tx_isp_get_subdevdata(sd);
+            if (core_dev) {
+                /* Map core registers directly to core device */
+                core_dev->core_regs = sd->regs;
+                pr_info("*** CRITICAL FIX: CORE regs mapped to core device: %p ***\n", sd->regs);
+
+                /* Also link to global ISP device if available */
+                if (ourISPdev) {
+                    ourISPdev->core_dev = core_dev;
+                    pr_info("*** CRITICAL FIX: Core device linked to global ISP device ***\n");
+                }
+            } else {
+                pr_err("*** CRITICAL ERROR: Core device not found in subdev private data ***\n");
+            }
         } else {
-            pr_info("*** CORE device not yet linked - regs will be mapped later ***\n");
+            pr_err("*** CRITICAL ERROR: No core registers mapped ***\n");
         }
     } else if (strcmp(dev_name, "gc2053") == 0 || strstr(dev_name, "sensor") != NULL) {
         /* CRITICAL: This is a sensor device - register it in the subdev array */
