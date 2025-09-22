@@ -3216,9 +3216,16 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("*** Channel %d: VIDIOC_STREAMON - Binary Ninja implementation ***\n", channel);
 
         // Binary Ninja: if (*($s0 + 0x2d0) != 3)
-        if (state->state != 3) {
-            pr_err("Channel %d: STREAMON - Invalid state %d (expected 3)\n", channel, state->state);
+        // CRITICAL FIX: Accept state 2 OR 3 since SET_BANKS may be skipped by userspace
+        if (state->state != 3 && state->state != 2) {
+            pr_err("Channel %d: STREAMON - Invalid state %d (expected 2 or 3)\n", channel, state->state);
             return -EINVAL;
+        }
+
+        // If state is 2, promote it to 3 (ready for streaming)
+        if (state->state == 2) {
+            pr_info("*** Channel %d: STREAMON - Promoting state from 2 to 3 (SET_BANKS was skipped) ***\n", channel);
+            state->state = 3;
         }
 
         // Binary Ninja: if ((*($s0 + 0x230) & 1) != 0)
