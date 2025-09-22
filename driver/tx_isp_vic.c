@@ -79,14 +79,12 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             u32 vic_int_enable = readl(vic_dev->vic_regs + 0x1e8);
             pr_info("*** tx_vic_enable_irq: VIC interrupt mask register 0x1e8 = 0x%08x ***\n", vic_int_enable);
 
-            /* CRITICAL: Enable VIC interrupt generation at hardware level */
-            /* Based on Binary Ninja analysis, VIC needs interrupt enable bit set in control register */
-            u32 vic_ctrl = readl(vic_dev->vic_regs + 0x0);
-            vic_ctrl |= 0x8;  /* Enable interrupt generation bit */
-            writel(vic_ctrl, vic_dev->vic_regs + 0x0);
+            /* CRITICAL: Enable VIC interrupt generation per Binary Ninja reference */
+            /* Binary Ninja shows VIC interrupt enable is in status register, not control register */
+            writel(0x1, vic_dev->vic_regs + 0x1e0);  /* Enable interrupt generation in status register */
             wmb();
 
-            pr_info("*** tx_vic_enable_irq: VIC interrupt generation ENABLED in hardware (ctrl=0x%08x) ***\n", vic_ctrl);
+            pr_info("*** tx_vic_enable_irq: VIC interrupt generation ENABLED per Binary Ninja (0x1e0=0x1) ***\n");
             pr_info("*** tx_vic_enable_irq: VIC interrupt masks configured (0x1e8=0xFFFFFFFE enables bit 0, 0x1ec=0xFFFFFFFF disables all MDMA) ***\n");
         }
     }
