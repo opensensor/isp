@@ -1035,6 +1035,9 @@ int __init tx_isp_subdev_platform_init(void)
     pr_info("All ISP subdev platform drivers registered successfully\n");
     return 0;
 
+err_unregister_fs:
+    extern struct platform_driver tx_isp_fs_platform_driver;
+    platform_driver_unregister(&tx_isp_fs_platform_driver);
 err_unregister_vin:
     platform_driver_unregister(&tx_isp_vin_driver);
 err_unregister_vic:
