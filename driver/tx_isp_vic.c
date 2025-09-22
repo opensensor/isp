@@ -260,22 +260,31 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
     vic_base = vic_dev->vic_regs;  // Use primary VIC space (0x133e0000)
     pr_info("*** VIC HW INIT: Using PRIMARY VIC space for interrupt configuration ***\n");
 
-    // Clear any pending interrupts first
+    // CRITICAL FIX: Shadow register unlock sequence
+    // 0x7800438 is the UNLOCK VALUE to enable shadow register access
+    pr_info("*** VIC HW INIT: Starting shadow register unlock sequence ***\n");
+
+    // Step 1: Clear any pending interrupts first
     writel(0, vic_base + 0x00);  // Clear ISR
     writel(0, vic_base + 0x20);  // Clear ISR1
     wmb();
 
-    // Set up interrupt masks to match OEM
-    writel(0x00000001, vic_base + 0x04);  // IMR
+    // Step 2: Write unlock value to enable shadow register programming
+    writel(0x07800438, vic_base + 0x04);  // IMR - UNLOCK VALUE (not interrupt mask!)
     wmb();
-    writel(0x00000000, vic_base + 0x24);  // IMR1
-    wmb();
+    pr_info("*** VIC HW INIT: Shadow register UNLOCK value written (0x07800438) ***\n");
 
-    // Configure ISP control interrupts
-    writel(0x07800438, vic_base + 0x04);  // IMR
+    // Step 3: Now write the actual interrupt control configuration
+    writel(0xb5742249, vic_base + 0x0c);  // IMCR - actual interrupt control
     wmb();
-    writel(0xb5742249, vic_base + 0x0c);  // IMCR
+    pr_info("*** VIC HW INIT: Interrupt control value written (0xb5742249) ***\n");
+
+    // Step 4: Activate shadow registers by writing enable sequence
+    writel(0x00000001, vic_base + 0x04);  // IMR - activate shadow registers
     wmb();
+    writel(0x00000000, vic_base + 0x24);  // IMR1 - clear secondary mask
+    wmb();
+    pr_info("*** VIC HW INIT: Shadow registers ACTIVATED ***\n");
 
     pr_info("*** VIC HW INIT: Interrupt configuration applied to PRIMARY VIC space ***\n");
 
