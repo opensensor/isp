@@ -79,11 +79,8 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
 {
     unsigned long flags;
 
-    pr_info("*** tx_vic_disable_irq: BINARY NINJA EXACT ***\n");
-
     /* Binary Ninja: if (dump_vsd_5 == 0 || dump_vsd_5 u>= 0xfffff001) return */
     if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
-        pr_err("tx_vic_disable_irq: Invalid VIC device\n");
         return;
     }
 
@@ -95,17 +92,11 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 0 */
         vic_dev->irq_enabled = 0;
 
-        /* CRITICAL FIX: Disable hardware interrupt generation - Binary Ninja reference */
         /* Binary Ninja: $v0_2 = *(dump_vsd_5 + 0x88); if ($v0_2 != 0) $v0_2(dump_vsd_5 + 0x80) */
-
-        /* CRITICAL FIX: Call kernel IRQ disable function - this was missing! */
         if (vic_dev->irq_disable && vic_dev->irq_priv) {
-            pr_info("*** tx_vic_disable_irq: Calling kernel IRQ disable function (Binary Ninja EXACT) ***\n");
-            vic_dev->irq_disable(vic_dev->irq_priv);  /* This calls tx_isp_disable_irq(&vic_dev->sd.irq_info) */
-            pr_info("*** tx_vic_disable_irq: Kernel IRQ 38 should now be DISABLED ***\n");
-        } else {
-            pr_err("*** tx_vic_disable_irq: CRITICAL ERROR - No IRQ disable function! ***\n");
+            vic_dev->irq_disable(vic_dev->irq_priv);
         }
+    }
 
         /* CRITICAL: PRESERVE VIC hardware interrupt configuration */
         /* CRITICAL FIX: Don't clear hardware interrupt registers - preserve working configuration */
