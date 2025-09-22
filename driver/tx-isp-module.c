@@ -2040,20 +2040,7 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
     int i;
     int result;
 
-    /* CRITICAL: Initialize core device before streaming if enable=1 */
-    if (arg2 == 1 && arg1->core_dev && arg1->subdevs[4]) {
-        pr_info("*** tx_isp_video_s_stream: Initializing core device before streaming ***\n");
-        pr_info("*** tx_isp_video_s_stream: Core state before init: %d ***\n", arg1->core_dev->state);
-
-        int core_ret = ispcore_core_ops_init(arg1->subdevs[4], 1);
-        pr_info("*** tx_isp_video_s_stream: ispcore_core_ops_init returned: %d ***\n", core_ret);
-        pr_info("*** tx_isp_video_s_stream: Core state after init: %d ***\n", arg1->core_dev->state);
-
-        if (core_ret != 0) {
-            pr_err("tx_isp_video_s_stream: Core initialization failed: %d\n", core_ret);
-            return core_ret;
-        }
-    }
+    pr_info("*** tx_isp_video_s_stream: EXACT Binary Ninja reference implementation - enable=%d ***\n", arg2);
 
     /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
     s4 = arg1->subdevs;
@@ -2538,18 +2525,26 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("*** Channel %d: QBUF - Queue buffer index=%d ***\n", channel, buffer.index);
 
         // CRITICAL: QBUF should trigger core ops init according to Binary Ninja reference
+        // BUT only if core is in state 2 (READY) - don't re-initialize if already in state 3 (ACTIVE)
         if (ourISPdev && ourISPdev->core_dev &&
             ourISPdev->core_dev->sd.ops && ourISPdev->core_dev->sd.ops->core &&
             ourISPdev->core_dev->sd.ops->core->init) {
 
-            pr_info("*** Channel %d: QBUF - CALLING CORE OPS INIT ***\n", channel);
-            int core_init_ret = ourISPdev->core_dev->sd.ops->core->init(&ourISPdev->core_dev->sd, 1);
+            /* Check core state before attempting initialization */
+            if (ourISPdev->core_dev->state == 2) {
+                pr_info("*** Channel %d: QBUF - Core in READY state (2), calling CORE OPS INIT ***\n", channel);
+                int core_init_ret = ourISPdev->core_dev->sd.ops->core->init(&ourISPdev->core_dev->sd, 1);
 
-            if (core_init_ret != 0) {
-                pr_err("Channel %d: QBUF - Core ops init failed: %d\n", channel, core_init_ret);
-                // Don't fail QBUF for init failure - continue with buffer queuing
+                if (core_init_ret != 0) {
+                    pr_err("Channel %d: QBUF - Core ops init failed: %d\n", channel, core_init_ret);
+                    // Don't fail QBUF for init failure - continue with buffer queuing
+                } else {
+                    pr_info("*** Channel %d: QBUF - Core ops init SUCCESS ***\n", channel);
+                }
+            } else if (ourISPdev->core_dev->state == 3) {
+                pr_info("*** Channel %d: QBUF - Core already in ACTIVE state (3), skipping init ***\n", channel);
             } else {
-                pr_info("*** Channel %d: QBUF - Core ops init SUCCESS ***\n", channel);
+                pr_info("*** Channel %d: QBUF - Core in state %d, not ready for init ***\n", channel, ourISPdev->core_dev->state);
             }
         }
 
