@@ -666,6 +666,187 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     pr_info("*** tx_isp_vic_start: EXACT Binary Ninja reference implementation ***\n");
 
+    /* Binary Ninja: Basic validation - if (!arg1) return -EINVAL */
+    if (!vic_dev) {
+        return -EINVAL;
+    }
+
+    /* Binary Ninja: void* $v1 = *(arg1 + 0x110) - Get sensor attributes
+     * FIXED: Modern implementation gets sensor from subdev array starting at index 4 */
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (sensor && sensor->video.attr) {
+        sensor_attr = sensor->video.attr;
+        pr_info("tx_isp_vic_start: Found sensor attributes: dbus_type=%d, width=%d, height=%d\n",
+                sensor_attr->dbus_type, sensor_attr->total_width, sensor_attr->total_height);
+    } else {
+        pr_err("tx_isp_vic_start: No sensor attributes available\n");
+        return -ENODEV;
+    }
+
+    /* Binary Ninja: int32_t $v0 = *($v1 + 0x14) - Get interface type */
+    interface_type = sensor_attr->dbus_type;
+
+    /* Get VIC register base - Binary Ninja: *(arg1 + 0xb8) */
+    vic_regs = vic_dev->vic_regs;
+    if (!vic_regs) {
+        return -EINVAL;
+    }
+
+    /* Binary Ninja: if ($v0 == 1) - MIPI interface */
+    if (interface_type == 1) {  /* MIPI interface */
+        pr_info("tx_isp_vic_start: MIPI interface detected\n");
+
+        /* Binary Ninja: Check sensor flags and configure accordingly */
+        if (sensor_attr->dbus_type != interface_type) {
+            pr_info("tx_isp_vic_start: Sensor flags mismatch\n");
+            writel(0xa000a, vic_regs + 0x1a4);
+        } else {
+            pr_info("tx_isp_vic_start: Sensor flags match - normal MIPI config\n");
+            writel(0x20000, vic_regs + 0x10);
+            writel(0x100010, vic_regs + 0x1a4);
+        }
+
+        /* Binary Ninja: Essential VIC configuration for MIPI */
+        writel(2, vic_regs + 0xc);  /* VIC mode */
+        writel(sensor_attr->dbus_type, vic_regs + 0x14);  /* Interface type */
+
+        /* Binary Ninja: Set frame dimensions - *(*(arg1 + 0xb8) + 4) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
+        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
+
+        /* Binary Ninja: Buffer size calculation based on sensor format */
+        struct tx_isp_mipi_bus *mipi = &sensor_attr->mipi;
+        u32 bytes_per_pixel = 8;  /* Default for RAW8 */
+        if (mipi->mipi_sc.sensor_csi_fmt == TX_SENSOR_RAW10) {
+            bytes_per_pixel = 10;
+        } else if (mipi->mipi_sc.sensor_csi_fmt == TX_SENSOR_RAW12) {
+            bytes_per_pixel = 12;
+        }
+
+        /* Binary Ninja: Buffer calculation - $v0_4 = $v0_3 * *($a0 + 0x2c) */
+        u32 buffer_calc = (bytes_per_pixel * vic_dev->width) >> 5;
+        if ((bytes_per_pixel * vic_dev->width) & 0x1f) buffer_calc++;
+        writel(buffer_calc, vic_regs + 0x100);  /* Buffer calculation result */
+
+        pr_info("tx_isp_vic_start: Buffer calculation: %d bpp * %d width = %d (reg 0x100)\n",
+                bytes_per_pixel, vic_dev->width, buffer_calc);
+
+        /* Binary Ninja EXACT: Complex MIPI configuration register 0x10c */
+        u32 mipi_config = 0;
+        mipi_config |= (mipi->mipi_sc.hcrop_diff_en << 25);
+        mipi_config |= (mipi->mipi_sc.mipi_vcomp_en << 24);
+        mipi_config |= (mipi->mipi_sc.sensor_csi_fmt << 23);
+        mipi_config |= (mipi->mipi_sc.mipi_hcomp_en << 22);
+        mipi_config |= (mipi->mipi_sc.line_sync_mode << 21);
+        mipi_config |= (mipi->mipi_sc.work_start_flag << 20);
+        mipi_config |= (mipi->mipi_sc.data_type_en << 18);
+        mipi_config |= (mipi->mipi_sc.del_start << 16);
+        mipi_config |= (mipi->mipi_sc.mipi_crop_start2x << 12);
+        mipi_config |= (mipi->mipi_sc.mipi_crop_start2y << 8);
+        mipi_config |= (mipi->mipi_sc.sensor_frame_mode << 4);
+        mipi_config |= (mipi->mipi_sc.sensor_mode << 2);
+        writel(mipi_config, vic_regs + 0x10c);
+
+        /* Binary Ninja EXACT: MIPI configuration registers */
+        writel((vic_dev->width << 16) | mipi->mipi_sc.data_type_value, vic_regs + 0x110);
+        writel(mipi->mipi_sc.mipi_crop_start0x, vic_regs + 0x114);
+        writel(mipi->mipi_sc.mipi_crop_start0y, vic_regs + 0x118);
+        writel(mipi->mipi_sc.mipi_crop_start1x, vic_regs + 0x11c);
+
+        /* Binary Ninja EXACT: Frame mode configuration based on sensor frame mode */
+        u32 frame_mode_val = 0x4440;  /* Default frame mode */
+        if (mipi->mipi_sc.sensor_frame_mode == 1) {
+            frame_mode_val = 0x4140;
+        } else if (mipi->mipi_sc.sensor_frame_mode == 2) {
+            frame_mode_val = 0x4240;
+        }
+        writel(frame_mode_val, vic_regs + 0x1ac);
+        writel(frame_mode_val, vic_regs + 0x1a8);
+        writel(0x10, vic_regs + 0x1b0);
+
+        /* Binary Ninja EXACT: Additional MIPI crop configuration registers */
+        writel((mipi->mipi_sc.mipi_crop_start1y << 16) | mipi->mipi_sc.mipi_crop_start3x, vic_regs + 0x104);
+        writel((mipi->mipi_sc.mipi_crop_start3y << 16) | mipi->mipi_sc.mipi_crop_start1x, vic_regs + 0x108);
+
+        /* Binary Ninja EXACT: Configure frame config register before unlock */
+        writel((mipi->mipi_sc.sensor_frame_mode << 4) | mipi->mipi_sc.sensor_csi_fmt, vic_regs + 0x1a0);
+
+        /* Binary Ninja EXACT: VIC unlock sequence for MIPI interface */
+        /* **(arg1 + 0xb8) = 2 */
+        writel(2, vic_regs + 0x0);
+        pr_info("*** tx_isp_vic_start: Step 1 - VIC unlock sequence: wrote 2 to reg 0x0 ***\n");
+
+        /* **(arg1 + 0xb8) = 4 */
+        writel(4, vic_regs + 0x0);
+        pr_info("*** tx_isp_vic_start: Step 2 - VIC unlock sequence: wrote 4 to reg 0x0 ***\n");
+
+        /* Binary Ninja EXACT: while (*$v1_30 != 0) nop */
+        /* CRITICAL FIX: Add timeout to prevent infinite loop hardware lockup */
+        u32 timeout = 10000;
+        u32 vic_status;
+
+        while ((vic_status = readl(vic_regs + 0x0)) != 0 && timeout-- > 0) {
+            /* Reference driver: nop (just wait) */
+            udelay(1);
+        }
+
+        if (timeout == 0) {
+            pr_err("*** tx_isp_vic_start: VIC unlock timeout! Final status=0x%x ***\n", vic_status);
+            return -ETIMEDOUT;
+        }
+
+        pr_info("*** tx_isp_vic_start: Step 3 - VIC unlock completed, status=0x%x, timeout_remaining=%d ***\n", vic_status, timeout);
+
+    } else if (interface_type == 5) {  /* BT1120 interface */
+        pr_info("tx_isp_vic_start: BT1120 interface detected\n");
+
+        /* Binary Ninja: sensor type is BT1120! */
+        writel(4, vic_regs + 0xc);  /* BT1120 mode */
+
+        /* Binary Ninja: Check GPIO mode support */
+        if (sensor_attr->mipi.mipi_sc.sensor_mode != 0) {
+            pr_err("tx_isp_vic_start: BT1120 does not support GPIO mode\n");
+            return -EINVAL;
+        }
+
+        /* Binary Ninja EXACT: BT1120 configuration */
+        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
+        writel(0x800c0000, vic_regs + 0x10);
+        writel(vic_dev->width << 1, vic_regs + 0x18);
+        writel(0x100010, vic_regs + 0x1a4);
+        writel(0x4440, vic_regs + 0x1ac);
+
+        /* Binary Ninja EXACT: BT1120 unlock sequence */
+        writel(2, vic_regs + 0x0);
+        pr_info("tx_isp_vic_start: BT1120: wrote 2 to reg 0x0\n");
+
+    } else {
+        /* Non-MIPI interfaces (DVP, etc.) */
+        pr_info("tx_isp_vic_start: Non-MIPI interface type %d\n", interface_type);
+
+        /* Binary Ninja: Basic configuration for other interfaces */
+        writel(2, vic_regs + 0xc);  /* DVP mode */
+        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
+        writel(0x4440, vic_regs + 0x1ac);
+        writel(0x4440, vic_regs + 0x1a8);
+        writel(0x10, vic_regs + 0x1b0);
+
+        /* Binary Ninja: For non-MIPI, write 2 then 1 */
+        writel(2, vic_regs + 0x0);
+        pr_info("tx_isp_vic_start: Non-MIPI: wrote 2 to reg 0x0\n");
+    }
+
+    /* Binary Ninja EXACT: Final VIC enable - *$v0_47 = 1 */
+    writel(1, vic_regs + 0x0);
+    pr_info("*** tx_isp_vic_start: Step 4 - VIC enabled: wrote 1 to reg 0x0 ***\n");
+
+    /* Binary Ninja EXACT: vic_start_ok = 1 */
+    extern uint32_t vic_start_ok;
+    vic_start_ok = 1;
+    pr_info("*** tx_isp_vic_start: vic_start_ok set to 1 ***\n");
+
+    pr_info("*** tx_isp_vic_start: VIC hardware initialization completed successfully ***\n");
+    return 0;
 }
 
 /* VIC sensor operations sync_sensor_attr - REMOVED
