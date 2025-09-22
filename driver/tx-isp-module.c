@@ -568,7 +568,7 @@ void system_reg_write(u32 arg1, u32 arg2)
     extern uint32_t vic_start_ok;
 
     /* Binary Ninja: Get register base from ISP device structure at offset 0xb8 */
-    void __iomem *reg_base = ourISPdev->isp_dev->core_regs;  /* This is at offset 0xb8 in the structure */
+    void __iomem *reg_base = ourISPdev->core_dev->core_regs;  /* This is at offset 0xb8 in the structure */
 
     if (!reg_base) {
         pr_warn("system_reg_write: No register base available for reg=0x%x val=0x%x\n", arg1, arg2);
@@ -1641,8 +1641,8 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         return IRQ_HANDLED;
     }
 
-    /* CRITICAL FIX: Use SECONDARY VIC registers for interrupt handling to match enable function */
-    vic_regs = vic_dev->vic_regs;
+    /* CRITICAL FIX: Use SECONDARY VIC registers for interrupt handling - this is where interrupt registers are located */
+    vic_regs = vic_dev->vic_regs_secondary;  /* Use 0x10023000 base for interrupt processing */
     if (!vic_regs ||
         (unsigned long)vic_regs < 0x80000000 ||
         (unsigned long)vic_regs >= 0xfffff000) {

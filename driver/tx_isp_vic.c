@@ -668,7 +668,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         u32 timeout = 10000;
         u32 vic_status;
 
-        while ((vic_status = readl(vic_regs + 0x0)) != 0 && timeout-- > 0) {
+        while ((vic_status = readl(vic_ctrl_regs + 0x0)) != 0 && timeout-- > 0) {
             /* Reference driver: nop (just wait) */
             udelay(1);
         }
