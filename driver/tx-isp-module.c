@@ -2036,14 +2036,12 @@ bool is_valid_kernel_pointer(const void *ptr)
  */
 int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
 {
-    struct tx_isp_subdev **s4;    /* $s4 in reference: arg1 + 0x38 */
+    struct tx_isp_subdev **s4;
     int i;
     int result;
 
-    /* Binary Ninja: Simple implementation without debug logging */
-
     /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
-    s4 = arg1->subdevs;  /* subdevs array at offset 0x38 */
+    s4 = arg1->subdevs;
 
     /* Binary Ninja: for (int32_t i = 0; i != 0x10; ) */
     for (i = 0; i != 0x10; ) {
@@ -2051,63 +2049,58 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
         struct tx_isp_subdev *a0 = *s4;
 
         if (a0 != 0) {
-            /* Binary Ninja: void* $v0_3 = *(*($a0 + 0xc4) + 4) */
+            /* Binary Ninja: int32_t* $v0_3 = *(*($a0 + 0xc4) + 4) */
             struct tx_isp_subdev_video_ops *v0_3 = a0->ops ? a0->ops->video : NULL;
 
             if (v0_3 == 0) {
-                /* Binary Ninja: i += 1 */
                 i += 1;
             } else {
-                /* Binary Ninja: int32_t $v0_4 = *($v0_3 + 4) */
+                /* Binary Ninja: int32_t $v0_4 = *$v0_3 */
                 int (*v0_4)(struct tx_isp_subdev *, int) = v0_3->s_stream;
 
                 if (v0_4 == 0) {
-                    /* Binary Ninja: i += 1 */
                     i += 1;
                 } else {
                     /* Binary Ninja: int32_t result = $v0_4($a0, arg2) */
                     result = v0_4(a0, arg2);
 
                     if (result == 0) {
-                        /* Binary Ninja: i += 1 */
                         i += 1;
                     } else {
                         /* Binary Ninja: if (result != 0xfffffdfd) */
-                        if (result != -ENOIOCTLCMD) {
-
+                        if (result != 0xfffffdfd) {
                             /* Binary Ninja: void* $s0_1 = arg1 + (i << 2) */
                             struct tx_isp_subdev **s0_1 = &arg1->subdevs[i];
 
                             /* Binary Ninja: while (arg1 != $s0_1) */
                             while (&arg1->subdevs[0] != s0_1) {
                                 /* Binary Ninja: void* $a0_1 = *($s0_1 + 0x38) */
-                                /* This is accessing s0_1 as if it's an offset from arg1, but s0_1 is already a subdev pointer */
-                                /* So we need to go back one step: s0_1 -= 1 */
+                                /* Move back one position */
                                 s0_1 -= 1;
                                 struct tx_isp_subdev *a0_1 = *s0_1;
 
                                 if (a0_1 == 0) {
-                                    /* Binary Ninja: $s0_1 -= 4 (already done above) */
+                                    /* Binary Ninja: $s0_1 -= 4 */
                                     continue;
                                 } else {
-                                    /* Binary Ninja: void* $v0_6 = *(*($a0_1 + 0xc4) + 4) */
+                                    /* Binary Ninja: int32_t* $v0_6 = *(*($a0_1 + 0xc4) + 4) */
                                     struct tx_isp_subdev_video_ops *v0_6 = a0_1->ops ? a0_1->ops->video : NULL;
 
                                     if (v0_6 == 0) {
-                                        /* Binary Ninja: $s0_1 -= 4 (already done above) */
+                                        /* Binary Ninja: $s0_1 -= 4 */
                                         continue;
                                     } else {
-                                        /* Binary Ninja: int32_t $v0_7 = *($v0_6 + 4) */
+                                        /* Binary Ninja: int32_t $v0_7 = *$v0_6 */
                                         int (*v0_7)(struct tx_isp_subdev *, int) = v0_6->s_stream;
 
                                         if (v0_7 == 0) {
-                                            /* Binary Ninja: $s0_1 -= 4 (already done above) */
+                                            /* Binary Ninja: $s0_1 -= 4 */
                                             continue;
                                         } else {
                                             /* Binary Ninja: $v0_7($a0_1, arg2 u< 1 ? 1 : 0) */
                                             int rollback_enable = (arg2 < 1) ? 1 : 0;
                                             v0_7(a0_1, rollback_enable);
-                                            /* Binary Ninja: $s0_1 -= 4 (already done above) */
+                                            /* Binary Ninja: $s0_1 -= 4 */
                                         }
                                     }
                                 }
@@ -2116,13 +2109,11 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
                             /* Binary Ninja: return result */
                             return result;
                         }
-                        /* Binary Ninja: i += 1 */
                         i += 1;
                     }
                 }
             }
         } else {
-            /* Binary Ninja: i += 1 */
             i += 1;
         }
 
