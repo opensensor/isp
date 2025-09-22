@@ -1539,24 +1539,24 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         pr_err("%s[%d]: invalid parameter\n", "ispvic_frame_channel_s_stream", __LINE__);
         return 0xffffffea; /* -EINVAL */
     }
-    
+
     /* Binary Ninja: Set stream operation string */
     stream_op = (arg2 != 0) ? "streamon" : "streamoff";
     pr_info("%s[%d]: %s\n", "ispvic_frame_channel_s_stream", __LINE__, stream_op);
-    
+
     /* Binary Ninja EXACT: if (arg2 == *($s0 + 0x210)) return 0 */
+    /* SAFE: Use struct member access for stream_state */
+    struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)s0;
+    if (!vic_dev) {
+        pr_err("ispvic_frame_channel_s_stream: NULL vic_dev\n");
+        return 0xffffffea;
+    }
+
     pr_info("*** ispvic_frame_channel_s_stream: Checking stream state - current=%d, requested=%d ***\n",
             vic_dev->stream_state, arg2);
     if (arg2 == vic_dev->stream_state) {
-        pr_info("*** ispvic_frame_channel_s_stream: Stream state already matches - but FORCING VIC MDMA enable ***\n");
-
-        /* CRITICAL FIX: Even if stream state matches, we need to ensure VIC MDMA is enabled */
-        if (arg2 != 0) {
-            pr_info("*** CRITICAL: Calling vic_pipo_mdma_enable even though stream state matches ***\n");
-            vic_pipo_mdma_enable(vic_dev);
-            pr_info("*** CRITICAL: vic_pipo_mdma_enable completed - VIC MDMA should now be active ***\n");
-        }
-        return 0;
+        pr_info("*** ispvic_frame_channel_s_stream: Stream state matches - EARLY RETURN (no MDMA enable) ***\n");
+        return 0;  /* Binary Ninja EXACT: early return without any MDMA operations */
     }
     pr_info("*** ispvic_frame_channel_s_stream: Stream state different - proceeding with streaming setup ***\n");
     
