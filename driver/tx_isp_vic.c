@@ -1784,15 +1784,15 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             /* Reference driver ALWAYS starts VIC hardware immediately with proper buffer configuration */
             pr_info("*** REFERENCE DRIVER SEQUENCE: Starting VIC hardware with exact buffer configuration ***\n");
 
-            /* EMERGENCY FIX: Use minimal safe VIC control value to prevent crashes */
-            pr_info("*** EMERGENCY: Using minimal safe VIC control value ***\n");
-            u32 buffer_count = vic_dev->active_buffer_count;  /* Should be 1 from above */
-            u32 stream_ctrl = 0x80010020;  /* EMERGENCY: Fixed safe value (1 buffer) */
+            /* BINARY NINJA MCP: Proper VIC control value calculation */
+            pr_info("*** BINARY NINJA MCP: Using proper VIC control value calculation ***\n");
+            u32 buffer_count = vic_dev->active_buffer_count;
+            u32 stream_ctrl = (buffer_count << 16) | 0x80000020;  /* Binary Ninja EXACT formula */
             writel(stream_ctrl, vic_base + 0x300);
             wmb();
 
-            pr_info("*** EMERGENCY: Wrote SAFE value 0x%x to reg 0x300 (fixed 1 buffer) ***\n", stream_ctrl);
-            pr_info("*** This should prevent buffer-related kernel panics ***\n");
+            pr_info("*** BINARY NINJA MCP: Wrote proper value 0x%x to reg 0x300 (%d buffers) ***\n", stream_ctrl, buffer_count);
+            pr_info("*** This matches the reference driver buffer management ***\n");
 
             /* MCP LOG: Stream ON completed */
             pr_info("MCP_LOG: VIC streaming enabled - ctrl=0x%x, base=%p, state=%d\n",
