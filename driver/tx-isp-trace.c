@@ -46,6 +46,22 @@ struct reg_range {
     const char *description;
 };
 
+// VIC interrupt registers to monitor closely
+static const u32 vic_interrupt_registers[] = {
+    0x00,   // ISR - Interrupt Status Register
+    0x04,   // IMR - Interrupt Mask Register
+    0x0c,   // IMCR - Interrupt Control Register
+    0x20,   // ISR1 - Interrupt Status Register 1
+    0x24,   // IMR1 - Interrupt Mask Register 1
+    0x1e0,  // Legacy interrupt status
+    0x1e4,  // Legacy interrupt status 2
+    0x1e8,  // Legacy interrupt mask
+    0x1ec,  // Legacy interrupt mask 2
+    0x300,  // VIC DMA control
+    0x308,  // VIC interrupt status
+    0x30c,  // VIC interrupt enable
+};
+
 // Known register ranges and their types
 static const struct reg_range isp_ranges[] = {
     // Keep control ranges for tracing
