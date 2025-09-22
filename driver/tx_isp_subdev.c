@@ -647,8 +647,8 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
             pr_err("*** VIC AUTO-LINK: Registers not mapped - cannot register interrupt ***\n");
         }
 
-    } else if (strcmp(dev_name, "tx-isp-vin") == 0) {
-        /* Link VIN device */
+    } else if (strcmp(dev_name, "isp-w01") == 0) {
+        /* Link VIN device - device name is now "isp-w01" */
         pr_info("*** DEBUG: VIN device name matched! Setting up VIN device ***\n");
         struct tx_isp_vin_device *vin_dev = container_of(sd, struct tx_isp_vin_device, sd);
         ourISPdev->vin_dev = vin_dev;
@@ -670,8 +670,8 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         /* VIN initialization now happens during sensor registration for proper timing */
         pr_info("*** VIN INITIALIZATION DEFERRED TO SENSOR REGISTRATION PHASE ***\n");
 
-    } else if (strcmp(dev_name, "tx-isp-fs") == 0) {
-        /* Link FS device */
+    } else if (strcmp(dev_name, "isp-fs") == 0) {
+        /* Link FS device - device name is now "isp-fs" */
         struct tx_isp_fs_device *fs_dev = container_of(sd, struct tx_isp_fs_device, subdev);
         ourISPdev->fs_dev = (struct frame_source_device *)fs_dev;
         pr_info("*** LINKED FS device: %p ***\n", fs_dev);
@@ -684,26 +684,38 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
             pr_err("*** FS subdev slot (index 3) already occupied ***\n");
         }
 
-    } else if (strcmp(dev_name, "tx-isp-core") == 0) {
-        /* Core device register mapping - CRITICAL FIX */
-        if (sd->regs) {
-            /* CRITICAL: Get core device from subdev private data */
-            struct tx_isp_core_device *core_dev = tx_isp_get_subdevdata(sd);
-            if (core_dev) {
-                /* Map core registers directly to core device */
+    } else if (strcmp(dev_name, "isp-m0") == 0) {
+        /* Link Core device - device name is now "isp-m0" */
+        pr_info("*** DEBUG: CORE device name matched! Setting up Core device ***\n");
+
+        /* CRITICAL: Get core device from subdev private data */
+        struct tx_isp_core_device *core_dev = tx_isp_get_subdevdata(sd);
+        if (core_dev) {
+            /* Map core registers directly to core device */
+            if (sd->regs) {
                 core_dev->core_regs = sd->regs;
                 pr_info("*** CRITICAL FIX: CORE regs mapped to core device: %p ***\n", sd->regs);
+            }
 
-                /* Also link to global ISP device if available */
-                if (ourISPdev) {
-                    ourISPdev->core_dev = core_dev;
-                    pr_info("*** CRITICAL FIX: Core device linked to global ISP device ***\n");
-                }
+            /* Link core device to ISP device */
+            int link_ret = tx_isp_link_core_device(ourISPdev, core_dev);
+            if (link_ret != 0) {
+                pr_err("*** CORE AUTO-LINK: Failed to link core device: %d ***\n", link_ret);
             } else {
-                pr_err("*** CRITICAL ERROR: Core device not found in subdev private data ***\n");
+                pr_info("*** LINKED CORE device: %p ***\n", core_dev);
+                pr_info("*** CORE SUBDEV REGISTERED AT INDEX 4 ***\n");
+
+                /* Now call ispcore_core_ops_init since the core is linked to ISP device */
+                pr_info("*** CORE AUTO-LINK: Calling ispcore_core_ops_init to initialize core ***\n");
+                int init_ret = ispcore_core_ops_init(&core_dev->sd, 1);
+                if (init_ret != 0) {
+                    pr_err("*** CORE AUTO-LINK: ispcore_core_ops_init failed: %d ***\n", init_ret);
+                } else {
+                    pr_info("*** CORE AUTO-LINK: Core initialization SUCCESS - ready for streaming ***\n");
+                }
             }
         } else {
-            pr_err("*** CRITICAL ERROR: No core registers mapped ***\n");
+            pr_err("*** CRITICAL ERROR: Core device not found in subdev private data ***\n");
         }
     } else if (strcmp(dev_name, "gc2053") == 0 || strstr(dev_name, "sensor") != NULL) {
         /* CRITICAL: This is a sensor device - check if already registered to prevent duplicates */
