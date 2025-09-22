@@ -517,9 +517,6 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
 /* CSI error checking function - called from VIC interrupt handler */
 extern void tx_isp_csi_check_errors(struct tx_isp_dev *isp_dev);
 
-extern int tx_isp_create_subdev_graph(struct tx_isp_dev *isp);
-extern void tx_isp_cleanup_subdev_graph(struct tx_isp_dev *isp);
-
 /* Forward declarations for hardware initialization functions */
 static int tx_isp_hardware_init(struct tx_isp_dev *isp_dev);
 extern int sensor_init(struct tx_isp_dev *isp_dev);
@@ -4463,9 +4460,6 @@ static void tx_isp_exit(void)
     pr_info("*** Using reference driver interrupt-based cleanup ***\n");
 
     if (ourISPdev) {
-        /* Clean up subdevice graph */
-        tx_isp_cleanup_subdev_graph(ourISPdev);
-        
         /* *** CRITICAL: Cleanup V4L2 video devices *** */
         tx_isp_v4l2_cleanup();
         pr_info("*** V4L2 VIDEO DEVICES CLEANED UP ***\n");
