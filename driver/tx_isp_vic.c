@@ -59,31 +59,31 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 1 */
         vic_dev->irq_enabled = 1;
 
-        /* CRITICAL FIX: Configure VIC hardware interrupt registers - MISSING FROM ORIGINAL CODE */
-        void __iomem *vic_regs = vic_dev->vic_regs;
-        if (vic_regs) {
+        /* CRITICAL FIX: Configure VIC hardware interrupt registers using SECONDARY VIC registers */
+        void __iomem *vic_regs_secondary = vic_dev->vic_regs_secondary;
+        if (vic_regs_secondary) {
             /* Clear any pending interrupts first */
-            u32 pending1 = readl(vic_regs + 0x1e0);
-            u32 pending2 = readl(vic_regs + 0x1e4);
-            writel(pending1, vic_regs + 0x1f0);  /* Clear interrupt status 1 */
-            writel(pending2, vic_regs + 0x1f4);  /* Clear interrupt status 2 */
+            u32 pending1 = readl(vic_regs_secondary + 0x1e0);
+            u32 pending2 = readl(vic_regs_secondary + 0x1e4);
+            writel(pending1, vic_regs_secondary + 0x1f0);  /* Clear interrupt status 1 */
+            writel(pending2, vic_regs_secondary + 0x1f4);  /* Clear interrupt status 2 */
             wmb();
 
             /* Enable VIC hardware interrupts - Binary Ninja reference shows these are needed */
             /* Enable frame done interrupt (bit 0) and error interrupts for debugging */
-            writel(0x1, vic_regs + 0x1e8);      /* Enable frame done interrupt (bit 0) */
-            writel(0x3, vic_regs + 0x1ec);      /* Enable MDMA interrupts (bits 0,1) */
+            writel(0x1, vic_regs_secondary + 0x1e8);      /* Enable frame done interrupt (bit 0) */
+            writel(0x3, vic_regs_secondary + 0x1ec);      /* Enable MDMA interrupts (bits 0,1) */
             wmb();
 
-            pr_info("*** tx_vic_enable_irq: VIC hardware interrupt registers configured ***\n");
-            pr_info("*** tx_vic_enable_irq: Enabled frame done (0x1e8=0x1) and MDMA (0x1ec=0x3) interrupts ***\n");
+            pr_info("*** tx_vic_enable_irq: VIC hardware interrupt registers configured using SECONDARY VIC registers ***\n");
+            pr_info("*** tx_vic_enable_irq: Enabled frame done (0x1e8=0x1) and MDMA (0x1ec=0x3) interrupts on 0x10023000 ***\n");
+            pr_info("*** tx_vic_enable_irq: Secondary VIC regs mapped at %p (0x10023000) ***\n", vic_regs_secondary);
         }
 
         /* CRITICAL FIX: Call hardware interrupt enable function - Binary Ninja reference */
         /* Binary Ninja: $v0_1 = *(dump_vsd_5 + 0x84); if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
-        /* Calling enable_irq() here would interfere with the main dispatcher's IRQ management */
+        /* TODO: Need to identify what function should be at offset 0x84 in VIC device structure */
         pr_info("*** tx_vic_enable_irq: VIC software interrupt flag ENABLED ***\n");
-            /* Fallback: Direct hardware register enable */
         pr_info("*** tx_vic_enable_irq: Hardware IRQ 38 managed by main dispatcher ***\n");
 
         /* Set the global vic_start_ok flag to allow interrupt processing */
@@ -123,9 +123,12 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
 
         /* CRITICAL FIX: Call hardware interrupt disable function - Binary Ninja reference */
         /* Binary Ninja: $v0_2 = *(dump_vsd_5 + 0x88); if ($v0_2 != 0) $v0_2(dump_vsd_5 + 0x80) */
-        /* Calling disable_irq() here would interfere with the main dispatcher's IRQ management */
+        /* CRITICAL FIX: Disable the kernel IRQ line */
+        if (vic_dev->irq > 0) {
+            disable_irq(vic_dev->irq);
+            pr_info("*** tx_vic_disable_irq: Kernel IRQ %d DISABLED ***\n", vic_dev->irq);
+        }
         pr_info("*** tx_vic_disable_irq: VIC software interrupt flag DISABLED ***\n");
-            /* Fallback: Direct hardware register disable */
         pr_info("*** tx_vic_disable_irq: Hardware IRQ 38 managed by main dispatcher ***\n");
 
         /* Clear the global vic_start_ok flag to stop interrupt processing */

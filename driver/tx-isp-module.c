@@ -1635,12 +1635,12 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         return IRQ_HANDLED;
     }
 
-    /* CRITICAL FIX: Get VIC registers from vic_dev, not isp_dev */
-    vic_regs = vic_dev->vic_regs;
+    /* CRITICAL FIX: Use SECONDARY VIC registers for interrupt handling to match enable function */
+    vic_regs = vic_dev->vic_regs_secondary;
     if (!vic_regs ||
         (unsigned long)vic_regs < 0x80000000 ||
         (unsigned long)vic_regs >= 0xfffff000) {
-        pr_debug("*** VIC IRQ: No VIC registers mapped - safe exit ***\n");
+        pr_debug("*** VIC IRQ: No SECONDARY VIC registers mapped - safe exit ***\n");
         return IRQ_HANDLED;
     }
 
