@@ -2089,20 +2089,20 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
         }
 
         /* CRITICAL FIX: Call core->init for ISP Core subdev to set state to 3 */
-        /* The ISP Core subdev is at index 4 and needs core->init to transition from state 1 to state 3 */
+        /* The ISP Core subdev is at index 0 and needs core->init to transition from state 1 to state 3 */
         pr_info("*** tx_isp_video_s_stream: Calling core->init for ISP Core subdev ***\n");
 
-        /* Check specifically for the core subdev at index 4 */
-        if (arg1->subdevs[4] && arg1->subdevs[4]->ops && arg1->subdevs[4]->ops->core && arg1->subdevs[4]->ops->core->init) {
-            pr_info("*** tx_isp_video_s_stream: Found ISP Core subdev at index 4 - calling core->init ***\n");
-            int init_result = arg1->subdevs[4]->ops->core->init(arg1->subdevs[4], 1);
+        /* Check specifically for the core subdev at index 0 */
+        if (arg1->subdevs[0] && arg1->subdevs[0]->ops && arg1->subdevs[0]->ops->core && arg1->subdevs[0]->ops->core->init) {
+            pr_info("*** tx_isp_video_s_stream: Found ISP Core subdev at index 0 - calling core->init ***\n");
+            int init_result = arg1->subdevs[0]->ops->core->init(arg1->subdevs[0], 1);
             if (init_result != 0) {
                 pr_err("tx_isp_video_s_stream: ISP Core init failed: %d\n", init_result);
                 return init_result;
             }
             pr_info("*** tx_isp_video_s_stream: ISP Core init SUCCESS - state should now be 3 ***\n");
         } else {
-            pr_err("tx_isp_video_s_stream: ISP Core subdev not found at index 4 or missing core->init\n");
+            pr_err("tx_isp_video_s_stream: ISP Core subdev not found at index 0 or missing core->init\n");
             return -EINVAL;
         }
     }
