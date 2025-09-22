@@ -876,6 +876,28 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** ISP PIPELINE: VIC->ISP connection ENABLED (0x800=1, 0x804=0x1c, 0x1c=8) ***\n");
         pr_info("*** ISP CORE: Hardware interrupt generation ENABLED during VIC init ***\n");
         pr_info("*** VIC->ISP: Pipeline should now generate hardware interrupts when VIC completes frames! ***\n");
+
+        /* CRITICAL MISSING PIECE: Register ISP interrupt handlers via system_irq_func_set */
+        extern int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
+        extern irqreturn_t ip_done_interrupt_static(int irq, void *dev_id);
+        extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
+
+        /* Binary Ninja: system_irq_func_set(0xd, ip_done_interrupt_static) - Set IRQ handler */
+        int irq_ret = system_irq_func_set(0xd, ip_done_interrupt_static);
+        if (irq_ret == 0) {
+            pr_info("*** VIC START: ISP processing completion callback registered (index=0xd) ***\n");
+        } else {
+            pr_err("*** VIC START: Failed to register ISP processing completion callback: %d ***\n", irq_ret);
+        }
+
+        /* Register main ISP core interrupt handler */
+        irq_ret = system_irq_func_set(0x0, ispcore_interrupt_service_routine);
+        if (irq_ret == 0) {
+            pr_info("*** VIC START: ISP core interrupt handler registered (index=0x0) ***\n");
+        } else {
+            pr_err("*** VIC START: Failed to register ISP core interrupt handler: %d ***\n", irq_ret);
+        }
+
     } else {
         pr_warn("*** ISP CORE IRQ: core_regs not mapped; unable to enable core interrupts here ***\n");
     }
