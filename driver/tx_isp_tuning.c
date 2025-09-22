@@ -1960,7 +1960,6 @@ int tisp_init(void *sensor_info, char *param_name)
 
     /* Binary Ninja: Final ISP mode configuration */
     data_b2e74 = 0;  /* Linear mode (not WDR) */
-    int isp_mode;
     if (data_b2e74 != 0) {
         isp_mode = 0x10;  /* WDR mode */
     } else {
@@ -2034,10 +2033,6 @@ int tisp_init(void *sensor_info, char *param_name)
     /* The reference driver does NOT create any kthread for event processing */
     /* Events are processed on-demand when triggered, not continuously */
     pr_info("*** tisp_init: Event system ready for on-demand processing (Binary Ninja reference) ***\n");
-
-    /* Binary Ninja: system_irq_func_set(0xd, ip_done_interrupt_static) - Set IRQ handler */
-    /* CRITICAL: This sets up the ISP processing completion callback - missing piece! */
-    extern irqreturn_t ip_done_interrupt_static(int irq, void *dev_id);
 
     int irq_ret = system_irq_func_set(0xd, ip_done_interrupt_static);
     if (irq_ret == 0) {
