@@ -72,6 +72,15 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         /* CRITICAL FIX: Enable hardware interrupt generation - Binary Ninja reference */
         /* Binary Ninja: $v0_1 = *(dump_vsd_5 + 0x84); if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
 
+        /* CRITICAL FIX: Call kernel IRQ enable function - this was missing! */
+        if (vic_dev->irq_handler && vic_dev->irq_priv) {
+            pr_info("*** tx_vic_enable_irq: Calling kernel IRQ enable function (Binary Ninja EXACT) ***\n");
+            vic_dev->irq_handler(vic_dev->irq_priv);  /* This calls tx_isp_enable_irq(&vic_dev->sd.irq_info) */
+            pr_info("*** tx_vic_enable_irq: Kernel IRQ 38 should now be ENABLED ***\n");
+        } else {
+            pr_err("*** tx_vic_enable_irq: CRITICAL ERROR - No IRQ handler function! ***\n");
+        }
+
         /* CRITICAL: Ensure VIC clocks are enabled before enabling interrupts */
         void __iomem *cpm_regs = ioremap(0x10000000, 0x1000);
         if (cpm_regs) {
@@ -198,6 +207,15 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
 
         /* CRITICAL FIX: Disable hardware interrupt generation - Binary Ninja reference */
         /* Binary Ninja: $v0_2 = *(dump_vsd_5 + 0x88); if ($v0_2 != 0) $v0_2(dump_vsd_5 + 0x80) */
+
+        /* CRITICAL FIX: Call kernel IRQ disable function - this was missing! */
+        if (vic_dev->irq_disable && vic_dev->irq_priv) {
+            pr_info("*** tx_vic_disable_irq: Calling kernel IRQ disable function (Binary Ninja EXACT) ***\n");
+            vic_dev->irq_disable(vic_dev->irq_priv);  /* This calls tx_isp_disable_irq(&vic_dev->sd.irq_info) */
+            pr_info("*** tx_vic_disable_irq: Kernel IRQ 38 should now be DISABLED ***\n");
+        } else {
+            pr_err("*** tx_vic_disable_irq: CRITICAL ERROR - No IRQ disable function! ***\n");
+        }
 
         /* CRITICAL: PRESERVE VIC hardware interrupt configuration */
         /* CRITICAL FIX: Don't clear hardware interrupt registers - preserve working configuration */
