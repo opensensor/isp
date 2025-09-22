@@ -3237,8 +3237,14 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
             /* CRITICAL FIX: Call ispcore_core_ops_init directly instead of broken event system */
             if (ourISPdev->subdevs[4]) {  /* Core subdev is at index 4 */
+                pr_info("*** STREAMON EVENT: Core subdev found at index 4: %p ***\n", ourISPdev->subdevs[4]);
+                pr_info("*** STREAMON EVENT: Current core state: %d ***\n", ourISPdev->core_dev->state);
                 pr_info("*** STREAMON EVENT: Calling core init to transition from state 2 to 3 ***\n");
+
                 ret = ispcore_core_ops_init(ourISPdev->subdevs[4], 1);
+                pr_info("*** STREAMON EVENT: ispcore_core_ops_init returned: %d ***\n", ret);
+                pr_info("*** STREAMON EVENT: Core state after init: %d ***\n", ourISPdev->core_dev->state);
+
                 if (ret == 0) {
                     pr_info("*** STREAMON EVENT: Core initialization SUCCESS ***\n");
 

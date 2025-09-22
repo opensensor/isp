@@ -2618,14 +2618,18 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
     int32_t vic_state;
     int ret;
 
-    pr_info("*** ispcore_core_ops_init: NEW ARCHITECTURE - Using core device ***");
+    pr_info("*** ispcore_core_ops_init: NEW ARCHITECTURE - Using core device, on=%d ***", on);
 
     /* Get core device from subdev */
     core_dev = tx_isp_subdev_to_core_device(sd);
+    pr_info("*** ispcore_core_ops_init: core_dev=%p ***", core_dev);
+
     if (!tx_isp_core_device_is_valid(core_dev)) {
         pr_err("ispcore_core_ops_init: Invalid core device\n");
         return -EINVAL;
     }
+
+    pr_info("*** ispcore_core_ops_init: Core device valid, current state=%d ***", core_dev->state);
 
     /* Get ISP device from core device */
     isp_dev = core_dev->isp_dev;
@@ -2725,12 +2729,15 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
             /* CRITICAL: Handle initialization case (on=1) */
             if (on == 1) {
                 pr_info("*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***");
+                pr_info("*** ispcore_core_ops_init: Current vic_state (core state): %d ***", vic_state);
 
                 /* Binary Ninja: Check CORE state is 2 (ready) before init */
                 if (vic_state != 2) {
                     pr_err("ispcore_core_ops_init: Core state %d != 2, cannot initialize\n", vic_state);
                     return -EINVAL;
                 }
+
+                pr_info("*** ispcore_core_ops_init: Core state check passed, proceeding with initialization ***");
 
                 /* Binary Ninja: Call tisp_init() with sensor attributes */
                 extern struct tx_isp_sensor *tx_isp_get_sensor(void);
