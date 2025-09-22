@@ -1998,24 +1998,6 @@ int tx_isp_video_link_stream(struct tx_isp_dev *arg1, int arg2)
         s4 = &s4[1];
     }
 
-    /* CRITICAL FIX: NOW call sensor s_stream AFTER VIC is fully configured */
-    if (arg2 == 1) {
-        pr_info("*** tx_isp_video_s_stream: NOW calling sensor s_stream AFTER VIC configuration ***\n");
-
-        if (sensor && sensor->sd.ops && sensor->sd.ops->video && sensor->sd.ops->video->s_stream) {
-            pr_info("*** tx_isp_video_s_stream: Calling sensor s_stream - VIC interrupts should be ready ***\n");
-            int sensor_result = sensor->sd.ops->video->s_stream(&sensor->sd, 1);
-            if (sensor_result != 0) {
-                pr_err("*** tx_isp_video_s_stream: Sensor s_stream failed: %d ***\n", sensor_result);
-                /* Don't fail the entire operation - VIC is configured correctly */
-            } else {
-                pr_info("*** tx_isp_video_s_stream: Sensor s_stream SUCCESS - MIPI data should now generate VIC interrupts ***\n");
-            }
-        } else {
-            pr_info("*** tx_isp_video_s_stream: No sensor s_stream function available ***\n");
-        }
-    }
-
     /* Binary Ninja: return 0 */
     pr_info("*** tx_isp_video_s_stream: EXACT Binary Ninja reference implementation complete ***\n");
     return 0;
