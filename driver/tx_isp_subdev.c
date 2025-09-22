@@ -360,12 +360,12 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             sd->isp = ourISPdev;
             pr_info("*** tx_isp_subdev_init: CSI subdev registered at index 1 ***\n");
         } else if (ops == &vic_subdev_ops) {
-            /* VIC at index 4 - processing controller configures image processing pipelines */
+            /* VIC at index 3 - processing controller configures image processing pipelines */
             struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
             ourISPdev->vic_dev = vic_dev;
-            ourISPdev->subdevs[4] = sd;
+            ourISPdev->subdevs[3] = sd;
             sd->isp = ourISPdev;
-            pr_info("*** tx_isp_subdev_init: VIC device linked and registered at index 4 ***\n");
+            pr_info("*** tx_isp_subdev_init: VIC device linked and registered at index 3 ***\n");
         } else if (ops && ops->sensor && ops != &csi_subdev_ops && ops != &vic_subdev_ops && ops != &fs_subdev_ops) {
             /* CRITICAL FIX: This is a REAL sensor subdev (not CSI, VIC, or FS which also have sensor ops) */
             pr_info("*** tx_isp_subdev_init: DETECTED SENSOR SUBDEV - ops=%p, ops->sensor=%p ***\n", ops, ops->sensor);
@@ -376,8 +376,8 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             sd->module.notify = tx_isp_module_notify_handler;
             pr_info("*** tx_isp_subdev_init: Set up sensor module notify handler ***\n");
 
-            /* SENSOR at index 2 - initializes after CSI interface is ready */
-            int sensor_index = 2;
+            /* SENSORS start at index 5+ - come last after all hardware components are initialized */
+            int sensor_index = -1;
             for (int i = 5; i < ISP_MAX_SUBDEVS; i++) {
                 if (ourISPdev->subdevs[i] == NULL) {
                     sensor_index = i;
@@ -668,9 +668,9 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
                 vin_dev->sd.ops->core, vin_dev->sd.ops->video,
                 vin_dev->sd.ops->video ? vin_dev->sd.ops->video->s_stream : NULL);
 
-        /* VIN at index 3 - sets up to receive data from sensor after sensor is initialized */
-        ourISPdev->subdevs[3] = &vin_dev->sd;
-        pr_info("*** REGISTERED VIN SUBDEV AT INDEX 3 WITH VIDEO OPS ***\n");
+        /* VIN at index 2 - sets up to receive data from sensors */
+        ourISPdev->subdevs[2] = &vin_dev->sd;
+        pr_info("*** REGISTERED VIN SUBDEV AT INDEX 2 WITH VIDEO OPS ***\n");
 
         /* VIN initialization now happens during sensor registration for proper timing */
         pr_info("*** VIN INITIALIZATION DEFERRED TO SENSOR REGISTRATION PHASE ***\n");
@@ -681,12 +681,12 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         ourISPdev->fs_dev = (struct frame_source_device *)fs_dev;
         pr_info("*** LINKED FS device: %p ***\n", fs_dev);
 
-        /* FS at index 5 - frame synchronization coordinates the already-initialized components */
-        if (ourISPdev->subdevs[5] == NULL) {
-            ourISPdev->subdevs[5] = &fs_dev->subdev;
-            pr_info("*** REGISTERED FS SUBDEV AT INDEX 5 WITH SUBDEV OPS ***\n");
+        /* FS at index 4 - frame synchronization coordinates the already-initialized components */
+        if (ourISPdev->subdevs[4] == NULL) {
+            ourISPdev->subdevs[4] = &fs_dev->subdev;
+            pr_info("*** REGISTERED FS SUBDEV AT INDEX 4 WITH SUBDEV OPS ***\n");
         } else {
-            pr_err("*** FS subdev slot (index 5) already occupied ***\n");
+            pr_err("*** FS subdev slot (index 4) already occupied ***\n");
         }
 
     } else if (strcmp(dev_name, "isp-m0") == 0) {
