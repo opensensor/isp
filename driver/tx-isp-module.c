@@ -4402,6 +4402,46 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp_dev)
     /* Binary Ninja: Set globe_ispdev = isp_dev */
     ourISPdev = isp_dev;
 
+    /* CRITICAL: Create /proc/jz/isp directory and device entries - EXACT Binary Ninja MCP */
+    pr_info("*** tx_isp_create_graph_and_nodes: Creating /proc/jz/isp entries ***\n");
+
+    /* Create /proc/jz directory if it doesn't exist */
+    struct proc_dir_entry *jz_proc = proc_mkdir("jz", NULL);
+    if (jz_proc) {
+        /* Create /proc/jz/isp directory */
+        isp_dev->proc_context = proc_mkdir("isp", jz_proc);
+        if (isp_dev->proc_context) {
+            pr_info("*** Created /proc/jz/isp directory ***\n");
+
+            /* Binary Ninja: Create proc entries for each registered device */
+            for (i = 0; i < pdata->device_id; i++) {
+                if (i < ARRAY_SIZE(tx_isp_platform_devices) && tx_isp_platform_devices[i]) {
+                    void *driver_data = platform_get_drvdata(tx_isp_platform_devices[i]);
+                    if (driver_data) {
+                        /* Binary Ninja: private_proc_create_data(*($v0_7 + 8), 0x124, *(arg1 + 0x11c), $a3_1, $v0_7) */
+                        struct proc_dir_entry *proc_entry = proc_create_data(
+                            tx_isp_platform_devices[i]->name,  /* Device name */
+                            0644,                               /* Permissions (0x124 = 0644) */
+                            isp_dev->proc_context,             /* Parent directory */
+                            NULL,                               /* File operations (will be set by device) */
+                            driver_data                         /* Private data */
+                        );
+
+                        if (proc_entry) {
+                            pr_info("*** Created /proc/jz/isp/%s entry ***\n", tx_isp_platform_devices[i]->name);
+                        } else {
+                            pr_warn("*** Failed to create /proc/jz/isp/%s entry ***\n", tx_isp_platform_devices[i]->name);
+                        }
+                    }
+                }
+            }
+        } else {
+            pr_err("*** Failed to create /proc/jz/isp directory ***\n");
+        }
+    } else {
+        pr_err("*** Failed to create /proc/jz directory ***\n");
+    }
+
     /* CRITICAL: Initialize frame channels with proper Binary Ninja state values */
     pr_info("*** tx_isp_create_graph_and_nodes: Initializing frame channels ***\n");
     for (i = 0; i < num_channels; i++) {
