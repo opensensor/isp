@@ -929,8 +929,9 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
         /* Binary Ninja: if (arg1 != 0) */
         if (sd != NULL) {
             /* Binary Ninja: void* $v0_5 = **(arg1 + 0xc4) */
+            /* SAFE: Double dereference - first get inpads[0].priv, then dereference that pointer */
             if (sd->inpads && sd->inpads[0].priv) {
-                callback_ptr = sd->inpads[0].priv;
+                callback_ptr = *((void **)sd->inpads[0].priv);  /* Double dereference */
 
                 /* Binary Ninja: if ($v0_5 == 0) return 0 */
                 if (callback_ptr == NULL) {
