@@ -567,15 +567,17 @@ void system_reg_write(u32 arg1, u32 arg2)
     /* SAFE: Use proper struct member access instead of offset arithmetic */
     extern uint32_t vic_start_ok;
 
+    /* Binary Ninja: Get register base from ISP device structure at offset 0xb8 */
+    void __iomem *reg_base = ourISPdev->vic_regs - 0xe0000;  /* This is at offset 0xb8 in the structure */
 
-    /* Map ISP registers based on VIC base (which is at 0x133e0000) */
-    /* ISP core registers are at 0x13300000 = vic_regs - 0xe0000 */
-    isp_regs = ourISPdev->vic_dev->vic_regs - 0xe0000;
+    if (!reg_base) {
+        pr_warn("system_reg_write: No register base available for reg=0x%x val=0x%x\n", arg1, arg2);
+        return;
+    }
 
-    pr_debug("system_reg_write: Writing ISP reg[0x%x] = 0x%x\n", reg, value);
-
-    /* Write to ISP register with proper offset */
-    writel(value, isp_regs + reg);
+    /* Binary Ninja EXACT: Write to register base + offset */
+    pr_info("*** SYSTEM_REG_WRITE: reg[0x%x] = 0x%x (Binary Ninja EXACT) ***\n", arg1, arg2);
+    writel(arg2, reg_base + arg1);
     wmb();
 }
 
