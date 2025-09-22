@@ -2572,30 +2572,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         pr_info("*** Channel %d: QBUF - Queue buffer index=%d ***\n", channel, buffer.index);
 
-        // CRITICAL: QBUF should trigger core ops init according to Binary Ninja reference
-        // BUT only if core is in state 2 (READY) - don't re-initialize if already in state 3 (ACTIVE)
-        if (ourISPdev && ourISPdev->core_dev &&
-            ourISPdev->core_dev->sd.ops && ourISPdev->core_dev->sd.ops->core &&
-            ourISPdev->core_dev->sd.ops->core->init) {
-
-            /* Check core state before attempting initialization */
-            if (ourISPdev->core_dev->state == 2) {
-                pr_info("*** Channel %d: QBUF - Core in READY state (2), calling CORE OPS INIT ***\n", channel);
-                int core_init_ret = ourISPdev->core_dev->sd.ops->core->init(&ourISPdev->core_dev->sd, 1);
-
-                if (core_init_ret != 0) {
-                    pr_err("Channel %d: QBUF - Core ops init failed: %d\n", channel, core_init_ret);
-                    // Don't fail QBUF for init failure - continue with buffer queuing
-                } else {
-                    pr_info("*** Channel %d: QBUF - Core ops init SUCCESS ***\n", channel);
-                }
-            } else if (ourISPdev->core_dev->state == 3) {
-                pr_info("*** Channel %d: QBUF - Core already in ACTIVE state (3), skipping init ***\n", channel);
-            } else {
-                pr_info("*** Channel %d: QBUF - Core in state %d, not ready for init ***\n", channel, ourISPdev->core_dev->state);
-            }
-        }
-
         /* SAFE: Use our buffer array instead of unsafe pointer arithmetic */
         if (buffer.index >= 64) {
             pr_err("*** QBUF: Buffer index %d out of range ***\n", buffer.index);
