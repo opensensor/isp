@@ -3965,10 +3965,6 @@ int sensor_early_init(void *core_dev)
 
     if (core_dev != NULL) {
         result = 0;
-
-        if (g_ispcore == NULL) {
-            g_ispcore = core_dev;
-        }
     }
 
     return result;
