@@ -4331,7 +4331,9 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
                 /* Binary Ninja: private_kfree($v0) */
                 tx_isp_destroy_core_device(core_dev);
-                return -ENOMEM;
+
+                /* Binary Ninja: return 0xffffffea */
+                return -EINVAL;
             }
 
             /* Create frame channel devices using global ISP device */
@@ -4353,6 +4355,8 @@ int tx_isp_core_probe(struct platform_device *pdev)
             }
 
             pr_info("*** tx_isp_core_probe: Core probe completed successfully ***\n");
+
+            /* Binary Ninja: return 0 */
             return 0;
 
         } else {
