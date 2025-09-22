@@ -1455,9 +1455,6 @@ err_free_dev:
     return ret;
 }
 
-/* REMOVED: tx_isp_detect_and_register_sensors function */
-/* Sensor detection is handled by userspace via TX_ISP_SENSOR_REGISTER IOCTL (0x805056c1) */
-/* which calls subdev_sensor_ops_ioctl with IOCTL 0x2000000 to create I2C sensor devices */
 
 /* tx_isp_disable_irq - EXACT Binary Ninja implementation with correct parameter */
 void tx_isp_disable_irq(void *arg1)
