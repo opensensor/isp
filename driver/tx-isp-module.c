@@ -4953,7 +4953,13 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                 /* Binary Ninja: *($s0_1 + 0xe8) = 2 */
                 vic_dev->state = 2;
                 pr_info("*** VIC device final state set to 2 (fully activated) ***\n");
-                
+
+                /* CRITICAL FIX: Also set core device state to 2 (ready) */
+                if (isp_dev->core_dev) {
+                    isp_dev->core_dev->state = 2;
+                    pr_info("*** Core device state set to 2 (ready for initialization) ***\n");
+                }
+
                 /* Binary Ninja: return 0 */
                 pr_info("*** ispcore_activate_module: SUCCESS - ALL REGISTER WRITES SHOULD NOW BE TRIGGERED ***\n");
                 return 0;
