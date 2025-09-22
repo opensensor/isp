@@ -29,81 +29,9 @@ static struct tx_isp_vic_device *dump_vsd = NULL;  /* Global VIC device pointer 
 static void *test_addr = NULL;  /* Test address pointer */
 irqreturn_t isp_vic_interrupt_service_routine(void *arg1);
 
-/* VIC hardware interrupt enable/disable functions - Binary Ninja reference implementation */
-void vic_hardware_irq_enable(void *irq_info);
-void vic_hardware_irq_disable(void *irq_info);
-
-/* VIC hardware interrupt enable function - Binary Ninja reference */
-void vic_hardware_irq_enable(void *irq_info)
-{
-    extern struct tx_isp_dev *ourISPdev;
-
-    pr_info("*** vic_hardware_irq_enable: ENTRY - Binary Ninja reference implementation ***\n");
-
-    if (!ourISPdev || !ourISPdev->vic_dev) {
-        pr_err("vic_hardware_irq_enable: No VIC device available\n");
-        return;
-    }
-
-    struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
-
-    /* CRITICAL: Enable VIC hardware interrupt registers using SECONDARY VIC registers */
-    void __iomem *vic_regs_secondary = vic_dev->vic_regs_secondary;
-    if (vic_regs_secondary) {
-        /* Clear any pending interrupts first */
-        u32 pending1 = readl(vic_regs_secondary + 0x1e0);
-        u32 pending2 = readl(vic_regs_secondary + 0x1e4);
-        writel(pending1, vic_regs_secondary + 0x1f0);  /* Clear interrupt status 1 */
-        writel(pending2, vic_regs_secondary + 0x1f4);  /* Clear interrupt status 2 */
-        wmb();
-
-        /* Enable VIC hardware interrupts - Binary Ninja reference shows these are needed */
-        /* Enable frame done interrupt (bit 0) and error interrupts for debugging */
-        writel(0x1, vic_regs_secondary + 0x1e8);      /* Enable frame done interrupt (bit 0) */
-        writel(0x3, vic_regs_secondary + 0x1ec);      /* Enable MDMA interrupts (bits 0,1) */
-        wmb();
-
-        pr_info("*** vic_hardware_irq_enable: VIC hardware interrupt registers configured ***\n");
-        pr_info("*** vic_hardware_irq_enable: Enabled frame done (0x1e8=0x1) and MDMA (0x1ec=0x3) interrupts ***\n");
-    } else {
-        pr_err("vic_hardware_irq_enable: Secondary VIC registers not mapped\n");
-    }
-}
-
-/* VIC hardware interrupt disable function - Binary Ninja reference */
-void vic_hardware_irq_disable(void *irq_info)
-{
-    extern struct tx_isp_dev *ourISPdev;
-
-    pr_info("*** vic_hardware_irq_disable: ENTRY - Binary Ninja reference implementation ***\n");
-
-    if (!ourISPdev || !ourISPdev->vic_dev) {
-        pr_err("vic_hardware_irq_disable: No VIC device available\n");
-        return;
-    }
-
-    struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
-
-    /* CRITICAL: Disable VIC hardware interrupt registers using SECONDARY VIC registers */
-    void __iomem *vic_regs_secondary = vic_dev->vic_regs_secondary;
-    if (vic_regs_secondary) {
-        /* Disable all VIC hardware interrupts */
-        writel(0x0, vic_regs_secondary + 0x1e8);      /* Disable frame done interrupt */
-        writel(0x0, vic_regs_secondary + 0x1ec);      /* Disable MDMA interrupts */
-        wmb();
-
-        /* Clear any pending interrupts */
-        u32 pending1 = readl(vic_regs_secondary + 0x1e0);
-        u32 pending2 = readl(vic_regs_secondary + 0x1e4);
-        writel(pending1, vic_regs_secondary + 0x1f0);  /* Clear interrupt status 1 */
-        writel(pending2, vic_regs_secondary + 0x1f4);  /* Clear interrupt status 2 */
-        wmb();
-
-        pr_info("*** vic_hardware_irq_disable: VIC hardware interrupts DISABLED ***\n");
-    } else {
-        pr_err("vic_hardware_irq_disable: Secondary VIC registers not mapped\n");
-    }
-}
+/* Forward declarations for actual reference driver functions */
+extern void tx_isp_enable_irq(void *irq_info);
+extern void tx_isp_disable_irq(void *irq_info);
 
 /* BINARY NINJA EXACT: tx_vic_enable_irq implementation */
 void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
@@ -135,7 +63,7 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 1 */
         vic_dev->irq_enabled = 1;
 
-        /* CRITICAL FIX: Configure VIC hardware interrupt registers using SECONDARY VIC registers */
+        /* CRITICAL: Configure VIC hardware interrupt registers using SECONDARY VIC registers */
         void __iomem *vic_regs_secondary = vic_dev->vic_regs_secondary;
         if (vic_regs_secondary) {
             /* Clear any pending interrupts first */
@@ -161,7 +89,7 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         /* SAFE: Use struct members instead of unsafe offset math */
         if (vic_dev->irq_handler != NULL) {
             vic_dev->irq_handler(vic_dev->irq_priv);
-            pr_info("*** tx_vic_enable_irq: Called hardware IRQ enable function via SAFE struct member ***\n");
+            pr_info("*** tx_vic_enable_irq: Called tx_isp_enable_irq via SAFE struct member ***\n");
         } else {
             pr_info("*** tx_vic_enable_irq: No hardware IRQ enable function set ***\n");
         }
@@ -207,7 +135,7 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
         /* SAFE: Use struct members instead of unsafe offset math */
         if (vic_dev->irq_disable != NULL) {
             vic_dev->irq_disable(vic_dev->irq_priv);
-            pr_info("*** tx_vic_disable_irq: Called hardware IRQ disable function via SAFE struct member ***\n");
+            pr_info("*** tx_vic_disable_irq: Called tx_isp_disable_irq via SAFE struct member ***\n");
         } else {
             pr_info("*** tx_vic_disable_irq: No hardware IRQ disable function set ***\n");
         }
@@ -1981,15 +1909,14 @@ int tx_isp_vic_probe(struct platform_device *pdev)
 
     /* CRITICAL FIX: Initialize VIC interrupt handler function pointers using SAFE struct members */
     /* Binary Ninja reference shows function pointers are needed, but we use safe struct access */
-    extern void vic_hardware_irq_enable(void *irq_info);
-    extern void vic_hardware_irq_disable(void *irq_info);
+    /* Use actual reference driver functions: tx_isp_enable_irq and tx_isp_disable_irq */
 
     /* SAFE: Use proper struct members instead of unsafe offset math */
-    vic_dev->irq_handler = vic_hardware_irq_enable;
-    vic_dev->irq_disable = vic_hardware_irq_disable;
+    vic_dev->irq_handler = (void (*)(void *))tx_isp_enable_irq;
+    vic_dev->irq_disable = (void (*)(void *))tx_isp_disable_irq;
     vic_dev->irq_priv = &vic_dev->sd.irq_info;  /* Pass IRQ info structure */
 
-    pr_info("*** VIC PROBE: Hardware IRQ function pointers set using SAFE struct members ***\n");
+    pr_info("*** VIC PROBE: Hardware IRQ function pointers set using SAFE struct members (tx_isp_enable/disable_irq) ***\n");
 
     /* EMERGENCY FIX: Disable complex buffer management to prevent kernel panic */
     /* Initialize only the absolute minimum required for basic operation */
