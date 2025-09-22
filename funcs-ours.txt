@@ -7,13 +7,9 @@
   __frame_channel_vb2_streamoff
   __private_spin_lock_irqsave
   ae0_interrupt_hist
-  ae0_interrupt_hist_wrapper
   ae0_interrupt_static
-  ae0_interrupt_static_wrapper
   ae1_interrupt_hist
-  ae1_interrupt_hist_wrapper
   ae1_interrupt_static
-  ae1_interrupt_static_wrapper
   apical_isp_ae_g_roi
   apical_isp_ae_zone_g_ctrl
   apical_isp_af_zone_g_ctrl
@@ -60,6 +56,8 @@
   frame_channel_unlocked_ioctl
   frame_channel_vidioc_get_fmt
   frame_channel_vidioc_set_fmt
+  frame_channel_wakeup_waiters
+  fs_activate_module
   fs_chardev_ioctl
   fs_chardev_open
   fs_chardev_release
@@ -121,6 +119,7 @@
   isp_vic_interrupt_service_routine
   isp_write32
   ispcore_activate_module
+  ispcore_activate_module_subdev
   ispcore_core_ops_init
   ispcore_core_ops_ioctl
   ispcore_frame_channel_dqbuf
@@ -133,6 +132,7 @@
   ispcore_sensor_ops_ioctl
   ispcore_sensor_ops_release_all_sensor
   ispcore_slake_module
+  ispcore_slake_module_subdev
   ispcore_sync_sensor_attr
   ispcore_video_s_stream
   ispmodule_ip_done_irq_handler
@@ -144,8 +144,6 @@
   jz_isp_ccm_parameter_convert
   ktime_get_real_ns
   list_for_each
-  list_for_each_entry
-  list_for_each_entry_safe
   list_for_each_safe
   load_isp_tuning_file
   mbus_to_bayer_write
@@ -233,6 +231,7 @@
   subdev_sensor_ops_enum_input
   subdev_sensor_ops_ioctl
   subdev_sensor_ops_release_all_sensor
+  subdev_sensor_ops_release_sensor
   subdev_sensor_ops_set_input
   subdev_video_destroy_link
   system_irq_func_set
@@ -541,6 +540,8 @@
   tx_isp_core_device_set_state
   tx_isp_core_device_start_streaming
   tx_isp_core_device_stop_streaming
+  tx_isp_core_irq_handle
+  tx_isp_core_irq_handler
   tx_isp_core_irq_thread_handle
   tx_isp_core_probe
   tx_isp_core_remove
@@ -582,16 +583,17 @@
   tx_isp_init_sink_subdev
   tx_isp_init_source_subdev
   tx_isp_init_subdev_pads
-  tx_isp_init_subdev_registry
   tx_isp_ispcore_activate_module_complete
   tx_isp_link_core_device
   tx_isp_module_deinit
   tx_isp_module_init
+  tx_isp_module_notify_handler
   tx_isp_open
   tx_isp_platform_probe
   tx_isp_platform_remove
   tx_isp_reg_set
   tx_isp_register_link
+  tx_isp_register_sensor_subdev
   tx_isp_release
   tx_isp_request_irq
   tx_isp_send_event_to_remote
@@ -605,7 +607,6 @@
   tx_isp_subdev_register
   tx_isp_subdev_unregister
   tx_isp_unlocked_ioctl
-  tx_isp_unregister_sensor_subdev
   tx_isp_v4l2_cleanup
   tx_isp_v4l2_cropcap
   tx_isp_v4l2_dqbuf
@@ -654,7 +655,6 @@
   vic_pipo_mdma_enable
   vic_saveraw
   vic_sensor_ops_ioctl
-  vic_sensor_ops_sync_sensor_attr
   vic_snapraw
   video_input_cmd_open
   video_input_cmd_set
@@ -662,3 +662,4 @@
   vin_core_ops_ioctl
   vin_s_stream
   void
+
