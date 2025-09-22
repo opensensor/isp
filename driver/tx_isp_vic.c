@@ -2037,7 +2037,6 @@ int tx_isp_vic_probe(struct platform_device *pdev)
 int tx_isp_vic_remove(struct platform_device *pdev)
 {
     struct tx_isp_subdev *sd = platform_get_drvdata(pdev);
-    struct tx_isp_vic_device *vic_dev;
     struct resource *res;
 
     if (!sd)
