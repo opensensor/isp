@@ -5202,11 +5202,11 @@ int tx_isp_link_core_device(struct tx_isp_dev *isp_dev, struct tx_isp_core_devic
     core_dev->isp_dev = isp_dev;
     core_dev->sd.isp = isp_dev;
 
-    /* Register core subdev in subdevs array at index 4 */
-    isp_dev->subdevs[4] = &core_dev->sd;
+    /* Register core subdev in subdevs array at index 0 - CORE initializes first */
+    isp_dev->subdevs[0] = &core_dev->sd;
 
     pr_info("*** tx_isp_link_core_device: Core device linked successfully ***\n");
-    pr_info("*** Core subdev registered at index 4: %p ***\n", &core_dev->sd);
+    pr_info("*** Core subdev registered at index 0: %p ***\n", &core_dev->sd);
 
     return 0;
 }
