@@ -82,6 +82,16 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             pr_info("*** tx_vic_enable_irq: VIC hardware interrupt registers configured using SECONDARY VIC registers ***\n");
             pr_info("*** tx_vic_enable_irq: Enabled frame done (0x1e8=0x1) and MDMA (0x1ec=0x3) interrupts on 0x10023000 ***\n");
             pr_info("*** tx_vic_enable_irq: Secondary VIC regs mapped at %p (0x10023000) ***\n", vic_regs_secondary);
+
+            /* DIAGNOSTIC: Read back VIC interrupt registers to verify they stuck */
+            u32 vic_int_en1 = readl(vic_regs_secondary + 0x1e8);
+            u32 vic_int_en2 = readl(vic_regs_secondary + 0x1ec);
+            u32 vic_int_stat1 = readl(vic_regs_secondary + 0x1e0);
+            u32 vic_int_stat2 = readl(vic_regs_secondary + 0x1e4);
+
+            pr_info("*** DIAGNOSTIC: VIC interrupt register readback ***\n");
+            pr_info("*** VIC 0x1e8=%08x, 0x1ec=%08x, 0x1e0=%08x, 0x1e4=%08x ***\n",
+                    vic_int_en1, vic_int_en2, vic_int_stat1, vic_int_stat2);
         }
 
         /* CRITICAL FIX: Call hardware interrupt enable function using SAFE struct members */
@@ -839,7 +849,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(1, vic_regs + 0x0);
     pr_info("*** tx_isp_vic_start: Step 4 - VIC enabled: wrote 1 to reg 0x0 ***\n");
 
-    /* CRITICAL: Enable ISP core interrupt generation - EXACT working sequence */
+    /* CRITICAL: Enable ISP core interrupt generation - EXACT working sequence from logs */
     if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
         void __iomem *core = ourISPdev->core_dev->core_regs;
 
@@ -878,6 +888,12 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** VIC->ISP: Pipeline should now generate hardware interrupts when VIC completes frames! ***\n");
     } else {
         pr_warn("*** ISP CORE IRQ: core_regs not mapped; unable to enable core interrupts here ***\n");
+    }
+
+    /* CRITICAL: Also enable the kernel IRQ line if it was registered earlier */
+    if (ourISPdev && ourISPdev->isp_irq > 0) {
+        enable_irq(ourISPdev->isp_irq);
+        pr_info("*** ISP CORE IRQ: enable_irq(%d) called ***\n", ourISPdev->isp_irq);
     }
 
     /* Binary Ninja EXACT: vic_start_ok = 1 */
