@@ -61,6 +61,21 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         if (vic_dev->irq_handler && vic_dev->irq_priv) {
             vic_dev->irq_handler(vic_dev->irq_priv);
         }
+
+        /* CRITICAL FIX: Configure VIC interrupt masks - this was missing! */
+        if (vic_dev->vic_regs) {
+            /* Clear any pending interrupts first */
+            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main interrupt status */
+            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
+            wmb();
+
+            /* Configure VIC interrupt masks - 0x1e8 is DISABLE mask (1=disable, 0=enable) */
+            writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);  /* Enable frame done interrupt (bit 0) */
+            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1ec);  /* Disable all MDMA interrupts */
+            wmb();
+
+            pr_info("*** tx_vic_enable_irq: VIC interrupt masks configured (0x1e8=0xFFFFFFFE, 0x1ec=0xFFFFFFFF) ***\n");
+        }
     }
 
     /* Binary Ninja: private_spin_unlock_irqrestore(dump_vsd_3 + 0x130, var_18) */
