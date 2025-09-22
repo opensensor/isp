@@ -4267,6 +4267,12 @@ int tx_isp_core_probe(struct platform_device *pdev)
             pr_info("*** tx_isp_core_probe: Calling sensor_early_init ***\n");
             sensor_early_init(ourISPdev);
 
+            /* Binary Ninja: uint32_t isp_clk_1 = get_isp_clk() */
+            /* Binary Ninja: if (isp_clk_1 == 0) isp_clk_1 = isp_clk */
+            /* Binary Ninja: isp_clk = isp_clk_1 */
+            /* Clock management is handled by our clock infrastructure */
+            pr_info("*** tx_isp_core_probe: ISP clock management handled by infrastructure ***\n");
+
             /* Store channel array in core device */
             core_dev->frame_channels = channel_array;
             core_dev->channel_count = channel_count;
