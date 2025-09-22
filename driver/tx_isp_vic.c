@@ -73,23 +73,24 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: $v0_1 = *(dump_vsd_5 + 0x84); if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
 
         /* CRITICAL: Enable VIC hardware interrupt generation */
-        if (vic_dev->vic_regs_secondary) {
+        /* CRITICAL FIX: Use PRIMARY VIC registers for interrupt control - secondary is for control only */
+        if (vic_dev->vic_regs) {
             /* CRITICAL FIX: VIC interrupt mask is DISABLE mask - write 0 to ENABLE interrupts */
             /* Binary Ninja logic: not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
             /* This means mask register bits set to 1 DISABLE interrupts, so write 0 to enable */
             u32 interrupt_mask = 0x0;  /* 0 = Enable all interrupts (inverted logic) */
-            writel(interrupt_mask, vic_dev->vic_regs_secondary + 0x1e8);  /* Interrupt mask register */
-            writel(interrupt_mask, vic_dev->vic_regs_secondary + 0x1ec);  /* Secondary interrupt mask register */
+            writel(interrupt_mask, vic_dev->vic_regs + 0x1e8);  /* Interrupt mask register */
+            writel(interrupt_mask, vic_dev->vic_regs + 0x1ec);  /* Secondary interrupt mask register */
             wmb();
-            pr_info("*** tx_vic_enable_irq: VIC hardware interrupt mask ENABLED (wrote 0x%x to disable mask) ***\n", interrupt_mask);
+            pr_info("*** tx_vic_enable_irq: VIC hardware interrupt mask ENABLED (wrote 0x%x to PRIMARY VIC disable mask) ***\n", interrupt_mask);
 
             /* Clear any pending interrupts */
-            writel(0xFFFFFFFF, vic_dev->vic_regs_secondary + 0x1f0);  /* Clear interrupt status */
-            writel(0xFFFFFFFF, vic_dev->vic_regs_secondary + 0x1f4);  /* Clear secondary interrupt status */
+            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear interrupt status */
+            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear secondary interrupt status */
             wmb();
-            pr_info("*** tx_vic_enable_irq: VIC pending interrupts cleared ***\n");
+            pr_info("*** tx_vic_enable_irq: VIC pending interrupts cleared in PRIMARY registers ***\n");
         } else {
-            pr_err("*** tx_vic_enable_irq: No VIC secondary registers - cannot enable hardware interrupts ***\n");
+            pr_err("*** tx_vic_enable_irq: No VIC primary registers - cannot enable hardware interrupts ***\n");
         }
 
         pr_info("*** tx_vic_enable_irq: VIC software interrupt flag ENABLED ***\n");
@@ -133,23 +134,24 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: $v0_2 = *(dump_vsd_5 + 0x88); if ($v0_2 != 0) $v0_2(dump_vsd_5 + 0x80) */
 
         /* CRITICAL: Disable VIC hardware interrupt generation */
-        if (vic_dev->vic_regs_secondary) {
+        /* CRITICAL FIX: Use PRIMARY VIC registers for interrupt control - secondary is for control only */
+        if (vic_dev->vic_regs) {
             /* CRITICAL FIX: VIC interrupt mask is DISABLE mask - write 0xFFFFFFFF to DISABLE all interrupts */
             /* Binary Ninja logic: not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
             /* This means mask register bits set to 1 DISABLE interrupts, so write 0xFFFFFFFF to disable all */
             u32 interrupt_mask = 0xFFFFFFFF;  /* 0xFFFFFFFF = Disable all interrupts */
-            writel(interrupt_mask, vic_dev->vic_regs_secondary + 0x1e8);  /* Interrupt mask register */
-            writel(interrupt_mask, vic_dev->vic_regs_secondary + 0x1ec);  /* Secondary interrupt mask register */
+            writel(interrupt_mask, vic_dev->vic_regs + 0x1e8);  /* Interrupt mask register */
+            writel(interrupt_mask, vic_dev->vic_regs + 0x1ec);  /* Secondary interrupt mask register */
             wmb();
-            pr_info("*** tx_vic_disable_irq: VIC hardware interrupt mask DISABLED (wrote 0x%x to disable mask) ***\n", interrupt_mask);
+            pr_info("*** tx_vic_disable_irq: VIC hardware interrupt mask DISABLED (wrote 0x%x to PRIMARY VIC disable mask) ***\n", interrupt_mask);
 
             /* Clear any pending interrupts */
-            writel(0xFFFFFFFF, vic_dev->vic_regs_secondary + 0x1f0);  /* Clear interrupt status */
-            writel(0xFFFFFFFF, vic_dev->vic_regs_secondary + 0x1f4);  /* Clear secondary interrupt status */
+            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear interrupt status */
+            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear secondary interrupt status */
             wmb();
-            pr_info("*** tx_vic_disable_irq: VIC pending interrupts cleared ***\n");
+            pr_info("*** tx_vic_disable_irq: VIC pending interrupts cleared in PRIMARY registers ***\n");
         } else {
-            pr_err("*** tx_vic_disable_irq: No VIC secondary registers - cannot disable hardware interrupts ***\n");
+            pr_err("*** tx_vic_disable_irq: No VIC primary registers - cannot disable hardware interrupts ***\n");
         }
 
         pr_info("*** tx_vic_disable_irq: VIC software interrupt flag DISABLED ***\n");

@@ -1628,12 +1628,12 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         return IRQ_HANDLED;
     }
 
-    /* CRITICAL FIX: Use SECONDARY VIC registers for interrupt handling - this is where interrupt registers are located */
-    vic_regs = vic_dev->vic_regs_secondary;  /* Use 0x10023000 base for interrupt processing */
+    /* CRITICAL FIX: Use PRIMARY VIC registers for interrupt handling - this is where interrupt registers are located */
+    vic_regs = vic_dev->vic_regs;  /* Use 0x133e0000 base for interrupt processing */
     if (!vic_regs ||
         (unsigned long)vic_regs < 0x80000000 ||
         (unsigned long)vic_regs >= 0xfffff000) {
-        pr_debug("*** VIC IRQ: No SECONDARY VIC registers mapped - safe exit ***\n");
+        pr_debug("*** VIC IRQ: No PRIMARY VIC registers mapped - safe exit ***\n");
         return IRQ_HANDLED;
     }
 
