@@ -2040,7 +2040,7 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
     int i;
     int result;
 
-    pr_info("*** tx_isp_video_s_stream: EXACT Binary Ninja MCP implementation - enable=%d ***\n", arg2);
+    /* Binary Ninja: Simple implementation without debug logging */
 
     /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
     s4 = arg1->subdevs;  /* subdevs array at offset 0x38 */
@@ -2051,16 +2051,6 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
         struct tx_isp_subdev *a0 = *s4;
 
         if (a0 != 0) {
-            /* CRITICAL: Call activate_module ONLY on core device (index 4) before s_stream */
-            if (arg2 == 1 && i == 4 && a0->ops && a0->ops->internal && a0->ops->internal->activate_module) {
-                pr_info("*** tx_isp_video_s_stream: Calling activate_module on CORE device (subdev %d) ***\n", i);
-                int activate_ret = a0->ops->internal->activate_module(a0);
-                if (activate_ret != 0 && activate_ret != -ENOIOCTLCMD) {
-                    pr_err("tx_isp_video_s_stream: activate_module failed on core device: %d\n", activate_ret);
-                    /* Continue - don't fail the entire streaming operation */
-                }
-            }
-
             /* Binary Ninja: void* $v0_3 = *(*($a0 + 0xc4) + 4) */
             struct tx_isp_subdev_video_ops *v0_3 = a0->ops ? a0->ops->video : NULL;
 
