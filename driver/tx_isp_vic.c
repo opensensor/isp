@@ -1432,13 +1432,13 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         return NULL;
     }
 
-    /* Binary Ninja EXACT: int32_t $v1 = *(arg1 + 0xdc) */
-    width = vic_dev->width;   /* SAFE: *(arg1 + 0xdc) = vic_dev->width */
+    /* Binary Ninja: int32_t $v1 = *(arg1 + 0xdc) - use SAFE struct member access */
+    width = vic_dev->width;   /* SAFE: struct member access instead of *(arg1 + 0xdc) */
 
-    /* Binary Ninja EXACT: height = *(arg1 + 0xe0) */
-    height = vic_dev->height; /* SAFE: *(arg1 + 0xe0) = vic_dev->height */
+    /* Binary Ninja: height = *(arg1 + 0xe0) - use SAFE struct member access */
+    height = vic_dev->height; /* SAFE: struct member access instead of *(arg1 + 0xe0) */
 
-    pr_info("vic_pipo_mdma_enable: Using vic_dev dimensions %dx%d (Binary Ninja MCP)\n", width, height);
+    pr_info("vic_pipo_mdma_enable: Using vic_dev dimensions %dx%d (SAFE struct access)\n", width, height);
     
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x308) = 1 */
     writel(1, vic_base + 0x308);
