@@ -359,7 +359,6 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     /* Binary Ninja: int32_t result = 0 */
     result = 0;
 
-    while (true) {
     /* Binary Ninja: $a0_4 = *($s0 + 0x15c) */
     a0_4 = core_dev->irq_enabled;
 
