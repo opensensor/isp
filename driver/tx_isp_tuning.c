@@ -7648,41 +7648,7 @@ int tiziano_mdns_init(uint32_t width, uint32_t height)
     /* This was causing register resets that disabled ISP and VIC interrupts */
     pr_info("tiziano_mdns_init: DISABLED to prevent ISP control register corruption\n");
     return 0;
-    
-    pr_info("tiziano_mdns_init: Initializing MDNS processing (%dx%d)\n", width, height);
-    
-    if (!base_reg) {
-        pr_err("tiziano_mdns_init: Failed to map MDNS registers\n");
-        return -ENOMEM;
-    }
-    
-    /* Select parameters based on WDR mode */
-    uint32_t *y_wei_array, *c_thres_array;
-    
-    if (mdns_wdr_en != 0) {
-        y_wei_array = mdns_y_ass_wei_adj_value1_wdr;
-        c_thres_array = mdns_c_false_edg_thres1_wdr;
-        pr_info("tiziano_mdns_init: Using WDR MDNS parameters\n");
-    } else {
-        y_wei_array = mdns_y_ass_wei_adj_value1;
-        c_thres_array = mdns_c_false_edg_thres1;
-        pr_info("tiziano_mdns_init: Using linear MDNS parameters\n");
-    }
-    
-    /* Write MDNS parameters to hardware */
-    for (int i = 0; i < 16; i++) {
-        writel(y_wei_array[i], base_reg + 0x100 + (i * 4));     /* Y weight adjustment */
-        writel(c_thres_array[i], base_reg + 0x140 + (i * 4));   /* C false edge threshold */
-    }
-    
-    /* Configure MDNS for resolution */
-    writel(width, base_reg + 0x00);   /* Image width */
-    writel(height, base_reg + 0x04);  /* Image height */
-    writel(1, base_reg + 0x08);       /* Enable MDNS */
-    
-    iounmap(base_reg);
-    pr_info("tiziano_mdns_init: MDNS processing initialized successfully\n");
-    return 0;
+    // STUB
 }
 
 /* tiziano_clm_init - removed duplicate, using Binary Ninja implementation below */
