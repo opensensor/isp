@@ -82,6 +82,38 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             pr_info("*** tx_vic_enable_irq: VIC hardware interrupt registers configured using SECONDARY VIC registers ***\n");
             pr_info("*** tx_vic_enable_irq: Enabled frame done (0x1e8=0x1) and MDMA (0x1ec=0x3) interrupts on 0x10023000 ***\n");
             pr_info("*** tx_vic_enable_irq: Secondary VIC regs mapped at %p (0x10023000) ***\n", vic_regs_secondary);
+
+            /* DIAGNOSTIC: Read back VIC interrupt registers to verify they stuck */
+            u32 vic_int_en1 = readl(vic_regs_secondary + 0x1e8);
+            u32 vic_int_en2 = readl(vic_regs_secondary + 0x1ec);
+            u32 vic_int_stat1 = readl(vic_regs_secondary + 0x1e0);
+            u32 vic_int_stat2 = readl(vic_regs_secondary + 0x1e4);
+
+            pr_info("*** DIAGNOSTIC: VIC interrupt register readback ***\n");
+            pr_info("*** VIC 0x1e8=%08x, 0x1ec=%08x, 0x1e0=%08x, 0x1e4=%08x ***\n",
+                    vic_int_en1, vic_int_en2, vic_int_stat1, vic_int_stat2);
+
+            /* CRITICAL: Check if VIC secondary registers are actually mapped correctly */
+            if (vic_int_en1 != 0x1 || vic_int_en2 != 0x3) {
+                pr_err("*** CRITICAL: VIC interrupt enables didn't stick! Expected 0x1e8=0x1, 0x1ec=0x3 ***\n");
+                pr_err("*** VIC secondary register mapping at 0x10023000 may be incorrect! ***\n");
+
+                /* Try alternative VIC interrupt register addresses */
+                pr_info("*** Trying alternative VIC interrupt register addresses ***\n");
+
+                /* Try primary VIC registers for interrupt enable */
+                if (vic_dev->vic_regs) {
+                    writel(0x1, vic_dev->vic_regs + 0x1e8);
+                    writel(0x3, vic_dev->vic_regs + 0x1ec);
+                    wmb();
+
+                    u32 alt_en1 = readl(vic_dev->vic_regs + 0x1e8);
+                    u32 alt_en2 = readl(vic_dev->vic_regs + 0x1ec);
+                    pr_info("*** Alternative VIC primary regs: 0x1e8=%08x, 0x1ec=%08x ***\n", alt_en1, alt_en2);
+                }
+            } else {
+                pr_info("*** GOOD: VIC interrupt enables are set correctly ***\n");
+            }
         }
 
         /* CRITICAL FIX: Call hardware interrupt enable function using SAFE struct members */
