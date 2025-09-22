@@ -95,44 +95,10 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             writel(0x3FFF, core + 0x98bc);
             wmb();
 
-            pr_info("*** tx_vic_enable_irq: VIC hardware interrupt registers configured using SECONDARY VIC registers ***\n");
-            pr_info("*** tx_vic_enable_irq: Enabled frame done (0x1e8=0x1) and MDMA (0x1ec=0x3) interrupts on 0x10023000 ***\n");
-            pr_info("*** tx_vic_enable_irq: Secondary VIC regs mapped at %p (0x10023000) ***\n", vic_regs_secondary);
-
-            /* DIAGNOSTIC: Read back VIC interrupt registers to verify they stuck */
-            u32 vic_int_en1 = readl(vic_regs_secondary + 0x1e8);
-            u32 vic_int_en2 = readl(vic_regs_secondary + 0x1ec);
-            u32 vic_int_stat1 = readl(vic_regs_secondary + 0x1e0);
-            u32 vic_int_stat2 = readl(vic_regs_secondary + 0x1e4);
-
-            pr_info("*** DIAGNOSTIC: VIC interrupt register readback ***\n");
-            pr_info("*** VIC 0x1e8=%08x, 0x1ec=%08x, 0x1e0=%08x, 0x1e4=%08x ***\n",
-                    vic_int_en1, vic_int_en2, vic_int_stat1, vic_int_stat2);
-
-            /* CRITICAL: Check if VIC secondary registers are actually mapped correctly */
-            if (vic_int_en1 != 0x1 || vic_int_en2 != 0x3) {
-                pr_err("*** CRITICAL: VIC secondary register writes at 0x10023000 not sticking! ***\n");
-                pr_err("*** Expected 0x1e8=0x1, 0x1ec=0x3 but got 0x1e8=%08x, 0x1ec=%08x ***\n", vic_int_en1, vic_int_en2);
-
-                /* DIAGNOSTIC: Check if VIC hardware is in the right state for interrupt config */
-                u32 vic_status = readl(vic_dev->vic_regs + 0x0);  /* VIC control register */
-                u32 vic_state = readl(vic_dev->vic_regs + 0x4);   /* VIC state register */
-                pr_info("*** VIC DIAGNOSTIC: Primary VIC control=0x%08x, state=0x%08x ***\n", vic_status, vic_state);
-
-                /* DIAGNOSTIC: Check if secondary register space is actually mapped */
-                u32 sec_test1 = readl(vic_regs_secondary + 0x0);
-                u32 sec_test2 = readl(vic_regs_secondary + 0x4);
-                pr_info("*** VIC DIAGNOSTIC: Secondary VIC 0x0=0x%08x, 0x4=0x%08x ***\n", sec_test1, sec_test2);
-
-                /* CRITICAL: Maybe VIC needs to be in streaming state before interrupt registers work */
-                if (vic_status != 0x1) {
-                    pr_info("*** VIC DIAGNOSTIC: VIC not in active state (0x%08x), this might prevent interrupt config ***\n", vic_status);
-                }
-
-                pr_err("*** VIC secondary interrupt configuration FAILED - VIC interrupts will not work ***\n");
-            } else {
-                pr_info("*** SUCCESS: VIC secondary interrupt enables are working correctly! ***\n");
-            }
+            pr_info("*** tx_vic_enable_irq: ISP core interrupt generation ENABLED - this will generate VIC interrupts! ***\n");
+            pr_info("*** tx_vic_enable_irq: ISP pipeline connection active (0x800=1, 0x804=0x1c, 0x1c=8) ***\n");
+        } else {
+            pr_err("*** tx_vic_enable_irq: ISP core registers not available - cannot enable interrupts! ***\n");
         }
 
         /* CRITICAL FIX: Call hardware interrupt enable function using SAFE struct members */
