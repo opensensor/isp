@@ -829,12 +829,13 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     interface_type = sensor_attr->dbus_type;
 
     /* Binary Ninja: *(arg1 + 0xb8) - VIC register base */
-    /* Use primary VIC registers for MIPI configuration */
-    vic_regs = vic_dev->vic_regs;
+    /* CRITICAL FIX: Use SECONDARY VIC registers (0x10023000) for ALL operations - matches Binary Ninja */
+    vic_regs = vic_dev->vic_regs_secondary;
     if (!vic_regs) {
         pr_err("tx_isp_vic_start: No VIC registers available\n");
         return -EINVAL;
     }
+    pr_info("*** tx_isp_vic_start: Using SECONDARY VIC space (0x10023000) for ALL operations ***\n");
 
     /* Binary Ninja: if ($v0 == 1) */
     pr_info("*** tx_isp_vic_start: CRITICAL DEBUG - interface_type=%d, checking if == 1 ***\n", interface_type);
