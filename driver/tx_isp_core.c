@@ -309,6 +309,13 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
             int s2_1 = 0;
             void *v0_5 = core_dev->frame_channels;
 
+            /* CRITICAL FIX: Check if frame_channels is properly initialized */
+            if (!v0_5) {
+                pr_err("*** CRITICAL: core_dev->frame_channels is NULL - cannot process stream OFF ***\n");
+                pr_err("*** This indicates frame_channels was not properly initialized during probe ***\n");
+                return -EINVAL;
+            }
+
             while (true) {
                 void *v0_6 = (char*)v0_5 + s2_1;
                 s2_1 += 0xc4;  /* sizeof(frame_channel) */
