@@ -1957,10 +1957,6 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Binary Ninja: void* $s2_1 = arg1[0x16] */
     pdata = pdev->dev.platform_data;
 
-    /* CRITICAL FIX: Store VIC device pointer in subdev private data BEFORE init */
-    tx_isp_set_subdevdata(&vic_dev->sd, vic_dev);
-    pr_info("*** VIC PROBE: Stored vic_dev pointer %p in subdev private data ***\n", vic_dev);
-
     /* CRITICAL FIX: Set up VIC event callback structure using SAFE struct member access */
     struct vic_event_callback *callback_struct;
 
@@ -1969,18 +1965,21 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         memset(callback_struct, 0, sizeof(struct vic_event_callback));
         callback_struct->event_handler = (int (*)(void*, int, void*))vic_core_ops_ioctl;
 
-        /* CRITICAL FIX: Store callback in dev_priv field instead of host_priv */
-        /* This prevents overwriting the VIC device pointer that vic_core_s_stream needs */
-        vic_dev->sd.dev_priv = callback_struct;
+        /* Store callback in a VIC device field to avoid conflicts with subdev fields */
+        vic_dev->event_callback = callback_struct;
 
-        pr_info("*** VIC PROBE: Event callback structure set up using dev_priv field ***\n");
+        pr_info("*** VIC PROBE: Event callback structure stored in VIC device field ***\n");
     } else {
         pr_err("*** VIC PROBE: Failed to allocate callback structure ***\n");
     }
 
+    /* CRITICAL FIX: Store VIC device pointer in subdev private data */
+    /* This MUST be the VIC device pointer for auto-link to work */
+    tx_isp_set_subdevdata(&vic_dev->sd, vic_dev);
+    pr_info("*** VIC PROBE: Stored vic_dev pointer %p in subdev dev_priv ***\n", vic_dev);
+
     /* CRITICAL FIX: Set host_priv to VIC device for Binary Ninja compatibility */
     /* Binary Ninja expects VIC device at offset 0xd4 (host_priv field) */
-    /* This MUST come AFTER callback setup to prevent overwriting */
     tx_isp_set_subdev_hostdata(&vic_dev->sd, vic_dev);
     pr_info("*** VIC PROBE: Set host_priv to vic_dev %p for Binary Ninja compatibility ***\n", vic_dev);
 
