@@ -829,37 +829,6 @@ static struct tx_isp_subdev_sensor_ops core_sensor_ops = {
     .release_all_sensor = NULL
 };
 
-/* Core activate module function - basic activation only (state 1->2) */
-static int ispcore_activate_module_subdev(struct tx_isp_subdev *sd)
-{
-    struct tx_isp_core_device *core_dev;
-
-    pr_info("*** ispcore_activate_module_subdev: Basic core activation (state 1->2) ***\n");
-
-    if (!sd) {
-        pr_err("ispcore_activate_module_subdev: Invalid subdev\n");
-        return -EINVAL;
-    }
-
-    /* Get core device from subdev */
-    core_dev = tx_isp_subdev_to_core_device(sd);
-    if (!tx_isp_core_device_is_valid(core_dev)) {
-        pr_err("ispcore_activate_module_subdev: Invalid core device\n");
-        return -EINVAL;
-    }
-
-    /* Basic activation: enable clocks and transition state 1->2 */
-    if (core_dev->state == 1) {
-        core_dev->state = 2;
-        pr_info("*** ispcore_activate_module_subdev: Core state transitioned 1->2 ***\n");
-    } else {
-        pr_info("*** ispcore_activate_module_subdev: Core already in state %d ***\n", core_dev->state);
-    }
-
-    pr_info("*** ispcore_activate_module_subdev: Basic activation complete ***\n");
-    return 0;
-}
-
 /* Core internal operations - CRITICAL: Missing from original implementation */
 static struct tx_isp_subdev_internal_ops core_internal_ops = {
     .slake_module = ispcore_slake_module,
