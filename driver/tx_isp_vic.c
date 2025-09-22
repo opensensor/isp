@@ -63,20 +63,36 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 1 */
         vic_dev->irq_enabled = 1;
 
-        /* CRITICAL: Configure VIC hardware interrupt registers using SECONDARY VIC registers */
-        void __iomem *vic_regs_secondary = vic_dev->vic_regs_secondary;
-        if (vic_regs_secondary) {
-            /* Clear any pending interrupts first */
-            u32 pending1 = readl(vic_regs_secondary + 0x1e0);
-            u32 pending2 = readl(vic_regs_secondary + 0x1e4);
-            writel(pending1, vic_regs_secondary + 0x1f0);  /* Clear interrupt status 1 */
-            writel(pending2, vic_regs_secondary + 0x1f4);  /* Clear interrupt status 2 */
-            wmb();
+        /* CRITICAL: Use the WORKING approach - ISP core registers generate the interrupts! */
+        /* This matches the working client_side.txt implementation that got interrupts working */
 
-            /* Enable VIC hardware interrupts - Binary Ninja reference shows these are needed */
-            /* Enable frame done interrupt (bit 0) and error interrupts for debugging */
-            writel(0x1, vic_regs_secondary + 0x1e8);      /* Enable frame done interrupt (bit 0) */
-            writel(0x3, vic_regs_secondary + 0x1ec);      /* Enable MDMA interrupts (bits 0,1) */
+        pr_info("*** tx_vic_enable_irq: Using WORKING ISP core interrupt approach ***\n");
+
+        if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
+            void __iomem *core = ourISPdev->core_dev->core_regs;
+
+            pr_info("*** tx_vic_enable_irq: Enabling ISP core interrupts to generate VIC interrupts ***\n");
+
+            /* Clear any pending interrupts first */
+            u32 pend_legacy = readl(core + 0xb4);
+            u32 pend_new    = readl(core + 0x98b4);
+            writel(pend_legacy, core + 0xb8);
+            writel(pend_new,    core + 0x98b8);
+
+            /* CRITICAL: Enable ISP pipeline connection - this generates the interrupts! */
+            writel(1, core + 0x800);      /* Enable ISP pipeline */
+            writel(0x1c, core + 0x804);   /* Configure ISP routing */
+            writel(8, core + 0x1c);       /* Set ISP control mode */
+
+            /* CRITICAL: Enable ISP core interrupt generation at hardware level */
+            writel(0xffffffff, core + 0x30);  /* Enable all interrupt sources */
+            writel(0x133, core + 0x10);       /* Enable specific interrupt types */
+
+            /* Enable interrupt banks */
+            writel(0x3FFF, core + 0xb0);
+            writel(0x3FFF, core + 0xbc);
+            writel(0x3FFF, core + 0x98b0);
+            writel(0x3FFF, core + 0x98bc);
             wmb();
 
             pr_info("*** tx_vic_enable_irq: VIC hardware interrupt registers configured using SECONDARY VIC registers ***\n");
