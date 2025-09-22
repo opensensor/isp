@@ -133,14 +133,23 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             pr_info("*** tx_vic_enable_irq: VIC pending interrupts cleared in PRIMARY registers ***\n");
 
             /* CRITICAL FIX: Enable specific VIC interrupt types for frame completion */
-            /* Based on Binary Ninja MCP analysis - VIC needs specific interrupt enables */
-            /* Enable frame completion, DMA completion, and buffer ready interrupts */
-            u32 vic_int_enable = 0x1F;  /* Enable frame completion interrupts (bits 0-4) */
-            writel(vic_int_enable, vic_dev->vic_regs + 0x30c);  /* VIC interrupt enable register */
-            wmb();
-            pr_info("*** CRITICAL FIX: VIC specific interrupt types ENABLED (wrote 0x%x to reg 0x30c) ***\n", vic_int_enable);
+            /* CRITICAL FIX: Use SECONDARY VIC registers for interrupt control! */
+            if (vic_dev->vic_regs_secondary) {
+                /* Based on Binary Ninja MCP analysis - VIC needs specific interrupt enables */
+                /* Enable frame completion, DMA completion, and buffer ready interrupts */
+                u32 vic_int_enable = 0x1F;  /* Enable frame completion interrupts (bits 0-4) */
+                writel(vic_int_enable, vic_dev->vic_regs_secondary + 0x30c);  /* VIC interrupt enable register */
+                wmb();
+                pr_info("*** CRITICAL FIX: VIC specific interrupt types ENABLED in SECONDARY space (wrote 0x%x to reg 0x30c) ***\n", vic_int_enable);
 
-            /* CRITICAL FIX: Enable VIC DMA interrupt generation */
+                /* Try alternative interrupt enable registers in secondary space */
+                writel(0x1F, vic_dev->vic_regs_secondary + 0x10);  /* Alternative interrupt enable */
+                writel(0x1F, vic_dev->vic_regs_secondary + 0x18);  /* Alternative interrupt enable */
+                wmb();
+                pr_info("*** CRITICAL FIX: VIC alternative interrupt enables written to SECONDARY space ***\n");
+            }
+
+            /* CRITICAL FIX: Enable VIC DMA interrupt generation in PRIMARY space */
             u32 vic_dma_ctrl = readl(vic_dev->vic_regs + 0x300);
             vic_dma_ctrl |= 0x100;  /* Enable DMA interrupt bit */
             writel(vic_dma_ctrl, vic_dev->vic_regs + 0x300);
@@ -152,10 +161,29 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             u32 status2 = readl(vic_dev->vic_regs + 0x1e4);
             u32 mask1 = readl(vic_dev->vic_regs + 0x1e8);
             u32 mask2 = readl(vic_dev->vic_regs + 0x1ec);
-            pr_info("*** VIC INTERRUPT TEST: status1=0x%x, status2=0x%x, mask1=0x%x, mask2=0x%x ***\n",
+            u32 vic_int_status = readl(vic_dev->vic_regs + 0x308);  /* VIC interrupt status */
+            u32 vic_int_enable = readl(vic_dev->vic_regs + 0x30c);  /* VIC interrupt enable */
+            u32 vic_dma_ctrl = readl(vic_dev->vic_regs + 0x300);    /* VIC DMA control */
+
+            pr_info("*** VIC INTERRUPT TEST PRIMARY: status1=0x%x, status2=0x%x, mask1=0x%x, mask2=0x%x ***\n",
                     status1, status2, mask1, mask2);
-            pr_info("*** VIC INTERRUPT TEST: Effective interrupts = 0x%x, 0x%x ***\n",
+            pr_info("*** VIC INTERRUPT TEST PRIMARY: Effective interrupts = 0x%x, 0x%x ***\n",
                     (~mask1) & status1, (~mask2) & status2);
+            pr_info("*** VIC SPECIFIC INTERRUPTS PRIMARY: int_status=0x%x, int_enable=0x%x, dma_ctrl=0x%x ***\n",
+                    vic_int_status, vic_int_enable, vic_dma_ctrl);
+
+            /* CRITICAL TEST: Check SECONDARY VIC register space for interrupt status */
+            if (vic_dev->vic_regs_secondary) {
+                u32 sec_status1 = readl(vic_dev->vic_regs_secondary + 0x0);
+                u32 sec_status2 = readl(vic_dev->vic_regs_secondary + 0x4);
+                u32 sec_int_enable = readl(vic_dev->vic_regs_secondary + 0x30c);
+                u32 sec_alt1 = readl(vic_dev->vic_regs_secondary + 0x10);
+                u32 sec_alt2 = readl(vic_dev->vic_regs_secondary + 0x18);
+
+                pr_info("*** VIC INTERRUPT TEST SECONDARY: status1=0x%x, status2=0x%x, int_enable=0x%x ***\n",
+                        sec_status1, sec_status2, sec_int_enable);
+                pr_info("*** VIC SECONDARY ALTERNATIVES: alt1=0x%x, alt2=0x%x ***\n", sec_alt1, sec_alt2);
+            }
         } else {
             pr_err("*** tx_vic_enable_irq: No VIC primary registers - cannot enable hardware interrupts ***\n");
         }
@@ -201,14 +229,18 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: $v0_2 = *(dump_vsd_5 + 0x88); if ($v0_2 != 0) $v0_2(dump_vsd_5 + 0x80) */
 
         /* CRITICAL: Disable VIC hardware interrupt generation */
-        /* CRITICAL FIX: Use PRIMARY VIC registers for interrupt control - secondary is for control only */
-        if (vic_dev->vic_regs) {
-            /* CRITICAL FIX: Disable specific VIC interrupt types first */
-            writel(0x0, vic_dev->vic_regs + 0x30c);  /* Disable VIC interrupt enable register */
+        /* CRITICAL FIX: Use SECONDARY VIC registers for interrupt control */
+        if (vic_dev->vic_regs_secondary) {
+            /* CRITICAL FIX: Disable specific VIC interrupt types first in SECONDARY space */
+            writel(0x0, vic_dev->vic_regs_secondary + 0x30c);  /* Disable VIC interrupt enable register */
+            writel(0x0, vic_dev->vic_regs_secondary + 0x10);   /* Disable alternative interrupt enable */
+            writel(0x0, vic_dev->vic_regs_secondary + 0x18);   /* Disable alternative interrupt enable */
             wmb();
-            pr_info("*** tx_vic_disable_irq: VIC specific interrupt types DISABLED (wrote 0x0 to reg 0x30c) ***\n");
+            pr_info("*** tx_vic_disable_irq: VIC specific interrupt types DISABLED in SECONDARY space ***\n");
+        }
 
-            /* CRITICAL FIX: Disable VIC DMA interrupt generation */
+        if (vic_dev->vic_regs) {
+            /* CRITICAL FIX: Disable VIC DMA interrupt generation in PRIMARY space */
             u32 vic_dma_ctrl = readl(vic_dev->vic_regs + 0x300);
             vic_dma_ctrl &= ~0x100;  /* Disable DMA interrupt bit */
             writel(vic_dma_ctrl, vic_dev->vic_regs + 0x300);
