@@ -2043,10 +2043,11 @@ int tx_isp_vic_remove(struct platform_device *pdev)
     if (!sd)
         return -EINVAL;
 
-    /* SAFE: Clean up callback structure using dev_priv field */
-    if (sd->dev_priv) {
-        kfree(sd->dev_priv);
-        sd->dev_priv = NULL;
+    /* SAFE: Clean up callback structure from VIC device field */
+    struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
+    if (vic_dev && vic_dev->event_callback) {
+        kfree(vic_dev->event_callback);
+        vic_dev->event_callback = NULL;
     }
 
     /* Get VIC device from subdev */
