@@ -260,31 +260,26 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
     vic_base = vic_dev->vic_regs;  // Use primary VIC space (0x133e0000)
     pr_info("*** VIC HW INIT: Using PRIMARY VIC space for interrupt configuration ***\n");
 
-    // CRITICAL FIX: Shadow register unlock sequence
-    // 0x7800438 is the UNLOCK VALUE to enable shadow register access
-    pr_info("*** VIC HW INIT: Starting shadow register unlock sequence ***\n");
+    // CRITICAL FIX: Use the EXACT working interrupt registers from irqs-start-stop tag
+    pr_info("*** VIC HW INIT: Using WORKING interrupt registers (0x1e8/0x1f0/0x1f4) ***\n");
 
-    // Step 1: Clear any pending interrupts first
-    writel(0, vic_base + 0x00);  // Clear ISR
-    writel(0, vic_base + 0x20);  // Clear ISR1
+    // Step 1: Clear pending interrupts using WORKING registers
+    writel(0xFFFFFFFF, vic_base + 0x1f0);  /* Clear main interrupt status */
+    writel(0xFFFFFFFF, vic_base + 0x1f4);  /* Clear MDMA interrupt status */
     wmb();
+    pr_info("*** VIC HW INIT: Cleared interrupt status registers ***\n");
 
-    // Step 2: Write unlock value to enable shadow register programming
-    writel(0x07800438, vic_base + 0x04);  // IMR - UNLOCK VALUE (not interrupt mask!)
+    // Step 2: Enable interrupts using WORKING register (0x1e8)
+    writel(0xFFFFFFFE, vic_base + 0x1e8);  /* Enable frame done interrupt */
     wmb();
-    pr_info("*** VIC HW INIT: Shadow register UNLOCK value written (0x07800438) ***\n");
+    pr_info("*** VIC HW INIT: WORKING interrupt mask applied (0xFFFFFFFE to 0x1e8) ***\n");
 
-    // Step 3: Now write the actual interrupt control configuration
-    writel(0xb5742249, vic_base + 0x0c);  // IMCR - actual interrupt control
-    wmb();
-    pr_info("*** VIC HW INIT: Interrupt control value written (0xb5742249) ***\n");
-
-    // Step 4: Activate shadow registers by writing enable sequence
-    writel(0x00000001, vic_base + 0x04);  // IMR - activate shadow registers
-    wmb();
-    writel(0x00000000, vic_base + 0x24);  // IMR1 - clear secondary mask
-    wmb();
-    pr_info("*** VIC HW INIT: Shadow registers ACTIVATED ***\n");
+    // Step 3: Verify the interrupt configuration took effect
+    u32 verify_mask = readl(vic_base + 0x1e8);
+    u32 verify_status1 = readl(vic_base + 0x1f0);
+    u32 verify_status2 = readl(vic_base + 0x1f4);
+    pr_info("*** VIC HW INIT: Verification - mask=0x%x, status1=0x%x, status2=0x%x ***\n",
+            verify_mask, verify_status1, verify_status2);
 
     pr_info("*** VIC HW INIT: Interrupt configuration applied to PRIMARY VIC space ***\n");
 
