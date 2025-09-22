@@ -1805,8 +1805,11 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     u32 error_check;
     int i;
 
+    /* CRITICAL: Add visible logging to see when ISP core interrupt handler is called */
+    pr_info("*** ISP CORE INTERRUPT HANDLER: IRQ %d called, dev_id=%p ***\n", irq, dev_id);
+
     if (!isp_dev || !isp_dev->vic_regs) {
-        pr_debug("ispcore_interrupt_service_routine: Invalid device\n");
+        pr_info("*** ISP CORE INTERRUPT: Invalid device - isp_dev=%p ***\n", isp_dev);
         return IRQ_NONE;
     }
 
@@ -1840,14 +1843,14 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             writel(status_new, isp_regs + 0x98b8);
         wmb();
         if (interrupt_status != 0) {
-            pr_debug("*** ISP CORE INTERRUPT: bank=%s status=0x%08x (legacy=0x%08x new=0x%08x) ***\n",
+            pr_info("*** ISP CORE INTERRUPT: bank=%s status=0x%08x (legacy=0x%08x new=0x%08x) ***\n",
                     status_legacy ? "legacy(+0xb*)" : "new(+0x98b*)",
                     interrupt_status, status_legacy, status_new);
         } else if (isp_force_core_isr) {
-            pr_debug("*** ISP CORE: FORCED FRAME DONE VIA VIC (no pending) ***\n");
+            pr_info("*** ISP CORE: FORCED FRAME DONE VIA VIC (no pending) ***\n");
             interrupt_status = 1; /* Force Channel 0 frame-done path */
         } else {
-            pr_debug("*** ISP CORE INTERRUPT: no pending (legacy=0x%08x new=0x%08x) ***\n",
+            pr_info("*** ISP CORE INTERRUPT: no pending (legacy=0x%08x new=0x%08x) ***\n",
                      status_legacy, status_new);
             return IRQ_HANDLED; /* No interrupt to process */
         }
