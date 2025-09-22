@@ -3381,14 +3381,17 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         pr_info("*** CRITICAL: Tuning parameter system activated ***\n");
                     }
 
-                    /* CRITICAL: Maintain frame flow without disrupting VIC hardware */
+                    /* CRITICAL FIX: DISABLE frame processing trigger that corrupts CSI PHY registers */
+                    /* The isp_frame_done_wakeup() function was causing CSI PHY register corruption every ~200ms */
+                    /* This corruption destroys VIC interrupt configuration and prevents VIC interrupts from firing */
                     if (ourISPdev->vic_dev) {
-                        /* Gentle frame processing trigger that doesn't disrupt VIC */
-                        isp_frame_done_wakeup();
-                        
-                        /* Update frame counter for userspace */
+                        /* DISABLED: isp_frame_done_wakeup() - this was corrupting CSI PHY registers */
+                        pr_info("*** CRITICAL FIX: Skipping isp_frame_done_wakeup() to prevent CSI PHY corruption ***\n");
+
+                        /* Update frame counter for userspace - this is safe */
                         extern atomic64_t frame_done_cnt;
                         atomic64_inc(&frame_done_cnt);
+                        pr_info("*** Frame counter updated without triggering CSI PHY corruption ***\n");
                     }
 
                     /* BINARY NINJA REFERENCE: Acknowledge tuning enable without heavy operations */

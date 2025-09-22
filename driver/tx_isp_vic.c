@@ -185,6 +185,33 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
                     int_status, int_mask, int_status2, int_mask2);
         }
 
+        /* CRITICAL DEBUG: Check VIC interrupt status registers to see if hardware is generating interrupts */
+        if (vic_dev->vic_regs) {
+            u32 int_status = readl(vic_dev->vic_regs + 0x1e0);
+            u32 int_mask = readl(vic_dev->vic_regs + 0x1e8);
+            u32 int_status2 = readl(vic_dev->vic_regs + 0x1e4);
+            u32 int_mask2 = readl(vic_dev->vic_regs + 0x1ec);
+            pr_info("*** VIC DEBUG: INT_STATUS=0x%08x, INT_MASK=0x%08x, INT_STATUS2=0x%08x, INT_MASK2=0x%08x ***\n",
+                    int_status, int_mask, int_status2, int_mask2);
+
+            /* CRITICAL DEBUG: Check if VIC hardware is responsive by reading basic control registers */
+            u32 vic_ctrl = readl(vic_dev->vic_regs + 0x0);
+            u32 vic_status = readl(vic_dev->vic_regs + 0x4);
+            u32 vic_config = readl(vic_dev->vic_regs + 0x8);
+            u32 vic_frame_size = readl(vic_dev->vic_regs + 0x10);
+            pr_info("*** VIC HARDWARE DEBUG: CTRL=0x%08x, STATUS=0x%08x, CONFIG=0x%08x, FRAME_SIZE=0x%08x ***\n",
+                    vic_ctrl, vic_status, vic_config, vic_frame_size);
+
+            /* Check secondary VIC registers too */
+            if (vic_dev->vic_regs_secondary) {
+                u32 sec_ctrl = readl(vic_dev->vic_regs_secondary + 0x0);
+                u32 sec_status = readl(vic_dev->vic_regs_secondary + 0x4);
+                u32 sec_config = readl(vic_dev->vic_regs_secondary + 0x14);
+                pr_info("*** VIC SECONDARY DEBUG: CTRL=0x%08x, STATUS=0x%08x, CONFIG=0x%08x ***\n",
+                        sec_ctrl, sec_status, sec_config);
+            }
+        }
+
         pr_info("*** tx_vic_enable_irq: VIC interrupts ENABLED ***\n");
     } else {
         pr_info("*** tx_vic_enable_irq: VIC interrupts already enabled ***\n");
