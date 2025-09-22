@@ -347,6 +347,7 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     extern struct tx_isp_subdev_ops core_subdev_ops;
     extern struct tx_isp_subdev_ops vic_subdev_ops;
     extern struct tx_isp_subdev_ops csi_subdev_ops;
+    extern struct tx_isp_subdev_ops fs_subdev_ops;
 
     if (ourISPdev) {
         if (ops == &csi_subdev_ops) {
@@ -365,8 +366,8 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             /* This is the Core ISP subdev - registration handled by core device linking */
             pr_info("*** tx_isp_subdev_init: Core ISP subdev registration handled by core device ***\n");
             /* The actual registration is done in tx_isp_link_core_device() */
-        } else if (ops && ops->sensor && ops != &csi_subdev_ops && ops != &vic_subdev_ops) {
-            /* CRITICAL FIX: This is a REAL sensor subdev (not CSI or VIC which also have sensor ops) */
+        } else if (ops && ops->sensor && ops != &csi_subdev_ops && ops != &vic_subdev_ops && ops != &fs_subdev_ops) {
+            /* CRITICAL FIX: This is a REAL sensor subdev (not CSI, VIC, or FS which also have sensor ops) */
             pr_info("*** tx_isp_subdev_init: DETECTED SENSOR SUBDEV - ops=%p, ops->sensor=%p ***\n", ops, ops->sensor);
 
             /* CRITICAL FIX: Set up the module notify function for TX_ISP_EVENT_SYNC_SENSOR_ATTR */

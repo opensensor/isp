@@ -1473,9 +1473,10 @@ struct tx_isp_sensor *tx_isp_get_sensor(void)
     for (int i = 5; i < ISP_MAX_SUBDEVS; i++) {
         struct tx_isp_subdev *sd = ourISPdev->subdevs[i];
         if (sd && sd->ops && sd->ops->sensor) {
-            /* CRITICAL: Check if this is a REAL sensor subdev, not the Core device */
-            /* The Core device has sensor ops for registration but is not a real sensor */
-            if (sd->ops != &core_subdev_ops) {
+            /* CRITICAL: Check if this is a REAL sensor subdev, not Core/FS devices */
+            /* The Core and FS devices have sensor ops for registration but are not real sensors */
+            extern struct tx_isp_subdev_ops fs_subdev_ops;
+            if (sd->ops != &core_subdev_ops && sd->ops != &fs_subdev_ops) {
                 /* This is a real sensor subdev - get the sensor structure that contains this subdev */
                 /* The sensor structure contains the subdev as sd member, so we use container_of */
                 struct tx_isp_sensor *sensor = container_of(sd, struct tx_isp_sensor, sd);
