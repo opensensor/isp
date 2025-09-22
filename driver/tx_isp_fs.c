@@ -486,7 +486,7 @@ static struct platform_driver tx_isp_fs_platform_driver = {
     .probe = tx_isp_fs_probe,
     .remove = tx_isp_fs_remove,
     .driver = {
-        .name = "tx-isp-fs",
+        .name = "isp-fs",  /* Match platform device name */
         .owner = THIS_MODULE,
     },
 };

@@ -943,7 +943,7 @@ static struct platform_driver tx_isp_csi_driver = {
     .probe = tx_isp_csi_probe,
     .remove = tx_isp_csi_remove,
     .driver = {
-        .name = "tx-isp-csi",
+        .name = "isp-w00",  /* Match platform device name */
         .owner = THIS_MODULE,
     },
 };
@@ -952,7 +952,7 @@ static struct platform_driver tx_isp_vin_driver = {
     .probe = tx_isp_vin_probe,
     .remove = tx_isp_vin_remove,
     .driver = {
-        .name = "tx-isp-vin",
+        .name = "isp-w01",  /* Match platform device name */
         .owner = THIS_MODULE,
     },
 };
@@ -961,7 +961,7 @@ static struct platform_driver tx_isp_core_driver = {
     .probe = tx_isp_core_probe,
     .remove = tx_isp_core_remove,
     .driver = {
-        .name = "tx-isp-core",
+        .name = "isp-m0",  /* Match platform device name */
         .owner = THIS_MODULE,
     },
 };
