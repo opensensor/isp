@@ -629,7 +629,7 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         }
 
         /* CRITICAL: Register VIC interrupt handler NOW that registers are mapped */
-        if (sd->regs && ourISPdev->vid_dev && ourISPdev->vic_dev->vic_regs) {
+        if (sd->regs && ourISPdev->vic_dev && ourISPdev->vic_dev->vic_regs) {
             pr_info("*** VIC AUTO-LINK: Registers are mapped, registering interrupt handler ***\n");
 
             /* Find the VIC platform device */
