@@ -544,24 +544,24 @@ int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
 /* Duplicate function removed - using existing csi_sensor_ops_ioctl at line 406 */
 
 /* Define the core operations */
-static struct tx_isp_subdev_core_ops csi_core_ops = {
+struct tx_isp_subdev_core_ops csi_core_ops = {
     .init = csi_core_ops_init,
     .reset = NULL,
     .ioctl = NULL,
 };
 
 /* Define the video operations */
-static struct tx_isp_subdev_video_ops csi_video_ops = {
+struct tx_isp_subdev_video_ops csi_video_ops = {
     .s_stream = csi_video_s_stream,
 };
 
 /* Define the sensor operations */
-static struct tx_isp_subdev_sensor_ops csi_sensor_ops = {
+struct tx_isp_subdev_sensor_ops csi_sensor_ops = {
     .ioctl = csi_sensor_ops_ioctl,
 };
 
 /* CSI internal operations - EXACT Binary Ninja implementation */
-static struct tx_isp_subdev_internal_ops csi_internal_ops = {
+struct tx_isp_subdev_internal_ops csi_internal_ops = {
     .activate_module = tx_isp_csi_activate_subdev,  /* CRITICAL FIX: Missing activate_module function */
     .slake_module = tx_isp_csi_slake_subdev,
 };

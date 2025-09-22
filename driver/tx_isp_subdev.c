@@ -326,6 +326,14 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     /* SAFE: Use struct member access instead of offset */
     sd->ops = ops;
 
+    /* DEBUG: Check what ops structure we're getting */
+    pr_info("*** tx_isp_subdev_init: ops=%p, ops->core=%p ***\n", ops, ops ? ops->core : NULL);
+    if (ops && ops->core && ops->core->init) {
+        pr_info("*** tx_isp_subdev_init: ops->core->init=%p ***\n", ops->core->init);
+    } else {
+        pr_info("*** tx_isp_subdev_init: WARNING - ops->core->init is NULL! ***\n");
+    }
+
     /* CRITICAL FIX: Set device pointers that are needed for IRQ registration */
     sd->dev = &pdev->dev;        /* Device pointer for to_platform_device() */
     sd->pdev = pdev;             /* Platform device pointer */
