@@ -916,18 +916,21 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
         pr_info("*** tx_isp_vic_start: VIC unlock sequence using SECONDARY VIC space (0x10023000) ***\n");
 
-        /* Binary Ninja: *vic_regs = 2 */
-        writel(2, vic_unlock_regs + 0x0);
+        /* CRITICAL FIX: Use PRIMARY VIC space for unlock - EXACT Binary Ninja reference */
+        pr_info("*** tx_isp_vic_start: VIC unlock sequence using PRIMARY VIC space (EXACT Binary Ninja) ***\n");
 
-        /* Binary Ninja: *vic_regs = 4 */
-        writel(4, vic_unlock_regs + 0x0);
+        /* Binary Ninja EXACT: **(arg1 + 0xb8) = 2 */
+        writel(2, vic_regs + 0x0);
 
-        /* Binary Ninja EXACT: while (*vic_regs != 0) nop */
+        /* Binary Ninja EXACT: **(arg1 + 0xb8) = 4 */
+        writel(4, vic_regs + 0x0);
+
+        /* Binary Ninja EXACT: while (*$v1_30 != 0) nop */
         /* CRITICAL DEBUG: Add timeout and logging to see what's happening */
         u32 unlock_status;
         int timeout_count = 0;
 
-        while ((unlock_status = readl(vic_unlock_regs + 0x0)) != 0) {
+        while ((unlock_status = readl(vic_regs + 0x0)) != 0) {
             /* Binary Ninja: nop (just wait) */
             timeout_count++;
 
