@@ -3292,20 +3292,6 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
     pr_info("ISP IOCTL: cmd=0x%x arg=0x%lx\n", cmd, arg);
 
-    /* DEBUG: Log subdev array contents for crash debugging */
-    if (cmd == 0x805056c1) {  /* Only for sensor register IOCTL */
-        pr_info("*** DEBUG: Subdev array contents before IOCTL processing ***\n");
-        for (int i = 0; i < 8; i++) {  /* Check first 8 slots */
-            struct tx_isp_subdev *sd = isp_dev->subdevs[i];
-            if (sd != NULL) {
-                pr_info("*** DEBUG: subdevs[%d] = %p (valid=%s, aligned=%s) ***\n",
-                        i, sd,
-                        (virt_addr_valid(sd) && (unsigned long)sd >= 0x80000000 && (unsigned long)sd < 0xfffff000) ? "YES" : "NO",
-                        (((unsigned long)sd & 0x3) == 0) ? "YES" : "NO");
-            }
-        }
-    }
-
     /* Binary Ninja: Main switch structure exactly as decompiled */
     if (cmd == 0x800856d7) {
         /* TX_ISP_WDR_GET_BUF - Binary Ninja exact implementation */
@@ -3588,9 +3574,40 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         s6_1 = 0;
 
-        /* Binary Ninja: Complex link setup logic */
-        /* This would involve pad configuration and linking */
         pr_info("TX_ISP_VIDEO_LINK_SETUP: config=%d\n", link_config);
+
+        /* Binary Ninja: if ($a2_4 != *($s7 + 0x10c)) - Check if config changed */
+        if (link_config != isp_dev->link_config) {
+            pr_info("TX_ISP_VIDEO_LINK_SETUP: Link config changed from %d to %d\n",
+                    isp_dev->link_config, link_config);
+
+            /* Binary Ninja: Initialize all subdevices by calling their ops->init() methods */
+            /* Loop through subdevs array and call init for each valid subdevice */
+            int i;
+            for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+                struct tx_isp_subdev *sd = isp_dev->subdevs[i];
+
+                if (sd && sd->ops && sd->ops->core && sd->ops->core->init) {
+                    pr_info("TX_ISP_VIDEO_LINK_SETUP: Initializing subdev[%d] (%p)\n", i, sd);
+
+                    /* Call subdevice init function */
+                    int init_result = sd->ops->core->init(sd, 1);
+
+                    if (init_result != 0 && init_result != 0xfffffdfd) {
+                        pr_err("TX_ISP_VIDEO_LINK_SETUP: Subdev[%d] init failed: %d\n", i, init_result);
+                        /* Continue with other subdevices even if one fails */
+                    } else {
+                        pr_info("TX_ISP_VIDEO_LINK_SETUP: Subdev[%d] init success\n", i);
+                    }
+                }
+            }
+
+            /* Binary Ninja: *($s7 + 0x10c) = var_98 - Update stored link config */
+            isp_dev->link_config = link_config;
+            pr_info("TX_ISP_VIDEO_LINK_SETUP: Link config updated to %d\n", link_config);
+        } else {
+            pr_info("TX_ISP_VIDEO_LINK_SETUP: Link config unchanged (%d)\n", link_config);
+        }
 
         return s6_1;
     }
@@ -3620,20 +3637,6 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
             if (sd == NULL) {
                 continue; /* Skip empty slots */
-            }
-
-            /* CRITICAL SAFETY: Validate sd pointer before ANY access */
-            if (!virt_addr_valid(sd) ||
-                (unsigned long)sd < 0x80000000 ||
-                (unsigned long)sd >= 0xfffff000) {
-                pr_err("*** TX_ISP_SENSOR_REGISTER: Invalid subdev pointer 0x%p at index %d - SKIPPING ***\n", sd, i);
-                continue; /* Skip invalid pointers */
-            }
-
-            /* CRITICAL SAFETY: Check MIPS alignment before accessing struct members */
-            if (((unsigned long)sd & 0x3) != 0) {
-                pr_err("*** TX_ISP_SENSOR_REGISTER: Unaligned subdev pointer 0x%p at index %d - SKIPPING ***\n", sd, i);
-                continue; /* Skip unaligned pointers that would cause BadVA crash */
             }
 
             /* SAFE: Check if this is a valid subdev with proper null checks */
