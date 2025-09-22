@@ -669,6 +669,46 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** tx_isp_vic_start: CPM clock gates cleared for ISP/VIC ***\n");
     }
 
+    /* CRITICAL: Hardware reset sequence - this might be the missing piece! */
+    void __iomem *reset_regs = ioremap(0x10000000, 0x1000);  /* CPM base for reset control */
+    if (reset_regs) {
+        u32 reset_reg;
+        int timeout = 500;
+
+        /* Check current reset status */
+        reset_reg = readl(reset_regs + 0xc4);
+        pr_info("*** tx_isp_vic_start: Initial reset status: 0x%08x ***\n", reset_reg);
+
+        /* Trigger ISP hardware reset sequence */
+        reset_reg |= 0x200000;  /* Set reset trigger bit */
+        writel(reset_reg, reset_regs + 0xc4);
+        wmb();
+
+        /* Wait for hardware ready */
+        while (timeout > 0) {
+            reset_reg = readl(reset_regs + 0xc4);
+            if ((reset_reg & 0x100000) != 0) {  /* Hardware ready bit */
+                /* Complete reset sequence */
+                reset_reg = (reset_reg & 0xffdfffff) | 0x400000;  /* Set complete bit, clear trigger */
+                writel(reset_reg, reset_regs + 0xc4);
+                reset_reg &= 0xffbfffff;  /* Clear complete bit */
+                writel(reset_reg, reset_regs + 0xc4);
+                wmb();
+
+                pr_info("*** tx_isp_vic_start: ISP hardware reset completed successfully ***\n");
+                break;
+            }
+            timeout--;
+            msleep(2);
+        }
+
+        if (timeout == 0) {
+            pr_err("*** tx_isp_vic_start: ISP hardware reset TIMEOUT - this will prevent interrupts! ***\n");
+        }
+
+        iounmap(reset_regs);
+    }
+
     /* Binary Ninja: void* $v1 = *(arg1 + 0x110) - Get sensor attributes
      * FIXED: Modern implementation gets sensor from subdev array starting at index 4 */
     extern struct tx_isp_sensor *tx_isp_get_sensor(void);
