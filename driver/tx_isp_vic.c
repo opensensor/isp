@@ -844,35 +844,25 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(2, vic_regs + 0x0);
     }
 
-    /* CRITICAL FIX: Configure VIC hardware to generate interrupts BEFORE final enable */
-    pr_info("*** tx_isp_vic_start: CRITICAL FIX - Configuring VIC interrupt generation ***\n");
+    /* CRITICAL FIX: Configure VIC interrupt generation EXACTLY as Binary Ninja reference */
+    pr_info("*** tx_isp_vic_start: CRITICAL FIX - Configuring VIC interrupt generation per Binary Ninja ***\n");
 
-    /* Clear any pending interrupts before enabling */
+    /* Binary Ninja: Clear any pending interrupts before configuration */
     writel(0xFFFFFFFF, vic_regs + 0x1f0);  /* Clear main interrupt status */
     writel(0xFFFFFFFF, vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
     wmb();
 
-    /* Configure VIC interrupt masks - enable frame done interrupt */
+    /* Binary Ninja: Configure VIC interrupt masks - 0x1e8 is DISABLE mask (1=disable, 0=enable) */
     writel(0xFFFFFFFE, vic_regs + 0x1e8);  /* Enable frame done interrupt (bit 0) */
     writel(0xFFFFFFFF, vic_regs + 0x1ec);  /* Disable all MDMA interrupts */
     wmb();
 
-    /* CRITICAL: Enable VIC interrupt generation in hardware control register */
-    u32 vic_ctrl = readl(vic_regs + 0x0);
-    vic_ctrl |= 0x8;  /* Enable interrupt generation bit */
-    vic_ctrl |= 0x1;  /* Enable VIC processing bit */
-    writel(vic_ctrl, vic_regs + 0x0);
+    /* CRITICAL: Binary Ninja shows VIC needs specific interrupt enable configuration */
+    /* The VIC hardware has separate interrupt enable registers beyond just masks */
+    writel(0x1, vic_regs + 0x1e0);  /* Enable interrupt generation in status register */
     wmb();
 
-    /* CRITICAL: Configure VIC to process frames and generate interrupts */
-    /* Based on Binary Ninja analysis, VIC needs frame processing enabled */
-    u32 vic_frame_ctrl = readl(vic_regs + 0x4);
-    vic_frame_ctrl |= 0x1;  /* Enable frame processing */
-    writel(vic_frame_ctrl, vic_regs + 0x4);
-    wmb();
-
-    pr_info("*** tx_isp_vic_start: VIC interrupt generation configured (ctrl=0x%08x, frame_ctrl=0x%08x, mask=0xFFFFFFFE) ***\n",
-            vic_ctrl, vic_frame_ctrl);
+    pr_info("*** tx_isp_vic_start: VIC interrupt generation configured per Binary Ninja reference ***\n");
 
     /* Binary Ninja EXACT: Final VIC enable - *vic_regs = 1 */
     /* Use SECONDARY VIC space for enable (same as unlock sequence) */
