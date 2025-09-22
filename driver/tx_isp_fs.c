@@ -482,7 +482,7 @@ int tx_isp_fs_remove(struct platform_device *pdev)
 
 
 /* FS platform driver structure */
-static struct platform_driver tx_isp_fs_platform_driver = {
+struct platform_driver tx_isp_fs_platform_driver = {
     .probe = tx_isp_fs_probe,
     .remove = tx_isp_fs_remove,
     .driver = {
