@@ -907,21 +907,27 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(frame_mode_val, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
 
-        /* Binary Ninja EXACT: Simple VIC unlock sequence */
-        pr_info("*** tx_isp_vic_start: VIC unlock sequence - EXACT Binary Ninja reference ***\n");
+        /* CRITICAL FIX: Use SECONDARY VIC space for unlock sequence - this is what worked before! */
+        void __iomem *vic_unlock_regs = vic_dev->vic_regs_secondary;  /* 0x10023000 - this worked before */
+        if (!vic_unlock_regs) {
+            pr_err("tx_isp_vic_start: No SECONDARY VIC registers for unlock sequence\n");
+            return -EINVAL;
+        }
+
+        pr_info("*** tx_isp_vic_start: VIC unlock sequence using SECONDARY VIC space (0x10023000) ***\n");
 
         /* Binary Ninja: *vic_regs = 2 */
-        writel(2, vic_regs + 0x0);
+        writel(2, vic_unlock_regs + 0x0);
 
         /* Binary Ninja: *vic_regs = 4 */
-        writel(4, vic_regs + 0x0);
+        writel(4, vic_unlock_regs + 0x0);
 
         /* Binary Ninja EXACT: while (*vic_regs != 0) nop */
-        while (readl(vic_regs + 0x0) != 0) {
+        while (readl(vic_unlock_regs + 0x0) != 0) {
             /* Binary Ninja: nop (just wait) */
         }
 
-        pr_info("*** tx_isp_vic_start: VIC unlock completed - EXACT Binary Ninja reference ***\n");
+        pr_info("*** tx_isp_vic_start: VIC unlock completed using SECONDARY VIC space ***\n");
 
         /* Binary Ninja: Additional MIPI crop configuration */
         writel((mipi->mipi_sc.mipi_crop_start1y << 16) | mipi->mipi_sc.mipi_crop_start3x, vic_regs + 0x104);
@@ -975,48 +981,23 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(2, vic_regs + 0x0);
     }
 
-    /* CRITICAL: VIC hardware interrupts will be initialized by tx_isp_vic_restore_interrupts() */
-    pr_info("*** tx_isp_vic_start: VIC hardware interrupts will be restored after vic_start_ok=1 ***\n");
-
-    /* Binary Ninja EXACT: Final VIC enable - *$v0_47 = 1 */
-    /* Use the same control register base that was used for unlock sequence */
-    void __iomem *vic_ctrl_regs = vic_dev->vic_regs_secondary;
-    if (vic_ctrl_regs) {
-        writel(1, vic_ctrl_regs + 0x0);
-        pr_info("*** tx_isp_vic_start: Step 4 - VIC enabled: wrote 1 to control reg 0x0 ***\n");
+    /* Binary Ninja EXACT: Final VIC enable - *vic_regs = 1 */
+    /* Use SECONDARY VIC space for enable (same as unlock sequence) */
+    void __iomem *vic_enable_regs = vic_dev->vic_regs_secondary;
+    if (vic_enable_regs) {
+        writel(1, vic_enable_regs + 0x0);
+        pr_info("*** tx_isp_vic_start: VIC enabled using SECONDARY VIC space ***\n");
     } else {
-        pr_err("tx_isp_vic_start: No VIC control registers for final enable\n");
+        pr_err("tx_isp_vic_start: No SECONDARY VIC registers for final enable\n");
         return -EINVAL;
     }
 
-    /* Binary Ninja: Final configuration - Enable ISP pipeline */
-    if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
-        void __iomem *core = ourISPdev->core_dev->core_regs;
-
-        /* Clear any pending interrupts */
-        u32 pend_legacy = readl(core + 0xb4);
-        u32 pend_new = readl(core + 0x98b4);
-        writel(pend_legacy, core + 0xb8);
-        writel(pend_new, core + 0x98b8);
-
-        /* Enable ISP pipeline connection */
-        writel(1, core + 0x800);
-        writel(0x1c, core + 0x804);
-        writel(8, core + 0x1c);
-
-        pr_info("tx_isp_vic_start: ISP pipeline enabled\n");
-    }
-
-    /* Binary Ninja: Set vic_start_ok */
+    /* Binary Ninja EXACT: Set vic_start_ok global flag */
     extern uint32_t vic_start_ok;
     vic_start_ok = 1;
-    pr_info("*** tx_isp_vic_start: vic_start_ok set to 1 ***\n");
+    pr_info("*** tx_isp_vic_start: vic_start_ok set to 1 - EXACT Binary Ninja reference ***\n");
 
-    /* CRITICAL: Call the working interrupt restore function */
-    tx_isp_vic_restore_interrupts();
-    pr_info("*** tx_isp_vic_start: Called tx_isp_vic_restore_interrupts() ***\n");
-
-    pr_info("*** tx_isp_vic_start: VIC hardware initialization completed successfully ***\n");
+    pr_info("*** tx_isp_vic_start: SIMPLIFIED to match Binary Ninja exactly ***\n");
     return 0;
 }
 
