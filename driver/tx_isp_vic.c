@@ -1264,6 +1264,9 @@ long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg)
 
         /* Binary Ninja: Call vic_mdma_enable to enable VIC MDMA */
         /* Use VBM buffer addresses for saveraw command */
+        extern struct frame_channel_device frame_channels[];
+        struct tx_isp_channel_state *state = &frame_channels[0].state;
+
         if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
             int format_type = 0;  /* Default to RAW format */
             int dual_channel = 0; /* Single channel mode */
