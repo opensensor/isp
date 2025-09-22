@@ -2113,7 +2113,7 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
         /* Sensors are already initialized by activate_module() calls above */
         /* But ISP Core needs core->init to transition from state 2 to state 3 */
         pr_info("*** tx_isp_video_s_stream: Calling core->init ONLY for ISP Core subdev ***\n");
-        for (int i = 0; i < 16; i++) {
+        for (int i = 0; i < 4; i++) {
             struct tx_isp_subdev *subdev = arg1->subdevs[i];
             if (subdev && subdev->ops && subdev->ops->core && subdev->ops->core->init) {
                 /* Check if this is the ISP Core subdev (not sensor) */
@@ -4808,22 +4808,6 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                         /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch1 hcomp err !!!\n", *($s1_2 + 8)) */
                         pr_err("Err [VIC_INT] : mipi ch1 hcomp err !!!\n");
                         return -1;
-                    }
-                }
-                
-                /* Initialize other subdevices as needed */
-                extern struct tx_isp_sensor *tx_isp_get_sensor(void);
-                struct tx_isp_sensor *sensor = tx_isp_get_sensor();
-                if (sensor) {
-                    pr_info("Initializing sensor subdevice\n");
-                    /* Binary Ninja: Initialize sensor subdevice */
-                    if (sensor->sd.ops && sensor->sd.ops->core && sensor->sd.ops->core->init) {
-                        int ret = sensor->sd.ops->core->init(&sensor->sd, 1);
-                        if (ret) {
-                            pr_err("Failed to initialize sensor: %d\n", ret);
-                        } else {
-                            pr_info("Sensor initialized successfully\n");
-                        }
                     }
                 }
                 
