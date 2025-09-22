@@ -2718,19 +2718,19 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         /* CRITICAL FIX: Get video_buffer structure and set state like reference driver */
         struct video_buffer *video_buffer = NULL;
 
-        pr_info("*** Channel %d: QBUF - Buffer structure check: buffer_addresses=%p, buffer_count=%d ***\n",
-                channel, state->buffer_addresses, state->buffer_count);
+        pr_info("*** Channel %d: QBUF - VBM buffer check: vbm_buffer_addresses=%p, vbm_buffer_count=%d ***\n",
+                channel, state->vbm_buffer_addresses, state->vbm_buffer_count);
 
-        if (state->buffer_addresses && buffer.index < state->buffer_count && state->buffer_addresses[buffer.index] != 0) {
-            video_buffer = (struct video_buffer *)state->buffer_addresses[buffer.index];
-            pr_info("*** Channel %d: QBUF found video_buffer structure[%d] at %p ***\n",
-                    channel, buffer.index, video_buffer);
-        } else {
-            pr_warn("*** Channel %d: QBUF no video_buffer structure found for index %d ***\n",
+        /* Note: We don't use video_buffer structures in VBM mode - buffers are managed directly */
+        /* VBM mode uses simple buffer address arrays for direct hardware DMA */
+        if (state->vbm_buffer_addresses && buffer.index < 16) {
+            pr_info("*** Channel %d: QBUF - VBM buffer slot[%d] available ***\n",
                     channel, buffer.index);
-            pr_warn("*** Channel %d: QBUF DEBUG - buffer_addresses=%p, buffer_count=%d, buffer_addresses[%d]=0x%x ***\n",
-                    channel, state->buffer_addresses, state->buffer_count, buffer.index,
-                    (state->buffer_addresses && buffer.index < state->buffer_count) ? state->buffer_addresses[buffer.index] : 0);
+        } else {
+            pr_warn("*** Channel %d: QBUF - VBM buffer management not initialized ***\n",
+                    channel);
+            pr_warn("*** Channel %d: QBUF DEBUG - vbm_buffer_addresses=%p, vbm_buffer_count=%d, index=%d ***\n",
+                    channel, state->vbm_buffer_addresses, state->vbm_buffer_count, buffer.index);
 
             /* CRITICAL FIX: VBMFillPool expects QBUF to succeed - this is normal initialization */
             pr_info("*** Channel %d: QBUF - VBM initialization mode (VBMFillPool) ***\n", channel);
