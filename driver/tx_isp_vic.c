@@ -1801,10 +1801,28 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         
         /* Binary Ninja EXACT: *($s0 + 0x210) = 1 */
         vic_dev->stream_state = 1;
+
+        /* CRITICAL MISSING CALL: Start VIC frame channel streaming */
+        pr_info("*** CRITICAL: Calling ispvic_frame_channel_s_stream to start VIC frame processing ***\n");
+        /* Note: This should be called AFTER stream_state is set but BEFORE unlocking */
     }
-    
+
     /* Binary Ninja EXACT: private_spin_unlock_irqrestore($s0 + 0x1f4, var_18) */
     private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, var_18);
+
+    /* CRITICAL: Call ispvic_frame_channel_s_stream AFTER unlocking to prevent deadlock */
+    if (arg2 != 0 && vic_dev->stream_state == 1) {
+        pr_info("*** CRITICAL: NOW calling ispvic_frame_channel_s_stream for VIC frame processing ***\n");
+        /* This will call vic_pipo_mdma_enable and start actual frame processing */
+        /* Use the subdev that contains this vic_dev */
+        struct tx_isp_subdev *vic_sd = container_of(vic_dev, struct tx_isp_subdev, host_priv);
+        int stream_ret = ispvic_frame_channel_s_stream(vic_sd, 1);
+        if (stream_ret == 0) {
+            pr_info("*** SUCCESS: ispvic_frame_channel_s_stream completed - VIC frame processing started! ***\n");
+        } else {
+            pr_err("*** ERROR: ispvic_frame_channel_s_stream failed: %d ***\n", stream_ret);
+        }
+    }
     
     /* Binary Ninja EXACT: return 0 */
     return 0;
