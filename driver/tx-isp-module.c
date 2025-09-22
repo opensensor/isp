@@ -399,7 +399,7 @@ static struct tx_isp_subdev_platform_data csi_pdata = {
 };
 
 struct platform_device tx_isp_csi_platform_device = {
-    .name = "tx-isp-csi",
+    .name = "isp-w00",  /* Stock driver name for CSI/frame channel 0 */
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_csi_resources),
     .resource = tx_isp_csi_resources,
@@ -4421,20 +4421,23 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp_dev)
                         const struct file_operations *proc_fops = NULL;
 
                         /* Set appropriate file operations based on device type */
-                        if (strstr(tx_isp_platform_devices[i]->name, "vic")) {
+                        if (strstr(tx_isp_platform_devices[i]->name, "vic") || strstr(tx_isp_platform_devices[i]->name, "isp-w")) {
                             extern const struct file_operations isp_vic_frd_fops;
                             proc_fops = &isp_vic_frd_fops;
                         } else if (strstr(tx_isp_platform_devices[i]->name, "csi")) {
                             extern const struct file_operations isp_csi_fops;
                             proc_fops = &isp_csi_fops;
-                        } else if (strstr(tx_isp_platform_devices[i]->name, "core")) {
+                        } else if (strstr(tx_isp_platform_devices[i]->name, "core") || strstr(tx_isp_platform_devices[i]->name, "isp-m0")) {
                             extern const struct file_operations isp_core_fops;
                             proc_fops = &isp_core_fops;
+                        } else {
+                            extern const struct file_operations graph_proc_fops;
+                            proc_fops = &graph_proc_fops;
                         }
 
                         /* Binary Ninja: private_proc_create_data(*($v0_7 + 8), 0x124, *(arg1 + 0x11c), $a3_1, $v0_7) */
                         struct proc_dir_entry *proc_entry = proc_create_data(
-                            tx_isp_platform_devices[i]->name,  /* Device name */
+                            tx_isp_platform_devices[i]->name,  /* Device name from platform device */
                             0644,                               /* Permissions (0x124 = 0644) */
                             isp_dev->proc_context,             /* Parent directory */
                             proc_fops,                          /* File operations */
