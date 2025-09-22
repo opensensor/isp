@@ -712,7 +712,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         if ((bytes_per_pixel * vic_dev->width) & 0x1f) buffer_calc++;
         writel(buffer_calc, vic_regs + 0x100);
 
-        /* Binary Ninja EXACT: Complex MIPI configuration register 0x10c */
+        /* Binary Ninja: Complex MIPI configuration register 0x10c */
         u32 mipi_config = 0;
         mipi_config |= (mipi->mipi_sc.hcrop_diff_en << 25);
         mipi_config |= (mipi->mipi_sc.mipi_vcomp_en << 24);
@@ -728,14 +728,14 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         mipi_config |= (mipi->mipi_sc.sensor_mode << 2);
         writel(mipi_config, vic_regs + 0x10c);
 
-        /* Binary Ninja EXACT: MIPI configuration registers */
+        /* Binary Ninja: MIPI configuration registers */
         writel((vic_dev->width << 16) | mipi->mipi_sc.data_type_value, vic_regs + 0x110);
         writel(mipi->mipi_sc.mipi_crop_start0x, vic_regs + 0x114);
         writel(mipi->mipi_sc.mipi_crop_start0y, vic_regs + 0x118);
         writel(mipi->mipi_sc.mipi_crop_start1x, vic_regs + 0x11c);
 
-        /* Binary Ninja EXACT: Frame mode configuration based on sensor frame mode */
-        u32 frame_mode_val = 0x4440;  /* Default frame mode */
+        /* Binary Ninja: Frame mode configuration */
+        u32 frame_mode_val = 0x4440;
         if (mipi->mipi_sc.sensor_frame_mode == 1) {
             frame_mode_val = 0x4140;
         } else if (mipi->mipi_sc.sensor_frame_mode == 2) {
@@ -745,38 +745,19 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(frame_mode_val, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
 
-        /* Binary Ninja EXACT: Additional MIPI crop configuration registers */
+        /* Binary Ninja: VIC unlock sequence */
+        writel(2, vic_regs + 0x0);
+        writel(4, vic_regs + 0x0);
+
+        /* Binary Ninja: while (*$v1_30 != 0) nop */
+        while (readl(vic_regs + 0x0) != 0) {
+            /* nop */
+        }
+
+        /* Binary Ninja: Additional MIPI crop configuration */
         writel((mipi->mipi_sc.mipi_crop_start1y << 16) | mipi->mipi_sc.mipi_crop_start3x, vic_regs + 0x104);
         writel((mipi->mipi_sc.mipi_crop_start3y << 16) | mipi->mipi_sc.mipi_crop_start1x, vic_regs + 0x108);
-
-        /* Binary Ninja EXACT: Configure frame config register before unlock */
         writel((mipi->mipi_sc.sensor_frame_mode << 4) | mipi->mipi_sc.sensor_csi_fmt, vic_regs + 0x1a0);
-
-        /* Binary Ninja EXACT: VIC unlock sequence for MIPI interface */
-        /* **(arg1 + 0xb8) = 2 */
-        writel(2, vic_regs + 0x0);
-        pr_info("*** tx_isp_vic_start: Step 1 - VIC unlock sequence: wrote 2 to reg 0x0 ***\n");
-
-        /* **(arg1 + 0xb8) = 4 */
-        writel(4, vic_regs + 0x0);
-        pr_info("*** tx_isp_vic_start: Step 2 - VIC unlock sequence: wrote 4 to reg 0x0 ***\n");
-
-        /* Binary Ninja EXACT: while (*$v1_30 != 0) nop */
-        /* CRITICAL FIX: Add timeout to prevent infinite loop hardware lockup */
-        u32 timeout = 10000;
-        u32 vic_status;
-
-        while ((vic_status = readl(vic_regs + 0x0)) != 0 && timeout-- > 0) {
-            /* Reference driver: nop (just wait) */
-            udelay(1);
-        }
-
-        if (timeout == 0) {
-            pr_err("*** tx_isp_vic_start: VIC unlock timeout! Final status=0x%x ***\n", vic_status);
-            return -ETIMEDOUT;
-        }
-
-        pr_info("*** tx_isp_vic_start: Step 3 - VIC unlock completed, status=0x%x, timeout_remaining=%d ***\n", vic_status, timeout);
 
     } else if (interface_type == 5) {  /* BT1120 interface */
         pr_info("tx_isp_vic_start: BT1120 interface detected\n");
