@@ -152,34 +152,18 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 
             pr_info("*** CRITICAL FIX: Applied WORKING irqs-start-stop interrupt configuration to PRIMARY VIC space ***\n");
 
-            /* CRITICAL TEST: Check if VIC hardware is generating any interrupt signals */
-            u32 status1 = readl(vic_dev->vic_regs + 0x1e0);
-            u32 status2 = readl(vic_dev->vic_regs + 0x1e4);
-            u32 mask1 = readl(vic_dev->vic_regs + 0x1e8);
-            u32 mask2 = readl(vic_dev->vic_regs + 0x1ec);
-            u32 vic_int_status = readl(vic_dev->vic_regs + 0x308);  /* VIC interrupt status */
-            u32 vic_int_enable = readl(vic_dev->vic_regs + 0x30c);  /* VIC interrupt enable */
-            vic_dma_ctrl = readl(vic_dev->vic_regs + 0x300);    /* VIC DMA control */
+            /* CRITICAL TEST: Check WORKING interrupt configuration registers */
+            u32 isr = readl(vic_dev->vic_regs + 0x00);      /* Interrupt Status Register */
+            u32 imr = readl(vic_dev->vic_regs + 0x04);      /* Interrupt Mask Register */
+            u32 imcr = readl(vic_dev->vic_regs + 0x0c);     /* Interrupt Control Register */
+            u32 isr1 = readl(vic_dev->vic_regs + 0x20);     /* Interrupt Status Register 1 */
+            u32 imr1 = readl(vic_dev->vic_regs + 0x24);     /* Interrupt Mask Register 1 */
 
-            pr_info("*** VIC INTERRUPT TEST PRIMARY: status1=0x%x, status2=0x%x, mask1=0x%x, mask2=0x%x ***\n",
-                    status1, status2, mask1, mask2);
-            pr_info("*** VIC INTERRUPT TEST PRIMARY: Effective interrupts = 0x%x, 0x%x ***\n",
-                    (~mask1) & status1, (~mask2) & status2);
-            pr_info("*** VIC SPECIFIC INTERRUPTS PRIMARY: int_status=0x%x, int_enable=0x%x, dma_ctrl=0x%x ***\n",
-                    vic_int_status, vic_int_enable, vic_dma_ctrl);
-
-            /* CRITICAL TEST: Check SECONDARY VIC register space for interrupt status */
-            if (vic_dev->vic_regs_secondary) {
-                u32 sec_status1 = readl(vic_dev->vic_regs_secondary + 0x0);
-                u32 sec_status2 = readl(vic_dev->vic_regs_secondary + 0x4);
-                u32 sec_int_enable = readl(vic_dev->vic_regs_secondary + 0x30c);
-                u32 sec_alt1 = readl(vic_dev->vic_regs_secondary + 0x10);
-                u32 sec_alt2 = readl(vic_dev->vic_regs_secondary + 0x18);
-
-                pr_info("*** VIC INTERRUPT TEST SECONDARY: status1=0x%x, status2=0x%x, int_enable=0x%x ***\n",
-                        sec_status1, sec_status2, sec_int_enable);
-                pr_info("*** VIC SECONDARY ALTERNATIVES: alt1=0x%x, alt2=0x%x ***\n", sec_alt1, sec_alt2);
-            }
+            pr_info("*** VIC WORKING INTERRUPT CONFIG: ISR=0x%x, IMR=0x%x, IMCR=0x%x ***\n",
+                    isr, imr, imcr);
+            pr_info("*** VIC WORKING INTERRUPT CONFIG: ISR1=0x%x, IMR1=0x%x ***\n",
+                    isr1, imr1);
+            pr_info("*** VIC WORKING CONFIG: Should see IMR=0x07800438, IMCR=0xb5742249 ***\n");
         } else {
             pr_err("*** tx_vic_enable_irq: No VIC primary registers - cannot enable hardware interrupts ***\n");
         }
