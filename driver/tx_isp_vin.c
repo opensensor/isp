@@ -205,7 +205,7 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
 int tx_isp_vin_reset(struct tx_isp_subdev *sd, int on)
 {
     struct tx_isp_vin_device *vin = sd_to_vin_device(sd);
-    struct tx_isp_sensor *sensor = vin->active;
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
     int ret = 0;
 
     mcp_log_info("vin_reset: called", on);
@@ -264,7 +264,7 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
     pr_info("vin_s_stream: VIN state = %d, enable = %d\n", vin_state, enable);
 
     /* SAFE: Validate sensor pointer before access */
-    sensor_ptr = vin_dev->active;
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
     if (sensor_ptr == 0) {
         pr_info("vin_s_stream: No sensor available, safe exit\n");
         goto safe_state_update;
@@ -770,7 +770,6 @@ int tx_isp_vin_probe(struct platform_device *pdev)
 
     /* Binary Ninja: *($v0 + 0xf8) = 0 and *($v0 + 0xe4) = 0 */
     vin->refcnt = 0;
-    vin->active = NULL;
 
     /* Binary Ninja: void* $s2_1 = arg1[0x16] */
     pdata = pdev->dev.platform_data;

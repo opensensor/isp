@@ -14,8 +14,7 @@ struct tx_isp_config;
 struct tx_isp_vin_device {
     struct tx_isp_subdev sd;        /* Base subdev - must be first */
     struct list_head sensors;       /* List of registered sensors */
-    struct tx_isp_sensor *active;   /* Currently active sensor */
-    
+
     struct mutex mlock;             /* Mutex for sensor list operations */
     int state;                      /* VIN module state */
     unsigned int refcnt;            /* Reference count */
