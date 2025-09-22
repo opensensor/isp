@@ -76,12 +76,12 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 
             /* CRITICAL MISSING FIX: Enable VIC interrupt generation in hardware */
             /* The VIC hardware needs to be told to generate interrupts, not just have masks configured */
-            u32 vic_int_enable = readl(vic_dev->secondary_vic_regs + 0x1e8);
+            u32 vic_int_enable = readl(vic_dev->vic_regs_control + 0x1e8);
             pr_info("*** tx_vic_enable_irq: VIC interrupt mask register 0x1e8 = 0x%08x ***\n", vic_int_enable);
 
             /* CRITICAL: Enable VIC interrupt generation per Binary Ninja reference */
             /* Binary Ninja shows VIC interrupt enable is in status register, not control register */
-            writel(0x1, vic_dev->secondary_vic_regs + 0x1e0);  /* Enable interrupt generation in status register */
+            writel(0x1, vic_dev->vic_regs_control + 0x1e0);  /* Enable interrupt generation in status register */
             wmb();
 
             pr_info("*** tx_vic_enable_irq: VIC interrupt generation ENABLED per Binary Ninja (0x1e0=0x1) ***\n");
@@ -726,7 +726,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x10, vic_regs + 0x1b0);
 
         /* CRITICAL FIX: Use SECONDARY VIC space for unlock sequence - this is what worked before! */
-        void __iomem *vic_unlock_regs = vic_dev->vic_regs_secondary;  /* 0x10023000 - this worked before */
+        void __iomem *vic_unlock_regs = vic_dev->vic_regs_control;  /* 0x10023000 - this worked before */
         if (!vic_unlock_regs) {
             pr_err("tx_isp_vic_start: No SECONDARY VIC registers for unlock sequence\n");
             return -EINVAL;
@@ -851,7 +851,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     /* Binary Ninja EXACT: Final VIC enable - *vic_regs = 1 */
     /* Use SECONDARY VIC space for enable (same as unlock sequence) */
-    void __iomem *vic_enable_regs = vic_dev->vic_regs_secondary;
+    void __iomem *vic_enable_regs = vic_dev->vic_regs_control;
     if (vic_enable_regs) {
         writel(1, vic_enable_regs + 0x0);
         pr_info("*** tx_isp_vic_start: VIC enabled using SECONDARY VIC space ***\n");
@@ -1913,14 +1913,14 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     pr_info("*** VIC PROBE: Primary VIC registers mapped at 0x133e0000 -> %p ***\n", vic_dev->vic_regs);
 
     /* Secondary VIC register space (0x10023000) - VIC control operations */
-    vic_dev->vic_regs_secondary = ioremap(0x10023000, 0x1000);
-    if (!vic_dev->vic_regs_secondary) {
+    vic_dev->vic_regs_control = ioremap(0x10023000, 0x1000);
+    if (!vic_dev->vic_regs_control) {
         pr_err("*** VIC PROBE: CRITICAL - Failed to map VIC control registers at 0x10023000 ***\n");
         iounmap(vic_dev->vic_regs);
         private_kfree(vic_dev);
         return -ENOMEM;
     }
-    pr_info("*** VIC PROBE: VIC control registers mapped at 0x10023000 -> %p ***\n", vic_dev->vic_regs_secondary);
+    pr_info("*** VIC PROBE: VIC control registers mapped at 0x10023000 -> %p ***\n", vic_dev->vic_regs_control);
 
     /* CRITICAL: Initialize list heads for buffer management FIRST */
     INIT_LIST_HEAD(&vic_dev->queue_head);
@@ -2073,9 +2073,9 @@ int tx_isp_vic_remove(struct platform_device *pdev)
             vic_dev->vic_regs = NULL;
             pr_info("*** VIC REMOVE: Primary VIC registers unmapped ***\n");
         }
-        if (vic_dev->vic_regs_secondary) {
-            iounmap(vic_dev->vic_regs_secondary);
-            vic_dev->vic_regs_secondary = NULL;
+        if (vic_dev->vic_regs_control) {
+            iounmap(vic_dev->vic_regs_control);
+            vic_dev->vic_regs_control = NULL;
             pr_info("*** VIC REMOVE: Secondary VIC registers unmapped ***\n");
         }
     }
