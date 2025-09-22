@@ -1263,3 +1263,25 @@ terminate called after throwing an instance of 'std::invalid_argument'
 root@ing-wyze-cam3-a000 ~# ls /proc/jz/isp/
 isp-w02      tx-isp-core  tx-isp-csi   tx-isp-vin
 root@ing-wyze-cam3-a000 ~# 
+root@ing-wyze-cam3-a000 ~# ls /proc/jz/isp/
+isp-w02      tx-isp-core  tx-isp-csi   tx-isp-vin
+root@ing-wyze-cam3-a000 ~# logcat
+I/ao( 2040): AO Enable: 0
+I/ao( 2040): AO Ch Enable: 0:0
+I/ao( 2040): EXIT AO Ch Enable: 0:0
+I/ao( 2040): AO Set Vol: 60
+I/ao( 2040): AO Get Gain: 20
+I/OSD( 2000): IMP_OSD_SetPoolSize:1048576
+I/LIBIMP_CONTROL( 2000): Version: Aug 28 2025_05:46:40_ dlsym
+E/IMP-ISP( 2000): Cannot open /dev/tx-isp
+I/OSD( 2418): IMP_OSD_SetPoolSize:1048576
+D/IMP-ISP( 2418): ~~~~~~ IMP_ISP_Open[331] ~~~~~~~
+I/IMP-ISP( 2418): IMP_ISP_AddSensor,480: paddr = 0x6300000, size = 0x477e70
+I/Alloc Manager( 2418): MEM Alloc Method is kmalloc
+D/KMEM Method( 2418): CMD Line Rmem Size:30408704, Addr:0x06300000
+D/KMEM Method( 2418): alloc->mem_alloc.method = kmalloc
+ 			alloc->mem_alloc.vaddr = 0x75386000
+ 			alloc->mem_alloc.paddr = 0x06300000
+ 			alloc->mem_alloc.length = 30408704
+I/Alloc Manager( 2418): MEM Manager Method is continuous
+E/IMP-ISP( 2418): Failed to enable sensor!
