@@ -3323,11 +3323,8 @@ static struct tx_isp_subdev_video_ops csi_video_ops = {
 /* vic_subdev_ops is defined in tx_isp_vic.c - use external reference */
 extern struct tx_isp_subdev_ops vic_subdev_ops;
 
-static struct tx_isp_subdev_ops csi_subdev_ops = {
-    .video = &csi_video_ops,
-    .sensor = NULL,
-    .core = NULL,
-};
+/* REMOVED: Duplicate csi_subdev_ops definition - use the complete one from tx_isp_csi.c */
+extern struct tx_isp_subdev_ops csi_subdev_ops;
 
 // Binary Ninja MCP EXACT reference implementation
 static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
