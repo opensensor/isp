@@ -705,17 +705,6 @@ int tx_isp_csi_probe(struct platform_device *pdev)
     /* Binary Ninja expects CSI device at offset 0xd4 (host_priv field) */
     tx_isp_set_subdev_hostdata(&csi_dev->sd, csi_dev);
     pr_info("*** CSI PROBE: Set host_priv to csi_dev %p AFTER subdev_init ***\n", csi_dev);
-    if (ret != 0) {
-        /* Binary Ninja: isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", zx.d(*($s1_1 + 2))) */
-        if (pdata) {
-            isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", pdata->sensor_type);
-        } else {
-            isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", 0);
-        }
-        /* Binary Ninja: private_kfree($v0) */
-        private_kfree(csi_dev);
-        return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
-    }
 
     /* FIXED: Use memory mapping from tx_isp_subdev_init instead of duplicate mapping */
     if (csi_dev->sd.regs) {
