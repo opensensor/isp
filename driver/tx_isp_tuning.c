@@ -2030,32 +2030,8 @@ int tisp_init(void *sensor_info, char *param_name)
         return param_init_ret;
     }
 
-    /* *** CRITICAL MISSING PIECE: Call tx_isp_subdev_pipo to initialize VIC buffer management *** */
-    pr_info("*** CRITICAL: Calling tx_isp_subdev_pipo to initialize VIC buffer management ***\n");
-
-    /* Get VIC subdev from global ISP device */
-    extern struct tx_isp_dev *ourISPdev;
-    if (ourISPdev && ourISPdev->vic_dev) {
-        struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
-        struct tx_isp_subdev *vic_sd = &vic_dev->sd;
-
-        pr_info("*** CRITICAL: Calling tx_isp_subdev_pipo with VIC subdev %p ***\n", vic_sd);
-
-        /* CRITICAL FIX: Create proper raw_pipe structure instead of passing NULL */
-        /* Binary Ninja MCP expects non-NULL arg to trigger full buffer initialization */
-        void *raw_pipe[8] = {0};  /* Function pointer table for VIC operations */
-
-        int pipo_ret = tx_isp_subdev_pipo(vic_sd, raw_pipe);  /* Initialize VIC buffer management */
-        if (pipo_ret == 0) {
-            pr_info("*** SUCCESS: tx_isp_subdev_pipo completed - VIC buffer management initialized! ***\n");
-            pr_info("*** VIC function pointers: qbuf=%p, clearbuf=%p, s_stream=%p ***\n",
-                    raw_pipe[0], raw_pipe[2], raw_pipe[3]);
-        } else {
-            pr_err("*** ERROR: tx_isp_subdev_pipo failed: %d ***\n", pipo_ret);
-        }
-    } else {
-        pr_err("*** ERROR: No VIC device available for tx_isp_subdev_pipo call ***\n");
-    }
+    /* REFERENCE DRIVER: tx_isp_subdev_pipo is NOT called by tisp_init */
+    /* VIC buffer management and interrupt configuration happens elsewhere */
 
     pr_info("*** tisp_init: ISP HARDWARE PIPELINE FULLY INITIALIZED - THIS SHOULD TRIGGER REGISTER ACTIVITY ***\n");
     pr_info("*** tisp_init: All hardware blocks enabled, registers configured, events ready ***\n");
