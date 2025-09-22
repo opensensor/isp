@@ -759,43 +759,42 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel((mipi->mipi_sc.mipi_crop_start3y << 16) | mipi->mipi_sc.mipi_crop_start1x, vic_regs + 0x108);
         writel((mipi->mipi_sc.sensor_frame_mode << 4) | mipi->mipi_sc.sensor_csi_fmt, vic_regs + 0x1a0);
 
-    } else if (interface_type == 5) {  /* BT1120 interface */
-        pr_info("tx_isp_vic_start: BT1120 interface detected\n");
-
-        /* Binary Ninja: sensor type is BT1120! */
-        writel(4, vic_regs + 0xc);  /* BT1120 mode */
-
-        /* Binary Ninja: Check GPIO mode support */
+    } else if (interface_type == 5) {
+        /* Binary Ninja: BT1120 interface */
+        writel(4, vic_regs + 0xc);
         if (sensor_attr->mipi.mipi_sc.sensor_mode != 0) {
-            pr_err("tx_isp_vic_start: BT1120 does not support GPIO mode\n");
             return -EINVAL;
         }
-
-        /* Binary Ninja EXACT: BT1120 configuration */
         writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
         writel(0x800c0000, vic_regs + 0x10);
         writel(vic_dev->width << 1, vic_regs + 0x18);
         writel(0x100010, vic_regs + 0x1a4);
         writel(0x4440, vic_regs + 0x1ac);
-
-        /* Binary Ninja EXACT: BT1120 unlock sequence */
         writel(2, vic_regs + 0x0);
-        pr_info("tx_isp_vic_start: BT1120: wrote 2 to reg 0x0\n");
+
+    } else if (interface_type == 4) {
+        /* Binary Ninja: BT656 interface */
+        writel(0, vic_regs + 0xc);
+        if (sensor_attr->mipi.mipi_sc.sensor_mode != 0) {
+            return -EINVAL;
+        }
+        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
+        writel(0x800c0000, vic_regs + 0x10);
+        writel(vic_dev->width << 1, vic_regs + 0x18);
+        writel(0x100010, vic_regs + 0x1a4);
+        writel(0x4440, vic_regs + 0x1ac);
+        writel(0x200, vic_regs + 0x1d0);
+        writel(0x200, vic_regs + 0x1d4);
+        writel(2, vic_regs + 0x0);
 
     } else {
-        /* Non-MIPI interfaces (DVP, etc.) */
-        pr_info("tx_isp_vic_start: Non-MIPI interface type %d\n", interface_type);
-
-        /* Binary Ninja: Basic configuration for other interfaces */
-        writel(2, vic_regs + 0xc);  /* DVP mode */
+        /* Binary Ninja: DVP and other interfaces */
+        writel(2, vic_regs + 0xc);
         writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
         writel(0x4440, vic_regs + 0x1ac);
         writel(0x4440, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
-
-        /* Binary Ninja: For non-MIPI, write 2 then 1 */
         writel(2, vic_regs + 0x0);
-        pr_info("tx_isp_vic_start: Non-MIPI: wrote 2 to reg 0x0\n");
     }
 
     /* Binary Ninja EXACT: Final VIC enable - *$v0_47 = 1 */
