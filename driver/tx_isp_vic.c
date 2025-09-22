@@ -74,7 +74,15 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1ec);  /* Disable all MDMA interrupts */
             wmb();
 
+            /* CRITICAL FIX: Enable hardware interrupt generation in VIC control register */
+            /* This is the missing piece - VIC hardware needs this to actually generate interrupts */
+            u32 vic_ctrl = readl(vic_dev->vic_regs + 0x0);
+            vic_ctrl |= 0x8;  /* Enable interrupt generation bit */
+            writel(vic_ctrl, vic_dev->vic_regs + 0x0);
+            wmb();
+
             pr_info("*** tx_vic_enable_irq: VIC interrupt masks configured (0x1e8=0xFFFFFFFE enables bit 0, 0x1ec=0xFFFFFFFF disables all MDMA) ***\n");
+            pr_info("*** tx_vic_enable_irq: VIC hardware interrupt generation ENABLED (control reg |= 0x8) ***\n");
         }
     }
 
@@ -103,6 +111,15 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: $v0_2 = *(dump_vsd_5 + 0x88); if ($v0_2 != 0) $v0_2(dump_vsd_5 + 0x80) */
         if (vic_dev->irq_disable && vic_dev->irq_priv) {
             vic_dev->irq_disable(vic_dev->irq_priv);
+        }
+
+        /* CRITICAL FIX: Disable hardware interrupt generation in VIC control register */
+        if (vic_dev->vic_regs) {
+            u32 vic_ctrl = readl(vic_dev->vic_regs + 0x0);
+            vic_ctrl &= ~0x8;  /* Disable interrupt generation bit */
+            writel(vic_ctrl, vic_dev->vic_regs + 0x0);
+            wmb();
+            pr_info("*** tx_vic_disable_irq: VIC hardware interrupt generation DISABLED (control reg &= ~0x8) ***\n");
         }
     }
 
