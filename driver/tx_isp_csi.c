@@ -529,7 +529,7 @@ int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
     /* Binary Ninja: if ($v1_2 == 3) csi_core_ops_init(arg1, 0) */
     if (state == 3) {
         pr_info("tx_isp_csi_slake_subdev: CSI in state 3, calling core_ops_init(disable)\n");
-        csi_core_ops_init(sd, 0);
+        //csi_core_ops_init(sd, 0);
     }
 
     /* Binary Ninja: private_mutex_lock($s2_1) */
