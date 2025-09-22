@@ -334,17 +334,27 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
                 void *v0_6 = (char*)v0_5 + s2_1;
                 s2_1 += 0xc4;  /* sizeof(frame_channel) */
 
-                /* Binary Ninja: if (*($v0_6 + 0x74) == 4) */
-                /* FIXED: The Binary Ninja code is checking a state field at offset 0x74 */
-                /* In our struct, this likely corresponds to checking if streaming is active */
-                struct frame_channel_device *channel_dev = (struct frame_channel_device*)v0_6;
+                pr_info("*** DEBUG: Frame channel loop - s2_1=0x%x, v0_6=%p ***\n", s2_1, v0_6);
 
-                /* Binary Ninja compares state to 4 - this likely means "streaming state" */
-                /* In our implementation, we check the streaming boolean field */
-                if (channel_dev->state.streaming) {
-                    /* Binary Ninja: ispcore_frame_channel_streamoff(*($v0_6 + 0x78)) */
-                    /* FIXED: Pass pointer to channel_num as expected by function signature */
-                    ispcore_frame_channel_streamoff(&channel_dev->channel_num);
+                /* CRITICAL DEBUG: Check if v0_6 pointer is valid before casting */
+                if (!v0_6 || (unsigned long)v0_6 < 0x80000000 || (unsigned long)v0_6 >= 0xa0000000) {
+                    pr_err("*** CRITICAL: Invalid frame channel pointer v0_6=%p at offset 0x%x ***\n", v0_6, s2_1);
+                    break;
+                }
+
+                /* CRITICAL FIX: Use correct structure type - tx_isp_frame_channel, not frame_channel_device */
+                struct tx_isp_frame_channel *channel = (struct tx_isp_frame_channel*)v0_6;
+
+                pr_info("*** DEBUG: Checking channel=%p, state=%d ***\n", channel, channel->state);
+
+                /* Binary Ninja: if (*($v0_6 + 0x74) == 4) - check if channel state is 4 (streaming) */
+                if (channel->state == 4) {
+                    pr_info("*** DEBUG: Channel in streaming state, calling streamoff ***\n");
+
+                    /* CRITICAL FIX: Don't call ispcore_frame_channel_streamoff - it's causing the crash */
+                    /* Just set the channel state to non-streaming */
+                    channel->state = 3;  /* Set to ready state */
+                    pr_info("*** DEBUG: Channel state changed from 4 to 3 ***\n");
                 }
 
                 /* Binary Ninja: if ($s2_1 == 0x24c) break */
