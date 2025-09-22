@@ -107,6 +107,16 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear secondary interrupt status */
             wmb();
             pr_info("*** tx_vic_enable_irq: VIC pending interrupts cleared in PRIMARY registers ***\n");
+
+            /* CRITICAL TEST: Check if VIC hardware is generating any interrupt signals */
+            u32 status1 = readl(vic_dev->vic_regs + 0x1e0);
+            u32 status2 = readl(vic_dev->vic_regs + 0x1e4);
+            u32 mask1 = readl(vic_dev->vic_regs + 0x1e8);
+            u32 mask2 = readl(vic_dev->vic_regs + 0x1ec);
+            pr_info("*** VIC INTERRUPT TEST: status1=0x%x, status2=0x%x, mask1=0x%x, mask2=0x%x ***\n",
+                    status1, status2, mask1, mask2);
+            pr_info("*** VIC INTERRUPT TEST: Effective interrupts = 0x%x, 0x%x ***\n",
+                    (~mask1) & status1, (~mask2) & status2);
         } else {
             pr_err("*** tx_vic_enable_irq: No VIC primary registers - cannot enable hardware interrupts ***\n");
         }
