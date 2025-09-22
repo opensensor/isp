@@ -683,17 +683,28 @@ int tx_isp_csi_probe(struct platform_device *pdev)
     /* Binary Ninja: void* $s1_1 = arg1[0x16] */
     pdata = pdev->dev.platform_data;
 
-    /* CRITICAL FIX: Set both dev_priv and host_priv to CSI device */
+    /* Binary Ninja: tx_isp_subdev_init(arg1, $v0, &csi_subdev_ops) */
+    ret = tx_isp_subdev_init(pdev, &csi_dev->sd, &csi_subdev_ops);
+    if (ret != 0) {
+        /* Binary Ninja: isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", zx.d(*($s1_1 + 2))) */
+        if (pdata) {
+            isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", pdata->sensor_type);
+        } else {
+            isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", 0);
+        }
+        /* Binary Ninja: private_kfree($v0) */
+        private_kfree(csi_dev);
+        return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
+    }
+
+    /* CRITICAL FIX: Set dev_priv and host_priv AFTER tx_isp_subdev_init to prevent overwrite */
     /* csi_video_s_stream() uses tx_isp_get_subdevdata() which reads dev_priv */
     tx_isp_set_subdevdata(&csi_dev->sd, csi_dev);
-    pr_info("*** CSI PROBE: Set dev_priv to csi_dev %p for csi_video_s_stream() ***\n", csi_dev);
+    pr_info("*** CSI PROBE: Set dev_priv to csi_dev %p AFTER subdev_init ***\n", csi_dev);
 
     /* Binary Ninja expects CSI device at offset 0xd4 (host_priv field) */
     tx_isp_set_subdev_hostdata(&csi_dev->sd, csi_dev);
-    pr_info("*** CSI PROBE: Set host_priv to csi_dev %p for Binary Ninja compatibility ***\n", csi_dev);
-
-    /* Binary Ninja: tx_isp_subdev_init(arg1, $v0, &csi_subdev_ops) */
-    ret = tx_isp_subdev_init(pdev, &csi_dev->sd, &csi_subdev_ops);
+    pr_info("*** CSI PROBE: Set host_priv to csi_dev %p AFTER subdev_init ***\n", csi_dev);
     if (ret != 0) {
         /* Binary Ninja: isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", zx.d(*($s1_1 + 2))) */
         if (pdata) {
