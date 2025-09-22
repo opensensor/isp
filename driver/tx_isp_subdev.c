@@ -391,17 +391,8 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
                 pr_info("*** tx_isp_subdev_init: SENSOR subdev registered at index %d, sd=%p ***\n", sensor_index, sd);
                 pr_info("*** tx_isp_subdev_init: SENSOR ops=%p, ops->sensor=%p ***\n", sd->ops, sd->ops->sensor);
 
-                /* CRITICAL FIX: Initialize core device now that sensor is available */
-                if (ourISPdev->core_dev) {
-                    extern int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on);
-                    pr_info("*** tx_isp_subdev_init: Calling ispcore_core_ops_init after sensor registration ***\n");
-                    int init_ret = ispcore_core_ops_init(&ourISPdev->core_dev->sd, 1);
-                    if (init_ret == 0) {
-                        pr_info("*** tx_isp_subdev_init: Core device state transition successful after sensor registration ***\n");
-                    } else {
-                        pr_err("*** tx_isp_subdev_init: Core device state transition failed: %d ***\n", init_ret);
-                    }
-                }
+                /* State transitions are now handled by ispcore_slake_module during probe */
+                pr_info("*** tx_isp_subdev_init: Core state transitions handled by slake_module ***\n");
             } else {
                 pr_err("*** tx_isp_subdev_init: No available slot for sensor subdev ***\n");
             }
