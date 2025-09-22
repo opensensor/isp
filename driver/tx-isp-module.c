@@ -2045,21 +2045,46 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
 
     pr_info("*** tx_isp_video_s_stream: EXACT Binary Ninja reference implementation - enable=%d ***\n", arg2);
 
-    /* CRITICAL FIX: Call internal ops activate_module BEFORE streaming if enable=1 */
+    /* CRITICAL FIX: Call specific activate functions BEFORE streaming if enable=1 */
     if (arg2 == 1) {
-        pr_info("*** tx_isp_video_s_stream: Calling internal ops activate_module before streaming ***\n");
+        pr_info("*** tx_isp_video_s_stream: Calling specific activate functions before streaming ***\n");
 
-        /* Call activate_module on each subdev that has internal ops */
+        /* Call specific activate functions based on subdev type */
         for (int i = 0; i < 16; i++) {
             struct tx_isp_subdev *subdev = arg1->subdevs[i];
-            if (subdev && subdev->ops && subdev->ops->internal && subdev->ops->internal->activate_module) {
-                pr_info("*** tx_isp_video_s_stream: Calling activate_module on subdev[%d] ***\n", i);
-                int activate_result = subdev->ops->internal->activate_module(subdev);
+            if (subdev) {
+                int activate_result = 0;
+
+                /* Call the appropriate activate function based on subdev index/type */
+                if (i == 0 && subdev->ops == &csi_subdev_ops) {
+                    /* CSI subdev */
+                    pr_info("*** tx_isp_video_s_stream: Calling tx_isp_csi_activate_subdev on subdev[%d] ***\n", i);
+                    activate_result = tx_isp_csi_activate_subdev(subdev);
+                } else if (i == 1 && subdev->ops == &vic_subdev_ops) {
+                    /* VIC subdev */
+                    pr_info("*** tx_isp_video_s_stream: Calling tx_isp_vic_activate_subdev on subdev[%d] ***\n", i);
+                    activate_result = tx_isp_vic_activate_subdev(subdev);
+                } else if (i == 2 && subdev->ops == &vin_subdev_ops) {
+                    /* VIN subdev */
+                    pr_info("*** tx_isp_video_s_stream: Calling tx_isp_vin_activate_subdev on subdev[%d] ***\n", i);
+                    activate_result = tx_isp_vin_activate_subdev(subdev);
+                } else if (i == 4 && subdev->ops == &core_subdev_ops) {
+                    /* Core subdev - call ispcore_activate_module */
+                    pr_info("*** tx_isp_video_s_stream: Calling ispcore_activate_module on subdev[%d] ***\n", i);
+                    activate_result = ispcore_activate_module(arg1);
+                } else if (i == 3) {
+                    /* FS subdev - call fs_activate_module */
+                    pr_info("*** tx_isp_video_s_stream: Calling fs_activate_module on subdev[%d] ***\n", i);
+                    activate_result = fs_activate_module(subdev);
+                }
+
                 if (activate_result != 0) {
-                    pr_err("tx_isp_video_s_stream: activate_module failed on subdev[%d]: %d\n", i, activate_result);
+                    pr_err("tx_isp_video_s_stream: activate function failed on subdev[%d]: %d\n", i, activate_result);
                     return activate_result;
                 }
-                pr_info("*** tx_isp_video_s_stream: activate_module SUCCESS on subdev[%d] ***\n", i);
+                if (activate_result == 0 && (i == 0 || i == 1 || i == 2 || i == 3 || i == 4)) {
+                    pr_info("*** tx_isp_video_s_stream: activate function SUCCESS on subdev[%d] ***\n", i);
+                }
             }
         }
 

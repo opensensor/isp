@@ -784,25 +784,35 @@ static struct tx_isp_subdev_sensor_ops core_sensor_ops = {
     .release_all_sensor = NULL
 };
 
-/* Core activate module function - calls ispcore_core_ops_init to transition state 2->3 */
+/* Core activate module function - basic activation only (state 1->2) */
 static int ispcore_activate_module_subdev(struct tx_isp_subdev *sd)
 {
-    pr_info("*** ispcore_activate_module_subdev: Activating core device ***\n");
+    struct tx_isp_core_device *core_dev;
+
+    pr_info("*** ispcore_activate_module_subdev: Basic core activation (state 1->2) ***\n");
 
     if (!sd) {
         pr_err("ispcore_activate_module_subdev: Invalid subdev\n");
         return -EINVAL;
     }
 
-    /* Call ispcore_core_ops_init with on=1 to transition from state 2 to 3 */
-    int ret = ispcore_core_ops_init(sd, 1);
-    if (ret == 0) {
-        pr_info("*** ispcore_activate_module_subdev: Core device activated successfully ***\n");
-    } else {
-        pr_err("ispcore_activate_module_subdev: Core activation failed: %d\n", ret);
+    /* Get core device from subdev */
+    core_dev = tx_isp_subdev_to_core_device(sd);
+    if (!tx_isp_core_device_is_valid(core_dev)) {
+        pr_err("ispcore_activate_module_subdev: Invalid core device\n");
+        return -EINVAL;
     }
 
-    return ret;
+    /* Basic activation: enable clocks and transition state 1->2 */
+    if (core_dev->state == 1) {
+        core_dev->state = 2;
+        pr_info("*** ispcore_activate_module_subdev: Core state transitioned 1->2 ***\n");
+    } else {
+        pr_info("*** ispcore_activate_module_subdev: Core already in state %d ***\n", core_dev->state);
+    }
+
+    pr_info("*** ispcore_activate_module_subdev: Basic activation complete ***\n");
+    return 0;
 }
 
 /* Core slake module function - calls ispcore_core_ops_init to deinitialize */
@@ -828,7 +838,6 @@ static int ispcore_slake_module_subdev(struct tx_isp_subdev *sd)
 
 /* Core internal operations - CRITICAL: Missing from original implementation */
 static struct tx_isp_subdev_internal_ops core_internal_ops = {
-    .activate_module = ispcore_activate_module_subdev,
     .slake_module = ispcore_slake_module_subdev,
 };
 

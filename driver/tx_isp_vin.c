@@ -430,7 +430,6 @@ int vin_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
  * ======================================================================== */
 
 static struct tx_isp_subdev_internal_ops vin_subdev_internal_ops = {
-    .activate_module = tx_isp_vin_activate_subdev,
     .slake_module = tx_isp_vin_slake_subdev,
 };
 

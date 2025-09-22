@@ -577,7 +577,6 @@ struct tx_isp_subdev_sensor_ops csi_sensor_ops = {
 
 /* CSI internal operations - EXACT Binary Ninja implementation */
 struct tx_isp_subdev_internal_ops csi_internal_ops = {
-    .activate_module = tx_isp_csi_activate_subdev,  /* CRITICAL FIX: Missing activate_module function */
     .slake_module = tx_isp_csi_slake_subdev,
 };
 

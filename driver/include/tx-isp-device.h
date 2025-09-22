@@ -634,15 +634,11 @@ extern int num_channels;
  * Internal ops. Never call this from drivers, only the tx isp device can call
  * these ops.
  *
- * activate_module: called when this subdev is enabled. When called the module
- * could be operated;
- *
  * slake_module: called when this subdev is disabled. When called the
  *	module couldn't be operated.
  *
  */
 struct tx_isp_subdev_internal_ops {
-	int (*activate_module)(struct tx_isp_subdev *sd);
 	int (*slake_module)(struct tx_isp_subdev *sd);
 };
 
