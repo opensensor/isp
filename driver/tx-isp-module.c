@@ -4041,6 +4041,19 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     spin_lock_init(&isp_dev->lock);
     pr_info("*** PROBE: ISP device mutex and spinlock initialized ***\n");
 
+    /* CRITICAL: Initialize event callback structure for Binary Ninja compatibility */
+    isp_dev->event_callback = kmalloc(sizeof(struct tx_isp_event_callback), GFP_KERNEL);
+    if (!isp_dev->event_callback) {
+        pr_err("*** PROBE: Failed to allocate event callback structure ***\n");
+        kfree(isp_dev);
+        return -ENOMEM;
+    }
+    memset(isp_dev->event_callback, 0, sizeof(struct tx_isp_event_callback));
+
+    /* Set up default event handler - for now, return 0xfffffdfd for all events */
+    isp_dev->event_callback->event_handler = NULL;  /* Will be set up later if needed */
+    pr_info("*** PROBE: Event callback structure initialized at 0x%p (offset 0xc from isp_dev) ***\n", isp_dev->event_callback);
+
     /* Initialize reserved memory information */
     unsigned long rmem_base, rmem_size;
     if (parse_rmem_bootarg(&rmem_base, &rmem_size) == 0) {
@@ -4234,6 +4247,11 @@ err_cleanup_subdev_drivers:
     tx_isp_subdev_platform_exit();
 err_free_dev:
     if (ourISPdev) {
+        /* Clean up event callback structure */
+        if (ourISPdev->event_callback) {
+            kfree(ourISPdev->event_callback);
+            ourISPdev->event_callback = NULL;
+        }
         kfree(ourISPdev);
         ourISPdev = NULL;
     }
@@ -4521,6 +4539,12 @@ static void tx_isp_exit(void)
         platform_driver_unregister(&tx_isp_driver);
         platform_device_unregister(&tx_isp_platform_device);
         
+        /* Clean up event callback structure */
+        if (ourISPdev->event_callback) {
+            kfree(ourISPdev->event_callback);
+            ourISPdev->event_callback = NULL;
+        }
+
         /* Free device structure */
         kfree(ourISPdev);
         ourISPdev = NULL;
