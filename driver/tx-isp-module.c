@@ -2059,6 +2059,21 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
                 pr_info("*** tx_isp_video_s_stream: activate_module SUCCESS on subdev[%d] ***\n", i);
             }
         }
+
+        /* CRITICAL FIX: Call core->init on each subdev after activation to configure hardware */
+        pr_info("*** tx_isp_video_s_stream: Calling core->init on subdevs after activation ***\n");
+        for (int i = 0; i < 16; i++) {
+            struct tx_isp_subdev *subdev = arg1->subdevs[i];
+            if (subdev && subdev->ops && subdev->ops->core && subdev->ops->core->init) {
+                pr_info("*** tx_isp_video_s_stream: Calling core->init(enable=1) on subdev[%d] ***\n", i);
+                int init_result = subdev->ops->core->init(subdev, 1);
+                if (init_result != 0) {
+                    pr_err("tx_isp_video_s_stream: core->init failed on subdev[%d]: %d\n", i, init_result);
+                    return init_result;
+                }
+                pr_info("*** tx_isp_video_s_stream: core->init SUCCESS on subdev[%d] ***\n", i);
+            }
+        }
     }
 
     /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
