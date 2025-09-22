@@ -432,7 +432,7 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
                 return ret;
             }
         } else {
-            pr_info("*** CSI: Skipping IRQ request - CSI uses register mapping only ***\n");
+            pr_info("*** %s: Skipping IRQ request - device has no IRQ resource ***\n", dev_name_str);
         }
 
         /* FIXED: Get first memory resource without string comparison */

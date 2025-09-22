@@ -4405,72 +4405,66 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp_dev)
     /* CRITICAL: Create /proc/jz/isp directory and device entries - EXACT Binary Ninja MCP */
     pr_info("*** tx_isp_create_graph_and_nodes: Creating /proc/jz/isp entries ***\n");
 
-    /* Create /proc/jz directory if it doesn't exist */
-    struct proc_dir_entry *jz_proc = proc_mkdir("jz", NULL);
-    if (jz_proc) {
-        /* Create /proc/jz/isp directory */
-        isp_dev->proc_context = proc_mkdir("isp", jz_proc);
-        if (isp_dev->proc_context) {
-            pr_info("*** Created /proc/jz/isp directory ***\n");
+    /* Create /proc/jz/isp directory */
+    isp_dev->proc_context = proc_mkdir("jz/isp", NULL);
+    if (isp_dev->proc_context) {
+        pr_info("*** Created /proc/jz/isp directory ***\n");
 
-            /* Binary Ninja: Create proc entries for each registered device */
-            for (i = 0; i < pdata->device_id; i++) {
-                if (i < ARRAY_SIZE(tx_isp_platform_devices) && tx_isp_platform_devices[i]) {
-                    void *driver_data = platform_get_drvdata(tx_isp_platform_devices[i]);
-                    if (driver_data) {
-                        const struct file_operations *proc_fops = NULL;
+        /* Binary Ninja: Create proc entries for each registered device */
+        for (i = 0; i < pdata->device_id; i++) {
+            if (i < ARRAY_SIZE(tx_isp_platform_devices) && tx_isp_platform_devices[i]) {
+                void *driver_data = platform_get_drvdata(tx_isp_platform_devices[i]);
+                if (driver_data) {
+                    const struct file_operations *proc_fops = NULL;
 
-                        /* Set appropriate file operations based on device type */
-                        if (strstr(tx_isp_platform_devices[i]->name, "vic") || strstr(tx_isp_platform_devices[i]->name, "isp-w")) {
-                            extern const struct file_operations isp_vic_frd_fops;
-                            proc_fops = &isp_vic_frd_fops;
-                        } else if (strstr(tx_isp_platform_devices[i]->name, "csi")) {
-                            extern const struct file_operations isp_csi_fops;
-                            proc_fops = &isp_csi_fops;
-                        } else if (strstr(tx_isp_platform_devices[i]->name, "core") || strstr(tx_isp_platform_devices[i]->name, "isp-m0")) {
-                            extern const struct file_operations isp_core_fops;
-                            proc_fops = &isp_core_fops;
-                        } else {
-                            extern const struct file_operations graph_proc_fops;
-                            proc_fops = &graph_proc_fops;
-                        }
+                    /* Set appropriate file operations based on device type */
+                    if (strstr(tx_isp_platform_devices[i]->name, "vic") || strstr(tx_isp_platform_devices[i]->name, "isp-w")) {
+                        extern const struct file_operations isp_vic_frd_fops;
+                        proc_fops = &isp_vic_frd_fops;
+                    } else if (strstr(tx_isp_platform_devices[i]->name, "csi")) {
+                        extern const struct file_operations isp_csi_fops;
+                        proc_fops = &isp_csi_fops;
+                    } else if (strstr(tx_isp_platform_devices[i]->name, "core") || strstr(tx_isp_platform_devices[i]->name, "isp-m0")) {
+                        extern const struct file_operations isp_core_fops;
+                        proc_fops = &isp_core_fops;
+                    } else {
+                        extern const struct file_operations graph_proc_fops;
+                        proc_fops = &graph_proc_fops;
+                    }
 
-                        /* Binary Ninja: private_proc_create_data(*($v0_7 + 8), 0x124, *(arg1 + 0x11c), $a3_1, $v0_7) */
-                        struct proc_dir_entry *proc_entry = proc_create_data(
-                            tx_isp_platform_devices[i]->name,  /* Device name from platform device */
-                            0644,                               /* Permissions (0x124 = 0644) */
-                            isp_dev->proc_context,             /* Parent directory */
-                            proc_fops,                          /* File operations */
-                            driver_data                         /* Private data */
-                        );
+                    /* Binary Ninja: private_proc_create_data(*($v0_7 + 8), 0x124, *(arg1 + 0x11c), $a3_1, $v0_7) */
+                    struct proc_dir_entry *proc_entry = proc_create_data(
+                        tx_isp_platform_devices[i]->name,  /* Device name from platform device */
+                        0644,                               /* Permissions (0x124 = 0644) */
+                        isp_dev->proc_context,             /* Parent directory */
+                        proc_fops,                          /* File operations */
+                        driver_data                         /* Private data */
+                    );
 
-                        if (proc_entry) {
-                            pr_info("*** Created /proc/jz/isp/%s entry with file ops ***\n", tx_isp_platform_devices[i]->name);
-                        } else {
-                            pr_warn("*** Failed to create /proc/jz/isp/%s entry ***\n", tx_isp_platform_devices[i]->name);
-                        }
+                    if (proc_entry) {
+                        pr_info("*** Created /proc/jz/isp/%s entry with file ops ***\n", tx_isp_platform_devices[i]->name);
+                    } else {
+                        pr_warn("*** Failed to create /proc/jz/isp/%s entry ***\n", tx_isp_platform_devices[i]->name);
                     }
                 }
             }
+        }
 
-            /* Binary Ninja: Register misc devices for each platform device */
-            pr_info("*** tx_isp_create_graph_and_nodes: Registering misc devices ***\n");
-            for (i = 0; i < pdata->device_id; i++) {
-                if (i < ARRAY_SIZE(tx_isp_platform_devices) && tx_isp_platform_devices[i]) {
-                    void *driver_data = platform_get_drvdata(tx_isp_platform_devices[i]);
-                    if (driver_data) {
-                        /* Binary Ninja: if (private_misc_register($v0_7 + 0xc) s< 0) */
-                        /* This would register misc devices for each subdev, but we handle this differently */
-                        /* Our frame channel devices are already created via the main misc device */
-                        pr_info("*** Misc device registration handled via main tx-isp device ***\n");
-                    }
+        /* Binary Ninja: Register misc devices for each platform device */
+        pr_info("*** tx_isp_create_graph_and_nodes: Registering misc devices ***\n");
+        for (i = 0; i < pdata->device_id; i++) {
+            if (i < ARRAY_SIZE(tx_isp_platform_devices) && tx_isp_platform_devices[i]) {
+                void *driver_data = platform_get_drvdata(tx_isp_platform_devices[i]);
+                if (driver_data) {
+                    /* Binary Ninja: if (private_misc_register($v0_7 + 0xc) s< 0) */
+                    /* This would register misc devices for each subdev, but we handle this differently */
+                    /* Our frame channel devices are already created via the main misc device */
+                    pr_info("*** Misc device registration handled via main tx-isp device ***\n");
                 }
             }
-        } else {
-            pr_err("*** Failed to create /proc/jz/isp directory ***\n");
         }
     } else {
-        pr_err("*** Failed to create /proc/jz directory ***\n");
+        pr_err("*** Failed to create /proc/jz/isp directory ***\n");
     }
 
     /* CRITICAL: Initialize frame channels with proper Binary Ninja state values */
