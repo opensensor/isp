@@ -1977,7 +1977,43 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
 
     pr_info("*** tx_isp_video_s_stream: EXACT Binary Ninja reference implementation - enable=%d ***\n", arg2);
 
+    /* CRITICAL FIX: Initialize core before streaming starts */
+    if (arg2 == 1) {  /* Stream ON */
+        pr_info("*** tx_isp_video_s_stream: STREAM ON - Initializing core first ***\n");
 
+        /* Step 1: Activate core module (1 → 2 state transition) */
+        if (arg1->core_dev && arg1->core_dev->state == 1) {
+            pr_info("*** tx_isp_video_s_stream: Core state is 1, calling activate_module ***\n");
+            result = ispcore_activate_module(arg1);
+            if (result != 0) {
+                pr_err("tx_isp_video_s_stream: ispcore_activate_module failed: %d\n", result);
+                return result;
+            }
+            pr_info("*** tx_isp_video_s_stream: ispcore_activate_module completed ***\n");
+        }
+
+        /* Step 2: Initialize core (2 → 3 state transition) */
+        if (arg1->core_dev && arg1->core_dev->state == 2) {
+            struct tx_isp_subdev *core_sd = &arg1->core_dev->sd;
+            if (core_sd->ops && core_sd->ops->core && core_sd->ops->core->init) {
+                pr_info("*** tx_isp_video_s_stream: Core state is 2, calling core->init ***\n");
+                result = core_sd->ops->core->init(core_sd, 1);
+                if (result != 0) {
+                    pr_err("tx_isp_video_s_stream: core->init failed: %d\n", result);
+                    return result;
+                }
+                pr_info("*** tx_isp_video_s_stream: core->init completed, core should now be state 3 ***\n");
+            }
+        }
+
+        /* Verify core is ready for streaming */
+        if (arg1->core_dev && arg1->core_dev->state < 3) {
+            pr_err("tx_isp_video_s_stream: Core state %d < 3, not ready for streaming\n", arg1->core_dev->state);
+            return -EINVAL;
+        }
+
+        pr_info("*** tx_isp_video_s_stream: Core initialization complete, proceeding with subdev streaming ***\n");
+    }
 
     /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
     s4 = arg1->subdevs;
