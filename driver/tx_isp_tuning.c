@@ -2040,9 +2040,16 @@ int tisp_init(void *sensor_info, char *param_name)
         struct tx_isp_subdev *vic_sd = &vic_dev->sd;
 
         pr_info("*** CRITICAL: Calling tx_isp_subdev_pipo with VIC subdev %p ***\n", vic_sd);
-        int pipo_ret = tx_isp_subdev_pipo(vic_sd, NULL);  /* Initialize VIC buffer management */
+
+        /* CRITICAL FIX: Create proper raw_pipe structure instead of passing NULL */
+        /* Binary Ninja MCP expects non-NULL arg to trigger full buffer initialization */
+        void *raw_pipe[8] = {0};  /* Function pointer table for VIC operations */
+
+        int pipo_ret = tx_isp_subdev_pipo(vic_sd, raw_pipe);  /* Initialize VIC buffer management */
         if (pipo_ret == 0) {
             pr_info("*** SUCCESS: tx_isp_subdev_pipo completed - VIC buffer management initialized! ***\n");
+            pr_info("*** VIC function pointers: qbuf=%p, clearbuf=%p, s_stream=%p ***\n",
+                    raw_pipe[0], raw_pipe[2], raw_pipe[3]);
         } else {
             pr_err("*** ERROR: tx_isp_subdev_pipo failed: %d ***\n", pipo_ret);
         }
