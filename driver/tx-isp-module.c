@@ -2042,6 +2042,20 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
 
     pr_info("*** tx_isp_video_s_stream: EXACT Binary Ninja reference implementation - enable=%d ***\n", arg2);
 
+    /* CRITICAL FIX: Initialize core device to state 3 BEFORE streaming if enable=1 */
+    if (arg2 == 1 && arg1->subdevs[4]) {  /* Core subdev is at index 4 */
+        struct tx_isp_subdev *core_subdev = arg1->subdevs[4];
+        if (core_subdev->ops && core_subdev->ops->core && core_subdev->ops->core->init) {
+            pr_info("*** tx_isp_video_s_stream: Calling core init to transition state 2->3 ***\n");
+            int core_init_result = core_subdev->ops->core->init(core_subdev, 1);
+            if (core_init_result != 0) {
+                pr_err("tx_isp_video_s_stream: Core init failed: %d\n", core_init_result);
+                return core_init_result;
+            }
+            pr_info("*** tx_isp_video_s_stream: Core init SUCCESS - core should now be in state 3 ***\n");
+        }
+    }
+
     /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
     s4 = arg1->subdevs;
 
