@@ -421,7 +421,7 @@ static struct tx_isp_subdev_platform_data vin_pdata = {
 };
 
 struct platform_device tx_isp_vin_platform_device = {
-    .name = "tx-isp-vin",
+    .name = "isp-w01",  /* Stock driver name for VIN/frame channel 1 */
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_vin_resources),
     .resource = tx_isp_vin_resources,
@@ -460,7 +460,7 @@ static struct fs_platform_data fs_pdata = {
 };
 
 struct platform_device tx_isp_fs_platform_device = {
-    .name = "tx-isp-fs",
+    .name = "isp-fs",  /* Stock driver name for Frame Sync */
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_fs_resources),
     .resource = tx_isp_fs_resources,
@@ -492,7 +492,7 @@ static struct tx_isp_subdev_platform_data core_pdata = {
 };
 
 struct platform_device tx_isp_core_platform_device = {
-    .name = "tx-isp-core",
+    .name = "isp-m0",  /* Stock driver name for M0 processor/tuning */
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_core_resources),
     .resource = tx_isp_core_resources,
