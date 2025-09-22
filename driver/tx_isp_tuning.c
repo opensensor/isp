@@ -56,7 +56,7 @@ extern struct tx_isp_dev *ourISPdev;
 int tisp_netlink_init(void);
 int isp_trigger_frame_data_transfer(struct tx_isp_dev *dev);
 int tisp_lsc_write_lut_datas(void);
-int32_t ip_done_interrupt_static(void);
+irqreturn_t ip_done_interrupt_static(int irq, void *dev_id);
 /* ===== TIZIANO WDR PROCESSING PIPELINE - Binary Ninja Reference Implementation ===== */
 
 // ISP Tuning device support - missing component for /dev/isp-m0
@@ -2034,7 +2034,7 @@ int tisp_init(void *sensor_info, char *param_name)
     /* Events are processed on-demand when triggered, not continuously */
     pr_info("*** tisp_init: Event system ready for on-demand processing (Binary Ninja reference) ***\n");
 
-    int irq_ret = system_irq_func_set(0xd, ip_done_interrupt_static);
+    int32_t irq_ret = system_irq_func_set(0xd, ip_done_interrupt_static);
     if (irq_ret == 0) {
         pr_info("*** tisp_init: ISP processing completion callback registered (index=0xd) ***\n");
     } else {
