@@ -679,9 +679,11 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* Binary Ninja: int32_t $v0 = *($v1 + 0x14) */
     interface_type = sensor_attr->dbus_type;
 
-    /* Binary Ninja: *(arg1 + 0xb8) */
-    vic_regs = vic_dev->vic_regs;
+    /* Binary Ninja: *(arg1 + 0xb8) - VIC control register base */
+    /* CRITICAL FIX: Use VIC control registers at 0x10023000 for unlock sequence */
+    vic_regs = vic_dev->vic_regs_secondary;
     if (!vic_regs) {
+        pr_err("tx_isp_vic_start: No VIC control registers available\n");
         return -EINVAL;
     }
 
@@ -747,11 +749,22 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
         /* Binary Ninja: VIC unlock sequence */
         writel(2, vic_regs + 0x0);
+        wmb(); /* Ensure write completes */
+
         writel(4, vic_regs + 0x0);
+        wmb(); /* Ensure write completes */
 
         /* Binary Ninja: while (*$v1_30 != 0) nop */
-        while (readl(vic_regs + 0x0) != 0) {
-            /* nop */
+        u32 vic_status;
+        u32 timeout = 100000; /* Add timeout to prevent infinite hang */
+        while ((vic_status = readl(vic_regs + 0x0)) != 0 && timeout-- > 0) {
+            /* Binary Ninja: nop - just wait */
+            cpu_relax();
+        }
+
+        if (timeout == 0) {
+            pr_err("tx_isp_vic_start: VIC unlock timeout! Status=0x%x\n", vic_status);
+            return -ETIMEDOUT;
         }
 
         /* Binary Ninja: Additional MIPI crop configuration */
@@ -1960,7 +1973,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     pr_info("*** VIC PROBE: VIC control registers mapped at 0x10023000 -> %p ***\n", vic_dev->vic_regs);
 
     /* Secondary VIC register space (0x133e0000) - for extended operations */
-    vic_dev->vic_regs = ioremap(0x133e0000, 0x10000);
+    vic_dev->vic_regs = ioremap(0x10023000, 0x1000);
     if (!vic_dev->vic_regs) {
         pr_err("*** VIC PROBE: CRITICAL - Failed to map secondary VIC registers at 0x133e0000 ***\n");
         iounmap(vic_dev->vic_regs);

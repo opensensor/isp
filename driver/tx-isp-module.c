@@ -349,13 +349,13 @@ struct platform_device tx_isp_platform_device = {
     },
 };
 
-/* VIC platform device resources - CORRECTED to match /proc/iomem */
+/* VIC platform device resources - CORRECTED to use actual VIC control base */
 static struct resource tx_isp_vic_resources[] = {
     [0] = {
-        .start = 0x133e0000,           /* T31 VIC base address - MATCHES /proc/iomem */
-        .end   = 0x133effff,           /* T31 VIC end address - MATCHES /proc/iomem */
+        .start = 0x10023000,           /* T31 VIC control base address - ACTUAL VIC registers */
+        .end   = 0x10023fff,           /* T31 VIC control end address */
         .flags = IORESOURCE_MEM,
-        .name = "isp-device",          /* EXACT name from stock driver */
+        .name = "isp-w01",             /* EXACT name from stock driver for 0x10023000 */
     },
     [1] = {
         .start = 38,                   /* T31 VIC IRQ 38 - MATCHES STOCK DRIVER isp-w02 */

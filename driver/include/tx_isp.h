@@ -222,8 +222,7 @@ struct tx_isp_dev {
     void *vic_irq_priv;
     volatile u32 vic_irq_enabled;
     struct irq_handler_data *vic_irq_data;
-    void __iomem *vic_regs;      /* Primary VIC register space (0x133e0000) */
-    void __iomem *vic_regs2;     /* Secondary VIC register space (0x10023000) */
+    void __iomem *vic_regs;      /* Primary VIC register space (0x10023000) */
     /* vic_dev moved to offset 0xd4 above - REMOVED duplicate declaration */
     struct ddr_device *ddr_dev;
     struct tx_isp_vin_device *vin_dev;
