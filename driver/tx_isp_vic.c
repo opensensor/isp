@@ -213,15 +213,15 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
         /* CRITICAL FIX: Disable hardware interrupt generation - Binary Ninja reference */
         /* Binary Ninja: $v0_2 = *(dump_vsd_5 + 0x88); if ($v0_2 != 0) $v0_2(dump_vsd_5 + 0x80) */
 
-        /* CRITICAL: Disable VIC hardware interrupt generation */
-        /* CRITICAL FIX: Use SECONDARY VIC space for interrupt control */
+        /* CRITICAL: PRESERVE VIC hardware interrupt configuration */
+        /* CRITICAL FIX: Don't clear hardware interrupt registers - preserve working configuration */
         if (vic_dev->vic_regs_secondary) {
-            /* Clear interrupt masks - disable all interrupts in SECONDARY space */
-            writel(0x0, vic_dev->vic_regs_secondary + 0x04);  /* IMR - disable all interrupts */
-            writel(0x0, vic_dev->vic_regs_secondary + 0x0c);  /* IMCR - clear interrupt control */
-            writel(0x0, vic_dev->vic_regs_secondary + 0x24);  /* IMR1 - clear secondary mask */
-            wmb();
-            pr_info("*** tx_vic_disable_irq: VIC interrupts DISABLED in SECONDARY space ***\n");
+            /* PRESERVE interrupt configuration - only disable software processing */
+            /* writel(0x0, vic_dev->vic_regs_secondary + 0x04);  // COMMENTED OUT - preserve IMR */
+            /* writel(0x0, vic_dev->vic_regs_secondary + 0x0c);  // COMMENTED OUT - preserve IMCR */
+            /* writel(0x0, vic_dev->vic_regs_secondary + 0x24);  // COMMENTED OUT - preserve IMR1 */
+            /* wmb(); */
+            pr_info("*** tx_vic_disable_irq: PRESERVING VIC hardware interrupt configuration ***\n");
 
             /* CRITICAL FIX: VIC interrupt mask is DISABLE mask - write 0xFFFFFFFF to DISABLE all interrupts */
             /* Binary Ninja logic: not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
