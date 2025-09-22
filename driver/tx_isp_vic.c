@@ -686,10 +686,14 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(mipi_config, vic_regs + 0x10c);
 
         /* Binary Ninja EXACT: MIPI configuration registers */
-        writel((mipi->image_twidth << 16) | mipi->mipi_sc.data_type_value, vic_regs + 0x110);
+        /* CRITICAL FIX: Use negotiated stream width instead of sensor image_twidth */
+        writel((stream_width << 16) | mipi->mipi_sc.data_type_value, vic_regs + 0x110);
         writel(mipi->mipi_sc.mipi_crop_start0x, vic_regs + 0x114);
         writel(mipi->mipi_sc.mipi_crop_start0y, vic_regs + 0x118);
         writel(mipi->mipi_sc.mipi_crop_start1x, vic_regs + 0x11c);
+
+        pr_info("tx_isp_vic_start: MIPI reg 0x110 = 0x%x (width=%d, data_type=0x%x)\n",
+                (stream_width << 16) | mipi->mipi_sc.data_type_value, stream_width, mipi->mipi_sc.data_type_value);
 
         /* Binary Ninja EXACT: Frame mode configuration based on sensor frame mode */
         u32 frame_mode_val = 0x4440;  /* Default frame mode */
