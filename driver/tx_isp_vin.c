@@ -235,17 +235,10 @@ int tx_isp_vin_reset(struct tx_isp_subdev *sd, int on)
 int vin_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vin_device *vin_dev;
-    void *sensor_ptr;
     int result = 0;
     int32_t vin_state;
 
     pr_info("*** vin_s_stream: SAFE implementation - sd=%p, enable=%d ***\n", sd, enable);
-
-    /* CRITICAL SAFETY: Validate sd parameter first */
-    if (!sd || (unsigned long)sd < 0x80000000 || (unsigned long)sd >= 0xfffff000) {
-        pr_err("vin_s_stream: Invalid subdev pointer %p\n", sd);
-        return -EINVAL;
-    }
 
     /* SAFE: Validate container_of result */
     vin_dev = container_of(sd, struct tx_isp_vin_device, sd);
@@ -265,17 +258,6 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
 
     /* SAFE: Validate sensor pointer before access */
     struct tx_isp_sensor *sensor = tx_isp_get_sensor();
-    if (sensor_ptr == 0) {
-        pr_info("vin_s_stream: No sensor available, safe exit\n");
-        goto safe_state_update;
-    }
-
-    /* CRITICAL SAFETY: Validate sensor structure before accessing members */
-    struct tx_isp_sensor *sensor = (struct tx_isp_sensor *)sensor_ptr;
-    if (!virt_addr_valid(sensor) || (unsigned long)sensor < 0x80000000 || (unsigned long)sensor >= 0xfffff000) {
-        pr_err("vin_s_stream: Invalid sensor pointer %p\n", sensor);
-        goto safe_state_update;
-    }
 
     /* SAFE: Check sensor ops with proper validation */
     if (!sensor->sd.ops) {
