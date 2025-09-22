@@ -837,19 +837,35 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
 
     /* Binary Ninja: if ($v0 == 1) */
+    pr_info("*** tx_isp_vic_start: CRITICAL DEBUG - interface_type=%d, checking if == 1 ***\n", interface_type);
     if (interface_type == 1) {
+        pr_info("*** tx_isp_vic_start: MIPI interface detected - configuring VIC for MIPI ***\n");
+        pr_info("*** tx_isp_vic_start: vic_dev->width=%d, vic_dev->height=%d ***\n", vic_dev->width, vic_dev->height);
+
         /* Binary Ninja: Check sensor flags */
         if (sensor_attr->mipi.mipi_sc.sensor_mode != interface_type) {
+            pr_info("*** tx_isp_vic_start: sensor_mode != interface_type, writing 0xa000a to 0x1a4 ***\n");
             writel(0xa000a, vic_regs + 0x1a4);
         } else {
+            pr_info("*** tx_isp_vic_start: sensor_mode == interface_type, writing 0x20000 to 0x10 and 0x100010 to 0x1a4 ***\n");
             writel(0x20000, vic_regs + 0x10);
             writel(0x100010, vic_regs + 0x1a4);
         }
 
         /* Binary Ninja: VIC configuration */
+        pr_info("*** tx_isp_vic_start: Writing VIC configuration registers ***\n");
         writel(2, vic_regs + 0xc);
         writel(sensor_attr->dbus_type, vic_regs + 0x14);
-        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
+
+        /* CRITICAL: Write frame size to register 0x4 */
+        u32 frame_size_value = (vic_dev->width << 16) | vic_dev->height;
+        pr_info("*** tx_isp_vic_start: CRITICAL - Writing frame size 0x%08x (%dx%d) to register 0x4 ***\n",
+                frame_size_value, vic_dev->width, vic_dev->height);
+        writel(frame_size_value, vic_regs + 0x4);
+
+        /* Verify the write */
+        u32 readback = readl(vic_regs + 0x4);
+        pr_info("*** tx_isp_vic_start: VERIFICATION - Register 0x4 readback = 0x%08x ***\n", readback);
 
         /* Binary Ninja: Buffer calculation */
         struct tx_isp_mipi_bus *mipi = &sensor_attr->mipi;
@@ -937,11 +953,14 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     } else if (interface_type == 5) {
         /* Binary Ninja: BT1120 interface */
+        pr_info("*** tx_isp_vic_start: BT1120 interface detected - interface_type=%d ***\n", interface_type);
         writel(4, vic_regs + 0xc);
         if (sensor_attr->mipi.mipi_sc.sensor_mode != 0) {
             return -EINVAL;
         }
-        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
+        u32 frame_size_value = (vic_dev->width << 16) | vic_dev->height;
+        pr_info("*** tx_isp_vic_start: BT1120 - Writing frame size 0x%08x to register 0x4 ***\n", frame_size_value);
+        writel(frame_size_value, vic_regs + 0x4);
         writel(0x800c0000, vic_regs + 0x10);
         writel(vic_dev->width << 1, vic_regs + 0x18);
         writel(0x100010, vic_regs + 0x1a4);
@@ -950,11 +969,14 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     } else if (interface_type == 4) {
         /* Binary Ninja: BT656 interface */
+        pr_info("*** tx_isp_vic_start: BT656 interface detected - interface_type=%d ***\n", interface_type);
         writel(0, vic_regs + 0xc);
         if (sensor_attr->mipi.mipi_sc.sensor_mode != 0) {
             return -EINVAL;
         }
-        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
+        u32 frame_size_value = (vic_dev->width << 16) | vic_dev->height;
+        pr_info("*** tx_isp_vic_start: BT656 - Writing frame size 0x%08x to register 0x4 ***\n", frame_size_value);
+        writel(frame_size_value, vic_regs + 0x4);
         writel(0x800c0000, vic_regs + 0x10);
         writel(vic_dev->width << 1, vic_regs + 0x18);
         writel(0x100010, vic_regs + 0x1a4);
@@ -965,8 +987,11 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     } else {
         /* Binary Ninja: DVP and other interfaces */
+        pr_info("*** tx_isp_vic_start: DVP/Other interface detected - interface_type=%d ***\n", interface_type);
         writel(2, vic_regs + 0xc);
-        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
+        u32 frame_size_value = (vic_dev->width << 16) | vic_dev->height;
+        pr_info("*** tx_isp_vic_start: DVP/Other - Writing frame size 0x%08x to register 0x4 ***\n", frame_size_value);
+        writel(frame_size_value, vic_regs + 0x4);
         writel(0x4440, vic_regs + 0x1ac);
         writel(0x4440, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
