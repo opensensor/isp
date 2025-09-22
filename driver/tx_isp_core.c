@@ -163,7 +163,7 @@ static int tisp_event_process(void)
     ret = wait_for_completion_timeout(&tevent_info, 20); /* 0x14 = 20 jiffies */
 
     if (ret == -512) { /* 0xfffffe00 = -512 */
-        isp_printf(2, "Can not support this frame mode!!!\n", "tisp_event_process");
+        pr_info("tisp_event_process: Event processing interrupted by signal\n");
         return 0;
     }
 
@@ -1334,7 +1334,7 @@ int isp_framesource_show(struct seq_file *seq, void *v)
         if (i == 0) {  /* Channel 0 specific info */
             result += seq_printf(seq, "sensor type is BT1120!\n");
         } else {
-            result += seq_printf(seq, "Can not support this frame mode!!!\n");
+            result += seq_printf(seq, "Channel %d: Additional channel info\n", i);
         }
 
         /* Binary Ninja: Show detailed channel configuration */

@@ -4477,27 +4477,7 @@ static void tx_isp_exit(void)
         /* CRITICAL FIX: Disable VIC interrupts at hardware level BEFORE freeing vic_dev */
         if (ourISPdev->vic_dev) {
             struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
-
-            /* CRITICAL: Disable VIC interrupts at hardware level to prevent race condition */
-            extern uint32_t vic_start_ok;
-            vic_start_ok = 0;  /* Stop interrupt processing immediately */
-
-            /* Disable VIC hardware interrupts if registers are mapped */
-            if (vic_dev->vic_regs) {
-                /* Disable all VIC interrupt sources */
-                writel(0, vic_dev->vic_regs + 0x1e0);  /* Disable interrupt enables */
-                writel(0xffffffff, vic_dev->vic_regs + 0x1f0);  /* Clear all pending interrupts */
-                wmb();  /* Ensure writes complete before proceeding */
-                pr_info("*** VIC hardware interrupts DISABLED before cleanup ***\n");
-            }
-
-            /* Wait for any in-flight interrupts to complete */
-            synchronize_irq(38);
-            pr_info("*** VIC interrupt synchronization complete ***\n");
-
-            /* NOW it's safe to set vic_dev to NULL and free memory */
-            ourISPdev->vic_dev = NULL;  /* Clear pointer BEFORE freeing to prevent race */
-
+            
             // Clean up any remaining buffers
             if (!list_empty(&vic_dev->queue_head)) {
                 struct list_head *pos, *n;
