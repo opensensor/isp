@@ -2032,7 +2032,23 @@ int tisp_init(void *sensor_info, char *param_name)
 
     /* *** CRITICAL MISSING PIECE: Call tx_isp_subdev_pipo to initialize VIC buffer management *** */
     pr_info("*** CRITICAL: Calling tx_isp_subdev_pipo to initialize VIC buffer management ***\n");
-	// TODO
+
+    /* Get VIC subdev from global ISP device */
+    extern struct tx_isp_dev *ourISPdev;
+    if (ourISPdev && ourISPdev->vic_dev) {
+        struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
+        struct tx_isp_subdev *vic_sd = &vic_dev->sd;
+
+        pr_info("*** CRITICAL: Calling tx_isp_subdev_pipo with VIC subdev %p ***\n", vic_sd);
+        int pipo_ret = tx_isp_subdev_pipo(vic_sd, NULL);  /* Initialize VIC buffer management */
+        if (pipo_ret == 0) {
+            pr_info("*** SUCCESS: tx_isp_subdev_pipo completed - VIC buffer management initialized! ***\n");
+        } else {
+            pr_err("*** ERROR: tx_isp_subdev_pipo failed: %d ***\n", pipo_ret);
+        }
+    } else {
+        pr_err("*** ERROR: No VIC device available for tx_isp_subdev_pipo call ***\n");
+    }
 
     pr_info("*** tisp_init: ISP HARDWARE PIPELINE FULLY INITIALIZED - THIS SHOULD TRIGGER REGISTER ACTIVITY ***\n");
     pr_info("*** tisp_init: All hardware blocks enabled, registers configured, events ready ***\n");
