@@ -69,12 +69,27 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 1 */
         vic_dev->irq_enabled = 1;
 
-        /* CRITICAL FIX: Call hardware interrupt enable function - Binary Ninja reference */
+        /* CRITICAL FIX: Enable hardware interrupt generation - Binary Ninja reference */
         /* Binary Ninja: $v0_1 = *(dump_vsd_5 + 0x84); if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
-        /* Calling enable_irq() here would interfere with the main dispatcher's IRQ management */
+
+        /* CRITICAL: Enable VIC hardware interrupt generation */
+        if (vic_dev->vic_regs_secondary) {
+            /* Enable frame done interrupt (bit 0) and error interrupts */
+            u32 interrupt_mask = 0x1;  /* Frame done interrupt */
+            writel(interrupt_mask, vic_dev->vic_regs_secondary + 0x1e8);  /* Interrupt enable register */
+            wmb();
+            pr_info("*** tx_vic_enable_irq: VIC hardware interrupt mask enabled: 0x%x ***\n", interrupt_mask);
+
+            /* Clear any pending interrupts */
+            writel(0xFFFFFFFF, vic_dev->vic_regs_secondary + 0x1f0);  /* Clear interrupt status */
+            writel(0xFFFFFFFF, vic_dev->vic_regs_secondary + 0x1f4);  /* Clear secondary interrupt status */
+            wmb();
+            pr_info("*** tx_vic_enable_irq: VIC pending interrupts cleared ***\n");
+        } else {
+            pr_err("*** tx_vic_enable_irq: No VIC secondary registers - cannot enable hardware interrupts ***\n");
+        }
+
         pr_info("*** tx_vic_enable_irq: VIC software interrupt flag ENABLED ***\n");
-            /* Fallback: Direct hardware register enable */
-        pr_info("*** tx_vic_enable_irq: Hardware IRQ 38 managed by main dispatcher ***\n");
 
         /* Set the global vic_start_ok flag to allow interrupt processing */
         extern uint32_t vic_start_ok;
@@ -111,12 +126,26 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 0 */
         vic_dev->irq_enabled = 0;
 
-        /* CRITICAL FIX: Call hardware interrupt disable function - Binary Ninja reference */
+        /* CRITICAL FIX: Disable hardware interrupt generation - Binary Ninja reference */
         /* Binary Ninja: $v0_2 = *(dump_vsd_5 + 0x88); if ($v0_2 != 0) $v0_2(dump_vsd_5 + 0x80) */
-        /* Calling disable_irq() here would interfere with the main dispatcher's IRQ management */
+
+        /* CRITICAL: Disable VIC hardware interrupt generation */
+        if (vic_dev->vic_regs_secondary) {
+            /* Disable all VIC interrupts */
+            writel(0x0, vic_dev->vic_regs_secondary + 0x1e8);  /* Disable interrupt mask */
+            wmb();
+            pr_info("*** tx_vic_disable_irq: VIC hardware interrupt mask disabled ***\n");
+
+            /* Clear any pending interrupts */
+            writel(0xFFFFFFFF, vic_dev->vic_regs_secondary + 0x1f0);  /* Clear interrupt status */
+            writel(0xFFFFFFFF, vic_dev->vic_regs_secondary + 0x1f4);  /* Clear secondary interrupt status */
+            wmb();
+            pr_info("*** tx_vic_disable_irq: VIC pending interrupts cleared ***\n");
+        } else {
+            pr_err("*** tx_vic_disable_irq: No VIC secondary registers - cannot disable hardware interrupts ***\n");
+        }
+
         pr_info("*** tx_vic_disable_irq: VIC software interrupt flag DISABLED ***\n");
-            /* Fallback: Direct hardware register disable */
-        pr_info("*** tx_vic_disable_irq: Hardware IRQ 38 managed by main dispatcher ***\n");
 
         /* Clear the global vic_start_ok flag to stop interrupt processing */
         extern uint32_t vic_start_ok;

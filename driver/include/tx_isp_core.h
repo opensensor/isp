@@ -9,6 +9,9 @@ int tx_isp_core_probe(struct platform_device *pdev);
 int tx_isp_core_stop(struct tx_isp_subdev *sd);
 int tx_isp_core_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *config);
 
+/* Core Interrupt Operations */
+int tx_isp_core_enable_irq(struct tx_isp_core_device *core_dev);
+
 /* Core IOCTL Operations */
 int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 
