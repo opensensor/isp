@@ -1625,6 +1625,24 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (stride)\n", stride);
 
+    /* CRITICAL FIX: Enable VIC hardware interrupt generation */
+    pr_info("*** CRITICAL: Enabling VIC hardware interrupt generation ***\n");
+
+    /* Enable VIC MDMA interrupt - this is likely the missing piece */
+    writel(0x1, vic_base + 0x30);     /* VIC interrupt enable register */
+    wmb();
+    pr_info("*** VIC INTERRUPT: Enabled VIC interrupt at reg 0x30 = 0x1 ***\n");
+
+    /* Enable VIC MDMA completion interrupt */
+    writel(0x1, vic_base + 0x34);     /* VIC MDMA interrupt enable */
+    wmb();
+    pr_info("*** VIC INTERRUPT: Enabled VIC MDMA interrupt at reg 0x34 = 0x1 ***\n");
+
+    /* Unmask VIC interrupt sources */
+    writel(0xFFFFFFFF, vic_base + 0x38);  /* VIC interrupt unmask */
+    wmb();
+    pr_info("*** VIC INTERRUPT: Unmasked all VIC interrupts at reg 0x38 = 0xFFFFFFFF ***\n");
+
     /* CRITICAL MISSING: DMA cache synchronization operations */
     /* Binary Ninja reference shows DMA sync operations are required for proper data transfer */
 
