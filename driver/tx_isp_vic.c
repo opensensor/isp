@@ -2409,6 +2409,15 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
         int stream_ret = ispvic_frame_channel_s_stream(sd, 1);  /* Enable streaming */
         if (stream_ret == 0) {
             pr_info("*** tx_isp_subdev_pipo: ispvic_frame_channel_s_stream SUCCESS - VIC streaming started! ***\n");
+
+            /* CRITICAL FIX: Call vic_core_s_stream to enable VIC interrupts - this was missing! */
+            pr_info("*** tx_isp_subdev_pipo: CALLING vic_core_s_stream to enable VIC interrupts ***\n");
+            int vic_stream_ret = vic_core_s_stream(sd, 1);  /* Enable VIC interrupts */
+            if (vic_stream_ret == 0) {
+                pr_info("*** tx_isp_subdev_pipo: vic_core_s_stream SUCCESS - VIC interrupts should now be ENABLED! ***\n");
+            } else {
+                pr_err("*** tx_isp_subdev_pipo: vic_core_s_stream FAILED: %d ***\n", vic_stream_ret);
+            }
         } else {
             pr_err("*** tx_isp_subdev_pipo: ispvic_frame_channel_s_stream FAILED: %d ***\n", stream_ret);
         }
