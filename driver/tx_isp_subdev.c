@@ -416,10 +416,12 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     /* SAFE: Get platform data using proper kernel API */
     struct tx_isp_subdev_platform_data *pdata = dev_get_platdata(&pdev->dev);
     if (pdata != NULL) {
-        /* CRITICAL: Skip IRQ request for CSI and VIC during probe */
-        /* VIC IRQ will be registered at the END of global init to prevent early interrupts */
+        /* CRITICAL: Skip IRQ request for devices that don't have IRQ resources */
+        /* Only VIC (isp-w02) and Core (isp-m0) have IRQ resources */
         const char *dev_name_str = dev_name(&pdev->dev);
-        if (strcmp(dev_name_str, "tx-isp-csi") != 0) {
+        if (strcmp(dev_name_str, "isp-w00") != 0 &&  /* CSI - no IRQ */
+            strcmp(dev_name_str, "isp-w01") != 0 &&  /* VIN - no IRQ */
+            strcmp(dev_name_str, "isp-fs") != 0) {   /* FS - no IRQ */
             /* Binary Ninja: tx_isp_request_irq(arg1, arg2 + 0x80) */
             /* SAFE: Use struct member access for IRQ setup */
             ret = tx_isp_request_irq(pdev, &sd->irq_info);
