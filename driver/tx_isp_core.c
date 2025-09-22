@@ -4293,8 +4293,24 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 pr_info("***   - Tuning device: %p ***\n", tuning_dev);
             } else {
                 pr_err("*** tx_isp_core_probe: Tuning init FAILED ***\n");
+
+                /* Binary Ninja: if ($v0[0x3a] s>= 2) ispcore_slake_module($v0) */
+                if (core_dev->state >= 2) {
+                    pr_info("*** tx_isp_core_probe: Calling ispcore_slake_module for cleanup (state=%d) ***\n", core_dev->state);
+                    ispcore_slake_module(ourISPdev);
+                }
+
+                /* Binary Ninja: private_kfree($v0[0x54]) */
+                if (channel_array) {
+                    kfree(channel_array);
+                    core_dev->channel_array = NULL;
+                }
+
+                /* Binary Ninja: tx_isp_subdev_deinit($v0) */
+                tx_isp_subdev_deinit(&core_dev->sd);
+
+                /* Binary Ninja: private_kfree($v0) */
                 tx_isp_destroy_core_device(core_dev);
-                kfree(channel_array);
                 return -ENOMEM;
             }
 
