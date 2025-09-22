@@ -5140,14 +5140,8 @@ int tx_isp_core_device_init(struct tx_isp_core_device *core_dev)
         core_dev->ipu_clk = NULL;
     }
 
-    /* CRITICAL FIX: Call ispcore_core_ops_init to transition from state 1 to state 3 */
-    /* This is required for the core to be ready for streaming */
-    pr_info("*** tx_isp_core_device_init: Calling ispcore_core_ops_init to initialize core ***\n");
-    int init_ret = ispcore_core_ops_init(&core_dev->sd, 1);
-    if (init_ret != 0) {
-        pr_err("tx_isp_core_device_init: ispcore_core_ops_init failed: %d\n", init_ret);
-        return init_ret;
-    }
+    /* State transitions are now handled by ispcore_slake_module during probe */
+    pr_info("*** tx_isp_core_device_init: State transitions handled by slake_module ***\n");
 
     core_dev->is_initialized = true;
 
