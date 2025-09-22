@@ -2247,6 +2247,15 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
         pr_info("*** tx_isp_subdev_pipo: RESETTING stream_state to 0 before calling ispvic_frame_channel_s_stream ***\n");
         vic_dev->stream_state = 0;  /* Ensure stream state is 0 so MDMA enable will be called */
 
+        /* CRITICAL: Call ispvic_frame_channel_qbuf to write buffer addresses to VIC hardware */
+        pr_info("*** tx_isp_subdev_pipo: CALLING ispvic_frame_channel_qbuf to write buffer addresses ***\n");
+        int qbuf_ret = ispvic_frame_channel_qbuf(sd, NULL);
+        if (qbuf_ret == 0) {
+            pr_info("*** tx_isp_subdev_pipo: ispvic_frame_channel_qbuf SUCCESS - buffer addresses written to VIC hardware ***\n");
+        } else {
+            pr_err("*** tx_isp_subdev_pipo: ispvic_frame_channel_qbuf FAILED: %d ***\n", qbuf_ret);
+        }
+
         /* CRITICAL MISSING CALL: Start VIC frame channel streaming */
         pr_info("*** tx_isp_subdev_pipo: CALLING ispvic_frame_channel_s_stream to start VIC streaming ***\n");
         int stream_ret = ispvic_frame_channel_s_stream(sd, 1);  /* Enable streaming */
