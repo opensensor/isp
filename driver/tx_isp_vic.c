@@ -1519,54 +1519,19 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 /* ISPVIC Frame Channel S_Stream - EXACT Binary Ninja Implementation */
 int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
 {
-    struct tx_isp_vic_device *vic_dev = NULL;
-    void __iomem *vic_base = NULL;
+    void *s0 = NULL;
     int32_t var_18 = 0;
     const char *stream_op;
-    
-    pr_info("*** ispvic_frame_channel_s_stream: RACE CONDITION FIX ***\n");
-    pr_info("ispvic_frame_channel_s_stream: vic_dev=%p, enable=%d\n", arg1, arg2);
 
-    /* CRITICAL: Comprehensive NULL pointer validation to prevent BadVA crashes */
-    if (!arg1) {
-        pr_err("*** ispvic_frame_channel_s_stream: NULL arg1 - CRITICAL ERROR ***\n");
-        return 0xffffffea; /* -EINVAL */
-    }
+    pr_info("*** ispvic_frame_channel_s_stream: EXACT Binary Ninja implementation ***\n");
+    pr_info("ispvic_frame_channel_s_stream: arg1=%p, arg2=%d\n", arg1, arg2);
 
-    /* CRITICAL: Validate arg1 is in valid kernel memory range */
-    if ((unsigned long)arg1 < 0x80000000 || (unsigned long)arg1 >= 0xfffff000) {
-        pr_err("*** ispvic_frame_channel_s_stream: Invalid arg1 pointer 0x%p - memory corruption ***\n", arg1);
-        return 0xffffffea; /* -EINVAL */
-    }
-
-    /* CRITICAL FIX: Use safe struct member access instead of dangerous offset *(arg1 + 0xd4) */
+    /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = *(arg1 + 0xd4) */
     if (arg1 != 0 && (unsigned long)arg1 < 0xfffff001) {
-        /* CRITICAL FIX: Prevent unaligned memory access that causes BadVA crashes */
-        /* MIPS ALIGNMENT CHECK: Ensure arg1 is properly aligned before accessing */
-        if (((unsigned long)arg1 & 0x3) != 0) {
-            pr_err("*** CRITICAL: arg1 pointer 0x%p not 4-byte aligned - would cause unaligned access crash! ***\n", arg1);
-            return 0xffffffea;
-        }
-
-        /* SAFE: Use proper struct member access instead of offset arithmetic */
+        /* SAFE: Get vic_dev from subdev->host_priv using struct member access */
         struct tx_isp_subdev *sd = (struct tx_isp_subdev *)arg1;
-
-        /* Check if arg1 is a subdev by looking for the host_priv field */
-        if (sd->host_priv && (unsigned long)sd->host_priv >= 0x80000000 && (unsigned long)sd->host_priv < 0xfffff000) {
-            /* Binary Ninja: $s0 = *(arg1 + 0xd4) - get vic_dev from subdev->host_priv */
-            vic_dev = (struct tx_isp_vic_device *)sd->host_priv;
-            pr_info("ispvic_frame_channel_s_stream: vic_dev retrieved from subdev->host_priv: %p\n", vic_dev);
-        } else {
-            /* Fallback: assume arg1 is vic_dev directly */
-            vic_dev = (struct tx_isp_vic_device *)arg1;
-            pr_info("ispvic_frame_channel_s_stream: vic_dev retrieved as direct cast: %p\n", vic_dev);
-        }
-
-        /* CRITICAL: Validate vic_dev structure integrity before accessing any members */
-        if (!vic_dev || !vic_dev->vic_regs) {
-            pr_err("*** ispvic_frame_channel_s_stream: NULL vic_regs - VIC not initialized ***\n");
-            return 0xffffffea; /* -EINVAL */
-        }
+        s0 = sd->host_priv;  /* Binary Ninja: $s0 = *(arg1 + 0xd4) */
+        pr_info("ispvic_frame_channel_s_stream: s0 (vic_dev) = %p\n", s0);
     }
 
     /* Binary Ninja EXACT: if (arg1 == 0) return 0xffffffea */
