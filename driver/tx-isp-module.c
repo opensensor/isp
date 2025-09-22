@@ -4435,6 +4435,20 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp_dev)
                     }
                 }
             }
+
+            /* Binary Ninja: Register misc devices for each platform device */
+            pr_info("*** tx_isp_create_graph_and_nodes: Registering misc devices ***\n");
+            for (i = 0; i < pdata->device_id; i++) {
+                if (i < ARRAY_SIZE(tx_isp_platform_devices) && tx_isp_platform_devices[i]) {
+                    void *driver_data = platform_get_drvdata(tx_isp_platform_devices[i]);
+                    if (driver_data) {
+                        /* Binary Ninja: if (private_misc_register($v0_7 + 0xc) s< 0) */
+                        /* This would register misc devices for each subdev, but we handle this differently */
+                        /* Our frame channel devices are already created via the main misc device */
+                        pr_info("*** Misc device registration handled via main tx-isp device ***\n");
+                    }
+                }
+            }
         } else {
             pr_err("*** Failed to create /proc/jz/isp directory ***\n");
         }
