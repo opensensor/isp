@@ -5268,8 +5268,8 @@ int tx_isp_core_device_set_sensor_attr(struct tx_isp_core_device *core_dev,
 
     pr_info("*** tx_isp_core_device_set_sensor_attr: Setting sensor attributes ***\n");
 
-    /* Store sensor attributes */
-    core_dev->sensor_attr = attr;
+    /* Store sensor attributes - REMOVED: No sensor_attr field on core device */
+    /* Sensor attributes are accessed via tx_isp_get_sensor() helper method */
 
     /* Update core device dimensions from sensor attributes */
     if (attr->total_width > 0 && attr->total_height > 0) {
