@@ -2088,9 +2088,17 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
             }
         }
 
-        /* CRITICAL FIX: Call core->init for ISP Core subdev to set state to 3 */
-        /* The ISP Core subdev is at index 0 and needs core->init to transition from state 1 to state 3 */
-        pr_info("*** tx_isp_video_s_stream: Calling core->init for ISP Core subdev ***\n");
+        /* CRITICAL FIX: Ensure core state is 2 before calling core->init */
+        /* The Binary Ninja reference shows ispcore_core_ops_init expects state 2, not state 1 */
+        pr_info("*** tx_isp_video_s_stream: Preparing core state for initialization ***\n");
+
+        if (arg1->core_dev) {
+            pr_info("*** tx_isp_video_s_stream: Current core state: %d ***\n", arg1->core_dev->state);
+            if (arg1->core_dev->state == 1) {
+                pr_info("*** tx_isp_video_s_stream: Transitioning core state from 1 to 2 (ready) ***\n");
+                arg1->core_dev->state = 2;  /* Set to READY state as expected by ispcore_core_ops_init */
+            }
+        }
 
         /* Check specifically for the core subdev at index 0 */
         if (arg1->subdevs[0] && arg1->subdevs[0]->ops && arg1->subdevs[0]->ops->core && arg1->subdevs[0]->ops->core->init) {
