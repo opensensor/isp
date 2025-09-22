@@ -923,8 +923,26 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(4, vic_unlock_regs + 0x0);
 
         /* Binary Ninja EXACT: while (*vic_regs != 0) nop */
-        while (readl(vic_unlock_regs + 0x0) != 0) {
+        /* CRITICAL DEBUG: Add timeout and logging to see what's happening */
+        u32 unlock_status;
+        int timeout_count = 0;
+
+        while ((unlock_status = readl(vic_unlock_regs + 0x0)) != 0) {
             /* Binary Ninja: nop (just wait) */
+            timeout_count++;
+
+            /* Debug every 1000 iterations to see what's happening */
+            if ((timeout_count % 1000) == 0) {
+                pr_info("*** VIC unlock: iteration %d, status=0x%x (waiting for 0x0) ***\n",
+                        timeout_count, unlock_status);
+
+                /* Check if we're stuck - after 10000 iterations, something is wrong */
+                if (timeout_count >= 10000) {
+                    pr_err("*** VIC unlock TIMEOUT: status=0x%x never became 0 - VIC hardware issue! ***\n",
+                           unlock_status);
+                    return -ETIMEDOUT;
+                }
+            }
         }
 
         pr_info("*** tx_isp_vic_start: VIC unlock completed using SECONDARY VIC space ***\n");
