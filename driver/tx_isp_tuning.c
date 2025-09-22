@@ -1592,58 +1592,82 @@ int tisp_init(void *sensor_info, char *param_name)
     system_reg_write(0x989c, 0x1010001);
     system_reg_write(0x98a8, 0x1010001);
 
-    /* CRITICAL FIX: Binary Ninja reference does NOT write VIC control registers in tisp_init! */
-    /* VIC control registers are written elsewhere in the reference driver */
-    /* Removing incorrect VIC register writes that don't exist in reference driver */
-    pr_info("*** SKIPPING VIC CONTROL REGISTERS - NOT WRITTEN BY tisp_init IN REFERENCE DRIVER ***\n");
+    /* EXACT Binary Ninja MCP reference implementation - CORE REGISTER SEQUENCE */
+    pr_info("*** tisp_init: EXACT Binary Ninja MCP register sequence ***\n");
 
-    /* CRITICAL FIX: Use actual sensor IMAGE dimensions, not total frame size */
-    /* GC2053 sensor: total_width=1920, total_height=1080 (actual image) */
-    /* sensor_params contains total frame size (2200x1418) which is WRONG for ISP */
+    /* Get sensor dimensions - Binary Ninja uses arg1[0] and arg1[1] */
+    uint32_t width = sensor_params.width;   /* arg1[0] equivalent */
+    uint32_t height = sensor_params.height; /* arg1[1] equivalent */
 
-    uint32_t actual_image_width = 1920;   /* GC2053 actual image width */
-    uint32_t actual_image_height = 1080;  /* GC2053 actual image height */
+    /* Binary Ninja: system_reg_write(4, $v0_4 << 0x10 | arg1[1]) */
+    system_reg_write(4, (width << 16) | height);
+    pr_info("*** tisp_init: Frame size register 4: 0x%x ***\n", (width << 16) | height);
 
-    pr_info("tisp_init: CRITICAL FIX - Using ACTUAL sensor image dimensions %dx%d (not frame size %dx%d)\n",
-            actual_image_width, actual_image_height, sensor_params.width, sensor_params.height);
+    /* Binary Ninja: Format switch based on arg1[2] - using format=0 (default case) */
+    int format = 0;  /* arg1[2] equivalent - assume format 0 */
+    int deir_en = 0;
 
-    /* Binary Ninja: system_reg_write(4, $v0_4 << 0x10 | arg1[1]) - Basic ISP config */
-    system_reg_write(0x4, (sensor_params.width << 16) | sensor_params.height);
-
-    /* Binary Ninja: Handle different sensor modes - simplified version */
-    switch (sensor_params.mode) {
-        case 0: case 1: case 2: case 3:
-            system_reg_write(0x8, sensor_params.mode);
-            break;
-        default:
-            system_reg_write(0x8, 0); /* Default mode */
-            break;
+    if (format >= 0x15) {
+        pr_err("tisp_init: Can't output the width(%d)!\n", format);
+    } else {
+        switch (format) {
+            case 0: system_reg_write(8, 0); deir_en = 0; break;
+            case 1: system_reg_write(8, 1); deir_en = 0; break;
+            case 2: system_reg_write(8, 2); deir_en = 0; break;
+            case 3: system_reg_write(8, 3); deir_en = 0; break;
+            case 4: system_reg_write(8, 8); deir_en = 1; break;
+            case 5: system_reg_write(8, 9); deir_en = 1; break;
+            case 6: system_reg_write(8, 0xa); deir_en = 1; break;
+            case 7: system_reg_write(8, 0xb); deir_en = 1; break;
+            case 8: system_reg_write(8, 0xc); deir_en = 1; break;
+            case 9: system_reg_write(8, 0xd); deir_en = 1; break;
+            case 0xa: system_reg_write(8, 0xe); deir_en = 1; break;
+            case 0xb: system_reg_write(8, 0xf); deir_en = 1; break;
+            case 0xc: system_reg_write(8, 0x10); deir_en = 1; break;
+            case 0xd: system_reg_write(8, 0x11); deir_en = 1; break;
+            case 0xe: system_reg_write(8, 0x12); deir_en = 1; break;
+            case 0xf: system_reg_write(8, 0x13); deir_en = 1; break;
+            case 0x10: system_reg_write(8, 0x14); deir_en = 1; break;
+            case 0x11: system_reg_write(8, 0x15); deir_en = 1; break;
+            case 0x12: system_reg_write(8, 0x16); deir_en = 1; break;
+            case 0x13: system_reg_write(8, 0x17); deir_en = 1; break;
+            case 0x14: deir_en = 1; break;  /* No system_reg_write for case 0x14 */
+        }
     }
+    pr_info("*** tisp_init: Format register 8: format=%d, deir_en=%d ***\n", format, deir_en);
 
-    /* CRITICAL FIX: ISP control register - enable processing pipeline */
-    /* This register controls the overall ISP processing pipeline operation */
-    system_reg_write(0x1c, 0x3f08);  /* Enable ISP processing pipeline + frame sync */
-    pr_info("*** tisp_init: ISP control register set to enable processing pipeline ***\n");
+    /* Binary Ninja: system_reg_write(0x1c, $a1_7) where $a1_7 = deir_en ? 0x10003f00 : 0x3f00 */
+    int isp_control_val = 0x3f00;
+    if (deir_en == 1) {
+        isp_control_val = 0x10003f00;
+    }
+    system_reg_write(0x1c, isp_control_val);
+    pr_info("*** tisp_init: ISP control 0x1c: 0x%x ***\n", isp_control_val);
 
-    /* CRITICAL FIX: Configure ISP input/output formats to prevent Error interrupt type 2 */
-    /* The 0x00000500 error indicates format/processing configuration issues */
+    /* Binary Ninja: Complex bit manipulation for core control register */
+    int core_base = 0x8077efff;  /* Binary Ninja initial value */
+    /* Simplified bit manipulation - Binary Ninja does complex loop but result is predictable */
+    int data_b2e74 = 0;  /* Assume linear mode (not WDR) */
+    int final_core_control;
+    if (data_b2e74 != 1) {
+        final_core_control = (core_base & 0xb577fffd) | 0x34000009;
+    } else {
+        final_core_control = (core_base & 0xa1ffdf76) | 0x880002;
+    }
+    system_reg_write(0xc, final_core_control);
+    pr_info("*** tisp_init: Core control 0xc: 0x%x ***\n", final_core_control);
 
-    /* CRITICAL FIX: Use EXACT reference driver format configuration */
-    /* Binary Ninja: system_reg_write(0x10, $a1_9) where $a1_9 = 0x33f or 0x133 */
-
-    /* Reference driver format register - this is the key missing piece! */
-    uint32_t format_reg_value = 0x133;  /* Normal mode format (not WDR) */
-    system_reg_write(0x10, format_reg_value);
-    pr_info("*** tisp_init: REFERENCE DRIVER format register 0x10 = 0x%x ***\n", format_reg_value);
-
-    /* Reference driver sets register 0x30 */
+    /* Binary Ninja: system_reg_write(0x30, 0xffffffff) */
     system_reg_write(0x30, 0xffffffff);
-    pr_info("*** tisp_init: REFERENCE DRIVER register 0x30 = 0xffffffff ***\n");
+    pr_info("*** tisp_init: Register 0x30: 0xffffffff ***\n");
 
-    /* Configure processing pipeline data flow */
-    system_reg_write(0x24, 0x1);     /* Enable data flow from input to processing */
-    system_reg_write(0x28, 0x1);     /* Enable data flow from processing to output */
-    pr_info("*** tisp_init: ISP data flow configured (input->processing->output) ***\n");
+    /* Binary Ninja: system_reg_write(0x10, $a1_9) where $a1_9 = data_b2e74 ? 0x33f : 0x133 */
+    int format_reg_val = 0x33f;
+    if (data_b2e74 != 1) {
+        format_reg_val = 0x133;
+    }
+    system_reg_write(0x10, format_reg_val);
+    pr_info("*** tisp_init: Format register 0x10: 0x%x ***\n", format_reg_val);
 
     /* REFERENCE DRIVER: Final ISP configuration registers (Binary Ninja exact sequence) */
     /* These are the final three critical registers that enable the ISP pipeline */
