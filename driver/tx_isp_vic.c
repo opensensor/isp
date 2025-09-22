@@ -80,10 +80,15 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             pr_info("*** tx_vic_enable_irq: Secondary VIC regs mapped at %p (0x10023000) ***\n", vic_regs_secondary);
         }
 
-        /* CRITICAL FIX: Call hardware interrupt enable function - Binary Ninja reference */
-        /* Binary Ninja: $v0_1 = *(dump_vsd_5 + 0x84); if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
-        /* TODO: Need to identify what function should be at offset 0x84 in VIC device structure */
-        pr_info("*** tx_vic_enable_irq: VIC software interrupt flag ENABLED ***\n");
+        /* CRITICAL FIX: Call hardware interrupt enable function using SAFE struct members */
+        /* Binary Ninja reference: $v0_1 = *(dump_vsd_5 + 0x84); if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
+        /* SAFE: Use struct members instead of unsafe offset math */
+        if (vic_dev->irq_handler != NULL) {
+            vic_dev->irq_handler(vic_dev->irq_priv);
+            pr_info("*** tx_vic_enable_irq: Called hardware IRQ enable function via SAFE struct member ***\n");
+        } else {
+            pr_info("*** tx_vic_enable_irq: No hardware IRQ enable function set ***\n");
+        }
         pr_info("*** tx_vic_enable_irq: Hardware IRQ 38 managed by main dispatcher ***\n");
 
         /* Set the global vic_start_ok flag to allow interrupt processing */
