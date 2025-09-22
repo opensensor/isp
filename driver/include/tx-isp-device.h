@@ -346,6 +346,12 @@ struct tx_isp_subdev {
 	/* Clocks */
 	struct clk **clks;
 
+	/* Event callback structure for Binary Ninja compatibility */
+	void *event_callback_struct;   /* Callback structure at offset 0xc equivalent */
+
+	/* Event callback structure for Binary Ninja compatibility */
+	void *event_callback_struct;   /* Safe replacement for offset 0xc access */
+
 	/* Synchronization */
 	spinlock_t lock;
 	spinlock_t vic_lock;
