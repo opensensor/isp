@@ -67,13 +67,6 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
     spin_unlock_irqrestore(&vic_dev->lock, flags);
 }
 
-
-
-
-    /* Binary Ninja: private_spin_unlock_irqrestore(dump_vsd_3 + 0x130, var_18) */
-    spin_unlock_irqrestore(&vic_dev->lock, flags);
-}
-
 /* BINARY NINJA EXACT: tx_vic_disable_irq implementation */
 void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
 {
