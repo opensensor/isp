@@ -4418,17 +4418,31 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp_dev)
                 if (i < ARRAY_SIZE(tx_isp_platform_devices) && tx_isp_platform_devices[i]) {
                     void *driver_data = platform_get_drvdata(tx_isp_platform_devices[i]);
                     if (driver_data) {
+                        const struct file_operations *proc_fops = NULL;
+
+                        /* Set appropriate file operations based on device type */
+                        if (strstr(tx_isp_platform_devices[i]->name, "vic")) {
+                            extern const struct file_operations isp_vic_frd_fops;
+                            proc_fops = &isp_vic_frd_fops;
+                        } else if (strstr(tx_isp_platform_devices[i]->name, "csi")) {
+                            extern const struct file_operations isp_csi_fops;
+                            proc_fops = &isp_csi_fops;
+                        } else if (strstr(tx_isp_platform_devices[i]->name, "core")) {
+                            extern const struct file_operations isp_core_fops;
+                            proc_fops = &isp_core_fops;
+                        }
+
                         /* Binary Ninja: private_proc_create_data(*($v0_7 + 8), 0x124, *(arg1 + 0x11c), $a3_1, $v0_7) */
                         struct proc_dir_entry *proc_entry = proc_create_data(
                             tx_isp_platform_devices[i]->name,  /* Device name */
                             0644,                               /* Permissions (0x124 = 0644) */
                             isp_dev->proc_context,             /* Parent directory */
-                            NULL,                               /* File operations (will be set by device) */
+                            proc_fops,                          /* File operations */
                             driver_data                         /* Private data */
                         );
 
                         if (proc_entry) {
-                            pr_info("*** Created /proc/jz/isp/%s entry ***\n", tx_isp_platform_devices[i]->name);
+                            pr_info("*** Created /proc/jz/isp/%s entry with file ops ***\n", tx_isp_platform_devices[i]->name);
                         } else {
                             pr_warn("*** Failed to create /proc/jz/isp/%s entry ***\n", tx_isp_platform_devices[i]->name);
                         }
