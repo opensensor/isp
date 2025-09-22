@@ -132,36 +132,41 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             wmb();
             pr_info("*** tx_vic_enable_irq: VIC pending interrupts cleared in PRIMARY registers ***\n");
 
-            /* CRITICAL FIX: Use WORKING irqs-start-stop configuration in PRIMARY VIC space */
-            /* Clear any pending interrupts first */
-            writel(0, vic_dev->vic_regs + 0x00);  /* Clear ISR */
-            writel(0, vic_dev->vic_regs + 0x20);  /* Clear ISR1 */
+            /* CRITICAL FIX: VIC interrupt registers are in SECONDARY VIC space! */
+            if (!vic_dev->vic_regs_secondary) {
+                pr_err("*** CRITICAL ERROR: No secondary VIC registers for interrupt control! ***\n");
+                return;
+            }
+
+            /* Clear any pending interrupts first in SECONDARY space */
+            writel(0, vic_dev->vic_regs_secondary + 0x00);  /* Clear ISR */
+            writel(0, vic_dev->vic_regs_secondary + 0x20);  /* Clear ISR1 */
             wmb();
 
-            /* Set up interrupt masks to match WORKING OEM configuration */
-            writel(0x00000001, vic_dev->vic_regs + 0x04);  /* IMR - enable basic interrupts */
+            /* Set up interrupt masks to match WORKING OEM configuration in SECONDARY space */
+            writel(0x00000001, vic_dev->vic_regs_secondary + 0x04);  /* IMR - enable basic interrupts */
             wmb();
-            writel(0x00000000, vic_dev->vic_regs + 0x24);  /* IMR1 - clear secondary mask */
-            wmb();
-
-            /* Configure ISP control interrupts - WORKING configuration */
-            writel(0x07800438, vic_dev->vic_regs + 0x04);  /* IMR - working interrupt mask */
-            wmb();
-            writel(0xb5742249, vic_dev->vic_regs + 0x0c);  /* IMCR - working interrupt control */
+            writel(0x00000000, vic_dev->vic_regs_secondary + 0x24);  /* IMR1 - clear secondary mask */
             wmb();
 
-            pr_info("*** CRITICAL FIX: Applied WORKING irqs-start-stop interrupt configuration to PRIMARY VIC space ***\n");
+            /* Configure ISP control interrupts - WORKING configuration in SECONDARY space */
+            writel(0x07800438, vic_dev->vic_regs_secondary + 0x04);  /* IMR - working interrupt mask */
+            wmb();
+            writel(0xb5742249, vic_dev->vic_regs_secondary + 0x0c);  /* IMCR - working interrupt control */
+            wmb();
 
-            /* CRITICAL TEST: Check WORKING interrupt configuration registers */
-            u32 isr = readl(vic_dev->vic_regs + 0x00);      /* Interrupt Status Register */
-            u32 imr = readl(vic_dev->vic_regs + 0x04);      /* Interrupt Mask Register */
-            u32 imcr = readl(vic_dev->vic_regs + 0x0c);     /* Interrupt Control Register */
-            u32 isr1 = readl(vic_dev->vic_regs + 0x20);     /* Interrupt Status Register 1 */
-            u32 imr1 = readl(vic_dev->vic_regs + 0x24);     /* Interrupt Mask Register 1 */
+            pr_info("*** CRITICAL FIX: Applied WORKING interrupt configuration to SECONDARY VIC space (0x10023000) ***\n");
 
-            pr_info("*** VIC WORKING INTERRUPT CONFIG: ISR=0x%x, IMR=0x%x, IMCR=0x%x ***\n",
+            /* CRITICAL TEST: Check WORKING interrupt configuration registers in SECONDARY space */
+            u32 isr = readl(vic_dev->vic_regs_secondary + 0x00);      /* Interrupt Status Register */
+            u32 imr = readl(vic_dev->vic_regs_secondary + 0x04);      /* Interrupt Mask Register */
+            u32 imcr = readl(vic_dev->vic_regs_secondary + 0x0c);     /* Interrupt Control Register */
+            u32 isr1 = readl(vic_dev->vic_regs_secondary + 0x20);     /* Interrupt Status Register 1 */
+            u32 imr1 = readl(vic_dev->vic_regs_secondary + 0x24);     /* Interrupt Mask Register 1 */
+
+            pr_info("*** VIC WORKING INTERRUPT CONFIG (SECONDARY): ISR=0x%x, IMR=0x%x, IMCR=0x%x ***\n",
                     isr, imr, imcr);
-            pr_info("*** VIC WORKING INTERRUPT CONFIG: ISR1=0x%x, IMR1=0x%x ***\n",
+            pr_info("*** VIC WORKING INTERRUPT CONFIG (SECONDARY): ISR1=0x%x, IMR1=0x%x ***\n",
                     isr1, imr1);
             pr_info("*** VIC WORKING CONFIG: Should see IMR=0x07800438, IMCR=0xb5742249 ***\n");
         } else {
