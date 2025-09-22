@@ -55,6 +55,7 @@ extern struct tx_isp_dev *ourISPdev;
 /* Forward declaration for frame channel wakeup function */
 int tisp_netlink_init(void);
 int isp_trigger_frame_data_transfer(struct tx_isp_dev *dev);
+int tisp_lsc_write_lut_datas(void);
 /* ===== TIZIANO WDR PROCESSING PIPELINE - Binary Ninja Reference Implementation ===== */
 
 // ISP Tuning device support - missing component for /dev/isp-m0
