@@ -896,15 +896,9 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
         result = tx_isp_subdev_pipo(sd, arg);
 		return result;
     }
-    /* Binary Ninja: else if (arg2 == 0x3000009) */
-    else if (cmd == 0x3000009) {
-        pr_info("vic_core_ops_ioctl: tx_isp_subdev_pipo cmd=0x%x\n", cmd);
-        result = tx_isp_subdev_pipo(sd, arg);
-		return result;
-    }
     /* Binary Ninja: else if (arg2 != 0x1000000) return 0 */
     else if (cmd != 0x1000000) {
-        pr_info("vic_core_ops_ioctl: Unknown cmd=0x%x, returning 0\n", cmd);
+        pr_info("vic_core_ops_ioctl: REFERENCE DRIVER - Unknown cmd=0x%x, returning 0\n", cmd);
         return 0;
     }
     /* Binary Ninja: Handle 0x1000000 case */
