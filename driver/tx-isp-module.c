@@ -51,7 +51,7 @@
 struct tx_isp_sensor *tx_isp_get_sensor(void);
 int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd);
 int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd);
-int tx_isp_vin_activate_subdev(struct tx_isp_subdev *sd);
+int tx_isp_vin_activate_subdev(void* arg1);  /* Binary Ninja signature */
 int fs_activate_module(struct tx_isp_subdev *sd);
 int ispcore_activate_module(struct tx_isp_dev *isp_dev);
 
