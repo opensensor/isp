@@ -876,14 +876,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(2, vic_regs + 0x0);
     }
 
-    /* CRITICAL: Initialize VIC hardware interrupts BEFORE enabling VIC */
-    pr_info("*** tx_isp_vic_start: Step 3.5 - Initializing VIC hardware interrupts ***\n");
-    int ret = tx_isp_vic_hw_init(&vic_dev->sd);
-    if (ret != 0) {
-        pr_err("*** tx_isp_vic_start: tx_isp_vic_hw_init FAILED: %d ***\n", ret);
-        return ret;
-    }
-    pr_info("*** tx_isp_vic_start: VIC hardware interrupts initialized successfully ***\n");
+    /* CRITICAL: VIC hardware interrupts will be initialized by tx_isp_vic_restore_interrupts() */
+    pr_info("*** tx_isp_vic_start: VIC hardware interrupts will be restored after vic_start_ok=1 ***\n");
 
     /* Binary Ninja EXACT: Final VIC enable - *$v0_47 = 1 */
     /* Use the same control register base that was used for unlock sequence */
