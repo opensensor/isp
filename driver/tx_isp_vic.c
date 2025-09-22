@@ -852,35 +852,13 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             writel(0x100010, vic_regs + 0x1a4);
         }
 
-        /* Binary Ninja: VIC configuration */
-        pr_info("*** tx_isp_vic_start: Writing VIC configuration registers ***\n");
+        /* Binary Ninja: VIC configuration - WRITE NON-FRAME-SIZE REGISTERS FIRST */
+        pr_info("*** tx_isp_vic_start: Writing VIC configuration registers (BEFORE frame size) ***\n");
         writel(2, vic_regs + 0xc);
         writel(sensor_attr->dbus_type, vic_regs + 0x14);
 
-        /* CRITICAL: Write frame size to register 0x4 - TRY BOTH VIC REGISTER SPACES */
-        u32 frame_size_value = (vic_dev->width << 16) | vic_dev->height;
-        pr_info("*** tx_isp_vic_start: CRITICAL - Writing frame size 0x%08x (%dx%d) to register 0x4 ***\n",
-                frame_size_value, vic_dev->width, vic_dev->height);
-
-        /* Try PRIMARY VIC space (0x133e0000) */
-        writel(frame_size_value, vic_regs + 0x4);
-        u32 readback_primary = readl(vic_regs + 0x4);
-        pr_info("*** tx_isp_vic_start: PRIMARY VIC (0x133e0000) - Register 0x4 readback = 0x%08x ***\n", readback_primary);
-
-        /* Try SECONDARY VIC space (0x10023000) */
-        if (vic_dev->vic_regs_secondary) {
-            writel(frame_size_value, vic_dev->vic_regs_secondary + 0x4);
-            u32 readback_secondary = readl(vic_dev->vic_regs_secondary + 0x4);
-            pr_info("*** tx_isp_vic_start: SECONDARY VIC (0x10023000) - Register 0x4 readback = 0x%08x ***\n", readback_secondary);
-
-            if (readback_secondary == frame_size_value) {
-                pr_info("*** tx_isp_vic_start: SUCCESS! Frame size write worked in SECONDARY VIC space ***\n");
-            } else if (readback_primary == frame_size_value) {
-                pr_info("*** tx_isp_vic_start: SUCCESS! Frame size write worked in PRIMARY VIC space ***\n");
-            } else {
-                pr_err("*** tx_isp_vic_start: CRITICAL ERROR - Frame size write FAILED in both VIC spaces! ***\n");
-            }
-        }
+        /* CRITICAL: DEFER frame size write until AFTER VIC unlock sequence */
+        pr_info("*** tx_isp_vic_start: DEFERRING frame size write until AFTER VIC unlock ***\n");
 
         /* Binary Ninja: Buffer calculation */
         struct tx_isp_mipi_bus *mipi = &sensor_attr->mipi;
@@ -960,6 +938,31 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         }
 
         pr_info("tx_isp_vic_start: VIC unlock sequence completed, status=0x%x\n", vic_status);
+
+        /* CRITICAL: NOW write frame size AFTER VIC unlock - VIC can now accept register writes */
+        u32 frame_size_value = (vic_dev->width << 16) | vic_dev->height;
+        pr_info("*** tx_isp_vic_start: CRITICAL - Writing frame size 0x%08x (%dx%d) to register 0x4 AFTER unlock ***\n",
+                frame_size_value, vic_dev->width, vic_dev->height);
+
+        /* Try PRIMARY VIC space (0x133e0000) */
+        writel(frame_size_value, vic_regs + 0x4);
+        u32 readback_primary = readl(vic_regs + 0x4);
+        pr_info("*** tx_isp_vic_start: PRIMARY VIC (0x133e0000) - Register 0x4 readback = 0x%08x ***\n", readback_primary);
+
+        /* Try SECONDARY VIC space (0x10023000) */
+        if (vic_dev->vic_regs_secondary) {
+            writel(frame_size_value, vic_dev->vic_regs_secondary + 0x4);
+            u32 readback_secondary = readl(vic_dev->vic_regs_secondary + 0x4);
+            pr_info("*** tx_isp_vic_start: SECONDARY VIC (0x10023000) - Register 0x4 readback = 0x%08x ***\n", readback_secondary);
+
+            if (readback_secondary == frame_size_value) {
+                pr_info("*** tx_isp_vic_start: SUCCESS! Frame size write worked in SECONDARY VIC space ***\n");
+            } else if (readback_primary == frame_size_value) {
+                pr_info("*** tx_isp_vic_start: SUCCESS! Frame size write worked in PRIMARY VIC space ***\n");
+            } else {
+                pr_err("*** tx_isp_vic_start: CRITICAL ERROR - Frame size write FAILED even after VIC unlock! ***\n");
+            }
+        }
 
         /* Binary Ninja: Additional MIPI crop configuration */
         writel((mipi->mipi_sc.mipi_crop_start1y << 16) | mipi->mipi_sc.mipi_crop_start3x, vic_regs + 0x104);
