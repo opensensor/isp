@@ -4249,6 +4249,17 @@ int tx_isp_core_probe(struct platform_device *pdev)
             core_dev->channel_count = channel_count;
             core_dev->channel_array = channel_array;  /* Binary Ninja compatibility */
 
+            /* CRITICAL: Call ispcore_slake_module to trigger proper state transitions */
+            /* This should handle the 1->2 state transition that we've been missing */
+            pr_info("*** tx_isp_core_probe: Calling ispcore_slake_module for state initialization ***\n");
+            ret = ispcore_slake_module(ourISPdev);
+            if (ret != 0) {
+                pr_err("tx_isp_core_probe: ispcore_slake_module failed: %d\n", ret);
+                /* Don't fail probe for slake failure, but log it */
+            } else {
+                pr_info("*** tx_isp_core_probe: ispcore_slake_module completed successfully ***\n");
+            }
+
             pr_info("*** tx_isp_core_probe: Core device setup complete ***\n");
             pr_info("***   - Core device: %p ***\n", core_dev);
             pr_info("***   - Channel count: %d ***\n", channel_count);
