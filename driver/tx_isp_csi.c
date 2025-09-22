@@ -659,7 +659,7 @@ static int isp_csi_show(struct seq_file *m, void *v)
 }
 
 /* CSI file operations - Binary Ninja reference */
-static const struct file_operations isp_csi_fops = {
+const struct file_operations isp_csi_fops = {
     .owner = THIS_MODULE,
     .open = dump_isp_csi_open,
     .read = seq_read,

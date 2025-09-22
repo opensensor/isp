@@ -3036,7 +3036,7 @@ static const struct file_operations isp_tuning_fops = {
 };
 
 /* ISP Core file operations - Binary Ninja reference */
-static const struct file_operations isp_core_fops = {
+const struct file_operations isp_core_fops = {
     .owner = THIS_MODULE,
     .open = isp_tuning_open,        /* Reuse tuning open function */
     .release = isp_tuning_release,  /* Reuse tuning release function */
