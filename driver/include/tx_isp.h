@@ -106,10 +106,18 @@ struct tx_isp_csi_device {
 };
 
 /* Core ISP device structure - Global ISP device management only */
+/* Event callback structure for Binary Ninja compatibility */
+struct tx_isp_event_callback {
+    void *reserved[7];                       /* +0x00-0x18: Reserved space (28 bytes) */
+    int (*event_handler)(void*, int, void*); /* +0x1c: Event handler function */
+} __attribute__((packed));
+
 struct tx_isp_dev {
     /* Global device info (core subdev moved to separate core_dev) */
-    struct device *dev;
-    struct device *tisp_device;
+    struct device *dev;                      /* 0x00: Device pointer (4 bytes) */
+    struct device *tisp_device;              /* 0x04: TISP device pointer (4 bytes) */
+    uint32_t padding_to_0xc;                 /* 0x08: Padding to align event_callback to 0xc */
+    struct tx_isp_event_callback *event_callback; /* 0x0c: Event callback structure pointer - Binary Ninja EXACT */
     struct miscdevice miscdev;
     struct cdev tisp_cdev;
     spinlock_t lock;
