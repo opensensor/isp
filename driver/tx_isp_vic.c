@@ -72,6 +72,24 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         /* CRITICAL FIX: Enable hardware interrupt generation - Binary Ninja reference */
         /* Binary Ninja: $v0_1 = *(dump_vsd_5 + 0x84); if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
 
+        /* CRITICAL: Ensure VIC clocks are enabled before enabling interrupts */
+        void __iomem *cpm_regs = ioremap(0x10000000, 0x1000);
+        if (cpm_regs) {
+            u32 clkgr0 = readl(cpm_regs + 0x20);
+            u32 clkgr1 = readl(cpm_regs + 0x28);
+
+            /* Clear VIC clock gate bits to enable VIC clocks */
+            clkgr0 &= ~(1 << 30); // VIC in CLKGR0
+            clkgr1 &= ~(1 << 30); // VIC in CLKGR1
+
+            writel(clkgr0, cpm_regs + 0x20);
+            writel(clkgr1, cpm_regs + 0x28);
+            wmb();
+            msleep(10);  /* Allow clocks to stabilize */
+            iounmap(cpm_regs);
+            pr_info("*** tx_vic_enable_irq: VIC clocks enabled via CPM ***\n");
+        }
+
         /* CRITICAL: Enable VIC hardware interrupt generation */
         /* CRITICAL FIX: Use PRIMARY VIC registers for interrupt control - secondary is for control only */
         if (vic_dev->vic_regs) {
