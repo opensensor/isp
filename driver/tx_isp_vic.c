@@ -2034,11 +2034,10 @@ int tx_isp_vic_remove(struct platform_device *pdev)
     if (!sd)
         return -EINVAL;
 
-    /* Clean up callback structure */
-    void *callback_struct = *((void **)((char *)sd + 0xc));
-    if (callback_struct) {
-        kfree(callback_struct);
-        *((void **)((char *)sd + 0xc)) = NULL;
+    /* SAFE: Clean up callback structure using struct member access */
+    if (sd->event_callback_struct) {
+        kfree(sd->event_callback_struct);
+        sd->event_callback_struct = NULL;
     }
 
     /* Get VIC device from subdev */
