@@ -3382,7 +3382,9 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         if (core_dev) {
             struct tx_isp_core_device *core = (struct tx_isp_core_device *)core_dev;
             /* Binary Ninja: void* $v0_96 = *($v1_22 + 0x120) */
-            if (core->sensor_attr) {
+            /* SAFE: Use helper method to get sensor attributes instead of unsafe struct access */
+            struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+            if (sensor && &sensor->info) {
                 /* Binary Ninja: int32_t $a0_41 = *($v0_96 + 0x90) */
                 int wdr_mode = 1; // Default linear mode
 
