@@ -89,6 +89,9 @@ struct tx_isp_vic_device {
     /* Binary Ninja compatibility members */
     void *self_ptr;                             /* Self-pointer for validation */
     uint32_t format_magic;                      /* NV12 format magic number (0x3231564e) */
+
+    /* Event callback structure - separate from subdev fields to prevent conflicts */
+    struct vic_event_callback *event_callback;  /* VIC event callback structure */
     
     /* Device properties (properly aligned) */
     u32 stride;                                 /* Line stride */
