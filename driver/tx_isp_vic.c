@@ -1055,8 +1055,8 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     /* Binary Ninja: else if (arg2 == 0x3000009) */
     else if (cmd == 0x3000009) {
         pr_info("vic_core_ops_ioctl: tx_isp_subdev_pipo cmd=0x%x\n", cmd);
-        //result = tx_isp_subdev_pipo(sd, arg);
-		return 0;  // TODO
+        result = tx_isp_subdev_pipo(sd, arg);
+		return result;
     }
     /* Binary Ninja: else if (arg2 != 0x1000000) return 0 */
     else if (cmd != 0x1000000) {
