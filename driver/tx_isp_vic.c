@@ -624,6 +624,51 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
+    /* STEP 1: Enable clocks - Critical for VIC operation */
+    struct clk *cgu_isp_clk = clk_get(NULL, "cgu_isp");
+    if (!IS_ERR(cgu_isp_clk)) {
+        clk_set_rate(cgu_isp_clk, 100000000);
+        int ret_clk = clk_prepare_enable(cgu_isp_clk);
+        if (ret_clk == 0) {
+            pr_info("*** tx_isp_vic_start: CGU_ISP clock enabled at 100MHz ***\n");
+        }
+        clk_put(cgu_isp_clk);
+    }
+
+    struct clk *isp_clk = clk_get(NULL, "isp");
+    if (!IS_ERR(isp_clk)) {
+        clk_prepare_enable(isp_clk);
+        pr_info("*** tx_isp_vic_start: ISP clock enabled ***\n");
+        clk_put(isp_clk);
+    }
+
+    struct clk *csi_clk = clk_get(NULL, "csi");
+    if (!IS_ERR(csi_clk)) {
+        clk_prepare_enable(csi_clk);
+        pr_info("*** tx_isp_vic_start: CSI clock enabled ***\n");
+        clk_put(csi_clk);
+    }
+
+    /* STEP 2: CPM register setup */
+    void __iomem *cpm_regs = ioremap(0x10000000, 0x1000);
+    if (cpm_regs) {
+        u32 clkgr0 = readl(cpm_regs + 0x20);
+        u32 clkgr1 = readl(cpm_regs + 0x28);
+
+        clkgr0 &= ~(1 << 13); // ISP
+        clkgr0 &= ~(1 << 21); // Alternative ISP
+        clkgr0 &= ~(1 << 30); // VIC in CLKGR0
+        clkgr1 &= ~(1 << 30); // VIC in CLKGR1
+
+        writel(clkgr0, cpm_regs + 0x20);
+        writel(clkgr1, cpm_regs + 0x28);
+        wmb();
+        msleep(20);
+        iounmap(cpm_regs);
+
+        pr_info("*** tx_isp_vic_start: CPM clock gates cleared for ISP/VIC ***\n");
+    }
+
     /* Binary Ninja: void* $v1 = *(arg1 + 0x110) - Get sensor attributes
      * FIXED: Modern implementation gets sensor from subdev array starting at index 4 */
     extern struct tx_isp_sensor *tx_isp_get_sensor(void);
