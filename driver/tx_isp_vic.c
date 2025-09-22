@@ -214,14 +214,14 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: $v0_2 = *(dump_vsd_5 + 0x88); if ($v0_2 != 0) $v0_2(dump_vsd_5 + 0x80) */
 
         /* CRITICAL: Disable VIC hardware interrupt generation */
-        /* CRITICAL FIX: Use WORKING irqs-start-stop approach in PRIMARY VIC space */
-        if (vic_dev->vic_regs) {
-            /* Clear interrupt masks - disable all interrupts */
-            writel(0x0, vic_dev->vic_regs + 0x04);  /* IMR - disable all interrupts */
-            writel(0x0, vic_dev->vic_regs + 0x0c);  /* IMCR - clear interrupt control */
-            writel(0x0, vic_dev->vic_regs + 0x24);  /* IMR1 - clear secondary mask */
+        /* CRITICAL FIX: Use SECONDARY VIC space for interrupt control */
+        if (vic_dev->vic_regs_secondary) {
+            /* Clear interrupt masks - disable all interrupts in SECONDARY space */
+            writel(0x0, vic_dev->vic_regs_secondary + 0x04);  /* IMR - disable all interrupts */
+            writel(0x0, vic_dev->vic_regs_secondary + 0x0c);  /* IMCR - clear interrupt control */
+            writel(0x0, vic_dev->vic_regs_secondary + 0x24);  /* IMR1 - clear secondary mask */
             wmb();
-            pr_info("*** tx_vic_disable_irq: VIC interrupts DISABLED using WORKING approach ***\n");
+            pr_info("*** tx_vic_disable_irq: VIC interrupts DISABLED in SECONDARY space ***\n");
 
             /* CRITICAL FIX: VIC interrupt mask is DISABLE mask - write 0xFFFFFFFF to DISABLE all interrupts */
             /* Binary Ninja logic: not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
