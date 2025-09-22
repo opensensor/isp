@@ -1455,77 +1455,9 @@ err_free_dev:
     return ret;
 }
 
-// Detect and register loaded sensor modules into subdev infrastructure - Kernel 3.10 compatible
-static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev)
-{
-    int ret = 0;
-
-    if (!isp_dev) {
-        return -EINVAL;
-    }
-
-    pr_info("*** CRITICAL: Creating I2C sensor devices during ISP initialization ***\n");
-
-    /* CRITICAL FIX: Use the proper IOCTL to create I2C sensor device */
-    /* This matches the reference driver behavior where sensors are detected via IOCTL 0x2000000 */
-
-    /* Prepare sensor data structure for IOCTL 0x2000000 */
-    uint32_t sensor_data[0x14]; /* 0x50 bytes / 4 = 0x14 uint32_t elements */
-    memset(sensor_data, 0, sizeof(sensor_data));
-
-    /* Set up sensor data according to Binary Ninja reference */
-    sensor_data[8] = 1;    /* Interface type: 1 = I2C */
-    sensor_data[0xf] = 0;  /* I2C adapter number: 0 */
-    sensor_data[0xe] = 0x37; /* I2C address: 0x37 for GC2053 */
-
-    /* Copy sensor name to data[9] onwards (Binary Ninja: memcpy(&var_40, &arg3[9], 0x14)) */
-    strncpy((char*)&sensor_data[9], "gc2053", 20);
-
-    pr_info("*** Calling subdev_sensor_ops_ioctl with IOCTL 0x2000000 to create I2C sensor device ***\n");
-
-    /* CRITICAL FIX: Find Core subdev by searching the subdev array */
-    /* The Core subdev can be at different indices depending on registration order */
-    struct tx_isp_subdev *core_subdev = NULL;
-
-    for (int i = 0; i < ISP_MAX_SUBDEVS; i++) {
-        struct tx_isp_subdev *sd = isp_dev->subdevs[i];
-        if (sd && sd->ops && sd->ops->sensor && sd->ops->sensor->ioctl) {
-            /* Check if this is the Core subdev by looking for core ops */
-            if (sd->ops->core) {
-                core_subdev = sd;
-                pr_info("*** Found Core subdev at index %d: %p ***\n", i, core_subdev);
-                break;
-            }
-        }
-    }
-
-    if (core_subdev && core_subdev->ops && core_subdev->ops->sensor && core_subdev->ops->sensor->ioctl) {
-        pr_info("*** Calling sensor IOCTL 0x2000000 on Core subdev %p ***\n", core_subdev);
-        ret = core_subdev->ops->sensor->ioctl(core_subdev, 0x2000000, sensor_data);
-
-        if (ret == 0) {
-            pr_info("*** I2C sensor device created successfully via Core sensor IOCTL ***\n");
-            return 0;
-        } else {
-            pr_err("*** Failed to create I2C sensor device via Core sensor IOCTL: %d ***\n", ret);
-        }
-    } else {
-        pr_err("*** Core subdev sensor IOCTL not available for sensor device creation ***\n");
-        pr_err("*** core_subdev=%p ***\n", core_subdev);
-        if (core_subdev) {
-            pr_err("*** core_subdev->ops=%p ***\n", core_subdev->ops);
-            if (core_subdev->ops) {
-                pr_err("*** core_subdev->ops->sensor=%p ***\n", core_subdev->ops->sensor);
-                if (core_subdev->ops->sensor) {
-                    pr_err("*** core_subdev->ops->sensor->ioctl=%p ***\n", core_subdev->ops->sensor->ioctl);
-                }
-            }
-        }
-    }
-
-    pr_info("Sensor detection complete - result: %d\n", ret);
-    return ret ? ret : -ENODEV;
-}
+/* REMOVED: tx_isp_detect_and_register_sensors function */
+/* Sensor detection is handled by userspace via TX_ISP_SENSOR_REGISTER IOCTL (0x805056c1) */
+/* which calls subdev_sensor_ops_ioctl with IOCTL 0x2000000 to create I2C sensor devices */
 
 /* tx_isp_disable_irq - EXACT Binary Ninja implementation with correct parameter */
 void tx_isp_disable_irq(void *arg1)
@@ -1922,14 +1854,6 @@ int tx_isp_video_link_stream(struct tx_isp_dev *arg1, int arg2)
         struct tx_isp_subdev *a0 = *s4;
 
         if (a0 != 0) {
-            /* CRITICAL FIX: Skip sensor subdevs in main loop to prevent premature streaming */
-            if (sensor && a0 == &sensor->sd) {
-                pr_info("*** tx_isp_video_s_stream: SKIPPING sensor s_stream in main loop (will call later) ***\n");
-                i += 1;
-                s4 = &s4[1];
-                continue;
-            }
-
             /* Binary Ninja: void* $v0_3 = *(*($a0 + 0xc4) + 4) */
             struct tx_isp_subdev_video_ops *v0_3 = a0->ops ? a0->ops->video : NULL;
 
@@ -4034,23 +3958,20 @@ void isp_core_tuning_deinit(void *core_dev)
     pr_info("isp_core_tuning_deinit: Destroying ISP tuning interface\n");
 }
 
+/* sensor_early_init - EXACT Binary Ninja implementation */
 int sensor_early_init(void *core_dev)
 {
-    pr_info("sensor_early_init: Preparing sensor infrastructure\n");
+    int result = -EINVAL;  /* 0xffffffea = -22 = -EINVAL */
 
-    /* CRITICAL: Call sensor detection during early init to create I2C sensor devices */
-    if (ourISPdev) {
-        pr_info("sensor_early_init: Calling tx_isp_detect_and_register_sensors\n");
-        int ret = tx_isp_detect_and_register_sensors(ourISPdev);
-        if (ret != 0) {
-            pr_err("sensor_early_init: Failed to detect and register sensors: %d\n", ret);
-            /* Don't fail initialization - sensors might be registered later */
+    if (core_dev != NULL) {
+        result = 0;
+
+        if (g_ispcore == NULL) {
+            g_ispcore = core_dev;
         }
-    } else {
-        pr_err("sensor_early_init: ourISPdev is NULL - cannot detect sensors\n");
     }
 
-    return 0;
+    return result;
 }
 
 
