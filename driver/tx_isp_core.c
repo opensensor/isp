@@ -51,6 +51,7 @@ int tisp_channel_start(int channel, void *attr);
 void ispcore_frame_channel_streamoff(int32_t* arg1);
 void tx_isp_enable_irq(void *arg1);
 void tx_isp_disable_irq(void *arg1);
+int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on);  /* Core initialization function */
 
 /* Binary Ninja math function forward declarations */
 uint32_t tisp_math_exp2(uint32_t val, uint32_t shift, uint32_t base);
