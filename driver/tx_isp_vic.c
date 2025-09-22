@@ -98,45 +98,7 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
         }
     }
 
-        /* CRITICAL: PRESERVE VIC hardware interrupt configuration */
-        /* CRITICAL FIX: Don't clear hardware interrupt registers - preserve working configuration */
-        if (vic_dev->vic_regs_secondary) {
-            /* PRESERVE interrupt configuration - only disable software processing */
-            /* writel(0x0, vic_dev->vic_regs_secondary + 0x04);  // COMMENTED OUT - preserve IMR */
-            /* writel(0x0, vic_dev->vic_regs_secondary + 0x0c);  // COMMENTED OUT - preserve IMCR */
-            /* writel(0x0, vic_dev->vic_regs_secondary + 0x24);  // COMMENTED OUT - preserve IMR1 */
-            /* wmb(); */
-            pr_info("*** tx_vic_disable_irq: PRESERVING VIC hardware interrupt configuration ***\n");
 
-            /* CRITICAL FIX: VIC interrupt mask is DISABLE mask - write 0xFFFFFFFF to DISABLE all interrupts */
-            /* Binary Ninja logic: not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
-            /* This means mask register bits set to 1 DISABLE interrupts, so write 0xFFFFFFFF to disable all */
-            u32 interrupt_mask = 0xFFFFFFFF;  /* 0xFFFFFFFF = Disable all interrupts */
-            writel(interrupt_mask, vic_dev->vic_regs + 0x1e8);  /* Interrupt mask register */
-            writel(interrupt_mask, vic_dev->vic_regs + 0x1ec);  /* Secondary interrupt mask register */
-            wmb();
-            pr_info("*** tx_vic_disable_irq: VIC hardware interrupt mask DISABLED (wrote 0x%x to PRIMARY VIC disable mask) ***\n", interrupt_mask);
-
-            /* Clear any pending interrupts */
-            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear interrupt status */
-            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear secondary interrupt status */
-            wmb();
-            pr_info("*** tx_vic_disable_irq: VIC pending interrupts cleared in PRIMARY registers ***\n");
-        } else {
-            pr_err("*** tx_vic_disable_irq: No VIC primary registers - cannot disable hardware interrupts ***\n");
-        }
-
-        pr_info("*** tx_vic_disable_irq: VIC software interrupt flag DISABLED ***\n");
-
-        /* Clear the global vic_start_ok flag to stop interrupt processing */
-        extern uint32_t vic_start_ok;
-        vic_start_ok = 0;
-        pr_info("*** tx_vic_disable_irq: vic_start_ok flag set to 0 ***\n");
-
-        pr_info("*** tx_vic_disable_irq: VIC interrupts DISABLED ***\n");
-    } else {
-        pr_info("*** tx_vic_disable_irq: VIC interrupts already disabled ***\n");
-    }
 
     /* Binary Ninja: private_spin_unlock_irqrestore(dump_vsd_3 + 0x130, var_18) */
     spin_unlock_irqrestore(&vic_dev->lock, flags);
