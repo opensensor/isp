@@ -101,6 +101,30 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             pr_err("*** tx_vic_enable_irq: ISP core registers not available - cannot enable interrupts! ***\n");
         }
 
+        /* CRITICAL FIX: Enable VIC hardware interrupt registers */
+        pr_info("*** tx_vic_enable_irq: Configuring VIC hardware interrupt registers ***\n");
+
+        if (vic_dev->vic_regs) {
+            void __iomem *vic_base = vic_dev->vic_regs;
+
+            /* Enable VIC MDMA interrupt - this is the missing piece for hardware interrupts */
+            writel(0x1, vic_base + 0x30);     /* VIC interrupt enable register */
+            wmb();
+            pr_info("*** VIC INTERRUPT: Enabled VIC interrupt at reg 0x30 = 0x1 ***\n");
+
+            /* Enable VIC MDMA completion interrupt */
+            writel(0x1, vic_base + 0x34);     /* VIC MDMA interrupt enable */
+            wmb();
+            pr_info("*** VIC INTERRUPT: Enabled VIC MDMA interrupt at reg 0x34 = 0x1 ***\n");
+
+            /* Unmask VIC interrupt sources */
+            writel(0xFFFFFFFF, vic_base + 0x38);  /* VIC interrupt unmask */
+            wmb();
+            pr_info("*** VIC INTERRUPT: Unmasked all VIC interrupts at reg 0x38 = 0xFFFFFFFF ***\n");
+        } else {
+            pr_err("*** tx_vic_enable_irq: VIC registers not mapped - cannot enable hardware interrupts! ***\n");
+        }
+
         /* CRITICAL FIX: Call hardware interrupt enable function using SAFE struct members */
         /* Binary Ninja reference: $v0_1 = *(dump_vsd_5 + 0x84); if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
         /* SAFE: Use struct members instead of unsafe offset math */
