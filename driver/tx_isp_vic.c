@@ -797,16 +797,13 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(2, vic_regs + 0x0);
     }
 
-    /* Binary Ninja EXACT: Final VIC enable - *$v0_47 = 1 */
+    /* Binary Ninja: Final VIC enable */
     writel(1, vic_regs + 0x0);
-    pr_info("*** tx_isp_vic_start: Step 4 - VIC enabled: wrote 1 to reg 0x0 ***\n");
 
-    /* Binary Ninja EXACT: vic_start_ok = 1 */
+    /* Binary Ninja: Set vic_start_ok */
     extern uint32_t vic_start_ok;
     vic_start_ok = 1;
-    pr_info("*** tx_isp_vic_start: vic_start_ok set to 1 ***\n");
 
-    pr_info("*** tx_isp_vic_start: VIC hardware initialization completed successfully ***\n");
     return 0;
 }
 
