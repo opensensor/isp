@@ -680,8 +680,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     interface_type = sensor_attr->dbus_type;
 
     /* Binary Ninja: *(arg1 + 0xb8) - VIC control register base */
-    /* CRITICAL FIX: Use VIC control registers at 0x10023000 for unlock sequence */
-    vic_regs = vic_dev->vic_regs;
+    /* CRITICAL: Use VIC control registers (0x10023000) for unlock sequence */
+    vic_regs = vic_dev->vic_regs_secondary;
     if (!vic_regs) {
         pr_err("tx_isp_vic_start: No VIC control registers available\n");
         return -EINVAL;
@@ -1962,15 +1962,25 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     vic_dev->hw_irq_enabled = 0; /* Hardware interrupt initially disabled */
     pr_info("*** VIC PROBE: IRQ numbers initialized to 38 ***\n");
 
-    /* CRITICAL FIX: Map VIC register spaces - Use correct VIC control base */
-    /* Primary VIC register space (0x10023000) - main VIC control registers */
-    vic_dev->vic_regs = ioremap(0x10023000, 0x1000);
+    /* CRITICAL FIX: Map DUAL VIC register spaces - both are needed */
+    /* Primary VIC register space (0x133e0000) - main VIC processing and interrupts */
+    vic_dev->vic_regs = ioremap(0x133e0000, 0x10000);
     if (!vic_dev->vic_regs) {
-        pr_err("*** VIC PROBE: CRITICAL - Failed to map VIC control registers at 0x10023000 ***\n");
+        pr_err("*** VIC PROBE: CRITICAL - Failed to map primary VIC registers at 0x133e0000 ***\n");
         private_kfree(vic_dev);
         return -ENOMEM;
     }
-    pr_info("*** VIC PROBE: VIC control registers mapped at 0x10023000 -> %p ***\n", vic_dev->vic_regs);
+    pr_info("*** VIC PROBE: Primary VIC registers mapped at 0x133e0000 -> %p ***\n", vic_dev->vic_regs);
+
+    /* Secondary VIC register space (0x10023000) - VIC control operations */
+    vic_dev->vic_regs_secondary = ioremap(0x10023000, 0x1000);
+    if (!vic_dev->vic_regs_secondary) {
+        pr_err("*** VIC PROBE: CRITICAL - Failed to map VIC control registers at 0x10023000 ***\n");
+        iounmap(vic_dev->vic_regs);
+        private_kfree(vic_dev);
+        return -ENOMEM;
+    }
+    pr_info("*** VIC PROBE: VIC control registers mapped at 0x10023000 -> %p ***\n", vic_dev->vic_regs_secondary);
 
     /* CRITICAL: Initialize list heads for buffer management FIRST */
     INIT_LIST_HEAD(&vic_dev->queue_head);
