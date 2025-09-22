@@ -4949,39 +4949,33 @@ static irqreturn_t ispmodule_ip_done_irq_handler(int irq, void *dev_id)
 
 /* tx_isp_handle_sync_sensor_attr_event is now defined in tx_isp_core.c */
 
-/* tx_isp_send_event_to_remote - Binary Ninja EXACT implementation */
-int tx_isp_send_event_to_remote(void *isp_dev, int event_type, void *data)
+/* tx_isp_send_event_to_remote - SAFE implementation using struct member access */
+int tx_isp_send_event_to_remote(void *subdev_ptr, int event_type, void *data)
 {
-    pr_info("*** tx_isp_send_event_to_remote: Binary Ninja EXACT - isp_dev=0x%p, event=0x%x ***\n", isp_dev, event_type);
+    struct tx_isp_subdev *sd = (struct tx_isp_subdev *)subdev_ptr;
 
-    /* Binary Ninja: if (arg1 != 0) */
-    if (isp_dev != NULL) {
-        /* Binary Ninja: void* $a0 = *(arg1 + 0xc) */
-        void **callback_struct_ptr = (void **)((char *)isp_dev + 0xc);
-        void *callback_struct = *callback_struct_ptr;
+    pr_info("*** tx_isp_send_event_to_remote: SAFE implementation - sd=0x%p, event=0x%x ***\n", sd, event_type);
 
-        pr_info("*** tx_isp_send_event_to_remote: callback_struct_ptr=0x%p, callback_struct=0x%p ***\n",
-                callback_struct_ptr, callback_struct);
+    if (sd != NULL) {
+        /* SAFE: Use struct member instead of dangerous pointer arithmetic */
+        void *callback_struct = sd->event_callback_struct;
 
-        /* Binary Ninja: if ($a0 != 0) */
+        pr_info("*** tx_isp_send_event_to_remote: callback_struct=0x%p ***\n", callback_struct);
+
         if (callback_struct != NULL) {
-            /* Binary Ninja: int32_t $t9_1 = *($a0 + 0x1c) */
-            int (**event_handler_ptr)(void*, int, void*) = (int (**)(void*, int, void*))((char *)callback_struct + 0x1c);
-            int (*event_handler)(void*, int, void*) = *event_handler_ptr;
+            /* SAFE: Cast to proper callback structure type */
+            struct vic_event_callback *vic_callback = (struct vic_event_callback *)callback_struct;
 
-            pr_info("*** tx_isp_send_event_to_remote: event_handler_ptr=0x%p, event_handler=0x%p ***\n",
-                    event_handler_ptr, event_handler);
+            pr_info("*** tx_isp_send_event_to_remote: event_handler=0x%p ***\n", vic_callback->event_handler);
 
-            /* Binary Ninja: if ($t9_1 != 0) jump($t9_1) */
-            if (event_handler != NULL) {
+            if (vic_callback->event_handler != NULL) {
                 pr_info("*** tx_isp_send_event_to_remote: Calling event_handler(0x%p, 0x%x, 0x%p) ***\n",
-                        isp_dev, event_type, data);
-                return event_handler(isp_dev, event_type, data);
+                        sd, event_type, data);
+                return vic_callback->event_handler(sd, event_type, data);
             }
         }
     }
 
-    /* Binary Ninja: return 0xfffffdfd */
     pr_info("*** tx_isp_send_event_to_remote: No handler found - returning 0xfffffdfd ***\n");
     return 0xfffffdfd;
 }
