@@ -1960,9 +1960,20 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     tx_isp_set_subdev_hostdata(&vic_dev->sd, vic_dev);
     pr_info("*** VIC PROBE: Set host_priv to vic_dev %p for Binary Ninja compatibility ***\n", vic_dev);
 
-    /* REMOVED: Dangerous callback structure setup that was corrupting memory */
-    /* The reference driver's callback mechanism needs to be implemented differently */
-    pr_info("*** VIC PROBE: Callback structure setup deferred - avoiding memory corruption ***\n");
+    /* CRITICAL FIX: Set up VIC event callback structure at offset 0xc */
+    /* This is what tx_isp_send_event_to_remote looks for */
+    struct vic_event_callback *callback_struct = kmalloc(sizeof(struct vic_event_callback), GFP_KERNEL);
+    if (callback_struct) {
+        memset(callback_struct, 0, sizeof(struct vic_event_callback));
+        callback_struct->event_handler = (int (*)(void*, int, void*))vic_core_ops_ioctl;
+
+        /* Set callback structure at offset 0xc from subdev */
+        *((void **)((char *)&vic_dev->sd + 0xc)) = callback_struct;
+
+        pr_info("*** VIC PROBE: Event callback structure set up at offset 0xc ***\n");
+    } else {
+        pr_err("*** VIC PROBE: Failed to allocate callback structure ***\n");
+    }
 
     /* Binary Ninja: tx_isp_subdev_init(arg1, $v0, &vic_subdev_ops) */
     ret = tx_isp_subdev_init(pdev, &vic_dev->sd, &vic_subdev_ops);
@@ -2023,6 +2034,13 @@ int tx_isp_vic_remove(struct platform_device *pdev)
 
     if (!sd)
         return -EINVAL;
+
+    /* Clean up callback structure */
+    void *callback_struct = *((void **)((char *)sd + 0xc));
+    if (callback_struct) {
+        kfree(callback_struct);
+        *((void **)((char *)sd + 0xc)) = NULL;
+    }
 
     /* Get VIC device from subdev */
     vic_dev = tx_isp_get_subdevdata(sd);
