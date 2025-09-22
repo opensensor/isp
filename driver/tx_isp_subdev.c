@@ -840,6 +840,7 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
 
     /* Binary Ninja: int32_t $v0_1 = private_platform_get_irq(arg1, 0) */
     irq_num = platform_get_irq(pdev, 0);
+    pr_info("*** tx_isp_request_irq: platform_get_irq returned %d for device %s ***\n", irq_num, dev_name(&pdev->dev));
 
     /* Binary Ninja: if ($v0_1 s>= 0) */
     if (irq_num >= 0) {
@@ -860,6 +861,9 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
         pr_info("*** tx_isp_request_irq: Using main ISP device as dev_id for IRQ %d (device: %s) ***\n",
                 irq_num, dev_name_str);
 
+        pr_info("*** tx_isp_request_irq: About to call request_threaded_irq(irq=%d, handler=%p, thread=%p, flags=0x%lx, name=%s, dev_id=%p) ***\n",
+                irq_num, isp_irq_handle, isp_irq_thread_handle, IRQF_SHARED, dev_name(&pdev->dev), correct_dev_id);
+
         ret = request_threaded_irq(irq_num,
                                    isp_irq_handle,      /* Main dispatcher handles all IRQs */
                                    isp_irq_thread_handle, /* Thread handler */
@@ -867,8 +871,11 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
                                    dev_name(&pdev->dev),  /* Device name */
                                    correct_dev_id);  /* CRITICAL FIX: Pass correct structure type */
 
+        pr_info("*** tx_isp_request_irq: request_threaded_irq returned %d ***\n", ret);
+
         if (ret != 0) {
             /* Binary Ninja: isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", "tx_isp_request_irq") */
+            pr_err("*** CRITICAL: tx_isp_request_irq: request_threaded_irq FAILED for IRQ %d: %d ***\n", irq_num, ret);
             isp_printf(2, "tx_isp_request_irq: request_threaded_irq failed: %d\n", ret);
             /* Binary Ninja: *arg2 = 0 */
             irq_info->irq = 0;

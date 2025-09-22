@@ -1593,7 +1593,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
 
     /* CRITICAL SAFETY: Comprehensive parameter validation to prevent kernel panic */
     if (arg1 == NULL || (uintptr_t)arg1 >= 0xfffff001) {
-        pr_debug("*** VIC IRQ: NULL or invalid arg1 pointer ***\n");
+        pr_info("*** VIC IRQ: NULL or invalid arg1 pointer ***\n");
         return IRQ_HANDLED;
     }
 
@@ -4858,7 +4858,7 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
         return IRQ_NONE;
     }
 
-    pr_debug("*** isp_irq_handle: IRQ %d received, dev_id=%p ***\n", irq, dev_id);
+    pr_info("*** isp_irq_handle: IRQ %d received, dev_id=%p ***\n", irq, dev_id);
 
     /* Binary Ninja reference shows this is the main interrupt processing function */
     /* It handles VIC interrupts directly, not through a dispatcher */
