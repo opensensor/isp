@@ -857,7 +857,8 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
         /* Binary Ninja: if (arg1 != 0) */
         if (sd != NULL) {
             /* Binary Ninja: void* $v0_2 = *(*(arg1 + 0xc4) + 0xc) */
-            /* arg1 + 0xc4 = sd->inpads, *(sd->inpads) = sd->inpads[0], +0xc = priv field */
+            /* SAFE: Use struct member access instead of raw offset arithmetic */
+            /* In reference driver, this accesses callback through inpads[0].priv */
             if (sd->inpads && sd->inpads[0].priv) {
                 callback_ptr = sd->inpads[0].priv;
 
@@ -868,6 +869,7 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                 }
 
                 /* Binary Ninja: $v0_3 = *($v0_2 + 4) */
+                /* SAFE: Access callback function at offset +4 from callback_ptr */
                 callback_func = *((int (**)(void))((char *)callback_ptr + 4));
 
                 /* Binary Ninja: if ($v0_3 == 0) return 0 */
