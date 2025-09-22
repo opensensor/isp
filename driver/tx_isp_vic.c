@@ -134,10 +134,14 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
 
         /* CRITICAL: Disable VIC hardware interrupt generation */
         if (vic_dev->vic_regs_secondary) {
-            /* Disable all VIC interrupts */
-            writel(0x0, vic_dev->vic_regs_secondary + 0x1e8);  /* Disable interrupt mask */
+            /* CRITICAL FIX: VIC interrupt mask is DISABLE mask - write 0xFFFFFFFF to DISABLE all interrupts */
+            /* Binary Ninja logic: not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
+            /* This means mask register bits set to 1 DISABLE interrupts, so write 0xFFFFFFFF to disable all */
+            u32 interrupt_mask = 0xFFFFFFFF;  /* 0xFFFFFFFF = Disable all interrupts */
+            writel(interrupt_mask, vic_dev->vic_regs_secondary + 0x1e8);  /* Interrupt mask register */
+            writel(interrupt_mask, vic_dev->vic_regs_secondary + 0x1ec);  /* Secondary interrupt mask register */
             wmb();
-            pr_info("*** tx_vic_disable_irq: VIC hardware interrupt mask disabled ***\n");
+            pr_info("*** tx_vic_disable_irq: VIC hardware interrupt mask DISABLED (wrote 0x%x to disable mask) ***\n", interrupt_mask);
 
             /* Clear any pending interrupts */
             writel(0xFFFFFFFF, vic_dev->vic_regs_secondary + 0x1f0);  /* Clear interrupt status */
