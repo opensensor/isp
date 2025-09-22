@@ -63,83 +63,11 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 1 */
         vic_dev->irq_enabled = 1;
 
-        /* CRITICAL: Use the WORKING approach - ISP core registers generate the interrupts! */
-        /* This matches the working client_side.txt implementation that got interrupts working */
-
-        pr_info("*** tx_vic_enable_irq: Using WORKING ISP core interrupt approach ***\n");
-
-        if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
-            void __iomem *core = ourISPdev->core_dev->core_regs;
-
-            pr_info("*** tx_vic_enable_irq: Enabling ISP core interrupts to generate VIC interrupts ***\n");
-
-            /* Clear any pending interrupts first */
-            u32 pend_legacy = readl(core + 0xb4);
-            u32 pend_new    = readl(core + 0x98b4);
-            writel(pend_legacy, core + 0xb8);
-            writel(pend_new,    core + 0x98b8);
-
-            /* CRITICAL: Enable ISP pipeline connection - this generates the interrupts! */
-            writel(1, core + 0x800);      /* Enable ISP pipeline */
-            writel(0x1c, core + 0x804);   /* Configure ISP routing */
-            writel(8, core + 0x1c);       /* Set ISP control mode */
-
-            /* CRITICAL: Enable ISP core interrupt generation at hardware level */
-            writel(0xffffffff, core + 0x30);  /* Enable all interrupt sources */
-            writel(0x133, core + 0x10);       /* Enable specific interrupt types */
-
-            /* Enable interrupt banks */
-            writel(0x3FFF, core + 0xb0);
-            writel(0x3FFF, core + 0xbc);
-            writel(0x3FFF, core + 0x98b0);
-            writel(0x3FFF, core + 0x98bc);
-            wmb();
-
-            pr_info("*** tx_vic_enable_irq: ISP core interrupt generation ENABLED - this will generate VIC interrupts! ***\n");
-            pr_info("*** tx_vic_enable_irq: ISP pipeline connection active (0x800=1, 0x804=0x1c, 0x1c=8) ***\n");
-        } else {
-            pr_err("*** tx_vic_enable_irq: ISP core registers not available - cannot enable interrupts! ***\n");
-        }
-
-        /* CRITICAL FIX: Enable VIC hardware interrupt registers using SECONDARY VIC registers */
-        pr_info("*** tx_vic_enable_irq: Configuring VIC hardware interrupt registers ***\n");
-
-        if (vic_dev->vic_regs) {
-            void __iomem *vic_secondary = vic_dev->vic_regs;
-
-            /* CRITICAL FIX: Use SECONDARY VIC register space for interrupt configuration */
-            /* This matches tx_vic_disable_irq which uses vic_regs */
-
-            /* Enable VIC frame done interrupt */
-            writel(0x1, vic_secondary + 0x1e8);     /* VIC frame done interrupt enable */
-            wmb();
-            pr_info("*** VIC INTERRUPT: Enabled VIC frame done interrupt at reg 0x1e8 = 0x1 ***\n");
-
-            /* Enable VIC MDMA completion interrupt */
-            writel(0x1, vic_secondary + 0x1ec);     /* VIC MDMA interrupt enable */
-            wmb();
-            pr_info("*** VIC INTERRUPT: Enabled VIC MDMA interrupt at reg 0x1ec = 0x1 ***\n");
-
-            /* Clear any pending interrupts before enabling */
-            u32 pending1 = readl(vic_secondary + 0x1e0);
-            u32 pending2 = readl(vic_secondary + 0x1e4);
-            writel(pending1, vic_secondary + 0x1f0);  /* Clear interrupt status 1 */
-            writel(pending2, vic_secondary + 0x1f4);  /* Clear interrupt status 2 */
-            wmb();
-            pr_info("*** VIC INTERRUPT: Cleared pending interrupts (0x%x, 0x%x) ***\n", pending1, pending2);
-        } else {
-            pr_err("*** tx_vic_enable_irq: Secondary VIC registers not mapped - cannot enable hardware interrupts! ***\n");
-        }
-
-        /* CRITICAL FIX: Call hardware interrupt enable function using SAFE struct members */
-        /* Binary Ninja reference: $v0_1 = *(dump_vsd_5 + 0x84); if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
-        /* SAFE: Use struct members instead of unsafe offset math */
-        if (vic_dev->irq_handler != NULL) {
-            vic_dev->irq_handler(vic_dev->irq_priv);
-            pr_info("*** tx_vic_enable_irq: Called tx_isp_enable_irq via SAFE struct member ***\n");
-        } else {
-            pr_info("*** tx_vic_enable_irq: No hardware IRQ enable function set ***\n");
-        }
+        /* CRITICAL FIX: Call hardware interrupt enable function - Binary Ninja reference */
+        /* Binary Ninja: $v0_1 = *(dump_vsd_5 + 0x84); if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
+        /* Calling enable_irq() here would interfere with the main dispatcher's IRQ management */
+        pr_info("*** tx_vic_enable_irq: VIC software interrupt flag ENABLED ***\n");
+            /* Fallback: Direct hardware register enable */
         pr_info("*** tx_vic_enable_irq: Hardware IRQ 38 managed by main dispatcher ***\n");
 
         /* Set the global vic_start_ok flag to allow interrupt processing */
@@ -174,43 +102,14 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
 
     /* Binary Ninja: if (*(dump_vsd_1 + 0x13c) != 0) */
     if (vic_dev->irq_enabled != 0) {
-        /* Binay Ninja: *(dump_vsd_1 + 0x13c) = 0 */
+        /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 0 */
         vic_dev->irq_enabled = 0;
 
-        /* CRITICAL: Disable VIC hardware interrupt registers using SECONDARY VIC registers */
-        void __iomem *vic_regs = vic_dev->vic_regs;
-        if (vic_regs) {
-            /* Disable all VIC hardware interrupts */
-            writel(0x0, vic_regs + 0x1e8);      /* Disable frame done interrupt */
-            writel(0x0, vic_regs + 0x1ec);      /* Disable MDMA interrupts */
-            wmb();
-
-            /* Clear any pending interrupts */
-            u32 pending1 = readl(vic_regs + 0x1e0);
-            u32 pending2 = readl(vic_regs + 0x1e4);
-            writel(pending1, vic_regs + 0x1f0);  /* Clear interrupt status 1 */
-            writel(pending2, vic_regs + 0x1f4);  /* Clear interrupt status 2 */
-            wmb();
-
-            pr_info("*** tx_vic_disable_irq: VIC hardware interrupts DISABLED ***\n");
-        }
-
-        /* CRITICAL FIX: Call hardware interrupt disable function using SAFE struct members */
-        /* Binary Ninja reference: $v0_2 = *(dump_vsd_5 + 0x88); if ($v0_2 != 0) $v0_2(dump_vsd_5 + 0x80) */
-        /* SAFE: Use struct members instead of unsafe offset math */
-        if (vic_dev->irq_disable != NULL) {
-            vic_dev->irq_disable(vic_dev->irq_priv);
-            pr_info("*** tx_vic_disable_irq: Called tx_isp_disable_irq via SAFE struct member ***\n");
-        } else {
-            pr_info("*** tx_vic_disable_irq: No hardware IRQ disable function set ***\n");
-        }
-
-        /* CRITICAL FIX: Disable the kernel IRQ line */
-        if (vic_dev->irq > 0) {
-            disable_irq(vic_dev->irq);
-            pr_info("*** tx_vic_disable_irq: Kernel IRQ %d DISABLED ***\n", vic_dev->irq);
-        }
+        /* CRITICAL FIX: Call hardware interrupt disable function - Binary Ninja reference */
+        /* Binary Ninja: $v0_2 = *(dump_vsd_5 + 0x88); if ($v0_2 != 0) $v0_2(dump_vsd_5 + 0x80) */
+        /* Calling disable_irq() here would interfere with the main dispatcher's IRQ management */
         pr_info("*** tx_vic_disable_irq: VIC software interrupt flag DISABLED ***\n");
+            /* Fallback: Direct hardware register disable */
         pr_info("*** tx_vic_disable_irq: Hardware IRQ 38 managed by main dispatcher ***\n");
 
         /* Clear the global vic_start_ok flag to stop interrupt processing */
@@ -764,17 +663,14 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         wmb(); /* Ensure write completes */
         pr_info("tx_isp_vic_start: Wrote 4 to VIC control register\n");
 
-        /* Binary Ninja: while (*$v1_30 != 0) nop */
+        /* Binary Ninja EXACT: while (*$v1_30 != 0) nop */
+        /* CRITICAL FIX: Add timeout to prevent infinite loop hardware lockup */
+        u32 timeout = 10000;
         u32 vic_status;
-        u32 timeout = 100000; /* Add timeout to prevent infinite hang */
-        pr_info("tx_isp_vic_start: Waiting for VIC control register to become 0\n");
 
-        while ((vic_status = readl(vic_ctrl_regs + 0x0)) != 0 && timeout-- > 0) {
-            /* Binary Ninja: nop - just wait */
-            cpu_relax();
-            if ((timeout % 10000) == 0) {
-                pr_info("tx_isp_vic_start: Still waiting, status=0x%x, timeout=%d\n", vic_status, timeout);
-            }
+        while ((vic_status = readl(vic_regs + 0x0)) != 0 && timeout-- > 0) {
+            /* Reference driver: nop (just wait) */
+            udelay(1);
         }
 
         if (timeout == 0) {
@@ -827,18 +723,34 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(2, vic_regs + 0x0);
     }
 
-    /* Binary Ninja: Final VIC enable - use control register space */
-    void __iomem *vic_ctrl_regs = vic_dev->vic_regs_secondary;
-    if (vic_ctrl_regs) {
-        writel(1, vic_ctrl_regs + 0x0);
-    } else {
-        writel(1, vic_regs + 0x0);
+    /* Binary Ninja EXACT: Final VIC enable - *$v0_47 = 1 */
+    writel(1, vic_regs + 0x0);
+    pr_info("*** tx_isp_vic_start: Step 4 - VIC enabled: wrote 1 to reg 0x0 ***\n");
+
+    /* Binary Ninja: Final configuration - Enable ISP pipeline */
+    if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
+        void __iomem *core = ourISPdev->core_dev->core_regs;
+
+        /* Clear any pending interrupts */
+        u32 pend_legacy = readl(core + 0xb4);
+        u32 pend_new = readl(core + 0x98b4);
+        writel(pend_legacy, core + 0xb8);
+        writel(pend_new, core + 0x98b8);
+
+        /* Enable ISP pipeline connection */
+        writel(1, core + 0x800);
+        writel(0x1c, core + 0x804);
+        writel(8, core + 0x1c);
+
+        pr_info("tx_isp_vic_start: ISP pipeline enabled\n");
     }
 
     /* Binary Ninja: Set vic_start_ok */
     extern uint32_t vic_start_ok;
     vic_start_ok = 1;
+    pr_info("*** tx_isp_vic_start: vic_start_ok set to 1 ***\n");
 
+    pr_info("*** tx_isp_vic_start: VIC hardware initialization completed successfully ***\n");
     return 0;
 }
 
@@ -1467,24 +1379,6 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (stride)\n", stride);
 
-    /* CRITICAL FIX: Enable VIC hardware interrupt generation */
-    pr_info("*** CRITICAL: Enabling VIC hardware interrupt generation ***\n");
-
-    /* Enable VIC MDMA interrupt - this is likely the missing piece */
-    writel(0x1, vic_base + 0x30);     /* VIC interrupt enable register */
-    wmb();
-    pr_info("*** VIC INTERRUPT: Enabled VIC interrupt at reg 0x30 = 0x1 ***\n");
-
-    /* Enable VIC MDMA completion interrupt */
-    writel(0x1, vic_base + 0x34);     /* VIC MDMA interrupt enable */
-    wmb();
-    pr_info("*** VIC INTERRUPT: Enabled VIC MDMA interrupt at reg 0x34 = 0x1 ***\n");
-
-    /* Unmask VIC interrupt sources */
-    writel(0xFFFFFFFF, vic_base + 0x38);  /* VIC interrupt unmask */
-    wmb();
-    pr_info("*** VIC INTERRUPT: Unmasked all VIC interrupts at reg 0x38 = 0xFFFFFFFF ***\n");
-
     /* CRITICAL MISSING: DMA cache synchronization operations */
     /* Binary Ninja reference shows DMA sync operations are required for proper data transfer */
 
@@ -1984,9 +1878,9 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     vic_dev->hw_irq_enabled = 0; /* Hardware interrupt initially disabled */
     pr_info("*** VIC PROBE: IRQ numbers initialized to 38 ***\n");
 
-    /* CRITICAL FIX: Map DUAL VIC register spaces - both are needed */
-    /* Primary VIC register space (0x133e0000) - main VIC processing and interrupts */
-    vic_dev->vic_regs = ioremap(0x133e0000, 0x10000);
+    /* CRITICAL FIX: Map VIC register spaces - THIS WAS MISSING! */
+    /* Primary VIC register space (0x133e0000) - main VIC control */
+    vic_dev->vic_regs = ioremap(0x133e0000, 0x1000);
     if (!vic_dev->vic_regs) {
         pr_err("*** VIC PROBE: CRITICAL - Failed to map primary VIC registers at 0x133e0000 ***\n");
         private_kfree(vic_dev);
@@ -2136,9 +2030,9 @@ int tx_isp_vic_remove(struct platform_device *pdev)
             vic_dev->vic_regs = NULL;
             pr_info("*** VIC REMOVE: Primary VIC registers unmapped ***\n");
         }
-        if (vic_dev->vic_regs) {
-            iounmap(vic_dev->vic_regs);
-            vic_dev->vic_regs = NULL;
+        if (vic_dev->vic_regs_secondary) {
+            iounmap(vic_dev->vic_regs_secondary);
+            vic_dev->vic_regs_secondary = NULL;
             pr_info("*** VIC REMOVE: Secondary VIC registers unmapped ***\n");
         }
     }
