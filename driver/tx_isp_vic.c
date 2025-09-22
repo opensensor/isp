@@ -196,11 +196,20 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 
             /* CRITICAL DEBUG: Check if VIC hardware is responsive by reading basic control registers */
             u32 vic_ctrl = readl(vic_dev->vic_regs + 0x0);
-            u32 vic_status = readl(vic_dev->vic_regs + 0x4);
+            u32 vic_status = readl(vic_dev->vic_regs + 0x4);  /* For MIPI: This IS the frame size register! */
             u32 vic_config = readl(vic_dev->vic_regs + 0x8);
-            u32 vic_frame_size = readl(vic_dev->vic_regs + 0x10);
-            pr_info("*** VIC HARDWARE DEBUG: CTRL=0x%08x, STATUS=0x%08x, CONFIG=0x%08x, FRAME_SIZE=0x%08x ***\n",
-                    vic_ctrl, vic_status, vic_config, vic_frame_size);
+            u32 vic_frame_size_alt = readl(vic_dev->vic_regs + 0x10);  /* For BT1120/BT656 only */
+            pr_info("*** VIC HARDWARE DEBUG: CTRL=0x%08x, STATUS/FRAME_SIZE=0x%08x, CONFIG=0x%08x, REG_0x10=0x%08x ***\n",
+                    vic_ctrl, vic_status, vic_config, vic_frame_size_alt);
+
+            /* CRITICAL: For MIPI interface, frame size is in register 0x4 (vic_status), not 0x10 */
+            if (vic_status != 0) {
+                u32 width = vic_status >> 16;
+                u32 height = vic_status & 0xFFFF;
+                pr_info("*** VIC FRAME SIZE: %dx%d (from register 0x4 - MIPI interface) ***\n", width, height);
+            } else {
+                pr_info("*** VIC FRAME SIZE: NOT SET - register 0x4 is 0x00000000 ***\n");
+            }
 
             /* Check secondary VIC registers too */
             if (vic_dev->vic_regs_secondary) {
