@@ -2776,22 +2776,6 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 
                 pr_info("*** ispcore_core_ops_init: Core state check passed, proceeding with initialization ***");
 
-                /* Binary Ninja: Call tisp_init() with sensor attributes */
-                extern struct tx_isp_sensor *tx_isp_get_sensor(void);
-                struct tx_isp_sensor *init_sensor = tx_isp_get_sensor();
-                if (init_sensor && init_sensor->video.attr) {
-                    pr_info("*** ispcore_core_ops_init: Calling tisp_init with sensor attributes ***");
-                    ret = tisp_init(init_sensor->video.attr, NULL);
-                    if (ret != 0) {
-                        pr_err("ispcore_core_ops_init: tisp_init failed: %d\n", ret);
-                        return ret;
-                    }
-                    pr_info("*** ispcore_core_ops_init: tisp_init SUCCESS ***");
-                } else {
-                    pr_info("*** ispcore_core_ops_init: No sensor attributes - SKIPPING tisp_init (should only be called once with valid sensor) ***");
-                    /* CRITICAL FIX: Don't call tisp_init without sensor attributes - this was causing register interference */
-                }
-
                 /* CRITICAL: Binary Ninja: *($s0 + 0xe8) = 3 - Set VIC state to 3 (ACTIVE) */
                 vic_dev->state = 3;
                 pr_info("*** ispcore_core_ops_init: VIC state set to 3 (ACTIVE) - CORE READY FOR STREAMING ***");
