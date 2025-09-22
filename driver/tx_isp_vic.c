@@ -1726,7 +1726,14 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
     pr_info("*** ispvic_frame_channel_s_stream: Checking stream state - current=%d, requested=%d ***\n",
             vic_dev->stream_state, arg2);
     if (arg2 == vic_dev->stream_state) {
-        pr_info("*** ispvic_frame_channel_s_stream: Stream state already matches - returning early ***\n");
+        pr_info("*** ispvic_frame_channel_s_stream: Stream state already matches - but FORCING VIC MDMA enable ***\n");
+
+        /* CRITICAL FIX: Even if stream state matches, we need to ensure VIC MDMA is enabled */
+        if (arg2 != 0) {
+            pr_info("*** CRITICAL: Calling vic_pipo_mdma_enable even though stream state matches ***\n");
+            vic_pipo_mdma_enable(vic_dev);
+            pr_info("*** CRITICAL: vic_pipo_mdma_enable completed - VIC MDMA should now be active ***\n");
+        }
         return 0;
     }
     pr_info("*** ispvic_frame_channel_s_stream: Stream state different - proceeding with streaming setup ***\n");
