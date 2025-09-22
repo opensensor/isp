@@ -1902,12 +1902,24 @@ int tx_isp_video_link_stream(struct tx_isp_dev *arg1, int arg2)
     /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
     s4 = arg1->subdevs;  /* Subdev array at offset 0x38 */
 
+    /* CRITICAL FIX: Skip sensor s_stream calls in main loop to prevent premature MIPI data */
+    /* Sensors will be started AFTER VIC is fully configured and interrupts are enabled */
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+
     /* Binary Ninja: for (int32_t i = 0; i != 0x10; ) */
     for (i = 0; i != 0x10; ) {
         /* Binary Ninja: void* $a0 = *$s4 */
         struct tx_isp_subdev *a0 = *s4;
 
         if (a0 != 0) {
+            /* CRITICAL FIX: Skip sensor subdevs in main loop to prevent premature streaming */
+            if (sensor && a0 == &sensor->sd) {
+                pr_info("*** tx_isp_video_s_stream: SKIPPING sensor s_stream in main loop (will call later) ***\n");
+                i += 1;
+                s4 = &s4[1];
+                continue;
+            }
+
             /* Binary Ninja: void* $v0_3 = *(*($a0 + 0xc4) + 4) */
             struct tx_isp_subdev_video_ops *v0_3 = a0->ops ? a0->ops->video : NULL;
 
