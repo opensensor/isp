@@ -1808,11 +1808,6 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     /* CRITICAL: Add visible logging to see when ISP core interrupt handler is called */
     pr_info("*** ISP CORE INTERRUPT HANDLER: IRQ %d called, dev_id=%p ***\n", irq, dev_id);
 
-    if (!isp_dev || !isp_dev->vic_regs) {
-        pr_info("*** ISP CORE INTERRUPT: Invalid device - isp_dev=%p ***\n", isp_dev);
-        return IRQ_NONE;
-    }
-
     vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
     if (!vic_dev) {
         return IRQ_NONE;
