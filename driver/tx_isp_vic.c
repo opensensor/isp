@@ -635,14 +635,39 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(sensor_attr->dbus_type, vic_regs + 0x14);  /* Interface type */
         writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);  /* Dimensions */
 
-        /* Binary Ninja: Buffer size calculation - simplified */
-        writel(0x1, vic_regs + 0x100);  /* Buffer calculation result */
+        /* Binary Ninja: Buffer size calculation based on sensor format */
+        struct tx_isp_mipi_bus *mipi = &sensor_attr->mipi;
+        u32 bytes_per_pixel = 8;  /* Default for RAW8 */
+        if (mipi->mipi_sc.sensor_csi_fmt == TX_SENSOR_RAW10) {
+            bytes_per_pixel = 10;
+        } else if (mipi->mipi_sc.sensor_csi_fmt == TX_SENSOR_RAW12) {
+            bytes_per_pixel = 12;
+        }
+        u32 buffer_calc = (bytes_per_pixel * mipi->image_twidth) >> 5;
+        if ((bytes_per_pixel * mipi->image_twidth) & 0x1f) buffer_calc++;
+        writel(buffer_calc, vic_regs + 0x100);  /* Buffer calculation result */
 
-        /* Binary Ninja: Additional MIPI registers */
-        writel(0x7800000, vic_regs + 0x110);  /* MIPI config 1 */
-        writel(0x0, vic_regs + 0x114);        /* MIPI config 2 */
-        writel(0x0, vic_regs + 0x118);        /* MIPI config 3 */
-        writel(0x0, vic_regs + 0x11c);        /* MIPI config 4 */
+        /* Binary Ninja EXACT: Complex MIPI configuration register 0x10c */
+        u32 mipi_config = 0;
+        mipi_config |= (mipi->mipi_sc.hcrop_diff_en << 25);
+        mipi_config |= (mipi->mipi_sc.mipi_vcomp_en << 24);
+        mipi_config |= (mipi->mipi_sc.sensor_csi_fmt << 23);
+        mipi_config |= (mipi->mipi_sc.mipi_hcomp_en << 22);
+        mipi_config |= (mipi->mipi_sc.line_sync_mode << 21);
+        mipi_config |= (mipi->mipi_sc.work_start_flag << 20);
+        mipi_config |= (mipi->mipi_sc.data_type_en << 18);
+        mipi_config |= (mipi->mipi_sc.del_start << 16);
+        mipi_config |= (mipi->mipi_sc.mipi_crop_start2x << 12);
+        mipi_config |= (mipi->mipi_sc.mipi_crop_start2y << 8);
+        mipi_config |= (mipi->mipi_sc.sensor_frame_mode << 4);
+        mipi_config |= (mipi->mipi_sc.sensor_mode << 2);
+        writel(mipi_config, vic_regs + 0x10c);
+
+        /* Binary Ninja EXACT: MIPI configuration registers */
+        writel((mipi->image_twidth << 16) | mipi->mipi_sc.data_type_value, vic_regs + 0x110);
+        writel(mipi->mipi_sc.mipi_crop_start0x, vic_regs + 0x114);
+        writel(mipi->mipi_sc.mipi_crop_start0y, vic_regs + 0x118);
+        writel(mipi->mipi_sc.mipi_crop_start1x, vic_regs + 0x11c);
 
         /* Binary Ninja: Frame mode configuration */
         writel(0x4440, vic_regs + 0x1ac);  /* Default frame mode */
