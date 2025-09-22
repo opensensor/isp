@@ -2044,10 +2044,10 @@ int tx_isp_vic_remove(struct platform_device *pdev)
     if (!sd)
         return -EINVAL;
 
-    /* SAFE: Clean up callback structure using host_priv field */
-    if (sd->host_priv) {
-        kfree(sd->host_priv);
-        sd->host_priv = NULL;
+    /* SAFE: Clean up callback structure using dev_priv field */
+    if (sd->dev_priv) {
+        kfree(sd->dev_priv);
+        sd->dev_priv = NULL;
     }
 
     /* Get VIC device from subdev */
