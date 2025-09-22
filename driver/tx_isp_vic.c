@@ -759,23 +759,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(1, vic_regs + 0x0);
     pr_info("*** tx_isp_vic_start: Step 4 - VIC enabled: wrote 1 to reg 0x0 ***\n");
 
-    /* Binary Ninja: Final configuration - Enable ISP pipeline */
-    if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
-        void __iomem *core = ourISPdev->core_dev->core_regs;
-
-        /* Clear any pending interrupts */
-        u32 pend_legacy = readl(core + 0xb4);
-        u32 pend_new = readl(core + 0x98b4);
-        writel(pend_legacy, core + 0xb8);
-        writel(pend_new, core + 0x98b8);
-
-        /* Enable ISP pipeline connection */
-        writel(1, core + 0x800);
-        writel(0x1c, core + 0x804);
-        writel(8, core + 0x1c);
-
-        pr_info("tx_isp_vic_start: ISP pipeline enabled\n");
-    }
+    /* Binary Ninja EXACT: Reference driver does NOT enable ISP core interrupts here */
+    /* The reference tx_isp_vic_start only configures VIC registers and sets vic_start_ok */
+    pr_info("*** tx_isp_vic_start: EXACT Binary Ninja reference - no ISP core interrupt enabling ***\n");
 
     /* Binary Ninja EXACT: vic_start_ok = 1 */
     extern uint32_t vic_start_ok;
@@ -1904,12 +1890,19 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     spin_lock_init(&vic_dev->buffer_mgmt_lock);
     spin_lock_init(&vic_dev->lock);
 
-    /* CRITICAL FIX: Remove dangerous function pointer cast that doesn't exist in reference driver */
-    /* The reference driver doesn't use irq_handler function pointers - all IRQs go through main dispatcher */
-    vic_dev->irq_handler = NULL;  /* Initialize to NULL - not used in reference driver */
-    vic_dev->irq_disable = NULL;  /* Initialize to NULL for safety */
-    vic_dev->irq_priv = NULL;     /* Initialize to NULL - not used in reference driver */
-    pr_info("*** VIC PROBE: IRQ handler pointers set to NULL (reference driver uses main dispatcher) ***\n");
+    /* CRITICAL FIX: Initialize VIC interrupt handler function pointer - Binary Ninja reference */
+    /* Binary Ninja: VIC device structure has function pointer at offset 0x84 for interrupt enable */
+    /* This is what tx_vic_enable_irq calls: $v0_1 = *(dump_vsd_5 + 0x84); if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
+    extern void vic_hardware_irq_enable(void *irq_info);
+    extern void vic_hardware_irq_disable(void *irq_info);
+
+    /* Set up function pointers at correct offsets - Binary Ninja reference */
+    void **enable_func_ptr = (void **)((char *)vic_dev + 0x84);
+    void **disable_func_ptr = (void **)((char *)vic_dev + 0x88);
+    *enable_func_ptr = vic_hardware_irq_enable;
+    *disable_func_ptr = vic_hardware_irq_disable;
+
+    pr_info("*** VIC PROBE: Hardware IRQ function pointers set at offsets 0x84/0x88 (Binary Ninja reference) ***\n");
 
     /* EMERGENCY FIX: Disable complex buffer management to prevent kernel panic */
     /* Initialize only the absolute minimum required for basic operation */
