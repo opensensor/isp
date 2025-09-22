@@ -660,9 +660,14 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         } else if (mipi->mipi_sc.sensor_csi_fmt == TX_SENSOR_RAW12) {
             bytes_per_pixel = 12;
         }
-        u32 buffer_calc = (bytes_per_pixel * mipi->image_twidth) >> 5;
-        if ((bytes_per_pixel * mipi->image_twidth) & 0x1f) buffer_calc++;
+
+        /* CRITICAL FIX: Use negotiated stream width instead of sensor image_twidth */
+        u32 buffer_calc = (bytes_per_pixel * stream_width) >> 5;
+        if ((bytes_per_pixel * stream_width) & 0x1f) buffer_calc++;
         writel(buffer_calc, vic_regs + 0x100);  /* Buffer calculation result */
+
+        pr_info("tx_isp_vic_start: Buffer calculation: %d bpp * %d width = %d (reg 0x100)\n",
+                bytes_per_pixel, stream_width, buffer_calc);
 
         /* Binary Ninja EXACT: Complex MIPI configuration register 0x10c */
         u32 mipi_config = 0;
