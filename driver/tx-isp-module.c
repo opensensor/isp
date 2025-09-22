@@ -2511,11 +2511,12 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_info("Channel %d: Freeing existing buffers\n", channel);
             state->buffer_count = 0;
 
-            /* CRITICAL FIX: Free buffer address array */
-            if (state->buffer_addresses) {
-                kfree(state->buffer_addresses);
-                state->buffer_addresses = NULL;
-                pr_info("*** Channel %d: Freed buffer address array ***\n", channel);
+            /* CRITICAL FIX: Free VBM buffer array */
+            if (state->vbm_buffer_addresses) {
+                kfree(state->vbm_buffer_addresses);
+                state->vbm_buffer_addresses = NULL;
+                state->vbm_buffer_count = 0;
+                pr_info("*** Channel %d: Freed VBM buffer array ***\n", channel);
             }
 
             /* CRITICAL: Clear VIC active_buffer_count */
