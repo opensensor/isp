@@ -1412,51 +1412,33 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
 }
 
 /* VIC PIPO MDMA Enable function - EXACT Binary Ninja implementation */
-static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
+static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_base;
     u32 width, height, stride;
-    
-    pr_info("*** vic_pipo_mdma_enable: EXACT Binary Ninja implementation ***\n");
-    
-    /* CRITICAL: Validate vic_dev structure first */
+
+    pr_info("*** vic_pipo_mdma_enable: EXACT Binary Ninja MCP implementation ***\n");
+
     if (!vic_dev) {
         pr_err("vic_pipo_mdma_enable: NULL vic_dev parameter\n");
-        return;
+        return NULL;
     }
-    
+
     /* Binary Ninja EXACT: vic_base = *(arg1 + 0xb8) */
     vic_base = vic_dev->vic_regs;
-    
-    /* CRITICAL: Validate VIC register base */
-    if (!vic_base || 
-        (unsigned long)vic_base < 0x80000000 ||
-        (unsigned long)vic_base == 0x735f656d) {
-        pr_err("vic_pipo_mdma_enable: Invalid VIC register base %p - ABORTING\n", vic_base);
-        return;
+
+    if (!vic_base) {
+        pr_err("vic_pipo_mdma_enable: NULL vic_regs\n");
+        return NULL;
     }
-    
-    /* CRITICAL FIX: Use ACTUAL sensor output dimensions, NOT total frame dimensions */
-    /* The green frames were caused by MDMA trying to transfer 2200x1418 bytes */
-    /* but sensor only provides 1920x1080 bytes of actual image data */
 
-    /* GC2053 sensor specifications:
-     * - Total frame: 2200x1418 (includes blanking)
-     * - Actual image: 1920x1080 (the data we want)
-     * - MDMA must be configured for ACTUAL image size, not total frame size
-     */
-    width = 1920;   /* ACTUAL sensor output width (not total_width!) */
-    height = 1080;  /* ACTUAL sensor output height (not total_height!) */
+    /* Binary Ninja EXACT: int32_t $v1 = *(arg1 + 0xdc) */
+    width = vic_dev->width;   /* SAFE: *(arg1 + 0xdc) = vic_dev->width */
 
-    pr_info("*** CRITICAL FIX: Using ACTUAL sensor output dimensions %dx%d ***\n", width, height);
-    pr_info("*** MDMA will transfer %d bytes per line (%d * 2 for RAW10) ***\n", width * 2, width);
-    pr_info("*** This should fix green frames by matching sensor data size ***\n");
-    
-    /* Update vic_dev to ensure consistency */
-    vic_dev->width = width;
-    vic_dev->height = height;
+    /* Binary Ninja EXACT: height = *(arg1 + 0xe0) */
+    height = vic_dev->height; /* SAFE: *(arg1 + 0xe0) = vic_dev->height */
 
-    pr_info("vic_pipo_mdma_enable: FINAL dimensions=%dx%d (ACTUAL sensor output, not total frame)\n", width, height);
+    pr_info("vic_pipo_mdma_enable: Using vic_dev dimensions %dx%d (Binary Ninja MCP)\n", width, height);
     
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x308) = 1 */
     writel(1, vic_base + 0x308);
