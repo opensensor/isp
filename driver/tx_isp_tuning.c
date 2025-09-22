@@ -1649,7 +1649,7 @@ int tisp_init(void *sensor_info, char *param_name)
     /* Binary Ninja: Complex bit manipulation for core control register */
     int core_base = 0x8077efff;  /* Binary Ninja initial value */
     /* Simplified bit manipulation - Binary Ninja does complex loop but result is predictable */
-    int data_b2e74 = 0;  /* Assume linear mode (not WDR) */
+    data_b2e74 = 0;  /* Assume linear mode (not WDR) */
     int final_core_control;
     if (data_b2e74 != 1) {
         final_core_control = (core_base & 0xb577fffd) | 0x34000009;
@@ -1710,7 +1710,7 @@ int tisp_init(void *sensor_info, char *param_name)
     pr_info("*** tisp_init: FINAL REGISTER SEQUENCE ***\n");
 
     /* Binary Ninja: Final ISP mode configuration */
-    int data_b2e74 = 0;  /* Linear mode (not WDR) */
+    data_b2e74 = 0;  /* Linear mode (not WDR) */
     int isp_mode;
     if (data_b2e74 != 0) {
         isp_mode = 0x10;  /* WDR mode */
@@ -4253,8 +4253,6 @@ int apical_isp_af_zone_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl
 /* tisp_g_wdr_en - Binary Ninja EXACT implementation */
 int tisp_g_wdr_en(void *out_buf)
 {
-    extern uint32_t data_b2e74;  /* WDR mode flag from tx_isp_core.c */
-
     if (!out_buf) {
         pr_err("tisp_g_wdr_en: NULL output buffer\n");
         return -EINVAL;
@@ -4958,7 +4956,6 @@ int tisp_top_param_array_get(void *out_buf, void *size_buf)
     }
 
     /* Binary Ninja: tisp_g_wdr_en(&data_b2e74) */
-    extern uint32_t data_b2e74;
     tisp_g_wdr_en(&data_b2e74);
 
     /* Binary Ninja: memcpy(arg1, &sensor_info, 0x60); *arg2 = 0x60 */
