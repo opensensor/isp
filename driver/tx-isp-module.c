@@ -2447,10 +2447,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
                     /* Store buffer structure in channel state like reference driver */
                     /* Reference: channel_state[(i + channel_buffer_offset + 0x3a) << 2 + 0x24] = buffer */
-                    /* For now, store in buffer_addresses array as placeholder */
-                    if (state->buffer_addresses) {
-                        state->buffer_addresses[i] = (uint32_t)(uintptr_t)buffer; /* Store structure pointer */
-                    }
+                    /* Note: We don't store video_buffer structures in VBM addresses - those are for actual frame data */
+                    /* The video_buffer structures are managed separately for V4L2 compatibility */
 
                     pr_info("*** Channel %d: Allocated video_buffer structure[%d] at %p ***\n",
                             channel, i, buffer);
