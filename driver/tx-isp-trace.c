@@ -46,22 +46,6 @@ struct reg_range {
     const char *description;
 };
 
-// VIC interrupt registers to monitor closely
-static const u32 vic_interrupt_registers[] = {
-    0x00,   // ISR - Interrupt Status Register
-    0x04,   // IMR - Interrupt Mask Register
-    0x0c,   // IMCR - Interrupt Control Register
-    0x20,   // ISR1 - Interrupt Status Register 1
-    0x24,   // IMR1 - Interrupt Mask Register 1
-    0x1e0,  // Legacy interrupt status
-    0x1e4,  // Legacy interrupt status 2
-    0x1e8,  // Legacy interrupt mask
-    0x1ec,  // Legacy interrupt mask 2
-    0x300,  // VIC DMA control
-    0x308,  // VIC interrupt status
-    0x30c,  // VIC interrupt enable
-};
-
 // Known register ranges and their types
 static const struct reg_range isp_ranges[] = {
     // Keep control ranges for tracing
@@ -84,6 +68,7 @@ static const struct reg_range isp_ranges[] = {
 
 #define NUM_RANGES ARRAY_SIZE(isp_ranges)
 
+// Restored original addresses - trace module was working correctly
 static struct isp_region isp_regions[] = {
     {
         .phys_addr = 0x10023000,
@@ -101,7 +86,7 @@ static struct isp_region isp_regions[] = {
         .name = "isp-w02"
     },
     {
-        .phys_addr = 0x10022000,  // Adjust this to actual CSI PHY base address
+        .phys_addr = 0x10022000,  // CSI PHY base address
         .size = 0x1000,
         .name = "isp-csi"
     }
@@ -226,7 +211,7 @@ static void check_region_changes(struct work_struct *work)
 
     // Reschedule if still monitoring
     if (region->monitoring) {
-        schedule_delayed_work(&region->monitor_work, HZ/100); // 10ms interval
+        schedule_delayed_work(&region->monitor_work, HZ/100); // 10ms interval to catch rapid changes
     }
 }
 
@@ -268,7 +253,7 @@ static int init_region(struct isp_region *region)
     }
 
     region->monitoring = true;
-    schedule_delayed_work(&region->monitor_work, HZ/100);
+    schedule_delayed_work(&region->monitor_work, HZ/100); // Start with 10ms interval
 
     pr_info("ISP Monitor: initialized region %s at phys 0x%pap size 0x%zx\n",
             region->name, &region->phys_addr, region->size);
