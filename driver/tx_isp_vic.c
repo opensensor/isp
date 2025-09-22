@@ -681,7 +681,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     /* Binary Ninja: *(arg1 + 0xb8) - VIC control register base */
     /* CRITICAL FIX: Use VIC control registers at 0x10023000 for unlock sequence */
-    vic_regs = vic_dev->vic_regs_secondary;
+    vic_regs = vic_dev->vic_regs;
     if (!vic_regs) {
         pr_err("tx_isp_vic_start: No VIC control registers available\n");
         return -EINVAL;
@@ -1971,16 +1971,6 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         return -ENOMEM;
     }
     pr_info("*** VIC PROBE: VIC control registers mapped at 0x10023000 -> %p ***\n", vic_dev->vic_regs);
-
-    /* Secondary VIC register space (0x133e0000) - for extended operations */
-    vic_dev->vic_regs = ioremap(0x10023000, 0x1000);
-    if (!vic_dev->vic_regs) {
-        pr_err("*** VIC PROBE: CRITICAL - Failed to map secondary VIC registers at 0x133e0000 ***\n");
-        iounmap(vic_dev->vic_regs);
-        private_kfree(vic_dev);
-        return -ENOMEM;
-    }
-    pr_info("*** VIC PROBE: Secondary VIC registers mapped at 0x133e0000 -> %p ***\n", vic_dev->vic_regs);
 
     /* CRITICAL: Initialize list heads for buffer management FIRST */
     INIT_LIST_HEAD(&vic_dev->queue_head);
