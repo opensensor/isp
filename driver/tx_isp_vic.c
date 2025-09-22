@@ -74,6 +74,19 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1ec);  /* Disable all MDMA interrupts */
             wmb();
 
+            /* CRITICAL MISSING FIX: Enable VIC interrupt generation in hardware */
+            /* The VIC hardware needs to be told to generate interrupts, not just have masks configured */
+            u32 vic_int_enable = readl(vic_dev->vic_regs + 0x1e8);
+            pr_info("*** tx_vic_enable_irq: VIC interrupt mask register 0x1e8 = 0x%08x ***\n", vic_int_enable);
+
+            /* CRITICAL: Enable VIC interrupt generation at hardware level */
+            /* Based on Binary Ninja analysis, VIC needs interrupt enable bit set in control register */
+            u32 vic_ctrl = readl(vic_dev->vic_regs + 0x0);
+            vic_ctrl |= 0x8;  /* Enable interrupt generation bit */
+            writel(vic_ctrl, vic_dev->vic_regs + 0x0);
+            wmb();
+
+            pr_info("*** tx_vic_enable_irq: VIC interrupt generation ENABLED in hardware (ctrl=0x%08x) ***\n", vic_ctrl);
             pr_info("*** tx_vic_enable_irq: VIC interrupt masks configured (0x1e8=0xFFFFFFFE enables bit 0, 0x1ec=0xFFFFFFFF disables all MDMA) ***\n");
         }
     }
@@ -134,13 +147,28 @@ void tx_isp_vic_check_interrupt_status(void)
     struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
     u32 int_status = readl(vic_dev->vic_regs + 0x1e0);
     u32 int_status2 = readl(vic_dev->vic_regs + 0x1e4);
+    u32 int_mask = readl(vic_dev->vic_regs + 0x1e8);
+    u32 int_mask2 = readl(vic_dev->vic_regs + 0x1ec);
+    u32 vic_ctrl = readl(vic_dev->vic_regs + 0x0);
 
     if (int_status != 0 || int_status2 != 0) {
         pr_info("*** VIC INTERRUPT STATUS CHECK: STATUS1=0x%08x, STATUS2=0x%08x - HARDWARE IS GENERATING INTERRUPTS! ***\n",
                 int_status, int_status2);
+        pr_info("*** VIC INTERRUPT MASKS: MASK1=0x%08x, MASK2=0x%08x, CTRL=0x%08x ***\n",
+                int_mask, int_mask2, vic_ctrl);
     } else {
         pr_info("*** VIC INTERRUPT STATUS CHECK: STATUS1=0x%08x, STATUS2=0x%08x - no hardware interrupts ***\n",
                 int_status, int_status2);
+        pr_info("*** VIC INTERRUPT CONFIG: MASK1=0x%08x, MASK2=0x%08x, CTRL=0x%08x ***\n",
+                int_mask, int_mask2, vic_ctrl);
+
+        /* Check if interrupt generation is enabled in hardware */
+        if ((vic_ctrl & 0x8) == 0) {
+            pr_err("*** VIC INTERRUPT ERROR: Interrupt generation NOT enabled in hardware (ctrl bit 3 = 0) ***\n");
+        }
+        if ((int_mask & 0x1) != 0) {
+            pr_err("*** VIC INTERRUPT ERROR: Frame done interrupt MASKED (mask bit 0 = 1) ***\n");
+        }
     }
 }
 
@@ -816,6 +844,27 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(2, vic_regs + 0x0);
     }
 
+    /* CRITICAL FIX: Configure VIC hardware to generate interrupts BEFORE final enable */
+    pr_info("*** tx_isp_vic_start: CRITICAL FIX - Configuring VIC interrupt generation ***\n");
+
+    /* Clear any pending interrupts before enabling */
+    writel(0xFFFFFFFF, vic_regs + 0x1f0);  /* Clear main interrupt status */
+    writel(0xFFFFFFFF, vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
+    wmb();
+
+    /* Configure VIC interrupt masks - enable frame done interrupt */
+    writel(0xFFFFFFFE, vic_regs + 0x1e8);  /* Enable frame done interrupt (bit 0) */
+    writel(0xFFFFFFFF, vic_regs + 0x1ec);  /* Disable all MDMA interrupts */
+    wmb();
+
+    /* CRITICAL: Enable VIC interrupt generation in hardware control register */
+    u32 vic_ctrl = readl(vic_regs + 0x0);
+    vic_ctrl |= 0x8;  /* Enable interrupt generation bit */
+    writel(vic_ctrl, vic_regs + 0x0);
+    wmb();
+
+    pr_info("*** tx_isp_vic_start: VIC interrupt generation configured (ctrl=0x%08x, mask=0xFFFFFFFE) ***\n", vic_ctrl);
+
     /* Binary Ninja EXACT: Final VIC enable - *vic_regs = 1 */
     /* Use SECONDARY VIC space for enable (same as unlock sequence) */
     void __iomem *vic_enable_regs = vic_dev->vic_regs_secondary;
@@ -832,7 +881,12 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     vic_start_ok = 1;
     pr_info("*** tx_isp_vic_start: vic_start_ok set to 1 - EXACT Binary Ninja reference ***\n");
 
-    pr_info("*** tx_isp_vic_start: SIMPLIFIED to match Binary Ninja exactly ***\n");
+    pr_info("*** tx_isp_vic_start: VIC interrupt generation ENABLED - hardware should now generate interrupts ***\n");
+
+    /* CRITICAL DEBUG: Check VIC interrupt configuration immediately after setup */
+    pr_info("*** tx_isp_vic_start: Checking VIC interrupt configuration after setup ***\n");
+    tx_isp_vic_check_interrupt_status();
+
     return 0;
 }
 
