@@ -59,6 +59,26 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 1 */
         vic_dev->irq_enabled = 1;
 
+        /* CRITICAL FIX: Configure VIC hardware interrupt registers - MISSING FROM ORIGINAL CODE */
+        void __iomem *vic_regs = vic_dev->vic_regs;
+        if (vic_regs) {
+            /* Clear any pending interrupts first */
+            u32 pending1 = readl(vic_regs + 0x1e0);
+            u32 pending2 = readl(vic_regs + 0x1e4);
+            writel(pending1, vic_regs + 0x1f0);  /* Clear interrupt status 1 */
+            writel(pending2, vic_regs + 0x1f4);  /* Clear interrupt status 2 */
+            wmb();
+
+            /* Enable VIC hardware interrupts - Binary Ninja reference shows these are needed */
+            /* Enable frame done interrupt (bit 0) and error interrupts for debugging */
+            writel(0x1, vic_regs + 0x1e8);      /* Enable frame done interrupt (bit 0) */
+            writel(0x3, vic_regs + 0x1ec);      /* Enable MDMA interrupts (bits 0,1) */
+            wmb();
+
+            pr_info("*** tx_vic_enable_irq: VIC hardware interrupt registers configured ***\n");
+            pr_info("*** tx_vic_enable_irq: Enabled frame done (0x1e8=0x1) and MDMA (0x1ec=0x3) interrupts ***\n");
+        }
+
         /* CRITICAL FIX: Call hardware interrupt enable function - Binary Ninja reference */
         /* Binary Ninja: $v0_1 = *(dump_vsd_5 + 0x84); if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
         /* Calling enable_irq() here would interfere with the main dispatcher's IRQ management */
