@@ -1841,9 +1841,7 @@ int tx_isp_video_link_stream(struct tx_isp_dev *arg1, int arg2)
     /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
     s4 = arg1->subdevs;  /* Subdev array at offset 0x38 */
 
-    /* CRITICAL FIX: Skip sensor s_stream calls in main loop to prevent premature MIPI data */
-    /* Sensors will be started AFTER VIC is fully configured and interrupts are enabled */
-    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+
 
     /* Binary Ninja: for (int32_t i = 0; i != 0x10; ) */
     for (i = 0; i != 0x10; ) {
@@ -1859,7 +1857,7 @@ int tx_isp_video_link_stream(struct tx_isp_dev *arg1, int arg2)
                 i += 1;
             } else {
                 /* Binary Ninja: int32_t $v0_4 = *($v0_3 + 4) */
-                int (*v0_4)(struct tx_isp_subdev *, int) = v0_3->s_stream;
+                int (*v0_4)(struct tx_isp_subdev *, int) = v0_3->link_stream;
 
                 if (v0_4 == 0) {
                     /* Binary Ninja: i += 1 */
@@ -1897,7 +1895,7 @@ int tx_isp_video_link_stream(struct tx_isp_dev *arg1, int arg2)
                                         continue;
                                     } else {
                                         /* Binary Ninja: int32_t $v0_7 = *($v0_6 + 4) */
-                                        int (*v0_7)(struct tx_isp_subdev *, int) = v0_6->s_stream;
+                                        int (*v0_7)(struct tx_isp_subdev *, int) = v0_6->link_stream;
 
                                         if (v0_7 == 0) {
                                             /* Binary Ninja: $s0_1 -= 4 (already done above) */
@@ -1979,34 +1977,7 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
 
     pr_info("*** tx_isp_video_s_stream: EXACT Binary Ninja reference implementation - enable=%d ***\n", arg2);
 
-    /* CRITICAL FIX: Call specific activate functions BEFORE streaming if enable=1 */
-    if (arg2 == 1) {
-        /* CRITICAL FIX: Ensure core state is 2 before calling core->init */
-        /* The Binary Ninja reference shows ispcore_core_ops_init expects state 2, not state 1 */
-        pr_info("*** tx_isp_video_s_stream: Preparing core state for initialization ***\n");
 
-        if (arg1->core_dev) {
-            pr_info("*** tx_isp_video_s_stream: Current core state: %d ***\n", arg1->core_dev->state);
-            if (arg1->core_dev->state == 1) {
-                pr_info("*** tx_isp_video_s_stream: Transitioning core state from 1 to 2 (ready) ***\n");
-                arg1->core_dev->state = 2;  /* Set to READY state as expected by ispcore_core_ops_init */
-            }
-        }
-
-        /* Check specifically for the core subdev at index 0 */
-        if (arg1->subdevs[0] && arg1->subdevs[0]->ops && arg1->subdevs[0]->ops->core && arg1->subdevs[0]->ops->core->init) {
-            pr_info("*** tx_isp_video_s_stream: Found ISP Core subdev at index 0 - calling core->init ***\n");
-            int init_result = arg1->subdevs[0]->ops->core->init(arg1->subdevs[0], 1);
-            if (init_result != 0) {
-                pr_err("tx_isp_video_s_stream: ISP Core init failed: %d\n", init_result);
-                return init_result;
-            }
-            pr_info("*** tx_isp_video_s_stream: ISP Core init SUCCESS - state should now be 3 ***\n");
-        } else {
-            pr_err("tx_isp_video_s_stream: ISP Core subdev not found at index 0 or missing core->init\n");
-            return -EINVAL;
-        }
-    }
 
     /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
     s4 = arg1->subdevs;
