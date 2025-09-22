@@ -1961,11 +1961,6 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     tx_isp_set_subdevdata(&vic_dev->sd, vic_dev);
     pr_info("*** VIC PROBE: Stored vic_dev pointer %p in subdev private data ***\n", vic_dev);
 
-    /* CRITICAL FIX: Set host_priv to VIC device for Binary Ninja compatibility */
-    /* Binary Ninja expects VIC device at offset 0xd4 (host_priv field) */
-    tx_isp_set_subdev_hostdata(&vic_dev->sd, vic_dev);
-    pr_info("*** VIC PROBE: Set host_priv to vic_dev %p for Binary Ninja compatibility ***\n", vic_dev);
-
     /* CRITICAL FIX: Set up VIC event callback structure using SAFE struct member access */
     struct vic_event_callback *callback_struct;
 
@@ -1974,13 +1969,20 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         memset(callback_struct, 0, sizeof(struct vic_event_callback));
         callback_struct->event_handler = (int (*)(void*, int, void*))vic_core_ops_ioctl;
 
-        /* SAFE: Store callback in host_priv field - this is what Binary Ninja offset 0xc maps to */
-        vic_dev->sd.host_priv = callback_struct;
+        /* CRITICAL FIX: Store callback in dev_priv field instead of host_priv */
+        /* This prevents overwriting the VIC device pointer that vic_core_s_stream needs */
+        vic_dev->sd.dev_priv = callback_struct;
 
-        pr_info("*** VIC PROBE: Event callback structure set up using SAFE host_priv field ***\n");
+        pr_info("*** VIC PROBE: Event callback structure set up using dev_priv field ***\n");
     } else {
         pr_err("*** VIC PROBE: Failed to allocate callback structure ***\n");
     }
+
+    /* CRITICAL FIX: Set host_priv to VIC device for Binary Ninja compatibility */
+    /* Binary Ninja expects VIC device at offset 0xd4 (host_priv field) */
+    /* This MUST come AFTER callback setup to prevent overwriting */
+    tx_isp_set_subdev_hostdata(&vic_dev->sd, vic_dev);
+    pr_info("*** VIC PROBE: Set host_priv to vic_dev %p for Binary Ninja compatibility ***\n", vic_dev);
 
     /* Binary Ninja: tx_isp_subdev_init(arg1, $v0, &vic_subdev_ops) */
     ret = tx_isp_subdev_init(pdev, &vic_dev->sd, &vic_subdev_ops);
