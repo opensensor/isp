@@ -881,9 +881,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
 
     /* CRITICAL: Also enable the kernel IRQ line if it was registered earlier */
-    if (ourISPdev && ourISPdev->isp_irq > 0) {
-        enable_irq(ourISPdev->isp_irq);
-        pr_info("*** ISP CORE IRQ: enable_irq(%d) called ***\n", ourISPdev->isp_irq);
+    if (ourISPdev && ourISPdev->vic_irq > 0) {
+        enable_irq(ourISPdev->vic_irq);
+        pr_info("*** VIC IRQ: enable_irq(%d) called ***\n", ourISPdev->vic_irq);
     }
 
     /* Binary Ninja EXACT: vic_start_ok = 1 */
