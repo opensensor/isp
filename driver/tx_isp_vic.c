@@ -225,23 +225,14 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: $v0_2 = *(dump_vsd_5 + 0x88); if ($v0_2 != 0) $v0_2(dump_vsd_5 + 0x80) */
 
         /* CRITICAL: Disable VIC hardware interrupt generation */
-        /* CRITICAL FIX: Use SECONDARY VIC registers for interrupt control */
-        if (vic_dev->vic_regs_secondary) {
-            /* CRITICAL FIX: Disable specific VIC interrupt types first in SECONDARY space */
-            writel(0x0, vic_dev->vic_regs_secondary + 0x30c);  /* Disable VIC interrupt enable register */
-            writel(0x0, vic_dev->vic_regs_secondary + 0x10);   /* Disable alternative interrupt enable */
-            writel(0x0, vic_dev->vic_regs_secondary + 0x18);   /* Disable alternative interrupt enable */
-            wmb();
-            pr_info("*** tx_vic_disable_irq: VIC specific interrupt types DISABLED in SECONDARY space ***\n");
-        }
-
+        /* CRITICAL FIX: Use WORKING irqs-start-stop approach in PRIMARY VIC space */
         if (vic_dev->vic_regs) {
-            /* CRITICAL FIX: Disable VIC DMA interrupt generation in PRIMARY space */
-            u32 vic_dma_ctrl = readl(vic_dev->vic_regs + 0x300);
-            vic_dma_ctrl &= ~0x100;  /* Disable DMA interrupt bit */
-            writel(vic_dma_ctrl, vic_dev->vic_regs + 0x300);
+            /* Clear interrupt masks - disable all interrupts */
+            writel(0x0, vic_dev->vic_regs + 0x04);  /* IMR - disable all interrupts */
+            writel(0x0, vic_dev->vic_regs + 0x0c);  /* IMCR - clear interrupt control */
+            writel(0x0, vic_dev->vic_regs + 0x24);  /* IMR1 - clear secondary mask */
             wmb();
-            pr_info("*** tx_vic_disable_irq: VIC DMA interrupt generation DISABLED (reg 0x300 = 0x%x) ***\n", vic_dma_ctrl);
+            pr_info("*** tx_vic_disable_irq: VIC interrupts DISABLED using WORKING approach ***\n");
 
             /* CRITICAL FIX: VIC interrupt mask is DISABLE mask - write 0xFFFFFFFF to DISABLE all interrupts */
             /* Binary Ninja logic: not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
