@@ -4336,12 +4336,21 @@ int tx_isp_core_probe(struct platform_device *pdev)
             return 0;
 
         } else {
-            pr_err("tx_isp_core_probe: Failed to allocate channel array\n");
+            /* Binary Ninja: isp_printf(2, "Failed to init output channels!\n", $a2_2) */
+            pr_err("tx_isp_core_probe: Failed to init output channels!\n");
+
+            /* Binary Ninja: tx_isp_subdev_deinit($v0) */
+            tx_isp_subdev_deinit(&core_dev->sd);
+
+            /* Binary Ninja: private_kfree($v0) */
             tx_isp_destroy_core_device(core_dev);
             return -ENOMEM;
         }
     } else {
-        pr_err("tx_isp_core_probe: Failed to initialize core subdev\n");
+        /* Binary Ninja: isp_printf(2, "Failed to init isp module(%d.%d)\n", zx.d(*($s2_1 + 2))) */
+        pr_err("tx_isp_core_probe: Failed to init isp module\n");
+
+        /* Binary Ninja: private_kfree($v0) */
         tx_isp_destroy_core_device(core_dev);
         return -ENOMEM;
     }
