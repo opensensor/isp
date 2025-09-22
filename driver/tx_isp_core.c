@@ -4215,9 +4215,10 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 current_channel++;
             }
 
-            /* SAFE: Channel array is stored in local variable - not needed in main device structure */
-            /* The channels[] array in isp_dev is used for ISP channel management */
-            /* The channel_array is used for Binary Ninja compatibility during initialization */
+            /* CRITICAL FIX: Assign channel_array to core_dev->frame_channels - THIS WAS MISSING! */
+            /* This is required for ispcore_video_s_stream to access frame channels during stream OFF */
+            core_dev->frame_channels = (struct tx_isp_frame_channel *)channel_array;
+            pr_info("*** tx_isp_core_probe: Assigned frame_channels=%p to core_dev ***\n", core_dev->frame_channels);
 
             /* Set basic platform data first */
             platform_set_drvdata(pdev, ourISPdev);
