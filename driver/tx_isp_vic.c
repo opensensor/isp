@@ -175,6 +175,16 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         vic_start_ok = 1;
         pr_info("*** tx_vic_enable_irq: vic_start_ok flag set to 1 ***\n");
 
+        /* CRITICAL DEBUG: Check VIC interrupt status registers to see if hardware is generating interrupts */
+        if (vic_dev->vic_regs) {
+            u32 int_status = readl(vic_dev->vic_regs + 0x1e0);
+            u32 int_mask = readl(vic_dev->vic_regs + 0x1e8);
+            u32 int_status2 = readl(vic_dev->vic_regs + 0x1e4);
+            u32 int_mask2 = readl(vic_dev->vic_regs + 0x1ec);
+            pr_info("*** VIC DEBUG: INT_STATUS=0x%08x, INT_MASK=0x%08x, INT_STATUS2=0x%08x, INT_MASK2=0x%08x ***\n",
+                    int_status, int_mask, int_status2, int_mask2);
+        }
+
         pr_info("*** tx_vic_enable_irq: VIC interrupts ENABLED ***\n");
     } else {
         pr_info("*** tx_vic_enable_irq: VIC interrupts already enabled ***\n");
@@ -263,6 +273,36 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
 
 static int ispcore_activate_module(struct tx_isp_dev *isp_dev);
 
+/* VIC interrupt status checker - debug function to see if hardware generates interrupts */
+void tx_isp_vic_check_interrupt_status(void)
+{
+    extern struct tx_isp_dev *ourISPdev;
+    static unsigned long last_check = 0;
+    unsigned long now = jiffies;
+
+    /* Check every 5 seconds */
+    if (time_before(now, last_check + 5*HZ)) {
+        return;
+    }
+    last_check = now;
+
+    if (!ourISPdev || !ourISPdev->vic_dev || !ourISPdev->vic_dev->vic_regs || vic_start_ok != 1) {
+        return;
+    }
+
+    struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
+    u32 int_status = readl(vic_dev->vic_regs + 0x1e0);
+    u32 int_status2 = readl(vic_dev->vic_regs + 0x1e4);
+
+    if (int_status != 0 || int_status2 != 0) {
+        pr_info("*** VIC INTERRUPT STATUS CHECK: STATUS1=0x%08x, STATUS2=0x%08x - HARDWARE IS GENERATING INTERRUPTS! ***\n",
+                int_status, int_status2);
+    } else {
+        pr_info("*** VIC INTERRUPT STATUS CHECK: STATUS1=0x%08x, STATUS2=0x%08x - no hardware interrupts ***\n",
+                int_status, int_status2);
+    }
+}
+
 /* VIC interrupt restoration function - EXACT copy from working irqs-start-stop tag */
 void tx_isp_vic_restore_interrupts(void)
 {
@@ -272,6 +312,9 @@ void tx_isp_vic_restore_interrupts(void)
     if (!ourISPdev || !ourISPdev->vic_dev || vic_start_ok != 1) {
         return; /* VIC not active */
     }
+
+    /* Check VIC interrupt status periodically */
+    tx_isp_vic_check_interrupt_status();
 
     pr_info("*** VIC INTERRUPT RESTORE: Restoring VIC interrupt registers in PRIMARY VIC space ***\n");
 
