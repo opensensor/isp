@@ -74,17 +74,6 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1ec);  /* Disable all MDMA interrupts */
             wmb();
 
-            /* CRITICAL MISSING FIX: Enable VIC interrupt generation in hardware */
-            /* The VIC hardware needs to be told to generate interrupts, not just have masks configured */
-            u32 vic_int_enable = readl(vic_dev->vic_regs_control + 0x1e8);
-            pr_info("*** tx_vic_enable_irq: VIC interrupt mask register 0x1e8 = 0x%08x ***\n", vic_int_enable);
-
-            /* CRITICAL: Enable VIC interrupt generation per Binary Ninja reference */
-            /* Binary Ninja shows VIC interrupt enable is in status register, not control register */
-            writel(0x1, vic_dev->vic_regs_control + 0x1e0);  /* Enable interrupt generation in status register */
-            wmb();
-
-            pr_info("*** tx_vic_enable_irq: VIC interrupt generation ENABLED per Binary Ninja (0x1e0=0x1) ***\n");
             pr_info("*** tx_vic_enable_irq: VIC interrupt masks configured (0x1e8=0xFFFFFFFE enables bit 0, 0x1ec=0xFFFFFFFF disables all MDMA) ***\n");
         }
     }
@@ -829,26 +818,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(2, vic_regs + 0x0);
     }
 
-    /* CRITICAL FIX: Configure VIC interrupt generation EXACTLY as Binary Ninja reference */
-    pr_info("*** tx_isp_vic_start: CRITICAL FIX - Configuring VIC interrupt generation per Binary Ninja ***\n");
-
-    /* Binary Ninja: Clear any pending interrupts before configuration */
-    writel(0xFFFFFFFF, vic_regs + 0x1f0);  /* Clear main interrupt status */
-    writel(0xFFFFFFFF, vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
-    wmb();
-
-    /* Binary Ninja: Configure VIC interrupt masks - 0x1e8 is DISABLE mask (1=disable, 0=enable) */
-    writel(0xFFFFFFFE, vic_regs + 0x1e8);  /* Enable frame done interrupt (bit 0) */
-    writel(0xFFFFFFFF, vic_regs + 0x1ec);  /* Disable all MDMA interrupts */
-    wmb();
-
-    /* CRITICAL: Binary Ninja shows VIC needs specific interrupt enable configuration */
-    /* The VIC hardware has separate interrupt enable registers beyond just masks */
-    writel(0x1, vic_regs + 0x1e0);  /* Enable interrupt generation in status register */
-    wmb();
-
-    pr_info("*** tx_isp_vic_start: VIC interrupt generation configured per Binary Ninja reference ***\n");
-
     /* Binary Ninja EXACT: Final VIC enable - *vic_regs = 1 */
     /* Use SECONDARY VIC space for enable (same as unlock sequence) */
     void __iomem *vic_enable_regs = vic_dev->vic_regs_control;
@@ -865,10 +834,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     vic_start_ok = 1;
     pr_info("*** tx_isp_vic_start: vic_start_ok set to 1 - EXACT Binary Ninja reference ***\n");
 
-
-    /* CRITICAL DEBUG: Check VIC interrupt configuration immediately after setup */
     pr_info("*** tx_isp_vic_start: SIMPLIFIED to match Binary Ninja exactly ***\n");
-
     return 0;
 }
 

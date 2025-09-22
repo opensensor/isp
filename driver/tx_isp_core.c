@@ -1473,10 +1473,9 @@ struct tx_isp_sensor *tx_isp_get_sensor(void)
     for (int i = 5; i < ISP_MAX_SUBDEVS; i++) {
         struct tx_isp_subdev *sd = ourISPdev->subdevs[i];
         if (sd && sd->ops && sd->ops->sensor) {
-            /* CRITICAL: Check if this is a REAL sensor subdev, not Core/FS devices */
-            /* The Core and FS devices have sensor ops for registration but are not real sensors */
-            extern struct tx_isp_subdev_ops fs_subdev_ops;
-            if (sd->ops != &core_subdev_ops && sd->ops != &fs_subdev_ops) {
+            /* CRITICAL: Check if this is a REAL sensor subdev, not the Core device */
+            /* The Core device has sensor ops for registration but is not a real sensor */
+            if (sd->ops != &core_subdev_ops) {
                 /* This is a real sensor subdev - get the sensor structure that contains this subdev */
                 /* The sensor structure contains the subdev as sd member, so we use container_of */
                 struct tx_isp_sensor *sensor = container_of(sd, struct tx_isp_sensor, sd);
@@ -2718,6 +2717,22 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 }
 
                 pr_info("*** ispcore_core_ops_init: Core state check passed, proceeding with initialization ***");
+
+                /* Binary Ninja: Call tisp_init() with sensor attributes */
+                extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+                struct tx_isp_sensor *init_sensor = tx_isp_get_sensor();
+                if (init_sensor && init_sensor->video.attr) {
+                    pr_info("*** ispcore_core_ops_init: Calling tisp_init with sensor attributes ***");
+                    ret = tisp_init(init_sensor->video.attr, NULL);
+                    if (ret != 0) {
+                        pr_err("ispcore_core_ops_init: tisp_init failed: %d\n", ret);
+                        return ret;
+                    }
+                    pr_info("*** ispcore_core_ops_init: tisp_init SUCCESS ***");
+                } else {
+                    pr_info("*** ispcore_core_ops_init: No sensor attributes - SKIPPING tisp_init (should only be called once with valid sensor) ***");
+                    /* CRITICAL FIX: Don't call tisp_init without sensor attributes - this was causing register interference */
+                }
 
                 /* CRITICAL: Binary Ninja: *($s0 + 0xe8) = 3 - Set VIC state to 3 (ACTIVE) */
                 vic_dev->state = 3;
