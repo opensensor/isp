@@ -130,6 +130,24 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 0 */
         vic_dev->irq_enabled = 0;
 
+        /* CRITICAL: Disable VIC hardware interrupt registers using SECONDARY VIC registers */
+        void __iomem *vic_regs_secondary = vic_dev->vic_regs_secondary;
+        if (vic_regs_secondary) {
+            /* Disable all VIC hardware interrupts */
+            writel(0x0, vic_regs_secondary + 0x1e8);      /* Disable frame done interrupt */
+            writel(0x0, vic_regs_secondary + 0x1ec);      /* Disable MDMA interrupts */
+            wmb();
+
+            /* Clear any pending interrupts */
+            u32 pending1 = readl(vic_regs_secondary + 0x1e0);
+            u32 pending2 = readl(vic_regs_secondary + 0x1e4);
+            writel(pending1, vic_regs_secondary + 0x1f0);  /* Clear interrupt status 1 */
+            writel(pending2, vic_regs_secondary + 0x1f4);  /* Clear interrupt status 2 */
+            wmb();
+
+            pr_info("*** tx_vic_disable_irq: VIC hardware interrupts DISABLED ***\n");
+        }
+
         /* CRITICAL FIX: Call hardware interrupt disable function using SAFE struct members */
         /* Binary Ninja reference: $v0_2 = *(dump_vsd_5 + 0x88); if ($v0_2 != 0) $v0_2(dump_vsd_5 + 0x80) */
         /* SAFE: Use struct members instead of unsafe offset math */
