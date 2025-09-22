@@ -2471,19 +2471,20 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             
             state->buffer_count = reqbuf.count;
 
-            /* CRITICAL FIX: Allocate buffer address array to store real addresses */
-            if (state->buffer_addresses) {
-                pr_info("*** Channel %d: REQBUFS freeing existing buffer address array ***\n", channel);
-                kfree(state->buffer_addresses);
+            /* CRITICAL FIX: Initialize VBM buffer management for this channel */
+            if (state->vbm_buffer_addresses) {
+                pr_info("*** Channel %d: REQBUFS freeing existing VBM buffer array ***\n", channel);
+                kfree(state->vbm_buffer_addresses);
             }
-            state->buffer_addresses = kzalloc(reqbuf.count * sizeof(uint32_t), GFP_KERNEL);
-            if (!state->buffer_addresses) {
-                pr_err("*** Channel %d: Failed to allocate buffer address array ***\n", channel);
+            state->vbm_buffer_addresses = kzalloc(reqbuf.count * sizeof(uint32_t), GFP_KERNEL);
+            if (!state->vbm_buffer_addresses) {
+                pr_err("*** Channel %d: Failed to allocate VBM buffer array ***\n", channel);
                 state->buffer_count = 0;
                 return -ENOMEM;
             }
-            pr_info("*** Channel %d: REQBUFS allocated buffer address array for %d buffers at %p ***\n",
-                    channel, reqbuf.count, state->buffer_addresses);
+            state->vbm_buffer_count = 0; /* Will be set as buffers are queued */
+            pr_info("*** Channel %d: REQBUFS allocated VBM buffer array for %d buffers at %p ***\n",
+                    channel, reqbuf.count, state->vbm_buffer_addresses);
 
             /* Set buffer type from REQBUFS request */
             fcd->buffer_type = reqbuf.type;
