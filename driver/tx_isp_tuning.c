@@ -1704,13 +1704,24 @@ int tisp_init(void *sensor_info, char *param_name)
         pr_info("*** tisp_init: AE1 buffer allocated at 0x%p ***\n", ae1_buffer);
     }
 
-    /* CRITICAL FIX: Configure ISP with ACTUAL sensor image dimensions */
-    /* This is the missing piece - ISP must know the correct image size */
+    /* Binary Ninja: Final register sequence - EXACT MCP implementation */
+    pr_info("*** tisp_init: FINAL REGISTER SEQUENCE ***\n");
 
-    /* Binary Ninja: system_reg_write(4, width << 16 | height) */
-    system_reg_write(0x4, (actual_image_width << 16) | actual_image_height);
-    pr_info("*** tisp_init: ISP frame size configured - %dx%d (ACTUAL sensor image) ***\n",
-            actual_image_width, actual_image_height);
+    /* Binary Ninja: Final ISP mode configuration */
+    int data_b2e74 = 0;  /* Linear mode (not WDR) */
+    int isp_mode;
+    if (data_b2e74 != 0) {
+        isp_mode = 0x10;  /* WDR mode */
+    } else {
+        isp_mode = 0x1c;  /* Linear mode */
+    }
+
+    /* Binary Ninja: Final three critical register writes */
+    system_reg_write(0x804, isp_mode);  /* ISP routing configuration */
+    system_reg_write(0x1c, 8);          /* ISP control mode */
+    system_reg_write(0x800, 1);         /* Enable ISP pipeline */
+
+    pr_info("*** tisp_init: FINAL REGISTERS - 0x804=0x%x, 0x1c=8, 0x800=1 ***\n", isp_mode);
 
     /* CRITICAL FIX: Configure Bayer pattern mapping - Binary Ninja mbus_to_bayer_write */
     /* GC2053 uses V4L2_MBUS_FMT_SRGGB10_1X10 (0x3001) which maps to Bayer pattern 1 */
