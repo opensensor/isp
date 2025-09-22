@@ -95,35 +95,25 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 
             /* CRITICAL: Check if VIC secondary registers are actually mapped correctly */
             if (vic_int_en1 != 0x1 || vic_int_en2 != 0x3) {
-                pr_err("*** CRITICAL: VIC secondary register writes not sticking! ***\n");
+                pr_err("*** CRITICAL: VIC secondary register writes at 0x10023000 not sticking! ***\n");
                 pr_err("*** Expected 0x1e8=0x1, 0x1ec=0x3 but got 0x1e8=%08x, 0x1ec=%08x ***\n", vic_int_en1, vic_int_en2);
 
-                /* CRITICAL FIX: Try different secondary register addresses */
-                pr_info("*** TRYING ALTERNATIVE SECONDARY VIC REGISTER ADDRESSES ***\n");
+                /* DIAGNOSTIC: Check if VIC hardware is in the right state for interrupt config */
+                u32 vic_status = readl(vic_dev->vic_regs + 0x0);  /* VIC control register */
+                u32 vic_state = readl(vic_dev->vic_regs + 0x4);   /* VIC state register */
+                pr_info("*** VIC DIAGNOSTIC: Primary VIC control=0x%08x, state=0x%08x ***\n", vic_status, vic_state);
 
-                /* Try alternative secondary register mapping - maybe 0x10023000 is wrong */
-                void __iomem *alt_vic_regs = ioremap(0x10024000, 0x1000);  /* Try +0x1000 offset */
-                if (alt_vic_regs) {
-                    writel(0x1, alt_vic_regs + 0x1e8);
-                    writel(0x3, alt_vic_regs + 0x1ec);
-                    wmb();
+                /* DIAGNOSTIC: Check if secondary register space is actually mapped */
+                u32 sec_test1 = readl(vic_regs_secondary + 0x0);
+                u32 sec_test2 = readl(vic_regs_secondary + 0x4);
+                pr_info("*** VIC DIAGNOSTIC: Secondary VIC 0x0=0x%08x, 0x4=0x%08x ***\n", sec_test1, sec_test2);
 
-                    u32 alt_en1 = readl(alt_vic_regs + 0x1e8);
-                    u32 alt_en2 = readl(alt_vic_regs + 0x1ec);
-                    pr_info("*** ALT VIC 0x10024000: 0x1e8=%08x, 0x1ec=%08x ***\n", alt_en1, alt_en2);
-
-                    if (alt_en1 == 0x1 && alt_en2 == 0x3) {
-                        pr_info("*** SUCCESS: Alternative VIC secondary registers at 0x10024000 work! ***\n");
-                        /* Update the secondary register pointer */
-                        iounmap(vic_regs_secondary);
-                        vic_dev->vic_regs_secondary = alt_vic_regs;
-                    } else {
-                        iounmap(alt_vic_regs);
-                        pr_err("*** FAILED: Alternative VIC secondary registers don't work either ***\n");
-                    }
-                } else {
-                    pr_err("*** FAILED: Could not map alternative VIC secondary registers ***\n");
+                /* CRITICAL: Maybe VIC needs to be in streaming state before interrupt registers work */
+                if (vic_status != 0x1) {
+                    pr_info("*** VIC DIAGNOSTIC: VIC not in active state (0x%08x), this might prevent interrupt config ***\n", vic_status);
                 }
+
+                pr_err("*** VIC secondary interrupt configuration FAILED - VIC interrupts will not work ***\n");
             } else {
                 pr_info("*** SUCCESS: VIC secondary interrupt enables are working correctly! ***\n");
             }
