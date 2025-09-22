@@ -679,11 +679,11 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* Binary Ninja: int32_t $v0 = *($v1 + 0x14) */
     interface_type = sensor_attr->dbus_type;
 
-    /* Binary Ninja: *(arg1 + 0xb8) - VIC control register base */
-    /* CRITICAL: Use VIC control registers (0x10023000) for unlock sequence */
-    vic_regs = vic_dev->vic_regs_secondary;
+    /* Binary Ninja: *(arg1 + 0xb8) - VIC register base */
+    /* Use primary VIC registers for MIPI configuration */
+    vic_regs = vic_dev->vic_regs;
     if (!vic_regs) {
-        pr_err("tx_isp_vic_start: No VIC control registers available\n");
+        pr_err("tx_isp_vic_start: No VIC registers available\n");
         return -EINVAL;
     }
 
@@ -747,25 +747,42 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(frame_mode_val, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
 
-        /* Binary Ninja: VIC unlock sequence */
-        writel(2, vic_regs + 0x0);
-        wmb(); /* Ensure write completes */
+        /* Binary Ninja: VIC unlock sequence - use control register space */
+        void __iomem *vic_ctrl_regs = vic_dev->vic_regs_secondary;
+        if (!vic_ctrl_regs) {
+            pr_err("tx_isp_vic_start: No VIC control registers for unlock sequence\n");
+            return -EINVAL;
+        }
 
-        writel(4, vic_regs + 0x0);
+        pr_info("tx_isp_vic_start: Starting VIC unlock sequence\n");
+
+        writel(2, vic_ctrl_regs + 0x0);
         wmb(); /* Ensure write completes */
+        pr_info("tx_isp_vic_start: Wrote 2 to VIC control register\n");
+
+        writel(4, vic_ctrl_regs + 0x0);
+        wmb(); /* Ensure write completes */
+        pr_info("tx_isp_vic_start: Wrote 4 to VIC control register\n");
 
         /* Binary Ninja: while (*$v1_30 != 0) nop */
         u32 vic_status;
         u32 timeout = 100000; /* Add timeout to prevent infinite hang */
-        while ((vic_status = readl(vic_regs + 0x0)) != 0 && timeout-- > 0) {
+        pr_info("tx_isp_vic_start: Waiting for VIC control register to become 0\n");
+
+        while ((vic_status = readl(vic_ctrl_regs + 0x0)) != 0 && timeout-- > 0) {
             /* Binary Ninja: nop - just wait */
             cpu_relax();
+            if ((timeout % 10000) == 0) {
+                pr_info("tx_isp_vic_start: Still waiting, status=0x%x, timeout=%d\n", vic_status, timeout);
+            }
         }
 
         if (timeout == 0) {
             pr_err("tx_isp_vic_start: VIC unlock timeout! Status=0x%x\n", vic_status);
             return -ETIMEDOUT;
         }
+
+        pr_info("tx_isp_vic_start: VIC unlock sequence completed, status=0x%x\n", vic_status);
 
         /* Binary Ninja: Additional MIPI crop configuration */
         writel((mipi->mipi_sc.mipi_crop_start1y << 16) | mipi->mipi_sc.mipi_crop_start3x, vic_regs + 0x104);
@@ -810,8 +827,13 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(2, vic_regs + 0x0);
     }
 
-    /* Binary Ninja: Final VIC enable */
-    writel(1, vic_regs + 0x0);
+    /* Binary Ninja: Final VIC enable - use control register space */
+    void __iomem *vic_ctrl_regs = vic_dev->vic_regs_secondary;
+    if (vic_ctrl_regs) {
+        writel(1, vic_ctrl_regs + 0x0);
+    } else {
+        writel(1, vic_regs + 0x0);
+    }
 
     /* Binary Ninja: Set vic_start_ok */
     extern uint32_t vic_start_ok;
