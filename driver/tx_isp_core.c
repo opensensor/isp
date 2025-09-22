@@ -4348,12 +4348,13 @@ int tx_isp_core_probe(struct platform_device *pdev)
 }
 
 
-/* Core remove function - NEW ARCHITECTURE */
+/* Core remove function - EXACT Binary Ninja MCP implementation */
 int tx_isp_core_remove(struct platform_device *pdev)
 {
+    /* Binary Ninja: void* $v0 = private_platform_get_drvdata() */
     struct tx_isp_core_device *core_dev = platform_get_drvdata(pdev);
 
-    pr_info("*** tx_isp_core_remove: Removing core device ***\n");
+    pr_info("*** tx_isp_core_remove: EXACT Binary Ninja MCP implementation ***\n");
 
     /* Cancel any pending frame sync work to prevent use-after-free */
     pr_info("*** tx_isp_core_remove: Canceling frame sync work ***\n");
@@ -4361,19 +4362,44 @@ int tx_isp_core_remove(struct platform_device *pdev)
     pr_info("*** tx_isp_core_remove: Frame sync work canceled successfully ***\n");
 
     if (tx_isp_core_device_is_valid(core_dev)) {
-        /* Deinitialize tuning system */
+        /* Binary Ninja: int32_t* $s0 = *($v0 + 0xd4) - Get ISP device from core device */
+        /* In our implementation, we use the global ourISPdev */
+
+        /* Binary Ninja: int32_t $a0 = $s0[0x6f] - Get tuning device */
+        /* Binary Ninja: if ($a0 != 0) isp_core_tuning_deinit($a0) */
         if (core_dev->tuning_dev) {
+            pr_info("*** tx_isp_core_remove: Deinitializing tuning system ***\n");
             isp_core_tuning_deinit(core_dev->tuning_dev);
             core_dev->tuning_dev = NULL;
         }
 
-        /* Free channel array */
+        /* Binary Ninja: if ($s0[0x3a] s>= 2) ispcore_slake_module($s0) */
+        if (core_dev->state >= 2) {
+            pr_info("*** tx_isp_core_remove: Calling ispcore_slake_module (state=%d) ***\n", core_dev->state);
+            ispcore_slake_module(ourISPdev);
+        }
+
+        /* Binary Ninja: private_kfree($s0[0x54]) */
         if (core_dev->channel_array) {
+            pr_info("*** tx_isp_core_remove: Freeing channel array ***\n");
             kfree(core_dev->channel_array);
             core_dev->channel_array = NULL;
         }
 
-        /* Destroy core device */
+        /* Binary Ninja: $s0[0x56] = 1 - Set cleanup flag */
+        /* Binary Ninja: $s0[0x54] = 0 - Clear channel array pointer */
+        /* These are handled by our destroy function */
+
+        /* Binary Ninja: tx_isp_subdev_deinit($v0) */
+        pr_info("*** tx_isp_core_remove: Deinitializing subdev ***\n");
+        tx_isp_subdev_deinit(&core_dev->sd);
+
+        /* Binary Ninja: tisp_deinit() */
+        pr_info("*** tx_isp_core_remove: Calling tisp_deinit ***\n");
+        tisp_deinit();
+
+        /* Binary Ninja: private_kfree($s0) */
+        pr_info("*** tx_isp_core_remove: Destroying core device ***\n");
         tx_isp_destroy_core_device(core_dev);
     }
 
