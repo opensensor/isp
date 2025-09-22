@@ -1662,7 +1662,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
     }
 
     /* CRITICAL FIX: Use SECONDARY VIC registers for interrupt handling to match enable function */
-    vic_regs = vic_dev->vic_regs_secondary;
+    vic_regs = vic_dev->vic_regs;
     if (!vic_regs ||
         (unsigned long)vic_regs < 0x80000000 ||
         (unsigned long)vic_regs >= 0xfffff000) {

@@ -104,11 +104,11 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         /* CRITICAL FIX: Enable VIC hardware interrupt registers using SECONDARY VIC registers */
         pr_info("*** tx_vic_enable_irq: Configuring VIC hardware interrupt registers ***\n");
 
-        if (vic_dev->vic_regs_secondary) {
-            void __iomem *vic_secondary = vic_dev->vic_regs_secondary;
+        if (vic_dev->vic_regs) {
+            void __iomem *vic_secondary = vic_dev->vic_regs;
 
             /* CRITICAL FIX: Use SECONDARY VIC register space for interrupt configuration */
-            /* This matches tx_vic_disable_irq which uses vic_regs_secondary */
+            /* This matches tx_vic_disable_irq which uses vic_regs */
 
             /* Enable VIC frame done interrupt */
             writel(0x1, vic_secondary + 0x1e8);     /* VIC frame done interrupt enable */
@@ -174,22 +174,22 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
 
     /* Binary Ninja: if (*(dump_vsd_1 + 0x13c) != 0) */
     if (vic_dev->irq_enabled != 0) {
-        /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 0 */
+        /* Binay Ninja: *(dump_vsd_1 + 0x13c) = 0 */
         vic_dev->irq_enabled = 0;
 
         /* CRITICAL: Disable VIC hardware interrupt registers using SECONDARY VIC registers */
-        void __iomem *vic_regs_secondary = vic_dev->vic_regs_secondary;
-        if (vic_regs_secondary) {
+        void __iomem *vic_regs = vic_dev->vic_regs;
+        if (vic_regs) {
             /* Disable all VIC hardware interrupts */
-            writel(0x0, vic_regs_secondary + 0x1e8);      /* Disable frame done interrupt */
-            writel(0x0, vic_regs_secondary + 0x1ec);      /* Disable MDMA interrupts */
+            writel(0x0, vic_regs + 0x1e8);      /* Disable frame done interrupt */
+            writel(0x0, vic_regs + 0x1ec);      /* Disable MDMA interrupts */
             wmb();
 
             /* Clear any pending interrupts */
-            u32 pending1 = readl(vic_regs_secondary + 0x1e0);
-            u32 pending2 = readl(vic_regs_secondary + 0x1e4);
-            writel(pending1, vic_regs_secondary + 0x1f0);  /* Clear interrupt status 1 */
-            writel(pending2, vic_regs_secondary + 0x1f4);  /* Clear interrupt status 2 */
+            u32 pending1 = readl(vic_regs + 0x1e0);
+            u32 pending2 = readl(vic_regs + 0x1e4);
+            writel(pending1, vic_regs + 0x1f0);  /* Clear interrupt status 1 */
+            writel(pending2, vic_regs + 0x1f4);  /* Clear interrupt status 2 */
             wmb();
 
             pr_info("*** tx_vic_disable_irq: VIC hardware interrupts DISABLED ***\n");
@@ -1949,25 +1949,25 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     vic_dev->hw_irq_enabled = 0; /* Hardware interrupt initially disabled */
     pr_info("*** VIC PROBE: IRQ numbers initialized to 38 ***\n");
 
-    /* CRITICAL FIX: Map VIC register spaces - THIS WAS MISSING! */
-    /* Primary VIC register space (0x133e0000) - main VIC control */
-    vic_dev->vic_regs = ioremap(0x133e0000, 0x1000);
+    /* CRITICAL FIX: Map VIC register spaces - Use correct VIC control base */
+    /* Primary VIC register space (0x10023000) - main VIC control registers */
+    vic_dev->vic_regs = ioremap(0x10023000, 0x1000);
     if (!vic_dev->vic_regs) {
-        pr_err("*** VIC PROBE: CRITICAL - Failed to map primary VIC registers at 0x133e0000 ***\n");
+        pr_err("*** VIC PROBE: CRITICAL - Failed to map VIC control registers at 0x10023000 ***\n");
         private_kfree(vic_dev);
         return -ENOMEM;
     }
-    pr_info("*** VIC PROBE: Primary VIC registers mapped at 0x133e0000 -> %p ***\n", vic_dev->vic_regs);
+    pr_info("*** VIC PROBE: VIC control registers mapped at 0x10023000 -> %p ***\n", vic_dev->vic_regs);
 
-    /* Secondary VIC register space (0x10023000) - for specific operations */
-    vic_dev->vic_regs_secondary = ioremap(0x10023000, 0x1000);
-    if (!vic_dev->vic_regs_secondary) {
-        pr_err("*** VIC PROBE: CRITICAL - Failed to map secondary VIC registers at 0x10023000 ***\n");
+    /* Secondary VIC register space (0x133e0000) - for extended operations */
+    vic_dev->vic_regs = ioremap(0x133e0000, 0x10000);
+    if (!vic_dev->vic_regs) {
+        pr_err("*** VIC PROBE: CRITICAL - Failed to map secondary VIC registers at 0x133e0000 ***\n");
         iounmap(vic_dev->vic_regs);
         private_kfree(vic_dev);
         return -ENOMEM;
     }
-    pr_info("*** VIC PROBE: Secondary VIC registers mapped at 0x10023000 -> %p ***\n", vic_dev->vic_regs_secondary);
+    pr_info("*** VIC PROBE: Secondary VIC registers mapped at 0x133e0000 -> %p ***\n", vic_dev->vic_regs);
 
     /* CRITICAL: Initialize list heads for buffer management FIRST */
     INIT_LIST_HEAD(&vic_dev->queue_head);
@@ -1990,8 +1990,8 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     pr_info("*** VIC PROBE: Hardware IRQ function pointers set using SAFE struct members (tx_isp_enable/disable_irq) ***\n");
 
     /* CRITICAL: Test VIC secondary register access to verify mapping */
-    if (vic_dev->vic_regs_secondary) {
-        u32 test_val = readl(vic_dev->vic_regs_secondary + 0x1e0);
+    if (vic_dev->vic_regs) {
+        u32 test_val = readl(vic_dev->vic_regs + 0x1e0);
         pr_info("*** VIC PROBE: Secondary VIC register test - 0x1e0 = 0x%08x (mapping verified) ***\n", test_val);
     } else {
         pr_err("*** VIC PROBE: CRITICAL - Secondary VIC registers NOT MAPPED! ***\n");
@@ -2101,9 +2101,9 @@ int tx_isp_vic_remove(struct platform_device *pdev)
             vic_dev->vic_regs = NULL;
             pr_info("*** VIC REMOVE: Primary VIC registers unmapped ***\n");
         }
-        if (vic_dev->vic_regs_secondary) {
-            iounmap(vic_dev->vic_regs_secondary);
-            vic_dev->vic_regs_secondary = NULL;
+        if (vic_dev->vic_regs) {
+            iounmap(vic_dev->vic_regs);
+            vic_dev->vic_regs = NULL;
             pr_info("*** VIC REMOVE: Secondary VIC registers unmapped ***\n");
         }
     }
