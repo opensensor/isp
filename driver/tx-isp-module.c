@@ -1984,47 +1984,6 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
 
     /* CRITICAL FIX: Call specific activate functions BEFORE streaming if enable=1 */
     if (arg2 == 1) {
-        pr_info("*** tx_isp_video_s_stream: Calling specific activate functions before streaming ***\n");
-
-        /* Call specific activate functions based on subdev type */
-        for (int i = 0; i < 16; i++) {
-            struct tx_isp_subdev *subdev = arg1->subdevs[i];
-            if (subdev) {
-                int activate_result = 0;
-
-                /* Call the appropriate activate function based on subdev index/type */
-                if (i == 0 && subdev->ops == &csi_subdev_ops) {
-                    /* CSI subdev */
-                    pr_info("*** tx_isp_video_s_stream: Calling tx_isp_csi_activate_subdev on subdev[%d] ***\n", i);
-                    activate_result = tx_isp_csi_activate_subdev(subdev);
-                } else if (i == 1 && subdev->ops == &vic_subdev_ops) {
-                    /* VIC subdev */
-                    pr_info("*** tx_isp_video_s_stream: Calling tx_isp_vic_activate_subdev on subdev[%d] ***\n", i);
-                    activate_result = tx_isp_vic_activate_subdev(subdev);
-                } else if (i == 2 && subdev->ops == &vin_subdev_ops) {
-                    /* VIN subdev */
-                    pr_info("*** tx_isp_video_s_stream: Calling tx_isp_vin_activate_subdev on subdev[%d] ***\n", i);
-                    activate_result = tx_isp_vin_activate_subdev(subdev);
-                } else if (i == 4 && subdev->ops == &core_subdev_ops) {
-                    /* Core subdev - call ispcore_activate_module */
-                    pr_info("*** tx_isp_video_s_stream: Calling ispcore_activate_module on subdev[%d] ***\n", i);
-                    activate_result = ispcore_activate_module(arg1);
-                } else if (i == 3) {
-                    /* FS subdev - call fs_activate_module */
-                    pr_info("*** tx_isp_video_s_stream: Calling fs_activate_module on subdev[%d] ***\n", i);
-                    activate_result = fs_activate_module(subdev);
-                }
-
-                if (activate_result != 0) {
-                    pr_err("tx_isp_video_s_stream: activate function failed on subdev[%d]: %d\n", i, activate_result);
-                    return activate_result;
-                }
-                if (activate_result == 0 && (i == 0 || i == 1 || i == 2 || i == 3 || i == 4)) {
-                    pr_info("*** tx_isp_video_s_stream: activate function SUCCESS on subdev[%d] ***\n", i);
-                }
-            }
-        }
-
         /* CRITICAL FIX: Ensure core state is 2 before calling core->init */
         /* The Binary Ninja reference shows ispcore_core_ops_init expects state 2, not state 1 */
         pr_info("*** tx_isp_video_s_stream: Preparing core state for initialization ***\n");
