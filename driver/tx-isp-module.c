@@ -3383,6 +3383,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             struct tx_isp_core_device *core = (struct tx_isp_core_device *)core_dev;
             /* Binary Ninja: void* $v0_96 = *($v1_22 + 0x120) */
             /* SAFE: Use helper method to get sensor attributes instead of unsafe struct access */
+            extern struct tx_isp_sensor *tx_isp_get_sensor(void);
             struct tx_isp_sensor *sensor = tx_isp_get_sensor();
             if (sensor && &sensor->info) {
                 /* Binary Ninja: int32_t $a0_41 = *($v0_96 + 0x90) */
