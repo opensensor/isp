@@ -163,7 +163,7 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             u32 mask2 = readl(vic_dev->vic_regs + 0x1ec);
             u32 vic_int_status = readl(vic_dev->vic_regs + 0x308);  /* VIC interrupt status */
             u32 vic_int_enable = readl(vic_dev->vic_regs + 0x30c);  /* VIC interrupt enable */
-            u32 vic_dma_ctrl = readl(vic_dev->vic_regs + 0x300);    /* VIC DMA control */
+            vic_dma_ctrl = readl(vic_dev->vic_regs + 0x300);    /* VIC DMA control */
 
             pr_info("*** VIC INTERRUPT TEST PRIMARY: status1=0x%x, status2=0x%x, mask1=0x%x, mask2=0x%x ***\n",
                     status1, status2, mask1, mask2);
