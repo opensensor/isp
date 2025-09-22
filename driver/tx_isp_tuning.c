@@ -1723,103 +1723,94 @@ int tisp_init(void *sensor_info, char *param_name)
     system_reg_write(0x1c, 8);          /* ISP control mode */
     system_reg_write(0x800, 1);         /* Enable ISP pipeline */
 
-    pr_info("*** tisp_init: FINAL REGISTERS - 0x804=0x%x, 0x1c=8, 0x800=1 ***\n", isp_mode);
+    /* Binary Ninja: CRITICAL - Initialize all ISP sub-modules */
+    pr_info("*** tisp_init: INITIALIZING ISP SUB-MODULES ***\n");
 
-    // /* Binary Ninja: tiziano function calls - EXACT MCP sequence */
-    // pr_info("*** tisp_init: INITIALIZING ALL ISP PIPELINE COMPONENTS ***\n");
+    /* CRITICAL FIX: Use ACTUAL sensor image dimensions for all ISP components */
+    /* Binary Ninja: Initialize all tiziano sub-modules in correct order */
+    tiziano_ae_init(actual_image_height, actual_image_width, sensor_params.fps);
+    tiziano_awb_init(actual_image_height, actual_image_width);
+    tiziano_gamma_init();  /* Binary Ninja: takes no parameters */
+    tiziano_gib_init();
+    tiziano_lsc_init();
+    tiziano_ccm_init();
+    tiziano_dmsc_init();
+    tiziano_sharpen_init();
+    tiziano_sdns_init();
+    tiziano_mdns_init(actual_image_width, actual_image_height);
+    tiziano_clm_init();
+    tiziano_dpc_init();
+    tiziano_hldc_init();
+    tiziano_defog_init(actual_image_width, actual_image_height);
+    tiziano_adr_init(actual_image_width, actual_image_height);
+    tiziano_af_init(actual_image_height, actual_image_width);
+    tiziano_bcsh_init();
+    tiziano_ydns_init();
+    tiziano_rdns_init();
 
-    // /* Binary Ninja: tiziano_ae_init(data_b2f34, tispinfo, zx.d(arg1[0xc].w)) */
-    // tiziano_ae_init(height, width, 1);
+    /* Binary Ninja: WDR initialization if enabled */
+    if (sensor_params.mode == 1) {  /* WDR mode */
+        pr_info("*** tisp_init: WDR MODE ENABLED - Initializing WDR components ***\n");
+        tiziano_wdr_init(actual_image_width, actual_image_height);
+        tisp_gb_init();
+        /* Enable WDR for all sub-modules */
+        tisp_dpc_wdr_en(1);
+        tisp_lsc_wdr_en(1);
+        tisp_gamma_wdr_en(1);
+        tisp_sharpen_wdr_en(1);
+        tisp_ccm_wdr_en(1);
+        tisp_bcsh_wdr_en(1);
+        tisp_rdns_wdr_en(1);
+        tisp_adr_wdr_en(1);
+        tisp_defog_wdr_en(1);
+        tisp_mdns_wdr_en(1);
+        tisp_dmsc_wdr_en(1);
+        tisp_ae_wdr_en(1);
+        tisp_sdns_wdr_en(1);
+        pr_info("*** tisp_init: WDR COMPONENTS INITIALIZED ***\n");
+    }
 
-    // /* Binary Ninja: tiziano function sequence */
-    // tiziano_awb_init(height, width);
-    // tiziano_gamma_init();
-    // tiziano_gib_init();
-    // tiziano_lsc_init();
-    // tiziano_ccm_init();
-    // tiziano_dmsc_init();
-    // tiziano_sharpen_init();
-    // tiziano_sdns_init();
-    // tiziano_mdns_init(width, height);
-    // tiziano_clm_init();
-    // tiziano_dpc_init();
-    // tiziano_hldc_init();
-    // tiziano_defog_init(width, height);
-    // tiziano_adr_init(width, height);
-    // tiziano_af_init(height, width);
-    // tiziano_bcsh_init();
-    // tiziano_ydns_init();
-    // tiziano_rdns_init();
-
-    // /* Binary Ninja: WDR initialization if needed */
-    // if (data_b2e74 != 1) {
-    //     /* Linear mode - no WDR */
-    //     pr_info("*** tisp_init: LINEAR MODE - WDR disabled ***\n");
-    // } else {
-    //     /* WDR mode initialization */
-    //     pr_info("*** tisp_init: INITIALIZING WDR-SPECIFIC COMPONENTS ***\n");
-    //     tiziano_wdr_init(width, height);
-    //     tisp_gb_init();
-    //     tisp_dpc_wdr_en(1);
-    //     tisp_lsc_wdr_en(1);
-    //     tisp_gamma_wdr_en(1);
-    //     tisp_sharpen_wdr_en(1);
-    //     tisp_ccm_wdr_en(1);
-    //     tisp_bcsh_wdr_en(1);
-    //     tisp_rdns_wdr_en(1);
-    //     tisp_adr_wdr_en(1);
-    //     tisp_defog_wdr_en(1);
-    //     tisp_mdns_wdr_en(1);
-    //     tisp_dmsc_wdr_en(1);
-    //     tisp_ae_wdr_en(1);
-    //     tisp_sdns_wdr_en(1);
-    //     pr_info("*** tisp_init: WDR COMPONENTS INITIALIZED ***\n");
-    // }
-
-    /* Binary Ninja: Event system initialization - EXACT MCP sequence */
-    pr_info("*** tisp_init: INITIALIZING EVENT SYSTEM ***\n");
-
-    /* Binary Ninja: tisp_event_init() */
+    /* Binary Ninja: Initialize event system and callbacks */
+    pr_info("*** tisp_init: INITIALIZING ISP EVENT SYSTEM ***\n");
     tisp_event_init();
-
-    /* Binary Ninja: Event callback registration */
     tisp_event_set_cb(4, tisp_tgain_update);
     tisp_event_set_cb(5, tisp_again_update);
     tisp_event_set_cb(7, tisp_ev_update);
     tisp_event_set_cb(9, tisp_ct_update);
     tisp_event_set_cb(8, tisp_ae_ir_update);
 
-    /* Binary Ninja: system_irq_func_set(0xd, ip_done_interrupt_static) */
-    system_irq_func_set(0xd, ip_done_interrupt_static);
+    /* BINARY NINJA REFERENCE: No continuous thread - events are processed on-demand */
+    pr_info("*** tisp_init: BINARY NINJA REFERENCE - No event processing thread created ***\n");
 
-    /* Binary Ninja: tisp_param_operate_init() */
-    int param_result = tisp_param_operate_init();
-    if (param_result != 0) {
-        pr_err("tisp_init: tisp_param_operate_init failed: %d\n", param_result);
-    }
+    /* The reference driver does NOT create any kthread for event processing */
+    /* Events are processed on-demand when triggered, not continuously */
+    pr_info("*** tisp_init: Event system ready for on-demand processing (Binary Ninja reference) ***\n");
 
-    pr_info("*** tisp_init: EXACT Binary Ninja MCP implementation complete ***\n");
-    return 0;
-}
+    /* Binary Ninja: system_irq_func_set(0xd, ip_done_interrupt_static) - Set IRQ handler */
+    /* CRITICAL: This sets up the ISP processing completion callback - missing piece! */
+    extern irqreturn_t ip_done_interrupt_static(int irq, void *dev_id);
 
-/* ip_done_interrupt_static - EXACT Binary Ninja MCP implementation */
-/* Address: 0x00024e7c */
-int32_t ip_done_interrupt_static(void)
-{
-    pr_info("ip_done_interrupt_static: IP done interrupt handler called\n");
-
-    /* Binary Ninja: if ((system_reg_read(0xc) & 0x40) == 0) */
-    uint32_t reg_val = system_reg_read(0xc);
-    if ((reg_val & 0x40) == 0) {
-        pr_info("ip_done_interrupt_static: LSC bit not set (0x%x), calling tisp_lsc_write_lut_datas\n", reg_val);
-        /* Binary Ninja: tisp_lsc_write_lut_datas() */
-        // tisp_lsc_write_lut_datas();
+    int irq_ret = system_irq_func_set(0xd, ip_done_interrupt_static);
+    if (irq_ret == 0) {
+        pr_info("*** tisp_init: ISP processing completion callback registered (index=0xd) ***\n");
     } else {
-        pr_info("ip_done_interrupt_static: LSC bit already set (0x%x), skipping LUT write\n", reg_val);
+        pr_err("*** tisp_init: Failed to register ISP processing completion callback: %d ***\n", irq_ret);
     }
 
-    /* Binary Ninja: return 2 */
-    return 2;
+    /* Binary Ninja: tisp_param_operate_init() - Final parameter initialization */
+    int param_init_ret = tisp_param_operate_init();
+    if (param_init_ret != 0) {
+        pr_err("tisp_init: tisp_param_operate_init failed: %d\n", param_init_ret);
+        return param_init_ret;
+    }
+
+    /* REFERENCE DRIVER: tx_isp_subdev_pipo is NOT called by tisp_init */
+    /* VIC buffer management and interrupt configuration happens elsewhere */
+
+    pr_info("*** tisp_init: ISP HARDWARE PIPELINE FULLY INITIALIZED - THIS SHOULD TRIGGER REGISTER ACTIVITY ***\n");
+    pr_info("*** tisp_init: All hardware blocks enabled, registers configured, events ready ***\n");
+
+    return 0;
 }
 
 static inline u64 ktime_get_real_ns(void)
@@ -2944,20 +2935,10 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
     /* CRITICAL SAFETY: Block ALL tuning calls except essential VIN operations */
     /* The userspace client is calling this repetitively and corrupting memory */
 
-    /* CRITICAL FIX: Only allow VIN start sequence, disable all continuous tuning */
+    /* Allow only essential VIN initialization commands */
     if (cmd == 0xc00c56c6 && magic == 0x56) {
-        /* Check if this is VIN initialization vs continuous tuning */
-        static int vin_init_count = 0;
-        vin_init_count++;
-
-        if (vin_init_count <= 2) {
-            pr_info("TUNING: Allowing V4L2 control command 0x%x for VIN init (call #%d)\n", cmd, vin_init_count);
-            /* Continue with normal processing for VIN init only */
-        } else {
-            pr_info("TUNING DISABLED: Blocking continuous tuning command 0x%x (call #%d) to prevent CSI PHY corruption\n", cmd, vin_init_count);
-            pr_info("TUNING DISABLED: CSI PHY registers must remain stable for VIC interrupts\n");
-            return 0;
-        }
+        /* This is a V4L2 control command - allow for VIN init */
+        pr_info("TUNING: Allowing V4L2 control command 0x%x for VIN init\n", cmd);
     } else if (cmd == 0x80000e0 && magic == 0x74) {
         /* This might be FPS control for VIN start - allow */
         pr_info("TUNING: Allowing FPS control command 0x%x for VIN start\n", cmd);
