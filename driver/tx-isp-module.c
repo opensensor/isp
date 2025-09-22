@@ -4949,7 +4949,7 @@ static irqreturn_t ispmodule_ip_done_irq_handler(int irq, void *dev_id)
 
 /* tx_isp_handle_sync_sensor_attr_event is now defined in tx_isp_core.c */
 
-/* tx_isp_send_event_to_remote - SAFE implementation using struct member access */
+/* tx_isp_send_event_to_remote - SAFE implementation using VIC device callback field */
 int tx_isp_send_event_to_remote(void *subdev_ptr, int event_type, void *data)
 {
     struct tx_isp_subdev *sd = (struct tx_isp_subdev *)subdev_ptr;
@@ -4957,14 +4957,13 @@ int tx_isp_send_event_to_remote(void *subdev_ptr, int event_type, void *data)
     pr_info("*** tx_isp_send_event_to_remote: SAFE implementation - sd=0x%p, event=0x%x ***\n", sd, event_type);
 
     if (sd != NULL) {
-        /* SAFE: Use dev_priv field which stores the callback structure */
-        void *callback_struct = sd->dev_priv;
+        /* Get VIC device from host_priv (Binary Ninja compatibility) */
+        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)sd->host_priv;
 
-        pr_info("*** tx_isp_send_event_to_remote: callback_struct=0x%p ***\n", callback_struct);
+        pr_info("*** tx_isp_send_event_to_remote: vic_dev=0x%p ***\n", vic_dev);
 
-        if (callback_struct != NULL) {
-            /* SAFE: Cast to proper callback structure type */
-            struct vic_event_callback *vic_callback = (struct vic_event_callback *)callback_struct;
+        if (vic_dev != NULL && vic_dev->event_callback != NULL) {
+            struct vic_event_callback *vic_callback = vic_dev->event_callback;
 
             pr_info("*** tx_isp_send_event_to_remote: event_handler=0x%p ***\n", vic_callback->event_handler);
 
