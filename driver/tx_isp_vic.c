@@ -1758,12 +1758,15 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         vic_dev->stream_state = 0;
 
     } else {
-        /* EMERGENCY FIX: Disable complex VIC buffer programming to prevent kernel panic */
-        pr_info("*** EMERGENCY: VIC buffer programming DISABLED to prevent kernel panic ***\n");
-        pr_info("*** Stream ON will proceed with minimal VIC configuration ***\n");
+        /* BINARY NINJA MCP: Proper VIC buffer programming sequence */
+        pr_info("*** BINARY NINJA MCP: VIC buffer programming ENABLED - following reference driver ***\n");
+        pr_info("*** Stream ON will proceed with FULL VIC configuration ***\n");
 
-        /* Set minimal buffer count to prevent division by zero or invalid operations */
-        vic_dev->active_buffer_count = 1;
+        /* Binary Ninja: Use actual buffer count from VBM system */
+        if (vic_dev->active_buffer_count == 0) {
+            vic_dev->active_buffer_count = 4;  /* Default buffer count */
+        }
+        pr_info("*** VIC: Using %d buffers for streaming ***\n", vic_dev->active_buffer_count);
 
         /* CRITICAL FIX: RE-ENABLE vic_pipo_mdma_enable - this is required for VIC interrupts! */
         pr_info("*** CRITICAL: RE-ENABLING vic_pipo_mdma_enable - required for VIC interrupts ***\n");
