@@ -2126,7 +2126,14 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
                     }
                     pr_info("*** tx_isp_video_s_stream: ispcore_core_ops_init SUCCESS - core state should now be 3 ***\n");
                 } else {
-                    pr_info("*** tx_isp_video_s_stream: subdev[%d] is sensor - already initialized by activate_module ***\n", i);
+                    /* CRITICAL FIX: Sensors need their init function called too! */
+                    pr_info("*** tx_isp_video_s_stream: subdev[%d] is sensor - calling sensor init ***\n", i);
+                    int init_result = subdev->ops->core->init(subdev, 1);
+                    if (init_result != 0) {
+                        pr_err("tx_isp_video_s_stream: sensor init failed on subdev[%d]: %d\n", i, init_result);
+                        return init_result;
+                    }
+                    pr_info("*** tx_isp_video_s_stream: sensor init SUCCESS on subdev[%d] ***\n", i);
                 }
             }
         }
