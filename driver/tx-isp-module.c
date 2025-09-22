@@ -4033,7 +4033,7 @@ static const struct file_operations tx_isp_fops = {
 static struct tx_isp_subdev_core_ops main_subdev_core_ops = {
     .init = ispcore_core_ops_init,  /* Will be set when needed */
     .reset = NULL,
-    .ioctl = tx_isp_unlocked_ioctl,
+    .ioctl = NULL,
 };
 
 static struct tx_isp_subdev_ops main_subdev_ops = {
