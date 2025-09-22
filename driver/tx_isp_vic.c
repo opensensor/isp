@@ -155,15 +155,6 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             writel(0xb5742249, vic_dev->vic_regs_secondary + 0x0c);  /* IMCR - working interrupt control */
             wmb();
 
-            pr_info("*** CRITICAL FIX: Applied WORKING interrupt configuration to SECONDARY VIC space (0x10023000) ***\n");
-
-            /* CRITICAL TEST: Check WORKING interrupt configuration registers in SECONDARY space */
-            u32 isr = readl(vic_dev->vic_regs_secondary + 0x00);      /* Interrupt Status Register */
-            u32 imr = readl(vic_dev->vic_regs_secondary + 0x04);      /* Interrupt Mask Register */
-            u32 imcr = readl(vic_dev->vic_regs_secondary + 0x0c);     /* Interrupt Control Register */
-            u32 isr1 = readl(vic_dev->vic_regs_secondary + 0x20);     /* Interrupt Status Register 1 */
-            u32 imr1 = readl(vic_dev->vic_regs_secondary + 0x24);     /* Interrupt Mask Register 1 */
-
             pr_info("*** VIC WORKING INTERRUPT CONFIG (SECONDARY): ISR=0x%x, IMR=0x%x, IMCR=0x%x ***\n",
                     isr, imr, imcr);
             pr_info("*** VIC WORKING INTERRUPT CONFIG (SECONDARY): ISR1=0x%x, IMR1=0x%x ***\n",
@@ -907,7 +898,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     /* CRITICAL: Initialize VIC hardware interrupts BEFORE enabling VIC */
     pr_info("*** tx_isp_vic_start: Step 3.5 - Initializing VIC hardware interrupts ***\n");
-    ret = tx_isp_vic_hw_init(&vic_dev->sd);
+    int ret = tx_isp_vic_hw_init(&vic_dev->sd);
     if (ret != 0) {
         pr_err("*** tx_isp_vic_start: tx_isp_vic_hw_init FAILED: %d ***\n", ret);
         return ret;
