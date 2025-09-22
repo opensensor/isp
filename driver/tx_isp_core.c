@@ -287,7 +287,11 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     __private_spin_lock_irqsave(&core_dev->lock, &var_28);
 
     /* Binary Ninja: if (*($s0 + 0xe8) s< 3) */
+    pr_info("*** CORE STATE CHECK: core_dev->state=%d (need >=3), enable=%d ***\n", core_dev->state, enable);
+
     if (core_dev->state < 3) {
+        pr_err("*** WORKING BACKWARDS: Current state=%d, need to find missing %d->3 transition ***\n",
+               core_dev->state, core_dev->state);
         /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream") */
         isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream");
         /* Binary Ninja: private_spin_unlock_irqrestore($s0 + 0xdc, var_28) */
