@@ -724,8 +724,15 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
 
     /* Binary Ninja EXACT: Final VIC enable - *$v0_47 = 1 */
-    writel(1, vic_regs + 0x0);
-    pr_info("*** tx_isp_vic_start: Step 4 - VIC enabled: wrote 1 to reg 0x0 ***\n");
+    /* Use the same control register base that was used for unlock sequence */
+    void __iomem *vic_ctrl_regs = vic_dev->vic_regs_secondary;
+    if (vic_ctrl_regs) {
+        writel(1, vic_ctrl_regs + 0x0);
+        pr_info("*** tx_isp_vic_start: Step 4 - VIC enabled: wrote 1 to control reg 0x0 ***\n");
+    } else {
+        pr_err("tx_isp_vic_start: No VIC control registers for final enable\n");
+        return -EINVAL;
+    }
 
     /* Binary Ninja: Final configuration - Enable ISP pipeline */
     if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
