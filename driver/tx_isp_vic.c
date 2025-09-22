@@ -155,11 +155,6 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             writel(0xb5742249, vic_dev->vic_regs_secondary + 0x0c);  /* IMCR - working interrupt control */
             wmb();
 
-            pr_info("*** VIC WORKING INTERRUPT CONFIG (SECONDARY): ISR=0x%x, IMR=0x%x, IMCR=0x%x ***\n",
-                    isr, imr, imcr);
-            pr_info("*** VIC WORKING INTERRUPT CONFIG (SECONDARY): ISR1=0x%x, IMR1=0x%x ***\n",
-                    isr1, imr1);
-            pr_info("*** VIC WORKING CONFIG: Should see IMR=0x07800438, IMCR=0xb5742249 ***\n");
         } else {
             pr_err("*** tx_vic_enable_irq: No VIC primary registers - cannot enable hardware interrupts ***\n");
         }
