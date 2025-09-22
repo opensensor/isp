@@ -101,28 +101,34 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             pr_err("*** tx_vic_enable_irq: ISP core registers not available - cannot enable interrupts! ***\n");
         }
 
-        /* CRITICAL FIX: Enable VIC hardware interrupt registers */
+        /* CRITICAL FIX: Enable VIC hardware interrupt registers using SECONDARY VIC registers */
         pr_info("*** tx_vic_enable_irq: Configuring VIC hardware interrupt registers ***\n");
 
-        if (vic_dev->vic_regs) {
-            void __iomem *vic_base = vic_dev->vic_regs;
+        if (vic_dev->vic_regs_secondary) {
+            void __iomem *vic_secondary = vic_dev->vic_regs_secondary;
 
-            /* Enable VIC MDMA interrupt - this is the missing piece for hardware interrupts */
-            writel(0x1, vic_base + 0x30);     /* VIC interrupt enable register */
+            /* CRITICAL FIX: Use SECONDARY VIC register space for interrupt configuration */
+            /* This matches tx_vic_disable_irq which uses vic_regs_secondary */
+
+            /* Enable VIC frame done interrupt */
+            writel(0x1, vic_secondary + 0x1e8);     /* VIC frame done interrupt enable */
             wmb();
-            pr_info("*** VIC INTERRUPT: Enabled VIC interrupt at reg 0x30 = 0x1 ***\n");
+            pr_info("*** VIC INTERRUPT: Enabled VIC frame done interrupt at reg 0x1e8 = 0x1 ***\n");
 
             /* Enable VIC MDMA completion interrupt */
-            writel(0x1, vic_base + 0x34);     /* VIC MDMA interrupt enable */
+            writel(0x1, vic_secondary + 0x1ec);     /* VIC MDMA interrupt enable */
             wmb();
-            pr_info("*** VIC INTERRUPT: Enabled VIC MDMA interrupt at reg 0x34 = 0x1 ***\n");
+            pr_info("*** VIC INTERRUPT: Enabled VIC MDMA interrupt at reg 0x1ec = 0x1 ***\n");
 
-            /* Unmask VIC interrupt sources */
-            writel(0xFFFFFFFF, vic_base + 0x38);  /* VIC interrupt unmask */
+            /* Clear any pending interrupts before enabling */
+            u32 pending1 = readl(vic_secondary + 0x1e0);
+            u32 pending2 = readl(vic_secondary + 0x1e4);
+            writel(pending1, vic_secondary + 0x1f0);  /* Clear interrupt status 1 */
+            writel(pending2, vic_secondary + 0x1f4);  /* Clear interrupt status 2 */
             wmb();
-            pr_info("*** VIC INTERRUPT: Unmasked all VIC interrupts at reg 0x38 = 0xFFFFFFFF ***\n");
+            pr_info("*** VIC INTERRUPT: Cleared pending interrupts (0x%x, 0x%x) ***\n", pending1, pending2);
         } else {
-            pr_err("*** tx_vic_enable_irq: VIC registers not mapped - cannot enable hardware interrupts! ***\n");
+            pr_err("*** tx_vic_enable_irq: Secondary VIC registers not mapped - cannot enable hardware interrupts! ***\n");
         }
 
         /* CRITICAL FIX: Call hardware interrupt enable function using SAFE struct members */
