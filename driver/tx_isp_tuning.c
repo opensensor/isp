@@ -1820,22 +1820,6 @@ int32_t ip_done_interrupt_static(void)
     return 2;
 }
 
-/* tisp_lsc_write_lut_datas - LSC LUT data write function */
-int tisp_lsc_write_lut_datas(void)
-{
-    pr_info("tisp_lsc_write_lut_datas: Writing LSC LUT data to hardware\n");
-
-    /* This function would write LSC (Lens Shading Correction) lookup table data */
-    /* For now, implement as stub - full implementation would require LSC LUT arrays */
-
-    /* Set the LSC bit to indicate LUT data has been written */
-    uint32_t reg_val = system_reg_read(0xc);
-    system_reg_write(0xc, reg_val | 0x40);
-
-    pr_info("tisp_lsc_write_lut_datas: LSC LUT data write complete, bit 0x40 set\n");
-    return 0;
-}
-
 static inline u64 ktime_get_real_ns(void)
 {
     struct timespec ts;
