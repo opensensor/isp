@@ -860,30 +860,9 @@ static int ispcore_activate_module_subdev(struct tx_isp_subdev *sd)
     return 0;
 }
 
-/* Core slake module function - calls ispcore_core_ops_init to deinitialize */
-static int ispcore_slake_module_subdev(struct tx_isp_subdev *sd)
-{
-    pr_info("*** ispcore_slake_module_subdev: Deactivating core device ***\n");
-
-    if (!sd) {
-        pr_err("ispcore_slake_module_subdev: Invalid subdev\n");
-        return -EINVAL;
-    }
-
-    /* Call ispcore_core_ops_init with on=0 to deinitialize */
-    int ret = ispcore_core_ops_init(sd, 0);
-    if (ret == 0) {
-        pr_info("*** ispcore_slake_module_subdev: Core device deactivated successfully ***\n");
-    } else {
-        pr_err("ispcore_slake_module_subdev: Core deactivation failed: %d\n", ret);
-    }
-
-    return ret;
-}
-
 /* Core internal operations - CRITICAL: Missing from original implementation */
 static struct tx_isp_subdev_internal_ops core_internal_ops = {
-    .slake_module = ispcore_slake_module_subdev,
+    .slake_module = ispcore_slake_module,
 };
 
 /* Update the core subdev ops to include the core ops */
