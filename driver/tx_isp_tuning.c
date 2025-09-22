@@ -1407,6 +1407,13 @@ int tisp_ae0_process(void)
 /* ISP tuning file loading function - based on Binary Ninja tiziano_load_parameters */
 static int load_isp_tuning_file(const char *filename)
 {
+	return 0;
+}
+
+/* tisp_init - Binary Ninja EXACT implementation - THE MISSING HARDWARE INITIALIZER */
+/* ISP tuning file loading function - based on Binary Ninja tiziano_load_parameters */
+static int load_isp_tuning_file_real(const char *filename)
+{
     struct file *fp;
     mm_segment_t old_fs;
     loff_t pos = 0;
