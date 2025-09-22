@@ -1559,104 +1559,48 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         return 0;  /* Binary Ninja EXACT: early return without any MDMA operations */
     }
     pr_info("*** ispvic_frame_channel_s_stream: Stream state different - proceeding with streaming setup ***\n");
-    
-    /* BINARY NINJA MCP: Proper VBM buffer allocation sequence */
-    if (arg2 != 0) {
-        pr_info("*** BINARY NINJA MCP: VBM buffer allocation ENABLED - following reference driver ***\n");
-
-        /* Binary Ninja: Proper buffer allocation sequence */
-        if (vic_dev->active_buffer_count > 0) {
-            pr_info("*** VBM: Allocating %d buffers for streaming ***\n", vic_dev->active_buffer_count);
-            /* Buffer allocation will be handled by proper VBM system */
-        } else {
-            pr_info("*** VBM: No buffers allocated yet - will use default buffer management ***\n");
-            vic_dev->active_buffer_count = 4;  /* Default buffer count */
-        }
-    }
-
     /* Binary Ninja EXACT: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
     __private_spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, &var_18);
 
     if (arg2 == 0) {
         /* Stream OFF */
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = 0 */
-        vic_base = vic_dev->vic_regs;
-        if (vic_base && (unsigned long)vic_base >= 0x80000000) {
+        void __iomem *vic_base = vic_dev->vic_regs;  /* SAFE: $s0 + 0xb8 = vic_regs */
+        if (vic_base) {
             writel(0, vic_base + 0x300);
             wmb();
             pr_info("ispvic_frame_channel_s_stream: Stream OFF - wrote 0 to reg 0x300\n");
         }
 
         /* Binary Ninja EXACT: *($s0 + 0x210) = 0 */
-        vic_dev->stream_state = 0;
+        vic_dev->stream_state = 0;  /* SAFE: $s0 + 0x210 = stream_state */
 
     } else {
-        /* BINARY NINJA MCP: Proper VIC buffer programming sequence */
-        pr_info("*** BINARY NINJA MCP: VIC buffer programming ENABLED - following reference driver ***\n");
-        pr_info("*** Stream ON will proceed with FULL VIC configuration ***\n");
-
-        /* Binary Ninja: Use actual buffer count from VBM system */
-        if (vic_dev->active_buffer_count == 0) {
-            vic_dev->active_buffer_count = 4;  /* Default buffer count */
-        }
-        pr_info("*** VIC: Using %d buffers for streaming ***\n", vic_dev->active_buffer_count);
-
-        /* CRITICAL FIX: RE-ENABLE vic_pipo_mdma_enable - this is required for VIC interrupts! */
-        pr_info("*** CRITICAL: RE-ENABLING vic_pipo_mdma_enable - required for VIC interrupts ***\n");
+        /* Stream ON */
+        /* Binary Ninja EXACT: vic_pipo_mdma_enable($s0) */
+        pr_info("*** CRITICAL: Calling vic_pipo_mdma_enable - required for VIC interrupts ***\n");
         vic_pipo_mdma_enable(vic_dev);
         pr_info("*** vic_pipo_mdma_enable completed - VIC MDMA should now generate interrupts! ***\n");
 
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
-        /* CRITICAL: Use proper struct member access instead of dangerous offset +0xb8 */
-        vic_base = vic_dev->vic_regs;
-        if (vic_base && (unsigned long)vic_base >= 0x80000000) {
-            /* CRITICAL: Use proper struct member access instead of dangerous offset +0x218 */
-            pr_info("ispvic_frame_channel_s_stream: BEFORE - active_buffer_count=%d\n", vic_dev->active_buffer_count);
-
-            /* CRITICAL FIX: Follow EXACT reference driver buffer management sequence */
-            /* Reference driver ALWAYS starts VIC hardware immediately with proper buffer configuration */
-            pr_info("*** REFERENCE DRIVER SEQUENCE: Starting VIC hardware with exact buffer configuration ***\n");
-
-            /* BINARY NINJA MCP: Proper VIC control value calculation */
-            pr_info("*** BINARY NINJA MCP: Using proper VIC control value calculation ***\n");
+        void __iomem *vic_base = vic_dev->vic_regs;  /* SAFE: $s0 + 0xb8 = vic_regs */
+        if (vic_base) {
+            /* SAFE: $s0 + 0x218 = active_buffer_count */
             u32 buffer_count = vic_dev->active_buffer_count;
             u32 stream_ctrl = (buffer_count << 16) | 0x80000020;  /* Binary Ninja EXACT formula */
             writel(stream_ctrl, vic_base + 0x300);
             wmb();
 
-            pr_info("*** BINARY NINJA MCP: Wrote proper value 0x%x to reg 0x300 (%d buffers) ***\n", stream_ctrl, buffer_count);
-            pr_info("*** This matches the reference driver buffer management ***\n");
-
-            /* MCP LOG: Stream ON completed */
-            pr_info("MCP_LOG: VIC streaming enabled - ctrl=0x%x, base=%p, state=%d\n",
-                    stream_ctrl, vic_base, 1);
+            pr_info("*** Binary Ninja EXACT: Wrote 0x%x to reg 0x300 (%d buffers) ***\n", stream_ctrl, buffer_count);
         }
-        
-        /* Binary Ninja EXACT: *($s0 + 0x210) = 1 */
-        vic_dev->stream_state = 1;
 
-        /* CRITICAL MISSING CALL: Start VIC frame channel streaming */
-        pr_info("*** CRITICAL: Calling ispvic_frame_channel_s_stream to start VIC frame processing ***\n");
-        /* Note: This should be called AFTER stream_state is set but BEFORE unlocking */
+        /* Binary Ninja EXACT: *($s0 + 0x210) = 1 */
+        vic_dev->stream_state = 1;  /* SAFE: $s0 + 0x210 = stream_state */
     }
 
     /* Binary Ninja EXACT: private_spin_unlock_irqrestore($s0 + 0x1f4, var_18) */
     private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, var_18);
 
-    /* CRITICAL: Call ispvic_frame_channel_s_stream AFTER unlocking to prevent deadlock */
-    if (arg2 != 0 && vic_dev->stream_state == 1) {
-        pr_info("*** CRITICAL: NOW calling ispvic_frame_channel_s_stream for VIC frame processing ***\n");
-        /* This will call vic_pipo_mdma_enable and start actual frame processing */
-        /* Use the subdev that contains this vic_dev */
-        struct tx_isp_subdev *vic_sd = container_of(vic_dev, struct tx_isp_subdev, host_priv);
-        int stream_ret = ispvic_frame_channel_s_stream(vic_sd, 1);
-        if (stream_ret == 0) {
-            pr_info("*** SUCCESS: ispvic_frame_channel_s_stream completed - VIC frame processing started! ***\n");
-        } else {
-            pr_err("*** ERROR: ispvic_frame_channel_s_stream failed: %d ***\n", stream_ret);
-        }
-    }
-    
     /* Binary Ninja EXACT: return 0 */
     return 0;
 }
