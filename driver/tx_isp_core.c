@@ -260,22 +260,12 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     pr_info("*** ispcore_video_s_stream: DEBUG - sd=%p, enable=%d ***\n", sd, enable);
 
     /* CRITICAL DEBUG: Check if sd pointer is valid before container_of */
-    if (!sd || (unsigned long)sd < 0x80000000 || (unsigned long)sd >= 0xa0000000) {
-        pr_err("*** CRITICAL: Invalid sd pointer %p - cannot use container_of ***\n", sd);
-        return -EINVAL;
-    }
 
     core_dev = container_of(sd, struct tx_isp_core_device, sd);
-    pr_info("*** ispcore_video_s_stream: DEBUG - core_dev=%p (from container_of) ***\n", core_dev);
-
-    /* CRITICAL DEBUG: Validate core_dev pointer after container_of */
-    if (!core_dev || (unsigned long)core_dev < 0x80000000 || (unsigned long)core_dev >= 0xa0000000) {
-        pr_err("*** CRITICAL: Invalid core_dev pointer %p from container_of(sd=%p) ***\n", core_dev, sd);
+    if (!core_dev) {
+        pr_err("ispcore_video_s_stream: No core device available\n");
         return -EINVAL;
     }
-
-    /* CRITICAL DEBUG: Check core_dev->frame_channels before accessing */
-    pr_info("*** ispcore_video_s_stream: DEBUG - core_dev->frame_channels=%p ***\n", core_dev->frame_channels);
 
     isp_dev = core_dev->isp_dev;
     if (!isp_dev) {
