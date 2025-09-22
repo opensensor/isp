@@ -4929,26 +4929,19 @@ int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
         return 0;
 
     case 0x3000003: /* TX_ISP_EVENT_FRAME_STREAMON */
-        pr_info("*** tx_isp_send_event_to_remote: STREAMON event - TRIGGERING CORE INITIALIZATION ***\n");
+        pr_info("*** tx_isp_send_event_to_remote: STREAMON event - Binary Ninja EXACT behavior ***\n");
 
-        /* CRITICAL: This event should trigger core initialization according to Binary Ninja reference */
-        if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->sd.ops &&
-            ourISPdev->core_dev->sd.ops->core && ourISPdev->core_dev->sd.ops->core->init) {
+        /* CRITICAL FIX: Binary Ninja reference shows this event should return 0xfffffdfd (success/no-op)
+         * The frame channel STREAMON should work regardless of core state.
+         * Trying to initialize the core when it's already streaming (state 4) causes EINVAL.
+         */
+        if (ourISPdev && ourISPdev->core_dev) {
+            pr_info("*** STREAMON EVENT: Core state=%d - returning success without re-initialization ***\n",
+                    ourISPdev->core_dev->state);
+        }
 
-            pr_info("*** STREAMON EVENT: Calling core init to transition from state 2 to 3 ***\n");
-            int core_init_ret = ourISPdev->core_dev->sd.ops->core->init(&ourISPdev->core_dev->sd, 1);
-
-            if (core_init_ret == 0) {
-                pr_info("*** STREAMON EVENT: Core initialized successfully - state should be 3 ***\n");
-                pr_info("*** CORE STATE AFTER INIT: %d (should be 3) ***\n", ourISPdev->core_dev->state);
-                return 0;
-            } else {
-                pr_err("*** STREAMON EVENT: Core initialization failed: %d ***\n", core_init_ret);
-                return core_init_ret;
-            }
-        } else {
-            pr_err("*** STREAMON EVENT: No core device available for initialization ***\n");
-            return 0xfffffdfd;
+        /* Binary Ninja: Frame STREAMON event returns 0xfffffdfd (success but no-op) */
+        return 0xfffffdfd;
         }
 
     default:
