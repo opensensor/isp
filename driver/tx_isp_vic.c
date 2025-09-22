@@ -2364,8 +2364,17 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
         /* SAFE: Use proper struct member access instead of offset 0x214 */
         vic_dev->processing = 1;
         pr_info("tx_isp_subdev_pipo: set processing = 1 (pipe enabled, safe struct access)\n");
+
+        /* CRITICAL MISSING CALL: Start VIC frame channel streaming */
+        pr_info("*** tx_isp_subdev_pipo: CALLING ispvic_frame_channel_s_stream to start VIC streaming ***\n");
+        int stream_ret = ispvic_frame_channel_s_stream(sd, 1);  /* Enable streaming */
+        if (stream_ret == 0) {
+            pr_info("*** tx_isp_subdev_pipo: ispvic_frame_channel_s_stream SUCCESS - VIC streaming started! ***\n");
+        } else {
+            pr_err("*** tx_isp_subdev_pipo: ispvic_frame_channel_s_stream FAILED: %d ***\n", stream_ret);
+        }
     }
-    
+
     pr_info("tx_isp_subdev_pipo: completed successfully, returning 0\n");
     return 0;
 }
