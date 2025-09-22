@@ -1936,6 +1936,14 @@ int tx_isp_vic_probe(struct platform_device *pdev)
 
     pr_info("*** VIC PROBE: Hardware IRQ function pointers set using SAFE struct members (tx_isp_enable/disable_irq) ***\n");
 
+    /* CRITICAL: Test VIC secondary register access to verify mapping */
+    if (vic_dev->vic_regs_secondary) {
+        u32 test_val = readl(vic_dev->vic_regs_secondary + 0x1e0);
+        pr_info("*** VIC PROBE: Secondary VIC register test - 0x1e0 = 0x%08x (mapping verified) ***\n", test_val);
+    } else {
+        pr_err("*** VIC PROBE: CRITICAL - Secondary VIC registers NOT MAPPED! ***\n");
+    }
+
     /* EMERGENCY FIX: Disable complex buffer management to prevent kernel panic */
     /* Initialize only the absolute minimum required for basic operation */
     pr_info("*** EMERGENCY: VIC buffer management DISABLED to prevent kernel panic ***\n");

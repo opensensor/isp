@@ -568,7 +568,14 @@ void system_reg_write(u32 arg1, u32 arg2)
     extern uint32_t vic_start_ok;
 
     /* Binary Ninja: Get register base from ISP device structure at offset 0xb8 */
-    void __iomem *reg_base = ourISPdev->vic_regs;  /* This is at offset 0xb8 in the structure */
+    /* CRITICAL FIX: Use ISP CORE registers, not VIC registers - Binary Ninja reference shows core regs */
+    void __iomem *reg_base = NULL;
+    if (ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
+        reg_base = ourISPdev->core_dev->core_regs;  /* ISP core registers for system_reg_write */
+    } else {
+        pr_warn("system_reg_write: ISP core registers not available, falling back to VIC regs\n");
+        reg_base = ourISPdev->vic_regs;  /* Fallback to VIC regs */
+    }
 
     if (!reg_base) {
         pr_warn("system_reg_write: No register base available for reg=0x%x val=0x%x\n", arg1, arg2);
