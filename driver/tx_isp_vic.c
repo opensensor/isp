@@ -2096,11 +2096,11 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         /* This is a simplified approach - the full reference uses complex buffer management */
 
         /* Get buffer address from VBM system (this is where QBUF stores addresses) */
-        extern struct tx_isp_dev *ourISPdev;
-        if (ourISPdev && ourISPdev->frame_channel_state[0].vbm_buffer_addresses) {
+        extern struct frame_channel_device frame_channels[];
+        if (frame_channels[0].state.vbm_buffer_addresses) {
             int i;
             for (i = 0; i < 5; i++) {
-                buffer_addr = ourISPdev->frame_channel_state[0].vbm_buffer_addresses[i];
+                buffer_addr = frame_channels[0].state.vbm_buffer_addresses[i];
                 if (buffer_addr != 0) {
                     /* Binary Ninja EXACT: int32_t $v1_1 = $v0_5[4] - get buffer index */
                     buffer_index = i;
