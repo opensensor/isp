@@ -1500,8 +1500,8 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         pr_err("*** CRITICAL ERROR: No VBM buffer addresses available - VIC cannot generate interrupts! ***\n");
         pr_err("*** vbm_buffer_addresses=%p, vbm_buffer_count=%d ***\n",
                state->vbm_buffer_addresses, state->vbm_buffer_count);
-        pr_err("*** vic_dev->buffer_addresses=%p, active_buffer_count=%d ***\n",
-               vic_dev->buffer_addresses, vic_dev->active_buffer_count);
+        pr_err("*** vic_dev->active_buffer_count=%d ***\n",
+               vic_dev->active_buffer_count);
     }
 
     pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - VIC should now generate interrupts! ***\n");
