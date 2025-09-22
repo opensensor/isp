@@ -546,6 +546,8 @@ int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
 /* Define the core operations */
 static struct tx_isp_subdev_core_ops csi_core_ops = {
     .init = csi_core_ops_init,
+    .reset = NULL,
+    .ioctl = NULL,
 };
 
 /* Define the video operations */
@@ -886,3 +888,4 @@ int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
 
 EXPORT_SYMBOL(dump_csi_reg);
 EXPORT_SYMBOL(tx_isp_csi_activate_subdev);
+EXPORT_SYMBOL(csi_core_ops_init);
