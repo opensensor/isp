@@ -167,7 +167,7 @@ static struct tx_isp_subdev_internal_ops fs_internal_ops = {
 };
 
 /* FS complete subdev operations structure */
-static struct tx_isp_subdev_ops fs_subdev_ops = {
+struct tx_isp_subdev_ops fs_subdev_ops = {
     .core = &fs_core_ops,
     .sensor = &fs_sensor_ops,
     .internal = &fs_internal_ops,

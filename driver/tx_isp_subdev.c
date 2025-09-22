@@ -941,10 +941,6 @@ void tx_isp_free_irq(struct tx_isp_irq_info *irq_info)
     pr_info("tx_isp_free_irq: IRQ freed\n");
 }
 
-
-static struct tx_isp_subdev_ops fs_subdev_ops = { 0 }; // All fields NULL/0
-
-
 /* Platform driver structures */
 static struct platform_driver tx_isp_csi_driver = {
     .probe = tx_isp_csi_probe,
