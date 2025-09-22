@@ -3231,51 +3231,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             ourISPdev->core_dev->streaming = 0;  /* Clear streaming flag */
         }
 
-        // Binary Ninja: tx_isp_send_event_to_remote(*($s0 + 0x2bc), 0x3000003, 0)
-        if (ourISPdev) {
-            pr_info("*** Channel %d: STREAMON - Sending TX_ISP_EVENT_FRAME_STREAMON ***\n", channel);
-
-            /* CRITICAL FIX: Call ispcore_core_ops_init directly instead of broken event system */
-            if (ourISPdev->subdevs[4]) {  /* Core subdev is at index 4 */
-                pr_info("*** STREAMON EVENT: Core subdev found at index 4: %p ***\n", ourISPdev->subdevs[4]);
-                pr_info("*** STREAMON EVENT: Current core state: %d ***\n", ourISPdev->core_dev->state);
-                pr_info("*** STREAMON EVENT: Calling core init to transition from state 2 to 3 ***\n");
-
-                ret = ispcore_core_ops_init(ourISPdev->subdevs[4], 1);
-                pr_info("*** STREAMON EVENT: ispcore_core_ops_init returned: %d ***\n", ret);
-                pr_info("*** STREAMON EVENT: Core state after init: %d ***\n", ourISPdev->core_dev->state);
-
-                if (ret == 0) {
-                    pr_info("*** STREAMON EVENT: Core initialization SUCCESS ***\n");
-
-                    // CRITICAL FIX: Call tx_isp_video_s_stream to enable VIC interrupts
-                    pr_info("*** Channel %d: STREAMON - Calling tx_isp_video_s_stream to enable VIC interrupts ***\n", channel);
-                    ret = tx_isp_video_s_stream(ourISPdev, 1);
-                    if (ret != 0) {
-                        pr_err("Channel %d: STREAMON - tx_isp_video_s_stream failed: %d\n", channel, ret);
-                        state->flags &= ~1;
-                        state->streaming = false;
-                        return ret;
-                    }
-
-                    // Binary Ninja: *($s0 + 0x2d0) = 4
-                    state->state = 4;
-                    pr_info("*** Channel %d: STREAMON - State set to 4 (streaming) ***\n", channel);
-                    return 0;
-                } else {
-                    pr_err("*** STREAMON EVENT: Core initialization failed: %d ***\n", ret);
-                    state->flags &= ~1; // Clear streaming flag on failure
-                    state->streaming = false;
-                    return ret;
-                }
-            } else {
-                pr_err("Channel %d: STREAMON - No core subdev available\n", channel);
-                state->flags &= ~1; // Clear streaming flag on failure
-                state->streaming = false;
-                return -ENODEV;
-            }
-        }
-
         return 0;
     }
     case 0x80045613: { // VIDIOC_STREAMOFF - Binary Ninja EXACT implementation
