@@ -43,23 +43,11 @@ extern void tx_isp_disable_irq(void *irq_info);
 void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 {
     unsigned long flags;
-    extern struct tx_isp_dev *ourISPdev;
-
-    pr_info("*** tx_vic_enable_irq: BINARY NINJA EXACT ***\n");
 
     /* Binary Ninja: if (dump_vsd_5 == 0 || dump_vsd_5 u>= 0xfffff001) return */
     if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
-        pr_err("tx_vic_enable_irq: Invalid VIC device\n");
         return;
     }
-
-    /* CRITICAL SAFETY: Basic validation only - don't block interrupt enable */
-    if (!ourISPdev) {
-        pr_err("tx_vic_enable_irq: ourISPdev is NULL\n");
-        return;
-    }
-
-    pr_info("*** tx_vic_enable_irq: ourISPdev=%p, vic_dev=%p ***\n", ourISPdev, vic_dev);
 
     /* Binary Ninja: __private_spin_lock_irqsave(dump_vsd_2 + 0x130, &var_18) */
     spin_lock_irqsave(&vic_dev->lock, flags);
@@ -69,35 +57,15 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 1 */
         vic_dev->irq_enabled = 1;
 
-        /* CRITICAL FIX: Enable hardware interrupt generation - Binary Ninja reference */
         /* Binary Ninja: $v0_1 = *(dump_vsd_5 + 0x84); if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
-
-        /* CRITICAL FIX: Call kernel IRQ enable function - this was missing! */
         if (vic_dev->irq_handler && vic_dev->irq_priv) {
-            pr_info("*** tx_vic_enable_irq: Calling kernel IRQ enable function (Binary Ninja EXACT) ***\n");
-            vic_dev->irq_handler(vic_dev->irq_priv);  /* This calls tx_isp_enable_irq(&vic_dev->sd.irq_info) */
-            pr_info("*** tx_vic_enable_irq: Kernel IRQ 38 should now be ENABLED ***\n");
-        } else {
-            pr_err("*** tx_vic_enable_irq: CRITICAL ERROR - No IRQ handler function! ***\n");
+            vic_dev->irq_handler(vic_dev->irq_priv);
         }
+    }
 
-        /* CRITICAL: Ensure VIC clocks are enabled before enabling interrupts */
-        void __iomem *cpm_regs = ioremap(0x10000000, 0x1000);
-        if (cpm_regs) {
-            u32 clkgr0 = readl(cpm_regs + 0x20);
-            u32 clkgr1 = readl(cpm_regs + 0x28);
-
-            /* Clear VIC clock gate bits to enable VIC clocks */
-            clkgr0 &= ~(1 << 30); // VIC in CLKGR0
-            clkgr1 &= ~(1 << 30); // VIC in CLKGR1
-
-            writel(clkgr0, cpm_regs + 0x20);
-            writel(clkgr1, cpm_regs + 0x28);
-            wmb();
-            mdelay(10);  /* Allow clocks to stabilize - use mdelay in atomic context */
-            iounmap(cpm_regs);
-            pr_info("*** tx_vic_enable_irq: VIC clocks enabled via CPM ***\n");
-        }
+    /* Binary Ninja: private_spin_unlock_irqrestore(dump_vsd_3 + 0x130, var_18) */
+    spin_unlock_irqrestore(&vic_dev->lock, flags);
+}
 
         /* CRITICAL MISSING: Initialize secondary VIC registers - THIS WAS THE MISSING STEP! */
         if (vic_dev->vic_regs_secondary) {
