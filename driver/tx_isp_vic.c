@@ -829,13 +829,16 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     interface_type = sensor_attr->dbus_type;
 
     /* Binary Ninja: *(arg1 + 0xb8) - VIC register base */
-    /* CRITICAL FIX: Use SECONDARY VIC registers (0x10023000) for ALL operations - matches Binary Ninja */
-    vic_regs = vic_dev->vic_regs_secondary;
+    /* CRITICAL FIX: Map VIC registers DYNAMICALLY during tx_isp_vic_start - matches Binary Ninja reference */
+    vic_regs = ioremap(0x10023000, 0x1000);
     if (!vic_regs) {
-        pr_err("tx_isp_vic_start: No VIC registers available\n");
+        pr_err("tx_isp_vic_start: Failed to map VIC registers at 0x10023000\n");
         return -EINVAL;
     }
-    pr_info("*** tx_isp_vic_start: Using SECONDARY VIC space (0x10023000) for ALL operations ***\n");
+    pr_info("*** tx_isp_vic_start: DYNAMICALLY mapped VIC registers 0x10023000 -> %p ***\n", vic_regs);
+
+    /* Store the dynamically mapped registers for later use */
+    vic_dev->vic_regs_dynamic = vic_regs;
 
     /* Binary Ninja: if ($v0 == 1) */
     pr_info("*** tx_isp_vic_start: CRITICAL DEBUG - interface_type=%d, checking if == 1 ***\n", interface_type);
