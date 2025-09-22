@@ -704,28 +704,41 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
             pr_err("*** CRITICAL ERROR: No core registers mapped ***\n");
         }
     } else if (strcmp(dev_name, "gc2053") == 0 || strstr(dev_name, "sensor") != NULL) {
-        /* CRITICAL: This is a sensor device - register it in the subdev array */
-        pr_info("*** DETECTED SENSOR DEVICE: '%s' - registering in subdev array ***\n", dev_name);
+        /* CRITICAL: This is a sensor device - check if already registered to prevent duplicates */
+        pr_info("*** DETECTED SENSOR DEVICE: '%s' - checking for existing registration ***\n", dev_name);
 
-        /* Find next available slot starting from index 5 (after CSI=0, VIC=1, VIN=2, FS=3, Core=4) */
-        int sensor_index = -1;
+        /* CRITICAL FIX: Check if this subdev is already registered to prevent duplicates */
+        bool already_registered = false;
         for (int i = 5; i < ISP_MAX_SUBDEVS; i++) {
-            if (ourISPdev->subdevs[i] == NULL) {
-                sensor_index = i;
+            if (ourISPdev->subdevs[i] == sd) {
+                already_registered = true;
+                pr_info("*** SENSOR '%s' already registered at subdev index %d (sd=%p) ***\n", dev_name, i, sd);
+                pr_info("*** SENSOR: Skipping duplicate registration to prevent multiple sensor inits ***\n");
                 break;
             }
         }
 
-        if (sensor_index != -1) {
-            ourISPdev->subdevs[sensor_index] = sd;
-            sd->isp = ourISPdev;
-            pr_info("*** SENSOR '%s' registered at subdev index %d ***\n", dev_name, sensor_index);
-            pr_info("*** SENSOR subdev: %p, ops: %p ***\n", sd, sd->ops);
-            if (sd->ops && sd->ops->sensor) {
-                pr_info("*** SENSOR ops->sensor: %p ***\n", sd->ops->sensor);
+        if (!already_registered) {
+            /* Find next available slot starting from index 5 (after CSI=0, VIC=1, VIN=2, FS=3, Core=4) */
+            int sensor_index = -1;
+            for (int i = 5; i < ISP_MAX_SUBDEVS; i++) {
+                if (ourISPdev->subdevs[i] == NULL) {
+                    sensor_index = i;
+                    break;
+                }
             }
-        } else {
-            pr_err("*** No available slot for sensor '%s' ***\n", dev_name);
+
+            if (sensor_index != -1) {
+                ourISPdev->subdevs[sensor_index] = sd;
+                sd->isp = ourISPdev;
+                pr_info("*** SENSOR '%s' registered at subdev index %d ***\n", dev_name, sensor_index);
+                pr_info("*** SENSOR subdev: %p, ops: %p ***\n", sd, sd->ops);
+                if (sd->ops && sd->ops->sensor) {
+                    pr_info("*** SENSOR ops->sensor: %p ***\n", sd->ops->sensor);
+                }
+            } else {
+                pr_err("*** No available slot for sensor '%s' ***\n", dev_name);
+            }
         }
     } else {
         pr_info("*** DEBUG: Unknown device name '%s' - no specific auto-link handling ***\n", dev_name);

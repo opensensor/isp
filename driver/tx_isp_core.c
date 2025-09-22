@@ -3900,7 +3900,7 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
 
             /* SAFE: Use struct member access for state field instead of *(s2_1 + 0x74) */
             if (channel_s2->state != 4) {
-                //tisp_channel_start((uint32_t)arg1[1] & 0xff, NULL); /* zx.d(arg1[1].b) */
+                tisp_channel_start((uint32_t)arg1[1] & 0xff, NULL); /* zx.d(arg1[1].b) */
                 channel_s2->state = 4; /* *(s2_1 + 0x74) = 4 */
                 uint32_t a1_6 = var_58;
                 arg1[7] = 4;

@@ -1479,6 +1479,7 @@ static int sensor_get_black_pedestal(struct tx_isp_subdev *sd, int value) {
 static int sensor_init(struct tx_isp_subdev *sd, int enable) {
 	struct tx_isp_sensor *sensor = sd_to_sensor_device(sd);
 	int ret = 0;
+	static bool sensor_initialized = false;
 
 	ISP_WARNING("*** SENSOR_INIT: %s enable=%d ***\n", SENSOR_NAME, enable);
 	if (!enable) {
@@ -1486,7 +1487,15 @@ static int sensor_init(struct tx_isp_subdev *sd, int enable) {
 		return ISP_SUCCESS;
 	}
 
-	ISP_WARNING("SENSOR_INIT: Configuring %s (chip_id=0x%x, %dx%d)\n", 
+	/* CRITICAL FIX: Prevent multiple sensor initializations that cause CSI PHY reconfiguration */
+	/* Multiple sensor inits trigger CSI PHY register changes that reset ISP/VIC control registers */
+	if (sensor_initialized) {
+		ISP_WARNING("*** SENSOR_INIT: %s already initialized, skipping to prevent CSI PHY reconfiguration ***\n", SENSOR_NAME);
+		ISP_WARNING("*** SENSOR_INIT: This prevents register reset that disables ISP/VIC interrupts ***\n");
+		return ISP_SUCCESS;
+	}
+
+	ISP_WARNING("SENSOR_INIT: Configuring %s (chip_id=0x%x, %dx%d)\n",
 	            SENSOR_NAME, SENSOR_CHIP_ID, wsize->width, wsize->height);
 	sensor->video.mbus.width = wsize->width;
 	sensor->video.mbus.height = wsize->height;
@@ -1494,15 +1503,19 @@ static int sensor_init(struct tx_isp_subdev *sd, int enable) {
 	sensor->video.mbus.field = V4L2_FIELD_NONE;
 	sensor->video.mbus.colorspace = wsize->colorspace;
 	sensor->video.fps = wsize->fps;
-	
+
 	ISP_WARNING("*** CALLING SENSOR_WRITE_ARRAY WITH %p (should be 137 registers) ***\n", wsize->regs);
 	ret = sensor_write_array(sd, wsize->regs);
 	ISP_WARNING("*** SENSOR_WRITE_ARRAY RETURNED: %d ***\n", ret);
-	
+
 	if (ret) {
 		ISP_ERROR("*** SENSOR_WRITE_ARRAY FAILED: %d ***\n", ret);
 		return ret;
 	}
+
+	/* Mark sensor as initialized to prevent duplicate initialization */
+	sensor_initialized = true;
+	ISP_WARNING("*** SENSOR_INIT: %s initialization complete - marked as initialized ***\n", SENSOR_NAME);
 
 	return 0;
 }
