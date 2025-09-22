@@ -1212,7 +1212,11 @@ long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg)
         }
 
         /* Binary Ninja: Call vic_mdma_enable to enable VIC MDMA */
-        if (vic_dev->buffer_addresses && vic_dev->buffer_addresses[0]) {
+        /* Use VBM buffer addresses for snapraw command */
+        extern struct frame_channel_device frame_channels[];
+        struct tx_isp_channel_state *state = &frame_channels[0].state;
+
+        if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
             int format_type = 0;  /* Default to RAW format */
             int dual_channel = 0; /* Single channel mode */
 
@@ -1224,9 +1228,9 @@ long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg)
                 format_type = 0;  /* Keep as RAW for now */
             }
 
-            pr_info("*** isp_vic_cmd_set: Calling vic_mdma_enable for snapraw ***\n");
+            pr_info("*** isp_vic_cmd_set: Calling vic_mdma_enable for snapraw with VBM buffer ***\n");
             ret = vic_mdma_enable(vic_dev, 0, dual_channel, save_num,
-                                vic_dev->buffer_addresses[0], format_type);
+                                state->vbm_buffer_addresses[0], format_type);
 
             if (ret == 0) {
                 pr_info("*** isp_vic_cmd_set: vic_mdma_enable SUCCESS - VIC MDMA enabled for snapraw ***\n");
@@ -1259,13 +1263,14 @@ long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg)
         }
 
         /* Binary Ninja: Call vic_mdma_enable to enable VIC MDMA */
-        if (vic_dev->buffer_addresses && vic_dev->buffer_addresses[0]) {
+        /* Use VBM buffer addresses for saveraw command */
+        if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
             int format_type = 0;  /* Default to RAW format */
             int dual_channel = 0; /* Single channel mode */
 
-            pr_info("*** isp_vic_cmd_set: Calling vic_mdma_enable for saveraw ***\n");
+            pr_info("*** isp_vic_cmd_set: Calling vic_mdma_enable for saveraw with VBM buffer ***\n");
             ret = vic_mdma_enable(vic_dev, 0, dual_channel, save_num,
-                                vic_dev->buffer_addresses[0], format_type);
+                                state->vbm_buffer_addresses[0], format_type);
 
             if (ret == 0) {
                 pr_info("*** isp_vic_cmd_set: vic_mdma_enable SUCCESS - VIC MDMA enabled for saveraw ***\n");
