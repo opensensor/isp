@@ -2040,6 +2040,21 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
     int i;
     int result;
 
+    /* CRITICAL: Initialize core device before streaming if enable=1 */
+    if (arg2 == 1 && arg1->core_dev && arg1->subdevs[4]) {
+        pr_info("*** tx_isp_video_s_stream: Initializing core device before streaming ***\n");
+        pr_info("*** tx_isp_video_s_stream: Core state before init: %d ***\n", arg1->core_dev->state);
+
+        int core_ret = ispcore_core_ops_init(arg1->subdevs[4], 1);
+        pr_info("*** tx_isp_video_s_stream: ispcore_core_ops_init returned: %d ***\n", core_ret);
+        pr_info("*** tx_isp_video_s_stream: Core state after init: %d ***\n", arg1->core_dev->state);
+
+        if (core_ret != 0) {
+            pr_err("tx_isp_video_s_stream: Core initialization failed: %d\n", core_ret);
+            return core_ret;
+        }
+    }
+
     /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
     s4 = arg1->subdevs;
 
