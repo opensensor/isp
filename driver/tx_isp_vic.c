@@ -85,7 +85,7 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             writel(clkgr0, cpm_regs + 0x20);
             writel(clkgr1, cpm_regs + 0x28);
             wmb();
-            msleep(10);  /* Allow clocks to stabilize */
+            mdelay(10);  /* Allow clocks to stabilize - use mdelay in atomic context */
             iounmap(cpm_regs);
             pr_info("*** tx_vic_enable_irq: VIC clocks enabled via CPM ***\n");
         }
