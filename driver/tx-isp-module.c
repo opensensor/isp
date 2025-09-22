@@ -2429,9 +2429,9 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
                         /* Free previously allocated buffer structures */
                         for (int j = 0; j < i; j++) {
-                            if (state->buffer_addresses && state->buffer_addresses[j] != 0) {
-                                kfree((void *)(uintptr_t)state->buffer_addresses[j]);
-                                state->buffer_addresses[j] = 0;
+                            if (state->vbm_buffer_addresses && state->vbm_buffer_addresses[j] != 0) {
+                                kfree((void *)(uintptr_t)state->vbm_buffer_addresses[j]);
+                                state->vbm_buffer_addresses[j] = 0;
                             }
                         }
                         return -ENOMEM;
