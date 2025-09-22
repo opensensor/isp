@@ -1669,15 +1669,40 @@ int tisp_init(void *sensor_info, char *param_name)
     system_reg_write(0x10, format_reg_val);
     pr_info("*** tisp_init: Format register 0x10: 0x%x ***\n", format_reg_val);
 
-    /* REFERENCE DRIVER: Final ISP configuration registers (Binary Ninja exact sequence) */
-    /* These are the final three critical registers that enable the ISP pipeline */
+    /* Binary Ninja: Buffer allocation sequence - EXACT MCP implementation */
+    pr_info("*** tisp_init: ALLOCATING ISP PROCESSING BUFFERS ***\n");
 
-    uint32_t isp_mode = 0x1c;  /* Normal mode (not WDR) - Binary Ninja: $v0_30 = 0x1c */
-    system_reg_write(0x804, isp_mode);  /* ISP routing configuration */
-    system_reg_write(0x1c, 8);          /* ISP control mode */
-    system_reg_write(0x800, 1);         /* Enable ISP pipeline */
+    /* Binary Ninja: AE buffer allocation - private_kmalloc(0x6000, 0xd0) */
+    void *ae0_buffer = kmalloc(0x6000, GFP_KERNEL);
+    if (ae0_buffer != NULL) {
+        /* Binary Ninja: AE0 buffer register setup */
+        system_reg_write(0xa02c, virt_to_phys(ae0_buffer));
+        system_reg_write(0xa030, virt_to_phys(ae0_buffer) + 0x1000);
+        system_reg_write(0xa034, virt_to_phys(ae0_buffer) + 0x2000);
+        system_reg_write(0xa038, virt_to_phys(ae0_buffer) + 0x3000);
+        system_reg_write(0xa03c, virt_to_phys(ae0_buffer) + 0x4000);
+        system_reg_write(0xa040, virt_to_phys(ae0_buffer) + 0x4800);
+        system_reg_write(0xa044, virt_to_phys(ae0_buffer) + 0x5000);
+        system_reg_write(0xa048, virt_to_phys(ae0_buffer) + 0x5800);
+        system_reg_write(0xa04c, 0x33);
+        pr_info("*** tisp_init: AE0 buffer allocated at 0x%p ***\n", ae0_buffer);
+    }
 
-    pr_info("*** tisp_init: REFERENCE DRIVER final configuration - 0x804=0x%x, 0x1c=8, 0x800=1 ***\n", isp_mode);
+    /* Binary Ninja: AE1 buffer allocation */
+    void *ae1_buffer = kmalloc(0x6000, GFP_KERNEL);
+    if (ae1_buffer != NULL) {
+        /* Binary Ninja: AE1 buffer register setup */
+        system_reg_write(0xa82c, virt_to_phys(ae1_buffer));
+        system_reg_write(0xa830, virt_to_phys(ae1_buffer) + 0x1000);
+        system_reg_write(0xa834, virt_to_phys(ae1_buffer) + 0x2000);
+        system_reg_write(0xa838, virt_to_phys(ae1_buffer) + 0x3000);
+        system_reg_write(0xa83c, virt_to_phys(ae1_buffer) + 0x4000);
+        system_reg_write(0xa840, virt_to_phys(ae1_buffer) + 0x4800);
+        system_reg_write(0xa844, virt_to_phys(ae1_buffer) + 0x5000);
+        system_reg_write(0xa848, virt_to_phys(ae1_buffer) + 0x5800);
+        system_reg_write(0xa84c, 0x33);
+        pr_info("*** tisp_init: AE1 buffer allocated at 0x%p ***\n", ae1_buffer);
+    }
 
     /* CRITICAL FIX: Configure ISP with ACTUAL sensor image dimensions */
     /* This is the missing piece - ISP must know the correct image size */
