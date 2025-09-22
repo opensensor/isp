@@ -132,6 +132,21 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             wmb();
             pr_info("*** tx_vic_enable_irq: VIC pending interrupts cleared in PRIMARY registers ***\n");
 
+            /* CRITICAL FIX: Enable specific VIC interrupt types for frame completion */
+            /* Based on Binary Ninja MCP analysis - VIC needs specific interrupt enables */
+            /* Enable frame completion, DMA completion, and buffer ready interrupts */
+            u32 vic_int_enable = 0x1F;  /* Enable frame completion interrupts (bits 0-4) */
+            writel(vic_int_enable, vic_dev->vic_regs + 0x30c);  /* VIC interrupt enable register */
+            wmb();
+            pr_info("*** CRITICAL FIX: VIC specific interrupt types ENABLED (wrote 0x%x to reg 0x30c) ***\n", vic_int_enable);
+
+            /* CRITICAL FIX: Enable VIC DMA interrupt generation */
+            u32 vic_dma_ctrl = readl(vic_dev->vic_regs + 0x300);
+            vic_dma_ctrl |= 0x100;  /* Enable DMA interrupt bit */
+            writel(vic_dma_ctrl, vic_dev->vic_regs + 0x300);
+            wmb();
+            pr_info("*** CRITICAL FIX: VIC DMA interrupt generation ENABLED (reg 0x300 = 0x%x) ***\n", vic_dma_ctrl);
+
             /* CRITICAL TEST: Check if VIC hardware is generating any interrupt signals */
             u32 status1 = readl(vic_dev->vic_regs + 0x1e0);
             u32 status2 = readl(vic_dev->vic_regs + 0x1e4);
@@ -188,6 +203,18 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
         /* CRITICAL: Disable VIC hardware interrupt generation */
         /* CRITICAL FIX: Use PRIMARY VIC registers for interrupt control - secondary is for control only */
         if (vic_dev->vic_regs) {
+            /* CRITICAL FIX: Disable specific VIC interrupt types first */
+            writel(0x0, vic_dev->vic_regs + 0x30c);  /* Disable VIC interrupt enable register */
+            wmb();
+            pr_info("*** tx_vic_disable_irq: VIC specific interrupt types DISABLED (wrote 0x0 to reg 0x30c) ***\n");
+
+            /* CRITICAL FIX: Disable VIC DMA interrupt generation */
+            u32 vic_dma_ctrl = readl(vic_dev->vic_regs + 0x300);
+            vic_dma_ctrl &= ~0x100;  /* Disable DMA interrupt bit */
+            writel(vic_dma_ctrl, vic_dev->vic_regs + 0x300);
+            wmb();
+            pr_info("*** tx_vic_disable_irq: VIC DMA interrupt generation DISABLED (reg 0x300 = 0x%x) ***\n", vic_dma_ctrl);
+
             /* CRITICAL FIX: VIC interrupt mask is DISABLE mask - write 0xFFFFFFFF to DISABLE all interrupts */
             /* Binary Ninja logic: not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
             /* This means mask register bits set to 1 DISABLE interrupts, so write 0xFFFFFFFF to disable all */
