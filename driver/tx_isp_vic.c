@@ -1764,8 +1764,10 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         /* Set minimal buffer count to prevent division by zero or invalid operations */
         vic_dev->active_buffer_count = 1;
 
-        /* EMERGENCY: Skip vic_pipo_mdma_enable to prevent buffer-related crashes */
-        pr_info("*** EMERGENCY: vic_pipo_mdma_enable SKIPPED to prevent crashes ***\n");
+        /* CRITICAL FIX: RE-ENABLE vic_pipo_mdma_enable - this is required for VIC interrupts! */
+        pr_info("*** CRITICAL: RE-ENABLING vic_pipo_mdma_enable - required for VIC interrupts ***\n");
+        vic_pipo_mdma_enable(vic_dev);
+        pr_info("*** vic_pipo_mdma_enable completed - VIC MDMA should now generate interrupts! ***\n");
 
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
         /* CRITICAL: Use proper struct member access instead of dangerous offset +0xb8 */

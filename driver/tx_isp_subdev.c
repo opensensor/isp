@@ -852,7 +852,6 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
         /* Reference driver behavior: Register all IRQs normally without special handling */
 
         /* Binary Ninja: request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, 0x2000, *arg1, arg2) */
-        /* EMERGENCY FIX: Use absolutely minimal handlers to prevent kernel panic */
         extern struct tx_isp_dev *ourISPdev;
         extern irqreturn_t isp_irq_handle(int irq, void *dev_id);
         extern irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
@@ -885,7 +884,7 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
         /* Binary Ninja: *arg2 = $v0_1 */
         irq_info->irq = irq_num;
         /* Binary Ninja: arg2[1] = tx_isp_enable_irq */
-        irq_info->handler = isp_irq_handle;  /* EMERGENCY: Back to minimal safe handler */
+        irq_info->handler = isp_irq_handle;
         /* Binary Ninja: arg2[2] = tx_isp_disable_irq */
         irq_info->data = irq_info;  /* Store self-reference for callbacks */
         /* Binary Ninja: tx_isp_disable_irq(arg2) - initially disable IRQ */
