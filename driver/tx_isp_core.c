@@ -359,6 +359,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     /* Binary Ninja: int32_t result = 0 */
     result = 0;
 
+    while (true) {
     /* Binary Ninja: $a0_4 = *($s0 + 0x15c) */
     a0_4 = core_dev->irq_enabled;
 
@@ -3232,34 +3233,6 @@ void ispcore_frame_channel_streamoff(int32_t* arg1)
         struct tx_isp_subdev *sd = (struct tx_isp_subdev *)v0;
         s0 = sd->host_priv;  /* SAFE: Use struct member access instead of offset arithmetic */
     }
-
-    /* CRITICAL FIX: Use safe struct member access instead of dangerous offset 0x15c */
-    if (!s0) {
-        pr_err("*** CRITICAL: s0 (host_priv) is NULL - cannot access device structure ***\n");
-        return;
-    }
-
-    /* CRITICAL: Check for memory corruption patterns in s0 */
-    if ((unsigned long)s0 == 0x6d617266 || (unsigned long)s0 == 0x66617266 ||
-        (unsigned long)s0 == 0x5aaa5aaa || (unsigned long)s0 == 0x6b6b6b6b ||
-        (unsigned long)s0 == 0xdeadbeef || (unsigned long)s0 == 0xbaadf00d) {
-        pr_err("*** CRITICAL: s0 pointer 0x%p contains corruption pattern - ABORTING ***\n", s0);
-        pr_err("*** This indicates string data or poison values overwrote the pointer ***\n");
-        return;
-    }
-
-    /* CRITICAL: Validate s0 is in valid kernel memory range */
-    if ((unsigned long)s0 < 0x80000000 || (unsigned long)s0 >= 0xfffff000) {
-        pr_err("*** CRITICAL: s0 pointer 0x%p outside kernel memory - ABORTING ***\n", s0);
-        return;
-    }
-
-    /* CRITICAL: Validate s0 is properly aligned */
-    if ((unsigned long)s0 & 0x3) {
-        pr_err("*** CRITICAL: s0 pointer 0x%p not 4-byte aligned - ABORTING ***\n", s0);
-        return;
-    }
-
     /* SAFE FIX: Use struct member access instead of dangerous offset *(s0 + 0x15c) */
     /* Binary Ninja expects this field to be 1 for normal operation, 0 for special handling */
     struct tx_isp_core_device *core_dev = (struct tx_isp_core_device *)s0;
@@ -3270,7 +3243,7 @@ void ispcore_frame_channel_streamoff(int32_t* arg1)
     void* s3 = core_dev->frame_channels;  /* Use frame_channels instead of raw offset */
     int32_t var_28 = 0;
 
-    pr_debug("ispcore_frame_channel_streamoff: core_dev=%p, state=%d, v1_2=%d\n",
+    pr_info("ispcore_frame_channel_streamoff: core_dev=%p, state=%d, v1_2=%d\n",
              core_dev, core_dev->state, v1_2);
 
     if (v1_2 != 1) {

@@ -3260,6 +3260,17 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 ret = ispcore_core_ops_init(ourISPdev->subdevs[4], 1);
                 if (ret == 0) {
                     pr_info("*** STREAMON EVENT: Core initialization SUCCESS ***\n");
+
+                    // CRITICAL FIX: Call tx_isp_video_s_stream to enable VIC interrupts
+                    pr_info("*** Channel %d: STREAMON - Calling tx_isp_video_s_stream to enable VIC interrupts ***\n", channel);
+                    ret = tx_isp_video_s_stream(ourISPdev, 1);
+                    if (ret != 0) {
+                        pr_err("Channel %d: STREAMON - tx_isp_video_s_stream failed: %d\n", channel, ret);
+                        state->flags &= ~1;
+                        state->streaming = false;
+                        return ret;
+                    }
+
                     // Binary Ninja: *($s0 + 0x2d0) = 4
                     state->state = 4;
                     pr_info("*** Channel %d: STREAMON - State set to 4 (streaming) ***\n", channel);
@@ -3288,6 +3299,16 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -EFAULT;
 
         pr_info("*** Channel %d: VIDIOC_STREAMOFF - Binary Ninja implementation ***\n", channel);
+
+        // CRITICAL FIX: Call tx_isp_video_s_stream to disable VIC interrupts
+        if (ourISPdev) {
+            pr_info("*** Channel %d: STREAMOFF - Calling tx_isp_video_s_stream to disable VIC interrupts ***\n", channel);
+            ret = tx_isp_video_s_stream(ourISPdev, 0);
+            if (ret != 0) {
+                pr_err("Channel %d: STREAMOFF - tx_isp_video_s_stream failed: %d\n", channel, ret);
+                // Continue with streamoff even if video s_stream fails
+            }
+        }
 
         // Binary Ninja: return __frame_channel_vb2_streamoff($s0, var_78)
         // For now, implement basic streamoff logic

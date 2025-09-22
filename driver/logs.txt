@@ -1,126 +1,1601 @@
-.903098] *** tx_isp_get_sensor: Searching subdev array for sensors ***
-[   31.903106] *** tx_isp_get_sensor: subdevs[0] = 85205400, ops = c06827e0 ***
-[   31.903113] *** tx_isp_get_sensor: subdevs[0] ops->sensor = c06827fc ***
-[   31.903120] *** tx_isp_get_sensor: subdevs[1] = 855d6000, ops = c0682770 ***
-[   31.903127] *** tx_isp_get_sensor: subdevs[1] ops->sensor = c06827b4 ***
-[   31.903134] *** tx_isp_get_sensor: subdevs[2] = 85a35600, ops = c0683614 ***
-[   31.903142] *** tx_isp_get_sensor: subdevs[2] ops->sensor =   (null) ***
-[   31.903148] *** tx_isp_get_sensor: subdevs[3] = NULL ***
-[   31.903155] *** tx_isp_get_sensor: subdevs[4] = 855d6400, ops = c0682598 ***
-[   31.903162] *** tx_isp_get_sensor: subdevs[4] ops->sensor = c06825b4 ***
-[   31.903169] *** tx_isp_get_sensor: subdevs[5] = 855d6c00, ops = c06a0638 ***
-[   31.903176] *** tx_isp_get_sensor: subdevs[5] ops->sensor = c06a064c ***
-[   31.903183] *** tx_isp_get_sensor: subdevs[6] = 855d6c00, ops = c06a0638 ***
-[   31.903190] *** tx_isp_get_sensor: subdevs[6] ops->sensor = c06a064c ***
-[   31.903195] *** tx_isp_get_sensor: subdevs[7] = NULL ***
-[   31.903201] *** tx_isp_get_sensor: subdevs[8] = NULL ***
-[   31.903206] *** tx_isp_get_sensor: subdevs[9] = NULL ***
-[   31.903212] *** tx_isp_get_sensor: subdevs[10] = NULL ***
-[   31.903218] *** tx_isp_get_sensor: subdevs[11] = NULL ***
-[   31.903223] *** tx_isp_get_sensor: subdevs[12] = NULL ***
-[   31.903228] *** tx_isp_get_sensor: subdevs[13] = NULL ***
-[   31.903234] *** tx_isp_get_sensor: subdevs[14] = NULL ***
-[   31.903240] *** tx_isp_get_sensor: subdevs[15] = NULL ***
-[   31.903246] *** tx_isp_get_sensor: Found real sensor at index 5: 855d6c00 ***
-[   31.903253] *** Channel 0: DQBUF waiting for frame completion (timeout=200ms) ***
-[   31.903269] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
-[   31.903276] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
-[   31.903282] *** Channel 0: Frame completion wait ***
-[   31.903288] *** Channel 0: Waiting for frame (timeout=100ms) ***
-[   31.903308] tisp_adr_set_params: ADR parameters written to hardware
-[   31.903314] tisp_event_set_cb: Setting callback for event 18
-[   31.903321] tisp_event_set_cb: Event 18 callback set to c065a1c4
-[   31.903327] tisp_event_set_cb: Setting callback for event 2
-[   31.903333] tisp_event_set_cb: Event 2 callback set to c065a198
-[   31.903338] tiziano_adr_init: ADR processing initialized successfully
-[   31.903345] tiziano_af_init: Initializing Auto Focus (1920x1080)
-[   31.903350] tiziano_bcsh_init: Initializing BCSH processing
-[   31.903356] tiziano_ydns_init: Initializing YDNS processing
-[   31.903361] tiziano_rdns_init: Initializing RDNS processing
-[   31.903366] *** tisp_init: INITIALIZING ISP EVENT SYSTEM ***
-[   31.903372] tisp_event_init: Initializing ISP event system
-[   31.903379] tisp_event_init: SAFE event system initialized with 20 nodes
-[   31.903385] tisp_event_set_cb: Setting callback for event 4
-[   31.903391] tisp_event_set_cb: Event 4 callback set to c065a1f0
-[   31.903397] tisp_event_set_cb: Setting callback for event 5
-[   31.903403] tisp_event_set_cb: Event 5 callback set to c065aa20
-[   31.903409] tisp_event_set_cb: Setting callback for event 7
-[   31.903415] tisp_event_set_cb: Event 7 callback set to c065a284
-[   31.903421] tisp_event_set_cb: Setting callback for event 9
-[   31.903427] tisp_event_set_cb: Event 9 callback set to c065a30c
-[   31.903433] tisp_event_set_cb: Setting callback for event 8
-[   31.903439] tisp_event_set_cb: Event 8 callback set to c065a3d0
-[   31.903444] *** tisp_init: BINARY NINJA REFERENCE - No event processing thread created ***
-[   31.903450] *** tisp_init: Event system ready for on-demand processing (Binary Ninja reference) ***
-[   31.903456] *** tisp_init: ISP processing completion callback registered (index=0xd) ***
-[   31.903462] tisp_param_operate_init: Initializing parameter operations
-[   31.903470] tisp_netlink_init: Initializing netlink communication
-[   31.903500] Can not support this frame mode!!!
-[   31.903513] CPU: 0 PID: 2376 Comm: prudynt Tainted: G           O 3.10.14__isvp_swan_1.0__ #1
-[   31.903520] Stack : 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
-[   31.903520] 	  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
-[   31.903520] 	  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
-[   31.903520] 	  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
-[   31.903520] 	  00000000 00000000 00000000 00000000 00000000 00000000 00000000 820dbbb8
-[   31.903520] 	  ...
-[   31.903594] Call Trace:[<8001f744>] 0x8001f744
-[   31.903608] [<8001f744>] 0x8001f744
-[   31.903615] [<c065c934>] 0xc065c934
-[   31.903621] [<c0644740>] 0xc0644740
-[   31.903628] [<c065e010>] 0xc065e010
-[   31.903634] [<c065de54>] 0xc065de54
-[   31.903640] [<c065e98c>] 0xc065e98c
-[   31.903646] [<803b462c>] 0x803b462c
-[   31.903652] [<c065efcc>] 0xc065efcc
-[   31.903659] [<c06618a4>] 0xc06618a4
-[   31.903665] [<c065fc3c>] 0xc065fc3c
-[   31.903672] [<c06629e0>] 0xc06629e0
-[   31.903678] [<803b462c>] 0x803b462c
-[   31.903685] [<c065df6c>] 0xc065df6c
-[   31.903691] [<c065d304>] 0xc065d304
-[   31.903698] [<c065d474>] 0xc065d474
-[   31.903704] [<c065d578>] 0xc065d578
-[   31.903710] [<c065d77c>] 0xc065d77c
-[   31.903716] [<c065d91c>] 0xc065d91c
-[   31.903722] [<c065dea0>] 0xc065dea0
-[   31.903728] [<c065decc>] 0xc065decc
-[   31.903734] [<c065de14>] 0xc065de14
-[   31.903740] [<c065dbe4>] 0xc065dbe4
-[   31.903747] [<c065ea20>] 0xc065ea20
-[   31.903753] [<c065dd60>] 0xc065dd60
-[   31.903759] [<c065dd90>] 0xc065dd90
-[   31.903766] [<c065ddbc>] 0xc065ddbc
-[   31.903772] [<c065dde8>] 0xc065dde8
-[   31.903778] [<803b462c>] 0x803b462c
-[   31.903784] [<c0661bd4>] 0xc0661bd4
-[   31.903791] [<c06566f0>] 0xc06566f0
-[   31.903798] [<803b462c>] 0x803b462c
-[   31.903804] [<80045612>] 0x80045612
-[   31.903810] [<c0652df0>] 0xc0652df0
-[   31.903817] [<800b0c10>] 0x800b0c10
-[   31.903824] [<8009727c>] 0x8009727c
-[   31.903830] [<800c4780>] 0x800c4780
-[   31.903836] [<800656d4>] 0x800656d4
-[   31.903843] [<800140c4>] 0x800140c4
-[   31.903850] [<800656d4>] 0x800656d4
-[   31.903856] [<80065c44>] 0x80065c44
-[   31.903863] [<80048c14>] 0x80048c14
-[   31.903869] [<80061b34>] 0x80061b34
-[   31.903876] [<80045612>] 0x80045612
-[   31.903882] [<800dadb0>] 0x800dadb0
-[   31.903888] [<800dbbb8>] 0x800dbbb8
-[   31.903896] [<80045612>] 0x80045612
-[   31.903902] [<800224bc>] 0x800224bc
-[   31.903908] [<80045612>] 0x80045612
-[   31.903916] 
-[   31.903921] tisp_code_create_tuning_node: Creating ISP M0 tuning device node
-[   31.903927] tisp_code_create_tuning_node: Device already created, skipping
-[   31.903932] *** CRITICAL: Calling tx_isp_subdev_pipo to initialize VIC buffer management ***
-[   31.903938] *** tisp_init: ISP HARDWARE PIPELINE FULLY INITIALIZED - THIS SHOULD TRIGGER REGISTER ACTIVITY ***
-[   31.903944] *** tisp_init: All hardware blocks enabled, registers configured, events ready ***
-[   31.903950] *** ispcore_core_ops_init: tisp_init SUCCESS ***
-[   31.903955] *** ispcore_core_ops_init: VIC state set to 3 (ACTIVE) - CORE READY FOR STREAMING ****** ispcore_core_ops_init: Core device state set to 3 (ACTIVE) ***
-[   31.903963] ispcore_core_ops_init: Complete, result=0<6>[   31.903969] *** STREAMON EVENT: Core initialization SUCCESS ***
-[   31.903974] *** Channel 0: STREAMON - State set to 4 (streaming) ***
-[   32.002816] *** Channel 0: Frame wait returned 0 ***
-[   32.002828] *** Channel 0: Frame wait timeout/error, generating frame ***
+[  209.086600] TX ISP driver initializing with new subdevice management system...
+[  209.086612] *** Using reference driver interrupt-driven frame processing ***
+[  209.086618] *** CRITICAL: REGISTERING SUBDEV PLATFORM DRIVERS FIRST ***
+[  209.086624] *** TX ISP SUBDEV PLATFORM DRIVERS REGISTRATION ***
+[  209.096670] All ISP subdev platform drivers registered successfully
+[  209.096683] *** SUBDEV PLATFORM DRIVERS REGISTERED - VIC/CSI/VIN/CORE DRIVERS AVAILABLE ***
+[  209.096689] *** CRITICAL: INITIALIZING SUBDEVICE REGISTRY BEFORE MAIN PLATFORM DEVICE ***
+[  209.096694] *** CRITICAL: Registering main platform driver ***
+[  209.099153] *** Main platform driver registered successfully ***
+[  209.099165] *** REFERENCE DRIVER: Subdev platform devices will be registered by tx_isp_create_graph_and_nodes ***
+[  209.101692] *** PROBE: tx_isp_platform_probe CALLED for device tx-isp ***
+[  209.101710] *** PROBE: ISP device allocated successfully: 85b90000 ***
+[  209.101726] *** PROBE: ISP device mutex and spinlock initialized ***
+[  209.101734] *** PROBE: Event callback structure initialized at 0x85f54a80 (offset 0xc from isp_dev) ***
+[  209.101744] parse_rmem_bootarg: Found rmem=29M@0x06300000 (size=0x01d00000)
+[  209.101751] *** PROBE: Initialized rmem_addr=0x06300000, size=0x01d00000 ***
+[  209.101757] *** PROBE: Platform data: c0682408 ***
+[  209.101762] *** PROBE: Platform data validation passed ***
+[  209.101768] *** REFERENCE DRIVER: Individual subdevices will initialize their own memory regions ***
+[  209.101774] *** PLATFORM DEVICES ALREADY REGISTERED IN INIT - SKIPPING DUPLICATE REGISTRATION ***
+[  209.101780] *** tx_isp_module_init: EXACT Binary Ninja reference implementation ***
+[  209.104300] *** tx_isp_create_graph_and_nodes: EXACT Binary Ninja reference implementation ***
+[  209.104314] *** Registering platform device 0 from platform data ***
+[  209.107219] *** CSI PROBE: Set dev_priv to csi_dev 85205400 for csi_video_s_stream() ***
+[  209.107232] *** CSI PROBE: Set host_priv to csi_dev 85205400 for Binary Ninja compatibility ***
+[  209.107239] *** tx_isp_subdev_init: CALLED for device 'tx-isp-csi' ***
+[  209.107247] *** tx_isp_subdev_init: pdev=c0682110, sd=85205400, ops=c0682700 ***
+[  209.107253] *** tx_isp_subdev_init: ourISPdev=85b90000 ***
+[  209.107260] *** tx_isp_subdev_init: Set sd->dev=c0682120, sd->pdev=c0682110 ***
+[  209.107266] *** tx_isp_subdev_init: CSI subdev registered at index 0 ***
+[  209.107272] tx_isp_module_init: Module initialized for tx-isp-csi
+[  209.107278] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
+[  209.107284] *** CSI: Skipping IRQ request - CSI uses register mapping only ***
+[  209.107291] tx_isp_subdev_init: platform_get_resource returned c06821f4 for device tx-isp-csi
+[  209.107299] tx_isp_subdev_init: Memory resource found: start=0x10022000, end=0x10022fff, size=0x00001000
+[  209.107308] isp_subdev_init_clks: Initializing 2 clocks
+[  209.107320] CGU_ISP clock enabled at 100MHz
+[  209.107328] ISP clock enabled
+[  209.135274] CPM clock gates configured
+[  209.135288] isp_subdev_init_clks: Successfully initialized 2 clocks
+[  209.135298] *** tx_isp_subdev_auto_link: ENTRY - pdev=c0682110, sd=85205400, ourISPdev=85b90000 ***
+[  209.135307] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-csi' to ourISPdev=85b90000 ***
+[  209.135313] *** DEBUG: Device name comparison - checking 'tx-isp-csi' ***
+[  209.135318] *** DEBUG: About to check device name matches ***
+[  209.135325] *** CSI BASIC REGISTERS SET: b0022000 (from tx_isp_subdev_init) ***
+[  209.135332] *** LINKED CSI device: 85205400, regs: b0022000 ***
+[  209.135339] *** CSI PROBE: Using register mapping from tx_isp_subdev_init: b0022000 ***
+[  209.135346] *** CSI PROBE: Device linking handled automatically by tx_isp_subdev_init ***
+[  209.135367] *** Platform device 0 (tx-isp-csi) registered successfully ***
+[  209.135374] *** Registering platform device 1 from platform data ***
+[  209.135714] *** VIC PROBE: IRQ numbers initialized to 38 ***
+[  209.135728] *** VIC PROBE: Primary VIC registers mapped at 0x133e0000 -> b33e0000 ***
+[  209.135735] *** VIC PROBE: Secondary VIC registers mapped at 0x10023000 -> b0023000 ***
+[  209.135741] *** VIC PROBE: IRQ handler pointers set to NULL (reference driver uses main dispatcher) ***
+[  209.135746] *** EMERGENCY: VIC buffer management DISABLED to prevent kernel panic ***
+[  209.135752] *** VIC will operate in minimal mode without complex buffer operations ***
+[  209.135758] *** EMERGENCY: VIC basic initialization complete - complex buffer management SKIPPED ***
+[  209.135766] *** VIC PROBE: Initialized default dimensions 1920x1080 and critical fields ***
+[  209.135772] *** VIC PROBE: Stored vic_dev pointer 8547a000 in subdev private data ***
+[  209.135778] *** VIC PROBE: Set host_priv to vic_dev 8547a000 for Binary Ninja compatibility ***
+[  209.135784] *** VIC PROBE: Callback structure setup deferred - avoiding memory corruption ***
+[  209.135791] *** tx_isp_subdev_init: CALLED for device 'isp-w02' ***
+[  209.135799] *** tx_isp_subdev_init: pdev=c0682210, sd=8547a000, ops=c0682690 ***
+[  209.135805] *** tx_isp_subdev_init: ourISPdev=85b90000 ***
+[  209.135812] *** tx_isp_subdev_init: Set sd->dev=c0682220, sd->pdev=c0682210 ***
+[  209.135818] *** tx_isp_subdev_init: VIC device linked and registered at index 1 ***
+[  209.135824] tx_isp_module_init: Module initialized for isp-w02
+[  209.135830] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
+[  209.135838] *** tx_isp_request_irq: Using main ISP device as dev_id for IRQ 38 (device: isp-w02) ***
+[  209.138159] *** tx_isp_disable_irq: EXACT Binary Ninja - disabling IRQ 38 ***
+[  209.138172] *** tx_isp_disable_irq: IRQ 38 DISABLED ***
+[  209.138179] *** tx_isp_request_irq: IRQ 38 registered successfully for isp-w02 ***
+[  209.138188] tx_isp_subdev_init: platform_get_resource returned c06822f4 for device isp-w02
+[  209.138196] tx_isp_subdev_init: Memory resource found: start=0x133e0000, end=0x133effff, size=0x00010000
+[  209.138206] isp_subdev_init_clks: Initializing 2 clocks
+[  209.138215] CGU_ISP clock enabled at 100MHz
+[  209.138222] ISP clock enabled
+[  209.165272] CPM clock gates configured
+[  209.165284] isp_subdev_init_clks: Successfully initialized 2 clocks
+[  209.165292] *** tx_isp_subdev_auto_link: ENTRY - pdev=c0682210, sd=8547a000, ourISPdev=85b90000 ***
+[  209.165300] *** tx_isp_subdev_auto_link: Auto-linking device 'isp-w02' to ourISPdev=85b90000 ***
+[  209.165306] *** DEBUG: Device name comparison - checking 'isp-w02' ***
+[  209.165312] *** DEBUG: About to check device name matches ***
+[  209.165318] *** DEBUG: VIC DEVICE NAME MATCHED! Processing VIC device linking ***
+[  209.165324] *** DEBUG: Retrieved vic_dev from subdev data: 8547a000 ***
+[  209.165330] *** DEBUG: About to set ourISPdev->vic_dev = 8547a000 ***
+[  209.165336] *** DEBUG: ourISPdev before linking: 85b90000 ***
+[  209.165342] *** DEBUG: ourISPdev->vic_dev set to: 8547a000 ***
+[  209.165348] *** VIC AUTO-LINK: VIC IRQ already registered (irq=38) ***
+[  209.165354] *** MAPPED secondary VIC registers: b0023000 (0x10023000) ***
+[  209.165362] *** LINKED VIC device: 8547a000, primary_regs: b33e0000, secondary_regs: b0023000 ***
+[  209.165368] *** VIC AUTO-LINK: Registers are mapped, registering interrupt handler ***
+[  209.165375] *** VIC PROBE: Device linking handled automatically by tx_isp_subdev_init ***
+[  209.165396] *** Platform device 1 (isp-w02) registered successfully ***
+[  209.165404] *** Registering platform device 2 from platform data ***
+[  209.165717] *** tx_isp_subdev_init: CALLED for device 'tx-isp-vin' ***
+[  209.165732] *** tx_isp_subdev_init: pdev=c0682038, sd=853f6800, ops=c0683534 ***
+[  209.165739] *** tx_isp_subdev_init: ourISPdev=85b90000 ***
+[  209.165746] *** tx_isp_subdev_init: Set sd->dev=c0682048, sd->pdev=c0682038 ***
+[  209.165752] *** tx_isp_subdev_init: NOT A SENSOR - ops=c0683534 ***
+[  209.165760] *** tx_isp_subdev_init: ops->sensor=  (null), csi_subdev_ops=c0682700 ***
+[  209.165766] tx_isp_module_init: Module initialized for tx-isp-vin
+[  209.165772] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
+[  209.165780] *** tx_isp_subdev_auto_link: ENTRY - pdev=c0682038, sd=853f6800, ourISPdev=85b90000 ***
+[  209.165788] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-vin' to ourISPdev=85b90000 ***
+[  209.165794] *** DEBUG: Device name comparison - checking 'tx-isp-vin' ***
+[  209.165799] *** DEBUG: About to check device name matches ***
+[  209.165804] *** DEBUG: VIN device name matched! Setting up VIN device ***
+[  209.165810] *** LINKED VIN device: 853f6800 ***
+[  209.165818] *** VIN SUBDEV OPS CONFIGURED: core=c0683554, video=c0683548, s_stream=c0663a10 ***
+[  209.165824] *** REGISTERED VIN SUBDEV AT INDEX 2 WITH VIDEO OPS ***
+[  209.165829] *** VIN INITIALIZATION DEFERRED TO SENSOR REGISTRATION PHASE ***
+[  209.165836] *** VIN PROBE: Device linking handled automatically by tx_isp_subdev_init ***
+[  209.165856] *** Platform device 2 (tx-isp-vin) registered successfully ***
+[  209.165863] *** Registering platform device 3 from platform data ***
+[  209.168368] *** Platform device 3 (tx-isp-fs) registered successfully ***
+[  209.168379] *** Registering platform device 4 from platform data ***
+[  209.170882] *** tx_isp_core_probe: NEW ARCHITECTURE - Creating separate core device ***
+[  209.170896] *** tx_isp_create_core_device: Creating ISP core device ***
+[  209.170905] *** tx_isp_create_core_device: Core device created successfully: 8547a400 ***
+[  209.170912] *** CORE PROBE: Set dev_priv to core_dev 8547a400 ***
+[  209.170918] *** CORE PROBE: Set host_priv to core_dev 8547a400 - PREVENTS BadVA CRASH ***
+[  209.170925] *** tx_isp_subdev_init: CALLED for device 'tx-isp-core' ***
+[  209.170933] *** tx_isp_subdev_init: pdev=c0681dc0, sd=8547a400, ops=c06824b8 ***
+[  209.170939] *** tx_isp_subdev_init: ourISPdev=85b90000 ***
+[  209.170946] *** tx_isp_subdev_init: Set sd->dev=c0681dd0, sd->pdev=c0681dc0 ***
+[  209.170952] *** tx_isp_subdev_init: Core ISP subdev registration handled by core device ***
+[  209.170958] tx_isp_module_init: Module initialized for tx-isp-core
+[  209.170964] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
+[  209.170972] *** tx_isp_request_irq: Using main ISP device as dev_id for IRQ 37 (device: tx-isp-core) ***
+[  209.173331] *** tx_isp_disable_irq: EXACT Binary Ninja - disabling IRQ 37 ***
+[  209.173344] *** tx_isp_disable_irq: IRQ 37 DISABLED ***
+[  209.173351] *** tx_isp_request_irq: IRQ 37 registered successfully for tx-isp-core ***
+[  209.173360] tx_isp_subdev_init: platform_get_resource returned c0681ea4 for device tx-isp-core
+[  209.173368] tx_isp_subdev_init: Memory resource found: start=0x13300000, end=0x1330ffff, size=0x00010000
+[  209.173378] isp_subdev_init_clks: Initializing 3 clocks
+[  209.173387] CGU_ISP clock enabled at 100MHz
+[  209.173394] ISP clock enabled
+[  209.173401] CSI clock enabled
+[  209.195309] CPM clock gates configured
+[  209.195321] isp_subdev_init_clks: Successfully initialized 3 clocks
+[  209.195330] *** tx_isp_subdev_auto_link: ENTRY - pdev=c0681dc0, sd=8547a400, ourISPdev=85b90000 ***
+[  209.195338] *** tx_isp_subdev_auto_link: Auto-linking device 'tx-isp-core' to ourISPdev=85b90000 ***
+[  209.195344] *** DEBUG: Device name comparison - checking 'tx-isp-core' ***
+[  209.195350] *** DEBUG: About to check device name matches ***
+[  209.195356] *** CORE device not yet linked - regs will be mapped later ***
+[  209.195362] *** tx_isp_core_probe: Core subdev initialized successfully ***
+[  209.195370] *** tx_isp_core_device_init: Initializing core device: 8547a400 ***
+[  209.195381] *** tx_isp_core_device_init: Core device initialized successfully ***
+[  209.195386] *** tx_isp_core_device_init: Core sensor IOCTL handler set for sensor registration ***
+[  209.195394] *** tx_isp_link_core_device: Linking core device 8547a400 to ISP device 85b90000 ***
+[  209.195400] *** tx_isp_link_core_device: Core device linked successfully ***
+[  209.195406] *** Core subdev registered at index 4: 8547a400 ***
+[  209.195420] *** tx_isp_core_probe: VIC device creation deferred to platform driver system ***
+[  209.195426] *** tx_isp_core_probe: Platform drivers will call tx_isp_subdev_init for proper initialization ***
+[  209.195431] *** tx_isp_core_probe: Calling sensor_early_init ***
+[  209.195437] sensor_early_init: Preparing sensor infrastructure
+[  209.195442] sensor_early_init: Calling tx_isp_detect_and_register_sensors
+[  209.195448] *** CRITICAL: Creating I2C sensor devices during ISP initialization ***
+[  209.195454] *** Calling subdev_sensor_ops_ioctl with IOCTL 0x2000000 to create I2C sensor device ***
+[  209.195460] *** Calling sensor IOCTL 0x2000000 on Core subdev 8547a400 ***
+[  209.195466] subdev_sensor_ops_ioctl: cmd=0x2000000
+[  209.195472] *** subdev_sensor_ops_ioctl: IOCTL 0x2000000 - Creating I2C sensor device ***
+[  209.195478] *** Creating I2C sensor device on adapter 0 ***
+[  209.195486] *** Creating I2C device: gc2053 at 0x37 ***
+[  209.195492] *** isp_i2c_new_subdev_board: MIPS-SAFE implementation - FIXED CRASH ***
+[  209.195500] Creating I2C subdev: type=gc2053 addr=0x37 on adapter i2c0 (MIPS-safe)
+[  209.195505] *** MIPS-SAFE: Requesting sensor module gc2053 ***
+[  209.198350] *** MIPS-SAFE: Valid I2C address 0x37, creating device ***
+[  209.198640] *** MIPS-SAFE: I2C device created successfully at 0x8595a300 ***
+[  209.198652] *** MIPS-SAFE: Device driver not loaded or not aligned ***
+[  209.198660] *** I2C DEVICE STORED: gc2053 at 0x37 - probe may complete later ***
+[  209.198667] *** I2C sensor device created successfully: gc2053 at 0x37 ***
+[  209.198674] *** I2C sensor device created successfully via Core sensor IOCTL ***
+[  209.198680] *** tx_isp_core_probe: Core device setup complete ***
+[  209.198686] ***   - Core device: 8547a400 ***
+[  209.198691] ***   - Channel count: 6 ***
+[  209.198697] ***   - Linked to ISP device: 85b90000 ***
+[  209.198702] *** tx_isp_core_probe: Initializing core tuning system ***
+[  209.198708] isp_core_tuning_init: Initializing tuning data structure
+[  209.198722] isp_core_tuning_init: Tuning data structure initialized at 84d1e000
+[  209.198728] isp_core_tuning_init: Structure size: 4356 bytes (vs Binary Ninja 0x40d0)
+[  209.198734] *** SAFE: mode_flag properly initialized using struct member access ***
+[  209.198739] *** tx_isp_core_probe: Tuning init SUCCESS ***
+[  209.198744] *** tx_isp_core_probe: SUCCESS - Core device fully initialized ***
+[  209.198750] ***   - Core device: 8547a400 ***
+[  209.198756] ***   - Tuning device: 84d1e000 ***
+[  209.198761] *** tx_isp_core_probe: Creating frame channel devices ***
+[  209.198767] *** tx_isp_create_framechan_devices: Creating frame channel devices ***
+[  209.201276] *** Created frame channel device: /dev/framechan0 (major=10, minor=54) ***
+[  209.203897] *** Created frame channel device: /dev/framechan1 (major=10, minor=53) ***
+[  209.206514] *** Created frame channel device: /dev/framechan2 (major=10, minor=52) ***
+[  209.209058] *** Created frame channel device: /dev/framechan3 (major=10, minor=51) ***
+[  209.209069] *** tx_isp_create_framechan_devices: All frame channel devices created ***
+[  209.209075] *** tx_isp_core_probe: Frame channel devices created successfully ***
+[  209.209080] *** tx_isp_core_probe: Creating ISP M0 tuning device node ***
+[  209.209086] tisp_code_create_tuning_node: Creating ISP M0 tuning device node
+[  209.209095] tisp_code_create_tuning_node: Allocated dynamic major 251
+[  209.214094] *** ISP M0 TUNING DEVICE CREATED: /dev/isp-m0 (major=251, minor=0) ***
+[  209.214105] *** tx_isp_core_probe: ISP M0 tuning device node created successfully ***
+[  209.214111] *** tx_isp_core_probe: Core probe completed successfully ***
+[  209.214132] *** Platform device 4 (tx-isp-core) registered successfully ***
+[  209.214138] *** tx_isp_create_graph_and_nodes: Initializing frame channels ***
+[  209.214147] *** Frame channel 0 initialized: 1920x1080, state=2 ***
+[  209.214155] *** Frame channel 1 initialized: 640x360, state=2 ***
+[  209.214160] *** tx_isp_create_graph_and_nodes: Binary Ninja reference implementation complete ***
+[  209.214168] *** tx_isp_module_init: VIC device linkage check - isp_dev->vic_dev = 8547a000 ***
+[  209.214174] *** tx_isp_module_init: VIC device successfully linked ***
+[  209.214180] *** tx_isp_module_init: Binary Ninja reference implementation complete ***
+[  209.214186] *** PROBE: Binary Ninja reference implementation complete ***
+[  209.214194] *** SUCCESS: ourISPdev allocated by probe function: 85b90000 ***
+[  209.214200] *** Following reference driver: IRQ registration handled by tx_isp_request_irq ***
+[  209.214206] TX ISP driver initialized successfully - probe function will handle device setup
+[  216.773419] *** tx_isp_subdev_init: CALLED for device 'gc2053' ***
+[  216.773434] *** tx_isp_subdev_init: pdev=c06a0558, sd=8547ac00, ops=c06a0638 ***
+[  216.773441] *** tx_isp_subdev_init: ourISPdev=85b90000 ***
+[  216.773447] *** tx_isp_subdev_init: Set sd->dev=c06a0568, sd->pdev=c06a0558 ***
+[  216.773455] *** tx_isp_subdev_init: DETECTED SENSOR SUBDEV - ops=c06a0638, ops->sensor=c06a064c ***
+[  216.773461] *** tx_isp_subdev_init: Set up sensor module notify handler ***
+[  216.773469] *** tx_isp_subdev_init: SENSOR subdev registered at index 5, sd=8547ac00 ***
+[  216.773476] *** tx_isp_subdev_init: SENSOR ops=c06a0638, ops->sensor=c06a064c ***
+[  216.773482] tx_isp_module_init: Module initialized for (null)
+[  216.773488] *** tx_isp_subdev_init: VIC interrupt registration will happen in auto-linking function ***
+[  216.773497] *** tx_isp_subdev_auto_link: ENTRY - pdev=c06a0558, sd=8547ac00, ourISPdev=85b90000 ***
+[  216.773503] *** tx_isp_subdev_auto_link: Auto-linking device 'gc2053' to ourISPdev=85b90000 ***
+[  216.773509] *** DEBUG: Device name comparison - checking 'gc2053' ***
+[  216.773515] *** DEBUG: About to check device name matches ***
+[  216.773522] *** DETECTED SENSOR DEVICE: 'gc2053' - registering in subdev array ***
+[  216.773529] *** SENSOR 'gc2053' registered at subdev index 6 ***
+[  216.773535] *** SENSOR subdev: 8547ac00, ops: c06a0638 ***
+[  216.773541] *** SENSOR ops->sensor: c06a064c ***
+root@ing-wyze-cam3-a000 ~# prudynt &
+root@ing-wyze-cam3-a000 ~# [INFO:Config.cpp]: Loaded configuration from /etc/prudynt.cfg
+[INFO:main.cpp]: PRUDYNT-T Next-Gen Video Daemon: Aug 28 2025 05:46:40_f5514583
+[INFO:main.cpp]: Starting Prudynt Video Server.
+[INFO:IMPSystem.cpp]: LIBIMP Version IMP-1.1.6
+[INFO:IMPSystem.cpp]: SYSUTILS Version: SYSUTILS-1.1.6
+[INFO:IMPSystem.cpp]: CPU Information: T31-X
+[INFO:IMPSystem.cpp]: Sensor: gc2053
+---- FPGA board is ready ----
+  Board UID : 30AB6E51
+  Board HW ID : 72000460
+  Board rev.  : 5DE5A975
+  Board date  : 20190326
+-----------------------------
+[INFO:Opus.cpp]: Encoder bitrate: 40000
+[INFO:WS.cpp]: Server started on port 8089
+root@ing-wyze-cam3-a000 ~# dmesg warn: shm_init,53shm init already
+[INFO:IMPAudio.cpp]: Audio In: format:OPUS, vol:80, gain:25, samplerate:16000, bitwidth:16, soundmode:1, frmNum:30, numPerFrm:640, chnCnt:1, usrFrmDepth:30
+
+[  219.240812] *** tx_isp_vic_start: Step 3 - VIC unlock completed, status=0x2, timeout_remaining=-1 ***
+[  219.918424] *** FRAME CHANNEL 0: State set to 3 (ready for streaming) - Binary Ninja EXACT ***
+[  219.918430] *** SAFE: Frame channel device stored in file->private_data ***
+[  219.918436] *** FRAME CHANNEL 0 OPENED SUCCESSFULLY - NOW READY FOR IOCTLS ***
+[  219.918445] Channel 0: Format 1920x1080, pixfmt=0x32315659, minor=54
+[  219.918464] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc07056c3 ***
+[  219.918471] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc07056c3 ***
+[  219.918480] Channel 0: Set format 1920x1080 pixfmt=0x3231564e
+[  219.919079] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0145608 ***
+[  219.919090] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc0145608 ***
+[  219.919097] *** Channel 0: REQBUFS - MEMORY-AWARE implementation ***
+[  219.919104] Channel 0: Request 4 buffers, type=1 memory=2
+[  219.919111] *** Channel 0: REQBUFS - CALLING CORE OPS INIT ***
+[  219.919117] *** ispcore_core_ops_init: NEW ARCHITECTURE - Using core device ***
+[  219.919123] *** ispcore_core_ops_init: Frame sync work structure initialized ***<6>[  219.919129] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  219.919137] *** tx_isp_get_sensor: subdevs[0] = 85205400, ops = c0682700 ***
+[  219.919144] *** tx_isp_get_sensor: subdevs[0] ops->sensor = c068271c ***
+[  219.919152] *** tx_isp_get_sensor: subdevs[1] = 8547a000, ops = c0682690 ***
+[  219.919158] *** tx_isp_get_sensor: subdevs[1] ops->sensor = c06826d4 ***
+[  219.919166] *** tx_isp_get_sensor: subdevs[2] = 853f6800, ops = c0683534 ***
+[  219.919173] *** tx_isp_get_sensor: subdevs[2] ops->sensor =   (null) ***
+[  219.919180] *** tx_isp_get_sensor: subdevs[3] = NULL ***
+[  219.919187] *** tx_isp_get_sensor: subdevs[4] = 8547a400, ops = c06824b8 ***
+[  219.919193] *** tx_isp_get_sensor: subdevs[4] ops->sensor = c06824d4 ***
+[  219.919201] *** tx_isp_get_sensor: subdevs[5] = 8547ac00, ops = c06a0638 ***
+[  219.919208] *** tx_isp_get_sensor: subdevs[5] ops->sensor = c06a064c ***
+[  219.919215] *** tx_isp_get_sensor: subdevs[6] = 8547ac00, ops = c06a0638 ***
+[  219.919222] *** tx_isp_get_sensor: subdevs[6] ops->sensor = c06a064c ***
+[  219.919228] *** tx_isp_get_sensor: subdevs[7] = NULL ***
+[  219.919234] *** tx_isp_get_sensor: subdevs[8] = NULL ***
+[  219.919239] *** tx_isp_get_sensor: subdevs[9] = NULL ***
+[  219.919245] *** tx_isp_get_sensor: subdevs[10] = NULL ***
+[  219.919250] *** tx_isp_get_sensor: subdevs[11] = NULL ***
+[  219.919256] *** tx_isp_get_sensor: subdevs[12] = NULL ***
+[  219.919262] *** tx_isp_get_sensor: subdevs[13] = NULL ***
+[  219.919268] *** tx_isp_get_sensor: subdevs[14] = NULL ***
+[  219.919274] *** tx_isp_get_sensor: subdevs[15] = NULL ***
+[  219.919280] *** tx_isp_get_sensor: Found real sensor at index 5: 8547ac00 ***
+[  219.919286] ispcore_core_ops_init: Sensor available, skipping sensor_attr access for now
+[  219.919292] ispcore_core_ops_init: Core device=8547a400, state=4*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***
+[  219.919300] ispcore_core_ops_init: Core state 4 != 2, cannot initialize
+[  219.919307] Channel 0: REQBUFS - Core ops init failed: -22
+[  219.919313] Channel 0: USERPTR mode - client will provide buffers
+[  219.919320] Channel 0: USERPTR mode - 4 user buffers expected
+[  219.919329] *** Channel 0: REQBUFS allocated buffer address array for 4 buffers at 8569a600 ***
+[  219.919336] *** Channel 0: VIC active_buffer_count set to 4 ***
+[  219.919342] *** REQBUFS: VIC DMA will be configured during streaming via vic_pipo_mdma_enable ***
+[  219.919348] *** Channel 0: MEMORY-AWARE REQBUFS SUCCESS - 4 buffers ***
+[  219.919374] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  219.919382] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  219.919388] *** Channel 0: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  219.919394] *** Channel 0: QBUF - Buffer copied from user successfully ***
+[  219.919402] *** Channel 0: QBUF - Buffer received: index=0, type=1, memory=2 ***
+[  219.919410] *** Channel 0: QBUF - Buffer m.offset=0x70d9000, m.userptr=0x70d9000 ***
+[  219.919416] *** Channel 0: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  219.919424] *** Channel 0: QBUF - Validation: buffer.index=0, state->buffer_count=4 ***
+[  219.919430] *** Channel 0: QBUF - Queue buffer index=0 ***
+[  219.919436] *** Channel 0: QBUF - CALLING CORE OPS INIT ***
+[  219.919441] *** ispcore_core_ops_init: NEW ARCHITECTURE - Using core device ***
+[  219.919446] *** ispcore_core_ops_init: Frame sync work structure initialized ***<6>[  219.919451] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  219.919459] *** tx_isp_get_sensor: subdevs[0] = 85205400, ops = c0682700 ***
+[  219.919466] *** tx_isp_get_sensor: subdevs[0] ops->sensor = c068271c ***
+[  219.919473] *** tx_isp_get_sensor: subdevs[1] = 8547a000, ops = c0682690 ***
+[  219.919480] *** tx_isp_get_sensor: subdevs[1] ops->sensor = c06826d4 ***
+[  219.919487] *** tx_isp_get_sensor: subdevs[2] = 853f6800, ops = c0683534 ***
+[  219.919494] *** tx_isp_get_sensor: subdevs[2] ops->sensor =   (null) ***
+[  219.919500] *** tx_isp_get_sensor: subdevs[3] = NULL ***
+[  219.919507] *** tx_isp_get_sensor: subdevs[4] = 8547a400, ops = c06824b8 ***
+[  219.919514] *** tx_isp_get_sensor: subdevs[4] ops->sensor = c06824d4 ***
+[  219.919521] *** tx_isp_get_sensor: subdevs[5] = 8547ac00, ops = c06a0638 ***
+[  219.919528] *** tx_isp_get_sensor: subdevs[5] ops->sensor = c06a064c ***
+[  219.919535] *** tx_isp_get_sensor: subdevs[6] = 8547ac00, ops = c06a0638 ***
+[  219.919542] *** tx_isp_get_sensor: subdevs[6] ops->sensor = c06a064c ***
+[  219.919548] *** tx_isp_get_sensor: subdevs[7] = NULL ***
+[  219.919553] *** tx_isp_get_sensor: subdevs[8] = NULL ***
+[  219.919559] *** tx_isp_get_sensor: subdevs[9] = NULL ***
+[  219.919564] *** tx_isp_get_sensor: subdevs[10] = NULL ***
+[  219.919570] *** tx_isp_get_sensor: subdevs[11] = NULL ***
+[  219.919576] *** tx_isp_get_sensor: subdevs[12] = NULL ***
+[  219.919582] *** tx_isp_get_sensor: subdevs[13] = NULL ***
+[  219.919588] *** tx_isp_get_sensor: subdevs[14] = NULL ***
+[  219.919593] *** tx_isp_get_sensor: subdevs[15] = NULL ***
+[  219.919600] *** tx_isp_get_sensor: Found real sensor at index 5: 8547ac00 ***
+[  219.919605] ispcore_core_ops_init: Sensor available, skipping sensor_attr access for now
+[  219.919610] ispcore_core_ops_init: Core device=8547a400, state=4*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***
+[  219.919619] ispcore_core_ops_init: Core state 4 != 2, cannot initialize
+[  219.919625] Channel 0: QBUF - Core ops init failed: -22
+[  219.919632] *** QBUF: No buffer allocated for index 0 - VBM initialization mode ***
+[  219.919638] *** Channel 0: QBUF - Using buffer struct   (null) for index 0 ***
+[  219.919645] *** Channel 0: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***
+[  219.919653] *** tx_isp_send_event_to_remote: Binary Ninja EXACT - isp_dev=0x8547a000, event=0x3000008 ***
+[  219.919660] *** tx_isp_send_event_to_remote: callback_struct_ptr=0x8547a00c, callback_struct=0x  (null) ***
+[  219.919666] *** tx_isp_send_event_to_remote: No handler found - returning 0xfffffdfd ***
+[  219.919673] *** Channel 0: QBUF EVENT - No VIC callback ***
+[  219.919680] *** Channel 0: QBUF - Using REAL buffer address from userptr: 0x70d9000 ***
+[  219.919688] *** Channel 0: QBUF - Buffer 0: phys_addr=0x70d9000, size=4147200 (VALIDATED) ***
+[  219.919697] *** Channel 0: QBUF VBM - Stored buffer[0] = 0x70d9000, total_count=1 ***
+[  219.919705] *** Channel 0: QBUF - Buffer structure check: buffer_addresses=8569a600, buffer_count=4 ***
+[  219.919712] *** Channel 0: QBUF no video_buffer structure found for index 0 ***
+[  219.919720] *** Channel 0: QBUF DEBUG - buffer_addresses=8569a600, buffer_count=4, buffer_addresses[0]=0x0 ***
+[  219.919727] *** Channel 0: QBUF - VBM initialization mode (VBMFillPool) ***
+[  219.919734] *** Channel 0: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x70d9000 ***
+[  219.919741] *** Channel 0: QBUF completed successfully (MIPS-safe) ***
+[  219.919752] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  219.919759] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  219.919765] *** Channel 0: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  219.919771] *** Channel 0: QBUF - Buffer copied from user successfully ***
+[  219.919778] *** Channel 0: QBUF - Buffer received: index=1, type=1, memory=2 ***
+[  219.919786] *** Channel 0: QBUF - Buffer m.offset=0x73d6000, m.userptr=0x73d6000 ***
+[  219.919793] *** Channel 0: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  219.919800] *** Channel 0: QBUF - Validation: buffer.index=1, state->buffer_count=4 ***
+[  219.919807] *** Channel 0: QBUF - Queue buffer index=1 ***
+[  219.919812] *** Channel 0: QBUF - CALLING CORE OPS INIT ***
+[  219.919818] *** ispcore_core_ops_init: NEW ARCHITECTURE - Using core device ***
+[  219.919822] *** ispcore_core_ops_init: Frame sync work structure initialized ***<6>[  219.919828] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  219.919835] *** tx_isp_get_sensor: subdevs[0] = 85205400, ops = c0682700 ***
+[  219.919842] *** tx_isp_get_sensor: subdevs[0] ops->sensor = c068271c ***
+[  219.919849] *** tx_isp_get_sensor: subdevs[1] = 8547a000, ops = c0682690 ***
+[  219.919856] *** tx_isp_get_sensor: subdevs[1] ops->sensor = c06826d4 ***
+[  219.919863] *** tx_isp_get_sensor: subdevs[2] = 853f6800, ops = c0683534 ***
+[  219.919870] *** tx_isp_get_sensor: subdevs[2] ops->sensor =   (null) ***
+[  219.919876] *** tx_isp_get_sensor: subdevs[3] = NULL ***
+[  219.919883] *** tx_isp_get_sensor: subdevs[4] = 8547a400, ops = c06824b8 ***
+[  219.919890] *** tx_isp_get_sensor: subdevs[4] ops->sensor = c06824d4 ***
+[  219.919897] *** tx_isp_get_sensor: subdevs[5] = 8547ac00, ops = c06a0638 ***
+[  219.919904] *** tx_isp_get_sensor: subdevs[5] ops->sensor = c06a064c ***
+[  219.919911] *** tx_isp_get_sensor: subdevs[6] = 8547ac00, ops = c06a0638 ***
+[  219.919918] *** tx_isp_get_sensor: subdevs[6] ops->sensor = c06a064c ***
+[  219.919924] *** tx_isp_get_sensor: subdevs[7] = NULL ***
+[  219.919929] *** tx_isp_get_sensor: subdevs[8] = NULL ***
+[  219.919935] *** tx_isp_get_sensor: subdevs[9] = NULL ***
+[  219.919941] *** tx_isp_get_sensor: subdevs[10] = NULL ***
+[  219.919946] *** tx_isp_get_sensor: subdevs[11] = NULL ***
+[  219.919952] *** tx_isp_get_sensor: subdevs[12] = NULL ***
+[  219.919958] *** tx_isp_get_sensor: subdevs[13] = NULL ***
+[  219.919964] *** tx_isp_get_sensor: subdevs[14] = NULL ***
+[  219.919970] *** tx_isp_get_sensor: subdevs[15] = NULL ***
+[  219.919976] *** tx_isp_get_sensor: Found real sensor at index 5: 8547ac00 ***
+[  219.919982] ispcore_core_ops_init: Sensor available, skipping sensor_attr access for now
+[  219.919987] ispcore_core_ops_init: Core device=8547a400, state=4*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***
+[  219.919995] ispcore_core_ops_init: Core state 4 != 2, cannot initialize
+[  219.920002] Channel 0: QBUF - Core ops init failed: -22
+[  219.920008] *** QBUF: No buffer allocated for index 1 - VBM initialization mode ***
+[  219.920014] *** Channel 0: QBUF - Using buffer struct   (null) for index 1 ***
+[  219.920021] *** Channel 0: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***
+[  219.920028] *** tx_isp_send_event_to_remote: Binary Ninja EXACT - isp_dev=0x8547a000, event=0x3000008 ***
+[  219.920036] *** tx_isp_send_event_to_remote: callback_struct_ptr=0x8547a00c, callback_struct=0x  (null) ***
+[  219.920042] *** tx_isp_send_event_to_remote: No handler found - returning 0xfffffdfd ***
+[  219.920048] *** Channel 0: QBUF EVENT - No VIC callback ***
+[  219.920054] *** Channel 0: QBUF - Using REAL buffer address from userptr: 0x73d6000 ***
+[  219.920062] *** Channel 0: QBUF - Buffer 1: phys_addr=0x73d6000, size=4147200 (VALIDATED) ***
+[  219.920070] *** Channel 0: QBUF VBM - Stored buffer[1] = 0x73d6000, total_count=2 ***
+[  219.920078] *** Channel 0: QBUF - Buffer structure check: buffer_addresses=8569a600, buffer_count=4 ***
+[  219.920084] *** Channel 0: QBUF no video_buffer structure found for index 1 ***
+[  219.920093] *** Channel 0: QBUF DEBUG - buffer_addresses=8569a600, buffer_count=4, buffer_addresses[1]=0x0 ***
+[  219.920099] *** Channel 0: QBUF - VBM initialization mode (VBMFillPool) ***
+[  219.920106] *** Channel 0: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x73d6000 ***
+[  219.920112] *** Channel 0: QBUF completed successfully (MIPS-safe) ***
+[  219.920121] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  219.920128] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  219.920134] *** Channel 0: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  219.920141] *** Channel 0: QBUF - Buffer copied from user successfully ***
+[  219.920148] *** Channel 0: QBUF - Buffer received: index=2, type=1, memory=2 ***
+[  219.920156] *** Channel 0: QBUF - Buffer m.offset=0x76d3000, m.userptr=0x76d3000 ***
+[  219.920163] *** Channel 0: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  219.920170] *** Channel 0: QBUF - Validation: buffer.index=2, state->buffer_count=4 ***
+[  219.920176] *** Channel 0: QBUF - Queue buffer index=2 ***
+[  219.920182] *** Channel 0: QBUF - CALLING CORE OPS INIT ***
+[  219.920187] *** ispcore_core_ops_init: NEW ARCHITECTURE - Using core device ***
+[  219.920192] *** ispcore_core_ops_init: Frame sync work structure initialized ***<6>[  219.920197] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  219.920294] *** tx_isp_get_sensor: subdevs[0] = 85205400, ops = c0682700 ***
+[  219.921040] *** tx_isp_get_sensor: subdevs[0] ops->sensor = c068271c ***
+[  219.921167] *** tx_isp_get_sensor: subdevs[1] = 8547a000, ops = c0682690 ***
+[  219.921584] *** tx_isp_get_sensor: subdevs[1] ops->sensor = c06826d4 ***
+[  219.921598] *** tx_isp_get_sensor: subdevs[2] = 853f6800, ops = c0683534 ***
+[  219.921606] *** tx_isp_get_sensor: subdevs[2] ops->sensor =   (null) ***
+[  219.921612] *** tx_isp_get_sensor: subdevs[3] = NULL ***
+[  219.921620] *** tx_isp_get_sensor: subdevs[4] = 8547a400, ops = c06824b8 ***
+[  219.921626] *** tx_isp_get_sensor: subdevs[4] ops->sensor = c06824d4 ***
+[  219.921634] *** tx_isp_get_sensor: subdevs[5] = 8547ac00, ops = c06a0638 ***
+[  219.921641] *** tx_isp_get_sensor: subdevs[5] ops->sensor = c06a064c ***
+[  219.921648] *** tx_isp_get_sensor: subdevs[6] = 8547ac00, ops = c06a0638 ***
+[  219.921655] *** tx_isp_get_sensor: subdevs[6] ops->sensor = c06a064c ***
+[  219.921661] *** tx_isp_get_sensor: subdevs[7] = NULL ***
+[  219.921667] *** tx_isp_get_sensor: subdevs[8] = NULL ***
+[  219.921672] *** tx_isp_get_sensor: subdevs[9] = NULL ***
+[  219.921678] *** tx_isp_get_sensor: subdevs[10] = NULL ***
+[  219.921684] *** tx_isp_get_sensor: subdevs[11] = NULL ***
+[  219.921690] *** tx_isp_get_sensor: subdevs[12] = NULL ***
+[  219.921696] *** tx_isp_get_sensor: subdevs[13] = NULL ***
+[  219.921702] *** tx_isp_get_sensor: subdevs[14] = NULL ***
+[  219.921707] *** tx_isp_get_sensor: subdevs[15] = NULL ***
+[  219.921714] *** tx_isp_get_sensor: Found real sensor at index 5: 8547ac00 ***
+[  219.921721] ispcore_core_ops_init: Sensor available, skipping sensor_attr access for now
+[  219.921727] ispcore_core_ops_init: Core device=8547a400, state=4*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***
+[  219.921736] ispcore_core_ops_init: Core state 4 != 2, cannot initialize
+[  219.921743] Channel 0: QBUF - Core ops init failed: -22
+[  219.921749] *** QBUF: No buffer allocated for index 2 - VBM initialization mode ***
+[  219.921756] *** Channel 0: QBUF - Using buffer struct   (null) for index 2 ***
+[  219.921763] *** Channel 0: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***
+[  219.921771] *** tx_isp_send_event_to_remote: Binary Ninja EXACT - isp_dev=0x8547a000, event=0x3000008 ***
+[  219.921778] *** tx_isp_send_event_to_remote: callback_struct_ptr=0x8547a00c, callback_struct=0x  (null) ***
+[  219.921784] *** tx_isp_send_event_to_remote: No handler found - returning 0xfffffdfd ***
+[  219.921791] *** Channel 0: QBUF EVENT - No VIC callback ***
+[  219.921798] *** Channel 0: QBUF - Using REAL buffer address from userptr: 0x76d3000 ***
+[  219.921806] *** Channel 0: QBUF - Buffer 2: phys_addr=0x76d3000, size=4147200 (VALIDATED) ***
+[  219.921814] *** Channel 0: QBUF VBM - Stored buffer[2] = 0x76d3000, total_count=3 ***
+[  219.921822] *** Channel 0: QBUF - Buffer structure check: buffer_addresses=8569a600, buffer_count=4 ***
+[  219.921828] *** Channel 0: QBUF no video_buffer structure found for index 2 ***
+[  219.921837] *** Channel 0: QBUF DEBUG - buffer_addresses=8569a600, buffer_count=4, buffer_addresses[2]=0x0 ***
+[  219.921844] *** Channel 0: QBUF - VBM initialization mode (VBMFillPool) ***
+[  219.921850] *** Channel 0: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x76d3000 ***
+[  219.921858] *** Channel 0: QBUF completed successfully (MIPS-safe) ***
+[  219.921884] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  219.921891] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  219.921898] *** Channel 0: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  219.921904] *** Channel 0: QBUF - Buffer copied from user successfully ***
+[  219.921912] *** Channel 0: QBUF - Buffer received: index=3, type=1, memory=2 ***
+[  219.921919] *** Channel 0: QBUF - Buffer m.offset=0x79d0000, m.userptr=0x79d0000 ***
+[  219.921926] *** Channel 0: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  219.921934] *** Channel 0: QBUF - Validation: buffer.index=3, state->buffer_count=4 ***
+[  219.921940] *** Channel 0: QBUF - Queue buffer index=3 ***
+[  219.921946] *** Channel 0: QBUF - CALLING CORE OPS INIT ***
+[  219.921952] *** ispcore_core_ops_init: NEW ARCHITECTURE - Using core device ***
+[  219.921956] *** ispcore_core_ops_init: Frame sync work structure initialized ***<6>[  219.921962] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  219.921970] *** tx_isp_get_sensor: subdevs[0] = 85205400, ops = c0682700 ***
+[  219.921976] *** tx_isp_get_sensor: subdevs[0] ops->sensor = c068271c ***
+[  219.921984] *** tx_isp_get_sensor: subdevs[1] = 8547a000, ops = c0682690 ***
+[  219.921991] *** tx_isp_get_sensor: subdevs[1] ops->sensor = c06826d4 ***
+[  219.921998] *** tx_isp_get_sensor: subdevs[2] = 853f6800, ops = c0683534 ***
+[  219.922005] *** tx_isp_get_sensor: subdevs[2] ops->sensor =   (null) ***
+[  219.922010] *** tx_isp_get_sensor: subdevs[3] = NULL ***
+[  219.922018] *** tx_isp_get_sensor: subdevs[4] = 8547a400, ops = c06824b8 ***
+[  219.922024] *** tx_isp_get_sensor: subdevs[4] ops->sensor = c06824d4 ***
+[  219.922032] *** tx_isp_get_sensor: subdevs[5] = 8547ac00, ops = c06a0638 ***
+[  219.922039] *** tx_isp_get_sensor: subdevs[5] ops->sensor = c06a064c ***
+[  219.922046] *** tx_isp_get_sensor: subdevs[6] = 8547ac00, ops = c06a0638 ***
+[  219.922053] *** tx_isp_get_sensor: subdevs[6] ops->sensor = c06a064c ***
+[  219.922059] *** tx_isp_get_sensor: subdevs[7] = NULL ***
+[  219.922064] *** tx_isp_get_sensor: subdevs[8] = NULL ***
+[  219.922070] *** tx_isp_get_sensor: subdevs[9] = NULL ***
+[  219.922076] *** tx_isp_get_sensor: subdevs[10] = NULL ***
+[  219.922082] *** tx_isp_get_sensor: subdevs[11] = NULL ***
+[  219.922087] *** tx_isp_get_sensor: subdevs[12] = NULL ***
+[  219.922093] *** tx_isp_get_sensor: subdevs[13] = NULL ***
+[  219.922099] *** tx_isp_get_sensor: subdevs[14] = NULL ***
+[  219.922105] *** tx_isp_get_sensor: subdevs[15] = NULL ***
+[  219.922111] *** tx_isp_get_sensor: Found real sensor at index 5: 8547ac00 ***
+[  219.922117] ispcore_core_ops_init: Sensor available, skipping sensor_attr access for now
+[  219.922122] ispcore_core_ops_init: Core device=8547a400, state=4*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***
+[  219.922130] ispcore_core_ops_init: Core state 4 != 2, cannot initialize
+[  219.922137] Channel 0: QBUF - Core ops init failed: -22
+[  219.922143] *** QBUF: No buffer allocated for index 3 - VBM initialization mode ***
+[  219.922150] *** Channel 0: QBUF - Using buffer struct   (null) for index 3 ***
+[  219.922156] *** Channel 0: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***
+[  219.922164] *** tx_isp_send_event_to_remote: Binary Ninja EXACT - isp_dev=0x8547a000, event=0x3000008 ***
+[  219.922171] *** tx_isp_send_event_to_remote: callback_struct_ptr=0x8547a00c, callback_struct=0x  (null) ***
+[  219.922177] *** tx_isp_send_event_to_remote: No handler found - returning 0xfffffdfd ***
+[  219.922183] *** Channel 0: QBUF EVENT - No VIC callback ***set jpeg streamMngCtx suceess
+
+[  219.922190] *** Channel 0: QBUF - Using REAL buffer address from userptr: 0x79d0000 ***
+[  219.922198] *** Channel 0: QBUF - Buffer 3: phys_addr=0x79d0000, size=4147200 (VALIDATED) ***
+[  219.922206] *** Channel 0: QBUF VBM - Stored buffer[3] = 0x79d0000, total_count=4 ***
+[  219.922213] *** Channel 0: QBUF - Buffer structure check: buffer_addresses=8569a600, buffer_count=4 ***
+[  219.922220] *** Channel 0: QBUF no video_buffer structure found for index 3 ***
+[  219.922228] *** Channel 0: QBUF DEBUG - buffer_addresses=8569a600, buffer_count=4, buffer_addresses[3]=0x0 ***
+[  219.922235] *** Channel 0: QBUF - VBM initialization mode (VBMFillPool) ***
+[  219.922242] *** Channel 0: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x79d0000 ***
+[  219.922248] *** Channel 0: QBUF completed successfully (MIPS-safe) ***
+[  219.922340] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x80045612 ***
+[  219.922350] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0x80045612 ***
+[  219.922356] *** Channel 0: VIDIOC_STREAMON - Binary Ninja implementation ***
+[  219.922362] Channel 0: STREAMON - Enqueuing buffers in driver
+[  219.922369] *** Channel 0: STREAMON - Resetting core state from 4 to 2 (ready) ***
+[  219.922376] *** Channel 0: STREAMON - Sending TX_ISP_EVENT_FRAME_STREAMON ***
+[  219.922381] *** STREAMON EVENT: Calling core init to transition from state 2 to 3 ***
+[  219.922387] *** ispcore_core_ops_init: NEW ARCHITECTURE - Using core device ***
+[  219.922392] *** ispcore_core_ops_init: Frame sync work structure initialized ***<6>[  219.922397] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  219.922405] *** tx_isp_get_sensor: subdevs[0] = 85205400, ops = c0682700 ***
+[  219.922412] *** tx_isp_get_sensor: subdevs[0] ops->sensor = c068271c ***
+[  219.922419] *** tx_isp_get_sensor: subdevs[1] = 8547a000, ops = c0682690 ***
+[  219.922426] *** tx_isp_get_sensor: subdevs[1] ops->sensor = c06826d4 ***
+[  219.922434] *** tx_isp_get_sensor: subdevs[2] = 853f6800, ops = c0683534 ***
+[  219.922440] *** tx_isp_get_sensor: subdevs[2] ops->sensor =   (null) ***
+[  219.922446] *** tx_isp_get_sensor: subdevs[3] = NULL ***
+[  219.922454] *** tx_isp_get_sensor: subdevs[4] = 8547a400, ops = c06824b8 ***
+[  219.922460] *** tx_isp_get_sensor: subdevs[4] ops->sensor = c06824d4 ***
+[  219.922468] *** tx_isp_get_sensor: subdevs[5] = 8547ac00, ops = c06a0638 ***
+[  219.922474] *** tx_isp_get_sensor: subdevs[5] ops->sensor = c06a064c ***
+[  219.922482] *** tx_isp_get_sensor: subdevs[6] = 8547ac00, ops = c06a0638 ***
+[  219.922488] *** tx_isp_get_sensor: subdevs[6] ops->sensor = c06a064c ***
+[  219.922494] *** tx_isp_get_sensor: subdevs[7] = NULL ***
+[  219.922500] *** tx_isp_get_sensor: subdevs[8] = NULL ***
+[  219.922506] *** tx_isp_get_sensor: subdevs[9] = NULL ***
+[  219.922512] *** tx_isp_get_sensor: subdevs[10] = NULL ***
+[  219.922517] *** tx_isp_get_sensor: subdevs[11] = NULL ***
+[  219.922523] *** tx_isp_get_sensor: subdevs[12] = NULL ***
+[  219.922529] *** tx_isp_get_sensor: subdevs[13] = NULL ***
+[  219.922534] *** tx_isp_get_sensor: subdevs[14] = NULL ***
+[  219.922540] *** tx_isp_get_sensor: subdevs[15] = NULL ***
+[  219.922547] *** tx_isp_get_sensor: Found real sensor at index 5: 8547ac00 ***
+[  219.922552] ispcore_core_ops_init: Sensor available, skipping sensor_attr access for now
+[  219.922558] ispcore_core_ops_init: Core device=8547a400, state=2*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***
+[  219.922566] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  219.922573] *** tx_isp_get_sensor: subdevs[0] = 85205400, ops = c0682700 ***
+[  219.922580] *** tx_isp_get_sensor: subdevs[0] ops->sensor = c068271c ***
+[  219.922587] *** tx_isp_get_sensor: subdevs[1] = 8547a000, ops = c0682690 ***
+[  219.922594] *** tx_isp_get_sensor: subdevs[1] ops->sensor = c06826d4 ***
+[  219.922602] *** tx_isp_get_sensor: subdevs[2] = 853f6800, ops = c0683534 ***
+[  219.922608] *** tx_isp_get_sensor: subdevs[2] ops->sensor =   (null) ***
+[  219.922614] *** tx_isp_get_sensor: subdevs[3] = NULL ***
+[  219.922621] *** tx_isp_get_sensor: subdevs[4] = 8547a400, ops = c06824b8 ***
+[  219.922628] *** tx_isp_get_sensor: subdevs[4] ops->sensor = c06824d4 ***
+[  219.922635] *** tx_isp_get_sensor: subdevs[5] = 8547ac00, ops = c06a0638 ***
+[  219.922642] *** tx_isp_get_sensor: subdevs[5] ops->sensor = c06a064c ***
+[  219.922649] *** tx_isp_get_sensor: subdevs[6] = 8547ac00, ops = c06a0638 ***
+[  219.922656] *** tx_isp_get_sensor: subdevs[6] ops->sensor = c06a064c ***
+[  219.922662] *** tx_isp_get_sensor: subdevs[7] = NULL ***
+[  219.922668] *** tx_isp_get_sensor: subdevs[8] = NULL ***
+[  219.922673] *** tx_isp_get_sensor: subdevs[9] = NULL ***
+[  219.922679] *** tx_isp_get_sensor: subdevs[10] = NULL ***
+[  219.922684] *** tx_isp_get_sensor: subdevs[11] = NULL ***
+[  219.922690] *** tx_isp_get_sensor: subdevs[12] = NULL ***
+[  219.922696] *** tx_isp_get_sensor: subdevs[13] = NULL ***
+[  219.922702] *** tx_isp_get_sensor: subdevs[14] = NULL ***
+[  219.922708] *** tx_isp_get_sensor: subdevs[15] = NULL ***
+[  219.922714] *** tx_isp_get_sensor: Found real sensor at index 5: 8547ac00 ***
+[  219.922720] *** ispcore_core_ops_init: Calling tisp_init with sensor attributes ***
+[  219.922725] *** tisp_init: IMPLEMENTING MISSING HARDWARE REGISTER INITIALIZATION ***
+[  219.922731] *** THIS FUNCTION CONTAINS ALL THE system_reg_write CALLS FROM REFERENCE ***
+[  219.922738] tisp_init: Initializing ISP hardware for sensor (-1066794652x8275)
+[  219.922744] *** WRITING ISP CORE CONTROL REGISTERS - FROM BINARY NINJA tisp_init ***
+[  219.922752] *** SYSTEM_REG_WRITE: reg[0xb004] = 0xf001f001 (Binary Ninja EXACT) ***
+[  219.922759] *** SYSTEM_REG_WRITE: reg[0xb008] = 0x40404040 (Binary Ninja EXACT) ***
+[  219.922766] *** SYSTEM_REG_WRITE: reg[0xb00c] = 0x40404040 (Binary Ninja EXACT) ***
+[  219.922774] *** SYSTEM_REG_WRITE: reg[0xb010] = 0x40404040 (Binary Ninja EXACT) ***
+[  219.922780] *** SYSTEM_REG_WRITE: reg[0xb014] = 0x404040 (Binary Ninja EXACT) ***
+[  219.922788] *** SYSTEM_REG_WRITE: reg[0xb018] = 0x40404040 (Binary Ninja EXACT) ***
+[  219.922794] *** SYSTEM_REG_WRITE: reg[0xb01c] = 0x40404040 (Binary Ninja EXACT) ***
+[  219.922802] *** SYSTEM_REG_WRITE: reg[0xb020] = 0x40404040 (Binary Ninja EXACT) ***
+[  219.922808] *** SYSTEM_REG_WRITE: reg[0xb024] = 0x404040 (Binary Ninja EXACT) ***
+[  219.922816] *** SYSTEM_REG_WRITE: reg[0xb028] = 0x1000080 (Binary Ninja EXACT) ***
+[  219.922822] *** SYSTEM_REG_WRITE: reg[0xb02c] = 0x1000080 (Binary Ninja EXACT) ***
+[  219.922830] *** SYSTEM_REG_WRITE: reg[0xb030] = 0x100 (Binary Ninja EXACT) ***
+[  219.922836] *** SYSTEM_REG_WRITE: reg[0xb034] = 0xffff0100 (Binary Ninja EXACT) ***
+[  219.922844] *** SYSTEM_REG_WRITE: reg[0xb038] = 0x1ff00 (Binary Ninja EXACT) ***
+[  219.922850] *** SYSTEM_REG_WRITE: reg[0xb04c] = 0x103 (Binary Ninja EXACT) ***
+[  219.922857] *** SYSTEM_REG_WRITE: reg[0xb050] = 0x3 (Binary Ninja EXACT) ***
+[  219.922863] *** WRITING CRITICAL VARYING REGISTERS - USING EXACT REFERENCE VALUES ***
+[  219.922870] *** SYSTEM_REG_WRITE: reg[0xb07c] = 0x341b (Binary Ninja EXACT) ***
+[  219.922876] *** SYSTEM_REG_WRITE: reg[0xb080] = 0x46b0 (Binary Ninja EXACT) ***
+[  219.922883] *** SYSTEM_REG_WRITE: reg[0xb084] = 0x1813 (Binary Ninja EXACT) ***
+[  219.922890] *** SYSTEM_REG_WRITE: reg[0xb08c] = 0x10a (Binary Ninja EXACT) ***
+[  219.922896] *** ISP CORE CONTROL REGISTERS WRITTEN - NOW MATCHES REFERENCE DRIVER ***
+[  219.922902] *** WRITING ISP CONTROL REGISTERS - FROM BINARY NINJA tisp_init ***
+[  219.922908] *** SYSTEM_REG_WRITE: reg[0x9804] = 0x3f00 (Binary Ninja EXACT) ***
+[  219.922915] *** SYSTEM_REG_WRITE: reg[0x9864] = 0x7800438 (Binary Ninja EXACT) ***
+[  219.922922] *** SYSTEM_REG_WRITE: reg[0x987c] = 0xc0000000 (Binary Ninja EXACT) ***
+[  219.922929] *** SYSTEM_REG_WRITE: reg[0x9880] = 0x1 (Binary Ninja EXACT) ***
+[  219.922936] *** SYSTEM_REG_WRITE: reg[0x9884] = 0x1 (Binary Ninja EXACT) ***
+[  219.922943] *** SYSTEM_REG_WRITE: reg[0x9890] = 0x1010001 (Binary Ninja EXACT) ***
+[  219.922950] *** SYSTEM_REG_WRITE: reg[0x989c] = 0x1010001 (Binary Ninja EXACT) ***
+[  219.922957] *** SYSTEM_REG_WRITE: reg[0x98a8] = 0x1010001 (Binary Ninja EXACT) ***
+[  219.922962] *** WRITING VIC CONTROL REGISTERS - FROM BINARY NINJA tisp_init ***
+[  219.922970] *** SYSTEM_REG_WRITE: reg[0x9a00] = 0x50002d0 (Binary Ninja EXACT) ***
+[  219.922976] *** SYSTEM_REG_WRITE: reg[0x9a04] = 0x3000300 (Binary Ninja EXACT) ***
+[  219.922984] *** SYSTEM_REG_WRITE: reg[0x9a2c] = 0x50002d0 (Binary Ninja EXACT) ***
+[  219.922990] *** SYSTEM_REG_WRITE: reg[0x9a34] = 0x1 (Binary Ninja EXACT) ***
+[  219.922997] *** SYSTEM_REG_WRITE: reg[0x9a70] = 0x1 (Binary Ninja EXACT) ***
+[  219.923004] *** SYSTEM_REG_WRITE: reg[0x9a7c] = 0x1 (Binary Ninja EXACT) ***
+[  219.923010] *** SYSTEM_REG_WRITE: reg[0x9a80] = 0x500 (Binary Ninja EXACT) ***
+[  219.923017] *** SYSTEM_REG_WRITE: reg[0x9a88] = 0x1 (Binary Ninja EXACT) ***
+[  219.923024] *** SYSTEM_REG_WRITE: reg[0x9a94] = 0x1 (Binary Ninja EXACT) ***
+[  219.923030] *** SYSTEM_REG_WRITE: reg[0x9a98] = 0x500 (Binary Ninja EXACT) ***
+[  219.923038] *** SYSTEM_REG_WRITE: reg[0x9ac0] = 0x200 (Binary Ninja EXACT) ***
+[  219.923044] *** SYSTEM_REG_WRITE: reg[0x9ac8] = 0x200 (Binary Ninja EXACT) ***
+[  219.923053] tisp_init: CRITICAL FIX - Using ACTUAL sensor image dimensions 1920x1080 (not frame size -1066794652x8275)
+[  219.923060] *** SYSTEM_REG_WRITE: reg[0x4] = 0x1642053 (Binary Ninja EXACT) ***
+[  219.923066] *** SYSTEM_REG_WRITE: reg[0x8] = 0x0 (Binary Ninja EXACT) ***
+[  219.923074] *** SYSTEM_REG_WRITE: reg[0x1c] = 0x3f08 (Binary Ninja EXACT) ***
+[  219.923079] *** tisp_init: ISP control register set to enable processing pipeline ***
+[  219.923086] *** SYSTEM_REG_WRITE: reg[0x10] = 0x133 (Binary Ninja EXACT) ***
+[  219.923092] *** tisp_init: REFERENCE DRIVER format register 0x10 = 0x133 ***
+[  219.923099] *** SYSTEM_REG_WRITE: reg[0x30] = 0xffffffff (Binary Ninja EXACT) ***
+[  219.923104] *** tisp_init: REFERENCE DRIVER register 0x30 = 0xffffffff ***
+[  219.923111] *** SYSTEM_REG_WRITE: reg[0x24] = 0x1 (Binary Ninja EXACT) ***
+[  219.923118] *** SYSTEM_REG_WRITE: reg[0x28] = 0x1 (Binary Ninja EXACT) ***
+[  219.923124] *** tisp_init: ISP data flow configured (input->processing->output) ***
+[  219.923130] *** SYSTEM_REG_WRITE: reg[0x804] = 0x1c (Binary Ninja EXACT) ***
+[  219.923136] *** SYSTEM_REG_WRITE: reg[0x1c] = 0x8 (Binary Ninja EXACT) ***
+[  219.923143] *** SYSTEM_REG_WRITE: reg[0x800] = 0x1 (Binary Ninja EXACT) ***
+[  219.923150] *** tisp_init: REFERENCE DRIVER final configuration - 0x804=0x1c, 0x1c=8, 0x800=1 ***
+[  219.923156] *** SYSTEM_REG_WRITE: reg[0x4] = 0x7800438 (Binary Ninja EXACT) ***
+[  219.923163] *** tisp_init: ISP frame size configured - 1920x1080 (ACTUAL sensor image) ***
+[  219.923170] *** SYSTEM_REG_WRITE: reg[0x8] = 0x1 (Binary Ninja EXACT) ***
+[  219.923177] *** tisp_init: CRITICAL FIX - Bayer pattern configured: mbus=0x3001 -> pattern=1 (register 8) ***
+[  219.923182] *** tisp_init: CONFIGURING RAW10 BAYER PROCESSING PIPELINE ***
+[  219.923189] *** SYSTEM_REG_WRITE: reg[0x14] = 0x2b (Binary Ninja EXACT) ***
+[  219.923196] *** SYSTEM_REG_WRITE: reg[0x18] = 0xa0a (Binary Ninja EXACT) ***
+[  219.923202] *** SYSTEM_REG_WRITE: reg[0x40] = 0x1 (Binary Ninja EXACT) ***
+[  219.923209] *** SYSTEM_REG_WRITE: reg[0x44] = 0x1 (Binary Ninja EXACT) ***
+[  219.923216] *** SYSTEM_REG_WRITE: reg[0x5000] = 0x1 (Binary Ninja EXACT) ***
+[  219.923223] *** SYSTEM_REG_WRITE: reg[0x5004] = 0x1000000 (Binary Ninja EXACT) ***
+[  219.923230] *** SYSTEM_REG_WRITE: reg[0x5006] = 0x100 (Binary Ninja EXACT) ***
+[  219.923239] *** SYSTEM_REG_WRITE: reg[0x5008] = 0x0 (Binary Ninja EXACT) ***
+[  219.923246] *** SYSTEM_REG_WRITE: reg[0x500a] = 0x1000000 (Binary Ninja EXACT) ***
+[  219.923254] *** SYSTEM_REG_WRITE: reg[0x500c] = 0x100 (Binary Ninja EXACT) ***
+[  219.923260] *** SYSTEM_REG_WRITE: reg[0x5018] = 0x0 (Binary Ninja EXACT) ***
+[  219.923267] *** SYSTEM_REG_WRITE: reg[0x501c] = 0x1 (Binary Ninja EXACT) ***
+[  219.923274] *** SYSTEM_REG_WRITE: reg[0x5020] = 0x0 (Binary Ninja EXACT) ***
+[  219.923279] *** CRITICAL FIX: CCM configured using EXACT Binary Ninja register addresses ***
+[  219.923285] *** CCM registers 0x5004-0x5014 programmed with identity matrix ***
+[  219.923291] *** This should eliminate green frames by enabling proper color processing ***
+[  219.923298] *** SYSTEM_REG_WRITE: reg[0x200] = 0x4d (Binary Ninja EXACT) ***
+[  219.923304] *** SYSTEM_REG_WRITE: reg[0x204] = 0x96 (Binary Ninja EXACT) ***
+[  219.923311] *** SYSTEM_REG_WRITE: reg[0x208] = 0x1d (Binary Ninja EXACT) ***
+[  219.923318] *** SYSTEM_REG_WRITE: reg[0x20c] = 0x70 (Binary Ninja EXACT) ***
+[  219.923324] *** SYSTEM_REG_WRITE: reg[0x210] = 0x5a (Binary Ninja EXACT) ***
+[  219.923331] *** SYSTEM_REG_WRITE: reg[0x214] = 0x80 (Binary Ninja EXACT) ***
+[  219.923338] *** SYSTEM_REG_WRITE: reg[0x218] = 0x80 (Binary Ninja EXACT) ***
+[  219.923344] *** SYSTEM_REG_WRITE: reg[0x21c] = 0x6a (Binary Ninja EXACT) ***
+[  219.923351] *** SYSTEM_REG_WRITE: reg[0x220] = 0x16 (Binary Ninja EXACT) ***
+[  219.923357] *** CRITICAL FIX: RGB to YUV conversion matrix configured properly ***
+[  219.923362] *** tisp_init: RAW10 BAYER PROCESSING PIPELINE CONFIGURED ***
+[  219.923368] *** tisp_init: Loading ISP tuning parameters from /etc/sensor/ ***
+[  219.923375] *** load_isp_tuning_file: Loading /etc/sensor/gc2053-t31.bin ***
+[  219.923420] *** load_isp_tuning_file: File size = 159736 bytes ***
+[  219.924005] *** load_isp_tuning_file: Day/night tuning parameters loaded ***
+[  219.924050] *** load_isp_tuning_file: Successfully loaded /etc/sensor/gc2053-t31.bin ***
+[  219.924058] *** tisp_init: Standard tuning parameters loaded successfully ***
+[  219.924065] *** load_isp_tuning_file: Loading /etc/sensor/gc2053-cust-t31.bin ***
+[  219.924110] *** load_isp_tuning_file: File size = 159736 bytes ***
+[  219.924695] *** load_isp_tuning_file: Day/night tuning parameters loaded ***
+[  219.924738] *** load_isp_tuning_file: Successfully loaded /etc/sensor/gc2053-cust-t31.bin ***
+[  219.924746] *** tisp_init: Custom tuning parameters loaded successfully ***
+[  219.924753] tisp_set_csc_version: Setting CSC version 0
+[  219.924761] *** SYSTEM_REG_WRITE: reg[0xc] = 0xb477effd (Binary Ninja EXACT) ***
+[  219.924768] *** tisp_init: REFERENCE DRIVER bypass register set to 0xb477effd (exact Binary Ninja logic) ***
+[  219.924773] *** tisp_init: CONFIGURING ISP FOR NV12 OUTPUT FORMAT ***
+[  219.924780] *** SYSTEM_REG_WRITE: reg[0x10] = 0x133 (Binary Ninja EXACT) ***
+[  219.924787] *** SYSTEM_REG_WRITE: reg[0x30] = 0xffffffff (Binary Ninja EXACT) ***
+[  219.924792] *** tisp_init: ISP configured for NV12 4:2:0 output format ***
+[  219.924798] *** tisp_init: INITIALIZING ALL ISP PIPELINE COMPONENTS ***
+[  219.924805] *** SYSTEM_REG_WRITE: reg[0x5000] = 0x1 (Binary Ninja EXACT) ***
+[  219.924812] *** SYSTEM_REG_WRITE: reg[0x5004] = 0x0 (Binary Ninja EXACT) ***
+[  219.924817] *** tisp_init: ISP-VIC frame synchronization enabled ***
+[  219.924824] *** SYSTEM_REG_WRITE: reg[0x6000] = 0x1 (Binary Ninja EXACT) ***
+[  219.924830] *** SYSTEM_REG_WRITE: reg[0x6004] = 0x1 (Binary Ninja EXACT) ***
+[  219.924836] *** tisp_init: ISP processing pipeline fully enabled ***
+[  219.924842] *** SYSTEM_REG_WRITE: reg[0x7000] = 0x1 (Binary Ninja EXACT) ***
+[  219.924849] *** SYSTEM_REG_WRITE: reg[0x7004] = 0x1 (Binary Ninja EXACT) ***
+[  219.924855] *** tisp_init: ISP master processing enabled - pipeline should now work ***
+[  219.924862] *** SYSTEM_REG_WRITE: reg[0x30] = 0xffffffff (Binary Ninja EXACT) ***
+[  219.924868] *** SYSTEM_REG_WRITE: reg[0x10] = 0x133 (Binary Ninja EXACT) ***
+[  219.924874] tisp_init: ISP memory buffers configured
+[  219.924879] *** tisp_init: INITIALIZING ALL ISP PIPELINE COMPONENTS ***
+[  219.924887] tiziano_ae_init: Initializing Auto Exposure (1920x1080@1) - Binary Ninja EXACT
+[  219.924896] tiziano_ae_params_refresh: Refreshing AE parameters
+[  219.924909] tiziano_ae_params_refresh: AE parameters refreshed
+[  219.924916] tiziano_ae_init_exp_th: Initializing AE exposure thresholds
+[  219.924922] tiziano_ae_init_exp_th: AE exposure thresholds initialized
+[  219.924928] tiziano_ae_para_addr: Setting up AE parameter addresses
+[  219.924933] tiziano_ae_para_addr: AE parameter addresses configured
+[  219.924940] tiziano_ae_set_hardware_param: ae_id=0, update_only=0
+[  219.924947] *** SYSTEM_REG_WRITE: reg[0xa004] = 0xff0ff (Binary Ninja EXACT) ***
+[  219.924954] *** SYSTEM_REG_WRITE: reg[0xa008] = 0x40d0b00 (Binary Ninja EXACT) ***
+[  219.924961] *** SYSTEM_REG_WRITE: reg[0xa00c] = 0x80d0b00 (Binary Ninja EXACT) ***
+[  219.924968] *** SYSTEM_REG_WRITE: reg[0xa010] = 0xc0d0b00 (Binary Ninja EXACT) ***
+[  219.924975] *** SYSTEM_REG_WRITE: reg[0xa014] = 0xd0b00 (Binary Ninja EXACT) ***
+[  219.924982] *** SYSTEM_REG_WRITE: reg[0xa018] = 0xd0b0010 (Binary Ninja EXACT) ***
+[  219.924989] *** SYSTEM_REG_WRITE: reg[0xa01c] = 0x6834a014 (Binary Ninja EXACT) ***
+[  219.924996] *** SYSTEM_REG_WRITE: reg[0xa020] = 0x1000c0 (Binary Ninja EXACT) ***
+[  219.925003] *** SYSTEM_REG_WRITE: reg[0xa024] = 0x43800 (Binary Ninja EXACT) ***
+[  219.925010] *** SYSTEM_REG_WRITE: reg[0xa000] = 0x1 (Binary Ninja EXACT) ***
+[  219.925017] *** SYSTEM_REG_WRITE: reg[0xa028] = 0x100000 (Binary Ninja EXACT) ***
+[  219.925023] tiziano_ae_set_hardware_param: Parameters written to AE0
+[  219.925030] tiziano_ae_set_hardware_param: ae_id=1, update_only=0
+[  219.925036] *** SYSTEM_REG_WRITE: reg[0xa804] = 0x0 (Binary Ninja EXACT) ***
+[  219.925043] *** SYSTEM_REG_WRITE: reg[0xa808] = 0x0 (Binary Ninja EXACT) ***
+[  219.925050] *** SYSTEM_REG_WRITE: reg[0xa80c] = 0x0 (Binary Ninja EXACT) ***
+[  219.925056] *** SYSTEM_REG_WRITE: reg[0xa810] = 0x0 (Binary Ninja EXACT) ***
+[  219.925063] *** SYSTEM_REG_WRITE: reg[0xa814] = 0x0 (Binary Ninja EXACT) ***
+[  219.925070] *** SYSTEM_REG_WRITE: reg[0xa818] = 0x0 (Binary Ninja EXACT) ***
+[  219.925076] *** SYSTEM_REG_WRITE: reg[0xa81c] = 0x0 (Binary Ninja EXACT) ***
+[  219.925083] *** SYSTEM_REG_WRITE: reg[0xa820] = 0x0 (Binary Ninja EXACT) ***
+[  219.925090] *** SYSTEM_REG_WRITE: reg[0xa824] = 0x0 (Binary Ninja EXACT) ***
+[  219.925096] *** SYSTEM_REG_WRITE: reg[0xa800] = 0x1 (Binary Ninja EXACT) ***
+[  219.925103] *** SYSTEM_REG_WRITE: reg[0xa828] = 0x0 (Binary Ninja EXACT) ***
+[  219.925109] tiziano_ae_set_hardware_param: Parameters written to AE1
+[  219.925117] tiziano_deflicker_expt: flicker_t=0, param2=4096, param3=25, param4=1
+[  219.925135] tiziano_deflicker_expt: Generated 119 LUT entries
+[  219.925141] tisp_event_set_cb: Setting callback for event 1
+[  219.925148] tisp_event_set_cb: Event 1 callback set to c065b338
+[  219.925154] tisp_event_set_cb: Setting callback for event 6
+[  219.925161] tisp_event_set_cb: Event 6 callback set to c065a448
+[  219.925167] tiziano_ae_init: AE initialization complete - Binary Ninja EXACT implementation
+[  219.925174] tiziano_awb_init: Initializing Auto White Balance (1920x1080)
+[  219.925181] *** SYSTEM_REG_WRITE: reg[0xb000] = 0x1 (Binary Ninja EXACT) ***
+[  219.925188] *** SYSTEM_REG_WRITE: reg[0x1800] = 0x1 (Binary Ninja EXACT) ***
+[  219.925193] tiziano_awb_init: AWB hardware blocks enabled
+[  219.925198] tiziano_gamma_init: Initializing Gamma processing
+[  219.925204] tiziano_gamma_lut_parameter: Writing gamma LUT to registers
+[  219.925264] tiziano_gamma_lut_parameter: Gamma LUT written to hardware
+[  219.925270] tiziano_gib_init: Initializing GIB processing
+[  219.925276] tiziano_lsc_init: Initializing LSC processing
+[  219.925281] tiziano_lsc_params_refresh: Refreshing LSC parameters
+[  219.925288] tiziano_lsc_params_refresh: Updated LSC strength=0x800, CT=9984
+[  219.925294] *** SYSTEM_REG_WRITE: reg[0x3800] = 0x11 (Binary Ninja EXACT) ***
+[  219.925302] *** SYSTEM_REG_WRITE: reg[0x3804] = 0x108002 (Binary Ninja EXACT) ***
+[  219.925307] tisp_lsc_write_lut_datas: Writing LSC LUT data
+[  219.925369] tiziano_ccm_init: Initializing Color Correction Matrix
+[  219.925374] tiziano_ccm_init: Using linear CCM parameters
+[  219.925380] tiziano_ccm_params_refresh: Refreshing CCM parameters
+root@ing-wyze-cam3-a000 ~# [INFO:IMPAudioServerMediaSubsession.cpp]: IMPAudioServerMediaSubsession init
+[INFO:RTSP.cpp]: Audio stream 0 added to session
+[INFO:RTSP.cpp]: stream 0 available at: rtsp://192.168.50.211/ch0
+root@ing-wyze-cam3-a000 ~# cat /proc/interrupts 
+           CPU0       
+  9:          0   jz-intc  i2s_irq
+ 11:      35969   jz-intc  jz-timerost
+ 14:         24   jz-intc  ipu
+ 15:      53110   jz-intc  jz-sfc
+ 18:          0   jz-intc  pdma
+ 23:          0   jz-intc  GPIO C
+ 24:          1   jz-intc  GPIO B
+ 25:          0   jz-intc  GPIO A
+ 29:          1   jz-intc  dwc2
+ 37:          0   jz-intc  tx-isp-core
+ 38:          0   jz-intc  isp-w02
+ 44:      15023   jz-intc  jzmmc_v1.2.1
+ 45:          0   jz-intc  jzmmc_v1.2.0
+ 58:        382   jz-intc  uart1
+ 68:          0   jz-intc  jz-i2c.0
+ 70:          8   jz-intc  avpu.0
+126:          0    GPIO B  GPIO Button
+134:          1    GPIO B  mmc-insert-detect
+ERR:          0
+root@ing-wyze-cam3-a000 ~# dmesg 
+[  220.635447] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  220.635455] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  220.635461] *** Channel 0: Frame completion wait ***
+[  220.635467] *** Channel 0: Waiting for frame (timeout=100ms) ***
+[  220.635473] *** Channel 0: Frame wait returned 10 ***
+[  220.635479] *** Channel 0: Frame was ready, consuming it ***
+[  220.635487] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  220.635494] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  220.635500] *** Channel 0: Frame completion wait ***
+[  220.635505] *** Channel 0: Waiting for frame (timeout=100ms) ***
+[  220.725421] *** Channel 0: DQBUF wait returned 0 ***
+[  220.725432] *** Channel 0: DQBUF timeout, generating frame ***
+[  220.725441] *** Channel 0: DQBUF complete - buffer[3] seq=2 flags=0x3 ***
+[  220.725463] TUNING: Allowing V4L2 control command 0xc00c56c6 for VIN init
+[  220.725470] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  220.725477] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: ENABLE
+[  220.725483] *** DEBUG: enable=1, dev->core_dev->tuning_enabled=1 ***
+[  220.725489] *** BINARY NINJA REFERENCE: Tuning enable - no hardware reset performed ***
+[  220.725504] isp_core_tunning_unlocked_ioctl: ISP tuning enabled
+[  220.725623] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  220.725633] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  220.725640] *** Channel 0: DQBUF - dequeue buffer request ***
+[  220.725646] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  220.725655] *** tx_isp_get_sensor: subdevs[0] = 85205400, ops = c0682700 ***
+[  220.725661] *** tx_isp_get_sensor: subdevs[0] ops->sensor = c068271c ***
+[  220.725669] *** tx_isp_get_sensor: subdevs[1] = 8547a000, ops = c0682690 ***
+[  220.725676] *** tx_isp_get_sensor: subdevs[1] ops->sensor = c06826d4 ***
+[  220.725683] *** tx_isp_get_sensor: subdevs[2] = 853f6800, ops = c0683534 ***
+[  220.725690] *** tx_isp_get_sensor: subdevs[2] ops->sensor =   (null) ***
+[  220.725696] *** tx_isp_get_sensor: subdevs[3] = NULL ***
+[  220.725703] *** tx_isp_get_sensor: subdevs[4] = 8547a400, ops = c06824b8 ***
+[  220.725711] *** tx_isp_get_sensor: subdevs[4] ops->sensor = c06824d4 ***
+[  220.725718] *** tx_isp_get_sensor: subdevs[5] = 8547ac00, ops = c06a0638 ***
+[  220.725725] *** tx_isp_get_sensor: subdevs[5] ops->sensor = c06a064c ***
+[  220.725732] *** tx_isp_get_sensor: subdevs[6] = 8547ac00, ops = c06a0638 ***
+[  220.725739] *** tx_isp_get_sensor: subdevs[6] ops->sensor = c06a064c ***
+[  220.725745] *** tx_isp_get_sensor: subdevs[7] = NULL ***
+[  220.725750] *** tx_isp_get_sensor: subdevs[8] = NULL ***
+[  220.725756] *** tx_isp_get_sensor: subdevs[9] = NULL ***
+[  220.725761] *** tx_isp_get_sensor: subdevs[10] = NULL ***
+[  220.725767] *** tx_isp_get_sensor: subdevs[11] = NULL ***
+[  220.725773] *** tx_isp_get_sensor: subdevs[12] = NULL ***
+[  220.725779] *** tx_isp_get_sensor: subdevs[13] = NULL ***
+[  220.725785] *** tx_isp_get_sensor: subdevs[14] = NULL ***
+[  220.725790] *** tx_isp_get_sensor: subdevs[15] = NULL ***
+[  220.725797] *** tx_isp_get_sensor: Found real sensor at index 5: 8547ac00 ***
+[  220.725804] *** Channel 0: DQBUF waiting for frame completion (timeout=200ms) ***
+[  220.735441] *** Channel 0: Frame wait returned 0 ***
+[  220.735456] *** Channel 0: Frame wait timeout/error, generating frame ***
+[  220.735477] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  220.735485] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  220.735491] *** Channel 0: Frame completion wait ***
+[  220.735497] *** Channel 0: Waiting for frame (timeout=100ms) ***
+[  220.735503] *** Channel 0: Frame wait returned 10 ***
+[  220.735509] *** Channel 0: Frame was ready, consuming it ***
+[  220.735517] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  220.735523] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  220.735529] *** Channel 0: Frame completion wait ***
+[  220.735535] *** Channel 0: Waiting for frame (timeout=100ms) ***
+[  220.735711] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  220.735721] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  220.735728] *** Channel 0: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  220.735734] *** Channel 0: QBUF - Buffer copied from user successfully ***
+[  220.735741] *** Channel 0: QBUF - Buffer received: index=3, type=1, memory=2 ***
+[  220.735749] *** Channel 0: QBUF - Buffer m.offset=0x79d0000, m.userptr=0x79d0000 ***
+[  220.735757] *** Channel 0: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  220.735763] *** Channel 0: QBUF - Validation: buffer.index=3, state->buffer_count=4 ***
+[  220.735770] *** Channel 0: QBUF - Queue buffer index=3 ***
+[  220.735777] *** Channel 0: QBUF - CALLING CORE OPS INIT ***
+[  220.735783] *** ispcore_core_ops_init: NEW ARCHITECTURE - Using core device ***
+[  220.735788] *** ispcore_core_ops_init: Frame sync work structure initialized ***<6>[  220.735795] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  220.735803] *** tx_isp_get_sensor: subdevs[0] = 85205400, ops = c0682700 ***
+[  220.735810] *** tx_isp_get_sensor: subdevs[0] ops->sensor = c068271c ***
+[  220.735817] *** tx_isp_get_sensor: subdevs[1] = 8547a000, ops = c0682690 ***
+[  220.735824] *** tx_isp_get_sensor: subdevs[1] ops->sensor = c06826d4 ***
+[  220.735831] *** tx_isp_get_sensor: subdevs[2] = 853f6800, ops = c0683534 ***
+[  220.735839] *** tx_isp_get_sensor: subdevs[2] ops->sensor =   (null) ***
+[  220.735845] *** tx_isp_get_sensor: subdevs[3] = NULL ***
+[  220.735852] *** tx_isp_get_sensor: subdevs[4] = 8547a400, ops = c06824b8 ***
+[  220.735859] *** tx_isp_get_sensor: subdevs[4] ops->sensor = c06824d4 ***
+[  220.735866] *** tx_isp_get_sensor: subdevs[5] = 8547ac00, ops = c06a0638 ***
+[  220.735891] *** tx_isp_get_sensor: subdevs[5] ops->sensor = c06a064c ***
+[  220.735899] *** tx_isp_get_sensor: subdevs[6] = 8547ac00, ops = c06a0638 ***
+[  220.735906] *** tx_isp_get_sensor: subdevs[6] ops->sensor = c06a064c ***
+[  220.735911] *** tx_isp_get_sensor: subdevs[7] = NULL ***
+[  220.735917] *** tx_isp_get_sensor: subdevs[8] = NULL ***
+[  220.735923] *** tx_isp_get_sensor: subdevs[9] = NULL ***
+[  220.735929] *** tx_isp_get_sensor: subdevs[10] = NULL ***
+[  220.735935] *** tx_isp_get_sensor: subdevs[11] = NULL ***
+[  220.735940] *** tx_isp_get_sensor: subdevs[12] = NULL ***
+[  220.735946] *** tx_isp_get_sensor: subdevs[13] = NULL ***
+[  220.735951] *** tx_isp_get_sensor: subdevs[14] = NULL ***
+[  220.735957] *** tx_isp_get_sensor: subdevs[15] = NULL ***
+[  220.735964] *** tx_isp_get_sensor: Found real sensor at index 5: 8547ac00 ***
+[  220.735970] ispcore_core_ops_init: Sensor available, skipping sensor_attr access for now
+[  220.735975] ispcore_core_ops_init: Core device=8547a400, state=3*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***
+[  220.735984] ispcore_core_ops_init: Core state 3 != 2, cannot initialize
+[  220.735991] Channel 0: QBUF - Core ops init failed: -22
+[  220.735997] *** QBUF: No buffer allocated for index 3 - VBM initialization mode ***
+[  220.736004] *** Channel 0: QBUF - Using buffer struct   (null) for index 3 ***
+[  220.736010] *** Channel 0: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***
+[  220.736018] *** tx_isp_send_event_to_remote: Binary Ninja EXACT - isp_dev=0x8547a000, event=0x3000008 ***
+[  220.736025] *** tx_isp_send_event_to_remote: callback_struct_ptr=0x8547a00c, callback_struct=0x  (null) ***
+[  220.736032] *** tx_isp_send_event_to_remote: No handler found - returning 0xfffffdfd ***
+[  220.736038] *** Channel 0: QBUF EVENT - No VIC callback ***
+[  220.736045] *** Channel 0: QBUF - Using REAL buffer address from userptr: 0x79d0000 ***
+[  220.736053] *** Channel 0: QBUF - Buffer 3: phys_addr=0x79d0000, size=4147200 (VALIDATED) ***
+[  220.736061] *** Channel 0: QBUF VBM - Stored buffer[3] = 0x79d0000, total_count=4 ***
+[  220.736069] *** Channel 0: QBUF - Buffer structure check: buffer_addresses=8569a600, buffer_count=4 ***
+[  220.736075] *** Channel 0: QBUF no video_buffer structure found for index 3 ***
+[  220.736084] *** Channel 0: QBUF DEBUG - buffer_addresses=8569a600, buffer_count=4, buffer_addresses[3]=0x0 ***
+[  220.736091] *** Channel 0: QBUF - VBM initialization mode (VBMFillPool) ***
+[  220.736097] *** Channel 0: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x79d0000 ***
+[  220.736108] *** Channel 0: QBUF completed successfully (MIPS-safe) ***
+[  220.736274] *** Channel 0: Frame wait returned 10 ***
+[  220.736284] *** Channel 0: Frame was ready, consuming it ***
+[  220.736299] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  220.736306] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  220.736313] *** Channel 0: Frame completion wait ***
+[  220.736318] *** Channel 0: Waiting for frame (timeout=100ms) ***
+[  220.835421] *** Channel 0: Frame wait returned 0 ***
+[  220.835433] *** Channel 0: Frame wait timeout/error, generating frame ***
+[  220.925422] *** Channel 0: DQBUF wait returned 1 ***
+[  220.925436] *** Channel 0: DQBUF complete - buffer[0] seq=3 flags=0x3 ***
+[  220.925457] TUNING: Allowing V4L2 control command 0xc00c56c6 for VIN init
+[  220.925465] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  220.925471] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: ENABLE
+[  220.925478] *** DEBUG: enable=1, dev->core_dev->tuning_enabled=1 ***
+[  220.925484] *** BINARY NINJA REFERENCE: Tuning enable - no hardware reset performed ***
+[  220.925489] isp_core_tunning_unlocked_ioctl: ISP tuning enabled
+[  220.925611] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  220.925621] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  220.925628] *** Channel 0: DQBUF - dequeue buffer request ***
+[  220.925633] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  220.925642] *** tx_isp_get_sensor: subdevs[0] = 85205400, ops = c0682700 ***
+[  220.925649] *** tx_isp_get_sensor: subdevs[0] ops->sensor = c068271c ***
+[  220.925657] *** tx_isp_get_sensor: subdevs[1] = 8547a000, ops = c0682690 ***
+[  220.925663] *** tx_isp_get_sensor: subdevs[1] ops->sensor = c06826d4 ***
+[  220.925671] *** tx_isp_get_sensor: subdevs[2] = 853f6800, ops = c0683534 ***
+[  220.925678] *** tx_isp_get_sensor: subdevs[2] ops->sensor =   (null) ***
+[  220.925684] *** tx_isp_get_sensor: subdevs[3] = NULL ***
+[  220.925691] *** tx_isp_get_sensor: subdevs[4] = 8547a400, ops = c06824b8 ***
+[  220.925698] *** tx_isp_get_sensor: subdevs[4] ops->sensor = c06824d4 ***
+[  220.925705] *** tx_isp_get_sensor: subdevs[5] = 8547ac00, ops = c06a0638 ***
+[  220.925713] *** tx_isp_get_sensor: subdevs[5] ops->sensor = c06a064c ***
+[  220.925720] *** tx_isp_get_sensor: subdevs[6] = 8547ac00, ops = c06a0638 ***
+[  220.925727] *** tx_isp_get_sensor: subdevs[6] ops->sensor = c06a064c ***
+[  220.925732] *** tx_isp_get_sensor: subdevs[7] = NULL ***
+[  220.925738] *** tx_isp_get_sensor: subdevs[8] = NULL ***
+[  220.925743] *** tx_isp_get_sensor: subdevs[9] = NULL ***
+[  220.925749] *** tx_isp_get_sensor: subdevs[10] = NULL ***
+[  220.925755] *** tx_isp_get_sensor: subdevs[11] = NULL ***
+[  220.925761] *** tx_isp_get_sensor: subdevs[12] = NULL ***
+[  220.925767] *** tx_isp_get_sensor: subdevs[13] = NULL ***
+[  220.925772] *** tx_isp_get_sensor: subdevs[14] = NULL ***
+[  220.925778] *** tx_isp_get_sensor: subdevs[15] = NULL ***
+[  220.925785] *** tx_isp_get_sensor: Found real sensor at index 5: 8547ac00 ***
+[  220.925791] *** Channel 0: DQBUF waiting for frame completion (timeout=200ms) ***
+[  220.926057] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  220.926073] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  220.926079] *** Channel 0: Frame completion wait ***
+[  220.926085] *** Channel 0: Waiting for frame (timeout=100ms) ***
+[  220.935735] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  220.935749] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  220.935756] *** Channel 0: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  220.935762] *** Channel 0: QBUF - Buffer copied from user successfully ***
+[  220.935770] *** Channel 0: QBUF - Buffer received: index=0, type=1, memory=2 ***
+[  220.935777] *** Channel 0: QBUF - Buffer m.offset=0x70d9000, m.userptr=0x70d9000 ***
+[  220.935785] *** Channel 0: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  220.935791] *** Channel 0: QBUF - Validation: buffer.index=0, state->buffer_count=4 ***
+[  220.935798] *** Channel 0: QBUF - Queue buffer index=0 ***
+[  220.935805] *** Channel 0: QBUF - CALLING CORE OPS INIT ***
+[  220.935811] *** ispcore_core_ops_init: NEW ARCHITECTURE - Using core device ***
+[  220.935816] *** ispcore_core_ops_init: Frame sync work structure initialized ***<6>[  220.935823] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  220.935831] *** tx_isp_get_sensor: subdevs[0] = 85205400, ops = c0682700 ***
+[  220.935837] *** tx_isp_get_sensor: subdevs[0] ops->sensor = c068271c ***
+[  220.935845] *** tx_isp_get_sensor: subdevs[1] = 8547a000, ops = c0682690 ***
+[  220.935852] *** tx_isp_get_sensor: subdevs[1] ops->sensor = c06826d4 ***
+[  220.935859] *** tx_isp_get_sensor: subdevs[2] = 853f6800, ops = c0683534 ***
+[  220.935867] *** tx_isp_get_sensor: subdevs[2] ops->sensor =   (null) ***
+[  220.935873] *** tx_isp_get_sensor: subdevs[3] = NULL ***
+[  220.935880] *** tx_isp_get_sensor: subdevs[4] = 8547a400, ops = c06824b8 ***
+[  220.935887] *** tx_isp_get_sensor: subdevs[4] ops->sensor = c06824d4 ***
+[  220.935894] *** tx_isp_get_sensor: subdevs[5] = 8547ac00, ops = c06a0638 ***
+[  220.935901] *** tx_isp_get_sensor: subdevs[5] ops->sensor = c06a064c ***
+[  220.935909] *** tx_isp_get_sensor: subdevs[6] = 8547ac00, ops = c06a0638 ***
+[  220.935915] *** tx_isp_get_sensor: subdevs[6] ops->sensor = c06a064c ***
+[  220.935921] *** tx_isp_get_sensor: subdevs[7] = NULL ***
+[  220.935927] *** tx_isp_get_sensor: subdevs[8] = NULL ***
+[  220.935933] *** tx_isp_get_sensor: subdevs[9] = NULL ***
+[  220.935938] *** tx_isp_get_sensor: subdevs[10] = NULL ***
+[  220.935944] *** tx_isp_get_sensor: subdevs[11] = NULL ***
+[  220.935949] *** tx_isp_get_sensor: subdevs[12] = NULL ***
+[  220.935955] *** tx_isp_get_sensor: subdevs[13] = NULL ***
+[  220.935961] *** tx_isp_get_sensor: subdevs[14] = NULL ***
+[  220.935967] *** tx_isp_get_sensor: subdevs[15] = NULL ***
+[  220.935973] *** tx_isp_get_sensor: Found real sensor at index 5: 8547ac00 ***
+[  220.935994] ispcore_core_ops_init: Sensor available, skipping sensor_attr access for now
+[  220.936000] ispcore_core_ops_init: Core device=8547a400, state=3*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***
+[  220.936009] ispcore_core_ops_init: Core state 3 != 2, cannot initialize
+[  220.936015] Channel 0: QBUF - Core ops init failed: -22
+[  220.936021] *** QBUF: No buffer allocated for index 0 - VBM initialization mode ***
+[  220.936029] *** Channel 0: QBUF - Using buffer struct   (null) for index 0 ***
+[  220.936035] *** Channel 0: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***
+[  220.936043] *** tx_isp_send_event_to_remote: Binary Ninja EXACT - isp_dev=0x8547a000, event=0x3000008 ***
+[  220.936051] *** tx_isp_send_event_to_remote: callback_struct_ptr=0x8547a00c, callback_struct=0x  (null) ***
+[  220.936057] *** tx_isp_send_event_to_remote: No handler found - returning 0xfffffdfd ***
+[  220.936063] *** Channel 0: QBUF EVENT - No VIC callback ***
+[  220.936069] *** Channel 0: QBUF - Using REAL buffer address from userptr: 0x70d9000 ***
+[  220.936078] *** Channel 0: QBUF - Buffer 0: phys_addr=0x70d9000, size=4147200 (VALIDATED) ***
+[  220.936086] *** Channel 0: QBUF VBM - Stored buffer[0] = 0x70d9000, total_count=4 ***
+[  220.936093] *** Channel 0: QBUF - Buffer structure check: buffer_addresses=8569a600, buffer_count=4 ***
+[  220.936100] *** Channel 0: QBUF no video_buffer structure found for index 0 ***
+[  220.936109] *** Channel 0: QBUF DEBUG - buffer_addresses=8569a600, buffer_count=4, buffer_addresses[0]=0x0 ***
+[  220.936115] *** Channel 0: QBUF - VBM initialization mode (VBMFillPool) ***
+[  220.936123] *** Channel 0: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x70d9000 ***
+[  220.936133] *** Channel 0: QBUF completed successfully (MIPS-safe) ***
+[  220.936205] *** Channel 0: Frame wait returned 9 ***
+[  220.936213] *** Channel 0: Frame was ready, consuming it ***
+[  221.125427] *** Channel 0: DQBUF wait returned 0 ***
+[  221.125439] *** Channel 0: DQBUF timeout, generating frame ***
+[  221.125448] *** Channel 0: DQBUF complete - buffer[1] seq=4 flags=0x3 ***
+[  221.125469] TUNING: Allowing V4L2 control command 0xc00c56c6 for VIN init
+[  221.125476] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  221.125483] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: ENABLE
+[  221.125490] *** DEBUG: enable=1, dev->core_dev->tuning_enabled=1 ***
+[  221.125495] *** BINARY NINJA REFERENCE: Tuning enable - no hardware reset performed ***
+[  221.125501] isp_core_tunning_unlocked_ioctl: ISP tuning enabled
+[  221.125624] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  221.125634] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  221.125641] *** Channel 0: DQBUF - dequeue buffer request ***
+[  221.125646] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  221.125655] *** tx_isp_get_sensor: subdevs[0] = 85205400, ops = c0682700 ***
+[  221.125662] *** tx_isp_get_sensor: subdevs[0] ops->sensor = c068271c ***
+[  221.125669] *** tx_isp_get_sensor: subdevs[1] = 8547a000, ops = c0682690 ***
+[  221.125676] *** tx_isp_get_sensor: subdevs[1] ops->sensor = c06826d4 ***
+[  221.125683] *** tx_isp_get_sensor: subdevs[2] = 853f6800, ops = c0683534 ***
+[  221.125691] *** tx_isp_get_sensor: subdevs[2] ops->sensor =   (null) ***
+[  221.125697] *** tx_isp_get_sensor: subdevs[3] = NULL ***
+[  221.125704] *** tx_isp_get_sensor: subdevs[4] = 8547a400, ops = c06824b8 ***
+[  221.125711] *** tx_isp_get_sensor: subdevs[4] ops->sensor = c06824d4 ***
+[  221.125719] *** tx_isp_get_sensor: subdevs[5] = 8547ac00, ops = c06a0638 ***
+[  221.125725] *** tx_isp_get_sensor: subdevs[5] ops->sensor = c06a064c ***
+[  221.125733] *** tx_isp_get_sensor: subdevs[6] = 8547ac00, ops = c06a0638 ***
+[  221.125739] *** tx_isp_get_sensor: subdevs[6] ops->sensor = c06a064c ***
+[  221.125745] *** tx_isp_get_sensor: subdevs[7] = NULL ***
+[  221.125751] *** tx_isp_get_sensor: subdevs[8] = NULL ***
+[  221.125757] *** tx_isp_get_sensor: subdevs[9] = NULL ***
+[  221.125762] *** tx_isp_get_sensor: subdevs[10] = NULL ***
+[  221.125768] *** tx_isp_get_sensor: subdevs[11] = NULL ***
+[  221.125774] *** tx_isp_get_sensor: subdevs[12] = NULL ***
+[  221.125779] *** tx_isp_get_sensor: subdevs[13] = NULL ***
+[  221.125785] *** tx_isp_get_sensor: subdevs[14] = NULL ***
+[  221.125791] *** tx_isp_get_sensor: subdevs[15] = NULL ***
+[  221.125797] *** tx_isp_get_sensor: Found real sensor at index 5: 8547ac00 ***
+[  221.125805] *** Channel 0: DQBUF waiting for frame completion (timeout=200ms) ***
+[  221.126046] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  221.126061] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  221.126068] *** Channel 0: Frame completion wait ***
+[  221.126074] *** Channel 0: Waiting for frame (timeout=100ms) ***
+[  221.135787] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  221.135801] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  221.135807] *** Channel 0: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  221.135813] *** Channel 0: QBUF - Buffer copied from user successfully ***
+[  221.135821] *** Channel 0: QBUF - Buffer received: index=1, type=1, memory=2 ***
+[  221.135845] *** Channel 0: QBUF - Buffer m.offset=0x73d6000, m.userptr=0x73d6000 ***
+[  221.135853] *** Channel 0: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  221.135860] *** Channel 0: QBUF - Validation: buffer.index=1, state->buffer_count=4 ***
+[  221.135867] *** Channel 0: QBUF - Queue buffer index=1 ***
+[  221.135873] *** Channel 0: QBUF - CALLING CORE OPS INIT ***
+[  221.135879] *** ispcore_core_ops_init: NEW ARCHITECTURE - Using core device ***
+[  221.135885] *** ispcore_core_ops_init: Frame sync work structure initialized ***<6>[  221.135891] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  221.135900] *** tx_isp_get_sensor: subdevs[0] = 85205400, ops = c0682700 ***
+[  221.135907] *** tx_isp_get_sensor: subdevs[0] ops->sensor = c068271c ***
+[  221.135915] *** tx_isp_get_sensor: subdevs[1] = 8547a000, ops = c0682690 ***
+[  221.135921] *** tx_isp_get_sensor: subdevs[1] ops->sensor = c06826d4 ***
+[  221.135929] *** tx_isp_get_sensor: subdevs[2] = 853f6800, ops = c0683534 ***
+[  221.135936] *** tx_isp_get_sensor: subdevs[2] ops->sensor =   (null) ***
+[  221.135943] *** tx_isp_get_sensor: subdevs[3] = NULL ***
+[  221.135950] *** tx_isp_get_sensor: subdevs[4] = 8547a400, ops = c06824b8 ***
+[  221.135957] *** tx_isp_get_sensor: subdevs[4] ops->sensor = c06824d4 ***
+[  221.135964] *** tx_isp_get_sensor: subdevs[5] = 8547ac00, ops = c06a0638 ***
+[  221.135971] *** tx_isp_get_sensor: subdevs[5] ops->sensor = c06a064c ***
+[  221.135979] *** tx_isp_get_sensor: subdevs[6] = 8547ac00, ops = c06a0638 ***
+[  221.135985] *** tx_isp_get_sensor: subdevs[6] ops->sensor = c06a064c ***
+[  221.135991] *** tx_isp_get_sensor: subdevs[7] = NULL ***
+[  221.135997] *** tx_isp_get_sensor: subdevs[8] = NULL ***
+[  221.136003] *** tx_isp_get_sensor: subdevs[9] = NULL ***
+[  221.136008] *** tx_isp_get_sensor: subdevs[10] = NULL ***
+[  221.136014] *** tx_isp_get_sensor: subdevs[11] = NULL ***
+[  221.136019] *** tx_isp_get_sensor: subdevs[12] = NULL ***
+[  221.136025] *** tx_isp_get_sensor: subdevs[13] = NULL ***
+[  221.136031] *** tx_isp_get_sensor: subdevs[14] = NULL ***
+[  221.136037] *** tx_isp_get_sensor: subdevs[15] = NULL ***
+[  221.136044] *** tx_isp_get_sensor: Found real sensor at index 5: 8547ac00 ***
+[  221.136050] ispcore_core_ops_init: Sensor available, skipping sensor_attr access for now
+[  221.136055] ispcore_core_ops_init: Core device=8547a400, state=3*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***
+[  221.136064] ispcore_core_ops_init: Core state 3 != 2, cannot initialize
+[  221.136070] Channel 0: QBUF - Core ops init failed: -22
+[  221.136077] *** QBUF: No buffer allocated for index 1 - VBM initialization mode ***
+[  221.136083] *** Channel 0: QBUF - Using buffer struct   (null) for index 1 ***
+[  221.136090] *** Channel 0: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***
+[  221.136098] *** tx_isp_send_event_to_remote: Binary Ninja EXACT - isp_dev=0x8547a000, event=0x3000008 ***
+[  221.136105] *** tx_isp_send_event_to_remote: callback_struct_ptr=0x8547a00c, callback_struct=0x  (null) ***
+[  221.136111] *** tx_isp_send_event_to_remote: No handler found - returning 0xfffffdfd ***
+[  221.136118] *** Channel 0: QBUF EVENT - No VIC callback ***
+[  221.136125] *** Channel 0: QBUF - Using REAL buffer address from userptr: 0x73d6000 ***
+[  221.136133] *** Channel 0: QBUF - Buffer 1: phys_addr=0x73d6000, size=4147200 (VALIDATED) ***
+[  221.136141] *** Channel 0: QBUF VBM - Stored buffer[1] = 0x73d6000, total_count=4 ***
+[  221.136149] *** Channel 0: QBUF - Buffer structure check: buffer_addresses=8569a600, buffer_count=4 ***
+[  221.136155] *** Channel 0: QBUF no video_buffer structure found for index 1 ***
+[  221.136164] *** Channel 0: QBUF DEBUG - buffer_addresses=8569a600, buffer_count=4, buffer_addresses[1]=0x0 ***
+[  221.136171] *** Channel 0: QBUF - VBM initialization mode (VBMFillPool) ***
+[  221.136177] *** Channel 0: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x73d6000 ***
+[  221.136189] *** Channel 0: QBUF completed successfully (MIPS-safe) ***
+[  221.136263] *** Channel 0: Frame wait returned 9 ***
+[  221.136271] *** Channel 0: Frame was ready, consuming it ***
+[  221.297561] TUNING: Allowing V4L2 control command 0xc00c56c6 for VIN init
+[  221.297574] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  221.297581] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: ENABLE
+[  221.297588] *** DEBUG: enable=1, dev->core_dev->tuning_enabled=1 ***
+[  221.297594] *** BINARY NINJA REFERENCE: Tuning enable - no hardware reset performed ***
+[  221.297599] isp_core_tunning_unlocked_ioctl: ISP tuning enabled
+[  221.325437] *** Channel 0: DQBUF wait returned 0 ***
+[  221.325448] *** Channel 0: DQBUF timeout, generating frame ***
+[  221.325457] *** Channel 0: DQBUF complete - buffer[2] seq=5 flags=0x3 ***
+[  221.325478] TUNING: Allowing V4L2 control command 0xc00c56c6 for VIN init
+[  221.325486] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  221.325493] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: ENABLE
+[  221.325500] *** DEBUG: enable=1, dev->core_dev->tuning_enabled=1 ***
+[  221.325505] *** BINARY NINJA REFERENCE: Tuning enable - no hardware reset performed ***
+[  221.325511] isp_core_tunning_unlocked_ioctl: ISP tuning enabled
+[  221.325633] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  221.325643] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  221.325650] *** Channel 0: DQBUF - dequeue buffer request ***
+[  221.325656] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  221.325664] *** tx_isp_get_sensor: subdevs[0] = 85205400, ops = c0682700 ***
+[  221.325671] *** tx_isp_get_sensor: subdevs[0] ops->sensor = c068271c ***
+[  221.325679] *** tx_isp_get_sensor: subdevs[1] = 8547a000, ops = c0682690 ***
+[  221.325686] *** tx_isp_get_sensor: subdevs[1] ops->sensor = c06826d4 ***
+[  221.325693] *** tx_isp_get_sensor: subdevs[2] = 853f6800, ops = c0683534 ***
+[  221.325700] *** tx_isp_get_sensor: subdevs[2] ops->sensor =   (null) ***
+[  221.325706] *** tx_isp_get_sensor: subdevs[3] = NULL ***
+[  221.325714] *** tx_isp_get_sensor: subdevs[4] = 8547a400, ops = c06824b8 ***
+[  221.325720] *** tx_isp_get_sensor: subdevs[4] ops->sensor = c06824d4 ***
+[  221.325728] *** tx_isp_get_sensor: subdevs[5] = 8547ac00, ops = c06a0638 ***
+[  221.325735] *** tx_isp_get_sensor: subdevs[5] ops->sensor = c06a064c ***
+[  221.325742] *** tx_isp_get_sensor: subdevs[6] = 8547ac00, ops = c06a0638 ***
+[  221.325749] *** tx_isp_get_sensor: subdevs[6] ops->sensor = c06a064c ***
+[  221.325755] *** tx_isp_get_sensor: subdevs[7] = NULL ***
+[  221.325760] *** tx_isp_get_sensor: subdevs[8] = NULL ***
+[  221.325766] *** tx_isp_get_sensor: subdevs[9] = NULL ***
+[  221.325772] *** tx_isp_get_sensor: subdevs[10] = NULL ***
+[  221.325778] *** tx_isp_get_sensor: subdevs[11] = NULL ***
+[  221.325784] *** tx_isp_get_sensor: subdevs[12] = NULL ***
+[  221.325790] *** tx_isp_get_sensor: subdevs[13] = NULL ***
+[  221.325795] *** tx_isp_get_sensor: subdevs[14] = NULL ***
+[  221.325801] *** tx_isp_get_sensor: subdevs[15] = NULL ***
+[  221.325808] *** tx_isp_get_sensor: Found real sensor at index 5: 8547ac00 ***
+[  221.325814] *** Channel 0: DQBUF waiting for frame completion (timeout=200ms) ***
+[  221.326058] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  221.326073] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  221.326080] *** Channel 0: Frame completion wait ***
+[  221.326086] *** Channel 0: Waiting for frame (timeout=100ms) ***
+[  221.335752] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  221.335766] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  221.335773] *** Channel 0: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  221.335779] *** Channel 0: QBUF - Buffer copied from user successfully ***
+[  221.335787] *** Channel 0: QBUF - Buffer received: index=2, type=1, memory=2 ***
+[  221.335794] *** Channel 0: QBUF - Buffer m.offset=0x76d3000, m.userptr=0x76d3000 ***
+[  221.335802] *** Channel 0: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  221.335809] *** Channel 0: QBUF - Validation: buffer.index=2, state->buffer_count=4 ***
+[  221.335815] *** Channel 0: QBUF - Queue buffer index=2 ***
+[  221.335822] *** Channel 0: QBUF - CALLING CORE OPS INIT ***
+[  221.335828] *** ispcore_core_ops_init: NEW ARCHITECTURE - Using core device ***
+[  221.335833] *** ispcore_core_ops_init: Frame sync work structure initialized ***<6>[  221.335840] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  221.335848] *** tx_isp_get_sensor: subdevs[0] = 85205400, ops = c0682700 ***
+[  221.335855] *** tx_isp_get_sensor: subdevs[0] ops->sensor = c068271c ***
+[  221.335862] *** tx_isp_get_sensor: subdevs[1] = 8547a000, ops = c0682690 ***
+[  221.335869] *** tx_isp_get_sensor: subdevs[1] ops->sensor = c06826d4 ***
+[  221.335877] *** tx_isp_get_sensor: subdevs[2] = 853f6800, ops = c0683534 ***
+[  221.335884] *** tx_isp_get_sensor: subdevs[2] ops->sensor =   (null) ***
+[  221.335890] *** tx_isp_get_sensor: subdevs[3] = NULL ***
+[  221.335898] *** tx_isp_get_sensor: subdevs[4] = 8547a400, ops = c06824b8 ***
+[  221.335904] *** tx_isp_get_sensor: subdevs[4] ops->sensor = c06824d4 ***
+[  221.335912] *** tx_isp_get_sensor: subdevs[5] = 8547ac00, ops = c06a0638 ***
+[  221.335918] *** tx_isp_get_sensor: subdevs[5] ops->sensor = c06a064c ***
+[  221.335926] *** tx_isp_get_sensor: subdevs[6] = 8547ac00, ops = c06a0638 ***
+[  221.335933] *** tx_isp_get_sensor: subdevs[6] ops->sensor = c06a064c ***
+[  221.335938] *** tx_isp_get_sensor: subdevs[7] = NULL ***
+[  221.335944] *** tx_isp_get_sensor: subdevs[8] = NULL ***
+[  221.335950] *** tx_isp_get_sensor: subdevs[9] = NULL ***
+[  221.335956] *** tx_isp_get_sensor: subdevs[10] = NULL ***
+[  221.335962] *** tx_isp_get_sensor: subdevs[11] = NULL ***
+[  221.335967] *** tx_isp_get_sensor: subdevs[12] = NULL ***
+[  221.335973] *** tx_isp_get_sensor: subdevs[13] = NULL ***
+[  221.335979] *** tx_isp_get_sensor: subdevs[14] = NULL ***
+[  221.335984] *** tx_isp_get_sensor: subdevs[15] = NULL ***
+[  221.335991] *** tx_isp_get_sensor: Found real sensor at index 5: 8547ac00 ***
+[  221.335997] ispcore_core_ops_init: Sensor available, skipping sensor_attr access for now
+[  221.336003] ispcore_core_ops_init: Core device=8547a400, state=3*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***
+[  221.336011] ispcore_core_ops_init: Core state 3 != 2, cannot initialize
+[  221.336018] Channel 0: QBUF - Core ops init failed: -22
+[  221.336024] *** QBUF: No buffer allocated for index 2 - VBM initialization mode ***
+[  221.336031] *** Channel 0: QBUF - Using buffer struct   (null) for index 2 ***
+[  221.336038] *** Channel 0: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***
+[  221.336046] *** tx_isp_send_event_to_remote: Binary Ninja EXACT - isp_dev=0x8547a000, event=0x3000008 ***
+[  221.336053] *** tx_isp_send_event_to_remote: callback_struct_ptr=0x8547a00c, callback_struct=0x  (null) ***
+[  221.336059] *** tx_isp_send_event_to_remote: No handler found - returning 0xfffffdfd ***
+[  221.336066] *** Channel 0: QBUF EVENT - No VIC callback ***
+[  221.336072] *** Channel 0: QBUF - Using REAL buffer address from userptr: 0x76d3000 ***
+[  221.336080] *** Channel 0: QBUF - Buffer 2: phys_addr=0x76d3000, size=4147200 (VALIDATED) ***
+[  221.336088] *** Channel 0: QBUF VBM - Stored buffer[2] = 0x76d3000, total_count=4 ***
+[  221.336096] *** Channel 0: QBUF - Buffer structure check: buffer_addresses=8569a600, buffer_count=4 ***
+[  221.336103] *** Channel 0: QBUF no video_buffer structure found for index 2 ***
+[  221.336112] *** Channel 0: QBUF DEBUG - buffer_addresses=8569a600, buffer_count=4, buffer_addresses[2]=0x0 ***
+[  221.336118] *** Channel 0: QBUF - VBM initialization mode (VBMFillPool) ***
+[  221.336125] *** Channel 0: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x76d3000 ***
+[  221.336138] *** Channel 0: QBUF completed successfully (MIPS-safe) ***
+[  221.336322] *** Channel 0: Frame wait returned 9 ***
+[  221.336331] *** Channel 0: Frame was ready, consuming it ***
+[  221.525443] *** Channel 0: DQBUF wait returned 0 ***
+[  221.525454] *** Channel 0: DQBUF timeout, generating frame ***
+[  221.525463] *** Channel 0: DQBUF complete - buffer[3] seq=6 flags=0x3 ***
+[  221.525488] TUNING: Allowing V4L2 control command 0xc00c56c6 for VIN init
+[  221.525495] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  221.525502] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: ENABLE
+[  221.525509] *** DEBUG: enable=1, dev->core_dev->tuning_enabled=1 ***
+[  221.525515] *** BINARY NINJA REFERENCE: Tuning enable - no hardware reset performed ***
+[  221.525520] isp_core_tunning_unlocked_ioctl: ISP tuning enabled
+[  221.525661] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  221.525671] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  221.525678] *** Channel 0: DQBUF - dequeue buffer request ***
+[  221.525684] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  221.525692] *** tx_isp_get_sensor: subdevs[0] = 85205400, ops = c0682700 ***
+[  221.525699] *** tx_isp_get_sensor: subdevs[0] ops->sensor = c068271c ***
+[  221.525706] *** tx_isp_get_sensor: subdevs[1] = 8547a000, ops = c0682690 ***
+[  221.525713] *** tx_isp_get_sensor: subdevs[1] ops->sensor = c06826d4 ***
+[  221.525721] *** tx_isp_get_sensor: subdevs[2] = 853f6800, ops = c0683534 ***
+[  221.525728] *** tx_isp_get_sensor: subdevs[2] ops->sensor =   (null) ***
+[  221.525734] *** tx_isp_get_sensor: subdevs[3] = NULL ***
+[  221.525741] *** tx_isp_get_sensor: subdevs[4] = 8547a400, ops = c06824b8 ***
+[  221.525748] *** tx_isp_get_sensor: subdevs[4] ops->sensor = c06824d4 ***
+[  221.525756] *** tx_isp_get_sensor: subdevs[5] = 8547ac00, ops = c06a0638 ***
+[  221.525762] *** tx_isp_get_sensor: subdevs[5] ops->sensor = c06a064c ***
+[  221.525770] *** tx_isp_get_sensor: subdevs[6] = 8547ac00, ops = c06a0638 ***
+[  221.525776] *** tx_isp_get_sensor: subdevs[6] ops->sensor = c06a064c ***
+[  221.525782] *** tx_isp_get_sensor: subdevs[7] = NULL ***
+[  221.525788] *** tx_isp_get_sensor: subdevs[8] = NULL ***
+[  221.525794] *** tx_isp_get_sensor: subdevs[9] = NULL ***
+[  221.525800] *** tx_isp_get_sensor: subdevs[10] = NULL ***
+[  221.525805] *** tx_isp_get_sensor: subdevs[11] = NULL ***
+[  221.525811] *** tx_isp_get_sensor: subdevs[12] = NULL ***
+[  221.525817] *** tx_isp_get_sensor: subdevs[13] = NULL ***
+[  221.525822] *** tx_isp_get_sensor: subdevs[14] = NULL ***
+[  221.525828] *** tx_isp_get_sensor: subdevs[15] = NULL ***
+[  221.525835] *** tx_isp_get_sensor: Found real sensor at index 5: 8547ac00 ***
+[  221.525842] *** Channel 0: DQBUF waiting for frame completion (timeout=200ms) ***
+[  221.526088] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  221.526129] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  221.526136] *** Channel 0: Frame completion wait ***
+[  221.526148] *** Channel 0: Waiting for frame (timeout=100ms) ***
+[  221.535816] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  221.535830] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  221.535836] *** Channel 0: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  221.535842] *** Channel 0: QBUF - Buffer copied from user successfully ***
+[  221.535850] *** Channel 0: QBUF - Buffer received: index=3, type=1, memory=2 ***
+[  221.535858] *** Channel 0: QBUF - Buffer m.offset=0x79d0000, m.userptr=0x79d0000 ***
+[  221.535864] *** Channel 0: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  221.535872] *** Channel 0: QBUF - Validation: buffer.index=3, state->buffer_count=4 ***
+[  221.535878] *** Channel 0: QBUF - Queue buffer index=3 ***
+[  221.535885] *** Channel 0: QBUF - CALLING CORE OPS INIT ***
+[  221.535891] *** ispcore_core_ops_init: NEW ARCHITECTURE - Using core device ***
+[  221.535896] *** ispcore_core_ops_init: Frame sync work structure initialized ***<6>[  221.535902] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  221.535911] *** tx_isp_get_sensor: subdevs[0] = 85205400, ops = c0682700 ***
+[  221.535918] *** tx_isp_get_sensor: subdevs[0] ops->sensor = c068271c ***
+[  221.535925] *** tx_isp_get_sensor: subdevs[1] = 8547a000, ops = c0682690 ***
+[  221.535932] *** tx_isp_get_sensor: subdevs[1] ops->sensor = c06826d4 ***
+[  221.535940] *** tx_isp_get_sensor: subdevs[2] = 853f6800, ops = c0683534 ***
+[  221.535947] *** tx_isp_get_sensor: subdevs[2] ops->sensor =   (null) ***
+[  221.535953] *** tx_isp_get_sensor: subdevs[3] = NULL ***
+[  221.535960] *** tx_isp_get_sensor: subdevs[4] = 8547a400, ops = c06824b8 ***
+[  221.535967] *** tx_isp_get_sensor: subdevs[4] ops->sensor = c06824d4 ***
+[  221.535974] *** tx_isp_get_sensor: subdevs[5] = 8547ac00, ops = c06a0638 ***
+[  221.535981] *** tx_isp_get_sensor: subdevs[5] ops->sensor = c06a064c ***
+[  221.535989] *** tx_isp_get_sensor: subdevs[6] = 8547ac00, ops = c06a0638 ***
+[  221.535996] *** tx_isp_get_sensor: subdevs[6] ops->sensor = c06a064c ***
+[  221.536001] *** tx_isp_get_sensor: subdevs[7] = NULL ***
+[  221.536007] *** tx_isp_get_sensor: subdevs[8] = NULL ***
+[  221.536027] *** tx_isp_get_sensor: subdevs[9] = NULL ***
+[  221.536033] *** tx_isp_get_sensor: subdevs[10] = NULL ***
+[  221.536039] *** tx_isp_get_sensor: subdevs[11] = NULL ***
+[  221.536044] *** tx_isp_get_sensor: subdevs[12] = NULL ***
+[  221.536050] *** tx_isp_get_sensor: subdevs[13] = NULL ***
+[  221.536056] *** tx_isp_get_sensor: subdevs[14] = NULL ***
+[  221.536062] *** tx_isp_get_sensor: subdevs[15] = NULL ***
+[  221.536068] *** tx_isp_get_sensor: Found real sensor at index 5: 8547ac00 ***
+[  221.536074] ispcore_core_ops_init: Sensor available, skipping sensor_attr access for now
+[  221.536080] ispcore_core_ops_init: Core device=8547a400, state=3*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***
+[  221.536088] ispcore_core_ops_init: Core state 3 != 2, cannot initialize
+[  221.536095] Channel 0: QBUF - Core ops init failed: -22
+[  221.536101] *** QBUF: No buffer allocated for index 3 - VBM initialization mode ***
+[  221.536108] *** Channel 0: QBUF - Using buffer struct   (null) for index 3 ***
+[  221.536115] *** Channel 0: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***
+[  221.536123] *** tx_isp_send_event_to_remote: Binary Ninja EXACT - isp_dev=0x8547a000, event=0x3000008 ***
+[  221.536130] *** tx_isp_send_event_to_remote: callback_struct_ptr=0x8547a00c, callback_struct=0x  (null) ***
+[  221.536136] *** tx_isp_send_event_to_remote: No handler found - returning 0xfffffdfd ***
+[  221.536142] *** Channel 0: QBUF EVENT - No VIC callback ***
+[  221.536150] *** Channel 0: QBUF - Using REAL buffer address from userptr: 0x79d0000 ***
+[  221.536158] *** Channel 0: QBUF - Buffer 3: phys_addr=0x79d0000, size=4147200 (VALIDATED) ***
+[  221.536166] *** Channel 0: QBUF VBM - Stored buffer[3] = 0x79d0000, total_count=4 ***
+[  221.536173] *** Channel 0: QBUF - Buffer structure check: buffer_addresses=8569a600, buffer_count=4 ***
+[  221.536180] *** Channel 0: QBUF no video_buffer structure found for index 3 ***
+[  221.536189] *** Channel 0: QBUF DEBUG - buffer_addresses=8569a600, buffer_count=4, buffer_addresses[3]=0x0 ***
+[  221.536195] *** Channel 0: QBUF - VBM initialization mode (VBMFillPool) ***
+[  221.536202] *** Channel 0: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x79d0000 ***
+[  221.536213] *** Channel 0: QBUF completed successfully (MIPS-safe) ***
+[  221.536295] *** Channel 0: Frame wait returned 9 ***
+[  221.536302] *** Channel 0: Frame was ready, consuming it ***
+[  221.725432] *** Channel 0: DQBUF wait returned 0 ***
+[  221.725444] *** Channel 0: DQBUF timeout, generating frame ***
+[  221.725452] *** Channel 0: DQBUF complete - buffer[0] seq=7 flags=0x3 ***
+[  221.725473] TUNING: Allowing V4L2 control command 0xc00c56c6 for VIN init
+[  221.725480] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  221.725487] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: ENABLE
+[  221.725494] *** DEBUG: enable=1, dev->core_dev->tuning_enabled=1 ***
+[  221.725500] *** BINARY NINJA REFERENCE: Tuning enable - no hardware reset performed ***
+[  221.725505] isp_core_tunning_unlocked_ioctl: ISP tuning enabled
+[  221.725638] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  221.725648] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  221.725655] *** Channel 0: DQBUF - dequeue buffer request ***
+[  221.725661] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  221.725670] *** tx_isp_get_sensor: subdevs[0] = 85205400, ops = c0682700 ***
+[  221.725676] *** tx_isp_get_sensor: subdevs[0] ops->sensor = c068271c ***
+[  221.725684] *** tx_isp_get_sensor: subdevs[1] = 8547a000, ops = c0682690 ***
+[  221.725691] *** tx_isp_get_sensor: subdevs[1] ops->sensor = c06826d4 ***
+[  221.725698] *** tx_isp_get_sensor: subdevs[2] = 853f6800, ops = c0683534 ***
+[  221.725706] *** tx_isp_get_sensor: subdevs[2] ops->sensor =   (null) ***
+[  221.725712] *** tx_isp_get_sensor: subdevs[3] = NULL ***
+[  221.725719] *** tx_isp_get_sensor: subdevs[4] = 8547a400, ops = c06824b8 ***
+[  221.725726] *** tx_isp_get_sensor: subdevs[4] ops->sensor = c06824d4 ***
+[  221.725733] *** tx_isp_get_sensor: subdevs[5] = 8547ac00, ops = c06a0638 ***
+[  221.725740] *** tx_isp_get_sensor: subdevs[5] ops->sensor = c06a064c ***
+[  221.725748] *** tx_isp_get_sensor: subdevs[6] = 8547ac00, ops = c06a0638 ***
+[  221.725754] *** tx_isp_get_sensor: subdevs[6] ops->sensor = c06a064c ***
+[  221.725760] *** tx_isp_get_sensor: subdevs[7] = NULL ***
+[  221.725766] *** tx_isp_get_sensor: subdevs[8] = NULL ***
+[  221.725772] *** tx_isp_get_sensor: subdevs[9] = NULL ***
+[  221.725777] *** tx_isp_get_sensor: subdevs[10] = NULL ***
+[  221.725783] *** tx_isp_get_sensor: subdevs[11] = NULL ***
+[  221.725789] *** tx_isp_get_sensor: subdevs[12] = NULL ***
+[  221.725794] *** tx_isp_get_sensor: subdevs[13] = NULL ***
+[  221.725800] *** tx_isp_get_sensor: subdevs[14] = NULL ***
+[  221.725806] *** tx_isp_get_sensor: subdevs[15] = NULL ***
+[  221.725812] *** tx_isp_get_sensor: Found real sensor at index 5: 8547ac00 ***
+[  221.725820] *** Channel 0: DQBUF waiting for frame completion (timeout=200ms) ***
+[  221.726064] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  221.726078] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  221.726085] *** Channel 0: Frame completion wait ***
+[  221.726091] *** Channel 0: Waiting for frame (timeout=100ms) ***
+[  221.735720] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  221.735733] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  221.735740] *** Channel 0: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  221.735746] *** Channel 0: QBUF - Buffer copied from user successfully ***
+[  221.735754] *** Channel 0: QBUF - Buffer received: index=0, type=1, memory=2 ***
+[  221.735761] *** Channel 0: QBUF - Buffer m.offset=0x70d9000, m.userptr=0x70d9000 ***
+[  221.735768] *** Channel 0: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  221.735776] *** Channel 0: QBUF - Validation: buffer.index=0, state->buffer_count=4 ***
+[  221.735782] *** Channel 0: QBUF - Queue buffer index=0 ***
+[  221.735788] *** Channel 0: QBUF - CALLING CORE OPS INIT ***
+[  221.735794] *** ispcore_core_ops_init: NEW ARCHITECTURE - Using core device ***
+[  221.735800] *** ispcore_core_ops_init: Frame sync work structure initialized ***<6>[  221.735806] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  221.735815] *** tx_isp_get_sensor: subdevs[0] = 85205400, ops = c0682700 ***
+[  221.735822] *** tx_isp_get_sensor: subdevs[0] ops->sensor = c068271c ***
+[  221.735830] *** tx_isp_get_sensor: subdevs[1] = 8547a000, ops = c0682690 ***
+[  221.735836] *** tx_isp_get_sensor: subdevs[1] ops->sensor = c06826d4 ***
+[  221.735844] *** tx_isp_get_sensor: subdevs[2] = 853f6800, ops = c0683534 ***
+[  221.735851] *** tx_isp_get_sensor: subdevs[2] ops->sensor =   (null) ***
+[  221.735857] *** tx_isp_get_sensor: subdevs[3] = NULL ***
+[  221.735864] *** tx_isp_get_sensor: subdevs[4] = 8547a400, ops = c06824b8 ***
+[  221.735871] *** tx_isp_get_sensor: subdevs[4] ops->sensor = c06824d4 ***
+[  221.735879] *** tx_isp_get_sensor: subdevs[5] = 8547ac00, ops = c06a0638 ***
+[  221.735886] *** tx_isp_get_sensor: subdevs[5] ops->sensor = c06a064c ***
+[  221.735893] *** tx_isp_get_sensor: subdevs[6] = 8547ac00, ops = c06a0638 ***
+[  221.735900] *** tx_isp_get_sensor: subdevs[6] ops->sensor = c06a064c ***
+[  221.735906] *** tx_isp_get_sensor: subdevs[7] = NULL ***
+[  221.735912] *** tx_isp_get_sensor: subdevs[8] = NULL ***
+[  221.735917] *** tx_isp_get_sensor: subdevs[9] = NULL ***
+[  221.735923] *** tx_isp_get_sensor: subdevs[10] = NULL ***
+[  221.735929] *** tx_isp_get_sensor: subdevs[11] = NULL ***
+[  221.735934] *** tx_isp_get_sensor: subdevs[12] = NULL ***
+[  221.735940] *** tx_isp_get_sensor: subdevs[13] = NULL ***
+[  221.735946] *** tx_isp_get_sensor: subdevs[14] = NULL ***
+[  221.735969] *** tx_isp_get_sensor: subdevs[15] = NULL ***
+[  221.735976] *** tx_isp_get_sensor: Found real sensor at index 5: 8547ac00 ***
+[  221.735982] ispcore_core_ops_init: Sensor available, skipping sensor_attr access for now
+[  221.735988] ispcore_core_ops_init: Core device=8547a400, state=3*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***
+[  221.735996] ispcore_core_ops_init: Core state 3 != 2, cannot initialize
+[  221.736003] Channel 0: QBUF - Core ops init failed: -22
+[  221.736009] *** QBUF: No buffer allocated for index 0 - VBM initialization mode ***
+[  221.736016] *** Channel 0: QBUF - Using buffer struct   (null) for index 0 ***
+[  221.736022] *** Channel 0: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***
+[  221.736030] *** tx_isp_send_event_to_remote: Binary Ninja EXACT - isp_dev=0x8547a000, event=0x3000008 ***
+[  221.736038] *** tx_isp_send_event_to_remote: callback_struct_ptr=0x8547a00c, callback_struct=0x  (null) ***
+[  221.736044] *** tx_isp_send_event_to_remote: No handler found - returning 0xfffffdfd ***
+[  221.736050] *** Channel 0: QBUF EVENT - No VIC callback ***
+[  221.736057] *** Channel 0: QBUF - Using REAL buffer address from userptr: 0x70d9000 ***
+[  221.736066] *** Channel 0: QBUF - Buffer 0: phys_addr=0x70d9000, size=4147200 (VALIDATED) ***
+[  221.736074] *** Channel 0: QBUF VBM - Stored buffer[0] = 0x70d9000, total_count=4 ***
+[  221.736081] *** Channel 0: QBUF - Buffer structure check: buffer_addresses=8569a600, buffer_count=4 ***
+[  221.736088] *** Channel 0: QBUF no video_buffer structure found for index 0 ***
+[  221.736096] *** Channel 0: QBUF DEBUG - buffer_addresses=8569a600, buffer_count=4, buffer_addresses[0]=0x0 ***
+[  221.736103] *** Channel 0: QBUF - VBM initialization mode (VBMFillPool) ***
+[  221.736110] *** Channel 0: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x70d9000 ***
+[  221.736122] *** Channel 0: QBUF completed successfully (MIPS-safe) ***
+[  221.736198] *** Channel 0: Frame wait returned 9 ***
+[  221.736206] *** Channel 0: Frame was ready, consuming it ***
+[  221.925431] *** Channel 0: DQBUF wait returned 0 ***
+[  221.925442] *** Channel 0: DQBUF timeout, generating frame ***
+[  221.925451] *** Channel 0: DQBUF complete - buffer[1] seq=8 flags=0x3 ***
+[  221.925470] TUNING: Allowing V4L2 control command 0xc00c56c6 for VIN init
+[  221.925477] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  221.925484] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: ENABLE
+[  221.925491] *** DEBUG: enable=1, dev->core_dev->tuning_enabled=1 ***
+[  221.925497] *** BINARY NINJA REFERENCE: Tuning enable - no hardware reset performed ***
+[  221.925502] isp_core_tunning_unlocked_ioctl: ISP tuning enabled
+[  221.925645] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  221.925655] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  221.925661] *** Channel 0: DQBUF - dequeue buffer request ***
+[  221.925667] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  221.925676] *** tx_isp_get_sensor: subdevs[0] = 85205400, ops = c0682700 ***
+[  221.925683] *** tx_isp_get_sensor: subdevs[0] ops->sensor = c068271c ***
+[  221.925691] *** tx_isp_get_sensor: subdevs[1] = 8547a000, ops = c0682690 ***
+[  221.925698] *** tx_isp_get_sensor: subdevs[1] ops->sensor = c06826d4 ***
+[  221.925705] *** tx_isp_get_sensor: subdevs[2] = 853f6800, ops = c0683534 ***
+[  221.925713] *** tx_isp_get_sensor: subdevs[2] ops->sensor =   (null) ***
+[  221.925719] *** tx_isp_get_sensor: subdevs[3] = NULL ***
+[  221.925726] *** tx_isp_get_sensor: subdevs[4] = 8547a400, ops = c06824b8 ***
+[  221.925733] *** tx_isp_get_sensor: subdevs[4] ops->sensor = c06824d4 ***
+[  221.925740] *** tx_isp_get_sensor: subdevs[5] = 8547ac00, ops = c06a0638 ***
+[  221.925747] *** tx_isp_get_sensor: subdevs[5] ops->sensor = c06a064c ***
+[  221.925755] *** tx_isp_get_sensor: subdevs[6] = 8547ac00, ops = c06a0638 ***
+[  221.925761] *** tx_isp_get_sensor: subdevs[6] ops->sensor = c06a064c ***
+[  221.925767] *** tx_isp_get_sensor: subdevs[7] = NULL ***
+[  221.925773] *** tx_isp_get_sensor: subdevs[8] = NULL ***
+[  221.925779] *** tx_isp_get_sensor: subdevs[9] = NULL ***
+[  221.925784] *** tx_isp_get_sensor: subdevs[10] = NULL ***
+[  221.925790] *** tx_isp_get_sensor: subdevs[11] = NULL ***
+[  221.925795] *** tx_isp_get_sensor: subdevs[12] = NULL ***
+[  221.925801] *** tx_isp_get_sensor: subdevs[13] = NULL ***
+[  221.925807] *** tx_isp_get_sensor: subdevs[14] = NULL ***
+[  221.925813] *** tx_isp_get_sensor: subdevs[15] = NULL ***
+[  221.925819] *** tx_isp_get_sensor: Found real sensor at index 5: 8547ac00 ***
+[  221.925827] *** Channel 0: DQBUF waiting for frame completion (timeout=200ms) ***
+[  221.926072] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  221.926087] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  221.926093] *** Channel 0: Frame completion wait ***
+[  221.926099] *** Channel 0: Waiting for frame (timeout=100ms) ***
+[  221.935903] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  221.935916] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  221.935923] *** Channel 0: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  221.935929] *** Channel 0: QBUF - Buffer copied from user successfully ***
+[  221.935937] *** Channel 0: QBUF - Buffer received: index=1, type=1, memory=2 ***
+[  221.935945] *** Channel 0: QBUF - Buffer m.offset=0x73d6000, m.userptr=0x73d6000 ***
+[  221.935952] *** Channel 0: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  221.935959] *** Channel 0: QBUF - Validation: buffer.index=1, state->buffer_count=4 ***
+[  221.935983] *** Channel 0: QBUF - Queue buffer index=1 ***
+[  221.935991] *** Channel 0: QBUF - CALLING CORE OPS INIT ***
+[  221.935997] *** ispcore_core_ops_init: NEW ARCHITECTURE - Using core device ***
+[  221.936002] *** ispcore_core_ops_init: Frame sync work structure initialized ***<6>[  221.936009] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  221.936017] *** tx_isp_get_sensor: subdevs[0] = 85205400, ops = c0682700 ***
+[  221.936024] *** tx_isp_get_sensor: subdevs[0] ops->sensor = c068271c ***
+[  221.936032] *** tx_isp_get_sensor: subdevs[1] = 8547a000, ops = c0682690 ***
+[  221.936039] *** tx_isp_get_sensor: subdevs[1] ops->sensor = c06826d4 ***
+[  221.936046] *** tx_isp_get_sensor: subdevs[2] = 853f6800, ops = c0683534 ***
+[  221.936053] *** tx_isp_get_sensor: subdevs[2] ops->sensor =   (null) ***
+[  221.936059] *** tx_isp_get_sensor: subdevs[3] = NULL ***
+[  221.936067] *** tx_isp_get_sensor: subdevs[4] = 8547a400, ops = c06824b8 ***
+[  221.936073] *** tx_isp_get_sensor: subdevs[4] ops->sensor = c06824d4 ***
+[  221.936081] *** tx_isp_get_sensor: subdevs[5] = 8547ac00, ops = c06a0638 ***
+[  221.936088] *** tx_isp_get_sensor: subdevs[5] ops->sensor = c06a064c ***
+[  221.936095] *** tx_isp_get_sensor: subdevs[6] = 8547ac00, ops = c06a0638 ***
+[  221.936102] *** tx_isp_get_sensor: subdevs[6] ops->sensor = c06a064c ***
+[  221.936108] *** tx_isp_get_sensor: subdevs[7] = NULL ***
+[  221.936114] *** tx_isp_get_sensor: subdevs[8] = NULL ***
+[  221.936119] *** tx_isp_get_sensor: subdevs[9] = NULL ***
+[  221.936125] *** tx_isp_get_sensor: subdevs[10] = NULL ***
+[  221.936131] *** tx_isp_get_sensor: subdevs[11] = NULL ***
+[  221.936137] *** tx_isp_get_sensor: subdevs[12] = NULL ***
+[  221.936143] *** tx_isp_get_sensor: subdevs[13] = NULL ***
+[  221.936148] *** tx_isp_get_sensor: subdevs[14] = NULL ***
+[  221.936154] *** tx_isp_get_sensor: subdevs[15] = NULL ***
+[  221.936161] *** tx_isp_get_sensor: Found real sensor at index 5: 8547ac00 ***
+[  221.936167] ispcore_core_ops_init: Sensor available, skipping sensor_attr access for now
+[  221.936172] ispcore_core_ops_init: Core device=8547a400, state=3*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***
+[  221.936181] ispcore_core_ops_init: Core state 3 != 2, cannot initialize
+[  221.936187] Channel 0: QBUF - Core ops init failed: -22
+[  221.936193] *** QBUF: No buffer allocated for index 1 - VBM initialization mode ***
+[  221.936201] *** Channel 0: QBUF - Using buffer struct   (null) for index 1 ***
+[  221.936207] *** Channel 0: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***
+[  221.936215] *** tx_isp_send_event_to_remote: Binary Ninja EXACT - isp_dev=0x8547a000, event=0x3000008 ***
+[  221.936222] *** tx_isp_send_event_to_remote: callback_struct_ptr=0x8547a00c, callback_struct=0x  (null) ***
+[  221.936229] *** tx_isp_send_event_to_remote: No handler found - returning 0xfffffdfd ***
+[  221.936235] *** Channel 0: QBUF EVENT - No VIC callback ***
+[  221.936242] *** Channel 0: QBUF - Using REAL buffer address from userptr: 0x73d6000 ***
+[  221.936250] *** Channel 0: QBUF - Buffer 1: phys_addr=0x73d6000, size=4147200 (VALIDATED) ***
+[  221.936258] *** Channel 0: QBUF VBM - Stored buffer[1] = 0x73d6000, total_count=4 ***
+[  221.936266] *** Channel 0: QBUF - Buffer structure check: buffer_addresses=8569a600, buffer_count=4 ***
+[  221.936273] *** Channel 0: QBUF no video_buffer structure found for index 1 ***
+[  221.936281] *** Channel 0: QBUF DEBUG - buffer_addresses=8569a600, buffer_count=4, buffer_addresses[1]=0x0 ***
+[  221.936288] *** Channel 0: QBUF - VBM initialization mode (VBMFillPool) ***
+[  221.936295] *** Channel 0: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x73d6000 ***
+[  221.936307] *** Channel 0: QBUF completed successfully (MIPS-safe) ***
+[  221.936380] *** Channel 0: Frame wait returned 9 ***
+[  221.936387] *** Channel 0: Frame was ready, consuming it ***
+[  222.125443] *** Channel 0: DQBUF wait returned 0 ***
+[  222.125455] *** Channel 0: DQBUF timeout, generating frame ***
+[  222.125463] *** Channel 0: DQBUF complete - buffer[2] seq=9 flags=0x3 ***
+[  222.125483] TUNING: Allowing V4L2 control command 0xc00c56c6 for VIN init
+[  222.125491] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  222.125498] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: ENABLE
+[  222.125504] *** DEBUG: enable=1, dev->core_dev->tuning_enabled=1 ***
+[  222.125510] *** BINARY NINJA REFERENCE: Tuning enable - no hardware reset performed ***
+[  222.125515] isp_core_tunning_unlocked_ioctl: ISP tuning enabled
+[  222.125637] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  222.125647] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  222.125653] *** Channel 0: DQBUF - dequeue buffer request ***
+[  222.125659] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  222.125668] *** tx_isp_get_sensor: subdevs[0] = 85205400, ops = c0682700 ***
+[  222.125675] *** tx_isp_get_sensor: subdevs[0] ops->sensor = c068271c ***
+[  222.125682] *** tx_isp_get_sensor: subdevs[1] = 8547a000, ops = c0682690 ***
+[  222.125689] *** tx_isp_get_sensor: subdevs[1] ops->sensor = c06826d4 ***
+[  222.125697] *** tx_isp_get_sensor: subdevs[2] = 853f6800, ops = c0683534 ***
+[  222.125704] *** tx_isp_get_sensor: subdevs[2] ops->sensor =   (null) ***
+[  222.125710] *** tx_isp_get_sensor: subdevs[3] = NULL ***
+[  222.125717] *** tx_isp_get_sensor: subdevs[4] = 8547a400, ops = c06824b8 ***
+[  222.125724] *** tx_isp_get_sensor: subdevs[4] ops->sensor = c06824d4 ***
+[  222.125732] *** tx_isp_get_sensor: subdevs[5] = 8547ac00, ops = c06a0638 ***
+[  222.125739] *** tx_isp_get_sensor: subdevs[5] ops->sensor = c06a064c ***
+[  222.125746] *** tx_isp_get_sensor: subdevs[6] = 8547ac00, ops = c06a0638 ***
+[  222.125753] *** tx_isp_get_sensor: subdevs[6] ops->sensor = c06a064c ***
+[  222.125759] *** tx_isp_get_sensor: subdevs[7] = NULL ***
+[  222.125764] *** tx_isp_get_sensor: subdevs[8] = NULL ***
+[  222.125770] *** tx_isp_get_sensor: subdevs[9] = NULL ***
+[  222.125776] *** tx_isp_get_sensor: subdevs[10] = NULL ***
+[  222.125781] *** tx_isp_get_sensor: subdevs[11] = NULL ***
+[  222.125787] *** tx_isp_get_sensor: subdevs[12] = NULL ***
+[  222.125793] *** tx_isp_get_sensor: subdevs[13] = NULL ***
+[  222.125799] *** tx_isp_get_sensor: subdevs[14] = NULL ***
+[  222.125804] *** tx_isp_get_sensor: subdevs[15] = NULL ***
+[  222.125811] *** tx_isp_get_sensor: Found real sensor at index 5: 8547ac00 ***
+[  222.125818] *** Channel 0: DQBUF waiting for frame completion (timeout=200ms) ***
+[  222.126061] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  222.126077] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  222.126083] *** Channel 0: Frame completion wait ***
+[  222.126089] *** Channel 0: Waiting for frame (timeout=100ms) ***
+[  222.135766] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  222.135779] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  222.135786] *** Channel 0: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  222.135793] *** Channel 0: QBUF - Buffer copied from user successfully ***
+[  222.135800] *** Channel 0: QBUF - Buffer received: index=2, type=1, memory=2 ***
+[  222.135807] *** Channel 0: QBUF - Buffer m.offset=0x76d3000, m.userptr=0x76d3000 ***
+[  222.135815] *** Channel 0: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  222.135822] *** Channel 0: QBUF - Validation: buffer.index=2, state->buffer_count=4 ***
+[  222.135829] *** Channel 0: QBUF - Queue buffer index=2 ***
+[  222.135835] *** Channel 0: QBUF - CALLING CORE OPS INIT ***
+[  222.135841] *** ispcore_core_ops_init: NEW ARCHITECTURE - Using core device ***
+[  222.135847] *** ispcore_core_ops_init: Frame sync work structure initialized ***<6>[  222.135853] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  222.135861] *** tx_isp_get_sensor: subdevs[0] = 85205400, ops = c0682700 ***
+[  222.135868] *** tx_isp_get_sensor: subdevs[0] ops->sensor = c068271c ***
+[  222.135876] *** tx_isp_get_sensor: subdevs[1] = 8547a000, ops = c0682690 ***
+[  222.135883] *** tx_isp_get_sensor: subdevs[1] ops->sensor = c06826d4 ***
+[  222.135890] *** tx_isp_get_sensor: subdevs[2] = 853f6800, ops = c0683534 ***
+[  222.135897] *** tx_isp_get_sensor: subdevs[2] ops->sensor =   (null) ***
+[  222.135903] *** tx_isp_get_sensor: subdevs[3] = NULL ***
+[  222.135911] *** tx_isp_get_sensor: subdevs[4] = 8547a400, ops = c06824b8 ***
+[  222.135918] *** tx_isp_get_sensor: subdevs[4] ops->sensor = c06824d4 ***
+[  222.135925] *** tx_isp_get_sensor: subdevs[5] = 8547ac00, ops = c06a0638 ***
+[  222.135932] *** tx_isp_get_sensor: subdevs[5] ops->sensor = c06a064c ***
+[  222.135939] *** tx_isp_get_sensor: subdevs[6] = 8547ac00, ops = c06a0638 ***
+[  222.135946] *** tx_isp_get_sensor: subdevs[6] ops->sensor = c06a064c ***
+[  222.135952] *** tx_isp_get_sensor: subdevs[7] = NULL ***
+[  222.135958] *** tx_isp_get_sensor: subdevs[8] = NULL ***
+[  222.135963] *** tx_isp_get_sensor: subdevs[9] = NULL ***
+[  222.135969] *** tx_isp_get_sensor: subdevs[10] = NULL ***
+[  222.135975] *** tx_isp_get_sensor: subdevs[11] = NULL ***
+[  222.135981] *** tx_isp_get_sensor: subdevs[12] = NULL ***
+[  222.135987] *** tx_isp_get_sensor: subdevs[13] = NULL ***
+[  222.135993] *** tx_isp_get_sensor: subdevs[14] = NULL ***
+[  222.135998] *** tx_isp_get_sensor: subdevs[15] = NULL ***
+[  222.136005] *** tx_isp_get_sensor: Found real sensor at index 5: 8547ac00 ***
+[  222.136011] ispcore_core_ops_init: Sensor available, skipping sensor_attr access for now
+[  222.136017] ispcore_core_ops_init: Core device=8547a400, state=3*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***
+[  222.136025] ispcore_core_ops_init: Core state 3 != 2, cannot initialize
+[  222.136031] Channel 0: QBUF - Core ops init failed: -22
+[  222.136038] *** QBUF: No buffer allocated for index 2 - VBM initialization mode ***
+[  222.136045] *** Channel 0: QBUF - Using buffer struct   (null) for index 2 ***
+[  222.136051] *** Channel 0: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***
+[  222.136059] *** tx_isp_send_event_to_remote: Binary Ninja EXACT - isp_dev=0x8547a000, event=0x3000008 ***
+[  222.136067] *** tx_isp_send_event_to_remote: callback_struct_ptr=0x8547a00c, callback_struct=0x  (null) ***
+[  222.136073] *** tx_isp_send_event_to_remote: No handler found - returning 0xfffffdfd ***
+[  222.136079] *** Channel 0: QBUF EVENT - No VIC callback ***
+[  222.136086] *** Channel 0: QBUF - Using REAL buffer address from userptr: 0x76d3000 ***
+[  222.136094] *** Channel 0: QBUF - Buffer 2: phys_addr=0x76d3000, size=4147200 (VALIDATED) ***
+[  222.136102] *** Channel 0: QBUF VBM - Stored buffer[2] = 0x76d3000, total_count=4 ***
+[  222.136110] *** Channel 0: QBUF - Buffer structure check: buffer_addresses=8569a600, buffer_count=4 ***
+[  222.136117] *** Channel 0: QBUF no video_buffer structure found for index 2 ***
+[  222.136125] *** Channel 0: QBUF DEBUG - buffer_addresses=8569a600, buffer_count=4, buffer_addresses[2]=0x0 ***
+[  222.136132] *** Channel 0: QBUF - VBM initialization mode (VBMFillPool) ***
+[  222.136139] *** Channel 0: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x76d3000 ***
+[  222.136151] *** Channel 0: QBUF completed successfully (MIPS-safe) ***
+[  222.136223] *** Channel 0: Frame wait returned 9 ***
+[  222.136230] *** Channel 0: Frame was ready, consuming it ***
