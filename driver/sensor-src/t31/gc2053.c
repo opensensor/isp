@@ -1209,7 +1209,8 @@ static struct tx_isp_sensor_win_setting sensor_win_sizes[] = {
 	},
 };
 
-struct tx_isp_sensor_win_setting *wsize = &sensor_win_sizes[5];
+/* Default to 30fps MIPI mode (1920x1080) instead of 40fps mode */
+struct tx_isp_sensor_win_setting *wsize = &sensor_win_sizes[2];
 
 static struct regval_list sensor_stream_on_dvp[] = {
 	{0xfe, 0x00},  /* Page 0 */
