@@ -2317,8 +2317,18 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
     }
     
     if (!vic_dev) {
-        pr_err("tx_isp_subdev_pipo: vic_dev is NULL\n");
-        return 0;  /* Binary Ninja returns 0 even on error */
+        pr_err("tx_isp_subdev_pipo: vic_dev is NULL - subdev %p is not a VIC subdev\n", sd);
+        pr_err("tx_isp_subdev_pipo: This function should be called with VIC subdev, not ISP core subdev\n");
+
+        /* CRITICAL FIX: Get the actual VIC subdev from global ISP device */
+        extern struct tx_isp_dev *ourISPdev;
+        if (ourISPdev && ourISPdev->vic_dev) {
+            vic_dev = ourISPdev->vic_dev;
+            pr_info("*** tx_isp_subdev_pipo: Retrieved VIC device from global ISP device: %p ***\n", vic_dev);
+        } else {
+            pr_err("tx_isp_subdev_pipo: No VIC device available in global ISP device\n");
+            return 0;  /* Binary Ninja returns 0 even on error */
+        }
     }
     
     /* SAFE: Use proper struct member access instead of offset 0x20c */
