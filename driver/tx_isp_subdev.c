@@ -1005,11 +1005,19 @@ int __init tx_isp_subdev_platform_init(void)
         goto err_unregister_vic;
     }
 
+    /* Register FS platform driver - CRITICAL for /proc/jz/isp/isp-fs entry */
+    extern struct platform_driver tx_isp_fs_platform_driver;
+    ret = platform_driver_register(&tx_isp_fs_platform_driver);
+    if (ret) {
+        pr_err("Failed to register FS platform driver: %d\n", ret);
+        goto err_unregister_vin;
+    }
+
     /* Register CORE platform driver AFTER VIC - CRITICAL for initialization order */
     ret = platform_driver_register(&tx_isp_core_driver);
     if (ret) {
         pr_err("Failed to register CORE platform driver: %d\n", ret);
-        goto err_unregister_vin;
+        goto err_unregister_fs;
     }
     
     pr_info("All ISP subdev platform drivers registered successfully\n");
