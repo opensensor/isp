@@ -829,13 +829,12 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     interface_type = sensor_attr->dbus_type;
 
     /* Binary Ninja: *(arg1 + 0xb8) - VIC register base */
-    /* CRITICAL FIX: Use PRIMARY VIC space (0x133e0000 = isp-w02) - matches reference trace! */
-    vic_regs = vic_dev->vic_regs;  /* 0x133e0000 - this is isp-w02 from reference trace */
+    vic_regs = vic_dev->vic_regs;  /* Single VIC register base - matches Binary Ninja exactly */
     if (!vic_regs) {
-        pr_err("tx_isp_vic_start: No PRIMARY VIC registers available\n");
+        pr_err("tx_isp_vic_start: No VIC registers available\n");
         return -EINVAL;
     }
-    pr_info("*** tx_isp_vic_start: Using PRIMARY VIC space (0x133e0000 = isp-w02) - matches reference trace ***\n");
+    pr_info("*** tx_isp_vic_start: Using single VIC register base - EXACT Binary Ninja reference ***\n");
 
     /* Binary Ninja: if ($v0 == 1) */
     pr_info("*** tx_isp_vic_start: CRITICAL DEBUG - interface_type=%d, checking if == 1 ***\n", interface_type);
@@ -853,13 +852,15 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             writel(0x100010, vic_regs + 0x1a4);
         }
 
-        /* Binary Ninja: VIC configuration - WRITE NON-FRAME-SIZE REGISTERS FIRST */
-        pr_info("*** tx_isp_vic_start: Writing VIC configuration registers (BEFORE frame size) ***\n");
+        /* Binary Ninja: VIC configuration registers */
+        pr_info("*** tx_isp_vic_start: Writing VIC configuration registers - EXACT Binary Ninja sequence ***\n");
         writel(2, vic_regs + 0xc);
         writel(sensor_attr->dbus_type, vic_regs + 0x14);
 
-        /* CRITICAL: DEFER frame size write until AFTER VIC unlock sequence */
-        pr_info("*** tx_isp_vic_start: DEFERRING frame size write until AFTER VIC unlock ***\n");
+        /* Binary Ninja: Write frame size immediately - no deferral needed */
+        u32 frame_size_value = (vic_dev->width << 16) | vic_dev->height;
+        writel(frame_size_value, vic_regs + 0x4);
+        pr_info("*** tx_isp_vic_start: Frame size 0x%08x written to register 0x4 ***\n", frame_size_value);
 
         /* Binary Ninja: Buffer calculation */
         struct tx_isp_mipi_bus *mipi = &sensor_attr->mipi;
