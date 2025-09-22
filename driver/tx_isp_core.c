@@ -4252,7 +4252,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
             /* CRITICAL: Call ispcore_slake_module to trigger proper state transitions */
             /* This should handle the 1->2 state transition that we've been missing */
             pr_info("*** tx_isp_core_probe: Calling ispcore_slake_module for state initialization ***\n");
-            ret = ispcore_slake_module(ourISPdev);
+            int ret = ispcore_slake_module(ourISPdev);
             if (ret != 0) {
                 pr_err("tx_isp_core_probe: ispcore_slake_module failed: %d\n", ret);
                 /* Don't fail probe for slake failure, but log it */
