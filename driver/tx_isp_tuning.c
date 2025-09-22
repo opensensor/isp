@@ -3168,10 +3168,20 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
     /* CRITICAL SAFETY: Block ALL tuning calls except essential VIN operations */
     /* The userspace client is calling this repetitively and corrupting memory */
 
-    /* Allow only essential VIN initialization commands */
+    /* CRITICAL FIX: Only allow VIN start sequence, disable all continuous tuning */
     if (cmd == 0xc00c56c6 && magic == 0x56) {
-        /* This is a V4L2 control command - allow for VIN init */
-        pr_info("TUNING: Allowing V4L2 control command 0x%x for VIN init\n", cmd);
+        /* Check if this is VIN initialization vs continuous tuning */
+        static int vin_init_count = 0;
+        vin_init_count++;
+
+        if (vin_init_count <= 2) {
+            pr_info("TUNING: Allowing V4L2 control command 0x%x for VIN init (call #%d)\n", cmd, vin_init_count);
+            /* Continue with normal processing for VIN init only */
+        } else {
+            pr_info("TUNING DISABLED: Blocking continuous tuning command 0x%x (call #%d) to prevent CSI PHY corruption\n", cmd, vin_init_count);
+            pr_info("TUNING DISABLED: CSI PHY registers must remain stable for VIC interrupts\n");
+            return 0;
+        }
     } else if (cmd == 0x80000e0 && magic == 0x74) {
         /* This might be FPS control for VIN start - allow */
         pr_info("TUNING: Allowing FPS control command 0x%x for VIN start\n", cmd);
