@@ -684,6 +684,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel((mipi->mipi_sc.mipi_crop_start1y << 16) | mipi->mipi_sc.mipi_crop_start3x, vic_regs + 0x104);
         writel((mipi->mipi_sc.mipi_crop_start3y << 16) | mipi->mipi_sc.mipi_crop_start1x, vic_regs + 0x108);
         
+        /* Binary Ninja EXACT: Configure frame config register before unlock */
+        writel((mipi->mipi_sc.sensor_frame_mode << 4) | mipi->mipi_sc.sensor_csi_fmt, vic_regs + 0x1a0);
+
         /* Binary Ninja EXACT: VIC unlock sequence for MIPI interface */
         /* **(arg1 + 0xb8) = 2 */
         writel(2, vic_regs + 0x0);
