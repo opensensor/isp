@@ -7643,9 +7643,11 @@ static uint32_t mdns_c_false_edg_thres1_wdr[16] = {0x4, 0x6, 0x8, 0xa, 0xc, 0xe,
 /* tiziano_mdns_init - MDNS initialization */
 int tiziano_mdns_init(uint32_t width, uint32_t height)
 {
-    /* CRITICAL FIX: Changed from 0x13309000 to 0x13320000 to avoid overlap with ISP control registers */
-    /* Original 0x13309000 was overlapping with ISP control registers at 0x13309804, 0x13309ac0, 0x13309ac8 */
-    void __iomem *base_reg = ioremap(0x13320000, 0x1000); /* MDNS register base - NON-OVERLAPPING */
+    /* CRITICAL FIX: DISABLED - This function was overlapping with ISP control registers */
+    /* Original ioremap(0x13309000) was overlapping with ISP control registers at 0x13309804, 0x13309ac0, 0x13309ac8 */
+    /* This was causing register resets that disabled ISP and VIC interrupts */
+    pr_info("tiziano_mdns_init: DISABLED to prevent ISP control register corruption\n");
+    return 0;
     
     pr_info("tiziano_mdns_init: Initializing MDNS processing (%dx%d)\n", width, height);
     
