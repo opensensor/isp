@@ -4031,9 +4031,9 @@ static const struct file_operations tx_isp_fops = {
 
 /* Main ISP subdev operations - Binary Ninja reference */
 static struct tx_isp_subdev_core_ops main_subdev_core_ops = {
-    .init = NULL,  /* Will be set when needed */
+    .init = ispcore_core_ops_init,  /* Will be set when needed */
     .reset = NULL,
-    .ioctl = NULL,
+    .ioctl = tx_isp_unlocked_ioctl,
 };
 
 static struct tx_isp_subdev_ops main_subdev_ops = {
