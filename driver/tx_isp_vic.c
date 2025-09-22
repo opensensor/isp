@@ -902,10 +902,36 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_warn("*** ISP CORE IRQ: core_regs not mapped; unable to enable core interrupts here ***\n");
     }
 
-    /* CRITICAL: Also enable the kernel IRQ line if it was registered earlier */
-    if (ourISPdev && ourISPdev->vic_irq > 0) {
-        enable_irq(ourISPdev->vic_irq);
-        pr_info("*** VIC IRQ: enable_irq(%d) called ***\n", ourISPdev->vic_irq);
+    /* CRITICAL: Enable the kernel IRQ lines - this was the missing piece! */
+    /* Enable both ISP core IRQ (37) and VIC IRQ (38) */
+    if (ourISPdev) {
+        /* Enable ISP core IRQ 37 */
+        if (ourISPdev->core_dev && ourISPdev->core_dev->irq > 0) {
+            enable_irq(ourISPdev->core_dev->irq);
+            pr_info("*** ISP CORE IRQ: enable_irq(%d) called ***\n", ourISPdev->core_dev->irq);
+        }
+
+        /* Enable VIC IRQ 38 */
+        if (ourISPdev->vic_irq > 0) {
+            enable_irq(ourISPdev->vic_irq);
+            pr_info("*** VIC IRQ: enable_irq(%d) called ***\n", ourISPdev->vic_irq);
+        }
+
+        /* Also try enabling via platform device IRQ resources */
+        if (ourISPdev->pdev) {
+            int irq37 = platform_get_irq(ourISPdev->pdev, 0);  /* First IRQ resource */
+            int irq38 = platform_get_irq(ourISPdev->pdev, 1);  /* Second IRQ resource */
+
+            if (irq37 > 0) {
+                enable_irq(irq37);
+                pr_info("*** PLATFORM IRQ: enable_irq(%d) called for tx-isp-core ***\n", irq37);
+            }
+
+            if (irq38 > 0) {
+                enable_irq(irq38);
+                pr_info("*** PLATFORM IRQ: enable_irq(%d) called for isp-w02 ***\n", irq38);
+            }
+        }
     }
 
     /* Binary Ninja EXACT: vic_start_ok = 1 */
