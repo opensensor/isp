@@ -1723,9 +1723,13 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
     pr_info("%s[%d]: %s\n", "ispvic_frame_channel_s_stream", __LINE__, stream_op);
     
     /* Binary Ninja EXACT: if (arg2 == *($s0 + 0x210)) return 0 */
+    pr_info("*** ispvic_frame_channel_s_stream: Checking stream state - current=%d, requested=%d ***\n",
+            vic_dev->stream_state, arg2);
     if (arg2 == vic_dev->stream_state) {
+        pr_info("*** ispvic_frame_channel_s_stream: Stream state already matches - returning early ***\n");
         return 0;
     }
+    pr_info("*** ispvic_frame_channel_s_stream: Stream state different - proceeding with streaming setup ***\n");
     
     /* BINARY NINJA MCP: Proper VBM buffer allocation sequence */
     if (arg2 != 0) {
