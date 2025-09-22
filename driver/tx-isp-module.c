@@ -2064,14 +2064,20 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
         pr_info("*** tx_isp_video_s_stream: Calling core->init on subdevs after activation ***\n");
         for (int i = 0; i < 16; i++) {
             struct tx_isp_subdev *subdev = arg1->subdevs[i];
-            if (subdev && subdev->ops && subdev->ops->core && subdev->ops->core->init) {
-                pr_info("*** tx_isp_video_s_stream: Calling core->init(enable=1) on subdev[%d] ***\n", i);
-                int init_result = subdev->ops->core->init(subdev, 1);
-                if (init_result != 0) {
-                    pr_err("tx_isp_video_s_stream: core->init failed on subdev[%d]: %d\n", i, init_result);
-                    return init_result;
+            if (subdev && subdev->ops) {
+                pr_info("*** tx_isp_video_s_stream: subdev[%d]=%p, ops=%p, core=%p ***\n",
+                        i, subdev, subdev->ops, subdev->ops->core);
+                if (subdev->ops->core && subdev->ops->core->init) {
+                    pr_info("*** tx_isp_video_s_stream: Calling core->init(enable=1) on subdev[%d] ***\n", i);
+                    int init_result = subdev->ops->core->init(subdev, 1);
+                    if (init_result != 0) {
+                        pr_err("tx_isp_video_s_stream: core->init failed on subdev[%d]: %d\n", i, init_result);
+                        return init_result;
+                    }
+                    pr_info("*** tx_isp_video_s_stream: core->init SUCCESS on subdev[%d] ***\n", i);
+                } else {
+                    pr_info("*** tx_isp_video_s_stream: subdev[%d] has NULL core ops, skipping ***\n", i);
                 }
-                pr_info("*** tx_isp_video_s_stream: core->init SUCCESS on subdev[%d] ***\n", i);
             }
         }
     }

@@ -280,6 +280,15 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
         /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
         /* SAFE: Use proper struct member access instead of dangerous offset */
         csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+
+        /* CRITICAL SAFETY CHECK: Prevent BadVA crash */
+        if (!csi_dev) {
+            pr_err("csi_core_ops_init: CRITICAL ERROR - sd->dev_priv is NULL! sd=%p\n", sd);
+            pr_err("csi_core_ops_init: This means CSI device was not properly set during probe\n");
+            return 0xffffffea;
+        }
+
+        pr_info("csi_core_ops_init: sd=%p, csi_dev=%p, enable=%d\n", sd, csi_dev, enable);
         result = 0xffffffea;
 
         /* Binary Ninja: if ($s0_1 != 0 && $s0_1 u< 0xfffff001) */
