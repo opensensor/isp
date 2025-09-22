@@ -1511,13 +1511,6 @@ static int sensor_init(struct tx_isp_subdev *sd, int enable) {
 		return ret;
 	}
 
-	ISP_WARNING("*** CALLING TX_ISP_EVENT_SYNC_SENSOR_ATTR ***\n");
-	/* FIXED: Call our properly implemented handler directly instead of using the broken macro */
-	ret = tx_isp_handle_sync_sensor_attr_event(sd, sensor->video.attr);
-	ISP_WARNING("*** TX_ISP_EVENT_SYNC_SENSOR_ATTR RETURNED: %d ***\n", ret);
-	
-	sensor->priv = wsize;
-	ISP_WARNING("*** SENSOR_INIT COMPLETE FOR %s ***\n", SENSOR_NAME);
 	return 0;
 }
 
