@@ -4234,9 +4234,9 @@ int tx_isp_core_probe(struct platform_device *pdev)
             pr_info("*** tx_isp_core_probe: VIC device creation deferred to platform driver system ***\n");
             pr_info("*** tx_isp_core_probe: Platform drivers will call tx_isp_subdev_init for proper initialization ***\n");
 
-            /* Binary Ninja: sensor_early_init($v0) */
-            pr_info("*** tx_isp_core_probe: Calling sensor_early_init ***\n");
-            sensor_early_init(ourISPdev);
+            /* CRITICAL FIX: Defer sensor detection until after all subdevs are registered */
+            /* sensor_early_init will be called later after platform drivers register their subdevs */
+            pr_info("*** tx_isp_core_probe: Sensor detection deferred until after subdev registration ***\n");
 
             /* Binary Ninja: uint32_t isp_clk_1 = get_isp_clk() */
             /* Binary Ninja: if (isp_clk_1 == 0) isp_clk_1 = isp_clk */

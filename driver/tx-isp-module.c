@@ -1483,8 +1483,21 @@ static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev)
 
     pr_info("*** Calling subdev_sensor_ops_ioctl with IOCTL 0x2000000 to create I2C sensor device ***\n");
 
-    /* Use Core subdev which has sensor ops that can handle 0x2000000 */
-    struct tx_isp_subdev *core_subdev = isp_dev->subdevs[4]; /* Core is at index 4 */
+    /* CRITICAL FIX: Find Core subdev by searching the subdev array */
+    /* The Core subdev can be at different indices depending on registration order */
+    struct tx_isp_subdev *core_subdev = NULL;
+
+    for (int i = 0; i < ISP_MAX_SUBDEVS; i++) {
+        struct tx_isp_subdev *sd = isp_dev->subdevs[i];
+        if (sd && sd->ops && sd->ops->sensor && sd->ops->sensor->ioctl) {
+            /* Check if this is the Core subdev by looking for core ops */
+            if (sd->ops->core) {
+                core_subdev = sd;
+                pr_info("*** Found Core subdev at index %d: %p ***\n", i, core_subdev);
+                break;
+            }
+        }
+    }
 
     if (core_subdev && core_subdev->ops && core_subdev->ops->sensor && core_subdev->ops->sensor->ioctl) {
         pr_info("*** Calling sensor IOCTL 0x2000000 on Core subdev %p ***\n", core_subdev);
