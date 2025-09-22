@@ -561,14 +561,31 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 static int tx_isp_hardware_init(struct tx_isp_dev *isp_dev);
 void system_reg_write(u32 reg, u32 value);
 
-/* system_reg_write - Helper function to write ISP registers safely */
+/* system_reg_write - Helper function to write ISP registers safely with VIC interrupt protection */
 void system_reg_write(u32 reg, u32 value)
 {
     void __iomem *isp_regs = NULL;
+    extern uint32_t vic_start_ok;
 
     if (!ourISPdev || !ourISPdev->vic_regs) {
         pr_warn("system_reg_write: No ISP registers available for reg=0x%x val=0x%x\n", reg, value);
         return;
+    }
+
+    /* CRITICAL FIX: Protect VIC interrupt registers from tuning system overwrites */
+    if (vic_start_ok == 1) {
+        /* VIC is active - protect critical interrupt registers */
+        if (reg == 0x30 || reg == 0x10 || reg == 0xb0 || reg == 0xbc ||
+            reg == 0x98b0 || reg == 0x98bc || reg == 0xb8 || reg == 0x98b8) {
+            pr_debug("*** VIC PROTECTION: Blocking tuning write to interrupt register 0x%x during VIC streaming ***\n", reg);
+            return;  /* Block write to interrupt registers during VIC operation */
+        }
+
+        /* Also protect VIC control registers that could affect interrupt generation */
+        if (reg == 0x800 || reg == 0x804 || reg == 0x1c) {
+            pr_debug("*** VIC PROTECTION: Blocking tuning write to VIC control register 0x%x during streaming ***\n", reg);
+            return;  /* Block write to VIC control registers during operation */
+        }
     }
 
     /* Map ISP registers based on VIC base (which is at 0x133e0000) */
