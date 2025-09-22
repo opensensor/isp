@@ -13,6 +13,7 @@ int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes);
 void dump_csi_reg(struct tx_isp_subdev *sd);
 int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd);
 int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+struct tx_isp_sensor *tx_isp_get_sensor(void);
 extern struct tx_isp_dev *ourISPdev;
 extern bool is_valid_kernel_pointer(const void *ptr);
 void system_reg_write(u32 reg, u32 value);
