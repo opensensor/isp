@@ -3349,14 +3349,18 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         pr_info("*** Channel %d: VIDIOC_STREAMOFF - Binary Ninja implementation ***\n", channel);
 
-        // CRITICAL FIX: Call tx_isp_video_s_stream to disable VIC interrupts
-        if (ourISPdev) {
+        // CRITICAL FIX: Only call tx_isp_video_s_stream if streaming was actually started
+        // This prevents tisp_channel_stop() from clearing ISP control registers during sensor init
+        if (ourISPdev && state->streaming) {
             pr_info("*** Channel %d: STREAMOFF - Calling tx_isp_video_s_stream to disable VIC interrupts ***\n", channel);
             ret = tx_isp_video_s_stream(ourISPdev, 0);
             if (ret != 0) {
                 pr_err("Channel %d: STREAMOFF - tx_isp_video_s_stream failed: %d\n", channel, ret);
                 // Continue with streamoff even if video s_stream fails
             }
+        } else if (ourISPdev && !state->streaming) {
+            pr_info("*** Channel %d: STREAMOFF - Skipping tx_isp_video_s_stream (not streaming) ***\n", channel);
+            pr_info("*** Channel %d: STREAMOFF - This prevents tisp_channel_stop() from clearing ISP control registers ***\n", channel);
         }
 
         // Binary Ninja: return __frame_channel_vb2_streamoff($s0, var_78)
