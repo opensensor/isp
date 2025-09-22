@@ -2078,10 +2078,27 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
             }
         }
 
-        /* CRITICAL FIX: REMOVE duplicate core->init loop that was causing double sensor initialization */
-        /* The activate_module() calls above already initialize the subdevs properly */
-        /* The second core->init loop was re-initializing sensors and corrupting CSI PHY configuration */
-        pr_info("*** tx_isp_video_s_stream: Skipping duplicate core->init loop - subdevs already initialized by activate_module ***\n");
+        /* CRITICAL FIX: Call core->init ONLY for ISP Core subdev to set state to 3 */
+        /* Sensors are already initialized by activate_module() calls above */
+        /* But ISP Core needs core->init to transition from state 2 to state 3 */
+        pr_info("*** tx_isp_video_s_stream: Calling core->init ONLY for ISP Core subdev ***\n");
+        for (int i = 0; i < 16; i++) {
+            struct tx_isp_subdev *subdev = arg1->subdevs[i];
+            if (subdev && subdev->ops && subdev->ops->core && subdev->ops->core->init) {
+                /* Check if this is the ISP Core subdev (not sensor) */
+                if (subdev->ops->core->init == ispcore_core_ops_init) {
+                    pr_info("*** tx_isp_video_s_stream: Calling ispcore_core_ops_init on subdev[%d] ***\n", i);
+                    int init_result = subdev->ops->core->init(subdev, 1);
+                    if (init_result != 0) {
+                        pr_err("tx_isp_video_s_stream: ispcore_core_ops_init failed on subdev[%d]: %d\n", i, init_result);
+                        return init_result;
+                    }
+                    pr_info("*** tx_isp_video_s_stream: ispcore_core_ops_init SUCCESS - core state should now be 3 ***\n");
+                } else {
+                    pr_info("*** tx_isp_video_s_stream: subdev[%d] is sensor - already initialized by activate_module ***\n", i);
+                }
+            }
+        }
     }
 
     /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
