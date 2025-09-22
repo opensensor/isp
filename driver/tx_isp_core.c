@@ -4288,6 +4288,20 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 core_dev->tuning_dev = tuning_dev;
                 core_dev->tuning_enabled = true;
 
+                /* Binary Ninja: $v0[0x3a] = 1 - Set initialization level to 1 */
+                core_dev->state = 2;  /* Set to ready state after successful tuning init */
+
+                /* Binary Ninja: private_platform_set_drvdata(arg1, $v0) */
+                platform_set_drvdata(pdev, core_dev);
+                pr_info("*** tx_isp_core_probe: Set platform driver data ***\n");
+
+                /* Binary Ninja: mdns_y_pspa_cur_bi_wei0_array = $v0 */
+                /* This sets a global reference - we use ourISPdev->core_dev */
+                if (ourISPdev) {
+                    ourISPdev->core_dev = core_dev;
+                    pr_info("*** tx_isp_core_probe: Set global core device reference ***\n");
+                }
+
                 pr_info("*** tx_isp_core_probe: SUCCESS - Core device fully initialized ***\n");
                 pr_info("***   - Core device: %p ***\n", core_dev);
                 pr_info("***   - Tuning device: %p ***\n", tuning_dev);
