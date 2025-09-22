@@ -62,28 +62,11 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             vic_dev->irq_handler(vic_dev->irq_priv);
         }
 
-        /* CRITICAL FIX: Configure VIC interrupt masks - this was missing! */
-        if (vic_dev->vic_regs) {
-            /* Clear any pending interrupts first */
-            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main interrupt status */
-            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
-            wmb();
+        /* CRITICAL FIX: The reference driver does NOT configure interrupt masks in tx_vic_enable_irq! */
+        /* VIC interrupt configuration happens in tx_isp_vic_start, not here */
+        /* This function only sets the software flag and calls the IRQ handler */
 
-            /* Configure VIC interrupt masks - 0x1e8 is DISABLE mask (1=disable, 0=enable) */
-            writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);  /* Enable frame done interrupt (bit 0) */
-            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1ec);  /* Disable all MDMA interrupts */
-            wmb();
-
-            /* CRITICAL FIX: Enable hardware interrupt generation in VIC control register */
-            /* This is the missing piece - VIC hardware needs this to actually generate interrupts */
-            u32 vic_ctrl = readl(vic_dev->vic_regs + 0x0);
-            vic_ctrl |= 0x8;  /* Enable interrupt generation bit */
-            writel(vic_ctrl, vic_dev->vic_regs + 0x0);
-            wmb();
-
-            pr_info("*** tx_vic_enable_irq: VIC interrupt masks configured (0x1e8=0xFFFFFFFE enables bit 0, 0x1ec=0xFFFFFFFF disables all MDMA) ***\n");
-            pr_info("*** tx_vic_enable_irq: VIC hardware interrupt generation ENABLED (control reg |= 0x8) ***\n");
-        }
+        pr_info("*** tx_vic_enable_irq: EXACT Binary Ninja - only setting software flag, no hardware config ***\n");
     }
 
     /* Binary Ninja: private_spin_unlock_irqrestore(dump_vsd_3 + 0x130, var_18) */
@@ -113,14 +96,10 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
             vic_dev->irq_disable(vic_dev->irq_priv);
         }
 
-        /* CRITICAL FIX: Disable hardware interrupt generation in VIC control register */
-        if (vic_dev->vic_regs) {
-            u32 vic_ctrl = readl(vic_dev->vic_regs + 0x0);
-            vic_ctrl &= ~0x8;  /* Disable interrupt generation bit */
-            writel(vic_ctrl, vic_dev->vic_regs + 0x0);
-            wmb();
-            pr_info("*** tx_vic_disable_irq: VIC hardware interrupt generation DISABLED (control reg &= ~0x8) ***\n");
-        }
+        /* CRITICAL FIX: The reference driver does NOT configure hardware registers in tx_vic_disable_irq! */
+        /* This function only clears the software flag and calls the IRQ disable handler */
+
+        pr_info("*** tx_vic_disable_irq: EXACT Binary Ninja - only clearing software flag, no hardware config ***\n");
     }
 
 
@@ -834,6 +813,22 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x10, vic_regs + 0x1b0);
         writel(2, vic_regs + 0x0);
     }
+
+    /* CRITICAL FIX: Configure VIC interrupts BEFORE final enable */
+    /* VIC interrupt configuration happens here in tx_isp_vic_start, not in tx_vic_enable_irq */
+    pr_info("*** tx_isp_vic_start: Configuring VIC interrupts using PRIMARY VIC space ***\n");
+
+    /* Clear any pending interrupts first */
+    writel(0xFFFFFFFF, vic_regs + 0x1f0);  /* Clear main interrupt status */
+    writel(0xFFFFFFFF, vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
+    wmb();
+
+    /* Configure VIC interrupt masks - 0x1e8 is DISABLE mask (1=disable, 0=enable) */
+    writel(0xFFFFFFFE, vic_regs + 0x1e8);  /* Enable frame done interrupt (bit 0) */
+    writel(0xFFFFFFFF, vic_regs + 0x1ec);  /* Disable all MDMA interrupts */
+    wmb();
+
+    pr_info("*** tx_isp_vic_start: VIC interrupt masks configured (0x1e8=0xFFFFFFFE enables bit 0) ***\n");
 
     /* Binary Ninja EXACT: Final VIC enable - *vic_regs = 1 */
     /* Use SECONDARY VIC space for enable (same as unlock sequence) */
