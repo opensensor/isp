@@ -90,6 +90,30 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             pr_info("*** tx_vic_enable_irq: VIC clocks enabled via CPM ***\n");
         }
 
+        /* CRITICAL MISSING: Initialize secondary VIC registers - THIS WAS THE MISSING STEP! */
+        if (vic_dev->vic_regs_secondary) {
+            pr_info("*** CRITICAL FIX: Initializing secondary VIC registers (MISSING from our driver!) ***\n");
+
+            /* Reference trace: ISP isp-w01: write at offset 0x0: 0x0 -> 0x3130322a */
+            writel(0x3130322a, vic_dev->vic_regs_secondary + 0x0);
+            wmb();
+            pr_info("*** VIC SECONDARY: Wrote 0x3130322a to offset 0x0 ***\n");
+
+            /* Reference trace: ISP isp-w01: write at offset 0x4: 0x0 -> 0x1 */
+            writel(0x1, vic_dev->vic_regs_secondary + 0x4);
+            wmb();
+            pr_info("*** VIC SECONDARY: Wrote 0x1 to offset 0x4 ***\n");
+
+            /* Reference trace: ISP isp-w01: write at offset 0x14: 0x0 -> 0x200 */
+            writel(0x200, vic_dev->vic_regs_secondary + 0x14);
+            wmb();
+            pr_info("*** VIC SECONDARY: Wrote 0x200 to offset 0x14 ***\n");
+
+            pr_info("*** CRITICAL FIX: Secondary VIC registers initialized - VIC should now generate interrupts! ***\n");
+        } else {
+            pr_err("*** CRITICAL ERROR: No secondary VIC registers - cannot initialize VIC interrupt generation! ***\n");
+        }
+
         /* CRITICAL: Enable VIC hardware interrupt generation */
         /* CRITICAL FIX: Use PRIMARY VIC registers for interrupt control - secondary is for control only */
         if (vic_dev->vic_regs) {
