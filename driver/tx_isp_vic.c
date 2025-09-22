@@ -132,29 +132,25 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             wmb();
             pr_info("*** tx_vic_enable_irq: VIC pending interrupts cleared in PRIMARY registers ***\n");
 
-            /* CRITICAL FIX: Enable specific VIC interrupt types for frame completion */
-            /* CRITICAL FIX: Use SECONDARY VIC registers for interrupt control! */
-            if (vic_dev->vic_regs_secondary) {
-                /* Based on Binary Ninja MCP analysis - VIC needs specific interrupt enables */
-                /* Enable frame completion, DMA completion, and buffer ready interrupts */
-                u32 vic_int_enable = 0x1F;  /* Enable frame completion interrupts (bits 0-4) */
-                writel(vic_int_enable, vic_dev->vic_regs_secondary + 0x30c);  /* VIC interrupt enable register */
-                wmb();
-                pr_info("*** CRITICAL FIX: VIC specific interrupt types ENABLED in SECONDARY space (wrote 0x%x to reg 0x30c) ***\n", vic_int_enable);
-
-                /* Try alternative interrupt enable registers in secondary space */
-                writel(0x1F, vic_dev->vic_regs_secondary + 0x10);  /* Alternative interrupt enable */
-                writel(0x1F, vic_dev->vic_regs_secondary + 0x18);  /* Alternative interrupt enable */
-                wmb();
-                pr_info("*** CRITICAL FIX: VIC alternative interrupt enables written to SECONDARY space ***\n");
-            }
-
-            /* CRITICAL FIX: Enable VIC DMA interrupt generation in PRIMARY space */
-            u32 vic_dma_ctrl = readl(vic_dev->vic_regs + 0x300);
-            vic_dma_ctrl |= 0x100;  /* Enable DMA interrupt bit */
-            writel(vic_dma_ctrl, vic_dev->vic_regs + 0x300);
+            /* CRITICAL FIX: Use WORKING irqs-start-stop configuration in PRIMARY VIC space */
+            /* Clear any pending interrupts first */
+            writel(0, vic_dev->vic_regs + 0x00);  /* Clear ISR */
+            writel(0, vic_dev->vic_regs + 0x20);  /* Clear ISR1 */
             wmb();
-            pr_info("*** CRITICAL FIX: VIC DMA interrupt generation ENABLED (reg 0x300 = 0x%x) ***\n", vic_dma_ctrl);
+
+            /* Set up interrupt masks to match WORKING OEM configuration */
+            writel(0x00000001, vic_dev->vic_regs + 0x04);  /* IMR - enable basic interrupts */
+            wmb();
+            writel(0x00000000, vic_dev->vic_regs + 0x24);  /* IMR1 - clear secondary mask */
+            wmb();
+
+            /* Configure ISP control interrupts - WORKING configuration */
+            writel(0x07800438, vic_dev->vic_regs + 0x04);  /* IMR - working interrupt mask */
+            wmb();
+            writel(0xb5742249, vic_dev->vic_regs + 0x0c);  /* IMCR - working interrupt control */
+            wmb();
+
+            pr_info("*** CRITICAL FIX: Applied WORKING irqs-start-stop interrupt configuration to PRIMARY VIC space ***\n");
 
             /* CRITICAL TEST: Check if VIC hardware is generating any interrupt signals */
             u32 status1 = readl(vic_dev->vic_regs + 0x1e0);
