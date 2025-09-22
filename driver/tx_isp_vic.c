@@ -1890,19 +1890,17 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     spin_lock_init(&vic_dev->buffer_mgmt_lock);
     spin_lock_init(&vic_dev->lock);
 
-    /* CRITICAL FIX: Initialize VIC interrupt handler function pointer - Binary Ninja reference */
-    /* Binary Ninja: VIC device structure has function pointer at offset 0x84 for interrupt enable */
-    /* This is what tx_vic_enable_irq calls: $v0_1 = *(dump_vsd_5 + 0x84); if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
+    /* CRITICAL FIX: Initialize VIC interrupt handler function pointers using SAFE struct members */
+    /* Binary Ninja reference shows function pointers are needed, but we use safe struct access */
     extern void vic_hardware_irq_enable(void *irq_info);
     extern void vic_hardware_irq_disable(void *irq_info);
 
-    /* Set up function pointers at correct offsets - Binary Ninja reference */
-    void **enable_func_ptr = (void **)((char *)vic_dev + 0x84);
-    void **disable_func_ptr = (void **)((char *)vic_dev + 0x88);
-    *enable_func_ptr = vic_hardware_irq_enable;
-    *disable_func_ptr = vic_hardware_irq_disable;
+    /* SAFE: Use proper struct members instead of unsafe offset math */
+    vic_dev->irq_handler = vic_hardware_irq_enable;
+    vic_dev->irq_disable = vic_hardware_irq_disable;
+    vic_dev->irq_priv = &vic_dev->sd.irq_info;  /* Pass IRQ info structure */
 
-    pr_info("*** VIC PROBE: Hardware IRQ function pointers set at offsets 0x84/0x88 (Binary Ninja reference) ***\n");
+    pr_info("*** VIC PROBE: Hardware IRQ function pointers set using SAFE struct members ***\n");
 
     /* EMERGENCY FIX: Disable complex buffer management to prevent kernel panic */
     /* Initialize only the absolute minimum required for basic operation */
