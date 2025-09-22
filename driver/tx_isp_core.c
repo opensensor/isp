@@ -2641,7 +2641,6 @@ static uint8_t sensor_info[0x60];
 static uint8_t ds0_attr[0x34];
 static uint8_t ds1_attr[0x34];
 static uint8_t ds2_attr[0x34];
-static uint32_t data_b2e74 = 0;  /* WDR mode flag */
 static uint32_t data_b2f34 = 0;  /* Frame height */
 static uint32_t deir_en = 0;     /* DEIR enable flag */
 
