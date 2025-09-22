@@ -205,6 +205,7 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
 int tx_isp_vin_reset(struct tx_isp_subdev *sd, int on)
 {
     struct tx_isp_vin_device *vin = sd_to_vin_device(sd);
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
     struct tx_isp_sensor *sensor = tx_isp_get_sensor();
     int ret = 0;
 
@@ -257,6 +258,7 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
     pr_info("vin_s_stream: VIN state = %d, enable = %d\n", vin_state, enable);
 
     /* SAFE: Validate sensor pointer before access */
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
     struct tx_isp_sensor *sensor = tx_isp_get_sensor();
 
     /* SAFE: Check sensor ops with proper validation */

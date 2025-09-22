@@ -333,6 +333,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                 } else {
                     /* Binary Ninja: void* $v1_5 = *($s0_1 + 0x110) */
                     /* SAFE: Use helper method to get sensor attributes instead of unsafe offset access */
+                    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
                     struct tx_isp_sensor *sensor = tx_isp_get_sensor();
                     if (sensor) {
                         sensor_attr = &sensor->info;
