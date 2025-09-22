@@ -633,7 +633,24 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: Essential VIC configuration for MIPI */
         writel(2, vic_regs + 0xc);  /* VIC mode */
         writel(sensor_attr->dbus_type, vic_regs + 0x14);  /* Interface type */
-        writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);  /* Dimensions */
+
+        /* CRITICAL FIX: Use negotiated frame channel dimensions instead of sensor total dimensions */
+        extern struct frame_channel_device frame_channels[];
+        int stream_width = 1920;  /* Default fallback */
+        int stream_height = 1080; /* Default fallback */
+
+        /* Get negotiated dimensions from active frame channel */
+        if (frame_channels[0].state.enabled && frame_channels[0].state.width > 0) {
+            stream_width = frame_channels[0].state.width;
+            stream_height = frame_channels[0].state.height;
+            pr_info("tx_isp_vic_start: Using negotiated dimensions from frame channel 0: %dx%d\n",
+                    stream_width, stream_height);
+        } else {
+            pr_info("tx_isp_vic_start: Using default dimensions (frame channel not configured): %dx%d\n",
+                    stream_width, stream_height);
+        }
+
+        writel((stream_width << 16) | stream_height, vic_regs + 0x4);  /* Use negotiated dimensions */
 
         /* Binary Ninja: Buffer size calculation based on sensor format */
         struct tx_isp_mipi_bus *mipi = &sensor_attr->mipi;
