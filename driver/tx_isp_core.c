@@ -603,7 +603,7 @@ EXPORT_SYMBOL(ispcore_irq_thread_handle);
 EXPORT_SYMBOL(ispcore_link_setup);
 int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr);
 static int isp_free_buffer(struct tx_isp_dev *isp, void *virt_addr, dma_addr_t phys_addr, uint32_t size);
-irqreturn_t ip_done_interrupt_static(int irq, void *dev_id);
+int32_t ip_done_interrupt_static(void);
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
 int sensor_init(struct tx_isp_dev *isp_dev);
 void *isp_core_tuning_init(void *arg1);
@@ -1813,31 +1813,6 @@ int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id)
 }
 EXPORT_SYMBOL(system_irq_func_set);
 
-
-/* ip_done_interrupt_static - EXACT Binary Ninja function name */
-irqreturn_t ip_done_interrupt_static(int irq, void *dev_id)
-{
-    /* Binary Ninja: if ((system_reg_read(0xc) & 0x40) == 0) */
-    uint32_t reg_val = system_reg_read(0xc);
-
-    if ((reg_val & 0x40) == 0) {
-        /* CRITICAL FIX: Don't call tuning functions during VIC streaming */
-        /* This was causing CSI PHY register corruption every ~70ms */
-        extern uint32_t vic_start_ok;
-        if (vic_start_ok == 1) {
-            pr_debug("*** IP DONE: Skipping LSC tuning during VIC streaming to prevent CSI PHY corruption ***\n");
-        } else {
-            /* Binary Ninja: tisp_lsc_write_lut_datas() */
-            tisp_lsc_write_lut_datas();
-            pr_debug("*** IP DONE: LSC tuning completed (VIC not streaming) ***\n");
-        }
-    }
-
-    pr_debug("*** ip_done_interrupt_handler: ISP processing complete ***\n");
-
-    /* Binary Ninja: return 2 */
-    return IRQ_HANDLED; /* Convert to standard Linux return value */
-}
 
 /* ispcore_interrupt_service_routine - EXACT Binary Ninja implementation */
 irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
