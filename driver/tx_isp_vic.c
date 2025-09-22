@@ -669,13 +669,20 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(mipi->mipi_sc.mipi_crop_start0y, vic_regs + 0x118);
         writel(mipi->mipi_sc.mipi_crop_start1x, vic_regs + 0x11c);
 
-        /* Binary Ninja: Frame mode configuration */
-        writel(0x4440, vic_regs + 0x1ac);  /* Default frame mode */
-        writel(0x4440, vic_regs + 0x1a8);  /* Frame mode copy */
-        writel(0x10, vic_regs + 0x1b0);    /* Frame control */
+        /* Binary Ninja EXACT: Frame mode configuration based on sensor frame mode */
+        u32 frame_mode_val = 0x4440;  /* Default frame mode */
+        if (mipi->mipi_sc.sensor_frame_mode == 1) {
+            frame_mode_val = 0x4140;
+        } else if (mipi->mipi_sc.sensor_frame_mode == 2) {
+            frame_mode_val = 0x4240;
+        }
+        writel(frame_mode_val, vic_regs + 0x1ac);
+        writel(frame_mode_val, vic_regs + 0x1a8);
+        writel(0x10, vic_regs + 0x1b0);
 
-        /* Binary Ninja: Additional control registers */
-        writel(0x0, vic_regs + 0x1a0);     /* Frame config */
+        /* Binary Ninja EXACT: Additional MIPI crop configuration registers */
+        writel((mipi->mipi_sc.mipi_crop_start1y << 16) | mipi->mipi_sc.mipi_crop_start3x, vic_regs + 0x104);
+        writel((mipi->mipi_sc.mipi_crop_start3y << 16) | mipi->mipi_sc.mipi_crop_start1x, vic_regs + 0x108);
         
         /* Binary Ninja EXACT: VIC unlock sequence for MIPI interface */
         /* **(arg1 + 0xb8) = 2 */
