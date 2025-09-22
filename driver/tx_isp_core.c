@@ -4295,7 +4295,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 core_dev->tuning_enabled = true;
 
                 /* Binary Ninja: $v0[0x3a] = 1 - Set initialization level to 1 */
-                core_dev->state = 2;  /* Set to ready state after successful tuning init */
+                /* Note: Don't set state to 2 here - let normal initialization flow handle state transitions */
 
                 /* Binary Ninja: private_platform_set_drvdata(arg1, $v0) */
                 platform_set_drvdata(pdev, core_dev);
@@ -4368,7 +4368,9 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
             /* Binary Ninja: private_kfree($v0) */
             tx_isp_destroy_core_device(core_dev);
-            return -ENOMEM;
+
+            /* Binary Ninja: result = 0xffffffea */
+            return -EINVAL;
         }
     } else {
         /* Binary Ninja: isp_printf(2, "Failed to init isp module(%d.%d)\n", zx.d(*($s2_1 + 2))) */
@@ -4376,6 +4378,8 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
         /* Binary Ninja: private_kfree($v0) */
         tx_isp_destroy_core_device(core_dev);
+
+        /* Binary Ninja: result = 0xfffffff4 */
         return -ENOMEM;
     }
 }
@@ -5154,8 +5158,8 @@ int tx_isp_core_device_init(struct tx_isp_core_device *core_dev)
         core_dev->ipu_clk = NULL;
     }
 
-    /* Set state to ready */
-    core_dev->state = 2;  /* READY state */
+    /* Don't set state to 2 here - let ispcore_core_ops_init handle state transitions */
+    /* The core should remain in state 1 until ispcore_core_ops_init(sd, 1) is called */
     core_dev->is_initialized = true;
 
     pr_info("*** tx_isp_core_device_init: Core device initialized successfully ***\n");
