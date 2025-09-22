@@ -125,7 +125,6 @@ struct tx_isp_vic_device {
     uint32_t buffer_count;                      /* General buffer count */
 
     /* Buffer addresses for vic_mdma_enable and isp_vic_cmd_set */
-    dma_addr_t *buffer_addresses;               /* Array of buffer addresses */
     int buffer_address_count;                   /* Number of buffer addresses */
 
     /* BINARY NINJA COMPATIBILITY: Additional members referenced in interrupt handler */

@@ -581,9 +581,6 @@ struct tx_isp_channel_state {
     int state;                   /* Offset 0x2d0 - *($s0 + 0x2d0) - channel state (3=ready, 4=streaming) */
     uint32_t flags;              /* Offset 0x230 - *($s0 + 0x230) - streaming flags (bit 0 = streaming) */
 
-    /* CRITICAL FIX: Store buffer structures like reference driver */
-    uint32_t *buffer_addresses;  /* Array of buffer structure pointers */
-
     /* VBM buffer management for VBMFillPool compatibility */
     uint32_t *vbm_buffer_addresses;       /* Array of VBM buffer addresses */
     int vbm_buffer_count;                 /* Number of VBM buffers */

@@ -1464,30 +1464,38 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (stride)\n", stride);
 
-    /* CRITICAL MISSING: Write actual buffer addresses to VIC hardware registers */
+    /* CRITICAL FIX: Write actual buffer addresses to VIC hardware registers */
     /* VIC hardware needs to know where to DMA frame data to generate interrupts */
     pr_info("*** CRITICAL FIX: Writing buffer addresses to VIC hardware registers ***\n");
 
-    /* Access buffer addresses from VBM system */
-    if (vic_dev->buffer_addresses && vic_dev->active_buffer_count > 0) {
+    /* Access buffer addresses from VBM system - where QBUF actually stores them */
+    extern struct frame_channel_device frame_channels[];
+    struct tx_isp_channel_state *state = &frame_channels[0].state;
+
+    if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
         int i;
-        for (i = 0; i < vic_dev->active_buffer_count && i < 5; i++) {
-            u32 buffer_addr = vic_dev->buffer_addresses[i];
+        pr_info("*** VIC BUFFER ACCESS: Found %d VBM buffer addresses at %p ***\n",
+                state->vbm_buffer_count, state->vbm_buffer_addresses);
+
+        for (i = 0; i < state->vbm_buffer_count && i < 5; i++) {
+            u32 buffer_addr = state->vbm_buffer_addresses[i];
             u32 reg_offset = 0x318 + (i * 4);  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
 
             if (buffer_addr != 0) {
                 writel(buffer_addr, vic_base + reg_offset);
                 wmb();
-                pr_info("*** VIC BUFFER %d: Wrote address 0x%x to reg 0x%x ***\n",
+                pr_info("*** VIC BUFFER %d: Wrote VBM address 0x%x to reg 0x%x ***\n",
                         i, buffer_addr, reg_offset);
             } else {
-                pr_warn("*** VIC BUFFER %d: No address available (0x0) ***\n", i);
+                pr_warn("*** VIC BUFFER %d: No VBM address available (0x0) ***\n", i);
             }
         }
-        pr_info("*** CRITICAL: VIC buffer addresses configured - hardware can now generate interrupts! ***\n");
+        pr_info("*** CRITICAL: VIC buffer addresses configured from VBM - hardware can now generate interrupts! ***\n");
     } else {
-        pr_err("*** CRITICAL ERROR: No buffer addresses available - VIC cannot generate interrupts! ***\n");
-        pr_err("*** buffer_addresses=%p, active_buffer_count=%d ***\n",
+        pr_err("*** CRITICAL ERROR: No VBM buffer addresses available - VIC cannot generate interrupts! ***\n");
+        pr_err("*** vbm_buffer_addresses=%p, vbm_buffer_count=%d ***\n",
+               state->vbm_buffer_addresses, state->vbm_buffer_count);
+        pr_err("*** vic_dev->buffer_addresses=%p, active_buffer_count=%d ***\n",
                vic_dev->buffer_addresses, vic_dev->active_buffer_count);
     }
 
@@ -2097,10 +2105,15 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 
         /* Get buffer address from VBM system (this is where QBUF stores addresses) */
         extern struct frame_channel_device frame_channels[];
-        if (frame_channels[0].state.vbm_buffer_addresses) {
+        struct tx_isp_channel_state *state = &frame_channels[0].state;
+
+        if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
             int i;
-            for (i = 0; i < 5; i++) {
-                buffer_addr = frame_channels[0].state.vbm_buffer_addresses[i];
+            pr_info("*** ispvic_frame_channel_qbuf: Writing %d VBM buffer addresses to VIC hardware ***\n",
+                    state->vbm_buffer_count);
+
+            for (i = 0; i < state->vbm_buffer_count && i < 5; i++) {
+                buffer_addr = state->vbm_buffer_addresses[i];
                 if (buffer_addr != 0) {
                     /* Binary Ninja EXACT: int32_t $v1_1 = $v0_5[4] - get buffer index */
                     buffer_index = i;
@@ -2110,13 +2123,15 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
                     writel(buffer_addr, vic_dev->vic_regs + reg_offset);
                     wmb();
 
-                    pr_info("*** CRITICAL: VIC BUFFER %d: Wrote address 0x%x to reg 0x%x ***\n",
+                    pr_info("*** CRITICAL: VIC BUFFER %d: Wrote VBM address 0x%x to reg 0x%x ***\n",
                             buffer_index, buffer_addr, reg_offset);
                 }
             }
-            pr_info("*** CRITICAL: VIC buffer addresses written to hardware - interrupts should now work! ***\n");
+            pr_info("*** CRITICAL: VIC buffer addresses written to hardware from VBM - interrupts should now work! ***\n");
         } else {
             pr_warn("ispvic_frame_channel_qbuf: No VBM buffer addresses available\n");
+            pr_warn("*** vbm_buffer_addresses=%p, vbm_buffer_count=%d ***\n",
+                    state->vbm_buffer_addresses, state->vbm_buffer_count);
         }
     }
 
