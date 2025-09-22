@@ -2744,10 +2744,17 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 pr_info("*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***");
                 pr_info("*** ispcore_core_ops_init: Current vic_state (core state): %d ***", vic_state);
 
-                /* Binary Ninja: Check CORE state is 2 (ready) before init */
-                if (vic_state != 2) {
-                    pr_err("ispcore_core_ops_init: Core state %d != 2, cannot initialize\n", vic_state);
+                /* CRITICAL FIX: Allow ISP core initialization in streaming state */
+                /* The original check required state 2 (ready), but VIC may already be streaming (state 4) */
+                if (vic_state < 2) {
+                    pr_err("ispcore_core_ops_init: Core state %d < 2, not ready for initialization\n", vic_state);
                     return -EINVAL;
+                }
+
+                if (vic_state == 4) {
+                    pr_info("*** ispcore_core_ops_init: Core already streaming (state 4) - initializing during streaming ***");
+                } else {
+                    pr_info("*** ispcore_core_ops_init: Core in ready state (%d) - normal initialization ***", vic_state);
                 }
 
                 pr_info("*** ispcore_core_ops_init: Core state check passed, proceeding with initialization ***");
