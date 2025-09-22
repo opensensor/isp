@@ -2113,28 +2113,16 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
         /* Sensors are already initialized by activate_module() calls above */
         /* But ISP Core needs core->init to transition from state 2 to state 3 */
         pr_info("*** tx_isp_video_s_stream: Calling core->init ONLY for ISP Core subdev ***\n");
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 4; i++) { // VIN will handle sensor's init
             struct tx_isp_subdev *subdev = arg1->subdevs[i];
             if (subdev && subdev->ops && subdev->ops->core && subdev->ops->core->init) {
-                /* Check if this is the ISP Core subdev (not sensor) */
-                if (subdev->ops->core->init == ispcore_core_ops_init) {
-                    pr_info("*** tx_isp_video_s_stream: Calling ispcore_core_ops_init on subdev[%d] ***\n", i);
-                    int init_result = subdev->ops->core->init(subdev, 1);
-                    if (init_result != 0) {
-                        pr_err("tx_isp_video_s_stream: ispcore_core_ops_init failed on subdev[%d]: %d\n", i, init_result);
-                        return init_result;
-                    }
-                    pr_info("*** tx_isp_video_s_stream: ispcore_core_ops_init SUCCESS - core state should now be 3 ***\n");
-                } else {
-                    /* CRITICAL FIX: Sensors need their init function called too! */
-                    pr_info("*** tx_isp_video_s_stream: subdev[%d] is sensor - calling sensor init ***\n", i);
-                    int init_result = subdev->ops->core->init(subdev, 1);
-                    if (init_result != 0) {
-                        pr_err("tx_isp_video_s_stream: sensor init failed on subdev[%d]: %d\n", i, init_result);
-                        return init_result;
-                    }
-                    pr_info("*** tx_isp_video_s_stream: sensor init SUCCESS on subdev[%d] ***\n", i);
+                pr_info("*** tx_isp_video_s_stream: subdev[%d] is sensor - calling sensor init ***\n", i);
+                int init_result = subdev->ops->core->init(subdev, 1);
+                if (init_result != 0) {
+                    pr_err("tx_isp_video_s_stream: sensor init failed on subdev[%d]: %d\n", i, init_result);
+                    return init_result;
                 }
+                pr_info("*** tx_isp_video_s_stream: sensor init SUCCESS on subdev[%d] ***\n", i);
             }
         }
     }
