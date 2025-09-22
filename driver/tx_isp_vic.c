@@ -61,27 +61,17 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 
         /* CRITICAL FIX: Call hardware interrupt enable function - Binary Ninja reference */
         /* Binary Ninja: $v0_1 = *(dump_vsd_5 + 0x84); if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
-        if (vic_dev->irq_handler) {
-            vic_dev->irq_handler(vic_dev->irq_priv);
-            pr_info("*** tx_vic_enable_irq: Called hardware interrupt enable function ***\n");
-        } else {
+        /* Calling enable_irq() here would interfere with the main dispatcher's IRQ management */
+        pr_info("*** tx_vic_enable_irq: VIC software interrupt flag ENABLED ***\n");
             /* Fallback: Direct hardware register enable */
-            if (vic_dev->vic_regs) {
-                writel(0xffffffff, vic_dev->vic_regs + 0x1e0);  /* Enable all VIC interrupt sources */
-                writel(0xffffffff, vic_dev->vic_regs + 0x1e4);  /* Enable secondary VIC interrupt sources */
-                writel(0xffffffff, vic_dev->vic_regs + 0x1f0);  /* Clear primary interrupt status */
-                writel(0xffffffff, vic_dev->vic_regs + 0x1f4);  /* Clear secondary interrupt status */
-                wmb();
-                pr_info("*** tx_vic_enable_irq: Direct hardware interrupt enable (fallback) ***\n");
-            }
-        }
+        pr_info("*** tx_vic_enable_irq: Hardware IRQ 38 managed by main dispatcher ***\n");
 
         /* Set the global vic_start_ok flag to allow interrupt processing */
         extern uint32_t vic_start_ok;
         vic_start_ok = 1;
         pr_info("*** tx_vic_enable_irq: vic_start_ok flag set to 1 ***\n");
 
-        pr_info("*** tx_vic_enable_irq: VIC interrupts ENABLED (software + hardware) ***\n");
+        pr_info("*** tx_vic_enable_irq: VIC interrupts ENABLED ***\n");
     } else {
         pr_info("*** tx_vic_enable_irq: VIC interrupts already enabled ***\n");
     }
@@ -113,18 +103,10 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
 
         /* CRITICAL FIX: Call hardware interrupt disable function - Binary Ninja reference */
         /* Binary Ninja: $v0_2 = *(dump_vsd_5 + 0x88); if ($v0_2 != 0) $v0_2(dump_vsd_5 + 0x80) */
-        if (vic_dev->irq_disable) {
-            vic_dev->irq_disable(vic_dev->irq_priv);
-            pr_info("*** tx_vic_disable_irq: Called hardware interrupt disable function ***\n");
-        } else {
+        /* Calling disable_irq() here would interfere with the main dispatcher's IRQ management */
+        pr_info("*** tx_vic_disable_irq: VIC software interrupt flag DISABLED ***\n");
             /* Fallback: Direct hardware register disable */
-            if (vic_dev->vic_regs) {
-                writel(0, vic_dev->vic_regs + 0x1e0);  /* Disable all VIC interrupt sources */
-                writel(0, vic_dev->vic_regs + 0x1e4);  /* Disable secondary VIC interrupt sources */
-                wmb();
-                pr_info("*** tx_vic_disable_irq: Direct hardware interrupt disable (fallback) ***\n");
-            }
-        }
+        pr_info("*** tx_vic_disable_irq: Hardware IRQ 38 managed by main dispatcher ***\n");
 
         /* Clear the global vic_start_ok flag to stop interrupt processing */
         extern uint32_t vic_start_ok;
@@ -658,22 +640,20 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
         /* Binary Ninja EXACT: while (*$v1_30 != 0) nop */
         /* CRITICAL FIX: Add timeout to prevent infinite loop hardware lockup */
-        u32 timeout_count = 100000;  /* Much larger timeout */
+        u32 timeout = 10000;
         u32 vic_status;
-        pr_info("*** tx_isp_vic_start: Step 3 - Waiting for VIC unlock (with timeout) ***\n");
 
-        while ((vic_status = readl(vic_regs + 0x0)) != 0 && timeout_count-- > 0) {
+        while ((vic_status = readl(vic_regs + 0x0)) != 0 && timeout-- > 0) {
             /* Reference driver: nop (just wait) */
-            cpu_relax();  /* Equivalent to nop but prevents compiler optimization */
+            udelay(1);
         }
 
-        if (timeout_count == 0) {
+        if (timeout == 0) {
             pr_err("*** tx_isp_vic_start: VIC unlock timeout! Final status=0x%x ***\n", vic_status);
-            pr_err("*** This indicates VIC hardware is not responding - check register mapping ***\n");
             return -ETIMEDOUT;
         }
 
-        pr_info("*** tx_isp_vic_start: Step 3 - VIC unlock completed, status=0x%x, remaining_timeout=%d ***\n", vic_status, timeout_count);
+        pr_info("*** tx_isp_vic_start: Step 3 - VIC unlock completed, status=0x%x, timeout_remaining=%d ***\n", vic_status, timeout);
 
     } else {
         /* Non-MIPI interfaces (DVP, etc.) */

@@ -536,6 +536,7 @@ extern int tx_isp_fs_probe(struct platform_device *pdev);
 extern int tx_isp_vin_init(void* arg1, int32_t arg2);  /* VIN init function that causes kernel panics */
 extern int vin_s_stream(struct tx_isp_subdev *sd, int enable);  /* VIN s_stream function that can cause kernel panics */
 extern int sensor_s_stream(struct tx_isp_subdev *sd, int enable);  /* Sensor s_stream function that can cause kernel panics */
+int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on);  /* Core initialization function */
 
 /* Forward declarations for Binary Ninja reference implementation */
 static int tx_isp_platform_probe(struct platform_device *pdev);
@@ -3241,21 +3242,39 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         state->flags |= 1;
         state->streaming = true;
 
+        // CRITICAL FIX: Reset core state to 2 (ready) before streaming initialization
+        if (ourISPdev && ourISPdev->core_dev) {
+            pr_info("*** Channel %d: STREAMON - Resetting core state from %d to 2 (ready) ***\n",
+                    channel, ourISPdev->core_dev->state);
+            ourISPdev->core_dev->state = 2;  /* Reset to READY state for reinitialization */
+            ourISPdev->core_dev->streaming = 0;  /* Clear streaming flag */
+        }
+
         // Binary Ninja: tx_isp_send_event_to_remote(*($s0 + 0x2bc), 0x3000003, 0)
         if (ourISPdev) {
             pr_info("*** Channel %d: STREAMON - Sending TX_ISP_EVENT_FRAME_STREAMON ***\n", channel);
-            ret = tx_isp_send_event_to_remote(ourISPdev, TX_ISP_EVENT_FRAME_STREAMON, NULL);
 
-            if (ret == 0 || ret == 0xfffffdfd) {
-                // Binary Ninja: *($s0 + 0x2d0) = 4
-                state->state = 4;
-                pr_info("*** Channel %d: STREAMON - State set to 4 (streaming) ***\n", channel);
-                return 0;
+            /* CRITICAL FIX: Call ispcore_core_ops_init directly instead of broken event system */
+            if (ourISPdev->subdevs[4]) {  /* Core subdev is at index 4 */
+                pr_info("*** STREAMON EVENT: Calling core init to transition from state 2 to 3 ***\n");
+                ret = ispcore_core_ops_init(ourISPdev->subdevs[4], 1);
+                if (ret == 0) {
+                    pr_info("*** STREAMON EVENT: Core initialization SUCCESS ***\n");
+                    // Binary Ninja: *($s0 + 0x2d0) = 4
+                    state->state = 4;
+                    pr_info("*** Channel %d: STREAMON - State set to 4 (streaming) ***\n", channel);
+                    return 0;
+                } else {
+                    pr_err("*** STREAMON EVENT: Core initialization failed: %d ***\n", ret);
+                    state->flags &= ~1; // Clear streaming flag on failure
+                    state->streaming = false;
+                    return ret;
+                }
             } else {
-                pr_err("Channel %d: STREAMON - Event send failed: 0x%x\n", channel, ret);
+                pr_err("Channel %d: STREAMON - No core subdev available\n", channel);
                 state->flags &= ~1; // Clear streaming flag on failure
                 state->streaming = false;
-                return ret;
+                return -ENODEV;
             }
         }
 
