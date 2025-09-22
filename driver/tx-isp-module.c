@@ -49,6 +49,11 @@
 
 /* Forward declarations */
 struct tx_isp_sensor *tx_isp_get_sensor(void);
+int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd);
+int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd);
+int tx_isp_vin_activate_subdev(struct tx_isp_subdev *sd);
+int fs_activate_module(struct tx_isp_subdev *sd);
+int ispcore_activate_module(struct tx_isp_dev *isp_dev);
 
 /* External ISP device reference */
 extern struct tx_isp_dev *ourISPdev;
