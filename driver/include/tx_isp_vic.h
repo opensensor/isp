@@ -80,7 +80,7 @@ struct tx_isp_vic_device {
 
     /* CRITICAL: VIC register bases - dual VIC architecture */
     void __iomem *vic_regs;                     /* 0xb8: Primary VIC register base */
-    void __iomem *vic_regs_secondary;                     /* 0xb8: Primary VIC register base */
+    void __iomem *vic_regs_control;                     /* 0xb8: Primary VIC register base */
 
     /* CRITICAL: Frame dimensions at expected offsets */
     uint32_t width;                             /* 0xdc: Frame width (Binary Ninja expects this) */
