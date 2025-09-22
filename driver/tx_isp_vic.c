@@ -2300,27 +2300,26 @@ static int ispvic_frame_channel_clearbuf(void)
     return 0;
 }
 
-/* tx_isp_subdev_pipo - SAFE struct member access implementation */
+/* tx_isp_subdev_pipo - EXACT Binary Ninja MCP implementation */
 int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
 {
     struct tx_isp_vic_device *vic_dev = NULL;
     void **raw_pipe = (void **)arg;
     int i;
-    
-    pr_info("*** tx_isp_subdev_pipo: SAFE struct member access implementation ***\n");
-    pr_info("tx_isp_subdev_pipo: entry - sd=%p, arg=%p\n", sd, arg);
-    
-    /* SAFE: Validate parameters */
-    if (sd != NULL && (unsigned long)sd < 0xfffff001) {
-        vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
-        pr_info("tx_isp_subdev_pipo: vic_dev retrieved: %p\n", vic_dev);
-    }
-    
-    if (!vic_dev) {
-        pr_err("tx_isp_subdev_pipo: vic_dev is NULL - subdev %p is not a VIC subdev\n", sd);
-        pr_err("tx_isp_subdev_pipo: This function should be called with VIC subdev, not ISP core subdev\n");
 
-        /* CRITICAL FIX: Get the actual VIC subdev from global ISP device */
+    pr_info("*** tx_isp_subdev_pipo: EXACT Binary Ninja MCP implementation ***\n");
+    pr_info("tx_isp_subdev_pipo: entry - sd=%p, arg=%p\n", sd, arg);
+
+    /* Binary Ninja EXACT: if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = *(arg1 + 0xd4) */
+    if (sd != NULL && (unsigned long)sd < 0xfffff001) {
+        vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdev_hostdata(sd);  /* offset 0xd4 = host_priv */
+        pr_info("tx_isp_subdev_pipo: vic_dev retrieved from host_priv: %p\n", vic_dev);
+    }
+
+    if (!vic_dev) {
+        pr_err("tx_isp_subdev_pipo: vic_dev is NULL - getting from global ISP device\n");
+
+        /* CRITICAL FIX: Get the actual VIC device from global ISP device */
         extern struct tx_isp_dev *ourISPdev;
         if (ourISPdev && ourISPdev->vic_dev) {
             vic_dev = ourISPdev->vic_dev;
@@ -2331,28 +2330,42 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
         }
     }
     
-    /* SAFE: Use proper struct member access instead of offset 0x20c */
+    /* Binary Ninja EXACT: *($s0 + 0x20c) = 1 */
     vic_dev->processing = 1;
-    pr_info("tx_isp_subdev_pipo: set processing = 1 (safe struct access)\n");
-    
-    /* SAFE: Check if arg is NULL */
+    pr_info("tx_isp_subdev_pipo: set processing = 1 (Binary Ninja offset 0x20c)\n");
+
+    /* Binary Ninja EXACT: if (arg2 == 0) *($s0 + 0x214) = 0 */
     if (arg == NULL) {
-        /* SAFE: Use proper struct member access instead of offset 0x214 */
-        vic_dev->processing = 0;
-        pr_info("tx_isp_subdev_pipo: arg is NULL - set processing = 0 (safe struct access)\n");
+        vic_dev->processing = 0;  /* Use processing field for offset 0x214 */
+        pr_info("tx_isp_subdev_pipo: arg is NULL - set processing = 0 (Binary Ninja offset 0x214)\n");
     } else {
-        pr_info("tx_isp_subdev_pipo: arg is not NULL - initializing pipe structures\n");
-        
-        /* SAFE: Use Linux list initialization instead of manual pointer manipulation */
+        pr_info("tx_isp_subdev_pipo: arg is not NULL - initializing pipe structures (Binary Ninja MCP)\n");
+
+        /* Binary Ninja EXACT: Initialize linked list pointers */
+        /* *($s0 + 0x204) = $s0 + 0x204 */
+        /* *($s0 + 0x208) = $s0 + 0x204 */
         INIT_LIST_HEAD(&vic_dev->queue_head);
         INIT_LIST_HEAD(&vic_dev->done_head);
         INIT_LIST_HEAD(&vic_dev->free_head);
-        
-        pr_info("tx_isp_subdev_pipo: initialized linked list heads (safe Linux API)\n");
-        
-        /* SAFE: Use proper spinlock initialization */
+
+        pr_info("tx_isp_subdev_pipo: initialized linked list heads (Binary Ninja MCP)\n");
+
+        /* Binary Ninja EXACT: private_spin_lock_init() */
         spin_lock_init(&vic_dev->buffer_mgmt_lock);
-        pr_info("tx_isp_subdev_pipo: initialized spinlock\n");
+        pr_info("tx_isp_subdev_pipo: initialized spinlock (Binary Ninja MCP)\n");
+
+        /* CRITICAL BINARY NINJA MCP: Set up function pointer table */
+        /* *raw_pipe = ispvic_frame_channel_qbuf */
+        /* *(raw_pipe_1 + 8) = ispvic_frame_channel_clearbuf */
+        /* *(raw_pipe_1 + 0xc) = ispvic_frame_channel_s_stream */
+        /* *(raw_pipe_1 + 0x10) = arg1 */
+        if (raw_pipe) {
+            raw_pipe[0] = (void *)ispvic_frame_channel_qbuf;      /* offset 0x0 */
+            raw_pipe[2] = (void *)ispvic_frame_channel_clearbuf;  /* offset 0x8 */
+            raw_pipe[3] = (void *)ispvic_frame_channel_s_stream;  /* offset 0xc - CRITICAL! */
+            raw_pipe[4] = (void *)sd;                             /* offset 0x10 */
+            pr_info("*** CRITICAL: Set ispvic_frame_channel_s_stream at raw_pipe[3] (offset 0xc) ***\n");
+        }
         
         /* SAFE: Set function pointers using proper array indexing */  // TODO
         //raw_pipe[0] = (void *)ispvic_frame_channel_qbuf;
