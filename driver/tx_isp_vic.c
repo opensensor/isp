@@ -1482,38 +1482,34 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (stride)\n", stride);
 
-    /* CRITICAL MISSING: DMA cache synchronization operations */
-    /* Binary Ninja reference shows DMA sync operations are required for proper data transfer */
+    /* CRITICAL MISSING: Write actual buffer addresses to VIC hardware registers */
+    /* VIC hardware needs to know where to DMA frame data to generate interrupts */
+    pr_info("*** CRITICAL FIX: Writing buffer addresses to VIC hardware registers ***\n");
 
-    /* Ensure DMA coherency for VIC buffer operations */
-    /* Access ISP device through VIC device structure */
-    if (vic_dev && vic_dev->sd.isp) {
-        struct tx_isp_dev *isp_dev = vic_dev->sd.isp;
-        u32 frame_size = width * height * 2;  /* RAW10 data = 2 bytes per pixel */
+    /* Access buffer addresses from VBM system */
+    if (vic_dev->buffer_addresses && vic_dev->active_buffer_count > 0) {
+        int i;
+        for (i = 0; i < vic_dev->active_buffer_count && i < 5; i++) {
+            u32 buffer_addr = vic_dev->buffer_addresses[i];
+            u32 reg_offset = 0x318 + (i * 4);  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
 
-        /* Use ISP device buffer management if available */
-        if (isp_dev->dma_buf && isp_dev->dma_size > 0) {
-            pr_info("*** CRITICAL DMA SYNC: Synchronizing ISP DMA buffer for coherency ***\n");
-
-            /* TEMPORARY: Disable DMA cache sync to prevent corruption */
-            pr_info("*** DEBUGGING: DMA cache sync disabled to isolate corruption ***\n");
-
-            pr_info("*** DMA SYNC: ISP buffer addr=0x%x size=%d synced for device ***\n",
-                    isp_dev->dma_addr, isp_dev->dma_size);
-        } else {
-            pr_info("*** DMA SYNC: No ISP DMA buffers available for sync ***\n");
+            if (buffer_addr != 0) {
+                writel(buffer_addr, vic_base + reg_offset);
+                wmb();
+                pr_info("*** VIC BUFFER %d: Wrote address 0x%x to reg 0x%x ***\n",
+                        i, buffer_addr, reg_offset);
+            } else {
+                pr_warn("*** VIC BUFFER %d: No address available (0x0) ***\n", i);
+            }
         }
-
-        /* Additional cache flush for MIPS coherency */
-        wmb();  /* Write memory barrier */
-        __sync();  /* MIPS cache sync */
-
-        pr_info("*** DMA SYNC COMPLETE: All VBM buffers synchronized for hardware access ***\n");
+        pr_info("*** CRITICAL: VIC buffer addresses configured - hardware can now generate interrupts! ***\n");
     } else {
-        pr_warn("*** WARNING: No VBM buffers available for DMA sync - may cause data corruption ***\n");
+        pr_err("*** CRITICAL ERROR: No buffer addresses available - VIC cannot generate interrupts! ***\n");
+        pr_err("*** buffer_addresses=%p, active_buffer_count=%d ***\n",
+               vic_dev->buffer_addresses, vic_dev->active_buffer_count);
     }
 
-    pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - CONTROL LIMIT ERROR SHOULD BE FIXED ***\n");
+    pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - VIC should now generate interrupts! ***\n");
 }
 
 /* ISPVIC Frame Channel S_Stream - EXACT Binary Ninja Implementation */
