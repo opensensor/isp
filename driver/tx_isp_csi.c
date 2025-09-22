@@ -321,8 +321,13 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                     v0_17 = 2;
                 } else {
                     /* Binary Ninja: void* $v1_5 = *($s0_1 + 0x110) */
-                    /* SAFE: Use proper struct member access instead of dangerous offset */
-                    sensor_attr = csi_dev->sensor_attr;
+                    /* SAFE: Use helper method to get sensor attributes instead of unsafe offset access */
+                    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+                    if (sensor) {
+                        sensor_attr = &sensor->info;
+                    } else {
+                        sensor_attr = NULL;
+                    }
 
                     /* Binary Ninja: int32_t $s2_1 = *($v1_5 + 0x14) */
                     int interface_type = sensor_attr->dbus_type;

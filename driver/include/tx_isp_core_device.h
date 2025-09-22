@@ -4,10 +4,6 @@
 #include "tx-isp-device.h"
 #include "tx_isp.h"
 
-/* Forward declarations */
-struct tx_isp_dev;
-struct tx_isp_sensor_attribute;
-
 /**
  * tx_isp_core_device - ISP Core Device Structure
  * 
@@ -50,9 +46,6 @@ struct tx_isp_core_device {
     struct work_struct fs_work;                /* Frame sync work structure */
     atomic_t processing_counter;               /* Processing counter */
     bool tisp_initialized;                     /* TISP initialization flag */
-
-    /* Core sensor interface */
-    struct tx_isp_sensor_attribute *sensor_attr;  /* Current sensor attributes */
 
     /* Core image processing settings */
     uint32_t wdr_mode;                             /* WDR mode setting */
