@@ -896,32 +896,11 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
         result = tx_isp_subdev_pipo(sd, arg);
 		return result;
     }
-    /* CRITICAL FIX: Handle IOCTL 0x3000008 for streaming buffer management */
-    else if (cmd == 0x3000008) {
-        pr_info("*** vic_core_ops_ioctl: STREAMING BUFFER MANAGEMENT - cmd=0x3000008 ***\n");
-        pr_info("*** CRITICAL: This IOCTL should call tx_isp_subdev_pipo for buffer management! ***\n");
-
-        /* CRITICAL: IOCTL 0x3000008 should call tx_isp_subdev_pipo just like 0x3000009 */
-        /* This is what enables VIC buffer management and interrupt processing */
-        pr_info("*** vic_core_ops_ioctl: Calling tx_isp_subdev_pipo for IOCTL 0x3000008 ***\n");
+    /* Binary Ninja: else if (arg2 == 0x3000009) */
+    else if (cmd == 0x3000009) {
+        pr_info("vic_core_ops_ioctl: tx_isp_subdev_pipo cmd=0x%x\n", cmd);
         result = tx_isp_subdev_pipo(sd, arg);
-
-        /* After buffer management is set up, ensure VIC interrupts are enabled */
-        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdev_hostdata(sd);
-        if (vic_dev) {
-            pr_info("*** vic_core_ops_ioctl: Buffer management complete, ensuring VIC interrupts enabled ***\n");
-
-            /* Make sure VIC is in streaming state and interrupts are enabled */
-            if (vic_dev->state == 4) {
-                pr_info("*** vic_core_ops_ioctl: VIC in streaming state 4, interrupts should be working ***\n");
-            } else {
-                pr_info("*** vic_core_ops_ioctl: VIC not in streaming state (%d), enabling interrupts ***\n", vic_dev->state);
-                tx_vic_enable_irq(vic_dev);
-            }
-        }
-
-        pr_info("*** vic_core_ops_ioctl: IOCTL 0x3000008 complete, result=%d ***\n", result);
-        return result;
+		return result;
     }
     /* Binary Ninja: else if (arg2 != 0x1000000) return 0 */
     else if (cmd != 0x1000000) {
