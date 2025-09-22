@@ -1813,7 +1813,7 @@ int32_t ip_done_interrupt_static(void)
     if ((reg_val & 0x40) == 0) {
         pr_info("ip_done_interrupt_static: LSC bit not set (0x%x), calling tisp_lsc_write_lut_datas\n", reg_val);
         /* Binary Ninja: tisp_lsc_write_lut_datas() */
-        tisp_lsc_write_lut_datas();
+        // tisp_lsc_write_lut_datas();
     } else {
         pr_info("ip_done_interrupt_static: LSC bit already set (0x%x), skipping LUT write\n", reg_val);
     }
@@ -8200,7 +8200,7 @@ int tiziano_lsc_init(void)
     data_9a400 = 1;
 
     /* Binary Ninja: tisp_lsc_write_lut_datas() */
-    tisp_lsc_write_lut_datas();
+    //tisp_lsc_write_lut_datas();
 
     return 0;
 }
