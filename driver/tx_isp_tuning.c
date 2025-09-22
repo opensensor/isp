@@ -2076,11 +2076,7 @@ uint32_t system_reg_read(u32 reg)
 {
     extern struct tx_isp_dev *ourISPdev;
     
-    if (!ourISPdev || !ourISPdev->vic_regs) {
-        return 0;
-    }
-    
-    void __iomem *isp_base = ourISPdev->vic_regs - 0x9a00; /* Get ISP base */
+    void __iomem *isp_base = ourISPdev->vic_dev->vic_regs - 0x9a00; /* Get ISP base */
     return readl(isp_base + reg);
 }
 
@@ -9733,7 +9729,7 @@ int32_t dump_vic_reg(void)
     void __iomem *vic_regs = NULL;
 
     /* Get VIC register base if available */
-    if (ourISPdev && ourISPdev->vic_regs) {
+    if (ourISPdev && ourISPdev->vic_dev && ourISPdev->vic_dev->vic_regs) {
         vic_regs = ourISPdev->vic_regs;
     }
 
