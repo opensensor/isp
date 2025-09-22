@@ -965,40 +965,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             }
         }
 
-        /* CRITICAL: Add missing ISP Control and VIC Control register writes from reference trace */
-        if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
-            void __iomem *isp_regs = ourISPdev->core_dev->core_regs;  /* isp-m0 at 0x13300000 */
-
-            pr_info("*** tx_isp_vic_start: Writing MISSING ISP Control registers (isp-m0) ***\n");
-
-            /* ISP Control writes from reference trace */
-            writel(0x3f00, isp_regs + 0x9804);
-            writel(0x7800438, isp_regs + 0x9864);  /* Frame size in ISP Control */
-            writel(0xc0000000, isp_regs + 0x987c);
-            writel(0x1, isp_regs + 0x9880);
-            writel(0x1, isp_regs + 0x9884);
-            writel(0x1010001, isp_regs + 0x9890);
-            writel(0x1010001, isp_regs + 0x989c);
-            writel(0x1010001, isp_regs + 0x98a8);
-
-            pr_info("*** tx_isp_vic_start: Writing MISSING VIC Control registers (isp-m0) ***\n");
-
-            /* VIC Control writes from reference trace */
-            writel(0x50002d0, isp_regs + 0x9a00);
-            writel(0x3000300, isp_regs + 0x9a04);
-            writel(0x50002d0, isp_regs + 0x9a2c);
-            writel(0x1, isp_regs + 0x9a34);
-            writel(0x1, isp_regs + 0x9a70);
-            writel(0x1, isp_regs + 0x9a7c);
-            writel(0x500, isp_regs + 0x9a80);
-            writel(0x1, isp_regs + 0x9a88);
-            writel(0x1, isp_regs + 0x9a94);
-            writel(0x500, isp_regs + 0x9a98);
-            writel(0x200, isp_regs + 0x9ac0);
-            writel(0x200, isp_regs + 0x9ac8);
-
-            pr_info("*** tx_isp_vic_start: ISP Control and VIC Control registers configured - VIC interrupts should now work! ***\n");
-        }
+        /* NOTE: ISP Control and VIC Control registers are handled by tisp_init() in ispcore_core_ops_init */
+        pr_info("*** tx_isp_vic_start: ISP Control registers should be configured by tisp_init() ***\n");
 
         /* Binary Ninja: Additional MIPI crop configuration */
         writel((mipi->mipi_sc.mipi_crop_start1y << 16) | mipi->mipi_sc.mipi_crop_start3x, vic_regs + 0x104);
