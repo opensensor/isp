@@ -561,24 +561,11 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 static int tx_isp_hardware_init(struct tx_isp_dev *isp_dev);
 void system_reg_write(u32 reg, u32 value);
 
-/* system_reg_write - Binary Ninja reference implementation with streaming protection */
-void system_reg_write(u32 arg1, u32 arg2)
+/* system_reg_write - Direct struct access, no debug logging */
+void system_reg_write(u32 reg, u32 value)
 {
-    /* SAFE: Use proper struct member access instead of offset arithmetic */
-    extern uint32_t vic_start_ok;
-
-    /* Binary Ninja: Get register base from ISP device structure at offset 0xb8 */
-    void __iomem *reg_base = ourISPdev->core_dev->core_regs;  /* This is at offset 0xb8 in the structure */
-
-    if (!reg_base) {
-        pr_warn("system_reg_write: No register base available for reg=0x%x val=0x%x\n", arg1, arg2);
-        return;
-    }
-
-    /* Binary Ninja EXACT: Write to register base + offset */
-    pr_info("*** SYSTEM_REG_WRITE: reg[0x%x] = 0x%x (Binary Ninja EXACT) ***\n", arg1, arg2);
-    writel(arg2, reg_base + arg1);
-    wmb();
+    /* Direct register write - matches Binary Ninja behavior exactly */
+    writel(value, ourISPdev->core_dev->core_regs + reg);
 }
 
 /* system_reg_write_ae - EXACT Binary Ninja decompiled implementation */
