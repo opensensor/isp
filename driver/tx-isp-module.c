@@ -4903,51 +4903,41 @@ static irqreturn_t ispmodule_ip_done_irq_handler(int irq, void *dev_id)
 
 /* tx_isp_handle_sync_sensor_attr_event is now defined in tx_isp_core.c */
 
-/* tx_isp_send_event_to_remote - SAFE implementation to prevent crashes */
-int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
+/* tx_isp_send_event_to_remote - Binary Ninja EXACT implementation */
+int tx_isp_send_event_to_remote(void *isp_dev, int event_type, void *data)
 {
-    pr_info("*** tx_isp_send_event_to_remote: SAFE implementation - event=0x%x ***\n", event_type);
+    pr_info("*** tx_isp_send_event_to_remote: Binary Ninja EXACT - isp_dev=0x%p, event=0x%x ***\n", isp_dev, event_type);
 
-    /* CRITICAL SAFETY: Validate subdev pointer before ANY access */
-    if (!subdev || (unsigned long)subdev < 0x80000000 || (unsigned long)subdev >= 0xfffff000) {
-        pr_err("*** tx_isp_send_event_to_remote: Invalid subdev pointer 0x%p ***\n", subdev);
-        return 0xfffffdfd;
+    /* Binary Ninja: if (arg1 != 0) */
+    if (isp_dev != NULL) {
+        /* Binary Ninja: void* $a0 = *(arg1 + 0xc) */
+        void **callback_struct_ptr = (void **)((char *)isp_dev + 0xc);
+        void *callback_struct = *callback_struct_ptr;
+
+        pr_info("*** tx_isp_send_event_to_remote: callback_struct_ptr=0x%p, callback_struct=0x%p ***\n",
+                callback_struct_ptr, callback_struct);
+
+        /* Binary Ninja: if ($a0 != 0) */
+        if (callback_struct != NULL) {
+            /* Binary Ninja: int32_t $t9_1 = *($a0 + 0x1c) */
+            int (**event_handler_ptr)(void*, int, void*) = (int (**)(void*, int, void*))((char *)callback_struct + 0x1c);
+            int (*event_handler)(void*, int, void*) = *event_handler_ptr;
+
+            pr_info("*** tx_isp_send_event_to_remote: event_handler_ptr=0x%p, event_handler=0x%p ***\n",
+                    event_handler_ptr, event_handler);
+
+            /* Binary Ninja: if ($t9_1 != 0) jump($t9_1) */
+            if (event_handler != NULL) {
+                pr_info("*** tx_isp_send_event_to_remote: Calling event_handler(0x%p, 0x%x, 0x%p) ***\n",
+                        isp_dev, event_type, data);
+                return event_handler(isp_dev, event_type, data);
+            }
+        }
     }
 
-    /* SAFE: For now, just handle specific events without dangerous pointer access */
-    switch (event_type) {
-    case 0x3000008: /* TX_ISP_EVENT_FRAME_QBUF */
-        pr_info("*** tx_isp_send_event_to_remote: QBUF event - safe handling ***\n");
-        /* Signal frame completion for VIC */
-        if (ourISPdev && ourISPdev->vic_dev) {
-            complete(&ourISPdev->vic_dev->frame_complete);
-        }
-        return 0;
-
-    case 0x3000006: /* TX_ISP_EVENT_FRAME_DQBUF */
-        pr_info("*** tx_isp_send_event_to_remote: DQBUF event - safe handling ***\n");
-        return 0;
-
-    case 0x3000003: /* TX_ISP_EVENT_FRAME_STREAMON */
-        pr_info("*** tx_isp_send_event_to_remote: STREAMON event - Binary Ninja EXACT behavior ***\n");
-
-        /* CRITICAL FIX: Binary Ninja reference shows this event should return 0xfffffdfd (success/no-op)
-         * The frame channel STREAMON should work regardless of core state.
-         * Trying to initialize the core when it's already streaming (state 4) causes EINVAL.
-         */
-        if (ourISPdev && ourISPdev->core_dev) {
-            pr_info("*** STREAMON EVENT: Core state=%d - returning success without re-initialization ***\n",
-                    ourISPdev->core_dev->state);
-        }
-
-        /* Binary Ninja: Frame STREAMON event returns 0xfffffdfd (success but no-op) */
-        return 0xfffffdfd;
-        }
-
-    default:
-        pr_info("*** tx_isp_send_event_to_remote: Unknown event 0x%x - safe return ***\n", event_type);
-        return 0xfffffdfd;
-    }
+    /* Binary Ninja: return 0xfffffdfd */
+    pr_info("*** tx_isp_send_event_to_remote: No handler found - returning 0xfffffdfd ***\n");
+    return 0xfffffdfd;
 }
 
 /* __enqueue_in_driver - EXACT Binary Ninja implementation */
