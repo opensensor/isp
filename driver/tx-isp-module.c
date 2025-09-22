@@ -2088,21 +2088,22 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
             }
         }
 
-        /* CRITICAL FIX: Call core->init ONLY for ISP Core subdev to set state to 3 */
-        /* Sensors are already initialized by activate_module() calls above */
-        /* But ISP Core needs core->init to transition from state 2 to state 3 */
-        pr_info("*** tx_isp_video_s_stream: Calling core->init ONLY for ISP Core subdev ***\n");
-        for (int i = 0; i < 4; i++) { // VIN will handle sensor's init
-            struct tx_isp_subdev *subdev = arg1->subdevs[i];
-            if (subdev && subdev->ops && subdev->ops->core && subdev->ops->core->init) {
-                pr_info("*** tx_isp_video_s_stream: subdev[%d] is sensor - calling sensor init ***\n", i);
-                int init_result = subdev->ops->core->init(subdev, 1);
-                if (init_result != 0) {
-                    pr_err("tx_isp_video_s_stream: sensor init failed on subdev[%d]: %d\n", i, init_result);
-                    return init_result;
-                }
-                pr_info("*** tx_isp_video_s_stream: sensor init SUCCESS on subdev[%d] ***\n", i);
+        /* CRITICAL FIX: Call core->init for ISP Core subdev to set state to 3 */
+        /* The ISP Core subdev is at index 4 and needs core->init to transition from state 1 to state 3 */
+        pr_info("*** tx_isp_video_s_stream: Calling core->init for ISP Core subdev ***\n");
+
+        /* Check specifically for the core subdev at index 4 */
+        if (arg1->subdevs[4] && arg1->subdevs[4]->ops && arg1->subdevs[4]->ops->core && arg1->subdevs[4]->ops->core->init) {
+            pr_info("*** tx_isp_video_s_stream: Found ISP Core subdev at index 4 - calling core->init ***\n");
+            int init_result = arg1->subdevs[4]->ops->core->init(arg1->subdevs[4], 1);
+            if (init_result != 0) {
+                pr_err("tx_isp_video_s_stream: ISP Core init failed: %d\n", init_result);
+                return init_result;
             }
+            pr_info("*** tx_isp_video_s_stream: ISP Core init SUCCESS - state should now be 3 ***\n");
+        } else {
+            pr_err("tx_isp_video_s_stream: ISP Core subdev not found at index 4 or missing core->init\n");
+            return -EINVAL;
         }
     }
 
