@@ -656,80 +656,61 @@ cleanup:
     return ret;
 }
 
-/* tx_isp_vic_start - EXACT Binary Ninja reference implementation */
+/* tx_isp_vic_start - EXACT Binary Ninja MCP implementation */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_regs;
     struct tx_isp_sensor_attribute *sensor_attr;
     u32 interface_type;
-    int ret = 0;
 
-    pr_info("*** tx_isp_vic_start: EXACT Binary Ninja reference implementation ***\n");
-
-    /* Binary Ninja: Basic validation - if (!arg1) return -EINVAL */
+    /* Binary Ninja: Basic validation */
     if (!vic_dev) {
         return -EINVAL;
     }
 
-    /* Binary Ninja: void* $v1 = *(arg1 + 0x110) - Get sensor attributes
-     * FIXED: Modern implementation gets sensor from subdev array starting at index 4 */
+    /* Binary Ninja: void* $v1 = *(arg1 + 0x110) */
     extern struct tx_isp_sensor *tx_isp_get_sensor(void);
     struct tx_isp_sensor *sensor = tx_isp_get_sensor();
-    if (sensor && sensor->video.attr) {
-        sensor_attr = sensor->video.attr;
-        pr_info("tx_isp_vic_start: Found sensor attributes: dbus_type=%d, width=%d, height=%d\n",
-                sensor_attr->dbus_type, sensor_attr->total_width, sensor_attr->total_height);
-    } else {
-        pr_err("tx_isp_vic_start: No sensor attributes available\n");
+    if (!sensor || !sensor->video.attr) {
         return -ENODEV;
     }
+    sensor_attr = sensor->video.attr;
 
-    /* Binary Ninja: int32_t $v0 = *($v1 + 0x14) - Get interface type */
+    /* Binary Ninja: int32_t $v0 = *($v1 + 0x14) */
     interface_type = sensor_attr->dbus_type;
 
-    /* Get VIC register base - Binary Ninja: *(arg1 + 0xb8) */
+    /* Binary Ninja: *(arg1 + 0xb8) */
     vic_regs = vic_dev->vic_regs;
     if (!vic_regs) {
         return -EINVAL;
     }
 
-    /* Binary Ninja: if ($v0 == 1) - MIPI interface */
-    if (interface_type == 1) {  /* MIPI interface */
-        pr_info("tx_isp_vic_start: MIPI interface detected\n");
-
-        /* Binary Ninja: Check sensor flags and configure accordingly */
-        if (sensor_attr->dbus_type != interface_type) {
-            pr_info("tx_isp_vic_start: Sensor flags mismatch\n");
+    /* Binary Ninja: if ($v0 == 1) */
+    if (interface_type == 1) {
+        /* Binary Ninja: Check sensor flags */
+        if (sensor_attr->mipi.mipi_sc.sensor_mode != interface_type) {
             writel(0xa000a, vic_regs + 0x1a4);
         } else {
-            pr_info("tx_isp_vic_start: Sensor flags match - normal MIPI config\n");
             writel(0x20000, vic_regs + 0x10);
             writel(0x100010, vic_regs + 0x1a4);
         }
 
-        /* Binary Ninja: Essential VIC configuration for MIPI */
-        writel(2, vic_regs + 0xc);  /* VIC mode */
-        writel(sensor_attr->dbus_type, vic_regs + 0x14);  /* Interface type */
-
-        /* Binary Ninja: Set frame dimensions - *(*(arg1 + 0xb8) + 4) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
+        /* Binary Ninja: VIC configuration */
+        writel(2, vic_regs + 0xc);
+        writel(sensor_attr->dbus_type, vic_regs + 0x14);
         writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
 
-        /* Binary Ninja: Buffer size calculation based on sensor format */
+        /* Binary Ninja: Buffer calculation */
         struct tx_isp_mipi_bus *mipi = &sensor_attr->mipi;
-        u32 bytes_per_pixel = 8;  /* Default for RAW8 */
+        u32 bytes_per_pixel = 8;
         if (mipi->mipi_sc.sensor_csi_fmt == TX_SENSOR_RAW10) {
             bytes_per_pixel = 10;
         } else if (mipi->mipi_sc.sensor_csi_fmt == TX_SENSOR_RAW12) {
             bytes_per_pixel = 12;
         }
-
-        /* Binary Ninja: Buffer calculation - $v0_4 = $v0_3 * *($a0 + 0x2c) */
         u32 buffer_calc = (bytes_per_pixel * vic_dev->width) >> 5;
         if ((bytes_per_pixel * vic_dev->width) & 0x1f) buffer_calc++;
-        writel(buffer_calc, vic_regs + 0x100);  /* Buffer calculation result */
-
-        pr_info("tx_isp_vic_start: Buffer calculation: %d bpp * %d width = %d (reg 0x100)\n",
-                bytes_per_pixel, vic_dev->width, buffer_calc);
+        writel(buffer_calc, vic_regs + 0x100);
 
         /* Binary Ninja EXACT: Complex MIPI configuration register 0x10c */
         u32 mipi_config = 0;
