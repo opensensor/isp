@@ -4957,8 +4957,8 @@ int tx_isp_send_event_to_remote(void *subdev_ptr, int event_type, void *data)
     pr_info("*** tx_isp_send_event_to_remote: SAFE implementation - sd=0x%p, event=0x%x ***\n", sd, event_type);
 
     if (sd != NULL) {
-        /* SAFE: Use struct member instead of dangerous pointer arithmetic */
-        void *callback_struct = sd->event_callback_struct;
+        /* SAFE: Use host_priv field which stores the callback structure */
+        void *callback_struct = sd->host_priv;
 
         pr_info("*** tx_isp_send_event_to_remote: callback_struct=0x%p ***\n", callback_struct);
 

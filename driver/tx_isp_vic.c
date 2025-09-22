@@ -24,6 +24,12 @@
 extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 
+/* VIC event callback structure for Binary Ninja compatibility */
+struct vic_event_callback {
+    void *reserved[7];                       /* +0x00-0x18: Reserved space (28 bytes) */
+    int (*event_handler)(void*, int, void*); /* +0x1c: Event handler function */
+} __attribute__((packed));
+
 /* Binary Ninja reference global variables */
 static struct tx_isp_vic_device *dump_vsd = NULL;  /* Global VIC device pointer */
 static void *test_addr = NULL;  /* Test address pointer */
@@ -1961,15 +1967,17 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     pr_info("*** VIC PROBE: Set host_priv to vic_dev %p for Binary Ninja compatibility ***\n", vic_dev);
 
     /* CRITICAL FIX: Set up VIC event callback structure using SAFE struct member access */
-    struct vic_event_callback *callback_struct = kmalloc(sizeof(struct vic_event_callback), GFP_KERNEL);
+    struct vic_event_callback *callback_struct;
+
+    callback_struct = kmalloc(sizeof(struct vic_event_callback), GFP_KERNEL);
     if (callback_struct) {
         memset(callback_struct, 0, sizeof(struct vic_event_callback));
         callback_struct->event_handler = (int (*)(void*, int, void*))vic_core_ops_ioctl;
 
-        /* SAFE: Use struct member instead of dangerous pointer arithmetic */
-        vic_dev->sd.event_callback_struct = callback_struct;
+        /* SAFE: Store callback in host_priv field - this is what Binary Ninja offset 0xc maps to */
+        vic_dev->sd.host_priv = callback_struct;
 
-        pr_info("*** VIC PROBE: Event callback structure set up using SAFE struct member access ***\n");
+        pr_info("*** VIC PROBE: Event callback structure set up using SAFE host_priv field ***\n");
     } else {
         pr_err("*** VIC PROBE: Failed to allocate callback structure ***\n");
     }
@@ -2034,10 +2042,10 @@ int tx_isp_vic_remove(struct platform_device *pdev)
     if (!sd)
         return -EINVAL;
 
-    /* SAFE: Clean up callback structure using struct member access */
-    if (sd->event_callback_struct) {
-        kfree(sd->event_callback_struct);
-        sd->event_callback_struct = NULL;
+    /* SAFE: Clean up callback structure using host_priv field */
+    if (sd->host_priv) {
+        kfree(sd->host_priv);
+        sd->host_priv = NULL;
     }
 
     /* Get VIC device from subdev */
