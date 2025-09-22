@@ -919,6 +919,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     vic_start_ok = 1;
     pr_info("*** tx_isp_vic_start: vic_start_ok set to 1 ***\n");
 
+    /* CRITICAL: Call the working interrupt restore function */
+    tx_isp_vic_restore_interrupts();
+    pr_info("*** tx_isp_vic_start: Called tx_isp_vic_restore_interrupts() ***\n");
+
     pr_info("*** tx_isp_vic_start: VIC hardware initialization completed successfully ***\n");
     return 0;
 }
