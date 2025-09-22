@@ -9730,7 +9730,7 @@ int32_t dump_vic_reg(void)
 
     /* Get VIC register base if available */
     if (ourISPdev && ourISPdev->vic_dev && ourISPdev->vic_dev->vic_regs) {
-        vic_regs = ourISPdev->vic_regs;
+        vic_regs = ourISPdev->vic_dev->vic_regs;
     }
 
     /* Binary Ninja EXACT loop: dump registers from 0 to 0x1b4 (436 bytes) */
