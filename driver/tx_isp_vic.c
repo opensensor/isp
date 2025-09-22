@@ -29,6 +29,10 @@ static struct tx_isp_vic_device *dump_vsd = NULL;  /* Global VIC device pointer 
 static void *test_addr = NULL;  /* Test address pointer */
 irqreturn_t isp_vic_interrupt_service_routine(void *arg1);
 
+/* VIC hardware interrupt enable/disable functions - Binary Ninja reference implementation */
+void vic_hardware_irq_enable(void *irq_info);
+void vic_hardware_irq_disable(void *irq_info);
+
 /* BINARY NINJA EXACT: tx_vic_enable_irq implementation */
 void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 {
@@ -126,8 +130,16 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 0 */
         vic_dev->irq_enabled = 0;
 
-        /* CRITICAL FIX: Call hardware interrupt disable function - Binary Ninja reference */
-        /* Binary Ninja: $v0_2 = *(dump_vsd_5 + 0x88); if ($v0_2 != 0) $v0_2(dump_vsd_5 + 0x80) */
+        /* CRITICAL FIX: Call hardware interrupt disable function using SAFE struct members */
+        /* Binary Ninja reference: $v0_2 = *(dump_vsd_5 + 0x88); if ($v0_2 != 0) $v0_2(dump_vsd_5 + 0x80) */
+        /* SAFE: Use struct members instead of unsafe offset math */
+        if (vic_dev->irq_disable != NULL) {
+            vic_dev->irq_disable(vic_dev->irq_priv);
+            pr_info("*** tx_vic_disable_irq: Called hardware IRQ disable function via SAFE struct member ***\n");
+        } else {
+            pr_info("*** tx_vic_disable_irq: No hardware IRQ disable function set ***\n");
+        }
+
         /* CRITICAL FIX: Disable the kernel IRQ line */
         if (vic_dev->irq > 0) {
             disable_irq(vic_dev->irq);
