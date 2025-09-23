@@ -2042,8 +2042,7 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
                                             continue;
                                         } else {
                                             /* Binary Ninja: $v0_7($a0_1, arg2 u< 1 ? 1 : 0) */
-                                            int rollback_enable = (arg2 < 1) ? 1 : 0;
-                                            v0_7(a0_1, rollback_enable);
+                                            v0_7(a0_1, arg2 < 1 ? 1 : 0);
                                             /* Binary Ninja: $s0_1 -= 4 */
                                         }
                                     }
