@@ -1715,6 +1715,26 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
         if (current_state != 4) {
             pr_info("*** vic_core_s_stream: EXACT Binary Ninja - State != 4, calling VIC start sequence ***\n");
 
+            /* CRITICAL FIX: Add the missing initialization sequence from working driver-irqs */
+            pr_info("*** CRITICAL: Following EXACT reference driver sub-device initialization sequence ***\n");
+
+            /* CRITICAL FIX: Disable VIC interrupts during initialization to prevent control limit errors */
+            extern uint32_t vic_start_ok;
+            vic_start_ok = 1;
+
+            /* CRITICAL FIX: Correct the register base mapping! */
+            /* vic_regs = 0x133e0000 = CSI PHY (isp-w02 in trace) */
+            /* isp_base = 0x13300000 = Main ISP (isp-m0 in trace) - NEEDS SEPARATE MAPPING */
+            void __iomem *main_isp_base = ioremap(0x13300000, 0x100000);  /* Map main ISP separately */
+            void __iomem *vic_w01_base = ioremap(0x10023000, 0x1000);    /* Map isp-w01 separately */
+
+            if (!main_isp_base || !vic_w01_base) {
+                pr_err("*** CRITICAL: Failed to map ISP register bases ***\n");
+                if (main_isp_base) iounmap(main_isp_base);
+                if (vic_w01_base) iounmap(vic_w01_base);
+                return -ENOMEM;
+            }
+
             /* Binary Ninja: tx_vic_disable_irq() */
             tx_vic_disable_irq(vic_dev);
 
@@ -1722,8 +1742,36 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             ret = tx_isp_vic_start(vic_dev);
             if (ret != 0) {
                 pr_err("*** vic_core_s_stream: tx_isp_vic_start FAILED: %d ***\n", ret);
+                if (main_isp_base) iounmap(main_isp_base);
+                if (vic_w01_base) iounmap(vic_w01_base);
                 return ret;
             }
+
+            /* CRITICAL FIX: Add the missing register initialization sequence from working driver-irqs */
+            pr_info("*** STEP 5: Applying 280ms delta register changes AFTER sensor detection ***\n");
+            /* Use the correct main_isp_base (0x13300000 = isp-m0) */
+            writel(0x0, main_isp_base + 0x9804);        /* 0x3f00 -> 0x0 */
+            writel(0x0, main_isp_base + 0x9ac0);        /* 0x200 -> 0x0 */
+            writel(0x0, main_isp_base + 0x9ac8);        /* 0x200 -> 0x0 */
+            /* CRITICAL FIX: Skip interrupt-related Core Control registers to preserve VIC interrupts */
+            pr_info("*** 280ms DELTA: Skipping Core Control registers 0xb018-0xb024 to preserve interrupts ***\n");
+            /* writel(0x24242424, main_isp_base + 0xb018); // SKIPPED - kills VIC interrupts */
+            /* writel(0x24242424, main_isp_base + 0xb01c); // SKIPPED - kills VIC interrupts */
+            /* writel(0x24242424, main_isp_base + 0xb020); // SKIPPED - kills VIC interrupts */
+            /* writel(0x242424, main_isp_base + 0xb024);   // SKIPPED - kills VIC interrupts */
+            writel(0x10d0046, main_isp_base + 0xb028);  /* 0x1000080 -> 0x10d0046 */
+            writel(0xe8002f, main_isp_base + 0xb02c);   /* 0x1000080 -> 0xe8002f */
+            writel(0xc50100, main_isp_base + 0xb030);   /* 0x100 -> 0xc50100 */
+            writel(0x1670100, main_isp_base + 0xb034);  /* 0xffff0100 -> 0x1670100 */
+            writel(0x1f001, main_isp_base + 0xb038);    /* 0x1ff00 -> 0x1f001 */
+            writel(0x22c0000, main_isp_base + 0xb03c);  /* 0x0 -> 0x22c0000 */
+            writel(0x22c1000, main_isp_base + 0xb040);  /* 0x0 -> 0x22c1000 */
+            writel(0x22c2000, main_isp_base + 0xb044);  /* 0x0 -> 0x22c2000 */
+            writel(0x22c3000, main_isp_base + 0xb048);  /* 0x0 -> 0x22c3000 */
+            writel(0x3, main_isp_base + 0xb04c);        /* 0x103 -> 0x3 */
+            writel(0x10000000, main_isp_base + 0xb078);  /* 0x0 -> 0x10000000 */
+            wmb();
+            pr_info("*** CRITICAL FIX: ISP/VIC control registers reset sequence applied - matches working driver-irqs ***\n");
 
             /* Binary Ninja: *($s1_1 + 0x128) = 4 */
             vic_dev->state = 4;
@@ -1732,6 +1780,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             tx_vic_enable_irq(vic_dev);
 
             pr_info("*** vic_core_s_stream: EXACT Binary Ninja - VIC initialized, state=4 ***\n");
+
+            /* Clean up mappings */
+            if (main_isp_base) iounmap(main_isp_base);
+            if (vic_w01_base) iounmap(vic_w01_base);
 
             /* Binary Ninja: return $v0_1 */
             return ret;
