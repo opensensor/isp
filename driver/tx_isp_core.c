@@ -295,15 +295,16 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     /* Binary Ninja: Reset frame counters - these are VIC device counters */
     /* *($s0 + 0x164) = 0 */
     vic_dev->frame_count = 0;
-    /* *($s0 + 0x168) = 0 */
-    vic_dev->error_count = 0;
-    /* *($s0 + 0x170) = 0 */
-    vic_dev->drop_count = 0;
+    /* *($s0 + 0x168) = 0 - VIC device uses different counter names */
+    vic_dev->total_errors = 0;
+    /* *($s0 + 0x170) = 0 - VIC device uses different counter names */
+    vic_dev->dropped_frames = 0;
     /* *($s0 + 0x160) = 0 */
     vic_dev->total_frames = 0;
 
     /* CRITICAL FIX: Binary Ninja: int32_t $v0_3 = *($s0 + 0xe8) - Get VIC state */
-    int v0_3 = vic_state;
+    {
+        int v0_3 = vic_state;
 
     /* Binary Ninja: if (arg2 == 0) */
     if (enable == 0) {
@@ -5088,8 +5089,7 @@ struct tx_isp_core_device *tx_isp_create_core_device(struct platform_device *pde
     core_dev->dev = &pdev->dev;
     core_dev->pdev = pdev;
 
-    /* Initialize state */
-    core_dev->state = 1;  /* INIT state */
+    /* REMOVED: Core state initialization - ALL state management happens through VIC device */
     core_dev->streaming = 0;  /* Not streaming */
     core_dev->is_initialized = false;
     core_dev->tuning_enabled = false;

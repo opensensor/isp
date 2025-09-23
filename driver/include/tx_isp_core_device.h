@@ -20,8 +20,8 @@ struct tx_isp_core_device {
     void __iomem *core_regs;                    /* ISP core registers */
     void __iomem *tuning_regs;                  /* Tuning registers */
     
-    /* Core device state */
-    int state;                                  /* Core state: 1=init, 2=ready, 3=active, 4=streaming */
+    /* REMOVED: Core device state - ALL state management happens through VIC device */
+    /* Based on Binary Ninja MCP analysis, core device is stateless */
     int streaming;                              /* Streaming state: 0=off, 1=on */
     struct mutex mlock;                         /* Core operations mutex */
     spinlock_t lock;                           /* Core spinlock for interrupt handling */
@@ -101,9 +101,8 @@ int tx_isp_core_device_deinit(struct tx_isp_core_device *core_dev);
 int tx_isp_link_core_device(struct tx_isp_dev *isp_dev, struct tx_isp_core_device *core_dev);
 void tx_isp_unlink_core_device(struct tx_isp_dev *isp_dev);
 
-/* Core device state management */
-int tx_isp_core_device_set_state(struct tx_isp_core_device *core_dev, int state);
-int tx_isp_core_device_get_state(struct tx_isp_core_device *core_dev);
+/* REMOVED: Core device state management - ALL state management happens through VIC device */
+/* Based on Binary Ninja MCP analysis, core device is stateless */
 
 /* Core device streaming control */
 int tx_isp_core_device_start_streaming(struct tx_isp_core_device *core_dev);
