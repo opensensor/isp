@@ -956,15 +956,33 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0, vic_regs + 0x1b4);
     wmb();
 
-    /* CRITICAL: Verify interrupt configuration is preserved in CSI PHY space */
-    u32 verify_int_en = readl(csi_phy_regs + 0x1e0);
-    u32 verify_int_mask = readl(csi_phy_regs + 0x1e8);
-    pr_info("*** CSI PHY INTERRUPT VERIFY: INT_EN=0x%08x, INT_MASK=0x%08x ***\n", verify_int_en, verify_int_mask);
+    /* CRITICAL FIX: NOW configure VIC interrupts AFTER hardware is properly configured */
+    pr_info("*** tx_isp_vic_start: NOW configuring VIC interrupts after hardware setup ***\n");
 
-    /* Also verify VIC space doesn't have conflicting values */
-    u32 vic_1e0 = readl(vic_regs + 0x1e0);
-    u32 vic_1e8 = readl(vic_regs + 0x1e8);
-    pr_info("*** VIC SPACE CHECK: VIC[0x1e0]=0x%08x, VIC[0x1e8]=0x%08x (should be different from CSI PHY) ***\n", vic_1e0, vic_1e8);
+    /* Configure VIC dimensions first - CRITICAL prerequisite for interrupt registers */
+    u32 width = sensor_attr->mipi.image_width;
+    u32 height = sensor_attr->mipi.image_height;
+    writel((width << 16) | height, vic_regs + 0x10);  /* VIC dimensions */
+    writel(width * 2, vic_regs + 0x14);               /* VIC stride for 16-bit */
+    wmb();
+
+    /* Configure VIC control register - CRITICAL prerequisite */
+    writel(2, vic_regs + 0xc);  /* MIPI mode (2, not 3) - matches working reference */
+    wmb();
+
+    pr_info("*** VIC HARDWARE PREREQUISITES: Dimensions %dx%d, stride %d, MIPI mode 2 ***\n",
+            width, height, width * 2);
+
+    /* NOW the VIC hardware should accept interrupt register writes */
+    /* Use VIC register space (0x133e0000) like the working reference */
+    writel(0xffffffff, vic_regs + 0x1e0);  /* Enable all interrupts */
+    writel(0x0, vic_regs + 0x1e8);         /* Clear interrupt masks */
+    wmb();
+
+    /* Verify interrupt configuration is preserved */
+    u32 verify_int_en = readl(vic_regs + 0x1e0);
+    u32 verify_int_mask = readl(vic_regs + 0x1e8);
+    pr_info("*** VIC INTERRUPT VERIFY: INT_EN=0x%08x, INT_MASK=0x%08x ***\n", verify_int_en, verify_int_mask);
 
     /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
     pr_info("*** tx_isp_vic_start: vic_start_ok set to 1 - EXACT Binary Ninja reference ***\n");
