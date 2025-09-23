@@ -139,6 +139,57 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
     spin_unlock_irqrestore(&vic_dev->lock, flags);
 }
 
+/* CRITICAL FIX: Initialize VIC hardware with proper interrupt configuration - FROM WORKING VERSION */
+int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
+{
+    struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
+    void __iomem *vic_base;
+
+    if (!vic_dev || !vic_dev->vic_regs) {
+        pr_err("tx_isp_vic_hw_init: No primary VIC registers available\n");
+        return -EINVAL;
+    }
+
+    // CRITICAL: Use PRIMARY VIC space for interrupt configuration
+    vic_base = vic_dev->vic_regs;  // Use primary VIC space (0x133e0000)
+    pr_info("*** VIC HW INIT: Using PRIMARY VIC space for interrupt configuration ***\n");
+
+    // Clear any pending interrupts first
+    writel(0, vic_base + 0x00);  // Clear ISR
+    writel(0, vic_base + 0x20);  // Clear ISR1
+    wmb();
+
+    // Set up interrupt masks to match OEM
+    writel(0x00000001, vic_base + 0x04);  // IMR
+    wmb();
+    writel(0x00000000, vic_base + 0x24);  // IMR1
+    wmb();
+
+    // Configure ISP control interrupts
+    writel(0x07800438, vic_base + 0x04);  // IMR
+    wmb();
+    writel(0xb5742249, vic_base + 0x0c);  // IMCR
+    wmb();
+
+    pr_info("*** VIC HW INIT: Interrupt configuration applied to PRIMARY VIC space ***\n");
+
+    /* CRITICAL: Register the VIC interrupt handler - THIS WAS MISSING! */
+    int irq = 38;  /* VIC uses IRQ 38 (isp-w02) */
+    int ret = request_irq(irq, (irq_handler_t)isp_vic_interrupt_service_routine, IRQF_SHARED, "tx-isp-vic", sd);
+    if (ret == 0) {
+        pr_info("*** VIC HW INIT: Interrupt handler registered for IRQ %d ***\n", irq);
+    } else {
+        pr_err("*** VIC HW INIT: Failed to register interrupt handler for IRQ %d: %d ***\n", irq, ret);
+        return ret;
+    }
+
+    /* Enable the interrupt at hardware level */
+    enable_irq(irq);
+    pr_info("*** VIC HW INIT: Hardware interrupt enabled for IRQ %d ***\n", irq);
+
+    return 0;
+}
+
 static int ispcore_activate_module(struct tx_isp_dev *isp_dev);
 
 /* VIC frame completion handler */
