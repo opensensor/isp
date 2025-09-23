@@ -77,16 +77,10 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
     }
 
     /* Binary Ninja: void* $a0 = *(arg1 + 0xe4) */
-    /* SAFE: Use proper function instead of offset-based access */
-    struct tx_isp_vin_device *vin_dev = (struct tx_isp_vin_device *)tx_isp_get_subdevdata(sd);
-    if (!vin_dev) {
-        pr_err("VIN: tx_isp_vin_init: VIN device is NULL\n");
-        return -EINVAL;
-    }
-
-    /* Get active sensor - VIN doesn't manage sensors directly, get from ISP device */
-    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)sd->isp;
-    a0 = isp_dev ? isp_dev->sensor : NULL;
+    /* SAFE: Use proper function to get active sensor */
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    a0 = sensor;
 
     pr_info("VIN: tx_isp_vin_init: a0 (sensor) = %p\n", a0);
 
@@ -102,15 +96,6 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
 
     struct tx_isp_vin_device *vin_dev = ourISPdev->vin_dev;
     pr_info("VIN: tx_isp_vin_init: using VIN device from global ISP: %p\n", vin_dev);
-
-    /* SAFE: Always use global ISP device sensor to avoid pointer confusion */
-    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
-    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
-    if (!sensor) {
-        a0 = 0;
-    } else {
-        a0 = sensor;
-    }
     
     /* Binary Ninja: if ($a0 == 0) */
     if (a0 == 0) {
