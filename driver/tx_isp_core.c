@@ -2677,9 +2677,14 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
         /* For enable, try to get sensor attributes if available */
         extern struct tx_isp_sensor *tx_isp_get_sensor(void);
         struct tx_isp_sensor *sensor = tx_isp_get_sensor();
-        if (sensor) {
-            /* Note: sensor_attr access needs to be determined from actual sensor structure */
-            pr_info("ispcore_core_ops_init: Sensor available, skipping sensor_attr access for now");
+        if (sensor && sensor->video.attr) {
+            /* Use the actual sensor attributes */
+            sensor_attr = sensor->video.attr;
+            pr_info("ispcore_core_ops_init: Using sensor attributes from sensor: %s", sensor_attr->name);
+        } else if (sensor) {
+            pr_info("ispcore_core_ops_init: Sensor found but no attributes - sensor_attr will be NULL");
+        } else {
+            pr_info("ispcore_core_ops_init: No sensor found - sensor_attr will be NULL");
         }
         /* sensor_attr can be NULL for initial core init */
     }
