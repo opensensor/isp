@@ -830,8 +830,33 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     pr_info("*** tx_isp_vic_start: VIC interrupt masks configured (0x1e8=0xFFFFFFFE enables bit 0) ***\n");
 
+    /* CRITICAL FIX: Always restore VIC control registers to streaming state */
+    /* The tuning system turns off VIC control registers (0x9ac0, 0x9ac8) after initialization */
+    /* We need to restore them to streaming state (0x1) every time streaming starts */
+    if (vic_regs) {
+        /* Read current VIC control register values */
+        u32 vic_ctrl_1 = readl(vic_regs + 0x9ac0);
+        u32 vic_ctrl_2 = readl(vic_regs + 0x9ac8);
+        pr_info("*** VIC CONTROL FIX: Current VIC control values: 0x9ac0=0x%x, 0x9ac8=0x%x ***\n", vic_ctrl_1, vic_ctrl_2);
+
+        /* Always restore VIC control registers to streaming state */
+        writel(0x1, vic_regs + 0x9ac0);     /* VIC control register 1: -> 0x1 (streaming) */
+        writel(0x1, vic_regs + 0x9ac8);     /* VIC control register 2: -> 0x1 (streaming) */
+        wmb();
+
+        /* Verify the restoration worked */
+        vic_ctrl_1 = readl(vic_regs + 0x9ac0);
+        vic_ctrl_2 = readl(vic_regs + 0x9ac8);
+        pr_info("*** VIC CONTROL FIX: VIC control registers restored: 0x9ac0=0x%x, 0x9ac8=0x%x ***\n", vic_ctrl_1, vic_ctrl_2);
+
+        if (vic_ctrl_1 == 0x1 && vic_ctrl_2 == 0x1) {
+            pr_info("*** VIC CONTROL FIX: SUCCESS! VIC control registers in streaming state ***\n");
+        } else {
+            pr_err("*** VIC CONTROL FIX: FAILED! Registers rejected streaming state ***\n");
+        }
+    }
+
     /* STREAM->OFF->STREAM PRESERVATION: Don't reset working VIC hardware */
-    /* The issue is that we reinitialize VIC hardware every time, breaking the working state */
     /* Only do full VIC hardware initialization if VIC is not already working */
     if (vic_regs && vic_start_ok != 1) {
         pr_info("*** VIC PRESERVATION: VIC not working (vic_start_ok=%d), doing full hardware init ***\n", vic_start_ok);
