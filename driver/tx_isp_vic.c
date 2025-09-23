@@ -959,9 +959,13 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* CRITICAL FIX: NOW configure VIC interrupts AFTER hardware is properly configured */
     pr_info("*** tx_isp_vic_start: NOW configuring VIC interrupts after hardware setup ***\n");
 
+    /* Declare variables at the beginning for C90 compliance */
+    u32 width, height;
+    u32 verify_int_en, verify_int_mask;
+
     /* Configure VIC dimensions first - CRITICAL prerequisite for interrupt registers */
-    u32 width = sensor_attr->mipi.image_width;
-    u32 height = sensor_attr->mipi.image_height;
+    width = sensor_attr->mipi.image_twidth;
+    height = sensor_attr->mipi.image_theight;
     writel((width << 16) | height, vic_regs + 0x10);  /* VIC dimensions */
     writel(width * 2, vic_regs + 0x14);               /* VIC stride for 16-bit */
     wmb();
@@ -980,8 +984,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     wmb();
 
     /* Verify interrupt configuration is preserved */
-    u32 verify_int_en = readl(vic_regs + 0x1e0);
-    u32 verify_int_mask = readl(vic_regs + 0x1e8);
+    verify_int_en = readl(vic_regs + 0x1e0);
+    verify_int_mask = readl(vic_regs + 0x1e8);
     pr_info("*** VIC INTERRUPT VERIFY: INT_EN=0x%08x, INT_MASK=0x%08x ***\n", verify_int_en, verify_int_mask);
 
     /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
