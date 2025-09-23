@@ -2003,6 +2003,34 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
 
     pr_info("*** tx_isp_video_s_stream: EXACT Binary Ninja reference implementation - enable=%d ***\n", arg2);
 
+    /* CRITICAL FIX: Initialize subdevs before streaming if link_stream wasn't called */
+    if (arg2 == 1) {  /* Stream ON */
+        pr_info("*** tx_isp_video_s_stream: CRITICAL FIX - Ensuring subdevs are initialized ***\n");
+        s4 = arg1->subdevs;
+        for (i = 0; i != 0x10; i++) {
+            struct tx_isp_subdev *subdev = s4[i];
+            if (subdev != NULL && subdev->ops) {
+                /* Call activate_module if available */
+                if (subdev->ops->internal && subdev->ops->internal->activate_module) {
+                    pr_info("*** tx_isp_video_s_stream: Calling activate_module on subdev[%d] ***\n", i);
+                    result = subdev->ops->internal->activate_module(subdev);
+                    if (result != 0 && result != -ENOIOCTLCMD) {
+                        pr_err("tx_isp_video_s_stream: activate_module failed on subdev[%d]: %d\n", i, result);
+                    }
+                }
+                /* Call core init if available */
+                if (subdev->ops->core && subdev->ops->core->init) {
+                    pr_info("*** tx_isp_video_s_stream: Calling core init on subdev[%d] ***\n", i);
+                    result = subdev->ops->core->init(subdev, 1);
+                    if (result != 0 && result != -ENOIOCTLCMD) {
+                        pr_err("tx_isp_video_s_stream: core init failed on subdev[%d]: %d\n", i, result);
+                    }
+                }
+            }
+        }
+        pr_info("*** tx_isp_video_s_stream: Subdev initialization complete ***\n");
+    }
+
     /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
     s4 = arg1->subdevs;
 
