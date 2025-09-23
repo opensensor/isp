@@ -1981,9 +1981,10 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
     if (arg2 == 1) {  /* Stream ON */
         pr_info("*** tx_isp_video_s_stream: STREAM ON - Initializing core first ***\n");
 
-        /* Step 1: Activate core module (1 → 2 state transition) */
-        if (arg1->core_dev && arg1->core_dev->state == 1) {
-            pr_info("*** tx_isp_video_s_stream: Core state is 1, calling activate_module ***\n");
+        /* CRITICAL FIX: Step 1: Activate core module (VIC 1 → 2 state transition) */
+        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)arg1->vic_dev;
+        if (vic_dev && vic_dev->state == 1) {
+            pr_info("*** tx_isp_video_s_stream: VIC state is 1, calling activate_module ***\n");
             result = ispcore_activate_module(arg1);
             if (result != 0) {
                 pr_err("tx_isp_video_s_stream: ispcore_activate_module failed: %d\n", result);
@@ -1992,17 +1993,17 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
             pr_info("*** tx_isp_video_s_stream: ispcore_activate_module completed ***\n");
         }
 
-        /* Step 2: Initialize core (2 → 3 state transition) */
-        if (arg1->core_dev && arg1->core_dev->state == 2) {
+        /* CRITICAL FIX: Step 2: Initialize core (VIC 2 → 3 state transition) */
+        if (vic_dev && vic_dev->state == 2) {
             struct tx_isp_subdev *core_sd = &arg1->core_dev->sd;
             if (core_sd->ops && core_sd->ops->core && core_sd->ops->core->init) {
-                pr_info("*** tx_isp_video_s_stream: Core state is 2, calling core->init ***\n");
+                pr_info("*** tx_isp_video_s_stream: VIC state is 2, calling core->init ***\n");
                 result = core_sd->ops->core->init(core_sd, 1);
                 if (result != 0) {
                     pr_err("tx_isp_video_s_stream: core->init failed: %d\n", result);
                     return result;
                 }
-                pr_info("*** tx_isp_video_s_stream: core->init completed, core should now be state 3 ***\n");
+                pr_info("*** tx_isp_video_s_stream: core->init completed, VIC should now be state 3 ***\n");
             }
         }
 
@@ -4940,11 +4941,9 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                 vic_dev->state = 2;
                 pr_info("*** VIC device final state set to 2 (fully activated) ***\n");
 
-                /* CRITICAL FIX: Also set core device state to 2 (ready) */
-                if (isp_dev->core_dev) {
-                    isp_dev->core_dev->state = 2;
-                    pr_info("*** Core device state set to 2 (ready for initialization) ***\n");
-                }
+                /* REMOVED: Core device state management - ALL state management happens through VIC device */
+                /* Based on Binary Ninja MCP analysis, only VIC state should be managed */
+                pr_info("*** CRITICAL: Core device is stateless - only VIC state matters ***\n");
 
                 /* Binary Ninja: return 0 */
                 pr_info("*** ispcore_activate_module: SUCCESS - ALL REGISTER WRITES SHOULD NOW BE TRIGGERED ***\n");
