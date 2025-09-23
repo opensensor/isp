@@ -704,20 +704,26 @@ int tx_isp_vin_slake_subdev(struct tx_isp_subdev *sd)
 
     /* CRITICAL: Binary Ninja sensor management - MISSING from our implementation! */
     /* Binary Ninja: $v0_2 = *(arg1 + 0xe4) */
-    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)sd->isp;
-    void *sensor = isp_dev ? isp_dev->sensor : NULL;
+    /* Use the common function to get active sensor */
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
 
     /* Binary Ninja: if ($v0_2 != 0) subdev_sensor_ops_set_input(arg1, &var_18, entry_$a2) */
     if (sensor != NULL) {
         int input_index = -1;  /* var_18 = 0xffffffff */
         pr_info("tx_isp_vin_slake_subdev: Releasing sensor input\n");
-        subdev_sensor_ops_set_input(sd, 0xc0045627, &input_index);  /* TX_ISP_SENSOR_SET_INPUT */
+        /* Call sensor ops through the sensor subdev if available */
+        if (sensor->sd.ops && sensor->sd.ops->sensor && sensor->sd.ops->sensor->ioctl) {
+            sensor->sd.ops->sensor->ioctl(&sensor->sd, 0xc0045627, &input_index);
+        }
     }
 
     /* Binary Ninja: if (*(arg1 + 0xdc) != arg1 + 0xdc) subdev_sensor_ops_release_all_sensor(arg1) */
     if (!list_empty(&vin_dev->sensors)) {
         pr_info("tx_isp_vin_slake_subdev: Releasing all sensors\n");
-        subdev_sensor_ops_release_all_sensor(sd);
+        /* Call the exported function */
+        extern int ispcore_sensor_ops_release_all_sensor(struct tx_isp_subdev *sd);
+        ispcore_sensor_ops_release_all_sensor(sd);
     }
 
     /* Binary Ninja: private_mutex_lock(arg1 + 0xe8) */
