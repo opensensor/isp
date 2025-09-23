@@ -870,6 +870,26 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     if (vic_regs && vic_hardware_state != 1) {
         pr_info("*** VIC PRESERVATION: VIC hardware not streaming (reg 0x0 = 0x%x), doing full hardware init ***\n", vic_hardware_state);
 
+        /* CRITICAL FIX: Configure VIC interrupts BEFORE hardware initialization */
+        /* This must happen before the 2->4->wait->1 sequence */
+        void __iomem *vic_w01_base = vic_dev->vic_regs_control;
+
+        if (vic_w01_base) {
+            /* EXACT atleast-95 sequence: Disable during config, then enable all */
+            writel(0x0, vic_w01_base + 0x1e0);        /* Disable all interrupts during config */
+            writel(0xffffffff, vic_w01_base + 0x1e8); /* Mask all interrupts during config */
+            wmb();
+
+            /* Now enable ALL interrupts like atleast-95 */
+            writel(0xffffffff, vic_w01_base + 0x1e0); /* Enable ALL interrupts */
+            writel(0x0, vic_w01_base + 0x1e8);        /* Clear ALL interrupt masks */
+            wmb();
+
+            pr_info("*** VIC INTERRUPTS: CONFIGURED BEFORE HARDWARE INIT - 0x1e0=0xffffffff, 0x1e8=0x0 ***\n");
+        } else {
+            pr_warn("*** VIC INTERRUPTS: No control register space available ***\n");
+        }
+
         /* Binary Ninja EXACT: Hardware enable sequence from working version */
         writel(0x2, vic_regs + 0x0);        /* Pre-enable state */
         wmb();
