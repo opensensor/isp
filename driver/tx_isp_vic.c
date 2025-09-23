@@ -1562,6 +1562,15 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** vic_core_ops_init: tx_isp_vic_start SUCCESS, vic_start_ok=%d ***\n", vic_start_ok);
             }
 
+            /* CRITICAL FIX: Initialize VIC hardware interrupts BEFORE enabling them */
+            pr_info("*** vic_core_ops_init: Calling VIC hardware init for interrupt setup ***\n");
+            int hw_init_ret = tx_isp_vic_hw_init(sd);
+            if (hw_init_ret != 0) {
+                pr_err("vic_core_ops_init: VIC hardware init FAILED: %d\n", hw_init_ret);
+                return hw_init_ret;
+            }
+            pr_info("*** vic_core_ops_init: VIC hardware init SUCCESS - interrupts should now work ***\n");
+
             /* Binary Ninja: tx_vic_enable_irq() */
             tx_vic_enable_irq(vic_dev);
 
