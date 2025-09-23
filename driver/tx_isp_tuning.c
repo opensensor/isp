@@ -2066,6 +2066,10 @@ int tisp_init(void *sensor_info, char *param_name)
     pr_info("*** tisp_init: ISP HARDWARE PIPELINE FULLY INITIALIZED - THIS SHOULD TRIGGER REGISTER ACTIVITY ***\n");
     pr_info("*** tisp_init: All hardware blocks enabled, registers configured, events ready ***\n");
 
+    /* CRITICAL FIX: Mark as initialized to prevent future calls */
+    tisp_already_initialized = true;
+    pr_info("*** tisp_init: Marked as initialized - future calls will be skipped ***\n");
+
     return 0;
 }
 
