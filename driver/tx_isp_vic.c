@@ -1681,9 +1681,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
         /* Binary Ninja: $v0 = 0 */
         ret = 0;
 
-        /* CRITICAL FIX: Always perform VIC Control register sequence for streaming */
-        pr_info("*** vic_core_s_stream: CRITICAL FIX - Always write VIC Control registers for streaming ***\n");
-
         /* EXACT Binary Ninja MCP reference logic */
         /* Binary Ninja: if ($v1_3 != 4) */
         if (current_state != 4) {
@@ -1706,25 +1703,13 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             tx_vic_enable_irq(vic_dev);
 
             pr_info("*** vic_core_s_stream: EXACT Binary Ninja - VIC initialized, state=4 ***\n");
+
+            /* Binary Ninja: return $v0_1 */
+            return ret;
         } else {
-            pr_info("*** vic_core_s_stream: State=4, but still need VIC Control register sequence ***\n");
+            pr_info("*** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***\n");
+            return ret;
         }
-
-        /* CRITICAL FIX: VIC Control register sequence - ALWAYS needed for streaming */
-        pr_info("*** vic_core_s_stream: Writing VIC Control register sequence (2 -> 1) ***\n");
-
-        /* Step 1: Write 2 to VIC Control register (prepare for streaming) */
-        writel(2, vic_dev->vic_regs + 0x0);  /* VIC Control register at offset 0x0 */
-        wmb();
-        pr_info("*** vic_core_s_stream: VIC Control[0x0] = 2 (prepare) ***\n");
-
-        /* Step 2: Write 1 to VIC Control register (start streaming) */
-        writel(1, vic_dev->vic_regs + 0x0);  /* VIC Control register at offset 0x0 */
-        wmb();
-        pr_info("*** vic_core_s_stream: VIC Control[0x0] = 1 (start streaming) ***\n");
-
-        /* Binary Ninja: return $v0_1 */
-        return ret;
     }
 }
 
