@@ -169,4 +169,7 @@ struct tx_isp_vic_device {
 int vic_mdma_enable(struct tx_isp_vic_device *vic_dev, int channel, int dual_channel,
                     int buffer_count, dma_addr_t base_addr, int format_type);
 
+/* VIC core operations IOCTL handler */
+int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+
 #endif /* __TX_ISP_VIC_H__ */
