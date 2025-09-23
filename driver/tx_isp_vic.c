@@ -97,33 +97,19 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
     if (vic_dev->irq_enabled != 0) {
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 0 */
         vic_dev->irq_enabled = 0;
+        pr_info("tx_vic_disable_irq: VIC interrupts disabled (irq_enabled = 0)\n");
 
         /* Binary Ninja: $v0_2 = *(dump_vsd_5 + 0x88); if ($v0_2 != 0) $v0_2(dump_vsd_5 + 0x80) */
         if (vic_dev->irq_disable && vic_dev->irq_priv) {
+            pr_info("tx_vic_disable_irq: Calling VIC interrupt disable callback\n");
             vic_dev->irq_disable(vic_dev->irq_priv);
         }
 
-        /* CRITICAL FIX: Disable VIC hardware interrupt generation using PRIMARY register space */
-        /* From working commits: VIC interrupts need to be disabled in PRIMARY VIC registers */
-        if (vic_dev->vic_regs) {
-            /* Disable VIC DMA interrupt generation first */
-            writel(0x00000000, vic_dev->vic_regs + 0x30c);  /* Disable VIC DMA interrupts */
-            wmb();
-
-            /* Disable all VIC interrupts by masking them */
-            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1e8);  /* Mask all main interrupts */
-            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1ec);  /* Mask all MDMA interrupts */
-            writel(0x00000000, vic_dev->vic_regs + 0x1e0);  /* Disable frame done interrupt */
-            writel(0x00000000, vic_dev->vic_regs + 0x1e4);  /* Disable MDMA interrupts */
-            wmb();
-
-            /* Clear any pending interrupts */
-            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main interrupt status */
-            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
-            wmb();
-
-            pr_info("*** tx_vic_disable_irq: CRITICAL FIX - VIC hardware interrupts DISABLED using PRIMARY register space ***\n");
-        }
+        /* CRITICAL: Working reference does NOT write to VIC hardware interrupt registers! */
+        /* The VIC interrupt hardware is controlled by the VIC start/stop functions */
+        pr_info("tx_vic_disable_irq: VIC interrupt flag cleared - hardware controlled by VIC stop\n");
+    } else {
+        pr_info("tx_vic_disable_irq: VIC interrupts already disabled\n");
     }
 
 
