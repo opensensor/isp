@@ -861,9 +861,15 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
 
     /* STREAM->OFF->STREAM PRESERVATION: Don't reset working VIC hardware */
-    /* Only do full VIC hardware initialization if VIC is not already working */
-    if (vic_regs && vic_start_ok != 1) {
-        pr_info("*** VIC PRESERVATION: VIC not working (vic_start_ok=%d), doing full hardware init ***\n", vic_start_ok);
+    /* Check ACTUAL VIC hardware state instead of vic_start_ok */
+    u32 vic_hardware_state = 0;
+    if (vic_regs) {
+        vic_hardware_state = readl(vic_regs + 0x0);
+    }
+
+    /* Only do full VIC hardware initialization if VIC hardware is not already streaming */
+    if (vic_regs && vic_hardware_state != 1) {
+        pr_info("*** VIC PRESERVATION: VIC hardware not streaming (reg 0x0 = 0x%x), doing full hardware init ***\n", vic_hardware_state);
 
         /* Binary Ninja EXACT: Hardware enable sequence from working version */
         writel(0x2, vic_regs + 0x0);        /* Pre-enable state */
