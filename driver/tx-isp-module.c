@@ -438,15 +438,6 @@ struct platform_device tx_isp_vin_platform_device = {
     },
 };
 
-/* Frame Source platform device resources - NO IRQ (FS doesn't need separate IRQ) */
-static struct resource tx_isp_fs_resources[] = {
-    [0] = {
-        .start = 0x13310000,           /* T31 FS base address */
-        .end   = 0x1331FFFF,           /* T31 FS end address */
-        .flags = IORESOURCE_MEM,
-    },
-};
-
 /* Frame Source platform data - provides channel configuration */
 struct fs_platform_data {
     int num_channels;
@@ -470,8 +461,8 @@ static struct fs_platform_data fs_pdata = {
 struct platform_device tx_isp_fs_platform_device = {
     .name = "isp-fs",  /* Stock driver name for Frame Sync */
     .id = -1,
-    .num_resources = ARRAY_SIZE(tx_isp_fs_resources),
-    .resource = tx_isp_fs_resources,
+    .num_resources = 0,
+    .resource = NULL,
     .dev = {
         .platform_data = &fs_pdata,  /* Provide channel configuration */
     },
