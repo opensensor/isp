@@ -562,19 +562,20 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 static int tx_isp_hardware_init(struct tx_isp_dev *isp_dev);
 void system_reg_write(u32 reg, u32 value);
 
-/* system_reg_write - FIXED to match working driver-irqs version */
+/* system_reg_write - EXACT Binary Ninja implementation */
 void system_reg_write(u32 reg, u32 value)
 {
     /* Binary Ninja EXACT: *(*(mdns_y_pspa_cur_bi_wei0_array + 0xb8) + arg1) = arg2 */
-    /* mdns_y_pspa_cur_bi_wei0_array is the ISP device structure (ourISPdev) */
-    /* +0xb8 is the register base address offset in the device structure */
+    /* mdns_y_pspa_cur_bi_wei0_array is set to core_dev in tx_isp_core_probe */
+    /* +0xb8 is the register base address offset in the core device structure */
 
-    if (!ourISPdev) {
-        pr_warn("system_reg_write: No ISP device available for reg=0x%x val=0x%x\n", reg, value);
+    if (!ourISPdev || !ourISPdev->core_dev) {
+        pr_warn("system_reg_write: No core device available for reg=0x%x val=0x%x\n", reg, value);
         return;
     }
 
-    /* Use core_regs - this generated 1 interrupt, so it's the right register space */
+    /* Binary Ninja EXACT: Get register base from core device structure at offset 0xb8 */
+    /* This should be core_dev->core_regs based on the structure layout */
     void __iomem *reg_base = ourISPdev->core_dev->core_regs;
 
     if (!reg_base) {
@@ -582,9 +583,9 @@ void system_reg_write(u32 reg, u32 value)
         return;
     }
 
-    /* Binary Ninja EXACT: Write to register base + offset */
+    /* Binary Ninja EXACT: Direct memory write (not writel) */
     pr_info("*** SYSTEM_REG_WRITE: reg[0x%x] = 0x%x (Binary Ninja EXACT) ***\n", reg, value);
-    writel(value, reg_base + reg);
+    *(volatile u32*)(reg_base + reg) = value;
     wmb();
 }
 
