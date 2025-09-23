@@ -4186,9 +4186,9 @@ int tx_isp_open(struct inode *inode, struct file *file)
     /* This prevents repeated tisp_init calls that corrupt CSI PHY registers */
     static bool isp_core_initialized = false;
 
-    if (!isp_core_initialized && isp->subdevs[0]) {  /* Core subdev is at index 0 */
+    if (!isp_core_initialized && isp->subdevs[4]) {  /* Core subdev is at index 4 */
         pr_info("*** tx_isp_open: Calling ispcore_core_ops_init(1) - FIRST TIME ONLY ***\n");
-        ret = ispcore_core_ops_init(isp->subdevs[0], 1);
+        ret = ispcore_core_ops_init(isp->subdevs[4], 1);
         if (ret != 0) {
             pr_err("tx_isp_open: ispcore_core_ops_init failed: %d\n", ret);
             return ret;
@@ -4819,9 +4819,12 @@ static void tx_isp_exit(void)
             if (sensor->sd.ops && sensor->sd.ops->core && sensor->sd.ops->core->reset) {
                 sensor->sd.ops->core->reset(&sensor->sd, 1);
             }
-            /* Clear sensor from subdev array */
-            if (ourISPdev && ourISPdev->subdevs[3]) {
-                ourISPdev->subdevs[3] = NULL;
+            /* Clear sensor from subdev array - sensors start at index 5 */
+            for (int i = 5; i < ISP_MAX_SUBDEVS; i++) {
+                if (ourISPdev && ourISPdev->subdevs[i]) {
+                    ourISPdev->subdevs[i] = NULL;
+                    break;  /* Clear first sensor found */
+                }
             }
         }
         
