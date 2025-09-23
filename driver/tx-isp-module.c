@@ -6297,35 +6297,7 @@ int tisp_ae1_process(void)
 
 
 
-/* Kernel interface for sensor drivers to register their subdev */
-int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor *sensor)
-{
-    struct registered_sensor *reg_sensor;
-    int i;
-    int ret = 0;
-
-    if (!sd || !sensor) {
-        pr_err("Invalid sensor registration parameters\n");
-        return -EINVAL;
-    }
-
-    mutex_lock(&sensor_register_mutex);
-
-    pr_info("=== KERNEL SENSOR REGISTRATION ===\n");
-    pr_info("Sensor: %s (subdev=%p)\n",
-            (sensor && sensor->info.name[0]) ? sensor->info.name : "(unnamed)", sd);
-
-    mutex_unlock(&sensor_register_mutex);
-    return 0;
-
-err_cleanup_graph:
-    /* FIXED: Add missing error cleanup label */
-    pr_err("Failed to initialize V4L2 or frame channel devices\n");
-err_exit:
-    mutex_unlock(&sensor_register_mutex);
-    return ret;
-}
-EXPORT_SYMBOL(tx_isp_register_sensor_subdev);
+/* REMOVED: tx_isp_register_sensor_subdev - sensors should register through tx_isp_subdev_init like all other subdevs */
 
 /* Export AE processing function for use by other modules */
 EXPORT_SYMBOL(tisp_ae1_process);
