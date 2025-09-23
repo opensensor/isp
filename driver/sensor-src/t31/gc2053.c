@@ -2049,8 +2049,8 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 	ISP_WARNING("=== I2C COMMUNICATION TEST COMPLETE ===\n");
 	ISP_WARNING("Registering %s with ISP framework (sd=%p, sensor=%p)\n",
 	            sensor->info.name[0] ? sensor->info.name : SENSOR_NAME, sd, sensor);
-	/* FIXED: Store sensor in subdev hostdata so tx_isp_get_sensor can find it */
-	sd->hostdata = sensor;
+	/* FIXED: Store sensor in subdev host_priv so tx_isp_get_sensor can find it */
+	tx_isp_set_subdev_hostdata(sd, sensor);
 	ISP_WARNING("%s registered with ISP framework successfully\n",
 	            sensor->info.name[0] ? sensor->info.name : SENSOR_NAME);
 	pr_debug("probe ok ------->%s\n", SENSOR_NAME);
