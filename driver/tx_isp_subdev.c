@@ -134,11 +134,13 @@ int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count)
     /* Get platform data for clock configuration */
     if (sd->pdev && sd->pdev->dev.platform_data) {
         pdata = (struct tx_isp_subdev_platform_data *)sd->pdev->dev.platform_data;
-        /* For now, use hardcoded clock configs since platform data doesn't have clk arrays yet */
-        clk_configs = NULL;
+        /* CRITICAL: Use platform data clock arrays - Binary Ninja: *($s1_1 + 8) */
+        clk_configs = pdata->clks;
+        pr_info("isp_subdev_init_clks: Using platform data clock arrays: %p\n", clk_configs);
     } else {
         pdata = NULL;
         clk_configs = NULL;
+        pr_warn("isp_subdev_init_clks: No platform data - using fallback clocks\n");
     }
 
     /* Binary Ninja: if ($s5 != 0) */
@@ -156,145 +158,86 @@ int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count)
         /* Binary Ninja: memset($v0_1, 0, $s1) */
         memset(clk_array, 0, clk_array_size);
 
-        /* Binary Ninja EXACT: Clock initialization loop */
+        /* Binary Ninja EXACT: Clock initialization using platform data arrays */
         /* int32_t* $s6_1 = arg2; int32_t* $s4_1 = $v0_1; int32_t $s0_2 = 0; */
-        const char **clock_names = NULL;
-        unsigned long *clock_rates = NULL;
 
-        /* Define clock arrays based on device type - EXACT Binary Ninja pattern */
-        if (sd->pdev && strcmp(sd->pdev->name, "isp-m0") == 0) {
-            /* ISP Core device - 3 clocks */
-            static const char *core_clk_names[] = {"cgu_isp", "isp", "csi"};
-            static unsigned long core_clk_rates[] = {100000000, 0xffff, 0xffff}; /* 100MHz, auto, auto */
-            clock_names = core_clk_names;
-            clock_rates = core_clk_rates;
-        } else if (sd->pdev && (strcmp(sd->pdev->name, "isp-w02") == 0 || strcmp(sd->pdev->name, "isp-w00") == 0)) {
-            /* VIC/CSI devices - 2 clocks */
-            static const char *vic_clk_names[] = {"cgu_isp", "isp"};
-            static unsigned long vic_clk_rates[] = {100000000, 0xffff}; /* 100MHz, auto */
-            clock_names = vic_clk_names;
-            clock_rates = vic_clk_rates;
+        /* CRITICAL: Use platform data clock arrays - Binary Ninja: *($s1_1 + 8) */
+        if (clk_configs) {
+            pr_info("isp_subdev_init_clks: Using platform data clock configs\n");
         } else {
-            /* Default - try common clocks */
-            static const char *default_clk_names[] = {"cgu_isp", "isp", "csi"};
-            static unsigned long default_clk_rates[] = {100000000, 0xffff, 0xffff};
-            clock_names = default_clk_names;
-            clock_rates = default_clk_rates;
+            /* Fallback to hardcoded arrays if no platform data */
+            pr_warn("isp_subdev_init_clks: No platform data clock configs - using fallback\n");
         }
 
-        /* Use vic_start clock management pattern - get standard ISP clocks */
+        /* Binary Ninja EXACT: Clock initialization using platform data arrays */
         i = 0;
+        while (i < clk_count) {
+            const char *clk_name;
+            unsigned long clk_rate;
 
-        /* Binary Ninja: Clock 0 - Try different clock names for T31 platform */
-        if (i < clk_count) {
-            /* Try multiple clock names that might be available on T31 */
-            const char *clock_names[] = {"cgu_isp", "isp", "cgu_cim", NULL};
-            int clock_idx = 0;
-
-            cgu_isp_clk = NULL;
-            while (clock_names[clock_idx] && IS_ERR_OR_NULL(cgu_isp_clk)) {
-                cgu_isp_clk = clk_get(sd->dev, clock_names[clock_idx]);
-                if (!IS_ERR(cgu_isp_clk)) {
-                    pr_info("Found clock: %s\n", clock_names[clock_idx]);
-                    break;
+            /* CRITICAL: Get clock name and rate from platform data - Binary Ninja: *$s6_1 */
+            if (clk_configs && i < clk_count) {
+                clk_name = clk_configs[i].name;
+                clk_rate = clk_configs[i].rate;
+                pr_info("Platform data clock[%d]: name=%s, rate=%lu\n", i, clk_name, clk_rate);
+            } else {
+                /* Fallback to hardcoded values if no platform data */
+                static const char *fallback_names[] = {"cgu_isp", "isp", "csi"};
+                static unsigned long fallback_rates[] = {100000000, 0xffff, 0xffff};
+                if (i < 3) {
+                    clk_name = fallback_names[i];
+                    clk_rate = fallback_rates[i];
+                    pr_warn("Using fallback clock[%d]: name=%s, rate=%lu\n", i, clk_name, clk_rate);
+                } else {
+                    break; /* No more fallback clocks */
                 }
-                clock_idx++;
             }
 
-            clk_array[i] = cgu_isp_clk;
+            /* Binary Ninja: int32_t $v0_3 = private_clk_get(*(arg1 + 4), *$s6_1) */
+            struct clk *clk = clk_get(sd->dev, clk_name);
+            clk_array[i] = clk;
 
             /* Binary Ninja: if ($v0_3 u< 0xfffff001) */
-            if (!IS_ERR_OR_NULL(cgu_isp_clk)) {
-                /* Binary Ninja: private_clk_set_rate($v0_3, $a1_1) */
-                ret = clk_set_rate(cgu_isp_clk, 100000000);  /* 100MHz */
-                if (ret == 0) {
-                    ret = clk_prepare_enable(cgu_isp_clk);
+            if (!IS_ERR_OR_NULL(clk)) {
+                /* Binary Ninja: int32_t $a1_1 = $s6_1[1] */
+                int result = 0;
+
+                /* Binary Ninja: if ($a1_1 != 0xffff) */
+                if (clk_rate != 0xffff) {
+                    /* Binary Ninja: result_1 = private_clk_set_rate($v0_3, $a1_1) */
+                    result = clk_set_rate(clk, clk_rate);
+                    pr_info("Clock %s: set rate %lu Hz, result=%d\n", clk_name, clk_rate, result);
+                }
+
+                /* Binary Ninja: if ($a1_1 == 0xffff || result_1 == 0) */
+                if (clk_rate == 0xffff || result == 0) {
+                    ret = clk_prepare_enable(clk);
                     if (ret == 0) {
-                        pr_info("ISP clock enabled at 100MHz\n");
+                        pr_info("Clock %s enabled successfully\n", clk_name);
                         i++;
+                        /* Binary Ninja: continue to next clock */
+                        continue;
                     } else {
                         /* Binary Ninja: isp_printf(2, "sensor type is BT1120!\n", *$s6_1) */
-                        pr_warn("Failed to enable ISP clock, continuing anyway\n");
-                        i++; /* Continue anyway - clock might not be needed */
+                        pr_warn("Failed to enable clock %s, continuing anyway\n", clk_name);
+                        i++;
+                        continue;
                     }
                 } else {
                     /* Binary Ninja: isp_printf(2, "sensor type is BT1120!\n", *$s6_1) */
-                    pr_warn("Failed to set ISP clock rate, continuing anyway\n");
-                    i++; /* Continue anyway - clock might not be needed */
+                    pr_warn("Failed to set rate for clock %s, continuing anyway\n", clk_name);
+                    /* Binary Ninja: $s0_3 = $s0_2 << 2 - goto cleanup */
+                    break;
                 }
             } else {
                 /* Binary Ninja: isp_printf(2, "Can not support this frame mode!!!\n", *$s6_1) */
-                pr_warn("No ISP clock found, continuing without clock management\n");
-                clk_array[i] = NULL;
-                i++; /* Continue anyway - T31 might not need explicit clock management */
+                pr_warn("Failed to get clock %s\n", clk_name);
+                /* Binary Ninja: result = *$s4_1; $s0_3 = $s0_2 << 2 - goto cleanup */
+                break;
             }
         }
 
-        /* Binary Ninja: Clock 1 - ISP Core */
-        if (i < clk_count) {
-            const char *isp_clock_names[] = {"isp", "cgu_isp", "ipu", NULL};
-            int clock_idx = 0;
 
-            isp_clk = NULL;
-            while (isp_clock_names[clock_idx] && IS_ERR_OR_NULL(isp_clk)) {
-                isp_clk = clk_get(sd->dev, isp_clock_names[clock_idx]);
-                if (!IS_ERR(isp_clk)) {
-                    pr_info("Found ISP clock: %s\n", isp_clock_names[clock_idx]);
-                    break;
-                }
-                clock_idx++;
-            }
-
-            clk_array[i] = isp_clk;
-
-            if (!IS_ERR_OR_NULL(isp_clk)) {
-                ret = clk_prepare_enable(isp_clk);
-                if (ret == 0) {
-                    pr_info("ISP core clock enabled\n");
-                    i++;
-                } else {
-                    pr_warn("Failed to enable ISP core clock, continuing anyway\n");
-                    i++;
-                }
-            } else {
-                pr_warn("No ISP core clock found, continuing anyway\n");
-                clk_array[i] = NULL;
-                i++;
-            }
-        }
-
-        /* Binary Ninja: Clock 2 - CSI/MIPI */
-        if (i < clk_count) {
-            const char *csi_clock_names[] = {"csi", "mipi", "cgu_cim", NULL};
-            int clock_idx = 0;
-
-            csi_clk = NULL;
-            while (csi_clock_names[clock_idx] && IS_ERR_OR_NULL(csi_clk)) {
-                csi_clk = clk_get(sd->dev, csi_clock_names[clock_idx]);
-                if (!IS_ERR(csi_clk)) {
-                    pr_info("Found CSI clock: %s\n", csi_clock_names[clock_idx]);
-                    break;
-                }
-                clock_idx++;
-            }
-
-            clk_array[i] = csi_clk;
-
-            if (!IS_ERR_OR_NULL(csi_clk)) {
-                ret = clk_prepare_enable(csi_clk);
-                if (ret == 0) {
-                    pr_info("CSI/MIPI clock enabled\n");
-                    i++;
-                } else {
-                    pr_warn("Failed to enable CSI clock, continuing anyway\n");
-                    i++;
-                }
-            } else {
-                pr_warn("No CSI clock found, continuing anyway\n");
-                clk_array[i] = NULL;
-                i++;
-            }
-        }
 
         /* CPM register setup - following vic_start pattern */
         cpm_regs = ioremap(0x10000000, 0x1000);
@@ -525,6 +468,7 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             sd->clk_num = pdata->clk_num;
 
             /* Binary Ninja: isp_subdev_init_clks(arg2, *($s1_1 + 8)) */
+            /* CRITICAL: Binary Ninja calls with different parameter than clk_num! */
             ret = isp_subdev_init_clks(sd, pdata->clk_num);
             if (ret != 0) {
                 /* Binary Ninja: isp_printf(2, "register is 0x%x, value is 0x%x\n", *(arg2 + 8)) */
