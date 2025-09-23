@@ -1516,9 +1516,13 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
     int current_state;
     int result;
 
+    /* CRITICAL DEBUG: Log entry to verify this function is being called */
+    pr_info("*** vic_core_ops_init: ENTRY - sd=%p, enable=%d ***\n", sd, enable);
+
     /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) */
     if (sd == NULL || (unsigned long)sd >= 0xfffff001) {
         /* Binary Ninja: isp_printf(2, "The parameter is invalid!\n", arg3) */
+        pr_err("*** vic_core_ops_init: INVALID PARAMETER - sd=%p, enable=%d ***\n", sd, enable);
         isp_printf(2, "The parameter is invalid!\n", enable);
         return 0xffffffea;  /* Binary Ninja: return 0xffffffea */
     }
@@ -1527,8 +1531,16 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
     /* SAFE: Use proper struct member access instead of dangerous offset */
     vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
 
+    /* CRITICAL DEBUG: Verify VIC device is valid */
+    if (!vic_dev) {
+        pr_err("*** vic_core_ops_init: CRITICAL ERROR - vic_dev is NULL! ***\n");
+        return -EINVAL;
+    }
+    pr_info("*** vic_core_ops_init: vic_dev=%p, current state check ***\n", vic_dev);
+
     /* Binary Ninja: int32_t $v0_2 = *($s1_1 + 0x128) */
     current_state = vic_dev->state;
+    pr_info("*** vic_core_ops_init: current_state=%d, enable=%d ***\n", current_state, enable);
 
     /* Binary Ninja: if (arg2 == 0) */
     if (enable == 0) {
@@ -1867,18 +1879,23 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
     int state;
     int i;
 
+    /* CRITICAL DEBUG: Log entry to verify this function is being called */
+    pr_info("*** tx_isp_vic_slake_subdev: ENTRY - sd=%p ***\n", sd);
+
     /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 0xffffffea */
     if (!sd || (unsigned long)sd >= 0xfffff001) {
+        pr_err("*** tx_isp_vic_slake_subdev: INVALID PARAMETER - sd=%p ***\n", sd);
         return -EINVAL;
     }
 
     /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
     vic_dev = (struct tx_isp_vic_device *)sd->dev_priv;
     if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
+        pr_err("*** tx_isp_vic_slake_subdev: INVALID VIC DEVICE - vic_dev=%p ***\n", vic_dev);
         return -EINVAL;
     }
 
-    pr_info("*** tx_isp_vic_slake_subdev: VIC slake/shutdown - current state=%d ***\n", vic_dev->state);
+    pr_info("*** tx_isp_vic_slake_subdev: VIC slake/shutdown - vic_dev=%p, current state=%d ***\n", vic_dev, vic_dev->state);
 
     /* Binary Ninja: int32_t $v1_2 = *($s0_1 + 0xe8) */
     state = vic_dev->state;

@@ -116,7 +116,7 @@ static int tx_isp_create_subdev_links(struct tx_isp_dev *isp);
 static int tx_isp_register_link(struct tx_isp_dev *isp, struct link_config *link);
 static int tx_isp_configure_default_links(struct tx_isp_dev *isp);
 int tx_isp_configure_format_propagation(struct tx_isp_dev *isp);
-int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev);
+int tisp_init(void *sensor_info, char *param_name);
 
 /* Critical ISP Core initialization functions - MISSING FROM LOGS! */
 int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on);
@@ -2550,8 +2550,12 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
                         continue;
                     }
 
+                    /* CRITICAL DEBUG: Log each subdev being processed */
+                    pr_info("*** ispcore_slake_module: Processing subdev[%d]=%p ***\n", i, subdev);
+
                     /* Binary Ninja: if ($s2_1 u>= 0xfffff001) continue */
                     if ((unsigned long)subdev >= 0xfffff001) {
+                        pr_info("*** ispcore_slake_module: subdev[%d] invalid pointer, skipping ***\n", i);
                         continue;
                     }
 
@@ -2559,6 +2563,7 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
                     if (subdev->ops && subdev->ops->internal) {
                         /* Binary Ninja: int32_t $v0_7 = *($v0_6 + 4) - SAFE: Get slake_module function */
                         if (subdev->ops->internal->slake_module) {
+                            pr_info("*** ispcore_slake_module: Calling slake_module for subdev[%d] ***\n", i);
                             /* Binary Ninja: int32_t $v0_8 = $v0_7($s2_1) */
                             int ret = subdev->ops->internal->slake_module(subdev);
 
@@ -2569,7 +2574,11 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
                                 isp_printf(2, (unsigned char*)"error handler!!!\n", subdev->module.name);
                                 break;
                             }
+                        } else {
+                            pr_info("*** ispcore_slake_module: subdev[%d] has no slake_module function ***\n", i);
                         }
+                    } else {
+                        pr_info("*** ispcore_slake_module: subdev[%d] has no ops or internal ops ***\n", i);
                     }
                 }
 

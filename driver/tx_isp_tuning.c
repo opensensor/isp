@@ -1573,10 +1573,27 @@ int tisp_init(void *sensor_info, char *param_name)
         return -ENODEV;
     }
 
-    /* Binary Ninja: Basic sensor parameter setup */
+    /* CRITICAL FIX: Properly extract dimensions from sensor attribute structure */
     if (sensor_info) {
-        /* Use provided sensor info if available */
-        memcpy(&sensor_params, sensor_info, sizeof(sensor_params));
+        struct tx_isp_sensor_attribute *sensor_attr = (struct tx_isp_sensor_attribute *)sensor_info;
+
+        /* Extract actual width/height from the correct fields in sensor attribute */
+        sensor_params.width = sensor_attr->total_width;
+        sensor_params.height = sensor_attr->total_height;
+        sensor_params.fps = 25; /* Default FPS */
+        sensor_params.mode = 0; /* Default mode */
+
+        /* Validate dimensions to prevent garbage values */
+        if (sensor_params.width == 0 || sensor_params.height == 0 ||
+            sensor_params.width > 10000 || sensor_params.height > 10000) {
+            pr_warn("*** tisp_init: Invalid sensor dimensions %dx%d, using defaults 1920x1080 ***\n",
+                    sensor_params.width, sensor_params.height);
+            sensor_params.width = 1920;
+            sensor_params.height = 1080;
+        }
+
+        pr_info("*** tisp_init: FIXED - Extracted dimensions from sensor_attr: %dx%d ***\n",
+                sensor_params.width, sensor_params.height);
     }
 
     pr_info("tisp_init: Initializing ISP hardware for sensor (%dx%d)\n",
