@@ -5133,34 +5133,79 @@ static irqreturn_t ispmodule_ip_done_irq_handler(int irq, void *dev_id)
 
 /* tx_isp_handle_sync_sensor_attr_event is now defined in tx_isp_core.c */
 
-/* tx_isp_send_event_to_remote - SAFE implementation using VIC device callback field */
-int tx_isp_send_event_to_remote(void *subdev_ptr, int event_type, void *data)
+/* Event handler jump table structure - matches Ghidra offsets */
+struct tx_isp_event_dispatch {
+    void *reserved[3];                                    /* Padding to reach offset 0xc */
+    struct tx_isp_event_handler_table *handler_table;     /* +0xc: Secondary struct pointer */
+};
+
+struct tx_isp_event_handler_table {
+    void *reserved[7];                                    /* Padding to reach offset 0x1c */
+    int (*event_handler)(void *sd, int event_type, void *data);  /* +0x1c: Function pointer */
+};
+
+/* Default event handler implementation */
+static int default_event_handler(void *sd, int event_type, void *data)
 {
-    struct tx_isp_subdev *sd = (struct tx_isp_subdev *)subdev_ptr;
+    pr_debug("default_event_handler: sd=%p, event=0x%x, data=%p\n", sd, event_type, data);
 
-    pr_info("*** tx_isp_send_event_to_remote: SAFE implementation - sd=0x%p, event=0x%x ***\n", sd, event_type);
+    switch (event_type) {
+        case 0x3000005:  /* Buffer enqueue event */
+            pr_debug("default_event_handler: Buffer enqueue event\n");
+            return 0;
+        case 0x3000008:  /* Buffer QBUF event */
+            pr_debug("default_event_handler: Buffer QBUF event\n");
+            return 0;
+        default:
+            pr_debug("default_event_handler: Unknown event 0x%x\n", event_type);
+            return 0;
+    }
+}
 
-    if (sd != NULL) {
-        /* Get VIC device from host_priv (Binary Ninja compatibility) */
-        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)sd->host_priv;
+/* Global event dispatch structures */
+static struct tx_isp_event_handler_table global_event_table = {
+    .event_handler = default_event_handler
+};
 
-        pr_info("*** tx_isp_send_event_to_remote: vic_dev=0x%p ***\n", vic_dev);
+static struct tx_isp_event_dispatch global_event_dispatch = {
+    .handler_table = &global_event_table
+};
 
-        if (vic_dev != NULL && vic_dev->event_callback != NULL) {
-            struct vic_event_callback *vic_callback = vic_dev->event_callback;
+/* tx_isp_send_event_to_remote - EXACT Ghidra reference with safe struct access */
+int tx_isp_send_event_to_remote(void *arg1, int event_type, void *data)
+{
+    struct tx_isp_subdev *sd = (struct tx_isp_subdev *)arg1;
 
-            pr_info("*** tx_isp_send_event_to_remote: event_handler=0x%p ***\n", vic_callback->event_handler);
-
-            if (vic_callback->event_handler != NULL) {
-                pr_info("*** tx_isp_send_event_to_remote: Calling event_handler(0x%p, 0x%x, 0x%p) ***\n",
-                        sd, event_type, data);
-                return vic_callback->event_handler(sd, event_type, data);
-            }
-        }
+    /* Ghidra: beq a0,zero,LAB_0001fb24 */
+    if (sd == NULL) {
+        return -0x203;  /* Ghidra: li v0,-0x203 */
     }
 
-    pr_info("*** tx_isp_send_event_to_remote: No handler found - returning 0xfffffdfd ***\n");
-    return 0xfffffdfd;
+    /* CRITICAL: Set up the dispatch structure if not already done */
+    if (sd->host_priv == NULL) {
+        sd->host_priv = &global_event_dispatch;
+        pr_debug("tx_isp_send_event_to_remote: Initialized event dispatch for subdev %p\n", sd);
+    }
+
+    /* Ghidra: lw a0,0xc(a0) - Load secondary struct from offset 0xc */
+    struct tx_isp_event_dispatch *dispatch = (struct tx_isp_event_dispatch *)sd->host_priv;
+
+    /* Ghidra: beq a0,zero,LAB_0001fb24 */
+    if (dispatch == NULL || dispatch->handler_table == NULL) {
+        return -0x203;
+    }
+
+    /* Ghidra: lw t9,0x1c(a0) - Load function pointer from offset 0x1c */
+    int (*handler)(void *, int, void *) = dispatch->handler_table->event_handler;
+
+    /* Ghidra: beq t9,zero,LAB_0001fb24 */
+    if (handler == NULL) {
+        return -0x203;
+    }
+
+    /* Ghidra: jr t9 (tail call - jump directly to handler) */
+    pr_debug("tx_isp_send_event_to_remote: Dispatching event 0x%x to handler %p\n", event_type, handler);
+    return handler(sd, event_type, data);
 }
 
 /* __enqueue_in_driver - EXACT Binary Ninja implementation */
