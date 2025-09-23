@@ -372,9 +372,10 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         /* Binary Ninja: $s3_1 = &arg1[0xe] */
         s3_1 = &isp_dev->subdevs[0];
     } else {
-        /* EXACT Binary Ninja MCP: *($s0 + 0xe8) = 4 - Set VIC state to 4 */
-        vic_dev->state = 4;
-        pr_info("*** ispcore_video_s_stream: EXACT Binary Ninja - VIC state set to 4 (STREAMING) ***\n");
+        /* CRITICAL FIX: DO NOT set VIC state to 4 here - let vic_core_s_stream handle it */
+        /* The original Binary Ninja sets state to 4, but this prevents tx_isp_vic_start from running */
+        /* vic_core_s_stream will set state to 4 AFTER tx_isp_vic_start completes successfully */
+        pr_info("*** ispcore_video_s_stream: FIXED - VIC state remains 3, vic_core_s_stream will handle state transition ***\n");
         /* Binary Ninja: $s3_1 = &arg1[0xe] */
         s3_1 = &isp_dev->subdevs[0];
     }
