@@ -2759,9 +2759,15 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                     /* CRITICAL FIX: Don't call tisp_init without sensor attributes - this was causing register interference */
                 }
 
-                /* CRITICAL: Binary Ninja: *($s0 + 0xe8) = 3 - Set VIC state to 3 (ACTIVE) */
-                vic_dev->state = 3;
-                pr_info("*** ispcore_core_ops_init: VIC state set to 3 (ACTIVE) - CORE READY FOR STREAMING ***");
+                /* CRITICAL FIX: Don't reset VIC state if it's already streaming (state 4) */
+                /* The issue is that VIC gets initialized to state 4, then ISP core resets it to 3, causing reinitialization */
+                if (vic_dev->state != 4) {
+                    /* Binary Ninja: *($s0 + 0xe8) = 3 - Set VIC state to 3 (ACTIVE) */
+                    vic_dev->state = 3;
+                    pr_info("*** ispcore_core_ops_init: VIC state set to 3 (ACTIVE) - CORE READY FOR STREAMING ***");
+                } else {
+                    pr_info("*** ispcore_core_ops_init: VIC already streaming (state 4) - preserving state to avoid reinitialization ***");
+                }
 
                 /* CRITICAL: Also set core device state to 3 */
                 core_dev->state = 3;
