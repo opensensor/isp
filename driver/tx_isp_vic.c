@@ -36,7 +36,7 @@ static void *test_addr = NULL;  /* Test address pointer */
 irqreturn_t isp_vic_interrupt_service_routine(void *arg1);
 
 /* Forward declarations for actual reference driver functions */
-extern void tx_isp_enable_irq(void *irq_info);
+void tx_isp_enable_irq(void *arg1);
 extern void tx_isp_disable_irq(void *irq_info);
 
 /* BINARY NINJA EXACT: tx_vic_enable_irq implementation */
@@ -591,6 +591,29 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
     pr_info("*** tx_isp_vic_start: Using single VIC register base - EXACT Binary Ninja reference ***\n");
 
+    /* STEP 2: CPM register manipulation like tx_isp_init_vic_registers */
+    pr_info("*** STREAMING: Configuring CPM registers for VIC access ***\n");
+    cpm_regs = ioremap(0x10000000, 0x1000);
+    if (cpm_regs) {
+        u32 clkgr0 = readl(cpm_regs + 0x20);
+        u32 clkgr1 = readl(cpm_regs + 0x28);
+
+        /* Enable ISP/VIC clocks */
+        clkgr0 &= ~(1 << 13); // ISP clock
+        clkgr0 &= ~(1 << 21); // Alternative ISP position
+        clkgr0 &= ~(1 << 30); // VIC in CLKGR0
+        clkgr1 &= ~(1 << 30); // VIC in CLKGR1
+
+        writel(clkgr0, cpm_regs + 0x20);
+        writel(clkgr1, cpm_regs + 0x28);
+        wmb();
+        msleep(20);
+
+        pr_info("STREAMING: CPM clocks configured for VIC access\n");
+        iounmap(cpm_regs);
+    }
+
+
     /* CRITICAL FIX: Add the missing register writes that got interrupts working in first-IRQ/first-IRQA commits */
     pr_info("*** tx_isp_vic_start: Writing CRITICAL interrupt-enabling registers from working commits ***\n");
     writel(0x3130322a, vic_regs + 0x0);      /* First register from reference trace - CRITICAL for interrupts */
@@ -820,29 +843,55 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
+
+
+    /* Binary Ninja: Enable VIC processing */
+    writel(1, vic_regs + 0x0);
+    wmb();
+    pr_info("tx_isp_vic_start: VIC processing enabled (reg 0x0 = 1)\n");
+
+    /* Binary Ninja: Final configuration registers */
+    writel(0x100010, vic_regs + 0x1a4);
+    writel(0x4210, vic_regs + 0x1ac);
+    writel(0x10, vic_regs + 0x1b0);
+    writel(0, vic_regs + 0x1b4);
+    wmb();
+
+    /* Binary Ninja: Log WDR mode */
+    const char *wdr_msg = (vic_dev->sensor_attr.wdr_cache != 0) ?
+        "WDR mode enabled" : "Linear mode enabled";
+    pr_info("tx_isp_vic_start: %s\n", wdr_msg);
+
+    /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
+    vic_start_ok = 1;
+
+    /* CRITICAL: Enable ISP system-level interrupts when VIC streaming starts */
+
+
     /* CRITICAL FIX: Missing VIC Control register sequence from Binary Ninja reference */
     pr_info("*** tx_isp_vic_start: CRITICAL FIX - Writing VIC Control register sequence ***\n");
 
     /* Binary Ninja: **(arg1 + 0xb8) = 2 */
-    writel(2, vic_regs + 0x0);  /* VIC Control register at offset 0x0 */
+    writel(1, vic_regs + 0x0);  /* VIC Control register at offset 0x0 */
     wmb();
     pr_info("*** tx_isp_vic_start: VIC Control[0x0] = 2 (prepare) ***\n");
 
-    /* Binary Ninja: isp_printf(0, "VIC_CTRL : %08x\n", **(arg1 + 0xb8)) */
-    u32 vic_ctrl_value = readl(vic_regs + 0x0);
-    pr_info("VIC_CTRL : %08x\n", vic_ctrl_value);
-
-    /* CRITICAL FIX: Enable VIC interrupt generation at hardware level by setting bit 0x8 */
-    /* From working commit 09f5fcec: "enable VIC interrupt generation at the hardware level by setting a specific bit (0x8)" */
-    writel(1 | 0x8, vic_regs + 0x0);  /* VIC Control register: streaming (bit 0) + interrupt enable (bit 0x8) */
+    /* Binary Ninja: Final configuration registers */
+    writel(0x100010, vic_regs + 0x1a4);
+    writel(0x4210, vic_regs + 0x1ac);
+    writel(0x10, vic_regs + 0x1b0);
+    writel(0, vic_regs + 0x1b4);
     wmb();
-    pr_info("*** tx_isp_vic_start: VIC Control[0x0] = 0x%x (streaming + interrupt generation enabled) ***\n", 1 | 0x8);
 
-    /* Binary Ninja EXACT: Set vic_start_ok global flag */
-    extern uint32_t vic_start_ok;
-    vic_start_ok = 1;
+    /* Binary Ninja: Log WDR mode */
+    const char *wdr_msg = (vic_dev->sensor_attr.wdr_cache != 0) ?
+        "WDR mode enabled" : "Linear mode enabled";
+    pr_info("tx_isp_vic_start: %s\n", wdr_msg);
+
+    /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
     pr_info("*** tx_isp_vic_start: vic_start_ok set to 1 - EXACT Binary Ninja reference ***\n");
-
+    vic_start_ok = 1;
+	enable_irq(38);
     pr_info("*** tx_isp_vic_start: VIC Control register sequence complete - streaming should start ***\n");
     return 0;
 }
@@ -1975,7 +2024,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Use actual reference driver functions: tx_isp_enable_irq and tx_isp_disable_irq */
 
     /* SAFE: Use proper struct members instead of unsafe offset math */
-    vic_dev->irq_handler = (void (*)(void *))tx_isp_enable_irq;
+    // vic_dev->irq_handler = (void (*)(void *))tx_isp_enable_irq;
     vic_dev->irq_disable = (void (*)(void *))tx_isp_disable_irq;
     vic_dev->irq_priv = &vic_dev->sd.irq_info;  /* Pass IRQ info structure */
 
