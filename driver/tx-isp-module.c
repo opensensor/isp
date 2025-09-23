@@ -4082,9 +4082,9 @@ int tx_isp_open(struct inode *inode, struct file *file)
 
     /* CRITICAL FIX: Call ispcore_core_ops_init when device is opened (Binary Ninja MCP sequence) */
     /* This should trigger the 280ms register updates with proper sensor attributes */
-    if (isp->subdevs[4]) {  /* Core subdev is at index 4 */
+    if (isp->subdevs[0]) {  /* Core subdev is at index 0 */
         pr_info("*** tx_isp_open: Calling ispcore_core_ops_init(1) - device open initialization ***\n");
-        ret = ispcore_core_ops_init(isp->subdevs[4], 1);
+        ret = ispcore_core_ops_init(isp->subdevs[0], 1);
         if (ret != 0) {
             pr_err("tx_isp_open: ispcore_core_ops_init failed: %d\n", ret);
             return ret;

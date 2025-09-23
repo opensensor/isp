@@ -352,8 +352,9 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     if (ourISPdev) {
         if (ops == &core_subdev_ops) {
             /* CORE should be at index 0 - it initializes first to set up clocks, power domains, and base registers */
-            pr_info("*** tx_isp_subdev_init: Core ISP subdev registration handled by core device ***\n");
-            /* The actual registration is done in tx_isp_link_core_device() */
+            ourISPdev->subdevs[0] = sd;  /* Core at index 0 */
+            sd->isp = ourISPdev;
+            pr_info("*** tx_isp_subdev_init: Core ISP subdev registered at index 0 ***\n");
         } else if (ops == &csi_subdev_ops) {
             /* CSI at index 1 - establishes physical data interface after CORE is ready */
             ourISPdev->subdevs[1] = sd;  /* CSI at index 1 */
