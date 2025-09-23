@@ -118,6 +118,7 @@ extern struct tx_isp_dev *ourISPdev;
 int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count)
 {
     struct clk **clk_array = NULL;
+    struct clk *cgu_isp_clk, *isp_clk, *csi_clk;
     struct tx_isp_subdev_platform_data *pdata;
     struct tx_isp_device_clk *clk_configs;
     void __iomem *cpm_regs;
