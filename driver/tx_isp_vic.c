@@ -563,6 +563,7 @@ cleanup:
 /* tx_isp_vic_start - EXACT Binary Ninja MCP implementation */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 {
+	void __iomem *cpm_regs;
     void __iomem *vic_regs;
     struct tx_isp_sensor_attribute *sensor_attr;
     u32 interface_type;
