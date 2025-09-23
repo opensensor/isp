@@ -3174,24 +3174,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             ourISPdev->core_dev->streaming = 0;  /* Clear streaming flag */
         }
 
-        // CRITICAL MISSING CALL: Send IOCTL 0x3000009 to VIC subdev to enable VIC DMA
-        if (ourISPdev && ourISPdev->vic_dev) {
-            struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
-            pr_info("*** Channel %d: STREAMON - Sending IOCTL 0x3000009 to VIC subdev to enable DMA ***\n", channel);
-
-            // CRITICAL FIX: tx_isp_subdev_pipo needs non-NULL arg to enable VIC DMA
-            // Create a dummy raw_pipe array as expected by Binary Ninja reference
-            void *raw_pipe_array[8] = {0};  /* Initialize with zeros */
-
-            // Call vic_core_ops_ioctl with cmd=0x3000009 and proper arg to trigger tx_isp_subdev_pipo
-            ret = vic_core_ops_ioctl(&vic_dev->sd, 0x3000009, raw_pipe_array);
-            if (ret != 0) {
-                pr_err("*** Channel %d: STREAMON - VIC DMA enable failed: %d ***\n", channel, ret);
-                return ret;
-            }
-            pr_info("*** Channel %d: STREAMON - VIC DMA enabled successfully! ***\n", channel);
-        }
-
         return 0;
     }
     case 0x80045613: { // VIDIOC_STREAMOFF - Binary Ninja EXACT implementation
