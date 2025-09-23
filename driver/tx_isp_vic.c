@@ -890,12 +890,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
         pr_info("*** VIC PRESERVATION: VIC hardware initialized (2->4->wait->1, waited %d us) ***\n", wait_count);
         pr_info("*** VIC PRESERVATION: VIC register 0x0 = 0x1 (STREAMING STATE) ***\n");
-    } else if (vic_start_ok == 1) {
-        pr_info("*** VIC PRESERVATION: VIC already working (vic_start_ok=1), preserving hardware state ***\n");
-        pr_info("*** VIC PRESERVATION: Skipping hardware reinitialization to preserve working interrupts ***\n");
     } else {
-        pr_err("tx_isp_vic_start: No PRIMARY VIC registers for hardware enable\n");
-        return -EINVAL;
+        pr_info("*** VIC PRESERVATION: VIC hardware already streaming (reg 0x0 = 0x%x), preserving hardware state ***\n", vic_hardware_state);
+        pr_info("*** VIC PRESERVATION: Skipping hardware reinitialization to preserve working VIC ***\n");
     }
 
     /* Binary Ninja EXACT: Set vic_start_ok global flag */
