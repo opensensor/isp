@@ -510,7 +510,8 @@ int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
     }
 
     /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
-    csi_dev = (struct tx_isp_csi_device *)sd->dev_priv;
+    /* SAFE: Use proper function instead of offset-based access */
+    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
     if (!csi_dev || (unsigned long)csi_dev >= 0xfffff001) {
         return -EINVAL;
     }
@@ -527,10 +528,11 @@ int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
         state = csi_dev->state;  /* Update state after s_stream */
     }
 
+    /* Binary Ninja: void* $s2_1 = $s0_1 + 0x12c - Get mutex */
     /* Binary Ninja: if ($v1_2 == 3) csi_core_ops_init(arg1, 0) */
-    if (state == 3) {
+    if (csi_dev->state == 3) {
         pr_info("tx_isp_csi_slake_subdev: CSI in state 3, calling core_ops_init(disable)\n");
-        //csi_core_ops_init(sd, 0);
+        csi_core_ops_init(sd, 0);
     }
 
     /* Binary Ninja: private_mutex_lock($s2_1) */
@@ -541,10 +543,14 @@ int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
         pr_info("tx_isp_csi_slake_subdev: CSI state 2->1, disabling clocks\n");
         csi_dev->state = 1;
 
-        /* Binary Ninja: Disable clocks in reverse order */
+        /* Binary Ninja: void* $v0 = *(arg1 + 0xbc) - Get clocks array */
+        /* Binary Ninja: if ($v0 != 0 && $v0 u< 0xfffff001) - Clock disabling loop */
         if (sd->clks && sd->clk_num > 0) {
+            /* Binary Ninja: int32_t $s0_2 = *(arg1 + 0xc0) - Get clock count */
+            /* Binary Ninja: Clock disabling loop in reverse order */
             for (i = sd->clk_num - 1; i >= 0; i--) {
                 if (sd->clks[i]) {
+                    /* Binary Ninja: private_clk_disable(*$s0_4) */
                     clk_disable(sd->clks[i]);
                     pr_info("tx_isp_csi_slake_subdev: Disabled clock %d\n", i);
                 }

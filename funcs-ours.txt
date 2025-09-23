@@ -7,9 +7,13 @@
   __frame_channel_vb2_streamoff
   __private_spin_lock_irqsave
   ae0_interrupt_hist
+  ae0_interrupt_hist_wrapper
   ae0_interrupt_static
+  ae0_interrupt_static_wrapper
   ae1_interrupt_hist
+  ae1_interrupt_hist_wrapper
   ae1_interrupt_static
+  ae1_interrupt_static_wrapper
   apical_isp_ae_g_roi
   apical_isp_ae_zone_g_ctrl
   apical_isp_af_zone_g_ctrl
@@ -39,6 +43,7 @@
   data_b2ef8
   data_b2f04
   data_b2f08
+  data_b2f20
   default_event_handler
   destroy_isp_tuning_device
   dump_csi_reg
@@ -49,6 +54,7 @@
   find_subdev_link_pad
   fix_point_div_32
   fix_point_div_64
+  fix_point_intp
   fix_point_mult2_32
   fix_point_mult3_32
   frame_chan_event
@@ -203,6 +209,7 @@
   private_vfree
   private_vmalloc
   push_buffer_fifo
+  restore_isp_control_interrupt_registers_after_reset
   sensor_alloc_analog_gain
   sensor_alloc_analog_gain_short
   sensor_alloc_digital_gain
@@ -243,6 +250,8 @@
   system_reg_write_clm
   system_reg_write_gb
   system_reg_write_gib
+  system_yvu_or_yuv
+  table_intp
   tisp_adr_get_par_cfg
   tisp_adr_par_refresh
   tisp_adr_param_array_get
@@ -265,41 +274,78 @@
   tisp_ae_algo_init
   tisp_ae_deinit
   tisp_ae_exp_th_par_refresh
+  tisp_ae_g_luma
   tisp_ae_get_hist_custome
   tisp_ae_get_par_cfg
   tisp_ae_get_y_zone
   tisp_ae_ir_update
   tisp_ae_param_array_get
+  tisp_ae_param_array_set
   tisp_ae_set_par_cfg
+  tisp_ae_target
+  tisp_ae_trig
+  tisp_ae_tune
   tisp_ae_update_zone_data
   tisp_ae_wdr_en
+  tisp_af_get_attr
+  tisp_af_get_metric
   tisp_af_get_par_cfg
+  tisp_af_get_statistics
   tisp_af_get_zone
   tisp_af_par_refresh
   tisp_af_param_array_get
+  tisp_af_param_array_set
+  tisp_af_process_impl
+  tisp_af_set_attr
+  tisp_af_set_attr_refresh
   tisp_af_set_par_cfg
   tisp_again_update
   tisp_awb_algo_deinit
+  tisp_awb_algo_handle
   tisp_awb_algo_init
   tisp_awb_deinit
+  tisp_awb_ev_update
+  tisp_awb_get_ct
+  tisp_awb_get_ct_trend
+  tisp_awb_get_frz
   tisp_awb_get_par_cfg
+  tisp_awb_get_zone
   tisp_awb_par_refresh
+  tisp_awb_param_array_set
+  tisp_awb_set_ct
+  tisp_awb_set_ct_trend
+  tisp_awb_set_frz
   tisp_awb_set_par_cfg
   tisp_bcsh_brightness
   tisp_bcsh_contrast
+  tisp_bcsh_ct_update
+  tisp_bcsh_ev_update
+  tisp_bcsh_g_brightness
+  tisp_bcsh_g_contrast
+  tisp_bcsh_g_hue
+  tisp_bcsh_g_rgb_coefft
+  tisp_bcsh_g_saturation
+  tisp_bcsh_get_attr
   tisp_bcsh_get_par_cfg
   tisp_bcsh_param_array_get
+  tisp_bcsh_param_array_set
   tisp_bcsh_s_hue
+  tisp_bcsh_s_rgb_coefft
   tisp_bcsh_saturation
+  tisp_bcsh_set_attr
+  tisp_bcsh_set_mjpeg_contrast
   tisp_bcsh_set_par_cfg
   tisp_bcsh_wdr_en
   tisp_blc_get_par_cfg
   tisp_blc_set_par_cfg
   tisp_ccm_ct_update
   tisp_ccm_ev_update
+  tisp_ccm_get_attr
   tisp_ccm_get_par_cfg
   tisp_ccm_is_initialized
   tisp_ccm_param_array_get
+  tisp_ccm_param_array_set
+  tisp_ccm_set_attr
   tisp_ccm_set_par_cfg
   tisp_ccm_wdr_en
   tisp_channel_attr_set
@@ -324,15 +370,28 @@
   tisp_deinit
   tisp_deinit_free
   tisp_dma_cache_sync_helper
+  tisp_dmsc_all_reg_refresh
+  tisp_dmsc_intp
   tisp_dmsc_par_refresh
+  tisp_dmsc_param_array_set
+  tisp_dmsc_refresh
   tisp_dmsc_set_par_cfg
   tisp_dmsc_wdr_en
   tisp_dn_mode_get
   tisp_dn_mode_set
   tisp_dpc_all_reg_refresh
+  tisp_dpc_cor_par_cfg
+  tisp_dpc_d_m1_par_cfg
+  tisp_dpc_d_m2_par_cfg
+  tisp_dpc_d_m3_par_cfg
   tisp_dpc_get_par_cfg
+  tisp_dpc_intp
+  tisp_dpc_intp_reg_refresh
   tisp_dpc_par_refresh
   tisp_dpc_param_array_get
+  tisp_dpc_param_array_set
+  tisp_dpc_refresh
+  tisp_dpc_s_par_cfg
   tisp_dpc_set_par_cfg
   tisp_dpc_wdr_en
   tisp_ev_update
@@ -341,6 +400,7 @@
   tisp_event_process
   tisp_event_push
   tisp_event_set_cb
+  tisp_flip_enable
   tisp_fw_process
   tisp_g_ae_hist
   tisp_g_ae_zone
@@ -356,6 +416,7 @@
   tisp_g_wdr_en
   tisp_gamma_get_par_cfg
   tisp_gamma_param_array_get
+  tisp_gamma_param_array_set
   tisp_gamma_set_par_cfg
   tisp_gamma_wdr_en
   tisp_gb_blc_again_interp
@@ -367,40 +428,89 @@
   tisp_get_ae_info
   tisp_get_ae_state
   tisp_get_awb_info
+  tisp_get_bcsh_hue
+  tisp_get_blc_attr
+  tisp_get_brightness
+  tisp_get_contrast
+  tisp_get_csc_attr
+  tisp_get_current_csc
   tisp_get_defog_strength
+  tisp_get_frame_drop
+  tisp_get_saturation
+  tisp_get_sharpness
+  tisp_get_wdr_output_mode
   tisp_gib_set_par_cfg
   tisp_hldc_con_par_cfg
   tisp_hldc_get_par_cfg
   tisp_hldc_set_par_cfg
+  tisp_hv_flip_enable
+  tisp_hv_flip_get
   tisp_init
   tisp_log2_fixed_to_fixed
+  tisp_log2_fixed_to_fixed_64
   tisp_log2_fixed_to_fixed_tuning
   tisp_log2_int_to_fixed
+  tisp_log2_int_to_fixed_64
+  tisp_lsc_ct_update
+  tisp_lsc_gain_update
   tisp_lsc_get_par_cfg
+  tisp_lsc_hvflip
   tisp_lsc_judge_ct_update_flag
   tisp_lsc_judge_gain_update_flag
+  tisp_lsc_lut_mirror_exchange
+  tisp_lsc_mirror_flip
   tisp_lsc_param_array_get
+  tisp_lsc_param_array_set
   tisp_lsc_set_par_cfg
+  tisp_lsc_upside_down_lut
   tisp_lsc_wdr_en
   tisp_lsc_write_lut_datas
   tisp_math_exp2
   tisp_mdns_all_reg_refresh
+  tisp_mdns_bypass
+  tisp_mdns_c_2d_param_cfg
+  tisp_mdns_c_3d_param_cfg
   tisp_mdns_get_par_cfg
+  tisp_mdns_intp
+  tisp_mdns_intp_reg_refresh
   tisp_mdns_par_refresh
   tisp_mdns_param_array_get
+  tisp_mdns_param_array_set
+  tisp_mdns_refresh
   tisp_mdns_reg_trigger
   tisp_mdns_set_par_cfg
+  tisp_mdns_top_func_cfg
+  tisp_mdns_top_func_refresh
   tisp_mdns_wdr_en
+  tisp_mdns_y_2d_param_cfg
+  tisp_mdns_y_3d_param_cfg
+  tisp_mirror_enable
   tisp_netlink_event_set_cb
   tisp_netlink_exit
   tisp_netlink_init
   tisp_param_operate_deinit
   tisp_param_operate_init
   tisp_param_operate_process
+  tisp_rdns_all_reg_refresh
+  tisp_rdns_awb_gain_par_cfg
+  tisp_rdns_awb_gain_updata
+  tisp_rdns_gain_update
   tisp_rdns_get_par_cfg
+  tisp_rdns_gray_np_par_cfg
+  tisp_rdns_intp
+  tisp_rdns_intp_reg_refresh
+  tisp_rdns_lum_np_par_cfg
+  tisp_rdns_opt_cfg
   tisp_rdns_par_refresh
   tisp_rdns_param_array_get
+  tisp_rdns_param_array_set
+  tisp_rdns_refresh
   tisp_rdns_set_par_cfg
+  tisp_rdns_sl_par_cfg
+  tisp_rdns_slope_cfg
+  tisp_rdns_std_np_par_cfg
+  tisp_rdns_text_np_par_cfg
+  tisp_rdns_thres_par_cfg
   tisp_rdns_wdr_en
   tisp_reg_map_get
   tisp_reg_map_set
@@ -420,6 +530,7 @@
   tisp_s_fcrop_control
   tisp_s_mdns_ratio
   tisp_s_sdns_ratio
+  tisp_s_wb_attr
   tisp_s_wdr_init_en
   tisp_sdns_all_reg_refresh
   tisp_sdns_get_par_cfg
@@ -434,19 +545,32 @@
   tisp_set_bcsh_hue
   tisp_set_brightness
   tisp_set_contrast
+  tisp_set_csc_attr
   tisp_set_csc_version
+  tisp_set_fps
+  tisp_set_frame_drop
   tisp_set_saturation
   tisp_set_sensor_analog_gain
   tisp_set_sensor_analog_gain_short
+  tisp_set_sensor_digital_gain
   tisp_set_sensor_digital_gain_short
   tisp_set_sensor_integration_time
   tisp_set_sensor_integration_time_short
+  tisp_set_sharpness
+  tisp_set_user_csc
+  tisp_set_wdr_output_mode
   tisp_sharpen_all_reg_refresh
+  tisp_sharpen_intp
+  tisp_sharpen_intp_reg_refresh
   tisp_sharpen_par_refresh
   tisp_sharpen_param_array_get
+  tisp_sharpen_param_array_set
+  tisp_sharpen_refresh
   tisp_sharpen_wdr_en
+  tisp_simple_intp
   tisp_tgain_update
   tisp_top_param_array_get
+  tisp_top_read
   tisp_top_sel
   tisp_wdr_ev_calculate
   tisp_wdr_expTime_updata
@@ -479,6 +603,7 @@
   tiziano_af_params_refresh
   tiziano_awb_init
   tiziano_awb_params_refresh
+  tiziano_awb_set_hardware_param
   tiziano_bcsh_init
   tiziano_bcsh_lut_parameter
   tiziano_bcsh_params_refresh
@@ -490,6 +615,7 @@
   tiziano_clm_params_refresh
   tiziano_ct_ccm_interpolation
   tiziano_deflicker_expt
+  tiziano_deflicker_expt_tune
   tiziano_defog_init
   tiziano_defog_params_init
   tiziano_defog_params_refresh
@@ -625,6 +751,7 @@
   tx_isp_v4l2_unlocked_ioctl
   tx_isp_vic_activate_subdev
   tx_isp_vic_frame_done
+  tx_isp_vic_hw_init
   tx_isp_vic_probe
   tx_isp_vic_remove
   tx_isp_vic_slake_subdev
@@ -641,6 +768,7 @@
   tx_vic_disable_irq
   tx_vic_enable_irq
   update_af_zone_data
+  verify_handler_addresses
   vic_core_ops_init
   vic_core_ops_ioctl
   vic_core_s_stream
