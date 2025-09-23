@@ -1409,6 +1409,19 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
         /* Binary Ninja: if ($v0_2 != 3) */
         if (current_state != 3) {
+            /* CRITICAL FIX: Call tx_isp_vic_start BEFORE enabling interrupts */
+            /* This is where VIC hardware should be initialized for interrupt generation */
+            extern uint32_t vic_start_ok;
+            if (vic_start_ok != 1) {
+                pr_info("*** vic_core_ops_init: CRITICAL FIX - vic_start_ok=%d, calling tx_isp_vic_start ***\n", vic_start_ok);
+                int ret = tx_isp_vic_start(vic_dev);
+                if (ret != 0) {
+                    pr_err("vic_core_ops_init: tx_isp_vic_start FAILED: %d\n", ret);
+                    return ret;
+                }
+                pr_info("*** vic_core_ops_init: tx_isp_vic_start SUCCESS, vic_start_ok=%d ***\n", vic_start_ok);
+            }
+
             /* Binary Ninja: tx_vic_enable_irq() */
             tx_vic_enable_irq(vic_dev);
 
