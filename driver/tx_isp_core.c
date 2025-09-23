@@ -806,7 +806,7 @@ int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg
 
 /* Core subdev operations - matches the pattern used by other devices */
 struct tx_isp_subdev_core_ops core_subdev_core_ops = {
-    .init = NULL,  /* CRITICAL FIX: ispcore_core_ops_init should be called from tx_isp_open, not subdev init */
+    .init = ispcore_core_ops_init,  /* CRITICAL FIX: Wire in the core init function for VIC 2→3 transition */
     .reset = NULL,
     .ioctl = ispcore_core_ops_ioctl,  /* Wire in the IOCTL handler */
 };
