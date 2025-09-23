@@ -24,6 +24,9 @@ int tiziano_channel_start(int channel_id, struct tx_isp_channel_attr *attr);
 int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
 int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
 
+/* Sensor Management Functions */
+int ispcore_sensor_ops_release_all_sensor(struct tx_isp_subdev *sd);
+
 /* Hardware Reset Functions */
 u32 tx_isp_check_reset_status(void);
 

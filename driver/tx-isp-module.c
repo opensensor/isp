@@ -5907,7 +5907,7 @@ static int subdev_sensor_ops_release_sensor(struct tx_isp_subdev *sd, void *arg)
 }
 
 /* ispcore_sensor_ops_release_all_sensor - Release all sensors */
-static int ispcore_sensor_ops_release_all_sensor(struct tx_isp_subdev *sd)
+int ispcore_sensor_ops_release_all_sensor(struct tx_isp_subdev *sd)
 {
     pr_info("ispcore_sensor_ops_release_all_sensor: Releasing all sensors\n");
 

@@ -19,6 +19,7 @@
 #include <linux/delay.h>
 #include "../include/tx_isp.h"
 #include "../include/tx_isp_vin.h"
+#include "../include/tx_isp_core.h"
 #include "../include/tx-isp-device.h"
 #include "../include/tx-isp-debug.h"
 
