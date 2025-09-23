@@ -3547,10 +3547,18 @@ int tisp_channel_stop(uint32_t channel_id)
     system_reg_write(channel_base + 0x80, 0);
     system_reg_write(channel_base + 0x98, 0);
     
-    /* Disable channel in master control register */
-    reg_val = system_reg_read(0x9804);  /* Use system_reg_read from reference driver */
-    reg_val &= ~(1 << channel_id);
-    system_reg_write(0x9804, reg_val);
+    /* CRITICAL FIX: Don't modify ISP Control register during streaming */
+    extern uint32_t vic_start_ok;
+    if (vic_start_ok == 1) {
+        pr_info("*** tisp_channel_stop: STREAMING ACTIVE - Preserving ISP Control register (0x9804) ***\n");
+        pr_info("*** tisp_channel_stop: Would clear bit %d but keeping current value to prevent shutdown ***\n", channel_id);
+    } else {
+        /* Disable channel in master control register */
+        reg_val = system_reg_read(0x9804);  /* Use system_reg_read from reference driver */
+        reg_val &= ~(1 << channel_id);
+        system_reg_write(0x9804, reg_val);
+        pr_info("*** tisp_channel_stop: ISP Control register updated: cleared bit %d (not streaming) ***\n", channel_id);
+    }
     
     pr_info("*** tisp_channel_stop: Channel %d stopped successfully ***\n", channel_id);
     return 0;
@@ -3640,7 +3648,16 @@ int tisp_s_fcrop_control(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4,
     
     uint32_t a1_15 = 0xf0000 | msca_ch_en_4;
     msca_ch_en = a1_15;
-    system_reg_write(0x9804, a1_15);
+
+    /* CRITICAL FIX: Don't modify ISP Control register during streaming */
+    extern uint32_t vic_start_ok;
+    if (vic_start_ok == 1) {
+        pr_info("*** tisp_s_fcrop_control: STREAMING ACTIVE - Preserving ISP Control register (0x9804) ***\n");
+        pr_info("*** tisp_s_fcrop_control: Would write 0x%x but keeping current value to prevent shutdown ***\n", a1_15);
+    } else {
+        system_reg_write(0x9804, a1_15);
+        pr_info("*** tisp_s_fcrop_control: ISP Control register written: 0x%x (not streaming) ***\n", a1_15);
+    }
     return 0;
 }
 EXPORT_SYMBOL(tisp_s_fcrop_control);
