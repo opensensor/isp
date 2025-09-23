@@ -1817,20 +1817,14 @@ int tisp_init(void *sensor_info, char *param_name)
     /* The bypass register controls which ISP modules are active vs bypassed */
     /* Green frames indicate that essential processing modules are being bypassed */
 
-    /* CRITICAL FIX: Use EXACT reference driver bypass register calculation */
-    /* Binary Ninja: bypass starts at 0x8077efff, gets modified by parameter loop, then conditional logic */
+    /* CRITICAL FIX: Use EXACT reference driver bypass register value */
+    /* The calculated value 0xb477effd was causing hardware reset - use reference value instead */
 
-    uint32_t bypass_val = 0x8077efff;  /* Reference driver initial value */
-
-    /* Binary Ninja: Final conditional bypass modification */
-    /* if (data_b2e74 != 1) { bypass_val = (bypass_val & 0xb577fffd) | 0x34000009; } */
-    /* else { bypass_val = (bypass_val & 0xa1ffdf76) | 0x880002; } */
-
-    /* Use normal mode (not WDR) for GC2053 */
-    bypass_val = (bypass_val & 0xb577fffd) | 0x34000009;
+    /* REFERENCE DRIVER EXACT VALUE: ISP isp-m0: [CSI PHY Control] write at offset 0xc: 0x0 -> 0x80700008 */
+    uint32_t bypass_val = 0x80700008;  /* EXACT reference driver value - prevents hardware reset */
 
     system_reg_write(0xc, bypass_val);
-    pr_info("*** tisp_init: REFERENCE DRIVER bypass register set to 0x%x (exact Binary Ninja logic) ***\n", bypass_val);
+    pr_info("*** CRITICAL FIX: ISP bypass register set to EXACT reference value 0x%x - prevents hardware reset ***\n", bypass_val);
 
     /* CRITICAL FIX: Configure ISP for NV12 output format */
     /* Application requests NV12 format (0x3231564e) but buffer size mismatch suggests confusion */
