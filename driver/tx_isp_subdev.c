@@ -324,7 +324,7 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     /* CRITICAL: Link subdevices to main ISP device when they're created */
     extern struct tx_isp_dev *ourISPdev;
 
-    /* CRITICAL: Register subdevices in the global ISP device with proper if-else logic */
+    /* CRITICAL: Register subdevices in the global ISP device using helper functions */
     extern struct tx_isp_subdev_ops core_subdev_ops;
     extern struct tx_isp_subdev_ops vic_subdev_ops;
     extern struct tx_isp_subdev_ops csi_subdev_ops;
@@ -332,22 +332,19 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
 
     if (ourISPdev) {
         if (ops == &csi_subdev_ops) {
-            /* CSI at index 0 - establishes physical data interface first */
-            ourISPdev->subdevs[0] = sd;  /* CSI at index 0 */
-            sd->isp = ourISPdev;
-            pr_info("*** tx_isp_subdev_init: CSI subdev registered at index 0 ***\n");
+            /* CSI - register using helper function */
+            int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
+            pr_info("*** tx_isp_subdev_init: CSI subdev registered at slot %d ***\n", slot);
         } else if (ops == &vic_subdev_ops) {
-            /* VIC at index 1 - processing controller after CSI */
+            /* VIC - register using helper function and link VIC device */
             struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
             ourISPdev->vic_dev = vic_dev;
-            ourISPdev->subdevs[1] = sd;
-            sd->isp = ourISPdev;
-            pr_info("*** tx_isp_subdev_init: VIC device linked and registered at index 1 ***\n");
+            int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
+            pr_info("*** tx_isp_subdev_init: VIC device linked and registered at slot %d ***\n", slot);
         } else if (ops == &core_subdev_ops) {
-            /* CORE at index 4 - sink that processes data from sources */
-            ourISPdev->subdevs[4] = sd;  /* Core at index 4 */
-            sd->isp = ourISPdev;
-            pr_info("*** tx_isp_subdev_init: Core ISP subdev registered at index 4 ***\n");
+            /* CORE - register using helper function */
+            int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
+            pr_info("*** tx_isp_subdev_init: Core ISP subdev registered at slot %d ***\n", slot);
         } else if (ops && ops->sensor && ops != &csi_subdev_ops && ops != &vic_subdev_ops && ops != &fs_subdev_ops) {
             /* CRITICAL FIX: This is a REAL sensor subdev (not CSI, VIC, or FS which also have sensor ops) */
             pr_info("*** tx_isp_subdev_init: DETECTED SENSOR SUBDEV - ops=%p, ops->sensor=%p ***\n", ops, ops->sensor);
@@ -358,19 +355,10 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             sd->module.notify = tx_isp_module_notify_handler;
             pr_info("*** tx_isp_subdev_init: Set up sensor module notify handler ***\n");
 
-            /* SENSORS start at index 5+ - come last after all hardware components are initialized */
-            int sensor_index = -1;
-            for (int i = 5; i < ISP_MAX_SUBDEVS; i++) {
-                if (ourISPdev->subdevs[i] == NULL) {
-                    sensor_index = i;
-                    break;
-                }
-            }
-
-            if (sensor_index != -1) {
-                ourISPdev->subdevs[sensor_index] = sd;
-                sd->isp = ourISPdev;
-                pr_info("*** tx_isp_subdev_init: SENSOR subdev registered at index %d, sd=%p ***\n", sensor_index, sd);
+            /* SENSOR - register using helper function */
+            int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
+            if (slot >= 0) {
+                pr_info("*** tx_isp_subdev_init: SENSOR subdev registered at slot %d, sd=%p ***\n", slot, sd);
                 pr_info("*** tx_isp_subdev_init: SENSOR ops=%p, ops->sensor=%p ***\n", sd->ops, sd->ops->sensor);
 
                 /* State transitions are now handled by ispcore_slake_module during probe */

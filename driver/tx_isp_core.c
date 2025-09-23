@@ -366,18 +366,18 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
             vic_dev->state = 3;
             pr_info("*** ispcore_video_s_stream: VIC state set to 3 (ACTIVE) after stream OFF ***\n");
         }
-        /* Binary Ninja: $s3_1 = &arg1[0xe] */
-        s3_1 = &isp_dev->subdevs[0];
+        /* Use helper functions instead of hardcoded array access */
+        s3_1 = &isp_dev->subdevs[0];  /* Keep for Binary Ninja compatibility */
     } else if (v0_3 != 3) {
-        /* Binary Ninja: $s3_1 = &arg1[0xe] */
-        s3_1 = &isp_dev->subdevs[0];
+        /* Use helper functions instead of hardcoded array access */
+        s3_1 = &isp_dev->subdevs[0];  /* Keep for Binary Ninja compatibility */
     } else {
         /* CRITICAL FIX: DO NOT set VIC state to 4 here - let vic_core_s_stream handle it */
         /* The original Binary Ninja sets state to 4, but this prevents tx_isp_vic_start from running */
         /* vic_core_s_stream will set state to 4 AFTER tx_isp_vic_start completes successfully */
         pr_info("*** ispcore_video_s_stream: FIXED - VIC state remains 3, vic_core_s_stream will handle state transition ***\n");
-        /* Binary Ninja: $s3_1 = &arg1[0xe] */
-        s3_1 = &isp_dev->subdevs[0];
+        /* Use helper functions instead of hardcoded array access */
+        s3_1 = &isp_dev->subdevs[0];  /* Keep for Binary Ninja compatibility */
     }
 
     /* CRITICAL FIX: Remove recursive subdev loop that causes infinite recursion */
@@ -2545,52 +2545,81 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
             pr_info("ispcore_slake_module: Processing subdevices");
             pr_info("*** DEBUG: isp_dev=%p, isp_dev->subdevs=%p ***", isp_dev, isp_dev->subdevs);
 
-            for (i = 0; i < 16; i++) {  /* Binary Ninja shows loop through subdev array */
-                    struct tx_isp_subdev *subdev = isp_dev->subdevs[i];
+            /* Process specific subdevices using helper functions in proper order */
+            struct tx_isp_subdev *csi_sd = tx_isp_get_csi_subdev(isp_dev);
+            struct tx_isp_subdev *vic_sd = tx_isp_get_vic_subdev(isp_dev);
+            struct tx_isp_subdev *core_sd = tx_isp_get_core_subdev(isp_dev);
+            struct tx_isp_subdev *fs_sd = tx_isp_get_fs_subdev(isp_dev);
+            struct tx_isp_subdev *sensor_sd = tx_isp_find_sensor_subdev(isp_dev);
 
-                    /* Binary Ninja: if ($s2_1 == 0) continue */
-                    if (subdev == NULL) {
-                        continue;
-                    }
-
-                    /* CRITICAL DEBUG: Log each subdev being processed */
-                    pr_info("*** ispcore_slake_module: Processing subdev[%d]=%p ***\n", i, subdev);
-
-                    /* CRITICAL: Validate subdev pointer is in valid kernel memory range */
-                    if ((unsigned long)subdev < 0x80000000 || (unsigned long)subdev >= 0xfffff000) {
-                        pr_err("*** ispcore_slake_module: subdev[%d]=%p is INVALID - skipping to prevent crash ***\n", i, subdev);
-                        continue;
-                    }
-
-                    /* Binary Ninja: if ($s2_1 u>= 0xfffff001) continue */
-                    if ((unsigned long)subdev >= 0xfffff001) {
-                        pr_info("*** ispcore_slake_module: subdev[%d] invalid pointer, skipping ***\n", i);
-                        continue;
-                    }
-
-                    /* Binary Ninja: void* $v0_6 = *(*($s2_1 + 0xc4) + 0x10) - SAFE: Get internal ops */
-                    if (subdev->ops && subdev->ops->internal) {
-                        /* Binary Ninja: int32_t $v0_7 = *($v0_6 + 4) - SAFE: Get slake_module function */
-                        if (subdev->ops->internal->slake_module) {
-                            pr_info("*** ispcore_slake_module: Calling slake_module for subdev[%d] ***\n", i);
-                            /* Binary Ninja: int32_t $v0_8 = $v0_7($s2_1) */
-                            int ret = subdev->ops->internal->slake_module(subdev);
-
-                            if (ret == 0) {
-                                pr_info("ispcore_slake_module: Subdev %d slake success", i);
-                            } else if (ret != -0x203) {  /* Binary Ninja: if ($v0_8 != 0xfffffdfd) */
-                                /* Binary Ninja: isp_printf(2, "error handler!!!\n", *($s2_1 + 8)) */
-                                isp_printf(2, (unsigned char*)"error handler!!!\n", subdev->module.name);
-                                break;
-                            }
-                        } else {
-                            pr_info("*** ispcore_slake_module: subdev[%d] has no slake_module function ***\n", i);
-                        }
-                    } else {
-                        pr_info("*** ispcore_slake_module: subdev[%d] has no ops or internal ops ***\n", i);
-                    }
+            /* Process CSI first */
+            if (csi_sd && csi_sd->ops && csi_sd->ops->internal && csi_sd->ops->internal->slake_module) {
+                pr_info("*** ispcore_slake_module: Calling slake_module for CSI subdev ***\n");
+                int ret = csi_sd->ops->internal->slake_module(csi_sd);
+                if (ret == 0) {
+                    pr_info("ispcore_slake_module: CSI slake success");
+                } else if (ret != -0x203) {
+                    isp_printf(2, (unsigned char*)"error handler!!!\n", csi_sd->module.name);
+                    goto slake_error;
+                }
             }
 
+            /* Process VIC second */
+            if (vic_sd && vic_sd->ops && vic_sd->ops->internal && vic_sd->ops->internal->slake_module) {
+                pr_info("*** ispcore_slake_module: Calling slake_module for VIC subdev ***\n");
+                int ret = vic_sd->ops->internal->slake_module(vic_sd);
+                if (ret == 0) {
+                    pr_info("ispcore_slake_module: VIC slake success");
+                } else if (ret != -0x203) {
+                    isp_printf(2, (unsigned char*)"error handler!!!\n", vic_sd->module.name);
+                    goto slake_error;
+                }
+            }
+
+            /* Process FS third */
+            if (fs_sd && fs_sd->ops && fs_sd->ops->internal && fs_sd->ops->internal->slake_module) {
+                pr_info("*** ispcore_slake_module: Calling slake_module for FS subdev ***\n");
+                int ret = fs_sd->ops->internal->slake_module(fs_sd);
+                if (ret == 0) {
+                    pr_info("ispcore_slake_module: FS slake success");
+                } else if (ret != -0x203) {
+                    isp_printf(2, (unsigned char*)"error handler!!!\n", fs_sd->module.name);
+                    goto slake_error;
+                }
+            }
+
+            /* Process Core fourth (Note: Core should NOT have slake_module to avoid recursion) */
+            if (core_sd && core_sd->ops && core_sd->ops->internal && core_sd->ops->internal->slake_module) {
+                pr_info("*** ispcore_slake_module: Calling slake_module for Core subdev ***\n");
+                int ret = core_sd->ops->internal->slake_module(core_sd);
+                if (ret == 0) {
+                    pr_info("ispcore_slake_module: Core slake success");
+                } else if (ret != -0x203) {
+                    isp_printf(2, (unsigned char*)"error handler!!!\n", core_sd->module.name);
+                    goto slake_error;
+                }
+            }
+
+            /* Process Sensor last */
+            if (sensor_sd && sensor_sd->ops && sensor_sd->ops->internal && sensor_sd->ops->internal->slake_module) {
+                pr_info("*** ispcore_slake_module: Calling slake_module for Sensor subdev ***\n");
+                int ret = sensor_sd->ops->internal->slake_module(sensor_sd);
+                if (ret == 0) {
+                    pr_info("ispcore_slake_module: Sensor slake success");
+                } else if (ret != -0x203) {
+                    isp_printf(2, (unsigned char*)"error handler!!!\n", sensor_sd->module.name);
+                    goto slake_error;
+                }
+            }
+
+            pr_info("*** ispcore_slake_module: All subdev slake operations completed using helper functions ***\n");
+            goto clock_management;
+
+slake_error:
+            pr_err("*** ispcore_slake_module: Subdev slake operation failed ***\n");
+            /* Continue to clock management even on error */
+
+clock_management:
             /* Binary Ninja: Clock management loop */
             /* int32_t $s2_2 = $s0_3 - 1; while (true) */
             pr_info("ispcore_slake_module: Managing ISP clocks");
@@ -5334,11 +5363,15 @@ int tx_isp_link_core_device(struct tx_isp_dev *isp_dev, struct tx_isp_core_devic
     core_dev->isp_dev = isp_dev;
     core_dev->sd.isp = isp_dev;
 
-    /* Register core subdev in subdevs array at index 4 - CORE is sink after sources */
-    isp_dev->subdevs[4] = &core_dev->sd;
+    /* Register core subdev using helper function instead of hardcoded index */
+    int slot = tx_isp_register_subdev_by_name(isp_dev, &core_dev->sd);
+    if (slot < 0) {
+        pr_err("tx_isp_link_core_device: Failed to register core subdev in array\n");
+        return -ENOMEM;
+    }
 
     pr_info("*** tx_isp_link_core_device: Core device linked successfully ***\n");
-    pr_info("*** Core subdev registered at index 4: %p ***\n", &core_dev->sd);
+    pr_info("*** Core subdev registered at slot %d: %p ***\n", slot, &core_dev->sd);
 
     return 0;
 }

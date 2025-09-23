@@ -40,6 +40,36 @@
 #ifndef FRAME_CHANNEL_MAGIC
 #define FRAME_CHANNEL_MAGIC 0xDEADBEEF
 #endif
+
+/* Helper function to perform sensor operations using helper functions */
+static int tx_isp_sensor_operation_helper(struct tx_isp_dev *isp_dev, unsigned int cmd, void *arg)
+{
+    struct tx_isp_subdev *sensor_sd;
+    int ret = 0;
+
+    if (!isp_dev) {
+        return -EINVAL;
+    }
+
+    /* Use helper function to find sensor instead of hardcoded array access */
+    sensor_sd = tx_isp_find_sensor_subdev(isp_dev);
+    if (!sensor_sd) {
+        pr_warn("tx_isp_sensor_operation_helper: No sensor subdev found\n");
+        return -ENODEV;
+    }
+
+    /* Validate sensor subdev has proper ops */
+    if (!sensor_sd->ops || !sensor_sd->ops->sensor || !sensor_sd->ops->sensor->ioctl) {
+        pr_warn("tx_isp_sensor_operation_helper: Sensor subdev has no ioctl function\n");
+        return -ENOSYS;
+    }
+
+    /* Perform the sensor operation */
+    ret = sensor_sd->ops->sensor->ioctl(sensor_sd, cmd, arg);
+    pr_debug("tx_isp_sensor_operation_helper: sensor ioctl(0x%x) returned %d\n", cmd, ret);
+
+    return ret;
+}
 #include "../include/tx_isp_vic_buffer.h"
 
 /* CSI State constants - needed for proper state management */
@@ -2075,6 +2105,9 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
 
     pr_info("*** tx_isp_video_s_stream: EXACT Binary Ninja reference implementation - enable=%d ***\n", enable);
 
+    /* Debug: Show current subdev array status using helper function */
+    tx_isp_debug_print_subdevs(dev);
+
     /* CRITICAL FIX: Initialize core before streaming starts */
     if (enable == 1) {  /* Stream ON */
         pr_info("*** tx_isp_video_s_stream: STREAM ON - Initializing core first ***\n");
@@ -2125,19 +2158,54 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
     if (enable == 1) {  /* Stream ON - initialize subdevs first */
         pr_info("*** tx_isp_video_s_stream: CRITICAL FIX - Initializing all subdevs before streaming ***\n");
 
-        for (i = 0; i != 0x10; i++) {
-            struct tx_isp_subdev *sd = dev->subdevs[i];
-            if (sd != NULL && sd->ops && sd->ops->core && sd->ops->core->init) {
-                pr_info("*** tx_isp_video_s_stream: Calling subdev[%d]->ops->core->init(1) ***\n", i);
-                result = sd->ops->core->init(sd, 1);
-                if (result != 0 && result != -ENOIOCTLCMD) {
-                    pr_err("tx_isp_video_s_stream: subdev[%d] init failed: %d\n", i, result);
-                    return result;
-                }
-                pr_info("*** tx_isp_video_s_stream: subdev[%d] init SUCCESS ***\n", i);
-            } else if (sd != NULL) {
-                pr_info("*** tx_isp_video_s_stream: subdev[%d] has no init function - skipping ***\n", i);
+        /* Initialize subdevs in proper order using helper functions: CSI → VIC → Core → Sensors */
+        struct tx_isp_subdev *csi_sd = tx_isp_get_csi_subdev(dev);
+        struct tx_isp_subdev *vic_sd = tx_isp_get_vic_subdev(dev);
+        struct tx_isp_subdev *core_sd = tx_isp_get_core_subdev(dev);
+        struct tx_isp_subdev *sensor_sd = tx_isp_find_sensor_subdev(dev);
+
+        /* Initialize CSI first */
+        if (csi_sd && csi_sd->ops && csi_sd->ops->core && csi_sd->ops->core->init) {
+            pr_info("*** tx_isp_video_s_stream: Initializing CSI subdev ***\n");
+            result = csi_sd->ops->core->init(csi_sd, 1);
+            if (result != 0 && result != -ENOIOCTLCMD) {
+                pr_err("tx_isp_video_s_stream: CSI init failed: %d\n", result);
+                return result;
             }
+            pr_info("*** tx_isp_video_s_stream: CSI init SUCCESS ***\n");
+        }
+
+        /* Initialize VIC second */
+        if (vic_sd && vic_sd->ops && vic_sd->ops->core && vic_sd->ops->core->init) {
+            pr_info("*** tx_isp_video_s_stream: Initializing VIC subdev ***\n");
+            result = vic_sd->ops->core->init(vic_sd, 1);
+            if (result != 0 && result != -ENOIOCTLCMD) {
+                pr_err("tx_isp_video_s_stream: VIC init failed: %d\n", result);
+                return result;
+            }
+            pr_info("*** tx_isp_video_s_stream: VIC init SUCCESS ***\n");
+        }
+
+        /* Initialize Core third */
+        if (core_sd && core_sd->ops && core_sd->ops->core && core_sd->ops->core->init) {
+            pr_info("*** tx_isp_video_s_stream: Initializing Core subdev ***\n");
+            result = core_sd->ops->core->init(core_sd, 1);
+            if (result != 0 && result != -ENOIOCTLCMD) {
+                pr_err("tx_isp_video_s_stream: Core init failed: %d\n", result);
+                return result;
+            }
+            pr_info("*** tx_isp_video_s_stream: Core init SUCCESS ***\n");
+        }
+
+        /* Initialize Sensor last */
+        if (sensor_sd && sensor_sd->ops && sensor_sd->ops->core && sensor_sd->ops->core->init) {
+            pr_info("*** tx_isp_video_s_stream: Initializing Sensor subdev ***\n");
+            result = sensor_sd->ops->core->init(sensor_sd, 1);
+            if (result != 0 && result != -ENOIOCTLCMD) {
+                pr_err("tx_isp_video_s_stream: Sensor init failed: %d\n", result);
+                return result;
+            }
+            pr_info("*** tx_isp_video_s_stream: Sensor init SUCCESS ***\n");
         }
         pr_info("*** tx_isp_video_s_stream: All subdev initialization complete - proceeding with s_stream ***\n");
     }
@@ -3979,50 +4047,17 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
     /* Binary Ninja: Handle 0xc0045627 - TX_ISP_SENSOR_SET_INPUT */
     if (cmd == 0xc0045627) {
-        void **s0_4 = (void **)&isp_dev->subdevs[0];
-
         /* Binary Ninja: if (private_copy_from_user(&var_98, arg3, 4) != 0) */
         if (copy_from_user(&var_98, (void __user *)arg, 4) != 0) {
             pr_err("TX_ISP_SENSOR_SET_INPUT: Failed to copy input data\n");
             return -EFAULT;
         }
 
-        /* SAFE: Loop through subdevices with proper pointer validation */
-        for (int i = 0; i < ISP_MAX_SUBDEVS; i++) {
-            struct tx_isp_subdev *sd = isp_dev->subdevs[i];
-
-            if (sd == NULL) {
-                continue; /* Skip empty slots */
-            }
-
-            /* CRITICAL SAFETY: Validate sd pointer before ANY access */
-            if (!virt_addr_valid(sd) ||
-                (unsigned long)sd < 0x80000000 ||
-                (unsigned long)sd >= 0xfffff000) {
-                pr_err("*** TX_ISP_SENSOR_SET_INPUT: Invalid subdev pointer 0x%p at index %d - SKIPPING ***\n", sd, i);
-                continue; /* Skip invalid pointers */
-            }
-
-            /* CRITICAL SAFETY: Check MIPS alignment before accessing struct members */
-            if (((unsigned long)sd & 0x3) != 0) {
-                pr_err("*** TX_ISP_SENSOR_SET_INPUT: Unaligned subdev pointer 0x%p at index %d - SKIPPING ***\n", sd, i);
-                continue; /* Skip unaligned pointers that would cause BadVA crash */
-            }
-
-            /* SAFE: Check if this is a valid subdev with proper null checks */
-            if (!sd->ops || !sd->ops->sensor || !sd->ops->sensor->ioctl) {
-                continue; /* Skip subdevs without sensor IOCTL */
-            }
-
-            /* SAFE: Call sensor IOCTL with proper error handling */
-            int32_t ret = sd->ops->sensor->ioctl(sd, 0x2000004, &var_98);
-
-            if (ret != 0 && ret != 0xfffffdfd) {
-                return ret; /* Stop on error (except 0xfffffdfd which means continue) */
-            }
+        /* Use helper function instead of hardcoded array access */
+        int32_t ret = tx_isp_sensor_operation_helper(isp_dev, 0x2000004, &var_98);
+        if (ret != 0 && ret != 0xfffffdfd) {
+            return ret; /* Stop on error (except 0xfffffdfd which means continue) */
         }
-
-        s6_1 = 0;
 
         /* Binary Ninja: if (private_copy_to_user(arg3, &var_98, 4) != 0) */
         if (copy_to_user((void __user *)arg, &var_98, 4) != 0) {
@@ -4030,7 +4065,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -EFAULT;
         }
 
-        return s6_1;
+        return 0;
     }
 
     /* Binary Ninja: Handle 0x8038564f - TX_ISP_SENSOR_S_REGISTER */
@@ -4439,99 +4474,51 @@ static struct miscdevice tx_isp_miscdev = {
     .fops = &tx_isp_fops,
 };
 
-// Main initialization function - REFACTORED to use new subdevice management system
+/* tx_isp_init - EXACT Binary Ninja MCP reference implementation */
 static int tx_isp_init(void)
 {
-    int ret, i;
-    int gpio_mode_check;
-    struct platform_device *subdev_platforms[5];
+    int v0, a2;
+    int s0;
+    const char *a1_1;
 
-    pr_info("TX ISP driver initializing with new subdevice management system...\n");
+    pr_info("*** tx_isp_init: EXACT Binary Ninja MCP reference implementation ***\n");
 
-    /* CRITICAL: Verify interrupt handler addresses at module load */
-    verify_handler_addresses();
+    /* Binary Ninja: $v0, $a2 = private_driver_get_interface() */
+    v0 = private_driver_get_interface(&a2);
 
-    /* CRITICAL DEBUG: Test interrupt handler manually to verify it works */
-    printk(KERN_ALERT "*** TESTING: Manual interrupt handler test will run after device initialization ***\n");
+    /* Binary Ninja: if ($v0 == 0) */
+    if (v0 == 0) {
+        /* Binary Ninja: $v0_1, $a2 = private_platform_device_register(&tx_isp_platform_device) */
+        int v0_1 = private_platform_device_register(&tx_isp_platform_device);
+        s0 = v0_1;
 
-    /* Step 1: Check driver interface (matches reference) */
-    gpio_mode_check = 0;  // Always return success for standard kernel
-    if (gpio_mode_check != 0) {
-        pr_err("VIC_CTRL : %08x\n", gpio_mode_check);
-        return gpio_mode_check;
+        /* Binary Ninja: if ($v0_1 == 0) */
+        if (v0_1 == 0) {
+            /* Binary Ninja: int32_t $v0_3 = private_platform_driver_register(&tx_isp_driver) */
+            int v0_3 = private_platform_driver_register(&tx_isp_driver);
+
+            /* Binary Ninja: if ($v0_3 == 0) return 0 */
+            if (v0_3 == 0) {
+                pr_info("*** tx_isp_init: Platform device and driver registered successfully ***\n");
+                return 0;
+            }
+
+            /* Binary Ninja: private_platform_device_unregister(&tx_isp_platform_device) */
+            private_platform_device_unregister(&tx_isp_platform_device);
+            pr_err("tx_isp_init: Platform driver registration failed: %d\n", v0_3);
+            return v0_3;
+        }
+
+        a1_1 = "not support the gpio mode!\n";
+    } else {
+        s0 = v0;
+        a1_1 = "VIC_CTRL : %08x\n";
     }
 
-    /* NOTE: ourISPdev will be set by the platform probe function after device registration */
-    /* We'll check for it after registering the platform device */
-
-    /* REMOVED: Frame generation work queue - NOT in reference driver */
-    /* Reference driver uses pure interrupt-driven frame processing */
-    pr_info("*** Using reference driver interrupt-driven frame processing ***\n");
-
-    /* *** CRITICAL FIX: Register subdev platform drivers BEFORE main platform device *** */
-    /* This ensures VIC/CSI/VIN drivers are available when main probe function runs */
-    pr_info("*** CRITICAL: REGISTERING SUBDEV PLATFORM DRIVERS FIRST ***\n");
-    ret = tx_isp_subdev_platform_init();
-    if (ret) {
-        pr_err("Failed to initialize subdev platform drivers: %d\n", ret);
-        goto err_free_dev;
-    }
-    pr_info("*** SUBDEV PLATFORM DRIVERS REGISTERED - VIC/CSI/VIN/CORE DRIVERS AVAILABLE ***\n");
-
-    /* *** CRITICAL FIX: Initialize subdevice registry BEFORE main platform device registration *** */
-    /* This ensures the registry is ready when tx_isp_core_probe tries to create the graph */
-    pr_info("*** CRITICAL: INITIALIZING SUBDEVICE REGISTRY BEFORE MAIN PLATFORM DEVICE ***\n");
-
-    /* Build platform device array for the registry system */
-    subdev_platforms[0] = &tx_isp_csi_platform_device;
-    subdev_platforms[1] = &tx_isp_vic_platform_device;
-    subdev_platforms[2] = &tx_isp_vin_platform_device;
-    subdev_platforms[3] = &tx_isp_fs_platform_device;
-    subdev_platforms[4] = &tx_isp_core_platform_device;
-
-    /* NOTE: Subdev registry initialization will be done after platform device registration */
-    /* when ourISPdev is available from the probe function */
-
-    /* *** CRITICAL: Register main platform driver BEFORE platform device *** */
-    pr_info("*** CRITICAL: Registering main platform driver ***\n");
-    ret = platform_driver_register(&tx_isp_driver);
-    if (ret != 0) {
-        pr_err("Failed to register main platform driver: %d\n", ret);
-        goto err_cleanup_subdev_drivers;
-    }
-    pr_info("*** Main platform driver registered successfully ***\n");
-
-    /* *** REFERENCE DRIVER: Individual subdev platform devices are registered by tx_isp_create_graph_and_nodes *** */
-    pr_info("*** REFERENCE DRIVER: Subdev platform devices will be registered by tx_isp_create_graph_and_nodes ***\n");
-
-    /* Step 2: Register main platform device (matches reference driver exactly) */
-    ret = platform_device_register(&tx_isp_platform_device);
-    if (ret != 0) {
-        pr_err("not support the gpio mode!\n");
-        goto err_cleanup_main_driver;
-    }
-
-    /* CRITICAL: Check if platform probe function ran and set ourISPdev */
-    if (!ourISPdev) {
-        pr_err("*** CRITICAL: ourISPdev is NULL after platform device registration! ***\n");
-        pr_err("*** This indicates platform probe function failed or didn't run ***\n");
-        ret = -ENODEV;
-        goto err_cleanup_platform_device;
-    }
-
-    pr_info("*** SUCCESS: ourISPdev allocated by probe function: %p ***\n", ourISPdev);
-    /* Device already allocated and initialized by probe - just ensure basic fields are set */
-    ourISPdev->refcnt = 0;
-    ourISPdev->is_open = false;
-
-    /* *** CRITICAL FIX: Use tx_isp_request_irq like working driver-irqs *** */
-    pr_info("*** Following reference driver: IRQ registration handled by tx_isp_request_irq ***\n");
-
-    /* Reference driver: All complex initialization happens in probe function */
-    pr_info("TX ISP driver initialized successfully - explicit IRQ registration complete\n");
-
-    /* Reference driver: Return success - probe function handles the rest */
-    return 0;
+    /* Binary Ninja: isp_printf(1, $a1_1, $a2) */
+    isp_printf(1, (unsigned char*)a1_1, a2);
+    return s0;
+}
 
 /* Error handling for reference driver compatibility */
 err_cleanup_irqs:
