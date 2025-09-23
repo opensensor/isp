@@ -1861,6 +1861,7 @@ struct tx_isp_subdev_core_ops vic_core_ops = {
 /* VIC internal operations - EXACT Binary Ninja implementation */
 static struct tx_isp_subdev_internal_ops vic_internal_ops = {
     .slake_module = tx_isp_vic_slake_subdev,
+    .activate_module = vic_core_ops_init,  /* CRITICAL: Wire vic_core_ops_init directly for VIC state 1->3 transition */
 };
 
 /* Complete VIC subdev ops structure - MISSING sensor ops registration */
