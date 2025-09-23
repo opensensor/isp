@@ -1524,6 +1524,9 @@ static int load_isp_tuning_file_real(const char *filename)
     return 0;
 }
 
+/* Global variable to ensure tisp_init is only called once, ever */
+static bool tisp_init_has_been_called = false;
+
 int tisp_init(void *sensor_info, char *param_name)
 {
     extern struct tx_isp_dev *ourISPdev;
@@ -1534,16 +1537,15 @@ int tisp_init(void *sensor_info, char *param_name)
         uint32_t mode;
     } sensor_params = {1920, 1080, 25, 0}; /* Default sensor parameters */
 
-    static int tisp_init_call_count = 0;
-    static bool tisp_already_initialized = false;
-
-    tisp_init_call_count++;
-
-    /* CRITICAL FIX: Prevent multiple tisp_init calls that corrupt CSI PHY registers */
-    if (tisp_already_initialized) {
-        pr_info("tisp_init: Already initialized (call #%d) - skipping to prevent register corruption\n", tisp_init_call_count);
+    /* CRITICAL FIX: Only allow tisp_init to be called ONCE, EVER */
+    if (tisp_init_has_been_called) {
+        pr_info("tisp_init: ALREADY CALLED - skipping to prevent register corruption\n");
         return 0;  /* Return success but don't reinitialize */
     }
+
+    /* Mark as called immediately to prevent any race conditions */
+    tisp_init_has_been_called = true;
+    pr_info("tisp_init: FIRST AND ONLY CALL - proceeding with initialization\n");
 
     if (!ourISPdev) {
         pr_err("tisp_init: No ISP device available\n");
@@ -2066,9 +2068,7 @@ int tisp_init(void *sensor_info, char *param_name)
     pr_info("*** tisp_init: ISP HARDWARE PIPELINE FULLY INITIALIZED - THIS SHOULD TRIGGER REGISTER ACTIVITY ***\n");
     pr_info("*** tisp_init: All hardware blocks enabled, registers configured, events ready ***\n");
 
-    /* CRITICAL FIX: Mark as initialized to prevent future calls */
-    tisp_already_initialized = true;
-    pr_info("*** tisp_init: Marked as initialized - future calls will be skipped ***\n");
+    pr_info("*** tisp_init: INITIALIZATION COMPLETE - this function will never run again ***\n");
 
     return 0;
 }

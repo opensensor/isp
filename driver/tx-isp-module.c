@@ -561,6 +561,18 @@ void system_reg_write(u32 reg, u32 value);
 /* system_reg_write - Direct struct access, no debug logging */
 void system_reg_write(u32 reg, u32 value)
 {
+    /* CRITICAL FIX: Prevent writing 0 to critical ISP/VIC control registers that would kill VIC interrupts */
+    if (value == 0) {
+        if (reg == 0x9804) {  /* ISP Control register */
+            pr_info("*** CRITICAL FIX: Blocked attempt to write 0 to ISP Control register 0x9804 - this would kill VIC interrupts ***\n");
+            return;
+        }
+        if (reg == 0x9ac0 || reg == 0x9ac8) {  /* VIC Control registers */
+            pr_info("*** CRITICAL FIX: Blocked attempt to write 0 to VIC Control register 0x%x - this would kill VIC interrupts ***\n", reg);
+            return;
+        }
+    }
+
     /* Direct register write - matches Binary Ninja behavior exactly */
     writel(value, ourISPdev->core_dev->core_regs + reg);
 }
