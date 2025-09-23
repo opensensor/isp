@@ -2046,39 +2046,108 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
         pr_info("*** tx_isp_video_s_stream: Core initialization complete, proceeding with subdev streaming ***\n");
     }
 
-    /* Iterate through all 16 subdevs */
-    for (i = 0; i < 16; i++) {
-        subdev = dev->subdevs[i];
+    /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
+    s4 = arg1->subdevs;
 
-        if (subdev != NULL) {
-            /* Safe access to video ops */
-            if (subdev->ops && subdev->ops->video && subdev->ops->video->s_stream) {
-                /* Call s_stream function */
-                result = subdev->ops->video->s_stream(subdev, enable);
+    /* CRITICAL FIX: Initialize all subdevs BEFORE calling s_stream */
+    if (arg2 == 1) {  /* Stream ON - initialize subdevs first */
+        pr_info("*** tx_isp_video_s_stream: CRITICAL FIX - Initializing all subdevs before streaming ***\n");
 
-                if (result == 0) {
-                    /* Success, continue to next subdev */
-                    continue;
-                } else if (result == -ENOIOCTLCMD) {
-                    /* Not implemented, continue to next subdev */
-                    continue;
-                } else {
-                    /* Error occurred, rollback previously enabled subdevs */
-                    pr_err("tx_isp_video_s_stream: s_stream failed on subdev[%d]: %d\n", i, result);
-
-                    /* Rollback: disable all previously enabled subdevs */
-                    for (int j = i - 1; j >= 0; j--) {
-                        struct tx_isp_subdev *rollback_subdev = dev->subdevs[j];
-                        if (rollback_subdev && rollback_subdev->ops &&
-                            rollback_subdev->ops->video && rollback_subdev->ops->video->s_stream) {
-                            /* Disable with opposite enable flag */
-                            rollback_subdev->ops->video->s_stream(rollback_subdev, enable ? 0 : 1);
-                        }
-                    }
+        for (i = 0; i != 0x10; i++) {
+            struct tx_isp_subdev *sd = arg1->subdevs[i];
+            if (sd != NULL && sd->ops && sd->ops->core && sd->ops->core->init) {
+                pr_info("*** tx_isp_video_s_stream: Calling subdev[%d]->ops->core->init(1) ***\n", i);
+                result = sd->ops->core->init(sd, 1);
+                if (result != 0 && result != -ENOIOCTLCMD) {
+                    pr_err("tx_isp_video_s_stream: subdev[%d] init failed: %d\n", i, result);
                     return result;
                 }
+                pr_info("*** tx_isp_video_s_stream: subdev[%d] init SUCCESS ***\n", i);
+            } else if (sd != NULL) {
+                pr_info("*** tx_isp_video_s_stream: subdev[%d] has no init function - skipping ***\n", i);
             }
         }
+        pr_info("*** tx_isp_video_s_stream: All subdev initialization complete - proceeding with s_stream ***\n");
+    }
+
+    /* Binary Ninja: for (int32_t i = 0; i != 0x10; ) */
+    for (i = 0; i != 0x10; ) {
+        /* Binary Ninja: void* $a0 = *$s4 */
+        struct tx_isp_subdev *a0 = *s4;
+
+        if (a0 != 0) {
+            /* Binary Ninja: int32_t* $v0_3 = *(*($a0 + 0xc4) + 4) */
+            struct tx_isp_subdev_video_ops *v0_3 = a0->ops ? a0->ops->video : NULL;
+
+            if (v0_3 == 0) {
+                i += 1;
+            } else {
+                /* Binary Ninja: int32_t $v0_4 = *$v0_3 */
+                int (*v0_4)(struct tx_isp_subdev *, int) = v0_3->s_stream;
+
+                if (v0_4 == 0) {
+                    i += 1;
+                } else {
+                    /* Binary Ninja: int32_t result = $v0_4($a0, arg2) */
+                    pr_info("*** tx_isp_video_s_stream: Calling subdev[%d]->ops->video->s_stream(%d) ***\n", i, arg2);
+                    result = v0_4(a0, arg2);
+
+                    if (result == 0) {
+                        pr_info("*** tx_isp_video_s_stream: subdev[%d] s_stream SUCCESS ***\n", i);
+                        i += 1;
+                    } else {
+                        /* Binary Ninja: if (result != 0xfffffdfd) */
+                        if (result != 0xfffffdfd) {
+                            /* Binary Ninja: void* $s0_1 = arg1 + (i << 2) */
+                            struct tx_isp_subdev **s0_1 = &arg1->subdevs[i];
+
+                            /* Binary Ninja: while (arg1 != $s0_1) */
+                            while (&arg1->subdevs[0] != s0_1) {
+                                /* Binary Ninja: void* $a0_1 = *($s0_1 + 0x38) */
+                                /* Move back one position */
+                                s0_1 -= 1;
+                                struct tx_isp_subdev *a0_1 = *s0_1;
+
+                                if (a0_1 == 0) {
+                                    /* Binary Ninja: $s0_1 -= 4 */
+                                    continue;
+                                } else {
+                                    /* Binary Ninja: int32_t* $v0_6 = *(*($a0_1 + 0xc4) + 4) */
+                                    struct tx_isp_subdev_video_ops *v0_6 = a0_1->ops ? a0_1->ops->video : NULL;
+
+                                    if (v0_6 == 0) {
+                                        /* Binary Ninja: $s0_1 -= 4 */
+                                        continue;
+                                    } else {
+                                        /* Binary Ninja: int32_t $v0_7 = *$v0_6 */
+                                        int (*v0_7)(struct tx_isp_subdev *, int) = v0_6->s_stream;
+
+                                        if (v0_7 == 0) {
+                                            /* Binary Ninja: $s0_1 -= 4 */
+                                            continue;
+                                        } else {
+                                            /* Binary Ninja: $v0_7($a0_1, arg2 u< 1 ? 1 : 0) */
+                                            int rollback_enable = (arg2 < 1) ? 1 : 0;
+                                            v0_7(a0_1, rollback_enable);
+                                            /* Binary Ninja: $s0_1 -= 4 */
+                                        }
+                                    }
+                                }
+                            }
+
+                            /* Binary Ninja: return result */
+                            return result;
+                        }
+                        i += 1;
+                    }
+                }
+            }
+        } else {
+            i += 1;
+        }
+
+        /* Binary Ninja: $s4 = &$s4[1] */
+        s4 = &s4[1];
     }
 
     /* All subdevs processed successfully */
