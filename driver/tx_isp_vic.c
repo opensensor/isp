@@ -966,6 +966,17 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* Configure VIC dimensions first - CRITICAL prerequisite for interrupt registers */
     width = sensor_attr->mipi.image_twidth;
     height = sensor_attr->mipi.image_theight;
+
+    /* CRITICAL FIX: Use hardcoded dimensions if sensor attributes are invalid (0x0) */
+    if (width == 0 || height == 0) {
+        width = 1920;   /* GC2053 sensor output width */
+        height = 1080;  /* GC2053 sensor output height */
+        pr_info("*** VIC DIMENSIONS: Using hardcoded %dx%d (sensor attrs invalid: %dx%d) ***\n",
+                width, height, sensor_attr->mipi.image_twidth, sensor_attr->mipi.image_theight);
+    } else {
+        pr_info("*** VIC DIMENSIONS: Using sensor attrs %dx%d ***\n", width, height);
+    }
+
     writel((width << 16) | height, vic_regs + 0x10);  /* VIC dimensions */
     writel(width * 2, vic_regs + 0x14);               /* VIC stride for 16-bit */
     wmb();
