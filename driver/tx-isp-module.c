@@ -574,8 +574,8 @@ void system_reg_write(u32 reg, u32 value)
         return;
     }
 
-    /* Binary Ninja: Get register base from ISP device structure at offset 0xb8 */
-    void __iomem *reg_base = ourISPdev->vic_dev->vic_regs;  /* This is at offset 0xb8 in the structure */
+    /* Use core_regs - this generated 1 interrupt, so it's the right register space */
+    void __iomem *reg_base = ourISPdev->core_dev->core_regs;
 
     if (!reg_base) {
         pr_warn("system_reg_write: No register base available for reg=0x%x val=0x%x\n", reg, value);
