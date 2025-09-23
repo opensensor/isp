@@ -1671,37 +1671,46 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
         /* Binary Ninja: $v0 = 0 */
         ret = 0;
 
-        /* CRITICAL FIX: Always run VIC hardware enable sequence when streaming starts */
-        /* The issue was that VIC state 4 caused hardware initialization to be skipped */
-        /* But we need the hardware enable sequence to transition VIC registers from 0x200 to 0x1 */
-        pr_info("*** vic_core_s_stream: ALWAYS calling VIC start sequence (current_state=%d) ***\n", current_state);
+        /* STREAM->OFF->STREAM PRESERVATION: Only initialize VIC if not already working */
+        /* Binary Ninja: if ($v1_3 != 4) */
+        if (current_state != 4) {
+            pr_info("*** vic_core_s_stream: State != 4, calling VIC start sequence ***\n");
 
-        /* Binary Ninja: tx_vic_disable_irq() */
-        pr_info("*** vic_core_s_stream: Step 1 - Disabling VIC interrupts ***\n");
-        tx_vic_disable_irq(vic_dev);
+            /* Binary Ninja: tx_vic_disable_irq() */
+            pr_info("*** vic_core_s_stream: Step 1 - Disabling VIC interrupts ***\n");
+            tx_vic_disable_irq(vic_dev);
 
-        /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
-        pr_info("*** vic_core_s_stream: Step 2 - Calling tx_isp_vic_start to initialize VIC hardware ***\n");
-        ret = tx_isp_vic_start(vic_dev);
-        if (ret != 0) {
-            pr_err("*** vic_core_s_stream: tx_isp_vic_start FAILED: %d - VIC hardware not initialized! ***\n", ret);
+            /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
+            pr_info("*** vic_core_s_stream: Step 2 - Calling tx_isp_vic_start to initialize VIC hardware ***\n");
+            ret = tx_isp_vic_start(vic_dev);
+            if (ret != 0) {
+                pr_err("*** vic_core_s_stream: tx_isp_vic_start FAILED: %d - VIC hardware not initialized! ***\n", ret);
+                return ret;
+            }
+            pr_info("*** vic_core_s_stream: Step 3 - tx_isp_vic_start SUCCESS - VIC hardware initialized ***\n");
+
+            /* Binary Ninja: *($s1_1 + 0x128) = 4 */
+            vic_dev->state = 4;
+            pr_info("*** vic_core_s_stream: Step 4 - VIC state set to 4 (streaming) ***\n");
+
+            /* Binary Ninja: tx_vic_enable_irq() */
+            pr_info("*** vic_core_s_stream: Step 5 - Enabling VIC interrupts ***\n");
+            tx_vic_enable_irq(vic_dev);
+            pr_info("*** vic_core_s_stream: Step 6 - VIC interrupts enabled ***\n");
+
+            pr_info("*** vic_core_s_stream: VIC start completed, ret=%d, state=4 ***\n", ret);
+
+            /* Binary Ninja: return $v0_1 */
+            return ret;
+        } else {
+            pr_info("*** vic_core_s_stream: STREAM->OFF->STREAM case - VIC already in state 4, preserving hardware ***\n");
+            pr_info("*** vic_core_s_stream: Just enabling interrupts without reinitializing hardware ***\n");
+
+            /* Just enable interrupts without reinitializing hardware */
+            tx_vic_enable_irq(vic_dev);
+            pr_info("*** vic_core_s_stream: VIC interrupts re-enabled, preserving working hardware state ***\n");
             return ret;
         }
-        pr_info("*** vic_core_s_stream: Step 3 - tx_isp_vic_start SUCCESS - VIC hardware initialized ***\n");
-
-        /* Binary Ninja: *($s1_1 + 0x128) = 4 */
-        vic_dev->state = 4;
-        pr_info("*** vic_core_s_stream: Step 4 - VIC state set to 4 (streaming) ***\n");
-
-        /* Binary Ninja: tx_vic_enable_irq() */
-        pr_info("*** vic_core_s_stream: Step 5 - Enabling VIC interrupts ***\n");
-        tx_vic_enable_irq(vic_dev);
-        pr_info("*** vic_core_s_stream: Step 6 - VIC interrupts enabled ***\n");
-
-        pr_info("*** vic_core_s_stream: VIC start completed, ret=%d, state=4 ***\n", ret);
-
-        /* Binary Ninja: return $v0_1 */
-        return ret;
     }
 }
 
