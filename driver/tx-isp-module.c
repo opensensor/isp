@@ -2008,6 +2008,33 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
         return -EINVAL;
     }
 
+    /* CRITICAL FIX: Initialize subdevs before streaming if link_stream wasn't called */
+    if (enable == 1) {  /* Stream ON */
+        pr_info("*** tx_isp_video_s_stream: CRITICAL FIX - Ensuring subdevs are initialized ***\n");
+        for (i = 0; i < 16; i++) {
+            struct tx_isp_subdev *subdev = dev->subdevs[i];
+            if (subdev != NULL && subdev->ops) {
+                /* Call activate_module if available */
+                if (subdev->ops->internal && subdev->ops->internal->activate_module) {
+                    pr_info("*** tx_isp_video_s_stream: Calling activate_module on subdev[%d] ***\n", i);
+                    result = subdev->ops->internal->activate_module(subdev);
+                    if (result != 0 && result != -ENOIOCTLCMD) {
+                        pr_err("tx_isp_video_s_stream: activate_module failed on subdev[%d]: %d\n", i, result);
+                    }
+                }
+                /* Call core init if available */
+                if (subdev->ops->core && subdev->ops->core->init) {
+                    pr_info("*** tx_isp_video_s_stream: Calling core init on subdev[%d] ***\n", i);
+                    result = subdev->ops->core->init(subdev, 1);
+                    if (result != 0 && result != -ENOIOCTLCMD) {
+                        pr_err("tx_isp_video_s_stream: core init failed on subdev[%d]: %d\n", i, result);
+                    }
+                }
+            }
+        }
+        pr_info("*** tx_isp_video_s_stream: Subdev initialization complete ***\n");
+    }
+
     /* Iterate through all 16 subdevs */
     for (i = 0; i < 16; i++) {
         subdev = dev->subdevs[i];
