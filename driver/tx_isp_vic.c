@@ -828,7 +828,17 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0xFFFFFFFF, vic_regs + 0x1ec);  /* Disable all MDMA interrupts */
     wmb();
 
+    /* CRITICAL FIX: Enable VIC master interrupt enable register */
+    /* The VIC hardware may have a master interrupt enable that gates all interrupts */
+    /* Common registers for master interrupt enable: 0x1e0, 0x1e4, 0x200, 0x204 */
+    writel(0x1, vic_regs + 0x1e0);        /* Try master interrupt enable */
+    writel(0x1, vic_regs + 0x1e4);        /* Try alternate master enable */
+    writel(0x1, vic_regs + 0x200);        /* Try global interrupt enable */
+    writel(0x1, vic_regs + 0x204);        /* Try interrupt control enable */
+    wmb();
+
     pr_info("*** tx_isp_vic_start: VIC interrupt masks configured (0x1e8=0xFFFFFFFE enables bit 0) ***\n");
+    pr_info("*** tx_isp_vic_start: VIC master interrupt enables configured (0x1e0=0x1, 0x1e4=0x1, 0x200=0x1, 0x204=0x1) ***\n");
 
     /* CRITICAL FIX: Always restore VIC control registers to streaming state */
     /* The tuning system turns off VIC control registers (0x9ac0, 0x9ac8) after initialization */
