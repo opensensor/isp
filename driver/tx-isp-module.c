@@ -5178,9 +5178,8 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
     printk(KERN_ALERT "*** CRITICAL: isp_irq_handle: IRQ %d received, dev_id=%p ***\n", irq, dev_id);
     pr_info("*** isp_irq_handle: IRQ %d received, dev_id=%p ***\n", irq, dev_id);
 
-    /* CRITICAL DEBUG: Force console output and add delay to ensure message is visible */
+    /* CRITICAL DEBUG: Force console output - NO SLEEP IN ATOMIC CONTEXT */
     printk(KERN_ALERT "*** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***\n");
-    msleep(1);  /* Brief delay to ensure message gets to console */
 
     /* Binary Ninja reference shows this is the main interrupt processing function */
     /* It handles VIC interrupts directly, not through a dispatcher */
