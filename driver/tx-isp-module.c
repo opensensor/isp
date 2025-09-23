@@ -52,7 +52,7 @@ static int tx_isp_sensor_operation_helper(struct tx_isp_dev *isp_dev, unsigned i
     }
 
     /* Use helper function to find sensor instead of hardcoded array access */
-    sensor_sd = tx_isp_find_sensor_subdev(isp_dev);
+    sensor_sd = tx_isp_get_sensor_subdev(isp_dev);
     if (!sensor_sd) {
         pr_warn("tx_isp_sensor_operation_helper: No sensor subdev found\n");
         return -ENODEV;
@@ -2168,7 +2168,7 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
         struct tx_isp_subdev *csi_sd = tx_isp_get_csi_subdev(dev);
         struct tx_isp_subdev *vic_sd = tx_isp_get_vic_subdev(dev);
         struct tx_isp_subdev *core_sd = tx_isp_get_core_subdev(dev);
-        struct tx_isp_subdev *sensor_sd = tx_isp_find_sensor_subdev(dev);
+        struct tx_isp_subdev *sensor_sd = tx_isp_get_sensor_subdev(dev);
 
         /* Initialize CSI first */
         if (csi_sd && csi_sd->ops && csi_sd->ops->core && csi_sd->ops->core->init) {

@@ -2550,7 +2550,7 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
             struct tx_isp_subdev *vic_sd = tx_isp_get_vic_subdev(isp_dev);
             struct tx_isp_subdev *core_sd = tx_isp_get_core_subdev(isp_dev);
             struct tx_isp_subdev *fs_sd = tx_isp_get_fs_subdev(isp_dev);
-            struct tx_isp_subdev *sensor_sd = tx_isp_find_sensor_subdev(isp_dev);
+            struct tx_isp_subdev *sensor_sd = tx_isp_get_sensor_subdev(isp_dev);
 
             /* Process CSI first */
             if (csi_sd && csi_sd->ops && csi_sd->ops->internal && csi_sd->ops->internal->slake_module) {
