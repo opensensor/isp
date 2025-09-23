@@ -562,11 +562,30 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 static int tx_isp_hardware_init(struct tx_isp_dev *isp_dev);
 void system_reg_write(u32 reg, u32 value);
 
-/* system_reg_write - Direct struct access, no debug logging */
+/* system_reg_write - FIXED to match working driver-irqs version */
 void system_reg_write(u32 reg, u32 value)
 {
-    /* Direct register write - matches Binary Ninja behavior exactly */
-    writel(value, ourISPdev->core_dev->core_regs + reg);
+    /* Binary Ninja EXACT: *(*(mdns_y_pspa_cur_bi_wei0_array + 0xb8) + arg1) = arg2 */
+    /* mdns_y_pspa_cur_bi_wei0_array is the ISP device structure (ourISPdev) */
+    /* +0xb8 is the register base address offset in the device structure */
+
+    if (!ourISPdev) {
+        pr_warn("system_reg_write: No ISP device available for reg=0x%x val=0x%x\n", reg, value);
+        return;
+    }
+
+    /* Binary Ninja: Get register base from ISP device structure at offset 0xb8 */
+    void __iomem *reg_base = ourISPdev->vic_regs;  /* This is at offset 0xb8 in the structure */
+
+    if (!reg_base) {
+        pr_warn("system_reg_write: No register base available for reg=0x%x val=0x%x\n", reg, value);
+        return;
+    }
+
+    /* Binary Ninja EXACT: Write to register base + offset */
+    pr_info("*** SYSTEM_REG_WRITE: reg[0x%x] = 0x%x (Binary Ninja EXACT) ***\n", reg, value);
+    writel(value, reg_base + reg);
+    wmb();
 }
 
 /* system_reg_write_ae - EXACT Binary Ninja decompiled implementation */
