@@ -4080,11 +4080,22 @@ int tx_isp_open(struct inode *inode, struct file *file)
         return 0;
     }
 
-    /* CRITICAL FIX: DO NOT trigger any hardware initialization during open */
-    /* The original code was safe, but we need to ensure no delayed operations start */
-    pr_info("*** tx_isp_open: SAFE MODE - no hardware initialization during open ***\n");
+    /* CRITICAL FIX: Call ispcore_core_ops_init when device is opened (Binary Ninja MCP sequence) */
+    /* This should trigger the 280ms register updates with proper sensor attributes */
+    if (isp->subdevs[4]) {  /* Core subdev is at index 4 */
+        pr_info("*** tx_isp_open: Calling ispcore_core_ops_init(1) - device open initialization ***\n");
+        ret = ispcore_core_ops_init(isp->subdevs[4], 1);
+        if (ret != 0) {
+            pr_err("tx_isp_open: ispcore_core_ops_init failed: %d\n", ret);
+            return ret;
+        }
+        pr_info("*** tx_isp_open: ispcore_core_ops_init SUCCESS - ISP core initialized for streaming ***\n");
+    } else {
+        pr_err("tx_isp_open: No core subdev available for initialization\n");
+        return -ENODEV;
+    }
 
-    /* SAFE: Mark as open without triggering dangerous operations */
+    /* SAFE: Mark as open after successful initialization */
     isp->refcnt = 1;
     isp->is_open = true;
     file->private_data = isp;
@@ -4127,7 +4138,7 @@ static const struct file_operations tx_isp_fops = {
 
 /* Main ISP subdev operations - Binary Ninja reference */
 static struct tx_isp_subdev_core_ops main_subdev_core_ops = {
-    .init = ispcore_core_ops_init,  /* Will be set when needed */
+    .init = NULL,  /* CRITICAL FIX: ispcore_core_ops_init should be called from tx_isp_open, not subdev init */
     .reset = NULL,
     .ioctl = NULL,
 };
