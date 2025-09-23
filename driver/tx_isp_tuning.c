@@ -1677,10 +1677,21 @@ int tisp_init(void *sensor_info, char *param_name)
 
     uint32_t isp_mode = 0x1c;  /* Normal mode (not WDR) - Binary Ninja: $v0_30 = 0x1c */
     system_reg_write(0x804, isp_mode);  /* ISP routing configuration */
-    system_reg_write(0x1c, 8);          /* ISP control mode */
+
+    /* CRITICAL FIX: Don't turn off ISP control if streaming is already active */
+    extern uint32_t vic_start_ok;
+    if (vic_start_ok == 1) {
+        pr_info("*** tisp_init: STREAMING ACTIVE - Skipping ISP control register write to prevent shutdown ***\n");
+        pr_info("*** tisp_init: VIC streaming detected - keeping ISP controls enabled ***\n");
+    } else {
+        system_reg_write(0x1c, 8);          /* ISP control mode - only when not streaming */
+        pr_info("*** tisp_init: ISP control mode set to 8 (streaming not active) ***\n");
+    }
+
     system_reg_write(0x800, 1);         /* Enable ISP pipeline */
 
-    pr_info("*** tisp_init: REFERENCE DRIVER final configuration - 0x804=0x%x, 0x1c=8, 0x800=1 ***\n", isp_mode);
+    pr_info("*** tisp_init: REFERENCE DRIVER final configuration - 0x804=0x%x, 0x1c=%s, 0x800=1 ***\n",
+            isp_mode, (vic_start_ok == 1) ? "SKIPPED" : "8");
 
     /* CRITICAL FIX: Configure ISP with ACTUAL sensor image dimensions */
     /* This is the missing piece - ISP must know the correct image size */
@@ -1983,7 +1994,15 @@ int tisp_init(void *sensor_info, char *param_name)
 
     /* Binary Ninja: Final three critical register writes */
     system_reg_write(0x804, isp_mode);  /* ISP routing configuration */
-    system_reg_write(0x1c, 8);          /* ISP control mode */
+
+    /* CRITICAL FIX: Don't turn off ISP control if streaming is already active */
+    if (vic_start_ok == 1) {
+        pr_info("*** tisp_init: STREAMING ACTIVE - Skipping second ISP control register write ***\n");
+    } else {
+        system_reg_write(0x1c, 8);          /* ISP control mode - only when not streaming */
+        pr_info("*** tisp_init: Second ISP control mode set to 8 (streaming not active) ***\n");
+    }
+
     system_reg_write(0x800, 1);         /* Enable ISP pipeline */
 
     /* Binary Ninja: CRITICAL - Initialize all ISP sub-modules */
