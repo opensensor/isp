@@ -1487,6 +1487,37 @@ void tx_isp_disable_irq(void *arg1)
     pr_info("*** tx_isp_disable_irq: IRQ %d DISABLED ***\n", irq_num);
 }
 
+/* Restore critical ISP Control interrupt registers after reset - CRITICAL for hardware interrupt generation */
+static void restore_isp_control_interrupt_registers_after_reset(void)
+{
+    if (!ourISPdev || !ourISPdev->core_dev || !ourISPdev->core_dev->core_regs) {
+        pr_err("restore_isp_control_interrupt_registers_after_reset: No core registers available\n");
+        return;
+    }
+
+    void __iomem *core_regs = ourISPdev->core_dev->core_regs;
+
+    pr_info("*** CRITICAL: Restoring ISP Control interrupt registers to enable hardware interrupt generation ***\n");
+
+    /* Restore the ISP Control interrupt registers that enable hardware interrupt generation */
+    /* These values match the working driver-irqs and are critical for interrupt generation */
+    writel(0x3f00,      core_regs + 0x9804);  /* Main ISP Control - must be active for interrupts */
+    writel(0x7800438,   core_regs + 0x9864);  /* ISP interrupt control */
+    writel(0xc0000000,  core_regs + 0x987c);  /* ISP interrupt control */
+    writel(0x1,         core_regs + 0x9880);  /* ISP interrupt enable */
+    writel(0x1,         core_regs + 0x9884);  /* ISP interrupt enable */
+    writel(0x1010001,   core_regs + 0x9890);  /* ISP interrupt configuration */
+    writel(0x1010001,   core_regs + 0x989c);  /* ISP interrupt configuration */
+    writel(0x1010001,   core_regs + 0x98a8);  /* ISP interrupt configuration */
+
+    /* Also restore VIC Control registers for interrupt generation */
+    writel(0x200,       core_regs + 0x9ac0);  /* VIC Control - interrupt related */
+    writel(0x200,       core_regs + 0x9ac8);  /* VIC Control - interrupt related */
+    wmb();
+
+    pr_info("*** CRITICAL: ISP Control interrupt registers restored - hardware should now generate interrupts ***\n");
+}
+
 /* tx_isp_enable_irq - EXACT Binary Ninja implementation with correct parameter */
 void tx_isp_enable_irq(void *arg1)
 {
@@ -1512,6 +1543,10 @@ void tx_isp_enable_irq(void *arg1)
     enable_irq(irq_num);
 
     pr_info("*** tx_isp_enable_irq: IRQ %d ENABLED ***\n", irq_num);
+
+    /* CRITICAL FIX: Restore ISP Control interrupt registers after IRQ enable */
+    /* This ensures hardware interrupt generation works even after register resets */
+    restore_isp_control_interrupt_registers_after_reset();
 }
 
 
@@ -4446,11 +4481,40 @@ static int tx_isp_init(void)
     ourISPdev->refcnt = 0;
     ourISPdev->is_open = false;
 
-    /* Reference driver approach: Let tx_isp_request_irq handle all interrupt registrations */
-    pr_info("*** Following reference driver: IRQ registration handled by tx_isp_request_irq ***\n");
+    /* *** CRITICAL FIX: Register BOTH IRQ handlers like working driver-irqs *** */
+    pr_info("*** REGISTERING BOTH IRQ HANDLERS (37 + 38) FOR COMPLETE INTERRUPT SUPPORT ***\n");
+
+    /* Register IRQ 37 (isp-m0) - Primary ISP processing */
+    ret = request_threaded_irq(37,
+                              isp_irq_handle,
+                              isp_irq_thread_handle,
+                              IRQF_SHARED,
+                              "isp-m0",                /* Match stock driver name */
+                              ourISPdev);
+    if (ret != 0) {
+        pr_err("*** FAILED TO REQUEST IRQ 37 (isp-m0): %d ***\n", ret);
+    } else {
+        pr_info("*** SUCCESS: IRQ 37 (isp-m0) REGISTERED ***\n");
+        ourISPdev->isp_irq = 37;
+    }
+
+    /* Register IRQ 38 (isp-w02) - Secondary ISP channel */
+    ret = request_threaded_irq(38,
+                              isp_irq_handle,          /* Same handlers work for both IRQs */
+                              isp_irq_thread_handle,
+                              IRQF_SHARED,
+                              "isp-w02",               /* Match stock driver name */
+                              ourISPdev);
+    if (ret != 0) {
+        pr_err("*** FAILED TO REQUEST IRQ 38 (isp-w02): %d ***\n", ret);
+        pr_err("*** ONLY IRQ 37 WILL BE AVAILABLE ***\n");
+    } else {
+        pr_info("*** SUCCESS: IRQ 38 (isp-w02) REGISTERED ***\n");
+        ourISPdev->isp_irq2 = 38;  /* Store secondary IRQ */
+    }
 
     /* Reference driver: All complex initialization happens in probe function */
-    pr_info("TX ISP driver initialized successfully - probe function will handle device setup\n");
+    pr_info("TX ISP driver initialized successfully - explicit IRQ registration complete\n");
 
     /* Reference driver: Return success - probe function handles the rest */
     return 0;
@@ -4715,8 +4779,20 @@ static void tx_isp_exit(void)
         ourISPdev = NULL;
         pr_info("*** ourISPdev set to NULL - interrupt handlers will now safely exit ***\n");
 
-        /* Reference driver approach: IRQs freed by tx_isp_free_irq in subdevice cleanup */
-        pr_info("*** Following reference driver: IRQ cleanup handled by tx_isp_free_irq ***\n");
+        /* *** CRITICAL: Free both IRQ 37 and IRQ 38 that we explicitly registered *** */
+        pr_info("*** Freeing explicitly registered IRQs (37 + 38) ***\n");
+
+        /* Free IRQ 37 (isp-m0) */
+        if (local_isp_dev->isp_irq == 37) {
+            free_irq(37, local_isp_dev);
+            pr_info("*** IRQ 37 (isp-m0) freed ***\n");
+        }
+
+        /* Free IRQ 38 (isp-w02) */
+        if (local_isp_dev->isp_irq2 == 38) {
+            free_irq(38, local_isp_dev);
+            pr_info("*** IRQ 38 (isp-w02) freed ***\n");
+        }
 
         /* Free hardware interrupts if initialized (legacy cleanup) */
         if (isp_irq > 0 && isp_irq != 37 && isp_irq != 38) {
