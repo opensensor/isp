@@ -70,12 +70,17 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         }
 
         /* CRITICAL FIX: Enable VIC interrupt at kernel level - this is what the callback should do! */
-        if (ourISPdev && ourISPdev->vic_irq > 0) {
-            pr_info("*** tx_vic_enable_irq: CRITICAL FIX - Enabling VIC interrupt (IRQ %d) at kernel level ***\n", ourISPdev->vic_irq);
-            enable_irq(ourISPdev->vic_irq);
-            pr_info("*** tx_vic_enable_irq: VIC interrupt (IRQ %d) ENABLED at kernel level ***\n", ourISPdev->vic_irq);
+        if (vic_dev->irq > 0) {
+            pr_info("*** tx_vic_enable_irq: CRITICAL FIX - Enabling VIC interrupt (IRQ %d) at kernel level ***\n", vic_dev->irq);
+            enable_irq(vic_dev->irq);
+            pr_info("*** tx_vic_enable_irq: VIC interrupt (IRQ %d) ENABLED at kernel level ***\n", vic_dev->irq);
+        } else if (vic_dev->sd.irq_info.irq > 0) {
+            pr_info("*** tx_vic_enable_irq: CRITICAL FIX - Enabling VIC interrupt (IRQ %d) from irq_info at kernel level ***\n", vic_dev->sd.irq_info.irq);
+            enable_irq(vic_dev->sd.irq_info.irq);
+            pr_info("*** tx_vic_enable_irq: VIC interrupt (IRQ %d) ENABLED at kernel level ***\n", vic_dev->sd.irq_info.irq);
         } else {
-            pr_err("*** tx_vic_enable_irq: CRITICAL ERROR - No VIC IRQ found! ***\n");
+            pr_err("*** tx_vic_enable_irq: CRITICAL ERROR - No VIC IRQ found! vic_dev->irq=%d, irq_info.irq=%d ***\n",
+                   vic_dev->irq, vic_dev->sd.irq_info.irq);
         }
 
         pr_info("tx_vic_enable_irq: VIC interrupt flag set and kernel interrupt enabled\n");
@@ -112,9 +117,18 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
             vic_dev->irq_disable(vic_dev->irq_priv);
         }
 
-        /* CRITICAL: Working reference does NOT write to VIC hardware interrupt registers! */
-        /* The VIC interrupt hardware is controlled by the VIC start/stop functions */
-        pr_info("tx_vic_disable_irq: VIC interrupt flag cleared - hardware controlled by VIC stop\n");
+        /* CRITICAL FIX: Disable VIC interrupt at kernel level */
+        if (vic_dev->irq > 0) {
+            pr_info("*** tx_vic_disable_irq: CRITICAL FIX - Disabling VIC interrupt (IRQ %d) at kernel level ***\n", vic_dev->irq);
+            disable_irq(vic_dev->irq);
+            pr_info("*** tx_vic_disable_irq: VIC interrupt (IRQ %d) DISABLED at kernel level ***\n", vic_dev->irq);
+        } else if (vic_dev->sd.irq_info.irq > 0) {
+            pr_info("*** tx_vic_disable_irq: CRITICAL FIX - Disabling VIC interrupt (IRQ %d) from irq_info at kernel level ***\n", vic_dev->sd.irq_info.irq);
+            disable_irq(vic_dev->sd.irq_info.irq);
+            pr_info("*** tx_vic_disable_irq: VIC interrupt (IRQ %d) DISABLED at kernel level ***\n", vic_dev->sd.irq_info.irq);
+        }
+
+        pr_info("tx_vic_disable_irq: VIC interrupt flag cleared and kernel interrupt disabled\n");
     } else {
         pr_info("tx_vic_disable_irq: VIC interrupts already disabled\n");
     }

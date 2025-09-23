@@ -216,9 +216,6 @@ struct tx_isp_dev {
     struct completion frame_complete;  /* Global frame completion */
 
     /* IRQ management */
-    int isp_irq;                     /* Primary ISP IRQ (37) */
-    int isp_irq2;                    /* Secondary ISP IRQ (38) */
-    int vic_irq;
     void (*vic_irq_handler)(void *);
     void (*vic_irq_disable)(void *);
     void *vic_irq_priv;
