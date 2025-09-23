@@ -14,9 +14,9 @@
 extern void system_reg_write(u32 reg, u32 value);
 
 /* Global BCSH variables - based on Binary Ninja reference */
-uint8_t data_9a91d = 128; /* Saturation */
-uint8_t data_9a91e = 128; /* Contrast */
-uint8_t data_9a91f = 128; /* Brightness */
+extern uint8_t data_9a91d; /* Saturation */
+extern uint8_t data_9a91e; /* Contrast */
+extern uint8_t data_9a91f; /* Brightness */
 
 /* BCSH parameter structures */
 static uint8_t bcsh_brightness = 128;

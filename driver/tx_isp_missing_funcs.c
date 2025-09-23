@@ -213,33 +213,40 @@ uint32_t tisp_top_read(void)
 }
 EXPORT_SYMBOL(tisp_top_read);
 
-/* ===== MODULE INITIALIZATION ===== */
+/* ===== SYSTEM WORK QUEUE INITIALIZATION ===== */
 
-static int __init tx_isp_missing_funcs_init(void)
+/**
+ * tx_isp_missing_funcs_init - Initialize missing functions (called by main module)
+ */
+int tx_isp_missing_funcs_init(void)
 {
     /* Initialize system work queue */
-    system_wq = alloc_workqueue("tx_isp_system", WQ_MEM_RECLAIM | WQ_HIGHPRI, 0);
     if (!system_wq) {
-        pr_err("Failed to create system work queue\n");
-        return -ENOMEM;
+        system_wq = alloc_workqueue("tx_isp_system", WQ_MEM_RECLAIM | WQ_HIGHPRI, 0);
+        if (!system_wq) {
+            pr_err("Failed to create system work queue\n");
+            return -ENOMEM;
+        }
     }
 
-    pr_info("TX-ISP missing functions module loaded\n");
+    pr_info("TX-ISP missing functions initialized\n");
     return 0;
 }
+EXPORT_SYMBOL(tx_isp_missing_funcs_init);
 
-static void __exit tx_isp_missing_funcs_exit(void)
+/**
+ * tx_isp_missing_funcs_exit - Cleanup missing functions (called by main module)
+ */
+void tx_isp_missing_funcs_exit(void)
 {
     if (system_wq) {
         destroy_workqueue(system_wq);
         system_wq = NULL;
     }
-    
-    pr_info("TX-ISP missing functions module unloaded\n");
-}
 
-module_init(tx_isp_missing_funcs_init);
-module_exit(tx_isp_missing_funcs_exit);
+    pr_info("TX-ISP missing functions cleaned up\n");
+}
+EXPORT_SYMBOL(tx_isp_missing_funcs_exit);
 
 /* ===== AE (AUTO EXPOSURE) FUNCTIONS ===== */
 
@@ -255,15 +262,15 @@ extern void tiziano_ae_set_hardware_param(int index, void *param, int enable);
 extern void tiziano_deflicker_expt(void *flicker_t, int p1, int p2, int p3, void *lut, void *nodes);
 
 /* Global AE variables - based on Binary Ninja reference */
-int data_b2ee0 = 0, data_b2ee4 = 0, data_b2ef0 = 0, data_b2ef4 = 0, data_b2ef8 = 0;
-int data_b2f04 = 0, data_b2f08 = 0, data_b2eec = 0;
-int data_c46b8 = 0, data_c46b4 = 0, data_c46bc = 0, data_c46f8 = 0, data_c4710 = 0;
-int data_c46b0 = 0, data_c46d4 = 0, data_c46d8 = 0;
-int ae_wdr_en = 0, ta_custom_ev = 0, ta_custom_tgain = 0, ta_custom_again = 0;
+extern int data_b2ee0, data_b2ee4, data_b2ef0, data_b2ef4, data_b2ef8;
+extern int data_b2f04, data_b2f08, data_b2eec;
+extern int data_c46b8, data_c46b4, data_c46bc, data_c46f8, data_c4710;
+extern int data_c46b0, data_c46d4, data_c46d8;
+extern int ae_wdr_en, ta_custom_ev, ta_custom_tgain, ta_custom_again;
 extern int dmsc_awb_gain;
-int dmsc_uu_stren_wdr_array = 0;
-int tisp_ae_hist[256] = {0};
-int data_b2e1c = 1920 * 1080, sensor_info = 1920 * 1080;
+extern int dmsc_uu_stren_wdr_array;
+extern int tisp_ae_hist[256];
+extern int data_b2e1c, sensor_info;
 
 /* AE parameter structures - based on decompiled references */
 static uint8_t _ae_parameter[0xa8];
@@ -628,7 +635,7 @@ EXPORT_SYMBOL(tisp_ae_trig);
 /* ===== CONTROL AND CONFIGURATION FUNCTIONS ===== */
 
 /* Global control variables */
-uint32_t msca_dmaout_arb = 0;
+extern uint32_t msca_dmaout_arb;
 
 /**
  * tisp_flip_enable - Enable/disable vertical flip
@@ -744,18 +751,13 @@ extern int data_b2f20(int fps_val, void *sensor_ctrl);
 extern void tiziano_deflicker_expt_tune(int flicker_hz, int param1, int param2, int param3);
 extern uint32_t system_reg_read(u32 reg);
 
-/* Stub implementations for missing external functions */
-int data_b2f20(int fps_val, void *sensor_ctrl) { return fps_val; }
-void tiziano_deflicker_expt_tune(int flicker_hz, int param1, int param2, int param3) { }
-uint32_t system_reg_read(u32 reg) { return 0; }
-
 /* Global frame control variables */
-void *sensor_ctrl = NULL;
-uint32_t flicker_hz = 0;
-int data_b2ea4 = 0, data_b2ea8 = 0, data_b2ed0 = 0, data_b2eb0 = 0, data_b2ecc = 0;
-int data_b2e44 = 0, data_b2e48 = 0, data_b2e4a = 0, data_b2e4c = 0, data_b2e58 = 0;
-int data_c46c8 = 0, data_c4700 = 0, data_b2e4e = 0, data_b2e62 = 0, data_b2e54 = 0;
-int data_b2e64 = 0, data_b2e56 = 0, data_b2e7e = 0, data_b2e80 = 0;
+extern void *sensor_ctrl;
+extern uint32_t flicker_hz;
+extern int data_b2ea4, data_b2ea8, data_b2ed0, data_b2eb0, data_b2ecc;
+extern int data_b2e44, data_b2e48, data_b2e4a, data_b2e4c, data_b2e58;
+extern int data_c46c8, data_c4700, data_b2e4e, data_b2e62, data_b2e54;
+extern int data_b2e64, data_b2e56, data_b2e7e, data_b2e80;
 
 /**
  * tisp_set_fps - Set frame rate
@@ -853,6 +855,4 @@ int tisp_get_frame_drop(int channel, int *drop_config)
 }
 EXPORT_SYMBOL(tisp_get_frame_drop);
 
-MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("TX-ISP Missing Functions Implementation");
-MODULE_AUTHOR("Generated from Binary Ninja MCP");
+/* This file is part of the main tx-isp module */
