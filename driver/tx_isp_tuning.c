@@ -1589,27 +1589,27 @@ int tisp_init(void *sensor_info, char *param_name)
 
     /* Binary Ninja: ISP Control registers */
     pr_info("*** WRITING ISP CONTROL REGISTERS - FROM BINARY NINJA tisp_init ***\n");
-    //system_reg_write(0x9804, 0x3f00);
-    //system_reg_write(0x9864, 0x7800438);
-    //system_reg_write(0x987c, 0xc0000000);
-    //system_reg_write(0x9880, 0x1);
-    //system_reg_write(0x9884, 0x1);
-    //system_reg_write(0x9890, 0x1010001);
-    //system_reg_write(0x989c, 0x1010001);
-    //system_reg_write(0x98a8, 0x1010001);
+    system_reg_write(0x9804, 0x3f00);
+    system_reg_write(0x9864, 0x7800438);
+    system_reg_write(0x987c, 0xc0000000);
+    system_reg_write(0x9880, 0x1);
+    system_reg_write(0x9884, 0x1);
+    system_reg_write(0x9890, 0x1010001);
+    system_reg_write(0x989c, 0x1010001);
+    system_reg_write(0x98a8, 0x1010001);
 
     /* Binary Ninja: VIC Control registers */
     pr_info("*** WRITING VIC CONTROL REGISTERS - FROM BINARY NINJA tisp_init ***\n");
-    //system_reg_write(0x9a00, 0x50002d0);
-    //system_reg_write(0x9a04, 0x3000300);
-    //system_reg_write(0x9a2c, 0x50002d0);
-    //system_reg_write(0x9a34, 0x1);
-    //system_reg_write(0x9a70, 0x1);
-    //system_reg_write(0x9a7c, 0x1);
-    //system_reg_write(0x9a80, 0x500);
-    //system_reg_write(0x9a88, 0x1);
-    //system_reg_write(0x9a94, 0x1);
-    //system_reg_write(0x9a98, 0x500);
+    system_reg_write(0x9a00, 0x50002d0);
+    system_reg_write(0x9a04, 0x3000300);
+    system_reg_write(0x9a2c, 0x50002d0);
+    system_reg_write(0x9a34, 0x1);
+    system_reg_write(0x9a70, 0x1);
+    system_reg_write(0x9a7c, 0x1);
+    system_reg_write(0x9a80, 0x500);
+    system_reg_write(0x9a88, 0x1);
+    system_reg_write(0x9a94, 0x1);
+    system_reg_write(0x9a98, 0x500);
     /* CRITICAL FIX: REMOVE VIC control register writes - they don't exist in Binary Ninja reference! */
     /* The reference tisp_init does NOT write to 0x9ac0 or 0x9ac8 at all */
     /* These registers should be controlled by VIC hardware, not by tuning system */

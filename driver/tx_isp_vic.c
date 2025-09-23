@@ -1715,25 +1715,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
         if (current_state != 4) {
             pr_info("*** vic_core_s_stream: EXACT Binary Ninja - State != 4, calling VIC start sequence ***\n");
 
-            /* CRITICAL FIX: Add the missing initialization sequence from working driver-irqs */
-            pr_info("*** CRITICAL: Following EXACT reference driver sub-device initialization sequence ***\n");
-
-            /* CRITICAL FIX: Disable VIC interrupts during initialization to prevent control limit errors */
-            extern uint32_t vic_start_ok;
-            vic_start_ok = 1;
-
-            /* CRITICAL FIX: Correct the register base mapping! */
-            /* vic_regs = 0x133e0000 = CSI PHY (isp-w02 in trace) */
-            /* isp_base = 0x13300000 = Main ISP (isp-m0 in trace) - NEEDS SEPARATE MAPPING */
-            void __iomem *main_isp_base = ioremap(0x13300000, 0x100000);  /* Map main ISP separately */
-            void __iomem *vic_w01_base = ioremap(0x10023000, 0x1000);    /* Map isp-w01 separately */
-
-            if (!main_isp_base || !vic_w01_base) {
-                pr_err("*** CRITICAL: Failed to map ISP register bases ***\n");
-                if (main_isp_base) iounmap(main_isp_base);
-                if (vic_w01_base) iounmap(vic_w01_base);
-                return -ENOMEM;
-            }
+            /* Binary Ninja: tx_vic_disable_irq() */
+            tx_vic_disable_irq(vic_dev);
 
             /* Binary Ninja: tx_vic_disable_irq() */
             tx_vic_disable_irq(vic_dev);
