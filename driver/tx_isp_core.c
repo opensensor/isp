@@ -315,8 +315,12 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         if (v0_3 == 4) {
             /* Binary Ninja: Frame channel loop */
             int s2_1 = 0;
+            void *v0_5;
+            void *v0_6;
+            struct tx_isp_frame_channel *channel;
+
             /* CRITICAL FIX: Frame channels are in VIC device, not core device */
-            void *v0_5 = vic_dev->frame_channels;
+            v0_5 = vic_dev->frame_channels;
 
             /* CRITICAL FIX: Check if frame_channels is properly initialized */
             if (!v0_5) {
@@ -326,7 +330,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
             }
 
             while (true) {
-                void *v0_6 = (char*)v0_5 + s2_1;
+                v0_6 = (char*)v0_5 + s2_1;
                 s2_1 += 0xc4;  /* sizeof(frame_channel) */
 
                 pr_info("*** DEBUG: Frame channel loop - s2_1=0x%x, v0_6=%p ***\n", s2_1, v0_6);
@@ -338,7 +342,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
                 }
 
                 /* CRITICAL FIX: Use correct structure type - tx_isp_frame_channel, not frame_channel_device */
-                struct tx_isp_frame_channel *channel = (struct tx_isp_frame_channel*)v0_6;
+                channel = (struct tx_isp_frame_channel*)v0_6;
 
                 pr_info("*** DEBUG: Checking channel=%p, state=%d ***\n", channel, channel->state);
 
@@ -387,22 +391,25 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     /* Binary Ninja: int32_t result = 0 */
     result = 0;
 
+    /* CRITICAL FIX: Get core device from ISP device for IRQ management */
+    struct tx_isp_core_device *core_dev = isp_dev->core_dev;
+
     /* Binary Ninja: $a0_4 = *($s0 + 0x15c) */
-    a0_4 = core_dev->irq_enabled;
+    a0_4 = (core_dev && core_dev->irq_enabled) ? core_dev->irq_enabled : 0;
 
     /* Binary Ninja: void* $v0_10 = arg1[0x2e] */
     /* FIXED: Access IRQ info from the core device's subdev structure */
-    struct tx_isp_irq_info *irq_info = &core_dev->sd.irq_info;
+    struct tx_isp_irq_info *irq_info = (core_dev) ? &core_dev->sd.irq_info : NULL;
 
     /* Binary Ninja: IRQ enable/disable logic */
     if (a0_4 == 1 || enable == 0) {
         /* Binary Ninja: *($v0_10 + 0xb0) = 0 */
-        core_dev->irq_enabled = 0;
+        if (core_dev) core_dev->irq_enabled = 0;
         /* Binary Ninja: $v0_11 = tx_isp_disable_irq */
         tx_isp_disable_irq(irq_info);
     } else {
         /* Binary Ninja: *($v0_10 + 0xb0) = 0xffffffff */
-        core_dev->irq_enabled = 1;
+        if (core_dev) core_dev->irq_enabled = 1;
         /* Binary Ninja: $v0_11 = tx_isp_enable_irq */
         tx_isp_enable_irq(irq_info);
     }
