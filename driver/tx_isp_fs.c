@@ -55,13 +55,13 @@ int fs_slake_module(struct tx_isp_subdev *sd)
     }
 
     /* Binary Ninja: if (*(arg1 + 0xe4) != 1) - Check FS state != 1 */
-    if (fs_dev->state != 1) {
-        pr_info("fs_slake_module: FS state=%d, processing channels\n", fs_dev->state);
+    if (fs_dev->fs_state != 1) {
+        pr_info("fs_slake_module: FS state=%d, processing channels\n", fs_dev->fs_state);
 
         /* Binary Ninja: for (int32_t i = 0; i s< *(arg1 + 0xe0); i += 1) */
         for (i = 0; i < fs_dev->channel_count; i++) {
             /* Binary Ninja: void* $s1_2 = i * 0x2ec + *(arg1 + 0xdc) */
-            struct tx_isp_frame_channel *channel = &fs_dev->channels[i];
+            struct tx_isp_frame_channel *channel = &fs_dev->frame_channels[i];
 
             pr_info("fs_slake_module: Processing channel %d, state=%d\n", i, channel->state);
 
@@ -82,7 +82,7 @@ int fs_slake_module(struct tx_isp_subdev *sd)
         }
 
         /* Binary Ninja: *(arg1 + 0xe4) = 1 */
-        fs_dev->state = 1;
+        fs_dev->fs_state = 1;
         pr_info("fs_slake_module: FS state set to 1\n");
     }
 
