@@ -5864,10 +5864,10 @@ int tisp_wdr_expTime_updata(void)
     /* Update exposure time based on WDR algorithm */
     /* This function updates the WDR exposure timing parameters */
     pr_info("tisp_wdr_expTime_updata: Updating WDR exposure timing\n");
-    
+
     /* Binary Ninja shows this updates global exposure variables */
     /* In real implementation, this would read from hardware registers and update timing */
-    
+
     return 0;
 }
 
@@ -6696,11 +6696,12 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
     /* Binary Ninja EXACT: tisp_event_set_cb(6, tisp_ae1_process) */
     tisp_event_set_cb(6, tisp_ae1_process);
     
-    /* Binary Ninja EXACT: private_spin_lock_init(0) */
-    private_spin_lock_init(0);
-    
-    /* Binary Ninja EXACT: private_spin_lock_init(0) */
-    private_spin_lock_init(0);
+    /* CRITICAL FIX: Binary Ninja shows NULL spinlock init - this was causing 6+ second delays! */
+    /* The reference driver initializes actual spinlock variables, not NULL pointers */
+    /* These calls were causing undefined behavior and blocking the streaming initialization */
+    pr_info("*** CRITICAL FIX: Skipping NULL spinlock initialization that was causing 6+ second delays ***\n");
+    /* private_spin_lock_init(0); - REMOVED: This was the root cause of the timing issue! */
+    /* private_spin_lock_init(0); - REMOVED: This was the root cause of the timing issue! */
     
     /* Binary Ninja EXACT: ae_comp_default = data_b0c18 */
     ae_comp_default = data_b0c18;
