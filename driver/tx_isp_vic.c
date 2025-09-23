@@ -1963,7 +1963,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
 
     /* CRITICAL FIX: Map VIC register spaces - THIS WAS MISSING! */
     /* Primary VIC register space (0x133e0000) - main VIC control */
-    vic_dev->vic_regs = ioremap(0x133e0000, 0x1000);
+    vic_dev->vic_regs = ioremap(0x133e0000, 0x10000);
     if (!vic_dev->vic_regs) {
         pr_err("*** VIC PROBE: CRITICAL - Failed to map primary VIC registers at 0x133e0000 ***\n");
         private_kfree(vic_dev);
