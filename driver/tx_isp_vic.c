@@ -1858,10 +1858,56 @@ struct tx_isp_subdev_core_ops vic_core_ops = {
     .ioctl = vic_core_ops_ioctl,  /* MISSING from original! */
 };
 
+/* tx_isp_vic_activate_subdev - EXACT Binary Ninja implementation (00011088) */
+int tx_isp_vic_activate_subdev(void* arg1)
+{
+    struct tx_isp_vic_device *vic_dev;
+    int result = 0xffffffea;  /* Binary Ninja: int32_t result = 0xffffffea */
+
+    pr_info("*** tx_isp_vic_activate_subdev: EXACT Binary Ninja implementation ***\n");
+
+    /* Binary Ninja: if (arg1 != 0) */
+    if (arg1 != NULL) {
+        /* Binary Ninja: if (arg1 u>= 0xfffff001) return 0xffffffea */
+        if ((uintptr_t)arg1 >= 0xfffff001) {
+            return 0xffffffea;
+        }
+
+        /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
+        struct tx_isp_subdev *sd = (struct tx_isp_subdev *)arg1;
+        vic_dev = (struct tx_isp_vic_device *)sd->dev_priv;  /* SAFE: arg1 + 0xd4 = dev_priv */
+
+        /* Binary Ninja: result = 0xffffffea */
+        result = 0xffffffea;
+
+        /* Binary Ninja: if ($s0_1 != 0 && $s0_1 u< 0xfffff001) */
+        if (vic_dev != NULL && (uintptr_t)vic_dev < 0xfffff001) {
+            /* Binary Ninja: private_mutex_lock($s0_1 + 0x130) */
+            mutex_lock(&vic_dev->state_lock);  /* SAFE: $s0_1 + 0x130 = state_lock */
+
+            /* Binary Ninja: if (*($s0_1 + 0x128) == 1) *($s0_1 + 0x128) = 2 */
+            if (vic_dev->state == 1) {  /* SAFE: $s0_1 + 0x128 = state */
+                vic_dev->state = 2;
+                pr_info("tx_isp_vic_activate_subdev: VIC state 1 -> 2 (activated)\n");
+            }
+
+            /* Binary Ninja: private_mutex_unlock($s0_1 + 0x130) */
+            mutex_unlock(&vic_dev->state_lock);
+
+            /* Binary Ninja: return 0 */
+            return 0;
+        }
+    }
+
+    /* Binary Ninja: return result */
+    pr_info("*** tx_isp_vic_activate_subdev: FAILED - result=0x%x ***\n", result);
+    return result;
+}
+
 /* VIC internal operations - EXACT Binary Ninja implementation */
 static struct tx_isp_subdev_internal_ops vic_internal_ops = {
     .slake_module = tx_isp_vic_slake_subdev,
-    .activate_module = vic_core_ops_init,  /* CRITICAL: Wire vic_core_ops_init directly for VIC state 1->3 transition */
+    .activate_module = tx_isp_vic_activate_subdev,  /* EXACT Binary Ninja reference! */
 };
 
 /* Complete VIC subdev ops structure - MISSING sensor ops registration */
