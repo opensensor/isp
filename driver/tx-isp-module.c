@@ -4397,6 +4397,11 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     }
 
     pr_info("*** PROBE: Binary Ninja reference implementation complete ***\n");
+
+    /* CRITICAL DEBUG: Test interrupt handler manually after full initialization */
+    printk(KERN_ALERT "*** CRITICAL: Running manual interrupt handler test ***\n");
+    test_interrupt_handler_manually();
+
     return 0;
 }
 
@@ -5115,6 +5120,20 @@ int __init verify_handler_addresses(void)
     printk(KERN_ALERT "*** CRITICAL: isp_irq_handle function address: %p ***\n", isp_irq_handle);
     printk(KERN_ALERT "*** CRITICAL: isp_irq_thread_handle function address: %p ***\n", isp_irq_thread_handle);
     return 0;
+}
+
+/* CRITICAL DEBUG: Manual interrupt handler test */
+static void test_interrupt_handler_manually(void)
+{
+    extern struct tx_isp_dev *ourISPdev;
+
+    if (ourISPdev) {
+        printk(KERN_ALERT "*** MANUAL TEST: Calling isp_irq_handle(37, %p) manually ***\n", ourISPdev);
+        isp_irq_handle(37, ourISPdev);
+        printk(KERN_ALERT "*** MANUAL TEST: isp_irq_handle call completed ***\n");
+    } else {
+        printk(KERN_ALERT "*** MANUAL TEST: ourISPdev is NULL, cannot test handler ***\n");
+    }
 }
 
 /* isp_irq_handle - EXACT Binary Ninja reference implementation */
