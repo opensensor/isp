@@ -1889,7 +1889,8 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
     }
 
     /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
-    vic_dev = (struct tx_isp_vic_device *)sd->dev_priv;
+    /* SAFE: Use proper function instead of offset-based access */
+    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
         pr_err("*** tx_isp_vic_slake_subdev: INVALID VIC DEVICE - vic_dev=%p ***\n", vic_dev);
         return -EINVAL;
@@ -1908,20 +1909,23 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
     }
 
     /* Binary Ninja: if ($v1_2 == 3) vic_core_ops_init(arg1, 0) */
-    if (state == 3) {
+    if (vic_dev->state == 3) {
         pr_info("tx_isp_vic_slake_subdev: VIC in state 3, calling core_ops_init(disable)\n");
         vic_core_ops_init(sd, 0);
     }
 
-    /* Binary Ninja: Disable clocks in reverse order */
-    if (sd->clks && sd->clk_num > 0) {
-        for (i = sd->clk_num - 1; i >= 0; i--) {
-            if (sd->clks[i]) {
-                clk_disable(sd->clks[i]);
-                pr_info("tx_isp_vic_slake_subdev: Disabled clock %d\n", i);
-            }
-        }
+    /* Binary Ninja: void* $s1_2 = $s0_1 + 0x130 - Get mutex */
+    /* Binary Ninja: private_mutex_lock($s1_2) */
+    mutex_lock(&vic_dev->mlock);
+
+    /* Binary Ninja: if (*($s0_1 + 0x128) == 2) *($s0_1 + 0x128) = 1 */
+    if (vic_dev->state == 2) {
+        pr_info("tx_isp_vic_slake_subdev: VIC state 2->1\n");
+        vic_dev->state = 1;
     }
+
+    /* Binary Ninja: private_mutex_unlock($s1_2) */
+    mutex_unlock(&vic_dev->mlock);
 
     pr_info("*** tx_isp_vic_slake_subdev: VIC slake complete, final state=%d ***\n", vic_dev->state);
     return 0;
