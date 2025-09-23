@@ -132,38 +132,6 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
 
 static int ispcore_activate_module(struct tx_isp_dev *isp_dev);
 
-/* VIC interrupt status checker - debug function to see if hardware generates interrupts */
-void tx_isp_vic_check_interrupt_status(void)
-{
-    extern struct tx_isp_dev *ourISPdev;
-    static unsigned long last_check = 0;
-    unsigned long now = jiffies;
-
-    /* Check every 5 seconds */
-    if (time_before(now, last_check + 5*HZ)) {
-        return;
-    }
-    last_check = now;
-
-    if (!ourISPdev || !ourISPdev->vic_dev || !ourISPdev->vic_dev->vic_regs || vic_start_ok != 1) {
-        return;
-    }
-
-    struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
-    u32 int_status = readl(vic_dev->vic_regs + 0x1e0);
-    u32 int_status2 = readl(vic_dev->vic_regs + 0x1e4);
-
-    if (int_status != 0 || int_status2 != 0) {
-        pr_info("*** VIC INTERRUPT STATUS CHECK: STATUS1=0x%08x, STATUS2=0x%08x - HARDWARE IS GENERATING INTERRUPTS! ***\n",
-                int_status, int_status2);
-    } else {
-        pr_info("*** VIC INTERRUPT STATUS CHECK: STATUS1=0x%08x, STATUS2=0x%08x - no hardware interrupts ***\n",
-                int_status, int_status2);
-
-        /* Check if interrupt generation is enabled in hardware */
-    }
-}
-
 /* VIC interrupt restoration function - EXACT copy from working irqs-start-stop tag */
 void tx_isp_vic_restore_interrupts(void)
 {
@@ -174,8 +142,6 @@ void tx_isp_vic_restore_interrupts(void)
         return; /* VIC not active */
     }
 
-    /* Check VIC interrupt status periodically */
-    tx_isp_vic_check_interrupt_status();
 
     pr_info("*** VIC INTERRUPT RESTORE: Restoring VIC interrupt registers in PRIMARY VIC space ***\n");
 
@@ -689,6 +655,41 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** tx_isp_vic_start: Writing VIC configuration registers - EXACT Binary Ninja sequence ***\n");
         writel(2, vic_regs + 0xc);
         writel(sensor_attr->dbus_type, vic_regs + 0x14);
+
+        /* CRITICAL FIX: Add missing VIC configuration registers from reference driver */
+        /* These registers are essential to prevent hardware protection from triggering */
+        pr_info("*** tx_isp_vic_start: Adding CRITICAL missing VIC configuration registers ***\n");
+
+        /* Control registers - prevent hardware protection */
+        writel(0x800800, vic_regs + 0x60);      /* Control register */
+        writel(0x9d09d0, vic_regs + 0x64);      /* Control register */
+        writel(0x6002, vic_regs + 0x70);        /* Control register */
+        writel(0x7003, vic_regs + 0x74);        /* Control register */
+
+        /* Color space configuration - critical for proper operation */
+        writel(0xeb8080, vic_regs + 0xc0);      /* Color space config */
+        writel(0x108080, vic_regs + 0xc4);      /* Color space config */
+        writel(0x29f06e, vic_regs + 0xc8);      /* Color space config */
+        writel(0x913622, vic_regs + 0xcc);      /* Color space config */
+
+        /* Processing configuration - prevent timing issues */
+        writel(0x515af0, vic_regs + 0xd0);      /* Processing config */
+        writel(0xaaa610, vic_regs + 0xd4);      /* Processing config */
+        writel(0xd21092, vic_regs + 0xd8);      /* Processing config */
+        writel(0x6acade, vic_regs + 0xdc);      /* Processing config */
+
+        /* Additional processing config - complete configuration */
+        writel(0xeb8080, vic_regs + 0xe0);      /* Additional processing */
+        writel(0x108080, vic_regs + 0xe4);      /* Additional processing */
+        writel(0x29f06e, vic_regs + 0xe8);      /* Additional processing */
+        writel(0x913622, vic_regs + 0xec);      /* Additional processing */
+        writel(0x515af0, vic_regs + 0xf0);      /* Additional processing */
+        writel(0xaaa610, vic_regs + 0xf4);      /* Additional processing */
+        writel(0xd21092, vic_regs + 0xf8);      /* Additional processing */
+        writel(0x6acade, vic_regs + 0xfc);      /* Additional processing */
+        wmb();
+
+        pr_info("*** tx_isp_vic_start: CRITICAL VIC configuration registers written - hardware protection should be prevented ***\n");
 
         /* Binary Ninja: Write frame size immediately - no deferral needed */
         u32 frame_size_value = (vic_dev->width << 16) | vic_dev->height;
