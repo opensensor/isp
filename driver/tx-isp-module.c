@@ -4431,6 +4431,9 @@ static int tx_isp_init(void)
 
     pr_info("TX ISP driver initializing with new subdevice management system...\n");
 
+    /* CRITICAL: Verify interrupt handler addresses at module load */
+    verify_handler_addresses();
+
     /* Step 1: Check driver interface (matches reference) */
     gpio_mode_check = 0;  // Always return success for standard kernel
     if (gpio_mode_check != 0) {
@@ -5102,6 +5105,14 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
 
 /* isp_irq_handle - SAFE struct member access implementation with correct dev_id handling */
 
+/* CRITICAL: Add function address logging at module load to verify symbol resolution */
+static int __init verify_handler_addresses(void)
+{
+    printk(KERN_ALERT "*** CRITICAL: isp_irq_handle function address: %p ***\n", isp_irq_handle);
+    printk(KERN_ALERT "*** CRITICAL: isp_irq_thread_handle function address: %p ***\n", isp_irq_thread_handle);
+    return 0;
+}
+
 /* isp_irq_handle - EXACT Binary Ninja reference implementation */
 irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
@@ -5114,6 +5125,8 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
         return IRQ_NONE;
     }
 
+    /* CRITICAL: Use printk with KERN_ALERT to ensure this message is ALWAYS visible */
+    printk(KERN_ALERT "*** CRITICAL: isp_irq_handle: IRQ %d received, dev_id=%p ***\n", irq, dev_id);
     pr_info("*** isp_irq_handle: IRQ %d received, dev_id=%p ***\n", irq, dev_id);
 
     /* Binary Ninja reference shows this is the main interrupt processing function */

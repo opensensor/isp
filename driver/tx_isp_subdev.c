@@ -895,6 +895,10 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
         pr_info("*** tx_isp_request_irq: About to call request_threaded_irq(irq=%d, handler=%p, thread=%p, flags=0x%lx, name=%s, dev_id=%p) ***\n",
                 irq_num, isp_irq_handle, isp_irq_thread_handle, IRQF_SHARED, dev_name(&pdev->dev), correct_dev_id);
 
+        /* CRITICAL FIX: Add explicit handler address logging to verify correct functions are registered */
+        pr_info("*** tx_isp_request_irq: About to register IRQ %d with handlers: main=%p, thread=%p ***\n",
+                irq_num, isp_irq_handle, isp_irq_thread_handle);
+
         ret = request_threaded_irq(irq_num,
                                    isp_irq_handle,      /* Main dispatcher handles all IRQs */
                                    isp_irq_thread_handle, /* Thread handler */
