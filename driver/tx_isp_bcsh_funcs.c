@@ -13,7 +13,7 @@
 /* External function declarations */
 extern void system_reg_write(u32 reg, u32 value);
 
-/* Global BCSH variables - based on Binary Ninja reference */
+/* Global BCSH variables - defined in tx_isp_missing_funcs.c */
 extern uint8_t data_9a91d; /* Saturation */
 extern uint8_t data_9a91e; /* Contrast */
 extern uint8_t data_9a91f; /* Brightness */

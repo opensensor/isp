@@ -267,10 +267,8 @@ extern int data_b2f04, data_b2f08, data_b2eec;
 extern int data_c46b8, data_c46b4, data_c46bc, data_c46f8, data_c4710;
 extern int data_c46b0, data_c46d4, data_c46d8;
 extern int ae_wdr_en, ta_custom_ev, ta_custom_tgain, ta_custom_again;
-extern int dmsc_awb_gain;
 extern int dmsc_uu_stren_wdr_array;
-extern int tisp_ae_hist[256];
-extern uint32_t data_b2e1c, sensor_info;
+extern uint32_t data_b2e1c;
 
 /* AE parameter structures - based on decompiled references */
 static uint8_t _ae_parameter[0xa8];

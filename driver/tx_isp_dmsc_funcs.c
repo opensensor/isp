@@ -15,7 +15,7 @@ extern int tisp_simple_intp(int index, int factor, int *table);
 extern void tisp_dmsc_all_reg_refresh(int param);
 extern void tisp_dmsc_par_refresh(int param1, int param2, int param3);
 
-/* Global DMSC variables and arrays - based on Binary Ninja reference */
+/* Global DMSC variables and arrays - defined in tx_isp_missing_funcs.c */
 extern int data_9a430;
 
 /* DMSC parameter arrays - extensive set based on decompiled switch statement */
@@ -92,7 +92,7 @@ static uint8_t dmsc_sp_d_w_stren_wdr_array[0x24];
 static uint8_t dmsc_sp_d_b_stren_wdr_array[0x24];
 static uint8_t dmsc_sp_ud_w_stren_wdr_array[0x24];
 static uint8_t dmsc_sp_ud_b_stren_wdr_array[0x24];
-extern uint8_t dmsc_awb_gain[0xc];
+extern uint8_t dmsc_awb_gain[0xc]; /* Defined in tx_isp_missing_funcs.c */
 
 /* Current array pointers for WDR/normal mode switching */
 static uint8_t *dmsc_uu_thres_array_now = dmsc_uu_thres_array;

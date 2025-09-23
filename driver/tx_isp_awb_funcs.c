@@ -14,7 +14,7 @@
 extern int tisp_s_wb_attr(int mode, int param1, int param2, int param3, int param4, int param5);
 extern void tiziano_awb_set_hardware_param(void);
 
-/* Global AWB variables */
+/* Global AWB variables - defined in tx_isp_missing_funcs.c */
 extern uint32_t _awb_ct;
 
 /* AWB parameter structures - based on decompiled references */

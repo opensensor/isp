@@ -6428,7 +6428,7 @@ void tisp_set_sensor_analog_gain_short(void);
 static int system_reg_write_ae(int ae_id, uint32_t reg, uint32_t value);
 /* REMOVED: Conflicting static declaration - use extern from tx_isp_core.c */
 void private_spin_lock_init(spinlock_t *lock);
-static uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand);
+uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand);
 static uint32_t tisp_math_exp2(uint32_t value, uint32_t precision, uint32_t shift);
 
 /* Sensor interface functions - Forward declarations */

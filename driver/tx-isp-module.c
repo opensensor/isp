@@ -5316,12 +5316,6 @@ static uint32_t tisp_math_exp2(uint32_t base, uint32_t shift, uint32_t scale)
     return (base << shift) / scale;
 }
 
-/* fix_point_mult3_32 - Fixed point multiplication */
-static uint32_t fix_point_mult3_32(uint32_t pos, uint32_t val1, uint32_t val2)
-{
-    return (val1 * val2) >> pos;
-}
-
 /* fix_point_mult2_32 - Fixed point multiplication */
 static uint32_t fix_point_mult2_32(uint32_t pos, uint32_t val1, uint32_t val2)
 {
