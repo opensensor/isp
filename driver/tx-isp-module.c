@@ -3795,27 +3795,6 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
         }
 
-            /* Binary Ninja: Initialize all subdevices by calling their ops->init() methods */
-            /* Loop through subdevs array and call init for each valid subdevice */
-            int i;
-            for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
-                struct tx_isp_subdev *sd = isp_dev->subdevs[i];
-
-                if (sd && sd->ops && sd->ops->core && sd->ops->core->init) {
-                    pr_info("TX_ISP_VIDEO_LINK_SETUP: Initializing subdev[%d] (%p)\n", i, sd);
-
-                    /* Call subdevice init function */
-                    int init_result = sd->ops->core->init(sd, 1);
-
-                    if (init_result != 0 && init_result != 0xfffffdfd) {
-                        pr_err("TX_ISP_VIDEO_LINK_SETUP: Subdev[%d] init failed: %d\n", i, init_result);
-                        /* Continue with other subdevices even if one fails */
-                    } else {
-                        pr_info("TX_ISP_VIDEO_LINK_SETUP: Subdev[%d] init success\n", i);
-                    }
-                }
-            }
-
         pr_debug("TX_ISP_SENSOR_REGISTER: Completed with result 0x%x\n", s6_1);
         return s6_1;
     }
