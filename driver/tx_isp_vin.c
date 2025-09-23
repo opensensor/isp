@@ -58,12 +58,6 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
 
     pr_info("VIN: tx_isp_vin_init: EXACT Binary Ninja implementation with safety checks = 0x%x\n", arg2);
 
-	extern bool tisp_init_has_been_called;
-	if (tisp_init_has_been_called) {
-		pr_info("VIN: tx_isp_vin_init: called before init\n");
-		return 0;
-	}
-
     /* CRITICAL SAFETY: Validate arg1 before any access */
     if (!arg1) {
         pr_err("VIN: tx_isp_vin_init: arg1 is NULL\n");

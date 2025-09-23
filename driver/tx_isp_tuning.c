@@ -1524,10 +1524,6 @@ static int load_isp_tuning_file_real(const char *filename)
     return 0;
 }
 
-/* Global variable to ensure tisp_init is only called once, ever */
-bool tisp_init_has_been_called = false;
-EXPORT_SYMBOL(tisp_init_has_been_called);
-
 int tisp_init(void *sensor_info, char *param_name)
 {
     extern struct tx_isp_dev *ourISPdev;
@@ -1537,16 +1533,6 @@ int tisp_init(void *sensor_info, char *param_name)
         uint32_t fps;
         uint32_t mode;
     } sensor_params = {1920, 1080, 25, 0}; /* Default sensor parameters */
-
-    /* CRITICAL FIX: Only allow tisp_init to be called ONCE, EVER */
-    if (tisp_init_has_been_called) {
-        pr_info("tisp_init: ALREADY CALLED - skipping to prevent register corruption\n");
-        return 0;  /* Return success but don't reinitialize */
-    }
-
-    /* Mark as called immediately to prevent any race conditions */
-    tisp_init_has_been_called = true;
-    pr_info("tisp_init: FIRST AND ONLY CALL - proceeding with initialization\n");
 
     /* CRITICAL FIX: Ensure tuning device is available immediately after tisp_init */
     /* In reference driver, tuning system is available right after core initialization */
