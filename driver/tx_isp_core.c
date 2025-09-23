@@ -3760,9 +3760,12 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                         void* s3_1 = (void*)arg1[8];
                         void* s2 = (char*)v0_10 + 0x38;
 
-                        /* SAFE FIX: Replace dangerous offset access *(s4_1 + 0x15c) with struct access */
+                        /* CRITICAL FIX: Replace core state with VIC state - core device is stateless */
                         struct tx_isp_core_device *host_dev = (struct tx_isp_core_device *)s4_1;
-                        bool is_streaming_mode = (host_dev->state == 4);  /* Check if in streaming state */
+                        /* Get VIC device to check streaming state */
+                        struct tx_isp_vic_device *vic_dev = (host_dev && host_dev->isp_dev) ?
+                            (struct tx_isp_vic_device *)host_dev->isp_dev->vic_dev : NULL;
+                        bool is_streaming_mode = (vic_dev && vic_dev->state == 4);  /* Check VIC streaming state */
 
                         if (is_streaming_mode) { /* SAFE: Use streaming state instead of raw offset */
                             /* SAFE FIX: Replace dangerous offset arithmetic with safe operations */
@@ -3866,9 +3869,12 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
             
             void* s2_1 = (void*)arg1[8];
             
-            /* SAFE FIX: Replace dangerous offset access *(v0_13 + 0x15c) with struct access */
+            /* CRITICAL FIX: Replace core state with VIC state - core device is stateless */
             struct tx_isp_core_device *host_dev_13 = (struct tx_isp_core_device *)v0_13;
-            bool is_streaming_mode_13 = (host_dev_13->state == 4);  /* Check if in streaming state */
+            /* Get VIC device to check streaming state */
+            struct tx_isp_vic_device *vic_dev_13 = (host_dev_13 && host_dev_13->isp_dev) ?
+                (struct tx_isp_vic_device *)host_dev_13->isp_dev->vic_dev : NULL;
+            bool is_streaming_mode_13 = (vic_dev_13 && vic_dev_13->state == 4);  /* Check VIC streaming state */
 
             if (is_streaming_mode_13) { /* SAFE: Use streaming state instead of raw offset */
                 /* SAFE FIX: Replace dangerous callback pointer access with safe operation */
