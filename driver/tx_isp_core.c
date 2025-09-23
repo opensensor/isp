@@ -2754,22 +2754,41 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 
                 pr_info("*** ispcore_core_ops_init: VIC state check passed, proceeding with initialization ***");
 
-                /* Call tisp_init() - it has its own protection against multiple calls */
+                /* CRITICAL: Call tisp_init() TWICE as shown in Binary Ninja MCP */
+                /* Binary Ninja MCP shows two calls: 00079050 and 00079058 */
                 extern struct tx_isp_sensor *tx_isp_get_sensor(void);
                 struct tx_isp_sensor *init_sensor = tx_isp_get_sensor();
+
+                pr_info("*** ispcore_core_ops_init: BINARY NINJA MCP - First tisp_init call (00079050) ***");
                 if (init_sensor && init_sensor->video.attr) {
                     pr_info("*** ispcore_core_ops_init: Calling tisp_init with sensor attributes ***");
                     ret = tisp_init(init_sensor->video.attr, NULL);
                     if (ret != 0) {
-                        pr_err("ispcore_core_ops_init: tisp_init failed: %d\n", ret);
+                        pr_err("ispcore_core_ops_init: First tisp_init failed: %d\n", ret);
                         return ret;
                     }
-                    pr_info("*** ispcore_core_ops_init: tisp_init completed ***");
+                    pr_info("*** ispcore_core_ops_init: First tisp_init completed ***");
                 } else {
                     pr_info("*** ispcore_core_ops_init: No sensor attributes - calling tisp_init anyway (it will handle this) ***");
                     ret = tisp_init(NULL, NULL);
                     if (ret != 0) {
-                        pr_err("ispcore_core_ops_init: tisp_init failed: %d\n", ret);
+                        pr_err("ispcore_core_ops_init: First tisp_init failed: %d\n", ret);
+                        return ret;
+                    }
+                }
+
+                pr_info("*** ispcore_core_ops_init: BINARY NINJA MCP - Second tisp_init call (00079058) ***");
+                if (init_sensor && init_sensor->video.attr) {
+                    ret = tisp_init(init_sensor->video.attr, NULL);
+                    if (ret != 0) {
+                        pr_err("ispcore_core_ops_init: Second tisp_init failed: %d\n", ret);
+                        return ret;
+                    }
+                    pr_info("*** ispcore_core_ops_init: Second tisp_init completed ***");
+                } else {
+                    ret = tisp_init(NULL, NULL);
+                    if (ret != 0) {
+                        pr_err("ispcore_core_ops_init: Second tisp_init failed: %d\n", ret);
                         return ret;
                     }
                 }
