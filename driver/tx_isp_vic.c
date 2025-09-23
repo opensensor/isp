@@ -39,13 +39,16 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1);
 void tx_isp_enable_irq(void *arg1);
 extern void tx_isp_disable_irq(void *irq_info);
 
-/* BINARY NINJA EXACT: tx_vic_enable_irq implementation */
+/* BINARY NINJA EXACT: tx_vic_enable_irq implementation - WORKING REFERENCE VERSION */
 void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 {
     unsigned long flags;
 
+    pr_info("*** tx_vic_enable_irq: EXACT Binary Ninja implementation from working reference ***\n");
+
     /* Binary Ninja: if (dump_vsd_5 == 0 || dump_vsd_5 u>= 0xfffff001) return */
     if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
+        pr_err("tx_vic_enable_irq: Invalid VIC device pointer\n");
         return;
     }
 
@@ -53,46 +56,28 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
     spin_lock_irqsave(&vic_dev->lock, flags);
 
     /* Binary Ninja: if (*(dump_vsd_1 + 0x13c) != 0) */
-    if (vic_dev->irq_enabled == 0) {
+    if (vic_dev->irq_enabled != 0) {
+        pr_info("tx_vic_enable_irq: VIC interrupts already enabled\n");
+    } else {
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 1 */
         vic_dev->irq_enabled = 1;
+        pr_info("tx_vic_enable_irq: VIC interrupts enabled (irq_enabled = 1)\n");
 
         /* Binary Ninja: $v0_1 = *(dump_vsd_5 + 0x84); if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
         if (vic_dev->irq_handler && vic_dev->irq_priv) {
+            pr_info("tx_vic_enable_irq: Calling VIC interrupt callback\n");
             vic_dev->irq_handler(vic_dev->irq_priv);
         }
 
-        /* CRITICAL FIX: Enable VIC hardware interrupt generation using PRIMARY register space */
-        /* From working commits: VIC interrupts need to be enabled in PRIMARY VIC registers */
-        if (vic_dev->vic_regs) {
-            /* Clear any pending interrupts first */
-            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main interrupt status */
-            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
-            wmb();
-
-            /* CRITICAL FIX: Enable VIC frame done interrupt using PRIMARY register space */
-            /* From working commits: Enable frame done interrupt (bit 0) and MDMA interrupts */
-            writel(0x00000001, vic_dev->vic_regs + 0x1e0);  /* Enable frame done interrupt */
-            writel(0x00000000, vic_dev->vic_regs + 0x1e8);  /* Unmask frame done interrupt */
-            writel(0x00000003, vic_dev->vic_regs + 0x1e4);  /* Enable MDMA channel 0,1 interrupts */
-            writel(0x00000000, vic_dev->vic_regs + 0x1ec);  /* Unmask MDMA interrupts */
-            wmb();
-
-            /* CRITICAL FIX: Enable VIC DMA interrupt generation - from working commits */
-            writel(0x00000001, vic_dev->vic_regs + 0x30c);  /* Enable VIC DMA interrupts */
-            wmb();
-
-            pr_info("*** tx_vic_enable_irq: CRITICAL FIX - VIC hardware interrupts ENABLED using PRIMARY register space ***\n");
-            pr_info("*** tx_vic_enable_irq: Frame done interrupt enabled (0x1e0=0x1, 0x1e8=0x0) ***\n");
-            pr_info("*** tx_vic_enable_irq: MDMA interrupts enabled (0x1e4=0x3, 0x1ec=0x0) ***\n");
-            pr_info("*** tx_vic_enable_irq: VIC DMA interrupts enabled (0x30c=0x1) ***\n");
-        } else {
-            pr_err("*** tx_vic_enable_irq: CRITICAL ERROR - No VIC primary registers mapped! ***\n");
-        }
+        /* CRITICAL: Working reference does NOT write to VIC hardware interrupt registers! */
+        /* The VIC interrupt hardware is enabled by the VIC start function register sequence */
+        pr_info("tx_vic_enable_irq: VIC interrupt flag set - hardware enabled by VIC start sequence\n");
     }
 
     /* Binary Ninja: private_spin_unlock_irqrestore(dump_vsd_3 + 0x130, var_18) */
     spin_unlock_irqrestore(&vic_dev->lock, flags);
+
+    pr_info("*** tx_vic_enable_irq: completed successfully ***\n");
 }
 
 /* BINARY NINJA EXACT: tx_vic_disable_irq implementation */
