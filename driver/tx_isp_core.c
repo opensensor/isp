@@ -1771,7 +1771,7 @@ int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id)
     /* Binary Ninja: *((arg1 << 2) + &irq_func_cb) = arg2 */
     irq_func_cb[index] = handler;
 
-    pr_debug("*** system_irq_func_set: Registered handler at index %d ***\n", index);
+    pr_info("*** system_irq_func_set: Registered handler at index %d ***\n", index);
     return 0;
 }
 EXPORT_SYMBOL(system_irq_func_set);
