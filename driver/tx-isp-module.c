@@ -56,6 +56,7 @@ int fs_activate_module(struct tx_isp_subdev *sd);
 int ispcore_activate_module(struct tx_isp_dev *isp_dev);
 uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand);
 int __init verify_handler_addresses(void);
+void test_interrupt_handler_manually(void);
 
 /* External variables */
 extern int isp_clk;  /* Global ISP clock rate from tx_isp_core.c */
@@ -5123,7 +5124,7 @@ int __init verify_handler_addresses(void)
 }
 
 /* CRITICAL DEBUG: Manual interrupt handler test */
-static void test_interrupt_handler_manually(void)
+void test_interrupt_handler_manually(void)
 {
     extern struct tx_isp_dev *ourISPdev;
 
