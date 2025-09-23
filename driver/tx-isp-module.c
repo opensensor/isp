@@ -55,6 +55,9 @@ int tx_isp_vin_activate_subdev(void* arg1);  /* Binary Ninja signature */
 int fs_activate_module(struct tx_isp_subdev *sd);
 int ispcore_activate_module(struct tx_isp_dev *isp_dev);
 
+/* External variables */
+extern int isp_clk;  /* Global ISP clock rate from tx_isp_core.c */
+
 /* External ISP device reference */
 extern struct tx_isp_dev *ourISPdev;
 #include <linux/platform_device.h>
@@ -4835,7 +4838,7 @@ static int private_reset_tx_isp_module(int arg)
     return -ETIMEDOUT; /* Binary Ninja: return 0xffffffff */
 }
 
-/* ispcore_activate_module - EXACT Binary Ninja implementation that triggers register writes */
+/* ispcore_activate_module - Fixed to match our actual struct layouts */
 int ispcore_activate_module(struct tx_isp_dev *isp_dev)
 {
     struct tx_isp_vic_device *vic_dev;
@@ -4843,146 +4846,125 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
     int clk_count;
     int i;
     int result = 0xffffffea;
-    void *subdev_array;
     void *current_subdev;
-    int subdev_count;
-    void *subdev_entry;
-    int (*subdev_init_func)(void*);
     int subdev_result;
-    void *function_ptr;
-    int a2_1, a3_1;
-    
-    pr_info("*** ispcore_activate_module: EXACT Binary Ninja implementation ***\n");
-    
+    int a2_1;
+    extern int isp_clk;  /* Global isp_clk variable from tx_isp_core.c */
+
+    pr_info("*** ispcore_activate_module: Fixed for our struct layouts ***\n");
+
     /* Binary Ninja: if (arg1 != 0) */
     if (isp_dev != NULL) {
         /* Binary Ninja: if (arg1 u>= 0xfffff001) return 0xffffffea */
         if ((uintptr_t)isp_dev >= 0xfffff001) {
             return 0xffffffea;
         }
-        
-        /* CRITICAL FIX: Use safe struct member access instead of dangerous offset *(arg1 + 0xd4) */
-        /* MIPS ALIGNMENT CHECK: Ensure isp_dev is properly aligned before accessing */
-        if (((unsigned long)isp_dev & 0x3) != 0) {
-            pr_err("*** CRITICAL: isp_dev pointer 0x%p not 4-byte aligned - would cause unaligned access crash! ***\n", isp_dev);
-            return -EINVAL;
-        }
 
-        /* SAFE: Use proper struct member access instead of offset arithmetic */
+        /* FIXED: Use our actual struct layout for VIC device access */
         vic_dev = isp_dev->vic_dev;
         result = 0xffffffea;
-        
+
         /* Binary Ninja: if ($s0_1 != 0 && $s0_1 u< 0xfffff001) */
         if (vic_dev != NULL && (uintptr_t)vic_dev < 0xfffff001) {
             result = 0;
-            
-            /* Binary Ninja: if (*($s0_1 + 0xe8) == 1) */
+
+            /* Binary Ninja: if (*($s0_1 + 0xe8) == 1) - VIC state check */
             if (vic_dev->state == 1) {
                 pr_info("*** VIC device in state 1, proceeding with activation ***\n");
-                
-                /* SAFE: Use proper struct member access instead of dangerous offsets */
-                /* SAFE: Clock configuration loop using safe member access */
-                int clock_count = 2;  /* Default clock count for VIC device */
-                
-                /* CRITICAL: Clock configuration section */
-                pr_info("*** CLOCK CONFIGURATION SECTION ***\n");
-                
-                /* For our implementation, we'll use the ISP device's clock array */
-                if (isp_dev->core_dev && isp_dev->core_dev->core_clk) {
-                    /* Binary Ninja: if (private_clk_get_rate(*$s2_1) != 0xffff) */
-                    unsigned long current_rate = clk_get_rate(isp_dev->core_dev->core_clk);
-                    if (current_rate != 0xffff) {
-                        /* Binary Ninja: private_clk_set_rate(*$s2_1, isp_clk) */
-                        /* Set ISP clock to appropriate rate */
-                        clk_set_rate(isp_dev->core_dev->core_clk, 100000000); /* 100MHz ISP clock */
-                        pr_info("ISP clock set to 100MHz\n");
-                    }
 
-                    /* Binary Ninja: private_clk_enable(*$s2_1) */
-                    clk_prepare_enable(isp_dev->core_dev->core_clk);
-                    pr_info("ISP clock enabled\n");
-                }
-                
-                /* CRITICAL: Subdevice validation loop */
-                pr_info("*** SUBDEVICE VALIDATION SECTION ***\n");
-                
-                /* Binary Ninja: int32_t $a2_1 = 0; void* $a3_1 */
-                /* Binary Ninja: while (true) { $a3_1 = $a2_1 * 0xc4 */
-                a2_1 = 0;
-                subdev_count = 4; /* Assume max 4 subdevices for safety */
-                
-                while (true) {
-                    a3_1 = a2_1 * 0xc4; /* Binary Ninja calculation */
-                    
-                    /* Binary Ninja: if ($a2_1 u>= *($s0_1 + 0x154)) break */
-                    if (a2_1 >= subdev_count) {
-                        break;
-                    }
-                    
-                    /* Binary Ninja: void* $v0_6 = $a3_1 + *($s0_1 + 0x150) */
-                    /* For our implementation, check if we have valid subdevices */
-                    if (a2_1 == 0 && isp_dev->vic_dev) {
-                        /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
-                        struct tx_isp_vic_device *check_vic = isp_dev->vic_dev;
-                        
-                        /* Binary Ninja: if (*($v0_6 + 0x74) != 1) */
-                        if (check_vic->state != 1) {
-                            /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch0 hcomp err !!!\n", $a2_1) */
-                            pr_err("Err [VIC_INT] : mipi ch0 hcomp err !!!\n");
-                            /* Binary Ninja: return 0xffffffff */
-                            return 0xffffffff;
+                /* CRITICAL: Clock configuration loop - Fixed for our struct layout */
+                /* FIXED: Access VIC device's subdev structure for clock array */
+                struct tx_isp_subdev *vic_subdev = &vic_dev->sd;
+                clk_array = vic_subdev->clks;      /* Our actual clock array location */
+                clk_count = vic_subdev->clk_num;   /* Our actual clock count location */
+
+                pr_info("*** CLOCK CONFIGURATION SECTION: clk_array=%p, clk_count=%d ***\n", clk_array, clk_count);
+
+                /* Binary Ninja clock loop implementation */
+                if (clk_array && clk_count > 0) {
+                    for (i = 0; i < clk_count; i++) {
+                        if (clk_array[i]) {
+                            /* Binary Ninja: if (private_clk_get_rate(*$s2_1) != 0xffff) */
+                            unsigned long current_rate = clk_get_rate(clk_array[i]);
+                            if (current_rate != 0xffff) {
+                                /* Binary Ninja: private_clk_set_rate(*$s2_1, isp_clk) */
+                                clk_set_rate(clk_array[i], isp_clk);
+                                pr_info("Clock %d set to %d Hz\n", i, isp_clk);
+                            }
+
+                            /* Binary Ninja: private_clk_enable(*$s2_1) */
+                            clk_prepare_enable(clk_array[i]);
+                            pr_info("Clock %d enabled\n", i);
                         }
-                        
-                        /* Binary Ninja: *($v0_6 + 0x74) = 2 */
-                        check_vic->state = 2;
-                        pr_info("VIC device state set to 2 (activated)\n");
                     }
-                    
-                    /* Binary Ninja: $a2_1 += 1 */
-                    a2_1 += 1;
                 }
-                
+
+                /* CRITICAL: Subdevice validation loop - Simplified for our layout */
+                pr_info("*** SUBDEVICE VALIDATION SECTION ***\n");
+
+                /* Binary Ninja: Validate VIC device state */
+                a2_1 = 0;
+
+                /* Binary Ninja: Check VIC state and set to 2 */
+                if (vic_dev->state != 1) {
+                    /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch0 hcomp err !!!\n", $a2_1) */
+                    isp_printf(2, "Err [VIC_INT] : mipi ch0 hcomp err !!!\n", a2_1);
+                    /* Binary Ninja: return 0xffffffff */
+                    return 0xffffffff;
+                }
+
+                /* Binary Ninja: *($v0_6 + 0x74) = 2 - Set VIC state to activated */
+                vic_dev->state = 2;
+                pr_info("VIC device state set to 2 (activated)\n");
+
                 /* CRITICAL: Function pointer call that triggers register writes */
                 pr_info("*** CRITICAL FUNCTION POINTER CALL SECTION ***\n");
-                
-                /* Binary Ninja: void* $a0_3 = *($s0_1 + 0x1bc) */
+
                 /* Binary Ninja: (*($a0_3 + 0x40cc))($a0_3, 0x4000000, 0, $a3_1) */
-                
-                /* VIC initialization now only handled by vic_core_s_stream - reference driver behavior */
+                /* CRITICAL: This triggers the actual hardware initialization */
                 if (vic_dev && vic_dev->vic_regs) {
-                    pr_info("*** VIC initialization deferred to vic_core_s_stream (reference driver behavior) ***\n");
+                    pr_info("*** CALLING CRITICAL VIC INITIALIZATION FUNCTION ***\n");
+
+                    /* CRITICAL: Write VIC control register to trigger initialization */
+                    /* This matches the Binary Ninja function call pattern */
+                    writel(0x4000000, vic_dev->vic_regs + 0x0);  /* VIC control register */
+                    wmb();
+                    pr_info("*** VIC control register written with 0x4000000 ***\n");
                 }
-                
-                /* CRITICAL: Subdevice initialization loop */
+
+                /* CRITICAL: Subdevice initialization loop - Fixed for our layout */
                 pr_info("*** SUBDEVICE INITIALIZATION LOOP ***\n");
-                
-                /* Binary Ninja: void* $s2_2 = $s0_1 + 0x38; void* $s1_2 = *$s2_2 */
-                /* This iterates through the subdev array and calls their init functions */
-                
-                /* For our implementation, initialize key subdevices */
-                if (isp_dev->csi_dev) {
-                    struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
-                    
-                    /* Binary Ninja: int32_t $v0_12 = $v0_11($s1_2) */
-                    /* Call CSI initialization */
-                    pr_info("Calling CSI subdevice initialization\n");
-                    int csi_result = csi_core_ops_init(&csi_dev->sd, 1);
-                    
-                    /* Binary Ninja: if ($v0_12 != 0 && $v0_12 != 0xfffffdfd) */
-                    if (csi_result != 0 && csi_result != 0xfffffdfd) {
-                        /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch1 hcomp err !!!\n", *($s1_2 + 8)) */
-                        pr_err("Err [VIC_INT] : mipi ch1 hcomp err !!!\n");
-                        return -1;
+
+                /* FIXED: Use our actual subdev array at offset 0x38 in tx_isp_dev */
+                /* Binary Ninja iterates through subdev array and calls init functions */
+                for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+                    current_subdev = isp_dev->subdevs[i];
+                    if (!current_subdev) {
+                        continue;  /* Skip empty slots */
+                    }
+
+                    if ((uintptr_t)current_subdev >= 0xfffff001) {
+                        continue;  /* Skip invalid pointers */
+                    }
+
+                    /* Binary Ninja: Call subdev init function */
+                    struct tx_isp_subdev *sd = (struct tx_isp_subdev *)current_subdev;
+                    if (sd->ops && sd->ops->core && sd->ops->core->init) {
+                        pr_info("Calling subdev %d initialization\n", i);
+                        subdev_result = sd->ops->core->init(sd, 1);
+
+                        /* Binary Ninja: if ($v0_12 != 0 && $v0_12 != 0xfffffdfd) */
+                        if (subdev_result != 0 && subdev_result != 0xfffffdfd) {
+                            /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch1 hcomp err !!!\n", *($s1_2 + 8)) */
+                            isp_printf(2, "Err [VIC_INT] : mipi ch1 hcomp err !!!\n", i);
+                            break;
+                        }
                     }
                 }
-                
-                /* Binary Ninja: *($s0_1 + 0xe8) = 2 */
+
+                /* Binary Ninja: *($s0_1 + 0xe8) = 2 - Final VIC state set */
                 vic_dev->state = 2;
                 pr_info("*** VIC device final state set to 2 (fully activated) ***\n");
-
-                /* REMOVED: Core device state management - ALL state management happens through VIC device */
-                /* Based on Binary Ninja MCP analysis, only VIC state should be managed */
-                pr_info("*** CRITICAL: Core device is stateless - only VIC state matters ***\n");
 
                 /* Binary Ninja: return 0 */
                 pr_info("*** ispcore_activate_module: SUCCESS - ALL REGISTER WRITES SHOULD NOW BE TRIGGERED ***\n");
@@ -4990,7 +4972,7 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
             }
         }
     }
-    
+
     /* Binary Ninja: return result */
     pr_info("*** ispcore_activate_module: FAILED - result=0x%x ***\n", result);
     return result;
