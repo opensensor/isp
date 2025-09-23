@@ -70,11 +70,12 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
             wmb();
 
-            /* Enable VIC frame done interrupt (bit 0) - this is what generates interrupts */
-            writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);  /* Enable frame done interrupt */
+            /* CRITICAL FIX: Enable VIC frame done interrupt (bit 0) by clearing the mask bit */
+            /* In interrupt mask registers: 0 = ENABLED, 1 = MASKED (disabled) */
+            writel(0x00000000, vic_dev->vic_regs + 0x1e8);  /* Enable ALL VIC interrupts (clear all mask bits) */
             wmb();
 
-            pr_info("*** tx_vic_enable_irq: CRITICAL FIX - VIC hardware interrupts ENABLED (0x1e8=0xFFFFFFFE) ***\n");
+            pr_info("*** tx_vic_enable_irq: CRITICAL FIX - VIC hardware interrupts ENABLED (0x1e8=0x00000000 - all interrupts unmasked) ***\n");
         } else {
             pr_err("*** tx_vic_enable_irq: CRITICAL ERROR - No VIC registers mapped! ***\n");
         }

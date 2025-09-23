@@ -2789,8 +2789,12 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 /* Based on Binary Ninja MCP analysis, core device is stateless */
                 pr_info("*** ispcore_core_ops_init: Core device is stateless - only VIC state matters ***");
 
-                /* CRITICAL: Enable ISP core hardware interrupts using ISP device's core_dev */
-                if (isp_dev && isp_dev->core_dev) {
+                /* CRITICAL FIX: Don't enable ISP core interrupts during streaming - it causes hardware reset */
+                /* The register writes in tx_isp_core_enable_irq corrupt ISP control logic when called during streaming */
+                if (vic_state == 4) {
+                    pr_info("*** ispcore_core_ops_init: STREAMING ACTIVE - Skipping ISP core interrupt enable to prevent hardware reset ***");
+                    pr_info("*** ispcore_core_ops_init: ISP core interrupts should be enabled BEFORE streaming starts ***");
+                } else if (isp_dev && isp_dev->core_dev) {
                     ret = tx_isp_core_enable_irq(isp_dev->core_dev);
                     if (ret != 0) {
                         pr_err("ispcore_core_ops_init: Failed to enable ISP core interrupts: %d\n", ret);
