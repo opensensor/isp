@@ -599,7 +599,7 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev);
 int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp_dev);
 
 /* Binary Ninja MCP reference function declarations */
-int private_driver_get_interface(int *a2);
+/* Note: private_driver_get_interface already declared in txx-funcs.h */
 int private_platform_device_register(struct platform_device *pdev);
 int private_platform_driver_register(struct platform_driver *drv);
 void private_platform_device_unregister(struct platform_device *pdev);
@@ -4490,7 +4490,8 @@ static int tx_isp_init(void)
     pr_info("*** tx_isp_init: EXACT Binary Ninja MCP reference implementation ***\n");
 
     /* Binary Ninja: $v0, $a2 = private_driver_get_interface() */
-    v0 = private_driver_get_interface(&a2);
+    v0 = private_driver_get_interface();
+    a2 = 0;  /* Initialize a2 for error message */
 
     /* Binary Ninja: if ($v0 == 0) */
     if (v0 == 0) {
@@ -4527,18 +4528,7 @@ static int tx_isp_init(void)
 }
 
 /* Binary Ninja MCP reference function implementations */
-
-/* private_driver_get_interface - EXACT Binary Ninja MCP implementation */
-int private_driver_get_interface(int *a2)
-{
-    /* Binary Ninja: Check GPIO mode support */
-    /* In reference driver, this checks hardware GPIO configuration */
-    /* For standard kernel, always return success */
-    if (a2) {
-        *a2 = 0;  /* Success value */
-    }
-    return 0;  /* Success */
-}
+/* Note: private_driver_get_interface is already implemented in txx-funcs.h */
 
 /* private_platform_device_register - EXACT Binary Ninja MCP implementation */
 int private_platform_device_register(struct platform_device *pdev)
@@ -4561,26 +4551,7 @@ void private_platform_device_unregister(struct platform_device *pdev)
     platform_device_unregister(pdev);
 }
 
-/* Error handling for reference driver compatibility */
-err_cleanup_irqs:
-err_cleanup_platform_device:
-    platform_device_unregister(&tx_isp_platform_device);
-err_cleanup_main_driver:
-    platform_driver_unregister(&tx_isp_driver);
-err_cleanup_subdev_drivers:
-    tx_isp_subdev_platform_exit();
-err_free_dev:
-    if (ourISPdev) {
-        /* Clean up event callback structure */
-        if (ourISPdev->event_callback) {
-            kfree(ourISPdev->event_callback);
-            ourISPdev->event_callback = NULL;
-        }
-        kfree(ourISPdev);
-        ourISPdev = NULL;
-    }
-    return ret;
-}
+/* Error labels removed - Binary Ninja MCP implementation doesn't use them */
 
 /* tx_isp_module_init - EXACT Binary Ninja reference implementation */
 static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
