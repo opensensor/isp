@@ -946,34 +946,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     wmb();
     pr_info("*** tx_isp_vic_start: VIC processing enabled (0x0=0x1, 0x4=0x1) ***\n");
 
-    /* CRITICAL FIX: Enable VIC hardware interrupts in CORRECT CSI PHY register space */
-    pr_info("*** tx_isp_vic_start: CRITICAL FIX - VIC interrupts are in CSI PHY space, not VIC space! ***\n");
-
-    /* CRITICAL: VIC interrupt registers 0x1e0/0x1e8 are actually CSI PHY registers! */
-    /* We need to write to the CSI PHY register space, not VIC register space */
-    void __iomem *csi_phy_regs = vic_dev->vic_regs_control;  /* 0x10023000 - CSI PHY space */
-    if (!csi_phy_regs) {
-        pr_err("*** CRITICAL ERROR: No CSI PHY register space for VIC interrupt configuration! ***\n");
-        return -EINVAL;
-    }
-
-    pr_info("*** VIC INTERRUPTS: Writing to CSI PHY space (0x10023000), not VIC space (0x133e0000) ***\n");
-
-    /* Clear any pending interrupts first in CSI PHY space */
-    writel(0xFFFFFFFF, csi_phy_regs + 0x1f0);  /* Clear main interrupt status */
-    writel(0xFFFFFFFF, csi_phy_regs + 0x1f4);  /* Clear MDMA interrupt status */
-    wmb();
-
-    /* Enable VIC interrupts in CSI PHY register space - from working reference driver */
-    writel(0x3FFFFFFF, csi_phy_regs + 0x1e0);  /* Enable all VIC interrupts */
-    writel(0x0, csi_phy_regs + 0x1e8);         /* Clear interrupt masks */
-    writel(0xF, csi_phy_regs + 0x1e4);         /* Enable MDMA interrupts */
-    writel(0x0, csi_phy_regs + 0x1ec);         /* Clear MDMA masks */
-    wmb();
-
-    pr_info("*** VIC INTERRUPT REGISTERS ENABLED IN CSI PHY SPACE - INTERRUPTS SHOULD NOW FIRE! ***\n");
-    pr_info("*** CSI PHY INT_EN (0x1e0) = 0x3FFFFFFF, INT_MASK (0x1e8) = 0x0 ***\n");
-    pr_info("*** CSI PHY MDMA_EN (0x1e4) = 0xF, MDMA_MASK (0x1ec) = 0x0 ***\n");
+    /* CRITICAL FIX: DEFER interrupt configuration until AFTER VIC hardware is properly configured */
+    pr_info("*** tx_isp_vic_start: DEFERRING interrupt configuration until VIC hardware is ready ***\n");
 
     /* Binary Ninja: Final configuration registers */
     writel(0x100010, vic_regs + 0x1a4);
