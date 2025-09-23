@@ -251,9 +251,9 @@ EXPORT_SYMBOL(tx_isp_missing_funcs_exit);
 /* ===== AE (AUTO EXPOSURE) FUNCTIONS ===== */
 
 /* External AE-related function declarations */
-extern int fix_point_div_32(int precision, int dividend, int divisor);
+uint32_t fix_point_div_32(uint32_t shift_bits, uint32_t numerator, uint32_t denominator);
 extern int fix_point_mult2_32(int precision, int a, int b);
-extern int fix_point_mult3_32(int precision, int a, int b);
+uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand);
 extern int tisp_log2_fixed_to_fixed(void);
 extern uint32_t tisp_math_exp2(int val, int shift, int base);
 extern void system_reg_write_ae(int bank, u32 reg, u32 value);
@@ -749,8 +749,7 @@ extern int data_b2f20(int fps_val, void *sensor_ctrl);
 extern void tiziano_deflicker_expt_tune(int flicker_hz, int param1, int param2, int param3);
 extern uint32_t system_reg_read(u32 reg);
 extern int fix_point_intp(int arg1, int arg2, int arg3, int arg4, int arg5);
-extern uint32_t fix_point_div_32(uint32_t shift_bits, uint32_t numerator, uint32_t denominator);
-extern uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand);
+uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand);
 
 /* Global frame control variables - now properly exported from tx_isp_tuning.c */
 extern uint32_t data_b2ea4, data_b2ea8, data_b2ed0, data_b2ecc;
