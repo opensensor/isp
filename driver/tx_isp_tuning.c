@@ -3524,27 +3524,6 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 
                             pr_info("*** This should maintain proper ISP pipeline control and prevent CSI PHY timeouts ***\n");
                 }
-
-                /* CRITICAL: Ignore disable commands when auto-initialized to prevent init/release cycle */
-                if (!enable && auto_init_done) {
-                    pr_info("isp_core_tunning_unlocked_ioctl: Ignoring disable command - tuning was auto-initialized\n");
-
-                    /* CRITICAL FIX: Restart streaming after tuning operations complete */
-                    /* This is the missing piece - after tuning disable, we need to restart streaming */
-                    extern int tx_isp_video_link_stream(struct tx_isp_dev *dev, int enable);
-                    if (ourISPdev) {
-                        pr_info("*** CRITICAL FIX: Restarting streaming after tuning operations complete ***\n");
-                        ret = tx_isp_video_link_stream(ourISPdev, 1);
-                        if (ret != 0) {
-                            pr_err("isp_core_tunning_unlocked_ioctl: Failed to restart streaming: %d\n", ret);
-                        } else {
-                            pr_info("*** CRITICAL FIX: Streaming restarted successfully after tuning ***\n");
-                        }
-                    }
-
-                    ret = 0;  /* Return success but don't actually disable */
-                    break;
-                }
                 
                 if (enable) {
                     pr_info("*** DEBUG: enable=1, dev->core_dev->tuning_enabled=%d ***\n", dev->core_dev ? dev->core_dev->tuning_enabled : -1);
