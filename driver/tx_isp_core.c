@@ -646,9 +646,10 @@ static uint32_t effect_frame = 0;
 static uint32_t effect_count = 0;
 
 
-static int isp_clk = 100000000;
+int isp_clk = 100000000;
 module_param(isp_clk, int, S_IRUGO);
 MODULE_PARM_DESC(isp_clk, "isp clock freq");
+EXPORT_SYMBOL(isp_clk);
 
 int isp_ch0_pre_dequeue_time;
 module_param(isp_ch0_pre_dequeue_time, int, S_IRUGO);
