@@ -1822,7 +1822,7 @@ static struct tx_isp_subdev_ops sensor_ops = {
 	.sensor = &sensor_sensor_ops,
 };
 
-extern int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor *sensor);
+/* REMOVED: tx_isp_register_sensor_subdev - sensors register through tx_isp_subdev_init */
 /* It's the sensor device */
 static u64 tx_isp_module_dma_mask = ~(u64) 0;
 struct platform_device sensor_platform_device = {
