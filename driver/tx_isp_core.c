@@ -243,69 +243,67 @@ int isp_fw_process(void *data)
 /* ispcore_video_s_stream - EXACT Binary Ninja MCP implementation */
 int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
 {
-    struct tx_isp_core_device *core_dev;
+    struct tx_isp_vic_device *vic_dev;  /* CRITICAL FIX: Uses VIC device, not core device */
     struct tx_isp_dev *isp_dev;
     struct tx_isp_subdev **s3_1;
     int result = 0;
     int var_28 = 0;
     int a0_4;
+    int vic_state;
 
-    pr_info("*** ispcore_video_s_stream: FIXED Binary Ninja MCP implementation - enable=%d ***\n", enable);
+    pr_info("*** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=%d ***\n", enable);
 
     if (!sd) {
         pr_err("ispcore_video_s_stream: Invalid subdev\n");
         return -EINVAL;
     }
 
-    /* Binary Ninja: void* $s0 = arg1[0x35] - get core device from subdev */
-    pr_info("*** ispcore_video_s_stream: DEBUG - sd=%p, enable=%d ***\n", sd, enable);
-
-    /* CRITICAL DEBUG: Check if sd pointer is valid before container_of */
-
-    core_dev = container_of(sd, struct tx_isp_core_device, sd);
-    if (!core_dev) {
-        pr_err("ispcore_video_s_stream: No core device available\n");
-        return -EINVAL;
-    }
-
-    isp_dev = core_dev->isp_dev;
+    /* Get ISP device from subdev */
+    isp_dev = (struct tx_isp_dev *)sd->isp;
     if (!isp_dev) {
         pr_err("ispcore_video_s_stream: No ISP device available\n");
         return -EINVAL;
     }
 
+    /* CRITICAL FIX: Binary Ninja: void* $s0 = arg1[0x35] - get VIC device, not core device */
+    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+    if (!vic_dev) {
+        pr_err("ispcore_video_s_stream: No VIC device available\n");
+        return -EINVAL;
+    }
+
     /* Binary Ninja: __private_spin_lock_irqsave($s0 + 0xdc, &var_28) */
-    __private_spin_lock_irqsave(&core_dev->lock, &var_28);
+    __private_spin_lock_irqsave(&vic_dev->lock, &var_28);
 
-    /* Binary Ninja: if (*($s0 + 0xe8) s< 3) */
-    pr_info("*** CORE STATE CHECK: core_dev->state=%d (need >=3), enable=%d ***\n", core_dev->state, enable);
+    /* CRITICAL FIX: Binary Ninja: if (*($s0 + 0xe8) s< 3) - Check VIC state, not core state */
+    vic_state = vic_dev->state;
+    pr_info("*** VIC STATE CHECK: vic_dev->state=%d (need >=3), enable=%d ***\n", vic_state, enable);
 
-    if (core_dev->state < 3) {
-        pr_err("*** WORKING BACKWARDS: Current state=%d, need to find missing %d->3 transition ***\n",
-               core_dev->state, core_dev->state);
+    if (vic_state < 3) {
+        pr_err("*** VIC STATE ERROR: Current VIC state=%d, need >=3 for streaming ***\n", vic_state);
         /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream") */
         isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream");
         /* Binary Ninja: private_spin_unlock_irqrestore($s0 + 0xdc, var_28) */
-        spin_unlock_irqrestore(&core_dev->lock, var_28);
+        spin_unlock_irqrestore(&vic_dev->lock, var_28);
         /* Binary Ninja: return 0xffffffff */
         return -1;
     }
 
     /* Binary Ninja: private_spin_unlock_irqrestore($s0 + 0xdc, var_28) */
-    spin_unlock_irqrestore(&core_dev->lock, var_28);
+    spin_unlock_irqrestore(&vic_dev->lock, var_28);
 
-    /* Binary Ninja: Reset frame counters */
+    /* Binary Ninja: Reset frame counters - these are VIC device counters */
     /* *($s0 + 0x164) = 0 */
-    core_dev->frame_count = 0;
+    vic_dev->frame_count = 0;
     /* *($s0 + 0x168) = 0 */
-    core_dev->error_count = 0;
+    vic_dev->error_count = 0;
     /* *($s0 + 0x170) = 0 */
-    core_dev->drop_count = 0;
+    vic_dev->drop_count = 0;
     /* *($s0 + 0x160) = 0 */
-    core_dev->total_frames = 0;
+    vic_dev->total_frames = 0;
 
-    /* Binary Ninja: int32_t $v0_3 = *($s0 + 0xe8) */
-    int v0_3 = core_dev->state;
+    /* CRITICAL FIX: Binary Ninja: int32_t $v0_3 = *($s0 + 0xe8) - Get VIC state */
+    int v0_3 = vic_state;
 
     /* Binary Ninja: if (arg2 == 0) */
     if (enable == 0) {
@@ -316,11 +314,12 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         if (v0_3 == 4) {
             /* Binary Ninja: Frame channel loop */
             int s2_1 = 0;
-            void *v0_5 = core_dev->frame_channels;
+            /* CRITICAL FIX: Frame channels are in VIC device, not core device */
+            void *v0_5 = vic_dev->frame_channels;
 
             /* CRITICAL FIX: Check if frame_channels is properly initialized */
             if (!v0_5) {
-                pr_err("*** CRITICAL: core_dev->frame_channels is NULL - cannot process stream OFF ***\n");
+                pr_err("*** CRITICAL: vic_dev->frame_channels is NULL - cannot process stream OFF ***\n");
                 pr_err("*** This indicates frame_channels was not properly initialized during probe ***\n");
                 return -EINVAL;
             }
