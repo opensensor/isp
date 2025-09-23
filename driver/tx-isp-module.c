@@ -4099,11 +4099,7 @@ int tx_isp_open(struct inode *inode, struct file *file)
     isp->refcnt = 1;
     isp->is_open = true;
     file->private_data = isp;
-
-    /* CRITICAL FIX: Explicitly disable any background processing that might start */
-    /* This prevents the 14-second delayed crash that happens after prudynt starts */
-    pr_info("*** tx_isp_open: Background processing disabled to prevent delayed crashes ***\n");
-
+    
     pr_info("*** tx_isp_open: ISP opened safely - no dangerous operations triggered ***\n");
     return 0;
 }
