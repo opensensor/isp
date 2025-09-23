@@ -628,13 +628,10 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
             pr_info("*** VIC AUTO-LINK: VIC IRQ already registered (irq=%d) ***\n", vic_dev->sd.irq_info.irq);
         }
 
-        /* CRITICAL: Map secondary VIC register space (0x10023000) */
-        vic_dev->vic_regs = ioremap(0x10023000, 0x1000);
-        if (!vic_dev->vic_regs) {
-            pr_err("*** FAILED to map secondary VIC registers (0x10023000) ***\n");
-        } else {
-            pr_info("*** MAPPED secondary VIC registers: %p (0x10023000) ***\n", vic_dev->vic_regs);
-        }
+        /* CRITICAL FIX: Don't remap VIC registers - use the correct mapping from VIC probe */
+        /* VIC registers are already correctly mapped to 0x133e0000 in tx_isp_vic_probe */
+        /* Remapping to 0x10023000 was causing VIC writes to go to wrong register space */
+        pr_info("*** VIC AUTO-LINK: Using existing VIC register mapping (0x133e0000) - NOT remapping ***\n");
 
         /* CRITICAL: Register VIC interrupt handler NOW that registers are mapped */
         if (sd->regs && ourISPdev->vic_dev && ourISPdev->vic_dev->vic_regs) {
