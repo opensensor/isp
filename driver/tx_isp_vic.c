@@ -843,31 +843,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
-
-
-    /* Binary Ninja: Enable VIC processing */
-    writel(1, vic_regs + 0x0);
-    wmb();
-    pr_info("tx_isp_vic_start: VIC processing enabled (reg 0x0 = 1)\n");
-
-    /* Binary Ninja: Final configuration registers */
-    writel(0x100010, vic_regs + 0x1a4);
-    writel(0x4210, vic_regs + 0x1ac);
-    writel(0x10, vic_regs + 0x1b0);
-    writel(0, vic_regs + 0x1b4);
-    wmb();
-
-    /* Binary Ninja: Log WDR mode */
-    const char *wdr_msg = (vic_dev->sensor_attr.wdr_cache != 0) ?
-        "WDR mode enabled" : "Linear mode enabled";
-    pr_info("tx_isp_vic_start: %s\n", wdr_msg);
-
-    /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
-    vic_start_ok = 1;
-
-    /* CRITICAL: Enable ISP system-level interrupts when VIC streaming starts */
-
-
     /* CRITICAL FIX: Missing VIC Control register sequence from Binary Ninja reference */
     pr_info("*** tx_isp_vic_start: CRITICAL FIX - Writing VIC Control register sequence ***\n");
 
