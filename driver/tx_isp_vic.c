@@ -661,6 +661,14 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
     pr_info("*** tx_isp_vic_start: Using single VIC register base - EXACT Binary Ninja reference ***\n");
 
+    /* CRITICAL FIX: Add the missing register writes that got interrupts working in first-IRQ/first-IRQA commits */
+    pr_info("*** tx_isp_vic_start: Writing CRITICAL interrupt-enabling registers from working commits ***\n");
+    writel(0x3130322a, vic_regs + 0x0);      /* First register from reference trace - CRITICAL for interrupts */
+    writel(0x1, vic_regs + 0x4);             /* Second register from reference trace - CRITICAL for interrupts */
+    writel(0x200, vic_regs + 0x14);          /* Third register from reference trace - CRITICAL for interrupts */
+    wmb();
+    pr_info("*** tx_isp_vic_start: CRITICAL interrupt-enabling registers written (0x3130322a, 0x1, 0x200) ***\n");
+
     /* Binary Ninja: if ($v0 == 1) */
     pr_info("*** tx_isp_vic_start: CRITICAL DEBUG - interface_type=%d, checking if == 1 ***\n", interface_type);
     if (interface_type == 1) {
