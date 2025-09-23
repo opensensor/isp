@@ -642,7 +642,7 @@ extern int num_channels;
  */
 struct tx_isp_subdev_internal_ops {
 	int (*slake_module)(struct tx_isp_subdev *sd);
-	int (*activate_module)(void *arg);  /* EXACT Binary Ninja signature */
+	int (*activate_module)(struct tx_isp_subdev *sd);  /* Match header signature */
 };
 
 struct tx_isp_subdev_ops {

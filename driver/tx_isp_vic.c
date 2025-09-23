@@ -1337,23 +1337,22 @@ cleanup:
     return ret;
 }
 
-/* tx_isp_vic_activate_subdev - EXACT Binary Ninja implementation (00011088) */
-int tx_isp_vic_activate_subdev(void* arg1)
+/* tx_isp_vic_activate_subdev - Binary Ninja logic with header-compatible signature */
+int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
 {
     struct tx_isp_vic_device *vic_dev;
     int result = 0xffffffea;  /* Binary Ninja: int32_t result = 0xffffffea */
 
-    pr_info("*** tx_isp_vic_activate_subdev: EXACT Binary Ninja implementation ***\n");
+    pr_info("*** tx_isp_vic_activate_subdev: Binary Ninja logic with header signature ***\n");
 
     /* Binary Ninja: if (arg1 != 0) */
-    if (arg1 != NULL) {
+    if (sd != NULL) {
         /* Binary Ninja: if (arg1 u>= 0xfffff001) return 0xffffffea */
-        if ((uintptr_t)arg1 >= 0xfffff001) {
+        if ((uintptr_t)sd >= 0xfffff001) {
             return 0xffffffea;
         }
 
         /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
-        struct tx_isp_subdev *sd = (struct tx_isp_subdev *)arg1;
         vic_dev = (struct tx_isp_vic_device *)sd->dev_priv;  /* SAFE: arg1 + 0xd4 = dev_priv */
 
         /* Binary Ninja: result = 0xffffffea */
