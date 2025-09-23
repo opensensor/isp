@@ -15,6 +15,32 @@ extern void system_reg_write(u32 reg, u32 value);
 extern uint32_t system_reg_read(u32 reg);
 extern int fix_point_intp(int arg1, int arg2, int arg3, int arg4, int arg5);
 
+/* ===== FRAME CONTROL FUNCTIONS ===== */
+
+/* External function declarations for frame control */
+extern int data_b2f20(int fps_val, void *sensor_ctrl);
+extern void tiziano_deflicker_expt_tune(int flicker_hz, int param1, int param2, int param3);
+extern uint32_t system_reg_read(u32 reg);
+extern int fix_point_intp(int arg1, int arg2, int arg3, int arg4, int arg5);
+uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand);
+
+/* Global frame control variables - now properly exported from tx_isp_tuning.c */
+extern uint32_t data_b2ea4, data_b2ea8, data_b2ed0, data_b2ecc;
+extern uint32_t data_b2e44, data_b2e54, data_b2e56;
+
+/* Forward declarations for variables defined at bottom of file */
+extern void *sensor_ctrl;
+extern uint32_t flicker_hz;
+extern uint32_t sensor_info;
+extern int tisp_ae_hist[256];
+extern uint8_t dmsc_awb_gain[0xc];
+extern uint32_t _awb_ct;
+extern uint8_t data_9a91d, data_9a91e, data_9a91f;
+extern int data_9a430;
+extern uint32_t data_b2e48, data_b2e4a, data_b2e4c, data_b2e58;
+extern uint32_t data_c46c8, data_c4700, data_b2e4e, data_b2e62;
+extern uint32_t data_b2e64, data_b2e7e, data_b2e80, data_b2eb0;
+
 /* ===== SYSTEM/UTILITY FUNCTIONS ===== */
 
 /* Global work queue for system operations */
@@ -741,32 +767,6 @@ int tisp_hv_flip_get(int *flip_status)
     return 0;
 }
 EXPORT_SYMBOL(tisp_hv_flip_get);
-
-/* ===== FRAME CONTROL FUNCTIONS ===== */
-
-/* External function declarations for frame control */
-extern int data_b2f20(int fps_val, void *sensor_ctrl);
-extern void tiziano_deflicker_expt_tune(int flicker_hz, int param1, int param2, int param3);
-extern uint32_t system_reg_read(u32 reg);
-extern int fix_point_intp(int arg1, int arg2, int arg3, int arg4, int arg5);
-uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand);
-
-/* Global frame control variables - now properly exported from tx_isp_tuning.c */
-extern uint32_t data_b2ea4, data_b2ea8, data_b2ed0, data_b2ecc;
-extern uint32_t data_b2e44, data_b2e54, data_b2e56;
-
-/* Forward declarations for variables defined at bottom of file */
-extern void *sensor_ctrl;
-extern uint32_t flicker_hz;
-extern uint32_t sensor_info;
-extern int tisp_ae_hist[256];
-extern uint8_t dmsc_awb_gain[0xc];
-extern uint32_t _awb_ct;
-extern uint8_t data_9a91d, data_9a91e, data_9a91f;
-extern int data_9a430;
-extern uint32_t data_b2e48, data_b2e4a, data_b2e4c, data_b2e58;
-extern uint32_t data_c46c8, data_c4700, data_b2e4e, data_b2e62;
-extern uint32_t data_b2e64, data_b2e7e, data_b2e80, data_b2eb0;
 
 /**
  * tisp_set_fps - Set frame rate
