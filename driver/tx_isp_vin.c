@@ -77,12 +77,16 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
     }
 
     /* Binary Ninja: void* $a0 = *(arg1 + 0xe4) */
-    /* SAFE: Access with bounds checking */
-    if (!virt_addr_valid((char*)arg1 + 0xe4)) {
-        pr_err("VIN: tx_isp_vin_init: arg1+0xe4 is not valid virtual address\n");
+    /* SAFE: Use proper function instead of offset-based access */
+    struct tx_isp_vin_device *vin_dev = (struct tx_isp_vin_device *)tx_isp_get_subdevdata(sd);
+    if (!vin_dev) {
+        pr_err("VIN: tx_isp_vin_init: VIN device is NULL\n");
         return -EINVAL;
     }
-    a0 = *((void**)((char*)arg1 + 0xe4));
+
+    /* Get active sensor - VIN doesn't manage sensors directly, get from ISP device */
+    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)sd->isp;
+    a0 = isp_dev ? isp_dev->sensor : NULL;
 
     pr_info("VIN: tx_isp_vin_init: a0 (sensor) = %p\n", a0);
 
@@ -662,7 +666,8 @@ int tx_isp_vin_slake_subdev(struct tx_isp_subdev *sd)
     }
 
     /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
-    vin_dev = (struct tx_isp_vin_device *)sd->dev_priv;
+    /* SAFE: Use proper function instead of offset-based access */
+    vin_dev = (struct tx_isp_vin_device *)tx_isp_get_subdevdata(sd);
     if (!vin_dev || (unsigned long)vin_dev >= 0xfffff001) {
         return -EINVAL;
     }
