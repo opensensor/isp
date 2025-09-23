@@ -662,7 +662,7 @@ int tisp_set_csc_version(int version)
     return 0;
 }
 /* Use external system_reg_write from tx-isp-module.c with built-in streaming protection */
-extern void //system_reg_write(u32 reg, u32 value);
+extern void system_reg_write(u32 reg, u32 value);
 
 /* External system_irq_func_set from tx_isp_core.c */
 extern int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
