@@ -2481,8 +2481,8 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
                     /* Binary Ninja: isp_printf(0, "Err [VIC_INT] : dma chid ovf  !!!\n", "ispcore_slake_module") */
                     isp_printf(0, (unsigned char*)"Err [VIC_INT] : dma chid ovf  !!!\n", "ispcore_slake_module");
                     /* Binary Ninja: ispcore_core_ops_init(arg1, 0) */
-                    if (isp_dev->subdevs[4]) {
-                        ispcore_core_ops_init(isp_dev->subdevs[4], 0);
+                    if (isp_dev->subdevs[0]) {
+                        ispcore_core_ops_init(isp_dev->subdevs[0], 0);
                     }
                 }
 
