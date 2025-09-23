@@ -1993,17 +1993,21 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
             pr_info("*** tx_isp_video_s_stream: ispcore_activate_module completed ***\n");
         }
 
-        /* CRITICAL FIX: Step 2: Initialize core (VIC 2 → 3 state transition) */
+        /* CRITICAL FIX: Step 2: Initialize VIC core (VIC 2 → 3 state transition) */
         if (vic_dev && vic_dev->state == 2) {
-            struct tx_isp_subdev *core_sd = &arg1->core_dev->sd;
-            if (core_sd->ops && core_sd->ops->core && core_sd->ops->core->init) {
-                pr_info("*** tx_isp_video_s_stream: VIC state is 2, calling core->init ***\n");
-                result = core_sd->ops->core->init(core_sd, 1);
+            /* CRITICAL FIX: Call VIC subdev's core->init, not ISP core's init */
+            struct tx_isp_subdev *vic_sd = &vic_dev->sd;
+            if (vic_sd->ops && vic_sd->ops->core && vic_sd->ops->core->init) {
+                pr_info("*** tx_isp_video_s_stream: VIC state is 2, calling VIC core->init ***\n");
+                result = vic_sd->ops->core->init(vic_sd, 1);
                 if (result != 0) {
-                    pr_err("tx_isp_video_s_stream: core->init failed: %d\n", result);
+                    pr_err("tx_isp_video_s_stream: VIC core->init failed: %d\n", result);
                     return result;
                 }
-                pr_info("*** tx_isp_video_s_stream: core->init completed, VIC should now be state 3 ***\n");
+                pr_info("*** tx_isp_video_s_stream: VIC core->init completed, VIC should now be state 3 ***\n");
+            } else {
+                pr_err("tx_isp_video_s_stream: VIC core->init not available\n");
+                return -EINVAL;
             }
         }
 
