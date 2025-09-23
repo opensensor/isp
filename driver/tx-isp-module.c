@@ -34,7 +34,7 @@
 #include "../include/tx-isp-device.h"
 #include "../include/tx-libimp.h"
 #include "../include/tx_isp_core_device.h"
-#include "../include/txx-isp.h"  /* CRITICAL: Include for struct tx_isp_device_clk */
+#include "include/txx-isp.h"  /* CRITICAL: Include for struct tx_isp_device_clk */
 
 /* CRITICAL: Magic number for frame channel validation */
 #ifndef FRAME_CHANNEL_MAGIC
