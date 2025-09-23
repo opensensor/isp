@@ -1810,6 +1810,7 @@ static struct tx_isp_subdev_core_ops sensor_core_ops = {
 
 static struct tx_isp_subdev_video_ops sensor_video_ops = {
 	.s_stream = sensor_s_stream,
+	.link_stream = sensor_s_stream,  /* CRITICAL FIX: tx_isp_video_link_stream calls link_stream! */
 };
 
 static struct tx_isp_subdev_sensor_ops sensor_sensor_ops = {
