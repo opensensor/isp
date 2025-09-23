@@ -8669,7 +8669,17 @@ int tisp_channel_start(int channel, void *attr)
     msca_ch_en = s1_3;
     a1_1 = 0xf0000 | msca_ch_en;
     msca_ch_en = a1_1;
-    system_reg_write(0x9804, a1_1);
+
+    /* CRITICAL FIX: Don't overwrite ISP Control register during streaming */
+    /* This prevents tisp_channel_start from corrupting the ISP Control register */
+    extern uint32_t vic_start_ok;
+    if (vic_start_ok == 1) {
+        pr_info("*** tisp_channel_start: STREAMING ACTIVE - Preserving ISP Control register (0x9804) ***\n");
+        pr_info("*** tisp_channel_start: Would write 0x%x but keeping current value to prevent shutdown ***\n", a1_1);
+    } else {
+        system_reg_write(0x9804, a1_1);
+        pr_info("*** tisp_channel_start: ISP Control register written: 0x%x (not streaming) ***\n", a1_1);
+    }
 
     /* Binary Ninja: Read status registers for logging */
     system_reg_read(0x9864);
