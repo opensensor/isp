@@ -41,12 +41,6 @@ extern uint32_t data_b2e48, data_b2e4a, data_b2e4c, data_b2e58;
 extern uint32_t data_c46c8, data_c4700, data_b2e4e, data_b2e62;
 extern uint32_t data_b2e64, data_b2e7e, data_b2e80, data_b2eb0;
 
-/* ===== SYSTEM/UTILITY FUNCTIONS ===== */
-
-/* Global work queue for system operations */
-struct workqueue_struct *system_wq = NULL;
-EXPORT_SYMBOL(system_wq);
-
 /**
  * system_yvu_or_yuv - Convert YUV/YVU format and write to register
  * @format_flag: 0 for YUV, non-zero for YVU
@@ -239,40 +233,6 @@ uint32_t tisp_top_read(void)
 }
 EXPORT_SYMBOL(tisp_top_read);
 
-/* ===== SYSTEM WORK QUEUE INITIALIZATION ===== */
-
-/**
- * tx_isp_missing_funcs_init - Initialize missing functions (called by main module)
- */
-int tx_isp_missing_funcs_init(void)
-{
-    /* Initialize system work queue */
-    if (!system_wq) {
-        system_wq = alloc_workqueue("tx_isp_system", WQ_MEM_RECLAIM | WQ_HIGHPRI, 0);
-        if (!system_wq) {
-            pr_err("Failed to create system work queue\n");
-            return -ENOMEM;
-        }
-    }
-
-    pr_info("TX-ISP missing functions initialized\n");
-    return 0;
-}
-EXPORT_SYMBOL(tx_isp_missing_funcs_init);
-
-/**
- * tx_isp_missing_funcs_exit - Cleanup missing functions (called by main module)
- */
-void tx_isp_missing_funcs_exit(void)
-{
-    if (system_wq) {
-        destroy_workqueue(system_wq);
-        system_wq = NULL;
-    }
-
-    pr_info("TX-ISP missing functions cleaned up\n");
-}
-EXPORT_SYMBOL(tx_isp_missing_funcs_exit);
 
 /* ===== AE (AUTO EXPOSURE) FUNCTIONS ===== */
 
