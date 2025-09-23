@@ -758,6 +758,12 @@ extern uint32_t data_b2e44, data_b2e54, data_b2e56;
 /* Forward declarations for variables defined at bottom of file */
 extern void *sensor_ctrl;
 extern uint32_t flicker_hz;
+extern uint32_t sensor_info;
+extern int tisp_ae_hist[256];
+extern uint8_t dmsc_awb_gain[0xc];
+extern uint32_t _awb_ct;
+extern uint8_t data_9a91d, data_9a91e, data_9a91f;
+extern int data_9a430;
 extern uint32_t data_b2e48, data_b2e4a, data_b2e4c, data_b2e58;
 extern uint32_t data_c46c8, data_c4700, data_b2e4e, data_b2e62;
 extern uint32_t data_b2e64, data_b2e7e, data_b2e80, data_b2eb0;
