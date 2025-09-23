@@ -2788,17 +2788,17 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 /* Based on Binary Ninja MCP analysis, core device is stateless */
                 pr_info("*** ispcore_core_ops_init: Core device is stateless - only VIC state matters ***");
 
-                /* CRITICAL: Enable ISP core hardware interrupts */
-                if (core_dev) {
-                    ret = tx_isp_core_enable_irq(core_dev);
+                /* CRITICAL: Enable ISP core hardware interrupts using ISP device's core_dev */
+                if (isp_dev && isp_dev->core_dev) {
+                    ret = tx_isp_core_enable_irq(isp_dev->core_dev);
                     if (ret != 0) {
                         pr_err("ispcore_core_ops_init: Failed to enable ISP core interrupts: %d\n", ret);
                         /* Don't fail initialization, but log the error */
                     } else {
-                        pr_info("*** ispcore_core_ops_init: ISP Core hardware interrupts enabled ***");
+                        pr_info("*** ispcore_core_ops_init: ISP Core hardware interrupts ENABLED - Frame sync should now work! ***");
                     }
                 } else {
-                    pr_warn("*** ispcore_core_ops_init: No core device available for interrupt enabling ***");
+                    pr_warn("*** ispcore_core_ops_init: No ISP core device available for interrupt enabling ***");
                 }
 
                 result = 0;
