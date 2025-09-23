@@ -823,22 +823,32 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0xFFFFFFFF, vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
     wmb();
 
-    /* Configure VIC interrupt masks - 0x1e8 is DISABLE mask (1=disable, 0=enable) */
-    writel(0xFFFFFFFE, vic_regs + 0x1e8);  /* Enable frame done interrupt (bit 0) */
-    writel(0xFFFFFFFF, vic_regs + 0x1ec);  /* Disable all MDMA interrupts */
-    wmb();
+    /* CRITICAL FIX: Use EXACT atleast-95 VIC interrupt configuration */
+    /* The atleast-95 version had working VIC interrupts with this exact config */
+    void __iomem *vic_w01_base = vic_dev->vic_regs_secondary;  /* Use secondary VIC space like atleast-95 */
 
-    /* CRITICAL FIX: Enable VIC master interrupt enable register */
-    /* The VIC hardware may have a master interrupt enable that gates all interrupts */
-    /* Common registers for master interrupt enable: 0x1e0, 0x1e4, 0x200, 0x204 */
-    writel(0x1, vic_regs + 0x1e0);        /* Try master interrupt enable */
-    writel(0x1, vic_regs + 0x1e4);        /* Try alternate master enable */
-    writel(0x1, vic_regs + 0x200);        /* Try global interrupt enable */
-    writel(0x1, vic_regs + 0x204);        /* Try interrupt control enable */
-    wmb();
+    if (vic_w01_base) {
+        /* EXACT atleast-95 sequence: Disable during config, then enable all */
+        writel(0x0, vic_w01_base + 0x1e0);        /* Disable all interrupts during config */
+        writel(0xffffffff, vic_w01_base + 0x1e8); /* Mask all interrupts during config */
+        wmb();
 
-    pr_info("*** tx_isp_vic_start: VIC interrupt masks configured (0x1e8=0xFFFFFFFE enables bit 0) ***\n");
-    pr_info("*** tx_isp_vic_start: VIC master interrupt enables configured (0x1e0=0x1, 0x1e4=0x1, 0x200=0x1, 0x204=0x1) ***\n");
+        /* Now enable ALL interrupts like atleast-95 */
+        writel(0xffffffff, vic_w01_base + 0x1e0); /* Enable ALL interrupts */
+        writel(0x0, vic_w01_base + 0x1e8);        /* Clear ALL interrupt masks */
+        wmb();
+
+        pr_info("*** tx_isp_vic_start: EXACT atleast-95 VIC interrupt config - SECONDARY VIC space ***\n");
+        pr_info("*** VIC INTERRUPTS: 0x1e0=0xffffffff (enable all), 0x1e8=0x0 (clear all masks) ***\n");
+    } else {
+        /* Fallback to primary space if secondary not available */
+        writel(0xffffffff, vic_regs + 0x1e0);     /* Enable ALL interrupts */
+        writel(0x0, vic_regs + 0x1e8);            /* Clear ALL interrupt masks */
+        writel(0xFFFFFFFF, vic_regs + 0x1ec);     /* Disable all MDMA interrupts */
+        wmb();
+
+        pr_info("*** tx_isp_vic_start: atleast-95 VIC interrupt config - PRIMARY VIC space (fallback) ***\n");
+    }
 
     /* CRITICAL FIX: Always restore VIC control registers to streaming state */
     /* The tuning system turns off VIC control registers (0x9ac0, 0x9ac8) after initialization */
