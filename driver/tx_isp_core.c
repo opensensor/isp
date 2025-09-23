@@ -1470,7 +1470,7 @@ struct tx_isp_sensor *tx_isp_get_sensor(void)
     }
 
     /* CRITICAL FIX: Search for REAL sensors starting at index 5 (after all hardware components) */
-    for (int i = 5; i < ISP_MAX_SUBDEVS; i++) {
+    for (int i = 0; i < ISP_MAX_SUBDEVS; i++) {
         struct tx_isp_subdev *sd = ourISPdev->subdevs[i];
         if (sd && sd->ops && sd->ops->sensor) {
             /* CRITICAL: Check if this is a REAL sensor subdev, not the Core device */
