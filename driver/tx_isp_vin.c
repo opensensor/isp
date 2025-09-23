@@ -658,7 +658,7 @@ int tx_isp_vin_slake_subdev(struct tx_isp_subdev *sd)
 {
     struct tx_isp_vin_device *vin_dev;
     int state;
-    int i;
+    int refcnt;
 
     /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 0xffffffea */
     if (!sd || (unsigned long)sd >= 0xfffff001) {
@@ -672,40 +672,65 @@ int tx_isp_vin_slake_subdev(struct tx_isp_subdev *sd)
         return -EINVAL;
     }
 
-    pr_info("*** tx_isp_vin_slake_subdev: VIN slake/shutdown - current state=%d ***\n", vin_dev->state);
+    pr_info("*** tx_isp_vin_slake_subdev: VIN slake/shutdown - current state=%d, refcnt=%d ***\n", vin_dev->state, vin_dev->refcnt);
 
-    /* Binary Ninja: int32_t $v1_2 = *($s0_1 + 0x128) */
-    state = vin_dev->state;
+    /* CRITICAL: Binary Ninja reference count system - MISSING from our implementation! */
+    /* Binary Ninja: int32_t $v0_1 = *(arg1 + 0xf8) */
+    refcnt = vin_dev->refcnt;
 
-    /* Binary Ninja: if ($v1_2 == 4) vin_s_stream(arg1, 0) */
-    if (state == 4) {
+    /* Binary Ninja: if ($v0_1 != 0) *(arg1 + 0xf8) = $v0_1 - 1 */
+    if (refcnt != 0) {
+        vin_dev->refcnt = refcnt - 1;
+        refcnt = vin_dev->refcnt;
+    }
+
+    /* Binary Ninja: if ($v0_1 != 0) return 0 - CRITICAL EARLY EXIT! */
+    if (refcnt != 0) {
+        pr_info("*** tx_isp_vin_slake_subdev: refcnt=%d, early exit ***\n", refcnt);
+        return 0;
+    }
+
+    /* Binary Ninja: if (*(arg1 + 0xf4) == 4) vin_s_stream(arg1, 0) */
+    if (vin_dev->state == 4) {
         pr_info("tx_isp_vin_slake_subdev: VIN in streaming state, stopping stream\n");
         vin_s_stream(sd, 0);
-        state = vin_dev->state;  /* Update state after s_stream */
     }
 
-    /* Binary Ninja: if ($v1_2 == 3) vin_core_ops_init(arg1, 0) */
-    if (state == 3) {
-        pr_info("tx_isp_vin_slake_subdev: VIN in state 3, calling core_ops_init(disable)\n");
-        /* VIN doesn't have core_ops_init, just transition to state 2 */
-        vin_dev->state = 2;
+    /* Binary Ninja: if (*(arg1 + 0xf4) == 3) tx_isp_vin_init(arg1, 0) */
+    if (vin_dev->state == 3) {
+        pr_info("tx_isp_vin_slake_subdev: VIN in state 3, calling tx_isp_vin_init(disable)\n");
+        tx_isp_vin_init(sd, 0);
     }
 
-    /* Binary Ninja: if ($v1_2 == 2) *($s0_1 + 0x128) = 1 */
+    /* CRITICAL: Binary Ninja sensor management - MISSING from our implementation! */
+    /* Binary Ninja: $v0_2 = *(arg1 + 0xe4) */
+    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)sd->isp;
+    void *sensor = isp_dev ? isp_dev->sensor : NULL;
+
+    /* Binary Ninja: if ($v0_2 != 0) subdev_sensor_ops_set_input(arg1, &var_18, entry_$a2) */
+    if (sensor != NULL) {
+        int input_index = -1;  /* var_18 = 0xffffffff */
+        pr_info("tx_isp_vin_slake_subdev: Releasing sensor input\n");
+        subdev_sensor_ops_set_input(sd, 0xc0045627, &input_index);  /* TX_ISP_SENSOR_SET_INPUT */
+    }
+
+    /* Binary Ninja: if (*(arg1 + 0xdc) != arg1 + 0xdc) subdev_sensor_ops_release_all_sensor(arg1) */
+    if (!list_empty(&vin_dev->sensors)) {
+        pr_info("tx_isp_vin_slake_subdev: Releasing all sensors\n");
+        subdev_sensor_ops_release_all_sensor(sd);
+    }
+
+    /* Binary Ninja: private_mutex_lock(arg1 + 0xe8) */
+    mutex_lock(&vin_dev->mlock);
+
+    /* Binary Ninja: if (*(arg1 + 0xf4) == 2) *(arg1 + 0xf4) = 1 */
     if (vin_dev->state == 2) {
-        pr_info("tx_isp_vin_slake_subdev: VIN state 2->1, disabling clocks\n");
+        pr_info("tx_isp_vin_slake_subdev: VIN state 2->1\n");
         vin_dev->state = 1;
-
-        /* Binary Ninja: Disable clocks in reverse order */
-        if (sd->clks && sd->clk_num > 0) {
-            for (i = sd->clk_num - 1; i >= 0; i--) {
-                if (sd->clks[i]) {
-                    clk_disable(sd->clks[i]);
-                    pr_info("tx_isp_vin_slake_subdev: Disabled clock %d\n", i);
-                }
-            }
-        }
     }
+
+    /* Binary Ninja: private_mutex_unlock(arg1 + 0xe8) */
+    mutex_unlock(&vin_dev->mlock);
 
     pr_info("*** tx_isp_vin_slake_subdev: VIN slake complete, final state=%d ***\n", vin_dev->state);
     return 0;
