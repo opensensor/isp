@@ -858,11 +858,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0, vic_regs + 0x1b4);
     wmb();
 
-    /* Binary Ninja: Log WDR mode */
-    const char *wdr_msg = (vic_dev->sensor_attr.wdr_cache != 0) ?
-        "WDR mode enabled" : "Linear mode enabled";
-    pr_info("tx_isp_vic_start: %s\n", wdr_msg);
-
     /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
     pr_info("*** tx_isp_vic_start: vic_start_ok set to 1 - EXACT Binary Ninja reference ***\n");
     vic_start_ok = 1;
