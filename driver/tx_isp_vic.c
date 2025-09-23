@@ -103,23 +103,23 @@ void tx_isp_vic_restore_interrupts(void)
 
     pr_info("*** VIC INTERRUPT RESTORE: Restoring VIC interrupt registers in PRIMARY VIC space ***\n");
 
-    /* CRITICAL: Use PRIMARY VIC space for interrupt control (0x133e0000) */
+    /* CRITICAL: Use CSI PHY space for interrupt control (0x10023000), not VIC space */
     struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
-    if (!vic_dev || !vic_dev->vic_regs) {
-        pr_err("*** VIC INTERRUPT RESTORE: No primary VIC registers available ***\n");
+    if (!vic_dev || !vic_dev->vic_regs_control) {
+        pr_err("*** VIC INTERRUPT RESTORE: No CSI PHY registers available ***\n");
         return;
     }
 
     /* Restore VIC interrupt register values using WORKING ISP-activates configuration */
-    pr_info("*** VIC INTERRUPT RESTORE: Using WORKING ISP-activates configuration (0x1e8/0x1ec) ***\n");
+    pr_info("*** VIC INTERRUPT RESTORE: Using CSI PHY space for interrupt configuration ***\n");
 
-    /* Clear pending interrupts first */
-    writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main interrupt status */
-    writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
+    /* Clear pending interrupts first in CSI PHY space */
+    writel(0xFFFFFFFF, vic_dev->vic_regs_control + 0x1f0);  /* Clear main interrupt status */
+    writel(0xFFFFFFFF, vic_dev->vic_regs_control + 0x1f4);  /* Clear MDMA interrupt status */
     wmb();
 
     /* CRITICAL FIX 3: Restore interrupt masks with protection against overwrites */
-    writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);  /* Enable frame done interrupt */
+    writel(0xFFFFFFFE, vic_dev->vic_regs_control + 0x1e8);  /* Enable frame done interrupt */
     /* SKIP MDMA register 0x1ec - it doesn't work correctly */
     wmb();
 
@@ -946,24 +946,34 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     wmb();
     pr_info("*** tx_isp_vic_start: VIC processing enabled (0x0=0x1, 0x4=0x1) ***\n");
 
-    /* CRITICAL FIX: Enable VIC hardware interrupts - EXACT working reference implementation */
-    pr_info("*** tx_isp_vic_start: CRITICAL FIX - Enabling VIC hardware interrupts like working reference ***\n");
+    /* CRITICAL FIX: Enable VIC hardware interrupts in CORRECT CSI PHY register space */
+    pr_info("*** tx_isp_vic_start: CRITICAL FIX - VIC interrupts are in CSI PHY space, not VIC space! ***\n");
 
-    /* Clear any pending interrupts first */
-    writel(0xFFFFFFFF, vic_regs + 0x1f0);  /* Clear main interrupt status */
-    writel(0xFFFFFFFF, vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
+    /* CRITICAL: VIC interrupt registers 0x1e0/0x1e8 are actually CSI PHY registers! */
+    /* We need to write to the CSI PHY register space, not VIC register space */
+    void __iomem *csi_phy_regs = vic_dev->vic_regs_control;  /* 0x10023000 - CSI PHY space */
+    if (!csi_phy_regs) {
+        pr_err("*** CRITICAL ERROR: No CSI PHY register space for VIC interrupt configuration! ***\n");
+        return -EINVAL;
+    }
+
+    pr_info("*** VIC INTERRUPTS: Writing to CSI PHY space (0x10023000), not VIC space (0x133e0000) ***\n");
+
+    /* Clear any pending interrupts first in CSI PHY space */
+    writel(0xFFFFFFFF, csi_phy_regs + 0x1f0);  /* Clear main interrupt status */
+    writel(0xFFFFFFFF, csi_phy_regs + 0x1f4);  /* Clear MDMA interrupt status */
     wmb();
 
-    /* Enable VIC interrupts - from working reference driver */
-    writel(0x3FFFFFFF, vic_regs + 0x1e0);  /* Enable all VIC interrupts */
-    writel(0x0, vic_regs + 0x1e8);         /* Clear interrupt masks */
-    writel(0xF, vic_regs + 0x1e4);         /* Enable MDMA interrupts */
-    writel(0x0, vic_regs + 0x1ec);         /* Clear MDMA masks */
+    /* Enable VIC interrupts in CSI PHY register space - from working reference driver */
+    writel(0x3FFFFFFF, csi_phy_regs + 0x1e0);  /* Enable all VIC interrupts */
+    writel(0x0, csi_phy_regs + 0x1e8);         /* Clear interrupt masks */
+    writel(0xF, csi_phy_regs + 0x1e4);         /* Enable MDMA interrupts */
+    writel(0x0, csi_phy_regs + 0x1ec);         /* Clear MDMA masks */
     wmb();
 
-    pr_info("*** VIC INTERRUPT REGISTERS ENABLED - INTERRUPTS SHOULD NOW FIRE! ***\n");
-    pr_info("*** VIC INT_EN (0x1e0) = 0x3FFFFFFF, INT_MASK (0x1e8) = 0x0 ***\n");
-    pr_info("*** VIC MDMA_EN (0x1e4) = 0xF, MDMA_MASK (0x1ec) = 0x0 ***\n");
+    pr_info("*** VIC INTERRUPT REGISTERS ENABLED IN CSI PHY SPACE - INTERRUPTS SHOULD NOW FIRE! ***\n");
+    pr_info("*** CSI PHY INT_EN (0x1e0) = 0x3FFFFFFF, INT_MASK (0x1e8) = 0x0 ***\n");
+    pr_info("*** CSI PHY MDMA_EN (0x1e4) = 0xF, MDMA_MASK (0x1ec) = 0x0 ***\n");
 
     /* Binary Ninja: Final configuration registers */
     writel(0x100010, vic_regs + 0x1a4);
@@ -972,10 +982,15 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0, vic_regs + 0x1b4);
     wmb();
 
-    /* CRITICAL: Verify interrupt configuration is preserved */
-    u32 verify_int_en = readl(vic_regs + 0x1e0);
-    u32 verify_int_mask = readl(vic_regs + 0x1e8);
-    pr_info("*** VIC INTERRUPT VERIFY: INT_EN=0x%08x, INT_MASK=0x%08x ***\n", verify_int_en, verify_int_mask);
+    /* CRITICAL: Verify interrupt configuration is preserved in CSI PHY space */
+    u32 verify_int_en = readl(csi_phy_regs + 0x1e0);
+    u32 verify_int_mask = readl(csi_phy_regs + 0x1e8);
+    pr_info("*** CSI PHY INTERRUPT VERIFY: INT_EN=0x%08x, INT_MASK=0x%08x ***\n", verify_int_en, verify_int_mask);
+
+    /* Also verify VIC space doesn't have conflicting values */
+    u32 vic_1e0 = readl(vic_regs + 0x1e0);
+    u32 vic_1e8 = readl(vic_regs + 0x1e8);
+    pr_info("*** VIC SPACE CHECK: VIC[0x1e0]=0x%08x, VIC[0x1e8]=0x%08x (should be different from CSI PHY) ***\n", vic_1e0, vic_1e8);
 
     /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
     pr_info("*** tx_isp_vic_start: vic_start_ok set to 1 - EXACT Binary Ninja reference ***\n");
