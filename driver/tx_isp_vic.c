@@ -62,22 +62,22 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             vic_dev->irq_handler(vic_dev->irq_priv);
         }
 
-        /* CRITICAL FIX: Enable VIC hardware interrupt generation */
-        /* The reference driver enables hardware interrupts here, not just software flags */
-        if (vic_dev->vic_regs) {
-            /* Clear any pending interrupts first */
-            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main interrupt status */
-            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
+        /* CRITICAL FIX: Enable VIC hardware interrupt generation using SECONDARY register space */
+        /* From working commits: VIC interrupts must be configured in secondary register space (0x10023000) */
+        if (vic_dev->vic_regs_control) {
+            /* Clear any pending interrupts first in secondary space */
+            writel(0xFFFFFFFF, vic_dev->vic_regs_control + 0x1f0);  /* Clear main interrupt status */
+            writel(0xFFFFFFFF, vic_dev->vic_regs_control + 0x1f4);  /* Clear MDMA interrupt status */
             wmb();
 
-            /* CRITICAL FIX: Enable VIC frame done interrupt (bit 0) by clearing the mask bit */
-            /* In interrupt mask registers: 0 = ENABLED, 1 = MASKED (disabled) */
-            writel(0x00000000, vic_dev->vic_regs + 0x1e8);  /* Enable ALL VIC interrupts (clear all mask bits) */
+            /* CRITICAL FIX: Enable VIC frame done interrupt using secondary register space */
+            /* From working commits: interrupt configuration must use secondary space */
+            writel(0x00000000, vic_dev->vic_regs_control + 0x1e8);  /* Enable ALL VIC interrupts in secondary space */
             wmb();
 
-            pr_info("*** tx_vic_enable_irq: CRITICAL FIX - VIC hardware interrupts ENABLED (0x1e8=0x00000000 - all interrupts unmasked) ***\n");
+            pr_info("*** tx_vic_enable_irq: CRITICAL FIX - VIC hardware interrupts ENABLED using SECONDARY register space (0x1e8=0x00000000) ***\n");
         } else {
-            pr_err("*** tx_vic_enable_irq: CRITICAL ERROR - No VIC registers mapped! ***\n");
+            pr_err("*** tx_vic_enable_irq: CRITICAL ERROR - No VIC secondary registers mapped! ***\n");
         }
     }
 
@@ -108,20 +108,20 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
             vic_dev->irq_disable(vic_dev->irq_priv);
         }
 
-        /* CRITICAL FIX: Disable VIC hardware interrupt generation */
-        /* The reference driver disables hardware interrupts here */
-        if (vic_dev->vic_regs) {
-            /* Disable all VIC interrupts by masking them */
-            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1e8);  /* Mask all main interrupts */
-            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1ec);  /* Mask all MDMA interrupts */
+        /* CRITICAL FIX: Disable VIC hardware interrupt generation using SECONDARY register space */
+        /* From working commits: VIC interrupts must be configured in secondary register space */
+        if (vic_dev->vic_regs_control) {
+            /* Disable all VIC interrupts by masking them in secondary space */
+            writel(0xFFFFFFFF, vic_dev->vic_regs_control + 0x1e8);  /* Mask all main interrupts */
+            writel(0xFFFFFFFF, vic_dev->vic_regs_control + 0x1ec);  /* Mask all MDMA interrupts */
             wmb();
 
-            /* Clear any pending interrupts */
-            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main interrupt status */
-            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
+            /* Clear any pending interrupts in secondary space */
+            writel(0xFFFFFFFF, vic_dev->vic_regs_control + 0x1f0);  /* Clear main interrupt status */
+            writel(0xFFFFFFFF, vic_dev->vic_regs_control + 0x1f4);  /* Clear MDMA interrupt status */
             wmb();
 
-            pr_info("*** tx_vic_disable_irq: CRITICAL FIX - VIC hardware interrupts DISABLED (0x1e8/0x1ec=0xFFFFFFFF) ***\n");
+            pr_info("*** tx_vic_disable_irq: CRITICAL FIX - VIC hardware interrupts DISABLED using SECONDARY register space ***\n");
         }
     }
 
@@ -832,10 +832,11 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     u32 vic_ctrl_value = readl(vic_regs + 0x0);
     pr_info("VIC_CTRL : %08x\n", vic_ctrl_value);
 
-    /* Binary Ninja: **(arg1 + 0xb8) = 1 */
-    writel(1, vic_regs + 0x0);  /* VIC Control register at offset 0x0 */
+    /* CRITICAL FIX: Enable VIC interrupt generation at hardware level by setting bit 0x8 */
+    /* From working commit 09f5fcec: "enable VIC interrupt generation at the hardware level by setting a specific bit (0x8)" */
+    writel(1 | 0x8, vic_regs + 0x0);  /* VIC Control register: streaming (bit 0) + interrupt enable (bit 0x8) */
     wmb();
-    pr_info("*** tx_isp_vic_start: VIC Control[0x0] = 1 (start streaming) ***\n");
+    pr_info("*** tx_isp_vic_start: VIC Control[0x0] = 0x%x (streaming + interrupt generation enabled) ***\n", 1 | 0x8);
 
     /* Binary Ninja EXACT: Set vic_start_ok global flag */
     extern uint32_t vic_start_ok;
