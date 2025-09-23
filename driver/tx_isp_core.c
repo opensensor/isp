@@ -2753,28 +2753,24 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 
                 pr_info("*** ispcore_core_ops_init: VIC state check passed, proceeding with initialization ***");
 
-                /* CRITICAL FIX: Only call tisp_init ONCE to prevent register corruption */
-                static bool tisp_init_called = false;
-
-                if (!tisp_init_called) {
-                    /* Binary Ninja: Call tisp_init() with sensor attributes */
-                    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
-                    struct tx_isp_sensor *init_sensor = tx_isp_get_sensor();
-                    if (init_sensor && init_sensor->video.attr) {
-                        pr_info("*** ispcore_core_ops_init: Calling tisp_init with sensor attributes - FIRST TIME ONLY ***");
-                        ret = tisp_init(init_sensor->video.attr, NULL);
-                        if (ret != 0) {
-                            pr_err("ispcore_core_ops_init: tisp_init failed: %d\n", ret);
-                            return ret;
-                        }
-                        tisp_init_called = true;
-                        pr_info("*** ispcore_core_ops_init: tisp_init SUCCESS - marked as called ***");
-                    } else {
-                        pr_info("*** ispcore_core_ops_init: No sensor attributes - SKIPPING tisp_init (should only be called once with valid sensor) ***");
-                        /* CRITICAL FIX: Don't call tisp_init without sensor attributes - this was causing register interference */
+                /* Call tisp_init() - it has its own protection against multiple calls */
+                extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+                struct tx_isp_sensor *init_sensor = tx_isp_get_sensor();
+                if (init_sensor && init_sensor->video.attr) {
+                    pr_info("*** ispcore_core_ops_init: Calling tisp_init with sensor attributes ***");
+                    ret = tisp_init(init_sensor->video.attr, NULL);
+                    if (ret != 0) {
+                        pr_err("ispcore_core_ops_init: tisp_init failed: %d\n", ret);
+                        return ret;
                     }
+                    pr_info("*** ispcore_core_ops_init: tisp_init completed ***");
                 } else {
-                    pr_info("*** ispcore_core_ops_init: tisp_init already called - skipping to prevent register corruption ***");
+                    pr_info("*** ispcore_core_ops_init: No sensor attributes - calling tisp_init anyway (it will handle this) ***");
+                    ret = tisp_init(NULL, NULL);
+                    if (ret != 0) {
+                        pr_err("ispcore_core_ops_init: tisp_init failed: %d\n", ret);
+                        return ret;
+                    }
                 }
 
                 /* CRITICAL FIX: Don't reset VIC state if it's already streaming (state 4) */
