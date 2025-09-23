@@ -372,9 +372,10 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         /* Binary Ninja: $s3_1 = &arg1[0xe] */
         s3_1 = &isp_dev->subdevs[0];
     } else {
-        /* CRITICAL FIX: Binary Ninja: *($s0 + 0xe8) = 4 - Set VIC state to 4 */
-        vic_dev->state = 4;
-        pr_info("*** ispcore_video_s_stream: VIC state set to 4 (STREAMING) ***\n");
+        /* CRITICAL FIX: DON'T set VIC state to 4 here - let vic_core_s_stream do it */
+        /* The issue was that VIC state was set to 4 BEFORE vic_core_s_stream was called */
+        /* This caused vic_core_s_stream to skip tx_isp_vic_start because state was already 4 */
+        pr_info("*** ispcore_video_s_stream: VIC state is 3, ready for streaming - vic_core_s_stream will set to 4 ***\n");
         /* Binary Ninja: $s3_1 = &arg1[0xe] */
         s3_1 = &isp_dev->subdevs[0];
     }
