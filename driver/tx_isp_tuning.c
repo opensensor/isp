@@ -1606,8 +1606,12 @@ int tisp_init(void *sensor_info, char *param_name)
     system_reg_write(0x9a88, 0x1);
     system_reg_write(0x9a94, 0x1);
     system_reg_write(0x9a98, 0x500);
-    system_reg_write(0x9ac0, 0x200);
-    system_reg_write(0x9ac8, 0x200);
+    /* CRITICAL FIX: REMOVE VIC control register writes - they don't exist in Binary Ninja reference! */
+    /* The reference tisp_init does NOT write to 0x9ac0 or 0x9ac8 at all */
+    /* These registers should be controlled by VIC hardware, not by tuning system */
+    /* system_reg_write(0x9ac0, 0x200);  // REMOVED - not in reference driver */
+    /* system_reg_write(0x9ac8, 0x200);  // REMOVED - not in reference driver */
+    pr_info("*** TUNING SYSTEM: VIC control registers 0x9ac0/0x9ac8 REMOVED - not in Binary Ninja reference ***\n");
 
     /* CRITICAL FIX: Use actual sensor IMAGE dimensions, not total frame size */
     /* GC2053 sensor: total_width=1920, total_height=1080 (actual image) */
