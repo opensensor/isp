@@ -708,7 +708,6 @@ int tx_isp_vin_slake_subdev(struct tx_isp_subdev *sd)
     if (!list_empty(&vin_dev->sensors)) {
         pr_info("tx_isp_vin_slake_subdev: Releasing all sensors\n");
         /* Call the exported function */
-        extern int ispcore_sensor_ops_release_all_sensor(struct tx_isp_subdev *sd);
         ispcore_sensor_ops_release_all_sensor(sd);
     }
 
@@ -794,6 +793,10 @@ int tx_isp_vin_probe(struct platform_device *pdev)
         private_kfree(vin);
         return -ENOMEM;  /* Binary Ninja returns 0xfffffff4 */
     }
+
+    /* CRITICAL FIX: Set dev_priv so tx_isp_get_subdevdata() returns the VIN device */
+    tx_isp_set_subdevdata(&vin->sd, vin);
+    pr_info("*** VIN PROBE: Set dev_priv to vin_dev %p AFTER subdev_init ***\n", vin);
 
     /* Binary Ninja: *($v0 + 0xd8) = $v0 */
     /* Note: self_ptr member doesn't exist in tx_isp_vin_device structure */
