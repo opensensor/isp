@@ -164,7 +164,8 @@ static uint32_t adr_min_thresholds[9] = {0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe
 
 /* Global parameter arrays */
 static void *dmsc_sp_d_w_stren_wdr_array = NULL;
-static void *sensor_info_ptr = NULL;
+void *sensor_info_ptr = NULL;
+EXPORT_SYMBOL(sensor_info_ptr);
 uint32_t data_b2e1c = 1080; /* Sensor height */
 EXPORT_SYMBOL(data_b2e1c);
 

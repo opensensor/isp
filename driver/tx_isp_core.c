@@ -2607,7 +2607,6 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
 
 /* Global variables for tisp_init - Binary Ninja exact data structures */
 static uint8_t tispinfo[0x74];
-static uint8_t sensor_info[0x60];
 static uint8_t ds0_attr[0x34];
 static uint8_t ds1_attr[0x34];
 static uint8_t ds2_attr[0x34];
