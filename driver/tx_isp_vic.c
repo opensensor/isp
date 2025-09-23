@@ -841,6 +841,23 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
+    /* CRITICAL FIX: Transition PRIMARY VIC space from configure (0x200) to streaming (0x1) */
+    /* The register traces show that 0x9ac0 and 0x9ac8 need to transition from 0x200 to 0x1 */
+    if (vic_regs) {
+        pr_info("*** CRITICAL FIX: Transitioning PRIMARY VIC control registers from configure (0x200) to streaming (0x1) ***\n");
+
+        /* Write 0x1 to VIC control registers to start streaming */
+        writel(0x1, vic_regs + 0x9ac0);  /* PRIMARY VIC control register 1 */
+        writel(0x1, vic_regs + 0x9ac8);  /* PRIMARY VIC control register 2 */
+        wmb();
+
+        pr_info("*** CRITICAL FIX: VIC control registers 0x9ac0 and 0x9ac8 set to 0x1 (streaming state) ***\n");
+        pr_info("*** CRITICAL FIX: VIC should now generate interrupts when frames are captured! ***\n");
+    } else {
+        pr_err("tx_isp_vic_start: No PRIMARY VIC registers for streaming transition\n");
+        return -EINVAL;
+    }
+
     /* Binary Ninja EXACT: Set vic_start_ok global flag */
     extern uint32_t vic_start_ok;
     vic_start_ok = 1;
