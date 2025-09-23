@@ -3187,20 +3187,6 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
     /* CRITICAL SAFETY: Block ALL tuning calls except essential VIN operations */
     /* The userspace client is calling this repetitively and corrupting memory */
 
-    /* Allow only essential VIN initialization commands */
-    if (cmd == 0xc00c56c6 && magic == 0x56) {
-        /* This is a V4L2 control command - allow for VIN init */
-        pr_info("TUNING: Allowing V4L2 control command 0x%x for VIN init\n", cmd);
-    } else if (cmd == 0x80000e0 && magic == 0x74) {
-        /* This might be FPS control for VIN start - allow */
-        pr_info("TUNING: Allowing FPS control command 0x%x for VIN start\n", cmd);
-    } else {
-        /* Silently ignore ALL other tuning commands to prevent memory corruption */
-        pr_info("TUNING DISABLED: Silently ignoring command 0x%x (magic=0x%x) to prevent memory corruption\n", cmd, magic);
-        pr_info("TUNING DISABLED: Returning success to keep streaming app happy\n");
-        return 0;  /* Return success - app thinks tuning worked but we did nothing */
-    }
-
     /* CRITICAL: Binary Ninja reference implementation - FIXED g_ispcore -> ourISPdev */
     /* Reference: $s0 = *(*(*(arg1 + 0x70) + 0xc8) + 0x1bc) */
     /* FIXED: This dangerous pointer chain caused BadVA 0xc8 crashes */
