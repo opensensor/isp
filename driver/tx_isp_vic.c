@@ -1337,59 +1337,50 @@ cleanup:
     return ret;
 }
 
-/* VIC activation function - matching reference driver */
-int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
+/* tx_isp_vic_activate_subdev - EXACT Binary Ninja implementation (00011088) */
+int tx_isp_vic_activate_subdev(void* arg1)
 {
     struct tx_isp_vic_device *vic_dev;
-    
-    if (!sd)
-        return -EINVAL;
-    
-    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
-    if (!vic_dev) {
-        pr_err("VIC device is NULL\n");
-        return -EINVAL;
-    }
-    
-    /* CRITICAL FIX: Use spinlock instead of mutex to prevent "sleeping in atomic context" */
-    /* mutex_lock() can sleep, but this function can be called from atomic context */
-    unsigned long flags;
-    spin_lock_irqsave(&vic_dev->lock, flags);
-    
-    if (vic_dev->state == 1) {
-        vic_dev->state = 2; /* INIT -> READY */
-        pr_info("VIC activated: state %d -> 2 (READY)\n", 1);
-        
-        /* *** CRITICAL: Ensure free buffers are available during activation *** */
-        if (list_empty(&vic_dev->free_head)) {
-            pr_info("*** VIC ACTIVATION: Replenishing free buffer pool ***\n");
-            for (int i = 0; i < 5; i++) {
-                /* FIXED: Use shared aligned buffer structure */
-                struct vic_buffer_entry *free_buffer = VIC_BUFFER_ALLOC();
-                if (free_buffer) {
-                    free_buffer->buffer_addr = 0;  /* Buffer address placeholder */
-                    free_buffer->buffer_index = i + 100;  /* Buffer index (activation batch) */
-                    free_buffer->buffer_status = VIC_BUFFER_STATUS_FREE;  /* Buffer status */
+    int result = 0xffffffea;  /* Binary Ninja: int32_t result = 0xffffffea */
 
-                    list_add_tail(&free_buffer->list, &vic_dev->free_head);
-                    pr_info("*** VIC ACTIVATION: Added free buffer %d (aligned struct) ***\n", i);
-                }
+    pr_info("*** tx_isp_vic_activate_subdev: EXACT Binary Ninja implementation ***\n");
+
+    /* Binary Ninja: if (arg1 != 0) */
+    if (arg1 != NULL) {
+        /* Binary Ninja: if (arg1 u>= 0xfffff001) return 0xffffffea */
+        if ((uintptr_t)arg1 >= 0xfffff001) {
+            return 0xffffffea;
+        }
+
+        /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
+        struct tx_isp_subdev *sd = (struct tx_isp_subdev *)arg1;
+        vic_dev = (struct tx_isp_vic_device *)sd->dev_priv;  /* SAFE: arg1 + 0xd4 = dev_priv */
+
+        /* Binary Ninja: result = 0xffffffea */
+        result = 0xffffffea;
+
+        /* Binary Ninja: if ($s0_1 != 0 && $s0_1 u< 0xfffff001) */
+        if (vic_dev != NULL && (uintptr_t)vic_dev < 0xfffff001) {
+            /* Binary Ninja: private_mutex_lock($s0_1 + 0x130) */
+            mutex_lock(&vic_dev->state_lock);  /* SAFE: $s0_1 + 0x130 = state_lock */
+
+            /* Binary Ninja: if (*($s0_1 + 0x128) == 1) *($s0_1 + 0x128) = 2 */
+            if (vic_dev->state == 1) {  /* SAFE: $s0_1 + 0x128 = state */
+                vic_dev->state = 2;
+                pr_info("tx_isp_vic_activate_subdev: VIC state 1 -> 2 (activated)\n");
             }
-            pr_info("*** VIC ACTIVATION: Free buffer pool replenished - no more 'bank no free' ***\n");
-        } else {
-            pr_info("*** VIC ACTIVATION: Free buffers already available - count checking ***\n");
-            struct list_head *pos;
-            int free_count = 0;
-            list_for_each(pos, &vic_dev->free_head) {
-                free_count++;
-            }
-            pr_info("*** VIC ACTIVATION: %d free buffers available ***\n", free_count);
+
+            /* Binary Ninja: private_mutex_unlock($s0_1 + 0x130) */
+            mutex_unlock(&vic_dev->state_lock);
+
+            /* Binary Ninja: return 0 */
+            return 0;
         }
     }
-    
-    /* CRITICAL FIX: Use spinlock instead of mutex to prevent "sleeping in atomic context" */
-    spin_unlock_irqrestore(&vic_dev->lock, flags);
-    return 0;
+
+    /* Binary Ninja: return result */
+    pr_info("*** tx_isp_vic_activate_subdev: FAILED - result=0x%x ***\n", result);
+    return result;
 }
 
 /* vic_core_ops_init - EXACT Binary Ninja reference implementation */
@@ -1857,52 +1848,6 @@ struct tx_isp_subdev_core_ops vic_core_ops = {
     .init = vic_core_ops_init,
     .ioctl = vic_core_ops_ioctl,  /* MISSING from original! */
 };
-
-/* tx_isp_vic_activate_subdev - EXACT Binary Ninja implementation (00011088) */
-int tx_isp_vic_activate_subdev(void* arg1)
-{
-    struct tx_isp_vic_device *vic_dev;
-    int result = 0xffffffea;  /* Binary Ninja: int32_t result = 0xffffffea */
-
-    pr_info("*** tx_isp_vic_activate_subdev: EXACT Binary Ninja implementation ***\n");
-
-    /* Binary Ninja: if (arg1 != 0) */
-    if (arg1 != NULL) {
-        /* Binary Ninja: if (arg1 u>= 0xfffff001) return 0xffffffea */
-        if ((uintptr_t)arg1 >= 0xfffff001) {
-            return 0xffffffea;
-        }
-
-        /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
-        struct tx_isp_subdev *sd = (struct tx_isp_subdev *)arg1;
-        vic_dev = (struct tx_isp_vic_device *)sd->dev_priv;  /* SAFE: arg1 + 0xd4 = dev_priv */
-
-        /* Binary Ninja: result = 0xffffffea */
-        result = 0xffffffea;
-
-        /* Binary Ninja: if ($s0_1 != 0 && $s0_1 u< 0xfffff001) */
-        if (vic_dev != NULL && (uintptr_t)vic_dev < 0xfffff001) {
-            /* Binary Ninja: private_mutex_lock($s0_1 + 0x130) */
-            mutex_lock(&vic_dev->state_lock);  /* SAFE: $s0_1 + 0x130 = state_lock */
-
-            /* Binary Ninja: if (*($s0_1 + 0x128) == 1) *($s0_1 + 0x128) = 2 */
-            if (vic_dev->state == 1) {  /* SAFE: $s0_1 + 0x128 = state */
-                vic_dev->state = 2;
-                pr_info("tx_isp_vic_activate_subdev: VIC state 1 -> 2 (activated)\n");
-            }
-
-            /* Binary Ninja: private_mutex_unlock($s0_1 + 0x130) */
-            mutex_unlock(&vic_dev->state_lock);
-
-            /* Binary Ninja: return 0 */
-            return 0;
-        }
-    }
-
-    /* Binary Ninja: return result */
-    pr_info("*** tx_isp_vic_activate_subdev: FAILED - result=0x%x ***\n", result);
-    return result;
-}
 
 /* VIC internal operations - EXACT Binary Ninja implementation */
 static struct tx_isp_subdev_internal_ops vic_internal_ops = {
