@@ -300,6 +300,10 @@ int tx_isp_fs_probe(struct platform_device *pdev)
         return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
     }
 
+    /* CRITICAL FIX: Set dev_priv so tx_isp_get_subdevdata() returns the FS device */
+    tx_isp_set_subdevdata(&fs_dev->subdev, fs_dev);
+    pr_info("*** FS PROBE: Set dev_priv to fs_dev %p AFTER subdev_init ***\n", fs_dev);
+
     /* CRITICAL FIX: Add NULL check to prevent BadVA 0xc8 crash */
     if (!fs_dev) {
         pr_err("tx_isp_fs_probe: fs_dev is NULL - PREVENTS BadVA 0xc8 crash\n");
