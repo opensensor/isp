@@ -4071,13 +4071,13 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     if (cmd >= 0x800456d1) {
         if (cmd == 0x800456d2) {
             /* TX_ISP_VIDEO_LINK_STREAM_ON */
-            //return tx_isp_video_link_stream(isp_dev, 1);
+            return tx_isp_video_link_stream(isp_dev, 1);
         } else if (cmd < 0x800456d2) {
             /* TX_ISP_VIDEO_LINK_DESTROY */
-            //return tx_isp_video_link_destroy(isp_dev);
+            return tx_isp_video_link_destroy(isp_dev);
         } else if (cmd == 0x800456d3) {
             /* TX_ISP_VIDEO_LINK_STREAM_OFF */
-            //return tx_isp_video_link_stream(isp_dev, 0);
+            return tx_isp_video_link_stream(isp_dev, 0);
         }
         return 0;
     }
