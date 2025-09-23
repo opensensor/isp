@@ -56,7 +56,6 @@ int fs_activate_module(struct tx_isp_subdev *sd);
 int ispcore_activate_module(struct tx_isp_dev *isp_dev);
 uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand);
 int __init verify_handler_addresses(void);
-void test_interrupt_handler_manually(void);
 
 /* External variables */
 extern int isp_clk;  /* Global ISP clock rate from tx_isp_core.c */
@@ -4391,10 +4390,6 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
 
     pr_info("*** PROBE: Binary Ninja reference implementation complete ***\n");
 
-    /* CRITICAL DEBUG: Test interrupt handler manually after full initialization */
-    printk(KERN_ALERT "*** CRITICAL: Running manual interrupt handler test ***\n");
-    test_interrupt_handler_manually();
-
     return 0;
 }
 
@@ -5113,53 +5108,6 @@ int __init verify_handler_addresses(void)
     printk(KERN_ALERT "*** CRITICAL: isp_irq_handle function address: %p ***\n", isp_irq_handle);
     printk(KERN_ALERT "*** CRITICAL: isp_irq_thread_handle function address: %p ***\n", isp_irq_thread_handle);
     return 0;
-}
-
-/* CRITICAL DEBUG: Manual interrupt handler test */
-void test_interrupt_handler_manually(void)
-{
-    extern struct tx_isp_dev *ourISPdev;
-
-    if (ourISPdev) {
-        printk(KERN_ALERT "*** MANUAL TEST: Calling isp_irq_handle(37, %p) manually ***\n", ourISPdev);
-        isp_irq_handle(37, ourISPdev);
-        printk(KERN_ALERT "*** MANUAL TEST: isp_irq_handle call completed ***\n");
-
-        /* CRITICAL: Check if IRQ 37 is actually registered to our handler */
-        printk(KERN_ALERT "*** CRITICAL: Checking IRQ 37 registration status ***\n");
-
-        /* Force re-registration with explicit logging */
-        free_irq(37, ourISPdev);
-        printk(KERN_ALERT "*** CRITICAL: Freed IRQ 37, now re-registering ***\n");
-
-        int ret = request_threaded_irq(37, isp_irq_handle, isp_irq_thread_handle,
-                                      IRQF_SHARED, "isp-m0", ourISPdev);
-        if (ret == 0) {
-            printk(KERN_ALERT "*** CRITICAL: IRQ 37 re-registered successfully with FIXED handler ***\n");
-
-            /* CRITICAL: Try to trigger a hardware interrupt by writing to ISP control registers */
-            if (ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
-                void __iomem *isp_regs = ourISPdev->core_dev->core_regs;
-                printk(KERN_ALERT "*** CRITICAL: Attempting to trigger hardware interrupt via ISP control registers ***\n");
-
-                /* Write to ISP interrupt enable register to force an interrupt */
-                writel(0x1, isp_regs + 0x1c);  /* Enable frame done interrupt */
-                wmb();
-                writel(0x1, isp_regs + 0x18);  /* Trigger interrupt */
-                wmb();
-
-                printk(KERN_ALERT "*** CRITICAL: Hardware interrupt trigger attempted - check if handler is called ***\n");
-                msleep(100);  /* Wait for interrupt to fire */
-                printk(KERN_ALERT "*** CRITICAL: Hardware interrupt test complete ***\n");
-            } else {
-                printk(KERN_ALERT "*** CRITICAL: No ISP core registers available for hardware interrupt test ***\n");
-            }
-        } else {
-            printk(KERN_ALERT "*** CRITICAL: IRQ 37 re-registration FAILED: %d ***\n", ret);
-        }
-    } else {
-        printk(KERN_ALERT "*** MANUAL TEST: ourISPdev is NULL, cannot test handler ***\n");
-    }
 }
 
 /* isp_irq_handle - EXACT Binary Ninja reference implementation */
