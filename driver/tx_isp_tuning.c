@@ -1315,7 +1315,7 @@ int tiziano_ae_set_hardware_param(int ae_id, uint8_t *param_array, int update_on
             //system_reg_write(0xa024, param9);
         }
         reg_base = 0xa028;
-        system_reg_write_ae(1, reg_base, special_param);
+        //system_reg_write_ae(1, reg_base, special_param);
     } else if (ae_id == 1) {
         if (!update_only) {
             //system_reg_write(0xa804, param1);
@@ -1329,7 +1329,7 @@ int tiziano_ae_set_hardware_param(int ae_id, uint8_t *param_array, int update_on
             //system_reg_write(0xa824, param9);
         }
         reg_base = 0xa828;
-        system_reg_write_ae(2, reg_base, special_param);
+        //system_reg_write_ae(2, reg_base, special_param);
     } else {
         pr_err("tiziano_ae_set_hardware_param: Invalid AE ID %d\n", ae_id);
         return -EINVAL;
@@ -6612,20 +6612,20 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
             /* Binary Ninja EXACT: int32_t $v0_2 = data_afcd4 */
             int32_t v0_2 = data_afcd4;
             /* Binary Ninja EXACT: system_reg_write_ae(3, 0x1030, $v0_2 << 0x10 | $v0_2) */
-            system_reg_write_ae(3, 0x1030, v0_2 << 0x10 | v0_2);
+            //system_reg_write_ae(3, 0x1030, v0_2 << 0x10 | v0_2);
             /* Binary Ninja EXACT: int32_t $v0_3 = data_afcd4 */
             int32_t v0_3 = data_afcd4;
-            /* Binary Ninja EXACT: system_reg_write_ae(3, 0x1034, $v0_3 << 0x10 | $v0_3) */
-            system_reg_write_ae(3, 0x1034, v0_3 << 0x10 | v0_3);
+            /* Binary Ninja EXACT: //system_reg_write_ae(3, 0x1034, $v0_3 << 0x10 | $v0_3) */
+            //system_reg_write_ae(3, 0x1034, v0_3 << 0x10 | v0_3);
         } else if (v1_1 == ta_custom_en_1) {
             /* Binary Ninja EXACT: int32_t $v0_4 = data_afcd4 */
             int32_t v0_4 = data_afcd4;
-            /* Binary Ninja EXACT: system_reg_write_ae(3, 0x1000, $v0_4 << 0x10 | $v0_4) */
-            system_reg_write_ae(3, 0x1000, v0_4 << 0x10 | v0_4);
+            /* Binary Ninja EXACT: //system_reg_write_ae(3, 0x1000, $v0_4 << 0x10 | $v0_4) */
+            //system_reg_write_ae(3, 0x1000, v0_4 << 0x10 | v0_4);
             /* Binary Ninja EXACT: int32_t $v0_5 = data_afcd4 */
             int32_t v0_5 = data_afcd4;
-            /* Binary Ninja EXACT: system_reg_write_ae(3, 0x1004, $v0_5 << 0x10 | $v0_5) */
-            system_reg_write_ae(3, 0x1004, v0_5 << 0x10 | v0_5);
+            /* Binary Ninja EXACT: //system_reg_write_ae(3, 0x1004, $v0_5 << 0x10 | $v0_5) */
+            //system_reg_write_ae(3, 0x1004, v0_5 << 0x10 | v0_5);
         }
         
         /* Binary Ninja EXACT: int32_t _AePointPos_1 = _AePointPos.data[0] */
@@ -6651,13 +6651,13 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
             
             /* Binary Ninja EXACT: int32_t $v0_7 = data_afce0 */
             int32_t v0_7 = data_afce0;
-            /* Binary Ninja EXACT: system_reg_write_ae(3, 0x100c, $v0_7 << 0x10 | $v0_7) */
-            system_reg_write_ae(3, 0x100c, v0_7 << 0x10 | v0_7);
+            /* Binary Ninja EXACT: //system_reg_write_ae(3, 0x100c, $v0_7 << 0x10 | $v0_7) */
+            //system_reg_write_ae(3, 0x100c, v0_7 << 0x10 | v0_7);
             
             /* Binary Ninja EXACT: int32_t $v0_8 = data_afce0 */
             int32_t v0_8 = data_afce0;
-            /* Binary Ninja EXACT: system_reg_write_ae(3, 0x1010, $v0_8 << 0x10 | $v0_8) */
-            system_reg_write_ae(3, 0x1010, v0_8 << 0x10 | v0_8);
+            /* Binary Ninja EXACT: //system_reg_write_ae(3, 0x1010, $v0_8 << 0x10 | $v0_8) */
+            //system_reg_write_ae(3, 0x1010, v0_8 << 0x10 | v0_8);
         }
     }
 
@@ -8675,18 +8675,18 @@ int tisp_gb_init_reg(void)
     pr_info("tisp_gb_init_reg: Initializing GB registers\n");
 
     /* Binary Ninja: system_reg_write_gb(1, 0x1008, tisp_gb_dgain_shift:4 << 2 | tisp_gb_dgain_shift.d) */
-    system_reg_write_gb(1, 0x1008, (tisp_gb_dgain_shift[0] >> 4) << 2 | (tisp_gb_dgain_shift[0] & 0xf));
+    //system_reg_write_gb(1, 0x1008, (tisp_gb_dgain_shift[0] >> 4) << 2 | (tisp_gb_dgain_shift[0] & 0xf));
 
     /* Binary Ninja: if (init.31768 == 0) */
     if (gb_init_flag == 0) {
-        /* Binary Ninja: system_reg_write_gb(1, 0x1000, data_aa3e8 << 0x10 | tisp_gb_dgain_rgbir_l) */
-        system_reg_write_gb(1, 0x1000, data_aa3e8 << 0x10 | tisp_gb_dgain_rgbir_l);
-        /* Binary Ninja: system_reg_write_gb(1, 0x1004, data_aa3f0 << 0x10 | data_aa3ec) */
-        system_reg_write_gb(1, 0x1004, data_aa3f0 << 0x10 | data_aa3ec);
-        /* Binary Ninja: system_reg_write_gb(1, 0x100c, data_aa3d8 << 0x10 | tisp_gb_dgain_rgbir_s) */
-        system_reg_write_gb(1, 0x100c, data_aa3d8 << 0x10 | tisp_gb_dgain_rgbir_s);
-        /* Binary Ninja: system_reg_write_gb(1, 0x1010, data_aa3e0 << 0x10 | data_aa3dc) */
-        system_reg_write_gb(1, 0x1010, data_aa3e0 << 0x10 | data_aa3dc);
+        /* Binary Ninja: //system_reg_write_gb(1, 0x1000, data_aa3e8 << 0x10 | tisp_gb_dgain_rgbir_l) */
+        //system_reg_write_gb(1, 0x1000, data_aa3e8 << 0x10 | tisp_gb_dgain_rgbir_l);
+        /* Binary Ninja: //system_reg_write_gb(1, 0x1004, data_aa3f0 << 0x10 | data_aa3ec) */
+        //system_reg_write_gb(1, 0x1004, data_aa3f0 << 0x10 | data_aa3ec);
+        /* Binary Ninja: //system_reg_write_gb(1, 0x100c, data_aa3d8 << 0x10 | tisp_gb_dgain_rgbir_s) */
+        //system_reg_write_gb(1, 0x100c, data_aa3d8 << 0x10 | tisp_gb_dgain_rgbir_s);
+        /* Binary Ninja: //system_reg_write_gb(1, 0x1010, data_aa3e0 << 0x10 | data_aa3dc) */
+        //system_reg_write_gb(1, 0x1010, data_aa3e0 << 0x10 | data_aa3dc);
     }
 
     /* Binary Ninja: tisp_gb_blc_again_interp(tisp_gb_blc_ag.d, 0) */
