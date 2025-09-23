@@ -2537,12 +2537,14 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
                 /* Binary Ninja: *($s0_1 + 0xe8) = 1 - SAFE: Set VIC state to 1 */
                 vic_dev->state = 1;
                 pr_info("ispcore_slake_module: Set VIC state to INIT (1)");
+            }
 
-                /* Binary Ninja: Subdevice slake loop */
-                /* void* $s3_1 = $s0_1 + 0x38 - SAFE: Get subdev array */
-                pr_info("ispcore_slake_module: Processing subdevices");
+            /* CRITICAL FIX: Subdev processing should happen regardless of VIC state */
+            /* Binary Ninja: Subdevice slake loop */
+            /* void* $s3_1 = $s0_1 + 0x38 - SAFE: Get subdev array */
+            pr_info("ispcore_slake_module: Processing subdevices");
 
-                for (i = 0; i < 16; i++) {  /* Binary Ninja shows loop through subdev array */
+            for (i = 0; i < 16; i++) {  /* Binary Ninja shows loop through subdev array */
                     struct tx_isp_subdev *subdev = isp_dev->subdevs[i];
 
                     /* Binary Ninja: if ($s2_1 == 0) continue */
@@ -2580,29 +2582,28 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
                     } else {
                         pr_info("*** ispcore_slake_module: subdev[%d] has no ops or internal ops ***\n", i);
                     }
-                }
+            }
 
-                /* Binary Ninja: Clock management loop */
-                /* int32_t $s2_2 = $s0_3 - 1; while (true) */
-                pr_info("ispcore_slake_module: Managing ISP clocks");
+            /* Binary Ninja: Clock management loop */
+            /* int32_t $s2_2 = $s0_3 - 1; while (true) */
+            pr_info("ispcore_slake_module: Managing ISP clocks");
 
-                /* SAFE: Disable individual clocks instead of array access */
-                if (isp_dev->csi_clk) {
-                    clk_disable(isp_dev->csi_clk);
-                    pr_info("ispcore_slake_module: Disabled CSI clock");
-                }
-                if (isp_dev->core_dev && isp_dev->core_dev->ipu_clk) {
-                    clk_disable(isp_dev->core_dev->ipu_clk);
-                    pr_info("ispcore_slake_module: Disabled IPU clock");
-                }
-                if (isp_dev->core_dev && isp_dev->core_dev->core_clk) {
-                    clk_disable(isp_dev->core_dev->core_clk);
-                    pr_info("ispcore_slake_module: Disabled ISP clock");
-                }
-                if (isp_dev->cgu_isp) {
-                    clk_disable(isp_dev->cgu_isp);
-                    pr_info("ispcore_slake_module: Disabled CGU ISP clock");
-                }
+            /* SAFE: Disable individual clocks instead of array access */
+            if (isp_dev->csi_clk) {
+                clk_disable(isp_dev->csi_clk);
+                pr_info("ispcore_slake_module: Disabled CSI clock");
+            }
+            if (isp_dev->core_dev && isp_dev->core_dev->ipu_clk) {
+                clk_disable(isp_dev->core_dev->ipu_clk);
+                pr_info("ispcore_slake_module: Disabled IPU clock");
+            }
+            if (isp_dev->core_dev && isp_dev->core_dev->core_clk) {
+                clk_disable(isp_dev->core_dev->core_clk);
+                pr_info("ispcore_slake_module: Disabled ISP clock");
+            }
+            if (isp_dev->cgu_isp) {
+                clk_disable(isp_dev->cgu_isp);
+                pr_info("ispcore_slake_module: Disabled CGU ISP clock");
             }
 
             /* Binary Ninja: return 0 */
