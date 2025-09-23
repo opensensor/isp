@@ -1535,7 +1535,16 @@ int tisp_init(void *sensor_info, char *param_name)
     } sensor_params = {1920, 1080, 25, 0}; /* Default sensor parameters */
 
     static int tisp_init_call_count = 0;
+    static bool tisp_already_initialized = false;
+
     tisp_init_call_count++;
+
+    /* CRITICAL FIX: Prevent multiple tisp_init calls that corrupt CSI PHY registers */
+    if (tisp_already_initialized) {
+        pr_info("tisp_init: Already initialized (call #%d) - skipping to prevent register corruption\n", tisp_init_call_count);
+        return 0;  /* Return success but don't reinitialize */
+    }
+
     if (!ourISPdev) {
         pr_err("tisp_init: No ISP device available\n");
         return -ENODEV;
