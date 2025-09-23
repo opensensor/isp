@@ -313,13 +313,21 @@ struct vic_event_callback {
 /* CRITICAL FIX: Stock driver uses TWO separate IRQs - 37 (isp-m0) and 38 (isp-w02) */
 /* FIXED: Main ISP device only claims IRQ resources, not memory regions */
 /* Individual subdevices manage their own memory regions to prevent conflicts */
+
+/* T31 ISP platform device with CORRECT IRQ resources - FIXED for stock driver compatibility */
+/* CRITICAL FIX: Stock driver uses TWO separate IRQs - 37 (isp-m0) and 38 (isp-w02) */
 static struct resource tx_isp_resources[] = {
     [0] = {
+        .start = 0x13300000,           /* T31 ISP base address */
+        .end   = 0x133FFFFF,           /* T31 ISP end address */
+        .flags = IORESOURCE_MEM,
+    },
+    [1] = {
         .start = 37,                   /* T31 ISP IRQ 37 (isp-m0) - PRIMARY ISP PROCESSING */
         .end   = 37,
         .flags = IORESOURCE_IRQ,
     },
-    [1] = {
+    [2] = {
         .start = 38,                   /* T31 ISP IRQ 38 (isp-w02) - SECONDARY ISP CHANNEL */
         .end   = 38,
         .flags = IORESOURCE_IRQ,
@@ -358,10 +366,9 @@ struct platform_device tx_isp_platform_device = {
 /* VIC platform device resources - CORRECTED to match /proc/iomem */
 static struct resource tx_isp_vic_resources[] = {
     [0] = {
-        .start = 0x133e0000,           /* T31 VIC base address - MATCHES /proc/iomem */
-        .end   = 0x133effff,           /* T31 VIC end address - MATCHES /proc/iomem */
+        .start = 0x10023000,           /* T31 VIC base address */
+        .end   = 0x10023FFF,           /* T31 VIC end address */
         .flags = IORESOURCE_MEM,
-        .name = "isp-device",          /* EXACT name from stock driver */
     },
     [1] = {
         .start = 38,                   /* T31 VIC IRQ 38 - MATCHES STOCK DRIVER isp-w02 */
@@ -478,10 +485,9 @@ struct platform_device tx_isp_fs_platform_device = {
 /* ISP Core platform device resources - CORRECTED to match /proc/iomem */
 static struct resource tx_isp_core_resources[] = {
     [0] = {
-        .start = 0x13300000,           /* T31 ISP Core base address - MATCHES /proc/iomem */
-        .end   = 0x1330FFFF,           /* T31 ISP Core end address - MATCHES /proc/iomem (64KB) */
+        .start = 0x13300000,           /* T31 ISP Core base address */
+        .end   = 0x133FFFFF,           /* T31 ISP Core end address */
         .flags = IORESOURCE_MEM,
-        .name = "isp-device",          /* EXACT name from stock driver */
     },
     [1] = {
         .start = 37,                   /* T31 ISP Core IRQ 37 - MATCHES STOCK DRIVER isp-m0 */
@@ -5132,6 +5138,39 @@ void test_interrupt_handler_manually(void)
         printk(KERN_ALERT "*** MANUAL TEST: Calling isp_irq_handle(37, %p) manually ***\n", ourISPdev);
         isp_irq_handle(37, ourISPdev);
         printk(KERN_ALERT "*** MANUAL TEST: isp_irq_handle call completed ***\n");
+
+        /* CRITICAL: Check if IRQ 37 is actually registered to our handler */
+        printk(KERN_ALERT "*** CRITICAL: Checking IRQ 37 registration status ***\n");
+
+        /* Force re-registration with explicit logging */
+        free_irq(37, ourISPdev);
+        printk(KERN_ALERT "*** CRITICAL: Freed IRQ 37, now re-registering ***\n");
+
+        int ret = request_threaded_irq(37, isp_irq_handle, isp_irq_thread_handle,
+                                      IRQF_SHARED, "isp-m0-FIXED", ourISPdev);
+        if (ret == 0) {
+            printk(KERN_ALERT "*** CRITICAL: IRQ 37 re-registered successfully with FIXED handler ***\n");
+
+            /* CRITICAL: Try to trigger a hardware interrupt by writing to ISP control registers */
+            if (ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
+                void __iomem *isp_regs = ourISPdev->core_dev->core_regs;
+                printk(KERN_ALERT "*** CRITICAL: Attempting to trigger hardware interrupt via ISP control registers ***\n");
+
+                /* Write to ISP interrupt enable register to force an interrupt */
+                writel(0x1, isp_regs + 0x1c);  /* Enable frame done interrupt */
+                wmb();
+                writel(0x1, isp_regs + 0x18);  /* Trigger interrupt */
+                wmb();
+
+                printk(KERN_ALERT "*** CRITICAL: Hardware interrupt trigger attempted - check if handler is called ***\n");
+                msleep(100);  /* Wait for interrupt to fire */
+                printk(KERN_ALERT "*** CRITICAL: Hardware interrupt test complete ***\n");
+            } else {
+                printk(KERN_ALERT "*** CRITICAL: No ISP core registers available for hardware interrupt test ***\n");
+            }
+        } else {
+            printk(KERN_ALERT "*** CRITICAL: IRQ 37 re-registration FAILED: %d ***\n", ret);
+        }
     } else {
         printk(KERN_ALERT "*** MANUAL TEST: ourISPdev is NULL, cannot test handler ***\n");
     }

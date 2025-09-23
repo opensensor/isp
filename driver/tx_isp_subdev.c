@@ -462,8 +462,6 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
                 /* Binary Ninja: isp_printf(2, "The parameter is invalid!\n", "tx_isp_subdev_init") */
                 pr_err("tx_isp_subdev_init: request_mem_region failed for %s (0x%08x-0x%08x)\n",
                        dev_name(&pdev->dev), (u32)mem_res->start, (u32)mem_res->end);
-                pr_err("*** MEMORY REGION CONFLICT: Stock driver may still be loaded ***\n");
-                pr_err("*** Please unload stock driver first: rmmod tx_isp_t31 ***\n");
                 isp_printf(2, "The parameter is invalid!\n", "tx_isp_subdev_init");
                 ret = 0xfffffff0;
                 goto cleanup_irq;
