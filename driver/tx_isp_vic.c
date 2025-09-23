@@ -994,10 +994,22 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0x0, vic_regs + 0x1e8);         /* Clear interrupt masks */
     wmb();
 
-    /* Verify interrupt configuration is preserved */
+    /* Verify interrupt configuration is preserved BEFORE final config */
     verify_int_en = readl(vic_regs + 0x1e0);
     verify_int_mask = readl(vic_regs + 0x1e8);
-    pr_info("*** VIC INTERRUPT VERIFY: INT_EN=0x%08x, INT_MASK=0x%08x ***\n", verify_int_en, verify_int_mask);
+    pr_info("*** VIC INTERRUPT VERIFY (BEFORE FINAL CONFIG): INT_EN=0x%08x, INT_MASK=0x%08x ***\n", verify_int_en, verify_int_mask);
+
+    /* Binary Ninja: Final configuration registers */
+    writel(0x100010, vic_regs + 0x1a4);
+    writel(0x4210, vic_regs + 0x1ac);
+    writel(0x10, vic_regs + 0x1b0);
+    writel(0, vic_regs + 0x1b4);
+    wmb();
+
+    /* Verify interrupt configuration is preserved AFTER final config */
+    verify_int_en = readl(vic_regs + 0x1e0);
+    verify_int_mask = readl(vic_regs + 0x1e8);
+    pr_info("*** VIC INTERRUPT VERIFY (AFTER FINAL CONFIG): INT_EN=0x%08x, INT_MASK=0x%08x ***\n", verify_int_en, verify_int_mask);
 
     /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
     pr_info("*** tx_isp_vic_start: vic_start_ok set to 1 - EXACT Binary Ninja reference ***\n");
