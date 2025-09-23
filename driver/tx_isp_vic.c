@@ -69,9 +69,16 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             vic_dev->irq_handler(vic_dev->irq_priv);
         }
 
-        /* CRITICAL: Working reference does NOT write to VIC hardware interrupt registers! */
-        /* The VIC interrupt hardware is enabled by the VIC start function register sequence */
-        pr_info("tx_vic_enable_irq: VIC interrupt flag set - hardware enabled by VIC start sequence\n");
+        /* CRITICAL FIX: Enable VIC interrupt at kernel level - this is what the callback should do! */
+        if (ourISPdev && ourISPdev->vic_irq > 0) {
+            pr_info("*** tx_vic_enable_irq: CRITICAL FIX - Enabling VIC interrupt (IRQ %d) at kernel level ***\n", ourISPdev->vic_irq);
+            enable_irq(ourISPdev->vic_irq);
+            pr_info("*** tx_vic_enable_irq: VIC interrupt (IRQ %d) ENABLED at kernel level ***\n", ourISPdev->vic_irq);
+        } else {
+            pr_err("*** tx_vic_enable_irq: CRITICAL ERROR - No VIC IRQ found! ***\n");
+        }
+
+        pr_info("tx_vic_enable_irq: VIC interrupt flag set and kernel interrupt enabled\n");
     }
 
     /* Binary Ninja: private_spin_unlock_irqrestore(dump_vsd_3 + 0x130, var_18) */
@@ -865,9 +872,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
     pr_info("*** tx_isp_vic_start: vic_start_ok set to 1 - EXACT Binary Ninja reference ***\n");
     vic_start_ok = 1;
-    enable_irq(38);
     pr_info("*** tx_isp_vic_start: VIC Control register sequence complete - streaming should start ***\n");
     pr_info("*** tx_isp_vic_start: VIC should now generate frame done interrupts! ***\n");
+    pr_info("*** tx_isp_vic_start: VIC interrupt will be enabled by tx_vic_enable_irq callback ***\n");
     return 0;
 }
 
