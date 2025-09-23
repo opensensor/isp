@@ -662,7 +662,7 @@ int tisp_set_csc_version(int version)
     return 0;
 }
 /* Use external system_reg_write from tx-isp-module.c with built-in streaming protection */
-extern void system_reg_write(u32 reg, u32 value);
+extern void //system_reg_write(u32 reg, u32 value);
 
 /* External system_irq_func_set from tx_isp_core.c */
 extern int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
@@ -1246,20 +1246,20 @@ static int system_reg_write_ae(int ae_id, uint32_t reg, uint32_t value)
     /* AE-specific register write - from Binary Ninja */
     switch (ae_id) {
         case 1:
-            system_reg_write(0xa000, 1);
+            //system_reg_write(0xa000, 1);
             break;
         case 2:
-            system_reg_write(0xa800, 1);
+            //system_reg_write(0xa800, 1);
             break;
         case 3:
-            system_reg_write(0x1070, 1);
+            //system_reg_write(0x1070, 1);
             break;
         default:
             pr_warn("Unknown AE ID: %d\n", ae_id);
             break;
     }
 
-    system_reg_write(reg, value);
+    //system_reg_write(reg, value);
     return 0;
 }
 
@@ -1304,29 +1304,29 @@ int tiziano_ae_set_hardware_param(int ae_id, uint8_t *param_array, int update_on
     uint32_t reg_base;
     if (ae_id == 0) {
         if (!update_only) {
-            system_reg_write(0xa004, param1);
-            system_reg_write(0xa008, param2);
-            system_reg_write(0xa00c, param3);
-            system_reg_write(0xa010, param4);
-            system_reg_write(0xa014, param5);
-            system_reg_write(0xa018, param6);
-            system_reg_write(0xa01c, param7);
-            system_reg_write(0xa020, param8);
-            system_reg_write(0xa024, param9);
+            //system_reg_write(0xa004, param1);
+            //system_reg_write(0xa008, param2);
+            //system_reg_write(0xa00c, param3);
+            //system_reg_write(0xa010, param4);
+            //system_reg_write(0xa014, param5);
+            //system_reg_write(0xa018, param6);
+            //system_reg_write(0xa01c, param7);
+            //system_reg_write(0xa020, param8);
+            //system_reg_write(0xa024, param9);
         }
         reg_base = 0xa028;
         system_reg_write_ae(1, reg_base, special_param);
     } else if (ae_id == 1) {
         if (!update_only) {
-            system_reg_write(0xa804, param1);
-            system_reg_write(0xa808, param2);
-            system_reg_write(0xa80c, param3);
-            system_reg_write(0xa810, param4);
-            system_reg_write(0xa814, param5);
-            system_reg_write(0xa818, param6);
-            system_reg_write(0xa81c, param7);
-            system_reg_write(0xa820, param8);
-            system_reg_write(0xa824, param9);
+            //system_reg_write(0xa804, param1);
+            //system_reg_write(0xa808, param2);
+            //system_reg_write(0xa80c, param3);
+            //system_reg_write(0xa810, param4);
+            //system_reg_write(0xa814, param5);
+            //system_reg_write(0xa818, param6);
+            //system_reg_write(0xa81c, param7);
+            //system_reg_write(0xa820, param8);
+            //system_reg_write(0xa824, param9);
         }
         reg_base = 0xa828;
         system_reg_write_ae(2, reg_base, special_param);
@@ -1556,62 +1556,62 @@ int tisp_init(void *sensor_info, char *param_name)
 
     /* Binary Ninja: ISP Core Control registers */
     pr_info("*** WRITING ISP CORE CONTROL REGISTERS - FROM BINARY NINJA tisp_init ***\n");
-    system_reg_write(0xb004, 0xf001f001);
-    system_reg_write(0xb008, 0x40404040);
-    system_reg_write(0xb00c, 0x40404040);
-    system_reg_write(0xb010, 0x40404040);
-    system_reg_write(0xb014, 0x404040);
-    system_reg_write(0xb018, 0x40404040);
-    system_reg_write(0xb01c, 0x40404040);
-    system_reg_write(0xb020, 0x40404040);
-    system_reg_write(0xb024, 0x404040);
-    system_reg_write(0xb028, 0x1000080);
-    system_reg_write(0xb02c, 0x1000080);
-    system_reg_write(0xb030, 0x100);
-    system_reg_write(0xb034, 0xffff0100);
-    system_reg_write(0xb038, 0x1ff00);
-    system_reg_write(0xb04c, 0x103);
-    system_reg_write(0xb050, 0x3);
+    //system_reg_write(0xb004, 0xf001f001);
+    //system_reg_write(0xb008, 0x40404040);
+    //system_reg_write(0xb00c, 0x40404040);
+    //system_reg_write(0xb010, 0x40404040);
+    //system_reg_write(0xb014, 0x404040);
+    //system_reg_write(0xb018, 0x40404040);
+    //system_reg_write(0xb01c, 0x40404040);
+    //system_reg_write(0xb020, 0x40404040);
+    //system_reg_write(0xb024, 0x404040);
+    //system_reg_write(0xb028, 0x1000080);
+    //system_reg_write(0xb02c, 0x1000080);
+    //system_reg_write(0xb030, 0x100);
+    //system_reg_write(0xb034, 0xffff0100);
+    //system_reg_write(0xb038, 0x1ff00);
+    //system_reg_write(0xb04c, 0x103);
+    //system_reg_write(0xb050, 0x3);
 
     /* CRITICAL: These are the varying registers that must match the reference driver exactly! */
     /* Using the EXACT reference values from the trace provided */
     pr_info("*** WRITING CRITICAL VARYING REGISTERS - USING EXACT REFERENCE VALUES ***\n");
-    system_reg_write(0xb07c, 0x341b);     /* Reference: 0x341b (EXACT match required) */
-    system_reg_write(0xb080, 0x46b0);     /* Reference: 0x46b0 (EXACT match required) */
-    system_reg_write(0xb084, 0x1813);     /* Reference: 0x1813 (EXACT match required) */
+    //system_reg_write(0xb07c, 0x341b);     /* Reference: 0x341b (EXACT match required) */
+    //system_reg_write(0xb080, 0x46b0);     /* Reference: 0x46b0 (EXACT match required) */
+    //system_reg_write(0xb084, 0x1813);     /* Reference: 0x1813 (EXACT match required) */
     /* Skip 0xb088 - reference doesn't write here */
-    system_reg_write(0xb08c, 0x10a);      /* Reference: 0x10a (EXACT match required) */
+    //system_reg_write(0xb08c, 0x10a);      /* Reference: 0x10a (EXACT match required) */
 
     pr_info("*** ISP CORE CONTROL REGISTERS WRITTEN - NOW MATCHES REFERENCE DRIVER ***\n");
 
     /* Binary Ninja: ISP Control registers */
     pr_info("*** WRITING ISP CONTROL REGISTERS - FROM BINARY NINJA tisp_init ***\n");
-    system_reg_write(0x9804, 0x3f00);
-    system_reg_write(0x9864, 0x7800438);
-    system_reg_write(0x987c, 0xc0000000);
-    system_reg_write(0x9880, 0x1);
-    system_reg_write(0x9884, 0x1);
-    system_reg_write(0x9890, 0x1010001);
-    system_reg_write(0x989c, 0x1010001);
-    system_reg_write(0x98a8, 0x1010001);
+    //system_reg_write(0x9804, 0x3f00);
+    //system_reg_write(0x9864, 0x7800438);
+    //system_reg_write(0x987c, 0xc0000000);
+    //system_reg_write(0x9880, 0x1);
+    //system_reg_write(0x9884, 0x1);
+    //system_reg_write(0x9890, 0x1010001);
+    //system_reg_write(0x989c, 0x1010001);
+    //system_reg_write(0x98a8, 0x1010001);
 
     /* Binary Ninja: VIC Control registers */
     pr_info("*** WRITING VIC CONTROL REGISTERS - FROM BINARY NINJA tisp_init ***\n");
-    system_reg_write(0x9a00, 0x50002d0);
-    system_reg_write(0x9a04, 0x3000300);
-    system_reg_write(0x9a2c, 0x50002d0);
-    system_reg_write(0x9a34, 0x1);
-    system_reg_write(0x9a70, 0x1);
-    system_reg_write(0x9a7c, 0x1);
-    system_reg_write(0x9a80, 0x500);
-    system_reg_write(0x9a88, 0x1);
-    system_reg_write(0x9a94, 0x1);
-    system_reg_write(0x9a98, 0x500);
+    //system_reg_write(0x9a00, 0x50002d0);
+    //system_reg_write(0x9a04, 0x3000300);
+    //system_reg_write(0x9a2c, 0x50002d0);
+    //system_reg_write(0x9a34, 0x1);
+    //system_reg_write(0x9a70, 0x1);
+    //system_reg_write(0x9a7c, 0x1);
+    //system_reg_write(0x9a80, 0x500);
+    //system_reg_write(0x9a88, 0x1);
+    //system_reg_write(0x9a94, 0x1);
+    //system_reg_write(0x9a98, 0x500);
     /* CRITICAL FIX: REMOVE VIC control register writes - they don't exist in Binary Ninja reference! */
     /* The reference tisp_init does NOT write to 0x9ac0 or 0x9ac8 at all */
     /* These registers should be controlled by VIC hardware, not by tuning system */
-    /* system_reg_write(0x9ac0, 0x200);  // REMOVED - not in reference driver */
-    /* system_reg_write(0x9ac8, 0x200);  // REMOVED - not in reference driver */
+    /* //system_reg_write(0x9ac0, 0x200);  // REMOVED - not in reference driver */
+    /* //system_reg_write(0x9ac8, 0x200);  // REMOVED - not in reference driver */
     pr_info("*** TUNING SYSTEM: VIC control registers 0x9ac0/0x9ac8 REMOVED - not in Binary Ninja reference ***\n");
 
     /* CRITICAL FIX: Use actual sensor IMAGE dimensions, not total frame size */
@@ -1624,49 +1624,49 @@ int tisp_init(void *sensor_info, char *param_name)
     pr_info("tisp_init: CRITICAL FIX - Using ACTUAL sensor image dimensions %dx%d (not frame size %dx%d)\n",
             actual_image_width, actual_image_height, sensor_params.width, sensor_params.height);
 
-    /* Binary Ninja: system_reg_write(4, $v0_4 << 0x10 | arg1[1]) - Basic ISP config */
-    system_reg_write(0x4, (sensor_params.width << 16) | sensor_params.height);
+    /* Binary Ninja: //system_reg_write(4, $v0_4 << 0x10 | arg1[1]) - Basic ISP config */
+    //system_reg_write(0x4, (sensor_params.width << 16) | sensor_params.height);
 
     /* Binary Ninja: Handle different sensor modes - simplified version */
     switch (sensor_params.mode) {
         case 0: case 1: case 2: case 3:
-            system_reg_write(0x8, sensor_params.mode);
+            //system_reg_write(0x8, sensor_params.mode);
             break;
         default:
-            system_reg_write(0x8, 0); /* Default mode */
+            //system_reg_write(0x8, 0); /* Default mode */
             break;
     }
 
     /* CRITICAL FIX: ISP control register - enable processing pipeline */
     /* This register controls the overall ISP processing pipeline operation */
-    system_reg_write(0x1c, 0x3f08);  /* Enable ISP processing pipeline + frame sync */
+    //system_reg_write(0x1c, 0x3f08);  /* Enable ISP processing pipeline + frame sync */
     pr_info("*** tisp_init: ISP control register set to enable processing pipeline ***\n");
 
     /* CRITICAL FIX: Configure ISP input/output formats to prevent Error interrupt type 2 */
     /* The 0x00000500 error indicates format/processing configuration issues */
 
     /* CRITICAL FIX: Use EXACT reference driver format configuration */
-    /* Binary Ninja: system_reg_write(0x10, $a1_9) where $a1_9 = 0x33f or 0x133 */
+    /* Binary Ninja: //system_reg_write(0x10, $a1_9) where $a1_9 = 0x33f or 0x133 */
 
     /* Reference driver format register - this is the key missing piece! */
     uint32_t format_reg_value = 0x133;  /* Normal mode format (not WDR) */
-    system_reg_write(0x10, format_reg_value);
+    //system_reg_write(0x10, format_reg_value);
     pr_info("*** tisp_init: REFERENCE DRIVER format register 0x10 = 0x%x ***\n", format_reg_value);
 
     /* Reference driver sets register 0x30 */
-    system_reg_write(0x30, 0xffffffff);
+    //system_reg_write(0x30, 0xffffffff);
     pr_info("*** tisp_init: REFERENCE DRIVER register 0x30 = 0xffffffff ***\n");
 
     /* Configure processing pipeline data flow */
-    system_reg_write(0x24, 0x1);     /* Enable data flow from input to processing */
-    system_reg_write(0x28, 0x1);     /* Enable data flow from processing to output */
+    //system_reg_write(0x24, 0x1);     /* Enable data flow from input to processing */
+    //system_reg_write(0x28, 0x1);     /* Enable data flow from processing to output */
     pr_info("*** tisp_init: ISP data flow configured (input->processing->output) ***\n");
 
     /* REFERENCE DRIVER: Final ISP configuration registers (Binary Ninja exact sequence) */
     /* These are the final three critical registers that enable the ISP pipeline */
 
     uint32_t isp_mode = 0x1c;  /* Normal mode (not WDR) - Binary Ninja: $v0_30 = 0x1c */
-    system_reg_write(0x804, isp_mode);  /* ISP routing configuration */
+    //system_reg_write(0x804, isp_mode);  /* ISP routing configuration */
 
     /* CRITICAL FIX: Don't turn off ISP control if streaming is already active */
     extern uint32_t vic_start_ok;
@@ -1674,11 +1674,11 @@ int tisp_init(void *sensor_info, char *param_name)
         pr_info("*** tisp_init: STREAMING ACTIVE - Skipping ISP control register write to prevent shutdown ***\n");
         pr_info("*** tisp_init: VIC streaming detected - keeping ISP controls enabled ***\n");
     } else {
-        system_reg_write(0x1c, 8);          /* ISP control mode - only when not streaming */
+        //system_reg_write(0x1c, 8);          /* ISP control mode - only when not streaming */
         pr_info("*** tisp_init: ISP control mode set to 8 (streaming not active) ***\n");
     }
 
-    system_reg_write(0x800, 1);         /* Enable ISP pipeline */
+    //system_reg_write(0x800, 1);         /* Enable ISP pipeline */
 
     pr_info("*** tisp_init: REFERENCE DRIVER final configuration - 0x804=0x%x, 0x1c=%s, 0x800=1 ***\n",
             isp_mode, (vic_start_ok == 1) ? "SKIPPED" : "8");
@@ -1686,8 +1686,8 @@ int tisp_init(void *sensor_info, char *param_name)
     /* CRITICAL FIX: Configure ISP with ACTUAL sensor image dimensions */
     /* This is the missing piece - ISP must know the correct image size */
 
-    /* Binary Ninja: system_reg_write(4, width << 16 | height) */
-    system_reg_write(0x4, (actual_image_width << 16) | actual_image_height);
+    /* Binary Ninja: //system_reg_write(4, width << 16 | height) */
+    //system_reg_write(0x4, (actual_image_width << 16) | actual_image_height);
     pr_info("*** tisp_init: ISP frame size configured - %dx%d (ACTUAL sensor image) ***\n",
             actual_image_width, actual_image_height);
 
@@ -1734,8 +1734,8 @@ int tisp_init(void *sensor_info, char *param_name)
             break;
     }
 
-    /* Binary Ninja: system_reg_write(8, bayer_pattern) */
-    system_reg_write(0x8, bayer_pattern);
+    /* Binary Ninja: //system_reg_write(8, bayer_pattern) */
+    //system_reg_write(0x8, bayer_pattern);
     pr_info("*** tisp_init: CRITICAL FIX - Bayer pattern configured: mbus=0x%x -> pattern=%d (register 8) ***\n",
             sensor_mbus_code, bayer_pattern);
 
@@ -1745,31 +1745,31 @@ int tisp_init(void *sensor_info, char *param_name)
     pr_info("*** tisp_init: CONFIGURING RAW10 BAYER PROCESSING PIPELINE ***\n");
 
     /* Configure RAW10 input format - 10-bit Bayer data processing */
-    system_reg_write(0x14, 0x2b);      /* RAW10 format code (0x2b from MIPI spec) */
-    system_reg_write(0x18, 0x0a0a);    /* 10-bit depth configuration */
+    //system_reg_write(0x14, 0x2b);      /* RAW10 format code (0x2b from MIPI spec) */
+    //system_reg_write(0x18, 0x0a0a);    /* 10-bit depth configuration */
 
     /* Enable demosaic processing for RGGB Bayer pattern */
-    system_reg_write(0x40, 0x1);       /* Enable demosaic module */
-    system_reg_write(0x44, bayer_pattern); /* Set Bayer pattern (1 = RGGB) */
+    //system_reg_write(0x40, 0x1);       /* Enable demosaic module */
+    //system_reg_write(0x44, bayer_pattern); /* Set Bayer pattern (1 = RGGB) */
 
     /* CRITICAL FIX: Configure CCM using EXACT Binary Ninja register addresses */
     /* From tiziano_ccm_lut_parameter: registers 0x5004-0x5014 for CCM matrix */
 
     /* Enable CCM processing first */
-    system_reg_write(0x5000, 1);       /* Enable CCM module */
+    //system_reg_write(0x5000, 1);       /* Enable CCM module */
 
     /* Binary Ninja EXACT: CCM matrix registers (9 coefficients) */
     /* Standard identity matrix with slight color correction for GC2053 */
-    system_reg_write(0x5004, 0x01000000);  /* CCM[0,0] and CCM[0,1] (R-R=1.0, R-G=0.0) */
-    system_reg_write(0x5006, 0x00000100);  /* CCM[0,2] and CCM[1,0] (R-B=0.0, G-R=0.0) */
-    system_reg_write(0x5008, 0x00000000);  /* CCM[1,1] and CCM[1,2] (G-G=1.0, G-B=0.0) */
-    system_reg_write(0x500a, 0x01000000);  /* CCM[2,0] and CCM[2,1] (B-R=0.0, B-G=0.0) */
-    system_reg_write(0x500c, 0x00000100);  /* CCM[2,2] (B-B=1.0) */
+    //system_reg_write(0x5004, 0x01000000);  /* CCM[0,0] and CCM[0,1] (R-R=1.0, R-G=0.0) */
+    //system_reg_write(0x5006, 0x00000100);  /* CCM[0,2] and CCM[1,0] (R-B=0.0, G-R=0.0) */
+    //system_reg_write(0x5008, 0x00000000);  /* CCM[1,1] and CCM[1,2] (G-G=1.0, G-B=0.0) */
+    //system_reg_write(0x500a, 0x01000000);  /* CCM[2,0] and CCM[2,1] (B-R=0.0, B-G=0.0) */
+    //system_reg_write(0x500c, 0x00000100);  /* CCM[2,2] (B-B=1.0) */
 
     /* CCM control register - from Binary Ninja tiziano_ccm_lut_parameter */
-    system_reg_write(0x5018, 0x00000000);  /* CCM control - basic configuration */
-    system_reg_write(0x501c, 0x00000001);  /* CCM step size */
-    system_reg_write(0x5020, 0x00000000);  /* CCM additional control */
+    //system_reg_write(0x5018, 0x00000000);  /* CCM control - basic configuration */
+    //system_reg_write(0x501c, 0x00000001);  /* CCM step size */
+    //system_reg_write(0x5020, 0x00000000);  /* CCM additional control */
 
     pr_info("*** CRITICAL FIX: CCM configured using EXACT Binary Ninja register addresses ***\n");
     pr_info("*** CCM registers 0x5004-0x5014 programmed with identity matrix ***\n");
@@ -1777,15 +1777,15 @@ int tisp_init(void *sensor_info, char *param_name)
 
     /* CRITICAL FIX: Configure proper RGB to YUV conversion (final output stage) */
     /* Standard BT.601 coefficients for proper color space conversion */
-    system_reg_write(0x200, 0x4d);     /* Y coefficient: 0.299*R (77 in fixed point) */
-    system_reg_write(0x204, 0x96);     /* Y coefficient: 0.587*G (150 in fixed point) */
-    system_reg_write(0x208, 0x1d);     /* Y coefficient: 0.114*B (29 in fixed point) */
-    system_reg_write(0x20c, 0x70);     /* U coefficient: -0.169*R (-43 in fixed point) */
-    system_reg_write(0x210, 0x5a);     /* U coefficient: -0.331*G (-85 in fixed point) */
-    system_reg_write(0x214, 0x80);     /* U coefficient: 0.500*B (128 in fixed point) */
-    system_reg_write(0x218, 0x80);     /* V coefficient: 0.500*R (128 in fixed point) */
-    system_reg_write(0x21c, 0x6a);     /* V coefficient: -0.419*G (-107 in fixed point) */
-    system_reg_write(0x220, 0x16);     /* V coefficient: -0.081*B (-21 in fixed point) */
+    //system_reg_write(0x200, 0x4d);     /* Y coefficient: 0.299*R (77 in fixed point) */
+    //system_reg_write(0x204, 0x96);     /* Y coefficient: 0.587*G (150 in fixed point) */
+    //system_reg_write(0x208, 0x1d);     /* Y coefficient: 0.114*B (29 in fixed point) */
+    //system_reg_write(0x20c, 0x70);     /* U coefficient: -0.169*R (-43 in fixed point) */
+    //system_reg_write(0x210, 0x5a);     /* U coefficient: -0.331*G (-85 in fixed point) */
+    //system_reg_write(0x214, 0x80);     /* U coefficient: 0.500*B (128 in fixed point) */
+    //system_reg_write(0x218, 0x80);     /* V coefficient: 0.500*R (128 in fixed point) */
+    //system_reg_write(0x21c, 0x6a);     /* V coefficient: -0.419*G (-107 in fixed point) */
+    //system_reg_write(0x220, 0x16);     /* V coefficient: -0.081*B (-21 in fixed point) */
 
     pr_info("*** CRITICAL FIX: RGB to YUV conversion matrix configured properly ***\n");
 
@@ -1823,7 +1823,7 @@ int tisp_init(void *sensor_info, char *param_name)
     /* REFERENCE DRIVER EXACT VALUE: ISP isp-m0: [CSI PHY Control] write at offset 0xc: 0x0 -> 0x80700008 */
     uint32_t bypass_val = 0x80700008;  /* EXACT reference driver value - prevents hardware reset */
 
-    system_reg_write(0xc, bypass_val);
+    //system_reg_write(0xc, bypass_val);
     pr_info("*** CRITICAL FIX: ISP bypass register set to EXACT reference value 0x%x - prevents hardware reset ***\n", bypass_val);
 
     /* CRITICAL FIX: Configure ISP for NV12 output format */
@@ -1832,8 +1832,8 @@ int tisp_init(void *sensor_info, char *param_name)
     pr_info("*** tisp_init: CONFIGURING ISP FOR NV12 OUTPUT FORMAT ***\n");
 
     /* Configure ISP output format for NV12 (4:2:0) */
-    system_reg_write(0x10, 0x133);     /* NV12 format code from reference driver */
-    system_reg_write(0x30, 0xffffffff); /* Enable all processing for NV12 conversion */
+    //system_reg_write(0x10, 0x133);     /* NV12 format code from reference driver */
+    //system_reg_write(0x30, 0xffffffff); /* Enable all processing for NV12 conversion */
     pr_info("*** tisp_init: ISP configured for NV12 4:2:0 output format ***\n");
 
     /* CRITICAL FIX: Initialize essential ISP processing modules to prevent Error interrupt type 2 */
@@ -1851,25 +1851,25 @@ int tisp_init(void *sensor_info, char *param_name)
     /* This ensures ISP processes each VIC frame immediately */
 
     /* Configure ISP frame synchronization */
-    system_reg_write(0x5000, 0x1);   /* Enable frame sync between VIC and ISP */
-    system_reg_write(0x5004, 0x0);   /* Frame sync mode: immediate processing */
+    //system_reg_write(0x5000, 0x1);   /* Enable frame sync between VIC and ISP */
+    //system_reg_write(0x5004, 0x0);   /* Frame sync mode: immediate processing */
     pr_info("*** tisp_init: ISP-VIC frame synchronization enabled ***\n");
 
     /* Configure ISP processing pipeline enable */
-    system_reg_write(0x6000, 0x1);   /* Enable complete processing pipeline */
-    system_reg_write(0x6004, 0x1);   /* Enable pipeline output */
+    //system_reg_write(0x6000, 0x1);   /* Enable complete processing pipeline */
+    //system_reg_write(0x6004, 0x1);   /* Enable pipeline output */
     pr_info("*** tisp_init: ISP processing pipeline fully enabled ***\n");
 
     /* Final ISP configuration - ensure all modules work together */
-    system_reg_write(0x7000, 0x1);   /* Master ISP enable */
-    system_reg_write(0x7004, 0x1);   /* Master processing enable */
+    //system_reg_write(0x7000, 0x1);   /* Master ISP enable */
+    //system_reg_write(0x7004, 0x1);   /* Master processing enable */
     pr_info("*** tisp_init: ISP master processing enabled - pipeline should now work ***\n");
 
-    /* Binary Ninja: system_reg_write(0x30, 0xffffffff) - Enable all interrupts */
-    system_reg_write(0x30, 0xffffffff);
+    /* Binary Ninja: //system_reg_write(0x30, 0xffffffff) - Enable all interrupts */
+    //system_reg_write(0x30, 0xffffffff);
 
-    /* Binary Ninja: system_reg_write(0x10, $a1_9) - Main ISP enable */
-    system_reg_write(0x10, 0x133);
+    /* Binary Ninja: //system_reg_write(0x10, $a1_9) - Main ISP enable */
+    //system_reg_write(0x10, 0x133);
 
     /* Binary Ninja: Allocate and configure memory buffers - simplified version */
     /* In real implementation, this would allocate DMA buffers for ISP processing */
@@ -1929,15 +1929,15 @@ int tisp_init(void *sensor_info, char *param_name)
     void *ae0_buffer = kmalloc(AE_BUFFER_SIZE, GFP_KERNEL);
     if (ae0_buffer != NULL) {
         dma_addr_t ae0_phys = virt_to_phys(ae0_buffer);
-        system_reg_write(0xa02c, ae0_phys);
-        system_reg_write(0xa030, ae0_phys + 0x1000);
-        system_reg_write(0xa034, ae0_phys + 0x2000);
-        system_reg_write(0xa038, ae0_phys + 0x3000);
-        system_reg_write(0xa03c, ae0_phys + 0x4000);
-        system_reg_write(0xa040, ae0_phys + 0x4800);
-        system_reg_write(0xa044, ae0_phys + 0x5000);
-        system_reg_write(0xa048, ae0_phys + 0x5800);
-        system_reg_write(0xa04c, 0x33);
+        //system_reg_write(0xa02c, ae0_phys);
+        //system_reg_write(0xa030, ae0_phys + 0x1000);
+        //system_reg_write(0xa034, ae0_phys + 0x2000);
+        //system_reg_write(0xa038, ae0_phys + 0x3000);
+        //system_reg_write(0xa03c, ae0_phys + 0x4000);
+        //system_reg_write(0xa040, ae0_phys + 0x4800);
+        //system_reg_write(0xa044, ae0_phys + 0x5000);
+        //system_reg_write(0xa048, ae0_phys + 0x5800);
+        //system_reg_write(0xa04c, 0x33);
 
         /* CRITICAL FIX: Initialize data_b2f3c to point to AE0 buffer */
         /* This prevents DMA operations from targeting kernel stack! */
@@ -1953,15 +1953,15 @@ int tisp_init(void *sensor_info, char *param_name)
     void *ae1_buffer = kmalloc(AE_BUFFER_SIZE, GFP_KERNEL);
     if (ae1_buffer != NULL) {
         dma_addr_t ae1_phys = virt_to_phys(ae1_buffer);
-        system_reg_write(0xa82c, ae1_phys);
-        system_reg_write(0xa830, ae1_phys + 0x1000);
-        system_reg_write(0xa834, ae1_phys + 0x2000);
-        system_reg_write(0xa838, ae1_phys + 0x3000);
-        system_reg_write(0xa83c, ae1_phys + 0x4000);
-        system_reg_write(0xa840, ae1_phys + 0x4800);
-        system_reg_write(0xa844, ae1_phys + 0x5000);
-        system_reg_write(0xa848, ae1_phys + 0x5800);
-        system_reg_write(0xa84c, 0x33);
+        //system_reg_write(0xa82c, ae1_phys);
+        //system_reg_write(0xa830, ae1_phys + 0x1000);
+        //system_reg_write(0xa834, ae1_phys + 0x2000);
+        //system_reg_write(0xa838, ae1_phys + 0x3000);
+        //system_reg_write(0xa83c, ae1_phys + 0x4000);
+        //system_reg_write(0xa840, ae1_phys + 0x4800);
+        //system_reg_write(0xa844, ae1_phys + 0x5000);
+        //system_reg_write(0xa848, ae1_phys + 0x5800);
+        //system_reg_write(0xa84c, 0x33);
         pr_info("*** tisp_init: AE1 buffer allocated at 0x%08x ***\n", (uint32_t)ae1_phys);
     }
 
@@ -1977,17 +1977,17 @@ int tisp_init(void *sensor_info, char *param_name)
     }
 
     /* Binary Ninja: Final three critical register writes */
-    system_reg_write(0x804, isp_mode);  /* ISP routing configuration */
+    //system_reg_write(0x804, isp_mode);  /* ISP routing configuration */
 
     /* CRITICAL FIX: Don't turn off ISP control if streaming is already active */
     if (vic_start_ok == 1) {
         pr_info("*** tisp_init: STREAMING ACTIVE - Skipping second ISP control register write ***\n");
     } else {
-        system_reg_write(0x1c, 8);          /* ISP control mode - only when not streaming */
+        //system_reg_write(0x1c, 8);          /* ISP control mode - only when not streaming */
         pr_info("*** tisp_init: Second ISP control mode set to 8 (streaming not active) ***\n");
     }
 
-    system_reg_write(0x800, 1);         /* Enable ISP pipeline */
+    //system_reg_write(0x800, 1);         /* Enable ISP pipeline */
 
     /* Binary Ninja: CRITICAL - Initialize all ISP sub-modules */
     pr_info("*** tisp_init: INITIALIZING ISP SUB-MODULES ***\n");
@@ -6716,8 +6716,8 @@ int tiziano_awb_init(uint32_t height, uint32_t width)
     pr_info("tiziano_awb_init: Initializing Auto White Balance (%dx%d)\n", width, height);
     
     /* Binary Ninja system_reg_write_awb shows these register writes */
-    system_reg_write(0xb000, 1);  /* Enable AWB block 1 */
-    system_reg_write(0x1800, 1);  /* Enable AWB block 2 */
+    //system_reg_write(0xb000, 1);  /* Enable AWB block 1 */
+    //system_reg_write(0x1800, 1);  /* Enable AWB block 2 */
     
     pr_info("tiziano_awb_init: AWB hardware blocks enabled\n");
     return 0;
@@ -7606,7 +7606,7 @@ int tisp_sharpen_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_w
     
     if (enable_write == 1) {
         /* Enable sharpening with register write */
-        system_reg_write(0xb000 + 0x400, 1);  /* Enable sharpening processing */
+        //system_reg_write(0xb000 + 0x400, 1);  /* Enable sharpening processing */
     }
     
     return 0;
@@ -7789,7 +7789,7 @@ int tisp_sdns_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_writ
     
     if (enable_write == 1) {
         /* Binary Ninja: Enable SDNS with register write */
-        system_reg_write(0x8b4c, 1);
+        //system_reg_write(0x8b4c, 1);
     }
     
     return 0;
@@ -8018,7 +8018,7 @@ int tisp_dpc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write
     
     if (enable_write == 1) {
         /* Enable DPC with register write */
-        system_reg_write(0xa000 + 0x200, 1);  /* Enable DPC processing */
+        //system_reg_write(0xa000 + 0x200, 1);  /* Enable DPC processing */
     }
     
     return 0;
@@ -8181,16 +8181,16 @@ int tiziano_adr_init(uint32_t width, uint32_t height)
     if (height_sub < 0x14) height_sub = 0x14;
     
     /* Binary Ninja: Write ADR configuration registers */
-    system_reg_write(0x4000, width_div | (height_div << 16));
-    system_reg_write(0x4010, height_div << 16);
-    system_reg_write(0x4014, ((height_div << 1) << 16) | (height_div << 1));
-    system_reg_write(0x4018, height);
-    system_reg_write(0x401c, width_div << 16);
-    system_reg_write(0x4020, ((width_div * 3) << 16) | (width_div << 1));
-    system_reg_write(0x4024, ((width_div * 4) << 16) | (width_div * 3));
-    system_reg_write(0x4028, width);
-    system_reg_write(0x4454, ((height - height_sub) << 16) | height_sub);
-    system_reg_write(0x4458, ((width - width_sub) << 16) | width_sub);
+    //system_reg_write(0x4000, width_div | (height_div << 16));
+    //system_reg_write(0x4010, height_div << 16);
+    //system_reg_write(0x4014, ((height_div << 1) << 16) | (height_div << 1));
+    //system_reg_write(0x4018, height);
+    //system_reg_write(0x401c, width_div << 16);
+    //system_reg_write(0x4020, ((width_div * 3) << 16) | (width_div << 1));
+    //system_reg_write(0x4024, ((width_div * 4) << 16) | (width_div * 3));
+    //system_reg_write(0x4028, width);
+    //system_reg_write(0x4454, ((height - height_sub) << 16) | height_sub);
+    //system_reg_write(0x4458, ((width - width_sub) << 16) | width_sub);
     
     /* Binary Ninja: Refresh parameters */
     tiziano_adr_params_refresh();
@@ -8295,8 +8295,8 @@ int tiziano_hldc_init(void)
     /* Binary Ninja: tisp_hldc_con_par_cfg() */
     tisp_hldc_con_par_cfg();
 
-    /* Binary Ninja: system_reg_write(0x9044, 3) */
-    system_reg_write(0x9044, 3);
+    /* Binary Ninja: //system_reg_write(0x9044, 3) */
+    //system_reg_write(0x9044, 3);
 
     return 0;
 }
@@ -8406,11 +8406,11 @@ int tiziano_lsc_init(void)
     /* Binary Ninja: tiziano_lsc_params_refresh() */
     tiziano_lsc_params_refresh();
 
-    /* Binary Ninja: system_reg_write(0x3800, lsc_mesh_size:4 << 0x10 | lsc_mesh_size.d) */
-    system_reg_write(0x3800, ((lsc_mesh_size >> 16) & 0xffff) << 0x10 | (lsc_mesh_size & 0xffff));
+    /* Binary Ninja: //system_reg_write(0x3800, lsc_mesh_size:4 << 0x10 | lsc_mesh_size.d) */
+    //system_reg_write(0x3800, ((lsc_mesh_size >> 16) & 0xffff) << 0x10 | (lsc_mesh_size & 0xffff));
 
-    /* Binary Ninja: system_reg_write(0x3804, data_9a424 << 0x10 | lsc_mean_en << 0xf | lsc_mesh_scale) */
-    system_reg_write(0x3804, data_9a424 << 0x10 | lsc_mean_en << 0xf | lsc_mesh_scale);
+    /* Binary Ninja: //system_reg_write(0x3804, data_9a424 << 0x10 | lsc_mean_en << 0xf | lsc_mesh_scale) */
+    //system_reg_write(0x3804, data_9a424 << 0x10 | lsc_mean_en << 0xf | lsc_mesh_scale);
 
     /* Binary Ninja: data_9a404 = 5 */
     data_9a404 = 5;
@@ -8607,8 +8607,8 @@ int tisp_channel_start(int channel, void *attr)
         channel = 0;  /* Force channel to 0 for rest of function */
     }
 
-    /* Binary Ninja: system_reg_write(0x9818, msca_dmaout_arb_2) */
-    system_reg_write(0x9818, msca_dmaout_arb_2);
+    /* Binary Ninja: //system_reg_write(0x9818, msca_dmaout_arb_2) */
+    //system_reg_write(0x9818, msca_dmaout_arb_2);
 
     /* Binary Ninja: Channel configuration logic */
     uint32_t *attr_array = (uint32_t *)channel_attr;
@@ -8624,17 +8624,17 @@ int tisp_channel_start(int channel, void *attr)
     s3 = (channel + 0x98) << 8;
     if (attr_array && (attr_array[1] << 1 < tispinfo_1 || attr_array[2] << 1 < v0_2)) {
         /* Scaling enabled */
-        system_reg_write(s3 + 0x1c0, 0x40080);
-        system_reg_write(s3 + 0x1c4, 0x40080);
-        system_reg_write(s3 + 0x1c8, 0x40080);
-        system_reg_write(s3 + 0x1cc, 0x40080);
+        //system_reg_write(s3 + 0x1c0, 0x40080);
+        //system_reg_write(s3 + 0x1c4, 0x40080);
+        //system_reg_write(s3 + 0x1c8, 0x40080);
+        //system_reg_write(s3 + 0x1cc, 0x40080);
         s1_3 = (1 << ((channel + 8) & 0x1f)) | (1 << ((channel + 0xb) & 0x1f)) | msca_ch_en;
     } else {
         /* No scaling */
-        system_reg_write(s3 + 0x1c0, 0x200);
-        system_reg_write(s3 + 0x1c4, 0);
-        system_reg_write(s3 + 0x1c8, 0x200);
-        system_reg_write(s3 + 0x1cc, 0);
+        //system_reg_write(s3 + 0x1c0, 0x200);
+        //system_reg_write(s3 + 0x1c4, 0);
+        //system_reg_write(s3 + 0x1c8, 0x200);
+        //system_reg_write(s3 + 0x1cc, 0);
         s1_3 = (~((1 << ((channel + 8) & 0x1f)) | (1 << ((channel + 0xb) & 0x1f)))) & msca_ch_en;
     }
 
@@ -8650,7 +8650,7 @@ int tisp_channel_start(int channel, void *attr)
         pr_info("*** tisp_channel_start: STREAMING ACTIVE - Preserving ISP Control register (0x9804) ***\n");
         pr_info("*** tisp_channel_start: Would write 0x%x but keeping current value to prevent shutdown ***\n", a1_1);
     } else {
-        system_reg_write(0x9804, a1_1);
+        //system_reg_write(0x9804, a1_1);
         pr_info("*** tisp_channel_start: ISP Control register written: 0x%x (not streaming) ***\n", a1_1);
     }
 
@@ -10166,7 +10166,7 @@ static int tisp_mdns_all_reg_refresh(uint32_t base_addr)
 
     /* Binary Ninja implementation:
      * tisp_mdns_intp(arg1);
-     * system_reg_write(0x7804, 0x110);
+     * //system_reg_write(0x7804, 0x110);
      * tisp_mdns_y_3d_param_cfg();
      * tisp_mdns_y_2d_param_cfg();
      * tisp_mdns_c_3d_param_cfg();
@@ -10175,7 +10175,7 @@ static int tisp_mdns_all_reg_refresh(uint32_t base_addr)
      */
 
     /* Key register writes for MDNS configuration */
-    system_reg_write(0x7804, 0x110);
+    //system_reg_write(0x7804, 0x110);
 
     return 0;
 }
@@ -10185,8 +10185,8 @@ static int tisp_mdns_reg_trigger(void)
 {
     pr_info("tisp_mdns_reg_trigger: Triggering MDNS register update\n");
 
-    /* Binary Ninja: system_reg_write(0x7804, 0x111); */
-    system_reg_write(0x7804, 0x111);
+    /* Binary Ninja: //system_reg_write(0x7804, 0x111); */
+    //system_reg_write(0x7804, 0x111);
 
     return 0;
 }
@@ -10307,7 +10307,7 @@ int tisp_s_adr_enable(int enable)
      *     tiziano_adr_init(sensor_info, data_b2e1c);
      *     $a1_1 = $v0 & 0xffffff7f;
      * }
-     * system_reg_write(0xc, $a1_1);
+     * //system_reg_write(0xc, $a1_1);
      */
 
     reg_val = system_reg_read(0xc);
@@ -10324,7 +10324,7 @@ int tisp_s_adr_enable(int enable)
         return -EINVAL;
     }
 
-    system_reg_write(0xc, reg_val);
+    //system_reg_write(0xc, reg_val);
     return 0;
 }
 
@@ -11340,4 +11340,4 @@ int data_b2f08(uint32_t param, int flag)
 }
 
 /* REMOVED: Static stub system_reg_write - use external implementation from tx-isp-module.c */
-/* The real system_reg_write() that does actual hardware writes is declared extern */
+/* The real //system_reg_write() that does actual hardware writes is declared extern */
