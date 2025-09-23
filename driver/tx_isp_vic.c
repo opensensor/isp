@@ -825,8 +825,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     /* CRITICAL FIX: Use EXACT atleast-95 VIC interrupt configuration */
     /* The atleast-95 version had working VIC interrupts with this exact config */
-    void __iomem *vic_w01_base = vic_dev->vic_regs_secondary;  /* Use secondary VIC space like atleast-95 */
-
+    void __iomem *vic_w01_base = vic_dev->vic_regs_control;  
     if (vic_w01_base) {
         /* EXACT atleast-95 sequence: Disable during config, then enable all */
         writel(0x0, vic_w01_base + 0x1e0);        /* Disable all interrupts during config */
