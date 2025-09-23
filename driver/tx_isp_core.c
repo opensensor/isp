@@ -1477,10 +1477,10 @@ struct tx_isp_sensor *tx_isp_get_sensor(void)
             /* The Core device has sensor ops for registration but is not a real sensor */
             if (sd->ops != &core_subdev_ops) {
                 /* CRITICAL FIX: The subdev IS the sensor - don't use container_of */
-                /* The sensor structure is stored as hostdata in the subdev */
-                struct tx_isp_sensor *sensor = (struct tx_isp_sensor *)sd->hostdata;
+                /* The sensor structure is stored as host_priv in the subdev */
+                struct tx_isp_sensor *sensor = (struct tx_isp_sensor *)tx_isp_get_subdev_hostdata(sd);
                 if (!sensor) {
-                    pr_info("*** tx_isp_get_sensor: Found sensor subdev at index %d but no hostdata - creating sensor structure ***\n", i);
+                    pr_info("*** tx_isp_get_sensor: Found sensor subdev at index %d but no host_priv - creating sensor structure ***\n", i);
                     /* Create a sensor structure for this subdev */
                     sensor = kzalloc(sizeof(struct tx_isp_sensor), GFP_KERNEL);
                     if (!sensor) {
@@ -1489,7 +1489,7 @@ struct tx_isp_sensor *tx_isp_get_sensor(void)
                     }
                     /* Link the subdev and sensor */
                     sensor->sd = *sd;  /* Copy subdev structure */
-                    sd->hostdata = sensor;
+                    tx_isp_set_subdev_hostdata(sd, sensor);
                 }
                 pr_info("*** tx_isp_get_sensor: Found real sensor at index %d: %p ***\n", i, sensor);
 
