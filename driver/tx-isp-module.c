@@ -4940,8 +4940,10 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                 pr_info("*** SUBDEVICE INITIALIZATION LOOP ***\n");
 
                 /* FIXED: Use our actual subdev array at offset 0x38 in tx_isp_dev */
-                /* Binary Ninja iterates through subdev array and calls init functions */
-                for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+                /* CRITICAL FIX: Initialize subdevs in REVERSE order so sensors initialize BEFORE VIC streaming */
+                /* This prevents CSI PHY reconfiguration conflicts when VIC is already active */
+                pr_info("*** SUBDEVICE INITIALIZATION: Traversing backwards to initialize sensors first ***\n");
+                for (i = ISP_MAX_SUBDEVS - 1; i >= 0; i--) {
                     current_subdev = isp_dev->subdevs[i];
                     if (!current_subdev) {
                         continue;  /* Skip empty slots */
@@ -4954,7 +4956,7 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                     /* Binary Ninja: Call subdev init function */
                     struct tx_isp_subdev *sd = (struct tx_isp_subdev *)current_subdev;
                     if (sd->ops && sd->ops->core && sd->ops->core->init) {
-                        pr_info("Calling subdev %d initialization\n", i);
+                        pr_info("Calling subdev %d initialization (REVERSE ORDER - sensors first)\n", i);
                         subdev_result = sd->ops->core->init(sd, 1);
 
                         /* Binary Ninja: if ($v0_12 != 0 && $v0_12 != 0xfffffdfd) */
