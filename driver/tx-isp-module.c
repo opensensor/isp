@@ -2007,9 +2007,9 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
             }
         }
 
-        /* Verify core is ready for streaming */
-        if (arg1->core_dev && arg1->core_dev->state < 3) {
-            pr_err("tx_isp_video_s_stream: Core state %d < 3, not ready for streaming\n", arg1->core_dev->state);
+        /* CRITICAL FIX: Verify VIC is ready for streaming */
+        if (vic_dev && vic_dev->state < 3) {
+            pr_err("tx_isp_video_s_stream: VIC state %d < 3, not ready for streaming\n", vic_dev->state);
             return -EINVAL;
         }
 
