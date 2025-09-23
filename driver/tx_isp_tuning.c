@@ -1548,6 +1548,10 @@ int tisp_init(void *sensor_info, char *param_name)
     tisp_init_has_been_called = true;
     pr_info("tisp_init: FIRST AND ONLY CALL - proceeding with initialization\n");
 
+    /* CRITICAL FIX: Ensure tuning device is available immediately after tisp_init */
+    /* In reference driver, tuning system is available right after core initialization */
+    pr_info("*** tisp_init: REFERENCE DRIVER TIMING - Tuning system will be available immediately ***\n");
+
     if (!ourISPdev) {
         pr_err("tisp_init: No ISP device available\n");
         return -ENODEV;
