@@ -297,10 +297,8 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     vic_dev->frame_count = 0;
     /* *($s0 + 0x168) = 0 - VIC device uses different counter names */
     vic_dev->total_errors = 0;
-    /* *($s0 + 0x170) = 0 - VIC device uses different counter names */
-    vic_dev->dropped_frames = 0;
-    /* *($s0 + 0x160) = 0 */
-    vic_dev->total_frames = 0;
+    /* REMOVED: dropped_frames and total_frames - not available in VIC device structure */
+    /* Use frame_count and total_errors for frame tracking */
 
     /* CRITICAL FIX: Binary Ninja: int32_t $v0_3 = *($s0 + 0xe8) - Get VIC state */
     int v0_3 = vic_state;
