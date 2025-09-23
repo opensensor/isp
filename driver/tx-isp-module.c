@@ -79,7 +79,7 @@ static int tx_isp_sensor_operation_helper(struct tx_isp_dev *isp_dev, unsigned i
 #define CSI_STATE_ERROR     3
 
 /* Forward declarations */
-struct tx_isp_sensor *tx_isp_get_sensor(void);
+/* Note: tx_isp_get_sensor is now defined in tx_isp_subdev_helpers.h with different signature */
 int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd);
 int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd);
 int tx_isp_vin_activate_subdev(void* arg1);  /* Binary Ninja signature */
