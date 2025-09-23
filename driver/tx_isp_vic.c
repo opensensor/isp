@@ -814,109 +814,15 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(2, vic_regs + 0x0);
     }
 
-    /* CRITICAL FIX: Configure VIC interrupts BEFORE final enable */
-    /* VIC interrupt configuration happens here in tx_isp_vic_start, not in tx_vic_enable_irq */
-    pr_info("*** tx_isp_vic_start: Configuring VIC interrupts using PRIMARY VIC space ***\n");
-
-    /* Clear any pending interrupts first */
-    writel(0xFFFFFFFF, vic_regs + 0x1f0);  /* Clear main interrupt status */
-    writel(0xFFFFFFFF, vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
-    wmb();
-
-    /* CRITICAL FIX: Use EXACT atleast-95 VIC interrupt configuration */
-    /* The atleast-95 version had working VIC interrupts with this exact config */
-    void __iomem *vic_w01_base = vic_dev->vic_regs_control;  
-    if (vic_w01_base) {
-        /* EXACT atleast-95 sequence: Disable during config, then enable all */
-        writel(0x0, vic_w01_base + 0x1e0);        /* Disable all interrupts during config */
-        writel(0xffffffff, vic_w01_base + 0x1e8); /* Mask all interrupts during config */
-        wmb();
-
-        /* Now enable ALL interrupts like atleast-95 */
-        writel(0xffffffff, vic_w01_base + 0x1e0); /* Enable ALL interrupts */
-        writel(0x0, vic_w01_base + 0x1e8);        /* Clear ALL interrupt masks */
-        wmb();
-
-        pr_info("*** tx_isp_vic_start: EXACT atleast-95 VIC interrupt config - SECONDARY VIC space ***\n");
-        pr_info("*** VIC INTERRUPTS: 0x1e0=0xffffffff (enable all), 0x1e8=0x0 (clear all masks) ***\n");
+    /* Binary Ninja EXACT: Final VIC enable - *vic_regs = 1 */
+    /* Use SECONDARY VIC space for enable (same as unlock sequence) */
+    void __iomem *vic_enable_regs = vic_dev->vic_regs_secondary;
+    if (vic_enable_regs) {
+        writel(1, vic_enable_regs + 0x0);
+        pr_info("*** tx_isp_vic_start: VIC enabled using SECONDARY VIC space ***\n");
     } else {
-        /* Fallback to primary space if secondary not available */
-        writel(0xffffffff, vic_regs + 0x1e0);     /* Enable ALL interrupts */
-        writel(0x0, vic_regs + 0x1e8);            /* Clear ALL interrupt masks */
-        writel(0xFFFFFFFF, vic_regs + 0x1ec);     /* Disable all MDMA interrupts */
-        wmb();
-
-        pr_info("*** tx_isp_vic_start: atleast-95 VIC interrupt config - PRIMARY VIC space (fallback) ***\n");
-    }
-
-    /* CRITICAL FIX: Always restore VIC control registers to streaming state */
-    /* The tuning system turns off VIC control registers (0x9ac0, 0x9ac8) after initialization */
-    /* We need to restore them to streaming state (0x1) every time streaming starts */
-    if (vic_regs) {
-        /* Read current VIC control register values */
-        u32 vic_ctrl_1 = readl(vic_regs + 0x9ac0);
-        u32 vic_ctrl_2 = readl(vic_regs + 0x9ac8);
-        pr_info("*** VIC CONTROL FIX: Current VIC control values: 0x9ac0=0x%x, 0x9ac8=0x%x ***\n", vic_ctrl_1, vic_ctrl_2);
-    }
-
-    /* STREAM->OFF->STREAM PRESERVATION: Don't reset working VIC hardware */
-    /* Check ACTUAL VIC hardware state from the CORRECT register space */
-    u32 vic_hardware_state = 0;
-
-    /* CRITICAL FIX: Read VIC hardware state from PRIMARY VIC space, not unlock space */
-    /* The unlock space (0x10023000) contains unlock values, not hardware state */
-    /* The hardware state should be read from the primary VIC space (0x133e0000) */
-    if (vic_regs) {
-        vic_hardware_state = readl(vic_regs + 0x0);
-        pr_info("*** VIC STATE CHECK: Reading from PRIMARY VIC space (0x133e0000) reg 0x0 = 0x%x ***\n", vic_hardware_state);
-    }
-
-    /* Only do full VIC hardware initialization if VIC hardware is not already streaming */
-    if (vic_regs && vic_hardware_state != 0x3130322a) {
-        pr_info("*** VIC PRESERVATION: VIC hardware not streaming (reg 0x0 = 0x%x), doing full hardware init ***\n", vic_hardware_state);
-
-        /* CRITICAL FIX: Configure VIC interrupts BEFORE hardware initialization */
-        /* This must happen before the 2->4->wait->1 sequence */
-        void __iomem *vic_w01_base = vic_dev->vic_regs_control;
-
-        if (vic_w01_base) {
-            /* EXACT atleast-95 sequence: Disable during config, then enable all */
-            writel(0x0, vic_w01_base + 0x1e0);        /* Disable all interrupts during config */
-            writel(0xffffffff, vic_w01_base + 0x1e8); /* Mask all interrupts during config */
-            wmb();
-
-            /* Now enable ALL interrupts like atleast-95 */
-            writel(0xffffffff, vic_w01_base + 0x1e0); /* Enable ALL interrupts */
-            writel(0x0, vic_w01_base + 0x1e8);        /* Clear ALL interrupt masks */
-            wmb();
-
-            pr_info("*** VIC INTERRUPTS: CONFIGURED BEFORE HARDWARE INIT - 0x1e0=0xffffffff, 0x1e8=0x0 ***\n");
-        } else {
-            pr_warn("*** VIC INTERRUPTS: No control register space available ***\n");
-        }
-
-        /* Binary Ninja EXACT: Hardware enable sequence from working version */
-        writel(0x2, vic_regs + 0x0);        /* Pre-enable state */
-        wmb();
-        writel(0x4, vic_regs + 0x0);        /* Wait state */
-        wmb();
-
-        /* Wait for hardware ready */
-        u32 wait_count = 0;
-        u32 vic_status;
-        while ((vic_status = readl(vic_regs + 0x0)) != 0 && wait_count < 1000) {
-            wait_count++;
-            udelay(1);
-        }
-
-        writel(0x1, vic_regs + 0x0);        /* Final enable - START STREAMING */
-        wmb();
-
-        pr_info("*** VIC PRESERVATION: VIC hardware initialized (2->4->wait->1, waited %d us) ***\n", wait_count);
-        pr_info("*** VIC PRESERVATION: VIC register 0x0 = 0x1 (STREAMING STATE) ***\n");
-    } else {
-        pr_info("*** VIC PRESERVATION: VIC hardware already streaming (reg 0x0 = 0x%x), preserving hardware state ***\n", vic_hardware_state);
-        pr_info("*** VIC PRESERVATION: Skipping hardware reinitialization to preserve working VIC ***\n");
+        pr_err("tx_isp_vic_start: No SECONDARY VIC registers for final enable\n");
+        return -EINVAL;
     }
 
     /* Binary Ninja EXACT: Set vic_start_ok global flag */
