@@ -350,23 +350,23 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     extern struct tx_isp_subdev_ops fs_subdev_ops;
 
     if (ourISPdev) {
-        if (ops == &core_subdev_ops) {
-            /* CORE should be at index 0 - it initializes first to set up clocks, power domains, and base registers */
-            ourISPdev->subdevs[0] = sd;  /* Core at index 0 */
+        if (ops == &csi_subdev_ops) {
+            /* CSI at index 0 - establishes physical data interface first */
+            ourISPdev->subdevs[0] = sd;  /* CSI at index 0 */
             sd->isp = ourISPdev;
-            pr_info("*** tx_isp_subdev_init: Core ISP subdev registered at index 0 ***\n");
-        } else if (ops == &csi_subdev_ops) {
-            /* CSI at index 1 - establishes physical data interface after CORE is ready */
-            ourISPdev->subdevs[1] = sd;  /* CSI at index 1 */
-            sd->isp = ourISPdev;
-            pr_info("*** tx_isp_subdev_init: CSI subdev registered at index 1 ***\n");
+            pr_info("*** tx_isp_subdev_init: CSI subdev registered at index 0 ***\n");
         } else if (ops == &vic_subdev_ops) {
-            /* VIC at index 3 - processing controller configures image processing pipelines */
+            /* VIC at index 1 - processing controller after CSI */
             struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
             ourISPdev->vic_dev = vic_dev;
-            ourISPdev->subdevs[3] = sd;
+            ourISPdev->subdevs[1] = sd;
             sd->isp = ourISPdev;
-            pr_info("*** tx_isp_subdev_init: VIC device linked and registered at index 3 ***\n");
+            pr_info("*** tx_isp_subdev_init: VIC device linked and registered at index 1 ***\n");
+        } else if (ops == &core_subdev_ops) {
+            /* CORE at index 4 - sink that processes data from sources */
+            ourISPdev->subdevs[4] = sd;  /* Core at index 4 */
+            sd->isp = ourISPdev;
+            pr_info("*** tx_isp_subdev_init: Core ISP subdev registered at index 4 ***\n");
         } else if (ops && ops->sensor && ops != &csi_subdev_ops && ops != &vic_subdev_ops && ops != &fs_subdev_ops) {
             /* CRITICAL FIX: This is a REAL sensor subdev (not CSI, VIC, or FS which also have sensor ops) */
             pr_info("*** tx_isp_subdev_init: DETECTED SENSOR SUBDEV - ops=%p, ops->sensor=%p ***\n", ops, ops->sensor);
@@ -687,12 +687,12 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         ourISPdev->fs_dev = (struct frame_source_device *)fs_dev;
         pr_info("*** LINKED FS device: %p ***\n", fs_dev);
 
-        /* FS at index 4 - frame synchronization coordinates the already-initialized components */
-        if (ourISPdev->subdevs[4] == NULL) {
-            ourISPdev->subdevs[4] = &fs_dev->subdev;
-            pr_info("*** REGISTERED FS SUBDEV AT INDEX 4 WITH SUBDEV OPS ***\n");
+        /* FS at index 3 - frame synchronization coordinates the already-initialized components */
+        if (ourISPdev->subdevs[3] == NULL) {
+            ourISPdev->subdevs[3] = &fs_dev->subdev;
+            pr_info("*** REGISTERED FS SUBDEV AT INDEX 3 WITH SUBDEV OPS ***\n");
         } else {
-            pr_err("*** FS subdev slot (index 4) already occupied ***\n");
+            pr_err("*** FS subdev slot (index 3) already occupied ***\n");
         }
 
     } else if (strcmp(dev_name, "isp-m0") == 0) {

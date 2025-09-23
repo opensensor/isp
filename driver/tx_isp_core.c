@@ -2543,6 +2543,7 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
             /* Binary Ninja: Subdevice slake loop */
             /* void* $s3_1 = $s0_1 + 0x38 - SAFE: Get subdev array */
             pr_info("ispcore_slake_module: Processing subdevices");
+            pr_info("*** DEBUG: isp_dev=%p, isp_dev->subdevs=%p ***", isp_dev, isp_dev->subdevs);
 
             for (i = 0; i < 16; i++) {  /* Binary Ninja shows loop through subdev array */
                     struct tx_isp_subdev *subdev = isp_dev->subdevs[i];
@@ -2554,6 +2555,12 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
 
                     /* CRITICAL DEBUG: Log each subdev being processed */
                     pr_info("*** ispcore_slake_module: Processing subdev[%d]=%p ***\n", i, subdev);
+
+                    /* CRITICAL: Validate subdev pointer is in valid kernel memory range */
+                    if ((unsigned long)subdev < 0x80000000 || (unsigned long)subdev >= 0xfffff000) {
+                        pr_err("*** ispcore_slake_module: subdev[%d]=%p is INVALID - skipping to prevent crash ***\n", i, subdev);
+                        continue;
+                    }
 
                     /* Binary Ninja: if ($s2_1 u>= 0xfffff001) continue */
                     if ((unsigned long)subdev >= 0xfffff001) {
@@ -5327,11 +5334,11 @@ int tx_isp_link_core_device(struct tx_isp_dev *isp_dev, struct tx_isp_core_devic
     core_dev->isp_dev = isp_dev;
     core_dev->sd.isp = isp_dev;
 
-    /* Register core subdev in subdevs array at index 0 - CORE initializes first */
-    isp_dev->subdevs[0] = &core_dev->sd;
+    /* Register core subdev in subdevs array at index 4 - CORE is sink after sources */
+    isp_dev->subdevs[4] = &core_dev->sd;
 
     pr_info("*** tx_isp_link_core_device: Core device linked successfully ***\n");
-    pr_info("*** Core subdev registered at index 0: %p ***\n", &core_dev->sd);
+    pr_info("*** Core subdev registered at index 4: %p ***\n", &core_dev->sd);
 
     return 0;
 }
