@@ -830,26 +830,37 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     pr_info("*** tx_isp_vic_start: VIC interrupt masks configured (0x1e8=0xFFFFFFFE enables bit 0) ***\n");
 
-    /* CRITICAL FIX: Write to the ACTUAL VIC control registers that show up in traces */
-    /* The register traces show 0x9ac0 and 0x9ac8 need to transition from 0x200 to 0x1 */
+    /* CRITICAL DEBUG: Force VIC control registers to streaming state regardless of current value */
+    /* The issue is that registers are at 0x0 when we expect 0x200, so force them to 0x1 */
     if (vic_regs) {
-        pr_info("*** CRITICAL FIX: Transitioning VIC control registers 0x9ac0/0x9ac8 from 0x200 to 0x1 ***\n");
+        pr_info("*** FORCE VIC STREAMING: Setting VIC control registers to 0x1 regardless of current state ***\n");
 
-        /* Read current values to confirm they're at 0x200 (configure state) */
+        /* Read current values for debugging */
         u32 vic_ctrl_1 = readl(vic_regs + 0x9ac0);
         u32 vic_ctrl_2 = readl(vic_regs + 0x9ac8);
-        pr_info("*** CRITICAL FIX: Current VIC control values: 0x9ac0=0x%x, 0x9ac8=0x%x ***\n", vic_ctrl_1, vic_ctrl_2);
+        pr_info("*** FORCE VIC STREAMING: Current values BEFORE: 0x9ac0=0x%x, 0x9ac8=0x%x ***\n", vic_ctrl_1, vic_ctrl_2);
 
-        /* Transition from configure state (0x200) to streaming state (0x1) */
-        writel(0x1, vic_regs + 0x9ac0);     /* VIC control register 1: 0x200 -> 0x1 */
-        writel(0x1, vic_regs + 0x9ac8);     /* VIC control register 2: 0x200 -> 0x1 */
+        /* FORCE streaming state - write 0x1 regardless of current value */
+        writel(0x1, vic_regs + 0x9ac0);     /* Force VIC control register 1 to streaming */
+        writel(0x1, vic_regs + 0x9ac8);     /* Force VIC control register 2 to streaming */
         wmb();
 
-        /* Verify the transition worked */
+        /* Wait a bit for hardware to process */
+        udelay(100);
+
+        /* Verify the write worked */
         vic_ctrl_1 = readl(vic_regs + 0x9ac0);
         vic_ctrl_2 = readl(vic_regs + 0x9ac8);
-        pr_info("*** CRITICAL FIX: VIC control registers transitioned to streaming: 0x9ac0=0x%x, 0x9ac8=0x%x ***\n", vic_ctrl_1, vic_ctrl_2);
-        pr_info("*** CRITICAL FIX: VIC should now generate interrupts when frames are captured! ***\n");
+        pr_info("*** FORCE VIC STREAMING: Values AFTER write: 0x9ac0=0x%x, 0x9ac8=0x%x ***\n", vic_ctrl_1, vic_ctrl_2);
+
+        if (vic_ctrl_1 == 0x1 && vic_ctrl_2 == 0x1) {
+            pr_info("*** FORCE VIC STREAMING: SUCCESS! VIC control registers set to streaming state ***\n");
+        } else {
+            pr_err("*** FORCE VIC STREAMING: FAILED! Registers did not accept 0x1 value ***\n");
+            pr_err("*** FORCE VIC STREAMING: This suggests register mapping or hardware issue ***\n");
+        }
+
+        pr_info("*** FORCE VIC STREAMING: VIC should now generate interrupts when frames are captured! ***\n");
     } else {
         pr_err("tx_isp_vic_start: No PRIMARY VIC registers for control register transition\n");
         return -EINVAL;
