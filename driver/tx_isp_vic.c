@@ -830,31 +830,34 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     pr_info("*** tx_isp_vic_start: VIC interrupt masks configured (0x1e8=0xFFFFFFFE enables bit 0) ***\n");
 
-    /* Binary Ninja EXACT: Final VIC enable - *vic_regs = 1 */
-    /* Use SECONDARY VIC space for enable (same as unlock sequence) */
-    void __iomem *vic_enable_regs = vic_dev->vic_regs_control;
-    if (vic_enable_regs) {
-        writel(1, vic_enable_regs + 0x0);
-        pr_info("*** tx_isp_vic_start: VIC enabled using SECONDARY VIC space ***\n");
-    } else {
-        pr_err("tx_isp_vic_start: No SECONDARY VIC registers for final enable\n");
-        return -EINVAL;
-    }
+    /* ATLEAST-95 WORKING APPROACH: Conditional VIC hardware enable sequence */
+    /* Only enable VIC hardware if it's not already working (vic_start_ok != 1) */
+    if (vic_regs && vic_start_ok != 1) {
+        pr_info("*** ATLEAST-95 APPROACH: VIC hardware enable sequence (vic_start_ok=%d) ***\n", vic_start_ok);
 
-    /* CRITICAL FIX: Transition PRIMARY VIC space from configure (0x200) to streaming (0x1) */
-    /* The register traces show that 0x9ac0 and 0x9ac8 need to transition from 0x200 to 0x1 */
-    if (vic_regs) {
-        pr_info("*** CRITICAL FIX: Transitioning PRIMARY VIC control registers from configure (0x200) to streaming (0x1) ***\n");
-
-        /* Write 0x1 to VIC control registers to start streaming */
-        writel(0x1, vic_regs + 0x9ac0);  /* PRIMARY VIC control register 1 */
-        writel(0x1, vic_regs + 0x9ac8);  /* PRIMARY VIC control register 2 */
+        /* Binary Ninja EXACT: Hardware enable sequence from working version */
+        writel(0x2, vic_regs + 0x0);        /* Pre-enable state */
+        wmb();
+        writel(0x4, vic_regs + 0x0);        /* Wait state */
         wmb();
 
-        pr_info("*** CRITICAL FIX: VIC control registers 0x9ac0 and 0x9ac8 set to 0x1 (streaming state) ***\n");
-        pr_info("*** CRITICAL FIX: VIC should now generate interrupts when frames are captured! ***\n");
+        /* Wait for hardware ready */
+        u32 wait_count = 0;
+        u32 vic_status;
+        while ((vic_status = readl(vic_regs + 0x0)) != 0 && wait_count < 1000) {
+            wait_count++;
+            udelay(1);
+        }
+
+        writel(0x1, vic_regs + 0x0);        /* Final enable - START STREAMING */
+        wmb();
+
+        pr_info("*** ATLEAST-95 APPROACH: VIC hardware enabled (2->4->wait->1, waited %d us) ***\n", wait_count);
+        pr_info("*** ATLEAST-95 APPROACH: VIC register 0x0 = 0x1 (STREAMING STATE) ***\n");
+    } else if (vic_start_ok == 1) {
+        pr_info("*** ATLEAST-95 APPROACH: VIC already working (vic_start_ok=1), preserving state ***\n");
     } else {
-        pr_err("tx_isp_vic_start: No PRIMARY VIC registers for streaming transition\n");
+        pr_err("tx_isp_vic_start: No PRIMARY VIC registers for hardware enable\n");
         return -EINVAL;
     }
 
