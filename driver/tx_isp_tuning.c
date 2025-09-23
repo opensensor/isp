@@ -1534,8 +1534,12 @@ int tisp_init(void *sensor_info, char *param_name)
         uint32_t mode;
     } sensor_params = {1920, 1080, 25, 0}; /* Default sensor parameters */
 
-    pr_info("*** tisp_init: IMPLEMENTING MISSING HARDWARE REGISTER INITIALIZATION ***\n");
+    static int tisp_init_call_count = 0;
+    tisp_init_call_count++;
+
+    pr_info("*** tisp_init: CALL #%d - IMPLEMENTING MISSING HARDWARE REGISTER INITIALIZATION ***\n", tisp_init_call_count);
     pr_info("*** THIS FUNCTION CONTAINS ALL THE system_reg_write CALLS FROM REFERENCE ***\n");
+    pr_info("*** tisp_init: VIC control registers 0x9ac0/0x9ac8 REMOVED per Binary Ninja reference ***\n");
 
     if (!ourISPdev) {
         pr_err("tisp_init: No ISP device available\n");
