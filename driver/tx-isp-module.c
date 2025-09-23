@@ -1852,8 +1852,6 @@ int tx_isp_video_link_stream(struct tx_isp_dev *arg1, int arg2)
     /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
     s4 = arg1->subdevs;  /* Subdev array at offset 0x38 */
 
-
-
     /* Binary Ninja: for (int32_t i = 0; i != 0x10; ) */
     for (i = 0; i != 0x10; ) {
         /* Binary Ninja: void* $a0 = *$s4 */
@@ -1913,8 +1911,7 @@ int tx_isp_video_link_stream(struct tx_isp_dev *arg1, int arg2)
                                             continue;
                                         } else {
                                             /* Binary Ninja: $v0_7($a0_1, arg2 u< 1 ? 1 : 0) */
-                                            int rollback_enable = (arg2 < 1) ? 1 : 0;
-                                            v0_7(a0_1, rollback_enable);
+                                            v0_7(a0_1, arg2 < 1 ? 1 : 0);
                                             /* Binary Ninja: $s0_1 -= 4 (already done above) */
                                         }
                                     }
@@ -1939,7 +1936,6 @@ int tx_isp_video_link_stream(struct tx_isp_dev *arg1, int arg2)
     }
 
     /* Binary Ninja: return 0 */
-    pr_info("*** tx_isp_video_s_stream: EXACT Binary Ninja reference implementation complete ***\n");
     return 0;
 }
 
@@ -1988,72 +1984,8 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
 
     pr_info("*** tx_isp_video_s_stream: EXACT Binary Ninja reference implementation - enable=%d ***\n", arg2);
 
-    /* CRITICAL FIX: Initialize core before streaming starts */
-    if (arg2 == 1) {  /* Stream ON */
-        pr_info("*** tx_isp_video_s_stream: STREAM ON - Initializing core first ***\n");
-
-        /* CRITICAL FIX: Step 1: Activate core module (VIC 1 → 2 state transition) */
-        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)arg1->vic_dev;
-        if (vic_dev && vic_dev->state == 1) {
-            pr_info("*** tx_isp_video_s_stream: VIC state is 1, calling activate_module ***\n");
-            result = ispcore_activate_module(arg1);
-            if (result != 0) {
-                pr_err("tx_isp_video_s_stream: ispcore_activate_module failed: %d\n", result);
-                return result;
-            }
-            pr_info("*** tx_isp_video_s_stream: ispcore_activate_module completed ***\n");
-        }
-
-        /* CRITICAL FIX: Step 2: Initialize VIC core (VIC 2 → 3 state transition) */
-        if (vic_dev && vic_dev->state == 2) {
-            /* CRITICAL FIX: Call VIC subdev's core->init, not ISP core's init */
-            struct tx_isp_subdev *vic_sd = &vic_dev->sd;
-            if (vic_sd->ops && vic_sd->ops->core && vic_sd->ops->core->init) {
-                pr_info("*** tx_isp_video_s_stream: VIC state is 2, calling VIC core->init ***\n");
-                result = vic_sd->ops->core->init(vic_sd, 1);
-                if (result != 0) {
-                    pr_err("tx_isp_video_s_stream: VIC core->init failed: %d\n", result);
-                    return result;
-                }
-                pr_info("*** tx_isp_video_s_stream: VIC core->init completed, VIC should now be state 3 ***\n");
-            } else {
-                pr_err("tx_isp_video_s_stream: VIC core->init not available\n");
-                return -EINVAL;
-            }
-        }
-
-        /* CRITICAL FIX: Verify VIC is ready for streaming */
-        if (vic_dev && vic_dev->state < 3) {
-            pr_err("tx_isp_video_s_stream: VIC state %d < 3, not ready for streaming\n", vic_dev->state);
-            return -EINVAL;
-        }
-
-        pr_info("*** tx_isp_video_s_stream: Core initialization complete, proceeding with subdev streaming ***\n");
-    }
-
     /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
     s4 = arg1->subdevs;
-
-    /* CRITICAL FIX: Initialize all subdevs BEFORE calling s_stream */
-    if (arg2 == 1) {  /* Stream ON - initialize subdevs first */
-        pr_info("*** tx_isp_video_s_stream: CRITICAL FIX - Initializing all subdevs before streaming ***\n");
-
-        for (i = 0; i != 0x10; i++) {
-            struct tx_isp_subdev *sd = arg1->subdevs[i];
-            if (sd != NULL && sd->ops && sd->ops->core && sd->ops->core->init) {
-                pr_info("*** tx_isp_video_s_stream: Calling subdev[%d]->ops->core->init(1) ***\n", i);
-                result = sd->ops->core->init(sd, 1);
-                if (result != 0 && result != -ENOIOCTLCMD) {
-                    pr_err("tx_isp_video_s_stream: subdev[%d] init failed: %d\n", i, result);
-                    return result;
-                }
-                pr_info("*** tx_isp_video_s_stream: subdev[%d] init SUCCESS ***\n", i);
-            } else if (sd != NULL) {
-                pr_info("*** tx_isp_video_s_stream: subdev[%d] has no init function - skipping ***\n", i);
-            }
-        }
-        pr_info("*** tx_isp_video_s_stream: All subdev initialization complete - proceeding with s_stream ***\n");
-    }
 
     /* Binary Ninja: for (int32_t i = 0; i != 0x10; ) */
     for (i = 0; i != 0x10; ) {
@@ -2074,15 +2006,13 @@ int tx_isp_video_s_stream(struct tx_isp_dev *arg1, int arg2)
                     i += 1;
                 } else {
                     /* Binary Ninja: int32_t result = $v0_4($a0, arg2) */
-                    pr_info("*** tx_isp_video_s_stream: Calling subdev[%d]->ops->video->s_stream(%d) ***\n", i, arg2);
                     result = v0_4(a0, arg2);
 
                     if (result == 0) {
-                        pr_info("*** tx_isp_video_s_stream: subdev[%d] s_stream SUCCESS ***\n", i);
                         i += 1;
                     } else {
                         /* Binary Ninja: if (result != 0xfffffdfd) */
-                        if (result != 0xfffffdfd) {
+                        if (result != -ENOIOCTLCMD) {
                             /* Binary Ninja: void* $s0_1 = arg1 + (i << 2) */
                             struct tx_isp_subdev **s0_1 = &arg1->subdevs[i];
 
