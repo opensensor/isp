@@ -862,13 +862,45 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     pr_info("*** tx_isp_vic_start: VIC processing enabled (0x0=0x1, 0x4=0x1) ***\n");
 
     /* CRITICAL FIX: Enable VIC interrupt generation - from working commits */
+    pr_info("*** tx_isp_vic_start: Writing VIC interrupt registers to PRIMARY VIC space (0x133e0000) ***\n");
     writel(0x00000001, vic_regs + 0x1e0);  /* Enable frame done interrupt */
     writel(0x00000000, vic_regs + 0x1e8);  /* Unmask frame done interrupt */
     writel(0x00000003, vic_regs + 0x1e4);  /* Enable MDMA channel 0,1 interrupts */
     writel(0x00000000, vic_regs + 0x1ec);  /* Unmask MDMA interrupts */
     writel(0x00000001, vic_regs + 0x30c);  /* Enable VIC DMA interrupts */
     wmb();
+
+    /* CRITICAL DEBUG: Verify interrupt registers were written correctly */
+    u32 verify_1e0 = readl(vic_regs + 0x1e0);
+    u32 verify_1e8 = readl(vic_regs + 0x1e8);
+    u32 verify_1e4 = readl(vic_regs + 0x1e4);
+    u32 verify_1ec = readl(vic_regs + 0x1ec);
+    u32 verify_30c = readl(vic_regs + 0x30c);
+    pr_info("*** VIC INTERRUPT REGISTER VERIFICATION ***\n");
+    pr_info("  0x1e0 (frame done enable) = 0x%08x (expected: 0x00000001)\n", verify_1e0);
+    pr_info("  0x1e8 (frame done mask) = 0x%08x (expected: 0x00000000)\n", verify_1e8);
+    pr_info("  0x1e4 (MDMA enable) = 0x%08x (expected: 0x00000003)\n", verify_1e4);
+    pr_info("  0x1ec (MDMA mask) = 0x%08x (expected: 0x00000000)\n", verify_1ec);
+    pr_info("  0x30c (DMA enable) = 0x%08x (expected: 0x00000001)\n", verify_30c);
+
     pr_info("*** tx_isp_vic_start: VIC interrupts enabled for frame processing ***\n");
+
+    /* CRITICAL EXPERIMENT: Also try writing VIC interrupt registers to SECONDARY VIC space */
+    if (vic_dev->vic_regs_control) {
+        pr_info("*** tx_isp_vic_start: EXPERIMENT - Writing VIC interrupt registers to SECONDARY VIC space (0x10023000) ***\n");
+        writel(0x00000001, vic_dev->vic_regs_control + 0x1e0);  /* Enable frame done interrupt */
+        writel(0x00000000, vic_dev->vic_regs_control + 0x1e8);  /* Unmask frame done interrupt */
+        writel(0x00000003, vic_dev->vic_regs_control + 0x1e4);  /* Enable MDMA channel 0,1 interrupts */
+        writel(0x00000000, vic_dev->vic_regs_control + 0x1ec);  /* Unmask MDMA interrupts */
+        writel(0x00000001, vic_dev->vic_regs_control + 0x30c);  /* Enable VIC DMA interrupts */
+        wmb();
+
+        /* Verify secondary space writes */
+        u32 sec_1e0 = readl(vic_dev->vic_regs_control + 0x1e0);
+        u32 sec_1e8 = readl(vic_dev->vic_regs_control + 0x1e8);
+        pr_info("*** SECONDARY VIC INTERRUPT REGISTER VERIFICATION ***\n");
+        pr_info("  Secondary 0x1e0 = 0x%08x, Secondary 0x1e8 = 0x%08x\n", sec_1e0, sec_1e8);
+    }
 
     /* Binary Ninja: Final configuration registers */
     writel(0x100010, vic_regs + 0x1a4);
