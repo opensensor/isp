@@ -62,22 +62,32 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             vic_dev->irq_handler(vic_dev->irq_priv);
         }
 
-        /* CRITICAL FIX: Enable VIC hardware interrupt generation using SECONDARY register space */
-        /* From working commits: VIC interrupts must be configured in secondary register space (0x10023000) */
-        if (vic_dev->vic_regs_control) {
-            /* Clear any pending interrupts first in secondary space */
-            writel(0xFFFFFFFF, vic_dev->vic_regs_control + 0x1f0);  /* Clear main interrupt status */
-            writel(0xFFFFFFFF, vic_dev->vic_regs_control + 0x1f4);  /* Clear MDMA interrupt status */
+        /* CRITICAL FIX: Enable VIC hardware interrupt generation using PRIMARY register space */
+        /* From working commits: VIC interrupts need to be enabled in PRIMARY VIC registers */
+        if (vic_dev->vic_regs) {
+            /* Clear any pending interrupts first */
+            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main interrupt status */
+            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
             wmb();
 
-            /* CRITICAL FIX: Enable VIC frame done interrupt using secondary register space */
-            /* From working commits: interrupt configuration must use secondary space */
-            writel(0x00000000, vic_dev->vic_regs_control + 0x1e8);  /* Enable ALL VIC interrupts in secondary space */
+            /* CRITICAL FIX: Enable VIC frame done interrupt using PRIMARY register space */
+            /* From working commits: Enable frame done interrupt (bit 0) and MDMA interrupts */
+            writel(0x00000001, vic_dev->vic_regs + 0x1e0);  /* Enable frame done interrupt */
+            writel(0x00000000, vic_dev->vic_regs + 0x1e8);  /* Unmask frame done interrupt */
+            writel(0x00000003, vic_dev->vic_regs + 0x1e4);  /* Enable MDMA channel 0,1 interrupts */
+            writel(0x00000000, vic_dev->vic_regs + 0x1ec);  /* Unmask MDMA interrupts */
             wmb();
 
-            pr_info("*** tx_vic_enable_irq: CRITICAL FIX - VIC hardware interrupts ENABLED using SECONDARY register space (0x1e8=0x00000000) ***\n");
+            /* CRITICAL FIX: Enable VIC DMA interrupt generation - from working commits */
+            writel(0x00000001, vic_dev->vic_regs + 0x30c);  /* Enable VIC DMA interrupts */
+            wmb();
+
+            pr_info("*** tx_vic_enable_irq: CRITICAL FIX - VIC hardware interrupts ENABLED using PRIMARY register space ***\n");
+            pr_info("*** tx_vic_enable_irq: Frame done interrupt enabled (0x1e0=0x1, 0x1e8=0x0) ***\n");
+            pr_info("*** tx_vic_enable_irq: MDMA interrupts enabled (0x1e4=0x3, 0x1ec=0x0) ***\n");
+            pr_info("*** tx_vic_enable_irq: VIC DMA interrupts enabled (0x30c=0x1) ***\n");
         } else {
-            pr_err("*** tx_vic_enable_irq: CRITICAL ERROR - No VIC secondary registers mapped! ***\n");
+            pr_err("*** tx_vic_enable_irq: CRITICAL ERROR - No VIC primary registers mapped! ***\n");
         }
     }
 
@@ -108,20 +118,26 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
             vic_dev->irq_disable(vic_dev->irq_priv);
         }
 
-        /* CRITICAL FIX: Disable VIC hardware interrupt generation using SECONDARY register space */
-        /* From working commits: VIC interrupts must be configured in secondary register space */
-        if (vic_dev->vic_regs_control) {
-            /* Disable all VIC interrupts by masking them in secondary space */
-            writel(0xFFFFFFFF, vic_dev->vic_regs_control + 0x1e8);  /* Mask all main interrupts */
-            writel(0xFFFFFFFF, vic_dev->vic_regs_control + 0x1ec);  /* Mask all MDMA interrupts */
+        /* CRITICAL FIX: Disable VIC hardware interrupt generation using PRIMARY register space */
+        /* From working commits: VIC interrupts need to be disabled in PRIMARY VIC registers */
+        if (vic_dev->vic_regs) {
+            /* Disable VIC DMA interrupt generation first */
+            writel(0x00000000, vic_dev->vic_regs + 0x30c);  /* Disable VIC DMA interrupts */
             wmb();
 
-            /* Clear any pending interrupts in secondary space */
-            writel(0xFFFFFFFF, vic_dev->vic_regs_control + 0x1f0);  /* Clear main interrupt status */
-            writel(0xFFFFFFFF, vic_dev->vic_regs_control + 0x1f4);  /* Clear MDMA interrupt status */
+            /* Disable all VIC interrupts by masking them */
+            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1e8);  /* Mask all main interrupts */
+            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1ec);  /* Mask all MDMA interrupts */
+            writel(0x00000000, vic_dev->vic_regs + 0x1e0);  /* Disable frame done interrupt */
+            writel(0x00000000, vic_dev->vic_regs + 0x1e4);  /* Disable MDMA interrupts */
             wmb();
 
-            pr_info("*** tx_vic_disable_irq: CRITICAL FIX - VIC hardware interrupts DISABLED using SECONDARY register space ***\n");
+            /* Clear any pending interrupts */
+            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main interrupt status */
+            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
+            wmb();
+
+            pr_info("*** tx_vic_disable_irq: CRITICAL FIX - VIC hardware interrupts DISABLED using PRIMARY register space ***\n");
         }
     }
 
@@ -847,10 +863,20 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* CRITICAL FIX: Missing VIC Control register sequence from Binary Ninja reference */
     pr_info("*** tx_isp_vic_start: CRITICAL FIX - Writing VIC Control register sequence ***\n");
 
-    /* Binary Ninja: **(arg1 + 0xb8) = 2 */
-    writel(1, vic_regs + 0x0);  /* VIC Control register at offset 0x0 */
+    /* CRITICAL FIX: Enable VIC processing and frame processing - from working commits */
+    writel(0x1, vic_regs + 0x0);   /* Enable VIC processing (bit 0) */
+    writel(0x1, vic_regs + 0x4);   /* Enable VIC frame processing (bit 0) */
     wmb();
-    pr_info("*** tx_isp_vic_start: VIC Control[0x0] = 2 (prepare) ***\n");
+    pr_info("*** tx_isp_vic_start: VIC processing enabled (0x0=0x1, 0x4=0x1) ***\n");
+
+    /* CRITICAL FIX: Enable VIC interrupt generation - from working commits */
+    writel(0x00000001, vic_regs + 0x1e0);  /* Enable frame done interrupt */
+    writel(0x00000000, vic_regs + 0x1e8);  /* Unmask frame done interrupt */
+    writel(0x00000003, vic_regs + 0x1e4);  /* Enable MDMA channel 0,1 interrupts */
+    writel(0x00000000, vic_regs + 0x1ec);  /* Unmask MDMA interrupts */
+    writel(0x00000001, vic_regs + 0x30c);  /* Enable VIC DMA interrupts */
+    wmb();
+    pr_info("*** tx_isp_vic_start: VIC interrupts enabled for frame processing ***\n");
 
     /* Binary Ninja: Final configuration registers */
     writel(0x100010, vic_regs + 0x1a4);
@@ -859,11 +885,18 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0, vic_regs + 0x1b4);
     wmb();
 
+    /* CRITICAL FIX: Write VIC control register to start frame capture - from working commits */
+    /* This is what actually triggers VIC to start generating interrupts */
+    writel(0x80000020, vic_regs + 0x300);  /* VIC control register - start frame capture */
+    wmb();
+    pr_info("*** tx_isp_vic_start: CRITICAL - VIC control register 0x300 = 0x80000020 (start frame capture) ***\n");
+
     /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
     pr_info("*** tx_isp_vic_start: vic_start_ok set to 1 - EXACT Binary Ninja reference ***\n");
     vic_start_ok = 1;
-	enable_irq(38);
+    enable_irq(38);
     pr_info("*** tx_isp_vic_start: VIC Control register sequence complete - streaming should start ***\n");
+    pr_info("*** tx_isp_vic_start: VIC should now generate frame done interrupts! ***\n");
     return 0;
 }
 
@@ -1972,7 +2005,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     pr_info("*** VIC PROBE: Primary VIC registers mapped at 0x133e0000 -> %p ***\n", vic_dev->vic_regs);
 
     /* Secondary VIC register space (0x10023000) - VIC control operations */
-    vic_dev->vic_regs_control = ioremap(0x10023000, 0x1000);
+    vic_dev->vic_regs_control = ioremap(0x10023000, 0x10000);
     if (!vic_dev->vic_regs_control) {
         pr_err("*** VIC PROBE: CRITICAL - Failed to map VIC control registers at 0x10023000 ***\n");
         iounmap(vic_dev->vic_regs);
