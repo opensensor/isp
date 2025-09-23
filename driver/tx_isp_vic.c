@@ -860,10 +860,27 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
 
     /* STREAM->OFF->STREAM PRESERVATION: Don't reset working VIC hardware */
-    /* Check ACTUAL VIC hardware state instead of vic_start_ok */
+    /* Check ACTUAL VIC hardware state from the CORRECT register space */
     u32 vic_hardware_state = 0;
+
+    /* CRITICAL FIX: Read VIC hardware state from PRIMARY VIC space, not unlock space */
+    /* The unlock space (0x10023000) contains unlock values, not hardware state */
+    /* The hardware state should be read from the primary VIC space (0x133e0000) */
     if (vic_regs) {
         vic_hardware_state = readl(vic_regs + 0x0);
+        pr_info("*** VIC STATE CHECK: Reading from PRIMARY VIC space (0x133e0000) reg 0x0 = 0x%x ***\n", vic_hardware_state);
+
+        /* If we get unlock values instead of hardware state, try a different offset */
+        if (vic_hardware_state == 0x3130322a || vic_hardware_state == 0x0) {
+            /* Try reading from a different register that might contain the actual hardware state */
+            u32 alt_state = readl(vic_regs + 0x8);   /* Try offset 0x8 */
+            pr_info("*** VIC STATE CHECK: Alternative register 0x8 = 0x%x ***\n", alt_state);
+
+            if (alt_state == 0x1) {
+                vic_hardware_state = alt_state;
+                pr_info("*** VIC STATE CHECK: Using alternative register 0x8 for hardware state ***\n");
+            }
+        }
     }
 
     /* Only do full VIC hardware initialization if VIC hardware is not already streaming */
