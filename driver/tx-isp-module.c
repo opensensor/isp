@@ -4435,6 +4435,9 @@ static int tx_isp_init(void)
     /* CRITICAL: Verify interrupt handler addresses at module load */
     verify_handler_addresses();
 
+    /* CRITICAL DEBUG: Test interrupt handler manually to verify it works */
+    printk(KERN_ALERT "*** TESTING: Manual interrupt handler test will run after device initialization ***\n");
+
     /* Step 1: Check driver interface (matches reference) */
     gpio_mode_check = 0;  // Always return success for standard kernel
     if (gpio_mode_check != 0) {
