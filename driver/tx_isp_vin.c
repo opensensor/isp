@@ -431,6 +431,7 @@ static struct tx_isp_subdev_core_ops vin_subdev_core_ops = {
 
 static struct tx_isp_subdev_video_ops vin_subdev_video_ops = {
     .s_stream = vin_s_stream,
+    .link_stream = vin_s_stream,  /* CRITICAL FIX: tx_isp_video_link_stream calls link_stream! */
 };
 
 struct tx_isp_subdev_ops vin_subdev_ops = {

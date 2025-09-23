@@ -815,6 +815,7 @@ struct tx_isp_subdev_core_ops core_subdev_core_ops = {
 /* Core subdev video operations - GLOBAL to ensure proper accessibility */
 struct tx_isp_subdev_video_ops core_subdev_video_ops = {
     .s_stream = ispcore_video_s_stream,  /* CRITICAL: Wire in the video streaming function */
+    .link_stream = ispcore_video_s_stream,  /* CRITICAL FIX: tx_isp_video_link_stream calls link_stream! */
     .link_setup = ispcore_link_setup,    /* CRITICAL: Wire in the link setup function */
 };
 
