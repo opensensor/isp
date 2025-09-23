@@ -1526,6 +1526,7 @@ static int load_isp_tuning_file_real(const char *filename)
 
 /* Global variable to ensure tisp_init is only called once, ever */
 bool tisp_init_has_been_called = false;
+EXPORT_SYMBOL(tisp_init_has_been_called);
 
 int tisp_init(void *sensor_info, char *param_name)
 {
