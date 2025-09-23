@@ -4481,37 +4481,8 @@ static int tx_isp_init(void)
     ourISPdev->refcnt = 0;
     ourISPdev->is_open = false;
 
-    /* *** CRITICAL FIX: Register BOTH IRQ handlers like working driver-irqs *** */
-    pr_info("*** REGISTERING BOTH IRQ HANDLERS (37 + 38) FOR COMPLETE INTERRUPT SUPPORT ***\n");
-
-    /* Register IRQ 37 (isp-m0) - Primary ISP processing */
-    ret = request_threaded_irq(37,
-                              isp_irq_handle,
-                              isp_irq_thread_handle,
-                              IRQF_SHARED,
-                              "isp-m0",                /* Match stock driver name */
-                              ourISPdev);
-    if (ret != 0) {
-        pr_err("*** FAILED TO REQUEST IRQ 37 (isp-m0): %d ***\n", ret);
-    } else {
-        pr_info("*** SUCCESS: IRQ 37 (isp-m0) REGISTERED ***\n");
-        ourISPdev->isp_irq = 37;
-    }
-
-    /* Register IRQ 38 (isp-w02) - Secondary ISP channel */
-    ret = request_threaded_irq(38,
-                              isp_irq_handle,          /* Same handlers work for both IRQs */
-                              isp_irq_thread_handle,
-                              IRQF_SHARED,
-                              "isp-w02",               /* Match stock driver name */
-                              ourISPdev);
-    if (ret != 0) {
-        pr_err("*** FAILED TO REQUEST IRQ 38 (isp-w02): %d ***\n", ret);
-        pr_err("*** ONLY IRQ 37 WILL BE AVAILABLE ***\n");
-    } else {
-        pr_info("*** SUCCESS: IRQ 38 (isp-w02) REGISTERED ***\n");
-        ourISPdev->isp_irq2 = 38;  /* Store secondary IRQ */
-    }
+    /* *** CRITICAL FIX: Use tx_isp_request_irq like working driver-irqs *** */
+    pr_info("*** Following reference driver: IRQ registration handled by tx_isp_request_irq ***\n");
 
     /* Reference driver: All complex initialization happens in probe function */
     pr_info("TX ISP driver initialized successfully - explicit IRQ registration complete\n");
@@ -4779,29 +4750,14 @@ static void tx_isp_exit(void)
         ourISPdev = NULL;
         pr_info("*** ourISPdev set to NULL - interrupt handlers will now safely exit ***\n");
 
-        /* *** CRITICAL: Free both IRQ 37 and IRQ 38 that we explicitly registered *** */
-        pr_info("*** Freeing explicitly registered IRQs (37 + 38) ***\n");
-
-        /* Free IRQ 37 (isp-m0) */
-        if (local_isp_dev->isp_irq == 37) {
-            free_irq(37, local_isp_dev);
-            pr_info("*** IRQ 37 (isp-m0) freed ***\n");
-        }
-
-        /* Free IRQ 38 (isp-w02) */
-        if (local_isp_dev->isp_irq2 == 38) {
-            free_irq(38, local_isp_dev);
-            pr_info("*** IRQ 38 (isp-w02) freed ***\n");
-        }
-
-        /* Free hardware interrupts if initialized (legacy cleanup) */
-        if (isp_irq > 0 && isp_irq != 37 && isp_irq != 38) {
+        /* Free hardware interrupts if initialized */
+        if (isp_irq > 0) {
             free_irq(isp_irq, local_isp_dev);
             pr_info("Hardware interrupt %d freed\n", isp_irq);
         }
 
-        /* Free secondary interrupt if initialized (legacy cleanup) */
-        if (isp_irq2 > 0 && isp_irq2 != 37 && isp_irq2 != 38) {
+        /* Free secondary interrupt if initialized */
+        if (isp_irq2 > 0) {
             free_irq(isp_irq2, local_isp_dev);
             pr_info("Hardware interrupt %d freed\n", isp_irq2);
         }
