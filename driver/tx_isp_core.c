@@ -357,11 +357,12 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
                 }
 
                 /* Binary Ninja: $v0_5 = *($s0 + 0x150) */
-                v0_5 = core_dev->frame_channels;
+                v0_5 = vic_dev->frame_channels;
             }
 
-            /* Binary Ninja: *($s0 + 0xe8) = 3 */
-            core_dev->state = 3;
+            /* CRITICAL FIX: Binary Ninja: *($s0 + 0xe8) = 3 - Set VIC state to 3 */
+            vic_dev->state = 3;
+            pr_info("*** ispcore_video_s_stream: VIC state set to 3 (ACTIVE) after stream OFF ***\n");
         }
         /* Binary Ninja: $s3_1 = &arg1[0xe] */
         s3_1 = &isp_dev->subdevs[0];
@@ -369,8 +370,9 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         /* Binary Ninja: $s3_1 = &arg1[0xe] */
         s3_1 = &isp_dev->subdevs[0];
     } else {
-        /* Binary Ninja: *($s0 + 0xe8) = 4 */
-        core_dev->state = 4;
+        /* CRITICAL FIX: Binary Ninja: *($s0 + 0xe8) = 4 - Set VIC state to 4 */
+        vic_dev->state = 4;
+        pr_info("*** ispcore_video_s_stream: VIC state set to 4 (STREAMING) ***\n");
         /* Binary Ninja: $s3_1 = &arg1[0xe] */
         s3_1 = &isp_dev->subdevs[0];
     }
