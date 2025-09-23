@@ -2692,25 +2692,25 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
         pr_info("ispcore_core_ops_init: VIC device=%p, state=%d", vic_dev, vic_state);
 
         /* Binary Ninja: if ($v0_3 != 1) */
-        if (core_state != 1) {
+        if (vic_state != 1) {
             /* Binary Ninja: if (arg2 == 0) - Deinitialize if no sensor attributes */
             if (sensor_attr == NULL && on == 0) {
                 pr_info("ispcore_core_ops_init: Deinitializing (sensor_attr=NULL, on=0)");
 
-                /* Binary Ninja: Check current state and handle streaming */
-                if (core_state == 4) {
+                /* Binary Ninja: Check current VIC state and handle streaming */
+                if (vic_state == 4) {
                     /* Binary Ninja: ispcore_video_s_stream(arg1, 0) */
                     ispcore_video_s_stream(sd, 0);
-                    core_state = core_dev->state;  /* Update core state after s_stream */
+                    vic_state = vic_dev->state;  /* Update VIC state after s_stream */
                 }
 
                 /* Binary Ninja: if ($v1_55 == 3) - Stop kernel thread if in state 3 */
-                if (core_state == 3) {
+                if (vic_state == 3) {
                     /* Binary Ninja: private_kthread_stop(*($s0 + 0x1b8)) */
                     /* Note: fw_thread management removed - handled by separate thread management system */
                     pr_info("ispcore_core_ops_init: Thread management handled by separate system");
                     /* Binary Ninja: *($s0 + 0xe8) = 2 */
-                    core_dev->state = 2;
+                    vic_dev->state = 2;
                 }
 
                 /* CRITICAL: Cancel any pending frame sync work before deinit */
@@ -2730,22 +2730,22 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
             /* CRITICAL: Handle initialization case (on=1) */
             if (on == 1) {
                 pr_info("*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***");
-                pr_info("*** ispcore_core_ops_init: Current core_state (core state): %d ***", core_state);
+                pr_info("*** ispcore_core_ops_init: Current vic_state (VIC state): %d ***", vic_state);
 
                 /* CRITICAL FIX: Allow ISP core initialization in streaming state */
                 /* The original check required state 2 (ready), but VIC may already be streaming (state 4) */
-                if (core_state < 2) {
-                    pr_err("ispcore_core_ops_init: Core state %d < 2, not ready for initialization\n", core_state);
+                if (vic_state < 2) {
+                    pr_err("ispcore_core_ops_init: VIC state %d < 2, not ready for initialization\n", vic_state);
                     return -EINVAL;
                 }
 
-                if (core_state == 4) {
-                    pr_info("*** ispcore_core_ops_init: Core already streaming (state 4) - initializing during streaming ***");
+                if (vic_state == 4) {
+                    pr_info("*** ispcore_core_ops_init: VIC already streaming (state 4) - initializing during streaming ***");
                 } else {
-                    pr_info("*** ispcore_core_ops_init: Core in ready state (%d) - normal initialization ***", core_state);
+                    pr_info("*** ispcore_core_ops_init: VIC in ready state (%d) - normal initialization ***", vic_state);
                 }
 
-                pr_info("*** ispcore_core_ops_init: Core state check passed, proceeding with initialization ***");
+                pr_info("*** ispcore_core_ops_init: VIC state check passed, proceeding with initialization ***");
 
                 /* Binary Ninja: Call tisp_init() with sensor attributes */
                 extern struct tx_isp_sensor *tx_isp_get_sensor(void);
@@ -2774,16 +2774,25 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 }
 
                 /* CRITICAL: Also set core device state to 3 */
-                core_dev->state = 3;
-                pr_info("*** ispcore_core_ops_init: Core device state set to 3 (ACTIVE) ***");
+                core_dev = isp_dev->core_dev;  /* Get core device from ISP device */
+                if (core_dev) {
+                    core_dev->state = 3;
+                    pr_info("*** ispcore_core_ops_init: Core device state set to 3 (ACTIVE) ***");
+                } else {
+                    pr_warn("*** ispcore_core_ops_init: No core device available to set state ***");
+                }
 
                 /* CRITICAL: Enable ISP core hardware interrupts */
-                ret = tx_isp_core_enable_irq(core_dev);
-                if (ret != 0) {
-                    pr_err("ispcore_core_ops_init: Failed to enable ISP core interrupts: %d\n", ret);
-                    /* Don't fail initialization, but log the error */
+                if (core_dev) {
+                    ret = tx_isp_core_enable_irq(core_dev);
+                    if (ret != 0) {
+                        pr_err("ispcore_core_ops_init: Failed to enable ISP core interrupts: %d\n", ret);
+                        /* Don't fail initialization, but log the error */
+                    } else {
+                        pr_info("*** ispcore_core_ops_init: ISP Core hardware interrupts enabled ***");
+                    }
                 } else {
-                    pr_info("*** ispcore_core_ops_init: ISP Core hardware interrupts enabled ***");
+                    pr_warn("*** ispcore_core_ops_init: No core device available for interrupt enabling ***");
                 }
 
                 result = 0;
