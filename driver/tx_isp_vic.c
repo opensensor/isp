@@ -816,7 +816,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     /* Binary Ninja EXACT: Final VIC enable - *vic_regs = 1 */
     /* Use SECONDARY VIC space for enable (same as unlock sequence) */
-    void __iomem *vic_enable_regs = vic_dev->vic_regs_secondary;
+    void __iomem *vic_enable_regs = vic_dev->vic_regs_control;
     if (vic_enable_regs) {
         writel(1, vic_enable_regs + 0x0);
         pr_info("*** tx_isp_vic_start: VIC enabled using SECONDARY VIC space ***\n");
