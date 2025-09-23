@@ -819,12 +819,29 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
+    /* CRITICAL FIX: Missing VIC Control register sequence from Binary Ninja reference */
+    pr_info("*** tx_isp_vic_start: CRITICAL FIX - Writing VIC Control register sequence ***\n");
+
+    /* Binary Ninja: **(arg1 + 0xb8) = 2 */
+    writel(2, vic_regs + 0x0);  /* VIC Control register at offset 0x0 */
+    wmb();
+    pr_info("*** tx_isp_vic_start: VIC Control[0x0] = 2 (prepare) ***\n");
+
+    /* Binary Ninja: isp_printf(0, "VIC_CTRL : %08x\n", **(arg1 + 0xb8)) */
+    u32 vic_ctrl_value = readl(vic_regs + 0x0);
+    pr_info("VIC_CTRL : %08x\n", vic_ctrl_value);
+
+    /* Binary Ninja: **(arg1 + 0xb8) = 1 */
+    writel(1, vic_regs + 0x0);  /* VIC Control register at offset 0x0 */
+    wmb();
+    pr_info("*** tx_isp_vic_start: VIC Control[0x0] = 1 (start streaming) ***\n");
+
     /* Binary Ninja EXACT: Set vic_start_ok global flag */
     extern uint32_t vic_start_ok;
     vic_start_ok = 1;
     pr_info("*** tx_isp_vic_start: vic_start_ok set to 1 - EXACT Binary Ninja reference ***\n");
 
-    pr_info("*** tx_isp_vic_start: SIMPLIFIED to match Binary Ninja exactly ***\n");
+    pr_info("*** tx_isp_vic_start: VIC Control register sequence complete - streaming should start ***\n");
     return 0;
 }
 
