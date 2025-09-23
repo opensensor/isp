@@ -5280,42 +5280,8 @@ int tx_isp_link_core_device(struct tx_isp_dev *isp_dev, struct tx_isp_core_devic
 }
 EXPORT_SYMBOL(tx_isp_link_core_device);
 
-/**
- * tx_isp_core_device_set_state - Set core device state
- * @core_dev: Core device
- * @state: New state
- *
- * Returns: 0 on success, negative error code on failure
- */
-int tx_isp_core_device_set_state(struct tx_isp_core_device *core_dev, int state)
-{
-    if (!tx_isp_core_device_is_valid(core_dev)) {
-        return -EINVAL;
-    }
-
-    pr_info("tx_isp_core_device_set_state: Changing state from %d to %d\n",
-            core_dev->state, state);
-
-    core_dev->state = state;
-    return 0;
-}
-EXPORT_SYMBOL(tx_isp_core_device_set_state);
-
-/**
- * tx_isp_core_device_get_state - Get core device state
- * @core_dev: Core device
- *
- * Returns: Current state or negative error code
- */
-int tx_isp_core_device_get_state(struct tx_isp_core_device *core_dev)
-{
-    if (!tx_isp_core_device_is_valid(core_dev)) {
-        return -EINVAL;
-    }
-
-    return core_dev->state;
-}
-EXPORT_SYMBOL(tx_isp_core_device_get_state);
+/* REMOVED: Core device state management functions - ALL state management happens through VIC device */
+/* Based on Binary Ninja MCP analysis, core device is stateless */
 
 /**
  * tx_isp_core_device_start_streaming - Start core device streaming
