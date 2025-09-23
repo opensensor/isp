@@ -722,11 +722,12 @@ int tx_isp_core_enable_irq(struct tx_isp_core_device *core_dev)
     /* Binary Ninja: system_reg_write(0x10, 0x133) - Enable specific interrupt types */
     writel(0x133, core + 0x10);
 
-    /* Enable interrupt banks */
-    writel(0x3FFF, core + 0xb0);
-    writel(0x3FFF, core + 0xbc);
-    writel(0x3FFF, core + 0x98b0);
-    writel(0x3FFF, core + 0x98bc);
+    /* CRITICAL FIX: Enable frame sync + essential interrupts, but MASK error interrupts */
+    /* This allows ISP interrupts to work while preventing error interrupt storms */
+    writel(0x3FFF, core + 0xb0);        /* Legacy enable - all interrupt sources */
+    writel(0x1000, core + 0xbc);        /* Legacy unmask - ONLY frame sync initially */
+    writel(0x3FFF, core + 0x98b0);      /* New enable - all interrupt sources */
+    writel(0x1000, core + 0x98bc);      /* New unmask - ONLY frame sync initially */
     wmb();
 
     pr_info("*** ISP PIPELINE: VIC->ISP connection ENABLED (0x800=1, 0x804=0x1c, 0x1c=8) ***\n");
