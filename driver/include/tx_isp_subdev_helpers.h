@@ -71,13 +71,7 @@ static inline struct tx_isp_subdev *tx_isp_get_fs_subdev(struct tx_isp_dev *isp_
     return tx_isp_find_subdev_by_name(isp_dev, "isp-fs");
 }
 
-/**
- * tx_isp_get_fs_subdev - Get Frame Source subdevice (isp-fs)
- */
-static inline struct tx_isp_subdev *tx_isp_get_fs_subdev(struct tx_isp_dev *isp_dev)
-{
-    return tx_isp_find_subdev_by_name(isp_dev, "isp-fs");
-}
+/* Duplicate removed - tx_isp_get_fs_subdev already defined above */
 
 /**
  * tx_isp_find_sensor_subdev - Find first available sensor subdevice
