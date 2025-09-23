@@ -55,6 +55,7 @@ int tx_isp_vin_activate_subdev(void* arg1);  /* Binary Ninja signature */
 int fs_activate_module(struct tx_isp_subdev *sd);
 int ispcore_activate_module(struct tx_isp_dev *isp_dev);
 uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand);
+int __init verify_handler_addresses(void);
 
 /* External variables */
 extern int isp_clk;  /* Global ISP clock rate from tx_isp_core.c */
@@ -5106,7 +5107,7 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
 /* isp_irq_handle - SAFE struct member access implementation with correct dev_id handling */
 
 /* CRITICAL: Add function address logging at module load to verify symbol resolution */
-static int __init verify_handler_addresses(void)
+int __init verify_handler_addresses(void)
 {
     printk(KERN_ALERT "*** CRITICAL: isp_irq_handle function address: %p ***\n", isp_irq_handle);
     printk(KERN_ALERT "*** CRITICAL: isp_irq_thread_handle function address: %p ***\n", isp_irq_thread_handle);
