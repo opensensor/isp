@@ -54,36 +54,42 @@ int fs_slake_module(struct tx_isp_subdev *sd)
         return -EINVAL;
     }
 
-    /* Binary Ninja: if (*(arg1 + 0xe4) != 1) - Check FS state != 1 */
-    if (fs_dev->fs_state != 1) {
-        pr_info("fs_slake_module: FS state=%d, processing channels\n", fs_dev->fs_state);
+    /* Binary Ninja: if (*(arg1 + 0xe4) != 1) - Check FS initialized != 1 */
+    if (fs_dev->initialized != 1) {
+        pr_info("fs_slake_module: FS initialized=%d, processing channels\n", fs_dev->initialized);
 
         /* Binary Ninja: for (int32_t i = 0; i s< *(arg1 + 0xe0); i += 1) */
         for (i = 0; i < fs_dev->channel_count; i++) {
-            /* Binary Ninja: void* $s1_2 = i * 0x2ec + *(arg1 + 0xdc) */
-            struct tx_isp_frame_channel *channel = &fs_dev->frame_channels[i];
+            pr_info("fs_slake_module: Processing channel %d\n", i);
 
-            pr_info("fs_slake_module: Processing channel %d, state=%d\n", i, channel->state);
+            /* Binary Ninja: Channel processing - simplified since we don't have direct channel access */
+            /* The actual channel management is handled by the ISP device channels array */
+            if (ourISPdev && i < ISP_MAX_CHAN) {
+                struct isp_channel *channel = &ourISPdev->channels[i];
 
-            /* Binary Ninja: if (*($s1_2 + 0x2d0) != 4) *($s1_2 + 0x2d0) = 1 */
-            if (channel->state != 4) {
-                channel->state = 1;
-                pr_info("fs_slake_module: Channel %d state set to 1\n", i);
-            } else {
-                /* Binary Ninja: Channel state == 4 (streaming) */
-                pr_info("fs_slake_module: Channel %d in streaming state, stopping\n", i);
+                pr_info("fs_slake_module: Channel %d enabled=%d\n", i, channel->enabled);
 
-                /* Binary Ninja: __frame_channel_vb2_streamoff($s1_2, *($s1_2 + 0x24), entry_$a2) */
-                /* Binary Ninja: __vb2_queue_free($s1_2 + 0x24, *($s1_2 + 0x20c)) */
-                /* Simplified implementation - just set state to 1 */
-                channel->state = 1;
-                pr_info("fs_slake_module: Channel %d stopped, state set to 1\n", i);
+                /* Binary Ninja: if (*($s1_2 + 0x2d0) != 4) *($s1_2 + 0x2d0) = 1 */
+                if (channel->state != 4) {
+                    channel->state = 1;
+                    pr_info("fs_slake_module: Channel %d state set to 1\n", i);
+                } else {
+                    /* Binary Ninja: Channel state == 4 (streaming) */
+                    pr_info("fs_slake_module: Channel %d in streaming state, stopping\n", i);
+
+                    /* Binary Ninja: __frame_channel_vb2_streamoff($s1_2, *($s1_2 + 0x24), entry_$a2) */
+                    /* Binary Ninja: __vb2_queue_free($s1_2 + 0x24, *($s1_2 + 0x20c)) */
+                    /* Simplified implementation - just set state to 1 */
+                    channel->state = 1;
+                    channel->enabled = false;
+                    pr_info("fs_slake_module: Channel %d stopped, state set to 1\n", i);
+                }
             }
         }
 
         /* Binary Ninja: *(arg1 + 0xe4) = 1 */
-        fs_dev->fs_state = 1;
-        pr_info("fs_slake_module: FS state set to 1\n");
+        fs_dev->initialized = 1;
+        pr_info("fs_slake_module: FS initialized set to 1\n");
     }
 
     pr_info("*** fs_slake_module: FS slake complete, result=%d ***\n", result);
