@@ -6349,7 +6349,8 @@ int tisp_wdr_init(void)
 /* ===== MISSING TIZIANO ISP PIPELINE COMPONENTS - Binary Ninja Reference ===== */
 
 /* AE data structures and globals - Based on decompiled tiziano_ae_init */
-static uint8_t tisp_ae_hist[0x42c];
+uint8_t tisp_ae_hist[0x42c];
+EXPORT_SYMBOL(tisp_ae_hist);
 static uint8_t tisp_ae_hist_last[0x42c];
 static uint8_t dmsc_sp_d_w_stren_wdr_array_ae[0x98];
 static uint32_t ae_ctrls[4];
