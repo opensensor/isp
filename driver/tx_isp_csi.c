@@ -212,18 +212,8 @@ int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
             if (cmd != 0x200000f) {
                 /* Binary Ninja: if (arg2 == 0x200000c) */
                 if (cmd == 0x200000c) {
-                    /* CRITICAL FIX: Only initialize CSI once to prevent register reset */
-                    /* Multiple calls to csi_core_ops_init() cause CSI PHY reconfiguration */
-                    /* which triggers hardware reset that clears ISP/VIC control registers */
-                    if (csi_dev->state < 2) {
-                        pr_info("*** csi_sensor_ops_ioctl: IOCTL 0x200000c - Initializing CSI (state=%d) ***\n", csi_dev->state);
-                        /* Binary Ninja: csi_core_ops_init(arg1, 1, 0x200000f) */
-                        csi_core_ops_init(sd, 1);
-                        csi_dev->state = 2;  /* Mark as initialized */
-                    } else {
-                        pr_info("*** csi_sensor_ops_ioctl: IOCTL 0x200000c - CSI already initialized (state=%d), skipping ***\n", csi_dev->state);
-                        pr_info("*** csi_sensor_ops_ioctl: This prevents CSI PHY reconfiguration that resets ISP/VIC control registers ***\n");
-                    }
+                    /* Binary Ninja: csi_core_ops_init(arg1, 1, 0x200000f) */
+                    csi_core_ops_init(sd, 1);
                 }
             } else {
                 /* Binary Ninja: else if (*(*(arg1 + 0x110) + 0x14) == 1) */
