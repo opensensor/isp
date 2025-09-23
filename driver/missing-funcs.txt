@@ -1,3 +1,6 @@
+system_wq
+system_yvu_or_yuv
+table_intp
 tisp_adr_ev_update
 tisp_adr_param_array_set
 tisp_ae_algo_handle
@@ -302,10 +305,3 @@ tisp_ydns_intp_reg_refresh
 tisp_ydns_param_array_set
 tisp_ydns_param_cfg
 tisp_ydns_refresh
-tiziano_adr_5x5_param
-tiziano_adr_5x5_param_distance
-tiziano_adr_algorithm
-tiziano_adr_dn_params_refresh
-Tiziano_adr_fpga
-tiziano_adr_gamma_refresh
-tiziano_adr_get_data

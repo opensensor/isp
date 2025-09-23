@@ -39,6 +39,7 @@
   data_b2ef8
   data_b2f04
   data_b2f08
+  default_event_handler
   destroy_isp_tuning_device
   dump_csi_reg
   dump_isp_csi_open
@@ -119,7 +120,6 @@
   isp_vic_interrupt_service_routine
   isp_write32
   ispcore_activate_module
-  ispcore_activate_module_subdev
   ispcore_core_ops_init
   ispcore_core_ops_ioctl
   ispcore_frame_channel_dqbuf
@@ -132,7 +132,6 @@
   ispcore_sensor_ops_ioctl
   ispcore_sensor_ops_release_all_sensor
   ispcore_slake_module
-  ispcore_slake_module_subdev
   ispcore_sync_sensor_attr
   ispcore_video_s_stream
   ispmodule_ip_done_irq_handler
@@ -146,6 +145,7 @@
   list_for_each
   list_for_each_safe
   load_isp_tuning_file
+  load_isp_tuning_file_real
   mbus_to_bayer_write
   mcp_log_info
   mips_dma_cache_sync
@@ -529,17 +529,15 @@
   tiziano_ydns_params_refresh
   tx_isp_activate_csi_subdev
   tx_isp_check_reset_status
-  tx_isp_cleanup_subdev_graph
   tx_isp_configure_clocks
   tx_isp_configure_default_links
   tx_isp_configure_format_propagation
   tx_isp_core_device_deinit
-  tx_isp_core_device_get_state
   tx_isp_core_device_init
   tx_isp_core_device_set_sensor_attr
-  tx_isp_core_device_set_state
   tx_isp_core_device_start_streaming
   tx_isp_core_device_stop_streaming
+  tx_isp_core_enable_irq
   tx_isp_core_irq_handle
   tx_isp_core_irq_handler
   tx_isp_core_irq_thread_handle
@@ -552,7 +550,6 @@
   tx_isp_create_framechan_devices
   tx_isp_create_graph_and_nodes
   tx_isp_create_misc_device
-  tx_isp_create_subdev_graph
   tx_isp_create_subdev_link
   tx_isp_create_subdev_links
   tx_isp_create_v4l2_device
@@ -565,7 +562,6 @@
   tx_isp_csi_slake_subdev
   tx_isp_destroy_core_device
   tx_isp_destroy_v4l2_device
-  tx_isp_detect_and_register_sensors
   tx_isp_disable_irq
   tx_isp_enable_irq
   tx_isp_exit
@@ -593,7 +589,6 @@
   tx_isp_platform_remove
   tx_isp_reg_set
   tx_isp_register_link
-  tx_isp_register_sensor_subdev
   tx_isp_release
   tx_isp_request_irq
   tx_isp_send_event_to_remote
@@ -661,5 +656,3 @@
   video_input_cmd_show
   vin_core_ops_ioctl
   vin_s_stream
-  void
-
