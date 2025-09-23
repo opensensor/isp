@@ -5147,7 +5147,7 @@ void test_interrupt_handler_manually(void)
         printk(KERN_ALERT "*** CRITICAL: Freed IRQ 37, now re-registering ***\n");
 
         int ret = request_threaded_irq(37, isp_irq_handle, isp_irq_thread_handle,
-                                      IRQF_SHARED, "isp-m0-FIXED", ourISPdev);
+                                      IRQF_SHARED, "isp-m0", ourISPdev);
         if (ret == 0) {
             printk(KERN_ALERT "*** CRITICAL: IRQ 37 re-registered successfully with FIXED handler ***\n");
 
