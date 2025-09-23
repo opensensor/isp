@@ -590,14 +590,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
     pr_info("*** tx_isp_vic_start: Using single VIC register base - EXACT Binary Ninja reference ***\n");
 
-    /* CRITICAL FIX: Add the missing register writes that got interrupts working in first-IRQ/first-IRQA commits */
-    pr_info("*** tx_isp_vic_start: Writing CRITICAL interrupt-enabling registers from working commits ***\n");
-    writel(0x3130322a, vic_regs + 0x0);      /* First register from reference trace - CRITICAL for interrupts */
-    writel(0x1, vic_regs + 0x4);             /* Second register from reference trace - CRITICAL for interrupts */
-    writel(0x200, vic_regs + 0x14);          /* Third register from reference trace - CRITICAL for interrupts */
-    wmb();
-    pr_info("*** tx_isp_vic_start: CRITICAL interrupt-enabling registers written (0x3130322a, 0x1, 0x200) ***\n");
-
     /* Binary Ninja: if ($v0 == 1) */
     pr_info("*** tx_isp_vic_start: CRITICAL DEBUG - interface_type=%d, checking if == 1 ***\n", interface_type);
     if (interface_type == 1) {
@@ -618,41 +610,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** tx_isp_vic_start: Writing VIC configuration registers - EXACT Binary Ninja sequence ***\n");
         writel(2, vic_regs + 0xc);
         writel(sensor_attr->dbus_type, vic_regs + 0x14);
-
-        /* CRITICAL FIX: Add missing VIC configuration registers from reference driver */
-        /* These registers are essential to prevent hardware protection from triggering */
-        pr_info("*** tx_isp_vic_start: Adding CRITICAL missing VIC configuration registers ***\n");
-
-        /* Control registers - prevent hardware protection */
-        writel(0x800800, vic_regs + 0x60);      /* Control register */
-        writel(0x9d09d0, vic_regs + 0x64);      /* Control register */
-        writel(0x6002, vic_regs + 0x70);        /* Control register */
-        writel(0x7003, vic_regs + 0x74);        /* Control register */
-
-        /* Color space configuration - critical for proper operation */
-        writel(0xeb8080, vic_regs + 0xc0);      /* Color space config */
-        writel(0x108080, vic_regs + 0xc4);      /* Color space config */
-        writel(0x29f06e, vic_regs + 0xc8);      /* Color space config */
-        writel(0x913622, vic_regs + 0xcc);      /* Color space config */
-
-        /* Processing configuration - prevent timing issues */
-        writel(0x515af0, vic_regs + 0xd0);      /* Processing config */
-        writel(0xaaa610, vic_regs + 0xd4);      /* Processing config */
-        writel(0xd21092, vic_regs + 0xd8);      /* Processing config */
-        writel(0x6acade, vic_regs + 0xdc);      /* Processing config */
-
-        /* Additional processing config - complete configuration */
-        writel(0xeb8080, vic_regs + 0xe0);      /* Additional processing */
-        writel(0x108080, vic_regs + 0xe4);      /* Additional processing */
-        writel(0x29f06e, vic_regs + 0xe8);      /* Additional processing */
-        writel(0x913622, vic_regs + 0xec);      /* Additional processing */
-        writel(0x515af0, vic_regs + 0xf0);      /* Additional processing */
-        writel(0xaaa610, vic_regs + 0xf4);      /* Additional processing */
-        writel(0xd21092, vic_regs + 0xf8);      /* Additional processing */
-        writel(0x6acade, vic_regs + 0xfc);      /* Additional processing */
-        wmb();
-
-        pr_info("*** tx_isp_vic_start: CRITICAL VIC configuration registers written - hardware protection should be prevented ***\n");
 
         /* Binary Ninja: Write frame size immediately - no deferral needed */
         u32 frame_size_value = (vic_dev->width << 16) | vic_dev->height;
