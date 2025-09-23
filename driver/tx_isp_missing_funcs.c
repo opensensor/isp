@@ -756,6 +756,13 @@ extern uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uin
 extern uint32_t data_b2ea4, data_b2ea8, data_b2ed0, data_b2ecc;
 extern uint32_t data_b2e44, data_b2e54, data_b2e56;
 
+/* Forward declarations for variables defined at bottom of file */
+extern void *sensor_ctrl;
+extern uint32_t flicker_hz;
+extern uint32_t data_b2e48, data_b2e4a, data_b2e4c, data_b2e58;
+extern uint32_t data_c46c8, data_c4700, data_b2e4e, data_b2e62;
+extern uint32_t data_b2e64, data_b2e7e, data_b2e80, data_b2eb0;
+
 /**
  * tisp_set_fps - Set frame rate
  * @fps_packed: Packed FPS value (numerator in upper 16 bits, denominator in lower 16 bits)
