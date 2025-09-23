@@ -861,30 +861,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     wmb();
     pr_info("*** tx_isp_vic_start: VIC processing enabled (0x0=0x1, 0x4=0x1) ***\n");
 
-    /* CRITICAL FIX: NOW write VIC interrupt registers AFTER VIC unlock sequence */
-    pr_info("*** tx_isp_vic_start: NOW writing VIC interrupt registers AFTER unlock (VIC should be unlocked now) ***\n");
-
-    /* Try writing to PRIMARY VIC space (0x133e0000) */
-    pr_info("*** tx_isp_vic_start: Writing VIC interrupt registers to PRIMARY VIC space (0x133e0000) ***\n");
-    writel(0x00000001, vic_regs + 0x1e0);  /* Enable frame done interrupt */
-    writel(0x00000000, vic_regs + 0x1e8);  /* Unmask frame done interrupt */
-    writel(0x00000003, vic_regs + 0x1e4);  /* Enable MDMA channel 0,1 interrupts */
-    writel(0x00000000, vic_regs + 0x1ec);  /* Unmask MDMA interrupts */
-    writel(0x00000001, vic_regs + 0x30c);  /* Enable VIC DMA interrupts */
-    wmb();
-
-    /* CRITICAL DEBUG: Verify interrupt registers were written correctly AFTER unlock */
-    u32 verify_1e0 = readl(vic_regs + 0x1e0);
-    u32 verify_1e8 = readl(vic_regs + 0x1e8);
-    u32 verify_1e4 = readl(vic_regs + 0x1e4);
-    u32 verify_1ec = readl(vic_regs + 0x1ec);
-    u32 verify_30c = readl(vic_regs + 0x30c);
-    pr_info("*** VIC INTERRUPT REGISTER VERIFICATION (AFTER UNLOCK) ***\n");
-    pr_info("  0x1e0 (frame done enable) = 0x%08x (expected: 0x00000001)\n", verify_1e0);
-    pr_info("  0x1e8 (frame done mask) = 0x%08x (expected: 0x00000000)\n", verify_1e8);
-    pr_info("  0x1e4 (MDMA enable) = 0x%08x (expected: 0x00000003)\n", verify_1e4);
-    pr_info("  0x1ec (MDMA mask) = 0x%08x (expected: 0x00000000)\n", verify_1ec);
-    pr_info("  0x30c (DMA enable) = 0x%08x (expected: 0x00000001)\n", verify_30c);
+    /* CRITICAL INSIGHT: The 0x1e0/0x1e4/0x30c registers are STATUS registers, not CONTROL registers! */
+    /* VIC interrupts must be enabled by a different mechanism - likely via control register bits */
+    pr_info("*** tx_isp_vic_start: VIC interrupts will be enabled via control register bits, not dedicated interrupt registers ***\n");
 
     /* Binary Ninja: Final configuration registers */
     writel(0x100010, vic_regs + 0x1a4);
@@ -893,11 +872,18 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0, vic_regs + 0x1b4);
     wmb();
 
-    /* CRITICAL FIX: Write VIC control register to start frame capture - from working commits */
-    /* This is what actually triggers VIC to start generating interrupts */
-    writel(0x80000020, vic_regs + 0x300);  /* VIC control register - start frame capture */
+    /* CRITICAL EXPERIMENT: Try enabling VIC interrupts via VIC control register bits */
+    /* Maybe VIC interrupts are enabled by setting specific bits in the control register */
+    u32 vic_control_val = 0x80000020;  /* Base value from working commits */
+    vic_control_val |= 0x00000001;     /* Try enabling interrupt bit 0 */
+    vic_control_val |= 0x00000008;     /* Try enabling interrupt bit 3 */
+
+    pr_info("*** tx_isp_vic_start: EXPERIMENT - VIC control register with interrupt bits enabled ***\n");
+    writel(vic_control_val, vic_regs + 0x300);  /* VIC control register with interrupt bits */
     wmb();
-    pr_info("*** tx_isp_vic_start: CRITICAL - VIC control register 0x300 = 0x80000020 (start frame capture) ***\n");
+
+    u32 verify_control = readl(vic_regs + 0x300);
+    pr_info("*** tx_isp_vic_start: VIC control register 0x300 = 0x%08x (with interrupt bits) ***\n", verify_control);
 
     /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
     pr_info("*** tx_isp_vic_start: vic_start_ok set to 1 - EXACT Binary Ninja reference ***\n");
