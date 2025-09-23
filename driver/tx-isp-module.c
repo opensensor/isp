@@ -318,16 +318,11 @@ struct vic_event_callback {
 /* CRITICAL FIX: Stock driver uses TWO separate IRQs - 37 (isp-m0) and 38 (isp-w02) */
 static struct resource tx_isp_resources[] = {
     [0] = {
-        .start = 0x13300000,           /* T31 ISP base address */
-        .end   = 0x133FFFFF,           /* T31 ISP end address */
-        .flags = IORESOURCE_MEM,
-    },
-    [1] = {
         .start = 37,                   /* T31 ISP IRQ 37 (isp-m0) - PRIMARY ISP PROCESSING */
         .end   = 37,
         .flags = IORESOURCE_IRQ,
     },
-    [2] = {
+    [1] = {
         .start = 38,                   /* T31 ISP IRQ 38 (isp-w02) - SECONDARY ISP CHANNEL */
         .end   = 38,
         .flags = IORESOURCE_IRQ,
