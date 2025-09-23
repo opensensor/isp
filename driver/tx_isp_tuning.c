@@ -165,7 +165,8 @@ static uint32_t adr_min_thresholds[9] = {0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe
 /* Global parameter arrays */
 static void *dmsc_sp_d_w_stren_wdr_array = NULL;
 static void *sensor_info_ptr = NULL;
-static uint32_t data_b2e1c = 1080; /* Sensor height */
+uint32_t data_b2e1c = 1080; /* Sensor height */
+EXPORT_SYMBOL(data_b2e1c);
 
 /* SDNS (Spatial Denoising) Variables */
 static uint32_t data_9a9c0 = 0;
@@ -425,7 +426,8 @@ static uint32_t ae_ev_value = 0;
 
 /* Channel and MSCA Variables */
 static uint32_t msca_ch_en = 0;
-static uint32_t msca_dmaout_arb = 0;
+uint32_t msca_dmaout_arb = 0;
+EXPORT_SYMBOL(msca_dmaout_arb);
 static uint32_t ds1_attr = 0;
 static uint32_t ds2_attr = 0;
 static uint32_t ds0_attr = 0;
@@ -2199,7 +2201,7 @@ static int32_t fix_point_div_64(int32_t shift_bits, int32_t scale,
     return quotient;
 }
 
-static uint32_t fix_point_div_32(uint32_t shift_bits, uint32_t numerator, uint32_t denominator)
+uint32_t fix_point_div_32(uint32_t shift_bits, uint32_t numerator, uint32_t denominator)
 {
     if (denominator == 0) {
         return 0xFFFFFFFF; /* Return max value on division by zero */
@@ -2211,6 +2213,7 @@ static uint32_t fix_point_div_32(uint32_t shift_bits, uint32_t numerator, uint32
 
     return result;
 }
+EXPORT_SYMBOL(fix_point_div_32);
 
 static uint32_t fix_point_mult2_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand)
 {
@@ -2239,11 +2242,12 @@ static uint32_t fix_point_mult2_32(uint32_t shift_bits, uint32_t multiplier, uin
            ((uint64_t)low_mult * low_cand >> (shift_bits & 0x1f));
 }
 
-static uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand)
+uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand)
 {
     /* Binary Ninja: return fix_point_mult2_32(arg1, arg2, arg3)() __tailcall */
     return fix_point_mult2_32(shift_bits, multiplier, multiplicand);
 }
+EXPORT_SYMBOL(fix_point_mult3_32);
 
 static int tisp_g_ev_attr(uint32_t *ev_buffer, struct isp_tuning_data *tuning)
 {
@@ -6384,19 +6388,28 @@ static uint32_t *data_d04c4 = &data_afcd4;
 static uint32_t data_b0c18 = 0x80;  /* AE compensation default */
 
 /* AE exposure threshold parameters */
-static uint32_t data_b2ea8 = 0x8000;  /* AE exp threshold */
-static uint32_t data_b2e9c = 0x1000;  /* Min exposure */
-static uint32_t data_b2ea0 = 0x4000;  /* Max exposure */
-static uint32_t data_b2ea4 = 0x400;   /* Min gain */
-static uint32_t data_b2ecc = 0x400;   /* WDR min gain */
-static uint32_t data_b2ed0 = 0x800;   /* WDR min exp */
-static uint32_t data_b2ed4 = 0x2000;  /* WDR max exp */
+uint32_t data_b2ea8 = 0x8000;  /* AE exp threshold */
+uint32_t data_b2e9c = 0x1000;  /* Min exposure */
+uint32_t data_b2ea0 = 0x4000;  /* Max exposure */
+uint32_t data_b2ea4 = 0x400;   /* Min gain */
+uint32_t data_b2ecc = 0x400;   /* WDR min gain */
+uint32_t data_b2ed0 = 0x800;   /* WDR min exp */
+uint32_t data_b2ed4 = 0x2000;  /* WDR max exp */
 
 /* AE deflicker parameters */
-static uint32_t data_b2e56 = 25;      /* FPS numerator */
-static uint32_t data_b2e54 = 1;       /* FPS denominator */
-static uint32_t data_b2e44 = 0x1000;  /* Deflicker base */
+uint32_t data_b2e56 = 25;      /* FPS numerator */
+uint32_t data_b2e54 = 1;       /* FPS denominator */
+uint32_t data_b2e44 = 0x1000;  /* Deflicker base */
 static uint32_t data_b0b28, data_b0b2c, data_b0b30;
+
+/* Export symbols for missing functions */
+EXPORT_SYMBOL(data_b2ea8);
+EXPORT_SYMBOL(data_b2ea4);
+EXPORT_SYMBOL(data_b2ecc);
+EXPORT_SYMBOL(data_b2ed0);
+EXPORT_SYMBOL(data_b2e56);
+EXPORT_SYMBOL(data_b2e54);
+EXPORT_SYMBOL(data_b2e44);
 
 /* AE interrupt handlers - Forward declarations (implemented as exported functions) */
 /* ae0_interrupt_hist, ae0_interrupt_static, ae1_interrupt_hist, ae1_interrupt_static */

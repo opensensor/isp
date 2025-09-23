@@ -270,7 +270,7 @@ extern int ae_wdr_en, ta_custom_ev, ta_custom_tgain, ta_custom_again;
 extern int dmsc_awb_gain;
 extern int dmsc_uu_stren_wdr_array;
 extern int tisp_ae_hist[256];
-extern int data_b2e1c, sensor_info;
+extern uint32_t data_b2e1c, sensor_info;
 
 /* AE parameter structures - based on decompiled references */
 static uint8_t _ae_parameter[0xa8];
@@ -750,14 +750,13 @@ EXPORT_SYMBOL(tisp_hv_flip_get);
 extern int data_b2f20(int fps_val, void *sensor_ctrl);
 extern void tiziano_deflicker_expt_tune(int flicker_hz, int param1, int param2, int param3);
 extern uint32_t system_reg_read(u32 reg);
+extern int fix_point_intp(int arg1, int arg2, int arg3, int arg4, int arg5);
+extern uint32_t fix_point_div_32(uint32_t shift_bits, uint32_t numerator, uint32_t denominator);
+extern uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand);
 
-/* Global frame control variables */
-extern void *sensor_ctrl;
-extern uint32_t flicker_hz;
-extern int data_b2ea4, data_b2ea8, data_b2ed0, data_b2eb0, data_b2ecc;
-extern int data_b2e44, data_b2e48, data_b2e4a, data_b2e4c, data_b2e58;
-extern int data_c46c8, data_c4700, data_b2e4e, data_b2e62, data_b2e54;
-extern int data_b2e64, data_b2e56, data_b2e7e, data_b2e80;
+/* Global frame control variables - now properly exported from tx_isp_tuning.c */
+extern uint32_t data_b2ea4, data_b2ea8, data_b2ed0, data_b2ecc;
+extern uint32_t data_b2e44, data_b2e54, data_b2e56;
 
 /**
  * tisp_set_fps - Set frame rate
@@ -854,5 +853,78 @@ int tisp_get_frame_drop(int channel, int *drop_config)
     return 0;
 }
 EXPORT_SYMBOL(tisp_get_frame_drop);
+
+/* ===== MISSING VARIABLE DEFINITIONS ===== */
+
+/* Variables that don't exist elsewhere - create them here */
+void *sensor_ctrl = NULL;
+EXPORT_SYMBOL(sensor_ctrl);
+
+uint32_t flicker_hz = 0;
+EXPORT_SYMBOL(flicker_hz);
+
+uint32_t _awb_ct = 5000; /* Default color temperature */
+EXPORT_SYMBOL(_awb_ct);
+
+uint8_t data_9a91d = 128; /* Saturation */
+EXPORT_SYMBOL(data_9a91d);
+
+uint8_t data_9a91e = 128; /* Contrast */
+EXPORT_SYMBOL(data_9a91e);
+
+uint8_t data_9a91f = 128; /* Brightness */
+EXPORT_SYMBOL(data_9a91f);
+
+int data_9a430 = 0;
+EXPORT_SYMBOL(data_9a430);
+
+uint32_t sensor_info = 1920 * 1080;
+EXPORT_SYMBOL(sensor_info);
+
+int tisp_ae_hist[256] = {0};
+EXPORT_SYMBOL(tisp_ae_hist);
+
+uint8_t dmsc_awb_gain[0xc] = {0};
+EXPORT_SYMBOL(dmsc_awb_gain);
+
+/* Additional missing variables that need to be defined */
+uint32_t data_b2e48 = 0, data_b2e4a = 0, data_b2e4c = 0, data_b2e58 = 0;
+uint32_t data_c46c8 = 0, data_c4700 = 0, data_b2e4e = 0, data_b2e62 = 0;
+uint32_t data_b2e64 = 0, data_b2e7e = 0, data_b2e80 = 0, data_b2eb0 = 0;
+
+EXPORT_SYMBOL(data_b2e48);
+EXPORT_SYMBOL(data_b2e4a);
+EXPORT_SYMBOL(data_b2e4c);
+EXPORT_SYMBOL(data_b2e58);
+EXPORT_SYMBOL(data_c46c8);
+EXPORT_SYMBOL(data_c4700);
+EXPORT_SYMBOL(data_b2e4e);
+EXPORT_SYMBOL(data_b2e62);
+EXPORT_SYMBOL(data_b2e64);
+EXPORT_SYMBOL(data_b2e7e);
+EXPORT_SYMBOL(data_b2e80);
+EXPORT_SYMBOL(data_b2eb0);
+
+/* Stub implementations for missing external functions */
+int data_b2f20(int fps_val, void *sensor_ctrl) { return fps_val; }
+EXPORT_SYMBOL(data_b2f20);
+
+void tiziano_deflicker_expt_tune(int flicker_hz, int param1, int param2, int param3) { }
+EXPORT_SYMBOL(tiziano_deflicker_expt_tune);
+
+int fix_point_intp(int arg1, int arg2, int arg3, int arg4, int arg5) { return arg1; }
+EXPORT_SYMBOL(fix_point_intp);
+
+void tisp_dmsc_par_refresh(void) { }
+EXPORT_SYMBOL(tisp_dmsc_par_refresh);
+
+void tisp_dmsc_all_reg_refresh(void) { }
+EXPORT_SYMBOL(tisp_dmsc_all_reg_refresh);
+
+void tiziano_awb_set_hardware_param(int param1, int param2) { }
+EXPORT_SYMBOL(tiziano_awb_set_hardware_param);
+
+int tisp_s_wb_attr(void *attr) { return 0; }
+EXPORT_SYMBOL(tisp_s_wb_attr);
 
 /* This file is part of the main tx-isp module */
