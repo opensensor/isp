@@ -673,8 +673,18 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         ourISPdev->subdevs[2] = &vin_dev->sd;
         pr_info("*** REGISTERED VIN SUBDEV AT INDEX 2 WITH VIDEO OPS ***\n");
 
-        /* VIN initialization now happens during sensor registration for proper timing */
-        pr_info("*** VIN INITIALIZATION DEFERRED TO SENSOR REGISTRATION PHASE ***\n");
+        /* CRITICAL FIX: Initialize VIN immediately during probe, not deferred */
+        pr_info("*** VIN INITIALIZATION: Calling tx_isp_vin_init immediately during probe ***\n");
+        if (vin_dev->sd.ops && vin_dev->sd.ops->core && vin_dev->sd.ops->core->init) {
+            int ret = vin_dev->sd.ops->core->init(&vin_dev->sd, 1);
+            if (ret == 0) {
+                pr_info("*** VIN INITIALIZATION: SUCCESS during probe phase ***\n");
+            } else {
+                pr_err("VIN INITIALIZATION: Failed during probe: %d\n", ret);
+            }
+        } else {
+            pr_err("VIN INITIALIZATION: No init function available\n");
+        }
 
     } else if (strcmp(dev_name, "isp-fs") == 0) {
         /* Link FS device - device name is now "isp-fs" */
