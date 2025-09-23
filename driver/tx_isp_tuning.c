@@ -1559,31 +1559,31 @@ int tisp_init(void *sensor_info, char *param_name)
 
     /* Binary Ninja: ISP Core Control registers */
     pr_info("*** WRITING ISP CORE CONTROL REGISTERS - FROM BINARY NINJA tisp_init ***\n");
-    //system_reg_write(0xb004, 0xf001f001);
-    //system_reg_write(0xb008, 0x40404040);
-    //system_reg_write(0xb00c, 0x40404040);
-    //system_reg_write(0xb010, 0x40404040);
-    //system_reg_write(0xb014, 0x404040);
-    //system_reg_write(0xb018, 0x40404040);
-    //system_reg_write(0xb01c, 0x40404040);
-    //system_reg_write(0xb020, 0x40404040);
-    //system_reg_write(0xb024, 0x404040);
-    //system_reg_write(0xb028, 0x1000080);
-    //system_reg_write(0xb02c, 0x1000080);
-    //system_reg_write(0xb030, 0x100);
-    //system_reg_write(0xb034, 0xffff0100);
-    //system_reg_write(0xb038, 0x1ff00);
-    //system_reg_write(0xb04c, 0x103);
-    //system_reg_write(0xb050, 0x3);
+    system_reg_write(0xb004, 0xf001f001);
+    system_reg_write(0xb008, 0x40404040);
+    system_reg_write(0xb00c, 0x40404040);
+    system_reg_write(0xb010, 0x40404040);
+    system_reg_write(0xb014, 0x404040);
+    system_reg_write(0xb018, 0x40404040);
+    system_reg_write(0xb01c, 0x40404040);
+    system_reg_write(0xb020, 0x40404040);
+    system_reg_write(0xb024, 0x404040);
+    system_reg_write(0xb028, 0x1000080);
+    system_reg_write(0xb02c, 0x1000080);
+    system_reg_write(0xb030, 0x100);
+    system_reg_write(0xb034, 0xffff0100);
+    system_reg_write(0xb038, 0x1ff00);
+    system_reg_write(0xb04c, 0x103);
+    system_reg_write(0xb050, 0x3);
 
     /* CRITICAL: These are the varying registers that must match the reference driver exactly! */
     /* Using the EXACT reference values from the trace provided */
     pr_info("*** WRITING CRITICAL VARYING REGISTERS - USING EXACT REFERENCE VALUES ***\n");
-    //system_reg_write(0xb07c, 0x341b);     /* Reference: 0x341b (EXACT match required) */
-    //system_reg_write(0xb080, 0x46b0);     /* Reference: 0x46b0 (EXACT match required) */
-    //system_reg_write(0xb084, 0x1813);     /* Reference: 0x1813 (EXACT match required) */
+    system_reg_write(0xb07c, 0x341b);     /* Reference: 0x341b (EXACT match required) */
+    system_reg_write(0xb080, 0x46b0);     /* Reference: 0x46b0 (EXACT match required) */
+    system_reg_write(0xb084, 0x1813);     /* Reference: 0x1813 (EXACT match required) */
     /* Skip 0xb088 - reference doesn't write here */
-    //system_reg_write(0xb08c, 0x10a);      /* Reference: 0x10a (EXACT match required) */
+    system_reg_write(0xb08c, 0x10a);      /* Reference: 0x10a (EXACT match required) */
 
     pr_info("*** ISP CORE CONTROL REGISTERS WRITTEN - NOW MATCHES REFERENCE DRIVER ***\n");
 
