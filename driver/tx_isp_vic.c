@@ -132,43 +132,6 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
 
 static int ispcore_activate_module(struct tx_isp_dev *isp_dev);
 
-/* VIC interrupt restoration function - EXACT copy from working irqs-start-stop tag */
-void tx_isp_vic_restore_interrupts(void)
-{
-    extern struct tx_isp_dev *ourISPdev;
-    void __iomem *vic_interrupt_base;
-
-    if (!ourISPdev || !ourISPdev->vic_dev || vic_start_ok != 1) {
-        return; /* VIC not active */
-    }
-
-
-    pr_info("*** VIC INTERRUPT RESTORE: Restoring VIC interrupt registers in PRIMARY VIC space ***\n");
-
-    /* CRITICAL: Use PRIMARY VIC space for interrupt control (0x133e0000) */
-    struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)container_of(ourISPdev->vic_dev, struct tx_isp_vic_device, sd);
-    if (!vic_dev || !vic_dev->vic_regs) {
-        pr_err("*** VIC INTERRUPT RESTORE: No primary VIC registers available ***\n");
-        return;
-    }
-
-    /* Restore VIC interrupt register values using WORKING ISP-activates configuration */
-    pr_info("*** VIC INTERRUPT RESTORE: Using WORKING ISP-activates configuration (0x1e8/0x1ec) ***\n");
-
-    /* Clear pending interrupts first */
-    writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main interrupt status */
-    writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
-    wmb();
-
-    /* Restore working interrupt masks - FOCUS ON MAIN INTERRUPT ONLY */
-    writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);  /* Enable frame done interrupt */
-    /* SKIP MDMA register 0x1ec - it doesn't work correctly */
-    wmb();
-
-    pr_info("*** VIC INTERRUPT RESTORE: WORKING configuration restored (MainMask=0xFFFFFFFE) ***\n");
-}
-EXPORT_SYMBOL(tx_isp_vic_restore_interrupts);
-
 /* VIC frame completion handler */
 static void tx_isp_vic_frame_done(struct tx_isp_subdev *sd, int channel)
 {
