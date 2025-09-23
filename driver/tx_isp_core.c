@@ -4460,9 +4460,10 @@ int tx_isp_core_remove(struct platform_device *pdev)
             core_dev->tuning_dev = NULL;
         }
 
-        /* Binary Ninja: if ($s0[0x3a] s>= 2) ispcore_slake_module($s0) */
-        if (core_dev->state >= 2) {
-            pr_info("*** tx_isp_core_remove: Calling ispcore_slake_module (state=%d) ***\n", core_dev->state);
+        /* CRITICAL FIX: Binary Ninja: if ($s0[0x3a] s>= 2) ispcore_slake_module($s0) */
+        /* The check is against ISP device state at offset 0x3a, not core device state */
+        if (ourISPdev && ourISPdev->pipeline_state >= 2) {
+            pr_info("*** tx_isp_core_remove: Calling ispcore_slake_module (ISP pipeline_state=%d) ***\n", ourISPdev->pipeline_state);
             ispcore_slake_module(ourISPdev);
         }
 
