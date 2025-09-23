@@ -303,8 +303,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     vic_dev->total_frames = 0;
 
     /* CRITICAL FIX: Binary Ninja: int32_t $v0_3 = *($s0 + 0xe8) - Get VIC state */
-    {
-        int v0_3 = vic_state;
+    int v0_3 = vic_state;
 
     /* Binary Ninja: if (arg2 == 0) */
     if (enable == 0) {
@@ -2782,14 +2781,9 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                     pr_info("*** ispcore_core_ops_init: VIC already streaming (state 4) - preserving state to avoid reinitialization ***");
                 }
 
-                /* CRITICAL: Also set core device state to 3 */
-                core_dev = isp_dev->core_dev;  /* Get core device from ISP device */
-                if (core_dev) {
-                    core_dev->state = 3;
-                    pr_info("*** ispcore_core_ops_init: Core device state set to 3 (ACTIVE) ***");
-                } else {
-                    pr_warn("*** ispcore_core_ops_init: No core device available to set state ***");
-                }
+                /* REMOVED: Core device state management - ALL state management happens through VIC device */
+                /* Based on Binary Ninja MCP analysis, core device is stateless */
+                pr_info("*** ispcore_core_ops_init: Core device is stateless - only VIC state matters ***");
 
                 /* CRITICAL: Enable ISP core hardware interrupts */
                 if (core_dev) {
@@ -3307,18 +3301,20 @@ void ispcore_frame_channel_streamoff(int32_t* arg1)
         struct tx_isp_subdev *sd = (struct tx_isp_subdev *)v0;
         s0 = sd->host_priv;  /* SAFE: Use struct member access instead of offset arithmetic */
     }
-    /* SAFE FIX: Use struct member access instead of dangerous offset *(s0 + 0x15c) */
+    /* CRITICAL FIX: Use VIC state instead of core state */
     /* Binary Ninja expects this field to be 1 for normal operation, 0 for special handling */
     struct tx_isp_core_device *core_dev = (struct tx_isp_core_device *)s0;
-    int32_t v1_2 = (core_dev->state == 4) ? 1 : 0;  /* Use streaming state as mode flag */
+    /* Get VIC device to check streaming state */
+    struct tx_isp_vic_device *vic_dev = core_dev->isp_dev ? (struct tx_isp_vic_device *)core_dev->isp_dev->vic_dev : NULL;
+    int32_t v1_2 = (vic_dev && vic_dev->state == 4) ? 1 : 0;  /* Use VIC streaming state as mode flag */
 
     void* s2 = (void*)arg1[8];
     /* SAFE FIX: Use struct member access instead of dangerous offset *(s0 + 0x120) */
     void* s3 = core_dev->frame_channels;  /* Use frame_channels instead of raw offset */
     int32_t var_28 = 0;
 
-    pr_info("ispcore_frame_channel_streamoff: core_dev=%p, state=%d, v1_2=%d\n",
-             core_dev, core_dev->state, v1_2);
+    pr_info("ispcore_frame_channel_streamoff: core_dev=%p, vic_state=%d, v1_2=%d\n",
+             core_dev, vic_dev ? vic_dev->state : -1, v1_2);
 
     if (v1_2 != 1) {
         uint32_t s5_1 = (uint32_t)(*(arg1 + 7));  /* zx.d(*(arg1 + 7)) */
@@ -4364,9 +4360,10 @@ int tx_isp_core_probe(struct platform_device *pdev)
             } else {
                 pr_err("*** tx_isp_core_probe: Tuning init FAILED ***\n");
 
-                /* Binary Ninja: if ($v0[0x3a] s>= 2) ispcore_slake_module($v0) */
-                if (core_dev->state >= 2) {
-                    pr_info("*** tx_isp_core_probe: Calling ispcore_slake_module for cleanup (state=%d) ***\n", core_dev->state);
+                /* CRITICAL FIX: Binary Ninja: if ($v0[0x3a] s>= 2) ispcore_slake_module($v0) */
+                /* The check should be against ISP device pipeline state, not core state */
+                if (ourISPdev && ourISPdev->pipeline_state >= 2) {
+                    pr_info("*** tx_isp_core_probe: Calling ispcore_slake_module for cleanup (pipeline_state=%d) ***\n", ourISPdev->pipeline_state);
                     ispcore_slake_module(ourISPdev);
                 }
 
@@ -5239,8 +5236,7 @@ int tx_isp_core_device_deinit(struct tx_isp_core_device *core_dev)
         tx_isp_core_device_stop_streaming(core_dev);
     }
 
-    /* Set state back to init */
-    core_dev->state = 1;  /* INIT state */
+    /* REMOVED: Core state management - ALL state management happens through VIC device */
     core_dev->is_initialized = false;
 
     pr_info("*** tx_isp_core_device_deinit: Core device deinitialized ***\n");
@@ -5305,7 +5301,7 @@ int tx_isp_core_device_start_streaming(struct tx_isp_core_device *core_dev)
 
     /* Set streaming state */
     core_dev->streaming = 1;
-    core_dev->state = 4;  /* STREAMING state */
+    /* REMOVED: Core state management - ALL state management happens through VIC device */
 
     pr_info("*** tx_isp_core_device_start_streaming: Core streaming started ***\n");
     return 0;
@@ -5334,7 +5330,7 @@ int tx_isp_core_device_stop_streaming(struct tx_isp_core_device *core_dev)
 
     /* Clear streaming state */
     core_dev->streaming = 0;
-    core_dev->state = 3;  /* ACTIVE state */
+    /* REMOVED: Core state management - ALL state management happens through VIC device */
 
     pr_info("*** tx_isp_core_device_stop_streaming: Core streaming stopped ***\n");
     return 0;

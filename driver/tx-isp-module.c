@@ -3167,11 +3167,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         state->flags |= 1;
         state->streaming = true;
 
-        // CRITICAL FIX: Reset core state to 2 (ready) before streaming initialization
+        // REMOVED: Core state management - ALL state management happens through VIC device
+        // Based on Binary Ninja MCP analysis, core device is stateless
         if (ourISPdev && ourISPdev->core_dev) {
-            pr_info("*** Channel %d: STREAMON - Resetting core state from %d to 2 (ready) ***\n",
-                    channel, ourISPdev->core_dev->state);
-            ourISPdev->core_dev->state = 2;  /* Reset to READY state for reinitialization */
+            pr_info("*** Channel %d: STREAMON - Core device is stateless, only managing streaming flag ***\n", channel);
             ourISPdev->core_dev->streaming = 0;  /* Clear streaming flag */
         }
 
