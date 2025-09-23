@@ -62,11 +62,22 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
             vic_dev->irq_handler(vic_dev->irq_priv);
         }
 
-        /* CRITICAL FIX: The reference driver does NOT configure interrupt masks in tx_vic_enable_irq! */
-        /* VIC interrupt configuration happens in tx_isp_vic_start, not here */
-        /* This function only sets the software flag and calls the IRQ handler */
+        /* CRITICAL FIX: Enable VIC hardware interrupt generation */
+        /* The reference driver enables hardware interrupts here, not just software flags */
+        if (vic_dev->vic_regs) {
+            /* Clear any pending interrupts first */
+            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main interrupt status */
+            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
+            wmb();
 
-        pr_info("*** tx_vic_enable_irq: EXACT Binary Ninja - only setting software flag, no hardware config ***\n");
+            /* Enable VIC frame done interrupt (bit 0) - this is what generates interrupts */
+            writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);  /* Enable frame done interrupt */
+            wmb();
+
+            pr_info("*** tx_vic_enable_irq: CRITICAL FIX - VIC hardware interrupts ENABLED (0x1e8=0xFFFFFFFE) ***\n");
+        } else {
+            pr_err("*** tx_vic_enable_irq: CRITICAL ERROR - No VIC registers mapped! ***\n");
+        }
     }
 
     /* Binary Ninja: private_spin_unlock_irqrestore(dump_vsd_3 + 0x130, var_18) */
@@ -96,10 +107,21 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
             vic_dev->irq_disable(vic_dev->irq_priv);
         }
 
-        /* CRITICAL FIX: The reference driver does NOT configure hardware registers in tx_vic_disable_irq! */
-        /* This function only clears the software flag and calls the IRQ disable handler */
+        /* CRITICAL FIX: Disable VIC hardware interrupt generation */
+        /* The reference driver disables hardware interrupts here */
+        if (vic_dev->vic_regs) {
+            /* Disable all VIC interrupts by masking them */
+            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1e8);  /* Mask all main interrupts */
+            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1ec);  /* Mask all MDMA interrupts */
+            wmb();
 
-        pr_info("*** tx_vic_disable_irq: EXACT Binary Ninja - only clearing software flag, no hardware config ***\n");
+            /* Clear any pending interrupts */
+            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main interrupt status */
+            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
+            wmb();
+
+            pr_info("*** tx_vic_disable_irq: CRITICAL FIX - VIC hardware interrupts DISABLED (0x1e8/0x1ec=0xFFFFFFFF) ***\n");
+        }
     }
 
 
@@ -2278,7 +2300,7 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
             if (stream_ret == 0) {
                 pr_info("*** tx_isp_subdev_pipo: vic_core_s_stream SUCCESS - VIC interrupts should now be ENABLED! ***\n");
             } else {
-                pr_err("*** tx_isp_subdev_pipo: vic_core_s_stream FAILED: %d ***\n", vic_stream_ret);
+                pr_err("*** tx_isp_subdev_pipo: vic_core_s_stream FAILED: %d ***\n", stream_ret);
             }
         } else {
             pr_err("*** tx_isp_subdev_pipo: ispvic_frame_channel_s_stream FAILED: %d ***\n", stream_ret);
