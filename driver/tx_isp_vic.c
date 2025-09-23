@@ -590,6 +590,14 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
     pr_info("*** tx_isp_vic_start: Using single VIC register base - EXACT Binary Ninja reference ***\n");
 
+    /* CRITICAL FIX: Add the missing register writes that got interrupts working in first-IRQ/first-IRQA commits */
+    pr_info("*** tx_isp_vic_start: Writing CRITICAL interrupt-enabling registers from working commits ***\n");
+    writel(0x3130322a, vic_regs + 0x0);      /* First register from reference trace - CRITICAL for interrupts */
+    writel(0x1, vic_regs + 0x4);             /* Second register from reference trace - CRITICAL for interrupts */
+    writel(0x200, vic_regs + 0x14);          /* Third register from reference trace - CRITICAL for interrupts */
+    wmb();
+    pr_info("*** tx_isp_vic_start: CRITICAL interrupt-enabling registers written (0x3130322a, 0x1, 0x200) ***\n");
+
     /* Binary Ninja: if ($v0 == 1) */
     pr_info("*** tx_isp_vic_start: CRITICAL DEBUG - interface_type=%d, checking if == 1 ***\n", interface_type);
     if (interface_type == 1) {
@@ -610,6 +618,41 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** tx_isp_vic_start: Writing VIC configuration registers - EXACT Binary Ninja sequence ***\n");
         writel(2, vic_regs + 0xc);
         writel(sensor_attr->dbus_type, vic_regs + 0x14);
+
+        /* CRITICAL FIX: Add missing VIC configuration registers from reference driver */
+        /* These registers are essential to prevent hardware protection from triggering */
+        pr_info("*** tx_isp_vic_start: Adding CRITICAL missing VIC configuration registers ***\n");
+
+        /* Control registers - prevent hardware protection */
+        writel(0x800800, vic_regs + 0x60);      /* Control register */
+        writel(0x9d09d0, vic_regs + 0x64);      /* Control register */
+        writel(0x6002, vic_regs + 0x70);        /* Control register */
+        writel(0x7003, vic_regs + 0x74);        /* Control register */
+
+        /* Color space configuration - critical for proper operation */
+        writel(0xeb8080, vic_regs + 0xc0);      /* Color space config */
+        writel(0x108080, vic_regs + 0xc4);      /* Color space config */
+        writel(0x29f06e, vic_regs + 0xc8);      /* Color space config */
+        writel(0x913622, vic_regs + 0xcc);      /* Color space config */
+
+        /* Processing configuration - prevent timing issues */
+        writel(0x515af0, vic_regs + 0xd0);      /* Processing config */
+        writel(0xaaa610, vic_regs + 0xd4);      /* Processing config */
+        writel(0xd21092, vic_regs + 0xd8);      /* Processing config */
+        writel(0x6acade, vic_regs + 0xdc);      /* Processing config */
+
+        /* Additional processing config - complete configuration */
+        writel(0xeb8080, vic_regs + 0xe0);      /* Additional processing */
+        writel(0x108080, vic_regs + 0xe4);      /* Additional processing */
+        writel(0x29f06e, vic_regs + 0xe8);      /* Additional processing */
+        writel(0x913622, vic_regs + 0xec);      /* Additional processing */
+        writel(0x515af0, vic_regs + 0xf0);      /* Additional processing */
+        writel(0xaaa610, vic_regs + 0xf4);      /* Additional processing */
+        writel(0xd21092, vic_regs + 0xf8);      /* Additional processing */
+        writel(0x6acade, vic_regs + 0xfc);      /* Additional processing */
+        wmb();
+
+        pr_info("*** tx_isp_vic_start: CRITICAL VIC configuration registers written - hardware protection should be prevented ***\n");
 
         /* Binary Ninja: Write frame size immediately - no deferral needed */
         u32 frame_size_value = (vic_dev->width << 16) | vic_dev->height;
@@ -1315,45 +1358,55 @@ cleanup:
 int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
 {
     struct tx_isp_vic_device *vic_dev;
-    int result = 0xffffffea;  /* Binary Ninja: int32_t result = 0xffffffea */
+    
+    if (!sd)
+        return -EINVAL;
+    
+    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+    if (!vic_dev) {
+        pr_err("VIC device is NULL\n");
+        return -EINVAL;
+    }
+    
+    /* CRITICAL FIX: Use spinlock instead of mutex to prevent "sleeping in atomic context" */
+    /* mutex_lock() can sleep, but this function can be called from atomic context */
+    unsigned long flags;
+    spin_lock_irqsave(&vic_dev->lock, flags);
+    
+    if (vic_dev->state == 1) {
+        vic_dev->state = 2; /* INIT -> READY */
+        pr_info("VIC activated: state %d -> 2 (READY)\n", 1);
+        
+        /* *** CRITICAL: Ensure free buffers are available during activation *** */
+        if (list_empty(&vic_dev->free_head)) {
+            pr_info("*** VIC ACTIVATION: Replenishing free buffer pool ***\n");
+            for (int i = 0; i < 5; i++) {
+                /* FIXED: Use shared aligned buffer structure */
+                struct vic_buffer_entry *free_buffer = VIC_BUFFER_ALLOC();
+                if (free_buffer) {
+                    free_buffer->buffer_addr = 0;  /* Buffer address placeholder */
+                    free_buffer->buffer_index = i + 100;  /* Buffer index (activation batch) */
+                    free_buffer->buffer_status = VIC_BUFFER_STATUS_FREE;  /* Buffer status */
 
-    pr_info("*** tx_isp_vic_activate_subdev: Binary Ninja logic with header signature ***\n");
-
-    /* Binary Ninja: if (arg1 != 0) */
-    if (sd != NULL) {
-        /* Binary Ninja: if (arg1 u>= 0xfffff001) return 0xffffffea */
-        if ((uintptr_t)sd >= 0xfffff001) {
-            return 0xffffffea;
-        }
-
-        /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
-        vic_dev = (struct tx_isp_vic_device *)sd->dev_priv;  /* SAFE: arg1 + 0xd4 = dev_priv */
-
-        /* Binary Ninja: result = 0xffffffea */
-        result = 0xffffffea;
-
-        /* Binary Ninja: if ($s0_1 != 0 && $s0_1 u< 0xfffff001) */
-        if (vic_dev != NULL && (uintptr_t)vic_dev < 0xfffff001) {
-            /* Binary Ninja: private_mutex_lock($s0_1 + 0x130) */
-            mutex_lock(&vic_dev->state_lock);  /* SAFE: $s0_1 + 0x130 = state_lock */
-
-            /* Binary Ninja: if (*($s0_1 + 0x128) == 1) *($s0_1 + 0x128) = 2 */
-            if (vic_dev->state == 1) {  /* SAFE: $s0_1 + 0x128 = state */
-                vic_dev->state = 2;
-                pr_info("tx_isp_vic_activate_subdev: VIC state 1 -> 2 (activated)\n");
+                    list_add_tail(&free_buffer->list, &vic_dev->free_head);
+                    pr_info("*** VIC ACTIVATION: Added free buffer %d (aligned struct) ***\n", i);
+                }
             }
-
-            /* Binary Ninja: private_mutex_unlock($s0_1 + 0x130) */
-            mutex_unlock(&vic_dev->state_lock);
-
-            /* Binary Ninja: return 0 */
-            return 0;
+            pr_info("*** VIC ACTIVATION: Free buffer pool replenished - no more 'bank no free' ***\n");
+        } else {
+            pr_info("*** VIC ACTIVATION: Free buffers already available - count checking ***\n");
+            struct list_head *pos;
+            int free_count = 0;
+            list_for_each(pos, &vic_dev->free_head) {
+                free_count++;
+            }
+            pr_info("*** VIC ACTIVATION: %d free buffers available ***\n", free_count);
         }
     }
-
-    /* Binary Ninja: return result */
-    pr_info("*** tx_isp_vic_activate_subdev: FAILED - result=0x%x ***\n", result);
-    return result;
+    
+    /* CRITICAL FIX: Use spinlock instead of mutex to prevent "sleeping in atomic context" */
+    spin_unlock_irqrestore(&vic_dev->lock, flags);
+    return 0;
 }
 
 /* vic_core_ops_init - EXACT Binary Ninja reference implementation */
