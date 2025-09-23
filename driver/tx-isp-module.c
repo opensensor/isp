@@ -1584,11 +1584,6 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
     u32 int_status2 = readl(vic_regs + 0x1e4);
     pr_info("*** VIC IRQ: STATUS1=0x%08x, STATUS2=0x%08x ***\n", int_status1, int_status2);
 
-    /* CRITICAL DEBUG: Check VIC interrupt status registers to see if hardware is generating interrupts */
-    u32 int_status1 = readl(vic_regs + 0x1e0);
-    u32 int_status2 = readl(vic_regs + 0x1e4);
-    pr_info("*** VIC IRQ: STATUS1=0x%08x, STATUS2=0x%08x ***\n", int_status1, int_status2);
-
     /* CRITICAL SAFETY: Additional check for vic_start_ok flag */
     if (vic_start_ok == 0) {
         pr_debug("*** VIC IRQ: vic_start_ok=0, interrupts disabled ***\n");
