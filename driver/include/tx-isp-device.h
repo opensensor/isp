@@ -636,10 +636,13 @@ extern int num_channels;
  *
  * slake_module: called when this subdev is disabled. When called the
  *	module couldn't be operated.
+ * activate_module: called when this subdev needs to be activated.
+ *	Transitions device from init state to ready state.
  *
  */
 struct tx_isp_subdev_internal_ops {
 	int (*slake_module)(struct tx_isp_subdev *sd);
+	int (*activate_module)(void *arg);  /* EXACT Binary Ninja signature */
 };
 
 struct tx_isp_subdev_ops {
