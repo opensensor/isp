@@ -32,6 +32,12 @@ struct tx_isp_subdev_platform_data {
     /* Additional platform-specific data */
 };
 
+/* Clock configuration structure - EXACT Binary Ninja MCP compatibility */
+struct tx_isp_device_clk {
+    const char *name;        /* Clock name */
+    unsigned long rate;      /* Clock rate (0xffff = auto) */
+};
+
 #define TX_ISP_LINKFLAG_ENABLED		(0x1)
 
 /* ISP subdevice types */
