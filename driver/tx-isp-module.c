@@ -371,11 +371,18 @@ static struct resource tx_isp_vic_resources[] = {
     },
 };
 
+/* VIC clock configuration array - EXACT Binary Ninja MCP */
+static struct tx_isp_device_clk vic_clks[] = {
+    {"cgu_isp", 100000000},  /* 100MHz CGU ISP clock */
+    {"isp", 0xffff},         /* Auto-rate ISP clock */
+};
+
 /* VIC platform data - CRITICAL for tx_isp_subdev_init to work */
 static struct tx_isp_subdev_platform_data vic_pdata = {
     .interface_type = 1,  /* VIC interface */
     .clk_num = 2,         /* Number of clocks needed */
     .sensor_type = 0,     /* Default sensor type */
+    .clks = vic_clks,     /* CRITICAL: Clock configuration array - Binary Ninja: *($s1_1 + 8) */
 };
 
 struct platform_device tx_isp_vic_platform_device = {
@@ -398,11 +405,18 @@ static struct resource tx_isp_csi_resources[] = {
     },
 };
 
+/* CSI clock configuration array - EXACT Binary Ninja MCP */
+static struct tx_isp_device_clk csi_clks[] = {
+    {"cgu_isp", 100000000},  /* 100MHz CGU ISP clock */
+    {"isp", 0xffff},         /* Auto-rate ISP clock */
+};
+
 /* CSI platform data - CRITICAL for tx_isp_subdev_init to work */
 static struct tx_isp_subdev_platform_data csi_pdata = {
     .interface_type = 1,  /* MIPI interface */
     .clk_num = 2,         /* Number of clocks needed */
     .sensor_type = 0,     /* Default sensor type */
+    .clks = csi_clks,     /* CRITICAL: Clock configuration array - Binary Ninja: *($s1_1 + 8) */
 };
 
 struct platform_device tx_isp_csi_platform_device = {
@@ -481,11 +495,19 @@ static struct resource tx_isp_core_resources[] = {
     },
 };
 
+/* CORE clock configuration array - EXACT Binary Ninja MCP */
+static struct tx_isp_device_clk core_clks[] = {
+    {"cgu_isp", 100000000},  /* 100MHz CGU ISP clock */
+    {"isp", 0xffff},         /* Auto-rate ISP clock */
+    {"csi", 0xffff},         /* Auto-rate CSI clock */
+};
+
 /* CORE platform data - CRITICAL for tx_isp_subdev_init to work */
 static struct tx_isp_subdev_platform_data core_pdata = {
     .interface_type = 1,  /* ISP Core interface */
     .clk_num = 3,         /* Number of clocks needed (ISP, CSI, VPU) */
     .sensor_type = 0,     /* Default sensor type */
+    .clks = core_clks,    /* CRITICAL: Clock configuration array - Binary Ninja: *($s1_1 + 8) */
 };
 
 struct platform_device tx_isp_core_platform_device = {

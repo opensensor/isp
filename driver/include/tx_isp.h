@@ -23,11 +23,12 @@
 
 #include "tx-isp-common.h"
 
-/* Platform data structure for subdevices - Binary Ninja compatibility */
+/* Platform data structure for subdevices - EXACT Binary Ninja MCP compatibility */
 struct tx_isp_subdev_platform_data {
-    int interface_type;  /* Interface type (1=MIPI, 2=DVP, etc.) */
-    int clk_num;        /* Number of clocks */
-    int sensor_type;    /* Sensor type */
+    int interface_type;                    /* Offset 0: Interface type (1=MIPI, 2=DVP, etc.) */
+    int clk_num;                          /* Offset 4: Number of clocks - Binary Ninja: $s1_1[4] */
+    int sensor_type;                      /* Offset 8: Sensor type */
+    struct tx_isp_device_clk *clks;       /* Offset 12: Clock configuration array - Binary Ninja: *($s1_1 + 8) */
     /* Additional platform-specific data */
 };
 
