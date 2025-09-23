@@ -4925,11 +4925,15 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                 if (vic_dev && vic_dev->vic_regs) {
                     pr_info("*** CALLING CRITICAL VIC INITIALIZATION FUNCTION ***\n");
 
-                    /* CRITICAL: Write VIC control register to trigger initialization */
-                    /* This matches the Binary Ninja function call pattern */
-                    writel(0x4000000, vic_dev->vic_regs + 0x0);  /* VIC control register */
+                    /* CRITICAL FIX: Write to the correct VIC control register */
+                    /* The register monitor shows VIC control at ISP base + 0x9a00 */
+                    /* vic_regs points to 0x133e0000, ISP base is vic_regs - 0x9a00 */
+                    void __iomem *isp_base = vic_dev->vic_regs - 0x9a00;
+
+                    /* Write to VIC control register at offset 0x9a00 from ISP base */
+                    writel(0x4000000, isp_base + 0x9a00);  /* VIC control register at 0x9a00 */
                     wmb();
-                    pr_info("*** VIC control register written with 0x4000000 ***\n");
+                    pr_info("*** VIC control register written with 0x4000000 to ISP+0x9a00 ***\n");
                 }
 
                 /* CRITICAL: Subdevice initialization loop - Fixed for our layout */
