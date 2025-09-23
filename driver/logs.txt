@@ -1,109 +1,203 @@
-  305.676427] *** ispcore_slake_module: Calling slake_module for subdev[0] ***
-[  305.676434] *** tx_isp_csi_slake_subdev: CSI slake/shutdown - current state=1 ***
-[  305.676441] *** tx_isp_csi_slake_subdev: CSI slake complete, final state=1 ***
-[  305.676446] ispcore_slake_module: Subdev 0 slake success
-[  305.676451] *** ispcore_slake_module: Processing subdev[1]=8059e000 ***
-[  305.676458] *** ispcore_slake_module: Calling slake_module for subdev[1] ***
-[  305.676464] *** tx_isp_vic_slake_subdev: ENTRY - sd=8059e000 ***
-[  305.676471] *** tx_isp_vic_slake_subdev: VIC slake/shutdown - vic_dev=8059e000, current state=1 ***
-[  305.676478] *** tx_isp_vic_slake_subdev: VIC slake complete, final state=1 ***
-[  305.676483] ispcore_slake_module: Subdev 1 slake success
-[  305.676489] *** ispcore_slake_module: Processing subdev[2]=853f7800 ***
-[  305.676495] *** ispcore_slake_module: Calling slake_module for subdev[2] ***
-[  305.676502] *** tx_isp_vin_slake_subdev: VIN slake/shutdown - current state=1, refcnt=0 ***
-[  305.676508] *** tx_isp_get_sensor: Searching subdev array for sensors ***
-[  305.676515] *** tx_isp_get_sensor: subdevs[5] = NULL ***
-[  305.676520] *** tx_isp_get_sensor: subdevs[6] = NULL ***
-[  305.676526] *** tx_isp_get_sensor: subdevs[7] = NULL ***
-[  305.676531] *** tx_isp_get_sensor: subdevs[8] = NULL ***
-[  305.676537] *** tx_isp_get_sensor: subdevs[9] = NULL ***
-[  305.676543] *** tx_isp_get_sensor: subdevs[10] = NULL ***
-[  305.676549] *** tx_isp_get_sensor: subdevs[11] = NULL ***
-[  305.676554] *** tx_isp_get_sensor: subdevs[12] = NULL ***
-[  305.676560] *** tx_isp_get_sensor: subdevs[13] = NULL ***
-[  305.676565] *** tx_isp_get_sensor: subdevs[14] = NULL ***
-[  305.676571] *** tx_isp_get_sensor: subdevs[15] = NULL ***
-[  305.676578] *** tx_isp_get_sensor: Found real sensor at index 0: 85205800 ***
-[  305.676584] tx_isp_vin_slake_subdev: Releasing sensor input
-[  305.676591] *** tx_isp_vin_slake_subdev: VIN slake complete, final state=1 ***
-[  305.676597] ispcore_slake_module: Subdev 2 slake success
-[  305.676601] *** ispcore_slake_module: Processing subdev[3]=853f7600 ***
-[  305.676608] *** ispcore_slake_module: Calling slake_module for subdev[3] ***
-[  305.676614] *** fs_slake_module: EXACT Binary Ninja implementation ***
-[  305.676619] fs_slake_module: FS device is NULL
-[  305.676625] error handler!!!
-[  305.676635] CPU: 0 PID: 2961 Comm: insmod Tainted: G           O 3.10.14__isvp_swan_1.0__ #1
-[  305.676642] Stack : 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
-[  305.676642] 	  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
-[  305.676642] 	  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
-[  305.676642] 	  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
-[  305.676642] 	  00000000 00000000 00000000 00000000 00000000 00000000 00000000 842a1970
-[  305.676642] 	  ...
-[  305.676715] Call Trace:[<8001f744>] 0x8001f744
-[  305.676729] [<8001f744>] 0x8001f744
-[  305.676736] [<c065f468>] 0xc065f468
-[  305.676743] [<803b462c>] 0x803b462c
-[  305.676749] [<c0674cd8>] 0xc0674cd8
-[  305.676755] [<800584d0>] 0x800584d0
-[  305.676762] [<803b462c>] 0x803b462c
-[  305.676768] [<c0674a28>] 0xc0674a28
-[  305.676775] [<800584d0>] 0x800584d0
-[  305.676781] [<801e8a5c>] 0x801e8a5c
-[  305.676787] [<c0675358>] 0xc0675358
-[  305.676793] [<80128144>] 0x80128144
-[  305.676801] [<800c4618>] 0x800c4618
-[  305.676807] [<801ace08>] 0x801ace08
-[  305.676813] [<8005b120>] 0x8005b120
-[  305.676819] [<c06607ac>] 0xc06607ac
-[  305.676827] [<801eae24>] 0x801eae24
-[  305.676833] [<801e91bc>] 0x801e91bc
-[  305.676839] [<803b152c>] 0x803b152c
-[  305.676846] [<801e92c0>] 0x801e92c0
-[  305.676852] [<801e7104>] 0x801e7104
-[  305.676859] [<803baac8>] 0x803baac8
-[  305.676865] [<801e8f14>] 0x801e8f14
-[  305.676872] [<801a45d0>] 0x801a45d0
-[  305.676878] [<801e8288>] 0x801e8288
-[  305.676885] [<801e6608>] 0x801e6608
-[  305.676892] [<8003ff84>] 0x8003ff84
-[  305.676899] [<801eae24>] 0x801eae24
-[  305.676905] [<c0680000>] 0xc0680000
-[  305.676911] [<801ea748>] 0x801ea748
-[  305.676918] [<803b462c>] 0x803b462c
-[  305.676925] [<c066b6bc>] 0xc066b6bc
-[  305.676931] [<801e4524>] 0x801e4524
-[  305.676937] [<803b4664>] 0x803b4664
-[  305.676944] [<803b462c>] 0x803b462c
-[  305.676951] [<c066bca4>] 0xc066bca4
-[  305.676958] [<801e91bc>] 0x801e91bc
-[  305.676964] [<803b152c>] 0x803b152c
-[  305.676971] [<801e92c0>] 0x801e92c0
-[  305.676977] [<801e7104>] 0x801e7104
-[  305.676984] [<803baac8>] 0x803baac8
-[  305.676991] [<801e8f14>] 0x801e8f14
-[  305.676997] [<801a45d0>] 0x801a45d0
-[  305.677003] [<801e8288>] 0x801e8288
-[  305.677011] [<801e6608>] 0x801e6608
-[  305.677018] [<801ea748>] 0x801ea748
-[  305.677025] [<803b462c>] 0x803b462c
-[  305.677031] [<c066b400>] 0xc066b400
-[  305.677039] [<c066b2a8>] 0xc066b2a8
-[  305.677045] [<800105a4>] 0x800105a4
-[  305.677051] [<8005e5c4>] 0x8005e5c4
-[  305.677059] [<8007b7a8>] 0x8007b7a8
-[  305.677065] [<801be95c>] 0x801be95c
-[  305.677080] [<8007bb5c>] 0x8007bb5c
-[  305.677091] [<800224bc>] 0x800224bc
-[  305.677098] [<800da544>] 0x800da544
-[  305.677105] 
-[  305.677110] ispcore_slake_module: Managing ISP clocks
-[  305.677114] ispcore_slake_module: Disabled IPU clockispcore_slake_module: Disabled ISP clock
-[  305.677122] ispcore_slake_module: Complete, result=0<6>[  305.677127] *** tx_isp_core_probe: ispcore_slake_module completed successfully ***
-[  305.677133] *** tx_isp_core_probe: Core device setup complete ***
-[  305.677139] ***   - Core device: 8059e400 ***
-[  305.677144] ***   - Channel count: 6 ***
-[  305.677150] ***   - Linked to ISP device: 80578000 ***
-[  305.677155] *** tx_isp_core_probe: Initializing core tuning system ***
-[  305.677161] isp_core_tuning_init: Initializing tuning data structure
-[  305.677172] isp_core_tuning_init: Tuning data structure initialized at 84d1e000
-[  305.677179] isp_core_tuning_init: Structure size: 4356 bytes (vs Bin
+65230] ISP core clock enabled
+[   34.765237] Found CSI clock: csi
+[   34.765242] CSI/MIPI clock enabled
+[   34.789177] CPM clock gates configured
+[   34.789190] isp_subdev_init_clks: Successfully initialized 3 clocks
+[   34.789200] *** tx_isp_subdev_auto_link: ENTRY - pdev=c06a6020, sd=80482400, ourISPdev=81124000 ***
+[   34.789208] *** tx_isp_subdev_auto_link: Auto-linking device 'isp-m0' to ourISPdev=81124000 ***
+[   34.789214] *** DEBUG: Device name comparison - checking 'isp-m0' ***
+[   34.789220] *** DEBUG: About to check device name matches ***
+[   34.789226] *** DEBUG: CORE device name matched! Setting up Core device ***
+[   34.789232] *** CRITICAL FIX: CORE regs mapped to core device: b3300000 ***
+[   34.789240] *** tx_isp_link_core_device: Linking core device 80482400 to ISP device 81124000 ***
+[   34.789245] *** tx_isp_link_core_device: Core device linked successfully ***
+[   34.789251] *** Core subdev registered at index 4: 80482400 ***
+[   34.789257] *** LINKED CORE device: 80482400 ***
+[   34.789262] *** CORE SUBDEV REGISTERED AT INDEX 0 ***
+[   34.789267] *** tx_isp_core_probe: Core subdev initialized successfully ***
+[   34.789274] *** tx_isp_core_device_init: Initializing core device: 80482400 ***
+[   34.789286] *** tx_isp_core_device_init: State transitions handled by slake_module ***
+[   34.789291] *** tx_isp_core_device_init: Core device initialized successfully ***
+[   34.789297] *** tx_isp_core_device_init: Core sensor IOCTL handler set for sensor registration ***
+[   34.789304] *** tx_isp_link_core_device: Linking core device 80482400 to ISP device 81124000 ***
+[   34.789310] *** tx_isp_link_core_device: Core device linked successfully ***
+[   34.789315] *** Core subdev registered at index 4: 80482400 ***
+[   34.789329] *** tx_isp_core_probe: Assigned frame_channels=80482800 to core_dev ***
+[   34.789334] *** tx_isp_core_probe: VIC device creation deferred to platform driver system ***
+[   34.789340] *** tx_isp_core_probe: Platform drivers will call tx_isp_subdev_init for proper initialization ***
+[   34.789346] *** tx_isp_core_probe: Calling sensor_early_init ***
+[   34.789351] *** tx_isp_core_probe: ISP clock management handled by infrastructure ***
+[   34.789356] *** tx_isp_core_probe: Calling ispcore_slake_module for state initialization ***
+[   34.789362] *** ispcore_slake_module: EXACT Binary Ninja MCP implementation ***
+[   34.789368] ispcore_slake_module: VIC device=80482000, state=1ispcore_slake_module: Processing subdevices
+[   34.789378] *** DEBUG: isp_dev=81124000, isp_dev->subdevs=81127274 ***<6>[   34.789384] *** ispcore_slake_module: Processing subdev[0]=85207400 ***
+[   34.789390] *** ispcore_slake_module: Calling slake_module for subdev[0] ***
+[   34.789396] *** tx_isp_csi_slake_subdev: CSI slake/shutdown - current state=1 ***
+[   34.789403] *** tx_isp_csi_slake_subdev: CSI slake complete, final state=1 ***
+[   34.789409] ispcore_slake_module: Subdev 0 slake success
+[   34.789414] *** ispcore_slake_module: Processing subdev[1]=80482000 ***
+[   34.789420] *** ispcore_slake_module: Calling slake_module for subdev[1] ***
+[   34.789426] *** tx_isp_vic_slake_subdev: ENTRY - sd=80482000 ***
+[   34.789433] *** tx_isp_vic_slake_subdev: VIC slake/shutdown - vic_dev=80482000, current state=1 ***
+[   34.789440] *** tx_isp_vic_slake_subdev: VIC slake complete, final state=1 ***
+[   34.789445] ispcore_slake_module: Subdev 1 slake success
+[   34.789450] *** ispcore_slake_module: Processing subdev[2]=84cca000 ***
+[   34.789456] *** ispcore_slake_module: Calling slake_module for subdev[2] ***
+[   34.789463] *** tx_isp_vin_slake_subdev: VIN slake/shutdown - current state=1, refcnt=0 ***
+[   34.789469] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[   34.789475] *** tx_isp_get_sensor: subdevs[5] = NULL ***
+[   34.789480] *** tx_isp_get_sensor: subdevs[6] = NULL ***
+[   34.789486] *** tx_isp_get_sensor: subdevs[7] = NULL ***
+[   34.789492] *** tx_isp_get_sensor: subdevs[8] = NULL ***
+[   34.789497] *** tx_isp_get_sensor: subdevs[9] = NULL ***
+[   34.789502] *** tx_isp_get_sensor: subdevs[10] = NULL ***
+[   34.789508] *** tx_isp_get_sensor: subdevs[11] = NULL ***
+[   34.789514] *** tx_isp_get_sensor: subdevs[12] = NULL ***
+[   34.789519] *** tx_isp_get_sensor: subdevs[13] = NULL ***
+[   34.789524] *** tx_isp_get_sensor: subdevs[14] = NULL ***
+[   34.789530] *** tx_isp_get_sensor: subdevs[15] = NULL ***
+[   34.789536] *** tx_isp_get_sensor: Found real sensor at index 0: 85207400 ***
+[   34.789542] tx_isp_vin_slake_subdev: Releasing sensor input
+[   34.789549] *** tx_isp_vin_slake_subdev: VIN slake complete, final state=1 ***
+[   34.789554] ispcore_slake_module: Subdev 2 slake success
+[   34.789560] *** ispcore_slake_module: Processing subdev[3]=853f6e00 ***
+[   34.789566] *** ispcore_slake_module: Calling slake_module for subdev[3] ***
+[   34.789571] *** fs_slake_module: EXACT Binary Ninja implementation ***
+[   34.789577] *** fs_slake_module: FS slake complete, result=0 ***
+[   34.789582] ispcore_slake_module: Subdev 3 slake success
+[   34.789588] *** ispcore_slake_module: Processing subdev[4]=80482400 ***
+[   34.789594] *** ispcore_slake_module: Calling slake_module for subdev[4] ***
+[   34.789598] *** ispcore_slake_module: EXACT Binary Ninja MCP implementation ***
+[   34.789603] ispcore_slake_module: Complete, result=-22error handler!!!
+[   34.789618] CPU: 0 PID: 2350 Comm: insmod Tainted: G           O 3.10.14__isvp_swan_1.0__ #1
+[   34.789624] Stack : 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+p[   34.789624] 	  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+[   34.789624] 	  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+[   34.789624] 	  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+[   34.789624] 	  00000000 00000000 00000000 00000000 00000000 00000000 00000000 85c11970
+[   34.789624] 	  ...
+[   34.789698] Call Trace:[<8001f744>] 0x8001f744
+[   34.789711] [<8001f744>] 0x8001f744
+[   34.789718] [<c065f468>] 0xc065f468
+[   34.789724] [<803b462c>] 0x803b462c
+[   34.789730] [<c0674cf8>] 0xc0674cf8
+[   34.789736] [<800584d0>] 0x800584d0
+[   34.789743] [<80482b28>] 0x80482b28
+[   34.789749] [<803b462c>] 0x803b462c
+[   34.789755] [<80482400>] 0x80482400
+[   34.789761] [<80482800>] 0x80482800
+[   34.789767] [<c0674a48>] 0xc0674a48
+[   34.789773] [<800584d0>] 0x800584d0
+[   34.789779] [<801e8a5c>] 0x801e8a5c
+[   34.789785] [<c0675378>] 0xc0675378
+[   34.789792] [<80128144>] 0x80128144
+[   34.789798] [<800c4618>] 0x800c4618
+[   34.789804] [<801ace08>] 0x801ace08
+[   34.789810] [<8005b120>] 0x8005b120
+[   34.789816] [<c06607ac>] 0xc06607ac
+[   34.789824] [<801eae24>] 0x801eae24
+[   34.789830] [<801e91bc>] 0x801e91bc
+[   34.789836] [<803b152c>] 0x803b152c
+[   34.789842] [<8048bb80>] 0x8048bb80
+[   34.789848] [<801e92c0>] 0x801e92c0
+[   34.789854] [<801e7104>] 0x801e7104
+[   34.789861] [<804888c0>] 0x804888c0
+[   34.789867] [<803baac8>] 0x803baac8
+[   34.789873] [<801e8f14>] 0x801e8f14
+[   34.789880] [<801a45d0>] 0x801a45d0
+[   34.789886] [<801e8288>] 0x801e8288
+[   34.789892] [<801e6608>] 0x801e6608
+[   34.789899] [<8003ff84>] 0x8003ff84
+[   34.789906] [<801eae24>] 0x801eae24
+[   34.789912] [<c0680000>] 0xc0680000
+[   34.789918] [<801ea748>] 0x801ea748
+[   34.789925] [<803b462c>] 0x803b462c
+[   34.789931] [<c066b6dc>] 0xc066b6dc
+[   34.789938] [<801e4524>] 0x801e4524
+[   34.789944] [<803b4664>] 0x803b4664
+[   34.789950] [<803b462c>] 0x803b462c
+[   34.789956] [<c066bcc4>] 0xc066bcc4
+[   34.789964] [<801e91bc>] 0x801e91bc
+[   34.789970] [<803b152c>] 0x803b152c
+[   34.789976] [<80492100>] 0x80492100
+[   34.789982] [<801e92c0>] 0x801e92c0
+[   34.789988] [<801e7104>] 0x801e7104
+[   34.789995] [<803baac8>] 0x803baac8
+[   34.790001] [<801e8f14>] 0x801e8f14
+[   34.790008] [<801a45d0>] 0x801a45d0
+[   34.790014] [<801e8288>] 0x801e8288
+[   34.790020] [<801e6608>] 0x801e6608
+[   34.790028] [<801ea748>] 0x801ea748
+[   34.790035] [<803b462c>] 0x803b462c
+[   34.790041] [<c066b420>] 0xc066b420
+[   34.790048] [<c066b2c8>] 0xc066b2c8
+[   34.790054] [<800105a4>] 0x800105a4
+[   34.790061] [<8005e5c4>] 0x8005e5c4
+[   34.790068] [<8007b7a8>] 0x8007b7a8
+[   34.790074] [<801be95c>] 0x801be95c
+[   34.790089] [<8007bb5c>] 0x8007bb5c
+[   34.790099] [<800224bc>] 0x800224bc
+[   34.790106] [<800da544>] 0x800da544
+[   34.790114] 
+[   34.790118] ispcore_slake_module: Managing ISP clocks
+[   34.790122] ispcore_slake_module: Disabled IPU clockispcore_slake_module: Disabled ISP clock
+[   34.790130] ispcore_slake_module: Complete, result=0<6>[   34.790135] *** tx_isp_core_probe: ispcore_slake_module completed successfully ***
+[   34.790140] *** tx_isp_core_probe: Core device setup complete ***
+[   34.790146] ***   - Core device: 80482400 ***
+[   34.790151] ***   - Channel count: 6 ***
+[   34.790156] ***   - Linked to ISP device: 81124000 ***
+[   34.790162] *** tx_isp_core_probe: Initializing core tuning system ***
+[   34.790167] isp_core_tuning_init: Initializing tuning data structure
+[   34.790178] isp_core_tuning_init: Tuning data structure initialized at 84d1e000
+[   34.790184] isp_core_tuning_init: Structure size: 4356 bytes (vs Binary Ninja 0x40d0)
+[   34.790190] *** SAFE: mode_flag properly initialized using struct member access ***
+[   34.790196] *** tx_isp_core_probe: Tuning init SUCCESS ***
+[   34.790200] *** tx_isp_core_probe: Set platform driver data ***
+[   34.790206] *** tx_isp_core_probe: Set global core device reference ***
+[   34.790211] *** tx_isp_core_probe: SUCCESS - Core device fully initialized ***
+[   34.790217] ***   - Core device: 80482400 ***
+[   34.790222] ***   - Tuning device: 84d1e000 ***
+[   34.790227] *** tx_isp_core_probe: Creating frame channel devices ***
+[   34.790232] *** tx_isp_create_framechan_devices: Creating frame channel devices ***
+[   34.793612] *** Created frame channel device: /dev/framechan0 (major=10, minor=54) ***
+[   34.799362] *** Created frame channel device: /dev/framechan1 (major=10, minor=53) ***
+[   34.801920] *** Created frame channel device: /dev/framechan2 (major=10, minor=52) ***
+[   34.810251] *** Created frame channel device: /dev/framechan3 (major=10, minor=51) ***
+[   34.810262] *** tx_isp_create_framechan_devices: All frame channel devices created ***
+[   34.810267] *** tx_isp_core_probe: Frame channel devices created successfully ***
+[   34.810273] *** tx_isp_core_probe: Creating ISP M0 tuning device node ***
+[   34.810278] tisp_code_create_tuning_node: Creating ISP M0 tuning device node
+[   34.810287] tisp_code_create_tuning_node: Allocated dynamic major 251
+[   34.815284] *** ISP M0 TUNING DEVICE CREATED: /dev/isp-m0 (major=251, minor=0) ***
+[   34.815295] *** tx_isp_core_probe: ISP M0 tuning device node created successfully ***
+[   34.815301] *** tx_isp_core_probe: Core probe completed successfully ***
+[   34.815322] *** Platform device 4 (isp-m0) registered successfully ***
+[   34.815328] *** tx_isp_create_graph_and_nodes: Creating /proc/jz/isp entries ***
+[   34.815350] *** Created /proc/jz/isp directory ***
+[   34.815360] *** Created /proc/jz/isp/isp-w00 entry with file ops ***
+[   34.815370] *** Created /proc/jz/isp/isp-w02 entry with file ops ***
+[   34.815378] *** Created /proc/jz/isp/isp-w01 entry with file ops ***
+[   34.815387] *** Created /proc/jz/isp/isp-fs entry with file ops ***
+[   34.815396] *** Created /proc/jz/isp/isp-m0 entry with file ops ***
+[   34.815401] *** tx_isp_create_graph_and_nodes: Registering misc devices ***
+[   34.815407] *** Misc device registration handled via main tx-isp device ***
+[   34.815412] *** Misc device registration handled via main tx-isp device ***
+[   34.815417] *** Misc device registration handled via main tx-isp device ***
+[   34.815422] *** Misc device registration handled via main tx-isp device ***
+[   34.815428] *** Misc device registration handled via main tx-isp device ***
+[   34.815433] *** tx_isp_create_graph_and_nodes: Initializing frame channels ***
+[   34.815442] *** Frame channel 0 initialized: 1920x1080, state=2 ***
+[   34.815450] *** Frame channel 1 initialized: 640x360, state=2 ***
+[   34.815456] *** tx_isp_create_graph_and_nodes: Binary Ninja reference implementation complete ***
+[   34.815464] *** tx_isp_module_init: VIC device linkage check - isp_dev->vic_dev = 80482000 ***
+[   34.815469] *** tx_isp_module_init: VIC device successfully linked ***
+[   34.815474] *** tx_isp_module_init: Binary Ninja reference implementation complete ***
+[   34.815480] *** PROBE: Binary Ninja reference implementation complete ***
+[   34.815490] *** SUCCESS: ourISPdev allocated by probe function: 81124000 ***
+[   34.815496] *** Following reference driver: IRQ registration handled by tx_isp_request_irq ***
+[   34.815501] TX ISP driver initialized successfully - explicit IRQ registration complete
+[   34.836827] ISP isp-w01: [CSI PHY Control] write at offset 0x0: 0x0 -> 0x3130322a (delta: 0.000 ms)
+[   34.836841] ISP isp-w01: [CSI PHY Control] write at offset 0x4: 0x0 -> 0x1 (delta: 0.000 ms)
+[   34.836851] ISP isp-w01: [CSI PHY Control] write at offset 0x14: 0x0 -> 0x200 (delta: 0.000 ms)
+[   35.869370] === gc2053 SENSOR MODULE INIT ===
+[   35.871826] gc2053 I2C driver registered, waiting for device creation by ISP

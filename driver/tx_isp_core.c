@@ -840,9 +840,9 @@ static struct tx_isp_subdev_sensor_ops core_sensor_ops = {
     .release_all_sensor = NULL
 };
 
-/* Core internal operations - CRITICAL: Missing from original implementation */
+/* Core internal operations - CRITICAL: Core should NOT have slake_module to avoid recursion */
 static struct tx_isp_subdev_internal_ops core_internal_ops = {
-    .slake_module = ispcore_slake_module,
+    .slake_module = NULL,  /* Core doesn't process itself - it processes other subdevs */
 };
 
 /* Update the core subdev ops to include the core ops */
