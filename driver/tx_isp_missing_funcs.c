@@ -891,9 +891,6 @@ EXPORT_SYMBOL(data_9a430);
 uint32_t sensor_info = 1920 * 1080;
 EXPORT_SYMBOL(sensor_info);
 
-int tisp_ae_hist[256] = {0};
-EXPORT_SYMBOL(tisp_ae_hist);
-
 uint8_t dmsc_awb_gain[0xc] = {0};
 EXPORT_SYMBOL(dmsc_awb_gain);
 
