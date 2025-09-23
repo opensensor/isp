@@ -1849,6 +1849,25 @@ int tx_isp_video_link_stream(struct tx_isp_dev *arg1, int arg2)
 
     pr_info("*** tx_isp_video_link_stream: EXACT Binary Ninja MCP implementation - enable=%d ***\n", arg2);
 
+    /* CRITICAL FIX: Call activate_module on all subdevs FIRST to get them from state 1->2 */
+    if (arg2 == 1) {  /* Stream ON */
+        pr_info("*** tx_isp_video_link_stream: CRITICAL FIX - Calling activate_module on all subdevs first ***\n");
+        s4 = arg1->subdevs;
+        for (i = 0; i != 0x10; i++) {
+            struct tx_isp_subdev *subdev = s4[i];
+            if (subdev != NULL && subdev->ops && subdev->ops->internal && subdev->ops->internal->activate_module) {
+                pr_info("*** tx_isp_video_link_stream: Calling activate_module on subdev[%d] ***\n", i);
+                result = subdev->ops->internal->activate_module(subdev);
+                if (result != 0 && result != -ENOIOCTLCMD) {
+                    pr_err("tx_isp_video_link_stream: activate_module failed on subdev[%d]: %d\n", i, result);
+                    return result;
+                }
+                pr_info("*** tx_isp_video_link_stream: activate_module SUCCESS on subdev[%d] ***\n", i);
+            }
+        }
+        pr_info("*** tx_isp_video_link_stream: All activate_module calls complete ***\n");
+    }
+
     /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
     s4 = arg1->subdevs;  /* Subdev array at offset 0x38 */
 
