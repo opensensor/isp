@@ -946,8 +946,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     wmb();
     pr_info("*** tx_isp_vic_start: VIC processing enabled (0x0=0x1, 0x4=0x1) ***\n");
 
-    /* CRITICAL FIX: DEFER interrupt configuration until AFTER VIC hardware is properly configured */
-    pr_info("*** tx_isp_vic_start: DEFERRING interrupt configuration until VIC hardware is ready ***\n");
+    /* CRITICAL FIX: VIC interrupt registers are now configured at probe time */
+    pr_info("*** tx_isp_vic_start: VIC interrupt registers configured at probe time - no need to reconfigure ***\n");
 
     /* Binary Ninja: Final configuration registers */
     writel(0x100010, vic_regs + 0x1a4);
@@ -955,61 +955,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0x10, vic_regs + 0x1b0);
     writel(0, vic_regs + 0x1b4);
     wmb();
-
-    /* CRITICAL FIX: NOW configure VIC interrupts AFTER hardware is properly configured */
-    pr_info("*** tx_isp_vic_start: NOW configuring VIC interrupts after hardware setup ***\n");
-
-    /* Declare variables at the beginning for C90 compliance */
-    u32 width, height;
-    u32 verify_int_en, verify_int_mask;
-
-    /* Configure VIC dimensions first - CRITICAL prerequisite for interrupt registers */
-    width = sensor_attr->mipi.image_twidth;
-    height = sensor_attr->mipi.image_theight;
-
-    /* CRITICAL FIX: Use hardcoded dimensions if sensor attributes are invalid (0x0) */
-    if (width == 0 || height == 0) {
-        width = 1920;   /* GC2053 sensor output width */
-        height = 1080;  /* GC2053 sensor output height */
-        pr_info("*** VIC DIMENSIONS: Using hardcoded %dx%d (sensor attrs invalid: %dx%d) ***\n",
-                width, height, sensor_attr->mipi.image_twidth, sensor_attr->mipi.image_theight);
-    } else {
-        pr_info("*** VIC DIMENSIONS: Using sensor attrs %dx%d ***\n", width, height);
-    }
-
-    writel((width << 16) | height, vic_regs + 0x10);  /* VIC dimensions */
-    writel(width * 2, vic_regs + 0x14);               /* VIC stride for 16-bit */
-    wmb();
-
-    /* Configure VIC control register - CRITICAL prerequisite */
-    writel(2, vic_regs + 0xc);  /* MIPI mode (2, not 3) - matches working reference */
-    wmb();
-
-    pr_info("*** VIC HARDWARE PREREQUISITES: Dimensions %dx%d, stride %d, MIPI mode 2 ***\n",
-            width, height, width * 2);
-
-    /* NOW the VIC hardware should accept interrupt register writes */
-    /* Use VIC register space (0x133e0000) like the working reference */
-    writel(0xffffffff, vic_regs + 0x1e0);  /* Enable all interrupts */
-    writel(0x0, vic_regs + 0x1e8);         /* Clear interrupt masks */
-    wmb();
-
-    /* Verify interrupt configuration is preserved BEFORE final config */
-    verify_int_en = readl(vic_regs + 0x1e0);
-    verify_int_mask = readl(vic_regs + 0x1e8);
-    pr_info("*** VIC INTERRUPT VERIFY (BEFORE FINAL CONFIG): INT_EN=0x%08x, INT_MASK=0x%08x ***\n", verify_int_en, verify_int_mask);
-
-    /* Binary Ninja: Final configuration registers */
-    writel(0x100010, vic_regs + 0x1a4);
-    writel(0x4210, vic_regs + 0x1ac);
-    writel(0x10, vic_regs + 0x1b0);
-    writel(0, vic_regs + 0x1b4);
-    wmb();
-
-    /* Verify interrupt configuration is preserved AFTER final config */
-    verify_int_en = readl(vic_regs + 0x1e0);
-    verify_int_mask = readl(vic_regs + 0x1e8);
-    pr_info("*** VIC INTERRUPT VERIFY (AFTER FINAL CONFIG): INT_EN=0x%08x, INT_MASK=0x%08x ***\n", verify_int_en, verify_int_mask);
 
     /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
     pr_info("*** tx_isp_vic_start: vic_start_ok set to 1 - EXACT Binary Ninja reference ***\n");
@@ -2179,6 +2124,32 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     if (vic_dev->vic_regs) {
         u32 test_val = readl(vic_dev->vic_regs + 0x1e0);
         pr_info("*** VIC PROBE: Secondary VIC register test - 0x1e0 = 0x%08x (mapping verified) ***\n", test_val);
+
+        /* CRITICAL FIX: Configure VIC interrupt registers at probe time */
+        pr_info("*** VIC PROBE: Configuring VIC interrupt registers at probe time ***\n");
+
+        /* Clear any pending interrupts first */
+        writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main interrupt status */
+        writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
+        wmb();
+
+        /* Configure VIC interrupt registers - enable all interrupts, clear masks */
+        writel(0xffffffff, vic_dev->vic_regs + 0x1e0);  /* Enable all VIC interrupts */
+        writel(0x0, vic_dev->vic_regs + 0x1e8);         /* Clear interrupt masks */
+        writel(0xF, vic_dev->vic_regs + 0x1e4);         /* Enable MDMA interrupts */
+        writel(0x0, vic_dev->vic_regs + 0x1ec);         /* Clear MDMA masks */
+        wmb();
+
+        /* Verify interrupt configuration was accepted */
+        u32 verify_int_en = readl(vic_dev->vic_regs + 0x1e0);
+        u32 verify_int_mask = readl(vic_dev->vic_regs + 0x1e8);
+        pr_info("*** VIC PROBE: Interrupt config - INT_EN=0x%08x, INT_MASK=0x%08x ***\n", verify_int_en, verify_int_mask);
+
+        if (verify_int_en != 0xffffffff || verify_int_mask != 0x0) {
+            pr_warn("*** VIC PROBE: WARNING - Interrupt registers not holding values! ***\n");
+        } else {
+            pr_info("*** VIC PROBE: SUCCESS - VIC interrupt registers configured and verified! ***\n");
+        }
     } else {
         pr_err("*** VIC PROBE: CRITICAL - Secondary VIC registers NOT MAPPED! ***\n");
     }
