@@ -4546,10 +4546,19 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
 
     pr_info("*** tx_isp_module_init: EXACT Binary Ninja reference implementation ***\n");
 
+    /* CRITICAL FIX: Register platform drivers BEFORE registering platform devices */
+    pr_info("*** tx_isp_module_init: Registering subdev platform drivers FIRST ***\n");
+    ret = tx_isp_subdev_platform_init();
+    if (ret != 0) {
+        pr_err("Failed to register subdev platform drivers: %d\n", ret);
+        return ret;
+    }
+
     /* Binary Ninja: Register misc device to create /dev/tx-isp */
     ret = misc_register(&tx_isp_miscdev);
     if (ret != 0) {
         pr_err("Failed to register misc device: %d\n", ret);
+        tx_isp_subdev_platform_exit();  /* Cleanup platform drivers */
         return ret;
     }
 
@@ -4558,6 +4567,7 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
     if (ret != 0) {
         pr_err("Failed to create graph and nodes: %d\n", ret);
         misc_deregister(&tx_isp_miscdev);
+        tx_isp_subdev_platform_exit();  /* Cleanup platform drivers */
         return ret;
     }
 
