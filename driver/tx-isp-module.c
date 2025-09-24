@@ -113,6 +113,7 @@ static int sensor_count = 0;
 /* Global current sensor index - tracks which sensor is currently selected */
 static int current_sensor_index = -1; /* -1 means no sensor selected */
 extern int isp_memopt; // Memory optimization flag from tx_isp_core.c
+extern struct tx_isp_subdev_ops core_subdev_ops; // Core subdev ops from tx_isp_core.c
 
 /* CRITICAL: VIC interrupt control flag - Binary Ninja reference */
 /* This is now declared as extern - the actual definition is in tx_isp_vic.c */
@@ -5613,9 +5614,24 @@ long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *a
             if (!sd || !arg) {
                 return -EINVAL;
             }
-            /* CRITICAL FIX: Return the stored current sensor index */
+            /* CRITICAL FIX: Auto-select first available sensor if none selected */
             {
                 uint32_t input_value;
+
+                if (current_sensor_index < 0) {
+                    /* No sensor selected - auto-select first available sensor */
+                    if (ourISPdev) {
+                        for (int i = 0; i < ISP_MAX_SUBDEVS; i++) {
+                            struct tx_isp_subdev *sensor_sd = ourISPdev->subdevs[i];
+                            if (sensor_sd && sensor_sd->ops && sensor_sd->ops->sensor &&
+                                sensor_sd->ops != &core_subdev_ops) {
+                                current_sensor_index = 0; /* First sensor gets index 0 */
+                                pr_info("subdev_sensor_ops_ioctl: Auto-selected first sensor at slot %d as index 0\n", i);
+                                break;
+                            }
+                        }
+                    }
+                }
 
                 if (current_sensor_index >= 0) {
                     /* A sensor is currently selected */
