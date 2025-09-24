@@ -1665,6 +1665,13 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
         vic_regs = vic_dev->vic_regs;
 
+        /* CRITICAL SAFETY: Check if VIC registers are properly mapped before access */
+        if (!vic_regs || !virt_addr_valid(vic_regs)) {
+            pr_err("*** VIC IRQ: VIC registers not mapped or invalid: %p ***\n", vic_regs);
+            return IRQ_HANDLED;
+        }
+
+        /* CRITICAL SAFETY: Add memory barrier and exception handling for register access */
         /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
         v1_7 = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);
 
