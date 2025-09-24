@@ -687,19 +687,16 @@ int ae0_interrupt_hist_wrapper(void) {
     return ae0_interrupt_hist();
 }
 
-irqreturn_t ae0_interrupt_static_wrapper(int irq, void *dev_id) {
-    ae0_interrupt_static();
-    return IRQ_HANDLED;
+int ae0_interrupt_static_wrapper(void) {
+    return ae0_interrupt_static();
 }
 
-irqreturn_t ae1_interrupt_hist_wrapper(int irq, void *dev_id) {
-    ae1_interrupt_hist();
-    return IRQ_HANDLED;
+int ae1_interrupt_hist_wrapper(void) {
+    return ae1_interrupt_hist();
 }
 
-irqreturn_t ae1_interrupt_static_wrapper(int irq, void *dev_id) {
-    ae1_interrupt_static();
-    return IRQ_HANDLED;
+int ae1_interrupt_static_wrapper(void) {
+    return ae1_interrupt_static();
 }
 
 /* ===== MISSING SYMBOL IMPLEMENTATIONS - Binary Ninja Reference ===== */
