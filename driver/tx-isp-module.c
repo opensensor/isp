@@ -1490,8 +1490,16 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     /* *** CRITICAL: Map ISP CSI registers - Binary Ninja offset +0x13c region *** */
     /* Binary Ninja shows *($s0_1 + 0x13c) points to ISP CSI register region */
     /* This is the MIPI-specific CSI control registers within ISP */
-    isp_csi_regs = isp_dev->vic_dev->vic_regs - 0x9a00 + 0x10000; /* ISP base + CSI offset */
-    pr_info("*** ISP CSI REGISTERS MAPPED: %p (Binary Ninja +0x13c region) ***\n", isp_csi_regs);
+
+    /* CRITICAL FIX: Check if VIC device is ready before accessing vic_regs */
+    if (isp_dev->vic_dev && isp_dev->vic_dev->vic_regs) {
+        isp_csi_regs = isp_dev->vic_dev->vic_regs - 0x9a00 + 0x10000; /* ISP base + CSI offset */
+        pr_info("*** ISP CSI REGISTERS MAPPED: %p (Binary Ninja +0x13c region) ***\n", isp_csi_regs);
+    } else {
+        /* VIC device not ready yet - defer ISP CSI register mapping */
+        pr_info("*** ISP CSI REGISTERS: VIC device not ready - will map later when VIC is initialized ***\n");
+        isp_csi_regs = NULL;
+    }
 
     /* Binary Ninja: Store register addresses at correct offsets */
     /* *($v0 + 0xb8) = csi_basic_regs (basic CSI control) */

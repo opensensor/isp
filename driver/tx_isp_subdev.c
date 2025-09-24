@@ -982,19 +982,20 @@ int __init tx_isp_subdev_platform_init(void)
     int ret;
     
     pr_info("*** TX ISP SUBDEV PLATFORM DRIVERS REGISTRATION ***\n");
-    
-    /* Register CSI platform driver */
-    ret = platform_driver_register(&tx_isp_csi_driver);
-    if (ret) {
-        pr_err("Failed to register CSI platform driver: %d\n", ret);
-        return ret;
-    }
+
 
     /* Register VIC platform driver BEFORE Core ISP - CRITICAL for initialization order */
     ret = platform_driver_register(&tx_isp_vic_driver);
     if (ret) {
         pr_err("Failed to register VIC platform driver: %d\n", ret);
         goto err_unregister_csi;
+    }
+
+    /* Register CSI platform driver */
+    ret = platform_driver_register(&tx_isp_csi_driver);
+    if (ret) {
+        pr_err("Failed to register CSI platform driver: %d\n", ret);
+        return ret;
     }
 
     /* Register VIN platform driver */
