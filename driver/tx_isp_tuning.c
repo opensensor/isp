@@ -2090,10 +2090,6 @@ int tisp_init(void *sensor_info, char *param_name)
 
     pr_info("*** tisp_init: INITIALIZATION COMPLETE - this function will never run again ***\n");
 
-    /* CRITICAL: Reset recursion guard to allow future legitimate calls */
-    tisp_init_in_progress = false;
-    printk(KERN_ALERT "*** tisp_init: Recursion guard reset - initialization complete ***\n");
-
     return 0;
 }
 
