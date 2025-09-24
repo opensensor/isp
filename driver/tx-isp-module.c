@@ -1795,10 +1795,12 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
 
             /* Binary Ninja: MDMA interrupt handling */
             if ((v1_10 & 1) != 0) {
-                vic_mdma_irq_function(vic_dev, 0);
+                printk(KERN_ALERT "*** VIC IRQ: MDMA channel 0 interrupt - SKIPPING to prevent lockup ***\n");
+                /* vic_mdma_irq_function(vic_dev, 0); */
             }
             if ((v1_10 & 2) != 0) {
-                vic_mdma_irq_function(vic_dev, 1);
+                printk(KERN_ALERT "*** VIC IRQ: MDMA channel 1 interrupt - SKIPPING to prevent lockup ***\n");
+                /* vic_mdma_irq_function(vic_dev, 1); */
             }
             if ((v1_10 & 4) != 0) {
                 pr_err("Err [VIC_INT] : dma arb trans done ovf!!!\n");
