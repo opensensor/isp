@@ -557,7 +557,7 @@ struct platform_device tx_isp_core_platform_device = {
 
 /* Forward declarations - Using actual function names from reference driver */
 int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
-static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
+int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 irqreturn_t isp_irq_handle(int irq, void *dev_id);
 irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
 int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data);

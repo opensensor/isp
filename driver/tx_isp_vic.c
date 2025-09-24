@@ -500,7 +500,7 @@ static void tx_isp_vic_frame_done(struct tx_isp_subdev *sd, int channel)
 
 /* Forward declarations for interrupt functions */
 int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
-static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
+int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 
 /* MIPS DMA cache synchronization helper - CRITICAL for proper data transfer */
 static void mips_dma_cache_sync(dma_addr_t addr, size_t size, int direction)
@@ -668,7 +668,7 @@ label_123f4:
 }
 
 /* vic_mdma_irq_function - EXACT Binary Ninja MCP implementation */
-static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
+int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
 {
     u32 frame_size;
 
