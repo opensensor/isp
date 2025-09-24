@@ -2928,10 +2928,10 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* CRITICAL FIX: Cache sensor dimensions during probe (process context - safe for file operations) */
     cache_sensor_dimensions_from_proc();
 
-    /* CRITICAL FIX: tx_isp_subdev_pipo will be called from userspace IOCTL (cmd 0x3000009) */
+    /* CRITICAL FIX: tx_isp_subdev_pipo will be called from tisp_init during core initialization */
     /* This matches the working reference where it's called from tisp_init, not probe */
-    pr_info("*** VIC PROBE: VIC frame channel streaming will be initialized via userspace IOCTL ***\n");
-    pr_info("*** VIC PROBE: Waiting for userspace to call VIC core ops IOCTL 0x3000009 ***\n");
+    pr_info("*** VIC PROBE: VIC frame channel streaming will be initialized via tisp_init ***\n");
+    pr_info("*** VIC PROBE: Waiting for core subdev init to call tisp_init which calls tx_isp_subdev_pipo ***\n");
 
     return 0;
 }
