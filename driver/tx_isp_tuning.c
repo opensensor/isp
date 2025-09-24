@@ -1541,19 +1541,8 @@ static int load_isp_tuning_file_real(const char *filename)
     return 0;
 }
 
-/* CRITICAL: Prevent recursive initialization that causes infinite handler registration */
-static bool tisp_init_in_progress = false;
-
 int tisp_init(void *sensor_info, char *param_name)
 {
-    /* CRITICAL: Prevent recursive initialization that causes infinite handler registration */
-    if (tisp_init_in_progress) {
-        printk(KERN_ALERT "*** tisp_init: RECURSIVE CALL DETECTED - preventing infinite loop ***\n");
-        printk(KERN_ALERT "*** tisp_init: Initialization already in progress - returning success ***\n");
-        return 0;
-    }
-
-    tisp_init_in_progress = true;
     printk(KERN_ALERT "*** tisp_init: ENTRY - sensor_info=%p, param_name=%s ***\n",
             sensor_info, param_name ? param_name : "NULL");
 
@@ -1571,7 +1560,6 @@ int tisp_init(void *sensor_info, char *param_name)
 
     if (!ourISPdev) {
         pr_err("tisp_init: No ISP device available\n");
-        tisp_init_in_progress = false;  /* Reset guard on error */
         return -ENODEV;
     }
 
@@ -2075,6 +2063,7 @@ int tisp_init(void *sensor_info, char *param_name)
     int param_init_ret = tisp_param_operate_init();
     if (param_init_ret != 0) {
         pr_err("tisp_init: tisp_param_operate_init failed: %d\n", param_init_ret);
+        tisp_init_in_progress = false;  /* Reset guard on error */
         return param_init_ret;
     }
 

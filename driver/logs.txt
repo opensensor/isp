@@ -1,44 +1,42 @@
-   52.607054] *** system_irq_func_set: Registered handler c068560c at index 26 ***
-[   52.617155] *** system_irq_func_set: Registered handler c068596c at index 29 ***
-[   52.634759] *** system_irq_func_set: Registered handler c0685878 at index 28 ***
-[   52.652991] *** system_irq_func_set: Registered handler c067d150 at index 13 ***
-[   52.670843] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=85f24000 ***
-[   52.678293] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
-[   52.686015] *** ISP CORE INTERRUPT HANDLER: IRQ 37 called, dev_id=85f24000 ***
-[   52.693461] *** ISP CORE: Read interrupt status - legacy=0x00000400, new=0x00000000 ***
-[   52.701709] *** ISP CORE: Selected interrupt_status=0x00000400 from legacy(+0xb*) bank ***
-[   52.710239] *** ISP CORE: Clearing legacy interrupt 0x00000400 to reg +0xb8 ***
-[   52.717775] *** ISP CORE: After clearing - legacy=0x00000000, new=0x00000000 ***
-[   52.725405] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000400 (legacy=0x00000400 new=0x00000000) ***
-[   52.735811] *** ISP CORE: About to process IRQ callbacks - interrupt_status=0x400 ***
-[   52.743887] *** ISP CORE: Callback[10] for bit 10 is NULL - skipping ***
-[   52.750797] *** ISP CORE INTERRUPT PROCESSING COMPLETE - returning IRQ_HANDLED ***
-[   52.849819] *** system_irq_func_set: Registered handler c068577c at index 27 ***
-[   52.866834] *** system_irq_func_set: Registered handler c068560c at index 26 ***
-[   52.884671] *** system_irq_func_set: Registered handler c068596c at index 29 ***
-[   52.899147] *** system_irq_func_set: Registered handler c0685878 at index 28 ***
-[   52.918088] *** system_irq_func_set: Registered handler c068577c at index 27 ***
-[   52.937166] *** system_irq_func_set: Registered handler c068560c at index 26 ***
-[   52.947243] *** system_irq_func_set: Registered handler c068596c at index 29 ***
-[   52.967443] *** system_irq_func_set: Registered handler c0685878 at index 28 ***
-[   52.984013] *** system_irq_func_set: Registered handler c067d150 at index 13 ***
-[   53.002981] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=85f24000 ***
-[   53.010432] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
-[   53.018145] *** ISP CORE INTERRUPT HANDLER: IRQ 37 called, dev_id=85f24000 ***
-[   53.025600] *** ISP CORE: Read interrupt status - legacy=0x00000400, new=0x00000000 ***
-[   53.033863] *** ISP CORE: Selected interrupt_status=0x00000400 from legacy(+0xb*) bank ***
-[   53.042391] *** ISP CORE: Clearing legacy interrupt 0x00000400 to reg +0xb8 ***
-[   53.049925] *** ISP CORE: After clearing - legacy=0x00000000, new=0x00000000 ***
-[   53.057557] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000400 (legacy=0x00000400 new=0x00000000) ***
-[   53.067961] *** ISP CORE: About to process IRQ callbacks - interrupt_status=0x400 ***
-[   53.076036] *** ISP CORE: Callback[10] for bit 10 is NULL - skipping ***
-[   53.082949] *** ISP CORE INTERRUPT PROCESSING COMPLETE - returning IRQ_HANDLED ***
-[   53.189785] *** system_irq_func_set: Registered handler c068577c at index 27 ***
-[   53.207599] *** system_irq_func_set: Registered handler c068560c at index 26 ***
-[   53.217673] *** system_irq_func_set: Registered handler c068596c at index 29 ***
-[   53.233341] *** system_irq_func_set: Registered handler c0685878 at index 28 ***
-[   53.250294] *** system_irq_func_set: Registered handler c068577c at index 27 ***
-[   53.268110] *** system_irq_func_set: Registered handler c068560c at index 26 ***
-[   53.282410] *** system_irq_func_set: Registered handler c068596c at index 29 ***
-[   53.299150] *** system_irq_func_set: Registered handler c0685878 at index 28 ***
-[   53.317783] *** system_irq_func_set: Registered handler c067d150 at index 13 ***
+ng-wyze-cam3-a000 login: [  172.159570] *** system_irq_func_set: Registered handler c068577c at index 27 ***
+[  172.177448] *** system_irq_func_set: Registered handler c068560c at index 26 ***
+[  172.197484] *** system_irq_func_set: Registered handler c068596c at index 29 ***
+[  172.209413] *** system_irq_func_set: Registered handler c0685878 at index 28 ***
+[  172.228253] *** system_irq_func_set: Registered handler c067d150 at index 13 ***
+[  172.249294] *** system_irq_func_set: Registered handler c068577c at index 27 ***
+[  172.257513] *** system_irq_func_set: Registered handler c068560c at index 26 ***
+[  172.277728] *** system_irq_func_set: Registered handler c068596c at index 29 ***
+[  172.297923] *** system_irq_func_set: Registered handler c0685878 at index 28 ***
+[  172.306598] *** system_irq_func_set: Registered handler c067d150 at index 13 ***
+[  172.326150] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=80480000 ***
+[  172.333603] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
+[  172.341317] *** ISP CORE INTERRUPT HANDLER: IRQ 37 called, dev_id=80480000 ***
+[  172.348767] *** ISP CORE: Read interrupt status - legacy=0x00000400, new=0x00000000 ***
+[  172.357021] *** ISP CORE: Selected interrupt_status=0x00000400 from legacy(+0xb*) bank ***
+[  172.365543] *** ISP CORE: Clearing legacy interrupt 0x00000400 to reg +0xb8 ***
+[  172.373078] *** ISP CORE: After clearing - legacy=0x00000000, new=0x00000000 ***
+[  172.380708] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000400 (legacy=0x00000400 new=0x00000000) ***
+[  172.391120] *** ISP CORE: About to process IRQ callbacks - interrupt_status=0x400 ***
+[  172.399194] *** ISP CORE: Callback[10] for bit 10 is NULL - skipping ***
+[  172.406104] *** ISP CORE INTERRUPT PROCESSING COMPLETE - returning IRQ_HANDLED ***
+[  172.505604] *** system_irq_func_set: Registered handler c068577c at index 27 ***
+[  172.519419] *** system_irq_func_set: Registered handler c068560c at index 26 ***
+[  172.537219] *** system_irq_func_set: Registered handler c068596c at index 29 ***
+[  172.553173] *** system_irq_func_set: Registered handler c0685878 at index 28 ***
+[  172.570490] *** system_irq_func_set: Registered handler c067d150 at index 13 ***
+[  172.590743] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=80480000 ***
+[  172.598194] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
+[  172.605915] *** ISP CORE INTERRUPT HANDLER: IRQ 37 called, dev_id=80480000 ***
+[  172.613360] *** ISP CORE: Read interrupt status - legacy=0x00000400, new=0x00000000 ***
+[  172.621622] *** ISP CORE: Selected interrupt_status=0x00000400 from legacy(+0xb*) bank ***
+[  172.630148] *** ISP CORE: Clearing legacy interrupt 0x00000400 to reg +0xb8 ***
+[  172.637682] *** ISP CORE: After clearing - legacy=0x00000000, new=0x00000000 ***
+[  172.645312] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000400 (legacy=0x00000400 new=0x00000000) ***
+[  172.655729] *** ISP CORE: About to process IRQ callbacks - interrupt_status=0x400 ***
+[  172.663804] *** ISP CORE: Callback[10] for bit 10 is NULL - skipping ***
+[  172.670708] *** ISP CORE INTERRUPT PROCESSING COMPLETE - returning IRQ_HANDLED ***
+[  172.717613] *** system_irq_func_set: Registered handler c068577c at index 27 ***
+[  172.729462] *** system_irq_func_set: Registered handler c068560c at index 26 ***
+[  172.737093] *** system_irq_func_set: Registered handler c068596c at index 29 ***
+[  172.759417] *** system_irq_func_set: Registered handler c0685878 at index 28 ***
+[  172.778447] *** system_irq_func_set: Registered handler c067d150 at index 13 ***
