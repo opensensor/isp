@@ -1443,8 +1443,9 @@ int vic_mdma_enable(struct tx_isp_vic_device *vic_dev, int channel, int dual_cha
     writel(vic_control, vic_regs + 0x300);
     wmb();
 
-    pr_info("*** vic_mdma_enable: VIC[0x300] = 0x%x (MDMA ENABLED) ***\n", vic_control);
-    pr_info("*** vic_mdma_enable: Frame size=%d, buffer_offset=%d ***\n", frame_size, buffer_offset);
+    pr_err("*** vic_mdma_enable: VIC[0x300] = 0x%x (MDMA ENABLED) ***\n", vic_control);
+    pr_err("*** vic_mdma_enable: Frame size=%d, buffer_offset=%d ***\n", frame_size, buffer_offset);
+    pr_err("*** vic_mdma_enable: SUCCESS - returning 0 ***\n");
 
     return 0;
 }
