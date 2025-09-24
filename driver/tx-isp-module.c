@@ -4594,10 +4594,15 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
     if (isp_dev->vic_dev && isp_dev->vic_dev->vic_regs) {
         void __iomem *vic_regs = isp_dev->vic_dev->vic_regs;
 
-        /* WORKING REFERENCE: Enable all interrupts and clear masks - ACTUAL WORKING APPROACH */
-        writel(0xffffffff, vic_regs + 0x1e0); /* Enable all interrupts - WORKING REFERENCE */
-        writel(0x0, vic_regs + 0x1e8); /* Clear interrupt masks - WORKING REFERENCE */
+        /* CRITICAL FIX: Based on Binary Ninja analysis of interrupt handler */
+        /* 0x1e0 is READ-ONLY status register - DO NOT WRITE TO IT */
+        /* 0x1e8 is interrupt MASK register - 0 = enabled, 1 = disabled */
+
+        /* Enable frame done interrupt (bit 0) and other essential VIC interrupts */
+        writel(0xFFFFFFFE, vic_regs + 0x1e8); /* Enable frame done interrupt (bit 0 = 0) */
         wmb();
+
+        pr_info("*** VIC INTERRUPT FIX: Enabled frame done interrupt via mask register 0x1e8 = 0xFFFFFFFE ***\n");
 
         /* NOTE: vic_start_ok will be set to 1 later when VIC hardware is fully configured */
         pr_info("*** VIC INTERRUPT REGISTERS: Configured during module init - vic_start_ok will be set during VIC streaming ***\n");
