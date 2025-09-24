@@ -4192,6 +4192,8 @@ int tx_isp_open(struct inode *inode, struct file *file)
     struct tx_isp_subdev *core_sd = tx_isp_find_subdev_by_name(isp, "isp-m0");
     if (!isp_core_initialized && core_sd) {
         pr_info("*** tx_isp_open: Found core subdev %p, calling ispcore_core_ops_init(1) - FIRST TIME ONLY ***\n", core_sd);
+        pr_info("*** DEBUG: core_sd->dev_priv=%p, core_sd->host_priv=%p ***\n", core_sd->dev_priv, core_sd->host_priv);
+        pr_info("*** DEBUG: core_sd->pdev=%p, core_sd->ops=%p ***\n", core_sd->pdev, core_sd->ops);
         ret = ispcore_core_ops_init(core_sd, 1);
         if (ret != 0) {
             pr_err("tx_isp_open: ispcore_core_ops_init failed: %d\n", ret);
