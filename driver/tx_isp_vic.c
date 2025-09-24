@@ -1128,19 +1128,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     pr_info("*** VIC HARDWARE PREREQUISITES: Dimensions %dx%d, stride %d, MIPI mode 2 ***\n",
             width, height, width * 2);
 
-    /* CRITICAL FIX: VIC interrupt configuration must happen AFTER VIC unlock sequence */
-    /* The magic value 0x3130322a in register 0x0 indicates CSI PHY coordination - this is CORRECT */
-
-    pr_info("*** VIC INTERRUPT CONFIG: VIC unlock sequence will be completed first, then interrupt config ***\n");
-
-    /* NOTE: Interrupt control registers 0x300 and 0x30c will be configured AFTER VIC unlock */
-    /* This is moved to after the VIC unlock sequence below */
-
-    /* STATUS registers will be checked after VIC unlock sequence completes */
-    verify_int_en = readl(vic_regs + 0x1e0);   /* Read interrupt status register */
-    verify_int_mask = readl(vic_regs + 0x1e8); /* Read interrupt mask status register */
-    pr_info("*** VIC INTERRUPT STATUS CHECK (BEFORE UNLOCK): STATUS=0x%08x, MASK_STATUS=0x%08x ***\n", verify_int_en, verify_int_mask);
-
     /* Binary Ninja: Final configuration registers */
     writel(0x100010, vic_regs + 0x1a4);
     writel(0x4210, vic_regs + 0x1ac);
@@ -1148,10 +1135,16 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0, vic_regs + 0x1b4);
     wmb();
 
-    /* CRITICAL: NOW configure VIC interrupts using WORKING BRANCH registers */
-    pr_info("*** VIC INTERRUPT CONFIG: Using WORKING BRANCH registers (NOT Binary Ninja) ***\n");
+    /* CRITICAL FIX: VIC interrupt configuration must happen AFTER VIC unlock sequence */
+    /* The magic value 0x3130322a in register 0x0 indicates CSI PHY coordination - this is CORRECT */
 
-    /* WORKING BRANCH: Clear any pending interrupts first */
+    pr_info("*** VIC INTERRUPT CONFIG: VIC unlock sequence will be completed first, then interrupt config ***\n");
+
+    /* NOTE: Interrupt control registers will be configured AFTER VIC unlock sequence below */
+    /* STATUS registers will be checked after VIC unlock sequence completes */
+    verify_int_en = readl(vic_regs + 0x1e0);   /* Read interrupt status register */
+    verify_int_mask = readl(vic_regs + 0x1e8); /* Read interrupt mask status register */
+    pr_info("*** VIC INTERRUPT STATUS CHECK (BEFORE UNLOCK): STATUS=0x%08x, MASK_STATUS=0x%08x ***\n", verify_int_en, verify_int_mask);
     pr_info("*** VIC INTERRUPT CONFIG: Clearing pending interrupts ***\n");
     writel(0, vic_regs + 0x00);  /* Clear ISR */
     writel(0, vic_regs + 0x20);  /* Clear ISR1 */
