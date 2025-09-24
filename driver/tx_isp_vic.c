@@ -1014,10 +1014,18 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0x1, vic_regs + 0x34);  /* Enable VIC MDMA completion interrupt */
     wmb();
 
-    /* STEP 3: Unmask all VIC interrupt sources via register 0x38 */
-    /* Git commit 2b4d3d7270a4f058e13c8c2583fcd307507c3b3d shows writing 0xFFFFFFFF unmasks all */
-    pr_info("*** VIC INTERRUPT CONFIG: Writing 0xFFFFFFFF to register 0x38 (unmask all interrupt sources) ***\n");
-    writel(0xFFFFFFFF, vic_regs + 0x38);  /* Unmask all VIC interrupt sources */
+    /* STEP 3: Configure VIC interrupt masks using CORRECT registers */
+    /* Git commit 789cd9aa9f45c7d4c7c595a1c7f62b1d9ea4b18b shows VIC_IMR=0x04, VIC_IMCR=0x0c */
+    pr_info("*** VIC INTERRUPT CONFIG: Clearing interrupt masks via register 0x08 (VIC_IMSR) ***\n");
+    writel(0x0, vic_regs + 0x08);  /* Clear interrupt masks via VIC_IMSR */
+    wmb();
+
+    pr_info("*** VIC INTERRUPT CONFIG: Setting VIC_IMR register 0x04 = 0x07800438 ***\n");
+    writel(0x07800438, vic_regs + 0x04);  /* VIC_IMR - Interrupt Mask Register */
+    wmb();
+
+    pr_info("*** VIC INTERRUPT CONFIG: Setting VIC_IMCR register 0x0c = 0xb5742249 ***\n");
+    writel(0xb5742249, vic_regs + 0x0c);  /* VIC_IMCR - Interrupt Mask Clear Register */
     wmb();
 
     /* STEP 3: Configure interrupt masks in SECONDARY VIC space (0x10023000) */
@@ -1040,16 +1048,21 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
 
     /* Verify CORRECT interrupt control registers were set AFTER VIC unlock */
+    pr_info("*** VIC INTERRUPT CONFIG: Starting verification of CORRECT interrupt registers ***\n");
     u32 ctrl_0x0_verify = readl(vic_regs + 0x0);
     u32 ctrl_0x4_verify = readl(vic_regs + 0x4);
     u32 ctrl_0x30_verify = readl(vic_regs + 0x30);   /* VIC MDMA interrupt enable */
     u32 ctrl_0x34_verify = readl(vic_regs + 0x34);   /* VIC MDMA completion interrupt enable */
-    u32 ctrl_0x38_verify = readl(vic_regs + 0x38);   /* VIC interrupt source unmask */
+    u32 ctrl_0x04_verify = readl(vic_regs + 0x04);   /* VIC_IMR - Interrupt Mask Register */
+    u32 ctrl_0x08_verify = readl(vic_regs + 0x08);   /* VIC_IMSR - Interrupt Mask Set Register */
+    u32 ctrl_0x0c_verify = readl(vic_regs + 0x0c);   /* VIC_IMCR - Interrupt Mask Clear Register */
 
     pr_info("*** VIC INTERRUPT CONTROL VERIFY (CORRECT REGISTERS): 0x0=0x%08x, 0x4=0x%08x ***\n",
             ctrl_0x0_verify, ctrl_0x4_verify);
-    pr_info("*** VIC INTERRUPT CONTROL VERIFY (INTERRUPT REGS): 0x30=0x%08x, 0x34=0x%08x, 0x38=0x%08x ***\n",
-            ctrl_0x30_verify, ctrl_0x34_verify, ctrl_0x38_verify);
+    pr_info("*** VIC INTERRUPT CONTROL VERIFY (INTERRUPT REGS): 0x30=0x%08x, 0x34=0x%08x ***\n",
+            ctrl_0x30_verify, ctrl_0x34_verify);
+    pr_info("*** VIC INTERRUPT CONTROL VERIFY (MASK REGS): 0x04=0x%08x, 0x08=0x%08x, 0x0c=0x%08x ***\n",
+            ctrl_0x04_verify, ctrl_0x08_verify, ctrl_0x0c_verify);
 
     /* Also verify secondary space if available */
     if (vic_dev->vic_regs_control) {
@@ -1057,11 +1070,12 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** VIC INTERRUPT CONTROL VERIFY (SECONDARY): 0x1e8=0x%08x ***\n", sec_0x1e8_verify);
     }
 
-    if ((ctrl_0x30_verify & 0x1) && (ctrl_0x34_verify & 0x1) && (ctrl_0x38_verify == 0xFFFFFFFF)) {
-        pr_info("*** VIC INTERRUPT: CORRECT interrupt control registers set - interrupts should fire! ***\n");
+    if ((ctrl_0x30_verify & 0x1) && (ctrl_0x34_verify & 0x1) &&
+        (ctrl_0x04_verify == 0x07800438) && (ctrl_0x0c_verify == 0xb5742249)) {
+        pr_info("*** VIC INTERRUPT: ALL CORRECT interrupt control registers set - interrupts should fire! ***\n");
     } else {
         pr_warn("*** VIC INTERRUPT: Some CORRECT interrupt control register writes failed ***\n");
-        pr_warn("*** VIC INTERRUPT: Expected: 0x30 & 0x1, 0x34 & 0x1, 0x38 == 0xFFFFFFFF ***\n");
+        pr_warn("*** VIC INTERRUPT: Expected: 0x30 & 0x1, 0x34 & 0x1, 0x04 == 0x07800438, 0x0c == 0xb5742249 ***\n");
     }
 
     /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
