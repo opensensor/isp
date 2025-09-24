@@ -1673,11 +1673,12 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
 
         /* CRITICAL SAFETY: Check if VIC registers are properly mapped before access */
         printk(KERN_ALERT "*** VIC IRQ: Checking vic_regs validity: vic_regs=%p ***\n", vic_regs);
-        if (!vic_regs || !virt_addr_valid(vic_regs)) {
-            printk(KERN_ALERT "*** VIC IRQ: VIC registers not mapped or invalid: %p ***\n", vic_regs);
+        if (!vic_regs) {
+            printk(KERN_ALERT "*** VIC IRQ: VIC registers are NULL ***\n");
             return IRQ_HANDLED;
         }
-        printk(KERN_ALERT "*** VIC IRQ: vic_regs passed validity check ***\n");
+        /* NOTE: virt_addr_valid() doesn't work for ioremap'd addresses - they're in vmalloc area */
+        printk(KERN_ALERT "*** VIC IRQ: vic_regs passed validity check - proceeding with register access ***\n");
 
         /* CRITICAL SAFETY: Add memory barrier and exception handling for register access */
         printk(KERN_ALERT "*** VIC IRQ: About to read VIC registers at %p ***\n", vic_regs);
