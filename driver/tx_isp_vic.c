@@ -925,26 +925,22 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     pr_info("*** tx_isp_vic_start: Using single VIC register base - EXACT Binary Ninja reference ***\n");
 
     /* CRITICAL FIX: Skip CPM clock reconfiguration during streaming to prevent CSI PHY reset */
-    pr_info("*** STREAMING: Configuring CPM registers for VIC access ***\n");
-    cpm_regs = ioremap(0x10000000, 0x1000);
-    if (cpm_regs) {
-        u32 clkgr0 = readl(cpm_regs + 0x20);
-        u32 clkgr1 = readl(cpm_regs + 0x28);
+    pr_info("*** STREAMING: SKIPPING CPM clock reconfiguration to preserve CSI PHY configuration ***\n");
+    pr_info("*** STREAMING: CPM clocks should already be configured during module init ***\n");
 
     /* The CPM clock reconfiguration was causing CSI PHY registers to reset to 0 */
-        clkgr0 &= ~(1 << 13); // ISP clock
-        clkgr0 &= ~(1 << 21); // Alternative ISP position
-        clkgr0 &= ~(1 << 30); // VIC in CLKGR0
-        clkgr1 &= ~(1 << 30); // VIC in CLKGR1
+    /* This happens because changing VIC/ISP clocks triggers a hardware reset */
+    /* that wipes out the carefully configured CSI PHY registers */
 
-        writel(clkgr0, cpm_regs + 0x20);
-        writel(clkgr1, cpm_regs + 0x28);
-        wmb();
-        msleep(20);
+    /* REMOVED CPM reconfiguration code that was causing CSI PHY reset:
+     * - clkgr0 &= ~(1 << 13); // ISP clock
+     * - clkgr0 &= ~(1 << 21); // Alternative ISP position
+     * - clkgr0 &= ~(1 << 30); // VIC in CLKGR0
+     * - clkgr1 &= ~(1 << 30); // VIC in CLKGR1
+     * - msleep(20); // This delay was when CSI PHY got reset
+     */
 
-        pr_info("STREAMING: CPM clocks configured for VIC access\n");
-        iounmap(cpm_regs);
-    }
+    pr_info("STREAMING: CPM clocks preserved - CSI PHY configuration should remain intact\n");
 
 
     /* MOVED: Interrupt register configuration moved to END of function to prevent overwriting */
