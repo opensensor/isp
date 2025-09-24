@@ -300,18 +300,43 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
     /* The working branch configures registers 0x04 and 0x0c in tx_isp_vic_hw_init() */
     /* Registers 0x100 and 0x14 are configured later during frame capture operations */
 
+    /* CRITICAL ROOT CAUSE FIX: Enable VIC hardware BEFORE configuring interrupts */
+    /* Binary Ninja reference shows VIC hardware enable sequence is required first */
+    pr_info("*** VIC HW INIT: CRITICAL - Enabling VIC hardware before interrupt configuration ***\n");
+
+    // STEP 1: VIC hardware enable sequence from Binary Ninja reference
+    writel(2, vic_base + 0x0);  /* VIC enable step 1 - prepare hardware */
+    wmb();
+    writel(4, vic_base + 0x0);  /* VIC enable step 2 - activate hardware */
+    wmb();
+
+    // STEP 2: Wait for VIC hardware to be ready (poll until register 0x0 becomes 0)
+    int timeout = 1000;
+    u32 vic_status;
+    while (timeout-- > 0) {
+        vic_status = readl(vic_base + 0x0);
+        if (vic_status == 0) {
+            break;  // VIC hardware is ready
+        }
+        udelay(1);
+    }
+
+    if (timeout <= 0) {
+        pr_err("*** VIC HW INIT: TIMEOUT - VIC hardware failed to become ready (status=0x%08x) ***\n", vic_status);
+        return -ETIMEDOUT;
+    }
+
+    pr_info("*** VIC HW INIT: VIC hardware enabled and ready (status=0x%08x after %d iterations) ***\n",
+            vic_status, 1000 - timeout);
+
+    // STEP 3: Final VIC enable
+    writel(1, vic_base + 0x0);  /* VIC enable step 3 - final enable */
+    wmb();
+
+    pr_info("*** VIC HW INIT: VIC hardware fully enabled - now configuring interrupt registers ***\n");
+
+    /* NOW configure VIC interrupts - hardware is enabled and responsive */
     pr_info("*** VIC HW INIT: Configuring VIC interrupts EXACTLY like working branch ***\n");
-
-    // Clear any pending interrupts first
-    writel(0, vic_base + 0x00);  // Clear ISR
-    writel(0, vic_base + 0x20);  // Clear ISR1
-    wmb();
-
-    // Set up interrupt masks to match OEM - FROM WORKING BRANCH
-    writel(0x00000001, vic_base + 0x04);  // IMR
-    wmb();
-    writel(0x00000000, vic_base + 0x24);  // IMR1
-    wmb();
 
     // Configure ISP control interrupts - FROM WORKING BRANCH
     writel(0x07800438, vic_base + 0x04);  // IMR
