@@ -289,7 +289,7 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
 
     // CRITICAL ROOT CAUSE FIX: Try SECONDARY VIC space for interrupt configuration
     // The primary VIC space (0x133e0000) may be for data/control, secondary (0x10023000) for interrupts
-    vic_base = vic_dev->vic_ctrl_regs;  // Use secondary VIC space (0x10023000)
+    vic_base = vic_dev->vic_regs_control;  // Use secondary VIC space (0x10023000)
     if (!vic_base) {
         pr_err("tx_isp_vic_hw_init: No secondary VIC registers available, falling back to primary\n");
         vic_base = vic_dev->vic_regs;  // Fallback to primary VIC space
