@@ -899,15 +899,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
 
 
-    /* CRITICAL FIX: Add the missing register writes that got interrupts working in first-IRQ/first-IRQA commits */
-    pr_info("*** tx_isp_vic_start: Writing CRITICAL interrupt-enabling registers from working commits ***\n");
-    writel(0x3130322a, vic_regs + 0x0);      /* First register from reference trace - CRITICAL for interrupts */
-    writel(0x07800438, vic_regs + 0x4);      /* VIC interrupt mask register - CRITICAL for interrupts */
-    writel(0xb5742249, vic_regs + 0xc);      /* VIC interrupt control register - CRITICAL for interrupts */
-    writel(0x2d0, vic_regs + 0x100);         /* VIC interrupt config register - CRITICAL for interrupts */
-    writel(0x2b, vic_regs + 0x14);           /* VIC interrupt control register 2 - CRITICAL for interrupts */
-    wmb();
-    pr_info("*** tx_isp_vic_start: CRITICAL interrupt-enabling registers written (0x3130322a, 0x07800438, 0xb5742249, 0x2d0, 0x2b) ***\n");
+    /* MOVED: Interrupt register configuration moved to END of function to prevent overwriting */
+    pr_info("*** tx_isp_vic_start: Interrupt registers will be configured at END to prevent overwriting ***\n");
 
     /* Binary Ninja: if ($v0 == 1) */
     pr_info("*** tx_isp_vic_start: CRITICAL DEBUG - interface_type=%d, checking if == 1 ***\n", interface_type);
@@ -965,10 +958,11 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
         pr_info("*** tx_isp_vic_start: CRITICAL VIC configuration registers written - hardware protection should be prevented ***\n");
 
-        /* Binary Ninja: Write frame size immediately - no deferral needed */
+        /* CRITICAL FIX: DO NOT write frame size to 0x4 - that's the interrupt mask register! */
+        /* Binary Ninja: Frame size should go to a different register, not 0x4 which is IMR */
         u32 frame_size_value = (vic_dev->width << 16) | vic_dev->height;
-        writel(frame_size_value, vic_regs + 0x4);
-        pr_info("*** tx_isp_vic_start: Frame size 0x%08x written to register 0x4 ***\n", frame_size_value);
+        /* REMOVED: writel(frame_size_value, vic_regs + 0x4); - This overwrites interrupt mask register! */
+        pr_info("*** tx_isp_vic_start: Frame size 0x%08x calculated but NOT written to 0x4 (interrupt register) ***\n", frame_size_value);
 
         /* Binary Ninja: Buffer calculation */
         struct tx_isp_mipi_bus *mipi = &sensor_attr->mipi;
