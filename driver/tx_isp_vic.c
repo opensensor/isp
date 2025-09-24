@@ -1033,6 +1033,40 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     pr_info("*** VIC INTERRUPT CONFIG: CORRECT Binary Ninja interrupt configuration complete ***\n");
 
+    /* CRITICAL MISSING PIECE: Enable ISP core interrupt generation at hardware level */
+    pr_info("*** ISP CORE INTERRUPT CONFIG: Enabling ISP core interrupt generation (MISSING FROM CURRENT BRANCH) ***\n");
+
+    /* Get ISP core registers */
+    struct tx_isp_dev *isp_dev = ourISPdev;
+    if (isp_dev && isp_dev->core_dev && isp_dev->core_dev->core_regs) {
+        void __iomem *core = isp_dev->core_dev->core_regs;
+
+        /* CRITICAL: Enable ISP core interrupt generation at hardware level */
+        /* Binary Ninja: system_reg_write(0x30, 0xffffffff) - Enable all interrupt sources */
+        writel(0xffffffff, core + 0x30);
+        wmb();
+
+        /* Binary Ninja: system_reg_write(0x10, 0x133) - Enable specific interrupt types */
+        writel(0x133, core + 0x10);
+        wmb();
+
+        pr_info("*** ISP CORE: Hardware interrupt generation ENABLED (0x30=0xffffffff, 0x10=0x133) ***\n");
+        pr_info("*** VIC->ISP: Pipeline should now generate hardware interrupts when VIC completes frames! ***\n");
+
+        /* Verify the writes took effect */
+        u32 verify_0x30 = readl(core + 0x30);
+        u32 verify_0x10 = readl(core + 0x10);
+        pr_info("*** ISP CORE VERIFY: 0x30=0x%08x, 0x10=0x%08x ***\n", verify_0x30, verify_0x10);
+
+    } else {
+        pr_err("*** ISP CORE INTERRUPT CONFIG: CRITICAL ERROR - ISP core registers not available! ***\n");
+        pr_err("*** ISP CORE INTERRUPT CONFIG: isp_dev=%p, core_dev=%p ***\n",
+               isp_dev, isp_dev ? isp_dev->core_dev : NULL);
+        if (isp_dev && isp_dev->core_dev) {
+            pr_err("*** ISP CORE INTERRUPT CONFIG: core_regs=%p ***\n", isp_dev->core_dev->core_regs);
+        }
+    }
+
     /* NOTE: VIC DMA start (0x300) should happen during streaming, not here */
     /* Working reference shows vic_pipo_mdma_enable + ispvic_frame_channel_s_stream handle DMA */
 
