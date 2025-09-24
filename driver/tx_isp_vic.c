@@ -249,6 +249,29 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
     vic_base = vic_dev->vic_regs;  // Use primary VIC space (0x133e0000)
     pr_info("*** VIC HW INIT: Using PRIMARY VIC space for interrupt configuration ***\n");
 
+    /* CRITICAL: VIC unlock sequence BEFORE configuring interrupts - FROM WORKING BRANCH */
+    pr_info("*** VIC HW INIT: Starting VIC unlock sequence before interrupt configuration ***\n");
+
+    writel(0x2, vic_base + 0x0);  /* Pre-enable */
+    wmb();
+    writel(0x4, vic_base + 0x0);  /* Wait state */
+    wmb();
+
+    /* Wait for hardware ready (register should become 0) */
+    u32 timeout = 10000;
+    u32 vic_status;
+    while ((vic_status = readl(vic_base + 0x0)) != 0) {
+        udelay(1);
+        if (--timeout == 0) {
+            pr_err("*** VIC HW INIT: VIC unlock timeout - register stuck at 0x%x ***\n", vic_status);
+            break;  /* Continue anyway, but log the issue */
+        }
+    }
+
+    if (timeout > 0) {
+        pr_info("*** VIC HW INIT: VIC unlock successful - register 0x0 = 0x0 ***\n");
+    }
+
     // Clear any pending interrupts first
     writel(0, vic_base + 0x00);  // Clear ISR
     writel(0, vic_base + 0x20);  // Clear ISR1
