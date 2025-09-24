@@ -24,6 +24,67 @@
 extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 
+/* Helper function to read sensor dimensions from /proc/jz/sensor/ files */
+static int read_sensor_dimensions(u32 *width, u32 *height)
+{
+    struct file *width_file, *height_file;
+    mm_segment_t old_fs;
+    char width_buf[16], height_buf[16];
+    loff_t pos;
+    int ret = 0;
+
+    /* Set default values in case of failure */
+    *width = 1920;
+    *height = 1080;
+
+    old_fs = get_fs();
+    set_fs(KERNEL_DS);
+
+    /* Read width from /proc/jz/sensor/width */
+    width_file = filp_open("/proc/jz/sensor/width", O_RDONLY, 0);
+    if (!IS_ERR(width_file)) {
+        pos = 0;
+        memset(width_buf, 0, sizeof(width_buf));
+        if (vfs_read(width_file, width_buf, sizeof(width_buf)-1, &pos) > 0) {
+            width_buf[sizeof(width_buf)-1] = '\0';
+            *width = simple_strtol(width_buf, NULL, 10);
+        }
+        filp_close(width_file, NULL);
+    } else {
+        pr_warn("read_sensor_dimensions: Failed to open /proc/jz/sensor/width\n");
+        ret = -1;
+    }
+
+    /* Read height from /proc/jz/sensor/height */
+    height_file = filp_open("/proc/jz/sensor/height", O_RDONLY, 0);
+    if (!IS_ERR(height_file)) {
+        pos = 0;
+        memset(height_buf, 0, sizeof(height_buf));
+        if (vfs_read(height_file, height_buf, sizeof(height_buf)-1, &pos) > 0) {
+            height_buf[sizeof(height_buf)-1] = '\0';
+            *height = simple_strtol(height_buf, NULL, 10);
+        }
+        filp_close(height_file, NULL);
+    } else {
+        pr_warn("read_sensor_dimensions: Failed to open /proc/jz/sensor/height\n");
+        ret = -1;
+    }
+
+    set_fs(old_fs);
+
+    /* Validate dimensions */
+    if (*width == 0 || *height == 0 || *width > 4096 || *height > 4096) {
+        pr_warn("read_sensor_dimensions: Invalid dimensions %dx%d, using defaults 1920x1080\n", *width, *height);
+        *width = 1920;
+        *height = 1080;
+        ret = -1;
+    } else {
+        pr_info("read_sensor_dimensions: Successfully read %dx%d from /proc/jz/sensor/\n", *width, *height);
+    }
+
+    return ret;
+}
+
 /* VIC event callback structure for Binary Ninja compatibility */
 struct vic_event_callback {
     void *reserved[7];                       /* +0x00-0x18: Reserved space (28 bytes) */
@@ -953,19 +1014,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     u32 width, height;
     u32 verify_int_en, verify_int_mask;
 
-    /* Configure VIC dimensions first - CRITICAL prerequisite for interrupt registers */
-    width = sensor_attr->mipi.image_twidth;
-    height = sensor_attr->mipi.image_theight;
-
-    /* CRITICAL FIX: Use hardcoded dimensions if sensor attributes are invalid (0x0) */
-    if (width == 0 || height == 0) {
-        width = 1920;   /* GC2053 sensor output width */
-        height = 1080;  /* GC2053 sensor output height */
-        pr_info("*** VIC DIMENSIONS: Using hardcoded %dx%d (sensor attrs invalid: %dx%d) ***\n",
-                width, height, sensor_attr->mipi.image_twidth, sensor_attr->mipi.image_theight);
-    } else {
-        pr_info("*** VIC DIMENSIONS: Using sensor attrs %dx%d ***\n", width, height);
-    }
+    /* CRITICAL FIX: Read sensor dimensions from /proc/jz/sensor/ files instead of corrupted attributes */
+    read_sensor_dimensions(&width, &height);
+    pr_info("*** VIC DIMENSIONS: Using /proc/jz/sensor/ dimensions %dx%d (RELIABLE) ***\n", width, height);
 
     /* Configure VIC dimensions - CRITICAL for interrupt register acceptance */
     writel((width << 16) | height, vic_regs + 0x10);  /* VIC dimensions */
@@ -1713,39 +1764,9 @@ ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, 
     pr_err("*** vic_proc_write: vic_dev->vic_regs=%p ***\n", vic_dev->vic_regs);
     pr_err("*** vic_proc_write: isp_dev=%p, isp_dev->vic_dev=%p ***\n", isp_dev, isp_dev->vic_dev);
 
-    /* CRITICAL FIX: Read sensor dimensions from /proc/jz/sensor/ */
-    struct file *width_file, *height_file;
-    char width_buf[16], height_buf[16];
-    int width = 1920, height = 1080;  /* Default values */
-    mm_segment_t old_fs;
-    loff_t pos;
-
-    old_fs = get_fs();
-    set_fs(KERNEL_DS);
-
-    /* Read width from /proc/jz/sensor/width */
-    width_file = filp_open("/proc/jz/sensor/width", O_RDONLY, 0);
-    if (!IS_ERR(width_file)) {
-        pos = 0;
-        if (vfs_read(width_file, width_buf, sizeof(width_buf)-1, &pos) > 0) {
-            width_buf[sizeof(width_buf)-1] = '\0';
-            width = simple_strtol(width_buf, NULL, 10);
-        }
-        filp_close(width_file, NULL);
-    }
-
-    /* Read height from /proc/jz/sensor/height */
-    height_file = filp_open("/proc/jz/sensor/height", O_RDONLY, 0);
-    if (!IS_ERR(height_file)) {
-        pos = 0;
-        if (vfs_read(height_file, height_buf, sizeof(height_buf)-1, &pos) > 0) {
-            height_buf[sizeof(height_buf)-1] = '\0';
-            height = simple_strtol(height_buf, NULL, 10);
-        }
-        filp_close(height_file, NULL);
-    }
-
-    set_fs(old_fs);
+    /* CRITICAL FIX: Read sensor dimensions using helper function */
+    u32 width, height;
+    read_sensor_dimensions(&width, &height);
 
     /* Update vic_dev with correct sensor dimensions */
     vic_dev->width = width;
@@ -2142,13 +2163,14 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         return NULL;
     }
 
-    /* Binary Ninja: int32_t $v1 = *(arg1 + 0xdc) - use SAFE struct member access */
-    width = vic_dev->width;   /* SAFE: struct member access instead of *(arg1 + 0xdc) */
+    /* CRITICAL FIX: Read sensor dimensions using helper function for consistency */
+    read_sensor_dimensions(&width, &height);
 
-    /* Binary Ninja: height = *(arg1 + 0xe0) - use SAFE struct member access */
-    height = vic_dev->height; /* SAFE: struct member access instead of *(arg1 + 0xe0) */
+    /* Update vic_dev with correct dimensions */
+    vic_dev->width = width;
+    vic_dev->height = height;
 
-    pr_info("vic_pipo_mdma_enable: Using vic_dev dimensions %dx%d (SAFE struct access)\n", width, height);
+    pr_info("vic_pipo_mdma_enable: Using /proc/jz/sensor/ dimensions %dx%d (RELIABLE)\n", width, height);
     
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x308) = 1 */
     writel(1, vic_base + 0x308);
