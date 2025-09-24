@@ -2224,8 +2224,9 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
         /* Binary Ninja: if ($v0_2 != 2) */
         if (current_state != 2) {
-            /* Binary Ninja: tx_vic_disable_irq() */
-            tx_vic_disable_irq(vic_dev);
+            /* CRITICAL FIX: Do NOT disable VIC interrupts when disabling VIC */
+            /* tx_vic_disable_irq(vic_dev); -- REMOVED: This was disabling IRQ 38 at kernel level */
+            pr_info("*** vic_core_ops_init: CRITICAL FIX - Skipping VIC interrupt disable to keep IRQ 38 enabled ***\n");
 
             /* Binary Ninja: *($s1_1 + 0x128) = 2 */
             vic_dev->state = 2;
@@ -2501,11 +2502,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
         if (current_state != 4) {
             pr_info("*** vic_core_s_stream: EXACT Binary Ninja - State != 4, calling VIC start sequence ***\n");
 
-            /* Binary Ninja: tx_vic_disable_irq() */
-            tx_vic_disable_irq(vic_dev);
-
-            /* Binary Ninja: tx_vic_disable_irq() */
-            tx_vic_disable_irq(vic_dev);
+            /* CRITICAL FIX: Do NOT disable VIC interrupts before starting VIC */
+            /* tx_vic_disable_irq(vic_dev); -- REMOVED: This was disabling IRQ 38 at kernel level */
+            /* tx_vic_disable_irq(vic_dev); -- REMOVED: Duplicate disable call */
+            pr_info("*** vic_core_s_stream: CRITICAL FIX - Skipping VIC interrupt disable to keep IRQ 38 enabled ***\n");
 
             /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
             ret = tx_isp_vic_start(vic_dev);
