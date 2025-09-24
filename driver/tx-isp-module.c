@@ -4671,13 +4671,22 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp_dev)
                         proc_fops = &graph_proc_fops;
                     }
 
+                    /* CRITICAL FIX: For isp-w02, pass main ISP device instead of VIC device */
+                    void *proc_private_data = driver_data;
+                    if (strstr(tx_isp_platform_devices[i]->name, "isp-w02")) {
+                        /* isp_vic_frd_show expects ISP device, not VIC device */
+                        proc_private_data = isp_dev;
+                        pr_info("*** PROC ENTRY FIX: Using ISP device %p instead of VIC device %p for %s ***\n",
+                                isp_dev, driver_data, tx_isp_platform_devices[i]->name);
+                    }
+
                     /* Binary Ninja: private_proc_create_data(*($v0_7 + 8), 0x124, *(arg1 + 0x11c), $a3_1, $v0_7) */
                     struct proc_dir_entry *proc_entry = proc_create_data(
                         tx_isp_platform_devices[i]->name,  /* Device name from platform device */
                         0644,                               /* Permissions (0x124 = 0644) */
                         isp_dev->proc_context,             /* Parent directory */
                         proc_fops,                          /* File operations */
-                        driver_data                         /* Private data */
+                        proc_private_data                   /* FIXED: Use ISP device for isp-w02 */
                     );
 
                     if (proc_entry) {
