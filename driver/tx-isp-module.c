@@ -1688,8 +1688,8 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
 
                 /* CRITICAL: Also increment main ISP frame counter for /proc/jz/isp/isp-w02 */
                 if (isp_dev) {
-                    isp_dev->frame_count++;
-                    pr_info("*** ISP FRAME COUNT UPDATED: %u (for /proc/jz/isp/isp-w02) ***\n", isp_dev->frame_count);
+                    isp_dev->core_dev->frame_count++;
+                    pr_info("*** ISP FRAME COUNT UPDATED: %u (for /proc/jz/isp/isp-w02) ***\n", isp_dev->core_dev->frame_count);
                 }
 
                 /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
