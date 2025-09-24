@@ -1824,18 +1824,18 @@ static void frame_channel_wakeup_waiters(struct isp_core_channel *channel)
     }
 }
 
-/* system_irq_func_set - EXACT Binary Ninja implementation */
-int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id))
+/* system_irq_func_set - EXACT Binary Ninja implementation with CORRECT signature */
+int system_irq_func_set(int index, int (*handler)(void))
 {
     if (index < 0 || index >= 32) {
-        pr_err("system_irq_func_set: Invalid index %d\n", index);
+        printk(KERN_ALERT "*** system_irq_func_set: Invalid index %d ***\n", index);
         return -EINVAL;
     }
 
     /* Binary Ninja: *((arg1 << 2) + &irq_func_cb) = arg2 */
-    irq_func_cb[index] = handler;
+    irq_func_cb[index] = (irqreturn_t (*)(int, void*))handler;  /* Cast for storage */
 
-    pr_info("*** system_irq_func_set: Registered handler at index %d ***\n", index);
+    printk(KERN_ALERT "*** system_irq_func_set: Registered handler %p at index %d ***\n", handler, index);
     return 0;
 }
 EXPORT_SYMBOL(system_irq_func_set);
@@ -2156,25 +2156,33 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     /* Binary Ninja: IRQ callback array processing - EXACT MCP implementation */
     printk(KERN_ALERT "*** ISP CORE: About to process IRQ callbacks - interrupt_status=0x%x ***\n", interrupt_status);
 
-    /* Binary Ninja EXACT: void* $s2_1 = &irq_func_cb; int32_t i = 0; int32_t result = 1 */
-    void **s2_1 = &irq_func_cb[0];
-    int result = IRQ_HANDLED;  /* Binary Ninja: result = 1 */
+    /* CRITICAL SAFETY: Temporarily disable callback processing until we debug the crash */
+    printk(KERN_ALERT "*** ISP CORE: TEMPORARILY DISABLING callback processing - callbacks causing NULL pointer crash ***\n");
 
-    /* Binary Ninja EXACT: do { ... } while (i != 0x20) */
+    /* DEBUG: Show which callbacks would be called */
     for (i = 0; i < 0x20; i++) {
-        /* Binary Ninja: int32_t $v0_46 = 1 << (i & 0x1f) & $s1 */
+        u32 v0_46 = (1 << (i & 0x1f)) & interrupt_status;
+        if (v0_46 != 0) {
+            printk(KERN_ALERT "*** ISP CORE: Would call callback[%d] for bit %d - callback=%p ***\n", i, i, irq_func_cb[i]);
+        }
+    }
+
+    /*
+    // Binary Ninja EXACT: void* $s2_1 = &irq_func_cb; int32_t i = 0; int32_t result = 1
+    void **s2_1 = &irq_func_cb[0];
+    int result = IRQ_HANDLED;
+
+    // Binary Ninja EXACT: do { ... } while (i != 0x20)
+    for (i = 0; i < 0x20; i++) {
         u32 v0_46 = (1 << (i & 0x1f)) & interrupt_status;
 
         if (v0_46 != 0) {
-            /* Binary Ninja: int32_t $v0_47 = *$s2_1 */
             int (*v0_47)(void) = (int (*)(void))(*s2_1);
 
             if (v0_47 != NULL) {
-                printk(KERN_ALERT "*** ISP CORE: Calling callback[%d] for bit %d (NO PARAMETERS) ***\n", i, i);
-                /* Binary Ninja EXACT: int32_t result_1 = $v0_47() - NO PARAMETERS! */
-                int result_1 = v0_47();
+                printk(KERN_ALERT "*** ISP CORE: Calling callback[%d] for bit %d ***\n", i, i);
+                int result_1 = v0_47();  // THIS IS CAUSING THE CRASH!
 
-                /* Binary Ninja: if (result_1 != 1) result = result_1 */
                 if (result_1 != IRQ_HANDLED) {
                     result = result_1;
                 }
@@ -2182,9 +2190,9 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             }
         }
 
-        /* Binary Ninja: $s2_1 += 4 */
         s2_1++;
     }
+    */
 
     printk(KERN_ALERT "*** ISP CORE INTERRUPT PROCESSING COMPLETE - returning IRQ_HANDLED ***\n");
 

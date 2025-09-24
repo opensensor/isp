@@ -1,44 +1,127 @@
-   72.258532] *** VIC IRQ: Read reg 0x1e8 = 0x0 ***
-[   72.263411] *** VIC IRQ: About to read reg 0x1e0 ***
-[   72.268520] *** VIC IRQ: Read reg 0x1e0 = 0x0 ***
-[   72.283519] *** VIC IRQ: Calculated v1_7 = 0x0 ***
-[   72.288467] *** VIC IRQ: Read v1_10 = 0x0 ***
-[   72.303687] *** VIC IRQ: About to write v1_7=0x0 to reg 0x1f0 ***
-[   72.313793] *** VIC IRQ: About to write v1_10=0x0 to reg 0x1f4 ***
-[   72.328953] *** VIC IRQ: Register writes completed ***
-[   72.338688] *** VIC IRQ: About to check vic_start_ok - vic_start_ok=1 ***
-[   72.349071] *** VIC IRQ: vic_start_ok=1, v1_7=0x0, v1_10=0x0 ***
-[   72.366229] *** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***
-[   72.376327] *** VIC IRQ COMPLETE: Processed v1_7=0x0, v1_10=0x0 - returning IRQ_HANDLED ***
-[   72.397472] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=811b8000 ***
-[   72.404934] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
-[   72.412654] *** ISP CORE INTERRUPT HANDLER: IRQ 37 called, dev_id=811b8000 ***
-[   72.420103] *** ISP CORE: About to process IRQ callbacks - interrupt_status=0x400 ***
-[   72.428182] *** ISP CORE INTERRUPT PROCESSING COMPLETE - returning IRQ_HANDLED ***
-[   72.477274] *** VIC INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
-[   72.496688] *** VIC IRQ: About to access isp_dev->vic_dev, isp_dev=811b8000 ***
-[   72.506775] *** VIC IRQ: Got vic_dev=811b4000 ***
-[   72.516880] *** VIC IRQ: Checking vic_dev validity: vic_dev=811b4000 ***
-[   72.537068] *** VIC IRQ: About to access vic_dev->vic_regs ***
-[   72.543111] *** VIC IRQ: Got vic_regs=b0023000 ***
-[   72.558184] *** VIC IRQ: Checking vic_regs validity: vic_regs=b0023000 ***
-[   72.568271] *** VIC IRQ: vic_regs passed validity check - proceeding with register access ***
-[   72.582535] *** VIC IRQ: About to read VIC registers at b0023000 ***
-[   72.598946] *** VIC IRQ: About to read reg 0x1e8 ***
-[   72.604119] *** VIC IRQ: Read reg 0x1e8 = 0x0 ***
-[   72.614231] *** VIC IRQ: About to read reg 0x1e0 ***
-[   72.624340] *** VIC IRQ: Read reg 0x1e0 = 0x0 ***
-[   72.634446] *** VIC IRQ: Calculated v1_7 = 0x0 ***
-[   72.644552] *** VIC IRQ: Read v1_10 = 0x0 ***
-[   72.652188] *** VIC IRQ: About to write v1_7=0x0 to reg 0x1f0 ***
-[   72.668751] *** VIC IRQ: About to write v1_10=0x0 to reg 0x1f4 ***
-[   72.678839] *** VIC IRQ: Register writes completed ***
-[   72.688967] *** VIC IRQ: About to check vic_start_ok - vic_start_ok=1 ***
-[   72.695976] *** VIC IRQ: vic_start_ok=1, v1_7=0x0, v1_10=0x0 ***
-[   72.708132] *** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***
-[   72.718950] *** VIC IRQ COMPLETE: Processed v1_7=0x0, v1_10=0x0 - returning IRQ_HANDLED ***
-[   72.738250] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=811b8000 ***
-[   72.745702] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
-[   72.753425] *** ISP CORE INTERRUPT HANDLER: IRQ 37 called, dev_id=811b8000 ***
-[   72.760881] *** ISP CORE: About to process IRQ callbacks - interrupt_status=0x400 ***
-[   72.768957] *** ISP CORE INTERRUPT PROCESSING COMPLETE - returning IRQ_HANDLED ***
+147.098229] *** ISP CORE INTERRUPT HANDLER: IRQ 37 called, dev_id=80514000 ***
+[  147.105687] *** ISP CORE: Read interrupt status - legacy=0x00000400, new=0x00000000 ***
+[  147.113947] *** ISP CORE: Selected interrupt_status=0x00000400 from legacy(+0xb*) bank ***
+[  147.122471] *** ISP CORE: Clearing legacy interrupt 0x00000400 to reg +0xb8 ***
+[  147.130019] *** ISP CORE: After clearing - legacy=0x00000000, new=0x00000000 ***
+[  147.137647] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000400 (legacy=0x00000400 new=0x00000000) ***
+[  147.148064] *** ISP CORE: About to process IRQ callbacks - interrupt_status=0x400 ***
+[  147.156145] *** ISP CORE INTERRUPT PROCESSING COMPLETE - returning IRQ_HANDLED ***
+[  147.253303] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=80514000 ***
+[  147.260756] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
+[  147.268482] *** ISP CORE INTERRUPT HANDLER: IRQ 37 called, dev_id=80514000 ***
+[  147.275935] *** ISP CORE: Read interrupt status - legacy=0x00000400, new=0x00000000 ***
+[  147.284189] *** ISP CORE: Selected interrupt_status=0x00000400 from legacy(+0xb*) bank ***
+[  147.292707] *** ISP CORE: Clearing legacy interrupt 0x00000400 to reg +0xb8 ***
+[  147.300252] *** ISP CORE: After clearing - legacy=0x00000000, new=0x00000000 ***
+[  147.307879] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000400 (legacy=0x00000400 new=0x00000000) ***
+[  147.318296] *** ISP CORE: About to process IRQ callbacks - interrupt_status=0x400 ***
+[  147.326374] *** ISP CORE INTERRUPT PROCESSING COMPLETE - returning IRQ_HANDLED ***
+[  147.416487] CPU 0 Unable to handle kernel paging request at virtual address 77e6a228, epc == 800242c8, ra == 800242bc
+[  147.427440] CPU 0 Unable to handle kernel paging request at virtual address 77e69f3c, epc == 80054a0c, ra == 8005e2c8
+[  147.438395] CPU 0 Unable to handle kernel paging request at virtual address 77e69f3c, epc == 80054a0c, ra == 8005e2c8
+[  147.449343] CPU 0 Unable to handle kernel paging request at virtual address 77e69f3c, epc == 80054a0c, ra == 8005e2c8
+[  147.460292] CPU 0 Unable to handle kernel paging request at virtual address 77e69f3c, epc == 80054a0c, ra == 8005e2c8
+[  147.471250] CPU 0 Unable to handle kernel paging request at virtual address 77e69f3c, epc == 80054a0c, ra == 8005e2c8
+[  147.482198] CPU 0 Unable to handle kernel paging request at virtual address 77e69f3c, epc == 80054a0c, ra == 8005e2c8
+[  147.493145] CPU 0 Unable to handle kernel paging request at virtual address 77e69f3c, epc == 80054a0c, ra == 8005e2c8
+[  147.504092] CPU 0 Unable to handle kernel paging request at virtual address 77e69f3c, epc == 80054a0c, ra == 8005e2c8
+[  147.515038] CPU 0 Unable to handle kernel paging request at virtual address 77e69f3c, epc == 80054a0c, ra == 8005e2c8
+[  147.525988] CPU 0 Unable to handle kernel paging request at virtual address 77e69f3c, epc == 80054a0c, ra == 8005e2c8
+[  147.536933] CPU 0 Unable to handle kernel paging request at virtual address 77e69f3c, epc == 80054a0c, ra == 8005e2c8
+[  147.547880] CPU 0 Unable to handle kernel paging request at virtual address 77e69f3c, epc == 80054a0c, ra == 8005e2c8
+[  147.558874] CPU 0 Unable to handle kernel paging request at virtual address 000000dc, epc == 80024270, ra == 8001b1a4
+[  147.569828] Oops[#1]:
+[  147.572166] CPU: 0 PID: 0 Comm:  Tainted: G           O 3.10.14__isvp_swan_1.0__ #1
+[  147.580065] task: ad52aa66 ti: 85464000 task.ti:   (null)
+[  147.585628] $ 0   : 00000000 10001c00 00000000 3ffcd001
+[  147.591029] $ 4   : 85466090 00000000 000000dc ffffffff
+[  147.596420] $ 8   : 10001c00 1000001e 00000000 ffffffe0
+[  147.835690] Process  (pid: 0, threadinfo=85464000, task=ad52aa66, tls=96a6b21e)
+[  147.843224] Stack : 80450000 80072d78 804b2d38 00000001 00000006 00000000 ad52aa66 2a210711
+          00000093 80044e94 85465d58 80453000 85465d58 2a210711 00000093 80453000
+          85465d58 80072f14 804c5d70 80451e60 80453000 8005b658 00000009 803eb657
+          2a210711 00000093 80453000 80453000 00000093 80451e60 85465c20 8005bac0
+          8045446c 0000000b 0000000b 00000000 2a20f771 00000093 3b9aca00 00000003
+          ...
+
+7.547880] CPU 0 Unable to handle kernel paging request at virtual address 77e69f3c, epc == 80054a0c, ra == 8005e2c8
+[  147.558874] CPU 0 Unable to handle kernel paging request at virtual address 000000dc, epc == 80024270, ra == 8001b1a4
+[  147.569828] Oops[#1]:
+[  147.572166] CPU: 0 PID: 0 Comm:  Tainted: G           O 3.10.14__isvp_swan_1.0__ #1
+[  147.580065] task: ad52aa66 ti: 85464000 task.ti:   (null)
+[  147.585628] $ 0   : 00000000 10001c00 00000000 3ffcd001
+[  147.591029] $ 4   : 85466090 00000000 000000dc ffffffff
+[  147.596420] $ 8   : 10001c00 1000001e 00000000 ffffffe0
+[  147.601810] $12   : 00000023 8546bf20 00000000 00000090
+[  147.607207] $16   : 8e5500dc 622f21ff 00000000 00000000
+[  147.612590] $20   : 8001b1a4 85469eb8 00030000 80448680
+[  147.617985] $24   : 00000000 80065d98
+[  147.623375] $28   : 85466000 85465fb8 80450000 8001b1a4
+[  147.628768] Hi    : 00000000
+[  147.631726] Lo    : 00000000
+[  147.634690] epc   : 80024270 0x80024270
+[  147.638640]     Tainted: G           O
+[  147.642504] ra    : 8001b1a4 0x8001b1a4
+[  147.646450] Status: 10001c02 KERNEL EXL
+[  147.650500] Cause : 40809408
+[  147.653465] BadVA : 000000dc
+[  147.656428] PrId  : 00d00100 (Ingenic Xburst)
+[  147.660911] Modules linked in: sensor_gc2053_t31(O) tx_isp_t31(O) tx_isp_trace(O) 8189fs(O) pwm_hal(O) pwm_core(O) gpio_userkeys(O) avpu(O) audio(O) cp210x ch341 usbserial exfat(O)
+jzmmc_v12
+[  147.678411] Process  (pid: 0, threadinfo=85464000, task=ad52aa66, tls=96a6b21e)
+[  147.685944] Stack : 000ff502 00003a80 0010da02 00003aa0 000fca02 00003ac0 000f9702 00003ae0
+          0011cd02 00003b00 0011e902 00030001 0010fb02 00003b40 0010bc02 00003b60
+          00122902 00003b80
+[  147.703386] Call Trace:
+[  147.705902]
+Code: 00c21021  3463d001  0043102b <8e5500dc> 00808825  10400015  00c08025  3c038046  8c63f0ac
+[  147.716176] CPU 0 Unable to handle kernel paging request at virtual address 000000c8, epc == 80064e40, ra == 80044e94
+[  147.727127] Oops[#2]:
+[  147.729462] CPU: 0 PID: 0 Comm:  Tainted: G      D    O 3.10.14__isvp_swan_1.0__ #1
+[  147.737362] task: ad52aa66 ti: 85464000 task.ti:   (null)
+[  147.742918] $ 0   : 00000000 10001c00 00000000 00000001
+[  147.748302] $ 4   : 03480000 00010000 00000001 00000001
+[  147.753701] $ 8   : 00000000 00000000 0d934d0f 68d47f98
+[  147.759088] $12   : 00000000 804c0000 00000000 00000000
+[  147.764476] $16   : 00000001 80452880 ad52aa66 00000004
+[  147.769868] $20   : 80072ec8 80451e30 ffffffff 80450000
+[  147.775255] $24   : 00000000 80065d98
+[  147.780645] $28   : 85464000 85465b60 80450000 80044e94
+
+[  147.879885] Call Trace:[<80072d78>] 0x80072d78
+[  147.884462] [<80044e94>] 0x80044e94  
+[  147.888058] [<80072f14>] 0x80072f14  
+[  147.891645] [<8005b658>] 0x8005b658  
+[  147.895244] [<8005bac0>] 0x8005bac0  
+[  147.898842] [<8005c8cc>] 0x8005c8cc  
+[  147.902436] [<801aca54>] 0x801aca54  
+[  147.906034] [<8001409c>] 0x8001409c  
+[  147.909624] [<80084618>] 0x80084618  
+[  147.913213] [<8001b1a4>] 0x8001b1a4  
+[  147.916808] [<8008484c>] 0x8008484c  
+[  147.920404] [<80065d98>] 0x80065d98  
+[  147.923994] [<80037e80>] 0x80037e80  
+[  147.927583] [<800873e8>] 0x800873e8  
+[  147.931181] [<800840c0>] 0x800840c0  
+[  147.934772] [<8001d1e8>] 0x8001d1e8  
+[  147.938366] [<8001896c>] 0x8001896c  
+[  147.941960] [<8001b1a0>] 0x8001b1a0  
+[  147.945550] [<80024270>] 0x80024270  
+[  147.949140] [<8001b1a4>] 0x8001b1a4  
+[  147.952727] [<80065d98>] 0x80065d98  
+[  147.956326] [<8001f8c8>] 0x8001f8c8  
+[  147.959917] [<8001f8dc>] 0x8001f8dc  
+[  147.963510] [<8002463c>] 0x8002463c  
+[  147.967108] [<80024270>] 0x80024270  
+[  147.970704] [<8001b1a4>] 0x8001b1a4  
+[  147.974298] [<8001b1a4>] 0x8001b1a4  
+[  147.977888] [<8001b1a4>] 0x8001b1a4  
+[  147.981486] [<8001b1a4>] 0x8001b1a4  
+[  147.985082] [<80065d98>] 0x80065d98  
+[  147.988678] [<8001b1a4>] 0x8001b1a4  
+[  147.992272] [<80024270>] 0x80024270  
+[  147.995866]
+[  147.997398]
+Code: 8e430178  00671821  ae430178 <8c4300c8> 10600010  00000000  8f830014  24630001  af830014
+[  148.007656] ---[ end trace 34dfc45cae00da89 ]---
+[  148.012413] Kernel panic - not syncing: Fatal exception in interrupt
