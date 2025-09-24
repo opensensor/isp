@@ -458,8 +458,6 @@ static struct netlink_kernel_cfg nlcfg = {
     .input = NULL,  /* No input handler needed for this netlink socket */
     .cb_mutex = NULL,
     .bind = NULL,
-    .unbind = NULL,
-    .compare = NULL,
 };
 
 /* Memory Management Variables */
