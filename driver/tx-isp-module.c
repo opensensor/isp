@@ -1672,18 +1672,25 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         }
 
         /* CRITICAL SAFETY: Add memory barrier and exception handling for register access */
+        printk(KERN_ALERT "*** VIC IRQ: About to read VIC registers at %p ***\n", vic_regs);
+
         /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
         v1_7 = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);
+        printk(KERN_ALERT "*** VIC IRQ: Read v1_7 = 0x%x ***\n", v1_7);
 
         /* Binary Ninja: int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
         v1_10 = (~readl(vic_regs + 0x1ec)) & readl(vic_regs + 0x1e4);
+        printk(KERN_ALERT "*** VIC IRQ: Read v1_10 = 0x%x ***\n", v1_10);
 
         /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7 */
+        printk(KERN_ALERT "*** VIC IRQ: About to write v1_7=0x%x to reg 0x1f0 ***\n", v1_7);
         writel(v1_7, vic_regs + 0x1f0);
 
         /* Binary Ninja: *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
+        printk(KERN_ALERT "*** VIC IRQ: About to write v1_10=0x%x to reg 0x1f4 ***\n", v1_10);
         writel(v1_10, vic_regs + 0x1f4);
         wmb();
+        printk(KERN_ALERT "*** VIC IRQ: Register writes completed ***\n");
 
         /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
         if (vic_start_ok != 0) {
