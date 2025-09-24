@@ -2501,8 +2501,11 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
                     /* Binary Ninja: isp_printf(0, "Err [VIC_INT] : dma chid ovf  !!!\n", "ispcore_slake_module") */
                     isp_printf(0, (unsigned char*)"Err [VIC_INT] : dma chid ovf  !!!\n", "ispcore_slake_module");
                     /* Binary Ninja: ispcore_core_ops_init(arg1, 0) */
-                    if (isp_dev->subdevs[4]) {  /* Core is now at index 4 */
-                        ispcore_core_ops_init(isp_dev->subdevs[4], 0);
+                    struct tx_isp_subdev *core_sd = tx_isp_find_subdev_by_name(isp_dev, "isp-m0");
+                    if (core_sd) {
+                        ispcore_core_ops_init(core_sd, 0);
+                    } else {
+                        pr_err("ispcore_slake_module: Core subdev not found for ispcore_core_ops_init\n");
                     }
                 }
 
