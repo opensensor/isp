@@ -2186,32 +2186,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         }
     }
 
-    /*
-    // Binary Ninja EXACT: void* $s2_1 = &irq_func_cb; int32_t i = 0; int32_t result = 1
-    void **s2_1 = &irq_func_cb[0];
-    int result = IRQ_HANDLED;
 
-    // Binary Ninja EXACT: do { ... } while (i != 0x20)
-    for (i = 0; i < 0x20; i++) {
-        u32 v0_46 = (1 << (i & 0x1f)) & interrupt_status;
-
-        if (v0_46 != 0) {
-            int (*v0_47)(void) = (int (*)(void))(*s2_1);
-
-            if (v0_47 != NULL) {
-                printk(KERN_ALERT "*** ISP CORE: Calling callback[%d] for bit %d ***\n", i, i);
-                int result_1 = v0_47();  // THIS IS CAUSING THE CRASH!
-
-                if (result_1 != IRQ_HANDLED) {
-                    result = result_1;
-                }
-                printk(KERN_ALERT "*** ISP CORE: Callback[%d] returned %d ***\n", i, result_1);
-            }
-        }
-
-        s2_1++;
-    }
-    */
 
     printk(KERN_ALERT "*** ISP CORE INTERRUPT PROCESSING COMPLETE - returning IRQ_HANDLED ***\n");
 

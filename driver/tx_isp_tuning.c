@@ -682,22 +682,7 @@ int ae0_interrupt_static(void);
 int ae1_interrupt_hist(void);
 int ae1_interrupt_static(void);
 
-/* AE interrupt wrapper functions - CORRECTED to match Binary Ninja MCP signature */
-int ae0_interrupt_hist_wrapper(void) {
-    return ae0_interrupt_hist();
-}
-
-int ae0_interrupt_static_wrapper(void) {
-    return ae0_interrupt_static();
-}
-
-int ae1_interrupt_hist_wrapper(void) {
-    return ae1_interrupt_hist();
-}
-
-int ae1_interrupt_static_wrapper(void) {
-    return ae1_interrupt_static();
-}
+/* No wrapper functions needed - Binary Ninja MCP registers functions directly */
 
 /* ===== MISSING SYMBOL IMPLEMENTATIONS - Binary Ninja Reference ===== */
 
@@ -6763,11 +6748,11 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
     }
 
 
-    /* Binary Ninja EXACT: system_irq_func_set with proper wrappers */
-    system_irq_func_set(0x1b, ae0_interrupt_hist_wrapper);
-    system_irq_func_set(0x1a, ae0_interrupt_static_wrapper);
-    system_irq_func_set(0x1d, ae1_interrupt_hist_wrapper);
-    system_irq_func_set(0x1c, ae1_interrupt_static_wrapper);
+    /* Binary Ninja EXACT: system_irq_func_set with direct function registration */
+    system_irq_func_set(0x1b, ae0_interrupt_hist);
+    system_irq_func_set(0x1a, ae0_interrupt_static);
+    system_irq_func_set(0x1d, ae1_interrupt_hist);
+    system_irq_func_set(0x1c, ae1_interrupt_static);
     
     /* Binary Ninja EXACT: uint32_t $a2_13 = zx.d(data_b2e56) */
     uint32_t a2_13 = (uint32_t)data_b2e56;
