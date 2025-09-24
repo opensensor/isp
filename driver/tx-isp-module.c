@@ -4599,9 +4599,8 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
         writel(0x0, vic_regs + 0x1e8); /* Clear interrupt masks - WORKING REFERENCE */
         wmb();
 
-        /* Set VIC start flag - CRITICAL for interrupt processing */
-        extern uint32_t vic_start_ok;
-        vic_start_ok = 1;
+        /* NOTE: vic_start_ok will be set to 1 later when VIC hardware is fully configured */
+        pr_info("*** VIC INTERRUPT REGISTERS: Configured during module init - vic_start_ok will be set during VIC streaming ***\n");
 
         pr_info("*** VIC INTERRUPT REGISTERS ENABLED - INTERRUPTS SHOULD NOW FIRE! ***\n");
     } else {

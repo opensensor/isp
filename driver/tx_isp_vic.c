@@ -1095,9 +1095,14 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     wmb();
     pr_info("*** tx_isp_vic_start: VIC processing enabled (0x0=0x1, 0x4=0x1) ***\n");
 
-    /* REMOVED: VIC interrupt configuration moved to tx_isp_module_init() where it belongs */
-    /* The working reference configures VIC interrupts during MODULE INIT, not during VIC streaming */
-    pr_info("*** VIC INTERRUPT CONFIG: VIC interrupts already configured during module init - skipping duplicate config ***\n");
+    /* CRITICAL: VIC interrupt registers configured during module init, but vic_start_ok set here */
+    /* The working reference sets vic_start_ok AFTER VIC hardware is fully configured */
+    pr_info("*** VIC INTERRUPT CONFIG: VIC interrupt registers already configured - now setting vic_start_ok = 1 ***\n");
+
+    /* Set VIC start flag - CRITICAL for interrupt processing */
+    extern uint32_t vic_start_ok;
+    vic_start_ok = 1;
+    pr_info("*** VIC INTERRUPT CONFIG: vic_start_ok = 1 - VIC interrupts now enabled for processing ***\n");
 
     /* CRITICAL FIX: Configure VIC dimensions and control BEFORE interrupt registers */
     pr_info("*** tx_isp_vic_start: Configuring VIC hardware prerequisites for interrupt registers ***\n");
