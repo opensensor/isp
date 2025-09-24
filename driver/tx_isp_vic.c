@@ -2463,6 +2463,21 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
             pr_info("*** vic_core_s_stream: EXACT Binary Ninja - VIC initialized, state=4 ***\n");
 
+            /* CRITICAL: Call ispcore_slake_module when VIC state reaches 4 - FROM WORKING BRANCH */
+            pr_info("*** VIC STATE 4: Calling ispcore_slake_module to initialize ISP core ***\n");
+            extern int ispcore_slake_module(struct tx_isp_dev *isp);
+            extern struct tx_isp_dev *ourISPdev;
+            if (ourISPdev) {
+                int slake_ret = ispcore_slake_module(ourISPdev);
+                if (slake_ret == 0) {
+                    pr_info("*** ispcore_slake_module SUCCESS - ISP core should now be initialized ***\n");
+                } else {
+                    pr_err("*** ispcore_slake_module FAILED: %d ***\n", slake_ret);
+                }
+            } else {
+                pr_err("*** VIC STATE 4: No ISP device available for ispcore_slake_module ***\n");
+            }
+
             /* Binary Ninja: return $v0_1 */
             return ret;
         } else {
@@ -2781,17 +2796,9 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     tx_isp_set_subdev_hostdata(&vic_dev->sd, vic_dev);
     pr_info("*** VIC PROBE: Set host_priv to vic_dev %p for Binary Ninja compatibility ***\n", vic_dev);
 
-    /* CRITICAL: Initialize VIC hardware interrupts BEFORE subdev initialization */
-    pr_info("*** VIC PROBE: Calling tx_isp_vic_hw_init for hardware interrupt configuration ***\n");
-    ret = tx_isp_vic_hw_init(&vic_dev->sd);
-    if (ret != 0) {
-        pr_err("*** VIC PROBE: CRITICAL - tx_isp_vic_hw_init failed: %d ***\n", ret);
-        iounmap(vic_dev->vic_regs_control);
-        iounmap(vic_dev->vic_regs);
-        private_kfree(vic_dev);
-        return ret;
-    }
-    pr_info("*** VIC PROBE: tx_isp_vic_hw_init SUCCESS - VIC hardware interrupts configured ***\n");
+    /* CRITICAL FIX: Do NOT call tx_isp_vic_hw_init during probe - working branch doesn't! */
+    /* VIC interrupt configuration happens during actual VIC operations, not during probe */
+    pr_info("*** VIC PROBE: Skipping tx_isp_vic_hw_init - working branch configures interrupts during VIC operations ***\n");
 
     /* Binary Ninja: tx_isp_subdev_init(arg1, $v0, &vic_subdev_ops) */
     ret = tx_isp_subdev_init(pdev, &vic_dev->sd, &vic_subdev_ops);
