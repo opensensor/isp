@@ -1651,6 +1651,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
     void __iomem *vic_regs;
     u32 v1_7, v1_10;
     extern uint32_t vic_start_ok;
+    printk(KERN_ALERT "*** VIC INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***\n");
 
     /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
     if (arg1 == NULL || (uintptr_t)arg1 >= 0xfffff001) {
@@ -1658,25 +1659,40 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
     }
 
     /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
+    printk(KERN_ALERT "*** VIC IRQ: About to access isp_dev->vic_dev, isp_dev=%p ***\n", isp_dev);
     vic_dev = isp_dev->vic_dev;
+    printk(KERN_ALERT "*** VIC IRQ: Got vic_dev=%p ***\n", vic_dev);
 
     /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
+    printk(KERN_ALERT "*** VIC IRQ: Checking vic_dev validity: vic_dev=%p ***\n", vic_dev);
     if (vic_dev != NULL && (uintptr_t)vic_dev < 0xfffff001) {
         /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
+        printk(KERN_ALERT "*** VIC IRQ: About to access vic_dev->vic_regs ***\n");
         vic_regs = vic_dev->vic_regs;
+        printk(KERN_ALERT "*** VIC IRQ: Got vic_regs=%p ***\n", vic_regs);
 
         /* CRITICAL SAFETY: Check if VIC registers are properly mapped before access */
+        printk(KERN_ALERT "*** VIC IRQ: Checking vic_regs validity: vic_regs=%p ***\n", vic_regs);
         if (!vic_regs || !virt_addr_valid(vic_regs)) {
-            pr_err("*** VIC IRQ: VIC registers not mapped or invalid: %p ***\n", vic_regs);
+            printk(KERN_ALERT "*** VIC IRQ: VIC registers not mapped or invalid: %p ***\n", vic_regs);
             return IRQ_HANDLED;
         }
+        printk(KERN_ALERT "*** VIC IRQ: vic_regs passed validity check ***\n");
 
         /* CRITICAL SAFETY: Add memory barrier and exception handling for register access */
         printk(KERN_ALERT "*** VIC IRQ: About to read VIC registers at %p ***\n", vic_regs);
 
         /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
-        v1_7 = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);
-        printk(KERN_ALERT "*** VIC IRQ: Read v1_7 = 0x%x ***\n", v1_7);
+        printk(KERN_ALERT "*** VIC IRQ: About to read reg 0x1e8 ***\n");
+        u32 reg_1e8 = readl(vic_regs + 0x1e8);
+        printk(KERN_ALERT "*** VIC IRQ: Read reg 0x1e8 = 0x%x ***\n", reg_1e8);
+
+        printk(KERN_ALERT "*** VIC IRQ: About to read reg 0x1e0 ***\n");
+        u32 reg_1e0 = readl(vic_regs + 0x1e0);
+        printk(KERN_ALERT "*** VIC IRQ: Read reg 0x1e0 = 0x%x ***\n", reg_1e0);
+
+        v1_7 = (~reg_1e8) & reg_1e0;
+        printk(KERN_ALERT "*** VIC IRQ: Calculated v1_7 = 0x%x ***\n", v1_7);
 
         /* Binary Ninja: int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
         v1_10 = (~readl(vic_regs + 0x1ec)) & readl(vic_regs + 0x1e4);
@@ -1707,11 +1723,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 }
 
                 /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
-                printk(KERN_ALERT "*** VIC IRQ: About to call vic_framedone_irq_function ***\n");
-
-                /* CRITICAL SAFETY: Temporarily disable this call to isolate the lockup cause */
-                /* vic_framedone_irq_function(vic_dev); */
-                printk(KERN_ALERT "*** VIC IRQ: SKIPPED vic_framedone_irq_function to prevent lockup ***\n");
+                vic_framedone_irq_function(vic_dev);
             }
 
             /* Binary Ninja: Error handling for frame asfifo overflow */
@@ -1795,12 +1807,10 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
 
             /* Binary Ninja: MDMA interrupt handling */
             if ((v1_10 & 1) != 0) {
-                printk(KERN_ALERT "*** VIC IRQ: MDMA channel 0 interrupt - SKIPPING to prevent lockup ***\n");
-                /* vic_mdma_irq_function(vic_dev, 0); */
+                vic_mdma_irq_function(vic_dev, 0);
             }
             if ((v1_10 & 2) != 0) {
-                printk(KERN_ALERT "*** VIC IRQ: MDMA channel 1 interrupt - SKIPPING to prevent lockup ***\n");
-                /* vic_mdma_irq_function(vic_dev, 1); */
+                vic_mdma_irq_function(vic_dev, 1);
             }
             if ((v1_10 & 4) != 0) {
                 pr_err("Err [VIC_INT] : dma arb trans done ovf!!!\n");
