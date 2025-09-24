@@ -9207,17 +9207,27 @@ int tisp_netlink_init(void)
 {
     pr_info("tisp_netlink_init: Initializing netlink communication\n");
 
-    /* Binary Ninja: uint32_t $v0 = private_netlink_kernel_create(init_net, 0x17, &nlcfg) */
-    uint32_t v0 = (uint32_t)private_netlink_kernel_create(&init_net, 0x17, &nlcfg);
+    /* CRITICAL FIX: Try standard NETLINK_GENERIC (16) first, then custom protocol 0x17 */
+    pr_info("tisp_netlink_init: Trying standard NETLINK_GENERIC protocol (16)\n");
+    uint32_t v0 = (uint32_t)netlink_kernel_create(&init_net, 16, NULL);  /* NETLINK_GENERIC */
+    if (v0 == 0) {
+        pr_info("tisp_netlink_init: NETLINK_GENERIC failed, trying custom protocol 0x17\n");
+        v0 = (uint32_t)netlink_kernel_create(&init_net, 0x17, NULL);
+        if (v0 == 0) {
+            pr_info("tisp_netlink_init: Custom protocol failed, trying with nlcfg structure\n");
+            v0 = (uint32_t)netlink_kernel_create(&init_net, 0x17, &nlcfg);
+        }
+    }
+
     nlsk = (void*)v0;
 
     if (v0 != 0) {
-        /* Binary Ninja: return 0 */
+        pr_info("tisp_netlink_init: Netlink socket created successfully\n");
         return 0;
     }
 
     /* Binary Ninja: Netlink creation failed */
-    pr_err("tisp_netlink_init: Failed to create netlink socket\n");
+    pr_err("tisp_netlink_init: Failed to create netlink socket with both NULL and nlcfg\n");
     return 0xffffffff;
 }
 

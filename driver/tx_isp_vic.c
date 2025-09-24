@@ -411,6 +411,36 @@ int tx_isp_vic_apply_full_config(struct tx_isp_vic_device *vic_dev)
         pr_warn("*** VIC FULL CONFIG: WARNING - Some essential VIC control registers may not have been accepted ***\n");
     }
 
+    /* CRITICAL DEBUG: Verify interrupt registers are still correct after full config */
+    u32 verify_int_0x04 = readl(vic_regs + 0x04);
+    u32 verify_int_0x0c = readl(vic_regs + 0x0c);
+    u32 verify_int_0x100 = readl(vic_regs + 0x100);
+    u32 verify_int_0x14 = readl(vic_regs + 0x14);
+
+    pr_info("*** VIC FULL CONFIG: INTERRUPT REGISTER VERIFY AFTER FULL CONFIG ***\n");
+    pr_info("*** VIC FULL CONFIG: 0x04=0x%08x (expected 0x07800438), 0x0c=0x%08x (expected 0xb5742249) ***\n",
+            verify_int_0x04, verify_int_0x0c);
+    pr_info("*** VIC FULL CONFIG: 0x100=0x%08x (expected 0x2d0), 0x14=0x%08x (expected 0x2b) ***\n",
+            verify_int_0x100, verify_int_0x14);
+
+    bool int_regs_ok = (verify_int_0x04 == 0x07800438) && (verify_int_0x0c == 0xb5742249) &&
+                       (verify_int_0x100 == 0x2d0) && (verify_int_0x14 == 0x2b);
+
+    if (int_regs_ok) {
+        pr_info("*** VIC FULL CONFIG: SUCCESS - Interrupt registers still correct after full config! ***\n");
+    } else {
+        pr_warn("*** VIC FULL CONFIG: CRITICAL - Interrupt registers corrupted after full config! ***\n");
+        pr_warn("*** VIC FULL CONFIG: Re-writing interrupt registers to fix corruption ***\n");
+
+        /* Re-write interrupt registers if they were corrupted */
+        writel(0x07800438, vic_regs + 0x4);      /* VIC interrupt mask register */
+        writel(0xb5742249, vic_regs + 0xc);      /* VIC interrupt control register */
+        writel(0x2d0, vic_regs + 0x100);         /* VIC interrupt config register */
+        writel(0x2b, vic_regs + 0x14);           /* VIC interrupt control register 2 */
+        wmb();
+        pr_info("*** VIC FULL CONFIG: Interrupt registers re-written after corruption ***\n");
+    }
+
     pr_info("*** tx_isp_vic_apply_full_config: Full VIC configuration complete - interrupts should now work ***\n");
     return 0;
 }
