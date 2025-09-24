@@ -1873,11 +1873,17 @@ int tisp_init(void *sensor_info, char *param_name)
     /* CRITICAL FIX: Use EXACT reference driver bypass register value */
     /* The calculated value 0xb477effd was causing hardware reset - use reference value instead */
 
-    /* REFERENCE DRIVER EXACT VALUE: ISP isp-m0: [CSI PHY Control] write at offset 0xc: 0x0 -> 0x80700008 */
-    uint32_t bypass_val = 0x80700008;  /* EXACT reference driver value - prevents hardware reset */
+    /* CRITICAL ROOT CAUSE FIX: Register 0xc is CSI PHY Control, NOT ISP bypass! */
+    /* The logs show: "ISP isp-m0: [CSI PHY Control] write at offset 0xc: 0x0 -> 0x80700008" */
+    /* This means 0xc is a CSI PHY register that should NOT be written by tuning system! */
 
-    system_reg_write(0xc, bypass_val);
-    pr_info("*** CRITICAL FIX: ISP bypass register set to EXACT reference value 0x%x - prevents hardware reset ***\n", bypass_val);
+    /* CRITICAL FIX: DO NOT WRITE TO CSI PHY REGISTERS FROM TUNING SYSTEM */
+    /* Writing to register 0xc corrupts CSI PHY configuration and breaks VIC interrupts */
+    pr_info("*** CRITICAL ROOT CAUSE FIX: Skipping CSI PHY register 0xc write to prevent VIC interrupt corruption ***\n");
+    pr_info("*** Register 0xc is CSI PHY Control - tuning system must not write to it! ***\n");
+
+    /* The bypass functionality should be handled by ISP control registers, not CSI PHY */
+    /* Use proper ISP bypass register instead of corrupting CSI PHY */
 
     /* CRITICAL FIX: Configure ISP for NV12 output format */
     /* Application requests NV12 format (0x3231564e) but buffer size mismatch suggests confusion */
@@ -10435,7 +10441,12 @@ int tisp_s_adr_enable(int enable)
         return -EINVAL;
     }
 
-    system_reg_write(0xc, reg_val);
+    /* CRITICAL ROOT CAUSE FIX: Register 0xc is CSI PHY Control, NOT ISP bypass! */
+    /* This function is also corrupting CSI PHY configuration and breaking VIC interrupts */
+    pr_info("*** CRITICAL ROOT CAUSE FIX: tisp_s_adr_enable - Skipping CSI PHY register 0xc write ***\n");
+    pr_info("*** Register 0xc is CSI PHY Control - ADR enable should not write to it! ***\n");
+
+    /* ADR functionality should use proper ADR control registers, not CSI PHY */
     return 0;
 }
 

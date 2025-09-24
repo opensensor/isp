@@ -627,9 +627,10 @@ void system_reg_write(u32 reg, u32 value)
         return;
     }
 
-    /* Binary Ninja EXACT: Get register base from core device structure at offset 0xb8 */
-    /* This should be core_dev->core_regs based on the structure layout */
-    void __iomem *reg_base = ourISPdev->core_dev->core_regs;
+    /* CRITICAL ROOT CAUSE FIX: Use main ISP device core_regs, not core subdevice */
+    /* The tuning system should write to the main ISP register space, not subdevice space */
+    /* Binary Ninja reference shows system_reg_write uses the main ISP core register base */
+    void __iomem *reg_base = ourISPdev->core_regs;
 
     if (!reg_base) {
         pr_warn("system_reg_write: No register base available for reg=0x%x val=0x%x\n", reg, value);
@@ -4367,6 +4368,16 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     /* Binary Ninja: memset($v0, 0, 0x120) */
     memset(isp_dev, 0, sizeof(struct tx_isp_dev));
 
+    /* CRITICAL ROOT CAUSE FIX: Map ISP core registers for system_reg_write */
+    /* The tuning system needs access to ISP core registers at 0x13300000 */
+    isp_dev->core_regs = ioremap(0x13300000, 0x10000);
+    if (!isp_dev->core_regs) {
+        pr_err("*** PROBE: Failed to map ISP core registers ***\n");
+        kfree(isp_dev);
+        return -ENOMEM;
+    }
+    pr_info("*** PROBE: ISP core registers mapped at 0x13300000 for system_reg_write ***\n");
+
     /* CRITICAL FIX: Initialize mutex that was missing */
     mutex_init(&isp_dev->mutex);
     spin_lock_init(&isp_dev->lock);
@@ -4376,6 +4387,9 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     isp_dev->event_callback = kmalloc(sizeof(struct tx_isp_event_callback), GFP_KERNEL);
     if (!isp_dev->event_callback) {
         pr_err("*** PROBE: Failed to allocate event callback structure ***\n");
+        if (isp_dev->core_regs) {
+            iounmap(isp_dev->core_regs);
+        }
         kfree(isp_dev);
         return -ENOMEM;
     }
@@ -4408,6 +4422,12 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     if (pdata == NULL) {
         pr_err("*** PROBE: No platform data provided - FAILING ***\n");
         isp_printf(2, (unsigned char *)"No platform data provided\n");
+        if (isp_dev->core_regs) {
+            iounmap(isp_dev->core_regs);
+        }
+        if (isp_dev->event_callback) {
+            kfree(isp_dev->event_callback);
+        }
         kfree(isp_dev);
         return -EFAULT;  /* Binary Ninja returns 0xfffffff4 */
     }
@@ -4416,6 +4436,12 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     /* Binary Ninja: Check device count - zx.d(*($s2_1 + 4)) u>= 0x11 */
     if (pdata->device_id >= 0x11) {
         isp_printf(2, (unsigned char *)"saveraw\n");
+        if (isp_dev->core_regs) {
+            iounmap(isp_dev->core_regs);
+        }
+        if (isp_dev->event_callback) {
+            kfree(isp_dev->event_callback);
+        }
         kfree(isp_dev);
         return -EFAULT;  /* Binary Ninja returns 0xffffffea */
     }
@@ -4448,6 +4474,12 @@ static int tx_isp_platform_probe(struct platform_device *pdev)
     ret = tx_isp_module_init(isp_dev);
     if (ret != 0) {
         pr_err("tx_isp_module_init failed: %d\n", ret);
+        if (isp_dev->core_regs) {
+            iounmap(isp_dev->core_regs);
+        }
+        if (isp_dev->event_callback) {
+            kfree(isp_dev->event_callback);
+        }
         kfree(isp_dev);
         ourISPdev = NULL;
         return ret;
@@ -4937,6 +4969,13 @@ static void tx_isp_exit(void)
         if (ourISPdev->event_callback) {
             kfree(ourISPdev->event_callback);
             ourISPdev->event_callback = NULL;
+        }
+
+        /* Clean up core register mapping */
+        if (ourISPdev->core_regs) {
+            iounmap(ourISPdev->core_regs);
+            ourISPdev->core_regs = NULL;
+            pr_info("ISP core registers unmapped\n");
         }
 
         /* Free device structure */

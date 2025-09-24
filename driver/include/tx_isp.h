@@ -153,6 +153,11 @@ struct tx_isp_dev {
     u32 vic_frame_size;
     struct list_head vic_buf_queue;
 
+    /* Centralized register mappings - CRITICAL for system_reg_write */
+    void __iomem *core_regs;     /* ISP core registers - MATCHES REFERENCE DRIVER */
+    void __iomem *csi_regs;      /* CSI registers */
+    void __iomem *phy_base;      /* PHY registers */
+
     /* Memory management */
     dma_addr_t rmem_addr;
     size_t rmem_size;
@@ -202,11 +207,6 @@ struct tx_isp_dev {
     struct clk *cgu_isp;         /* Global CGU ISP clock */
     struct clk *csi_clk;         /* CSI clock (CSI-specific) */
 
-    /* Global register mappings (core-specific registers moved to core_dev) */
-    void __iomem *csi_regs;      /* CSI registers */
-    /* vic_regs is already declared above at line 209 */
-    /* phy_base is already declared above at line 214 */
-
     /* GPIO control */
     int reset_gpio;
     int pwdn_gpio;
@@ -232,7 +232,6 @@ struct tx_isp_dev {
     struct ddr_device *ddr_dev;
     struct tx_isp_vin_device *vin_dev;
     struct frame_source_device *fs_dev;
-    void __iomem *phy_base;
 
     /* Statistics */
     struct ae_statistics ae_stats;
