@@ -1529,8 +1529,12 @@ struct tx_isp_sensor *tx_isp_get_sensor(void)
                     pr_err("*** tx_isp_get_sensor: Failed to allocate sensor structure ***\n");
                     return NULL;
                 }
-                /* Link the subdev and sensor */
-                sensor->sd = *sd;  /* Copy subdev structure */
+                /* CRITICAL FIX: Don't copy entire subdev structure - just link pointers */
+                /* Copying the entire subdev structure causes pointer corruption */
+                sensor->sd.isp = sd->isp;  /* Link to ISP device */
+                sensor->sd.pdev = sd->pdev;  /* Link to platform device */
+                sensor->sd.ops = sd->ops;   /* Link to operations */
+                /* Don't copy other fields that may contain invalid pointers */
                 tx_isp_set_subdev_hostdata(sd, sensor);
             }
             pr_info("*** tx_isp_get_sensor: Found real sensor: %p ***\n", sensor);
