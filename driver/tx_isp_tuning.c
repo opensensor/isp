@@ -673,8 +673,8 @@ int tisp_set_csc_version(int version)
 /* Use external system_reg_write from tx-isp-module.c with built-in streaming protection */
 extern void system_reg_write(u32 reg, u32 value);
 
-/* External system_irq_func_set from tx_isp_core.c */
-extern int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
+/* External system_irq_func_set from tx_isp_core.c - CORRECTED signature */
+extern int system_irq_func_set(int index, int (*handler)(void));
 
 /* Forward declarations for AE interrupt functions */
 int ae0_interrupt_hist(void);
@@ -682,10 +682,9 @@ int ae0_interrupt_static(void);
 int ae1_interrupt_hist(void);
 int ae1_interrupt_static(void);
 
-/* AE interrupt wrapper functions to convert signatures from int function(void) to irqreturn_t function(int, void*) */
-irqreturn_t ae0_interrupt_hist_wrapper(int irq, void *dev_id) {
-    ae0_interrupt_hist();
-    return IRQ_HANDLED;
+/* AE interrupt wrapper functions - CORRECTED to match Binary Ninja MCP signature */
+int ae0_interrupt_hist_wrapper(void) {
+    return ae0_interrupt_hist();
 }
 
 irqreturn_t ae0_interrupt_static_wrapper(int irq, void *dev_id) {
