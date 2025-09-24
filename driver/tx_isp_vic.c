@@ -1065,16 +1065,21 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     u32 ctrl_0x4_verify = readl(vic_regs + 0x4);
     u32 ctrl_0x30_verify = readl(vic_regs + 0x30);   /* VIC MDMA interrupt enable */
     u32 ctrl_0x34_verify = readl(vic_regs + 0x34);   /* VIC MDMA completion interrupt enable */
-    u32 ctrl_0x04_verify = readl(vic_regs + 0x04);   /* VIC_IMR - Interrupt Mask Register */
-    u32 ctrl_0x08_verify = readl(vic_regs + 0x08);   /* VIC_IMSR - Interrupt Mask Set Register */
-    u32 ctrl_0x0c_verify = readl(vic_regs + 0x0c);   /* VIC_IMCR - Interrupt Mask Clear Register */
 
     pr_info("*** VIC INTERRUPT CONTROL VERIFY (CORRECT REGISTERS): 0x0=0x%08x, 0x4=0x%08x ***\n",
             ctrl_0x0_verify, ctrl_0x4_verify);
     pr_info("*** VIC INTERRUPT CONTROL VERIFY (INTERRUPT REGS): 0x30=0x%08x, 0x34=0x%08x ***\n",
             ctrl_0x30_verify, ctrl_0x34_verify);
-    pr_info("*** VIC INTERRUPT CONTROL VERIFY (MASK REGS): 0x04=0x%08x, 0x08=0x%08x, 0x0c=0x%08x ***\n",
-            ctrl_0x04_verify, ctrl_0x08_verify, ctrl_0x0c_verify);
+
+    /* Verify interrupt mask registers in SECONDARY VIC space */
+    if (vic_dev->vic_regs_control) {
+        u32 sec_0x04_verify = readl(vic_dev->vic_regs_control + 0x04);   /* VIC_IMR in secondary space */
+        u32 sec_0x08_verify = readl(vic_dev->vic_regs_control + 0x08);   /* VIC_IMSR in secondary space */
+        u32 sec_0x0c_verify = readl(vic_dev->vic_regs_control + 0x0c);   /* VIC_IMCR in secondary space */
+
+        pr_info("*** VIC INTERRUPT CONTROL VERIFY (SECONDARY MASK REGS): 0x04=0x%08x, 0x08=0x%08x, 0x0c=0x%08x ***\n",
+                sec_0x04_verify, sec_0x08_verify, sec_0x0c_verify);
+    }
 
     /* Also verify secondary space if available */
     if (vic_dev->vic_regs_control) {
@@ -1082,12 +1087,22 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** VIC INTERRUPT CONTROL VERIFY (SECONDARY): 0x1e8=0x%08x ***\n", sec_0x1e8_verify);
     }
 
-    if ((ctrl_0x30_verify & 0x1) && (ctrl_0x34_verify & 0x1) &&
-        (ctrl_0x04_verify == 0x07800438) && (ctrl_0x0c_verify == 0xb5742249)) {
+    /* Check success condition with secondary space mask registers */
+    bool interrupt_enables_ok = (ctrl_0x30_verify & 0x1) && (ctrl_0x34_verify & 0x1);
+    bool mask_registers_ok = false;
+
+    if (vic_dev->vic_regs_control) {
+        u32 sec_0x04_verify = readl(vic_dev->vic_regs_control + 0x04);
+        u32 sec_0x0c_verify = readl(vic_dev->vic_regs_control + 0x0c);
+        mask_registers_ok = (sec_0x04_verify == 0x07800438) && (sec_0x0c_verify == 0xb5742249);
+    }
+
+    if (interrupt_enables_ok && mask_registers_ok) {
         pr_info("*** VIC INTERRUPT: ALL CORRECT interrupt control registers set - interrupts should fire! ***\n");
     } else {
         pr_warn("*** VIC INTERRUPT: Some CORRECT interrupt control register writes failed ***\n");
-        pr_warn("*** VIC INTERRUPT: Expected: 0x30 & 0x1, 0x34 & 0x1, 0x04 == 0x07800438, 0x0c == 0xb5742249 ***\n");
+        pr_warn("*** VIC INTERRUPT: Expected: 0x30 & 0x1, 0x34 & 0x1, SECONDARY 0x04 == 0x07800438, SECONDARY 0x0c == 0xb5742249 ***\n");
+        pr_warn("*** VIC INTERRUPT: interrupt_enables_ok=%d, mask_registers_ok=%d ***\n", interrupt_enables_ok, mask_registers_ok);
     }
 
     /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
