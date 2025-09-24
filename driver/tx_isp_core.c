@@ -28,6 +28,7 @@
 #include "../include/tx_isp_tuning.h"
 #include "../include/tx-isp-device.h"
 #include "../include/tx_isp_core_device.h"
+#include "../include/tx_isp_subdev_helpers.h"
 #include "../include/tx-libimp.h"
 #include <linux/platform_device.h>
 #include <linux/device.h>
@@ -5364,15 +5365,22 @@ int tx_isp_link_core_device(struct tx_isp_dev *isp_dev, struct tx_isp_core_devic
     core_dev->isp_dev = isp_dev;
     core_dev->sd.isp = isp_dev;
 
-    /* Register core subdev using helper function instead of hardcoded index */
-    int slot = tx_isp_register_subdev_by_name(isp_dev, &core_dev->sd);
-    if (slot < 0) {
-        pr_err("tx_isp_link_core_device: Failed to register core subdev in array\n");
-        return -ENOMEM;
+    /* FIXED: Don't register core subdev again - it's already registered in tx_isp_subdev_init */
+    /* Find existing registration slot for logging */
+    int slot = -1;
+    for (int i = 0; i < ISP_MAX_SUBDEVS; i++) {
+        if (isp_dev->subdevs[i] == &core_dev->sd) {
+            slot = i;
+            break;
+        }
     }
 
     pr_info("*** tx_isp_link_core_device: Core device linked successfully ***\n");
-    pr_info("*** Core subdev registered at slot %d: %p ***\n", slot, &core_dev->sd);
+    if (slot >= 0) {
+        pr_info("*** Core subdev already registered at slot %d: %p ***\n", slot, &core_dev->sd);
+    } else {
+        pr_warn("*** Core subdev not found in subdev array - this may cause issues ***\n");
+    }
 
     return 0;
 }

@@ -34,6 +34,7 @@
 #include "../include/tx-isp-device.h"
 #include "../include/tx-libimp.h"
 #include "../include/tx_isp_core_device.h"
+#include "../include/tx_isp_subdev_helpers.h"
 
 
 /* CRITICAL: Magic number for frame channel validation */
@@ -4260,9 +4261,12 @@ int tx_isp_open(struct inode *inode, struct file *file)
     /* This prevents repeated tisp_init calls that corrupt CSI PHY registers */
     static bool isp_core_initialized = false;
 
+    /* Debug: Print subdev array status before calling ispcore_core_ops_init */
+    tx_isp_debug_print_subdevs(isp);
+
     struct tx_isp_subdev *core_sd = tx_isp_find_subdev_by_name(isp, "isp-m0");
     if (!isp_core_initialized && core_sd) {
-        pr_info("*** tx_isp_open: Calling ispcore_core_ops_init(1) - FIRST TIME ONLY ***\n");
+        pr_info("*** tx_isp_open: Found core subdev %p, calling ispcore_core_ops_init(1) - FIRST TIME ONLY ***\n", core_sd);
         ret = ispcore_core_ops_init(core_sd, 1);
         if (ret != 0) {
             pr_err("tx_isp_open: ispcore_core_ops_init failed: %d\n", ret);
