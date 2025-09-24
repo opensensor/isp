@@ -1358,11 +1358,16 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     /* Step 3: Now write VIC interrupt registers to enabled hardware */
     pr_info("*** tx_isp_vic_start: Writing VIC interrupt registers to enabled hardware ***\n");
-    writel(0x3130322a, vic_regs + 0x0);      /* First register from reference trace - CRITICAL for interrupts */
+
+    /* CRITICAL FIX: Write interrupt registers first, then control register last */
     writel(0x07800438, vic_regs + 0x4);      /* VIC interrupt mask register - CRITICAL for interrupts */
     writel(0xb5742249, vic_regs + 0xc);      /* VIC interrupt control register - CRITICAL for interrupts */
     writel(0x2d0, vic_regs + 0x100);         /* VIC interrupt config register - CRITICAL for interrupts */
     writel(0x2b, vic_regs + 0x14);           /* VIC interrupt control register 2 - CRITICAL for interrupts */
+    wmb();
+
+    /* Write control register LAST to avoid overwriting interrupt registers */
+    writel(0x3130322a, vic_regs + 0x0);      /* VIC control register - write LAST to preserve interrupt settings */
     wmb();
 
     pr_info("*** tx_isp_vic_start: FINAL VIC interrupt registers written to enabled hardware! ***\n");
