@@ -1098,30 +1098,39 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* CRITICAL FIX: NOW configure VIC interrupts AFTER VIC hardware is unlocked and enabled */
     pr_info("*** VIC INTERRUPT CONFIG: VIC hardware is now unlocked - configuring interrupts ***\n");
 
+    /* CRITICAL FIX: Try writing interrupt registers to SECONDARY VIC space (0x10023000) */
+    void __iomem *vic_interrupt_regs = vic_dev->vic_regs_control;  /* Secondary VIC space */
+    if (!vic_interrupt_regs) {
+        pr_err("*** VIC INTERRUPT CONFIG: No secondary VIC registers available - using primary ***\n");
+        vic_interrupt_regs = vic_regs;  /* Fallback to primary */
+    } else {
+        pr_info("*** VIC INTERRUPT CONFIG: Using SECONDARY VIC space (0x10023000) for interrupt registers ***\n");
+    }
+
     /* WORKING BRANCH: Clear any pending interrupts first */
-    writel(0, vic_regs + 0x00);  // Clear ISR
-    writel(0, vic_regs + 0x20);  // Clear ISR1
+    writel(0, vic_interrupt_regs + 0x00);  // Clear ISR
+    writel(0, vic_interrupt_regs + 0x20);  // Clear ISR1
     wmb();
 
     /* WORKING BRANCH: Configure ISP control interrupts - EXACTLY like working branch */
-    writel(0x07800438, vic_regs + 0x04);  // IMR - Working branch value
+    writel(0x07800438, vic_interrupt_regs + 0x04);  // IMR - Working branch value
     wmb();
-    writel(0xb5742249, vic_regs + 0x0c);  // IMCR - Working branch value
+    writel(0xb5742249, vic_interrupt_regs + 0x0c);  // IMCR - Working branch value
     wmb();
 
     /* WORKING BRANCH: Configure frame capture interrupt registers */
-    writel(0x2d0, vic_regs + 0x100);      // Interrupt configuration
+    writel(0x2d0, vic_interrupt_regs + 0x100);      // Interrupt configuration
     wmb();
-    writel(0x2b, vic_regs + 0x14);        // Interrupt control
+    writel(0x2b, vic_interrupt_regs + 0x14);        // Interrupt control
     wmb();
 
     pr_info("*** VIC INTERRUPT CONFIG: Applied WORKING BRANCH interrupt configuration AFTER VIC unlock ***\n");
 
     /* Verify interrupt register writes were accepted */
-    u32 verify_imr = readl(vic_regs + 0x04);
-    u32 verify_imcr = readl(vic_regs + 0x0c);
-    u32 verify_config = readl(vic_regs + 0x100);
-    u32 verify_control = readl(vic_regs + 0x14);
+    u32 verify_imr = readl(vic_interrupt_regs + 0x04);
+    u32 verify_imcr = readl(vic_interrupt_regs + 0x0c);
+    u32 verify_config = readl(vic_interrupt_regs + 0x100);
+    u32 verify_control = readl(vic_interrupt_regs + 0x14);
 
     pr_info("*** VIC INTERRUPT VERIFY (AFTER UNLOCK): 0x04=0x%08x (expected 0x07800438), 0x0c=0x%08x (expected 0xb5742249) ***\n",
             verify_imr, verify_imcr);
