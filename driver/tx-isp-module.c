@@ -1851,13 +1851,17 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 }
 
                 /* Binary Ninja: Register restoration sequence */
+                printk(KERN_ALERT "*** VIC ERROR RECOVERY: Restoring registers 0x104 and 0x108 ***\n");
                 u32 reg_val = readl(vic_regs + 0x104);
                 writel(reg_val, vic_regs + 0x104);
+                printk(KERN_ALERT "*** VIC ERROR RECOVERY: Restored reg 0x104 = 0x%x ***\n", reg_val);
 
                 reg_val = readl(vic_regs + 0x108);
                 writel(reg_val, vic_regs + 0x108);
+                printk(KERN_ALERT "*** VIC ERROR RECOVERY: Restored reg 0x108 = 0x%x ***\n", reg_val);
 
                 /* Binary Ninja: **($s0 + 0xb8) = 1 */
+                printk(KERN_ALERT "*** VIC ERROR RECOVERY: Setting VIC control to 1 - recovery complete ***\n");
                 writel(1, vic_regs + 0x0);
             }
         }
