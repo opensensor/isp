@@ -1330,15 +1330,42 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_warn("*** VIC MANUAL INTERRUPT TEST: No ISP device available for testing ***\n");
     }
 
-    /* CRITICAL FIX: Write VIC interrupt registers at the VERY END to prevent overwriting */
-    pr_info("*** tx_isp_vic_start: FINAL STEP - Writing VIC interrupt registers to prevent overwriting ***\n");
+    /* CRITICAL FIX: Enable VIC hardware BEFORE writing interrupt registers */
+    pr_info("*** tx_isp_vic_start: CRITICAL - Enabling VIC hardware before interrupt configuration ***\n");
+
+    /* Step 1: Enable VIC hardware - Binary Ninja shows VIC control sequence */
+    writel(0x2, vic_regs + 0x0);             /* VIC enable step 1 - prepare hardware */
+    wmb();
+    writel(0x4, vic_regs + 0x0);             /* VIC enable step 2 - activate hardware */
+    wmb();
+    writel(0x1, vic_regs + 0x0);             /* VIC enable step 3 - final enable */
+    wmb();
+
+    /* Step 2: Wait for VIC hardware to become ready */
+    int timeout = 1000;
+    u32 status;
+    do {
+        status = readl(vic_regs + 0x0);
+        if ((status & 0x1) == 0) break;  /* Wait for ready bit */
+        udelay(1);
+    } while (--timeout > 0);
+
+    if (timeout <= 0) {
+        pr_warn("*** tx_isp_vic_start: VIC hardware enable timeout - continuing anyway ***\n");
+    } else {
+        pr_info("*** tx_isp_vic_start: VIC hardware enabled successfully (status=0x%x) ***\n", status);
+    }
+
+    /* Step 3: Now write VIC interrupt registers to enabled hardware */
+    pr_info("*** tx_isp_vic_start: Writing VIC interrupt registers to enabled hardware ***\n");
     writel(0x3130322a, vic_regs + 0x0);      /* First register from reference trace - CRITICAL for interrupts */
     writel(0x07800438, vic_regs + 0x4);      /* VIC interrupt mask register - CRITICAL for interrupts */
     writel(0xb5742249, vic_regs + 0xc);      /* VIC interrupt control register - CRITICAL for interrupts */
     writel(0x2d0, vic_regs + 0x100);         /* VIC interrupt config register - CRITICAL for interrupts */
     writel(0x2b, vic_regs + 0x14);           /* VIC interrupt control register 2 - CRITICAL for interrupts */
     wmb();
-    pr_info("*** tx_isp_vic_start: FINAL VIC interrupt registers written - VIC interrupts should now fire! ***\n");
+
+    pr_info("*** tx_isp_vic_start: FINAL VIC interrupt registers written to enabled hardware! ***\n");
 
     return 0;
 }

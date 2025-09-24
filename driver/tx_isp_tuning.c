@@ -9226,9 +9226,11 @@ int tisp_netlink_init(void)
         return 0;
     }
 
-    /* Binary Ninja: Netlink creation failed */
-    pr_err("tisp_netlink_init: Failed to create netlink socket with both NULL and nlcfg\n");
-    return 0xffffffff;
+    /* CRITICAL FIX: Don't fail ISP initialization if netlink socket creation fails */
+    /* The netlink socket is used for tuning parameter communication, not core VIC interrupts */
+    pr_warn("tisp_netlink_init: Failed to create netlink socket - continuing without netlink support\n");
+    pr_warn("tisp_netlink_init: ISP tuning parameters may not be available, but VIC interrupts should still work\n");
+    return 0;  /* Return success to allow ISP initialization to continue */
 }
 
 
