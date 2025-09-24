@@ -1707,7 +1707,11 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 }
 
                 /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
-                vic_framedone_irq_function(vic_dev);
+                printk(KERN_ALERT "*** VIC IRQ: About to call vic_framedone_irq_function ***\n");
+
+                /* CRITICAL SAFETY: Temporarily disable this call to isolate the lockup cause */
+                /* vic_framedone_irq_function(vic_dev); */
+                printk(KERN_ALERT "*** VIC IRQ: SKIPPED vic_framedone_irq_function to prevent lockup ***\n");
             }
 
             /* Binary Ninja: Error handling for frame asfifo overflow */
