@@ -4587,6 +4587,15 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
         return ret;
     }
 
+    /* CRITICAL FIX: Initialize CSI subdev - THIS WAS MISSING! */
+    pr_info("*** tx_isp_module_init: Initializing CSI subdev (MISSING from current implementation) ***\n");
+    ret = tx_isp_init_csi_subdev(isp_dev);
+    if (ret != 0) {
+        pr_err("Failed to initialize CSI subdev: %d\n", ret);
+        tx_isp_subdev_platform_exit();  /* Cleanup platform drivers */
+        return ret;
+    }
+
     /* Binary Ninja: Register misc device to create /dev/tx-isp */
     ret = misc_register(&tx_isp_miscdev);
     if (ret != 0) {
