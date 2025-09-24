@@ -979,30 +979,50 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     pr_info("*** VIC HARDWARE PREREQUISITES: Dimensions %dx%d, stride %d, MIPI mode 2 ***\n",
             width, height, width * 2);
 
-    /* CRITICAL FIX: 0x1e0/0x1e8 are STATUS registers, not control registers! */
-    /* The Binary Ninja interrupt handler READS from these to check interrupt status */
-    /* We need to enable interrupts through CONTROL registers instead */
+    /* CRITICAL FIX: Based on working git commits, enable VIC interrupts through proper sequence */
+    /* Git commit 590cb9198fffd8592a256d33885285af849c0640 shows the working approach */
 
-    pr_info("*** VIC INTERRUPT CONFIG: Using CONTROL registers to enable interrupts (0x1e0/0x1e8 are status registers) ***\n");
+    pr_info("*** VIC INTERRUPT CONFIG: Using WORKING git commit sequence to enable interrupts ***\n");
 
-    /* CRITICAL: Enable VIC interrupts through control register 0x30c */
-    /* Based on git commit analysis, this is the actual interrupt enable register */
-    writel(0x1, vic_regs + 0x30c);  /* Enable frame done interrupt */
-    wmb();
-
-    /* CRITICAL: Also enable through VIC control register bits */
-    /* Enable frame processing interrupt in VIC control register */
+    /* STEP 1: Enable VIC processing by setting bit 0 in VIC control register (0x0) */
     u32 vic_ctrl = readl(vic_regs + 0x0);
-    vic_ctrl |= 0x2;  /* Set interrupt enable bit */
+    vic_ctrl |= 0x1;  /* Enable VIC processing (bit 0) */
     writel(vic_ctrl, vic_regs + 0x0);
     wmb();
 
-    /* CRITICAL: Configure interrupt mask registers in CONTROL space if available */
+    /* STEP 2: Enable frame processing by setting bit 0 in VIC frame control register (0x4) */
+    u32 vic_frame_ctrl = readl(vic_regs + 0x4);
+    vic_frame_ctrl |= 0x1;  /* Enable frame processing (bit 0) */
+    writel(vic_frame_ctrl, vic_regs + 0x4);
+    wmb();
+
+    /* STEP 3: Enable VIC DMA interrupt generation via register 0x300 */
+    /* Git commit 71ee3324210750aaf08ca0aff08685af34621127 shows this is needed */
+    writel(0x1, vic_regs + 0x300);  /* Enable VIC DMA interrupt generation */
+    wmb();
+
+    /* STEP 4: Enable specific interrupt types in register 0x30c */
+    /* Frame completion, DMA completion, and buffer ready interrupts */
+    writel(0x7, vic_regs + 0x30c);  /* Enable frame done + DMA + buffer ready (bits 0,1,2) */
+    wmb();
+
+    /* STEP 5: Configure interrupt masks in SECONDARY VIC space (0x10023000) */
+    /* Git commits show some interrupt operations need secondary space */
     if (vic_dev->vic_regs_control) {
-        pr_info("*** VIC INTERRUPT CONFIG: Configuring interrupt masks in CONTROL space ***\n");
-        /* Enable frame done interrupt mask */
+        pr_info("*** VIC INTERRUPT CONFIG: Configuring interrupt masks in SECONDARY VIC space ***\n");
+
+        /* Clear any pending interrupts first in secondary space */
+        writel(0xFFFFFFFF, vic_dev->vic_regs_control + 0x1f0);  /* Clear main interrupt status */
+        writel(0xFFFFFFFF, vic_dev->vic_regs_control + 0x1f4);  /* Clear MDMA interrupt status */
+        wmb();
+
+        /* Enable frame done interrupt mask in secondary space */
         writel(0xFFFFFFFE, vic_dev->vic_regs_control + 0x1e8);  /* Enable frame done interrupt (bit 0 clear) */
         wmb();
+
+        pr_info("*** VIC INTERRUPT CONFIG: Secondary VIC space configured ***\n");
+    } else {
+        pr_warn("*** VIC INTERRUPT CONFIG: No secondary VIC space available ***\n");
     }
 
     /* NOW read the STATUS registers to verify interrupt hardware is ready */
@@ -1010,14 +1030,26 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     verify_int_mask = readl(vic_regs + 0x1e8); /* Read interrupt mask status register */
     pr_info("*** VIC INTERRUPT STATUS CHECK: STATUS=0x%08x, MASK_STATUS=0x%08x ***\n", verify_int_en, verify_int_mask);
 
-    /* Read control register to verify our enable bit was set */
-    u32 ctrl_verify = readl(vic_regs + 0x30c);
-    pr_info("*** VIC INTERRUPT CONTROL VERIFY: CTRL_0x30c=0x%08x ***\n", ctrl_verify);
+    /* Verify all control registers were set correctly */
+    u32 ctrl_0x0_verify = readl(vic_regs + 0x0);
+    u32 ctrl_0x4_verify = readl(vic_regs + 0x4);
+    u32 ctrl_0x300_verify = readl(vic_regs + 0x300);
+    u32 ctrl_0x30c_verify = readl(vic_regs + 0x30c);
 
-    if (ctrl_verify & 0x1) {
-        pr_info("*** VIC INTERRUPT: Frame done interrupt ENABLED via control register ***\n");
+    pr_info("*** VIC INTERRUPT CONTROL VERIFY (PRIMARY): 0x0=0x%08x, 0x4=0x%08x, 0x300=0x%08x, 0x30c=0x%08x ***\n",
+            ctrl_0x0_verify, ctrl_0x4_verify, ctrl_0x300_verify, ctrl_0x30c_verify);
+
+    /* Also verify secondary space if available */
+    if (vic_dev->vic_regs_control) {
+        u32 sec_0x1e8_verify = readl(vic_dev->vic_regs_control + 0x1e8);
+        pr_info("*** VIC INTERRUPT CONTROL VERIFY (SECONDARY): 0x1e8=0x%08x ***\n", sec_0x1e8_verify);
+    }
+
+    if ((ctrl_0x0_verify & 0x1) && (ctrl_0x4_verify & 0x1) && (ctrl_0x300_verify & 0x1) && (ctrl_0x30c_verify & 0x7)) {
+        pr_info("*** VIC INTERRUPT: ALL primary control registers set correctly - interrupts should fire! ***\n");
     } else {
-        pr_warn("*** VIC INTERRUPT: Frame done interrupt NOT enabled - control register write failed ***\n");
+        pr_warn("*** VIC INTERRUPT: Some primary control register writes failed - interrupts may not work ***\n");
+        pr_warn("*** VIC INTERRUPT: Expected: 0x0 & 0x1, 0x4 & 0x1, 0x300 & 0x1, 0x30c & 0x7 ***\n");
     }
 
     /* Binary Ninja: Final configuration registers */
