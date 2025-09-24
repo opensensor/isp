@@ -1060,39 +1060,37 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0, vic_regs + 0x1b4);
     wmb();
 
-    /* CRITICAL: NOW configure VIC interrupts using CORRECT registers from Binary Ninja */
-    pr_info("*** VIC INTERRUPT CONFIG: Using CORRECT registers from Binary Ninja decompilation ***\n");
+    /* CRITICAL: NOW configure VIC interrupts using WORKING BRANCH registers */
+    pr_info("*** VIC INTERRUPT CONFIG: Using WORKING BRANCH registers (NOT Binary Ninja) ***\n");
 
-    /* Binary Ninja shows interrupt handler reads from 0x1e0/0x1e8 and 0x1e4/0x1ec */
-    /* Handler logic: ($v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0)) */
-
-    /* Clear any pending interrupts first */
+    /* WORKING BRANCH: Clear any pending interrupts first */
     pr_info("*** VIC INTERRUPT CONFIG: Clearing pending interrupts ***\n");
-    writel(0xFFFFFFFF, vic_regs + 0x1f0);  /* Clear main interrupt status */
-    writel(0xFFFFFFFF, vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
+    writel(0, vic_regs + 0x00);  /* Clear ISR */
+    writel(0, vic_regs + 0x20);  /* Clear ISR1 */
     wmb();
 
-    /* Enable VIC interrupts - Binary Ninja: handler reads from 0x1e0 & ~0x1e8 */
-    pr_info("*** VIC INTERRUPT CONFIG: Enabling VIC interrupts via register 0x1e0 ***\n");
-    writel(0xFFFFFFFF, vic_regs + 0x1e0);  /* Enable all VIC interrupt sources */
+    /* WORKING BRANCH: Set up interrupt masks to match working configuration */
+    pr_info("*** VIC INTERRUPT CONFIG: Configuring interrupt masks (WORKING BRANCH) ***\n");
+    writel(0x00000001, vic_regs + 0x04);  /* IMR - Initial mask */
+    wmb();
+    writel(0x00000000, vic_regs + 0x24);  /* IMR1 - Clear secondary mask */
     wmb();
 
-    /* Clear VIC interrupt masks - Binary Ninja: handler uses ~0x1e8 */
-    pr_info("*** VIC INTERRUPT CONFIG: Clearing VIC interrupt masks via register 0x1e8 ***\n");
-    writel(0x0, vic_regs + 0x1e8);  /* Clear all VIC interrupt masks (enable all) */
+    /* WORKING BRANCH: Configure ISP control interrupts */
+    pr_info("*** VIC INTERRUPT CONFIG: Configuring ISP control interrupts (WORKING BRANCH) ***\n");
+    writel(0x07800438, vic_regs + 0x04);  /* IMR - Working branch value */
+    wmb();
+    writel(0xb5742249, vic_regs + 0x0c);  /* IMCR - Working branch value */
     wmb();
 
-    /* Enable MDMA interrupts - Binary Ninja: handler reads from 0x1e4 & ~0x1ec */
-    pr_info("*** VIC INTERRUPT CONFIG: Enabling MDMA interrupts via register 0x1e4 ***\n");
-    writel(0xFFFFFFFF, vic_regs + 0x1e4);  /* Enable all MDMA interrupt sources */
+    /* WORKING BRANCH: Apply VIC interrupt system configuration */
+    pr_info("*** VIC INTERRUPT CONFIG: Applying VIC interrupt system configuration (WORKING BRANCH) ***\n");
+    writel(0x2d0, vic_regs + 0x100);      /* Interrupt configuration - Working branch value */
+    wmb();
+    writel(0x2b, vic_regs + 0x14);        /* Interrupt control - Working branch value */
     wmb();
 
-    /* Clear MDMA interrupt masks - Binary Ninja: handler uses ~0x1ec */
-    pr_info("*** VIC INTERRUPT CONFIG: Clearing MDMA interrupt masks via register 0x1ec ***\n");
-    writel(0x0, vic_regs + 0x1ec);  /* Clear all MDMA interrupt masks (enable all) */
-    wmb();
-
-    pr_info("*** VIC INTERRUPT CONFIG: CORRECT Binary Ninja interrupt configuration complete ***\n");
+    pr_info("*** VIC INTERRUPT CONFIG: WORKING BRANCH interrupt configuration complete ***\n");
 
     /* CRITICAL MISSING PIECE: Enable ISP core interrupt generation at hardware level */
     pr_info("*** ISP CORE INTERRUPT CONFIG: Enabling ISP core interrupt generation (MISSING FROM CURRENT BRANCH) ***\n");
@@ -1140,35 +1138,35 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* NOTE: VIC DMA start (0x300) should happen during streaming, not here */
     /* Working reference shows vic_pipo_mdma_enable + ispvic_frame_channel_s_stream handle DMA */
 
-    /* Verify CORRECT Binary Ninja interrupt registers were set */
-    pr_info("*** VIC INTERRUPT CONFIG: Starting verification of BINARY NINJA interrupt registers ***\n");
+    /* Verify WORKING BRANCH interrupt registers were set */
+    pr_info("*** VIC INTERRUPT CONFIG: Starting verification of WORKING BRANCH interrupt registers ***\n");
     u32 ctrl_0x0_verify = readl(vic_regs + 0x0);
     u32 ctrl_0x4_verify = readl(vic_regs + 0x4);
 
-    /* Verify CORRECT Binary Ninja interrupt registers */
-    u32 ctrl_0x1e0_verify = readl(vic_regs + 0x1e0); /* VIC interrupt status (Binary Ninja) */
-    u32 ctrl_0x1e8_verify = readl(vic_regs + 0x1e8); /* VIC interrupt mask (Binary Ninja) */
-    u32 ctrl_0x1e4_verify = readl(vic_regs + 0x1e4); /* MDMA interrupt status (Binary Ninja) */
-    u32 ctrl_0x1ec_verify = readl(vic_regs + 0x1ec); /* MDMA interrupt mask (Binary Ninja) */
+    /* Verify WORKING BRANCH interrupt registers */
+    u32 ctrl_0x04_verify = readl(vic_regs + 0x04);   /* IMR (Working Branch) */
+    u32 ctrl_0x0c_verify = readl(vic_regs + 0x0c);   /* IMCR (Working Branch) */
+    u32 ctrl_0x100_verify = readl(vic_regs + 0x100); /* Interrupt configuration (Working Branch) */
+    u32 ctrl_0x14_verify = readl(vic_regs + 0x14);   /* Interrupt control (Working Branch) */
 
-    pr_info("*** VIC INTERRUPT CONTROL VERIFY (CORRECT REGISTERS): 0x0=0x%08x, 0x4=0x%08x ***\n",
+    pr_info("*** VIC INTERRUPT CONTROL VERIFY (BASIC REGISTERS): 0x0=0x%08x, 0x4=0x%08x ***\n",
             ctrl_0x0_verify, ctrl_0x4_verify);
-    pr_info("*** VIC INTERRUPT CONTROL VERIFY (BINARY NINJA REGS): 0x1e0=0x%08x, 0x1e8=0x%08x, 0x1e4=0x%08x, 0x1ec=0x%08x ***\n",
-            ctrl_0x1e0_verify, ctrl_0x1e8_verify, ctrl_0x1e4_verify, ctrl_0x1ec_verify);
+    pr_info("*** VIC INTERRUPT CONTROL VERIFY (WORKING BRANCH REGS): 0x04=0x%08x, 0x0c=0x%08x, 0x100=0x%08x, 0x14=0x%08x ***\n",
+            ctrl_0x04_verify, ctrl_0x0c_verify, ctrl_0x100_verify, ctrl_0x14_verify);
 
-    /* Check success condition with Binary Ninja registers */
-    bool interrupt_sources_enabled = (ctrl_0x1e0_verify != 0x0);  /* Some interrupt sources enabled */
-    bool interrupt_masks_cleared = (ctrl_0x1e8_verify == 0x0);    /* All interrupt masks cleared */
-    bool mdma_sources_enabled = (ctrl_0x1e4_verify != 0x0);       /* Some MDMA interrupt sources enabled */
-    bool mdma_masks_cleared = (ctrl_0x1ec_verify == 0x0);         /* All MDMA interrupt masks cleared */
+    /* Check success condition with WORKING BRANCH registers */
+    bool imr_configured = (ctrl_0x04_verify == 0x07800438);       /* IMR matches working branch */
+    bool imcr_configured = (ctrl_0x0c_verify == 0xb5742249);     /* IMCR matches working branch */
+    bool int_config_set = (ctrl_0x100_verify == 0x2d0);          /* Interrupt config matches working branch */
+    bool int_control_set = (ctrl_0x14_verify == 0x2b);           /* Interrupt control matches working branch */
 
-    if (interrupt_sources_enabled && interrupt_masks_cleared && mdma_sources_enabled && mdma_masks_cleared) {
-        pr_info("*** VIC INTERRUPT: ALL BINARY NINJA interrupt registers configured correctly - interrupts should fire! ***\n");
+    if (imr_configured && imcr_configured && int_config_set && int_control_set) {
+        pr_info("*** VIC INTERRUPT: ALL WORKING BRANCH interrupt registers configured correctly - interrupts should fire! ***\n");
     } else {
-        pr_warn("*** VIC INTERRUPT: Some BINARY NINJA interrupt register configuration failed ***\n");
-        pr_warn("*** VIC INTERRUPT: Expected: 0x1e0 != 0, 0x1e8 == 0, 0x1e4 != 0, 0x1ec == 0 ***\n");
-        pr_warn("*** VIC INTERRUPT: sources_enabled=%d, masks_cleared=%d, mdma_sources_enabled=%d, mdma_masks_cleared=%d ***\n",
-                interrupt_sources_enabled, interrupt_masks_cleared, mdma_sources_enabled, mdma_masks_cleared);
+        pr_warn("*** VIC INTERRUPT: Some WORKING BRANCH interrupt register configuration failed ***\n");
+        pr_warn("*** VIC INTERRUPT: Expected: 0x04=0x07800438, 0x0c=0xb5742249, 0x100=0x2d0, 0x14=0x2b ***\n");
+        pr_warn("*** VIC INTERRUPT: imr_ok=%d, imcr_ok=%d, config_ok=%d, control_ok=%d ***\n",
+                imr_configured, imcr_configured, int_config_set, int_control_set);
     }
 
     /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
