@@ -1686,14 +1686,35 @@ ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, 
         /* Call vic_mdma_enable to enable VIC MDMA */
         extern struct frame_channel_device frame_channels[];
         struct tx_isp_channel_state *state = &frame_channels[0].state;
+        dma_addr_t buffer_addr = 0;
+        void *temp_buffer = NULL;
+        bool allocated_temp_buffer = false;
 
         if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
+            /* Use existing VBM buffer */
+            buffer_addr = state->vbm_buffer_addresses[0];
+            pr_info("*** vic_proc_write: Using VBM buffer address 0x%x ***\n", buffer_addr);
+        } else {
+            /* Allocate temporary buffer for snapraw operation */
+            u32 frame_size = vic_dev->width * vic_dev->height * 2;  /* RAW10 = 2 bytes/pixel */
+            pr_info("*** vic_proc_write: No VBM buffers, allocating temporary buffer (size=%u) ***\n", frame_size);
+
+            temp_buffer = dma_alloc_coherent(NULL, frame_size, &buffer_addr, GFP_KERNEL);
+            if (!temp_buffer || !buffer_addr) {
+                pr_err("vic_proc_write: Failed to allocate temporary buffer\n");
+                ret = -ENOMEM;
+                goto cleanup;
+            }
+            allocated_temp_buffer = true;
+            pr_info("*** vic_proc_write: Allocated temporary buffer at 0x%x ***\n", buffer_addr);
+        }
+
+        if (buffer_addr) {
             int format_type = 0;  /* Default to RAW format */
             int dual_channel = 0; /* Single channel mode */
 
-            pr_info("*** vic_proc_write: Calling vic_mdma_enable for snapraw with VBM buffer ***\n");
-            ret = vic_mdma_enable(vic_dev, 0, dual_channel, save_num,
-                                state->vbm_buffer_addresses[0], format_type);
+            pr_info("*** vic_proc_write: Calling vic_mdma_enable for snapraw with buffer 0x%x ***\n", buffer_addr);
+            ret = vic_mdma_enable(vic_dev, 0, dual_channel, save_num, buffer_addr, format_type);
 
             if (ret == 0) {
                 pr_info("*** vic_proc_write: vic_mdma_enable SUCCESS - VIC MDMA enabled for snapraw ***\n");
@@ -1701,9 +1722,13 @@ ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, 
             } else {
                 pr_err("vic_proc_write: vic_mdma_enable failed: %d\n", ret);
             }
-        } else {
-            pr_err("vic_proc_write: No buffer addresses available for snapraw\n");
-            ret = -ENOMEM;
+        }
+
+        /* Clean up temporary buffer if allocated */
+        if (allocated_temp_buffer && temp_buffer) {
+            u32 frame_size = vic_dev->width * vic_dev->height * 2;
+            dma_free_coherent(NULL, frame_size, temp_buffer, buffer_addr);
+            pr_info("*** vic_proc_write: Freed temporary buffer ***\n");
         }
     }
     /* Process "saveraw" command */
@@ -1729,14 +1754,35 @@ ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, 
         /* Call vic_mdma_enable to enable VIC MDMA */
         extern struct frame_channel_device frame_channels[];
         struct tx_isp_channel_state *state = &frame_channels[0].state;
+        dma_addr_t buffer_addr = 0;
+        void *temp_buffer = NULL;
+        bool allocated_temp_buffer = false;
 
         if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
+            /* Use existing VBM buffer */
+            buffer_addr = state->vbm_buffer_addresses[0];
+            pr_info("*** vic_proc_write: Using VBM buffer address 0x%x ***\n", buffer_addr);
+        } else {
+            /* Allocate temporary buffer for saveraw operation */
+            u32 frame_size = vic_dev->width * vic_dev->height * 2;  /* RAW10 = 2 bytes/pixel */
+            pr_info("*** vic_proc_write: No VBM buffers, allocating temporary buffer (size=%u) ***\n", frame_size);
+
+            temp_buffer = dma_alloc_coherent(NULL, frame_size, &buffer_addr, GFP_KERNEL);
+            if (!temp_buffer || !buffer_addr) {
+                pr_err("vic_proc_write: Failed to allocate temporary buffer\n");
+                ret = -ENOMEM;
+                goto cleanup;
+            }
+            allocated_temp_buffer = true;
+            pr_info("*** vic_proc_write: Allocated temporary buffer at 0x%x ***\n", buffer_addr);
+        }
+
+        if (buffer_addr) {
             int format_type = 0;  /* Default to RAW format */
             int dual_channel = 0; /* Single channel mode */
 
-            pr_info("*** vic_proc_write: Calling vic_mdma_enable for saveraw with VBM buffer ***\n");
-            ret = vic_mdma_enable(vic_dev, 0, dual_channel, save_num,
-                                state->vbm_buffer_addresses[0], format_type);
+            pr_info("*** vic_proc_write: Calling vic_mdma_enable for saveraw with buffer 0x%x ***\n", buffer_addr);
+            ret = vic_mdma_enable(vic_dev, 0, dual_channel, save_num, buffer_addr, format_type);
 
             if (ret == 0) {
                 pr_info("*** vic_proc_write: vic_mdma_enable SUCCESS - VIC MDMA enabled for saveraw ***\n");
@@ -1744,9 +1790,13 @@ ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, 
             } else {
                 pr_err("vic_proc_write: vic_mdma_enable failed: %d\n", ret);
             }
-        } else {
-            pr_err("vic_proc_write: No buffer addresses available for saveraw\n");
-            ret = -ENOMEM;
+        }
+
+        /* Clean up temporary buffer if allocated */
+        if (allocated_temp_buffer && temp_buffer) {
+            u32 frame_size = vic_dev->width * vic_dev->height * 2;
+            dma_free_coherent(NULL, frame_size, temp_buffer, buffer_addr);
+            pr_info("*** vic_proc_write: Freed temporary buffer ***\n");
         }
     }
     else {
@@ -2344,6 +2394,7 @@ const struct file_operations vic_w02_proc_fops = {
     .write = vic_proc_write,            /* CRITICAL: Use write handler for proc entry */
     .llseek = seq_lseek,               /* Allow seeking */
 };
+EXPORT_SYMBOL(vic_w02_proc_fops);
 
 /* tx_isp_vic_probe - EXACT Binary Ninja reference implementation */
 int tx_isp_vic_probe(struct platform_device *pdev)
