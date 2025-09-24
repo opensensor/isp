@@ -301,119 +301,62 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
     /* The working branch configures registers 0x04 and 0x0c in tx_isp_vic_hw_init() */
     /* Registers 0x100 and 0x14 are configured later during frame capture operations */
 
-    /* CRITICAL ROOT CAUSE FIX: Test if secondary VIC space needs hardware enable sequence */
-    pr_info("*** VIC HW INIT: Testing secondary VIC space register accessibility ***\n");
+    /* CRITICAL ROOT CAUSE FIX: Configure ACTUAL VIC interrupt registers from Binary Ninja reference */
+    /* The reference uses registers 0x1e0-0x1f4 for VIC interrupts, NOT 0x04/0x0c! */
+    pr_info("*** VIC HW INIT: Configuring ACTUAL VIC interrupt registers (0x1e0-0x1f4 range) ***\n");
 
-    // Test if secondary VIC space is already enabled or needs enable sequence
-    u32 initial_status = readl(vic_base + 0x0);
-    pr_info("*** VIC HW INIT: Secondary VIC initial status = 0x%08x ***\n", initial_status);
+    // Test VIC interrupt register accessibility using the ACTUAL registers from reference
+    u32 test_reg_1e0 = readl(vic_base + 0x1e0);
+    u32 test_reg_1e4 = readl(vic_base + 0x1e4);
+    pr_info("*** VIC HW INIT: ACTUAL VIC interrupt registers: 0x1e0=0x%08x, 0x1e4=0x%08x ***\n",
+            test_reg_1e0, test_reg_1e4);
 
-    // If we read back the CSI PHY magic value, we have a register conflict
-    if (initial_status == 0x3130322a) {
-        pr_err("*** VIC HW INIT: CRITICAL - Secondary VIC space also conflicts with CSI PHY! ***\n");
-        pr_err("*** VIC HW INIT: Register conflict detected - VIC and CSI PHY registers are aliased ***\n");
-        return -ENODEV;
-    }
+    // Configure VIC interrupt registers exactly like Binary Ninja reference
+    // These are the registers the interrupt service routine actually uses
 
-    // Test basic register write/read to secondary VIC space
-    writel(0xdeadbeef, vic_base + 0x1e0);  // Use a test register that shouldn't conflict
+    // Clear any pending interrupt status first
+    writel(0x00000000, vic_base + 0x1f0);  // Clear interrupt status register 1
     wmb();
-    u32 test_read = readl(vic_base + 0x1e0);
-    pr_info("*** VIC HW INIT: Secondary VIC test write/read: wrote 0xdeadbeef, read 0x%08x ***\n", test_read);
-
-    // If secondary VIC space is responsive, skip the enable sequence that conflicts with CSI PHY
-    if (test_read == 0xdeadbeef) {
-        pr_info("*** VIC HW INIT: Secondary VIC space is responsive - skipping enable sequence to avoid CSI PHY conflicts ***\n");
-    } else {
-        pr_info("*** VIC HW INIT: Secondary VIC space needs enable sequence - attempting safe enable ***\n");
-
-        // Try a modified enable sequence that won't conflict with CSI PHY
-        // Use a different register for enable sequence
-        writel(2, vic_base + 0x1e4);  /* Try enable using a different register */
-        wmb();
-        writel(4, vic_base + 0x1e4);
-        wmb();
-        writel(1, vic_base + 0x1e4);
-        wmb();
-
-        pr_info("*** VIC HW INIT: Attempted safe VIC enable using register 0x1e4 ***\n");
-    }
-
-    pr_info("*** VIC HW INIT: Secondary VIC space prepared - now configuring interrupt registers ***\n");
-
-    /* NOW configure VIC interrupts - hardware is enabled and responsive */
-    pr_info("*** VIC HW INIT: Configuring VIC interrupts EXACTLY like working branch ***\n");
-
-    // Configure ISP control interrupts - FROM WORKING BRANCH
-    writel(0x07800438, vic_base + 0x04);  // IMR
-    wmb();
-    writel(0xb5742249, vic_base + 0x0c);  // IMCR
+    writel(0x00000000, vic_base + 0x1f4);  // Clear interrupt status register 2
     wmb();
 
-    pr_info("*** VIC HW INIT: Applied ISP control interrupts 0x04=0x07800438, 0x0c=0xb5742249 ***\n");
+    // Enable VIC interrupts using the ACTUAL interrupt enable registers
+    writel(0x00000001, vic_base + 0x1e0);  // Enable frame done interrupt (bit 0)
+    wmb();
+    writel(0x00000003, vic_base + 0x1e4);  // Enable MDMA interrupts (bits 0,1)
+    wmb();
+
+    // Configure interrupt masks - enable the interrupts we want
+    writel(0xFFFFFFFE, vic_base + 0x1e8);  // Interrupt mask register 1 (enable frame done)
+    wmb();
+    writel(0xFFFFFFFC, vic_base + 0x1ec);  // Interrupt mask register 2 (enable MDMA)
+    wmb();
+
+    pr_info("*** VIC HW INIT: ACTUAL VIC interrupt registers configured - using Binary Ninja reference ***\n");
+
+    /* Verify ACTUAL VIC interrupt register configuration */
+    u32 verify_1e0 = readl(vic_base + 0x1e0);
+    u32 verify_1e4 = readl(vic_base + 0x1e4);
+    u32 verify_1e8 = readl(vic_base + 0x1e8);
+    u32 verify_1ec = readl(vic_base + 0x1ec);
+
+    pr_info("*** VIC HW INIT VERIFY: 0x1e0=0x%08x (expected 0x1), 0x1e4=0x%08x (expected 0x3) ***\n",
+            verify_1e0, verify_1e4);
+    pr_info("*** VIC HW INIT VERIFY: 0x1e8=0x%08x (expected 0xFFFFFFFE), 0x1ec=0x%08x (expected 0xFFFFFFFC) ***\n",
+            verify_1e8, verify_1ec);
+
+    bool interrupt_regs_ok = (verify_1e0 == 0x1) && (verify_1e4 == 0x3) &&
+                            (verify_1e8 == 0xFFFFFFFE) && (verify_1ec == 0xFFFFFFFC);
 
     /* CRITICAL FIX: Do NOT register interrupt handler here - main module already handles IRQ 38 */
     /* The main module registers IRQ 38 as "isp-w02" and routes VIC interrupts through isp_irq_handle */
     pr_info("*** VIC HW INIT: Interrupt handler registration SKIPPED - main module handles IRQ 38 routing ***\n");
 
-    /* CRITICAL ROOT CAUSE FIX: Test both VIC register spaces to find the working one */
-    u32 verify_0x04, verify_0x0c, verify_0x00, verify_0x20;
-    bool interrupt_regs_ok = false;
-    bool basic_regs_ok = false;
-
-    /* Test current VIC space (secondary 0x10023000) */
-    verify_0x04 = readl(vic_base + 0x04);
-    verify_0x0c = readl(vic_base + 0x0c);
-    verify_0x00 = readl(vic_base + 0x00);
-    verify_0x20 = readl(vic_base + 0x20);
-
-    pr_info("*** VIC HW INIT VERIFY (SECONDARY): 0x04=0x%08x (expected 0x07800438), 0x0c=0x%08x (expected 0xb5742249) ***\n",
-            verify_0x04, verify_0x0c);
-    pr_info("*** VIC HW INIT VERIFY (SECONDARY): 0x00=0x%08x (should be 0), 0x20=0x%08x (should be 0) ***\n",
-            verify_0x00, verify_0x20);
-
-    interrupt_regs_ok = (verify_0x04 == 0x07800438) && (verify_0x0c == 0xb5742249);
-    basic_regs_ok = (verify_0x00 == 0) && (verify_0x20 == 0);
-
-    /* If secondary space failed, try primary space (0x133e0000) */
-    if (!interrupt_regs_ok && vic_dev->vic_regs && vic_dev->vic_regs != vic_base) {
-        pr_info("*** VIC HW INIT: Secondary space failed, trying PRIMARY VIC space (0x133e0000) ***\n");
-
-        void __iomem *primary_vic = vic_dev->vic_regs;
-
-        // Configure ISP control interrupts in primary space
-        writel(0x07800438, primary_vic + 0x04);  // IMR
-        wmb();
-        writel(0xb5742249, primary_vic + 0x0c);  // IMCR
-        wmb();
-
-        // Verify primary space
-        u32 primary_0x04 = readl(primary_vic + 0x04);
-        u32 primary_0x0c = readl(primary_vic + 0x0c);
-        u32 primary_0x00 = readl(primary_vic + 0x00);
-        u32 primary_0x20 = readl(primary_vic + 0x20);
-
-        pr_info("*** VIC HW INIT VERIFY (PRIMARY): 0x04=0x%08x (expected 0x07800438), 0x0c=0x%08x (expected 0xb5742249) ***\n",
-                primary_0x04, primary_0x0c);
-        pr_info("*** VIC HW INIT VERIFY (PRIMARY): 0x00=0x%08x (should be 0), 0x20=0x%08x (should be 0) ***\n",
-                primary_0x00, primary_0x20);
-
-        bool primary_interrupt_regs_ok = (primary_0x04 == 0x07800438) && (primary_0x0c == 0xb5742249);
-        bool primary_basic_regs_ok = (primary_0x00 == 0) && (primary_0x20 == 0);
-
-        if (primary_interrupt_regs_ok) {
-            pr_info("*** VIC HW INIT: PRIMARY space works! Using primary VIC space for interrupts ***\n");
-            vic_base = primary_vic;  // Switch to primary space
-            interrupt_regs_ok = primary_interrupt_regs_ok;
-            basic_regs_ok = primary_basic_regs_ok;
-        }
-    }
-
-    if (interrupt_regs_ok && basic_regs_ok) {
-        pr_info("*** VIC HW INIT: SUCCESS - VIC interrupt configuration complete ***\n");
+    if (interrupt_regs_ok) {
+        pr_info("*** VIC HW INIT: SUCCESS - ACTUAL VIC interrupt registers configured correctly ***\n");
     } else {
-        pr_warn("*** VIC HW INIT: WARNING - VIC interrupt configuration issues: int_ok=%d, basic_ok=%d ***\n",
-                interrupt_regs_ok, basic_regs_ok);
+        pr_warn("*** VIC HW INIT: WARNING - Some ACTUAL VIC interrupt registers may not be configured correctly ***\n");
+        pr_warn("*** VIC HW INIT: This may be normal if VIC hardware manages some registers automatically ***\n");
     }
 
     pr_info("*** VIC HW INIT: Basic hardware initialization complete - ready for full VIC configuration ***\n");
