@@ -634,9 +634,13 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
                 vin_dev->sd.ops->core, vin_dev->sd.ops->video,
                 vin_dev->sd.ops->video ? vin_dev->sd.ops->video->s_stream : NULL);
 
-        /* VIN at index 2 - sets up to receive data from sensors */
-        ourISPdev->subdevs[2] = &vin_dev->sd;
-        pr_info("*** REGISTERED VIN SUBDEV AT INDEX 2 WITH VIDEO OPS ***\n");
+        /* VIN - register using helper function instead of hardcoded index */
+        int slot = tx_isp_register_subdev_by_name(ourISPdev, &vin_dev->sd);
+        if (slot >= 0) {
+            pr_info("*** REGISTERED VIN SUBDEV AT SLOT %d WITH VIDEO OPS ***\n", slot);
+        } else {
+            pr_err("*** Failed to register VIN subdev - no available slots ***\n");
+        }
 
         /* CRITICAL FIX: Initialize VIN immediately during probe, not deferred */
         pr_info("*** VIN INITIALIZATION: Calling tx_isp_vin_init immediately during probe ***\n");
