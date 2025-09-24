@@ -1014,19 +1014,26 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0x1, vic_regs + 0x34);  /* Enable VIC MDMA completion interrupt */
     wmb();
 
-    /* STEP 3: Configure VIC interrupt masks using CORRECT registers */
-    /* Git commit 789cd9aa9f45c7d4c7c595a1c7f62b1d9ea4b18b shows VIC_IMR=0x04, VIC_IMCR=0x0c */
-    pr_info("*** VIC INTERRUPT CONFIG: Clearing interrupt masks via register 0x08 (VIC_IMSR) ***\n");
-    writel(0x0, vic_regs + 0x08);  /* Clear interrupt masks via VIC_IMSR */
+    /* STEP 3: Configure VIC interrupt masks using SHADOW REGISTER UNLOCK SEQUENCE */
+    /* Git commit 6a83e06c84dfa44e7cf5d7ff69e8f95abbb1bbb3 shows shadow register unlock sequence */
+    pr_info("*** VIC INTERRUPT CONFIG: Starting SHADOW REGISTER UNLOCK SEQUENCE ***\n");
+
+    /* STEP 3a: Write unlock value to VIC_IMR to unlock shadow registers */
+    pr_info("*** VIC INTERRUPT CONFIG: Writing UNLOCK value 0x07800438 to VIC_IMR register 0x04 ***\n");
+    writel(0x07800438, vic_regs + 0x04);  /* VIC_IMR - Shadow register unlock */
     wmb();
 
-    pr_info("*** VIC INTERRUPT CONFIG: Setting VIC_IMR register 0x04 = 0x07800438 ***\n");
-    writel(0x07800438, vic_regs + 0x04);  /* VIC_IMR - Interrupt Mask Register */
+    /* STEP 3b: Write control configuration to VIC_IMCR */
+    pr_info("*** VIC INTERRUPT CONFIG: Writing CONTROL value 0xb5742249 to VIC_IMCR register 0x0c ***\n");
+    writel(0xb5742249, vic_regs + 0x0c);  /* VIC_IMCR - Interrupt control configuration */
     wmb();
 
-    pr_info("*** VIC INTERRUPT CONFIG: Setting VIC_IMCR register 0x0c = 0xb5742249 ***\n");
-    writel(0xb5742249, vic_regs + 0x0c);  /* VIC_IMCR - Interrupt Mask Clear Register */
+    /* STEP 3c: Clear interrupt masks via VIC_IMSR to activate shadow registers */
+    pr_info("*** VIC INTERRUPT CONFIG: Clearing masks via VIC_IMSR register 0x08 to ACTIVATE shadow registers ***\n");
+    writel(0x0, vic_regs + 0x08);  /* VIC_IMSR - Activate shadow registers */
     wmb();
+
+    pr_info("*** VIC INTERRUPT CONFIG: SHADOW REGISTER UNLOCK SEQUENCE COMPLETE ***\n");
 
     /* STEP 3: Configure interrupt masks in SECONDARY VIC space (0x10023000) */
     /* Git commits show some interrupt operations need secondary space */
