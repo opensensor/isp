@@ -1201,24 +1201,20 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     get_cached_sensor_dimensions(&width, &height);
     pr_info("*** VIC DIMENSIONS: Using cached sensor dimensions %dx%d (ATOMIC CONTEXT SAFE) ***\n", width, height);
 
-    /* CRITICAL FIX: Skip interrupt-disrupting registers if VIC interrupts already working */
-    if (vic_start_ok == 1) {
-        pr_info("*** VIC REGISTER PROTECTION: SKIPPING interrupt-disrupting registers 0xc, 0x10, 0x14 - VIC interrupts already working ***\n");
-    } else {
-        pr_info("*** VIC REGISTER CONFIG: Writing VIC configuration registers (vic_start_ok=%d) ***\n", vic_start_ok);
+    /* CRITICAL FIX: ALWAYS configure VIC registers - verification shows they're not set correctly */
+    pr_info("*** VIC REGISTER CONFIG: FORCE writing VIC configuration registers (required for interrupts) ***\n");
 
-        /* Configure VIC dimensions - CRITICAL for interrupt register acceptance */
-        writel((width << 16) | height, vic_regs + 0x10);  /* VIC dimensions */
-        writel(width * 2, vic_regs + 0x14);               /* VIC stride for 16-bit */
-        wmb();
+    /* Configure VIC dimensions - CRITICAL for interrupt register acceptance */
+    writel((width << 16) | height, vic_regs + 0x10);  /* VIC dimensions */
+    writel(width * 2, vic_regs + 0x14);               /* VIC stride for 16-bit */
+    wmb();
 
-        /* Configure VIC control register - CRITICAL prerequisite */
-        writel(2, vic_regs + 0xc);  /* MIPI mode (2, not 3) - matches working reference */
-        wmb();
+    /* Configure VIC control register - CRITICAL prerequisite */
+    writel(2, vic_regs + 0xc);  /* MIPI mode (2, not 3) - matches working reference */
+    wmb();
 
-        pr_info("*** VIC REGISTER CONFIG: VIC configuration registers written (0xc=2, 0x10=0x%08x, 0x14=%d) ***\n",
-                (width << 16) | height, width * 2);
-    }
+    pr_info("*** VIC REGISTER CONFIG: VIC configuration registers written (0xc=2, 0x10=0x%08x, 0x14=%d) ***\n",
+            (width << 16) | height, width * 2);
 
     pr_info("*** VIC HARDWARE PREREQUISITES: Dimensions %dx%d, stride %d, MIPI mode 2 ***\n",
             width, height, width * 2);

@@ -2718,6 +2718,15 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
     struct tx_isp_dev *isp_dev;
     struct tx_isp_sensor_attribute *sensor_attr = NULL;
     void* s0 = NULL;
+
+    pr_info("*** ispcore_core_ops_init: ENTRY - sd=%p, on=%d ***\n", sd, on);
+    if (sd) {
+        pr_info("*** ispcore_core_ops_init: sd->dev_priv=%p, sd->host_priv=%p ***\n", sd->dev_priv, sd->host_priv);
+        pr_info("*** ispcore_core_ops_init: sd->pdev=%p, sd->ops=%p ***\n", sd->pdev, sd->ops);
+    } else {
+        pr_err("*** ispcore_core_ops_init: ERROR - sd is NULL! ***\n");
+        return -EINVAL;
+    }
     int32_t var_18 = 0;
     int32_t result = -EINVAL;
     struct tx_isp_vic_device *vic_dev;
@@ -2765,20 +2774,32 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
     }
 
     /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) */
-    if (isp_dev != NULL && (unsigned long)isp_dev < 0xfffff001) {
-        /* CRITICAL FIX: Binary Ninja: $s0 = arg1[0x35] - Get VIC device from ISP device */
-        /* The Binary Ninja decompilation shows this accesses VIC device, not core device */
-        vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-        s0 = (void*)vic_dev;
+    /* CRITICAL FIX: arg1 is the subdev parameter, not isp_dev */
+    if (sd != NULL && (unsigned long)sd < 0xfffff001) {
+        /* Binary Ninja: $s0 = arg1[0x35] - This is sd->host_priv (core device) */
+        s0 = sd->host_priv;  /* This should be the core device */
+        pr_info("*** ispcore_core_ops_init: s0 (core_dev) = %p from sd->host_priv ***\n", s0);
     }
 
     /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
     if (s0 != NULL && (unsigned long)s0 < 0xfffff001) {
-        /* CRITICAL FIX: Binary Ninja: int32_t $v0_3 = *($s0 + 0xe8) - Get VIC state, not core state */
-        vic_state = vic_dev->state;  /* This is VIC state at offset 0xe8 */
-        result = 0;
-
-        pr_info("ispcore_core_ops_init: VIC device=%p, state=%d", vic_dev, vic_state);
+        /* s0 is the core device, get VIC device from core device's ISP device */
+        core_dev = (struct tx_isp_core_device *)s0;
+        if (core_dev && core_dev->isp_dev) {
+            vic_dev = (struct tx_isp_vic_device *)core_dev->isp_dev->vic_dev;
+            if (vic_dev) {
+                /* Binary Ninja: int32_t $v0_3 = *($s0 + 0xe8) - Get VIC state */
+                vic_state = vic_dev->state;  /* This is VIC state at offset 0xe8 */
+                result = 0;
+                pr_info("ispcore_core_ops_init: core_dev=%p, vic_dev=%p, vic_state=%d", core_dev, vic_dev, vic_state);
+            } else {
+                pr_err("ispcore_core_ops_init: No VIC device found in core device's ISP device");
+                return -ENODEV;
+            }
+        } else {
+            pr_err("ispcore_core_ops_init: Invalid core device or no ISP device");
+            return -ENODEV;
+        }
 
         /* Binary Ninja: if ($v0_3 != 1) */
         if (vic_state != 1) {
