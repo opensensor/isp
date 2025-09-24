@@ -4274,6 +4274,9 @@ int tx_isp_open(struct inode *inode, struct file *file)
         }
         isp_core_initialized = true;
         pr_info("*** tx_isp_open: ispcore_core_ops_init SUCCESS - ISP core initialized ONCE ***\n");
+    } else if (!isp_core_initialized) {
+        pr_err("*** tx_isp_open: Core subdev 'isp-m0' not found - cannot initialize ISP core ***\n");
+        return -ENODEV;
 
         /* CRITICAL FIX: Ensure tuning system timing matches reference driver */
         /* In reference driver, tuning system is available immediately after core init */

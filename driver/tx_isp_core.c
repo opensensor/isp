@@ -306,8 +306,9 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
     /* Binary Ninja: if (arg2 == 0) */
     if (enable == 0) {
-        /* Binary Ninja: $s3_1 = &arg1[0xe] */
-        s3_1 = &isp_dev->subdevs[0];
+        /* Binary Ninja: $s3_1 = &arg1[0xe] - Use helper to find CSI subdev */
+        struct tx_isp_subdev *csi_sd = tx_isp_get_csi_subdev(isp_dev);
+        s3_1 = csi_sd ? &csi_sd : NULL;
 
         /* Binary Ninja: if ($v0_3 == 4) */
         if (v0_3 == 4) {
@@ -368,17 +369,20 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
             pr_info("*** ispcore_video_s_stream: VIC state set to 3 (ACTIVE) after stream OFF ***\n");
         }
         /* Use helper functions instead of hardcoded array access */
-        s3_1 = &isp_dev->subdevs[0];  /* Keep for Binary Ninja compatibility */
+        struct tx_isp_subdev *csi_sd = tx_isp_get_csi_subdev(isp_dev);
+        s3_1 = csi_sd ? &csi_sd : NULL;  /* CSI subdev for Binary Ninja compatibility */
     } else if (v0_3 != 3) {
         /* Use helper functions instead of hardcoded array access */
-        s3_1 = &isp_dev->subdevs[0];  /* Keep for Binary Ninja compatibility */
+        struct tx_isp_subdev *csi_sd2 = tx_isp_get_csi_subdev(isp_dev);
+        s3_1 = csi_sd2 ? &csi_sd2 : NULL;  /* CSI subdev for Binary Ninja compatibility */
     } else {
         /* CRITICAL FIX: DO NOT set VIC state to 4 here - let vic_core_s_stream handle it */
         /* The original Binary Ninja sets state to 4, but this prevents tx_isp_vic_start from running */
         /* vic_core_s_stream will set state to 4 AFTER tx_isp_vic_start completes successfully */
         pr_info("*** ispcore_video_s_stream: FIXED - VIC state remains 3, vic_core_s_stream will handle state transition ***\n");
         /* Use helper functions instead of hardcoded array access */
-        s3_1 = &isp_dev->subdevs[0];  /* Keep for Binary Ninja compatibility */
+        struct tx_isp_subdev *csi_sd3 = tx_isp_get_csi_subdev(isp_dev);
+        s3_1 = csi_sd3 ? &csi_sd3 : NULL;  /* CSI subdev for Binary Ninja compatibility */
     }
 
     /* CRITICAL FIX: Remove recursive subdev loop that causes infinite recursion */
