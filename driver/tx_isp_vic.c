@@ -924,27 +924,23 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
     pr_info("*** tx_isp_vic_start: Using single VIC register base - EXACT Binary Ninja reference ***\n");
 
-    /* STEP 2: CPM register manipulation like tx_isp_init_vic_registers */
-    pr_info("*** STREAMING: Configuring CPM registers for VIC access ***\n");
-    cpm_regs = ioremap(0x10000000, 0x1000);
-    if (cpm_regs) {
-        u32 clkgr0 = readl(cpm_regs + 0x20);
-        u32 clkgr1 = readl(cpm_regs + 0x28);
+    /* CRITICAL FIX: Skip CPM clock reconfiguration during streaming to prevent CSI PHY reset */
+    pr_info("*** STREAMING: SKIPPING CPM clock reconfiguration to preserve CSI PHY configuration ***\n");
+    pr_info("*** STREAMING: CPM clocks should already be configured during module init ***\n");
 
-        /* Enable ISP/VIC clocks */
-        clkgr0 &= ~(1 << 13); // ISP clock
-        clkgr0 &= ~(1 << 21); // Alternative ISP position
-        clkgr0 &= ~(1 << 30); // VIC in CLKGR0
-        clkgr1 &= ~(1 << 30); // VIC in CLKGR1
+    /* The CPM clock reconfiguration was causing CSI PHY registers to reset to 0 */
+    /* This happens because changing VIC/ISP clocks triggers a hardware reset */
+    /* that wipes out the carefully configured CSI PHY registers */
 
-        writel(clkgr0, cpm_regs + 0x20);
-        writel(clkgr1, cpm_regs + 0x28);
-        wmb();
-        msleep(20);
+    /* REMOVED CPM reconfiguration code that was causing CSI PHY reset:
+     * - clkgr0 &= ~(1 << 13); // ISP clock
+     * - clkgr0 &= ~(1 << 21); // Alternative ISP position
+     * - clkgr0 &= ~(1 << 30); // VIC in CLKGR0
+     * - clkgr1 &= ~(1 << 30); // VIC in CLKGR1
+     * - msleep(20); // This delay was when CSI PHY got reset
+     */
 
-        pr_info("STREAMING: CPM clocks configured for VIC access\n");
-        iounmap(cpm_regs);
-    }
+    pr_info("STREAMING: CPM clocks preserved - CSI PHY configuration should remain intact\n");
 
 
     /* MOVED: Interrupt register configuration moved to END of function to prevent overwriting */
@@ -1422,13 +1418,13 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
      * But NONE of this happens unless VIC is actively processing frames!
      */
 
-    /* Try to trigger VIC frame processing by writing to the frame processing control register */
-    pr_info("*** ATTEMPTING TO START VIC FRAME PROCESSING ***\n");
-    writel(0x1, vic_regs + 0x300);  /* Frame processing start - from logs this should be 0x80040020 for 4 buffers */
-    wmb();
+    /* CRITICAL FIX: Remove problematic frame processing start that may trigger CSI PHY reset */
+    pr_info("*** SKIPPING VIC FRAME PROCESSING START - preventing potential CSI PHY reset ***\n");
+    pr_info("*** VIC frame processing should be triggered by MDMA enable, not manual register write ***\n");
 
-    /* Wait a moment and check if VIC starts generating interrupts */
-    msleep(100);
+    /* The write to vic_regs + 0x300 was potentially causing hardware conflicts */
+    /* VIC frame processing should be started by the MDMA system, not manual trigger */
+    /* REMOVED: writel(0x1, vic_regs + 0x300); - This was causing CSI PHY reset */
 
     /* Check interrupt count after attempting to start frame processing */
     pr_info("*** VIC FRAME PROCESSING START ATTEMPTED - Check /proc/interrupts for VIC interrupt activity ***\n");
