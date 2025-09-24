@@ -1571,6 +1571,7 @@ int tisp_init(void *sensor_info, char *param_name)
 
     if (!ourISPdev) {
         pr_err("tisp_init: No ISP device available\n");
+        tisp_init_in_progress = false;  /* Reset guard on error */
         return -ENODEV;
     }
 
