@@ -1641,7 +1641,7 @@ void tx_isp_enable_irq(void *arg1)
     do { if (ptr) writel((val), (ptr) + (offset)); } while(0)
 
 /* Forward declaration for ISP core interrupt handler */
-extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
+irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 
 /* isp_vic_interrupt_service_routine - EXACT Binary Ninja MCP implementation */
 irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
@@ -5324,7 +5324,6 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
     /* CRITICAL FIX: For Core interrupts (IRQ 37), call the core handler */
     if (irq == 37) {
         /* Binary Ninja: Call ISP core interrupt service routine with ISP device */
-        extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
         result = ispcore_interrupt_service_routine(irq, isp_dev);
         pr_debug("*** isp_irq_handle: Core IRQ %d processed, result=%d ***\n", irq, result);
         return result;

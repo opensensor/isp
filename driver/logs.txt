@@ -1,203 +1,119 @@
-  273.727733] *** VIC IRQ: About to access isp_dev->vic_dev, isp_dev=81140000 ***
-[  273.747926] *** VIC IRQ: Got vic_dev=856b8400 ***
-[  273.752809] *** VIC IRQ: Checking vic_dev validity: vic_dev=856b8400 ***
-[  273.764843] *** VIC IRQ: About to access vic_dev->vic_regs ***
-[  273.781060] *** VIC IRQ: Got vic_regs=b0023000 ***
-[  273.791171] *** VIC IRQ: Checking vic_regs validity: vic_regs=b0023000 ***
-[  273.808205] *** VIC IRQ: vic_regs passed validity check - proceeding with register access ***
-[  273.827181] *** VIC IRQ: About to read VIC registers at b0023000 ***
-[  273.837273] *** VIC IRQ: About to read reg 0x1e8 ***
-[  273.847385] *** VIC IRQ: Read reg 0x1e8 = 0x0 ***
-[  273.857489] *** VIC IRQ: About to read reg 0x1e0 ***
-[  273.867597] *** VIC IRQ: Read reg 0x1e0 = 0x0 ***
-[  273.877721] *** VIC IRQ: Calculated v1_7 = 0x0 ***
-[  273.885962] *** VIC IRQ: Read v1_10 = 0x0 ***
-[  273.900657] *** VIC IRQ: About to write v1_7=0x0 to reg 0x1f0 ***
-[  273.910771] *** VIC IRQ: About to write v1_10=0x0 to reg 0x1f4 ***
-[  273.917149] *** VIC IRQ: Register writes completed ***
-[  273.943509] *** VIC INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
-[  273.963093] *** VIC IRQ: About to access isp_dev->vic_dev, isp_dev=81140000 ***
-[  273.988243] *** VIC IRQ: Got vic_dev=856b8400 ***
-[  273.993112] *** VIC IRQ: Checking vic_dev validity: vic_dev=856b8400 ***
-[  274.010210] *** VIC IRQ: About to access vic_dev->vic_regs ***
-[  274.016240] *** VIC IRQ: Got vic_regs=b0023000 ***
-[  274.035995] *** VIC IRQ: Checking vic_regs validity: vic_regs=b0023000 ***
-[  274.051601] *** VIC IRQ: vic_regs passed validity check - proceeding with register access ***
-[  274.068212] *** VIC IRQ: About to read VIC registers at b0023000 ***
-[  274.084934] *** VIC IRQ: About to read reg 0x1e8 ***
-[  274.095047] *** VIC IRQ: Read reg 0x1e8 = 0x0 ***
-[  274.105147] *** VIC IRQ: About to read reg 0x1e0 ***
-[  274.115272] *** VIC IRQ: Read reg 0x1e0 = 0x0 ***
-[  274.125373] *** VIC IRQ: Calculated v1_7 = 0x0 ***
-[  274.134043] *** VIC IRQ: Read v1_10 = 0x0 ***
-[  274.145386] *** VIC IRQ: About to write v1_7=0x0 to reg 0x1f0 ***
-[  274.158225] *** VIC IRQ: About to write v1_10=0x0 to reg 0x1f4 ***
-[  274.168215] *** VIC IRQ: Register writes completed ***
-[  274.174505] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=81140000 ***
-[  274.181963] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
-[  274.221731] *** VIC INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
-[  274.238227] *** VIC IRQ: About to access isp_dev->vic_dev, isp_dev=81140000 ***
-[  274.252314] *** VIC IRQ: Got vic_dev=856b8400 ***
-[  274.267365] *** VIC IRQ: Checking vic_dev validity: vic_dev=856b8400 ***
-[  274.288338] *** VIC IRQ: About to access vic_dev->vic_regs ***
-  274.105147] *** VIC IRQ: About to read reg 0x1e0 ***
-[  274.115272] *** VIC IRQ: Read reg 0x1e0 = 0x0 ***
-[  274.125373] *** VIC IRQ: Calculated v1_7 = 0x0 ***
-[  274.134043] *** VIC IRQ: Read v1_10 = 0x0 ***
-[  274.145386] *** VIC IRQ: About to write v1_7=0x0 to reg 0x1f0 ***
-[  274.158225] *** VIC IRQ: About to write v1_10=0x0 to reg 0x1f4 ***
-[  274.168215] *** VIC IRQ: Register writes completed ***
-[  274.174505] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=81140000 ***
-[  274.181963] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
-[  274.221731] *** VIC INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
-[  274.238227] *** VIC IRQ: About to access isp_dev->vic_dev, isp_dev=81140000 ***
-[  274.252314] *** VIC IRQ: Got vic_dev=856b8400 ***
-[  274.267365] *** VIC IRQ: Checking vic_dev validity: vic_dev=856b8400 ***
-[  274.288338] *** VIC IRQ: About to access vic_dev->vic_regs ***
-[  274.294367] *** VIC IRQ: Got vic_regs=b0023000 ***
-[  274.309474] *** VIC IRQ: Checking vic_regs validity: vic_regs=b0023000 ***
-[  274.319559] *** VIC IRQ: vic_regs passed validity check - proceeding with register access ***
-[  274.338203] *** VIC IRQ: About to read VIC registers at b0023000 ***
-[  274.354944] *** VIC IRQ: About to read reg 0x1e8 ***
-[  274.365053] *** VIC IRQ: Read reg 0x1e8 = 0x0 ***
-[  274.375161] *** VIC IRQ: About to read reg 0x1e0 ***
-[  274.381315] *** VIC IRQ: Read reg 0x1e0 = 0x0 ***
-[  274.396389] *** VIC IRQ: Calculated v1_7 = 0x0 ***
-[  274.406511] *** VIC IRQ: Read v1_10 = 0x0 ***
-[  274.413653] *** VIC IRQ: About to write v1_7=0x0 to reg 0x1f0 ***
-[  274.428211] *** VIC IRQ: About to write v1_10=0x0 to reg 0x1f4 ***
-[  274.438200] *** VIC IRQ: Register writes completed ***
-[  274.444036] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=81140000 ***
-[  274.451493] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
-[  274.517062] CPU 0 Unable to handle kernel paging request at virtual address 000000dc, epc == 80024270, ra == 8001b1a4
-[  274.528018] Oops[#1]:  274.530362] CPU: 0 PID: 0 Comm:  Tainted: G           O 3.10.14__isvp_swan_1.0__ #1
-[  274.538265] task: 804b1000 ti: 8047a000 task.ti:   (null)
-[  274.543836] $ 0   : 00000000 10001c00 00000000 3ffcd001
-[  274.549236] $ 4   : 8047c0b8 00000000 0000000c 000015a1
-[  274.554620] $ 8   : 10001c00 1000001e 00000000 ffffffe0
-[  274.560018] $12   : 00000023 8047bf10 00000000 00000078
-[  274.565406] $16   : 804c3b1c 00000000 00000000 80473524
-[  274.570805] $20   : 0000000a 804c0000 00030000 80450000
-[  274.576201] $24   : 00000000 00000000
-[  274.581594] $28   : 8047c000 8047bfe0 00000018 8001b1a4
-[  274.586990] Hi    : 00000000
-[  274.589958] Lo    : 00000032
-[  274.592926] epc   : 80024270 0x80024270
-[  274.596871]     Tainted: G           O
-[  274.600732] ra    : 8001b1a4 0x8001b1a4
-[  274.604684] Status: 10001c02 KERNEL EXL
-[  274.608724] Cause : 40808008
-[  274.611690] BadVA : 000000dc
-[  274.614657] PrId  : 00d00100 (Ingenic Xburst)
-[  274.619147] Modules linked in: sensor_gc2053_t31(O) tx_isp_t31(O) tx_isp_trace(O) 8189fs(O) pwm_hal(O) pwm_core(O) gpio_userkeys(O) avpu(O) audio(O) cp210x ch341 usbserial exfat(O) jzmmc_v12
-[  274.636668] Process  (pid: 0, threadinfo=8047a000, task=804b1000, tls=804b1000)
-[  274.644208] Stack : 804b2d38 804b2d38 804c2aa8 804c2ab8 00000000 00000055 00000001 00000001
-[  274.652834] Call Trace:
-[  274.655350]
-Code: 00c21021  3463d001  0043102b <8e5500dc> 00808825  10400015  00c08025  3c038046  8c63f0ac
-[  274.665615] CPU 0 Unable to handle kernel paging request at virtual address 000000c8, epc == 80064e40, ra == 80044e94
-[  274.676570] Oops[#2]:
-[  274.678914] CPU: 0 PID: 0 Comm:  Tainted: G      D    O 3.10.14__isvp_swan_1.0__ #1
-[  274.686812] task: 804b1000 ti: 8047a000 task.ti:   (null)
-[  274.692376] $ 0   : 00000000 10001c00 00000000 00000001
-[  274.697770] $ 4   : 004c0000 00010000 00000001 00000001
-[  274.703161] $ 8   : 00000000 00000000 14e42372 68d47952
-[  274.708554] $12   : 00000000 804c0000 00000000 00000000
-[  274.713942] $16   : 00000001 80452880 804b1000 00000004
-[  274.719338] $20   : 80072ec8 80451e30 ffffffff 80450000
-[  274.724750] $24   : 00000000 00000000
-[  274.730138] $28   : 8047a000 8047bb88 80450000 80044e94
-[  274.735542] Hi    : 00000000
-[  274.738509] Lo    : 00000000
-[  274.741478] epc   : 80064e40 0x80064e40
-[  274.745430]     Tainted: G      D    O
-[  274.749293] ra    : 80044e94 0x80044e94
-[  274.753246] Status: 10001c02 KERNEL EXL
-[  274.757291] Cause : 40808008  274.760251] BadVA : 000000c8
-[  274.763214] PrId  : 00d00100 (Ingenic Xburst)
-[  274.767698] Modules linked in: sensor_gc2053_t31(O) tx_isp_t31(O) tx_isp_trace(O) 8189fs(O) pwm_hal(O) pwm_core(O) gpio_userkeys(O) avpu(O) audio(O) cp210x ch341 usbserial exfat(O) jzmmc_v12
-[  274.785220] Process  (pid: 0, threadinfo=8047a000, task=804b1000, tls=804b1000)
-[  274.792759] Stack : 80450000 80072d78 804b2d38 00000001 00000006 00000000 804b1000 272fa40f
-          00000112 80044e94 8047bd80 80453000 8047bd80 272fa40f 00000112 80453000
-          8047bd80 80072f14 804c5d70 80451e60 80453000 8005b658 00000009 803eb657
-          272fa40f 00000112 80453000 80453000 00000112 80451e60 8047bc48 8005bac0
-          8045446c 0000000b 0000000b 00000000 272f91d5 00000112 3b9aca00 00000003
+   47.946354] *** VIC IRQ: Read v1_10 = 0x0 ***
+[   47.950872] *** VIC IRQ: About to write v1_7=0x0 to reg 0x1f0 ***
+[   47.967288] *** VIC IRQ: About to write v1_10=0x0 to reg 0x1f4 ***
+[   47.977379] *** VIC IRQ: Register writes completed ***
+[   47.987491] *** VIC IRQ: About to check vic_start_ok - vic_start_ok=1 ***
+[   48.007695] *** VIC IRQ: vic_start_ok=1, v1_7=0x0, v1_10=0x0 ***
+[   48.013932] *** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***
+[   48.029028] *** VIC IRQ COMPLETE: Processed v1_7=0x0, v1_10=0x0 - returning IRQ_HANDLED ***
+[   48.048772] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=80514000 ***
+[   48.056230] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
+[   48.082400] *** VIC INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
+[   48.100708] *** VIC IRQ: About to access isp_dev->vic_dev, isp_dev=80514000 ***
+[   48.108254] *** VIC IRQ: Got vic_dev=8049e000 ***
+[   48.129040] *** VIC IRQ: Checking vic_dev validity: vic_dev=8049e000 ***
+[   48.146132] *** VIC IRQ: About to access vic_dev->vic_regs ***
+[   48.152177] *** VIC IRQ: Got vic_regs=b0023000 ***
+[   48.167258] *** VIC IRQ: Checking vic_regs validity: vic_regs=b0023000 ***
+[   48.177336] *** VIC IRQ: vic_regs passed validity check - proceeding with register access ***
+[   48.197552] *** VIC IRQ: About to read VIC registers at b0023000 ***
+[   48.207645] *** VIC IRQ: About to read reg 0x1e8 ***
+[   48.217752] *** VIC IRQ: Read reg 0x1e8 = 0x0 ***
+[   48.227862] *** VIC IRQ: About to read reg 0x1e0 ***
+[   48.237965] *** VIC IRQ: Read reg 0x1e0 = 0x0 ***
+[   48.248073] *** VIC IRQ: Calculated v1_7 = 0x0 ***
+[   48.258173] *** VIC IRQ: Read v1_10 = 0x0 ***
+[   48.268282] *** VIC IRQ: About to write v1_7=0x0 to reg 0x1f0 ***
+[   48.288481] *** VIC IRQ: About to write v1_10=0x0 to reg 0x1f4 ***
+[   48.294970] *** VIC IRQ: Register writes completed ***
+[   48.309052] *** VIC IRQ: About to check vic_start_ok - vic_start_ok=1 ***
+[   48.326240] *** VIC IRQ: vic_start_ok=1, v1_7=0x0, v1_10=0x0 ***
+[   48.332466] *** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***
+[   48.349088] *** VIC IRQ COMPLETE: Processed v1_7=0x0, v1_10=0x0 - returning IRQ_HANDLED ***
+[   48.358209] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=80514000 ***
+[   48.365662] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
+[   48.424034] Unhandled kernel unaligned access[#1]:
+[   48.429006] CPU: 0 PID: 0 Comm:  Tainted: G           O 3.10.14__isvp_swan_1.0__ #1
+[   48.436915] task: 96f0433c ti: 85e88000 task.ti:   (null)
+[   48.442488] $ 0   : 00000000 10001c00 00000000 3ffcd001
+[   48.447884] $ 4   : 85e8a148 00000000 000045d4 00001639
+[   48.453268] $ 8   : 10001c00 1000001e 00000000 ffffffe0
+[   48.458651] $12   : 00000023 85e91ed8 00000000 00000048
+[   48.464040] $16   : 8e5500dc 000045d1 000044f5 00000000
+[   48.469433] $20   : 8001b1a4 85e8a230 00030000 00000000
+[   48.474819] $24   : 00000003 80065d98
+[   48.480208] $28   : 85e8a000 85e8a070 80450000 8001b1a4
+[   48.503291] Status: 10001c02 KERNEL EXL
+[   48.507339] Cause : 40809010
+[   48.510308] BadVA : 000045d1
+[   48.513270] PrId  : 00d00100 (Ingenic Xburst)
+[   48.517761] Modules linked in: sensor_gc2053_t31(O) tx_isp_t31(O) tx_isp_trace(O) 8189fs(O) pwm_hal(O) pwm_core(O) gpio_userkeys(O) avpu(O) audio(O) cp210x ch341 usbserial exfat(O) jzmmc_v12
+[   48.535273] Process  (pid: 0, threadinfo=85e88000, task=96f0433c, tls=bfe36759)
+[   48.542808] Stack : 000045a7 00000bdf 00000016 00130001 000045c7 00000188 00000008 00090001
+          000045e0 00000bf5 0000000f 00030001 000010f9 000187c4 00000000 00110000
+          000010fe 000187f4 00000000 00110000 000045f9 00000000 00000000 fff10004
+          00004606 00005828 00000048 00010002 00004618 00005870 000000ec 00010002
+          00004625 00005b20 00000004 001e0001 00004637 00000020 00000008 00090001
           ...
-[  274.829442] Call Trace:[<80072d78>] 0x80072d78
-[  274.834018] [<80044e94>] 0x80044e94  
-[  274.837615] [<8047bd80>] 0x8047bd80  
-[  274.841212] [<8047bd80>] 0x8047bd80  
-[  274.844804] [<8047bd80>] 0x8047bd80  
-[  274.848395] [<80072f14>] 0x80072f14  
-[  274.851982] [<8005b658>] 0x8005b658  
-[  274.855572] [<8047bc48>] 0x8047bc48  
-[  274.859163] [<8005bac0>] 0x8005bac0  
-[  274.862762] [<8005c8cc>] 0x8005c8cc  
-[  274.866358] [<801aca54>] 0x801aca54  
-[  274.869950] [<8001409c>] 0x8001409c  
-[  274.873542] [<801db99c>] 0x801db99c  
-[  274.877137] [<80084618>] 0x80084618  
-[  274.880734] [<8008484c>] 0x8008484c  
-[  274.884330] [<80037e80>] 0x80037e80  
-[  274.887923] [<800873e8>] 0x800873e8  
-[  274.891514] [<800840c0>] 0x800840c0  
-[  274.895102] [<8001d1e8>] 0x8001d1e8  
-[  274.898694] [<8001896c>] 0x8001896c  
-[  274.902282] [<8001b1a0>] 0x8001b1a0  
-[  274.905867] [<80024270>] 0x80024270  
-[  274.909464] [<8047bf30>] 0x8047bf30  
-[  274.913052] [<8047a000>] 0x8047a000  
-[  274.916640] [<8047be30>] 0x8047be30  
-[  274.920237] [<8001f8c8>] 0x8001f8c8  
-[  274.923832] [<8047bf30>] 0x8047bf30  
-[  274.927425] [<8001f8dc>] 0x8001f8dc  
-[  274.931021] [<8047bf30>] 0x8047bf30  
-[  274.934618] [<8002463c>] 0x8002463c  
-[  274.938213] [<8047be58>] 0x8047be58  
-[  274.941812] [<80024270>] 0x80024270  
-[  274.945402] [<8001b1a4>] 0x8001b1a4  
-[  274.948999] [<8047bde0>] 0x8047bde0  274.869950] [<8001409c>] 0x8001409c  
-[  274.873542] [<801db99c>] 0x801db99c  
-[  274.877137] [<80084618>] 0x80084618  
-[  274.880734] [<8008484c>] 0x8008484c  
-[  274.884330] [<80037e80>] 0x80037e80  
-[  274.887923] [<800873e8>] 0x800873e8  
-[  274.891514] [<800840c0>] 0x800840c0  
-[  274.895102] [<8001d1e8>] 0x8001d1e8  
-[  274.898694] [<8001896c>] 0x8001896c  
-[  274.902282] [<8001b1a0>] 0x8001b1a0  
-[  274.905867] [<80024270>] 0x80024270  
-[  274.909464] [<8047bf30>] 0x8047bf30  
-[  274.913052] [<8047a000>] 0x8047a000  
-[  274.916640] [<8047be30>] 0x8047be30  
-[  274.920237] [<8001f8c8>] 0x8001f8c8  
-[  274.923832] [<8047bf30>] 0x8047bf30  
-[  274.927425] [<8001f8dc>] 0x8001f8dc  
-[  274.931021] [<8047bf30>] 0x8047bf30  
-[  274.934618] [<8002463c>] 0x8002463c  
-[  274.938213] [<8047be58>] 0x8047be58  
-[  274.941812] [<80024270>] 0x80024270  
-[  274.945402] [<8001b1a4>] 0x8001b1a4  
-[  274.948999] [<8047bde0>] 0x8047bde0  
-[  274.952598] [<8047beac>] 0x8047beac  
-[  274.956186] [<8047beac>] 0x8047beac  
-[  274.959784] [<8047beb8>] 0x8047beb8  
-[  274.963378] [<8047beb8>] 0x8047beb8  
-[  274.966976] [<8047bed4>] 0x8047bed4  
-[  274.970564] [<8047bed4>] 0x8047bed4  
-[  274.974162] [<8047bee0>] 0x8047bee0  
-[  274.977758] [<8047bee0>] 0x8047bee0  
-[  274.981357] [<800b4d2c>] 0x800b4d2c  
-[  274.984953] [<8001b1a4>] 0x8001b1a4  
-[  274.988548] [<8047c0b8>] 0x8047c0b8  
-[  274.992140] [<8047bf10>] 0x8047bf10  
-[  274.995730] [<8047c000>] 0x8047c000  
-[  274.999328] [<8047bfe0>] 0x8047bfe0  
-[  275.002924] [<8001b1a4>] 0x8001b1a4  
-[  275.006522] [<80024270>] 0x80024270  
-[  275.010109]
-[  275.011634]
+[   48.579509] Call Trace:[<80024270>] 0x80024270
+[   48.584091] [<8001b1a4>] 0x8001b1a4  
+[   48.587691] [<8001b1a4>] 0x8001b1a4  
+[   48.591290] [<80024270>] 0x80024270  
+[   48.594881] [<8001b1a4>] 0x8001b1a4  
+[   48.598477] [<80065d98>] 0x80065d98  
+[   48.602075] [<8001b1a4>] 0x8001b1a4  
+[   48.605671] [<80021254>] 0x80021254  
+[   48.609267] [<8001b1a4>] 0x8001b1a4  
+[   48.612865] [<8001b1a4>] 0x8001b1a4  
+[   48.616457] [<8001b1a4>] 0x8001b1a4  
+[   48.620053] [<80065d98>] 0x80065d98  
+[   48.623649] [<8001b1a4>] 0x8001b1a4  
+[   48.627243] [<80024270>] 0x80024270  
+[   48.630842] [<80024270>] 0x80024270  
+[   48.634435] [<8001b1a4>] 0x8001b1a4  
+[   48.638029] [<8001b1a4>] 0x8001b1a4  
+[   48.641627] [<80024270>] 0x80024270  
+[   48.645219] [<8001b1a4>] 0x8001b1a4  [   49.300722] PrId  : 00d00100 (Ingenic Xburst)
+[   49.305214] Modules linked in: sensor_gc2053_t31(O) tx_isp_t31(O) tx_isp_trace(O) 8189fs(O) pwm_hal(O) pwm_core(O) gpio_userkeys(O) avpu(O) audio(O) cp210x ch341 usbserial exfat(O) jzmmc_v12
+[   49.322736] Process  (pid: 0, threadinfo=85e88000, task=96f0433c, tls=bfe36759)
+[   49.330272] Stack : 80450000 80072d78 80452410 800663c4 00000006 00000000 96f0433c 0b92b9fb
+          00000031 80044e94 85e89eb0 80453000 85e89eb0 0b92b9fb 00000031 80453000
+          85e89eb0 80072f14 804c5d70 80451e60 80453000 8005b658 00000031 80451e60
+          0b92b9fb 00000031 80453000 80453000 00000031 80451e60 85e89d78 8005bac0
+          8045446c 0000000b 0000000b 00000000 0b92834b 00000031 3b9aca00 00000003
+          ...
+[   49.366914] Call Trace:[<80072d78>] 0x80072d78
+[   49.371502] [<800663c4>] 0x800663c4  
+[   49.375093] [<80044e94>] 0x80044e94  
+[   49.378685] [<80072f14>] 0x80072f14  
+[   49.382276] [<8005b658>] 0x8005b658  
+[   49.385864] [<8005bac0>] 0x8005bac0  
+[   49.389454] [<8005c8cc>] 0x8005c8cc  
+[   49.393039] [<801aca54>] 0x801aca54  
+[   49.396629] [<8001409c>] 0x8001409c  
+[   49.400222] [<801db99c>] 0x801db99c  
+[   49.403810] [<80084618>] 0x80084618  
+[   49.407403] [<8001b1a4>] 0x8001b1a4  
+[   49.411001] [<8008484c>] 0x8008484c  
+[   49.414599] [<801ae2b4>] 0x801ae2b4  
+[   49.418194] [<80037e80>] 0x80037e80  
+[   49.421786] [<800873e8>] 0x800873e8  
+[   49.425376] [<800840c0>] 0x800840c0  
+[   49.428972] [<8001d1e8>] 0x8001d1e8  
+[   49.432570] [<8001896c>] 0x8001896c  
+[   49.436166] [<8001b1a0>] 0x8001b1a0  
+[   49.439760] [<80024270>] 0x80024270  
+[   49.443352] [<8001b1a4>] 0x8001b1a4  
+[   49.446946] [<80065d98>] 0x80065d98  
+[   49.450540] [<8001f8c8>] 0x8001f8c8  
+[   49.454139] [<8001f8dc>] 0x8001f8dc  
+[   49.457736] [<80024270>] 0x80024270  
+[   49.461324] [<80021464>] 0x80021464  
+[   49.464920] [<8001b1a4>] 0x8001b1a4  
+[   49.468518] [<8001b1a4>] 0x8001b1a4  
+[   49.472108]
+[   49.473632]
 Code: 8e430178  00671821  ae430178 <8c4300c8> 10600010  00000000  8f830014  24630001  af830014
-[  275.021877] ---[ end trace ecd4841dc49f6953 ]---
-[  275.026638] Kernel panic - not syncing: Fatal exception in interrupt
-[  275.033190] Rebooting in 10 seconds..
+[   49.483892] ---[ end trace 98fde090c64aa626 ]---
+[   49.488647] Kernel panic - not syncing: Fatal exception in interrupt
+[   49.495208] Rebooting in 10 seconds..

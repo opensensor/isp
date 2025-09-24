@@ -1878,7 +1878,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     int i;
 
     /* CRITICAL: Add visible logging to see when ISP core interrupt handler is called */
-    pr_info("*** ISP CORE INTERRUPT HANDLER: IRQ %d called, dev_id=%p ***\n", irq, dev_id);
+    printk(KERN_ALERT "*** ISP CORE INTERRUPT HANDLER: IRQ %d called, dev_id=%p ***\n", irq, dev_id);
 
     vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
     if (!vic_dev) {
@@ -2134,17 +2134,23 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     }
 
     /* Binary Ninja: IRQ callback array processing */
+    printk(KERN_ALERT "*** ISP CORE: About to process IRQ callbacks - interrupt_status=0x%x ***\n", interrupt_status);
+
+    /* CRITICAL SAFETY: Temporarily disable callback processing to prevent infinite recursion */
+    printk(KERN_ALERT "*** ISP CORE: TEMPORARILY SKIPPING IRQ callback processing to prevent recursion ***\n");
+
     /* Binary Ninja: for (int i = 0; i != 0x20; i++) */
+    /*
     for (i = 0; i < 0x20; i++) {
         u32 bit_mask = 1 << (i & 0x1f);
         if (interrupt_status & bit_mask) {
-            /* Binary Ninja: if (irq_func_cb[i] != 0) */
             if (irq_func_cb[i] != NULL) {
-                irqreturn_t callback_result = irq_func_cb[i](irq, dev_id);
-                pr_debug("ISP CORE: IRQ callback[%d] returned %d\n", i, callback_result);
+                printk(KERN_ALERT "*** ISP CORE: Would call callback[%d] for bit %d ***\n", i, i);
+                // irqreturn_t callback_result = irq_func_cb[i](irq, dev_id);  // DISABLED TO PREVENT RECURSION
             }
         }
     }
+    */
 
     pr_debug("*** ISP CORE INTERRUPT PROCESSING COMPLETE ***\n");
 
