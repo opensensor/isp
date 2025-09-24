@@ -1,119 +1,44 @@
-   47.946354] *** VIC IRQ: Read v1_10 = 0x0 ***
-[   47.950872] *** VIC IRQ: About to write v1_7=0x0 to reg 0x1f0 ***
-[   47.967288] *** VIC IRQ: About to write v1_10=0x0 to reg 0x1f4 ***
-[   47.977379] *** VIC IRQ: Register writes completed ***
-[   47.987491] *** VIC IRQ: About to check vic_start_ok - vic_start_ok=1 ***
-[   48.007695] *** VIC IRQ: vic_start_ok=1, v1_7=0x0, v1_10=0x0 ***
-[   48.013932] *** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***
-[   48.029028] *** VIC IRQ COMPLETE: Processed v1_7=0x0, v1_10=0x0 - returning IRQ_HANDLED ***
-[   48.048772] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=80514000 ***
-[   48.056230] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
-[   48.082400] *** VIC INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
-[   48.100708] *** VIC IRQ: About to access isp_dev->vic_dev, isp_dev=80514000 ***
-[   48.108254] *** VIC IRQ: Got vic_dev=8049e000 ***
-[   48.129040] *** VIC IRQ: Checking vic_dev validity: vic_dev=8049e000 ***
-[   48.146132] *** VIC IRQ: About to access vic_dev->vic_regs ***
-[   48.152177] *** VIC IRQ: Got vic_regs=b0023000 ***
-[   48.167258] *** VIC IRQ: Checking vic_regs validity: vic_regs=b0023000 ***
-[   48.177336] *** VIC IRQ: vic_regs passed validity check - proceeding with register access ***
-[   48.197552] *** VIC IRQ: About to read VIC registers at b0023000 ***
-[   48.207645] *** VIC IRQ: About to read reg 0x1e8 ***
-[   48.217752] *** VIC IRQ: Read reg 0x1e8 = 0x0 ***
-[   48.227862] *** VIC IRQ: About to read reg 0x1e0 ***
-[   48.237965] *** VIC IRQ: Read reg 0x1e0 = 0x0 ***
-[   48.248073] *** VIC IRQ: Calculated v1_7 = 0x0 ***
-[   48.258173] *** VIC IRQ: Read v1_10 = 0x0 ***
-[   48.268282] *** VIC IRQ: About to write v1_7=0x0 to reg 0x1f0 ***
-[   48.288481] *** VIC IRQ: About to write v1_10=0x0 to reg 0x1f4 ***
-[   48.294970] *** VIC IRQ: Register writes completed ***
-[   48.309052] *** VIC IRQ: About to check vic_start_ok - vic_start_ok=1 ***
-[   48.326240] *** VIC IRQ: vic_start_ok=1, v1_7=0x0, v1_10=0x0 ***
-[   48.332466] *** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***
-[   48.349088] *** VIC IRQ COMPLETE: Processed v1_7=0x0, v1_10=0x0 - returning IRQ_HANDLED ***
-[   48.358209] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=80514000 ***
-[   48.365662] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
-[   48.424034] Unhandled kernel unaligned access[#1]:
-[   48.429006] CPU: 0 PID: 0 Comm:  Tainted: G           O 3.10.14__isvp_swan_1.0__ #1
-[   48.436915] task: 96f0433c ti: 85e88000 task.ti:   (null)
-[   48.442488] $ 0   : 00000000 10001c00 00000000 3ffcd001
-[   48.447884] $ 4   : 85e8a148 00000000 000045d4 00001639
-[   48.453268] $ 8   : 10001c00 1000001e 00000000 ffffffe0
-[   48.458651] $12   : 00000023 85e91ed8 00000000 00000048
-[   48.464040] $16   : 8e5500dc 000045d1 000044f5 00000000
-[   48.469433] $20   : 8001b1a4 85e8a230 00030000 00000000
-[   48.474819] $24   : 00000003 80065d98
-[   48.480208] $28   : 85e8a000 85e8a070 80450000 8001b1a4
-[   48.503291] Status: 10001c02 KERNEL EXL
-[   48.507339] Cause : 40809010
-[   48.510308] BadVA : 000045d1
-[   48.513270] PrId  : 00d00100 (Ingenic Xburst)
-[   48.517761] Modules linked in: sensor_gc2053_t31(O) tx_isp_t31(O) tx_isp_trace(O) 8189fs(O) pwm_hal(O) pwm_core(O) gpio_userkeys(O) avpu(O) audio(O) cp210x ch341 usbserial exfat(O) jzmmc_v12
-[   48.535273] Process  (pid: 0, threadinfo=85e88000, task=96f0433c, tls=bfe36759)
-[   48.542808] Stack : 000045a7 00000bdf 00000016 00130001 000045c7 00000188 00000008 00090001
-          000045e0 00000bf5 0000000f 00030001 000010f9 000187c4 00000000 00110000
-          000010fe 000187f4 00000000 00110000 000045f9 00000000 00000000 fff10004
-          00004606 00005828 00000048 00010002 00004618 00005870 000000ec 00010002
-          00004625 00005b20 00000004 001e0001 00004637 00000020 00000008 00090001
-          ...
-[   48.579509] Call Trace:[<80024270>] 0x80024270
-[   48.584091] [<8001b1a4>] 0x8001b1a4  
-[   48.587691] [<8001b1a4>] 0x8001b1a4  
-[   48.591290] [<80024270>] 0x80024270  
-[   48.594881] [<8001b1a4>] 0x8001b1a4  
-[   48.598477] [<80065d98>] 0x80065d98  
-[   48.602075] [<8001b1a4>] 0x8001b1a4  
-[   48.605671] [<80021254>] 0x80021254  
-[   48.609267] [<8001b1a4>] 0x8001b1a4  
-[   48.612865] [<8001b1a4>] 0x8001b1a4  
-[   48.616457] [<8001b1a4>] 0x8001b1a4  
-[   48.620053] [<80065d98>] 0x80065d98  
-[   48.623649] [<8001b1a4>] 0x8001b1a4  
-[   48.627243] [<80024270>] 0x80024270  
-[   48.630842] [<80024270>] 0x80024270  
-[   48.634435] [<8001b1a4>] 0x8001b1a4  
-[   48.638029] [<8001b1a4>] 0x8001b1a4  
-[   48.641627] [<80024270>] 0x80024270  
-[   48.645219] [<8001b1a4>] 0x8001b1a4  [   49.300722] PrId  : 00d00100 (Ingenic Xburst)
-[   49.305214] Modules linked in: sensor_gc2053_t31(O) tx_isp_t31(O) tx_isp_trace(O) 8189fs(O) pwm_hal(O) pwm_core(O) gpio_userkeys(O) avpu(O) audio(O) cp210x ch341 usbserial exfat(O) jzmmc_v12
-[   49.322736] Process  (pid: 0, threadinfo=85e88000, task=96f0433c, tls=bfe36759)
-[   49.330272] Stack : 80450000 80072d78 80452410 800663c4 00000006 00000000 96f0433c 0b92b9fb
-          00000031 80044e94 85e89eb0 80453000 85e89eb0 0b92b9fb 00000031 80453000
-          85e89eb0 80072f14 804c5d70 80451e60 80453000 8005b658 00000031 80451e60
-          0b92b9fb 00000031 80453000 80453000 00000031 80451e60 85e89d78 8005bac0
-          8045446c 0000000b 0000000b 00000000 0b92834b 00000031 3b9aca00 00000003
-          ...
-[   49.366914] Call Trace:[<80072d78>] 0x80072d78
-[   49.371502] [<800663c4>] 0x800663c4  
-[   49.375093] [<80044e94>] 0x80044e94  
-[   49.378685] [<80072f14>] 0x80072f14  
-[   49.382276] [<8005b658>] 0x8005b658  
-[   49.385864] [<8005bac0>] 0x8005bac0  
-[   49.389454] [<8005c8cc>] 0x8005c8cc  
-[   49.393039] [<801aca54>] 0x801aca54  
-[   49.396629] [<8001409c>] 0x8001409c  
-[   49.400222] [<801db99c>] 0x801db99c  
-[   49.403810] [<80084618>] 0x80084618  
-[   49.407403] [<8001b1a4>] 0x8001b1a4  
-[   49.411001] [<8008484c>] 0x8008484c  
-[   49.414599] [<801ae2b4>] 0x801ae2b4  
-[   49.418194] [<80037e80>] 0x80037e80  
-[   49.421786] [<800873e8>] 0x800873e8  
-[   49.425376] [<800840c0>] 0x800840c0  
-[   49.428972] [<8001d1e8>] 0x8001d1e8  
-[   49.432570] [<8001896c>] 0x8001896c  
-[   49.436166] [<8001b1a0>] 0x8001b1a0  
-[   49.439760] [<80024270>] 0x80024270  
-[   49.443352] [<8001b1a4>] 0x8001b1a4  
-[   49.446946] [<80065d98>] 0x80065d98  
-[   49.450540] [<8001f8c8>] 0x8001f8c8  
-[   49.454139] [<8001f8dc>] 0x8001f8dc  
-[   49.457736] [<80024270>] 0x80024270  
-[   49.461324] [<80021464>] 0x80021464  
-[   49.464920] [<8001b1a4>] 0x8001b1a4  
-[   49.468518] [<8001b1a4>] 0x8001b1a4  
-[   49.472108]
-[   49.473632]
-Code: 8e430178  00671821  ae430178 <8c4300c8> 10600010  00000000  8f830014  24630001  af830014
-[   49.483892] ---[ end trace 98fde090c64aa626 ]---
-[   49.488647] Kernel panic - not syncing: Fatal exception in interrupt
-[   49.495208] Rebooting in 10 seconds..
+[  167.056350] *** VIC IRQ: Read reg 0x1e8 = 0x0 ***
+[  167.061258] *** VIC IRQ: About to read reg 0x1e0 ***
+[  167.071374] *** VIC IRQ: Read reg 0x1e0 = 0x0 ***
+[  167.076232] *** VIC IRQ: Calculated v1_7 = 0x0 ***
+[  167.091541] *** VIC IRQ: Read v1_10 = 0x0 ***
+[  167.096036] *** VIC IRQ: About to write v1_7=0x0 to reg 0x1f0 ***
+[  167.116331] *** VIC IRQ: About to write v1_10=0x0 to reg 0x1f4 ***
+[  167.126326] *** VIC IRQ: Register writes completed ***
+[  167.131639] *** VIC IRQ: About to check vic_start_ok - vic_start_ok=1 ***
+[  167.154296] *** VIC IRQ: vic_start_ok=1, v1_7=0x0, v1_10=0x0 ***
+[  167.165662] *** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***
+[  167.182348] *** VIC IRQ COMPLETE: Processed v1_7=0x0, v1_10=0x0 - returning IRQ_HANDLED ***
+[  167.203516] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=80514000 ***
+[  167.210971] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
+[  167.218684] *** ISP CORE INTERRUPT HANDLER: IRQ 37 called, dev_id=80514000 ***
+[  167.226140] *** ISP CORE: About to process IRQ callbacks - interrupt_status=0x400 ***
+[  167.234216] *** ISP CORE: TEMPORARILY SKIPPING IRQ callback processing to prevent recursion ***
+[  167.297679] *** VIC INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
+[  167.315959] *** VIC IRQ: About to access isp_dev->vic_dev, isp_dev=80514000 ***
+[  167.336173] *** VIC IRQ: Got vic_dev=85f28400 ***
+[  167.341061] *** VIC IRQ: Checking vic_dev validity: vic_dev=85f28400 ***
+[  167.356347] *** VIC IRQ: About to access vic_dev->vic_regs ***
+[  167.366341] *** VIC IRQ: Got vic_regs=b0023000 ***
+[  167.376347] *** VIC IRQ: Checking vic_regs validity: vic_regs=b0023000 ***
+[  167.393603] *** VIC IRQ: vic_regs passed validity check - proceeding with register access ***
+[  167.410613] *** VIC IRQ: About to read VIC registers at b0023000 ***
+[  167.426351] *** VIC IRQ: About to read reg 0x1e8 ***
+[  167.436342] *** VIC IRQ: Read reg 0x1e8 = 0x0 ***
+[  167.441216] *** VIC IRQ: About to read reg 0x1e0 ***
+[  167.456353] *** VIC IRQ: Read reg 0x1e0 = 0x0 ***
+[  167.466345] *** VIC IRQ: Calculated v1_7 = 0x0 ***
+[  167.471295] *** VIC IRQ: Read v1_10 = 0x0 ***
+[  167.486034] *** VIC IRQ: About to write v1_7=0x0 to reg 0x1f0 ***
+[  167.496147] *** VIC IRQ: About to write v1_10=0x0 to reg 0x1f4 ***
+[  167.516387] *** VIC IRQ: Register writes completed ***
+[  167.521721] *** VIC IRQ: About to check vic_start_ok - vic_start_ok=1 ***
+[  167.538888] *** VIC IRQ: vic_start_ok=1, v1_7=0x0, v1_10=0x0 ***
+[  167.548989] *** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***
+[  167.555466] *** VIC IRQ COMPLETE: Processed v1_7=0x0, v1_10=0x0 - returning IRQ_HANDLED ***
+[  167.583989] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=80514000 ***
+[  167.591445] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
+[  167.599167] *** ISP CORE INTERRUPT HANDLER: IRQ 37 called, dev_id=80514000 ***
+[  167.606635] *** ISP CORE: About to process IRQ callbacks - interrupt_status=0x400 ***
+[  167.614711] *** ISP CORE: TEMPORARILY SKIPPING IRQ callback processing to prevent recursion ***

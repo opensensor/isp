@@ -2133,26 +2133,40 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         }
     }
 
-    /* Binary Ninja: IRQ callback array processing */
+    /* Binary Ninja: IRQ callback array processing - EXACT MCP implementation */
     printk(KERN_ALERT "*** ISP CORE: About to process IRQ callbacks - interrupt_status=0x%x ***\n", interrupt_status);
 
-    /* CRITICAL SAFETY: Temporarily disable callback processing to prevent infinite recursion */
-    printk(KERN_ALERT "*** ISP CORE: TEMPORARILY SKIPPING IRQ callback processing to prevent recursion ***\n");
+    /* Binary Ninja EXACT: void* $s2_1 = &irq_func_cb; int32_t i = 0; int32_t result = 1 */
+    void **s2_1 = &irq_func_cb[0];
+    int result = IRQ_HANDLED;  /* Binary Ninja: result = 1 */
 
-    /* Binary Ninja: for (int i = 0; i != 0x20; i++) */
-    /*
+    /* Binary Ninja EXACT: do { ... } while (i != 0x20) */
     for (i = 0; i < 0x20; i++) {
-        u32 bit_mask = 1 << (i & 0x1f);
-        if (interrupt_status & bit_mask) {
-            if (irq_func_cb[i] != NULL) {
-                printk(KERN_ALERT "*** ISP CORE: Would call callback[%d] for bit %d ***\n", i, i);
-                // irqreturn_t callback_result = irq_func_cb[i](irq, dev_id);  // DISABLED TO PREVENT RECURSION
+        /* Binary Ninja: int32_t $v0_46 = 1 << (i & 0x1f) & $s1 */
+        u32 v0_46 = (1 << (i & 0x1f)) & interrupt_status;
+
+        if (v0_46 != 0) {
+            /* Binary Ninja: int32_t $v0_47 = *$s2_1 */
+            int (*v0_47)(void) = (int (*)(void))(*s2_1);
+
+            if (v0_47 != NULL) {
+                printk(KERN_ALERT "*** ISP CORE: Calling callback[%d] for bit %d (NO PARAMETERS) ***\n", i, i);
+                /* Binary Ninja EXACT: int32_t result_1 = $v0_47() - NO PARAMETERS! */
+                int result_1 = v0_47();
+
+                /* Binary Ninja: if (result_1 != 1) result = result_1 */
+                if (result_1 != IRQ_HANDLED) {
+                    result = result_1;
+                }
+                printk(KERN_ALERT "*** ISP CORE: Callback[%d] returned %d ***\n", i, result_1);
             }
         }
-    }
-    */
 
-    pr_debug("*** ISP CORE INTERRUPT PROCESSING COMPLETE ***\n");
+        /* Binary Ninja: $s2_1 += 4 */
+        s2_1++;
+    }
+
+    printk(KERN_ALERT "*** ISP CORE INTERRUPT PROCESSING COMPLETE - returning IRQ_HANDLED ***\n");
 
     /* Binary Ninja: return 1 */
     return IRQ_HANDLED;
