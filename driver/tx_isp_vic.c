@@ -91,7 +91,7 @@ static int read_sensor_dimensions(u32 *width, u32 *height)
 }
 
 /* Cache sensor dimensions during probe (process context - sleeping allowed) */
-static void cache_sensor_dimensions_from_proc(void)
+void cache_sensor_dimensions_from_proc(void)
 {
     u32 width, height;
     int ret;
@@ -115,7 +115,7 @@ static void cache_sensor_dimensions_from_proc(void)
 }
 
 /* Get cached sensor dimensions (safe for atomic context) */
-static void get_cached_sensor_dimensions(u32 *width, u32 *height)
+void get_cached_sensor_dimensions(u32 *width, u32 *height)
 {
     if (!sensor_dimensions_cached) {
         pr_warn("get_cached_sensor_dimensions: Dimensions not cached, using defaults\n");
