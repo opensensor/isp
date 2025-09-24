@@ -1841,9 +1841,11 @@ int system_irq_func_set(int index, int (*handler)(void))
 EXPORT_SYMBOL(system_irq_func_set);
 
 
-/* ip_done_interrupt_static - EXACT Binary Ninja function name */
-irqreturn_t ip_done_interrupt_static(int irq, void *dev_id)
+/* ip_done_interrupt_static - EXACT Binary Ninja function name with CORRECT signature */
+int ip_done_interrupt_static(void)
 {
+    printk(KERN_ALERT "*** IP DONE INTERRUPT: Processing complete (Binary Ninja MCP) ***\n");
+
     /* Binary Ninja: if ((system_reg_read(0xc) & 0x40) == 0) */
     uint32_t reg_val = system_reg_read(0xc);
 
@@ -1852,18 +1854,18 @@ irqreturn_t ip_done_interrupt_static(int irq, void *dev_id)
         /* This was causing CSI PHY register corruption every ~70ms */
         extern uint32_t vic_start_ok;
         if (vic_start_ok == 1) {
-            pr_debug("*** IP DONE: Skipping LSC tuning during VIC streaming to prevent CSI PHY corruption ***\n");
+            printk(KERN_ALERT "*** IP DONE: Skipping LSC tuning during VIC streaming to prevent CSI PHY corruption ***\n");
         } else {
             /* Binary Ninja: tisp_lsc_write_lut_datas() */
             tisp_lsc_write_lut_datas();
-            pr_debug("*** IP DONE: LSC tuning completed (VIC not streaming) ***\n");
+            printk(KERN_ALERT "*** IP DONE: LSC tuning completed (VIC not streaming) ***\n");
         }
     }
 
-    pr_debug("*** ip_done_interrupt_handler: ISP processing complete ***\n");
+    printk(KERN_ALERT "*** ip_done_interrupt_static: ISP processing complete ***\n");
 
-    /* Binary Ninja: return 2 */
-    return IRQ_HANDLED; /* Convert to standard Linux return value */
+    /* Binary Ninja: return 1 */
+    return 1;
 }
 
 /* ispcore_interrupt_service_routine - EXACT Binary Ninja implementation */
