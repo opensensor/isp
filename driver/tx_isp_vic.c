@@ -279,7 +279,87 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
         pr_warn("*** VIC HW INIT: WARNING - Basic VIC hardware initialization may have issues ***\n");
     }
 
-    pr_info("*** VIC HW INIT: Hardware interrupt configuration complete - ready for main module IRQ routing ***\n");
+    pr_info("*** VIC HW INIT: Basic hardware initialization complete - ready for full VIC configuration ***\n");
+    return 0;
+}
+
+/**
+ * tx_isp_vic_apply_full_config - Apply full VIC configuration including interrupts
+ * This function configures VIC interrupts AFTER the VIC hardware is fully set up
+ * Based on working branch tx_isp_vic_apply_full_config() function
+ */
+int tx_isp_vic_apply_full_config(struct tx_isp_vic_device *vic_dev)
+{
+    void __iomem *vic_regs;
+
+    if (!vic_dev || !vic_dev->vic_regs) {
+        pr_err("*** tx_isp_vic_apply_full_config: Invalid VIC device or registers ***\n");
+        return -EINVAL;
+    }
+
+    vic_regs = vic_dev->vic_regs;
+    pr_info("*** tx_isp_vic_apply_full_config: Applying full VIC configuration including interrupts ***\n");
+
+    /* Apply VIC interrupt system configuration - FROM WORKING BRANCH */
+    writel(0x2d0, vic_regs + 0x100);        /* Interrupt configuration */
+    writel(0x2b, vic_regs + 0x14);          /* Interrupt control - reference driver value */
+    wmb();
+    pr_info("*** VIC FULL CONFIG: Applied interrupt registers 0x100=0x2d0, 0x14=0x2b ***\n");
+
+    /* Apply ISP control interrupts - FROM WORKING BRANCH */
+    writel(0x07800438, vic_regs + 0x04);    /* IMR - Working branch value */
+    writel(0xb5742249, vic_regs + 0x0c);    /* IMCR - Working branch value */
+    wmb();
+    pr_info("*** VIC FULL CONFIG: Applied ISP control interrupts 0x04=0x07800438, 0x0c=0xb5742249 ***\n");
+
+    /* Apply essential VIC control registers - FROM WORKING BRANCH */
+    writel(0x800800, vic_regs + 0x60);      /* Control register */
+    writel(0x9d09d0, vic_regs + 0x64);      /* Control register */
+    writel(0x6002, vic_regs + 0x70);        /* Control register */
+    writel(0x7003, vic_regs + 0x74);        /* Control register */
+    wmb();
+    pr_info("*** VIC FULL CONFIG: Applied essential control registers 0x60-0x74 ***\n");
+
+    /* Apply VIC color space configuration - FROM WORKING BRANCH */
+    writel(0xeb8080, vic_regs + 0xc0);      /* Color space config */
+    writel(0x108080, vic_regs + 0xc4);      /* Color space config */
+    writel(0x29f06e, vic_regs + 0xc8);      /* Color space config */
+    writel(0x913622, vic_regs + 0xcc);      /* Color space config */
+    wmb();
+    pr_info("*** VIC FULL CONFIG: Applied color space configuration 0xc0-0xcc ***\n");
+
+    /* Apply VIC processing configuration - FROM WORKING BRANCH */
+    writel(0x515af0, vic_regs + 0xd0);      /* Processing config */
+    writel(0xaaa610, vic_regs + 0xd4);      /* Processing config */
+    writel(0xd21092, vic_regs + 0xd8);      /* Processing config */
+    writel(0x6acade, vic_regs + 0xdc);      /* Processing config */
+    wmb();
+    pr_info("*** VIC FULL CONFIG: Applied processing configuration 0xd0-0xdc ***\n");
+
+    /* Verify interrupt configuration was accepted */
+    u32 verify_0x04 = readl(vic_regs + 0x04);
+    u32 verify_0x0c = readl(vic_regs + 0x0c);
+    u32 verify_0x100 = readl(vic_regs + 0x100);
+    u32 verify_0x14 = readl(vic_regs + 0x14);
+
+    pr_info("*** VIC FULL CONFIG VERIFY: 0x04=0x%08x (expected 0x07800438), 0x0c=0x%08x (expected 0xb5742249) ***\n",
+            verify_0x04, verify_0x0c);
+    pr_info("*** VIC FULL CONFIG VERIFY: 0x100=0x%08x (expected 0x2d0), 0x14=0x%08x (expected 0x2b) ***\n",
+            verify_0x100, verify_0x14);
+
+    bool all_regs_ok = (verify_0x04 == 0x07800438) && (verify_0x0c == 0xb5742249) &&
+                       (verify_0x100 == 0x2d0) && (verify_0x14 == 0x2b);
+
+    if (all_regs_ok) {
+        pr_info("*** VIC FULL CONFIG: SUCCESS - ALL VIC interrupt registers configured correctly! ***\n");
+    } else {
+        pr_warn("*** VIC FULL CONFIG: WARNING - Some VIC interrupt registers may not have been accepted ***\n");
+        pr_warn("*** VIC FULL CONFIG: 0x04_ok=%d, 0x0c_ok=%d, 0x100_ok=%d, 0x14_ok=%d ***\n",
+                (verify_0x04 == 0x07800438), (verify_0x0c == 0xb5742249),
+                (verify_0x100 == 0x2d0), (verify_0x14 == 0x2b));
+    }
+
+    pr_info("*** tx_isp_vic_apply_full_config: Full VIC configuration complete - interrupts should now work ***\n");
     return 0;
 }
 
@@ -2418,6 +2498,15 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             } else if (vic_dev->state == 3) {
                 vic_dev->state = 4;
                 pr_info("*** vic_core_s_stream: VIC state transition 3 → 4 (STREAMING) ***\n");
+
+                /* CRITICAL: Apply full VIC configuration now that VIC is in streaming state */
+                pr_info("*** vic_core_s_stream: VIC reached state 4 - applying full VIC configuration ***\n");
+                int config_ret = tx_isp_vic_apply_full_config(vic_dev);
+                if (config_ret != 0) {
+                    pr_err("vic_core_s_stream: VIC full configuration FAILED: %d\n", config_ret);
+                    return config_ret;
+                }
+                pr_info("*** vic_core_s_stream: VIC full configuration SUCCESS - interrupts should now work ***\n");
             } else {
                 pr_info("*** vic_core_s_stream: VIC state %d - letting tx_isp_video_s_stream handle state 2 → 3 transition ***\n", vic_dev->state);
             }
