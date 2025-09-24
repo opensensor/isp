@@ -1709,6 +1709,9 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         wmb();
         printk(KERN_ALERT "*** VIC IRQ: Register writes completed ***\n");
 
+        /* CRITICAL DEBUG: Add the missing debugging right after register writes */
+        printk(KERN_ALERT "*** VIC IRQ: About to check vic_start_ok - vic_start_ok=%u ***\n", vic_start_ok);
+
         /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
         printk(KERN_ALERT "*** VIC IRQ: vic_start_ok=%u, v1_7=0x%x, v1_10=0x%x ***\n", vic_start_ok, v1_7, v1_10);
 
@@ -1813,11 +1816,11 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
 
             /* Binary Ninja: MDMA interrupt handling */
             if ((v1_10 & 1) != 0) {
-                printk(KERN_ALERT "*** VIC IRQ: TEMPORARILY SKIPPING vic_mdma_irq_function(0) to prevent recursion ***\n");
+                printk(KERN_ALERT "*** VIC SUCCESS: MDMA channel 0 interrupt (bit 0) - TEMPORARILY SKIPPING function call ***\n");
                 /* vic_mdma_irq_function(vic_dev, 0); */
             }
             if ((v1_10 & 2) != 0) {
-                printk(KERN_ALERT "*** VIC IRQ: TEMPORARILY SKIPPING vic_mdma_irq_function(1) to prevent recursion ***\n");
+                printk(KERN_ALERT "*** VIC SUCCESS: MDMA channel 1 interrupt (bit 1) - TEMPORARILY SKIPPING function call ***\n");
                 /* vic_mdma_irq_function(vic_dev, 1); */
             }
             if ((v1_10 & 4) != 0) {
@@ -1860,6 +1863,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
     }
 
     /* Binary Ninja: return 1 */
+    printk(KERN_ALERT "*** VIC IRQ COMPLETE: Processed v1_7=0x%x, v1_10=0x%x - returning IRQ_HANDLED ***\n", v1_7, v1_10);
     return IRQ_HANDLED;
 }
 
