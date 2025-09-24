@@ -80,19 +80,29 @@ static inline struct tx_isp_subdev *tx_isp_get_fs_subdev(struct tx_isp_dev *isp_
 static inline struct tx_isp_subdev *tx_isp_find_sensor_subdev(struct tx_isp_dev *isp_dev)
 {
     int i;
-    
+
     if (!isp_dev) {
         return NULL;
     }
-    
+
     for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
         struct tx_isp_subdev *sd = isp_dev->subdevs[i];
         if (sd && sd->ops && sd->ops->sensor) {
             return sd;
         }
     }
-    
+
     return NULL;
+}
+
+/**
+ * tx_isp_get_sensor_subdev - Get sensor subdevice (new helper function)
+ * This replaces the old hardcoded index access
+ * Note: Different from tx_isp_get_sensor() which returns struct tx_isp_sensor*
+ */
+static inline struct tx_isp_subdev *tx_isp_get_sensor_subdev(struct tx_isp_dev *isp_dev)
+{
+    return tx_isp_find_sensor_subdev(isp_dev);
 }
 
 /**
