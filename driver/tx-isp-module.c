@@ -1729,8 +1729,8 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 }
 
                 /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
-                printk(KERN_ALERT "*** VIC IRQ: TEMPORARILY SKIPPING vic_framedone_irq_function to prevent recursion ***\n");
-                /* vic_framedone_irq_function(vic_dev); */
+                printk(KERN_ALERT "*** VIC SUCCESS: Calling vic_framedone_irq_function ***\n");
+                vic_framedone_irq_function(vic_dev);
             } else {
                 printk(KERN_ALERT "*** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***\n");
             }
@@ -1816,12 +1816,12 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
 
             /* Binary Ninja: MDMA interrupt handling */
             if ((v1_10 & 1) != 0) {
-                printk(KERN_ALERT "*** VIC SUCCESS: MDMA channel 0 interrupt (bit 0) - TEMPORARILY SKIPPING function call ***\n");
-                /* vic_mdma_irq_function(vic_dev, 0); */
+                printk(KERN_ALERT "*** VIC SUCCESS: MDMA channel 0 interrupt (bit 0) - calling function ***\n");
+                vic_mdma_irq_function(vic_dev, 0);
             }
             if ((v1_10 & 2) != 0) {
-                printk(KERN_ALERT "*** VIC SUCCESS: MDMA channel 1 interrupt (bit 1) - TEMPORARILY SKIPPING function call ***\n");
-                /* vic_mdma_irq_function(vic_dev, 1); */
+                printk(KERN_ALERT "*** VIC SUCCESS: MDMA channel 1 interrupt (bit 1) - calling function ***\n");
+                vic_mdma_irq_function(vic_dev, 1);
             }
             if ((v1_10 & 4) != 0) {
                 printk(KERN_ALERT "*** VIC ERROR: dma arb trans done overflow (bit 2) ***\n");
