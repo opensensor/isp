@@ -268,20 +268,23 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
 
     pr_info("*** VIC HW INIT: Interrupt configuration applied to PRIMARY VIC space ***\n");
 
-    /* CRITICAL: Register the VIC interrupt handler - THIS WAS MISSING! */
-    int irq = 38;  /* VIC uses IRQ 38 (isp-w02) */
-    int ret = request_irq(irq, (irq_handler_t)isp_vic_interrupt_service_routine, IRQF_SHARED, "tx-isp-vic", sd);
-    if (ret == 0) {
-        pr_info("*** VIC HW INIT: Interrupt handler registered for IRQ %d ***\n", irq);
+    /* CRITICAL FIX: Do NOT register interrupt handler here - main module already handles IRQ 38 */
+    /* The main module registers IRQ 38 as "isp-w02" and routes VIC interrupts through isp_irq_handle */
+    pr_info("*** VIC HW INIT: Interrupt handler registration SKIPPED - main module handles IRQ 38 routing ***\n");
+
+    /* Verify interrupt configuration was accepted */
+    u32 verify_0x04 = readl(vic_base + 0x04);
+    u32 verify_0x0c = readl(vic_base + 0x0c);
+    pr_info("*** VIC HW INIT VERIFY: 0x04=0x%08x (expected 0x07800438), 0x0c=0x%08x (expected 0xb5742249) ***\n",
+            verify_0x04, verify_0x0c);
+
+    if (verify_0x04 == 0x07800438 && verify_0x0c == 0xb5742249) {
+        pr_info("*** VIC HW INIT: SUCCESS - VIC interrupt configuration accepted by hardware! ***\n");
     } else {
-        pr_err("*** VIC HW INIT: Failed to register interrupt handler for IRQ %d: %d ***\n", irq, ret);
-        return ret;
+        pr_warn("*** VIC HW INIT: WARNING - VIC interrupt configuration may not have been accepted ***\n");
     }
 
-    /* Enable the interrupt at hardware level */
-    enable_irq(irq);
-    pr_info("*** VIC HW INIT: Hardware interrupt enabled for IRQ %d ***\n", irq);
-
+    pr_info("*** VIC HW INIT: Hardware interrupt configuration complete - ready for main module IRQ routing ***\n");
     return 0;
 }
 
