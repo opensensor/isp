@@ -4607,10 +4607,10 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
     /* CRITICAL: Enable ISP core interrupt registers - FROM WORKING LOGS */
     pr_info("*** ENABLING ISP CORE INTERRUPT REGISTERS FOR MIPI DATA ***\n");
 
-    if (isp_dev->base) {
+    if (isp_dev->core_dev && isp_dev->core_dev->core_regs) {
         /* Configure ISP core interrupt registers - FROM WORKING LOGS */
-        writel(0x8fffffff, isp_dev->base + 0x30);  /* ISP core interrupt enable */
-        writel(0x00000133, isp_dev->base + 0x10);  /* ISP core interrupt control */
+        writel(0x8fffffff, isp_dev->core_dev->core_regs + 0x30);  /* ISP core interrupt enable */
+        writel(0x00000133, isp_dev->core_dev->core_regs + 0x10);  /* ISP core interrupt control */
         wmb();
 
         pr_info("*** ISP CORE INTERRUPT REGISTERS ENABLED at legacy(+0xb*) and new(+0x98b*) ***\n");
@@ -4621,7 +4621,7 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
     pr_info("*** BOTH VIC AND ISP CORE INTERRUPTS NOW ENABLED! ***\n");
 
     /* CRITICAL: Set vic_start_ok to 1 - FROM WORKING LOGS */
-    extern int vic_start_ok;
+    extern uint32_t vic_start_ok;
     vic_start_ok = 1;
     pr_info("*** vic_start_ok SET TO 1 - INTERRUPTS WILL NOW BE PROCESSED! ***\n");
 
