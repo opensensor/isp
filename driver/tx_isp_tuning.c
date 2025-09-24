@@ -452,7 +452,15 @@ static uint32_t tisp_gb_blc_ag = 0;
 
 /* Operation and Netlink Variables */
 /* opmsg, nlsk, data_ca490, data_ca48c moved to top of file */
-static void *nlcfg = NULL;
+static struct netlink_kernel_cfg nlcfg = {
+    .groups = 0,
+    .flags = 0,
+    .input = NULL,  /* No input handler needed for this netlink socket */
+    .cb_mutex = NULL,
+    .bind = NULL,
+    .unbind = NULL,
+    .compare = NULL,
+};
 
 /* Memory Management Variables */
 /* data_ca490, data_ca48c moved to top of file */
