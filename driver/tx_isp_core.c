@@ -1499,25 +1499,6 @@ struct tx_isp_sensor *tx_isp_get_sensor(void)
 
     pr_info("*** tx_isp_get_sensor: Searching subdev array for sensors ***\n");
 
-    /* Debug: Show what's in the entire subdev array */
-    for (int i = 5; i < ISP_MAX_SUBDEVS; i++) {
-        struct tx_isp_subdev *sd = ourISPdev->subdevs[i];
-        if (sd) {
-            pr_info("*** tx_isp_get_sensor: subdevs[%d] = %p, ops = %p ***\n", i, sd, sd->ops);
-            if (sd->ops) {
-                pr_info("*** tx_isp_get_sensor: subdevs[%d] ops->sensor = %p ***\n", i, sd->ops->sensor);
-            }
-        } else {
-            pr_info("*** tx_isp_get_sensor: subdevs[%d] = NULL ***\n", i);
-        }
-    }
-
-    /* CRITICAL FIX: No real sensors are registered yet - return NULL */
-    /* The logs show all subdev slots 5-15 are NULL, meaning no sensor modules are loaded */
-    /* The helper function is finding the Core subdev (isp-m0) which has sensor ops but is not a real sensor */
-    pr_info("*** tx_isp_get_sensor: No real sensor modules loaded yet - all slots 5-15 are NULL ***\n");
-    pr_info("*** tx_isp_get_sensor: Sensor modules must be loaded via insmod before they can be detected ***\n");
-
     /* Check if any real sensor modules are actually loaded */
     bool real_sensor_found = false;
     for (int i = 5; i < ISP_MAX_SUBDEVS; i++) {
@@ -1560,58 +1541,58 @@ struct tx_isp_sensor *tx_isp_get_sensor(void)
             }
             pr_info("*** tx_isp_get_sensor: Found real sensor: %p ***\n", sensor);
 
-                /* CRITICAL FIX: If sensor attributes are NULL, set up default sensor attributes */
-                if (!sensor->video.attr) {
-                    pr_info("*** tx_isp_get_sensor: Sensor attributes are NULL - setting up default attributes ***\n");
+            /* CRITICAL FIX: If sensor attributes are NULL, set up default sensor attributes */
+            if (!sensor->video.attr) {
+                pr_info("*** tx_isp_get_sensor: Sensor attributes are NULL - setting up default attributes ***\n");
 
-                    /* The sensor probe wasn't called, so we need to set up the attributes manually */
-                    /* Use the sensor's own attr structure (not video.attr pointer) */
-                    sensor->video.attr = &sensor->attr;
+                /* The sensor probe wasn't called, so we need to set up the attributes manually */
+                /* Use the sensor's own attr structure (not video.attr pointer) */
+                sensor->video.attr = &sensor->attr;
 
-                    /* Set up default GC2053 MIPI attributes in the sensor's attr structure */
-                    sensor->attr.name = "gc2053";
-                    sensor->attr.chip_id = 0x2053;
-                    sensor->attr.cbus_type = TX_SENSOR_CONTROL_INTERFACE_I2C;
-                    sensor->attr.cbus_mask = 0x0303;
-                    sensor->attr.cbus_device = 0x37;
-                    sensor->attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;
+                /* Set up default GC2053 MIPI attributes in the sensor's attr structure */
+                sensor->attr.name = "gc2053";
+                sensor->attr.chip_id = 0x2053;
+                sensor->attr.cbus_type = TX_SENSOR_CONTROL_INTERFACE_I2C;
+                sensor->attr.cbus_mask = 0x0303;
+                sensor->attr.cbus_device = 0x37;
+                sensor->attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;
 
-                    /* MIPI configuration */
-                    sensor->attr.mipi.clk = 78000000;
-                    sensor->attr.mipi.lans = 2;
-                    sensor->attr.mipi.settle_time_apative_en = 0;
-                    sensor->attr.mipi.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10;
-                    sensor->attr.mipi.mipi_sc.hcrop_diff_en = 0;
-                    sensor->attr.mipi.mipi_sc.mipi_vcomp_en = 0;
-                    sensor->attr.mipi.mipi_sc.mipi_hcomp_en = 0;
-                    sensor->attr.mipi.mipi_sc.line_sync_mode = 0;
-                    sensor->attr.mipi.mipi_sc.work_start_flag = 0;
-                    sensor->attr.mipi.mipi_sc.data_type_en = 0;
-                    sensor->attr.mipi.mipi_sc.data_type_value = 0x2b;
-                    sensor->attr.mipi.mipi_sc.del_start = 0;
-                    sensor->attr.mipi.mipi_sc.sensor_frame_mode = TX_SENSOR_DEFAULT_FRAME_MODE;
-                    sensor->attr.mipi.mipi_sc.sensor_fid_mode = 0;
-                    sensor->attr.mipi.mipi_sc.sensor_mode = TX_SENSOR_DEFAULT_MODE;
+                /* MIPI configuration */
+                sensor->attr.mipi.clk = 78000000;
+                sensor->attr.mipi.lans = 2;
+                sensor->attr.mipi.settle_time_apative_en = 0;
+                sensor->attr.mipi.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10;
+                sensor->attr.mipi.mipi_sc.hcrop_diff_en = 0;
+                sensor->attr.mipi.mipi_sc.mipi_vcomp_en = 0;
+                sensor->attr.mipi.mipi_sc.mipi_hcomp_en = 0;
+                sensor->attr.mipi.mipi_sc.line_sync_mode = 0;
+                sensor->attr.mipi.mipi_sc.work_start_flag = 0;
+                sensor->attr.mipi.mipi_sc.data_type_en = 0;
+                sensor->attr.mipi.mipi_sc.data_type_value = 0x2b;
+                sensor->attr.mipi.mipi_sc.del_start = 0;
+                sensor->attr.mipi.mipi_sc.sensor_frame_mode = TX_SENSOR_DEFAULT_FRAME_MODE;
+                sensor->attr.mipi.mipi_sc.sensor_fid_mode = 0;
+                sensor->attr.mipi.mipi_sc.sensor_mode = TX_SENSOR_DEFAULT_MODE;
 
-                    /* Timing parameters */
-                    sensor->attr.data_type = TX_SENSOR_DATA_TYPE_LINEAR;
-                    sensor->attr.max_again = 444864;
-                    sensor->attr.max_dgain = 0;
-                    sensor->attr.min_integration_time = 1;
-                    sensor->attr.min_integration_time_native = 4;
-                    sensor->attr.max_integration_time_native = 0x58a - 8;
-                    sensor->attr.integration_time_limit = 0x58a - 8;
-                    sensor->attr.total_width = 0x44c * 2;
-                    sensor->attr.total_height = 0x58a;
-                    sensor->attr.max_integration_time = 0x58a - 8;
-                    sensor->attr.integration_time_apply_delay = 2;
-                    sensor->attr.again_apply_delay = 2;
-                    sensor->attr.dgain_apply_delay = 2;
-                    sensor->attr.one_line_expr_in_us = 28;
-                    sensor->attr.expo_fs = 0;
+                /* Timing parameters */
+                sensor->attr.data_type = TX_SENSOR_DATA_TYPE_LINEAR;
+                sensor->attr.max_again = 444864;
+                sensor->attr.max_dgain = 0;
+                sensor->attr.min_integration_time = 1;
+                sensor->attr.min_integration_time_native = 4;
+                sensor->attr.max_integration_time_native = 0x58a - 8;
+                sensor->attr.integration_time_limit = 0x58a - 8;
+                sensor->attr.total_width = 0x44c * 2;
+                sensor->attr.total_height = 0x58a;
+                sensor->attr.max_integration_time = 0x58a - 8;
+                sensor->attr.integration_time_apply_delay = 2;
+                sensor->attr.again_apply_delay = 2;
+                sensor->attr.dgain_apply_delay = 2;
+                sensor->attr.one_line_expr_in_us = 28;
+                sensor->attr.expo_fs = 0;
 
-                    pr_info("*** tx_isp_get_sensor: Default sensor attributes set up successfully ***\n");
-                }
+                pr_info("*** tx_isp_get_sensor: Default sensor attributes set up successfully ***\n");
+            }
 
             return sensor;
         } else {
