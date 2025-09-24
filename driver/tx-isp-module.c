@@ -4530,13 +4530,6 @@ static int tx_isp_init(void)
 /* Binary Ninja MCP reference function implementations */
 /* Note: private_driver_get_interface is already implemented in txx-funcs.h */
 
-/* private_platform_device_register - EXACT Binary Ninja MCP implementation */
-int private_platform_device_register(struct platform_device *pdev)
-{
-    /* Binary Ninja: Register platform device */
-    return platform_device_register(pdev);
-}
-
 /* private_platform_driver_register - EXACT Binary Ninja MCP implementation */
 int private_platform_driver_register(struct platform_driver *drv)
 {
