@@ -325,19 +325,58 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
     /* The main module registers IRQ 38 as "isp-w02" and routes VIC interrupts through isp_irq_handle */
     pr_info("*** VIC HW INIT: Interrupt handler registration SKIPPED - main module handles IRQ 38 routing ***\n");
 
-    /* Verify VIC interrupt configuration was accepted */
-    u32 verify_0x04 = readl(vic_base + 0x04);
-    u32 verify_0x0c = readl(vic_base + 0x0c);
-    u32 verify_0x00 = readl(vic_base + 0x00);
-    u32 verify_0x20 = readl(vic_base + 0x20);
+    /* CRITICAL ROOT CAUSE FIX: Test both VIC register spaces to find the working one */
+    u32 verify_0x04, verify_0x0c, verify_0x00, verify_0x20;
+    bool interrupt_regs_ok = false;
+    bool basic_regs_ok = false;
 
-    pr_info("*** VIC HW INIT VERIFY: 0x04=0x%08x (expected 0x07800438), 0x0c=0x%08x (expected 0xb5742249) ***\n",
+    /* Test current VIC space (secondary 0x10023000) */
+    verify_0x04 = readl(vic_base + 0x04);
+    verify_0x0c = readl(vic_base + 0x0c);
+    verify_0x00 = readl(vic_base + 0x00);
+    verify_0x20 = readl(vic_base + 0x20);
+
+    pr_info("*** VIC HW INIT VERIFY (SECONDARY): 0x04=0x%08x (expected 0x07800438), 0x0c=0x%08x (expected 0xb5742249) ***\n",
             verify_0x04, verify_0x0c);
-    pr_info("*** VIC HW INIT VERIFY: 0x00=0x%08x (should be 0), 0x20=0x%08x (should be 0) ***\n",
+    pr_info("*** VIC HW INIT VERIFY (SECONDARY): 0x00=0x%08x (should be 0), 0x20=0x%08x (should be 0) ***\n",
             verify_0x00, verify_0x20);
 
-    bool interrupt_regs_ok = (verify_0x04 == 0x07800438) && (verify_0x0c == 0xb5742249);
-    bool basic_regs_ok = (verify_0x00 == 0) && (verify_0x20 == 0);
+    interrupt_regs_ok = (verify_0x04 == 0x07800438) && (verify_0x0c == 0xb5742249);
+    basic_regs_ok = (verify_0x00 == 0) && (verify_0x20 == 0);
+
+    /* If secondary space failed, try primary space (0x133e0000) */
+    if (!interrupt_regs_ok && vic_dev->vic_regs && vic_dev->vic_regs != vic_base) {
+        pr_info("*** VIC HW INIT: Secondary space failed, trying PRIMARY VIC space (0x133e0000) ***\n");
+
+        void __iomem *primary_vic = vic_dev->vic_regs;
+
+        // Configure ISP control interrupts in primary space
+        writel(0x07800438, primary_vic + 0x04);  // IMR
+        wmb();
+        writel(0xb5742249, primary_vic + 0x0c);  // IMCR
+        wmb();
+
+        // Verify primary space
+        u32 primary_0x04 = readl(primary_vic + 0x04);
+        u32 primary_0x0c = readl(primary_vic + 0x0c);
+        u32 primary_0x00 = readl(primary_vic + 0x00);
+        u32 primary_0x20 = readl(primary_vic + 0x20);
+
+        pr_info("*** VIC HW INIT VERIFY (PRIMARY): 0x04=0x%08x (expected 0x07800438), 0x0c=0x%08x (expected 0xb5742249) ***\n",
+                primary_0x04, primary_0x0c);
+        pr_info("*** VIC HW INIT VERIFY (PRIMARY): 0x00=0x%08x (should be 0), 0x20=0x%08x (should be 0) ***\n",
+                primary_0x00, primary_0x20);
+
+        bool primary_interrupt_regs_ok = (primary_0x04 == 0x07800438) && (primary_0x0c == 0xb5742249);
+        bool primary_basic_regs_ok = (primary_0x00 == 0) && (primary_0x20 == 0);
+
+        if (primary_interrupt_regs_ok) {
+            pr_info("*** VIC HW INIT: PRIMARY space works! Using primary VIC space for interrupts ***\n");
+            vic_base = primary_vic;  // Switch to primary space
+            interrupt_regs_ok = primary_interrupt_regs_ok;
+            basic_regs_ok = primary_basic_regs_ok;
+        }
+    }
 
     if (interrupt_regs_ok && basic_regs_ok) {
         pr_info("*** VIC HW INIT: SUCCESS - VIC interrupt configuration complete ***\n");
