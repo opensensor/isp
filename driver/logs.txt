@@ -1,418 +1,47 @@
-[   64.072559] vic_proc_write: Unknown command: 
-[   64.072565] *** vic_proc_write: Completed with ret=0 ***
-[   64.072579] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.072588] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.072595] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.072601] *** vic_proc_write: isp_dev=80530000 ***
-[   64.072607] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.072613] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.072619] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.072625] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.072632] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.072663] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.072669] *** vic_proc_write: Processing command: '' ***
-[   64.072675] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.072681] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.072688] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.072693] vic_proc_write: Unknown command: 
-[   64.072699] *** vic_proc_write: Completed with ret=0 ***
-[   64.072713] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.072722] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.072729] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.072735] *** vic_proc_write: isp_dev=80530000 ***
-[   64.072740] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.072746] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.072753] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.072759] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.072766] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.072804] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.072811] *** vic_proc_write: Processing command: '' ***
-[   64.072817] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.072823] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.072829] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.072835] vic_proc_write: Unknown command: 
-[   64.072841] *** vic_proc_write: Completed with ret=0 ***
-[   64.072855] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.072864] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.072871] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.072877] *** vic_proc_write: isp_dev=80530000 ***
-[   64.072883] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.072888] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.072895] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.072901] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.072908] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.072940] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.072947] *** vic_proc_write: Processing command: '' ***
-[   64.072953] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.072959] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.072965] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.072971] vic_proc_write: Unknown command: 
-[   64.072977] *** vic_proc_write: Completed with ret=0 ***
-[   64.072991] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.072999] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.073006] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.073012] *** vic_proc_write: isp_dev=80530000 ***
-[   64.073018] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.073024] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.073031] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.073037] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.073043] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.073073] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.073079] *** vic_proc_write: Processing command: '' ***
-[   64.073085] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.073092] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.073098] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.073104] vic_proc_write: Unknown command: 
-[   64.073109] *** vic_proc_write: Completed with ret=0 ***
-[   64.073124] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.073132] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.073139] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.073145] *** vic_proc_write: isp_dev=80530000 ***
-[   64.073151] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.073157] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.073163] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.073169] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.073176] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.073205] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.073212] *** vic_proc_write: Processing command: '' ***
-[   64.073218] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.073224] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.073231] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.073236] vic_proc_write: Unknown command: 
-[   64.073241] *** vic_proc_write: Completed with ret=0 ***
-[   64.073256] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.073264] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.073271] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.073277] *** vic_proc_write: isp_dev=80530000 ***
-[   64.073283] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.073289] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.073295] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.073301] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.073308] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.073346] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.073353] *** vic_proc_write: Processing command: '' ***
-[   64.073359] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.073365] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.073372] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.073377] vic_proc_write: Unknown command: 
-[   64.073383] *** vic_proc_write: Completed with ret=0 ***
-[   64.073399] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.073407] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.073413] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.073419] *** vic_proc_write: isp_dev=80530000 ***
-[   64.073425] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.073431] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.073438] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.073444] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.073451] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.073483] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.073489] *** vic_proc_write: Processing command: '' ***
-[   64.073495] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.073501] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.073508] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.073513] vic_proc_write: Unknown command: 
-[   64.073519] *** vic_proc_write: Completed with ret=0 ***
-[   64.073534] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.073542] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.073549] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.073555] *** vic_proc_write: isp_dev=80530000 ***
-[   64.073561] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.073567] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.073573] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.073579] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.073586] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.073616] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.073623] *** vic_proc_write: Processing command: '' ***
-[   64.073629] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.073635] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.073641] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.073647] vic_proc_write: Unknown command: 
-[   64.073652] *** vic_proc_write: Completed with ret=0 ***
-[   64.073667] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.073675] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.073682] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.073688] *** vic_proc_write: isp_dev=80530000 ***
-[   64.073694] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.073700] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.073707] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.073713] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.073720] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.073750] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.073757] *** vic_proc_write: Processing command: '' ***
-[   64.073763] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.073769] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.073775] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.073781] vic_proc_write: Unknown command: 
-[   64.073786] *** vic_proc_write: Completed with ret=0 ***
-[   64.073800] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.073809] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.073815] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.073821] *** vic_proc_write: isp_dev=80530000 ***
-[   64.073827] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.073833] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.073839] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.073846] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.073853] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.073891] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.073899] *** vic_proc_write: Processing command: '' ***
-[   64.073905] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.073911] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.073917] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.073923] vic_proc_write: Unknown command: 
-[   64.073928] *** vic_proc_write: Completed with ret=0 ***
-[   64.073944] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.073952] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.073959] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.073965] *** vic_proc_write: isp_dev=80530000 ***
-[   64.073971] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.073977] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.073983] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.073989] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.073996] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.074027] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.074033] *** vic_proc_write: Processing command: '' ***
-[   64.074039] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.074045] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.074052] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.074057] vic_proc_write: Unknown command: 
-[   64.074063] *** vic_proc_write: Completed with ret=0 ***
-[   64.074077] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.074085] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.074092] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.074098] *** vic_proc_write: isp_dev=80530000 ***
-[   64.074104] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.074110] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.074116] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.074122] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.074129] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.074159] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.074165] *** vic_proc_write: Processing command: '' ***
-[   64.074171] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.074177] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.074184] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.074189] vic_proc_write: Unknown command: 
-[   64.074195] *** vic_proc_write: Completed with ret=0 ***
-[   64.074209] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.074217] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.074224] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.074230] *** vic_proc_write: isp_dev=80530000 ***
-[   64.074235] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.074241] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.074248] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.074254] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.074261] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.074290] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.074297] *** vic_proc_write: Processing command: '' ***
-[   64.074303] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.074309] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.074315] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.074321] vic_proc_write: Unknown command: 
-[   64.074326] *** vic_proc_write: Completed with ret=0 ***
-[   64.074340] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.074348] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.074355] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.074361] *** vic_proc_write: isp_dev=80530000 ***
-[   64.074367] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.074373] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.074379] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.074385] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.074392] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.074429] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.074436] *** vic_proc_write: Processing command: '' ***
-[   64.074443] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.074449] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.074455] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.074461] vic_proc_write: Unknown command: 
-[   64.074466] *** vic_proc_write: Completed with ret=0 ***
-[   64.074481] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.074489] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.074496] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.074502] *** vic_proc_write: isp_dev=80530000 ***
-[   64.074508] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.074514] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.074521] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.074527] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.074533] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.074565] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.074572] *** vic_proc_write: Processing command: '' ***
-[   64.074578] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.074584] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.074591] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.074596] vic_proc_write: Unknown command: 
-[   64.074601] *** vic_proc_write: Completed with ret=0 ***
-[   64.074617] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.074625] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.074632] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.074638] *** vic_proc_write: isp_dev=80530000 ***
-[   64.074644] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.074649] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.074656] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.074662] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.074669] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.074698] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.074705] *** vic_proc_write: Processing command: '' ***
-[   64.074711] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.074717] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.074723] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.074729] vic_proc_write: Unknown command: 
-[   64.074734] *** vic_proc_write: Completed with ret=0 ***
-[   64.074749] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.074757] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.074764] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.074769] *** vic_proc_write: isp_dev=80530000 ***
-[   64.074775] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.074781] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.074788] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.074794] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.074801] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.074831] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.074837] *** vic_proc_write: Processing command: '' ***
-[   64.074843] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.074849] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.074856] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.074861] vic_proc_write: Unknown command: 
-[   64.074867] *** vic_proc_write: Completed with ret=0 ***
-[   64.074881] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.074890] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.074897] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.074903] *** vic_proc_write: isp_dev=80530000 ***
-[   64.074909] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.074914] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.074921] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.074927] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.074934] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.074973] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.074979] *** vic_proc_write: Processing command: '' ***
-[   64.074986] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.074992] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.074998] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.075004] vic_proc_write: Unknown command: 
-[   64.075009] *** vic_proc_write: Completed with ret=0 ***
-[   64.075025] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.075033] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.075040] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.075046] *** vic_proc_write: isp_dev=80530000 ***
-[   64.075052] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.075058] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.075064] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.075071] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.075077] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.075109] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.075116] *** vic_proc_write: Processing command: '' ***
-[   64.075123] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.075128] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.075135] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.075140] vic_proc_write: Unknown command: 
-[   64.075146] *** vic_proc_write: Completed with ret=0 ***
-[   64.075160] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.075169] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.075175] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.075181] *** vic_proc_write: isp_dev=80530000 ***
-[   64.075187] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.075193] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.075199] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.075206] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.075213] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.075243] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.075250] *** vic_proc_write: Processing command: '' ***
-[   64.075256] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.075262] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.075269] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.075274] vic_proc_write: Unknown command: 
-[   64.075280] *** vic_proc_write: Completed with ret=0 ***
-[   64.075294] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.075302] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.075309] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.075315] *** vic_proc_write: isp_dev=80530000 ***
-[   64.075321] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.075327] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.075333] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.075339] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.075346] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.075376] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.075383] *** vic_proc_write: Processing command: '' ***
-[   64.075389] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.075395] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.075401] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.075407] vic_proc_write: Unknown command: 
-[   64.075413] *** vic_proc_write: Completed with ret=0 ***
-[   64.075427] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.075435] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.075442] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.075448] *** vic_proc_write: isp_dev=80530000 ***
-[   64.075454] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.075460] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.075466] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.075473] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.075479] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.075517] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.075523] *** vic_proc_write: Processing command: '' ***
-[   64.075530] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.075536] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.075542] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.075548] vic_proc_write: Unknown command: 
-[   64.075553] *** vic_proc_write: Completed with ret=0 ***
-[   64.075569] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.075577] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.075584] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.075590] *** vic_proc_write: isp_dev=80530000 ***
-[   64.075596] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.075602] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.075608] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.075615] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.075621] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.075651] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.075658] *** vic_proc_write: Processing command: '' ***
-[   64.075664] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.075670] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.075677] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.075682] vic_proc_write: Unknown command: 
-[   64.075687] *** vic_proc_write: Completed with ret=0 ***
-[   64.075702] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.075710] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.075717] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.075723] *** vic_proc_write: isp_dev=80530000 ***
-[   64.075729] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.075735] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.075741] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.075747] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.075754] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.075783] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.075790] *** vic_proc_write: Processing command: '' ***
-[   64.075796] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.075802] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.075808] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.075814] vic_proc_write: Unknown command: 
-[   64.075819] *** vic_proc_write: Completed with ret=0 ***
-[   64.075833] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.075841] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.075848] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.075854] *** vic_proc_write: isp_dev=80530000 ***
-[   64.075860] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.075866] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.075873] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.075879] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.075885] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.075915] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.075922] *** vic_proc_write: Processing command: '' ***
-[   64.075928] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.075934] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.075941] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.075946] vic_proc_write: Unknown command: 
-[   64.075951] *** vic_proc_write: Completed with ret=0 ***
-[   64.075965] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
-[   64.075973] *** vic_proc_write: file=84167140, buf=77db03d9, ppos=854f9f10 ***
-[   64.075981] *** vic_proc_write: seq=85f69100, seq->private=80530000 ***
-[   64.086179] *** vic_proc_write: isp_dev=80530000 ***
-[   64.086191] *** vic_proc_write: isp_dev->vic_dev=80528400 ***
-[   64.086197] *** vic_proc_write: vic_dev=80528400 (VALIDATED) ***
-[   64.086205] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
-[   64.086211] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
-[   64.086217] *** vic_proc_write: isp_dev=80530000, isp_dev->vic_dev=80528400 ***
-[   64.086284] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
-[   64.086292] *** vic_proc_write: Processing command: '' ***
-[   64.086298] *** vic_proc_write: frame_channels[0] at c06ae690 ***
-[   64.086304] *** vic_proc_write: frame_channels[0].state at c06ae6b8 ***
-[   64.086311] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
-[   64.086317] vic_proc_write: Unknown command: 
-[   64.086323] *** vic_proc_write: Completed with ret=0 ***
+[   95.946386] *** vic_w02_proc_open: ENTRY - inode=856c8a60, file=841e8d20 ***
+[   95.946398] *** vic_w02_proc_open: PDE_DATA(inode)=85f26000 ***
+[   95.946408] *** vic_w02_proc_open: FIXED seq->private from vic_dev=85f26000 to isp_dev=80514000 ***
+[   95.946414] *** vic_w02_proc_open: SUCCESS - seq->private=80514000 ***
+[   95.946451] *** vic_proc_write: ENTRY - Processing write operation, count=10 ***
+[   95.946460] *** vic_proc_write: file=841e8d20, buf=7796d360, ppos=85499f10 ***
+[   95.946467] *** vic_proc_write: seq=85c26f00, seq->private=80514000 ***
+[   95.946473] *** vic_proc_write: isp_dev=80514000 ***
+[   95.946479] *** vic_proc_write: isp_dev->vic_dev=85f26000 ***
+[   95.946486] *** vic_proc_write: vic_dev=85f26000 (VALIDATED) ***
+[   95.946492] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
+[   95.946499] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
+[   95.946506] *** vic_proc_write: isp_dev=80514000, isp_dev->vic_dev=85f26000 ***
+[   95.946546] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
+[   95.946555] *** vic_proc_write: Processing command: 'snapraw 1' (length=9) ***
+[   95.946561] *** vic_proc_write: frame_channels[0] at c06ae790 ***
+[   95.946567] *** vic_proc_write: frame_channels[0].state at c06ae7b8 ***
+[   95.946574] *** vic_proc_write: vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
+[   95.946580] *** vic_proc_write: Processing 'snapraw' command ***
+[   95.946586] vic_proc_write: snapraw save_num=1
+[   95.946592] *** vic_proc_write: No VBM buffers, allocating temporary buffer (size=4147200) ***
+[   95.956948] *** vic_proc_write: Allocated temporary buffer at 0x2400000 ***
+[   95.956960] *** vic_proc_write: Calling vic_mdma_enable for snapraw with buffer 0x2400000 ***
+[   95.956970] *** vic_mdma_enable: ENTRY - vic_dev=85f26000, channel=0, buffer_count=1, base_addr=0x2400000 ***
+[   95.956978] *** vic_mdma_enable: Validation passed - vic_dev=85f26000, vic_regs=b0023000 ***
+[   95.956984] *** vic_mdma_enable: EXACT Binary Ninja implementation ***
+[   95.956992] vic_mdma_enable: width=1920, height=1080, buffers=1, format=0
+[   95.956999] *** vic_mdma_enable: VIC[0x300] = 0x80010020 (MDMA ENABLED) ***
+[   95.957006] *** vic_mdma_enable: Frame size=4147200, buffer_offset=4147200 ***
+[   95.957011] *** vic_mdma_enable: SUCCESS - returning 0 ***
+[   95.957016] *** vic_proc_write: vic_mdma_enable SUCCESS - VIC MDMA enabled for snapraw ***
+[   95.957052] *** vic_proc_write: Freed temporary buffer ***
+[   95.957058] *** vic_proc_write: Completed with ret=9 ***
+[   95.957098] *** vic_proc_write: ENTRY - Processing write operation, count=1 ***
+[   95.957107] *** vic_proc_write: file=841e8d20, buf=7796d369, ppos=85499f10 ***
+[   95.957114] *** vic_proc_write: seq=85c26f00, seq->private=80514000 ***
+[   95.957120] *** vic_proc_write: isp_dev=80514000 ***
+[   95.957126] *** vic_proc_write: isp_dev->vic_dev=85f26000 ***
+[   95.957132] *** vic_proc_write: vic_dev=85f26000 (VALIDATED) ***
+[   95.957139] *** vic_proc_write: vic_dev->width=1920, vic_dev->height=1080 (UNINITIALIZED) ***
+[   95.957145] *** vic_proc_write: vic_dev->vic_regs=b0023000 ***
+[   95.957152] *** vic_proc_write: isp_dev=80514000, isp_dev->vic_dev=85f26000 ***
+[   95.957212] *** vic_proc_write: FIXED - vic_dev->width=1920, vic_dev->height=1080 (from sensor) ***
+[   95.957222] *** vic_proc_write: Processing command: '' (length=0) ***
+[   95.957228] *** vic_proc_write: ERROR - Empty command, returning EINVAL to stop loop ***
+[   95.957233] *** vic_proc_write: Completed with ret=-22 ***
+root@ing-wyze-cam3-a000 ~# 

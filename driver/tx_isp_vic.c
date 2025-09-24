@@ -1263,24 +1263,25 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     return result;
 }
 
-/* ISP VIC FRD show function - EXACT Binary Ninja implementation */
+/* ISP VIC FRD show function - REWRITTEN to expect ISP device instead of VIC subdev */
 int isp_vic_frd_show(struct seq_file *seq, void *v)
 {
-    struct tx_isp_subdev *sd;
+    struct tx_isp_dev *isp_dev;
     struct tx_isp_vic_device *vic_dev;
     int i, total_errors = 0;
     int frame_count;
-    
-    /* Binary Ninja: void* $v0 = *(arg1 + 0x3c) */
-    sd = (struct tx_isp_subdev *)seq->private;
-    if (!sd || (unsigned long)sd >= 0xfffff001) {
-        pr_err("The parameter is invalid!\n");
+
+    /* Get ISP device from seq->private (set by proc entry creation) */
+    isp_dev = (struct tx_isp_dev *)seq->private;
+    if (!isp_dev || (unsigned long)isp_dev < 0x80000000 || (unsigned long)isp_dev >= 0xfffff000) {
+        pr_err("isp_vic_frd_show: Invalid ISP device pointer: %p\n", isp_dev);
         return 0;
     }
-    
-    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
-    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
-        pr_err("The parameter is invalid!\n");
+
+    /* Get VIC device from ISP device */
+    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+    if (!vic_dev || (unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff000) {
+        pr_err("isp_vic_frd_show: Invalid VIC device pointer: %p\n", vic_dev);
         return 0;
     }
     
