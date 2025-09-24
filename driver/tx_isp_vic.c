@@ -2846,7 +2846,18 @@ int tx_isp_vic_probe(struct platform_device *pdev)
 
     /* CRITICAL FIX: Do NOT call tx_isp_vic_hw_init during probe - working branch doesn't! */
     /* VIC interrupt configuration happens during actual VIC operations, not during probe */
-    pr_info("*** VIC PROBE: Skipping tx_isp_vic_hw_init - working branch configures interrupts during VIC operations ***\n");
+    /* CRITICAL FIX: Configure VIC interrupts BEFORE clocks are enabled */
+    /* Your insight about clock timing is correct - VIC interrupt registers must be configured */
+    /* when VIC hardware is in reset/unconfigured state, BEFORE any clocks are enabled */
+    pr_info("*** VIC PROBE: CRITICAL - Configuring VIC interrupts BEFORE clock enablement ***\n");
+
+    int hw_init_ret = tx_isp_vic_hw_init(&vic_dev->sd);
+    if (hw_init_ret != 0) {
+        pr_err("*** VIC PROBE: CRITICAL - VIC interrupt configuration FAILED: %d ***\n", hw_init_ret);
+        /* Don't fail probe, but log the issue */
+    } else {
+        pr_info("*** VIC PROBE: SUCCESS - VIC interrupts configured BEFORE clocks enabled ***\n");
+    }
 
     /* Binary Ninja: tx_isp_subdev_init(arg1, $v0, &vic_subdev_ops) */
     ret = tx_isp_subdev_init(pdev, &vic_dev->sd, &vic_subdev_ops);
