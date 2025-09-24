@@ -18,6 +18,7 @@
 #include "../include/tx-isp-device.h"
 #include "../include/tx-libimp.h"
 #include "../include/tx_isp_vic_buffer.h"
+#include "../include/txx-funcs.h"
 #include <linux/platform_device.h>
 #include <linux/device.h>
 
