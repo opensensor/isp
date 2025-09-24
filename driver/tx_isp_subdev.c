@@ -924,6 +924,10 @@ void tx_isp_free_irq(struct tx_isp_irq_info *irq_info)
     pr_info("tx_isp_free_irq: IRQ freed\n");
 }
 
+/* Forward declarations for probe functions */
+extern int tx_isp_vic_probe(struct platform_device *pdev);
+extern int tx_isp_vic_remove(struct platform_device *pdev);
+
 /* Platform driver structures */
 static struct platform_driver tx_isp_csi_driver = {
     .probe = tx_isp_csi_probe,
