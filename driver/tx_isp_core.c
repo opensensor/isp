@@ -3880,98 +3880,75 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
         }
         
         case 0x3000002: {
-            /* Set format */
-            ISP_INFO("ispcore_pad_event_handle: case 0x3000002 (set format)");
-            result = 0xffffffea; /* -EINVAL */
-            
-            if (arg1 != 0 && (uintptr_t)arg1 < 0xfffff001) {
-                void* v0_10 = (void*)*arg1;
-                
-                if (v0_10 != 0) {
-                    if ((uintptr_t)v0_10 >= 0xfffff001)
-                        return 0xffffffea;
-                    
-                    /* CRITICAL FIX: Use safe struct member access instead of dangerous offset *(v0_10 + 0xd4) */
-                    /* MIPS ALIGNMENT CHECK: Ensure v0_10 is properly aligned before accessing */
-                    if (((unsigned long)v0_10 & 0x3) != 0) {
-                        pr_err("*** CRITICAL: v0_10 pointer 0x%p not 4-byte aligned - would cause unaligned access crash! ***\n", v0_10);
-                        return 0xffffffea;
-                    }
+            /* Set format IOCTL */
+            ISP_INFO("ispcore_pad_event_handle: Set format request");
 
-                    /* SAFE: Use proper struct member access instead of offset arithmetic */
-                    struct tx_isp_subdev *sd_10 = (struct tx_isp_subdev *)v0_10;
-                    void* s4_1 = sd_10->host_priv;  /* SAFE: Access host_priv field directly */
+            if (!arg1) {
+                pr_err("ispcore_pad_event_handle: NULL format request\n");
+                return -EINVAL;
+            }
 
-                    if (s4_1 != 0 && (uintptr_t)s4_1 < 0xfffff001) {
-                        void* s3_1 = (void*)arg1[8];
-                        void* s2 = (char*)v0_10 + 0x38;
+            /* Get the subdev from the format request */
+            struct tx_isp_subdev *subdev = (struct tx_isp_subdev *)*arg1;
+            if (!subdev) {
+                pr_err("ispcore_pad_event_handle: NULL subdev in format request\n");
+                return -EINVAL;
+            }
 
-                        /* CRITICAL FIX: Replace core state with VIC state - core device is stateless */
-                        struct tx_isp_core_device *host_dev = (struct tx_isp_core_device *)s4_1;
-                        /* Get VIC device to check streaming state */
-                        struct tx_isp_vic_device *vic_dev = (host_dev && host_dev->isp_dev) ?
-                            (struct tx_isp_vic_device *)host_dev->isp_dev->vic_dev : NULL;
-                        bool is_streaming_mode = (vic_dev && vic_dev->state == 4);  /* Check VIC streaming state */
+            /* Get the core device from the subdev */
+            struct tx_isp_core_device *core_dev = (struct tx_isp_core_device *)subdev->host_priv;
+            if (!core_dev) {
+                pr_err("ispcore_pad_event_handle: No core device associated with subdev\n");
+                return -EINVAL;
+            }
 
-                        if (is_streaming_mode) {
-                            
-                            /* Complex loop for channel processing */
-                            void* a0_3 = *((void**)s2);
-                            while (true) {
-                                if (a0_3 != 0) {
-                                    void* v0_38 = *((void**)((char*)a0_3 + 0xc4));
-                                    if (v0_38 == 0) {
-                                        s2 = (char*)s2 + 4;
-                                    } else {
-                                        int32_t v0_39 = *((uint32_t*)v0_38 + 7); /* *(v0_38 + 0x1c) */
-                                        if (v0_39 == 0) {
-                                            s2 = (char*)s2 + 4;
-                                        } else {
-                                            /* Call function pointer */
-                                            int32_t v0_40 = 0; /* Would call v0_39() */
-                                            if (v0_40 == 0) {
-                                                s2 = (char*)s2 + 4;
-                                            } else {
-                                                if (v0_40 != 0xfffffdfd)
-                                                    return 0;
-                                                s2 = (char*)s2 + 4;
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    s2 = (char*)s2 + 4;
-                                }
-                                
-                                if ((char*)v0_10 + 0x78 == s2)
-                                    break;
-                                
-                                a0_3 = *((void**)s2);
-                            }
-                            
-                            ISP_INFO("ispcore_pad_event_handle: channel processing loop completed");
-                            return 0;
-                        }
-                        
-                        /* Format processing logic */
-                        ISP_INFO("ispcore_pad_event_handle: processing format configuration");
-                        
-                        /* Call tisp_channel_attr_set */
-                        uint32_t a0_25 = (uint32_t)arg1[1] & 0xff; /* zx.d(arg1[1].b) */
-                        
-                        /* Prepare channel attributes structure */
-                        memset(&var_58, 0, 0x34);
-                        /* Complex attribute setup would go here */
-                        
-                        if (tisp_channel_attr_set(a0_25, &var_58) != 0) {
-                            isp_printf(2, "Err [VIC_INT] : dma syfifo ovf!!!\n");
-                            return 0;
-                        }
-                        
-                        memcpy(s3_1, arg3, 0x70);
-                        ISP_INFO("ispcore_pad_event_handle: format set successfully");
-                        return 0;
-                    }
+            /* Get format data and channel info */
+            void *format_data = (void*)arg1[8];
+            if (!format_data) {
+                pr_err("ispcore_pad_event_handle: No format data provided\n");
+                return -EINVAL;
+            }
+
+            /* Check if we're in streaming mode by looking at VIC state */
+            struct tx_isp_vic_device *vic_dev = (core_dev->isp_dev) ?
+                (struct tx_isp_vic_device *)core_dev->isp_dev->vic_dev : NULL;
+            bool is_streaming = (vic_dev && vic_dev->state == 4);
+
+            if (is_streaming) {
+                /* Handle format change during streaming - need to update active channels */
+                /* Process active channels during streaming */
+                ISP_INFO("ispcore_pad_event_handle: Processing format change during streaming");
+
+                /* This complex loop processes frame channels during streaming format changes */
+                /* For now, just acknowledge the format change and return success */
+                /* The actual channel reconfiguration should be handled by the VIC subsystem */
+
+                ISP_INFO("ispcore_pad_event_handle: Format change during streaming acknowledged");
+                return 0;
+            } else {
+                /* Handle format change when not streaming */
+                ISP_INFO("ispcore_pad_event_handle: Processing format configuration (not streaming)");
+
+                /* Get channel ID from the request */
+                uint32_t channel_id = (uint32_t)arg1[1] & 0xff;
+
+                /* Prepare channel attributes structure */
+                uint8_t channel_attr[0x34];
+                memset(channel_attr, 0, sizeof(channel_attr));
+
+                /* Set channel attributes */
+                if (tisp_channel_attr_set(channel_id, channel_attr) != 0) {
+                    pr_err("ispcore_pad_event_handle: Failed to set channel attributes\n");
+                    return 0;
                 }
+
+                /* Copy format data to destination */
+                if (arg3) {
+                    memcpy(format_data, arg3, 0x70);
+                }
+
+                ISP_INFO("ispcore_pad_event_handle: Format set successfully");
+                return 0;
             }
             break;
         }
