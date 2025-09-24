@@ -1033,7 +1033,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     pr_info("*** VIC INTERRUPT CONFIG: CORRECT Binary Ninja interrupt configuration complete ***\n");
 
-
+    /* NOTE: VIC DMA start (0x300) should happen during streaming, not here */
+    /* Working reference shows vic_pipo_mdma_enable + ispvic_frame_channel_s_stream handle DMA */
 
     /* Verify CORRECT Binary Ninja interrupt registers were set */
     pr_info("*** VIC INTERRUPT CONFIG: Starting verification of BINARY NINJA interrupt registers ***\n");
@@ -1603,6 +1604,162 @@ cleanup:
     }
 
     pr_info("*** isp_vic_cmd_set: Completed with ret=%d ***\n", ret);
+    return ret;
+}
+
+/* VIC proc write function - CRITICAL for proc entry write operations */
+ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
+{
+    struct seq_file *seq = file->private_data;
+    struct tx_isp_dev *isp_dev;
+    struct tx_isp_vic_device *vic_dev = NULL;
+    char *cmd_buf;
+    char local_buf[32];
+    int ret = 0;
+    bool use_local_buf = false;
+
+    pr_info("*** vic_proc_write: Processing write operation, count=%zu ***\n", count);
+
+    if (!seq || !seq->private) {
+        pr_err("vic_proc_write: Invalid file private data\n");
+        return -EINVAL;
+    }
+
+    isp_dev = (struct tx_isp_dev *)seq->private;
+    if (isp_dev && isp_dev->vic_dev) {
+        vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+    }
+
+    if (!vic_dev) {
+        pr_err("vic_proc_write: VIC device not available\n");
+        return -ENODEV;
+    }
+
+    /* Allocate buffer for command */
+    if (count < 32) {  /* Use local buffer for small commands */
+        cmd_buf = local_buf;
+        use_local_buf = true;
+    } else {
+        cmd_buf = kmalloc(count + 1, GFP_KERNEL);
+        if (!cmd_buf) {
+            return -ENOMEM;
+        }
+        use_local_buf = false;
+    }
+
+    /* Copy command from user space */
+    if (copy_from_user(cmd_buf, buf, count) != 0) {
+        ret = -EFAULT;
+        goto cleanup;
+    }
+
+    cmd_buf[count] = '\0';  /* Null terminate */
+
+    /* Remove trailing newline if present */
+    if (count > 0 && cmd_buf[count-1] == '\n') {
+        cmd_buf[count-1] = '\0';
+        count--;
+    }
+
+    pr_info("*** vic_proc_write: Processing command: '%s' ***\n", cmd_buf);
+
+    /* Process "snapraw" command */
+    if (strncmp(cmd_buf, "snapraw", 7) == 0) {
+        pr_info("*** vic_proc_write: Processing 'snapraw' command ***\n");
+
+        /* Parse save number from command */
+        unsigned long save_num = 1;
+        if (count > 8) {
+            save_num = simple_strtoull(&cmd_buf[8], NULL, 0);
+            if (save_num < 2) save_num = 1;
+        }
+
+        pr_info("vic_proc_write: snapraw save_num=%lu\n", save_num);
+
+        /* Check width limit */
+        if (vic_dev->width >= 0xa81) {
+            pr_err("vic_proc_write: Can't output the width(%d)!\n", vic_dev->width);
+            ret = -EINVAL;
+            goto cleanup;
+        }
+
+        /* Call vic_mdma_enable to enable VIC MDMA */
+        extern struct frame_channel_device frame_channels[];
+        struct tx_isp_channel_state *state = &frame_channels[0].state;
+
+        if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
+            int format_type = 0;  /* Default to RAW format */
+            int dual_channel = 0; /* Single channel mode */
+
+            pr_info("*** vic_proc_write: Calling vic_mdma_enable for snapraw with VBM buffer ***\n");
+            ret = vic_mdma_enable(vic_dev, 0, dual_channel, save_num,
+                                state->vbm_buffer_addresses[0], format_type);
+
+            if (ret == 0) {
+                pr_info("*** vic_proc_write: vic_mdma_enable SUCCESS - VIC MDMA enabled for snapraw ***\n");
+                ret = count;  /* Return success */
+            } else {
+                pr_err("vic_proc_write: vic_mdma_enable failed: %d\n", ret);
+            }
+        } else {
+            pr_err("vic_proc_write: No buffer addresses available for snapraw\n");
+            ret = -ENOMEM;
+        }
+    }
+    /* Process "saveraw" command */
+    else if (strncmp(cmd_buf, "saveraw", 7) == 0) {
+        pr_info("*** vic_proc_write: Processing 'saveraw' command ***\n");
+
+        /* Parse save number from command */
+        unsigned long save_num = 1;
+        if (count > 8) {
+            save_num = simple_strtoull(&cmd_buf[8], NULL, 0);
+            if (save_num < 2) save_num = 1;
+        }
+
+        pr_info("vic_proc_write: saveraw save_num=%lu\n", save_num);
+
+        /* Check width limit */
+        if (vic_dev->width >= 0xa81) {
+            pr_err("vic_proc_write: Can't output the width(%d)!\n", vic_dev->width);
+            ret = -EINVAL;
+            goto cleanup;
+        }
+
+        /* Call vic_mdma_enable to enable VIC MDMA */
+        extern struct frame_channel_device frame_channels[];
+        struct tx_isp_channel_state *state = &frame_channels[0].state;
+
+        if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
+            int format_type = 0;  /* Default to RAW format */
+            int dual_channel = 0; /* Single channel mode */
+
+            pr_info("*** vic_proc_write: Calling vic_mdma_enable for saveraw with VBM buffer ***\n");
+            ret = vic_mdma_enable(vic_dev, 0, dual_channel, save_num,
+                                state->vbm_buffer_addresses[0], format_type);
+
+            if (ret == 0) {
+                pr_info("*** vic_proc_write: vic_mdma_enable SUCCESS - VIC MDMA enabled for saveraw ***\n");
+                ret = count;  /* Return success */
+            } else {
+                pr_err("vic_proc_write: vic_mdma_enable failed: %d\n", ret);
+            }
+        } else {
+            pr_err("vic_proc_write: No buffer addresses available for saveraw\n");
+            ret = -ENOMEM;
+        }
+    }
+    else {
+        pr_info("vic_proc_write: Unknown command: %s\n", cmd_buf);
+        ret = count;  /* Return success for unknown commands */
+    }
+
+cleanup:
+    if (!use_local_buf && cmd_buf) {
+        kfree(cmd_buf);
+    }
+
+    pr_info("*** vic_proc_write: Completed with ret=%d ***\n", ret);
     return ret;
 }
 
@@ -2176,6 +2333,16 @@ const struct file_operations isp_vic_frd_fops = {
     .unlocked_ioctl = isp_vic_cmd_set,  /* isp_vic_cmd_set from hex dump */
     .open = dump_isp_vic_frd_open,      /* dump_isp_vic_frd_open from hex dump */
     .release = single_release,          /* private_single_release from hex dump */
+};
+
+/* VIC W02 proc file operations - FIXED for proper proc write interface */
+const struct file_operations vic_w02_proc_fops = {
+    .owner = THIS_MODULE,
+    .open = dump_isp_vic_frd_open,      /* Use same open function */
+    .release = single_release,          /* Use same release function */
+    .read = seq_read,                   /* Allow reading */
+    .write = vic_proc_write,            /* CRITICAL: Use write handler for proc entry */
+    .llseek = seq_lseek,               /* Allow seeking */
 };
 
 /* tx_isp_vic_probe - EXACT Binary Ninja reference implementation */

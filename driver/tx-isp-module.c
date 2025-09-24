@@ -4651,7 +4651,11 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp_dev)
                     const struct file_operations *proc_fops = NULL;
 
                     /* Set appropriate file operations based on device type */
-                    if (strstr(tx_isp_platform_devices[i]->name, "vic") || strstr(tx_isp_platform_devices[i]->name, "isp-w")) {
+                    if (strstr(tx_isp_platform_devices[i]->name, "isp-w02")) {
+                        /* CRITICAL: Use write-enabled file operations for isp-w02 proc entry */
+                        extern const struct file_operations vic_w02_proc_fops;
+                        proc_fops = &vic_w02_proc_fops;
+                    } else if (strstr(tx_isp_platform_devices[i]->name, "vic") || strstr(tx_isp_platform_devices[i]->name, "isp-w")) {
                         extern const struct file_operations isp_vic_frd_fops;
                         proc_fops = &isp_vic_frd_fops;
                     } else if (strstr(tx_isp_platform_devices[i]->name, "csi")) {
