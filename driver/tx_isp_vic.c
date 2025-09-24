@@ -1070,7 +1070,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** CRITICAL: Need to find the correct VIC unlock mechanism ***\n");
 
         /* HYPOTHESIS: VIC unlock might be through SECONDARY VIC space, not PRIMARY */
-        void __iomem *vic_unlock_regs = vic_dev->vic_regs_control;  /* 0x10023000 */
+        vic_unlock_regs = vic_dev->vic_regs_control;  /* 0x10023000 */
 
         if (vic_unlock_regs) {
             pr_info("*** TRYING VIC UNLOCK via SECONDARY VIC space (0x10023000) ***\n");
