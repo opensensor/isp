@@ -249,79 +249,34 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
     vic_base = vic_dev->vic_regs;  // Use primary VIC space (0x133e0000)
     pr_info("*** VIC HW INIT: Using PRIMARY VIC space for interrupt configuration ***\n");
 
-    /* CRITICAL: VIC unlock sequence BEFORE configuring interrupts - FROM WORKING BRANCH */
-    pr_info("*** VIC HW INIT: Starting VIC unlock sequence before interrupt configuration ***\n");
+    /* CRITICAL FIX: Do NOT configure VIC interrupts during hardware init - too early! */
+    /* The working branch configures VIC interrupts AFTER extensive VIC hardware setup */
+    /* VIC interrupt configuration happens in tx_isp_vic_apply_full_config() after VIC is fully configured */
 
-    writel(0x2, vic_base + 0x0);  /* Pre-enable */
-    wmb();
-    writel(0x4, vic_base + 0x0);  /* Wait state */
-    wmb();
-
-    /* Wait for hardware ready (register should become 0) */
-    u32 timeout = 10000;
-    u32 vic_status;
-    while ((vic_status = readl(vic_base + 0x0)) != 0) {
-        udelay(1);
-        if (--timeout == 0) {
-            pr_err("*** VIC HW INIT: VIC unlock timeout - register stuck at 0x%x ***\n", vic_status);
-            break;  /* Continue anyway, but log the issue */
-        }
-    }
-
-    if (timeout > 0) {
-        pr_info("*** VIC HW INIT: VIC unlock successful - register 0x0 = 0x0 ***\n");
-    }
+    pr_info("*** VIC HW INIT: Basic VIC hardware initialization only - interrupt config deferred ***\n");
 
     // Clear any pending interrupts first
     writel(0, vic_base + 0x00);  // Clear ISR
     writel(0, vic_base + 0x20);  // Clear ISR1
     wmb();
 
-    // Set up interrupt masks to match OEM
-    writel(0x00000001, vic_base + 0x04);  // IMR
-    wmb();
-    writel(0x00000000, vic_base + 0x24);  // IMR1
-    wmb();
-
-    // Configure ISP control interrupts
-    writel(0x07800438, vic_base + 0x04);  // IMR
-    wmb();
-    writel(0xb5742249, vic_base + 0x0c);  // IMCR
-    wmb();
-
-    /* CRITICAL: Add missing interrupt configuration registers from working branch */
-    writel(0x2d0, vic_base + 0x100);      /* Interrupt configuration - Working branch value */
-    wmb();
-    writel(0x2b, vic_base + 0x14);        /* Interrupt control - Working branch value */
-    wmb();
-
-    pr_info("*** VIC HW INIT: ALL interrupt configuration applied to PRIMARY VIC space (0x04, 0x0c, 0x100, 0x14) ***\n");
+    pr_info("*** VIC HW INIT: Basic interrupt clearing complete - full interrupt config happens later ***\n");
 
     /* CRITICAL FIX: Do NOT register interrupt handler here - main module already handles IRQ 38 */
     /* The main module registers IRQ 38 as "isp-w02" and routes VIC interrupts through isp_irq_handle */
     pr_info("*** VIC HW INIT: Interrupt handler registration SKIPPED - main module handles IRQ 38 routing ***\n");
 
-    /* Verify ALL interrupt configuration registers were accepted */
-    u32 verify_0x04 = readl(vic_base + 0x04);
-    u32 verify_0x0c = readl(vic_base + 0x0c);
-    u32 verify_0x100 = readl(vic_base + 0x100);
-    u32 verify_0x14 = readl(vic_base + 0x14);
+    /* Verify basic VIC hardware initialization */
+    u32 verify_0x00 = readl(vic_base + 0x00);
+    u32 verify_0x20 = readl(vic_base + 0x20);
 
-    pr_info("*** VIC HW INIT VERIFY: 0x04=0x%08x (expected 0x07800438), 0x0c=0x%08x (expected 0xb5742249) ***\n",
-            verify_0x04, verify_0x0c);
-    pr_info("*** VIC HW INIT VERIFY: 0x100=0x%08x (expected 0x2d0), 0x14=0x%08x (expected 0x2b) ***\n",
-            verify_0x100, verify_0x14);
+    pr_info("*** VIC HW INIT VERIFY: 0x00=0x%08x (should be 0), 0x20=0x%08x (should be 0) ***\n",
+            verify_0x00, verify_0x20);
 
-    bool all_regs_ok = (verify_0x04 == 0x07800438) && (verify_0x0c == 0xb5742249) &&
-                       (verify_0x100 == 0x2d0) && (verify_0x14 == 0x2b);
-
-    if (all_regs_ok) {
-        pr_info("*** VIC HW INIT: SUCCESS - ALL VIC interrupt registers configured correctly! ***\n");
+    if (verify_0x00 == 0 && verify_0x20 == 0) {
+        pr_info("*** VIC HW INIT: SUCCESS - Basic VIC hardware initialization complete ***\n");
     } else {
-        pr_warn("*** VIC HW INIT: WARNING - Some VIC interrupt registers may not have been accepted ***\n");
-        pr_warn("*** VIC HW INIT: 0x04_ok=%d, 0x0c_ok=%d, 0x100_ok=%d, 0x14_ok=%d ***\n",
-                (verify_0x04 == 0x07800438), (verify_0x0c == 0xb5742249),
-                (verify_0x100 == 0x2d0), (verify_0x14 == 0x2b));
+        pr_warn("*** VIC HW INIT: WARNING - Basic VIC hardware initialization may have issues ***\n");
     }
 
     pr_info("*** VIC HW INIT: Hardware interrupt configuration complete - ready for main module IRQ routing ***\n");
