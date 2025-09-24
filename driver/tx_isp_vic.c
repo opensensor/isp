@@ -2883,6 +2883,18 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* REMOVED: Manual linking - now handled automatically by tx_isp_subdev_init */
     pr_info("*** VIC PROBE: Device linking handled automatically by tx_isp_subdev_init ***\n");
 
+    /* CRITICAL FIX: Initialize VIC frame channel streaming like working reference */
+    pr_info("*** VIC PROBE: Initializing VIC frame channel streaming (matching working reference) ***\n");
+    void *raw_pipe[8] = {NULL}; /* 8 function pointers as per Binary Ninja */
+
+    int pipo_ret = tx_isp_subdev_pipo(&vic_dev->sd, raw_pipe);
+    if (pipo_ret == 0) {
+        pr_info("*** VIC PROBE: tx_isp_subdev_pipo SUCCESS - VIC frame channel streaming ENABLED! ***\n");
+        pr_info("*** VIC PROBE: VIC interrupts should now fire when streaming starts! ***\n");
+    } else {
+        pr_err("*** VIC PROBE: tx_isp_subdev_pipo FAILED: %d ***\n", pipo_ret);
+    }
+
     return 0;
 }
 
