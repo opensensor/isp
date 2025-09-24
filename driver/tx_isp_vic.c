@@ -1014,26 +1014,31 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0x1, vic_regs + 0x34);  /* Enable VIC MDMA completion interrupt */
     wmb();
 
-    /* STEP 3: Configure VIC interrupt masks using SHADOW REGISTER UNLOCK SEQUENCE */
-    /* Git commit 6a83e06c84dfa44e7cf5d7ff69e8f95abbb1bbb3 shows shadow register unlock sequence */
-    pr_info("*** VIC INTERRUPT CONFIG: Starting SHADOW REGISTER UNLOCK SEQUENCE ***\n");
+    /* STEP 3: Try writing VIC interrupt masks to SECONDARY VIC space instead */
+    /* Working reference uses primary space, but our primary space writes fail */
+    /* Maybe secondary space (0x10023000) accepts the interrupt mask writes */
+    if (vic_dev->vic_regs_control) {
+        pr_info("*** VIC INTERRUPT CONFIG: Trying interrupt masks in SECONDARY VIC space ***\n");
 
-    /* STEP 3a: Write unlock value to VIC_IMR to unlock shadow registers */
-    pr_info("*** VIC INTERRUPT CONFIG: Writing UNLOCK value 0x07800438 to VIC_IMR register 0x04 ***\n");
-    writel(0x07800438, vic_regs + 0x04);  /* VIC_IMR - Shadow register unlock */
-    wmb();
+        /* STEP 3a: Write unlock value to VIC_IMR in secondary space */
+        pr_info("*** VIC INTERRUPT CONFIG: Writing UNLOCK value 0x07800438 to SECONDARY VIC_IMR register 0x04 ***\n");
+        writel(0x07800438, vic_dev->vic_regs_control + 0x04);  /* VIC_IMR - Shadow register unlock */
+        wmb();
 
-    /* STEP 3b: Write control configuration to VIC_IMCR */
-    pr_info("*** VIC INTERRUPT CONFIG: Writing CONTROL value 0xb5742249 to VIC_IMCR register 0x0c ***\n");
-    writel(0xb5742249, vic_regs + 0x0c);  /* VIC_IMCR - Interrupt control configuration */
-    wmb();
+        /* STEP 3b: Write control configuration to VIC_IMCR in secondary space */
+        pr_info("*** VIC INTERRUPT CONFIG: Writing CONTROL value 0xb5742249 to SECONDARY VIC_IMCR register 0x0c ***\n");
+        writel(0xb5742249, vic_dev->vic_regs_control + 0x0c);  /* VIC_IMCR - Interrupt control configuration */
+        wmb();
 
-    /* STEP 3c: Clear interrupt masks via VIC_IMSR to activate shadow registers */
-    pr_info("*** VIC INTERRUPT CONFIG: Clearing masks via VIC_IMSR register 0x08 to ACTIVATE shadow registers ***\n");
-    writel(0x0, vic_regs + 0x08);  /* VIC_IMSR - Activate shadow registers */
-    wmb();
+        /* STEP 3c: Clear interrupt masks via VIC_IMSR in secondary space */
+        pr_info("*** VIC INTERRUPT CONFIG: Clearing masks via SECONDARY VIC_IMSR register 0x08 ***\n");
+        writel(0x0, vic_dev->vic_regs_control + 0x08);  /* VIC_IMSR - Activate shadow registers */
+        wmb();
 
-    pr_info("*** VIC INTERRUPT CONFIG: SHADOW REGISTER UNLOCK SEQUENCE COMPLETE ***\n");
+        pr_info("*** VIC INTERRUPT CONFIG: SECONDARY VIC space interrupt mask configuration complete ***\n");
+    } else {
+        pr_warn("*** VIC INTERRUPT CONFIG: No secondary VIC space available for interrupt masks ***\n");
+    }
 
     /* STEP 3: Configure interrupt masks in SECONDARY VIC space (0x10023000) */
     /* Git commits show some interrupt operations need secondary space */
