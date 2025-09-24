@@ -3747,38 +3747,24 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
     /* Binary Ninja: Handle 0x40045626 - GET_SENSOR_INFO */
     if (cmd == 0x40045626) {
-        int32_t *i_3 = (int32_t *)&isp_dev->subdevs[0];
+        /* FIXED: Use proper subdev iteration instead of hardcoded array access */
+        for (int i = 0; i < ISP_MAX_SUBDEVS; i++) {
+            struct tx_isp_subdev *sd = isp_dev->subdevs[i];
+            if (!sd) continue;
 
-        /* Binary Ninja: Loop through subdevices exactly as reference */
-        do {
-            struct tx_isp_subdev *sd = (struct tx_isp_subdev *)*i_3;
+            /* Binary Ninja: void* $v0_10 = *(*($a0_4 + 0xc4) + 0xc) */
+            if (sd->ops && sd->ops->sensor) {
+                /* Binary Ninja: int32_t $v0_11 = *($v0_10 + 8) */
+                if (sd->ops->sensor->ioctl) {
+                    /* Binary Ninja: int32_t $v0_13 = $v0_11($a0_4, 0x2000003, &var_98) */
+                    int32_t ret = sd->ops->sensor->ioctl(sd, 0x2000003, &var_98);
 
-            if (sd != NULL) {
-                /* Binary Ninja: void* $v0_10 = *(*($a0_4 + 0xc4) + 0xc) */
-                if (sd->ops && sd->ops->sensor) {
-                    /* Binary Ninja: int32_t $v0_11 = *($v0_10 + 8) */
-                    if (sd->ops->sensor->ioctl) {
-                        /* Binary Ninja: int32_t $v0_13 = $v0_11($a0_4, 0x2000003, &var_98) */
-                        int32_t ret = sd->ops->sensor->ioctl(sd, 0x2000003, &var_98);
-
-                        if (ret == 0) {
-                            i_3++;
-                        } else {
-                            i_3++;
-                            if (ret != 0xfffffdfd) {
-                                return ret;
-                            }
-                        }
-                    } else {
-                        i_3++;
+                    if (ret != 0 && ret != 0xfffffdfd) {
+                        return ret;
                     }
-                } else {
-                    i_3++;
                 }
-            } else {
-                i_3++;
             }
-        } while ((void *)i_3 != (void *)&isp_dev->subdevs[ISP_MAX_SUBDEVS]);
+        }
 
         s6_1 = 0;
 
