@@ -1783,7 +1783,21 @@ ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, 
         count--;
     }
 
-    pr_err("*** vic_proc_write: Processing command: '%s' ***\n", cmd_buf);
+    pr_err("*** vic_proc_write: Processing command: '%s' (length=%zu) ***\n", cmd_buf, count);
+
+    /* CRITICAL FIX: Reject empty commands to prevent infinite loop */
+    if (count == 0 || cmd_buf[0] == '\0') {
+        pr_err("*** vic_proc_write: ERROR - Empty command, returning EINVAL to stop loop ***\n");
+        ret = -EINVAL;
+        goto cleanup;
+    }
+
+    /* CRITICAL FIX: Only process complete commands, reject single characters */
+    if (count == 1) {
+        pr_err("*** vic_proc_write: ERROR - Single character command '%c', returning EINVAL ***\n", cmd_buf[0]);
+        ret = -EINVAL;
+        goto cleanup;
+    }
 
     /* Debug: Check frame_channels accessibility */
     extern struct frame_channel_device frame_channels[];
@@ -1929,8 +1943,8 @@ ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, 
         }
     }
     else {
-        pr_info("vic_proc_write: Unknown command: %s\n", cmd_buf);
-        ret = count;  /* Return success for unknown commands */
+        pr_err("*** vic_proc_write: ERROR - Unknown command: '%s' ***\n", cmd_buf);
+        ret = -EINVAL;  /* Return error for unknown commands to prevent loops */
     }
 
 cleanup:
