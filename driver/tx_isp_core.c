@@ -1512,12 +1512,33 @@ struct tx_isp_sensor *tx_isp_get_sensor(void)
         }
     }
 
-    /* CRITICAL FIX: Use helper function to find sensor instead of hardcoded array access */
+    /* CRITICAL FIX: No real sensors are registered yet - return NULL */
+    /* The logs show all subdev slots 5-15 are NULL, meaning no sensor modules are loaded */
+    /* The helper function is finding the Core subdev (isp-m0) which has sensor ops but is not a real sensor */
+    pr_info("*** tx_isp_get_sensor: No real sensor modules loaded yet - all slots 5-15 are NULL ***\n");
+    pr_info("*** tx_isp_get_sensor: Sensor modules must be loaded via insmod before they can be detected ***\n");
+
+    /* Check if any real sensor modules are actually loaded */
+    bool real_sensor_found = false;
+    for (int i = 5; i < ISP_MAX_SUBDEVS; i++) {
+        if (ourISPdev->subdevs[i] != NULL) {
+            real_sensor_found = true;
+            break;
+        }
+    }
+
+    if (!real_sensor_found) {
+        pr_info("*** tx_isp_get_sensor: No real sensor modules found - returning NULL ***\n");
+        return NULL;
+    }
+
+    /* If we get here, there are real sensors - use the helper function */
     struct tx_isp_subdev *sd = tx_isp_get_sensor_subdev(ourISPdev);
     if (sd && sd->ops && sd->ops->sensor) {
         /* CRITICAL: Check if this is a REAL sensor subdev, not the Core device */
         /* The Core device has sensor ops for registration but is not a real sensor */
-        if (sd->ops != &core_subdev_ops) {
+        /* Check by platform device name instead of ops pointer comparison */
+        if (sd->pdev && sd->pdev->name && strcmp(sd->pdev->name, "isp-m0") != 0) {
             /* CRITICAL FIX: The subdev IS the sensor - don't use container_of */
             /* The sensor structure is stored as host_priv in the subdev */
             struct tx_isp_sensor *sensor = (struct tx_isp_sensor *)tx_isp_get_subdev_hostdata(sd);

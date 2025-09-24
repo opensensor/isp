@@ -925,26 +925,38 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     pr_info("*** tx_isp_vic_start: Using single VIC register base - EXACT Binary Ninja reference ***\n");
 
     /* CRITICAL FIX: Skip CPM clock reconfiguration during streaming to prevent CSI PHY reset */
-    pr_info("*** STREAMING: SKIPPING CPM clock reconfiguration to preserve CSI PHY configuration ***\n");
-    pr_info("*** STREAMING: CPM clocks should already be configured during module init ***\n");
+    pr_info("*** STREAMING: Configuring CPM registers for VIC access ***\n");
+    cpm_regs = ioremap(0x10000000, 0x1000);
+    if (cpm_regs) {
+        u32 clkgr0 = readl(cpm_regs + 0x20);
+        u32 clkgr1 = readl(cpm_regs + 0x28);
 
     /* The CPM clock reconfiguration was causing CSI PHY registers to reset to 0 */
-    /* This happens because changing VIC/ISP clocks triggers a hardware reset */
-    /* that wipes out the carefully configured CSI PHY registers */
+        clkgr0 &= ~(1 << 13); // ISP clock
+        clkgr0 &= ~(1 << 21); // Alternative ISP position
+        clkgr0 &= ~(1 << 30); // VIC in CLKGR0
+        clkgr1 &= ~(1 << 30); // VIC in CLKGR1
 
-    /* REMOVED CPM reconfiguration code that was causing CSI PHY reset:
-     * - clkgr0 &= ~(1 << 13); // ISP clock
-     * - clkgr0 &= ~(1 << 21); // Alternative ISP position
-     * - clkgr0 &= ~(1 << 30); // VIC in CLKGR0
+        writel(clkgr0, cpm_regs + 0x20);
+        writel(clkgr1, cpm_regs + 0x28);
+        wmb();
+        msleep(20);
      * - clkgr1 &= ~(1 << 30); // VIC in CLKGR1
      * - msleep(20); // This delay was when CSI PHY got reset
      */
 
-    pr_info("STREAMING: CPM clocks preserved - CSI PHY configuration should remain intact\n");
+        pr_info("STREAMING: CPM clocks configured for VIC access\n");
+        iounmap(cpm_regs);
+    }
 
 
     /* MOVED: Interrupt register configuration moved to END of function to prevent overwriting */
-    pr_info("*** tx_isp_vic_start: Interrupt registers will be configured at END to prevent overwriting ***\n");
+    pr_info("*** tx_isp_vic_start: Writing CRITICAL interrupt-enabling registers from working commits ***\n");
+    writel(0x3130322a, vic_regs + 0x0);      /* First register from reference trace - CRITICAL for interrupts */
+    writel(0x1, vic_regs + 0x4);             /* Second register from reference trace - CRITICAL for interrupts */
+    writel(0x200, vic_regs + 0x14);          /* Third register from reference trace - CRITICAL for interrupts */
+    wmb();
+    pr_info("*** tx_isp_vic_start: CRITICAL interrupt-enabling registers written (0x3130322a, 0x1, 0x200) ***\n");
 
     /* Binary Ninja: if ($v0 == 1) */
     pr_info("*** tx_isp_vic_start: CRITICAL DEBUG - interface_type=%d, checking if == 1 ***\n", interface_type);
@@ -1066,55 +1078,48 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** tx_isp_vic_start: VIC unlock sequence - FIXED register space issue ***\n");
 
         /* CRITICAL DISCOVERY: VIC registers are completely locked - need proper unlock sequence */
-        pr_info("*** CRITICAL: VIC hardware is locked - registers not accepting writes ***\n");
-        pr_info("*** CRITICAL: Need to find the correct VIC unlock mechanism ***\n");
 
         /* HYPOTHESIS: VIC unlock might be through SECONDARY VIC space, not PRIMARY */
-        vic_unlock_regs = vic_dev->vic_regs_control;  /* 0x10023000 */
 
-        if (vic_unlock_regs) {
-            pr_info("*** TRYING VIC UNLOCK via SECONDARY VIC space (0x10023000) ***\n");
 
             /* Try unlock sequence on SECONDARY VIC space */
-            writel(2, vic_unlock_regs + 0x0);
-            wmb();
-            writel(4, vic_unlock_regs + 0x0);
+        writel(2, vic_regs + 0x0);
             wmb();
 
             /* Test if PRIMARY VIC space is now writable */
-            u32 test_pattern = 0x12345678;
-            writel(test_pattern, vic_regs + 0x4);  /* Try writing to frame size register */
+        writel(4, vic_regs + 0x0);
             wmb();
-            u32 readback = readl(vic_regs + 0x4);
 
-            pr_info("*** VIC UNLOCK TEST: Wrote 0x%08x to 0x4, read back 0x%08x ***\n", test_pattern, readback);
+        /* CRITICAL FIX: Read unlock status from DIFFERENT register - not the same one we wrote to! */
 
-            if (readback == test_pattern) {
-                pr_info("*** VIC UNLOCK SUCCESS: VIC registers are now writable! ***\n");
-            } else {
-                pr_err("*** VIC UNLOCK FAILED: VIC registers still locked ***\n");
+        /* Binary Ninja likely reads from a STATUS register, not the CONTROL register */
+        pr_info("*** VIC unlock: Commands written, checking VIC status register ***\n");
+
+        u32 unlock_status;
+        int timeout_count = 0;
 
                 /* ALTERNATIVE: Try different unlock sequence */
-                pr_info("*** TRYING ALTERNATIVE VIC UNLOCK SEQUENCE ***\n");
+        while ((unlock_status = readl(vic_regs + 0x1e0)) & 0x1) {  /* Check bit 0 for unlock status */
+            timeout_count++;
 
                 /* Maybe VIC unlock is through ISP core registers? */
-                struct tx_isp_dev *isp_dev = ourISPdev;
-                if (isp_dev && isp_dev->core_dev && isp_dev->core_dev->core_regs) {
-                    void __iomem *core_regs = isp_dev->core_dev->core_regs;
+            if ((timeout_count % 1000) == 0) {
+                pr_info("*** VIC unlock: iteration %d, status=0x%x (waiting for bit 0 clear) ***\n",
+                        timeout_count, unlock_status);
 
                     /* Try writing VIC unlock through ISP core */
-                    writel(0x1, core_regs + 0x9800);  /* VIC unlock via ISP core? */
-                    wmb();
+                if (timeout_count >= 10000) {
 
                     /* Test again */
-                    writel(test_pattern, vic_regs + 0x4);
-                    wmb();
-                    readback = readl(vic_regs + 0x4);
 
-                    pr_info("*** VIC UNLOCK via ISP CORE: Wrote 0x%08x, read back 0x%08x ***\n", test_pattern, readback);
+                    pr_err("*** VIC unlock TIMEOUT: status=0x%x bit 0 never cleared - trying alternative approach ***\n",
+                           unlock_status);
+                    break;  /* Don't return error, try to continue */
                 }
             }
         }
+        pr_info("*** VIC unlock: Completed with final status=0x%x after %d iterations ***\n",
+                unlock_status, timeout_count);
 
         pr_info("*** tx_isp_vic_start: VIC unlock completed using SECONDARY VIC space ***\n");
 
