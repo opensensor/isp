@@ -624,7 +624,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 
 label_123f4:
     /* Binary Ninja: GPIO handling section */
-    extern int gpio_switch_state;
+    /* gpio_switch_state is already defined as static variable above */
 
     /* Binary Ninja: if (gpio_switch_state != 0) */
     if (gpio_switch_state != 0) {
