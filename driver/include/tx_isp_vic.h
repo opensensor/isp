@@ -172,4 +172,8 @@ int vic_mdma_enable(struct tx_isp_vic_device *vic_dev, int channel, int dual_cha
 /* VIC core operations IOCTL handler */
 int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 
+/* Sensor dimension caching functions */
+void cache_sensor_dimensions_from_proc(void);
+void get_cached_sensor_dimensions(u32 *width, u32 *height);
+
 #endif /* __TX_ISP_VIC_H__ */

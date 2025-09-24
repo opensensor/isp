@@ -739,6 +739,10 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
                 if (sd->ops && sd->ops->sensor) {
                     pr_info("*** SENSOR ops->sensor: %p ***\n", sd->ops->sensor);
                 }
+
+                /* CRITICAL FIX: Cache sensor dimensions now that sensor is loaded and /proc entries exist */
+                pr_info("*** SENSOR REGISTERED: Caching sensor dimensions from /proc/jz/sensor/ ***\n");
+                cache_sensor_dimensions_from_proc();
             } else {
                 pr_err("*** No available slot for sensor '%s' ***\n", dev_name);
             }

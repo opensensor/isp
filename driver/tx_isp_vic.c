@@ -2942,8 +2942,8 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* REMOVED: Manual linking - now handled automatically by tx_isp_subdev_init */
     pr_info("*** VIC PROBE: Device linking handled automatically by tx_isp_subdev_init ***\n");
 
-    /* CRITICAL FIX: Cache sensor dimensions during probe (process context - safe for file operations) */
-    cache_sensor_dimensions_from_proc();
+    /* CRITICAL FIX: Sensor dimensions will be cached when sensor module loads and calls tx_isp_subdev_init */
+    pr_info("*** VIC PROBE: Sensor dimensions will be cached when sensor module loads ***\n");
 
     /* CRITICAL FIX: tx_isp_subdev_pipo will be called from tisp_init during core initialization */
     /* This matches the working reference where it's called from tisp_init, not probe */
