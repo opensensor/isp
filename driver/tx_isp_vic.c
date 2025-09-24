@@ -1647,6 +1647,53 @@ ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, 
         return -ENODEV;
     }
 
+    /* Debug: Check vic_dev structure integrity */
+    pr_err("*** vic_proc_write: vic_dev=%p ***\n", vic_dev);
+    pr_err("*** vic_proc_write: vic_dev->width=%d, vic_dev->height=%d (UNINITIALIZED) ***\n", vic_dev->width, vic_dev->height);
+    pr_err("*** vic_proc_write: vic_dev->vic_regs=%p ***\n", vic_dev->vic_regs);
+    pr_err("*** vic_proc_write: isp_dev=%p, isp_dev->vic_dev=%p ***\n", isp_dev, isp_dev->vic_dev);
+
+    /* CRITICAL FIX: Read sensor dimensions from /proc/jz/sensor/ */
+    struct file *width_file, *height_file;
+    char width_buf[16], height_buf[16];
+    int width = 1920, height = 1080;  /* Default values */
+    mm_segment_t old_fs;
+    loff_t pos;
+
+    old_fs = get_fs();
+    set_fs(KERNEL_DS);
+
+    /* Read width from /proc/jz/sensor/width */
+    width_file = filp_open("/proc/jz/sensor/width", O_RDONLY, 0);
+    if (!IS_ERR(width_file)) {
+        pos = 0;
+        if (vfs_read(width_file, width_buf, sizeof(width_buf)-1, &pos) > 0) {
+            width_buf[sizeof(width_buf)-1] = '\0';
+            width = simple_strtol(width_buf, NULL, 10);
+        }
+        filp_close(width_file, NULL);
+    }
+
+    /* Read height from /proc/jz/sensor/height */
+    height_file = filp_open("/proc/jz/sensor/height", O_RDONLY, 0);
+    if (!IS_ERR(height_file)) {
+        pos = 0;
+        if (vfs_read(height_file, height_buf, sizeof(height_buf)-1, &pos) > 0) {
+            height_buf[sizeof(height_buf)-1] = '\0';
+            height = simple_strtol(height_buf, NULL, 10);
+        }
+        filp_close(height_file, NULL);
+    }
+
+    set_fs(old_fs);
+
+    /* Update vic_dev with correct sensor dimensions */
+    vic_dev->width = width;
+    vic_dev->height = height;
+
+    pr_err("*** vic_proc_write: FIXED - vic_dev->width=%d, vic_dev->height=%d (from sensor) ***\n",
+           vic_dev->width, vic_dev->height);
+
     /* Allocate buffer for command */
     if (count < 32) {  /* Use local buffer for small commands */
         cmd_buf = local_buf;
