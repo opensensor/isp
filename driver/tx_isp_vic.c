@@ -1120,25 +1120,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     pr_info("*** VIC INTERRUPT CONFIG: Applied WORKING REFERENCE interrupt configuration (0x1e0/0x1e8) ***\n");
 
-    pr_info("*** VIC INTERRUPT CONFIG: Applied WORKING BRANCH interrupt configuration AFTER VIC unlock ***\n");
-
-    /* Verify interrupt register writes were accepted - WORKING REFERENCE registers */
-    u32 verify_int_enable = readl(vic_interrupt_regs + 0x1e0);
-    u32 verify_int_mask = readl(vic_interrupt_regs + 0x1e8);
-
-    pr_info("*** VIC INTERRUPT VERIFY (WORKING REFERENCE): 0x1e0=0x%08x (expected 0xffffffff), 0x1e8=0x%08x (expected 0x0) ***\n",
-            verify_int_enable, verify_int_mask);
-
-    if (verify_int_enable == 0xffffffff && verify_int_mask == 0x0) {
-        pr_info("*** VIC INTERRUPT SUCCESS: WORKING REFERENCE interrupt registers configured correctly! ***\n");
-    } else {
-        pr_err("*** VIC INTERRUPT FAILURE: WORKING REFERENCE interrupt register configuration failed ***\n");
-        pr_err("*** VIC INTERRUPT: Expected: 0x1e0=0xffffffff, 0x1e8=0x0 ***\n");
-        pr_err("*** VIC INTERRUPT: int_enable_ok=%d, int_mask_ok=%d ***\n",
-               (verify_int_enable == 0xffffffff) ? 1 : 0,
-               (verify_int_mask == 0x0) ? 1 : 0);
-    }
-
     /* CRITICAL FIX: Configure VIC dimensions and control BEFORE interrupt registers */
     pr_info("*** tx_isp_vic_start: Configuring VIC hardware prerequisites for interrupt registers ***\n");
 
