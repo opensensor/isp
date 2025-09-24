@@ -1724,7 +1724,8 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 }
 
                 /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
-                vic_framedone_irq_function(vic_dev);
+                printk(KERN_ALERT "*** VIC IRQ: TEMPORARILY SKIPPING vic_framedone_irq_function to prevent recursion ***\n");
+                /* vic_framedone_irq_function(vic_dev); */
             }
 
             /* Binary Ninja: Error handling for frame asfifo overflow */
@@ -1808,10 +1809,12 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
 
             /* Binary Ninja: MDMA interrupt handling */
             if ((v1_10 & 1) != 0) {
-                vic_mdma_irq_function(vic_dev, 0);
+                printk(KERN_ALERT "*** VIC IRQ: TEMPORARILY SKIPPING vic_mdma_irq_function(0) to prevent recursion ***\n");
+                /* vic_mdma_irq_function(vic_dev, 0); */
             }
             if ((v1_10 & 2) != 0) {
-                vic_mdma_irq_function(vic_dev, 1);
+                printk(KERN_ALERT "*** VIC IRQ: TEMPORARILY SKIPPING vic_mdma_irq_function(1) to prevent recursion ***\n");
+                /* vic_mdma_irq_function(vic_dev, 1); */
             }
             if ((v1_10 & 4) != 0) {
                 pr_err("Err [VIC_INT] : dma arb trans done ovf!!!\n");
