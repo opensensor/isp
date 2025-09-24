@@ -895,8 +895,9 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
         irq_info->handler = isp_irq_handle;
         /* Binary Ninja: arg2[2] = tx_isp_disable_irq */
         irq_info->data = irq_info;  /* Store self-reference for callbacks */
-        /* Binary Ninja: tx_isp_disable_irq(arg2) - initially disable IRQ */
-        tx_isp_disable_irq(irq_info);
+        /* CRITICAL FIX: Do NOT disable IRQ after registration - working version keeps IRQs enabled */
+        /* tx_isp_disable_irq(irq_info); -- REMOVED: This was killing VIC interrupts */
+        pr_info("*** tx_isp_request_irq: IRQ %d LEFT ENABLED (working version behavior) ***\n", irq_num);
 
         pr_info("*** tx_isp_request_irq: IRQ %d registered successfully for %s ***\n", irq_num, dev_name(&pdev->dev));
     } else {
