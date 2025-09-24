@@ -287,9 +287,14 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
         return -EINVAL;
     }
 
-    // CRITICAL: Use PRIMARY VIC space for interrupt configuration
-    vic_base = vic_dev->vic_regs;  // Use primary VIC space (0x133e0000)
-    pr_info("*** VIC HW INIT: Using PRIMARY VIC space for interrupt configuration ***\n");
+    // CRITICAL ROOT CAUSE FIX: Try SECONDARY VIC space for interrupt configuration
+    // The primary VIC space (0x133e0000) may be for data/control, secondary (0x10023000) for interrupts
+    vic_base = vic_dev->vic_ctrl_regs;  // Use secondary VIC space (0x10023000)
+    if (!vic_base) {
+        pr_err("tx_isp_vic_hw_init: No secondary VIC registers available, falling back to primary\n");
+        vic_base = vic_dev->vic_regs;  // Fallback to primary VIC space
+    }
+    pr_info("*** VIC HW INIT: Using SECONDARY VIC space (0x10023000) for interrupt configuration ***\n");
 
     /* CRITICAL FIX: Configure VIC interrupts during hardware init - EXACTLY like working branch */
     /* The working branch configures registers 0x04 and 0x0c in tx_isp_vic_hw_init() */
