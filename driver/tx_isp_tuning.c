@@ -4076,8 +4076,26 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
                                 ret = tisp_dpc_get_par_cfg(&param_ptr[3], &param_ptr[1]);
                                 break;
                             case 5:  /* tx_isp_subdev_pipo */
-                                //ret = tx_isp_subdev_pipo((struct tx_isp_subdev *)&param_ptr[3], &param_ptr[1]);
-								ret = 0; // TODO
+                                pr_info("*** CRITICAL: Enabling tx_isp_subdev_pipo - this will start VIC frame channel streaming! ***\n");
+
+                                /* CRITICAL FIX: Get VIC subdev from global ISP device */
+                                extern struct tx_isp_dev *ourISPdev;
+                                if (ourISPdev && ourISPdev->vic_dev) {
+                                    struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                                    void *raw_pipe[8] = {NULL}; /* 8 function pointers as per Binary Ninja */
+
+                                    pr_info("*** CALLING tx_isp_subdev_pipo with VIC subdev %p ***\n", &vic_dev->sd);
+                                    ret = tx_isp_subdev_pipo(&vic_dev->sd, raw_pipe);
+                                    if (ret == 0) {
+                                        pr_info("*** SUCCESS: tx_isp_subdev_pipo completed - VIC frame channel streaming ENABLED! ***\n");
+                                        pr_info("*** VIC interrupts should now fire! ***\n");
+                                    } else {
+                                        pr_err("*** ERROR: tx_isp_subdev_pipo failed: %d ***\n", ret);
+                                    }
+                                } else {
+                                    pr_err("*** ERROR: No VIC device available for tx_isp_subdev_pipo ***\n");
+                                    ret = -ENODEV;
+                                }
                                 break;
                             case 6:  /* tisp_rdns_get_par_cfg */
                                 ret = tisp_rdns_get_par_cfg(&param_ptr[3], &param_ptr[1]);
