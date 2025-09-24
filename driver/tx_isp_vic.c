@@ -941,9 +941,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(clkgr1, cpm_regs + 0x28);
         wmb();
         msleep(20);
-     * - clkgr1 &= ~(1 << 30); // VIC in CLKGR1
-     * - msleep(20); // This delay was when CSI PHY got reset
-     */
 
         pr_info("STREAMING: CPM clocks configured for VIC access\n");
         iounmap(cpm_regs);
