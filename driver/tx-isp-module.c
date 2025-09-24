@@ -1710,41 +1710,45 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         printk(KERN_ALERT "*** VIC IRQ: Register writes completed ***\n");
 
         /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
+        printk(KERN_ALERT "*** VIC IRQ: vic_start_ok=%u, v1_7=0x%x, v1_10=0x%x ***\n", vic_start_ok, v1_7, v1_10);
+
         if (vic_start_ok != 0) {
             /* Binary Ninja: if (($v1_7 & 1) != 0) */
             if ((v1_7 & 1) != 0) {
                 /* Binary Ninja: *($s0 + 0x160) += 1 */
                 vic_dev->frame_count++;
-                pr_info("*** VIC FRAME DONE INTERRUPT: Frame completion detected (count=%u) ***\n", vic_dev->frame_count);
+                printk(KERN_ALERT "*** VIC SUCCESS: FRAME DONE INTERRUPT detected (count=%u) ***\n", vic_dev->frame_count);
 
                 /* CRITICAL: Also increment main ISP frame counter for /proc/jz/isp/isp-w02 */
                 if (isp_dev) {
                     isp_dev->core_dev->frame_count++;
-                    pr_info("*** ISP FRAME COUNT UPDATED: %u (for /proc/jz/isp/isp-w02) ***\n", isp_dev->core_dev->frame_count);
+                    printk(KERN_ALERT "*** VIC SUCCESS: ISP FRAME COUNT UPDATED: %u (for /proc/jz/isp/isp-w02) ***\n", isp_dev->core_dev->frame_count);
                 }
 
                 /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
                 printk(KERN_ALERT "*** VIC IRQ: TEMPORARILY SKIPPING vic_framedone_irq_function to prevent recursion ***\n");
                 /* vic_framedone_irq_function(vic_dev); */
+            } else {
+                printk(KERN_ALERT "*** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***\n");
             }
 
             /* Binary Ninja: Error handling for frame asfifo overflow */
             if ((v1_7 & 0x200) != 0) {
-                pr_err("Err [VIC_INT] : frame asfifo ovf!!!!!\n");
+                printk(KERN_ALERT "*** VIC ERROR: frame asfifo overflow (bit 9) ***\n");
             }
 
             /* Binary Ninja: Error handling for horizontal errors */
             if ((v1_7 & 0x400) != 0) {
-                pr_err("Err [VIC_INT] : hor err ch0 !!!!! 0x3a8 = 0x%08x\n", readl(vic_regs + 0x3a8));
+                printk(KERN_ALERT "*** VIC ERROR: horizontal error ch0 (bit 10) - reg 0x3a8 = 0x%08x ***\n", readl(vic_regs + 0x3a8));
             }
             if ((v1_7 & 0x800) != 0) {
-                pr_err("Err [VIC_INT] : hor err ch1 !!!!!\n");
+                printk(KERN_ALERT "*** VIC ERROR: horizontal error ch1 (bit 11) ***\n");
             }
             if ((v1_7 & 0x1000) != 0) {
-                pr_err("Err [VIC_INT] : hor err ch2 !!!!!\n");
+                printk(KERN_ALERT "*** VIC ERROR: horizontal error ch2 (bit 12) ***\n");
             }
             if ((v1_7 & 0x2000) != 0) {
-                pr_err("Err [VIC_INT] : hor err ch3 !!!!!\n");
+                printk(KERN_ALERT "*** VIC ERROR: horizontal error ch3 (bit 13) ***\n");
             }
 
             /* Binary Ninja: Error handling for vertical errors */
