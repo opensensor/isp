@@ -4059,46 +4059,25 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -EFAULT;
         }
 
-        /* Binary Ninja: Loop through subdevices for sensor register write */
-        void **s0_6 = (void **)&isp_dev->subdevs[0];
-        struct tx_isp_subdev *sd = (struct tx_isp_subdev *)*s0_6;
+        /* FIXED: Use proper subdev iteration instead of hardcoded array access */
+        for (int i = 0; i < ISP_MAX_SUBDEVS; i++) {
+            struct tx_isp_subdev *sd = isp_dev->subdevs[i];
+            if (!sd) continue;
+            /* Binary Ninja: void* $v0_54 = *(*($a0_21 + 0xc4) + 0xc) */
+            if (sd->ops && sd->ops->sensor) {
+                /* Binary Ninja: int32_t $v0_55 = *($v0_54 + 8) */
+                if (sd->ops->sensor->ioctl) {
+                    /* Binary Ninja: int32_t $v0_56 = $v0_56() */
+                    int32_t ret = sd->ops->sensor->ioctl(sd, 0x2000005, &var_98);
 
-        while (true) {
-            if (sd != NULL) {
-                /* Binary Ninja: void* $v0_54 = *(*($a0_21 + 0xc4) + 0xc) */
-                if (sd->ops && sd->ops->sensor) {
-                    /* Binary Ninja: int32_t $v0_55 = *($v0_54 + 8) */
-                    if (sd->ops->sensor->ioctl) {
-                        /* Binary Ninja: int32_t $v0_56 = $v0_55() */
-                        int32_t ret = sd->ops->sensor->ioctl(sd, 0x2000005, &var_98);
-                        s6_1 = ret;
-
-                        if (ret == 0) {
-                            s0_6++;
-                        } else {
-                            s0_6++;
-                            if (ret != 0xfffffdfd) {
-                                break;
-                            }
-                        }
-                    } else {
-                        s0_6++;
+                    if (ret != 0 && ret != 0xfffffdfd) {
+                        return ret;
                     }
-                } else {
-                    s0_6++;
                 }
-            } else {
-                s0_6++;
             }
-
-            if ((void *)s0_6 == (void *)&isp_dev->subdevs[ISP_MAX_SUBDEVS]) {
-                return 0;
-            }
-
-            sd = (struct tx_isp_subdev *)*s0_6;
         }
 
-        return s6_1;
+        return 0;
     }
 
     /* Binary Ninja: Handle 0xc0385650 - TX_ISP_SENSOR_G_REGISTER */
@@ -4107,42 +4086,22 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         int32_t copy_ret = copy_from_user(&var_98, (void __user *)arg, 0x38);
 
         if (copy_ret == 0) {
-            void **s0_7 = (void **)&isp_dev->subdevs[0];
-            struct tx_isp_subdev *sd = (struct tx_isp_subdev *)*s0_7;
+            /* FIXED: Use proper subdev iteration instead of hardcoded array access */
+            for (int i = 0; i < ISP_MAX_SUBDEVS; i++) {
+                struct tx_isp_subdev *sd = isp_dev->subdevs[i];
+                if (!sd) continue;
+                /* Binary Ninja: void* $v0_61 = *(*($a0_23 + 0xc4) + 0xc) */
+                if (sd->ops && sd->ops->sensor) {
+                    /* Binary Ninja: int32_t $v0_62 = *($v0_61 + 8) */
+                    if (sd->ops->sensor->ioctl) {
+                        /* Binary Ninja: int32_t $v0_63 = $v0_62() */
+                        int32_t ret = sd->ops->sensor->ioctl(sd, 0x2000004, &var_98);
 
-            /* Binary Ninja: Loop through subdevices */
-            while (true) {
-                if (sd != NULL) {
-                    /* Binary Ninja: void* $v0_61 = *(*($a0_23 + 0xc4) + 0xc) */
-                    if (sd->ops && sd->ops->sensor) {
-                        /* Binary Ninja: int32_t $v0_62 = *($v0_61 + 8) */
-                        if (sd->ops->sensor->ioctl) {
-                            /* Binary Ninja: int32_t $v0_63 = $v0_62() */
-                            int32_t ret = sd->ops->sensor->ioctl(sd, 0x2000004, &var_98);
-
-                            if (ret == 0) {
-                                s0_7++;
-                            } else {
-                                s0_7++;
-                                if (ret != 0xfffffdfd) {
-                                    return ret;
-                                }
-                            }
-                        } else {
-                            s0_7++;
+                        if (ret != 0 && ret != 0xfffffdfd) {
+                            return ret;
                         }
-                    } else {
-                        s0_7++;
                     }
-                } else {
-                    s0_7++;
                 }
-
-                if ((void *)s0_7 == (void *)&isp_dev->subdevs[ISP_MAX_SUBDEVS]) {
-                    break;
-                }
-
-                sd = (struct tx_isp_subdev *)*s0_7;
             }
 
             /* Binary Ninja: int32_t $v0_65 = private_copy_to_user(arg3, &var_98, 0x38) */
