@@ -979,15 +979,46 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     pr_info("*** VIC HARDWARE PREREQUISITES: Dimensions %dx%d, stride %d, MIPI mode 2 ***\n",
             width, height, width * 2);
 
-    /* NOW configure VIC interrupt registers - hardware should accept them */
-    writel(0xffffffff, vic_regs + 0x1e0);  /* Enable all VIC interrupts */
-    writel(0x0, vic_regs + 0x1e8);         /* Clear interrupt masks */
+    /* CRITICAL FIX: 0x1e0/0x1e8 are STATUS registers, not control registers! */
+    /* The Binary Ninja interrupt handler READS from these to check interrupt status */
+    /* We need to enable interrupts through CONTROL registers instead */
+
+    pr_info("*** VIC INTERRUPT CONFIG: Using CONTROL registers to enable interrupts (0x1e0/0x1e8 are status registers) ***\n");
+
+    /* CRITICAL: Enable VIC interrupts through control register 0x30c */
+    /* Based on git commit analysis, this is the actual interrupt enable register */
+    writel(0x1, vic_regs + 0x30c);  /* Enable frame done interrupt */
     wmb();
 
-    /* Verify interrupt configuration was accepted */
-    verify_int_en = readl(vic_regs + 0x1e0);
-    verify_int_mask = readl(vic_regs + 0x1e8);
-    pr_info("*** VIC INTERRUPT VERIFY: INT_EN=0x%08x, INT_MASK=0x%08x ***\n", verify_int_en, verify_int_mask);
+    /* CRITICAL: Also enable through VIC control register bits */
+    /* Enable frame processing interrupt in VIC control register */
+    u32 vic_ctrl = readl(vic_regs + 0x0);
+    vic_ctrl |= 0x2;  /* Set interrupt enable bit */
+    writel(vic_ctrl, vic_regs + 0x0);
+    wmb();
+
+    /* CRITICAL: Configure interrupt mask registers in CONTROL space if available */
+    if (vic_dev->vic_regs_control) {
+        pr_info("*** VIC INTERRUPT CONFIG: Configuring interrupt masks in CONTROL space ***\n");
+        /* Enable frame done interrupt mask */
+        writel(0xFFFFFFFE, vic_dev->vic_regs_control + 0x1e8);  /* Enable frame done interrupt (bit 0 clear) */
+        wmb();
+    }
+
+    /* NOW read the STATUS registers to verify interrupt hardware is ready */
+    verify_int_en = readl(vic_regs + 0x1e0);   /* Read interrupt status register */
+    verify_int_mask = readl(vic_regs + 0x1e8); /* Read interrupt mask status register */
+    pr_info("*** VIC INTERRUPT STATUS CHECK: STATUS=0x%08x, MASK_STATUS=0x%08x ***\n", verify_int_en, verify_int_mask);
+
+    /* Read control register to verify our enable bit was set */
+    u32 ctrl_verify = readl(vic_regs + 0x30c);
+    pr_info("*** VIC INTERRUPT CONTROL VERIFY: CTRL_0x30c=0x%08x ***\n", ctrl_verify);
+
+    if (ctrl_verify & 0x1) {
+        pr_info("*** VIC INTERRUPT: Frame done interrupt ENABLED via control register ***\n");
+    } else {
+        pr_warn("*** VIC INTERRUPT: Frame done interrupt NOT enabled - control register write failed ***\n");
+    }
 
     /* Binary Ninja: Final configuration registers */
     writel(0x100010, vic_regs + 0x1a4);
