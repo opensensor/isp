@@ -1456,27 +1456,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     pr_info("*** tx_isp_vic_start: VIC should now generate frame done interrupts! ***\n");
     pr_info("*** tx_isp_vic_start: VIC interrupt will be enabled by tx_vic_enable_irq callback ***\n");
 
-    /* CRITICAL TEST: Manually trigger VIC interrupt to test if handler is working */
-    pr_info("*** VIC MANUAL INTERRUPT TEST: Testing VIC interrupt handler manually ***\n");
-    extern struct tx_isp_dev *ourISPdev;
-    if (ourISPdev) {
-        /* Test 1: Call VIC interrupt handler directly */
-        pr_info("*** VIC TEST 1: Calling isp_vic_interrupt_service_routine directly ***\n");
-        irqreturn_t test_result = isp_vic_interrupt_service_routine(ourISPdev);
-        pr_info("*** VIC TEST 1: Manual interrupt handler returned %d ***\n", test_result);
-
-        /* Test 2: Call VIC frame done function directly */
-        pr_info("*** VIC TEST 2: Calling vic_framedone_irq_function directly ***\n");
-        if (ourISPdev->vic_dev) {
-            int frame_result = vic_framedone_irq_function(ourISPdev->vic_dev);
-            pr_info("*** VIC TEST 2: Manual frame done function returned %d ***\n", frame_result);
-        }
-
-        pr_info("*** VIC MANUAL INTERRUPT TEST: If these tests work, the issue is hardware interrupt generation ***\n");
-    } else {
-        pr_warn("*** VIC MANUAL INTERRUPT TEST: No ISP device available for testing ***\n");
-    }
-
     return 0;
 }
 

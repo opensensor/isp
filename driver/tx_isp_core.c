@@ -1902,22 +1902,42 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     {
         u32 status_legacy = readl(isp_regs + 0xb4);
         u32 status_new    = readl(isp_regs + 0x98b4);
+        printk(KERN_ALERT "*** ISP CORE: Read interrupt status - legacy=0x%08x, new=0x%08x ***\n", status_legacy, status_new);
+
         interrupt_status  = status_legacy ? status_legacy : status_new;
+        printk(KERN_ALERT "*** ISP CORE: Selected interrupt_status=0x%08x from %s bank ***\n",
+               interrupt_status, status_legacy ? "legacy(+0xb*)" : "new(+0x98b*)");
+
         /* Clear pending in the corresponding bank(s) */
-        if (status_legacy)
+        if (status_legacy) {
+            printk(KERN_ALERT "*** ISP CORE: Clearing legacy interrupt 0x%08x to reg +0xb8 ***\n", status_legacy);
             writel(status_legacy, isp_regs + 0xb8);
-        if (status_new)
+        }
+        if (status_new) {
+            printk(KERN_ALERT "*** ISP CORE: Clearing new interrupt 0x%08x to reg +0x98b8 ***\n", status_new);
             writel(status_new, isp_regs + 0x98b8);
+        }
         wmb();
+
+        /* CRITICAL DEBUG: Verify interrupt was actually cleared */
+        u32 verify_legacy = readl(isp_regs + 0xb4);
+        u32 verify_new = readl(isp_regs + 0x98b4);
+        printk(KERN_ALERT "*** ISP CORE: After clearing - legacy=0x%08x, new=0x%08x ***\n", verify_legacy, verify_new);
+
+        if (verify_legacy != 0 || verify_new != 0) {
+            printk(KERN_ALERT "*** ISP CORE CRITICAL: INTERRUPT NOT CLEARED! Still pending: legacy=0x%08x, new=0x%08x ***\n",
+                   verify_legacy, verify_new);
+        }
+
         if (interrupt_status != 0) {
-            pr_info("*** ISP CORE INTERRUPT: bank=%s status=0x%08x (legacy=0x%08x new=0x%08x) ***\n",
+            printk(KERN_ALERT "*** ISP CORE INTERRUPT: bank=%s status=0x%08x (legacy=0x%08x new=0x%08x) ***\n",
                     status_legacy ? "legacy(+0xb*)" : "new(+0x98b*)",
                     interrupt_status, status_legacy, status_new);
         } else if (isp_force_core_isr) {
-            pr_info("*** ISP CORE: FORCED FRAME DONE VIA VIC (no pending) ***\n");
+            printk(KERN_ALERT "*** ISP CORE: FORCED FRAME DONE VIA VIC (no pending) ***\n");
             interrupt_status = 1; /* Force Channel 0 frame-done path */
         } else {
-            pr_info("*** ISP CORE INTERRUPT: no pending (legacy=0x%08x new=0x%08x) ***\n",
+            printk(KERN_ALERT "*** ISP CORE INTERRUPT: no pending (legacy=0x%08x new=0x%08x) ***\n",
                      status_legacy, status_new);
             return IRQ_HANDLED; /* No interrupt to process */
         }

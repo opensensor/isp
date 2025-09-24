@@ -1,44 +1,44 @@
-[  266.912410] *** VIC IRQ: Read reg 0x1e8 = 0x0 ***
-[  266.917289] *** VIC IRQ: About to read reg 0x1e0 ***
-[  266.932623] *** VIC IRQ: Read reg 0x1e0 = 0x0 ***
-[  266.937503] *** VIC IRQ: Calculated v1_7 = 0x0 ***
-[  266.942438] *** VIC IRQ: Read v1_10 = 0x0 ***
-[  266.957060] *** VIC IRQ: About to write v1_7=0x0 to reg 0x1f0 ***
-[  266.972841] *** VIC IRQ: About to write v1_10=0x0 to reg 0x1f4 ***
-[  266.982841] *** VIC IRQ: Register writes completed ***
-[  266.988149] *** VIC IRQ: About to check vic_start_ok - vic_start_ok=1 ***
-[  266.999693] *** VIC IRQ: vic_start_ok=1, v1_7=0x0, v1_10=0x0 ***
-[  267.012857] *** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***
-[  267.022089] *** VIC IRQ COMPLETE: Processed v1_7=0x0, v1_10=0x0 - returning IRQ_HANDLED ***
-[  267.041891] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=80514000 ***
-[  267.049344] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
-[  267.057060] *** ISP CORE INTERRUPT HANDLER: IRQ 37 called, dev_id=80514000 ***
-[  267.064513] *** ISP CORE: About to process IRQ callbacks - interrupt_status=0x400 ***
-[  267.072593] *** ISP CORE INTERRUPT PROCESSING COMPLETE - returning IRQ_HANDLED ***
-[  267.122751] *** VIC INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
-[  267.141165] *** VIC IRQ: About to access isp_dev->vic_dev, isp_dev=80514000 ***
-[  267.151251] *** VIC IRQ: Got vic_dev=85ebe400 ***
-[  267.161356] *** VIC IRQ: Checking vic_dev validity: vic_dev=85ebe400 ***
-[  267.181552] *** VIC IRQ: About to access vic_dev->vic_regs ***
-[  267.187605] *** VIC IRQ: Got vic_regs=b0023000 ***
-[  267.202681] *** VIC IRQ: Checking vic_regs validity: vic_regs=b0023000 ***
-[  267.209804] *** VIC IRQ: vic_regs passed validity check - proceeding with register access ***
-[  267.227915] *** VIC IRQ: About to read VIC registers at b0023000 ***
-[  267.242848] *** VIC IRQ: About to read reg 0x1e8 ***
-[  267.252861] *** VIC IRQ: Read reg 0x1e8 = 0x0 ***
-[  267.257711] *** VIC IRQ: About to read reg 0x1e0 ***
-[  267.272852] *** VIC IRQ: Read reg 0x1e0 = 0x0 ***
-[  267.282859] *** VIC IRQ: Calculated v1_7 = 0x0 ***
-[  267.292855] *** VIC IRQ: Read v1_10 = 0x0 ***
-[  267.297356] *** VIC IRQ: About to write v1_7=0x0 to reg 0x1f0 ***
-[  267.313803] *** VIC IRQ: About to write v1_10=0x0 to reg 0x1f4 ***
-[  267.320181] *** VIC IRQ: Register writes completed ***
-[  267.342860] *** VIC IRQ: About to check vic_start_ok - vic_start_ok=1 ***
-[  267.357215] *** VIC IRQ: vic_start_ok=1, v1_7=0x0, v1_10=0x0 ***
-[  267.372843] *** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***
-[  267.379366] *** VIC IRQ COMPLETE: Processed v1_7=0x0, v1_10=0x0 - returning IRQ_HANDLED ***
-[  267.400078] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=80514000 ***
-[  267.407537] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
-[  267.415251] *** ISP CORE INTERRUPT HANDLER: IRQ 37 called, dev_id=80514000 ***
-[  267.422714] *** ISP CORE: About to process IRQ callbacks - interrupt_status=0x400 ***
-[  267.430788] *** ISP CORE INTERRUPT PROCESSING COMPLETE - returning IRQ_HANDLED ***
+   72.258532] *** VIC IRQ: Read reg 0x1e8 = 0x0 ***
+[   72.263411] *** VIC IRQ: About to read reg 0x1e0 ***
+[   72.268520] *** VIC IRQ: Read reg 0x1e0 = 0x0 ***
+[   72.283519] *** VIC IRQ: Calculated v1_7 = 0x0 ***
+[   72.288467] *** VIC IRQ: Read v1_10 = 0x0 ***
+[   72.303687] *** VIC IRQ: About to write v1_7=0x0 to reg 0x1f0 ***
+[   72.313793] *** VIC IRQ: About to write v1_10=0x0 to reg 0x1f4 ***
+[   72.328953] *** VIC IRQ: Register writes completed ***
+[   72.338688] *** VIC IRQ: About to check vic_start_ok - vic_start_ok=1 ***
+[   72.349071] *** VIC IRQ: vic_start_ok=1, v1_7=0x0, v1_10=0x0 ***
+[   72.366229] *** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***
+[   72.376327] *** VIC IRQ COMPLETE: Processed v1_7=0x0, v1_10=0x0 - returning IRQ_HANDLED ***
+[   72.397472] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=811b8000 ***
+[   72.404934] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
+[   72.412654] *** ISP CORE INTERRUPT HANDLER: IRQ 37 called, dev_id=811b8000 ***
+[   72.420103] *** ISP CORE: About to process IRQ callbacks - interrupt_status=0x400 ***
+[   72.428182] *** ISP CORE INTERRUPT PROCESSING COMPLETE - returning IRQ_HANDLED ***
+[   72.477274] *** VIC INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
+[   72.496688] *** VIC IRQ: About to access isp_dev->vic_dev, isp_dev=811b8000 ***
+[   72.506775] *** VIC IRQ: Got vic_dev=811b4000 ***
+[   72.516880] *** VIC IRQ: Checking vic_dev validity: vic_dev=811b4000 ***
+[   72.537068] *** VIC IRQ: About to access vic_dev->vic_regs ***
+[   72.543111] *** VIC IRQ: Got vic_regs=b0023000 ***
+[   72.558184] *** VIC IRQ: Checking vic_regs validity: vic_regs=b0023000 ***
+[   72.568271] *** VIC IRQ: vic_regs passed validity check - proceeding with register access ***
+[   72.582535] *** VIC IRQ: About to read VIC registers at b0023000 ***
+[   72.598946] *** VIC IRQ: About to read reg 0x1e8 ***
+[   72.604119] *** VIC IRQ: Read reg 0x1e8 = 0x0 ***
+[   72.614231] *** VIC IRQ: About to read reg 0x1e0 ***
+[   72.624340] *** VIC IRQ: Read reg 0x1e0 = 0x0 ***
+[   72.634446] *** VIC IRQ: Calculated v1_7 = 0x0 ***
+[   72.644552] *** VIC IRQ: Read v1_10 = 0x0 ***
+[   72.652188] *** VIC IRQ: About to write v1_7=0x0 to reg 0x1f0 ***
+[   72.668751] *** VIC IRQ: About to write v1_10=0x0 to reg 0x1f4 ***
+[   72.678839] *** VIC IRQ: Register writes completed ***
+[   72.688967] *** VIC IRQ: About to check vic_start_ok - vic_start_ok=1 ***
+[   72.695976] *** VIC IRQ: vic_start_ok=1, v1_7=0x0, v1_10=0x0 ***
+[   72.708132] *** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***
+[   72.718950] *** VIC IRQ COMPLETE: Processed v1_7=0x0, v1_10=0x0 - returning IRQ_HANDLED ***
+[   72.738250] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=811b8000 ***
+[   72.745702] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
+[   72.753425] *** ISP CORE INTERRUPT HANDLER: IRQ 37 called, dev_id=811b8000 ***
+[   72.760881] *** ISP CORE: About to process IRQ callbacks - interrupt_status=0x400 ***
+[   72.768957] *** ISP CORE INTERRUPT PROCESSING COMPLETE - returning IRQ_HANDLED ***
