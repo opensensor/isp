@@ -1673,7 +1673,14 @@ ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, 
         count--;
     }
 
-    pr_info("*** vic_proc_write: Processing command: '%s' ***\n", cmd_buf);
+    pr_err("*** vic_proc_write: Processing command: '%s' ***\n", cmd_buf);
+
+    /* Debug: Check frame_channels accessibility */
+    extern struct frame_channel_device frame_channels[];
+    pr_err("*** vic_proc_write: frame_channels[0] at %p ***\n", &frame_channels[0]);
+    pr_err("*** vic_proc_write: frame_channels[0].state at %p ***\n", &frame_channels[0].state);
+    pr_err("*** vic_proc_write: vbm_buffer_addresses=%p, vbm_buffer_count=%d ***\n",
+           frame_channels[0].state.vbm_buffer_addresses, frame_channels[0].state.vbm_buffer_count);
 
     /* Process "snapraw" command */
     if (strncmp(cmd_buf, "snapraw", 7) == 0) {
