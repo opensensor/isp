@@ -3913,14 +3913,7 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                             (struct tx_isp_vic_device *)host_dev->isp_dev->vic_dev : NULL;
                         bool is_streaming_mode = (vic_dev && vic_dev->state == 4);  /* Check VIC streaming state */
 
-                        if (is_streaming_mode) { /* SAFE: Use streaming state instead of raw offset */
-                            /* SAFE FIX: Replace dangerous offset arithmetic with safe operations */
-                            /* Binary Ninja: memset(s4_1 + 0x1c0, 0, 0x18) - clear callback area */
-                            /* SAFE: Use proper callback management instead of raw memory manipulation */
-                            pr_debug("ispcore_pad_event_handle: Setting up streaming callbacks for device %p\n", host_dev);
-
-                            /* SAFE: Store callback information in device structure instead of raw offsets */
-                            host_dev->isp_dev = (struct tx_isp_dev *)arg1;  /* Store ISP device reference */
+                        if (is_streaming_mode) {
                             
                             /* Complex loop for channel processing */
                             void* a0_3 = *((void**)s2);
