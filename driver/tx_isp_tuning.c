@@ -2063,7 +2063,6 @@ int tisp_init(void *sensor_info, char *param_name)
     int param_init_ret = tisp_param_operate_init();
     if (param_init_ret != 0) {
         pr_err("tisp_init: tisp_param_operate_init failed: %d\n", param_init_ret);
-        tisp_init_in_progress = false;  /* Reset guard on error */
         return param_init_ret;
     }
 
