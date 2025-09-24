@@ -1756,62 +1756,62 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
 
             /* Binary Ninja: Error handling for vertical errors */
             if ((v1_7 & 0x4000) != 0) {
-                pr_err("Err [VIC_INT] : ver err ch0 !!!!!\n");
+                printk(KERN_ALERT "*** VIC ERROR: vertical error ch0 (bit 14) ***\n");
             }
             if ((v1_7 & 0x8000) != 0) {
-                pr_err("Err [VIC_INT] : ver err ch1 !!!!!\n");
+                printk(KERN_ALERT "*** VIC ERROR: vertical error ch1 (bit 15) ***\n");
             }
             if ((v1_7 & 0x10000) != 0) {
-                pr_err("Err [VIC_INT] : ver err ch2 !!!!!\n");
+                printk(KERN_ALERT "*** VIC ERROR: vertical error ch2 (bit 16) ***\n");
             }
             if ((v1_7 & 0x20000) != 0) {
-                pr_err("Err [VIC_INT] : ver err ch3 !!!!!\n");
+                printk(KERN_ALERT "*** VIC ERROR: vertical error ch3 (bit 17) ***\n");
             }
 
             /* Binary Ninja: More error conditions */
             if ((v1_7 & 0x40000) != 0) {
-                pr_err("Err [VIC_INT] : hvf err !!!!!\n");
+                printk(KERN_ALERT "*** VIC ERROR: hvf error (bit 18) ***\n");
             }
             if ((v1_7 & 0x80000) != 0) {
-                pr_err("Err [VIC_INT] : dvp hcomp err!!!!\n");
+                printk(KERN_ALERT "*** VIC ERROR: dvp hcomp error (bit 19) ***\n");
             }
             if ((v1_7 & 0x100000) != 0) {
-                pr_err("Err [VIC_INT] : dma syfifo ovf!!!\n");
+                printk(KERN_ALERT "*** VIC ERROR: dma syfifo overflow (bit 20) ***\n");
             }
             if ((v1_7 & 0x200000) != 0) {
-                pr_err("Err [VIC_INT] : control limit err!!!\n");
+                printk(KERN_ALERT "*** VIC ERROR: control limit error (bit 21) ***\n");
             }
             if ((v1_7 & 0x400000) != 0) {
-                pr_err("Err [VIC_INT] : image syfifo ovf !!!\n");
+                printk(KERN_ALERT "*** VIC ERROR: image syfifo overflow (bit 22) ***\n");
             }
             if ((v1_7 & 0x800000) != 0) {
-                pr_err("Err [VIC_INT] : mipi fid asfifo ovf!!!\n");
+                printk(KERN_ALERT "*** VIC ERROR: mipi fid asfifo overflow (bit 23) ***\n");
             }
 
             /* Binary Ninja: MIPI error conditions */
             if ((v1_7 & 0x1000000) != 0) {
-                pr_err("Err [VIC_INT] : mipi ch0 hcomp err !!!\n");
+                printk(KERN_ALERT "*** VIC ERROR: mipi ch0 hcomp error (bit 24) ***\n");
             }
             if ((v1_7 & 0x2000000) != 0) {
-                pr_err("Err [VIC_INT] : mipi ch1 hcomp err !!!\n");
+                printk(KERN_ALERT "*** VIC ERROR: mipi ch1 hcomp error (bit 25) ***\n");
             }
             if ((v1_7 & 0x4000000) != 0) {
-                pr_err("Err [VIC_INT] : mipi ch2 hcomp err !!!\n");
+                printk(KERN_ALERT "*** VIC ERROR: mipi ch2 hcomp error (bit 26) ***\n");
             }
             if ((v1_7 & 0x8000000) != 0) {
-                pr_err("Err [VIC_INT] : mipi ch3 hcomp err !!!\n");
+                printk(KERN_ALERT "*** VIC ERROR: mipi ch3 hcomp error (bit 27) ***\n");
             }
             if ((v1_7 & 0x10000000) != 0) {
-                pr_err("Err [VIC_INT] : mipi ch0 vcomp err !!!\n");
+                printk(KERN_ALERT "*** VIC ERROR: mipi ch0 vcomp error (bit 28) ***\n");
             }
             if ((v1_7 & 0x20000000) != 0) {
-                pr_err("Err [VIC_INT] : mipi ch1 vcomp err !!!\n");
+                printk(KERN_ALERT "*** VIC ERROR: mipi ch1 vcomp error (bit 29) ***\n");
             }
             if ((v1_7 & 0x40000000) != 0) {
-                pr_err("Err [VIC_INT] : mipi ch2 vcomp err !!!\n");
+                printk(KERN_ALERT "*** VIC ERROR: mipi ch2 vcomp error (bit 30) ***\n");
             }
             if ((v1_7 & 0x80000000) != 0) {
-                pr_err("Err [VIC_INT] : mipi ch3 vcomp err !!!\n");
+                printk(KERN_ALERT "*** VIC ERROR: mipi ch3 vcomp error (bit 31) ***\n");
             }
 
             /* Binary Ninja: MDMA interrupt handling */
@@ -1824,26 +1824,27 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 /* vic_mdma_irq_function(vic_dev, 1); */
             }
             if ((v1_10 & 4) != 0) {
-                pr_err("Err [VIC_INT] : dma arb trans done ovf!!!\n");
+                printk(KERN_ALERT "*** VIC ERROR: dma arb trans done overflow (bit 2) ***\n");
             }
             if ((v1_10 & 8) != 0) {
-                pr_err("Err [VIC_INT] : dma chid ovf  !!!\n");
+                printk(KERN_ALERT "*** VIC ERROR: dma chid overflow (bit 3) ***\n");
             }
 
             /* Binary Ninja: Error handler for critical conditions */
             if ((v1_7 & 0xde00) != 0 && vic_start_ok == 1) {
-                pr_err("error handler!!!\n");
+                printk(KERN_ALERT "*** VIC CRITICAL: Error handler triggered - error_bits=0x%x ***\n", (v1_7 & 0xde00));
 
                 /* Binary Ninja: **($s0 + 0xb8) = 4 */
+                printk(KERN_ALERT "*** VIC ERROR RECOVERY: Setting VIC control to 4 ***\n");
                 writel(4, vic_regs + 0x0);
 
                 /* Binary Ninja: while (*$v0_70 != 0) */
                 u32 addr_ctl;
                 int timeout = 10000;
                 while ((addr_ctl = readl(vic_regs + 0x0)) != 0) {
-                    pr_err("addr ctl is 0x%x\n", addr_ctl);
+                    printk(KERN_ALERT "*** VIC ERROR RECOVERY: addr ctl is 0x%x ***\n", addr_ctl);
                     if (--timeout == 0) {
-                        pr_err("VIC error handler timeout\n");
+                        printk(KERN_ALERT "*** VIC ERROR RECOVERY: TIMEOUT - breaking loop ***\n");
                         break;
                     }
                     udelay(1);
