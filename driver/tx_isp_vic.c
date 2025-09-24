@@ -2928,17 +2928,10 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* CRITICAL FIX: Cache sensor dimensions during probe (process context - safe for file operations) */
     cache_sensor_dimensions_from_proc();
 
-    /* CRITICAL FIX: Initialize VIC frame channel streaming like working reference */
-    pr_info("*** VIC PROBE: Initializing VIC frame channel streaming (matching working reference) ***\n");
-    void *raw_pipe[8] = {NULL}; /* 8 function pointers as per Binary Ninja */
-
-    int pipo_ret = tx_isp_subdev_pipo(&vic_dev->sd, raw_pipe);
-    if (pipo_ret == 0) {
-        pr_info("*** VIC PROBE: tx_isp_subdev_pipo SUCCESS - VIC frame channel streaming ENABLED! ***\n");
-        pr_info("*** VIC PROBE: VIC interrupts should now fire when streaming starts! ***\n");
-    } else {
-        pr_err("*** VIC PROBE: tx_isp_subdev_pipo FAILED: %d ***\n", pipo_ret);
-    }
+    /* CRITICAL FIX: tx_isp_subdev_pipo will be called from userspace IOCTL (cmd 0x3000009) */
+    /* This matches the working reference where it's called from tisp_init, not probe */
+    pr_info("*** VIC PROBE: VIC frame channel streaming will be initialized via userspace IOCTL ***\n");
+    pr_info("*** VIC PROBE: Waiting for userspace to call VIC core ops IOCTL 0x3000009 ***\n");
 
     return 0;
 }
