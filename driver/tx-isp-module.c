@@ -628,10 +628,9 @@ void system_reg_write(u32 reg, u32 value)
         return;
     }
 
-    /* CRITICAL ROOT CAUSE FIX: Use main ISP device core_regs, not core subdevice */
-    /* The tuning system should write to the main ISP register space, not subdevice space */
-    /* Binary Ninja reference shows system_reg_write uses the main ISP core register base */
-    void __iomem *reg_base = ourISPdev->core_regs;
+    /* Binary Ninja EXACT: Get register base from core device structure at offset 0xb8 */
+    /* This should be core_dev->core_regs based on the structure layout */
+    void __iomem *reg_base = ourISPdev->core_dev->core_regs;
 
     if (!reg_base) {
         pr_warn("system_reg_write: No register base available for reg=0x%x val=0x%x\n", reg, value);
@@ -1491,16 +1490,8 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     /* *** CRITICAL: Map ISP CSI registers - Binary Ninja offset +0x13c region *** */
     /* Binary Ninja shows *($s0_1 + 0x13c) points to ISP CSI register region */
     /* This is the MIPI-specific CSI control registers within ISP */
-
-    /* CRITICAL FIX: Check if VIC device is ready before accessing vic_regs */
-    if (isp_dev->vic_dev && isp_dev->vic_dev->vic_regs) {
-        isp_csi_regs = isp_dev->vic_dev->vic_regs - 0x9a00 + 0x10000; /* ISP base + CSI offset */
-        pr_info("*** ISP CSI REGISTERS MAPPED: %p (Binary Ninja +0x13c region) ***\n", isp_csi_regs);
-    } else {
-        /* VIC device not ready yet - defer ISP CSI register mapping */
-        pr_info("*** ISP CSI REGISTERS: VIC device not ready - will map later when VIC is initialized ***\n");
-        isp_csi_regs = NULL;
-    }
+    isp_csi_regs = isp_dev->vic_dev->vic_regs - 0x9a00 + 0x10000; /* ISP base + CSI offset */
+    pr_info("*** ISP CSI REGISTERS MAPPED: %p (Binary Ninja +0x13c region) ***\n", isp_csi_regs);
 
     /* Binary Ninja: Store register addresses at correct offsets */
     /* *($v0 + 0xb8) = csi_basic_regs (basic CSI control) */

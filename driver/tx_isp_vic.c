@@ -1192,15 +1192,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     wmb();
     pr_info("*** tx_isp_vic_start: VIC processing enabled (0x0=0x1, 0x4=0x1) ***\n");
 
-    /* CRITICAL: VIC interrupt registers configured during module init, but vic_start_ok set here */
-    /* The working reference sets vic_start_ok AFTER VIC hardware is fully configured */
-    pr_info("*** VIC INTERRUPT CONFIG: VIC interrupt registers already configured - now setting vic_start_ok = 1 ***\n");
-
-    /* Set VIC start flag - CRITICAL for interrupt processing */
-    extern uint32_t vic_start_ok;
-    vic_start_ok = 1;
-    pr_info("*** VIC INTERRUPT CONFIG: vic_start_ok = 1 - VIC interrupts now enabled for processing ***\n");
-
     /* CRITICAL FIX: Configure VIC dimensions and control BEFORE interrupt registers */
     pr_info("*** tx_isp_vic_start: Configuring VIC hardware prerequisites for interrupt registers ***\n");
 
@@ -1240,15 +1231,30 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* CRITICAL FIX: VIC interrupt configuration must happen AFTER VIC unlock sequence */
     /* The magic value 0x3130322a in register 0x0 indicates CSI PHY coordination - this is CORRECT */
 
-    pr_info("*** VIC INTERRUPT CONFIG: VIC unlock sequence will be completed first, then interrupt config ***\n");
+    pr_info("*** VIC INTERRUPT CONFIG: Clearing pending interrupts ***\n");
+    writel(0, vic_regs + 0x00);  /* Clear ISR */
+    writel(0, vic_regs + 0x20);  /* Clear ISR1 */
+    wmb();
 
     /* NOTE: Interrupt control registers will be configured AFTER VIC unlock sequence below */
     /* STATUS registers will be checked after VIC unlock sequence completes */
-    verify_int_en = readl(vic_regs + 0x1e0);   /* Read interrupt status register */
-    verify_int_mask = readl(vic_regs + 0x1e8); /* Read interrupt mask status register */
-    pr_info("*** VIC INTERRUPT STATUS CHECK (BEFORE UNLOCK): STATUS=0x%08x, MASK_STATUS=0x%08x ***\n", verify_int_en, verify_int_mask);
+    pr_info("*** VIC INTERRUPT CONFIG: Configuring interrupt masks (WORKING BRANCH) ***\n");
+    writel(0x00000001, vic_regs + 0x04);  /* IMR - Initial mask */
+    wmb();
+    writel(0x00000000, vic_regs + 0x24);  /* IMR1 - Clear secondary mask */
+    wmb();
+    pr_info("*** VIC INTERRUPT CONFIG: Configuring ISP control interrupts (WORKING BRANCH) ***\n");
+    writel(0x07800438, vic_regs + 0x04);  /* IMR - Working branch value */
+    wmb();
+    writel(0xb5742249, vic_regs + 0x0c);  /* IMCR - Working branch value */
+    wmb();
     /* REMOVED: Duplicate interrupt configuration - now happens AFTER VIC unlock sequence */
-    pr_info("*** VIC INTERRUPT CONFIG: Interrupt configuration moved to AFTER VIC unlock sequence ***\n");
+    pr_info("*** VIC INTERRUPT CONFIG: Applying VIC interrupt system configuration (WORKING BRANCH) ***\n");
+    writel(0x2d0, vic_regs + 0x100);      /* Interrupt configuration - Working branch value */
+    wmb();
+    writel(0x2b, vic_regs + 0x14);        /* Interrupt control - Working branch value */
+    wmb();
+    pr_info("*** VIC INTERRUPT CONFIG: WORKING BRANCH interrupt configuration complete ***\n");
 
     /* CRITICAL MISSING PIECE: Enable ISP core interrupt generation at hardware level */
     pr_info("*** ISP CORE INTERRUPT CONFIG: Enabling ISP core interrupt generation (MISSING FROM CURRENT BRANCH) ***\n");
