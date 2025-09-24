@@ -1643,7 +1643,7 @@ void tx_isp_enable_irq(void *arg1)
 /* Forward declaration for ISP core interrupt handler */
 extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 
-/* isp_vic_interrupt_service_routine - SAFE implementation to prevent kernel panic */
+/* isp_vic_interrupt_service_routine - EXACT Binary Ninja MCP implementation */
 irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)arg1;
@@ -1652,99 +1652,176 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
     u32 v1_7, v1_10;
     extern uint32_t vic_start_ok;
 
-    /* CRITICAL SAFETY: Comprehensive parameter validation to prevent kernel panic */
+    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
     if (arg1 == NULL || (uintptr_t)arg1 >= 0xfffff001) {
-        pr_info("*** VIC IRQ: NULL or invalid arg1 pointer ***\n");
         return IRQ_HANDLED;
     }
 
-    /* CRITICAL DEBUG: Log every interrupt to see if they're coming through */
-    pr_info("*** VIC INTERRUPT HANDLER CALLED: arg1=%p ***\n", arg1);
-
-    /* CRITICAL SAFETY: Validate isp_dev structure integrity */
-    if (!virt_addr_valid(isp_dev) ||
-        (unsigned long)isp_dev < 0x80000000 ||
-        (unsigned long)isp_dev >= 0xfffff000) {
-        pr_err("*** VIC IRQ: Invalid isp_dev pointer 0x%p - preventing crash ***\n", isp_dev);
-        return IRQ_HANDLED;
-    }
-
-    /* CRITICAL SAFETY: Verify this is actually a tx_isp_dev structure */
-    /* Check if ourISPdev matches to ensure we have the right structure type */
-    extern struct tx_isp_dev *ourISPdev;
-    if (isp_dev != ourISPdev) {
-        pr_err("*** VIC IRQ: dev_id mismatch - expected ourISPdev=%p, got %p ***\n", ourISPdev, isp_dev);
-        return IRQ_HANDLED;
-    }
-
-    /* CRITICAL SAFETY: Validate vic_dev pointer before access */
+    /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
     vic_dev = isp_dev->vic_dev;
-    if (vic_dev == NULL || (uintptr_t)vic_dev >= 0xfffff001) {
-        pr_debug("*** VIC IRQ: No VIC device available ***\n");
-        return IRQ_HANDLED;
-    }
 
-    /* CRITICAL SAFETY: Validate vic_dev structure integrity */
-    if (!virt_addr_valid(vic_dev) ||
-        (unsigned long)vic_dev < 0x80000000 ||
-        (unsigned long)vic_dev >= 0xfffff000) {
-        pr_err("*** VIC IRQ: Invalid vic_dev pointer 0x%p - preventing crash ***\n", vic_dev);
-        return IRQ_HANDLED;
-    }
+    /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
+    if (vic_dev != NULL && (uintptr_t)vic_dev < 0xfffff001) {
+        /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
+        vic_regs = vic_dev->vic_regs;
 
-    /* CRITICAL FIX: Use PRIMARY VIC registers for interrupt handling - this is where interrupt registers are located */
-    vic_regs = vic_dev->vic_regs;  /* Use 0x133e0000 base for interrupt processing */
-    if (!vic_regs ||
-        (unsigned long)vic_regs < 0x80000000 ||
-        (unsigned long)vic_regs >= 0xfffff000) {
-        pr_debug("*** VIC IRQ: No PRIMARY VIC registers mapped - safe exit ***\n");
-        return IRQ_HANDLED;
-    }
+        /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
+        v1_7 = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);
 
-    /* CRITICAL DEBUG: Check VIC interrupt status registers to see if hardware is generating interrupts */
-    u32 int_status1 = readl(vic_regs + 0x1e0);
-    u32 int_status2 = readl(vic_regs + 0x1e4);
-    pr_info("*** VIC IRQ: STATUS1=0x%08x, STATUS2=0x%08x ***\n", int_status1, int_status2);
+        /* Binary Ninja: int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
+        v1_10 = (~readl(vic_regs + 0x1ec)) & readl(vic_regs + 0x1e4);
 
-    /* CRITICAL SAFETY: Additional check for vic_start_ok flag */
-    if (vic_start_ok == 0) {
-        pr_debug("*** VIC IRQ: vic_start_ok=0, interrupts disabled ***\n");
-        return IRQ_HANDLED;
-    }
+        /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7 */
+        writel(v1_7, vic_regs + 0x1f0);
 
-    /* SAFE: Read interrupt status registers with error handling */
-    v1_7 = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);
-    v1_10 = (~readl(vic_regs + 0x1ec)) & readl(vic_regs + 0x1e4);
+        /* Binary Ninja: *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
+        writel(v1_10, vic_regs + 0x1f4);
+        wmb();
 
-    /* SAFE: Clear interrupt status */
-    writel(v1_7, vic_regs + 0x1f0);
-    writel(v1_10, vic_regs + 0x1f4);
-    wmb();
+        /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
+        if (vic_start_ok != 0) {
+            /* Binary Ninja: if (($v1_7 & 1) != 0) */
+            if ((v1_7 & 1) != 0) {
+                /* Binary Ninja: *($s0 + 0x160) += 1 */
+                vic_dev->frame_count++;
+                pr_info("*** VIC FRAME DONE INTERRUPT: Frame completion detected (count=%u) ***\n", vic_dev->frame_count);
 
-    /* SAFE: Process interrupts only if vic_start_ok is set */
-    if (vic_start_ok != 0) {
-        /* CRITICAL FIX: Completely disable frame interrupt processing to prevent NULL pointer crashes */
-        if ((v1_7 & 1) != 0) {
-            /* EMERGENCY: Skip all vic_dev access - even validation is causing crashes */
-            pr_debug("VIC frame done interrupt - EMERGENCY: skipping all vic_dev access to prevent crash\n");
-            /* Don't access vic_dev at all - it's causing NULL pointer dereference at offset 0xc8 */
+                /* CRITICAL: Also increment main ISP frame counter for /proc/jz/isp/isp-w02 */
+                if (isp_dev) {
+                    isp_dev->frame_count++;
+                    pr_info("*** ISP FRAME COUNT UPDATED: %u (for /proc/jz/isp/isp-w02) ***\n", isp_dev->frame_count);
+                }
+
+                /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
+                vic_framedone_irq_function(vic_dev);
+            }
+
+            /* Binary Ninja: Error handling for frame asfifo overflow */
+            if ((v1_7 & 0x200) != 0) {
+                pr_err("Err [VIC_INT] : frame asfifo ovf!!!!!\n");
+            }
+
+            /* Binary Ninja: Error handling for horizontal errors */
+            if ((v1_7 & 0x400) != 0) {
+                pr_err("Err [VIC_INT] : hor err ch0 !!!!! 0x3a8 = 0x%08x\n", readl(vic_regs + 0x3a8));
+            }
+            if ((v1_7 & 0x800) != 0) {
+                pr_err("Err [VIC_INT] : hor err ch1 !!!!!\n");
+            }
+            if ((v1_7 & 0x1000) != 0) {
+                pr_err("Err [VIC_INT] : hor err ch2 !!!!!\n");
+            }
+            if ((v1_7 & 0x2000) != 0) {
+                pr_err("Err [VIC_INT] : hor err ch3 !!!!!\n");
+            }
+
+            /* Binary Ninja: Error handling for vertical errors */
+            if ((v1_7 & 0x4000) != 0) {
+                pr_err("Err [VIC_INT] : ver err ch0 !!!!!\n");
+            }
+            if ((v1_7 & 0x8000) != 0) {
+                pr_err("Err [VIC_INT] : ver err ch1 !!!!!\n");
+            }
+            if ((v1_7 & 0x10000) != 0) {
+                pr_err("Err [VIC_INT] : ver err ch2 !!!!!\n");
+            }
+            if ((v1_7 & 0x20000) != 0) {
+                pr_err("Err [VIC_INT] : ver err ch3 !!!!!\n");
+            }
+
+            /* Binary Ninja: More error conditions */
+            if ((v1_7 & 0x40000) != 0) {
+                pr_err("Err [VIC_INT] : hvf err !!!!!\n");
+            }
+            if ((v1_7 & 0x80000) != 0) {
+                pr_err("Err [VIC_INT] : dvp hcomp err!!!!\n");
+            }
+            if ((v1_7 & 0x100000) != 0) {
+                pr_err("Err [VIC_INT] : dma syfifo ovf!!!\n");
+            }
+            if ((v1_7 & 0x200000) != 0) {
+                pr_err("Err [VIC_INT] : control limit err!!!\n");
+            }
+            if ((v1_7 & 0x400000) != 0) {
+                pr_err("Err [VIC_INT] : image syfifo ovf !!!\n");
+            }
+            if ((v1_7 & 0x800000) != 0) {
+                pr_err("Err [VIC_INT] : mipi fid asfifo ovf!!!\n");
+            }
+
+            /* Binary Ninja: MIPI error conditions */
+            if ((v1_7 & 0x1000000) != 0) {
+                pr_err("Err [VIC_INT] : mipi ch0 hcomp err !!!\n");
+            }
+            if ((v1_7 & 0x2000000) != 0) {
+                pr_err("Err [VIC_INT] : mipi ch1 hcomp err !!!\n");
+            }
+            if ((v1_7 & 0x4000000) != 0) {
+                pr_err("Err [VIC_INT] : mipi ch2 hcomp err !!!\n");
+            }
+            if ((v1_7 & 0x8000000) != 0) {
+                pr_err("Err [VIC_INT] : mipi ch3 hcomp err !!!\n");
+            }
+            if ((v1_7 & 0x10000000) != 0) {
+                pr_err("Err [VIC_INT] : mipi ch0 vcomp err !!!\n");
+            }
+            if ((v1_7 & 0x20000000) != 0) {
+                pr_err("Err [VIC_INT] : mipi ch1 vcomp err !!!\n");
+            }
+            if ((v1_7 & 0x40000000) != 0) {
+                pr_err("Err [VIC_INT] : mipi ch2 vcomp err !!!\n");
+            }
+            if ((v1_7 & 0x80000000) != 0) {
+                pr_err("Err [VIC_INT] : mipi ch3 vcomp err !!!\n");
+            }
+
+            /* Binary Ninja: MDMA interrupt handling */
+            if ((v1_10 & 1) != 0) {
+                vic_mdma_irq_function(vic_dev, 0);
+            }
+            if ((v1_10 & 2) != 0) {
+                vic_mdma_irq_function(vic_dev, 1);
+            }
+            if ((v1_10 & 4) != 0) {
+                pr_err("Err [VIC_INT] : dma arb trans done ovf!!!\n");
+            }
+            if ((v1_10 & 8) != 0) {
+                pr_err("Err [VIC_INT] : dma chid ovf  !!!\n");
+            }
+
+            /* Binary Ninja: Error handler for critical conditions */
+            if ((v1_7 & 0xde00) != 0 && vic_start_ok == 1) {
+                pr_err("error handler!!!\n");
+
+                /* Binary Ninja: **($s0 + 0xb8) = 4 */
+                writel(4, vic_regs + 0x0);
+
+                /* Binary Ninja: while (*$v0_70 != 0) */
+                u32 addr_ctl;
+                int timeout = 10000;
+                while ((addr_ctl = readl(vic_regs + 0x0)) != 0) {
+                    pr_err("addr ctl is 0x%x\n", addr_ctl);
+                    if (--timeout == 0) {
+                        pr_err("VIC error handler timeout\n");
+                        break;
+                    }
+                    udelay(1);
+                }
+
+                /* Binary Ninja: Register restoration sequence */
+                u32 reg_val = readl(vic_regs + 0x104);
+                writel(reg_val, vic_regs + 0x104);
+
+                reg_val = readl(vic_regs + 0x108);
+                writel(reg_val, vic_regs + 0x108);
+
+                /* Binary Ninja: **($s0 + 0xb8) = 1 */
+                writel(1, vic_regs + 0x0);
+            }
         }
-
-        /* SAFE: Handle control limit error without dangerous reset sequence */
-        if ((v1_7 & 0x200000) != 0) {
-            pr_debug("VIC control limit error - handled safely\n");
-        }
-
-        /* CRITICAL FIX: Remove dangerous VIC reset sequence that was causing crashes */
-        /* The original Binary Ninja code was writing to VIC registers in a way that
-         * corrupted the hardware state and caused kernel panics. We'll handle errors
-         * more safely by just logging them. */
-        if ((v1_7 & 0xde00) != 0) {
-            pr_debug("VIC error condition 0x%x - logged safely without reset\n", v1_7 & 0xde00);
-            /* Don't perform dangerous hardware reset that was causing crashes */
-        }
     }
 
+    /* Binary Ninja: return 1 */
     return IRQ_HANDLED;
 }
 
