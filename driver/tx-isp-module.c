@@ -4544,13 +4544,6 @@ int private_platform_driver_register(struct platform_driver *drv)
     return platform_driver_register(drv);
 }
 
-/* private_platform_device_unregister - EXACT Binary Ninja MCP implementation */
-void private_platform_device_unregister(struct platform_device *pdev)
-{
-    /* Binary Ninja: Unregister platform device */
-    platform_device_unregister(pdev);
-}
-
 /* Error labels removed - Binary Ninja MCP implementation doesn't use them */
 
 /* tx_isp_module_init - EXACT Binary Ninja reference implementation */
