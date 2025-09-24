@@ -657,12 +657,12 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         ourISPdev->fs_dev = (struct frame_source_device *)fs_dev;
         pr_info("*** LINKED FS device: %p ***\n", fs_dev);
 
-        /* FS at index 3 - frame synchronization coordinates the already-initialized components */
-        if (ourISPdev->subdevs[3] == NULL) {
-            ourISPdev->subdevs[3] = &fs_dev->subdev;
-            pr_info("*** REGISTERED FS SUBDEV AT INDEX 3 WITH SUBDEV OPS ***\n");
+        /* FS - register using helper function instead of hardcoded index */
+        int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
+        if (slot >= 0) {
+            pr_info("*** REGISTERED FS SUBDEV AT SLOT %d WITH SUBDEV OPS ***\n", slot);
         } else {
-            pr_err("*** FS subdev slot (index 3) already occupied ***\n");
+            pr_err("*** Failed to register FS subdev - no available slots ***\n");
         }
 
     } else if (strcmp(dev_name, "isp-m0") == 0) {
