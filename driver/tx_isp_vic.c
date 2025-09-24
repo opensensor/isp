@@ -1322,10 +1322,20 @@ int vic_mdma_enable(struct tx_isp_vic_device *vic_dev, int channel, int dual_cha
     u32 width, height, stride, frame_size;
     u32 vic_control;
 
-    if (!vic_dev || !vic_dev->vic_regs) {
-        pr_err("vic_mdma_enable: Invalid VIC device\n");
+    pr_err("*** vic_mdma_enable: ENTRY - vic_dev=%p, channel=%d, buffer_count=%d, base_addr=0x%x ***\n",
+           vic_dev, channel, buffer_count, base_addr);
+
+    if (!vic_dev) {
+        pr_err("*** vic_mdma_enable: ERROR - vic_dev is NULL ***\n");
         return -EINVAL;
     }
+
+    if (!vic_dev->vic_regs) {
+        pr_err("*** vic_mdma_enable: ERROR - vic_dev->vic_regs is NULL ***\n");
+        return -EINVAL;
+    }
+
+    pr_err("*** vic_mdma_enable: Validation passed - vic_dev=%p, vic_regs=%p ***\n", vic_dev, vic_dev->vic_regs);
 
     /* CRITICAL SAFETY: Additional validation for VIC device structure */
     if ((unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff000) {
@@ -1618,7 +1628,8 @@ ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, 
     int ret = 0;
     bool use_local_buf = false;
 
-    pr_info("*** vic_proc_write: Processing write operation, count=%zu ***\n", count);
+    pr_err("*** vic_proc_write: ENTRY - Processing write operation, count=%zu ***\n", count);
+    pr_err("*** vic_proc_write: file=%p, buf=%p, ppos=%p ***\n", file, buf, ppos);
 
     if (!seq || !seq->private) {
         pr_err("vic_proc_write: Invalid file private data\n");
