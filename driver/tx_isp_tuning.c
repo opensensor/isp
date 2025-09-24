@@ -1541,8 +1541,22 @@ static int load_isp_tuning_file_real(const char *filename)
     return 0;
 }
 
+/* CRITICAL: Prevent recursive initialization that causes infinite handler registration */
+static bool tisp_init_in_progress = false;
+
 int tisp_init(void *sensor_info, char *param_name)
 {
+    /* CRITICAL: Prevent recursive initialization that causes infinite handler registration */
+    if (tisp_init_in_progress) {
+        printk(KERN_ALERT "*** tisp_init: RECURSIVE CALL DETECTED - preventing infinite loop ***\n");
+        printk(KERN_ALERT "*** tisp_init: Initialization already in progress - returning success ***\n");
+        return 0;
+    }
+
+    tisp_init_in_progress = true;
+    printk(KERN_ALERT "*** tisp_init: ENTRY - sensor_info=%p, param_name=%s ***\n",
+            sensor_info, param_name ? param_name : "NULL");
+
     extern struct tx_isp_dev *ourISPdev;
     struct {
         uint32_t width;
@@ -2086,6 +2100,10 @@ int tisp_init(void *sensor_info, char *param_name)
     pr_info("*** tisp_init: All hardware blocks enabled, registers configured, events ready ***\n");
 
     pr_info("*** tisp_init: INITIALIZATION COMPLETE - this function will never run again ***\n");
+
+    /* CRITICAL: Reset recursion guard to allow future legitimate calls */
+    tisp_init_in_progress = false;
+    printk(KERN_ALERT "*** tisp_init: Recursion guard reset - initialization complete ***\n");
 
     return 0;
 }
