@@ -24,6 +24,11 @@
 extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 
+/* Static variables to cache sensor dimensions (read once during probe) */
+static u32 cached_sensor_width = 1920;   /* Default fallback */
+static u32 cached_sensor_height = 1080;  /* Default fallback */
+static int sensor_dimensions_cached = 0; /* Flag to indicate if dimensions were read */
+
 /* Helper function to read sensor dimensions from /proc/jz/sensor/ files */
 static int read_sensor_dimensions(u32 *width, u32 *height)
 {
@@ -83,6 +88,43 @@ static int read_sensor_dimensions(u32 *width, u32 *height)
     }
 
     return ret;
+}
+
+/* Cache sensor dimensions during probe (process context - sleeping allowed) */
+static void cache_sensor_dimensions_from_proc(void)
+{
+    u32 width, height;
+    int ret;
+
+    pr_info("*** cache_sensor_dimensions_from_proc: Reading sensor dimensions during probe ***\n");
+
+    ret = read_sensor_dimensions(&width, &height);
+    if (ret == 0) {
+        cached_sensor_width = width;
+        cached_sensor_height = height;
+        sensor_dimensions_cached = 1;
+        pr_info("*** cache_sensor_dimensions_from_proc: Successfully cached %dx%d ***\n", width, height);
+    } else {
+        /* Keep defaults */
+        cached_sensor_width = 1920;
+        cached_sensor_height = 1080;
+        sensor_dimensions_cached = 1;  /* Mark as cached even with defaults */
+        pr_info("*** cache_sensor_dimensions_from_proc: Using default dimensions %dx%d ***\n",
+                cached_sensor_width, cached_sensor_height);
+    }
+}
+
+/* Get cached sensor dimensions (safe for atomic context) */
+static void get_cached_sensor_dimensions(u32 *width, u32 *height)
+{
+    if (!sensor_dimensions_cached) {
+        pr_warn("get_cached_sensor_dimensions: Dimensions not cached, using defaults\n");
+        *width = 1920;
+        *height = 1080;
+    } else {
+        *width = cached_sensor_width;
+        *height = cached_sensor_height;
+    }
 }
 
 /* VIC event callback structure for Binary Ninja compatibility */
@@ -1111,9 +1153,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     u32 width, height;
     u32 verify_int_en, verify_int_mask;
 
-    /* CRITICAL FIX: Read sensor dimensions from /proc/jz/sensor/ files instead of corrupted attributes */
-    read_sensor_dimensions(&width, &height);
-    pr_info("*** VIC DIMENSIONS: Using /proc/jz/sensor/ dimensions %dx%d (RELIABLE) ***\n", width, height);
+    /* CRITICAL FIX: Use cached sensor dimensions (safe for atomic context) */
+    get_cached_sensor_dimensions(&width, &height);
+    pr_info("*** VIC DIMENSIONS: Using cached sensor dimensions %dx%d (ATOMIC CONTEXT SAFE) ***\n", width, height);
 
     /* CRITICAL FIX: Skip interrupt-disrupting registers if VIC interrupts already working */
     if (vic_start_ok == 1) {
@@ -1846,9 +1888,9 @@ ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, 
     pr_err("*** vic_proc_write: vic_dev->vic_regs=%p ***\n", vic_dev->vic_regs);
     pr_err("*** vic_proc_write: isp_dev=%p, isp_dev->vic_dev=%p ***\n", isp_dev, isp_dev->vic_dev);
 
-    /* CRITICAL FIX: Read sensor dimensions using helper function */
+    /* CRITICAL FIX: Use cached sensor dimensions (safe for atomic context) */
     u32 width, height;
-    read_sensor_dimensions(&width, &height);
+    get_cached_sensor_dimensions(&width, &height);
 
     /* Update vic_dev with correct sensor dimensions */
     vic_dev->width = width;
@@ -2246,14 +2288,14 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         return NULL;
     }
 
-    /* CRITICAL FIX: Read sensor dimensions using helper function for consistency */
-    read_sensor_dimensions(&width, &height);
+    /* CRITICAL FIX: Use cached sensor dimensions (safe for atomic context) */
+    get_cached_sensor_dimensions(&width, &height);
 
     /* Update vic_dev with correct dimensions */
     vic_dev->width = width;
     vic_dev->height = height;
 
-    pr_info("vic_pipo_mdma_enable: Using /proc/jz/sensor/ dimensions %dx%d (RELIABLE)\n", width, height);
+    pr_info("vic_pipo_mdma_enable: Using cached sensor dimensions %dx%d (ATOMIC CONTEXT SAFE)\n", width, height);
     
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x308) = 1 */
     writel(1, vic_base + 0x308);
@@ -2882,6 +2924,9 @@ int tx_isp_vic_probe(struct platform_device *pdev)
 
     /* REMOVED: Manual linking - now handled automatically by tx_isp_subdev_init */
     pr_info("*** VIC PROBE: Device linking handled automatically by tx_isp_subdev_init ***\n");
+
+    /* CRITICAL FIX: Cache sensor dimensions during probe (process context - safe for file operations) */
+    cache_sensor_dimensions_from_proc();
 
     /* CRITICAL FIX: Initialize VIC frame channel streaming like working reference */
     pr_info("*** VIC PROBE: Initializing VIC frame channel streaming (matching working reference) ***\n");
