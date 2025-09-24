@@ -1004,16 +1004,19 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     /* STEP 1: Enable VIC MDMA interrupt via register 0x30 */
     /* Git commit 2b4d3d7270a4f058e13c8c2583fcd307507c3b3d shows this is the correct register */
+    pr_info("*** VIC INTERRUPT CONFIG: Writing 0x1 to register 0x30 (VIC MDMA interrupt) ***\n");
     writel(0x1, vic_regs + 0x30);  /* Enable VIC MDMA interrupt */
     wmb();
 
     /* STEP 2: Enable VIC MDMA completion interrupt via register 0x34 */
     /* Git commit 2b4d3d7270a4f058e13c8c2583fcd307507c3b3d shows this enables MDMA completion */
+    pr_info("*** VIC INTERRUPT CONFIG: Writing 0x1 to register 0x34 (VIC MDMA completion interrupt) ***\n");
     writel(0x1, vic_regs + 0x34);  /* Enable VIC MDMA completion interrupt */
     wmb();
 
     /* STEP 3: Unmask all VIC interrupt sources via register 0x38 */
     /* Git commit 2b4d3d7270a4f058e13c8c2583fcd307507c3b3d shows writing 0xFFFFFFFF unmasks all */
+    pr_info("*** VIC INTERRUPT CONFIG: Writing 0xFFFFFFFF to register 0x38 (unmask all interrupt sources) ***\n");
     writel(0xFFFFFFFF, vic_regs + 0x38);  /* Unmask all VIC interrupt sources */
     wmb();
 
@@ -1036,14 +1039,17 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_warn("*** VIC INTERRUPT CONFIG: No secondary VIC space available ***\n");
     }
 
-    /* Verify interrupt control registers were set correctly AFTER VIC unlock */
+    /* Verify CORRECT interrupt control registers were set AFTER VIC unlock */
     u32 ctrl_0x0_verify = readl(vic_regs + 0x0);
     u32 ctrl_0x4_verify = readl(vic_regs + 0x4);
-    u32 ctrl_0x300_verify = readl(vic_regs + 0x300);
-    u32 ctrl_0x30c_verify = readl(vic_regs + 0x30c);
+    u32 ctrl_0x30_verify = readl(vic_regs + 0x30);   /* VIC MDMA interrupt enable */
+    u32 ctrl_0x34_verify = readl(vic_regs + 0x34);   /* VIC MDMA completion interrupt enable */
+    u32 ctrl_0x38_verify = readl(vic_regs + 0x38);   /* VIC interrupt source unmask */
 
-    pr_info("*** VIC INTERRUPT CONTROL VERIFY (AFTER UNLOCK): 0x0=0x%08x, 0x4=0x%08x, 0x300=0x%08x, 0x30c=0x%08x ***\n",
-            ctrl_0x0_verify, ctrl_0x4_verify, ctrl_0x300_verify, ctrl_0x30c_verify);
+    pr_info("*** VIC INTERRUPT CONTROL VERIFY (CORRECT REGISTERS): 0x0=0x%08x, 0x4=0x%08x ***\n",
+            ctrl_0x0_verify, ctrl_0x4_verify);
+    pr_info("*** VIC INTERRUPT CONTROL VERIFY (INTERRUPT REGS): 0x30=0x%08x, 0x34=0x%08x, 0x38=0x%08x ***\n",
+            ctrl_0x30_verify, ctrl_0x34_verify, ctrl_0x38_verify);
 
     /* Also verify secondary space if available */
     if (vic_dev->vic_regs_control) {
@@ -1051,11 +1057,11 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** VIC INTERRUPT CONTROL VERIFY (SECONDARY): 0x1e8=0x%08x ***\n", sec_0x1e8_verify);
     }
 
-    if ((ctrl_0x300_verify & 0x1) && (ctrl_0x30c_verify & 0x7)) {
-        pr_info("*** VIC INTERRUPT: Interrupt control registers set correctly AFTER unlock - interrupts should fire! ***\n");
+    if ((ctrl_0x30_verify & 0x1) && (ctrl_0x34_verify & 0x1) && (ctrl_0x38_verify == 0xFFFFFFFF)) {
+        pr_info("*** VIC INTERRUPT: CORRECT interrupt control registers set - interrupts should fire! ***\n");
     } else {
-        pr_warn("*** VIC INTERRUPT: Interrupt control register writes still failed even after unlock ***\n");
-        pr_warn("*** VIC INTERRUPT: Expected: 0x300 & 0x1, 0x30c & 0x7 ***\n");
+        pr_warn("*** VIC INTERRUPT: Some CORRECT interrupt control register writes failed ***\n");
+        pr_warn("*** VIC INTERRUPT: Expected: 0x30 & 0x1, 0x34 & 0x1, 0x38 == 0xFFFFFFFF ***\n");
     }
 
     /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
