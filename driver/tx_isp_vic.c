@@ -1018,14 +1018,24 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     read_sensor_dimensions(&width, &height);
     pr_info("*** VIC DIMENSIONS: Using /proc/jz/sensor/ dimensions %dx%d (RELIABLE) ***\n", width, height);
 
-    /* Configure VIC dimensions - CRITICAL for interrupt register acceptance */
-    writel((width << 16) | height, vic_regs + 0x10);  /* VIC dimensions */
-    writel(width * 2, vic_regs + 0x14);               /* VIC stride for 16-bit */
-    wmb();
+    /* CRITICAL FIX: Skip interrupt-disrupting registers if VIC interrupts already working */
+    if (vic_start_ok == 1) {
+        pr_info("*** VIC REGISTER PROTECTION: SKIPPING interrupt-disrupting registers 0xc, 0x10, 0x14 - VIC interrupts already working ***\n");
+    } else {
+        pr_info("*** VIC REGISTER CONFIG: Writing VIC configuration registers (vic_start_ok=%d) ***\n", vic_start_ok);
 
-    /* Configure VIC control register - CRITICAL prerequisite */
-    writel(2, vic_regs + 0xc);  /* MIPI mode (2, not 3) - matches working reference */
-    wmb();
+        /* Configure VIC dimensions - CRITICAL for interrupt register acceptance */
+        writel((width << 16) | height, vic_regs + 0x10);  /* VIC dimensions */
+        writel(width * 2, vic_regs + 0x14);               /* VIC stride for 16-bit */
+        wmb();
+
+        /* Configure VIC control register - CRITICAL prerequisite */
+        writel(2, vic_regs + 0xc);  /* MIPI mode (2, not 3) - matches working reference */
+        wmb();
+
+        pr_info("*** VIC REGISTER CONFIG: VIC configuration registers written (0xc=2, 0x10=0x%08x, 0x14=%d) ***\n",
+                (width << 16) | height, width * 2);
+    }
 
     pr_info("*** VIC HARDWARE PREREQUISITES: Dimensions %dx%d, stride %d, MIPI mode 2 ***\n",
             width, height, width * 2);
@@ -1092,14 +1102,23 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     if (isp_dev && isp_dev->core_dev && isp_dev->core_dev->core_regs) {
         void __iomem *core = isp_dev->core_dev->core_regs;
 
-        /* CRITICAL: Enable ISP core interrupt generation at hardware level */
-        /* Binary Ninja: system_reg_write(0x30, 0xffffffff) - Enable all interrupt sources */
-        writel(0xffffffff, core + 0x30);
-        wmb();
+        /* CRITICAL FIX: Skip interrupt-disrupting ISP core registers if VIC interrupts already working */
+        if (vic_start_ok == 1) {
+            pr_info("*** ISP CORE PROTECTION: SKIPPING interrupt-disrupting core registers 0x30, 0x10 - VIC interrupts already working ***\n");
+        } else {
+            pr_info("*** ISP CORE CONFIG: Writing ISP core interrupt registers (vic_start_ok=%d) ***\n", vic_start_ok);
 
-        /* Binary Ninja: system_reg_write(0x10, 0x133) - Enable specific interrupt types */
-        writel(0x133, core + 0x10);
-        wmb();
+            /* CRITICAL: Enable ISP core interrupt generation at hardware level */
+            /* Binary Ninja: system_reg_write(0x30, 0xffffffff) - Enable all interrupt sources */
+            writel(0xffffffff, core + 0x30);
+            wmb();
+
+            /* Binary Ninja: system_reg_write(0x10, 0x133) - Enable specific interrupt types */
+            writel(0x133, core + 0x10);
+            wmb();
+
+            pr_info("*** ISP CORE CONFIG: ISP core interrupt registers written (0x30=0xffffffff, 0x10=0x133) ***\n");
+        }
 
         pr_info("*** ISP CORE: Hardware interrupt generation ENABLED (0x30=0xffffffff, 0x10=0x133) ***\n");
         pr_info("*** VIC->ISP: Pipeline should now generate hardware interrupts when VIC completes frames! ***\n");
