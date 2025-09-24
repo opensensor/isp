@@ -2349,11 +2349,26 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         }
         pr_info("*** CRITICAL: VIC buffer addresses configured from VBM - hardware can now generate interrupts! ***\n");
     } else {
-        pr_err("*** CRITICAL ERROR: No VBM buffer addresses available - VIC cannot generate interrupts! ***\n");
-        pr_err("*** vbm_buffer_addresses=%p, vbm_buffer_count=%d ***\n",
+        /* CRITICAL FIX: Use fallback buffer addresses like working reference */
+        pr_warn("*** CRITICAL: No VBM buffer addresses - using fallback addresses from reserved memory ***\n");
+        pr_warn("*** vbm_buffer_addresses=%p, vbm_buffer_count=%d ***\n",
                state->vbm_buffer_addresses, state->vbm_buffer_count);
-        pr_err("*** vic_dev->active_buffer_count=%d ***\n",
-               vic_dev->active_buffer_count);
+
+        /* Use reserved memory region 0x6300000 like working reference */
+        u32 frame_size = width * height * 2;  /* RAW10 = 2 bytes/pixel */
+        u32 base_addr = 0x6300000;  /* Reserved memory base from boot parameter rmem=29M@0x6300000 */
+
+        int i;
+        for (i = 0; i < 5; i++) {
+            u32 buffer_addr = base_addr + (i * frame_size);
+            u32 reg_offset = 0x318 + (i * 4);  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
+
+            writel(buffer_addr, vic_base + reg_offset);
+            wmb();
+            pr_info("*** VIC FALLBACK BUFFER %d: Wrote reserved memory address 0x%x to reg 0x%x ***\n",
+                    i, buffer_addr, reg_offset);
+        }
+        pr_info("*** CRITICAL: VIC fallback buffer addresses configured - hardware can now generate interrupts! ***\n");
     }
 
     pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - VIC should now generate interrupts! ***\n");
@@ -3047,9 +3062,26 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
             }
             pr_info("*** CRITICAL: VIC buffer addresses written to hardware from VBM - interrupts should now work! ***\n");
         } else {
-            pr_warn("ispvic_frame_channel_qbuf: No VBM buffer addresses available\n");
+            /* CRITICAL FIX: Use fallback buffer addresses like working reference */
+            pr_warn("ispvic_frame_channel_qbuf: No VBM buffer addresses - using fallback addresses\n");
             pr_warn("*** vbm_buffer_addresses=%p, vbm_buffer_count=%d ***\n",
                     state->vbm_buffer_addresses, state->vbm_buffer_count);
+
+            /* Use reserved memory region 0x6300000 like working reference */
+            u32 frame_size = cached_sensor_width * cached_sensor_height * 2;  /* RAW10 = 2 bytes/pixel */
+            u32 base_addr = 0x6300000;  /* Reserved memory base */
+
+            int i;
+            for (i = 0; i < 5; i++) {
+                u32 buffer_addr = base_addr + (i * frame_size);
+                u32 reg_offset = (i + 0xc6) << 2;  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
+
+                writel(buffer_addr, vic_dev->vic_regs + reg_offset);
+                wmb();
+                pr_info("*** QBUF FALLBACK BUFFER %d: Wrote reserved memory address 0x%x to reg 0x%x ***\n",
+                        i, buffer_addr, reg_offset);
+            }
+            pr_info("*** CRITICAL: QBUF fallback buffer addresses configured - hardware can now generate interrupts! ***\n");
         }
     }
 
