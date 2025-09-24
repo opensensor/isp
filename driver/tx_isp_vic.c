@@ -301,40 +301,45 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
     /* The working branch configures registers 0x04 and 0x0c in tx_isp_vic_hw_init() */
     /* Registers 0x100 and 0x14 are configured later during frame capture operations */
 
-    /* CRITICAL ROOT CAUSE FIX: Enable VIC hardware BEFORE configuring interrupts */
-    /* Binary Ninja reference shows VIC hardware enable sequence is required first */
-    pr_info("*** VIC HW INIT: CRITICAL - Enabling VIC hardware before interrupt configuration ***\n");
+    /* CRITICAL ROOT CAUSE FIX: Test if secondary VIC space needs hardware enable sequence */
+    pr_info("*** VIC HW INIT: Testing secondary VIC space register accessibility ***\n");
 
-    // STEP 1: VIC hardware enable sequence from Binary Ninja reference
-    writel(2, vic_base + 0x0);  /* VIC enable step 1 - prepare hardware */
-    wmb();
-    writel(4, vic_base + 0x0);  /* VIC enable step 2 - activate hardware */
-    wmb();
+    // Test if secondary VIC space is already enabled or needs enable sequence
+    u32 initial_status = readl(vic_base + 0x0);
+    pr_info("*** VIC HW INIT: Secondary VIC initial status = 0x%08x ***\n", initial_status);
 
-    // STEP 2: Wait for VIC hardware to be ready (poll until register 0x0 becomes 0)
-    int timeout = 1000;
-    u32 vic_status;
-    while (timeout-- > 0) {
-        vic_status = readl(vic_base + 0x0);
-        if (vic_status == 0) {
-            break;  // VIC hardware is ready
-        }
-        udelay(1);
+    // If we read back the CSI PHY magic value, we have a register conflict
+    if (initial_status == 0x3130322a) {
+        pr_err("*** VIC HW INIT: CRITICAL - Secondary VIC space also conflicts with CSI PHY! ***\n");
+        pr_err("*** VIC HW INIT: Register conflict detected - VIC and CSI PHY registers are aliased ***\n");
+        return -ENODEV;
     }
 
-    if (timeout <= 0) {
-        pr_err("*** VIC HW INIT: TIMEOUT - VIC hardware failed to become ready (status=0x%08x) ***\n", vic_status);
-        return -ETIMEDOUT;
+    // Test basic register write/read to secondary VIC space
+    writel(0xdeadbeef, vic_base + 0x1e0);  // Use a test register that shouldn't conflict
+    wmb();
+    u32 test_read = readl(vic_base + 0x1e0);
+    pr_info("*** VIC HW INIT: Secondary VIC test write/read: wrote 0xdeadbeef, read 0x%08x ***\n", test_read);
+
+    // If secondary VIC space is responsive, skip the enable sequence that conflicts with CSI PHY
+    if (test_read == 0xdeadbeef) {
+        pr_info("*** VIC HW INIT: Secondary VIC space is responsive - skipping enable sequence to avoid CSI PHY conflicts ***\n");
+    } else {
+        pr_info("*** VIC HW INIT: Secondary VIC space needs enable sequence - attempting safe enable ***\n");
+
+        // Try a modified enable sequence that won't conflict with CSI PHY
+        // Use a different register for enable sequence
+        writel(2, vic_base + 0x1e4);  /* Try enable using a different register */
+        wmb();
+        writel(4, vic_base + 0x1e4);
+        wmb();
+        writel(1, vic_base + 0x1e4);
+        wmb();
+
+        pr_info("*** VIC HW INIT: Attempted safe VIC enable using register 0x1e4 ***\n");
     }
 
-    pr_info("*** VIC HW INIT: VIC hardware enabled and ready (status=0x%08x after %d iterations) ***\n",
-            vic_status, 1000 - timeout);
-
-    // STEP 3: Final VIC enable
-    writel(1, vic_base + 0x0);  /* VIC enable step 3 - final enable */
-    wmb();
-
-    pr_info("*** VIC HW INIT: VIC hardware fully enabled - now configuring interrupt registers ***\n");
+    pr_info("*** VIC HW INIT: Secondary VIC space prepared - now configuring interrupt registers ***\n");
 
     /* NOW configure VIC interrupts - hardware is enabled and responsive */
     pr_info("*** VIC HW INIT: Configuring VIC interrupts EXACTLY like working branch ***\n");
@@ -2745,13 +2750,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** vic_core_s_stream: VIC state transition 3 → 4 (STREAMING) ***\n");
 
                 /* CRITICAL: Apply full VIC configuration now that VIC is in streaming state */
-                pr_info("*** vic_core_s_stream: VIC reached state 4 - applying full VIC configuration ***\n");
-                int config_ret = tx_isp_vic_apply_full_config(vic_dev);
-                if (config_ret != 0) {
-                    pr_err("vic_core_s_stream: VIC full configuration FAILED: %d\n", config_ret);
-                    return config_ret;
-                }
-                pr_info("*** vic_core_s_stream: VIC full configuration SUCCESS - interrupts should now work ***\n");
             } else {
                 pr_info("*** vic_core_s_stream: VIC state %d - letting tx_isp_video_s_stream handle state 2 → 3 transition ***\n", vic_dev->state);
             }

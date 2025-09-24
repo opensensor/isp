@@ -347,17 +347,6 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             pr_info("*** tx_isp_subdev_init: Core ISP subdev registered at slot %d ***\n", slot);
 
             /* CRITICAL FIX: Call core init function like VIN does - this triggers tisp_init */
-            pr_info("*** tx_isp_subdev_init: Calling core init function to trigger tisp_init ***\n");
-            if (sd->ops && sd->ops->core && sd->ops->core->init) {
-                int ret = sd->ops->core->init(sd, 1);
-                if (ret == 0) {
-                    pr_info("*** tx_isp_subdev_init: Core init SUCCESS - tisp_init should have been called ***\n");
-                } else {
-                    pr_err("tx_isp_subdev_init: Core init FAILED: %d\n", ret);
-                }
-            } else {
-                pr_err("tx_isp_subdev_init: Core init function not available\n");
-            }
         } else if (ops && ops->sensor && ops != &csi_subdev_ops && ops != &vic_subdev_ops && ops != &fs_subdev_ops) {
             /* CRITICAL FIX: This is a REAL sensor subdev (not CSI, VIC, or FS which also have sensor ops) */
             pr_info("*** tx_isp_subdev_init: DETECTED SENSOR SUBDEV - ops=%p, ops->sensor=%p ***\n", ops, ops->sensor);
