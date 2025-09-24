@@ -4594,10 +4594,14 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
     if (isp_dev->vic_dev && isp_dev->vic_dev->vic_regs) {
         void __iomem *vic_regs = isp_dev->vic_dev->vic_regs;
 
-        /* Write VIC interrupt enable registers - FROM WORKING LOGS */
-        writel(0x07800438, vic_regs + 0x04);  /* IMR - Working branch value */
-        writel(0xb5742249, vic_regs + 0x0c);  /* IMCR - Working branch value */
+        /* WORKING REFERENCE: Enable all interrupts and clear masks - ACTUAL WORKING APPROACH */
+        writel(0xffffffff, vic_regs + 0x1e0); /* Enable all interrupts - WORKING REFERENCE */
+        writel(0x0, vic_regs + 0x1e8); /* Clear interrupt masks - WORKING REFERENCE */
         wmb();
+
+        /* Set VIC start flag - CRITICAL for interrupt processing */
+        extern uint32_t vic_start_ok;
+        vic_start_ok = 1;
 
         pr_info("*** VIC INTERRUPT REGISTERS ENABLED - INTERRUPTS SHOULD NOW FIRE! ***\n");
     } else {

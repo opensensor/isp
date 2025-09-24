@@ -1095,30 +1095,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     wmb();
     pr_info("*** tx_isp_vic_start: VIC processing enabled (0x0=0x1, 0x4=0x1) ***\n");
 
-    /* CRITICAL FIX: NOW configure VIC interrupts AFTER VIC hardware is unlocked and enabled */
-    pr_info("*** VIC INTERRUPT CONFIG: VIC hardware is now unlocked - configuring interrupts ***\n");
-
-    /* CRITICAL FIX: Try writing interrupt registers to SECONDARY VIC space (0x10023000) */
-    void __iomem *vic_interrupt_regs = vic_dev->vic_regs_control;  /* Secondary VIC space */
-    if (!vic_interrupt_regs) {
-        pr_err("*** VIC INTERRUPT CONFIG: No secondary VIC registers available - using primary ***\n");
-        vic_interrupt_regs = vic_regs;  /* Fallback to primary */
-    } else {
-        pr_info("*** VIC INTERRUPT CONFIG: Using SECONDARY VIC space (0x10023000) for interrupt registers ***\n");
-    }
-
-    /* WORKING BRANCH: Clear any pending interrupts first */
-    writel(0, vic_interrupt_regs + 0x00);  // Clear ISR
-    writel(0, vic_interrupt_regs + 0x20);  // Clear ISR1
-    wmb();
-
-    /* WORKING REFERENCE: Use the ACTUAL working approach from tx_isp_vic_debug.c */
-    writel(0xffffffff, vic_interrupt_regs + 0x1e0); /* Enable all interrupts - WORKING REFERENCE */
-    wmb();
-    writel(0x0, vic_interrupt_regs + 0x1e8); /* Clear interrupt masks - WORKING REFERENCE */
-    wmb();
-
-    pr_info("*** VIC INTERRUPT CONFIG: Applied WORKING REFERENCE interrupt configuration (0x1e0/0x1e8) ***\n");
+    /* REMOVED: VIC interrupt configuration moved to tx_isp_module_init() where it belongs */
+    /* The working reference configures VIC interrupts during MODULE INIT, not during VIC streaming */
+    pr_info("*** VIC INTERRUPT CONFIG: VIC interrupts already configured during module init - skipping duplicate config ***\n");
 
     /* CRITICAL FIX: Configure VIC dimensions and control BEFORE interrupt registers */
     pr_info("*** tx_isp_vic_start: Configuring VIC hardware prerequisites for interrupt registers ***\n");
