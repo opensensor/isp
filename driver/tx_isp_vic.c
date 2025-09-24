@@ -1000,16 +1000,21 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     wmb();
 
     /* CRITICAL: NOW configure VIC interrupt control registers AFTER VIC unlock is complete */
-    pr_info("*** VIC INTERRUPT CONFIG: VIC unlock complete, now configuring interrupt control registers ***\n");
+    pr_info("*** VIC INTERRUPT CONFIG: VIC unlock complete, now using CORRECT interrupt registers ***\n");
 
-    /* STEP 1: Enable VIC DMA interrupt generation via register 0x300 */
-    /* Git commit 71ee3324210750aaf08ca0aff08685af34621127 shows this is needed */
-    writel(0x1, vic_regs + 0x300);  /* Enable VIC DMA interrupt generation */
+    /* STEP 1: Enable VIC MDMA interrupt via register 0x30 */
+    /* Git commit 2b4d3d7270a4f058e13c8c2583fcd307507c3b3d shows this is the correct register */
+    writel(0x1, vic_regs + 0x30);  /* Enable VIC MDMA interrupt */
     wmb();
 
-    /* STEP 2: Enable specific interrupt types in register 0x30c */
-    /* Frame completion, DMA completion, and buffer ready interrupts */
-    writel(0x7, vic_regs + 0x30c);  /* Enable frame done + DMA + buffer ready (bits 0,1,2) */
+    /* STEP 2: Enable VIC MDMA completion interrupt via register 0x34 */
+    /* Git commit 2b4d3d7270a4f058e13c8c2583fcd307507c3b3d shows this enables MDMA completion */
+    writel(0x1, vic_regs + 0x34);  /* Enable VIC MDMA completion interrupt */
+    wmb();
+
+    /* STEP 3: Unmask all VIC interrupt sources via register 0x38 */
+    /* Git commit 2b4d3d7270a4f058e13c8c2583fcd307507c3b3d shows writing 0xFFFFFFFF unmasks all */
+    writel(0xFFFFFFFF, vic_regs + 0x38);  /* Unmask all VIC interrupt sources */
     wmb();
 
     /* STEP 3: Configure interrupt masks in SECONDARY VIC space (0x10023000) */
@@ -1059,6 +1064,28 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     pr_info("*** tx_isp_vic_start: VIC Control register sequence complete - streaming should start ***\n");
     pr_info("*** tx_isp_vic_start: VIC should now generate frame done interrupts! ***\n");
     pr_info("*** tx_isp_vic_start: VIC interrupt will be enabled by tx_vic_enable_irq callback ***\n");
+
+    /* CRITICAL TEST: Manually trigger VIC interrupt to test if handler is working */
+    pr_info("*** VIC MANUAL INTERRUPT TEST: Testing VIC interrupt handler manually ***\n");
+    extern struct tx_isp_dev *ourISPdev;
+    if (ourISPdev) {
+        /* Test 1: Call VIC interrupt handler directly */
+        pr_info("*** VIC TEST 1: Calling isp_vic_interrupt_service_routine directly ***\n");
+        irqreturn_t test_result = isp_vic_interrupt_service_routine(ourISPdev);
+        pr_info("*** VIC TEST 1: Manual interrupt handler returned %d ***\n", test_result);
+
+        /* Test 2: Call VIC frame done function directly */
+        pr_info("*** VIC TEST 2: Calling vic_framedone_irq_function directly ***\n");
+        if (ourISPdev->vic_dev) {
+            int frame_result = vic_framedone_irq_function(ourISPdev->vic_dev);
+            pr_info("*** VIC TEST 2: Manual frame done function returned %d ***\n", frame_result);
+        }
+
+        pr_info("*** VIC MANUAL INTERRUPT TEST: If these tests work, the issue is hardware interrupt generation ***\n");
+    } else {
+        pr_warn("*** VIC MANUAL INTERRUPT TEST: No ISP device available for testing ***\n");
+    }
+
     return 0;
 }
 
