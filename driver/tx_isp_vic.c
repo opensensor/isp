@@ -1315,45 +1315,7 @@ int dump_isp_vic_frd_open(struct inode *inode, struct file *file)
     return single_open_size(file, isp_vic_frd_show, PDE_DATA(inode), 0x400);
 }
 
-/* VIC W02 proc open - FIXED to provide correct ISP device reference */
-int vic_w02_proc_open(struct inode *inode, struct file *file)
-{
-    struct seq_file *seq;
-    int ret;
 
-    pr_err("*** vic_w02_proc_open: ENTRY - inode=%p, file=%p ***\n", inode, file);
-    pr_err("*** vic_w02_proc_open: PDE_DATA(inode)=%p ***\n", PDE_DATA(inode));
-
-    /* Use single_open_size with isp_vic_frd_show function */
-    ret = single_open_size(file, isp_vic_frd_show, PDE_DATA(inode), 0x400);
-    if (ret != 0) {
-        pr_err("*** vic_w02_proc_open: single_open_size failed: %d ***\n", ret);
-        return ret;
-    }
-
-    /* Get the seq_file and fix the private data */
-    seq = file->private_data;
-    if (seq) {
-        /* PDE_DATA gives us VIC device, but we need main ISP device */
-        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)PDE_DATA(inode);
-        if (vic_dev && vic_dev->sd.isp) {
-            /* Set seq->private to main ISP device instead of VIC device */
-            seq->private = vic_dev->sd.isp;
-            pr_err("*** vic_w02_proc_open: FIXED seq->private from vic_dev=%p to isp_dev=%p ***\n",
-                   vic_dev, vic_dev->sd.isp);
-        } else {
-            pr_err("*** vic_w02_proc_open: ERROR - Cannot get ISP device from VIC device ***\n");
-            single_release(inode, file);
-            return -ENODEV;
-        }
-    } else {
-        pr_err("*** vic_w02_proc_open: ERROR - seq is NULL ***\n");
-        return -ENOMEM;
-    }
-
-    pr_err("*** vic_w02_proc_open: SUCCESS - seq->private=%p ***\n", seq->private);
-    return 0;
-}
 
 /* vic_mdma_enable - EXACT Binary Ninja implementation */
 int vic_mdma_enable(struct tx_isp_vic_device *vic_dev, int channel, int dual_channel,
@@ -2532,7 +2494,7 @@ const struct file_operations isp_vic_frd_fops = {
 /* VIC W02 proc file operations - FIXED for proper proc write interface */
 const struct file_operations vic_w02_proc_fops = {
     .owner = THIS_MODULE,
-    .open = vic_w02_proc_open,          /* CRITICAL: Use fixed open function */
+    .open = dump_isp_vic_frd_open,      /* Use standard open function - isp_vic_frd_show now expects ISP device */
     .release = single_release,          /* Use same release function */
     .read = seq_read,                   /* Allow reading */
     .write = vic_proc_write,            /* CRITICAL: Use write handler for proc entry */
