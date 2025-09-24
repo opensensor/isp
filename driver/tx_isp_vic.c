@@ -1858,6 +1858,42 @@ ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, 
 
             if (ret == 0) {
                 pr_info("*** vic_proc_write: vic_mdma_enable SUCCESS - VIC MDMA enabled for snapraw ***\n");
+
+                /* CRITICAL: Wait for frame capture to complete, then save to file */
+                pr_info("*** vic_proc_write: Waiting for frame capture to complete (500ms timeout) ***\n");
+                msleep(500);  /* Wait for VIC to capture frame */
+
+                /* Save captured frame to /opt/snapraw.raw */
+                struct file *output_file;
+                mm_segment_t old_fs_save;
+                loff_t pos = 0;
+                u32 frame_size = vic_dev->width * vic_dev->height * 2;  /* RAW10 = 2 bytes/pixel */
+
+                old_fs_save = get_fs();
+                set_fs(KERNEL_DS);
+
+                output_file = filp_open("/opt/snapraw.raw", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                if (!IS_ERR(output_file)) {
+                    /* Map the buffer for reading */
+                    void *mapped_buffer = ioremap_nocache(buffer_addr, frame_size);
+                    if (mapped_buffer) {
+                        ssize_t bytes_written = vfs_write(output_file, mapped_buffer, frame_size, &pos);
+                        if (bytes_written == frame_size) {
+                            pr_info("*** vic_proc_write: SUCCESS - Saved %d bytes to /opt/snapraw.raw ***\n", bytes_written);
+                        } else {
+                            pr_err("vic_proc_write: Failed to write complete frame: %d/%d bytes\n", bytes_written, frame_size);
+                        }
+                        iounmap(mapped_buffer);
+                    } else {
+                        pr_err("vic_proc_write: Failed to map buffer for reading\n");
+                    }
+                    filp_close(output_file, NULL);
+                } else {
+                    pr_err("vic_proc_write: Failed to create /opt/snapraw.raw: %ld\n", PTR_ERR(output_file));
+                }
+
+                set_fs(old_fs_save);
+
                 ret = count;  /* Return success */
             } else {
                 pr_err("vic_proc_write: vic_mdma_enable failed: %d\n", ret);
