@@ -2455,28 +2455,22 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 return ret;
             }
 
-            /* Binary Ninja: *($s1_1 + 0x128) = 4 */
-            vic_dev->state = 4;
+            /* CRITICAL FIX: Follow proper state machine - don't jump directly to state 4 */
+            /* The proper flow is: 1 → 2 → 3 → 4, not 1 → 4 */
+            if (vic_dev->state == 1) {
+                vic_dev->state = 2;
+                pr_info("*** vic_core_s_stream: VIC state transition 1 → 2 (CONFIGURED) ***\n");
+            } else if (vic_dev->state == 3) {
+                vic_dev->state = 4;
+                pr_info("*** vic_core_s_stream: VIC state transition 3 → 4 (STREAMING) ***\n");
+            } else {
+                pr_info("*** vic_core_s_stream: VIC state %d - letting tx_isp_video_s_stream handle state 2 → 3 transition ***\n", vic_dev->state);
+            }
 
             /* Binary Ninja: tx_vic_enable_irq() */
             tx_vic_enable_irq(vic_dev);
 
-            pr_info("*** vic_core_s_stream: EXACT Binary Ninja - VIC initialized, state=4 ***\n");
-
-            /* CRITICAL: Call ispcore_slake_module when VIC state reaches 4 - FROM WORKING BRANCH */
-            pr_info("*** VIC STATE 4: Calling ispcore_slake_module to initialize ISP core ***\n");
-            extern int ispcore_slake_module(struct tx_isp_dev *isp);
-            extern struct tx_isp_dev *ourISPdev;
-            if (ourISPdev) {
-                int slake_ret = ispcore_slake_module(ourISPdev);
-                if (slake_ret == 0) {
-                    pr_info("*** ispcore_slake_module SUCCESS - ISP core should now be initialized ***\n");
-                } else {
-                    pr_err("*** ispcore_slake_module FAILED: %d ***\n", slake_ret);
-                }
-            } else {
-                pr_err("*** VIC STATE 4: No ISP device available for ispcore_slake_module ***\n");
-            }
+            pr_info("*** vic_core_s_stream: VIC initialized, final state=%d ***\n", vic_dev->state);
 
             /* Binary Ninja: return $v0_1 */
             return ret;
