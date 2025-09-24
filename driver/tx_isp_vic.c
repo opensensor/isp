@@ -999,110 +999,71 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0, vic_regs + 0x1b4);
     wmb();
 
-    /* CRITICAL: NOW configure VIC interrupt control registers AFTER VIC unlock is complete */
-    pr_info("*** VIC INTERRUPT CONFIG: VIC unlock complete, now using CORRECT interrupt registers ***\n");
+    /* CRITICAL: NOW configure VIC interrupts using CORRECT registers from Binary Ninja */
+    pr_info("*** VIC INTERRUPT CONFIG: Using CORRECT registers from Binary Ninja decompilation ***\n");
 
-    /* STEP 1: Enable VIC MDMA interrupt via register 0x30 */
-    /* Git commit 2b4d3d7270a4f058e13c8c2583fcd307507c3b3d shows this is the correct register */
-    pr_info("*** VIC INTERRUPT CONFIG: Writing 0x1 to register 0x30 (VIC MDMA interrupt) ***\n");
-    writel(0x1, vic_regs + 0x30);  /* Enable VIC MDMA interrupt */
+    /* Binary Ninja shows interrupt handler reads from 0x1e0/0x1e8 and 0x1e4/0x1ec */
+    /* Handler logic: ($v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0)) */
+
+    /* Clear any pending interrupts first */
+    pr_info("*** VIC INTERRUPT CONFIG: Clearing pending interrupts ***\n");
+    writel(0xFFFFFFFF, vic_regs + 0x1f0);  /* Clear main interrupt status */
+    writel(0xFFFFFFFF, vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
     wmb();
 
-    /* STEP 2: Enable VIC MDMA completion interrupt via register 0x34 */
-    /* Git commit 2b4d3d7270a4f058e13c8c2583fcd307507c3b3d shows this enables MDMA completion */
-    pr_info("*** VIC INTERRUPT CONFIG: Writing 0x1 to register 0x34 (VIC MDMA completion interrupt) ***\n");
-    writel(0x1, vic_regs + 0x34);  /* Enable VIC MDMA completion interrupt */
+    /* Enable VIC interrupts - Binary Ninja: handler reads from 0x1e0 & ~0x1e8 */
+    pr_info("*** VIC INTERRUPT CONFIG: Enabling VIC interrupts via register 0x1e0 ***\n");
+    writel(0xFFFFFFFF, vic_regs + 0x1e0);  /* Enable all VIC interrupt sources */
     wmb();
 
-    /* STEP 3: Try writing VIC interrupt masks to SECONDARY VIC space instead */
-    /* Working reference uses primary space, but our primary space writes fail */
-    /* Maybe secondary space (0x10023000) accepts the interrupt mask writes */
-    if (vic_dev->vic_regs_control) {
-        pr_info("*** VIC INTERRUPT CONFIG: Trying interrupt masks in SECONDARY VIC space ***\n");
+    /* Clear VIC interrupt masks - Binary Ninja: handler uses ~0x1e8 */
+    pr_info("*** VIC INTERRUPT CONFIG: Clearing VIC interrupt masks via register 0x1e8 ***\n");
+    writel(0x0, vic_regs + 0x1e8);  /* Clear all VIC interrupt masks (enable all) */
+    wmb();
 
-        /* STEP 3a: Write unlock value to VIC_IMR in secondary space */
-        pr_info("*** VIC INTERRUPT CONFIG: Writing UNLOCK value 0x07800438 to SECONDARY VIC_IMR register 0x04 ***\n");
-        writel(0x07800438, vic_dev->vic_regs_control + 0x04);  /* VIC_IMR - Shadow register unlock */
-        wmb();
+    /* Enable MDMA interrupts - Binary Ninja: handler reads from 0x1e4 & ~0x1ec */
+    pr_info("*** VIC INTERRUPT CONFIG: Enabling MDMA interrupts via register 0x1e4 ***\n");
+    writel(0xFFFFFFFF, vic_regs + 0x1e4);  /* Enable all MDMA interrupt sources */
+    wmb();
 
-        /* STEP 3b: Write control configuration to VIC_IMCR in secondary space */
-        pr_info("*** VIC INTERRUPT CONFIG: Writing CONTROL value 0xb5742249 to SECONDARY VIC_IMCR register 0x0c ***\n");
-        writel(0xb5742249, vic_dev->vic_regs_control + 0x0c);  /* VIC_IMCR - Interrupt control configuration */
-        wmb();
+    /* Clear MDMA interrupt masks - Binary Ninja: handler uses ~0x1ec */
+    pr_info("*** VIC INTERRUPT CONFIG: Clearing MDMA interrupt masks via register 0x1ec ***\n");
+    writel(0x0, vic_regs + 0x1ec);  /* Clear all MDMA interrupt masks (enable all) */
+    wmb();
 
-        /* STEP 3c: Clear interrupt masks via VIC_IMSR in secondary space */
-        pr_info("*** VIC INTERRUPT CONFIG: Clearing masks via SECONDARY VIC_IMSR register 0x08 ***\n");
-        writel(0x0, vic_dev->vic_regs_control + 0x08);  /* VIC_IMSR - Activate shadow registers */
-        wmb();
+    pr_info("*** VIC INTERRUPT CONFIG: CORRECT Binary Ninja interrupt configuration complete ***\n");
 
-        pr_info("*** VIC INTERRUPT CONFIG: SECONDARY VIC space interrupt mask configuration complete ***\n");
-    } else {
-        pr_warn("*** VIC INTERRUPT CONFIG: No secondary VIC space available for interrupt masks ***\n");
-    }
 
-    /* STEP 3: Configure interrupt masks in SECONDARY VIC space (0x10023000) */
-    /* Git commits show some interrupt operations need secondary space */
-    if (vic_dev->vic_regs_control) {
-        pr_info("*** VIC INTERRUPT CONFIG: Configuring interrupt masks in SECONDARY VIC space ***\n");
 
-        /* Clear any pending interrupts first in secondary space */
-        writel(0xFFFFFFFF, vic_dev->vic_regs_control + 0x1f0);  /* Clear main interrupt status */
-        writel(0xFFFFFFFF, vic_dev->vic_regs_control + 0x1f4);  /* Clear MDMA interrupt status */
-        wmb();
-
-        /* Enable frame done interrupt mask in secondary space */
-        writel(0xFFFFFFFE, vic_dev->vic_regs_control + 0x1e8);  /* Enable frame done interrupt (bit 0 clear) */
-        wmb();
-
-        pr_info("*** VIC INTERRUPT CONFIG: Secondary VIC space configured ***\n");
-    } else {
-        pr_warn("*** VIC INTERRUPT CONFIG: No secondary VIC space available ***\n");
-    }
-
-    /* Verify CORRECT interrupt control registers were set AFTER VIC unlock */
-    pr_info("*** VIC INTERRUPT CONFIG: Starting verification of CORRECT interrupt registers ***\n");
+    /* Verify CORRECT Binary Ninja interrupt registers were set */
+    pr_info("*** VIC INTERRUPT CONFIG: Starting verification of BINARY NINJA interrupt registers ***\n");
     u32 ctrl_0x0_verify = readl(vic_regs + 0x0);
     u32 ctrl_0x4_verify = readl(vic_regs + 0x4);
-    u32 ctrl_0x30_verify = readl(vic_regs + 0x30);   /* VIC MDMA interrupt enable */
-    u32 ctrl_0x34_verify = readl(vic_regs + 0x34);   /* VIC MDMA completion interrupt enable */
+
+    /* Verify CORRECT Binary Ninja interrupt registers */
+    u32 ctrl_0x1e0_verify = readl(vic_regs + 0x1e0); /* VIC interrupt status (Binary Ninja) */
+    u32 ctrl_0x1e8_verify = readl(vic_regs + 0x1e8); /* VIC interrupt mask (Binary Ninja) */
+    u32 ctrl_0x1e4_verify = readl(vic_regs + 0x1e4); /* MDMA interrupt status (Binary Ninja) */
+    u32 ctrl_0x1ec_verify = readl(vic_regs + 0x1ec); /* MDMA interrupt mask (Binary Ninja) */
 
     pr_info("*** VIC INTERRUPT CONTROL VERIFY (CORRECT REGISTERS): 0x0=0x%08x, 0x4=0x%08x ***\n",
             ctrl_0x0_verify, ctrl_0x4_verify);
-    pr_info("*** VIC INTERRUPT CONTROL VERIFY (INTERRUPT REGS): 0x30=0x%08x, 0x34=0x%08x ***\n",
-            ctrl_0x30_verify, ctrl_0x34_verify);
+    pr_info("*** VIC INTERRUPT CONTROL VERIFY (BINARY NINJA REGS): 0x1e0=0x%08x, 0x1e8=0x%08x, 0x1e4=0x%08x, 0x1ec=0x%08x ***\n",
+            ctrl_0x1e0_verify, ctrl_0x1e8_verify, ctrl_0x1e4_verify, ctrl_0x1ec_verify);
 
-    /* Verify interrupt mask registers in SECONDARY VIC space */
-    if (vic_dev->vic_regs_control) {
-        u32 sec_0x04_verify = readl(vic_dev->vic_regs_control + 0x04);   /* VIC_IMR in secondary space */
-        u32 sec_0x08_verify = readl(vic_dev->vic_regs_control + 0x08);   /* VIC_IMSR in secondary space */
-        u32 sec_0x0c_verify = readl(vic_dev->vic_regs_control + 0x0c);   /* VIC_IMCR in secondary space */
+    /* Check success condition with Binary Ninja registers */
+    bool interrupt_sources_enabled = (ctrl_0x1e0_verify != 0x0);  /* Some interrupt sources enabled */
+    bool interrupt_masks_cleared = (ctrl_0x1e8_verify == 0x0);    /* All interrupt masks cleared */
+    bool mdma_sources_enabled = (ctrl_0x1e4_verify != 0x0);       /* Some MDMA interrupt sources enabled */
+    bool mdma_masks_cleared = (ctrl_0x1ec_verify == 0x0);         /* All MDMA interrupt masks cleared */
 
-        pr_info("*** VIC INTERRUPT CONTROL VERIFY (SECONDARY MASK REGS): 0x04=0x%08x, 0x08=0x%08x, 0x0c=0x%08x ***\n",
-                sec_0x04_verify, sec_0x08_verify, sec_0x0c_verify);
-    }
-
-    /* Also verify secondary space if available */
-    if (vic_dev->vic_regs_control) {
-        u32 sec_0x1e8_verify = readl(vic_dev->vic_regs_control + 0x1e8);
-        pr_info("*** VIC INTERRUPT CONTROL VERIFY (SECONDARY): 0x1e8=0x%08x ***\n", sec_0x1e8_verify);
-    }
-
-    /* Check success condition with secondary space mask registers */
-    bool interrupt_enables_ok = (ctrl_0x30_verify & 0x1) && (ctrl_0x34_verify & 0x1);
-    bool mask_registers_ok = false;
-
-    if (vic_dev->vic_regs_control) {
-        u32 sec_0x04_verify = readl(vic_dev->vic_regs_control + 0x04);
-        u32 sec_0x0c_verify = readl(vic_dev->vic_regs_control + 0x0c);
-        mask_registers_ok = (sec_0x04_verify == 0x07800438) && (sec_0x0c_verify == 0xb5742249);
-    }
-
-    if (interrupt_enables_ok && mask_registers_ok) {
-        pr_info("*** VIC INTERRUPT: ALL CORRECT interrupt control registers set - interrupts should fire! ***\n");
+    if (interrupt_sources_enabled && interrupt_masks_cleared && mdma_sources_enabled && mdma_masks_cleared) {
+        pr_info("*** VIC INTERRUPT: ALL BINARY NINJA interrupt registers configured correctly - interrupts should fire! ***\n");
     } else {
-        pr_warn("*** VIC INTERRUPT: Some CORRECT interrupt control register writes failed ***\n");
-        pr_warn("*** VIC INTERRUPT: Expected: 0x30 & 0x1, 0x34 & 0x1, SECONDARY 0x04 == 0x07800438, SECONDARY 0x0c == 0xb5742249 ***\n");
-        pr_warn("*** VIC INTERRUPT: interrupt_enables_ok=%d, mask_registers_ok=%d ***\n", interrupt_enables_ok, mask_registers_ok);
+        pr_warn("*** VIC INTERRUPT: Some BINARY NINJA interrupt register configuration failed ***\n");
+        pr_warn("*** VIC INTERRUPT: Expected: 0x1e0 != 0, 0x1e8 == 0, 0x1e4 != 0, 0x1ec == 0 ***\n");
+        pr_warn("*** VIC INTERRUPT: sources_enabled=%d, masks_cleared=%d, mdma_sources_enabled=%d, mdma_masks_cleared=%d ***\n",
+                interrupt_sources_enabled, interrupt_masks_cleared, mdma_sources_enabled, mdma_masks_cleared);
     }
 
     /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
