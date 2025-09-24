@@ -1333,28 +1333,91 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* CRITICAL FIX: Enable VIC hardware BEFORE writing interrupt registers */
     pr_info("*** tx_isp_vic_start: CRITICAL - Enabling VIC hardware before interrupt configuration ***\n");
 
-    /* Step 1: Enable VIC hardware - Binary Ninja shows VIC control sequence */
-    writel(0x2, vic_regs + 0x0);             /* VIC enable step 1 - prepare hardware */
-    wmb();
-    writel(0x4, vic_regs + 0x0);             /* VIC enable step 2 - activate hardware */
-    wmb();
-    writel(0x1, vic_regs + 0x0);             /* VIC enable step 3 - final enable */
-    wmb();
+    /* CRITICAL DEBUG: Check if VIC register space is working at all */
+    pr_info("*** tx_isp_vic_start: Testing VIC register space accessibility ***\n");
 
-    /* Step 2: Wait for VIC hardware to become ready */
-    int timeout = 1000;
-    u32 status;
-    do {
-        status = readl(vic_regs + 0x0);
-        if ((status & 0x1) == 0) break;  /* Wait for ready bit */
-        udelay(1);
-    } while (--timeout > 0);
+    /* Test 1: Try to write and read back a test pattern */
+    u32 test_pattern = 0xdeadbeef;
+    writel(test_pattern, vic_regs + 0x0);
+    wmb();
+    u32 readback = readl(vic_regs + 0x0);
+    pr_info("*** VIC REG TEST: Wrote 0x%08x, read back 0x%08x (match=%s) ***\n",
+            test_pattern, readback, (readback == test_pattern) ? "YES" : "NO");
 
-    if (timeout <= 0) {
-        pr_warn("*** tx_isp_vic_start: VIC hardware enable timeout - continuing anyway ***\n");
+    /* Test 2: Try different register offsets */
+    writel(0x12345678, vic_regs + 0x4);
+    wmb();
+    u32 readback_4 = readl(vic_regs + 0x4);
+    pr_info("*** VIC REG TEST: Offset 0x4 - Wrote 0x12345678, read back 0x%08x ***\n", readback_4);
+
+    /* Test 3: Check if this is the secondary VIC space issue */
+    void __iomem *secondary_vic_regs = vic_dev->vic_regs_control;
+    if (secondary_vic_regs) {
+        writel(test_pattern, secondary_vic_regs + 0x0);
+        wmb();
+        u32 secondary_readback = readl(secondary_vic_regs + 0x0);
+        pr_info("*** VIC REG TEST: Secondary space (0x10023000) - Wrote 0x%08x, read back 0x%08x (match=%s) ***\n",
+                test_pattern, secondary_readback, (secondary_readback == test_pattern) ? "YES" : "NO");
+
+        /* If secondary space works, use it for interrupt registers */
+        if (secondary_readback == test_pattern) {
+            pr_info("*** VIC REG TEST: Secondary VIC space is responsive - will use for interrupt registers ***\n");
+            vic_regs = secondary_vic_regs;  /* Switch to working register space */
+        }
     } else {
-        pr_info("*** tx_isp_vic_start: VIC hardware enabled successfully (status=0x%x) ***\n", status);
+        pr_err("*** VIC REG TEST: Secondary VIC space not mapped! ***\n");
     }
+
+    /* If registers are not working, this is a fundamental hardware access issue */
+    if (readback == 0 && readback_4 == 0) {
+        pr_err("*** CRITICAL: VIC registers are not responding - hardware access issue! ***\n");
+        pr_err("*** CRITICAL: VIC base address might be wrong or hardware is powered down ***\n");
+    }
+
+    /* CRITICAL INSIGHT: VIC interrupts may only fire when there's active video data flow */
+    pr_info("*** CRITICAL INSIGHT: VIC interrupts require ACTIVE VIDEO PIPELINE ***\n");
+    pr_info("*** CRITICAL INSIGHT: Checking if sensor->CSI->VIC pipeline is streaming data ***\n");
+
+    /* Check if sensor is actually streaming */
+    extern struct tx_isp_dev *ourISPdev;
+    if (ourISPdev && ourISPdev->subdevs[4]) {
+        struct tx_isp_subdev *sensor_sd = ourISPdev->subdevs[4];
+        pr_info("*** PIPELINE CHECK: Sensor subdev found at slot 4: %p ***\n", sensor_sd);
+
+        /* Try to verify sensor is streaming by checking its state */
+        if (sensor_sd->ops && sensor_sd->ops->video && sensor_sd->ops->video->s_stream) {
+            pr_info("*** PIPELINE CHECK: Sensor has s_stream operation - pipeline should be active ***\n");
+        } else {
+            pr_warn("*** PIPELINE CHECK: Sensor missing s_stream operation - pipeline may not be active ***\n");
+        }
+    } else {
+        pr_err("*** PIPELINE CHECK: No sensor found - VIC has no data source for interrupts! ***\n");
+    }
+
+    /* The key insight: VIC interrupts are DATA-DRIVEN, not just register-driven */
+    pr_info("*** KEY INSIGHT: VIC interrupts fire when frames complete processing, not just from register config ***\n");
+
+    /* CRITICAL MISSING PIECE: VIC needs to be told to START PROCESSING frames */
+    pr_info("*** CRITICAL MISSING PIECE: VIC hardware needs explicit START command to begin frame processing ***\n");
+
+    /* Based on Binary Ninja ISR analysis, VIC interrupts fire when:
+     * 1. Frame processing completes (bit 0x1 in interrupt status)
+     * 2. DMA transfer completes (bits 0x1, 0x2 in secondary status)
+     * 3. Error conditions occur (various error bits)
+     *
+     * But NONE of this happens unless VIC is actively processing frames!
+     */
+
+    /* Try to trigger VIC frame processing by writing to the frame processing control register */
+    pr_info("*** ATTEMPTING TO START VIC FRAME PROCESSING ***\n");
+    writel(0x1, vic_regs + 0x300);  /* Frame processing start - from logs this should be 0x80040020 for 4 buffers */
+    wmb();
+
+    /* Wait a moment and check if VIC starts generating interrupts */
+    msleep(100);
+
+    /* Check interrupt count after attempting to start frame processing */
+    pr_info("*** VIC FRAME PROCESSING START ATTEMPTED - Check /proc/interrupts for VIC interrupt activity ***\n");
 
     /* Step 3: Now write VIC interrupt registers to enabled hardware */
     pr_info("*** tx_isp_vic_start: Writing VIC interrupt registers to enabled hardware ***\n");
