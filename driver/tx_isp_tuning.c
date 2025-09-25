@@ -1345,19 +1345,6 @@ static uint32_t awb_b_gain = 128;
 static uint32_t ae_ev_init_strict = 0;
 static uint32_t ae_ev_init_en = 0;
 
-/* Forward declarations for tiziano functions */
-int tiziano_s_awb_start(int r_gain, int b_gain);
-int tiziano_ae_s_ev_start(int ev_value);
-
-/* AWB and EV function implementations - EXACT Binary Ninja reference implementation */
-int tisp_s_awb_start(int r_gain, int b_gain)
-{
-    pr_info("tisp_s_awb_start: r_gain=%d, b_gain=%d\n", r_gain, b_gain);
-
-    /* Binary Ninja: return tiziano_s_awb_start(arg1, arg2) __tailcall */
-    return tiziano_s_awb_start(r_gain, b_gain);
-}
-EXPORT_SYMBOL(tisp_s_awb_start);
 
 int tisp_s_ev_start(int ev_value)
 {
