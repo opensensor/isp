@@ -263,7 +263,7 @@ static void *opmsg = NULL;
 static void *nlsk = NULL;
 static uint32_t data_ca490 = 0;
 static uint32_t data_ca48c = 0;
-
+int tiziano_bcsh_update();
 
 //static int tisp_netlink_event_set_cb(void *cb) { return 0; }
 static int tisp_param_operate_process(void) { return 0; }
@@ -2306,7 +2306,7 @@ static int apical_isp_ev_g_attr(struct tx_isp_dev *dev, struct isp_core_ctrl *ct
 
 
 
-static int tiziano_bcsh_update()
+int tiziano_bcsh_update()
 {
     struct isp_tuning_data *tuning = ourISPdev->tuning;
     uint32_t ev_shifted = tuning->bcsh_ev >> 10;
