@@ -3269,8 +3269,8 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 }
                 
                 if (enable) {
-                    pr_info("*** DEBUG: enable=1, dev->tuning_enabled=%d ***\n", dev->tuning_enabled);
-                    if (dev->tuning_enabled != 3) {
+                    pr_info("*** DEBUG: enable=1, dev->tuning_enabled=%d ***\n", dev->core_dev->tuning_enabled);
+                    if (dev->core_dev->tuning_enabled != 3) {
                         /* CRITICAL: Initialize tuning_data if not already initialized */
                         if (!dev->tuning_data) {
                             pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
@@ -3304,8 +3304,8 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 } else {
                     /* BINARY NINJA REFERENCE: Simple tuning disable - no hardware deinitialization */
                     pr_info("*** BINARY NINJA REFERENCE: Tuning disable - no hardware reset performed ***\n");
-                    if (dev->tuning_enabled == 3) {
-                        dev->tuning_enabled = 0;
+                    if (dev->core_dev->tuning_enabled == 3) {
+                        dev->core_dev->tuning_enabled = 0;
                         pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning disabled (Binary Ninja reference behavior)\n");
                     }
                     ret = 0;  /* Success - just disable tuning without hardware reset */
