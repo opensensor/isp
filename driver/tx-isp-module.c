@@ -2095,104 +2095,120 @@ static int tx_isp_video_link_destroy(struct tx_isp_dev *isp_dev)
  * For stream start, it first activates all modules, then starts streaming.
  * If any subdevice fails to start, it stops all previously started subdevices.
  */
-int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
+int tx_isp_video_link_stream(struct tx_isp_dev *arg1, int arg2)
 {
-    struct tx_isp_subdev **subdev_array;
+    struct tx_isp_subdev **s4;    /* $s4 in reference: arg1 + 0x38 */
     int i;
     int result;
 
-    pr_info("tx_isp_video_link_stream: %s streaming on all subdevices\n",
-            enable ? "Starting" : "Stopping");
+    pr_info("*** tx_isp_video_link_stream: EXACT Binary Ninja MCP implementation - enable=%d ***\n", arg2);
 
-    if (!isp_dev) {
-        pr_err("tx_isp_video_link_stream: NULL ISP device\n");
-        return -EINVAL;
-    }
-
-    /* For stream start, activate all modules first */
-    if (enable == 1) {
-        pr_info("tx_isp_video_link_stream: Activating all subdevice modules first\n");
-        subdev_array = isp_dev->subdevs;
-        for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
-            struct tx_isp_subdev *subdev = subdev_array[i];
-            if (subdev && subdev->ops && subdev->ops->internal && subdev->ops->internal->activate_module) {
-                pr_info("tx_isp_video_link_stream: Activating subdev[%d] (%s)\n",
-                        i, subdev->pdev ? subdev->pdev->name : "unknown");
+    /* CRITICAL FIX: Call activate_module on all subdevs FIRST to get them from state 1->2 */
+    if (arg2 == 1) {  /* Stream ON */
+        pr_info("*** tx_isp_video_link_stream: CRITICAL FIX - Calling activate_module on all subdevs first ***\n");
+        s4 = arg1->subdevs;
+        for (i = 0; i != 0x10; i++) {
+            struct tx_isp_subdev *subdev = s4[i];
+            if (subdev != NULL && subdev->ops && subdev->ops->internal && subdev->ops->internal->activate_module) {
+                pr_info("*** tx_isp_video_link_stream: Calling activate_module on subdev[%d] ***\n", i);
                 result = subdev->ops->internal->activate_module(subdev);
                 if (result != 0 && result != -ENOIOCTLCMD) {
-                    pr_err("tx_isp_video_link_stream: Failed to activate subdev[%d]: %d\n", i, result);
+                    pr_err("tx_isp_video_link_stream: activate_module failed on subdev[%d]: %d\n", i, result);
                     return result;
                 }
+                pr_info("*** tx_isp_video_link_stream: activate_module SUCCESS on subdev[%d] ***\n", i);
             }
         }
-        pr_info("tx_isp_video_link_stream: All subdevice modules activated\n");
+        pr_info("*** tx_isp_video_link_stream: All activate_module calls complete ***\n");
     }
 
-    /* Start/stop streaming on all subdevices */
-    subdev_array = isp_dev->subdevs;
+    /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
+    s4 = arg1->subdevs;  /* Subdev array at offset 0x38 */
 
-    for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
-        struct tx_isp_subdev *subdev = subdev_array[i];
+    /* Binary Ninja: for (int32_t i = 0; i != 0x10; ) */
+    for (i = 0; i != 0x10; ) {
+        /* Binary Ninja: void* $a0 = *$s4 */
+        struct tx_isp_subdev *a0 = *s4;
 
-        if (!subdev) {
-            continue;
-        }
+        if (a0 != 0) {
+            /* Binary Ninja: void* $v0_3 = *(*($a0 + 0xc4) + 4) */
+            struct tx_isp_subdev_video_ops *v0_3 = a0->ops ? a0->ops->video : NULL;
 
-        /* Get video operations for this subdevice */
-        struct tx_isp_subdev_video_ops *video_ops = subdev->ops ? subdev->ops->video : NULL;
-        if (!video_ops) {
-            continue;
-        }
+            if (v0_3 == 0) {
+                /* Binary Ninja: i += 1 */
+                i += 1;
+            } else {
+                /* Binary Ninja: int32_t $v0_4 = *($v0_3 + 4) */
+                int (*v0_4)(struct tx_isp_subdev *, int) = v0_3->link_stream;
 
-        /* Get the link_stream function pointer */
-        int (*link_stream_func)(struct tx_isp_subdev *, int) = video_ops->link_stream;
-        if (!link_stream_func) {
-            continue;
-        }
+                if (v0_4 == 0) {
+                    /* Binary Ninja: i += 1 */
+                    i += 1;
+                } else {
+                    /* Binary Ninja: int32_t result = $v0_4($a0, arg2) */
+                    result = v0_4(a0, arg2);
 
-        /* Call link_stream on this subdevice */
-        pr_info("tx_isp_video_link_stream: Calling link_stream on subdev[%d] (%s)\n",
-                i, subdev->pdev ? subdev->pdev->name : "unknown");
-        result = link_stream_func(subdev, enable);
+                    if (result == 0) {
+                        /* Binary Ninja: i += 1 */
+                        i += 1;
+                    } else {
+                        /* Binary Ninja: if (result != 0xfffffdfd) */
+                        if (result != -ENOIOCTLCMD) {
+                            /* Binary Ninja: void* $s0_1 = arg1 + (i << 2) */
+                            struct tx_isp_subdev **s0_1 = &arg1->subdevs[i];
 
-        if (result == 0) {
-            /* Success - continue to next subdevice */
-            continue;
-        } else if (result == -ENOIOCTLCMD) {
-            /* Not implemented - continue to next subdevice */
-            continue;
+                            /* Binary Ninja: while (arg1 != $s0_1) */
+                            while (&arg1->subdevs[0] != s0_1) {
+                                /* Binary Ninja: void* $a0_1 = *($s0_1 + 0x38) */
+                                /* This is accessing s0_1 as if it's an offset from arg1, but s0_1 is already a subdev pointer */
+                                /* So we need to go back one step: s0_1 -= 1 */
+                                s0_1 -= 1;
+                                struct tx_isp_subdev *a0_1 = *s0_1;
+
+                                if (a0_1 == 0) {
+                                    /* Binary Ninja: $s0_1 -= 4 (already done above) */
+                                    continue;
+                                } else {
+                                    /* Binary Ninja: void* $v0_6 = *(*($a0_1 + 0xc4) + 4) */
+                                    struct tx_isp_subdev_video_ops *v0_6 = a0_1->ops ? a0_1->ops->video : NULL;
+
+                                    if (v0_6 == 0) {
+                                        /* Binary Ninja: $s0_1 -= 4 (already done above) */
+                                        continue;
+                                    } else {
+                                        /* Binary Ninja: int32_t $v0_7 = *($v0_6 + 4) */
+                                        int (*v0_7)(struct tx_isp_subdev *, int) = v0_6->link_stream;
+
+                                        if (v0_7 == 0) {
+                                            /* Binary Ninja: $s0_1 -= 4 (already done above) */
+                                            continue;
+                                        } else {
+                                            /* Binary Ninja: $v0_7($a0_1, arg2 u< 1 ? 1 : 0) */
+                                            v0_7(a0_1, arg2 < 1 ? 1 : 0);
+                                            /* Binary Ninja: $s0_1 -= 4 (already done above) */
+                                        }
+                                    }
+                                }
+                            }
+
+                            /* Binary Ninja: return result */
+                            return result;
+                        }
+                        /* Binary Ninja: i += 1 */
+                        i += 1;
+                    }
+                }
+            }
         } else {
-            /* Error occurred - need to stop all previously started subdevices */
-            pr_err("tx_isp_video_link_stream: link_stream failed on subdev[%d]: %d\n", i, result);
-            /* Stop all previously started subdevices in reverse order */
-            for (int cleanup_idx = i - 1; cleanup_idx >= 0; cleanup_idx--) {
-                struct tx_isp_subdev *cleanup_subdev = isp_dev->subdevs[cleanup_idx];
-                if (!cleanup_subdev) {
-                    continue;
-                }
-
-                struct tx_isp_subdev_video_ops *cleanup_video_ops =
-                    cleanup_subdev->ops ? cleanup_subdev->ops->video : NULL;
-                if (!cleanup_video_ops) {
-                    continue;
-                }
-
-                int (*cleanup_link_stream)(struct tx_isp_subdev *, int) = cleanup_video_ops->link_stream;
-                if (!cleanup_link_stream) {
-                    continue;
-                }
-
-                /* Stop this subdevice (opposite of enable) */
-                pr_info("tx_isp_video_link_stream: Stopping subdev[%d] due to error\n", cleanup_idx);
-                cleanup_link_stream(cleanup_subdev, enable < 1 ? 1 : 0);
-            }
-
-            return result;
+            /* Binary Ninja: i += 1 */
+            i += 1;
         }
+
+        /* Binary Ninja: $s4 = &$s4[1] */
+        s4 = &s4[1];
     }
 
-    pr_info("tx_isp_video_link_stream: Successfully %s streaming on all subdevices\n",
-            enable ? "started" : "stopped");
+    /* Binary Ninja: return 0 */
     return 0;
 }
 
@@ -2342,21 +2358,6 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
                 return result;
             }
             pr_info("*** tx_isp_video_s_stream: Sensor init SUCCESS ***\n");
-    /* CRITICAL: Program VIC MDMA and start VIC streaming before s_stream() calls
-     * This mirrors the working had-vic-interrupts branch, where PIPO/MDMA enable
-     * is triggered prior to regular streaming to generate interrupts.
-     */
-    if (enable == 1) {
-        struct tx_isp_subdev *vic_sd2 = tx_isp_get_vic_subdev(dev);
-        if (vic_sd2) {
-            void *raw_pipe_dummy[8] = { NULL }; /* BN MCP expects non-NULL to avoid disabling processing */
-            pr_info("*** tx_isp_video_s_stream: Calling tx_isp_subdev_pipo to enable VIC MDMA/streaming ***\n");
-            tx_isp_subdev_pipo(vic_sd2, raw_pipe_dummy);
-        } else {
-            pr_warn("tx_isp_video_s_stream: No VIC subdev found for PIPO/MDMA setup\n");
-        }
-    }
-
         }
         pr_info("*** tx_isp_video_s_stream: All subdev initialization complete - proceeding with s_stream ***\n");
     }
