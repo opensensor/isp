@@ -1354,8 +1354,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     /* CRITICAL: Enable ISP core interrupt generation - EXACT Binary Ninja reference */
     /* This was the missing piece that caused interrupts to stall out */
-    if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
-        void __iomem *core = ourISPdev->core_dev->core_regs;
+    if (ourISPdev && ourISPdev->core_regs) {
+        void __iomem *core = ourISPdev->core_regs;
 
         /* Clear any pending interrupts first */
         u32 pend_legacy = readl(core + 0xb4);
@@ -1395,7 +1395,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
 
     /* Also enable the kernel IRQ line if it was registered earlier */
-    enable_irq(37);
+    if (ourISPdev && ourISPdev->isp_irq > 0) {
+        enable_irq(ourISPdev->isp_irq);
+        pr_info("*** ISP CORE IRQ: enable_irq(%d) called ***\n", ourISPdev->isp_irq);
+    }
 
     return 0;
 }
