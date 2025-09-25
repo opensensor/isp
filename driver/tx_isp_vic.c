@@ -2695,6 +2695,25 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 }
 
 
+                /* Attempt control-bank re-unlock/enable if key regs are zero */
+                if (vic_dev->vic_regs_control) {
+                    void __iomem *vcc = vic_dev->vic_regs_control;
+                    u32 ctrl300_c_pre = readl(vcc + 0x300);
+                    u32 buf318_c_pre = readl(vcc + 0x318);
+                    if (ctrl300_c_pre == 0 && buf318_c_pre == 0) {
+                        pr_warn("*** VIC CONTROL BANK: Re-applying enable sequence on CONTROL bank ***\n");
+                        /* Minimal enable sequence on CONTROL bank */
+                        writel(2, vcc + 0x0);
+                        wmb();
+                        writel(4, vcc + 0x0);
+                        wmb();
+                        writel(1, vcc + 0x0);
+                        wmb();
+                        pr_info("*** VIC CONTROL BANK: Post-enable [0x0]=0x%08x ***\n", readl(vcc + 0x0));
+                    }
+                }
+
+
                 /* If control bank still zeros, force-mirror key regs from PRIMARY to CONTROL */
                 if (vic_dev->vic_regs && vic_dev->vic_regs_control) {
                     void __iomem *vrp = vic_dev->vic_regs;
