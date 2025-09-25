@@ -1834,7 +1834,8 @@ int system_irq_func_set(int index, int (*handler)(void))
     }
 
     /* Binary Ninja: *((arg1 << 2) + &irq_func_cb) = arg2 */
-    irq_func_cb[index] = (irqreturn_t (*)(int, void*))handler;  /* Cast for storage */
+    /* CRITICAL FIX: No cast needed - signatures match exactly */
+    irq_func_cb[index] = handler;
 
     printk(KERN_ALERT "*** system_irq_func_set: Registered handler %p at index %d ***\n", handler, index);
     return 0;
