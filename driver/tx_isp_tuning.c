@@ -3117,7 +3117,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         isp_frame_done_wakeup();
                         
                         /* Update frame counter for userspace */
-                        ourISPdev->frame_count++;
+                        ourISPdev->core_dev->frame_count++;
                     }
 
                     /* BINARY NINJA REFERENCE: Acknowledge tuning enable without heavy operations */
