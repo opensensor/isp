@@ -1733,7 +1733,7 @@ int tisp_init(void *sensor_info, char *param_name)
     /* Call all tiziano pipeline initialization functions in Binary Ninja order */
     tiziano_ae_init(sensor_params.height, sensor_params.width, sensor_params.fps);
     tiziano_awb_init(sensor_params.height, sensor_params.width);
-    tiziano_gamma_init(sensor_params.width, sensor_params.height, sensor_params.fps);
+    tiziano_gamma_init();
     tiziano_gib_init();
     tiziano_lsc_init();
     tiziano_ccm_init();
@@ -1819,7 +1819,7 @@ int tisp_init(void *sensor_info, char *param_name)
     /* Binary Ninja: Initialize all tiziano sub-modules in correct order */
     tiziano_ae_init(sensor_params.height, sensor_params.width, sensor_params.fps);
     tiziano_awb_init(sensor_params.height, sensor_params.width);
-    tiziano_gamma_init(sensor_params.width, sensor_params.height, sensor_params.fps);
+    tiziano_gamma_init();
     tiziano_gib_init();
     tiziano_lsc_init();
     tiziano_ccm_init();
@@ -1871,15 +1871,6 @@ int tisp_init(void *sensor_info, char *param_name)
     /* CRITICAL: Start event processing thread for sensor I2C communication */
     pr_info("*** tisp_init: STARTING EVENT PROCESSING THREAD ***\n");
     extern int tisp_event_process(void);
-
-    /* Create kernel thread to continuously process ISP events */
-    tisp_event_thread = kthread_run(tisp_event_process_thread, NULL, "tisp_events");
-    if (IS_ERR(tisp_event_thread)) {
-        pr_err("*** tisp_init: Failed to create event processing thread: %ld ***\n", PTR_ERR(tisp_event_thread));
-        tisp_event_thread = NULL;
-    } else {
-        pr_info("*** tisp_init: Event processing thread started successfully ***\n");
-    }
 
     /* Binary Ninja: system_irq_func_set(0xd, ip_done_interrupt_static) - Set IRQ handler */
     /* CRITICAL: This sets up the ISP processing completion callback - missing piece! */
