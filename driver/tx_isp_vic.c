@@ -3181,19 +3181,24 @@ static int tx_isp_vic_apply_full_config(struct tx_isp_vic_device *vic_dev)
     writel(0x7003, vic_regs + 0x74);        /* Control register */
     wmb();
 
-    /* Apply VIC color space configuration */
-    writel(0xeb8080, vic_regs + 0xc0);      /* Color space config */
-    writel(0x108080, vic_regs + 0xc4);      /* Color space config */
-    writel(0x29f06e, vic_regs + 0xc8);      /* Color space config */
-    writel(0x913622, vic_regs + 0xcc);      /* Color space config */
-    wmb();
+    /* Apply color/processing only for YUV paths; skip for RAW10 to avoid bogus green */
+    if (vic_dev->sensor_attr.data_type != 0x2b) {
+        /* Apply VIC color space configuration */
+        writel(0xeb8080, vic_regs + 0xc0);
+        writel(0x108080, vic_regs + 0xc4);
+        writel(0x29f06e, vic_regs + 0xc8);
+        writel(0x913622, vic_regs + 0xcc);
+        wmb();
 
-    /* Apply VIC processing configuration */
-    writel(0x515af0, vic_regs + 0xd0);      /* Processing config */
-    writel(0xaaa610, vic_regs + 0xd4);      /* Processing config */
-    writel(0xd21092, vic_regs + 0xd8);      /* Processing config */
-    writel(0x6acade, vic_regs + 0xdc);      /* Processing config */
-    wmb();
+        /* Apply VIC processing configuration */
+        writel(0x515af0, vic_regs + 0xd0);
+        writel(0xaaa610, vic_regs + 0xd4);
+        writel(0xd21092, vic_regs + 0xd8);
+        writel(0x6acade, vic_regs + 0xdc);
+        wmb();
+    } else {
+        pr_info("VIC FULL CONFIG: RAW10 path - skipping YUV color/processing registers\n");
+    }
 
     pr_info("*** VIC FULL CONFIG: Complete VIC configuration applied successfully ***\n");
 
