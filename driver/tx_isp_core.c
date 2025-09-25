@@ -1903,7 +1903,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     /* Support both legacy (+0xb*) and new (+0x98b*) interrupt banks */
     {
         interrupt_status = readl(isp_regs + 0xb4);
-        printk(KERN_ALERT "*** ISP CORE: Read interrupt status - interrupt_status=0x%08x***\n", interrupt_status);
+        printk(KERN_ALERT "*** ISP CORE: Read interrupt status - interrupt_status=0x%08x ***\n", interrupt_status);
 
         /* Clear pending in the corresponding bank(s) */
         printk(KERN_ALERT "*** ISP CORE: Clearing legacy interrupt 0x%08x to reg +0xb8 ***\n", interrupt_status);
@@ -1912,8 +1912,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
         /* CRITICAL DEBUG: Verify interrupt was actually cleared */
         u32 verify_legacy = readl(isp_regs + 0xb4);
-        u32 verify_new = readl(isp_regs + 0x98b4);
-        printk(KERN_ALERT "*** ISP CORE: After clearing - legacy=0x%08x, new=0x%08x ***\n", verify_legacy, verify_new);
+        printk(KERN_ALERT "*** ISP CORE: After clearing - legacy=0x%08x ***\n", verify_legacy);
     }
 
     /* Binary Ninja: if (($s1 & 0x3f8) == 0) */
@@ -2156,8 +2155,6 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             }
         }
     }
-
-
 
     printk(KERN_ALERT "*** ISP CORE INTERRUPT PROCESSING COMPLETE - returning IRQ_HANDLED ***\n");
 
