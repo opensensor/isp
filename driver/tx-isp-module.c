@@ -154,29 +154,29 @@ static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
     struct device *dev = NULL;
     struct module *owner = NULL;
     void *subdev_data = NULL;
-    
+
     pr_info("*** isp_i2c_new_subdev_board: MIPS-SAFE implementation - FIXED CRASH ***\n");
-    
+
     /* MIPS ALIGNMENT CHECK: Validate pointer alignment */
     if (!adapter || ((uintptr_t)adapter & 0x3) != 0) {
         pr_err("*** MIPS ALIGNMENT ERROR: adapter pointer 0x%p not 4-byte aligned ***\n", adapter);
         return NULL;
     }
-    
+
     if (!info || ((uintptr_t)info & 0x3) != 0) {
         pr_err("*** MIPS ALIGNMENT ERROR: info pointer 0x%p not 4-byte aligned ***\n", info);
         return NULL;
     }
-    
+
     /* MIPS SAFE: Validate info structure fields */
     if (!info->type || strlen(info->type) == 0) {
         pr_err("isp_i2c_new_subdev_board: Invalid device type\n");
         return NULL;
     }
-    
+
     /* Check if we already have a client for this address - MIPS SAFE */
     mutex_lock(&i2c_client_mutex);
-    if (global_sensor_i2c_client && 
+    if (global_sensor_i2c_client &&
         ((uintptr_t)global_sensor_i2c_client & 0x3) == 0 &&
         global_sensor_i2c_client->addr == info->addr) {
         pr_info("*** REUSING EXISTING I2C CLIENT: %s at 0x%02x (MIPS-safe) ***\n",
@@ -185,52 +185,52 @@ static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
         return global_sensor_i2c_client;
     }
     mutex_unlock(&i2c_client_mutex);
-    
+
     pr_info("Creating I2C subdev: type=%s addr=0x%02x on adapter %s (MIPS-safe)\n",
             info->type, info->addr, adapter->name);
-    
+
     /* CRITICAL FIX: Binary Ninja reference implementation - MIPS-SAFE VERSION */
     /* Binary Ninja: private_request_module(1, arg2, arg3) */
     pr_info("*** MIPS-SAFE: Requesting sensor module %s ***\n", info->type);
     request_module("sensor_%s", info->type);
-    
+
     /* MIPS SAFE: Binary Ninja: if (zx.d(*(arg2 + 0x16)) != 0) */
     /* FIXED: Instead of unsafe *(arg2 + 0x16), check info->addr properly */
     if (info->addr != 0) {
         pr_info("*** MIPS-SAFE: Valid I2C address 0x%02x, creating device ***\n", info->addr);
-        
+
         /* Binary Ninja: void* $v0_1 = private_i2c_new_device(arg1, arg2) */
         client = i2c_new_device(adapter, info);
-        
+
         /* MIPS SAFE: Binary Ninja: if ($v0_1 != 0) */
         if (client && ((uintptr_t)client & 0x3) == 0) {
             pr_info("*** MIPS-SAFE: I2C device created successfully at 0x%p ***\n", client);
-            
+
             /* MIPS SAFE: Binary Ninja: void* $v0_2 = *($v0_1 + 0x1c) */
             /* FIXED: Instead of unsafe *($v0_1 + 0x1c), use proper struct member */
             dev = &client->dev;
             if (dev && ((uintptr_t)dev & 0x3) == 0) {
-                
+
                 /* MIPS SAFE: Get device driver safely */
                 if (dev->driver && ((uintptr_t)dev->driver & 0x3) == 0) {
                     owner = dev->driver->owner;
-                    
+
                     /* Binary Ninja: if ($v0_2 != 0 && private_try_module_get(*($v0_2 + 0x2c)) != 0) */
                     /* MIPS SAFE: Instead of unsafe *($v0_2 + 0x2c), use owner directly */
                     if (owner && try_module_get(owner)) {
                         pr_info("*** MIPS-SAFE: Module reference acquired for %s ***\n", info->type);
-                        
+
                         /* Binary Ninja: int32_t result = private_i2c_get_clientdata($v0_1) */
                         /* MIPS SAFE: Get client data safely */
                         subdev_data = i2c_get_clientdata(client);
-                        
+
                         /* Binary Ninja: private_module_put(*(*($v0_1 + 0x1c) + 0x2c)) */
                         module_put(owner);
-                        
+
                         /* Binary Ninja: if (result != 0) return result */
                         if (subdev_data) {
                             pr_info("*** MIPS-SAFE: Sensor subdev data found, device ready ***\n");
-                            
+
                             /* Store globally to prevent duplicates - MIPS SAFE */
                             mutex_lock(&i2c_client_mutex);
                             if (!global_sensor_i2c_client) {
@@ -239,7 +239,7 @@ static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
                                         client->name, client->addr);
                             }
                             mutex_unlock(&i2c_client_mutex);
-                            
+
                             return client;
                         } else {
                             pr_info("*** MIPS-SAFE: No subdev data yet, device created but not probed ***\n");
@@ -253,7 +253,7 @@ static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
             } else {
                 pr_err("*** MIPS ALIGNMENT ERROR: client->dev not properly aligned ***\n");
             }
-            
+
             /* Store the client even if probe hasn't completed yet */
             mutex_lock(&i2c_client_mutex);
             if (!global_sensor_i2c_client) {
@@ -262,7 +262,7 @@ static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
                         client->name, client->addr);
             }
             mutex_unlock(&i2c_client_mutex);
-            
+
         } else if (!client) {
             pr_err("*** FAILED TO CREATE I2C DEVICE FOR %s ***\n", info->type);
         } else {
@@ -273,7 +273,7 @@ static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
     } else {
         pr_err("*** MIPS-SAFE: Invalid I2C address 0 ***\n");
     }
-    
+
     /* Binary Ninja: return 0 (NULL for failed client creation) */
     return client;
 }
@@ -283,7 +283,7 @@ static int prepare_i2c_infrastructure(struct tx_isp_dev *dev)
 {
     pr_info("I2C infrastructure prepared for dynamic sensor registration\n");
     pr_info("I2C devices will be created when sensors register via IOCTL\n");
-    
+
     /* No static I2C device creation - done dynamically during sensor registration */
     return 0;
 }
@@ -298,7 +298,7 @@ static void cleanup_i2c_infrastructure(struct tx_isp_dev *dev)
         global_sensor_i2c_client = NULL;
     }
     mutex_unlock(&i2c_client_mutex);
-    
+
     /* Clean up any remaining I2C clients and adapters */
     pr_info("I2C infrastructure cleanup complete\n");
 }
@@ -498,7 +498,7 @@ static struct fs_platform_data fs_pdata = {
     .num_channels = 4,  /* Create 4 frame channels like reference */
     .channels = {
         {.enabled = 1, .name = "isp-w00", .index = 0},
-        {.enabled = 1, .name = "isp-w01", .index = 1}, 
+        {.enabled = 1, .name = "isp-w01", .index = 1},
         {.enabled = 1, .name = "isp-w02", .index = 2},
         {.enabled = 0, .name = "isp-w03", .index = 3},  /* Channel 3 disabled by default */
     }
@@ -586,6 +586,9 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1);
 static int private_reset_tx_isp_module(int arg);
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
 
+/* VIC PIPO/MDMA setup entry point (Binary Ninja MCP) */
+extern int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg);
+
 /* Forward declarations for initialization functions */
 extern int tx_isp_fs_platform_init(void);
 extern void tx_isp_fs_platform_exit(void);
@@ -654,10 +657,10 @@ void system_reg_write_ae(u32 arg1, u32 arg2, u32 arg3)
      *     system_reg_write(0xa800, 1)
      * else if (arg1 == 3)
      *     system_reg_write(0x1070, 1)
-     * 
+     *
      * return system_reg_write(arg2, arg3) __tailcall
      */
-    
+
     if (arg1 == 1) {
         system_reg_write(0xa000, 1);  /* Enable AE block 1 */
     } else if (arg1 == 2) {
@@ -665,7 +668,7 @@ void system_reg_write_ae(u32 arg1, u32 arg2, u32 arg3)
     } else if (arg1 == 3) {
         system_reg_write(0x1070, 1);  /* Enable AE block 3 */
     }
-    
+
     /* Tailcall to system_reg_write with remaining args */
     system_reg_write(arg2, arg3);
 }
@@ -676,14 +679,14 @@ void system_reg_write_af(u32 arg1, u32 arg2, u32 arg3)
     /* Binary Ninja decompiled code:
      * if (arg1 == 1)
      *     system_reg_write(0xb800, 1)
-     * 
+     *
      * return system_reg_write(arg2, arg3) __tailcall
      */
-    
+
     if (arg1 == 1) {
         system_reg_write(0xb800, 1);  /* Enable AF block */
     }
-    
+
     /* Tailcall to system_reg_write with remaining args */
     system_reg_write(arg2, arg3);
 }
@@ -696,16 +699,16 @@ void system_reg_write_awb(u32 arg1, u32 arg2, u32 arg3)
      *     system_reg_write(0xb000, 1)
      * else if (arg1 == 2)
      *     system_reg_write(0x1800, 1)
-     * 
+     *
      * return system_reg_write(arg2, arg3) __tailcall
      */
-    
+
     if (arg1 == 1) {
         system_reg_write(0xb000, 1);  /* Enable AWB block 1 */
     } else if (arg1 == 2) {
         system_reg_write(0x1800, 1);  /* Enable AWB block 2 */
     }
-    
+
     /* Tailcall to system_reg_write with remaining args */
     system_reg_write(arg2, arg3);
 }
@@ -716,14 +719,14 @@ void system_reg_write_clm(u32 arg1, u32 arg2, u32 arg3)
     /* Binary Ninja decompiled code:
      * if (arg1 == 1)
      *     system_reg_write(0x6800, 1)
-     * 
+     *
      * return system_reg_write(arg2, arg3) __tailcall
      */
-    
+
     if (arg1 == 1) {
         system_reg_write(0x6800, 1);  /* Enable CLM block */
     }
-    
+
     /* Tailcall to system_reg_write with remaining args */
     system_reg_write(arg2, arg3);
 }
@@ -734,14 +737,14 @@ void system_reg_write_gb(u32 arg1, u32 arg2, u32 arg3)
     /* Binary Ninja decompiled code:
      * if (arg1 == 1)
      *     system_reg_write(0x1070, 1)
-     * 
+     *
      * return system_reg_write(arg2, arg3) __tailcall
      */
-    
+
     if (arg1 == 1) {
         system_reg_write(0x1070, 1);  /* Enable GB block */
     }
-    
+
     /* Tailcall to system_reg_write with remaining args */
     system_reg_write(arg2, arg3);
 }
@@ -752,14 +755,14 @@ void system_reg_write_gib(u32 arg1, u32 arg2, u32 arg3)
     /* Binary Ninja decompiled code:
      * if (arg1 == 1)
      *     system_reg_write(0x1070, 1)
-     * 
+     *
      * return system_reg_write(arg2, arg3) __tailcall
      */
-    
+
     if (arg1 == 1) {
         system_reg_write(0x1070, 1);  /* Enable GIB block */
     }
-    
+
     /* Tailcall to system_reg_write with remaining args */
     system_reg_write(arg2, arg3);
 }
@@ -1247,15 +1250,15 @@ int frame_channel_open(struct inode *inode, struct file *file)
     int minor = iminor(inode);
     int i;
     int channel_num = -1;
-    
+
     pr_info("*** FRAME CHANNEL OPEN: minor=%d ***\n", minor);
-    
+
     /* CRITICAL FIX: Validate file pointer first */
     if (!file) {
         pr_err("Frame channel open: Invalid file pointer\n");
         return -EINVAL;
     }
-    
+
     /* CRITICAL FIX: Find the frame channel device by minor number */
     /* First try to match against registered frame_channels array */
     for (i = 0; i < num_channels; i++) {
@@ -1265,12 +1268,12 @@ int frame_channel_open(struct inode *inode, struct file *file)
             break;
         }
     }
-    
+
     /* FALLBACK: If not found in array, create a new frame channel entry */
     /* This handles cases where devices were created externally */
     if (!fcd) {
         pr_info("*** FRAME CHANNEL OPEN: Device not in array, creating new entry for minor %d ***\n", minor);
-        
+
         /* Determine channel number from minor - framechan0=minor X, framechan1=minor Y, etc */
         /* Since we can't easily map minor to channel, we'll use the first available slot */
         for (i = 0; i < 4; i++) { /* Max 4 channels */
@@ -1284,12 +1287,12 @@ int frame_channel_open(struct inode *inode, struct file *file)
             }
         }
     }
-    
+
     if (!fcd) {
         pr_err("Frame channel open: No available slot for minor %d\n", minor);
         return -ENODEV;
     }
-    
+
     /* Initialize channel state - safe to call multiple times in kernel 3.10 */
     spin_lock_init(&fcd->state.buffer_lock);
     init_waitqueue_head(&fcd->state.frame_wait);
@@ -1300,7 +1303,7 @@ int frame_channel_open(struct inode *inode, struct file *file)
     spin_lock_init(&fcd->state.queue_lock);
     fcd->state.queued_count = 0;
     fcd->state.completed_count = 0;
-    
+
     /* Set default format based on channel if not already set */
     if (fcd->state.width == 0) {
         if (fcd->channel_num == 0) {
@@ -1311,16 +1314,16 @@ int frame_channel_open(struct inode *inode, struct file *file)
         } else {
             /* Sub channel - smaller */
             fcd->state.width = 640;
-            fcd->state.height = 360;  
+            fcd->state.height = 360;
             fcd->state.format = 0x3231564e; /* NV12 */
         }
-        
+
         fcd->state.enabled = false;
         fcd->state.streaming = false;
         fcd->state.buffer_count = 0;
         fcd->state.sequence = 0;
         fcd->state.frame_ready = false;
-        
+
         pr_info("*** FRAME CHANNEL %d: Initialized state ***\n", fcd->channel_num);
     }
 
@@ -1332,16 +1335,16 @@ int frame_channel_open(struct inode *inode, struct file *file)
     /* CRITICAL FIX: Store frame channel device at the exact offset expected by reference driver */
     /* Binary Ninja shows frame_channel_unlocked_ioctl expects device at *(file + 0x70) */
     file->private_data = fcd;
-    
+
     /* SAFE: Use proper file->private_data instead of unsafe offset access */
     /* The Binary Ninja offset 0x70 corresponds to the private_data field */
     /* file->private_data is already set above - no unsafe offset access needed */
     pr_info("*** SAFE: Frame channel device stored in file->private_data ***\n");
-    
+
     pr_info("*** FRAME CHANNEL %d OPENED SUCCESSFULLY - NOW READY FOR IOCTLS ***\n", fcd->channel_num);
     pr_info("Channel %d: Format %dx%d, pixfmt=0x%x, minor=%d\n",
             fcd->channel_num, fcd->state.width, fcd->state.height, fcd->state.format, minor);
-    
+
     return 0;
 }
 
@@ -1349,23 +1352,23 @@ int frame_channel_open(struct inode *inode, struct file *file)
 int frame_channel_release(struct inode *inode, struct file *file)
 {
     struct frame_channel_device *fcd = file->private_data;
-    
+
     if (!fcd) {
         return 0;
     }
-    
+
     pr_info("*** FRAME CHANNEL %d RELEASED ***\n", fcd->channel_num);
-    
+
     /* Stop streaming if active */
     if (fcd->state.streaming) {
         pr_info("Channel %d: Stopping streaming on release\n", fcd->channel_num);
         fcd->state.streaming = false;
         fcd->state.enabled = false;
-        
+
         /* Wake up any waiters */
         wake_up_interruptible(&fcd->state.frame_wait);
     }
-    
+
     file->private_data = NULL;
     return 0;
 }
@@ -1385,9 +1388,9 @@ static int tx_isp_init_csi_subdev(struct tx_isp_dev *isp_dev)
     if (!isp_dev) {
         return -EINVAL;
     }
-    
+
     pr_info("*** INITIALIZING CSI AS PROPER SUBDEV FOR MIPI INTERFACE ***\n");
-    
+
     /* Use Binary Ninja csi_device_probe method */
     return csi_device_probe(isp_dev);
 }
@@ -1396,15 +1399,15 @@ static int tx_isp_init_csi_subdev(struct tx_isp_dev *isp_dev)
 static int tx_isp_activate_csi_subdev(struct tx_isp_dev *isp_dev)
 {
     struct tx_isp_csi_device *csi_dev;
-    
+
     if (!isp_dev || !isp_dev->csi_dev) {
         return -EINVAL;
     }
-    
+
     csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
-    
+
     pr_info("*** ACTIVATING CSI SUBDEV FOR MIPI RECEPTION ***\n");
-    
+
     /* Call the Binary Ninja method directly */
     return tx_isp_csi_activate_subdev(&csi_dev->sd);
 }
@@ -1414,32 +1417,32 @@ static int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_i
 {
     struct tx_isp_csi_device *csi_dev;
     struct tx_isp_dev *isp_dev;
-    
+
     if (!sd || !sensor_attr) {
         pr_err("csi_sensor_ops_sync_sensor_attr: Invalid parameters\n");
         return -EINVAL;
     }
-    
+
     /* Cast isp pointer properly */
     isp_dev = (struct tx_isp_dev *)sd->isp;
     if (!isp_dev) {
         pr_err("csi_sensor_ops_sync_sensor_attr: Invalid ISP device\n");
         return -EINVAL;
     }
-    
+
     csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
     if (!csi_dev) {
         pr_err("csi_sensor_ops_sync_sensor_attr: No CSI device\n");
         return -EINVAL;
     }
-    
+
     pr_info("csi_sensor_ops_sync_sensor_attr: Syncing sensor attributes for interface %d\n",
             sensor_attr->dbus_type);
 
     /* Store sensor attributes in CSI device */
     csi_dev->interface_type = sensor_attr->dbus_type;
     csi_dev->lanes = (sensor_attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) ? 2 : 1; /* MIPI=1 uses 2 lanes, DVP=2 uses 1 lane */
-    
+
     return 0;
 }
 
@@ -1451,34 +1454,34 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     void __iomem *isp_csi_regs = NULL;
     struct resource *mem_resource = NULL;
     int ret = 0;
-    
+
     if (!isp_dev) {
         pr_err("csi_device_probe: Invalid ISP device\n");
         return -EINVAL;
     }
-    
+
     pr_info("*** csi_device_probe: EXACT Binary Ninja tx_isp_csi_probe implementation ***\n");
-    
+
     /* Binary Ninja: private_kmalloc(0x148, 0xd0) */
     csi_dev = kzalloc(sizeof(struct tx_isp_csi_device), GFP_KERNEL);
     if (!csi_dev) {
         pr_err("csi_device_probe: Failed to allocate CSI device (0x148 bytes)\n");
         return -ENOMEM;
     }
-    
+
     /* SAFE: Use sizeof instead of hardcoded size to prevent buffer overflow */
     memset(csi_dev, 0, sizeof(struct tx_isp_csi_device));
-    
+
     /* Initialize CSI subdev structure like Binary Ninja tx_isp_subdev_init */
     memset(&csi_dev->sd, 0, sizeof(csi_dev->sd));
     csi_dev->sd.isp = isp_dev;
     csi_dev->sd.ops = NULL;  /* Would be &csi_subdev_ops in full implementation */
     csi_dev->sd.vin_state = TX_ISP_MODULE_INIT;
-    
+
     /* REMOVED: Manual memory region request - handled by tx_isp_subdev_init per reference driver */
     /* Memory region will be requested by the platform device probe function */
     mem_resource = NULL;  /* Will be set by platform device probe */
-    
+
     /* CRITICAL FIX: Get CSI registers from the linked CSI device */
     if (isp_dev->csi_dev && isp_dev->csi_regs) {
         csi_basic_regs = isp_dev->csi_regs;
@@ -1487,7 +1490,7 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
         csi_basic_regs = NULL;
         pr_info("*** CSI BASIC REGISTERS: Not available yet (will be set by platform device probe) ***\n");
     }
-    
+
     /* *** CRITICAL: Map ISP CSI registers - Binary Ninja offset +0x13c region *** */
     /* Binary Ninja shows *($s0_1 + 0x13c) points to ISP CSI register region */
     /* This is the MIPI-specific CSI control registers within ISP */
@@ -1505,22 +1508,22 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     /* Binary Ninja: Store register addresses at correct offsets */
     /* *($v0 + 0xb8) = csi_basic_regs (basic CSI control) */
     csi_dev->csi_regs = csi_basic_regs;
-    
+
     /* SAFE: Use proper struct members instead of unsafe offset access */
     /* These offsets should correspond to actual struct members in tx_isp_csi_device */
     /* For now, store in the main csi_regs field - the reference driver will handle proper mapping */
     csi_dev->csi_regs = isp_csi_regs;  /* Use primary register field */
     /* mem_resource is already stored in the platform device structure */
-    
+
     /* Binary Ninja: private_raw_mutex_init($v0 + 0x12c) */
     mutex_init(&csi_dev->mlock);
-    
+
     /* Binary Ninja: *($v0 + 0x128) = 1 (initial state) */
     csi_dev->state = 1;
-    
+
     /* Binary Ninja: dump_csd = $v0 (global CSI device pointer) */
     /* Store globally for debug access */
-    
+
     pr_info("*** CSI device structure initialized: ***\n");
     pr_info("  Size: 0x148 bytes\n");
     pr_info("  Basic regs (+0xb8): %p (0x10022000)\n", csi_basic_regs);
@@ -1531,10 +1534,10 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     pr_info("*** CRITICAL: LINKING CSI DEVICE TO ISP DEVICE ***\n");
     isp_dev->csi_dev = csi_dev;
     pr_info("*** CSI DEVICE LINKED: isp_dev->csi_dev = %p ***\n", isp_dev->csi_dev);
-    
+
     pr_info("*** csi_device_probe: Binary Ninja CSI device created successfully ***\n");
     return 0;
-    
+
 err_release_mem:
     /* REMOVED: Manual memory region release - handled by platform device system */
 err_free_dev:
@@ -2339,6 +2342,21 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
                 return result;
             }
             pr_info("*** tx_isp_video_s_stream: Sensor init SUCCESS ***\n");
+    /* CRITICAL: Program VIC MDMA and start VIC streaming before s_stream() calls
+     * This mirrors the working had-vic-interrupts branch, where PIPO/MDMA enable
+     * is triggered prior to regular streaming to generate interrupts.
+     */
+    if (enable == 1) {
+        struct tx_isp_subdev *vic_sd2 = tx_isp_get_vic_subdev(dev);
+        if (vic_sd2) {
+            pr_info("*** tx_isp_video_s_stream: Calling tx_isp_subdev_pipo to enable VIC MDMA/streaming ***\n");
+            /* Pass NULL for raw_pipe: tx_isp_subdev_pipo handles NULL safely and still enables MDMA */
+            tx_isp_subdev_pipo(vic_sd2, NULL);
+        } else {
+            pr_warn("tx_isp_video_s_stream: No VIC subdev found for PIPO/MDMA setup\n");
+        }
+    }
+
         }
         pr_info("*** tx_isp_video_s_stream: All subdev initialization complete - proceeding with s_stream ***\n");
     }
@@ -2479,13 +2497,13 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_err("*** frame_channel_unlocked_ioctl: Invalid private_data pointer 0x%p - memory corruption ***\n", file->private_data);
         return -EFAULT;
     }
-    
+
     /* MIPS ALIGNMENT CHECK: Validate argp pointer */
     if (argp && ((uintptr_t)argp & 0x3) != 0) {
         pr_err("*** MIPS ALIGNMENT ERROR: argp pointer 0x%p not 4-byte aligned ***\n", argp);
         return -EINVAL;
     }
-    
+
     /* MIPS SAFE: Get frame channel device with alignment validation */
     fcd = file->private_data;
     if (!fcd || ((uintptr_t)fcd & 0x3) != 0) {
@@ -2493,52 +2511,52 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_err("*** This prevents the crash at BadVA: 0x5f4942b3 safely ***\n");
         return -EINVAL;
     }
-    
+
     /* MIPS SAFE: Additional bounds validation */
     if ((uintptr_t)fcd < PAGE_SIZE || (uintptr_t)fcd >= 0xfffff000) {
         pr_err("*** MIPS ERROR: Frame channel device pointer 0x%p out of valid range ***\n", fcd);
         return -EFAULT;
     }
-    
+
     /* MIPS SAFE: Validate channel number with alignment */
     if (((uintptr_t)&fcd->channel_num & 0x3) != 0) {
         pr_err("*** MIPS ALIGNMENT ERROR: channel_num field not aligned ***\n");
         return -EFAULT;
     }
-    
+
     channel = fcd->channel_num;
     if (channel < 0 || channel >= 4) {
         pr_err("*** MIPS ERROR: Invalid channel number %d (valid: 0-3) ***\n", channel);
         return -EINVAL;
     }
-    
+
     /* MIPS SAFE: Validate state structure alignment */
     state = &fcd->state;
     if (((uintptr_t)state & 0x3) != 0) {
         pr_err("*** MIPS ALIGNMENT ERROR: channel state structure not aligned ***\n");
         return -EFAULT;
     }
-    
+
     pr_info("*** Frame channel %d IOCTL: MIPS-safe processing - cmd=0x%x ***\n", channel, cmd);
-        
+
     // Add channel enable/disable IOCTLs that IMP_FrameSource_EnableChn uses
     switch (cmd) {
     case 0x40045620: { // Channel enable IOCTL (common pattern)
         int enable;
-        
+
         if (copy_from_user(&enable, argp, sizeof(enable)))
             return -EFAULT;
-            
+
         state->enabled = enable ? true : false;
         pr_info("Frame channel %d %s\n", channel, enable ? "ENABLED" : "DISABLED");
-        
+
         return 0;
     }
     case 0x40045621: { // Channel disable IOCTL (common pattern)
         state->enabled = false;
         state->streaming = false;
         pr_info("Frame channel %d DISABLED\n", channel);
-        
+
         return 0;
     }
     case 0xc0205622: { // Get channel attributes
@@ -2548,18 +2566,18 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             int format;
             int enabled;
         } attr;
-        
+
         attr.width = state->width;
         attr.height = state->height;
         attr.format = state->format;
         attr.enabled = state->enabled ? 1 : 0;
-        
+
         if (copy_to_user(argp, &attr, sizeof(attr)))
             return -EFAULT;
-            
+
         pr_info("Frame channel %d get attr: %dx%d fmt=0x%x enabled=%d\n",
                 channel, attr.width, attr.height, attr.format, attr.enabled);
-        
+
         return 0;
     }
     case 0xc0205623: { // Set channel attributes
@@ -2569,18 +2587,18 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             int format;
             int enabled;
         } attr;
-        
+
         if (copy_from_user(&attr, argp, sizeof(attr)))
             return -EFAULT;
-            
+
         state->width = attr.width;
         state->height = attr.height;
         state->format = attr.format;
         state->enabled = attr.enabled ? true : false;
-        
+
         pr_info("Frame channel %d set attr: %dx%d fmt=0x%x enabled=%d\n",
                 channel, attr.width, attr.height, attr.format, attr.enabled);
-        
+
         return 0;
     }
     case 0xc0145608: { // VIDIOC_REQBUFS - Request buffers - MEMORY-AWARE implementation
@@ -2598,49 +2616,49 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("*** Channel %d: REQBUFS - MEMORY-AWARE implementation ***\n", channel);
         pr_info("Channel %d: Request %d buffers, type=%d memory=%d\n",
                 channel, reqbuf.count, reqbuf.type, reqbuf.memory);
-        
+
         /* CRITICAL: Check available memory before allocation */
         if (reqbuf.count > 0) {
             u32 buffer_size;
             u32 total_memory_needed;
             u32 available_memory = 96768; /* From Wyze Cam logs - only 94KB free */
-            
+
             /* Calculate buffer size based on channel */
             if (channel == 0) {
                 buffer_size = 1920 * 1080 * 3 / 2; /* NV12 main stream */
             } else {
                 buffer_size = 640 * 360 * 3 / 2;   /* NV12 sub stream */
             }
-            
+
             /* Limit buffer count based on memory type and available memory */
             if (reqbuf.memory == 1) { /* V4L2_MEMORY_MMAP - driver allocates */
                 total_memory_needed = reqbuf.count * buffer_size;
-                
+
                 pr_info("Channel %d: MMAP mode - need %u bytes for %d buffers\n",
                        channel, total_memory_needed, reqbuf.count);
-                
+
                 /* CRITICAL: Memory pressure detection */
                 if (total_memory_needed > available_memory) {
                     /* Calculate maximum safe buffer count */
                     u32 max_safe_buffers = available_memory / buffer_size;
                     if (max_safe_buffers == 0) max_safe_buffers = 1; /* At least 1 buffer */
-                    
+
                     pr_warn("*** MEMORY PRESSURE DETECTED ***\n");
                     pr_warn("Channel %d: Requested %d buffers (%u bytes) > available %u bytes\n",
                            channel, reqbuf.count, total_memory_needed, available_memory);
                     pr_warn("Channel %d: Reducing to %d buffers to prevent Wyze Cam failure\n",
                            channel, max_safe_buffers);
-                    
+
                     reqbuf.count = max_safe_buffers;
                     total_memory_needed = reqbuf.count * buffer_size;
                 }
-                
+
                 /* Additional safety: Limit to 4 buffers max for memory efficiency */
                 reqbuf.count = min(reqbuf.count, 4U);
-                
+
                 pr_info("Channel %d: MMAP allocation - %d buffers of %u bytes each\n",
                        channel, reqbuf.count, buffer_size);
-                
+
                 /* CRITICAL FIX: Allocate video_buffer structures like reference driver */
                 pr_info("Channel %d: MMAP mode - allocating %d video_buffer structures\n",
                        channel, reqbuf.count);
@@ -2679,22 +2697,22 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     pr_info("*** Channel %d: Allocated video_buffer structure[%d] at %p ***\n",
                             channel, i, buffer);
                 }
-                
+
             } else if (reqbuf.memory == 2) { /* V4L2_MEMORY_USERPTR - client allocates */
                 pr_info("Channel %d: USERPTR mode - client will provide buffers\n", channel);
-                
+
                 /* Validate client can provide reasonable buffer count */
                 reqbuf.count = min(reqbuf.count, 8U); /* Max 8 user buffers */
-                
+
                 /* No driver allocation needed - client provides buffers */
                 pr_info("Channel %d: USERPTR mode - %d user buffers expected\n",
                        channel, reqbuf.count);
-                
+
             } else {
                 pr_err("Channel %d: Unsupported memory type %d\n", channel, reqbuf.memory);
                 return -EINVAL;
             }
-            
+
             state->buffer_count = reqbuf.count;
 
             /* CRITICAL FIX: Initialize VBM buffer management for this channel */
@@ -2731,7 +2749,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
             pr_info("*** Channel %d: MEMORY-AWARE REQBUFS SUCCESS - %d buffers ***\n",
                    channel, state->buffer_count);
-            
+
         } else {
             /* Free existing buffers */
             pr_info("Channel %d: Freeing existing buffers\n", channel);
@@ -2753,10 +2771,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_info("*** Channel %d: VIC active_buffer_count cleared ***\n", channel);
             }
         }
-        
+
         if (copy_to_user(argp, &reqbuf, sizeof(reqbuf)))
             return -EFAULT;
-            
+
         return 0;
     }
     case 0xc044560f: { // VIDIOC_QBUF - Queue buffer - EXACT Binary Ninja reference
@@ -2986,7 +3004,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_err("*** QBUF: Failed to copy buffer back to user ***\n");
             return -EFAULT;
         }
-        
+
         pr_info("*** Channel %d: QBUF completed successfully (MIPS-safe) ***\n", channel);
         return 0;
     }
@@ -3062,7 +3080,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         if (copy_to_user(argp, &buffer, sizeof(buffer)))
             return -EFAULT;
-            
+
         return 0;
     }
     case 0xc0445611: { // VIDIOC_DQBUF - Dequeue buffer - Binary Ninja implementation
@@ -3085,16 +3103,16 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             uint32_t reserved2;
             uint32_t reserved;
         } buffer;
-        
+
         struct tx_isp_sensor *active_sensor = NULL;
         unsigned long flags;
         int ret = 0;
         bool sensor_active = false;
         uint32_t buf_index;
-        
+
         if (copy_from_user(&buffer, argp, sizeof(buffer)))
             return -EFAULT;
-            
+
         pr_info("*** Channel %d: DQBUF - dequeue buffer request ***\n", channel);
 
         // Validate buffer type matches channel configuration
@@ -3110,7 +3128,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             state->enabled = true;
 
         }
-        
+
         // Check if real sensor is connected and active
         extern struct tx_isp_sensor *tx_isp_get_sensor(void);
         struct tx_isp_sensor *sensor_check = tx_isp_get_sensor();
@@ -3121,14 +3139,14 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_info("Channel %d: Real sensor %s is ACTIVE\n", channel, active_sensor->info.name);
             }
         }
-        
+
         /* Binary Ninja DQBUF: Wait for frame completion with proper state checking */
         pr_info("*** Channel %d: DQBUF waiting for frame completion (timeout=200ms) ***\n", channel);
         ret = wait_event_interruptible_timeout(state->frame_wait,
                                              state->frame_ready || !state->streaming,
                                              msecs_to_jiffies(200)); // 200ms timeout like reference
         pr_info("*** Channel %d: DQBUF wait returned %d ***\n", channel, ret);
-        
+
         if (ret == 0) {
             pr_info("*** Channel %d: DQBUF timeout, generating frame ***\n", channel);
             spin_lock_irqsave(&state->buffer_lock, flags);
@@ -3138,22 +3156,22 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_info("*** Channel %d: DQBUF interrupted: %d ***\n", channel, ret);
             return ret;
         }
-        
+
         if (!state->streaming) {
             pr_info("Channel %d: Streaming stopped during DQBUF wait\n", channel);
             return -EAGAIN;
         }
-        
+
         /* Binary Ninja __fill_v4l2_buffer implementation */
         spin_lock_irqsave(&state->buffer_lock, flags);
-        
+
         // Calculate buffer index like Binary Ninja reference
         if (state->buffer_count > 0) {
             buf_index = state->sequence % state->buffer_count;
         } else {
             buf_index = state->sequence % 4; // Default cycling
         }
-        
+
         /* Fill buffer structure like Binary Ninja __fill_v4l2_buffer */
         // memcpy(arg2, arg1, 0x34) - copy basic buffer info
         buffer.index = buf_index;
@@ -3169,11 +3187,11 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         buffer.sequence = state->sequence++;
         buffer.memory = 1; // V4L2_MEMORY_MMAP
         buffer.length = buffer.bytesused;
-        
-        /* Binary Ninja flag logic: *(arg2 + 0xc) = result 
+
+        /* Binary Ninja flag logic: *(arg2 + 0xc) = result
          * Flags depend on buffer state */
         buffer.flags = 0x1; // V4L2_BUF_FLAG_MAPPED
-        
+
         /* Binary Ninja state-based flag setting */
         if (sensor_active) {
             buffer.flags |= 0x2; // V4L2_BUF_FLAG_DONE (real data)
@@ -3181,14 +3199,14 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         } else {
             buffer.flags |= 0x2; // V4L2_BUF_FLAG_DONE (simulated data)
         }
-        
+
         /* Set buffer physical address offset like Binary Ninja */
         buffer.m.offset = buf_index * buffer.bytesused;
-        
+
         /* Binary Ninja DMA sync: private_dma_sync_single_for_device(nullptr, var_44, var_40, 2) */
         if (sensor_active && ourISPdev && ourISPdev->vic_dev) {
             struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
-            
+
             /* Update VIC buffer tracking for this dequeue like Binary Ninja */
             if (vic_dev && vic_dev->vic_regs && buf_index < 8) {
                 /* CRITICAL FIX: Use stored real buffer address instead of generated fake address */
@@ -3306,7 +3324,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_info("*** Channel %d: DQBUF - No VIC device or invalid buffer index ***\n", channel);
             }
         }
-        
+
         // Mark frame as consumed
         state->frame_ready = false;
         spin_unlock_irqrestore(&state->buffer_lock, flags);
@@ -3336,12 +3354,12 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 uint8_t raw_data[200];
             } fmt;
         } format;
-        
+
         if (copy_from_user(&format, argp, sizeof(format)))
             return -EFAULT;
-            
+
         pr_info("Channel %d: Get format, type=%d\n", channel, format.type);
-        
+
         // Set default HD format
         format.fmt.pix.width = 1920;
         format.fmt.pix.height = 1080;
@@ -3350,10 +3368,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         format.fmt.pix.bytesperline = 1920;
         format.fmt.pix.sizeimage = 1920 * 1080 * 3 / 2;
         format.fmt.pix.colorspace = 8; // V4L2_COLORSPACE_REC709
-        
+
         if (copy_to_user(argp, &format, sizeof(format)))
             return -EFAULT;
-            
+
         return 0;
     }
     case 0xc07056c3: { // VIDIOC_S_FMT - Set format
@@ -3373,16 +3391,16 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 uint8_t raw_data[200];
             } fmt;
         } format;
-        
+
         if (copy_from_user(&format, argp, sizeof(format)))
             return -EFAULT;
-            
+
         pr_info("Channel %d: Set format %dx%d pixfmt=0x%x\n",
                 channel, format.fmt.pix.width, format.fmt.pix.height, format.fmt.pix.pixelformat);
-        
+
         // Reference validates and configures the format
         // For now, acknowledge the format set
-        
+
         return 0;
     }
     case 0x400456bf: { // Frame completion wait
@@ -3540,7 +3558,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("Channel %d: Unhandled IOCTL 0x%x\n", channel, cmd);
         return -ENOTTY;
     }
-    
+
     return 0;
 }
 
@@ -4335,7 +4353,7 @@ int tx_isp_open(struct inode *inode, struct file *file)
     isp->refcnt = 1;
     isp->is_open = true;
     file->private_data = isp;
-    
+
     pr_info("*** tx_isp_open: ISP opened safely - no dangerous operations triggered ***\n");
     return 0;
 }
@@ -4927,11 +4945,11 @@ static void tx_isp_exit(void)
         /* *** CRITICAL: Cleanup V4L2 video devices *** */
         tx_isp_v4l2_cleanup();
         pr_info("*** V4L2 VIDEO DEVICES CLEANED UP ***\n");
-        
+
         /* *** CRITICAL: Destroy ISP M0 tuning device node (matches reference driver) *** */
         tisp_code_destroy_tuning_node();
         pr_info("*** ISP M0 TUNING DEVICE NODE DESTROYED ***\n");
-        
+
         /* Clean up clocks properly using Linux Clock Framework */
         if (ourISPdev->core_dev && ourISPdev->core_dev->core_clk) {
             clk_disable_unprepare(ourISPdev->core_dev->core_clk);
@@ -4939,13 +4957,13 @@ static void tx_isp_exit(void)
             ourISPdev->core_dev->core_clk = NULL;
             pr_info("ISP clock disabled and released\n");
         }
-        
+
         /* Note: CGU_ISP and VIC clocks managed locally, no storage in device struct */
         pr_info("Additional clocks cleaned up\n");
-        
+
         /* Clean up I2C infrastructure */
         cleanup_i2c_infrastructure(ourISPdev);
-        
+
         /* CRITICAL: Store IRQ numbers before setting ourISPdev to NULL */
         int isp_irq = (ourISPdev->core_dev) ? ourISPdev->core_dev->irq : -1;
         int isp_irq2 = -1;  /* IRQ2 not used in new architecture */
@@ -4971,11 +4989,11 @@ static void tx_isp_exit(void)
         synchronize_irq(37);
         synchronize_irq(38);
         pr_info("*** All interrupts synchronized - safe to free memory ***\n");
-        
+
         /* CRITICAL FIX: Disable VIC interrupts at hardware level BEFORE freeing vic_dev */
         if (ourISPdev->vic_dev) {
             struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
-            
+
             // Clean up any remaining buffers
             if (!list_empty(&vic_dev->queue_head)) {
                 struct list_head *pos, *n;
@@ -4996,7 +5014,7 @@ static void tx_isp_exit(void)
             kfree(vic_dev);
             pr_info("VIC device cleaned up safely\n");
         }
-        
+
         /* Clean up sensor if present */
         extern struct tx_isp_sensor *tx_isp_get_sensor(void);
         struct tx_isp_sensor *sensor = tx_isp_get_sensor();
@@ -5012,10 +5030,10 @@ static void tx_isp_exit(void)
                 }
             }
         }
-        
+
         /* Unregister misc device */
         misc_deregister(&tx_isp_miscdev);
-        
+
         /* *** CRITICAL: Unregister platform devices that were registered in init *** */
         platform_device_unregister(&tx_isp_core_platform_device);
         platform_device_unregister(&tx_isp_fs_platform_device);
@@ -5023,15 +5041,15 @@ static void tx_isp_exit(void)
         platform_device_unregister(&tx_isp_vic_platform_device);
         platform_device_unregister(&tx_isp_csi_platform_device);
         pr_info("*** PLATFORM SUBDEVICES UNREGISTERED ***\n");
-        
+
         /* *** CRITICAL: Cleanup subdev platform drivers *** */
         tx_isp_subdev_platform_exit();
         pr_info("*** SUBDEV PLATFORM DRIVERS CLEANED UP ***\n");
-        
+
         /* Unregister platform components */
         platform_driver_unregister(&tx_isp_driver);
         platform_device_unregister(&tx_isp_platform_device);
-        
+
         /* Clean up event callback structure */
         if (ourISPdev->event_callback) {
             kfree(ourISPdev->event_callback);
@@ -5062,23 +5080,23 @@ static int private_reset_tx_isp_module(int arg)
     void __iomem *cpm_regs;
     u32 reset_reg;
     int timeout = 500; /* 0x1f4 iterations like Binary Ninja */
-    
+
     if (arg != 0) {
         return 0;
     }
-    
+
     /* Map CPM registers */
     cpm_regs = ioremap(0x10000000, 0x1000);
     if (!cpm_regs) {
         return -ENOMEM;
     }
-    
+
     /* Binary Ninja: *0xb00000c4 |= 0x200000 */
     reset_reg = readl(cpm_regs + 0xc4);
     reset_reg |= 0x200000;
     writel(reset_reg, cpm_regs + 0xc4);
     wmb();
-    
+
     /* Binary Ninja: for (int32_t i = 0x1f4; i != 0; ) */
     while (timeout > 0) {
         reset_reg = readl(cpm_regs + 0xc4);
@@ -5091,16 +5109,16 @@ static int private_reset_tx_isp_module(int arg)
             reset_reg &= 0xffbfffff;
             writel(reset_reg, cpm_regs + 0xc4);
             wmb();
-            
+
             iounmap(cpm_regs);
             return 0;
         }
-        
+
         /* Binary Ninja: i -= 1; private_msleep(2) */
         timeout--;
         msleep(2);
     }
-    
+
     iounmap(cpm_regs);
     return -ETIMEDOUT; /* Binary Ninja: return 0xffffffff */
 }
@@ -5265,31 +5283,31 @@ static struct vic_buffer_entry *pop_buffer_fifo(struct list_head *fifo_head)
 {
     struct vic_buffer_entry *buffer = NULL;
     unsigned long flags;
-    
+
     if (!fifo_head || list_empty(fifo_head)) {
         return NULL;
     }
-    
+
     spin_lock_irqsave(&irq_cb_lock, flags);
-    
+
     if (!list_empty(fifo_head)) {
         buffer = list_first_entry(fifo_head, struct vic_buffer_entry, list);
         list_del(&buffer->list);
     }
-    
+
     spin_unlock_irqrestore(&irq_cb_lock, flags);
-    
+
     return buffer;
 }
 
 static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entry *buffer)
 {
     unsigned long flags;
-    
+
     if (!fifo_head || !buffer) {
         return;
     }
-    
+
     spin_lock_irqsave(&irq_cb_lock, flags);
     list_add_tail(&buffer->list, fifo_head);
     spin_unlock_irqrestore(&irq_cb_lock, flags);
@@ -5394,19 +5412,19 @@ irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
 static irqreturn_t ispmodule_ip_done_irq_handler(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
-    
+
     if (!isp_dev) {
         return IRQ_NONE;
     }
-    
+
     pr_info("*** ISP IP DONE INTERRUPT: Processing complete ***\n");
-    
+
     /* Update frame processing statistics */
     /* Use external frame counter since frame_complete is a completion struct */
     extern atomic64_t frame_done_cnt;
     atomic64_inc(&frame_done_cnt);
 
-    
+
     return IRQ_HANDLED;
 }
 
@@ -5492,11 +5510,11 @@ static int __enqueue_in_driver(void *buffer_struct)
 {
     void *s1;
     int result;
-    
+
     if (!buffer_struct) {
         return 0xfffffdfd;
     }
-    
+
     /* SAFE: Use proper struct member access instead of unsafe offsets */
     /* These offsets should correspond to actual buffer structure members */
     /* For now, use safe defaults until proper buffer structure is defined */
@@ -5504,7 +5522,7 @@ static int __enqueue_in_driver(void *buffer_struct)
 
     /* Buffer state management should use proper struct members */
     /* For now, skip unsafe buffer state manipulation */
-    
+
     /* Binary Ninja: int32_t result = tx_isp_send_event_to_remote(*($s1 + 0x298), 0x3000005, arg1 + 0x68) */
     if (s1 && ourISPdev && ourISPdev->vic_dev) {
         /* Get VIC subdev for event routing */
@@ -5512,10 +5530,10 @@ static int __enqueue_in_driver(void *buffer_struct)
         struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
         /* SAFE: Use proper struct member instead of unsafe offset */
         void *event_data = buffer_struct;  /* Use the buffer struct itself as event data */
-        
+
         pr_info("__enqueue_in_driver: Sending BUFFER_ENQUEUE event to VIC\n");
         result = tx_isp_send_event_to_remote(vic_dev, 0x3000005, event_data);
-        
+
         /* Binary Ninja: if (result != 0 && result != 0xfffffdfd) */
         if (result != 0 && result != 0xfffffdfd) {
             pr_err("__enqueue_in_driver: flags = 0x%08x\n", result);
@@ -5523,7 +5541,7 @@ static int __enqueue_in_driver(void *buffer_struct)
     } else {
         result = 0xfffffdfd;
     }
-    
+
     /* Binary Ninja: return result */
     return result;
 }
@@ -5613,7 +5631,7 @@ static void tisp_ae1_expt(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t 
 static void tisp_set_sensor_integration_time_short(uint32_t integration_time)
 {
     pr_info("tisp_set_sensor_integration_time_short: Setting integration time to %u\n", integration_time);
-    
+
     /* CRITICAL: This would normally write to sensor via I2C */
     extern struct tx_isp_sensor *tx_isp_get_sensor(void);
     struct tx_isp_sensor *sensor = tx_isp_get_sensor();
@@ -6468,7 +6486,7 @@ EXPORT_SYMBOL(tiziano_ae_s_ev_start);
 static void tisp_set_ae1_ag(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4)
 {
     pr_info("tisp_set_ae1_ag: Setting AE analog gain\n");
-    
+
     /* CRITICAL: This would normally write to sensor via I2C */
     extern struct tx_isp_sensor *tx_isp_get_sensor(void);
     struct tx_isp_sensor *sensor = tx_isp_get_sensor();
@@ -6495,59 +6513,59 @@ static void JZ_Isp_Ae_Dg2reg(uint32_t pos, uint32_t *reg1, uint32_t dg_val, uint
 static int tisp_ae1_ctrls_update(void)
 {
     pr_info("*** tisp_ae1_ctrls_update: CRITICAL AE CONTROL UPDATE ***\n");
-    
+
     /* Binary Ninja: if (data_b0e10 != 1) return 0 */
     if (data_b0e10 != 1) {
         return 0;
     }
-    
+
     /* Binary Ninja: int32_t $v1_1 = data_c4700 */
     uint32_t v1_1 = data_c4700;
-    
+
     /* Binary Ninja: if (data_b2ed0 u< $v1_1) data_c4700 = *data_d04d4 else *data_d04d4 = $v1_1 */
     if (data_b2ed0 < v1_1) {
         data_c4700 = data_d04d4;
     } else {
         data_d04d4 = v1_1;
     }
-    
+
     /* Binary Ninja: uint32_t $v0_5 = tisp_math_exp2(data_b2ed4, 0x10, 0xa) */
     uint32_t v0_5 = tisp_math_exp2(data_b2ed4, 0x10, 0xa);
     uint32_t v1_2 = data_c46fc;
-    
+
     /* Binary Ninja: if ($v0_5 u< $v1_2) data_c46fc = *data_d04d8 else *data_d04d8 = $v1_2 */
     if (v0_5 < v1_2) {
         data_c46fc = data_d04d8;
     } else {
         data_d04d8 = v1_2;
     }
-    
+
     /* Binary Ninja: int32_t $v0_9 = data_c4704 */
     uint32_t v0_9 = data_c4704;
-    
+
     /* Binary Ninja: if ($v0_9 u>= 0x401) data_c4704 = *data_d04dc else *data_d04dc = $v0_9 */
     if (v0_9 >= 0x401) {
         data_c4704 = data_d04dc;
     } else {
         data_d04dc = v0_9;
     }
-    
+
     /* Binary Ninja: int32_t $v1_5 = data_c4708; if ($v1_5 != *data_d04e0) *data_d04e0 = $v1_5 */
     uint32_t v1_5 = data_c4708;
     if (v1_5 != data_d04e0) {
         data_d04e0 = v1_5;
     }
-    
+
     /* Binary Ninja: int32_t $v1_6 = data_c4730 */
     uint32_t v1_6 = data_c4730;
-    
+
     /* Binary Ninja: if ($v1_6 u< data_b2ecc) data_c4730 = *data_d04e4 else *data_d04e4 = $v1_6 */
     if (v1_6 < data_b2ecc) {
         data_c4730 = data_d04e4;
     } else {
         data_d04e4 = v1_6;
     }
-    
+
     /* Binary Ninja: dmsc_sp_ud_ns_thres_array processing */
     uint32_t dmsc_val = dmsc_sp_ud_ns_thres_array;
     if (dmsc_val < 0x400) {
@@ -6555,7 +6573,7 @@ static int tisp_ae1_ctrls_update(void)
     } else {
         data_d04e8 = dmsc_val;
     }
-    
+
     /* Binary Ninja: int32_t $v0_19 = data_c4734 */
     uint32_t v0_19 = data_c4734;
     if (v0_19 < 0x400) {
@@ -6563,13 +6581,13 @@ static int tisp_ae1_ctrls_update(void)
     } else {
         data_d04ec = v0_19;
     }
-    
+
     /* Binary Ninja: int32_t $v1_11 = data_c4738; if ($v1_11 != *data_d04f0) *data_d04f0 = $v1_11 */
     uint32_t v1_11 = data_c4738;
     if (v1_11 != data_d04f0) {
         data_d04f0 = v1_11;
     }
-    
+
     pr_info("*** tisp_ae1_ctrls_update: AE CONTROLS UPDATED SUCCESSFULLY ***\n");
     return 0;
 }
@@ -6583,52 +6601,52 @@ static int tisp_ae1_process_impl(void)
     uint32_t v0 = 1 << (AePointPos_1 & 0x1f);
     uint32_t var_38 = v0;
     uint32_t var_34 = v0;
-    
+
     pr_info("*** tisp_ae1_process_impl: CRITICAL AE PROCESSING WITH REGISTER WRITES ***\n");
-    
+
     /* Binary Ninja: Complex AE processing loops and calculations */
     /* Simplified for now - the key is the register writes at the end */
-    
+
     /* Binary Ninja: Tiziano_ae1_fpga call */
     Tiziano_ae1_fpga(0, 0, 0, 0);
-    
+
     /* Binary Ninja: tisp_ae1_expt call */
     tisp_ae1_expt(0, 0, 0, 0);
-    
+
     /* Binary Ninja: tisp_set_sensor_integration_time_short call */
     tisp_set_sensor_integration_time_short(data_d04a8);
-    
+
     /* Binary Ninja: tisp_set_ae1_ag call */
     tisp_set_ae1_ag(0, 0, 0, 0);
-    
+
     /* Binary Ninja: Complex cache management and effect processing */
     uint32_t v0_1 = data_b0cec;
     EffectFrame = v0_1;
     EffectCount1 = v0_1;
-    
+
     /* Update cache arrays */
     ev1_cache[0] = fix_point_mult3_32(AePointPos_1, data_d04a8 << (AePointPos_1 & 0x1f), data_d04ac);
     ad1_cache[0] = fix_point_mult2_32(AePointPos_1, data_d04ac, data_d04b0);
     ag1_cache[0] = data_d04ac;
     dg1_cache[0] = data_d04b0;
-    
+
     /* Binary Ninja: JZ_Isp_Ae_Dg2reg call */
     JZ_Isp_Ae_Dg2reg(AePointPos_1, &var_30, dg1_cache[EffectFrame], &var_38);
-    
+
     /* *** CRITICAL: THE MISSING REGISTER WRITES THAT PREVENT CONTROL LIMIT VIOLATIONS! *** */
     pr_info("*** CRITICAL: WRITING AE REGISTERS TO PREVENT CONTROL LIMIT VIOLATIONS ***\n");
-    
+
     /* Binary Ninja: system_reg_write_ae(3, 0x100c, var_30) */
     system_reg_write_ae(3, 0x100c, var_30);
     pr_info("*** AE REGISTER WRITE: system_reg_write_ae(3, 0x100c, 0x%x) ***\n", var_30);
-    
+
     /* Binary Ninja: system_reg_write_ae(3, 0x1010, var_2c) */
     system_reg_write_ae(3, 0x1010, var_2c);
     pr_info("*** AE REGISTER WRITE: system_reg_write_ae(3, 0x1010, 0x%x) ***\n", var_2c);
-    
+
     pr_info("*** tisp_ae1_process_impl: CRITICAL AE REGISTER WRITES COMPLETED! ***\n");
     pr_info("*** THIS SHOULD PREVENT THE 0x200000 CONTROL LIMIT VIOLATION! ***\n");
-    
+
     return 0;
 }
 
@@ -6637,15 +6655,15 @@ int tisp_ae1_process(void)
 {
     pr_info("*** tisp_ae1_process: THE MISSING CRITICAL AE PROCESSING FUNCTION! ***\n");
     pr_info("*** THIS IS WHAT PREVENTS THE VIC CONTROL LIMIT VIOLATIONS! ***\n");
-    
+
     /* Binary Ninja: tisp_ae1_ctrls_update() */
     tisp_ae1_ctrls_update();
-    
+
     /* Binary Ninja: tisp_ae1_process_impl() */
     tisp_ae1_process_impl();
-    
+
     pr_info("*** tisp_ae1_process: AE PROCESSING COMPLETE - CONTROL LIMITS SHOULD BE STABLE! ***\n");
-    
+
     /* Binary Ninja: return 0 */
     return 0;
 }
