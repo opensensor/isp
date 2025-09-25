@@ -2778,6 +2778,20 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(1, vr + 0x0);
                 wmb();
                 pr_info("*** VIC CONTROL (PRIMARY): WROTE 1 to [0x0] before enabling IRQ ***\n");
+            /* Re-assert IMCR just before enabling IRQ to defeat any late clobber */
+            if (vic_dev && vic_dev->vic_regs) {
+                void __iomem *vr = vic_dev->vic_regs;
+                writel(0xb5742249, vr + 0x0c);
+                wmb();
+                pr_info("*** VIC PRIMARY IMCR REASSERT: [0x0c]=0x%08x (expect 0xb5742249) ***\n", readl(vr + 0x0c));
+            }
+            if (vic_dev && vic_dev->vic_regs_control) {
+                void __iomem *vc = vic_dev->vic_regs_control;
+                writel(0xb5742249, vc + 0x0c);
+                wmb();
+                pr_info("*** VIC CONTROL IMCR REASSERT: [0x0c]=0x%08x (expect 0xb5742249) ***\n", readl(vc + 0x0c));
+            }
+
             }
 
             /* Enable VIC IRQ after final re-assert and verification */
