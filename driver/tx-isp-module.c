@@ -912,36 +912,6 @@ static void* find_subdev_link_pad(struct tx_isp_dev *isp_dev, char *name)
     return NULL;
 }
 
-// Sensor synchronization matching reference ispcore_sync_sensor_attr - SDK compatible
-static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sensor_attribute *sensor_attr)
-{
-    if (!isp_dev || !sensor_attr) {
-        pr_err("Invalid parameters for sensor sync\n");
-        return -EINVAL;
-    }
-    
-    // Work with actual SDK sensor structure
-    if (isp_dev->sensor) {
-        // Copy sensor attributes to device sensor
-        memcpy(&isp_dev->sensor->attr, sensor_attr, sizeof(struct tx_isp_sensor_attribute));
-        pr_debug("Sensor attr sync completed for %s\n", sensor_attr->name);
-        
-        // Update device sensor info
-        strncpy(isp_dev->sensor_name, sensor_attr->name, sizeof(isp_dev->sensor_name) - 1);
-        /* CRITICAL FIX: Use ACTUAL sensor output dimensions, not total dimensions */
-        /* The real sensor driver provides total dimensions (2200x1418) but VIC needs output dimensions (1920x1080) */
-        isp_dev->sensor_width = 1920;   /* ACTUAL sensor output width */
-        isp_dev->sensor_height = 1080;  /* ACTUAL sensor output height */
-        pr_info("*** DIMENSION FIX: Set global sensor dimensions to ACTUAL output %dx%d (not total %dx%d) ***\n",
-                isp_dev->sensor_width, isp_dev->sensor_height,
-                sensor_attr->total_width, sensor_attr->total_height);
-        
-        return 0;
-    }
-    
-    pr_debug("No active sensor for sync\n");
-    return -ENODEV;
-}
 
 // Simplified VIC registration - removed complex platform device array
 static int vic_registered = 0;
@@ -1132,7 +1102,7 @@ static int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     }
     
     /* Binary Ninja: if (*(*(arg1 + 0x110) + 0x14) != 1) return 0 */
-    sensor_attr = isp_dev->sensor ? isp_dev->sensor->video.attr : NULL;
+    sensor_attr = NULL;
     if (!sensor_attr || sensor_attr->dbus_type != 1) {
         pr_debug("csi_video_s_stream: Not DVP interface, skipping\n");
         return 0;
@@ -1261,13 +1231,7 @@ static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const cha
         sensor_attr.total_height = 1080;
         sensor_attr.integration_time = 1000; // Default integration time
         sensor_attr.max_again = 0x40000; // Default gain (format .16)
-        
-        ret = tx_isp_sync_sensor_attr(isp_dev, &sensor_attr);
-        if (ret) {
-            pr_warn("Failed to sync %s sensor attributes: %d\n", sensor_name, ret);
-        } else {
-            pr_info("Synced %s sensor attributes to ISP core\n", sensor_name);
-        }
+
     }
     
     pr_info("Sensor pipeline activation complete\n");
@@ -6015,151 +5979,6 @@ static int sensor_subdev_core_g_chip_ident(struct tx_isp_subdev *sd, struct tx_i
         pr_err("*** ERROR: NO REAL SENSOR DRIVER G_CHIP_IDENT FUNCTION AVAILABLE! ***\n");
         return -ENODEV;
     }
-}
-
-static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
-{
-    struct tx_isp_sensor *sensor;
-    struct tx_isp_dev *isp_dev = ourISPdev;
-    int ret = 0;
-    static int vin_init_in_progress = 0; /* CRITICAL: Prevent infinite recursion */
-
-    pr_info("*** ISP SENSOR WRAPPER s_stream: enable=%d ***\n", enable);
-
-    /* STEP 1: Do the ISP's own sensor management work */
-    sensor = isp_dev->sensor;
-    if (sensor) {
-        pr_info("*** ISP: Setting up ISP-side for sensor %s streaming=%d ***\n",
-                sensor->info.name, enable);
-
-        if (enable) {
-            /* CRITICAL FIX: Initialize VIN if not already initialized - WITH RECURSION PROTECTION */
-            if (isp_dev->vin_dev && !vin_init_in_progress) {
-                struct tx_isp_vin_device *vin_device = (struct tx_isp_vin_device *)isp_dev->vin_dev;
-                if (vin_device->state != 3 && vin_device->state != 5) {
-                    pr_info("*** CRITICAL: VIN NOT INITIALIZED (state=%d), INITIALIZING NOW ***\n", vin_device->state);
-                    
-                    /* CRITICAL: Set flag to prevent infinite recursion */
-                    vin_init_in_progress = 1;
-                    
-                    /* CRITICAL FIX: Call the EXACT Binary Ninja VIN init function */
-                    extern int tx_isp_vin_init(void* arg1, int32_t arg2);
-                    ret = tx_isp_vin_init(vin_device, 1);
-                    
-                    /* CRITICAL: Clear flag after init attempt */
-                    vin_init_in_progress = 0;
-                    
-                    if (ret && ret != 0xffffffff) {
-                        pr_err("*** CRITICAL: VIN INITIALIZATION FAILED: %d ***\n", ret);
-                        return ret;
-                    }
-                    pr_info("*** CRITICAL: VIN INITIALIZED SUCCESSFULLY - STATE NOW 3 ***\n");
-                } else {
-                    pr_info("*** VIN ALREADY INITIALIZED (state=%d) ***\n", vin_device->state);
-                }
-            } else if (vin_init_in_progress) {
-                pr_info("*** VIN INITIALIZATION ALREADY IN PROGRESS - SKIPPING TO PREVENT RECURSION ***\n");
-            }
-
-            /* Any ISP-specific sensor configuration */
-            if (sensor->video.attr) {
-                /* CRITICAL FIX: Use CORRECT enum values from tx-isp-common.h */
-                /* TX_SENSOR_DATA_INTERFACE_MIPI = 1, TX_SENSOR_DATA_INTERFACE_DVP = 2 */
-                if (sensor->video.attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) {  /* MIPI = 1 */
-                    pr_info("ISP: Configuring for MIPI interface (dbus_type=1)\n");
-                    /* MIPI-specific ISP setup */
-                } else if (sensor->video.attr->dbus_type == TX_SENSOR_DATA_INTERFACE_DVP) {  /* DVP = 2 */
-                    pr_info("ISP: Configuring for DVP interface (dbus_type=2)\n");
-                    /* DVP-specific ISP setup */
-                } else {
-                    pr_warn("ISP: Unknown interface type %d, defaulting to MIPI\n", sensor->video.attr->dbus_type);
-                    /* Force to MIPI if unknown */
-                    sensor->video.attr->dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;
-                }
-            }
-        } else {
-            pr_info("ISP: Sensor streaming disabled\n");
-        }
-    }
-
-    /* STEP 2: Now delegate to the actual sensor driver */
-    pr_info("*** ISP DELEGATING TO REAL SENSOR_S_STREAM: enable=%d ***\n", enable);
-
-    if (stored_sensor_ops.original_ops &&
-        stored_sensor_ops.original_ops->video &&
-        stored_sensor_ops.original_ops->video->s_stream) {
-
-        pr_info("*** CALLING REAL SENSOR DRIVER S_STREAM - THIS WRITES 0x3e=0x91! ***\n");
-
-        ret = stored_sensor_ops.original_ops->video->s_stream(stored_sensor_ops.sensor_sd, enable);
-
-        pr_info("*** REAL SENSOR DRIVER S_STREAM RETURNED: %d ***\n", ret);
-
-        /* CRITICAL: Only update VIN state AFTER sensor streaming succeeds (T30 pattern) */
-        if (ret == 0 || ret == -0x203) {
-            if (enable) {
-                /* CRITICAL: Set sensor subdev state to RUNNING (this is what gets checked!) */
-                sd->vin_state = TX_ISP_MODULE_RUNNING;
-                pr_info("*** CRITICAL: SENSOR SUBDEV STATE SET TO RUNNING (5) ***\n");
-
-                /* CRITICAL FIX: SIMPLIFIED VIN S_STREAM CALL - NO RECURSION */
-                pr_info("*** CRITICAL: NOW CALLING VIN_S_STREAM - THIS SHOULD TRANSITION STATE TO 5! ***\n");
-
-                int vin_ret = -ENODEV;
-                
-                /* CRITICAL FIX: Direct VIN streaming call without complex recursion */
-                if (isp_dev && isp_dev->vin_dev) {
-                    struct tx_isp_vin_device *vin_device = (struct tx_isp_vin_device *)isp_dev->vin_dev;
-                    
-                    /* SIMPLIFIED: Just set VIN to streaming state directly */
-                    if (vin_device->state == 3) {
-                        vin_device->state = 5; /* Set to streaming state */
-                        pr_info("*** VIN STATE DIRECTLY SET TO STREAMING (5) ***\n");
-                        vin_ret = 0;
-                    } else {
-                        pr_info("*** VIN STATE ALREADY AT %d - NO CHANGE NEEDED ***\n", vin_device->state);
-                        vin_ret = 0;
-                    }
-                } else {
-                    pr_err("*** ERROR: ISP device or VIN not available ***\n");
-                }
-
-                pr_info("*** CRITICAL: VIN_S_STREAM RETURNED: %d ***\n", vin_ret);
-                pr_info("*** CRITICAL: VIN STATE SHOULD NOW BE 5 (RUNNING) ***\n");
-
-            } else {
-                /* ISP's work when disabling streaming */
-                sd->vin_state = TX_ISP_MODULE_INIT;
-                
-                /* CRITICAL FIX: Simplified VIN streaming stop */
-                pr_info("*** CALLING VIN_S_STREAM TO STOP ***\n");
-                
-                if (isp_dev && isp_dev->vin_dev) {
-                    struct tx_isp_vin_device *vin_device = (struct tx_isp_vin_device *)isp_dev->vin_dev;
-                    
-                    /* SIMPLIFIED: Just set VIN to non-streaming state directly */
-                    if (vin_device->state == 5) {
-                        vin_device->state = 3; /* Set back to initialized but not streaming */
-                        pr_info("*** VIN STATE SET BACK TO INITIALIZED (3) ***\n");
-                    }
-                }
-                
-                pr_info("*** VIN STREAMING STOP COMPLETED ***\n");
-            }
-            
-            /* Force success if sensor returned -0x203 */
-            ret = 0;
-        } else if (ret < 0 && enable) {
-            pr_err("*** Sensor streaming failed, VIN state remains at INIT ***\n");
-        }
-
-    } else {
-        pr_err("*** ERROR: NO REAL SENSOR DRIVER S_STREAM FUNCTION AVAILABLE! ***\n");
-        pr_err("*** THIS IS WHY 0x3e=0x91 IS NOT BEING WRITTEN! ***\n");
-        return -ENODEV;
-    }
-
-    return ret;
 }
 
 /* Compatibility wrapper for old function name to resolve linking errors */
