@@ -1,6 +1,9 @@
 #include <linux/module.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
+/* Forward declare to use pointer only */
+struct tx_isp_vic_device;
+
 #include <linux/uaccess.h>
 #include "../include/tx_isp.h"
 
@@ -35,7 +38,7 @@ static int tx_isp_proc_w00_show(struct seq_file *m, void *v)
 
     /* Reference driver outputs single integer for vic frame counter */
     seq_printf(m, "%u", isp->frame_count);
-    
+
     return 0;
 }
 
@@ -64,7 +67,7 @@ static int tx_isp_proc_w01_show(struct seq_file *m, void *v)
 
     /* Reference driver outputs single integer for vic frame counter */
     seq_printf(m, "%u", isp->frame_count);
-    
+
     return 0;
 }
 
@@ -74,17 +77,17 @@ static ssize_t tx_isp_proc_w01_write(struct file *file, const char __user *buffe
     struct seq_file *m = file->private_data;
     struct tx_isp_dev *isp = m->private;
     char cmd[64];
-    
+
     if (count >= sizeof(cmd))
         return -EINVAL;
-        
+
     if (copy_from_user(cmd, buffer, count))
         return -EFAULT;
-        
+
     cmd[count] = '\0';
-    
+
     pr_info("ISP W01 proc command: %s\n", cmd);
-    
+
     /* Handle common ISP commands that userspace might send */
     if (strncmp(cmd, "snapraw", 7) == 0) {
         pr_info("ISP W01 snapraw command received\n");
@@ -98,7 +101,7 @@ static ssize_t tx_isp_proc_w01_write(struct file *file, const char __user *buffe
         if (isp)
             isp->streaming_enabled = false;
     }
-    
+
     return count;
 }
 
@@ -218,6 +221,55 @@ static ssize_t tx_isp_proc_w02_write(struct file *file, const char __user *buffe
     return count;
 }
 
+/* Optional ioctl path to mirror modern isp_vic_cmd_set behavior */
+static long tx_isp_proc_w02_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+    struct seq_file *m = file->private_data;
+    struct tx_isp_dev *isp = m ? (struct tx_isp_dev *)m->private : NULL;
+    char kbuf[64];
+    size_t len = (size_t)cmd; /* modern path uses cmd as count, arg as userspace ptr */
+
+    if (!isp) {
+        pr_err("isp-w02 ioctl: no isp dev\n");
+        return -ENODEV;
+    }
+
+    if (len >= sizeof(kbuf))
+        len = sizeof(kbuf) - 1;
+
+    if (copy_from_user(kbuf, (void __user *)arg, len))
+        return -EFAULT;
+
+    kbuf[len] = '\0';
+    pr_info("isp-w02 ioctl cmd: '%s' (len=%zu)\n", kbuf, len);
+
+    if (strncmp(kbuf, "snapraw", 7) == 0) {
+        unsigned int savenum = 1;
+        struct tx_isp_vic_device *vic_dev = isp->vic_dev;
+        struct tx_isp_subdev *sd = vic_dev ? &vic_dev->sd : NULL;
+        if (!sd)
+            return -ENODEV;
+        /* Parse optional count after command */
+        sscanf(kbuf, "snapraw %u", &savenum);
+        extern int vic_snapraw_opt(struct tx_isp_subdev *sd);
+        return vic_snapraw_opt(sd);
+    } else if (strncmp(kbuf, "saveraw", 7) == 0) {
+        unsigned int savenum = 1;
+        struct tx_isp_vic_device *vic_dev = isp->vic_dev;
+        struct tx_isp_subdev *sd = vic_dev ? &vic_dev->sd : NULL;
+        if (!sd)
+            return -ENODEV;
+        sscanf(kbuf, "saveraw %u", &savenum);
+        extern int vic_saveraw(struct tx_isp_subdev *sd, unsigned int savenum);
+        return vic_saveraw(sd, savenum);
+    }
+
+    return 0;
+}
+
+    return count;
+}
+
 static int tx_isp_proc_w02_open(struct inode *inode, struct file *file)
 {
     return single_open(file, tx_isp_proc_w02_show, PDE_DATA(inode));
@@ -228,6 +280,7 @@ static const struct file_operations tx_isp_proc_w02_fops = {
     .open = tx_isp_proc_w02_open,
     .read = seq_read,
     .write = tx_isp_proc_w02_write,
+    .unlocked_ioctl = tx_isp_proc_w02_ioctl,
     .llseek = seq_lseek,
     .release = single_release,
 };
@@ -244,7 +297,7 @@ static int tx_isp_proc_fs_show(struct seq_file *m, void *v)
 
     /* FS proc entry for Frame Source status */
     seq_printf(m, "%u", isp->frame_count);
-    
+
     return 0;
 }
 
@@ -254,17 +307,17 @@ static ssize_t tx_isp_proc_fs_write(struct file *file, const char __user *buffer
     struct seq_file *m = file->private_data;
     struct tx_isp_dev *isp = m->private;
     char cmd[64];
-    
+
     if (count >= sizeof(cmd))
         return -EINVAL;
-        
+
     if (copy_from_user(cmd, buffer, count))
         return -EFAULT;
-        
+
     cmd[count] = '\0';
-    
+
     pr_info("ISP FS proc command: %s\n", cmd);
-    
+
     /* Handle FS-specific commands */
     if (strncmp(cmd, "enable", 6) == 0) {
         pr_info("ISP FS enable command received\n");
@@ -275,7 +328,7 @@ static ssize_t tx_isp_proc_fs_write(struct file *file, const char __user *buffer
         if (isp)
             isp->streaming_enabled = false;
     }
-    
+
     return count;
 }
 
@@ -305,7 +358,7 @@ static int tx_isp_proc_m0_show(struct seq_file *m, void *v)
 
     /* M0 proc entry for main ISP core status */
     seq_printf(m, "%u", isp->frame_count);
-    
+
     return 0;
 }
 
@@ -315,17 +368,17 @@ static ssize_t tx_isp_proc_m0_write(struct file *file, const char __user *buffer
     struct seq_file *m = file->private_data;
     struct tx_isp_dev *isp = m->private;
     char cmd[64];
-    
+
     if (count >= sizeof(cmd))
         return -EINVAL;
-        
+
     if (copy_from_user(cmd, buffer, count))
         return -EFAULT;
-        
+
     cmd[count] = '\0';
-    
+
     pr_info("ISP M0 proc command: %s\n", cmd);
-    
+
     /* Handle M0-specific commands */
     if (strncmp(cmd, "enable", 6) == 0) {
         pr_info("ISP M0 enable command received\n");
@@ -336,7 +389,7 @@ static ssize_t tx_isp_proc_m0_write(struct file *file, const char __user *buffer
         if (isp)
             isp->streaming_enabled = false;
     }
-    
+
     return count;
 }
 
@@ -401,9 +454,9 @@ static struct proc_context *tx_isp_proc_ctx = NULL;
 static struct proc_dir_entry *get_or_create_proc_dir(const char *name, struct proc_dir_entry *parent, bool *created)
 {
     struct proc_dir_entry *dir = NULL;
-    
+
     *created = false;
-    
+
     /* On Linux 3.10, try proc_mkdir which should handle existing directories gracefully */
     dir = proc_mkdir(name, parent);
     if (dir) {
@@ -412,13 +465,13 @@ static struct proc_dir_entry *get_or_create_proc_dir(const char *name, struct pr
         pr_info("Created or accessed proc directory: %s\n", name);
         return dir;
     }
-    
-    /* 
+
+    /*
      * If proc_mkdir failed, it could be because:
      * 1. Directory exists but proc_mkdir doesn't return it (overlay fs issue)
      * 2. Insufficient permissions
      * 3. Out of memory
-     * 
+     *
      * For Linux 3.10 with overlays, we try a different approach:
      * Create a dummy file to test if the parent directory is writable
      */
@@ -428,7 +481,7 @@ static struct proc_dir_entry *get_or_create_proc_dir(const char *name, struct pr
         if (test_entry) {
             /* Parent is writable, remove test entry */
             proc_remove(test_entry);
-            
+
             /* The directory might exist but be inaccessible via proc_mkdir
              * In this case, we'll proceed without the jz directory reference
              * and create our subdirectory directly under proc root if needed
@@ -437,7 +490,7 @@ static struct proc_dir_entry *get_or_create_proc_dir(const char *name, struct pr
             return NULL;
         }
     }
-    
+
     pr_err("Failed to create or access proc directory: %s\n", name);
     return NULL;
 }
@@ -556,13 +609,13 @@ error_free_ctx:
 void tx_isp_remove_proc_entries(void)
 {
     struct proc_context *ctx = tx_isp_proc_ctx;
-    
+
     if (!ctx) {
         return;
     }
-    
+
     pr_info("*** tx_isp_remove_proc_entries: Cleaning up proc entries ***\n");
-    
+
     if (ctx->vic_entry) {
         proc_remove(ctx->vic_entry);
     }
@@ -587,10 +640,10 @@ void tx_isp_remove_proc_entries(void)
     if (ctx->isp_dir) {
         proc_remove(ctx->isp_dir);
     }
-    
+
     kfree(ctx);
     tx_isp_proc_ctx = NULL;
-    
+
     pr_info("All proc entries removed\n");
 }
 
