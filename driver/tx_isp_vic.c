@@ -2739,41 +2739,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     }
                 }
 
-
-                /* If control bank still zeros, force-mirror key regs from PRIMARY to CONTROL */
-                if (vic_dev->vic_regs && vic_dev->vic_regs_control) {
-                    void __iomem *vrp = vic_dev->vic_regs;
-                    void __iomem *vcc = vic_dev->vic_regs_control;
-                    u32 ctrl300_c = readl(vcc + 0x300);
-                    u32 buf318_c = readl(vcc + 0x318);
-                    if (ctrl300_c == 0 && buf318_c == 0) {
-                        pr_warn("*** VIC CONTROL BANK: Detected zeros, forcing mirror from PRIMARY ***\n");
-                        /* Mirror MDMA config regs */
-                        writel(readl(vrp + 0x308), vcc + 0x308);
-                        writel(readl(vrp + 0x304), vcc + 0x304);
-                        writel(readl(vrp + 0x310), vcc + 0x310);
-                        writel(readl(vrp + 0x314), vcc + 0x314);
-                        /* Mirror buffer addresses 0x318..0x328 */
-                        for (u32 off = 0x318; off <= 0x328; off += 4)
-                            writel(readl(vrp + off), vcc + off);
-                        /* Also mirror secondary range 0x32c..0x33c (NV12/dual) */
-                        for (u32 off = 0x32c; off <= 0x33c; off += 4)
-                            writel(readl(vrp + off), vcc + off);
-                        /* Mirror stream control 0x300 */
-                        writel(readl(vrp + 0x300), vcc + 0x300);
-                        /* Re-assert mask/clear pending in CONTROL */
-                        writel(0x00000000, vcc + 0x1f0);
-                        writel(0x00000000, vcc + 0x1f4);
-                        writel(0xFFFFFFFE, vcc + 0x1e8);
-                        wmb();
-                        pr_info("*** VIC CONTROL BANK MIRRORED: [0x300]=0x%08x [0x1e8]=0x%08x ***\n",
-                                readl(vcc + 0x300), readl(vcc + 0x1e8));
-                    }
-                }
-
-
-            /* Enable VIC IRQ after final re-assert and verification */
-
                 /* UNMASK-ALL + short sampling loop to detect which source asserts */
                 if (vic_dev->vic_regs) {
                     void __iomem *vr = vic_dev->vic_regs;
