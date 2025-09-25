@@ -1729,17 +1729,18 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
 
                 /* Re-assert core VIC IRQ gate and W1C-clear core framedone bits when fallback is active */
                 if (v1_7 & 1) {
+                    /* W1C clear framedone sources first to drop any stale assertion */
+                    writel(0x1, core + 0x9a70);
+                    writel(0x1, core + 0x9a7c);
+                    wmb();
+                    printk(KERN_ALERT "*** VIC IRQ FALLBACK: CORE W1C CLEAR [9a70]/[9a7c] done ***\n");
+
+                    /* Then re-assert the core VIC IRQ gate to arm the next frame */
                     writel(0x200, core + 0x9ac0);
                     writel(0x200, core + 0x9ac8);
                     wmb();
                     printk(KERN_ALERT "*** VIC IRQ FALLBACK: GATE REASSERT [9ac0]=0x%08x [9ac8]=0x%08x ***\n",
                            readl(core + 0x9ac0), readl(core + 0x9ac8));
-
-                    /* W1C clear framedone sources to allow next assertion */
-                    writel(0x1, core + 0x9a70);
-                    writel(0x1, core + 0x9a7c);
-                    wmb();
-                    printk(KERN_ALERT "*** VIC IRQ FALLBACK: CORE W1C CLEAR [9a70]/[9a7c] done ***\n");
                 }
             } else {
                 printk(KERN_ALERT "*** VIC IRQ FALLBACK: No ISP core regs mapped for fallback ***\n");

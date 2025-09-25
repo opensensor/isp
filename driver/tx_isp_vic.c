@@ -2614,6 +2614,27 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 return ret;
             }
 
+
+            /* Guarded: Clear ISP core VIC status and re-assert gate so next framedone can assert HW IRQ */
+            do {
+                struct tx_isp_dev *ispd = ourISPdev;
+                void __iomem *core = NULL;
+                if (ispd && ispd->core_dev && ispd->core_dev->core_regs)
+                    core = ispd->core_dev->core_regs;
+                else if (ispd && ispd->core_regs)
+                    core = ispd->core_regs;
+                if (core) {
+                    /* W1C clear any latched framedone bits first, then re-assert the gate */
+                    writel(0x1, core + 0x9a70);
+                    writel(0x1, core + 0x9a7c);
+                    wmb();
+                    writel(0x200, core + 0x9ac0);
+                    writel(0x200, core + 0x9ac8);
+                    wmb();
+                    pr_info("*** vic_core_s_stream: CORE W1C [9a70/9a7c] then GATE REASSERT [9ac0/9ac8] ***\n");
+                }
+            } while (0);
+
             /* Re-write buffer addresses AFTER MDMA start to ensure hardware sees them */
             pr_info("*** vic_core_s_stream: Re-writing buffer addresses AFTER MDMA start ***\n");
             {
