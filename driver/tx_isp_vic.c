@@ -2768,34 +2768,43 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(1, vr + 0x0);
                 wmb();
                 pr_info("*** VIC CONTROL (PRIMARY): WROTE 1 to [0x0] before enabling IRQ ***\n");
-            /* Post-RUN: program interrupt ENABLE registers, do not touch masks */
+            /* Post-RUN re-arm: commit dance so enables latch without touching masks */
             if (vic_dev && vic_dev->vic_regs) {
                 void __iomem *vr = vic_dev->vic_regs;
-                writel(0xFFFFFFFF, vr + 0x1e0); /* VIC enables */
-                writel(0x0000000F, vr + 0x1e4); /* MDMA enables (minimal) */
-                wmb();
-                pr_info("*** VIC PRIMARY ENABLES: [0x1e0]=0x%08x [0x1e4]=0x%08x ***\n",
-                        readl(vr + 0x1e0), readl(vr + 0x1e4));
-                /* Clear any pending (W1C) before enabling CPU IRQ */
+                /* Clear pending first (W1C) */
                 writel(0xFFFFFFFF, vr + 0x1f0);
                 writel(0xFFFFFFFF, vr + 0x1f4);
+                /* Write enables, CONFIG, re-write enables, then RUN */
+                writel(0x3FFFFFFF, vr + 0x1e0);
+                writel(0x0000000F, vr + 0x1e4);
+                writel(2, vr + 0x0);
                 wmb();
-                pr_info("*** VIC PRIMARY PENDING CLEARED (W1C) ***\n");
+                writel(0x3FFFFFFF, vr + 0x1e0);
+                writel(0x0000000F, vr + 0x1e4);
+                writel(1, vr + 0x0);
+                wmb();
+                udelay(100);
+                pr_info("*** VIC PRIMARY ENABLES (POST-RUN COMMIT): [0x1e0]=0x%08x [0x1e4]=0x%08x ***\n",
+                        readl(vr + 0x1e0), readl(vr + 0x1e4));
             }
             if (vic_dev && vic_dev->vic_regs_control) {
                 void __iomem *vc = vic_dev->vic_regs_control;
-                writel(0xFFFFFFFF, vc + 0x1e0);
-                writel(0x0000000F, vc + 0x1e4);
-                wmb();
-                pr_info("*** VIC CONTROL ENABLES: [0x1e0]=0x%08x [0x1e4]=0x%08x ***\n",
-                        readl(vc + 0x1e0), readl(vc + 0x1e4));
+                /* Clear pending first (W1C) */
                 writel(0xFFFFFFFF, vc + 0x1f0);
                 writel(0xFFFFFFFF, vc + 0x1f4);
+                /* Write enables, CONFIG, re-write enables, then RUN */
+                writel(0x3FFFFFFF, vc + 0x1e0);
+                writel(0x0000000F, vc + 0x1e4);
+                writel(2, vc + 0x0);
                 wmb();
-                pr_info("*** VIC CONTROL PENDING CLEARED (W1C) ***\n");
+                writel(0x3FFFFFFF, vc + 0x1e0);
+                writel(0x0000000F, vc + 0x1e4);
+                writel(1, vc + 0x0);
+                wmb();
+                udelay(100);
+                pr_info("*** VIC CONTROL ENABLES (POST-RUN COMMIT): [0x1e0]=0x%08x [0x1e4]=0x%08x ***\n",
+                        readl(vc + 0x1e0), readl(vc + 0x1e4));
             }
-            /* small delay to let enables settle before CPU IRQ gate */
-            udelay(100);
 
             }
 
