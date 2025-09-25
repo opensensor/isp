@@ -1218,7 +1218,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     pr_info("*** VIC INTERRUPT CONFIG: Applying VIC interrupt system configuration (WORKING BRANCH) ***\n");
     writel(0x2d0, vic_regs + 0x100);      /* Interrupt configuration - Working branch value */
     wmb();
-    writel(0x2b, vic_regs + 0x14);        /* Interrupt control - Working branch value */
+    writel(0x630, vic_regs + 0x14);        /* Interrupt control - Working branch value (matched to reference) */
     wmb();
 
     pr_info("*** VIC INTERRUPT CONFIG: WORKING BRANCH interrupt configuration complete ***\n");
@@ -2672,7 +2672,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x30c), readl(vr + 0x1e0), readl(vr + 0x1e8));
                 /* Final assert of interrupt routing/control regs (0x100/0x14), then small delay */
                 writel(0x000002d0, vr + 0x100);
-                writel(0x0000002b, vr + 0x14);
+                writel(0x00000630, vr + 0x14);
                 wmb();
                 pr_info("*** VIC VERIFY (PRIMARY EXTRA): [0x100]=0x%08x [0x14]=0x%08x ***\n",
                         readl(vr + 0x100), readl(vr + 0x14));
@@ -2686,7 +2686,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x00000000, vc + 0x1f4);
                 /* Try routing/control asserts at CONTROL bank too (offsets mirror?) */
                 writel(0x000002d0, vc + 0x100);
-                writel(0x0000002b, vc + 0x14);
+                writel(0x00000630, vc + 0x14);
                 /* Try unmask if present; tolerate if unmapped */
                 writel(0xFFFFFFFE, vc + 0x1e8);
                 /* Global interrupt enable at 0x30c (if present) */
