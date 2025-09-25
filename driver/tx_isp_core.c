@@ -1902,47 +1902,18 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     }
     /* Support both legacy (+0xb*) and new (+0x98b*) interrupt banks */
     {
-        u32 status_legacy = readl(isp_regs + 0xb4);
-        u32 status_new    = readl(isp_regs + 0x98b4);
-        printk(KERN_ALERT "*** ISP CORE: Read interrupt status - legacy=0x%08x, new=0x%08x ***\n", status_legacy, status_new);
-
-        interrupt_status  = status_legacy ? status_legacy : status_new;
-        printk(KERN_ALERT "*** ISP CORE: Selected interrupt_status=0x%08x from %s bank ***\n",
-               interrupt_status, status_legacy ? "legacy(+0xb*)" : "new(+0x98b*)");
+        interrupt_status = readl(isp_regs + 0xb4);
+        printk(KERN_ALERT "*** ISP CORE: Read interrupt status - interrupt_status=0x%08x***\n", interrupt_status);
 
         /* Clear pending in the corresponding bank(s) */
-        if (status_legacy) {
-            printk(KERN_ALERT "*** ISP CORE: Clearing legacy interrupt 0x%08x to reg +0xb8 ***\n", status_legacy);
-            writel(status_legacy, isp_regs + 0xb8);
-        }
-        if (status_new) {
-            printk(KERN_ALERT "*** ISP CORE: Clearing new interrupt 0x%08x to reg +0x98b8 ***\n", status_new);
-            writel(status_new, isp_regs + 0x98b8);
-        }
+        printk(KERN_ALERT "*** ISP CORE: Clearing legacy interrupt 0x%08x to reg +0xb8 ***\n", interrupt_status);
+        writel(interrupt_status, isp_regs + 0xb8);
         wmb();
 
         /* CRITICAL DEBUG: Verify interrupt was actually cleared */
         u32 verify_legacy = readl(isp_regs + 0xb4);
         u32 verify_new = readl(isp_regs + 0x98b4);
         printk(KERN_ALERT "*** ISP CORE: After clearing - legacy=0x%08x, new=0x%08x ***\n", verify_legacy, verify_new);
-
-        if (verify_legacy != 0 || verify_new != 0) {
-            printk(KERN_ALERT "*** ISP CORE CRITICAL: INTERRUPT NOT CLEARED! Still pending: legacy=0x%08x, new=0x%08x ***\n",
-                   verify_legacy, verify_new);
-        }
-
-        if (interrupt_status != 0) {
-            printk(KERN_ALERT "*** ISP CORE INTERRUPT: bank=%s status=0x%08x (legacy=0x%08x new=0x%08x) ***\n",
-                    status_legacy ? "legacy(+0xb*)" : "new(+0x98b*)",
-                    interrupt_status, status_legacy, status_new);
-        } else if (isp_force_core_isr) {
-            printk(KERN_ALERT "*** ISP CORE: FORCED FRAME DONE VIA VIC (no pending) ***\n");
-            interrupt_status = 1; /* Force Channel 0 frame-done path */
-        } else {
-            printk(KERN_ALERT "*** ISP CORE INTERRUPT: no pending (legacy=0x%08x new=0x%08x) ***\n",
-                     status_legacy, status_new);
-            return IRQ_HANDLED; /* No interrupt to process */
-        }
     }
 
     /* Binary Ninja: if (($s1 & 0x3f8) == 0) */
@@ -2125,7 +2096,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* *** CRITICAL: CHANNEL 1 FRAME COMPLETION PROCESSING *** */
     if (interrupt_status & 2) {  /* Channel 1 frame done */
-        pr_debug("*** ISP CORE: CHANNEL 1 FRAME DONE INTERRUPT ***\n");
+        printk(KERN_ALERT"*** ISP CORE: CHANNEL 1 FRAME DONE INTERRUPT ***\n");
 
         /* Binary Ninja: Similar processing for channel 1 */
         while ((readl(vic_regs + 0x9a7c) & 1) == 0) {
@@ -2133,7 +2104,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             u32 frame_info1 = readl(vic_regs + 0x9a8c);
             u32 frame_info2 = readl(vic_regs + 0x9a90);
 
-            pr_debug("*** CH1 FRAME COMPLETION: addr=0x%x, info1=0x%x, info2=0x%x ***\n",
+            printk(KERN_ALERT "*** CH1 FRAME COMPLETION: addr=0x%x, info1=0x%x, info2=0x%x ***\n",
                    frame_buffer_addr, frame_info1, frame_info2);
 
             /* Wake up channel 1 waiters */
@@ -2145,7 +2116,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* Binary Ninja: Channel 2 frame completion */
     if (interrupt_status & 4) {
-        pr_debug("ISP CORE: Channel 2 frame done\n");
+        printk(KERN_ALERT "ISP CORE: Channel 2 frame done\n");
         /* Similar processing for channel 2 */
         while ((readl(vic_regs + 0x9b7c) & 1) == 0) {
             /* Channel 2 frame processing */
