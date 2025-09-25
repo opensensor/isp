@@ -1589,6 +1589,20 @@ int tisp_init(void *sensor_info, char *param_name)
     pr_info("tisp_init: Initializing ISP hardware for sensor (%dx%d)\n",
             sensor_params.width, sensor_params.height);
 
+    /* The reference driver does NOT create any kthread for event processing */
+    /* Events are processed on-demand when triggered, not continuously */
+    pr_info("*** tisp_init: Event system ready for on-demand processing (Binary Ninja reference) ***\n");
+    /* Binary Ninja: Initialize event system and callbacks */
+    pr_info("*** tisp_init: INITIALIZING ISP EVENT SYSTEM ***\n");
+    tisp_event_init();
+    tisp_event_set_cb(4, tisp_tgain_update);
+    tisp_event_set_cb(5, tisp_again_update);
+    tisp_event_set_cb(7, tisp_ev_update);
+    tisp_event_set_cb(9, tisp_ct_update);
+    tisp_event_set_cb(8, tisp_ae_ir_update);
+    int32_t irq_ret = system_irq_func_set(0xd, ip_done_interrupt_static);
+
+
     /* *** BINARY NINJA REGISTER SEQUENCE - THE MISSING HARDWARE INITIALIZATION! *** */
 
     /* Binary Ninja: ISP Core Control registers */
@@ -2032,27 +2046,10 @@ int tisp_init(void *sensor_info, char *param_name)
 
     system_reg_write(0x800, 1);         /* Enable ISP pipeline */
 
-    /* REMOVED: Duplicate ISP sub-module initialization */
-    /* This was causing repeated handler registrations - the initialization already happened above */
-    pr_info("*** tisp_init: ISP SUB-MODULES already initialized above - skipping duplicate initialization ***\n");
-
-    /* Binary Ninja: Initialize event system and callbacks */
-    pr_info("*** tisp_init: INITIALIZING ISP EVENT SYSTEM ***\n");
-    tisp_event_init();
-    tisp_event_set_cb(4, tisp_tgain_update);
-    tisp_event_set_cb(5, tisp_again_update);
-    tisp_event_set_cb(7, tisp_ev_update);
-    tisp_event_set_cb(9, tisp_ct_update);
-    tisp_event_set_cb(8, tisp_ae_ir_update);
-
     /* BINARY NINJA REFERENCE: No continuous thread - events are processed on-demand */
     pr_info("*** tisp_init: BINARY NINJA REFERENCE - No event processing thread created ***\n");
 
-    /* The reference driver does NOT create any kthread for event processing */
-    /* Events are processed on-demand when triggered, not continuously */
-    pr_info("*** tisp_init: Event system ready for on-demand processing (Binary Ninja reference) ***\n");
 
-    int32_t irq_ret = system_irq_func_set(0xd, ip_done_interrupt_static);
     if (irq_ret == 0) {
         pr_info("*** tisp_init: ISP processing completion callback registered (index=0xd) ***\n");
     } else {
