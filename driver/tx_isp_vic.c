@@ -1395,10 +1395,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
 
     /* Also enable the kernel IRQ line if it was registered earlier */
-    if (ourISPdev && ourISPdev->isp_irq > 0) {
-        enable_irq(ourISPdev->isp_irq);
-        pr_info("*** ISP CORE IRQ: enable_irq(%d) called ***\n", ourISPdev->isp_irq);
-    }
+    /* CRITICAL: Use hardcoded IRQ 37 for ISP core - matches tx-isp-module.c resource definition */
+    enable_irq(37);
+    pr_info("*** ISP CORE IRQ: enable_irq(37) called ***\n");
 
     return 0;
 }
