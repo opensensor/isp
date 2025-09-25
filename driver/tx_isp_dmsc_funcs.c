@@ -157,7 +157,7 @@ int dmsc_sp_ud_ns_thres_intp = 0;
 int tisp_dmsc_param_array_set(int param_id, void *data, int *size_out)
 {
     if (param_id - 0x5f >= 0x4a) {
-        pr_err("tisp_dmsc_param_array_set: Invalid parameter ID %d\n", param_id);
+        printk(KERN_ALERT "tisp_dmsc_param_array_set: Invalid parameter ID %d\n", param_id);
         return -1;
     }
 

@@ -327,7 +327,7 @@ EXPORT_SYMBOL(tisp_ae_g_luma);
 int tisp_ae_param_array_set(int param_id, void *data, int *size_out)
 {
     if (param_id - 1 >= 0x22) {
-        pr_err("tisp_ae_param_array_set: Invalid parameter ID %d\n", param_id);
+        printk(KERN_ALERT "tisp_ae_param_array_set: Invalid parameter ID %d\n", param_id);
         return -1;
     }
 
@@ -742,7 +742,7 @@ int tisp_set_fps(uint32_t fps_packed)
     result = data_b2f20(fps_val, &sensor_ctrl);
 
     if (result < 0) {
-        pr_err("tisp_set_fps: Failed to set FPS: %d\n", param2);
+        printk(KERN_ALERT "tisp_set_fps: Failed to set FPS: %d\n", param2);
         return -1;
     }
 
@@ -766,7 +766,7 @@ int tisp_set_fps(uint32_t fps_packed)
     data_b2e64 = (int16_t)(data_b2ed0 & 0xffff);
     data_b2e56 = (int16_t)(data_b2e80 & 0xffff);
 
-    pr_info("tisp_set_fps: Set FPS to %d/%d\n", fps_num, fps_den);
+    printk(KERN_ALERT "tisp_set_fps: Set FPS to %d/%d\n", fps_num, fps_den);
 
     /* Handle deflicker if enabled */
     if (flicker_hz != 0) {
@@ -788,7 +788,7 @@ int tisp_set_frame_drop(int channel, int *drop_config, int param3)
     uint32_t drop_count = (uint32_t)(drop_config[1] & 0xff);
 
     if (drop_count >= 0x20) {
-        pr_err("tisp_set_frame_drop: Invalid drop count %d\n", drop_count);
+        printk(KERN_ALERT "tisp_set_frame_drop: Invalid drop count %d\n", drop_count);
         return -1;
     }
 

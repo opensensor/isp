@@ -184,14 +184,14 @@ int tx_isp_subdev_register(struct tx_isp_subdev_desc *desc,
     int ret = 0;
 
     if (!desc || !pdev) {
-        pr_err("tx_isp_subdev_register: Invalid parameters\n");
+        printk(KERN_ALERT "tx_isp_subdev_register: Invalid parameters\n");
         return -EINVAL;
     }
 
     mutex_lock(&subdev_registry_mutex);
 
     if (subdev_count >= ISP_MAX_SUBDEVS) {
-        pr_err("tx_isp_subdev_register: Too many subdevices\n");
+        printk(KERN_ALERT "tx_isp_subdev_register: Too many subdevices\n");
         ret = -ENOSPC;
         goto unlock;
     }
@@ -218,7 +218,7 @@ int tx_isp_subdev_register(struct tx_isp_subdev_desc *desc,
     subdev_registry[subdev_count] = runtime;
     subdev_count++;
 
-    pr_info("tx_isp_subdev_register: Registered subdevice '%s' (type=%d, id=%d)\n",
+    printk(KERN_ALERT "tx_isp_subdev_register: Registered subdevice '%s' (type=%d, id=%d)\n",
             desc->name, desc->type, desc->device_id);
 
 unlock:
@@ -264,7 +264,7 @@ void tx_isp_subdev_unregister(struct platform_device *pdev)
             }
             subdev_count--;
 
-            pr_info("tx_isp_subdev_unregister: Unregistered subdevice\n");
+            printk(KERN_ALERT "tx_isp_subdev_unregister: Unregistered subdevice\n");
             break;
         }
     }
@@ -282,7 +282,7 @@ static int tx_isp_init_source_subdev(struct tx_isp_dev *isp,
     void *driver_data = platform_get_drvdata(desc->pdev);
 
     if (!driver_data) {
-        pr_warn("tx_isp_init_source_subdev: No driver data for %s\n", desc->name);
+        printk(KERN_ALERT "tx_isp_init_source_subdev: No driver data for %s\n", desc->name);
         return 0;
     }
 
@@ -313,10 +313,10 @@ static int tx_isp_init_source_subdev(struct tx_isp_dev *isp,
 
         if (sd) {
             isp->subdev_graph[desc->dst_index] = sd;  /* Store tx_isp_subdev*, not driver_data */
-            pr_info("tx_isp_init_source_subdev: %s subdev stored at index %d\n",
+            printk(KERN_ALERT "tx_isp_init_source_subdev: %s subdev stored at index %d\n",
                     desc->name, desc->dst_index);
         } else {
-            pr_warn("tx_isp_init_source_subdev: Could not extract subdev from %s driver_data\n", desc->name);
+            printk(KERN_ALERT "tx_isp_init_source_subdev: Could not extract subdev from %s driver_data\n", desc->name);
         }
     }
 
@@ -335,20 +335,20 @@ static int tx_isp_init_sink_subdev(struct tx_isp_dev *isp,
     void *src_subdev;
 
     if (!driver_data) {
-        pr_warn("tx_isp_init_sink_subdev: No driver data for %s\n", desc->name);
+        printk(KERN_ALERT "tx_isp_init_sink_subdev: No driver data for %s\n", desc->name);
         return 0;
     }
 
     /* Find source subdevice */
     if (desc->src_index >= ISP_MAX_SUBDEVS) {
-        pr_err("tx_isp_init_sink_subdev: Invalid source index %d for %s\n",
+        printk(KERN_ALERT "tx_isp_init_sink_subdev: Invalid source index %d for %s\n",
                desc->src_index, desc->name);
         return -EINVAL;
     }
 
     src_subdev = isp->subdev_graph[desc->src_index];
     if (!src_subdev) {
-        pr_err("tx_isp_init_sink_subdev: Source subdev %d not found for %s\n",
+        printk(KERN_ALERT "tx_isp_init_sink_subdev: Source subdev %d not found for %s\n",
                desc->src_index, desc->name);
         return -ENODEV;
     }
@@ -356,12 +356,12 @@ static int tx_isp_init_sink_subdev(struct tx_isp_dev *isp,
     /* Create link: source -> sink */
     int ret = tx_isp_create_subdev_link(src_subdev, driver_data, desc);
     if (ret < 0) {
-        pr_err("tx_isp_init_sink_subdev: Failed to create link for %s: %d\n",
+        printk(KERN_ALERT "tx_isp_init_sink_subdev: Failed to create link for %s: %d\n",
                desc->name, ret);
         return ret;
     }
 
-    pr_info("tx_isp_init_sink_subdev: Created link %s[%d] -> %s[%d]\n",
+    printk(KERN_ALERT "tx_isp_init_sink_subdev: Created link %s[%d] -> %s[%d]\n",
             "source", desc->src_index, desc->name, desc->dst_index);
 
     runtime->initialized = true;
@@ -378,7 +378,7 @@ static int tx_isp_create_subdev_link(void *src_subdev, void *dst_subdev,
      * a cleaner approach. In a real implementation, this would configure
      * the hardware routing between subdevices. */
     
-    pr_info("tx_isp_create_subdev_link: Linking %s (src=%p, dst=%p)\n",
+    printk(KERN_ALERT "tx_isp_create_subdev_link: Linking %s (src=%p, dst=%p)\n",
             desc->name, src_subdev, dst_subdev);
     
     /* Store the link information for later use */
@@ -408,7 +408,7 @@ static int tx_isp_create_misc_device(struct tx_isp_subdev_runtime *runtime)
 
     ret = misc_register(misc_dev);
     if (ret < 0) {
-        pr_err("Failed to register misc device %s: %d\n", 
+        printk(KERN_ALERT "Failed to register misc device %s: %d\n",
                runtime->desc->name, ret);
         kfree(misc_dev->name);
         kfree(misc_dev);
@@ -416,7 +416,7 @@ static int tx_isp_create_misc_device(struct tx_isp_subdev_runtime *runtime)
     }
 
     runtime->misc_dev = misc_dev;
-    pr_info("Created misc device: /dev/%s\n", runtime->desc->name);
+    printk(KERN_ALERT "Created misc device: /dev/%s\n", runtime->desc->name);
     return 0;
 }
 
@@ -426,13 +426,13 @@ static int tx_isp_csi_device_init(struct tx_isp_dev *isp)
 {
     struct tx_isp_csi_device *csi_dev;
 
-    pr_info("Initializing CSI device\n");
+    printk(KERN_ALERT "Initializing CSI device\n");
 
     /* Allocate CSI device structure if not already present */
     if (!isp->csi_dev) {
         csi_dev = kzalloc(sizeof(struct tx_isp_csi_device), GFP_KERNEL);
         if (!csi_dev) {
-            pr_err("Failed to allocate CSI device\n");
+            printk(KERN_ALERT "Failed to allocate CSI device\n");
             return -ENOMEM;
         }
 
@@ -446,7 +446,7 @@ static int tx_isp_csi_device_init(struct tx_isp_dev *isp)
         isp->csi_dev = csi_dev;
     }
 
-    pr_info("CSI device initialized\n");
+    printk(KERN_ALERT "CSI device initialized\n");
     return 0;
 }
 

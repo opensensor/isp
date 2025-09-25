@@ -143,7 +143,7 @@ static void start_sequence(struct seq_write_info *seq, u32 offset, u32 value)
 static void end_sequence(struct seq_write_info *seq, const char *region_name)
 {
     if (seq->count > 4) {
-        pr_info("ISP %s: Sequential write at 0x%x: %d registers from 0x%x\n",
+        printk(KERN_ALERT "ISP %s: Sequential write at 0x%x: %d registers from 0x%x\n",
                 region_name, seq->start_offset, seq->count, seq->last_value);
     }
     seq->in_progress = false;
@@ -193,7 +193,7 @@ static void check_region_changes(struct work_struct *work)
                     end_sequence(&region->seq_write, region->name);
 
                 // Log control and VIC register writes with timing
-                pr_info("ISP %s: [%s] write at offset 0x%x: 0x%x -> 0x%x (delta: %lu.%03lu ms)\n",
+                printk(KERN_ALERT "ISP %s: [%s] write at offset 0x%x: 0x%x -> 0x%x (delta: %lu.%03lu ms)\n",
                        region->name, reg_desc, offset,
                        region->last_values[i], current_val,
                        jiffies_to_msecs(delta_jiffies),
@@ -222,7 +222,7 @@ static int init_region(struct isp_region *region)
     // Map the region
     region->virt_addr = ioremap(region->phys_addr, region->size);
     if (!region->virt_addr) {
-        pr_err("Failed to map ISP region %s at 0x%pap\n",
+        printk(KERN_ALERT "Failed to map ISP region %s at 0x%pap\n",
                region->name, &region->phys_addr);
         return -ENOMEM;
     }
@@ -255,7 +255,7 @@ static int init_region(struct isp_region *region)
     region->monitoring = true;
     schedule_delayed_work(&region->monitor_work, HZ/100); // Start with 10ms interval
 
-    pr_info("ISP Monitor: initialized region %s at phys 0x%pap size 0x%zx\n",
+    printk(KERN_ALERT "ISP Monitor: initialized region %s at phys 0x%pap size 0x%zx\n",
             region->name, &region->phys_addr, region->size);
 
     return 0;
@@ -289,7 +289,7 @@ static int __init isp_monitor_init(void)
 {
     int i, ret;
 
-    pr_info("ISP Register Monitor v%s initializing\n", ISP_MONITOR_VERSION);
+    printk(KERN_ALERT "ISP Register Monitor v%s initializing\n", ISP_MONITOR_VERSION);
 
     for (i = 0; i < NUM_REGIONS; i++) {
         ret = init_region(&isp_regions[i]);
@@ -311,7 +311,7 @@ static void __exit isp_monitor_exit(void)
     for (i = 0; i < NUM_REGIONS; i++)
         cleanup_region(&isp_regions[i]);
 
-    pr_info("ISP Register Monitor unloaded\n");
+    printk(KERN_ALERT "ISP Register Monitor unloaded\n");
 }
 
 module_init(isp_monitor_init);

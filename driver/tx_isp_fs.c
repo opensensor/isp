@@ -41,7 +41,7 @@ int fs_slake_module(struct tx_isp_subdev *sd)
         return -EINVAL;
     }
 
-    pr_info("*** fs_slake_module: EXACT Binary Ninja implementation ***\n");
+    printk(KERN_ALERT "*** fs_slake_module: EXACT Binary Ninja implementation ***\n");
 
     /* Binary Ninja: result = 0 */
     int result = 0;
@@ -50,49 +50,49 @@ int fs_slake_module(struct tx_isp_subdev *sd)
     /* SAFE: Get FS device and check state */
     fs_dev = (struct tx_isp_fs_device *)tx_isp_get_subdevdata(sd);
     if (!fs_dev) {
-        pr_err("fs_slake_module: FS device is NULL\n");
+        printk(KERN_ALERT "fs_slake_module: FS device is NULL\n");
         return -EINVAL;
     }
 
     /* Binary Ninja: if (*(arg1 + 0xe4) != 1) - Check FS initialized != 1 */
     if (fs_dev->initialized != 1) {
-        pr_info("fs_slake_module: FS initialized=%d, processing channels\n", fs_dev->initialized);
+        printk(KERN_ALERT "fs_slake_module: FS initialized=%d, processing channels\n", fs_dev->initialized);
 
         /* Binary Ninja: for (int32_t i = 0; i s< *(arg1 + 0xe0); i += 1) */
         for (i = 0; i < fs_dev->channel_count; i++) {
-            pr_info("fs_slake_module: Processing channel %d\n", i);
+            printk(KERN_ALERT "fs_slake_module: Processing channel %d\n", i);
 
             /* Binary Ninja: Channel processing - simplified since we don't have direct channel access */
             /* The actual channel management is handled by the ISP device channels array */
             if (ourISPdev && i < ISP_MAX_CHAN) {
                 struct isp_channel *channel = &ourISPdev->channels[i];
 
-                pr_info("fs_slake_module: Channel %d enabled=%d\n", i, channel->enabled);
+                printk(KERN_ALERT "fs_slake_module: Channel %d enabled=%d\n", i, channel->enabled);
 
                 /* Binary Ninja: if (*($s1_2 + 0x2d0) != 4) *($s1_2 + 0x2d0) = 1 */
                 if (channel->state != 4) {
                     channel->state = 1;
-                    pr_info("fs_slake_module: Channel %d state set to 1\n", i);
+                    printk(KERN_ALERT "fs_slake_module: Channel %d state set to 1\n", i);
                 } else {
                     /* Binary Ninja: Channel state == 4 (streaming) */
-                    pr_info("fs_slake_module: Channel %d in streaming state, stopping\n", i);
+                    printk(KERN_ALERT "fs_slake_module: Channel %d in streaming state, stopping\n", i);
 
                     /* Binary Ninja: __frame_channel_vb2_streamoff($s1_2, *($s1_2 + 0x24), entry_$a2) */
                     /* Binary Ninja: __vb2_queue_free($s1_2 + 0x24, *($s1_2 + 0x20c)) */
                     /* Simplified implementation - just set state to 1 */
                     channel->state = 1;
                     channel->enabled = false;
-                    pr_info("fs_slake_module: Channel %d stopped, state set to 1\n", i);
+                    printk(KERN_ALERT "fs_slake_module: Channel %d stopped, state set to 1\n", i);
                 }
             }
         }
 
         /* Binary Ninja: *(arg1 + 0xe4) = 1 */
         fs_dev->initialized = 1;
-        pr_info("fs_slake_module: FS initialized set to 1\n");
+        printk(KERN_ALERT "fs_slake_module: FS initialized set to 1\n");
     }
 
-    pr_info("*** fs_slake_module: FS slake complete, result=%d ***\n", result);
+    printk(KERN_ALERT "*** fs_slake_module: FS slake complete, result=%d ***\n", result);
     return result;
 }
 EXPORT_SYMBOL(fs_slake_module);
@@ -103,7 +103,7 @@ int fs_activate_module(struct tx_isp_subdev *sd)
     int result = 0xffffffea;
     int a2_1;
 
-    pr_info("*** fs_activate_module: EXACT Binary Ninja implementation ***\n");
+    printk(KERN_ALERT "*** fs_activate_module: EXACT Binary Ninja implementation ***\n");
 
     /* Binary Ninja: if (arg1 != 0) */
     if (sd != NULL) {
@@ -132,10 +132,10 @@ int fs_activate_module(struct tx_isp_subdev *sd)
                 if (a2_1 >= max_channels) {
                     /* Binary Ninja: *(arg1 + 0xe4) = 2 */
                     /* SAFE: Set FS state to 2 (activated) */
-                    pr_info("*** fs_activate_module: FS state set to 2 (activated) ***\n");
+                    printk(KERN_ALERT "*** fs_activate_module: FS state set to 2 (activated) ***\n");
 
                     /* Binary Ninja: return 0 */
-                    pr_info("*** fs_activate_module: SUCCESS ***\n");
+                    printk(KERN_ALERT "*** fs_activate_module: SUCCESS ***\n");
                     return 0;
                 }
 
@@ -150,7 +150,7 @@ int fs_activate_module(struct tx_isp_subdev *sd)
 
                 /* Binary Ninja: *($v0_3 + 0x2d0) = 2 */
                 /* SAFE: Set channel state to 2 (activated) */
-                pr_info("*** fs_activate_module: Channel %d activated ***\n", a2_1);
+                printk(KERN_ALERT "*** fs_activate_module: Channel %d activated ***\n", a2_1);
 
                 /* Binary Ninja: $a2_1 += 1 */
                 a2_1 += 1;
@@ -165,7 +165,7 @@ int fs_activate_module(struct tx_isp_subdev *sd)
     }
 
     /* Binary Ninja: return result */
-    pr_info("*** fs_activate_module: result=0x%x ***\n", result);
+    printk(KERN_ALERT "*** fs_activate_module: result=0x%x ***\n", result);
     return result;
 }
 EXPORT_SYMBOL(fs_activate_module);
@@ -195,19 +195,19 @@ struct tx_isp_subdev_ops fs_subdev_ops = {
 /* Frame source file operations - matching isp_framesource_fops */
 static int fs_chardev_open(struct inode *inode, struct file *file)
 {
-    pr_info("*** FS device opened ***\n");
+    printk(KERN_ALERT "*** FS device opened ***\n");
     return 0;
 }
 
 static int fs_chardev_release(struct inode *inode, struct file *file)
 {
-    pr_info("*** FS device released ***\n");
+    printk(KERN_ALERT "*** FS device released ***\n");
     return 0;
 }
 
 static long fs_chardev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-    pr_info("*** FS IOCTL: cmd=0x%x arg=0x%lx ***\n", cmd, arg);
+    printk(KERN_ALERT "*** FS IOCTL: cmd=0x%x arg=0x%lx ***\n", cmd, arg);
     return 0;
 }
 
@@ -235,11 +235,11 @@ static int frame_chan_event(void *data)
     struct tx_isp_frame_channel *chan = (struct tx_isp_frame_channel *)data;
     
     if (!chan) {
-        pr_err("frame_chan_event: NULL channel data\n");
+        printk(KERN_ALERT "frame_chan_event: NULL channel data\n");
         return -EINVAL;
     }
     
-    pr_info("*** frame_chan_event: channel=%p, state=%d ***\n", chan, chan->state);
+    printk(KERN_ALERT "*** frame_chan_event: channel=%p, state=%d ***\n", chan, chan->state);
     
     /* Signal frame completion - use correct field name */
     complete(&chan->frame_done);
@@ -253,7 +253,7 @@ static int frame_chan_event(void *data)
 /* Frame channel initialization/deinitialization */
 void tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan)
 {
-    pr_info("Deinitializing frame channel\n");
+    printk(KERN_ALERT "Deinitializing frame channel\n");
     if (chan->active) {
         misc_deregister(&chan->misc);
     }
@@ -302,11 +302,11 @@ int tx_isp_fs_probe(struct platform_device *pdev)
 
     /* CRITICAL FIX: Set dev_priv so tx_isp_get_subdevdata() returns the FS device */
     tx_isp_set_subdevdata(&fs_dev->subdev, fs_dev);
-    pr_info("*** FS PROBE: Set dev_priv to fs_dev %p AFTER subdev_init ***\n", fs_dev);
+    printk(KERN_ALERT "*** FS PROBE: Set dev_priv to fs_dev %p AFTER subdev_init ***\n", fs_dev);
 
     /* CRITICAL FIX: Add NULL check to prevent BadVA 0xc8 crash */
     if (!fs_dev) {
-        pr_err("tx_isp_fs_probe: fs_dev is NULL - PREVENTS BadVA 0xc8 crash\n");
+        printk(KERN_ALERT "tx_isp_fs_probe: fs_dev is NULL - PREVENTS BadVA 0xc8 crash\n");
         return -ENOMEM;
     }
 
@@ -324,7 +324,7 @@ int tx_isp_fs_probe(struct platform_device *pdev)
     /* SAFE: Use proper struct size instead of fixed 0x2ec */
     channels_buffer = kzalloc(channel_count * sizeof(struct tx_isp_frame_channel), GFP_KERNEL);
     if (!channels_buffer) {
-        pr_err("Failed to allocate channels buffer\n");
+        printk(KERN_ALERT "Failed to allocate channels buffer\n");
         ret = -ENOMEM;
         goto error_cleanup;
     }
@@ -332,7 +332,7 @@ int tx_isp_fs_probe(struct platform_device *pdev)
     /* CRITICAL FIX: Allocate channel_configs array that was missing */
     fs_dev->channel_configs = kzalloc(channel_count * sizeof(struct tx_isp_channel_config), GFP_KERNEL);
     if (!fs_dev->channel_configs) {
-        pr_err("Failed to allocate channel configs buffer\n");
+        printk(KERN_ALERT "Failed to allocate channel configs buffer\n");
         ret = -ENOMEM;
         kfree(channels_buffer);
         goto error_cleanup;
@@ -342,7 +342,7 @@ int tx_isp_fs_probe(struct platform_device *pdev)
     fs_dev->channel_buffer = channels_buffer;
     
     /* Binary Ninja: Channel initialization loop */
-    pr_info("tx_isp_fs_probe: initializing %d frame channels\n", channel_count);
+    printk(KERN_ALERT "tx_isp_fs_probe: initializing %d frame channels\n", channel_count);
     
     for (i = 0; i < channel_count; i++) {
         /* SAFE: Use proper array indexing instead of offset calculation */
@@ -378,7 +378,7 @@ int tx_isp_fs_probe(struct platform_device *pdev)
             ret = misc_register(&current_channel->misc);
             if (ret < 0) {
                 /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch0 hcomp err !!!\n", $s0_2[0xb0]) */
-                pr_err("Err [VIC_INT] : mipi ch0 hcomp err !!!\n");
+                printk(KERN_ALERT "Err [VIC_INT] : mipi ch0 hcomp err !!!\n");
                 /* Binary Ninja: result = 0xfffffffe */
                 ret = -2;
                 goto error_cleanup_loop;
@@ -401,12 +401,12 @@ int tx_isp_fs_probe(struct platform_device *pdev)
             /* Binary Ninja: $s0_2[0xb4] = 1 */
             current_channel->state = 1;  /* Active state */
             
-            pr_info("tx_isp_fs_probe: initialized frame channel %d: %s\n",
+            printk(KERN_ALERT "tx_isp_fs_probe: initialized frame channel %d: %s\n",
                     i, current_channel->name);
         } else {
             /* Binary Ninja: $s0_2[0xb4] = 0 */
             current_channel->state = 0;  /* Inactive state */
-            pr_info("tx_isp_fs_probe: channel %d inactive\n", i);
+            printk(KERN_ALERT "tx_isp_fs_probe: channel %d inactive\n", i);
         }
     }
     
@@ -446,7 +446,7 @@ setup_complete:
     dump_fsd = fs_dev;
 
     /* *** REMOVED MANUAL LINKING - Now handled by tx_isp_subdev_auto_link() *** */
-    pr_info("*** FS PROBE: Device linking handled automatically by tx_isp_subdev_auto_link() ***\n");
+    printk(KERN_ALERT "*** FS PROBE: Device linking handled automatically by tx_isp_subdev_auto_link() ***\n");
 
     return 0;
 }
@@ -459,7 +459,7 @@ int tx_isp_fs_remove(struct platform_device *pdev)
     struct tx_isp_frame_channel *current_channel;
     int i;
     
-    pr_info("*** tx_isp_fs_remove ***\n");
+    printk(KERN_ALERT "*** tx_isp_fs_remove ***\n");
     
     if (!fs_dev) {
         return 0;
@@ -482,7 +482,7 @@ int tx_isp_fs_remove(struct platform_device *pdev)
     
     kfree(fs_dev);
     
-    pr_info("FS device removed\n");
+    printk(KERN_ALERT "FS device removed\n");
     return 0;
 }
 
@@ -504,23 +504,23 @@ int __init tx_isp_fs_platform_init(void)
 {
     int ret;
     
-    pr_info("*** TX ISP FS PLATFORM DRIVER REGISTRATION ***\n");
+    printk(KERN_ALERT "*** TX ISP FS PLATFORM DRIVER REGISTRATION ***\n");
     
     ret = platform_driver_register(&tx_isp_fs_platform_driver);
     if (ret) {
-        pr_err("Failed to register FS platform driver: %d\n", ret);
+        printk(KERN_ALERT "Failed to register FS platform driver: %d\n", ret);
         return ret;
     }
     
-    pr_info("FS platform driver registered successfully\n");
+    printk(KERN_ALERT "FS platform driver registered successfully\n");
     return 0;
 }
 
 void __exit tx_isp_fs_platform_exit(void)
 {
-    pr_info("*** TX ISP FS PLATFORM DRIVER UNREGISTRATION ***\n");
+    printk(KERN_ALERT "*** TX ISP FS PLATFORM DRIVER UNREGISTRATION ***\n");
     platform_driver_unregister(&tx_isp_fs_platform_driver);
-    pr_info("FS platform driver unregistered\n");
+    printk(KERN_ALERT "FS platform driver unregistered\n");
 }
 
 /* Export symbols */

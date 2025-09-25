@@ -57,23 +57,23 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
     int32_t v1;
     extern struct tx_isp_dev *ourISPdev;
 
-    pr_info("VIN: tx_isp_vin_init: EXACT Binary Ninja implementation with safety checks = 0x%x\n", arg2);
+    printk(KERN_ALERT "VIN: tx_isp_vin_init: EXACT Binary Ninja implementation with safety checks = 0x%x\n", arg2);
 
     /* CRITICAL SAFETY: Validate arg1 before any access */
     if (!arg1) {
-        pr_err("VIN: tx_isp_vin_init: arg1 is NULL\n");
+        printk(KERN_ALERT "VIN: tx_isp_vin_init: arg1 is NULL\n");
         return -EINVAL;
     }
 
     /* CRITICAL SAFETY: Validate arg1 is in valid kernel memory range */
     if ((uintptr_t)arg1 < 0x80000000 || (uintptr_t)arg1 >= 0xfffff000) {
-        pr_err("VIN: tx_isp_vin_init: arg1 %p is not in valid kernel memory range\n", arg1);
+        printk(KERN_ALERT "VIN: tx_isp_vin_init: arg1 %p is not in valid kernel memory range\n", arg1);
         return -EINVAL;
     }
 
     /* CRITICAL SAFETY: Validate arg1 is properly aligned */
     if (((uintptr_t)arg1 & 0x3) != 0) {
-        pr_err("VIN: tx_isp_vin_init: arg1 %p is not 4-byte aligned\n", arg1);
+        printk(KERN_ALERT "VIN: tx_isp_vin_init: arg1 %p is not 4-byte aligned\n", arg1);
         return -EINVAL;
     }
 
@@ -83,25 +83,25 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
     struct tx_isp_sensor *sensor = tx_isp_get_sensor();
     a0 = sensor;
 
-    pr_info("VIN: tx_isp_vin_init: a0 (sensor) = %p\n", a0);
+    printk(KERN_ALERT "VIN: tx_isp_vin_init: a0 (sensor) = %p\n", a0);
 
     if (!ourISPdev) {
-        pr_err("VIN: tx_isp_vin_init: no global ISP device available\n");
+        printk(KERN_ALERT "VIN: tx_isp_vin_init: no global ISP device available\n");
         return -ENODEV;
     }
 
     if (!ourISPdev->vin_dev) {
-        pr_err("VIN: tx_isp_vin_init: no VIN device in global ISP\n");
+        printk(KERN_ALERT "VIN: tx_isp_vin_init: no VIN device in global ISP\n");
         return -ENODEV;
     }
 
     struct tx_isp_vin_device *vin_dev = ourISPdev->vin_dev;
-    pr_info("VIN: tx_isp_vin_init: using VIN device from global ISP: %p\n", vin_dev);
+    printk(KERN_ALERT "VIN: tx_isp_vin_init: using VIN device from global ISP: %p\n", vin_dev);
     
     /* Binary Ninja: if ($a0 == 0) */
     if (a0 == 0) {
         /* Binary Ninja: isp_printf(1, &$LC0, 0x158) */
-        pr_info("VIN: tx_isp_vin_init: no sensor available = 0x%x\n", 0x158);
+        printk(KERN_ALERT "VIN: tx_isp_vin_init: no sensor available = 0x%x\n", 0x158);
         /* Binary Ninja: result = 0xffffffff */
         result = 0xffffffff;
     } else {
@@ -110,13 +110,13 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
 
         /* CRITICAL: Basic NULL checks only - avoid is_valid_kernel_pointer */
         if (!sensor) {
-            pr_err("VIN: tx_isp_vin_init: sensor is NULL\n");
+            printk(KERN_ALERT "VIN: tx_isp_vin_init: sensor is NULL\n");
             v0_1 = 0;
         } else if (!sensor->sd.ops) {
-            pr_err("VIN: tx_isp_vin_init: sensor ops is NULL\n");
+            printk(KERN_ALERT "VIN: tx_isp_vin_init: sensor ops is NULL\n");
             v0_1 = 0;
         } else if (!sensor->sd.ops->core) {
-            pr_err("VIN: tx_isp_vin_init: sensor core ops is NULL\n");
+            printk(KERN_ALERT "VIN: tx_isp_vin_init: sensor core ops is NULL\n");
             v0_1 = 0;
         } else {
             v0_1 = sensor->sd.ops->core;
@@ -132,10 +132,10 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
 
             /* CRITICAL: Basic NULL checks only - avoid is_valid_kernel_pointer */
             if (!core_ops) {
-                pr_err("VIN: tx_isp_vin_init: core ops is NULL\n");
+                printk(KERN_ALERT "VIN: tx_isp_vin_init: core ops is NULL\n");
                 v0_2 = 0;
             } else if (!core_ops->init) {
-                pr_info("VIN: tx_isp_vin_init: no sensor init function available\n");
+                printk(KERN_ALERT "VIN: tx_isp_vin_init: no sensor init function available\n");
                 v0_2 = 0;
             } else {
                 v0_2 = (int32_t)core_ops->init;
@@ -150,7 +150,7 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
                 int (*init_func)(struct tx_isp_subdev *, int) = (int (*)(struct tx_isp_subdev *, int))v0_2;
                 struct tx_isp_sensor *sensor = (struct tx_isp_sensor *)a0;  /* Re-cast for safety */
 
-                pr_info("VIN: tx_isp_vin_init: calling sensor init function = 0x%x\n", arg2);
+                printk(KERN_ALERT "VIN: tx_isp_vin_init: calling sensor init function = 0x%x\n", arg2);
                 result = init_func(&sensor->sd, arg2);
 
                 /* Binary Ninja: if (result == 0xfffffdfd) */
@@ -158,7 +158,7 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
                     /* Binary Ninja: result = 0 */
                     result = 0;
                 }
-                pr_info("VIN: tx_isp_vin_init: sensor init returned = 0x%x\n", result);
+                printk(KERN_ALERT "VIN: tx_isp_vin_init: sensor init returned = 0x%x\n", result);
             }
         }
     }
@@ -177,9 +177,9 @@ int tx_isp_vin_init(void* arg1, int32_t arg2)
     /* vin_dev was safely obtained from global ISP device above */
     if (vin_dev) {
         vin_dev->state = v1;
-        pr_info("VIN: tx_isp_vin_init: *** VIN STATE SET SAFELY *** = 0x%x\n", v1);
+        printk(KERN_ALERT "VIN: tx_isp_vin_init: *** VIN STATE SET SAFELY *** = 0x%x\n", v1);
     } else {
-        pr_err("VIN: tx_isp_vin_init: cannot set state - VIN device is NULL\n");
+        printk(KERN_ALERT "VIN: tx_isp_vin_init: cannot set state - VIN device is NULL\n");
     }
     
     /* Binary Ninja: return result */
@@ -229,23 +229,23 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
     int result = 0;
     int32_t vin_state;
 
-    pr_info("*** vin_s_stream: SAFE implementation - sd=%p, enable=%d ***\n", sd, enable);
+    printk(KERN_ALERT "*** vin_s_stream: SAFE implementation - sd=%p, enable=%d ***\n", sd, enable);
 
     /* SAFE: Validate container_of result */
     vin_dev = container_of(sd, struct tx_isp_vin_device, sd);
     if (!vin_dev || (unsigned long)vin_dev >= 0xfffff001) {
-        pr_err("vin_s_stream: Invalid VIN device\n");
+        printk(KERN_ALERT "vin_s_stream: Invalid VIN device\n");
         return -EINVAL;
     }
 
     /* SAFE: Validate VIN device structure integrity */
     if (!virt_addr_valid(vin_dev)) {
-        pr_err("vin_s_stream: VIN device not in valid memory\n");
+        printk(KERN_ALERT "vin_s_stream: VIN device not in valid memory\n");
         return -EINVAL;
     }
 
     vin_state = vin_dev->state;
-    pr_info("vin_s_stream: VIN state = %d, enable = %d\n", vin_state, enable);
+    printk(KERN_ALERT "vin_s_stream: VIN state = %d, enable = %d\n", vin_state, enable);
 
     /* SAFE: Validate sensor pointer before access */
     extern struct tx_isp_sensor *tx_isp_get_sensor(void);
@@ -253,18 +253,18 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
 
     /* SAFE: Check sensor ops with proper validation */
     if (!sensor->sd.ops) {
-        pr_info("vin_s_stream: No sensor ops available\n");
+        printk(KERN_ALERT "vin_s_stream: No sensor ops available\n");
         goto safe_state_update;
     }
 
     if (!sensor->sd.ops->video) {
-        pr_info("vin_s_stream: No sensor video ops available\n");
+        printk(KERN_ALERT "vin_s_stream: No sensor video ops available\n");
         goto safe_state_update;
     }
 
     /* CRITICAL FIX: Don't call sensor s_stream directly to prevent race conditions */
     /* Let the core loop handle sensor independently to prevent crashes */
-    pr_info("vin_s_stream: VIN processing complete - sensor will be handled by core loop\n");
+    printk(KERN_ALERT "vin_s_stream: VIN processing complete - sensor will be handled by core loop\n");
     result = 0;  /* VIN processing successful */
 
 safe_state_update:
@@ -272,7 +272,7 @@ safe_state_update:
     int32_t new_state = enable ? 4 : 3;
     vin_dev->state = new_state;
 
-    pr_info("vin_s_stream: VIN state set to %d (SAFE implementation)\n", new_state);
+    printk(KERN_ALERT "vin_s_stream: VIN state set to %d (SAFE implementation)\n", new_state);
     return 0;
 }
 
@@ -315,7 +315,7 @@ int vin_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     void *callback_ptr;
     int (*callback_func)(void);
 
-    pr_info("*** vin_core_ops_ioctl: Binary Ninja implementation - cmd=0x%x, arg=%p ***\n", cmd, arg);
+    printk(KERN_ALERT "*** vin_core_ops_ioctl: Binary Ninja implementation - cmd=0x%x, arg=%p ***\n", cmd, arg);
 
     /* Binary Ninja: Handle TX_ISP_EVENT_SYNC_SENSOR_ATTR */
     if (cmd == 0x1000001) {  /* TX_ISP_EVENT_SYNC_SENSOR_ATTR */
@@ -328,7 +328,7 @@ int vin_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                 callback_ptr = sd->inpads[0].priv;
 
                 if (callback_ptr == NULL) {
-                    pr_info("vin_core_ops_ioctl: No callback pointer for cmd 0x1000001, returning 0\n");
+                    printk(KERN_ALERT "vin_core_ops_ioctl: No callback pointer for cmd 0x1000001, returning 0\n");
                     return 0;
                 }
 
@@ -336,19 +336,19 @@ int vin_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                 callback_func = *((int (**)(void))((char *)callback_ptr + 4));
 
                 if (callback_func == NULL) {
-                    pr_info("vin_core_ops_ioctl: No callback function for cmd 0x1000001, returning 0\n");
+                    printk(KERN_ALERT "vin_core_ops_ioctl: No callback function for cmd 0x1000001, returning 0\n");
                     return 0;
                 }
 
                 /* Binary Ninja: Call callback function */
-                pr_info("vin_core_ops_ioctl: Calling callback function for cmd 0x1000001\n");
+                printk(KERN_ALERT "vin_core_ops_ioctl: Calling callback function for cmd 0x1000001\n");
                 result = callback_func();
             } else {
-                pr_info("vin_core_ops_ioctl: No inpads for cmd 0x1000001, returning 0\n");
+                printk(KERN_ALERT "vin_core_ops_ioctl: No inpads for cmd 0x1000001, returning 0\n");
                 return 0;
             }
         } else {
-            pr_info("vin_core_ops_ioctl: NULL sd for cmd 0x1000001, returning 0\n");
+            printk(KERN_ALERT "vin_core_ops_ioctl: NULL sd for cmd 0x1000001, returning 0\n");
             return 0;
         }
     }
@@ -361,41 +361,41 @@ int vin_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                 callback_ptr = sd->inpads[0].priv;
 
                 if (callback_ptr == NULL) {
-                    pr_info("vin_core_ops_ioctl: No callback pointer for cmd 0x1000000, returning 0\n");
+                    printk(KERN_ALERT "vin_core_ops_ioctl: No callback pointer for cmd 0x1000000, returning 0\n");
                     return 0;
                 }
 
                 callback_func = *((int (**)(void))((char *)callback_ptr + 4));
 
                 if (callback_func == NULL) {
-                    pr_info("vin_core_ops_ioctl: No callback function for cmd 0x1000000, returning 0\n");
+                    printk(KERN_ALERT "vin_core_ops_ioctl: No callback function for cmd 0x1000000, returning 0\n");
                     return 0;
                 }
 
-                pr_info("vin_core_ops_ioctl: Calling callback function for cmd 0x1000000\n");
+                printk(KERN_ALERT "vin_core_ops_ioctl: Calling callback function for cmd 0x1000000\n");
                 result = callback_func();
             } else {
-                pr_info("vin_core_ops_ioctl: No inpads for cmd 0x1000000, returning 0\n");
+                printk(KERN_ALERT "vin_core_ops_ioctl: No inpads for cmd 0x1000000, returning 0\n");
                 return 0;
             }
         } else {
-            pr_info("vin_core_ops_ioctl: NULL sd for cmd 0x1000000, returning 0\n");
+            printk(KERN_ALERT "vin_core_ops_ioctl: NULL sd for cmd 0x1000000, returning 0\n");
             return 0;
         }
     }
     /* Binary Ninja: Handle unknown commands */
     else {
-        pr_info("vin_core_ops_ioctl: Unknown cmd=0x%x, returning 0\n", cmd);
+        printk(KERN_ALERT "vin_core_ops_ioctl: Unknown cmd=0x%x, returning 0\n", cmd);
         return 0;
     }
 
     /* Binary Ninja: Handle special return code */
     if (result == -515) {  /* 0xfffffdfd */
-        pr_info("vin_core_ops_ioctl: Result -515, returning 0\n");
+        printk(KERN_ALERT "vin_core_ops_ioctl: Result -515, returning 0\n");
         return 0;
     }
 
-    pr_info("*** vin_core_ops_ioctl: Binary Ninja - returning result=%d ***\n", result);
+    printk(KERN_ALERT "*** vin_core_ops_ioctl: Binary Ninja - returning result=%d ***\n", result);
     return result;
 }
 
@@ -442,7 +442,7 @@ int video_input_cmd_show(struct seq_file *seq, void *v)
         vin_dev = (struct tx_isp_vin_device *)isp_dev->vin_dev;
     }
 
-    pr_info("*** video_input_cmd_show: EXACT Binary Ninja implementation ***\n");
+    printk(KERN_ALERT "*** video_input_cmd_show: EXACT Binary Ninja implementation ***\n");
 
     /* Binary Ninja: if (*($v0 + 0xf4) s>= 4) */
     if (!vin_dev || vin_dev->state >= 4) {
@@ -456,7 +456,7 @@ int video_input_cmd_show(struct seq_file *seq, void *v)
 /* video_input_cmd_open - EXACT Binary Ninja implementation */
 int video_input_cmd_open(struct inode *inode, struct file *file)
 {
-    pr_info("*** video_input_cmd_open: EXACT Binary Ninja implementation ***\n");
+    printk(KERN_ALERT "*** video_input_cmd_open: EXACT Binary Ninja implementation ***\n");
 
     /* Binary Ninja: return private_single_open_size(arg2, video_input_cmd_show, PDE_DATA(), 0x200) */
     return single_open_size(file, video_input_cmd_show, PDE_DATA(inode), 0x200);
@@ -474,7 +474,7 @@ ssize_t video_input_cmd_set(struct file *file, const char __user *buffer, size_t
     bool use_local_buf = false;
 
     if (!seq || !seq->private) {
-        pr_err("video_input_cmd_set: Invalid file private data\n");
+        printk(KERN_ALERT "video_input_cmd_set: Invalid file private data\n");
         return -EINVAL;
     }
 
@@ -483,8 +483,8 @@ ssize_t video_input_cmd_set(struct file *file, const char __user *buffer, size_t
         vin_dev = (struct tx_isp_vin_device *)isp_dev->vin_dev;
     }
 
-    pr_info("*** video_input_cmd_set: EXACT Binary Ninja implementation ***\n");
-    pr_info("video_input_cmd_set: count=%zu\n", count);
+    printk(KERN_ALERT "*** video_input_cmd_set: EXACT Binary Ninja implementation ***\n");
+    printk(KERN_ALERT "video_input_cmd_set: count=%zu\n", count);
 
     if (!vin_dev) {
         return seq_printf(seq, "Can't ops the node!\n");
@@ -512,7 +512,7 @@ ssize_t video_input_cmd_set(struct file *file, const char __user *buffer, size_t
 
     /* Binary Ninja EXACT: Check for "bt601mode" command */
     if (strncmp(cmd_buf, "bt601mode", 9) == 0) {
-        pr_info("*** video_input_cmd_set: Processing 'bt601mode' command ***\n");
+        printk(KERN_ALERT "*** video_input_cmd_set: Processing 'bt601mode' command ***\n");
 
         /* Binary Ninja: Configure BT601 mode */
         if (vin_dev->vin_regs) {
@@ -522,24 +522,24 @@ ssize_t video_input_cmd_set(struct file *file, const char __user *buffer, size_t
             writel(vin_ctrl, vin_dev->vin_regs + VIN_CTRL_OFFSET);
             wmb();
 
-            pr_info("*** video_input_cmd_set: BT601 mode configured ***\n");
+            printk(KERN_ALERT "*** video_input_cmd_set: BT601 mode configured ***\n");
             sprintf(video_input_cmd_buf, "sensor type is BT601!\n");
         } else {
-            pr_err("video_input_cmd_set: No VIN registers available for BT601 mode\n");
+            printk(KERN_ALERT "video_input_cmd_set: No VIN registers available for BT601 mode\n");
             sprintf(video_input_cmd_buf, "VIC failed to config DVP mode!(8bits-sensor)\n");
         }
         ret = count;
     }
     /* Binary Ninja EXACT: Check for "mipi" command */
     else if (strncmp(cmd_buf, "mipi", 4) == 0) {
-        pr_info("*** video_input_cmd_set: Processing 'mipi' command ***\n");
+        printk(KERN_ALERT "*** video_input_cmd_set: Processing 'mipi' command ***\n");
 
         sprintf(video_input_cmd_buf, "do not support this interface\n");
         ret = count;
     }
     /* Binary Ninja EXACT: Check for "liner" command */
     else if (strncmp(cmd_buf, "liner", 5) == 0) {
-        pr_info("*** video_input_cmd_set: Processing 'liner' command ***\n");
+        printk(KERN_ALERT "*** video_input_cmd_set: Processing 'liner' command ***\n");
 
         /* Binary Ninja: Configure linear mode */
         if (vin_dev->vin_regs) {
@@ -549,17 +549,17 @@ ssize_t video_input_cmd_set(struct file *file, const char __user *buffer, size_t
             writel(vin_ctrl, vin_dev->vin_regs + VIN_CTRL_OFFSET);
             wmb();
 
-            pr_info("*** video_input_cmd_set: Linear mode configured ***\n");
+            printk(KERN_ALERT "*** video_input_cmd_set: Linear mode configured ***\n");
             sprintf(video_input_cmd_buf, "linear mode\n");
         } else {
-            pr_err("video_input_cmd_set: No VIN registers available for linear mode\n");
+            printk(KERN_ALERT "video_input_cmd_set: No VIN registers available for linear mode\n");
             sprintf(video_input_cmd_buf, "VIC failed to config DVP SONY mode!(10bits-sensor)\n");
         }
         ret = count;
     }
     /* Binary Ninja EXACT: Check for "wdr mode" command */
     else if (strncmp(cmd_buf, "wdr mode", 8) == 0) {
-        pr_info("*** video_input_cmd_set: Processing 'wdr mode' command ***\n");
+        printk(KERN_ALERT "*** video_input_cmd_set: Processing 'wdr mode' command ***\n");
 
         /* Parse WDR parameters from command */
         unsigned long wdr_param1 = 0, wdr_param2 = 0;
@@ -571,7 +571,7 @@ ssize_t video_input_cmd_set(struct file *file, const char __user *buffer, size_t
             wdr_param2 = simple_strtoull(param_end + 1, NULL, 0);
         }
 
-        pr_info("video_input_cmd_set: wdr mode params=%lu, %lu\n", wdr_param1, wdr_param2);
+        printk(KERN_ALERT "video_input_cmd_set: wdr mode params=%lu, %lu\n", wdr_param1, wdr_param2);
 
         /* Binary Ninja: Configure WDR mode */
         extern struct tx_isp_sensor *tx_isp_get_sensor(void);
@@ -596,20 +596,20 @@ ssize_t video_input_cmd_set(struct file *file, const char __user *buffer, size_t
                                                    &wdr_config);
 
             if (sensor_ret == 0) {
-                pr_info("*** video_input_cmd_set: WDR mode configured successfully ***\n");
+                printk(KERN_ALERT "*** video_input_cmd_set: WDR mode configured successfully ***\n");
                 sprintf(video_input_cmd_buf, "qbuffer null\n");
             } else {
-                pr_err("video_input_cmd_set: Sensor WDR configuration failed: %d\n", sensor_ret);
+                printk(KERN_ALERT "video_input_cmd_set: Sensor WDR configuration failed: %d\n", sensor_ret);
                 sprintf(video_input_cmd_buf, "Failed to init isp module(%lu.%lu)\n", wdr_param1, wdr_param2);
             }
         } else {
-            pr_err("video_input_cmd_set: No VIN registers or sensor available for WDR mode\n");
+            printk(KERN_ALERT "video_input_cmd_set: No VIN registers or sensor available for WDR mode\n");
             sprintf(video_input_cmd_buf, "Failed to init isp module(%lu.%lu)\n", wdr_param1, wdr_param2);
         }
         ret = count;
     }
     else {
-        pr_info("video_input_cmd_set: Unknown command: %s\n", cmd_buf);
+        printk(KERN_ALERT "video_input_cmd_set: Unknown command: %s\n", cmd_buf);
         sprintf(video_input_cmd_buf, "&vsd->mlock");
         ret = count;  /* Return success for unknown commands */
     }
@@ -619,7 +619,7 @@ cleanup:
         kfree(cmd_buf);
     }
 
-    pr_info("*** video_input_cmd_set: Completed with ret=%d ***\n", ret);
+    printk(KERN_ALERT "*** video_input_cmd_set: Completed with ret=%d ***\n", ret);
     return ret;
 }
 
@@ -658,7 +658,7 @@ int tx_isp_vin_slake_subdev(struct tx_isp_subdev *sd)
         return -EINVAL;
     }
 
-    pr_info("*** tx_isp_vin_slake_subdev: VIN slake/shutdown - current state=%d, refcnt=%d ***\n", vin_dev->state, vin_dev->refcnt);
+    printk(KERN_ALERT "*** tx_isp_vin_slake_subdev: VIN slake/shutdown - current state=%d, refcnt=%d ***\n", vin_dev->state, vin_dev->refcnt);
 
     /* CRITICAL: Binary Ninja reference count system - MISSING from our implementation! */
     /* Binary Ninja: int32_t $v0_1 = *(arg1 + 0xf8) */
@@ -672,19 +672,19 @@ int tx_isp_vin_slake_subdev(struct tx_isp_subdev *sd)
 
     /* Binary Ninja: if ($v0_1 != 0) return 0 - CRITICAL EARLY EXIT! */
     if (refcnt != 0) {
-        pr_info("*** tx_isp_vin_slake_subdev: refcnt=%d, early exit ***\n", refcnt);
+        printk(KERN_ALERT "*** tx_isp_vin_slake_subdev: refcnt=%d, early exit ***\n", refcnt);
         return 0;
     }
 
     /* Binary Ninja: if (*(arg1 + 0xf4) == 4) vin_s_stream(arg1, 0) */
     if (vin_dev->state == 4) {
-        pr_info("tx_isp_vin_slake_subdev: VIN in streaming state, stopping stream\n");
+        printk(KERN_ALERT "tx_isp_vin_slake_subdev: VIN in streaming state, stopping stream\n");
         vin_s_stream(sd, 0);
     }
 
     /* Binary Ninja: if (*(arg1 + 0xf4) == 3) tx_isp_vin_init(arg1, 0) */
     if (vin_dev->state == 3) {
-        pr_info("tx_isp_vin_slake_subdev: VIN in state 3, calling tx_isp_vin_init(disable)\n");
+        printk(KERN_ALERT "tx_isp_vin_slake_subdev: VIN in state 3, calling tx_isp_vin_init(disable)\n");
         tx_isp_vin_init(sd, 0);
     }
 
@@ -697,7 +697,7 @@ int tx_isp_vin_slake_subdev(struct tx_isp_subdev *sd)
     /* Binary Ninja: if ($v0_2 != 0) subdev_sensor_ops_set_input(arg1, &var_18, entry_$a2) */
     if (sensor != NULL) {
         int input_index = -1;  /* var_18 = 0xffffffff */
-        pr_info("tx_isp_vin_slake_subdev: Releasing sensor input\n");
+        printk(KERN_ALERT "tx_isp_vin_slake_subdev: Releasing sensor input\n");
         /* Call sensor ops through the sensor subdev if available */
         if (sensor->sd.ops && sensor->sd.ops->sensor && sensor->sd.ops->sensor->ioctl) {
             sensor->sd.ops->sensor->ioctl(&sensor->sd, 0xc0045627, &input_index);
@@ -706,7 +706,7 @@ int tx_isp_vin_slake_subdev(struct tx_isp_subdev *sd)
 
     /* Binary Ninja: if (*(arg1 + 0xdc) != arg1 + 0xdc) subdev_sensor_ops_release_all_sensor(arg1) */
     if (!list_empty(&vin_dev->sensors)) {
-        pr_info("tx_isp_vin_slake_subdev: Releasing all sensors\n");
+        printk(KERN_ALERT "tx_isp_vin_slake_subdev: Releasing all sensors\n");
         /* Call the exported function */
         ispcore_sensor_ops_release_all_sensor(sd);
     }
@@ -716,14 +716,14 @@ int tx_isp_vin_slake_subdev(struct tx_isp_subdev *sd)
 
     /* Binary Ninja: if (*(arg1 + 0xf4) == 2) *(arg1 + 0xf4) = 1 */
     if (vin_dev->state == 2) {
-        pr_info("tx_isp_vin_slake_subdev: VIN state 2->1\n");
+        printk(KERN_ALERT "tx_isp_vin_slake_subdev: VIN state 2->1\n");
         vin_dev->state = 1;
     }
 
     /* Binary Ninja: private_mutex_unlock(arg1 + 0xe8) */
     mutex_unlock(&vin_dev->mlock);
 
-    pr_info("*** tx_isp_vin_slake_subdev: VIN slake complete, final state=%d ***\n", vin_dev->state);
+    printk(KERN_ALERT "*** tx_isp_vin_slake_subdev: VIN slake complete, final state=%d ***\n", vin_dev->state);
     return 0;
 }
 
@@ -796,7 +796,7 @@ int tx_isp_vin_probe(struct platform_device *pdev)
 
     /* CRITICAL FIX: Set dev_priv so tx_isp_get_subdevdata() returns the VIN device */
     tx_isp_set_subdevdata(&vin->sd, vin);
-    pr_info("*** VIN PROBE: Set dev_priv to vin_dev %p AFTER subdev_init ***\n", vin);
+    printk(KERN_ALERT "*** VIN PROBE: Set dev_priv to vin_dev %p AFTER subdev_init ***\n", vin);
 
     /* Binary Ninja: *($v0 + 0xd8) = $v0 */
     /* Note: self_ptr member doesn't exist in tx_isp_vin_device structure */
@@ -812,7 +812,7 @@ int tx_isp_vin_probe(struct platform_device *pdev)
     vin->state = TX_ISP_MODULE_SLAKE;  /* State = 1 (SLAKE) */
 
     /* REMOVED: Manual linking - now handled automatically by tx_isp_subdev_init */
-    pr_info("*** VIN PROBE: Device linking handled automatically by tx_isp_subdev_init ***\n");
+    printk(KERN_ALERT "*** VIN PROBE: Device linking handled automatically by tx_isp_subdev_init ***\n");
 
     return 0;
 

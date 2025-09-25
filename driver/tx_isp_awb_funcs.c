@@ -67,7 +67,7 @@ EXPORT_SYMBOL(tisp_awb_algo_handle);
 int tisp_awb_param_array_set(int param_id, void *data, int *size_out)
 {
     if (param_id - 0x23 >= 0x19) {
-        pr_err("tisp_awb_param_array_set: Invalid parameter ID %d\n", param_id);
+        printk(KERN_ALERT "tisp_awb_param_array_set: Invalid parameter ID %d\n", param_id);
         return -1;
     }
 
