@@ -2525,6 +2525,14 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
 
     } else {
         /* Stream ON */
+        /* VIC CONTROL: reset state before (re)configuration per reference (write 2) */
+        if (vic_dev && vic_dev->vic_regs) {
+            void __iomem *vr = vic_dev->vic_regs;
+            writel(2, vr + 0x0);
+            wmb();
+            pr_info("*** VIC CONTROL (PRIMARY): WROTE 2 to [0x0] before MDMA/config ***\n");
+        }
+
         /* Binary Ninja EXACT: vic_pipo_mdma_enable($s0) */
         pr_info("*** CRITICAL: Calling vic_pipo_mdma_enable - required for VIC interrupts ***\n");
         vic_pipo_mdma_enable(vic_dev);
@@ -2775,6 +2783,14 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
             /* Post-IRQ-enable: sample status a bit longer to catch first frame */
             if (vic_dev->vic_regs) {
+            /* VIC CONTROL: enter RUN state after all config (write 1) */
+            if (vic_dev && vic_dev->vic_regs) {
+                void __iomem *vr = vic_dev->vic_regs;
+                writel(1, vr + 0x0);
+                wmb();
+                pr_info("*** VIC CONTROL (PRIMARY): WROTE 1 to [0x0] before enabling IRQ ***\n");
+            }
+
                 void __iomem *vr = vic_dev->vic_regs;
                 u32 s0, s1; int i;
                 for (i = 0; i < 200; i++) { /* ~200ms total if udelay(1000) */
