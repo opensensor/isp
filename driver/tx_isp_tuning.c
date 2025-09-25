@@ -1992,17 +1992,11 @@ int tisp_init(void *sensor_info, char *param_name)
     /* CRITICAL FIX: Use EXACT reference driver bypass register value */
     /* The calculated value 0xb477effd was causing hardware reset - use reference value instead */
 
-    /* CRITICAL ROOT CAUSE FIX: Register 0xc is CSI PHY Control, NOT ISP bypass! */
-    /* The logs show: "ISP isp-m0: [CSI PHY Control] write at offset 0xc: 0x0 -> 0x80700008" */
-    /* This means 0xc is a CSI PHY register that should NOT be written by tuning system! */
+    /* REFERENCE DRIVER EXACT VALUE: ISP isp-m0: [CSI PHY Control] write at offset 0xc: 0x0 -> 0x80700008 */
+    uint32_t bypass_val = 0x80700008;  /* EXACT reference driver value - prevents hardware reset */
 
-    /* CRITICAL FIX: DO NOT WRITE TO CSI PHY REGISTERS FROM TUNING SYSTEM */
-    /* Writing to register 0xc corrupts CSI PHY configuration and breaks VIC interrupts */
-    pr_info("*** CRITICAL ROOT CAUSE FIX: Skipping CSI PHY register 0xc write to prevent VIC interrupt corruption ***\n");
-    pr_info("*** Register 0xc is CSI PHY Control - tuning system must not write to it! ***\n");
-
-    /* The bypass functionality should be handled by ISP control registers, not CSI PHY */
-    /* Use proper ISP bypass register instead of corrupting CSI PHY */
+    system_reg_write(0xc, bypass_val);
+    pr_info("*** CRITICAL FIX: ISP bypass register set to EXACT reference value 0x%x - prevents hardware reset ***\n", bypass_val);
 
     /* CRITICAL FIX: Configure ISP for NV12 output format */
     /* Application requests NV12 format (0x3231564e) but buffer size mismatch suggests confusion */
@@ -2238,24 +2232,8 @@ int tisp_init(void *sensor_info, char *param_name)
         return param_init_ret;
     }
 
-    /* *** CRITICAL MISSING PIECE: Call tx_isp_subdev_pipo to initialize VIC buffer management *** */
-    pr_info("*** CRITICAL: Calling tx_isp_subdev_pipo to initialize VIC buffer management ***\n");
-
-    if (ourISPdev->vic_dev) {
-        /* Create a dummy raw_pipe structure for the call */
-        void *raw_pipe[8] = {NULL}; /* 8 function pointers as per Binary Ninja */
-
-        /* Call tx_isp_subdev_pipo with the VIC subdev and raw_pipe structure */
-        int pipo_ret = tx_isp_subdev_pipo(&ourISPdev->vic_dev->sd, raw_pipe);
-        if (pipo_ret == 0) {
-            pr_info("*** SUCCESS: tx_isp_subdev_pipo completed - VIC buffer management initialized ***\n");
-            pr_info("*** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***\n");
-        } else {
-            pr_err("*** ERROR: tx_isp_subdev_pipo failed: %d ***\n", pipo_ret);
-        }
-    } else {
-        pr_err("*** ERROR: No VIC device available for tx_isp_subdev_pipo call ***\n");
-    }
+    /* REFERENCE DRIVER: tx_isp_subdev_pipo is NOT called by tisp_init */
+    /* VIC buffer management and interrupt configuration happens elsewhere */
 
     pr_info("*** tisp_init: ISP HARDWARE PIPELINE FULLY INITIALIZED - THIS SHOULD TRIGGER REGISTER ACTIVITY ***\n");
     pr_info("*** tisp_init: All hardware blocks enabled, registers configured, events ready ***\n");
@@ -4215,26 +4193,9 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
                                 ret = tisp_dpc_get_par_cfg(&param_ptr[3], &param_ptr[1]);
                                 break;
                             case 5:  /* tx_isp_subdev_pipo */
-                                pr_info("*** CRITICAL: Enabling tx_isp_subdev_pipo - this will start VIC frame channel streaming! ***\n");
-
-                                /* CRITICAL FIX: Get VIC subdev from global ISP device */
-                                extern struct tx_isp_dev *ourISPdev;
-                                if (ourISPdev && ourISPdev->vic_dev) {
-                                    struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-                                    void *raw_pipe[8] = {NULL}; /* 8 function pointers as per Binary Ninja */
-
-                                    pr_info("*** CALLING tx_isp_subdev_pipo with VIC subdev %p ***\n", &vic_dev->sd);
-                                    ret = tx_isp_subdev_pipo(&vic_dev->sd, raw_pipe);
-                                    if (ret == 0) {
-                                        pr_info("*** SUCCESS: tx_isp_subdev_pipo completed - VIC frame channel streaming ENABLED! ***\n");
-                                        pr_info("*** VIC interrupts should now fire! ***\n");
-                                    } else {
-                                        pr_err("*** ERROR: tx_isp_subdev_pipo failed: %d ***\n", ret);
-                                    }
-                                } else {
-                                    pr_err("*** ERROR: No VIC device available for tx_isp_subdev_pipo ***\n");
-                                    ret = -ENODEV;
-                                }
+                                //ret = tx_isp_subdev_pipo((struct tx_isp_subdev *)&param_ptr[3], &param_ptr[1]);
+								pr_info("TODO case 5");
+								ret = 0; // TODO
                                 break;
                             case 6:  /* tisp_rdns_get_par_cfg */
                                 ret = tisp_rdns_get_par_cfg(&param_ptr[3], &param_ptr[1]);

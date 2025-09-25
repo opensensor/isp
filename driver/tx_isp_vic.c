@@ -278,15 +278,9 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
         return -EINVAL;
     }
 
-    // CRITICAL ROOT CAUSE FIX: MUST use SECONDARY VIC space to avoid register conflicts
-    // Primary VIC space (0x133e0000) OVERLAPS with ISP Core space (0x13300000-0x13400000)
-    // Secondary VIC space (0x10023000) is separate and won't conflict with CSI PHY registers
-    vic_base = vic_dev->vic_regs_control;  // Use secondary VIC space (0x10023000)
-    if (!vic_base) {
-        pr_err("*** VIC HW INIT: CRITICAL - No secondary VIC registers available! Cannot avoid register conflicts! ***\n");
-        return -ENOMEM;
-    }
-    pr_info("*** VIC HW INIT: Using SECONDARY VIC space (0x10023000) - avoids ISP Core register conflicts ***\n");
+    // CRITICAL: Use PRIMARY VIC space for interrupt configuration
+    vic_base = vic_dev->vic_regs;  // Use primary VIC space (0x133e0000)
+    pr_info("*** VIC HW INIT: Using PRIMARY VIC space for interrupt configuration ***\n");
 
     /* CRITICAL FIX: Configure VIC interrupts during hardware init - EXACTLY like working branch */
     /* The working branch configures registers 0x04 and 0x0c in tx_isp_vic_hw_init() */
@@ -296,161 +290,31 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
     /* The reference uses registers 0x1e0-0x1f4 for VIC interrupts, NOT 0x04/0x0c! */
     pr_info("*** VIC HW INIT: Configuring ACTUAL VIC interrupt registers (0x1e0-0x1f4 range) ***\n");
 
-    // Test VIC interrupt register accessibility using the ACTUAL registers from reference
-    u32 test_reg_1e0 = readl(vic_base + 0x1e0);
-    u32 test_reg_1e4 = readl(vic_base + 0x1e4);
-    pr_info("*** VIC HW INIT: ACTUAL VIC interrupt registers: 0x1e0=0x%08x, 0x1e4=0x%08x ***\n",
-            test_reg_1e0, test_reg_1e4);
-
-    // Configure VIC interrupt registers exactly like Binary Ninja reference
-    // These are the registers the interrupt service routine actually uses
-
-    // Clear any pending interrupt status first
-    writel(0x00000000, vic_base + 0x1f0);  // Clear interrupt status register 1
-    wmb();
-    writel(0x00000000, vic_base + 0x1f4);  // Clear interrupt status register 2
+    // Clear any pending interrupts first
+    writel(0, vic_base + 0x00);  // Clear ISR
+    writel(0, vic_base + 0x20);  // Clear ISR1
     wmb();
 
-    // Enable VIC interrupts using the ACTUAL interrupt enable registers
-    writel(0x00000001, vic_base + 0x1e0);  // Enable frame done interrupt (bit 0)
-    wmb();
-    writel(0x00000003, vic_base + 0x1e4);  // Enable MDMA interrupts (bits 0,1)
-    wmb();
-
-    // Configure interrupt masks - enable the interrupts we want
-    writel(0xFFFFFFFE, vic_base + 0x1e8);  // Interrupt mask register 1 (enable frame done)
-    wmb();
-    writel(0xFFFFFFFC, vic_base + 0x1ec);  // Interrupt mask register 2 (enable MDMA)
-    wmb();
-
-    pr_info("*** VIC HW INIT: ACTUAL VIC interrupt registers configured - using Binary Ninja reference ***\n");
-
-    /* Verify ACTUAL VIC interrupt register configuration */
-    u32 verify_1e0 = readl(vic_base + 0x1e0);
-    u32 verify_1e4 = readl(vic_base + 0x1e4);
-    u32 verify_1e8 = readl(vic_base + 0x1e8);
-    u32 verify_1ec = readl(vic_base + 0x1ec);
-
-    pr_info("*** VIC HW INIT VERIFY: 0x1e0=0x%08x (expected 0x1), 0x1e4=0x%08x (expected 0x3) ***\n",
-            verify_1e0, verify_1e4);
-    pr_info("*** VIC HW INIT VERIFY: 0x1e8=0x%08x (expected 0xFFFFFFFE), 0x1ec=0x%08x (expected 0xFFFFFFFC) ***\n",
-            verify_1e8, verify_1ec);
-
-    bool interrupt_regs_ok = (verify_1e0 == 0x1) && (verify_1e4 == 0x3) &&
-                            (verify_1e8 == 0xFFFFFFFE) && (verify_1ec == 0xFFFFFFFC);
+    pr_info("*** VIC HW INIT: Basic interrupt clearing complete - full interrupt config happens later ***\n");
 
     /* CRITICAL FIX: Do NOT register interrupt handler here - main module already handles IRQ 38 */
     /* The main module registers IRQ 38 as "isp-w02" and routes VIC interrupts through isp_irq_handle */
     pr_info("*** VIC HW INIT: Interrupt handler registration SKIPPED - main module handles IRQ 38 routing ***\n");
 
-    if (interrupt_regs_ok) {
-        pr_info("*** VIC HW INIT: SUCCESS - ACTUAL VIC interrupt registers configured correctly ***\n");
+    /* Verify basic VIC hardware initialization */
+    u32 verify_0x00 = readl(vic_base + 0x00);
+    u32 verify_0x20 = readl(vic_base + 0x20);
+
+    pr_info("*** VIC HW INIT VERIFY: 0x00=0x%08x (should be 0), 0x20=0x%08x (should be 0) ***\n",
+            verify_0x00, verify_0x20);
+
+    if (verify_0x00 == 0 && verify_0x20 == 0) {
+        pr_info("*** VIC HW INIT: SUCCESS - Basic VIC hardware initialization complete ***\n");
     } else {
-        pr_warn("*** VIC HW INIT: WARNING - Some ACTUAL VIC interrupt registers may not be configured correctly ***\n");
-        pr_warn("*** VIC HW INIT: This may be normal if VIC hardware manages some registers automatically ***\n");
+        pr_warn("*** VIC HW INIT: WARNING - Basic VIC hardware initialization may have issues ***\n");
     }
 
-    pr_info("*** VIC HW INIT: Basic hardware initialization complete - ready for full VIC configuration ***\n");
-    return 0;
-}
-
-/**
- * tx_isp_vic_apply_full_config - Apply full VIC configuration including interrupts
- * This function configures VIC interrupts AFTER the VIC hardware is fully set up
- * Based on working branch tx_isp_vic_apply_full_config() function
- */
-int tx_isp_vic_apply_full_config(struct tx_isp_vic_device *vic_dev)
-{
-    void __iomem *vic_regs;
-
-    if (!vic_dev || !vic_dev->vic_regs) {
-        pr_err("*** tx_isp_vic_apply_full_config: Invalid VIC device or registers ***\n");
-        return -EINVAL;
-    }
-
-    vic_regs = vic_dev->vic_regs;
-    pr_info("*** tx_isp_vic_apply_full_config: Applying full VIC configuration including interrupts ***\n");
-
-    /* CRITICAL FIX: Do NOT configure 0x04 and 0x0c here - they're configured in tx_isp_vic_hw_init() */
-    /* Only configure registers 0x100 and 0x14 here, which are configured during frame capture in working branch */
-
-    pr_info("*** VIC FULL CONFIG: Skipping 0x04/0x0c (configured in hw_init), applying frame capture registers only ***\n");
-
-    /* Apply essential VIC control registers - FROM WORKING BRANCH */
-    writel(0x800800, vic_regs + 0x60);      /* Control register */
-    writel(0x9d09d0, vic_regs + 0x64);      /* Control register */
-    writel(0x6002, vic_regs + 0x70);        /* Control register */
-    writel(0x7003, vic_regs + 0x74);        /* Control register */
-    wmb();
-    pr_info("*** VIC FULL CONFIG: Applied essential control registers 0x60-0x74 ***\n");
-
-    /* Apply VIC color space configuration - FROM WORKING BRANCH */
-    writel(0xeb8080, vic_regs + 0xc0);      /* Color space config */
-    writel(0x108080, vic_regs + 0xc4);      /* Color space config */
-    writel(0x29f06e, vic_regs + 0xc8);      /* Color space config */
-    writel(0x913622, vic_regs + 0xcc);      /* Color space config */
-    wmb();
-    pr_info("*** VIC FULL CONFIG: Applied color space configuration 0xc0-0xcc ***\n");
-
-    /* Apply VIC processing configuration - FROM WORKING BRANCH */
-    writel(0x515af0, vic_regs + 0xd0);      /* Processing config */
-    writel(0xaaa610, vic_regs + 0xd4);      /* Processing config */
-    writel(0xd21092, vic_regs + 0xd8);      /* Processing config */
-    writel(0x6acade, vic_regs + 0xdc);      /* Processing config */
-    wmb();
-    pr_info("*** VIC FULL CONFIG: Applied processing configuration 0xd0-0xdc ***\n");
-
-    /* Verify essential VIC control registers were configured */
-    u32 verify_0x60 = readl(vic_regs + 0x60);
-    u32 verify_0x64 = readl(vic_regs + 0x64);
-    u32 verify_0xc0 = readl(vic_regs + 0xc0);
-    u32 verify_0xd0 = readl(vic_regs + 0xd0);
-
-    pr_info("*** VIC FULL CONFIG VERIFY: 0x60=0x%08x (expected 0x800800), 0x64=0x%08x (expected 0x9d09d0) ***\n",
-            verify_0x60, verify_0x64);
-    pr_info("*** VIC FULL CONFIG VERIFY: 0xc0=0x%08x (expected 0xeb8080), 0xd0=0x%08x (expected 0x515af0) ***\n",
-            verify_0xc0, verify_0xd0);
-
-    bool essential_regs_ok = (verify_0x60 == 0x800800) && (verify_0x64 == 0x9d09d0) &&
-                            (verify_0xc0 == 0xeb8080) && (verify_0xd0 == 0x515af0);
-
-    if (essential_regs_ok) {
-        pr_info("*** VIC FULL CONFIG: SUCCESS - Essential VIC control registers configured correctly! ***\n");
-    } else {
-        pr_warn("*** VIC FULL CONFIG: WARNING - Some essential VIC control registers may not have been accepted ***\n");
-    }
-
-    /* CRITICAL DEBUG: Verify interrupt registers are still correct after full config */
-    u32 verify_int_0x04 = readl(vic_regs + 0x04);
-    u32 verify_int_0x0c = readl(vic_regs + 0x0c);
-    u32 verify_int_0x100 = readl(vic_regs + 0x100);
-    u32 verify_int_0x14 = readl(vic_regs + 0x14);
-
-    pr_info("*** VIC FULL CONFIG: INTERRUPT REGISTER VERIFY AFTER FULL CONFIG ***\n");
-    pr_info("*** VIC FULL CONFIG: 0x04=0x%08x (expected 0x07800438), 0x0c=0x%08x (expected 0xb5742249) ***\n",
-            verify_int_0x04, verify_int_0x0c);
-    pr_info("*** VIC FULL CONFIG: 0x100=0x%08x (expected 0x2d0), 0x14=0x%08x (expected 0x2b) ***\n",
-            verify_int_0x100, verify_int_0x14);
-
-    bool int_regs_ok = (verify_int_0x04 == 0x07800438) && (verify_int_0x0c == 0xb5742249) &&
-                       (verify_int_0x100 == 0x2d0) && (verify_int_0x14 == 0x2b);
-
-    if (int_regs_ok) {
-        pr_info("*** VIC FULL CONFIG: SUCCESS - Interrupt registers still correct after full config! ***\n");
-    } else {
-        pr_warn("*** VIC FULL CONFIG: CRITICAL - Interrupt registers corrupted after full config! ***\n");
-        pr_warn("*** VIC FULL CONFIG: Re-writing interrupt registers to fix corruption ***\n");
-
-        /* Re-write interrupt registers if they were corrupted */
-        writel(0x07800438, vic_regs + 0x4);      /* VIC interrupt mask register */
-        writel(0xb5742249, vic_regs + 0xc);      /* VIC interrupt control register */
-        writel(0x2d0, vic_regs + 0x100);         /* VIC interrupt config register */
-        writel(0x2b, vic_regs + 0x14);           /* VIC interrupt control register 2 */
-        wmb();
-        pr_info("*** VIC FULL CONFIG: Interrupt registers re-written after corruption ***\n");
-    }
-
-    pr_info("*** tx_isp_vic_apply_full_config: Full VIC configuration complete - interrupts should now work ***\n");
+    pr_info("*** VIC HW INIT: Hardware interrupt configuration complete - ready for main module IRQ routing ***\n");
     return 0;
 }
 
@@ -1010,23 +874,27 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
     pr_info("*** tx_isp_vic_start: Using single VIC register base - EXACT Binary Ninja reference ***\n");
 
-    /* CRITICAL FIX: Skip CPM clock reconfiguration during streaming to prevent CSI PHY reset */
-    pr_info("*** STREAMING: SKIPPING CPM clock reconfiguration to preserve CSI PHY configuration ***\n");
-    pr_info("*** STREAMING: CPM clocks should already be configured during module init ***\n");
+    /* STEP 2: CPM register manipulation like tx_isp_init_vic_registers */
+    pr_info("*** STREAMING: Configuring CPM registers for VIC access ***\n");
+    cpm_regs = ioremap(0x10000000, 0x1000);
+    if (cpm_regs) {
+        u32 clkgr0 = readl(cpm_regs + 0x20);
+        u32 clkgr1 = readl(cpm_regs + 0x28);
 
-    /* The CPM clock reconfiguration was causing CSI PHY registers to reset to 0 */
-    /* This happens because changing VIC/ISP clocks triggers a hardware reset */
-    /* that wipes out the carefully configured CSI PHY registers */
+        /* Enable ISP/VIC clocks */
+        clkgr0 &= ~(1 << 13); // ISP clock
+        clkgr0 &= ~(1 << 21); // Alternative ISP position
+        clkgr0 &= ~(1 << 30); // VIC in CLKGR0
+        clkgr1 &= ~(1 << 30); // VIC in CLKGR1
 
-    /* REMOVED CPM reconfiguration code that was causing CSI PHY reset:
-     * - clkgr0 &= ~(1 << 13); // ISP clock
-     * - clkgr0 &= ~(1 << 21); // Alternative ISP position
-     * - clkgr0 &= ~(1 << 30); // VIC in CLKGR0
-     * - clkgr1 &= ~(1 << 30); // VIC in CLKGR1
-     * - msleep(20); // This delay was when CSI PHY got reset
-     */
+        writel(clkgr0, cpm_regs + 0x20);
+        writel(clkgr1, cpm_regs + 0x28);
+        wmb();
+        msleep(20);
 
-    pr_info("STREAMING: CPM clocks preserved - CSI PHY configuration should remain intact\n");
+        pr_info("STREAMING: CPM clocks configured for VIC access\n");
+        iounmap(cpm_regs);
+    }
 
 
     /* MOVED: Interrupt register configuration moved to END of function to prevent overwriting */
@@ -1093,11 +961,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
         pr_info("*** tx_isp_vic_start: CRITICAL VIC configuration registers written - hardware protection should be prevented ***\n");
 
-        /* CRITICAL FIX: DO NOT write frame size to 0x4 - that's the interrupt mask register! */
-        /* Binary Ninja: Frame size should go to a different register, not 0x4 which is IMR */
+        /* Binary Ninja: Write frame size immediately - no deferral needed */
         u32 frame_size_value = (vic_dev->width << 16) | vic_dev->height;
-        /* REMOVED: writel(frame_size_value, vic_regs + 0x4); - This overwrites interrupt mask register! */
-        pr_info("*** tx_isp_vic_start: Frame size 0x%08x calculated but NOT written to 0x4 (interrupt register) ***\n", frame_size_value);
+        writel(frame_size_value, vic_regs + 0x4);
+        pr_info("*** tx_isp_vic_start: Frame size 0x%08x written to register 0x4 ***\n", frame_size_value);
 
         /* Binary Ninja: Buffer calculation */
         struct tx_isp_mipi_bus *mipi = &sensor_attr->mipi;
@@ -1156,12 +1023,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* CRITICAL FIX: The issue is register space confusion - use DIFFERENT register for unlock status */
         pr_info("*** tx_isp_vic_start: VIC unlock sequence - FIXED register space issue ***\n");
 
-        /* CRITICAL DISCOVERY: VIC registers are completely locked - need proper unlock sequence */
-
-        /* HYPOTHESIS: VIC unlock might be through SECONDARY VIC space, not PRIMARY */
-
-
-            /* Try unlock sequence on SECONDARY VIC space */
+        /* Binary Ninja EXACT: Write unlock commands to PRIMARY VIC space */
+        /* Binary Ninja EXACT: **(arg1 + 0xb8) = 2 */
         writel(2, vic_regs + 0x0);
             wmb();
 
@@ -1303,6 +1166,19 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     pr_info("*** VIC HARDWARE PREREQUISITES: Dimensions %dx%d, stride %d, MIPI mode 2 ***\n",
             width, height, width * 2);
 
+    /* CRITICAL FIX: VIC interrupt configuration must happen AFTER VIC unlock sequence */
+    /* The magic value 0x3130322a in register 0x0 indicates CSI PHY coordination - this is CORRECT */
+
+    pr_info("*** VIC INTERRUPT CONFIG: VIC unlock sequence will be completed first, then interrupt config ***\n");
+
+    /* NOTE: Interrupt control registers 0x300 and 0x30c will be configured AFTER VIC unlock */
+    /* This is moved to after the VIC unlock sequence below */
+
+    /* STATUS registers will be checked after VIC unlock sequence completes */
+    verify_int_en = readl(vic_regs + 0x1e0);   /* Read interrupt status register */
+    verify_int_mask = readl(vic_regs + 0x1e8); /* Read interrupt mask status register */
+    pr_info("*** VIC INTERRUPT STATUS CHECK (BEFORE UNLOCK): STATUS=0x%08x, MASK_STATUS=0x%08x ***\n", verify_int_en, verify_int_mask);
+
     /* Binary Ninja: Final configuration registers */
     writel(0x100010, vic_regs + 0x1a4);
     writel(0x4210, vic_regs + 0x1ac);
@@ -1310,11 +1186,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0, vic_regs + 0x1b4);
     wmb();
 
-    /* CRITICAL FIX: VIC interrupt configuration must happen AFTER VIC unlock sequence */
-    /* The magic value 0x3130322a in register 0x0 indicates CSI PHY coordination - this is CORRECT */
-
-    /* CRITICAL FIX: Configure VIC interrupt registers 0x1e0-0x1f4 - THIS WAS MISSING! */
-    pr_info("*** VIC INTERRUPT CONFIG: Configuring VIC interrupt registers (0x1e0-0x1f4) - FROM WORKING VERSION ***\n");
+    /* CRITICAL: NOW configure VIC interrupts using WORKING BRANCH registers */
+    pr_info("*** VIC INTERRUPT CONFIG: Using WORKING BRANCH registers (NOT Binary Ninja) ***\n");
 
     /* Clear any pending VIC interrupt status first */
     writel(0x00000000, vic_regs + 0x1f0);  /* Clear VIC interrupt status register 1 */
@@ -2309,9 +2182,8 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
         /* Binary Ninja: if ($v0_2 != 2) */
         if (current_state != 2) {
-            /* CRITICAL FIX: Do NOT disable VIC interrupts when disabling VIC */
-            /* tx_vic_disable_irq(vic_dev); -- REMOVED: This was disabling IRQ 38 at kernel level */
-            pr_info("*** vic_core_ops_init: CRITICAL FIX - Skipping VIC interrupt disable to keep IRQ 38 enabled ***\n");
+            /* Binary Ninja: tx_vic_disable_irq() */
+            tx_vic_disable_irq(vic_dev);
 
             /* Binary Ninja: *($s1_1 + 0x128) = 2 */
             vic_dev->state = 2;
@@ -2602,10 +2474,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
         if (current_state != 4) {
             pr_info("*** vic_core_s_stream: EXACT Binary Ninja - State != 4, calling VIC start sequence ***\n");
 
-            /* CRITICAL FIX: Do NOT disable VIC interrupts before starting VIC */
-            /* tx_vic_disable_irq(vic_dev); -- REMOVED: This was disabling IRQ 38 at kernel level */
-            /* tx_vic_disable_irq(vic_dev); -- REMOVED: Duplicate disable call */
-            pr_info("*** vic_core_s_stream: CRITICAL FIX - Skipping VIC interrupt disable to keep IRQ 38 enabled ***\n");
+            /* Binary Ninja: tx_vic_disable_irq() */
+            tx_vic_disable_irq(vic_dev);
 
             /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
             ret = tx_isp_vic_start(vic_dev);
@@ -2953,18 +2823,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
 
     /* CRITICAL FIX: Do NOT call tx_isp_vic_hw_init during probe - working branch doesn't! */
     /* VIC interrupt configuration happens during actual VIC operations, not during probe */
-    /* CRITICAL FIX: Configure VIC interrupts BEFORE clocks are enabled */
-    /* Your insight about clock timing is correct - VIC interrupt registers must be configured */
-    /* when VIC hardware is in reset/unconfigured state, BEFORE any clocks are enabled */
-    pr_info("*** VIC PROBE: CRITICAL - Configuring VIC interrupts BEFORE clock enablement ***\n");
-
-    int hw_init_ret = tx_isp_vic_hw_init(&vic_dev->sd);
-    if (hw_init_ret != 0) {
-        pr_err("*** VIC PROBE: CRITICAL - VIC interrupt configuration FAILED: %d ***\n", hw_init_ret);
-        /* Don't fail probe, but log the issue */
-    } else {
-        pr_info("*** VIC PROBE: SUCCESS - VIC interrupts configured BEFORE clocks enabled ***\n");
-    }
+    pr_info("*** VIC PROBE: Skipping tx_isp_vic_hw_init - working branch configures interrupts during VIC operations ***\n");
 
     /* Binary Ninja: tx_isp_subdev_init(arg1, $v0, &vic_subdev_ops) */
     ret = tx_isp_subdev_init(pdev, &vic_dev->sd, &vic_subdev_ops);
