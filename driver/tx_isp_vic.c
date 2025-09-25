@@ -184,35 +184,32 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
     spin_lock_irqsave(&vic_dev->lock, flags);
 
     /* Binary Ninja: if (*(dump_vsd_1 + 0x13c) != 0) */
-    if (vic_dev->irq_enabled != 0) {
-        pr_info("tx_vic_enable_irq: VIC interrupts already enabled\n");
-    } else {
-        /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 1 */
-        vic_dev->irq_enabled = 1;
-        pr_info("tx_vic_enable_irq: VIC interrupts enabled (irq_enabled = 1)\n");
 
-        /* Binary Ninja: $v0_1 = *(dump_vsd_5 + 0x84); if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
-        if (vic_dev->irq_handler && vic_dev->irq_priv) {
-            pr_info("tx_vic_enable_irq: Calling VIC interrupt callback\n");
-            vic_dev->irq_handler(vic_dev->irq_priv);
-        }
+    /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 1 */
+    vic_dev->irq_enabled = 1;
+    pr_info("tx_vic_enable_irq: VIC interrupts enabled (irq_enabled = 1)\n");
 
-        /* CRITICAL FIX: Enable VIC interrupt at kernel level - this is what the callback should do! */
-        if (vic_dev->irq > 0) {
-            pr_info("*** tx_vic_enable_irq: CRITICAL FIX - Enabling VIC interrupt (IRQ %d) at kernel level ***\n", vic_dev->irq);
-            enable_irq(vic_dev->irq);
-            pr_info("*** tx_vic_enable_irq: VIC interrupt (IRQ %d) ENABLED at kernel level ***\n", vic_dev->irq);
-        } else if (vic_dev->sd.irq_info.irq > 0) {
-            pr_info("*** tx_vic_enable_irq: CRITICAL FIX - Enabling VIC interrupt (IRQ %d) from irq_info at kernel level ***\n", vic_dev->sd.irq_info.irq);
-            enable_irq(vic_dev->sd.irq_info.irq);
-            pr_info("*** tx_vic_enable_irq: VIC interrupt (IRQ %d) ENABLED at kernel level ***\n", vic_dev->sd.irq_info.irq);
-        } else {
-            pr_err("*** tx_vic_enable_irq: CRITICAL ERROR - No VIC IRQ found! vic_dev->irq=%d, irq_info.irq=%d ***\n",
-                   vic_dev->irq, vic_dev->sd.irq_info.irq);
-        }
-
-        pr_info("tx_vic_enable_irq: VIC interrupt flag set and kernel interrupt enabled\n");
+    /* Binary Ninja: $v0_1 = *(dump_vsd_5 + 0x84); if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
+    if (vic_dev->irq_handler && vic_dev->irq_priv) {
+        pr_info("tx_vic_enable_irq: Calling VIC interrupt callback\n");
+        vic_dev->irq_handler(vic_dev->irq_priv);
     }
+
+    /* CRITICAL FIX: Enable VIC interrupt at kernel level - this is what the callback should do! */
+    if (vic_dev->irq > 0) {
+        pr_info("*** tx_vic_enable_irq: CRITICAL FIX - Enabling VIC interrupt (IRQ %d) at kernel level ***\n", vic_dev->irq);
+        enable_irq(vic_dev->irq);
+        pr_info("*** tx_vic_enable_irq: VIC interrupt (IRQ %d) ENABLED at kernel level ***\n", vic_dev->irq);
+    } else if (vic_dev->sd.irq_info.irq > 0) {
+        pr_info("*** tx_vic_enable_irq: CRITICAL FIX - Enabling VIC interrupt (IRQ %d) from irq_info at kernel level ***\n", vic_dev->sd.irq_info.irq);
+        enable_irq(vic_dev->sd.irq_info.irq);
+        pr_info("*** tx_vic_enable_irq: VIC interrupt (IRQ %d) ENABLED at kernel level ***\n", vic_dev->sd.irq_info.irq);
+    } else {
+        pr_err("*** tx_vic_enable_irq: CRITICAL ERROR - No VIC IRQ found! vic_dev->irq=%d, irq_info.irq=%d ***\n",
+               vic_dev->irq, vic_dev->sd.irq_info.irq);
+    }
+
+    pr_info("tx_vic_enable_irq: VIC interrupt flag set and kernel interrupt enabled\n");
 
     /* Binary Ninja: private_spin_unlock_irqrestore(dump_vsd_3 + 0x130, var_18) */
     spin_unlock_irqrestore(&vic_dev->lock, flags);
