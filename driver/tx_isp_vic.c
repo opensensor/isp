@@ -2659,9 +2659,9 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             /* Re-assert interrupt mask and clear pending in BOTH banks, verify key regs */
             if (vic_dev->vic_regs) {
                 void __iomem *vr = vic_dev->vic_regs;
-                /* Clear pending */
-                writel(0x00000000, vr + 0x1f0);
-                writel(0x00000000, vr + 0x1f4);
+                /* Clear pending (W1C) */
+                writel(0xFFFFFFFF, vr + 0x1f0);
+                writel(0xFFFFFFFF, vr + 0x1f4);
                 /* Enable all interrupt sources, then unmask frame-done (bit0) */
                 writel(0xFFFFFFFF, vr + 0x1e0);
                 writel(0xFFFFFFFE, vr + 0x1e8);
