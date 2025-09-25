@@ -10,7 +10,6 @@ tx-isp-t31-objs :=  $(DIR)/tx-isp-module.o \
                $(DIR)/tx_isp_reset.o \
                $(DIR)/tx_isp_subdev.o \
                $(DIR)/tx_isp_vic.o \
-               $(DIR)/tx_isp_frame_done.o \
                $(DIR)/tx_isp_csi.o \
                $(DIR)/tx_isp_fs.o \
                $(DIR)/tx_isp_tuning.o \
