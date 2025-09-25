@@ -2775,6 +2775,14 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     /* Keep UNMASK-ALL during debug to expose error IRQs */
                     pr_info("*** VIC MASK: Keeping UNMASK-ALL (0x1e8=0) during debug ***\n");
 
+            /* VIC CONTROL: enter RUN state after all config (write 1) */
+            if (vic_dev && vic_dev->vic_regs) {
+                void __iomem *vr = vic_dev->vic_regs;
+                writel(1, vr + 0x0);
+                wmb();
+                pr_info("*** VIC CONTROL (PRIMARY): WROTE 1 to [0x0] before enabling IRQ ***\n");
+            }
+
             /* Enable VIC IRQ after final re-assert and verification */
 
             pr_info("*** vic_core_s_stream: Enabling VIC IRQ AFTER final re-assert/verify ***\n");
@@ -2783,13 +2791,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
             /* Post-IRQ-enable: sample status a bit longer to catch first frame */
             if (vic_dev->vic_regs) {
-            /* VIC CONTROL: enter RUN state after all config (write 1) */
-            if (vic_dev && vic_dev->vic_regs) {
-                void __iomem *vr = vic_dev->vic_regs;
-                writel(1, vr + 0x0);
-                wmb();
-                pr_info("*** VIC CONTROL (PRIMARY): WROTE 1 to [0x0] before enabling IRQ ***\n");
-            }
 
                 void __iomem *vr = vic_dev->vic_regs;
                 u32 s0, s1; int i;
