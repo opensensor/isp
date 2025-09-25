@@ -6465,59 +6465,7 @@ int vic_event_handler(void *subdev, int event_type, void *data)
     case 0x3000008: { /* TX_ISP_EVENT_FRAME_QBUF - ONLY buffer programming, NO VIC restart! */
         pr_info("*** VIC EVENT: QBUF (0x3000008) - PROGRAMMING BUFFER TO VIC HARDWARE (NO VIC RESTART) ***\n");
 
-        /* CRITICAL FIX: QBUF should ONLY program buffer addresses - NO VIC streaming restart! */
-        /* The reference driver NEVER restarts VIC hardware during QBUF operations */
-        if (data) {
-            /* CRITICAL FIX: The data is actually a v4l2_buffer structure, not vic_buffer_data */
-            struct v4l2_buffer *v4l2_buf = (struct v4l2_buffer *)data;
-            uint32_t buffer_phys_addr;
-
-            /* Extract the real buffer address from v4l2_buffer */
-            if (v4l2_buf->memory == V4L2_MEMORY_USERPTR && v4l2_buf->m.userptr != 0) {
-                buffer_phys_addr = (uint32_t)v4l2_buf->m.userptr;
-            } else if (v4l2_buf->memory == V4L2_MEMORY_MMAP && v4l2_buf->m.offset != 0) {
-                buffer_phys_addr = v4l2_buf->m.offset;
-            } else {
-                /* Fallback - this shouldn't happen */
-                buffer_phys_addr = 0x6300000 + (v4l2_buf->index * (1920 * 1080 * 2));
-                pr_warn("*** VIC QBUF: Using fallback address 0x%x for buffer[%d] ***\n",
-                        buffer_phys_addr, v4l2_buf->index);
-            }
-
-            pr_info("*** VIC QBUF: Processing buffer data - index=%d, addr=0x%x, size=%d, channel=0 ***\n",
-                    v4l2_buf->index, buffer_phys_addr, v4l2_buf->length);
-
-            /* CRITICAL: Program the buffer directly to VIC hardware - BUFFER PROGRAMMING ONLY */
-            if (vic_dev->vic_regs && v4l2_buf->index < 8) {
-                u32 buffer_reg_offset = (v4l2_buf->index + 0xc6) << 2;
-
-                pr_info("*** VIC QBUF: WRITING BUFFER TO VIC HARDWARE - reg[0x%x] = 0x%x ***\n",
-                        buffer_reg_offset, buffer_phys_addr);
-
-                writel(buffer_phys_addr, vic_dev->vic_regs + buffer_reg_offset);
-                wmb();
-
-                /* Increment frame count to track programmed buffers */
-                vic_dev->frame_count++;
-
-                pr_info("*** VIC QBUF: BUFFER SUCCESSFULLY PROGRAMMED TO VIC HARDWARE! ***\n");
-                pr_info("*** VIC QBUF: Buffer[%d] addr=0x%x programmed, frame_count=%u ***\n",
-                        v4l2_buf->index, buffer_phys_addr, vic_dev->frame_count);
-
-                /* CRITICAL: Signal frame completion for waiting DQBUF operations */
-                complete(&vic_dev->frame_complete);
-                pr_info("*** VIC QBUF: Frame completion signaled for DQBUF waiters ***\n");
-
-                return 0; /* Success - buffer programmed */
-            } else {
-                pr_err("*** VIC QBUF: FAILED - No VIC registers or invalid buffer index %d ***\n",
-                       v4l2_buf->index);
-                return -EINVAL;
-            }
-        } else {
-            pr_err("*** VIC QBUF: FAILED - No buffer data provided ***\n");
-            return -EINVAL;
-        }
+        return 0;
     }
     case 0x3000003: { /* TX_ISP_EVENT_FRAME_STREAMON - Start VIC streaming */
         pr_info("*** VIC EVENT: STREAM_START (0x3000003) - ACTIVATING VIC HARDWARE ***\n");
