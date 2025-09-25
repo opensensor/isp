@@ -611,6 +611,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         if (error_check == 0) {
             /* Binary Ninja: tisp_lsc_write_lut_datas() - LSC LUT processing */
             pr_info("ISP interrupt: LSC LUT processing\n");
+			tisp_lsc_write_lut_datas();
         }
     } else {
         /* Binary Ninja: Error interrupt processing - EXACT reference behavior */
