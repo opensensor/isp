@@ -1254,7 +1254,7 @@ int tisp_bcsh_brightness(int brightness)
     pr_info("tisp_bcsh_brightness: brightness=%d\n", brightness);
 
     /* Binary Ninja: data_9a91f = arg1 */
-    bcsh_brightness_value = (uint8_t)brightness;
+    //bcsh_brightness_value = (uint8_t)brightness;
 
     /* Binary Ninja: tiziano_bcsh_update() */
     tiziano_bcsh_update();
@@ -1269,7 +1269,7 @@ void tisp_bcsh_contrast(uint8_t contrast)
     pr_info("tisp_bcsh_contrast: contrast=%d\n", contrast);
 
     /* Binary Ninja: data_9a91e = arg1 */
-    bcsh_contrast_value = contrast;
+    //bcsh_contrast_value = contrast;
 
     /* Binary Ninja: tiziano_bcsh_update() */
     tiziano_bcsh_update();
@@ -1281,7 +1281,7 @@ void tisp_bcsh_saturation(uint8_t saturation)
     pr_info("tisp_bcsh_saturation: saturation=%d\n", saturation);
 
     /* Binary Ninja: data_9a91d = arg1 */
-    bcsh_saturation_value = saturation;
+    //bcsh_saturation_value = saturation;
 
     /* Binary Ninja: tiziano_bcsh_update() */
     tiziano_bcsh_update();
@@ -1297,13 +1297,13 @@ void tisp_bcsh_s_hue(uint8_t hue)
 
     /* Binary Ninja: bcsh_hue = (($s0 * 0x78 - 1) s/ 0x100).b + 1 */
     /* This is a complex hue calculation - simplified for now */
-    bcsh_hue_value = hue;
+    //bcsh_hue_value = hue;
 
     /* Binary Ninja: tiziano_bcsh_update() */
     tiziano_bcsh_update();
 
     /* Binary Ninja: data_9a6fc = $s0.b */
-    bcsh_hue_value = (uint8_t)s0;
+    //bcsh_hue_value = (uint8_t)s0;
 }
 EXPORT_SYMBOL(tisp_bcsh_s_hue);
 
