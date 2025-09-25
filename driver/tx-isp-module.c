@@ -4016,34 +4016,6 @@ int tx_isp_open(struct inode *inode, struct file *file)
     return 0;
 }
 
-// Simple open handler following reference pattern
-int tx_isp_open(struct inode *inode, struct file *file)
-{
-    struct tx_isp_dev *isp = ourISPdev;
-    int ret = 0;
-
-    if (!isp) {
-        pr_err("ISP device not initialized\n");
-        return -ENODEV;
-    }
-
-    /* Check if already opened */
-    if (isp->refcnt) {
-        isp->refcnt++;
-        file->private_data = isp;
-        pr_info("ISP opened (refcnt=%d)\n", isp->refcnt);
-        return 0;
-    }
-
-    /* Mark as open */
-    isp->refcnt = 1;
-    isp->is_open = true;
-    file->private_data = isp;
-
-    pr_info("ISP opened successfully\n");
-    return ret;
-}
-
 // Simple release handler
 static int tx_isp_release(struct inode *inode, struct file *file)
 {
@@ -4429,7 +4401,6 @@ static int tx_isp_init(void)
         pr_err("*** FAILED TO REQUEST IRQ 37 (isp-m0): %d ***\n", ret);
     } else {
         pr_info("*** SUCCESS: IRQ 37 (isp-m0) REGISTERED ***\n");
-        ourISPdev->isp_irq = 37;
     }
     
     /* Register IRQ 38 (isp-w02) - Secondary ISP channel */
@@ -4444,7 +4415,6 @@ static int tx_isp_init(void)
         pr_err("*** ONLY IRQ 37 WILL BE AVAILABLE ***\n");
     } else {
         pr_info("*** SUCCESS: IRQ 38 (isp-w02) REGISTERED ***\n");
-        ourISPdev->isp_irq2 = 38;  /* Store secondary IRQ */
     }
     
     /* *** CRITICAL: Enable interrupt generation at hardware level *** */
