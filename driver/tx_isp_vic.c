@@ -828,6 +828,107 @@ cleanup:
     return ret;
 }
 
+/* Minimal snapraw-to-/opt helper: capture one RAW10 frame and write /opt/snapraw.raw */
+int vic_snapraw_opt(struct tx_isp_subdev *sd)
+{
+    uint32_t vic_ctrl, vic_status, vic_intr;
+    uint32_t width, height, frame_size;
+    struct tx_isp_dev *isp_dev = ourISPdev;
+    void __iomem *vic_base;
+    void *capture_buf = NULL;
+    dma_addr_t dma_addr = 0;
+    unsigned long timeout;
+    int ret = 0;
+    struct file *fp;
+    loff_t pos = 0;
+    mm_segment_t old_fs;
+
+    if (!sd || !isp_dev) {
+        pr_err("vic_snapraw_opt: No VIC or ISP device\n");
+        return -EINVAL;
+    }
+
+    width = isp_dev->sensor_width;
+    height = isp_dev->sensor_height;
+    if (!width || !height || width >= 0xa81) {
+        pr_err("vic_snapraw_opt: Bad dimensions %ux%u\n", width, height);
+        return -EINVAL;
+    }
+
+    frame_size = width * height * 2; /* RAW10 packed ~2B/px lane-aligned; MDMA expects *2 */
+
+    vic_base = ioremap(0x10023000, 0x1000);
+    if (!vic_base) {
+        pr_err("vic_snapraw_opt: Failed to map VIC regs\n");
+        return -ENOMEM;
+    }
+
+    capture_buf = dma_alloc_coherent(sd->dev, frame_size, &dma_addr, GFP_KERNEL);
+    if (!capture_buf) {
+        pr_err("vic_snapraw_opt: Failed to alloc DMA buf\n");
+        iounmap(vic_base);
+        return -ENOMEM;
+    }
+
+    /* Save original regs */
+    vic_ctrl = readl(vic_base + 0x7810);
+    vic_status = readl(vic_base + 0x7814);
+    vic_intr = readl(vic_base + 0x7804);
+
+    /* Program capture */
+    writel(vic_ctrl & 0x11110111, vic_base + 0x7810);
+    writel(0, vic_base + 0x7814);
+    writel(vic_intr | 1, vic_base + 0x7804);
+    writel(dma_addr,        vic_base + 0x7820);
+    writel(width * 2,       vic_base + 0x7824);
+    writel(height,          vic_base + 0x7828);
+
+    /* Start and wait */
+    writel(1, vic_base + 0x7800);
+    timeout = jiffies + msecs_to_jiffies(600);
+    while (time_before(jiffies, timeout)) {
+        if (!(readl(vic_base + 0x7800) & 1))
+            break;
+        usleep_range(1000, 2000);
+    }
+    if (readl(vic_base + 0x7800) & 1) {
+        pr_err("vic_snapraw_opt: Capture timeout\n");
+        ret = -ETIMEDOUT;
+        goto out_restore;
+    }
+
+    /* Write to /opt/snapraw.raw */
+    old_fs = get_fs();
+    set_fs(KERNEL_DS);
+    fp = filp_open("/opt/snapraw.raw", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (IS_ERR(fp)) {
+        pr_err("vic_snapraw_opt: open /opt/snapraw.raw failed: %ld\n", PTR_ERR(fp));
+        ret = -EIO;
+    } else {
+        ssize_t w = vfs_write(fp, capture_buf, frame_size, &pos);
+        if (w != frame_size) {
+            pr_err("vic_snapraw_opt: short write %zd/%u\n", w, frame_size);
+            ret = -EIO;
+        } else {
+            pr_info("vic_snapraw_opt: wrote %u bytes to /opt/snapraw.raw\n", frame_size);
+        }
+        filp_close(fp, NULL);
+    }
+    set_fs(old_fs);
+
+out_restore:
+    /* Restore regs */
+    writel(vic_ctrl,  vic_base + 0x7810);
+    writel(vic_status, vic_base + 0x7814);
+    writel(vic_intr,  vic_base + 0x7804);
+
+    if (capture_buf)
+        dma_free_coherent(sd->dev, frame_size, capture_buf, dma_addr);
+    iounmap(vic_base);
+    return ret;
+}
+
+
 
 /* Move vic_proc_write outside of vic_snapraw */
 static ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)

@@ -148,21 +148,63 @@ static ssize_t tx_isp_proc_w02_write(struct file *file, const char __user *buffe
     struct seq_file *m = file->private_data;
     struct tx_isp_dev *isp = m->private;
     char cmd[64];
-    
+    unsigned int savenum = 1;
+
     if (count >= sizeof(cmd))
         return -EINVAL;
-        
+
     if (copy_from_user(cmd, buffer, count))
         return -EFAULT;
-        
+
     cmd[count] = '\0';
-    
+
     pr_info("ISP W02 proc command: %s\n", cmd);
-    
-    /* Handle common ISP commands that userspace might send */
+
+    /* snapraw [N]: capture one RAW frame to /opt/snapraw.raw (N ignored for now) */
     if (strncmp(cmd, "snapraw", 7) == 0) {
-        pr_info("ISP W02 snapraw command received\n");
-        /* Handle raw snapshot command */
+        int ret = 0;
+        struct tx_isp_vic_device *vic_dev = NULL;
+        struct tx_isp_subdev *sd = NULL;
+
+        /* parse optional count */
+        if (sscanf(cmd, "snapraw %u", &savenum) == 1 && savenum < 1)
+            savenum = 1;
+
+        if (isp && isp->vic_dev)
+            vic_dev = isp->vic_dev;
+        if (vic_dev)
+            sd = &vic_dev->sd;
+
+        if (!sd) {
+            pr_err("isp-w02: snapraw: VIC subdev unavailable\n");
+            return -ENODEV;
+        }
+
+        extern int vic_snapraw_opt(struct tx_isp_subdev *sd);
+        pr_info("isp-w02: snapraw %u -> /opt/snapraw.raw\n", savenum);
+        ret = vic_snapraw_opt(sd);
+        if (ret)
+            pr_err("isp-w02: snapraw failed: %d\n", ret);
+
+    } else if (strncmp(cmd, "saveraw", 7) == 0) {
+        /* Optional: support 'saveraw N' using existing vic_saveraw to /tmp */
+        unsigned int save_n = 1;
+        struct tx_isp_vic_device *vic_dev = NULL;
+        struct tx_isp_subdev *sd = NULL;
+        if (sscanf(cmd, "saveraw %u", &save_n) != 1)
+            save_n = 1;
+        if (isp && isp->vic_dev)
+            vic_dev = isp->vic_dev;
+        if (vic_dev)
+            sd = &vic_dev->sd;
+        if (!sd) {
+            pr_err("isp-w02: saveraw: VIC subdev unavailable\n");
+            return -ENODEV;
+        }
+        pr_info("isp-w02: saveraw %u -> /tmp/vic_save_*.raw\n", save_n);
+        extern int vic_saveraw(struct tx_isp_subdev *sd, unsigned int savenum);
+        (void)vic_saveraw(sd, save_n);
+
     } else if (strncmp(cmd, "enable", 6) == 0) {
         pr_info("ISP W02 enable command received\n");
         if (isp)
@@ -172,7 +214,7 @@ static ssize_t tx_isp_proc_w02_write(struct file *file, const char __user *buffe
         if (isp)
             isp->streaming_enabled = false;
     }
-    
+
     return count;
 }
 
