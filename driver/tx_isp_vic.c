@@ -2681,9 +2681,9 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             }
             if (vic_dev->vic_regs_control) {
                 void __iomem *vc = vic_dev->vic_regs_control;
-                /* Clear pending (if mapped similarly) */
-                writel(0x00000000, vc + 0x1f0);
-                writel(0x00000000, vc + 0x1f4);
+                /* Clear pending (if mapped similarly, W1C) */
+                writel(0xFFFFFFFF, vc + 0x1f0);
+                writel(0xFFFFFFFF, vc + 0x1f4);
                 /* Try routing/control asserts at CONTROL bank too (offsets mirror?) */
                 writel(0x000002d0, vc + 0x100);
                 writel(0x00000630, vc + 0x14);
