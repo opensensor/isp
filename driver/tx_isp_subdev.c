@@ -578,7 +578,6 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
 
         /* CRITICAL FIX: Store VIC device pointer correctly - NOT cast to subdev! */
         ourISPdev->vic_dev = vic_dev;  /* vic_dev field expects struct tx_isp_vic_device * */
-        vic_dev->vic_regs = sd->regs;  /* Critical: Set primary VIC registers */
 
         pr_info("*** DEBUG: ourISPdev->vic_dev set to: %p ***\n", ourISPdev->vic_dev);
 
