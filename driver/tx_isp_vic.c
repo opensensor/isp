@@ -1037,7 +1037,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
 
     /* Get sensor attributes - offset 0x110 in Binary Ninja */
-    sensor_attr = &vic_dev->sensor_attr;
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    sensor_attr = &sensor->sensor_attr;
 
     /* DEBUG: Check if sensor_attr is properly initialized */
     pr_info("*** DEBUG: sensor_attr=%p, dbus_type=%d ***\n", sensor_attr, sensor_attr ? sensor_attr->dbus_type : -1);
@@ -1183,7 +1184,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         timeout = 10000;  /* 10ms timeout */
 
         /* CRITICAL: Check CSI PHY coordination in SECONDARY VIC space (0x10023000) */
-        void __iomem *secondary_regs = vic_dev->vic_regs_secondary;
+        void __iomem *secondary_regs = vic_dev->vic_regs_control;
         u32 secondary_val = secondary_regs ? readl(secondary_regs + 0x0) : 0;
         u32 primary_val = readl(vic_regs + 0x0);
 
