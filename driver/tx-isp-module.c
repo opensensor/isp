@@ -2840,13 +2840,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         /* SAFE: Update buffer state management */
         spin_lock_irqsave(&state->buffer_lock, flags);
-
-        /* Mark buffer as queued */
-        if (!state->frame_ready) {
-            state->frame_ready = true;
-            wake_up_interruptible(&state->frame_wait);
-        }
-
+        /* Do NOT mark frame ready on QBUF; wait for hardware frame-done IRQ */
         spin_unlock_irqrestore(&state->buffer_lock, flags);
 
         /* Copy buffer back to user space */
@@ -6291,10 +6285,7 @@ int vic_event_handler(void *subdev, int event_type, void *data)
                 pr_info("*** VIC QBUF: Buffer[%d] addr=0x%x programmed, frame_count=%u ***\n",
                         buffer_data->index, buffer_data->phys_addr, vic_dev->frame_count);
 
-                /* CRITICAL: Signal frame completion for waiting DQBUF operations */
-                complete(&vic_dev->frame_complete);
-                pr_info("*** VIC QBUF: Frame completion signaled for DQBUF waiters ***\n");
-
+                /* Do NOT signal completion on QBUF; IRQ will signal when frame is done */
                 return 0; /* Success - buffer programmed */
             } else {
                 pr_err("*** VIC QBUF: FAILED - No VIC registers or invalid buffer index %d ***\n",

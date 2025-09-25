@@ -468,7 +468,11 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         ourISPdev->frame_count++;
     isp_frame_done_wakeup();
 
-    /* Complete VIC local completions */
+    /* Wake up V4L2 frame waiters for streaming channels */
+    extern void tx_isp_wakeup_frame_channels(void);
+    tx_isp_wakeup_frame_channels();
+
+    /* Complete VIC local completions (kept for internal users) */
     complete(&vic_dev->frame_complete);
     complete(&sd->vic_frame_end_completion[0]);
 
@@ -2420,19 +2424,9 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
 
     switch (cmd) {
         case 0x3000008: /* QBUF event */
-            pr_info("*** VIC: Processing QBUF event 0x3000008 ***\n");
-
-            /* Handle QBUF event - trigger frame processing */
-            if (vic_dev->state == 4) { /* Streaming state */
-                /* Signal frame completion to wake up waiting processes */
-                complete(&vic_dev->frame_complete);
-                pr_info("*** VIC: QBUF event processed - frame completion signaled ***\n");
-                ret = 0;
-            } else {
-                pr_info("VIC: QBUF event received but not streaming (state=%d) - allowing anyway\n", vic_dev->state);
-                complete(&vic_dev->frame_complete);
-                ret = 0;
-            }
+            pr_info("*** VIC: Processing QBUF event 0x3000008 (no completion here; wait for IRQ) ***\n");
+            /* Do not signal completion on QBUF. Hardware will raise frame-done IRQ when done. */
+            ret = 0;
             break;
 
         default:
