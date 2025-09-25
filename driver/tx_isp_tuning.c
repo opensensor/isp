@@ -9685,12 +9685,12 @@ int dump_vic_reg(void)
     void __iomem *vic_regs;
     int result = 0;
 
-    if (!isp_dev || !isp_dev->vic_regs) {
+    if (!isp_dev || !isp_dev->vic_dev || !isp_dev->vic_dev->vic_regs) {
         pr_err("dump_vic_reg: No VIC registers available\n");
         return -EINVAL;
     }
 
-    vic_regs = isp_dev->vic_regs;
+    vic_regs = isp_dev->vic_dev->vic_regs;
 
     /* Binary Ninja EXACT: for (int32_t i = 0; i != 0x1b4; i += 4) */
     for (int i = 0; i != 0x1b4; i += 4) {
