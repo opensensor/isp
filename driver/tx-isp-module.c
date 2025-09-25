@@ -655,6 +655,11 @@ void system_reg_write(u32 reg, u32 value)
             pr_info("system_reg_write: BLOCKED reg[0x%x]=0x%x during streaming to protect interrupts\n", reg, value);
             return;
         }
+        /* Also block Core Control registers that the working branch skipped during streaming */
+        if (reg == 0xb018 || reg == 0xb01c || reg == 0xb020 || reg == 0xb024) {
+            pr_info("system_reg_write: BLOCKED core-control reg[0x%x]=0x%x during streaming (preserve interrupts)\n", reg, value);
+            return;
+        }
     }
 
     /* Binary Ninja EXACT: Direct memory write (not writel) */
