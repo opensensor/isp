@@ -2582,8 +2582,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
         if (current_state != 4) {
             pr_info("*** vic_core_s_stream: EXACT Binary Ninja - State != 4, calling VIC start sequence ***\n");
 
-            /* Binary Ninja: tx_vic_disable_irq() */
-            tx_vic_disable_irq(vic_dev);
+            /* SKIP disabling kernel IRQ before VIC start to avoid missing first frame */
+            pr_info("*** vic_core_s_stream: SKIPPING tx_vic_disable_irq before VIC start to preserve first frame IRQ ***\n");
 
             /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
             ret = tx_isp_vic_start(vic_dev);
