@@ -474,7 +474,6 @@ int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev);
 
 /* Forward declarations for hardware initialization functions */
 static int tx_isp_hardware_init(struct tx_isp_dev *isp_dev);
-extern int sensor_init(struct tx_isp_dev *isp_dev);
 
 /* Forward declarations for subdev ops structures */
 extern struct tx_isp_subdev_ops vic_subdev_ops;
@@ -675,105 +674,6 @@ int sensor_fps_control(int fps);
 static int sensor_get_id(void);
 static int sensor_disable_isp(void);
 static int sensor_get_lines_per_second(void);
-
-/* sensor_init - EXACT Binary Ninja implementation - Sets up sensor control structure */
-int sensor_init(struct tx_isp_dev *isp_dev)
-{
-    struct sensor_control_structure {
-        uint32_t reserved1[8];          /* 0x00-0x1c */
-        uint32_t width;                 /* 0x20 */
-        uint32_t height;                /* 0x24 */
-        uint32_t param1;                /* 0x28 */
-        uint32_t param2;                /* 0x2c */
-        uint32_t reserved2[8];          /* 0x30-0x4c */
-        uint32_t param3;                /* 0x50 */
-        uint32_t param4;                /* 0x54 */
-        uint32_t param5;                /* 0x58 */
-        /* Function pointers start at 0x5c */
-        int (*hw_reset_disable)(void);           /* 0x5c */
-        int (*hw_reset_enable)(void);            /* 0x60 */
-        int (*alloc_analog_gain)(int);           /* 0x64 */
-        int (*alloc_analog_gain_short)(int);     /* 0x68 */
-        int (*alloc_digital_gain)(int);          /* 0x6c */
-        int (*alloc_integration_time)(int);      /* 0x70 */
-        int (*alloc_integration_time_short)(int); /* 0x74 */
-        int (*set_integration_time)(int);        /* 0x78 */
-        int (*set_integration_time_short)(int);  /* 0x7c */
-        int (*start_changes)(void);              /* 0x80 */
-        int (*end_changes)(void);                /* 0x84 */
-        int (*set_analog_gain)(int);             /* 0x88 */
-        int (*set_analog_gain_short)(int);       /* 0x8c */
-        int (*set_digital_gain)(int);            /* 0x90 */
-        int (*get_normal_fps)(void);             /* 0x94 */
-        int (*read_black_pedestal)(void);        /* 0x98 */
-        int (*set_mode)(int);                    /* 0x9c */
-        int (*set_wdr_mode)(int);                /* 0xa0 */
-        int (*fps_control)(int);                 /* 0xa4 */
-        int (*get_id)(void);                     /* 0xa8 */
-        int (*disable_isp)(void);                /* 0xac */
-        int (*get_lines_per_second)(void);       /* 0xb0 */
-    } *sensor_ctrl;
-
-    pr_info("*** sensor_init: EXACT Binary Ninja implementation - Setting up sensor IOCTL linkages ***\n");
-
-    if (!isp_dev) {
-        pr_err("sensor_init: Invalid ISP device\n");
-        return -EINVAL;
-    }
-
-    /* Allocate sensor control structure */
-    sensor_ctrl = kzalloc(sizeof(struct sensor_control_structure), GFP_KERNEL);
-    if (!sensor_ctrl) {
-        pr_err("sensor_init: Failed to allocate sensor control structure\n");
-        return -ENOMEM;
-    }
-
-    /* Binary Ninja: Copy values from global sensor info structure */
-    /* For now, use default values - these would come from *(g_ispcore + 0x120) */
-    sensor_ctrl->width = 1920;    /* Default HD width */
-    sensor_ctrl->height = 1080;   /* Default HD height */
-    sensor_ctrl->param1 = 0;      /* Would be zx.d(*($v0 + 0xa4)) */
-    sensor_ctrl->param2 = 0;      /* Would be zx.d(*($v0 + 0xb4)) */
-    sensor_ctrl->param3 = 0;      /* Would be zx.d(*($v0 + 0xd8)) */
-    sensor_ctrl->param4 = 0;      /* Would be zx.d(*($v0 + 0xda)) */
-    sensor_ctrl->param5 = 0;      /* Would be *($v0 + 0xe0) */
-
-    /* Binary Ninja: Set up all function pointers for sensor operations */
-    sensor_ctrl->hw_reset_disable = sensor_hw_reset_disable;
-    sensor_ctrl->hw_reset_enable = sensor_hw_reset_enable;
-    sensor_ctrl->alloc_analog_gain = sensor_alloc_analog_gain;
-    sensor_ctrl->alloc_analog_gain_short = sensor_alloc_analog_gain_short;
-    sensor_ctrl->alloc_digital_gain = sensor_alloc_digital_gain;
-    sensor_ctrl->alloc_integration_time = sensor_alloc_integration_time;
-    sensor_ctrl->alloc_integration_time_short = sensor_alloc_integration_time_short;
-    sensor_ctrl->set_integration_time = sensor_set_integration_time;
-    sensor_ctrl->set_integration_time_short = sensor_set_integration_time_short;
-    sensor_ctrl->start_changes = sensor_start_changes;
-    sensor_ctrl->end_changes = sensor_end_changes;
-    sensor_ctrl->set_analog_gain = sensor_set_analog_gain;
-    sensor_ctrl->set_analog_gain_short = sensor_set_analog_gain_short;
-    sensor_ctrl->set_digital_gain = sensor_set_digital_gain;
-    sensor_ctrl->get_normal_fps = sensor_get_normal_fps;
-    sensor_ctrl->read_black_pedestal = sensor_read_black_pedestal;
-    sensor_ctrl->set_mode = sensor_set_mode;
-    sensor_ctrl->set_wdr_mode = sensor_set_wdr_mode;
-    sensor_ctrl->fps_control = sensor_fps_control;
-    sensor_ctrl->get_id = sensor_get_id;
-    sensor_ctrl->disable_isp = sensor_disable_isp;
-    sensor_ctrl->get_lines_per_second = sensor_get_lines_per_second;
-
-    /* Store sensor control structure in ISP device */
-    /* This would be stored at the appropriate offset in the ISP device structure */
-    /* For now, we'll just log that it's been set up */
-
-    pr_info("*** sensor_init: Sensor control structure fully initialized ***\n");
-    pr_info("*** sensor_init: All %zu function pointers set up ***\n",
-            sizeof(struct sensor_control_structure) / sizeof(void*) - 14); /* Subtract non-function fields */
-
-    /* Binary Ninja: return sensor_get_lines_per_second */
-    return (int)(uintptr_t)sensor_get_lines_per_second;
-}
-EXPORT_SYMBOL(sensor_init);
 
 /* Sensor control function implementations - EXACT Binary Ninja reference using ourISPdev */
 static int sensor_hw_reset_disable(void) {
