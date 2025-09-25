@@ -2351,18 +2351,18 @@ int tiziano_bcsh_update()
             //tuning->bcsh_saturation_value = v1 + (((v2 - v1) * weight) >> 8);
 
             // Interpolate SmaxListS
-            v1 = tuning->bcsh_au32SmaxListS_now[i];
-            v2 = tuning->bcsh_au32SmaxListS_now[i + 1];
+            //v1 = tuning->bcsh_au32SmaxListS_now[i];
+            //v2 = tuning->bcsh_au32SmaxListS_now[i + 1];
             //tuning->bcsh_saturation_max = v1 + (((v2 - v1) * weight) >> 8);
 
             // Interpolate SminListM
-            v1 = tuning->bcsh_au32SminListM_now[i];
-            v2 = tuning->bcsh_au32SminListM_now[i + 1];
+            //v1 = tuning->bcsh_au32SminListM_now[i];
+            //v2 = tuning->bcsh_au32SminListM_now[i + 1];
             //tuning->bcsh_saturation_min = v1 + (((v2 - v1) * weight) >> 8);
 
             // Interpolate SmaxListM
-            v1 = tuning->bcsh_au32SmaxListM_now[i];
-            v2 = tuning->bcsh_au32SmaxListM_now[i + 1];
+            //v1 = tuning->bcsh_au32SmaxListM_now[i];
+            //v2 = tuning->bcsh_au32SmaxListM_now[i + 1];
             //tuning->bcsh_saturation_mult = v1 + (((v2 - v1) * weight) >> 8);
 // TODO
             break;
