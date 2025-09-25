@@ -619,7 +619,7 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 static int tx_isp_hardware_init(struct tx_isp_dev *isp_dev);
 void system_reg_write(u32 reg, u32 value);
 
-/* system_reg_write - EXACT Binary Ninja implementation */
+/* system_reg_write - EXACT Binary Ninja implementation with VIC-safe guards during streaming */
 void system_reg_write(u32 reg, u32 value)
 {
     /* Binary Ninja EXACT: *(*(mdns_y_pspa_cur_bi_wei0_array + 0xb8) + arg1) = arg2 */
@@ -639,6 +639,16 @@ void system_reg_write(u32 reg, u32 value)
     if (!reg_base) {
         pr_warn("system_reg_write: No register base available for reg=0x%x val=0x%x\n", reg, value);
         return;
+    }
+
+    /* Guard: When streaming, block writes that disrupt VIC/ISP interrupts */
+    extern uint32_t vic_start_ok; /* set when VIC is running/streaming */
+    if (vic_start_ok) {
+        /* Registers known to gate or reset interrupt generation when toggled by tuning */
+        if (reg == 0x9ac0 || reg == 0x9ac8 || reg == 0x9804) {
+            pr_info("system_reg_write: BLOCKED reg[0x%x]=0x%x during streaming to protect interrupts\n", reg, value);
+            return;
+        }
     }
 
     /* Binary Ninja EXACT: Direct memory write (not writel) */
