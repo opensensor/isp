@@ -2778,19 +2778,34 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(1, vr + 0x0);
                 wmb();
                 pr_info("*** VIC CONTROL (PRIMARY): WROTE 1 to [0x0] before enabling IRQ ***\n");
-            /* Re-assert IMCR just before enabling IRQ to defeat any late clobber */
+            /* Post-RUN: program interrupt ENABLE registers, do not touch masks */
             if (vic_dev && vic_dev->vic_regs) {
                 void __iomem *vr = vic_dev->vic_regs;
-                writel(0xb5742249, vr + 0x0c);
+                writel(0xFFFFFFFF, vr + 0x1e0); /* VIC enables */
+                writel(0x0000000F, vr + 0x1e4); /* MDMA enables (minimal) */
                 wmb();
-                pr_info("*** VIC PRIMARY IMCR REASSERT: [0x0c]=0x%08x (expect 0xb5742249) ***\n", readl(vr + 0x0c));
+                pr_info("*** VIC PRIMARY ENABLES: [0x1e0]=0x%08x [0x1e4]=0x%08x ***\n",
+                        readl(vr + 0x1e0), readl(vr + 0x1e4));
+                /* Clear any pending (W1C) before enabling CPU IRQ */
+                writel(0xFFFFFFFF, vr + 0x1f0);
+                writel(0xFFFFFFFF, vr + 0x1f4);
+                wmb();
+                pr_info("*** VIC PRIMARY PENDING CLEARED (W1C) ***\n");
             }
             if (vic_dev && vic_dev->vic_regs_control) {
                 void __iomem *vc = vic_dev->vic_regs_control;
-                writel(0xb5742249, vc + 0x0c);
+                writel(0xFFFFFFFF, vc + 0x1e0);
+                writel(0x0000000F, vc + 0x1e4);
                 wmb();
-                pr_info("*** VIC CONTROL IMCR REASSERT: [0x0c]=0x%08x (expect 0xb5742249) ***\n", readl(vc + 0x0c));
+                pr_info("*** VIC CONTROL ENABLES: [0x1e0]=0x%08x [0x1e4]=0x%08x ***\n",
+                        readl(vc + 0x1e0), readl(vc + 0x1e4));
+                writel(0xFFFFFFFF, vc + 0x1f0);
+                writel(0xFFFFFFFF, vc + 0x1f4);
+                wmb();
+                pr_info("*** VIC CONTROL PENDING CLEARED (W1C) ***\n");
             }
+            /* small delay to let enables settle before CPU IRQ gate */
+            udelay(100);
 
             }
 
