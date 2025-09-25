@@ -1,32 +1,7 @@
 Welcome to Thingino firmware!
-ing-wyze-cam3-a000 login: [  190.127905] *** tisp_init: ENTRY - sensor_info=85219dfc, param_name=NULL ***
-[  190.143384] *** system_irq_func_set: Registered handler c067d064 at index 13 ***
-[  190.158558] *** system_irq_func_set: Registered handler c06853a4 at index 27 ***
-[  190.175008] *** system_irq_func_set: Registered handler c068528c at index 26 ***
-[  190.197599] *** system_irq_func_set: Registered handler c068548c at index 29 ***
-[  190.215418] *** system_irq_func_set: Registered handler c0685418 at index 28 ***
-[  190.235629] *** system_irq_func_set: Registered handler c0685500 at index 30 ***
-[  190.245518] *** system_irq_func_set: Registered handler c0685554 at index 20 ***
-[  190.263340] *** system_irq_func_set: Registered handler c06855a8 at index 18 ***
-[  190.277574] *** system_irq_func_set: Registered handler c06855fc at index 31 ***
-[  190.295212] *** system_irq_func_set: Registered handler c0685650 at index 11 ***
-[  190.314368] *** tisp_init: ENTRY - sensor_info=85219dfc, param_name=NULL ***
-[  190.327711] *** system_irq_func_set: Registered handler c067d064 at index 13 ***
-[  190.345908] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=80514000 ***
-[  190.353366] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
-[  190.361080] *** ISP CORE INTERRUPT HANDLER: IRQ 37 called, dev_id=80514000 ***
-[  190.368533] *** ISP CORE: Read interrupt status - interrupt_status=0x00000400 ***
-[  190.376250] *** ISP CORE: Clearing legacy interrupt 0x00000400 to reg +0xb8 ***
-[  190.383782] *** ISP CORE: After clearing - legacy=0x00000000 ***
-[  190.389972] *** ISP CORE: About to process IRQ callbacks - interrupt_status=0x400 ***
-[  190.398050] *** ISP CORE: Callback[10] for bit 10 is NULL - skipping ***
-[  190.404962] *** ISP CORE INTERRUPT PROCESSING COMPLETE - returning IRQ_HANDLED ***
-[  190.484244] *** system_irq_func_set: Registered handler c06853a4 at index 27 ***
-[  190.497575] *** system_irq_func_set: Registered handler c068528c at index 26 ***
-[  190.515373] *** system_irq_func_set: Registered handler c068548c at index 29 ***
-[  190.531217] *** system_irq_func_set: Registered handler c0685418 at index 28 ***
-[  190.547589] *** system_irq_func_set: Registered handler c0685500 at index 30 ***
-[  190.565614] *** system_irq_func_set: Registered handler c0685554 at index 20 ***
-[  190.585806] *** system_irq_func_set: Registered handler c06855a8 at index 18 ***
-[  190.593465] *** system_irq_func_set: Registered handler c06855fc at index 31 ***
-[  190.607579] *** system_irq_func_set: Registered handler c0685650 at index 11 ***
+ing-wyze-cam3-a000 login: [  108.417684] *** tisp_init: ENTRY - sensor_info=85217dfc, param_name=NULL ***
+[  108.424972] *** tisp_init: DEADLOCK PROTECTION ACTIVE - Single-threaded execution ***
+[  108.433198] *** system_irq_func_set: Registered handler c0676134 at index 13 ***
+[  108.441816] *** system_irq_func_set: Registered handler c067e36c at index 10 ***
+[  108.451840] *** tisp_init: ENTRY - sensor_info=85217dfc, param_name=NULL ***
+[  108.459160] *** tisp_init: Already completed - returning success ***
