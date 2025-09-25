@@ -312,15 +312,15 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
         return -EINVAL;
     }
 
-    // CRITICAL ROOT CAUSE FIX: MUST use SECONDARY VIC space to avoid register conflicts
-    // Primary VIC space (0x133e0000) OVERLAPS with ISP Core space (0x13300000-0x13400000)
-    // Secondary VIC space (0x10023000) is separate and won't conflict with CSI PHY registers
-    vic_base = vic_dev->vic_regs_control;  // Use secondary VIC space (0x10023000)
+    // CRITICAL ROOT CAUSE FIX: Use PRIMARY VIC space for interrupt registers - MATCHES WORKING VERSION
+    // The working version uses vic_dev->vic_regs (0x133e0000) for VIC interrupt registers
+    // Secondary VIC space (0x10023000) is for CSI PHY control, not VIC interrupts
+    vic_base = vic_dev->vic_regs;  // Use primary VIC space (0x133e0000) - MATCHES WORKING VERSION
     if (!vic_base) {
-        pr_err("*** VIC HW INIT: CRITICAL - No secondary VIC registers available! Cannot avoid register conflicts! ***\n");
+        pr_err("*** VIC HW INIT: CRITICAL - No primary VIC registers available! Cannot configure VIC interrupts! ***\n");
         return -ENOMEM;
     }
-    pr_info("*** VIC HW INIT: Using SECONDARY VIC space (0x10023000) - avoids ISP Core register conflicts ***\n");
+    pr_info("*** VIC HW INIT: Using PRIMARY VIC space (0x133e0000) for VIC interrupt registers - MATCHES WORKING VERSION ***\n");
 
     /* CRITICAL FIX: Configure VIC interrupts during hardware init - EXACTLY like working branch */
     /* The working branch configures registers 0x04 and 0x0c in tx_isp_vic_hw_init() */
