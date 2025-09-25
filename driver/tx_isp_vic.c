@@ -2591,8 +2591,19 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_err("*** vic_core_s_stream: tx_isp_vic_start FAILED: %d ***\n", ret);
                 return ret;
             }
-            /* Enable VIC IRQ immediately after VIC start to catch first frame */
-            pr_info("*** vic_core_s_stream: Enabling VIC IRQ immediately after tx_isp_vic_start ***\n");
+            /* Start VIC frame channel streaming before enabling IRQs (enables MDMA) */
+            /* Ensure stream_state reset so ispvic_frame_channel_s_stream performs MDMA enable */
+            vic_dev->stream_state = 0;
+
+            pr_info("*** vic_core_s_stream: Calling ispvic_frame_channel_s_stream(ENABLE) to start MDMA before enabling IRQ ***\n");
+            ret = ispvic_frame_channel_s_stream(sd, 1);
+            if (ret != 0) {
+                pr_err("*** vic_core_s_stream: ispvic_frame_channel_s_stream FAILED: %d ***\n", ret);
+                return ret;
+            }
+
+            /* Enable VIC IRQ immediately after MDMA start to catch first frame */
+            pr_info("*** vic_core_s_stream: Enabling VIC IRQ immediately after MDMA start ***\n");
             tx_vic_enable_irq(vic_dev);
 
 
