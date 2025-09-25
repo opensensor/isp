@@ -59,6 +59,11 @@ uint32_t tisp_math_exp2(uint32_t val, uint32_t shift, uint32_t base);
 int32_t tisp_log2_fixed_to_fixed_tuning(uint32_t val, int32_t in_fix_point, char out_fix_point);
 
 
+/* Forward declarations for VIC/VIC dispatcher handlers from tx-isp-module.c */
+irqreturn_t isp_irq_handle(int irq, void *dev_id);
+irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
+
+
 /* Frame sync work queue - CRITICAL for sensor I2C communication */
 static struct workqueue_struct *fs_workqueue = NULL;
 static struct work_struct fs_work;
@@ -803,21 +808,21 @@ int tx_isp_core_enable_irq(struct tx_isp_core_device *core_dev)
 int tx_isp_core_stop(struct tx_isp_subdev *sd)
 {
     struct tx_isp_dev *isp_dev;
-    
+
     if (!sd) {
         pr_err("tx_isp_core_stop: Invalid subdev\n");
         return -EINVAL;
     }
-    
+
     isp_dev = sd->isp;
     if (!isp_dev) {
         pr_err("tx_isp_core_stop: No ISP device\n");
         return -EINVAL;
     }
-    
+
     /* Set pipeline to idle state */
     isp_dev->pipeline_state = ISP_PIPELINE_IDLE;
-    
+
     pr_info("*** tx_isp_core_stop: ISP core stopped successfully ***\n");
     return 0;
 }
@@ -827,37 +832,37 @@ int tx_isp_core_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *confi
 {
     struct tx_isp_dev *isp_dev;
     int ret = 0;
-    
+
     if (!sd || !config) {
         pr_err("tx_isp_core_set_format: Invalid parameters\n");
         return -EINVAL;
     }
-    
+
     isp_dev = sd->isp;
     if (!isp_dev) {
         pr_err("tx_isp_core_set_format: No ISP device\n");
         return -EINVAL;
     }
-    
+
     pr_info("*** tx_isp_core_set_format: Setting format %dx%d ***\n",
             config->width, config->height);
-    
+
     /* Store format configuration */
     isp_dev->width = config->width;
     isp_dev->height = config->height;
     isp_dev->format = config->format;
-    
+
     /* Update sensor dimensions */
     isp_dev->sensor_width = config->width;
     isp_dev->sensor_height = config->height;
-    
+
     /* Configure format propagation through pipeline */
     ret = tx_isp_configure_format_propagation(isp_dev);
     if (ret < 0) {
         pr_err("tx_isp_core_set_format: Failed to configure format propagation: %d\n", ret);
         return ret;
     }
-    
+
     pr_info("*** tx_isp_core_set_format: Format set successfully ***\n");
     return 0;
 }
@@ -2229,9 +2234,16 @@ static int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
     /* Binary Ninja: private_spin_lock_init(arg2) */
     spin_lock_init((spinlock_t *)irq_info);
 
-    /* Binary Ninja: private_request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, 0x2000, *arg1, arg2) */
-    ret = request_threaded_irq(irq_number, tx_isp_core_irq_handle, tx_isp_core_irq_thread_handle,
-                               IRQF_SHARED, dev_name(&pdev->dev), irq_info);
+    /* Select IRQ handlers based on device type (VIC uses isp_irq_handle path) */
+    irq_handler_t top = tx_isp_core_irq_handle;
+    irq_handler_t thread = tx_isp_core_irq_thread_handle;
+    const char *name = dev_name(&pdev->dev);
+    if (name && strstr(name, "isp-w02")) {
+        top = isp_irq_handle;
+        thread = isp_irq_thread_handle;
+    }
+    ret = request_threaded_irq(irq_number, top, thread,
+                               IRQF_SHARED, name, irq_info);
     if (ret != 0) {
         pr_err("tx_isp_request_irq: Failed to request IRQ %d: %d\n", irq_number, ret);
         return ret;
@@ -2353,13 +2365,13 @@ int tx_isp_configure_clocks(struct tx_isp_dev *isp)
 
     /* Allow clocks to stabilize before proceeding - critical for CSI PHY */
     msleep(10);
-    
+
     /* Validate that clocks are actually running at expected rates */
     if (abs(clk_get_rate(csi_clk) - 100000000) > 1000000) {
         pr_warn("CSI clock rate deviation: expected 100MHz, got %luHz\n",
                 clk_get_rate(csi_clk));
     }
-    
+
     if (abs(clk_get_rate(isp_clk) - 200000000) > 2000000) {
         pr_warn("ISP clock rate deviation: expected 200MHz, got %luHz\n",
                 clk_get_rate(isp_clk));
@@ -2404,23 +2416,23 @@ err_put_cgu_isp:
 static int tx_isp_setup_media_links(struct tx_isp_dev *isp)
 {
     int ret;
-    
+
     pr_info("Setting up media entity links\n");
-    
+
     /* Initialize pad configurations for each subdevice */
     ret = tx_isp_init_subdev_pads(isp);
     if (ret < 0) {
         pr_err("Failed to initialize subdev pads: %d\n", ret);
         return ret;
     }
-    
+
     /* Create links between subdevices */
     ret = tx_isp_create_subdev_links(isp);
     if (ret < 0) {
         pr_err("Failed to create subdev links: %d\n", ret);
         return ret;
     }
-    
+
     pr_info("Media entity links setup completed\n");
     return 0;
 }
@@ -2429,13 +2441,13 @@ static int tx_isp_setup_media_links(struct tx_isp_dev *isp)
 static int tx_isp_init_subdev_pads(struct tx_isp_dev *isp)
 {
     pr_info("Initializing subdevice pads\n");
-    
+
     /* CSI pads: 1 output pad */
     if (isp->csi_dev) {
         /* CSI has one output pad that connects to VIC */
         pr_info("CSI pad 0: OUTPUT -> VIC pad 0\n");
     }
-    
+
     /* VIC pads: 1 input pad, 1 output pad */
     if (isp->vic_dev) {
         /* VIC input pad 0 receives from CSI */
@@ -2443,7 +2455,7 @@ static int tx_isp_init_subdev_pads(struct tx_isp_dev *isp)
         pr_info("VIC pad 0: INPUT <- CSI pad 0\n");
         pr_info("VIC pad 1: OUTPUT -> Capture interface\n");
     }
-    
+
     pr_info("Subdevice pads initialized\n");
     return 0;
 }
@@ -2453,34 +2465,34 @@ static int tx_isp_create_subdev_links(struct tx_isp_dev *isp)
 {
     struct link_config csi_to_vic_link;
     int ret;
-    
+
     pr_info("Creating subdevice links\n");
-    
+
     /* Create CSI -> VIC link */
     if (isp->csi_dev && isp->vic_dev) {
         /* Configure CSI source pad */
         csi_to_vic_link.src.name = "csi_output";
         csi_to_vic_link.src.type = 2; /* Source pad */
         csi_to_vic_link.src.index = 0;
-        
+
         /* Configure VIC sink pad */
         csi_to_vic_link.dst.name = "vic_input";
         csi_to_vic_link.dst.type = 1; /* Sink pad */
         csi_to_vic_link.dst.index = 0;
-        
+
         /* Set link flags */
         csi_to_vic_link.flags = TX_ISP_LINKFLAG_ENABLED;
-        
+
         /* Store link configuration */
         ret = tx_isp_register_link(isp, &csi_to_vic_link);
         if (ret < 0) {
             pr_err("Failed to register CSI->VIC link: %d\n", ret);
             return ret;
         }
-        
+
         pr_info("Created CSI->VIC link successfully\n");
     }
-    
+
     pr_info("Subdevice links created\n");
     return 0;
 }
@@ -2492,19 +2504,19 @@ static int tx_isp_register_link(struct tx_isp_dev *isp, struct link_config *link
         pr_err("Invalid parameters for link registration\n");
         return -EINVAL;
     }
-    
+
     pr_info("Registering link: %s[%d] -> %s[%d] (flags=0x%x)\n",
             link->src.name, link->src.index,
             link->dst.name, link->dst.index,
             link->flags);
-    
+
     /* In a full implementation, this would store the link in a list
      * and configure the hardware routing. For now, just validate and log. */
-    
+
     if (link->flags & TX_ISP_LINKFLAG_ENABLED) {
         pr_info("Link enabled and configured\n");
     }
-    
+
     return 0;
 }
 
@@ -2512,18 +2524,18 @@ static int tx_isp_register_link(struct tx_isp_dev *isp, struct link_config *link
 static int tx_isp_configure_default_links(struct tx_isp_dev *isp)
 {
     pr_info("Configuring default link routing\n");
-    
+
     /* Set pipeline to configured state */
     isp->pipeline_state = ISP_PIPELINE_CONFIGURED;
-    
+
     /* Enable default data flow: CSI -> VIC -> Output */
     if (isp->csi_dev && isp->vic_dev) {
         pr_info("Default routing: Sensor -> CSI -> VIC -> Capture\n");
-        
+
         /* Configure data format propagation */
         tx_isp_configure_format_propagation(isp);
     }
-    
+
     pr_info("Default link routing configured\n");
     return 0;
 }
@@ -2532,17 +2544,17 @@ static int tx_isp_configure_default_links(struct tx_isp_dev *isp)
 int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
 {
     pr_info("Configuring format propagation\n");
-    
+
     /* Ensure format compatibility between pipeline stages */
     if (isp->sensor_width > 0 && isp->sensor_height > 0) {
         pr_info("Propagating format: %dx%d through pipeline\n",
                 isp->sensor_width, isp->sensor_height);
-        
+
         /* Configure CSI format */
         if (isp->csi_dev) {
             pr_info("CSI configured for %dx%d\n", isp->sensor_width, isp->sensor_height);
         }
-        
+
         /* Configure VIC format */
         if (isp->vic_dev) {
             isp->vic_dev->width = isp->sensor_width;
@@ -2552,7 +2564,7 @@ int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
                     isp->vic_dev->width, isp->vic_dev->height, isp->vic_dev->stride);
         }
     }
-    
+
     pr_info("Format propagation configured\n");
     return 0;
 }
@@ -2998,35 +3010,35 @@ int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, d
 {
     void *virt;
     dma_addr_t phys;
-    
+
     if (!isp || !virt_addr || !phys_addr || size == 0) {
         pr_err("isp_malloc_buffer: Invalid parameters\n");
         return -EINVAL;
     }
-    
+
     pr_info("*** isp_malloc_buffer: FIXED - Using regular kernel memory instead of rmem ***\n");
-    
+
     /* FIXED: Use vmalloc instead of precious rmem - saves rmem for critical video buffers */
     virt = vmalloc(size);
     if (!virt) {
         pr_err("*** isp_malloc_buffer: Failed to allocate %u bytes from kernel memory ***\n", size);
         return -ENOMEM;
     }
-    
+
     /* TEMPORARY: Skip memset to prevent potential buffer overflow */
     pr_info("*** DEBUGGING: memset disabled to prevent potential buffer overflow ***\n");
-    
+
     /* Get physical address for DMA operations */
     phys = virt_to_phys(virt);
-    
+
     *virt_addr = virt;
     *phys_addr = phys;
-    
+
     pr_info("*** isp_malloc_buffer: FIXED - Allocated %u bytes from kernel memory ***\n", size);
     pr_info("*** isp_malloc_buffer: virt=%p, phys=0x%08x (using vmalloc instead of rmem) ***\n",
              virt, (uint32_t)phys);
     pr_info("*** isp_malloc_buffer: This saves %u bytes of precious rmem for VBMPool0! ***\n", size);
-    
+
     return 0;
 }
 
@@ -3039,13 +3051,13 @@ static int isp_free_buffer(struct tx_isp_dev *isp, void *virt_addr, dma_addr_t p
         ISP_ERROR("isp_free_buffer: Invalid parameters\n");
         return -EINVAL;
     }
-    
+
     /* For rmem, we just unmap the virtual address */
     iounmap(virt_addr);
-    
+
     ISP_INFO("*** isp_free_buffer: Freed %d bytes from rmem at virt=%p, phys=0x%08x ***\n",
              size, virt_addr, (uint32_t)phys_addr);
-    
+
     return 0;
 }
 
@@ -3296,28 +3308,28 @@ static ssize_t graph_proc_read(struct file *file, char __user *buffer, size_t co
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)PDE_DATA(file_inode(file));
     char info_buf[256];
     int len;
-    
+
     if (*pos > 0) {
         return 0; /* EOF */
     }
-    
-    len = snprintf(info_buf, sizeof(info_buf), 
+
+    len = snprintf(info_buf, sizeof(info_buf),
                    "ISP Graph Node Info:\n"
                    "Device: %p\n"
                    "Frame Count: %u\n"
                    "Pipeline State: %d\n",
-                   isp_dev, 
+                   isp_dev,
                    0,  /* frame_count removed - use external counter */
                    isp_dev ? isp_dev->pipeline_state : -1);
-    
+
     if (len > count) {
         len = count;
     }
-    
+
     if (copy_to_user(buffer, info_buf, len)) {
         return -EFAULT;
     }
-    
+
     *pos += len;
     return len;
 }
@@ -3347,58 +3359,58 @@ static int frame_channel_vidioc_set_fmt(void *channel_dev, void __user *arg)
     char format_buf[0x70]; /* 112 bytes format buffer */
     int ret;
     uint32_t format_type;
-    
+
     if (!channel_dev) {
         ISP_ERROR("frame_channel_vidioc_set_fmt: Invalid channel device\n");
         return -EINVAL;
     }
-    
+
     if (!arg) {
         ISP_ERROR("frame_channel_vidioc_set_fmt: Invalid user argument\n");
         return -EINVAL;
     }
-    
+
     /* Binary Ninja: private_copy_from_user(&var_80, arg2, 0x70) */
     ret = copy_from_user(format_buf, arg, 0x70);
     if (ret != 0) {
         ISP_ERROR("frame_channel_vidioc_set_fmt: Failed to copy from user\n");
         return -EFAULT;
     }
-    
+
     /* Extract format type from buffer - this is the first field in V4L2 format structure */
     format_type = *(uint32_t *)&format_buf[0x00];    /* var_80 from Binary Ninja */
-    
+
     ISP_INFO("frame_channel_vidioc_set_fmt: format_type=%d (V4L2_BUF_TYPE_*)\n", format_type);
-    
+
     /* Binary Ninja: Validate format type - more permissive validation */
     /* Accept V4L2_BUF_TYPE_VIDEO_CAPTURE (1) and V4L2_BUF_TYPE_VIDEO_OUTPUT (2) */
     if (format_type != 1 && format_type != 2) {
         ISP_INFO("frame_channel_vidioc_set_fmt: Accepting format type %d anyway\n", format_type);
         /* Don't fail - just log and continue as the Binary Ninja reference might be more permissive */
     }
-    
+
     /* Binary Ninja: tx_isp_send_event_to_remote(*(arg1 + 0x2bc), 0x3000002, &var_80) */
-    /* For now, simulate successful format setting - in full implementation this would 
+    /* For now, simulate successful format setting - in full implementation this would
      * send the SET_FORMAT event to the ISP core */
     ISP_INFO("frame_channel_vidioc_set_fmt: Setting video format (simulated)\n");
     ret = 0; /* Simulate success */
-    
+
     if (ret != 0 && ret != 0xfffffdfd) {
         ISP_ERROR("frame_channel_vidioc_set_fmt: Failed to set format: %d\n", ret);
         return ret;
     }
-    
+
     /* Binary Ninja: private_copy_to_user(arg2, &var_80, 0x70) */
     ret = copy_to_user(arg, format_buf, 0x70);
     if (ret != 0) {
         ISP_ERROR("frame_channel_vidioc_set_fmt: Failed to copy to user\n");
         return -EFAULT;
     }
-    
+
     /* Binary Ninja: memcpy(arg1 + 0x23c, &var_80, 0x70) - Store format in channel */
     /* For now, just log this step - in full implementation would store in channel structure */
     ISP_INFO("frame_channel_vidioc_set_fmt: Format stored in channel (simulated)\n");
-    
+
     ISP_INFO("frame_channel_vidioc_set_fmt: SUCCESS - Video format set\n");
     return 0;
 }
@@ -3411,11 +3423,11 @@ static int frame_channel_vidioc_get_fmt(void *channel_dev, void __user *arg)
 {
     char format_buf[0x70]; /* 112 bytes format buffer */
     int ret;
-    
+
     if (!channel_dev || !arg) {
         return -EINVAL;
     }
-    
+
     /* Return default format for now */
     memset(format_buf, 0, sizeof(format_buf));
     *(uint32_t *)&format_buf[0x00] = 1; /* Format type */
@@ -3426,7 +3438,7 @@ static int frame_channel_vidioc_get_fmt(void *channel_dev, void __user *arg)
     if (ret != 0) {
         return -EFAULT;
     }
-    
+
     ISP_INFO("frame_channel_vidioc_get_fmt: SUCCESS - Returned default format\n");
     return 0;
 }
@@ -3607,7 +3619,7 @@ int tisp_channel_attr_set(uint32_t channel_id, void* attr)
         int32_t a0_1 = data_b2e14;
         int32_t a1_1 = data_b2e0c;
 
-        if ((uint32_t)tispinfo_2 < (uint32_t)(tispinfo_3 + v1_1) || 
+        if ((uint32_t)tispinfo_2 < (uint32_t)(tispinfo_3 + v1_1) ||
             (uint32_t)s2 < (uint32_t)(a0_1 + a1_1)) {
             isp_printf(2, "sensor type is BT656!\n", "tisp_channel_attr_set");
             return 0xffffffff;
@@ -3636,7 +3648,7 @@ int tisp_channel_attr_set(uint32_t channel_id, void* attr)
 
     int32_t s1_2 = ((channel_id + 0x99) << 8);
     system_reg_write(s1_2, (tispinfo_4 << 0x10) | s7_1);
-    system_reg_write(s1_2 + 4, (((tispinfo_2 << 9) / (uint32_t)tispinfo_4) << 0x10) | 
+    system_reg_write(s1_2 + 4, (((tispinfo_2 << 9) / (uint32_t)tispinfo_4) << 0x10) |
                                (uint16_t)(((s2 << 9) / (uint32_t)s7_1)));
 
     if (arg2[3] == 0) {
@@ -3650,7 +3662,7 @@ int tisp_channel_attr_set(uint32_t channel_id, void* attr)
         int32_t v0_20 = arg2[7];
         int32_t a2_1 = arg2[5];
 
-        if ((uint32_t)tispinfo_4 < (uint32_t)(tispinfo_6 + a1_9) || 
+        if ((uint32_t)tispinfo_4 < (uint32_t)(tispinfo_6 + a1_9) ||
             (uint32_t)s7_1 < (uint32_t)(v0_20 + a2_1)) {
             isp_printf(2, "sensor type is BT601!\n", "tisp_channel_attr_set");
             return 0xffffffff;
@@ -3664,7 +3676,7 @@ int tisp_channel_attr_set(uint32_t channel_id, void* attr)
     system_reg_write(s1_2 + 0x28, (arg2[4] << 0x10) | arg2[5]);
     system_reg_write(s1_2 + 0x80, tispinfo_4);
     system_reg_write(s1_2 + 0x98, tispinfo_4);
-    
+
     return 0;
 }
 
@@ -3704,27 +3716,27 @@ int tisp_channel_stop(uint32_t channel_id)
     struct tx_isp_dev *isp_dev = tx_isp_get_device();
     u32 reg_val;
     u32 channel_base;
-    
+
     if (!isp_dev || channel_id >= ISP_MAX_CHAN) {
         pr_err("tisp_channel_stop: Invalid parameters\n");
         return -EINVAL;
     }
-    
+
     pr_info("*** tisp_channel_stop: Stopping channel %d ***\n", channel_id);
-    
+
     /* Calculate channel register base */
     channel_base = (channel_id + 0x98) << 8;
-    
+
     /* Disable channel scaling */
     system_reg_write(channel_base + 0x1c0, 0);
     system_reg_write(channel_base + 0x1c4, 0);
     system_reg_write(channel_base + 0x1c8, 0);
     system_reg_write(channel_base + 0x1cc, 0);
-    
+
     /* Clear channel control registers */
     system_reg_write(channel_base + 0x80, 0);
     system_reg_write(channel_base + 0x98, 0);
-    
+
     /* CRITICAL FIX: Don't modify ISP Control register during streaming */
     extern uint32_t vic_start_ok;
     if (vic_start_ok == 1) {
@@ -3737,7 +3749,7 @@ int tisp_channel_stop(uint32_t channel_id)
         system_reg_write(0x9804, reg_val);
         pr_info("*** tisp_channel_stop: ISP Control register updated: cleared bit %d (not streaming) ***\n", channel_id);
     }
-    
+
     pr_info("*** tisp_channel_stop: Channel %d stopped successfully ***\n", channel_id);
     return 0;
 }
@@ -3771,18 +3783,18 @@ int tisp_s_fcrop_control(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4,
 {
     uint32_t msca_ch_en_1 = msca_ch_en;
     int32_t arg_0 = arg1;
-    
+
     if (!(msca_ch_en_1 != 0)) {
         msca_ch_en_1 = 0;
     }
-    
+
     int32_t arg_4 = arg2;
     int32_t arg_8 = arg3;
     int32_t arg_c = arg4;
-    
+
     msca_ch_en = msca_ch_en_1;
     uint32_t msca_ch_en_4;
-    
+
     if ((arg1 & 0xff) == 0) {
         isp_printf(2, "The parameter is invalid!\n");
         msca_ch_en_4 = msca_ch_en;
@@ -3792,28 +3804,28 @@ int tisp_s_fcrop_control(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4,
         data_b2e10 = arg4;
         data_b2e04 = 1;
         data_b2e14 = arg5;
-        
+
         system_reg_write(0x9860, arg3 << 0x10 | arg2);
         system_reg_write(0x9864, arg4 << 0x10 | arg5);
-        
+
         uint32_t msca_ch_en_2 = msca_ch_en;
-        
+
         if ((msca_ch_en & 1) != 0) {
-            system_reg_write(0x9904, 
-                ((arg4 << 9) / data_b2de8) << 0x10 | 
+            system_reg_write(0x9904,
+                ((arg4 << 9) / data_b2de8) << 0x10 |
                 (uint16_t)((arg5 << 9) / data_b2dec));
             msca_ch_en_2 = msca_ch_en;
         }
-        
+
         uint32_t msca_ch_en_3 = msca_ch_en;
-        
+
         if ((msca_ch_en_2 & 2) != 0) {
             system_reg_write(0x9a04,
                 ((arg4 << 9) / data_b2db4) << 0x10 |
                 (uint16_t)((arg5 << 9) / data_b2db8));
             msca_ch_en_3 = msca_ch_en;
         }
-        
+
         if ((msca_ch_en_3 & 4) == 0) {
             msca_ch_en_4 = msca_ch_en;
         } else {
@@ -3823,7 +3835,7 @@ int tisp_s_fcrop_control(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4,
             msca_ch_en_4 = msca_ch_en;
         }
     }
-    
+
     uint32_t a1_15 = 0xf0000 | msca_ch_en_4;
     msca_ch_en = a1_15;
 
@@ -3848,7 +3860,7 @@ int tisp_g_fcrop_control(char* arg1)
 {
     int32_t v1 = data_b2e04;
     int32_t result;
-    
+
     if (v1 != 1) {
         *arg1 = 0;
         extern uint8_t tispinfo[];
@@ -3865,7 +3877,7 @@ int tisp_g_fcrop_control(char* arg1)
         *(arg1 + 0xc) = data_b2e10;
         result = data_b2e14;
     }
-    
+
     *(arg1 + 0x10) = result;
     return result;
 }
@@ -3876,7 +3888,7 @@ EXPORT_SYMBOL(tisp_g_fcrop_control);
  * ispcore_pad_event_handle - Handle ISP pad events
  * This is the EXACT implementation from Binary Ninja decompilation
  * @arg1: ISP device structure pointer
- * @arg2: Event code (0x3000001 - 0x3000007)  
+ * @arg2: Event code (0x3000001 - 0x3000007)
  * @arg3: Event data pointer
  * @return: 0 on success, negative error code on failure
  */
@@ -3886,19 +3898,19 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
     uint32_t var_58;
     void* v0_13;  /* Removed const qualifier */
     int32_t v1_7;
-    
+
     /* Add MCP logging for method entry */
     ISP_INFO("ispcore_pad_event_handle: entry with arg2=0x%x", arg2);
-    
+
     if (arg1 && (arg1[5] & 0x1) != 0 && ((uint32_t)(arg2 - 0x3000001) < 7)) {
         switch (arg2) {
         case 0x3000001: {
             /* Get format */
             void* a1_3 = (void*)arg1[8];
             result = 0;
-            
+
             ISP_INFO("ispcore_pad_event_handle: case 0x3000001 (get format), a1_3=%p, arg3=%p", a1_3, arg3);
-            
+
             if (arg3 != 0 && a1_3 != 0) {
                 /* SAFE FIX: Replace dangerous offset access with safe struct access */
                 /* Binary Ninja: v0_38 = *(a1_3 + 0x7c) - this is accessing a device pointer */
@@ -3916,34 +3928,34 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                     ISP_INFO("ispcore_pad_event_handle: copied format data (0x70 bytes)");
                     return 0;
                 }
-                
+
                 *((uint32_t*)arg3 + 1) = *((uint32_t*)a1_3 + 1);        /* *(arg3 + 4) = *(a1_3 + 4) */
                 *((uint32_t*)arg3 + 2) = *((uint32_t*)a1_3 + 2);        /* *(arg3 + 8) = *(a1_3 + 8) */
                 __builtin_strncpy((char*)arg3 + 0xc, "RG12", 4);
-                
+
                 int32_t v0_6 = *((uint32_t*)a1_3 + 1);
                 int32_t v1_2 = *((uint32_t*)a1_3 + 2);
                 *((uint32_t*)arg3 + 0xd) = 0;    /* *(arg3 + 0x34) = 0 */
                 *((uint32_t*)arg3 + 0x12) = 0;   /* *(arg3 + 0x48) = 0 */
                 *((uint32_t*)arg3 + 6) = (v0_6 * v1_2) << 1; /* *(arg3 + 0x18) = (v0_6 * v1_2) << 1 */
-                
+
                 ISP_INFO("ispcore_pad_event_handle: format configured %dx%d, size=%d", v0_6, v1_2, (v0_6 * v1_2) << 1);
             }
             break;
         }
-        
+
         case 0x3000002: {
             /* Set format */
             ISP_INFO("ispcore_pad_event_handle: case 0x3000002 (set format)");
             result = 0xffffffea; /* -EINVAL */
-            
+
             if (arg1 != 0 && (uintptr_t)arg1 < 0xfffff001) {
                 void* v0_10 = (void*)*arg1;
-                
+
                 if (v0_10 != 0) {
                     if ((uintptr_t)v0_10 >= 0xfffff001)
                         return 0xffffffea;
-                    
+
                     /* CRITICAL FIX: Use safe struct member access instead of dangerous offset *(v0_10 + 0xd4) */
                     /* MIPS ALIGNMENT CHECK: Ensure v0_10 is properly aligned before accessing */
                     if (((unsigned long)v0_10 & 0x3) != 0) {
@@ -3974,7 +3986,7 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
 
                             /* SAFE: Store callback information in device structure instead of raw offsets */
                             host_dev->isp_dev = (struct tx_isp_dev *)arg1;  /* Store ISP device reference */
-                            
+
                             /* Complex loop for channel processing */
                             void* a0_3 = *((void**)s2);
                             while (true) {
@@ -4001,32 +4013,32 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                                 } else {
                                     s2 = (char*)s2 + 4;
                                 }
-                                
+
                                 if ((char*)v0_10 + 0x78 == s2)
                                     break;
-                                
+
                                 a0_3 = *((void**)s2);
                             }
-                            
+
                             ISP_INFO("ispcore_pad_event_handle: channel processing loop completed");
                             return 0;
                         }
-                        
+
                         /* Format processing logic */
                         ISP_INFO("ispcore_pad_event_handle: processing format configuration");
-                        
+
                         /* Call tisp_channel_attr_set */
                         uint32_t a0_25 = (uint32_t)arg1[1] & 0xff; /* zx.d(arg1[1].b) */
-                        
+
                         /* Prepare channel attributes structure */
                         memset(&var_58, 0, 0x34);
                         /* Complex attribute setup would go here */
-                        
+
                         if (tisp_channel_attr_set(a0_25, &var_58) != 0) {
                             isp_printf(2, "Err [VIC_INT] : dma syfifo ovf!!!\n");
                             return 0;
                         }
-                        
+
                         memcpy(s3_1, arg3, 0x70);
                         ISP_INFO("ispcore_pad_event_handle: format set successfully");
                         return 0;
@@ -4035,12 +4047,12 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
             }
             break;
         }
-        
+
         case 0x3000003: {
             /* Stream start */
             ISP_INFO("ispcore_pad_event_handle: case 0x3000003 (stream start)");
             v0_13 = 0;
-            
+
             if (arg1 == 0) {
                 var_58 = 0;
             } else if ((uintptr_t)arg1 >= 0xfffff001) {
@@ -4065,9 +4077,9 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                     var_58 = 0;
                 }
             }
-            
+
             void* s2_1 = (void*)arg1[8];
-            
+
             /* CRITICAL FIX: Replace core state with VIC state - core device is stateless */
             struct tx_isp_core_device *host_dev_13 = (struct tx_isp_core_device *)v0_13;
             /* Get VIC device to check streaming state */
@@ -4084,10 +4096,10 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                 /* SAFE: Proper stream start handling without dangerous pointer arithmetic */
                 return 0;
             }
-            
+
             if ((arg1[7] & 0xff) != 3) /* zx.d(*(arg1 + 7)) != 3 */
                 return 0;
-            
+
             /* CRITICAL FIX: Use safe struct member access instead of unsafe offset arithmetic */
             struct frame_channel_binary_ninja *channel_s2 = (struct frame_channel_binary_ninja *)s2_1;
 
@@ -4111,20 +4123,20 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
             }
             break;
         }
-        
+
         case 0x3000004: {
             /* Stream stop */
             ISP_INFO("ispcore_pad_event_handle: case 0x3000004 (stream stop)");
             ispcore_frame_channel_streamoff(arg1);
             return 0;
         }
-        
+
         case 0x3000005: {
             /* Queue buffer */
             ISP_INFO("ispcore_pad_event_handle: case 0x3000005 (queue buffer)");
             void* v0_21;  /* Removed const qualifier */
             void* s3_4;   /* Removed const qualifier */
-            
+
             if (arg1 == 0 || (uintptr_t)arg1 >= 0xfffff001) {
                 s3_4 = 0;
                 v0_21 = 0;
@@ -4150,27 +4162,27 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                     var_58 = 0;
                 }
             }
-            
+
             if (*((uint32_t*)v0_21 + 0x57) != 1) { /* *(v0_21 + 0x15c) != 1 */
                 result = 0;
                 if ((arg1[5] & 0x20) == 0) {
                     void* s1_2 = (void*)arg1[8];
-                    
+
                     if (arg3 == 0 || s1_2 == 0) {
                         isp_printf(2, "Err [VIC_INT] : image syfifo ovf !!!\n");
                         return 0;
                     }
-                    
+
                     *((uint32_t*)arg3 - 7) = 4;  /* *(arg3 - 0x1c) = 4 */
                     /* SAFE: Use struct member access for spinlock instead of (char*)s1_2 + 0x9c */
                     struct frame_channel_binary_ninja *channel_s1_2 = (struct frame_channel_binary_ninja *)s1_2;
                     __private_spin_lock_irqsave(&channel_s1_2->lock, &var_58);
-                    
+
                     if (*((uint32_t*)s1_2 + 3) != 0x3231564e) { /* *(s1_2 + 0xc) != 0x3231564e */
                         isp_printf(2, "Err [VIC_INT] : control limit err!!!\n");
                         return 0xffffffff;
                     }
-                    
+
                     /* Buffer configuration */
                     int32_t v0_26 = ((*((uint32_t*)s1_2 + 2) + 0xf) & 0xfffffff0); /* (*(s1_2 + 8) + 0xf) & 0xfffffff0 */
                     int32_t a1_9 = *((uint32_t*)s1_2 + 1);     /* *(s1_2 + 4) */
@@ -4178,13 +4190,13 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                     int32_t a0_13 = *((uint32_t*)arg3 + 2);   /* *(arg3 + 8) */
                     *((uint32_t*)arg3 - 6) += 1;              /* *(arg3 - 0x18) += 1 */
                     *((uint32_t*)arg3 + 3) = v0_26 * a1_9 + a0_13; /* *(arg3 + 0xc) = calculation */
-                    
+
                     /* Hardware register writes */
                     uint32_t base_addr = *((uint32_t*)s3_4 + 0x2e);   /* *(s3_4 + 0xb8) */
                     uint32_t offset = (*((uint32_t*)s1_2 + 0x1c) << 8); /* *(s1_2 + 0x70) << 8 */
                     *((uint32_t*)(base_addr + offset + 0x996c)) = a0_13;
                     *((uint32_t*)(base_addr + offset + 0x9984)) = *((uint32_t*)arg3 + 3);
-                    
+
                     /* SAFE: Use the same struct variable for unlock */
                     spin_unlock_irqrestore(&channel_s1_2->lock, var_58);
                     ISP_INFO("ispcore_pad_event_handle: buffer queued successfully");
@@ -4199,18 +4211,18 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
             }
             break;
         }
-        
+
         case 0x3000006: {
             /* Simple return case */
             ISP_INFO("ispcore_pad_event_handle: case 0x3000006 (simple return)");
             return 0;
         }
-        
+
         case 0x3000007: {
             /* Dequeue buffer */
             ISP_INFO("ispcore_pad_event_handle: case 0x3000007 (dequeue buffer)");
             v0_13 = 0;
-            
+
             if (arg1 == 0) {
                 var_58 = 0;
             } else if ((uintptr_t)arg1 >= 0xfffff001) {
@@ -4235,17 +4247,17 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                     var_58 = 0;
                 }
             }
-            
+
             if (*((uint32_t*)v0_13 + 0x57) == 1) { /* *(v0_13 + 0x15c) == 1 */
                 v1_7 = *((int32_t*)v0_13 + 0x72); /* *(v0_13 + 0x1c8) */
                 if (v1_7 == 0)
                     return 0;
-                
+
                 /* Call function pointer v1_7(*(v0_13 + 0x1d0), arg3) */
                 ISP_INFO("ispcore_pad_event_handle: calling dequeue buffer callback");
                 return 0;
             }
-            
+
             result = 0;
             if ((arg1[5] & 0x20) == 0) {
                 void* s0_2 = (void*)arg1[8];
@@ -4261,14 +4273,14 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
             }
             break;
         }
-        
+
         default:
             ISP_ERROR("ispcore_pad_event_handle: unknown event code 0x%x", arg2);
             result = -EINVAL;
             break;
         }
     }
-    
+
     ISP_INFO("ispcore_pad_event_handle: exit with result=%d", result);
     return result;
 }
@@ -4280,7 +4292,7 @@ struct isp_subdev_data {
     uint32_t src_index;       /* 0x08: Source index (for type 2) */
     uint32_t dst_index;       /* 0x0C: Destination index */
     struct miscdevice misc;   /* 0x10: Misc device (starts at 0xC, but we pad) */
-    char device_name[16];     /* 0x20: Device name */  
+    char device_name[16];     /* 0x20: Device name */
     void *file_ops;           /* 0x30: File operations pointer */
     void *proc_ops;           /* 0x34: Proc operations pointer */
     char padding[0x100];      /* Padding to match Binary Ninja expectations */
@@ -4298,7 +4310,7 @@ static struct isp_subdev_data csi_subdev_data = {
 
 static struct isp_subdev_data vic_subdev_data = {
     .device_type = 2,    /* Sink */
-    .device_id = 1, 
+    .device_id = 1,
     .src_index = 0,      /* Connect to CSI (index 0) */
     .dst_index = 1,      /* VIC is at index 1 */
     .device_name = "vic",
@@ -4311,7 +4323,7 @@ static struct isp_subdev_data vin_subdev_data = {
     .device_id = 2,
     .src_index = 0,
     .dst_index = 2,
-    .device_name = "vin", 
+    .device_name = "vin",
     .file_ops = NULL,
     .proc_ops = NULL
 };
@@ -4341,33 +4353,33 @@ static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
 {
     int i, ret;
     char dev_name[32];
-    
+
     if (!isp_dev) {
         return -EINVAL;
     }
-    
+
     pr_info("*** tx_isp_create_framechan_devices: Creating frame channel devices ***\n");
-    
+
     /* Create frame channel devices /dev/isp-fs0, /dev/isp-fs1, etc. */
     for (i = 0; i < 4; i++) {  /* Create 4 frame channels like reference */
         struct miscdevice *fs_miscdev;
-        
+
         /* Allocate misc device structure */
         fs_miscdev = kzalloc(sizeof(struct miscdevice), GFP_KERNEL);
         if (!fs_miscdev) {
             pr_err("Failed to allocate misc device for framechan%d\n", i);
             return -ENOMEM;
         }
-        
+
         /* Set up device name */
         snprintf(dev_name, sizeof(dev_name), "framechan%d", i);
         fs_miscdev->name = kstrdup(dev_name, GFP_KERNEL);
         fs_miscdev->minor = MISC_DYNAMIC_MINOR;
-        
+
         /* Use the existing frame_channel_fops from tx-isp-module.c */
         extern const struct file_operations frame_channel_fops;
         fs_miscdev->fops = &frame_channel_fops;
-        
+
         /* Register the misc device */
         ret = misc_register(fs_miscdev);
         if (ret < 0) {
@@ -4376,14 +4388,14 @@ static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
             kfree(fs_miscdev);
             return ret;
         }
-        
+
         pr_info("*** Created frame channel device: /dev/%s (major=10, minor=%d) ***\n",
                 dev_name, fs_miscdev->minor);
-        
+
         /* Store misc device reference for cleanup */
         isp_dev->fs_miscdevs[i] = fs_miscdev;
     }
-    
+
     pr_info("*** tx_isp_create_framechan_devices: All frame channel devices created ***\n");
     return 0;
 }
@@ -5029,7 +5041,7 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     /* Get VIC device */
     vic_dev = isp_dev->vic_dev;
 
-    
+
     /* CRITICAL FIX: Work with real sensor attributes instead of VIC's copy */
     extern struct tx_isp_sensor *tx_isp_get_sensor(void);
     struct tx_isp_sensor *sensor = tx_isp_get_sensor();
@@ -5051,28 +5063,28 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
 
     /* Binary Ninja: Complex sensor attribute processing */
     stored_attr = sensor->video.attr;
-    
+
     /* Binary Ninja: Extract and process sensor timing parameters */
     integration_time = stored_attr->integration_time;
     again = stored_attr->again;
     dgain = stored_attr->dgain;
     fps = stored_attr->fps;
-    
+
     /* Binary Ninja: Calculate frame rate and timing */
     if (integration_time != 0 && fps != 0) {
-        calculated_fps = (integration_time & 0xffff) * 1000000 / 
+        calculated_fps = (integration_time & 0xffff) * 1000000 /
                         (integration_time >> 16) / fps;
         stored_attr->fps = calculated_fps;
     }
-    
+
     /* Binary Ninja: Process gain values */
     stored_attr->again = again;
     stored_attr->dgain = dgain;
-    
+
     /* Binary Ninja: tiziano_sync_sensor_attr(&var_68) */
     pr_info("*** ispcore_sync_sensor_attr: Calling tiziano_sync_sensor_attr ***\n");
     tiziano_sync_sensor_attr(stored_attr);
-    
+
     pr_info("*** ispcore_sync_sensor_attr: SUCCESS ***\n");
     return 0;  /* Return success directly - no need for the quirky -515 pattern */
 }
@@ -5082,12 +5094,12 @@ EXPORT_SYMBOL(ispcore_sync_sensor_attr);
 int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr)
 {
     int ret;
-    
+
     pr_info("*** tx_isp_handle_sync_sensor_attr_event: Processing TX_ISP_EVENT_SYNC_SENSOR_ATTR ***\n");
-    
+
     /* Call the actual sync sensor attribute function */
     ret = ispcore_sync_sensor_attr(sd, attr);
-    
+
     /* Now that ispcore_sync_sensor_attr returns 0 directly, no conversion needed */
     pr_info("*** tx_isp_handle_sync_sensor_attr_event: returning %d ***\n", ret);
     return ret;
@@ -5138,43 +5150,43 @@ int tiziano_sync_sensor_attr(struct tx_isp_sensor_attribute *attr)
     uint8_t data_b2eb7, data_b2eb8;
     uint32_t data_b2ecc, data_b2ed4;
     uint32_t again_val, dgain_val, exp2_result1, exp2_result2, cached_gain;
-    
+
     if (!attr) {
         pr_err("tiziano_sync_sensor_attr: Invalid sensor attributes\n");
         return -EINVAL;
     }
-    
+
     pr_info("*** tiziano_sync_sensor_attr: EXACT Binary Ninja implementation ***\n");
-    
+
     /* Binary Ninja: int32_t $a0 = arg1[7] */
     again_val = attr->again;
-    
+
     /* Binary Ninja: data_b2e1c = arg1[1] */
     data_b2e1c = attr->integration_time;
-    
+
     /* Binary Ninja: uint32_t $v0_2 = tisp_math_exp2($a0, 0x10, 0xa) */
     exp2_result1 = tisp_math_exp2(again_val, 0x10, 0xa);
-    
+
     /* Binary Ninja: int32_t $a0_1 = arg1[8] */
     dgain_val = attr->dgain;
-    
+
     /* Binary Ninja: data_b2e34 = $v0_2 */
     data_b2e34 = exp2_result1;
-    
+
     /* Binary Ninja: data_b2e38 = tisp_math_exp2($a0_1, 0x10, 0xa) */
     data_b2e38 = tisp_math_exp2(dgain_val, 0x10, 0xa);
-    
+
     /* Binary Ninja: Store various sensor parameters */
     data_b2e44 = attr->total_width;
     data_b2e48 = attr->total_height;
     data_b2e62 = attr->fps;
     data_b2e64 = attr->wdr_cache;
-    
+
     /* Binary Ninja: Process timing parameters */
     data_b2e4a = attr->integration_time_apply_delay;
     data_b2e4c = attr->again_apply_delay;
     data_b2e4e = attr->dgain_apply_delay;
-    
+
     /* Binary Ninja: Store additional parameters */
     data_b2e54 = attr->data_type;
     data_b2e56 = attr->dbus_type;
@@ -5185,21 +5197,21 @@ int tiziano_sync_sensor_attr(struct tx_isp_sensor_attribute *attr)
     data_b2e60 = attr->max_dgain;
     data_b2e62 = 0;
     data_b2e64 = 0;
-    
+
     /* Binary Ninja: uint32_t $v0_20 = tisp_math_exp2(arg1[0x15], 0x10, 0xa) */
     exp2_result2 = tisp_math_exp2(attr->max_dgain, 0x10, 0xa);
     data_b2e6c = exp2_result2;
-    
+
     /* Binary Ninja: int32_t $a0_3 = data_c46c0 */
     cached_gain = data_c46c0;
-    
+
     /* Binary Ninja: if ($a0_3 == 0 || $a0_3 == data_b2e34) */
     if (cached_gain == 0 || cached_gain == data_b2e34) {
         data_c46c0 = data_b2e34;
     } else {
         data_c46c0 = cached_gain;
     }
-    
+
     /* Binary Ninja: Store processed values in global cache */
     data_c46c4 = data_b2e38;
     data_c46fc = exp2_result2;
@@ -5207,7 +5219,7 @@ int tiziano_sync_sensor_attr(struct tx_isp_sensor_attribute *attr)
     dmsc_sp_d_ud_ns_opt = data_b2e48;
     data_c4730 = data_b2e62;
     data_c46c8 = data_b2e58;
-    
+
     /* Binary Ninja: Store additional processed values */
     data_b2e9c = again_val;
     data_b2ea0 = dgain_val;
@@ -5219,12 +5231,12 @@ int tiziano_sync_sensor_attr(struct tx_isp_sensor_attribute *attr)
     data_b2eb8 = (uint8_t)data_b2e5e;
     data_b2ecc = data_b2e62;
     data_b2ed4 = attr->max_dgain;
-    
+
     pr_info("*** tiziano_sync_sensor_attr: Sensor attributes synchronized successfully ***\n");
     pr_info("***   - Again: 0x%x -> 0x%x ***\n", again_val, data_b2e34);
     pr_info("***   - Dgain: 0x%x -> 0x%x ***\n", dgain_val, data_b2e38);
     pr_info("***   - Dimensions: %dx%d ***\n", data_b2e44, data_b2e48);
-    
+
     return 0;
 }
 EXPORT_SYMBOL(tiziano_sync_sensor_attr);
@@ -5234,7 +5246,7 @@ void private_dma_sync_single_for_device(struct device *dev, dma_addr_t addr, siz
 {
     pr_info("*** private_dma_sync_single_for_device: dev=%p, addr=0x%x, size=%zu ***\n",
              dev, (uint32_t)addr, size);
-    
+
     /* Binary Ninja: if (arg1 != 0) result = *(arg1 + 0x80) */
     if (dev != NULL) {
         /* In the reference, this accesses a function pointer at offset 0x80 in the device structure */
@@ -5250,16 +5262,16 @@ void private_dma_cache_sync(struct device *dev, void *vaddr, size_t size, enum d
 {
     pr_info("*** private_dma_cache_sync: dev=%p, vaddr=%p, size=%zu, dir=%d ***\n",
              dev, vaddr, size, direction);
-    
+
     if (!vaddr || size == 0) {
         pr_err("private_dma_cache_sync: Invalid parameters\n");
         return;
     }
-    
+
     /* Use the standard Linux DMA cache sync function that's available in kernel 3.10 */
     /* This matches the reference implementation in external/ingenic-sdk/3.10/avpu/t31/avpu_main.c */
     dma_cache_sync(dev, vaddr, size, direction);
-    
+
     pr_info("private_dma_cache_sync: Cache sync completed using dma_cache_sync\n");
 }
 EXPORT_SYMBOL(private_dma_cache_sync);
