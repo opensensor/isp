@@ -1041,6 +1041,106 @@ static int tisp_ae0_process_impl(void);
 /* tisp_event_push implemented as non-static below */
 static int system_reg_write_ae(int ae_id, uint32_t reg, uint32_t value);
 
+
+
+/* ===== MISSING TIZIANO ISP PIPELINE COMPONENTS - Binary Ninja Reference ===== */
+
+/* AE data structures and globals - Based on decompiled tiziano_ae_init */
+uint8_t tisp_ae_hist[0x42c];
+EXPORT_SYMBOL(tisp_ae_hist);
+static uint8_t tisp_ae_hist_last[0x42c];
+static uint8_t dmsc_sp_d_w_stren_wdr_array_ae[0x98];
+static uint32_t ae_ctrls[4];
+/* Removed duplicate declarations - using struct versions */
+static uint32_t ae_comp_default = 0x80;
+
+/* AE parameter structures - Based on decompiled code */
+static uint32_t data_b0cfc = 0x1000;
+static uint32_t data_b0d18 = 0x800;
+static uint32_t data_b0d1c = 0x1000;
+/* data_b0e10 already declared earlier */
+static uint32_t data_afcd0 = 0x100;
+static uint32_t data_afcd4 = 0x100;
+static uint32_t data_afcd8 = 0x800;
+static uint32_t data_afce0 = 0x100;
+/* ta_custom_en already declared earlier */
+
+/* Additional sensor control variables - Binary Ninja reference */
+static uint32_t data_d04a0 = 0x1000;  /* Integration time parameter */
+static uint32_t data_d04a8 = 0x1000;  /* Short integration time parameter */
+static uint32_t data_d04ac = 0x1000;  /* Short integration gain parameter */
+static uint32_t data_c46b8 = 0;       /* Integration time cache */
+static uint32_t data_c46f8 = 0;       /* Short integration time cache */
+static uint32_t data_c470c = 0;       /* Short exposure mode flag */
+
+/* REMOVED: Conflicting IRQ callback function table that was causing symbol collision */
+/* The real irq_func_cb array is in tx_isp_core.c with proper signature: irqreturn_t (*)(int irq, void *dev_id) */
+/* This conflicting array with signature void (*)(void) was never used and caused confusion */
+
+/* AE parameter addresses - Safe structure-based access */
+static uint32_t *data_d04b8 = &data_b0cfc;
+static uint32_t data_d04bc[6] = {0x0d0b00, 0x040d0b00, 0x080d0b00, 0x0c0d0b00, 0x100d0b00, 0x140d0b00};
+static uint32_t *data_d04c4 = &data_afcd4;
+
+/* Missing data_b0c18 variable */
+static uint32_t data_b0c18 = 0x80;  /* AE compensation default */
+
+/* AE exposure threshold parameters */
+uint32_t data_b2ea8 = 0x8000;  /* AE exp threshold */
+uint32_t data_b2e9c = 0x1000;  /* Min exposure */
+uint32_t data_b2ea0 = 0x4000;  /* Max exposure */
+uint32_t data_b2ea4 = 0x400;   /* Min gain */
+uint32_t data_b2ecc = 0x400;   /* WDR min gain */
+uint32_t data_b2ed0 = 0x800;   /* WDR min exp */
+uint32_t data_b2ed4 = 0x2000;  /* WDR max exp */
+
+/* AE deflicker parameters */
+uint32_t data_b2e56 = 25;      /* FPS numerator */
+uint32_t data_b2e54 = 1;       /* FPS denominator */
+uint32_t data_b2e44 = 0x1000;  /* Deflicker base */
+static uint32_t data_b0b28, data_b0b2c, data_b0b30;
+
+/* Export symbols for missing functions */
+EXPORT_SYMBOL(data_b2ea8);
+EXPORT_SYMBOL(data_b2ea4);
+EXPORT_SYMBOL(data_b2ecc);
+EXPORT_SYMBOL(data_b2ed0);
+EXPORT_SYMBOL(data_b2e56);
+EXPORT_SYMBOL(data_b2e54);
+EXPORT_SYMBOL(data_b2e44);
+
+/* AE interrupt handlers - Forward declarations (implemented as exported functions) */
+/* ae0_interrupt_hist, ae0_interrupt_static, ae1_interrupt_hist, ae1_interrupt_static */
+/* tisp_ae0_process, tiziano_ae_params_refresh, tiziano_ae_para_addr, tiziano_ae_set_hardware_param */
+/* are implemented as exported functions below */
+
+static void tisp_ae1_process(void);
+
+/* AE processing functions - Forward declarations */
+/* tiziano_ae_init_exp_th already declared as non-static at line 273 */
+static void tisp_set_sensor_integration_time(uint32_t time);
+void tisp_set_sensor_analog_gain(void);
+static void tisp_set_sensor_integration_time_short(uint32_t time);
+void tisp_set_sensor_analog_gain_short(void);
+/* tiziano_deflicker_expt implemented as exported function below */
+static int system_reg_write_ae(int ae_id, uint32_t reg, uint32_t value);
+/* REMOVED: Conflicting static declaration - use extern from tx_isp_core.c */
+void private_spin_lock_init(spinlock_t *lock);
+uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand);
+static uint32_t tisp_math_exp2(uint32_t value, uint32_t precision, uint32_t shift);
+
+/* Sensor interface functions - Forward declarations */
+int data_b2eec(uint32_t time, void **var_ptr);
+int data_b2ef0(uint32_t time, void **var_ptr);
+int data_b2ef4(uint32_t param, int flag);
+int data_b2ef8(uint32_t param, int flag);
+uint32_t data_b2ee0(uint32_t log_val, int16_t *var_ptr);
+uint32_t data_b2ee4(uint32_t log_val, void **var_ptr);
+int data_b2f04(uint32_t param, int flag);
+int data_b2f08(uint32_t param, int flag);
+int32_t dump_vic_reg(void);
+uint32_t tisp_log2_fixed_to_fixed(void);
+
 void private_complete(struct completion *comp)
 {
     if (comp) {
@@ -6268,103 +6368,6 @@ int tisp_wdr_init(void)
 }
 
 
-/* ===== MISSING TIZIANO ISP PIPELINE COMPONENTS - Binary Ninja Reference ===== */
-
-/* AE data structures and globals - Based on decompiled tiziano_ae_init */
-uint8_t tisp_ae_hist[0x42c];
-EXPORT_SYMBOL(tisp_ae_hist);
-static uint8_t tisp_ae_hist_last[0x42c];
-static uint8_t dmsc_sp_d_w_stren_wdr_array_ae[0x98];
-static uint32_t ae_ctrls[4];
-/* Removed duplicate declarations - using struct versions */
-static uint32_t ae_comp_default = 0x80;
-
-/* AE parameter structures - Based on decompiled code */
-static uint32_t data_b0cfc = 0x1000;
-static uint32_t data_b0d18 = 0x800;
-static uint32_t data_b0d1c = 0x1000;
-/* data_b0e10 already declared earlier */
-static uint32_t data_afcd0 = 0x100;
-static uint32_t data_afcd4 = 0x100;
-static uint32_t data_afcd8 = 0x800;
-static uint32_t data_afce0 = 0x100;
-/* ta_custom_en already declared earlier */
-
-/* Additional sensor control variables - Binary Ninja reference */
-static uint32_t data_d04a0 = 0x1000;  /* Integration time parameter */
-static uint32_t data_d04a8 = 0x1000;  /* Short integration time parameter */
-static uint32_t data_d04ac = 0x1000;  /* Short integration gain parameter */
-static uint32_t data_c46b8 = 0;       /* Integration time cache */
-static uint32_t data_c46f8 = 0;       /* Short integration time cache */
-static uint32_t data_c470c = 0;       /* Short exposure mode flag */
-
-/* REMOVED: Conflicting IRQ callback function table that was causing symbol collision */
-/* The real irq_func_cb array is in tx_isp_core.c with proper signature: irqreturn_t (*)(int irq, void *dev_id) */
-/* This conflicting array with signature void (*)(void) was never used and caused confusion */
-
-/* AE parameter addresses - Safe structure-based access */
-static uint32_t *data_d04b8 = &data_b0cfc;
-static uint32_t data_d04bc[6] = {0x0d0b00, 0x040d0b00, 0x080d0b00, 0x0c0d0b00, 0x100d0b00, 0x140d0b00};
-static uint32_t *data_d04c4 = &data_afcd4;
-
-/* Missing data_b0c18 variable */
-static uint32_t data_b0c18 = 0x80;  /* AE compensation default */
-
-/* AE exposure threshold parameters */
-uint32_t data_b2ea8 = 0x8000;  /* AE exp threshold */
-uint32_t data_b2e9c = 0x1000;  /* Min exposure */
-uint32_t data_b2ea0 = 0x4000;  /* Max exposure */
-uint32_t data_b2ea4 = 0x400;   /* Min gain */
-uint32_t data_b2ecc = 0x400;   /* WDR min gain */
-uint32_t data_b2ed0 = 0x800;   /* WDR min exp */
-uint32_t data_b2ed4 = 0x2000;  /* WDR max exp */
-
-/* AE deflicker parameters */
-uint32_t data_b2e56 = 25;      /* FPS numerator */
-uint32_t data_b2e54 = 1;       /* FPS denominator */
-uint32_t data_b2e44 = 0x1000;  /* Deflicker base */
-static uint32_t data_b0b28, data_b0b2c, data_b0b30;
-
-/* Export symbols for missing functions */
-EXPORT_SYMBOL(data_b2ea8);
-EXPORT_SYMBOL(data_b2ea4);
-EXPORT_SYMBOL(data_b2ecc);
-EXPORT_SYMBOL(data_b2ed0);
-EXPORT_SYMBOL(data_b2e56);
-EXPORT_SYMBOL(data_b2e54);
-EXPORT_SYMBOL(data_b2e44);
-
-/* AE interrupt handlers - Forward declarations (implemented as exported functions) */
-/* ae0_interrupt_hist, ae0_interrupt_static, ae1_interrupt_hist, ae1_interrupt_static */
-/* tisp_ae0_process, tiziano_ae_params_refresh, tiziano_ae_para_addr, tiziano_ae_set_hardware_param */
-/* are implemented as exported functions below */
-
-static void tisp_ae1_process(void);
-
-/* AE processing functions - Forward declarations */
-/* tiziano_ae_init_exp_th already declared as non-static at line 273 */
-static void tisp_set_sensor_integration_time(uint32_t time);
-void tisp_set_sensor_analog_gain(void);
-static void tisp_set_sensor_integration_time_short(uint32_t time);
-void tisp_set_sensor_analog_gain_short(void);
-/* tiziano_deflicker_expt implemented as exported function below */
-static int system_reg_write_ae(int ae_id, uint32_t reg, uint32_t value);
-/* REMOVED: Conflicting static declaration - use extern from tx_isp_core.c */
-void private_spin_lock_init(spinlock_t *lock);
-uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand);
-static uint32_t tisp_math_exp2(uint32_t value, uint32_t precision, uint32_t shift);
-
-/* Sensor interface functions - Forward declarations */
-int data_b2eec(uint32_t time, void **var_ptr);
-int data_b2ef0(uint32_t time, void **var_ptr);
-int data_b2ef4(uint32_t param, int flag);
-int data_b2ef8(uint32_t param, int flag);
-uint32_t data_b2ee0(uint32_t log_val, int16_t *var_ptr);
-uint32_t data_b2ee4(uint32_t log_val, void **var_ptr);
-int data_b2f04(uint32_t param, int flag);
-int data_b2f08(uint32_t param, int flag);
-int32_t dump_vic_reg(void);
-uint32_t tisp_log2_fixed_to_fixed(void);
 /* Note: tisp_log2_fixed_to_fixed and system_reg_write already declared elsewhere */
 
 /* Remove duplicate declarations - using the struct versions defined earlier */
