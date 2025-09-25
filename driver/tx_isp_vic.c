@@ -369,6 +369,8 @@ static void *data_b0000 = &data_b0000_array[0];  /* Return value for vic_framedo
 
 /* Forward declaration for streaming functions */
 int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2);
+static int ispvic_frame_channel_qbuf(void* arg1, void* arg2);
+
 
 /* GPIO info and state for vic_framedone_irq_function - matching reference driver */
 static volatile int gpio_switch_state = 0;
@@ -2594,6 +2596,17 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             /* Start VIC frame channel streaming before enabling IRQs (enables MDMA) */
             /* Ensure stream_state reset so ispvic_frame_channel_s_stream performs MDMA enable */
             vic_dev->stream_state = 0;
+
+            /* Force QBUF write to program buffer addresses before MDMA start */
+            pr_info("*** vic_core_s_stream: Forcing ispvic_frame_channel_qbuf to program buffer addresses before MDMA ***\n");
+            {
+                int qret = ispvic_frame_channel_qbuf(sd, NULL);
+                if (qret != 0) {
+                    pr_warn("*** vic_core_s_stream: ispvic_frame_channel_qbuf returned %d (continuing) ***\n", qret);
+                } else {
+                    pr_info("*** vic_core_s_stream: ispvic_frame_channel_qbuf SUCCESS ***\n");
+                }
+            }
 
             pr_info("*** vic_core_s_stream: Calling ispvic_frame_channel_s_stream(ENABLE) to start MDMA before enabling IRQ ***\n");
             ret = ispvic_frame_channel_s_stream(sd, 1);
