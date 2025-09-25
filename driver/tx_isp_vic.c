@@ -1348,6 +1348,11 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     writel(0x00000000, vic_regs + 0x1f0);
     writel(0x00000000, vic_regs + 0x1f4);
     writel(0xFFFFFFFE, vic_regs + 0x1e8);
+    /* Enable interrupt sources (both banks) before setting vic_start_ok */
+    writel(0xFFFFFFFF, vic_regs + 0x1e0);
+    writel(0xFFFFFFFF, vic_regs + 0x1e4);
+    wmb();
+
     wmb();
 
     /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
