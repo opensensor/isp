@@ -665,37 +665,31 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         pr_info("*** CRITICAL: CSI PHY timing configuration - frame_rate=%d, phy_timing=%d ***\n",
                                 frame_rate, phy_timing_value);
 
-                        /* Binary Ninja: Configure PHY timing registers */
-                        void __iomem *phy_base = csi_dev->phy_regs;
-                        if (!phy_base) {
-                            /* Map PHY registers if not already mapped */
-                            phy_base = ioremap(0x13310000, 0x1000);
-                            csi_dev->phy_regs = phy_base;
-                        }
-
-                        if (phy_base) {
-                            /* Binary Ninja: Configure critical PHY timing registers */
-                            u32 current_val = readl(phy_base + 0x160);
+                        /* Binary Ninja: Configure PHY timing registers on CSI base (match modern) */
+                        void __iomem *isp_csi_regs = csi_dev->csi_regs;
+                        if (!isp_csi_regs) {
+                            pr_err("CSI regs base NULL; cannot program PHY timing\n");
+                        } else {
+                            /* Configure critical PHY timing registers */
+                            u32 current_val = readl(isp_csi_regs + 0x160);
                             u32 new_val = (current_val & 0xfffffff0) | (phy_timing_value & 0xf);
-                            writel(new_val, phy_base + 0x160);
+                            writel(new_val, isp_csi_regs + 0x160);
                             wmb();
 
                             /* Mirror to other PHY timing registers */
-                            writel(new_val, phy_base + 0x1e0);
+                            writel(new_val, isp_csi_regs + 0x1e0);
                             wmb();
-                            writel(new_val, phy_base + 0x260);
+                            writel(new_val, isp_csi_regs + 0x260);
                             wmb();
 
                             pr_info("*** CSI PHY timing configured: 0x160=0x%08x, 0x1e0=0x%08x, 0x260=0x%08x ***\n",
-                                    readl(phy_base + 0x160), readl(phy_base + 0x1e0), readl(phy_base + 0x260));
+                                    readl(isp_csi_regs + 0x160), readl(isp_csi_regs + 0x1e0), readl(isp_csi_regs + 0x260));
 
-                            /* Binary Ninja: Additional PHY configuration */
-                            /* *$v0_8 = 0x7d */
-                            writel(0x7d, phy_base + 0x0);
+                            /* Additional PHY base configuration (match modern) */
+                            writel(0x7d, isp_csi_regs + 0x0);
                             wmb();
 
-                            /* *(*($s0_1 + 0x13c) + 0x128) = 0x3f */
-                            writel(0x3f, phy_base + 0x128);
+                            writel(0x3f, isp_csi_regs + 0x128);
                             wmb();
 
                             pr_info("*** CSI PHY base configuration: 0x0=0x7d, 0x128=0x3f ***\n");
