@@ -899,13 +899,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
 
 
-    /* MOVED: Interrupt register configuration moved to END of function to prevent overwriting */
-    pr_info("*** tx_isp_vic_start: Writing CRITICAL interrupt-enabling registers from working commits ***\n");
-    writel(0x3130322a, vic_regs + 0x0);      /* First register from reference trace - CRITICAL for interrupts */
-    writel(0x1, vic_regs + 0x4);             /* Second register from reference trace - CRITICAL for interrupts */
-    writel(0x200, vic_regs + 0x14);          /* Third register from reference trace - CRITICAL for interrupts */
-    wmb();
-    pr_info("*** tx_isp_vic_start: CRITICAL interrupt-enabling registers written (0x3130322a, 0x1, 0x200) ***\n");
+    /* NOTE: Removed wrong-bank 'critical interrupt-enabling' writes to PRIMARY 0x0/0x4/0x14. */
 
     /* Binary Ninja: if ($v0 == 1) */
     pr_info("*** tx_isp_vic_start: CRITICAL DEBUG - interface_type=%d, checking if == 1 ***\n", interface_type);
@@ -2671,11 +2665,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 wmb();
                 pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (UNMASK-ALL)***\n",
                         readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x30c), readl(vr + 0x1e0), readl(vr + 0x1e4), readl(vr + 0x1e8), readl(vr + 0x1ec));
-                /* Final assert: interrupt routing (0x100) and route/control (0x14) to match reference */
+                /* Primary bank: only verify 0x100; do NOT write 0x14 here (0x14 is stride on PRIMARY) */
                 writel(0x000002d0, vr + 0x100);
-                writel(0x00000630, vr + 0x14);
                 wmb();
-                pr_info("*** VIC VERIFY (PRIMARY EXTRA): [0x100]=0x%08x [0x14]=0x%08x (ROUTE/CTRL) ***\n",
+                pr_info("*** VIC VERIFY (PRIMARY EXTRA): [0x100]=0x%08x [0x14]=0x%08x (PRIMARY 0x14=stride) ***\n",
                         readl(vr + 0x100), readl(vr + 0x14));
                 udelay(50);
 
