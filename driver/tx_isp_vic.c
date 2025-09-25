@@ -2268,21 +2268,21 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         pr_info("vic_pipo_mdma_enable: 16bpp stride=%u for width=%u\n", stride, width);
     }
 
-    /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x304) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
+    /* Program MDMA dimensions for NV12 output (ACTIVE size) */
     writel((width << 16) | height, vic_base + 0x304);
     wmb();
-    pr_info("vic_pipo_mdma_enable: reg 0x304 = 0x%x (dimensions %dx%d)\n",
+    pr_info("vic_pipo_mdma_enable: reg 0x304 = 0x%x (NV12 dims %dx%d)\n",
             (width << 16) | height, width, height);
 
-    /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x310) = $v1_1 */
-    writel(stride, vic_base + 0x310);
+    /* NV12 bytes-per-line stride (Y and UV): align width to 16 bytes */
+    stride = (width + 15) & ~15;
+    writel(stride, vic_base + 0x310); /* Y stride */
     wmb();
-    pr_info("vic_pipo_mdma_enable: reg 0x310 = %d (stride)\n", stride);
+    pr_info("vic_pipo_mdma_enable: reg 0x310 = %d (NV12 Y stride)\n", stride);
 
-    /* Binary Ninja EXACT: *(result + 0x314) = $v1_1 */
-    writel(stride, vic_base + 0x314);
+    writel(stride, vic_base + 0x314); /* UV stride */
     wmb();
-    pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (stride)\n", stride);
+    pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (NV12 UV stride)\n", stride);
 
     pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - CONTROL LIMIT ERROR SHOULD BE FIXED ***\n");
 }
