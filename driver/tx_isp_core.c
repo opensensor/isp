@@ -187,6 +187,34 @@ int tx_isp_core_start(struct tx_isp_subdev *sd)
     }
 
     /* Set pipeline to streaming state */
+    /* Ensure ISP pipeline enable/routing is applied here as well (idempotent) */
+    if (isp_dev->core_regs) {
+        void __iomem *core = isp_dev->core_regs;
+        u32 pend_legacy = readl(core + 0xb4);
+        u32 pend_new    = readl(core + 0x98b4);
+        /* Clear any pending first */
+        writel(pend_legacy, core + 0xb8);
+        writel(pend_new,    core + 0x98b8);
+
+        /* Enable pipeline and routing (matches reference) */
+        writel(1,    core + 0x800);   /* Pipeline enable */
+        writel(0x1c, core + 0x804);   /* Routing */
+        writel(8,    core + 0x1c);    /* Control mode */
+
+        /* Enable interrupt generation; unmask only frame sync initially */
+        writel(0xffffffff, core + 0x30);
+        writel(0x133,      core + 0x10);
+        writel(0x3fff,     core + 0xb0);
+        writel(0x1000,     core + 0xbc);
+        writel(0x3fff,     core + 0x98b0);
+        writel(0x1000,     core + 0x98bc);
+        wmb();
+
+        pr_info("*** tx_isp_core_start: Applied ISP pipeline enable/routing (0x800=1, 0x804=0x1c, 0x1c=8) ***\n");
+    } else {
+        pr_warn("tx_isp_core_start: core_regs not mapped; skipping pipeline enable here\n");
+    }
+
     isp_dev->pipeline_state = ISP_PIPELINE_STREAMING;
 
     pr_info("*** tx_isp_core_start: ISP core started successfully ***\n");
@@ -702,6 +730,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
                    frame_buffer_addr, frame_info1, frame_info2);
 
             /* Binary Ninja: tx_isp_send_event_to_remote(*($s3_2 + 0x78), 0x3000006, &var_40) */
+
             /* This is the CRITICAL event that notifies frame channels of completion */
             if (vic_dev) {
                 /* Wake up channel 0 waiters */
@@ -3747,6 +3776,7 @@ void private_dma_cache_sync(struct device *dev, void *vaddr, size_t size, enum d
 EXPORT_SYMBOL(private_dma_cache_sync);
 
 /* Frame synchronization - using implementation from tx_isp_frame_done.c */
+
 
 
 
