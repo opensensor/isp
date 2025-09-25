@@ -6149,8 +6149,6 @@ EXPORT_SYMBOL(subdev_sensor_ops_release_all_sensor);
 
 /* REMOVED: tx_isp_register_sensor_subdev - sensors should register through tx_isp_subdev_init like all other subdevs */
 
-/* Export AE processing function for use by other modules */
-EXPORT_SYMBOL(tisp_ae1_process);
 
 /* Export system_reg_write functions for use by other modules */
 EXPORT_SYMBOL(system_reg_write);
