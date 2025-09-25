@@ -2230,12 +2230,6 @@ int tisp_init(void *sensor_info, char *param_name)
     /* Events are processed on-demand when triggered, not continuously */
     pr_info("*** tisp_init: Event system ready for on-demand processing (Binary Ninja reference) ***\n");
 
-    int32_t irq_ret = system_irq_func_set(0xd, ip_done_interrupt_static);
-    if (irq_ret == 0) {
-        pr_info("*** tisp_init: ISP processing completion callback registered (index=0xd) ***\n");
-    } else {
-        pr_err("*** tisp_init: Failed to register ISP processing completion callback: %d ***\n", irq_ret);
-    }
 
     /* Binary Ninja: tisp_param_operate_init() - Final parameter initialization */
     int param_init_ret = tisp_param_operate_init();
