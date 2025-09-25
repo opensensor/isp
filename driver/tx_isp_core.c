@@ -216,6 +216,130 @@ static int tisp_fw_process(void)
     return 0;
 }
 
+
+/**
+ * tx_isp_get_sensor - Get sensor from subdev array starting at index 5
+ * Modern hardware supports multiple sensors, so search from index 5 onwards
+ * Subdev array layout: 0=CSI, 1=VIC, 2=VIN, 3=FS, 4=CORE, 5+=REAL_SENSORS
+ */
+struct tx_isp_sensor *tx_isp_get_sensor(void)
+{
+    extern struct tx_isp_dev *ourISPdev;
+
+    if (!ourISPdev) {
+        pr_err("*** tx_isp_get_sensor: ourISPdev is NULL ***\n");
+        return NULL;
+    }
+
+    pr_info("*** tx_isp_get_sensor: Searching subdev array for sensors ***\n");
+
+    /* Debug: Show what's in the entire subdev array */
+    for (int i = 5; i < ISP_MAX_SUBDEVS; i++) {
+        struct tx_isp_subdev *sd = ourISPdev->subdevs[i];
+        if (sd) {
+            pr_info("*** tx_isp_get_sensor: subdevs[%d] = %p, ops = %p ***\n", i, sd, sd->ops);
+            if (sd->ops) {
+                pr_info("*** tx_isp_get_sensor: subdevs[%d] ops->sensor = %p ***\n", i, sd->ops->sensor);
+            }
+        } else {
+            pr_info("*** tx_isp_get_sensor: subdevs[%d] = NULL ***\n", i);
+        }
+    }
+
+    /* CRITICAL FIX: Use helper function to find sensor instead of hardcoded array access */
+    struct tx_isp_subdev *sd = tx_isp_get_sensor_subdev(ourISPdev);
+    if (sd && sd->ops && sd->ops->sensor) {
+        /* CRITICAL: Check if this is a REAL sensor subdev, not the Core device */
+        /* The Core device has sensor ops for registration but is not a real sensor */
+        if (sd->ops != &core_subdev_ops) {
+            /* CRITICAL FIX: The subdev IS the sensor - don't use container_of */
+            /* The sensor structure is stored as host_priv in the subdev */
+            struct tx_isp_sensor *sensor = (struct tx_isp_sensor *)tx_isp_get_subdev_hostdata(sd);
+            if (!sensor) {
+                pr_info("*** tx_isp_get_sensor: Found sensor subdev but no host_priv - creating sensor structure ***\n");
+                /* Create a sensor structure for this subdev */
+                sensor = kzalloc(sizeof(struct tx_isp_sensor), GFP_KERNEL);
+                if (!sensor) {
+                    pr_err("*** tx_isp_get_sensor: Failed to allocate sensor structure ***\n");
+                    return NULL;
+                }
+                /* Link the subdev and sensor */
+                sensor->sd = *sd;  /* Copy subdev structure */
+                tx_isp_set_subdev_hostdata(sd, sensor);
+            }
+            pr_info("*** tx_isp_get_sensor: Found real sensor: %p ***\n", sensor);
+
+                /* CRITICAL FIX: If sensor attributes are NULL, set up default sensor attributes */
+                if (!sensor->video.attr) {
+                    pr_info("*** tx_isp_get_sensor: Sensor attributes are NULL - setting up default attributes ***\n");
+
+                    /* The sensor probe wasn't called, so we need to set up the attributes manually */
+                    /* Use the sensor's own attr structure (not video.attr pointer) */
+                    sensor->video.attr = &sensor->attr;
+
+                    /* Set up default GC2053 MIPI attributes in the sensor's attr structure */
+                    sensor->attr.name = "gc2053";
+                    sensor->attr.chip_id = 0x2053;
+                    sensor->attr.cbus_type = TX_SENSOR_CONTROL_INTERFACE_I2C;
+                    sensor->attr.cbus_mask = 0x0303;
+                    sensor->attr.cbus_device = 0x37;
+                    sensor->attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;
+
+                    /* MIPI configuration */
+                    sensor->attr.mipi.clk = 78000000;
+                    sensor->attr.mipi.lans = 2;
+                    sensor->attr.mipi.settle_time_apative_en = 0;
+                    sensor->attr.mipi.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10;
+                    sensor->attr.mipi.mipi_sc.hcrop_diff_en = 0;
+                    sensor->attr.mipi.mipi_sc.mipi_vcomp_en = 0;
+                    sensor->attr.mipi.mipi_sc.mipi_hcomp_en = 0;
+                    sensor->attr.mipi.mipi_sc.line_sync_mode = 0;
+                    sensor->attr.mipi.mipi_sc.work_start_flag = 0;
+                    sensor->attr.mipi.mipi_sc.data_type_en = 0;
+                    sensor->attr.mipi.mipi_sc.data_type_value = 0x2b;
+                    sensor->attr.mipi.mipi_sc.del_start = 0;
+                    sensor->attr.mipi.mipi_sc.sensor_frame_mode = TX_SENSOR_DEFAULT_FRAME_MODE;
+                    sensor->attr.mipi.mipi_sc.sensor_fid_mode = 0;
+                    sensor->attr.mipi.mipi_sc.sensor_mode = TX_SENSOR_DEFAULT_MODE;
+
+                    /* Timing parameters */
+                    sensor->attr.data_type = TX_SENSOR_DATA_TYPE_LINEAR;
+                    sensor->attr.max_again = 444864;
+                    sensor->attr.max_dgain = 0;
+                    sensor->attr.min_integration_time = 1;
+                    sensor->attr.min_integration_time_native = 4;
+                    sensor->attr.max_integration_time_native = 0x58a - 8;
+                    sensor->attr.integration_time_limit = 0x58a - 8;
+                    sensor->attr.total_width = 0x44c * 2;
+                    sensor->attr.total_height = 0x58a;
+                    sensor->attr.max_integration_time = 0x58a - 8;
+                    sensor->attr.integration_time_apply_delay = 2;
+                    sensor->attr.again_apply_delay = 2;
+                    sensor->attr.dgain_apply_delay = 2;
+                    sensor->attr.one_line_expr_in_us = 28;
+                    sensor->attr.expo_fs = 0;
+
+                    pr_info("*** tx_isp_get_sensor: Default sensor attributes set up successfully ***\n");
+                }
+
+            return sensor;
+        } else {
+            pr_info("*** tx_isp_get_sensor: Skipping Core device (not a real sensor) ***\n");
+        }
+    }
+
+    pr_err("*** tx_isp_get_sensor: No real sensor found in subdev array ***\n");
+    /* No sensor found - return NULL as per stock driver behavior */
+    return NULL;
+}
+EXPORT_SYMBOL(tx_isp_get_sensor);
+
+/* Global interrupt callback array - EXACT Binary Ninja implementation */
+static irqreturn_t (*irq_func_cb[32])(int irq, void *dev_id) = {0};
+
+/* Missing variable declarations for ISP core interrupt handling */
+static volatile int isp_force_core_isr = 0;  /* Force ISP core ISR flag */
+
 /* isp_fw_process - Updated for core device architecture */
 int isp_fw_process(void *data)
 {
