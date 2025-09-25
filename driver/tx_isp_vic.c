@@ -1319,8 +1319,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* Also re-assert in control bank if present */
     if (vic_dev->vic_regs_control) {
         void __iomem *vic_ctl = vic_dev->vic_regs_control;
-        writel(0x00000000, vic_ctl + 0x1f0);
-        writel(0x00000000, vic_ctl + 0x1f4);
+        writel(0xFFFFFFFF, vic_ctl + 0x1f0);
+        writel(0xFFFFFFFF, vic_ctl + 0x1f4);
         writel(0xFFFFFFFE, vic_ctl + 0x1e8);
         wmb();
     }
