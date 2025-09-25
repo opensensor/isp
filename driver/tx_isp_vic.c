@@ -1220,6 +1220,30 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     wmb();
 
     pr_info("*** VIC INTERRUPT CONFIG: WORKING BRANCH interrupt configuration complete ***\n");
+    /* Mirror WORKING BRANCH interrupt configuration to control-bank registers if present */
+    if (vic_dev->vic_regs_control) {
+        void __iomem *vic_ctl = vic_dev->vic_regs_control;
+        pr_info("*** VIC INTERRUPT CONFIG: Mirroring WORKING BRANCH registers to control bank ***\n");
+        /* Clear any pending first */
+        writel(0x00000000, vic_ctl + 0x1f0);
+        writel(0x00000000, vic_ctl + 0x1f4);
+        wmb();
+        /* Program masks and control like primary */
+        writel(0x00000001, vic_ctl + 0x04);
+        wmb();
+        writel(0x00000000, vic_ctl + 0x24);
+        wmb();
+        writel(0x07800438, vic_ctl + 0x04);
+        wmb();
+        writel(0xb5742249, vic_ctl + 0x0c);
+        wmb();
+        writel(0x000002d0, vic_ctl + 0x100);
+        wmb();
+        writel(0x0000002b, vic_ctl + 0x14);
+        wmb();
+        pr_info("*** VIC INTERRUPT CONFIG: Control bank configuration complete ***\n");
+    }
+
 
     /* CRITICAL MISSING PIECE: Enable ISP core interrupt generation at hardware level */
     pr_info("*** ISP CORE INTERRUPT CONFIG: Enabling ISP core interrupt generation (MISSING FROM CURRENT BRANCH) ***\n");
@@ -1280,6 +1304,15 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     pr_info("*** VIC INTERRUPT CONTROL VERIFY (BASIC REGISTERS): 0x0=0x%08x, 0x4=0x%08x ***\n",
             ctrl_0x0_verify, ctrl_0x4_verify);
+    /* Also re-assert in control bank if present */
+    if (vic_dev->vic_regs_control) {
+        void __iomem *vic_ctl = vic_dev->vic_regs_control;
+        writel(0x00000000, vic_ctl + 0x1f0);
+        writel(0x00000000, vic_ctl + 0x1f4);
+        writel(0xFFFFFFFE, vic_ctl + 0x1e8);
+        wmb();
+    }
+
     pr_info("*** VIC INTERRUPT CONTROL VERIFY (WORKING BRANCH REGS): 0x04=0x%08x, 0x0c=0x%08x, 0x100=0x%08x, 0x14=0x%08x ***\n",
             ctrl_0x04_verify, ctrl_0x0c_verify, ctrl_0x100_verify, ctrl_0x14_verify);
 
@@ -1521,21 +1554,21 @@ int isp_vic_frd_show(struct seq_file *seq, void *v)
         pr_err("isp_vic_frd_show: Invalid VIC device pointer: %p\n", vic_dev);
         return 0;
     }
-    
+
     /* Binary Ninja: *($v0_1 + 0x164) = 0 */
     vic_dev->total_errors = 0;
-    
+
     /* Binary Ninja: Sum up error counts from vic_err array */
     for (i = 0; i < 13; i++) {  /* 0x34 / 4 = 13 elements */
         total_errors += vic_dev->vic_errors[i];
     }
-    
+
     frame_count = vic_dev->frame_count;
     vic_dev->total_errors = total_errors;
-    
+
     /* Binary Ninja: private_seq_printf(arg1, " %d, %d\n", $a2) */
     seq_printf(seq, " %d, %d\n", frame_count, total_errors);
-    
+
     /* Binary Ninja: Print all error counts */
     return seq_printf(seq, "%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d\n",
                      vic_dev->vic_errors[0], vic_dev->vic_errors[1], vic_dev->vic_errors[2],
@@ -2166,25 +2199,25 @@ cleanup:
 int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
 {
     struct tx_isp_vic_device *vic_dev;
-    
+
     if (!sd)
         return -EINVAL;
-    
+
     vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     if (!vic_dev) {
         pr_err("VIC device is NULL\n");
         return -EINVAL;
     }
-    
+
     /* CRITICAL FIX: Use spinlock instead of mutex to prevent "sleeping in atomic context" */
     /* mutex_lock() can sleep, but this function can be called from atomic context */
     unsigned long flags;
     spin_lock_irqsave(&vic_dev->lock, flags);
-    
+
     if (vic_dev->state == 1) {
         vic_dev->state = 2; /* INIT -> READY */
         pr_info("VIC activated: state %d -> 2 (READY)\n", 1);
-        
+
         /* *** CRITICAL: Ensure free buffers are available during activation *** */
         if (list_empty(&vic_dev->free_head)) {
             pr_info("*** VIC ACTIVATION: Replenishing free buffer pool ***\n");
@@ -2211,7 +2244,7 @@ int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
             pr_info("*** VIC ACTIVATION: %d free buffers available ***\n", free_count);
         }
     }
-    
+
     /* CRITICAL FIX: Use spinlock instead of mutex to prevent "sleeping in atomic context" */
     spin_unlock_irqrestore(&vic_dev->lock, flags);
     return 0;
@@ -2323,26 +2356,26 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     vic_dev->height = height;
 
     pr_info("vic_pipo_mdma_enable: Using cached sensor dimensions %dx%d (ATOMIC CONTEXT SAFE)\n", width, height);
-    
+
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x308) = 1 */
     writel(1, vic_base + 0x308);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x308 = 1 (MDMA enable)\n");
-    
+
     /* Binary Ninja EXACT: int32_t $v1_1 = $v1 << 1 (stride = width * 2) */
     stride = width << 1;
-    
+
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x304) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
     writel((width << 16) | height, vic_base + 0x304);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x304 = 0x%x (dimensions %dx%d)\n",
             (width << 16) | height, width, height);
-    
+
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x310) = $v1_1 */
     writel(stride, vic_base + 0x310);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x310 = %d (stride)\n", stride);
-    
+
     /* Binary Ninja EXACT: *(result + 0x314) = $v1_1 */
     writel(stride, vic_base + 0x314);
     wmb();
@@ -3134,7 +3167,7 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
             return 0;  /* Binary Ninja returns 0 even on error */
         }
     }
-    
+
     /* Binary Ninja EXACT: *($s0 + 0x20c) = 1 */
     vic_dev->processing = 1;
     pr_info("tx_isp_subdev_pipo: set processing = 1 (Binary Ninja offset 0x20c)\n");
@@ -3171,13 +3204,13 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
             raw_pipe[4] = (void *)sd;                             /* offset 0x10 */
             pr_info("*** CRITICAL: Set ispvic_frame_channel_s_stream at raw_pipe[3] (offset 0xc) ***\n");
         }
-        
+
         /* SAFE: Set function pointers using proper array indexing */  // TODO
         //raw_pipe[0] = (void *)ispvic_frame_channel_qbuf;
         //raw_pipe[2] = (void *)ispvic_frame_channel_clearbuf;  /* offset 8 / 4 = index 2 */
         //raw_pipe[3] = (void *)ispvic_frame_channel_s_stream;  /* offset 0xc / 4 = index 3 */
         //raw_pipe[4] = (void *)sd;                             /* offset 0x10 / 4 = index 4 */
-        
+
         /* SAFE: Initialize buffer structures using proper struct members */
         for (i = 0; i < 5; i++) {
             struct vic_buffer_entry *buffer_entry;  /* C90 compliance: declare at top */
@@ -3208,9 +3241,9 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
                 pr_info("tx_isp_subdev_pipo: cleared VIC register at offset 0x%x for buffer %d\n", reg_offset, i);
             }
         }
-        
+
         pr_info("tx_isp_subdev_pipo: initialized %d buffer structures (safe implementation)\n", i);
-        
+
         /* SAFE: Use proper struct member access instead of offset 0x214 */
         vic_dev->processing = 1;
         pr_info("tx_isp_subdev_pipo: set processing = 1 (pipe enabled, safe struct access)\n");
