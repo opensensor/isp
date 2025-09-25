@@ -39,7 +39,6 @@
 #include <asm/page.h>
 #include "../include/tx_isp.h"
 #include "../include/tx_isp_core.h"
-#include "../include/tx_isp_core_device.h"
 #include "../include/tx-isp-debug.h"
 #include "../include/tx_isp_sysfs.h"
 #include "../include/tx_isp_vic.h"
