@@ -2695,16 +2695,19 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Clear pending (if mapped similarly, W1C) */
                 writel(0xFFFFFFFF, vc + 0x1f0);
                 writel(0xFFFFFFFF, vc + 0x1f4);
-                /* Try routing/control asserts at CONTROL bank too (offsets mirror?) */
+                /* Route/control asserts at CONTROL bank (matches reference) */
                 writel(0x000002d0, vc + 0x100);
                 writel(0x00000630, vc + 0x14);
-                /* Try unmask if present; tolerate if unmapped */
-                writel(0xFFFFFFFE, vc + 0x1e8);
+                /* Enable sources on both banks and UNMASK-ALL on both masks */
+                writel(0xFFFFFFFF, vc + 0x1e0);
+                writel(0xFFFFFFFF, vc + 0x1e4);
+                writel(0x00000000, vc + 0x1e8);
+                writel(0x00000000, vc + 0x1ec);
                 /* Global interrupt enable at 0x30c (if present) */
                 writel(0xFFFFFFFF, vc + 0x30c);
                 wmb();
-                pr_info("*** VIC VERIFY (CONTROL): [0x0]=0x%08x [0x4]=0x%08x [0x100]=0x%08x [0x14]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e8]=0x%08x ***\n",
-                        readl(vc + 0x0), readl(vc + 0x4), readl(vc + 0x100), readl(vc + 0x14), readl(vc + 0x300), readl(vc + 0x30c), readl(vc + 0x1e8));
+                pr_info("*** VIC VERIFY (CONTROL): [0x0]=0x%08x [0x4]=0x%08x [0x100]=0x%08x [0x14]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x ***\n",
+                        readl(vc + 0x0), readl(vc + 0x4), readl(vc + 0x100), readl(vc + 0x14), readl(vc + 0x300), readl(vc + 0x30c), readl(vc + 0x1e0), readl(vc + 0x1e4), readl(vc + 0x1e8), readl(vc + 0x1ec));
             }
 
                 /* Read-back verification of buffer/control registers in BOTH banks */
