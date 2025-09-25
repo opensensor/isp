@@ -2229,39 +2229,27 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         return;
     }
 
-    /* Prefer sensor timing totals for VIC MDMA dimensions (matches reference driver) */
-    if (vic_dev->sensor_attr.total_width && vic_dev->sensor_attr.total_height) {
-        width  = vic_dev->sensor_attr.total_width;
-        height = vic_dev->sensor_attr.total_height;
-        pr_info("*** Using sensor_attr TOTAL timing %dx%d for VIC MDMA dims ***\n", width, height);
-    } else if (ourISPdev && ourISPdev->sensor_width && ourISPdev->sensor_height) {
-        /* Fallback: use active output if totals not populated yet */
+    /* Prefer ACTIVE output dimensions for VIC MDMA (matches NV12 buffer sizes) */
+    if (ourISPdev && ourISPdev->sensor_width && ourISPdev->sensor_height) {
         width  = ourISPdev->sensor_width;
         height = ourISPdev->sensor_height;
-        pr_info("*** Fallback to ISP core ACTIVE output %dx%d for VIC MDMA dims ***\n", width, height);
-    } else {
-        /* Last resort: vic_dev cached dims */
+        pr_info("*** Using ISP core ACTIVE output %dx%d for VIC MDMA dims ***\n", width, height);
+    } else if (vic_dev->width && vic_dev->height) {
         width  = vic_dev->width;
         height = vic_dev->height;
-        pr_info("*** Fallback to vic_dev cached dims %dx%d for VIC MDMA dims ***\n", width, height);
-    }
-
-    if (!width || !height) {
-        /* Default to a sane active resolution if nothing is set yet */
+        pr_info("*** Fallback to vic_dev cached ACTIVE dims %dx%d for VIC MDMA dims ***\n", width, height);
+    } else if (vic_dev->sensor_attr.total_width && vic_dev->sensor_attr.total_height) {
+        /* Last resort: totals, but NV12 buffers may be too small if used here */
+        width  = vic_dev->sensor_attr.total_width;
+        height = vic_dev->sensor_attr.total_height;
+        pr_warn("*** WARNING: Using sensor_attr TOTAL timing %dx%d for VIC MDMA dims ***\n", width, height);
+    } else {
         width = 1920;
         height = 1080;
         pr_info("*** DIMENSION FIX: defaulting VIC MDMA dims to %dx%d ***\n", width, height);
-    } else {
-        /* If totals look smaller than active (unlikely), avoid under-programming */
-        if ((vic_dev->width && width < vic_dev->width) || (vic_dev->height && height < vic_dev->height)) {
-            pr_warn("*** WARNING: MDMA dims %dx%d smaller than active %dx%d; using active instead ***\n",
-                    width, height, vic_dev->width, vic_dev->height);
-            width  = vic_dev->width;
-            height = vic_dev->height;
-        }
     }
 
-    pr_info("vic_pipo_mdma_enable: FINAL MDMA dims=%dx%d (modern logs expect totals, e.g., 2200x1418)\n", width, height);
+    pr_info("vic_pipo_mdma_enable: FINAL MDMA dims=%dx%d (expected NV12 active size)\n", width, height);
 
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x308) = 1 */
     writel(1, vic_base + 0x308);

@@ -1103,13 +1103,8 @@ int tisp_init(void *sensor_info, char *param_name)
     /* Binary Ninja: Call tisp_set_csc_version(0) */
     tisp_set_csc_version(0);
 
-    /* Binary Ninja: Configure top control bypass register */
-    uint32_t bypass_val = 0x8077efff; /* Default bypass configuration */
-
-    /* Binary Ninja: Select bypass configuration based on chip variant */
-    bypass_val &= 0xa1ffdf76;  /* Standard configuration mask */
-    bypass_val |= 0x880002;    /* Standard control bits */
-
+    /* Configure top control bypass register EXACTLY like modern/reference logs */
+    uint32_t bypass_val = 0x80ffcf76; /* Matches modern trace */
     system_reg_write(0xc, bypass_val);
     pr_info("tisp_init: Set ISP top bypass to 0x%x\n", bypass_val);
 
