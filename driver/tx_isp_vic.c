@@ -1347,6 +1347,25 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* CRITICAL FIX: VIC interrupt configuration must happen AFTER VIC unlock sequence */
     /* The magic value 0x3130322a in register 0x0 indicates CSI PHY coordination - this is CORRECT */
 
+    /* CRITICAL FIX: Configure VIC interrupt registers 0x1e0-0x1f4 - THIS WAS MISSING! */
+    pr_info("*** VIC INTERRUPT CONFIG: Configuring VIC interrupt registers (0x1e0-0x1f4) - FROM WORKING VERSION ***\n");
+
+    /* Clear any pending VIC interrupt status first */
+    writel(0x00000000, vic_regs + 0x1f0);  /* Clear VIC interrupt status register 1 */
+    writel(0x00000000, vic_regs + 0x1f4);  /* Clear VIC interrupt status register 2 */
+    wmb();
+
+    /* Enable VIC interrupts using the ACTUAL VIC interrupt enable registers */
+    writel(0x00000001, vic_regs + 0x1e0);  /* Enable VIC frame done interrupt (bit 0) */
+    writel(0x00000003, vic_regs + 0x1e4);  /* Enable VIC MDMA interrupts (bits 0,1) */
+    wmb();
+
+    /* Configure VIC interrupt masks - enable the interrupts we want */
+    writel(0xFFFFFFFE, vic_regs + 0x1e8);  /* VIC interrupt mask register 1 (enable frame done) */
+    writel(0xFFFFFFFC, vic_regs + 0x1ec);  /* VIC interrupt mask register 2 (enable MDMA) */
+    wmb();
+
+    pr_info("*** VIC INTERRUPT CONFIG: VIC interrupt registers configured - VIC should now generate IRQ 38! ***\n");
 
     /* Binary Ninja: 00010b84 - Set vic_start_ok */
     vic_start_ok = 1;
