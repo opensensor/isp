@@ -4733,6 +4733,32 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
     pr_info("*** ENABLING HARDWARE INTERRUPT GENERATION ***\n");
 
             pr_info("*** WRITING VIC INTERRUPT ENABLE REGISTERS ***\n");
+    /* Program early VIC enables like the had-continuous-interrupts branch; masks untouched */
+    if (isp_dev->vic_dev) {
+        struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+        if (vic->vic_regs) {
+            void __iomem *vr = vic->vic_regs;
+            void __iomem *vc = vic->vic_regs_control;
+            writel(0x3FFFFFFF, vr + 0x1e0); /* Enable VIC sources early */
+            writel(0x0000000F, vr + 0x1e4); /* Enable MDMA subset early */
+            if (vc) {
+                writel(0x3FFFFFFF, vc + 0x1e0);
+                writel(0x0000000F, vc + 0x1e4);
+            }
+            wmb();
+            pr_info("*** EARLY VIC ENABLES (MODULE INIT): PRIMARY [1e0]=0x%08x [1e4]=0x%08x ***\n",
+                    readl(vr + 0x1e0), readl(vr + 0x1e4));
+            if (vc) {
+                pr_info("*** EARLY VIC ENABLES (MODULE INIT): CONTROL [1e0]=0x%08x [1e4]=0x%08x ***\n",
+                        readl(vc + 0x1e0), readl(vc + 0x1e4));
+            }
+        } else {
+            pr_warn("*** EARLY VIC ENABLES (MODULE INIT): vic_regs not mapped yet ***\n");
+        }
+    } else {
+        pr_warn("*** EARLY VIC ENABLES (MODULE INIT): VIC device not linked yet ***\n");
+    }
+
 
             /* CRITICAL FIX: Enable ISP core interrupts too! Use core_regs if available */
             pr_info("*** ENABLING ISP CORE INTERRUPT REGISTERS FOR MIPI DATA ***\n");
