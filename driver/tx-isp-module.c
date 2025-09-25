@@ -4851,22 +4851,7 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                 
                 /* CRITICAL: Clock configuration section */
                 pr_info("*** CLOCK CONFIGURATION SECTION ***\n");
-                
-                /* For our implementation, we'll use the ISP device's clock array */
-                if (isp_dev->isp_clk) {
-                    /* Binary Ninja: if (private_clk_get_rate(*$s2_1) != 0xffff) */
-                    unsigned long current_rate = clk_get_rate(isp_dev->isp_clk);
-                    if (current_rate != 0xffff) {
-                        /* Binary Ninja: private_clk_set_rate(*$s2_1, isp_clk) */
-                        /* Set ISP clock to appropriate rate */
-                        clk_set_rate(isp_dev->isp_clk, 100000000); /* 100MHz ISP clock */
-                        pr_info("ISP clock set to 100MHz\n");
-                    }
-                    
-                    /* Binary Ninja: private_clk_enable(*$s2_1) */
-                    clk_prepare_enable(isp_dev->isp_clk);
-                    pr_info("ISP clock enabled\n");
-                }
+                // TODO
                 
                 /* CRITICAL: Subdevice validation loop */
                 pr_info("*** SUBDEVICE VALIDATION SECTION ***\n");
