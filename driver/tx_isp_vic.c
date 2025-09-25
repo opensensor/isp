@@ -29,6 +29,7 @@ uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 static u32 cached_sensor_width = 1920;   /* Default fallback */
 static u32 cached_sensor_height = 1080;  /* Default fallback */
 static int sensor_dimensions_cached = 0; /* Flag to indicate if dimensions were read */
+struct tx_isp_sensor *tx_isp_get_sensor(void);
 
 /* Helper function to read sensor dimensions from /proc/jz/sensor/ files */
 static int read_sensor_dimensions(u32 *width, u32 *height)
