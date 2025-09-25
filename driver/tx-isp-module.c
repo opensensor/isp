@@ -1687,20 +1687,30 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         printk(KERN_ALERT "*** VIC IRQ: About to read VIC registers at %p ***\n", vic_regs);
 
         /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
-        printk(KERN_ALERT "*** VIC IRQ: About to read reg 0x1e8 ***\n");
-        u32 reg_1e8 = readl(vic_regs + 0x1e8);
-        printk(KERN_ALERT "*** VIC IRQ: Read reg 0x1e8 = 0x%x ***\n", reg_1e8);
+        /* If PRIMARY enable/mask read as 0, fall back to CONTROL bank per reference behavior */
+        u32 reg_1e8, reg_1e0, reg_1ec, reg_1e4;
+        void __iomem *base_for_irq = vic_regs;
 
-        printk(KERN_ALERT "*** VIC IRQ: About to read reg 0x1e0 ***\n");
-        u32 reg_1e0 = readl(vic_regs + 0x1e0);
-        printk(KERN_ALERT "*** VIC IRQ: Read reg 0x1e0 = 0x%x ***\n", reg_1e0);
+        reg_1e8 = readl(base_for_irq + 0x1e8);
+        reg_1e0 = readl(base_for_irq + 0x1e0);
+        reg_1e4 = readl(base_for_irq + 0x1e4);
+        reg_1ec = readl(base_for_irq + 0x1ec);
+
+        if (reg_1e0 == 0 && reg_1e4 == 0 && vic_dev && vic_dev->vic_regs_control) {
+            base_for_irq = vic_dev->vic_regs_control;
+            reg_1e8 = readl(base_for_irq + 0x1e8);
+            reg_1e0 = readl(base_for_irq + 0x1e0);
+            reg_1e4 = readl(base_for_irq + 0x1e4);
+            reg_1ec = readl(base_for_irq + 0x1ec);
+            printk(KERN_ALERT "*** VIC IRQ: PRIMARY [1e0/1e4] zero; using CONTROL bank for mask/enable ***\n");
+        }
+
+        printk(KERN_ALERT "*** VIC IRQ: Using base %p [1e0]=0x%x [1e4]=0x%x [1e8]=0x%x [1ec]=0x%x ***\n",
+               base_for_irq, reg_1e0, reg_1e4, reg_1e8, reg_1ec);
 
         v1_7 = (~reg_1e8) & reg_1e0;
-        printk(KERN_ALERT "*** VIC IRQ: Calculated v1_7 = 0x%x ***\n", v1_7);
-
-        /* Binary Ninja: int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
-        v1_10 = (~readl(vic_regs + 0x1ec)) & readl(vic_regs + 0x1e4);
-        printk(KERN_ALERT "*** VIC IRQ: Read v1_10 = 0x%x ***\n", v1_10);
+        v1_10 = (~reg_1ec) & reg_1e4;
+        printk(KERN_ALERT "*** VIC IRQ: Calculated v1_7 = 0x%x v1_10 = 0x%x ***\n", v1_7, v1_10);
 
         /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7 */
         printk(KERN_ALERT "*** VIC IRQ: About to write v1_7=0x%x to reg 0x1f0 ***\n", v1_7);
