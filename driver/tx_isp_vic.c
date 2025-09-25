@@ -2096,17 +2096,21 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         return;
     }
 
-    /* CRITICAL FIX: Get dimensions from sensor attributes directly to prevent stale values */
-    /* The issue is vic_dev->width/height might be stale - get fresh values from sensor */
-    if (vic_dev->sensor_attr.total_width != 0 && vic_dev->sensor_attr.total_height != 0) {
+    /* Prefer ACTUAL output dimensions from core (not sensor total timing) */
+    if (ourISPdev && ourISPdev->sensor_width && ourISPdev->sensor_height) {
+        width = ourISPdev->sensor_width;
+        height = ourISPdev->sensor_height;
+        pr_info("*** Using ISP core output dimensions %dx%d ***\n", width, height);
+    } else if (vic_dev->sensor_attr.total_width != 0 && vic_dev->sensor_attr.total_height != 0) {
+        /* Fallback: use sensor_attr totals only if core output not available */
         width = vic_dev->sensor_attr.total_width;
         height = vic_dev->sensor_attr.total_height;
-        pr_info("*** CRITICAL FIX: Using FRESH sensor dimensions %dx%d from sensor_attr ***\n", width, height);
+        pr_info("*** Fallback to sensor_attr totals %dx%d ***\n", width, height);
     } else {
-        /* Fallback to vic_dev dimensions if sensor_attr is not available */
+        /* Last resort: vic_dev cached dims */
         width = vic_dev->width;
         height = vic_dev->height;
-        pr_info("*** FALLBACK: Using vic_dev dimensions %dx%d ***\n", width, height);
+        pr_info("*** Fallback to vic_dev cached dims %dx%d ***\n", width, height);
     }
 
     /* CRITICAL: Ensure we have valid dimensions - USE ACTUAL SENSOR OUTPUT DIMENSIONS */
@@ -2419,7 +2423,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** MINIMAL VIC CONFIG: Applying only essential registers to prevent control limit errors ***\n");
 
                 /* Step 1: Essential VIC mode and dimensions only */
-                writel(3, vic_regs + 0xc);                                    /* MIPI mode = 3 */
+                writel(2, vic_regs + 0xc);                                    /* MIPI mode = 2 (correct) */
+                pr_info("vic_core_s_stream: Set MIPI mode = 2 at 0x0c\n");
                 writel((sensor_width << 16) | sensor_height, vic_regs + 0x4); /* Dimensions */
                 wmb();
 
@@ -2587,7 +2592,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 if (vic_start_ok == 1) {
                     pr_info("*** STEP 7: SKIPPING interrupt-disrupting registers 0xc, 0x10, 0x14 - VIC interrupts already working ***\n");
                 } else {
-                    writel(0x1, vic_regs + 0xc);
+                    writel(0x2, vic_regs + 0xc);
+                    pr_info("vic_core_s_stream: Final CSI control set MIPI mode = 2 at 0x0c\n");
                     writel(0x1, vic_regs + 0x10);
                     writel(0x630, vic_regs + 0x14);
                     wmb();
