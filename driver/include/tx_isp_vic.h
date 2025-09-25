@@ -12,36 +12,24 @@ struct tx_isp_subdev;
 struct tx_isp_config;
 struct tx_isp_sensor_attribute;
 
-/* VIC Constants */
-#define VIC_MAX_CHAN        2
+/* VIC Constants - REMOVED: Use VIC_MAX_CHAN=6 from tx-isp-device.h to match Binary Ninja reference */
 
-/* VIC Register Definitions */
-#define VIC_CTRL            0x00
-#define VIC_STATUS          0x04
-#define VIC_BUFFER_ADDR     0x08
-#define VIC_FRAME_SIZE      0x0C
-#define VIC_INT_STATUS      0x10
-#define VIC_INT_MASK        0x14
+/* REMOVED: VIC Register Definitions - Use definitions from tx-isp-device.h instead */
+/* The Binary Ninja reference shows VIC registers use larger offsets like 0x300, 0x380, etc. */
+/* Small offsets like 0x00, 0x04 don't match the actual hardware usage */
 
-/* VIC Control Register Bits */
-#define VIC_CTRL_EN         BIT(0)
-#define VIC_CTRL_START      BIT(1)
-#define VIC_CTRL_STOP       BIT(2)
-#define VIC_CTRL_RST        BIT(3)
+/* REMOVED: VIC Control Register Bits - Use definitions from tx-isp-device.h instead */
+/* The bit definitions in tx-isp-device.h match the Binary Ninja reference driver */
 
-/* VIC Status Register Bits */
-#define STATUS_BUSY         BIT(0)
-#define STATUS_IDLE         BIT(1)
-
-/* VIC Interrupt Bits */
-#define INT_FRAME_DONE      BIT(0)
-#define INT_ERROR           BIT(1)
+/* REMOVED: VIC Status and Interrupt Bits - Use definitions from tx-isp-device.h instead */
+/* The bit definitions in tx-isp-device.h match the Binary Ninja reference driver */
 
 extern uint32_t vic_start_ok;  /* Global VIC interrupt enable flag declaration */
 
 /* VIC Functions */
 int tx_isp_vic_probe(struct platform_device *pdev);
 int tx_isp_vic_remove(struct platform_device *pdev);
+int tx_isp_vic_register_interrupt(struct tx_isp_vic_device *vic_dev, struct platform_device *pdev);
 
 /* VIC interrupt enable/disable functions (matching reference driver names) */
 void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev);
@@ -64,7 +52,6 @@ long vic_chardev_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 /* VIC Proc Operations - from spec driver */
 int isp_vic_frd_show(struct seq_file *seq, void *v);
 int dump_isp_vic_frd_open(struct inode *inode, struct file *file);
-int vic_event_handler(void *subdev, int event_type, void *data);
 
 // Forward declarations for initialization functions
 void isp_core_tuning_deinit(void *core_dev);
@@ -91,21 +78,28 @@ struct tx_isp_vic_device {
     /* CRITICAL: Base subdev structure MUST be first for container_of() to work */
     struct tx_isp_subdev sd;                    /* 0x00: Base subdev structure */
 
-    
     /* CRITICAL: VIC register bases - dual VIC architecture */
     void __iomem *vic_regs;                     /* 0xb8: Primary VIC register base (0x133e0000) */
-    void __iomem *vic_regs_secondary;           /* 0xbc: Secondary VIC register base (0x10023000) */
+    void __iomem *vic_regs_control;             /* Secondary VIC register base (0x10023000) */
 
     /* CRITICAL: Frame dimensions at expected offsets */
     uint32_t width;                             /* 0xdc: Frame width (Binary Ninja expects this) */
     uint32_t height;                            /* 0xe0: Frame height (Binary Ninja expects this) */
+
+    /* Binary Ninja compatibility members */
+    void *self_ptr;                             /* Self-pointer for validation */
+    uint32_t format_magic;                      /* NV12 format magic number (0x3231564e) */
+
+    /* Event callback structure - separate from subdev fields to prevent conflicts */
+    struct vic_event_callback *event_callback;  /* VIC event callback structure */
     
     /* Device properties (properly aligned) */
     u32 stride;                                 /* Line stride */
     uint32_t pixel_format;                      /* Pixel format */
     
-    /* CRITICAL: Sensor attributes with proper alignment */
-    struct tx_isp_sensor_attribute sensor_attr __attribute__((aligned(4))); /* Sensor attributes */
+    /* REMOVED: sensor_attr member - modern hardware supports multiple sensors
+     * VIC should get sensor attributes from subdev array starting at index 4
+     * via tx_isp_get_sensor() which now properly searches the subdev array */
     
     /* CRITICAL: Synchronization primitives with proper alignment */
     spinlock_t lock __attribute__((aligned(4)));                    /* General spinlock */
@@ -129,11 +123,23 @@ struct tx_isp_vic_device {
     
     /* Additional buffer management */
     uint32_t buffer_count;                      /* General buffer count */
-    
+
+    /* Buffer addresses for vic_mdma_enable and isp_vic_cmd_set */
+    int buffer_address_count;                   /* Number of buffer addresses */
+
+    /* BINARY NINJA COMPATIBILITY: Additional members referenced in interrupt handler */
+    void *frame_channels;                       /* 0x150: Frame channel array pointer */
+    uint32_t frame_info;                        /* Frame information for channel processing */
+    void *callback_handler;                     /* 0x1bc: Callback handler pointer */
+    uint32_t day_night_state;                   /* 0x178: Day/night switching state */
+    uint32_t first_frame_flag;                  /* First frame processing flag */
+    uint32_t mbus_config;                       /* MBUS configuration */
+    uint32_t bayer_config;                      /* 0xf4: Bayer configuration */
+
     /* Error tracking (properly aligned) */
     uint32_t vic_errors[13] __attribute__((aligned(4)));            /* Error array (13 elements) */
     uint32_t total_errors __attribute__((aligned(4)));              /* Total error count */
-    uint32_t frame_count __attribute__((aligned(4)));               /* Frame counter */
+    uint32_t frame_count __attribute__((aligned(4)));               /* 0x160: Frame counter */
     
     /* Buffer management structures (properly aligned) */
     spinlock_t buffer_lock __attribute__((aligned(4)));             /* Buffer lock */
@@ -158,6 +164,16 @@ struct tx_isp_vic_device {
 } __attribute__((aligned(4), packed));
 
 /* VIC function declarations */
-int tx_isp_vic_configure_dma(struct tx_isp_vic_device *vic_dev, dma_addr_t addr, u32 width, u32 height);
+/* REMOVED: tx_isp_vic_configure_dma - function doesn't exist in reference driver */
+/* Use vic_pipo_mdma_enable instead, which is called during streaming */
+int vic_mdma_enable(struct tx_isp_vic_device *vic_dev, int channel, int dual_channel,
+                    int buffer_count, dma_addr_t base_addr, int format_type);
+
+/* VIC core operations IOCTL handler */
+int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+
+/* Sensor dimension caching functions */
+void cache_sensor_dimensions_from_proc(void);
+void get_cached_sensor_dimensions(u32 *width, u32 *height);
 
 #endif /* __TX_ISP_VIC_H__ */

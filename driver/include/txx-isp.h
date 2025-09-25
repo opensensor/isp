@@ -27,11 +27,6 @@
 #define TX_ISP_TYPE_SUBDEV		0x01
 #define TX_ISP_TYPE_WIDGET		0x02
 
-#define TX_ISP_HEADER_ID(n)		(TX_ISP_TYPE_HEADER << 4 | n)
-#define TX_ISP_SUBDEV_ID(n)		(TX_ISP_TYPE_SUBDEV << 4 | n)
-#define TX_ISP_WIDGET_ID(n)		(TX_ISP_TYPE_WIDGET << 4 | n)
-#define TX_ISP_GET_ID(n)		((n) & 0xf)
-
 /* Video Device Descriptor Subtypes */
 #define TX_ISP_SUBTYPE_UNDEFINE		(0x00)
 #define TX_ISP_SUBTYPE_INPUT_TERMINAL	(0x01)

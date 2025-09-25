@@ -15,12 +15,6 @@
 #include "tx-libimp.h"
 
 
-enum tx_isp_subdev_id {
-	TX_ISP_CORE_SUBDEV_ID,
-	TX_ISP_MAX_SUBDEV_ID,
-};
-
-
 #define ISP_MAX_CHAN 6
 #define VIC_MAX_CHAN 6
 #define WDR_SHADOW_SIZE (64 * 1024)
@@ -75,13 +69,7 @@ enum tx_isp_subdev_id {
 #define CSI_DATA_TYPE      0x0010
 #define CSI_LANE_CTRL      0x0014
 
-/* VIN registers */
-#define VIN_CTRL           0x0000
-#define VIN_STATUS         0x0004
-#define VIN_INT_MASK       0x0008
-#define VIN_INT_STATUS     0x000C
-#define VIN_FRAME_SIZE     0x0010
-#define VIN_FORMAT        0x0014
+/* VIN registers - see tx_isp_vin.h for detailed definitions */
 
 /* Control register bit definitions */
 /* ISP_CTRL bits */
@@ -115,16 +103,9 @@ enum tx_isp_subdev_id {
 #define INT_ERROR          BIT(2)
 #define INT_OVERFLOW       BIT(3)
 
-/* Format definitions */
-#define FMT_RAW8          0x00
-#define FMT_RAW10         0x01
-#define FMT_RAW12         0x02
-#define FMT_YUV422        0x03
-#define FMT_RGB888        0x04
+/* Format definitions - see tx_isp_vin.h for VIN-specific format constants */
 
-/* Status register bit definitions */
-#define STATUS_IDLE        BIT(0)
-#define STATUS_BUSY        BIT(1)
+/* Status register bit definitions - see tx_isp_vin.h for VIN-specific status bits */
 #define STATUS_ERROR       BIT(2)
 
 struct isp_device_status {
@@ -160,7 +141,7 @@ struct ae_statistics {
 
 
 /* Declare functions but don't define them */
-u32 isp_read32(u32 reg);
+/* isp_read32 removed - use system_reg_read from reference driver instead */
 void isp_write32(u32 reg, u32 val);
 u32 vic_read32(u32 reg);
 void vic_write32(u32 reg, u32 val);
@@ -297,6 +278,13 @@ struct tx_isp_irq_device {
 	void (*disable_irq)(struct tx_isp_irq_device *irq_dev);
 };
 
+/* IRQ info structure for Binary Ninja compatibility */
+struct tx_isp_irq_info {
+	int irq;
+	void *handler;
+	void *data;
+};
+
 enum tx_isp_module_state {
 	TX_ISP_MODULE_UNDEFINE = 0,
 	TX_ISP_MODULE_SLAKE,
@@ -335,22 +323,31 @@ struct tx_isp_subdev {
 	struct tx_isp_irq_device irqdev;
 	struct tx_isp_chip_ident chip;
 
+	/* CRITICAL: Fixed padding to match Binary Ninja offsets */
+	char padding_to_0xc0[0x40];
+
 	/* Basic device info */
-	struct device *dev;
-	struct platform_device *pdev;
-	struct resource *res;
-	struct tx_isp_subdev_ops *ops;
-	void *dev_priv;
-	void *host_priv;
+	struct device *dev;                 /* 0xc0: Device pointer */
+	struct platform_device *pdev;      /* 0xc4: Platform device */
+	struct resource *res;               /* 0xc8: Resource */
+	struct tx_isp_subdev_ops *ops;      /* 0xcc: Operations */
+	void *dev_priv;                     /* 0xd0: Private data */
+	void *host_priv;                    /* 0xd4: Host private data */
 
 	/* Memory mappings */
 	void __iomem *base;         /* Common register base */
+	void __iomem *regs;         /* Binary Ninja: *(arg2 + 0xb8) register mapping */
+	struct resource *mem_res;   /* Binary Ninja: *(arg2 + 0xb4) memory resource */
+	struct tx_isp_irq_info irq_info;  /* Binary Ninja: arg2 + 0x80 IRQ information */
+	int clk_num;                /* Binary Ninja: *(arg2 + 0xc0) clock count */
 	void __iomem *isp;          /* ISP register base */
 	void __iomem *csi_base;     /* CSI register base */
 
 	/* Clocks */
 	struct clk **clks;
-	unsigned int clk_num;
+
+	/* Event callback structure for Binary Ninja compatibility */
+	void *event_callback_struct;   /* Callback structure at offset 0xc equivalent */
 
 	/* Synchronization */
 	spinlock_t lock;
@@ -375,14 +372,36 @@ struct tx_isp_subdev {
 	struct tx_isp_sensor *active_sensor;  /* Replaces sensor field */
 	int vin_state;                        /* Replaces state field */
 
-     /* Sensor list management */
-    struct list_head sensor_list;       /* Head of the sensor list */
-    struct list_head sensor_list_next;  /* Next entry in sensor list */
-
     struct tx_isp_frame_channel *frame_chans;
     int num_channels;
 };
 
+
+/* Channel configuration structure - SAFE replacement for raw offset access */
+struct tx_isp_channel_config {
+    void *reserved[7];                       /* +0x00-0x18: Reserved space (28 bytes) */
+    int (*event_handler)(void*);             /* +0x1c: Event handler function - SAFE ACCESS */
+    uint32_t padding[2];                     /* +0x20-0x24: Padding to 0x24 size */
+} __attribute__((packed, aligned(4)));
+
+/* Netlink socket structure - SAFE replacement for raw offset access at 0x130 */
+struct tx_isp_netlink_socket {
+    char reserved[0x130];                    /* +0x00-0x12F: Reserved space */
+    struct socket *socket_ptr;               /* +0x130: Socket pointer - SAFE ACCESS */
+    uint32_t padding[4];                     /* Additional padding */
+} __attribute__((packed, aligned(4)));
+
+/* Global frame source device structure - 0xe8 bytes as per Binary Ninja */
+struct tx_isp_fs_device {
+	struct tx_isp_subdev subdev;            /* Base subdev structure */
+	void __iomem *base_regs;                /* Base register mapping +0xb8 */
+
+	struct tx_isp_channel_config *channel_configs;  /* SAFE: Proper typed channel config array */
+	void *channel_buffer;                    /* kmalloc'ed channel buffer */
+	uint32_t channel_count;                  /* number of channels */
+	uint32_t initialized;                    /* initialization flag */
+	void *self_ptr;                          /* Self-pointer for validation */
+} __attribute__((packed));
 
 
 /* Device structures */
@@ -558,8 +577,9 @@ struct tx_isp_channel_state {
     int buffer_count;
     uint32_t sequence;           /* Frame sequence counter */
 
-    /* CRITICAL FIX: Store buffer structures like reference driver */
-    uint32_t *buffer_addresses;  /* Array of buffer structure pointers */
+    /* Binary Ninja state fields - EXACT offsets from decompiled code */
+    int state;                   /* Offset 0x2d0 - *($s0 + 0x2d0) - channel state (3=ready, 4=streaming) */
+    uint32_t flags;              /* Offset 0x230 - *($s0 + 0x230) - streaming flags (bit 0 = streaming) */
 
     /* VBM buffer management for VBMFillPool compatibility */
     uint32_t *vbm_buffer_addresses;       /* Array of VBM buffer addresses */
@@ -582,12 +602,13 @@ struct tx_isp_channel_state {
 };
 
 // Frame channel devices - create video channel devices like reference
+// CRITICAL: Add proper alignment and validation for MIPS
 struct frame_channel_device {
     struct miscdevice miscdev;
     int channel_num;
     struct tx_isp_channel_state state;
 
-    /* Binary Ninja buffer management fields */
+    /* Binary Ninja buffer management fields - ALIGNED for MIPS */
     struct mutex buffer_mutex;           /* Offset 0x28 - private_mutex_lock($s0 + 0x28) */
     spinlock_t buffer_queue_lock;        /* Offset 0x2c4 - __private_spin_lock_irqsave($s0 + 0x2c4) */
     void *buffer_queue_head;             /* Offset 0x214 - *($s0 + 0x214) */
@@ -598,7 +619,12 @@ struct frame_channel_device {
     int buffer_type;                     /* Offset 0x24 - *($s0 + 0x24) */
     int field;                           /* Offset 0x3c - *($s0 + 0x3c) */
     void *buffer_array[64];              /* Buffer array for index lookup */
-};
+
+    /* CRITICAL: Add validation magic number to detect corruption */
+    uint32_t magic;                      /* Magic number for validation */
+} __attribute__((aligned(8), packed));   /* MIPS-safe alignment */
+
+#define FRAME_CHANNEL_MAGIC 0xDEADBEEF
 
 /* External declarations for frame channel arrays */
 extern struct frame_channel_device frame_channels[];
@@ -608,16 +634,15 @@ extern int num_channels;
  * Internal ops. Never call this from drivers, only the tx isp device can call
  * these ops.
  *
- * activate_module: called when this subdev is enabled. When called the module
- * could be operated;
- *
  * slake_module: called when this subdev is disabled. When called the
  *	module couldn't be operated.
+ * activate_module: called when this subdev needs to be activated.
+ *	Transitions device from init state to ready state.
  *
  */
 struct tx_isp_subdev_internal_ops {
-	int (*activate_module)(struct tx_isp_subdev *sd);
 	int (*slake_module)(struct tx_isp_subdev *sd);
+	int (*activate_module)(struct tx_isp_subdev *sd);  /* Match header signature */
 };
 
 struct tx_isp_subdev_ops {
@@ -663,9 +688,12 @@ struct tx_isp_platform {
 	tx_isp_writel(((sd)->base), reg, value)
 
 int tx_isp_reg_set(struct tx_isp_subdev *sd, unsigned int reg, int start, int end, int val);
-
 int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd, struct tx_isp_subdev_ops *ops);
 void tx_isp_subdev_deinit(struct tx_isp_subdev *sd);
+int tx_isp_sensor_complete_init(struct tx_isp_subdev *sd);
+
+/* Auto-linking function to connect subdevices to global ISP device */
+void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev *sd);
 
 static inline void tx_isp_set_module_nodeops(struct tx_isp_module *module, struct file_operations *ops)
 {
@@ -724,7 +752,6 @@ struct wb_gains {
 };
 
 /* AF zone data structure matching Binary Ninja reference */
-#define MAX_AF_ZONES 16
 struct af_zone_data {
 	uint32_t status;
 	uint32_t zone_metrics[MAX_AF_ZONES];
@@ -767,29 +794,36 @@ struct isp_tuning_data {
 	spinlock_t lock;                     /* 0x04: Tuning lock */
 	struct mutex mutex;                  /* 0x08: Tuning mutex (32-bit aligned) */
 	uint32_t state;                      /* 0x0c: Tuning state */
-	
+
 	/* Page allocation tracking for proper cleanup */
 	unsigned long allocation_pages;      /* 0x10: Pages allocated via __get_free_pages */
 	int allocation_order;                /* 0x14: Allocation order for cleanup */
-	
-	/* Control values - CRITICAL: saturation must be at offset +0x68 */
-	uint32_t reserved1[20];              /* 0x18-0x67: Reserved for proper alignment (reduced by 2) */
-	
-	/* CRITICAL: These must be at the correct offsets for the controls */
-	uint32_t saturation;                 /* 0x68: Saturation control (cmd 0x980902) - CRASH LOCATION */
-	uint32_t brightness;                 /* 0x6c: Brightness control (cmd 0x980900) */
-	uint32_t contrast;                   /* 0x70: Contrast control (cmd 0x980901) */
-	uint32_t sharpness;                  /* 0x74: Sharpness control (cmd 0x98091b) */
-	
+
+	/* Tuning parameter values - CRITICAL: These prevent BadVA crashes */
+	uint32_t brightness;                 /* 0x18: Brightness value (0-255) */
+	uint32_t contrast;                   /* 0x1c: Contrast value (0-255) */
+	uint32_t saturation;                 /* 0x20: Saturation value (0-255) */
+	uint32_t sharpness;                  /* 0x24: Sharpness value (0-255) */
+
+	/* Additional tuning parameters accessed by control functions */
+
+	uint32_t shading;                    /* 0x30: Shading control */
+	uint32_t running_mode;               /* 0x34: ISP running mode */
+	uint32_t custom_mode;                /* 0x38: ISP custom mode */
+	uint32_t gamma;                      /* 0x3c: Gamma value */
+	uint32_t dpc;                        /* 0x40: Dead pixel correction */
+	uint32_t bypass;                     /* 0x48: Bypass mode */
+
+	/* CRITICAL: Padding to reach offset 0x15c where the crash occurs */
+	/* Binary Ninja accesses *(pointer + 0x15c) = *(pointer + 0x57*4) */
+	uint32_t mode_flag;                  /* 0x15c: Mode flag (checked against 1) - PREVENTS BadVA CRASH */
+
 	/* Additional controls */
 	uint32_t hflip;                      /* 0x70: Horizontal flip (cmd 0x980914) */
 	uint32_t vflip;                      /* 0x74: Vertical flip (cmd 0x980915) */
 	uint32_t antiflicker;                /* 0x78: Anti-flicker (cmd 0x980918) */
-	uint32_t shading;                    /* 0x7c: Shading control */
-	
+
 	/* Extended controls */
-	uint32_t running_mode;               /* 0x80: ISP running mode */
-	uint32_t custom_mode;                /* 0x84: ISP custom mode */
 	uint32_t move_state;                 /* 0x88: Move state */
 	uint32_t ae_comp;                    /* 0x8c: AE compensation */
 	

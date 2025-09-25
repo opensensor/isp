@@ -23,6 +23,21 @@
 
 #include "tx-isp-common.h"
 
+/* Platform data structure for subdevices - EXACT Binary Ninja MCP compatibility */
+struct tx_isp_subdev_platform_data {
+    int interface_type;                    /* Offset 0: Interface type (1=MIPI, 2=DVP, etc.) */
+    int clk_num;                          /* Offset 4: Number of clocks - Binary Ninja: $s1_1[4] */
+    int sensor_type;                      /* Offset 8: Sensor type */
+    struct tx_isp_device_clk *clks;       /* Offset 12: Clock configuration array - Binary Ninja: *($s1_1 + 8) */
+    /* Additional platform-specific data */
+};
+
+/* Clock configuration structure - EXACT Binary Ninja MCP compatibility */
+struct tx_isp_device_clk {
+    const char *name;        /* Clock name */
+    unsigned long rate;      /* Clock rate (0xffff = auto) */
+};
+
 #define TX_ISP_LINKFLAG_ENABLED		(0x1)
 
 /* ISP subdevice types */
@@ -36,11 +51,12 @@
 #define ISP_PIPELINE_STREAMING   2
 
 /* ISP constants for Binary Ninja compatibility */
-#define ISP_MAX_SUBDEVS          32
+#define ISP_MAX_SUBDEVS          16
 
 /* Forward declarations */
 struct tx_isp_subdev;
 struct tx_isp_core;
+struct tx_isp_core_device;
 struct isp_tuning_data;
 struct isp_tuning_state;
 struct ae_info;
@@ -56,6 +72,16 @@ struct ddr_device {
 
 struct frame_source_device;
 
+/* Platform data structure - compatible with Binary Ninja reference implementation */
+struct tx_isp_platform_data {
+    uint16_t reserved;      /* Padding to offset 2 */
+    uint32_t sensor_type;   /* Sensor type at offset 2 */
+    uint32_t device_id;     /* Device ID at offset 4 - Binary Ninja: zx.d(*($s2_1 + 4)) */
+    uint32_t flags;         /* Additional flags */
+    uint32_t version;       /* Version info */
+    /* Binary Ninja: Platform devices array at offset 8 - *($s2_1 + 8) */
+    struct platform_device **devices;  /* Array of platform device pointers */
+} __attribute__((packed));
 
 // CSI device structure for MIPI interface (based on Binary Ninja analysis)
 struct tx_isp_csi_device {
@@ -83,12 +109,19 @@ struct tx_isp_csi_device {
     spinlock_t lock;         // Protect register access
 };
 
-/* Core ISP device structure */
+/* Core ISP device structure - Global ISP device management only */
+/* Event callback structure for Binary Ninja compatibility */
+struct tx_isp_event_callback {
+    void *reserved[7];                       /* +0x00-0x18: Reserved space (28 bytes) */
+    int (*event_handler)(void*, int, void*); /* +0x1c: Event handler function */
+} __attribute__((packed));
+
 struct tx_isp_dev {
-    struct tx_isp_subdev sd;        // Base subdev at offset 0
-    /* Core device info */
-    struct device *dev;
-    struct device *tisp_device;
+    /* Global device info (core subdev moved to separate core_dev) */
+    struct device *dev;                      /* 0x00: Device pointer (4 bytes) */
+    struct device *tisp_device;              /* 0x04: TISP device pointer (4 bytes) */
+    uint32_t padding_to_0xc;                 /* 0x08: Padding to align event_callback to 0xc */
+    struct tx_isp_event_callback *event_callback; /* 0x0c: Event callback structure pointer - Binary Ninja EXACT */
     struct miscdevice miscdev;
     struct cdev tisp_cdev;
     spinlock_t lock;
@@ -120,6 +153,11 @@ struct tx_isp_dev {
     u32 vic_frame_size;
     struct list_head vic_buf_queue;
 
+    /* Centralized register mappings - CRITICAL for system_reg_write */
+    void __iomem *core_regs;     /* ISP core registers - MATCHES REFERENCE DRIVER */
+    void __iomem *csi_regs;      /* CSI registers */
+    void __iomem *phy_base;      /* PHY registers */
+
     /* Memory management */
     dma_addr_t rmem_addr;
     size_t rmem_size;
@@ -144,6 +182,12 @@ struct tx_isp_dev {
     struct tx_isp_csi_device *csi_dev;
     atomic_t csi_configured;
 
+    /* VIC device - positioned for proper struct member access */
+    struct tx_isp_vic_device *vic_dev;
+
+    /* Core device - separate subdevice like VIC/VIN/CSI */
+    struct tx_isp_core_device *core_dev;
+
     /* Status tracking */
     struct isp_device_status status;
     struct isp_device_link_state link_state;
@@ -159,17 +203,9 @@ struct tx_isp_dev {
     struct platform_device *core_pdev;
     struct platform_device *fs_pdev;
 
-    /* Clocks */
-    struct clk *cgu_isp;
-    struct clk *isp_clk;
-    struct clk *ipu_clk;
-    struct clk *csi_clk;
-    
-    /* Centralized register mappings */
-    void __iomem *core_regs;     /* ISP core registers */
-    void __iomem *csi_regs;      /* CSI registers */
-    /* vic_regs is already declared above at line 209 */
-    /* phy_base is already declared above at line 214 */
+    /* Global clocks (core-specific clocks moved to core_dev) */
+    struct clk *cgu_isp;         /* Global CGU ISP clock */
+    struct clk *csi_clk;         /* CSI clock (CSI-specific) */
 
     /* GPIO control */
     int reset_gpio;
@@ -178,43 +214,24 @@ struct tx_isp_dev {
     /* I2C */
     struct i2c_client *sensor_i2c_client;
     struct i2c_adapter *i2c_adapter;
-    struct tx_isp_subdev *sensor_sd;
-    struct tx_isp_sensor *sensor;
     /* REMOVED: sensor_attr - use vic_dev->sensor_attr or sensor->video.attr instead */
     struct tx_isp_subdev_ops *sensor_subdev_ops;  /* Sensor subdev operations */
     bool sensor_ops_initialized;                  /* Sensor operations initialization flag */
 
-    /* IRQs */
-    int isp_irq;
-    int isp_irq2;
-    spinlock_t irq_lock;
-    volatile u32 irq_enabled;
-    void (*irq_handler)(void *);
-    void (*irq_disable)(void *);
-    void *irq_priv;
-    
-    /* Binary Ninja interrupt function pointers */
-    void (*irq_enable_func)(struct tx_isp_dev *);   /* arg2[1] = tx_isp_enable_irq */
-    void (*irq_disable_func)(struct tx_isp_dev *);  /* arg2[2] = tx_isp_disable_irq */
-    struct irq_handler_data *isp_irq_data;
-    struct completion frame_complete;
-    struct task_struct *fw_thread;
-    uint32_t frame_count;
+    /* Global IRQ management (core-specific IRQs moved to core_dev) */
+    spinlock_t irq_lock;         /* Global IRQ lock */
+    struct completion frame_complete;  /* Global frame completion */
 
-    /* VIC IRQ */
-    int vic_irq;
+    /* IRQ management */
     void (*vic_irq_handler)(void *);
     void (*vic_irq_disable)(void *);
     void *vic_irq_priv;
     volatile u32 vic_irq_enabled;
     struct irq_handler_data *vic_irq_data;
-    void __iomem *vic_regs;      /* Primary VIC register space (0x133e0000) */
-    void __iomem *vic_regs2;     /* Secondary VIC register space (0x10023000) */
-    struct tx_isp_vic_device *vic_dev;
+    /* vic_dev moved to offset 0xd4 above - REMOVED duplicate declaration */
     struct ddr_device *ddr_dev;
     struct tx_isp_vin_device *vin_dev;
     struct frame_source_device *fs_dev;
-    void __iomem *phy_base;
 
     /* Statistics */
     struct ae_statistics ae_stats;
@@ -238,22 +255,12 @@ struct tx_isp_dev {
     void (*ae_algo_cb)(void *priv, int, int);
     void *ae_priv_data;
 
-    /* Tuning attributes */
-    uint32_t g_isp_deamon_info;
-    struct isp_tuning_data *tuning_data;
-    struct isp_tuning_state *tuning_state;
-    int tuning_enabled;
-    bool streaming_enabled;
-    bool bypass_enabled;
-    bool links_enabled;
-    u32 instance;
-    struct ae_info *ae_info;
-    struct awb_info *awb_info;
-    uint32_t wdr_mode;
-    uint32_t day_night;
-    uint32_t custom_mode;
-    uint32_t poll_state;
-    wait_queue_head_t poll_wait;
+    /* Global device attributes (core-specific tuning moved to core_dev) */
+    bool streaming_enabled;      /* Global streaming state */
+    bool links_enabled;          /* Global link state */
+    u32 instance;               /* Device instance */
+    uint32_t poll_state;        /* Global poll state */
+    wait_queue_head_t poll_wait; /* Global poll wait queue */
     
     /* Pipeline state management */
     int pipeline_state;
@@ -265,7 +272,10 @@ struct tx_isp_dev {
     struct proc_dir_entry *proc_dir;         /* Proc directory at offset 0x11c */
     
     /* CRITICAL: Binary Ninja subdev array at offset 0x38 - tx_isp_video_link_stream depends on this */
-    struct tx_isp_subdev *subdevs[16];       /* Subdev array at offset 0x38 for tx_isp_video_link_stream */
+    struct tx_isp_subdev *subdevs[ISP_MAX_SUBDEVS];       /* Subdev array at offset 0x38 for tx_isp_video_link_stream */
+
+    /* Video link configuration - Binary Ninja reference at offset 0x10c */
+    int link_config;                         /* Current link configuration (-1 = destroyed, 0-1 = valid configs) */
     
     /* Frame channel devices - needed for tx_isp_create_framechan_devices */
     struct miscdevice *fs_miscdevs[4];       /* Frame source misc devices (/dev/isp-fs*) */
@@ -305,6 +315,17 @@ int tx_isp_sysfs_init(struct tx_isp_dev *isp);
 void tx_isp_sysfs_exit(struct tx_isp_dev *isp);
 irqreturn_t tx_isp_core_irq_handler(int irq, void *dev_id);
 
+/* Note: tx_isp_reg_set is declared in tx-isp-device.h */
+/* Note: tx_isp_enable_irq and tx_isp_disable_irq are declared in tx-isp-module.c */
+
+/* TISP (Tiziano ISP) function declarations */
+int tisp_deinit(void);
+void tisp_param_operate_deinit(void);
+void tisp_event_exit(void);
+void tisp_deinit_free(void);
+
+/* Note: All TISP global variables are declared as static in tx_isp_tuning.c */
+
 void tx_isp_frame_chan_init(struct tx_isp_frame_channel *chan);
 void tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan);
 int tx_isp_setup_default_links(struct tx_isp_dev *dev);
@@ -318,5 +339,8 @@ extern struct platform_device tx_isp_core_platform_device;
 
 /* Sensor control functions - defined in tx-isp-module.c */
 int sensor_fps_control(int fps);
+
+/* Include subdevice helper functions */
+#include "tx_isp_subdev_helpers.h"
 
 #endif /* __TX_ISP_H__ */
