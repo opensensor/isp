@@ -8369,13 +8369,6 @@ int tisp_adr_process(void)
     return 0;
 }
 
-/* tiziano_adr_interrupt_static - ADR interrupt handler */
-int tiziano_adr_interrupt_static(void)
-{
-    pr_info("tiziano_adr_interrupt_static: ADR interrupt received\n");
-    return 0;
-}
-
 /* tiziano_adr_init - Binary Ninja EXACT implementation */
 int tiziano_adr_init(uint32_t width, uint32_t height)
 {
