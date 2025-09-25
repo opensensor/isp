@@ -2765,6 +2765,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         pr_info("*** VIC UNMASK-ALL TEST: No status bits asserted during pre-IRQ sample ***\n");
                 }
 
+            /* Enable VIC IRQ after final re-assert and verification */
+
             pr_info("*** vic_core_s_stream: Enabling VIC IRQ AFTER final re-assert/verify ***\n");
             tx_vic_enable_irq(vic_dev);
 
@@ -2773,7 +2775,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             if (vic_dev->vic_regs) {
                 void __iomem *vr = vic_dev->vic_regs;
                 u32 s0, s1; int i;
-                for (i = 0; i < 20; i++) { /* ~20ms total if udelay(1000) */
+                for (i = 0; i < 200; i++) { /* ~200ms total if udelay(1000) */
                     s0 = readl(vr + 0x1f0);
                     s1 = readl(vr + 0x1f4);
                     if (s0 || s1) {
@@ -2782,8 +2784,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     }
                     udelay(1000);
                 }
-                if (i == 20)
-                    pr_info("*** VIC POST-IRQ SAMPLE: No status bits asserted in 20ms window ***\n");
+                if (i == 200)
+                    pr_info("*** VIC POST-IRQ SAMPLE: No status bits asserted in 200ms window ***\n");
             }
 
 
