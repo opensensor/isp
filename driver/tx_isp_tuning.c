@@ -2054,8 +2054,8 @@ int tisp_init(void *sensor_info, char *param_name)
     pr_info("*** WRITING VIC INTERRUPT ENABLE REGISTERS ***\n");
 
     /* Configure VIC interrupt registers - EXACTLY like working logs */
-    if (ourISPdev->vic_dev && isp_dev->vic_dev->vic_regs) {
-        void __iomem *vic_regs = isp_dev->vic_dev->vic_regs;
+    if (ourISPdev->vic_dev && ourISPdev->vic_dev->vic_regs) {
+        void __iomem *vic_regs = ourISPdev->vic_dev->vic_regs;
 
         /* CRITICAL FIX: Based on Binary Ninja analysis of interrupt handler */
         /* 0x1e0 is READ-ONLY status register - DO NOT WRITE TO IT */
