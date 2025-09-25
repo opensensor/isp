@@ -1437,10 +1437,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** VIC hardware should be ready - proceeding with unlock sequence ***\n");
 
         /* Binary Ninja: EXACT reference driver MIPI mode configuration */
-        /* Binary Ninja: 000107ec - Set CSI mode */
-        writel(3, vic_regs + 0xc);  /* BINARY NINJA EXACT: VIC mode = 3 for MIPI interface */
+        /* Binary Ninja: 000107ec - Set CSI mode (match working logs) */
+        writel(2, vic_regs + 0xc);  /* Set VIC MIPI mode = 2 */
         wmb();
-        pr_info("*** VIC: Set MIPI mode (3) to VIC control register 0xc - BINARY NINJA EXACT ***\n");
+        pr_info("*** VIC: Set MIPI mode (2) to VIC control register 0xc (matches working logs) ***\n");
 
         /* BINARY NINJA EXACT: All missing register configurations */
 
@@ -3298,9 +3298,9 @@ static int tx_isp_vic_apply_full_config(struct tx_isp_vic_device *vic_dev)
 
     pr_info("*** VIC FULL CONFIG: Applying complete VIC configuration after sensor initialization ***\n");
 
-    /* Apply VIC interrupt system configuration */
+    /* Apply VIC interrupt system configuration (match modern logs) */
     writel(0x2d0, vic_regs + 0x100);        /* Interrupt configuration */
-    writel(0x2b, vic_regs + 0x14);          /* Interrupt control - reference driver value */
+    writel(0x2,   vic_regs + 0x14);         /* Interrupt control - modern logs show 0x2 */
     wmb();
 
     /* Apply essential VIC control registers */
@@ -3310,24 +3310,19 @@ static int tx_isp_vic_apply_full_config(struct tx_isp_vic_device *vic_dev)
     writel(0x7003, vic_regs + 0x74);        /* Control register */
     wmb();
 
-    /* Apply color/processing only for YUV paths; skip for RAW10 to avoid bogus green */
-    if (vic_dev->sensor_attr.data_type != 0x2b) {
-        /* Apply VIC color space configuration */
-        writel(0xeb8080, vic_regs + 0xc0);
-        writel(0x108080, vic_regs + 0xc4);
-        writel(0x29f06e, vic_regs + 0xc8);
-        writel(0x913622, vic_regs + 0xcc);
-        wmb();
+    /* Apply YUV color/processing unconditionally for NV12 output path (modern behavior) */
+    writel(0xeb8080, vic_regs + 0xc0);
+    writel(0x108080, vic_regs + 0xc4);
+    writel(0x29f06e, vic_regs + 0xc8);
+    writel(0x913622, vic_regs + 0xcc);
+    wmb();
 
-        /* Apply VIC processing configuration */
-        writel(0x515af0, vic_regs + 0xd0);
-        writel(0xaaa610, vic_regs + 0xd4);
-        writel(0xd21092, vic_regs + 0xd8);
-        writel(0x6acade, vic_regs + 0xdc);
-        wmb();
-    } else {
-        pr_info("VIC FULL CONFIG: RAW10 path - skipping YUV color/processing registers\n");
-    }
+    /* Apply VIC processing configuration */
+    writel(0x515af0, vic_regs + 0xd0);
+    writel(0xaaa610, vic_regs + 0xd4);
+    writel(0xd21092, vic_regs + 0xd8);
+    writel(0x6acade, vic_regs + 0xdc);
+    wmb();
 
     pr_info("*** VIC FULL CONFIG: Complete VIC configuration applied successfully ***\n");
 
