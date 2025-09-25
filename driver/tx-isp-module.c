@@ -4204,40 +4204,12 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         if (copy_from_user(&buf_setup, argp, sizeof(buf_setup)))
             return -EFAULT;
 
-        pr_info("ISP set buffer: addr=0x%x size=%d\n", buf_setup.addr, buf_setup.size);
-
-        // Calculate stride and buffer offsets like reference
-        stride = ((width + 7) >> 3) << 3;  // Aligned stride
-        frame_size = stride * height;
-
-        // Validate buffer size
-        if (buf_setup.size < frame_size) {
-            pr_err("Buffer too small: need %d, got %d\n", frame_size, buf_setup.size);
-            return -EFAULT;
-        }
-
-        // Configure main frame buffers (system registers like reference)
-        // These would be actual register writes in hardware implementation
-        pr_info("Configuring main frame buffer: 0x%x stride=%d\n", buf_setup.addr, stride);
-
-        // UV buffer offset calculation
-        uv_offset = frame_size + (frame_size >> 1);
-        if (buf_setup.size >= uv_offset) {
-            pr_info("Configuring UV buffer: 0x%x\n", buf_setup.addr + frame_size);
-        }
-
-        // YUV420 additional buffer configuration
-        yuv_stride = ((((width + 0x1f) >> 5) + 7) >> 3) << 3;
-        yuv_size = yuv_stride * ((((height + 0xf) >> 4) + 1) << 3);
-
-        if (!isp_memopt) {
-            // Full buffer mode - configure all planes
-            pr_info("Full buffer mode: YUV stride=%d size=%d\n", yuv_stride, yuv_size);
-        } else {
-            // Memory optimized mode
-            pr_info("Memory optimized mode\n");
-        }
-
+        /* Legacy TX_ISP_SET_BUF call. In VBM/V4L2 mode the application allocates
+         * and passes per-buffer physical addresses via VIDIOC_QBUF. Do NOT program
+         * any hardware here to avoid overriding the real VBM addresses.
+         */
+        pr_info("TX_ISP_SET_BUF(legacy) received addr=0x%x size=%d - ignored (VBM/V4L2 mode uses QBUF)\n",
+                buf_setup.addr, buf_setup.size);
         return 0;
     }
     case 0x800856d6: { // TX_ISP_WDR_SET_BUF - WDR buffer setup
