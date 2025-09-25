@@ -1354,7 +1354,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     /* CRITICAL: Enable ISP core interrupt generation - EXACT Binary Ninja reference */
     /* This was the missing piece that caused interrupts to stall out */
-    if (ourISPdev && ourISPdev->core_dev && ourISPdev->-core_dev->core_regs) {
+    if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
         void __iomem *core = ourISPdev->core_dev->core_regs;
 
         /* Clear any pending interrupts first */
