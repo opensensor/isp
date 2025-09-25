@@ -1383,13 +1383,13 @@ int ae0_interrupt_static(void)
     /* tisp_ae0_get_statistics(buffer_addr, 0xf001f001); - REMOVED: causes DMA issues */
 
     /* Binary Ninja: Handle DMSC interrupt flag */
-    if (data_b0e00 == 1) {
-        uint32_t *dmsc_ptr = (uint32_t *)dmsc_fc_t3_stren_intp;
-        data_b0e00 = 0;
-        if (dmsc_ptr) {
-            dmsc_ptr[1] = 0;  /* *(dmsc_fc_t3_stren_intp + 4) = 0 */
-        }
-    }
+    //if (data_b0e00 == 1) {
+    //    uint32_t *dmsc_ptr = (uint32_t *)dmsc_fc_t3_stren_intp;
+    //    data_b0e00 = 0;
+    //    if (dmsc_ptr) {
+    //        dmsc_ptr[1] = 0;  /* *(dmsc_fc_t3_stren_intp + 4) = 0 */
+    //    }
+    //}
 
     pr_info("ae0_interrupt_static: AE0 static interrupt processed\n");
     return 1;
