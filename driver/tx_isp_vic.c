@@ -2333,6 +2333,7 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
 static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_base;
+    void __iomem *vic_ctrl;
     u32 width, height, stride;
 
     pr_info("*** vic_pipo_mdma_enable: EXACT Binary Ninja MCP implementation ***\n");
@@ -2344,6 +2345,7 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 
     /* Binary Ninja EXACT: vic_base = *(arg1 + 0xb8) */
     vic_base = vic_dev->vic_regs;
+    vic_ctrl = vic_dev->vic_regs_control;
 
     if (!vic_base) {
         pr_err("vic_pipo_mdma_enable: NULL vic_regs\n");
@@ -2361,6 +2363,8 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x308) = 1 */
     writel(1, vic_base + 0x308);
+    if (vic_ctrl)
+        writel(1, vic_ctrl + 0x308);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x308 = 1 (MDMA enable)\n");
 
@@ -2369,17 +2373,23 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x304) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
     writel((width << 16) | height, vic_base + 0x304);
+    if (vic_ctrl)
+        writel((width << 16) | height, vic_ctrl + 0x304);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x304 = 0x%x (dimensions %dx%d)\n",
             (width << 16) | height, width, height);
 
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x310) = $v1_1 */
     writel(stride, vic_base + 0x310);
+    if (vic_ctrl)
+        writel(stride, vic_ctrl + 0x310);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x310 = %d (stride)\n", stride);
 
     /* Binary Ninja EXACT: *(result + 0x314) = $v1_1 */
     writel(stride, vic_base + 0x314);
+    if (vic_ctrl)
+        writel(stride, vic_ctrl + 0x314);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (stride)\n", stride);
 
@@ -2402,6 +2412,8 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 
             if (buffer_addr != 0) {
                 writel(buffer_addr, vic_base + reg_offset);
+                if (vic_ctrl)
+                    writel(buffer_addr, vic_ctrl + reg_offset);
                 wmb();
                 pr_info("*** VIC BUFFER %d: Wrote VBM address 0x%x to reg 0x%x ***\n",
                         i, buffer_addr, reg_offset);
@@ -2426,6 +2438,8 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
             u32 reg_offset = 0x318 + (i * 4);  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
 
             writel(buffer_addr, vic_base + reg_offset);
+            if (vic_ctrl)
+                writel(buffer_addr, vic_ctrl + reg_offset);
             wmb();
             pr_info("*** VIC FALLBACK BUFFER %d: Wrote reserved memory address 0x%x to reg 0x%x ***\n",
                     i, buffer_addr, reg_offset);
@@ -2487,7 +2501,10 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = 0 */
         void __iomem *vic_base = vic_dev->vic_regs;  /* SAFE: $s0 + 0xb8 = vic_regs */
         if (vic_base) {
+            void __iomem *vic_ctrl = vic_dev->vic_regs_control;
             writel(0, vic_base + 0x300);
+            if (vic_ctrl)
+                writel(0, vic_ctrl + 0x300);
             wmb();
             pr_info("ispvic_frame_channel_s_stream: Stream OFF - wrote 0 to reg 0x300\n");
         }
@@ -2508,7 +2525,10 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             /* SAFE: $s0 + 0x218 = active_buffer_count */
             u32 buffer_count = vic_dev->active_buffer_count;
             u32 stream_ctrl = (buffer_count << 16) | 0x80000020;  /* Binary Ninja EXACT formula */
+            void __iomem *vic_ctrl = vic_dev->vic_regs_control;
             writel(stream_ctrl, vic_base + 0x300);
+            if (vic_ctrl)
+                writel(stream_ctrl, vic_ctrl + 0x300);
             wmb();
 
             pr_info("*** Binary Ninja EXACT: Wrote 0x%x to reg 0x300 (%d buffers) ***\n", stream_ctrl, buffer_count);
