@@ -53,7 +53,7 @@
 extern struct tx_isp_dev *ourISPdev;
 
 /* Forward declaration for frame channel wakeup function */
-int tisp_netlink_init(void);
+//int tisp_netlink_init(void);
 int isp_trigger_frame_data_transfer(struct tx_isp_dev *dev);
 int tisp_lsc_write_lut_datas(void);
 irqreturn_t ip_done_interrupt_static(int irq, void *dev_id);
@@ -264,27 +264,8 @@ static void *nlsk = NULL;
 static uint32_t data_ca490 = 0;
 static uint32_t data_ca48c = 0;
 
-/**
- * tisp_netlink_exit - EXACT Binary Ninja MCP implementation
- * Address: 0x218fc
- */
-void tisp_netlink_exit(void)
-{
-    /* Binary Ninja: uint32_t nlsk_1 = nlsk */
-    if (nlsk != 0) {
-        /* SAFE: Use proper struct member access instead of raw offset 0x130 */
-        struct tx_isp_netlink_socket *nl_sock = (struct tx_isp_netlink_socket *)nlsk;
 
-        if (nl_sock->socket_ptr != NULL) {
-            /* Binary Ninja: return private_sock_release($a0_1) __tailcall */
-            sock_release(nl_sock->socket_ptr);
-            nl_sock->socket_ptr = NULL;  /* Clear pointer after release */
-        }
-    }
-
-    /* Binary Ninja: return nlsk_1 */
-}
-static int tisp_netlink_event_set_cb(void *cb) { return 0; }
+//static int tisp_netlink_event_set_cb(void *cb) { return 0; }
 static int tisp_param_operate_process(void) { return 0; }
 int tisp_event_push(void *event);
 
@@ -314,7 +295,7 @@ void tisp_event_exit(void)
 void tisp_param_operate_deinit(void)
 {
     /* Binary Ninja: tisp_netlink_exit() */
-    tisp_netlink_exit();
+    //tisp_netlink_exit();
 
     /* Binary Ninja: uint32_t opmsg_1 = opmsg */
     if (opmsg != NULL) {
@@ -8935,46 +8916,15 @@ int tisp_param_operate_init(void)
     }
 
     /* Binary Ninja: tisp_netlink_init() */
-    tisp_netlink_init();
+    //tisp_netlink_init();
 
     /* Binary Ninja: tisp_netlink_event_set_cb(tisp_param_operate_process) */
-    tisp_netlink_event_set_cb(tisp_param_operate_process);
+    //tisp_netlink_event_set_cb(tisp_param_operate_process);
 
     /* Binary Ninja: tisp_code_create_tuning_node() */
     tisp_code_create_tuning_node();
 
     return 0;
-}
-
-/* tisp_netlink_init - EXACT Binary Ninja implementation */
-int tisp_netlink_init(void)
-{
-    pr_info("tisp_netlink_init: Initializing netlink communication\n");
-
-    /* CRITICAL FIX: Try standard NETLINK_GENERIC (16) first, then custom protocol 0x17 */
-    pr_info("tisp_netlink_init: Trying standard NETLINK_GENERIC protocol (16)\n");
-    uint32_t v0 = (uint32_t)netlink_kernel_create(&init_net, 16, NULL);  /* NETLINK_GENERIC */
-    if (v0 == 0) {
-        pr_info("tisp_netlink_init: NETLINK_GENERIC failed, trying custom protocol 0x17\n");
-        v0 = (uint32_t)netlink_kernel_create(&init_net, 0x17, NULL);
-        if (v0 == 0) {
-            pr_info("tisp_netlink_init: Custom protocol failed, trying with nlcfg structure\n");
-            v0 = (uint32_t)netlink_kernel_create(&init_net, 0x17, &nlcfg);
-        }
-    }
-
-    nlsk = (void*)v0;
-
-    if (v0 != 0) {
-        pr_info("tisp_netlink_init: Netlink socket created successfully\n");
-        return 0;
-    }
-
-    /* CRITICAL FIX: Don't fail ISP initialization if netlink socket creation fails */
-    /* The netlink socket is used for tuning parameter communication, not core VIC interrupts */
-    pr_warn("tisp_netlink_init: Failed to create netlink socket - continuing without netlink support\n");
-    pr_warn("tisp_netlink_init: ISP tuning parameters may not be available, but VIC interrupts should still work\n");
-    return 0;  /* Return success to allow ISP initialization to continue */
 }
 
 
