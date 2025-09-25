@@ -2457,9 +2457,9 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
             writel(0x00000630, vr + 0x14);
             wmb();
             /* Enable sources and unmask framedone */
-            writel(0xFFFFFFFF, vr + 0x1e0);
-            writel(0xFFFFFFFE, vr + 0x1e8);
-            wmb();
+            //writel(0xFFFFFFFF, vr + 0x1e0);
+            //writel(0xFFFFFFFE, vr + 0x1e8);
+            //wmb();
             /* Small sampling window to catch first assertion post sensor stream-on */
             for (i = 0; i < 20; i++) {
                 s0 = readl(vr + 0x1f0);
