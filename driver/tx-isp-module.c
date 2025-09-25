@@ -1221,19 +1221,6 @@ static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const cha
         }
     }
     
-    // Sync sensor attributes to ISP core
-    if (isp_dev->sensor) {
-        // Create sensor attributes for pipeline activation
-        struct tx_isp_sensor_attribute sensor_attr = {0};
-        sensor_attr.name = sensor_name;
-        sensor_attr.chip_id = 0x2053; // GC2053 ID
-        sensor_attr.total_width = 1920;
-        sensor_attr.total_height = 1080;
-        sensor_attr.integration_time = 1000; // Default integration time
-        sensor_attr.max_again = 0x40000; // Default gain (format .16)
-
-    }
-    
     pr_info("Sensor pipeline activation complete\n");
     return 0;
 }
@@ -1958,7 +1945,7 @@ static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int c
     frame_channel_wakeup_waiters(&frame_channels[channel]);
     
     /* Update frame count for statistics */
-    isp_dev->frame_count++;
+    isp_dev->core_dev->frame_count++;
     
     /* Complete frame operation if completion is available */
 //    if (isp_dev->frame_complete.done == 0) {
@@ -4677,16 +4664,9 @@ static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void
     switch (cmd) {
     case 0x200000c:  /* Binary Ninja: VIC start command 1 */
     case 0x200000f:  /* Binary Ninja: VIC start command 2 */
-        pr_info("*** vic_sensor_ops_ioctl: IOCTL 0x%x - CALLING tx_isp_vic_start ***\n", cmd);
+        pr_info("*** vic_sensor_ops_ioctl: IOCTL 0x%x ***\n", cmd);
+
         
-        /* Get ISP device to access sensor */
-        isp_dev = (struct tx_isp_dev *)sd->isp;
-        if (!isp_dev || !isp_dev->sensor || !isp_dev->sensor->video.attr) {
-            pr_err("vic_sensor_ops_ioctl: No sensor available for VIC start\n");
-            return -ENODEV;
-        }
-        
-        sensor_attr = isp_dev->sensor->video.attr;
         /* VIC start now only called from vic_core_s_stream - reference driver behavior */
         pr_info("*** vic_sensor_ops_ioctl: VIC start deferred to vic_core_s_stream ***\n");
         return 0;
@@ -5500,7 +5480,7 @@ static irqreturn_t ispmodule_ip_done_irq_handler(int irq, void *dev_id)
 //    }
     
     /* Update frame processing statistics */
-    isp_dev->frame_count++;
+    isp_dev->core_dev->frame_count++;
     
     /* Wake up frame channel waiters */
 //    int i;
