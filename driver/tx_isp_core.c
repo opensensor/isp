@@ -2862,14 +2862,17 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
         /* Binary Ninja: if ($v0_3 != 1) */
         if (vic_state != 1) {
             /* Binary Ninja: if (arg2 == 0) - Deinitialize if no sensor attributes */
-            if (sensor_attr == NULL && on == 0) {
-                printk(KERN_ALERT "ispcore_core_ops_init: Deinitializing (sensor_attr=NULL, on=0)");
+            if (on == 0) {  /* CRITICAL FIX: Only call ispcore_video_s_stream during DEINITIALIZATION */
+                printk(KERN_ALERT "ispcore_core_ops_init: Deinitializing (on=0)");
 
                 /* Binary Ninja: Check current VIC state and handle streaming */
                 if (vic_state == 4) {
                     /* Binary Ninja: ispcore_video_s_stream(arg1, 0) */
+                    printk(KERN_ALERT "*** ispcore_core_ops_init: VIC streaming (state 4) - calling ispcore_video_s_stream(0) to stop ***");
                     ispcore_video_s_stream(sd, 0);
                     vic_state = vic_dev->state;  /* Update VIC state after s_stream */
+                } else {
+                    printk(KERN_ALERT "*** ispcore_core_ops_init: VIC not streaming (state %d) - no need to stop streaming ***", vic_state);
                 }
 
                 /* Binary Ninja: if ($v1_55 == 3) - Stop kernel thread if in state 3 */
@@ -2899,6 +2902,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
             if (on == 1) {
                 printk(KERN_ALERT "*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***");
                 printk(KERN_ALERT "*** ispcore_core_ops_init: Current vic_state (VIC state): %d ***", vic_state);
+                printk(KERN_ALERT "*** ispcore_core_ops_init: CRITICAL FIX - NOT calling ispcore_video_s_stream during initialization ***");
 
                 /* CRITICAL FIX: Allow ISP core initialization in streaming state */
                 /* The original check required state 2 (ready), but VIC may already be streaming (state 4) */
