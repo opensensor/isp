@@ -4724,19 +4724,6 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
 
             pr_info("*** WRITING VIC INTERRUPT ENABLE REGISTERS ***\n");
 
-    if (isp_dev->vic_dev && isp_dev->vic_dev->vic_regs) {
-        void __iomem *vic_regs = isp_dev->vic_dev->vic_regs;
-            /* Enable VIC interrupts - from reference driver */
-        writel(0xFFFFFFFE, vic_regs + 0x1e8); /* Enable frame done interrupt (bit 0 = 0) */
-            wmb();
-
-        pr_info("*** VIC INTERRUPT FIX: Enabled frame done interrupt via mask register 0x1e8 = 0xFFFFFFFE ***\n");
-        pr_info("*** VIC INTERRUPT REGISTERS: Configured during module init - vic_start_ok will be set during VIC streaming ***\n");
-            pr_info("*** VIC INTERRUPT REGISTERS ENABLED - INTERRUPTS SHOULD NOW FIRE! ***\n");
-    } else {
-        pr_err("*** ERROR: VIC device or registers not available for interrupt configuration ***\n");
-    }
-
             /* CRITICAL FIX: Enable ISP core interrupts too! Use core_regs if available */
             pr_info("*** ENABLING ISP CORE INTERRUPT REGISTERS FOR MIPI DATA ***\n");
     if (isp_dev->core_dev && isp_dev->core_dev->core_regs) {

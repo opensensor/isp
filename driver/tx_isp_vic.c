@@ -1315,17 +1315,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     u32 ctrl_0x100_verify = readl(vic_regs + 0x100); /* Interrupt configuration (Working Branch) */
     u32 ctrl_0x14_verify = readl(vic_regs + 0x14);   /* Interrupt control (Working Branch) */
 
-    pr_info("*** VIC INTERRUPT CONTROL VERIFY (BASIC REGISTERS): 0x0=0x%08x, 0x4=0x%08x ***\n",
-            ctrl_0x0_verify, ctrl_0x4_verify);
-    /* Also re-assert in control bank if present */
-    if (vic_dev->vic_regs_control) {
-        void __iomem *vic_ctl = vic_dev->vic_regs_control;
-        writel(0xFFFFFFFF, vic_ctl + 0x1f0);
-        writel(0xFFFFFFFF, vic_ctl + 0x1f4);
-        writel(0xFFFFFFFE, vic_ctl + 0x1e8);
-        wmb();
-    }
-
     pr_info("*** VIC INTERRUPT CONTROL VERIFY (WORKING BRANCH REGS): 0x04=0x%08x, 0x0c=0x%08x, 0x100=0x%08x, 0x14=0x%08x ***\n",
             ctrl_0x04_verify, ctrl_0x0c_verify, ctrl_0x100_verify, ctrl_0x14_verify);
 
@@ -1344,10 +1333,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
                 imr_configured, imcr_configured, int_config_set, int_control_set);
     }
 
-    /* Re-assert VIC interrupt mask and clear pending right before enabling vic_start_ok */
-    writel(0x00000000, vic_regs + 0x1f0);
-    writel(0x00000000, vic_regs + 0x1f4);
-    writel(0xFFFFFFFE, vic_regs + 0x1e8);
     /* Enable interrupt sources (both banks) before setting vic_start_ok */
     writel(0xFFFFFFFF, vic_regs + 0x1e0);
     writel(0xFFFFFFFF, vic_regs + 0x1e4);
@@ -2679,8 +2664,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Enable all interrupt sources (both banks) and UNMASK-ALL for debug */
                 writel(0xFFFFFFFF, vr + 0x1e0);
                 writel(0xFFFFFFFF, vr + 0x1e4);
-                writel(0x00000000, vr + 0x1e8);
-                writel(0x00000000, vr + 0x1ec);
+                //writel(0x00000000, vr + 0x1e8);
+                //writel(0x00000000, vr + 0x1ec);
                 /* Global interrupt enable at 0x30c (if implemented) */
                 writel(0xFFFFFFFF, vr + 0x30c);
                 wmb();
@@ -2706,8 +2691,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Enable sources on both banks and UNMASK-ALL on both masks */
                 writel(0xFFFFFFFF, vc + 0x1e0);
                 writel(0xFFFFFFFF, vc + 0x1e4);
-                writel(0x00000000, vc + 0x1e8);
-                writel(0x00000000, vc + 0x1ec);
+                //writel(0x00000000, vc + 0x1e8);
+                //writel(0x00000000, vc + 0x1ec);
                 /* Global interrupt enable at 0x30c (if present) */
                 writel(0xFFFFFFFF, vc + 0x30c);
                 wmb();
@@ -2766,8 +2751,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     /* Clear pending (W1C), then unmask ALL sources (both banks) */
                     writel(0xFFFFFFFF, vr + 0x1f0);
                     writel(0xFFFFFFFF, vr + 0x1f4);
-                    writel(0x00000000, vr + 0x1e8);
-                    writel(0x00000000, vr + 0x1ec);
+                    //writel(0x00000000, vr + 0x1e8);
+                    //writel(0x00000000, vr + 0x1ec);
                     wmb();
                     pr_info("*** VIC UNMASK-ALL TEST: [0x1e8]=0x%08x [0x1ec]=0x%08x (expect 0) ***\n", readl(vr + 0x1e8), readl(vr + 0x1ec));
 
