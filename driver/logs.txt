@@ -1,45 +1,260 @@
-[  154.307104] csi_video_s_stream: sd=85215400, enable=1
-[  154.317211] *** tx_isp_get_sensor: Searching subdev array for sensors ***
-[  154.337224] *** tx_isp_get_sensor: Found real sensor: 85215400 ***
-[  154.343691] csi_video_s_stream: Stream ON - CSI state set to 4
-[  154.359010] *** ispcore_video_s_stream: Called s_stream on subdev isp-w00: result=0 ***
-[  154.377509] *** vic_core_s_stream: BINARY NINJA EXACT - sd=85bf8000, enable=1 ***
-[  154.397696] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
-[  154.404922] *** vic_core_s_stream: STREAM ON ***
-[  154.417876] *** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***
-[  154.436124] *** ispcore_video_s_stream: Called s_stream on subdev isp-w02: result=0 ***
-[  154.446198] *** vin_s_stream: SAFE implementation - sd=81144000, enable=1 ***
-[  154.466417] vin_s_stream: VIN state = 4, enable = 1
-[  154.471558] *** tx_isp_get_sensor: Searching subdev array for sensors ***
-[  154.487892] *** tx_isp_get_sensor: Found real sensor: 85215400 ***
-[  154.504439] vin_s_stream: VIN processing complete - sensor will be handled by core loop
-[  154.517871] vin_s_stream: VIN state set to 4 (SAFE implementation)
-[  154.524258] *** ispcore_video_s_stream: Called s_stream on subdev isp-w01: result=0 ***
-[  154.547871] *** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=1 ***
-[  154.566748] *** VIC STATE CHECK: vic_dev->state=4 (need >=3), enable=1 ***
-[  154.576860] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
-[  154.597052] csi_video_s_stream: sd=85215400, enable=1
-[  154.607148] *** tx_isp_get_sensor: Searching subdev array for sensors ***
-[  154.627344] *** tx_isp_get_sensor: Found real sensor: 85215400 ***
-[  154.633754] csi_video_s_stream: Stream ON - CSI state set to 4
-[  154.647872] *** ispcore_video_s_stream: Called s_stream on subdev isp-w00: result=0 ***
-[  154.666296] *** vic_core_s_stream: BINARY NINJA EXACT - sd=85bf8000, enable=1 ***
-[  154.676402] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
-[  154.691330] *** vic_core_s_stream: STREAM ON ***
-[  154.696092] *** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***
-[  154.707868] *** ispcore_video_s_stream: Called s_stream on subdev isp-w02: result=0 ***
-[  154.726295] *** vin_s_stream: SAFE implementation - sd=81144000, enable=1 ***
-[  154.746478] vin_s_stream: VIN state = 4, enable = 1
-[  154.751537] *** tx_isp_get_sensor: Searching subdev array for sensors ***
-[  154.767869] *** tx_isp_get_sensor: Found real sensor: 85215400 ***
-[  154.776812] vin_s_stream: VIN processing complete - sensor will be handled by core loop
-[  154.795269] vin_s_stream: VIN state set to 4 (SAFE implementation)
-[  154.811238] *** ispcore_video_s_stream: Called s_stream on subdev isp-w01: result=0 ***
-[  154.827870] *** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=1 ***
-[  154.846746] *** VIC STATE CHECK: vic_dev->state=4 (need >=3), enable=1 ***
-[  154.856830] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
-[  154.877025] csi_video_s_stream: sd=85215400, enable=1
-[  154.882341] *** tx_isp_get_sensor: Searching subdev array for sensors ***
-[  154.897890] *** tx_isp_get_sensor: Found real sensor: 85215400 ***
-[  154.914432] csi_video_s_stream: Stream ON - CSI state set to 4
-[  154.924548] **
+[  396.374335] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[  396.393034] csi_video_s_stream: sd=8056a000, enable=1
+[  396.403141] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  396.423363] *** tx_isp_get_sensor: Found real sensor: 8056a000 ***
+[  396.429792] csi_video_s_stream: Stream ON - CSI state set to 4
+[  396.444346] *** ispcore_video_s_stream: Called s_stream on subdev isp-w00: result=0 ***
+[  396.462786] *** vic_core_s_stream: BINARY NINJA EXACT - sd=8056a400, enable=1 ***
+[  396.472862] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
+[  396.493070] *** vic_core_s_stream: STREAM ON ***
+[  396.497868] *** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***
+[  396.514202] *** ispcore_video_s_stream: Called s_stream on subdev isp-w02: result=0 ***
+[  396.532678] *** ispcore_video_s_stream: SKIPPING s_stream on core subdev isp-w01 to prevent recursion ***
+[  396.552856] *** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=1 ***
+[  396.573070] *** VIC STATE CHECK: vic_dev->state=4 (need >=3), enable=1 ***
+[  396.580202] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[  396.598873] csi_video_s_stream: sd=8056a000, enable=1
+[  396.604090] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  396.621252] *** tx_isp_get_sensor: Found real sensor: 8056a000 ***
+[  396.633663] csi_video_s_stream: Stream ON - CSI state set to 4
+[  396.651552] *** ispcore_video_s_stream: Called s_stream on subdev isp-w00: result=0 ***
+[  396.659841] *** vic_core_s_stream: BINARY NINJA EXACT - sd=8056a400, enable=1 ***
+[  396.677719] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
+[  396.694337] *** vic_core_s_stream: STREAM ON ***
+[  396.704344] *** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***
+[  396.722609] *** ispcore_video_s_stream: Called s_stream on subdev isp-w02: result=0 ***
+[  396.732675] *** ispcore_video_s_stream: SKIPPING s_stream on core subdev isp-w01 to prevent recursion ***
+[  396.752199] *** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=1 ***
+[  396.772639] *** VIC STATE CHECK: vic_dev->state=4 (need >=3), enable=1 ***
+[  396.779765] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[  396.798443] csi_video_s_stream: sd=8056a000, enable=1
+[  396.803658] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  396.820827] *** tx_isp_get_sensor: Found real sensor: 8056a000 ***
+[  396.834339] csi_video_s_stream: Stream ON - CSI state set to 4
+[  396.840367] *** ispcore_video_s_stream: Called s_stream on subdev isp-w00: result=0 ***
+[  396.864349] *** vic_core_s_stream: BINARY NINJA EXACT - sd=8056a400, enable=1 ***
+[  396.879033] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
+[  396.894343] *** vic_core_s_stream: STREAM ON ***
+[  396.904349] *** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***
+[  396.922611] *** ispcore_video_s_stream: Called s_stream on subdev isp-w02: result=0 ***
+[  396.942797] *** ispcore_video_s_stream: SKIPPING s_stream on core subdev isp-w01 to prevent recursion ***
+[  396.962974] *** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=1 ***
+[  396.973065] *** VIC STATE CHECK: vic_dev->state=4 (need >=3), enable=1 ***
+[  396.988813] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[  397.004396] csi_video_s_stream: sd=8056a000, enable=1
+[  397.009606] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  397.026763] *** tx_isp_get_sensor: Found real sensor: 8056a000 ***
+[  397.033141] csi_video_s_stream: Stream ON - CSI state set to 4
+[  397.054350] *** ispcore_video_s_stream: Called s_stream on subdev isp-w00: result=0 ***
+[  397.069697] *** vic_core_s_stream: BINARY NINJA EXACT - sd=8056a400, enable=1 ***
+[  397.083028] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
+[  397.100412] *** vic_core_s_stream: STREAM ON ***
+[  397.108709] *** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***
+[  397.124357] *** ispcore_video_s_stream: Called s_stream on subdev isp-w02: result=0 ***
+[  397.142795] *** ispcore_video_s_stream: SKIPPING s_stream on core subdev isp-w01 to prevent recursion ***
+[  397.162971] *** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=1 ***
+[  397.176952] *** VIC STATE CHECK: vic_dev->state=4 (need >=3), enable=1 ***
+[  397.194345] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[  397.202883] csi_video_s_stream: sd=8056a000, enable=1
+[  397.218234] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  397.230151] *** tx_isp_get_sensor: Found real sensor: 8056a000 ***
+[  397.244350] csi_video_s_stream: Stream ON - CSI state set to 4
+[  397.254352] *** ispcore_video_s_stream: Called s_stream on subdev isp-w00: result=0 ***
+[  397.272790] *** vic_core_s_stream: BINARY NINJA EXACT - sd=8056a400, enable=1 ***
+[  397.292996] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
+[  397.300208] *** vic_core_s_stream: STREAM ON ***
+[  397.314350] *** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***
+[  397.332607] *** ispcore_video_s_stream: Called s_stream on subdev isp-w02: result=0 ***
+[  397.342698] *** ispcore_video_s_stream: SKIPPING s_stream on core subdev isp-w01 to prevent recursion ***
+[  397.362882] *** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=1 ***
+[  397.381080] *** VIC STATE CHECK: vic_dev->state=4 (need >=3), enable=1 ***
+[  397.394348] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[  397.413048] csi_video_s_stream: sd=8056a000, enable=1
+[  397.423148] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  397.443345] *** tx_isp_get_sensor: Found real sensor: 8056a000 ***
+[  397.449750] csi_video_s_stream: Stream ON - CSI state set to 4
+[  397.462688] *** ispcore_video_s_stream: Called s_stream on subdev isp-w00: result=0 ***
+[  397.474350] *** vic_core_s_stream: BINARY NINJA EXACT - sd=8056a400, enable=1 ***
+[  397.492325] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
+[  397.512516] *** vic_core_s_stream: STREAM ON ***
+[  397.517302] *** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***
+[  397.534356] *** ispcore_video_s_stream: Called s_stream on subdev isp-w02: result=0 ***
+[  397.552784] *** ispcore_video_s_stream: SKIPPING s_stream on core subdev isp-w01 to prevent recursion ***
+[  397.572964] *** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=1 ***
+[  397.593176] *** VIC STATE CHECK: vic_dev->state=4 (need >=3), enable=1 ***
+[  397.600302] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[  397.618974] csi_video_s_stream: sd=8056a000, enable=1
+[  397.624182] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  397.641349] *** tx_isp_get_sensor: Found real sensor: 8056a000 ***
+[  397.661544] csi_video_s_stream: Stream ON - CSI state set to 4
+[  397.667598] *** ispcore_video_s_stream: Called s_stream on subdev isp-w00: result=0 ***
+[  397.684070] *** vic_core_s_stream: BINARY NINJA EXACT - sd=8056a400, enable=1 ***
+[  397.698718] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
+[  397.714359] *** vic_core_s_stream: STREAM ON ***
+[  397.719191] *** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***
+[  397.739370] *** ispcore_video_s_stream: Called s_stream on subdev isp-w02: result=0 ***
+[  397.754358] *** ispcore_video_s_stream: SKIPPING s_stream on core subdev isp-w01 to prevent recursion ***
+[  397.774397] *** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=1 ***
+[  397.783115] *** VIC STATE CHECK: vic_dev->state=4 (need >=3), enable=1 ***
+[  397.804356] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[  397.819572] csi_video_s_stream: sd=8056a000, enable=1
+[  397.834349] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  397.851536] *** tx_isp_get_sensor: Found real sensor: 8056a000 ***
+[  397.857943] csi_video_s_stream: Stream ON - CSI state set to 4
+[  397.874103] *** ispcore_video_s_stream: Called s_stream on subdev isp-w00: result=0 ***
+[  397.884182] *** vic_core_s_stream: BINARY NINJA EXACT - sd=8056a400, enable=1 ***
+[  397.904394] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
+[  397.911581] *** vic_core_s_stream: STREAM ON ***
+[  397.924350] *** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***
+[  397.938560] *** ispcore_video_s_stream: Called s_stream on subdev isp-w02: result=0 ***
+[  397.954406] *** ispcore_video_s_stream: SKIPPING s_stream on core subdev isp-w01 to prevent recursion ***
+[  397.964286] *** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=1 ***
+[  397.991303] *** VIC STATE CHECK: vic_dev->state=4 (need >=3), enable=1 ***
+[  398.004370] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[  398.023079] csi_video_s_stream: sd=8056a000, enable=1
+[  398.033179] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  398.051498] *** tx_isp_get_sensor: Found real sensor: 8056a000 ***
+[  398.057967] csi_video_s_stream: Stream ON - CSI state set to 4
+[  398.063989] *** ispcore_video_s_stream: Called s_stream on subdev isp-w00: result=0 ***
+[  398.092558] *** vic_core_s_stream: BINARY NINJA EXACT - sd=8056a400, enable=1 ***
+[  398.102613] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
+[  398.122811] *** vic_core_s_stream: STREAM ON ***
+[  398.127604] *** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***
+[  398.144368] *** ispcore_video_s_stream: Called s_stream on subdev isp-w02: result=0 ***
+[  398.162794] *** ispcore_video_s_stream: SKIPPING s_stream on core subdev isp-w01 to prevent recursion ***
+[  398.182980] *** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=1 ***
+[  398.196419] *** VIC STATE CHECK: vic_dev->state=4 (need >=3), enable=1 ***
+[  398.212549] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[  398.231301] csi_video_s_stream: sd=8056a000, enable=1
+[  398.241398] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  398.261587] *** tx_isp_get_sensor: Found real sensor: 8056a000 ***
+[  398.267997] csi_video_s_stream: Stream ON - CSI state set to 4
+[  398.284153] *** ispcore_video_s_stream: Called s_stream on subdev isp-w00: result=0 ***
+[  398.294239] *** vic_core_s_stream: BINARY NINJA EXACT - sd=8056a400, enable=1 ***
+[  398.311050] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
+[  398.328440] *** vic_core_s_stream: STREAM ON ***
+[  398.333203] *** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***
+[  398.351441] *** ispcore_video_s_stream: Called s_stream on subdev isp-w02: result=0 ***
+[  398.371627] *** ispcore_video_s_stream: SKIPPING s_stream on core subdev isp-w01 to prevent recursion ***
+[  398.391803] *** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=1 ***
+[  398.408837] *** VIC STATE CHECK: vic_dev->state=4 (need >=3), enable=1 ***
+[  398.424385] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[  398.443093] csi_video_s_stream: sd=8056a000, enable=1
+[  398.448323] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  398.464359] *** tx_isp_get_sensor: Found real sensor: 8056a000 ***
+[  398.480902] csi_video_s_stream: Stream ON - CSI state set to 4
+[  398.490996] *** ispcore_video_s_stream: Called s_stream on subdev isp-w00: result=0 ***
+[  398.504371] *** vic_core_s_stream: BINARY NINJA EXACT - sd=8056a400, enable=1 ***
+[  398.522278] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
+[  398.542477] *** vic_core_s_stream: STREAM ON ***
+[  398.547267] *** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***
+[  398.564511] *** ispcore_video_s_stream: Called s_stream on subdev isp-w02: result=0 ***
+[  398.582948] *** ispcore_video_s_stream: SKIPPING s_stream on core subdev isp-w01 to prevent recursion ***
+[  398.602820] *** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=1 ***
+[  398.614607] *** VIC STATE CHECK: vic_dev->state=4 (need >=3), enable=1 ***
+[  398.631886] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[  398.643798] csi_video_s_stream: sd=8056a000, enable=1
+[  398.662164] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  398.669207] *** tx_isp_get_sensor: Found real sensor: 8056a000 ***
+[  398.684358] csi_video_s_stream: Stream ON - CSI state set to 4
+[  398.694366] *** ispcore_video_s_stream: Called s_stream on subdev isp-w00: result=0 ***
+[  398.708176] *** vic_core_s_stream: BINARY NINJA EXACT - sd=8056a400, enable=1 ***
+[  398.724365] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
+[  398.741718] *** vic_core_s_stream: STREAM ON ***
+[  398.751832] *** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***
+[  398.772020] *** ispcore_video_s_stream: Called s_stream on subdev isp-w02: result=0 ***
+[  398.782094] *** ispcore_video_s_stream: SKIPPING s_stream on core subdev isp-w01 to prevent recursion ***
+[  398.802276] *** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=1 ***
+[  398.822478] *** VIC STATE CHECK: vic_dev->state=4 (need >=3), enable=1 ***
+[  398.832561] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[  398.852750] csi_video_s_stream: sd=8056a000, enable=1
+[  398.862848] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  398.882894] *** tx_isp_get_sensor: Found real sensor: 8056a000 ***
+[  398.889356] csi_video_s_stream: Stream ON - CSI state set to 4
+[  398.899468] *** ispcore_video_s_stream: Called s_stream on subdev isp-w00: result=0 ***
+[  398.919666] *** vic_core_s_stream: BINARY NINJA EXACT - sd=8056a400, enable=1 ***
+[  398.934370] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
+[  398.951734] *** vic_core_s_stream: STREAM ON ***
+[  398.956520] *** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***
+[  398.974371] *** ispcore_video_s_stream: Called s_stream on subdev isp-w02: result=0 ***
+[  398.990971] *** ispcore_video_s_stream: SKIPPING s_stream on core subdev isp-w01 to prevent recursion ***
+[  399.004361] *** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=1 ***
+[  399.023252] *** VIC STATE CHECK: vic_dev->state=4 (need >=3), enable=1 ***
+[  399.043450] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[  399.053526] csi_video_s_stream: sd=8056a000, enable=1
+[  399.073731] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  399.080770] *** tx_isp_get_sensor: Found real sensor: 8056a000 ***
+[  399.094361] csi_video_s_stream: Stream ON - CSI state set to 4
+[  399.104370] *** ispcore_video_s_stream: Called s_stream on subdev isp-w00: result=0 ***
+[  399.120540] *** vic_core_s_stream: BINARY NINJA EXACT - sd=8056a400, enable=1 ***
+[  399.138478] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
+[  399.154365] *** vic_core_s_stream: STREAM ON ***
+[  399.164370] *** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***
+[  399.182624] *** ispcore_video_s_stream: Called s_stream on subdev isp-w02: result=0 ***
+[  399.192696] *** ispcore_video_s_stream: SKIPPING s_stream on core subdev isp-w01 to prevent recursion ***
+[  399.212876] *** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=1 ***
+[  399.229864] *** VIC STATE CHECK: vic_dev->state=4 (need >=3), enable=1 ***
+[  399.244369] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[  399.263073] csi_video_s_stream: sd=8056a000, enable=1
+[  399.268310] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  399.284364] *** tx_isp_get_sensor: Found real sensor: 8056a000 ***
+[  399.300910] csi_video_s_stream: Stream ON - CSI state set to 4
+[  399.306961] *** ispcore_video_s_stream: Called s_stream on subdev isp-w00: result=0 ***
+[  399.325366] *** vic_core_s_stream: BINARY NINJA EXACT - sd=8056a400, enable=1 ***
+[  399.333097] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
+[  399.351601] *** vic_core_s_stream: STREAM ON ***
+[  399.360537] *** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***
+[  399.380725] *** ispcore_video_s_stream: Called s_stream on subdev isp-w02: result=0 ***
+[  399.394372] *** ispcore_video_s_stream: SKIPPING s_stream on core subdev isp-w01 to prevent recursion ***
+[  399.414415] *** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=1 ***
+[  399.423125] *** VIC STATE CHECK: vic_dev->state=4 (need >=3), enable=1 ***
+[  399.444372] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[  399.463087] csi_video_s_stream: sd=8056a000, enable=1
+[  399.473185] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  399.493378] *** tx_isp_get_sensor: Found real sensor: 8056a000 ***
+[  399.499783] csi_video_s_stream: Stream ON - CSI state set to 4
+[  399.514377] *** ispcore_video_s_stream: Called s_stream on subdev isp-w00: result=0 ***
+[  399.528249] *** vic_core_s_stream: BINARY NINJA EXACT - sd=8056a400, enable=1 ***
+[  399.544389] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
+[  399.561747] *** vic_core_s_stream: STREAM ON ***
+[  399.571855] *** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***
+[  399.584945] *** ispcore_video_s_stream: Called s_stream on subdev isp-w02: result=0 ***
+[  399.603382] *** ispcore_video_s_stream: SKIPPING s_stream on core subdev isp-w01 to prevent recursion ***
+[  399.623552] *** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=1 ***
+[  399.643761] *** VIC STATE CHECK: vic_dev->state=4 (need >=3), enable=1 ***
+[  399.653863] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[  399.674056] csi_video_s_stream: sd=8056a000, enable=1
+[  399.684151] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  399.695770] *** tx_isp_get_sensor: Found real sensor: 8056a000 ***
+[  399.702150] csi_video_s_stream: Stream ON - CSI state set to 4
+[  399.724385] *** ispcore_video_s_stream: Called s_stream on subdev isp-w00: result=0 ***
+[  399.742837] *** vic_core_s_stream: BINARY NINJA EXACT - sd=8056a400, enable=1 ***
+[  399.763043] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
+[  399.770260] *** vic_core_s_stream: STREAM ON ***
+[  399.784377] *** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***
+[  399.802626] *** ispcore_video_s_stream: Called s_stream on subdev isp-w02: result=0 ***
+[  399.810921] *** ispcore_video_s_stream: SKIPPING s_stream on core subdev isp-w01 to prevent recursion ***
+[  399.834394] *** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=1 ***
+[  399.853358] *** VIC STATE CHECK: vic_dev->state=4 (need >=3), enable=1 ***
+[  399.866238] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[  399.884374] csi_video_s_stream: sd=8056a000, enable=1
+[  399.894378] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  399.911559] *** tx_isp_get_sensor: Found real sensor: 8056a000 ***
+[  399.921647] csi_video_s_stream: Stream ON - CSI state set to 4
+[  399.931764] *** ispcore_video_s_stream: Called s_stream on subdev isp-w00: result=0 ***
+[  399.952045] *** vic_core_s_stream: BINARY NINJA EXACT - sd=8056a400, enable=1 ***
+[  399.972227] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
+[  399.979435] *** vic_core_s_stream: STREAM ON ***
+[  399.994341] *** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***
+[  400.004391] *** ispcore_video_s_stream: Called s_stream on subdev isp-w02: result=0 ***
+[  400.012662] *** ispcore_video_s_stream: SKIPPING s_stream on core subdev isp-w01 to prevent recursion ***
+[  400.042807] *** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=1 ***
+[  400.063018] *** VIC STATE CHECK: vic_dev->state=4 (need >=3), enable=1 ***
+[  400.073101] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[  400.093287] csi_video_s_stream: sd=8056a000, enable=1
+[  400.103393] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  400.121405] *** tx_isp_get_sensor: Found real sensor: 8056a000 ***
+[  400.134376] csi_video_s_stream: Stream ON - CSI state set to 4
+[  400.140457] *** ispcore_video_s_stream: Called s_stream on subdev isp-w00: result=0 ***
+[  400.160684] *** vic_core_s_stream: BINARY NINJA EXACT - sd=8056a400, enable=1 ***
+root@ing-wyze-cam3-a000 ~# 
