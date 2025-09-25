@@ -10430,13 +10430,13 @@ void *isp_core_tuning_init(void *arg1)
     tuning_data->shading = 0;       /* Shading disabled */
     tuning_data->running_mode = 0;  /* Default running mode */
     tuning_data->custom_mode = 0;   /* Default custom mode */
-    tuning_data->gamma = 128;       /* Default gamma */
-    tuning_data->dpc = 0;           /* DPC disabled */
+    //tuning_data->gamma = 128;       /* Default gamma */
+    //tuning_data->dpc = 0;           /* DPC disabled */
     tuning_data->antiflicker = 0;   /* Anti-flicker disabled */
-    tuning_data->bypass = 0;        /* Bypass disabled */
+    //tuning_data->bypass = 0;        /* Bypass disabled */
 
     /* SAFE: Initialize the mode_flag using struct member instead of dangerous offset */
-    tuning_data->mode_flag = 1;     /* SAFE: Use struct member instead of *(ptr + 0x15c) = 1 */
+    //tuning_data->mode_flag = 1;     /* SAFE: Use struct member instead of *(ptr + 0x15c) = 1 */
 
     pr_info("isp_core_tuning_init: Tuning data structure initialized at %p\n", tuning_data);
     pr_info("isp_core_tuning_init: Structure size: %zu bytes (vs Binary Ninja 0x40d0)\n", sizeof(struct isp_tuning_data));
