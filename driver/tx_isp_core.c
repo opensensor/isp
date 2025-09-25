@@ -334,11 +334,6 @@ struct tx_isp_sensor *tx_isp_get_sensor(void)
 }
 EXPORT_SYMBOL(tx_isp_get_sensor);
 
-/* Global interrupt callback array - EXACT Binary Ninja implementation */
-static irqreturn_t (*irq_func_cb[32])(int irq, void *dev_id) = {0};
-
-/* Missing variable declarations for ISP core interrupt handling */
-static volatile int isp_force_core_isr = 0;  /* Force ISP core ISR flag */
 
 /* isp_fw_process - Updated for core device architecture */
 int isp_fw_process(void *data)
