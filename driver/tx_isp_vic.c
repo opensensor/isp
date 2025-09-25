@@ -231,23 +231,23 @@ void tx_isp_vic_restore_interrupts(void)
 
     pr_info("*** VIC INTERRUPT RESTORE: Restoring VIC interrupt registers in PRIMARY VIC space ***\n");
 
-    /* CRITICAL: Use CSI PHY space for interrupt control (0x10023000), not VIC space */
+    /* CRITICAL: Use PRIMARY VIC space for interrupt control (0x133e0000) */
     struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
-    if (!vic_dev || !vic_dev->vic_regs_control) {
-        pr_err("*** VIC INTERRUPT RESTORE: No CSI PHY registers available ***\n");
+    if (!vic_dev || !vic_dev->vic_regs) {
+        pr_err("*** VIC INTERRUPT RESTORE: No primary VIC registers available ***\n");
         return;
     }
 
     /* Restore VIC interrupt register values using WORKING ISP-activates configuration */
-    pr_info("*** VIC INTERRUPT RESTORE: Using CSI PHY space for interrupt configuration ***\n");
+    pr_info("*** VIC INTERRUPT RESTORE: Using PRIMARY VIC space for interrupt configuration ***\n");
 
-    /* Clear pending interrupts first in CSI PHY space */
-    writel(0xFFFFFFFF, vic_dev->vic_regs_control + 0x1f0);  /* Clear main interrupt status */
-    writel(0xFFFFFFFF, vic_dev->vic_regs_control + 0x1f4);  /* Clear MDMA interrupt status */
+    /* Clear pending interrupts first in PRIMARY VIC space */
+    writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main interrupt status */
+    writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
     wmb();
 
     /* CRITICAL FIX 3: Restore interrupt masks with protection against overwrites */
-    writel(0xFFFFFFFE, vic_dev->vic_regs_control + 0x1e8);  /* Enable frame done interrupt */
+    writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);  /* Enable frame done interrupt */
     /* SKIP MDMA register 0x1ec - it doesn't work correctly */
     wmb();
 
@@ -1288,16 +1288,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(2, vic_regs + 0x0);
     }
 
-    /* Binary Ninja EXACT: Final VIC enable - *vic_regs = 1 */
-    /* Use SECONDARY VIC space for enable (same as unlock sequence) */
-    void __iomem *vic_enable_regs = vic_dev->vic_regs_control;
-    if (vic_enable_regs) {
-        writel(1, vic_enable_regs + 0x0);
-        pr_info("*** tx_isp_vic_start: VIC enabled using SECONDARY VIC space ***\n");
-    } else {
-        pr_err("tx_isp_vic_start: No SECONDARY VIC registers for final enable\n");
-        return -EINVAL;
-    }
+    /* Binary Ninja EXACT: Final VIC enable - use PRIMARY VIC space (vic_regs + 0x0) */
+    writel(1, vic_regs + 0x0);
+    pr_info("*** tx_isp_vic_start: VIC enabled using PRIMARY VIC space ***\n");
 
     /* CRITICAL FIX: Missing VIC Control register sequence from Binary Ninja reference */
     pr_info("*** tx_isp_vic_start: CRITICAL FIX - Writing VIC Control register sequence ***\n");
