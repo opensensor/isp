@@ -272,8 +272,6 @@ static long tx_isp_proc_w02_ioctl(struct file *file, unsigned int cmd, unsigned 
     return 0;
 }
 
-    return count;
-}
 
 static int tx_isp_proc_w02_open(struct inode *inode, struct file *file)
 {
