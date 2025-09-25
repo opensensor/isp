@@ -41,7 +41,7 @@ void csi_write32(u32 reg, u32 val)
     if (ourISPdev && ourISPdev->csi_dev && ourISPdev->csi_dev->csi_regs) {
         writel(val, ourISPdev->csi_dev->csi_regs + reg);
     } else {
-        printk(KERN_ALERT "csi_write32: No CSI registers available\n");
+        pr_err("csi_write32: No CSI registers available\n");
     }
 }
 
@@ -85,20 +85,20 @@ void tx_isp_csi_check_errors(struct tx_isp_dev *isp_dev)
 
     /* Only log if there are actual errors */
     if (err1 || err2) {
-        printk(KERN_ALERT "*** CSI ERROR CHECK: err1=0x%08x, err2=0x%08x, phy_state=0x%08x ***\n",
+        pr_info("*** CSI ERROR CHECK: err1=0x%08x, err2=0x%08x, phy_state=0x%08x ***\n",
                 err1, err2, phy_state);
 
         /* Handle protocol errors (ERR1) */
         if (err1) {
-            printk(KERN_ALERT "CSI Protocol errors (ERR1): 0x%08x\n", err1);
+            pr_err("CSI Protocol errors (ERR1): 0x%08x\n", err1);
 
-            if (err1 & 0x1) printk(KERN_ALERT "  - SOT Sync Error\n");
-            if (err1 & 0x2) printk(KERN_ALERT "  - SOTHS Sync Error\n");
-            if (err1 & 0x4) printk(KERN_ALERT "  - ECC Single-bit Error (corrected)\n");
-            if (err1 & 0x8) printk(KERN_ALERT "  - ECC Multi-bit Error (uncorrectable)\n");
-            if (err1 & 0x10) printk(KERN_ALERT "  - CRC Error\n");
-            if (err1 & 0x20) printk(KERN_ALERT "  - Packet Size Error\n");
-            if (err1 & 0x40) printk(KERN_ALERT "  - EoTp Error\n");
+            if (err1 & 0x1) pr_err("  - SOT Sync Error\n");
+            if (err1 & 0x2) pr_err("  - SOTHS Sync Error\n");
+            if (err1 & 0x4) pr_err("  - ECC Single-bit Error (corrected)\n");
+            if (err1 & 0x8) pr_err("  - ECC Multi-bit Error (uncorrectable)\n");
+            if (err1 & 0x10) pr_err("  - CRC Error\n");
+            if (err1 & 0x20) pr_err("  - Packet Size Error\n");
+            if (err1 & 0x40) pr_err("  - EoTp Error\n");
 
             /* Clear errors by writing back the status */
             writel(err1, csi_base + 0x20);
@@ -107,12 +107,12 @@ void tx_isp_csi_check_errors(struct tx_isp_dev *isp_dev)
 
         /* Handle application errors (ERR2) */
         if (err2) {
-            printk(KERN_ALERT "CSI Application errors (ERR2): 0x%08x\n", err2);
+            pr_err("CSI Application errors (ERR2): 0x%08x\n", err2);
 
-            if (err2 & 0x1) printk(KERN_ALERT "  - Data ID Error\n");
-            if (err2 & 0x2) printk(KERN_ALERT "  - Frame Sync Error\n");
-            if (err2 & 0x4) printk(KERN_ALERT "  - Frame Data Error\n");
-            if (err2 & 0x8) printk(KERN_ALERT "  - Frame Sequence Error\n");
+            if (err2 & 0x1) pr_err("  - Data ID Error\n");
+            if (err2 & 0x2) pr_err("  - Frame Sync Error\n");
+            if (err2 & 0x4) pr_err("  - Frame Data Error\n");
+            if (err2 & 0x8) pr_err("  - Frame Sequence Error\n");
 
             /* Clear errors by writing back the status */
             writel(err2, csi_base + 0x24);
@@ -121,7 +121,7 @@ void tx_isp_csi_check_errors(struct tx_isp_dev *isp_dev)
 
         /* Update error state */
         if ((err1 & 0x38) || (err2 & 0xE)) { /* Serious errors */
-            printk(KERN_ALERT "CSI: Serious errors detected, may need recovery\n");
+            pr_err("CSI: Serious errors detected, may need recovery\n");
         }
     }
 
@@ -151,12 +151,12 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_csi_device *csi_dev;
 
-    printk(KERN_ALERT "*** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***\n");
-    printk(KERN_ALERT "csi_video_s_stream: sd=%p, enable=%d\n", sd, enable);
+    pr_info("*** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***\n");
+    pr_info("csi_video_s_stream: sd=%p, enable=%d\n", sd, enable);
 
     /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 0xffffffea */
     if (!sd || (unsigned long)sd >= 0xfffff001) {
-        printk(KERN_ALERT "csi_video_s_stream: Invalid subdev pointer\n");
+        pr_err("csi_video_s_stream: Invalid subdev pointer\n");
         return 0xffffffea;
     }
 
@@ -165,14 +165,14 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     extern struct tx_isp_sensor *tx_isp_get_sensor(void);
     struct tx_isp_sensor *sensor = tx_isp_get_sensor();
     if (!sensor || !sensor->video.attr || sensor->video.attr->dbus_type != TX_SENSOR_DATA_INTERFACE_MIPI) {
-        printk(KERN_ALERT "csi_video_s_stream: Sensor interface type is not MIPI (1), returning 0\n");
+        pr_info("csi_video_s_stream: Sensor interface type is not MIPI (1), returning 0\n");
         return 0;
     }
 
     /* Get CSI device from subdev private data */
     csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
     if (!csi_dev) {
-        printk(KERN_ALERT "CSI device is NULL from subdev private data\n");
+        pr_err("CSI device is NULL from subdev private data\n");
         return 0xffffffea;
     }
 
@@ -181,10 +181,10 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     /* Binary Ninja: *(arg1 + 0x128) = $v0_4 */
     if (enable == 0) {
         csi_dev->state = 3;
-        printk(KERN_ALERT "csi_video_s_stream: Stream OFF - CSI state set to 3\n");
+        pr_info("csi_video_s_stream: Stream OFF - CSI state set to 3\n");
     } else {
         csi_dev->state = 4;
-        printk(KERN_ALERT "csi_video_s_stream: Stream ON - CSI state set to 4\n");
+        pr_info("csi_video_s_stream: Stream ON - CSI state set to 4\n");
     }
 
     /* Binary Ninja: return 0 */
@@ -251,7 +251,7 @@ int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sens
     /* Find or create the sensor */
     if (!sd->active_sensor) {
         /* In a real implementation, we would create a new sensor here */
-        printk(KERN_ALERT "No active sensor to sync attributes with\n");
+        pr_err("No active sensor to sync attributes with\n");
         return -EINVAL;
     }
 
@@ -284,12 +284,12 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
         /* CRITICAL SAFETY CHECK: Prevent BadVA crash */
         if (!csi_dev) {
-            printk(KERN_ALERT "csi_core_ops_init: CRITICAL ERROR - sd->dev_priv is NULL! sd=%p\n", sd);
-            printk(KERN_ALERT "csi_core_ops_init: This means CSI device was not properly set during probe\n");
+            pr_err("csi_core_ops_init: CRITICAL ERROR - sd->dev_priv is NULL! sd=%p\n", sd);
+            pr_err("csi_core_ops_init: This means CSI device was not properly set during probe\n");
             return 0xffffffea;
         }
 
-        printk(KERN_ALERT "csi_core_ops_init: sd=%p, csi_dev=%p, enable=%d\n", sd, csi_dev, enable);
+        pr_info("csi_core_ops_init: sd=%p, csi_dev=%p, enable=%d\n", sd, csi_dev, enable);
         result = 0xffffffea;
 
         /* Binary Ninja: if ($s0_1 != 0 && $s0_1 u< 0xfffff001) */
@@ -516,14 +516,14 @@ int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
         return -EINVAL;
     }
 
-    printk(KERN_ALERT "*** tx_isp_csi_slake_subdev: CSI slake/shutdown - current state=%d ***\n", csi_dev->state);
+    pr_info("*** tx_isp_csi_slake_subdev: CSI slake/shutdown - current state=%d ***\n", csi_dev->state);
 
     /* Binary Ninja: int32_t $v1_2 = *($s0_1 + 0x128) */
     state = csi_dev->state;
 
     /* Binary Ninja: if ($v1_2 == 4) csi_video_s_stream(arg1, 0) */
     if (state == 4) {
-        printk(KERN_ALERT "tx_isp_csi_slake_subdev: CSI in streaming state, stopping stream\n");
+        pr_info("tx_isp_csi_slake_subdev: CSI in streaming state, stopping stream\n");
         csi_video_s_stream(sd, 0);
         state = csi_dev->state;  /* Update state after s_stream */
     }
@@ -531,7 +531,7 @@ int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
     /* Binary Ninja: void* $s2_1 = $s0_1 + 0x12c - Get mutex */
     /* Binary Ninja: if ($v1_2 == 3) csi_core_ops_init(arg1, 0) */
     if (csi_dev->state == 3) {
-        printk(KERN_ALERT "tx_isp_csi_slake_subdev: CSI in state 3, calling core_ops_init(disable)\n");
+        pr_info("tx_isp_csi_slake_subdev: CSI in state 3, calling core_ops_init(disable)\n");
         csi_core_ops_init(sd, 0);
     }
 
@@ -540,7 +540,7 @@ int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
 
     /* Binary Ninja: if (*($s0_1 + 0x128) == 2) *($s0_1 + 0x128) = 1 */
     if (csi_dev->state == 2) {
-        printk(KERN_ALERT "tx_isp_csi_slake_subdev: CSI state 2->1, disabling clocks\n");
+        pr_info("tx_isp_csi_slake_subdev: CSI state 2->1, disabling clocks\n");
         csi_dev->state = 1;
 
         /* Binary Ninja: void* $v0 = *(arg1 + 0xbc) - Get clocks array */
@@ -552,14 +552,14 @@ int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
                 if (sd->clks[i]) {
                     /* Binary Ninja: private_clk_disable(*$s0_4) */
                     clk_disable(sd->clks[i]);
-                    printk(KERN_ALERT "tx_isp_csi_slake_subdev: Disabled clock %d\n", i);
+                    pr_info("tx_isp_csi_slake_subdev: Disabled clock %d\n", i);
                 }
             }
         }
     }
 
     mutex_unlock(&csi_dev->mlock);
-    printk(KERN_ALERT "*** tx_isp_csi_slake_subdev: CSI slake complete, final state=%d ***\n", csi_dev->state);
+    pr_info("*** tx_isp_csi_slake_subdev: CSI slake complete, final state=%d ***\n", csi_dev->state);
     return 0;
 }
 
@@ -713,19 +713,19 @@ int tx_isp_csi_probe(struct platform_device *pdev)
     /* CRITICAL FIX: Set dev_priv and host_priv AFTER tx_isp_subdev_init to prevent overwrite */
     /* csi_video_s_stream() uses tx_isp_get_subdevdata() which reads dev_priv */
     tx_isp_set_subdevdata(&csi_dev->sd, csi_dev);
-    printk(KERN_ALERT "*** CSI PROBE: Set dev_priv to csi_dev %p AFTER subdev_init ***\n", csi_dev);
+    pr_info("*** CSI PROBE: Set dev_priv to csi_dev %p AFTER subdev_init ***\n", csi_dev);
 
     /* Binary Ninja expects CSI device at offset 0xd4 (host_priv field) */
     tx_isp_set_subdev_hostdata(&csi_dev->sd, csi_dev);
-    printk(KERN_ALERT "*** CSI PROBE: Set host_priv to csi_dev %p AFTER subdev_init ***\n", csi_dev);
+    pr_info("*** CSI PROBE: Set host_priv to csi_dev %p AFTER subdev_init ***\n", csi_dev);
 
     /* FIXED: Use memory mapping from tx_isp_subdev_init instead of duplicate mapping */
     if (csi_dev->sd.regs) {
         csi_dev->csi_regs = csi_dev->sd.regs;
-        printk(KERN_ALERT "*** CSI PROBE: Using register mapping from tx_isp_subdev_init: %p ***\n", csi_dev->csi_regs);
+        pr_info("*** CSI PROBE: Using register mapping from tx_isp_subdev_init: %p ***\n", csi_dev->csi_regs);
     } else {
         /* Binary Ninja: isp_printf(2, "sensor type is BT1120!\n", "tx_isp_csi_probe") */
-        printk(KERN_ALERT "*** CSI PROBE: tx_isp_subdev_init failed to map registers ***\n");
+        pr_err("*** CSI PROBE: tx_isp_subdev_init failed to map registers ***\n");
         isp_printf(2, "sensor type is BT1120!\n", "tx_isp_csi_probe");
         tx_isp_subdev_deinit(&csi_dev->sd);
         private_kfree(csi_dev);
@@ -754,7 +754,7 @@ int tx_isp_csi_probe(struct platform_device *pdev)
     /* Note: self_ptr member not present in current CSI device structure */
 
     /* REMOVED: Manual linking - now handled automatically by tx_isp_subdev_init */
-    printk(KERN_ALERT "*** CSI PROBE: Device linking handled automatically by tx_isp_subdev_init ***\n");
+    pr_info("*** CSI PROBE: Device linking handled automatically by tx_isp_subdev_init ***\n");
 
     return 0;
 }
