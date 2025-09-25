@@ -2773,6 +2773,33 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
 
             /* Enable VIC IRQ after final re-assert and verification */
+
+                /* UNMASK-ALL + short sampling loop to detect which source asserts */
+                if (vic_dev->vic_regs) {
+                    void __iomem *vr = vic_dev->vic_regs;
+                    u32 s0, s1;
+                    int i;
+                    /* Clear pending, then unmask ALL sources */
+                    writel(0x00000000, vr + 0x1f0);
+                    writel(0x00000000, vr + 0x1f4);
+                    writel(0x00000000, vr + 0x1e8);
+                    wmb();
+                    pr_info("*** VIC UNMASK-ALL TEST: [0x1e8]=0x%08x (expect 0) ***\n", readl(vr + 0x1e8));
+
+                    /* Sample status a few times pre-IRQ to see if any bit asserts */
+                    for (i = 0; i < 10; i++) {
+                        s0 = readl(vr + 0x1f0);
+                        s1 = readl(vr + 0x1f4);
+                        if (s0 || s1) {
+                            pr_warn("*** VIC UNMASK-ALL TEST: Status asserted pre-IRQ: [0x1f0]=0x%08x [0x1f4]=0x%08x (iter=%d) ***\n", s0, s1, i);
+                            break;
+                        }
+                        udelay(100);
+                    }
+                    if (i == 10)
+                        pr_info("*** VIC UNMASK-ALL TEST: No status bits asserted during pre-IRQ sample ***\n");
+                }
+
             pr_info("*** vic_core_s_stream: Enabling VIC IRQ AFTER final re-assert/verify ***\n");
             tx_vic_enable_irq(vic_dev);
 
