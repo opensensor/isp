@@ -2671,18 +2671,21 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Clear pending (W1C) */
                 writel(0xFFFFFFFF, vr + 0x1f0);
                 writel(0xFFFFFFFF, vr + 0x1f4);
-                /* Enable all interrupt sources and UNMASK-ALL for debug */
+                /* Enable all interrupt sources (both banks) and UNMASK-ALL for debug */
                 writel(0xFFFFFFFF, vr + 0x1e0);
+                writel(0xFFFFFFFF, vr + 0x1e4);
                 writel(0x00000000, vr + 0x1e8);
+                writel(0x00000000, vr + 0x1ec);
                 /* Global interrupt enable at 0x30c (if implemented) */
                 writel(0xFFFFFFFF, vr + 0x30c);
                 wmb();
-                pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e8]=0x%08x (UNMASK-ALL)***\n",
-                        readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x30c), readl(vr + 0x1e0), readl(vr + 0x1e8));
-                /* Final assert of interrupt routing reg (0x100). Do NOT touch 0x14 (stride) on PRIMARY */
+                pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (UNMASK-ALL)***\n",
+                        readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x30c), readl(vr + 0x1e0), readl(vr + 0x1e4), readl(vr + 0x1e8), readl(vr + 0x1ec));
+                /* Final assert: interrupt routing (0x100) and route/control (0x14) to match reference */
                 writel(0x000002d0, vr + 0x100);
+                writel(0x00000630, vr + 0x14);
                 wmb();
-                pr_info("*** VIC VERIFY (PRIMARY EXTRA): [0x100]=0x%08x [0x14]=0x%08x (unchanged stride) ***\n",
+                pr_info("*** VIC VERIFY (PRIMARY EXTRA): [0x100]=0x%08x [0x14]=0x%08x (ROUTE/CTRL) ***\n",
                         readl(vr + 0x100), readl(vr + 0x14));
                 udelay(50);
 
@@ -2752,12 +2755,13 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     void __iomem *vr = vic_dev->vic_regs;
                     u32 s0, s1;
                     int i;
-                    /* Clear pending (W1C), then unmask ALL sources */
+                    /* Clear pending (W1C), then unmask ALL sources (both banks) */
                     writel(0xFFFFFFFF, vr + 0x1f0);
                     writel(0xFFFFFFFF, vr + 0x1f4);
                     writel(0x00000000, vr + 0x1e8);
+                    writel(0x00000000, vr + 0x1ec);
                     wmb();
-                    pr_info("*** VIC UNMASK-ALL TEST: [0x1e8]=0x%08x (expect 0) ***\n", readl(vr + 0x1e8));
+                    pr_info("*** VIC UNMASK-ALL TEST: [0x1e8]=0x%08x [0x1ec]=0x%08x (expect 0) ***\n", readl(vr + 0x1e8), readl(vr + 0x1ec));
 
                     /* Sample status a few times pre-IRQ to see if any bit asserts */
                     for (i = 0; i < 10; i++) {
