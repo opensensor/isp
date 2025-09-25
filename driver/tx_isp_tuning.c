@@ -1060,10 +1060,6 @@ static int tisp_ae0_process_impl(void);
 /* tisp_event_push implemented as non-static below */
 static int system_reg_write_ae(int ae_id, uint32_t reg, uint32_t value);
 
-/* Helper function implementations */
-/* REMOVED: tisp_dma_cache_sync_helper - this function doesn't exist in Binary Ninja MCP reference */
-/* The reference driver processes interrupts using register reads only, no DMA cache sync */
-
 void private_complete(struct completion *comp)
 {
     if (comp) {
@@ -10917,100 +10913,6 @@ void check_csi_error(void)
 
         msleep(100); /* Add delay to prevent log spam */
     }
-}
-
-/* ===== REMAINING MISSING SYMBOL IMPLEMENTATIONS - Binary Ninja EXACT ===== */
-
-/* ae0_interrupt_hist - Binary Ninja EXACT implementation */
-int ae0_interrupt_hist(void)
-{
-    pr_info("ae0_interrupt_hist: Processing AE0 histogram interrupt\n");
-
-    /* Binary Ninja: int32_t $s0 = (system_reg_read(0xa050) & 3) << 0xb */
-    uint32_t ae0_status = system_reg_read(0xa050);
-    uint32_t buffer_offset = (ae0_status & 3) << 11;
-
-    /* Binary Ninja: private_dma_cache_sync(0, $s0 + data_b2f48, 0x800, 0) */
-    void *buffer_addr = (void *)(buffer_offset + data_b2f48);
-    tisp_dma_cache_sync_helper(0, buffer_addr, 0x800, 0);
-
-    /* Binary Ninja: Determine histogram parameters */
-    void *hist_base = (void *)data_b2f48;
-    int hist_flag;
-
-    if (data_b0e10 != 1) {
-        hist_flag = 1;
-    } else {
-        hist_flag = 0;
-    }
-
-    /* Binary Ninja: tisp_ae0_get_hist($s0 + $a0_1, 1, $a2) */
-    tisp_ae0_get_hist(buffer_offset + hist_base, 1, hist_flag);
-
-    /* Binary Ninja: Create and push event - int32_t var_38 = 1; tisp_event_push(&var_40) */
-    struct {
-        uint32_t pad1[2];      /* var_40 offset */
-        uint32_t event_id;     /* var_38 = 1 */
-        uint32_t pad2[8];      /* Additional event data */
-    } event_data = {0};
-
-    event_data.event_id = 1;
-    tisp_event_push(&event_data);
-
-    pr_info("ae0_interrupt_hist: AE0 histogram interrupt processed\n");
-    return 2;
-}
-
-/* ae1_interrupt_static - Binary Ninja EXACT implementation */
-int ae1_interrupt_static(void)
-{
-    pr_info("ae1_interrupt_static: Processing AE1 static interrupt\n");
-
-    /* Binary Ninja: void* $s0 = system_reg_read(0xa850) << 8 & 0x3000 */
-    uint32_t ae1_status = system_reg_read(0xa850);
-    void *buffer_addr = (void *)((ae1_status << 8) & 0x3000) + data_b2f54;
-
-    /* Binary Ninja: private_dma_cache_sync(0, $s0 + data_b2f54, 0x1000, 0) */
-    tisp_dma_cache_sync_helper(0, buffer_addr, 0x1000, 0);
-
-    /* Binary Ninja: tisp_ae1_get_statistics($s0 + data_b2f54, 0xf001f001) */
-    tisp_ae1_get_statistics(buffer_addr, 0xf001f001);
-
-    /* Binary Ninja: data_b0dfc = 1 */
-    data_b0dfc = 1;
-
-    pr_info("ae1_interrupt_static: AE1 static interrupt processed\n");
-    return 1;
-}
-
-/* ae1_interrupt_hist - Binary Ninja EXACT implementation */
-int ae1_interrupt_hist(void)
-{
-    pr_info("ae1_interrupt_hist: Processing AE1 histogram interrupt\n");
-
-    /* Binary Ninja: int32_t $s0 = (system_reg_read(0xa850) & 3) << 0xb */
-    uint32_t ae1_status = system_reg_read(0xa850);
-    uint32_t buffer_offset = (ae1_status & 3) << 11;
-
-    /* Binary Ninja: private_dma_cache_sync(0, $s0 + data_b2f60, 0x800, 0) */
-    void *buffer_addr = (void *)(buffer_offset + data_b2f60);
-    private_dma_cache_sync(0, buffer_addr, 0x800, 0);
-
-    /* Binary Ninja: tisp_ae1_get_hist($s0 + data_b2f60) */
-    tisp_ae1_get_hist(buffer_addr);
-
-    /* Binary Ninja: Create and push event - int32_t var_38 = 6; tisp_event_push(&var_40) */
-    struct {
-        uint32_t pad1[2];      /* var_40 offset */
-        uint32_t event_id;     /* var_38 = 6 */
-        uint32_t pad2[8];      /* Additional event data */
-    } event_data = {0};
-
-    event_data.event_id = 6;
-    tisp_event_push(&event_data);
-
-    pr_info("ae1_interrupt_hist: AE1 histogram interrupt processed\n");
-    return 2;
 }
 
 /* tiziano_deflicker_expt - Binary Ninja EXACT implementation */
