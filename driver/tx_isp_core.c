@@ -2878,7 +2878,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 cancel_work_sync(&ispcore_fs_work);
 
                 /* Binary Ninja: tisp_deinit() */
-                tisp_deinit();
+                //tisp_deinit();
 
                 /* Binary Ninja: memset(*($s0 + 0x1bc) + 4, 0, 0x40a4) */
                 /* Binary Ninja: memset($s0 + 0x1d8, 0, 0x40) */
@@ -3302,7 +3302,7 @@ static ssize_t graph_proc_read(struct file *file, char __user *buffer, size_t co
 }
 
 /* Use file_operations for Linux 3.10 compatibility (proc_ops was added in 5.6) */
-static const struct file_operations graph_proc_fops = {
+const struct file_operations graph_proc_fops = {
     .owner = THIS_MODULE,
     .read = graph_proc_read,
 };
@@ -4635,7 +4635,7 @@ int tx_isp_core_remove(struct platform_device *pdev)
 
         /* Binary Ninja: tisp_deinit() */
         pr_info("*** tx_isp_core_remove: Calling tisp_deinit ***\n");
-        tisp_deinit();
+        //tisp_deinit();
 
         /* Binary Ninja: private_kfree($s0) */
         pr_info("*** tx_isp_core_remove: Destroying core device ***\n");
