@@ -2790,30 +2790,53 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_warn("*** QBUF: Field mismatch: got %d, expected %d - allowing ***\n", buffer.field, fcd->field);
         }
 
-        /* Binary Ninja: EXACT event call - tx_isp_send_event_to_remote(*($s0 + 0x2bc), 0x3000008, &var_78) */
-        if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
-            struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+        /* Try to extract the real physical address from v4l2_buffer for VIC programming */
+        pr_info("*** Channel %d: QBUF details: memory=%u index=%u length=%u bytesused=%u flags=0x%x field=%u ***\n",
+                channel, buffer.memory, buffer.index, buffer.length, buffer.bytesused, buffer.flags, buffer.field);
 
-            pr_info("*** Channel %d: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***\n", channel);
+        /* Heuristics: libimp/VBM often places physical address for MMAP in m.offset (T31 patterns) */
+        {
+            uint32_t phys_candidate = 0;
+            if (buffer.memory == 1 /* V4L2_MEMORY_MMAP */) {
+                phys_candidate = buffer.m.offset;
+            } else if (buffer.memory == 2 /* V4L2_MEMORY_USERPTR */) {
+                /* Some builds pass physical address via userptr; log but do not trust as phys directly */
+                phys_candidate = (uint32_t)(uintptr_t)buffer.m.userptr;
+            }
 
-            /* CRITICAL: Pass the raw buffer data, not a custom structure */
-            int event_result = tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &buffer);
-
-            if (event_result == 0) {
-                pr_info("*** Channel %d: QBUF EVENT SUCCESS ***\n", channel);
-            } else if (event_result == 0xfffffdfd) {
-                pr_info("*** Channel %d: QBUF EVENT - No VIC callback ***\n", channel);
+            /* Plausibility check: rmem region on Wyze T31 is typically 0x06300000..0x081E0000 */
+            if (phys_candidate >= 0x06000000 && phys_candidate < 0x09000000) {
+                pr_info("*** Channel %d: QBUF - Using candidate phys=0x%x from buffer (memory=%u) ***\n",
+                        channel, phys_candidate, buffer.memory);
+                /* Program VIC via event with explicit buffer data structure */
+                if (ourISPdev && ourISPdev->vic_dev) {
+                    struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                    struct { uint32_t index; uint32_t phys_addr; uint32_t size; uint32_t channel; } v;
+                    v.index = buffer.index;
+                    v.phys_addr = phys_candidate;
+                    v.size = state->width * state->height * 3 / 2; /* NV12 contiguous */
+                    v.channel = channel;
+                    pr_info("*** Channel %d: QBUF - Programming VIC buffer[%u] = 0x%x (size=%u) ***\n",
+                            channel, v.index, v.phys_addr, v.size);
+                    (void)tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &v);
+                }
             } else {
-                pr_warn("*** Channel %d: QBUF EVENT returned: 0x%x ***\n", channel, event_result);
+                /* Fallback: old behavior using rmem base + index * size */
+                int buffer_size = state->width * state->height * 2;
+                uint32_t buffer_phys_addr = 0x6300000 + (buffer.index * buffer_size);
+                pr_warn("*** Channel %d: QBUF - Could not deduce phys from buffer; using fallback 0x%x ***\n",
+                        channel, buffer_phys_addr);
+                if (ourISPdev && ourISPdev->vic_dev) {
+                    struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                    struct { uint32_t index; uint32_t phys_addr; uint32_t size; uint32_t channel; } v;
+                    v.index = buffer.index;
+                    v.phys_addr = buffer_phys_addr;
+                    v.size = state->width * state->height * 3 / 2;
+                    v.channel = channel;
+                    (void)tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &v);
+                }
             }
         }
-
-        /* SAFE: Calculate buffer physical address */
-        int buffer_size = state->width * state->height * 2;
-        uint32_t buffer_phys_addr = 0x6300000 + (buffer.index * buffer_size);
-
-        pr_info("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x, size=%d ***\n",
-                channel, buffer.index, buffer_phys_addr, buffer_size);
 
         /* SAFE: Update buffer state management */
         spin_lock_irqsave(&state->buffer_lock, flags);
