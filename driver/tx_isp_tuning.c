@@ -71,6 +71,7 @@ uint32_t data_9a450 = 0x2700;   /* Current CT value - global cache */
 static void *tparams_day = NULL;
 static void *tparams_night = NULL;
 static void *tparams_cust = NULL;
+void private_vfree(const void *addr);
 
 /* WDR Global Data Structures - From Binary Ninja Analysis */
 static uint32_t wdr_ev_now = 0;
