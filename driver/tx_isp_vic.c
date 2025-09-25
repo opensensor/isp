@@ -2131,8 +2131,17 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x308 = 1 (MDMA enable)\n");
 
-    /* Binary Ninja EXACT: int32_t $v1_1 = $v1 << 1 (stride = width * 2) */
-    stride = width << 1;
+    /* Compute stride based on sensor data type: RAW10 (0x2b) vs 16bpp */
+    if (vic_dev->sensor_attr.data_type == 0x2b) {
+        /* RAW10 packed: bytes per line = ceil(width * 10 / 8); align to 16 bytes */
+        stride = (width * 10 + 7) / 8;
+        stride = (stride + 15) & ~15;
+        pr_info("vic_pipo_mdma_enable: RAW10 stride=%u for width=%u\n", stride, width);
+    } else {
+        /* Default 16bpp stride */
+        stride = width << 1;
+        pr_info("vic_pipo_mdma_enable: 16bpp stride=%u for width=%u\n", stride, width);
+    }
 
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x304) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
     writel((width << 16) | height, vic_base + 0x304);
@@ -2930,112 +2939,56 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
     /* Instead, we need to check if there are pending buffers in our queue */
 
     if (arg2) {
-        /* Direct call with buffer data - add to queue */
-        list_add_tail((struct list_head *)arg2, &vic_dev->queue_head);
-        pr_info("*** VIC QBUF: Added buffer %p to queue (direct call) ***\n", arg2);
+        /* Treat arg2 as vic_buffer_entry and queue it */
+        struct vic_buffer_entry *entry = (struct vic_buffer_entry *)arg2;
+        if (entry->buffer_addr == 0) {
+            pr_err("VIC QBUF: buffer_addr is 0 - refusing to queue (no dummy addresses)\n");
+        } else {
+            list_add_tail(&entry->list, &vic_dev->queue_head);
+            pr_info("*** VIC QBUF: Queued buffer entry %p (addr=0x%x, idx=%u) ***\n",
+                    entry, entry->buffer_addr, entry->buffer_index);
+        }
     } else {
-        /* Event-based call - check for pending buffers that were queued by framechan ioctl */
-        pr_info("*** VIC QBUF: Event-based call - checking for pending buffers ***\n");
-
-        /* CRITICAL FIX: Create a dummy buffer entry if none exists but we have free buffers */
-        /* This simulates the case where framechan ioctl queued a buffer but it wasn't passed through events */
-        if (list_empty(&vic_dev->queue_head) && !list_empty(&vic_dev->free_head)) {
-            /* Create a temporary buffer entry to simulate a queued buffer */
-            struct list_head *temp_buffer = kzalloc(sizeof(struct list_head) + 64, GFP_ATOMIC);
-            if (temp_buffer) {
-                /* Initialize with a valid buffer address */
-                uint32_t *temp_data = (uint32_t *)((char *)temp_buffer + sizeof(struct list_head));
-                temp_data[0] = 0x30000000 + (vic_dev->active_buffer_count * 0x100000);  /* Valid physical address */
-                temp_data[1] = vic_dev->active_buffer_count;  /* Buffer index */
-                temp_data[2] = 0;  /* Buffer status */
-
-                /* Add to queue */
-                list_add_tail(temp_buffer, &vic_dev->queue_head);
-                pr_info("*** VIC QBUF: Created pending buffer entry with addr 0x%x ***\n", temp_data[0]);
-            }
-        }
+        /* No event payload: do not fabricate buffers; just log */
+        pr_info("*** VIC QBUF: No payload provided; skipping dummy buffer creation ***\n");
     }
 
-    /* Binary Ninja EXACT: if ($s0 + 0x1fc == *($s0 + 0x1fc)) */
-    if (list_empty(&vic_dev->free_head)) {
-        pr_info("ispvic_frame_channel_qbuf: bank no free\n");
+    if (list_empty(&vic_dev->queue_head)) {
+        pr_info("ispvic_frame_channel_qbuf: no queued buffers\n");
         goto unlock_exit;
     }
-    /* Binary Ninja EXACT: else if ($s0 + 0x1f4 == *($s0 + 0x1f4)) */
-    else if (list_empty(&vic_dev->queue_head)) {
-        pr_info("ispvic_frame_channel_qbuf: qbuffer null (MIPS-safe)\n");
-        goto unlock_exit;
-    }
-    else {
-        /* *** CRITICAL FIX: Process the queued buffer *** */
-        struct list_head *queue_buffer, *free_buffer;
-        uint32_t *buffer_data;
-        uint32_t buffer_addr, buffer_index;
+    {
+        /* Process the queued buffer using vic_buffer_entry */
+        struct list_head *queue_node = vic_dev->queue_head.next;
+        struct vic_buffer_entry *entry;
+        u32 buffer_addr;
+        int buffer_index;
 
-        /* Binary Ninja: pop_buffer_fifo($s0 + 0x1f4) */
-        queue_buffer = vic_dev->queue_head.next;
-        if (queue_buffer != &vic_dev->queue_head) {
-            list_del(queue_buffer);
+        list_del(queue_node);
+        entry = container_of(queue_node, struct vic_buffer_entry, list);
+        buffer_addr = entry->buffer_addr;
+        if (buffer_addr == 0) {
+            pr_err("VIC QBUF: queued entry has buffer_addr=0 - dropping\n");
+            goto unlock_exit;
+        }
 
-            /* Get free buffer entry */
-            free_buffer = vic_dev->free_head.next;
-            if (free_buffer != &vic_dev->free_head) {
-                list_del(free_buffer);
+        buffer_index = vic_dev->active_buffer_count % 5;  /* VIC has 5 buffer slots */
 
-                /* Binary Ninja: Extract buffer address from *($a3_1 + 8) */
-                /* In the reference, this extracts the physical address from the buffer structure */
-                buffer_data = (uint32_t *)((char *)queue_buffer + sizeof(struct list_head));
-                buffer_addr = buffer_data[0];  /* Get the actual buffer address */
-
-                /* Ensure we have a valid buffer address */
-                if (buffer_addr == 0) {
-                    buffer_addr = 0x30000000 + (vic_dev->active_buffer_count * 0x100000);  /* Valid physical address */
-                    pr_info("*** VIC QBUF: Generated buffer address 0x%x ***\n", buffer_addr);
-                }
-
-                /* Binary Ninja: $v1_1 = $v0_5[4] - get buffer index */
-                buffer_index = vic_dev->active_buffer_count % 5;  /* VIC has 5 buffer slots */
-
-                /* Binary Ninja: $v0_5[2] = $a1_2 - store buffer address in free buffer */
-                uint32_t *free_data = (uint32_t *)((char *)free_buffer + sizeof(struct list_head));
-                free_data[2] = buffer_addr;
-
-                /* Binary Ninja EXACT: *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2 */
-                /* This is the CRITICAL hardware programming step! */
-                if (vic_dev->vic_regs) {
-                    uint32_t reg_offset = (buffer_index + 0xc6) << 2;
-                    if (reg_offset < 0x1000) {  /* Bounds check */
-                        writel(buffer_addr, vic_dev->vic_regs + reg_offset);
-                        wmb();
-                        pr_info("*** CRITICAL SUCCESS: Buffer 0x%x programmed to VIC[0x%x] ***\n",
-                                buffer_addr, reg_offset);
-                        pr_info("*** NO MORE 'qbuffer null' - VIC hardware now has buffer! ***\n");
-
-                        /* CRITICAL FIX: Check vic_start_ok status but don't change it here */
-                        pr_info("*** VIC INTERNAL QBUF: Checking vic_start_ok status: vic_start_ok=%d ***\n", vic_start_ok);
-                        if (vic_start_ok == 0) {
-                            pr_info("*** VIC INTERNAL QBUF: vic_start_ok=0 - interrupts will be enabled after complete pipeline setup ***\n");
-                        } else {
-                            pr_info("*** VIC INTERNAL QBUF: VIC interrupts already enabled (vic_start_ok=%d) ***\n", vic_start_ok);
-                        }
-                    }
-                }
-
-                /* Binary Ninja: Add to done list */
-                list_add_tail(free_buffer, &vic_dev->done_head);
-
-                /* Binary Ninja: *($s0 + 0x218) += 1 */
-                vic_dev->active_buffer_count += 1;
-
-                pr_info("*** VIC QBUF: Buffer processing complete - active_count=%d ***\n",
-                        vic_dev->active_buffer_count);
-
-                /* Clean up temporary buffer if we created one */
-                if (!arg2) {
-                    kfree(queue_buffer);
-                }
+        if (vic_dev->vic_regs) {
+            uint32_t reg_offset = (buffer_index + 0xc6) << 2;
+            if (reg_offset < 0x1000) {
+                writel(buffer_addr, vic_dev->vic_regs + reg_offset);
+                wmb();
+                pr_info("*** CRITICAL SUCCESS: Buffer 0x%x programmed to VIC[0x%x] ***\n",
+                        buffer_addr, reg_offset);
             }
         }
+
+        /* Move entry to done list so ISR can match current frame address */
+        list_add_tail(&entry->list, &vic_dev->done_head);
+        vic_dev->active_buffer_count += 1;
+        pr_info("*** VIC QBUF: Buffer processed (addr=0x%x, idx=%d) - active_count=%d ***\n",
+                buffer_addr, buffer_index, vic_dev->active_buffer_count);
     }
 
 unlock_exit:
