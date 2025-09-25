@@ -186,7 +186,12 @@ static int tx_isp_v4l2_reqbufs(struct file *file, void *priv,
 
     /* Create a fake file structure for frame_channel_unlocked_ioctl */
     memset(&fake_file, 0, sizeof(fake_file));
-    fake_file.private_data = (void *)(unsigned long)dev->channel_num;
+    extern void *get_frame_channel_device_ptr(int channel);
+    fake_file.private_data = get_frame_channel_device_ptr(dev->channel_num);
+    if (!fake_file.private_data) {
+        pr_err("tx_isp_v4l2: invalid frame channel pointer for ch=%d\n", dev->channel_num);
+        return -EINVAL;
+    }
 
     /* Route to frame_channel_unlocked_ioctl with channel context */
     ret = frame_channel_unlocked_ioctl(&fake_file, 0xc0145608, (unsigned long)rb);
@@ -215,7 +220,12 @@ static int tx_isp_v4l2_qbuf(struct file *file, void *priv,
 
     /* Create a fake file structure for frame_channel_unlocked_ioctl */
     memset(&fake_file, 0, sizeof(fake_file));
-    fake_file.private_data = (void *)(unsigned long)dev->channel_num;
+    extern void *get_frame_channel_device_ptr(int channel);
+    fake_file.private_data = get_frame_channel_device_ptr(dev->channel_num);
+    if (!fake_file.private_data) {
+        pr_err("tx_isp_v4l2: invalid frame channel pointer for ch=%d\n", dev->channel_num);
+        return -EINVAL;
+    }
 
     /* Route to frame_channel_unlocked_ioctl QBUF (0xc044560f) */
     ret = frame_channel_unlocked_ioctl(&fake_file, 0xc044560f, (unsigned long)buf);
@@ -242,7 +252,12 @@ static int tx_isp_v4l2_dqbuf(struct file *file, void *priv,
 
     /* Create a fake file structure for frame_channel_unlocked_ioctl */
     memset(&fake_file, 0, sizeof(fake_file));
-    fake_file.private_data = (void *)(unsigned long)dev->channel_num;
+    extern void *get_frame_channel_device_ptr(int channel);
+    fake_file.private_data = get_frame_channel_device_ptr(dev->channel_num);
+    if (!fake_file.private_data) {
+        pr_err("tx_isp_v4l2: invalid frame channel pointer for ch=%d\n", dev->channel_num);
+        return -EINVAL;
+    }
 
     /* Route to frame_channel_unlocked_ioctl DQBUF (0xc0445611) */
     ret = frame_channel_unlocked_ioctl(&fake_file, 0xc0445611, (unsigned long)buf);
@@ -270,7 +285,12 @@ static int tx_isp_v4l2_streamon(struct file *file, void *priv,
 
     /* Create a fake file structure for frame_channel_unlocked_ioctl */
     memset(&fake_file, 0, sizeof(fake_file));
-    fake_file.private_data = (void *)(unsigned long)dev->channel_num;
+    extern void *get_frame_channel_device_ptr(int channel);
+    fake_file.private_data = get_frame_channel_device_ptr(dev->channel_num);
+    if (!fake_file.private_data) {
+        pr_err("tx_isp_v4l2: invalid frame channel pointer for ch=%d\n", dev->channel_num);
+        return -EINVAL;
+    }
 
     /* Route to frame_channel_unlocked_ioctl STREAMON (0x80045612) */
     ret = frame_channel_unlocked_ioctl(&fake_file, 0x80045612, (unsigned long)&type);
@@ -306,7 +326,12 @@ static int tx_isp_v4l2_streamoff(struct file *file, void *priv,
 
     /* Create a fake file structure for frame_channel_unlocked_ioctl */
     memset(&fake_file, 0, sizeof(fake_file));
-    fake_file.private_data = (void *)(unsigned long)dev->channel_num;
+    extern void *get_frame_channel_device_ptr(int channel);
+    fake_file.private_data = get_frame_channel_device_ptr(dev->channel_num);
+    if (!fake_file.private_data) {
+        pr_err("tx_isp_v4l2: invalid frame channel pointer for ch=%d\n", dev->channel_num);
+        return -EINVAL;
+    }
 
     /* Route to frame_channel_unlocked_ioctl STREAMOFF (0x80045613) */
     ret = frame_channel_unlocked_ioctl(&fake_file, 0x80045613, (unsigned long)&type);
@@ -677,8 +702,13 @@ static long tx_isp_v4l2_unlocked_ioctl(struct file *file, unsigned int cmd, unsi
     
     /* Create a fake file structure for frame_channel_unlocked_ioctl */
     memset(&fake_file, 0, sizeof(fake_file));
-    fake_file.private_data = (void *)(unsigned long)dev->channel_num;
-    
+    extern void *get_frame_channel_device_ptr(int channel);
+    fake_file.private_data = get_frame_channel_device_ptr(dev->channel_num);
+    if (!fake_file.private_data) {
+        pr_err("tx_isp_v4l2: invalid frame channel pointer for ch=%d\n", dev->channel_num);
+        return -EINVAL;
+    }
+
     /* Route to frame_channel_unlocked_ioctl */
     ret = frame_channel_unlocked_ioctl(&fake_file, cmd, arg);
     
