@@ -2023,7 +2023,6 @@ long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg)
             int dual_channel = 0; /* Single channel mode */
 
             /* Check if NV12 format */
-            extern struct tx_isp_sensor *tx_isp_get_sensor(void);
             struct tx_isp_sensor *cmd_sensor = tx_isp_get_sensor();
             if (cmd_sensor && cmd_sensor->video.attr) {
                 /* Determine format from sensor attributes */
