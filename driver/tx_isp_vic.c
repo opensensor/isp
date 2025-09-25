@@ -1226,9 +1226,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     if (vic_dev->vic_regs_control) {
         void __iomem *vic_ctl = vic_dev->vic_regs_control;
         pr_info("*** VIC INTERRUPT CONFIG: Mirroring WORKING BRANCH registers to control bank ***\n");
-        /* Clear any pending first */
-        writel(0x00000000, vic_ctl + 0x1f0);
-        writel(0x00000000, vic_ctl + 0x1f4);
+        /* Clear any pending first (W1C) */
+        writel(0xFFFFFFFF, vic_ctl + 0x1f0);
+        writel(0xFFFFFFFF, vic_ctl + 0x1f4);
         wmb();
         /* Program masks and control like primary */
         writel(0x00000001, vic_ctl + 0x04);
