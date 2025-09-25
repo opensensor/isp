@@ -3143,12 +3143,6 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         pr_err("*** CRITICAL: tuning_data pointer 0x%p not 4-byte aligned - ABORTING ***\n", tuning);
                         return -EFAULT;
                     }
-
-                    /* Validate the critical mode_flag field */
-                    if (tuning->mode_flag != 1) {
-                        pr_warn("*** WARNING: tuning_data->mode_flag is %u, should be 1 - FIXING ***\n", tuning->mode_flag);
-                        tuning->mode_flag = 1;  /* Fix it to prevent BadVA crash */
-                    }
                 }
                 
                 ret = apical_isp_core_ops_s_ctrl(dev, &ctrl);
@@ -3389,11 +3383,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                             }
 
                             /* CRITICAL: Validate the allocated structure has the correct mode_flag */
-                            struct isp_tuning_data *tuning = (struct isp_tuning_data *)ourISPdev->tuning_data;
-                            if (tuning->mode_flag != 1) {
-                                pr_err("*** CRITICAL: tuning_data->mode_flag is %u, should be 1 - FIXING ***\n", tuning->mode_flag);
-                                tuning->mode_flag = 1;  /* Force correct value to prevent BadVA crash */
-                            }
+                            struct isp_tuning_data *tuning = ourISPdev->tuning_data;
 
                             pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", ourISPdev->tuning_data);
 
