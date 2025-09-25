@@ -2078,10 +2078,10 @@ int tisp_init(void *sensor_info, char *param_name)
     /* CRITICAL: Enable ISP core interrupt registers - FROM WORKING LOGS */
     pr_info("*** ENABLING ISP CORE INTERRUPT REGISTERS FOR MIPI DATA ***\n");
 
-    if (isp_dev->core_dev && isp_dev->core_dev->core_regs) {
+    if (ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
         /* Configure ISP core interrupt registers - FROM WORKING LOGS */
-        writel(0x8fffffff, isp_dev->core_dev->core_regs + 0x30);  /* ISP core interrupt enable */
-        writel(0x00000133, isp_dev->core_dev->core_regs + 0x10);  /* ISP core interrupt control */
+        writel(0x8fffffff, ourISPdev->core_dev->core_regs + 0x30);  /* ISP core interrupt enable */
+        writel(0x00000133, ourISPdev->core_dev->core_regs + 0x10);  /* ISP core interrupt control */
         wmb();
 
         pr_info("*** ISP CORE INTERRUPT REGISTERS ENABLED at legacy(+0xb*) and new(+0x98b*) ***\n");
