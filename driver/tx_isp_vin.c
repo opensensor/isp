@@ -26,12 +26,12 @@
 /* MCP Logging Integration */
 #define mcp_log_info(msg, val) \
     do { \
-        pr_info("VIN: " msg " = 0x%x\n", val); \
+        printk(KERN_ALERT "VIN: " msg " = 0x%x\n", val); \
     } while(0)
 
 #define mcp_log_error(msg, val) \
     do { \
-        pr_err("VIN: " msg " = 0x%x\n", val); \
+        printk(KERN_ALERT "VIN: " msg " = 0x%x\n", val); \
     } while(0)
 
 bool is_valid_kernel_pointer(const void *ptr);
