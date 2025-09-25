@@ -1787,7 +1787,7 @@ static int32_t tisp_log2_int_to_fixed(uint32_t value, char precision_bits, char 
            (normalized & 0x7fff) >> ((15 - shift) & 0x1f);
 }
 
-static int32_t tisp_log2_fixed_to_fixed_tuning(uint32_t input_val, int32_t in_precision, char out_precision)
+int32_t tisp_log2_fixed_to_fixed_tuning(uint32_t input_val, int32_t in_precision, char out_precision)
 {
     // Call helper directly with original param signature
     return tisp_log2_int_to_fixed(input_val, out_precision, 0);
