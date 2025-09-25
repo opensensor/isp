@@ -2229,39 +2229,39 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         return;
     }
 
-    /* Prefer ACTUAL output dimensions from core (not sensor total timing) */
-    if (ourISPdev && ourISPdev->sensor_width && ourISPdev->sensor_height) {
-        width = ourISPdev->sensor_width;
-        height = ourISPdev->sensor_height;
-        pr_info("*** Using ISP core output dimensions %dx%d ***\n", width, height);
-    } else if (vic_dev->sensor_attr.total_width != 0 && vic_dev->sensor_attr.total_height != 0) {
-        /* Fallback: use sensor_attr totals only if core output not available */
-        width = vic_dev->sensor_attr.total_width;
+    /* Prefer sensor timing totals for VIC MDMA dimensions (matches reference driver) */
+    if (vic_dev->sensor_attr.total_width && vic_dev->sensor_attr.total_height) {
+        width  = vic_dev->sensor_attr.total_width;
         height = vic_dev->sensor_attr.total_height;
-        pr_info("*** Fallback to sensor_attr totals %dx%d ***\n", width, height);
+        pr_info("*** Using sensor_attr TOTAL timing %dx%d for VIC MDMA dims ***\n", width, height);
+    } else if (ourISPdev && ourISPdev->sensor_width && ourISPdev->sensor_height) {
+        /* Fallback: use active output if totals not populated yet */
+        width  = ourISPdev->sensor_width;
+        height = ourISPdev->sensor_height;
+        pr_info("*** Fallback to ISP core ACTIVE output %dx%d for VIC MDMA dims ***\n", width, height);
     } else {
         /* Last resort: vic_dev cached dims */
-        width = vic_dev->width;
+        width  = vic_dev->width;
         height = vic_dev->height;
-        pr_info("*** Fallback to vic_dev cached dims %dx%d ***\n", width, height);
+        pr_info("*** Fallback to vic_dev cached dims %dx%d for VIC MDMA dims ***\n", width, height);
     }
 
-    /* CRITICAL: Ensure we have valid dimensions - USE ACTUAL SENSOR OUTPUT DIMENSIONS */
-    if (width == 0 || height == 0) {
-        /* Only override if dimensions are actually invalid (zero) */
-        width = 1920;  /* ACTUAL sensor output width (not total width) */
-        height = 1080; /* ACTUAL sensor output height (not total height) */
-        pr_info("*** DIMENSION FIX: Using ACTUAL sensor output dimensions %dx%d ***\n", width, height);
-        pr_info("*** CRITICAL: VIC must match sensor OUTPUT, not sensor TOTAL dimensions ***\n");
-
-        /* Update vic_dev to prevent future mismatches */
-        vic_dev->width = width;
-        vic_dev->height = height;
+    if (!width || !height) {
+        /* Default to a sane active resolution if nothing is set yet */
+        width = 1920;
+        height = 1080;
+        pr_info("*** DIMENSION FIX: defaulting VIC MDMA dims to %dx%d ***\n", width, height);
     } else {
-        pr_info("*** DIMENSION VALIDATION: Using existing valid dimensions %dx%d ***\n", width, height);
+        /* If totals look smaller than active (unlikely), avoid under-programming */
+        if ((vic_dev->width && width < vic_dev->width) || (vic_dev->height && height < vic_dev->height)) {
+            pr_warn("*** WARNING: MDMA dims %dx%d smaller than active %dx%d; using active instead ***\n",
+                    width, height, vic_dev->width, vic_dev->height);
+            width  = vic_dev->width;
+            height = vic_dev->height;
+        }
     }
 
-    pr_info("vic_pipo_mdma_enable: FINAL dimensions=%dx%d (should be 2200x1418)\n", width, height);
+    pr_info("vic_pipo_mdma_enable: FINAL MDMA dims=%dx%d (modern logs expect totals, e.g., 2200x1418)\n", width, height);
 
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x308) = 1 */
     writel(1, vic_base + 0x308);
