@@ -1712,6 +1712,25 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         v1_10 = (~reg_1ec) & reg_1e4;
         printk(KERN_ALERT "*** VIC IRQ: Calculated v1_7 = 0x%x v1_10 = 0x%x ***\n", v1_7, v1_10);
 
+        /* Fallback: if both banks show zero enables, derive framedone from ISP core VIC regs */
+        if (reg_1e0 == 0 && reg_1e4 == 0) {
+            void __iomem *core = NULL;
+            if (isp_dev->core_dev && isp_dev->core_dev->core_regs)
+                core = isp_dev->core_dev->core_regs;
+            else if (ourISPdev && ourISPdev->core_regs)
+                core = ourISPdev->core_regs;
+            if (core) {
+                u32 ch0 = readl(core + 0x9a70);
+                u32 ch1 = readl(core + 0x9a7c);
+                printk(KERN_ALERT "*** VIC IRQ FALLBACK: core[0x9a70]=0x%08x core[0x9a7c]=0x%08x ***\n", ch0, ch1);
+                /* If either channel indicates framedone (bit 0), assert framedone */
+                if (ch0 & 1) v1_7 |= 1;
+                if (ch1 & 1) v1_7 |= 1; /* trigger same framedone path */
+            } else {
+                printk(KERN_ALERT "*** VIC IRQ FALLBACK: No ISP core regs mapped for fallback ***\n");
+            }
+        }
+
         /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7 */
         printk(KERN_ALERT "*** VIC IRQ: About to write v1_7=0x%x to reg 0x1f0 ***\n", v1_7);
         writel(v1_7, vic_regs + 0x1f0);
