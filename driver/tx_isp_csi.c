@@ -39,7 +39,25 @@ void csi_write32(u32 reg, u32 val)
 {
     /* Use CSI device registers */
     if (ourISPdev && ourISPdev->csi_dev && ourISPdev->csi_dev->csi_regs) {
-        writel(val, ourISPdev->csi_dev->csi_regs + reg);
+        void __iomem *base = ourISPdev->csi_dev->csi_regs;
+        bool streaming = false;
+        if (ourISPdev->vic_dev) {
+            int st = ourISPdev->vic_dev->state;
+            streaming = (st >= 3); /* INITIALIZED or STREAMING */
+        }
+
+        /* Protect CSI PHY/CTRL from being turned off while streaming */
+        if (streaming && (reg == 0x10 || reg == 0x0c || reg == 0x1e8)) {
+            u32 prev = readl(base + reg);
+            if (val == 0) {
+                pr_warn("*** CSI WRITE BLOCKED during streaming: reg[0x%03x] prev=0x%08x -> val=0x%08x (blocked) ***\n", reg, prev, val);
+                return; /* Block disabling writes while streaming */
+            }
+            /* Otherwise allow, but log */
+            pr_info("*** CSI WRITE during streaming: reg[0x%03x] prev=0x%08x -> val=0x%08x ***\n", reg, prev, val);
+        }
+
+        writel(val, base + reg);
     } else {
         pr_err("csi_write32: No CSI registers available\n");
     }

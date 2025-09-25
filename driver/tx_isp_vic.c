@@ -2671,11 +2671,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 wmb();
                 pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e8]=0x%08x ***\n",
                         readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x30c), readl(vr + 0x1e0), readl(vr + 0x1e8));
-                /* Final assert of interrupt routing/control regs (0x100/0x14), then small delay */
+                /* Final assert of interrupt routing reg (0x100). Do NOT touch 0x14 (stride) on PRIMARY */
                 writel(0x000002d0, vr + 0x100);
-                writel(0x00000630, vr + 0x14);
                 wmb();
-                pr_info("*** VIC VERIFY (PRIMARY EXTRA): [0x100]=0x%08x [0x14]=0x%08x ***\n",
+                pr_info("*** VIC VERIFY (PRIMARY EXTRA): [0x100]=0x%08x [0x14]=0x%08x (unchanged stride) ***\n",
                         readl(vr + 0x100), readl(vr + 0x14));
                 udelay(50);
 
@@ -2765,6 +2764,11 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     if (i == 10)
                         pr_info("*** VIC UNMASK-ALL TEST: No status bits asserted during pre-IRQ sample ***\n");
                 }
+                    /* Restore reference mask to framedone-only (bit0 enabled by 0) */
+                    writel(0xFFFFFFFE, vr + 0x1e8);
+                    wmb();
+                    pr_info("*** VIC UNMASK-ALL TEST: Restored mask [0x1e8]=0x%08x (expect 0xFFFFFFFE) ***\n", readl(vr + 0x1e8));
+
 
             /* Enable VIC IRQ after final re-assert and verification */
 
