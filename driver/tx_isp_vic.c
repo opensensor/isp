@@ -2663,13 +2663,13 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Clear pending (W1C) */
                 writel(0xFFFFFFFF, vr + 0x1f0);
                 writel(0xFFFFFFFF, vr + 0x1f4);
-                /* Enable all interrupt sources, then unmask frame-done (bit0) */
+                /* Enable all interrupt sources and UNMASK-ALL for debug */
                 writel(0xFFFFFFFF, vr + 0x1e0);
-                writel(0xFFFFFFFE, vr + 0x1e8);
+                writel(0x00000000, vr + 0x1e8);
                 /* Global interrupt enable at 0x30c (if implemented) */
                 writel(0xFFFFFFFF, vr + 0x30c);
                 wmb();
-                pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e8]=0x%08x ***\n",
+                pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e8]=0x%08x (UNMASK-ALL)***\n",
                         readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x30c), readl(vr + 0x1e0), readl(vr + 0x1e8));
                 /* Final assert of interrupt routing reg (0x100). Do NOT touch 0x14 (stride) on PRIMARY */
                 writel(0x000002d0, vr + 0x100);
@@ -2764,11 +2764,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     if (i == 10)
                         pr_info("*** VIC UNMASK-ALL TEST: No status bits asserted during pre-IRQ sample ***\n");
                 }
-                    /* Restore reference mask to framedone-only (bit0 enabled by 0) */
-                    writel(0xFFFFFFFE, vr + 0x1e8);
-                    wmb();
-                    pr_info("*** VIC UNMASK-ALL TEST: Restored mask [0x1e8]=0x%08x (expect 0xFFFFFFFE) ***\n", readl(vr + 0x1e8));
-
+                    /* Keep UNMASK-ALL during debug to expose error IRQs */
+                    pr_info("*** VIC MASK: Keeping UNMASK-ALL (0x1e8=0) during debug ***\n");
 
             /* Enable VIC IRQ after final re-assert and verification */
 
