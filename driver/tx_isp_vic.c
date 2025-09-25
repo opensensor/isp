@@ -2779,9 +2779,9 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     void __iomem *vr = vic_dev->vic_regs;
                     u32 s0, s1;
                     int i;
-                    /* Clear pending, then unmask ALL sources */
-                    writel(0x00000000, vr + 0x1f0);
-                    writel(0x00000000, vr + 0x1f4);
+                    /* Clear pending (W1C), then unmask ALL sources */
+                    writel(0xFFFFFFFF, vr + 0x1f0);
+                    writel(0xFFFFFFFF, vr + 0x1f4);
                     writel(0x00000000, vr + 0x1e8);
                     wmb();
                     pr_info("*** VIC UNMASK-ALL TEST: [0x1e8]=0x%08x (expect 0) ***\n", readl(vr + 0x1e8));
