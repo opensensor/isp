@@ -19,6 +19,9 @@
 #include <linux/platform_device.h>
 #include <linux/device.h>
 
+#include <linux/seq_file.h>
+#include <linux/uaccess.h>
+
 #include "../include/tx_isp_vic_buffer.h"
 /* Frame done notifier from tx_isp_frame_done.c */
 extern void isp_frame_done_wakeup(void);
