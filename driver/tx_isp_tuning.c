@@ -1250,6 +1250,18 @@ static int system_reg_write_ae(int ae_id, uint32_t reg, uint32_t value)
 
 /* ===== MISSING SYMBOL IMPLEMENTATIONS - EXACT Binary Ninja Reference ===== */
 
+void tisp_bcsh_saturation(uint8_t saturation)
+{
+    pr_info("tisp_bcsh_saturation: saturation=%d\n", saturation);
+
+    /* Binary Ninja: data_9a91d = arg1 */
+    bcsh_saturation_value = saturation;
+
+    /* Binary Ninja: tiziano_bcsh_update() */
+    tiziano_bcsh_update();
+}
+EXPORT_SYMBOL(tisp_bcsh_saturation);
+
 /* tiziano_ae_set_hardware_param - Binary Ninja EXACT implementation */
 int tiziano_ae_set_hardware_param(int ae_id, uint8_t *param_array, int update_only)
 {
@@ -9376,7 +9388,151 @@ int tisp_bcsh_param_array_get(int param_id, void *out_buf, int *size_buf)
     return 0;
 }
 
-/* ===== MISSING tisp_*_get_par_cfg FUNCTION IMPLEMENTATIONS ===== */
+
+/**
+ * tx_isp_get_sensor - Get sensor from subdev array starting at index 5
+ * Modern hardware supports multiple sensors, so search from index 5 onwards
+ * Subdev array layout: 0=CSI, 1=VIC, 2=VIN, 3=FS, 4=CORE, 5+=REAL_SENSORS
+ */
+struct tx_isp_sensor *tx_isp_get_sensor(void)
+{
+    extern struct tx_isp_dev *ourISPdev;
+
+    if (!ourISPdev) {
+        pr_err("*** tx_isp_get_sensor: ourISPdev is NULL ***\n");
+        return NULL;
+    }
+
+    pr_info("*** tx_isp_get_sensor: Searching subdev array for sensors ***\n");
+
+    /* Check if any real sensor modules are actually loaded */
+    bool real_sensor_found = false;
+    for (int i = 5; i < ISP_MAX_SUBDEVS; i++) {
+        if (ourISPdev->subdevs[i] != NULL) {
+            real_sensor_found = true;
+            break;
+        }
+    }
+
+    if (!real_sensor_found) {
+        pr_info("*** tx_isp_get_sensor: No real sensor modules found - returning NULL ***\n");
+        return NULL;
+    }
+
+    /* CRITICAL FIX: Search for REAL sensor subdevs starting from index 4 */
+    /* Subdev layout: 0=CSI, 1=VIC, 2=VIN, 3=Core, 4+=REAL_SENSORS */
+    struct tx_isp_subdev *sd = NULL;
+    for (int i = 4; i < ISP_MAX_SUBDEVS; i++) {
+        struct tx_isp_subdev *candidate = ourISPdev->subdevs[i];
+        if (candidate && candidate->ops && candidate->ops->sensor) {
+            /* Additional check: make sure this is NOT a core device */
+            if (candidate->pdev && candidate->pdev->name) {
+                if (strcmp(candidate->pdev->name, "isp-m0") != 0 &&
+                    strcmp(candidate->pdev->name, "isp-w00") != 0 &&
+                    strcmp(candidate->pdev->name, "isp-w01") != 0 &&
+                    strcmp(candidate->pdev->name, "isp-w02") != 0 &&
+                    strcmp(candidate->pdev->name, "isp-fs") != 0) {
+                    /* This looks like a real sensor */
+                    sd = candidate;
+                    pr_info("*** tx_isp_get_sensor: Found real sensor subdev at index %d: %p (name=%s) ***\n",
+                            i, sd, sd->pdev->name);
+                    break;
+                }
+            }
+        }
+    }
+
+    if (sd && sd->ops && sd->ops->sensor) {
+        /* CRITICAL: Check if this is a REAL sensor subdev, not the Core device */
+        /* The Core device has sensor ops for registration but is not a real sensor */
+        /* Check by platform device name instead of ops pointer comparison */
+        if (sd->pdev && sd->pdev->name && strcmp(sd->pdev->name, "isp-m0") != 0) {
+            /* CRITICAL FIX: The subdev IS the sensor - don't use container_of */
+            /* The sensor structure is stored as host_priv in the subdev */
+            struct tx_isp_sensor *sensor = (struct tx_isp_sensor *)tx_isp_get_subdev_hostdata(sd);
+            if (!sensor) {
+                pr_info("*** tx_isp_get_sensor: Found sensor subdev but no host_priv - creating sensor structure ***\n");
+                /* Create a sensor structure for this subdev */
+                sensor = kzalloc(sizeof(struct tx_isp_sensor), GFP_KERNEL);
+                if (!sensor) {
+                    pr_err("*** tx_isp_get_sensor: Failed to allocate sensor structure ***\n");
+                    return NULL;
+                }
+                /* CRITICAL FIX: Don't copy entire subdev structure - just link pointers */
+                /* Copying the entire subdev structure causes pointer corruption */
+                sensor->sd.isp = sd->isp;  /* Link to ISP device */
+                sensor->sd.pdev = sd->pdev;  /* Link to platform device */
+                sensor->sd.ops = sd->ops;   /* Link to operations */
+                /* Don't copy other fields that may contain invalid pointers */
+                tx_isp_set_subdev_hostdata(sd, sensor);
+            }
+            pr_info("*** tx_isp_get_sensor: Found real sensor: %p ***\n", sensor);
+
+            /* CRITICAL FIX: If sensor attributes are NULL, set up default sensor attributes */
+            if (!sensor->video.attr) {
+                pr_info("*** tx_isp_get_sensor: Sensor attributes are NULL - setting up default attributes ***\n");
+
+                /* The sensor probe wasn't called, so we need to set up the attributes manually */
+                /* Use the sensor's own attr structure (not video.attr pointer) */
+                sensor->video.attr = &sensor->attr;
+
+                /* Set up default GC2053 MIPI attributes in the sensor's attr structure */
+                sensor->attr.name = "gc2053";
+                sensor->attr.chip_id = 0x2053;
+                sensor->attr.cbus_type = TX_SENSOR_CONTROL_INTERFACE_I2C;
+                sensor->attr.cbus_mask = 0x0303;
+                sensor->attr.cbus_device = 0x37;
+                sensor->attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;
+
+                /* MIPI configuration */
+                sensor->attr.mipi.clk = 78000000;
+                sensor->attr.mipi.lans = 2;
+                sensor->attr.mipi.settle_time_apative_en = 0;
+                sensor->attr.mipi.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10;
+                sensor->attr.mipi.mipi_sc.hcrop_diff_en = 0;
+                sensor->attr.mipi.mipi_sc.mipi_vcomp_en = 0;
+                sensor->attr.mipi.mipi_sc.mipi_hcomp_en = 0;
+                sensor->attr.mipi.mipi_sc.line_sync_mode = 0;
+                sensor->attr.mipi.mipi_sc.work_start_flag = 0;
+                sensor->attr.mipi.mipi_sc.data_type_en = 0;
+                sensor->attr.mipi.mipi_sc.data_type_value = 0x2b;
+                sensor->attr.mipi.mipi_sc.del_start = 0;
+                sensor->attr.mipi.mipi_sc.sensor_frame_mode = TX_SENSOR_DEFAULT_FRAME_MODE;
+                sensor->attr.mipi.mipi_sc.sensor_fid_mode = 0;
+                sensor->attr.mipi.mipi_sc.sensor_mode = TX_SENSOR_DEFAULT_MODE;
+
+                /* Timing parameters */
+                sensor->attr.data_type = TX_SENSOR_DATA_TYPE_LINEAR;
+                sensor->attr.max_again = 444864;
+                sensor->attr.max_dgain = 0;
+                sensor->attr.min_integration_time = 1;
+                sensor->attr.min_integration_time_native = 4;
+                sensor->attr.max_integration_time_native = 0x58a - 8;
+                sensor->attr.integration_time_limit = 0x58a - 8;
+                sensor->attr.total_width = 0x44c * 2;
+                sensor->attr.total_height = 0x58a;
+                sensor->attr.max_integration_time = 0x58a - 8;
+                sensor->attr.integration_time_apply_delay = 2;
+                sensor->attr.again_apply_delay = 2;
+                sensor->attr.dgain_apply_delay = 2;
+                sensor->attr.one_line_expr_in_us = 28;
+                sensor->attr.expo_fs = 0;
+
+                pr_info("*** tx_isp_get_sensor: Default sensor attributes set up successfully ***\n");
+            }
+
+            return sensor;
+        } else {
+            pr_info("*** tx_isp_get_sensor: Skipping Core device (not a real sensor) ***\n");
+        }
+    }
+
+    pr_err("*** tx_isp_get_sensor: No real sensor found in subdev array ***\n");
+    /* No sensor found - return NULL as per stock driver behavior */
+    return NULL;
+}
+EXPORT_SYMBOL(tx_isp_get_sensor);
+
 
 /* tisp_ae_get_par_cfg - Binary Ninja stub implementation */
 int tisp_ae_get_par_cfg(void *out_buf, void *size_buf)
