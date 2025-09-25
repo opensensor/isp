@@ -1229,23 +1229,23 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     if (isp_dev && isp_dev->core_dev && isp_dev->core_dev->core_regs) {
         void __iomem *core = isp_dev->core_dev->core_regs;
 
-        /* CRITICAL FIX: Skip interrupt-disrupting ISP core registers if VIC interrupts already working */
-        if (vic_start_ok == 1) {
-            pr_info("*** ISP CORE PROTECTION: SKIPPING interrupt-disrupting core registers 0x30, 0x10 - VIC interrupts already working ***\n");
-        } else {
-            pr_info("*** ISP CORE CONFIG: Writing ISP core interrupt registers (vic_start_ok=%d) ***\n", vic_start_ok);
-
-            /* CRITICAL: Enable ISP core interrupt generation at hardware level */
-            /* Binary Ninja: system_reg_write(0x30, 0xffffffff) - Enable all interrupt sources */
-            writel(0xffffffff, core + 0x30);
-            wmb();
-
-            /* Binary Ninja: system_reg_write(0x10, 0x133) - Enable specific interrupt types */
-            writel(0x133, core + 0x10);
-            wmb();
-
-            pr_info("*** ISP CORE CONFIG: ISP core interrupt registers written (0x30=0xffffffff, 0x10=0x133) ***\n");
-        }
+        /* Enable ISP core interrupt generation at hardware level (always program here at VIC start) */
+        pr_info("*** ISP CORE CONFIG: Writing ISP core interrupt registers at VIC start ***\n");
+        /* Binary Ninja: system_reg_write(0x30, 0xffffffff) - Enable all interrupt sources */
+        writel(0xffffffff, core + 0x30);
+        wmb();
+        /* Binary Ninja: system_reg_write(0x10, 0x133) - Enable specific interrupt types */
+        writel(0x133, core + 0x10);
+        wmb();
+        pr_info("*** ISP CORE CONFIG: ISP core interrupt registers written (0x30=0xffffffff, 0x10=0x133) ***\n");
+        /* padding to preserve line count */
+        /* padding to preserve line count */
+        /* padding to preserve line count */
+        /* padding to preserve line count */
+        /* padding to preserve line count */
+        /* padding to preserve line count */
+        /* padding to preserve line count */
+        /* padding to preserve line count */
 
         pr_info("*** ISP CORE: Hardware interrupt generation ENABLED (0x30=0xffffffff, 0x10=0x133) ***\n");
         pr_info("*** VIC->ISP: Pipeline should now generate hardware interrupts when VIC completes frames! ***\n");
@@ -1297,6 +1297,12 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_warn("*** VIC INTERRUPT: imr_ok=%d, imcr_ok=%d, config_ok=%d, control_ok=%d ***\n",
                 imr_configured, imcr_configured, int_config_set, int_control_set);
     }
+
+    /* Re-assert VIC interrupt mask and clear pending right before enabling vic_start_ok */
+    writel(0x00000000, vic_regs + 0x1f0);
+    writel(0x00000000, vic_regs + 0x1f4);
+    writel(0xFFFFFFFE, vic_regs + 0x1e8);
+    wmb();
 
     /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
     pr_info("*** tx_isp_vic_start: vic_start_ok set to 1 - EXACT Binary Ninja reference ***\n");

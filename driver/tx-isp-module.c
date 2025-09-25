@@ -4719,8 +4719,6 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
 
     pr_info("*** BOTH VIC AND ISP CORE INTERRUPTS NOW ENABLED! ***\n");
 
-    vic_start_ok = 1;
-    pr_info("*** vic_start_ok SET TO 1 - INTERRUPTS WILL NOW BE PROCESSED! ***\n");
 
     pr_info("*** tx_isp_module_init: Binary Ninja reference implementation complete ***\n");
     return 0;
