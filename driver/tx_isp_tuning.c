@@ -1248,38 +1248,6 @@ static int system_reg_write_ae(int ae_id, uint32_t reg, uint32_t value)
     return 0;
 }
 
-
-/* tiziano_bcsh_update - Simplified implementation based on Binary Ninja analysis */
-int tiziano_bcsh_update(void)
-{
-    pr_info("tiziano_bcsh_update: Updating BCSH parameters\n");
-    pr_info("  Brightness: %d, Contrast: %d, Saturation: %d, Hue: %d\n",
-             bcsh_brightness_value, bcsh_contrast_value, bcsh_saturation_value, bcsh_hue_value);
-
-    /* Binary Ninja shows this function performs complex interpolation and matrix calculations
-     * for BCSH (Brightness, Contrast, Saturation, Hue) processing.
-     *
-     * The full implementation involves:
-     * 1. EV-based interpolation of BCSH parameters
-     * 2. Color matrix transformations (RGB2YUV)
-     * 3. LUT (Look-Up Table) parameter updates
-     * 4. Hardware register updates
-     *
-     * For now, we provide a simplified implementation that acknowledges
-     * the parameter changes without the full ISP pipeline processing.
-     */
-
-    /* In a full implementation, this would:
-     * - Update ISP BCSH hardware registers
-     * - Perform color matrix calculations
-     * - Update lookup tables
-     * - Apply the changes to the image processing pipeline
-     */
-
-    pr_info("tiziano_bcsh_update: BCSH update completed (simplified implementation)\n");
-    return 0;
-}
-
 /* BCSH function implementations - EXACT Binary Ninja reference implementation */
 int tisp_bcsh_brightness(int brightness)
 {
@@ -2338,8 +2306,9 @@ static int apical_isp_ev_g_attr(struct tx_isp_dev *dev, struct isp_core_ctrl *ct
 
 
 
-static int tiziano_bcsh_update(struct isp_tuning_data *tuning)
+static int tiziano_bcsh_update()
 {
+    struct isp_tuning_data *tuning = ourISPdev->tuning;
     uint32_t ev_shifted = tuning->bcsh_ev >> 10;
     uint32_t interp_values[8];
     int i;
