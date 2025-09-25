@@ -189,7 +189,6 @@ static int tx_isp_v4l2_reqbufs(struct file *file, void *priv,
 
     /* Create a fake file structure for frame_channel_unlocked_ioctl */
     memset(&fake_file, 0, sizeof(fake_file));
-    extern void *get_frame_channel_device_ptr(int channel);
     fake_file.private_data = get_frame_channel_device_ptr(dev->channel_num);
     if (!fake_file.private_data) {
         pr_err("tx_isp_v4l2: invalid frame channel pointer for ch=%d\n", dev->channel_num);
