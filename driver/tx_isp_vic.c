@@ -2615,8 +2615,43 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 return ret;
             }
 
-            /* Enable VIC IRQ immediately after MDMA start to catch first frame */
-            pr_info("*** vic_core_s_stream: Enabling VIC IRQ immediately after MDMA start ***\n");
+            /* Re-write buffer addresses AFTER MDMA start to ensure hardware sees them */
+            pr_info("*** vic_core_s_stream: Re-writing buffer addresses AFTER MDMA start ***\n");
+            {
+                int qret2 = ispvic_frame_channel_qbuf(sd, NULL);
+                if (qret2 != 0) {
+                    pr_warn("*** vic_core_s_stream: ispvic_frame_channel_qbuf (post-MDMA) returned %d (continuing) ***\n", qret2);
+                } else {
+                    pr_info("*** vic_core_s_stream: Post-MDMA QBUF SUCCESS ***\n");
+                }
+            }
+
+            /* Re-assert interrupt mask and clear pending in BOTH banks, verify key regs */
+            if (vic_dev->vic_regs) {
+                void __iomem *vr = vic_dev->vic_regs;
+                /* Clear pending */
+                writel(0x00000000, vr + 0x1f0);
+                writel(0x00000000, vr + 0x1f4);
+                /* Enable frame-done mask (bit0=0 active) */
+                writel(0xFFFFFFFE, vr + 0x1e8);
+                wmb();
+                pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x1e8]=0x%08x ***\n",
+                        readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x1e8));
+            }
+            if (vic_dev->vic_regs_control) {
+                void __iomem *vc = vic_dev->vic_regs_control;
+                /* Clear pending */
+                writel(0x00000000, vc + 0x1f0);
+                writel(0x00000000, vc + 0x1f4);
+                /* Enable frame-done mask */
+                writel(0xFFFFFFFE, vc + 0x1e8);
+                wmb();
+                pr_info("*** VIC VERIFY (CONTROL): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x1e8]=0x%08x ***\n",
+                        readl(vc + 0x0), readl(vc + 0x4), readl(vc + 0x300), readl(vc + 0x1e8));
+            }
+
+            /* Enable VIC IRQ after final re-assert and verification */
+            pr_info("*** vic_core_s_stream: Enabling VIC IRQ AFTER final re-assert/verify ***\n");
             tx_vic_enable_irq(vic_dev);
 
 
