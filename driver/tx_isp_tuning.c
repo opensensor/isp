@@ -2308,7 +2308,7 @@ static int apical_isp_ev_g_attr(struct tx_isp_dev *dev, struct isp_core_ctrl *ct
 
 int tiziano_bcsh_update()
 {
-    struct isp_tuning_data *tuning = ourISPdev->tuning;
+    struct isp_tuning_data *tuning = ourISPdev->tuning_data;
     uint32_t ev_shifted = tuning->bcsh_ev >> 10;
     uint32_t interp_values[8];
     int i;
@@ -2316,20 +2316,20 @@ int tiziano_bcsh_update()
     // Check if EV is below min threshold
     if (tuning->bcsh_au32EvList_now[0] > ev_shifted) {
         // Use minimum values
-        tuning->bcsh_saturation_value = tuning->bcsh_au32SminListS_now[0];
-        tuning->bcsh_saturation_max = tuning->bcsh_au32SmaxListS_now[0];
-        tuning->bcsh_saturation_min = tuning->bcsh_au32SminListM_now[0];
-        tuning->bcsh_saturation_mult = tuning->bcsh_au32SmaxListM_now[0];
+        //tuning->bcsh_saturation_value = tuning->bcsh_au32SminListS_now[0];
+        //tuning->bcsh_saturation_max = tuning->bcsh_au32SmaxListS_now[0];
+        //tuning->bcsh_saturation_min = tuning->bcsh_au32SminListM_now[0];
+        //tuning->bcsh_saturation_mult = tuning->bcsh_au32SmaxListM_now[0];
         return 0;
     }
 
     // Check if EV is above max threshold
     if (ev_shifted >= tuning->bcsh_au32EvList_now[8]) {
         // Use maximum values
-        tuning->bcsh_saturation_value  = tuning->bcsh_au32SminListS_now[8];
-        tuning->bcsh_saturation_max = tuning->bcsh_au32SmaxListS_now[8];
-        tuning->bcsh_saturation_min = tuning->bcsh_au32SminListM_now[8];
-        tuning->bcsh_saturation_mult = tuning->bcsh_au32SmaxListM_now[8];
+        //tuning->bcsh_saturation_value  = tuning->bcsh_au32SminListS_now[8];
+        //tuning->bcsh_saturation_max = tuning->bcsh_au32SmaxListS_now[8];
+        //tuning->bcsh_saturation_min = tuning->bcsh_au32SminListM_now[8];
+        //tuning->bcsh_saturation_mult = tuning->bcsh_au32SmaxListM_now[8];
         // Set other max values...
         return 0;
     }
@@ -2346,25 +2346,25 @@ int tiziano_bcsh_update()
             uint32_t weight = range ? (dist << 8) / range : 0;  // Fixed point 8.8
 
             // Interpolate SminListS
-            uint32_t v1 = tuning->bcsh_au32SminListS_now[i];
-            uint32_t v2 = tuning->bcsh_au32SminListS_now[i + 1];
-            tuning->bcsh_saturation_value = v1 + (((v2 - v1) * weight) >> 8);
+            //uint32_t v1 = tuning->bcsh_au32SminListS_now[i];
+            //uint32_t v2 = tuning->bcsh_au32SminListS_now[i + 1];
+            //tuning->bcsh_saturation_value = v1 + (((v2 - v1) * weight) >> 8);
 
             // Interpolate SmaxListS
             v1 = tuning->bcsh_au32SmaxListS_now[i];
             v2 = tuning->bcsh_au32SmaxListS_now[i + 1];
-            tuning->bcsh_saturation_max = v1 + (((v2 - v1) * weight) >> 8);
+            //tuning->bcsh_saturation_max = v1 + (((v2 - v1) * weight) >> 8);
 
             // Interpolate SminListM
             v1 = tuning->bcsh_au32SminListM_now[i];
             v2 = tuning->bcsh_au32SminListM_now[i + 1];
-            tuning->bcsh_saturation_min = v1 + (((v2 - v1) * weight) >> 8);
+            //tuning->bcsh_saturation_min = v1 + (((v2 - v1) * weight) >> 8);
 
             // Interpolate SmaxListM
             v1 = tuning->bcsh_au32SmaxListM_now[i];
             v2 = tuning->bcsh_au32SmaxListM_now[i + 1];
-            tuning->bcsh_saturation_mult = v1 + (((v2 - v1) * weight) >> 8);
-
+            //tuning->bcsh_saturation_mult = v1 + (((v2 - v1) * weight) >> 8);
+// TODO
             break;
         }
     }
