@@ -2056,6 +2056,27 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         /* Error handling would be here */
     }
 
+    /* FALLBACK: If VIC hardware IRQ (38) is not asserting, derive framedone from core VIC regs */
+    if (vic_dev && (isp_dev->core_dev && isp_dev->core_dev->core_regs)) {
+        void __iomem *core = isp_dev->core_dev->core_regs;
+        u32 ch0 = readl(core + 0x9a70);
+        u32 ch1 = readl(core + 0x9a7c);
+        if ((ch0 & 0x1) || (ch1 & 0x1)) {
+            pr_info("*** ISP CORE FALLBACK: core[9a70]=0x%08x core[9a7c]=0x%08x -> calling vic_framedone_irq_function ***\n", ch0, ch1);
+            /* Call VIC framedone handler directly to process the frame */
+            extern int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
+            vic_framedone_irq_function(vic_dev);
+            /* W1C clear framedone status then re-assert core VIC IRQ gate for next frame */
+            writel(0x1, core + 0x9a70);
+            writel(0x1, core + 0x9a7c);
+            wmb();
+            writel(0x200, core + 0x9ac0);
+            writel(0x200, core + 0x9ac8);
+            wmb();
+            pr_info("*** ISP CORE FALLBACK: Cleared [9a70]/[9a7c] and reasserted gate [9ac0]/[9ac8] ***\n");
+        }
+    }
+
     /* Binary Ninja EXACT: Handle bit 9 (0x200) - Processing status */
     if (interrupt_status & 0x200) {
         /* Binary Ninja: if (*($s0 + 0x17c) != 0) exception_handle() */
