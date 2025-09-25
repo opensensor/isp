@@ -1243,6 +1243,16 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         wmb();
         writel(0x0000002b, vic_ctl + 0x14);
         wmb();
+
+	    /* Global interrupt enable at 0x30c (observed in reference) */
+	    writel(0xFFFFFFFF, vic_regs + 0x30c);
+	    wmb();
+	    if (vic_dev->vic_regs_control) {
+	        void __iomem *vic_ctl = vic_dev->vic_regs_control;
+	        writel(0xFFFFFFFF, vic_ctl + 0x30c);
+	        wmb();
+	    }
+
         pr_info("*** VIC INTERRUPT CONFIG: Control bank configuration complete ***\n");
     }
 
@@ -2654,9 +2664,11 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x00000000, vr + 0x1f4);
                 /* Enable frame-done mask (bit0=0 active) */
                 writel(0xFFFFFFFE, vr + 0x1e8);
+                /* Global interrupt enable at 0x30c */
+                writel(0xFFFFFFFF, vr + 0x30c);
                 wmb();
-                pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x1e8]=0x%08x ***\n",
-                        readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x1e8));
+                pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e8]=0x%08x ***\n",
+                        readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x30c), readl(vr + 0x1e8));
             }
             if (vic_dev->vic_regs_control) {
                 void __iomem *vc = vic_dev->vic_regs_control;
@@ -2665,9 +2677,11 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x00000000, vc + 0x1f4);
                 /* Enable frame-done mask */
                 writel(0xFFFFFFFE, vc + 0x1e8);
+                /* Global interrupt enable at 0x30c */
+                writel(0xFFFFFFFF, vc + 0x30c);
                 wmb();
-                pr_info("*** VIC VERIFY (CONTROL): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x1e8]=0x%08x ***\n",
-                        readl(vc + 0x0), readl(vc + 0x4), readl(vc + 0x300), readl(vc + 0x1e8));
+                pr_info("*** VIC VERIFY (CONTROL): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e8]=0x%08x ***\n",
+                        readl(vc + 0x0), readl(vc + 0x4), readl(vc + 0x300), readl(vc + 0x30c), readl(vc + 0x1e8));
             }
 
                 /* Read-back verification of buffer/control registers in BOTH banks */
