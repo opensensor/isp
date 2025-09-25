@@ -1218,7 +1218,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     pr_info("*** VIC INTERRUPT CONFIG: Applying VIC interrupt system configuration (WORKING BRANCH) ***\n");
     writel(0x2d0, vic_regs + 0x100);      /* Interrupt configuration - Working branch value */
     wmb();
-    writel(0x630, vic_regs + 0x14);        /* Interrupt control - Working branch value (matched to reference) */
+    /* Do NOT write 0x14 here on PRIMARY: 0x14 is stride in PRIMARY bank; leave as programmed by format init */
+    pr_info("*** VIC PRIMARY: leaving 0x14=stride as-is (readback=0x%08x) ***\n", readl(vic_regs + 0x14));
     wmb();
 
     pr_info("*** VIC INTERRUPT CONFIG: WORKING BRANCH interrupt configuration complete ***\n");
