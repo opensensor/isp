@@ -403,17 +403,11 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
                     const char *subdev_name = a0_5->pdev ? a0_5->pdev->name : "unknown";
                     int result_1 = 0;  /* Declare result_1 here so it's available for the check below */
 
-                    if (strcmp(subdev_name, "isp-w01") == 0) {
-                        /* Skip calling s_stream on the core subdev itself to prevent infinite recursion */
-                        printk(KERN_ALERT "*** ispcore_video_s_stream: SKIPPING s_stream on core subdev %s to prevent recursion ***\n", subdev_name);
-                        result_1 = 0;  /* Success, but no actual call */
-                    } else {
-                        /* Binary Ninja: int32_t result_1 = $v0_8($a0_5, arg2) */
-                        result_1 = s_stream_func(a0_5, enable);
+                    /* Binary Ninja: int32_t result_1 = $v0_8($a0_5, arg2) */
+                    result_1 = s_stream_func(a0_5, enable);
 
-                        printk(KERN_ALERT "*** ispcore_video_s_stream: Called s_stream on subdev %s: result=%d ***\n",
-                                subdev_name, result_1);
-                    }
+                    printk(KERN_ALERT "*** ispcore_video_s_stream: Called s_stream on subdev %s: result=%d ***\n",
+                            subdev_name, result_1);
 
                     result = result_1;
 
@@ -886,7 +880,7 @@ struct tx_isp_subdev_core_ops core_subdev_core_ops = {
 
 /* Core subdev video operations - GLOBAL to ensure proper accessibility */
 struct tx_isp_subdev_video_ops core_subdev_video_ops = {
-    .s_stream = ispcore_video_s_stream,  /* CRITICAL: Wire in the video streaming function */
+    .s_stream = NULL,  /* CRITICAL: Wire in the video streaming function */
     .link_stream = NULL,  /* CRITICAL FIX: Core subdev should NOT have link_stream to prevent infinite loop */
     .link_setup = ispcore_link_setup,    /* CRITICAL: Wire in the link setup function */
 };
