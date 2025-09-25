@@ -2670,6 +2670,31 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         readl(vc + 0x0), readl(vc + 0x4), readl(vc + 0x300), readl(vc + 0x1e8));
             }
 
+                /* Read-back verification of buffer/control registers in BOTH banks */
+                if (vic_dev->vic_regs) {
+                    void __iomem *vrb = vic_dev->vic_regs;
+                    u32 b0 = readl(vrb + 0x318);
+                    u32 b1 = readl(vrb + 0x31c);
+                    u32 b2 = readl(vrb + 0x320);
+                    u32 b3 = readl(vrb + 0x324);
+                    u32 b4 = readl(vrb + 0x328);
+                    pr_info("*** VIC BUFS (PRIMARY): [0x318]=0x%08x [0x31c]=0x%08x [0x320]=0x%08x [0x324]=0x%08x [0x328]=0x%08x ***\n",
+                            b0, b1, b2, b3, b4);
+                    pr_info("*** VIC CTRL (PRIMARY): [0x300]=0x%08x ***\n", readl(vrb + 0x300));
+                }
+                if (vic_dev->vic_regs_control) {
+                    void __iomem *vcb = vic_dev->vic_regs_control;
+                    u32 b0 = readl(vcb + 0x318);
+                    u32 b1 = readl(vcb + 0x31c);
+                    u32 b2 = readl(vcb + 0x320);
+                    u32 b3 = readl(vcb + 0x324);
+                    u32 b4 = readl(vcb + 0x328);
+                    pr_info("*** VIC BUFS (CONTROL): [0x318]=0x%08x [0x31c]=0x%08x [0x320]=0x%08x [0x324]=0x%08x [0x328]=0x%08x ***\n",
+                            b0, b1, b2, b3, b4);
+                    pr_info("*** VIC CTRL (CONTROL): [0x300]=0x%08x ***\n", readl(vcb + 0x300));
+                }
+
+
             /* Enable VIC IRQ after final re-assert and verification */
             pr_info("*** vic_core_s_stream: Enabling VIC IRQ AFTER final re-assert/verify ***\n");
             tx_vic_enable_irq(vic_dev);
