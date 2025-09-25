@@ -2143,15 +2143,18 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             int (*v0_47)(void) = (int (*)(void))irq_func_cb[i];
 
             if (v0_47 != NULL) {
-                printk(KERN_ALERT "*** ISP CORE: Calling callback[%d] for bit %d - callback=%p ***\n", i, i, v0_47);
+                printk(KERN_ALERT "*** ISP CORE: ABOUT TO CALL callback[%d] for bit %d - callback=%p ***\n", i, i, v0_47);
+                printk(KERN_ALERT "*** ISP CORE: CALLING CALLBACK NOW - IF SYSTEM HANGS, THIS CALLBACK IS THE PROBLEM ***\n");
+
                 /* Binary Ninja EXACT: int32_t result_1 = $v0_47() - NO PARAMETERS! */
                 int result_1 = v0_47();
+
+                printk(KERN_ALERT "*** ISP CORE: CALLBACK RETURNED SUCCESSFULLY - callback[%d] returned %d ***\n", i, result_1);
 
                 /* Binary Ninja: if (result_1 != 1) result = result_1 */
                 if (result_1 != 1) {
                     result = result_1;
                 }
-                printk(KERN_ALERT "*** ISP CORE: Callback[%d] returned %d ***\n", i, result_1);
             } else {
                 printk(KERN_ALERT "*** ISP CORE: Callback[%d] for bit %d is NULL - skipping ***\n", i, i);
             }

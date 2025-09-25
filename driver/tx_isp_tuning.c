@@ -2274,9 +2274,35 @@ static inline u64 ktime_get_real_ns(void)
 uint32_t system_reg_read(u32 reg)
 {
     extern struct tx_isp_dev *ourISPdev;
-    
+
+    /* CRITICAL FIX: Validate pointers before access to prevent 22-second hang */
+    if (!ourISPdev) {
+        pr_err("*** CRITICAL: system_reg_read: ourISPdev is NULL - returning 0 to prevent hang ***\n");
+        return 0;
+    }
+
+    if (!ourISPdev->vic_dev) {
+        pr_err("*** CRITICAL: system_reg_read: vic_dev is NULL - returning 0 to prevent hang ***\n");
+        return 0;
+    }
+
+    if (!ourISPdev->vic_dev->vic_regs) {
+        pr_err("*** CRITICAL: system_reg_read: vic_regs is NULL - returning 0 to prevent hang ***\n");
+        return 0;
+    }
+
     void __iomem *isp_base = ourISPdev->vic_dev->vic_regs - 0x9a00; /* Get ISP base */
-    return readl(isp_base + reg);
+
+    /* CRITICAL FIX: Validate calculated base address */
+    if (!isp_base) {
+        pr_err("*** CRITICAL: system_reg_read: calculated isp_base is NULL - returning 0 to prevent hang ***\n");
+        return 0;
+    }
+
+    /* Safe register read with validation */
+    uint32_t value = readl(isp_base + reg);
+    pr_debug("system_reg_read: reg[0x%x] = 0x%x\n", reg, value);
+    return value;
 }
 
 

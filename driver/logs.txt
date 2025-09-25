@@ -1,36 +1,32 @@
- 137.661441] *** tx_isp_module_init: VIC device successfully linked ***
-[  137.661446] *** vic_start_ok SET TO 1 - INTERRUPTS WILL NOW BE PROCESSED! ***
-[  137.661452] *** tx_isp_module_init: Binary Ninja reference implementation complete ***
-[  137.661457] *** PROBE: Binary Ninja reference implementation complete ***
-[  137.663946] *** tx_isp_init: Platform device and driver registered successfully ***
-[  138.328740] === gc2053 SENSOR MODULE INIT ===
-[  138.331227] gc2053 I2C driver registered, waiting for device creation by ISP
-root@ing-wyze-cam3-a000 ~# prudynt &
-root@ing-wyze-cam3-a000 ~# [INFO:Config.cpp]: Loaded configuration from /etc/prudynt.cfg
-[INFO:main.cpp]: PRUDYNT-T Next-Gen Video Daemon: Aug 28 2025 05:46:40_f5514583
-[INFO:main.cpp]: Starting Prudynt Video Server.
-[INFO:IMPSystem.cpp]: LIBIMP Version IMP-1.1.6
-[INFO:IMPSystem.cpp]: SYSUTILS Version: SYSUTILS-1.1.6
-[INFO:IMPSystem.cpp]: CPU Information: T31-X
-[INFO:IMPSystem.cpp]: Sensor: gc2053
-[  145.923307] *** tisp_init: ENTRY - sensor_info=84b5a5fc, param_name=NULL ***
-[  145.930728] *** system_irq_func_set: Registered handler c0676064 at index 13 ***
-[  145.939385] *** system_irq_func_set: Registered handler c067e4b4 at index 27 ***
-[  145.947147] *** system_irq_func_set: Registered handler c067e344 at index 26 ***
-[  145.954919] *** system_irq_func_set: Registered handler c067e6a4 at index 29 ***
-[  145.962628] *** system_irq_func_set: Registered handler c067e5b0 at index 28 ***
-[  145.972583] *** tisp_init: ENTRY - sensor_info=84b5a5fc, param_name=NULL ***
-[  145.980063] *** system_irq_func_set: Registered handler c0676064 at index 13 ***
-[  145.988116] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=85fd4000 ***
-[  145.995567] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
-[  146.003280] *** ISP CORE INTERRUPT HANDLER: IRQ 37 called, dev_id=85fd4000 ***
-[  146.010727] *** ISP CORE: Read interrupt status - interrupt_status=0x00000400***
-[  146.018361] *** ISP CORE: Clearing legacy interrupt 0x00000400 to reg +0xb8 ***
-[  146.025907] *** ISP CORE: After clearing - legacy=0x00000000, new=0x00000000 ***
-[  146.033535] *** ISP CORE: About to process IRQ callbacks - interrupt_status=0x400 ***
-[  146.041615] *** ISP CORE: Callback[10] for bit 10 is NULL - skipping ***
-[  146.048531] *** ISP CORE INTERRUPT PROCESSING COMPLETE - returning IRQ_HANDLED ***
-[  146.057236] *** system_irq_func_set: Registered handler c067e4b4 at index 27 ***
-[  146.064901] *** system_irq_func_set: Registered handler c067e344 at index 26 ***
-[  146.072591] *** system_irq_func_set: Registered handler c067e6a4 at index 29 ***
-[  146.080253] *** system_irq_func_set: Registered handler c067e5b0 at index 28 ***
+Welcome to Thingino firmware!
+ing-wyze-cam3-a000 login: [  190.127905] *** tisp_init: ENTRY - sensor_info=85219dfc, param_name=NULL ***
+[  190.143384] *** system_irq_func_set: Registered handler c067d064 at index 13 ***
+[  190.158558] *** system_irq_func_set: Registered handler c06853a4 at index 27 ***
+[  190.175008] *** system_irq_func_set: Registered handler c068528c at index 26 ***
+[  190.197599] *** system_irq_func_set: Registered handler c068548c at index 29 ***
+[  190.215418] *** system_irq_func_set: Registered handler c0685418 at index 28 ***
+[  190.235629] *** system_irq_func_set: Registered handler c0685500 at index 30 ***
+[  190.245518] *** system_irq_func_set: Registered handler c0685554 at index 20 ***
+[  190.263340] *** system_irq_func_set: Registered handler c06855a8 at index 18 ***
+[  190.277574] *** system_irq_func_set: Registered handler c06855fc at index 31 ***
+[  190.295212] *** system_irq_func_set: Registered handler c0685650 at index 11 ***
+[  190.314368] *** tisp_init: ENTRY - sensor_info=85219dfc, param_name=NULL ***
+[  190.327711] *** system_irq_func_set: Registered handler c067d064 at index 13 ***
+[  190.345908] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=80514000 ***
+[  190.353366] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
+[  190.361080] *** ISP CORE INTERRUPT HANDLER: IRQ 37 called, dev_id=80514000 ***
+[  190.368533] *** ISP CORE: Read interrupt status - interrupt_status=0x00000400 ***
+[  190.376250] *** ISP CORE: Clearing legacy interrupt 0x00000400 to reg +0xb8 ***
+[  190.383782] *** ISP CORE: After clearing - legacy=0x00000000 ***
+[  190.389972] *** ISP CORE: About to process IRQ callbacks - interrupt_status=0x400 ***
+[  190.398050] *** ISP CORE: Callback[10] for bit 10 is NULL - skipping ***
+[  190.404962] *** ISP CORE INTERRUPT PROCESSING COMPLETE - returning IRQ_HANDLED ***
+[  190.484244] *** system_irq_func_set: Registered handler c06853a4 at index 27 ***
+[  190.497575] *** system_irq_func_set: Registered handler c068528c at index 26 ***
+[  190.515373] *** system_irq_func_set: Registered handler c068548c at index 29 ***
+[  190.531217] *** system_irq_func_set: Registered handler c0685418 at index 28 ***
+[  190.547589] *** system_irq_func_set: Registered handler c0685500 at index 30 ***
+[  190.565614] *** system_irq_func_set: Registered handler c0685554 at index 20 ***
+[  190.585806] *** system_irq_func_set: Registered handler c06855a8 at index 18 ***
+[  190.593465] *** system_irq_func_set: Registered handler c06855fc at index 31 ***
+[  190.607579] *** system_irq_func_set: Registered handler c0685650 at index 11 ***
