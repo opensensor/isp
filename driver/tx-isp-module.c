@@ -4673,52 +4673,6 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
         pr_err("*** This indicates a failure in VIC probe or device linking process ***\n");
     }
 
-    /* CRITICAL: Add the MISSING VIC interrupt initialization sequence from working logs */
-    pr_info("*** INITIALIZING HARDWARE INTERRUPTS FOR IRQ 37 AND 38 ***\n");
-    pr_info("*** USING BINARY NINJA tx_isp_request_irq FOR HARDWARE INTERRUPTS ***\n");
-
-    /* CRITICAL: Enable VIC interrupt generation - FROM WORKING LOGS */
-    pr_info("*** ENABLING HARDWARE INTERRUPT GENERATION ***\n");
-    pr_info("*** WRITING VIC INTERRUPT ENABLE REGISTERS ***\n");
-
-    /* Configure VIC interrupt registers - EXACTLY like working logs */
-    if (isp_dev->vic_dev && isp_dev->vic_dev->vic_regs) {
-        void __iomem *vic_regs = isp_dev->vic_dev->vic_regs;
-
-        /* CRITICAL FIX: Based on Binary Ninja analysis of interrupt handler */
-        /* 0x1e0 is READ-ONLY status register - DO NOT WRITE TO IT */
-        /* 0x1e8 is interrupt MASK register - 0 = enabled, 1 = disabled */
-
-        /* Enable frame done interrupt (bit 0) and other essential VIC interrupts */
-        writel(0xFFFFFFFE, vic_regs + 0x1e8); /* Enable frame done interrupt (bit 0 = 0) */
-        wmb();
-
-        pr_info("*** VIC INTERRUPT FIX: Enabled frame done interrupt via mask register 0x1e8 = 0xFFFFFFFE ***\n");
-
-        /* NOTE: vic_start_ok will be set to 1 later when VIC hardware is fully configured */
-        pr_info("*** VIC INTERRUPT REGISTERS: Configured during module init - vic_start_ok will be set during VIC streaming ***\n");
-
-        pr_info("*** VIC INTERRUPT REGISTERS ENABLED - INTERRUPTS SHOULD NOW FIRE! ***\n");
-    } else {
-        pr_err("*** ERROR: VIC device or registers not available for interrupt configuration ***\n");
-    }
-
-    /* CRITICAL: Enable ISP core interrupt registers - FROM WORKING LOGS */
-    pr_info("*** ENABLING ISP CORE INTERRUPT REGISTERS FOR MIPI DATA ***\n");
-
-    if (isp_dev->core_dev && isp_dev->core_dev->core_regs) {
-        /* Configure ISP core interrupt registers - FROM WORKING LOGS */
-        writel(0x8fffffff, isp_dev->core_dev->core_regs + 0x30);  /* ISP core interrupt enable */
-        writel(0x00000133, isp_dev->core_dev->core_regs + 0x10);  /* ISP core interrupt control */
-        wmb();
-
-        pr_info("*** ISP CORE INTERRUPT REGISTERS ENABLED at legacy(+0xb*) and new(+0x98b*) ***\n");
-    } else {
-        pr_err("*** ERROR: ISP core registers not available for interrupt configuration ***\n");
-    }
-
-    pr_info("*** BOTH VIC AND ISP CORE INTERRUPTS NOW ENABLED! ***\n");
-
     /* CRITICAL: Set vic_start_ok to 1 - FROM WORKING LOGS */
     extern uint32_t vic_start_ok;
     vic_start_ok = 1;
