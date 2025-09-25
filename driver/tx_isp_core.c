@@ -399,12 +399,20 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
                     /* Binary Ninja: result = 0xfffffdfd */
                     result = -ENOIOCTLCMD;
                 } else {
-                    /* Binary Ninja: int32_t result_1 = $v0_8($a0_5, arg2) */
-                    int result_1 = s_stream_func(a0_5, enable);
-                    result = result_1;
+                    /* CRITICAL FIX: Prevent infinite recursion - core subdev should not call s_stream on itself */
+                    const char *subdev_name = a0_5->pdev ? a0_5->pdev->name : "unknown";
+                    if (strcmp(subdev_name, "isp-w01") == 0) {
+                        /* Skip calling s_stream on the core subdev itself to prevent infinite recursion */
+                        printk(KERN_ALERT "*** ispcore_video_s_stream: SKIPPING s_stream on core subdev %s to prevent recursion ***\n", subdev_name);
+                        result = 0;  /* Success, but no actual call */
+                    } else {
+                        /* Binary Ninja: int32_t result_1 = $v0_8($a0_5, arg2) */
+                        int result_1 = s_stream_func(a0_5, enable);
+                        result = result_1;
 
-                    printk(KERN_ALERT "*** ispcore_video_s_stream: Called s_stream on subdev %s: result=%d ***\n",
-                            a0_5->pdev ? a0_5->pdev->name : "unknown", result_1);
+                        printk(KERN_ALERT "*** ispcore_video_s_stream: Called s_stream on subdev %s: result=%d ***\n",
+                                subdev_name, result_1);
+                    }
 
                     /* Binary Ninja: if (result_1 != 0) */
                     if (result_1 != 0) {

@@ -1,7 +1,45 @@
-Welcome to Thingino firmware!
-ing-wyze-cam3-a000 login: [  108.417684] *** tisp_init: ENTRY - sensor_info=85217dfc, param_name=NULL ***
-[  108.424972] *** tisp_init: DEADLOCK PROTECTION ACTIVE - Single-threaded execution ***
-[  108.433198] *** system_irq_func_set: Registered handler c0676134 at index 13 ***
-[  108.441816] *** system_irq_func_set: Registered handler c067e36c at index 10 ***
-[  108.451840] *** tisp_init: ENTRY - sensor_info=85217dfc, param_name=NULL ***
-[  108.459160] *** tisp_init: Already completed - returning success ***
+[  154.307104] csi_video_s_stream: sd=85215400, enable=1
+[  154.317211] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  154.337224] *** tx_isp_get_sensor: Found real sensor: 85215400 ***
+[  154.343691] csi_video_s_stream: Stream ON - CSI state set to 4
+[  154.359010] *** ispcore_video_s_stream: Called s_stream on subdev isp-w00: result=0 ***
+[  154.377509] *** vic_core_s_stream: BINARY NINJA EXACT - sd=85bf8000, enable=1 ***
+[  154.397696] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
+[  154.404922] *** vic_core_s_stream: STREAM ON ***
+[  154.417876] *** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***
+[  154.436124] *** ispcore_video_s_stream: Called s_stream on subdev isp-w02: result=0 ***
+[  154.446198] *** vin_s_stream: SAFE implementation - sd=81144000, enable=1 ***
+[  154.466417] vin_s_stream: VIN state = 4, enable = 1
+[  154.471558] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  154.487892] *** tx_isp_get_sensor: Found real sensor: 85215400 ***
+[  154.504439] vin_s_stream: VIN processing complete - sensor will be handled by core loop
+[  154.517871] vin_s_stream: VIN state set to 4 (SAFE implementation)
+[  154.524258] *** ispcore_video_s_stream: Called s_stream on subdev isp-w01: result=0 ***
+[  154.547871] *** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=1 ***
+[  154.566748] *** VIC STATE CHECK: vic_dev->state=4 (need >=3), enable=1 ***
+[  154.576860] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[  154.597052] csi_video_s_stream: sd=85215400, enable=1
+[  154.607148] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  154.627344] *** tx_isp_get_sensor: Found real sensor: 85215400 ***
+[  154.633754] csi_video_s_stream: Stream ON - CSI state set to 4
+[  154.647872] *** ispcore_video_s_stream: Called s_stream on subdev isp-w00: result=0 ***
+[  154.666296] *** vic_core_s_stream: BINARY NINJA EXACT - sd=85bf8000, enable=1 ***
+[  154.676402] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=4 ***
+[  154.691330] *** vic_core_s_stream: STREAM ON ***
+[  154.696092] *** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***
+[  154.707868] *** ispcore_video_s_stream: Called s_stream on subdev isp-w02: result=0 ***
+[  154.726295] *** vin_s_stream: SAFE implementation - sd=81144000, enable=1 ***
+[  154.746478] vin_s_stream: VIN state = 4, enable = 1
+[  154.751537] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  154.767869] *** tx_isp_get_sensor: Found real sensor: 85215400 ***
+[  154.776812] vin_s_stream: VIN processing complete - sensor will be handled by core loop
+[  154.795269] vin_s_stream: VIN state set to 4 (SAFE implementation)
+[  154.811238] *** ispcore_video_s_stream: Called s_stream on subdev isp-w01: result=0 ***
+[  154.827870] *** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=1 ***
+[  154.846746] *** VIC STATE CHECK: vic_dev->state=4 (need >=3), enable=1 ***
+[  154.856830] *** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***
+[  154.877025] csi_video_s_stream: sd=85215400, enable=1
+[  154.882341] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  154.897890] *** tx_isp_get_sensor: Found real sensor: 85215400 ***
+[  154.914432] csi_video_s_stream: Stream ON - CSI state set to 4
+[  154.924548] **
