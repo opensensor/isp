@@ -2804,6 +2804,24 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             tx_vic_enable_irq(vic_dev);
 
 
+            /* Post-IRQ-enable: sample status a bit longer to catch first frame */
+            if (vic_dev->vic_regs) {
+                void __iomem *vr = vic_dev->vic_regs;
+                u32 s0, s1; int i;
+                for (i = 0; i < 20; i++) { /* ~20ms total if udelay(1000) */
+                    s0 = readl(vr + 0x1f0);
+                    s1 = readl(vr + 0x1f4);
+                    if (s0 || s1) {
+                        pr_warn("*** VIC POST-IRQ SAMPLE: Status asserted: [0x1f0]=0x%08x [0x1f4]=0x%08x (iter=%d) ***\n", s0, s1, i);
+                        break;
+                    }
+                    udelay(1000);
+                }
+                if (i == 20)
+                    pr_info("*** VIC POST-IRQ SAMPLE: No status bits asserted in 20ms window ***\n");
+            }
+
+
             /* CRITICAL FIX: Follow proper state machine - don't jump directly to state 4 */
             /* The proper flow is: 1 → 2 → 3 → 4, not 1 → 4 */
             if (vic_dev->state == 1) {
