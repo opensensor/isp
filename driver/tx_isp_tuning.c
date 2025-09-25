@@ -8535,10 +8535,7 @@ void isp_cleanup_irq_handling(struct tx_isp_dev *dev)
     }
     
     /* Free interrupt */
-    if (dev->isp_irq > 0) {
-        free_irq(dev->isp_irq, dev);
-        pr_info("isp_cleanup_irq_handling: IRQ %d freed\n", ourISPdev->isp_irq);
-    }
+	// TODO
     
     /* BINARY NINJA REFERENCE: No event processing thread to stop */
 
