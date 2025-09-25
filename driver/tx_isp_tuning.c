@@ -8602,21 +8602,23 @@ int tisp_again_update(void)
 
     /* Update analog gain based on AE calculations */
     extern struct tx_isp_dev *ourISPdev;
-    if (ourISPdev && ourISPdev->tuning_data) {
-        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+    if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->tuning_data) {
+        struct isp_tuning_data *tuning = ourISPdev->core_dev->tuning_data;
 
         /* Update hardware analog gain register */
-        if (ourISPdev->core_regs) {
-            writel(tuning->max_again, ourISPdev->core_regs + 0xa008);  /* Analog gain register */
+        if (ourISPdev->core_dev->core_regs) {
+            writel(tuning->max_again, ourISPdev->core_dev->core_regs + 0xa008);  /* Analog gain register */
         }
 
         /* CRITICAL: Send analog gain update to sensor via I2C */
-        if (ourISPdev->sensor && ourISPdev->sensor->sd.ops &&
-            ourISPdev->sensor->sd.ops->sensor && ourISPdev->sensor->sd.ops->sensor->ioctl) {
+        extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+        struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+        if (sensor && sensor->sd.ops &&
+            sensor->sd.ops->sensor && sensor->sd.ops->sensor->ioctl) {
 
             int gain_value = tuning->max_again;
-            int sensor_ret = ourISPdev->sensor->sd.ops->sensor->ioctl(
-                &ourISPdev->sensor->sd, TX_ISP_EVENT_SENSOR_AGAIN, &gain_value);
+            int sensor_ret = sensor->sd.ops->sensor->ioctl(
+                &sensor->sd, TX_ISP_EVENT_SENSOR_AGAIN, &gain_value);
 
             if (sensor_ret == 0) {
                 pr_info("tisp_again_update: Sensor I2C gain update SUCCESS (gain=0x%x)\n", gain_value);
@@ -8632,6 +8634,7 @@ int tisp_again_update(void)
 
     return 0;
 }
+
 
 int tisp_ev_update(void)
 {
@@ -10239,22 +10242,23 @@ static void tisp_set_sensor_analog_gain_short(void)
 /* The real system_irq_func_set with proper signature is in tx_isp_core.c */
 
 /* Sensor interface functions - Safe structure-based implementations */
-static int data_b2eec(uint32_t time, void **var_ptr)
+int data_b2eec(uint32_t time, void **var_ptr)
 {
     /* Safe sensor integration time allocation */
-    pr_debug("data_b2eec: Allocating integration time %u\n", time);
+    pr_info("data_b2eec: Allocating integration time %u\n", time);
 
-    extern struct tx_isp_dev *ourISPdev;
-    if (!ourISPdev || !ourISPdev->sensor) {
-        pr_err("data_b2eec: No ISP device or sensor available\n");
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor) {
+        pr_err("data_b2eec: No sensor available\n");
         if (var_ptr) *var_ptr = NULL;
         return time; /* Return input time as fallback */
     }
 
     /* Use sensor's integration time allocation if available */
-    if (ourISPdev->sensor->attr.sensor_ctrl.alloc_integration_time) {
+    if (sensor->attr.sensor_ctrl.alloc_integration_time) {
         unsigned int sensor_it = 0;
-        int result = ourISPdev->sensor->attr.sensor_ctrl.alloc_integration_time(time, 0, &sensor_it);
+        int result = sensor->attr.sensor_ctrl.alloc_integration_time(time, 0, &sensor_it);
         if (var_ptr) *var_ptr = (void *)(uintptr_t)sensor_it;
         return result;
     }
@@ -10264,22 +10268,23 @@ static int data_b2eec(uint32_t time, void **var_ptr)
     return time;
 }
 
-static int data_b2ef0(uint32_t time, void **var_ptr)
+int data_b2ef0(uint32_t time, void **var_ptr)
 {
     /* Safe sensor short integration time allocation */
-    pr_debug("data_b2ef0: Allocating short integration time %u\n", time);
+    pr_info("data_b2ef0: Allocating short integration time %u\n", time);
 
-    extern struct tx_isp_dev *ourISPdev;
-    if (!ourISPdev || !ourISPdev->sensor) {
-        pr_err("data_b2ef0: No ISP device or sensor available\n");
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor) {
+        pr_err("data_b2ef0: No sensor available\n");
         if (var_ptr) *var_ptr = NULL;
         return time;
     }
 
     /* Use sensor's short integration time allocation if available */
-    if (ourISPdev->sensor->attr.sensor_ctrl.alloc_integration_time_short) {
+    if (sensor->attr.sensor_ctrl.alloc_integration_time_short) {
         unsigned int sensor_it_short = 0;
-        int result = ourISPdev->sensor->attr.sensor_ctrl.alloc_integration_time_short(time, 0, &sensor_it_short);
+        int result = sensor->attr.sensor_ctrl.alloc_integration_time_short(time, 0, &sensor_it_short);
         if (var_ptr) *var_ptr = (void *)(uintptr_t)sensor_it_short;
         return result;
     }
@@ -10289,68 +10294,71 @@ static int data_b2ef0(uint32_t time, void **var_ptr)
     return time;
 }
 
-static int data_b2ef4(uint32_t param, int flag)
+int data_b2ef4(uint32_t param, int flag)
 {
     /* Safe sensor integration time setting */
-    pr_debug("data_b2ef4: Setting sensor integration time %u, flag %d\n", param, flag);
+    pr_info("data_b2ef4: Setting sensor integration time %u, flag %d\n", param, flag);
 
-    extern struct tx_isp_dev *ourISPdev;
-    if (!ourISPdev || !ourISPdev->sensor) {
-        pr_err("data_b2ef4: No ISP device or sensor available\n");
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor) {
+        pr_err("data_b2ef4: No sensor available\n");
         return -ENODEV;
     }
 
     /* Set integration time via sensor attribute */
-    if (ourISPdev->sensor) {
-        ourISPdev->sensor->attr.integration_time = param;
-        pr_debug("data_b2ef4: Set sensor integration_time to %u\n", param);
+    if (sensor) {
+        sensor->attr.integration_time = param;
+        pr_info("data_b2ef4: Set sensor integration_time to %u\n", param);
         return 0;
     }
 
     /* Fallback: just log the operation */
-    pr_debug("data_b2ef4: No sensor set_integration_time operation available\n");
+    pr_info("data_b2ef4: No sensor set_integration_time operation available\n");
     return 0;
 }
 
-static int data_b2ef8(uint32_t param, int flag)
+int data_b2ef8(uint32_t param, int flag)
 {
     /* Safe sensor short integration time setting */
-    pr_debug("data_b2ef8: Setting sensor short integration time %u, flag %d\n", param, flag);
+    pr_info("data_b2ef8: Setting sensor short integration time %u, flag %d\n", param, flag);
 
-    extern struct tx_isp_dev *ourISPdev;
-    if (!ourISPdev || !ourISPdev->sensor) {
-        pr_err("data_b2ef8: No ISP device or sensor available\n");
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor) {
+        pr_err("data_b2ef8: No sensor available\n");
         return -ENODEV;
     }
 
     /* Set short integration time via sensor attribute */
-    if (ourISPdev->sensor) {
-        ourISPdev->sensor->attr.integration_time_short = param;
-        pr_debug("data_b2ef8: Set sensor integration_time_short to %u\n", param);
+    if (sensor) {
+        sensor->attr.integration_time_short = param;
+        pr_info("data_b2ef8: Set sensor integration_time_short to %u\n", param);
         return 0;
     }
 
     /* Fallback: just log the operation */
-    pr_debug("data_b2ef8: No sensor set_integration_time_short operation available\n");
+    pr_info("data_b2ef8: No sensor set_integration_time_short operation available\n");
     return 0;
 }
 
-static uint32_t data_b2ee0(uint32_t log_val, int16_t *var_ptr)
+uint32_t data_b2ee0(uint32_t log_val, int16_t *var_ptr)
 {
     /* Safe sensor analog gain allocation */
-    pr_debug("data_b2ee0: Allocating analog gain log_val %u\n", log_val);
+    pr_info("data_b2ee0: Allocating analog gain log_val %u\n", log_val);
 
-    extern struct tx_isp_dev *ourISPdev;
-    if (!ourISPdev || !ourISPdev->sensor) {
-        pr_err("data_b2ee0: No ISP device or sensor available\n");
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor) {
+        pr_err("data_b2ee0: No sensor available\n");
         if (var_ptr) *var_ptr = 0;
         return log_val;
     }
 
     /* Use sensor's analog gain allocation if available */
-    if (ourISPdev->sensor->attr.sensor_ctrl.alloc_again) {
+    if (sensor->attr.sensor_ctrl.alloc_again) {
         unsigned int sensor_again = 0;
-        uint32_t result = ourISPdev->sensor->attr.sensor_ctrl.alloc_again(log_val, TX_ISP_GAIN_FIXED_POINT, &sensor_again);
+        uint32_t result = sensor->attr.sensor_ctrl.alloc_again(log_val, TX_ISP_GAIN_FIXED_POINT, &sensor_again);
         if (var_ptr) *var_ptr = (int16_t)sensor_again;
         return result;
     }
@@ -10360,22 +10368,23 @@ static uint32_t data_b2ee0(uint32_t log_val, int16_t *var_ptr)
     return log_val;
 }
 
-static uint32_t data_b2ee4(uint32_t log_val, void **var_ptr)
+uint32_t data_b2ee4(uint32_t log_val, void **var_ptr)
 {
     /* Safe sensor short analog gain allocation */
-    pr_debug("data_b2ee4: Allocating short analog gain log_val %u\n", log_val);
+    pr_info("data_b2ee4: Allocating short analog gain log_val %u\n", log_val);
 
-    extern struct tx_isp_dev *ourISPdev;
-    if (!ourISPdev || !ourISPdev->sensor) {
-        pr_err("data_b2ee4: No ISP device or sensor available\n");
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor) {
+        pr_err("data_b2ee4: No sensor available\n");
         if (var_ptr) *var_ptr = NULL;
         return log_val;
     }
 
     /* Use sensor's short analog gain allocation if available */
-    if (ourISPdev->sensor->attr.sensor_ctrl.alloc_again_short) {
+    if (sensor->attr.sensor_ctrl.alloc_again_short) {
         unsigned int sensor_again_short = 0;
-        uint32_t result = ourISPdev->sensor->attr.sensor_ctrl.alloc_again_short(log_val, TX_ISP_GAIN_FIXED_POINT, &sensor_again_short);
+        uint32_t result = sensor->attr.sensor_ctrl.alloc_again_short(log_val, TX_ISP_GAIN_FIXED_POINT, &sensor_again_short);
         if (var_ptr) *var_ptr = (void *)(uintptr_t)sensor_again_short;
         return result;
     }
@@ -10385,49 +10394,51 @@ static uint32_t data_b2ee4(uint32_t log_val, void **var_ptr)
     return log_val;
 }
 
-static int data_b2f04(uint32_t param, int flag)
+int data_b2f04(uint32_t param, int flag)
 {
     /* Safe sensor analog gain setting */
-    pr_debug("data_b2f04: Setting sensor analog gain %u, flag %d\n", param, flag);
+    pr_info("data_b2f04: Setting sensor analog gain %u, flag %d\n", param, flag);
 
-    extern struct tx_isp_dev *ourISPdev;
-    if (!ourISPdev || !ourISPdev->sensor) {
-        pr_err("data_b2f04: No ISP device or sensor available\n");
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor) {
+        pr_err("data_b2f04: No sensor available\n");
         return -ENODEV;
     }
 
     /* Set analog gain via sensor attribute */
-    if (ourISPdev->sensor) {
-        ourISPdev->sensor->attr.again = param;
-        pr_debug("data_b2f04: Set sensor again to %u\n", param);
+    if (sensor) {
+        sensor->attr.again = param;
+        pr_info("data_b2f04: Set sensor again to %u\n", param);
         return 0;
     }
 
     /* Fallback: just log the operation */
-    pr_debug("data_b2f04: No sensor set_analog_gain operation available\n");
+    pr_info("data_b2f04: No sensor set_analog_gain operation available\n");
     return 0;
 }
 
-static int data_b2f08(uint32_t param, int flag)
+int data_b2f08(uint32_t param, int flag)
 {
     /* Safe sensor short analog gain setting */
-    pr_debug("data_b2f08: Setting sensor short analog gain %u, flag %d\n", param, flag);
+    pr_info("data_b2f08: Setting sensor short analog gain %u, flag %d\n", param, flag);
 
-    extern struct tx_isp_dev *ourISPdev;
-    if (!ourISPdev || !ourISPdev->sensor) {
-        pr_err("data_b2f08: No ISP device or sensor available\n");
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor) {
+        pr_err("data_b2f08: No sensor available\n");
         return -ENODEV;
     }
 
     /* Set short analog gain via sensor attribute - no direct field, use dgain as fallback */
-    if (ourISPdev->sensor) {
-        ourISPdev->sensor->attr.dgain = param; /* Use dgain for short gain */
-        pr_debug("data_b2f08: Set sensor dgain (short gain) to %u\n", param);
+    if (sensor) {
+        sensor->attr.dgain = param; /* Use dgain for short gain */
+        pr_info("data_b2f08: Set sensor dgain (short gain) to %u\n", param);
         return 0;
     }
 
     /* Fallback: just log the operation */
-    pr_debug("data_b2f08: No sensor set_analog_gain_short operation available\n");
+    pr_info("data_b2f08: No sensor set_analog_gain_short operation available\n");
     return 0;
 }
 
