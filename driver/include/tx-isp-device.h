@@ -732,6 +732,24 @@ static inline void tx_isp_set_subdev_hostdata(struct tx_isp_subdev *sd, void *da
 
 static inline void *tx_isp_get_subdev_hostdata(struct tx_isp_subdev *sd)
 {
+	/* CRITICAL SAFETY: Validate subdev pointer before accessing */
+	if (!sd) {
+		pr_err("*** tx_isp_get_subdev_hostdata: NULL subdev pointer ***\n");
+		return NULL;
+	}
+
+	/* MIPS ALIGNMENT CHECK: Ensure subdev is properly aligned */
+	if (((unsigned long)sd & 0x3) != 0) {
+		pr_err("*** tx_isp_get_subdev_hostdata: subdev pointer %p not 4-byte aligned ***\n", sd);
+		return NULL;
+	}
+
+	/* Validate subdev is in valid kernel memory range */
+	if ((unsigned long)sd < 0x80000000 || (unsigned long)sd >= 0xfffff000) {
+		pr_err("*** tx_isp_get_subdev_hostdata: subdev pointer %p outside valid kernel memory range ***\n", sd);
+		return NULL;
+	}
+
 	return sd->host_priv;
 }
 

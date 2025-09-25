@@ -74,8 +74,9 @@ static inline struct tx_isp_subdev *tx_isp_get_fs_subdev(struct tx_isp_dev *isp_
 /* Duplicate removed - tx_isp_get_fs_subdev already defined above */
 
 /**
- * tx_isp_find_sensor_subdev - Find first available sensor subdevice
- * Sensors are typically registered at indices 4+ but we should search dynamically
+ * tx_isp_find_sensor_subdev - Find first available REAL sensor subdevice
+ * CRITICAL FIX: Search only in sensor slots (4+) and exclude ISP core devices
+ * Subdev layout: 0=CSI, 1=VIC, 2=VIN, 3=Core, 4+=REAL_SENSORS
  */
 static inline struct tx_isp_subdev *tx_isp_find_sensor_subdev(struct tx_isp_dev *isp_dev)
 {
@@ -85,10 +86,22 @@ static inline struct tx_isp_subdev *tx_isp_find_sensor_subdev(struct tx_isp_dev 
         return NULL;
     }
 
-    for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+    /* CRITICAL FIX: Start search from index 4 to avoid finding ISP core devices */
+    for (i = 4; i < ISP_MAX_SUBDEVS; i++) {
         struct tx_isp_subdev *sd = isp_dev->subdevs[i];
         if (sd && sd->ops && sd->ops->sensor) {
-            return sd;
+            /* Additional validation: make sure this is NOT an ISP core device */
+            if (sd->pdev && sd->pdev->name) {
+                /* Exclude all known ISP core device names */
+                if (strcmp(sd->pdev->name, "isp-m0") != 0 &&
+                    strcmp(sd->pdev->name, "isp-w00") != 0 &&
+                    strcmp(sd->pdev->name, "isp-w01") != 0 &&
+                    strcmp(sd->pdev->name, "isp-w02") != 0 &&
+                    strcmp(sd->pdev->name, "isp-fs") != 0) {
+                    /* This looks like a real sensor device */
+                    return sd;
+                }
+            }
         }
     }
 
