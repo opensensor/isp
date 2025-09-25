@@ -2662,13 +2662,14 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Clear pending */
                 writel(0x00000000, vr + 0x1f0);
                 writel(0x00000000, vr + 0x1f4);
-                /* Enable frame-done mask (bit0=0 active) */
+                /* Enable all interrupt sources, then unmask frame-done (bit0) */
+                writel(0xFFFFFFFF, vr + 0x1e0);
                 writel(0xFFFFFFFE, vr + 0x1e8);
-                /* Global interrupt enable at 0x30c */
+                /* Global interrupt enable at 0x30c (if implemented) */
                 writel(0xFFFFFFFF, vr + 0x30c);
                 wmb();
-                pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e8]=0x%08x ***\n",
-                        readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x30c), readl(vr + 0x1e8));
+                pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e8]=0x%08x ***\n",
+                        readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x30c), readl(vr + 0x1e0), readl(vr + 0x1e8));
             }
             if (vic_dev->vic_regs_control) {
                 void __iomem *vc = vic_dev->vic_regs_control;
