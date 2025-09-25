@@ -1347,114 +1347,58 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* CRITICAL FIX: VIC interrupt configuration must happen AFTER VIC unlock sequence */
     /* The magic value 0x3130322a in register 0x0 indicates CSI PHY coordination - this is CORRECT */
 
-    pr_info("*** VIC INTERRUPT CONFIG: Clearing pending interrupts ***\n");
-    writel(0, vic_regs + 0x00);  /* Clear ISR */
-    writel(0, vic_regs + 0x20);  /* Clear ISR1 */
-    wmb();
 
-    /* NOTE: Interrupt control registers will be configured AFTER VIC unlock sequence below */
-    /* STATUS registers will be checked after VIC unlock sequence completes */
-    pr_info("*** VIC INTERRUPT CONFIG: Configuring interrupt masks (WORKING BRANCH) ***\n");
-    writel(0x00000001, vic_regs + 0x04);  /* IMR - Initial mask */
-    wmb();
-    writel(0x00000000, vic_regs + 0x24);  /* IMR1 - Clear secondary mask */
-    wmb();
-    pr_info("*** VIC INTERRUPT CONFIG: Configuring ISP control interrupts (WORKING BRANCH) ***\n");
-    writel(0x07800438, vic_regs + 0x04);  /* IMR - Working branch value */
-    wmb();
-    writel(0xb5742249, vic_regs + 0x0c);  /* IMCR - Working branch value */
-    wmb();
-    /* REMOVED: Duplicate interrupt configuration - now happens AFTER VIC unlock sequence */
-    pr_info("*** VIC INTERRUPT CONFIG: Applying VIC interrupt system configuration (WORKING BRANCH) ***\n");
-    writel(0x2d0, vic_regs + 0x100);      /* Interrupt configuration - Working branch value */
-    wmb();
-    writel(0x2b, vic_regs + 0x14);        /* Interrupt control - Working branch value */
-    wmb();
-    pr_info("*** VIC INTERRUPT CONFIG: WORKING BRANCH interrupt configuration complete ***\n");
-
-    /* CRITICAL MISSING PIECE: Enable ISP core interrupt generation at hardware level */
-    pr_info("*** ISP CORE INTERRUPT CONFIG: Enabling ISP core interrupt generation (MISSING FROM CURRENT BRANCH) ***\n");
-
-    /* Get ISP core registers */
-    struct tx_isp_dev *isp_dev = ourISPdev;
-    if (isp_dev && isp_dev->core_dev && isp_dev->core_dev->core_regs) {
-        void __iomem *core = isp_dev->core_dev->core_regs;
-
-        /* CRITICAL FIX: Skip interrupt-disrupting ISP core registers if VIC interrupts already working */
-        if (vic_start_ok == 1) {
-            pr_info("*** ISP CORE PROTECTION: SKIPPING interrupt-disrupting core registers 0x30, 0x10 - VIC interrupts already working ***\n");
-        } else {
-            pr_info("*** ISP CORE CONFIG: Writing ISP core interrupt registers (vic_start_ok=%d) ***\n", vic_start_ok);
-
-            /* CRITICAL: Enable ISP core interrupt generation at hardware level */
-            /* Binary Ninja: system_reg_write(0x30, 0xffffffff) - Enable all interrupt sources */
-            writel(0xffffffff, core + 0x30);
-            wmb();
-
-            /* Binary Ninja: system_reg_write(0x10, 0x133) - Enable specific interrupt types */
-            writel(0x133, core + 0x10);
-            wmb();
-
-            pr_info("*** ISP CORE CONFIG: ISP core interrupt registers written (0x30=0xffffffff, 0x10=0x133) ***\n");
-        }
-
-        pr_info("*** ISP CORE: Hardware interrupt generation ENABLED (0x30=0xffffffff, 0x10=0x133) ***\n");
-        pr_info("*** VIC->ISP: Pipeline should now generate hardware interrupts when VIC completes frames! ***\n");
-
-        /* Verify the writes took effect */
-        u32 verify_0x30 = readl(core + 0x30);
-        u32 verify_0x10 = readl(core + 0x10);
-        pr_info("*** ISP CORE VERIFY: 0x30=0x%08x, 0x10=0x%08x ***\n", verify_0x30, verify_0x10);
-
-    } else {
-        pr_err("*** ISP CORE INTERRUPT CONFIG: CRITICAL ERROR - ISP core registers not available! ***\n");
-        pr_err("*** ISP CORE INTERRUPT CONFIG: isp_dev=%p, core_dev=%p ***\n",
-               isp_dev, isp_dev ? isp_dev->core_dev : NULL);
-        if (isp_dev && isp_dev->core_dev) {
-            pr_err("*** ISP CORE INTERRUPT CONFIG: core_regs=%p ***\n", isp_dev->core_dev->core_regs);
-        }
-    }
-
-    /* NOTE: VIC DMA start (0x300) should happen during streaming, not here */
-    /* Working reference shows vic_pipo_mdma_enable + ispvic_frame_channel_s_stream handle DMA */
-
-    /* Verify WORKING BRANCH interrupt registers were set */
-    pr_info("*** VIC INTERRUPT CONFIG: Starting verification of WORKING BRANCH interrupt registers ***\n");
-    u32 ctrl_0x0_verify = readl(vic_regs + 0x0);
-    u32 ctrl_0x4_verify = readl(vic_regs + 0x4);
-
-    /* Verify WORKING BRANCH interrupt registers */
-    u32 ctrl_0x04_verify = readl(vic_regs + 0x04);   /* IMR (Working Branch) */
-    u32 ctrl_0x0c_verify = readl(vic_regs + 0x0c);   /* IMCR (Working Branch) */
-    u32 ctrl_0x100_verify = readl(vic_regs + 0x100); /* Interrupt configuration (Working Branch) */
-    u32 ctrl_0x14_verify = readl(vic_regs + 0x14);   /* Interrupt control (Working Branch) */
-
-    pr_info("*** VIC INTERRUPT CONTROL VERIFY (BASIC REGISTERS): 0x0=0x%08x, 0x4=0x%08x ***\n",
-            ctrl_0x0_verify, ctrl_0x4_verify);
-    pr_info("*** VIC INTERRUPT CONTROL VERIFY (WORKING BRANCH REGS): 0x04=0x%08x, 0x0c=0x%08x, 0x100=0x%08x, 0x14=0x%08x ***\n",
-            ctrl_0x04_verify, ctrl_0x0c_verify, ctrl_0x100_verify, ctrl_0x14_verify);
-
-    /* Check success condition with WORKING BRANCH registers */
-    bool imr_configured = (ctrl_0x04_verify == 0x07800438);       /* IMR matches working branch */
-    bool imcr_configured = (ctrl_0x0c_verify == 0xb5742249);     /* IMCR matches working branch */
-    bool int_config_set = (ctrl_0x100_verify == 0x2d0);          /* Interrupt config matches working branch */
-    bool int_control_set = (ctrl_0x14_verify == 0x2b);           /* Interrupt control matches working branch */
-
-    if (imr_configured && imcr_configured && int_config_set && int_control_set) {
-        pr_info("*** VIC INTERRUPT: ALL WORKING BRANCH interrupt registers configured correctly - interrupts should fire! ***\n");
-    } else {
-        pr_warn("*** VIC INTERRUPT: Some WORKING BRANCH interrupt register configuration failed ***\n");
-        pr_warn("*** VIC INTERRUPT: Expected: 0x04=0x07800438, 0x0c=0xb5742249, 0x100=0x2d0, 0x14=0x2b ***\n");
-        pr_warn("*** VIC INTERRUPT: imr_ok=%d, imcr_ok=%d, config_ok=%d, control_ok=%d ***\n",
-                imr_configured, imcr_configured, int_config_set, int_control_set);
-    }
-
-    /* *** CRITICAL: Set global vic_start_ok flag at end - Binary Ninja exact! *** */
-    pr_info("*** tx_isp_vic_start: vic_start_ok set to 1 - EXACT Binary Ninja reference ***\n");
+    /* Binary Ninja: 00010b84 - Set vic_start_ok */
     vic_start_ok = 1;
-    pr_info("*** tx_isp_vic_start: VIC Control register sequence complete - streaming should start ***\n");
-    pr_info("*** tx_isp_vic_start: VIC should now generate frame done interrupts! ***\n");
-    pr_info("*** tx_isp_vic_start: VIC interrupt will be enabled by tx_vic_enable_irq callback ***\n");
+    pr_info("*** VIC start completed - vic_start_ok = 1 ***\n");
+
+    /* CRITICAL: Enable ISP core interrupt generation - EXACT Binary Ninja reference */
+    /* This was the missing piece that caused interrupts to stall out */
+    if (ourISPdev && ourISPdev->-core_dev && ourISPdev->-core_dev->core_regs) {
+        void __iomem *core = ourISPdev->core_dev->core_regs;
+
+        /* Clear any pending interrupts first */
+        u32 pend_legacy = readl(core + 0xb4);
+        u32 pend_new    = readl(core + 0x98b4);
+        writel(pend_legacy, core + 0xb8);
+        writel(pend_new,    core + 0x98b8);
+
+        /* CRITICAL: Enable ISP pipeline connection - this is what was missing! */
+        /* Binary Ninja: system_reg_write(0x800, 1) - Enable ISP pipeline */
+        writel(1, core + 0x800);
+
+        /* Binary Ninja: system_reg_write(0x804, routing) - Configure ISP routing */
+        writel(0x1c, core + 0x804);
+
+        /* Binary Ninja: system_reg_write(0x1c, 8) - Set ISP control mode */
+        writel(8, core + 0x1c);
+
+        /* CRITICAL: Enable ISP core interrupt generation at hardware level */
+        /* Binary Ninja: system_reg_write(0x30, 0xffffffff) - Enable all interrupt sources */
+        writel(0xffffffff, core + 0x30);
+
+        /* Binary Ninja: system_reg_write(0x10, 0x133) - Enable specific interrupt types */
+        writel(0x133, core + 0x10);
+
+        /* Enable interrupt banks */
+        writel(0x3FFF, core + 0xb0);
+        writel(0x3FFF, core + 0xbc);
+        writel(0x3FFF, core + 0x98b0);
+        writel(0x3FFF, core + 0x98bc);
+        wmb();
+
+        pr_info("*** ISP PIPELINE: VIC->ISP connection ENABLED (0x800=1, 0x804=0x1c, 0x1c=8) ***\n");
+        pr_info("*** ISP CORE: Hardware interrupt generation ENABLED during VIC init ***\n");
+        pr_info("*** VIC->ISP: Pipeline should now generate hardware interrupts when VIC completes frames! ***\n");
+    } else {
+        pr_warn("*** ISP CORE IRQ: core_regs not mapped; unable to enable core interrupts here ***\n");
+    }
+
+    /* Also enable the kernel IRQ line if it was registered earlier */
+    if (ourISPdev && ourISPdev->isp_irq > 0) {
+        enable_irq(ourISPdev->isp_irq);
+        pr_info("*** ISP CORE IRQ: enable_irq(%d) called ***\n", ourISPdev->isp_irq);
+    }
 
     return 0;
 }
