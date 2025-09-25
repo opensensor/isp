@@ -1945,7 +1945,7 @@ static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int c
     frame_channel_wakeup_waiters(&frame_channels[channel]);
     
     /* Update frame count for statistics */
-    isp_dev->core_dev->frame_count++;
+    //isp_dev->core_dev->frame_count++;
     
     /* Complete frame operation if completion is available */
 //    if (isp_dev->frame_complete.done == 0) {
@@ -4939,12 +4939,7 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                         return -1;
                     }
                 }
-                
-                /* Initialize other subdevices as needed */
-                if (isp_dev->sensor) {
-                    pr_info("Initializing sensor subdevice\n");
-                    /* Sensor initialization would go here */
-                }
+
                 
                 /* Binary Ninja: *($s0_1 + 0xe8) = 2 */
                 vic_dev->state = 2;
@@ -5480,7 +5475,7 @@ static irqreturn_t ispmodule_ip_done_irq_handler(int irq, void *dev_id)
 //    }
     
     /* Update frame processing statistics */
-    isp_dev->core_dev->frame_count++;
+    //isp_dev->core_dev->frame_count++;
     
     /* Wake up frame channel waiters */
 //    int i;
