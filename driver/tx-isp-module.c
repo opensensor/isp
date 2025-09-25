@@ -641,6 +641,12 @@ void system_reg_write(u32 reg, u32 value)
         return;
     }
 
+    /* Guard 0x0 writes to critical interrupt-control registers ALWAYS */
+    if ((reg == 0x9ac0 || reg == 0x9ac8 || reg == 0x9804) && value == 0) {
+        pr_info("system_reg_write: BLOCKED reg[0x%x]=0x%x (disallow 0 write to protect interrupts)\n", reg, value);
+        return;
+    }
+
     /* Guard: When streaming, block writes that disrupt VIC/ISP interrupts */
     extern uint32_t vic_start_ok; /* set when VIC is running/streaming */
     if (vic_start_ok) {
