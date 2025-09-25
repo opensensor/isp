@@ -1668,9 +1668,6 @@ static int load_isp_tuning_file_real(const char *filename)
 
 int tisp_init(void *sensor_info, char *param_name)
 {
-    printk(KERN_ALERT "*** tisp_init: ENTRY - sensor_info=%p, param_name=%s ***\n",
-            sensor_info, param_name ? param_name : "NULL");
-
     extern struct tx_isp_dev *ourISPdev;
     struct {
         uint32_t width;
@@ -1679,9 +1676,8 @@ int tisp_init(void *sensor_info, char *param_name)
         uint32_t mode;
     } sensor_params = {1920, 1080, 25, 0}; /* Default sensor parameters */
 
-    /* CRITICAL FIX: Ensure tuning device is available immediately after tisp_init */
-    /* In reference driver, tuning system is available right after core initialization */
-    pr_info("*** tisp_init: REFERENCE DRIVER TIMING - Tuning system will be available immediately ***\n");
+    pr_info("*** tisp_init: IMPLEMENTING MISSING HARDWARE REGISTER INITIALIZATION ***\n");
+    pr_info("*** THIS FUNCTION CONTAINS ALL THE system_reg_write CALLS FROM REFERENCE ***\n");
 
     if (!ourISPdev) {
         pr_err("tisp_init: No ISP device available\n");
@@ -1783,12 +1779,8 @@ int tisp_init(void *sensor_info, char *param_name)
     system_reg_write(0x9a88, 0x1);
     system_reg_write(0x9a94, 0x1);
     system_reg_write(0x9a98, 0x500);
-    /* CRITICAL FIX: REMOVE VIC control register writes - they don't exist in Binary Ninja reference! */
-    /* The reference tisp_init does NOT write to 0x9ac0 or 0x9ac8 at all */
-    /* These registers should be controlled by VIC hardware, not by tuning system */
-    /* system_reg_write(0x9ac0, 0x200);  // REMOVED - not in reference driver */
-    /* system_reg_write(0x9ac8, 0x200);  // REMOVED - not in reference driver */
-    pr_info("*** TUNING SYSTEM: VIC control registers 0x9ac0/0x9ac8 REMOVED - not in Binary Ninja reference ***\n");
+    system_reg_write(0x9ac0, 0x200);
+    system_reg_write(0x9ac8, 0x200);
 
     /* CRITICAL FIX: Use actual sensor IMAGE dimensions, not total frame size */
     /* GC2053 sensor: total_width=1920, total_height=1080 (actual image) */
@@ -1843,21 +1835,10 @@ int tisp_init(void *sensor_info, char *param_name)
 
     uint32_t isp_mode = 0x1c;  /* Normal mode (not WDR) - Binary Ninja: $v0_30 = 0x1c */
     system_reg_write(0x804, isp_mode);  /* ISP routing configuration */
-
-    /* CRITICAL FIX: Don't turn off ISP control if streaming is already active */
-    extern uint32_t vic_start_ok;
-    if (vic_start_ok == 1) {
-        pr_info("*** tisp_init: STREAMING ACTIVE - Skipping ISP control register write to prevent shutdown ***\n");
-        pr_info("*** tisp_init: VIC streaming detected - keeping ISP controls enabled ***\n");
-    } else {
-        system_reg_write(0x1c, 8);          /* ISP control mode - only when not streaming */
-        pr_info("*** tisp_init: ISP control mode set to 8 (streaming not active) ***\n");
-    }
-
+    system_reg_write(0x1c, 8);          /* ISP control mode */
     system_reg_write(0x800, 1);         /* Enable ISP pipeline */
 
-    pr_info("*** tisp_init: REFERENCE DRIVER final configuration - 0x804=0x%x, 0x1c=%s, 0x800=1 ***\n",
-            isp_mode, (vic_start_ok == 1) ? "SKIPPED" : "8");
+    pr_info("*** tisp_init: REFERENCE DRIVER final configuration - 0x804=0x%x, 0x1c=8, 0x800=1 ***\n", isp_mode);
 
     /* CRITICAL FIX: Configure ISP with ACTUAL sensor image dimensions */
     /* This is the missing piece - ISP must know the correct image size */
@@ -1993,20 +1974,20 @@ int tisp_init(void *sensor_info, char *param_name)
     /* The bypass register controls which ISP modules are active vs bypassed */
     /* Green frames indicate that essential processing modules are being bypassed */
 
-    /* CRITICAL FIX: Use EXACT reference driver bypass register value */
-    /* The calculated value 0xb477effd was causing hardware reset - use reference value instead */
+    /* CRITICAL FIX: Use EXACT reference driver bypass register calculation */
+    /* Binary Ninja: bypass starts at 0x8077efff, gets modified by parameter loop, then conditional logic */
 
-    /* CRITICAL ROOT CAUSE FIX: Register 0xc is CSI PHY Control, NOT ISP bypass! */
-    /* The logs show: "ISP isp-m0: [CSI PHY Control] write at offset 0xc: 0x0 -> 0x80700008" */
-    /* This means 0xc is a CSI PHY register that should NOT be written by tuning system! */
+    uint32_t bypass_val = 0x8077efff;  /* Reference driver initial value */
 
-    /* CRITICAL FIX: DO NOT WRITE TO CSI PHY REGISTERS FROM TUNING SYSTEM */
-    /* Writing to register 0xc corrupts CSI PHY configuration and breaks VIC interrupts */
-    pr_info("*** CRITICAL ROOT CAUSE FIX: Skipping CSI PHY register 0xc write to prevent VIC interrupt corruption ***\n");
-    pr_info("*** Register 0xc is CSI PHY Control - tuning system must not write to it! ***\n");
+    /* Binary Ninja: Final conditional bypass modification */
+    /* if (data_b2e74 != 1) { bypass_val = (bypass_val & 0xb577fffd) | 0x34000009; } */
+    /* else { bypass_val = (bypass_val & 0xa1ffdf76) | 0x880002; } */
 
-    /* The bypass functionality should be handled by ISP control registers, not CSI PHY */
-    /* Use proper ISP bypass register instead of corrupting CSI PHY */
+    /* Use normal mode (not WDR) for GC2053 */
+    bypass_val = (bypass_val & 0xb577fffd) | 0x34000009;
+
+    system_reg_write(0xc, bypass_val);
+    pr_info("*** tisp_init: REFERENCE DRIVER bypass register set to 0x%x (exact Binary Ninja logic) ***\n", bypass_val);
 
     /* CRITICAL FIX: Configure ISP for NV12 output format */
     /* Application requests NV12 format (0x3231564e) but buffer size mismatch suggests confusion */
@@ -2208,8 +2189,6 @@ int tisp_init(void *sensor_info, char *param_name)
 
     pr_info("*** tisp_init: ISP HARDWARE PIPELINE FULLY INITIALIZED - THIS SHOULD TRIGGER REGISTER ACTIVITY ***\n");
     pr_info("*** tisp_init: All hardware blocks enabled, registers configured, events ready ***\n");
-
-    pr_info("*** tisp_init: INITIALIZATION COMPLETE - this function will never run again ***\n");
 
     return 0;
 }
@@ -8815,16 +8794,6 @@ int tisp_channel_start(int channel, void *attr)
     a1_1 = 0xf0000 | msca_ch_en;
     msca_ch_en = a1_1;
 
-    /* CRITICAL FIX: Don't overwrite ISP Control register during streaming */
-    /* This prevents tisp_channel_start from corrupting the ISP Control register */
-    extern uint32_t vic_start_ok;
-    if (vic_start_ok == 1) {
-        pr_info("*** tisp_channel_start: STREAMING ACTIVE - Preserving ISP Control register (0x9804) ***\n");
-        pr_info("*** tisp_channel_start: Would write 0x%x but keeping current value to prevent shutdown ***\n", a1_1);
-    } else {
-        system_reg_write(0x9804, a1_1);
-        pr_info("*** tisp_channel_start: ISP Control register written: 0x%x (not streaming) ***\n", a1_1);
-    }
 
     /* Binary Ninja: Read status registers for logging */
     system_reg_read(0x9864);
@@ -9066,7 +9035,14 @@ static irqreturn_t isp_irq_dispatcher(int irq, void *dev_id)
     spin_lock_irqsave(&isp_irq_lock, flags);
 
     /* Process each set interrupt bit */
-	// TODO
+    for (int i = 0; i < 32; i++) {
+        if ((irq_status & (1 << i)) && isp_event_func_cb[i]) {
+            pr_debug("isp_irq_dispatcher: Calling IRQ handler %d\n", i);
+            isp_event_func_cb[i]();
+            handled = 1;
+        }
+    }
+    
     spin_unlock_irqrestore(&isp_irq_lock, flags);
 
     /* Clear handled interrupts */
