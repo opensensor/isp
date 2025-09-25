@@ -2591,6 +2591,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_err("*** vic_core_s_stream: tx_isp_vic_start FAILED: %d ***\n", ret);
                 return ret;
             }
+            /* Enable VIC IRQ immediately after VIC start to catch first frame */
+            pr_info("*** vic_core_s_stream: Enabling VIC IRQ immediately after tx_isp_vic_start ***\n");
+            tx_vic_enable_irq(vic_dev);
+
 
             /* CRITICAL FIX: Follow proper state machine - don't jump directly to state 4 */
             /* The proper flow is: 1 → 2 → 3 → 4, not 1 → 4 */
@@ -2606,8 +2610,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** vic_core_s_stream: VIC state %d - letting tx_isp_video_s_stream handle state 2 → 3 transition ***\n", vic_dev->state);
             }
 
-            /* Binary Ninja: tx_vic_enable_irq() */
-            tx_vic_enable_irq(vic_dev);
 
             pr_info("*** vic_core_s_stream: VIC initialized, final state=%d ***\n", vic_dev->state);
 
