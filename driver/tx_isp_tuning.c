@@ -1314,14 +1314,7 @@ static uint32_t ae_ev_init_strict = 0;
 static uint32_t ae_ev_init_en = 0;
 
 
-int tisp_s_ev_start(int ev_value)
-{
-    pr_info("tisp_s_ev_start: ev_value=%d\n", ev_value);
 
-    /* Binary Ninja: return tiziano_ae_s_ev_start(arg1) __tailcall */
-    return tiziano_ae_s_ev_start(ev_value);
-}
-EXPORT_SYMBOL(tisp_s_ev_start);
 
 /* tiziano_ae_s_ev_start - EXACT Binary Ninja implementation */
 int tiziano_ae_s_ev_start(int ev_value)
@@ -1343,6 +1336,15 @@ int tiziano_ae_s_ev_start(int ev_value)
 }
 EXPORT_SYMBOL(tiziano_ae_s_ev_start);
 
+int tisp_s_ev_start(int ev_value)
+{
+    pr_info("tisp_s_ev_start: ev_value=%d\n", ev_value);
+
+    /* Binary Ninja: return tiziano_ae_s_ev_start(arg1) __tailcall */
+    return tiziano_ae_s_ev_start(ev_value);
+}
+EXPORT_SYMBOL(tisp_s_ev_start);
+
 /* tisp_set_ae1_ag - Set AE analog gain */
 static void tisp_set_ae1_ag(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4)
 {
@@ -1360,18 +1362,6 @@ static void tisp_set_ae1_ag(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_
                                      0x980902, &gain_value);
     }
 }
-
-void tisp_bcsh_saturation(uint8_t saturation)
-{
-    pr_info("tisp_bcsh_saturation: saturation=%d\n", saturation);
-
-    /* Binary Ninja: data_9a91d = arg1 */
-    bcsh_saturation_value = saturation;
-
-    /* Binary Ninja: tiziano_bcsh_update() */
-    tiziano_bcsh_update();
-}
-EXPORT_SYMBOL(tisp_bcsh_saturation);
 
 /* tiziano_ae_set_hardware_param - Binary Ninja EXACT implementation */
 int tiziano_ae_set_hardware_param(int ae_id, uint8_t *param_array, int update_only)
