@@ -1244,6 +1244,9 @@ struct frame_channel_device {
     void *buffer_array[64];              /* Buffer array for index lookup */
 };
 
+static struct frame_channel_device frame_channels[4]; /* Support up to 4 video channels */
+static int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
+
 /* Provide access to frame_channel_device pointer for V4L2 shim */
 void *get_frame_channel_device_ptr(int channel)
 {
@@ -1251,9 +1254,6 @@ void *get_frame_channel_device_ptr(int channel)
         return (void *)&frame_channels[channel];
     return NULL;
 }
-
-static struct frame_channel_device frame_channels[4]; /* Support up to 4 video channels */
-static int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
 
 /* VIC continuous frame generation work queue */
 static struct delayed_work vic_frame_work;
