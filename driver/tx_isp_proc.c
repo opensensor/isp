@@ -9,6 +9,12 @@ struct tx_isp_vic_device;
 long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
 
 #include "../include/tx_isp.h"
+#include "../include/tx_isp_vic.h"
+/* Prototypes to avoid C90 mixed decls in functions */
+int vic_snapraw_opt(struct tx_isp_subdev *sd);
+int vic_saveraw(struct tx_isp_subdev *sd, unsigned int savenum);
+
+
 
 #define TX_ISP_PROC_ISP_DIR "jz/isp"
 #define TX_ISP_PROC_ISP_W00_FILE "isp-w00"
@@ -186,7 +192,6 @@ static ssize_t tx_isp_proc_w02_write(struct file *file, const char __user *buffe
             return -ENODEV;
         }
 
-        extern int vic_snapraw_opt(struct tx_isp_subdev *sd);
         pr_info("isp-w02: snapraw %u -> /opt/snapraw.raw\n", savenum);
         ret = vic_snapraw_opt(sd);
         if (ret)
@@ -208,7 +213,6 @@ static ssize_t tx_isp_proc_w02_write(struct file *file, const char __user *buffe
             return -ENODEV;
         }
         pr_info("isp-w02: saveraw %u -> /tmp/vic_save_*.raw\n", save_n);
-        extern int vic_saveraw(struct tx_isp_subdev *sd, unsigned int savenum);
         (void)vic_saveraw(sd, save_n);
 
     } else if (strncmp(cmd, "enable", 6) == 0) {
@@ -254,7 +258,6 @@ static long tx_isp_proc_w02_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -ENODEV;
         /* Parse optional count after command */
         sscanf(kbuf, "snapraw %u", &savenum);
-        extern int vic_snapraw_opt(struct tx_isp_subdev *sd);
         return vic_snapraw_opt(sd);
     } else if (strncmp(kbuf, "saveraw", 7) == 0) {
         unsigned int savenum = 1;
@@ -263,7 +266,6 @@ static long tx_isp_proc_w02_ioctl(struct file *file, unsigned int cmd, unsigned 
         if (!sd)
             return -ENODEV;
         sscanf(kbuf, "saveraw %u", &savenum);
-        extern int vic_saveraw(struct tx_isp_subdev *sd, unsigned int savenum);
         return vic_saveraw(sd, savenum);
     }
 
