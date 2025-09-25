@@ -5,6 +5,9 @@
 struct tx_isp_vic_device;
 
 #include <linux/uaccess.h>
+/* Modern ioctl symbol from vic */
+long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
+
 #include "../include/tx_isp.h"
 
 #define TX_ISP_PROC_ISP_DIR "jz/isp"
@@ -280,7 +283,7 @@ static const struct file_operations tx_isp_proc_w02_fops = {
     .open = tx_isp_proc_w02_open,
     .read = seq_read,
     .write = tx_isp_proc_w02_write,
-    .unlocked_ioctl = tx_isp_proc_w02_ioctl,
+    .unlocked_ioctl = isp_vic_cmd_set,
     .llseek = seq_lseek,
     .release = single_release,
 };

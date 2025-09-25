@@ -2041,20 +2041,45 @@ int dump_isp_vic_frd_open(struct inode *inode, struct file *file)
     return single_open_size(file, isp_vic_frd_show, PDE_DATA(inode), 0x400);
 }
 
-/* ISP VIC cmd set function - placeholder matching reference driver interface */
+/* ISP VIC cmd set function - modern-compatible: cmd=len, arg=user cmd ptr */
 long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg)
 {
-    struct tx_isp_subdev *sd = file->private_data;
+    struct seq_file *seq = file->private_data;
+    struct tx_isp_dev *isp = seq ? (struct tx_isp_dev *)seq->private : NULL;
+    char kbuf[64];
+    size_t len = (size_t)cmd;
 
-    pr_info("isp_vic_cmd_set: cmd=0x%x, arg=0x%lx\n", cmd, arg);
-
-    if (!sd) {
-        pr_err("isp_vic_cmd_set: No subdev in file private_data\n");
-        return -EINVAL;
+    if (!isp) {
+        pr_err("isp_vic_cmd_set: no isp dev\n");
+        return -ENODEV;
     }
 
-    /* Forward to the main VIC ioctl handler */
-    return vic_chardev_ioctl(file, cmd, arg);
+    if (len >= sizeof(kbuf))
+        len = sizeof(kbuf) - 1;
+
+    if (copy_from_user(kbuf, (void __user *)arg, len))
+        return -EFAULT;
+
+    kbuf[len] = '\0';
+    pr_info("isp_vic_cmd_set: '%s' (len=%zu)\n", kbuf, len);
+
+    if (strncmp(kbuf, "snapraw", 7) == 0) {
+        struct tx_isp_vic_device *vic_dev = isp->vic_dev;
+        struct tx_isp_subdev *sd = vic_dev ? &vic_dev->sd : NULL;
+        extern int vic_snapraw_opt(struct tx_isp_subdev *sd);
+        return sd ? vic_snapraw_opt(sd) : -ENODEV;
+    } else if (strncmp(kbuf, "saveraw", 7) == 0) {
+        unsigned int savenum = 1;
+        struct tx_isp_vic_device *vic_dev = isp->vic_dev;
+        struct tx_isp_subdev *sd = vic_dev ? &vic_dev->sd : NULL;
+        if (!sd)
+            return -ENODEV;
+        sscanf(kbuf, "saveraw %u", &savenum);
+        extern int vic_saveraw(struct tx_isp_subdev *sd, unsigned int savenum);
+        return vic_saveraw(sd, savenum);
+    }
+
+    return 0;
 }
 
 /* VIC activation function - matching reference driver */
