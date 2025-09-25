@@ -2170,54 +2170,6 @@ int tisp_init(void *sensor_info, char *param_name)
     }
 
 
-    /* CRITICAL: Add the MISSING VIC interrupt initialization sequence from working logs */
-    pr_info("*** INITIALIZING HARDWARE INTERRUPTS FOR IRQ 37 AND 38 ***\n");
-    pr_info("*** USING BINARY NINJA tx_isp_request_irq FOR HARDWARE INTERRUPTS ***\n");
-
-    /* CRITICAL: Enable VIC interrupt generation - FROM WORKING LOGS */
-    pr_info("*** ENABLING HARDWARE INTERRUPT GENERATION ***\n");
-    pr_info("*** WRITING VIC INTERRUPT ENABLE REGISTERS ***\n");
-
-    /* Configure VIC interrupt registers - EXACTLY like working logs */
-    if (ourISPdev->vic_dev && ourISPdev->vic_dev->vic_regs) {
-        void __iomem *vic_regs = ourISPdev->vic_dev->vic_regs;
-
-        /* CRITICAL FIX: Based on Binary Ninja analysis of interrupt handler */
-        /* 0x1e0 is READ-ONLY status register - DO NOT WRITE TO IT */
-        /* 0x1e8 is interrupt MASK register - 0 = enabled, 1 = disabled */
-
-        /* Enable frame done interrupt (bit 0) and other essential VIC interrupts */
-        writel(0xFFFFFFFE, vic_regs + 0x1e8); /* Enable frame done interrupt (bit 0 = 0) */
-        wmb();
-
-        pr_info("*** VIC INTERRUPT FIX: Enabled frame done interrupt via mask register 0x1e8 = 0xFFFFFFFE ***\n");
-
-        /* NOTE: vic_start_ok will be set to 1 later when VIC hardware is fully configured */
-        pr_info("*** VIC INTERRUPT REGISTERS: Configured during module init - vic_start_ok will be set during VIC streaming ***\n");
-
-        pr_info("*** VIC INTERRUPT REGISTERS ENABLED - INTERRUPTS SHOULD NOW FIRE! ***\n");
-    } else {
-        pr_err("*** ERROR: VIC device or registers not available for interrupt configuration ***\n");
-    }
-
-    /* CRITICAL: Enable ISP core interrupt registers - FROM WORKING LOGS */
-    pr_info("*** ENABLING ISP CORE INTERRUPT REGISTERS FOR MIPI DATA ***\n");
-
-    if (ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
-        /* Configure ISP core interrupt registers - FROM WORKING LOGS */
-        writel(0x8fffffff, ourISPdev->core_dev->core_regs + 0x30);  /* ISP core interrupt enable */
-        writel(0x00000133, ourISPdev->core_dev->core_regs + 0x10);  /* ISP core interrupt control */
-        wmb();
-
-        pr_info("*** ISP CORE INTERRUPT REGISTERS ENABLED at legacy(+0xb*) and new(+0x98b*) ***\n");
-    } else {
-        pr_err("*** ERROR: ISP core registers not available for interrupt configuration ***\n");
-    }
-
-    pr_info("*** BOTH VIC AND ISP CORE INTERRUPTS NOW ENABLED! ***\n");
-
-    system_reg_write(0x800, 1);         /* Enable ISP pipeline */
-
     /* BINARY NINJA REFERENCE: No continuous thread - events are processed on-demand */
     pr_info("*** tisp_init: BINARY NINJA REFERENCE - No event processing thread created ***\n");
 
@@ -2274,35 +2226,9 @@ static inline u64 ktime_get_real_ns(void)
 uint32_t system_reg_read(u32 reg)
 {
     extern struct tx_isp_dev *ourISPdev;
-
-    /* CRITICAL FIX: Validate pointers before access to prevent 22-second hang */
-    if (!ourISPdev) {
-        pr_err("*** CRITICAL: system_reg_read: ourISPdev is NULL - returning 0 to prevent hang ***\n");
-        return 0;
-    }
-
-    if (!ourISPdev->vic_dev) {
-        pr_err("*** CRITICAL: system_reg_read: vic_dev is NULL - returning 0 to prevent hang ***\n");
-        return 0;
-    }
-
-    if (!ourISPdev->vic_dev->vic_regs) {
-        pr_err("*** CRITICAL: system_reg_read: vic_regs is NULL - returning 0 to prevent hang ***\n");
-        return 0;
-    }
-
+    
     void __iomem *isp_base = ourISPdev->vic_dev->vic_regs - 0x9a00; /* Get ISP base */
-
-    /* CRITICAL FIX: Validate calculated base address */
-    if (!isp_base) {
-        pr_err("*** CRITICAL: system_reg_read: calculated isp_base is NULL - returning 0 to prevent hang ***\n");
-        return 0;
-    }
-
-    /* Safe register read with validation */
-    uint32_t value = readl(isp_base + reg);
-    pr_debug("system_reg_read: reg[0x%x] = 0x%x\n", reg, value);
-    return value;
+    return readl(isp_base + reg);
 }
 
 
@@ -6911,15 +6837,15 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
     system_irq_func_set(0x0a, ae0_interrupt_static);    /* Index 10: For status 0x400 */
 
     /* DISABLED: All other callbacks to isolate the hang */
-    /* system_irq_func_set(0x1b, ae0_interrupt_hist);      // Index 27: AE0 histogram */
-    /* system_irq_func_set(0x1a, ae0_interrupt_static);    // Index 26: AE0 static */
-    /* system_irq_func_set(0x1d, ae1_interrupt_hist);      // Index 29: AE1 histogram */
-    /* system_irq_func_set(0x1c, ae1_interrupt_static);    // Index 28: AE1 static */
-    /* system_irq_func_set(0x1e, awb_interrupt_static);           // Index 30: AWB */
-    /* system_irq_func_set(0x14, tiziano_defog_interrupt_static); // Index 20: Defog */
-    /* system_irq_func_set(0x12, tiziano_adr_interrupt_static);   // Index 18: ADR */
-    /* system_irq_func_set(0x1f, af_interrupt_static);            // Index 31: AF */
-    /* system_irq_func_set(0x0b, tiziano_wdr_interrupt_static);   // Index 11: WDR */
+    system_irq_func_set(0x1b, ae0_interrupt_hist);      // Index 27: AE0 histogram */
+    system_irq_func_set(0x1a, ae0_interrupt_static);    // Index 26: AE0 static */
+    system_irq_func_set(0x1d, ae1_interrupt_hist);      // Index 29: AE1 histogram */
+    system_irq_func_set(0x1c, ae1_interrupt_static);    // Index 28: AE1 static */
+    system_irq_func_set(0x1e, awb_interrupt_static);           // Index 30: AWB */
+    system_irq_func_set(0x14, tiziano_defog_interrupt_static); // Index 20: Defog */
+    system_irq_func_set(0x12, tiziano_adr_interrupt_static);   // Index 18: ADR */
+	system_irq_func_set(0x1f, af_interrupt_static);            // Index 31: AF */
+    system_irq_func_set(0x0b, tiziano_wdr_interrupt_static);   // Index 11: WDR */
     
     /* Binary Ninja EXACT: uint32_t $a2_13 = zx.d(data_b2e56) */
     uint32_t a2_13 = (uint32_t)data_b2e56;
