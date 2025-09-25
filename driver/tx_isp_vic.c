@@ -1231,6 +1231,11 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         wmb();
         writel(0xb5742249, vic_ctl + 0x0c);
         wmb();
+        /* Verify IMCR sticks in CONTROL bank */
+        do {
+            u32 imcr_ctl = readl(vic_ctl + 0x0c);
+            pr_info("*** VIC CONTROL VERIFY: 0x0c(IMCR)=0x%08x (expect 0xb5742249) ***\n", imcr_ctl);
+        } while (0);
         writel(0x000002d0, vic_ctl + 0x100);
         wmb();
         writel(0x0000002b, vic_ctl + 0x14);

@@ -1608,7 +1608,7 @@ static void restore_isp_control_interrupt_registers_after_reset(void)
 
     /* Restore the ISP Control interrupt registers that enable hardware interrupt generation */
     /* These values match the working driver-irqs and are critical for interrupt generation */
-    writel(0x3f00,      core_regs + 0x9804);  /* Main ISP Control - must be active for interrupts */
+    //writel(0x3f00,      core_regs + 0x9804);  /* Main ISP Control - must be active for interrupts */
     writel(0x7800438,   core_regs + 0x9864);  /* ISP interrupt control */
     writel(0xc0000000,  core_regs + 0x987c);  /* ISP interrupt control */
     writel(0x1,         core_regs + 0x9880);  /* ISP interrupt enable */
@@ -1732,41 +1732,6 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         v1_7 = (~reg_1e8) & reg_1e0;
         v1_10 = (~reg_1ec) & reg_1e4;
         printk(KERN_ALERT "*** VIC IRQ: Calculated v1_7 = 0x%x v1_10 = 0x%x ***\n", v1_7, v1_10);
-
-        /* Fallback: if both banks show zero enables, derive framedone from ISP core VIC regs */
-        if (reg_1e0 == 0 && reg_1e4 == 0) {
-            void __iomem *core = NULL;
-            if (isp_dev->core_dev && isp_dev->core_dev->core_regs)
-                core = isp_dev->core_dev->core_regs;
-            else if (ourISPdev && ourISPdev->core_regs)
-                core = ourISPdev->core_regs;
-            if (core) {
-                u32 ch0 = readl(core + 0x9a70);
-                u32 ch1 = readl(core + 0x9a7c);
-                printk(KERN_ALERT "*** VIC IRQ FALLBACK: core[0x9a70]=0x%08x core[0x9a7c]=0x%08x ***\n", ch0, ch1);
-                /* If either channel indicates framedone (bit 0), assert framedone */
-                if (ch0 & 1) v1_7 |= 1;
-                if (ch1 & 1) v1_7 |= 1; /* trigger same framedone path */
-
-                /* Re-assert core VIC IRQ gate and W1C-clear core framedone bits when fallback is active */
-                if (v1_7 & 1) {
-                    /* W1C clear framedone sources first to drop any stale assertion */
-                    writel(0x1, core + 0x9a70);
-                    writel(0x1, core + 0x9a7c);
-                    wmb();
-                    printk(KERN_ALERT "*** VIC IRQ FALLBACK: CORE W1C CLEAR [9a70]/[9a7c] done ***\n");
-
-                    /* Then re-assert the core VIC IRQ gate to arm the next frame */
-                    writel(0x200, core + 0x9ac0);
-                    writel(0x200, core + 0x9ac8);
-                    wmb();
-                    printk(KERN_ALERT "*** VIC IRQ FALLBACK: GATE REASSERT [9ac0]=0x%08x [9ac8]=0x%08x ***\n",
-                           readl(core + 0x9ac0), readl(core + 0x9ac8));
-                }
-            } else {
-                printk(KERN_ALERT "*** VIC IRQ FALLBACK: No ISP core regs mapped for fallback ***\n");
-            }
-        }
 
         /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7 */
         printk(KERN_ALERT "*** VIC IRQ: About to write v1_7=0x%x to reg 0x1f0 ***\n", v1_7);
