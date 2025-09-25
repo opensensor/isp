@@ -2808,8 +2808,22 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
             }
 
-            /* Enable VIC IRQ after final re-assert and verification */
+            /* Re-assert ISP core VIC IRQ gate before enabling CPU IRQ (observed to drop to 0) */
+            do {
+                struct tx_isp_dev *isp_dev = ourISPdev;
+                if (isp_dev && isp_dev->core_dev && isp_dev->core_dev->core_regs) {
+                    void __iomem *core = isp_dev->core_dev->core_regs;
+                    writel(0x200, core + 0x9ac0);
+                    writel(0x200, core + 0x9ac8);
+                    wmb();
+                    pr_info("*** CORE VIC GATE REASSERT: [0x9ac0]=0x%08x [0x9ac8]=0x%08x ***\n",
+                            readl(core + 0x9ac0), readl(core + 0x9ac8));
+                } else {
+                    pr_warn("*** CORE VIC GATE REASSERT: core_regs not mapped, skipping ***\n");
+                }
+            } while (0);
 
+            /* Enable VIC IRQ after final re-assert and verification */
             pr_info("*** vic_core_s_stream: Enabling VIC IRQ AFTER final re-assert/verify ***\n");
             tx_vic_enable_irq(vic_dev);
 
