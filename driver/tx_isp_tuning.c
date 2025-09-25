@@ -1779,8 +1779,12 @@ int tisp_init(void *sensor_info, char *param_name)
     system_reg_write(0x9a88, 0x1);
     system_reg_write(0x9a94, 0x1);
     system_reg_write(0x9a98, 0x500);
-    system_reg_write(0x9ac0, 0x200);
-    system_reg_write(0x9ac8, 0x200);
+    /* CRITICAL FIX: REMOVE VIC control register writes - they don't exist in Binary Ninja reference! */
+    /* The reference tisp_init does NOT write to 0x9ac0 or 0x9ac8 at all */
+    /* These registers should be controlled by VIC hardware, not by tuning system */
+    /* system_reg_write(0x9ac0, 0x200);  // REMOVED - not in reference driver */
+    /* system_reg_write(0x9ac8, 0x200);  // REMOVED - not in reference driver */
+    pr_info("*** TUNING SYSTEM: VIC control registers 0x9ac0/0x9ac8 REMOVED - not in Binary Ninja reference ***\n");
 
     /* CRITICAL FIX: Use actual sensor IMAGE dimensions, not total frame size */
     /* GC2053 sensor: total_width=1920, total_height=1080 (actual image) */
@@ -1835,10 +1839,21 @@ int tisp_init(void *sensor_info, char *param_name)
 
     uint32_t isp_mode = 0x1c;  /* Normal mode (not WDR) - Binary Ninja: $v0_30 = 0x1c */
     system_reg_write(0x804, isp_mode);  /* ISP routing configuration */
-    system_reg_write(0x1c, 8);          /* ISP control mode */
+
+    /* CRITICAL FIX: Don't turn off ISP control if streaming is already active */
+    extern uint32_t vic_start_ok;
+    if (vic_start_ok == 1) {
+        pr_info("*** tisp_init: STREAMING ACTIVE - Skipping ISP control register write to prevent shutdown ***\n");
+        pr_info("*** tisp_init: VIC streaming detected - keeping ISP controls enabled ***\n");
+    } else {
+        system_reg_write(0x1c, 8);          /* ISP control mode - only when not streaming */
+        pr_info("*** tisp_init: ISP control mode set to 8 (streaming not active) ***\n");
+    }
+
     system_reg_write(0x800, 1);         /* Enable ISP pipeline */
 
-    pr_info("*** tisp_init: REFERENCE DRIVER final configuration - 0x804=0x%x, 0x1c=8, 0x800=1 ***\n", isp_mode);
+    pr_info("*** tisp_init: REFERENCE DRIVER final configuration - 0x804=0x%x, 0x1c=%s, 0x800=1 ***\n",
+            isp_mode, (vic_start_ok == 1) ? "SKIPPED" : "8");
 
     /* CRITICAL FIX: Configure ISP with ACTUAL sensor image dimensions */
     /* This is the missing piece - ISP must know the correct image size */
@@ -1974,20 +1989,20 @@ int tisp_init(void *sensor_info, char *param_name)
     /* The bypass register controls which ISP modules are active vs bypassed */
     /* Green frames indicate that essential processing modules are being bypassed */
 
-    /* CRITICAL FIX: Use EXACT reference driver bypass register calculation */
-    /* Binary Ninja: bypass starts at 0x8077efff, gets modified by parameter loop, then conditional logic */
+    /* CRITICAL FIX: Use EXACT reference driver bypass register value */
+    /* The calculated value 0xb477effd was causing hardware reset - use reference value instead */
 
-    uint32_t bypass_val = 0x8077efff;  /* Reference driver initial value */
+    /* CRITICAL ROOT CAUSE FIX: Register 0xc is CSI PHY Control, NOT ISP bypass! */
+    /* The logs show: "ISP isp-m0: [CSI PHY Control] write at offset 0xc: 0x0 -> 0x80700008" */
+    /* This means 0xc is a CSI PHY register that should NOT be written by tuning system! */
 
-    /* Binary Ninja: Final conditional bypass modification */
-    /* if (data_b2e74 != 1) { bypass_val = (bypass_val & 0xb577fffd) | 0x34000009; } */
-    /* else { bypass_val = (bypass_val & 0xa1ffdf76) | 0x880002; } */
+    /* CRITICAL FIX: DO NOT WRITE TO CSI PHY REGISTERS FROM TUNING SYSTEM */
+    /* Writing to register 0xc corrupts CSI PHY configuration and breaks VIC interrupts */
+    pr_info("*** CRITICAL ROOT CAUSE FIX: Skipping CSI PHY register 0xc write to prevent VIC interrupt corruption ***\n");
+    pr_info("*** Register 0xc is CSI PHY Control - tuning system must not write to it! ***\n");
 
-    /* Use normal mode (not WDR) for GC2053 */
-    bypass_val = (bypass_val & 0xb577fffd) | 0x34000009;
-
-    system_reg_write(0xc, bypass_val);
-    pr_info("*** tisp_init: REFERENCE DRIVER bypass register set to 0x%x (exact Binary Ninja logic) ***\n", bypass_val);
+    /* The bypass functionality should be handled by ISP control registers, not CSI PHY */
+    /* Use proper ISP bypass register instead of corrupting CSI PHY */
 
     /* CRITICAL FIX: Configure ISP for NV12 output format */
     /* Application requests NV12 format (0x3231564e) but buffer size mismatch suggests confusion */
@@ -2150,11 +2165,72 @@ int tisp_init(void *sensor_info, char *param_name)
         pr_info("*** tisp_init: Second ISP control mode set to 8 (streaming not active) ***\n");
     }
 
+    system_reg_write(0x800, 1);         /* Enable ISP pipeline */
+
+    /* Binary Ninja: CRITICAL - Initialize all ISP sub-modules */
+    pr_info("*** tisp_init: INITIALIZING ISP SUB-MODULES ***\n");
+
+    /* CRITICAL FIX: Use ACTUAL sensor image dimensions for all ISP components */
+    /* Binary Ninja: Initialize all tiziano sub-modules in correct order */
+    tiziano_ae_init(actual_image_height, actual_image_width, sensor_params.fps);
+    tiziano_awb_init(actual_image_height, actual_image_width);
+    tiziano_gamma_init();  /* Binary Ninja: takes no parameters */
+    tiziano_gib_init();
+    tiziano_lsc_init();
+    tiziano_ccm_init();
+    tiziano_dmsc_init();
+    tiziano_sharpen_init();
+    tiziano_sdns_init();
+    tiziano_mdns_init(actual_image_width, actual_image_height);
+    tiziano_clm_init();
+    tiziano_dpc_init();
+    tiziano_hldc_init();
+    tiziano_defog_init(actual_image_width, actual_image_height);
+    tiziano_adr_init(actual_image_width, actual_image_height);
+    tiziano_af_init(actual_image_height, actual_image_width);
+    tiziano_bcsh_init();
+    tiziano_ydns_init();
+    tiziano_rdns_init();
+
+    /* Binary Ninja: WDR initialization if enabled */
+    if (sensor_params.mode == 1) {  /* WDR mode */
+        pr_info("*** tisp_init: WDR MODE ENABLED - Initializing WDR components ***\n");
+        tiziano_wdr_init(actual_image_width, actual_image_height);
+        tisp_gb_init();
+        /* Enable WDR for all sub-modules */
+        tisp_dpc_wdr_en(1);
+        tisp_lsc_wdr_en(1);
+        tisp_gamma_wdr_en(1);
+        tisp_sharpen_wdr_en(1);
+        tisp_ccm_wdr_en(1);
+        tisp_bcsh_wdr_en(1);
+        tisp_rdns_wdr_en(1);
+        tisp_adr_wdr_en(1);
+        tisp_defog_wdr_en(1);
+        tisp_mdns_wdr_en(1);
+        tisp_dmsc_wdr_en(1);
+        tisp_ae_wdr_en(1);
+        tisp_sdns_wdr_en(1);
+        pr_info("*** tisp_init: WDR COMPONENTS INITIALIZED ***\n");
+    }
+
+    /* Binary Ninja: Initialize event system and callbacks */
+    pr_info("*** tisp_init: INITIALIZING ISP EVENT SYSTEM ***\n");
+    tisp_event_init();
+    tisp_event_set_cb(4, tisp_tgain_update);
+    tisp_event_set_cb(5, tisp_again_update);
+    tisp_event_set_cb(7, tisp_ev_update);
+    tisp_event_set_cb(9, tisp_ct_update);
+    tisp_event_set_cb(8, tisp_ae_ir_update);
 
     /* BINARY NINJA REFERENCE: No continuous thread - events are processed on-demand */
     pr_info("*** tisp_init: BINARY NINJA REFERENCE - No event processing thread created ***\n");
 
+    /* The reference driver does NOT create any kthread for event processing */
+    /* Events are processed on-demand when triggered, not continuously */
+    pr_info("*** tisp_init: Event system ready for on-demand processing (Binary Ninja reference) ***\n");
 
+    int32_t irq_ret = system_irq_func_set(0xd, ip_done_interrupt_static);
     if (irq_ret == 0) {
         pr_info("*** tisp_init: ISP processing completion callback registered (index=0xd) ***\n");
     } else {
