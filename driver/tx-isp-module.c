@@ -2442,6 +2442,39 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
         s4 = &s4[1];
     }
 
+    /* Post-sensor stream-on: re-assert VIC routing/mask to match working timing */
+    if (enable == 1) {
+        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)dev->vic_dev;
+        if (vic_dev && vic_dev->vic_regs) {
+            void __iomem *vr = vic_dev->vic_regs;
+            u32 s0, s1; int i;
+            pr_info("*** VIC POST-SENSOR REASSERT: re-applying routing/mask after sensor stream-on ***\n");
+            /* Clear pending (W1C) */
+            writel(0xFFFFFFFF, vr + 0x1f0);
+            writel(0xFFFFFFFF, vr + 0x1f4);
+            /* Route/control values from working reference */
+            writel(0x000002d0, vr + 0x100);
+            writel(0x00000630, vr + 0x14);
+            wmb();
+            /* Enable sources and unmask framedone */
+            writel(0xFFFFFFFF, vr + 0x1e0);
+            writel(0xFFFFFFFE, vr + 0x1e8);
+            wmb();
+            /* Small sampling window to catch first assertion post sensor stream-on */
+            for (i = 0; i < 20; i++) {
+                s0 = readl(vr + 0x1f0);
+                s1 = readl(vr + 0x1f4);
+                if (s0 || s1) {
+                    pr_warn("*** VIC POST-SENSOR REASSERT: Status asserted: [0x1f0]=0x%08x [0x1f4]=0x%08x (iter=%d) ***\n", s0, s1, i);
+                    break;
+                }
+                udelay(1000);
+            }
+            if (i == 20)
+                pr_info("*** VIC POST-SENSOR REASSERT: No status bits asserted in 20ms window ***\n");
+        }
+    }
+
     /* All subdevs processed successfully */
     return 0;
 }
