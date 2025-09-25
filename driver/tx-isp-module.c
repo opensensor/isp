@@ -2349,9 +2349,9 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
     if (enable == 1) {
         struct tx_isp_subdev *vic_sd2 = tx_isp_get_vic_subdev(dev);
         if (vic_sd2) {
+            void *raw_pipe_dummy[8] = { NULL }; /* BN MCP expects non-NULL to avoid disabling processing */
             pr_info("*** tx_isp_video_s_stream: Calling tx_isp_subdev_pipo to enable VIC MDMA/streaming ***\n");
-            /* Pass NULL for raw_pipe: tx_isp_subdev_pipo handles NULL safely and still enables MDMA */
-            tx_isp_subdev_pipo(vic_sd2, NULL);
+            tx_isp_subdev_pipo(vic_sd2, raw_pipe_dummy);
         } else {
             pr_warn("tx_isp_video_s_stream: No VIC subdev found for PIPO/MDMA setup\n");
         }

@@ -220,40 +220,6 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
     pr_info("*** tx_vic_enable_irq: completed successfully ***\n");
 }
 
-/* VIC interrupt restoration function - COMPREHENSIVE FIX for both control limit errors and interrupt overwrites */
-void tx_isp_vic_restore_interrupts(void)
-{
-    extern struct tx_isp_dev *ourISPdev;
-
-    if (!ourISPdev || !ourISPdev->vic_dev || vic_start_ok != 1) {
-        return; /* VIC not active */
-    }
-
-    pr_info("*** VIC INTERRUPT RESTORE: Restoring VIC interrupt registers in PRIMARY VIC space ***\n");
-
-    /* CRITICAL: Use PRIMARY VIC space for interrupt control (0x133e0000) */
-    struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
-    if (!vic_dev || !vic_dev->vic_regs) {
-        pr_err("*** VIC INTERRUPT RESTORE: No primary VIC registers available ***\n");
-        return;
-    }
-
-    /* Restore VIC interrupt register values using WORKING ISP-activates configuration */
-    pr_info("*** VIC INTERRUPT RESTORE: Using PRIMARY VIC space for interrupt configuration ***\n");
-
-    /* Clear pending interrupts first in PRIMARY VIC space */
-    writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main interrupt status */
-    writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
-    wmb();
-
-    /* CRITICAL FIX 3: Restore interrupt masks with protection against overwrites */
-    writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);  /* Enable frame done interrupt */
-    /* SKIP MDMA register 0x1ec - it doesn't work correctly */
-    wmb();
-
-    pr_info("*** VIC INTERRUPT RESTORE: WORKING configuration restored (MainMask=0xFFFFFFFE) ***\n");
-}
-
 /* BINARY NINJA EXACT: tx_vic_disable_irq implementation */
 void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
 {
