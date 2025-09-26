@@ -2819,81 +2819,108 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("*** Channel %d: QBUF details: memory=%u index=%u length=%u bytesused=%u flags=0x%x field=%u ***\n",
                 channel, buffer.memory, buffer.index, buffer.length, buffer.bytesused, buffer.flags, buffer.field);
 
-        /* Heuristics: libimp/VBM often places physical address for MMAP in m.offset (T31 patterns) */
+        /* Prefer VBM → legacy SET_BUF base/step → per-buffer candidate → last resort rmem */
         {
-            uint32_t phys_candidate = 0;
             uint32_t fs_size = state->width * state->height * 3 / 2; /* default NV12 */
-            if (buffer.memory == 1 /* V4L2_MEMORY_MMAP */) {
-                phys_candidate = buffer.m.offset;
-            } else if (buffer.memory == 2 /* V4L2_MEMORY_USERPTR */) {
-                /* Some builds pass physical address via userptr; log but do not trust as phys directly */
-                phys_candidate = (uint32_t)(uintptr_t)buffer.m.userptr;
+            uint32_t chosen_phys = 0;
+            uint32_t chosen_size = fs_size;
+
+            /* Compute NV12 stride from length if provided: total = stride * H * 3/2 */
+            {
+                u32 h = state->height ? state->height : 1080;
+                u32 stride = 0;
+                if (buffer.length) {
+                    /* ceil( (2*len) / (3*h) ), then align to 16 */
+                    u32 num = 2 * buffer.length;
+                    u32 den = 3 * h;
+                    stride = (num + den - 1) / den;
+                    stride = (stride + 15) & ~15;
+                } else {
+                    /* Fallback to width aligned to 16 */
+                    stride = (state->width + 15) & ~15;
+                }
+                chosen_size = stride * h * 3 / 2;
+
+                /* Program VIC NV12 strides immediately for the active channel 0 only */
+                if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
+                    struct tx_isp_vic_device *vd = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                    if (vd->vic_regs) {
+                        writel(stride, vd->vic_regs + 0x310); /* Y stride */
+                        wmb();
+                        writel(stride, vd->vic_regs + 0x314); /* UV stride */
+                        wmb();
+                        pr_info("*** VIC STRIDE: Programmed NV12 stride=%u (H=%u, size=%u) ***\n", stride, h, chosen_size);
+                    }
+                }
             }
 
-            /* Plausibility check: rmem region on Wyze T31 is typically 0x06300000..0x081E0000 */
-            if (phys_candidate >= 0x06000000 && phys_candidate < 0x09000000) {
-                pr_info("*** Channel %d: QBUF - Using candidate phys=0x%x from buffer (memory=%u) ***\n",
-                        channel, phys_candidate, buffer.memory);
-                /* Program VIC via event with explicit buffer data structure */
+            /* 1) VBM pool */
+            if (!chosen_phys && fcd->vbm_pool_ptr && is_valid_kernel_pointer(fcd->vbm_pool_ptr)) {
+                struct vbm_pool *vp = (struct vbm_pool *)fcd->vbm_pool_ptr;
+                if (state->buffer_count > 0 && buffer.index < state->buffer_count) {
+                    const struct vbm_frame *vf = &vp->frames[buffer.index];
+                    if (vf->phys_addr >= 0x06000000 && vf->phys_addr < 0x09000000) {
+                        chosen_phys = vf->phys_addr;
+                        if (vf->size)
+                            chosen_size = vf->size; /* trust VBM-reported size */
+                        pr_info("*** Channel %d: QBUF - Using VBM pool phys=0x%x (index=%u, size=%u) ***\n",
+                                channel, chosen_phys, buffer.index, chosen_size);
+                    }
+                }
+            }
+
+            /* 2) Legacy SET_BUF base+step */
+            if (!chosen_phys && (fcd->vbm_base_phys && fcd->vbm_frame_size)) {
+                uint32_t base = fcd->vbm_base_phys;
+                uint32_t step = fcd->vbm_frame_size;
+                uint32_t addr = base + (buffer.index * step);
+                if (addr >= 0x06000000 && addr < 0x09000000) {
+                    chosen_phys = addr;
+                    chosen_size = step;
+                    pr_info("*** Channel %d: QBUF - Using legacy base/step phys=0x%x (base=0x%x step=%u) ***\n",
+                            channel, chosen_phys, base, step);
+                }
+            }
+
+            /* 3) Candidate from v4l2_buffer fields */
+            if (!chosen_phys) {
+                uint32_t phys_candidate = 0;
+                if (buffer.memory == 1 /* V4L2_MEMORY_MMAP */) {
+                    phys_candidate = buffer.m.offset;
+                } else if (buffer.memory == 2 /* V4L2_MEMORY_USERPTR */) {
+                    phys_candidate = (uint32_t)(uintptr_t)buffer.m.userptr;
+                }
+                if (phys_candidate >= 0x06000000 && phys_candidate < 0x09000000) {
+                    chosen_phys = phys_candidate;
+                    pr_info("*** Channel %d: QBUF - Using candidate phys=0x%x from buffer (memory=%u) ***\n",
+                            channel, chosen_phys, buffer.memory);
+                }
+            }
+
+            /* 4) Last resort: rmem base */
+            if (!chosen_phys) {
+                chosen_phys = 0x06300000 + (buffer.index * chosen_size);
+                pr_warn("*** Channel %d: QBUF - Using rmem fallback phys=0x%x (size=%u) ***\n",
+                        channel, chosen_phys, chosen_size);
+            }
+
+            /* Route to VIC only for channel 0 (avoid mixing substream until ch1 is wired) */
+            if (channel != 0) {
+                pr_info("*** Channel %d: QBUF - Skipping VIC program (reserved for ch0); enqueued FS only ***\n", channel);
+                tx_isp_fs_enqueue_qbuf(channel, buffer.index, chosen_phys, chosen_size);
+            } else {
                 if (ourISPdev && ourISPdev->vic_dev) {
                     struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
                     struct { uint32_t index; uint32_t phys_addr; uint32_t size; uint32_t channel; } v;
                     v.index = buffer.index;
-                    v.phys_addr = phys_candidate;
-                    v.size = fs_size; /* NV12 contiguous */
+                    v.phys_addr = chosen_phys;
+                    v.size = chosen_size;
                     v.channel = channel;
                     pr_info("*** Channel %d: QBUF - Programming VIC buffer[%u] = 0x%x (size=%u) ***\n",
                             channel, v.index, v.phys_addr, v.size);
                     (void)tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &v);
                 }
-                /* Enqueue into FS queue for DQBUF correlation */
-                tx_isp_fs_enqueue_qbuf(channel, buffer.index, phys_candidate, fs_size);
-            } else {
-                /* Prefer VBM pool information when available */
-                if (fcd->vbm_pool_ptr && is_valid_kernel_pointer(fcd->vbm_pool_ptr)) {
-                    struct vbm_pool *vp = (struct vbm_pool *)fcd->vbm_pool_ptr;
-                    uint32_t vbm_phys = 0;
-                    uint32_t vbm_size = fs_size;
-                    if (state->buffer_count > 0 && buffer.index < state->buffer_count) {
-                        const struct vbm_frame *vf = &vp->frames[buffer.index];
-                        vbm_phys = vf->phys_addr;
-                        if (vf->size)
-                            vbm_size = vf->size;
-                    }
-                    if (vbm_phys >= 0x06000000 && vbm_phys < 0x09000000) {
-                        pr_info("*** Channel %d: QBUF - Using VBM pool phys=0x%x (index=%u, size=%u) ***\n",
-                                channel, vbm_phys, buffer.index, vbm_size);
-                        if (ourISPdev && ourISPdev->vic_dev) {
-                            struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-                            struct { uint32_t index; uint32_t phys_addr; uint32_t size; uint32_t channel; } v;
-                            v.index = buffer.index;
-                            v.phys_addr = vbm_phys;
-                            v.size = vbm_size;
-                            v.channel = channel;
-                            (void)tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &v);
-                        }
-                        tx_isp_fs_enqueue_qbuf(channel, buffer.index, vbm_phys, vbm_size);
-
-                    }
-                }
-                /* Fallback: prefer recorded VBM base/size from TX_ISP_SET_BUF; else rmem */
-                {
-                    uint32_t base = fcd->vbm_base_phys ? fcd->vbm_base_phys : 0x06300000;
-                    uint32_t step = fcd->vbm_frame_size ? fcd->vbm_frame_size : fs_size;
-                    uint32_t buffer_phys_addr = base + (buffer.index * step);
-                    pr_warn("*** Channel %d: QBUF - Using fallback phys=0x%x (base=0x%x step=%u) ***\n",
-                            channel, buffer_phys_addr, base, step);
-                    if (ourISPdev && ourISPdev->vic_dev) {
-                        struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-                        struct { uint32_t index; uint32_t phys_addr; uint32_t size; uint32_t channel; } v;
-                        v.index = buffer.index;
-                        v.phys_addr = buffer_phys_addr;
-                        v.size = step; /* best effort */
-                        v.channel = channel;
-                        (void)tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &v);
-                    }
-                    tx_isp_fs_enqueue_qbuf(channel, buffer.index, buffer_phys_addr, step);
-                }
+                tx_isp_fs_enqueue_qbuf(channel, buffer.index, chosen_phys, chosen_size);
             }
         }
 
