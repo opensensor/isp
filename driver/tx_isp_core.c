@@ -281,6 +281,19 @@ int tx_isp_core_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *confi
         return ret;
     }
 
+    /* Program DMSC CFA pattern from sensor mbus + flips (BN MCP: 0x4800 mosaic) */
+    if (isp_dev->sensor) {
+        u32 code = isp_dev->sensor->video.mbus.code;
+        unsigned int shvflip = isp_dev->sensor->video.shvflip;
+        int hflip = (shvflip & 0x1) ? 1 : 0;
+        int vflip = (shvflip & 0x2) ? 1 : 0;
+        extern void tisp_dmsc_set_cfa_from_mbus(u32 mbus_code, int hflip, int vflip);
+        tisp_dmsc_set_cfa_from_mbus(code, hflip, vflip);
+        pr_info("tx_isp_core_set_format: DMSC CFA programmed from mbus=0x%x, h=%d, v=%d\n", code, hflip, vflip);
+    } else {
+        pr_warn("tx_isp_core_set_format: No sensor present to determine CFA\n");
+    }
+
     pr_info("*** tx_isp_core_set_format: Format set successfully ***\n");
     return 0;
 }

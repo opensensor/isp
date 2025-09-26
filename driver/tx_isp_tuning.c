@@ -363,6 +363,10 @@ static uint32_t dmsc_uu_slope_array[16] = {0};
 static uint32_t dmsc_vv_slope_array[16] = {0};
 static uint32_t data_9a6a0 = 0xFFFFFFFF;
 
+/* DMSC output options and EV tracking (BN MCP: dmsc_out_opt @ 0x4800, data_9a430 prev EV) */
+static uint32_t dmsc_out_opt = 0;
+static uint32_t data_9a430 = 0xFFFFFFFF;
+
 static uint32_t bcsh_wdr_en = 0;
 static uint32_t *bcsh_luma_now = NULL;
 static uint32_t bcsh_luma_wdr[16] = {0};
@@ -7458,11 +7462,150 @@ int tiziano_ccm_init(void)
     return 0;
 }
 
-/* tiziano_dmsc_init - DMSC initialization */
+/* tiziano_dmsc_init - DMSC initialization (BN MCP aligned) */
 int tiziano_dmsc_init(void)
 {
-    pr_info("tiziano_dmsc_init: Initializing DMSC processing\n");
+    pr_info("tiziano_dmsc_init: Initializing DMSC processing (BN MCP)\n");
+
+    /* Select parameter arrays based on WDR enable (BN MCP pattern) */
+    if (dmsc_wdr_en != 0) {
+        dmsc_uu_thres_array_now = dmsc_uu_thres_wdr_array;
+        dmsc_vv_thres_array_now = dmsc_vv_thres_wdr_array;
+        dmsc_uu_slope_array_now = dmsc_uu_slope_wdr_array;
+        dmsc_vv_slope_array_now = dmsc_vv_slope_wdr_array;
+    } else {
+        dmsc_uu_thres_array_now = dmsc_uu_thres_array;
+        dmsc_vv_thres_array_now = dmsc_vv_thres_array;
+        dmsc_uu_slope_array_now = dmsc_uu_slope_array;
+        dmsc_vv_slope_array_now = dmsc_vv_slope_array;
+    }
+
+    /* BN: mark previous EV as invalid so first refresh is full */
+    data_9a430 = 0xFFFFFFFF;
+
+    /* BN: refresh params and then request full register refresh with commit */
+    tiziano_dmsc_params_refresh();
+    tisp_dmsc_par_refresh(0, 0, 1);
+
     return 0;
+}
+
+/* tisp_dmsc_out_opt_cfg - BN MCP: write DMSC output options to 0x4800 */
+static void tisp_dmsc_out_opt_cfg(void)
+{
+    system_reg_write(0x4800, dmsc_out_opt);
+}
+
+/* tisp_dmsc_all_reg_refresh - minimal full refresh used by par_refresh */
+static int tisp_dmsc_all_reg_refresh(void)
+{
+    tisp_dmsc_out_opt_cfg();
+    return 0;
+}
+
+/* tisp_dmsc_par_refresh - BN MCP style: full vs interp refresh, commit at 0x499c */
+int tisp_dmsc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write)
+{
+    uint32_t prev = data_9a430;
+
+    if (prev != 0xFFFFFFFF) {
+        uint32_t diff = (prev >= ev_value) ? (prev - ev_value) : (ev_value - prev);
+        if (diff >= threshold) {
+            data_9a430 = ev_value;
+            /* For now use full refresh; can split to intp later if needed */
+            tisp_dmsc_all_reg_refresh();
+        }
+    } else {
+        data_9a430 = ev_value;
+        tisp_dmsc_all_reg_refresh();
+    }
+
+    if (enable_write == 1) {
+        system_reg_write(0x499c, 1);
+    }
+
+    return 0;
+}
+
+/* Map V4L2 mbus Bayer code + flips to DMSC CFA bits and program 0x4800 */
+void tisp_dmsc_set_cfa_from_mbus(uint32_t mbus_code, int hflip, int vflip)
+{
+    /* Read current out_opt to avoid clobbering unrelated bits */
+    uint32_t out_opt = system_reg_read(0x4800);
+    uint32_t base;
+
+    switch (mbus_code) {
+#ifdef V4L2_MBUS_FMT_SRGGB10_1X10
+    case V4L2_MBUS_FMT_SRGGB10_1X10:
+#endif
+#ifdef V4L2_MBUS_FMT_SRGGB12_1X12
+    case V4L2_MBUS_FMT_SRGGB12_1X12:
+#endif
+#ifdef V4L2_MBUS_FMT_SRGGB8_1X8
+    case V4L2_MBUS_FMT_SRGGB8_1X8:
+#endif
+        base = 0; /* RGGB */
+        break;
+#ifdef V4L2_MBUS_FMT_SGRBG10_1X10
+    case V4L2_MBUS_FMT_SGRBG10_1X10:
+#endif
+#ifdef V4L2_MBUS_FMT_SGRBG12_1X12
+    case V4L2_MBUS_FMT_SGRBG12_1X12:
+#endif
+#ifdef V4L2_MBUS_FMT_SGRBG8_1X8
+    case V4L2_MBUS_FMT_SGRBG8_1X8:
+#endif
+        base = 1; /* GRBG */
+        break;
+#ifdef V4L2_MBUS_FMT_SGBRG10_1X10
+    case V4L2_MBUS_FMT_SGBRG10_1X10:
+#endif
+#ifdef V4L2_MBUS_FMT_SGBRG12_1X12
+    case V4L2_MBUS_FMT_SGBRG12_1X12:
+#endif
+#ifdef V4L2_MBUS_FMT_SGBRG8_1X8
+    case V4L2_MBUS_FMT_SGBRG8_1X8:
+#endif
+        base = 2; /* GBRG */
+        break;
+#ifdef V4L2_MBUS_FMT_SBGGR10_1X10
+    case V4L2_MBUS_FMT_SBGGR10_1X10:
+#endif
+#ifdef V4L2_MBUS_FMT_SBGGR12_1X12
+    case V4L2_MBUS_FMT_SBGGR12_1X12:
+#endif
+#ifdef V4L2_MBUS_FMT_SBGGR8_1X8
+    case V4L2_MBUS_FMT_SBGGR8_1X8:
+#endif
+        base = 3; /* BGGR */
+        break;
+    default:
+        base = 0; /* default RGGB */
+        break;
+    }
+
+    /* Apply flips to mosaic index; mapping is 2-bit Bayer orientation */
+    uint32_t idx = base;
+    if (hflip & 1) {
+        /* Swap R/B horizontally: RGGB<->GRBG, GBRG<->BGGR */
+        static const uint8_t hmap[4] = {1, 0, 3, 2};
+        idx = hmap[idx & 3];
+    }
+    if (vflip & 1) {
+        /* Swap top/bottom rows: RGGB<->GBRG, GRBG<->BGGR */
+        static const uint8_t vmap[4] = {2, 3, 0, 1};
+        idx = vmap[idx & 3];
+    }
+
+    out_opt = (out_opt & ~0x3u) | (idx & 0x3u);
+    dmsc_out_opt = out_opt;
+
+    pr_info("tisp_dmsc_set_cfa_from_mbus: mbus=0x%x h=%d v=%d -> mosaic=%u, out_opt=0x%08x\n",
+            mbus_code, hflip, vflip, idx, out_opt);
+
+    /* Write new out_opt and commit via par_refresh enable */
+    tisp_dmsc_out_opt_cfg();
+    system_reg_write(0x499c, 1);
 }
 
 /* Sharpening parameter arrays - Binary Ninja reference */
