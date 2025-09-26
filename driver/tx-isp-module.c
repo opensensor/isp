@@ -4522,10 +4522,12 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         return tx_isp_video_link_stream(isp_dev, 0);
     }
     case 0x80045612: { // VIDIOC_STREAMON - Start video streaming
-        return tx_isp_video_s_stream(isp_dev, 1);
+        pr_info("*** VIDIOC_STREAMON: Calling tx_isp_video_link_stream to enable ALL subdevs (VIC, CSI, sensor) ***\n");
+        return tx_isp_video_link_stream(isp_dev, 1);
     }
     case 0x80045613: { // VIDIOC_STREAMOFF - Stop video streaming
-        return tx_isp_video_s_stream(isp_dev, 0);
+        pr_info("*** VIDIOC_STREAMOFF: Calling tx_isp_video_link_stream to disable ALL subdevs (VIC, CSI, sensor) ***\n");
+        return tx_isp_video_link_stream(isp_dev, 0);
     }
     case 0x800456d8: { // TX_ISP_WDR_ENABLE - Enable WDR mode
         int wdr_enable = 1;
