@@ -970,14 +970,7 @@ int tx_isp_init_memory_mappings(struct tx_isp_dev *isp)
         goto err_unmap_core;
     }
     pr_debug("VIC registers mapped at 0x10023000\n");
-
-    /* Map CSI registers - use a different variable to avoid conflicts */
-    isp->csi_regs = ioremap(0x10022000, 0x1000);
-    if (!isp->csi_regs) {
-        pr_debug("Failed to map CSI registers\n");
-        goto err_unmap_vic;
-    }
-    pr_debug("CSI registers mapped at 0x10022000\n");
+	isp->csi_regs = isp->vic_dev->vic_regs - 0x9a00 + 0x10000; /* ISP base + CSI offset */
 
     /* Map PHY registers */
     isp->phy_base = ioremap(0x10021000, 0x1000);

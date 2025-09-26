@@ -782,9 +782,7 @@ int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes)
             }
         }
         
-        /* Update the CSI device structure */
-        csi_dev->csi_regs = tx_isp_csi_regs;
-        csi_base = csi_dev->csi_regs;
+        csi_base = tx_isp_csi_regs;
         
         pr_debug("CSI base address initialized: %p\n", csi_base);
     }
