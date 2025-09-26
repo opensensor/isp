@@ -6630,7 +6630,7 @@ int __enqueue_in_driver(void *buffer_struct)
         void *event_data = (char*)buffer_struct + 0x68;  /* Buffer metadata offset */
 
         pr_debug("__enqueue_in_driver: Sending BUFFER_ENQUEUE event to VIC\n");
-        result = tx_isp_send_event_to_remote(vic_dev, 0x3000005, event_data);
+        result = tx_isp_send_event_to_remote(&vic_dev->sd, 0x3000005, event_data);
 
         /* Binary Ninja: if (result != 0 && result != 0xfffffdfd) */
         if (result != 0 && result != 0xfffffdfd) {
