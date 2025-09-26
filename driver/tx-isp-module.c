@@ -6353,50 +6353,10 @@ int vic_event_handler(void *subdev, int event_type, void *data)
         /* Route to VIC notify handler for sensor attribute sync */
         return tx_isp_vic_notify(vic_dev, event_type, data);
     }
-    case 0x3000008: { /* TX_ISP_EVENT_FRAME_QBUF - ONLY buffer programming, NO VIC restart! */
-        pr_info("*** VIC EVENT: QBUF (0x3000008) - PROGRAMMING BUFFER TO VIC HARDWARE (NO VIC RESTART) ***\n");
-
-        /* CRITICAL FIX: QBUF should ONLY program buffer addresses - NO VIC streaming restart! */
-        /* The reference driver NEVER restarts VIC hardware during QBUF operations */
-        if (data) {
-            struct vic_buffer_data {
-                uint32_t index;
-                uint32_t phys_addr;
-                uint32_t size;
-                uint32_t channel;
-            } *buffer_data = (struct vic_buffer_data *)data;
-
-            pr_info("*** VIC QBUF: Processing buffer data - index=%d, addr=0x%x, size=%d, channel=%d ***\n",
-                    buffer_data->index, buffer_data->phys_addr, buffer_data->size, buffer_data->channel);
-
-            /* CRITICAL: Program the buffer directly to VIC hardware - BUFFER PROGRAMMING ONLY */
-            if (vic_dev->vic_regs && buffer_data->index < 8) {
-                u32 buffer_reg_offset = (buffer_data->index + 0xc6) << 2;
-
-                pr_info("*** VIC QBUF: WRITING BUFFER TO VIC HARDWARE - reg[0x%x] = 0x%x ***\n",
-                        buffer_reg_offset, buffer_data->phys_addr);
-
-                writel(buffer_data->phys_addr, vic_dev->vic_regs + buffer_reg_offset);
-                wmb();
-
-                /* Increment frame count to track programmed buffers */
-                vic_dev->frame_count++;
-
-                pr_info("*** VIC QBUF: BUFFER SUCCESSFULLY PROGRAMMED TO VIC HARDWARE! ***\n");
-                pr_info("*** VIC QBUF: Buffer[%d] addr=0x%x programmed, frame_count=%u ***\n",
-                        buffer_data->index, buffer_data->phys_addr, vic_dev->frame_count);
-
-                /* Do NOT signal completion on QBUF; IRQ will signal when frame is done */
-                return 0; /* Success - buffer programmed */
-            } else {
-                pr_err("*** VIC QBUF: FAILED - No VIC registers or invalid buffer index %d ***\n",
-                       buffer_data->index);
-                return -EINVAL;
-            }
-        } else {
-            pr_err("*** VIC QBUF: FAILED - No buffer data provided ***\n");
-            return -EINVAL;
-        }
+    case 0x3000008: { /* TX_ISP_EVENT_FRAME_QBUF */
+        /* Delegate QBUF handling to VIC driver to avoid duplicate programming here */
+        pr_info("*** VIC EVENT: QBUF (0x3000008) - routing to VIC notify handler ***\n");
+        return tx_isp_vic_notify(vic_dev, event_type, data);
     }
     case 0x3000003: { /* TX_ISP_EVENT_FRAME_STREAMON - Start VIC streaming */
         pr_info("*** VIC EVENT: STREAM_START (0x3000003) - ACTIVATING VIC HARDWARE ***\n");
