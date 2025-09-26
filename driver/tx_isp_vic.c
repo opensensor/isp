@@ -1064,13 +1064,26 @@ void tx_isp_vic_write_csi_phy_sequence(void)
 {
     void __iomem *csi_base;
 
-    if (!ourISPdev || !ourISPdev->vic_regs) {
-        pr_debug("tx_isp_vic_write_csi_phy_sequence: No ISP registers available\n");
+    if (!ourISPdev) {
+        pr_debug("tx_isp_vic_write_csi_phy_sequence: No ISP device available\n");
         return;
     }
 
-    /* Use the correct CSI register base - this should map to the CSI PHY registers */
-    csi_base = ourISPdev->vic_regs - 0x9a00;  /* Calculate CSI base from VIC base */
+    /* Resolve CSI base: prefer VIC-derived base; fallback to CSI device regs */
+    csi_base = NULL;
+    if (ourISPdev->vic_regs) {
+        /* Calculate CSI base from VIC base */
+        csi_base = ourISPdev->vic_regs - 0x9a00;
+    } else if (ourISPdev->csi_dev) {
+        struct tx_isp_csi_device *csi = (struct tx_isp_csi_device *)ourISPdev->csi_dev;
+        if (csi && csi->csi_regs)
+            csi_base = csi->csi_regs;
+    }
+
+    if (!csi_base) {
+        pr_debug("tx_isp_vic_write_csi_phy_sequence: No CSI base available (VIC/CSI not mapped yet)\n");
+        return;
+    }
 
     pr_debug("*** CRITICAL: Writing CSI PHY registers in CORRECT SEQUENCE matching reference driver ***\n");
     pr_debug("*** CSI PHY SEQUENCE: Step 1 - CSI PHY Config registers (0x100-0x1f4) ***\n");

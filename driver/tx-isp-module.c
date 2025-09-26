@@ -1197,6 +1197,10 @@ int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd);
 int csi_core_ops_init(struct tx_isp_subdev *sd, int enable);
 static int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *sensor_attr);
 
+
+/* CSI/PHY lane configuration sequence (from VIC) */
+void tx_isp_vic_write_csi_phy_sequence(void);
+
 // ISP Tuning device support - missing component for /dev/isp-m0
 static struct cdev isp_tuning_cdev;
 static struct class *isp_tuning_class = NULL;
@@ -4398,7 +4402,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 uint32_t base = buf_setup.addr;
                 uint32_t step = buf_setup.size;
                 pr_debug("*** TX_ISP_SET_BUF ch0: Pre-program VIC slots base=0x%x step=%u ***\n", base, step);
-                
+
                 /* CRITICAL FIX: Use VIC hardware stride calculation to match current address register */
                 /* Binary Ninja vic_pipo_mdma_enable shows: stride = width << 1, step = stride * height * 3/2 */
                 {
@@ -5715,6 +5719,10 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                         /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch1 hcomp err !!!\n", *($s1_2 + 8)) */
                         pr_debug("Err [VIC_INT] : mipi ch1 hcomp err !!!\n");
                         return -1;
+                    } else {
+                        /* After successful CSI init, program CSI/MIPI lane configuration (port from reference) */
+                        pr_debug("*** CSI: Applying CSI/MIPI lane configuration sequence (reference-standardize) ***\n");
+                        tx_isp_vic_write_csi_phy_sequence();
                     }
                 }
 
@@ -6473,25 +6481,25 @@ int vic_event_handler(void *subdev, int event_type, void *data)
         struct { u32 index; u32 phys_addr; u32 size; u32 channel; } *v = data;
         u32 phys = v ? v->phys_addr : 0;
         u32 index = v ? v->index : 0;
-        
+
         pr_debug("VIC EVENT: QBUF -> entry addr=0x%x idx=%u (calling ispvic_frame_channel_qbuf)\n",
                 phys, index);
-        
+
         if (phys >= 0x06000000 && phys < 0x10000000) {
             /* CRITICAL FIX: Program VIC slot directly since buffer management is broken */
             if (vic_dev && vic_dev->vic_regs) {
                 uint32_t slot_index = index % 5;  /* VIC has 5 slots C6-CA */
                 uint32_t reg_offset = (slot_index + 0xc6) << 2;  /* 0x318 + 4*slot */
-                
+
                 writel(phys, vic_dev->vic_regs + reg_offset);
                 wmb();
-                
+
                 pr_debug("*** VIC EVENT: DIRECT SLOT PROGRAMMING - Buffer 0x%x -> VIC[0x%x] (slot %u) ***\n",
                         phys, reg_offset, slot_index);
-                
+
                 /* Also update active buffer count */
                 vic_dev->active_buffer_count++;
-                
+
                 /* Create a buffer entry for the done list so ISR can match addresses */
                 struct vic_buffer_entry *entry = kzalloc(sizeof(struct vic_buffer_entry), GFP_ATOMIC);
                 if (entry) {
@@ -6499,15 +6507,15 @@ int vic_event_handler(void *subdev, int event_type, void *data)
                     entry->buffer_addr = phys;
                     entry->buffer_index = index;
                     entry->buffer_status = VIC_BUFFER_STATUS_QUEUED;
-                    
+
                     unsigned long flags;
                     spin_lock_irqsave(&vic_dev->buffer_lock, flags);
                     list_add_tail(&entry->list, &vic_dev->done_head);
                     spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
-                    
+
                     pr_debug("*** VIC EVENT: Buffer entry added to done_head for ISR matching ***\n");
                 }
-                
+
                 return 0;
             } else {
                 pr_debug("VIC EVENT: No VIC device available for direct slot programming\n");
