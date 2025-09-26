@@ -311,14 +311,17 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 buffer_index += 1;
 
                 /* Binary Ninja: if (i_1[2] == *($a3_1 + 0x380)) */
-                /* Check if buffer address matches current frame register */
+                /* Check if buffer address matches current frame register in EITHER VIC space */
                 if (vic_regs) {
-                    u32 current_frame_addr = readl(vic_regs + 0x380);
+                    u32 current_frame_addr_p = readl(vic_regs + 0x380);
+                    u32 current_frame_addr_s = 0;
+                    if (vic_dev->vic_regs_secondary)
+                        current_frame_addr_s = readl(vic_dev->vic_regs_secondary + 0x380);
                     /* SAFE: Extract buffer address from list entry (shared header) */
                     struct vic_buffer_entry *entry = container_of(pos, struct vic_buffer_entry, list);
 
-                    if (entry->buffer_addr == current_frame_addr) {
-
+                    if (entry->buffer_addr == current_frame_addr_p ||
+                        (current_frame_addr_s && entry->buffer_addr == current_frame_addr_s)) {
                         match_found = 1;  /* $v0 = 1 */
                     }
                 }
