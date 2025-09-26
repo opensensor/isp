@@ -239,7 +239,7 @@ static int tiziano_gib_params_refresh(void) { return 0; }
 static int tiziano_gib_lut_parameter(void) { return 0; }
 static int tiziano_gib_deir_reg(uint32_t *r, uint32_t *g, uint32_t *b) { return 0; }
 static int tiziano_dmsc_params_refresh(void) { return 0; }
-static int tisp_dmsc_par_refresh(uint32_t p1, uint32_t p2, int p3) { return 0; }
+int tisp_dmsc_par_refresh(uint32_t p1, uint32_t p2, int p3) { return 0; }
 static int tiziano_mdns_params_refresh(void) { return 0; }
 static int tisp_mdns_par_refresh(uint32_t p1, uint32_t p2, int p3) { return 0; }
 static int tiziano_wdr_params_refresh(void) { return 0; }
