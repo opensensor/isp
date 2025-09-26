@@ -3112,7 +3112,7 @@ int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         buffer_index = vic_dev->active_buffer_count % 5;  /* VIC has 5 buffer slots */
 
         if (vic_dev->vic_regs) {
-            uint32_t reg_offset = (buffer_index + 0xc6) << 2;
+            uint32_t reg_offset = (buffer_index + 0xe0) << 2;
             if (reg_offset < 0x1000) {
                 writel(buffer_addr, vic_dev->vic_regs + reg_offset);
                 wmb();
@@ -3220,7 +3220,7 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
             }
 
             /* SAFE: Clear VIC register using validated register access */
-            uint32_t reg_offset = (i + 0xc6) << 2;
+            uint32_t reg_offset = (i + 0xe0) << 2;
             if (vic_dev->vic_regs && reg_offset < 0x1000) {
                 writel(0, vic_dev->vic_regs + reg_offset);
                 pr_info("tx_isp_subdev_pipo: cleared VIC register at offset 0x%x for buffer %d\n", reg_offset, i);
