@@ -7,6 +7,68 @@
 #include <linux/slab.h>
 #include <linux/jiffies.h>
 
+#include <linux/version.h>
+
+#include <linux/fs.h>
+#include <linux/uaccess.h>
+#include <linux/err.h>
+#include <linux/mutex.h>
+
+/* File-based tracing to reduce dmesg noise */
+static struct file *trace_filp;
+static DEFINE_MUTEX(trace_lock);
+
+static int open_trace_file(void)
+{
+    trace_filp = filp_open("/opt/trace.txt", O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (IS_ERR(trace_filp)) {
+        pr_err("ISP Monitor: failed to open /opt/trace.txt: %ld\n", PTR_ERR(trace_filp));
+        trace_filp = NULL;
+        return -ENOENT;
+    }
+    return 0;
+}
+
+static void close_trace_file(void)
+{
+    if (trace_filp) {
+        filp_close(trace_filp, NULL);
+        trace_filp = NULL;
+    }
+}
+
+static void trace_log(const char *fmt, ...)
+{
+    va_list args;
+    char buf[256];
+    int len;
+
+    if (!trace_filp)
+        return;
+
+    va_start(args, fmt);
+    len = vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+
+    if (len <= 0)
+        return;
+    if (len > sizeof(buf))
+        len = sizeof(buf);
+
+    mutex_lock(&trace_lock);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,10,0)
+    {
+        mm_segment_t old_fs = get_fs();
+        set_fs(KERNEL_DS);
+        vfs_write(trace_filp, buf, len, &trace_filp->f_pos);
+        set_fs(old_fs);
+    }
+#else
+    kernel_write(trace_filp, buf, len, &trace_filp->f_pos);
+#endif
+    mutex_unlock(&trace_lock);
+}
+
 #define ISP_MONITOR_VERSION "1.3"
 
 // Region types for classification
@@ -143,7 +205,7 @@ static void start_sequence(struct seq_write_info *seq, u32 offset, u32 value)
 static void end_sequence(struct seq_write_info *seq, const char *region_name)
 {
     if (seq->count > 4) {
-        pr_info("ISP %s: Sequential write at 0x%x: %d registers from 0x%x\n",
+        trace_log("ISP %s: Sequential write at 0x%x: %d registers from 0x%x\n",
                 region_name, seq->start_offset, seq->count, seq->last_value);
     }
     seq->in_progress = false;
@@ -193,7 +255,7 @@ static void check_region_changes(struct work_struct *work)
                     end_sequence(&region->seq_write, region->name);
 
                 // Log control and VIC register writes with timing
-                pr_info("ISP %s: [%s] write at offset 0x%x: 0x%x -> 0x%x (delta: %lu.%03lu ms)\n",
+                trace_log("ISP %s: [%s] write at offset 0x%x: 0x%x -> 0x%x (delta: %lu.%03lu ms)\n",
                        region->name, reg_desc, offset,
                        region->last_values[i], current_val,
                        jiffies_to_msecs(delta_jiffies),
@@ -255,7 +317,7 @@ static int init_region(struct isp_region *region)
     region->monitoring = true;
     schedule_delayed_work(&region->monitor_work, HZ/100); // Start with 10ms interval
 
-    pr_info("ISP Monitor: initialized region %s at phys 0x%pap size 0x%zx\n",
+    trace_log("ISP Monitor: initialized region %s at phys 0x%pap size 0x%zx\n",
             region->name, &region->phys_addr, region->size);
 
     return 0;
@@ -289,7 +351,8 @@ static int __init isp_monitor_init(void)
 {
     int i, ret;
 
-    pr_info("ISP Register Monitor v%s initializing\n", ISP_MONITOR_VERSION);
+    open_trace_file();
+    trace_log("ISP Register Monitor v%s initializing\n", ISP_MONITOR_VERSION);
 
     for (i = 0; i < NUM_REGIONS; i++) {
         ret = init_region(&isp_regions[i]);
@@ -311,7 +374,8 @@ static void __exit isp_monitor_exit(void)
     for (i = 0; i < NUM_REGIONS; i++)
         cleanup_region(&isp_regions[i]);
 
-    pr_info("ISP Register Monitor unloaded\n");
+    trace_log("ISP Register Monitor unloaded\n");
+    close_trace_file();
 }
 
 module_init(isp_monitor_init);
