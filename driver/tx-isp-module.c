@@ -592,7 +592,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 static irqreturn_t isp_irq_handle(int irq, void *dev_id);
 static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
-int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data);
+int tx_isp_send_event_to_remote(struct tx_isp_subdev *sd, int event_type, void *data);
 static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev);
 static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev);
 static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const char *sensor_name);
@@ -2918,7 +2918,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     v.channel = channel;
                     pr_info("*** Channel %d: QBUF - Programming VIC buffer[%u] = 0x%x (size=%u) ***\n",
                             channel, v.index, v.phys_addr, v.size);
-                    (void)tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &v);
+                    int result = tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &v);
                 }
                 tx_isp_fs_enqueue_qbuf(channel, buffer.index, chosen_phys, chosen_size);
             }
@@ -6276,10 +6276,9 @@ static int tx_isp_module_notify(struct tx_isp_module *module, unsigned int notif
 }
 
 /* tx_isp_send_event_to_remote - MIPS-SAFE implementation with VIC event handler integration */
-int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
+int tx_isp_send_event_to_remote(struct tx_isp_subdev *sd, int event_type, void *data)
 {
     struct tx_isp_vic_device *vic_dev = NULL;
-    struct tx_isp_subdev *sd = (struct tx_isp_subdev *)subdev;
     int result = 0;
 
     pr_info("*** tx_isp_send_event_to_remote: MIPS-SAFE with VIC handler - event=0x%x ***\n", event_type);
