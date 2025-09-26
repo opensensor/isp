@@ -7528,7 +7528,7 @@ int tisp_dmsc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_writ
 
 /* Temporary hard-code for GC2053 CFA orientation: 0=RGGB,1=GRBG,2=GBRG,3=BGGR */
 #ifndef FORCE_GC2053_CFA_IDX
-#define FORCE_GC2053_CFA_IDX 1  /* GC2053 expectation: GRBG (adjust if needed) */
+#define FORCE_GC2053_CFA_IDX 0  /* GC2053 expectation per sensor driver: SRGGB -> RGGB index 0 */
 #endif
 
     return 0;
