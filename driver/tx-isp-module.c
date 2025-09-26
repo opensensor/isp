@@ -1655,6 +1655,10 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
 
     pr_debug("*** CSI: Hardware initialization completed successfully ***\n");
     pr_debug("*** CSI: Final state = %d ***\n", csi_dev->state);
+    /* Apply CSI/MIPI lane configuration sequence (port from reference-standardize) */
+    pr_debug("*** CSI: Applying CSI/MIPI lane configuration sequence (probe path) ***\n");
+    tx_isp_vic_write_csi_phy_sequence();
+
 
     pr_debug("*** csi_device_probe: Binary Ninja CSI device created successfully ***\n");
     return 0;

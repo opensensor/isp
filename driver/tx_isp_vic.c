@@ -1069,15 +1069,16 @@ void tx_isp_vic_write_csi_phy_sequence(void)
         return;
     }
 
-    /* Resolve CSI base: prefer VIC-derived base; fallback to CSI device regs */
+    /* Resolve CSI base: prefer CSI device registers; fallback to VIC-derived base */
     csi_base = NULL;
-    if (ourISPdev->vic_regs) {
-        /* Calculate CSI base from VIC base */
-        csi_base = ourISPdev->vic_regs - 0x9a00;
-    } else if (ourISPdev->csi_dev) {
+    if (ourISPdev->csi_dev) {
         struct tx_isp_csi_device *csi = (struct tx_isp_csi_device *)ourISPdev->csi_dev;
         if (csi && csi->csi_regs)
-            csi_base = csi->csi_regs;
+            csi_base = csi->csi_regs;  /* 0x10022000: isp-csi */
+    }
+    if (!csi_base && ourISPdev->vic_regs) {
+        /* Fallback: approximate CSI base from VIC base */
+        csi_base = ourISPdev->vic_regs - 0x9a00;
     }
 
     if (!csi_base) {
