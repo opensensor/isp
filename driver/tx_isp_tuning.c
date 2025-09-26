@@ -6618,18 +6618,18 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
     /* Let's see if registering a callback for bit 10 causes the hang */
 
     pr_info("*** DEBUGGING: Registering ONLY callback for bit 10 (status 0x400) ***\n");
-    system_irq_func_set(0x0a, ae0_interrupt_static);    /* Index 10: For status 0x400 */
+    //system_irq_func_set(0x0a, ae0_interrupt_static);    /* Index 10: For status 0x400 */
 
     /* DISABLED: All other callbacks to isolate the hang */
-    system_irq_func_set(0x1b, ae0_interrupt_hist);      // Index 27: AE0 histogram */
-    system_irq_func_set(0x1a, ae0_interrupt_static);    // Index 26: AE0 static */
-    system_irq_func_set(0x1d, ae1_interrupt_hist);      // Index 29: AE1 histogram */
-    system_irq_func_set(0x1c, ae1_interrupt_static);    // Index 28: AE1 static */
-    system_irq_func_set(0x1e, awb_interrupt_static);           // Index 30: AWB */
-    system_irq_func_set(0x14, tiziano_defog_interrupt_static); // Index 20: Defog */
-    system_irq_func_set(0x12, tiziano_adr_interrupt_static);   // Index 18: ADR */
-	system_irq_func_set(0x1f, af_interrupt_static);            // Index 31: AF */
-    system_irq_func_set(0x0b, tiziano_wdr_interrupt_static);   // Index 11: WDR */
+    //system_irq_func_set(0x1b, ae0_interrupt_hist);      // Index 27: AE0 histogram */
+    //system_irq_func_set(0x1a, ae0_interrupt_static);    // Index 26: AE0 static */
+    //system_irq_func_set(0x1d, ae1_interrupt_hist);      // Index 29: AE1 histogram */
+    //system_irq_func_set(0x1c, ae1_interrupt_static);    // Index 28: AE1 static */
+    //system_irq_func_set(0x1e, awb_interrupt_static);           // Index 30: AWB */
+    //system_irq_func_set(0x14, tiziano_defog_interrupt_static); // Index 20: Defog */
+    //system_irq_func_set(0x12, tiziano_adr_interrupt_static);   // Index 18: ADR */
+	//system_irq_func_set(0x1f, af_interrupt_static);            // Index 31: AF */
+    //system_irq_func_set(0x0b, tiziano_wdr_interrupt_static);   // Index 11: WDR */
 
     /* Binary Ninja EXACT: uint32_t $a2_13 = zx.d(data_b2e56) */
     uint32_t a2_13 = (uint32_t)data_b2e56;

@@ -1514,6 +1514,18 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         wmb();
         pr_info("*** BINARY NINJA EXACT: Hardware sequence 2->4->wait(%d us)->1 ***\n", wait_count);
 
+
+        /* Re-assert stream control after this enable too, to guard against register clearing */
+        {
+            u32 buffer_count = vic_dev->active_buffer_count;
+            if (buffer_count == 0) buffer_count = 2;
+            if (buffer_count > 5) buffer_count = 5;
+            u32 stream_ctrl = (buffer_count << 16) | 0x80000020;
+            writel(stream_ctrl, vic_regs + 0x300);
+            wmb();
+            pr_info("*** POST-ENABLE(A): Rewrote VIC[0x300]=0x%x (buffer_count=%u) ***\n", stream_ctrl, buffer_count);
+        }
+
         /* Format detection logic - Binary Ninja 000107f8-00010a04 */
         u32 mipi_config;
 
@@ -2833,6 +2845,19 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         writel(0x1, vic_regs + 0x0);        /* Binary Ninja: Final enable */
                         wmb();
                         pr_info("*** BINARY NINJA EXACT: Hardware enable sequence 2->4->wait->1 (waited %d us) ***\n", wait_count);
+
+                        /* Re-assert stream control after final enable: hardware may clear 0x300 during 2->4->1 */
+                        {
+                            u32 buffer_count = vic_dev->active_buffer_count;
+                            if (buffer_count == 0) buffer_count = 2; /* BN reference uses 2 if zero */
+                            if (buffer_count > 5) buffer_count = 5; /* 5 slots max */
+                            u32 stream_ctrl = (buffer_count << 16) | 0x80000020;
+                            writel(stream_ctrl, vic_regs + 0x300);
+                            wmb();
+                            pr_info("*** POST-ENABLE: Rewrote VIC[0x300]=0x%x (buffer_count=%u) to preserve control bits ***\n",
+                                    stream_ctrl, buffer_count);
+                        }
+
                     } else {
                         pr_err("*** ERROR: VIC registers not available for delayed enable ***\n");
                     }
