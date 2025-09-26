@@ -2366,26 +2366,20 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     pr_info("vic_pipo_mdma_enable: reg 0x304 = 0x%x (NV12 dims %dx%d)\n",
             (width << 16) | height, width, height);
 
-    /* Binary Ninja EXACT: int32_t $v1_1 = $v1 << 1 */
-    /* CRITICAL FIX: Reference driver uses width << 1 for both Y and UV strides! */
-    /* This is the EXACT formula from Binary Ninja decompilation */
-    stride = width << 1;  /* Binary Ninja: $v1_1 = $v1 << 1 */
-    
-    /* CRITICAL: Log stride calculation details */
-    pr_info("*** STRIDE CALCULATION: width=%d, stride=(width<<1)=%d ***\n", width, stride);
-    
-    if (stride == 0) {
-        pr_err("*** CRITICAL ERROR: Calculated stride is 0! Width=%d - forcing to 3840 ***\n", width);
-        stride = 3840;  /* 1920 << 1 = 3840 */
-    }
-    
-    writel(stride, vic_base + 0x310); /* Y stride */
-    wmb();
-    pr_info("vic_pipo_mdma_enable: reg 0x310 = %d (Y stride = width << 1)\n", stride);
+    /* NV12: stride is bytes per line = width (Y) and width (UV) */
+    u32 stride_y = width;
+    u32 stride_uv = width;
+    pr_info("*** NV12 STRIDE: width=%d, Y=%d, UV=%d ***\n", width, stride_y, stride_uv);
+    if (stride_y == 0) stride_y = width ? width : 1920;
+    if (stride_uv == 0) stride_uv = stride_y;
 
-    writel(stride, vic_base + 0x314); /* UV stride (same as Y per reference) */
+    writel(stride_y, vic_base + 0x310); /* Y stride */
     wmb();
-    pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (UV stride = width << 1)\n", stride);
+    pr_info("vic_pipo_mdma_enable: reg 0x310 = %d (Y stride = width)\n", stride_y);
+
+    writel(stride_uv, vic_base + 0x314); /* UV stride */
+    wmb();
+    pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (UV stride = width)\n", stride_uv);
 
     /* Ensure NV12 processing/color pipeline is enabled after MDMA setup */
     writel(0xeb8080, vic_base + 0xc0);
