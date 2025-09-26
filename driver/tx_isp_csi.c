@@ -449,11 +449,16 @@ int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 
     switch (cmd) {
     case TX_ISP_EVENT_SENSOR_RESIZE:  /* This is the correct event for reset */
-        /* Reset CSI */
-        /* CRITICAL FIX: Don't set to ERROR state (3)! Reset to IDLE (1) */
-        if (csi_dev->state >= CSI_STATE_ACTIVE) {
-            csi_dev->state = CSI_STATE_IDLE;  /* 1 = IDLE, not 3 = ERROR */
-            pr_info("CSI reset to IDLE state due to sensor resize\n");
+        /* CRITICAL FIX: DO NOT RESET CSI STATE IF HARDWARE IS ALREADY INITIALIZED */
+        /* The CSI hardware initialization during probe should be preserved */
+        pr_info("*** CSI EVENT: SENSOR_RESIZE received, but preserving initialized CSI hardware state=%d ***\n", csi_dev->state);
+
+        /* Only reset if CSI is in error state, not if it's properly initialized */
+        if (csi_dev->state == CSI_STATE_ERROR) {
+            csi_dev->state = CSI_STATE_IDLE;  /* Reset only from error state */
+            pr_info("CSI reset from ERROR to IDLE state due to sensor resize\n");
+        } else {
+            pr_info("CSI hardware state preserved (state=%d) - no reset needed\n", csi_dev->state);
         }
         break;
     case TX_ISP_EVENT_SENSOR_FPS:
