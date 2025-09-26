@@ -1991,10 +1991,7 @@ int tisp_init(void *sensor_info, char *param_name)
         system_reg_write(0xa044, ae0_phys + 0x5000);
         system_reg_write(0xa048, ae0_phys + 0x5800);
         system_reg_write(0xa04c, 0x33);
-        /* Enable AE0 system: store virtual buffer pointer for interrupt gating */
         /* Enable AE0 system: set global pointer used by AE interrupts/gating */
-        data_b2f3c = (uint32_t)ae0_buffer;
-
         data_b2f3c = (uint32_t)ae0_buffer;
 
         pr_info("*** tisp_init: AE0 buffer allocated at 0x%08x ***\n", (uint32_t)ae0_phys);
