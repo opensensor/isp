@@ -2290,7 +2290,7 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
 static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_base;
-    u32 width, height, stride;
+    u32 width = 0, height = 0, stride = 0;  /* CRITICAL FIX: Initialize to prevent undefined behavior */
 
     pr_info("*** vic_pipo_mdma_enable: EXACT Binary Ninja implementation ***\n");
 
@@ -2311,7 +2311,11 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         return;
     }
 
-    /* Prefer ACTIVE output dimensions for VIC MDMA (matches NV12 buffer sizes) */
+    /* CRITICAL FIX: Set default dimensions first to prevent stride = 0 */
+    width = 1920;   /* Default safe width */
+    height = 1080;  /* Default safe height */
+    
+    /* Try to get actual dimensions from various sources */
     if (ourISPdev && ourISPdev->sensor_width && ourISPdev->sensor_height) {
         width  = ourISPdev->sensor_width;
         height = ourISPdev->sensor_height;
@@ -2321,14 +2325,27 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         height = vic_dev->height;
         pr_info("*** Fallback to vic_dev cached ACTIVE dims %dx%d for VIC MDMA dims ***\n", width, height);
     } else if (vic_dev->sensor_attr.total_width && vic_dev->sensor_attr.total_height) {
-        /* Last resort: totals, but NV12 buffers may be too small if used here */
-        width  = vic_dev->sensor_attr.total_width;
-        height = vic_dev->sensor_attr.total_height;
-        pr_warn("*** WARNING: Using sensor_attr TOTAL timing %dx%d for VIC MDMA dims ***\n", width, height);
+        /* Handle GC2053 sensor specifically */
+        if (vic_dev->sensor_attr.total_width == 2200 && vic_dev->sensor_attr.total_height == 1418) {
+            /* GC2053 detected: use actual output dimensions */
+            width = 1920;
+            height = 1080;
+            pr_info("*** GC2053 detected: Using actual output dims 1920x1080 instead of totals 2200x1418 ***\n");
+        } else {
+            /* Use total dimensions but warn */
+            width  = vic_dev->sensor_attr.total_width;
+            height = vic_dev->sensor_attr.total_height;
+            pr_warn("*** WARNING: Using sensor_attr TOTAL timing %dx%d for VIC MDMA dims ***\n", width, height);
+        }
     } else {
+        pr_info("*** DIMENSION FIX: Using default VIC MDMA dims %dx%d ***\n", width, height);
+    }
+    
+    /* CRITICAL: Validate dimensions to prevent 0 stride */
+    if (width == 0 || height == 0) {
+        pr_err("*** CRITICAL ERROR: Invalid dimensions width=%d height=%d - forcing defaults ***\n", width, height);
         width = 1920;
         height = 1080;
-        pr_info("*** DIMENSION FIX: defaulting VIC MDMA dims to %dx%d ***\n", width, height);
     }
 
     pr_info("vic_pipo_mdma_enable: FINAL MDMA dims=%dx%d (expected NV12 active size)\n", width, height);
