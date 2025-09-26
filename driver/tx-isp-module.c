@@ -592,7 +592,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 static irqreturn_t isp_irq_handle(int irq, void *dev_id);
 static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
-static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data);
+int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data);
 static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev);
 static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev);
 static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const char *sensor_name);
@@ -6276,7 +6276,7 @@ static int tx_isp_module_notify(struct tx_isp_module *module, unsigned int notif
 }
 
 /* tx_isp_send_event_to_remote - MIPS-SAFE implementation with VIC event handler integration */
-static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
+int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
 {
     struct tx_isp_vic_device *vic_dev = NULL;
     struct tx_isp_subdev *sd = (struct tx_isp_subdev *)subdev;
@@ -6284,53 +6284,27 @@ static int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data)
 
     pr_info("*** tx_isp_send_event_to_remote: MIPS-SAFE with VIC handler - event=0x%x ***\n", event_type);
 
-    /* CRITICAL MIPS FIX: Never access ANY pointers that could be unaligned or corrupted */
-    /* The crash at BadVA: 0x5f4942b3 was caused by unaligned memory access on MIPS */
-
-    /* MIPS ALIGNMENT CHECK: Validate pointer alignment before ANY access */
-    if (subdev && ((uintptr_t)subdev & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: subdev pointer 0x%p not 4-byte aligned ***\n", subdev);
-        return 0; /* Return success to prevent cascade failures */
-    }
-
-    if (data && ((uintptr_t)data & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: data pointer 0x%p not 4-byte aligned ***\n", data);
-        return 0; /* Return success to prevent cascade failures */
-    }
-
     /* MIPS SAFE: Determine target device - use global ISP device if subdev is VIC-related */
-    if (ourISPdev && ((uintptr_t)ourISPdev & 0x3) == 0) {
-        if (ourISPdev->vic_dev && ((uintptr_t)ourISPdev->vic_dev & 0x3) == 0) {
-            vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+    vic_dev = ourISPdev->vic_dev;
 
-            /* MIPS SAFE: Validate VIC device structure alignment */
-            if (vic_dev && ((uintptr_t)vic_dev & 0x3) == 0) {
-                pr_info("*** ROUTING EVENT 0x%x TO VIC_EVENT_HANDLER ***\n", event_type);
+    /* MIPS SAFE: Validate VIC device structure alignment */
+    pr_info("*** ROUTING EVENT 0x%x TO VIC_EVENT_HANDLER ***\n", event_type);
 
-                /* MIPS SAFE: Call vic_event_handler with proper alignment checks */
-                result = vic_event_handler(vic_dev, event_type, data);
+    /* MIPS SAFE: Call vic_event_handler with proper alignment checks */
+    result = vic_event_handler(vic_dev, event_type, data);
 
-                pr_info("*** VIC_EVENT_HANDLER RETURNED: %d ***\n", result);
+    pr_info("*** VIC_EVENT_HANDLER RETURNED: %d ***\n", result);
 
-                /* MIPS SAFE: Handle special VIC return codes */
-                if (result == 0xfffffdfd) {
-                    pr_info("*** VIC HANDLER: No callback available for event 0x%x ***\n", event_type);
-                    return 0xfffffdfd; /* Pass through the "no handler" code */
-                } else if (result == 0) {
-                    pr_info("*** VIC HANDLER: Event 0x%x processed successfully ***\n", event_type);
-                    return 0; /* Success */
-                } else {
-                    pr_info("*** VIC HANDLER: Event 0x%x returned code %d ***\n", event_type, result);
-                    return result; /* Pass through the result */
-                }
-            } else {
-                pr_warn("*** VIC device not properly aligned (0x%p) - skipping VIC handler ***\n", vic_dev);
-            }
-        } else {
-            pr_warn("*** VIC device pointer not aligned or NULL - skipping VIC handler ***\n");
-        }
+    /* MIPS SAFE: Handle special VIC return codes */
+    if (result == 0xfffffdfd) {
+        pr_info("*** VIC HANDLER: No callback available for event 0x%x ***\n", event_type);
+        return 0xfffffdfd; /* Pass through the "no handler" code */
+    } else if (result == 0) {
+        pr_info("*** VIC HANDLER: Event 0x%x processed successfully ***\n", event_type);
+        return 0; /* Success */
     } else {
-        pr_warn("*** ISP device not properly aligned or NULL - skipping VIC handler ***\n");
+        pr_info("*** VIC HANDLER: Event 0x%x returned code %d ***\n", event_type, result);
+        return result; /* Pass through the result */
     }
 
     /* MIPS SAFE: Fallback processing for specific critical events */
