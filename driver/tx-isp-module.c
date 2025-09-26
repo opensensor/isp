@@ -29,6 +29,9 @@
 #include "../include/tx-isp-device.h"
 #include "../include/tx-libimp.h"
 
+#include "../include/tx_isp_vic_buffer.h"
+extern int ispvic_frame_channel_qbuf(void *arg1, void *arg2);
+
 /* CSI State constants - needed for proper state management */
 #define CSI_STATE_OFF       0
 #define CSI_STATE_IDLE      1
@@ -6491,9 +6494,26 @@ int vic_event_handler(void *subdev, int event_type, void *data)
         return tx_isp_vic_notify(vic_dev, event_type, data);
     }
     case 0x3000008: { /* TX_ISP_EVENT_FRAME_QBUF */
-        /* Delegate QBUF handling to VIC driver to avoid duplicate programming here */
-        pr_info("*** VIC EVENT: QBUF (0x3000008) - routing to VIC notify handler ***\n");
-        return tx_isp_vic_notify(vic_dev, event_type, data);
+        /* BN MCP: Build vic_buffer_entry and call ispvic_frame_channel_qbuf so ISR sees done_head */
+        struct { u32 index; u32 phys_addr; u32 size; u32 channel; } *v = data;
+        u32 phys = v ? v->phys_addr : 0;
+        if (phys >= 0x06000000 && phys < 0x09000000) {
+            struct vic_buffer_entry *entry = VIC_BUFFER_ALLOC_ATOMIC();
+            if (!entry) {
+                pr_err("VIC EVENT: QBUF alloc failed\n");
+                return -ENOMEM;
+            }
+            INIT_LIST_HEAD(&entry->list);
+            entry->buffer_addr = phys;
+            entry->buffer_index = v ? v->index : 0;
+            entry->buffer_status = VIC_BUFFER_STATUS_QUEUED;
+            pr_info("VIC EVENT: QBUF -> entry addr=0x%x idx=%u (calling ispvic_frame_channel_qbuf)\n",
+                    entry->buffer_addr, entry->buffer_index);
+            return ispvic_frame_channel_qbuf(NULL, entry);
+        } else {
+            pr_debug("VIC EVENT: QBUF ignored (phys=0x%x)\n", phys);
+            return -EINVAL;
+        }
     }
     case 0x3000003: { /* TX_ISP_EVENT_FRAME_STREAMON - Start VIC streaming */
         pr_info("*** VIC EVENT: STREAM_START (0x3000003) - ACTIVATING VIC HARDWARE ***\n");
@@ -6545,17 +6565,24 @@ int vic_event_handler(void *subdev, int event_type, void *data)
             void *vb = (void *)((char *)data - 0x68);
             u32 idx = *(u32 *)((char *)vb + 0x34);
             u32 phys = *(u32 *)((char *)vb + 0x70);
-            struct { u32 index; u32 phys_addr; u32 size; u32 channel; } v;
 
-            v.index = idx;
-            v.phys_addr = phys;
-            v.size = 0;     /* unknown here; optional */
-            v.channel = 0;  /* default to ch0 for VIC encoder path */
-
-            pr_info("VIC ENQUEUE: vb=%p index=%u phys=0x%x -> forwarding as QBUF\n", vb, idx, phys);
-
-            /* Reuse the QBUF notify path to program the slot */
-            return tx_isp_vic_notify(vic_dev, TX_ISP_EVENT_FRAME_QBUF, &v);
+            if (phys >= 0x06000000 && phys < 0x09000000) {
+                struct vic_buffer_entry *entry = VIC_BUFFER_ALLOC_ATOMIC();
+                if (!entry) {
+                    pr_err("VIC ENQUEUE: alloc failed\n");
+                    return -ENOMEM;
+                }
+                INIT_LIST_HEAD(&entry->list);
+                entry->buffer_addr = phys;
+                entry->buffer_index = idx;
+                entry->buffer_status = VIC_BUFFER_STATUS_QUEUED;
+                pr_info("VIC ENQUEUE: vb=%p index=%u phys=0x%x -> calling ispvic_frame_channel_qbuf\n",
+                        vb, idx, phys);
+                return ispvic_frame_channel_qbuf(NULL, entry);
+            } else {
+                pr_debug("VIC ENQUEUE: phys out of range 0x%x\n", phys);
+                return -EINVAL;
+            }
         }
     }
     default:
