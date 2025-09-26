@@ -3060,18 +3060,18 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
     struct tx_isp_vic_device *vic_dev = NULL;
     unsigned long var_18 = 0;
 
-    pr_info("*** ispvic_frame_channel_qbuf: EVENT-BASED QBUF with pending buffer processing ***\n");
+    pr_debug("ispvic_frame_channel_qbuf: event-based QBUF\n");
 
     /* SAFE: Use global ourISPdev reference instead of unsafe pointer arithmetic */
     if (!ourISPdev || !ourISPdev->vic_dev) {
-        pr_info("ispvic_frame_channel_qbuf: qbuffer null (MIPS-safe)\n");
+        pr_debug("ispvic_frame_channel_qbuf: qbuffer null (MIPS-safe)\n");
         return 0;
     }
 
     /* SAFE: Get VIC device from global ISP device reference */
     vic_dev = (struct tx_isp_vic_device *)container_of(ourISPdev->vic_dev, struct tx_isp_vic_device, sd);
     if (!vic_dev) {
-        pr_info("ispvic_frame_channel_qbuf: qbuffer null (MIPS-safe)\n");
+        pr_debug("ispvic_frame_channel_qbuf: qbuffer null (MIPS-safe)\n");
         return 0;
     }
 
@@ -3089,7 +3089,7 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
             pr_err("VIC QBUF: buffer_addr is 0 - refusing to queue (no dummy addresses)\n");
         } else {
             list_add_tail(&entry->list, &vic_dev->queue_head);
-            pr_info("*** VIC QBUF: Queued buffer entry %p (addr=0x%x, idx=%u) ***\n",
+            pr_debug("VIC QBUF: queued entry %p (addr=0x%x, idx=%u)\n",
                     entry, entry->buffer_addr, entry->buffer_index);
         }
     } else {
@@ -3098,7 +3098,7 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
     }
 
     if (list_empty(&vic_dev->queue_head)) {
-        pr_info("ispvic_frame_channel_qbuf: no queued buffers\n");
+        pr_debug("ispvic_frame_channel_qbuf: no queued buffers\n");
         goto unlock_exit;
     }
     {
