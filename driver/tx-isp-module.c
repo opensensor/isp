@@ -4380,8 +4380,6 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             if (fcd_local)
                 ch_local = fcd_local->channel_num;
 
-            /* Pre-program moved below after we store fcd/global cache to avoid ordering bug */
-
             /* Legacy TX_ISP_SET_BUF call. In VBM/V4L2 mode the application allocates
              * and passes per-buffer physical addresses via VIDIOC_QBUF. We will not
              * program hardware here, but we will STORE the base and per-frame size so
@@ -4402,16 +4400,8 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             } else {
                 pr_info("TX_ISP_SET_BUF(legacy) received but channel context unavailable\n");
             }
-        }
-        return 0;
-    }
-    case 0x800856d6: { // TX_ISP_WDR_SET_BUF - WDR buffer setup
-        struct wdr_buf_setup {
-            uint32_t addr;   // WDR buffer address
-            uint32_t size;   // WDR buffer size
-        } wdr_setup;
 
-            /* If this is channel 0, proactively program VIC slots with the just-set base/step now. */
+            /* Now that fcd/global cache is updated, pre-program VIC slots for ch0 */
             if (ch_local == 0 && ourISPdev && ourISPdev->vic_dev && buf_setup.addr && buf_setup.size) {
                 struct tx_isp_vic_device *vic_dev_prog = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
                 struct { uint32_t index; uint32_t phys_addr; uint32_t size; uint32_t channel; } v;
@@ -4423,6 +4413,15 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 v.index = 0; v.phys_addr = base;        tx_isp_send_event_to_remote(&vic_dev_prog->sd, 0x3000008, &v);
                 v.index = 1; v.phys_addr = base + step; tx_isp_send_event_to_remote(&vic_dev_prog->sd, 0x3000008, &v);
             }
+        }
+        return 0;
+    }
+    case 0x800856d6: { // TX_ISP_WDR_SET_BUF - WDR buffer setup
+        struct wdr_buf_setup {
+            uint32_t addr;   // WDR buffer address
+            uint32_t size;   // WDR buffer size
+        } wdr_setup;
+
 
         uint32_t wdr_width = 1920;
         uint32_t wdr_height = 1080;
