@@ -317,6 +317,23 @@ int tx_isp_core_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *confi
             u32 bayer = mbus_to_bayer_mode(code);
             system_reg_write(8, bayer);
             pr_info("tx_isp_core_set_format: Bayer reg[0x8]=%u from mbus=0x%x\n", bayer, code);
+            /* Minimal ISP pipeline bring-up per reference-standardize */
+            system_reg_write(0x14, 0x2b);      /* RAW10 code */
+            system_reg_write(0x18, 0x0a0a);    /* 10-bit depth */
+            system_reg_write(0x40, 0x1);       /* Enable demosaic */
+            system_reg_write(0x44, bayer);     /* Demosaic pattern */
+            system_reg_write(0x5000, 0x1);     /* Enable CCM */
+            /* Basic BT.601 RGB->YUV matrix (as in reference-standardize) */
+            system_reg_write(0x200, 0x4d);
+            system_reg_write(0x204, 0x96);
+            system_reg_write(0x208, 0x1d);
+            system_reg_write(0x20c, 0x70);
+            system_reg_write(0x210, 0x5a);
+            system_reg_write(0x214, 0x80);
+            system_reg_write(0x218, 0x80);
+            system_reg_write(0x21c, 0x6a);
+            system_reg_write(0x220, 0x16);
+            pr_info("tx_isp_core_set_format: Minimal ISP demosaic+CSC programmed\n");
         }
     } else {
         pr_warn("tx_isp_core_set_format: No sensor present to determine CFA\n");
@@ -1355,6 +1372,23 @@ int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
             u32 bayer = mbus_to_bayer_mode(code);
             system_reg_write(8, bayer);
             pr_info("tx_isp_configure_format_propagation: Bayer reg[0x8]=%u from mbus=0x%x\n", bayer, code);
+            /* Minimal ISP pipeline bring-up per reference-standardize */
+            system_reg_write(0x14, 0x2b);      /* RAW10 code */
+            system_reg_write(0x18, 0x0a0a);    /* 10-bit depth */
+            system_reg_write(0x40, 0x1);       /* Enable demosaic */
+            system_reg_write(0x44, bayer);     /* Demosaic pattern */
+            system_reg_write(0x5000, 0x1);     /* Enable CCM */
+            /* Basic BT.601 RGB->YUV matrix (as in reference-standardize) */
+            system_reg_write(0x200, 0x4d);
+            system_reg_write(0x204, 0x96);
+            system_reg_write(0x208, 0x1d);
+            system_reg_write(0x20c, 0x70);
+            system_reg_write(0x210, 0x5a);
+            system_reg_write(0x214, 0x80);
+            system_reg_write(0x218, 0x80);
+            system_reg_write(0x21c, 0x6a);
+            system_reg_write(0x220, 0x16);
+            pr_info("tx_isp_configure_format_propagation: Minimal ISP demosaic+CSC programmed\n");
         }
     } else {
         /* Fallback: program default RGGB (index 0) if sensor not yet linked */
