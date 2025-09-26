@@ -25,7 +25,7 @@
 struct tx_isp_fs_device {
     struct tx_isp_subdev subdev;            /* Base subdev structure */
     void __iomem *base_regs;                /* Base register mapping +0xb8 */
-    
+
     void *channel_configs;                   /* channel config array */
     void *channel_buffer;                    /* kmalloc'ed channel buffer */
     uint32_t channel_count;                  /* number of channels */
@@ -34,10 +34,26 @@ struct tx_isp_fs_device {
 
 
 /* Forward declarations */
-static int frame_chan_event(void *data);
+/* Use ISP event callback signature from tx-libimp.h */
+static int frame_chan_event(void *priv, u32 event, void *edata);
 
 
 /* FS subdev core operations */
+
+/* Frame channel registry for IRQ bridging */
+static struct tx_isp_frame_channel *g_fs_channels[4] = {NULL};
+static int (*g_fs_cb[4])(void *, u32, void *) = {NULL};
+static int g_fs_channel_count = 0;
+
+void tx_isp_fs_trigger_frame_event(int channel, u32 event, void *edata)
+{
+    if (channel >= 0 && channel < g_fs_channel_count &&
+        g_fs_channels[channel] && g_fs_cb[channel]) {
+        g_fs_cb[channel](g_fs_channels[channel], event, edata);
+    }
+}
+EXPORT_SYMBOL(tx_isp_fs_trigger_frame_event);
+
 static int fs_core_ops_init(struct tx_isp_subdev *sd, int enable)
 {
     pr_info("*** fs_core_ops_init: enable=%d ***\n", enable);
@@ -104,24 +120,35 @@ static const struct file_operations fs_channel_ops = {
     .llseek = default_llseek,
 };
 
-/* Frame channel event handler - EXACT Binary Ninja implementation */
-static int frame_chan_event(void *data)
+/* Frame channel event handler - Binary Ninja aligned signature
+ * Expected to receive event 0x3000006 (FRAME_DQBUF) with optional payload
+ */
+static int frame_chan_event(void *priv, u32 event, void *edata)
 {
-    struct tx_isp_frame_channel *chan = (struct tx_isp_frame_channel *)data;
-    
-    if (!chan) {
-        pr_err("frame_chan_event: NULL channel data\n");
+    struct tx_isp_frame_channel *chan = (struct tx_isp_frame_channel *)priv;
+    unsigned long flags;
+
+    if (!chan)
         return -EINVAL;
+
+    /* Only handle frame dequeue (frame done) events here */
+    if (event != 0x3000006)
+        return 0;
+
+    /* Minimal queue bookkeeping: move one queued buffer to done list if present */
+    spin_lock_irqsave(&chan->slock, flags);
+    if (!list_empty(&chan->queue_head)) {
+        struct list_head *node = chan->queue_head.next;
+        list_del(node);
+        list_add_tail(node, &chan->done_head);
+        chan->queued_count = (chan->queued_count > 0) ? chan->queued_count - 1 : 0;
+        chan->done_count++;
     }
-    
-    pr_info("*** frame_chan_event: channel=%p, state=%d ***\n", chan, chan->state);
-    
-    /* Signal frame completion - use correct field name */
+    spin_unlock_irqrestore(&chan->slock, flags);
+
+    /* Signal frame completion */
     complete(&chan->frame_done);
-    
-    /* Wake up any waiting processes - use correct field name */
     wake_up_interruptible(&chan->wait);
-    
     return 0;
 }
 
@@ -145,19 +172,19 @@ int tx_isp_fs_probe(struct platform_device *pdev)
     uint32_t channel_count;
     int ret;
     int i;
-    
+
     pr_info("*** tx_isp_fs_probe: Memory-safe implementation ***\n");
-    
+
     /* SAFE: Use proper struct size instead of fixed 0xe8 */
     fs_dev = kzalloc(sizeof(struct tx_isp_fs_device), GFP_KERNEL);
     if (!fs_dev) {
         pr_err("Err [VIC_INT] : control limit err!!!\n");
         return -12;
     }
-    
+
     /* Binary Ninja: void* $s2_1 = arg1[0x16] */
     /* This references platform device resource information */
-    
+
     /* Binary Ninja: if (tx_isp_subdev_init(arg1, $v0, &fs_subdev_ops) == 0) */
     ret = tx_isp_subdev_init(pdev, &fs_dev->subdev, &fs_subdev_ops);
     if (ret != 0) {
@@ -168,17 +195,17 @@ int tx_isp_fs_probe(struct platform_device *pdev)
         /* Binary Ninja: return 0xfffffff4 */
         return -12;
     }
-    
+
     /* SAFE: Access struct member directly instead of offset calculation */
     channel_count = fs_dev->channel_count;  /* Get from subdev initialization */
-    
+
     pr_info("tx_isp_fs_probe: channel_count=%d\n", channel_count);
-    
+
     /* Binary Ninja: if ($a0_2 == 0) goto label_1c670 */
     if (channel_count == 0) {
         goto setup_complete;
     }
-    
+
     /* SAFE: Use proper struct size instead of fixed 0x2ec */
     channels_buffer = kzalloc(channel_count * sizeof(struct tx_isp_frame_channel), GFP_KERNEL);
     if (!channels_buffer) {
@@ -186,42 +213,55 @@ int tx_isp_fs_probe(struct platform_device *pdev)
         ret = -ENOMEM;
         goto error_cleanup;
     }
-    
+
     /* SAFE: Direct struct member access */
     fs_dev->channel_buffer = channels_buffer;
-    
+
     /* Binary Ninja: Channel initialization loop */
     pr_info("tx_isp_fs_probe: initializing %d frame channels\n", channel_count);
-    
+    /* Publish channel count for IRQ bridging */
+    g_fs_channel_count = channel_count;
+
+
     for (i = 0; i < channel_count; i++) {
         /* SAFE: Use proper array indexing instead of offset calculation */
         current_channel = &channels_buffer[i];
-        
+
         /* SAFE: Use proper array indexing for channel configs */
         channel_config_ptr = (char *)fs_dev->channel_configs + (i * 0x24);
-        
+
         /* SAFE: Simple null check - remove unsafe pointer range checks */
-        if (!current_channel || !channel_config_ptr) {
+        if (!current_channel) {
             ret = -EINVAL;
             goto error_cleanup_loop;
         }
-        
+
+        /* Register channel and callback for IRQ bridging */
+        g_fs_channels[i] = current_channel;
+        g_fs_cb[i] = frame_chan_event;
+
         /* Set pad info based on channel config */
         current_channel->pad_id = i;
-        
+
         /* Binary Ninja: if (zx.d(*($s6_1 + 5)) != 0) */
         if (*(uint32_t *)((char *)channel_config_ptr + 5) != 0) {
             /* Binary Ninja: sprintf(&$s0_2[0xab], "Err [VIC_INT] : mipi fid asfifo ovf!!!\n") */
-            snprintf(current_channel->name, sizeof(current_channel->name), 
+            snprintf(current_channel->name, sizeof(current_channel->name),
                      "/dev/framechan%d", i);
-            
+
+            /* Initialize per-channel queue lists and counters */
+            INIT_LIST_HEAD(&current_channel->queue_head);
+            INIT_LIST_HEAD(&current_channel->done_head);
+            current_channel->queued_count = 0;
+            current_channel->done_count = 0;
+
             /* Binary Ninja: *$s0_2 = 0xff */
             current_channel->misc.minor = MISC_DYNAMIC_MINOR;
             /* Binary Ninja: $s0_2[2] = &fs_channel_ops */
             current_channel->misc.fops = &fs_channel_ops;
             /* Binary Ninja: $s0_2[1] = &$s0_2[0xab] */
             current_channel->misc.name = current_channel->name;
-            
+
             /* Binary Ninja: if (private_misc_register($s0_2) s< 0) */
             ret = misc_register(&current_channel->misc);
             if (ret < 0) {
@@ -231,7 +271,7 @@ int tx_isp_fs_probe(struct platform_device *pdev)
                 ret = -2;
                 goto error_cleanup_loop;
             }
-            
+
             /* Binary Ninja: Initialize completion and synchronization objects */
             /* Binary Ninja: private_init_completion(&$s0_2[0xb5]) */
             init_completion(&current_channel->frame_done);
@@ -241,15 +281,15 @@ int tx_isp_fs_probe(struct platform_device *pdev)
             mutex_init(&current_channel->mlock);
             /* Binary Ninja: private_init_waitqueue_head(&$s0_2[0x8a]) */
             init_waitqueue_head(&current_channel->wait);
-            
+
             /* Binary Ninja: Set up event callback */
             /* Binary Ninja: *($s6_1 + 0x1c) = frame_chan_event */
             *(void **)((char *)channel_config_ptr + 0x1c) = frame_chan_event;
-            
+
             /* Binary Ninja: $s0_2[0xb4] = 1 */
             current_channel->state = 1;  /* Active state */
-            
-            pr_info("tx_isp_fs_probe: initialized frame channel %d: %s\n", 
+
+            pr_info("tx_isp_fs_probe: initialized frame channel %d: %s\n",
                     i, current_channel->name);
         } else {
             /* Binary Ninja: $s0_2[0xb4] = 0 */
@@ -257,9 +297,9 @@ int tx_isp_fs_probe(struct platform_device *pdev)
             pr_info("tx_isp_fs_probe: channel %d inactive\n", i);
         }
     }
-    
+
     goto setup_complete;
-    
+
 error_cleanup_loop:
     /* SAFE: Error cleanup - deinitialize created channels */
     for (i = i - 1; i >= 0; i--) {
@@ -277,18 +317,18 @@ error_cleanup:
 setup_complete:
     /* SAFE: Direct struct member access */
     fs_dev->initialized = 1;
-    
+
     platform_set_drvdata(pdev, fs_dev);
-    
+
     /* SAFE: Set file operations through subdev module structure */
     fs_dev->subdev.module.ops = &isp_framesource_fops;
-    
+
     /* Note: Self-pointer assignment removed as it's not needed with proper struct access */
-    
-    pr_info("*** tx_isp_fs_probe: FS device created successfully (size=%zu, channels=%d) ***\n", 
+
+    pr_info("*** tx_isp_fs_probe: FS device created successfully (size=%zu, channels=%d) ***\n",
             sizeof(struct tx_isp_fs_device), channel_count);
     pr_info("*** FS PROBE COMPLETE - /proc/jz/isp/isp-fs SHOULD NOW BE AVAILABLE ***\n");
-    
+
     /* Binary Ninja: return 0 */
     return 0;
 }
@@ -300,13 +340,13 @@ int tx_isp_fs_remove(struct platform_device *pdev)
     struct tx_isp_frame_channel *channels_buffer;
     struct tx_isp_frame_channel *current_channel;
     int i;
-    
+
     pr_info("*** tx_isp_fs_remove ***\n");
-    
+
     if (!fs_dev) {
         return 0;
     }
-    
+
     /* SAFE: Clean up frame channels with proper array indexing */
     channels_buffer = (struct tx_isp_frame_channel *)fs_dev->channel_buffer;
     if (channels_buffer) {
@@ -318,12 +358,12 @@ int tx_isp_fs_remove(struct platform_device *pdev)
         }
         kfree(channels_buffer);
     }
-    
+
     /* Clean up subdev */
     tx_isp_subdev_deinit(&fs_dev->subdev);
-    
+
     kfree(fs_dev);
-    
+
     pr_info("FS device removed\n");
     return 0;
 }
@@ -345,15 +385,15 @@ static struct platform_driver tx_isp_fs_platform_driver = {
 int __init tx_isp_fs_platform_init(void)
 {
     int ret;
-    
+
     pr_info("*** TX ISP FS PLATFORM DRIVER REGISTRATION ***\n");
-    
+
     ret = platform_driver_register(&tx_isp_fs_platform_driver);
     if (ret) {
         pr_err("Failed to register FS platform driver: %d\n", ret);
         return ret;
     }
-    
+
     pr_info("FS platform driver registered successfully\n");
     return 0;
 }

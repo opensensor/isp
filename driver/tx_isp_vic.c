@@ -204,6 +204,9 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 
 /* VIC interrupt restoration function - using correct VIC base */
+/* FS bridge: trigger frame event into FS subsystem */
+extern void tx_isp_fs_trigger_frame_event(int channel, u32 event, void *edata);
+
 void tx_isp_vic_restore_interrupts(void)
 {
     extern struct tx_isp_dev *ourISPdev;
@@ -467,6 +470,10 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     if (ourISPdev)
         ourISPdev->frame_count++;
     isp_frame_done_wakeup();
+
+    /* Also notify FS subsystem via frame_chan_event (0x3000006) */
+    tx_isp_fs_trigger_frame_event(0, 0x3000006, NULL);
+    tx_isp_fs_trigger_frame_event(1, 0x3000006, NULL);
 
     /* Wake up V4L2 frame waiters for streaming channels */
     extern void tx_isp_wakeup_frame_channels(void);
