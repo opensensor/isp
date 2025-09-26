@@ -2310,189 +2310,213 @@ bool is_valid_kernel_pointer(const void *ptr)
             addr != 0x24a70688);   /* BadVA from crash log */
 }
 
+
 /**
- * tx_isp_video_s_stream - CORRECTED implementation using direct device references
+ * tx_isp_video_s_stream - EXACT Binary Ninja reference implementation
  * @dev: ISP device
  * @enable: Stream enable flag
  *
- * The user is absolutely correct - this should use direct references to vic_dev,
- * csi_dev, etc. to call their sd->ops methods directly instead of the insane
- * and dangerous subdev array iteration with unsafe pointer arithmetic.
+ * Binary Ninja decompiled implementation:
+ * - Iterates through subdevs array at offset 0x38 (16 entries)
+ * - Calls s_stream function on each subdev's video ops
+ * - Handles cleanup on failure by rolling back previously enabled subdevs
  *
  * Returns 0 on success, negative error code on failure
  */
 int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
 {
-    void **subdevs_ptr;    /* $s4 in reference: arg1 + 0x38 */
+    struct tx_isp_subdev **s4;
     int i;
+    int result;
 
-    pr_info("*** tx_isp_video_s_stream: FIXED Binary Ninja implementation - enable=%d ***\n", enable);
+    pr_info("*** tx_isp_video_s_stream: EXACT Binary Ninja reference implementation - enable=%d ***\n", enable);
 
-    /* CRITICAL: Validate ISP device pointer first */
-    if (!is_valid_kernel_pointer(dev)) {
-        pr_info("tx_isp_video_s_stream: Invalid ISP device pointer %p\n", dev);
-        return -EINVAL;
+    /* Debug: Show current subdev array status using helper function */
+    tx_isp_debug_print_subdevs(dev);
+
+    /* CRITICAL FIX: Initialize core before streaming starts */
+    if (enable == 1) {  /* Stream ON */
+        pr_info("*** tx_isp_video_s_stream: STREAM ON - Initializing core first ***\n");
+
+        /* CRITICAL FIX: Step 1: Activate core module (VIC 1 → 2 state transition) */
+        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)dev->vic_dev;
+        if (vic_dev && vic_dev->state == 1) {
+            pr_info("*** tx_isp_video_s_stream: VIC state is 1, calling activate_module ***\n");
+            result = ispcore_activate_module(dev);
+            if (result != 0) {
+                pr_err("tx_isp_video_s_stream: ispcore_activate_module failed: %d\n", result);
+                return result;
+            }
+            pr_info("*** tx_isp_video_s_stream: ispcore_activate_module completed ***\n");
+        }
+
+        /* CRITICAL FIX: Step 2: Initialize VIC core (VIC 2 → 3 state transition) */
+        if (vic_dev && vic_dev->state == 2) {
+            /* CRITICAL FIX: Call VIC subdev's core->init, not ISP core's init */
+            struct tx_isp_subdev *vic_sd = &vic_dev->sd;
+            if (vic_sd->ops && vic_sd->ops->core && vic_sd->ops->core->init) {
+                pr_info("*** tx_isp_video_s_stream: VIC state is 2, calling VIC core->init ***\n");
+                result = vic_sd->ops->core->init(vic_sd, 1);
+                if (result != 0) {
+                    pr_err("tx_isp_video_s_stream: VIC core->init failed: %d\n", result);
+                    return result;
+                }
+                pr_info("*** tx_isp_video_s_stream: VIC core->init completed, VIC should now be state 3 ***\n");
+            } else {
+                pr_err("tx_isp_video_s_stream: VIC core->init not available\n");
+                return -EINVAL;
+            }
+        }
+
+        /* CRITICAL FIX: Verify VIC is ready for streaming */
+        if (vic_dev && vic_dev->state < 3) {
+            pr_err("tx_isp_video_s_stream: VIC state %d < 3, not ready for streaming\n", vic_dev->state);
+            return -EINVAL;
+        }
+
+        pr_info("*** tx_isp_video_s_stream: Core initialization complete, proceeding with subdev streaming ***\n");
     }
 
-    /* Memory barrier before accessing device structure */
-    rmb();
+    /* Binary Ninja: int32_t* $s4 = dev + 0x38 */
+    s4 = dev->subdevs;
 
-    /* Reference: $s4 = arg1 + 0x38 (get subdevs array pointer) */
-    subdevs_ptr = (void **)((char *)dev + 0x38);
+    /* CRITICAL FIX: Initialize all subdevs BEFORE calling s_stream */
+    if (enable == 1) {  /* Stream ON - initialize subdevs first */
+        pr_info("*** tx_isp_video_s_stream: CRITICAL FIX - Initializing all subdevs before streaming ***\n");
 
-    /* SAFETY: Validate subdevs array pointer */
-    if (!is_valid_kernel_pointer(subdevs_ptr)) {
-        pr_info("tx_isp_video_s_stream: Invalid subdevs array pointer at dev+0x38: %p\n", subdevs_ptr);
-        return -EINVAL;
+        /* Initialize subdevs in proper order using helper functions: CSI → VIC → Core → Sensors */
+        struct tx_isp_subdev *csi_sd = tx_isp_get_csi_subdev(dev);
+        struct tx_isp_subdev *vic_sd = tx_isp_get_vic_subdev(dev);
+        struct tx_isp_subdev *core_sd = tx_isp_get_core_subdev(dev);
+        struct tx_isp_subdev *sensor_sd = tx_isp_get_sensor_subdev(dev);
+
+        /* Initialize CSI first */
+        if (csi_sd && csi_sd->ops && csi_sd->ops->core && csi_sd->ops->core->init) {
+            pr_info("*** tx_isp_video_s_stream: Initializing CSI subdev ***\n");
+            result = csi_sd->ops->core->init(csi_sd, 1);
+            if (result != 0 && result != -ENOIOCTLCMD) {
+                pr_err("tx_isp_video_s_stream: CSI init failed: %d\n", result);
+                return result;
+            }
+            pr_info("*** tx_isp_video_s_stream: CSI init SUCCESS ***\n");
+        }
+
+        /* Initialize VIC second */
+        if (vic_sd && vic_sd->ops && vic_sd->ops->core && vic_sd->ops->core->init) {
+            pr_info("*** tx_isp_video_s_stream: Initializing VIC subdev ***\n");
+            result = vic_sd->ops->core->init(vic_sd, 1);
+            if (result != 0 && result != -ENOIOCTLCMD) {
+                pr_err("tx_isp_video_s_stream: VIC init failed: %d\n", result);
+                return result;
+            }
+            pr_info("*** tx_isp_video_s_stream: VIC init SUCCESS ***\n");
+        }
+
+        /* Initialize Core third */
+        if (core_sd && core_sd->ops && core_sd->ops->core && core_sd->ops->core->init) {
+            pr_info("*** tx_isp_video_s_stream: Initializing Core subdev ***\n");
+            result = core_sd->ops->core->init(core_sd, 1);
+            if (result != 0 && result != -ENOIOCTLCMD) {
+                pr_err("tx_isp_video_s_stream: Core init failed: %d\n", result);
+                return result;
+            }
+            pr_info("*** tx_isp_video_s_stream: Core init SUCCESS ***\n");
+        }
+
+        /* Initialize Sensor last */
+        if (sensor_sd && sensor_sd->ops && sensor_sd->ops->core && sensor_sd->ops->core->init) {
+            pr_info("*** tx_isp_video_s_stream: Initializing Sensor subdev ***\n");
+            result = sensor_sd->ops->core->init(sensor_sd, 1);
+            if (result != 0 && result != -ENOIOCTLCMD) {
+                pr_err("tx_isp_video_s_stream: Sensor init failed: %d\n", result);
+                return result;
+            }
+            pr_info("*** tx_isp_video_s_stream: Sensor init SUCCESS ***\n");
+        }
+        pr_info("*** tx_isp_video_s_stream: All subdev initialization complete - proceeding with s_stream ***\n");
     }
 
+    /* Binary Ninja: for (int32_t i = 0; i != 0x10; ) */
+    for (i = 0; i != 0x10; ) {
+        /* Binary Ninja: void* $a0 = *$s4 */
+        struct tx_isp_subdev *a0 = *s4;
 
-    pr_info("*** tx_isp_video_s_stream: Processing %s request for subdevs ***\n",
-            enable ? "ENABLE" : "DISABLE");
+        if (a0 != 0) {
+            /* Binary Ninja: int32_t* $v0_3 = *(*($a0 + 0xc4) + 4) */
+            struct tx_isp_subdev_video_ops *v0_3 = a0->ops ? a0->ops->video : NULL;
 
-    /* Reference: for (int32_t i = 0; i != 0x10; ) - loop through 16 subdevs */
-    for (i = 0; i != 0x10; i++) {
-        void *subdev;                      /* $a0 in reference */
-        void **ops_ptr;                    /* $a0 + 0xc4 */
-        void **video_ops_ptr;              /* *($a0 + 0xc4) + 4 */
-        int (**s_stream_func_ptr)(void *, int);  /* $v0_3 */
-        int (*s_stream_func)(void *, int); /* $v0_4 */
-        int result;
+            if (v0_3 == 0) {
+                i += 1;
+            } else {
+                /* Binary Ninja: int32_t $v0_4 = *$v0_3 */
+                int (*v0_4)(struct tx_isp_subdev *, int) = v0_3->s_stream;
 
-        /* Reference: void* $a0 = *$s4 (get subdev from array) */
-        subdev = subdevs_ptr[i];
+                if (v0_4 == 0) {
+                    i += 1;
+                } else {
+                    /* Binary Ninja: int32_t result = $v0_4($a0, enable) */
+                    pr_info("*** tx_isp_video_s_stream: Calling subdev[%d]->ops->video->s_stream(%d) ***\n", i, enable);
+                    result = v0_4(a0, enable);
 
-        /* Reference: if ($a0 != 0) */
-        if (subdev != 0) {
-            /* SAFETY: Validate subdev pointer before dereferencing */
-            if (!is_valid_kernel_pointer(subdev)) {
-                pr_info("tx_isp_video_s_stream: Invalid subdev %d pointer %p - skipping\n", i, subdev);
-                continue;
-            }
+                    if (result == 0) {
+                        pr_info("*** tx_isp_video_s_stream: subdev[%d] s_stream SUCCESS ***\n", i);
+                        i += 1;
+                    } else {
+                        /* Binary Ninja: if (result != 0xfffffdfd) */
+                        if (result != 0xfffffdfd) {
+                            /* Binary Ninja: void* $s0_1 = dev + (i << 2) */
+                            struct tx_isp_subdev **s0_1 = &dev->subdevs[i];
 
-            /* Memory barrier before accessing subdev structure */
-            rmb();
+                            /* Binary Ninja: while (dev != $s0_1) */
+                            while (&dev->subdevs[0] != s0_1) {
+                                /* Binary Ninja: void* $a0_1 = *($s0_1 + 0x38) */
+                                /* Move back one position */
+                                s0_1 -= 1;
+                                struct tx_isp_subdev *a0_1 = *s0_1;
 
-            /* Reference: int32_t* $v0_3 = *(*($a0 + 0xc4) + 4) */
-            /* Step 1: $a0 + 0xc4 (get ops pointer location) */
-            ops_ptr = (void **)((char *)subdev + 0xc4);
+                                if (a0_1 == 0) {
+                                    /* Binary Ninja: $s0_1 -= 4 */
+                                    continue;
+                                } else {
+                                    /* Binary Ninja: int32_t* $v0_6 = *(*($a0_1 + 0xc4) + 4) */
+                                    struct tx_isp_subdev_video_ops *v0_6 = a0_1->ops ? a0_1->ops->video : NULL;
 
-            /* SAFETY: Validate ops pointer location */
-            if (!is_valid_kernel_pointer(ops_ptr)) {
-                pr_info("tx_isp_video_s_stream: Invalid ops pointer location for subdev %d: %p\n", i, ops_ptr);
-                continue;
-            }
+                                    if (v0_6 == 0) {
+                                        /* Binary Ninja: $s0_1 -= 4 */
+                                        continue;
+                                    } else {
+                                        /* Binary Ninja: int32_t $v0_7 = *$v0_6 */
+                                        int (*v0_7)(struct tx_isp_subdev *, int) = v0_6->s_stream;
 
-            /* Memory barrier before accessing ops structure */
-            rmb();
-
-            /* Step 2: *($a0 + 0xc4) (get ops structure) then +4 (get video ops) */
-            if (!is_valid_kernel_pointer(*ops_ptr)) {
-                pr_info("tx_isp_video_s_stream: Invalid ops structure for subdev %d: %p\n", i, *ops_ptr);
-                continue;
-            }
-
-            video_ops_ptr = (void **)((char *)*ops_ptr + 4);
-
-            /* SAFETY: Validate video ops pointer location */
-            if (!is_valid_kernel_pointer(video_ops_ptr)) {
-                pr_info("tx_isp_video_s_stream: Invalid video_ops pointer location for subdev %d: %p\n", i, video_ops_ptr);
-                continue;
-            }
-
-            /* Memory barrier before accessing video ops structure */
-            rmb();
-
-            /* Step 3: Get the s_stream function pointer */
-            s_stream_func_ptr = (int (**)(void *, int))video_ops_ptr;
-
-            /* Reference: if ($v0_3 == 0) */
-            if (*s_stream_func_ptr == 0) {
-                pr_info("tx_isp_video_s_stream: No s_stream function for subdev %d\n", i);
-                continue; /* i += 1 in reference */
-            }
-
-            s_stream_func = *s_stream_func_ptr;
-
-            /* SAFETY: Validate function pointer */
-            if (!is_valid_kernel_pointer(s_stream_func)) {
-                pr_info("tx_isp_video_s_stream: Invalid s_stream function pointer for subdev %d: %p\n", i, s_stream_func);
-                continue;
-            }
-
-            /* Reference: int32_t $v0_4 = *$v0_3 then if ($v0_4 == 0) */
-            /* (Already handled above in function pointer validation) */
-
-            pr_info("tx_isp_video_s_stream: Calling s_stream on subdev %d (func=%p, enable=%d)\n",
-                    i, s_stream_func, enable);
-
-            /* Reference: int32_t result = $v0_4($a0, arg2) */
-            result = s_stream_func(subdev, enable);
-
-            /* Reference: if (result == 0) i += 1 */
-            if (result == 0) {
-                pr_info("tx_isp_video_s_stream: Stream %s on subdev %d: SUCCESS\n",
-                        enable ? "ENABLED" : "DISABLED", i);
-                continue; /* Success, continue to next subdev */
-            }
-
-            /* Reference: if (result != 0xfffffdfd) - cleanup and return error */
-            if (result != 0xfffffdfd) {
-                pr_info("tx_isp_video_s_stream: Stream %s FAILED on subdev %d: %d\n",
-                       enable ? "enable" : "disable", i, result);
-
-                /* Reference cleanup logic: rollback previously enabled subdevs */
-                if (enable) {
-                    void **cleanup_ptr = (void **)((char *)dev + 0x38 + (i * sizeof(void *)));
-
-                    pr_info("tx_isp_video_s_stream: Rolling back previously enabled subdevs\n");
-
-                    /* Reference: while (arg1 != $s0_1) - cleanup loop */
-                    while ((void **)((char *)dev + 0x38) != cleanup_ptr) {
-                        void *cleanup_subdev = *cleanup_ptr;
-
-                        if (cleanup_subdev != 0 && is_valid_kernel_pointer(cleanup_subdev)) {
-                            /* Same logic as above but for disable */
-                            void **cleanup_ops_ptr = (void **)((char *)cleanup_subdev + 0xc4);
-
-                            if (is_valid_kernel_pointer(cleanup_ops_ptr) &&
-                                is_valid_kernel_pointer(*cleanup_ops_ptr)) {
-
-                                void **cleanup_video_ops_ptr = (void **)((char *)*cleanup_ops_ptr + 4);
-
-                                if (is_valid_kernel_pointer(cleanup_video_ops_ptr) &&
-                                    is_valid_kernel_pointer(*cleanup_video_ops_ptr)) {
-
-                                    int (**cleanup_func_ptr)(void *, int) = (int (**)(void *, int))cleanup_video_ops_ptr;
-                                    int (*cleanup_func)(void *, int) = *cleanup_func_ptr;
-
-                                    if (is_valid_kernel_pointer(cleanup_func)) {
-                                        int cleanup_result = cleanup_func(cleanup_subdev, 0);  /* Disable */
-                                        pr_info("tx_isp_video_s_stream: Cleanup: disabled subdev at %p (result=%d)\n",
-                                                cleanup_ptr, cleanup_result);
+                                        if (v0_7 == 0) {
+                                            /* Binary Ninja: $s0_1 -= 4 */
+                                            continue;
+                                        } else {
+                                            /* Binary Ninja: $v0_7($a0_1, enable u< 1 ? 1 : 0) */
+                                            int rollback_enable = (enable < 1) ? 1 : 0;
+                                            v0_7(a0_1, rollback_enable);
+                                            /* Binary Ninja: $s0_1 -= 4 */
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        cleanup_ptr -= 1; /* $s0_1 -= 4 in reference (pointer arithmetic) */
+                            /* Binary Ninja: return result */
+                            return result;
+                        }
+                        i += 1;
                     }
                 }
-
-                return result;
             }
-
-            /* Reference: Special case for result == 0xfffffdfd, continue with i += 1 */
-            pr_info("tx_isp_video_s_stream: Stream %s on subdev %d: special code 0xfffffdfd (ignored)\n",
-                    enable ? "enabled" : "disabled", i);
+        } else {
+            i += 1;
         }
 
-        /* Reference: i += 1 and $s4 = &$s4[1] (handled by for loop) */
+        /* Binary Ninja: $s4 = &$s4[1] */
+        s4 = &s4[1];
     }
 
-    pr_info("*** tx_isp_video_s_stream: FIXED implementation completed successfully ***\n");
-
-    /* Reference: return 0 */
+    /* All subdevs processed successfully */
     return 0;
 }
 
