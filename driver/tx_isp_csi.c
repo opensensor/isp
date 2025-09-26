@@ -692,9 +692,6 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                             pr_info("CSI: DATA_IDS configured to RAW10 (0x2b2b2b2b) on 0x18/0x1c\n");
                         }
 
-                        /* Exact BN MCP: program CSI PHY and Lane blocks at 0x10022000 */
-                        csi_program_ref_sequence(csi_dev->csi_regs);
-
 
                         /* *** CRITICAL: PHY timing configuration based on frame rate *** */
                         /* Binary Ninja: void* $v0_7 = *($s0_1 + 0x110) */
@@ -775,11 +772,15 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                             pr_info("*** CSI PHY base configuration: 0x0=0x7d, 0x128=0x3f ***\n");
                         }
 
-                        /* Binary Ninja: *(*($s0_1 + 0xb8) + 0x10) = 1 */
+                        /* Bring up D-PHY and CSI core: shutdownz -> 1, dphy_rstz -> 1, csi2_resetn -> 1 */
+                        writel(1, csi_dev->csi_regs + 0x08);
+                        wmb();
+                        msleep(1);
+                        writel(1, csi_dev->csi_regs + 0x0c);
+                        wmb();
+                        msleep(1);
                         writel(1, csi_dev->csi_regs + 0x10);
                         wmb();
-
-                        /* Binary Ninja: private_msleep(0xa) */
                         msleep(10);
 
                         v0_17 = 3;
