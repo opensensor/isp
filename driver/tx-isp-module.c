@@ -4423,14 +4423,15 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 uint32_t base = buf_setup.addr;
                 uint32_t step = buf_setup.size;
                 pr_info("*** TX_ISP_SET_BUF ch0: Pre-program VIC slots base=0x%x step=%u ***\n", base, step);
-					/* Compute step from current VIC stride/height to ensure exact bank alignment */
-					if (vic_dev_prog && vic_dev_prog->vic_regs) {
-						uint32_t stride_y = readl(vic_dev_prog->vic_regs + 0x310);
-						uint32_t h_vic = vic_dev_prog->height ? vic_dev_prog->height : 1080;
-						uint32_t y_size = stride_y * h_vic;
+					/* Compute step from ACTIVE dims (NV12: stride*H*3/2) to match encoder */
+					{
+						uint32_t w = (ourISPdev && ourISPdev->sensor_width) ? ourISPdev->sensor_width : 1920;
+						uint32_t h = (ourISPdev && ourISPdev->sensor_height) ? ourISPdev->sensor_height : 1080;
+						uint32_t stride_y = (w + 15) & ~15; /* Align to 16 like VIC */
+						uint32_t y_size = stride_y * h;
 						uint32_t step_vic = y_size + (y_size >> 1); /* NV12: Y + Y/2 */
-						pr_info("*** TX_ISP_SET_BUF ch0: VIC stride=%u height=%u -> computed step=%u (setbuf step=%u) ***\n",
-								stride_y, h_vic, step_vic, step);
+						pr_info("*** TX_ISP_SET_BUF ch0: Using ACTIVE dims %ux%u -> stride=%u, computed step=%u (setbuf step=%u) ***\n",
+								w, h, stride_y, step_vic, step);
 						step = step_vic;
 					}
 
