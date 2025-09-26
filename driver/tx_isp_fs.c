@@ -54,6 +54,73 @@ void tx_isp_fs_trigger_frame_event(int channel, u32 event, void *edata)
 }
 EXPORT_SYMBOL(tx_isp_fs_trigger_frame_event);
 
+
+/* FS queue entry to track QBUF items through to frame-done */
+struct fs_buffer_entry {
+    struct list_head list;
+    u32 index;
+    u32 phys;
+    u32 size;
+};
+
+/* Enqueue a QBUF entry into the FS channel queue */
+void tx_isp_fs_enqueue_qbuf(int channel, u32 index, u32 phys, u32 size)
+{
+    struct tx_isp_frame_channel *chan;
+    struct fs_buffer_entry *e;
+    unsigned long flags;
+
+    if (channel < 0 || channel >= g_fs_channel_count)
+        return;
+    chan = g_fs_channels[channel];
+    if (!chan)
+        return;
+
+    e = kzalloc(sizeof(*e), GFP_ATOMIC);
+    if (!e)
+        return;
+
+    INIT_LIST_HEAD(&e->list);
+    e->index = index; e->phys = phys; e->size = size;
+
+    spin_lock_irqsave(&chan->slock, flags);
+    list_add_tail(&e->list, &chan->queue_head);
+    chan->queued_count++;
+    spin_unlock_irqrestore(&chan->slock, flags);
+}
+EXPORT_SYMBOL(tx_isp_fs_enqueue_qbuf);
+
+/* Dequeue a completed entry from FS channel done queue */
+int tx_isp_fs_dequeue_done(int channel, u32 *index, u32 *phys, u32 *size)
+{
+    struct tx_isp_frame_channel *chan;
+    struct fs_buffer_entry *e;
+    unsigned long flags;
+
+    if (channel < 0 || channel >= g_fs_channel_count)
+        return -EINVAL;
+    chan = g_fs_channels[channel];
+    if (!chan)
+        return -ENODEV;
+
+    spin_lock_irqsave(&chan->slock, flags);
+    if (list_empty(&chan->done_head)) {
+        spin_unlock_irqrestore(&chan->slock, flags);
+        return -EAGAIN;
+    }
+    e = list_first_entry(&chan->done_head, struct fs_buffer_entry, list);
+    list_del(&e->list);
+    chan->done_count = (chan->done_count > 0) ? chan->done_count - 1 : 0;
+    spin_unlock_irqrestore(&chan->slock, flags);
+
+    if (index) *index = e->index;
+    if (phys) *phys = e->phys;
+    if (size) *size = e->size;
+    kfree(e);
+    return 0;
+}
+EXPORT_SYMBOL(tx_isp_fs_dequeue_done);
+
 static int fs_core_ops_init(struct tx_isp_subdev *sd, int enable)
 {
     pr_info("*** fs_core_ops_init: enable=%d ***\n", enable);

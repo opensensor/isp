@@ -618,6 +618,10 @@ extern int sensor_init(struct tx_isp_dev *isp_dev);
 
 /* Forward declarations for subdev ops structures */
 extern struct tx_isp_subdev_ops vic_subdev_ops;
+/* FS queue bridging externs */
+extern void tx_isp_fs_enqueue_qbuf(int channel, u32 index, u32 phys, u32 size);
+extern int tx_isp_fs_dequeue_done(int channel, u32 *index, u32 *phys, u32 *size);
+
 static struct tx_isp_subdev_ops csi_subdev_ops;
 
 /* Reference driver function declarations - Binary Ninja exact names */
@@ -2797,6 +2801,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         /* Heuristics: libimp/VBM often places physical address for MMAP in m.offset (T31 patterns) */
         {
             uint32_t phys_candidate = 0;
+            uint32_t fs_size = state->width * state->height * 3 / 2; /* default NV12 */
             if (buffer.memory == 1 /* V4L2_MEMORY_MMAP */) {
                 phys_candidate = buffer.m.offset;
             } else if (buffer.memory == 2 /* V4L2_MEMORY_USERPTR */) {
@@ -2814,12 +2819,14 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     struct { uint32_t index; uint32_t phys_addr; uint32_t size; uint32_t channel; } v;
                     v.index = buffer.index;
                     v.phys_addr = phys_candidate;
-                    v.size = state->width * state->height * 3 / 2; /* NV12 contiguous */
+                    v.size = fs_size; /* NV12 contiguous */
                     v.channel = channel;
                     pr_info("*** Channel %d: QBUF - Programming VIC buffer[%u] = 0x%x (size=%u) ***\n",
                             channel, v.index, v.phys_addr, v.size);
                     (void)tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &v);
                 }
+                /* Enqueue into FS queue for DQBUF correlation */
+                tx_isp_fs_enqueue_qbuf(channel, buffer.index, phys_candidate, fs_size);
             } else {
                 /* Fallback: old behavior using rmem base + index * size */
                 int buffer_size = state->width * state->height * 2;
@@ -2831,10 +2838,11 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     struct { uint32_t index; uint32_t phys_addr; uint32_t size; uint32_t channel; } v;
                     v.index = buffer.index;
                     v.phys_addr = buffer_phys_addr;
-                    v.size = state->width * state->height * 3 / 2;
+                    v.size = fs_size;
                     v.channel = channel;
                     (void)tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &v);
                 }
+                tx_isp_fs_enqueue_qbuf(channel, buffer.index, buffer_phys_addr, fs_size);
             }
         }
 
@@ -2945,21 +2953,39 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
         }
 
-        /* Binary Ninja DQBUF: Wait for frame completion with proper state checking */
-        pr_info("*** Channel %d: DQBUF waiting for frame completion (timeout=200ms) ***\n", channel);
-        ret = wait_event_interruptible_timeout(state->frame_wait,
-                                             state->frame_ready || !state->streaming,
-                                             msecs_to_jiffies(200)); // 200ms timeout like reference
-        pr_info("*** Channel %d: DQBUF wait returned %d ***\n", channel, ret);
-
-        if (ret == 0) {
-            pr_info("*** Channel %d: DQBUF timeout, generating frame ***\n", channel);
-            spin_lock_irqsave(&state->buffer_lock, flags);
-            state->frame_ready = true;
-            spin_unlock_irqrestore(&state->buffer_lock, flags);
-        } else if (ret < 0) {
-            pr_info("*** Channel %d: DQBUF interrupted: %d ***\n", channel, ret);
-            return ret;
+        /* First try to pop a completed FS frame */
+        {
+            u32 fs_index = 0, fs_phys = 0, fs_size = 0;
+            int fs_ret = tx_isp_fs_dequeue_done(channel, &fs_index, &fs_phys, &fs_size);
+            if (fs_ret == -EAGAIN) {
+                /* Wait for frame completion with proper state checking */
+                pr_info("*** Channel %d: DQBUF waiting for frame completion (timeout=200ms) ***\n", channel);
+                ret = wait_event_interruptible_timeout(state->frame_wait,
+                                                     state->frame_ready || !state->streaming,
+                                                     msecs_to_jiffies(200));
+                pr_info("*** Channel %d: DQBUF wait returned %d ***\n", channel, ret);
+                if (ret < 0)
+                    return ret;
+                /* Try FS dequeue again after wait */
+                fs_ret = tx_isp_fs_dequeue_done(channel, &fs_index, &fs_phys, &fs_size);
+            }
+            if (fs_ret == 0) {
+                /* We have a real completed frame from FS queue */
+                buffer.index = fs_index;
+                buffer.bytesused = fs_size;
+                buffer.flags |= 0x00000001; /* V4L2_BUF_FLAG_MAPPED or DONE-like marker */
+                state->sequence++;
+                pr_info("*** Channel %d: DQBUF pop FS done index=%u phys=0x%x size=%u ***\n",
+                        channel, fs_index, fs_phys, fs_size);
+            } else {
+                /* Fallback to legacy behavior below */
+                if (ret == 0) {
+                    /* If no FS frame and timeout occurred, mark one ready for legacy flow */
+                    spin_lock_irqsave(&state->buffer_lock, flags);
+                    state->frame_ready = true;
+                    spin_unlock_irqrestore(&state->buffer_lock, flags);
+                }
+            }
         }
 
         if (!state->streaming) {
@@ -2970,7 +2996,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         /* Binary Ninja __fill_v4l2_buffer implementation */
         spin_lock_irqsave(&state->buffer_lock, flags);
 
-        // Calculate buffer index like Binary Ninja reference
+        // Calculate buffer index like Binary Ninja reference (legacy fallback)
         if (state->buffer_count > 0) {
             buf_index = state->sequence % state->buffer_count;
         } else {
