@@ -313,15 +313,27 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 /* Binary Ninja: if (i_1[2] == *($a3_1 + 0x380)) */
                 /* Check if buffer address matches current frame register in EITHER VIC space */
                 if (vic_regs) {
-                    u32 current_frame_addr_p = readl(vic_regs + 0x380);
-                    u32 current_frame_addr_s = 0;
-                    if (vic_dev->vic_regs_secondary)
-                        current_frame_addr_s = readl(vic_dev->vic_regs_secondary + 0x380);
-                    /* SAFE: Extract buffer address from list entry (shared header) */
+                    /* Probe candidate current-address registers in primary and secondary spaces */
+                    u32 ca_p_380 = readl(vic_regs + 0x380);
+                    u32 ca_s_380 = 0;
+                    u32 ca_p_32c = readl(vic_regs + 0x32c);
+                    u32 ca_s_32c = 0;
+                    u32 ca_p_330 = readl(vic_regs + 0x330);
+                    u32 ca_s_330 = 0;
+                    if (vic_dev->vic_regs_secondary) {
+                        ca_s_380 = readl(vic_dev->vic_regs_secondary + 0x380);
+                        ca_s_32c = readl(vic_dev->vic_regs_secondary + 0x32c);
+                        ca_s_330 = readl(vic_dev->vic_regs_secondary + 0x330);
+                    }
+                    /* Extract buffer address from list entry */
                     struct vic_buffer_entry *entry = container_of(pos, struct vic_buffer_entry, list);
 
-                    if (entry->buffer_addr == current_frame_addr_p ||
-                        (current_frame_addr_s && entry->buffer_addr == current_frame_addr_s)) {
+                    if (entry->buffer_addr == ca_p_380 ||
+                        (ca_s_380 && entry->buffer_addr == ca_s_380) ||
+                        (ca_p_32c && entry->buffer_addr == ca_p_32c) ||
+                        (ca_s_32c && entry->buffer_addr == ca_s_32c) ||
+                        (ca_p_330 && entry->buffer_addr == ca_p_330) ||
+                        (ca_s_330 && entry->buffer_addr == ca_s_330)) {
                         match_found = 1;  /* $v0 = 1 */
                     }
                 }
@@ -341,12 +353,20 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             if (vic_regs) {
                 /* Diagnostics only: observe current control and slot state; do not rewrite 0x300 here */
                 u32 reg_val = readl(vic_regs + 0x300);
-                u32 cur_addr_p = readl(vic_regs + 0x380);
-                u32 cur_addr_s = 0;
-                if (vic_dev->vic_regs_secondary)
-                    cur_addr_s = readl(vic_dev->vic_regs_secondary + 0x380);
-                pr_info("*** VIC FRAME DONE: Observed VIC[0x300]=0x%x (CONTROL BITS: %s), CURR_ADDR(P)=0x%x CURR_ADDR(S)=0x%x ***\n",
-                        reg_val, (reg_val & 0x80000020) == 0x80000020 ? "PRESERVED" : "LOST", cur_addr_p, cur_addr_s);
+                u32 ca_p_380 = readl(vic_regs + 0x380);
+                u32 ca_s_380 = 0;
+                u32 ca_p_32c = readl(vic_regs + 0x32c);
+                u32 ca_s_32c = 0;
+                u32 ca_p_330 = readl(vic_regs + 0x330);
+                u32 ca_s_330 = 0;
+                if (vic_dev->vic_regs_secondary) {
+                    ca_s_380 = readl(vic_dev->vic_regs_secondary + 0x380);
+                    ca_s_32c = readl(vic_dev->vic_regs_secondary + 0x32c);
+                    ca_s_330 = readl(vic_dev->vic_regs_secondary + 0x330);
+                }
+                pr_info("*** VIC FRAME DONE: VIC[0x300]=0x%x (%s), CURR(P)[380]=0x%x [32c]=0x%x [330]=0x%x CURR(S)[380]=0x%x [32c]=0x%x [330]=0x%x ***\n",
+                        reg_val, (reg_val & 0x80000020) == 0x80000020 ? "PRESERVED" : "LOST",
+                        ca_p_380, ca_p_32c, ca_p_330, ca_s_380, ca_s_32c, ca_s_330);
                 pr_info("vic_framedone_irq_function: DONE_HEAD size=%d, high_bits=%d, match=%d\n",
                         buffer_index, high_bits, match_found);
                 /* Dump programmed slot addresses C6..CA */
