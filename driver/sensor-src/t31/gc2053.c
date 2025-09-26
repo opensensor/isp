@@ -1306,15 +1306,15 @@ int sensor_write(struct tx_isp_subdev *sd, unsigned char reg, unsigned char valu
 		return -ENODEV;
 	}
 	
-	ISP_WARNING("sensor_write: reg=0x%02x val=0x%02x, client=%p, adapter=%s, addr=0x%02x\n",
-	            reg, value, client, client->adapter->name, client->addr);
+	//ISP_WARNING("sensor_write: reg=0x%02x val=0x%02x, client=%p, adapter=%s, addr=0x%02x\n",
+	//            reg, value, client, client->adapter->name, client->addr);
 	
 	ret = private_i2c_transfer(client->adapter, &msg, 1);
 	if (ret > 0) {
 		ret = 0;
-		ISP_WARNING("sensor_write: reg=0x%02x val=0x%02x SUCCESS\n", reg, value);
+		//ISP_WARNING("sensor_write: reg=0x%02x val=0x%02x SUCCESS\n", reg, value);
 	} else {
-		ISP_ERROR("sensor_write: reg=0x%02x val=0x%02x FAILED ret=%d\n", reg, value, ret);
+		//ISP_ERROR("sensor_write: reg=0x%02x val=0x%02x FAILED ret=%d\n", reg, value, ret);
 	}
 
 	return ret;

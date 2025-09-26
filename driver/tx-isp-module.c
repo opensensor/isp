@@ -2177,11 +2177,34 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
 
     pr_debug("*** BINARY NINJA EXACT: Iterating through 16 subdevices at offset 0x38 ***\n");
 
+    /* BN: Activate all submodules before link_stream (1->2 state) */
+    if (enable == 1) {
+        struct tx_isp_subdev **s4 = subdevs_ptr;
+        int act_ret;
+        pr_info("*** tx_isp_video_link_stream: Activating all submodules before link_stream ***\n");
+        for (int ai = 0; ai != 0x10; ai++) {
+            struct tx_isp_subdev *asub = s4[ai];
+            if (!asub)
+                continue;
+            if (asub->ops && asub->ops->internal && asub->ops->internal->activate_module) {
+                act_ret = asub->ops->internal->activate_module(asub);
+                if (act_ret && act_ret != -ENOIOCTLCMD) {
+                    pr_info("tx_isp_video_link_stream: activate_module failed on subdev[%d]: %d\n", ai, act_ret);
+                    /* Conservative: continue, not fatal */
+                } else {
+                    pr_info("tx_isp_video_link_stream: activate_module OK on subdev[%d]\n", ai);
+                }
+			}
+        }
+        pr_info("*** tx_isp_video_link_stream: Activation pass complete ***\n");
+    }
+
     /* Binary Ninja: for (int32_t i = 0; i != 0x10; ) */
     for (i = 0; i != 0x10; i++) {
         struct tx_isp_subdev *subdev = subdevs_ptr[i];
 
         /* Binary Ninja: void* $a0 = *$s4 */
+
         if (subdev != 0) {
             /* Binary Ninja: void* $v0_3 = *(*($a0 + 0xc4) + 4) */
             if (subdev->ops && subdev->ops->video) {
@@ -2323,49 +2346,6 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
         return -EINVAL;
     }
 
-    /* BN better-control-flow pre-init sequence at STREAM ON */
-    if (enable == 1) {
-        int ret;
-        struct tx_isp_subdev *sd;
-        pr_info("*** tx_isp_video_s_stream: BCF pre-init ordering (CSI->VIC->CORE->SENSOR) ***\n");
-        /* CSI core->init(1) */
-        if (ourISPdev && ourISPdev->csi_dev) {
-            sd = &ourISPdev->csi_dev->sd;
-            if (sd->ops && sd->ops->core && sd->ops->core->init) {
-                ret = sd->ops->core->init(sd, 1);
-                if (ret && ret != -ENOIOCTLCMD)
-                    pr_info("BCF: CSI core->init ret=%d\n", ret);
-            }
-        }
-        /* VIC core->init(1) */
-        if (ourISPdev && ourISPdev->vic_dev) {
-            sd = &ourISPdev->vic_dev->sd;
-            if (sd->ops && sd->ops->core && sd->ops->core->init) {
-                ret = sd->ops->core->init(sd, 1);
-                if (ret && ret != -ENOIOCTLCMD)
-                    pr_info("BCF: VIC core->init ret=%d\n", ret);
-            }
-        }
-        /* CORE (isp-m0) core->init(1) */
-        if (ourISPdev) {
-            sd = &ourISPdev->sd;
-            if (sd->ops && sd->ops->core && sd->ops->core->init) {
-                ret = sd->ops->core->init(sd, 1);
-                if (ret && ret != -ENOIOCTLCMD)
-                    pr_info("BCF: CORE core->init ret=%d\n", ret);
-            }
-        }
-        /* SENSOR core->init(1) if present */
-        if (ourISPdev && ourISPdev->sensor) {
-            sd = &ourISPdev->sensor->sd;
-            if (sd->ops && sd->ops->core && sd->ops->core->init) {
-                ret = sd->ops->core->init(sd, 1);
-                if (ret && ret != -ENOIOCTLCMD)
-                    pr_info("BCF: SENSOR core->init ret=%d\n", ret);
-            }
-        }
-        pr_info("*** tx_isp_video_s_stream: BCF pre-init ordering complete ***\n");
-    }
 
     pr_debug("*** tx_isp_video_s_stream: Processing %s request for subdevs ***\n",
             enable ? "ENABLE" : "DISABLE");
