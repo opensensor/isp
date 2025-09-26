@@ -1249,6 +1249,8 @@ struct frame_channel_device {
 
     /* VBM integration */
     void *vbm_pool_ptr;                  /* Pointer to VBM pool (kernel address), if registered */
+    uint32_t vbm_base_phys;              /* Legacy base phys provided via TX_ISP_SET_BUF */
+    uint32_t vbm_frame_size;             /* Per-frame size provided/derived from libimp */
 };
 
 static struct frame_channel_device frame_channels[4]; /* Support up to 4 video channels */
@@ -2873,22 +2875,23 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
                     }
                 }
-                /* Fallback: old behavior using rmem base + index * size */
+                /* Fallback: prefer recorded VBM base/size from TX_ISP_SET_BUF; else rmem */
                 {
-                    int buffer_size = state->width * state->height * 2;
-                    uint32_t buffer_phys_addr = 0x6300000 + (buffer.index * buffer_size);
-                    pr_warn("*** Channel %d: QBUF - Could not deduce phys; using rmem fallback 0x%x ***\n",
-                            channel, buffer_phys_addr);
+                    uint32_t base = fcd->vbm_base_phys ? fcd->vbm_base_phys : 0x06300000;
+                    uint32_t step = fcd->vbm_frame_size ? fcd->vbm_frame_size : fs_size;
+                    uint32_t buffer_phys_addr = base + (buffer.index * step);
+                    pr_warn("*** Channel %d: QBUF - Using fallback phys=0x%x (base=0x%x step=%u) ***\n",
+                            channel, buffer_phys_addr, base, step);
                     if (ourISPdev && ourISPdev->vic_dev) {
                         struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
                         struct { uint32_t index; uint32_t phys_addr; uint32_t size; uint32_t channel; } v;
                         v.index = buffer.index;
                         v.phys_addr = buffer_phys_addr;
-                        v.size = fs_size;
+                        v.size = step; /* best effort */
                         v.channel = channel;
                         (void)tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &v);
                     }
-                    tx_isp_fs_enqueue_qbuf(channel, buffer.index, buffer_phys_addr, fs_size);
+                    tx_isp_fs_enqueue_qbuf(channel, buffer.index, buffer_phys_addr, step);
                 }
             }
         }
@@ -4279,11 +4282,14 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -EFAULT;
 
         /* Legacy TX_ISP_SET_BUF call. In VBM/V4L2 mode the application allocates
-         * and passes per-buffer physical addresses via VIDIOC_QBUF. Do NOT program
-         * any hardware here to avoid overriding the real VBM addresses.
+         * and passes per-buffer physical addresses via VIDIOC_QBUF. We will not
+         * program hardware here, but we will STORE the base and per-frame size so
+         * QBUF fallbacks can use real addresses rather than hardcoded rmem.
          */
-        pr_info("TX_ISP_SET_BUF(legacy) received addr=0x%x size=%d - ignored (VBM/V4L2 mode uses QBUF)\n",
-                buf_setup.addr, buf_setup.size);
+        fcd->vbm_base_phys = buf_setup.addr;
+        fcd->vbm_frame_size = buf_setup.size;
+        pr_info("TX_ISP_SET_BUF(legacy) recorded base=0x%x frame_size=%u for channel %d\n",
+                fcd->vbm_base_phys, fcd->vbm_frame_size, channel);
         return 0;
     }
     case 0x800856d6: { // TX_ISP_WDR_SET_BUF - WDR buffer setup
