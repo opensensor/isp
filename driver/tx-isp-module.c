@@ -4423,22 +4423,29 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 uint32_t base = buf_setup.addr;
                 uint32_t step = buf_setup.size;
                 pr_info("*** TX_ISP_SET_BUF ch0: Pre-program VIC slots base=0x%x step=%u ***\n", base, step);
-					/* Compute step from ACTIVE dims (NV12: stride*H*3/2) to match encoder */
-					{
-						uint32_t w = (ourISPdev && ourISPdev->sensor_width) ? ourISPdev->sensor_width : 1920;
-						uint32_t h = (ourISPdev && ourISPdev->sensor_height) ? ourISPdev->sensor_height : 1080;
-						uint32_t stride_y = (w + 15) & ~15; /* Align to 16 like VIC */
-						uint32_t y_size = stride_y * h;
-						uint32_t step_vic = y_size + (y_size >> 1); /* NV12: Y + Y/2 */
-						pr_info("*** TX_ISP_SET_BUF ch0: Using ACTIVE dims %ux%u -> stride=%u, computed step=%u (setbuf step=%u) ***\n",
-								w, h, stride_y, step_vic, step);
-						step = step_vic;
-					}
+                
+                /* CRITICAL FIX: Use VIC hardware stride calculation to match current address register */
+                /* Binary Ninja vic_pipo_mdma_enable shows: stride = width << 1, step = stride * height * 3/2 */
+                {
+                    uint32_t w = 1920;  /* VIC width */
+                    uint32_t h = 1080; /* VIC height */
+                    uint32_t vic_stride = w << 1;  /* Binary Ninja: $v1_1 = $v1 << 1 */
+                    uint32_t y_size = vic_stride * h;
+                    uint32_t step_vic = y_size + (y_size >> 1); /* NV12: Y + Y/2 */
+                    pr_info("*** TX_ISP_SET_BUF ch0: Using VIC hardware stride calculation: w=%u h=%u vic_stride=%u step=%u ***\n",
+                            w, h, vic_stride, step_vic);
+                    step = step_vic;
+                }
 
                 v.channel = 0;
                 v.size = step;
-                v.index = 0; v.phys_addr = base;        tx_isp_send_event_to_remote(&vic_dev_prog->sd, 0x3000008, &v);
-                v.index = 1; v.phys_addr = base + step; tx_isp_send_event_to_remote(&vic_dev_prog->sd, 0x3000008, &v);
+                /* Program all 5 VIC slots to ensure CA is not empty */
+                v.index = 0; v.phys_addr = base;            tx_isp_send_event_to_remote(&vic_dev_prog->sd, 0x3000008, &v);
+                v.index = 1; v.phys_addr = base + step;     tx_isp_send_event_to_remote(&vic_dev_prog->sd, 0x3000008, &v);
+                v.index = 2; v.phys_addr = base + 2*step;   tx_isp_send_event_to_remote(&vic_dev_prog->sd, 0x3000008, &v);
+                v.index = 3; v.phys_addr = base + 3*step;   tx_isp_send_event_to_remote(&vic_dev_prog->sd, 0x3000008, &v);
+                v.index = 4; v.phys_addr = base + 4*step;   tx_isp_send_event_to_remote(&vic_dev_prog->sd, 0x3000008, &v);
+                pr_info("*** TX_ISP_SET_BUF ch0: Programmed all 5 VIC slots (C6-CA) with VIC stride calculation ***\n");
             }
         }
         return 0;
