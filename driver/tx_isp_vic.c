@@ -2350,15 +2350,16 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
             (width << 16) | height, width, height);
 
     /* Binary Ninja EXACT: int32_t $v1_1 = $v1 << 1 */
-    /* CRITICAL FIX: Reference driver uses width << 1 for NV12 stride! */
-    stride = width << 1;  /* Binary Ninja exact: width * 2 for NV12 stride */
+    /* CRITICAL FIX: For NV12 output, Y stride = width, UV stride = width */
+    /* The << 1 might be for input RAW data, but output is NV12 */
+    stride = width;  /* NV12 Y plane: one byte per pixel width */
     writel(stride, vic_base + 0x310); /* Y stride */
     wmb();
-    pr_info("vic_pipo_mdma_enable: reg 0x310 = %d (NV12 Y stride = width << 1)\n", stride);
+    pr_info("vic_pipo_mdma_enable: reg 0x310 = %d (NV12 Y stride = width)\n", stride);
 
-    writel(stride, vic_base + 0x314); /* UV stride */
+    writel(stride, vic_base + 0x314); /* UV stride (same as Y for NV12) */
     wmb();
-    pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (NV12 UV stride = width << 1)\n", stride);
+    pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (NV12 UV stride = width)\n", stride);
 
     /* Ensure NV12 processing/color pipeline is enabled after MDMA setup */
     writel(0xeb8080, vic_base + 0xc0);
