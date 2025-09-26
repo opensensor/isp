@@ -2842,15 +2842,15 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 }
                 chosen_size = stride * h * 3 / 2;
 
-                /* Program VIC NV12 strides immediately for the active channel 0 only */
-                if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
+                /* Do NOT program VIC strides for channel 0 here; vic_pipo_mdma_enable will set 1920x1080 */
+                if (channel != 0 && ourISPdev && ourISPdev->vic_dev) {
                     struct tx_isp_vic_device *vd = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
                     if (vd->vic_regs) {
                         writel(stride, vd->vic_regs + 0x310); /* Y stride */
                         wmb();
                         writel(stride, vd->vic_regs + 0x314); /* UV stride */
                         wmb();
-                        pr_info("*** VIC STRIDE: Programmed NV12 stride=%u (H=%u, size=%u) ***\n", stride, h, chosen_size);
+                        pr_info("*** VIC STRIDE (ch%u): Programmed NV12 stride=%u (H=%u, size=%u) ***\n", channel, stride, h, chosen_size);
                     }
                 }
             }
