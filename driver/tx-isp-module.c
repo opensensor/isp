@@ -6217,7 +6217,7 @@ static int tx_isp_vic_notify(struct tx_isp_vic_device *vic_dev, unsigned int not
             pr_warn("tx_isp_vic_notify: QBUF index %u out of range\n", v->index);
             return -EINVAL;
         }
-        u32 reg_offset = (v->index + 0xe0) << 2; /* 0x380 + 4*index */
+        u32 reg_offset = (v->index + 0xc6) << 2; /* 0x318 + 4*index */
         writel(v->phys_addr, vic_dev->vic_regs + reg_offset);
         wmb();
         pr_info("*** VIC QBUF: slot[%u] addr=0x%x -> VIC[0x%x] size=%u ch=%u ***\n",
