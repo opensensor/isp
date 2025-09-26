@@ -631,7 +631,7 @@ static int private_reset_tx_isp_module(int arg);
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
 
 /* CRITICAL: Forward declaration for REAL CSI hardware implementation from tx_isp_csi.c */
-extern int csi_video_s_stream(struct tx_isp_subdev *sd, int enable);
+int csi_video_s_stream(struct tx_isp_subdev *sd, int enable);
 
 /* Forward declarations for initialization functions */
 extern int tx_isp_vic_platform_init(void);
@@ -1643,51 +1643,6 @@ err_release_mem:
 err_free_dev:
     kfree(csi_dev);
     return ret;
-}
-
-/* csi_video_s_stream - Binary Ninja exact implementation */
-static int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
-{
-    struct tx_isp_csi_device *csi_dev;
-    struct tx_isp_sensor_attribute *sensor_attr;
-    int interface_type;
-    int new_state;
-    struct tx_isp_dev *isp_dev;
-
-    if (!sd) {
-        pr_err("csi_video_s_stream: VIC failed to config DVP SONY mode!(10bits-sensor)\n");
-        return -EINVAL;
-    }
-
-    /* Cast isp pointer properly */
-    isp_dev = (struct tx_isp_dev *)sd->isp;
-    if (!isp_dev) {
-        pr_err("csi_video_s_stream: Invalid ISP device\n");
-        return -EINVAL;
-    }
-
-    /* Binary Ninja: if (*(*(arg1 + 0x110) + 0x14) != 1) return 0 */
-    sensor_attr = isp_dev->sensor ? isp_dev->sensor->video.attr : NULL;
-    if (!sensor_attr || sensor_attr->dbus_type != 1) {
-        pr_debug("csi_video_s_stream: Not DVP interface, skipping\n");
-        return 0;
-    }
-
-    csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
-    if (!csi_dev) {
-        return -EINVAL;
-    }
-
-    /* Binary Ninja: int32_t $v0_4 = 4; if (arg2 == 0) $v0_4 = 3 */
-    new_state = enable ? 4 : 3;
-
-    /* Binary Ninja: *(arg1 + 0x128) = $v0_4 */
-    csi_dev->state = new_state;
-
-    pr_info("csi_video_s_stream: %s, state=%d\n",
-            enable ? "ENABLE" : "DISABLE", csi_dev->state);
-
-    return 0;
 }
 
 /* CSI video streaming control - Updated to use standalone methods */
