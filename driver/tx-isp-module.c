@@ -2854,10 +2854,11 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     struct vbm_pool *vp = (struct vbm_pool *)fcd->vbm_pool_ptr;
                     uint32_t vbm_phys = 0;
                     uint32_t vbm_size = fs_size;
-                    if (buffer.index < vp->frame_count) {
-                        vbm_phys = vp->frames[buffer.index].phys_addr;
-                        if (vp->frames[buffer.index].size)
-                            vbm_size = vp->frames[buffer.index].size;
+                    if (state->buffer_count > 0 && buffer.index < state->buffer_count) {
+                        const struct vbm_frame *vf = &vp->frames[buffer.index];
+                        vbm_phys = vf->phys_addr;
+                        if (vf->size)
+                            vbm_size = vf->size;
                     }
                     if (vbm_phys >= 0x06000000 && vbm_phys < 0x09000000) {
                         pr_info("*** Channel %d: QBUF - Using VBM pool phys=0x%x (index=%u, size=%u) ***\n",
