@@ -3024,15 +3024,15 @@ int tx_isp_core_probe(struct platform_device *pdev)
     /* CRITICAL: Initialize the core subdev with proper operations */
     pr_info("*** tx_isp_core_probe: Initializing core subdev with operations ***\n");
 
-    /* Set up the core subdev operations with our implemented functions */
-    core_subdev_core_ops.init = NULL;  /* Will be set when needed */
-    core_subdev_core_ops.reset = NULL; /* Will be set when needed */
-    core_subdev_core_ops.ioctl = NULL; /* Will be set when needed */
+    /* Set up the core subdev operations with our implemented functions (BN MCP exact wiring) */
+    core_subdev_core_ops.init = core_subdev_core_init_bridge;
+    core_subdev_core_ops.reset = NULL;
+    core_subdev_core_ops.ioctl = NULL;
 
-    /* Update the core subdev ops structure */
-    core_subdev_ops.core = &core_subdev_core_ops;
-    core_subdev_ops.video = &core_subdev_video_ops;
-    core_subdev_ops.pad = &core_pad_ops;
+    /* Ensure the ops structure used for registration includes the core ops */
+    core_subdev_ops_full.core = &core_subdev_core_ops;
+    core_subdev_ops_full.video = &core_subdev_video_ops;
+    core_subdev_ops_full.pad = &core_pad_ops;
 
     /* Initialize the subdev that's already the first member of tx_isp_dev */
     isp_dev->sd.isp = isp_dev;  /* Set back-reference */
@@ -3042,12 +3042,12 @@ int tx_isp_core_probe(struct platform_device *pdev)
     /* Initialize subdev synchronization */
     mutex_init(&isp_dev->sd.lock);
 
-    pr_info("*** tx_isp_core_probe: Core subdev initialized with ops=%p ***\n", &core_subdev_ops);
+    pr_info("*** tx_isp_core_probe: Core subdev initialized with ops=%p ***\n", &core_subdev_ops_full);
     pr_info("***   - Core ops: start=%p, stop=%p, set_format=%p ***\n",
             tx_isp_core_start, tx_isp_core_stop, tx_isp_core_set_format);
 
     /* Binary Ninja: if (tx_isp_subdev_init(arg1, $v0, &core_subdev_ops) == 0) */
-    if (tx_isp_subdev_init(pdev, &isp_dev->sd, &core_subdev_ops) == 0) {
+    if (tx_isp_subdev_init(pdev, &isp_dev->sd, &core_subdev_ops_full) == 0) {
         pr_info("*** tx_isp_core_probe: Subdev init SUCCESS ***\n");
 
         /* SAFE: Channel configuration using proper struct access */
