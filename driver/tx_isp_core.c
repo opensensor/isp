@@ -314,17 +314,9 @@ int tx_isp_core_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *confi
         tisp_dmsc_set_cfa_from_mbus(code, hflip, vflip);
         pr_debug("tx_isp_core_set_format: DMSC CFA programmed from mbus=0x%x, h=%d, v=%d\n", code, hflip, vflip);
         {
-#ifndef FORCE_GC2053_BAYER_MODE
-#define FORCE_GC2053_BAYER_MODE 3 /* Trial: Force Bayer to GBRG */
-#endif
             u32 bayer = mbus_to_bayer_mode(code);
-#if (FORCE_GC2053_BAYER_MODE >= 0)
-            bayer = FORCE_GC2053_BAYER_MODE;
-            pr_debug("tx_isp_core_set_format: FORCED Bayer reg[0x8]=%u (override)\n", bayer);
-#else
-            pr_debug("tx_isp_core_set_format: Bayer reg[0x8]=%u from mbus=0x%x\n", bayer, code);
-#endif
             system_reg_write(8, bayer);
+            pr_info("tx_isp_core_set_format: Bayer reg[0x8]=%u from mbus=0x%x\n", bayer, code);
             /* Minimal ISP pipeline bring-up per reference-standardize */
             system_reg_write(0x14, 0x2b);      /* RAW10 code */
             system_reg_write(0x18, 0x0a0a);    /* 10-bit depth */
@@ -1377,17 +1369,9 @@ int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
         tisp_dmsc_set_cfa_from_mbus(code, hflip, vflip);
         pr_debug("tx_isp_configure_format_propagation: DMSC CFA programmed from mbus=0x%x, h=%d, v=%d\n", code, hflip, vflip);
         {
-#ifndef FORCE_GC2053_BAYER_MODE
-#define FORCE_GC2053_BAYER_MODE 3 /* Trial: Force Bayer to GBRG */
-#endif
             u32 bayer = mbus_to_bayer_mode(code);
-#if (FORCE_GC2053_BAYER_MODE >= 0)
-            bayer = FORCE_GC2053_BAYER_MODE;
-            pr_debug("tx_isp_configure_format_propagation: FORCED Bayer reg[0x8]=%u (override)\n", bayer);
-#else
-            pr_debug("tx_isp_configure_format_propagation: Bayer reg[0x8]=%u from mbus=0x%x\n", bayer, code);
-#endif
             system_reg_write(8, bayer);
+            pr_info("tx_isp_configure_format_propagation: Bayer reg[0x8]=%u from mbus=0x%x\n", bayer, code);
             /* Minimal ISP pipeline bring-up per reference-standardize */
             system_reg_write(0x14, 0x2b);      /* RAW10 code */
             system_reg_write(0x18, 0x0a0a);    /* 10-bit depth */
