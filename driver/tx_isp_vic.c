@@ -2415,7 +2415,7 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
         return -EINVAL;
     }
 
-    pr_debug("VIC EVENT: cmd=0x%x, data=%p\n", cmd, data);
+    pr_info("VIC EVENT: cmd=0x%x, data=%p\n", cmd, data);
 
     switch (cmd) {
         case 0x3000008: /* QBUF event */
@@ -3051,16 +3051,16 @@ int tx_isp_vic_remove(struct platform_device *pdev)
     return 0;
 }
 /* Forward declarations for callback functions referenced in pipo */
-static int ispvic_frame_channel_qbuf(void *arg1, void *arg2);
-static int ispvic_frame_channel_clearbuf(void);
+int ispvic_frame_channel_qbuf(void *arg1, void *arg2);
+int ispvic_frame_channel_clearbuf(void);
 
 /* ispvic_frame_channel_qbuf - FIXED: Handle event-based QBUF calls with pending buffer queue */
-static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
+int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 {
     struct tx_isp_vic_device *vic_dev = NULL;
     unsigned long var_18 = 0;
 
-    pr_debug("ispvic_frame_channel_qbuf: event-based QBUF\n");
+    pr_info("ispvic_frame_channel_qbuf: event-based QBUF\n");
 
     /* SAFE: Use global ourISPdev reference instead of unsafe pointer arithmetic */
     if (!ourISPdev || !ourISPdev->vic_dev) {
@@ -3089,7 +3089,7 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
             pr_err("VIC QBUF: buffer_addr is 0 - refusing to queue (no dummy addresses)\n");
         } else {
             list_add_tail(&entry->list, &vic_dev->queue_head);
-            pr_debug("VIC QBUF: queued entry %p (addr=0x%x, idx=%u)\n",
+            pr_info("VIC QBUF: queued entry %p (addr=0x%x, idx=%u)\n",
                     entry, entry->buffer_addr, entry->buffer_index);
         }
     } else {
@@ -3145,7 +3145,7 @@ unlock_exit:
 }
 
 /* ISPVIC Frame Channel Clear Buffer - placeholder matching Binary Ninja reference */
-static int ispvic_frame_channel_clearbuf(void)
+int ispvic_frame_channel_clearbuf(void)
 {
     pr_info("ispvic_frame_channel_clearbuf called\n");
     return 0;
