@@ -4335,6 +4335,19 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             if (fcd_local)
                 ch_local = fcd_local->channel_num;
 
+            /* If this is channel 0, proactively program VIC slots with base/step now. */
+            if (ch_local == 0 && ourISPdev && ourISPdev->vic_dev && fcd_local->vbm_base_phys && fcd_local->vbm_frame_size) {
+                struct tx_isp_vic_device *vic_dev_prog = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                struct { uint32_t index; uint32_t phys_addr; uint32_t size; uint32_t channel; } v;
+                uint32_t base = fcd_local->vbm_base_phys;
+                uint32_t step = fcd_local->vbm_frame_size;
+                pr_info("*** TX_ISP_SET_BUF ch0: Pre-program VIC slots base=0x%x step=%u ***\n", base, step);
+                v.channel = 0;
+                v.size = step;
+                v.index = 0; v.phys_addr = base;       tx_isp_send_event_to_remote(&vic_dev_prog->sd, 0x3000008, &v);
+                v.index = 1; v.phys_addr = base+step; tx_isp_send_event_to_remote(&vic_dev_prog->sd, 0x3000008, &v);
+            }
+
             /* Legacy TX_ISP_SET_BUF call. In VBM/V4L2 mode the application allocates
              * and passes per-buffer physical addresses via VIDIOC_QBUF. We will not
              * program hardware here, but we will STORE the base and per-frame size so
