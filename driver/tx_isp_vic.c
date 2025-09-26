@@ -25,7 +25,9 @@
 #include "../include/tx_isp_vic_buffer.h"
 /* Frame done notifier from tx_isp_frame_done.c */
 extern void isp_frame_done_wakeup(void);
-
+/* Forward declarations for callback functions referenced in pipo */
+int ispvic_frame_channel_qbuf(void *arg1, void *arg2);
+int ispvic_frame_channel_clearbuf(void);
 int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
@@ -3050,9 +3052,7 @@ int tx_isp_vic_remove(struct platform_device *pdev)
 
     return 0;
 }
-/* Forward declarations for callback functions referenced in pipo */
-int ispvic_frame_channel_qbuf(void *arg1, void *arg2);
-int ispvic_frame_channel_clearbuf(void);
+
 
 /* ispvic_frame_channel_qbuf - FIXED: Handle event-based QBUF calls with pending buffer queue */
 int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
