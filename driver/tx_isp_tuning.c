@@ -1748,13 +1748,6 @@ int tisp_ae0_process(void)
 /* ISP tuning file loading function - based on Binary Ninja tiziano_load_parameters */
 static int load_isp_tuning_file(const char *filename)
 {
-	return 0;
-}
-
-/* tisp_init - Binary Ninja EXACT implementation - THE MISSING HARDWARE INITIALIZER */
-/* ISP tuning file loading function - based on Binary Ninja tiziano_load_parameters */
-static int load_isp_tuning_file_real(const char *filename)
-{
     struct file *fp;
     mm_segment_t old_fs;
     loff_t pos = 0;
@@ -1890,6 +1883,19 @@ int tisp_init(void *sensor_info, char *param_name)
     pr_info("tisp_init: Using sensor parameters - %dx%d@%d, mode=%d\n",
             sensor_params.width, sensor_params.height, sensor_params.fps, sensor_params.mode);
 
+    /* Load standard tuning file (day/night parameters) */
+    if (load_isp_tuning_file("/etc/sensor/gc2053-t31.bin") != 0) {
+        pr_warn("*** tisp_init: Failed to load standard tuning file - using defaults ***\n");
+    } else {
+        pr_info("*** tisp_init: Standard tuning parameters loaded successfully ***\n");
+    }
+
+    /* Load custom tuning file (custom parameters) */
+    if (load_isp_tuning_file("/etc/sensor/gc2053-cust-t31.bin") != 0) {
+        pr_warn("*** tisp_init: Failed to load custom tuning file - using defaults ***\n");
+    } else {
+        pr_info("*** tisp_init: Custom tuning parameters loaded successfully ***\n");
+    }
     /* Binary Ninja: system_reg_write(4, $v0_4 << 0x10 | arg1[1]) - Basic ISP config */
     system_reg_write(0x4, (sensor_params.width << 16) | sensor_params.height);
 

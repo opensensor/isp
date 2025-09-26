@@ -2914,7 +2914,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 			if (channel == 0) {
 				if (fcd && fcd->vbm_base_phys && fcd->vbm_frame_size) {
 					chosen_phys = fcd->vbm_base_phys + buffer.index * fcd->vbm_frame_size;
-					chosen_size = fcd->vbm_frame_size;
+					/* Keep chosen_size derived from stride/length to match NV12 plane writes */
 					pr_info("*** Channel 0: QBUF - Forcing SET_BUF phys=0x%x (base=0x%x step=%u index=%u) ***\n",
 							chosen_phys, fcd->vbm_base_phys, fcd->vbm_frame_size, buffer.index);
 				} else if (g_setbuf_base[0] && g_setbuf_step[0]) {
@@ -2928,6 +2928,25 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 						g_setbuf_base[0], g_setbuf_step[0], chosen_phys);
 				}
 			}
+
+				/* Adjust ch0 phys using current VIC stride/height to match encoder bank exactly */
+				if (channel == 0 && ( (fcd && fcd->vbm_base_phys) || g_setbuf_base[0] ) && ourISPdev && ourISPdev->vic_dev) {
+					struct tx_isp_vic_device *vic_dev_dbg = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+					if (vic_dev_dbg && vic_dev_dbg->vic_regs) {
+						uint32_t stride_y = readl(vic_dev_dbg->vic_regs + 0x310);
+						uint32_t h_vic = vic_dev_dbg->height ? vic_dev_dbg->height : 1080;
+						uint32_t y_size = stride_y * h_vic;
+						uint32_t step_vic = y_size + (y_size >> 1); /* NV12: Y + Y/2 */
+						uint32_t base = (fcd && fcd->vbm_base_phys) ? fcd->vbm_base_phys : g_setbuf_base[0];
+						uint32_t phys_adj = base + buffer.index * step_vic;
+						if (phys_adj != chosen_phys) {
+							pr_info("*** Channel 0: QBUF - Adjusted phys by VIC stride: old=0x%x -> new=0x%x (base=0x%x stride=%u h=%u step=%u idx=%u) ***\n",
+									chosen_phys, phys_adj, base, stride_y, h_vic, step_vic, buffer.index);
+							chosen_phys = phys_adj;
+						}
+					}
+				}
+
 
             /* Program VIC only for channel 0 NV12 path to avoid clobbering with substream (ch1) buffers. */
             if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
@@ -4408,6 +4427,17 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 uint32_t base = buf_setup.addr;
                 uint32_t step = buf_setup.size;
                 pr_info("*** TX_ISP_SET_BUF ch0: Pre-program VIC slots base=0x%x step=%u ***\n", base, step);
+					/* Compute step from current VIC stride/height to ensure exact bank alignment */
+					if (vic_dev_prog && vic_dev_prog->vic_regs) {
+						uint32_t stride_y = readl(vic_dev_prog->vic_regs + 0x310);
+						uint32_t h_vic = vic_dev_prog->height ? vic_dev_prog->height : 1080;
+						uint32_t y_size = stride_y * h_vic;
+						uint32_t step_vic = y_size + (y_size >> 1); /* NV12: Y + Y/2 */
+						pr_info("*** TX_ISP_SET_BUF ch0: VIC stride=%u height=%u -> computed step=%u (setbuf step=%u) ***\n",
+								stride_y, h_vic, step_vic, step);
+						step = step_vic;
+					}
+
                 v.channel = 0;
                 v.size = step;
                 v.index = 0; v.phys_addr = base;        tx_isp_send_event_to_remote(&vic_dev_prog->sd, 0x3000008, &v);
