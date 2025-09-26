@@ -3153,35 +3153,10 @@ int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
             goto unlock_exit;
         }
 
-        /* Adjust buffer address to match encoder bank using current VIC stride/height */
-        if (vic_dev->vic_regs) {
-            u32 stride_y = readl(vic_dev->vic_regs + 0x310);
-            u32 h_vic = vic_dev->height ? vic_dev->height : 1080;
-            u32 y_size = stride_y * h_vic;
-            u32 step_vic = y_size + (y_size >> 1); /* NV12: Y + Y/2 */
-            /* Derive base from currently programmed slots (min non-zero) */
-            u32 s0 = readl(vic_dev->vic_regs + (0xc6u<<2));
-            u32 s1 = readl(vic_dev->vic_regs + (0xc7u<<2));
-            u32 s2 = readl(vic_dev->vic_regs + (0xc8u<<2));
-            u32 s3 = readl(vic_dev->vic_regs + (0xc9u<<2));
-            u32 s4 = readl(vic_dev->vic_regs + (0xcau<<2));
-            u32 base = 0xffffffff;
-            if (s0) base = min(base, s0);
-            if (s1) base = min(base, s1);
-            if (s2) base = min(base, s2);
-            if (s3) base = min(base, s3);
-            if (s4) base = min(base, s4);
-            if (base != 0xffffffff && base >= 0x06000000 && base < 0x09000000) {
-                u32 adj = base + entry->buffer_index * step_vic;
-                if (adj != buffer_addr) {
-                    pr_info("VIC QBUF: Adjusted phys by VIC stride: 0x%x -> 0x%x (base=0x%x stride=%u h=%u step=%u idx=%u)\n",
-                            buffer_addr, adj, base, stride_y, h_vic, step_vic, entry->buffer_index);
-                    buffer_addr = adj;
-                }
-            }
-        }
+        /* Use the address chosen upstream (VBM/SET_BUF path); do not adjust here */
 
-        buffer_index = vic_dev->active_buffer_count % 5;  /* VIC has 5 buffer slots */
+        /* Program slot index based on buffer index to keep bank alignment with encoder */
+        buffer_index = entry->buffer_index % 5;  /* VIC has 5 buffer slots */
 
         if (vic_dev->vic_regs) {
             uint32_t reg_offset = (buffer_index + 0xc6) << 2;
