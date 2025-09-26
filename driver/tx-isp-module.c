@@ -4282,15 +4282,29 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         if (copy_from_user(&buf_setup, argp, sizeof(buf_setup)))
             return -EFAULT;
 
-        /* Legacy TX_ISP_SET_BUF call. In VBM/V4L2 mode the application allocates
-         * and passes per-buffer physical addresses via VIDIOC_QBUF. We will not
-         * program hardware here, but we will STORE the base and per-frame size so
-         * QBUF fallbacks can use real addresses rather than hardcoded rmem.
-         */
-        fcd->vbm_base_phys = buf_setup.addr;
-        fcd->vbm_frame_size = buf_setup.size;
-        pr_info("TX_ISP_SET_BUF(legacy) recorded base=0x%x frame_size=%u for channel %d\n",
-                fcd->vbm_base_phys, fcd->vbm_frame_size, channel);
+        /* Resolve local frame channel context safely */
+        {
+            struct frame_channel_device *fcd_local = NULL;
+            int ch_local = -1;
+            if (file)
+                fcd_local = (struct frame_channel_device *)file->private_data;
+            if (fcd_local)
+                ch_local = fcd_local->channel_num;
+
+            /* Legacy TX_ISP_SET_BUF call. In VBM/V4L2 mode the application allocates
+             * and passes per-buffer physical addresses via VIDIOC_QBUF. We will not
+             * program hardware here, but we will STORE the base and per-frame size so
+             * QBUF fallbacks can use real addresses rather than hardcoded rmem.
+             */
+            if (fcd_local) {
+                fcd_local->vbm_base_phys = buf_setup.addr;
+                fcd_local->vbm_frame_size = buf_setup.size;
+                pr_info("TX_ISP_SET_BUF(legacy) recorded base=0x%x frame_size=%u for channel %d\n",
+                        fcd_local->vbm_base_phys, fcd_local->vbm_frame_size, ch_local);
+            } else {
+                pr_info("TX_ISP_SET_BUF(legacy) received but channel context unavailable\n");
+            }
+        }
         return 0;
     }
     case 0x800856d6: { // TX_ISP_WDR_SET_BUF - WDR buffer setup
