@@ -807,6 +807,7 @@ static struct tx_isp_subdev_core_ops csi_core_ops = {
 /* Define the video operations */
 static struct tx_isp_subdev_video_ops csi_video_ops = {
     .s_stream = csi_video_s_stream,
+    .link_stream = csi_video_s_stream,
 };
 
 /* Define the sensor operations */

@@ -78,6 +78,7 @@ static struct tx_isp_subdev *registered_sensor_subdev = NULL;
 static DEFINE_MUTEX(sensor_register_mutex);
 static void destroy_frame_channel_devices(void);
 int __init tx_isp_subdev_platform_init(void);
+
 void __exit tx_isp_subdev_platform_exit(void);
 int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
 void isp_process_frame_statistics(struct tx_isp_dev *dev);
@@ -2310,6 +2311,50 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
     if (!is_valid_kernel_pointer(subdevs_ptr)) {
         pr_debug("tx_isp_video_s_stream: Invalid subdevs array pointer at dev+0x38: %p\n", subdevs_ptr);
         return -EINVAL;
+    }
+
+    /* BN better-control-flow pre-init sequence at STREAM ON */
+    if (enable == 1) {
+        int ret;
+        struct tx_isp_subdev *sd;
+        pr_info("*** tx_isp_video_s_stream: BCF pre-init ordering (CSI->VIC->CORE->SENSOR) ***\n");
+        /* CSI core->init(1) */
+        if (ourISPdev && ourISPdev->csi_dev) {
+            sd = &ourISPdev->csi_dev->sd;
+            if (sd->ops && sd->ops->core && sd->ops->core->init) {
+                ret = sd->ops->core->init(sd, 1);
+                if (ret && ret != -ENOIOCTLCMD)
+                    pr_info("BCF: CSI core->init ret=%d\n", ret);
+            }
+        }
+        /* VIC core->init(1) */
+        if (ourISPdev && ourISPdev->vic_dev) {
+            sd = &ourISPdev->vic_dev->sd;
+            if (sd->ops && sd->ops->core && sd->ops->core->init) {
+                ret = sd->ops->core->init(sd, 1);
+                if (ret && ret != -ENOIOCTLCMD)
+                    pr_info("BCF: VIC core->init ret=%d\n", ret);
+            }
+        }
+        /* CORE (isp-m0) core->init(1) */
+        if (ourISPdev) {
+            sd = &ourISPdev->sd;
+            if (sd->ops && sd->ops->core && sd->ops->core->init) {
+                ret = sd->ops->core->init(sd, 1);
+                if (ret && ret != -ENOIOCTLCMD)
+                    pr_info("BCF: CORE core->init ret=%d\n", ret);
+            }
+        }
+        /* SENSOR core->init(1) if present */
+        if (ourISPdev && ourISPdev->sensor) {
+            sd = &ourISPdev->sensor->sd;
+            if (sd->ops && sd->ops->core && sd->ops->core->init) {
+                ret = sd->ops->core->init(sd, 1);
+                if (ret && ret != -ENOIOCTLCMD)
+                    pr_info("BCF: SENSOR core->init ret=%d\n", ret);
+            }
+        }
+        pr_info("*** tx_isp_video_s_stream: BCF pre-init ordering complete ***\n");
     }
 
     pr_debug("*** tx_isp_video_s_stream: Processing %s request for subdevs ***\n",
