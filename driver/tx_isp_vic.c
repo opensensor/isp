@@ -2370,6 +2370,15 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     /* CRITICAL FIX: Reference driver uses width << 1 for both Y and UV strides! */
     /* This is the EXACT formula from Binary Ninja decompilation */
     stride = width << 1;  /* Binary Ninja: $v1_1 = $v1 << 1 */
+    
+    /* CRITICAL: Log stride calculation details */
+    pr_info("*** STRIDE CALCULATION: width=%d, stride=(width<<1)=%d ***\n", width, stride);
+    
+    if (stride == 0) {
+        pr_err("*** CRITICAL ERROR: Calculated stride is 0! Width=%d - forcing to 3840 ***\n", width);
+        stride = 3840;  /* 1920 << 1 = 3840 */
+    }
+    
     writel(stride, vic_base + 0x310); /* Y stride */
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x310 = %d (Y stride = width << 1)\n", stride);
