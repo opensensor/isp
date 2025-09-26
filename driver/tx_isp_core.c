@@ -1315,6 +1315,18 @@ int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
         }
     }
 
+    /* Program DMSC CFA here as this path always runs, even if set_format() is skipped */
+    if (isp->sensor) {
+        u32 code = isp->sensor->video.mbus.code;
+        unsigned int shvflip = isp->sensor->video.shvflip;
+        int hflip = (shvflip & 0x1) ? 1 : 0;
+        int vflip = (shvflip & 0x2) ? 1 : 0;
+        tisp_dmsc_set_cfa_from_mbus(code, hflip, vflip);
+        pr_info("tx_isp_configure_format_propagation: DMSC CFA programmed from mbus=0x%x, h=%d, v=%d\n", code, hflip, vflip);
+    } else {
+        pr_warn("tx_isp_configure_format_propagation: No sensor present to determine CFA\n");
+    }
+
     pr_info("Format propagation configured\n");
     return 0;
 }
