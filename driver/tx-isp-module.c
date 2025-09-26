@@ -2904,8 +2904,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         channel, chosen_phys, chosen_size);
             }
 
-            /* Program VIC for all active channels (ch0/ch1). Encoder reads from programmed slots. */
-            if (ourISPdev && ourISPdev->vic_dev) {
+            /* Program VIC only for channel 0 NV12 path to avoid clobbering with substream (ch1) buffers. */
+            if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
                 struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
                 struct { uint32_t index; uint32_t phys_addr; uint32_t size; uint32_t channel; } v;
                 v.index = buffer.index;
@@ -3240,6 +3240,22 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
 
             pr_info("*** CHANNEL %d STREAMON: VIC streaming started successfully ***\n", channel);
+
+            /* Proactively program VIC slots for channel 0 using legacy SET_BUF base if available. */
+            if (channel == 0 && fcd && fcd->vbm_base_phys && fcd->vbm_frame_size && ourISPdev && ourISPdev->vic_dev) {
+                struct tx_isp_vic_device *vic_dev_prog = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                struct { uint32_t index; uint32_t phys_addr; uint32_t size; uint32_t channel; } v;
+                uint32_t base = fcd->vbm_base_phys;
+                uint32_t step = fcd->vbm_frame_size;
+                pr_info("*** CHANNEL 0 STREAMON: Pre-program VIC slots with base=0x%x step=%u ***\n", base, step);
+                /* Slot 0 */
+                v.index = 0; v.phys_addr = base; v.size = step; v.channel = 0;
+                tx_isp_send_event_to_remote(&vic_dev_prog->sd, 0x3000008, &v);
+                /* Slot 1 */
+                v.index = 1; v.phys_addr = base + step; v.size = step; v.channel = 0;
+                tx_isp_send_event_to_remote(&vic_dev_prog->sd, 0x3000008, &v);
+            }
+
         }
 
         // *** CRITICAL: TRIGGER SENSOR HARDWARE INITIALIZATION AND STREAMING ***
