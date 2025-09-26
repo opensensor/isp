@@ -2931,6 +2931,13 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 }
             }
             tx_isp_fs_enqueue_qbuf(channel, buffer.index, chosen_phys, chosen_size);
+
+		/* Reference: if streaming flag is set, immediately enqueue to VIC */
+		if (buffer_struct && state->streaming) {
+			pr_info("*** Channel %d: QBUF -> __enqueue_in_driver (streaming active) ***\n", channel);
+			__enqueue_in_driver(buffer_struct);
+		}
+
         }
 
         /* SAFE: Update buffer state management */
@@ -3234,6 +3241,19 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     state->streaming = false;
                     return ret;
                 }
+
+			/* Reference: on STREAMON, enqueue any prepared buffers to VIC */
+			if (fcd && state->buffer_count > 0) {
+				unsigned int i;
+				for (i = 0; i < state->buffer_count && i < 64; ++i) {
+					void *bufp = fcd->buffer_array[i];
+					if (bufp) {
+						pr_info("*** Channel %d: STREAMON -> __enqueue_in_driver for buffer[%u]=%p ***\n", channel, i, bufp);
+						__enqueue_in_driver(bufp);
+					}
+				}
+			}
+
             } else {
                 pr_info("*** Channel %d: VIC already streaming (state=%d), skipping VIC restart to preserve interrupts ***\n",
                         channel, vic->stream_state);
