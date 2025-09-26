@@ -336,23 +336,22 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             /* CRITICAL FIX: Preserve EXACT control bits 0x80000020 when updating buffer index */
             /* The reference driver preserves control bits, we were clearing them! */
             if (vic_regs) {
+                /* Diagnostics only: observe current control and slot state; do not rewrite 0x300 here */
                 u32 reg_val = readl(vic_regs + 0x300);
-                /* PRESERVE EXACT control bits (0x80000020) and only update buffer index in bits 16-19 */
-                /* Clear only the buffer index bits (16-19) and preserve everything else */
-                reg_val = (reg_val & 0xfff0ffff) | shifted_value;  /* Clear bits 16-19, set new buffer index */
-
-                /* FORCE control bits if they were lost */
-                if ((reg_val & 0x80000020) != 0x80000020) {
-                    reg_val |= 0x80000020;  /* Force control bits back on */
-                    pr_warn("*** VIC FRAME DONE: FORCED control bits 0x80000020 back on! ***\n");
+                u32 cur_addr = readl(vic_regs + 0x380);
+                pr_info("*** VIC FRAME DONE: Observed VIC[0x300]=0x%x (CONTROL BITS: %s), CURR_ADDR=0x%x ***\n",
+                        reg_val, (reg_val & 0x80000020) == 0x80000020 ? "PRESERVED" : "LOST", cur_addr);
+                pr_info("vic_framedone_irq_function: DONE_HEAD size=%d, high_bits=%d, match=%d\n",
+                        buffer_index, high_bits, match_found);
+                /* Dump programmed slot addresses C6..CA */
+                {   u32 s0 = readl(vic_regs + (0xc6u<<2));
+                    u32 s1 = readl(vic_regs + (0xc7u<<2));
+                    u32 s2 = readl(vic_regs + (0xc8u<<2));
+                    u32 s3 = readl(vic_regs + (0xc9u<<2));
+                    u32 s4 = readl(vic_regs + (0xcau<<2));
+                    pr_info("VIC SLOT ADDRS: [C6]=0x%x [C7]=0x%x [C8]=0x%x [C9]=0x%x [CA]=0x%x\n", s0,s1,s2,s3,s4);
                 }
-
-                writel(reg_val, vic_regs + 0x300);
-
-                pr_info("*** VIC FRAME DONE: Updated VIC[0x300] = 0x%x (CONTROL BITS: %s) ***\n",
-                        reg_val, (reg_val & 0x80000020) == 0x80000020 ? "PRESERVED" : "LOST");
-                pr_info("vic_framedone_irq_function: Updated VIC[0x300] = 0x%x (buffers: index=%d, high_bits=%d, match=%d)\n",
-                         reg_val, buffer_index, high_bits, match_found);
+                /* Do NOT rewrite reg 0x300 here; BN path sets it at stream-on. */
             }
 
             /* REFERENCE DRIVER: VIC frame done processing complete */
