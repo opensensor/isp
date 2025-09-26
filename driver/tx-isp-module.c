@@ -85,6 +85,7 @@ int tisp_init(void *sensor_info, char *param_name);
 /* Global I2C client tracking to prevent duplicate creation */
 static struct i2c_client *global_sensor_i2c_client = NULL;
 static DEFINE_MUTEX(i2c_client_mutex);
+int __enqueue_in_driver(void *buffer_struct);
 
 /* MIPS-SAFE I2C infrastructure - Fixed for unaligned access crash */
 static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
@@ -6497,7 +6498,7 @@ int vic_event_handler(void *subdev, int event_type, void *data)
 
 
 /* __enqueue_in_driver - EXACT Binary Ninja implementation */
-static int __enqueue_in_driver(void *buffer_struct)
+int __enqueue_in_driver(void *buffer_struct)
 {
     void *s1;
     int result;
