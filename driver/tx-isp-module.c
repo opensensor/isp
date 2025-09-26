@@ -2919,7 +2919,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 							chosen_phys, fcd->vbm_base_phys, fcd->vbm_frame_size, buffer.index);
 				} else if (g_setbuf_base[0] && g_setbuf_step[0]) {
 					chosen_phys = g_setbuf_base[0] + buffer.index * g_setbuf_step[0];
-					chosen_size = g_setbuf_step[0];
+					/* Keep chosen_size derived from stride/length to match NV12 plane writes */
 					pr_info("*** Channel 0: QBUF - Forcing GLOBAL SET_BUF phys=0x%x (base=0x%x step=%u index=%u) ***\n",
 							chosen_phys, g_setbuf_base[0], g_setbuf_step[0], buffer.index);
 				} else {
