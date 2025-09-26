@@ -431,8 +431,6 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     struct tx_isp_dev *isp_dev = ourISPdev;
     static int sensor_call_counter = 0;
 
-    pr_info("*** ISP FRAME SYNC WORK: ENTRY - Work function is running! ***\n");
-
     if (!isp_dev) {
         pr_warn("*** ISP FRAME SYNC WORK: isp_dev is NULL ***\n");
         return;

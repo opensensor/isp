@@ -2904,24 +2904,33 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         channel, chosen_phys, chosen_size);
             }
 
-            /* Route to VIC only for channel 0 (avoid mixing substream until ch1 is wired) */
-            if (channel != 0) {
-                pr_info("*** Channel %d: QBUF - Skipping VIC program (reserved for ch0); enqueued FS only ***\n", channel);
-                tx_isp_fs_enqueue_qbuf(channel, buffer.index, chosen_phys, chosen_size);
-            } else {
-                if (ourISPdev && ourISPdev->vic_dev) {
-                    struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-                    struct { uint32_t index; uint32_t phys_addr; uint32_t size; uint32_t channel; } v;
-                    v.index = buffer.index;
-                    v.phys_addr = chosen_phys;
-                    v.size = chosen_size;
-                    v.channel = channel;
-                    pr_info("*** Channel %d: QBUF - Programming VIC buffer[%u] = 0x%x (size=%u) ***\n",
-                            channel, v.index, v.phys_addr, v.size);
-                    int result = tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &v);
+            /* Program VIC for all active channels (ch0/ch1). Encoder reads from programmed slots. */
+            if (ourISPdev && ourISPdev->vic_dev) {
+                struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                struct { uint32_t index; uint32_t phys_addr; uint32_t size; uint32_t channel; } v;
+                v.index = buffer.index;
+                v.phys_addr = chosen_phys;
+                v.size = chosen_size;
+                v.channel = channel;
+                pr_info("*** Channel %d: QBUF - Programming VIC buffer[%u] = 0x%x (size=%u) ***\n",
+                        channel, v.index, v.phys_addr, v.size);
+                {
+                    int evt_res = tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &v);
+                    if (evt_res == 0xfffffdfd || evt_res == -ENOIOCTLCMD) {
+                        /* Fallback: program VIC slot directly if remote event not handled */
+                        if (vic_dev_buf->vic_regs) {
+                            u32 reg_offset = (v.index + 0xc6) << 2; /* 0x318 + 4*index */
+                            writel(v.phys_addr, vic_dev_buf->vic_regs + reg_offset);
+                            wmb();
+                            pr_info("*** VIC QBUF (fallback): slot[%u] addr=0x%x -> VIC[0x%x] size=%u ch=%u ***\n",
+                                    v.index, v.phys_addr, reg_offset, v.size, v.channel);
+                        } else {
+                            pr_warn("VIC QBUF (fallback): vic_regs not mapped, cannot program slot\n");
+                        }
+                    }
                 }
-                tx_isp_fs_enqueue_qbuf(channel, buffer.index, chosen_phys, chosen_size);
             }
+            tx_isp_fs_enqueue_qbuf(channel, buffer.index, chosen_phys, chosen_size);
         }
 
         /* SAFE: Update buffer state management */
