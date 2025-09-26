@@ -2286,6 +2286,19 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (NV12 UV stride)\n", stride);
 
+    /* Ensure NV12 processing/color pipeline is enabled after MDMA setup */
+    writel(0xeb8080, vic_base + 0xc0);
+    writel(0x108080, vic_base + 0xc4);
+    writel(0x29f06e, vic_base + 0xc8);
+    writel(0x913622, vic_base + 0xcc);
+    writel(0x515af0, vic_base + 0xd0);
+    writel(0xaaa610, vic_base + 0xd4);
+    writel(0xd21092, vic_base + 0xd8);
+    writel(0x6acade, vic_base + 0xdc);
+    wmb();
+    pr_info("vic_pipo_mdma_enable: Applied NV12 processing registers 0xc0..0xdc after MDMA enable\n");
+
+
     pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - CONTROL LIMIT ERROR SHOULD BE FIXED ***\n");
 }
 
