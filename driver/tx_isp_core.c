@@ -453,6 +453,46 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     pr_info("*** ISP FRAME SYNC WORK: sensor=%p, streaming_enabled=%d, vic_streaming=%d ***\n",
             isp_dev->sensor, isp_dev->streaming_enabled, vic_is_streaming);
 
+    /* CRITICAL FIX: Call CSI s_stream during streaming to configure CSI hardware */
+    static bool csi_streaming_started = false;
+    if (isp_dev->streaming_enabled && vic_is_streaming && !csi_streaming_started) {
+        pr_info("*** ISP FRAME SYNC WORK: STARTING CSI STREAMING (MISSING CRITICAL CALL) ***\n");
+
+        if (isp_dev->csi_dev) {
+            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
+            pr_info("*** CALLING CSI s_stream(enable=1) - CSI hardware will be configured for streaming ***\n");
+
+            int csi_result = csi_video_s_stream(&csi_dev->sd, 1);
+            if (csi_result == 0) {
+                csi_streaming_started = true;
+                pr_info("*** CSI STREAMING STARTED SUCCESSFULLY - CSI hardware now configured ***\n");
+                pr_info("*** ERROR INTERRUPT TYPE 2 SHOULD NOW STOP - CSI will receive MIPI data ***\n");
+            } else {
+                pr_err("*** CSI STREAMING FAILED: %d - Error interrupt type 2 will continue ***\n", csi_result);
+            }
+        } else {
+            pr_err("*** CSI STREAMING FAILED: No CSI device available ***\n");
+        }
+    } else if ((!isp_dev->streaming_enabled || !vic_is_streaming) && csi_streaming_started) {
+        pr_info("*** ISP FRAME SYNC WORK: STOPPING CSI STREAMING (streaming_enabled=%d, vic_streaming=%d) ***\n",
+                isp_dev->streaming_enabled, vic_is_streaming);
+
+        if (isp_dev->csi_dev) {
+            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
+            pr_info("*** CALLING CSI s_stream(enable=0) - CSI hardware will be disabled ***\n");
+
+            int csi_result = csi_video_s_stream(&csi_dev->sd, 0);
+            if (csi_result == 0) {
+                csi_streaming_started = false;
+                pr_info("*** CSI STREAMING STOPPED SUCCESSFULLY - CSI hardware disabled ***\n");
+            } else {
+                pr_err("*** CSI STREAMING STOP FAILED: %d ***\n", csi_result);
+            }
+        } else {
+            pr_err("*** CSI STREAMING STOP FAILED: No CSI device available ***\n");
+        }
+    }
+
     if (isp_dev->sensor && isp_dev->streaming_enabled) {
         extern int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev);
         if (per_frame_sensor_ops_enabled) {
