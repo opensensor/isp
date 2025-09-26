@@ -2265,17 +2265,10 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x308 = 1 (MDMA enable)\n");
 
-    /* Compute stride based on sensor data type: RAW10 (0x2b) vs 16bpp */
-    if (vic_dev->sensor_attr.data_type == 0x2b) {
-        /* RAW10 packed: bytes per line = ceil(width * 10 / 8); align to 16 bytes */
-        stride = (width * 10 + 7) / 8;
-        stride = (stride + 15) & ~15;
-        pr_info("vic_pipo_mdma_enable: RAW10 stride=%u for width=%u\n", stride, width);
-    } else {
-        /* Default 16bpp stride */
-        stride = width << 1;
-        pr_info("vic_pipo_mdma_enable: 16bpp stride=%u for width=%u\n", stride, width);
-    }
+    /* NV12-out consistency: do not compute input (RAW10/16bpp) stride here.
+     * The encoder consumes NV12; program NV12 stride below using aligned width.
+     */
+    pr_info("vic_pipo_mdma_enable: NV12-out mode active; using aligned width for stride\n");
 
     /* Program MDMA dimensions for NV12 output (ACTIVE size) */
     writel((width << 16) | height, vic_base + 0x304);
