@@ -692,6 +692,10 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                             pr_info("CSI: DATA_IDS configured to RAW10 (0x2b2b2b2b) on 0x18/0x1c\n");
                         }
 
+                        /* Exact BN MCP: program CSI PHY and Lane blocks at 0x10022000 */
+                        csi_program_ref_sequence(csi_dev->csi_regs);
+
+
                         /* *** CRITICAL: PHY timing configuration based on frame rate *** */
                         /* Binary Ninja: void* $v0_7 = *($s0_1 + 0x110) */
                         /* int32_t $v1_10 = *($v0_7 + 0x3c) */
