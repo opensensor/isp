@@ -6506,7 +6506,6 @@ int vic_event_handler(void *subdev, int event_type, void *data)
             INIT_LIST_HEAD(&entry->list);
             entry->buffer_addr = phys;
             entry->buffer_index = v ? v->index : 0;
-            entry->buffer_status = VIC_BUFFER_STATUS_QUEUED;
             pr_info("VIC EVENT: QBUF -> entry addr=0x%x idx=%u (calling ispvic_frame_channel_qbuf)\n",
                     entry->buffer_addr, entry->buffer_index);
             return ispvic_frame_channel_qbuf(NULL, entry);
@@ -6575,7 +6574,6 @@ int vic_event_handler(void *subdev, int event_type, void *data)
                 INIT_LIST_HEAD(&entry->list);
                 entry->buffer_addr = phys;
                 entry->buffer_index = idx;
-                entry->buffer_status = VIC_BUFFER_STATUS_QUEUED;
                 pr_info("VIC ENQUEUE: vb=%p index=%u phys=0x%x -> calling ispvic_frame_channel_qbuf\n",
                         vb, idx, phys);
                 return ispvic_frame_channel_qbuf(NULL, entry);
