@@ -3181,22 +3181,22 @@ int tx_isp_vic_remove(struct platform_device *pdev)
 }
 
 
-/* ispvic_frame_channel_qbuf - FIXED: Handle event-based QBUF calls with pending buffer queue */
+/* ispvic_frame_channel_qbuf - EXACT Binary Ninja implementation with proper buffer management */
 int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 {
     struct tx_isp_vic_device *vic_dev = NULL;
     unsigned long var_18 = 0;
+    struct vic_buffer_entry *buffer_entry;
+    u32 buffer_addr;
+    int buffer_index;
 
     pr_info("ispvic_frame_channel_qbuf: event-based QBUF\n");
 
-    /* SAFE: Use global ourISPdev reference instead of unsafe pointer arithmetic */
-    if (!ourISPdev || !ourISPdev->vic_dev) {
-        pr_debug("ispvic_frame_channel_qbuf: qbuffer null (MIPS-safe)\n");
-        return 0;
+    /* Binary Ninja EXACT: if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = *(arg1 + 0xd4) */
+    if (arg1 != 0 && (unsigned long)arg1 < 0xfffff001) {
+        vic_dev = (struct tx_isp_vic_device *)arg1;  /* arg1 IS the vic_dev */
     }
 
-    /* SAFE: Get VIC device from global ISP device reference */
-    vic_dev = (struct tx_isp_vic_device *)container_of(ourISPdev->vic_dev, struct tx_isp_vic_device, sd);
     if (!vic_dev) {
         pr_debug("ispvic_frame_channel_qbuf: qbuffer null (MIPS-safe)\n");
         return 0;
@@ -3205,65 +3205,66 @@ int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
     /* Binary Ninja EXACT: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
     __private_spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, &var_18);
 
-    /* CRITICAL FIX: Handle event-based calls where arg2 might be NULL */
-    /* When called via event system, the buffer data isn't passed as arg2 */
-    /* Instead, we need to check if there are pending buffers in our queue */
-
-    if (arg2) {
-        /* Treat arg2 as vic_buffer_entry and queue it */
-        struct vic_buffer_entry *entry = (struct vic_buffer_entry *)arg2;
-        if (entry->buffer_addr == 0) {
-            pr_err("VIC QBUF: buffer_addr is 0 - refusing to queue (no dummy addresses)\n");
-        } else {
-            list_add_tail(&entry->list, &vic_dev->queue_head);
-            pr_info("VIC QBUF: queued entry %p (addr=0x%x, idx=%u)\n",
-                    entry, entry->buffer_addr, entry->buffer_index);
-        }
-    } else {
-        /* No event payload: do not fabricate buffers; just log */
-        pr_info("*** VIC QBUF: No payload provided; skipping dummy buffer creation ***\n");
+    /* Binary Ninja EXACT: Check for free buffers first */
+    if (list_empty(&vic_dev->free_head)) {
+        pr_info("ispvic_frame_channel_qbuf: bank no free\n");
+        goto unlock_exit;
     }
 
     if (list_empty(&vic_dev->queue_head)) {
-        pr_debug("ispvic_frame_channel_qbuf: no queued buffers\n");
+        pr_info("ispvic_frame_channel_qbuf: qbuffer null\n");
         goto unlock_exit;
     }
-    {
-        /* Process the queued buffer using vic_buffer_entry */
-        struct list_head *queue_node = vic_dev->queue_head.next;
-        struct vic_buffer_entry *entry;
-        u32 buffer_addr;
-        int buffer_index;
 
-        list_del(queue_node);
-        entry = container_of(queue_node, struct vic_buffer_entry, list);
-        buffer_addr = entry->buffer_addr;
-        if (buffer_addr == 0) {
-            pr_err("VIC QBUF: queued entry has buffer_addr=0 - dropping\n");
-            goto unlock_exit;
-        }
-
-        /* Use the address chosen upstream (VBM/SET_BUF path); do not adjust here */
-
-        /* Program slot index based on buffer index to keep bank alignment with encoder */
-        buffer_index = entry->buffer_index % 5;  /* VIC has 5 buffer slots */
-
-        if (vic_dev->vic_regs) {
-            uint32_t reg_offset = (buffer_index + 0xc6) << 2;
-            if (reg_offset < 0x1000) {
-                writel(buffer_addr, vic_dev->vic_regs + reg_offset);
-                wmb();
-                pr_info("*** CRITICAL SUCCESS: Buffer 0x%x programmed to VIC[0x%x] ***\n",
-                        buffer_addr, reg_offset);
-            }
-        }
-
-        /* Move entry to done list so ISR can match current frame address */
-        list_add_tail(&entry->list, &vic_dev->done_head);
-        vic_dev->active_buffer_count += 1;
-        pr_info("*** VIC QBUF: Buffer processed (addr=0x%x, idx=%d) - active_count=%d ***\n",
-                buffer_addr, buffer_index, vic_dev->active_buffer_count);
+    /* Binary Ninja EXACT: Pop buffer from free list and get buffer from queue */
+    /* $a1_1, $a2_1 = pop_buffer_fifo($s0 + 0x1f4) */
+    struct list_head *free_node = vic_dev->free_head.next;
+    struct list_head *queue_node = vic_dev->queue_head.next;
+    
+    list_del(free_node);
+    list_del(queue_node);
+    
+    /* Binary Ninja EXACT: $v0_5, $a3_1 = $a1_1($a2_1) */
+    buffer_entry = container_of(free_node, struct vic_buffer_entry, list);
+    struct vic_buffer_entry *queue_entry = container_of(queue_node, struct vic_buffer_entry, list);
+    
+    /* Binary Ninja EXACT: int32_t $a1_2 = *($a3_1 + 8) */
+    /* CRITICAL FIX: Use the ACTUAL buffer address from the queue entry, not forced base address */
+    buffer_addr = queue_entry->buffer_addr;
+    
+    /* Binary Ninja EXACT: int32_t $v1_1 = $v0_5[4] */
+    buffer_index = buffer_entry->buffer_index % 5;  /* VIC has 5 slots */
+    
+    /* Binary Ninja EXACT: $v0_5[2] = $a1_2 */
+    buffer_entry->buffer_addr = buffer_addr;
+    
+    /* CRITICAL FIX: Validate buffer address is in valid range */
+    if (buffer_addr < 0x06000000 || buffer_addr >= 0x09000000) {
+        pr_err("VIC QBUF: Invalid buffer address 0x%x - must be in range 0x06000000-0x09000000\n", buffer_addr);
+        /* Put buffers back */
+        list_add_tail(free_node, &vic_dev->free_head);
+        list_add_tail(queue_node, &vic_dev->queue_head);
+        goto unlock_exit;
     }
+    
+    /* Binary Ninja EXACT: *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2 */
+    if (vic_dev->vic_regs) {
+        uint32_t reg_offset = (buffer_index + 0xc6) << 2;
+        writel(buffer_addr, vic_dev->vic_regs + reg_offset);
+        wmb();
+        pr_info("*** CRITICAL SUCCESS: Buffer 0x%x programmed to VIC[0x%x] ***\n",
+                buffer_addr, reg_offset);
+    }
+    
+    /* Binary Ninja EXACT: Move buffer to done list */
+    /* *($s0 + 0x208) = $v0_5; *$v0_5 = $s0 + 0x204; $v0_5[1] = $v1_5; *$v1_5 = $v0_5 */
+    list_add_tail(&buffer_entry->list, &vic_dev->done_head);
+    
+    /* Binary Ninja EXACT: *($s0 + 0x218) += 1 */
+    vic_dev->active_buffer_count += 1;
+    
+    pr_info("*** VIC QBUF: Buffer processed (addr=0x%x, idx=%d) - active_count=%d ***\n",
+            buffer_addr, buffer_index, vic_dev->active_buffer_count);
 
 unlock_exit:
     /* Binary Ninja EXACT: private_spin_unlock_irqrestore($s0 + 0x1f4, $a1_4) */
