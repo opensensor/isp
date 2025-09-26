@@ -142,6 +142,7 @@ struct tx_isp_dev {
     uint32_t sensor_height;
     uint32_t sensor_width;
     u32 sensor_interface_type;
+    struct tx_isp_sensor *sensor;
     u32 vic_status;
     bool is_open;
     struct tx_isp_chip_ident *chip;
