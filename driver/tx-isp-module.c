@@ -7120,6 +7120,13 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
         /* Set the ISP reference in the sensor subdev */
         sd->isp = (void *)ourISPdev;
 
+        /* *** CRITICAL FIX: Add sensor to subdev array so tx_isp_video_link_stream calls its s_stream *** */
+        pr_info("*** CRITICAL: Adding sensor to subdev array at index 2 for tx_isp_video_link_stream ***\n");
+        ourISPdev->subdevs[2] = sd;  /* Add sensor at index 2 (after VIC=0, CSI=1) */
+        pr_info("*** SENSOR SUBDEV REGISTERED: subdevs[2]=%p, ops=%p, s_stream=%p ***\n",
+                sd, sd->ops, sd->ops->video ? sd->ops->video->s_stream : NULL);
+        pr_info("*** NOW tx_isp_video_link_stream WILL CALL SENSOR s_stream TO WRITE 0x3e=0x91! ***\n");
+
         /* Check if any channel is already streaming and set state accordingly */
         sd->vin_state = TX_ISP_MODULE_INIT;  // Default to INIT
         for (i = 0; i < num_channels; i++) {
