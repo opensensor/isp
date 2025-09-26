@@ -1991,6 +1991,9 @@ int tisp_init(void *sensor_info, char *param_name)
         system_reg_write(0xa044, ae0_phys + 0x5000);
         system_reg_write(0xa048, ae0_phys + 0x5800);
         system_reg_write(0xa04c, 0x33);
+        /* Enable AE0 system: store virtual buffer pointer for interrupt gating */
+        data_b2f3c = (uint32_t)ae0_buffer;
+
         pr_info("*** tisp_init: AE0 buffer allocated at 0x%08x ***\n", (uint32_t)ae0_phys);
     }
 
@@ -2095,11 +2098,11 @@ int tisp_init(void *sensor_info, char *param_name)
 
     /* *** CRITICAL MISSING PIECE: Call tx_isp_subdev_pipo to initialize VIC buffer management *** */
     pr_info("*** CRITICAL: Calling tx_isp_subdev_pipo to initialize VIC buffer management ***\n");
-    
+
     if (ourISPdev->vic_dev) {
         /* Create a dummy raw_pipe structure for the call */
         void *raw_pipe[8] = {NULL}; /* 8 function pointers as per Binary Ninja */
-        
+
         /* Call tx_isp_subdev_pipo with the VIC subdev and raw_pipe structure */
         int pipo_ret = tx_isp_subdev_pipo(ourISPdev->vic_dev, raw_pipe);
         if (pipo_ret == 0) {
@@ -2130,7 +2133,7 @@ static inline u64 ktime_get_real_ns(void)
 uint32_t system_reg_read(u32 reg)
 {
     extern struct tx_isp_dev *ourISPdev;
-    
+
     void __iomem *isp_base = ourISPdev->vic_dev->vic_regs - 0x9a00; /* Get ISP base */
     return readl(isp_base + reg);
 }
@@ -2750,19 +2753,19 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
                 pr_err("CRITICAL: Cannot access brightness field - PREVENTS BadVA CRASH\n");
                 return -EFAULT;
             }
-            
+
             pr_info("BCSH: Reading brightness from validated struct member\n");
             ctrl->value = tuning->brightness;
             pr_info("BCSH: Brightness read successfully: %d\n", ctrl->value);
             break;
 
-        case 0x980901:  // Contrast  
+        case 0x980901:  // Contrast
             /* CRITICAL: SAFE access with validation */
             if (!access_ok(VERIFY_READ, &tuning->contrast, sizeof(tuning->contrast))) {
                 pr_err("CRITICAL: Cannot access contrast field - PREVENTS BadVA CRASH\n");
                 return -EFAULT;
             }
-            
+
             pr_info("BCSH: Reading contrast from validated struct member\n");
             ctrl->value = tuning->contrast;
             pr_info("BCSH: Contrast read successfully: %d\n", ctrl->value);
@@ -2774,14 +2777,14 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
                 pr_err("CRITICAL: Cannot access saturation field at %p - PREVENTING BadVA CRASH\n", &tuning->saturation);
                 return -EFAULT;
             }
-            
+
             /* Additional safety check - verify field address is reasonable */
-            if ((unsigned long)&tuning->saturation < (unsigned long)tuning || 
+            if ((unsigned long)&tuning->saturation < (unsigned long)tuning ||
                 (unsigned long)&tuning->saturation > (unsigned long)tuning + sizeof(*tuning)) {
                 pr_err("CRITICAL: Saturation field address out of bounds - PREVENTING BadVA CRASH\n");
                 return -EFAULT;
             }
-            
+
             pr_info("CRITICAL: Using SAFE validated struct member access for saturation\n");
             ctrl->value = tuning->saturation;
             pr_info("CRITICAL: Saturation read successfully: %d (BadVA crash prevented)\n", ctrl->value);
@@ -3268,7 +3271,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
         pr_err("isp_core_tunning_unlocked_ioctl: No ISP device available\n");
         return -ENODEV;
     }
-    
+
     /* CRITICAL: Auto-initialize tuning for V4L2 controls ONLY ONCE to prevent init/release cycle */
     if (magic == 0x56 && (!ourISPdev || ourISPdev->tuning_enabled != 3) && !auto_init_done) {
         pr_info("isp_core_tunning_unlocked_ioctl: Auto-initializing tuning for V4L2 control (one-time)\n");
@@ -3294,19 +3297,19 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
         auto_init_done = true;
         pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning auto-enabled for V4L2 controls (permanent)\n");
     }
-    
+
     /* CRITICAL: Check tuning enabled for tuning commands only */
     if (magic == 0x74 && (!ourISPdev || ourISPdev->tuning_enabled != 3)) {
         pr_err("isp_core_tunning_unlocked_ioctl: Tuning commands require explicit enable (cmd=0x%x)\n", cmd);
         return -ENODEV;
     }
-    
+
     /* Handle ISP core control commands (magic 0x56) */
     if (magic == 0x56) {
         struct isp_core_ctrl ctrl;
-        
+
         pr_info("isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0x%x\n", cmd);
-        
+
         switch (cmd) {
             case 0xc008561c: /* ISP_CORE_S_CTRL - Set control */
                 /* Binary Ninja: copy_from_user validation */
@@ -3314,9 +3317,9 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     pr_err("isp_core_tunning_unlocked_ioctl: Failed to copy control data from user\n");
                     return -EFAULT;
                 }
-                
+
                 pr_info("isp_core_tunning_unlocked_ioctl: Set control cmd=0x%x value=%d\n", ctrl.cmd, ctrl.value);
-                
+
                 /* CRITICAL: Validate control command before processing */
                 if (ctrl.cmd == 0x980900 && (!dev || !dev->tuning_data)) {
                     pr_err("isp_core_tunning_unlocked_ioctl: Brightness control attempted with NULL tuning data\n");
@@ -3339,37 +3342,37 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         return -EFAULT;
                     }
                 }
-                
+
                 ret = apical_isp_core_ops_s_ctrl(dev, &ctrl);
-                
+
                 if (ret == 0 && copy_to_user((void __user *)arg, &ctrl, sizeof(ctrl))) {
                     pr_err("isp_core_tunning_unlocked_ioctl: Failed to copy control data to user\n");
                     return -EFAULT;
                 }
                 break;
-                
+
             case 0xc008561b: /* ISP_CORE_G_CTRL - Get control */
                 /* Binary Ninja: copy_from_user validation */
                 if (copy_from_user(&ctrl, (void __user *)arg, sizeof(ctrl))) {
                     pr_err("isp_core_tunning_unlocked_ioctl: Failed to copy control data from user\n");
                     return -EFAULT;
                 }
-                
+
                 pr_info("isp_core_tunning_unlocked_ioctl: Get control cmd=0x%x\n", ctrl.cmd);
-                
+
                 /* CRITICAL: Simple validation for control commands like reference driver */
                 if (!dev || !dev->tuning_data) {
                     return -ENODEV;
                 }
-                
+
                 ret = apical_isp_core_ops_g_ctrl(dev, &ctrl);
-                
+
                 if (ret == 0 && copy_to_user((void __user *)arg, &ctrl, sizeof(ctrl))) {
                     pr_err("isp_core_tunning_unlocked_ioctl: Failed to copy control data to user\n");
                     return -EFAULT;
                 }
                 break;
-                
+
             case 0xc00c56c6: /* ISP_TUNING_ENABLE - Enable/disable tuning */
             {
                 uint32_t enable;
@@ -3377,7 +3380,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     pr_err("isp_core_tunning_unlocked_ioctl: Failed to copy tuning enable data from user\n");
                     return -EFAULT;
                 }
-                
+
                 pr_info("isp_core_tunning_unlocked_ioctl: Tuning enable/disable: %s\n", enable ? "ENABLE" : "DISABLE");
 
                 /* BINARY NINJA REFERENCE: Simple tuning enable acknowledgment */
@@ -3562,7 +3565,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 
                             pr_info("*** This should maintain proper ISP pipeline control and prevent CSI PHY timeouts ***\n");
                 }
-                
+
                 if (enable) {
                     pr_info("*** DEBUG: enable=1, dev->tuning_enabled=%d ***\n", dev ? dev->tuning_enabled : -1);
                     if (dev && dev->tuning_enabled != 3) {
@@ -3611,39 +3614,39 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 ret = 0;
                 break;
             }
-            
+
             default:
                 pr_warn("isp_core_tunning_unlocked_ioctl: Unknown ISP core control command: 0x%x\n", cmd);
                 ret = -EINVAL;
                 break;
         }
-        
+
         return ret;
     }
-    
+
     /* Handle tuning parameter commands (magic 0x74) */
     if (magic == 0x74) {
         int32_t *tisp_par_ioctl_ptr;
         unsigned long s0_1 = (unsigned long)arg;
         int32_t param_type;
-        
+
         pr_info("isp_core_tunning_unlocked_ioctl: Handling tuning parameter command 0x%x\n", cmd);
-        
+
         /* Binary Ninja: Check if tisp_par_ioctl is allocated */
         if (!tisp_par_ioctl) {
             pr_err("tisp_code_tuning_ioctl: Global buffer not allocated\n");
             return -ENOMEM;
         }
-        
+
         tisp_par_ioctl_ptr = (int32_t *)tisp_par_ioctl;
-        
+
         /* Binary Ninja: Handle tuning parameter commands */
         if ((cmd & 0xff) < 0x33) {
             if ((cmd - 0x20007400) < 0xa) {
                 switch (cmd) {
                     case 0x20007400: { /* GET operation */
                         pr_info("tisp_code_tuning_ioctl: GET operation 0x%x\n", cmd);
-                        
+
                         /* SECURITY FIX: Enhanced access validation */
                         if (!access_ok(VERIFY_READ, arg, 0x500c)) {
                             pr_err("tisp_code_tuning_ioctl: Access check failed for GET\n");
@@ -3675,17 +3678,17 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                             pr_err("tisp_code_tuning_ioctl: Copy to user failed: %d\n", ret);
                             return -EFAULT;
                         }
-                        
+
                         /* Binary Ninja: Process different parameter types based on tisp_par_ioctl[0] */
                         int32_t param_type = tisp_par_ioctl_ptr[0];
                         pr_info("tisp_code_tuning_ioctl: GET param_type=%d\n", param_type);
-                        
+
                         if (param_type >= 0x19) {
                             /* Invalid parameter type */
                             pr_err("tisp_code_tuning_ioctl: Invalid GET parameter type %d\n", param_type);
                             return -EINVAL;
                         }
-                        
+
                         /* Binary Ninja: Call appropriate get function based on parameter type */
                         switch (param_type) {
                             case 0:  /* Top parameters */
@@ -3712,7 +3715,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                                 pr_info("tisp_code_tuning_ioctl: GET parameter type %d (implementation pending)\n", param_type);
                                 break;
                         }
-                        
+
                         /* Binary Ninja: Copy result back to user */
                         ret = copy_to_user((void __user *)s0_1, tisp_par_ioctl, 0x500c);
                         if (ret != 0) {
@@ -3721,10 +3724,10 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         }
                         break;
                     }
-                    
+
                     case 0x20007401: { /* SET operation */
                         pr_info("tisp_code_tuning_ioctl: SET operation 0x%x\n", cmd);
-                        
+
                         /* SECURITY FIX: Enhanced access validation for SET operation */
                         if (!access_ok(VERIFY_WRITE, arg, 0x500c)) {
                             pr_err("tisp_code_tuning_ioctl: Access check failed for SET\n");
@@ -3756,16 +3759,16 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                             pr_err("tisp_code_tuning_ioctl: Copy from user failed: %d\n", ret);
                             return -EFAULT;
                         }
-                        
+
                         /* Binary Ninja: Process different parameter types based on tisp_par_ioctl[0] */
                         int32_t param_type = tisp_par_ioctl_ptr[0];
                         pr_info("tisp_code_tuning_ioctl: SET param_type=%d\n", param_type);
-                        
+
                         if (param_type - 1 >= 0x18) {
                             pr_err("tisp_code_tuning_ioctl: Invalid SET parameter type %d\n", param_type);
                             return -EINVAL;
                         }
-                        
+
                         /* Binary Ninja: Call appropriate set function based on parameter type */
                         switch (param_type) {
                             case 1:  /* BLC parameters */
@@ -3790,19 +3793,19 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         }
                         break;
                     }
-                    
+
                     case 0x20007403: { /* AE info get */
                         pr_info("tisp_code_tuning_ioctl: AE info get 0x%x\n", cmd);
-                        
+
                         /* Binary Ninja: Call tisp_get_ae_info(tisp_par_ioctl) */
                         /* tisp_get_ae_info(tisp_par_ioctl); */
-                        
+
                         /* Binary Ninja: Copy result to user */
                         if (!access_ok(VERIFY_WRITE, arg, 0x500c)) {
                             pr_err("tisp_code_tuning_ioctl: Access check failed for AE info get\n");
                             return -EFAULT;
                         }
-                        
+
                         ret = copy_to_user((void __user *)s0_1, tisp_par_ioctl, 0x500c);
                         if (ret != 0) {
                             pr_err("tisp_code_tuning_ioctl: AE info copy to user failed: %d\n", ret);
@@ -3810,37 +3813,37 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         }
                         break;
                     }
-                    
+
                     case 0x20007404: { /* AE info set */
                         pr_info("tisp_code_tuning_ioctl: AE info set 0x%x\n", cmd);
-                        
+
                         if (!access_ok(VERIFY_READ, arg, 0x500c)) {
                             pr_err("tisp_code_tuning_ioctl: Access check failed for AE info set\n");
                             return -EFAULT;
                         }
-                        
+
                         ret = copy_from_user(tisp_par_ioctl, (void __user *)s0_1, 0x500c);
                         if (ret != 0) {
                             pr_err("tisp_code_tuning_ioctl: AE info copy from user failed: %d\n", ret);
                             return -EFAULT;
                         }
-                        
+
                         /* Binary Ninja: Call tisp_set_ae_info(tisp_par_ioctl) */
                         /* tisp_set_ae_info(tisp_par_ioctl); */
                         break;
                     }
-                    
+
                     case 0x20007406: { /* AWB info get */
                         pr_info("tisp_code_tuning_ioctl: AWB info get 0x%x\n", cmd);
-                        
+
                         /* Binary Ninja: Call tisp_get_awb_info(tisp_par_ioctl) */
                         /* tisp_get_awb_info(tisp_par_ioctl); */
-                        
+
                         if (!access_ok(VERIFY_WRITE, arg, 0x500c)) {
                             pr_err("tisp_code_tuning_ioctl: Access check failed for AWB info get\n");
                             return -EFAULT;
                         }
-                        
+
                         ret = copy_to_user((void __user *)s0_1, tisp_par_ioctl, 0x500c);
                         if (ret != 0) {
                             pr_err("tisp_code_tuning_ioctl: AWB info copy to user failed: %d\n", ret);
@@ -3848,40 +3851,40 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         }
                         break;
                     }
-                    
+
                     case 0x20007407: { /* AWB info set */
                         pr_info("tisp_code_tuning_ioctl: AWB info set 0x%x\n", cmd);
-                        
+
                         if (!access_ok(VERIFY_READ, arg, 0x500c)) {
                             pr_err("tisp_code_tuning_ioctl: Access check failed for AWB info set\n");
                             return -EFAULT;
                         }
-                        
+
                         ret = copy_from_user(tisp_par_ioctl, (void __user *)s0_1, 0x500c);
                         if (ret != 0) {
                             pr_err("tisp_code_tuning_ioctl: AWB info copy from user failed: %d\n", ret);
                             return -EFAULT;
                         }
-                        
+
                         /* Binary Ninja: Call tisp_set_awb_info(tisp_par_ioctl) */
                         /* tisp_set_awb_info(tisp_par_ioctl); */
                         break;
                     }
-                    
+
                     case 0x20007408: { /* Special operation 1 */
                         pr_info("tisp_code_tuning_ioctl: Special operation 1: 0x%x\n", cmd);
-                        
+
                         if (!access_ok(VERIFY_READ, arg, 0x500c)) {
                             pr_err("tisp_code_tuning_ioctl: Access check failed for special op 1\n");
                             return -EFAULT;
                         }
-                        
+
                         ret = copy_from_user(tisp_par_ioctl, (void __user *)s0_1, 0x500c);
                         if (ret != 0) {
                             pr_err("tisp_code_tuning_ioctl: Special op 1 copy from user failed: %d\n", ret);
                             return -EFAULT;
                         }
-                        
+
                         /* SECURITY FIX: Safe string operations with proper bounds checking */
                         tisp_par_ioctl_ptr[1] = 0xb;  /* Set param at offset 4 */
 
@@ -3893,7 +3896,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         /* SAFE: Clear destination first, then copy exact length */
                         memset((char*)tisp_par_ioctl + 0xc, 0, 0xb);
                         memcpy((char*)tisp_par_ioctl + 0xc, safe_msg, safe_len);
-                        
+
                         ret = copy_to_user((void __user *)s0_1, tisp_par_ioctl, 0x500c);
                         if (ret != 0) {
                             pr_err("tisp_code_tuning_ioctl: Special op 1 copy to user failed: %d\n", ret);
@@ -3901,21 +3904,21 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         }
                         break;
                     }
-                    
+
                     case 0x20007409: { /* Special operation 2 */
                         pr_info("tisp_code_tuning_ioctl: Special operation 2: 0x%x\n", cmd);
-                        
+
                         if (!access_ok(VERIFY_READ, arg, 0x500c)) {
                             pr_err("tisp_code_tuning_ioctl: Access check failed for special op 2\n");
                             return -EFAULT;
                         }
-                        
+
                         ret = copy_from_user(tisp_par_ioctl, (void __user *)s0_1, 0x500c);
                         if (ret != 0) {
                             pr_err("tisp_code_tuning_ioctl: Special op 2 copy from user failed: %d\n", ret);
                             return -EFAULT;
                         }
-                        
+
                         /* SECURITY FIX: Safe string operations with proper bounds checking */
                         tisp_par_ioctl_ptr[1] = 0xf;  /* Set param at offset 4 */
 
@@ -3927,7 +3930,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         /* SAFE: Clear destination first, then copy exact length */
                         memset((char*)tisp_par_ioctl + 0xc, 0, 0xf);
                         memcpy((char*)tisp_par_ioctl + 0xc, safe_msg, safe_len);
-                        
+
                         ret = copy_to_user((void __user *)s0_1, tisp_par_ioctl, 0x500c);
                         if (ret != 0) {
                             pr_err("tisp_code_tuning_ioctl: Special op 2 copy to user failed: %d\n", ret);
@@ -3935,17 +3938,17 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         }
                         break;
                     }
-                    
+
                     default:
                         pr_err("tisp_code_tuning_ioctl: Unknown command in valid range: 0x%x\n", cmd);
                         return -EINVAL;
                 }
-                
+
                 return 0;  /* Success */
             }
         }
     }
-    
+
     /* Binary Ninja: Invalid command - not in supported range */
     if (((cmd >> 8) & 0xff) != 0x74) {
         pr_err("tisp_code_tuning_ioctl: Command magic not 0x74: cmd=0x%x\n", cmd);
@@ -3961,7 +3964,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 int tisp_code_tuning_open(struct inode *inode, struct file *file)
 {
     pr_info("ISP M0 device open called from pid %d\n", current->pid);
-    
+
     /* SAFE: Use regular kmalloc instead of precious rmem - tuning buffer doesn't need DMA */
     void *tuning_buffer = kmalloc(TUNING_PARAM_BUFFER_SIZE, GFP_KERNEL);
 
@@ -3970,27 +3973,27 @@ int tisp_code_tuning_open(struct inode *inode, struct file *file)
         pr_err("tisp_code_tuning_open: Failed to allocate tuning buffer (0x%x bytes)\n", TUNING_PARAM_BUFFER_SIZE);
         return -ENOMEM;
     }
-    
+
     /* CRITICAL: Verify alignment for MIPS - must be 4-byte aligned */
     if ((unsigned long)tuning_buffer & 0x3) {
         pr_err("CRITICAL: Tuning buffer not 4-byte aligned: %p\n", tuning_buffer);
         kfree(tuning_buffer);
         return -ENOMEM;
     }
-    
+
     /* tisp_par_ioctl = $v0 */
     tisp_par_ioctl = tuning_buffer;
-    
+
     /* memset($v0, 0, 0x500c) */
     memset(tuning_buffer, 0, 0x500c);
-    
+
     pr_info("*** REFERENCE DRIVER IMPLEMENTATION ***\n");
     pr_info("ISP M0 tuning buffer allocated: %p (size=0x%x, aligned)\n", tuning_buffer, 0x500c);
     pr_info("tisp_par_ioctl global variable set: %p\n", tisp_par_ioctl);
-    
+
     /* Store buffer pointer for file operations */
     file->private_data = tuning_buffer;
-    
+
     /* return 0 */
     return 0;
 }
@@ -5871,7 +5874,7 @@ int isp_m0_chardev_release(struct inode *inode, struct file *file)
         kfree(tuning_buffer);
         file->private_data = NULL;
     }
-    
+
     /* Clear global tuning parameter buffer if it matches */
     if (tisp_par_ioctl == tuning_buffer) {
         tisp_par_ioctl = NULL;
@@ -5910,10 +5913,10 @@ int tisp_wdr_ev_calculate(void)
 {
     /* Calculate exposure value for WDR processing */
     pr_info("tisp_wdr_ev_calculate: Calculating WDR exposure values\n");
-    
+
     /* Binary Ninja shows this calculates the current exposure values */
     /* for use in the WDR algorithm processing */
-    
+
     return 0;
 }
 
@@ -5922,10 +5925,10 @@ int Tiziano_wdr_fpga(void *struct_me, void *dev_para, void *ratio_para, void *x_
 {
     /* FPGA-based WDR processing implementation */
     pr_info("Tiziano_wdr_fpga: Processing WDR parameters via FPGA\n");
-    
+
     /* Binary Ninja shows this configures FPGA registers for WDR processing */
     /* This is the hardware acceleration part of the WDR algorithm */
-    
+
     return 0;
 }
 
@@ -5934,10 +5937,10 @@ int tiziano_wdr_fusion1_curve_block_mean1(void)
 {
     /* WDR fusion curve processing for block mean calculations */
     pr_info("tiziano_wdr_fusion1_curve_block_mean1: Processing WDR fusion curves\n");
-    
+
     /* Binary Ninja shows this processes fusion curves for block mean values */
     /* This is part of the WDR tone mapping algorithm */
-    
+
     return 0;
 }
 
@@ -5946,10 +5949,10 @@ int tiziano_wdr_soft_para_out(void)
 {
     /* Output WDR software parameters */
     pr_info("tiziano_wdr_soft_para_out: Outputting WDR software parameters\n");
-    
+
     /* Binary Ninja shows this outputs the processed WDR parameters */
     /* to the hardware registers for final image processing */
-    
+
     return 0;
 }
 
@@ -5963,13 +5966,13 @@ static int tiziano_wdr_algorithm(void)
     int32_t t5, t1, v0, t6, a1;
     uint32_t *a2_1;
     int32_t a3, i, t2;
-    
+
     pr_info("tiziano_wdr_algorithm: Starting WDR algorithm processing\n");
-    
+
     /* Binary Ninja: Call sub-functions first */
     tisp_wdr_expTime_updata();
     tisp_wdr_ev_calculate();
-    
+
     /* Binary Ninja: Initialize local variables */
     wdr_ev_now_1 = wdr_ev_now;
     v1 = &param_multiValueHigh_software_in_array;
@@ -5980,12 +5983,12 @@ static int tiziano_wdr_algorithm(void)
     v0 = data_b148c;
     t6 = wdr_ev_now_1 - wdr_ev_list_deghost_1;
     a1 = wdr_ev_list_deghost_1 - v0;
-    
+
     /* Binary Ninja: if (v0 u>= wdr_ev_list_deghost_1) a1 = v0 - wdr_ev_list_deghost_1 */
     if (v0 >= wdr_ev_list_deghost_1) {
         a1 = v0 - wdr_ev_list_deghost_1;
     }
-    
+
     /* Binary Ninja: Initialize output array pointer */
     if (!data_d94f8) {
         /* CRITICAL: Initialize data_d94f8 to prevent NULL pointer crash */
@@ -5997,24 +6000,24 @@ static int tiziano_wdr_algorithm(void)
         memset(data_d94f8, 0, 27 * sizeof(uint32_t));
         pr_info("tiziano_wdr_algorithm: Allocated WDR output array at %p\n", data_d94f8);
     }
-    
+
     a2_1 = (uint32_t *)data_d94f8; /* Points to wdr output array */
     a3 = (wdr_ev_list_deghost_1 < wdr_ev_now_1) ? 1 : 0;
     i = 0;
     t2 = (wdr_ev_now_1 < v0) ? 1 : 0;
-    
+
     /* Binary Ninja: Main processing loop - do/while (i != 0x1b) */
     do {
         if (i != 0x1a) {
             uint32_t v0_4;
-            
+
             /* Binary Ninja: Complex interpolation logic */
             if (a3 == 0) {
                 v0_4 = *((uint32_t*)a0);
             } else if (t2 != 0) {
                 int32_t t0_1 = *((uint32_t*)a0);
                 int32_t v0_5 = *((uint32_t*)v1);
-                
+
                 /* CRITICAL: Prevent division by zero */
                 if (a1 == 0) {
                     v0_4 = t0_1; /* Default to input value */
@@ -6026,37 +6029,37 @@ static int tiziano_wdr_algorithm(void)
             } else {
                 v0_4 = *((uint32_t*)v1);
             }
-            
+
             /* Binary Ninja: Store result */
             *a2_1 = v0_4;
-            
+
         } else {
             /* Binary Ninja: Special case for i == 0x1a */
             if (a3 == 0) {
                 data_b16a8 = t1;
             } else if (t2 != 0) {
                 int32_t v0_2;
-                
+
                 if (t5 >= t1) {
                     v0_2 = ((t5 - t1) * t6) / a1 + t1;
                 } else {
                     v0_2 = t1 - ((t1 - t5) * t6) / a1;
                 }
-                
+
                 data_b16a8 = v0_2;
             } else {
                 data_b16a8 = t5;
             }
         }
-        
+
         /* Binary Ninja: Increment loop variables */
         i += 1;
         a0 = (uint32_t*)a0 + 1;
         a2_1 += 1;
         v1 = (uint32_t*)v1 + 1;
-        
+
     } while (i != 0x1b);
-    
+
     /* Binary Ninja: Set up data structure pointers */
     data_b1e54 = data_b1ff8;
     TizianoWdrFpgaStructMe = &param_computerModle_software_in_array;
@@ -6089,22 +6092,22 @@ static int tiziano_wdr_algorithm(void)
     data_d94c8 = &param_multiValueHigh_software_in_array;
     data_d94f8 = (void*)data_d94f8; /* Output array pointer */
     data_d9504 = &wdr_detial_para_software_out;
-    
+
     /* Binary Ninja: Copy parameter array */
     /* for (int32_t i_1 = 0; i_1 u< 0x68; i_1 += 1) */
     for (int i_1 = 0; i_1 < 0x68; i_1++) {
         /* char var_80[0x68]; var_80[i_1] = *(&data_d94a0 + i_1) */
         /* This copies parameter data - simplified for kernel implementation */
     }
-    
+
     /* Binary Ninja: Call FPGA processing function */
     Tiziano_wdr_fpga(TizianoWdrFpgaStructMe, data_d9494, data_d9498, data_d949c);
-    
+
     /* Binary Ninja: WDR tool control */
     if (param_wdr_tool_control_array == 1) {
         data_b1ff8 = 0;
     }
-    
+
     /* Binary Ninja: Calculate exposure ratio */
     uint32_t divisor = param_ratioPara_software_in_array[0] + 1;
     if (divisor == 0) divisor = 1; /* Prevent division by zero */
@@ -6112,11 +6115,11 @@ static int tiziano_wdr_algorithm(void)
     int32_t a2_5 = data_b15a8;
     wdr_exp_ratio_def = lo_5;
     data_b15a0 = lo_5;
-    
+
     if (a2_5 == 1) {
         wdr_exp_ratio_def = wdr_s2l_ratio;
     }
-    
+
     /* Binary Ninja: Set WDR parameters */
     uint32_t wdr_exp_ratio_def_1 = wdr_exp_ratio_def;
     int32_t a1_4 = data_b1598;
@@ -6127,22 +6130,22 @@ static int tiziano_wdr_algorithm(void)
     data_b15b4 = 0;
     data_b15c0 = 0;
     data_b15cc = 0;
-    
+
     if (a1_4 == 1) {
         wdr_exp_ratio_def_1 -= data_b159c;
     }
-    
+
     data_b15b8 = wdr_exp_ratio_def_1;
     data_b15c4 = wdr_exp_ratio_def_1;
     data_b15d0 = wdr_exp_ratio_def_1;
-    
+
     /* Binary Ninja: Initialize block mean arrays */
     /* for (int32_t i_2 = 0; i_2 != 0x20; ) */
     for (int i_2 = 0; i_2 < 0x20; i_2 += 4) {
         void *v0_16 = (void*)((char*)&wdr_block_mean1_max + i_2);
         *((uint32_t*)v0_16) = 0;
     }
-    
+
     /* Binary Ninja: Complex block mean processing */
     int32_t t5_1 = data_d951c;
     int32_t t2_1 = data_d9520;
@@ -6150,11 +6153,11 @@ static int tiziano_wdr_algorithm(void)
     int32_t t0_2 = data_d9528;
     int i_3 = 0;
     void *v1_6 = &wdr_block_mean1;
-    
+
     /* Binary Ninja: Main block processing loop */
     do {
         int32_t v1_7 = *((uint32_t*)v1_6);
-        
+
         /* Binary Ninja: Complex block mean sorting algorithm */
         if (wdr_block_mean1_max < v1_7) {
             /* Copy and shift block mean values */
@@ -6164,7 +6167,7 @@ static int tiziano_wdr_algorithm(void)
                 *((uint32_t*)((char*)t9_1 + 4)) = s0_2;
             }
             wdr_block_mean1_max = v1_7;
-            
+
         } else if (data_d7210 < v1_7) {
             for (int j_1 = 0; j_1 < 0x18; j_1 += 4) {
                 int32_t s0_4 = *((uint32_t*)(j_1 + 0xd9514));
@@ -6172,7 +6175,7 @@ static int tiziano_wdr_algorithm(void)
                 *((uint32_t*)((char*)t9_2 + 8)) = s0_4;
             }
             data_d7210 = v1_7;
-            
+
         } else if (data_d7214 < v1_7) {
             for (int j_2 = 0; j_2 < 0x14; j_2 += 4) {
                 int32_t s0_6 = *((uint32_t*)(j_2 + 0xd9518));
@@ -6180,43 +6183,43 @@ static int tiziano_wdr_algorithm(void)
                 *((uint32_t*)((char*)t9_3 + 0xc)) = s0_6;
             }
             data_d7214 = v1_7;
-            
+
         } else if (data_d7218 < v1_7) {
             data_d721c = t5_1;
             data_d7220 = t2_1;
             data_d7224 = t1_1;
             data_d7228 = t0_2;
             data_d7218 = v1_7;
-            
+
         } else if (data_d721c < v1_7) {
             data_d7220 = t2_1;
             data_d7224 = t1_1;
             data_d7228 = t0_2;
             data_d721c = v1_7;
-            
+
         } else if (data_d7220 < v1_7) {
             data_d7224 = t1_1;
             data_d7228 = t0_2;
             data_d7220 = v1_7;
-            
+
         } else if (data_d7224 < v1_7) {
             data_d7228 = t0_2;
             data_d7224 = v1_7;
-            
+
         } else if (data_d7228 < v1_7) {
             data_d7228 = v1_7;
         }
-        
+
         i_3 += 4;
         v1_6 = (void*)((char*)&wdr_block_mean1 + i_3);
-        
+
     } while (i_3 != 0x384);
-    
+
     /* Binary Ninja: Block mean end calculation */
     int32_t v1_8 = data_d9080;
     wdr_block_mean1_end = 0;
     int32_t t0_3;
-    
+
     if (v1_8 < 4) {
         data_d9080 = 4;
         t0_3 = data_d9080;
@@ -6226,33 +6229,33 @@ static int tiziano_wdr_algorithm(void)
         data_d9080 = 8;
         t0_3 = data_d9080;
     }
-    
+
     /* Binary Ninja: Calculate average */
     int32_t v1_11 = 0;
     uint32_t wdr_block_mean1_end_2 = 0;
     int32_t a1_21 = 0;
     uint32_t *v0_17 = &wdr_block_mean1_max;
-    
+
     while (a1_21 != t0_3) {
         a1_21 += 1;
         wdr_block_mean1_end_2 += *v0_17;
         v0_17 += 1;
         v1_11 = 1;
     }
-    
+
     uint32_t wdr_block_mean1_end_1 = wdr_block_mean1_end;
-    
+
     if (v1_11 != 0) {
         wdr_block_mean1_end_1 = wdr_block_mean1_end_2;
     }
-    
+
     /* Binary Ninja: Calculate final result */
     uint32_t lo_6 = wdr_block_mean1_end_1 / a1_21;
     wdr_block_mean1_end = lo_6;
     uint32_t wdr_block_mean1_end_old_1 = wdr_block_mean1_end_old;
     uint32_t v1_13 = lo_6 - wdr_block_mean1_end_old_1;
     wdr_block_mean1_th = v1_13;
-    
+
     /* Binary Ninja: Threshold processing */
     if ((int32_t)v1_13 <= 0) {
         if (v1_13 == 0) {
@@ -6263,7 +6266,7 @@ static int tiziano_wdr_algorithm(void)
             int32_t v1_15 = -(int32_t)v1_13;
             wdr_block_mean1_th = v1_15;
             int32_t t0_5 = data_d9078;
-            
+
             if (t0_5 >= v1_15) {
                 wdr_block_mean1_end_old = lo_6;
             } else {
@@ -6275,7 +6278,7 @@ static int tiziano_wdr_algorithm(void)
             wdr_block_mean1_end_old = lo_6;
         } else {
             int32_t t0_4 = data_d9078;
-            
+
             if (t0_4 < (int32_t)v1_13) {
                 wdr_block_mean1_end_old = wdr_block_mean1_end_old_1 + t0_4;
             } else {
@@ -6283,12 +6286,12 @@ static int tiziano_wdr_algorithm(void)
             }
         }
     }
-    
+
     /* Binary Ninja: Special fusion processing */
     if (param_wdr_gam_y_array == 2 && data_b15ac == 1) {
         tiziano_wdr_fusion1_curve_block_mean1();
     }
-    
+
     pr_info("tiziano_wdr_algorithm: WDR algorithm processing complete\n");
     return 0;
 }
@@ -6297,24 +6300,24 @@ static int tiziano_wdr_algorithm(void)
 int tisp_wdr_process(void)
 {
     int32_t v0_1;
-    
+
     pr_info("tisp_wdr_process: Starting WDR processing pipeline\n");
-    
+
     /* Binary Ninja: Call main WDR algorithm */
     tiziano_wdr_algorithm();
-    
+
     /* Binary Ninja: Call software parameter output */
     tiziano_wdr_soft_para_out();
-    
+
     /* Binary Ninja: Update median window optimization array */
     v0_1 = mdns_y_pspa_ref_median_win_opt_array + 1;
-    
+
     if (v0_1 == 0x1e) {
         v0_1 = 0;
     }
-    
+
     mdns_y_pspa_ref_median_win_opt_array = v0_1;
-    
+
     pr_info("tisp_wdr_process: WDR processing pipeline complete\n");
     return 0;
 }
@@ -6324,10 +6327,10 @@ int tisp_wdr_process(void)
 int tiziano_wdr_init(uint32_t width, uint32_t height)
 {
     pr_info("tiziano_wdr_init: Initializing WDR processing (%dx%d)\n", width, height);
-    
+
     /* Initialize WDR-specific components and enable WDR mode */
     tisp_gb_init();
-    
+
     /* Enable WDR processing for all pipeline components */
     tisp_dpc_wdr_en(1);
     tisp_lsc_wdr_en(1);
@@ -6342,7 +6345,7 @@ int tiziano_wdr_init(uint32_t width, uint32_t height)
     tisp_dmsc_wdr_en(1);
     tisp_ae_wdr_en(1);
     tisp_sdns_wdr_en(1);
-    
+
     pr_info("tiziano_wdr_init: WDR processing initialized successfully\n");
     return 0;
 }
@@ -6351,7 +6354,7 @@ int tiziano_wdr_init(uint32_t width, uint32_t height)
 int tisp_wdr_init(void)
 {
     pr_info("tisp_wdr_init: Initializing WDR processing parameters\n");
-    
+
     /* Initialize default values for WDR parameters */
     wdr_ev_now = 0x1000;
     wdr_ev_list_deghost_val = 0x800;
@@ -6361,17 +6364,17 @@ int tisp_wdr_init(void)
     wdr_block_mean1_max = 0;
     wdr_exp_ratio_def = 0x1000;
     wdr_s2l_ratio = 0x800;
-    
+
     /* Initialize parameter arrays with default values */
     memset(param_multiValueHigh_software_in_array, 0, sizeof(param_multiValueHigh_software_in_array));
     memset(param_multiValueLow_software_in_array, 0, sizeof(param_multiValueLow_software_in_array));
     memset(param_computerModle_software_in_array, 0, sizeof(param_computerModle_software_in_array));
-    
+
     /* Set some default parameter values */
     param_multiValueHigh_software_in_array[0] = 0x2000;
     param_multiValueLow_software_in_array[0] = 0x1000;
     param_computerModle_software_in_array[0] = 1;
-    
+
     pr_info("tisp_wdr_init: WDR parameters initialized\n");
     return 0;
 }
@@ -6409,10 +6412,10 @@ static void tisp_ae1_process(void)
 int tiziano_ae_init_exp_th(void)
 {
     pr_info("tiziano_ae_init_exp_th: Initializing AE exposure thresholds\n");
-    
+
     /* Set parameter addresses safely */
     data_d04b8 = &data_b0cfc;
-    
+
     /* Initialize parameter array with safe values */
     data_d04bc[0] = 0x000d0b00;
     data_d04bc[1] = 0x040d0b00;
@@ -6420,55 +6423,55 @@ int tiziano_ae_init_exp_th(void)
     data_d04bc[3] = 0x0c0d0b00;
     data_d04bc[4] = 0x100d0b00;
     data_d04bc[5] = 0x140d0b00;
-    
+
     /* Check and set AE exposure threshold */
     if (data_b2ea8 < ae_exp_th.data[0]) {
         ae_exp_th.data[0] = data_b2ea8;
     }
-    
+
     /* Calculate and clamp exposure values using safe math */
     uint32_t min_exp = tisp_math_exp2(data_b2e9c, 0x10, 0xa);
     uint32_t max_exp = tisp_math_exp2(data_b2ea0, 0x10, 0xa);
-    
+
     if (min_exp >= data_b0cfc) {
         /* Use default if calculation exceeds limit */
         min_exp = data_b0cfc;
     } else {
         *data_d04b8 = min_exp;
     }
-    
+
     if (max_exp >= data_d04bc[0]) {
         /* Use default if calculation exceeds limit */
         max_exp = data_d04bc[0];
     } else {
         data_d04bc[0] = max_exp;
     }
-    
+
     /* Apply minimum gain constraints */
     if (*data_d04c4 < data_b2ea4) {
         *data_d04c4 = data_b2ea4;
     }
-    
+
     /* Set gain limits with safe bounds checking */
     uint32_t min_gain = 0x400;
     uint32_t max_gain = 0x400;
-    
+
     if (min_gain < 0x400) min_gain = 0x400;
     if (max_gain < 0x400) max_gain = 0x400;
-    
+
     /* Store calculated values in global cache */
     data_b0cfc = *data_d04b8;
     data_afcd4 = *data_d04c4;
-    
+
     /* WDR-specific threshold handling */
     if (data_b0e10 == 1) {
         pr_info("tiziano_ae_init_exp_th: Configuring WDR exposure thresholds\n");
-        
+
         /* WDR minimum exposure threshold */
         if (data_b2ed0 < data_b0d18) {
             data_b0d18 = data_b2ed0;
         }
-        
+
         /* WDR maximum exposure calculation */
         uint32_t wdr_max_exp = tisp_math_exp2(data_b2ed4, 0x10, 0xa);
         if (wdr_max_exp >= data_b0d1c) {
@@ -6476,19 +6479,19 @@ int tiziano_ae_init_exp_th(void)
         } else {
             data_b0d1c = wdr_max_exp;
         }
-        
+
         /* WDR gain constraints */
         if (data_b2ecc < 0x401) {
             /* Apply minimum gain */
         } else {
             data_b2ecc = 0x400;
         }
-        
+
         /* Store WDR values */
         data_afcd8 = data_b0d18;
         data_afce0 = data_b0d1c;
     }
-    
+
     pr_info("tiziano_ae_init_exp_th: AE exposure thresholds initialized\n");
     return 0;
 }
@@ -6497,13 +6500,13 @@ int tiziano_ae_init_exp_th(void)
 int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
 {
     pr_info("tiziano_ae_init: Initializing Auto Exposure (%dx%d@%d) - Binary Ninja EXACT\n", width, height, fps);
-    
+
     /* Binary Ninja EXACT: int32_t $a3, int32_t arg_c = $a3 */
     int32_t arg_c = fps;  /* arg_c corresponds to fps parameter */
-    
+
     /* Binary Ninja EXACT: memset(&tisp_ae_hist, 0, 0x42c) */
     memset(&tisp_ae_hist, 0, 0x42c);
-    
+
     /* Binary Ninja EXACT: __builtin_memcpy(&data_d4fbc, "\x0d\x00\x00\x00\x40\x00\x00\x00\x90\x00\x00\x00\xc0\x00\x00\x00\x0f\x00\x00\x00\x0f\x00\x00\x00", 0x18) */
     uint8_t init_data[0x18] = {
         0x0d, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00,
@@ -6511,16 +6514,16 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
         0x0f, 0x00, 0x00, 0x00, 0x0f, 0x00, 0x00, 0x00
     };
     memcpy(&data_d04bc, init_data, 0x18);
-    
+
     /* Binary Ninja EXACT: memcpy(&tisp_ae_hist_last, &tisp_ae_hist, 0x42c) */
     memcpy(&tisp_ae_hist_last, &tisp_ae_hist, 0x42c);
-    
+
     /* Binary Ninja EXACT: memset(&dmsc_sp_d_w_stren_wdr_array, 0, 0x98) */
     memset(&dmsc_sp_d_w_stren_wdr_array_ae, 0, 0x98);
-    
+
     /* Binary Ninja EXACT: memset(&ae_ctrls, 0, 0x10) */
     memset(&ae_ctrls, 0, 0x10);
-    
+
     /* Forward declarations removed - functions implemented below */
 
     /* Binary Ninja EXACT: tiziano_ae_params_refresh() */
@@ -6531,30 +6534,30 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
 
     /* Binary Ninja EXACT: tiziano_ae_para_addr() */
     (void)tiziano_ae_para_addr();
-    
+
     /* Binary Ninja EXACT: *data_d04c4 = arg3 (height parameter) */
     *data_d04c4 = height;
-    
+
     /* Binary Ninja EXACT: tiziano_ae_set_hardware_param(0, data_d4678, 0) */
     tiziano_ae_set_hardware_param(0, (uint32_t*)&data_d04bc[0], 0);
-    
+
     /* Binary Ninja EXACT: tiziano_ae_set_hardware_param(1, dmsc_alias_stren_intp, 0) */
     tiziano_ae_set_hardware_param(1, (uint32_t*)&dmsc_sp_d_w_stren_wdr_array_ae, 0);
-    
+
     /* Binary Ninja EXACT: uint32_t ta_custom_en_1 = ta_custom_en */
     uint32_t ta_custom_en_1 = ta_custom_en;
-    
+
     /* Binary Ninja EXACT: if (ta_custom_en_1 == 1) */
     if (ta_custom_en_1 == 1) {
         /* Binary Ninja EXACT: tisp_set_sensor_integration_time(_ae_result) */
         tisp_set_sensor_integration_time(_ae_result.data[0]);
-        
+
         /* Binary Ninja EXACT: tisp_set_sensor_analog_gain() */
         tisp_set_sensor_analog_gain();
-        
+
         /* Binary Ninja EXACT: int32_t $v1_1 = data_b0e10 */
         int32_t v1_1 = data_b0e10;
-        
+
         /* Binary Ninja EXACT: if ($v1_1 == 0) */
         if (v1_1 == 0) {
             /* Binary Ninja EXACT: int32_t $v0_2 = data_afcd4 */
@@ -6575,33 +6578,33 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
             /* Binary Ninja EXACT: system_reg_write_ae(3, 0x1004, $v0_5 << 0x10 | $v0_5) */
             system_reg_write_ae(3, 0x1004, v0_5 << 0x10 | v0_5);
         }
-        
+
         /* Binary Ninja EXACT: int32_t _AePointPos_1 = _AePointPos.data[0] */
         int32_t AePointPos_1 = _AePointPos.data[0];
 
         /* Binary Ninja EXACT: int32_t $v0_6 = fix_point_mult3_32(_AePointPos_1, _ae_result.data[0] << (_AePointPos_1 & 0x1f), data_afcd0) */
         int32_t v0_6 = fix_point_mult3_32(AePointPos_1, _ae_result.data[0] << (AePointPos_1 & 0x1f), data_afcd0);
-        
+
         /* Binary Ninja EXACT: int32_t $v1_2 = data_b0e10 */
         int32_t v1_2 = data_b0e10;
-        
+
         /* Binary Ninja EXACT: dmsc_uu_stren_wdr_array = $v0_6 */
         /* Store calculated value in global variable - using safe memory offset */
         data_afcd0 = v0_6;  /* Store AE calculation result */
-        
+
         /* Binary Ninja EXACT: if ($v1_2 == 1) */
         if (v1_2 == 1) {
             /* Binary Ninja EXACT: tisp_set_sensor_integration_time_short(data_afcd8) */
             tisp_set_sensor_integration_time_short(data_afcd8);
-            
+
             /* Binary Ninja EXACT: tisp_set_sensor_analog_gain_short() */
             tisp_set_sensor_analog_gain_short();
-            
+
             /* Binary Ninja EXACT: int32_t $v0_7 = data_afce0 */
             int32_t v0_7 = data_afce0;
             /* Binary Ninja EXACT: system_reg_write_ae(3, 0x100c, $v0_7 << 0x10 | $v0_7) */
             system_reg_write_ae(3, 0x100c, v0_7 << 0x10 | v0_7);
-            
+
             /* Binary Ninja EXACT: int32_t $v0_8 = data_afce0 */
             int32_t v0_8 = data_afce0;
             /* Binary Ninja EXACT: system_reg_write_ae(3, 0x1010, $v0_8 << 0x10 | $v0_8) */
@@ -6627,44 +6630,44 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
     system_irq_func_set(0x12, tiziano_adr_interrupt_static);   // Index 18: ADR */
 	system_irq_func_set(0x1f, af_interrupt_static);            // Index 31: AF */
     system_irq_func_set(0x0b, tiziano_wdr_interrupt_static);   // Index 11: WDR */
-    
+
     /* Binary Ninja EXACT: uint32_t $a2_13 = zx.d(data_b2e56) */
     uint32_t a2_13 = (uint32_t)data_b2e56;
-    
+
     /* Binary Ninja EXACT: uint32_t $a3_1 = zx.d(data_b2e54) */
     uint32_t a3_1 = (uint32_t)data_b2e54;
-    
+
     /* Binary Ninja EXACT: int32_t $a1_5 = data_b2e44 */
     int32_t a1_5 = data_b2e44;
-    
+
     /* Binary Ninja EXACT: data_b0b28 = $a1_5 */
     data_b0b28 = a1_5;
-    
+
     /* Binary Ninja EXACT: data_b0b2c = $a2_13 */
     data_b0b2c = a2_13;
-    
+
     /* Binary Ninja EXACT: data_b0b30 = $a3_1 */
     data_b0b30 = a3_1;
-    
+
     /* Binary Ninja EXACT: tiziano_deflicker_expt(_flicker_t, $a1_5, $a2_13, $a3_1, &_deflick_lut, &_nodes_num) */
     tiziano_deflicker_expt(_flicker_t.data[0], a1_5, a2_13, a3_1, _deflick_lut.data, (uint32_t*)&_nodes_num.data[0]);
-    
+
     /* Binary Ninja EXACT: tisp_event_set_cb(1, tisp_ae0_process) */
     tisp_event_set_cb(1, tisp_ae0_process);
-    
+
     /* Binary Ninja EXACT: tisp_event_set_cb(6, tisp_ae1_process) */
     tisp_event_set_cb(6, tisp_ae1_process);
-    
+
     /* CRITICAL FIX: Binary Ninja shows NULL spinlock init - this was causing 6+ second delays! */
     /* The reference driver initializes actual spinlock variables, not NULL pointers */
     /* These calls were causing undefined behavior and blocking the streaming initialization */
     pr_info("*** CRITICAL FIX: Skipping NULL spinlock initialization that was causing 6+ second delays ***\n");
     /* private_spin_lock_init(0); - REMOVED: This was the root cause of the timing issue! */
     /* private_spin_lock_init(0); - REMOVED: This was the root cause of the timing issue! */
-    
+
     /* Binary Ninja EXACT: ae_comp_default = data_b0c18 */
     ae_comp_default = data_b0c18;
-    
+
     /* Binary Ninja EXACT: return 0 */
     pr_info("tiziano_ae_init: AE initialization complete - Binary Ninja EXACT implementation\n");
     return 0;
@@ -6674,11 +6677,11 @@ int tiziano_ae_init(uint32_t height, uint32_t width, uint32_t fps)
 int tiziano_awb_init(uint32_t height, uint32_t width)
 {
     pr_info("tiziano_awb_init: Initializing Auto White Balance (%dx%d)\n", width, height);
-    
+
     /* Binary Ninja system_reg_write_awb shows these register writes */
     system_reg_write(0xb000, 1);  /* Enable AWB block 1 */
     system_reg_write(0x1800, 1);  /* Enable AWB block 2 */
-    
+
     pr_info("tiziano_awb_init: AWB hardware blocks enabled\n");
     return 0;
 }
@@ -6797,32 +6800,32 @@ int tiziano_gamma_lut_parameter(void)
 {
     uint32_t reg_base = 0x40000; /* Binary Ninja shows &data_40000 */
     void __iomem *base_reg = ioremap(0x13340000, 0x10000); /* ISP base + 0x40000 */
-    
+
     if (!base_reg) {
         pr_err("tiziano_gamma_lut_parameter: Failed to map gamma registers\n");
         return -ENOMEM;
     }
-    
+
     if (!tiziano_gamma_lut_now) {
         pr_err("tiziano_gamma_lut_parameter: No gamma LUT selected\n");
         iounmap(base_reg);
         return -EINVAL;
     }
-    
+
     pr_info("tiziano_gamma_lut_parameter: Writing gamma LUT to registers\n");
-    
+
     /* Binary Ninja: Loop from i=2 to 0x102, increment by 2 */
     for (int32_t i = 2; i < 0x102; i += 2) {
         uint32_t val = (tiziano_gamma_lut_now[i] << 12) | tiziano_gamma_lut_now[i - 2];
-        
+
         /* Write to three gamma channel registers - RGB */
         writel(val, base_reg + (reg_base - 0x40000));           /* R channel */
         writel(val, base_reg + (reg_base - 0x40000) + 0x8000);  /* G channel */
         writel(val, base_reg + (reg_base - 0x40000) + 0x10000); /* B channel */
-        
+
         reg_base += 4; /* Increment register address */
     }
-    
+
     iounmap(base_reg);
     pr_info("tiziano_gamma_lut_parameter: Gamma LUT written to hardware\n");
     return 0;
@@ -6907,7 +6910,7 @@ static int tisp_lsc_judge_ct_update_flag(void)
     /* Simple threshold check for color temperature changes */
     static uint32_t last_ct = 0;
     uint32_t ct_diff = (data_9a40c >= last_ct) ? (data_9a40c - last_ct) : (last_ct - data_9a40c);
-    
+
     if (ct_diff > 200) { /* 200K threshold */
         last_ct = data_9a40c;
         return 1;
@@ -6921,7 +6924,7 @@ static int tisp_lsc_judge_gain_update_flag(void)
     /* Simple threshold check for gain changes */
     static uint32_t last_gain = 0;
     uint32_t gain_diff = (lsc_curr_str >= last_gain) ? (lsc_curr_str - last_gain) : (last_gain - lsc_curr_str);
-    
+
     if (gain_diff > 0x80) { /* Gain threshold */
         last_gain = lsc_curr_str;
         return 1;
@@ -6933,46 +6936,46 @@ static int tisp_lsc_judge_gain_update_flag(void)
 int tisp_lsc_write_lut_datas(void)
 {
     static uint32_t lsc_count = 0;
-    
+
     pr_info("tisp_lsc_write_lut_datas: Writing LSC LUT data\n");
-    
+
     lsc_count += 1;
-    
+
     /* Binary Ninja: Check update flags */
     if (lsc_api_flag == 0) {
         lsc_ct_update_flag = tisp_lsc_judge_ct_update_flag();
         lsc_gain_update_flag = tisp_lsc_judge_gain_update_flag();
     }
-    
+
     /* Binary Ninja: Process LUT data if update needed */
     if (lsc_ct_update_flag == 1 || data_9a400 == 1 || lsc_api_flag == 1) {
         uint32_t mode = data_9a408;
-        
+
         if (mode == 0) {
             /* Use A illuminant LUT */
             memcpy(&lsc_final_lut, &lsc_a_lut, sizeof(lsc_final_lut));
         } else if (mode == 1) {
             /* Interpolate between A and T illuminants */
             uint32_t weight = ((data_9a40c - data_9a410) << 12) / (data_9a414 - data_9a410);
-            
+
             for (int i = 0; i < data_9a428; i++) {
                 uint32_t a_val = lsc_a_lut[i];
                 uint32_t t_val = lsc_t_lut[i];
-                
+
                 int32_t a_high = a_val >> 12;
                 int32_t a_low = a_val & 0xfff;
                 int32_t t_high = t_val >> 12;
                 int32_t t_low = t_val & 0xfff;
-                
+
                 int32_t final_high = (((t_high - a_high) * weight) >> 12) + a_high;
                 int32_t final_low = (((t_low - a_low) * weight) >> 12) + a_low;
-                
+
                 /* Clamp values */
                 if (final_high < 0) final_high = 0;
                 if (final_low < 0) final_low = 0;
                 if (final_high >= 0x1000) final_high = 0xfff;
                 if (final_low >= 0x1000) final_low = 0xfff;
-                
+
                 lsc_final_lut[i] = (final_high << 12) | final_low;
             }
         } else if (mode == 2) {
@@ -6984,30 +6987,30 @@ int tisp_lsc_write_lut_datas(void)
                 memcpy(&lsc_final_lut, &lsc_d_lut, sizeof(lsc_final_lut));
             } else {
                 uint32_t weight = ((data_9a40c - data_9a418) << 12) / (data_9a41c - data_9a418);
-                
+
                 for (int i = 0; i < data_9a428; i++) {
                     uint32_t t_val = lsc_t_lut[i];
                     uint32_t d_val = lsc_d_lut[i];
-                    
+
                     int32_t t_high = t_val >> 12;
                     int32_t t_low = t_val & 0xfff;
                     int32_t d_high = d_val >> 12;
                     int32_t d_low = d_val & 0xfff;
-                    
+
                     int32_t final_high = (((d_high - t_high) * weight) >> 12) + t_high;
                     int32_t final_low = (((d_low - t_low) * weight) >> 12) + t_low;
-                    
+
                     /* Clamp values */
                     if (final_high < 0) final_high = 0;
                     if (final_low < 0) final_low = 0;
                     if (final_high >= 0x1000) final_high = 0xfff;
                     if (final_low >= 0x1000) final_low = 0xfff;
-                    
+
                     lsc_final_lut[i] = (final_high << 12) | final_low;
                 }
             }
         }
-        
+
         /* Binary Ninja: Calculate base strength based on mesh scale */
         uint32_t base_strength = 0x800;
         if (lsc_mesh_scale == 0) {
@@ -7019,7 +7022,7 @@ int tisp_lsc_write_lut_datas(void)
         } else {
             base_strength = 0x100;
         }
-        
+
         /* Binary Ninja: Write LUT data to hardware registers */
         void __iomem *lsc_reg = ioremap(0x13328000, 0x10000);
         if (lsc_reg) {
@@ -7027,7 +7030,7 @@ int tisp_lsc_write_lut_datas(void)
                 uint32_t r_val = lsc_final_lut[i * 3];
                 uint32_t g_val = lsc_final_lut[i * 3 + 1];
                 uint32_t b_val = lsc_final_lut[i * 3 + 2];
-                
+
                 /* Apply strength scaling */
                 int32_t r_low = base_strength + (((r_val & 0xfff) - base_strength) * lsc_curr_str >> 12);
                 int32_t r_high = base_strength + (((r_val >> 12) - base_strength) * lsc_curr_str >> 12);
@@ -7035,7 +7038,7 @@ int tisp_lsc_write_lut_datas(void)
                 int32_t g_high = base_strength + (((g_val >> 12) - base_strength) * lsc_curr_str >> 12);
                 int32_t b_low = base_strength + (((b_val & 0xfff) - base_strength) * lsc_curr_str >> 12);
                 int32_t b_high = base_strength + (((b_val >> 12) - base_strength) * lsc_curr_str >> 12);
-                
+
                 /* Clamp all values */
                 if (r_low < 0) r_low = 0; if (r_low >= 0x1000) r_low = 0xfff;
                 if (r_high < 0) r_high = 0; if (r_high >= 0x1000) r_high = 0xfff;
@@ -7043,19 +7046,19 @@ int tisp_lsc_write_lut_datas(void)
                 if (g_high < 0) g_high = 0; if (g_high >= 0x1000) g_high = 0xfff;
                 if (b_low < 0) b_low = 0; if (b_low >= 0x1000) b_low = 0xfff;
                 if (b_high < 0) b_high = 0; if (b_high >= 0x1000) b_high = 0xfff;
-                
+
                 /* Write to hardware registers */
                 uint32_t reg_offset = i << 4;
                 writel((r_high << 12) | r_low, lsc_reg + reg_offset);
                 writel((g_high << 12) | g_low, lsc_reg + reg_offset + 4);
                 writel((b_high << 12) | b_low, lsc_reg + reg_offset + 8);
             }
-            
+
             /* Final LSC configuration register */
             writel(0, lsc_reg + 0xc);
             iounmap(lsc_reg);
         }
-        
+
         /* Reset update flags */
         if (lsc_api_flag == 0) {
             lsc_ct_update_flag = 0;
@@ -7063,7 +7066,7 @@ int tisp_lsc_write_lut_datas(void)
             data_9a400 = 0;
         }
     }
-    
+
     return 0;
 }
 
@@ -7131,22 +7134,22 @@ int tisp_ccm_is_initialized(void)
 static int tiziano_ccm_lut_parameter(int32_t *ccm_data)
 {
     void __iomem *base_reg = ioremap(0x13305000, 0x1000); /* CCM register base */
-    
+
     if (!base_reg) {
         pr_err("tiziano_ccm_lut_parameter: Failed to map CCM registers\n");
         return -ENOMEM;
     }
-    
+
     pr_info("tiziano_ccm_lut_parameter: Writing CCM matrix to registers\n");
-    
+
     /* Binary Ninja: Enable CCM processing */
     writel(1, base_reg);
-    
+
     /* Binary Ninja: Write CCM matrix values */
     for (int32_t i = 0; i < 10; i += 2) {
         uint32_t reg_addr;
         uint32_t val;
-        
+
         if (i != 8) {
             /* Combine two 16-bit values into 32-bit register */
             val = (ccm_data[i + 1] << 16) | (ccm_data[i] & 0xFFFF);
@@ -7154,17 +7157,17 @@ static int tiziano_ccm_lut_parameter(int32_t *ccm_data)
             /* Last register gets single value */
             val = ccm_data[8];
         }
-        
+
         /* Binary Ninja: Register address calculation (i + 0x2802) << 1 */
         reg_addr = (i + 0x2802) << 1;
         writel(val, base_reg + reg_addr - 0x5000);
     }
-    
+
     /* Binary Ninja: Additional CCM configuration registers */
     if (ccm_real.real == 1) {
         uint32_t dp_cfg = (data_aa470 << 16) | (tiziano_ccm_dp_cfg << 12) | data_aa474;
         writel(dp_cfg, base_reg + 0x18);
-        
+
         uint32_t dp_step;
         if (data_aa470 != data_aa474) {
             if (data_aa474 >= data_aa470) {
@@ -7175,11 +7178,11 @@ static int tiziano_ccm_lut_parameter(int32_t *ccm_data)
         } else {
             dp_step = 1;
         }
-        
+
         writel(dp_step, base_reg + 0x1c);
         writel((data_aa47c << 16) | data_aa478, base_reg + 0x20);
     }
-    
+
     iounmap(base_reg);
     pr_info("tiziano_ccm_lut_parameter: CCM matrix written to hardware\n");
     return 0;
@@ -7189,7 +7192,7 @@ static int tiziano_ccm_lut_parameter(int32_t *ccm_data)
 static void tiziano_ct_ccm_interpolation(uint32_t ct_value, uint32_t ct_threshold)
 {
     pr_info("tiziano_ct_ccm_interpolation: CT=%u, threshold=%u\n", ct_value, ct_threshold);
-    
+
     /* Interpolate CCM matrix based on color temperature */
     for (int i = 0; i < 9; i++) {
         if (ct_value > 5000) {
@@ -7201,7 +7204,7 @@ static void tiziano_ct_ccm_interpolation(uint32_t ct_value, uint32_t ct_threshol
         } else {
             /* Mixed lighting - interpolate between A and T */
             uint32_t weight = ((ct_value - 3000) * 256) / 2000;
-            ccm_parameter.data[i] = ((tiziano_ccm_a_now[i] * weight) + 
+            ccm_parameter.data[i] = ((tiziano_ccm_a_now[i] * weight) +
                                    (tiziano_ccm_t_now[i] * (256 - weight))) >> 8;
         }
     }
@@ -7211,11 +7214,11 @@ static void tiziano_ct_ccm_interpolation(uint32_t ct_value, uint32_t ct_threshol
 static void cm_control(void *ccm_param, uint32_t sat_value, void *output)
 {
     pr_info("cm_control: saturation=%u\n", sat_value);
-    
+
     /* Apply saturation scaling to CCM matrix */
     int32_t *matrix = (int32_t *)ccm_param;
     int32_t *result = (int32_t *)output;
-    
+
     for (int i = 0; i < 9; i++) {
         result[i] = (matrix[i] * sat_value) >> 8;
     }
@@ -7336,23 +7339,23 @@ int jz_isp_ccm(void)
 {
     uint32_t ev_value = data_9a454 >> 10;  /* Current EV shifted */
     int32_t ct_value = jz_isp_ccm_parameter_convert();
-    
+
     pr_info("jz_isp_ccm: EV=%u, CT=%d\n", ev_value, ct_value);
-    
+
     /* Binary Ninja: Check if CCM update is needed */
     if (ccm_real.real != 1) {
-        uint32_t ev_diff = (data_c52ec >= ev_value) ? 
+        uint32_t ev_diff = (data_c52ec >= ev_value) ?
                           (data_c52ec - ev_value) : (ev_value - data_c52ec);
-        
+
         if (data_c52f0 >= ev_diff) {
             /* No significant EV change - skip update */
             return 0;
         }
     }
-    
+
     /* Binary Ninja: EV-based saturation interpolation */
     uint32_t sat_value = 0x100;  /* Default saturation */
-    
+
     for (int i = 0; i < 9; i++) {
         if (cm_ev_list_now[i] >= ev_value) {
             if (i != 0) {
@@ -7361,7 +7364,7 @@ int jz_isp_ccm(void)
                 uint32_t ev_high = cm_ev_list_now[i];
                 uint32_t sat_low = cm_sat_list_now[i-1];
                 uint32_t sat_high = cm_sat_list_now[i];
-                
+
                 if (ev_high != ev_low) {
                     uint32_t weight = (ev_value - ev_low) * 256 / (ev_high - ev_low);
                     sat_value = sat_low + (((sat_high - sat_low) * weight) >> 8);
@@ -7373,35 +7376,35 @@ int jz_isp_ccm(void)
             }
             break;
         }
-        
+
         if (i == 8) {
             sat_value = cm_sat_list_now[8];  /* Use maximum value */
         }
     }
-    
+
     data_c52fc = sat_value;
-    
+
     /* Binary Ninja: CT-based processing */
-    uint32_t ct_diff = (data_c52f4 >= ct_value) ? 
+    uint32_t ct_diff = (data_c52f4 >= ct_value) ?
                       (data_c52f4 - ct_value) : (ct_value - data_c52f4);
-    
+
     if (ccm_real.real == 1 || data_c52f8 < ct_diff) {
         tiziano_ct_ccm_interpolation(ct_value, data_c52f8);
     }
-    
+
     /* Binary Ninja: Generate final CCM matrix */
     uint32_t final_matrix[9];
     cm_control(&ccm_parameter, data_c52fc, final_matrix);
-    
+
     /* Binary Ninja: Convert and write to registers */
     uint32_t reg_data[9];
     jz_isp_ccm_para2reg(reg_data, final_matrix);
-    
+
     int ret = tiziano_ccm_lut_parameter((int32_t *)reg_data);
     if (ret) {
         return ret;
     }
-    
+
     ccm_real.real = 0;  /* Clear update flag */
     return 0;
 }
@@ -7410,7 +7413,7 @@ int jz_isp_ccm(void)
 int tiziano_ccm_init(void)
 {
     pr_info("tiziano_ccm_init: Initializing Color Correction Matrix\n");
-    
+
     /* Binary Ninja: Select CCM parameters based on WDR mode */
     if (ccm_wdr_en != 1) {
         tiziano_ccm_a_now = tiziano_ccm_a_linear;
@@ -7427,11 +7430,11 @@ int tiziano_ccm_init(void)
         cm_sat_list_now = cm_sat_list_wdr;
         pr_info("tiziano_ccm_init: Using WDR CCM parameters\n");
     }
-    
+
     /* Binary Ninja: Initialize control structures */
     memset(&ccm_real, 0, sizeof(ccm_real));
     memset(&ccm_ctrl, 0, sizeof(ccm_ctrl));
-    
+
     /* Binary Ninja: Set initial state values */
     data_c52ec = data_9a454 >> 10;
     data_c52f4 = data_9a450;
@@ -7439,18 +7442,18 @@ int tiziano_ccm_init(void)
     ccm_real.real = 1;
     data_c52f8 = 0x64;
     data_c52f0 = 0x28;
-    
+
     /* Binary Ninja: Refresh parameters and initialize defaults */
     tiziano_ccm_params_refresh();
     memcpy(&ccm_parameter, &_ccm_d_parameter, sizeof(ccm_parameter));
-    
+
     /* Binary Ninja: Apply initial CCM configuration */
     int ret = jz_isp_ccm();
     if (ret) {
         pr_err("tiziano_ccm_init: Failed to initialize CCM: %d\n", ret);
         return ret;
     }
-    
+
     pr_info("tiziano_ccm_init: CCM initialized successfully\n");
     return 0;
 }
@@ -7514,14 +7517,14 @@ void tiziano_sharpen_params_refresh(void)
 static int tisp_sharpen_all_reg_refresh(void)
 {
     void __iomem *base_reg = ioremap(0x1330B000, 0x1000); /* Sharpening register base */
-    
+
     if (!base_reg) {
         pr_err("tisp_sharpen_all_reg_refresh: Failed to map sharpening registers\n");
         return -ENOMEM;
     }
-    
+
     pr_info("tisp_sharpen_all_reg_refresh: Writing sharpening parameters to registers\n");
-    
+
     /* Write sharpening arrays to hardware */
     for (int i = 0; i < 16; i++) {
         writel(y_sp_uu_thres_array_now[i], base_reg + 0x100 + (i * 4));      /* UU threshold */
@@ -7534,12 +7537,12 @@ static int tisp_sharpen_all_reg_refresh(void)
         writel(y_sp_b_sl_stren_2_array_now[i], base_reg + 0x2c0 + (i * 4));  /* B strength 2 */
         writel(y_sp_b_sl_stren_3_array_now[i], base_reg + 0x300 + (i * 4));  /* B strength 3 */
     }
-    
+
     /* Enable sharpening processing */
     writel(1, base_reg + 0x00);       /* Enable sharpening */
     writel(0x7, base_reg + 0x04);     /* Sharpening mode: all bands enabled */
     writel(0x80, base_reg + 0x08);    /* Sharpening global strength */
-    
+
     iounmap(base_reg);
     pr_info("tisp_sharpen_all_reg_refresh: Sharpening registers written to hardware\n");
     return 0;
@@ -7549,12 +7552,12 @@ static int tisp_sharpen_all_reg_refresh(void)
 int tisp_sharpen_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write)
 {
     uint32_t prev_value = data_9a920;
-    
+
     pr_info("tisp_sharpen_par_refresh: EV=%u, threshold=%u, enable=%d\n", ev_value, threshold, enable_write);
-    
+
     if (prev_value != 0xFFFFFFFF) {
         uint32_t diff = (prev_value >= ev_value) ? (prev_value - ev_value) : (ev_value - prev_value);
-        
+
         if (diff >= threshold) {
             data_9a920 = ev_value;
             tisp_sharpen_all_reg_refresh();
@@ -7563,12 +7566,12 @@ int tisp_sharpen_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_w
         data_9a920 = ev_value;
         tisp_sharpen_all_reg_refresh();
     }
-    
+
     if (enable_write == 1) {
         /* Enable sharpening with register write */
         system_reg_write(0xb000 + 0x400, 1);  /* Enable sharpening processing */
     }
-    
+
     return 0;
 }
 
@@ -7576,7 +7579,7 @@ int tisp_sharpen_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_w
 int tiziano_sharpen_init(void)
 {
     pr_info("tiziano_sharpen_init: Initializing Sharpening\n");
-    
+
     /* Binary Ninja: Select parameter arrays based on WDR mode */
     if (sharpen_wdr_en != 0) {
         y_sp_uu_thres_array_now = y_sp_uu_thres_wdr_array;
@@ -7601,18 +7604,18 @@ int tiziano_sharpen_init(void)
         y_sp_b_sl_stren_3_array_now = y_sp_b_sl_stren_3_array;
         pr_info("tiziano_sharpen_init: Using linear sharpening parameters\n");
     }
-    
+
     /* Binary Ninja: Initialize state and refresh parameters */
     data_9a920 = 0xFFFFFFFF;
     tiziano_sharpen_params_refresh();
-    
+
     /* Binary Ninja: Initial parameter refresh with enable */
     int ret = tisp_sharpen_par_refresh(0, 0, 1);
     if (ret) {
         pr_err("tiziano_sharpen_init: Failed to refresh sharpening parameters: %d\n", ret);
         return ret;
     }
-    
+
     pr_info("tiziano_sharpen_init: Sharpening initialized successfully\n");
     return 0;
 }
@@ -7688,14 +7691,14 @@ void tiziano_sdns_params_refresh(void)
 static int tisp_sdns_all_reg_refresh(void)
 {
     void __iomem *base_reg = ioremap(0x13308000, 0x1000); /* SDNS register base */
-    
+
     if (!base_reg) {
         pr_err("tisp_sdns_all_reg_refresh: Failed to map SDNS registers\n");
         return -ENOMEM;
     }
-    
+
     pr_info("tisp_sdns_all_reg_refresh: Writing SDNS parameters to registers\n");
-    
+
     /* Write threshold arrays to hardware */
     for (int i = 0; i < 16; i++) {
         writel(sdns_std_thr1_array_now[i], base_reg + 0x100 + (i * 4));     /* STD threshold 1 */
@@ -7711,10 +7714,10 @@ static int tisp_sdns_all_reg_refresh(void)
         writel(sdns_ave_fliter_now[i], base_reg + 0x380 + (i * 4));         /* Average filter */
         writel(sdns_sharpen_tt_opt_array_now[i], base_reg + 0x3c0 + (i * 4)); /* Sharpen TT */
     }
-    
+
     /* Enable SDNS processing - Binary Ninja shows 0x8b4c register */
     writel(1, base_reg + 0xb4c);
-    
+
     iounmap(base_reg);
     pr_info("tisp_sdns_all_reg_refresh: SDNS registers written to hardware\n");
     return 0;
@@ -7732,12 +7735,12 @@ static int tisp_sdns_intp_reg_refresh(void)
 int tisp_sdns_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write)
 {
     uint32_t prev_value = data_9a9c4;
-    
+
     pr_info("tisp_sdns_par_refresh: EV=%u, threshold=%u, enable=%d\n", ev_value, threshold, enable_write);
-    
+
     if (prev_value != 0xFFFFFFFF) {
         uint32_t diff = (prev_value >= ev_value) ? (prev_value - ev_value) : (ev_value - prev_value);
-        
+
         if (diff >= threshold) {
             data_9a9c4 = ev_value;
             tisp_sdns_intp_reg_refresh();
@@ -7746,12 +7749,12 @@ int tisp_sdns_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_writ
         data_9a9c4 = ev_value;
         tisp_sdns_all_reg_refresh();
     }
-    
+
     if (enable_write == 1) {
         /* Binary Ninja: Enable SDNS with register write */
         system_reg_write(0x8b4c, 1);
     }
-    
+
     return 0;
 }
 
@@ -7759,7 +7762,7 @@ int tisp_sdns_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_writ
 int tiziano_sdns_init(void)
 {
     pr_info("tiziano_sdns_init: Initializing SDNS processing\n");
-    
+
     /* Initialize strength arrays */
     for (int i = 0; i < 16; i++) {
         for (int j = 0; j < 16; j++) {
@@ -7767,7 +7770,7 @@ int tiziano_sdns_init(void)
             sdns_h_s_wdr_arrays[i][j] = (i + 1) * (j + 1) * 3;
         }
     }
-    
+
     /* Binary Ninja: Select parameter arrays based on WDR mode */
     if (sdns_wdr_en != 0) {
         sdns_h_mv_wei_now = sdns_h_mv_wei_wdr;
@@ -7800,18 +7803,18 @@ int tiziano_sdns_init(void)
         sdns_ave_thres_array_now = rgbg_dis; /* Binary Ninja shows this for linear mode */
         pr_info("tiziano_sdns_init: Using linear SDNS parameters\n");
     }
-    
+
     /* Binary Ninja: Initialize state and refresh parameters */
     data_9a9c4 = 0xFFFFFFFF;
     tiziano_sdns_params_refresh();
-    
+
     /* Binary Ninja: Initial parameter refresh with enable */
     int ret = tisp_sdns_par_refresh(0, 0, 1);
     if (ret) {
         pr_err("tiziano_sdns_init: Failed to refresh SDNS parameters: %d\n", ret);
         return ret;
     }
-    
+
     pr_info("tiziano_sdns_init: SDNS processing initialized successfully\n");
     return 0;
 }
@@ -7829,17 +7832,17 @@ static uint32_t mdns_c_false_edg_thres1_wdr[16] = {0x4, 0x6, 0x8, 0xa, 0xc, 0xe,
 int tiziano_mdns_init(uint32_t width, uint32_t height)
 {
     void __iomem *base_reg = ioremap(0x13309000, 0x1000); /* MDNS register base */
-    
+
     pr_info("tiziano_mdns_init: Initializing MDNS processing (%dx%d)\n", width, height);
-    
+
     if (!base_reg) {
         pr_err("tiziano_mdns_init: Failed to map MDNS registers\n");
         return -ENOMEM;
     }
-    
+
     /* Select parameters based on WDR mode */
     uint32_t *y_wei_array, *c_thres_array;
-    
+
     if (mdns_wdr_en != 0) {
         y_wei_array = mdns_y_ass_wei_adj_value1_wdr;
         c_thres_array = mdns_c_false_edg_thres1_wdr;
@@ -7849,18 +7852,18 @@ int tiziano_mdns_init(uint32_t width, uint32_t height)
         c_thres_array = mdns_c_false_edg_thres1;
         pr_info("tiziano_mdns_init: Using linear MDNS parameters\n");
     }
-    
+
     /* Write MDNS parameters to hardware */
     for (int i = 0; i < 16; i++) {
         writel(y_wei_array[i], base_reg + 0x100 + (i * 4));     /* Y weight adjustment */
         writel(c_thres_array[i], base_reg + 0x140 + (i * 4));   /* C false edge threshold */
     }
-    
+
     /* Configure MDNS for resolution */
     writel(width, base_reg + 0x00);   /* Image width */
     writel(height, base_reg + 0x04);  /* Image height */
     writel(1, base_reg + 0x08);       /* Enable MDNS */
-    
+
     iounmap(base_reg);
     pr_info("tiziano_mdns_init: MDNS processing initialized successfully\n");
     return 0;
@@ -7931,14 +7934,14 @@ void tiziano_dpc_params_refresh(void)
 static int tisp_dpc_all_reg_refresh(void)
 {
     void __iomem *base_reg = ioremap(0x1330A000, 0x1000); /* DPC register base */
-    
+
     if (!base_reg) {
         pr_err("tisp_dpc_all_reg_refresh: Failed to map DPC registers\n");
         return -ENOMEM;
     }
-    
+
     pr_info("tisp_dpc_all_reg_refresh: Writing DPC parameters to registers\n");
-    
+
     /* Write DPC threshold arrays to hardware */
     for (int i = 0; i < 16; i++) {
         writel(dpc_d_m1_dthres_array_now[i], base_reg + 0x100 + (i * 4));  /* M1 dead threshold */
@@ -7946,12 +7949,12 @@ static int tisp_dpc_all_reg_refresh(void)
         writel(dpc_d_m3_dthres_array_now[i], base_reg + 0x180 + (i * 4));  /* M3 dead threshold */
         writel(dpc_d_m3_fthres_array_now[i], base_reg + 0x1c0 + (i * 4));  /* M3 false threshold */
     }
-    
+
     /* Enable DPC processing */
     writel(1, base_reg + 0x00);     /* Enable DPC */
     writel(0x3, base_reg + 0x04);   /* DPC mode: both methods enabled */
     writel(0x10, base_reg + 0x08);  /* DPC strength */
-    
+
     iounmap(base_reg);
     pr_info("tisp_dpc_all_reg_refresh: DPC registers written to hardware\n");
     return 0;
@@ -7961,12 +7964,12 @@ static int tisp_dpc_all_reg_refresh(void)
 int tisp_dpc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write)
 {
     uint32_t prev_value = data_9ab10;
-    
+
     pr_info("tisp_dpc_par_refresh: EV=%u, threshold=%u, enable=%d\n", ev_value, threshold, enable_write);
-    
+
     if (prev_value != 0xFFFFFFFF) {
         uint32_t diff = (prev_value >= ev_value) ? (prev_value - ev_value) : (ev_value - prev_value);
-        
+
         if (diff >= threshold) {
             data_9ab10 = ev_value;
             tisp_dpc_all_reg_refresh();
@@ -7975,12 +7978,12 @@ int tisp_dpc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write
         data_9ab10 = ev_value;
         tisp_dpc_all_reg_refresh();
     }
-    
+
     if (enable_write == 1) {
         /* Enable DPC with register write */
         system_reg_write(0xa000 + 0x200, 1);  /* Enable DPC processing */
     }
-    
+
     return 0;
 }
 
@@ -8049,19 +8052,19 @@ void tiziano_adr_params_refresh(void)
 static int tisp_adr_set_params(void)
 {
     void __iomem *base_reg = ioremap(0x1330C000, 0x1000); /* ADR register base */
-    
+
     if (!base_reg) {
         pr_err("tisp_adr_set_params: Failed to map ADR registers\n");
         return -ENOMEM;
     }
-    
+
     pr_info("tisp_adr_set_params: Writing ADR parameters to registers\n");
-    
+
     /* Write center weight distribution */
     for (int i = 0; i < 31; i++) {
         writel(param_adr_centre_w_dis_array[i], base_reg + 0x100 + (i * 4));
     }
-    
+
     /* Write weight LUTs */
     for (int i = 0; i < 32; i++) {
         writel(param_adr_weight_20_lut_array[i], base_reg + 0x200 + (i * 4));
@@ -8070,11 +8073,11 @@ static int tisp_adr_set_params(void)
         writel(param_adr_weight_22_lut_array[i], base_reg + 0x380 + (i * 4));
         writel(param_adr_weight_21_lut_array[i], base_reg + 0x400 + (i * 4));
     }
-    
+
     /* Enable ADR processing */
     writel(1, base_reg + 0x00);        /* Enable ADR */
     writel(data_ace54, base_reg + 0x04); /* ADR strength parameter */
-    
+
     iounmap(base_reg);
     pr_info("tisp_adr_set_params: ADR parameters written to hardware\n");
     return 0;
@@ -8084,12 +8087,12 @@ static int tisp_adr_set_params(void)
 int tiziano_adr_params_init(void)
 {
     pr_info("tiziano_adr_params_init: Initializing ADR parameter arrays\n");
-    
+
     /* Initialize with basic tone mapping parameters */
     for (int i = 0; i < 31; i++) {
         param_adr_centre_w_dis_array[i] = 0x100 + (i * 8); /* Center weight distribution */
     }
-    
+
     for (int i = 0; i < 32; i++) {
         param_adr_weight_20_lut_array[i] = 0x80 + (i * 4);
         param_adr_weight_02_lut_array[i] = 0x70 + (i * 3);
@@ -8110,29 +8113,29 @@ int tisp_adr_process(void)
 int tiziano_adr_init(uint32_t width, uint32_t height)
 {
     pr_info("tiziano_adr_init: Initializing ADR processing (%dx%d)\n", width, height);
-    
+
     /* Binary Ninja: Store resolution parameters */
     data_af158 = width;
     data_af15c = height;
     width_def = width;
     height_def = height;
-    
+
     /* Binary Ninja: Calculate basic ADR parameters */
     uint32_t width_div = width / 6;
     uint32_t height_div = height >> 2;
-    
+
     width_div = width_div - (width_div & 1);  /* Make even */
     height_div = height_div - (height_div & 1); /* Make even */
-    
+
     uint32_t width_sub = width_div >> 2;
     uint32_t height_sub = height_div >> 2;
-    
+
     width_sub = width_sub - (width_sub & 1);   /* Make even */
     height_sub = height_sub - (height_sub & 1); /* Make even */
-    
+
     if (width_sub < 0x14) width_sub = 0x14;
     if (height_sub < 0x14) height_sub = 0x14;
-    
+
     /* Binary Ninja: Write ADR configuration registers */
     system_reg_write(0x4000, width_div | (height_div << 16));
     system_reg_write(0x4010, height_div << 16);
@@ -8144,10 +8147,10 @@ int tiziano_adr_init(uint32_t width, uint32_t height)
     system_reg_write(0x4028, width);
     system_reg_write(0x4454, ((height - height_sub) << 16) | height_sub);
     system_reg_write(0x4458, ((width - width_sub) << 16) | width_sub);
-    
+
     /* Binary Ninja: Refresh parameters */
     tiziano_adr_params_refresh();
-    
+
     /* Binary Ninja: Initialize and set parameters */
     tiziano_adr_params_init();
     int ret = tisp_adr_set_params();
@@ -8155,21 +8158,21 @@ int tiziano_adr_init(uint32_t width, uint32_t height)
         pr_err("tiziano_adr_init: Failed to set ADR parameters: %d\n", ret);
         return ret;
     }
-    
+
     /* Binary Ninja: Calculate final parameter */
     uint32_t width_calc = (width_div + 1) >> 1;
     uint32_t height_calc = (height_div + 1) >> 1;
-    
+
     if (width_calc >= height_calc) {
         data_ace54 = (height_calc * 3 + 1) >> 1;
     } else {
         data_ace54 = (width_calc * 3 + 1) >> 1;
     }
-    
+
     /* Binary Ninja: Set up interrupt and event callbacks */
     tisp_event_set_cb(0x12, tiziano_adr_interrupt_static);
     tisp_event_set_cb(2, tisp_adr_process);
-    
+
     pr_info("tiziano_adr_init: ADR processing initialized successfully\n");
     return 0;
 }
@@ -8695,15 +8698,15 @@ int tisp_sdns_wdr_en(int enable)
 int tisp_event_set_cb(int event_id, void *callback)
 {
     pr_info("tisp_event_set_cb: Setting callback for event %d\n", event_id);
-    
+
     if (event_id < 0 || event_id >= 32) {
         pr_err("tisp_event_set_cb: Invalid event ID %d\n", event_id);
         return -EINVAL;
     }
-    
+
     /* Binary Ninja: *((arg1 << 2) + &cb) = arg2 */
     cb[event_id] = (int (*)(void))callback;
-    
+
     pr_info("tisp_event_set_cb: Event %d callback set to %p\n", event_id, callback);
     return 0;
 }
@@ -8715,7 +8718,7 @@ static irqreturn_t isp_irq_dispatcher(int irq, void *dev_id)
     uint32_t irq_status;
     unsigned long flags;
     int handled = 0;
-    
+
     if (!dev || !dev || !dev->core_regs) {
         pr_err("isp_irq_dispatcher: Invalid device or register base\n");
         return IRQ_NONE;
@@ -8740,7 +8743,7 @@ static irqreturn_t isp_irq_dispatcher(int irq, void *dev_id)
             handled = 1;
         }
     }
-    
+
     spin_unlock_irqrestore(&isp_irq_lock, flags);
 
     /* Clear handled interrupts */
@@ -9800,15 +9803,15 @@ static bool tuning_device_created = false;  /* Guard flag to prevent duplicate c
 int tisp_code_create_tuning_node(void)
 {
     int ret;
-    
+
     pr_info("tisp_code_create_tuning_node: Creating ISP M0 tuning device node\n");
-    
+
     /* CRITICAL: Guard against duplicate device creation */
     if (tuning_device_created) {
         pr_info("tisp_code_create_tuning_node: Device already created, skipping\n");
         return 0;
     }
-    
+
     /* Binary Ninja: if (major == 0) alloc_chrdev_region, else register_chrdev_region */
     if (tuning_major == 0) {
         ret = alloc_chrdev_region(&tuning_devno, 0, 1, "isp-m0");
@@ -9827,10 +9830,10 @@ int tisp_code_create_tuning_node(void)
         }
         pr_info("tisp_code_create_tuning_node: Registered static major %d\n", tuning_major);
     }
-    
+
     /* Binary Ninja: cdev_init(&tuning_cdev, &isp_core_tunning_fops) */
     cdev_init(&tuning_cdev, &isp_core_tunning_fops);
-    
+
     /* Binary Ninja: cdev_add(&tuning_cdev, tuning_devno, 1) */
     ret = cdev_add(&tuning_cdev, tuning_devno, 1);
     if (ret < 0) {
@@ -9838,7 +9841,7 @@ int tisp_code_create_tuning_node(void)
         unregister_chrdev_region(tuning_devno, 1);
         return ret;
     }
-    
+
     /* Binary Ninja: tuning_class = __class_create(&__this_module, "isp-m0", 0) */
     tuning_class = class_create(THIS_MODULE, "isp-m0");
     if (IS_ERR(tuning_class)) {
@@ -9848,7 +9851,7 @@ int tisp_code_create_tuning_node(void)
         unregister_chrdev_region(tuning_devno, 1);
         return ret;
     }
-    
+
     /* Binary Ninja: device_create(tuning_class, 0, tuning_devno, 0, "isp-m0") */
     if (device_create(tuning_class, NULL, tuning_devno, NULL, "isp-m0") == NULL) {
         pr_err("tisp_code_create_tuning_node: Failed to create device\n");
@@ -9857,10 +9860,10 @@ int tisp_code_create_tuning_node(void)
         unregister_chrdev_region(tuning_devno, 1);
         return -EFAULT;
     }
-    
+
     /* Set flag to prevent duplicate creation */
     tuning_device_created = true;
-    
+
     pr_info("*** ISP M0 TUNING DEVICE CREATED: /dev/isp-m0 (major=%d, minor=0) ***\n", tuning_major);
     return 0;
 }
@@ -9870,25 +9873,25 @@ int tisp_code_create_tuning_node(void)
 int tisp_code_destroy_tuning_node(void)
 {
     pr_info("tisp_code_destroy_tuning_node: Destroying ISP M0 tuning device node\n");
-    
+
     if (tuning_class) {
         /* Binary Ninja: device_destroy(tuning_class, tuning_devno) */
         device_destroy(tuning_class, tuning_devno);
-        
+
         /* Binary Ninja: class_destroy(tuning_class) */
         class_destroy(tuning_class);
         tuning_class = NULL;
     }
-    
+
     /* Binary Ninja: cdev_del(&tuning_cdev) */
     cdev_del(&tuning_cdev);
-    
+
     /* Binary Ninja: unregister_chrdev_region(tuning_devno, 1) */
     unregister_chrdev_region(tuning_devno, 1);
-    
+
     /* Binary Ninja: tuning_major = 0 */
     tuning_major = 0;
-    
+
     pr_info("*** ISP M0 TUNING DEVICE DESTROYED ***\n");
     return 0;
 }
