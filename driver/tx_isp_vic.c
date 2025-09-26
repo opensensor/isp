@@ -3202,15 +3202,9 @@ int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
     int buffer_index;
 
     pr_info("ispvic_frame_channel_qbuf: event-based QBUF\n");
-
-    /* CRITICAL FIX: Use global VIC device if arg1 is NULL or invalid */
-    if (arg1 != 0 && (unsigned long)arg1 < 0xfffff001) {
-        vic_dev = (struct tx_isp_vic_device *)arg1;  /* arg1 IS the vic_dev */
-    } else {
-        /* Fallback to global VIC device */
-        if (ourISPdev && ourISPdev->vic_dev) {
-            vic_dev = (struct tx_isp_vic_device *)container_of(ourISPdev->vic_dev, struct tx_isp_vic_device, sd);
-        }
+    /* Fallback to global VIC device */
+    if (ourISPdev && ourISPdev->vic_dev) {
+        vic_dev = (struct tx_isp_vic_device *)container_of(ourISPdev->vic_dev, struct tx_isp_vic_device, sd);
     }
 
     if (!vic_dev) {
