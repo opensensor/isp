@@ -6488,23 +6488,46 @@ int vic_event_handler(void *subdev, int event_type, void *data)
         return tx_isp_vic_notify(vic_dev, event_type, data);
     }
     case 0x3000008: { /* TX_ISP_EVENT_FRAME_QBUF */
-        /* BN MCP: Build vic_buffer_entry and call ispvic_frame_channel_qbuf so ISR sees done_head */
+        /* CRITICAL FIX: Properly queue buffer with actual address to VIC device */
         struct { u32 index; u32 phys_addr; u32 size; u32 channel; } *v = data;
         u32 phys = v ? v->phys_addr : 0;
-        if (phys >= 0x06000000 && phys < 0x09000000) {
-            struct vic_buffer_entry *entry = VIC_BUFFER_ALLOC_ATOMIC();
+        
+        pr_info("VIC EVENT: QBUF -> entry addr=0x%x idx=%u (calling ispvic_frame_channel_qbuf)\n",
+                phys, v ? v->index : 0);
+        
+        if (phys >= 0x06000000 && phys < 0x10000000) {
+            /* CRITICAL FIX: Create buffer entry and add to VIC queue for processing */
+            struct vic_buffer_entry *entry = kzalloc(sizeof(struct vic_buffer_entry), GFP_ATOMIC);
             if (!entry) {
                 pr_err("VIC EVENT: QBUF alloc failed\n");
                 return -ENOMEM;
             }
+            
             INIT_LIST_HEAD(&entry->list);
-            entry->buffer_addr = phys;
+            entry->buffer_addr = phys;  /* Use ACTUAL buffer address */
             entry->buffer_index = v ? v->index : 0;
-            pr_info("VIC EVENT: QBUF -> entry addr=0x%x idx=%u (calling ispvic_frame_channel_qbuf)\n",
-                    entry->buffer_addr, entry->buffer_index);
-            return ispvic_frame_channel_qbuf(NULL, entry);
+            entry->buffer_status = VIC_BUFFER_STATUS_QUEUED;
+            
+            /* Add to VIC device queue for processing by ispvic_frame_channel_qbuf */
+            if (vic_dev && vic_dev->vic_regs) {
+                unsigned long flags;
+                spin_lock_irqsave(&vic_dev->buffer_lock, flags);
+                list_add_tail(&entry->list, &vic_dev->queue_head);
+                spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
+                
+                pr_info("*** VIC EVENT: Buffer 0x%x queued to VIC device - will be processed by qbuf handler ***\n", phys);
+                
+                /* Now call ispvic_frame_channel_qbuf to process the queued buffer */
+                int qbuf_result = ispvic_frame_channel_qbuf(vic_dev, NULL);
+                pr_info("*** VIC EVENT: ispvic_frame_channel_qbuf returned %d ***\n", qbuf_result);
+                return qbuf_result;
+            } else {
+                pr_err("VIC EVENT: No VIC device available for buffer queuing\n");
+                kfree(entry);
+                return -ENODEV;
+            }
         } else {
-            pr_debug("VIC EVENT: QBUF ignored (phys=0x%x)\n", phys);
+            pr_warn("VIC EVENT: QBUF ignored - invalid buffer address 0x%x (must be 0x06000000-0x10000000)\n", phys);
             return -EINVAL;
         }
     }
