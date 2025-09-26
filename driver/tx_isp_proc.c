@@ -14,6 +14,9 @@ long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg);
 int vic_snapraw_opt(struct tx_isp_subdev *sd);
 int vic_saveraw(struct tx_isp_subdev *sd, unsigned int savenum);
 
+#include <linux/atomic.h>
+extern atomic64_t frame_done_cnt;
+
 
 
 #define TX_ISP_PROC_ISP_DIR "jz/isp"
@@ -145,11 +148,17 @@ static int tx_isp_proc_w02_show(struct seq_file *m, void *v)
      * Line 2: "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0"
      * The frame_count increments to show ISP is processing frames
      */
-    seq_printf(m, " %u, 0\n", isp->frame_count);
+    {
+        unsigned long long fc = atomic64_read(&frame_done_cnt);
+        seq_printf(m, " %llu, 0\n", fc);
+    }
     seq_printf(m, "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0\n");
 
     /* Debug: Log what we're outputting */
-    pr_debug("isp-w02 proc: outputting frame_count=%u\n", isp->frame_count);
+    {
+        unsigned long long fc_dbg = atomic64_read(&frame_done_cnt);
+        pr_debug("isp-w02 proc: outputting frame_count=%llu\n", fc_dbg);
+    }
 
     return 0;
 }
