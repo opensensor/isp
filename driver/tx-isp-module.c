@@ -4262,25 +4262,17 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("ISP buffer calculation: width=%d height=%d memopt=%d\n",
                 width, height, isp_memopt);
 
-        // CRITICAL FIX: Use correct RAW10 buffer calculation instead of YUV
-        // RAW10 format: 10 bits per pixel = 1.25 bytes per pixel
-        // Formula: width * height * 1.25 (with proper alignment)
+        // Use NV12 buffer calculation (Y plane + interleaved UV plane)
+        // NV12 bytes = width * height * 3/2, aligned to 64 bytes for DMA
+        pr_info("*** BUFFER: Using NV12 calculation (width*height*3/2) ***\n");
 
-        pr_info("*** BUFFER FIX: Using RAW10 calculation instead of incorrect YUV calculation ***\n");
-
-        // RAW10: 10 bits per pixel, packed format
-        // Each 4 pixels = 5 bytes (4 * 10 bits = 40 bits = 5 bytes)
-        // So: (width * height * 5) / 4
-        uint32_t raw10_pixels = width * height;
-        uint32_t raw10_bytes = (raw10_pixels * 5) / 4;  // 10 bits per pixel = 1.25 bytes
-
-        // Add alignment padding (align to 64-byte boundaries for DMA)
-        uint32_t aligned_size = (raw10_bytes + 63) & ~63;
+        uint32_t nv12_bytes = (width * height * 3) / 2;
+        uint32_t aligned_size = (nv12_bytes + 63) & ~63;  // 64-byte alignment
 
         total_size = aligned_size;
 
-        pr_info("*** RAW10 BUFFER: %d pixels -> %d bytes -> %d aligned ***\n",
-                raw10_pixels, raw10_bytes, aligned_size);
+        pr_info("*** NV12 BUFFER: %d x %d -> %u bytes -> %u aligned ***\n",
+                width, height, nv12_bytes, aligned_size);
 
         pr_info("ISP calculated buffer size: %d bytes (0x%x)\n", total_size, total_size);
 
