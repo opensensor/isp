@@ -1246,6 +1246,9 @@ struct frame_channel_device {
     int buffer_type;                     /* Offset 0x24 - *($s0 + 0x24) */
     int field;                           /* Offset 0x3c - *($s0 + 0x3c) */
     void *buffer_array[64];              /* Buffer array for index lookup */
+
+    /* VBM integration */
+    void *vbm_pool_ptr;                  /* Pointer to VBM pool (kernel address), if registered */
 };
 
 static struct frame_channel_device frame_channels[4]; /* Support up to 4 video channels */
@@ -2630,6 +2633,22 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         return 0;
     }
+    case 0x400456f0: { // TX_ISP_REGISTER_VBM_POOL (private): register VBM pool kernel pointer
+        uint32_t pool_u32 = 0;
+        if (copy_from_user(&pool_u32, argp, sizeof(pool_u32)))
+            return -EFAULT;
+        fcd->vbm_pool_ptr = (void *)(uintptr_t)pool_u32;
+        pr_info("*** Channel %d: Registered VBM pool pointer = %p ***\n", channel, fcd->vbm_pool_ptr);
+        if (is_valid_kernel_pointer(fcd->vbm_pool_ptr)) {
+            struct vbm_pool *vp = (struct vbm_pool *)fcd->vbm_pool_ptr;
+            if (vp->width && vp->height) {
+                state->width = vp->width;
+                state->height = vp->height;
+                pr_info("*** Channel %d: Synced dimensions from VBM pool: %ux%u ***\n", channel, state->width, state->height);
+            }
+        }
+        return 0;
+    }
     case 0xc0145608: { // VIDIOC_REQBUFS - Request buffers - MEMORY-AWARE implementation
         struct v4l2_requestbuffers {
             uint32_t count;
@@ -2828,21 +2847,49 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 /* Enqueue into FS queue for DQBUF correlation */
                 tx_isp_fs_enqueue_qbuf(channel, buffer.index, phys_candidate, fs_size);
             } else {
-                /* Fallback: old behavior using rmem base + index * size */
-                int buffer_size = state->width * state->height * 2;
-                uint32_t buffer_phys_addr = 0x6300000 + (buffer.index * buffer_size);
-                pr_warn("*** Channel %d: QBUF - Could not deduce phys from buffer; using fallback 0x%x ***\n",
-                        channel, buffer_phys_addr);
-                if (ourISPdev && ourISPdev->vic_dev) {
-                    struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-                    struct { uint32_t index; uint32_t phys_addr; uint32_t size; uint32_t channel; } v;
-                    v.index = buffer.index;
-                    v.phys_addr = buffer_phys_addr;
-                    v.size = fs_size;
-                    v.channel = channel;
-                    (void)tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &v);
+                /* Prefer VBM pool information when available */
+                if (fcd->vbm_pool_ptr && is_valid_kernel_pointer(fcd->vbm_pool_ptr)) {
+                    struct vbm_pool *vp = (struct vbm_pool *)fcd->vbm_pool_ptr;
+                    uint32_t vbm_phys = 0;
+                    uint32_t vbm_size = fs_size;
+                    if (buffer.index < vp->frame_count) {
+                        vbm_phys = vp->frames[buffer.index].phys_addr;
+                        if (vp->frames[buffer.index].size)
+                            vbm_size = vp->frames[buffer.index].size;
+                    }
+                    if (vbm_phys >= 0x06000000 && vbm_phys < 0x09000000) {
+                        pr_info("*** Channel %d: QBUF - Using VBM pool phys=0x%x (index=%u, size=%u) ***\n",
+                                channel, vbm_phys, buffer.index, vbm_size);
+                        if (ourISPdev && ourISPdev->vic_dev) {
+                            struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                            struct { uint32_t index; uint32_t phys_addr; uint32_t size; uint32_t channel; } v;
+                            v.index = buffer.index;
+                            v.phys_addr = vbm_phys;
+                            v.size = vbm_size;
+                            v.channel = channel;
+                            (void)tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &v);
+                        }
+                        tx_isp_fs_enqueue_qbuf(channel, buffer.index, vbm_phys, vbm_size);
+
+                    }
                 }
-                tx_isp_fs_enqueue_qbuf(channel, buffer.index, buffer_phys_addr, fs_size);
+                /* Fallback: old behavior using rmem base + index * size */
+                {
+                    int buffer_size = state->width * state->height * 2;
+                    uint32_t buffer_phys_addr = 0x6300000 + (buffer.index * buffer_size);
+                    pr_warn("*** Channel %d: QBUF - Could not deduce phys; using rmem fallback 0x%x ***\n",
+                            channel, buffer_phys_addr);
+                    if (ourISPdev && ourISPdev->vic_dev) {
+                        struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                        struct { uint32_t index; uint32_t phys_addr; uint32_t size; uint32_t channel; } v;
+                        v.index = buffer.index;
+                        v.phys_addr = buffer_phys_addr;
+                        v.size = fs_size;
+                        v.channel = channel;
+                        (void)tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &v);
+                    }
+                    tx_isp_fs_enqueue_qbuf(channel, buffer.index, buffer_phys_addr, fs_size);
+                }
             }
         }
 
