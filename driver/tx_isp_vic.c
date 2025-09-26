@@ -2373,6 +2373,13 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             /* BINARY NINJA EXACT: Use exact reference driver formula to prevent control limit error */
             /* Binary Ninja: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
             u32 buffer_count = vic_dev->active_buffer_count;
+            /* BN MCP: field at 0x218 is buffer count. If zero at stream-on, default to 2 like reference */
+            if (buffer_count == 0) {
+                buffer_count = 2;
+                pr_warn("ispvic_frame_channel_s_stream: active_buffer_count was 0 at stream-on; defaulting buffer_count=2 per BN reference\n");
+            }
+            if (buffer_count > 5)
+                buffer_count = 5; /* VIC has 5 slots max */
             u32 stream_ctrl = (buffer_count << 16) | 0x80000020;  /* EXACT Binary Ninja formula */
             writel(stream_ctrl, vic_base + 0x300);
             wmb();
