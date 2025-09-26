@@ -2925,6 +2925,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         bool sensor_active = false;
         uint32_t buf_index;
 
+        bool used_fs = false; u32 fs_index_out = 0, fs_phys_out = 0, fs_size_out = 0;
+
         if (copy_from_user(&buffer, argp, sizeof(buffer)))
             return -EFAULT;
 
@@ -2971,12 +2973,12 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
             if (fs_ret == 0) {
                 /* We have a real completed frame from FS queue */
-                buffer.index = fs_index;
-                buffer.bytesused = fs_size;
-                buffer.flags |= 0x00000001; /* V4L2_BUF_FLAG_MAPPED or DONE-like marker */
-                state->sequence++;
+                used_fs = true;
+                fs_index_out = fs_index;
+                fs_phys_out = fs_phys;
+                fs_size_out = fs_size;
                 pr_info("*** Channel %d: DQBUF pop FS done index=%u phys=0x%x size=%u ***\n",
-                        channel, fs_index, fs_phys, fs_size);
+                        channel, fs_index_out, fs_phys_out, fs_size_out);
             } else {
                 /* Fallback to legacy behavior below */
                 if (ret == 0) {
@@ -2997,17 +2999,21 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         spin_lock_irqsave(&state->buffer_lock, flags);
 
         // Calculate buffer index like Binary Ninja reference (legacy fallback)
-        if (state->buffer_count > 0) {
-            buf_index = state->sequence % state->buffer_count;
+        if (!used_fs) {
+            if (state->buffer_count > 0) {
+                buf_index = state->sequence % state->buffer_count;
+            } else {
+                buf_index = state->sequence % 4; // Default cycling
+            }
         } else {
-            buf_index = state->sequence % 4; // Default cycling
+            buf_index = fs_index_out;
         }
 
         /* Fill buffer structure like Binary Ninja __fill_v4l2_buffer */
         // memcpy(arg2, arg1, 0x34) - copy basic buffer info
         buffer.index = buf_index;
         buffer.type = 1; // V4L2_BUF_TYPE_VIDEO_CAPTURE
-        buffer.bytesused = state->width * state->height * 3 / 2; // YUV420 size
+        buffer.bytesused = used_fs && fs_size_out ? fs_size_out : (state->width * state->height * 3 / 2);
         buffer.field = 1; // V4L2_FIELD_NONE
         do_gettimeofday(&buffer.timestamp);
         buffer.sequence = state->sequence++;
@@ -3028,6 +3034,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         /* Set buffer physical address offset like Binary Ninja */
         buffer.m.offset = buf_index * buffer.bytesused;
+        /* If FS provided a real phys, we can't map to offset here safely; leave as index-based */
 
         /* Binary Ninja DMA sync: private_dma_sync_single_for_device(nullptr, var_44, var_40, 2) */
         if (sensor_active && ourISPdev && ourISPdev->vic_dev) {
