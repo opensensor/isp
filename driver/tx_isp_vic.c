@@ -2734,7 +2734,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* CRITICAL FIX: Use sensor dimensions instead of hardcoded 1920x1080 */
                 writel((sensor_width << 16) | sensor_height, main_isp_base + 0x4);
                 writel(0x1, main_isp_base + 0x8);
-                writel(0x80700008, main_isp_base + 0xc);
+                /* CRITICAL FIX: Register 0xc is ERROR STATUS register - write 0x0 to clear errors, not 0x80700008! */
+                writel(0x0, main_isp_base + 0xc);
                 writel(0x1, main_isp_base + 0x28);
                 writel(0x400040, main_isp_base + 0x2c);
                 writel(0x1, main_isp_base + 0x90);
