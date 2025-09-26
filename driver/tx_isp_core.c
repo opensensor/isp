@@ -1324,7 +1324,9 @@ int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
         tisp_dmsc_set_cfa_from_mbus(code, hflip, vflip);
         pr_info("tx_isp_configure_format_propagation: DMSC CFA programmed from mbus=0x%x, h=%d, v=%d\n", code, hflip, vflip);
     } else {
-        pr_warn("tx_isp_configure_format_propagation: No sensor present to determine CFA\n");
+        /* Fallback: program default RGGB (index 0) if sensor not yet linked */
+        tisp_dmsc_set_cfa_from_mbus(0 /* unknown mbus -> default RGGB */, 0, 0);
+        pr_warn("tx_isp_configure_format_propagation: Sensor not present; programmed default CFA RGGB\n");
     }
 
     pr_info("Format propagation configured\n");
