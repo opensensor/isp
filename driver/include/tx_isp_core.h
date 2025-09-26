@@ -6,9 +6,14 @@ int tx_isp_core_remove(struct platform_device *pdev);
 int tx_isp_core_probe(struct platform_device *pdev);
 
 /* Core Operations */
-int tx_isp_core_start(struct tx_isp_subdev *sd);
 int tx_isp_core_stop(struct tx_isp_subdev *sd);
 int tx_isp_core_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *config);
+
+/* Core Interrupt Operations */
+int tx_isp_core_enable_irq(struct tx_isp_core_device *core_dev);
+
+/* Core IOCTL Operations */
+int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 
 /* Tiziano ISP Core Functions */
 int tiziano_isp_init(struct tx_isp_sensor_attribute *sensor_attr, char *param_name);
@@ -18,6 +23,9 @@ int tiziano_channel_start(int channel_id, struct tx_isp_channel_attr *attr);
 /* Event Handling Functions */
 int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
 int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
+
+/* Sensor Management Functions */
+int ispcore_sensor_ops_release_all_sensor(struct tx_isp_subdev *sd);
 
 /* Hardware Reset Functions */
 u32 tx_isp_check_reset_status(void);

@@ -14,14 +14,14 @@ struct tx_isp_config;
 struct tx_isp_vin_device {
     struct tx_isp_subdev sd;        /* Base subdev - must be first */
     struct list_head sensors;       /* List of registered sensors */
-    struct tx_isp_sensor *active;   /* Currently active sensor */
-    
+
     struct mutex mlock;             /* Mutex for sensor list operations */
     int state;                      /* VIN module state */
     unsigned int refcnt;            /* Reference count */
     
     /* Hardware resources */
     void __iomem *base;             /* VIN register base */
+    void __iomem *vin_regs;         /* VIN register base (alias for video_input_cmd functions) */
     struct clk *vin_clk;            /* VIN clock */
     int irq;                        /* VIN interrupt */
     
@@ -129,11 +129,23 @@ extern struct tx_isp_subdev_ops vin_subdev_ops;
 #define VIN_DMA_ADDR         0x18    /* VIN DMA Address Register */
 #define VIN_DMA_SIZE         0x1C    /* VIN DMA Size Register */
 
-/* VIN Control Register Bits */
-#define VIN_CTRL_EN          BIT(0)  /* VIN Enable */
-#define VIN_CTRL_START       BIT(1)  /* VIN Start */
-#define VIN_CTRL_STOP        BIT(2)  /* VIN Stop */
-#define VIN_CTRL_RST         BIT(3)  /* VIN Reset */
+/* VIN Control Register Bits - For video_input_cmd_set functions */
+#define VIN_CTRL_OFFSET          0x00    /* VIN Control Register Offset */
+#define VIN_CTRL_BT601_MODE      BIT(4)  /* BT601 8-bit sensor mode */
+#define VIN_CTRL_WDR_MODE        BIT(5)  /* WDR mode enable */
+
+/* VIN register access helper */
+#define vin_readl(vin_dev, offset)        readl((vin_dev)->vin_regs + (offset))
+#define vin_writel(vin_dev, offset, val)  writel((val), (vin_dev)->vin_regs + (offset))
+
+/* WDR Configuration Structure - For video_input_cmd_set */
+struct tx_isp_sensor_wdr_config {
+    unsigned long param1;
+    unsigned long param2;
+};
+
+/* Sensor WDR IOCTL Command */
+#define TX_ISP_SENSOR_SET_WDR_MODE  0x2000020
 
 /* VIN Status Register Bits */
 #define STATUS_BUSY          BIT(0)  /* VIN Busy Status */

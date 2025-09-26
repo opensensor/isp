@@ -44,8 +44,6 @@
 #define ISP_CTRL_PROCESS      0x8000164 // Same as bypass, used for process control
 
 #define VIDIOC_GET_SENSOR_INFO   0x40045626
-#define VIDIOC_SET_BUF_INFO      0x800856d4
-#define VIDIOC_GET_BUF_INFO      0x800856d5
 #define ISP_ENABLE_LINKS         0x800456d0
 #define ISP_DESTROY_LINKS        0x800456d1
 #define ISP_ENABLE_ROUTE         0x800456d2
@@ -136,14 +134,12 @@
 #define ISP_BYPASS_CTRL       0x0004  // Base + offset for bypass control
 #define ISP_ANTIFLICKER_CTRL  0x0008  // Base + offset for antiflicker
 
-#define ISP_CTRL_REG          0x00
 #define ISP_LINK_ENABLE_REG   0x04
 #define ISP_ROUTE_REG         0x08
 #define ISP_BYPASS_REG        0x0C
 
 
 /* ISP AF Zone register definitions */
-#define ISP_AF_ZONE_BASE      0x13380000   // Base address for AF zone registers
 #define ISP_AF_ZONE_METRICS   0x00         // Offset to zone metrics
 #define ISP_AF_ZONE_STATUS    0x40         // Offset to zone status
 #define ISP_AF_ZONE_CONFIG    0x44         // Offset to zone configuration
@@ -771,7 +767,6 @@ struct isp_channel_event {
 #endif
 
 // From OEM driver, netlink protocol setup
-#define ISP_NETLINK_PROTO 0x17
 #define ISP_NETLINK_GROUP 0xca624
 
 /* Frame States - must match libimp */
@@ -781,15 +776,7 @@ struct isp_channel_event {
 #define FRAME_STATE_DONE     3  // In done queue
 #define FRAME_STATE_ERROR    4  // Error state
 
-/* ISP Event types */
-#define ISP_EVENT_BUFFER_REQUEST  0x1000
-#define ISP_EVENT_BUFFER_ENQUEUE  0x1001
-#define ISP_EVENT_BUFFER_DONE     0x1002
-#define ISP_EVENT_FRAME_DONE      0x1003
-#define ISP_EVENT_STATS_READY     0x1004
-#define ISP_EVENT_STREAM_START    0x1005
-#define ISP_EVENT_STREAM_CANCEL   0x1006
-#define ISP_EVENT_QUEUE_FREE      0x1007
+/* ISP Event types - using 0x3000xxx values defined earlier */
 
 /* Event handler function type */
 typedef int (*isp_event_cb)(void *priv, u32 event, void *data);
@@ -1007,7 +994,8 @@ struct frame_entry { // Must match OEM offsets exactly
 #define ISP_EVENT_GAIN_UPDATE      0x80000001
 #define ISP_EVENT_CONTRAST_UPDATE  0x80000002
 
-#define ISP_AE_HIST_BASE        0x1000  // Example offset, need to confirm actual
+/* REMOVED: Duplicate ISP_AE_HIST_BASE definition - using 0x7000 from line 58 */
+/* Use ISP_AE_HIST_BASE from line 58 which matches Binary Ninja reference */
 #define ISP_AE_HIST_CFG0        (ISP_AE_HIST_BASE + 0x00)
 #define ISP_AE_HIST_CFG1        (ISP_AE_HIST_BASE + 0x04)
 #define ISP_AE_HIST_CFG2        (ISP_AE_HIST_BASE + 0x08)
@@ -1019,15 +1007,9 @@ struct frame_entry { // Must match OEM offsets exactly
 #define ISP_AE_HIST_NUM_BINS    (ISP_AE_HIST_BASE + 0x20)
 #define ISP_AE_HIST_DATA        (ISP_AE_HIST_BASE + 0x40)
 
-/* Direction bits */
-#define _IOC_NONE   0U
-#define _IOC_WRITE  1U  /* userspace writing to kernel, aka "IN" */
-#define _IOC_READ   2U  /* userspace reading from kernel, aka "OUT" */
-
-/* Check the direction */
-#define IOC_IN      (_IOC_WRITE << _IOC_DIRSHIFT)
-#define IOC_OUT     (_IOC_READ << _IOC_DIRSHIFT)
-#define IOC_INOUT   (((_IOC_WRITE|_IOC_READ) << _IOC_DIRSHIFT))
+/* REMOVED: Duplicate IOCTL definitions that conflict with kernel headers */
+/* These are already defined in include/uapi/asm-generic/ioctl.h and arch/mips/include/uapi/asm/ioctl.h */
+/* Use the kernel's standard IOCTL definitions instead */
 
 #define BCSH_SVALUE_REG     0x100  // Update with actual register offset
 #define BCSH_SMAX_REG       0x104
