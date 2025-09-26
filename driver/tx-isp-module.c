@@ -2905,6 +2905,15 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         channel, chosen_phys, chosen_size);
             }
 
+
+			/* Force ch0 to use SET_BUF base/step bank to match encoder expectations */
+			if (channel == 0 && fcd && fcd->vbm_base_phys && fcd->vbm_frame_size) {
+				chosen_phys = fcd->vbm_base_phys + buffer.index * fcd->vbm_frame_size;
+				chosen_size = fcd->vbm_frame_size;
+				pr_info("*** Channel 0: QBUF - Forcing SET_BUF phys=0x%x (base=0x%x step=%u index=%u) ***\n",
+					chosen_phys, fcd->vbm_base_phys, fcd->vbm_frame_size, buffer.index);
+			}
+
             /* Program VIC only for channel 0 NV12 path to avoid clobbering with substream (ch1) buffers. */
             if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
                 struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
@@ -6468,27 +6477,32 @@ int vic_event_handler(void *subdev, int event_type, void *data)
         }
     }
     case 0x3000005: { /* Buffer enqueue event from __enqueue_in_driver */
-        pr_info("*** VIC EVENT: BUFFER_ENQUEUE (0x3000005) - HARDWARE BUFFER SETUP ***\n");
+        pr_info("*** VIC EVENT: BUFFER_ENQUEUE (0x3000005) - using VB payload (buffer+0x68) ***\n");
 
-        /* Process buffer enqueue to VIC hardware */
-        if (data && vic_dev->vic_regs) {
-            /* Extract buffer information and program to VIC */
-            struct v4l2_buffer *buffer_data = (struct v4l2_buffer *)data;
-            if (buffer_data && buffer_data->index < 8) {
-                u32 buffer_phys_addr = 0x6300000 + (buffer_data->index * (1920 * 1080 * 2));
-                u32 buffer_reg_offset = (buffer_data->index + 0xc6) << 2;
-
-                pr_info("VIC EVENT: Programming buffer[%d] addr=0x%x to VIC reg 0x%x\n",
-                       buffer_data->index, buffer_phys_addr, buffer_reg_offset);
-
-                writel(buffer_phys_addr, vic_dev->vic_regs + buffer_reg_offset);
-                wmb();
-
-                /* Increment frame count like Binary Ninja */
-                vic_dev->frame_count++;
-            }
+        if (!data) {
+            pr_warn("VIC ENQUEUE: NULL data from __enqueue_in_driver\n");
+            return -EINVAL;
         }
-        return 0;
+
+        /* BN reference: event payload points to (buffer_struct + 0x68)
+         * Recover VB pointer, pull index (+0x34) and DMA phys addr (+0x70)
+         */
+        {
+            void *vb = (void *)((char *)data - 0x68);
+            u32 idx = *(u32 *)((char *)vb + 0x34);
+            u32 phys = *(u32 *)((char *)vb + 0x70);
+            struct { u32 index; u32 phys_addr; u32 size; u32 channel; } v;
+
+            v.index = idx;
+            v.phys_addr = phys;
+            v.size = 0;     /* unknown here; optional */
+            v.channel = 0;  /* default to ch0 for VIC encoder path */
+
+            pr_info("VIC ENQUEUE: vb=%p index=%u phys=0x%x -> forwarding as QBUF\n", vb, idx, phys);
+
+            /* Reuse the QBUF notify path to program the slot */
+            return tx_isp_vic_notify(vic_dev, TX_ISP_EVENT_FRAME_QBUF, &v);
+        }
     }
     default:
         pr_info("*** vic_event_handler: UNHANDLED EVENT 0x%x - returning 0xfffffdfd ***\n", event_type);
