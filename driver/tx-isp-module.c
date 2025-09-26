@@ -2197,8 +2197,14 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
                     pr_debug("*** DEBUG: subdev=%p, ops=%p, video=%p, s_stream=%p ***\n",
                             subdev, subdev->ops, subdev->ops->video, subdev->ops->video->s_stream);
 
-                    /* Binary Ninja: int32_t result = $v0_4($a0, arg2) */
-                    result = subdev->ops->video->s_stream(subdev, enable);
+                    /* Prefer link_stream when available; fall back to s_stream */
+                    int (*stream_fn)(struct tx_isp_subdev *, int) = NULL;
+                    if (subdev->ops->video->link_stream)
+                        stream_fn = subdev->ops->video->link_stream;
+                    else
+                        stream_fn = subdev->ops->video->s_stream;
+                    /* Binary Ninja: int32_t result = stream_fn($a0, arg2) */
+                    result = stream_fn(subdev, enable);
 
                     /* Binary Ninja: if (result == 0) i += 1 */
                     if (result == 0) {
@@ -2221,7 +2227,12 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
 
                                     /* Binary Ninja: $v0_7($a0_1, arg2 u< 1 ? 1 : 0) */
                                     int rollback_enable = (enable < 1) ? 1 : 0;
-                                    rollback_subdev->ops->video->s_stream(rollback_subdev, rollback_enable);
+                                    int (*rollback_fn)(struct tx_isp_subdev *, int) = NULL;
+                                    if (rollback_subdev->ops->video->link_stream)
+                                        rollback_fn = rollback_subdev->ops->video->link_stream;
+                                    else
+                                        rollback_fn = rollback_subdev->ops->video->s_stream;
+                                    rollback_fn(rollback_subdev, rollback_enable);
                                 }
                             }
 

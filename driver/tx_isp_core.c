@@ -719,7 +719,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* Binary Ninja: Frame sync interrupt processing */
     if (interrupt_status & 0x1000) {  /* Frame sync interrupt */
-        pr_info("*** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***\n");
+        // pr_info("*** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***\n");
 
         if (fs_workqueue) {
             /* REFERENCE DRIVER: Use queue_work_on for CPU 0 like private_schedule_work */

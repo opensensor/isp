@@ -625,6 +625,17 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         /* Binary Ninja: private_msleep(1) */
                         msleep(1);
 
+                        /* Program DATA_IDS filters to accept RAW10 (0x2b) on all VCs */
+                        {
+                            u32 dt = 0x2b;
+                            u32 dt_word = (dt << 24) | (dt << 16) | (dt << 8) | dt;
+                            writel(dt_word, csi_dev->csi_regs + 0x18); /* DATA_IDS_1 */
+                            wmb();
+                            writel(dt_word, csi_dev->csi_regs + 0x1c); /* DATA_IDS_2 */
+                            wmb();
+                            pr_debug("CSI: DATA_IDS configured to RAW10 (0x2b2b2b2b) on 0x18/0x1c\n");
+                        }
+
                         /* *** CRITICAL: PHY timing configuration based on frame rate *** */
                         /* Binary Ninja: void* $v0_7 = *($s0_1 + 0x110) */
                         /* int32_t $v1_10 = *($v0_7 + 0x3c) */
