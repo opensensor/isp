@@ -74,6 +74,29 @@ void system_reg_write(u32 reg, u32 value);
 int tisp_lsc_write_lut_datas(void);
 irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 
+/* Map V4L2 mbus Bayer codes to ISP Bayer mode (register 0x8) per reference-standardize */
+static inline u32 mbus_to_bayer_mode(u32 config)
+{
+    switch (config) {
+    /* RGGB group */
+    case 0x3001: case 0x3003: case 0x3004: case 0x3005:
+    case 0x3006: case 0x3007: case 0x3008: case 0x300b:
+        return 1; /* RGGB */
+    /* GRBG group */
+    case 0x3002: case 0x3009: case 0x300a: case 0x3011:
+        return 2; /* GRBG */
+    /* GBRG group */
+    case 0x300c: case 0x300e: case 0x3010: case 0x3013:
+        return 3; /* GBRG */
+    /* BGGR group */
+    case 0x300d: case 0x300f: case 0x3012: case 0x3014:
+        return 0; /* BGGR */
+    default:
+        return 0; /* Default safe */
+    }
+}
+
+
 /* Debug macro for sensor functions */
 #define ISP_DEBUG(fmt, ...) \
     do { \
@@ -290,6 +313,11 @@ int tx_isp_core_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *confi
         extern void tisp_dmsc_set_cfa_from_mbus(u32 mbus_code, int hflip, int vflip);
         tisp_dmsc_set_cfa_from_mbus(code, hflip, vflip);
         pr_info("tx_isp_core_set_format: DMSC CFA programmed from mbus=0x%x, h=%d, v=%d\n", code, hflip, vflip);
+        {
+            u32 bayer = mbus_to_bayer_mode(code);
+            system_reg_write(8, bayer);
+            pr_info("tx_isp_core_set_format: Bayer reg[0x8]=%u from mbus=0x%x\n", bayer, code);
+        }
     } else {
         pr_warn("tx_isp_core_set_format: No sensor present to determine CFA\n");
     }
@@ -1323,6 +1351,11 @@ int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
         int vflip = (shvflip & 0x2) ? 1 : 0;
         tisp_dmsc_set_cfa_from_mbus(code, hflip, vflip);
         pr_info("tx_isp_configure_format_propagation: DMSC CFA programmed from mbus=0x%x, h=%d, v=%d\n", code, hflip, vflip);
+        {
+            u32 bayer = mbus_to_bayer_mode(code);
+            system_reg_write(8, bayer);
+            pr_info("tx_isp_configure_format_propagation: Bayer reg[0x8]=%u from mbus=0x%x\n", bayer, code);
+        }
     } else {
         /* Fallback: program default RGGB (index 0) if sensor not yet linked */
         tisp_dmsc_set_cfa_from_mbus(0 /* unknown mbus -> default RGGB */, 0, 0);
