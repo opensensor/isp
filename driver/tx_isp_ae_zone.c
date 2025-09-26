@@ -27,7 +27,7 @@ static struct {
 /* MCP Logging Helper */
 static void mcp_log_info(const char *method_name, const char *description, void *data)
 {
-    pr_debug("MCP_LOG: %s: %s, data=%p\n", method_name, description, data);
+    pr_info("MCP_LOG: %s: %s, data=%p\n", method_name, description, data);
 }
 
 /* tisp_ae_get_y_zone - Binary Ninja EXACT Implementation */
@@ -38,7 +38,7 @@ int tisp_ae_get_y_zone(void *arg1)
     mcp_log_info("tisp_ae_get_y_zone", "entry with argument", arg1);
     
     if (!arg1) {
-        pr_debug("tisp_ae_get_y_zone: Invalid argument\n");
+        pr_info("tisp_ae_get_y_zone: Invalid argument\n");
         mcp_log_info("tisp_ae_get_y_zone", "error - null argument", NULL);
         return -EINVAL;
     }
@@ -79,13 +79,13 @@ int tisp_g_ae_zone(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
     mcp_log_info("tisp_g_ae_zone", "entry with device and control", dev);
 
     if (!dev || !ctrl) {
-        pr_debug("tisp_g_ae_zone: Invalid device or control pointer\n");
+        pr_info("tisp_g_ae_zone: Invalid device or control pointer\n");
         mcp_log_info("tisp_g_ae_zone", "error - invalid parameters", NULL);
         return -EINVAL;
     }
 
     if (!ctrl->value) {
-        pr_debug("tisp_g_ae_zone: No data pointer for AE zone\n");
+        pr_info("tisp_g_ae_zone: No data pointer for AE zone\n");
         mcp_log_info("tisp_g_ae_zone", "error - no data pointer", NULL);
         return -EINVAL;
     }
@@ -97,7 +97,7 @@ int tisp_g_ae_zone(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
     /* Get latest zone data using reference method */
     ret = tisp_ae_get_y_zone(&zones);
     if (ret) {
-        pr_debug("tisp_g_ae_zone: Failed to get AE zone data: %d\n", ret);
+        pr_info("tisp_g_ae_zone: Failed to get AE zone data: %d\n", ret);
         mcp_log_info("tisp_g_ae_zone", "error getting zone data", &ret);
         return ret;
     }
@@ -106,7 +106,7 @@ int tisp_g_ae_zone(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
 
     /* Copy zone data to user-provided buffer - Fixed: correct size */
     if (copy_to_user((void __user *)ctrl->value, &zones, sizeof(zones))) {
-        pr_debug("tisp_g_ae_zone: Failed to copy data to user\n");
+        pr_info("tisp_g_ae_zone: Failed to copy data to user\n");
         mcp_log_info("tisp_g_ae_zone", "error copying to user", NULL);
         return -EFAULT;
     }
@@ -126,7 +126,7 @@ int tisp_ae_update_zone_data(uint32_t *new_zone_data, size_t data_size)
     mcp_log_info("tisp_ae_update_zone_data", "entry with new data", new_zone_data);
     
     if (!new_zone_data || data_size != sizeof(ae_zone_data.zone_data)) {
-        pr_debug("tisp_ae_update_zone_data: Invalid parameters\n");
+        pr_info("tisp_ae_update_zone_data: Invalid parameters\n");
         mcp_log_info("tisp_ae_update_zone_data", "error - invalid parameters", NULL);
         return -EINVAL;
     }

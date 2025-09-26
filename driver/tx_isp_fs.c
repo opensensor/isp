@@ -123,14 +123,14 @@ EXPORT_SYMBOL(tx_isp_fs_dequeue_done);
 
 static int fs_core_ops_init(struct tx_isp_subdev *sd, int enable)
 {
-    pr_debug("*** fs_core_ops_init: enable=%d ***\n", enable);
+    pr_info("*** fs_core_ops_init: enable=%d ***\n", enable);
     return 0;
 }
 
 /* FS subdev sensor operations */
 static int fs_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
-    pr_debug("*** fs_sensor_ops_ioctl: cmd=0x%x ***\n", cmd);
+    pr_info("*** fs_sensor_ops_ioctl: cmd=0x%x ***\n", cmd);
     return 0;
 }
 
@@ -153,19 +153,19 @@ static struct tx_isp_subdev_ops fs_subdev_ops = {
 /* Frame source file operations - matching isp_framesource_fops */
 static int fs_chardev_open(struct inode *inode, struct file *file)
 {
-    pr_debug("*** FS device opened ***\n");
+    pr_info("*** FS device opened ***\n");
     return 0;
 }
 
 static int fs_chardev_release(struct inode *inode, struct file *file)
 {
-    pr_debug("*** FS device released ***\n");
+    pr_info("*** FS device released ***\n");
     return 0;
 }
 
 static long fs_chardev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-    pr_debug("*** FS IOCTL: cmd=0x%x arg=0x%lx ***\n", cmd, arg);
+    pr_info("*** FS IOCTL: cmd=0x%x arg=0x%lx ***\n", cmd, arg);
     return 0;
 }
 
@@ -222,7 +222,7 @@ static int frame_chan_event(void *priv, u32 event, void *edata)
 /* Frame channel initialization/deinitialization */
 void tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan)
 {
-    pr_debug("Deinitializing frame channel\n");
+    pr_info("Deinitializing frame channel\n");
     if (chan->active) {
         misc_deregister(&chan->misc);
     }
@@ -240,12 +240,12 @@ int tx_isp_fs_probe(struct platform_device *pdev)
     int ret;
     int i;
 
-    pr_debug("*** tx_isp_fs_probe: Memory-safe implementation ***\n");
+    pr_info("*** tx_isp_fs_probe: Memory-safe implementation ***\n");
 
     /* SAFE: Use proper struct size instead of fixed 0xe8 */
     fs_dev = kzalloc(sizeof(struct tx_isp_fs_device), GFP_KERNEL);
     if (!fs_dev) {
-        pr_debug("Err [VIC_INT] : control limit err!!!\n");
+        pr_info("Err [VIC_INT] : control limit err!!!\n");
         return -12;
     }
 
@@ -256,7 +256,7 @@ int tx_isp_fs_probe(struct platform_device *pdev)
     ret = tx_isp_subdev_init(pdev, &fs_dev->subdev, &fs_subdev_ops);
     if (ret != 0) {
         /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : image syfifo ovf !!!\n", zx.d(*($s2_1 + 2))) */
-        pr_debug("Err [VIC_INT] : image syfifo ovf !!!\n");
+        pr_info("Err [VIC_INT] : image syfifo ovf !!!\n");
         /* Binary Ninja: private_kfree($v0) */
         kfree(fs_dev);
         /* Binary Ninja: return 0xfffffff4 */
@@ -266,7 +266,7 @@ int tx_isp_fs_probe(struct platform_device *pdev)
     /* SAFE: Access struct member directly instead of offset calculation */
     channel_count = fs_dev->channel_count;  /* Get from subdev initialization */
 
-    pr_debug("tx_isp_fs_probe: channel_count=%d\n", channel_count);
+    pr_info("tx_isp_fs_probe: channel_count=%d\n", channel_count);
 
     /* Binary Ninja: if ($a0_2 == 0) goto label_1c670 */
     if (channel_count == 0) {
@@ -276,7 +276,7 @@ int tx_isp_fs_probe(struct platform_device *pdev)
     /* SAFE: Use proper struct size instead of fixed 0x2ec */
     channels_buffer = kzalloc(channel_count * sizeof(struct tx_isp_frame_channel), GFP_KERNEL);
     if (!channels_buffer) {
-        pr_debug("Failed to allocate channels buffer\n");
+        pr_info("Failed to allocate channels buffer\n");
         ret = -ENOMEM;
         goto error_cleanup;
     }
@@ -285,7 +285,7 @@ int tx_isp_fs_probe(struct platform_device *pdev)
     fs_dev->channel_buffer = channels_buffer;
 
     /* Binary Ninja: Channel initialization loop */
-    pr_debug("tx_isp_fs_probe: initializing %d frame channels\n", channel_count);
+    pr_info("tx_isp_fs_probe: initializing %d frame channels\n", channel_count);
     /* Publish channel count for IRQ bridging */
     g_fs_channel_count = channel_count;
 
@@ -333,7 +333,7 @@ int tx_isp_fs_probe(struct platform_device *pdev)
             ret = misc_register(&current_channel->misc);
             if (ret < 0) {
                 /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch0 hcomp err !!!\n", $s0_2[0xb0]) */
-                pr_debug("Err [VIC_INT] : mipi ch0 hcomp err !!!\n");
+                pr_info("Err [VIC_INT] : mipi ch0 hcomp err !!!\n");
                 /* Binary Ninja: result = 0xfffffffe */
                 ret = -2;
                 goto error_cleanup_loop;
@@ -356,12 +356,12 @@ int tx_isp_fs_probe(struct platform_device *pdev)
             /* Binary Ninja: $s0_2[0xb4] = 1 */
             current_channel->state = 1;  /* Active state */
 
-            pr_debug("tx_isp_fs_probe: initialized frame channel %d: %s\n",
+            pr_info("tx_isp_fs_probe: initialized frame channel %d: %s\n",
                     i, current_channel->name);
         } else {
             /* Binary Ninja: $s0_2[0xb4] = 0 */
             current_channel->state = 0;  /* Inactive state */
-            pr_debug("tx_isp_fs_probe: channel %d inactive\n", i);
+            pr_info("tx_isp_fs_probe: channel %d inactive\n", i);
         }
     }
 
@@ -392,9 +392,9 @@ setup_complete:
 
     /* Note: Self-pointer assignment removed as it's not needed with proper struct access */
 
-    pr_debug("*** tx_isp_fs_probe: FS device created successfully (size=%zu, channels=%d) ***\n",
+    pr_info("*** tx_isp_fs_probe: FS device created successfully (size=%zu, channels=%d) ***\n",
             sizeof(struct tx_isp_fs_device), channel_count);
-    pr_debug("*** FS PROBE COMPLETE - /proc/jz/isp/isp-fs SHOULD NOW BE AVAILABLE ***\n");
+    pr_info("*** FS PROBE COMPLETE - /proc/jz/isp/isp-fs SHOULD NOW BE AVAILABLE ***\n");
 
     /* Binary Ninja: return 0 */
     return 0;
@@ -408,7 +408,7 @@ int tx_isp_fs_remove(struct platform_device *pdev)
     struct tx_isp_frame_channel *current_channel;
     int i;
 
-    pr_debug("*** tx_isp_fs_remove ***\n");
+    pr_info("*** tx_isp_fs_remove ***\n");
 
     if (!fs_dev) {
         return 0;
@@ -431,7 +431,7 @@ int tx_isp_fs_remove(struct platform_device *pdev)
 
     kfree(fs_dev);
 
-    pr_debug("FS device removed\n");
+    pr_info("FS device removed\n");
     return 0;
 }
 
@@ -453,23 +453,23 @@ int __init tx_isp_fs_platform_init(void)
 {
     int ret;
 
-    pr_debug("*** TX ISP FS PLATFORM DRIVER REGISTRATION ***\n");
+    pr_info("*** TX ISP FS PLATFORM DRIVER REGISTRATION ***\n");
 
     ret = platform_driver_register(&tx_isp_fs_platform_driver);
     if (ret) {
-        pr_debug("Failed to register FS platform driver: %d\n", ret);
+        pr_info("Failed to register FS platform driver: %d\n", ret);
         return ret;
     }
 
-    pr_debug("FS platform driver registered successfully\n");
+    pr_info("FS platform driver registered successfully\n");
     return 0;
 }
 
 void __exit tx_isp_fs_platform_exit(void)
 {
-    pr_debug("*** TX ISP FS PLATFORM DRIVER UNREGISTRATION ***\n");
+    pr_info("*** TX ISP FS PLATFORM DRIVER UNREGISTRATION ***\n");
     platform_driver_unregister(&tx_isp_fs_platform_driver);
-    pr_debug("FS platform driver unregistered\n");
+    pr_info("FS platform driver unregistered\n");
 }
 
 /* Export symbols */

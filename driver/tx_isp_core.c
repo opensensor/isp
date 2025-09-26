@@ -57,7 +57,7 @@ static bool tisp_initialized = false;
 void tisp_reset_initialization_flag(void)
 {
     tisp_initialized = false;
-    pr_debug("tisp_reset_initialization_flag: ISP initialization flag reset\n");
+    pr_info("tisp_reset_initialization_flag: ISP initialization flag reset\n");
 }
 EXPORT_SYMBOL(tisp_reset_initialization_flag);
 int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr);
@@ -171,23 +171,23 @@ int tx_isp_core_start(struct tx_isp_subdev *sd)
     int ret = 0;
 
     if (!sd) {
-        pr_debug("tx_isp_core_start: Invalid subdev\n");
+        pr_info("tx_isp_core_start: Invalid subdev\n");
         return -EINVAL;
     }
 
     isp_dev = sd->isp;
     if (!isp_dev) {
-        pr_debug("tx_isp_core_start: No ISP device\n");
+        pr_info("tx_isp_core_start: No ISP device\n");
         return -EINVAL;
     }
 
-    pr_debug("*** tx_isp_core_start: Starting ISP core processing ***\n");
+    pr_info("*** tx_isp_core_start: Starting ISP core processing ***\n");
 
     /* Initialize memory mappings if not already done */
     if (!isp_dev->core_regs) {
         ret = tx_isp_init_memory_mappings(isp_dev);
         if (ret < 0) {
-            pr_debug("tx_isp_core_start: Failed to initialize memory mappings: %d\n", ret);
+            pr_info("tx_isp_core_start: Failed to initialize memory mappings: %d\n", ret);
             return ret;
         }
     }
@@ -196,7 +196,7 @@ int tx_isp_core_start(struct tx_isp_subdev *sd)
 //    if (!isp_dev->isp_clk) {
 //        ret = tx_isp_configure_clocks(isp_dev);
 //        if (ret < 0) {
-//            pr_debug("tx_isp_core_start: Failed to configure clocks: %d\n", ret);
+//            pr_info("tx_isp_core_start: Failed to configure clocks: %d\n", ret);
 //            return ret;
 //        }
 //    }
@@ -205,7 +205,7 @@ int tx_isp_core_start(struct tx_isp_subdev *sd)
     if (isp_dev->pipeline_state == ISP_PIPELINE_IDLE) {
         ret = tx_isp_setup_pipeline(isp_dev);
         if (ret < 0) {
-            pr_debug("tx_isp_core_start: Failed to setup pipeline: %d\n", ret);
+            pr_info("tx_isp_core_start: Failed to setup pipeline: %d\n", ret);
             return ret;
         }
     }
@@ -234,14 +234,14 @@ int tx_isp_core_start(struct tx_isp_subdev *sd)
         writel(0x1000,     core + 0x98bc);
         wmb();
 
-        pr_debug("*** tx_isp_core_start: Applied ISP pipeline enable/routing (0x800=1, 0x804=0x1c, 0x1c=8) ***\n");
+        pr_info("*** tx_isp_core_start: Applied ISP pipeline enable/routing (0x800=1, 0x804=0x1c, 0x1c=8) ***\n");
     } else {
-        pr_debug("tx_isp_core_start: core_regs not mapped; skipping pipeline enable here\n");
+        pr_info("tx_isp_core_start: core_regs not mapped; skipping pipeline enable here\n");
     }
 
     isp_dev->pipeline_state = ISP_PIPELINE_STREAMING;
 
-    pr_debug("*** tx_isp_core_start: ISP core started successfully ***\n");
+    pr_info("*** tx_isp_core_start: ISP core started successfully ***\n");
     return 0;
 }
 EXPORT_SYMBOL(tx_isp_core_start);
@@ -251,20 +251,20 @@ int tx_isp_core_stop(struct tx_isp_subdev *sd)
     struct tx_isp_dev *isp_dev;
 
     if (!sd) {
-        pr_debug("tx_isp_core_stop: Invalid subdev\n");
+        pr_info("tx_isp_core_stop: Invalid subdev\n");
         return -EINVAL;
     }
 
     isp_dev = sd->isp;
     if (!isp_dev) {
-        pr_debug("tx_isp_core_stop: No ISP device\n");
+        pr_info("tx_isp_core_stop: No ISP device\n");
         return -EINVAL;
     }
 
     /* Set pipeline to idle state */
     isp_dev->pipeline_state = ISP_PIPELINE_IDLE;
 
-    pr_debug("*** tx_isp_core_stop: ISP core stopped successfully ***\n");
+    pr_info("*** tx_isp_core_stop: ISP core stopped successfully ***\n");
     return 0;
 }
 EXPORT_SYMBOL(tx_isp_core_stop);
@@ -275,17 +275,17 @@ int tx_isp_core_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *confi
     int ret = 0;
 
     if (!sd || !config) {
-        pr_debug("tx_isp_core_set_format: Invalid parameters\n");
+        pr_info("tx_isp_core_set_format: Invalid parameters\n");
         return -EINVAL;
     }
 
     isp_dev = sd->isp;
     if (!isp_dev) {
-        pr_debug("tx_isp_core_set_format: No ISP device\n");
+        pr_info("tx_isp_core_set_format: No ISP device\n");
         return -EINVAL;
     }
 
-    pr_debug("*** tx_isp_core_set_format: Setting format %dx%d ***\n",
+    pr_info("*** tx_isp_core_set_format: Setting format %dx%d ***\n",
             config->width, config->height);
 
     /* Store format configuration */
@@ -300,7 +300,7 @@ int tx_isp_core_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *confi
     /* Configure format propagation through pipeline */
     ret = tx_isp_configure_format_propagation(isp_dev);
     if (ret < 0) {
-        pr_debug("tx_isp_core_set_format: Failed to configure format propagation: %d\n", ret);
+        pr_info("tx_isp_core_set_format: Failed to configure format propagation: %d\n", ret);
         return ret;
     }
 
@@ -312,7 +312,7 @@ int tx_isp_core_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *confi
         int vflip = (shvflip & 0x2) ? 1 : 0;
         extern void tisp_dmsc_set_cfa_from_mbus(u32 mbus_code, int hflip, int vflip);
         tisp_dmsc_set_cfa_from_mbus(code, hflip, vflip);
-        pr_debug("tx_isp_core_set_format: DMSC CFA programmed from mbus=0x%x, h=%d, v=%d\n", code, hflip, vflip);
+        pr_info("tx_isp_core_set_format: DMSC CFA programmed from mbus=0x%x, h=%d, v=%d\n", code, hflip, vflip);
         {
             u32 bayer = mbus_to_bayer_mode(code);
             system_reg_write(8, bayer);
@@ -333,13 +333,13 @@ int tx_isp_core_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *confi
             system_reg_write(0x218, 0x80);
             system_reg_write(0x21c, 0x6a);
             system_reg_write(0x220, 0x16);
-            pr_debug("tx_isp_core_set_format: Minimal ISP demosaic+CSC programmed\n");
+            pr_info("tx_isp_core_set_format: Minimal ISP demosaic+CSC programmed\n");
         }
     } else {
-        pr_debug("tx_isp_core_set_format: No sensor present to determine CFA\n");
+        pr_info("tx_isp_core_set_format: No sensor present to determine CFA\n");
     }
 
-    pr_debug("*** tx_isp_core_set_format: Format set successfully ***\n");
+    pr_info("*** tx_isp_core_set_format: Format set successfully ***\n");
     return 0;
 }
 EXPORT_SYMBOL(tx_isp_core_set_format);
@@ -436,18 +436,18 @@ static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
         return -ENODEV;
     }
     if (!per_frame_sensor_ops_enabled) {
-        pr_debug("ispcore_sensor_ops_ioctl: per-frame ops disabled; skipping I2C\n");
+        pr_info("ispcore_sensor_ops_ioctl: per-frame ops disabled; skipping I2C\n");
         return 0;
     }
 
-    pr_debug("*** ispcore_sensor_ops_ioctl: Looking for actual sensor device ***\n");
+    pr_info("*** ispcore_sensor_ops_ioctl: Looking for actual sensor device ***\n");
 
     /* CRITICAL: Don't iterate through subdevs - call the real sensor directly */
     /* The real sensor is stored in isp_dev->sensor, not in the subdevs array */
     if (isp_dev->sensor && isp_dev->sensor->sd.ops &&
         isp_dev->sensor->sd.ops->sensor && isp_dev->sensor->sd.ops->sensor->ioctl) {
 
-        pr_debug("*** ispcore_sensor_ops_ioctl: Found real sensor device - calling sensor IOCTL ***\n");
+        pr_info("*** ispcore_sensor_ops_ioctl: Found real sensor device - calling sensor IOCTL ***\n");
 
         /* CRITICAL: Sensor expects FPS in format (fps_num << 16) | fps_den */
         static int fps_value = (25 << 16) | 1;  /* Default 25/1 FPS in correct format */
@@ -457,25 +457,25 @@ static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
             int new_fps = (isp_dev->tuning_data->fps_num << 16) | isp_dev->tuning_data->fps_den;
             if (new_fps != fps_value) {
                 fps_value = new_fps;
-                pr_debug("*** ispcore_sensor_ops_ioctl: Updated FPS to %d/%d (0x%x) from tuning data ***\n",
+                pr_info("*** ispcore_sensor_ops_ioctl: Updated FPS to %d/%d (0x%x) from tuning data ***\n",
                         isp_dev->tuning_data->fps_num, isp_dev->tuning_data->fps_den, fps_value);
             }
         }
 
-        pr_debug("*** ispcore_sensor_ops_ioctl: Calling sensor with FPS=0x%x (25/1) ***\n", fps_value);
+        pr_info("*** ispcore_sensor_ops_ioctl: Calling sensor with FPS=0x%x (25/1) ***\n", fps_value);
 
         /* Call the real sensor's IOCTL with valid FPS pointer - this triggers I2C communication */
         result = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd, TX_ISP_EVENT_SENSOR_FPS, &fps_value);
 
-        pr_debug("*** ispcore_sensor_ops_ioctl: Real sensor IOCTL result: %d ***\n", result);
+        pr_info("*** ispcore_sensor_ops_ioctl: Real sensor IOCTL result: %d ***\n", result);
 
         if (result == 0) {
-            pr_debug("*** ispcore_sensor_ops_ioctl: Sensor I2C communication successful - should see I2C writes to 0x41/0x42 ***\n");
+            pr_info("*** ispcore_sensor_ops_ioctl: Sensor I2C communication successful - should see I2C writes to 0x41/0x42 ***\n");
         } else {
-            pr_debug("*** ispcore_sensor_ops_ioctl: Sensor I2C communication failed: %d ***\n", result);
+            pr_info("*** ispcore_sensor_ops_ioctl: Sensor I2C communication failed: %d ***\n", result);
         }
     } else {
-        pr_debug("*** ispcore_sensor_ops_ioctl: No real sensor device found ***\n");
+        pr_info("*** ispcore_sensor_ops_ioctl: No real sensor device found ***\n");
         result = -ENODEV;
     }
 
@@ -490,7 +490,7 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     static int sensor_call_counter = 0;
 
     if (!isp_dev) {
-        pr_debug("*** ISP FRAME SYNC WORK: isp_dev is NULL ***\n");
+        pr_info("*** ISP FRAME SYNC WORK: isp_dev is NULL ***\n");
         return;
     }
 
@@ -502,52 +502,52 @@ static void ispcore_irq_fs_work(struct work_struct *work)
 
         /* Auto-set streaming_enabled if VIC is streaming but flag is false */
         if (vic_is_streaming && !isp_dev->streaming_enabled) {
-            pr_debug("*** ISP FRAME SYNC WORK: Auto-setting streaming_enabled=true (VIC is streaming) ***\n");
+            pr_info("*** ISP FRAME SYNC WORK: Auto-setting streaming_enabled=true (VIC is streaming) ***\n");
             isp_dev->streaming_enabled = true;
         }
     }
 
     /* Check if sensor is available and streaming is active */
-    pr_debug("*** ISP FRAME SYNC WORK: sensor=%p, streaming_enabled=%d, vic_streaming=%d ***\n",
+    pr_info("*** ISP FRAME SYNC WORK: sensor=%p, streaming_enabled=%d, vic_streaming=%d ***\n",
             isp_dev->sensor, isp_dev->streaming_enabled, vic_is_streaming);
 
     /* CRITICAL FIX: Call CSI s_stream during streaming to configure CSI hardware */
     static bool csi_streaming_started = false;
     if (isp_dev->streaming_enabled && vic_is_streaming && !csi_streaming_started) {
-        pr_debug("*** ISP FRAME SYNC WORK: STARTING CSI STREAMING (MISSING CRITICAL CALL) ***\n");
+        pr_info("*** ISP FRAME SYNC WORK: STARTING CSI STREAMING (MISSING CRITICAL CALL) ***\n");
 
         if (isp_dev->csi_dev) {
             struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
-            pr_debug("*** CALLING CSI s_stream(enable=1) - CSI hardware will be configured for streaming ***\n");
+            pr_info("*** CALLING CSI s_stream(enable=1) - CSI hardware will be configured for streaming ***\n");
 
             int csi_result = csi_video_s_stream(&csi_dev->sd, 1);
             if (csi_result == 0) {
                 csi_streaming_started = true;
-                pr_debug("*** CSI STREAMING STARTED SUCCESSFULLY - CSI hardware now configured ***\n");
-                pr_debug("*** ERROR INTERRUPT TYPE 2 SHOULD NOW STOP - CSI will receive MIPI data ***\n");
+                pr_info("*** CSI STREAMING STARTED SUCCESSFULLY - CSI hardware now configured ***\n");
+                pr_info("*** ERROR INTERRUPT TYPE 2 SHOULD NOW STOP - CSI will receive MIPI data ***\n");
             } else {
-                pr_debug("*** CSI STREAMING FAILED: %d - Error interrupt type 2 will continue ***\n", csi_result);
+                pr_info("*** CSI STREAMING FAILED: %d - Error interrupt type 2 will continue ***\n", csi_result);
             }
         } else {
-            pr_debug("*** CSI STREAMING FAILED: No CSI device available ***\n");
+            pr_info("*** CSI STREAMING FAILED: No CSI device available ***\n");
         }
     } else if ((!isp_dev->streaming_enabled || !vic_is_streaming) && csi_streaming_started) {
-        pr_debug("*** ISP FRAME SYNC WORK: STOPPING CSI STREAMING (streaming_enabled=%d, vic_streaming=%d) ***\n",
+        pr_info("*** ISP FRAME SYNC WORK: STOPPING CSI STREAMING (streaming_enabled=%d, vic_streaming=%d) ***\n",
                 isp_dev->streaming_enabled, vic_is_streaming);
 
         if (isp_dev->csi_dev) {
             struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
-            pr_debug("*** CALLING CSI s_stream(enable=0) - CSI hardware will be disabled ***\n");
+            pr_info("*** CALLING CSI s_stream(enable=0) - CSI hardware will be disabled ***\n");
 
             int csi_result = csi_video_s_stream(&csi_dev->sd, 0);
             if (csi_result == 0) {
                 csi_streaming_started = false;
-                pr_debug("*** CSI STREAMING STOPPED SUCCESSFULLY - CSI hardware disabled ***\n");
+                pr_info("*** CSI STREAMING STOPPED SUCCESSFULLY - CSI hardware disabled ***\n");
             } else {
-                pr_debug("*** CSI STREAMING STOP FAILED: %d ***\n", csi_result);
+                pr_info("*** CSI STREAMING STOP FAILED: %d ***\n", csi_result);
             }
         } else {
-            pr_debug("*** CSI STREAMING STOP FAILED: No CSI device available ***\n");
+            pr_info("*** CSI STREAMING STOP FAILED: No CSI device available ***\n");
         }
     }
 
@@ -555,18 +555,18 @@ static void ispcore_irq_fs_work(struct work_struct *work)
         extern int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev);
         if (per_frame_sensor_ops_enabled) {
             int sensor_result = ispcore_sensor_ops_ioctl(isp_dev);
-            pr_debug("Frame sync: per-frame sensor ops executed, result=%d\n", sensor_result);
+            pr_info("Frame sync: per-frame sensor ops executed, result=%d\n", sensor_result);
         } else {
-            pr_debug("Frame sync: skipping per-frame sensor I2C ops (disabled)\n");
+            pr_info("Frame sync: skipping per-frame sensor I2C ops (disabled)\n");
         }
-        pr_debug("Frame sync event processed (sensor available)\n");
+        pr_info("Frame sync event processed (sensor available)\n");
     } else {
-        pr_debug("Frame sync event processed (no sensor/not streaming)\n");
+        pr_info("Frame sync event processed (no sensor/not streaming)\n");
     }
 
     /* CRITICAL: Ensure work completion is visible to prevent queue backup */
     sensor_call_counter++;
-    pr_debug("*** ISP FRAME SYNC WORK: Work completion #%d - ready for next interrupt ***\n", sensor_call_counter);
+    pr_info("*** ISP FRAME SYNC WORK: Work completion #%d - ready for next interrupt ***\n", sensor_call_counter);
 }
 
 /* Forward declarations for frame channel functions - avoid naming conflicts */
@@ -584,7 +584,7 @@ static struct isp_core_channel frame_channels[3] = {0};  /* Channel 0, 1, 2 */
 static void frame_channel_wakeup_waiters(struct isp_core_channel *channel)
 {
     if (channel) {
-        pr_debug("frame_channel_wakeup_waiters: Waking up waiters for channel\n");
+        pr_info("frame_channel_wakeup_waiters: Waking up waiters for channel\n");
         /* In full implementation, this would wake up waiting processes */
         isp_frame_done_wakeup();  /* Call the main frame done wakeup */
     }
@@ -594,14 +594,14 @@ static void frame_channel_wakeup_waiters(struct isp_core_channel *channel)
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id))
 {
     if (index < 0 || index >= 32) {
-        pr_debug("system_irq_func_set: Invalid index %d\n", index);
+        pr_info("system_irq_func_set: Invalid index %d\n", index);
         return -EINVAL;
     }
 
     /* Binary Ninja: *((arg1 << 2) + &irq_func_cb) = arg2 */
     irq_func_cb[index] = handler;
 
-    pr_debug("*** system_irq_func_set: Registered handler at index %d ***\n", index);
+    pr_info("*** system_irq_func_set: Registered handler at index %d ***\n", index);
     return 0;
 }
 EXPORT_SYMBOL(system_irq_func_set);
@@ -618,15 +618,15 @@ irqreturn_t ip_done_interrupt_static(int irq, void *dev_id)
         /* This was causing CSI PHY register corruption every ~70ms */
         extern uint32_t vic_start_ok;
         if (vic_start_ok == 1) {
-            pr_debug("*** IP DONE: Skipping LSC tuning during VIC streaming to prevent CSI PHY corruption ***\n");
+            pr_info("*** IP DONE: Skipping LSC tuning during VIC streaming to prevent CSI PHY corruption ***\n");
         } else {
             /* Binary Ninja: tisp_lsc_write_lut_datas() */
             tisp_lsc_write_lut_datas();
-            pr_debug("*** IP DONE: LSC tuning completed (VIC not streaming) ***\n");
+            pr_info("*** IP DONE: LSC tuning completed (VIC not streaming) ***\n");
         }
     }
 
-    pr_debug("*** ip_done_interrupt_handler: ISP processing complete ***\n");
+    pr_info("*** ip_done_interrupt_handler: ISP processing complete ***\n");
 
     /* Binary Ninja: return 2 */
     return IRQ_HANDLED; /* Convert to standard Linux return value */
@@ -644,7 +644,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     int i;
 
     if (!isp_dev || !isp_dev->vic_regs) {
-        pr_debug("ispcore_interrupt_service_routine: Invalid device\n");
+        pr_info("ispcore_interrupt_service_routine: Invalid device\n");
         return IRQ_NONE;
     }
 
@@ -680,10 +680,10 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         if (interrupt_status != 0) {
 			// Removed logging
         } else if (isp_force_core_isr) {
-            pr_debug("*** ISP CORE: FORCED FRAME DONE VIA VIC (no pending) ***\n");
+            pr_info("*** ISP CORE: FORCED FRAME DONE VIA VIC (no pending) ***\n");
             interrupt_status = 1; /* Force Channel 0 frame-done path */
         } else {
-            pr_debug("*** ISP CORE INTERRUPT: no pending (legacy=0x%08x new=0x%08x) ***\n",
+            pr_info("*** ISP CORE INTERRUPT: no pending (legacy=0x%08x new=0x%08x) ***\n",
                      status_legacy, status_new);
             return IRQ_HANDLED; /* No interrupt to process */
         }
@@ -761,7 +761,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     }
 
     if (interrupt_status & 0x100) {  /* Error interrupt type 2 */
-        //pr_debug("ISP CORE: Error interrupt type 2\n");
+        //pr_info("ISP CORE: Error interrupt type 2\n");
         /* Binary Ninja: exception_handle() */
         /* Error handling would be here */
     }
@@ -769,13 +769,13 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
 
     if (interrupt_status & 0x2000) {  /* Additional interrupt type */
-        pr_debug("ISP CORE: Additional interrupt type\n");
+        pr_info("ISP CORE: Additional interrupt type\n");
         /* Binary Ninja: Additional interrupt processing */
     }
 
     /* *** CRITICAL: CHANNEL 0 FRAME COMPLETION PROCESSING *** */
     if (interrupt_status & 1) {  /* Channel 0 frame done */
-        pr_debug("*** ISP CORE: CHANNEL 0 FRAME DONE INTERRUPT ***\n");
+        pr_info("*** ISP CORE: CHANNEL 0 FRAME DONE INTERRUPT ***\n");
 
         /* Binary Ninja: data_ca584 += 1 - increment frame counter */
         if (isp_dev) {
@@ -788,7 +788,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             u32 frame_info1 = readl(vic_regs + 0x998c);
             u32 frame_info2 = readl(vic_regs + 0x9990);
 
-            pr_debug("*** FRAME COMPLETION: addr=0x%x, info1=0x%x, info2=0x%x ***\n",
+            pr_info("*** FRAME COMPLETION: addr=0x%x, info1=0x%x, info2=0x%x ***\n",
                    frame_buffer_addr, frame_info1, frame_info2);
 
             /* Binary Ninja: tx_isp_send_event_to_remote(*($s3_2 + 0x78), 0x3000006, &var_40) */
@@ -808,7 +808,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* *** CRITICAL: CHANNEL 1 FRAME COMPLETION PROCESSING *** */
     if (interrupt_status & 2) {  /* Channel 1 frame done */
-        //pr_debug("*** ISP CORE: CHANNEL 1 FRAME DONE INTERRUPT ***\n");
+        //pr_info("*** ISP CORE: CHANNEL 1 FRAME DONE INTERRUPT ***\n");
 
         /* Binary Ninja: Similar processing for channel 1 */
         while ((readl(vic_regs + 0x9a7c) & 1) == 0) {
@@ -826,7 +826,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* Binary Ninja: Channel 2 frame completion */
     if (interrupt_status & 4) {
-        //pr_debug("ISP CORE: Channel 2 frame done\n");
+        //pr_info("ISP CORE: Channel 2 frame done\n");
         /* Similar processing for channel 2 */
         while ((readl(vic_regs + 0x9b7c) & 1) == 0) {
             /* Channel 2 frame processing */
@@ -864,7 +864,7 @@ irqreturn_t tx_isp_core_irq_thread_handle(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = dev_id;
 
-    pr_debug("*** isp_irq_thread_handle: Thread IRQ %d, dev_id=%p ***\n", irq, dev_id);
+    pr_info("*** isp_irq_thread_handle: Thread IRQ %d, dev_id=%p ***\n", irq, dev_id);
 
     /* Handle any thread-level interrupt processing here */
     /* For VIC, most processing is done in the main handler */
@@ -879,14 +879,14 @@ static int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
     int ret;
 
     if (!pdev || !irq_info) {
-        pr_debug("tx_isp_request_irq: Invalid parameters\n");
+        pr_info("tx_isp_request_irq: Invalid parameters\n");
         return -EINVAL;
     }
 
     /* Binary Ninja: int32_t $v0_1 = private_platform_get_irq(arg1, 0) */
     irq_number = platform_get_irq(pdev, 0);
     if (irq_number < 0) {
-        pr_debug("tx_isp_request_irq: Failed to get IRQ: %d\n", irq_number);
+        pr_info("tx_isp_request_irq: Failed to get IRQ: %d\n", irq_number);
         return irq_number;
     }
 
@@ -897,11 +897,11 @@ static int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
     ret = request_threaded_irq(irq_number, tx_isp_core_irq_handle, tx_isp_core_irq_thread_handle,
                                IRQF_SHARED, dev_name(&pdev->dev), irq_info);
     if (ret != 0) {
-        pr_debug("tx_isp_request_irq: Failed to request IRQ %d: %d\n", irq_number, ret);
+        pr_info("tx_isp_request_irq: Failed to request IRQ %d: %d\n", irq_number, ret);
         return ret;
     }
 
-    pr_debug("*** tx_isp_request_irq: IRQ %d registered successfully with dispatch system ***\n", irq_number);
+    pr_info("*** tx_isp_request_irq: IRQ %d registered successfully with dispatch system ***\n", irq_number);
     return 0;
 }
 
@@ -909,7 +909,7 @@ static int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
 irqreturn_t tx_isp_core_irq_handler(int irq, void *dev_id)
 {
     /* *** CRITICAL: Use dispatch system instead of direct handling *** */
-    pr_debug("*** tx_isp_core_irq_handler: Forwarding to dispatch system ***\n");
+    pr_info("*** tx_isp_core_irq_handler: Forwarding to dispatch system ***\n");
     return tx_isp_core_irq_handle(irq, dev_id);
 }
 
@@ -917,7 +917,7 @@ irqreturn_t tx_isp_core_irq_handler(int irq, void *dev_id)
 void tx_isp_frame_chan_init(struct tx_isp_frame_channel *chan)
 {
     /* Initialize channel state */
-    pr_debug("Initializing frame channel\n");
+    pr_info("Initializing frame channel\n");
     if (chan) {
         chan->active = false;
         spin_lock_init(&chan->slock);
@@ -930,34 +930,34 @@ void tx_isp_frame_chan_init(struct tx_isp_frame_channel *chan)
 /* Initialize memory mappings for ISP subsystems */
 int tx_isp_init_memory_mappings(struct tx_isp_dev *isp)
 {
-    pr_debug("Initializing ISP memory mappings\n");
+    pr_info("Initializing ISP memory mappings\n");
 
     /* Map ISP Core registers */
     isp->core_regs = ioremap(0x13300000, 0x10000);
     if (!isp->core_regs) {
-        pr_debug("Failed to map ISP core registers\n");
+        pr_info("Failed to map ISP core registers\n");
         return -ENOMEM;
     }
-    pr_debug("ISP core registers mapped at 0x13300000\n");
+    pr_info("ISP core registers mapped at 0x13300000\n");
 
     /* Map VIC registers */
     isp->vic_regs = ioremap(0x10023000, 0x1000);
     if (!isp->vic_regs) {
-        pr_debug("Failed to map VIC registers\n");
+        pr_info("Failed to map VIC registers\n");
         goto err_unmap_core;
     }
-    pr_debug("VIC registers mapped at 0x10023000\n");
+    pr_info("VIC registers mapped at 0x10023000\n");
 	isp->csi_regs = isp->vic_dev->vic_regs - 0x9a00 + 0x10000; /* ISP base + CSI offset */
 
     /* Map PHY registers */
     isp->phy_base = ioremap(0x10021000, 0x1000);
     if (!isp->phy_base) {
-        pr_debug("Failed to map PHY registers\n");
+        pr_info("Failed to map PHY registers\n");
         goto err_unmap_csi;
     }
-    pr_debug("PHY registers mapped at 0x10021000\n");
+    pr_info("PHY registers mapped at 0x10021000\n");
 
-    pr_debug("All ISP memory mappings initialized successfully\n");
+    pr_info("All ISP memory mappings initialized successfully\n");
     return 0;
 
 err_unmap_csi:
@@ -995,7 +995,7 @@ static int tx_isp_deinit_memory_mappings(struct tx_isp_dev *isp)
         isp->core_regs = NULL;
     }
 
-    pr_debug("All ISP memory mappings cleaned up\n");
+    pr_info("All ISP memory mappings cleaned up\n");
     return 0;
 }
 
@@ -1008,19 +1008,19 @@ int tx_isp_configure_clocks(struct tx_isp_dev *isp)
     struct clk *csi_clk;
     int ret;
 
-    pr_debug("Configuring ISP system clocks\n");
+    pr_info("Configuring ISP system clocks\n");
 
     /* Get the CGU ISP clock */
     cgu_isp = clk_get(isp->dev, "cgu_isp");
     if (IS_ERR(cgu_isp)) {
-        pr_debug("Failed to get CGU ISP clock\n");
+        pr_info("Failed to get CGU ISP clock\n");
         return PTR_ERR(cgu_isp);
     }
 
     /* Get the ISP core clock */
     isp_clk = clk_get(isp->dev, "isp");
     if (IS_ERR(isp_clk)) {
-        pr_debug("Failed to get ISP clock\n");
+        pr_info("Failed to get ISP clock\n");
         ret = PTR_ERR(isp_clk);
         goto err_put_cgu_isp;
     }
@@ -1028,7 +1028,7 @@ int tx_isp_configure_clocks(struct tx_isp_dev *isp)
     /* Get the IPU clock */
     ipu_clk = clk_get(isp->dev, "ipu");
     if (IS_ERR(ipu_clk)) {
-        pr_debug("Failed to get IPU clock\n");
+        pr_info("Failed to get IPU clock\n");
         ret = PTR_ERR(ipu_clk);
         goto err_put_isp_clk;
     }
@@ -1036,7 +1036,7 @@ int tx_isp_configure_clocks(struct tx_isp_dev *isp)
     /* Get the CSI clock */
     csi_clk = clk_get(isp->dev, "csi");
     if (IS_ERR(csi_clk)) {
-        pr_debug("Failed to get CSI clock\n");
+        pr_info("Failed to get CSI clock\n");
         ret = PTR_ERR(csi_clk);
         goto err_put_ipu_clk;
     }
@@ -1044,52 +1044,52 @@ int tx_isp_configure_clocks(struct tx_isp_dev *isp)
     /* Set clock rates */
     ret = clk_set_rate(cgu_isp, 120000000);
     if (ret) {
-        pr_debug("Failed to set CGU ISP clock rate\n");
+        pr_info("Failed to set CGU ISP clock rate\n");
         goto err_put_csi_clk;
     }
 
     ret = clk_set_rate(isp_clk, 200000000);
     if (ret) {
-        pr_debug("Failed to set ISP clock rate\n");
+        pr_info("Failed to set ISP clock rate\n");
         goto err_put_csi_clk;
     }
 
     ret = clk_set_rate(ipu_clk, 200000000);
     if (ret) {
-        pr_debug("Failed to set IPU clock rate\n");
+        pr_info("Failed to set IPU clock rate\n");
         goto err_put_csi_clk;
     }
 
     /* Initialize CSI clock to 100MHz */
     ret = clk_set_rate(csi_clk, 100000000);
     if (ret) {
-        pr_debug("Failed to set CSI clock rate\n");
+        pr_info("Failed to set CSI clock rate\n");
         goto err_put_csi_clk;
     }
-    pr_debug("CSI clock initialized: rate=%lu Hz\n", clk_get_rate(csi_clk));
+    pr_info("CSI clock initialized: rate=%lu Hz\n", clk_get_rate(csi_clk));
 
     /* Enable clocks */
     ret = clk_prepare_enable(cgu_isp);
     if (ret) {
-        pr_debug("Failed to enable CGU ISP clock\n");
+        pr_info("Failed to enable CGU ISP clock\n");
         goto err_put_csi_clk;
     }
 
     ret = clk_prepare_enable(isp_clk);
     if (ret) {
-        pr_debug("Failed to enable ISP clock\n");
+        pr_info("Failed to enable ISP clock\n");
         goto err_disable_cgu_isp;
     }
 
     ret = clk_prepare_enable(ipu_clk);
     if (ret) {
-        pr_debug("Failed to enable IPU clock\n");
+        pr_info("Failed to enable IPU clock\n");
         goto err_disable_isp_clk;
     }
 
     ret = clk_prepare_enable(csi_clk);
     if (ret) {
-        pr_debug("Failed to enable CSI clock\n");
+        pr_info("Failed to enable CSI clock\n");
         goto err_disable_ipu_clk;
     }
 
@@ -1104,21 +1104,21 @@ int tx_isp_configure_clocks(struct tx_isp_dev *isp)
 
     /* Validate that clocks are actually running at expected rates */
     if (abs(clk_get_rate(csi_clk) - 100000000) > 1000000) {
-        pr_debug("CSI clock rate deviation: expected 100MHz, got %luHz\n",
+        pr_info("CSI clock rate deviation: expected 100MHz, got %luHz\n",
                 clk_get_rate(csi_clk));
     }
 
     if (abs(clk_get_rate(isp_clk) - 200000000) > 2000000) {
-        pr_debug("ISP clock rate deviation: expected 200MHz, got %luHz\n",
+        pr_info("ISP clock rate deviation: expected 200MHz, got %luHz\n",
                 clk_get_rate(isp_clk));
     }
 
-    pr_debug("Clock configuration completed. Rates:\n");
-    pr_debug("  CSI Core: %lu Hz\n", clk_get_rate(isp->csi_clk));
-    pr_debug("  ISP Core: %lu Hz\n", clk_get_rate(isp->isp_clk));
-    pr_debug("  CGU ISP: %lu Hz\n", clk_get_rate(isp->cgu_isp));
-    pr_debug("  CSI: %lu Hz\n", clk_get_rate(isp->csi_clk));
-    pr_debug("  IPU: %lu Hz\n", clk_get_rate(isp->ipu_clk));
+    pr_info("Clock configuration completed. Rates:\n");
+    pr_info("  CSI Core: %lu Hz\n", clk_get_rate(isp->csi_clk));
+    pr_info("  ISP Core: %lu Hz\n", clk_get_rate(isp->isp_clk));
+    pr_info("  CGU ISP: %lu Hz\n", clk_get_rate(isp->cgu_isp));
+    pr_info("  CSI: %lu Hz\n", clk_get_rate(isp->csi_clk));
+    pr_info("  IPU: %lu Hz\n", clk_get_rate(isp->ipu_clk));
 
     return 0;
 
@@ -1143,7 +1143,7 @@ int tx_isp_setup_pipeline(struct tx_isp_dev *isp)
 {
     int ret;
 
-    pr_debug("Setting up ISP processing pipeline: CSI -> VIC -> Output\n");
+    pr_info("Setting up ISP processing pipeline: CSI -> VIC -> Output\n");
 
     /* Initialize the processing pipeline state */
     isp->pipeline_state = ISP_PIPELINE_IDLE;
@@ -1151,29 +1151,29 @@ int tx_isp_setup_pipeline(struct tx_isp_dev *isp)
     /* Configure default data path settings */
     if (isp->csi_dev) {
         isp->csi_dev->state = 1; /* INIT state */
-        pr_debug("CSI device ready for configuration\n");
+        pr_info("CSI device ready for configuration\n");
     }
 
     if (isp->vic_dev) {
         isp->vic_dev->state = 1; /* INIT state */
-        pr_debug("VIC device ready for configuration\n");
+        pr_info("VIC device ready for configuration\n");
     }
 
     /* Setup media entity links and pads */
     ret = tx_isp_setup_media_links(isp);
     if (ret < 0) {
-        pr_debug("Failed to setup media links: %d\n", ret);
+        pr_info("Failed to setup media links: %d\n", ret);
         return ret;
     }
 
     /* Configure default link routing */
     ret = tx_isp_configure_default_links(isp);
     if (ret < 0) {
-        pr_debug("Failed to configure default links: %d\n", ret);
+        pr_info("Failed to configure default links: %d\n", ret);
         return ret;
     }
 
-    pr_debug("ISP pipeline setup completed\n");
+    pr_info("ISP pipeline setup completed\n");
     return 0;
 }
 
@@ -1182,46 +1182,46 @@ static int tx_isp_setup_media_links(struct tx_isp_dev *isp)
 {
     int ret;
 
-    pr_debug("Setting up media entity links\n");
+    pr_info("Setting up media entity links\n");
 
     /* Initialize pad configurations for each subdevice */
     ret = tx_isp_init_subdev_pads(isp);
     if (ret < 0) {
-        pr_debug("Failed to initialize subdev pads: %d\n", ret);
+        pr_info("Failed to initialize subdev pads: %d\n", ret);
         return ret;
     }
 
     /* Create links between subdevices */
     ret = tx_isp_create_subdev_links(isp);
     if (ret < 0) {
-        pr_debug("Failed to create subdev links: %d\n", ret);
+        pr_info("Failed to create subdev links: %d\n", ret);
         return ret;
     }
 
-    pr_debug("Media entity links setup completed\n");
+    pr_info("Media entity links setup completed\n");
     return 0;
 }
 
 /* Initialize pad configurations for subdevices */
 static int tx_isp_init_subdev_pads(struct tx_isp_dev *isp)
 {
-    pr_debug("Initializing subdevice pads\n");
+    pr_info("Initializing subdevice pads\n");
 
     /* CSI pads: 1 output pad */
     if (isp->csi_dev) {
         /* CSI has one output pad that connects to VIC */
-        pr_debug("CSI pad 0: OUTPUT -> VIC pad 0\n");
+        pr_info("CSI pad 0: OUTPUT -> VIC pad 0\n");
     }
 
     /* VIC pads: 1 input pad, 1 output pad */
     if (isp->vic_dev) {
         /* VIC input pad 0 receives from CSI */
         /* VIC output pad 1 sends to application/capture */
-        pr_debug("VIC pad 0: INPUT <- CSI pad 0\n");
-        pr_debug("VIC pad 1: OUTPUT -> Capture interface\n");
+        pr_info("VIC pad 0: INPUT <- CSI pad 0\n");
+        pr_info("VIC pad 1: OUTPUT -> Capture interface\n");
     }
 
-    pr_debug("Subdevice pads initialized\n");
+    pr_info("Subdevice pads initialized\n");
     return 0;
 }
 
@@ -1231,7 +1231,7 @@ static int tx_isp_create_subdev_links(struct tx_isp_dev *isp)
     struct link_config csi_to_vic_link;
     int ret;
 
-    pr_debug("Creating subdevice links\n");
+    pr_info("Creating subdevice links\n");
 
     /* Create CSI -> VIC link */
     if (isp->csi_dev && isp->vic_dev) {
@@ -1251,14 +1251,14 @@ static int tx_isp_create_subdev_links(struct tx_isp_dev *isp)
         /* Store link configuration */
         ret = tx_isp_register_link(isp, &csi_to_vic_link);
         if (ret < 0) {
-            pr_debug("Failed to register CSI->VIC link: %d\n", ret);
+            pr_info("Failed to register CSI->VIC link: %d\n", ret);
             return ret;
         }
 
-        pr_debug("Created CSI->VIC link successfully\n");
+        pr_info("Created CSI->VIC link successfully\n");
     }
 
-    pr_debug("Subdevice links created\n");
+    pr_info("Subdevice links created\n");
     return 0;
 }
 
@@ -1266,11 +1266,11 @@ static int tx_isp_create_subdev_links(struct tx_isp_dev *isp)
 static int tx_isp_register_link(struct tx_isp_dev *isp, struct link_config *link)
 {
     if (!isp || !link) {
-        pr_debug("Invalid parameters for link registration\n");
+        pr_info("Invalid parameters for link registration\n");
         return -EINVAL;
     }
 
-    pr_debug("Registering link: %s[%d] -> %s[%d] (flags=0x%x)\n",
+    pr_info("Registering link: %s[%d] -> %s[%d] (flags=0x%x)\n",
             link->src.name, link->src.index,
             link->dst.name, link->dst.index,
             link->flags);
@@ -1279,7 +1279,7 @@ static int tx_isp_register_link(struct tx_isp_dev *isp, struct link_config *link
      * and configure the hardware routing. For now, just validate and log. */
 
     if (link->flags & TX_ISP_LINKFLAG_ENABLED) {
-        pr_debug("Link enabled and configured\n");
+        pr_info("Link enabled and configured\n");
     }
 
     return 0;
@@ -1288,36 +1288,36 @@ static int tx_isp_register_link(struct tx_isp_dev *isp, struct link_config *link
 /* Configure default link routing */
 static int tx_isp_configure_default_links(struct tx_isp_dev *isp)
 {
-    pr_debug("Configuring default link routing\n");
+    pr_info("Configuring default link routing\n");
 
     /* Set pipeline to configured state */
     isp->pipeline_state = ISP_PIPELINE_CONFIGURED;
 
     /* Enable default data flow: CSI -> VIC -> Output */
     if (isp->csi_dev && isp->vic_dev) {
-        pr_debug("Default routing: Sensor -> CSI -> VIC -> Capture\n");
+        pr_info("Default routing: Sensor -> CSI -> VIC -> Capture\n");
 
         /* Configure data format propagation */
         tx_isp_configure_format_propagation(isp);
     }
 
-    pr_debug("Default link routing configured\n");
+    pr_info("Default link routing configured\n");
     return 0;
 }
 
 /* Configure format propagation through the pipeline */
 int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
 {
-    pr_debug("Configuring format propagation\n");
+    pr_info("Configuring format propagation\n");
 
     /* Ensure format compatibility between pipeline stages */
     if (isp->sensor_width > 0 && isp->sensor_height > 0) {
-        pr_debug("Propagating format: %dx%d through pipeline\n",
+        pr_info("Propagating format: %dx%d through pipeline\n",
                 isp->sensor_width, isp->sensor_height);
 
         /* Configure CSI format */
         if (isp->csi_dev) {
-            pr_debug("CSI configured for %dx%d\n", isp->sensor_width, isp->sensor_height);
+            pr_info("CSI configured for %dx%d\n", isp->sensor_width, isp->sensor_height);
         }
 
         /* Configure VIC format */
@@ -1325,7 +1325,7 @@ int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
             isp->vic_dev->width = isp->sensor_width;
             isp->vic_dev->height = isp->sensor_height;
             isp->vic_dev->stride = isp->sensor_width * 2; /* Assume 16-bit per pixel */
-            pr_debug("VIC configured for %dx%d, stride=%d\n",
+            pr_info("VIC configured for %dx%d, stride=%d\n",
                     isp->vic_dev->width, isp->vic_dev->height, isp->vic_dev->stride);
         }
     }
@@ -1337,7 +1337,7 @@ int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
         int hflip = (shvflip & 0x1) ? 1 : 0;
         int vflip = (shvflip & 0x2) ? 1 : 0;
         tisp_dmsc_set_cfa_from_mbus(code, hflip, vflip);
-        pr_debug("tx_isp_configure_format_propagation: DMSC CFA programmed from mbus=0x%x, h=%d, v=%d\n", code, hflip, vflip);
+        pr_info("tx_isp_configure_format_propagation: DMSC CFA programmed from mbus=0x%x, h=%d, v=%d\n", code, hflip, vflip);
         {
             u32 bayer = mbus_to_bayer_mode(code);
             system_reg_write(8, bayer);
@@ -1358,15 +1358,15 @@ int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
             system_reg_write(0x218, 0x80);
             system_reg_write(0x21c, 0x6a);
             system_reg_write(0x220, 0x16);
-            pr_debug("tx_isp_configure_format_propagation: Minimal ISP demosaic+CSC programmed\n");
+            pr_info("tx_isp_configure_format_propagation: Minimal ISP demosaic+CSC programmed\n");
         }
     } else {
         /* Fallback: program default RGGB (index 0) if sensor not yet linked */
         tisp_dmsc_set_cfa_from_mbus(0 /* unknown mbus -> default RGGB */, 0, 0);
-        pr_debug("tx_isp_configure_format_propagation: Sensor not present; programmed default CFA RGGB\n");
+        pr_info("tx_isp_configure_format_propagation: Sensor not present; programmed default CFA RGGB\n");
     }
 
-    pr_debug("Format propagation configured\n");
+    pr_info("Format propagation configured\n");
     return 0;
 }
 
@@ -1375,13 +1375,13 @@ static int tx_isp_vic_device_init(struct tx_isp_dev *isp)
 {
     struct tx_isp_vic_device *vic_dev;
 
-    pr_debug("Initializing VIC device\n");
+    pr_info("Initializing VIC device\n");
 
     /* Allocate VIC device structure if not already present */
     if (!isp->vic_dev) {
         vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
         if (!vic_dev) {
-            pr_debug("Failed to allocate VIC device\n");
+            pr_info("Failed to allocate VIC device\n");
             return -ENOMEM;
         }
 
@@ -1394,7 +1394,7 @@ static int tx_isp_vic_device_init(struct tx_isp_dev *isp)
         isp->vic_dev = vic_dev;
     }
 
-    pr_debug("VIC device initialized\n");
+    pr_info("VIC device initialized\n");
     return 0;
 }
 
@@ -1430,11 +1430,11 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
     int isp_state;
 
     /* Add MCP logging for method entry */
-    pr_debug("ispcore_slake_module: entry with isp=%p", isp);
+    pr_info("ispcore_slake_module: entry with isp=%p", isp);
 
     /* Binary Ninja: int32_t result = 0xffffffea; if (arg1 != 0) */
     if (!isp) {
-        pr_debug("ispcore_slake_module: Invalid ISP device");
+        pr_info("ispcore_slake_module: Invalid ISP device");
         return -EINVAL;
     }
 
@@ -1444,90 +1444,90 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
     /* Binary Ninja: void* $s0_1 = arg1[0x35] */
     vic_dev = isp->vic_dev;
     if (!vic_dev) {
-        pr_debug("ispcore_slake_module: No VIC device found - creating it now");
+        pr_info("ispcore_slake_module: No VIC device found - creating it now");
         ret = tx_isp_create_vic_device(isp);
         if (ret != 0) {
-            pr_debug("ispcore_slake_module: Failed to create VIC device: %d", ret);
+            pr_info("ispcore_slake_module: Failed to create VIC device: %d", ret);
             return ret;
         }
         vic_dev = isp->vic_dev;
-        pr_debug("ispcore_slake_module: VIC device created successfully");
+        pr_info("ispcore_slake_module: VIC device created successfully");
     }
 
     /* Binary Ninja: int32_t $v0 = *($s0_1 + 0xe8) */
     isp_state = vic_dev->state;
-    pr_debug("ispcore_slake_module: Current ISP state = %d", isp_state);
+    pr_info("ispcore_slake_module: Current ISP state = %d", isp_state);
 
     /* Binary Ninja: if ($v0 != 1) */
     if (isp_state != 1) {
         /* Binary Ninja: if ($v0 s>= 3) */
         if (isp_state >= 3) {
-            pr_debug("ispcore_slake_module: ISP state >= 3, calling ispcore_core_ops_init");
+            pr_info("ispcore_slake_module: ISP state >= 3, calling ispcore_core_ops_init");
 
             /* Get sensor attributes from the connected sensor */
             struct tx_isp_sensor_attribute *sensor_attr = NULL;
             if (isp->sensor && isp->sensor->video.attr) {
                 sensor_attr = isp->sensor->video.attr;
-                pr_debug("ispcore_slake_module: Using sensor attributes from connected sensor");
+                pr_info("ispcore_slake_module: Using sensor attributes from connected sensor");
             } else {
-                pr_debug("ispcore_slake_module: No sensor attributes available, using NULL");
+                pr_info("ispcore_slake_module: No sensor attributes available, using NULL");
             }
 
             ret = ispcore_core_ops_init(isp, sensor_attr);
             if (ret < 0) {
-                pr_debug("ispcore_slake_module: ispcore_core_ops_init failed: %d", ret);
+                pr_info("ispcore_slake_module: ispcore_core_ops_init failed: %d", ret);
                 return ret;
             }
         }
 
         /* Binary Ninja: Channel initialization loop */
-        pr_debug("ispcore_slake_module: Initializing channel flags");
+        pr_info("ispcore_slake_module: Initializing channel flags");
         for (i = 0; i < ISP_MAX_CHAN; i++) {
             /* Binary Ninja: *($a2_1 + *($s0_1 + 0x150) + 0x74) = 1 */
             isp->channels[i].enabled = true;  /* Set channel enabled flag */
-            pr_debug("Channel %d: enabled", i);
+            pr_info("Channel %d: enabled", i);
         }
 
         /* Binary Ninja: (*($a0_1 + 0x40cc))($a0_1, 0x4000001, 0) */
         if (vic_dev) {
-            pr_debug("ispcore_slake_module: Calling VIC control function (0x4000001, 0)");
+            pr_info("ispcore_slake_module: Calling VIC control function (0x4000001, 0)");
             /* VIC control call - this would be a VIC register write or control function */
         }
 
         /* Binary Ninja: *($s0_1 + 0xe8) = 1 */
         vic_dev->state = 1;
-        pr_debug("ispcore_slake_module: Set ISP state to INIT (1)");
+        pr_info("ispcore_slake_module: Set ISP state to INIT (1)");
 
         /* Binary Ninja: Subdevice initialization loop */
-        pr_debug("ispcore_slake_module: Initializing subdevices");
+        pr_info("ispcore_slake_module: Initializing subdevices");
 
         /* Initialize CSI subdevice if present */
         if (isp->csi_dev) {
-            pr_debug("ispcore_slake_module: Initializing CSI subdevice");
+            pr_info("ispcore_slake_module: Initializing CSI subdevice");
 
             /* CRITICAL FIX: DO NOT RESET CSI STATE IF HARDWARE IS ALREADY INITIALIZED */
             /* The CSI hardware initialization during probe should be preserved */
             if (isp->csi_dev->state >= 3) {
-                pr_debug("*** CSI HARDWARE ALREADY INITIALIZED (state=%d) - PRESERVING STATE ***", isp->csi_dev->state);
-                pr_debug("*** SKIPPING CSI STATE RESET TO PRESERVE WORKING HARDWARE CONFIGURATION ***");
+                pr_info("*** CSI HARDWARE ALREADY INITIALIZED (state=%d) - PRESERVING STATE ***", isp->csi_dev->state);
+                pr_info("*** SKIPPING CSI STATE RESET TO PRESERVE WORKING HARDWARE CONFIGURATION ***");
             } else {
-                pr_debug("*** CSI NOT YET INITIALIZED (state=%d) - SETTING TO INIT STATE ***", isp->csi_dev->state);
+                pr_info("*** CSI NOT YET INITIALIZED (state=%d) - SETTING TO INIT STATE ***", isp->csi_dev->state);
                 isp->csi_dev->state = 1;  /* Set CSI to INIT state only if not already initialized */
             }
         }
 
         /* Initialize VIC subdevice if present */
         if (vic_dev) {
-            pr_debug("ispcore_slake_module: Initializing VIC subdevice");
+            pr_info("ispcore_slake_module: Initializing VIC subdevice");
             vic_dev->state = 1;  /* Set VIC to INIT state */
         }
 
         /* Binary Ninja: Clock management loop */
-        pr_debug("ispcore_slake_module: Managing ISP clocks");
+        pr_info("ispcore_slake_module: Managing ISP clocks");
         /* The reference has a clock disable loop at the end, but we'll keep clocks enabled for now */
     }
 
-    pr_debug("ispcore_slake_module: ISP MODULE SLAKING COMPLETE - SUCCESS!");
+    pr_info("ispcore_slake_module: ISP MODULE SLAKING COMPLETE - SUCCESS!");
     return 0;
 }
 EXPORT_SYMBOL(ispcore_slake_module);
@@ -1754,7 +1754,7 @@ int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute
 
         /* CRITICAL: Store the correct interrupt mask values for restoration */
         /* Core Control register writes may overwrite these, so we need to restore them */
-        pr_debug("*** ISP CORE: Interrupt masks configured - will restore if overwritten ***\n");
+        pr_info("*** ISP CORE: Interrupt masks configured - will restore if overwritten ***\n");
 
         ISP_INFO("*** ISP CORE: Pipeline ENABLED (0x800=1, 0x804=0x1c, 0x1c=8) ***\n");
         ISP_INFO("*** ISP CORE: Hardware interrupt generation ENABLED (0x30=0xffffffff, 0x10=0x133) ***\n");
@@ -1832,16 +1832,16 @@ int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, d
     dma_addr_t phys;
 
     if (!isp || !virt_addr || !phys_addr || size == 0) {
-        pr_debug("isp_malloc_buffer: Invalid parameters\n");
+        pr_info("isp_malloc_buffer: Invalid parameters\n");
         return -EINVAL;
     }
 
-    pr_debug("*** isp_malloc_buffer: FIXED - Using regular kernel memory instead of rmem ***\n");
+    pr_info("*** isp_malloc_buffer: FIXED - Using regular kernel memory instead of rmem ***\n");
 
     /* FIXED: Use vmalloc instead of precious rmem - saves rmem for critical video buffers */
     virt = vmalloc(size);
     if (!virt) {
-        pr_debug("*** isp_malloc_buffer: Failed to allocate %u bytes from kernel memory ***\n", size);
+        pr_info("*** isp_malloc_buffer: Failed to allocate %u bytes from kernel memory ***\n", size);
         return -ENOMEM;
     }
 
@@ -1854,10 +1854,10 @@ int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, d
     *virt_addr = virt;
     *phys_addr = phys;
 
-    pr_debug("*** isp_malloc_buffer: FIXED - Allocated %u bytes from kernel memory ***\n", size);
-    pr_debug("*** isp_malloc_buffer: virt=%p, phys=0x%08x (using vmalloc instead of rmem) ***\n",
+    pr_info("*** isp_malloc_buffer: FIXED - Allocated %u bytes from kernel memory ***\n", size);
+    pr_info("*** isp_malloc_buffer: virt=%p, phys=0x%08x (using vmalloc instead of rmem) ***\n",
              virt, (uint32_t)phys);
-    pr_debug("*** isp_malloc_buffer: This saves %u bytes of precious rmem for VBMPool0! ***\n", size);
+    pr_info("*** isp_malloc_buffer: This saves %u bytes of precious rmem for VBMPool0! ***\n", size);
 
     return 0;
 }
@@ -1934,7 +1934,7 @@ static int isp_tuning_open(struct inode *inode, struct file *file)
 {
     extern int tisp_code_tuning_open(struct inode *inode, struct file *file);
 
-    pr_debug("ISP tuning device opened - routing to tx_isp_tuning.c\n");
+    pr_info("ISP tuning device opened - routing to tx_isp_tuning.c\n");
 
     /* CRITICAL: Route to the proper implementation in tx_isp_tuning.c */
     return tisp_code_tuning_open(inode, file);
@@ -1944,7 +1944,7 @@ static int isp_tuning_release(struct inode *inode, struct file *file)
 {
     extern int isp_m0_chardev_release(struct inode *inode, struct file *file);
 
-    pr_debug("ISP tuning device released - routing to tx_isp_tuning.c\n");
+    pr_info("ISP tuning device released - routing to tx_isp_tuning.c\n");
 
     /* CRITICAL: Route to the proper implementation in tx_isp_tuning.c */
     return isp_m0_chardev_release(inode, file);
@@ -1957,13 +1957,13 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
     void __user *argp = (void __user *)arg;
     int param_type;
 
-    pr_debug("ISP Tuning IOCTL: cmd=0x%x\n", cmd);
+    pr_info("ISP Tuning IOCTL: cmd=0x%x\n", cmd);
 
     // Handle V4L2 control IOCTLs (VIDIOC_S_CTRL, VIDIOC_G_CTRL) - ROUTE TO tx_isp_tuning.c
     if (cmd == 0xc008561c || cmd == 0xc008561b) { // VIDIOC_S_CTRL / VIDIOC_G_CTRL
         extern int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __user *arg);
 
-        pr_debug("V4L2 Control: Routing to tx_isp_tuning.c implementation\n");
+        pr_info("V4L2 Control: Routing to tx_isp_tuning.c implementation\n");
 
         /* CRITICAL: Route to the proper implementation in tx_isp_tuning.c */
         return isp_core_tunning_unlocked_ioctl(file, cmd, argp);
@@ -1973,7 +1973,7 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
     if (cmd == 0xc00c56c6) { // VIDIOC_S_EXT_CTRLS or similar
         extern int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __user *arg);
 
-        pr_debug("Extended V4L2 control: Routing to tx_isp_tuning.c implementation\n");
+        pr_info("Extended V4L2 control: Routing to tx_isp_tuning.c implementation\n");
 
         /* CRITICAL: Route to the proper implementation in tx_isp_tuning.c */
         return isp_core_tunning_unlocked_ioctl(file, cmd, argp);
@@ -1992,7 +1992,7 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
                     // Reference processes various ISP parameter types (0-24)
                     param_type = *(int*)isp_tuning_buffer;
-                    pr_debug("ISP get tuning param type: %d\n", param_type);
+                    pr_info("ISP get tuning param type: %d\n", param_type);
 
                     // For now, return success with dummy data
                     memset(isp_tuning_buffer + 4, 0x5A, 16); // Dummy tuning data
@@ -2008,14 +2008,14 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
                         return -EFAULT;
 
                     param_type = *(int*)isp_tuning_buffer;
-                    pr_debug("ISP set tuning param type: %d\n", param_type);
+                    pr_info("ISP set tuning param type: %d\n", param_type);
 
                     // Reference calls various tisp_*_set_par_cfg() functions
                     // For now, acknowledge the parameter set
                     return 0;
                 }
                 case ISP_TUNING_GET_AE_INFO: {
-                    pr_debug("ISP get AE info\n");
+                    pr_info("ISP get AE info\n");
 
                     // Get AE (Auto Exposure) information
                     memset(isp_tuning_buffer, 0, sizeof(isp_tuning_buffer));
@@ -2027,7 +2027,7 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
                     return 0;
                 }
                 case ISP_TUNING_SET_AE_INFO: {
-                    pr_debug("ISP set AE info\n");
+                    pr_info("ISP set AE info\n");
 
                     if (copy_from_user(isp_tuning_buffer, argp, sizeof(isp_tuning_buffer)))
                         return -EFAULT;
@@ -2036,7 +2036,7 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
                     return 0;
                 }
                 case ISP_TUNING_GET_AWB_INFO: {
-                    pr_debug("ISP get AWB info\n");
+                    pr_info("ISP get AWB info\n");
 
                     // Get AWB (Auto White Balance) information
                     memset(isp_tuning_buffer, 0, sizeof(isp_tuning_buffer));
@@ -2048,7 +2048,7 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
                     return 0;
                 }
                 case ISP_TUNING_SET_AWB_INFO: {
-                    pr_debug("ISP set AWB info\n");
+                    pr_info("ISP set AWB info\n");
 
                     if (copy_from_user(isp_tuning_buffer, argp, sizeof(isp_tuning_buffer)))
                         return -EFAULT;
@@ -2058,7 +2058,7 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
                 }
                 case ISP_TUNING_GET_STATS:
                 case ISP_TUNING_GET_STATS2: {
-                    pr_debug("ISP get statistics\n");
+                    pr_info("ISP get statistics\n");
 
                     // Get ISP statistics information
                     memset(isp_tuning_buffer, 0, sizeof(isp_tuning_buffer));
@@ -2070,14 +2070,14 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
                     return 0;
                 }
                 default:
-                    pr_debug("Unhandled ISP tuning cmd: 0x%x\n", cmd);
+                    pr_info("Unhandled ISP tuning cmd: 0x%x\n", cmd);
                     return 0;
                 }
             }
         }
     }
 
-    pr_debug("Invalid ISP tuning command: 0x%x\n", cmd);
+    pr_info("Invalid ISP tuning command: 0x%x\n", cmd);
     return -EINVAL;
 }
 
@@ -2453,11 +2453,11 @@ int tisp_channel_stop(uint32_t channel_id)
     u32 channel_base;
 
     if (!isp_dev || channel_id >= ISP_MAX_CHAN) {
-        pr_debug("tisp_channel_stop: Invalid parameters\n");
+        pr_info("tisp_channel_stop: Invalid parameters\n");
         return -EINVAL;
     }
 
-    pr_debug("*** tisp_channel_stop: Stopping channel %d ***\n", channel_id);
+    pr_info("*** tisp_channel_stop: Stopping channel %d ***\n", channel_id);
 
     /* Calculate channel register base */
     channel_base = (channel_id + 0x98) << 8;
@@ -2477,7 +2477,7 @@ int tisp_channel_stop(uint32_t channel_id)
     reg_val &= ~(1 << channel_id);
     system_reg_write(0x9804, reg_val);
 
-    pr_debug("*** tisp_channel_stop: Channel %d stopped successfully ***\n", channel_id);
+    pr_info("*** tisp_channel_stop: Channel %d stopped successfully ***\n", channel_id);
     return 0;
 }
 EXPORT_SYMBOL(tisp_channel_stop);
@@ -3002,7 +3002,7 @@ static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
         return -EINVAL;
     }
 
-    pr_debug("*** tx_isp_create_framechan_devices: Creating frame channel devices ***\n");
+    pr_info("*** tx_isp_create_framechan_devices: Creating frame channel devices ***\n");
 
     /* Create frame channel devices /dev/isp-fs0, /dev/isp-fs1, etc. */
     for (i = 0; i < 4; i++) {  /* Create 4 frame channels like reference */
@@ -3011,7 +3011,7 @@ static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
         /* Allocate misc device structure */
         fs_miscdev = kzalloc(sizeof(struct miscdevice), GFP_KERNEL);
         if (!fs_miscdev) {
-            pr_debug("Failed to allocate misc device for framechan%d\n", i);
+            pr_info("Failed to allocate misc device for framechan%d\n", i);
             return -ENOMEM;
         }
 
@@ -3027,20 +3027,20 @@ static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
         /* Register the misc device */
         ret = misc_register(fs_miscdev);
         if (ret < 0) {
-            pr_debug("Failed to register /dev/%s: %d\n", dev_name, ret);
+            pr_info("Failed to register /dev/%s: %d\n", dev_name, ret);
             kfree(fs_miscdev->name);
             kfree(fs_miscdev);
             return ret;
         }
 
-        pr_debug("*** Created frame channel device: /dev/%s (major=10, minor=%d) ***\n",
+        pr_info("*** Created frame channel device: /dev/%s (major=10, minor=%d) ***\n",
                 dev_name, fs_miscdev->minor);
 
         /* Store misc device reference for cleanup */
         isp_dev->fs_miscdevs[i] = fs_miscdev;
     }
 
-    pr_debug("*** tx_isp_create_framechan_devices: All frame channel devices created ***\n");
+    pr_info("*** tx_isp_create_framechan_devices: All frame channel devices created ***\n");
     return 0;
 }
 
@@ -3063,7 +3063,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
     void *channel_array;
     void *tuning_dev;
 
-    pr_debug("*** tx_isp_core_probe: SAFE implementation using proper struct member access ***\n");
+    pr_info("*** tx_isp_core_probe: SAFE implementation using proper struct member access ***\n");
 
     /* Allocate ISP device structure using proper size */
     isp_dev = kzalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
@@ -3077,7 +3077,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
     platform_data = (struct tx_isp_platform_data *)pdev->dev.platform_data;
 
     /* SAFE: Create proper platform device array */
-    pr_debug("*** tx_isp_core_probe: SAFE platform device setup ***\n");
+    pr_info("*** tx_isp_core_probe: SAFE platform device setup ***\n");
 
     /* Get the actual registered platform devices from the module */
     extern struct platform_device tx_isp_csi_platform_device;
@@ -3105,7 +3105,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
     /* Allocate and set up the subdev_list array */
     isp_dev->subdev_list = kzalloc(sizeof(platform_devices), GFP_KERNEL);
     if (!isp_dev->subdev_list) {
-        pr_debug("Failed to allocate subdev_list\n");
+        pr_info("Failed to allocate subdev_list\n");
         kfree(isp_dev);
         return -ENOMEM;
     }
@@ -3114,7 +3114,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
     /* SAFE: Set up using proper struct members instead of dangerous offsets */
     isp_dev->subdev_count = ARRAY_SIZE(platform_devices);
 
-    pr_debug("*** tx_isp_core_probe: Platform devices configured - count=%d ***\n", isp_dev->subdev_count);
+    pr_info("*** tx_isp_core_probe: Platform devices configured - count=%d ***\n", isp_dev->subdev_count);
 
     /* SAFE: Initialize platform data reference using proper struct member access */
     if (!platform_data) {
@@ -3125,7 +3125,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
             platform_data->flags = 0;
             platform_data->version = 1;
             pdev->dev.platform_data = platform_data;
-            pr_debug("*** tx_isp_core_probe: Created safe platform data structure ***\n");
+            pr_info("*** tx_isp_core_probe: Created safe platform data structure ***\n");
         }
     }
 
@@ -3135,7 +3135,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
     spin_lock_init(&isp_dev->irq_lock);
 
     /* CRITICAL: Initialize the core subdev with proper operations */
-    pr_debug("*** tx_isp_core_probe: Initializing core subdev with operations ***\n");
+    pr_info("*** tx_isp_core_probe: Initializing core subdev with operations ***\n");
 
     /* Set up the core subdev operations with our implemented functions (BN MCP exact wiring) */
     core_subdev_core_ops.init = core_subdev_core_init_bridge;
@@ -3155,18 +3155,18 @@ int tx_isp_core_probe(struct platform_device *pdev)
     /* Initialize subdev synchronization */
     mutex_init(&isp_dev->sd.lock);
 
-    pr_debug("*** tx_isp_core_probe: Core subdev initialized with ops=%p ***\n", &core_subdev_ops_full);
-    pr_debug("***   - Core ops: start=%p, stop=%p, set_format=%p ***\n",
+    pr_info("*** tx_isp_core_probe: Core subdev initialized with ops=%p ***\n", &core_subdev_ops_full);
+    pr_info("***   - Core ops: start=%p, stop=%p, set_format=%p ***\n",
             tx_isp_core_start, tx_isp_core_stop, tx_isp_core_set_format);
 
     /* Binary Ninja: if (tx_isp_subdev_init(arg1, $v0, &core_subdev_ops) == 0) */
     if (tx_isp_subdev_init(pdev, &isp_dev->sd, &core_subdev_ops_full) == 0) {
-        pr_debug("*** tx_isp_core_probe: Subdev init SUCCESS ***\n");
+        pr_info("*** tx_isp_core_probe: Subdev init SUCCESS ***\n");
 
         /* SAFE: Channel configuration using proper struct access */
         channel_count = ISP_MAX_CHAN;  /* Use constant instead of dangerous offset access */
 
-        pr_debug("*** tx_isp_core_probe: Channel count = %d ***\n", channel_count);
+        pr_info("*** tx_isp_core_probe: Channel count = %d ***\n", channel_count);
 
         /* Binary Ninja: Channel array allocation */
         channel_array = kzalloc(channel_count * 0xc4, GFP_KERNEL);
@@ -3233,17 +3233,17 @@ int tx_isp_core_probe(struct platform_device *pdev)
             platform_set_drvdata(pdev, isp_dev);
 
             /* CRITICAL: Create VIC device BEFORE sensor_early_init */
-            pr_debug("*** tx_isp_core_probe: Creating VIC device ***\n");
+            pr_info("*** tx_isp_core_probe: Creating VIC device ***\n");
             result = tx_isp_create_vic_device(isp_dev);
             if (result != 0) {
-                pr_debug("*** tx_isp_core_probe: Failed to create VIC device: %d ***\n", result);
+                pr_info("*** tx_isp_core_probe: Failed to create VIC device: %d ***\n", result);
                 return result;
             } else {
-                pr_debug("*** tx_isp_core_probe: VIC device created successfully ***\n");
+                pr_info("*** tx_isp_core_probe: VIC device created successfully ***\n");
             }
 
             /* Binary Ninja: sensor_early_init($v0) */
-            pr_debug("*** tx_isp_core_probe: Calling sensor_early_init ***\n");
+            pr_info("*** tx_isp_core_probe: Calling sensor_early_init ***\n");
             sensor_early_init(isp_dev);
 
             /* Binary Ninja: Clock initialization */
@@ -3252,108 +3252,108 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 isp_clk_1 = isp_clk;
             isp_clk = isp_clk_1;
 
-            pr_debug("*** tx_isp_core_probe: Basic initialization complete ***\n");
-            pr_debug("***   - Core device size: %zu bytes ***\n", sizeof(struct tx_isp_dev));
-            pr_debug("***   - Channel count: %d ***\n", channel_count);
-            pr_debug("***   - Global ISP device set: %p ***\n", ourISPdev);
+            pr_info("*** tx_isp_core_probe: Basic initialization complete ***\n");
+            pr_info("***   - Core device size: %zu bytes ***\n", sizeof(struct tx_isp_dev));
+            pr_info("***   - Channel count: %d ***\n", channel_count);
+            pr_info("***   - Global ISP device set: %p ***\n", ourISPdev);
 
             /* CRITICAL: Set up memory mappings for register access FIRST */
-            pr_debug("*** tx_isp_core_probe: Setting up ISP memory mappings FIRST ***\n");
+            pr_info("*** tx_isp_core_probe: Setting up ISP memory mappings FIRST ***\n");
             result = tx_isp_init_memory_mappings(isp_dev);
                 if (result == 0) {
-                    pr_debug("*** tx_isp_core_probe: ISP memory mappings initialized successfully ***\n");
+                    pr_info("*** tx_isp_core_probe: ISP memory mappings initialized successfully ***\n");
 
                     /* CRITICAL: Update global ISP device with register base IMMEDIATELY */
                     ourISPdev = isp_dev;
-                    pr_debug("*** tx_isp_core_probe: Global ISP device updated with register base ***\n");
+                    pr_info("*** tx_isp_core_probe: Global ISP device updated with register base ***\n");
 
                     /* NOW initialize tuning system AFTER memory mappings are available */
-                    pr_debug("*** tx_isp_core_probe: Calling isp_core_tuning_init AFTER memory mappings ***\n");
+                    pr_info("*** tx_isp_core_probe: Calling isp_core_tuning_init AFTER memory mappings ***\n");
                     tuning_dev = (void*)isp_core_tuning_init(isp_dev);
 
                     /* SAFE: Store tuning device using proper member access */
                     isp_dev->tuning_data = (struct isp_tuning_data *)tuning_dev;
 
                     if (tuning_dev != NULL) {
-                        pr_debug("*** tx_isp_core_probe: Tuning init SUCCESS (with mapped registers) ***\n");
+                        pr_info("*** tx_isp_core_probe: Tuning init SUCCESS (with mapped registers) ***\n");
 
                         /* SAFE: Use tuning_dev directly instead of adding dangerous offset */
                         isp_dev->tuning_enabled = 1;
-                        pr_debug("*** tx_isp_core_probe: SAFE tuning pointer - using tuning_dev=%p directly ***\n", tuning_dev);
+                        pr_info("*** tx_isp_core_probe: SAFE tuning pointer - using tuning_dev=%p directly ***\n", tuning_dev);
 
                         /* NOW we can report full success */
-                        pr_debug("*** tx_isp_core_probe: SUCCESS - Core device fully initialized ***\n");
-                        pr_debug("***   - Tuning device: %p ***\n", tuning_dev);
+                        pr_info("*** tx_isp_core_probe: SUCCESS - Core device fully initialized ***\n");
+                        pr_info("***   - Tuning device: %p ***\n", tuning_dev);
                     } else {
-                        pr_debug("*** tx_isp_core_probe: Tuning init FAILED even with mapped registers ***\n");
+                        pr_info("*** tx_isp_core_probe: Tuning init FAILED even with mapped registers ***\n");
                         return -ENOMEM;
                     }
                 } else {
-                    pr_debug("*** tx_isp_core_probe: Failed to initialize ISP memory mappings: %d ***\n", result);
+                    pr_info("*** tx_isp_core_probe: Failed to initialize ISP memory mappings: %d ***\n", result);
                     return result;
                 }
 
                 /* CRITICAL: Create VIN device AFTER memory mappings are available */
-                pr_debug("*** tx_isp_core_probe: Creating VIN device (after memory mappings) ***\n");
+                pr_info("*** tx_isp_core_probe: Creating VIN device (after memory mappings) ***\n");
                 result = tx_isp_create_vin_device(isp_dev);
                 if (result != 0) {
-                    pr_debug("*** tx_isp_core_probe: Failed to create VIN device: %d ***\n", result);
+                    pr_info("*** tx_isp_core_probe: Failed to create VIN device: %d ***\n", result);
                     return result;
                 } else {
-                    pr_debug("*** tx_isp_core_probe: VIN device created successfully ***\n");
+                    pr_info("*** tx_isp_core_probe: VIN device created successfully ***\n");
                 }
 
                 /* CRITICAL: Initialize frame sync work queue for sensor I2C communication */
-                pr_debug("*** tx_isp_core_probe: About to create frame sync workqueue ***\n");
+                pr_info("*** tx_isp_core_probe: About to create frame sync workqueue ***\n");
                 fs_workqueue = create_singlethread_workqueue("isp_frame_sync");
                 if (!fs_workqueue) {
-                    pr_debug("*** tx_isp_core_probe: Failed to create frame sync workqueue ***\n");
+                    pr_info("*** tx_isp_core_probe: Failed to create frame sync workqueue ***\n");
                     return -ENOMEM;
                 }
-                pr_debug("*** tx_isp_core_probe: Frame sync workqueue created successfully at %p ***\n", fs_workqueue);
+                pr_info("*** tx_isp_core_probe: Frame sync workqueue created successfully at %p ***\n", fs_workqueue);
 
                 INIT_WORK(&fs_work, ispcore_irq_fs_work);
-                pr_debug("*** tx_isp_core_probe: Frame sync work initialized at %p ***\n", &fs_work);
-                pr_debug("*** tx_isp_core_probe: Frame sync work queue initialized with dedicated workqueue ***\n");
+                pr_info("*** tx_isp_core_probe: Frame sync work initialized at %p ***\n", &fs_work);
+                pr_info("*** tx_isp_core_probe: Frame sync work queue initialized with dedicated workqueue ***\n");
 
                 /* Skip direct test to avoid unintended I2C during probe */
-                pr_debug("*** tx_isp_core_probe: Skipping direct frame sync test during probe ***\n");
+                pr_info("*** tx_isp_core_probe: Skipping direct frame sync test during probe ***\n");
 
                 /* CRITICAL: Now that core device is set up, call the key function that creates graph and nodes */
-                pr_debug("*** tx_isp_core_probe: Calling tx_isp_create_graph_and_nodes ***\n");
+                pr_info("*** tx_isp_core_probe: Calling tx_isp_create_graph_and_nodes ***\n");
                 result = tx_isp_create_graph_and_nodes(isp_dev);
                 if (result == 0) {
-                    pr_debug("*** tx_isp_core_probe: tx_isp_create_graph_and_nodes SUCCESS ***\n");
+                    pr_info("*** tx_isp_core_probe: tx_isp_create_graph_and_nodes SUCCESS ***\n");
                 } else {
-                    pr_debug("*** tx_isp_core_probe: tx_isp_create_graph_and_nodes FAILED: %d ***\n", result);
+                    pr_info("*** tx_isp_core_probe: tx_isp_create_graph_and_nodes FAILED: %d ***\n", result);
                 }
 
                 /* CRITICAL: Create frame channel devices (/dev/isp-fs*) */
-                pr_debug("*** tx_isp_core_probe: Creating frame channel devices ***\n");
+                pr_info("*** tx_isp_core_probe: Creating frame channel devices ***\n");
                 result = tx_isp_create_framechan_devices(isp_dev);
                 if (result == 0) {
-                    pr_debug("*** tx_isp_core_probe: Frame channel devices created successfully ***\n");
+                    pr_info("*** tx_isp_core_probe: Frame channel devices created successfully ***\n");
                 } else {
-                    pr_debug("*** tx_isp_core_probe: Failed to create frame channel devices: %d ***\n", result);
+                    pr_info("*** tx_isp_core_probe: Failed to create frame channel devices: %d ***\n", result);
                 }
 
                 /* CRITICAL: Create proper proc directories (/proc/jz/isp/*) */
-                pr_debug("*** tx_isp_core_probe: Creating ISP proc entries ***\n");
+                pr_info("*** tx_isp_core_probe: Creating ISP proc entries ***\n");
                 result = tx_isp_create_proc_entries(isp_dev);
                 if (result == 0) {
-                    pr_debug("*** tx_isp_core_probe: ISP proc entries created successfully ***\n");
+                    pr_info("*** tx_isp_core_probe: ISP proc entries created successfully ***\n");
                 } else {
-                    pr_debug("*** tx_isp_core_probe: Failed to create ISP proc entries: %d ***\n", result);
+                    pr_info("*** tx_isp_core_probe: Failed to create ISP proc entries: %d ***\n", result);
                 }
 
                 /* CRITICAL: Create the ISP M0 tuning device node /dev/isp-m0 */
-                pr_debug("*** tx_isp_core_probe: Creating ISP M0 tuning device node ***\n");
+                pr_info("*** tx_isp_core_probe: Creating ISP M0 tuning device node ***\n");
                 extern int tisp_code_create_tuning_node(void);
                 result = tisp_code_create_tuning_node();
                 if (result == 0) {
-                    pr_debug("*** tx_isp_core_probe: ISP M0 tuning device node created successfully ***\n");
+                    pr_info("*** tx_isp_core_probe: ISP M0 tuning device node created successfully ***\n");
                 } else {
-                    pr_debug("*** tx_isp_core_probe: Failed to create ISP M0 tuning device node: %d ***\n", result);
+                    pr_info("*** tx_isp_core_probe: Failed to create ISP M0 tuning device node: %d ***\n", result);
                 }
 
                 return 0;
@@ -3384,7 +3384,7 @@ int tx_isp_core_remove(struct platform_device *pdev)
         cancel_work_sync(&fs_work);
         destroy_workqueue(fs_workqueue);
         fs_workqueue = NULL;
-        pr_debug("*** ISP CORE: Frame sync workqueue destroyed ***\n");
+        pr_info("*** ISP CORE: Frame sync workqueue destroyed ***\n");
     }
 
     if (core_dev) {
@@ -3658,7 +3658,7 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     uint32_t integration_time, again, dgain;
     uint16_t fps, calculated_fps;
 
-    pr_debug("*** ispcore_sync_sensor_attr: entry - sd=%p, attr=%p ***\n", sd, attr);
+    pr_info("*** ispcore_sync_sensor_attr: entry - sd=%p, attr=%p ***\n", sd, attr);
 
     isp_dev = ourISPdev;
 
@@ -3670,7 +3670,7 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     if (attr == NULL) {
         /* Binary Ninja: memset($s0_1 + 0xec, arg2, 0x4c) */
         memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
-        pr_debug("ispcore_sync_sensor_attr: cleared sensor attributes\n");
+        pr_info("ispcore_sync_sensor_attr: cleared sensor attributes\n");
         return 0;
     }
 
@@ -3698,10 +3698,10 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     stored_attr->dgain = dgain;
 
     /* Binary Ninja: tiziano_sync_sensor_attr(&var_68) */
-    pr_debug("*** ispcore_sync_sensor_attr: Calling tiziano_sync_sensor_attr ***\n");
+    pr_info("*** ispcore_sync_sensor_attr: Calling tiziano_sync_sensor_attr ***\n");
     tiziano_sync_sensor_attr(stored_attr);
 
-    pr_debug("*** ispcore_sync_sensor_attr: SUCCESS ***\n");
+    pr_info("*** ispcore_sync_sensor_attr: SUCCESS ***\n");
     return 0;  /* Return success directly - no need for the quirky -515 pattern */
 }
 EXPORT_SYMBOL(ispcore_sync_sensor_attr);
@@ -3711,13 +3711,13 @@ int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd, struct tx_isp
 {
     int ret;
 
-    pr_debug("*** tx_isp_handle_sync_sensor_attr_event: Processing TX_ISP_EVENT_SYNC_SENSOR_ATTR ***\n");
+    pr_info("*** tx_isp_handle_sync_sensor_attr_event: Processing TX_ISP_EVENT_SYNC_SENSOR_ATTR ***\n");
 
     /* Call the actual sync sensor attribute function */
     ret = ispcore_sync_sensor_attr(sd, attr);
 
     /* Now that ispcore_sync_sensor_attr returns 0 directly, no conversion needed */
-    pr_debug("*** tx_isp_handle_sync_sensor_attr_event: returning %d ***\n", ret);
+    pr_info("*** tx_isp_handle_sync_sensor_attr_event: returning %d ***\n", ret);
     return ret;
 }
 EXPORT_SYMBOL(tx_isp_handle_sync_sensor_attr_event);
@@ -3745,11 +3745,11 @@ int tiziano_sync_sensor_attr(struct tx_isp_sensor_attribute *attr)
     uint32_t again_val, dgain_val, exp2_result1, exp2_result2, cached_gain;
 
     if (!attr) {
-        pr_debug("tiziano_sync_sensor_attr: Invalid sensor attributes\n");
+        pr_info("tiziano_sync_sensor_attr: Invalid sensor attributes\n");
         return -EINVAL;
     }
 
-    pr_debug("*** tiziano_sync_sensor_attr: EXACT Binary Ninja implementation ***\n");
+    pr_info("*** tiziano_sync_sensor_attr: EXACT Binary Ninja implementation ***\n");
 
     /* Binary Ninja: int32_t $a0 = arg1[7] */
     again_val = attr->again;
@@ -3825,10 +3825,10 @@ int tiziano_sync_sensor_attr(struct tx_isp_sensor_attribute *attr)
     data_b2ecc = data_b2e62;
     data_b2ed4 = attr->max_dgain;
 
-    pr_debug("*** tiziano_sync_sensor_attr: Sensor attributes synchronized successfully ***\n");
-    pr_debug("***   - Again: 0x%x -> 0x%x ***\n", again_val, data_b2e34);
-    pr_debug("***   - Dgain: 0x%x -> 0x%x ***\n", dgain_val, data_b2e38);
-    pr_debug("***   - Dimensions: %dx%d ***\n", data_b2e44, data_b2e48);
+    pr_info("*** tiziano_sync_sensor_attr: Sensor attributes synchronized successfully ***\n");
+    pr_info("***   - Again: 0x%x -> 0x%x ***\n", again_val, data_b2e34);
+    pr_info("***   - Dgain: 0x%x -> 0x%x ***\n", dgain_val, data_b2e38);
+    pr_info("***   - Dimensions: %dx%d ***\n", data_b2e44, data_b2e48);
 
     return 0;
 }
@@ -3837,7 +3837,7 @@ EXPORT_SYMBOL(tiziano_sync_sensor_attr);
 /* private_dma_sync_single_for_device - EXACT Binary Ninja implementation with correct signature */
 void private_dma_sync_single_for_device(struct device *dev, dma_addr_t addr, size_t size, enum dma_data_direction dir)
 {
-    pr_debug("*** private_dma_sync_single_for_device: dev=%p, addr=0x%x, size=%zu ***\n",
+    pr_info("*** private_dma_sync_single_for_device: dev=%p, addr=0x%x, size=%zu ***\n",
              dev, (uint32_t)addr, size);
 
     /* Binary Ninja: if (arg1 != 0) result = *(arg1 + 0x80) */
@@ -3845,7 +3845,7 @@ void private_dma_sync_single_for_device(struct device *dev, dma_addr_t addr, siz
         /* In the reference, this accesses a function pointer at offset 0x80 in the device structure */
         /* For now, we'll use the standard Linux DMA sync function */
         dma_sync_single_for_device(dev, addr, size, dir);
-        pr_debug("private_dma_sync_single_for_device: DMA sync completed\n");
+        pr_info("private_dma_sync_single_for_device: DMA sync completed\n");
     }
 }
 EXPORT_SYMBOL(private_dma_sync_single_for_device);
@@ -3853,11 +3853,11 @@ EXPORT_SYMBOL(private_dma_sync_single_for_device);
 /* private_dma_cache_sync - Fixed implementation using standard Linux DMA API */
 void private_dma_cache_sync(struct device *dev, void *vaddr, size_t size, enum dma_data_direction direction)
 {
-    pr_debug("*** private_dma_cache_sync: dev=%p, vaddr=%p, size=%zu, dir=%d ***\n",
+    pr_info("*** private_dma_cache_sync: dev=%p, vaddr=%p, size=%zu, dir=%d ***\n",
              dev, vaddr, size, direction);
 
     if (!vaddr || size == 0) {
-        pr_debug("private_dma_cache_sync: Invalid parameters\n");
+        pr_info("private_dma_cache_sync: Invalid parameters\n");
         return;
     }
 
@@ -3865,7 +3865,7 @@ void private_dma_cache_sync(struct device *dev, void *vaddr, size_t size, enum d
     /* This matches the reference implementation in external/ingenic-sdk/3.10/avpu/t31/avpu_main.c */
     dma_cache_sync(dev, vaddr, size, direction);
 
-    pr_debug("private_dma_cache_sync: Cache sync completed using dma_cache_sync\n");
+    pr_info("private_dma_cache_sync: Cache sync completed using dma_cache_sync\n");
 }
 EXPORT_SYMBOL(private_dma_cache_sync);
 
