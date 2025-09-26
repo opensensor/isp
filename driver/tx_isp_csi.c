@@ -405,12 +405,16 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
         return 0;
 
     /* Initialize CSI hardware if needed */
-    if (enable && csi_dev->state < 3) {
+    if (enable && csi_dev->state < 4) {
+        pr_info("*** CSI STREAMING: Configuring CSI hardware for streaming (current state=%d) ***\n", csi_dev->state);
         ret = csi_core_ops_init(sd, 1);
         if (ret) {
-            pr_err("Failed to initialize CSI hardware: %d\n", ret);
+            pr_err("Failed to initialize CSI hardware for streaming: %d\n", ret);
             return ret;
         }
+        pr_info("*** CSI STREAMING: CSI hardware configured successfully for streaming ***\n");
+    } else if (enable) {
+        pr_info("*** CSI STREAMING: CSI already in streaming state (%d), skipping hardware config ***\n", csi_dev->state);
     }
 
     /* Binary Ninja: int32_t $v0_4 = 4, if (arg2 == 0) $v0_4 = 3 */
