@@ -79,24 +79,24 @@ static const struct file_operations fs_channel_ops = {
 int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
     int ret;
 
-    pr_info("Setting up default links\n");
+    pr_debug("Setting up default links\n");
 
     // Link sensor output -> CSI input
     if (dev->sensor_sd && dev->csi_dev) {
         if (!dev->sensor_sd->ops || !dev->sensor_sd->ops->video ||
             !dev->sensor_sd->ops->video->link_setup) {
-            pr_err("Sensor subdev missing required ops\n");
+            pr_debug("Sensor subdev missing required ops\n");
             return -EINVAL;
         }
 
-        pr_info("Setting up sensor -> CSI link\n");
+        pr_debug("Setting up sensor -> CSI link\n");
         ret = dev->sensor_sd->ops->video->link_setup(
             &dev->sensor_sd->outpads[0],
             &dev->csi_dev->sd.inpads[0],
             TX_ISP_LINKFLAG_ENABLED
         );
         if (ret && ret != -ENOIOCTLCMD) {
-            pr_err("Failed to setup sensor->CSI link: %d\n", ret);
+            pr_debug("Failed to setup sensor->CSI link: %d\n", ret);
             return ret;
         }
     }
@@ -105,18 +105,18 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
     if (dev->csi_dev && dev->vic_dev) {
         if (!dev->vic_dev->sd.ops || !dev->vic_dev->sd.ops->video ||
             !dev->vic_dev->sd.ops->video->link_setup) {
-            pr_err("CSI subdev missing required ops\n");
+            pr_debug("CSI subdev missing required ops\n");
             return -EINVAL;
         }
 
-        pr_info("Setting up CSI -> VIC link\n");
+        pr_debug("Setting up CSI -> VIC link\n");
         ret = dev->csi_dev->sd.ops->video->link_setup(
             &dev->csi_dev->sd.outpads[0],
             &dev->vic_dev->sd.inpads[0],
             TX_ISP_LINKFLAG_ENABLED
         );
         if (ret && ret != -ENOIOCTLCMD) {
-            pr_err("Failed to setup CSI->VIC link: %d\n", ret);
+            pr_debug("Failed to setup CSI->VIC link: %d\n", ret);
             return ret;
         }
     }
@@ -125,37 +125,37 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
     if (dev->vic_dev && dev->ddr_dev && dev->ddr_dev->sd) {
         if (!dev->vic_dev->sd.ops || !dev->vic_dev->sd.ops->video ||
             !dev->vic_dev->sd.ops->video->link_setup) {
-            pr_err("VIC subdev missing required ops\n");
+            pr_debug("VIC subdev missing required ops\n");
             return -EINVAL;
         }
 
-        pr_info("Setting up VIC -> DDR link\n");
+        pr_debug("Setting up VIC -> DDR link\n");
         ret = dev->vic_dev->sd.ops->video->link_setup(
             &dev->vic_dev->sd.outpads[0],
             &dev->ddr_dev->sd->inpads[0],
             TX_ISP_LINKFLAG_ENABLED
         );
         if (ret && ret != -ENOIOCTLCMD) {
-            pr_err("Failed to setup VIC->DDR link 0: %d\n", ret);
+            pr_debug("Failed to setup VIC->DDR link 0: %d\n", ret);
             return ret;
         }
 
         // Link second VIC output if present
         if (dev->vic_dev->sd.num_outpads > 1) {
-            pr_info("Setting up second VIC -> DDR link\n");
+            pr_debug("Setting up second VIC -> DDR link\n");
             ret = dev->vic_dev->sd.ops->video->link_setup(
                 &dev->vic_dev->sd.outpads[1],
                 &dev->ddr_dev->sd->inpads[0],
                 TX_ISP_LINKFLAG_ENABLED
             );
             if (ret && ret != -ENOIOCTLCMD) {
-                pr_err("Failed to setup VIC->DDR link 1: %d\n", ret);
+                pr_debug("Failed to setup VIC->DDR link 1: %d\n", ret);
                 return ret;
             }
         }
     }
 
-    pr_info("All default links set up successfully\n");
+    pr_debug("All default links set up successfully\n");
     return 0;
 }
 
@@ -180,21 +180,21 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
 {
     struct tx_isp_dev *dev = ourISPdev;
     
-    pr_info("Starting subdev init for %s\n", pdev ? pdev->name : "unknown");
+    pr_debug("Starting subdev init for %s\n", pdev ? pdev->name : "unknown");
 
     /* CRITICAL FIX: Early validation to prevent unaligned access */
     if (!pdev || !sd) {
-        pr_err("tx_isp_subdev_init: Invalid parameters\n");
+        pr_debug("tx_isp_subdev_init: Invalid parameters\n");
         return -EINVAL;
     }
 
     if (!dev) {
-        pr_err("No ISP device data found\n");
+        pr_debug("No ISP device data found\n");
         return -EINVAL;
     }
 
     /* SAFE: Use proper struct member access instead of unsafe offset arithmetic */
-    pr_info("Initializing subdev structure\n");
+    pr_debug("Initializing subdev structure\n");
     
     /* SAFE: Store ops pointer using proper struct member access */
     sd->ops = ops;
@@ -203,12 +203,12 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     sd->isp = (void*)dev;
     
     /* SAFE: Simple initialization without unsafe hardware calls */
-    pr_info("Basic subdev initialization complete\n");
+    pr_debug("Basic subdev initialization complete\n");
 
     /* SAFE: Set platform data using standard kernel API */
     platform_set_drvdata(pdev, dev);
     
-    pr_info("*** SAFE: Subdev %s initialized successfully - no unaligned access risk ***\n", pdev->name);
+    pr_debug("*** SAFE: Subdev %s initialized successfully - no unaligned access risk ***\n", pdev->name);
     return 0;
 }
 EXPORT_SYMBOL(tx_isp_subdev_init);
@@ -268,37 +268,37 @@ int __init tx_isp_subdev_platform_init(void)
 {
     int ret;
     
-    pr_info("*** TX ISP SUBDEV PLATFORM DRIVERS REGISTRATION ***\n");
+    pr_debug("*** TX ISP SUBDEV PLATFORM DRIVERS REGISTRATION ***\n");
     
     /* Register CSI platform driver */
     ret = platform_driver_register(&tx_isp_csi_driver);
     if (ret) {
-        pr_err("Failed to register CSI platform driver: %d\n", ret);
+        pr_debug("Failed to register CSI platform driver: %d\n", ret);
         return ret;
     }
     
     /* Register VIN platform driver */
     ret = platform_driver_register(&tx_isp_vin_driver);
     if (ret) {
-        pr_err("Failed to register VIN platform driver: %d\n", ret);
+        pr_debug("Failed to register VIN platform driver: %d\n", ret);
         goto err_unregister_csi;
     }
     
     /* Register CORE platform driver */
     ret = platform_driver_register(&tx_isp_core_driver);
     if (ret) {
-        pr_err("Failed to register CORE platform driver: %d\n", ret);
+        pr_debug("Failed to register CORE platform driver: %d\n", ret);
         goto err_unregister_vin;
     }
     
     /* Register VIC platform driver */
     ret = platform_driver_register(&tx_isp_vic_driver);
     if (ret) {
-        pr_err("Failed to register VIC platform driver: %d\n", ret);
+        pr_debug("Failed to register VIC platform driver: %d\n", ret);
         goto err_unregister_core;
     }
     
-    pr_info("All ISP subdev platform drivers registered successfully\n");
+    pr_debug("All ISP subdev platform drivers registered successfully\n");
     return 0;
     
 err_unregister_core:
@@ -312,7 +312,7 @@ err_unregister_csi:
 
 void __exit tx_isp_subdev_platform_exit(void)
 {
-    pr_info("*** TX ISP SUBDEV PLATFORM DRIVERS UNREGISTRATION ***\n");
+    pr_debug("*** TX ISP SUBDEV PLATFORM DRIVERS UNREGISTRATION ***\n");
     
     /* Unregister all platform drivers in reverse order */
     platform_driver_unregister(&tx_isp_vic_driver);
@@ -320,7 +320,7 @@ void __exit tx_isp_subdev_platform_exit(void)
     platform_driver_unregister(&tx_isp_vin_driver);
     platform_driver_unregister(&tx_isp_csi_driver);
     
-    pr_info("All ISP subdev platform drivers unregistered\n");
+    pr_debug("All ISP subdev platform drivers unregistered\n");
 }
 
 /* Export symbols for main module to call these functions */

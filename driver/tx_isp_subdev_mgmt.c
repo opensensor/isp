@@ -192,14 +192,14 @@ int tx_isp_subdev_register(struct tx_isp_subdev_desc *desc,
     int ret = 0;
 
     if (!desc || !pdev) {
-        pr_err("tx_isp_subdev_register: Invalid parameters\n");
+        pr_debug("tx_isp_subdev_register: Invalid parameters\n");
         return -EINVAL;
     }
 
     mutex_lock(&subdev_registry_mutex);
 
     if (subdev_count >= ISP_MAX_SUBDEVS) {
-        pr_err("tx_isp_subdev_register: Too many subdevices\n");
+        pr_debug("tx_isp_subdev_register: Too many subdevices\n");
         ret = -ENOSPC;
         goto unlock;
     }
@@ -226,7 +226,7 @@ int tx_isp_subdev_register(struct tx_isp_subdev_desc *desc,
     subdev_registry[subdev_count] = runtime;
     subdev_count++;
 
-    pr_info("tx_isp_subdev_register: Registered subdevice '%s' (type=%d, id=%d)\n",
+    pr_debug("tx_isp_subdev_register: Registered subdevice '%s' (type=%d, id=%d)\n",
             desc->name, desc->type, desc->device_id);
 
 unlock:
@@ -272,7 +272,7 @@ void tx_isp_subdev_unregister(struct platform_device *pdev)
             }
             subdev_count--;
 
-            pr_info("tx_isp_subdev_unregister: Unregistered subdevice\n");
+            pr_debug("tx_isp_subdev_unregister: Unregistered subdevice\n");
             break;
         }
     }
@@ -295,26 +295,26 @@ int tx_isp_create_subdev_graph(struct tx_isp_dev *isp)
     int i;
 
     if (!isp) {
-        pr_err("tx_isp_create_subdev_graph: Invalid ISP device\n");
+        pr_debug("tx_isp_create_subdev_graph: Invalid ISP device\n");
         return -EINVAL;
     }
 
-    pr_info("*** tx_isp_create_subdev_graph: Creating ISP processing graph ***\n");
+    pr_debug("*** tx_isp_create_subdev_graph: Creating ISP processing graph ***\n");
 
     mutex_lock(&subdev_registry_mutex);
 
     if (subdev_count == 0) {
-        pr_info("tx_isp_create_subdev_graph: No subdevices registered, creating basic setup\n");
+        pr_debug("tx_isp_create_subdev_graph: No subdevices registered, creating basic setup\n");
         
         /* Create basic CSI and VIC setup when no subdevices exist */
         ret = tx_isp_create_basic_pipeline(isp);
         if (ret < 0) {
-            pr_err("Failed to create basic pipeline: %d\n", ret);
+            pr_debug("Failed to create basic pipeline: %d\n", ret);
         }
         goto unlock;
     }
 
-    pr_info("tx_isp_create_subdev_graph: Processing %d registered subdevices\n", subdev_count);
+    pr_debug("tx_isp_create_subdev_graph: Processing %d registered subdevices\n", subdev_count);
 
     /* Step 1: Initialize all source subdevices */
     for (i = 0; i < subdev_count; i++) {
@@ -326,7 +326,7 @@ int tx_isp_create_subdev_graph(struct tx_isp_dev *isp)
         if (runtime->desc->type == TX_ISP_SUBDEV_TYPE_SOURCE) {
             ret = tx_isp_init_source_subdev(isp, runtime);
             if (ret < 0) {
-                pr_err("Failed to initialize source subdev %s: %d\n", 
+                pr_debug("Failed to initialize source subdev %s: %d\n",
                        runtime->desc->name, ret);
                 goto cleanup;
             }
@@ -343,18 +343,18 @@ int tx_isp_create_subdev_graph(struct tx_isp_dev *isp)
         if (runtime->desc->type == TX_ISP_SUBDEV_TYPE_SINK) {
             ret = tx_isp_init_sink_subdev(isp, runtime);
             if (ret < 0) {
-                pr_err("Failed to initialize sink subdev %s: %d\n",
+                pr_debug("Failed to initialize sink subdev %s: %d\n",
                        runtime->desc->name, ret);
                 goto cleanup;
             }
         }
     }
 
-    pr_info("*** tx_isp_create_subdev_graph: Graph creation completed successfully ***\n");
+    pr_debug("*** tx_isp_create_subdev_graph: Graph creation completed successfully ***\n");
     goto unlock;
 
 cleanup:
-    pr_err("tx_isp_create_subdev_graph: Graph creation failed, cleaning up\n");
+    pr_debug("tx_isp_create_subdev_graph: Graph creation failed, cleaning up\n");
     tx_isp_cleanup_subdev_graph(isp);
 
 unlock:
@@ -372,14 +372,14 @@ static int tx_isp_init_source_subdev(struct tx_isp_dev *isp,
     void *driver_data = platform_get_drvdata(desc->pdev);
 
     if (!driver_data) {
-        pr_warn("tx_isp_init_source_subdev: No driver data for %s\n", desc->name);
+        pr_debug("tx_isp_init_source_subdev: No driver data for %s\n", desc->name);
         return 0;
     }
 
     /* Store in ISP device graph array for compatibility */
     if (desc->dst_index < ISP_MAX_SUBDEVS) {
         isp->subdev_graph[desc->dst_index] = driver_data;
-        pr_info("tx_isp_init_source_subdev: %s stored at index %d\n", 
+        pr_debug("tx_isp_init_source_subdev: %s stored at index %d\n",
                 desc->name, desc->dst_index);
     }
 
@@ -398,20 +398,20 @@ static int tx_isp_init_sink_subdev(struct tx_isp_dev *isp,
     void *src_subdev;
 
     if (!driver_data) {
-        pr_warn("tx_isp_init_sink_subdev: No driver data for %s\n", desc->name);
+        pr_debug("tx_isp_init_sink_subdev: No driver data for %s\n", desc->name);
         return 0;
     }
 
     /* Find source subdevice */
     if (desc->src_index >= ISP_MAX_SUBDEVS) {
-        pr_err("tx_isp_init_sink_subdev: Invalid source index %d for %s\n",
+        pr_debug("tx_isp_init_sink_subdev: Invalid source index %d for %s\n",
                desc->src_index, desc->name);
         return -EINVAL;
     }
 
     src_subdev = isp->subdev_graph[desc->src_index];
     if (!src_subdev) {
-        pr_err("tx_isp_init_sink_subdev: Source subdev %d not found for %s\n",
+        pr_debug("tx_isp_init_sink_subdev: Source subdev %d not found for %s\n",
                desc->src_index, desc->name);
         return -ENODEV;
     }
@@ -419,12 +419,12 @@ static int tx_isp_init_sink_subdev(struct tx_isp_dev *isp,
     /* Create link: source -> sink */
     int ret = tx_isp_create_subdev_link(src_subdev, driver_data, desc);
     if (ret < 0) {
-        pr_err("tx_isp_init_sink_subdev: Failed to create link for %s: %d\n",
+        pr_debug("tx_isp_init_sink_subdev: Failed to create link for %s: %d\n",
                desc->name, ret);
         return ret;
     }
 
-    pr_info("tx_isp_init_sink_subdev: Created link %s[%d] -> %s[%d]\n",
+    pr_debug("tx_isp_init_sink_subdev: Created link %s[%d] -> %s[%d]\n",
             "source", desc->src_index, desc->name, desc->dst_index);
 
     runtime->initialized = true;
@@ -441,7 +441,7 @@ static int tx_isp_create_subdev_link(void *src_subdev, void *dst_subdev,
      * a cleaner approach. In a real implementation, this would configure
      * the hardware routing between subdevices. */
     
-    pr_info("tx_isp_create_subdev_link: Linking %s (src=%p, dst=%p)\n", 
+    pr_debug("tx_isp_create_subdev_link: Linking %s (src=%p, dst=%p)\n",
             desc->name, src_subdev, dst_subdev);
     
     /* Store the link information for later use */
@@ -474,7 +474,7 @@ static int tx_isp_create_misc_device(struct tx_isp_subdev_runtime *runtime)
 
     ret = misc_register(misc_dev);
     if (ret < 0) {
-        pr_err("Failed to register misc device %s: %d\n", 
+        pr_debug("Failed to register misc device %s: %d\n",
                runtime->desc->name, ret);
         kfree(misc_dev->name);
         kfree(misc_dev);
@@ -482,7 +482,7 @@ static int tx_isp_create_misc_device(struct tx_isp_subdev_runtime *runtime)
     }
 
     runtime->misc_dev = misc_dev;
-    pr_info("Created misc device: /dev/%s\n", runtime->desc->name);
+    pr_debug("Created misc device: /dev/%s\n", runtime->desc->name);
     return 0;
 }
 
@@ -492,13 +492,13 @@ static int tx_isp_csi_device_init(struct tx_isp_dev *isp)
 {
     struct tx_isp_csi_device *csi_dev;
 
-    pr_info("Initializing CSI device\n");
+    pr_debug("Initializing CSI device\n");
 
     /* Allocate CSI device structure if not already present */
     if (!isp->csi_dev) {
         csi_dev = kzalloc(sizeof(struct tx_isp_csi_device), GFP_KERNEL);
         if (!csi_dev) {
-            pr_err("Failed to allocate CSI device\n");
+            pr_debug("Failed to allocate CSI device\n");
             return -ENOMEM;
         }
 
@@ -512,7 +512,7 @@ static int tx_isp_csi_device_init(struct tx_isp_dev *isp)
         isp->csi_dev = csi_dev;
     }
 
-    pr_info("CSI device initialized\n");
+    pr_debug("CSI device initialized\n");
     return 0;
 }
 
@@ -524,19 +524,19 @@ static int tx_isp_create_basic_pipeline(struct tx_isp_dev *isp)
 {
     int ret;
 
-    pr_info("tx_isp_create_basic_pipeline: Creating basic CSI->VIC pipeline\n");
+    pr_debug("tx_isp_create_basic_pipeline: Creating basic CSI->VIC pipeline\n");
 
     /* Initialize CSI device */
     ret = tx_isp_csi_device_init(isp);
     if (ret < 0) {
-        pr_err("Failed to initialize CSI device: %d\n", ret);
+        pr_debug("Failed to initialize CSI device: %d\n", ret);
         return ret;
     }
 
     /* Initialize VIC device */
     ret = tx_isp_vic_device_init(isp);
     if (ret < 0) {
-        pr_err("Failed to initialize VIC device: %d\n", ret);
+        pr_debug("Failed to initialize VIC device: %d\n", ret);
         tx_isp_csi_device_deinit(isp);
         return ret;
     }
@@ -544,13 +544,13 @@ static int tx_isp_create_basic_pipeline(struct tx_isp_dev *isp)
     /* Setup pipeline */
     ret = tx_isp_setup_pipeline(isp);
     if (ret < 0) {
-        pr_err("Failed to setup pipeline: %d\n", ret);
+        pr_debug("Failed to setup pipeline: %d\n", ret);
         tx_isp_vic_device_deinit(isp);
         tx_isp_csi_device_deinit(isp);
         return ret;
     }
 
-    pr_info("tx_isp_create_basic_pipeline: Basic pipeline created successfully\n");
+    pr_debug("tx_isp_create_basic_pipeline: Basic pipeline created successfully\n");
     return 0;
 }
 
@@ -561,7 +561,7 @@ void tx_isp_cleanup_subdev_graph(struct tx_isp_dev *isp)
 {
     int i;
 
-    pr_info("tx_isp_cleanup_subdev_graph: Cleaning up subdevice graph\n");
+    pr_debug("tx_isp_cleanup_subdev_graph: Cleaning up subdevice graph\n");
 
     /* Cleanup frame channels */
     for (i = 0; i < 4; i++) {
@@ -582,7 +582,7 @@ void tx_isp_cleanup_subdev_graph(struct tx_isp_dev *isp)
     /* Cleanup subdev graph */
     memset(isp->subdev_graph, 0, sizeof(isp->subdev_graph));
 
-    pr_info("tx_isp_cleanup_subdev_graph: Cleanup completed\n");
+    pr_debug("tx_isp_cleanup_subdev_graph: Cleanup completed\n");
 }
 
 /**
@@ -601,10 +601,10 @@ int tx_isp_init_subdev_registry(struct tx_isp_dev *isp,
     int ret = 0;
     int i;
 
-    pr_info("*** tx_isp_init_subdev_registry: Initializing subdevice registry ***\n");
+    pr_debug("*** tx_isp_init_subdev_registry: Initializing subdevice registry ***\n");
 
     if (!isp || !platform_devices) {
-        pr_err("tx_isp_init_subdev_registry: Invalid parameters\n");
+        pr_debug("tx_isp_init_subdev_registry: Invalid parameters\n");
         return -EINVAL;
     }
 
@@ -620,21 +620,21 @@ int tx_isp_init_subdev_registry(struct tx_isp_dev *isp,
         /* Create driver data based on device type */
         void *driver_data = tx_isp_create_driver_data(desc);
         if (!driver_data) {
-            pr_err("Failed to create driver data for %s\n", desc->name);
+            pr_debug("Failed to create driver data for %s\n", desc->name);
             continue;
         }
 
         ret = tx_isp_subdev_register(desc, platform_devices[i], driver_data);
         if (ret < 0) {
-            pr_err("Failed to register subdevice %s: %d\n", desc->name, ret);
+            pr_debug("Failed to register subdevice %s: %d\n", desc->name, ret);
             kfree(driver_data);
             continue;
         }
 
-        pr_info("Registered subdevice: %s (pdev=%p)\n", desc->name, platform_devices[i]);
+        pr_debug("Registered subdevice: %s (pdev=%p)\n", desc->name, platform_devices[i]);
     }
 
-    pr_info("*** tx_isp_init_subdev_registry: Registry initialized with %d subdevices ***\n", 
+    pr_debug("*** tx_isp_init_subdev_registry: Registry initialized with %d subdevices ***\n",
             subdev_count);
     return 0;
 }
@@ -695,13 +695,13 @@ int tx_isp_vic_device_init(struct tx_isp_dev *isp)
 {
     struct tx_isp_vic_device *vic_dev;
 
-    pr_info("Initializing VIC device\n");
+    pr_debug("Initializing VIC device\n");
 
     /* Allocate VIC device structure if not already present */
     if (!isp->vic_dev) {
         vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
         if (!vic_dev) {
-            pr_err("Failed to allocate VIC device\n");
+            pr_debug("Failed to allocate VIC device\n");
             return -ENOMEM;
         }
 
@@ -714,7 +714,7 @@ int tx_isp_vic_device_init(struct tx_isp_dev *isp)
         isp->vic_dev = vic_dev;
     }
 
-    pr_info("VIC device initialized\n");
+    pr_debug("VIC device initialized\n");
     return 0;
 }
 
@@ -725,11 +725,11 @@ int tx_isp_vic_device_init(struct tx_isp_dev *isp)
 int tx_isp_csi_device_deinit(struct tx_isp_dev *isp)
 {
     if (!isp) {
-        pr_err("tx_isp_csi_device_deinit: Invalid ISP device\n");
+        pr_debug("tx_isp_csi_device_deinit: Invalid ISP device\n");
         return -EINVAL;
     }
     
-    pr_info("tx_isp_csi_device_deinit: CSI device deinitialized (stub)\n");
+    pr_debug("tx_isp_csi_device_deinit: CSI device deinitialized (stub)\n");
     return 0;
 }
 
@@ -739,11 +739,11 @@ int tx_isp_csi_device_deinit(struct tx_isp_dev *isp)
 int tx_isp_vic_device_deinit(struct tx_isp_dev *isp)
 {
     if (!isp) {
-        pr_err("tx_isp_vic_device_deinit: Invalid ISP device\n");
+        pr_debug("tx_isp_vic_device_deinit: Invalid ISP device\n");
         return -EINVAL;
     }
     
-    pr_info("tx_isp_vic_device_deinit: VIC device deinitialized (stub)\n");
+    pr_debug("tx_isp_vic_device_deinit: VIC device deinitialized (stub)\n");
     return 0;
 }
 

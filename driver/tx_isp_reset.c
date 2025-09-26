@@ -36,19 +36,19 @@ u32 tx_isp_check_reset_status(void)
     
     reset_reg = ioremap(TX_ISP_RESET_REG, 4);
     if (!reset_reg) {
-        pr_err("tx_isp_check_reset_status: Failed to map reset register\n");
+        pr_debug("tx_isp_check_reset_status: Failed to map reset register\n");
         return 0;
     }
     
     reg_val = readl(reset_reg);
     iounmap(reset_reg);
     
-    pr_info("*** TX ISP RESET STATUS: 0x%08x ***\n", reg_val);
-    pr_info("  Reset Trigger (bit 21): %s\n", 
+    pr_debug("*** TX ISP RESET STATUS: 0x%08x ***\n", reg_val);
+    pr_debug("  Reset Trigger (bit 21): %s\n",
             (reg_val & TX_ISP_RESET_TRIGGER) ? "SET" : "CLEAR");
-    pr_info("  Hardware Ready (bit 20): %s\n", 
+    pr_debug("  Hardware Ready (bit 20): %s\n",
             (reg_val & TX_ISP_RESET_READY) ? "READY" : "NOT READY");
-    pr_info("  Reset Complete (bit 22): %s\n", 
+    pr_debug("  Reset Complete (bit 22): %s\n",
             (reg_val & TX_ISP_RESET_COMPLETE) ? "SET" : "CLEAR");
     
     return reg_val;
