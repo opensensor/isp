@@ -630,6 +630,9 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);
 static int private_reset_tx_isp_module(int arg);
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
 
+/* CRITICAL: Forward declaration for REAL CSI hardware implementation from tx_isp_csi.c */
+extern int csi_video_s_stream(struct tx_isp_subdev *sd, int enable);
+
 /* Forward declarations for initialization functions */
 extern int tx_isp_vic_platform_init(void);
 extern void tx_isp_vic_platform_exit(void);
@@ -5400,29 +5403,26 @@ int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
     }
 }
 
-/* CSI video streaming function - MIPS-SAFE implementation */
+/* CSI video streaming function - REAL HARDWARE IMPLEMENTATION */
 int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable)
 {
-    pr_info("*** CSI VIDEO STREAMING %s - MIPS-SAFE implementation ***\n", enable ? "ENABLE" : "DISABLE");
+    pr_info("*** CSI VIDEO STREAMING %s - REAL HARDWARE IMPLEMENTATION ***\n", enable ? "ENABLE" : "DISABLE");
 
-    if (enable) {
-        struct tx_isp_csi_device *csi_dev = ourISPdev->csi_dev;
-        /* CRITICAL FIX: State 4 doesn't exist! Use CSI_STATE_ACTIVE (2) for streaming */
-        csi_dev->state = CSI_STATE_ACTIVE; /* 2 = ACTIVE, not 4 (invalid) */
-        pr_info("*** MIPS-SAFE: CSI device state set to ACTIVE (%d) ***\n", csi_dev->state);
-    } else {
-        pr_info("*** MIPS-SAFE: CSI streaming disable ***\n");
-
-        /* MIPS SAFE: Disable CSI streaming state */
-            struct tx_isp_csi_device *csi_dev = ourISPdev->csi_dev;
-            /* CRITICAL FIX: State 3 = CSI_STATE_ERROR! Use CSI_STATE_IDLE (1) for disable */
-            csi_dev->state = CSI_STATE_IDLE; /* 1 = IDLE, not 3 = ERROR */
-            pr_info("*** MIPS-SAFE: CSI device state set to IDLE (%d) ***\n", csi_dev->state);
-
+    if (!sd) {
+        pr_err("CSI s_stream: sd is NULL\n");
+        return -EINVAL;
     }
 
-    pr_info("*** CSI VIDEO STREAMING: MIPS-SAFE completion - no dangerous register access ***\n");
-    return 0; /* Always return success to prevent cascade failures */
+    if (!ourISPdev || !ourISPdev->csi_dev) {
+        pr_err("CSI s_stream: No CSI device available\n");
+        return -EINVAL;
+    }
+
+    /* CRITICAL FIX: Call the REAL CSI s_stream implementation from tx_isp_csi.c */
+    pr_info("*** CRITICAL: Calling REAL CSI hardware configuration (not dummy MIPS-SAFE) ***\n");
+
+    /* Forward to the actual CSI implementation that configures hardware */
+    return csi_video_s_stream(sd, enable);
 }
 
 /* vic_sensor_ops_ioctl - FIXED with proper struct member access */
