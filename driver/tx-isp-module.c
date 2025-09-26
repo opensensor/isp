@@ -6202,6 +6202,29 @@ static int tx_isp_vic_notify(struct tx_isp_vic_device *vic_dev, unsigned int not
         pr_info("*** VIC TX_ISP_EVENT_SYNC_SENSOR_ATTR: FIXED Handler returned %d ***\n", ret);
         return ret;
     }
+    case TX_ISP_EVENT_FRAME_QBUF: {
+        /* Program VIC buffer slot with provided phys address (NV12 path) */
+        if (!data) {
+            pr_warn("tx_isp_vic_notify: QBUF with NULL data\n");
+            return -EINVAL;
+        }
+        struct { u32 index; u32 phys_addr; u32 size; u32 channel; } *v = data;
+        if (!vic_dev || !vic_dev->vic_regs) {
+            pr_warn("tx_isp_vic_notify: QBUF but VIC regs not mapped\n");
+            return -ENODEV;
+        }
+        if (v->index >= 5) {
+            pr_warn("tx_isp_vic_notify: QBUF index %u out of range\n", v->index);
+            return -EINVAL;
+        }
+        u32 reg_offset = (v->index + 0xe0) << 2; /* 0x380 + 4*index */
+        writel(v->phys_addr, vic_dev->vic_regs + reg_offset);
+        wmb();
+        pr_info("*** VIC QBUF: slot[%u] addr=0x%x -> VIC[0x%x] size=%u ch=%u ***\n",
+                v->index, v->phys_addr, reg_offset, v->size, v->channel);
+        vic_dev->active_buffer_count++;
+        return 0;
+    }
     default:
         pr_info("tx_isp_vic_notify: Unhandled notification 0x%x\n", notification);
         return -ENOIOCTLCMD;
