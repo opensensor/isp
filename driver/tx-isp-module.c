@@ -405,14 +405,7 @@ static irqreturn_t (*irq_func_cb[MAX_IRQ_HANDLERS])(int irq, void *dev_id);
 static void (*event_func_cb[MAX_EVENT_HANDLERS])(void *data);
 static DEFINE_SPINLOCK(irq_cb_lock);
 
-/* Buffer management structures for VIC MDMA - Binary Ninja reference */
-struct vic_buffer_entry {
-    struct list_head list;
-    struct list_head *prev_entry;   /* prev pointer */
-    uint32_t buffer_addr;           /* Physical buffer address */
-    uint32_t buffer_index;          /* Buffer index in VIC */
-    uint32_t channel;               /* Channel number (0 or 1) */
-};
+/* Buffer management structures defined in tx_isp_vic_buffer.h (included above) */
 
 /* VIC MDMA channel state - Binary Ninja global variables */
 static uint32_t vic_mdma_ch0_sub_get_num = 0;
@@ -632,7 +625,7 @@ static struct tx_isp_subdev_ops csi_subdev_ops;
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);  /* FIXED: Correct signature to match tx_isp_vic.c */
 int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable);  /* FIXED: Forward declaration for CSI streaming */
 void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev);
-int ispvic_frame_channel_qbuf(struct tx_isp_vic_device *vic_dev, void *buffer);
+/* ispvic_frame_channel_qbuf is declared above with BN-aligned signature */
 static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);
 static int private_reset_tx_isp_module(int arg);
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
@@ -6647,12 +6640,15 @@ static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
 
             pr_debug("VIC: Queue buffer event for channel %d\n", channel);
 
-            // Create a dummy buffer entry for the queue
-            buffer_entry = kmalloc(sizeof(struct list_head), GFP_ATOMIC);
-            if (buffer_entry) {
-                INIT_LIST_HEAD(buffer_entry);
-                ispvic_frame_channel_qbuf(vic_dev, buffer_entry);
-            }
+            /* Create a dummy vic_buffer_entry and call qbuf; it will be safely ignored if addr=0 */
+            do {
+                struct vic_buffer_entry *entry = VIC_BUFFER_ALLOC_ATOMIC();
+                if (!entry) break;
+                INIT_LIST_HEAD(&entry->list);
+                entry->buffer_addr = 0;
+                entry->buffer_index = 0;
+                ispvic_frame_channel_qbuf(NULL, entry);
+            } while (0);
         }
         return 0;
     }
