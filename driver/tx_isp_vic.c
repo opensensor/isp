@@ -3203,9 +3203,14 @@ int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 
     pr_info("ispvic_frame_channel_qbuf: event-based QBUF\n");
 
-    /* Binary Ninja EXACT: if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = *(arg1 + 0xd4) */
+    /* CRITICAL FIX: Use global VIC device if arg1 is NULL or invalid */
     if (arg1 != 0 && (unsigned long)arg1 < 0xfffff001) {
         vic_dev = (struct tx_isp_vic_device *)arg1;  /* arg1 IS the vic_dev */
+    } else {
+        /* Fallback to global VIC device */
+        if (ourISPdev && ourISPdev->vic_dev) {
+            vic_dev = (struct tx_isp_vic_device *)container_of(ourISPdev->vic_dev, struct tx_isp_vic_device, sd);
+        }
     }
 
     if (!vic_dev) {
@@ -3250,8 +3255,8 @@ int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
     buffer_entry->buffer_addr = buffer_addr;
     
     /* CRITICAL FIX: Validate buffer address is in valid range */
-    if (buffer_addr < 0x06000000 || buffer_addr >= 0x09000000) {
-        pr_err("VIC QBUF: Invalid buffer address 0x%x - must be in range 0x06000000-0x09000000\n", buffer_addr);
+    if (buffer_addr < 0x06000000 || buffer_addr >= 0x10000000) {  /* Expanded range */
+        pr_err("VIC QBUF: Invalid buffer address 0x%x - must be in range 0x06000000-0x10000000\n", buffer_addr);
         /* Put buffers back */
         list_add_tail(free_node, &vic_dev->free_head);
         list_add_tail(queue_node, &vic_dev->queue_head);
