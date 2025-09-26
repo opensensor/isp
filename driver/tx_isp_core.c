@@ -636,14 +636,6 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     if (interrupt_status & 0x1000) {  /* Frame sync interrupt */
         pr_info("*** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***\n");
 
-        /* CRITICAL FIX: Always acknowledge the interrupt, even if work is already queued */
-        /* The key is to let the interrupt return IRQ_HANDLED to prevent interrupt storms */
-        pr_info("*** ISP CORE: Frame sync interrupt - attempting to queue work ***\n");
-
-        /* REFERENCE DRIVER: Use private_schedule_work like reference driver */
-        /* Binary Ninja: private_schedule_work calls queue_work_on for CPU-specific scheduling */
-        pr_info("*** ISP CORE: Using reference driver work scheduling ***\n");
-
         if (fs_workqueue) {
             pr_info("*** ISP CORE: fs_workqueue=%p, fs_work=%p ***\n", fs_workqueue, &fs_work);
             /* REFERENCE DRIVER: Use queue_work_on for CPU 0 like private_schedule_work */
