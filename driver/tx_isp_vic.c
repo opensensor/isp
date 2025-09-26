@@ -2415,17 +2415,37 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
         return -EINVAL;
     }
 
-    pr_info("*** VIC EVENT CALLBACK: cmd=0x%x, data=%p ***\n", cmd, data);
+    pr_debug("VIC EVENT: cmd=0x%x, data=%p\n", cmd, data);
 
     switch (cmd) {
         case 0x3000008: /* QBUF event */
-            pr_info("*** VIC: Processing QBUF event 0x3000008 (no completion here; wait for IRQ) ***\n");
-            /* Do not signal completion on QBUF. Hardware will raise frame-done IRQ when done. */
-            ret = 0;
+        {
+            struct { u32 index; u32 phys_addr; u32 size; u32 channel; } *v = data;
+            u32 phys = v ? v->phys_addr : 0;
+            if (phys >= 0x06000000 && phys < 0x09000000) {
+                struct vic_buffer_entry *entry = VIC_BUFFER_ALLOC_ATOMIC();
+                if (!entry) {
+                    pr_err("VIC: QBUF event alloc failed\n");
+                    ret = -ENOMEM;
+                    break;
+                }
+                INIT_LIST_HEAD(&entry->list);
+                entry->buffer_addr = phys;
+                entry->buffer_index = v ? v->index : 0;
+                entry->buffer_status = VIC_BUFFER_STATUS_QUEUED;
+                pr_debug("VIC: QBUF event -> queue addr=0x%x idx=%u\n", entry->buffer_addr, entry->buffer_index);
+                /* Process via qbuf handler (will program VIC and move to done list) */
+                ispvic_frame_channel_qbuf(vic_dev, entry);
+                ret = 0;
+            } else {
+                pr_debug("VIC: QBUF event ignored (phys=0x%x)\n", phys);
+                ret = -EINVAL;
+            }
             break;
+        }
 
         default:
-            pr_info("VIC: Unknown event cmd=0x%x\n", cmd);
+            pr_debug("VIC: Unknown event cmd=0x%x\n", cmd);
             ret = -ENOIOCTLCMD;
             break;
     }
