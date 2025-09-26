@@ -341,9 +341,12 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             if (vic_regs) {
                 /* Diagnostics only: observe current control and slot state; do not rewrite 0x300 here */
                 u32 reg_val = readl(vic_regs + 0x300);
-                u32 cur_addr = readl(vic_regs + 0x380);
-                pr_info("*** VIC FRAME DONE: Observed VIC[0x300]=0x%x (CONTROL BITS: %s), CURR_ADDR=0x%x ***\n",
-                        reg_val, (reg_val & 0x80000020) == 0x80000020 ? "PRESERVED" : "LOST", cur_addr);
+                u32 cur_addr_p = readl(vic_regs + 0x380);
+                u32 cur_addr_s = 0;
+                if (vic_dev->vic_regs_secondary)
+                    cur_addr_s = readl(vic_dev->vic_regs_secondary + 0x380);
+                pr_info("*** VIC FRAME DONE: Observed VIC[0x300]=0x%x (CONTROL BITS: %s), CURR_ADDR(P)=0x%x CURR_ADDR(S)=0x%x ***\n",
+                        reg_val, (reg_val & 0x80000020) == 0x80000020 ? "PRESERVED" : "LOST", cur_addr_p, cur_addr_s);
                 pr_info("vic_framedone_irq_function: DONE_HEAD size=%d, high_bits=%d, match=%d\n",
                         buffer_index, high_bits, match_found);
                 /* Dump programmed slot addresses C6..CA */
