@@ -1635,6 +1635,23 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     isp_dev->csi_dev = csi_dev;
     pr_info("*** CSI DEVICE LINKED: isp_dev->csi_dev = %p ***\n", isp_dev->csi_dev);
 
+    /* *** CRITICAL FIX: INITIALIZE CSI HARDWARE DURING PROBE *** */
+    pr_info("*** CRITICAL: INITIALIZING CSI HARDWARE AFTER DEVICE CREATION ***\n");
+
+    /* Set state to 2 so csi_core_ops_init will proceed with hardware initialization */
+    csi_dev->state = 2;
+    pr_info("*** CSI: State updated to 2 for hardware initialization ***\n");
+
+    /* Call CSI hardware initialization - this was missing! */
+    ret = csi_core_ops_init(&csi_dev->sd, 1);
+    if (ret) {
+        pr_err("*** CSI: Hardware initialization failed: %d ***\n", ret);
+        goto err_release_mem;
+    }
+
+    pr_info("*** CSI: Hardware initialization completed successfully ***\n");
+    pr_info("*** CSI: Final state = %d ***\n", csi_dev->state);
+
     pr_info("*** csi_device_probe: Binary Ninja CSI device created successfully ***\n");
     return 0;
 
