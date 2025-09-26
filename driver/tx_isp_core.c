@@ -1400,7 +1400,16 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
         /* Initialize CSI subdevice if present */
         if (isp->csi_dev) {
             pr_info("ispcore_slake_module: Initializing CSI subdevice");
-            isp->csi_dev->state = 1;  /* Set CSI to INIT state */
+
+            /* CRITICAL FIX: DO NOT RESET CSI STATE IF HARDWARE IS ALREADY INITIALIZED */
+            /* The CSI hardware initialization during probe should be preserved */
+            if (isp->csi_dev->state >= 3) {
+                pr_info("*** CSI HARDWARE ALREADY INITIALIZED (state=%d) - PRESERVING STATE ***", isp->csi_dev->state);
+                pr_info("*** SKIPPING CSI STATE RESET TO PRESERVE WORKING HARDWARE CONFIGURATION ***");
+            } else {
+                pr_info("*** CSI NOT YET INITIALIZED (state=%d) - SETTING TO INIT STATE ***", isp->csi_dev->state);
+                isp->csi_dev->state = 1;  /* Set CSI to INIT state only if not already initialized */
+            }
         }
 
         /* Initialize VIC subdevice if present */
