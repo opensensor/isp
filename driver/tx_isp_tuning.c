@@ -7526,6 +7526,11 @@ int tisp_dmsc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_writ
         system_reg_write(0x499c, 1);
     }
 
+/* Temporary hard-code for GC2053 CFA orientation: 0=RGGB,1=GRBG,2=GBRG,3=BGGR */
+#ifndef FORCE_GC2053_CFA_IDX
+#define FORCE_GC2053_CFA_IDX 1  /* GC2053 expectation: GRBG (adjust if needed) */
+#endif
+
     return 0;
 }
 
@@ -7599,11 +7604,14 @@ void tisp_dmsc_set_cfa_from_mbus(uint32_t mbus_code, int hflip, int vflip)
         idx = vmap[idx & 3];
     }
 
+    /* FORCE: Override with GC2053 expectation */
+    idx = FORCE_GC2053_CFA_IDX;
+
     out_opt = (out_opt & ~0x3u) | (idx & 0x3u);
     dmsc_out_opt = out_opt;
 
-    pr_info("tisp_dmsc_set_cfa_from_mbus: mbus=0x%x h=%d v=%d -> mosaic=%u, out_opt=0x%08x\n",
-            mbus_code, hflip, vflip, idx, out_opt);
+    pr_info("tisp_dmsc_set_cfa_from_mbus: FORCED GC2053 mosaic=%u (mbus=0x%x h=%d v=%d) out_opt=0x%08x\n",
+            idx, mbus_code, hflip, vflip, out_opt);
 
     /* Write new out_opt and commit via par_refresh enable */
     tisp_dmsc_out_opt_cfg();
