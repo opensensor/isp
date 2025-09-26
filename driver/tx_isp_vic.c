@@ -32,6 +32,11 @@ int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 
+/* Auto-detected current-address register (offset and space: 1=primary,2=secondary) */
+static u32 vic_curraddr_offset = 0;        /* e.g., 0x380 on some variants */
+static int vic_curraddr_space = 0;         /* 0=unknown, 1=primary, 2=secondary */
+static int vic_curraddr_detected = 0;      /* sticky once found */
+
 /* system_reg_write is now defined in tx-isp-module.c - removed duplicate */
 
 /* Debug function to track vic_start_ok changes */
@@ -328,13 +333,21 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                     /* Extract buffer address from list entry */
                     struct vic_buffer_entry *entry = container_of(pos, struct vic_buffer_entry, list);
 
-                    if (entry->buffer_addr == ca_p_380 ||
-                        (ca_s_380 && entry->buffer_addr == ca_s_380) ||
-                        (ca_p_32c && entry->buffer_addr == ca_p_32c) ||
-                        (ca_s_32c && entry->buffer_addr == ca_s_32c) ||
-                        (ca_p_330 && entry->buffer_addr == ca_p_330) ||
-                        (ca_s_330 && entry->buffer_addr == ca_s_330)) {
-                        match_found = 1;  /* $v0 = 1 */
+                    /* If auto-detected, use the selected register; else probe candidates */
+                    if (vic_curraddr_detected) {
+                        u32 cur = (vic_curraddr_space == 1 ? readl(vic_regs + vic_curraddr_offset)
+                                                          : (vic_dev->vic_regs_secondary ? readl(vic_dev->vic_regs_secondary + vic_curraddr_offset) : 0));
+                        if (cur && entry->buffer_addr == cur)
+                            match_found = 1;
+                    } else {
+                        if (entry->buffer_addr == ca_p_380 ||
+                            (ca_s_380 && entry->buffer_addr == ca_s_380) ||
+                            (ca_p_32c && entry->buffer_addr == ca_p_32c) ||
+                            (ca_s_32c && entry->buffer_addr == ca_s_32c) ||
+                            (ca_p_330 && entry->buffer_addr == ca_p_330) ||
+                            (ca_s_330 && entry->buffer_addr == ca_s_330)) {
+                            match_found = 1;
+                        }
                     }
                 }
             }
@@ -351,22 +364,45 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             /* CRITICAL FIX: Preserve EXACT control bits 0x80000020 when updating buffer index */
             /* The reference driver preserves control bits, we were clearing them! */
             if (vic_regs) {
-                /* Diagnostics only: observe current control and slot state; do not rewrite 0x300 here */
+                /* Diagnostics: observe control and current-address selection */
                 u32 reg_val = readl(vic_regs + 0x300);
-                u32 ca_p_380 = readl(vic_regs + 0x380);
-                u32 ca_s_380 = 0;
-                u32 ca_p_32c = readl(vic_regs + 0x32c);
-                u32 ca_s_32c = 0;
-                u32 ca_p_330 = readl(vic_regs + 0x330);
-                u32 ca_s_330 = 0;
-                if (vic_dev->vic_regs_secondary) {
-                    ca_s_380 = readl(vic_dev->vic_regs_secondary + 0x380);
-                    ca_s_32c = readl(vic_dev->vic_regs_secondary + 0x32c);
-                    ca_s_330 = readl(vic_dev->vic_regs_secondary + 0x330);
+                u32 selected_cur = 0;
+                if (!vic_curraddr_detected) {
+                    /* One-time auto-detect: scan 0x320..0x3c0 for a value matching any slot address */
+                    u32 slots[5] = {
+                        readl(vic_regs + (0xc6u<<2)), readl(vic_regs + (0xc7u<<2)),
+                        readl(vic_regs + (0xc8u<<2)), readl(vic_regs + (0xc9u<<2)),
+                        readl(vic_regs + (0xcau<<2))
+                    };
+                    int i;
+                    for (i = 0x320; i <= 0x3c0; i += 4) {
+                        u32 v = readl(vic_regs + i);
+                        if (v) {
+                            int s; for (s = 0; s < 5; ++s) if (v == slots[s]) { vic_curraddr_offset = i; vic_curraddr_space = 1; vic_curraddr_detected = 1; break; }
+                            if (vic_curraddr_detected) break;
+                        }
+                        if (vic_dev->vic_regs_secondary) {
+                            u32 vs = readl(vic_dev->vic_regs_secondary + i);
+                            if (vs) {
+                                int s; for (s = 0; s < 5; ++s) if (vs == slots[s]) { vic_curraddr_offset = i; vic_curraddr_space = 2; vic_curraddr_detected = 1; break; }
+                                if (vic_curraddr_detected) break;
+                            }
+                        }
+                    }
+                    if (vic_curraddr_detected) {
+                        pr_info("VIC CURR_ADDR DETECTED: space=%s offset=0x%x\n",
+                                vic_curraddr_space == 1 ? "PRIMARY" : "SECONDARY", vic_curraddr_offset);
+                    } else {
+                        pr_info("VIC CURR_ADDR DETECT: no match in 0x320..0x3c0 this frame\n");
+                    }
                 }
-                pr_info("*** VIC FRAME DONE: VIC[0x300]=0x%x (%s), CURR(P)[380]=0x%x [32c]=0x%x [330]=0x%x CURR(S)[380]=0x%x [32c]=0x%x [330]=0x%x ***\n",
+                if (vic_curraddr_detected) {
+                    selected_cur = (vic_curraddr_space == 1 ? readl(vic_regs + vic_curraddr_offset)
+                                                           : (vic_dev->vic_regs_secondary ? readl(vic_dev->vic_regs_secondary + vic_curraddr_offset) : 0));
+                }
+                pr_info("*** VIC FRAME DONE: VIC[0x300]=0x%x (%s), CURR(space=%d,off=0x%x)=0x%x ***\n",
                         reg_val, (reg_val & 0x80000020) == 0x80000020 ? "PRESERVED" : "LOST",
-                        ca_p_380, ca_p_32c, ca_p_330, ca_s_380, ca_s_32c, ca_s_330);
+                        vic_curraddr_space, vic_curraddr_offset, selected_cur);
                 pr_info("vic_framedone_irq_function: DONE_HEAD size=%d, high_bits=%d, match=%d\n",
                         buffer_index, high_bits, match_found);
                 /* Dump programmed slot addresses C6..CA */
