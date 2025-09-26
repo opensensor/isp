@@ -678,9 +678,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             writel(status_new, isp_regs + 0x98b8);
         wmb();
         if (interrupt_status != 0) {
-            pr_debug("*** ISP CORE INTERRUPT: bank=%s status=0x%08x (legacy=0x%08x new=0x%08x) ***\n",
-                    status_legacy ? "legacy(+0xb*)" : "new(+0x98b*)",
-                    interrupt_status, status_legacy, status_new);
+			// Removed logging
         } else if (isp_force_core_isr) {
             pr_debug("*** ISP CORE: FORCED FRAME DONE VIA VIC (no pending) ***\n");
             interrupt_status = 1; /* Force Channel 0 frame-done path */
@@ -697,15 +695,14 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         error_check = readl(isp_regs + 0xc) & 0x40;
         if (error_check == 0) {
             /* Binary Ninja: tisp_lsc_write_lut_datas() - LSC LUT processing */
-            pr_debug("ISP interrupt: LSC LUT processing\n");
+			// Removed logging
 			tisp_lsc_write_lut_datas();
         }
     } else {
         /* Binary Ninja: Error interrupt processing - EXACT reference behavior */
         u32 error_reg_84c = readl(vic_regs + 0x84c);
-        pr_debug("ispcore: irq-status 0x%08x, err is 0x%x,0x%x,084c is 0x%x\n",
-                interrupt_status, (interrupt_status & 0x3f8) >> 3,
-                interrupt_status & 0x7, error_reg_84c);
+			// Removed logging
+
 
         /* Binary Ninja: data_ca57c += 1 - increment error counter */
         /* Error counter increment would be here */
@@ -720,33 +717,21 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* *** CRITICAL: MAIN INTERRUPT PROCESSING SECTION *** */
 
-    /* CRITICAL DEBUG: Log all interrupt status values to find the real frame sync bit */
-    pr_debug("*** ISP CORE: INTERRUPT STATUS DEBUG: 0x%08x ***\n", interrupt_status);
-    pr_debug("*** ISP CORE: Checking bits - 0x1000=%s, 0x1=%s, 0x2=%s, 0x4=%s ***\n",
-            (interrupt_status & 0x1000) ? "SET" : "clear",
-            (interrupt_status & 0x1) ? "SET" : "clear",
-            (interrupt_status & 0x2) ? "SET" : "clear",
-            (interrupt_status & 0x4) ? "SET" : "clear");
-
     /* Binary Ninja: Frame sync interrupt processing */
     if (interrupt_status & 0x1000) {  /* Frame sync interrupt */
-        pr_debug("*** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***\n");
+        pr_info("*** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***\n");
 
         if (fs_workqueue) {
-            pr_debug("*** ISP CORE: fs_workqueue=%p, fs_work=%p ***\n", fs_workqueue, &fs_work);
             /* REFERENCE DRIVER: Use queue_work_on for CPU 0 like private_schedule_work */
             if (queue_work_on(0, fs_workqueue, &fs_work)) {
-                pr_debug("*** ISP CORE: Work queued successfully on CPU 0 ***\n");
             } else {
-                pr_debug("*** ISP CORE: Work was already queued - acknowledging interrupt anyway ***\n");
+                pr_info("*** ISP CORE: Work was already queued - acknowledging interrupt anyway ***\n");
             }
         } else {
-            pr_debug("*** ISP CORE: fs_workqueue is NULL - using system workqueue ***\n");
             /* REFERENCE DRIVER: Use schedule_work_on for CPU 0 */
             if (schedule_work_on(0, &fs_work)) {
-                pr_debug("*** ISP CORE: Work scheduled successfully on CPU 0 ***\n");
             } else {
-                pr_debug("*** ISP CORE: Work was already scheduled - acknowledging interrupt anyway ***\n");
+                pr_info("*** ISP CORE: Work was already scheduled - acknowledging interrupt anyway ***\n");
             }
         }
 
@@ -759,19 +744,16 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* Binary Ninja: Error interrupt processing */
     if (interrupt_status & 0x200) {  /* Error interrupt type 1 */
-        pr_debug("ISP CORE: Error interrupt type 1 - PIPELINE CONFIGURATION ERROR\n");
+        //pr_info("ISP CORE: Error interrupt type 1 - PIPELINE CONFIGURATION ERROR\n");
 
         /* CRITICAL FIX: This error interrupt indicates pipeline misconfiguration */
         /* Clear the error condition by reading/clearing error registers */
         if (isp_regs) {
             u32 error_status = readl(isp_regs + 0xc);  /* Read error status */
-            pr_debug("*** ISP CORE: Error status register 0xc = 0x%x ***\n", error_status);
 
             /* Clear error bits by writing back */
             writel(error_status, isp_regs + 0xc);
             wmb();
-
-            pr_debug("*** ISP CORE: Error interrupt cleared ***\n");
         }
 
         /* Binary Ninja: exception_handle() */
@@ -779,7 +761,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     }
 
     if (interrupt_status & 0x100) {  /* Error interrupt type 2 */
-        pr_debug("ISP CORE: Error interrupt type 2\n");
+        //pr_debug("ISP CORE: Error interrupt type 2\n");
         /* Binary Ninja: exception_handle() */
         /* Error handling would be here */
     }
@@ -826,7 +808,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* *** CRITICAL: CHANNEL 1 FRAME COMPLETION PROCESSING *** */
     if (interrupt_status & 2) {  /* Channel 1 frame done */
-        pr_debug("*** ISP CORE: CHANNEL 1 FRAME DONE INTERRUPT ***\n");
+        //pr_debug("*** ISP CORE: CHANNEL 1 FRAME DONE INTERRUPT ***\n");
 
         /* Binary Ninja: Similar processing for channel 1 */
         while ((readl(vic_regs + 0x9a7c) & 1) == 0) {
@@ -834,8 +816,6 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             u32 frame_info1 = readl(vic_regs + 0x9a8c);
             u32 frame_info2 = readl(vic_regs + 0x9a90);
 
-            pr_debug("*** CH1 FRAME COMPLETION: addr=0x%x, info1=0x%x, info2=0x%x ***\n",
-                   frame_buffer_addr, frame_info1, frame_info2);
 
             /* Wake up channel 1 waiters */
             if (frame_channels[1].state.streaming) {
@@ -846,7 +826,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* Binary Ninja: Channel 2 frame completion */
     if (interrupt_status & 4) {
-        pr_debug("ISP CORE: Channel 2 frame done\n");
+        //pr_debug("ISP CORE: Channel 2 frame done\n");
         /* Similar processing for channel 2 */
         while ((readl(vic_regs + 0x9b7c) & 1) == 0) {
             /* Channel 2 frame processing */
@@ -864,12 +844,9 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             /* Binary Ninja: if (irq_func_cb[i] != 0) */
             if (irq_func_cb[i] != NULL) {
                 irqreturn_t callback_result = irq_func_cb[i](irq, dev_id);
-                pr_debug("ISP CORE: IRQ callback[%d] returned %d\n", i, callback_result);
             }
         }
     }
-
-    pr_debug("*** ISP CORE INTERRUPT PROCESSING COMPLETE ***\n");
 
     /* Binary Ninja: return 1 */
     return IRQ_HANDLED;

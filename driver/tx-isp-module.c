@@ -1952,18 +1952,18 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     /* CRITICAL: Binary Ninja global vic_start_ok flag check */
     /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
     if (vic_start_ok != 0) {
-        pr_debug("*** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
+        //pr_debug("*** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
 
         /* Binary Ninja: if (($v1_7 & 1) != 0) */
         if ((v1_7 & 1) != 0) {
             /* Binary Ninja: *($s0 + 0x160) += 1 */
             vic_dev->frame_count++;
-            pr_debug("*** 2VIC FRAME DONE INTERRUPT: Frame completion detected (count=%u) ***\n", vic_dev->frame_count);
+            //pr_debug("*** 2VIC FRAME DONE INTERRUPT: Frame completion detected (count=%u) ***\n", vic_dev->frame_count);
 
             /* CRITICAL: Also increment main ISP frame counter for /proc/jz/isp/isp-w02 */
             if (ourISPdev) {
                 ourISPdev->frame_count++;
-                pr_debug("*** ISP FRAME COUNT UPDATED: %u (for /proc/jz/isp/isp-w02) ***\n", ourISPdev->frame_count);
+                //pr_debug("*** ISP FRAME COUNT UPDATED: %u (for /proc/jz/isp/isp-w02) ***\n", ourISPdev->frame_count);
             }
 
             /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
@@ -1972,7 +1972,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 
         /* Binary Ninja: Error handling for frame asfifo overflow */
         if ((v1_7 & 0x200) != 0) {
-            pr_debug("Err [VIC_INT] : frame asfifo ovf!!!!!\n");
+            //pr_debug("Err [VIC_INT] : frame asfifo ovf!!!!!\n");
         }
 
         /* Binary Ninja: Error handling for horizontal errors */
@@ -2089,8 +2089,8 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 
         /* Binary Ninja: Error recovery sequence - focus on prevention, not recovery */
         if ((v1_7 & 0xde00) != 0 && *vic_irq_enable_flag == 1) {
-            pr_debug("*** VIC ERROR RECOVERY: Detected error condition 0x%x (control limit errors should be prevented by proper config) ***\n", v1_7);
-            pr_debug("error handler!!!\n");
+            //pr_debug("*** VIC ERROR RECOVERY: Detected error condition 0x%x (control limit errors should be prevented by proper config) ***\n", v1_7);
+            //pr_debug("error handler!!!\n");
 
             /* Binary Ninja: **($s0 + 0xb8) = 4 */
             writel(4, vic_regs + 0x0);
@@ -2127,8 +2127,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         }
 
     } else {
-        pr_debug("*** VIC INTERRUPT IGNORED: vic_start_ok=0, interrupts disabled (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
-        pr_debug("*** This means VIC interrupts are firing but being ignored! ***\n");
+        //pr_debug("*** VIC INTERRUPT IGNORED: vic_start_ok=0, interrupts disabled (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
     }
 
     /* Binary Ninja: return 1 */
