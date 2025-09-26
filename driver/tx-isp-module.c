@@ -1257,6 +1257,10 @@ struct frame_channel_device {
 static struct frame_channel_device frame_channels[4]; /* Support up to 4 video channels */
 static int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
 
+/* Global per-channel cache of legacy SET_BUF base/step for robustness across FDs */
+static u32 g_setbuf_base[4] = {0};
+static u32 g_setbuf_step[4] = {0};
+
 /* Provide access to frame_channel_device pointer for V4L2 shim */
 void *get_frame_channel_device_ptr(int channel)
 {
@@ -2907,11 +2911,22 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
 
 			/* Force ch0 to use SET_BUF base/step bank to match encoder expectations */
-			if (channel == 0 && fcd && fcd->vbm_base_phys && fcd->vbm_frame_size) {
-				chosen_phys = fcd->vbm_base_phys + buffer.index * fcd->vbm_frame_size;
-				chosen_size = fcd->vbm_frame_size;
-				pr_info("*** Channel 0: QBUF - Forcing SET_BUF phys=0x%x (base=0x%x step=%u index=%u) ***\n",
-					chosen_phys, fcd->vbm_base_phys, fcd->vbm_frame_size, buffer.index);
+			if (channel == 0) {
+				if (fcd && fcd->vbm_base_phys && fcd->vbm_frame_size) {
+					chosen_phys = fcd->vbm_base_phys + buffer.index * fcd->vbm_frame_size;
+					chosen_size = fcd->vbm_frame_size;
+					pr_info("*** Channel 0: QBUF - Forcing SET_BUF phys=0x%x (base=0x%x step=%u index=%u) ***\n",
+							chosen_phys, fcd->vbm_base_phys, fcd->vbm_frame_size, buffer.index);
+				} else if (g_setbuf_base[0] && g_setbuf_step[0]) {
+					chosen_phys = g_setbuf_base[0] + buffer.index * g_setbuf_step[0];
+					chosen_size = g_setbuf_step[0];
+					pr_info("*** Channel 0: QBUF - Forcing GLOBAL SET_BUF phys=0x%x (base=0x%x step=%u index=%u) ***\n",
+							chosen_phys, g_setbuf_base[0], g_setbuf_step[0], buffer.index);
+				} else {
+					pr_warn("*** Channel 0: QBUF - SET_BUF not available (fcd base=0x%x step=%u, global base=0x%x step=%u); using chosen_phys=0x%x ***\n",
+						fcd ? fcd->vbm_base_phys : 0, fcd ? fcd->vbm_frame_size : 0,
+						g_setbuf_base[0], g_setbuf_step[0], chosen_phys);
+				}
 			}
 
             /* Program VIC only for channel 0 NV12 path to avoid clobbering with substream (ch1) buffers. */
@@ -4388,6 +4403,13 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 fcd_local->vbm_frame_size = buf_setup.size;
                 pr_info("TX_ISP_SET_BUF(legacy) recorded base=0x%x frame_size=%u for channel %d\n",
                         fcd_local->vbm_base_phys, fcd_local->vbm_frame_size, ch_local);
+                /* Also cache globally by channel to survive FD/context mismatch */
+                if (ch_local >= 0 && ch_local < 4) {
+                    g_setbuf_base[ch_local] = fcd_local->vbm_base_phys;
+                    g_setbuf_step[ch_local] = fcd_local->vbm_frame_size;
+                    pr_info("TX_ISP_SET_BUF(legacy) global cache: ch=%d base=0x%x step=%u\n",
+                            ch_local, g_setbuf_base[ch_local], g_setbuf_step[ch_local]);
+                }
             } else {
                 pr_info("TX_ISP_SET_BUF(legacy) received but channel context unavailable\n");
             }
