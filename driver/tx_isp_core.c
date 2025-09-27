@@ -1071,9 +1071,6 @@ err_unmap_csi:
 err_unmap_vic:
     iounmap(isp->vic_regs);
     isp->vic_regs = NULL;
-err_unmap_vic:
-    iounmap(isp->vic_regs);
-    isp->vic_regs = NULL;
 err_unmap_core:
     iounmap(isp->core_regs);
     isp->core_regs = NULL;
