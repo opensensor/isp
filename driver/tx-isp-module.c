@@ -1731,6 +1731,22 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         wmb();
         printk(KERN_ALERT "*** VIC IRQ: Register writes completed (at base=%p) ***\n", base_for_irq);
 
+        /* Restore interrupts on PRIMARY: clear pending, ensure frame-done enabled, and permit bit21 for debug */
+        if (vic_dev && vic_dev->vic_regs) {
+            void __iomem *vrp = vic_dev->vic_regs;
+            u32 en = readl(vrp + 0x1e0);
+            /* Clear pending */
+            writel(0xFFFFFFFF, vrp + 0x1f0);
+            writel(0xFFFFFFFF, vrp + 0x1f4);
+            wmb();
+            /* Ensure frame-done source enabled in 0x1e0 */
+            writel(en | 0x1, vrp + 0x1e0);
+            /* Allow framedone (bit0) and control-limit (bit21) to reach CPU: mask = ~((1<<0)|(1<<21)) */
+            writel(0xFFDFFFFE, vrp + 0x1e8);
+            wmb();
+            printk(KERN_ALERT "*** VIC IRQ: Restored enables(0x1e0|=1) and MainMask=0xFFDFFFFE (allow framedone+bit21) ***\n");
+        }
+
         /* CRITICAL DEBUG: Add the missing debugging right after register writes */
         printk(KERN_ALERT "*** VIC IRQ: About to check vic_start_ok - vic_start_ok=%u ***\n", vic_start_ok);
 
@@ -2521,10 +2537,10 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
             writel(0x000002d0, vr + 0x100);
             writel(0x00000630, vr + 0x14);
             wmb();
-            /* Enable sources and unmask framedone */
-            //writel(0xFFFFFFFF, vr + 0x1e0);
-            //writel(0xFFFFFFFE, vr + 0x1e8);
-            //wmb();
+            /* Enable sources and unmask framedone (MainMask=frame-done only) */
+            writel(0xFFFFFFFF, vr + 0x1e0);
+            writel(0xFFFFFFFE, vr + 0x1e8);
+            wmb();
             /* Small sampling window to catch first assertion post sensor stream-on */
             for (i = 0; i < 20; i++) {
                 s0 = readl(vr + 0x1f0);

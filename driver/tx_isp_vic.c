@@ -2752,15 +2752,15 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Clear pending (W1C) */
                 writel(0xFFFFFFFF, vr + 0x1f0);
                 writel(0xFFFFFFFF, vr + 0x1f4);
-                /* Enable all interrupt sources (both banks) and set MainMask to frame-done only (good-things logic) */
+                /* Enable all interrupt sources (both banks) and set MainMask to allow framedone + bit21 (debug) */
                 writel(0xFFFFFFFF, vr + 0x1e0);
                 writel(0xFFFFFFFF, vr + 0x1e4);
-                writel(0xFFFFFFFE, vr + 0x1e8); /* Enable only bit0 (frame done) */
+                writel(0xFFDFFFFE, vr + 0x1e8); /* unmask bit0 and bit21 */
                 /* Leave 0x1ec (MDMA mask) as-is per working reference */
                 /* Global interrupt enable at 0x30c (if implemented) */
                 writel(0xFFFFFFFF, vr + 0x30c);
                 wmb();
-                pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (MainMask=0xFFFFFFFE)***\n",
+                pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (MainMask=0xFFDFFFFE)***\n",
                         readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x30c), readl(vr + 0x1e0), readl(vr + 0x1e4), readl(vr + 0x1e8), readl(vr + 0x1ec));
                 /* Primary bank: only verify 0x100; do NOT write 0x14 here (0x14 is stride on PRIMARY) */
                 writel(0x000002d0, vr + 0x100);
@@ -2780,15 +2780,15 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x00000630, vc + 0x14);
                 /* Key unlock/IMCR observed in working reference */
                 writel(0xb5742249, vc + 0x0c);
-                /* Enable sources on both banks and UNMASK-ALL on both masks */
+                /* Enable sources on both banks and set MainMask to allow framedone + bit21 (debug) */
                 writel(0xFFFFFFFF, vc + 0x1e0);
                 writel(0xFFFFFFFF, vc + 0x1e4);
-                //writel(0x00000000, vc + 0x1e8);
-                //writel(0x00000000, vc + 0x1ec);
+                writel(0xFFDFFFFE, vc + 0x1e8);
+                /* Leave 0x1ec as-is */
                 /* Global interrupt enable at 0x30c (if present) */
                 writel(0xFFFFFFFF, vc + 0x30c);
                 wmb();
-                pr_info("*** VIC VERIFY (CONTROL): [0x0]=0x%08x [0x4]=0x%08x [0x0c]=0x%08x [0x100]=0x%08x [0x14]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x ***\n",
+                pr_info("*** VIC VERIFY (CONTROL): [0x0]=0x%08x [0x4]=0x%08x [0x0c]=0x%08x [0x100]=0x%08x [0x14]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (MainMask=0xFFDFFFFE)***\n",
                         readl(vc + 0x0), readl(vc + 0x4), readl(vc + 0x0c), readl(vc + 0x100), readl(vc + 0x14), readl(vc + 0x300), readl(vc + 0x30c), readl(vc + 0x1e0), readl(vc + 0x1e4), readl(vc + 0x1e8), readl(vc + 0x1ec));
             }
 
