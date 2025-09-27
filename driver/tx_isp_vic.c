@@ -2187,44 +2187,30 @@ int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
         return -EINVAL;
     }
 
-    /* CRITICAL FIX: Use spinlock instead of mutex to prevent "sleeping in atomic context" */
-    /* mutex_lock() can sleep, but this function can be called from atomic context */
-    unsigned long flags;
-    spin_lock_irqsave(&vic_dev->lock, flags);
+    /* CRITICAL FIX: Use mutex like good-things driver - activation is not called from atomic context */
+    /* Good-things driver uses mutex_lock for state changes during activation */
+    mutex_lock(&vic_dev->state_lock);
 
     if (vic_dev->state == 1) {
         vic_dev->state = 2; /* INIT -> READY */
         pr_info("VIC activated: state %d -> 2 (READY)\n", 1);
 
-        /* *** CRITICAL: Ensure free buffers are available during activation *** */
-        if (list_empty(&vic_dev->free_head)) {
-            pr_info("*** VIC ACTIVATION: Replenishing free buffer pool ***\n");
-            for (int i = 0; i < 5; i++) {
-                /* FIXED: Use shared aligned buffer structure */
-                struct vic_buffer_entry *free_buffer = VIC_BUFFER_ALLOC();
-                if (free_buffer) {
-                    free_buffer->buffer_addr = 0;  /* Buffer address placeholder */
-                    free_buffer->buffer_index = i + 100;  /* Buffer index (activation batch) */
-                    free_buffer->buffer_status = VIC_BUFFER_STATUS_FREE;  /* Buffer status */
+        /* *** CRITICAL: GOOD-THINGS APPROACH - Defer buffer allocation to prevent memory exhaustion *** */
+        pr_info("*** VIC ACTIVATION: Buffer allocation DEFERRED to prevent Wyze Cam memory exhaustion ***\n");
+        pr_info("*** VIC ACTIVATION: Buffers will be allocated on-demand during QBUF operations ***\n");
 
-                    list_add_tail(&free_buffer->list, &vic_dev->free_head);
-                    pr_info("*** VIC ACTIVATION: Added free buffer %d (aligned struct) ***\n", i);
-                }
-            }
-            pr_info("*** VIC ACTIVATION: Free buffer pool replenished - no more 'bank no free' ***\n");
-        } else {
-            pr_info("*** VIC ACTIVATION: Free buffers already available - count checking ***\n");
-            struct list_head *pos;
-            int free_count = 0;
-            list_for_each(pos, &vic_dev->free_head) {
-                free_count++;
-            }
-            pr_info("*** VIC ACTIVATION: %d free buffers available ***\n", free_count);
+        /* Initialize empty lists - buffers allocated later when needed */
+        if (list_empty(&vic_dev->free_head)) {
+            pr_info("*** VIC ACTIVATION: Free buffer list initialized (empty) - allocation deferred ***\n");
         }
+
+        /* Set buffer management to deferred mode */
+        vic_dev->buffer_count = 0;  /* No buffers allocated yet */
+        pr_info("*** VIC ACTIVATION: Using GOOD-THINGS deferred buffer allocation strategy ***\n");
     }
 
     /* CRITICAL FIX: Use spinlock instead of mutex to prevent "sleeping in atomic context" */
-    spin_unlock_irqrestore(&vic_dev->lock, flags);
+    mutex_unlock(&vic_dev->state_lock);
     return 0;
 }
 
@@ -3508,9 +3494,12 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
         //raw_pipe[3] = (void *)ispvic_frame_channel_s_stream;  /* offset 0xc / 4 = index 3 */
         //raw_pipe[4] = (void *)sd;                             /* offset 0x10 / 4 = index 4 */
 
-        /* SAFE: Initialize buffer structures using proper struct members */
+        /* GOOD-THINGS APPROACH: Defer buffer allocation to prevent memory exhaustion */
+        pr_info("*** tx_isp_subdev_pipo: GOOD-THINGS approach - deferring buffer allocation ***\n");
+        pr_info("*** Buffers will be allocated on-demand during QBUF operations ***\n");
+
+        /* Initialize buffer indices but don't allocate buffer structures yet */
         for (i = 0; i < 5; i++) {
-            struct vic_buffer_entry *buffer_entry;  /* C90 compliance: declare at top */
             uint32_t reg_offset;  /* C90 compliance: declare at top */
 
             /* SAFE: Use proper buffer index array instead of unsafe pointer arithmetic */
@@ -3518,18 +3507,8 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
                 vic_dev->buffer_index[i] = i;
             }
 
-            /* SAFE: Create proper buffer entries and add to free list */
-            buffer_entry = VIC_BUFFER_ALLOC();
-            if (buffer_entry) {
-                /* Initialize buffer data */
-                buffer_entry->buffer_addr = 0;  /* Buffer address */
-                buffer_entry->buffer_index = i;  /* Buffer index */
-                buffer_entry->buffer_status = VIC_BUFFER_STATUS_FREE;  /* Buffer status */
-
-                /* Add to free list using safe Linux API */
-                list_add_tail(&buffer_entry->list, &vic_dev->free_head);
-                pr_info("tx_isp_subdev_pipo: added buffer entry %d to free list (aligned struct)\n", i);
-            }
+            /* GOOD-THINGS: No buffer allocation here - deferred to QBUF operations */
+            pr_info("tx_isp_subdev_pipo: initialized buffer index %d (allocation deferred)\n", i);
 
             /* SAFE: Clear VIC register using validated register access */
             reg_offset = (i + 0xc6) << 2;
@@ -3538,6 +3517,10 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
                 pr_info("tx_isp_subdev_pipo: cleared VIC register at offset 0x%x for buffer %d\n", reg_offset, i);
             }
         }
+
+        /* Set buffer count to 0 - buffers will be allocated on-demand */
+        vic_dev->buffer_count = 0;
+        pr_info("*** tx_isp_subdev_pipo: Using GOOD-THINGS deferred buffer allocation strategy ***\n");
 
         pr_info("tx_isp_subdev_pipo: initialized %d buffer structures (safe implementation)\n", i);
 
