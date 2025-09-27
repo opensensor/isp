@@ -4777,10 +4777,6 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
                                ourISPdev);
     if (ret != 0) {
         pr_err("*** FAILED TO REQUEST IRQ 37 (isp-m0): %d ***\n", ret);
-    } else {
-        pr_info("*** SUCCESS: IRQ 37 (isp-m0) REGISTERED ***\n");
-        if (ourISPdev)
-            ourISPdev->isp_irq = 37;
     }
 
     /* Register IRQ 38 (isp-w02) - VIC channel */
