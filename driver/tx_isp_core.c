@@ -2875,12 +2875,29 @@ int ispcore_core_ops_init_with_sensor(struct tx_isp_dev *isp, struct tx_isp_sens
         return -EINVAL;
     }
 
-    /* CRITICAL: Call tisp_init with sensor attributes for MIPI CSI configuration */
+    /* CRITICAL: Call tisp_init with sensor parameters like good-things driver */
     if (sensor_attr) {
-        pr_info("*** ispcore_core_ops_init_with_sensor: Calling tisp_init with sensor attributes ***");
+        pr_info("*** ispcore_core_ops_init_with_sensor: Calling tisp_init with sensor parameters (good-things approach) ***");
         pr_info("*** This will configure MIPI CSI lanes and enable proper interrupt flow ***");
 
-        ret = tisp_init(sensor_attr, NULL);
+        /* GOOD-THINGS APPROACH: Create sensor parameters struct like good-things driver */
+        struct {
+            uint32_t width;
+            uint32_t height;
+            uint32_t fps;
+            uint32_t mode;
+        } sensor_params = {
+            .width = sensor_attr->total_width ? sensor_attr->total_width : 1920,
+            .height = sensor_attr->total_height ? sensor_attr->total_height : 1080,
+            .fps = 25,
+            .mode = 0
+        };
+
+        /* CRITICAL FIX: Call tisp_init with sensor name like good-things driver */
+        const char *sensor_name = sensor_attr->name ? sensor_attr->name : "gc2053";
+        pr_info("*** ispcore_core_ops_init_with_sensor: Calling tisp_init(&sensor_params, \"%s\") ***", sensor_name);
+
+        ret = tisp_init(&sensor_params, (char *)sensor_name);
         if (ret != 0) {
             pr_err("ispcore_core_ops_init_with_sensor: tisp_init failed: %d", ret);
             return ret;
@@ -2888,7 +2905,21 @@ int ispcore_core_ops_init_with_sensor(struct tx_isp_dev *isp, struct tx_isp_sens
 
         pr_info("*** ispcore_core_ops_init_with_sensor: tisp_init SUCCESS - MIPI CSI should now be configured ***");
     } else {
-        pr_warn("ispcore_core_ops_init_with_sensor: No sensor attributes - MIPI CSI configuration may be incomplete");
+        pr_warn("ispcore_core_ops_init_with_sensor: No sensor attributes - using default parameters");
+
+        /* Fallback: use default parameters */
+        struct {
+            uint32_t width;
+            uint32_t height;
+            uint32_t fps;
+            uint32_t mode;
+        } sensor_params = {1920, 1080, 25, 0};
+
+        ret = tisp_init(&sensor_params, "gc2053");
+        if (ret != 0) {
+            pr_err("ispcore_core_ops_init_with_sensor: tisp_init (fallback) failed: %d", ret);
+            return ret;
+        }
     }
 
     /* Set ISP core state to active */
