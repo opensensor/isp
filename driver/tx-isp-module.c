@@ -1218,30 +1218,6 @@ static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void
 /* VIC core s_stream - EXACT Binary Ninja implementation */
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable);
 
-// Frame channel devices - create video channel devices like reference
-struct frame_channel_device {
-    struct miscdevice miscdev;
-    int channel_num;
-    struct tx_isp_channel_state state;
-
-    /* Binary Ninja buffer management fields */
-    struct mutex buffer_mutex;           /* Offset 0x28 - private_mutex_lock($s0 + 0x28) */
-    spinlock_t buffer_queue_lock;        /* Offset 0x2c4 - __private_spin_lock_irqsave($s0 + 0x2c4) */
-    void *buffer_queue_head;             /* Offset 0x214 - *($s0 + 0x214) */
-    void *buffer_queue_base;             /* Offset 0x210 - $s0 + 0x210 */
-    int buffer_queue_count;              /* Offset 0x218 - *($s0 + 0x218) */
-    int streaming_flags;                 /* Offset 0x230 - *($s0 + 0x230) & 1 */
-    void *vic_subdev;                    /* Offset 0x2bc - *($s0 + 0x2bc) */
-    int buffer_type;                     /* Offset 0x24 - *($s0 + 0x24) */
-    int field;                           /* Offset 0x3c - *($s0 + 0x3c) */
-    void *buffer_array[64];              /* Buffer array for index lookup */
-
-    /* VBM integration */
-    void *vbm_pool_ptr;                  /* Pointer to VBM pool (kernel address), if registered */
-    uint32_t vbm_base_phys;              /* Legacy base phys provided via TX_ISP_SET_BUF */
-    uint32_t vbm_frame_size;             /* Per-frame size provided/derived from libimp */
-};
-
 static struct frame_channel_device frame_channels[4]; /* Support up to 4 video channels */
 static int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
 
