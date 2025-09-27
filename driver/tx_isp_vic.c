@@ -2444,7 +2444,7 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     /* CRITICAL FIX: Set default dimensions first to prevent stride = 0 */
     width = 1920;   /* Default safe width */
     height = 1080;  /* Default safe height */
-    
+
     /* Try to get actual dimensions from various sources */
     if (ourISPdev && ourISPdev->sensor_width && ourISPdev->sensor_height) {
         width  = ourISPdev->sensor_width;
@@ -2476,7 +2476,7 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     } else {
         pr_info("*** DIMENSION FIX: Using default VIC MDMA dims %dx%d ***\n", width, height);
     }
-    
+
     /* CRITICAL: Validate dimensions to prevent 0 stride */
     if (width == 0 || height == 0) {
         pr_info("*** CRITICAL ERROR: Invalid dimensions width=%d height=%d - forcing defaults ***\n", width, height);
@@ -2668,7 +2668,7 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
         {
             struct { u32 index; u32 phys_addr; u32 size; u32 channel; } *v = data;
             u32 phys = v ? v->phys_addr : 0;
-            
+
             /* CRITICAL FIX: Accept ALL valid buffer addresses, not just a narrow range */
             if (phys >= 0x06000000 && phys < 0x10000000) {  /* Expanded range for all valid memory */
                 struct vic_buffer_entry *entry = kzalloc(sizeof(struct vic_buffer_entry), GFP_ATOMIC);
@@ -2677,21 +2677,21 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
                     ret = -ENOMEM;
                     break;
                 }
-                
+
                 INIT_LIST_HEAD(&entry->list);
                 entry->buffer_addr = phys;  /* CRITICAL: Use the ACTUAL buffer address from userspace */
                 entry->buffer_index = v ? v->index : 0;
                 entry->buffer_status = VIC_BUFFER_STATUS_QUEUED;
-                
+
                 pr_info("*** VIC EVENT: QBUF -> queue ACTUAL addr=0x%x idx=%u (NOT forcing to base address) ***\n",
                         entry->buffer_addr, entry->buffer_index);
-                
+
                 /* Add to VIC device queue for processing */
                 unsigned long flags;
                 spin_lock_irqsave(&vic_dev->buffer_lock, flags);
                 list_add_tail(&entry->list, &vic_dev->queue_head);
                 spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
-                
+
                 pr_info("*** VIC EVENT: Buffer 0x%x queued successfully - will be programmed with ACTUAL address ***\n", phys);
                 ret = 0;
             } else {
@@ -3227,6 +3227,9 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Get subdev pointer */
     sd = &vic_dev->sd;
 
+    /* Set dev_priv before subdev init so auto-linking can retrieve vic_dev */
+    tx_isp_set_subdevdata(sd, vic_dev);
+
     /* Get platform resource (binary uses this for error message) */
     res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
@@ -3351,24 +3354,24 @@ int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
     /* $a1_1, $a2_1 = pop_buffer_fifo($s0 + 0x1f4) */
     struct list_head *free_node = vic_dev->free_head.next;
     struct list_head *queue_node = vic_dev->queue_head.next;
-    
+
     list_del(free_node);
     list_del(queue_node);
-    
+
     /* Binary Ninja EXACT: $v0_5, $a3_1 = $a1_1($a2_1) */
     buffer_entry = container_of(free_node, struct vic_buffer_entry, list);
     struct vic_buffer_entry *queue_entry = container_of(queue_node, struct vic_buffer_entry, list);
-    
+
     /* Binary Ninja EXACT: int32_t $a1_2 = *($a3_1 + 8) */
     /* CRITICAL FIX: Use the ACTUAL buffer address from the queue entry, not forced base address */
     buffer_addr = queue_entry->buffer_addr;
-    
+
     /* Binary Ninja EXACT: int32_t $v1_1 = $v0_5[4] */
     buffer_index = buffer_entry->buffer_index % 5;  /* VIC has 5 slots */
-    
+
     /* Binary Ninja EXACT: $v0_5[2] = $a1_2 */
     buffer_entry->buffer_addr = buffer_addr;
-    
+
     /* CRITICAL FIX: Validate buffer address is in valid range */
     if (buffer_addr < 0x06000000 || buffer_addr >= 0x10000000) {  /* Expanded range */
         pr_info("VIC QBUF: Invalid buffer address 0x%x - must be in range 0x06000000-0x10000000\n", buffer_addr);
@@ -3377,7 +3380,7 @@ int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         list_add_tail(queue_node, &vic_dev->queue_head);
         goto unlock_exit;
     }
-    
+
     /* Binary Ninja EXACT: *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2 */
     if (vic_dev->vic_regs) {
         uint32_t reg_offset = (buffer_index + 0xc6) << 2;
@@ -3386,14 +3389,14 @@ int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         pr_info("*** CRITICAL SUCCESS: Buffer 0x%x programmed to VIC[0x%x] ***\n",
                 buffer_addr, reg_offset);
     }
-    
+
     /* Binary Ninja EXACT: Move buffer to done list */
     /* *($s0 + 0x208) = $v0_5; *$v0_5 = $s0 + 0x204; $v0_5[1] = $v1_5; *$v1_5 = $v0_5 */
     list_add_tail(&buffer_entry->list, &vic_dev->done_head);
-    
+
     /* Binary Ninja EXACT: *($s0 + 0x218) += 1 */
     vic_dev->active_buffer_count += 1;
-    
+
     pr_info("*** VIC QBUF: Buffer processed (addr=0x%x, idx=%d) - active_count=%d ***\n",
             buffer_addr, buffer_index, vic_dev->active_buffer_count);
 

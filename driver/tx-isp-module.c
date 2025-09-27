@@ -5092,10 +5092,8 @@ static int tx_isp_init(void)
         /* SAFE: Add CSI to subdev array at index 1 using proper struct member */
         ourISPdev->subdevs[1] = &csi_dev->sd;
 
-        pr_info("*** REGISTERED CSI SUBDEV AT INDEX 1 WITH VIDEO OPS ***\n");
-        pr_info("CSI subdev: %p, ops: %p, video: %p, s_stream: %p\n",
-                &csi_dev->sd, csi_dev->sd.ops, csi_dev->sd.ops->video,
-                csi_dev->sd.ops->video->s_stream);
+        pr_info("*** REGISTERED CSI SUBDEV AT INDEX 1 ***\n");
+        pr_info("CSI subdev: %p, ops=%p\n", &csi_dev->sd, csi_dev->sd.ops);
     }
 
     /* *** CRITICAL: Register platform devices with proper IRQ setup *** */
@@ -5204,18 +5202,14 @@ static int tx_isp_init(void)
 
     /* Register CSI subdev with proper ops structure */
     if (ourISPdev->csi_dev) {
-        struct tx_isp_csi_device *csi_dev = &ourISPdev->csi_dev;
+        struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)ourISPdev->csi_dev;
 
         /* CSI driver sets its own sd.ops during probe. Just add to subdev array. */
-        // csi_dev->sd.isp = (void*)ourISPdev;
-
         /* SAFE: Add CSI to subdev array at index 1 using proper struct member */
         ourISPdev->subdevs[1] = &csi_dev->sd;
 
-        pr_info("*** REGISTERED CSI SUBDEV AT INDEX 1 WITH VIDEO OPS ***\n");
-        pr_info("CSI subdev: %p, ops: %p, video: %p, s_stream: %p\n",
-                &csi_dev->sd, csi_dev->sd.ops, csi_dev->sd.ops->video,
-                csi_dev->sd.ops->video->s_stream);
+        pr_info("*** REGISTERED CSI SUBDEV AT INDEX 1 ***\n");
+        pr_info("CSI subdev: %p, ops=%p\n", &csi_dev->sd, csi_dev->sd.ops);
     }
 
     pr_info("*** SUBDEV ARRAY POPULATED SAFELY - tx_isp_video_link_stream SHOULD NOW WORK! ***\n");
