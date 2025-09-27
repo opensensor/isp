@@ -1344,8 +1344,12 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
-    /* Get sensor attributes - offset 0x110 in Binary Ninja */
-    sensor_attr = &vic_dev->sensor_attr;
+    /* Get sensor attributes from actual sensor (not stored in VIC) */
+    {
+        extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+        struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+        sensor_attr = (sensor && sensor->video.attr) ? sensor->video.attr : (sensor ? &sensor->attr : NULL);
+    }
 
     /* DEBUG: Check if sensor_attr is properly initialized */
     pr_info("*** DEBUG: sensor_attr=%p, dbus_type=%d ***\n", sensor_attr, sensor_attr ? sensor_attr->dbus_type : -1);
@@ -2017,14 +2021,21 @@ int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sens
     }
 
     /* Binary Ninja: $v0_1 = arg2 == 0 ? memset : memcpy */
-    if (attr == NULL) {
-        /* Clear sensor attribute */
-        memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
-        pr_info("vic_sensor_ops_sync_sensor_attr: cleared sensor attributes\n");
-    } else {
-        /* Copy sensor attribute */
-        memcpy(&vic_dev->sensor_attr, attr, sizeof(vic_dev->sensor_attr));
-        pr_info("vic_sensor_ops_sync_sensor_attr: copied sensor attributes\n");
+    {
+        extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+        struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+        if (!sensor) {
+            pr_info("vic_sensor_ops_sync_sensor_attr: no sensor available\n");
+            return 0;
+        }
+        struct tx_isp_sensor_attribute *target = sensor->video.attr ? sensor->video.attr : &sensor->attr;
+        if (attr == NULL) {
+            memset(target, 0, sizeof(*target));
+            pr_info("vic_sensor_ops_sync_sensor_attr: cleared sensor attributes\n");
+        } else {
+            memcpy(target, attr, sizeof(*target));
+            pr_info("vic_sensor_ops_sync_sensor_attr: copied sensor attributes\n");
+        }
     }
 
     return 0;
@@ -2344,17 +2355,23 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         width  = vic_dev->width;
         height = vic_dev->height;
         pr_info("*** Fallback to vic_dev cached ACTIVE dims %dx%d for VIC MDMA dims ***\n", width, height);
-    } else if (vic_dev->sensor_attr.total_width && vic_dev->sensor_attr.total_height) {
+    } else if (ourISPdev && ourISPdev->sensor && (
+                   (ourISPdev->sensor->video.attr &&
+                    ourISPdev->sensor->video.attr->total_width && ourISPdev->sensor->video.attr->total_height) ||
+                   (!ourISPdev->sensor->video.attr &&
+                    ourISPdev->sensor->attr.total_width && ourISPdev->sensor->attr.total_height))) {
+        struct tx_isp_sensor_attribute *a = ourISPdev->sensor->video.attr ?
+                                            ourISPdev->sensor->video.attr : &ourISPdev->sensor->attr;
         /* Handle GC2053 sensor specifically */
-        if (vic_dev->sensor_attr.total_width == 2200 && vic_dev->sensor_attr.total_height == 1418) {
+        if (a->total_width == 2200 && a->total_height == 1418) {
             /* GC2053 detected: use actual output dimensions */
             width = 1920;
             height = 1080;
             pr_info("*** GC2053 detected: Using actual output dims 1920x1080 instead of totals 2200x1418 ***\n");
         } else {
             /* Use total dimensions but warn */
-            width  = vic_dev->sensor_attr.total_width;
-            height = vic_dev->sensor_attr.total_height;
+            width  = a->total_width;
+            height = a->total_height;
             pr_info("*** WARNING: Using sensor_attr TOTAL timing %dx%d for VIC MDMA dims ***\n", width, height);
         }
     } else {
@@ -2885,21 +2902,17 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 if (ourISPdev && ourISPdev->sensor) {
                     pr_info("*** COPYING REAL SENSOR ATTRIBUTES TO VIC DEVICE ***\n");
 
-                    /* Try video.attr first (pointer), then attr (direct member) */
-                    if (ourISPdev->sensor->video.attr) {
-                        /* Copy from video.attr (pointer to sensor attributes) */
-                        memcpy(&vic_dev->sensor_attr, ourISPdev->sensor->video.attr, sizeof(vic_dev->sensor_attr));
-                        pr_info("*** SENSOR ATTR SYNC: Using video.attr (pointer) ***\n");
-                    } else {
-                        /* Copy from attr (direct member) */
-                        memcpy(&vic_dev->sensor_attr, &ourISPdev->sensor->attr, sizeof(vic_dev->sensor_attr));
-                        pr_info("*** SENSOR ATTR SYNC: Using attr (direct member) ***\n");
+                    /* Use sensor's attributes directly instead of storing in VIC */
+                    {
+                        struct tx_isp_sensor_attribute *attr_ptr = ourISPdev->sensor->video.attr ?
+                            ourISPdev->sensor->video.attr : &ourISPdev->sensor->attr;
+                        pr_info("*** SENSOR ATTR SYNC: Using %s ***\n",
+                                ourISPdev->sensor->video.attr ? "video.attr (pointer)" : "attr (direct member)");
+                        pr_info("*** SENSOR ATTR: dbus_type=%d, total_width=%d, total_height=%d ***\n",
+                                attr_ptr->dbus_type,
+                                attr_ptr->total_width,
+                                attr_ptr->total_height);
                     }
-
-                    pr_info("*** SENSOR ATTR SYNC: dbus_type=%d, total_width=%d, total_height=%d ***\n",
-                            vic_dev->sensor_attr.dbus_type,
-                            vic_dev->sensor_attr.total_width,
-                            vic_dev->sensor_attr.total_height);
                 } else {
                     pr_info("*** WARNING: No real sensor attributes available, using VIC defaults ***\n");
                 }
@@ -3091,7 +3104,6 @@ long vic_chardev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 EXPORT_SYMBOL(vic_chardev_ioctl);
 
 static struct tx_isp_vic_device *dump_vsd = NULL;
-static void *test_addr = NULL;
 
 /* tx_isp_vic_probe - Matching binary flow with safe struct member access */
 int tx_isp_vic_probe(struct platform_device *pdev)
@@ -3147,15 +3159,10 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     dump_vsd = vic_dev;
     vic_dev->irq = 38;
 
-    /* Set test_addr to point to sensor_attr or appropriate member */
-    /* Binary points to offset 0x80 in the structure */
-    test_addr = &vic_dev->sensor_attr;  /* Or another member around offset 0x80 */
-
     pr_info("*** tx_isp_vic_probe: VIC device initialized successfully ***\n");
     pr_info("VIC device: vic_dev=%p, size=%zu\n", vic_dev, sizeof(struct tx_isp_vic_device));
     pr_info("  sd: %p\n", sd);
     pr_info("  state: %d\n", vic_dev->state);
-    pr_info("  test_addr: %p\n", test_addr);
 
     return 0;
 }
