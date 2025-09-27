@@ -2080,21 +2080,6 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     return IRQ_HANDLED;
 }
 
-static int tx_isp_video_link_destroy_impl(struct tx_isp_dev *isp_dev)
-{
-    // Reference: tx_isp_video_link_destroy.isra.5
-    // Gets link_config from offset 0x118, destroys links, sets to -1
-
-    pr_info("Video link destroy: cleaning up pipeline connections\n");
-
-    // In full implementation:
-    // 1. Get link_config from isp_dev->link_config (offset 0x118)
-    // 2. Iterate through configs array
-    // 3. Call find_subdev_link_pad() and subdev_video_destroy_link()
-    // 4. Set link_config to -1
-
-    return 0;
-}
 
 /* RACE CONDITION SAFE: Global initialization lock for subdev array access */
 static DEFINE_MUTEX(subdev_init_lock);
@@ -4087,6 +4072,57 @@ static int tx_isp_sensor_operation_helper(struct tx_isp_dev *isp_dev, unsigned i
 
 
 /**
+ * subdev_video_destroy_link - Destroy a single video link
+ * @link_pad: Pointer to link pad structure
+ * Returns: 0 on success
+ *
+ * Binary Ninja reference implementation
+ */
+static int subdev_video_destroy_link(struct tx_isp_video_pad *link_pad)
+{
+    if (!link_pad) {
+        return 0;
+    }
+
+    /* Binary Ninja: if (arg1[3] != 0) - check if link is active */
+    if (link_pad->link_flags != 0) {
+        void *src_pad = link_pad->link_src;
+        void *dst_pad = link_pad->link_dst;
+        void *src_pad_ptr = link_pad->link_src_pad;
+        void *dst_pad_ptr = link_pad->link_dst_pad;
+
+        /* Clear link structure */
+        link_pad->link_src = NULL;
+        link_pad->link_dst = NULL;
+        link_pad->link_src_pad = NULL;
+        link_pad->link_dst_pad = NULL;
+        link_pad->link_flags = 0;
+
+        /* Set pad state to disconnected */
+        link_pad->state = 2;
+
+        /* Clear destination pad if it exists */
+        if (dst_pad_ptr) {
+            struct tx_isp_video_pad *dst = (struct tx_isp_video_pad *)dst_pad_ptr;
+            dst->link_src = NULL;
+            dst->link_dst = NULL;
+            dst->link_src_pad = NULL;
+            dst->link_dst_pad = NULL;
+            dst->link_flags = 0;
+            dst->state = 2;
+        }
+
+        /* Set source pad state to disconnected if it exists */
+        if (src_pad) {
+            struct tx_isp_video_pad *src = (struct tx_isp_video_pad *)src_pad;
+            src->state = 2;
+        }
+    }
+
+    return 0;
+}
+
+/**
  * tx_isp_video_link_destroy - Destroy all video links
  * @isp_dev: ISP device
  * Returns: 0 on success, negative error code on failure
@@ -4149,6 +4185,7 @@ static int tx_isp_video_link_destroy(struct tx_isp_dev *isp_dev)
 
     return ret;
 }
+
 
 
 // Binary Ninja MCP EXACT reference implementation
