@@ -325,54 +325,30 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     extern struct tx_isp_dev *ourISPdev;
 
     /* CRITICAL: Register subdevices in the global ISP device using helper functions */
-    extern struct tx_isp_subdev_ops core_subdev_ops;
-    extern struct tx_isp_subdev_ops vic_subdev_ops;
-    extern struct tx_isp_subdev_ops csi_subdev_ops;
-    extern struct tx_isp_subdev_ops fs_subdev_ops;
-
     if (ourISPdev) {
-        if (ops == &csi_subdev_ops) {
-            /* CSI - register using helper function */
-            int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
-            pr_info("*** tx_isp_subdev_init: CSI subdev registered at slot %d ***\n", slot);
-        } else if (ops == &vic_subdev_ops) {
-            /* VIC - register using helper function and link VIC device */
-            struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
-            ourISPdev->vic_dev = vic_dev;
-            int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
-            pr_info("*** tx_isp_subdev_init: VIC device linked and registered at slot %d ***\n", slot);
-        } else if (ops == &core_subdev_ops) {
-            /* CORE - register using helper function */
-            int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
-            pr_info("*** tx_isp_subdev_init: Core ISP subdev registered at slot %d ***\n", slot);
+        const char *name = pdev->name ? pdev->name : dev_name(&pdev->dev);
 
-            /* CRITICAL FIX: Call core init function like VIN does - this triggers tisp_init */
-        } else if (ops && ops->sensor && ops != &csi_subdev_ops && ops != &vic_subdev_ops && ops != &fs_subdev_ops) {
-            /* CRITICAL FIX: This is a REAL sensor subdev (not CSI, VIC, or FS which also have sensor ops) */
-            pr_info("*** tx_isp_subdev_init: DETECTED SENSOR SUBDEV - ops=%p, ops->sensor=%p ***\n", ops, ops->sensor);
-
-            /* CRITICAL FIX: Set up the module notify function for TX_ISP_EVENT_SYNC_SENSOR_ATTR */
-            extern int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
-            extern int tx_isp_module_notify_handler(struct tx_isp_module *module, unsigned int cmd, void *arg);
-            sd->module.notify = tx_isp_module_notify_handler;
-            pr_info("*** tx_isp_subdev_init: Set up sensor module notify handler ***\n");
-
-            /* SENSOR - register using helper function */
+        /* Always register by platform device name; avoid cross-file globals */
+        if (name) {
             int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
-            if (slot >= 0) {
-                pr_info("*** tx_isp_subdev_init: SENSOR subdev registered at slot %d, sd=%p ***\n", slot, sd);
-                pr_info("*** tx_isp_subdev_init: SENSOR ops=%p, ops->sensor=%p ***\n", sd->ops, sd->ops->sensor);
+            pr_info("*** tx_isp_subdev_init: Registered subdev '%s' at slot %d ***\n", name, slot);
 
-                /* State transitions are now handled by ispcore_slake_module during probe */
-                pr_info("*** tx_isp_subdev_init: Core state transitions handled by slake_module ***\n");
-            } else {
-                pr_err("*** tx_isp_subdev_init: No available slot for sensor subdev ***\n");
+            /* Link VIC device pointer for convenience when we detect VIC name */
+            if (!strcmp(name, "isp-w02")) {
+                struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
+                ourISPdev->vic_dev = vic_dev;
+                pr_info("*** tx_isp_subdev_init: Linked VIC device to ISP dev ***\n");
+            }
+
+            /* Detect and handle real sensor subdevs (not CSI/VIC/FS) */
+            if (ops && ops->sensor && strcmp(name, "tx-isp-csi") && strcmp(name, "isp-w02") && strcmp(name, "tx-isp-fs")) {
+                pr_info("*** tx_isp_subdev_init: DETECTED SENSOR SUBDEV - ops=%p ***\n", ops);
+                extern int tx_isp_module_notify_handler(struct tx_isp_module *module, unsigned int cmd, void *arg);
+                sd->module.notify = tx_isp_module_notify_handler;
             }
         } else {
-            pr_info("*** tx_isp_subdev_init: NOT A SENSOR - ops=%p ***\n", ops);
-            if (ops) {
-                pr_info("*** tx_isp_subdev_init: ops->sensor=%p, csi_subdev_ops=%p ***\n", ops->sensor, &csi_subdev_ops);
-            }
+            pr_info("*** tx_isp_subdev_init: No device name available; registered generically ***\n");
+            (void)tx_isp_register_subdev_by_name(ourISPdev, sd);
         }
     }
 
