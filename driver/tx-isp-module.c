@@ -1597,7 +1597,20 @@ static void restore_isp_control_interrupt_registers_after_reset(void)
     writel(0x200,       core_regs + 0x9ac8);  /* VIC Control - interrupt related */
     wmb();
 
-    pr_info("*** CRITICAL: ISP Control interrupt registers restored - hardware should now generate interrupts ***\n");
+    /* Read-back verification to confirm the gate values stuck */
+    {
+        u32 g0 = readl(core_regs + 0x9ac0);
+        u32 g1 = readl(core_regs + 0x9ac8);
+        pr_info("*** CRITICAL: ISP Control interrupt registers restored - hardware should now generate interrupts (9ac0=0x%08x, 9ac8=0x%08x) ***\n", g0, g1);
+        if (g0 != 0x200 || g1 != 0x200) {
+            pr_warn("restore_isp_control_interrupt_registers_after_reset: gate readback not 0x200, re-writing 0x200 to 9ac0/9ac8\n");
+            writel(0x200, core_regs + 0x9ac0);
+            writel(0x200, core_regs + 0x9ac8);
+            wmb();
+            pr_info("restore_isp_control_interrupt_registers_after_reset: re-read 9ac0=0x%08x 9ac8=0x%08x\n",
+                    readl(core_regs + 0x9ac0), readl(core_regs + 0x9ac8));
+        }
+    }
 }
 
 /* tx_isp_enable_irq - EXACT Binary Ninja implementation with correct parameter */
