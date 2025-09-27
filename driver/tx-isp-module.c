@@ -2341,13 +2341,24 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
     if (enable == 1) {  /* Stream ON - initialize subdevs first */
         pr_info("*** tx_isp_video_s_stream: CRITICAL FIX - Initializing all subdevs before streaming ***\n");
 
-        /* Initialize subdevs in proper order using helper functions: CSI → VIC → Core → Sensors */
+        /* Initialize subdevs in proper order using helper functions: Core → CSI → VIC → Sensors */
         struct tx_isp_subdev *csi_sd = tx_isp_get_csi_subdev(dev);
         struct tx_isp_subdev *vic_sd = tx_isp_get_vic_subdev(dev);
         struct tx_isp_subdev *core_sd = tx_isp_get_core_subdev(dev);
         struct tx_isp_subdev *sensor_sd = tx_isp_get_sensor_subdev(dev);
 
-        /* Initialize CSI first */
+        /* Initialize Core first */
+        if (core_sd && core_sd->ops && core_sd->ops->core && core_sd->ops->core->init) {
+            pr_info("*** tx_isp_video_s_stream: Initializing Core subdev ***\n");
+            result = core_sd->ops->core->init(core_sd, 1);
+            if (result != 0 && result != -ENOIOCTLCMD) {
+                pr_err("tx_isp_video_s_stream: Core init failed: %d\n", result);
+                return result;
+            }
+            pr_info("*** tx_isp_video_s_stream: Core init SUCCESS ***\n");
+        }
+
+        /* Initialize CSI second */
         if (csi_sd && csi_sd->ops && csi_sd->ops->core && csi_sd->ops->core->init) {
             pr_info("*** tx_isp_video_s_stream: Initializing CSI subdev ***\n");
             result = csi_sd->ops->core->init(csi_sd, 1);
@@ -2358,7 +2369,7 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
             pr_info("*** tx_isp_video_s_stream: CSI init SUCCESS ***\n");
         }
 
-        /* Initialize VIC second */
+        /* Initialize VIC third */
         if (vic_sd && vic_sd->ops && vic_sd->ops->core && vic_sd->ops->core->init) {
             pr_info("*** tx_isp_video_s_stream: Initializing VIC subdev ***\n");
             result = vic_sd->ops->core->init(vic_sd, 1);
@@ -2367,17 +2378,6 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
                 return result;
             }
             pr_info("*** tx_isp_video_s_stream: VIC init SUCCESS ***\n");
-        }
-
-        /* Initialize Core third */
-        if (core_sd && core_sd->ops && core_sd->ops->core && core_sd->ops->core->init) {
-            pr_info("*** tx_isp_video_s_stream: Initializing Core subdev ***\n");
-            result = core_sd->ops->core->init(core_sd, 1);
-            if (result != 0 && result != -ENOIOCTLCMD) {
-                pr_err("tx_isp_video_s_stream: Core init failed: %d\n", result);
-                return result;
-            }
-            pr_info("*** tx_isp_video_s_stream: Core init SUCCESS ***\n");
         }
 
         /* Initialize Sensor last */
