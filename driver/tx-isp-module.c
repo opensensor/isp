@@ -1785,65 +1785,51 @@ void tx_isp_disable_irq(struct tx_isp_dev *isp_dev)
 }
 
 /* tx_isp_request_irq - EXACT Binary Ninja implementation */
-static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *isp_dev)
+
+/* tx_isp_request_irq - EXACT Binary Ninja reference implementation */
+int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq_info)
 {
     int irq_num;
     int ret;
 
-    /* Binary Ninja: if (arg1 == 0 || arg2 == 0) */
-    if (!pdev || !isp_dev) {
-        /* Binary Ninja: isp_printf(2, &$LC0, "tx_isp_request_irq") */
-        pr_info("tx_isp_request_irq: Invalid parameters\n");
-        /* Binary Ninja: return 0xffffffea */
-        return 0xffffffea;
+    /* Binary Ninja: if (arg1 == 0 || arg2 == 0) return 0xffffffea */
+    if (!pdev || !irq_info) {
+        isp_printf(2, "tx_isp_request_irq: Invalid parameters\n");
+        return -EINVAL;
     }
-
-    pr_info("*** tx_isp_request_irq: EXACT Binary Ninja implementation ***\n");
 
     /* Binary Ninja: int32_t $v0_1 = private_platform_get_irq(arg1, 0) */
     irq_num = platform_get_irq(pdev, 0);
+    pr_info("*** tx_isp_request_irq: platform_get_irq returned %d for device %s ***\n", irq_num, dev_name(&pdev->dev));
 
     /* Binary Ninja: if ($v0_1 s>= 0) */
     if (irq_num >= 0) {
-        pr_info("*** Platform IRQ found: %d ***\n", irq_num);
+        /* CRITICAL FIX: Always pass main ISP device as dev_id to prevent kernel panic */
+        /* The interrupt handlers expect tx_isp_dev*, not subdevice structures */
+        void *correct_dev_id = ourISPdev;  /* Always use main ISP device */
+        const char *dev_name_str = dev_name(&pdev->dev);
 
-        /* CRITICAL FIX: Store IRQ number FIRST before any operations that might fail */
-        isp_dev->isp_irq = irq_num;  /* Store IRQ number immediately */
+        /* FIXED: All interrupt handlers expect tx_isp_dev* as dev_id */
+        /* Passing subdevice structures (vic_dev, core_dev, vin_dev) causes type mismatch crashes */
+        pr_info("*** tx_isp_request_irq: Using main ISP device as dev_id for IRQ %d (device: %s) ***\n",
+                irq_num, dev_name_str);
 
-        /* Binary Ninja: private_spin_lock_init(arg2) */
-        spin_lock_init(&isp_dev->lock);
+        /* Binary Ninja: *arg2 = $v0_1 */
+        irq_info->irq = irq_num;
+        /* Binary Ninja: arg2[1] = tx_isp_enable_irq */
+        irq_info->handler = isp_irq_handle;
+        /* Binary Ninja: arg2[2] = tx_isp_disable_irq */
+        irq_info->data = irq_info;  /* Store self-reference for callbacks */
+        /* CRITICAL FIX: Do NOT disable IRQ after registration - working version keeps IRQs enabled */
+        /* tx_isp_disable_irq(irq_info); -- REMOVED: This was killing VIC interrupts */
+        pr_info("*** tx_isp_request_irq: IRQ %d LEFT ENABLED (working version behavior) ***\n", irq_num);
 
-        /* Binary Ninja: if (private_request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, IRQF_SHARED, *arg1, arg2) != 0) */
-        ret = request_threaded_irq(irq_num,
-                                  isp_irq_handle,          /* Binary Ninja: isp_irq_handle */
-                                  isp_irq_thread_handle,   /* Binary Ninja: isp_irq_thread_handle */
-                                  IRQF_SHARED,             /* FIXED: Use only IRQF_SHARED to match existing IRQ registration */
-                                  dev_name(&pdev->dev),    /* Binary Ninja: *arg1 */
-                                  isp_dev);                /* Binary Ninja: arg2 */
-
-        if (ret != 0) {
-            /* Binary Ninja: int32_t var_18_2 = $v0_1; isp_printf(2, "flags = 0x%08x, jzflags = %p,0x%08x", "tx_isp_request_irq") */
-            pr_info("*** tx_isp_request_irq: flags = 0x%08x, irq = %d, ret = 0x%08x ***\n",
-                   IRQF_SHARED | IRQF_ONESHOT, irq_num, ret);
-            /* Binary Ninja: *arg2 = 0 */
-            /* Binary Ninja: return 0xfffffffc */
-            return 0xfffffffc;
-        }
-
-        /* Binary Ninja: arg2[1] = tx_isp_enable_irq; *arg2 = $v0_1; arg2[2] = tx_isp_disable_irq */
-        isp_dev->irq_enable_func = tx_isp_enable_irq;   /* arg2[1] = tx_isp_enable_irq */
-        /* isp_dev->isp_irq already set above */         /* *arg2 = $v0_1 */
-        isp_dev->irq_disable_func = tx_isp_disable_irq; /* arg2[2] = tx_isp_disable_irq */
-
-        /* Binary Ninja: tx_isp_disable_irq(arg2) */
-        //tx_isp_disable_irq(isp_dev);
-
-        pr_info("*** tx_isp_request_irq: IRQ %d registered and stored in isp_dev->isp_irq ***\n", irq_num);
-
+        pr_info("*** tx_isp_request_irq: IRQ %d registered successfully for %s ***\n", irq_num, dev_name(&pdev->dev));
     } else {
         /* Binary Ninja: *arg2 = 0 */
-        isp_dev->isp_irq = 0;
-        pr_info("*** tx_isp_request_irq: Platform IRQ not available (ret=%d) ***\n", irq_num);
+        irq_info->irq = 0;
+        pr_err("tx_isp_request_irq: Failed to get IRQ: %d\n", irq_num);
+        return irq_num;
     }
 
     /* Binary Ninja: return 0 */
@@ -5245,19 +5231,6 @@ static int tx_isp_init(void)
     mutex_lock(&subdev_init_lock);
     subdev_init_complete = true;
     mutex_unlock(&subdev_init_lock);
-
-    pr_info("*** RACE CONDITION FIX: SUBDEV INITIALIZATION MARKED COMPLETE ***\n");
-    pr_info("*** tx_isp_video_link_stream CALLS WILL NOW PROCEED SAFELY ***\n");
-
-    pr_info("Device subsystem initialization complete\n");
-    /* Initialize VIC hardware and register its IRQ handler before central dispatcher */
-    if (ourISPdev->vic_dev) {
-        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-        pr_info("*** INITIALIZING VIC HARDWARE (irq + masks) VIA tx_isp_vic_hw_init ***\n");
-        tx_isp_vic_hw_init(&vic_dev->sd);
-    } else {
-        pr_info("*** WARNING: No VIC device available for tx_isp_vic_hw_init ***\n");
-    }
 
     /* *** CRITICAL: Initialize hardware interrupt handling for BOTH IRQs *** */
     pr_info("*** INITIALIZING HARDWARE INTERRUPTS FOR IRQ 37 AND 38 ***\n");

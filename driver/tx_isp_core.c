@@ -967,38 +967,6 @@ irqreturn_t tx_isp_core_irq_thread_handle(int irq, void *dev_id)
     return IRQ_HANDLED;
 }
 
-/* tx_isp_request_irq - EXACT Binary Ninja implementation */
-static int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
-{
-    int irq_number;
-    int ret;
-
-    if (!pdev || !irq_info) {
-        pr_info("tx_isp_request_irq: Invalid parameters\n");
-        return -EINVAL;
-    }
-
-    /* Binary Ninja: int32_t $v0_1 = private_platform_get_irq(arg1, 0) */
-    irq_number = platform_get_irq(pdev, 0);
-    if (irq_number < 0) {
-        pr_info("tx_isp_request_irq: Failed to get IRQ: %d\n", irq_number);
-        return irq_number;
-    }
-
-    /* Binary Ninja: private_spin_lock_init(arg2) */
-    spin_lock_init((spinlock_t *)irq_info);
-
-    /* Binary Ninja: private_request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, 0x2000, *arg1, arg2) */
-    ret = request_threaded_irq(irq_number, tx_isp_core_irq_handle, tx_isp_core_irq_thread_handle,
-                               IRQF_SHARED, dev_name(&pdev->dev), irq_info);
-    if (ret != 0) {
-        pr_info("tx_isp_request_irq: Failed to request IRQ %d: %d\n", irq_number, ret);
-        return ret;
-    }
-
-    pr_info("*** tx_isp_request_irq: IRQ %d registered successfully with dispatch system ***\n", irq_number);
-    return 0;
-}
 
 /* Core ISP interrupt handler - now calls the dispatch system */
 irqreturn_t tx_isp_core_irq_handler(int irq, void *dev_id)
