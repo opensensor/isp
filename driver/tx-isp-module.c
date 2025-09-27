@@ -1716,6 +1716,9 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
 
         printk(KERN_ALERT "*** VIC IRQ: Using base %p [1e0]=0x%x [1e4]=0x%x [1e8]=0x%x [1ec]=0x%x ***\n",
                base_for_irq, reg_1e0, reg_1e4, reg_1e8, reg_1ec);
+        /* Extra debug: control and geometry */
+        printk(KERN_ALERT "*** VIC IRQ: CTRL[0x300]=0x%x DIMS[0x304]=0x%x STRIDE[0x310]=0x%x ***\n",
+               readl(vic_regs + 0x300), readl(vic_regs + 0x304), readl(vic_regs + 0x310));
 
         v1_7 = (~reg_1e8) & reg_1e0;
         v1_10 = (~reg_1ec) & reg_1e4;
@@ -1744,6 +1747,18 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
             /* Allow framedone (bit0) and control-limit (bit21) to reach CPU: mask = ~((1<<0)|(1<<21)) */
             writel(0xFFDFFFFE, vrp + 0x1e8);
             wmb();
+            /* If control bits lost in 0x300, re-assert them like reference */
+            do {
+                u32 ctrl = readl(vrp + 0x300);
+                if ((ctrl & 0x80000020) != 0x80000020) {
+                    u32 count = vic_dev->active_buffer_count;
+                    if (count == 0) count = 2;
+                    ctrl = (count << 16) | 0x80000020;
+                    writel(ctrl, vrp + 0x300);
+                    wmb();
+                    printk(KERN_ALERT "*** VIC IRQ: Rewrote CTRL[0x300]=0x%x (count=%u) to preserve control bits ***\n", ctrl, count);
+                }
+            } while (0);
             printk(KERN_ALERT "*** VIC IRQ: Restored enables(0x1e0|=1) and MainMask=0xFFDFFFFE (allow framedone+bit21) ***\n");
         }
 
