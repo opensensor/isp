@@ -5304,8 +5304,20 @@ static int tx_isp_init(void)
         ourISPdev->isp_irq = 37;
     }
 
-    /* Register IRQ 38 (isp-w02) - handled by VIC-specific init to ensure correct dev_id */
-    pr_info("*** SKIP: IRQ 38 will be registered by VIC via tx_isp_vic_hw_init ***\n");
+    /* Register IRQ 38 (isp-w02) - Secondary ISP channel */
+    ret = request_threaded_irq(38,
+                              isp_irq_handle,          /* Same handlers work for both IRQs */
+                              isp_irq_thread_handle,
+                              IRQF_SHARED,
+                              "isp-w02",               /* Match stock driver name */
+                              ourISPdev);
+    if (ret != 0) {
+        pr_info("*** FAILED TO REQUEST IRQ 38 (isp-w02): %d ***\n", ret);
+        pr_info("*** ONLY IRQ 37 WILL BE AVAILABLE ***\n");
+    } else {
+        pr_info("*** SUCCESS: IRQ 38 (isp-w02) REGISTERED ***\n");
+        ourISPdev->isp_irq2 = 38;  /* Store secondary IRQ */
+    }
 
     /* *** CRITICAL: Enable interrupt generation at hardware level *** */
     pr_info("*** ENABLING HARDWARE INTERRUPT GENERATION ***\n");
