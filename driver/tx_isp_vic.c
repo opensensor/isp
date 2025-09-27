@@ -2752,9 +2752,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Clear pending (W1C) */
                 writel(0xFFFFFFFF, vr + 0x1f0);
                 writel(0xFFFFFFFF, vr + 0x1f4);
-                /* Enable all interrupt sources (both banks) and set MainMask to allow framedone + bit21 (debug) */
-                writel(0xFFFFFFFF, vr + 0x1e0);
-                writel(0xFFFFFFFF, vr + 0x1e4);
+                /* Set MainMask to allow framedone + bit21 (debug); do NOT touch status regs 0x1e0/0x1e4 */
                 writel(0xFFDFFFFE, vr + 0x1e8); /* unmask bit0 and bit21 */
                 /* Leave 0x1ec (MDMA mask) as-is per working reference */
                 /* Global interrupt enable at 0x30c (if implemented) */
