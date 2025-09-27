@@ -2483,6 +2483,20 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
         s4 = &s4[1];
     }
 
+    /* After all subdevs s_stream(enable) calls, re-trigger CSI init once sensor is streaming */
+    if (enable == 1) {
+        struct tx_isp_subdev *csi_sd_rt = tx_isp_get_csi_subdev(dev);
+        if (csi_sd_rt && csi_sd_rt->ops && csi_sd_rt->ops->core && csi_sd_rt->ops->core->init) {
+            struct tx_isp_csi_device *csid = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(csi_sd_rt);
+            if (csid && csid->interface_type == 1) {
+                pr_info("*** tx_isp_video_s_stream: Post-sensor s_stream re-trigger of CSI core->init ***\n");
+                /* Small delay to let sensor assert MIPI lanes */
+                private_msleep(2);
+                csi_sd_rt->ops->core->init(csi_sd_rt, 1);
+            }
+        }
+    }
+
     /* Post-sensor stream-on: re-assert VIC routing/mask to match working timing */
     if (enable == 1) {
         struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)dev->vic_dev;
