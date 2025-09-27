@@ -691,6 +691,12 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
             if (sd->regs) {
                 core_dev->core_regs = sd->regs;
                 pr_info("*** CRITICAL FIX: CORE regs mapped to core device: %p ***\n", sd->regs);
+            } else if (ourISPdev && ourISPdev->core_regs) {
+                /* CRITICAL FIX: Use shared core_regs from main ISP device when sd->regs is NULL */
+                core_dev->core_regs = ourISPdev->core_regs;
+                pr_info("*** CRITICAL FIX: CORE regs mapped from shared ISP device: %p ***\n", ourISPdev->core_regs);
+            } else {
+                pr_err("*** CRITICAL ERROR: No core registers available for core device ***\n");
             }
 
             /* Link core device to ISP device */

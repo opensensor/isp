@@ -186,6 +186,12 @@ int tx_isp_link_core_device(struct tx_isp_dev *isp_dev, struct tx_isp_core_devic
     core_dev->isp_dev = isp_dev;
     core_dev->sd.isp = isp_dev;
 
+    /* CRITICAL FIX: Ensure core_regs is set up during linking */
+    if (!core_dev->core_regs && isp_dev->core_regs) {
+        core_dev->core_regs = isp_dev->core_regs;
+        pr_info("*** tx_isp_link_core_device: BACKUP FIX - Core regs mapped from ISP device: %p ***\n", isp_dev->core_regs);
+    }
+
     /* FIXED: Don't register core subdev again - it's already registered in tx_isp_subdev_init */
     /* Find existing registration slot for logging */
     int slot = -1;
