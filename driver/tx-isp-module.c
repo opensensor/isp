@@ -4635,7 +4635,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         return 0;
     }
-    if (cmd == 0x800856d4): { // TX_ISP_SET_BUF - Set buffer addresses and configure DMA
+    if (cmd == 0x800856d4) { // TX_ISP_SET_BUF - Set buffer addresses and configure DMA
         struct isp_buf_setup {
             uint32_t addr;   // Physical buffer address
             uint32_t size;   // Buffer size
@@ -4715,7 +4715,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
         return 0;
     }
-    if (cmd == 0x800856d6): { // TX_ISP_WDR_SET_BUF - WDR buffer setup
+    if (cmd == 0x800856d6) { // TX_ISP_WDR_SET_BUF - WDR buffer setup
         struct wdr_buf_setup {
             uint32_t addr;   // WDR buffer address
             uint32_t size;   // WDR buffer size
@@ -4760,7 +4760,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         return 0;
     }
-    if (cmd == 0x800856d7): { // TX_ISP_WDR_GET_BUF - Get WDR buffer size
+    if (cmd == 0x800856d7) { // TX_ISP_WDR_GET_BUF - Get WDR buffer size
         struct wdr_buf_result {
             uint32_t addr;   // WDR buffer address (usually 0)
             uint32_t size;   // Calculated WDR buffer size
