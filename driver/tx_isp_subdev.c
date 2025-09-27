@@ -10,6 +10,8 @@
 #include "../include/tx_isp_vic.h"
 #include "../include/tx_isp_sysfs.h"
 
+#include <linux/string.h>
+
 /* External reference to global ISP device */
 extern struct tx_isp_dev *ourISPdev;
 
@@ -26,11 +28,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on);
 irqreturn_t tx_isp_core_irq_handle(int irq, void *dev_id);
 irqreturn_t tx_isp_core_irq_thread_handle(int irq, void *dev_id);
 
-/* Export the missing tx_isp_* functions */
-EXPORT_SYMBOL(tx_isp_module_init);
-EXPORT_SYMBOL(tx_isp_module_deinit);
-EXPORT_SYMBOL(tx_isp_request_irq);
-EXPORT_SYMBOL(tx_isp_free_irq);
+/* Exports not needed; functions are local within this module build */
 
 /* Platform data structure moved to tx_isp.h for global access */
 
@@ -476,7 +474,7 @@ cleanup_irq:
     tx_isp_module_deinit(sd);
     return ret;
 }
-EXPORT_SYMBOL(tx_isp_subdev_init);
+/* export not needed */
 
 /* Subdevice deinitialization */
 void tx_isp_subdev_deinit(struct tx_isp_subdev *sd)
@@ -494,7 +492,7 @@ void tx_isp_subdev_deinit(struct tx_isp_subdev *sd)
         }
     }
 }
-EXPORT_SYMBOL(tx_isp_subdev_deinit);
+/* export not needed */
 
 /* Auto-linking function to connect subdevices to global ISP device */
 void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev *sd)
@@ -702,7 +700,7 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         pr_info("*** DEBUG: Unknown device name '%s' - no specific auto-link handling ***\n", dev_name);
     }
 }
-EXPORT_SYMBOL(tx_isp_subdev_auto_link);
+/* export not needed */
 
 /**
  * tx_isp_reg_set - EXACT Binary Ninja MCP implementation
@@ -735,7 +733,7 @@ int tx_isp_reg_set(struct tx_isp_subdev *sd, unsigned int reg, int start, int en
 
     return 0;
 }
-EXPORT_SYMBOL(tx_isp_reg_set);
+/* export not needed */
 
 /* ===== MISSING tx_isp_* FUNCTION IMPLEMENTATIONS ===== */
 
@@ -1006,10 +1004,9 @@ void __exit tx_isp_subdev_platform_exit(void)
     platform_driver_unregister(&tx_isp_vin_driver);
     platform_driver_unregister(&tx_isp_vic_driver);
     platform_driver_unregister(&tx_isp_csi_driver);
-    
+
     pr_info("All ISP subdev platform drivers unregistered\n");
 }
 
 /* Export symbols for main module to call these functions */
-EXPORT_SYMBOL(tx_isp_subdev_platform_init);
-EXPORT_SYMBOL(tx_isp_subdev_platform_exit);
+/* exports not needed */
