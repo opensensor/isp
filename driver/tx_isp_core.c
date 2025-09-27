@@ -47,7 +47,6 @@ MODULE_PARM_DESC(print_level, "isp print level");
 
 /* Forward declarations */
 /* REMOVED: Memory mapping functions - handled by subdevices */
-int tisp_channel_start(int channel, void *attr);
 void ispcore_frame_channel_streamoff(int32_t* arg1);
 void tx_isp_enable_irq(void *arg1);
 void tx_isp_disable_irq(void *arg1);
@@ -156,6 +155,57 @@ static spinlock_t event_lock = __SPIN_LOCK_UNLOCKED(event_lock);
 /* Event callback table - Binary Ninja reference */
 static void (*cb[16])(void *arg1, void *arg2, void *arg3, void *arg4,
                       void *arg5, void *arg6, void *arg7, void *arg8) = {NULL};
+
+
+
+/**
+ * tisp_channel_start - Start ISP data processing channel
+ * This function activates the data path after ISP core is enabled
+ */
+int tisp_channel_start(int channel_id, struct tx_isp_channel_attr *attr)
+{
+    struct tx_isp_dev *isp_dev = tx_isp_get_device();
+    u32 reg_val;
+    u32 channel_base;
+
+    if (!isp_dev || !attr || channel_id < 0 || channel_id >= ISP_MAX_CHAN) {
+        ISP_ERROR("tisp_channel_start: Invalid parameters\n");
+        return -EINVAL;
+    }
+
+    ISP_INFO("*** tisp_channel_start: Starting channel %d ***\n", channel_id);
+
+    /* Calculate channel register base */
+    channel_base = (channel_id + 0x98) << 8;
+
+    /* Configure channel dimensions and scaling */
+    if (attr->width < isp_dev->sensor_width || attr->height < isp_dev->sensor_height) {
+        /* Enable scaling */
+        isp_write32(channel_base + 0x1c0, 0x40080);
+        isp_write32(channel_base + 0x1c4, 0x40080);
+        isp_write32(channel_base + 0x1c8, 0x40080);
+        isp_write32(channel_base + 0x1cc, 0x40080);
+        ISP_INFO("Channel %d: Scaling enabled for %dx%d -> %dx%d\n",
+                 channel_id, isp_dev->sensor_width, isp_dev->sensor_height,
+                 attr->width, attr->height);
+    } else {
+        /* No scaling needed */
+        isp_write32(channel_base + 0x1c0, 0x200);
+        isp_write32(channel_base + 0x1c4, 0);
+        isp_write32(channel_base + 0x1c8, 0x200);
+        isp_write32(channel_base + 0x1cc, 0);
+        ISP_INFO("Channel %d: No scaling needed\n", channel_id);
+    }
+
+    /* Enable channel in master control register */
+    reg_val = isp_read32(0x9804);
+    reg_val |= (1 << channel_id) | 0xf0000;
+    isp_write32(0x9804, reg_val);
+
+    ISP_INFO("*** tisp_channel_start: Channel %d started successfully ***\n", channel_id);
+    return 0;
+}
+EXPORT_SYMBOL(tisp_channel_start);
 
 /* tisp_event_process - EXACT Binary Ninja implementation */
 static int tisp_event_process(void)
