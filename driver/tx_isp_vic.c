@@ -1504,23 +1504,20 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     void __iomem *csi_base = main_isp_base + 0x10000;
 
     /* STEP 1: Enable clocks - Critical for VIC operation */
-    cgu_isp_clk = clk_get(NULL, "cgu_isp");
-    if (!IS_ERR(cgu_isp_clk)) {
-        clk_set_rate(cgu_isp_clk, 100000000);
-        ret = clk_prepare_enable(cgu_isp_clk);
+    if (!IS_ERR(clk_get(NULL, "cgu_isp"))) {
+        clk_set_rate(clk_get(NULL, "cgu_isp"), 100000000);
+        ret = clk_prepare_enable(clk_get(NULL, "cgu_isp"));
         if (ret == 0) {
             pr_info("CGU_ISP clock enabled at 100MHz\n");
         }
     }
 
-    isp_clk = clk_get(NULL, "isp");
-    if (!IS_ERR(isp_clk)) {
-        clk_prepare_enable(isp_clk);
+    if (!IS_ERR(clk_get(NULL, "isp"))) {
+        clk_prepare_enable(clk_get(NULL, "isp"));
     }
 
-    csi_clk = clk_get(NULL, "csi");
-    if (!IS_ERR(csi_clk)) {
-        clk_prepare_enable(csi_clk);
+    if (!IS_ERR(clk_get(NULL, "csi"))) {
+        clk_prepare_enable(clk_get(NULL, "csi"));
     }
 
     /* STEP 2: CPM register setup */
