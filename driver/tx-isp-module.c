@@ -605,7 +605,6 @@ static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel
 irqreturn_t isp_irq_handle(int irq, void *dev_id);
 irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
 int tx_isp_send_event_to_remote(struct tx_isp_subdev *sd, int event_type, void *data);
-static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev);
 static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev);
 static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const char *sensor_name);
 static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int channel);
@@ -1695,32 +1694,6 @@ static int tx_isp_activate_vic_subdev(struct tx_isp_dev *isp_dev)
 
     mutex_unlock(&vic_dev->mlock);
     return ret;
-}
-
-// Detect and register loaded sensor modules into subdev infrastructure - Kernel 3.10 compatible
-static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev)
-{
-    struct tx_isp_subdev *sensor_subdev;
-    int sensor_found = 0;
-    int ret = 0;
-
-    if (!isp_dev) {
-        return -EINVAL;
-    }
-
-    pr_info("Preparing sensor subdev infrastructure...\n");
-
-    // In kernel 3.10, we prepare the subdev infrastructure for when sensors register
-    // Sensors will register themselves via the enhanced IOCTL 0x805056c1
-
-    // Create placeholder sensor subdev structure for common sensors
-    // This will be populated when actual sensor modules call the registration IOCTL
-
-    pr_info("Sensor subdev infrastructure prepared for dynamic registration\n");
-    pr_info("Sensors will register via IOCTL 0x805056c1 when loaded\n");
-
-    // Always return success - sensors will register dynamically
-    return 0;
 }
 
 // Activate sensor pipeline - connects sensor -> CSI -> VIC -> ISP chain - SDK compatible
@@ -5284,13 +5257,6 @@ static int tx_isp_init(void)
         tx_isp_vic_hw_init(&vic_dev->sd);
     } else {
         pr_info("*** WARNING: No VIC device available for tx_isp_vic_hw_init ***\n");
-    }
-
-
-    /* Initialize real sensor detection and hardware integration */
-    ret = tx_isp_detect_and_register_sensors(ourISPdev);
-    if (ret) {
-        pr_info("No sensors detected, continuing with basic initialization: %d\n", ret);
     }
 
     /* *** CRITICAL: Initialize hardware interrupt handling for BOTH IRQs *** */

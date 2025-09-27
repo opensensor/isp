@@ -3527,7 +3527,7 @@ static struct platform_driver tx_isp_vic_platform_driver = {
     .probe = tx_isp_vic_probe,
     .remove = tx_isp_vic_remove,
     .driver = {
-        .name = "tx-isp-vic",
+        .name = "isp-w02",
         .owner = THIS_MODULE,
     },
 };
