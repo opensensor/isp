@@ -436,28 +436,5 @@ struct platform_driver tx_isp_fs_platform_driver = {
 };
 EXPORT_SYMBOL(tx_isp_fs_platform_driver);
 
-/* FS platform init/exit functions */
-int __init tx_isp_fs_platform_init(void)
-{
-    int ret;
-
-    pr_info("*** TX ISP FS PLATFORM DRIVER REGISTRATION ***\n");
-
-    ret = platform_driver_register(&tx_isp_fs_platform_driver);
-    if (ret) {
-        pr_info("Failed to register FS platform driver: %d\n", ret);
-        return ret;
-    }
-
-    pr_info("FS platform driver registered successfully\n");
-    return 0;
-}
-
-void __exit tx_isp_fs_platform_exit(void)
-{
-    pr_info("*** TX ISP FS PLATFORM DRIVER UNREGISTRATION ***\n");
-    platform_driver_unregister(&tx_isp_fs_platform_driver);
-    pr_info("FS platform driver unregistered\n");
-}
 
 /* Export symbols not needed within single module build */
