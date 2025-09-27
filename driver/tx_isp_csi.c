@@ -358,7 +358,6 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                     struct tx_isp_sensor *sensor = tx_isp_get_sensor();
                     if (sensor && sensor->video.attr) {
                         sensor_attr = sensor->video.attr;
-                        pr_info("*** csi_core_ops_init: Got sensor attributes from sensor %s ***\n", sensor->name);
                     } else {
                         pr_err("csi_core_ops_init: CRITICAL ERROR - No sensor attributes available\n");
                         return -EINVAL;
