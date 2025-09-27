@@ -1902,13 +1902,13 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
             /* CRITICAL: Simple clock enablement approach (matches working version) */
             pr_info("*** ispcore_core_ops_init: Enabling ISP clocks with simple approach ***");
 
-            /* Enable CGU_ISP clock */
+            /* Enable CGU_ISP clock at 100MHz (matches working version) */
             struct clk *cgu_isp_clk = clk_get(NULL, "cgu_isp");
             if (!IS_ERR(cgu_isp_clk)) {
-                clk_set_rate(cgu_isp_clk, 120000000);
+                clk_set_rate(cgu_isp_clk, 100000000);
                 int ret_cgu = clk_prepare_enable(cgu_isp_clk);
                 if (ret_cgu == 0) {
-                    pr_info("*** CGU_ISP clock enabled at 120MHz ***");
+                    pr_info("*** CGU_ISP clock enabled at 100MHz ***");
                 } else {
                     pr_warn("Failed to enable CGU_ISP clock: %d", ret_cgu);
                 }
@@ -1933,6 +1933,17 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                     pr_info("*** CSI clock enabled ***");
                 } else {
                     pr_warn("Failed to enable CSI clock: %d", ret_csi);
+                }
+            }
+
+            /* Enable IPU clock */
+            struct clk *ipu_clk = clk_get(NULL, "ipu");
+            if (!IS_ERR(ipu_clk)) {
+                int ret_ipu = clk_prepare_enable(ipu_clk);
+                if (ret_ipu == 0) {
+                    pr_info("*** IPU clock enabled ***");
+                } else {
+                    pr_warn("Failed to enable IPU clock: %d", ret_ipu);
                 }
             }
 
