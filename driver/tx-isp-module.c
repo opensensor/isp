@@ -5100,6 +5100,25 @@ static int tx_isp_init(void)
         ourISPdev->subdevs[4] = &ourISPdev->sd;
         pr_info("*** REGISTERED CORE SUBDEV AT INDEX 4 ***\n");
     }
+    /* Ensure core_dev object exists and is linked during probe to avoid tuning race */
+    if (ourISPdev && !ourISPdev->core_dev) {
+        struct tx_isp_core_device *core_dev;
+        core_dev = kzalloc(sizeof(*core_dev), GFP_KERNEL);
+        if (!core_dev) {
+            pr_err("*** Failed to allocate core_dev during probe ***\n");
+        } else {
+            memset(core_dev, 0, sizeof(*core_dev));
+            core_dev->self_ptr = core_dev;
+            core_dev->magic = 0x434F5245; /* 'CORE' */
+            core_dev->isp_dev = ourISPdev;
+            core_dev->sd.isp = ourISPdev;
+            /* Expose via core sd (which is isp_dev->sd) so tx_isp_get_subdevdata finds it */
+            tx_isp_set_subdevdata(&ourISPdev->sd, core_dev);
+            ourISPdev->core_dev = core_dev;
+            pr_info("*** CORE DEV ALLOCATED AND LINKED DURING PROBE: %p ***\n", core_dev);
+        }
+    }
+
 
 
     /* *** CRITICAL: Register platform devices with proper IRQ setup *** */
