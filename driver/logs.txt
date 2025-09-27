@@ -1,0 +1,1519 @@
+oot@ing-wyze-cam3-a000 ~# prudynt &
+root@ing-wyze-cam3-a000 ~# [INFO:Config.cpp]: Loaded configuration from /etc/prudynt.cfg
+[INFO:main.cpp]: PRUDYNT-T Next-Gen Video Daemon: Aug 28 2025 05:46:40_f5514583
+[INFO:main.cpp]: Starting Prudynt Video Server.
+[INFO:IMPSystem.cpp]: LIBIMP Version IMP-1.1.6
+[INFO:IMPSystem.cpp]: SYSUTILS Version: SYSUTILS-1.1.6
+[INFO:IMPSystem.cpp]: CPU Information: T31-X
+[INFO:IMPSystem.cpp]: Sensor: gc2053
+root@ing-wyze-cam3-a000 ~# dmesg ---- FPGA board is ready ----
+  Board UID : 30AB6E51
+  Board HW ID : 72000460
+  Board rev.  : 5DE5A975
+  Board date  : 20190326
+-----------------------------
+[INFO:WS.cpp]: Server started on port 8089
+
+[  164.226502] sensor_write: reg=0x2e val=0x68 SUCCESS
+[  164.236771] gc2053: *** WRITING MIPI STREAM ON REGISTERS - INCLUDING 0x3e=0x91 ***
+[  164.236777] sensor_write_array: Starting register configuration
+[  164.236786] sensor_write: reg=0xfe val=0x00, client=842a2500, adapter=i2c0, addr=0x37
+[  164.237098] sensor_write: reg=0xfe val=0x00 SUCCESS
+[  164.237104] sensor_write_array: reg[1] 0xfe=0x00 OK
+[  164.237113] sensor_write: reg=0x3e val=0x91, client=842a2500, adapter=i2c0, addr=0x37
+[  164.237431] sensor_write: reg=0x3e val=0x91 SUCCESS
+[  164.237438] sensor_write_array: reg[2] 0x3e=0x91 OK
+[  164.237444] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[  164.237451] gc2053: *** MIPI STREAM ON REGISTER WRITE COMPLETE, ret=0 ***
+[  164.237458] gc2053: *** STREAMING REGISTERS WRITTEN SUCCESSFULLY ***
+[  164.237464] gc2053: CRITICAL: 0x3e=0x91 should now be written - sensor outputting MIPI data
+[  164.237518] gc2053: s_stream called with enable=1
+[  164.237526] gc2053: module data_interface=1, sensor data_interface=1 (1=DVP, 2=MIPI)
+[  164.237533] gc2053: *** STARTING SENSOR HARDWARE STREAMING ***
+[  164.237539] gc2053: About to write streaming registers for interface 1
+[  164.237545] gc2053: *** WRITING MIPI STREAM ON REGISTERS - INCLUDING 0x3e=0x91 ***
+[  164.237551] sensor_write_array: Starting register configuration
+[  164.237560] sensor_write: reg=0xfe val=0x00, client=842a2500, adapter=i2c0, addr=0x37
+[  164.237878] sensor_write: reg=0xfe val=0x00 SUCCESS
+[  164.237886] sensor_write_array: reg[1] 0xfe=0x00 OK
+[  164.237894] sensor_write: reg=0x3e val=0x91, client=842a2500, adapter=i2c0, addr=0x37
+[  164.238208] sensor_write: reg=0x3e val=0x91 SUCCESS
+[  164.238215] sensor_write_array: reg[2] 0x3e=0x91 OK
+[  164.238222] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[  164.238269] gc2053: *** MIPI STREAM ON REGISTER WRITE COMPLETE, ret=0 ***
+[  164.238276] gc2053: *** STREAMING REGISTERS WRITTEN SUCCESSFULLY ***
+[  164.238282] gc2053: CRITICAL: 0x3e=0x91 should now be written - sensor outputting MIPI data
+[  164.291583] gc2053: s_stream called with enable=0
+[  164.291596] gc2053: module data_interface=1, sensor data_interface=1 (1=DVP, 2=MIPI)
+[  164.291602] gc2053: *** STOPPING SENSOR HARDWARE STREAMING ***
+[  164.291608] gc2053: Writing MIPI stream OFF registers (0x3e=0x00)
+[  164.291614] sensor_write_array: Starting register configuration
+[  164.291624] sensor_write: reg=0xfe val=0x00, client=842a2500, adapter=i2c0, addr=0x37
+[  164.291946] sensor_write: reg=0xfe val=0x00 SUCCESS
+[  164.291953] sensor_write_array: reg[1] 0xfe=0x00 OK
+[  164.291962] sensor_write: reg=0x3e val=0x00, client=842a2500, adapter=i2c0, addr=0x37
+[  164.292306] sensor_write: reg=0x3e val=0x00 SUCCESS
+[  164.292314] sensor_write_array: reg[2] 0x3e=0x00 OK
+[  164.292320] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[  164.292326] gc2053: Sensor hardware streaming stopped
+[  164.372084] gc2053: s_stream called with enable=1
+[  164.372096] gc2053: module data_interface=1, sensor data_interface=1 (1=DVP, 2=MIPI)
+[  164.372102] gc2053: *** STARTING SENSOR HARDWARE STREAMING ***
+[  164.372109] gc2053: About to write streaming registers for interface 1
+[  164.372115] gc2053: *** WRITING MIPI STREAM ON REGISTERS - INCLUDING 0x3e=0x91 ***
+[  164.372121] sensor_write_array: Starting register configuration
+[  164.372131] sensor_write: reg=0xfe val=0x00, client=842a2500, adapter=i2c0, addr=0x37
+[  164.372450] sensor_write: reg=0xfe val=0x00 SUCCESS
+[  164.372458] sensor_write_array: reg[1] 0xfe=0x00 OK
+[  164.372466] sensor_write: reg=0x3e val=0x91, client=842a2500, adapter=i2c0, addr=0x37
+[  164.372778] sensor_write: reg=0x3e val=0x91 SUCCESS
+[  164.372785] sensor_write_array: reg[2] 0x3e=0x91 OK
+[  164.372792] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[  164.372798] gc2053: *** MIPI STREAM ON REGISTER WRITE COMPLETE, ret=0 ***
+[  164.372804] gc2053: *** STREAMING REGISTERS WRITTEN SUCCESSFULLY ***
+[  164.372810] gc2053: CRITICAL: 0x3e=0x91 should now be written - sensor outputting MIPI data
+[  164.480882] *** SENSOR_INIT: gc2053 enable=1 ***
+[  164.480896] SENSOR_INIT: Configuring gc2053 (chip_id=0x2053, 1920x1080)
+[  164.480903] *** CALLING SENSOR_WRITE_ARRAY WITH c072aed0 (should be 137 registers) ***
+[  164.480909] sensor_write_array: Starting register configuration
+[  164.480919] sensor_write: reg=0xfe val=0x80, client=842a2500, adapter=i2c0, addr=0x37
+[  164.481242] sensor_write: reg=0xfe val=0x80 SUCCESS
+[  164.481250] sensor_write_array: reg[1] 0xfe=0x80 OK
+[  164.481258] sensor_write: reg=0xfe val=0x80, client=842a2500, adapter=i2c0, addr=0x37
+[  164.481570] sensor_write: reg=0xfe val=0x80 SUCCESS
+[  164.481577] sensor_write_array: reg[2] 0xfe=0x80 OK
+[  164.481586] sensor_write: reg=0xfe val=0x80, client=842a2500, adapter=i2c0, addr=0x37
+[  164.481907] sensor_write: reg=0xfe val=0x80 SUCCESS
+[  164.481914] sensor_write_array: reg[3] 0xfe=0x80 OK
+[  164.481923] sensor_write: reg=0xfe val=0x00, client=842a2500, adapter=i2c0, addr=0x37
+[  164.482230] sensor_write: reg=0xfe val=0x00 SUCCESS
+[  164.482238] sensor_write_array: reg[4] 0xfe=0x00 OK
+[  164.482247] sensor_write: reg=0xf2 val=0x00, client=842a2500, adapter=i2c0, addr=0x37
+[  164.482560] sensor_write: reg=0xf2 val=0x00 SUCCESS
+[  164.482567] sensor_write_array: reg[5] 0xf2=0x00 OK
+[  164.482576] sensor_write: reg=0xf3 val=0x00, client=842a2500, adapter=i2c0, addr=0x37
+[  164.482939] sensor_write: reg=0xf3 val=0x00 SUCCESS
+[  164.482948] sensor_write_array: reg[6] 0xf3=0x00 OK
+[  164.482956] sensor_write: reg=0xf4 val=0x36, client=842a2500, adapter=i2c0, addr=0x37
+[  164.483272] sensor_write: reg=0xf4 val=0x36 SUCCESS
+[  164.483280] sensor_write_array: reg[7] 0xf4=0x36 OK
+[  164.483288] sensor_write: reg=0xf5 val=0xc0, client=842a2500, adapter=i2c0, addr=0x37
+[  164.483602] sensor_write: reg=0xf5 val=0xc0 SUCCESS
+[  164.483608] sensor_write_array: reg[8] 0xf5=0xc0 OK
+[  164.483617] sensor_write: reg=0xf6 val=0x44, client=842a2500, adapter=i2c0, addr=0x37
+[  164.483930] sensor_write: reg=0xf6 val=0x44 SUCCESS
+[  164.483937] sensor_write_array: reg[9] 0xf6=0x44 OK
+[  164.483946] sensor_write: reg=0xf7 val=0x01, client=842a2500, adapter=i2c0, addr=0x37
+[  164.484258] sensor_write: reg=0xf7 val=0x01 SUCCESS
+[  164.484266] sensor_write_array: reg[10] 0xf7=0x01 OK
+[  164.484274] sensor_write: reg=0xf8 val=0x68, client=842a2500, adapter=i2c0, addr=0x37
+[  164.484592] sensor_write: reg=0xf8 val=0x68 SUCCESS
+[  164.484601] sensor_write: reg=0xf9 val=0x40, client=842a2500, adapter=i2c0, addr=0x37
+[  164.484914] sensor_write: reg=0xf9 val=0x40 SUCCESS
+[  164.484922] sensor_write: reg=0xfc val=0x8e, client=842a2500, adapter=i2c0, addr=0x37
+[  164.485236] sensor_write: reg=0xfc val=0x8e SUCCESS
+[  164.485244] sensor_write: reg=0xfe val=0x00, client=842a2500, adapter=i2c0, addr=0x37
+[  164.485557] sensor_write: reg=0xfe val=0x00 SUCCESS
+[  164.485566] sensor_write: reg=0x87 val=0x18, client=842a2500, adapter=i2c0, addr=0x37
+[  164.485879] sensor_write: reg=0x87 val=0x18 SUCCESS
+[  164.485888] sensor_write: reg=0xee val=0x30, client=842a2500, adapter=i2c0, addr=0x37
+[  164.486200] sensor_write: reg=0xee val=0x30 SUCCESS
+[  164.486209] sensor_write: reg=0xd0 val=0xb7, client=842a2500, adapter=i2c0, addr=0x37
+[  164.486522] sensor_write: reg=0xd0 val=0xb7 SUCCESS
+[  164.486530] sensor_write: reg=0x03 val=0x04, client=842a2500, adapter=i2c0, addr=0x37
+[  164.486843] sensor_write: reg=0x03 val=0x04 SUCCESS
+[  164.486852] sensor_write: reg=0x04 val=0x60, client=842a2500, adapter=i2c0, addr=0x37
+[  164.487164] sensor_write: reg=0x04 val=0x60 SUCCESS
+[  164.487173] sensor_write: reg=0x05 val=0x04, client=842a2500, adapter=i2c0, addr=0x37
+[  164.487486] sensor_write: reg=0x05 val=0x04 SUCCESS
+[  164.487494] sensor_write: reg=0x06 val=0x4c, client=842a2500, adapter=i2c0, addr=0x37
+[  164.487807] sensor_write: reg=0x06 val=0x4c SUCCESS
+[  164.487815] sensor_write: reg=0x07 val=0x00, client=842a2500, adapter=i2c0, addr=0x37
+[  164.488128] sensor_write: reg=0x07 val=0x00 SUCCESS
+[  164.488136] sensor_write: reg=0x08 val=0x11, client=842a2500, adapter=i2c0, addr=0x37
+[  164.488450] sensor_write: reg=0x08 val=0x11 SUCCESS
+[  164.488458] sensor_write: reg=0x09 val=0x00, client=842a2500, adapter=i2c0, addr=0x37
+[  164.488770] sensor_write: reg=0x09 val=0x00 SUCCESS
+[  164.488779] sensor_write: reg=0x0a val=0x02, client=842a2500, adapter=i2c0, addr=0x37
+[  164.489092] sensor_write: reg=0x0a val=0x02 SUCCESS
+[  164.489100] sensor_write: reg=0x0b val=0x00, client=842a2500, adapter=i2c0, addr=0x37
+[  164.489413] sensor_write: reg=0x0b val=0x00 SUCCESS
+[  164.489421] sensor_write: reg=0x0c val=0x02, client=842a2500, adapter=i2c0, addr=0x37
+[  164.489734] sensor_write: reg=0x0c val=0x02 SUCCESS
+[  164.489742] sensor_write: reg=0x0d val=0x04, client=842a2500, adapter=i2c0, addr=0x37
+[  164.490055] sensor_write: reg=0x0d val=0x04 SUCCESS
+[  164.490064] sensor_write: reg=0x0e val=0x40, client=842a2500, adapter=i2c0, addr=0x37
+[  164.490376] sensor_write: reg=0x0e val=0x40 SUCCESS
+[  164.490385] sensor_write: reg=0x12 val=0xe2, client=842a2500, adapter=i2c0, addr=0x37
+[  164.490698] sensor_write: reg=0x12 val=0xe2 SUCCESS
+[  164.490707] sensor_write: reg=0x13 val=0x16, client=842a2500, adapter=i2c0, addr=0x37
+[  164.491020] sensor_write: reg=0x13 val=0x16 SUCCESS
+[  164.491028] sensor_write: reg=0x19 val=0x0a, client=842a2500, adapter=i2c0, addr=0x37
+[  164.491341] sensor_write: reg=0x19 val=0x0a SUCCESS
+[  164.491350] sensor_write: reg=0x21 val=0x1c, client=842a2500, adapter=i2c0, addr=0x37
+[  164.491663] sensor_write: reg=0x21 val=0x1c SUCCESS
+[  164.491671] sensor_write: reg=0x28 val=0x0a, client=842a2500, adapter=i2c0, addr=0x37
+[  164.491984] sensor_write: reg=0x28 val=0x0a SUCCESS
+[  164.491992] sensor_write: reg=0x29 val=0x24, client=842a2500, adapter=i2c0, addr=0x37
+[  164.492334] sensor_write: reg=0x29 val=0x24 SUCCESS
+[  164.492344] sensor_write: reg=0x2b val=0x04, client=842a2500, adapter=i2c0, addr=0x37
+[  164.492660] sensor_write: reg=0x2b val=0x04 SUCCESS
+[  164.492668] sensor_write: reg=0x32 val=0xf8, client=842a2500, adapter=i2c0, addr=0x37
+[  164.493006] sensor_write: reg=0x32 val=0xf8 SUCCESS
+[  164.493015] sensor_write: reg=0x37 val=0x03, client=842a2500, adapter=i2c0, addr=0x37
+[  164.493327] sensor_write: reg=0x37 val=0x03 SUCCESS
+[  164.493336] sensor_write: reg=0x39 val=0x15, client=842a2500, adapter=i2c0, addr=0x37
+[  164.493650] sensor_write: reg=0x39 val=0x15 SUCCESS
+[  164.493659] sensor_write: reg=0x43 val=0x07, client=842a2500, adapter=i2c0, addr=0x37
+[  164.493970] sensor_write: reg=0x43 val=0x07 SUCCESS
+[  164.493979] sensor_write: reg=0x44 val=0x40, client=842a2500, adapter=i2c0, addr=0x37
+[  164.494292] sensor_write: reg=0x44 val=0x40 SUCCESS
+[  164.494300] sensor_write: reg=0x46 val=0x0b, client=842a2500, adapter=i2c0, addr=0x37
+[  164.494614] sensor_write: reg=0x46 val=0x0b SUCCESS
+[  164.494622] sensor_write: reg=0x4b val=0x20, client=842a2500, adapter=i2c0, addr=0x37
+[  164.494935] sensor_write: reg=0x4b val=0x20 SUCCESS
+[  164.494944] sensor_write: reg=0x4e val=0x08, client=842a2500, adapter=i2c0, addr=0x37
+[  164.495257] sensor_write: reg=0x4e val=0x08 SUCCESS
+[  164.495265] sensor_write: reg=0x55 val=0x20, client=842a2500, adapter=i2c0, addr=0x37
+[  164.495578] sensor_write: reg=0x55 val=0x20 SUCCESS
+[  164.495586] sensor_write: reg=0x66 val=0x05, client=842a2500, adapter=i2c0, addr=0x37
+[  164.495900] sensor_write: reg=0x66 val=0x05 SUCCESS
+[  164.495908] sensor_write: reg=0x67 val=0x05, client=842a2500, adapter=i2c0, addr=0x37
+[  164.496221] sensor_write: reg=0x67 val=0x05 SUCCESS
+[  164.496229] sensor_write: reg=0x77 val=0x01, client=842a2500, adapter=i2c0, addr=0x37
+[  164.496542] sensor_write: reg=0x77 val=0x01 SUCCESS
+[  164.496550] sensor_write: reg=0x78 val=0x00, client=842a2500, adapter=i2c0, addr=0x37
+[  164.496864] sensor_write: reg=0x78 val=0x00 SUCCESS
+[  164.496872] sensor_write: reg=0x7c val=0x93, client=842a2500, adapter=i2c0, addr=0x37
+[  164.497185] sensor_write: reg=0x7c val=0x93 SUCCESS
+[  164.497192] sensor_write_array: reg[50] 0x7c=0x93 OK
+[  164.497200] sensor_write: reg=0x8c val=0x12, client=842a2500, adapter=i2c0, addr=0x37
+[  164.497514] sensor_write: reg=0x8c val=0x12 SUCCESS
+[  164.497522] sensor_write: reg=0x8d val=0x92, client=842a2500, adapter=i2c0, addr=0x37
+[  164.497835] sensor_write: reg=0x8d val=0x92 SUCCESS
+[  164.497844] sensor_write: reg=0x90 val=0x00, client=842a2500, adapter=i2c0, addr=0x37
+[  164.498156] sensor_write: reg=0x90 val=0x00 SUCCESS
+[  164.498165] sensor_write: reg=0x41 val=0x04, client=842a2500, adapter=i2c0, addr=0x37
+[  164.498506] sensor_write: reg=0x41 val=0x04 SUCCESS
+[  164.498517] sensor_write: reg=0x42 val=0x9d, client=842a2500, adapter=i2c0, addr=0x37
+[  164.498832] sensor_write: reg=0x42 val=0x9d SUCCESS
+[  164.498842] sensor_write: reg=0x9d val=0x10, client=842a2500, adapter=i2c0, addr=0x37
+[  164.499153] sensor_write: reg=0x9d val=0x10 SUCCESS
+[  164.499162] sensor_write: reg=0xce val=0x7c, client=842a2500, adapter=i2c0, addr=0x37
+[  164.499475] sensor_write: reg=0xce val=0x7c SUCCESS
+[  164.499484] sensor_write: reg=0xd2 val=0x41, client=842a2500, adapter=i2c0, addr=0x37
+[  164.499797] sensor_write: reg=0xd2 val=0x41 SUCCESS
+[  164.499806] sensor_write: reg=0xd3 val=0xdc, client=842a2500, adapter=i2c0, addr=0x37
+[  164.500118] sensor_write: reg=0xd3 val=0xdc SUCCESS
+[  164.500127] sensor_write: reg=0xe6 val=0x50, client=842a2500, adapter=i2c0, addr=0x37
+[  164.500440] sensor_write: reg=0xe6 val=0x50 SUCCESS
+[  164.500449] sensor_write: reg=0xb6 val=0xc0, client=842a2500, adapter=i2c0, addr=0x37
+[  164.500762] sensor_write: reg=0xb6 val=0xc0 SUCCESS
+[  164.500770] sensor_write: reg=0xb0 val=0x70, client=842a2500, adapter=i2c0, addr=0x37
+[  164.501084] sensor_write: reg=0xb0 val=0x70 SUCCESS
+[  164.501092] sensor_write: reg=0xb1 val=0x01, client=842a2500, adapter=i2c0, addr=0x37
+[  164.501405] sensor_write: reg=0xb1 val=0x01 SUCCESS
+[  164.501414] sensor_write: reg=0xb2 val=0x00, client=842a2500, adapter=i2c0, addr=0x37
+[  164.501726] sensor_write: reg=0xb2 val=0x00 SUCCESS
+[  164.501735] sensor_write: reg=0xb3 val=0x00, client=842a2500, adapter=i2c0, addr=0x37
+[  164.502082] sensor_write: reg=0xb3 val=0x00 SUCCESS
+[  164.502092] sensor_write: reg=0xb4 val=0x00, client=842a2500, adapter=i2c0, addr=0x37
+[  164.502406] sensor_write: reg=0xb4 val=0x00 SUCCESS
+[  164.502414] sensor_write: reg=0xb8 val=0x01, client=842a2500, adapter=i2c0, addr=0x37
+[  164.502726] sensor_write: reg=0xb8 val=0x01 SUCCESS
+[  164.502734] sensor_write: reg=0xb9 val=0x00, client=842a2500, adapter=i2c0, addr=0x37
+[  164.503073] sensor_write: reg=0xb9 val=0x00 SUCCESS
+[  164.503083] sensor_write: reg=0x26 val=0x30, client=842a2500, adapter=i2c0, addr=0x37
+[  164.503396] sensor_write: reg=0x26 val=0x30 SUCCESS
+[  164.503404] sensor_write: reg=0xfe val=0x01, client=842a2500, adapter=i2c0, addr=0x37
+[  164.503721] sensor_write: reg=0xfe val=0x01 SUCCESS
+[  164.503730] sensor_write: reg=0x40 val=0x23, client=842a2500, adapter=i2c0, addr=0x37
+[  164.504042] sensor_write: reg=0x40 val=0x23 SUCCESS
+[  164.504050] sensor_write: reg=0x55 val=0x07, client=842a2500, adapter=i2c0, addr=0x37
+[  164.504363] sensor_write: reg=0x55 val=0x07 SUCCESS
+[  164.504372] sensor_write: reg=0x60 val=0x40, client=842a2500, adapter=i2c0, addr=0x37
+[  164.504685] sensor_write: reg=0x60 val=0x40 SUCCESS
+[  164.504693] sensor_write: reg=0xfe val=0x04, client=842a2500, adapter=i2c0, addr=0x37
+[  164.505006] sensor_write: reg=0xfe val=0x04 SUCCESS
+[  164.505015] sensor_write: reg=0x14 val=0x78, client=842a2500, adapter=i2c0, addr=0x37
+[  164.505328] sensor_write: reg=0x14 val=0x78 SUCCESS
+[  164.505336] sensor_write: reg=0x15 val=0x78, client=842a2500, adapter=i2c0, addr=0x37
+[  164.505650] sensor_write: reg=0x15 val=0x78 SUCCESS
+[  164.505658] sensor_write: reg=0x16 val=0x78, client=842a2500, adapter=i2c0, addr=0x37
+[  164.505971] sensor_write: reg=0x16 val=0x78 SUCCESS
+[  164.505980] sensor_write: reg=0x17 val=0x78, client=842a2500, adapter=i2c0, addr=0x37
+[  164.506292] sensor_write: reg=0x17 val=0x78 SUCCESS
+[  164.506301] sensor_write: reg=0xfe val=0x01, client=842a2500, adapter=i2c0, addr=0x37
+[  164.506614] sensor_write: reg=0xfe val=0x01 SUCCESS
+[  164.506622] sensor_write: reg=0x92 val=0x00, client=842a2500, adapter=i2c0, addr=0x37
+[  164.506936] sensor_write: reg=0x92 val=0x00 SUCCESS
+[  164.506944] sensor_write: reg=0x94 val=0x03, client=842a2500, adapter=i2c0, addr=0x37
+[  164.507257] sensor_write: reg=0x94 val=0x03 SUCCESS
+[  164.507266] sensor_write: reg=0x95 val=0x04, client=842a2500, adapter=i2c0, addr=0x37
+[  164.507578] sensor_write: reg=0x95 val=0x04 SUCCESS
+[  164.507587] sensor_write: reg=0x96 val=0x38, client=842a2500, adapter=i2c0, addr=0x37
+[  164.507900] sensor_write: reg=0x96 val=0x38 SUCCESS
+[  164.507908] sensor_write: reg=0x97 val=0x07, client=842a2500, adapter=i2c0, addr=0x37
+[  164.508221] sensor_write: reg=0x97 val=0x07 SUCCESS
+[  164.508230] sensor_write: reg=0x98 val=0x80, client=842a2500, adapter=i2c0, addr=0x37
+[  164.508543] sensor_write: reg=0x98 val=0x80 SUCCESS
+[  164.508551] sensor_write: reg=0xfe val=0x01, client=842a2500, adapter=i2c0, addr=0x37
+[  164.508864] sensor_write: reg=0xfe val=0x01 SUCCESS
+[  164.508872] sensor_write: reg=0x01 val=0x05, client=842a2500, adapter=i2c0, addr=0x37
+[  164.509186] sensor_write: reg=0x01 val=0x05 SUCCESS
+[  164.509194] sensor_write: reg=0x02 val=0x89, client=842a2500, adapter=i2c0, addr=0x37
+[  164.509507] sensor_write: reg=0x02 val=0x89 SUCCESS
+[  164.509515] sensor_write: reg=0x04 val=0x01, client=842a2500, adapter=i2c0, addr=0x37
+[  164.509828] sensor_write: reg=0x04 val=0x01 SUCCESS
+[  164.509836] sensor_write: reg=0x07 val=0xa6, client=842a2500, adapter=i2c0, addr=0x37
+[  164.510150] sensor_write: reg=0x07 val=0xa6 SUCCESS
+[  164.510158] sensor_write: reg=0x08 val=0xa9, client=842a2500, adapter=i2c0, addr=0x37
+[  164.510471] sensor_write: reg=0x08 val=0xa9 SUCCESS
+[  164.510479] sensor_write: reg=0x09 val=0xa8, client=842a2500, adapter=i2c0, addr=0x37
+[  164.510792] sensor_write: reg=0x09 val=0xa8 SUCCESS
+[  164.510800] sensor_write: reg=0x0a val=0xa7, client=842a2500, adapter=i2c0, addr=0x37
+[  164.511114] sensor_write: reg=0x0a val=0xa7 SUCCESS
+[  164.511122] sensor_write: reg=0x0b val=0xff, client=842a2500, adapter=i2c0, addr=0x37
+[  164.511435] sensor_write: reg=0x0b val=0xff SUCCESS
+[  164.511443] sensor_write: reg=0x0c val=0xff, client=842a2500, adapter=i2c0, addr=0x37
+[  164.511756] sensor_write: reg=0x0c val=0xff SUCCESS
+[  164.511764] sensor_write: reg=0x0f val=0x00, client=842a2500, adapter=i2c0, addr=0x37
+[  164.512094] sensor_write: reg=0x0f val=0x00 SUCCESS
+[  164.512104] sensor_write: reg=0x50 val=0x1c, client=842a2500, adapter=i2c0, addr=0x37
+[  164.512419] sensor_write: reg=0x50 val=0x1c SUCCESS
+[  164.512428] sensor_write: reg=0x89 val=0x03, client=842a2500, adapter=i2c0, addr=0x37
+[  164.512742] sensor_write: reg=0x89 val=0x03 SUCCESS
+[  164.512750] sensor_write: reg=0xfe val=0x04, client=842a2500, adapter=i2c0, addr=0x37
+[  164.513063] sensor_write: reg=0xfe val=0x04 SUCCESS
+[  164.513072] sensor_write: reg=0x28 val=0x86, client=842a2500, adapter=i2c0, addr=0x37
+[  164.513408] sensor_write: reg=0x28 val=0x86 SUCCESS
+[  164.513416] sensor_write_array: reg[100] 0x28=0x86 OK
+[  164.513425] sensor_write: reg=0x29 val=0x86, client=842a2500, adapter=i2c0, addr=0x37
+[  164.513740] sensor_write: reg=0x29 val=0x86 SUCCESS
+[  164.513749] sensor_write: reg=0x2a val=0x86, client=842a2500, adapter=i2c0, addr=0x37
+[  164.514063] sensor_write: reg=0x2a val=0x86 SUCCESS
+[  164.514072] sensor_write: reg=0x2b val=0x68, client=842a2500, adapter=i2c0, addr=0x37
+[  164.514384] sensor_write: reg=0x2b val=0x68 SUCCESS
+[  164.514393] sensor_write: reg=0x2c val=0x68, client=842a2500, adapter=i2c0, addr=0x37
+[  164.514706] sensor_write: reg=0x2c val=0x68 SUCCESS
+[  164.514715] sensor_write: reg=0x2d val=0x68, client=842a2500, adapter=i2c0, addr=0x37
+[  164.515028] sensor_write: reg=0x2d val=0x68 SUCCESS
+[  164.515036] sensor_write: reg=0x2e val=0x68, client=842a2500, adapter=i2c0, addr=0x37
+[  164.515349] sensor_write: reg=0x2e val=0x68 SUCCESS
+[  164.515358] sensor_write: reg=0x2f val=0x68, client=842a2500, adapter=i2c0, addr=0x37
+[  164.515671] sensor_write: reg=0x2f val=0x68 SUCCESS
+[  164.515680] sensor_write: reg=0x30 val=0x4f, client=842a2500, adapter=i2c0, addr=0x37
+[  164.515992] sensor_write: reg=0x30 val=0x4f SUCCESS
+[  164.516001] sensor_write: reg=0x31 val=0x68, client=842a2500, adapter=i2c0, addr=0x37
+[  164.516314] sensor_write: reg=0x31 val=0x68 SUCCESS
+[  164.516322] sensor_write: reg=0x32 val=0x67, client=842a2500, adapter=i2c0, addr=0x37
+[  164.516636] sensor_write: reg=0x32 val=0x67 SUCCESS
+[  164.516644] sensor_write: reg=0x33 val=0x66, client=842a2500, adapter=i2c0, addr=0x37
+[  164.516957] sensor_write: reg=0x33 val=0x66 SUCCESS
+[  164.516966] sensor_write: reg=0x34 val=0x66, client=842a2500, adapter=i2c0, addr=0x37
+[  164.517278] sensor_write: reg=0x34 val=0x66 SUCCESS
+[  164.517287] sensor_write: reg=0x35 val=0x66, client=842a2500, adapter=i2c0, addr=0x37
+[  164.517600] sensor_write: reg=0x35 val=0x66 SUCCESS
+[  164.517609] sensor_write: reg=0x36 val=0x66, client=842a2500, adapter=i2c0, addr=0x37
+[  164.517922] sensor_write: reg=0x36 val=0x66 SUCCESS
+[  164.517930] sensor_write: reg=0x37 val=0x66, client=842a2500, adapter=i2c0, addr=0x37
+[  164.518243] sensor_write: reg=0x37 val=0x66 SUCCESS
+[  164.518252] sensor_write: reg=0x38 val=0x62, client=842a2500, adapter=i2c0, addr=0x37
+[  164.518583] sensor_write: reg=0x38 val=0x62 SUCCESS
+[  164.518594] sensor_write: reg=0x39 val=0x62, client=842a2500, adapter=i2c0, addr=0x37
+[  164.518906] sensor_write: reg=0x39 val=0x62 SUCCESS
+[  164.518914] sensor_write: reg=0x3a val=0x62, client=842a2500, adapter=i2c0, addr=0x37
+[  164.519228] sensor_write: reg=0x3a val=0x62 SUCCESS
+[  164.519237] sensor_write: reg=0x3b val=0x62, client=842a2500, adapter=i2c0, addr=0x37
+[  164.519550] sensor_write: reg=0x3b val=0x62 SUCCESS
+[  164.519559] sensor_write: reg=0x3c val=0x62, client=842a2500, adapter=i2c0, addr=0x37
+[  164.519872] sensor_write: reg=0x3c val=0x62 SUCCESS
+[  164.519881] sensor_write: reg=0x3d val=0x62, client=842a2500, adapter=i2c0, addr=0x37
+[  164.520194] sensor_write: reg=0x3d val=0x62 SUCCESS
+[  164.520203] sensor_write: reg=0x3e val=0x62, client=842a2500, adapter=i2c0, addr=0x37
+[  164.520516] sensor_write: reg=0x3e val=0x62 SUCCESS
+[  164.520524] sensor_write: reg=0x3f val=0x62, client=842a2500, adapter=i2c0, addr=0x37
+[  164.520838] sensor_write: reg=0x3f val=0x62 SUCCESS
+[  164.520846] sensor_write: reg=0xfe val=0x01, client=842a2500, adapter=i2c0, addr=0x37
+[  164.521160] sensor_write: reg=0xfe val=0x01 SUCCESS
+[  164.521168] sensor_write: reg=0x9a val=0x06, client=842a2500, adapter=i2c0, addr=0x37
+[  164.521481] sensor_write: reg=0x9a val=0x06 SUCCESS
+[  164.521490] sensor_write: reg=0xfe val=0x00, client=842a2500, adapter=i2c0, addr=0x37
+[  164.521802] sensor_write: reg=0xfe val=0x00 SUCCESS
+[  164.521811] sensor_write: reg=0x7b val=0x2a, client=842a2500, adapter=i2c0, addr=0x37
+[  164.522137] sensor_write: reg=0x7b val=0x2a SUCCESS
+[  164.522147] sensor_write: reg=0x23 val=0x2d, client=842a2500, adapter=i2c0, addr=0x37
+[  164.522459] sensor_write: reg=0x23 val=0x2d SUCCESS
+[  164.522468] sensor_write: reg=0xfe val=0x03, client=842a2500, adapter=i2c0, addr=0x37
+[  164.522782] sensor_write: reg=0xfe val=0x03 SUCCESS
+[  164.522791] sensor_write: reg=0x01 val=0x27, client=842a2500, adapter=i2c0, addr=0x37
+[  164.523107] sensor_write: reg=0x01 val=0x27 SUCCESS
+[  164.523116] sensor_write: reg=0x02 val=0x56, client=842a2500, adapter=i2c0, addr=0x37
+[  164.523453] sensor_write: reg=0x02 val=0x56 SUCCESS
+[  164.523463] sensor_write: reg=0x03 val=0x8e, client=842a2500, adapter=i2c0, addr=0x37
+[  164.523777] sensor_write: reg=0x03 val=0x8e SUCCESS
+[  164.523787] sensor_write: reg=0x12 val=0x80, client=842a2500, adapter=i2c0, addr=0x37
+[  164.524098] sensor_write: reg=0x12 val=0x80 SUCCESS
+[  164.524107] sensor_write: reg=0x13 val=0x07, client=842a2500, adapter=i2c0, addr=0x37
+[  164.524420] sensor_write: reg=0x13 val=0x07 SUCCESS
+[  164.524429] sensor_write: reg=0x15 val=0x12, client=842a2500, adapter=i2c0, addr=0x37
+[  164.524742] sensor_write: reg=0x15 val=0x12 SUCCESS
+[  164.524751] sensor_write: reg=0xfe val=0x00, client=842a2500, adapter=i2c0, addr=0x37
+[  164.525131] sensor_write: reg=0xfe val=0x00 SUCCESS
+[  164.525147] sensor_write: reg=0x3e val=0x91, client=842a2500, adapter=i2c0, addr=0x37
+[  164.525461] sensor_write: reg=0x3e val=0x91 SUCCESS
+[  164.525468] sensor_write_array: Complete - wrote 137 registers, 0 errors
+[  164.525475] *** SENSOR_WRITE_ARRAY RETURNED: 0 ***
+[  164.525480] *** CALLING TX_ISP_EVENT_SYNC_SENSOR_ATTR ***
+[  164.525491] *** TX_ISP_EVENT_SYNC_SENSOR_ATTR RETURNED: 0 ***
+[  164.525497] *** SENSOR_INIT COMPLETE FOR gc2053 ***
+[  164.563945] sensor_g_chip_ident: GPIO reset already done in probe, proceeding with detection
+[  164.563955] === SENSOR DETECT START ===
+[  164.563963] sensor_detect: sd=81127000, client=842a2500
+[  164.563971] sensor_detect: client->addr=0x37, adapter=84074c10 (i2c0)
+[  164.563979] sensor_read: reg=0xf0, client=842a2500, adapter=i2c0, addr=0x37
+[  164.564383] sensor_read: reg=0xf0 value=0x20 SUCCESS
+[  164.564393] -----sensor_detect: 1396 ret = 0, v = 0x20 (expected 0x20)
+[  164.564402] sensor_read: reg=0xf1, client=842a2500, adapter=i2c0, addr=0x37
+[  164.564894] sensor_read: reg=0xf1 value=0x53 SUCCESS
+[  164.564903] -----sensor_detect: 1410 ret = 0, v = 0x53 (expected 0x53)
+[  164.564909] sensor_detect: SUCCESS - chip ID = 0x0053
+[  164.564916] gc2053 chip found @ 0x37 (i2c0)
+[  164.564921] sensor driver version H20230726a
+[  164.564931] gc2053: s_stream called with enable=1
+[  164.564939] gc2053: module data_interface=1, sensor data_interface=1 (1=DVP, 2=MIPI)
+[  164.564945] gc2053: *** STARTING SENSOR HARDWARE STREAMING ***
+[  164.564951] gc2053: About to write streaming registers for interface 1
+[  164.564957] gc2053: *** WRITING MIPI STREAM ON REGISTERS - INCLUDING 0x3e=0x91 ***
+[  164.564963] sensor_write_array: Starting register configuration
+[  164.564972] sensor_write: reg=0xfe val=0x00, client=842a2500, adapter=i2c0, addr=0x37
+[  164.565287] sensor_write: reg=0xfe val=0x00 SUCCESS
+[  164.565295] sensor_write_array: reg[1] 0xfe=0x00 OK
+[  164.565303] sensor_write: reg=0x3e val=0x91, client=842a2500, adapter=i2c0, addr=0x37
+[  164.565617] sensor_write: reg=0x3e val=0x91 SUCCESS
+[  164.565624] sensor_write_array: reg[2] 0x3e=0x91 OK
+[  164.565630] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[  164.565637] gc2053: *** MIPI STREAM ON REGISTER WRITE COMPLETE, ret=0 ***
+[  164.565643] gc2053: *** STREAMING REGISTERS WRITTEN SUCCESSFULLY ***
+[  164.565649] gc2053: CRITICAL: 0x3e=0x91 should now be written - sensor outputting MIPI data
+[  164.565666] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  164.565672] ISP interrupt: LSC LUT processing
+[  164.565678] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  164.565691] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.565703] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.565709] Err2 [VIC_INT] : control limit err!!!
+[  164.565748] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.565754] Err2 [VIC_INT] : control limit err!!!
+[  164.565831] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.565840] Err2 [VIC_INT] : control limit err!!!
+[  164.565916] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000600 (legacy=0x00000600 new=0x00000000) ***
+[  164.565927] ispcore: irq-status 0x00000600, err is 0x40,0x0,084c is 0x0
+[  164.565933] ISP CORE: Error interrupt type 1 - PIPELINE CONFIGURATION ERROR
+[  164.565941] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.565953] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.565959] Err2 [VIC_INT] : control limit err!!!
+[  164.565992] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.565999] Err2 [VIC_INT] : control limit err!!!
+[  164.566080] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.566089] Err2 [VIC_INT] : control limit err!!!
+[  164.566159] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.566168] Err2 [VIC_INT] : control limit err!!!
+[  164.566243] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.566251] Err2 [VIC_INT] : control limit err!!!
+[  164.566323] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200001, v1_10=0x0) ***
+[  164.566348] Err2 [VIC_INT] : control limit err!!!
+[  164.566363] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  164.566369] ISP interrupt: LSC LUT processing
+[  164.566376] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  164.566393] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.566404] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.566409] Err2 [VIC_INT] : control limit err!!!
+[  164.566488] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.566496] Err2 [VIC_INT] : control limit err!!!
+[  164.566571] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000600 (legacy=0x00000600 new=0x00000000) ***
+[  164.566581] ispcore: irq-status 0x00000600, err is 0x40,0x0,084c is 0x0
+[  164.566587] ISP CORE: Error interrupt type 1 - PIPELINE CONFIGURATION ERROR
+[  164.566595] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.566607] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.566613] Err2 [VIC_INT] : control limit err!!!
+[  164.566649] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.566655] Err2 [VIC_INT] : control limit err!!!
+[  164.566733] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.566741] Err2 [VIC_INT] : control limit err!!!
+[  164.566814] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.566822] Err2 [VIC_INT] : control limit err!!!
+[  164.566903] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.566911] Err2 [VIC_INT] : control limit err!!!
+[  164.566982] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  164.566991] ISP interrupt: LSC LUT processing
+[  164.566997] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  164.567013] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.567024] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200001, v1_10=0x0) ***
+[  164.567049] Err2 [VIC_INT] : control limit err!!!
+[  164.567061] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.567067] Err2 [VIC_INT] : control limit err!!!
+[  164.567143] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.567151] Err2 [VIC_INT] : control limit err!!!
+[  164.567224] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.567232] Err2 [VIC_INT] : control limit err!!!
+[  164.567306] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.567314] Err2 [VIC_INT] : control limit err!!!
+[  164.567391] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.567399] Err2 [VIC_INT] : control limit err!!!
+[  164.567471] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.567479] Err2 [VIC_INT] : control limit err!!!
+[  164.567553] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.567561] Err2 [VIC_INT] : control limit err!!!
+[  164.567627] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000600 (legacy=0x00000600 new=0x00000000) ***
+[  164.567638] ispcore: irq-status 0x00000600, err is 0x40,0x0,084c is 0x0
+[  164.567644] ISP CORE: Error interrupt type 1 - PIPELINE CONFIGURATION ERROR
+[  164.567654] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  164.567660] ISP interrupt: LSC LUT processing
+[  164.567666] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  164.567699] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200001, v1_10=0x0) ***
+[  164.567717] Err2 [VIC_INT] : control limit err!!!
+[  164.567729] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.567735] Err2 [VIC_INT] : control limit err!!!
+[  164.567800] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.567807] Err2 [VIC_INT] : control limit err!!!
+[  164.567881] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.567889] Err2 [VIC_INT] : control limit err!!!
+[  164.567963] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.567970] Err2 [VIC_INT] : control limit err!!!
+[  164.568046] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.568055] Err2 [VIC_INT] : control limit err!!!
+[  164.568127] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.568135] Err2 [VIC_INT] : control limit err!!!
+[  164.568209] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.568218] Err2 [VIC_INT] : control limit err!!!
+[  164.568283] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000600 (legacy=0x00000600 new=0x00000000) ***
+[  164.568294] ispcore: irq-status 0x00000600, err is 0x40,0x0,084c is 0x0
+[  164.568300] ISP CORE: Error interrupt type 1 - PIPELINE CONFIGURATION ERROR
+[  164.568310] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  164.568316] ISP interrupt: LSC LUT processing
+[  164.568322] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  164.568341] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200001, v1_10=0x0) ***
+[  164.568358] Err2 [VIC_INT] : control limit err!!!
+[  164.568369] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.568375] Err2 [VIC_INT] : control limit err!!!
+[  164.568456] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.568464] Err2 [VIC_INT] : control limit err!!!
+[  164.568536] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.568543] Err2 [VIC_INT] : control limit err!!!
+[  164.568619] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.568627] Err2 [VIC_INT] : control limit err!!!
+[  164.568701] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.568709] Err2 [VIC_INT] : control limit err!!!
+[  164.568783] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.568791] Err2 [VIC_INT] : control limit err!!!
+[  164.568866] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.568874] Err2 [VIC_INT] : control limit err!!!
+[  164.568938] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000600 (legacy=0x00000600 new=0x00000000) ***
+[  164.568949] ispcore: irq-status 0x00000600, err is 0x40,0x0,084c is 0x0
+[  164.568955] ISP CORE: Error interrupt type 1 - PIPELINE CONFIGURATION ERROR
+[  164.568965] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  164.568971] ISP interrupt: LSC LUT processing
+[  164.568977] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  164.568995] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200001, v1_10=0x0) ***
+[  164.569014] Err2 [VIC_INT] : control limit err!!!
+[  164.569025] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.569031] Err2 [VIC_INT] : control limit err!!!
+[  164.569113] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.569121] Err2 [VIC_INT] : control limit err!!!
+[  164.569191] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.569199] Err2 [VIC_INT] : control limit err!!!
+[  164.569275] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.569282] Err2 [VIC_INT] : control limit err!!!
+[  164.569359] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.569367] Err2 [VIC_INT] : control limit err!!!
+[  164.569438] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.569447] Err2 [VIC_INT] : control limit err!!!
+[  164.569521] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.569528] Err2 [VIC_INT] : control limit err!!!
+[  164.569593] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000600 (legacy=0x00000600 new=0x00000000) ***
+[  164.569604] ispcore: irq-status 0x00000600, err is 0x40,0x0,084c is 0x0
+[  164.569610] ISP CORE: Error interrupt type 1 - PIPELINE CONFIGURATION ERROR
+[  164.569620] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  164.569626] ISP interrupt: LSC LUT processing
+[  164.569631] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  164.569649] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200001, v1_10=0x0) ***
+[  164.569671] Err2 [VIC_INT] : control limit err!!!
+[  164.569683] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.569689] Err2 [VIC_INT] : control limit err!!!
+[  164.569767] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.569775] Err2 [VIC_INT] : control limit err!!!
+[  164.569850] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.569858] Err2 [VIC_INT] : control limit err!!!
+[  164.569931] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.569940] Err2 [VIC_INT] : control limit err!!!
+[  164.570013] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.570021] Err2 [VIC_INT] : control limit err!!!
+[  164.570094] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.570101] Err2 [VIC_INT] : control limit err!!!
+[  164.570175] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.570183] Err2 [VIC_INT] : control limit err!!!
+[  164.570250] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000600 (legacy=0x00000600 new=0x00000000) ***
+[  164.570261] ispcore: irq-status 0x00000600, err is 0x40,0x0,084c is 0x0
+[  164.570267] ISP CORE: Error interrupt type 1 - PIPELINE CONFIGURATION ERROR
+[  164.570277] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  164.570283] ISP interrupt: LSC LUT processing
+[  164.570289] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  164.570313] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200001, v1_10=0x0) ***
+[  164.570334] Err2 [VIC_INT] : control limit err!!!
+[  164.570345] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.570351] Err2 [VIC_INT] : control limit err!!!
+[  164.570425] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.570434] Err2 [VIC_INT] : control limit err!!!
+[  164.570505] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.570513] Err2 [VIC_INT] : control limit err!!!
+[  164.570587] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.570594] Err2 [VIC_INT] : control limit err!!!
+[  164.570667] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.570675] Err2 [VIC_INT] : control limit err!!!
+[  164.570752] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.570761] Err2 [VIC_INT] : control limit err!!!
+[  164.570832] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.570839] Err2 [VIC_INT] : control limit err!!!
+[  164.570905] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000600 (legacy=0x00000600 new=0x00000000) ***
+[  164.570916] ispcore: irq-status 0x00000600, err is 0x40,0x0,084c is 0x0
+[  164.570922] ISP CORE: Error interrupt type 1 - PIPELINE CONFIGURATION ERROR
+[  164.570933] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  164.570938] ISP interrupt: LSC LUT processing
+[  164.570944] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  164.570963] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200001, v1_10=0x0) ***
+[  164.570986] Err2 [VIC_INT] : control limit err!!!
+[  164.570996] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.571002] Err2 [VIC_INT] : control limit err!!!
+[  164.571079] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.571088] Err2 [VIC_INT] : control limit err!!!
+[  164.571160] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.571168] Err2 [VIC_INT] : control limit err!!!
+[  164.571245] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.571255] Err2 [VIC_INT] : control limit err!!!
+[  164.571323] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.571331] Err2 [VIC_INT] : control limit err!!!
+[  164.571407] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.571415] Err2 [VIC_INT] : control limit err!!!
+[  164.571487] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.571494] Err2 [VIC_INT] : control limit err!!!
+[  164.571564] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000600 (legacy=0x00000600 new=0x00000000) ***
+[  164.571575] ispcore: irq-status 0x00000600, err is 0x40,0x0,084c is 0x0
+[  164.571581] ISP CORE: Error interrupt type 1 - PIPELINE CONFIGURATION ERROR
+[  164.571591] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  164.571597] ISP interrupt: LSC LUT processing
+[  164.571603] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  164.571631] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200001, v1_10=0x0) ***
+[  164.571656] Err2 [VIC_INT] : control limit err!!!
+[  164.571667] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.571673] Err2 [VIC_INT] : control limit err!!!
+[  164.571734] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.571742] Err2 [VIC_INT] : control limit err!!!
+[  164.571817] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.571825] Err2 [VIC_INT] : control limit err!!!
+[  164.571898] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.571906] Err2 [VIC_INT] : control limit err!!!
+[  164.571979] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.571987] Err2 [VIC_INT] : control limit err!!!
+[  164.572086] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.572096] Err2 [VIC_INT] : control limit err!!!
+[  164.572143] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.572151] Err2 [VIC_INT] : control limit err!!!
+[  164.572217] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000600 (legacy=0x00000600 new=0x00000000) ***
+[  164.572228] ispcore: irq-status 0x00000600, err is 0x40,0x0,084c is 0x0
+[  164.572234] ISP CORE: Error interrupt type 1 - PIPELINE CONFIGURATION ERROR
+[  164.572245] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  164.572250] ISP interrupt: LSC LUT processing
+[  164.572256] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  164.572273] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200001, v1_10=0x0) ***
+[  164.572299] Err2 [VIC_INT] : control limit err!!!
+[  164.572309] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.572315] Err2 [VIC_INT] : control limit err!!!
+[  164.572390] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.572398] Err2 [VIC_INT] : control limit err!!!
+[  164.572471] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.572479] Err2 [VIC_INT] : control limit err!!!
+[  164.572554] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.572562] Err2 [VIC_INT] : control limit err!!!
+[  164.572637] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.572646] Err2 [VIC_INT] : control limit err!!!
+[  164.572718] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.572727] Err2 [VIC_INT] : control limit err!!!
+[  164.572800] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.572809] Err2 [VIC_INT] : control limit err!!!
+[  164.572873] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000600 (legacy=0x00000600 new=0x00000000) ***
+[  164.572883] ispcore: irq-status 0x00000600, err is 0x40,0x0,084c is 0x0
+[  164.572889] ISP CORE: Error interrupt type 1 - PIPELINE CONFIGURATION ERROR
+[  164.572899] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  164.572905] ISP interrupt: LSC LUT processing
+[  164.572911] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  164.572932] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200001, v1_10=0x0) ***
+[  164.572960] Err2 [VIC_INT] : control limit err!!!
+[  164.572970] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.572976] Err2 [VIC_INT] : control limit err!!!
+[  164.573047] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.573056] Err2 [VIC_INT] : control limit err!!!
+[  164.573129] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.573138] Err2 [VIC_INT] : control limit err!!!
+[  164.573210] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.573219] Err2 [VIC_INT] : control limit err!!!
+[  164.573291] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x200000, v1_10=0x0) ***
+[  164.573300] Err2 [VIC_INT] : control limit err!!!
+[  164.575241] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  164.575255] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  164.575265] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.575443] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  164.575449] ISP interrupt: LSC LUT processing
+[  164.575455] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  164.575471] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.576112] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  164.576127] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  164.576136] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.576151] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  164.576768] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  164.576780] ISP interrupt: LSC LUT processing
+[  164.576787] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  164.576803] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.576817] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  164.577422] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  164.577436] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  164.577445] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.577455] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  164.578073] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  164.578125] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  164.578131] ISP interrupt: LSC LUT processing
+[  164.578137] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  164.578150] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.578733] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  164.578747] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  164.578756] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.578767] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  164.579377] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  164.579416] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  164.579422] ISP interrupt: LSC LUT processing
+[  164.579428] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  164.579440] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.580047] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  164.580061] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  164.580071] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.580084] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  164.580704] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  164.580715] ISP interrupt: LSC LUT processing
+[  164.580722] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  164.580739] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.580753] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  164.581359] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  164.581373] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  164.581383] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.581396] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  164.582014] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  164.582025] ISP interrupt: LSC LUT processing
+[  164.582032] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  164.582052] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.582102] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  164.582671] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  164.582685] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  164.582695] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.582708] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  164.583329] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  164.583340] ISP interrupt: LSC LUT processing
+[  164.583347] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  164.583369] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.583383] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  164.583987] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  164.584003] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  164.584014] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.584029] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  164.584645] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  164.584659] ISP interrupt: LSC LUT processing
+[  164.584665] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  164.584685] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.584701] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  164.585299] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  164.585315] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  164.585325] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.585339] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  164.585955] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  164.585970] ISP interrupt: LSC LUT processing
+[  164.585977] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  164.585997] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.586019] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  164.586613] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  164.586630] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  164.586641] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.586657] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  164.587265] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  164.587280] ISP interrupt: LSC LUT processing
+[  164.587287] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  164.587307] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.587329] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  164.587923] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  164.587940] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  164.587950] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.587966] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  164.588578] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  164.588591] ISP interrupt: LSC LUT processing
+[  164.588598] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  164.588625] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.588651] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  164.589233] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  164.589249] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  164.589260] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.589275] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  164.589891] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  164.589905] ISP interrupt: LSC LUT processing
+[  164.589911] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  164.589933] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.589955] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  164.590546] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  164.590563] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  164.590573] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  164.590589] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+root@ing-wyze-cam3-a000 ~# set jpeg streamMngCtx suceessd
+root@ing-wyze-cam3-a000 ~# dmesg 
+[  165.489794] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.500321] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.500928] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.500942] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.500951] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.500964] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.501582] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.501592] ISP interrupt: LSC LUT processing
+[  165.501599] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.501617] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.501634] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.502238] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.502250] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.502259] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.502271] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.502897] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.502908] ISP interrupt: LSC LUT processing
+[  165.502915] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.502934] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.502952] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.503548] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000100 (legacy=0x00000100 new=0x00000000) ***
+[  165.503559] ispcore: irq-status 0x00000100, err is 0x20,0x0,084c is 0x0
+[  165.503568] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000400 (legacy=0x00000400 new=0x00000000) ***
+[  165.503574] ISP interrupt: LSC LUT processing
+[  165.503586] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.504206] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.504216] ISP interrupt: LSC LUT processing
+[  165.504222] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.504228] *** ISP CORE: Work was already queued - acknowledging interrupt anyway ***
+[  165.504237] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.504250] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.504863] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.504876] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.504885] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.504897] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.505518] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.505528] ISP interrupt: LSC LUT processing
+[  165.505535] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.505541] *** ISP CORE: Work was already queued - acknowledging interrupt anyway ***
+[  165.505550] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.505562] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.506174] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.506188] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.506197] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.506210] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.506832] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.506842] ISP interrupt: LSC LUT processing
+[  165.506848] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.506862] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.506876] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.507486] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.507498] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.507507] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.507519] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.508140] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.508151] ISP interrupt: LSC LUT processing
+[  165.508157] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.508168] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.508180] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.508798] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.508811] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.508820] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.508832] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.509451] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.509460] ISP interrupt: LSC LUT processing
+[  165.509466] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.509482] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.509494] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.510104] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.510114] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.510122] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.510134] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.510766] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.510776] ISP interrupt: LSC LUT processing
+[  165.510782] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.510798] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.510810] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.511422] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.511434] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.511442] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.511454] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.512073] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.512550] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.512556] ISP interrupt: LSC LUT processing
+[  165.512562] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.512578] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.512732] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.512745] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.512754] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.512766] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.513389] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.513400] ISP interrupt: LSC LUT processing
+[  165.513407] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.513413] *** ISP CORE: Work was already queued - acknowledging interrupt anyway ***
+[  165.513422] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.513434] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.514045] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.514058] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.514067] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.514080] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.514702] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.514712] ISP interrupt: LSC LUT processing
+[  165.514719] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.514734] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.514747] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.515356] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.515370] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.515378] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.515390] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.516013] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.516024] ISP interrupt: LSC LUT processing
+[  165.516030] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.516048] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.516061] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.516668] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.516681] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.516689] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.516702] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.517322] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.517330] ISP interrupt: LSC LUT processing
+[  165.517336] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.517351] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.517363] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.517974] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000100 (legacy=0x00000100 new=0x00000000) ***
+[  165.517983] ispcore: irq-status 0x00000100, err is 0x20,0x0,084c is 0x0
+[  165.517992] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000400 (legacy=0x00000400 new=0x00000000) ***
+[  165.517998] ISP interrupt: LSC LUT processing
+[  165.518008] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.518641] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.518652] ISP interrupt: LSC LUT processing
+[  165.518659] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.518677] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.518696] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.519291] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.519304] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.519312] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.519324] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.519948] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.519958] ISP interrupt: LSC LUT processing
+[  165.519965] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.519983] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.519996] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.520602] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.520615] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.520624] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.520636] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.521265] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.521276] ISP interrupt: LSC LUT processing
+[  165.521282] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.521297] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.521310] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.521918] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.521931] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.521942] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.521956] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.522570] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.522579] ISP interrupt: LSC LUT processing
+[  165.522586] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.522601] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.522618] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.523227] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.523239] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.523248] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.523260] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.523882] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.523891] ISP interrupt: LSC LUT processing
+[  165.523898] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.523913] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.523925] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.524532] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000100 (legacy=0x00000100 new=0x00000000) ***
+[  165.524541] ispcore: irq-status 0x00000100, err is 0x20,0x0,084c is 0x0
+[  165.524550] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000400 (legacy=0x00000400 new=0x00000000) ***
+[  165.524556] ISP interrupt: LSC LUT processing
+[  165.524566] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.525197] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.525207] ISP interrupt: LSC LUT processing
+[  165.525213] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.525230] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.525243] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.525852] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.525865] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.525874] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.525886] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.526505] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.526516] ISP interrupt: LSC LUT processing
+[  165.526522] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.526536] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.526548] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.527166] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.527180] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.527190] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.527204] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.527820] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.527830] ISP interrupt: LSC LUT processing
+[  165.527836] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.527853] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.527866] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.528476] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.528488] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.528497] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.528510] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.529131] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.529142] ISP interrupt: LSC LUT processing
+[  165.529148] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.529166] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.529179] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.529786] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.529799] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.529808] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.529820] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.530443] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.530453] ISP interrupt: LSC LUT processing
+[  165.530460] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.530478] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.530504] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.531101] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.531115] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.531124] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.531137] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.531754] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.531764] ISP interrupt: LSC LUT processing
+[  165.531770] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.531785] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.531797] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.532410] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.532424] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.532432] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.532445] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.533067] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.533078] ISP interrupt: LSC LUT processing
+[  165.533084] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.533101] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.533115] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.533722] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.533734] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.533742] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.533755] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.534380] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.534390] ISP interrupt: LSC LUT processing
+[  165.534397] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.534413] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.534430] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.535031] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.535042] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.535050] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.535062] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.535688] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.535697] ISP interrupt: LSC LUT processing
+[  165.535704] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.535718] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.535729] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.536348] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.536360] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.536368] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.536379] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.537001] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.537011] ISP interrupt: LSC LUT processing
+[  165.537018] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.537031] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.537044] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.537658] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.537672] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.537680] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.537693] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.538313] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.538323] ISP interrupt: LSC LUT processing
+[  165.538330] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.538344] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.538356] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.538968] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.538982] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.538990] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.539002] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.539622] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.539631] ISP interrupt: LSC LUT processing
+[  165.539637] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.539652] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.539663] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.540272] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000100 (legacy=0x00000100 new=0x00000000) ***
+[  165.540280] ispcore: irq-status 0x00000100, err is 0x20,0x0,084c is 0x0
+[  165.540290] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000400 (legacy=0x00000400 new=0x00000000) ***
+[  165.540295] ISP interrupt: LSC LUT processing
+[  165.540305] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.540941] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.540952] ISP interrupt: LSC LUT processing
+[  165.540959] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.540980] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.540994] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.541592] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.541604] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.541612] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.541624] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.542250] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.542260] ISP interrupt: LSC LUT processing
+[  165.542267] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.542282] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.542298] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.542905] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.542917] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.542926] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.542938] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.543560] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.543571] ISP interrupt: LSC LUT processing
+[  165.543578] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.543595] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.543614] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.544211] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.544222] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.544230] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.544241] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.544876] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.544887] ISP interrupt: LSC LUT processing
+[  165.544893] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.544914] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.544927] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.545523] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000100 (legacy=0x00000100 new=0x00000000) ***
+[  165.545534] ispcore: irq-status 0x00000100, err is 0x20,0x0,084c is 0x0
+[  165.545544] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000400 (legacy=0x00000400 new=0x00000000) ***
+[  165.545550] ISP interrupt: LSC LUT processing
+[  165.545560] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.546182] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.546190] ISP interrupt: LSC LUT processing
+[  165.546196] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.546211] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.546223] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.546834] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000100 (legacy=0x00000100 new=0x00000000) ***
+[  165.546845] ispcore: irq-status 0x00000100, err is 0x20,0x0,084c is 0x0
+[  165.546854] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000400 (legacy=0x00000400 new=0x00000000) ***
+[  165.546860] ISP interrupt: LSC LUT processing
+[  165.546871] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.547494] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.547504] ISP interrupt: LSC LUT processing
+[  165.547510] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.547527] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.547540] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.548145] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000100 (legacy=0x00000100 new=0x00000000) ***
+[  165.548154] ispcore: irq-status 0x00000100, err is 0x20,0x0,084c is 0x0
+[  165.548164] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000400 (legacy=0x00000400 new=0x00000000) ***
+[  165.548170] ISP interrupt: LSC LUT processing
+[  165.548180] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.548809] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.548820] ISP interrupt: LSC LUT processing
+[  165.548826] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.548840] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.548852] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.549466] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.549479] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.549488] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.549501] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.550120] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.550130] ISP interrupt: LSC LUT processing
+[  165.550137] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.550156] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.550174] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.550770] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.550780] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.550789] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.550800] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.551431] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.551441] ISP interrupt: LSC LUT processing
+[  165.551448] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.551461] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.551474] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.552086] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.552098] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.552107] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.552118] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.552741] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.552750] ISP interrupt: LSC LUT processing
+[  165.552757] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.552771] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.552783] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.553400] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.553413] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.553422] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.553434] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.554054] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.554064] ISP interrupt: LSC LUT processing
+[  165.554070] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.554084] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.554096] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.554714] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.554727] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.554736] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.554749] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.555364] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.555374] ISP interrupt: LSC LUT processing
+[  165.555382] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.555400] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.555417] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.556018] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000100 (legacy=0x00000100 new=0x00000000) ***
+[  165.556029] ispcore: irq-status 0x00000100, err is 0x20,0x0,084c is 0x0
+[  165.556038] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000400 (legacy=0x00000400 new=0x00000000) ***
+[  165.556044] ISP interrupt: LSC LUT processing
+[  165.556056] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.556670] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.557143] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.557150] ISP interrupt: LSC LUT processing
+[  165.557156] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.557167] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.557331] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.557342] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.557351] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.557362] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.557990] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.558001] ISP interrupt: LSC LUT processing
+[  165.558008] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.558025] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.558044] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.558648] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.558662] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.558671] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.558683] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.559301] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.559310] ISP interrupt: LSC LUT processing
+[  165.559317] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.559331] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.559344] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.559959] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.559973] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.559982] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.559995] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.560613] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.560624] ISP interrupt: LSC LUT processing
+[  165.560630] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.560649] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.560671] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.561269] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.561282] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.561290] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.561306] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.561926] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.561937] ISP interrupt: LSC LUT processing
+[  165.561943] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.561959] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.561976] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.562580] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.562592] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.562601] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.562612] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.563235] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.563736] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.563744] ISP interrupt: LSC LUT processing
+[  165.563751] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.563764] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.563892] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.563904] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.563912] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.563924] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.564546] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.564555] ISP interrupt: LSC LUT processing
+[  165.564561] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.564576] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.564588] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.565202] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.565213] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.565222] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.565232] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.565858] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.565868] ISP interrupt: LSC LUT processing
+[  165.565874] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.565880] *** ISP CORE: Work was already queued - acknowledging interrupt anyway ***
+[  165.565888] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.565899] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.566518] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.566532] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.566541] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.566554] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.567175] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.567186] ISP interrupt: LSC LUT processing
+[  165.567192] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.567212] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.567226] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.567828] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.567840] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.567849] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.567861] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.568482] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.568492] ISP interrupt: LSC LUT processing
+[  165.568498] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.568512] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.568525] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.569140] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.569154] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.569163] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.569183] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.569799] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.569810] ISP interrupt: LSC LUT processing
+[  165.569816] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.569835] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.569849] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.570452] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.570464] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.570473] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.570485] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.571108] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.571118] ISP interrupt: LSC LUT processing
+[  165.571125] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.571139] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.571152] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.571764] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.571776] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.571784] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.571795] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.572421] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.572432] ISP interrupt: LSC LUT processing
+[  165.572438] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.572454] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.572466] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.573076] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.573088] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.573096] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.573109] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.573732] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.573742] ISP interrupt: LSC LUT processing
+[  165.573748] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.573766] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.573790] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.574387] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.574400] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.574409] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.574422] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.575051] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.575063] ISP interrupt: LSC LUT processing
+[  165.575070] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.575091] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.575107] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.575696] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.575708] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.575716] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.575728] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.576346] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.576813] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.576820] ISP interrupt: LSC LUT processing
+[  165.576826] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.576837] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.577012] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.577025] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.577034] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.577046] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.577666] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.577676] ISP interrupt: LSC LUT processing
+[  165.577683] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.577698] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.577710] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.578326] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.578338] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.578348] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.578361] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.578978] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.578987] ISP interrupt: LSC LUT processing
+[  165.578994] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.579008] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.579021] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.579638] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.579650] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.579659] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.579670] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.580291] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.580301] ISP interrupt: LSC LUT processing
+[  165.580307] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.580322] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.580334] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.580947] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.580960] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.580968] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.580980] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.581602] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.581612] ISP interrupt: LSC LUT processing
+[  165.581617] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.581632] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.581648] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.582258] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.582271] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.582280] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.582292] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.582915] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.582926] ISP interrupt: LSC LUT processing
+[  165.582934] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.582951] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.582965] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.583565] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000100 (legacy=0x00000100 new=0x00000000) ***
+[  165.583575] ispcore: irq-status 0x00000100, err is 0x20,0x0,084c is 0x0
+[  165.583585] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000400 (legacy=0x00000400 new=0x00000000) ***
+[  165.583590] ISP interrupt: LSC LUT processing
+[  165.583601] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.584217] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.584692] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.584698] ISP interrupt: LSC LUT processing
+[  165.584704] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.584715] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.584880] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.584892] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.584901] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.584912] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.585536] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.585546] ISP interrupt: LSC LUT processing
+[  165.585552] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.585568] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.585580] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.586190] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.586202] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.586210] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.586221] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.586849] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.586858] ISP interrupt: LSC LUT processing
+[  165.586864] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.586870] *** ISP CORE: Work was already queued - acknowledging interrupt anyway ***
+[  165.586879] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.586890] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.587508] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.587521] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.587530] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.587543] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.588162] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.588172] ISP interrupt: LSC LUT processing
+[  165.588179] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.588197] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.588211] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.588820] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.588834] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.588843] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.588857] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.589472] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.589481] ISP interrupt: LSC LUT processing
+[  165.589488] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.589504] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.589516] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.590130] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.590143] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.590152] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.590166] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.590784] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00001000 (legacy=0x00001000 new=0x00000000) ***
+[  165.590793] ISP interrupt: LSC LUT processing
+[  165.590800] *** ISP CORE: FRAME SYNC INTERRUPT (0x1000) ***
+[  165.590815] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.590833] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+[  165.591440] *** ISP CORE INTERRUPT: bank=legacy(+0xb*) status=0x00000500 (legacy=0x00000500 new=0x00000000) ***
+[  165.591452] ispcore: irq-status 0x00000500, err is 0x20,0x0,084c is 0x0
+[  165.591460] *** ISP CORE INTERRUPT: no pending (legacy=0x00000000 new=0x00000000) ***
+[  165.591473] *** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x1, v1_10=0x0) ***
+root@ing-wyze-cam3-a000 ~# logcat
+I/ao( 2077): AO Enable: 0
+I/ao( 2077): AO Ch Enable: 0:0
+I/ao( 2077): EXIT AO Ch Enable: 0:0
+I/ao( 2077): AO Set Vol: 60
+I/ao( 2077): AO Get Gain: 20
+I/OSD( 2001): IMP_OSD_SetPoolSize:1048576
+I/LIBIMP_CONTROL( 2001): Version: Aug 28 2025_05:46:40_ dlsym
+E/IMP-ISP( 2001): Cannot open /dev/tx-isp
+I/OSD( 2753): IMP_OSD_SetPoolSize:1048576
+D/IMP-ISP( 2753): ~~~~~~ IMP_ISP_Open[331] ~~~~~~~
+I/IMP-ISP( 2753): IMP_ISP_AddSensor,480: paddr = 0x0, size = 0x2f7600
+I/Alloc Manager( 2753): MEM Alloc Method is kmalloc
+D/KMEM Method( 2753): CMD Line Rmem Size:30408704, Addr:0x06300000
+D/KMEM Method( 2753): alloc->mem_alloc.method = kmalloc
+ 			alloc->mem_alloc.vaddr = 0x7596e000
+ 			alloc->mem_alloc.paddr = 0x06300000
+ 			alloc->mem_alloc.length = 30408704
+I/Alloc Manager( 2753): MEM Manager Method is continuous
+D/System( 2753): IMP_System_Init SDK Version:1.1.6-a6394f42-Mon Dec 5 14:39:51 2022 +0800, built: Dec 29 2022 15:38:51
+D/System( 2753): system_init()
+D/System( 2753): Calling DSystem
+D/System( 2753): Calling FrameSource
+D/System( 2753): [ignored]read /proc/cpuinfo ret is NULLD/System( 2753): Calling IVS
+D/System( 2753): Calling OSD
+D/System( 2753): Calling Encoder
+D/System( 2753): Calling FB
+E/Framesource( 2753): IMP_FrameSource_GetChnAttr(): chnAttr was not set yet
+D/Encoder( 2753): IMP_Encoder_SetbufshareChn: encChn:2, shareChn:0
+E/MemPool( 2753): IMP_Encoder_GetPool(64):chnNum: 0 not bind pool
+I/Encoder( 2753): encChn=0,srcFrameCnt=3,srcFrameSize=3133440
+I/Encoder( 2753): encChn=0,srcStreamCnt=2,enc_chn->stream_frame_size=949248
+I/OSD( 2753): IMP_OSD_SetPoolSize:1048576
+I/OSD( 2753): IMP_OSD_CreateRgn(1227) create handle=0 success
+I/OSD( 2753): IMP_OSD_CreateRgn(1227) create handle=1 success
+I/OSD( 2753): IMP_OSD_CreateRgn(1227) create handle=2 success
+I/OSD( 2753): IMP_OSD_CreateRgn(1227) create handle=3 success
+D/System( 2753): system_bind(): bind DST-OSD-0(4.0.0) to SRC-Framesource-0(0.0.0)
+D/System( 2753): system_bind(): bind DST-Encoder-0(1.0.0) to SRC-OSD-0(4.0.0)
+I/Framesource( 2753): [chn0]: width = 1920 height = 1080
+I/VBM( 2753): VBMCreatePool()-0: w=1920 h=1080 f=842094158 nrVBs=4
+I/VBM( 2753): VBMCreatePool()-0: pool->config.fmt.fmt.pix.sizeimage=0 sizeimage=3133440
+E/Framesource( 2753): IMP_FrameSource_GetPool(3294):chnNum: 0 not bind pool
+E/VBM( 2753): VBMCreatePool()-0: sizeimage=3133440
+I/VBM( 2753): PoolId:0, frame=0x757f1770, frame->priv=0x757f179c, frame[0].virAddr=765c6700, frame[0].phyAddr=6f58700
+I/VBM( 2753): PoolId:0, frame=0x757f1b98, frame->priv=0x757f1bc4, frame[1].virAddr=768c3700, frame[1].phyAddr=7255700
+I/VBM( 2753): PoolId:0, frame=0x757f1fc0, frame->priv=0x757f1fec, frame[2].virAddr=76bc0700, frame[2].phyAddr=7552700
+I/VBM( 2753): PoolId:0, frame=0x757f23e8, frame->priv=0x757f2414, frame[3].virAddr=76ebd700, frame[3].phyAddr=784f700
+I/Encoder( 2753): framePriv->i_fps_num=25, framePriv->i_fps_den=1
+D/Encoder( 2753): enc_chn->index=0, gopAttr->uGopCtrlMode=2, gopAttr->uGopLength=20, gopAttr->uNotifyUserLTInter=0, gopAttr->uMaxSameSenceCnt=2, gopAttr->bEnableLT=0, gopAttr->uFreqLT=0, gopAttr->bLTRC=0
+D/Encoder( 2753): enc_chn->index=0, enc_chn->chnFpsMask=1, enc_chn->inFrmRate.frmRateNum=25, enc_chn->inFrmRate.frmRateDen=1, enc_chn->setFrmRate.frmRateNum=25, enc_chn->setFrmRate.frmRateDen=1, rcAttr->outFrmRate.frmRateNum=25, rcAttr->outFrmRate.frmRateDen=1
+D/Encoder( 2753): do_day_night_change(664):enc_chn->inStat.is_day=1
+E/Framesource( 2753): IMP_FrameSource_GetChnAttr(): chnAttr was not set yet
+E/MemPool( 2753): IMP_Encoder_GetPool(64):chnNum: 1 not bind pool
+I/Encoder( 2753): encChn=1,srcFrameCnt=3,srcFrameSize=353280
+I/Encoder( 2753): encChn=1,srcStreamCnt=2,enc_chn->stream_frame_size=199808
+I/OSD( 2753): IMP_OSD_SetPoolSize:1048576
+I/OSD( 2753): IMP_OSD_CreateRgn(1227) create handle=4 success
+I/OSD( 2753): IMP_OSD_CreateRgn(1227) create handle=5 success
+I/OSD( 2753): IMP_OSD_CreateRgn(1227) create handle=6 success
+I/OSD( 2753): IMP_OSD_CreateRgn(1227) create handle=7 success
+D/System( 2753): system_bind(): bind DST-OSD-1(4.1.0) to SRC-Framesource-1(0.1.0)
+D/System( 2753): system_bind(): bind DST-Encoder-1(1.1.0) to SRC-OSD-1(4.1.0)
+I/Framesource( 2753): [chn1]: width = 640 height = 360
+I/VBM( 2753): VBMCreatePool()-1: w=640 h=360 f=842094158 nrVBs=2
+I/VBM( 2753): VBMCreatePool()-1: pool->config.fmt.fmt.pix.sizeimage=0 sizeimage=353280
+E/Framesource( 2753): IMP_FrameSource_GetPool(3294):chnNum: 1 not bind pool
+E/VBM( 2753): VBMCreatePool()-1: sizeimage=353280
+I/VBM( 2753): PoolId:1, frame=0x756c6c90, frame->priv=0x756c6cbc, frame[0].virAddr=772f4800, frame[0].phyAddr=7c86800
+I/VBM( 2753): PoolId:1, frame=0x756c70b8, frame->priv=0x756c70e4, frame[1].virAddr=7734ac00, frame[1].phyAddr=7cdcc00
+I/Encoder( 2753): framePriv->i_fps_num=25, framePriv->i_fps_den=1
+D/Encoder( 2753): enc_chn->index=1, gopAttr->uGopCtrlMode=2, gopAttr->uGopLength=20, gopAttr->uNotifyUserLTInter=0, gopAttr->uMaxSameSenceCnt=2, gopAttr->bEnableLT=0, gopAttr->uFreqLT=0, gopAttr->bLTRC=0
+D/Encoder( 2753): enc_chn->index=1, enc_chn->chnFpsMask=1, enc_chn->inFrmRate.frmRateNum=25, enc_chn->inFrmRate.frmRateDen=1, enc_chn->setFrmRate.frmRateNum=25, enc_chn->setFrmRate.frmRateDen=1, rcAttr->outFrmRate.frmRateNum=25, rcAttr->outFrmRate.frmRateDen=1
+D/Encoder( 2753): do_day_night_change(664):enc_chn->inStat.is_day=1
+E/MemPool( 2753): IMP_Encoder_GetPool(64):chnNum: 2 not bind pool
+I/Encoder( 2753): encChn=2,srcFrameCnt=2,srcFrameSize=3133440
+I/Encoder( 2753): encChn=2,srcStreamCnt=0,enc_chn->stream_frame_size=0
+I/Encoder( 2753): framePriv->i_fps_num=25, framePriv->i_fps_den=1
+D/Encoder( 2753): enc_chn->index=2, gopAttr->uGopCtrlMode=2, gopAttr->uGopLength=0, gopAttr->uNotifyUserLTInter=0, gopAttr->uMaxSameSenceCnt=1, gopAttr->bEnableLT=0, gopAttr->uFreqLT=0, gopAttr->bLTRC=0
+D/Encoder( 2753): enc_chn->index=2, enc_chn->chnFpsMask=1fff7ff, enc_chn->inFrmRate.frmRateNum=25, enc_chn->inFrmRate.frmRateDen=1, enc_chn->setFrmRate.frmRateNum=24, enc_chn->setFrmRate.frmRateDen=1, rcAttr->outFrmRate.frmRateNum=24, rcAttr->outFrmRate.frmRateDen=1
+D/Encoder( 2753): do_day_night_change(664):enc_chn->inStat.is_day=1
+I/OSD( 2753): IMP_OSD_SetPoolSize:1048576
+(reverse-i-search)'': [INFO:RTSP.cpp]: stream 0 available at: rtsp://192.168.50.211/ch0
+[INFO:RTSP.cpp]: stream 1 available at: rtsp://192.168.50.211/ch1
+root@ing-wyze-cam3-a000 ~# cat /proc/interrupts 
+           CPU0       
+  9:          0   jz-intc  i2s_irq
+ 11:      30112   jz-intc  jz-timerost
+ 14:        602   jz-intc  ipu
+ 15:      81823   jz-intc  jz-sfc
+ 18:          0   jz-intc  pdma
+ 23:          0   jz-intc  GPIO C
+ 24:          1   jz-intc  GPIO B
+ 25:          0   jz-intc  GPIO A
+ 29:          1   jz-intc  dwc2
+ 37:       8102   jz-intc  tx-isp, isp-m0
+ 38:       8180   jz-intc  isp-w02
+ 44:      14735   jz-intc  jzmmc_v1.2.1
+ 45:          0   jz-intc  jzmmc_v1.2.0
+ 58:        386   jz-intc  uart1
+ 68:        295   jz-intc  jz-i2c.0
+ 70:        145   jz-intc  avpu.0
+126:          0    GPIO B  GPIO Button
+134:          1    GPIO B  mmc-insert-detect
+ERR:          0
+root@ing-wyze-cam3-a000 ~# 

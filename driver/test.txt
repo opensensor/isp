@@ -1,0 +1,16 @@
+0001137c    int32_t dump_vic_reg()
+
+000113d4        int32_t result
+000113d4        
+000113d4        for (int32_t i = 0; i != 0x1b4; )
+000113b4            int32_t i_1 = i
+000113d0            i += 4
+000113cc            result = isp_printf(1, "register is 0x%x, value is 0x%x\n", i_1)
+000113cc        
+000113f4        return result
+
+
+000113fc    void check_vic_error() __noreturn
+
+00011418        while (true)
+00011418            dump_vic_reg()

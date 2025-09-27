@@ -1,0 +1,61 @@
+000acb20    int32_t IMP_FrameSource_GetChnAttr(int32_t arg1, int32_t* arg2)
+
+000acb38        int32_t var_24_1
+000acb38        int32_t $v0_4
+000acb38        int32_t $v1_4
+000acb38        
+000acb38        if (arg2 == 0)
+000acc8c            $v0_4 = IMP_Log_Get_Option()
+000accac            int32_t var_20_2 = 0xfe79c  {"IMP_FrameSource_GetChnAttr"}
+000accb0            int32_t var_28_2 = 0xfe79c  {"IMP_FrameSource_GetChnAttr"}
+000accb4            var_24_1 = 0xfcf0c  {"%s(): chnAttr is NULL\n"}
+000accbc            $v1_4 = 0x4f3
+000acb38        else
+000acb44            if (arg1 s>= 5)
+000acc1c                imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfcaec, 0xfcb0c, 0x4f8, 0xfe79c, 
+000acc1c                    0xfcf24, 0xfe79c, arg1, &_gp)  {"Framesource"}  {"
+000acc1c                    /home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries.c"}  {"
+000acc1c                    %s(): Invalid chnNum %d\n"}  {"IMP_FrameSource_GetChnAttr"}
+000acc28                return 0xffffffff
+000acc28            
+000acb50            uint32_t gFramesource_1 = gFramesource
+000acb50            
+000acb54            if (gFramesource_1 == 0)
+000accc0                $v0_4 = IMP_Log_Get_Option()
+000acce0                int32_t var_20_3 = 0xfe79c  {"IMP_FrameSource_GetChnAttr"}
+000acce4                int32_t var_28_3 = 0xfe79c  {"IMP_FrameSource_GetChnAttr"}
+000acce8                var_24_1 = 0xfcff8  {"
+000acce8                    %s(): FrameSource is invalid,maybe system was not inited yet.\n"}
+000accf0                $v1_4 = 0x4ff
+000acb54            else
+000acb70                int32_t $a0_3 = gFramesource_1 + arg1 * 0x2e8
+000acb70                
+000acb78                if (*($a0_3 + 0x20) != 0)
+000acb80                    int32_t* i = $a0_3 + 0x20
+000acb80                    
+000acbac                    do
+000acb88                        int32_t $t0_1 = *i
+000acb8c                        int32_t $a3_1 = i[1]
+000acb90                        int32_t $a2_1 = i[2]
+000acb94                        int32_t $v1_3 = i[3]
+000acb98                        i = &i[4]
+000acb9c                        *arg2 = $t0_1
+000acba0                        arg2[1] = $a3_1
+000acba4                        arg2[2] = $a2_1
+000acba8                        arg2[3] = $v1_3
+000acbb0                        arg2 = &arg2[4]
+000acbac                    while (i != $a0_3 + 0x70)
+000acbac                    
+000acbb4                    return 0
+000acbb4                
+000acc2c                $v0_4 = IMP_Log_Get_Option()
+000acc4c                int32_t var_20_1 = 0xfe79c  {"IMP_FrameSource_GetChnAttr"}
+000acc50                int32_t var_28_1 = 0xfe79c  {"IMP_FrameSource_GetChnAttr"}
+000acc54                var_24_1 = 0xfd038  {"%s(): chnAttr was not set yet\n"}
+000acc58                $v1_4 = 0x506
+000acc58        
+000acc7c        imp_log_fun(6, $v0_4, 2, 0xfcaec, 0xfcb0c, $v1_4, 0xfe79c, var_24_1, 0xfe79c)  {"
+000acc7c            Framesource"}  {"
+000acc7c            /home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries.c"}  {"
+000acc7c            IMP_FrameSource_GetChnAttr"}
+000acc88        return 0xffffffff
