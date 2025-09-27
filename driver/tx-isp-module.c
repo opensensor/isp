@@ -4764,6 +4764,38 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
     pr_info("*** BOTH VIC AND ISP CORE INTERRUPTS NOW ENABLED! ***\n");
 
 
+
+    /* *** CRITICAL: Register BOTH IRQ handlers for complete interrupt support (match good-things) *** */
+    pr_info("*** REGISTERING BOTH IRQ HANDLERS (37 + 38) FOR COMPLETE INTERRUPT SUPPORT ***\n");
+
+    /* Register IRQ 37 (isp-m0) - Primary ISP processing */
+    ret = request_threaded_irq(37,
+                               isp_irq_handle,
+                               isp_irq_thread_handle,
+                               IRQF_SHARED,
+                               "isp-m0",                /* Match stock driver name */
+                               ourISPdev);
+    if (ret != 0) {
+        pr_err("*** FAILED TO REQUEST IRQ 37 (isp-m0): %d ***\n", ret);
+    } else {
+        pr_info("*** SUCCESS: IRQ 37 (isp-m0) REGISTERED ***\n");
+        if (ourISPdev)
+            ourISPdev->isp_irq = 37;
+    }
+
+    /* Register IRQ 38 (isp-w02) - VIC channel */
+    ret = request_threaded_irq(38,
+                               isp_irq_handle,          /* Same handlers work for both IRQs */
+                               isp_irq_thread_handle,
+                               IRQF_SHARED,
+                               "isp-w02",               /* Match stock driver name */
+                               ourISPdev);
+    if (ret != 0) {
+        pr_err("*** FAILED TO REQUEST IRQ 38 (isp-w02): %d ***\n", ret);
+    } else {
+        pr_info("*** SUCCESS: IRQ 38 (isp-w02) REGISTERED ***\n");
+    }
+
     pr_info("*** tx_isp_module_init: Binary Ninja reference implementation complete ***\n");
     return 0;
 }
