@@ -1099,35 +1099,51 @@ int tx_isp_configure_clocks(struct tx_isp_dev *isp)
 
     pr_info("Configuring ISP system clocks\n");
 
-    /* Get the CGU ISP clock */
+    /* Get the CGU ISP clock (try device first, then global fallback) */
     cgu_isp = clk_get(isp->dev, "cgu_isp");
     if (IS_ERR(cgu_isp)) {
-        pr_err("Failed to get CGU ISP clock\n");
-        return PTR_ERR(cgu_isp);
+        pr_info("Failed to get CGU ISP clock via device, trying global fallback\n");
+        cgu_isp = clk_get(NULL, "cgu_isp");
+        if (IS_ERR(cgu_isp)) {
+            pr_info("Failed to get CGU ISP clock (dev+global)\n");
+            return PTR_ERR(cgu_isp);
+        }
     }
 
-    /* Get the ISP core clock */
+    /* Get the ISP core clock (try device first, then global fallback) */
     isp_clk = clk_get(isp->dev, "isp");
     if (IS_ERR(isp_clk)) {
-        pr_err("Failed to get ISP clock\n");
-        ret = PTR_ERR(isp_clk);
-        goto err_put_cgu_isp;
+        pr_info("Failed to get ISP clock via device, trying global fallback\n");
+        isp_clk = clk_get(NULL, "isp");
+        if (IS_ERR(isp_clk)) {
+            pr_info("Failed to get ISP clock (dev+global)\n");
+            ret = PTR_ERR(isp_clk);
+            goto err_put_cgu_isp;
+        }
     }
 
-    /* Get the IPU clock */
+    /* Get the IPU clock (try device first, then global fallback) */
     ipu_clk = clk_get(isp->dev, "ipu");
     if (IS_ERR(ipu_clk)) {
-        pr_err("Failed to get IPU clock\n");
-        ret = PTR_ERR(ipu_clk);
-        goto err_put_isp_clk;
+        pr_info("Failed to get IPU clock via device, trying global fallback\n");
+        ipu_clk = clk_get(NULL, "ipu");
+        if (IS_ERR(ipu_clk)) {
+            pr_info("Failed to get IPU clock (dev+global)\n");
+            ret = PTR_ERR(ipu_clk);
+            goto err_put_isp_clk;
+        }
     }
 
-    /* Get the CSI clock */
+    /* Get the CSI clock (try device first, then global fallback) */
     csi_clk = clk_get(isp->dev, "csi");
     if (IS_ERR(csi_clk)) {
-        pr_err("Failed to get CSI clock\n");
-        ret = PTR_ERR(csi_clk);
-        goto err_put_ipu_clk;
+        pr_info("Failed to get CSI clock via device, trying global fallback\n");
+        csi_clk = clk_get(NULL, "csi");
+        if (IS_ERR(csi_clk)) {
+            pr_info("Failed to get CSI clock (dev+global)\n");
+            ret = PTR_ERR(csi_clk);
+            goto err_put_ipu_clk;
+        }
     }
 
     /* Set clock rates */
