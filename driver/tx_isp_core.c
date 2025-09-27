@@ -1895,6 +1895,36 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 
                 result = 0;
             }
+        } else {
+            /* CRITICAL: Handle vic_state == 1 case - This is the main initialization path */
+            pr_info("*** ispcore_core_ops_init: VIC state is 1 - MAIN INITIALIZATION PATH ***");
+
+            /* Ensure ISP/CSI/IPU clocks are configured and enabled once at init time */
+            if (!isp_dev->isp_clk || !isp_dev->csi_clk || !isp_dev->ipu_clk || !isp_dev->cgu_isp) {
+                int clk_ret = tx_isp_configure_clocks(isp_dev);
+                if (clk_ret) {
+                    pr_warn("ispcore_core_ops_init: tx_isp_configure_clocks failed: %d (continuing)\n", clk_ret);
+                } else {
+                    pr_info("*** ispcore_core_ops_init: Clocks configured and enabled ***\n");
+                }
+            } else {
+                pr_info("*** ispcore_core_ops_init: Clocks already configured (skipping) ***\n");
+            }
+
+            /* CRITICAL: Call tisp_init() for sensor initialization */
+            if (sensor_attr) {
+                pr_info("*** ispcore_core_ops_init: Calling tisp_init with sensor attributes ***");
+                ret = tisp_init(sensor_attr, NULL);
+                if (ret != 0) {
+                    pr_err("ispcore_core_ops_init: tisp_init failed: %d\n", ret);
+                    return ret;
+                }
+                pr_info("*** ispcore_core_ops_init: tisp_init SUCCESS ***");
+            } else {
+                pr_info("*** ispcore_core_ops_init: No sensor attributes - skipping tisp_init ***");
+            }
+
+            result = 0;
         }
     }
 
