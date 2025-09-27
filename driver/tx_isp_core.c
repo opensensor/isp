@@ -3374,7 +3374,6 @@ static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
     return 0;
 }
 
-
 /* tx_isp_core_probe - SAFE implementation using proper struct member access */
 int tx_isp_core_probe(struct platform_device *pdev)
 {
@@ -3384,6 +3383,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
     uint32_t channel_count;
     void *channel_array;
     void *tuning_dev;
+    struct tx_isp_core_device *core_dev;
 
     pr_info("*** tx_isp_core_probe: SAFE implementation using proper struct member access ***\n");
 
@@ -3458,6 +3458,10 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
     /* CRITICAL: Initialize the core subdev with proper operations */
     pr_info("*** tx_isp_core_probe: Initializing core subdev with operations ***\n");
+    /* Make global pointer available early to avoid races in early IOCTL paths */
+    ourISPdev = isp_dev;
+    pr_info("*** tx_isp_core_probe: Global ISP device set early for linking ***\n");
+
 
     /* Set up the core subdev operations with our implemented functions (BN MCP exact wiring) */
     core_subdev_core_ops.init = core_subdev_core_init_bridge;
@@ -3465,24 +3469,50 @@ int tx_isp_core_probe(struct platform_device *pdev)
     core_subdev_core_ops.ioctl = NULL;
 
     /* Ensure the ops structure used for registration includes the core ops */
-    core_subdev_ops_full.core = &core_subdev_core_ops;
-    core_subdev_ops_full.video = &core_subdev_video_ops;
-    core_subdev_ops_full.pad = &core_pad_ops;
+    core_subdev_ops.core = &core_subdev_core_ops;
+    core_subdev_ops.video = &core_subdev_video_ops;
+    core_subdev_ops.pad = &core_pad_ops;
 
     /* Initialize the subdev that's already the first member of tx_isp_dev */
     isp_dev->sd.isp = isp_dev;  /* Set back-reference */
-    isp_dev->sd.ops = &core_subdev_ops_full;  /* Set operations to the properly configured structure */
+    isp_dev->sd.ops = &core_subdev_ops;  /* Set operations to the properly configured structure */
     isp_dev->sd.vin_state = TX_ISP_MODULE_INIT;  /* Set initial state */
 
     /* Initialize subdev synchronization */
     mutex_init(&isp_dev->sd.lock);
 
-    pr_info("*** tx_isp_core_probe: Core subdev initialized with ops=%p ***\n", &core_subdev_ops_full);
+    pr_info("*** tx_isp_core_probe: Core subdev initialized with ops=%p ***\n", &core_subdev_ops);
     pr_info("***   - Core ops: start=%p, stop=%p, set_format=%p ***\n",
             tx_isp_core_start, tx_isp_core_stop, tx_isp_core_set_format);
+    /* Create and link a minimal core_dev so tuning and auto-linking have a valid object */
+    core_dev = kzalloc(sizeof(*core_dev), GFP_KERNEL);
+    if (!core_dev) {
+        pr_err("*** tx_isp_core_probe: Failed to allocate core_dev ***\n");
+        kfree(isp_dev);
+        return -ENOMEM;
+    }
+    memset(core_dev, 0, sizeof(*core_dev));
+    core_dev->self_ptr = core_dev;
+    core_dev->magic = 0x434F5245; /* 'CORE' */
+    core_dev->isp_dev = isp_dev;
+    core_dev->sd.isp = isp_dev;
+
+    /* Expose core_dev via subdev dev_priv so tx_isp_subdev_auto_link can retrieve it */
+    /* Ensure bi-directional link via helper as well (validates magic and sets backrefs) */
+    tx_isp_link_core_device(isp_dev, core_dev);
+
+    /* Populate Binary Ninja subdev array at index 4 (core) for tx_isp_video_link_stream */
+    isp_dev->subdevs[4] = &isp_dev->sd;
+    pr_info("*** REGISTERED CORE SUBDEV AT INDEX 4 (sd=%p) ***\n", &isp_dev->sd);
+
+    tx_isp_set_subdevdata(&isp_dev->sd, core_dev);
+
+    /* Also attach to isp_dev so early users (e.g., tuning path) can see it */
+    isp_dev->core_dev = core_dev;
+
 
     /* Binary Ninja: if (tx_isp_subdev_init(arg1, $v0, &core_subdev_ops) == 0) */
-    if (tx_isp_subdev_init(pdev, &isp_dev->sd, &core_subdev_ops_full) == 0) {
+    if (tx_isp_subdev_init(pdev, &isp_dev->sd, &core_subdev_ops) == 0) {
         pr_info("*** tx_isp_core_probe: Subdev init SUCCESS ***\n");
 
         /* SAFE: Channel configuration using proper struct access */
@@ -3567,12 +3597,6 @@ int tx_isp_core_probe(struct platform_device *pdev)
             /* Binary Ninja: sensor_early_init($v0) */
             pr_info("*** tx_isp_core_probe: Calling sensor_early_init ***\n");
             sensor_early_init(isp_dev);
-
-            /* Binary Ninja: Clock initialization */
-            uint32_t isp_clk_1 = 0; /* get_isp_clk() would be called here */
-            if (isp_clk_1 == 0)
-                isp_clk_1 = isp_clk;
-            isp_clk = isp_clk_1;
 
             pr_info("*** tx_isp_core_probe: Basic initialization complete ***\n");
             pr_info("***   - Core device size: %zu bytes ***\n", sizeof(struct tx_isp_dev));
@@ -3708,6 +3732,7 @@ int tx_isp_core_remove(struct platform_device *pdev)
         fs_workqueue = NULL;
         pr_info("*** ISP CORE: Frame sync workqueue destroyed ***\n");
     }
+    cancel_work_sync(&ispcore_fs_work);
 
     if (core_dev) {
         isp_core_tuning_deinit(core_dev);
