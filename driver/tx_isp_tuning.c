@@ -3280,7 +3280,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
     }
 
     /* CRITICAL: Auto-initialize tuning for V4L2 controls ONLY ONCE to prevent init/release cycle */
-    if (magic == 0x56 && (!ourISPdev || ourISPdev->core_dev->core_dev->tuning_enabled != 3) && !auto_init_done) {
+    if (magic == 0x56 && (!ourISPdev || ourISPdev->core_dev->tuning_enabled != 3) && !auto_init_done) {
         pr_info("isp_core_tunning_unlocked_ioctl: Auto-initializing tuning for V4L2 control (one-time)\n");
 
         /* Initialize tuning_data if not already initialized */
@@ -3306,7 +3306,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
     }
 
     /* CRITICAL: Check tuning enabled for tuning commands only */
-    if (magic == 0x74 && (!ourISPdev || ourISPdev->core_dev->core_dev->tuning_enabled != 3)) {
+    if (magic == 0x74 && (!ourISPdev || ourISPdev->core_dev->tuning_enabled != 3)) {
         pr_err("isp_core_tunning_unlocked_ioctl: Tuning commands require explicit enable (cmd=0x%x)\n", cmd);
         return -ENODEV;
     }
@@ -3391,7 +3391,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 pr_info("isp_core_tunning_unlocked_ioctl: Tuning enable/disable: %s\n", enable ? "ENABLE" : "DISABLE");
 
                 /* BINARY NINJA REFERENCE: Simple tuning enable acknowledgment */
-                if (enable && ourISPdev && ourISPdev->core_dev->core_dev->tuning_enabled == 3) {
+                if (enable && ourISPdev && ourISPdev->core_dev->tuning_enabled == 3) {
                     /* CRITICAL: VIC-SAFE TUNING OPERATION SEQUENCING */
                     /* The key insight is that tuning operations must be synchronized with VIC hardware state */
                     pr_info("*** BINARY NINJA REFERENCE: VIC-safe tuning enable acknowledged ***\n");
@@ -5889,7 +5889,7 @@ int isp_m0_chardev_release(struct inode *inode, struct file *file)
     }
 
     /* Use global device reference for any device operations */
-    if (ourISPdev && ourISPdev && ourISPdev->core_dev->core_dev->tuning_enabled == 3) {
+    if (ourISPdev && ourISPdev && ourISPdev->core_dev->tuning_enabled == 3) {
         pr_info("Disabling tuning on release\n");
         isp_core_tuning_release(ourISPdev);
         ourISPdev->core_dev->tuning_enabled = 0;
