@@ -2895,6 +2895,15 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 udelay(100);
                 pr_info("*** VIC PRIMARY ENABLES (POST-RUN COMMIT): [0x1e0]=0x%08x [0x1e4]=0x%08x ***\n",
                         readl(vr + 0x1e0), readl(vr + 0x1e4));
+
+                /* Re-apply IMR/IMCR gating on PRIMARY bank as seen in good-things */
+                writel(0x00000001, vr + 0x04);   /* IMR baseline */
+                writel(0x00000000, vr + 0x24);   /* IMR1 baseline */
+                writel(0x07800438, vr + 0x04);   /* IMR routing/mask */
+                writel(0xb5742249, vr + 0x0c);   /* IMCR key */
+                wmb();
+                pr_info("*** VIC PRIMARY GATE (POST-RUN): IMR=0x%08x IMCR=0x%08x ***\n",
+                        readl(vr + 0x04), readl(vr + 0x0c));
             }
             if (vic_dev && vic_dev->vic_regs_control) {
                 void __iomem *vc = vic_dev->vic_regs_control;
