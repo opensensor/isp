@@ -2358,6 +2358,16 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
             pr_info("*** tx_isp_video_s_stream: Core init SUCCESS ***\n");
         }
 
+        /* Ensure CSI is ACTIVATED (state 2) before CSI core->init so csi_core_ops_init runs */
+        if (csi_sd) {
+            struct tx_isp_csi_device *csi_dev_for_state = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(csi_sd);
+            if (csi_dev_for_state && csi_dev_for_state->state < 2) {
+                pr_info("*** tx_isp_video_s_stream: Activating CSI subdev (state %d -> 2) before CSI init ***\n", csi_dev_for_state->state);
+                tx_isp_csi_activate_subdev(csi_sd);
+                pr_info("*** tx_isp_video_s_stream: CSI subdev activation done, state=%d ***\n", csi_dev_for_state->state);
+            }
+        }
+
         /* Initialize CSI second */
         if (csi_sd && csi_sd->ops && csi_sd->ops->core && csi_sd->ops->core->init) {
             pr_info("*** tx_isp_video_s_stream: Initializing CSI subdev ***\n");
