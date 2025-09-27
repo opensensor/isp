@@ -27,7 +27,6 @@
 /*int isp_debug_init(void);*/
 /*int isp_debug_deinit(void);*/
 int isp_printf(unsigned int level, unsigned char *fmt, ...);
-int get_isp_clk(void);
 void *private_vmalloc(unsigned long size);
 void private_vfree(const void *addr);
 

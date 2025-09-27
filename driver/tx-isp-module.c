@@ -2270,11 +2270,6 @@ bool is_valid_kernel_pointer(const void *ptr)
             addr != 0x24a70688);   /* BadVA from crash log */
 }
 
-int get_isp_clk(void)
-{
-	return isp_clk;
-}
-EXPORT_SYMBOL(get_isp_clk);
 
 /* ispcore_activate_module - Fixed to match our actual struct layouts */
 int ispcore_activate_module(struct tx_isp_dev *isp_dev)
@@ -2287,7 +2282,6 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
     void *current_subdev;
     int subdev_result;
     int a2_1;
-    /* Use get_isp_clk() accessor instead of extern variable */
 
     pr_info("*** ispcore_activate_module: Fixed for our struct layouts ***\n");
 
@@ -2326,8 +2320,7 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                             unsigned long current_rate = clk_get_rate(clk_array[i]);
                             if (current_rate != 0xffff) {
                                 /* Binary Ninja: private_clk_set_rate(*$s2_1, get_isp_clk()) */
-                                clk_set_rate(clk_array[i], get_isp_clk());
-                                pr_info("Clock %d set to %d Hz\n", i, get_isp_clk());
+                                clk_set_rate(clk_array[i], clk_get(isp->dev, "isp"));
                             }
 
                             /* Binary Ninja: private_clk_enable(*$s2_1) */
