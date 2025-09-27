@@ -544,8 +544,8 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
     pr_info("*** DEBUG: Device name comparison - checking '%s' ***\n", dev_name);
     pr_info("*** DEBUG: About to check device name matches ***\n");
 
-    if (strcmp(dev_name, "isp-w00") == 0) {
-        /* Link CSI device - device name is now "isp-w00" */
+    if (strcmp(dev_name, "isp-w01") == 0) {
+        /* Link CSI device - device name is now "isp-w01" */
         struct tx_isp_csi_device *csi_dev = container_of(sd, struct tx_isp_csi_device, sd);
         ourISPdev->csi_dev = csi_dev;
         if (sd->regs) {

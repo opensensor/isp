@@ -1425,7 +1425,7 @@ static int tx_isp_activate_csi_subdev(struct tx_isp_dev *isp_dev)
         return -EINVAL;
     }
 
-    csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
+    csi_dev = isp_dev->csi_dev;
 
     pr_info("*** ACTIVATING CSI SUBDEV FOR MIPI RECEPTION ***\n");
 
