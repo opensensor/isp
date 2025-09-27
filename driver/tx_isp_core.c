@@ -157,6 +157,20 @@ static void (*cb[16])(void *arg1, void *arg2, void *arg3, void *arg4,
                       void *arg5, void *arg6, void *arg7, void *arg8) = {NULL};
 
 
+static void __iomem *tx_isp_core_regs = NULL;
+u32 isp_read32(u32 reg)
+{
+    if (!tx_isp_core_regs) {
+        tx_isp_core_regs = ioremap(0x13300000, 0x10000);  // Core base from /proc/iomem
+        if (!tx_isp_core_regs) {
+            pr_err("Failed to map core registers\n");
+            return 0;
+        }
+    }
+    return readl(tx_isp_core_regs + reg);
+}
+
+
 
 /**
  * tisp_channel_start - Start ISP data processing channel
