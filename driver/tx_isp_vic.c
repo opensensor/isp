@@ -163,12 +163,19 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     /* Initialize empty lists - buffers allocated later when needed */
     pr_info("*** VIC: Buffer lists initialized - allocation deferred to prevent memory pressure ***\n");
 
-    /* Set up sensor attributes with defaults */
-    memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
-    vic_dev->sensor_attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; /* MIPI interface (correct value from enum) */
-    vic_dev->sensor_attr.total_width = 1920;
-    vic_dev->sensor_attr.total_height = 1080;
-    vic_dev->sensor_attr.data_type = 0x2b; /* Default RAW10 */
+    /* Set up default sensor attributes on the actual sensor (VIC does not store them) */
+    {
+        extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+        struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+        if (sensor) {
+            struct tx_isp_sensor_attribute *attr = sensor->video.attr ? sensor->video.attr : &sensor->attr;
+            memset(attr, 0, sizeof(*attr));
+            attr->dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; /* MIPI interface */
+            attr->total_width = 1920;
+            attr->total_height = 1080;
+            attr->data_type = 0x2b; /* Default RAW10 */
+        }
+    }
 
     /* *** CRITICAL: Link VIC device to ISP core *** */
     /* Store the VIC device properly - the subdev is PART of the VIC device */
