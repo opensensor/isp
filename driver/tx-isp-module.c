@@ -1625,8 +1625,25 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     isp_dev->csi_dev = csi_dev;
     pr_info("*** CSI DEVICE LINKED: isp_dev->csi_dev = %p ***\n", isp_dev->csi_dev);
 
-    /* Deferring CSI hardware initialization until first VIDIOC_STREAMON */
-    pr_info("*** CSI: Deferring hardware initialization until STREAMON ***\n");
+    /* *** CRITICAL: INITIALIZING CSI HARDWARE AFTER DEVICE CREATION *** */
+    pr_info("*** CRITICAL: INITIALIZING CSI HARDWARE AFTER DEVICE CREATION ***\n");
+
+    /* *** CSI: State updated to 2 for hardware initialization *** */
+    csi_dev->state = 2;
+    pr_info("*** CSI: State updated to 2 for hardware initialization ***\n");
+
+    /* Call CSI core ops init to initialize hardware */
+    if (csi_dev->sd.ops && csi_dev->sd.ops->core && csi_dev->sd.ops->core->init) {
+        ret = csi_dev->sd.ops->core->init(&csi_dev->sd, 1);
+        if (ret) {
+            pr_info("*** CSI: Hardware initialization failed: %d ***\n", ret);
+        } else {
+            pr_info("*** CSI: Hardware initialization completed successfully ***\n");
+            pr_info("*** CSI: Final state = %d ***\n", csi_dev->state);
+        }
+    } else {
+        pr_info("*** CSI: No init function available ***\n");
+    }
 
     pr_info("*** csi_device_probe: Binary Ninja CSI device created successfully ***\n");
     return 0;
@@ -2317,24 +2334,23 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                 clk_array = vic_subdev->clks;      /* Our actual clock array location */
                 clk_count = vic_subdev->clk_num;   /* Our actual clock count location */
 
-                pr_info("*** CLOCK CONFIGURATION SECTION: clk_array=%p, clk_count=%d ***\n", clk_array, clk_count);
+                /* CRITICAL: Clock configuration section */
+                pr_info("*** CLOCK CONFIGURATION SECTION ***\n");
 
-                /* Binary Ninja clock loop implementation */
-                if (clk_array && clk_count > 0) {
-                    for (i = 0; i < clk_count; i++) {
-                        if (clk_array[i]) {
-                            /* Binary Ninja: if (private_clk_get_rate(*$s2_1) != 0xffff) */
-                            unsigned long current_rate = clk_get_rate(clk_array[i]);
-                            if (current_rate != 0xffff) {
-                                /* Binary Ninja: private_clk_set_rate(*$s2_1, get_isp_clk()) */
-                                clk_set_rate(clk_array[i], get_isp_clk());
-                            }
-
-                            /* Binary Ninja: private_clk_enable(*$s2_1) */
-                            clk_prepare_enable(clk_array[i]);
-                            pr_info("Clock %d enabled\n", i);
-                        }
+                /* For our implementation, we'll use the ISP device's clock */
+                if (isp_dev->isp_clk) {
+                    /* Binary Ninja: if (private_clk_get_rate(*$s2_1) != 0xffff) */
+                    unsigned long current_rate = clk_get_rate(isp_dev->isp_clk);
+                    if (current_rate != 0xffff) {
+                        /* Binary Ninja: private_clk_set_rate(*$s2_1, isp_clk) */
+                        /* Set ISP clock to appropriate rate */
+                        clk_set_rate(isp_dev->isp_clk, 100000000); /* 100MHz ISP clock */
+                        pr_info("ISP clock set to 100MHz\n");
                     }
+
+                    /* Binary Ninja: private_clk_enable(*$s2_1) */
+                    clk_prepare_enable(isp_dev->isp_clk);
+                    pr_info("ISP clock enabled\n");
                 }
 
                 /* CRITICAL: Subdevice validation loop - Simplified for our layout */
@@ -5475,6 +5491,10 @@ static void tx_isp_exit(void)
         if (ourISPdev->isp_irq > 0) {
             free_irq(ourISPdev->isp_irq, ourISPdev);
             pr_info("Hardware interrupt %d freed\n", ourISPdev->isp_irq);
+        }
+        if (ourISPdev->isp_irq2 > 0) {
+            free_irq(ourISPdev->isp_irq2, ourISPdev);
+            pr_info("Hardware interrupt %d freed\n", ourISPdev->isp_irq2);
         }
 
         /* Clean up VIC device directly */
