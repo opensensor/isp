@@ -356,6 +356,10 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                     int interface_type = sensor_attr->dbus_type;
                     pr_info("*** csi_core_ops_init: interface_type=%d (1=MIPI, 2=DVP) ***\n", interface_type);
 
+                    /* CRITICAL FIX: Store interface type in CSI device for later use */
+                    csi_dev->interface_type = interface_type;
+                    pr_info("*** csi_core_ops_init: Set csi_dev->interface_type = %d ***\n", interface_type);
+
                     if (interface_type == 1) {
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 4) = zx.d(*($v1_5 + 0x24)) - 1 */
                         writel(sensor_attr->mipi.lans - 1, csi_dev->csi_regs + 4);
