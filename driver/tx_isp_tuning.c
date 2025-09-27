@@ -3284,12 +3284,12 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
         pr_info("isp_core_tunning_unlocked_ioctl: Auto-initializing tuning for V4L2 control (one-time)\n");
 
         /* Initialize tuning_data if not already initialized */
-        if (!dev || !dev->tuning_data) {
+        if (!dev || !dev->core_dev->tuning_data) {
             pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
             if (ourISPdev) {
                 ourISPdev->core_dev->tuning_data = isp_core_tuning_init(dev);
             }
-            if (!dev || !dev->tuning_data) {
+            if (!dev || !dev->core_dev->tuning_data) {
                 pr_err("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
                 return -ENOMEM;
             }
@@ -3328,7 +3328,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 pr_info("isp_core_tunning_unlocked_ioctl: Set control cmd=0x%x value=%d\n", ctrl.cmd, ctrl.value);
 
                 /* CRITICAL: Validate control command before processing */
-                if (ctrl.cmd == 0x980900 && (!dev || !dev->tuning_data)) {
+                if (ctrl.cmd == 0x980900 && (!dev || !dev->core_dev->tuning_data)) {
                     pr_err("isp_core_tunning_unlocked_ioctl: Brightness control attempted with NULL tuning data\n");
                     return -ENODEV;
                 }
@@ -3368,7 +3368,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 pr_info("isp_core_tunning_unlocked_ioctl: Get control cmd=0x%x\n", ctrl.cmd);
 
                 /* CRITICAL: Simple validation for control commands like reference driver */
-                if (!dev || !dev->tuning_data) {
+                if (!dev || !dev->core_dev->tuning_data) {
                     return -ENODEV;
                 }
 
@@ -3518,18 +3518,18 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 
                             /* 5. DPC (Dead Pixel Correction) Updates */
                             extern int tisp_dpc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write);
-                            int dpc_ret = tisp_dpc_par_refresh((dev && dev->tuning_data) ? ((struct isp_tuning_data *)ourISPdev->core_dev->tuning_data)->exposure >> 10 : 0x100, 0x20, 0);
+                            int dpc_ret = tisp_dpc_par_refresh((dev && dev->core_dev->tuning_data) ? ((struct isp_tuning_data *)ourISPdev->core_dev->tuning_data)->exposure >> 10 : 0x100, 0x20, 0);
                             pr_info("TUNING: DPC refresh completed: %d\n", dpc_ret);
 
                             /* 6. Sharpening Updates */
                             extern int tisp_sharpen_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write);
-                            int sharpen_ret = tisp_sharpen_par_refresh((dev && dev->tuning_data) ? ((struct isp_tuning_data *)ourISPdev->core_dev->tuning_data)->exposure >> 10 : 0x100, 0x20, 0);
+                            int sharpen_ret = tisp_sharpen_par_refresh((dev && dev->core_dev->tuning_data) ? ((struct isp_tuning_data *)ourISPdev->core_dev->tuning_data)->exposure >> 10 : 0x100, 0x20, 0);
                             pr_info("TUNING: Sharpening refresh completed: %d\n", sharpen_ret);
 
                             /* 7. SDNS (Spatial Denoising) Updates */
                             extern int tisp_sdns_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write);
                             extern int tisp_s_sdns_ratio(int ratio);
-                            int sdns_ret = tisp_sdns_par_refresh((dev && dev->tuning_data) ? ((struct isp_tuning_data *)ourISPdev->core_dev->tuning_data)->exposure >> 10 : 0x100, 0x20, 0);
+                            int sdns_ret = tisp_sdns_par_refresh((dev && dev->core_dev->tuning_data) ? ((struct isp_tuning_data *)ourISPdev->core_dev->tuning_data)->exposure >> 10 : 0x100, 0x20, 0);
                             if (sdns_ret == 0) sdns_ret = tisp_s_sdns_ratio(128);
                             pr_info("TUNING: SDNS updates completed: %d\n", sdns_ret);
 
@@ -3577,7 +3577,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     pr_info("*** DEBUG: enable=1, dev->core_dev->tuning_enabled=%d ***\n", dev ? dev->core_dev->tuning_enabled : -1);
                     if (dev && dev->core_dev->tuning_enabled != 3) {
                         /* CRITICAL: Initialize tuning_data if not already initialized */
-                        if (!dev->tuning_data) {
+                        if (!dev->core_dev->tuning_data) {
                             pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
 
                             /* CRITICAL FIX: Pass the core_dev instead of dev to prevent structure mismatch */
