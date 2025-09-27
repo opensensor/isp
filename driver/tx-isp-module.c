@@ -1742,9 +1742,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
             writel(0xFFFFFFFF, vrp + 0x1f0);
             writel(0xFFFFFFFF, vrp + 0x1f4);
             wmb();
-            /* Ensure frame-done source enabled in 0x1e0 */
-            writel(en | 0x1, vrp + 0x1e0);
-            /* Allow framedone (bit0) and control-limit (bit21) to reach CPU: mask = ~((1<<0)|(1<<21)) */
+            /* Do NOT modify 0x1e0 here; it's a status W1C in the reference. Only adjust MainMask. */
             writel(0xFFDFFFFE, vrp + 0x1e8);
             wmb();
             /* If control bits lost in 0x300, re-assert them like reference */
