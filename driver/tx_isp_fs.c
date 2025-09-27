@@ -426,7 +426,7 @@ int tx_isp_fs_remove(struct platform_device *pdev)
 
 
 /* FS platform driver structure */
-static struct platform_driver tx_isp_fs_platform_driver = {
+struct platform_driver tx_isp_fs_platform_driver = {
     .probe = tx_isp_fs_probe,
     .remove = tx_isp_fs_remove,
     .driver = {
@@ -434,7 +434,7 @@ static struct platform_driver tx_isp_fs_platform_driver = {
         .owner = THIS_MODULE,
     },
 };
-
+EXPORT_SYMBOL(tx_isp_fs_platform_driver);
 
 /* FS platform init/exit functions */
 int __init tx_isp_fs_platform_init(void)
