@@ -628,6 +628,8 @@ extern int sensor_init(struct tx_isp_dev *isp_dev);
 
 /* Forward declarations for subdev ops structures */
 extern struct tx_isp_subdev_ops vic_subdev_ops;
+extern struct tx_isp_subdev_ops csi_subdev_ops;
+
 /* FS queue bridging externs */
 extern void tx_isp_fs_enqueue_qbuf(int channel, u32 index, u32 phys, u32 size);
 extern int tx_isp_fs_dequeue_done(int channel, u32 *index, u32 *phys, u32 *size);
@@ -1562,7 +1564,7 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     /* Initialize CSI subdev structure like Binary Ninja tx_isp_subdev_init */
     memset(&csi_dev->sd, 0, sizeof(csi_dev->sd));
     csi_dev->sd.isp = isp_dev;
-    csi_dev->sd.ops = NULL;  /* Would be &csi_subdev_ops in full implementation */
+    csi_dev->sd.ops = &csi_subdev_ops;  /* Wire CSI subdev ops so core->init/s_stream are callable */
     csi_dev->sd.vin_state = TX_ISP_MODULE_INIT;
     /* CRITICAL: set dev_priv so tx_isp_get_subdevdata(sd) returns csi_dev */
     tx_isp_set_subdevdata(&csi_dev->sd, csi_dev);
@@ -5216,12 +5218,18 @@ static int tx_isp_init(void)
     if (ourISPdev->csi_dev) {
         struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)ourISPdev->csi_dev;
 
-        /* CSI driver sets its own sd.ops during probe. Just add to subdev array. */
-        /* SAFE: Add CSI to subdev array at index 1 using proper struct member */
+        /* Ensure CSI subdev ops are wired so core->init and s_stream can be called */
+        if (!csi_dev->sd.ops) {
+            csi_dev->sd.ops = &csi_subdev_ops;
+        }
+        /* Add CSI to subdev array at index 1 using proper struct member */
         ourISPdev->subdevs[1] = &csi_dev->sd;
 
-        pr_info("*** REGISTERED CSI SUBDEV AT INDEX 1 ***\n");
-        pr_info("CSI subdev: %p, ops=%p\n", &csi_dev->sd, csi_dev->sd.ops);
+        pr_info("*** REGISTERED CSI SUBDEV AT INDEX 1 WITH VIDEO OPS ***\n");
+        pr_info("CSI subdev: %p, ops=%p, video=%p, s_stream=%p\n",
+                &csi_dev->sd, csi_dev->sd.ops,
+                csi_dev->sd.ops ? csi_dev->sd.ops->video : NULL,
+                (csi_dev->sd.ops && csi_dev->sd.ops->video) ? csi_dev->sd.ops->video->s_stream : NULL);
     }
 
     pr_info("*** SUBDEV ARRAY POPULATED SAFELY - tx_isp_video_link_stream SHOULD NOW WORK! ***\n");
