@@ -3566,11 +3566,6 @@ int tx_isp_core_probe(struct platform_device *pdev)
             pr_info("*** tx_isp_core_probe: Calling sensor_early_init ***\n");
             sensor_early_init(isp_dev);
 
-            /* Binary Ninja: Clock initialization */
-            uint32_t isp_clk_1 = 0; /* get_isp_clk() would be called here */
-            if (isp_clk_1 == 0)
-                isp_clk_1 = isp_clk;
-
             pr_info("*** tx_isp_core_probe: Basic initialization complete ***\n");
             pr_info("***   - Core device size: %zu bytes ***\n", sizeof(struct tx_isp_dev));
             pr_info("***   - Channel count: %d ***\n", channel_count);
