@@ -2752,15 +2752,15 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Clear pending (W1C) */
                 writel(0xFFFFFFFF, vr + 0x1f0);
                 writel(0xFFFFFFFF, vr + 0x1f4);
-                /* Enable all interrupt sources (both banks) and UNMASK-ALL for debug */
+                /* Enable all interrupt sources (both banks) and set MainMask to frame-done only (good-things logic) */
                 writel(0xFFFFFFFF, vr + 0x1e0);
                 writel(0xFFFFFFFF, vr + 0x1e4);
-                //writel(0x00000000, vr + 0x1e8);
-                //writel(0x00000000, vr + 0x1ec);
+                writel(0xFFFFFFFE, vr + 0x1e8); /* Enable only bit0 (frame done) */
+                /* Leave 0x1ec (MDMA mask) as-is per working reference */
                 /* Global interrupt enable at 0x30c (if implemented) */
                 writel(0xFFFFFFFF, vr + 0x30c);
                 wmb();
-                pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (UNMASK-ALL)***\n",
+                pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (MainMask=0xFFFFFFFE)***\n",
                         readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x30c), readl(vr + 0x1e0), readl(vr + 0x1e4), readl(vr + 0x1e8), readl(vr + 0x1ec));
                 /* Primary bank: only verify 0x100; do NOT write 0x14 here (0x14 is stride on PRIMARY) */
                 writel(0x000002d0, vr + 0x100);
