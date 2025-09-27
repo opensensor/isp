@@ -485,8 +485,8 @@ static struct tx_isp_subdev_pad_ops core_pad_ops = {
 };
 
 
-/* Core subdev ops (global) */
-struct tx_isp_subdev_ops core_subdev_ops = {
+/* Core subdev ops (local) */
+static struct tx_isp_subdev_ops core_subdev_ops = {
     .core = &core_subdev_core_ops,
     .video = &core_subdev_video_ops,
     .pad = &core_pad_ops,

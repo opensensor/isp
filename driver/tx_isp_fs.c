@@ -460,7 +460,4 @@ void __exit tx_isp_fs_platform_exit(void)
     pr_info("FS platform driver unregistered\n");
 }
 
-/* Export symbols */
-EXPORT_SYMBOL(tx_isp_fs_probe);
-EXPORT_SYMBOL(tx_isp_fs_platform_init);
-EXPORT_SYMBOL(tx_isp_fs_platform_exit);
+/* Export symbols not needed within single module build */
