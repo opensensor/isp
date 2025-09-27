@@ -125,6 +125,7 @@ int tisp_init(void *sensor_info, char *param_name);
 
 /* Critical ISP Core initialization functions - MISSING FROM LOGS! */
 int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on);
+int ispcore_core_ops_init_with_sensor(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr);
 int ispcore_slake_module(struct tx_isp_dev *isp_dev);
 int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev);
@@ -2459,14 +2460,23 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
             if (vic_state != 1) {
                 /* Binary Ninja: if ($v0 s>= 3) */
                 if (vic_state >= 3) {
-                    /* Binary Ninja: isp_printf(0, "Err [VIC_INT] : dma chid ovf  !!!\n", "ispcore_slake_module") */
-                    isp_printf(0, (unsigned char*)"Err [VIC_INT] : dma chid ovf  !!!\n", "ispcore_slake_module");
-                    /* CRITICAL FIX: Binary Ninja: ispcore_core_ops_init(arg1, 1) - Initialize, not deinitialize! */
-                    struct tx_isp_subdev *core_sd = tx_isp_find_subdev_by_name(isp_dev, "isp-m0");
-                    if (core_sd) {
-                        ispcore_core_ops_init(core_sd, 1);  /* CRITICAL FIX: Use 1 for initialization, not 0 */
+                    pr_info("ispcore_slake_module: ISP state >= 3, calling ispcore_core_ops_init");
+
+                    /* CRITICAL FIX: Use good-things approach - get sensor attributes from connected sensor */
+                    struct tx_isp_sensor_attribute *sensor_attr = NULL;
+                    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+                    if (sensor && sensor->video.attr) {
+                        sensor_attr = sensor->video.attr;
+                        pr_info("ispcore_slake_module: Using sensor attributes from connected sensor");
                     } else {
-                        pr_err("ispcore_slake_module: Core subdev not found for ispcore_core_ops_init\n");
+                        pr_info("ispcore_slake_module: No sensor attributes available, using NULL");
+                    }
+
+                    /* GOOD-THINGS APPROACH: Call ispcore_core_ops_init with ISP device and sensor attributes */
+                    ret = ispcore_core_ops_init_with_sensor(isp_dev, sensor_attr);
+                    if (ret < 0) {
+                        pr_info("ispcore_slake_module: ispcore_core_ops_init failed: %d", ret);
+                        return ret;
                     }
                 }
 
@@ -2849,6 +2859,52 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
     return result;
 }
 EXPORT_SYMBOL(ispcore_core_ops_init);
+
+/**
+ * ispcore_core_ops_init_with_sensor - GOOD-THINGS approach with sensor attributes
+ * This matches the good-things driver signature and enables MIPI CSI configuration
+ */
+int ispcore_core_ops_init_with_sensor(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr)
+{
+    int ret = 0;
+
+    pr_info("*** ispcore_core_ops_init_with_sensor: GOOD-THINGS approach - isp=%p, sensor_attr=%p ***", isp, sensor_attr);
+
+    if (!isp) {
+        pr_err("ispcore_core_ops_init_with_sensor: Invalid ISP device");
+        return -EINVAL;
+    }
+
+    /* CRITICAL: Call tisp_init with sensor attributes for MIPI CSI configuration */
+    if (sensor_attr) {
+        pr_info("*** ispcore_core_ops_init_with_sensor: Calling tisp_init with sensor attributes ***");
+        pr_info("*** This will configure MIPI CSI lanes and enable proper interrupt flow ***");
+
+        ret = tisp_init(sensor_attr, NULL);
+        if (ret != 0) {
+            pr_err("ispcore_core_ops_init_with_sensor: tisp_init failed: %d", ret);
+            return ret;
+        }
+
+        pr_info("*** ispcore_core_ops_init_with_sensor: tisp_init SUCCESS - MIPI CSI should now be configured ***");
+    } else {
+        pr_warn("ispcore_core_ops_init_with_sensor: No sensor attributes - MIPI CSI configuration may be incomplete");
+    }
+
+    /* Set ISP core state to active */
+    if (isp->vic_dev) {
+        if (isp->vic_dev->state < 3) {
+            isp->vic_dev->state = 3;
+            pr_info("*** ispcore_core_ops_init_with_sensor: VIC state set to 3 (ACTIVE) ***");
+        } else {
+            pr_info("*** ispcore_core_ops_init_with_sensor: VIC already in state %d (>= 3) ***", isp->vic_dev->state);
+        }
+    }
+
+    pr_info("*** ispcore_core_ops_init_with_sensor: SUCCESS - Core initialized with sensor attributes ***");
+    return 0;
+}
+EXPORT_SYMBOL(ispcore_core_ops_init_with_sensor);
 
 /**
  * isp_malloc_buffer - FIXED: Use regular kernel memory instead of precious rmem
