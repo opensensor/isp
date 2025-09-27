@@ -2820,7 +2820,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
 
                 /* Attempt control-bank re-unlock/enable if key regs are zero */
-                if (vic_dev->vic_regs_control) {
+                if (false && vic_dev->vic_regs_control) { /* SKIP: match good-things, avoid CONTROL re-enable */
                     void __iomem *vcc = vic_dev->vic_regs_control;
                     u32 ctrl300_c_pre = readl(vcc + 0x300);
                     u32 buf318_c_pre = readl(vcc + 0x318);
@@ -2864,7 +2864,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 wmb();
                 pr_info("*** VIC CONTROL (PRIMARY): WROTE 1 to [0x0] before enabling IRQ ***\n");
             /* Post-RUN re-arm: commit dance so enables latch without touching masks */
-            if (vic_dev && vic_dev->vic_regs) {
+            if (false && vic_dev && vic_dev->vic_regs) { /* SKIP: post-run re-arm and IMR/IMCR gating */
                 void __iomem *vr = vic_dev->vic_regs;
                 /* Clear pending first (W1C) */
                 writel(0xFFFFFFFF, vr + 0x1f0);
@@ -2886,7 +2886,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** VIC PRIMARY GATE (POST-RUN): IMR=0x%08x IMCR=0x%08x ***\n",
                         readl(vr + 0x04), readl(vr + 0x0c));
             }
-            if (vic_dev && vic_dev->vic_regs_control) {
+            if (false && vic_dev && vic_dev->vic_regs_control) { /* SKIP: post-run re-arm on CONTROL bank */
                 void __iomem *vc = vic_dev->vic_regs_control;
                 /* Clear pending first (W1C) */
                 writel(0xFFFFFFFF, vc + 0x1f0);
@@ -2905,7 +2905,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             /* Re-assert ISP core VIC IRQ gate before enabling CPU IRQ (observed to drop to 0) */
             do {
                 struct tx_isp_dev *isp_dev = ourISPdev;
-                if (isp_dev && isp_dev->core_dev && isp_dev->core_dev->core_regs) {
+                if (false && isp_dev && isp_dev->core_dev && isp_dev->core_dev->core_regs) { /* SKIP: avoid CORE VIC GATE REASSERT */
                     void __iomem *core = isp_dev->core_dev->core_regs;
                     writel(0x200, core + 0x9ac0);
                     writel(0x200, core + 0x9ac8);
