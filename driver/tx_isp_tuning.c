@@ -3280,16 +3280,20 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
     }
 
     /* CRITICAL: Auto-initialize tuning for V4L2 controls ONLY ONCE to prevent init/release cycle */
-    if (magic == 0x56 && (!ourISPdev || ourISPdev->core_dev->tuning_enabled != 3) && !auto_init_done) {
+    if (magic == 0x56 && (!ourISPdev || !ourISPdev->core_dev || ourISPdev->core_dev->tuning_enabled != 3) && !auto_init_done) {
         pr_info("isp_core_tunning_unlocked_ioctl: Auto-initializing tuning for V4L2 control (one-time)\n");
+        if (!ourISPdev || !ourISPdev->core_dev) {
+            pr_info("isp_core_tunning_unlocked_ioctl: core_dev not linked yet; returning -ENODEV\n");
+            return -ENODEV;
+        }
 
         /* Initialize tuning_data if not already initialized */
-        if (!dev || !dev->core_dev->tuning_data) {
+        if (!dev || !dev->core_dev || !dev->core_dev->tuning_data) {
             pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
-            if (ourISPdev) {
+            if (ourISPdev && ourISPdev->core_dev) {
                 ourISPdev->core_dev->tuning_data = isp_core_tuning_init(dev);
             }
-            if (!dev || !dev->core_dev->tuning_data) {
+            if (!dev || !dev->core_dev || !dev->core_dev->tuning_data) {
                 pr_info("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
                 return -ENOMEM;
             }
@@ -3328,7 +3332,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 pr_info("isp_core_tunning_unlocked_ioctl: Set control cmd=0x%x value=%d\n", ctrl.cmd, ctrl.value);
 
                 /* CRITICAL: Validate control command before processing */
-                if (ctrl.cmd == 0x980900 && (!dev || !dev->core_dev->tuning_data)) {
+                if (ctrl.cmd == 0x980900 && (!dev || !dev->core_dev || !dev->core_dev->tuning_data)) {
                     pr_info("isp_core_tunning_unlocked_ioctl: Brightness control attempted with NULL tuning data\n");
                     return -ENODEV;
                 }
@@ -3368,7 +3372,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 pr_info("isp_core_tunning_unlocked_ioctl: Get control cmd=0x%x\n", ctrl.cmd);
 
                 /* CRITICAL: Simple validation for control commands like reference driver */
-                if (!dev || !dev->core_dev->tuning_data) {
+                if (!dev || !dev->core_dev || !dev->core_dev->tuning_data) {
                     return -ENODEV;
                 }
 
@@ -3581,6 +3585,10 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                             pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
 
                             /* CRITICAL FIX: Pass the core_dev instead of dev to prevent structure mismatch */
+                            if (!ourISPdev || !ourISPdev->core_dev) {
+                                pr_info("isp_core_tunning_unlocked_ioctl: core_dev not linked yet; returning -ENODEV\n");
+                                return -ENODEV;
+                            }
                             ourISPdev->core_dev->tuning_data = isp_core_tuning_init(ourISPdev);
                             if (!ourISPdev->core_dev->tuning_data) {
                                 pr_info("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");

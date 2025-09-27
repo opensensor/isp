@@ -3586,14 +3586,20 @@ int tx_isp_core_probe(struct platform_device *pdev)
                     pr_info("*** tx_isp_core_probe: Calling isp_core_tuning_init AFTER memory mappings ***\n");
                     tuning_dev = (void*)isp_core_tuning_init(isp_dev);
 
-                    /* SAFE: Store tuning device using proper member access */
-                    isp_dev->core_dev->tuning_data = (struct isp_tuning_data *)tuning_dev;
+                    /* SAFE: Store tuning device using proper member access if core_dev is linked */
+                    if (isp_dev->core_dev) {
+                        isp_dev->core_dev->tuning_data = (struct isp_tuning_data *)tuning_dev;
+                    } else {
+                        pr_info("*** tx_isp_core_probe: core_dev not linked yet; deferring tuning_data attach ***\n");
+                    }
 
                     if (tuning_dev != NULL) {
                         pr_info("*** tx_isp_core_probe: Tuning init SUCCESS (with mapped registers) ***\n");
 
                         /* SAFE: Use tuning_dev directly instead of adding dangerous offset */
-                        isp_dev->core_dev->tuning_enabled = 1;
+                        if (isp_dev->core_dev) {
+                            isp_dev->core_dev->tuning_enabled = 1;
+                        }
                         pr_info("*** tx_isp_core_probe: SAFE tuning pointer - using tuning_dev=%p directly ***\n", tuning_dev);
 
                         /* NOW we can report full success */
