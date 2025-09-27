@@ -485,8 +485,8 @@ static struct tx_isp_subdev_pad_ops core_pad_ops = {
 };
 
 
-/* Update the core subdev ops to include the core ops */
-static struct tx_isp_subdev_ops core_subdev_ops_full = {
+/* Core subdev ops (global) */
+struct tx_isp_subdev_ops core_subdev_ops = {
     .core = &core_subdev_core_ops,
     .video = &core_subdev_video_ops,
     .pad = &core_pad_ops,
@@ -506,14 +506,8 @@ struct tx_isp_dev *tx_isp_get_device(void)
 EXPORT_SYMBOL(tx_isp_get_device);
 
 
-/* Core subdev operations structure - CRITICAL for proper initialization */
-static struct tx_isp_subdev_ops core_subdev_ops = {
-    .core = NULL,     /* Core operations */
-    .video = NULL,    /* Video operations */
-    .pad = &core_pad_ops,  /* Pad operations */
-    .sensor = NULL,   /* Sensor operations */
-    .internal = NULL  /* Internal operations */
-};
+/* Core subdev operations structure - provided globally above */
+
 
 /* Global interrupt callback array - EXACT Binary Ninja implementation */
 static irqreturn_t (*irq_func_cb[32])(int irq, void *dev_id) = {0};
@@ -3474,24 +3468,24 @@ int tx_isp_core_probe(struct platform_device *pdev)
     core_subdev_core_ops.ioctl = NULL;
 
     /* Ensure the ops structure used for registration includes the core ops */
-    core_subdev_ops_full.core = &core_subdev_core_ops;
-    core_subdev_ops_full.video = &core_subdev_video_ops;
-    core_subdev_ops_full.pad = &core_pad_ops;
+    core_subdev_ops.core = &core_subdev_core_ops;
+    core_subdev_ops.video = &core_subdev_video_ops;
+    core_subdev_ops.pad = &core_pad_ops;
 
     /* Initialize the subdev that's already the first member of tx_isp_dev */
     isp_dev->sd.isp = isp_dev;  /* Set back-reference */
-    isp_dev->sd.ops = &core_subdev_ops_full;  /* Set operations to the properly configured structure */
+    isp_dev->sd.ops = &core_subdev_ops;  /* Set operations to the properly configured structure */
     isp_dev->sd.vin_state = TX_ISP_MODULE_INIT;  /* Set initial state */
 
     /* Initialize subdev synchronization */
     mutex_init(&isp_dev->sd.lock);
 
-    pr_info("*** tx_isp_core_probe: Core subdev initialized with ops=%p ***\n", &core_subdev_ops_full);
+    pr_info("*** tx_isp_core_probe: Core subdev initialized with ops=%p ***\n", &core_subdev_ops);
     pr_info("***   - Core ops: start=%p, stop=%p, set_format=%p ***\n",
             tx_isp_core_start, tx_isp_core_stop, tx_isp_core_set_format);
 
     /* Binary Ninja: if (tx_isp_subdev_init(arg1, $v0, &core_subdev_ops) == 0) */
-    if (tx_isp_subdev_init(pdev, &isp_dev->sd, &core_subdev_ops_full) == 0) {
+    if (tx_isp_subdev_init(pdev, &isp_dev->sd, &core_subdev_ops) == 0) {
         pr_info("*** tx_isp_core_probe: Subdev init SUCCESS ***\n");
 
         /* SAFE: Channel configuration using proper struct access */

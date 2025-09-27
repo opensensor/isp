@@ -22,9 +22,9 @@ void tx_isp_free_irq(struct tx_isp_irq_info *irq_info);
 void tx_isp_disable_irq(void *arg1);
 int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on);
 
-/* Binary Ninja interrupt handlers - EXACT reference implementation */
-irqreturn_t isp_irq_handle(int irq, void *dev_id);
-irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
+/* Use core IRQ handlers (global) */
+irqreturn_t tx_isp_core_irq_handle(int irq, void *dev_id);
+irqreturn_t tx_isp_core_irq_thread_handle(int irq, void *dev_id);
 
 /* Export the missing tx_isp_* functions */
 EXPORT_SYMBOL(tx_isp_module_init);
@@ -841,10 +841,10 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
     if (irq_num >= 0) {
         /* Reference driver behavior: Register all IRQs normally without special handling */
 
-        /* Binary Ninja: request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, 0x2000, *arg1, arg2) */
+        /* request_threaded_irq uses core handlers */
         extern struct tx_isp_dev *ourISPdev;
-        extern irqreturn_t isp_irq_handle(int irq, void *dev_id);
-        extern irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
+        extern irqreturn_t tx_isp_core_irq_handle(int irq, void *dev_id);
+        extern irqreturn_t tx_isp_core_irq_thread_handle(int irq, void *dev_id);
 
         /* CRITICAL FIX: Always pass main ISP device as dev_id to prevent kernel panic */
         /* The interrupt handlers expect tx_isp_dev*, not subdevice structures */
@@ -857,15 +857,15 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
                 irq_num, dev_name_str);
 
         pr_info("*** tx_isp_request_irq: About to call request_threaded_irq(irq=%d, handler=%p, thread=%p, flags=0x%lx, name=%s, dev_id=%p) ***\n",
-                irq_num, isp_irq_handle, isp_irq_thread_handle, IRQF_SHARED, dev_name(&pdev->dev), correct_dev_id);
+                irq_num, tx_isp_core_irq_handle, tx_isp_core_irq_thread_handle, IRQF_SHARED, dev_name(&pdev->dev), correct_dev_id);
 
         /* CRITICAL FIX: Add explicit handler address logging to verify correct functions are registered */
         pr_info("*** tx_isp_request_irq: About to register IRQ %d with handlers: main=%p, thread=%p ***\n",
-                irq_num, isp_irq_handle, isp_irq_thread_handle);
+                irq_num, tx_isp_core_irq_handle, tx_isp_core_irq_thread_handle);
 
         ret = request_threaded_irq(irq_num,
-                                   isp_irq_handle,      /* Main dispatcher handles all IRQs */
-                                   isp_irq_thread_handle, /* Thread handler */
+                                   tx_isp_core_irq_handle,      /* Main dispatcher handles all IRQs */
+                                   tx_isp_core_irq_thread_handle, /* Thread handler */
                                    IRQF_SHARED,  /* 0x2000 = IRQF_SHARED */
                                    dev_name(&pdev->dev),  /* Device name */
                                    correct_dev_id);  /* CRITICAL FIX: Pass correct structure type */
@@ -884,7 +884,7 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
         /* Binary Ninja: *arg2 = $v0_1 */
         irq_info->irq = irq_num;
         /* Binary Ninja: arg2[1] = tx_isp_enable_irq */
-        irq_info->handler = isp_irq_handle;
+        irq_info->handler = tx_isp_core_irq_handle;
         /* Binary Ninja: arg2[2] = tx_isp_disable_irq */
         irq_info->data = irq_info;  /* Store self-reference for callbacks */
         /* CRITICAL FIX: Do NOT disable IRQ after registration - working version keeps IRQs enabled */

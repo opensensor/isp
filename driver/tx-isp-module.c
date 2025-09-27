@@ -621,7 +621,7 @@ extern struct tx_isp_subdev_ops vic_subdev_ops;
 extern void tx_isp_fs_enqueue_qbuf(int channel, u32 index, u32 phys, u32 size);
 extern int tx_isp_fs_dequeue_done(int channel, u32 *index, u32 *phys, u32 *size);
 
-static struct tx_isp_subdev_ops csi_subdev_ops;
+extern struct tx_isp_subdev_ops csi_subdev_ops;
 
 /* Reference driver function declarations - Binary Ninja exact names */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);  /* FIXED: Correct signature to match tx_isp_vic.c */
@@ -2282,7 +2282,7 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
     void *current_subdev;
     int subdev_result;
     int a2_1;
-    extern int isp_clk;  /* Global isp_clk variable from tx_isp_core.c */
+    /* Use get_isp_clk() accessor instead of extern variable */
 
     pr_info("*** ispcore_activate_module: Fixed for our struct layouts ***\n");
 
@@ -2320,9 +2320,9 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                             /* Binary Ninja: if (private_clk_get_rate(*$s2_1) != 0xffff) */
                             unsigned long current_rate = clk_get_rate(clk_array[i]);
                             if (current_rate != 0xffff) {
-                                /* Binary Ninja: private_clk_set_rate(*$s2_1, isp_clk) */
-                                clk_set_rate(clk_array[i], isp_clk);
-                                pr_info("Clock %d set to %d Hz\n", i, isp_clk);
+                                /* Binary Ninja: private_clk_set_rate(*$s2_1, get_isp_clk()) */
+                                clk_set_rate(clk_array[i], get_isp_clk());
+                                pr_info("Clock %d set to %d Hz\n", i, get_isp_clk());
                             }
 
                             /* Binary Ninja: private_clk_enable(*$s2_1) */
@@ -4043,11 +4043,7 @@ static struct tx_isp_subdev_sensor_ops sensor_subdev_sensor_ops = {
 /* vic_subdev_ops is defined in tx_isp_vic.c - use external reference */
 extern struct tx_isp_subdev_ops vic_subdev_ops;
 
-static struct tx_isp_subdev_ops csi_subdev_ops = {
-    .video = &csi_video_ops,
-    .sensor = NULL,
-    .core = NULL,
-};
+extern struct tx_isp_subdev_ops csi_subdev_ops;
 
 
 /* Complete sensor subdev ops structure */
