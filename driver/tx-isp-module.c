@@ -1741,31 +1741,6 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         printk(KERN_ALERT "*** VIC IRQ: About to write v1_10=0x%x to reg 0x1f4 (base=%p) ***\n", v1_10, base_for_irq);
         writel(v1_10, base_for_irq + 0x1f4);
         wmb();
-        printk(KERN_ALERT "*** VIC IRQ: Register writes completed (at base=%p) ***\n", base_for_irq);
-
-        /* CRITICAL FIX: Remove duplicate interrupt clearing that breaks continuous interrupts */
-        /* The working good-things version ONLY clears the specific bits (v1_7, v1_10) and doesn't do this */
-        /* This duplicate clearing of ALL bits (0xFFFFFFFF) interferes with hardware interrupt generation */
-        printk(KERN_ALERT "*** VIC IRQ: CRITICAL FIX - Skipping duplicate interrupt clearing to match working good-things version ***\n");
-        /* REMOVED: writel(0xFFFFFFFF, vrp + 0x1f0); */
-        /* REMOVED: writel(0xFFFFFFFF, vrp + 0x1f4); */
-            /* If control bits lost in 0x300, re-assert them like reference -- SKIPPED */
-            if (0) {
-                u32 ctrl = readl(vrp + 0x300);
-                if ((ctrl & 0x80000020) != 0x80000020) {
-                    u32 count = vic_dev->active_buffer_count;
-                    if (count == 0) count = 2;
-                    ctrl = (count << 16) | 0x80000020;
-                    writel(ctrl, vrp + 0x300);
-                    wmb();
-                    printk(KERN_ALERT "*** VIC IRQ: Rewrote CTRL[0x300]=0x%x (count=%u) to preserve control bits ***\n", ctrl, count);
-                }
-            }
-            /* printk(KERN_ALERT "*** VIC IRQ: Restored MainMask=0xFFDFFFFE (frame-done+bit21 for debug) ***\n"); */
-        }
-
-        /* CRITICAL DEBUG: Add the missing debugging right after register writes */
-        printk(KERN_ALERT "*** VIC IRQ: About to check vic_start_ok - vic_start_ok=%u ***\n", vic_start_ok);
 
         /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
         printk(KERN_ALERT "*** VIC IRQ: vic_start_ok=%u, v1_7=0x%x, v1_10=0x%x ***\n", vic_start_ok, v1_7, v1_10);

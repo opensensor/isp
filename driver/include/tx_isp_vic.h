@@ -176,4 +176,7 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 void cache_sensor_dimensions_from_proc(void);
 void get_cached_sensor_dimensions(u32 *width, u32 *height);
 
+/* VIC interrupt restoration function - CRITICAL for continuous interrupts */
+void tx_isp_vic_restore_interrupts(void);
+
 #endif /* __TX_ISP_VIC_H__ */
