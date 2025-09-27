@@ -1722,14 +1722,14 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         printk(KERN_ALERT "*** VIC IRQ: Calculated v1_7 = 0x%x v1_10 = 0x%x ***\n", v1_7, v1_10);
 
         /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7 */
-        printk(KERN_ALERT "*** VIC IRQ: About to write v1_7=0x%x to reg 0x1f0 ***\n", v1_7);
-        writel(v1_7, vic_regs + 0x1f0);
+        printk(KERN_ALERT "*** VIC IRQ: About to write v1_7=0x%x to reg 0x1f0 (base=%p) ***\n", v1_7, base_for_irq);
+        writel(v1_7, base_for_irq + 0x1f0);
 
         /* Binary Ninja: *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
-        printk(KERN_ALERT "*** VIC IRQ: About to write v1_10=0x%x to reg 0x1f4 ***\n", v1_10);
-        writel(v1_10, vic_regs + 0x1f4);
+        printk(KERN_ALERT "*** VIC IRQ: About to write v1_10=0x%x to reg 0x1f4 (base=%p) ***\n", v1_10, base_for_irq);
+        writel(v1_10, base_for_irq + 0x1f4);
         wmb();
-        printk(KERN_ALERT "*** VIC IRQ: Register writes completed ***\n");
+        printk(KERN_ALERT "*** VIC IRQ: Register writes completed (at base=%p) ***\n", base_for_irq);
 
         /* CRITICAL DEBUG: Add the missing debugging right after register writes */
         printk(KERN_ALERT "*** VIC IRQ: About to check vic_start_ok - vic_start_ok=%u ***\n", vic_start_ok);
@@ -1753,6 +1753,20 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
                 printk(KERN_ALERT "*** VIC SUCCESS: Calling vic_framedone_irq_function ***\n");
                 vic_framedone_irq_function(vic_dev);
+
+                /* GOOD-THINGS PRESERVATION: notify frame channel that a frame is ready */
+                do {
+                    extern struct frame_channel_device frame_channels[];
+                    struct frame_channel_device *fcd = &frame_channels[0];
+                    unsigned long flags_local;
+                    if (fcd) {
+                        spin_lock_irqsave(&fcd->state.buffer_lock, flags_local);
+                        fcd->state.frame_ready = true;
+                        spin_unlock_irqrestore(&fcd->state.buffer_lock, flags_local);
+                        wake_up_interruptible(&fcd->state.frame_wait);
+                        printk(KERN_ALERT "*** VIC IRQ: frame_ready signaled to frame channel 0 ***\n");
+                    }
+                } while (0);
             } else {
                 printk(KERN_ALERT "*** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***\n");
             }
