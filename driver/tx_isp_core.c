@@ -3046,15 +3046,6 @@ static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
     return 0;
 }
 
-
-/* Platform data structure for safe member access */
-struct tx_isp_platform_data {
-    uint16_t reserved;      /* Padding to offset 2 */
-    uint32_t device_id;     /* Device ID at offset 2 */
-    uint32_t flags;         /* Additional flags */
-    uint32_t version;       /* Version info */
-} __attribute__((packed));
-
 /* tx_isp_core_probe - SAFE implementation using proper struct member access */
 int tx_isp_core_probe(struct platform_device *pdev)
 {
