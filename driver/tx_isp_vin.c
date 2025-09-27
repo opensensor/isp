@@ -1037,15 +1037,11 @@ int tx_isp_vin_probe(struct platform_device *pdev)
     }
     mcp_log_info("vin_probe: IRQ obtained", vin->irq);
 
-    /* Get clock */
-    vin->vin_clk = clk_get(&pdev->dev, "vin");
-    if (IS_ERR(vin->vin_clk)) {
-        mcp_log_error("vin_probe: failed to get clock", PTR_ERR(vin->vin_clk));
-        vin->vin_clk = NULL; /* Optional clock */
-    } else {
-        clk_prepare_enable(vin->vin_clk);
-        mcp_log_info("vin_probe: clock enabled", 0);
-    }
+    /* CRITICAL FIX: VIN on T31 is integrated into ISP core and doesn't need separate clock
+     * Binary Ninja reference shows tx_isp_vin_probe doesn't attempt to get any clocks
+     * VIN uses the ISP core clock which is already enabled by the ISP core initialization */
+    vin->vin_clk = NULL; /* VIN doesn't need separate clock on T31 */
+    mcp_log_info("vin_probe: VIN integrated into ISP core - no separate clock needed", 0);
 
     /* Initialize subdev */
     sd = &vin->sd;
@@ -1104,11 +1100,13 @@ int tx_isp_vin_remove(struct platform_device *pdev)
     /* Cleanup subdev */
     tx_isp_subdev_deinit(&vin->sd);
 
-    /* Disable and release clock */
+    /* VIN doesn't have separate clock on T31 - integrated into ISP core */
     if (vin->vin_clk) {
         clk_disable_unprepare(vin->vin_clk);
         clk_put(vin->vin_clk);
         mcp_log_info("vin_remove: clock disabled", 0);
+    } else {
+        mcp_log_info("vin_remove: no separate clock to disable (integrated into ISP core)", 0);
     }
 
     /* Unmap registers */
