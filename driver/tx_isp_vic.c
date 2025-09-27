@@ -2772,6 +2772,19 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** VIC VERIFY (PRIMARY EXTRA): [0x100]=0x%08x [0x14]=0x%08x (PRIMARY 0x14=stride) ***\n",
                         readl(vr + 0x100), readl(vr + 0x14));
                 udelay(50);
+            /* Program minimal VIC timing/packing block like good-things (PRIMARY bank) */
+            if (vic_dev->vic_regs) {
+                void __iomem *vr_t = vic_dev->vic_regs;
+                writel(0x0002c000, vr_t + 0x10c);
+                writel(0x07800000, vr_t + 0x110);
+                writel(0x00000000, vr_t + 0x114);
+                writel(0x00000000, vr_t + 0x118);
+                writel(0x00000000, vr_t + 0x11c);
+                wmb();
+                pr_info("*** VIC TIMING (PRIMARY): [0x10c]=0x%08x [0x110]=0x%08x [0x114]=0x%08x [0x118]=0x%08x [0x11c]=0x%08x ***\n",
+                        readl(vr_t + 0x10c), readl(vr_t + 0x110), readl(vr_t + 0x114), readl(vr_t + 0x118), readl(vr_t + 0x11c));
+            }
+
 
             }
             if (vic_dev->vic_regs_control) {
