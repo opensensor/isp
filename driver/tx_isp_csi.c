@@ -339,50 +339,52 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     return 0;
 }
 
-
-/* CSI sensor operations IOCTL handler */
+/* CSI sensor operations IOCTL handler - EXACT Binary Ninja reference implementation */
 int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
     struct tx_isp_csi_device *csi_dev;
 
-    if (!sd)
-        return -EINVAL;
+    /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) */
+    if (sd != NULL && (unsigned long)sd < 0xfffff001) {
 
-    /* Get the CSI device from the subdevice */
-    csi_dev = ourISPdev->csi_dev;
-    if (!csi_dev) {
-        pr_info("CSI device is NULL\n");
-        return -EINVAL;
-    }
+        /* Binary Ninja: *(arg1 + 0x110) - get CSI device from subdev private data */
+        csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+        if (!csi_dev) {
+            /* Binary Ninja: return 0 on error */
+            return 0;
+        }
 
-    switch (cmd) {
-    case TX_ISP_EVENT_SENSOR_RESIZE:  /* This is the correct event for reset */
-        /* CRITICAL FIX: DO NOT RESET CSI STATE IF HARDWARE IS ALREADY INITIALIZED */
-        /* The CSI hardware initialization during probe should be preserved */
-        pr_info("*** CSI EVENT: SENSOR_RESIZE received, but preserving initialized CSI hardware state=%d ***\n", csi_dev->state);
-
-        /* Only reset if CSI is in error state, not if it's properly initialized */
-        if (csi_dev->state == CSI_STATE_ERROR) {
-            csi_dev->state = CSI_STATE_IDLE;  /* Reset only from error state */
-            pr_info("CSI reset from ERROR to IDLE state due to sensor resize\n");
+        /* Binary Ninja: if (arg2 != 0x200000e) */
+        if (cmd != 0x200000e) {
+            /* Binary Ninja: if (arg2 != 0x200000f) */
+            if (cmd != 0x200000f) {
+                /* Binary Ninja: if (arg2 == 0x200000c) */
+                if (cmd == 0x200000c) {
+                    /* Binary Ninja: csi_core_ops_init(arg1, 1, 0x200000f) */
+                    csi_core_ops_init(sd, 1);
+                }
+            } else {
+                /* Binary Ninja: else if (*(*(arg1 + 0x110) + 0x14) == 1) */
+                /* Check if CSI device interface type is 1 (MIPI) */
+                /* 0x14 offset in CSI device structure is interface_type */
+                if (csi_dev->interface_type == 1) {
+                    /* Binary Ninja: *(arg1 + 0x128) = 4 */
+                    /* CRITICAL FIX: Set state in CSI device, not subdev */
+                    csi_dev->state = 4;  /* Set to streaming_on state */
+                }
+            }
         } else {
-            pr_info("CSI hardware state preserved (state=%d) - no reset needed\n", csi_dev->state);
+            /* Binary Ninja: else if (*(*(arg1 + 0x110) + 0x14) == 1) */
+            /* Check if CSI device interface type is 1 (MIPI) */
+            if (csi_dev->interface_type == 1) {
+                /* Binary Ninja: *(arg1 + 0x128) = 3 */
+                /* CRITICAL FIX: Set state in CSI device, not subdev */
+                csi_dev->state = 3;  /* Set to streaming_off state */
+            }
         }
-        break;
-    case TX_ISP_EVENT_SENSOR_FPS:
-        /* Update FPS */
-        /* CRITICAL FIX: Don't check for ERROR state (3)! Check for ACTIVE (2) */
-        if (csi_dev->state >= CSI_STATE_ACTIVE) {
-            /* Stay in ACTIVE state for FPS changes */
-            pr_info("CSI FPS update while in ACTIVE state\n");
-        }
-        break;
-    case TX_ISP_EVENT_SENSOR_PREPARE_CHANGE:  /* This is the correct event for start */
-        /* Start CSI */
-        csi_core_ops_init(sd, 1);
-        break;
     }
 
+    /* Binary Ninja: return 0 */
     return 0;
 }
 
@@ -397,7 +399,7 @@ int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sens
     /* Find or create the sensor */
     if (!sd->active_sensor) {
         /* In a real implementation, we would create a new sensor here */
-        pr_info("No active sensor to sync attributes with\n");
+        pr_err("No active sensor to sync attributes with\n");
         return -EINVAL;
     }
 
@@ -406,63 +408,6 @@ int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sens
     memcpy(&sensor->attr, attr, sizeof(struct tx_isp_sensor_attribute));
 
     return 0;
-}
-
-/* Program CSI PHY and LANE registers to match BN MCP reference trace */
-static void csi_program_ref_sequence(void __iomem *base)
-{
-    struct { u32 off, val; } ctrl_writes[] = {
-        {0x00, 0x7d}, {0x04, 0xe3}, {0x08, 0xa0}, {0x0c, 0x83}, {0x10, 0xfa},
-        {0x1c, 0x88}, {0x20, 0x4e}, {0x24, 0xdd}, {0x28, 0x84}, {0x2c, 0x5e},
-        {0x30, 0xf0}, {0x34, 0xc0}, {0x38, 0x36}, {0x3c, 0xdb}, {0x40, 0x03},
-        {0x44, 0x80}, {0x48, 0x10}, {0x54, 0x03}, {0x58, 0xff}, {0x5c, 0x42},
-        {0x60, 0x01}, {0x64, 0xc0}, {0x68, 0xc0}, {0x6c, 0x78}, {0x70, 0x43},
-        {0x74, 0x33}, {0x80, 0x1f}, {0x88, 0x61},
-    };
-    struct { u32 off, val; } cfg_writes[] = {
-        {0x100, 0x8a}, {0x104, 0x05}, {0x10c, 0x40}, {0x110, 0xb0}, {0x114, 0xc5},
-        {0x118, 0x03}, {0x11c, 0x20}, {0x120, 0x0f}, {0x124, 0x48}, {0x128, 0x3f},
-        {0x12c, 0x0f}, {0x130, 0x88}, {0x138, 0x86}, {0x13c, 0x10}, {0x140, 0x04},
-        {0x144, 0x01}, {0x148, 0x32}, {0x14c, 0x80}, {0x158, 0x01}, {0x15c, 0x60},
-        {0x160, 0x1b}, {0x164, 0x18}, {0x168, 0x7f}, {0x16c, 0x4b}, {0x174, 0x03},
-        {0x180, 0x8a}, {0x184, 0x05}, {0x18c, 0x40}, {0x190, 0xb0}, {0x194, 0xc5},
-        {0x198, 0x03}, {0x19c, 0x09}, {0x1a0, 0x0f}, {0x1a4, 0x48}, {0x1a8, 0x0f},
-        {0x1ac, 0x0f}, {0x1b0, 0x88}, {0x1b8, 0x86}, {0x1bc, 0x10}, {0x1c0, 0x04},
-        {0x1c4, 0x01}, {0x1c8, 0x32}, {0x1cc, 0x80}, {0x1d8, 0x01}, {0x1dc, 0x60},
-        {0x1e0, 0x1b}, {0x1e4, 0x18}, {0x1e8, 0x7f}, {0x1ec, 0x4b}, {0x1f4, 0x03},
-    };
-    struct { u32 off, val; } lane_writes[] = {
-        {0x200, 0x8a}, {0x204, 0x05}, {0x20c, 0x40}, {0x210, 0xb0}, {0x214, 0xc5},
-        {0x218, 0x03}, {0x21c, 0x09}, {0x220, 0x0f}, {0x224, 0x48}, {0x228, 0x0f},
-        {0x22c, 0x0f}, {0x230, 0x88}, {0x238, 0x86}, {0x23c, 0x10}, {0x240, 0x04},
-        {0x244, 0x01}, {0x248, 0x32}, {0x24c, 0x80}, {0x258, 0x01}, {0x25c, 0x60},
-        {0x260, 0x1b}, {0x264, 0x18}, {0x268, 0x7f}, {0x26c, 0x4b}, {0x274, 0x03},
-        {0x280, 0x8a}, {0x284, 0x05}, {0x28c, 0x40}, {0x290, 0xb0}, {0x294, 0xc5},
-        {0x298, 0x03}, {0x29c, 0x09}, {0x2a0, 0x0f}, {0x2a4, 0x48}, {0x2a8, 0x0f},
-        {0x2ac, 0x0f}, {0x2b0, 0x88}, {0x2b8, 0x86}, {0x2bc, 0x10}, {0x2c0, 0x04},
-        {0x2c4, 0x01}, {0x2c8, 0x32}, {0x2cc, 0x80}, {0x2d8, 0x01}, {0x2dc, 0x60},
-        {0x2e0, 0x1b}, {0x2e4, 0x18}, {0x2e8, 0x7f}, {0x2ec, 0x4b}, {0x2f4, 0x03},
-    };
-
-    int i;
-    if (!base)
-        return;
-
-    /* Control block */
-    for (i = 0; i < ARRAY_SIZE(ctrl_writes); ++i) {
-        writel(ctrl_writes[i].val, base + ctrl_writes[i].off);
-        wmb();
-    }
-    /* Config block */
-    for (i = 0; i < ARRAY_SIZE(cfg_writes); ++i) {
-        writel(cfg_writes[i].val, base + cfg_writes[i].off);
-        wmb();
-    }
-    /* Lane block */
-    for (i = 0; i < ARRAY_SIZE(lane_writes); ++i) {
-        writel(lane_writes[i].val, base + lane_writes[i].off);
-        wmb();
-    }
 }
 
 /* csi_core_ops_init - EXACT Binary Ninja reference implementation */
@@ -692,46 +637,87 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 /* csi_set_on_lanes - EXACT Binary Ninja implementation */
 int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes)
 {
-    void __iomem *csi_base;
+    void __iomem *csi_regs;
     u32 reg_val;
 
-    pr_info("*** csi_set_on_lanes: EXACT Binary Ninja implementation ***\n");
-    pr_info("csi_set_on_lanes: lanes=%d\n", lanes);
+    /* Binary Ninja: isp_printf(0, "Can't output the width(%d)!\n", "csi_set_on_lanes") */
+    isp_printf(0, "Can't output the width(%d)!\n", "csi_set_on_lanes");
 
-    if (!csi_dev) {
-        pr_info("csi_set_on_lanes: CSI device is NULL\n");
+    /* Binary Ninja: void* $v1 = *(arg1 + 0xb8) */
+    csi_regs = csi_dev->csi_regs;
+
+    /* Binary Ninja: *($v1 + 4) = ((zx.d(arg2) - 1) & 3) | (*($v1 + 4) & 0xfffffffc) */
+    reg_val = readl(csi_regs + 4);
+    reg_val = (reg_val & 0xfffffffc) | ((lanes - 1) & 3);
+    writel(reg_val, csi_regs + 4);
+
+    /* Binary Ninja: return 0 */
+    return 0;
+}
+
+/* tx_isp_csi_slake_subdev - EXACT Binary Ninja reference implementation */
+int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
+{
+    struct tx_isp_csi_device *csi_dev;
+    int state;
+    int i;
+
+    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 0xffffffea */
+    if (!sd || (unsigned long)sd >= 0xfffff001) {
         return -EINVAL;
     }
 
-    /* Binary Ninja: void* $v1 = *(arg1 + 0xb8) */
-    /* CRITICAL FIX: Ensure CSI base is properly initialized */
-    csi_base = csi_dev->csi_regs;
-    if (!csi_base) {
-        pr_info("csi_set_on_lanes: CSI base is NULL\n");
-
-        /* Try to initialize CSI registers if not already done */
-        if (!tx_isp_csi_regs) {
-            tx_isp_csi_regs = ioremap(0x10022000, 0x1000);
-            if (!tx_isp_csi_regs) {
-                pr_info("*** ERROR: CSI lane configuration failed: -22 ***\n");
-                return -EINVAL;
-            }
-        }
-
-        csi_base = tx_isp_csi_regs;
-
-        pr_info("CSI base address initialized: %p\n", csi_base);
+    /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
+    /* SAFE: Use proper function instead of offset-based access */
+    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+    if (!csi_dev || (unsigned long)csi_dev >= 0xfffff001) {
+        return -EINVAL;
     }
 
-    /* Binary Ninja: *($v1 + 4) = ((zx.d(arg2) - 1) & 3) | (*($v1 + 4) & 0xfffffffc) */
-    reg_val = readl(csi_base + 4);
-    reg_val = (reg_val & 0xfffffffc) | ((lanes - 1) & 3);
-    writel(reg_val, csi_base + 4);
-    wmb();
+    pr_info("*** tx_isp_csi_slake_subdev: CSI slake/shutdown - current state=%d ***\n", csi_dev->state);
 
-    pr_info("*** CSI lanes configured: %d lanes (reg 0x4 = 0x%08x) ***\n", lanes, reg_val);
+    /* Binary Ninja: int32_t $v1_2 = *($s0_1 + 0x128) */
+    state = csi_dev->state;
 
-    /* Binary Ninja: return 0 */
+    /* Binary Ninja: if ($v1_2 == 4) csi_video_s_stream(arg1, 0) */
+    if (state == 4) {
+        pr_info("tx_isp_csi_slake_subdev: CSI in streaming state, stopping stream\n");
+        csi_video_s_stream(sd, 0);
+        state = csi_dev->state;  /* Update state after s_stream */
+    }
+
+    /* Binary Ninja: void* $s2_1 = $s0_1 + 0x12c - Get mutex */
+    /* Binary Ninja: if ($v1_2 == 3) csi_core_ops_init(arg1, 0) */
+    if (csi_dev->state == 3) {
+        pr_info("tx_isp_csi_slake_subdev: CSI in state 3, calling core_ops_init(disable)\n");
+        csi_core_ops_init(sd, 0);
+    }
+
+    /* Binary Ninja: private_mutex_lock($s2_1) */
+    mutex_lock(&csi_dev->mlock);
+
+    /* Binary Ninja: if (*($s0_1 + 0x128) == 2) *($s0_1 + 0x128) = 1 */
+    if (csi_dev->state == 2) {
+        pr_info("tx_isp_csi_slake_subdev: CSI state 2->1, disabling clocks\n");
+        csi_dev->state = 1;
+
+        /* Binary Ninja: void* $v0 = *(arg1 + 0xbc) - Get clocks array */
+        /* Binary Ninja: if ($v0 != 0 && $v0 u< 0xfffff001) - Clock disabling loop */
+        if (sd->clks && sd->clk_num > 0) {
+            /* Binary Ninja: int32_t $s0_2 = *(arg1 + 0xc0) - Get clock count */
+            /* Binary Ninja: Clock disabling loop in reverse order */
+            for (i = sd->clk_num - 1; i >= 0; i--) {
+                if (sd->clks[i]) {
+                    /* Binary Ninja: private_clk_disable(*$s0_4) */
+                    clk_disable(sd->clks[i]);
+                    pr_info("tx_isp_csi_slake_subdev: Disabled clock %d\n", i);
+                }
+            }
+        }
+    }
+
+    mutex_unlock(&csi_dev->mlock);
+    pr_info("*** tx_isp_csi_slake_subdev: CSI slake complete, final state=%d ***\n", csi_dev->state);
     return 0;
 }
 
@@ -751,13 +737,86 @@ static struct tx_isp_subdev_sensor_ops csi_sensor_ops = {
     .ioctl = csi_sensor_ops_ioctl,
 };
 
+/* CSI internal operations - EXACT Binary Ninja implementation */
+struct tx_isp_subdev_internal_ops csi_internal_ops = {
+    .slake_module = tx_isp_csi_slake_subdev,
+};
+
 /* Initialize the subdev ops structure with pointers to the operations */
 struct tx_isp_subdev_ops csi_subdev_ops = {
     .core = &csi_core_ops,
     .video = &csi_video_ops,
     .sensor = &csi_sensor_ops,
+    .internal = &csi_internal_ops,
 };
 EXPORT_SYMBOL(csi_subdev_ops);
+EXPORT_SYMBOL(tx_isp_csi_slake_subdev);
+
+/* Forward declarations for CSI file operations */
+static int dump_isp_csi_open(struct inode *inode, struct file *file);
+static int isp_csi_show(struct seq_file *m, void *v);
+
+/* dump_isp_csi_open - EXACT Binary Ninja implementation */
+static int dump_isp_csi_open(struct inode *inode, struct file *file)
+{
+    /* Binary Ninja: return private_single_open_size(arg2, isp_csi_show, PDE_DATA(), 0x400) __tailcall */
+    return single_open_size(file, isp_csi_show, PDE_DATA(inode), 0x400);
+}
+
+/* isp_csi_show - EXACT Binary Ninja implementation */
+static int isp_csi_show(struct seq_file *m, void *v)
+{
+    void *csi_data = m->private;
+    struct tx_isp_csi_device *csi_dev;
+    void __iomem *csi_regs;
+    u32 reg_20, reg_24;
+    int result = 0;
+
+    /* Binary Ninja: void* $v0 = *(arg1 + 0x3c) */
+    if (csi_data != NULL && (unsigned long)csi_data < 0xfffff001) {
+        /* Binary Ninja: void* $s1_1 = *($v0 + 0xd4) */
+        csi_dev = (struct tx_isp_csi_device *)csi_data;
+
+        if (csi_dev != NULL && (unsigned long)csi_dev < 0xfffff001) {
+            /* Binary Ninja: void* $v0_2 = *($s1_1 + 0xb8) */
+            csi_regs = csi_dev->csi_regs;
+
+            /* Binary Ninja: int32_t $v1_1 = *($v0_2 + 0x20) */
+            reg_20 = readl(csi_regs + 0x20);
+            /* Binary Ninja: int32_t $v0_4 = *($v0_2 + 0x24) */
+            reg_24 = readl(csi_regs + 0x24);
+
+            /* Binary Ninja: if ($v1_1 != 0) result = seq_printf(arg1, "sensor type is BT656!\n", $v1_1) */
+            if (reg_20 != 0) {
+                result = seq_printf(m, "sensor type is BT656!\n", reg_20);
+            }
+
+            /* Binary Ninja: if ($v0_4 != 0) result += seq_printf(arg1, "sensor type is BT601!\n", $v0_4) */
+            if (reg_24 != 0) {
+                result += seq_printf(m, "sensor type is BT601!\n", reg_24);
+            }
+
+            /* Binary Ninja: return result + seq_printf(arg1, "%s[%d] VIC failed to config DVP mode!(8bits-sensor)\n", *($v0_10 + 0x14)) */
+            if (reg_20 != 0 || reg_24 != 0) {
+                u32 reg_14 = readl(csi_regs + 0x14);
+                return result + seq_printf(m, "%s[%d] VIC failed to config DVP mode!(8bits-sensor)\n", reg_14);
+            }
+        }
+    }
+
+    /* Binary Ninja: isp_printf(2, "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n", entry_$a2) */
+    isp_printf(2, "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n", 0);
+    return 0;
+}
+
+/* CSI file operations - Binary Ninja reference */
+const struct file_operations isp_csi_fops = {
+    .owner = THIS_MODULE,
+    .open = dump_isp_csi_open,
+    .read = seq_read,
+    .llseek = seq_lseek,
+    .release = single_release,
+};
 
 // Define resources outside probe
 static struct resource tx_isp_csi_resources[] = {
@@ -899,50 +958,58 @@ pr_info("========================\n");
 int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
 {
     struct tx_isp_csi_device *csi_dev;
+    struct clk **clks;
+    int clk_count;
+    int i;
+    int result = 0xffffffea; /* Binary Ninja: int32_t result = 0xffffffea */
 
-    if (!sd)
-        return -EINVAL;
+    /* Binary Ninja: if (arg1 != 0) */
+    if (sd != NULL) {
+        /* Binary Ninja: if (arg1 u>= 0xfffff001) return 0xffffffea */
+        if ((unsigned long)sd >= 0xfffff001) {
+            return 0xffffffea;
+        }
 
-    csi_dev = ourISPdev->csi_dev;
-    if (!csi_dev) {
-        pr_info("CSI device is NULL\n");
-        return -EINVAL;
+        /* Binary Ninja: void* $s1_1 = *(arg1 + 0xd4) */
+        csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+        result = 0xffffffea;
+
+        /* Binary Ninja: if ($s1_1 != 0 && $s1_1 u< 0xfffff001) */
+        if (csi_dev != NULL && (unsigned long)csi_dev < 0xfffff001) {
+            /* Binary Ninja: private_mutex_lock($s1_1 + 0x12c) */
+            mutex_lock(&csi_dev->mlock);
+
+            /* Binary Ninja: if (*($s1_1 + 0x128) == 1) */
+            if (csi_dev->state == 1) {
+                /* Binary Ninja: *($s1_1 + 0x128) = 2 */
+                csi_dev->state = 2;
+
+                /* Binary Ninja: int32_t* $s1_2 = *(arg1 + 0xbc) */
+                clks = sd->clks;
+
+                /* Binary Ninja: if ($s1_2 != 0) */
+                if (clks != NULL) {
+                    /* Binary Ninja: if ($s1_2 u< 0xfffff001) */
+                    if ((unsigned long)clks < 0xfffff001) {
+                        /* Binary Ninja: while (i u< *(arg1 + 0xc0)) */
+                        clk_count = sd->clk_num;
+                        for (i = 0; i < clk_count; i++) {
+                            /* Binary Ninja: private_clk_enable(*$s1_2) */
+                            clk_enable(clks[i]);
+                        }
+                    }
+                }
+            }
+
+            /* Binary Ninja: private_mutex_unlock($s1_1 + 0x12c) */
+            mutex_unlock(&csi_dev->mlock);
+            /* Binary Ninja: return 0 */
+            return 0;
+        }
     }
 
-    mutex_lock(&csi_dev->mutex);
-
-    if (csi_dev->state == 1) {
-        csi_dev->state = 2; /* INIT -> READY */
-        pr_info("CSI activated: state %d -> 2 (READY)\n", 1);
-    }
-
-    mutex_unlock(&csi_dev->mutex);
-    return 0;
-}
-
-/* CSI slake function - matching reference driver */
-int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
-{
-    struct tx_isp_csi_device *csi_dev;
-
-    if (!sd)
-        return -EINVAL;
-
-    csi_dev = ourISPdev->csi_dev;
-    if (!csi_dev) {
-        pr_info("CSI device is NULL\n");
-        return -EINVAL;
-    }
-
-    mutex_lock(&csi_dev->mutex);
-
-    if (csi_dev->state > 1) {
-        csi_dev->state = 1; /* Back to INIT state */
-        pr_info("CSI slaked: state -> 1 (INIT)\n");
-    }
-
-    mutex_unlock(&csi_dev->mutex);
-    return 0;
+    /* Binary Ninja: return result */
+    return result;
 }
 
 /* Export symbols for use by other parts of the driver */
