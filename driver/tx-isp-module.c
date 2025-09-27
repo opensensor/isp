@@ -1742,11 +1742,11 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
             writel(0xFFFFFFFF, vrp + 0x1f0);
             writel(0xFFFFFFFF, vrp + 0x1f4);
             wmb();
-            /* Do NOT modify 0x1e0 here; it's a status W1C in the reference. Only adjust MainMask. */
-            writel(0xFFDFFFFE, vrp + 0x1e8);
+            /* Skip mask/ctrl restore in ISR to match good-things: no MainMask/CTRL writes here. */
+            /* writel(0xFFDFFFFE, vrp + 0x1e8);  -- SKIPPED */
             wmb();
-            /* If control bits lost in 0x300, re-assert them like reference */
-            do {
+            /* If control bits lost in 0x300, re-assert them like reference -- SKIPPED */
+            if (0) {
                 u32 ctrl = readl(vrp + 0x300);
                 if ((ctrl & 0x80000020) != 0x80000020) {
                     u32 count = vic_dev->active_buffer_count;
@@ -1756,8 +1756,8 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                     wmb();
                     printk(KERN_ALERT "*** VIC IRQ: Rewrote CTRL[0x300]=0x%x (count=%u) to preserve control bits ***\n", ctrl, count);
                 }
-            } while (0);
-            printk(KERN_ALERT "*** VIC IRQ: Restored MainMask=0xFFDFFFFE (frame-done+bit21 for debug) ***\n");
+            }
+            /* printk(KERN_ALERT "*** VIC IRQ: Restored MainMask=0xFFDFFFFE (frame-done+bit21 for debug) ***\n"); */
         }
 
         /* CRITICAL DEBUG: Add the missing debugging right after register writes */
