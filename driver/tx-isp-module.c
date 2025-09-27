@@ -5095,6 +5095,12 @@ static int tx_isp_init(void)
         pr_info("*** REGISTERED CSI SUBDEV AT INDEX 1 ***\n");
         pr_info("CSI subdev: %p, ops=%p\n", &csi_dev->sd, csi_dev->sd.ops);
     }
+    /* Register CORE subdev at index 4 (core sd is isp_dev->sd) */
+    if (ourISPdev) {
+        ourISPdev->subdevs[4] = &ourISPdev->sd;
+        pr_info("*** REGISTERED CORE SUBDEV AT INDEX 4 ***\n");
+    }
+
 
     /* *** CRITICAL: Register platform devices with proper IRQ setup *** */
     pr_info("*** REGISTERING PLATFORM DEVICES FOR DUAL IRQ SETUP (37 + 38) ***\n");

@@ -3458,6 +3458,10 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
     /* CRITICAL: Initialize the core subdev with proper operations */
     pr_info("*** tx_isp_core_probe: Initializing core subdev with operations ***\n");
+    /* Make global pointer available early to avoid races in early IOCTL paths */
+    ourISPdev = isp_dev;
+    pr_info("*** tx_isp_core_probe: Global ISP device set early for linking ***\n");
+
 
     /* Set up the core subdev operations with our implemented functions (BN MCP exact wiring) */
     core_subdev_core_ops.init = core_subdev_core_init_bridge;
@@ -3494,6 +3498,13 @@ int tx_isp_core_probe(struct platform_device *pdev)
     core_dev->sd.isp = isp_dev;
 
     /* Expose core_dev via subdev dev_priv so tx_isp_subdev_auto_link can retrieve it */
+    /* Ensure bi-directional link via helper as well (validates magic and sets backrefs) */
+    tx_isp_link_core_device(isp_dev, core_dev);
+
+    /* Populate Binary Ninja subdev array at index 4 (core) for tx_isp_video_link_stream */
+    isp_dev->subdevs[4] = &isp_dev->sd;
+    pr_info("*** REGISTERED CORE SUBDEV AT INDEX 4 (sd=%p) ***\n", &isp_dev->sd);
+
     tx_isp_set_subdevdata(&isp_dev->sd, core_dev);
 
     /* Also attach to isp_dev so early users (e.g., tuning path) can see it */
