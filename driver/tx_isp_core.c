@@ -158,6 +158,7 @@ static int per_frame_sensor_ops_enabled = 0;
 module_param(per_frame_sensor_ops_enabled, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(per_frame_sensor_ops_enabled, "Enable per-frame sensor I2C ops in frame sync work (default 0)");
 
+static struct work_struct ispcore_fs_work;
 static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
 extern struct tx_isp_dev *ourISPdev;
 
@@ -3619,6 +3620,7 @@ int tx_isp_core_remove(struct platform_device *pdev)
         fs_workqueue = NULL;
         pr_info("*** ISP CORE: Frame sync workqueue destroyed ***\n");
     }
+    cancel_work_sync(&ispcore_fs_work);
 
     if (core_dev) {
         isp_core_tuning_deinit(core_dev);
