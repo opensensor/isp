@@ -207,9 +207,11 @@ struct tx_isp_dev {
     struct platform_device *core_pdev;
     struct platform_device *fs_pdev;
 
-    /* Global clocks (core-specific clocks moved to core_dev) */
-    struct clk *cgu_isp;         /* Global CGU ISP clock */
-    struct clk *csi_clk;         /* CSI clock (CSI-specific) */
+    /* Clocks */
+    struct clk *cgu_isp;
+    struct clk *isp_clk;
+    struct clk *ipu_clk;
+    struct clk *csi_clk;
 
     /* GPIO control */
     int reset_gpio;
@@ -227,6 +229,8 @@ struct tx_isp_dev {
     struct completion frame_complete;  /* Global frame completion */
 
     /* IRQ management */
+    int isp_irq;
+    int isp_irq2;
     void (*vic_irq_handler)(void *);
     void (*vic_irq_disable)(void *);
     void *vic_irq_priv;
