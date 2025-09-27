@@ -1744,9 +1744,10 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
     /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) */
     /* CRITICAL FIX: arg1 is the subdev parameter, not isp_dev */
     if (sd != NULL && (unsigned long)sd < 0xfffff001) {
-        /* Binary Ninja: $s0 = arg1[0x35] - This is sd->host_priv (core device) */
-        s0 = sd->host_priv;  /* This should be the core device */
-        pr_info("*** ispcore_core_ops_init: s0 (core_dev) = %p from sd->host_priv ***\n", s0);
+        /* CRITICAL FIX: Use sd->dev_priv instead of sd->host_priv for core device */
+        /* The logs show sd->dev_priv=85f94800 (core_dev) but sd->host_priv=null */
+        s0 = sd->dev_priv;  /* This should be the core device */
+        pr_info("*** ispcore_core_ops_init: s0 (core_dev) = %p from sd->dev_priv ***\n", s0);
     }
 
     /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
