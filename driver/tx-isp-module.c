@@ -1218,23 +1218,6 @@ static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void
 /* VIC core s_stream - EXACT Binary Ninja implementation */
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable);
 
-/* Frame channel state management */
-struct tx_isp_channel_state {
-    bool enabled;
-    bool streaming;
-    int format;
-    int width;
-    int height;
-    int buffer_count;
-    uint32_t sequence;           /* Frame sequence counter */
-
-    /* Simplified buffer management for now */
-    struct frame_buffer current_buffer;     /* Current active buffer */
-    spinlock_t buffer_lock;                /* Protect buffer access */
-    wait_queue_head_t frame_wait;          /* Wait queue for frame completion */
-    bool frame_ready;                      /* Simple frame ready flag */
-};
-
 // Frame channel devices - create video channel devices like reference
 struct frame_channel_device {
     struct miscdevice miscdev;
