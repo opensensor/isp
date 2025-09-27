@@ -2718,15 +2718,17 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         writel(w, core + 0x9a00);     /* width */
                         writel(h, core + 0x9a04);     /* height */
                         writel(stride, core + 0x9a2c);/* line step or related */
-                        /* 0x9a94/0x9a98 are set earlier during init, leave as-is */
+                        /* Override tuning’s stale width-like register with dynamic width */
+                        writel(w, core + 0x9a98);     /* observed as 0x500 in logs when width was 1280 */
+                        /* 0x9a94 already set to 1 earlier; leave as-is */
 
                         /* Now (re)assert the core VIC IRQ gate */
                         writel(0x200, core + 0x9ac0);
                         writel(0x200, core + 0x9ac8);
                         wmb();
-                        pr_info("*** CORE VIC ROUTE INIT: [9a00]=0x%08x [9a04]=0x%08x [9a2c]=0x%08x [9a34]=0x%08x [9a88]=0x%08x [9a80]=0x%08x; GATE [9ac0]=0x%08x [9ac8]=0x%08x ***\n",
+                        pr_info("*** CORE VIC ROUTE INIT: [9a00]=0x%08x [9a04]=0x%08x [9a2c]=0x%08x [9a34]=0x%08x [9a88]=0x%08x [9a80]=0x%08x [9a98]=0x%08x; GATE [9ac0]=0x%08x [9ac8]=0x%08x ***\n",
                                 readl(core + 0x9a00), readl(core + 0x9a04), readl(core + 0x9a2c),
-                                readl(core + 0x9a34), readl(core + 0x9a88), readl(core + 0x9a80),
+                                readl(core + 0x9a34), readl(core + 0x9a88), readl(core + 0x9a80), readl(core + 0x9a98),
                                 readl(core + 0x9ac0), readl(core + 0x9ac8));
                     } while (0);
                     pr_info("*** vic_core_s_stream: CORE W1C [9a70/9a7c] then ROUTE INIT + GATE REASSERT ***\n");

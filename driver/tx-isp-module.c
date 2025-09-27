@@ -4738,6 +4738,25 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
         if (vic->vic_regs) {
             void __iomem *vr = vic->vic_regs;
             void __iomem *vc = vic->vic_regs_control;
+
+            /* Clear any pending first on both primary and control banks */
+            writel(0x00000000, vr + 0x00);
+            writel(0x00000000, vr + 0x20);
+            if (vc) {
+                writel(0x00000000, vc + 0x00);
+                writel(0x00000000, vc + 0x20);
+            }
+            wmb();
+
+            /* Good-things gating: IMR/IMCR on PRIMARY bank (matches reference trace) */
+            /* These gate the VIC line before detailed enables; required for interrupts to exit the block */
+            writel(0x00000001, vr + 0x04);   /* IMR baseline */
+            writel(0x00000000, vr + 0x24);   /* IMR1 baseline */
+            writel(0x07800438, vr + 0x04);   /* IMR routing/mask */
+            writel(0xb5742249, vr + 0x0c);   /* IMCR key */
+            wmb();
+
+            /* Our early VIC source enables (kept) on both banks */
             writel(0x3FFFFFFF, vr + 0x1e0); /* Enable VIC sources early */
             writel(0x0000000F, vr + 0x1e4); /* Enable MDMA subset early */
             if (vc) {
@@ -4745,6 +4764,7 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
                 writel(0x0000000F, vc + 0x1e4);
             }
             wmb();
+
             pr_info("*** EARLY VIC ENABLES (MODULE INIT): PRIMARY [1e0]=0x%08x [1e4]=0x%08x ***\n",
                     readl(vr + 0x1e0), readl(vr + 0x1e4));
             if (vc) {
