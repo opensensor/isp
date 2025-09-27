@@ -453,12 +453,15 @@ static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
         static int fps_value = (25 << 16) | 1;  /* Default 25/1 FPS in correct format */
 
         /* Update FPS from tuning data if available */
-        if (isp_dev->core_dev->tuning_data && isp_dev->core_dev->tuning_data->fps_num > 0 && isp_dev->core_dev->tuning_data->fps_den > 0) {
-            int new_fps = (isp_dev->core_dev->tuning_data->fps_num << 16) | isp_dev->core_dev->tuning_data->fps_den;
-            if (new_fps != fps_value) {
-                fps_value = new_fps;
-                pr_info("*** ispcore_sensor_ops_ioctl: Updated FPS to %d/%d (0x%x) from tuning data ***\n",
-                        isp_dev->core_dev->tuning_data->fps_num, isp_dev->core_dev->tuning_data->fps_den, fps_value);
+        if (isp_dev->core_dev->tuning_data) {
+            struct isp_tuning_data *tuning = (struct isp_tuning_data *)isp_dev->core_dev->tuning_data;
+            if (tuning->fps_num > 0 && tuning->fps_den > 0) {
+                int new_fps = (tuning->fps_num << 16) | tuning->fps_den;
+                if (new_fps != fps_value) {
+                    fps_value = new_fps;
+                    pr_info("*** ispcore_sensor_ops_ioctl: Updated FPS to %d/%d (0x%x) from tuning data ***\n",
+                            tuning->fps_num, tuning->fps_den, fps_value);
+                }
             }
         }
 
