@@ -2778,9 +2778,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x00000630, vc + 0x14);
                 /* Key unlock/IMCR observed in working reference */
                 writel(0xb5742249, vc + 0x0c);
-                /* Enable sources on both banks and set MainMask to allow framedone + bit21 (debug) */
-                writel(0xFFFFFFFF, vc + 0x1e0);
-                writel(0xFFFFFFFF, vc + 0x1e4);
+                /* Set MainMask to allow framedone + bit21 (debug); do NOT touch status regs 0x1e0/0x1e4 */
                 writel(0xFFDFFFFE, vc + 0x1e8);
                 /* Leave 0x1ec as-is */
                 /* Global interrupt enable at 0x30c (if present) */
