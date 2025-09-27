@@ -585,7 +585,7 @@ struct platform_device tx_isp_core_platform_device = {
 
 /* Forward declarations - Using actual function names from reference driver */
 struct frame_channel_device; /* Forward declare struct */
-static void frame_channel_wakeup_waiters(struct frame_channel_device *fcd);
+void frame_channel_wakeup_waiters(struct frame_channel_device *channel);
 static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data);
 int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
@@ -6769,28 +6769,6 @@ static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
         pr_info("VIC: Unknown event type: 0x%x\n", event_type);
         return -0x203; /* 0xfffffdfd */
     }
-}
-
-/* Wake up waiters when frame is ready - matches reference driver pattern */
-static void frame_channel_wakeup_waiters(struct frame_channel_device *fcd)
-{
-    unsigned long flags;
-
-    if (!fcd) {
-        return;
-    }
-
-    pr_info("Channel %d: Waking up frame waiters\n", fcd->channel_num);
-
-    /* Mark frame as ready and wake up waiters */
-    spin_lock_irqsave(&fcd->state.buffer_lock, flags);
-    fcd->state.frame_ready = true;
-    spin_unlock_irqrestore(&fcd->state.buffer_lock, flags);
-
-    /* Wake up any threads waiting for frame completion */
-    wake_up_interruptible(&fcd->state.frame_wait);
-
-    pr_info("Channel %d: Frame ready\n", fcd->channel_num);
 }
 
 /* Public function to wake up all streaming frame channels - for tuning system */

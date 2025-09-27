@@ -581,7 +581,7 @@ struct isp_core_channel {
 static struct isp_core_channel frame_channels[3] = {0};  /* Channel 0, 1, 2 */
 
 /* Frame channel wakeup function - placeholder implementation */
-static void frame_channel_wakeup_waiters(struct isp_core_channel *channel)
+void frame_channel_wakeup_waiters(struct frame_channel_device *channel);
 {
     if (channel) {
         pr_info("frame_channel_wakeup_waiters: Waking up waiters for channel\n");
