@@ -376,21 +376,6 @@ static struct {
 } gpio_info[10];
 
 
-/* Frame channel registry for IRQ bridging */
-static struct tx_isp_frame_channel *g_fs_channels[4] = {NULL};
-static int (*g_fs_cb[4])(void *, u32, void *) = {NULL};
-static int g_fs_channel_count = 0;
-
-void tx_isp_fs_trigger_frame_event(int channel, u32 event, void *edata)
-{
-    if (channel >= 0 && channel < g_fs_channel_count &&
-        g_fs_channels[channel] && g_fs_cb[channel]) {
-        g_fs_cb[channel](g_fs_channels[channel], event, edata);
-    }
-}
-EXPORT_SYMBOL(tx_isp_fs_trigger_frame_event);
-
-
 /* vic_framedone_irq_function - Updated to match BN MCP reference with safe struct access */
 int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 {
