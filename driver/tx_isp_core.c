@@ -2808,7 +2808,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 if (ourISPdev) {
                     /* Initialize clocks for all subdevs that need them */
                     struct tx_isp_subdev *core_sd = tx_isp_find_subdev_by_name(ourISPdev, "isp-m0");
-                    struct tx_isp_subdev *csi_sd = tx_isp_find_subdev_by_name(ourISPdev, "isp-w00");
+                    struct tx_isp_subdev *csi_sd = tx_isp_find_subdev_by_name(ourISPdev, "isp-w01");
                     struct tx_isp_subdev *vic_sd = tx_isp_find_subdev_by_name(ourISPdev, "isp-w02");
 
                     if (core_sd && core_sd->clk_num > 0) {

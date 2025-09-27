@@ -453,7 +453,7 @@ static struct tx_isp_subdev_platform_data csi_pdata = {
 };
 
 struct platform_device tx_isp_csi_platform_device = {
-    .name = "isp-w00",  /* Stock driver name for CSI/frame channel 0 */
+    .name = "isp-w01",  /* Stock driver name for CSI/frame channel 0 */
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_csi_resources),
     .resource = tx_isp_csi_resources,
@@ -475,7 +475,7 @@ static struct tx_isp_subdev_platform_data vin_pdata = {
 };
 
 struct platform_device tx_isp_vin_platform_device = {
-    .name = "isp-w01",  /* Stock driver name for VIN/frame channel 1 */
+    .name = "isp-w00",  /* Stock driver name for VIN/frame channel 1 */
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_vin_resources),
     .resource = tx_isp_vin_resources,

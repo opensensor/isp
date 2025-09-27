@@ -396,8 +396,8 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         /* CRITICAL: Skip IRQ request for devices that don't have IRQ resources */
         /* Only VIC (isp-w02) and Core (isp-m0) have IRQ resources */
         const char *dev_name_str = dev_name(&pdev->dev);
-        if (strcmp(dev_name_str, "isp-w00") != 0 &&  /* CSI - no IRQ */
-            strcmp(dev_name_str, "isp-w01") != 0 &&  /* VIN - no IRQ */
+        if (strcmp(dev_name_str, "isp-w00") != 0 &&  /* VIN - no IRQ */
+            strcmp(dev_name_str, "isp-w01") != 0 &&  /* CSI - no IRQ */
             strcmp(dev_name_str, "isp-fs") != 0) {   /* FS - no IRQ */
             /* Binary Ninja: tx_isp_request_irq(arg1, arg2 + 0x80) */
             /* SAFE: Use struct member access for IRQ setup */
@@ -932,7 +932,7 @@ static struct platform_driver tx_isp_csi_driver = {
     .probe = tx_isp_csi_probe,
     .remove = tx_isp_csi_remove,
     .driver = {
-        .name = "isp-w00",  /* Match platform device name */
+        .name = "isp-w01",  /* Match platform device name */
         .owner = THIS_MODULE,
     },
 };
@@ -941,7 +941,7 @@ static struct platform_driver tx_isp_vin_driver = {
     .probe = tx_isp_vin_probe,
     .remove = tx_isp_vin_remove,
     .driver = {
-        .name = "isp-w01",  /* Match platform device name */
+        .name = "isp-w00",  /* Match platform device name */
         .owner = THIS_MODULE,
     },
 };

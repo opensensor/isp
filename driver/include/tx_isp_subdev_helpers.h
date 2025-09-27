@@ -32,11 +32,11 @@ static inline struct tx_isp_subdev *tx_isp_find_subdev_by_name(struct tx_isp_dev
 }
 
 /**
- * tx_isp_get_csi_subdev - Get CSI subdevice (isp-w00)
+ * tx_isp_get_csi_subdev - Get CSI subdevice
  */
 static inline struct tx_isp_subdev *tx_isp_get_csi_subdev(struct tx_isp_dev *isp_dev)
 {
-    return tx_isp_find_subdev_by_name(isp_dev, "isp-w00");
+    return tx_isp_find_subdev_by_name(isp_dev, "isp-w01");
 }
 
 /**
@@ -44,7 +44,7 @@ static inline struct tx_isp_subdev *tx_isp_get_csi_subdev(struct tx_isp_dev *isp
  */
 static inline struct tx_isp_subdev *tx_isp_get_vin_subdev(struct tx_isp_dev *isp_dev)
 {
-    return tx_isp_find_subdev_by_name(isp_dev, "isp-w01");
+    return tx_isp_find_subdev_by_name(isp_dev, "isp-w00");
 }
 
 /**
