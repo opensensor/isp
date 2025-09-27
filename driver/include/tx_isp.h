@@ -242,6 +242,9 @@ struct tx_isp_dev {
     struct tx_isp_vin_device *vin_dev;
     struct frame_source_device *fs_dev;
 
+    void (*irq_enable_func)(struct tx_isp_dev *);   /* arg2[1] = tx_isp_enable_irq */
+    void (*irq_disable_func)(struct tx_isp_dev *);  /* arg2[2] = tx_isp_disable_irq */
+
     /* Statistics */
     struct ae_statistics ae_stats;
     spinlock_t ae_lock;
