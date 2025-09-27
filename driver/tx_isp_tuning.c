@@ -3300,7 +3300,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
         pr_info("*** BINARY NINJA REFERENCE: Skipping auto-initialization - no hardware reset during tuning setup ***\n");
 
         /* Enable tuning and mark auto-init as done */
-        ourISPdev->core_dev->core_dev->tuning_enabled = 3;
+        ourISPdev->core_dev->tuning_enabled = 3;
         auto_init_done = true;
         pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning auto-enabled for V4L2 controls (permanent)\n");
     }
@@ -3602,7 +3602,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         /* Reference driver only sets tuning_enabled flag - no hardware initialization */
                         ret = 0;  /* Success - just enable tuning without hardware reset */
 
-                        ourISPdev->core_dev->core_dev->tuning_enabled = 3;
+                        ourISPdev->core_dev->tuning_enabled = 3;
                         auto_init_done = true;  /* Mark as auto-initialized */
                         pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning enabled\n");
                     } else {
@@ -5892,7 +5892,7 @@ int isp_m0_chardev_release(struct inode *inode, struct file *file)
     if (ourISPdev && ourISPdev && ourISPdev->core_dev->core_dev->tuning_enabled == 3) {
         pr_info("Disabling tuning on release\n");
         isp_core_tuning_release(ourISPdev);
-        ourISPdev->core_dev->core_dev->tuning_enabled = 0;
+        ourISPdev->core_dev->tuning_enabled = 0;
     }
 
     pr_info("ISP M0 device released\n");
