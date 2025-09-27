@@ -440,8 +440,7 @@ static struct resource tx_isp_csi_resources[] = {
 
 /* CSI clock configuration array - EXACT Binary Ninja MCP */
 static struct tx_isp_device_clk csi_clks[] = {
-    {"cgu_isp", 100000000},  /* 100MHz CGU ISP clock */
-    {"isp", 0xffff},         /* Auto-rate ISP clock */
+    {"csi", 100000000},  /* 100MHz CGU ISP clock */
 };
 
 /* CSI platform data - CRITICAL for tx_isp_subdev_init to work */
