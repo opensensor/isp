@@ -3612,28 +3612,6 @@ int tx_isp_core_probe(struct platform_device *pdev)
                     /* CRITICAL: Update global ISP device with register base IMMEDIATELY */
                     ourISPdev = isp_dev;
                     pr_info("*** tx_isp_core_probe: Global ISP device updated with register base ***\n");
-
-                    /* NOW initialize tuning system AFTER memory mappings are available */
-                    pr_info("*** tx_isp_core_probe: Calling isp_core_tuning_init AFTER memory mappings ***\n");
-                    tuning_dev = (void*)isp_core_tuning_init(isp_dev);
-
-                    /* SAFE: Store tuning device using proper member access */
-                    isp_dev->tuning_data = (struct isp_tuning_data *)tuning_dev;
-
-                    if (tuning_dev != NULL) {
-                        pr_info("*** tx_isp_core_probe: Tuning init SUCCESS (with mapped registers) ***\n");
-
-                        /* SAFE: Use tuning_dev directly instead of adding dangerous offset */
-                        isp_dev->tuning_enabled = 1;
-                        pr_info("*** tx_isp_core_probe: SAFE tuning pointer - using tuning_dev=%p directly ***\n", tuning_dev);
-
-                        /* NOW we can report full success */
-                        pr_info("*** tx_isp_core_probe: SUCCESS - Core device fully initialized ***\n");
-                        pr_info("***   - Tuning device: %p ***\n", tuning_dev);
-                    } else {
-                        pr_info("*** tx_isp_core_probe: Tuning init FAILED even with mapped registers ***\n");
-                        return -ENOMEM;
-                    }
                 } else {
                     pr_info("*** tx_isp_core_probe: Failed to initialize ISP memory mappings: %d ***\n", result);
                     return result;
