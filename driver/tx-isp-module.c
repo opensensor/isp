@@ -5155,7 +5155,6 @@ static int tx_isp_init(void)
     ret = tx_isp_subdev_platform_init();
     if (ret) {
         pr_info("Failed to initialize subdev platform drivers: %d\n", ret);
-        tx_isp_fs_platform_exit();  /* Clean up FS driver */
         goto err_cleanup_platforms;
     }
     pr_info("*** SUBDEV PLATFORM DRIVERS INITIALIZED - CSI/VIC/VIN/CORE DRIVERS REGISTERED ***\n");
