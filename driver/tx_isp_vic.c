@@ -234,23 +234,16 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
             vic_dev->irq_disable(vic_dev->irq_priv);
         }
 
-        /* CRITICAL FIX: Disable VIC interrupt at kernel level */
-        if (vic_dev->irq > 0) {
-            pr_info("*** tx_vic_disable_irq: CRITICAL FIX - Disabling VIC interrupt (IRQ %d) at kernel level ***\n", vic_dev->irq);
-            disable_irq(vic_dev->irq);
-            pr_info("*** tx_vic_disable_irq: VIC interrupt (IRQ %d) DISABLED at kernel level ***\n", vic_dev->irq);
-        } else if (vic_dev->sd.irq_info.irq > 0) {
-            pr_info("*** tx_vic_disable_irq: CRITICAL FIX - Disabling VIC interrupt (IRQ %d) from irq_info at kernel level ***\n", vic_dev->sd.irq_info.irq);
-            disable_irq(vic_dev->sd.irq_info.irq);
-            pr_info("*** tx_vic_disable_irq: VIC interrupt (IRQ %d) DISABLED at kernel level ***\n", vic_dev->sd.irq_info.irq);
-        }
+        /* CRITICAL FIX: Don't call disable_irq() here - tx_isp_disable_irq() already handles kernel-level IRQ management */
+        /* The problem was that tx_vic_disable_irq() was calling disable_irq(38) but tx_vic_enable_irq() was not calling enable_irq() */
+        /* This created an imbalance where disable was called but the corresponding enable was missing */
+        pr_info("*** tx_vic_disable_irq: CRITICAL FIX - Skipping kernel disable_irq() to prevent enable/disable imbalance ***\n");
+        pr_info("*** tx_vic_disable_irq: Kernel IRQ management handled by tx_isp_disable_irq() callback ***\n");
 
-        pr_info("tx_vic_disable_irq: VIC interrupt flag cleared and kernel interrupt disabled\n");
+        pr_info("tx_vic_disable_irq: VIC interrupt flag cleared, kernel IRQ managed by callback\n");
     } else {
         pr_info("tx_vic_disable_irq: VIC interrupts already disabled\n");
     }
-
-
 
     /* Binary Ninja: private_spin_unlock_irqrestore(dump_vsd_3 + 0x130, var_18) */
     spin_unlock_irqrestore(&vic_dev->lock, flags);
