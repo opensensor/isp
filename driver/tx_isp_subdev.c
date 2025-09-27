@@ -10,8 +10,6 @@
 #include "../include/tx_isp_vic.h"
 #include "../include/tx_isp_sysfs.h"
 
-#include <linux/string.h>
-
 /* External reference to global ISP device */
 extern struct tx_isp_dev *ourISPdev;
 
@@ -24,11 +22,15 @@ void tx_isp_free_irq(struct tx_isp_irq_info *irq_info);
 void tx_isp_disable_irq(void *arg1);
 int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on);
 
-/* Use core IRQ handlers (global) */
-irqreturn_t tx_isp_core_irq_handle(int irq, void *dev_id);
-irqreturn_t tx_isp_core_irq_thread_handle(int irq, void *dev_id);
+/* Binary Ninja interrupt handlers - EXACT reference implementation */
+irqreturn_t isp_irq_handle(int irq, void *dev_id);
+irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
 
-/* Exports not needed; functions are local within this module build */
+/* Export the missing tx_isp_* functions */
+EXPORT_SYMBOL(tx_isp_module_init);
+EXPORT_SYMBOL(tx_isp_module_deinit);
+EXPORT_SYMBOL(tx_isp_request_irq);
+EXPORT_SYMBOL(tx_isp_free_irq);
 
 /* Platform data structure moved to tx_isp.h for global access */
 
@@ -323,30 +325,54 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     extern struct tx_isp_dev *ourISPdev;
 
     /* CRITICAL: Register subdevices in the global ISP device using helper functions */
+    extern struct tx_isp_subdev_ops core_subdev_ops;
+    extern struct tx_isp_subdev_ops vic_subdev_ops;
+    extern struct tx_isp_subdev_ops csi_subdev_ops;
+    extern struct tx_isp_subdev_ops fs_subdev_ops;
+
     if (ourISPdev) {
-        const char *name = pdev->name ? pdev->name : dev_name(&pdev->dev);
-
-        /* Always register by platform device name; avoid cross-file globals */
-        if (name) {
+        if (ops == &csi_subdev_ops) {
+            /* CSI - register using helper function */
             int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
-            pr_info("*** tx_isp_subdev_init: Registered subdev '%s' at slot %d ***\n", name, slot);
+            pr_info("*** tx_isp_subdev_init: CSI subdev registered at slot %d ***\n", slot);
+        } else if (ops == &vic_subdev_ops) {
+            /* VIC - register using helper function and link VIC device */
+            struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
+            ourISPdev->vic_dev = vic_dev;
+            int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
+            pr_info("*** tx_isp_subdev_init: VIC device linked and registered at slot %d ***\n", slot);
+        } else if (ops == &core_subdev_ops) {
+            /* CORE - register using helper function */
+            int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
+            pr_info("*** tx_isp_subdev_init: Core ISP subdev registered at slot %d ***\n", slot);
 
-            /* Link VIC device pointer for convenience when we detect VIC name */
-            if (!strcmp(name, "isp-w02")) {
-                struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
-                ourISPdev->vic_dev = vic_dev;
-                pr_info("*** tx_isp_subdev_init: Linked VIC device to ISP dev ***\n");
-            }
+            /* CRITICAL FIX: Call core init function like VIN does - this triggers tisp_init */
+        } else if (ops && ops->sensor && ops != &csi_subdev_ops && ops != &vic_subdev_ops && ops != &fs_subdev_ops) {
+            /* CRITICAL FIX: This is a REAL sensor subdev (not CSI, VIC, or FS which also have sensor ops) */
+            pr_info("*** tx_isp_subdev_init: DETECTED SENSOR SUBDEV - ops=%p, ops->sensor=%p ***\n", ops, ops->sensor);
 
-            /* Detect and handle real sensor subdevs (not CSI/VIC/FS) */
-            if (ops && ops->sensor && strcmp(name, "tx-isp-csi") && strcmp(name, "isp-w02") && strcmp(name, "tx-isp-fs")) {
-                pr_info("*** tx_isp_subdev_init: DETECTED SENSOR SUBDEV - ops=%p ***\n", ops);
-                extern int tx_isp_module_notify_handler(struct tx_isp_module *module, unsigned int cmd, void *arg);
-                sd->module.notify = tx_isp_module_notify_handler;
+            /* CRITICAL FIX: Set up the module notify function for TX_ISP_EVENT_SYNC_SENSOR_ATTR */
+            extern int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
+            extern int tx_isp_module_notify_handler(struct tx_isp_module *module, unsigned int cmd, void *arg);
+            sd->module.notify = tx_isp_module_notify_handler;
+            pr_info("*** tx_isp_subdev_init: Set up sensor module notify handler ***\n");
+
+            /* SENSOR - register using helper function */
+            int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
+            if (slot >= 0) {
+                pr_info("*** tx_isp_subdev_init: SENSOR subdev registered at slot %d, sd=%p ***\n", slot, sd);
+                pr_info("*** tx_isp_subdev_init: SENSOR ops=%p, ops->sensor=%p ***\n", sd->ops, sd->ops->sensor);
+
+                /* State transitions are now handled by ispcore_slake_module during probe */
+                pr_info("*** tx_isp_subdev_init: Core state transitions handled by slake_module ***\n");
+            } else {
+                pr_err("*** tx_isp_subdev_init: No available slot for sensor subdev ***\n");
             }
         } else {
-            pr_info("*** tx_isp_subdev_init: No device name available; registered generically ***\n");
-            (void)tx_isp_register_subdev_by_name(ourISPdev, sd);
+            pr_info("*** tx_isp_subdev_init: NOT A SENSOR - ops=%p ***\n", ops);
+            if (ops) {
+                pr_info("*** tx_isp_subdev_init: ops->sensor=%p, csi_subdev_ops=%p ***\n", ops->sensor, &csi_subdev_ops);
+            }
         }
     }
 
@@ -474,7 +500,7 @@ cleanup_irq:
     tx_isp_module_deinit(sd);
     return ret;
 }
-/* export not needed */
+EXPORT_SYMBOL(tx_isp_subdev_init);
 
 /* Subdevice deinitialization */
 void tx_isp_subdev_deinit(struct tx_isp_subdev *sd)
@@ -492,7 +518,7 @@ void tx_isp_subdev_deinit(struct tx_isp_subdev *sd)
         }
     }
 }
-/* export not needed */
+EXPORT_SYMBOL(tx_isp_subdev_deinit);
 
 /* Auto-linking function to connect subdevices to global ISP device */
 void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev *sd)
@@ -700,7 +726,7 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         pr_info("*** DEBUG: Unknown device name '%s' - no specific auto-link handling ***\n", dev_name);
     }
 }
-/* export not needed */
+EXPORT_SYMBOL(tx_isp_subdev_auto_link);
 
 /**
  * tx_isp_reg_set - EXACT Binary Ninja MCP implementation
@@ -733,7 +759,7 @@ int tx_isp_reg_set(struct tx_isp_subdev *sd, unsigned int reg, int start, int en
 
     return 0;
 }
-/* export not needed */
+EXPORT_SYMBOL(tx_isp_reg_set);
 
 /* ===== MISSING tx_isp_* FUNCTION IMPLEMENTATIONS ===== */
 
@@ -815,10 +841,10 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
     if (irq_num >= 0) {
         /* Reference driver behavior: Register all IRQs normally without special handling */
 
-        /* request_threaded_irq uses core handlers */
+        /* Binary Ninja: request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, 0x2000, *arg1, arg2) */
         extern struct tx_isp_dev *ourISPdev;
-        extern irqreturn_t tx_isp_core_irq_handle(int irq, void *dev_id);
-        extern irqreturn_t tx_isp_core_irq_thread_handle(int irq, void *dev_id);
+        extern irqreturn_t isp_irq_handle(int irq, void *dev_id);
+        extern irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
 
         /* CRITICAL FIX: Always pass main ISP device as dev_id to prevent kernel panic */
         /* The interrupt handlers expect tx_isp_dev*, not subdevice structures */
@@ -831,15 +857,15 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
                 irq_num, dev_name_str);
 
         pr_info("*** tx_isp_request_irq: About to call request_threaded_irq(irq=%d, handler=%p, thread=%p, flags=0x%lx, name=%s, dev_id=%p) ***\n",
-                irq_num, tx_isp_core_irq_handle, tx_isp_core_irq_thread_handle, IRQF_SHARED, dev_name(&pdev->dev), correct_dev_id);
+                irq_num, isp_irq_handle, isp_irq_thread_handle, IRQF_SHARED, dev_name(&pdev->dev), correct_dev_id);
 
         /* CRITICAL FIX: Add explicit handler address logging to verify correct functions are registered */
         pr_info("*** tx_isp_request_irq: About to register IRQ %d with handlers: main=%p, thread=%p ***\n",
-                irq_num, tx_isp_core_irq_handle, tx_isp_core_irq_thread_handle);
+                irq_num, isp_irq_handle, isp_irq_thread_handle);
 
         ret = request_threaded_irq(irq_num,
-                                   tx_isp_core_irq_handle,      /* Main dispatcher handles all IRQs */
-                                   tx_isp_core_irq_thread_handle, /* Thread handler */
+                                   isp_irq_handle,      /* Main dispatcher handles all IRQs */
+                                   isp_irq_thread_handle, /* Thread handler */
                                    IRQF_SHARED,  /* 0x2000 = IRQF_SHARED */
                                    dev_name(&pdev->dev),  /* Device name */
                                    correct_dev_id);  /* CRITICAL FIX: Pass correct structure type */
@@ -858,7 +884,7 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
         /* Binary Ninja: *arg2 = $v0_1 */
         irq_info->irq = irq_num;
         /* Binary Ninja: arg2[1] = tx_isp_enable_irq */
-        irq_info->handler = tx_isp_core_irq_handle;
+        irq_info->handler = isp_irq_handle;
         /* Binary Ninja: arg2[2] = tx_isp_disable_irq */
         irq_info->data = irq_info;  /* Store self-reference for callbacks */
         /* CRITICAL FIX: Do NOT disable IRQ after registration - working version keeps IRQs enabled */
