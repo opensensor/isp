@@ -2594,7 +2594,25 @@ slake_error:
 clock_management:
             /* Binary Ninja: Clock management loop */
             /* int32_t $s2_2 = $s0_3 - 1; while (true) */
-            pr_info("ispcore_slake_module: Skipping Disabling ISP clocks");
+            pr_info("ispcore_slake_module: Managing ISP clocks");
+
+            /* SAFE: Disable individual clocks instead of array access */
+            if (isp_dev->csi_clk) {
+                clk_disable(isp_dev->csi_clk);
+                pr_info("ispcore_slake_module: Disabled CSI clock");
+            }
+            if (isp_dev->core_dev && isp_dev->core_dev->ipu_clk) {
+                clk_disable(isp_dev->core_dev->ipu_clk);
+                pr_info("ispcore_slake_module: Disabled IPU clock");
+            }
+            if (isp_dev->core_dev && isp_dev->core_dev->core_clk) {
+                clk_disable(isp_dev->core_dev->core_clk);
+                pr_info("ispcore_slake_module: Disabled ISP clock");
+            }
+            if (isp_dev->cgu_isp) {
+                clk_disable(isp_dev->cgu_isp);
+                pr_info("ispcore_slake_module: Disabled CGU ISP clock");
+            }
 
             /* Binary Ninja: return 0 */
             result = 0;
@@ -2951,7 +2969,21 @@ int ispcore_core_ops_init_with_sensor(struct tx_isp_dev *isp, struct tx_isp_sens
         }
     }
 
-    pr_info("*** ispcore_core_ops_init_with_sensor: SUCCESS - Core initialized with sensor attributes ***");
+    /* GOOD-THINGS SEQUENCE: Program VIC PIPO/MDMA and enable interrupts now */
+    if (isp->vic_dev) {
+        struct tx_isp_subdev *vic_sd = &isp->vic_dev->sd;
+        pr_info("*** ispcore_core_ops_init_with_sensor: Calling tx_isp_subdev_pipo to program VIC and start MDMA/IRQs ***");
+        /* Pass non-NULL arg to follow initialization path; content unused by our implementation */
+        ret = tx_isp_subdev_pipo(vic_sd, isp);
+        if (ret != 0) {
+            pr_err("ispcore_core_ops_init_with_sensor: tx_isp_subdev_pipo failed: %d", ret);
+            return ret;
+        }
+    } else {
+        pr_warn("*** ispcore_core_ops_init_with_sensor: No VIC device present; skipping pipo/MDMA start ***");
+    }
+
+    pr_info("*** ispcore_core_ops_init_with_sensor: SUCCESS - Core initialized and VIC streaming/IRQs armed ***");
     return 0;
 }
 EXPORT_SYMBOL(ispcore_core_ops_init_with_sensor);
