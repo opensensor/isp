@@ -41,6 +41,7 @@ static int tx_isp_csi_device_deinit(struct tx_isp_dev *isp);
 static int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
 int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev);
 int tx_isp_send_event_to_remote(struct tx_isp_subdev *sd, int event_type, void *data);
+int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable);
 
 /* Forward declaration for VIC device creation from tx_isp_vic.c */
 extern int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
@@ -585,7 +586,7 @@ struct isp_core_channel {
 };
 
 /* Frame channel wakeup function - placeholder implementation */
-void frame_channel_wakeup_waiters(struct frame_channel_device *channel);
+void frame_channel_wakeup_waiters(struct frame_channel_device *channel)
 {
     if (channel) {
         pr_info("frame_channel_wakeup_waiters: Waking up waiters for channel\n");
