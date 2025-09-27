@@ -141,7 +141,7 @@ struct ae_statistics {
 
 
 /* Declare functions but don't define them */
-/* isp_read32 removed - use system_reg_read from reference driver instead */
+u32 isp_read32(u32 reg);
 void isp_write32(u32 reg, u32 val);
 u32 vic_read32(u32 reg);
 void vic_write32(u32 reg, u32 val);
