@@ -1743,7 +1743,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
             writel(0xFFFFFFFF, vrp + 0x1f4);
             wmb();
             /* Do NOT modify 0x1e0 here; it's a status W1C in the reference. Only adjust MainMask. */
-            writel(0xFFDFFFFE, vrp + 0x1e8);
+            writel(0xFFFFFFFE, vrp + 0x1e8);
             wmb();
             /* If control bits lost in 0x300, re-assert them like reference */
             do {
@@ -1757,7 +1757,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                     printk(KERN_ALERT "*** VIC IRQ: Rewrote CTRL[0x300]=0x%x (count=%u) to preserve control bits ***\n", ctrl, count);
                 }
             } while (0);
-            printk(KERN_ALERT "*** VIC IRQ: Restored enables(0x1e0|=1) and MainMask=0xFFDFFFFE (allow framedone+bit21) ***\n");
+            printk(KERN_ALERT "*** VIC IRQ: Restored MainMask=0xFFFFFFFE (frame-done only; good-things) ***\n");
         }
 
         /* CRITICAL DEBUG: Add the missing debugging right after register writes */

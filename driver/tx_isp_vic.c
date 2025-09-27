@@ -2753,7 +2753,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0xFFFFFFFF, vr + 0x1f0);
                 writel(0xFFFFFFFF, vr + 0x1f4);
                 /* Set MainMask to allow framedone + bit21 (debug); do NOT touch status regs 0x1e0/0x1e4 */
-                writel(0xFFDFFFFE, vr + 0x1e8); /* unmask bit0 and bit21 */
+                writel(0xFFFFFFFE, vr + 0x1e8); /* frame-done only, match good-things */
                 /* Leave 0x1ec (MDMA mask) as-is per working reference */
                 /* Global interrupt enable at 0x30c (if implemented) */
                 writel(0xFFFFFFFF, vr + 0x30c);
@@ -2779,7 +2779,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Key unlock/IMCR observed in working reference */
                 writel(0xb5742249, vc + 0x0c);
                 /* Set MainMask to allow framedone + bit21 (debug); do NOT touch status regs 0x1e0/0x1e4 */
-                writel(0xFFDFFFFE, vc + 0x1e8);
+                writel(0xFFFFFFFE, vc + 0x1e8);
                 /* Leave 0x1ec as-is */
                 /* Global interrupt enable at 0x30c (if present) */
                 writel(0xFFFFFFFF, vc + 0x30c);
@@ -2838,34 +2838,18 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     }
                 }
 
-                /* UNMASK-ALL + short sampling loop to detect which source asserts */
+                /* Apply working mask up front: frame-done only, like good-things */
                 if (vic_dev->vic_regs) {
                     void __iomem *vr = vic_dev->vic_regs;
-                    u32 s0, s1;
-                    int i;
-                    /* Clear pending (W1C), then unmask ALL sources (both banks) */
+                    /* Clear any pending first */
                     writel(0xFFFFFFFF, vr + 0x1f0);
                     writel(0xFFFFFFFF, vr + 0x1f4);
-                    //writel(0x00000000, vr + 0x1e8);
-                    //writel(0x00000000, vr + 0x1ec);
                     wmb();
-                    pr_info("*** VIC UNMASK-ALL TEST: [0x1e8]=0x%08x [0x1ec]=0x%08x (expect 0) ***\n", readl(vr + 0x1e8), readl(vr + 0x1ec));
-
-                    /* Sample status a few times pre-IRQ to see if any bit asserts */
-                    for (i = 0; i < 10; i++) {
-                        s0 = readl(vr + 0x1f0);
-                        s1 = readl(vr + 0x1f4);
-                        if (s0 || s1) {
-                            pr_warn("*** VIC UNMASK-ALL TEST: Status asserted pre-IRQ: [0x1f0]=0x%08x [0x1f4]=0x%08x (iter=%d) ***\n", s0, s1, i);
-                            break;
-                        }
-                        udelay(100);
-                    }
-                    if (i == 10)
-                        pr_info("*** VIC UNMASK-ALL TEST: No status bits asserted during pre-IRQ sample ***\n");
+                    /* Set MainMask to frame-done only */
+                    writel(0xFFFFFFFE, vr + 0x1e8);
+                    wmb();
+                    pr_info("*** VIC MASK: Set MainMask=0xFFFFFFFE (frame-done only) before RUN ***\n");
                 }
-                    /* Keep UNMASK-ALL during debug to expose error IRQs */
-                    pr_info("*** VIC MASK: Keeping UNMASK-ALL (0x1e8=0) during debug ***\n");
 
             /* VIC CONTROL: enter RUN state after all config (write 1) */
             if (vic_dev && vic_dev->vic_regs) {
