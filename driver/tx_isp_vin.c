@@ -530,6 +530,10 @@ int tx_isp_vin_reset(struct tx_isp_subdev *sd, int on)
 {
     struct tx_isp_vin_device *vin = sd_to_vin_device(sd);
     struct tx_isp_sensor *sensor = vin->active;
+    if (!sensor) {
+        extern struct tx_isp_dev *ourISPdev;
+        if (ourISPdev) sensor = ourISPdev->sensor;
+    }
     int ret = 0;
 
     mcp_log_info("vin_reset: called", on);
@@ -577,6 +581,10 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
     if (!vin || !is_valid_kernel_pointer(vin)) {
         mcp_log_error("vin_s_stream: no VIN device in global ISP", (u32)vin);
         return -ENODEV;
+    }
+    /* Ensure VIN active sensor is set from global ISP if not already */
+    if (!vin->active && ourISPdev->sensor) {
+        vin->active = ourISPdev->sensor;
     }
 
     mcp_log_info("vin_s_stream: VIN device from global ISP", (u32)vin);
@@ -782,6 +790,10 @@ static int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *
 {
     struct tx_isp_vin_device *vin = sd_to_vin_device(sd);
     struct tx_isp_sensor *sensor = vin->active;
+    if (!sensor) {
+        extern struct tx_isp_dev *ourISPdev;
+        if (ourISPdev) sensor = ourISPdev->sensor;
+    }
     int ret = 0;
 
     mcp_log_info("vin_ioctl: command received", cmd);
