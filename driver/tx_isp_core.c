@@ -2473,7 +2473,7 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
                     }
 
                     /* GOOD-THINGS APPROACH: Call ispcore_core_ops_init with ISP device and sensor attributes */
-                    ret = ispcore_core_ops_init_with_sensor(isp_dev, sensor_attr);
+                    int ret = ispcore_core_ops_init_with_sensor(isp_dev, sensor_attr);
                     if (ret < 0) {
                         pr_info("ispcore_slake_module: ispcore_core_ops_init failed: %d", ret);
                         return ret;
