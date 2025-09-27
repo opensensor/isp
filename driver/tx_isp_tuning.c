@@ -2597,7 +2597,7 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
     }
 
     /* Get tuning data from device - Binary Ninja reference */
-    tuning = (dev) ? (struct isp_tuning_data *)dev->tuning_data : NULL;
+    tuning = (dev) ? (struct isp_tuning_data *)dev->core_dev->tuning_data : NULL;
     if (!tuning) {
         pr_err("apical_isp_core_ops_g_ctrl: No tuning data available\n");
         return -EINVAL;
@@ -2810,7 +2810,7 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             break;
 
         case 0x8000164:  // ISP_CTRL_BYPASS
-            ctrl->value = (ourISPdev && ourISPdev) ? ourISPdev->bypass_enabled : 0;
+            ctrl->value = (ourISPdev && ourISPdev) ? ourISPdev->core_dev->bypass_enabled : 0;
             break;
 
         case 0x980918:  // ISP_CTRL_ANTIFLICKER
@@ -2889,7 +2889,7 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
 
         case 0x8000164:  // ISP_CTRL_BYPASS
             if (ourISPdev && ourISPdev) {
-                ourISPdev->bypass_enabled = !!ctrl->value;
+                ourISPdev->core_dev->bypass_enabled = !!ctrl->value;
             }
             break;
 
@@ -3334,8 +3334,8 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 }
 
                 /* CRITICAL: Additional validation for tuning data structure integrity */
-                if (dev && dev->tuning_data) {
-                    struct isp_tuning_data *tuning = (struct isp_tuning_data *)dev->tuning_data;
+                if (dev && dev->core_dev->tuning_data) {
+                    struct isp_tuning_data *tuning = (struct isp_tuning_data *)dev->core_dev->tuning_data;
 
                     /* Validate the structure is properly initialized */
                     if ((unsigned long)tuning < 0x80000000 || (unsigned long)tuning >= 0xfffff000) {
