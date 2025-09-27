@@ -133,10 +133,11 @@ static struct tx_isp_subdev_sensor_ops fs_sensor_ops = {
 };
 
 /* FS complete subdev operations structure */
-static struct tx_isp_subdev_ops fs_subdev_ops = {
+struct tx_isp_subdev_ops fs_subdev_ops = {
     .core = &fs_core_ops,
     .sensor = &fs_sensor_ops,
 };
+EXPORT_SYMBOL(fs_subdev_ops);
 
 /* Frame source file operations - matching isp_framesource_fops */
 static int fs_chardev_open(struct inode *inode, struct file *file)

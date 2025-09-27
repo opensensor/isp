@@ -602,8 +602,8 @@ void frame_channel_wakeup_waiters(struct frame_channel_device *channel);
 static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data);
 int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
-static irqreturn_t isp_irq_handle(int irq, void *dev_id);
-static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
+irqreturn_t isp_irq_handle(int irq, void *dev_id);
+irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
 int tx_isp_send_event_to_remote(struct tx_isp_subdev *sd, int event_type, void *data);
 static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev);
 static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev);
@@ -5885,7 +5885,7 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
 }
 
 /* isp_irq_handle - FIXED to properly route to ISP core interrupt handler */
-static irqreturn_t isp_irq_handle(int irq, void *dev_id)
+irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
     irqreturn_t result = IRQ_HANDLED;
@@ -5922,7 +5922,7 @@ static irqreturn_t isp_irq_handle(int irq, void *dev_id)
 }
 
 /* isp_irq_thread_handle - EXACT Binary Ninja implementation with CORRECT structure access */
-static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
+`irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
 {
     void *s0_1;
     void *s1_1;

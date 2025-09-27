@@ -21,10 +21,17 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
 void tx_isp_free_irq(struct tx_isp_irq_info *irq_info);
 void tx_isp_disable_irq(void *arg1);
 int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on);
-
+irqreturn_t isp_irq_handle(int irq, void *dev_id);
+irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
 /* Binary Ninja interrupt handlers - EXACT reference implementation */
 irqreturn_t isp_irq_handle(int irq, void *dev_id);
 irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
+
+    /* CRITICAL: Register subdevices in the global ISP device using helper functions */
+extern struct tx_isp_subdev_ops core_subdev_ops;
+extern struct tx_isp_subdev_ops vic_subdev_ops;
+extern struct tx_isp_subdev_ops csi_subdev_ops;
+extern struct tx_isp_subdev_ops fs_subdev_ops;
 
 /* Export the missing tx_isp_* functions */
 EXPORT_SYMBOL(tx_isp_module_init);
@@ -323,12 +330,6 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
 
     /* CRITICAL: Link subdevices to main ISP device when they're created */
     extern struct tx_isp_dev *ourISPdev;
-
-    /* CRITICAL: Register subdevices in the global ISP device using helper functions */
-    extern struct tx_isp_subdev_ops core_subdev_ops;
-    extern struct tx_isp_subdev_ops vic_subdev_ops;
-    extern struct tx_isp_subdev_ops csi_subdev_ops;
-    extern struct tx_isp_subdev_ops fs_subdev_ops;
 
     if (ourISPdev) {
         if (ops == &csi_subdev_ops) {
@@ -843,8 +844,6 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
 
         /* Binary Ninja: request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, 0x2000, *arg1, arg2) */
         extern struct tx_isp_dev *ourISPdev;
-        extern irqreturn_t isp_irq_handle(int irq, void *dev_id);
-        extern irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
 
         /* CRITICAL FIX: Always pass main ISP device as dev_id to prevent kernel panic */
         /* The interrupt handlers expect tx_isp_dev*, not subdevice structures */
