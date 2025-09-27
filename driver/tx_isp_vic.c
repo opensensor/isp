@@ -2771,6 +2771,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Route/control asserts at CONTROL bank (matches reference) */
                 writel(0x000002d0, vc + 0x100);
                 writel(0x00000630, vc + 0x14);
+                /* Key unlock/IMCR observed in working reference */
+                writel(0xb5742249, vc + 0x0c);
                 /* Enable sources on both banks and UNMASK-ALL on both masks */
                 writel(0xFFFFFFFF, vc + 0x1e0);
                 writel(0xFFFFFFFF, vc + 0x1e4);
@@ -2779,8 +2781,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Global interrupt enable at 0x30c (if present) */
                 writel(0xFFFFFFFF, vc + 0x30c);
                 wmb();
-                pr_info("*** VIC VERIFY (CONTROL): [0x0]=0x%08x [0x4]=0x%08x [0x100]=0x%08x [0x14]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x ***\n",
-                        readl(vc + 0x0), readl(vc + 0x4), readl(vc + 0x100), readl(vc + 0x14), readl(vc + 0x300), readl(vc + 0x30c), readl(vc + 0x1e0), readl(vc + 0x1e4), readl(vc + 0x1e8), readl(vc + 0x1ec));
+                pr_info("*** VIC VERIFY (CONTROL): [0x0]=0x%08x [0x4]=0x%08x [0x0c]=0x%08x [0x100]=0x%08x [0x14]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x ***\n",
+                        readl(vc + 0x0), readl(vc + 0x4), readl(vc + 0x0c), readl(vc + 0x100), readl(vc + 0x14), readl(vc + 0x300), readl(vc + 0x30c), readl(vc + 0x1e0), readl(vc + 0x1e4), readl(vc + 0x1e8), readl(vc + 0x1ec));
             }
 
                 /* Read-back verification of buffer/control registers in BOTH banks */
@@ -2824,9 +2826,12 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         wmb();
                         /* Also assert VIC IRQ gate in CONTROL bank to mirror core 0x9ac0/0x9ac8 */
                         writel(0x200, vcc + 0x14);
+                        /* Program IMCR/key and route bits mirrored from reference */
+                        writel(0xb5742249, vcc + 0x0c);
+                        writel(0x000002d0, vcc + 0x100);
                         wmb();
-                        pr_info("*** VIC CONTROL BANK: Post-enable [0x0]=0x%08x, [0x14]=0x%08x ***\n",
-                                readl(vcc + 0x0), readl(vcc + 0x14));
+                        pr_info("*** VIC CONTROL BANK: Post-enable [0x0]=0x%08x, [0x14]=0x%08x, [0x0c]=0x%08x, [0x100]=0x%08x ***\n",
+                                readl(vcc + 0x0), readl(vcc + 0x14), readl(vcc + 0x0c), readl(vcc + 0x100));
                     }
                 }
 
