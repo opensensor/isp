@@ -2838,45 +2838,12 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 if (current_state != 4 && vic_start_ok != 1) {
                     pr_info("*** STEP 9: vic_start_ok=%d, state=%d - calling tx_isp_vic_start ***\n", vic_start_ok, current_state);
                     ret = tx_isp_vic_start(vic_dev);
-                  pr_info("vic_core_s_stream: Stream ON - tx_isp_vic_start called after proper sub-device init\n");
+                  	pr_info("vic_core_s_stream: Stream ON - tx_isp_vic_start called after proper sub-device init\n");
 
                     /* CRITICAL FIX: Only enable interrupts AFTER all initialization is complete */
                     vic_dev->state = 4;
-                    wmb();  /* Ensure state is written before enabling interrupts */
                     vic_start_ok = 1;  /* NOW safe to enable interrupt processing */
                     pr_info("*** INTERRUPTS RE-ENABLED AFTER COMPLETE INITIALIZATION ***\n");
-
-                    /* CRITICAL: Call ispcore_slake_module when VIC state reaches 4 (>= 3) */
-                    pr_info("*** VIC STATE 4: Calling ispcore_slake_module to initialize ISP core ***\n");
-                    extern int ispcore_slake_module(struct tx_isp_dev *isp);
-                    if (ourISPdev) {
-                        int slake_ret = ispcore_slake_module(ourISPdev);
-                        if (slake_ret == 0) {
-                            pr_info("*** ispcore_slake_module SUCCESS - ISP core should now be initialized ***\n");
-                        } else {
-                            pr_err("*** ispcore_slake_module FAILED: %d ***\n", slake_ret);
-                        }
-                    }
-
-                    /* DELAYED VIC HARDWARE ENABLE: Now that everything is configured and sensor is streaming */
-                    pr_info("*** DELAYED VIC HARDWARE ENABLE: Enabling VIC hardware after complete initialization ***\n");
-                    void __iomem *vic_regs = vic_dev->vic_regs;
-                    if (vic_regs) {
-                        /* Re-assert stream control after final enable: hardware may clear 0x300 during 2->4->1 */
-                        {
-                            u32 buffer_count = vic_dev->active_buffer_count;
-                            if (buffer_count == 0) buffer_count = 2; /* BN reference uses 2 if zero */
-                            if (buffer_count > 5) buffer_count = 5; /* 5 slots max */
-                            u32 stream_ctrl = (buffer_count << 16) | 0x80000020;
-                            writel(stream_ctrl, vic_regs + 0x300);
-                            wmb();
-                            pr_info("*** POST-ENABLE: Rewrote VIC[0x300]=0x%x (buffer_count=%u) to preserve control bits ***\n",
-                                    stream_ctrl, buffer_count);
-                        }
-
-                    } else {
-                        pr_err("*** ERROR: VIC registers not available for delayed enable ***\n");
-                    }
 
                     pr_info("vic_core_s_stream: tx_isp_vic_start returned %d, state -> 4\n", ret);
                     return ret;
