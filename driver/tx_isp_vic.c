@@ -2861,10 +2861,36 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 vic_dev->state = 4;
                 pr_info("*** vic_core_s_stream: VIC state transition 3 → 4 (STREAMING) ***\n");
 
+                /* CRITICAL: Initialize clocks now that streaming is starting */
+                pr_info("*** VIC STATE 4: Initializing clocks for streaming ***\n");
+                extern int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count);
+                extern struct tx_isp_subdev *tx_isp_find_subdev_by_name(struct tx_isp_dev *isp_dev, const char *name);
+                extern struct tx_isp_dev *ourISPdev;
+                if (ourISPdev) {
+                    /* Initialize clocks for all subdevs that need them */
+                    struct tx_isp_subdev *csi_sd = tx_isp_find_subdev_by_name(ourISPdev, "isp-w00");
+                    struct tx_isp_subdev *vic_sd = tx_isp_find_subdev_by_name(ourISPdev, "isp-w02");
+
+                    if (csi_sd && csi_sd->clk_num > 0) {
+                        pr_info("*** Initializing CSI clocks (%d clocks) ***\n", csi_sd->clk_num);
+                        int clk_ret = isp_subdev_init_clks(csi_sd, csi_sd->clk_num);
+                        if (clk_ret != 0) {
+                            pr_err("*** CSI clock initialization failed: %d ***\n", clk_ret);
+                        }
+                    }
+
+                    if (vic_sd && vic_sd->clk_num > 0) {
+                        pr_info("*** Initializing VIC clocks (%d clocks) ***\n", vic_sd->clk_num);
+                        int clk_ret = isp_subdev_init_clks(vic_sd, vic_sd->clk_num);
+                        if (clk_ret != 0) {
+                            pr_err("*** VIC clock initialization failed: %d ***\n", clk_ret);
+                        }
+                    }
+                }
+
                 /* CRITICAL: Call ispcore_slake_module when VIC state reaches 4 (>= 3) */
                 pr_info("*** VIC STATE 4: Calling ispcore_slake_module to initialize ISP core ***\n");
                 extern int ispcore_slake_module(struct tx_isp_dev *isp_dev);
-                extern struct tx_isp_dev *ourISPdev;
                 if (ourISPdev) {
                     int slake_ret = ispcore_slake_module(ourISPdev);
                     if (slake_ret == 0) {
