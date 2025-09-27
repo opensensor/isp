@@ -399,21 +399,28 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         int v1_10 = sensor_attr->fps;
                         void *v0_8;
 
+                        /* CRITICAL: Binary Ninja hardware state machine trigger sequence */
+                        pr_info("*** CRITICAL: Triggering CSI hardware state machine for CSI Lane Config ***\n");
+
                         /* Binary Ninja: if ($v1_10 != 0) */
                         if (v1_10 != 0) {
                             /* Binary Ninja: $v0_8 = *($s0_1 + 0x13c) */
-                            /* SAFE: Use proper struct member access instead of dangerous offset */
-                            isp_csi_regs = csi_dev->csi_regs;
-                            v0_8 = isp_csi_regs;
+                            /* CRITICAL: This should be VIC registers, not CSI registers! */
+                            extern struct tx_isp_dev *ourISPdev;
+                            if (ourISPdev && ourISPdev->vic_dev) {
+                                v0_8 = ourISPdev->vic_dev->vic_regs;
+                                pr_info("*** CRITICAL: Using VIC registers for hardware state machine trigger ***\n");
+                            } else {
+                                pr_err("csi_core_ops_init: No VIC device available for hardware state machine trigger\n");
+                                return -EINVAL;
+                            }
                         } else {
                             /* Binary Ninja: int32_t $v0_9 = *($v0_7 + 0x1c) */
                             int v0_9 = sensor_attr->total_width;
 
                             /* Binary Ninja: Complex frame rate calculation based on width */
                             if (v0_9 - 0x50 < 0x1e) {
-                                /* Binary Ninja: $a0_2 = *($s0_1 + 0x13c) */
-                                /* SAFE: Use proper struct member access instead of dangerous offset */
-                                isp_csi_regs = csi_dev->csi_regs;
+                                v1_10 = 1;
                             } else {
                                 v1_10 = 1;
                                 if (v0_9 - 0x6e >= 0x28) {
@@ -446,29 +453,47 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                                         }
                                     }
                                 }
-                                /* SAFE: Use proper struct member access instead of dangerous offset */
-                                isp_csi_regs = csi_dev->csi_regs;
                             }
 
-                            /* Binary Ninja: int32_t $v0_14 = (*($a0_2 + 0x160) & 0xfffffff0) | $v1_10 */
-                            int v0_14 = (readl(isp_csi_regs + 0x160) & 0xfffffff0) | v1_10;
-                            writel(v0_14, isp_csi_regs + 0x160);
-                            writel(v0_14, isp_csi_regs + 0x1e0);
-                            writel(v0_14, isp_csi_regs + 0x260);
-                            v0_8 = isp_csi_regs;
+                            /* Binary Ninja: $a0_2 = *($s0_1 + 0x13c) */
+                            /* CRITICAL: This should be VIC registers, not CSI registers! */
+                            extern struct tx_isp_dev *ourISPdev;
+                            if (ourISPdev && ourISPdev->vic_dev) {
+                                void __iomem *vic_regs = ourISPdev->vic_dev->vic_regs;
+
+                                /* Binary Ninja: int32_t $v0_14 = (*($a0_2 + 0x160) & 0xfffffff0) | $v1_10 */
+                                int v0_14 = (readl(vic_regs + 0x160) & 0xfffffff0) | v1_10;
+                                writel(v0_14, vic_regs + 0x160);
+                                writel(v0_14, vic_regs + 0x1e0);
+                                writel(v0_14, vic_regs + 0x260);
+                                v0_8 = vic_regs;
+
+                                pr_info("*** CRITICAL: VIC registers 0x160/0x1e0/0x260 configured with value 0x%x ***\n", v0_14);
+                            } else {
+                                pr_err("csi_core_ops_init: No VIC device available for register configuration\n");
+                                return -EINVAL;
+                            }
                         }
 
-                        /* Binary Ninja: *$v0_8 = 0x7d */
+                        /* Binary Ninja: CRITICAL hardware state machine trigger sequence */
+                        /* *$v0_8 = 0x7d */
                         writel(0x7d, v0_8);
+                        wmb();
 
                         /* Binary Ninja: *(*($s0_1 + 0x13c) + 0x128) = 0x3f */
-                        writel(0x3f, isp_csi_regs + 0x128);
+                        writel(0x3f, (void __iomem *)v0_8 + 0x128);
+                        wmb();
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0x10) = 1 */
+                        /* CRITICAL: Final trigger for CSI hardware state machine */
                         writel(1, csi_dev->csi_regs + 0x10);
+                        wmb();
 
                         /* Binary Ninja: private_msleep(0xa) */
                         private_msleep(0xa);
+
+                        pr_info("*** CRITICAL: CSI hardware state machine trigger sequence completed ***\n");
+                        pr_info("*** CSI Lane Config writes should now be generated automatically by hardware ***\n");
 
                         v0_17 = 3;
 
