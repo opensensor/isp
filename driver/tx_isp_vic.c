@@ -2338,7 +2338,7 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
         /* Binary Ninja: if ($v0_2 != 2) */
         if (current_state != 2) {
             /* Binary Ninja: tx_vic_disable_irq() */
-            tx_vic_disable_irq(vic_dev);
+            //tx_vic_disable_irq(vic_dev);
 
             /* Binary Ninja: *($s1_1 + 0x128) = 2 */
             vic_dev->state = 2;
