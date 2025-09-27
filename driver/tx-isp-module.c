@@ -1729,17 +1729,16 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         } while (0);
 
 
-        /* Use raw status bits for detection and unconditionally clear all pendings (W1C).
-         * This matches good-things behavior and avoids stalls if mask registers drift.
-         */
-        v1_7 = reg_1e0;
-        v1_10 = reg_1e4;
-        printk(KERN_ALERT "*** VIC IRQ: Using STATUS for detection v1_7=0x%x v1_10=0x%x ***\n", v1_7, v1_10);
+        /* Binary Ninja: v1_7 = (~mask_main) & status_main; v1_10 = (~mask_mdma) & status_mdma */
+        v1_7 = (~reg_1e8) & reg_1e0;
+        v1_10 = (~reg_1ec) & reg_1e4;
+        printk(KERN_ALERT "*** VIC IRQ: Calculated v1_7 = 0x%x v1_10 = 0x%x ***\n", v1_7, v1_10);
 
-        /* Clear pending interrupts (W1C) regardless of mask state */
-        printk(KERN_ALERT "*** VIC IRQ: Clearing all pending with 0xFFFFFFFF to 0x1f0/0x1f4 (base=%p) ***\n", base_for_irq);
-        writel(0xFFFFFFFF, base_for_irq + 0x1f0);
-        writel(0xFFFFFFFF, base_for_irq + 0x1f4);
+        /* Binary Ninja: ack using the computed masked status */
+        printk(KERN_ALERT "*** VIC IRQ: About to write v1_7=0x%x to reg 0x1f0 (base=%p) ***\n", v1_7, base_for_irq);
+        writel(v1_7, base_for_irq + 0x1f0);
+        printk(KERN_ALERT "*** VIC IRQ: About to write v1_10=0x%x to reg 0x1f4 (base=%p) ***\n", v1_10, base_for_irq);
+        writel(v1_10, base_for_irq + 0x1f4);
         wmb();
 
         /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
@@ -4705,61 +4704,10 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
     pr_info("*** tx_isp_module_init: VIC device linkage check - isp_dev->vic_dev = %p ***\n", isp_dev->vic_dev);
 
 
-    /* *** CRITICAL: Enable interrupt generation at hardware level *** */
-    pr_info("*** ENABLING HARDWARE INTERRUPT GENERATION ***\n");
-
-            pr_info("*** WRITING VIC INTERRUPT ENABLE REGISTERS ***\n");
-    /* Program early VIC enables like the had-continuous-interrupts branch; masks untouched */
-    if (isp_dev->vic_dev) {
-        struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-        if (vic->vic_regs) {
-            void __iomem *vr = vic->vic_regs;
-            void __iomem *vc = vic->vic_regs_control;
-
-            /* Clear any pending first on both primary and control banks */
-            writel(0x00000000, vr + 0x00);
-            writel(0x00000000, vr + 0x20);
-            if (vc) {
-                writel(0x00000000, vc + 0x00);
-                writel(0x00000000, vc + 0x20);
-            }
-            wmb();
-
-            /* Good-things gating: IMR/IMCR on PRIMARY bank (matches reference trace) */
-            /* These gate the VIC line before detailed enables; required for interrupts to exit the block */
-            writel(0x00000001, vr + 0x04);   /* IMR baseline */
-            writel(0x00000000, vr + 0x24);   /* IMR1 baseline */
-            writel(0x07800438, vr + 0x04);   /* IMR routing/mask */
-            writel(0xb5742249, vr + 0x0c);   /* IMCR key */
-            wmb();
-
-            /* SKIP early writes to 0x1e0/0x1e4 (status W1C) to match good-things; do not touch these here */
-            /* writel(0x3FFFFFFF, vr + 0x1e0);  */
-            /* writel(0x0000000F, vr + 0x1e4);  */
-            /* if (vc) { writel(0x3FFFFFFF, vc + 0x1e0); writel(0x0000000F, vc + 0x1e4); } */
-            wmb();
-
-            pr_info("*** EARLY VIC ENABLES (MODULE INIT): SKIPPED 0x1e0/0x1e4 programming to preserve W1C semantics ***\n");
-        } else {
-            pr_warn("*** EARLY VIC ENABLES (MODULE INIT): vic_regs not mapped yet ***\n");
-        }
-    } else {
-        pr_warn("*** EARLY VIC ENABLES (MODULE INIT): VIC device not linked yet ***\n");
-    }
-
-
-            /* CRITICAL FIX: Enable ISP core interrupts too! Use core_regs if available */
-            pr_info("*** ENABLING ISP CORE INTERRUPT REGISTERS FOR MIPI DATA ***\n");
-    if (isp_dev->core_dev && isp_dev->core_dev->core_regs) {
-        /* Configure ISP core interrupt registers - FROM WORKING LOGS */
-        writel(0x8fffffff, isp_dev->core_dev->core_regs + 0x30);  /* ISP core interrupt enable */
-        writel(0x00000133, isp_dev->core_dev->core_regs + 0x10);  /* ISP core interrupt control */
-        wmb();
-
-        pr_info("*** ISP CORE INTERRUPT REGISTERS ENABLED at legacy(+0xb*) and new(+0x98b*) ***\n");
-    } else {
-        pr_err("*** ERROR: ISP core registers not available for interrupt configuration ***\n");
-    }
+    /* Defer all hardware interrupt enables to VIC start/streaming sequences.
+     * This matches the working good-things sequencing and avoids early side effects.
+     */
+    pr_info("*** Deferring hardware interrupt enables until VIC is configured and streaming ***\n");
 
     pr_info("*** BOTH VIC AND ISP CORE INTERRUPTS NOW ENABLED! ***\n");
 
