@@ -1133,9 +1133,9 @@ int sensor_fps_control(int fps) {
     pr_info("sensor_fps_control: Setting FPS to %d via registered sensor\n", fps);
 
     /* CRITICAL: Store FPS in tuning data first */
-    if (ourISPdev->tuning_data) {
-        ourISPdev->tuning_data->fps_num = fps;
-        ourISPdev->tuning_data->fps_den = 1;
+    if (ourISPdev->core_dev->tuning_data) {
+        ourISPdev->core_dev->tuning_data->fps_num = fps;
+        ourISPdev->core_dev->tuning_data->fps_den = 1;
         pr_info("sensor_fps_control: Stored %d/1 FPS in tuning data\n", fps);
     }
 

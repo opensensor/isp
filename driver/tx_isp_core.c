@@ -453,12 +453,12 @@ static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
         static int fps_value = (25 << 16) | 1;  /* Default 25/1 FPS in correct format */
 
         /* Update FPS from tuning data if available */
-        if (isp_dev->tuning_data && isp_dev->tuning_data->fps_num > 0 && isp_dev->tuning_data->fps_den > 0) {
-            int new_fps = (isp_dev->tuning_data->fps_num << 16) | isp_dev->tuning_data->fps_den;
+        if (isp_dev->core_dev->tuning_data && isp_dev->core_dev->tuning_data->fps_num > 0 && isp_dev->core_dev->tuning_data->fps_den > 0) {
+            int new_fps = (isp_dev->core_dev->tuning_data->fps_num << 16) | isp_dev->core_dev->tuning_data->fps_den;
             if (new_fps != fps_value) {
                 fps_value = new_fps;
                 pr_info("*** ispcore_sensor_ops_ioctl: Updated FPS to %d/%d (0x%x) from tuning data ***\n",
-                        isp_dev->tuning_data->fps_num, isp_dev->tuning_data->fps_den, fps_value);
+                        isp_dev->core_dev->tuning_data->fps_num, isp_dev->core_dev->tuning_data->fps_den, fps_value);
             }
         }
 
@@ -3271,7 +3271,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
                     tuning_dev = (void*)isp_core_tuning_init(isp_dev);
 
                     /* SAFE: Store tuning device using proper member access */
-                    isp_dev->tuning_data = (struct isp_tuning_data *)tuning_dev;
+                    isp_dev->core_dev->tuning_data = (struct isp_tuning_data *)tuning_dev;
 
                     if (tuning_dev != NULL) {
                         pr_info("*** tx_isp_core_probe: Tuning init SUCCESS (with mapped registers) ***\n");

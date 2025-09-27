@@ -2375,7 +2375,7 @@ static int apical_isp_expr_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *
         int32_t enabled;
     } expr_data;
 
-    int ret = tisp_g_ev_attr(ev_buffer, (ourISPdev && ourISPdev) ? ourISPdev->tuning_data : NULL);
+    int ret = tisp_g_ev_attr(ev_buffer, (ourISPdev && ourISPdev) ? ourISPdev->core_dev->tuning_data : NULL);
     if (ret)
         return ret;
 
@@ -2399,7 +2399,7 @@ static int apical_isp_ev_g_attr(struct tx_isp_dev *dev, struct isp_core_ctrl *ct
         int32_t val[6];  // Based on how many values are copied in decompiled
     } ev_data;
 
-    int ret = tisp_g_ev_attr(ev_buffer, (ourISPdev && ourISPdev) ? ourISPdev->tuning_data : NULL);
+    int ret = tisp_g_ev_attr(ev_buffer, (ourISPdev && ourISPdev) ? ourISPdev->core_dev->tuning_data : NULL);
     if (ret)
         return ret;
 
@@ -2416,7 +2416,7 @@ static int apical_isp_ev_g_attr(struct tx_isp_dev *dev, struct isp_core_ctrl *ct
 
 int tiziano_bcsh_update()
 {
-    struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+    struct isp_tuning_data *tuning = ourISPdev->core_dev->tuning_data;
     uint32_t ev_shifted = tuning->bcsh_ev >> 10;
     uint32_t interp_values[8];
     int i;
@@ -2596,7 +2596,7 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
     }
 
     /* Get tuning data from device - Binary Ninja reference */
-    tuning = (dev) ? (struct isp_tuning_data *)dev->tuning_data : NULL;
+    tuning = (dev) ? (struct isp_tuning_data *)dev->core_dev->tuning_data : NULL;
     if (!tuning) {
         pr_info("apical_isp_core_ops_g_ctrl: No tuning data available\n");
         return -EINVAL;
@@ -2840,7 +2840,7 @@ out:
 static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
 {
     int ret = 0;
-    struct isp_tuning_data *tuning = (ourISPdev && ourISPdev) ? (struct isp_tuning_data *)ourISPdev->tuning_data : NULL;
+    struct isp_tuning_data *tuning = (ourISPdev && ourISPdev) ? (struct isp_tuning_data *)ourISPdev->core_dev->tuning_data : NULL;
 
     if (!dev || !tuning) {
         pr_info("No ISP device or tuning data\n");
@@ -3006,9 +3006,9 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             pr_info("*** SET FPS: Received packed FPS 0x%x -> %d/%d FPS ***\n", fps_packed, fps_num, fps_den);
 
             /* Store in tuning data - this is what the client expects */
-            if (ourISPdev && ourISPdev && ourISPdev->tuning_data) {
-                ((struct isp_tuning_data *)ourISPdev->tuning_data)->fps_num = fps_num;
-                ((struct isp_tuning_data *)ourISPdev->tuning_data)->fps_den = fps_den;
+            if (ourISPdev && ourISPdev && ourISPdev->core_dev->tuning_data) {
+                ((struct isp_tuning_data *)ourISPdev->core_dev->tuning_data)->fps_num = fps_num;
+                ((struct isp_tuning_data *)ourISPdev->core_dev->tuning_data)->fps_den = fps_den;
 
                 pr_info("*** SET FPS: Stored %d/%d in tuning data ***\n", fps_num, fps_den);
 
@@ -3283,16 +3283,16 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
         pr_info("isp_core_tunning_unlocked_ioctl: Auto-initializing tuning for V4L2 control (one-time)\n");
 
         /* Initialize tuning_data if not already initialized */
-        if (!dev || !dev->tuning_data) {
+        if (!dev || !dev->core_dev->tuning_data) {
             pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
             if (ourISPdev) {
-                ourISPdev->tuning_data = isp_core_tuning_init(dev);
+                ourISPdev->core_dev->tuning_data = isp_core_tuning_init(dev);
             }
-            if (!dev || !dev->tuning_data) {
+            if (!dev || !dev->core_dev->tuning_data) {
                 pr_info("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
                 return -ENOMEM;
             }
-            pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", ourISPdev->tuning_data);
+            pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", ourISPdev->core_dev->tuning_data);
         }
 
         /* BINARY NINJA REFERENCE: NO AUTO-INITIALIZATION - tuning system only handles control operations */
@@ -3327,14 +3327,14 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 pr_info("isp_core_tunning_unlocked_ioctl: Set control cmd=0x%x value=%d\n", ctrl.cmd, ctrl.value);
 
                 /* CRITICAL: Validate control command before processing */
-                if (ctrl.cmd == 0x980900 && (!dev || !dev->tuning_data)) {
+                if (ctrl.cmd == 0x980900 && (!dev || !dev->core_dev->tuning_data)) {
                     pr_info("isp_core_tunning_unlocked_ioctl: Brightness control attempted with NULL tuning data\n");
                     return -ENODEV;
                 }
 
                 /* CRITICAL: Additional validation for tuning data structure integrity */
-                if (dev && dev->tuning_data) {
-                    struct isp_tuning_data *tuning = (struct isp_tuning_data *)dev->tuning_data;
+                if (dev && dev->core_dev->tuning_data) {
+                    struct isp_tuning_data *tuning = (struct isp_tuning_data *)dev->core_dev->tuning_data;
 
                     /* Validate the structure is properly initialized */
                     if ((unsigned long)tuning < 0x80000000 || (unsigned long)tuning >= 0xfffff000) {
@@ -3367,7 +3367,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                 pr_info("isp_core_tunning_unlocked_ioctl: Get control cmd=0x%x\n", ctrl.cmd);
 
                 /* CRITICAL: Simple validation for control commands like reference driver */
-                if (!dev || !dev->tuning_data) {
+                if (!dev || !dev->core_dev->tuning_data) {
                     return -ENODEV;
                 }
 
@@ -3517,18 +3517,18 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 
                             /* 5. DPC (Dead Pixel Correction) Updates */
                             extern int tisp_dpc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write);
-                            int dpc_ret = tisp_dpc_par_refresh((dev && dev->tuning_data) ? ((struct isp_tuning_data *)ourISPdev->tuning_data)->exposure >> 10 : 0x100, 0x20, 0);
+                            int dpc_ret = tisp_dpc_par_refresh((dev && dev->core_dev->tuning_data) ? ((struct isp_tuning_data *)ourISPdev->core_dev->tuning_data)->exposure >> 10 : 0x100, 0x20, 0);
                             pr_info("TUNING: DPC refresh completed: %d\n", dpc_ret);
 
                             /* 6. Sharpening Updates */
                             extern int tisp_sharpen_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write);
-                            int sharpen_ret = tisp_sharpen_par_refresh((dev && dev->tuning_data) ? ((struct isp_tuning_data *)ourISPdev->tuning_data)->exposure >> 10 : 0x100, 0x20, 0);
+                            int sharpen_ret = tisp_sharpen_par_refresh((dev && dev->core_dev->tuning_data) ? ((struct isp_tuning_data *)ourISPdev->core_dev->tuning_data)->exposure >> 10 : 0x100, 0x20, 0);
                             pr_info("TUNING: Sharpening refresh completed: %d\n", sharpen_ret);
 
                             /* 7. SDNS (Spatial Denoising) Updates */
                             extern int tisp_sdns_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write);
                             extern int tisp_s_sdns_ratio(int ratio);
-                            int sdns_ret = tisp_sdns_par_refresh((dev && dev->tuning_data) ? ((struct isp_tuning_data *)ourISPdev->tuning_data)->exposure >> 10 : 0x100, 0x20, 0);
+                            int sdns_ret = tisp_sdns_par_refresh((dev && dev->core_dev->tuning_data) ? ((struct isp_tuning_data *)ourISPdev->core_dev->tuning_data)->exposure >> 10 : 0x100, 0x20, 0);
                             if (sdns_ret == 0) sdns_ret = tisp_s_sdns_ratio(128);
                             pr_info("TUNING: SDNS updates completed: %d\n", sdns_ret);
 
@@ -3576,20 +3576,20 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     pr_info("*** DEBUG: enable=1, dev->tuning_enabled=%d ***\n", dev ? dev->tuning_enabled : -1);
                     if (dev && dev->tuning_enabled != 3) {
                         /* CRITICAL: Initialize tuning_data if not already initialized */
-                        if (!dev->tuning_data) {
+                        if (!dev->core_dev->tuning_data) {
                             pr_info("isp_core_tunning_unlocked_ioctl: Initializing tuning data structure\n");
 
                             /* CRITICAL FIX: Pass the core_dev instead of dev to prevent structure mismatch */
-                            ourISPdev->tuning_data = isp_core_tuning_init(ourISPdev);
-                            if (!ourISPdev->tuning_data) {
+                            ourISPdev->core_dev->tuning_data = isp_core_tuning_init(ourISPdev);
+                            if (!ourISPdev->core_dev->tuning_data) {
                                 pr_info("isp_core_tunning_unlocked_ioctl: Failed to allocate tuning data\n");
                                 return -ENOMEM;
                             }
 
                             /* CRITICAL: Validate the allocated structure has the correct mode_flag */
-                            struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+                            struct isp_tuning_data *tuning = ourISPdev->core_dev->tuning_data;
 
-                            pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", ourISPdev->tuning_data);
+                            pr_info("isp_core_tunning_unlocked_ioctl: Tuning data allocated at %p\n", ourISPdev->core_dev->tuning_data);
 
                             /* MCP LOG: Tuning data structure successfully initialized */
                             pr_info("MCP_LOG: ISP tuning data structure allocated and initialized successfully\n");
@@ -5839,7 +5839,7 @@ int tisp_g_drc_strength(uint32_t *value)
 
 int isp_core_tuning_release(struct tx_isp_dev *dev)
 {
-    struct isp_tuning_data *tuning = (struct isp_tuning_data *)ourISPdev->tuning_data;
+    struct isp_tuning_data *tuning = (struct isp_tuning_data *)ourISPdev->core_dev->tuning_data;
 
     pr_info("##### %s %d #####\n", __func__, __LINE__);
 
@@ -5861,7 +5861,7 @@ int isp_core_tuning_release(struct tx_isp_dev *dev)
 
     /* Clear the tuning data reference */
     if (ourISPdev) {
-        ourISPdev->tuning_data = NULL;
+        ourISPdev->core_dev->tuning_data = NULL;
     }
 
     return 0;
@@ -7262,12 +7262,12 @@ int tisp_ccm_ct_update(void)
     /* SAFE: Use global ISP device instead of complex parameter conversion */
     extern struct tx_isp_dev *ourISPdev;
 
-    if (!ourISPdev || !ourISPdev || !ourISPdev->tuning_data) {
+    if (!ourISPdev || !ourISPdev || !ourISPdev->core_dev->tuning_data) {
         pr_info("tisp_ccm_ct_update: No ISP device or tuning data available\n");
         return 0;
     }
 
-    int32_t current_ct = ((struct isp_tuning_data *)ourISPdev->tuning_data)->wb_temp;
+    int32_t current_ct = ((struct isp_tuning_data *)ourISPdev->core_dev->tuning_data)->wb_temp;
 
     /* Check if CT has changed significantly */
     uint32_t ct_diff = (data_c52f4 >= current_ct) ?
@@ -7300,13 +7300,13 @@ int tisp_ccm_ev_update(void)
     /* SAFE: Use global ISP device for EV access */
     extern struct tx_isp_dev *ourISPdev;
 
-    if (!ourISPdev || !ourISPdev || !ourISPdev->tuning_data) {
+    if (!ourISPdev || !ourISPdev || !ourISPdev->core_dev->tuning_data) {
         pr_info("tisp_ccm_ev_update: No ISP device or tuning data available\n");
         return 0;
     }
 
     /* Get current EV value from tuning data */
-    uint32_t current_ev = ((struct isp_tuning_data *)ourISPdev->tuning_data)->exposure >> 10;
+    uint32_t current_ev = ((struct isp_tuning_data *)ourISPdev->core_dev->tuning_data)->exposure >> 10;
 
     /* Check if EV has changed significantly */
     uint32_t ev_diff = (data_c52ec >= current_ev) ?
@@ -9340,8 +9340,8 @@ int tisp_tgain_update(void)
 
     /* Update total gain based on current sensor conditions */
     extern struct tx_isp_dev *ourISPdev;
-    if (ourISPdev && ourISPdev && ourISPdev->tuning_data) {
-        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+    if (ourISPdev && ourISPdev && ourISPdev->core_dev->tuning_data) {
+        struct isp_tuning_data *tuning = ourISPdev->core_dev->tuning_data;
 
         /* Calculate total gain from analog and digital components */
         uint32_t total_gain = (tuning->max_again * tuning->max_dgain) >> 10;
@@ -9364,8 +9364,8 @@ int tisp_again_update(void)
 
     /* Update analog gain based on AE calculations */
     extern struct tx_isp_dev *ourISPdev;
-    if (ourISPdev && ourISPdev && ourISPdev->tuning_data) {
-        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+    if (ourISPdev && ourISPdev && ourISPdev->core_dev->tuning_data) {
+        struct isp_tuning_data *tuning = ourISPdev->core_dev->tuning_data;
 
         /* Update hardware analog gain register */
         if (ourISPdev->core_regs) {
@@ -9404,8 +9404,8 @@ int tisp_ev_update(void)
     /* Update exposure value and trigger dependent updates */
     extern struct tx_isp_dev *ourISPdev;
 
-    if (ourISPdev && ourISPdev && ourISPdev->tuning_data) {
-        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+    if (ourISPdev && ourISPdev && ourISPdev->core_dev->tuning_data) {
+        struct isp_tuning_data *tuning = ourISPdev->core_dev->tuning_data;
 
         /* Update global EV cache for other modules */
         data_9a454 = tuning->exposure;
@@ -9428,8 +9428,8 @@ int tisp_ct_update(void)
     /* Update color temperature - SAFE VERSION without CCM calls */
     extern struct tx_isp_dev *ourISPdev;
 
-    if (ourISPdev && ourISPdev && ourISPdev->tuning_data) {
-        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+    if (ourISPdev && ourISPdev && ourISPdev->core_dev->tuning_data) {
+        struct isp_tuning_data *tuning = ourISPdev->core_dev->tuning_data;
 
         /* Update global CT cache for other modules */
         data_9a450 = tuning->wb_temp;
@@ -9456,8 +9456,8 @@ int tisp_ae_ir_update(void)
     /* Update AE IR (infrared) parameters for day/night transitions */
     extern struct tx_isp_dev *ourISPdev;
 
-    if (ourISPdev && ourISPdev && ourISPdev->tuning_data) {
-        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+    if (ourISPdev && ourISPdev && ourISPdev->core_dev->tuning_data) {
+        struct isp_tuning_data *tuning = ourISPdev->core_dev->tuning_data;
 
         /* Update IR cut filter based on light conditions */
         if (tuning->exposure > 0x8000) {  /* Low light threshold */

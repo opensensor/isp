@@ -153,6 +153,8 @@ struct tx_isp_dev {
     int vic_processing;
     u32 vic_frame_size;
     struct list_head vic_buf_queue;
+    void __iomem *vic_regs;      /* Primary VIC register space (0x133e0000) */
+    void __iomem *vic_regs2;     /* Secondary VIC register space (0x10023000) */
 
     /* Centralized register mappings - CRITICAL for system_reg_write */
     void __iomem *core_regs;     /* ISP core registers - MATCHES REFERENCE DRIVER */
