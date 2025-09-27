@@ -164,27 +164,20 @@ static int tx_isp_csi_hw_init(struct tx_isp_subdev *sd)
     return 0;
 }
 
-/* CSI video streaming control - EXACT Binary Ninja implementation */
+/* CSI video streaming control - EXACT Binary Ninja MCP implementation */
 int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_csi_device *csi_dev;
 
-    pr_info("*** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***\n");
+    pr_info("*** csi_video_s_stream: EXACT Binary Ninja MCP implementation ***\n");
     pr_info("csi_video_s_stream: sd=%p, enable=%d\n", sd, enable);
 
-    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 0xffffffea */
-    if (!sd || (unsigned long)sd >= 0xfffff001) {
-        pr_err("csi_video_s_stream: Invalid subdev pointer\n");
+    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) */
+    if (sd == NULL || (unsigned long)sd >= 0xfffff001) {
+        /* Binary Ninja: isp_printf(2, "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n", arg3) */
+        isp_printf(2, "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\n", enable);
+        /* Binary Ninja: return 0xffffffea */
         return 0xffffffea;
-    }
-
-    /* CRITICAL FIX: Binary Ninja exact check - if (*(*(arg1 + 0x110) + 0x14) != 1) return 0 */
-    /* This checks if sensor interface type is MIPI (1) - if not MIPI, return 0 */
-    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
-    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
-    if (!sensor || !sensor->video.attr || sensor->video.attr->dbus_type != TX_SENSOR_DATA_INTERFACE_MIPI) {
-        pr_info("csi_video_s_stream: Sensor interface type is not MIPI (1), returning 0\n");
-        return 0;
     }
 
     /* Get CSI device from subdev private data */
@@ -194,29 +187,25 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
         return 0xffffffea;
     }
 
-    /* CRITICAL: Initialize CSI hardware if needed (like good-things driver) */
-    if (enable && csi_dev->state < 4) {
-        pr_info("*** CSI STREAMING: Configuring CSI hardware for streaming (current state=%d) ***\n", csi_dev->state);
-        int ret = csi_core_ops_init(sd, 1);
-        if (ret) {
-            pr_info("Failed to initialize CSI hardware for streaming: %d\n", ret);
-            return ret;
-        }
-        pr_info("*** CSI STREAMING: CSI hardware configured successfully for streaming ***\n");
-    } else if (enable) {
-        pr_info("*** CSI STREAMING: CSI already in streaming state (%d), skipping hardware config ***\n", csi_dev->state);
+    /* Binary Ninja: if (*(*(arg1 + 0x110) + 0x14) != 1) return 0 */
+    /* This checks CSI device interface type - if not MIPI (1), return 0 */
+    if (csi_dev->interface_type != 1) {
+        pr_info("csi_video_s_stream: Interface type %d != 1 (MIPI), returning 0\n", csi_dev->interface_type);
+        return 0;
     }
 
     /* Binary Ninja: int32_t $v0_4 = 4 */
+    int v0_4 = 4;
+
     /* Binary Ninja: if (arg2 == 0) $v0_4 = 3 */
-    /* Binary Ninja: *(arg1 + 0x128) = $v0_4 */
     if (enable == 0) {
-        csi_dev->state = 3;
-        pr_info("csi_video_s_stream: Stream OFF - CSI state set to 3\n");
-    } else {
-        csi_dev->state = 4;
-        pr_info("csi_video_s_stream: Stream ON - CSI state set to 4\n");
+        v0_4 = 3;
     }
+
+    /* Binary Ninja: *(arg1 + 0x128) = $v0_4 */
+    csi_dev->state = v0_4;
+
+    pr_info("csi_video_s_stream: EXACT Binary Ninja MCP - CSI state set to %d (enable=%d)\n", v0_4, enable);
 
     /* Binary Ninja: return 0 */
     return 0;
