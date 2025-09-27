@@ -4324,47 +4324,6 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
     pr_info("ISP IOCTL: cmd=0x%x arg=0x%lx\n", cmd, arg);
 
-    /* Binary Ninja: Main switch structure exactly as decompiled */
-    if (cmd == 0x800856d7) {
-        /* TX_ISP_WDR_GET_BUF - Binary Ninja exact implementation */
-        void *core_dev = isp_dev->core_dev;
-        var_98.as_uint32 = 0;
-        var_94 = 0;
-
-        if (core_dev) {
-            struct tx_isp_core_device *core = (struct tx_isp_core_device *)core_dev;
-            /* Binary Ninja: void* $v0_96 = *($v1_22 + 0x120) */
-            /* SAFE: Use helper method to get sensor attributes instead of unsafe struct access */
-            struct tx_isp_sensor *sensor = tx_isp_get_sensor();
-            if (sensor && &sensor->info) {
-                /* Binary Ninja: int32_t $a0_41 = *($v0_96 + 0x90) */
-                int wdr_mode = 1; // Default linear mode
-
-                if (wdr_mode == 1) {
-                    /* Binary Ninja: var_94 = (*($v1_22 + 0x124) * *($v1_22 + 0x128)) << 1 */
-                    var_94 = (1080 * 1920) << 1; // Default dimensions
-                } else if (wdr_mode == 2) {
-                    /* Binary Ninja: var_94 = *($v0_96 + 0xe8) */
-                    var_94 = 1920 * 1080 * 2; // WDR mode calculation
-                } else {
-                    pr_err("WDR mode not supported\n");
-                    return -EINVAL;
-                }
-            }
-        }
-
-        pr_info("WDR buffer calculation: size=%d\n", var_94);
-        s6_1 = 0;
-
-        /* Binary Ninja: if (private_copy_to_user(arg3, &var_98, 8) != 0) */
-        if (copy_to_user((void __user *)arg, &var_98, 8) != 0) {
-            pr_err("Failed to copy WDR buffer result to user\n");
-            return -EFAULT;
-        }
-
-        return s6_1;
-    }
-
     /* Binary Ninja: Main conditional structure - FIXED ORDER */
     if (cmd == 0xc050561a) { // TX_ISP_SENSOR_ENUM_INPUT - EXACT Binary Ninja reference
         /* CRITICAL FIX: IOCTL 0xc050561a is _IOWR('V', 0x1a, 0x50) - 80 bytes read/write */
@@ -4636,124 +4595,201 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         return s6_1;
     }
 
-    /* Binary Ninja: Handle 0x800856d4 - TX_ISP_SET_BUF */
-    if (cmd == 0x800856d4) {
-        /* Binary Ninja: void* $s4_5 = *(*($s7 + 0x2c) + 0xd4) */
-        void *core_dev = isp_dev->core_dev;
+    case 0x800856d5: { // TX_ISP_GET_BUF - Calculate required buffer size
+        struct isp_buf_result {
+            uint32_t addr;   // Physical address (usually 0)
+            uint32_t size;   // Calculated buffer size
+        } buf_result;
+        uint32_t width = 1920;   // Default HD width
+        uint32_t height = 1080;  // Default HD height
+        uint32_t stride_factor;
+        uint32_t main_buf;
+        uint32_t total_main;
+        uint32_t yuv_stride;
+        uint32_t total_size;
 
-        /* Binary Ninja: if (private_copy_from_user(&var_98, arg3, 8) != 0) */
-        if (copy_from_user(&var_98, (void __user *)arg, 8) != 0) {
-            pr_err("TX_ISP_SET_BUF: Failed to copy buffer data\n");
+        pr_info("ISP buffer calculation: width=%d height=%d memopt=%d\n",
+                width, height, isp_memopt);
+
+        // Use NV12 buffer calculation (Y plane + interleaved UV plane)
+        // NV12 bytes = width * height * 3/2, aligned to 64 bytes for DMA
+        pr_info("*** BUFFER: Using NV12 calculation (width*height*3/2) ***\n");
+
+        uint32_t nv12_bytes = (width * height * 3) / 2;
+        uint32_t aligned_size = (nv12_bytes + 63) & ~63;  // 64-byte alignment
+
+        total_size = aligned_size;
+
+        pr_info("*** NV12 BUFFER: %d x %d -> %u bytes -> %u aligned ***\n",
+                width, height, nv12_bytes, aligned_size);
+
+        pr_info("ISP calculated buffer size: %d bytes (0x%x)\n", total_size, total_size);
+
+        // Set result: address=0, size=calculated
+        buf_result.addr = 0;
+        buf_result.size = total_size;
+
+        if (copy_to_user(argp, &buf_result, sizeof(buf_result)))
             return -EFAULT;
-        }
-
-        if (core_dev) {
-            struct tx_isp_core_device *core = (struct tx_isp_core_device *)core_dev;
-            /* Binary Ninja: Complex buffer setup with system register writes */
-            /* This would involve actual hardware register programming */
-            pr_info("TX_ISP_SET_BUF: addr=0x%x size=%d\n", var_98.as_uint32, var_94);
-        }
 
         return 0;
     }
+    case 0x800856d4: { // TX_ISP_SET_BUF - Set buffer addresses and configure DMA
+        struct isp_buf_setup {
+            uint32_t addr;   // Physical buffer address
+            uint32_t size;   // Buffer size
+        } buf_setup;
+        uint32_t width = 1920;
+        uint32_t height = 1080;
+        uint32_t stride;
+        uint32_t frame_size;
+        uint32_t uv_offset;
+        uint32_t yuv_stride;
+        uint32_t yuv_size;
 
-    /* Binary Ninja: Handle 0x800856d5 - TX_ISP_GET_BUF */
-    if (cmd == 0x800856d5) {
-        pr_info("TX_ISP_GET_BUF: IOCTL handler called\n");
-
-        /* Binary Ninja: void* $v1_14 = *(*($s7 + 0x2c) + 0xd4) */
-        void *core_dev = isp_dev->core_dev;
-        var_98.as_uint32 = 0;
-        var_94 = 0;
-
-        pr_info("TX_ISP_GET_BUF: core_dev=%p, isp_dev=%p\n", core_dev, isp_dev);
-
-        /* Get dimensions from core device or use defaults */
-        int width, height;
-        if (core_dev) {
-            struct tx_isp_core_device *core = (struct tx_isp_core_device *)core_dev;
-            /* Binary Ninja EXACT: Read width/height from core device structure */
-            /* Binary Ninja: int32_t $v0_83 = *($v1_14 + 0xec) */
-            /* Binary Ninja: int32_t $a2_9 = *($v1_14 + 0xf0) */
-            width = core->width;   /* offset 0xec in Binary Ninja */
-            height = core->height; /* offset 0xf0 in Binary Ninja */
-
-            pr_info("TX_ISP_GET_BUF: Using dimensions %dx%d from core device\n", width, height);
-        } else {
-            /* Use default dimensions if core_dev is NULL */
-            width = 1920;
-            height = 1080;
-            pr_info("TX_ISP_GET_BUF: core_dev is NULL, using default dimensions %dx%d\n", width, height);
-        }
-
-        /* Binary Ninja EXACT: Complex buffer calculation - ALWAYS PERFORM REGARDLESS OF CORE_DEV */
-        /* int32_t $t0_3 = $a2_9 << 3 */
-        /* int32_t $a0_29 = (($v0_83 + 7) u>> 3) * $t0_3 */
-        /* int32_t $a3_2 = ($a0_29 u>> 1) + $a0_29 */
-        int t0_3 = height << 3;
-        int a0_29 = ((width + 7) >> 3) * t0_3;
-        int a3_2 = (a0_29 >> 1) + a0_29;
-
-        /* Binary Ninja EXACT: Additional buffer calculations */
-        /* int32_t $a0_37 = (((($v0_83 + 0x1f) u>> 5) + 7) u>> 3) * (((($a2_9 + 0xf) u>> 4) + 1) << 3) */
-        int a0_37 = ((((width + 0x1f) >> 5) + 7) >> 3) * ((((height + 0xf) >> 4) + 1) << 3);
-        int a2_10 = a3_2 + a0_37;
-
-        /* Binary Ninja EXACT: Check isp_memopt flag for additional calculations */
-        if (isp_memopt == 0) {
-            /* int32_t $a1_55 = ((($v0_83 u>> 1) + 7) u>> 3) * $t0_3 */
-            int a1_55 = (((width >> 1) + 7) >> 3) * t0_3;
-            /* $a2_10 = ($a0_37 << 2) + ((((($v0_83 u>> 5) + 7) u>> 3) * $t0_3) u>> 5) + ($a1_55 u>> 1) + $a3_2 + $a1_55 */
-            a2_10 = (a0_37 << 2) + (((((width >> 5) + 7) >> 3) * t0_3) >> 5) + (a1_55 >> 1) + a3_2 + a1_55;
-        }
-
-        var_94 = a2_10;
-
-        /* Binary Ninja EXACT: var_94 = $a2_10, var_98 = 0, $s6_1 = 0 */
-        /* CRITICAL FIX: Return proper physical address instead of 0 */
-        if (isp_dev->rmem_addr != 0) {
-            var_98.as_uint32 = (uint32_t)isp_dev->rmem_addr;  /* Use reserved memory base address */
-        } else {
-            var_98.as_uint32 = 0x6300000;  /* Default T31 ISP memory base from rmem */
-        }
-        s6_1 = 0;
-
-        pr_info("TX_ISP_GET_BUF: Returning buffer size=%d, paddr=0x%x\n", var_94, var_98.as_uint32);
-
-        /* CRITICAL FIX: Create proper 8-byte structure for userspace */
-        /* Userspace expects: [paddr (4 bytes)][size (4 bytes)] */
-        struct {
-            uint32_t paddr;  /* Physical address */
-            uint32_t size;   /* Buffer size */
-        } __attribute__((packed)) result;
-
-        result.paddr = var_98.as_uint32;
-        result.size = var_94;
-
-        /* Binary Ninja: if (private_copy_to_user(arg3, &var_98, 8) != 0) */
-        if (copy_to_user((void __user *)arg, &result, 8) != 0) {
-            pr_err("TX_ISP_GET_BUF: Failed to copy buffer result\n");
+        if (copy_from_user(&buf_setup, argp, sizeof(buf_setup)))
             return -EFAULT;
-        }
 
-        return s6_1;
+        /* Resolve local frame channel context safely */
+        {
+            struct frame_channel_device *fcd_local = NULL;
+            int ch_local = -1;
+            if (file)
+                fcd_local = (struct frame_channel_device *)file->private_data;
+            if (fcd_local)
+                ch_local = fcd_local->channel_num;
+
+            /* Legacy TX_ISP_SET_BUF call. In VBM/V4L2 mode the application allocates
+             * and passes per-buffer physical addresses via VIDIOC_QBUF. We will not
+             * program hardware here, but we will STORE the base and per-frame size so
+             * QBUF fallbacks can use real addresses rather than hardcoded rmem.
+             */
+            if (fcd_local) {
+                fcd_local->vbm_base_phys = buf_setup.addr;
+                fcd_local->vbm_frame_size = buf_setup.size;
+                pr_info("TX_ISP_SET_BUF(legacy) recorded base=0x%x frame_size=%u for channel %d\n",
+                        fcd_local->vbm_base_phys, fcd_local->vbm_frame_size, ch_local);
+                /* Also cache globally by channel to survive FD/context mismatch */
+                if (ch_local >= 0 && ch_local < 4) {
+                    g_setbuf_base[ch_local] = fcd_local->vbm_base_phys;
+                    g_setbuf_step[ch_local] = fcd_local->vbm_frame_size;
+                    pr_info("TX_ISP_SET_BUF(legacy) global cache: ch=%d base=0x%x step=%u\n",
+                            ch_local, g_setbuf_base[ch_local], g_setbuf_step[ch_local]);
+                }
+            } else {
+                pr_info("TX_ISP_SET_BUF(legacy) received but channel context unavailable\n");
+            }
+
+            /* Now that fcd/global cache is updated, pre-program VIC slots for ch0 */
+            if (ch_local == 0 && ourISPdev && ourISPdev->vic_dev && buf_setup.addr && buf_setup.size) {
+                struct tx_isp_vic_device *vic_dev_prog = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                struct { uint32_t index; uint32_t phys_addr; uint32_t size; uint32_t channel; } v;
+                uint32_t base = buf_setup.addr;
+                uint32_t step = buf_setup.size;
+                pr_info("*** TX_ISP_SET_BUF ch0: Pre-program VIC slots base=0x%x step=%u ***\n", base, step);
+
+                /* CRITICAL FIX: Use VIC hardware stride calculation to match current address register */
+                /* Binary Ninja vic_pipo_mdma_enable shows: stride = width << 1, step = stride * height * 3/2 */
+                {
+                    uint32_t w = 1920;  /* VIC width */
+                    uint32_t h = 1080; /* VIC height */
+                    uint32_t vic_stride = w << 1;  /* Binary Ninja: $v1_1 = $v1 << 1 */
+                    uint32_t y_size = vic_stride * h;
+                    uint32_t step_vic = y_size + (y_size >> 1); /* NV12: Y + Y/2 */
+                    pr_info("*** TX_ISP_SET_BUF ch0: Using VIC hardware stride calculation: w=%u h=%u vic_stride=%u step=%u ***\n",
+                            w, h, vic_stride, step_vic);
+                    step = step_vic;
+                }
+
+                v.channel = 0;
+                v.size = step;
+                /* Program all 5 VIC slots to ensure CA is not empty */
+                v.index = 0; v.phys_addr = base;            tx_isp_send_event_to_remote(&vic_dev_prog->sd, 0x3000008, &v);
+                v.index = 1; v.phys_addr = base + step;     tx_isp_send_event_to_remote(&vic_dev_prog->sd, 0x3000008, &v);
+                v.index = 2; v.phys_addr = base + 2*step;   tx_isp_send_event_to_remote(&vic_dev_prog->sd, 0x3000008, &v);
+                v.index = 3; v.phys_addr = base + 3*step;   tx_isp_send_event_to_remote(&vic_dev_prog->sd, 0x3000008, &v);
+                v.index = 4; v.phys_addr = base + 4*step;   tx_isp_send_event_to_remote(&vic_dev_prog->sd, 0x3000008, &v);
+                pr_info("*** TX_ISP_SET_BUF ch0: Programmed all 5 VIC slots (C6-CA) with VIC stride calculation ***\n");
+            }
+        }
+        return 0;
     }
+    case 0x800856d6: { // TX_ISP_WDR_SET_BUF - WDR buffer setup
+        struct wdr_buf_setup {
+            uint32_t addr;   // WDR buffer address
+            uint32_t size;   // WDR buffer size
+        } wdr_setup;
 
-    /* Binary Ninja: Handle 0x800856d6 - TX_ISP_WDR_SET_BUF */
-    if (cmd == 0x800856d6) {
-        /* Binary Ninja: void* $s2_23 = *(*($s7 + 0x2c) + 0xd4) */
-        void *core_dev = isp_dev->core_dev;
 
-        /* Binary Ninja: if (private_copy_from_user(&var_98, arg3, 8) != 0) */
-        if (copy_from_user(&var_98, (void __user *)arg, 8) != 0) {
-            pr_err("TX_ISP_WDR_SET_BUF: Failed to copy WDR buffer data\n");
+        uint32_t wdr_width = 1920;
+        uint32_t wdr_height = 1080;
+        uint32_t wdr_mode = 1; // Linear mode by default
+        uint32_t required_size;
+        uint32_t stride_lines;
+
+        if (copy_from_user(&wdr_setup, argp, sizeof(wdr_setup)))
+            return -EFAULT;
+
+        pr_info("WDR buffer setup: addr=0x%x size=%d\n", wdr_setup.addr, wdr_setup.size);
+
+        if (wdr_mode == 1) {
+            // Linear mode calculation
+            stride_lines = wdr_height;
+            required_size = (stride_lines * wdr_width) << 1; // 16-bit per pixel
+        } else if (wdr_mode == 2) {
+            // WDR mode calculation - different formula
+            required_size = wdr_width * wdr_height * 2; // Different calculation for WDR
+            stride_lines = required_size / (wdr_width << 1);
+        } else {
+            pr_info("Unsupported WDR mode: %d\n", wdr_mode);
+            return -EINVAL;
+        }
+
+        pr_info("WDR mode %d: required_size=%d stride_lines=%d\n",
+                wdr_mode, required_size, stride_lines);
+
+        if (wdr_setup.size < required_size) {
+            pr_info("WDR buffer too small: need %d, got %d\n", required_size, wdr_setup.size);
             return -EFAULT;
         }
 
-        if (core_dev) {
-            /* Binary Ninja: WDR buffer configuration with register writes */
-            pr_info("TX_ISP_WDR_SET_BUF: addr=0x%x size=%d\n", var_98.as_uint32, var_94);
+        // Configure WDR registers (like reference 0x2004, 0x2008, 0x200c)
+        pr_info("Configuring WDR registers: addr=0x%x stride=%d lines=%d\n",
+                wdr_setup.addr, wdr_width << 1, stride_lines);
+
+        return 0;
+    }
+    case 0x800856d7: { // TX_ISP_WDR_GET_BUF - Get WDR buffer size
+        struct wdr_buf_result {
+            uint32_t addr;   // WDR buffer address (usually 0)
+            uint32_t size;   // Calculated WDR buffer size
+        } wdr_result;
+        uint32_t wdr_width = 1920;
+        uint32_t wdr_height = 1080;
+        uint32_t wdr_mode = 1; // Linear mode
+        uint32_t wdr_size;
+
+        pr_info("WDR buffer calculation: width=%d height=%d mode=%d\n",
+                wdr_width, wdr_height, wdr_mode);
+
+        if (wdr_mode == 1) {
+            // Linear mode: ($s1_13 * *($s2_23 + 0x124)) << 1
+            wdr_size = (wdr_height * wdr_width) << 1;
+        } else if (wdr_mode == 2) {
+            // WDR mode: different calculation
+            wdr_size = wdr_width * wdr_height * 2;
+        } else {
+            pr_info("WDR mode not supported\n");
+            return -EINVAL;
         }
+
+        pr_info("WDR calculated buffer size: %d bytes (0x%x)\n", wdr_size, wdr_size);
+
+        wdr_result.addr = 0;
+        wdr_result.size = wdr_size;
+
+        if (copy_to_user(argp, &wdr_result, sizeof(wdr_result)))
+            return -EFAULT;
 
         return 0;
     }
@@ -4889,6 +4925,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
     /* Binary Ninja: Handle 0xc0045627 - TX_ISP_SENSOR_SET_INPUT */
     if (cmd == 0xc0045627) {
+		pr_info("TX_ISP_SENSOR_SET_INPUT");
         /* Binary Ninja: if (private_copy_from_user(&var_98, arg3, 4) != 0) */
         if (copy_from_user(&var_98, (void __user *)arg, 4) != 0) {
             pr_err("TX_ISP_SENSOR_SET_INPUT: Failed to copy input data\n");
