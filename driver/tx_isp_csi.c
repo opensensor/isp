@@ -353,17 +353,20 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                     v0_17 = 2;
                 } else {
                     /* Binary Ninja: void* $v1_5 = *($s0_1 + 0x110) */
-                    /* SAFE: Use helper method to get sensor attributes instead of unsafe offset access */
+                    /* CRITICAL FIX: Get sensor attributes from connected sensor */
                     extern struct tx_isp_sensor *tx_isp_get_sensor(void);
                     struct tx_isp_sensor *sensor = tx_isp_get_sensor();
-                    if (sensor) {
-                        sensor_attr = &sensor->info;
+                    if (sensor && sensor->video.attr) {
+                        sensor_attr = sensor->video.attr;
+                        pr_info("*** csi_core_ops_init: Got sensor attributes from sensor %s ***\n", sensor->name);
                     } else {
-                        sensor_attr = NULL;
+                        pr_err("csi_core_ops_init: CRITICAL ERROR - No sensor attributes available\n");
+                        return -EINVAL;
                     }
 
                     /* Binary Ninja: int32_t $s2_1 = *($v1_5 + 0x14) */
                     int interface_type = sensor_attr->dbus_type;
+                    pr_info("*** csi_core_ops_init: interface_type=%d (1=MIPI, 2=DVP) ***\n", interface_type);
 
                     if (interface_type == 1) {
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 4) = zx.d(*($v1_5 + 0x24)) - 1 */
