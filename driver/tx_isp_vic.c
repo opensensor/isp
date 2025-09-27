@@ -2599,92 +2599,96 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vic_device *vic_dev;
-    int current_state;
+    void __iomem *vic_regs;
+    void __iomem *isp_base;
+    void __iomem *csi_base;
     int ret = -EINVAL;
 
-    pr_info("*** vic_core_s_stream: BINARY NINJA EXACT - sd=%p, enable=%d ***\n", sd, enable);
+    pr_info("*** vic_core_s_stream: ENTRY - sd=%p, enable=%d ***\n", sd, enable);
 
-    /* Binary Ninja: if (arg1 != 0) if (arg1 u>= 0xfffff001) return 0xffffffea */
-    if (!sd) {
-        return -EINVAL;
-    }
-    if ((unsigned long)sd >= 0xfffff001) {
-        return -EINVAL;
-    }
-
-    /* Binary Ninja: void* $s1_1 = *(arg1 + 0xd4) */
-    /* FIXED: Get VIC device from subdev host_priv as Binary Ninja expects */
-    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdev_hostdata(sd);
-
-    /* Binary Ninja: if ($s1_1 != 0 && $s1_1 u< 0xfffff001) */
-    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
-        pr_err("vic_core_s_stream: Invalid VIC device\n");
+    /* Validate parameters */
+    if (!sd || !ourISPdev || !ourISPdev->vic_dev) {
+        pr_err("vic_core_s_stream: Invalid parameters - sd=%p, ourISPdev=%p\n", sd, ourISPdev);
         return -EINVAL;
     }
 
-    /* Binary Ninja: int32_t $v1_3 = *($s1_1 + 0x128) */
-    current_state = vic_dev->state;
+    vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+    if (!vic_dev) {
+        pr_err("vic_core_s_stream: Failed to get VIC device\n");
+        return -EINVAL;
+    }
 
-    pr_info("*** vic_core_s_stream: BINARY NINJA EXACT - current_state=%d ***\n", current_state);
+    /* REVERT: Ensure VIC registers are mapped to ORIGINAL working address */
+    vic_regs = vic_dev->vic_regs;
+    if (!vic_regs) {
+        pr_err("*** CRITICAL FIX: VIC registers not mapped - mapping now ***\n");
+        vic_regs = ioremap(0x133e0000, 0x10000);
+        if (!vic_regs) {
+            pr_err("vic_core_s_stream: Failed to map VIC registers at 0x133e0000\n");
+            return -ENOMEM;
+        }
+        vic_dev->vic_regs = vic_regs;
+        pr_info("*** VIC registers mapped successfully: %p ***\n", vic_regs);
+    }
 
-    /* Binary Ninja: if (arg2 == 0) */
-    if (enable == 0) {
-        /* Stream OFF */
-        pr_info("*** vic_core_s_stream: STREAM OFF ***\n");
+    /* Calculate base addresses safely */
+    isp_base = vic_regs - 0x9a00;  /* Correct ISP base calculation */
+    csi_base = isp_base + 0x10000;
 
-        /* Binary Ninja: $v0 = 0 */
-        ret = 0;
+    pr_info("vic_core_s_stream: vic_regs=%p, isp_base=%p, csi_base=%p\n", vic_regs, isp_base, csi_base);
 
-        /* Binary Ninja: if ($v1_3 == 4) *($s1_1 + 0x128) = 3 */
-        if (current_state == 4) {
-            vic_dev->state = 3;
-            pr_info("vic_core_s_stream: Stream OFF - state 4 -> 3\n");
+    if (sd != NULL) {
+        if ((unsigned long)sd >= 0xfffff001) {
+            pr_err("vic_core_s_stream: Invalid sd pointer\n");
+            return -EINVAL;
         }
 
-        return ret;
-    } else {
-        /* Stream ON */
-        pr_info("*** vic_core_s_stream: STREAM ON ***\n");
+        ret = -EINVAL;
 
-        /* Binary Ninja: $v0 = 0 */
-        ret = 0;
+        if (vic_dev != NULL && (unsigned long)vic_dev < 0xfffff001) {
+            int current_state = vic_dev->state;
 
-        /* EXACT Binary Ninja MCP reference logic */
-        /* Binary Ninja: if ($v1_3 != 4) */
-        if (current_state != 4) {
-            pr_info("*** vic_core_s_stream: EXACT Binary Ninja - State != 4, calling VIC start sequence ***\n");
-
-            /* SKIP disabling kernel IRQ before VIC start to avoid missing first frame */
-            pr_info("*** vic_core_s_stream: SKIPPING tx_vic_disable_irq before VIC start to preserve first frame IRQ ***\n");
-
-            /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
-            ret = tx_isp_vic_start(vic_dev);
-            if (ret != 0) {
-                pr_err("*** vic_core_s_stream: tx_isp_vic_start FAILED: %d ***\n", ret);
-                return ret;
-            }
-            /* Start VIC frame channel streaming before enabling IRQs (enables MDMA) */
-            /* Ensure stream_state reset so ispvic_frame_channel_s_stream performs MDMA enable */
-            vic_dev->stream_state = 0;
-
-            /* Force QBUF write to program buffer addresses before MDMA start */
-            pr_info("*** vic_core_s_stream: Forcing ispvic_frame_channel_qbuf to program buffer addresses before MDMA ***\n");
-            {
-                int qret = ispvic_frame_channel_qbuf(sd, NULL);
-                if (qret != 0) {
-                    pr_warn("*** vic_core_s_stream: ispvic_frame_channel_qbuf returned %d (continuing) ***\n", qret);
-                } else {
-                    pr_info("*** vic_core_s_stream: ispvic_frame_channel_qbuf SUCCESS ***\n");
+            if (enable == 0) {
+                /* Stream OFF - BINARY NINJA REFERENCE: No adjustment function */
+                ret = 0;
+                ispvic_frame_channel_s_stream(vic_dev, 0);
+                if (current_state == 4) {
+                    vic_dev->state = 3;
+                    pr_info("vic_core_s_stream: Stream OFF - state 4 -> 3\n");
                 }
-            }
+            } else {
+                /* Stream ON - CRITICAL: Follow EXACT reference driver sub-device sequence */
+                ret = 0;
 
-            pr_info("*** vic_core_s_stream: Calling ispvic_frame_channel_s_stream(ENABLE) to start MDMA before enabling IRQ ***\n");
-            ret = ispvic_frame_channel_s_stream(sd, 1);
-            if (ret != 0) {
-                pr_err("*** vic_core_s_stream: ispvic_frame_channel_s_stream FAILED: %d ***\n", ret);
-                return ret;
-            }
+                pr_info("*** CRITICAL: Following EXACT reference driver sub-device initialization sequence ***\n");
 
+                /* CRITICAL FIX: Disable VIC interrupts during initialization to prevent control limit errors */
+                pr_info("*** DISABLING VIC INTERRUPTS DURING INITIALIZATION ***\n");
+                vic_start_ok = 1;  /* Disable interrupt processing */
+
+                /* CRITICAL FIX: Correct the register base mapping! */
+                /* vic_regs = 0x133e0000 = CSI PHY (isp-w02 in trace) */
+                /* isp_base = 0x13300000 = Main ISP (isp-m0 in trace) - NEEDS SEPARATE MAPPING */
+                void __iomem *main_isp_base = ioremap(0x13300000, 0x100000);  /* Map main ISP separately */
+                void __iomem *vic_w01_base = ioremap(0x10023000, 0x1000);    /* Map isp-w01 separately */
+
+                if (!main_isp_base || !vic_w01_base) {
+                    pr_err("*** CRITICAL: Failed to map ISP register bases ***\n");
+                    if (main_isp_base) iounmap(main_isp_base);
+                    if (vic_w01_base) iounmap(vic_w01_base);
+                    return -ENOMEM;
+                }
+
+
+                /* STEP 1: VIC Hardware Reset and Clean Configuration */
+                pr_info("*** STEP 1: VIC Hardware Reset and Clean Configuration ***\n");
+
+                /* Declare sensor dimensions at function scope */
+                u32 sensor_width = 1920;   /* ACTUAL sensor output width */
+                u32 sensor_height = 1080;  /* ACTUAL sensor output height */
+
+                /* HARDWARE RESET APPROACH: Reset VIC to clean state first */
+                pr_info("*** VIC HARDWARE RESET: Clearing VIC hardware state to prevent control limit errors ***\n");
 
             /* Guarded: Clear ISP core VIC status and re-assert gate so next framedone can assert HW IRQ */
             do {
@@ -2914,81 +2918,84 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
             }
 
-            /* Re-assert ISP core VIC IRQ gate before enabling CPU IRQ (observed to drop to 0) */
-            do {
-                struct tx_isp_dev *isp_dev = ourISPdev;
-                if (false && isp_dev && isp_dev->core_dev && isp_dev->core_dev->core_regs) { /* SKIP: avoid CORE VIC GATE REASSERT */
-                    void __iomem *core = isp_dev->core_dev->core_regs;
-                    writel(0x200, core + 0x9ac0);
-                    writel(0x200, core + 0x9ac8);
-                    wmb();
-                    pr_info("*** CORE VIC GATE REASSERT: [0x9ac0]=0x%08x [0x9ac8]=0x%08x ***\n",
-                            readl(core + 0x9ac0), readl(core + 0x9ac8));
+                /* STEP 9: CRITICAL FIX - Only call VIC start if VIC interrupts are not already working */
+                /* This prevents the destructive VIC unlock sequence that breaks working interrupts */
+                if (current_state != 4 && vic_start_ok != 1) {
+                    pr_info("*** STEP 9: vic_start_ok=%d, state=%d - calling tx_isp_vic_start ***\n", vic_start_ok, current_state);
+                    ret = tx_isp_vic_start(vic_dev);
                 } else {
-                    pr_warn("*** CORE VIC GATE REASSERT: core_regs not mapped, skipping ***\n");
+                    pr_info("*** STEP 9: vic_start_ok=%d, state=%d - SKIPPING tx_isp_vic_start to preserve working interrupts ***\n", vic_start_ok, current_state);
+                    ret = 0;  /* Success - VIC is already working */
                 }
-            } while (0);
+                ispvic_frame_channel_s_stream(vic_dev, 1);
 
-            /* Enable VIC IRQ after final re-assert and verification */
-            pr_info("*** vic_core_s_stream: Enabling VIC IRQ AFTER final re-assert/verify ***\n");
-            tx_vic_enable_irq(vic_dev);
+                if (current_state != 4) {
+                    pr_info("vic_core_s_stream: Stream ON - tx_isp_vic_start called after proper sub-device init\n");
 
+                    /* CRITICAL FIX: Only enable interrupts AFTER all initialization is complete */
+                    vic_dev->state = 4;
+                    wmb();  /* Ensure state is written before enabling interrupts */
+                    vic_start_ok = 1;  /* NOW safe to enable interrupt processing */
+                    pr_info("*** INTERRUPTS RE-ENABLED AFTER COMPLETE INITIALIZATION ***\n");
 
-            /* Post-IRQ-enable: sample status a bit longer to catch first frame */
-            if (vic_dev->vic_regs) {
-
-                void __iomem *vr = vic_dev->vic_regs;
-                u32 s0, s1; int i;
-                for (i = 0; i < 200; i++) { /* ~200ms total if udelay(1000) */
-                    s0 = readl(vr + 0x1f0);
-                    s1 = readl(vr + 0x1f4);
-                    if (s0 || s1) {
-                        pr_warn("*** VIC POST-IRQ SAMPLE: Status asserted: [0x1f0]=0x%08x [0x1f4]=0x%08x (iter=%d) ***\n", s0, s1, i);
-                        break;
+                    /* CRITICAL: Call ispcore_slake_module when VIC state reaches 4 (>= 3) */
+                    pr_info("*** VIC STATE 4: Calling ispcore_slake_module to initialize ISP core ***\n");
+                    extern int ispcore_slake_module(struct tx_isp_dev *isp);
+                    if (ourISPdev) {
+                        int slake_ret = ispcore_slake_module(ourISPdev);
+                        if (slake_ret == 0) {
+                            pr_info("*** ispcore_slake_module SUCCESS - ISP core should now be initialized ***\n");
+                        } else {
+                            pr_err("*** ispcore_slake_module FAILED: %d ***\n", slake_ret);
+                        }
                     }
-                    udelay(1000);
-                }
-                if (i == 200)
-                    pr_info("*** VIC POST-IRQ SAMPLE: No status bits asserted in 200ms window ***\n");
-            }
 
+                    /* DELAYED VIC HARDWARE ENABLE: Now that everything is configured and sensor is streaming */
+                    pr_info("*** DELAYED VIC HARDWARE ENABLE: Enabling VIC hardware after complete initialization ***\n");
+                    void __iomem *vic_regs = vic_dev->vic_regs;
+                    if (vic_regs) {
+                        /* BINARY NINJA EXACT: Hardware enable sequence */
+                        /* Binary Ninja: **(arg1 + 0xb8) = 2; **(arg1 + 0xb8) = 4; while (*$v1_30 != 0) nop; **(arg1 + 0xb8) = 1 */
+                        writel(0x2, vic_regs + 0x0);        /* Binary Ninja: Pre-enable state */
+                        wmb();
+                        writel(0x4, vic_regs + 0x0);        /* Binary Ninja: Wait state */
+                        wmb();
 
-            /* CRITICAL FIX: Follow proper state machine - don't jump directly to state 4 */
-            /* The proper flow is: 1 → 2 → 3 → 4, not 1 → 4 */
-            if (vic_dev->state == 1) {
-                vic_dev->state = 2;
-                pr_info("*** vic_core_s_stream: VIC state transition 1 → 2 (CONFIGURED) ***\n");
-            } else if (vic_dev->state == 3) {
-                vic_dev->state = 4;
-                pr_info("*** vic_core_s_stream: VIC state transition 3 → 4 (STREAMING) ***\n");
+                        /* Binary Ninja: Wait for hardware ready */
+                        u32 wait_count = 0;
+                        while ((readl(vic_regs + 0x0) != 0) && (wait_count < 1000)) {
+                            wait_count++;
+                            udelay(1);
+                        }
 
-                /* CRITICAL: Call ispcore_slake_module when VIC state reaches 4 (>= 3) */
-                pr_info("*** VIC STATE 4: Calling ispcore_slake_module to initialize ISP core ***\n");
-                extern int ispcore_slake_module(struct tx_isp_dev *isp_dev);
-                if (ourISPdev) {
-                    int slake_ret = ispcore_slake_module(ourISPdev);
-                    if (slake_ret == 0) {
-                        pr_info("*** ispcore_slake_module SUCCESS - ISP core should now be initialized ***\n");
+                        writel(0x1, vic_regs + 0x0);        /* Binary Ninja: Final enable */
+                        wmb();
+                        pr_info("*** BINARY NINJA EXACT: Hardware enable sequence 2->4->wait->1 (waited %d us) ***\n", wait_count);
+
+                        /* Re-assert stream control after final enable: hardware may clear 0x300 during 2->4->1 */
+                        {
+                            u32 buffer_count = vic_dev->active_buffer_count;
+                            if (buffer_count == 0) buffer_count = 2; /* BN reference uses 2 if zero */
+                            if (buffer_count > 5) buffer_count = 5; /* 5 slots max */
+                            u32 stream_ctrl = (buffer_count << 16) | 0x80000020;
+                            writel(stream_ctrl, vic_regs + 0x300);
+                            wmb();
+                            pr_info("*** POST-ENABLE: Rewrote VIC[0x300]=0x%x (buffer_count=%u) to preserve control bits ***\n",
+                                    stream_ctrl, buffer_count);
+                        }
+
                     } else {
-                        pr_info("*** ispcore_slake_module FAILED: %d ***\n", slake_ret);
+                        pr_err("*** ERROR: VIC registers not available for delayed enable ***\n");
                     }
+
+                    pr_info("vic_core_s_stream: tx_isp_vic_start returned %d, state -> 4\n", ret);
+                    return ret;
                 }
-
-                /* CRITICAL: Apply full VIC configuration now that VIC is in streaming state */
-            } else {
-                pr_info("*** vic_core_s_stream: VIC state %d - letting tx_isp_video_s_stream handle state 2 → 3 transition ***\n", vic_dev->state);
             }
-
-
-            pr_info("*** vic_core_s_stream: VIC initialized, final state=%d ***\n", vic_dev->state);
-
-            /* Binary Ninja: return $v0_1 */
-            return ret;
-        } else {
-            pr_info("*** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***\n");
-            return ret;
         }
     }
+
+    return ret;
 }
 
 /* Define VIC video operations */

@@ -1663,7 +1663,6 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
     void __iomem *vic_regs;
     u32 v1_7, v1_10;
     extern uint32_t vic_start_ok;
-    printk(KERN_ALERT "*** VIC INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***\n");
 
     /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
     if (arg1 == NULL || (uintptr_t)arg1 >= 0xfffff001) {

@@ -2108,7 +2108,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         }
     }
 
-    printk(KERN_ALERT "*** ISP CORE INTERRUPT PROCESSING COMPLETE - returning IRQ_HANDLED ***\n");
+    if (debug_this_core_irq) pr_info("*** ISP CORE INTERRUPT PROCESSING COMPLETE ***\n");
 
     /* Binary Ninja: return 1 */
     return IRQ_HANDLED;
