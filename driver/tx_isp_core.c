@@ -480,12 +480,22 @@ static struct tx_isp_subdev_pad_ops core_pad_ops = {
 };
 
 
+/* Forward declaration */
+extern long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+
+/* Core sensor operations - handles main sensor registration */
+static struct tx_isp_subdev_sensor_ops core_sensor_ops = {
+    .ioctl = subdev_sensor_ops_ioctl,  /* Set directly to sensor IOCTL handler */
+    .sync_sensor_attr = NULL,
+    .release_all_sensor = NULL
+};
+
 /* Core subdev ops (local) */
 struct tx_isp_subdev_ops core_subdev_ops = {
     .core = &core_subdev_core_ops,
     .video = &core_subdev_video_ops,
     .pad = &core_pad_ops,
-    .sensor = NULL,
+    .sensor = &core_sensor_ops,  /* Core handles sensor registration */
     .internal = NULL
 };
 EXPORT_SYMBOL(core_subdev_ops);
