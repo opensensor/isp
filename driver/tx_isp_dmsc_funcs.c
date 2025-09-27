@@ -354,16 +354,6 @@ int tisp_dmsc_intp(int ev_gain)
 }
 EXPORT_SYMBOL(tisp_dmsc_intp);
 
-/**
- * tisp_dmsc_refresh - Refresh DMSC parameters
- * @param: Refresh parameter
- */
-int tisp_dmsc_refresh(int param)
-{
-    tisp_dmsc_par_refresh(param, 0x100, 1);
-    return 0;
-}
-EXPORT_SYMBOL(tisp_dmsc_refresh);
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("TX-ISP DMSC Functions Implementation");

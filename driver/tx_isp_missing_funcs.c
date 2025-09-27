@@ -882,8 +882,6 @@ EXPORT_SYMBOL(tiziano_deflicker_expt_tune);
 int fix_point_intp(int arg1, int arg2, int arg3, int arg4, int arg5) { return arg1; }
 EXPORT_SYMBOL(fix_point_intp);
 
-void tisp_dmsc_par_refresh(void) { }
-EXPORT_SYMBOL(tisp_dmsc_par_refresh);
 
 void tisp_dmsc_all_reg_refresh(void) { }
 EXPORT_SYMBOL(tisp_dmsc_all_reg_refresh);

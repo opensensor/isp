@@ -6407,35 +6407,6 @@ int tisp_s_awb_start(int r_gain, int b_gain)
 }
 EXPORT_SYMBOL(tisp_s_awb_start);
 
-int tisp_s_ev_start(int ev_value)
-{
-    pr_info("tisp_s_ev_start: ev_value=%d\n", ev_value);
-
-    /* Binary Ninja: return tiziano_ae_s_ev_start(arg1) __tailcall */
-    return tiziano_ae_s_ev_start(ev_value);
-}
-EXPORT_SYMBOL(tisp_s_ev_start);
-
-/* tiziano_ae_s_ev_start - EXACT Binary Ninja implementation */
-int tiziano_ae_s_ev_start(int ev_value)
-{
-    pr_info("tiziano_ae_s_ev_start: ev_value=%d\n", ev_value);
-
-    /* Binary Ninja: ae_ev_init_strict = arg1 */
-    ae_ev_init_strict = ev_value;
-
-    /* Binary Ninja: ae_ev_init_en = 1 */
-    ae_ev_init_en = 1;
-
-    pr_info("tiziano_ae_s_ev_start: EV initialized - value=%d, enabled=%d\n",
-             ae_ev_init_strict, ae_ev_init_en);
-
-    /* Binary Ninja: return &data_d0000 */
-    /* This would return a pointer to some data structure */
-    return 0;
-}
-EXPORT_SYMBOL(tiziano_ae_s_ev_start);
-
 /* tisp_set_ae1_ag - Set AE analog gain */
 static void tisp_set_ae1_ag(uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4)
 {
