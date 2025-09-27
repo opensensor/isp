@@ -921,6 +921,15 @@ int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
                 /* Binary Ninja: *($s1_1 + 0x128) = 2 */
                 csi_dev->state = 2;
 
+                /* Ensure CSI clocks are initialized before enabling */
+                if (!sd->clks && sd->clk_num > 0) {
+                    extern int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_num);
+                    pr_info("tx_isp_csi_activate_subdev: Initializing %d clocks for CSI before enabling\n", sd->clk_num);
+                    if (isp_subdev_init_clks(sd, sd->clk_num) != 0) {
+                        pr_warn("tx_isp_csi_activate_subdev: isp_subdev_init_clks failed; continuing without clocks\n");
+                    }
+                }
+
                 /* Binary Ninja: int32_t* $s1_2 = *(arg1 + 0xbc) */
                 clks = sd->clks;
 
@@ -935,6 +944,8 @@ int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
                             clk_enable(clks[i]);
                         }
                     }
+                } else {
+                    pr_warn("tx_isp_csi_activate_subdev: No CSI clocks available to enable (clks=NULL, clk_num=%d)\n", sd->clk_num);
                 }
             }
 
