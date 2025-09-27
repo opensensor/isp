@@ -407,15 +407,10 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         /* Binary Ninja: if ($v1_10 != 0) */
                         if (v1_10 != 0) {
                             /* Binary Ninja: $v0_8 = *($s0_1 + 0x13c) */
-                            /* CRITICAL: This should be VIC registers, not CSI registers! */
-                            extern struct tx_isp_dev *ourISPdev;
-                            if (ourISPdev && ourISPdev->vic_dev) {
-                                v0_8 = ourISPdev->vic_dev->vic_regs;
-                                pr_info("*** CRITICAL: Using VIC registers for hardware state machine trigger ***\n");
-                            } else {
-                                pr_err("csi_core_ops_init: No VIC device available for hardware state machine trigger\n");
-                                return -EINVAL;
-                            }
+                            /* CRITICAL FIX: This should be CSI registers, not VIC registers! */
+                            /* The hardware state machine is triggered by CSI register writes */
+                            v0_8 = csi_dev->csi_regs;
+                            pr_info("*** CRITICAL: Using CSI registers for hardware state machine trigger ***\n");
                         } else {
                             /* Binary Ninja: int32_t $v0_9 = *($v0_7 + 0x1c) */
                             int v0_9 = sensor_attr->total_width;
@@ -458,23 +453,18 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                             }
 
                             /* Binary Ninja: $a0_2 = *($s0_1 + 0x13c) */
-                            /* CRITICAL: This should be VIC registers, not CSI registers! */
-                            extern struct tx_isp_dev *ourISPdev;
-                            if (ourISPdev && ourISPdev->vic_dev) {
-                                void __iomem *vic_regs = ourISPdev->vic_dev->vic_regs;
+                            /* CRITICAL FIX: This should be CSI registers, not VIC registers! */
+                            /* The hardware state machine is triggered by CSI register configuration */
+                            void __iomem *csi_regs = csi_dev->csi_regs;
 
-                                /* Binary Ninja: int32_t $v0_14 = (*($a0_2 + 0x160) & 0xfffffff0) | $v1_10 */
-                                int v0_14 = (readl(vic_regs + 0x160) & 0xfffffff0) | v1_10;
-                                writel(v0_14, vic_regs + 0x160);
-                                writel(v0_14, vic_regs + 0x1e0);
-                                writel(v0_14, vic_regs + 0x260);
-                                v0_8 = vic_regs;
+                            /* Binary Ninja: int32_t $v0_14 = (*($a0_2 + 0x160) & 0xfffffff0) | $v1_10 */
+                            int v0_14 = (readl(csi_regs + 0x160) & 0xfffffff0) | v1_10;
+                            writel(v0_14, csi_regs + 0x160);
+                            writel(v0_14, csi_regs + 0x1e0);
+                            writel(v0_14, csi_regs + 0x260);
+                            v0_8 = csi_regs;
 
-                                pr_info("*** CRITICAL: VIC registers 0x160/0x1e0/0x260 configured with value 0x%x ***\n", v0_14);
-                            } else {
-                                pr_err("csi_core_ops_init: No VIC device available for register configuration\n");
-                                return -EINVAL;
-                            }
+                            pr_info("*** CRITICAL: CSI registers 0x160/0x1e0/0x260 configured with value 0x%x ***\n", v0_14);
                         }
 
                         /* Binary Ninja: CRITICAL hardware state machine trigger sequence */
