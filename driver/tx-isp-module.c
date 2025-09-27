@@ -2270,6 +2270,11 @@ bool is_valid_kernel_pointer(const void *ptr)
             addr != 0x24a70688);   /* BadVA from crash log */
 }
 
+int get_isp_clk(void)
+{
+	return isp_clk;
+}
+EXPORT_SYMBOL(get_isp_clk);
 
 /* ispcore_activate_module - Fixed to match our actual struct layouts */
 int ispcore_activate_module(struct tx_isp_dev *isp_dev)

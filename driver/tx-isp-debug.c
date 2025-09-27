@@ -57,11 +57,6 @@ int isp_printf(unsigned int level, unsigned char *fmt, ...)
 }
 EXPORT_SYMBOL(isp_printf);
 
-int get_isp_clk(void)
-{
-	return isp_clk;
-}
-
 void *private_vmalloc(unsigned long size)
 {
 	void *addr = vmalloc(size);
