@@ -169,6 +169,49 @@ static struct tx_isp_dev *g_ispcore = NULL;
 uint32_t system_reg_read(u32 reg);
 
 
+/**
+ * tx_isp_link_core_device - Link core device to main ISP device
+ * @isp_dev: Main ISP device
+ * @core_dev: Core device to link
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+int tx_isp_link_core_device(struct tx_isp_dev *isp_dev, struct tx_isp_core_device *core_dev)
+{
+    if (!isp_dev || !tx_isp_core_device_is_valid(core_dev)) {
+        pr_err("tx_isp_link_core_device: Invalid parameters\n");
+        return -EINVAL;
+    }
+
+    pr_info("*** tx_isp_link_core_device: Linking core device %p to ISP device %p ***\n",
+            core_dev, isp_dev);
+
+    /* Set up bidirectional linking */
+    isp_dev->core_dev = core_dev;
+    core_dev->isp_dev = isp_dev;
+    core_dev->sd.isp = isp_dev;
+
+    /* FIXED: Don't register core subdev again - it's already registered in tx_isp_subdev_init */
+    /* Find existing registration slot for logging */
+    int slot = -1;
+    for (int i = 0; i < ISP_MAX_SUBDEVS; i++) {
+        if (isp_dev->subdevs[i] == &core_dev->sd) {
+            slot = i;
+            break;
+        }
+    }
+
+    pr_info("*** tx_isp_link_core_device: Core device linked successfully ***\n");
+    if (slot >= 0) {
+        pr_info("*** Core subdev already registered at slot %d: %p ***\n", slot, &core_dev->sd);
+    } else {
+        pr_warn("*** Core subdev not found in subdev array - this may cause issues ***\n");
+    }
+
+    return 0;
+}
+EXPORT_SYMBOL(tx_isp_link_core_device);
+
 
 /* tx_isp_core_enable_irq - Enable ISP core hardware interrupt generation */
 int tx_isp_core_enable_irq(struct tx_isp_core_device *core_dev)
