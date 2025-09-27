@@ -863,7 +863,13 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
 
     /* Get sensor attributes - offset 0x110 in Binary Ninja */
-    sensor_attr = &vic_dev->sensor_attr;
+    /* Binary Ninja: void* $v1 = *(arg1 + 0x110) */
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor || !sensor->video.attr) {
+        return -ENODEV;
+    }
+    sensor_attr = sensor->video.attr;
 
     /* DEBUG: Check if sensor_attr is properly initialized */
     pr_info("*** DEBUG: sensor_attr=%p, dbus_type=%d ***\n", sensor_attr, sensor_attr ? sensor_attr->dbus_type : -1);
