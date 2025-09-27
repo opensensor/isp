@@ -424,30 +424,48 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             pr_info("tx_isp_subdev_init: No memory resource for device %s (logical device - OK)\n", dev_name(&pdev->dev));
         }
 
+        /* Avoid double-claiming the main ISP region (0x13300000..) across CORE/VIN/FS.
+         * We map once in tx_isp_core_probe (isp->core_regs) and share it here. */
         if (mem_res) {
-            /* Binary Ninja: private_request_mem_region($a0_18, $v0_2[1] + 1 - $a0_18, $a2_11) */
-            /* SAFE: Use struct member access for memory region */
-            sd->mem_res = request_mem_region(mem_res->start,
-                                           resource_size(mem_res),
-                                           pdev->name);
-            if (!sd->mem_res) {
-                /* Binary Ninja: isp_printf(2, "The parameter is invalid!\n", "tx_isp_subdev_init") */
-                pr_err("tx_isp_subdev_init: request_mem_region failed for %s (0x%08x-0x%08x)\n",
-                       dev_name(&pdev->dev), (u32)mem_res->start, (u32)mem_res->end);
-                isp_printf(2, "The parameter is invalid!\n", "tx_isp_subdev_init");
-                ret = 0xfffffff0;
-                goto cleanup_irq;
-            }
+            const char *name = dev_name(&pdev->dev);
+            bool overlaps_core = (mem_res->start >= 0x13300000 && mem_res->start <= 0x133FFFFF);
 
-            /* Binary Ninja: private_ioremap($a0_19, $v0_22[1] + 1 - $a0_19) */
-            /* SAFE: Use struct member access for register mapping */
-            regs = ioremap(mem_res->start, resource_size(mem_res));
-            sd->regs = regs;
-            if (!regs) {
-                /* Binary Ninja: isp_printf(2, "vic_done_gpio%d", "tx_isp_subdev_init") */
-                isp_printf(2, "vic_done_gpio%d", "tx_isp_subdev_init");
-                ret = 0xfffffffa;
-                goto cleanup_mem;
+            if (overlaps_core && ourISPdev && ourISPdev->core_regs) {
+                /* Share existing core mapping; skip request_mem_region/ioremap to avoid conflicts */
+                if (!strcmp(name, "isp-m0")) {
+                    sd->regs = ourISPdev->core_regs;
+                } else if (!strcmp(name, "isp-w01")) {
+                    /* VIN uses ISP core region; share base mapping */
+                    sd->regs = ourISPdev->core_regs; /* if needed, add offset in specific code paths */
+                } else if (!strcmp(name, "tx-isp-fs")) {
+                    /* FS is within ISP core region at +0x10000; provide offset view */
+                    sd->regs = ourISPdev->core_regs + (mem_res->start - 0x13300000);
+                } else {
+                    /* Default for other devices within core range: share mapping */
+                    sd->regs = ourISPdev->core_regs + (mem_res->start - 0x13300000);
+                }
+                pr_info("tx_isp_subdev_init: Sharing core_regs for %s at offset 0x%lx\n",
+                        name, (unsigned long)(mem_res->start - 0x13300000));
+            } else {
+                /* Non-overlapping ranges (e.g., VIC/CSI) can safely own their region */
+                sd->mem_res = request_mem_region(mem_res->start,
+                                                resource_size(mem_res),
+                                                pdev->name);
+                if (!sd->mem_res) {
+                    pr_err("tx_isp_subdev_init: request_mem_region failed for %s (0x%08x-0x%08x)\n",
+                           dev_name(&pdev->dev), (u32)mem_res->start, (u32)mem_res->end);
+                    isp_printf(2, "The parameter is invalid!\n", "tx_isp_subdev_init");
+                    ret = 0xfffffff0;
+                    goto cleanup_irq;
+                }
+
+                regs = ioremap(mem_res->start, resource_size(mem_res));
+                sd->regs = regs;
+                if (!regs) {
+                    isp_printf(2, "vic_done_gpio%d", "tx_isp_subdev_init");
+                    ret = 0xfffffffa;
+                    goto cleanup_mem;
+                }
             }
         }
 
