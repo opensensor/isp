@@ -21,18 +21,6 @@
 #include "../include/tx-isp-device.h"
 #include "../include/tx-libimp.h"
 
-/* Global frame source device structure - 0xe8 bytes as per Binary Ninja */
-struct tx_isp_fs_device {
-    struct tx_isp_subdev subdev;            /* Base subdev structure */
-    void __iomem *base_regs;                /* Base register mapping +0xb8 */
-
-    void *channel_configs;                   /* channel config array */
-    void *channel_buffer;                    /* kmalloc'ed channel buffer */
-    uint32_t channel_count;                  /* number of channels */
-    uint32_t initialized;                    /* initialization flag */
-} __attribute__((packed));
-
-
 /* Forward declarations */
 /* Use ISP event callback signature from tx-libimp.h */
 static int frame_chan_event(void *priv, u32 event, void *edata);
