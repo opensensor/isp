@@ -2810,7 +2810,7 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             break;
 
         case 0x8000164:  // ISP_CTRL_BYPASS
-            ctrl->value = (ourISPdev && ourISPdev) ? ourISPdev->bypass_enabled : 0;
+            ctrl->value = (ourISPdev && ourISPdev->core_dev) ? ourISPdev->core_dev->bypass_enabled : 0;
             break;
 
         case 0x980918:  // ISP_CTRL_ANTIFLICKER
@@ -2889,7 +2889,7 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
 
         case 0x8000164:  // ISP_CTRL_BYPASS
             if (ourISPdev && ourISPdev) {
-                ourISPdev->bypass_enabled = !!ctrl->value;
+                ourISPdev->core_dev->bypass_enabled = !!ctrl->value;
             }
             break;
 
