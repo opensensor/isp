@@ -362,14 +362,10 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
                     if (interface_type == 1) {
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 4) = zx.d(*($v1_5 + 0x24)) - 1 */
-                        /* Program lane count in CSI base register space */
-                        {
-                            void __iomem *csi_base_regs = ourISPdev ? ourISPdev->csi_regs : NULL;
-                            writel(sensor_attr->mipi.lans - 1,
-                                   (csi_base_regs ? csi_base_regs : csi_dev->csi_regs) + 4);
-                            /* Binary Ninja: void* $v0_2 = *($s0_1 + 0xb8) */
-                            csi_regs = csi_base_regs ? csi_base_regs : csi_dev->csi_regs;
-                        }
+                        writel(sensor_attr->mipi.lans - 1, csi_dev->csi_regs + 4);
+
+                        /* Binary Ninja: void* $v0_2 = *($s0_1 + 0xb8) */
+                        csi_regs = csi_dev->csi_regs;
 
                         /* Binary Ninja: *($v0_2 + 8) &= 0xfffffffe */
                         writel(readl(csi_regs + 8) & 0xfffffffe, csi_regs + 8);
@@ -398,22 +394,21 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         int v1_10 = sensor_attr->fps;
                         void *v0_8;
 
-                        /* CRITICAL: Binary Ninja hardware state machine trigger sequence */
-                        pr_info("*** CRITICAL: Triggering CSI hardware state machine for CSI Lane Config ***\n");
-
                         /* Binary Ninja: if ($v1_10 != 0) */
                         if (v1_10 != 0) {
                             /* Binary Ninja: $v0_8 = *($s0_1 + 0x13c) */
-                            /* Use ISP CSI register space to arm the hardware state machine */
-                            v0_8 = isp_csi_regs ? isp_csi_regs : csi_dev->csi_regs;
-                            pr_info("*** CRITICAL: Using ISP CSI regs for HW state machine trigger: %p ***\n", v0_8);
+                            /* SAFE: Use proper struct member access instead of dangerous offset */
+                            isp_csi_regs = csi_dev->csi_regs;
+                            v0_8 = isp_csi_regs;
                         } else {
                             /* Binary Ninja: int32_t $v0_9 = *($v0_7 + 0x1c) */
                             int v0_9 = sensor_attr->total_width;
 
                             /* Binary Ninja: Complex frame rate calculation based on width */
                             if (v0_9 - 0x50 < 0x1e) {
-                                v1_10 = 1;
+                                /* Binary Ninja: $a0_2 = *($s0_1 + 0x13c) */
+                                /* SAFE: Use proper struct member access instead of dangerous offset */
+                                isp_csi_regs = csi_dev->csi_regs;
                             } else {
                                 v1_10 = 1;
                                 if (v0_9 - 0x6e >= 0x28) {
@@ -446,44 +441,29 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                                         }
                                     }
                                 }
+                                /* SAFE: Use proper struct member access instead of dangerous offset */
+                                isp_csi_regs = csi_dev->csi_regs;
                             }
 
-                            /* Binary Ninja: $a0_2 = *($s0_1 + 0x13c) */
-                            /* Configure ISP CSI regs 0x160/0x1e0/0x260 with lane value */
-                            void __iomem *regs_target = isp_csi_regs ? isp_csi_regs : csi_dev->csi_regs;
-
                             /* Binary Ninja: int32_t $v0_14 = (*($a0_2 + 0x160) & 0xfffffff0) | $v1_10 */
-                            int v0_14 = (readl(regs_target + 0x160) & 0xfffffff0) | v1_10;
-                            writel(v0_14, regs_target + 0x160);
-                            writel(v0_14, regs_target + 0x1e0);
-                            writel(v0_14, regs_target + 0x260);
-                            v0_8 = regs_target;
-
-                            pr_info("*** CRITICAL: CSI registers 0x160/0x1e0/0x260 configured with value 0x%x ***\n", v0_14);
+                            int v0_14 = (readl(isp_csi_regs + 0x160) & 0xfffffff0) | v1_10;
+                            writel(v0_14, isp_csi_regs + 0x160);
+                            writel(v0_14, isp_csi_regs + 0x1e0);
+                            writel(v0_14, isp_csi_regs + 0x260);
+                            v0_8 = isp_csi_regs;
                         }
 
-                        /* Binary Ninja: CRITICAL hardware state machine trigger sequence */
-                        /* *$v0_8 = 0x7d */
+                        /* Binary Ninja: *$v0_8 = 0x7d */
                         writel(0x7d, v0_8);
-                        wmb();
 
                         /* Binary Ninja: *(*($s0_1 + 0x13c) + 0x128) = 0x3f */
-                        writel(0x3f, (isp_csi_regs ? (isp_csi_regs + 0x128) : ((void __iomem *)v0_8 + 0x128)));
-                        wmb();
+                        writel(0x3f, isp_csi_regs + 0x128);
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0x10) = 1 */
-                        /* CRITICAL: Final trigger for CSI hardware state machine in CSI base regs */
-                        {
-                            void __iomem *csi_base_regs = ourISPdev ? ourISPdev->csi_regs : NULL;
-                            writel(1, (csi_base_regs ? (csi_base_regs + 0x10) : (csi_dev->csi_regs + 0x10)));
-                        }
-                        wmb();
+                        writel(1, csi_dev->csi_regs + 0x10);
 
                         /* Binary Ninja: private_msleep(0xa) */
                         private_msleep(0xa);
-
-                        pr_info("*** CRITICAL: CSI hardware state machine trigger sequence completed ***\n");
-                        pr_info("*** CSI Lane Config writes should now be generated automatically by hardware ***\n");
 
                         v0_17 = 3;
 
@@ -493,13 +473,11 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         v0_17 = 3;
                     } else {
                         /* Binary Ninja: DVP interface configuration */
-                        /* *(*($s0_1 + 0xb8) + 0xc) = 0 / 1 in CSI base regs */
-                        {
-                            void __iomem *csi_base_regs = ourISPdev ? ourISPdev->csi_regs : NULL;
-                            void __iomem *base = csi_base_regs ? csi_base_regs : csi_dev->csi_regs;
-                            writel(0, base + 0xc);
-                            writel(1, base + 0xc);
-                        }
+                        /* *(*($s0_1 + 0xb8) + 0xc) = 0 */
+                        writel(0, csi_dev->csi_regs + 0xc);
+
+                        /* *(*($s0_1 + 0xb8) + 0xc) = 1 */
+                        writel(1, csi_dev->csi_regs + 0xc);
 
                         /* **($s0_1 + 0x13c) = 0x7d */
                         writel(0x7d, isp_csi_regs);
