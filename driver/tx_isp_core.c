@@ -873,7 +873,7 @@ int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg
 
 /* Core subdev operations - matches the pattern used by other devices */
 struct tx_isp_subdev_core_ops core_subdev_core_ops = {
-    .init = ispcore_core_ops_init,  /* CRITICAL FIX: Wire in the core init function for VIC 2→3 transition */
+    .init = NULL,  /* CRITICAL FIX: ispcore_core_ops_init should be called from IOCTL operations, not subdev init */
     .reset = NULL,
     .ioctl = ispcore_core_ops_ioctl,  /* Wire in the IOCTL handler */
 };
@@ -4530,16 +4530,9 @@ int tx_isp_core_probe(struct platform_device *pdev)
             core_dev->channel_count = channel_count;
             core_dev->channel_array = channel_array;  /* Binary Ninja compatibility */
 
-            /* CRITICAL: Call ispcore_slake_module to trigger proper state transitions */
-            /* This should handle the 1->2 state transition that we've been missing */
-            pr_info("*** tx_isp_core_probe: Calling ispcore_slake_module for state initialization ***\n");
-            int ret = ispcore_slake_module(ourISPdev);
-            if (ret != 0) {
-                pr_err("tx_isp_core_probe: ispcore_slake_module failed: %d\n", ret);
-                /* Don't fail probe for slake failure, but log it */
-            } else {
-                pr_info("*** tx_isp_core_probe: ispcore_slake_module completed successfully ***\n");
-            }
+            /* CRITICAL FIX: Don't call ispcore_slake_module during probe */
+            /* It should be called when VIC reaches streaming state (state 4) through IOCTL operations */
+            pr_info("*** tx_isp_core_probe: ispcore_slake_module will be called when VIC reaches streaming state ***\n");
 
             pr_info("*** tx_isp_core_probe: Core device setup complete ***\n");
             pr_info("***   - Core device: %p ***\n", core_dev);

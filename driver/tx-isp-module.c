@@ -4353,74 +4353,32 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     return -ENOTTY;
 }
 
-// CRITICAL FIX: Safe open handler that prevents dangerous initialization chains
+// Simple open handler following good-things reference pattern
 int tx_isp_open(struct inode *inode, struct file *file)
 {
     struct tx_isp_dev *isp = ourISPdev;
     int ret = 0;
 
-    pr_info("*** tx_isp_open: SAFE IMPLEMENTATION - preventing dangerous initialization chains ***\n");
-
-    /* CRITICAL SAFETY: Validate ourISPdev before any access */
-    if (!isp || (unsigned long)isp < 0x80000000 || (unsigned long)isp >= 0xfffff000) {
-        pr_err("*** tx_isp_open: Invalid ISP device pointer %p ***\n", isp);
+    if (!isp) {
+        pr_info("ISP device not initialized\n");
         return -ENODEV;
     }
 
-    /* CRITICAL SAFETY: Validate isp structure integrity */
-    if (!virt_addr_valid(isp)) {
-        pr_err("*** tx_isp_open: ISP device not in valid memory ***\n");
-        return -EFAULT;
-    }
-
-    /* SAFE: Check if already opened */
-    if (isp->refcnt > 0) {
+    /* Check if already opened */
+    if (isp->refcnt) {
         isp->refcnt++;
         file->private_data = isp;
-        pr_info("*** tx_isp_open: ISP already open (refcnt=%d) ***\n", isp->refcnt);
+        pr_info("ISP opened (refcnt=%d)\n", isp->refcnt);
         return 0;
     }
 
-    /* CRITICAL FIX: Only call ispcore_core_ops_init ONCE, not on every open */
-    /* This prevents repeated tisp_init calls that corrupt CSI PHY registers */
-    static bool isp_core_initialized = false;
-
-    /* Debug: Print subdev array status before calling ispcore_core_ops_init */
-    tx_isp_debug_print_subdevs(isp);
-
-    struct tx_isp_subdev *core_sd = tx_isp_find_subdev_by_name(isp, "isp-m0");
-    if (!isp_core_initialized && core_sd) {
-        pr_info("*** tx_isp_open: Found core subdev %p, calling ispcore_core_ops_init(1) - FIRST TIME ONLY ***\n", core_sd);
-        pr_info("*** DEBUG: core_sd->dev_priv=%p, core_sd->host_priv=%p ***\n", core_sd->dev_priv, core_sd->host_priv);
-        pr_info("*** DEBUG: core_sd->pdev=%p, core_sd->ops=%p ***\n", core_sd->pdev, core_sd->ops);
-        ret = ispcore_core_ops_init(core_sd, 1);
-        if (ret != 0) {
-            pr_err("tx_isp_open: ispcore_core_ops_init failed: %d\n", ret);
-            return ret;
-        }
-        isp_core_initialized = true;
-        pr_info("*** tx_isp_open: ispcore_core_ops_init SUCCESS - ISP core initialized ONCE ***\n");
-    } else if (!isp_core_initialized) {
-        pr_err("*** tx_isp_open: Core subdev 'isp-m0' not found - cannot initialize ISP core ***\n");
-        return -ENODEV;
-
-        /* CRITICAL FIX: Ensure tuning system timing matches reference driver */
-        /* In reference driver, tuning system is available immediately after core init */
-        pr_info("*** tx_isp_open: REFERENCE DRIVER TIMING - Tuning system now available for immediate use ***\n");
-    } else if (isp_core_initialized) {
-        pr_info("*** tx_isp_open: ISP core already initialized - skipping repeated initialization ***\n");
-    } else {
-        pr_err("tx_isp_open: No core subdev available for initialization\n");
-        return -ENODEV;
-    }
-
-    /* SAFE: Mark as open after successful initialization */
+    /* Mark as open */
     isp->refcnt = 1;
     isp->is_open = true;
     file->private_data = isp;
 
-    pr_info("*** tx_isp_open: ISP opened safely - no dangerous operations triggered ***\n");
-    return 0;
+    pr_info("ISP opened successfully\n");
+    return ret;
 }
 
 // Simple release handler
