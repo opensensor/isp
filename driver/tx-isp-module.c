@@ -93,6 +93,18 @@ static struct i2c_client *global_sensor_i2c_client = NULL;
 static DEFINE_MUTEX(i2c_client_mutex);
 int __enqueue_in_driver(void *buffer_struct);
 
+
+int isp_clk = 100000000;
+module_param(isp_clk, int, S_IRUGO);
+MODULE_PARM_DESC(isp_clk, "isp clock freq");
+
+/* Local helper: desired ISP clock rate (Hz). Avoid cross-file globals. */
+long get_isp_clk(void)
+{
+    return isp_clk; /* 100 MHz default */
+}
+
+
 /* MIPS-SAFE I2C infrastructure - Fixed for unaligned access crash */
 static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
                                                    struct i2c_board_info *info)
