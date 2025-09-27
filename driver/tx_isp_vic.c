@@ -3328,7 +3328,7 @@ int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
     pr_info("ispvic_frame_channel_qbuf: event-based QBUF\n");
     /* Fallback to global VIC device */
     if (ourISPdev && ourISPdev->vic_dev) {
-        vic_dev = (struct tx_isp_vic_device *)container_of(ourISPdev->vic_dev, struct tx_isp_vic_device, sd);
+        vic_dev = ourISPdev->vic_dev; /* ourISPdev->vic_dev is already struct tx_isp_vic_device* */
     }
 
     if (!vic_dev) {
