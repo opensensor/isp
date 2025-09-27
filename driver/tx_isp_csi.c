@@ -566,8 +566,22 @@ int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
 
     /* Binary Ninja: if (*($s0_1 + 0x128) == 2) *($s0_1 + 0x128) = 1 */
     if (csi_dev->state == 2) {
-        pr_info("tx_isp_csi_slake_subdev: CSI state 2->1, though skipping disabling clocks\n");
+        pr_info("tx_isp_csi_slake_subdev: CSI state 2->1, disabling clocks\n");
         csi_dev->state = 1;
+
+        /* Binary Ninja: void* $v0 = *(arg1 + 0xbc) - Get clocks array */
+        /* Binary Ninja: if ($v0 != 0 && $v0 u< 0xfffff001) - Clock disabling loop */
+        if (sd->clks && sd->clk_num > 0) {
+            /* Binary Ninja: int32_t $s0_2 = *(arg1 + 0xc0) - Get clock count */
+            /* Binary Ninja: Clock disabling loop in reverse order */
+            for (i = sd->clk_num - 1; i >= 0; i--) {
+                if (sd->clks[i]) {
+                    /* Binary Ninja: private_clk_disable(*$s0_4) */
+                    clk_disable(sd->clks[i]);
+                    pr_info("tx_isp_csi_slake_subdev: Disabled clock %d\n", i);
+                }
+            }
+        }
     }
 
     mutex_unlock(&csi_dev->mlock);
