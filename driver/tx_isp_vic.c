@@ -2714,13 +2714,18 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         writel(0x1, core + 0x9a34);   /* enable bit observed in reference */
                         writel(0x1, core + 0x9a88);   /* enable/route latch bit */
                         writel(stride, core + 0x9a80);/* stride to match VIC MDMA */
+                        /* Also program minimal geometry at core side (width/height/stride-like) */
+                        writel(w, core + 0x9a00);     /* width */
+                        writel(h, core + 0x9a04);     /* height */
+                        writel(stride, core + 0x9a2c);/* line step or related */
                         /* 0x9a94/0x9a98 are set earlier during init, leave as-is */
 
                         /* Now (re)assert the core VIC IRQ gate */
                         writel(0x200, core + 0x9ac0);
                         writel(0x200, core + 0x9ac8);
                         wmb();
-                        pr_info("*** CORE VIC ROUTE INIT: [9a34]=0x%08x [9a88]=0x%08x [9a80]=0x%08x; GATE [9ac0]=0x%08x [9ac8]=0x%08x ***\n",
+                        pr_info("*** CORE VIC ROUTE INIT: [9a00]=0x%08x [9a04]=0x%08x [9a2c]=0x%08x [9a34]=0x%08x [9a88]=0x%08x [9a80]=0x%08x; GATE [9ac0]=0x%08x [9ac8]=0x%08x ***\n",
+                                readl(core + 0x9a00), readl(core + 0x9a04), readl(core + 0x9a2c),
                                 readl(core + 0x9a34), readl(core + 0x9a88), readl(core + 0x9a80),
                                 readl(core + 0x9ac0), readl(core + 0x9ac8));
                     } while (0);
