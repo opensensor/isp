@@ -194,6 +194,19 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
         return 0xffffffea;
     }
 
+    /* CRITICAL: Initialize CSI hardware if needed (like good-things driver) */
+    if (enable && csi_dev->state < 4) {
+        pr_info("*** CSI STREAMING: Configuring CSI hardware for streaming (current state=%d) ***\n", csi_dev->state);
+        int ret = csi_core_ops_init(sd, 1);
+        if (ret) {
+            pr_info("Failed to initialize CSI hardware for streaming: %d\n", ret);
+            return ret;
+        }
+        pr_info("*** CSI STREAMING: CSI hardware configured successfully for streaming ***\n");
+    } else if (enable) {
+        pr_info("*** CSI STREAMING: CSI already in streaming state (%d), skipping hardware config ***\n", csi_dev->state);
+    }
+
     /* Binary Ninja: int32_t $v0_4 = 4 */
     /* Binary Ninja: if (arg2 == 0) $v0_4 = 3 */
     /* Binary Ninja: *(arg1 + 0x128) = $v0_4 */
