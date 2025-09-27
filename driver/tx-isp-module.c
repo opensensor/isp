@@ -1219,7 +1219,7 @@ static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable);
 
 struct frame_channel_device frame_channels[4]; /* Support up to 4 video channels */
-static int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
+int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
 
 /* Global per-channel cache of legacy SET_BUF base/step for robustness across FDs */
 static u32 g_setbuf_base[4] = {0};
