@@ -2177,6 +2177,10 @@ cleanup:
 int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
 {
     struct tx_isp_vic_device *vic_dev;
+    struct clk **clks;
+    int clk_count;
+    int i;
+    int result = 0xffffffea; /* Binary Ninja: int32_t result = 0xffffffea */
 
     if (!sd)
         return -EINVAL;
