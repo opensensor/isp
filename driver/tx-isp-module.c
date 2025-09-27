@@ -502,7 +502,7 @@ static struct resource tx_isp_csi_resources[] = {
 };
 
 struct platform_device tx_isp_csi_platform_device = {
-    .name = "tx-isp-csi",
+    .name = "isp-w00",
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_csi_resources),
     .resource = tx_isp_csi_resources,
@@ -523,7 +523,7 @@ static struct resource tx_isp_vin_resources[] = {
 };
 
 struct platform_device tx_isp_vin_platform_device = {
-    .name = "tx-isp-vin",
+    .name = "isp-w01",
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_vin_resources),
     .resource = tx_isp_vin_resources,
@@ -588,7 +588,7 @@ static struct resource tx_isp_core_resources[] = {
 };
 
 struct platform_device tx_isp_core_platform_device = {
-    .name = "tx-isp-core",
+    .name = "isp-m0",
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_core_resources),
     .resource = tx_isp_core_resources,
