@@ -6154,10 +6154,8 @@ int ispcore_sensor_ops_release_all_sensor(struct tx_isp_subdev *sd)
         /* Reset sensor state */
         sensor->sd.vin_state = TX_ISP_MODULE_INIT;
 
-        /* Clear sensor attributes */
-        if (sensor->video.attr) {
-            sensor->video.attr = NULL;
-        }
+        /* Preserve sensor attributes across slake/release to avoid NULL deref in sensor_s_stream */
+        /* (was clearing sensor->video.attr = NULL here) */
     }
 
     return 0;
