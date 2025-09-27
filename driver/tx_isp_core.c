@@ -169,6 +169,63 @@ static struct tx_isp_dev *g_ispcore = NULL;
 uint32_t system_reg_read(u32 reg);
 
 
+
+/* tx_isp_core_enable_irq - Enable ISP core hardware interrupt generation */
+int tx_isp_core_enable_irq(struct tx_isp_core_device *core_dev)
+{
+    extern struct tx_isp_dev *ourISPdev;
+
+    pr_info("*** tx_isp_core_enable_irq: Enabling ISP Core hardware interrupts ***\n");
+
+    if (!core_dev || !core_dev->core_regs) {
+        pr_err("tx_isp_core_enable_irq: Invalid ISP device or core registers\n");
+        return -EINVAL;
+    }
+
+    /* CRITICAL: Enable ISP core interrupt generation - EXACT Binary Ninja reference */
+    void __iomem *core = core_dev->core_regs;
+
+    /* Clear any pending interrupts first */
+    u32 pend_legacy = readl(core + 0xb4);
+    u32 pend_new    = readl(core + 0x98b4);
+    writel(pend_legacy, core + 0xb8);
+    writel(pend_new,    core + 0x98b8);
+
+    /* CRITICAL: Enable ISP pipeline connection - this is what was missing! */
+    /* Binary Ninja: system_reg_write(0x800, 1) - Enable ISP pipeline */
+    writel(1, core + 0x800);
+
+    /* Binary Ninja: system_reg_write(0x804, routing) - Configure ISP routing */
+    writel(0x1c, core + 0x804);
+
+    /* Binary Ninja: system_reg_write(0x1c, 8) - Set ISP control mode */
+    writel(8, core + 0x1c);
+
+    /* CRITICAL: Enable ISP core interrupt generation at hardware level */
+    /* Binary Ninja: system_reg_write(0x30, 0xffffffff) - Enable all interrupt sources */
+    writel(0xffffffff, core + 0x30);
+
+    /* Binary Ninja: system_reg_write(0x10, 0x133) - Enable specific interrupt types */
+    writel(0x133, core + 0x10);
+
+    /* CRITICAL FIX: Enable frame sync + essential interrupts, but MASK error interrupts */
+    /* This allows ISP interrupts to work while preventing error interrupt storms */
+    writel(0x3FFF, core + 0xb0);        /* Legacy enable - all interrupt sources */
+    writel(0x1000, core + 0xbc);        /* Legacy unmask - ONLY frame sync initially */
+    writel(0x3FFF, core + 0x98b0);      /* New enable - all interrupt sources */
+    writel(0x1000, core + 0x98bc);      /* New unmask - ONLY frame sync initially */
+    wmb();
+
+    pr_info("*** ISP PIPELINE: VIC->ISP connection ENABLED (0x800=1, 0x804=0x1c, 0x1c=8) ***\n");
+    pr_info("*** ISP CORE: Hardware interrupt generation ENABLED ***\n");
+    pr_info("*** VIC->ISP: Pipeline should now generate hardware interrupts when VIC completes frames! ***\n");
+
+    /* Set software flag */
+    core_dev->irq_enabled = 1;
+
+    return 0;
+}
+
 /* Core subdev operations implementations */
 int tx_isp_core_start(struct tx_isp_subdev *sd)
 {
