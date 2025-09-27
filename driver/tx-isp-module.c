@@ -1278,6 +1278,19 @@ int frame_channel_open(struct inode *inode, struct file *file)
         return -EINVAL;
     }
 
+    /* Ensure ISP core is initialized on first frame channel open */
+    {
+        extern struct tx_isp_dev *tx_isp_get_device(void);
+        extern int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on);
+        struct tx_isp_dev *isp = tx_isp_get_device();
+        if (isp) {
+            int init_ret = ispcore_core_ops_init(&isp->sd, 1);
+            pr_info("FRAME CHANNEL OPEN: core init ret=%d\n", init_ret);
+        } else {
+            pr_info("FRAME CHANNEL OPEN: ourISPdev not ready yet\n");
+        }
+    }
+
     /* CRITICAL FIX: Find the frame channel device by minor number */
     /* First try to match against registered frame_channels array */
     for (i = 0; i < num_channels; i++) {

@@ -456,7 +456,7 @@ static int core_subdev_core_init_bridge(struct tx_isp_subdev *sd, int enable)
     if (enable && isp->sensor && isp->sensor->video.attr) {
         attr = isp->sensor->video.attr;
     }
-    return ispcore_core_ops_init(isp, enable);
+    return ispcore_core_ops_init(sd, enable);
 }
 
 /* Core subdev operations - matches the pattern used by other devices */
@@ -2277,6 +2277,17 @@ static int isp_tuning_open(struct inode *inode, struct file *file)
     extern int tisp_code_tuning_open(struct inode *inode, struct file *file);
 
     pr_info("ISP tuning device opened - routing to tx_isp_tuning.c\n");
+
+    /* Trigger core initialization on first open (reference behavior) */
+    do {
+        struct tx_isp_dev *isp = tx_isp_get_device();
+        if (isp) {
+            int init_ret = ispcore_core_ops_init(&isp->sd, 1);
+            pr_info("isp_tuning_open: core init ret=%d\n", init_ret);
+        } else {
+            pr_info("isp_tuning_open: ourISPdev not ready yet\n");
+        }
+    } while (0);
 
     /* CRITICAL: Route to the proper implementation in tx_isp_tuning.c */
     return tisp_code_tuning_open(inode, file);
