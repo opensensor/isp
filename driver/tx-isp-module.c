@@ -4303,6 +4303,7 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 {
     /* Binary Ninja: void* $s7 = *(arg1 + 0x70) */
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)file->private_data;
+    void __user *argp = (void __user *)arg;
     if (!isp_dev) {
         isp_dev = ourISPdev;
     }
