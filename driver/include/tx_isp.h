@@ -147,6 +147,7 @@ struct tx_isp_dev {
     bool is_open;
     struct tx_isp_chip_ident *chip;
     int active_link;
+	uint32_t frame_count;
 
     /* VIC specific */
     uint32_t vic_started;

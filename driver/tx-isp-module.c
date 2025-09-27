@@ -85,6 +85,7 @@ void isp_process_frame_statistics(struct tx_isp_dev *dev);
 void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
 void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
 int tisp_init(void *sensor_info, char *param_name);
+int vic_event_handler(void *subdev, int event_type, void *data);
 
 /* Global I2C client tracking to prevent duplicate creation */
 static struct i2c_client *global_sensor_i2c_client = NULL;
