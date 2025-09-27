@@ -15,6 +15,7 @@
 #include "../include/tx_isp_vin.h"
 #include "../include/tx_isp_tuning.h"
 #include "../include/tx-isp-device.h"
+#include "../include/tx_isp_core_device.h"
 #include "../include/tx-libimp.h"
 #include <linux/platform_device.h>
 #include <linux/device.h>
@@ -3659,19 +3660,24 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     vic_dev = isp_dev->vic_dev;
 
 
-    /* Binary Ninja: if (arg2 == 0) */
-    if (attr == NULL) {
-        /* Binary Ninja: memset($s0_1 + 0xec, arg2, 0x4c) */
-        memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
-        pr_info("ispcore_sync_sensor_attr: cleared sensor attributes\n");
+    /* Store attributes in the actual sensor, not VIC */
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor) {
+        pr_info("ispcore_sync_sensor_attr: no sensor available\n");
         return 0;
     }
-
-    /* Binary Ninja: memcpy($s0_1 + 0xec, arg2, 0x4c) */
-    memcpy(&vic_dev->sensor_attr, attr, sizeof(vic_dev->sensor_attr));
-
-    /* Binary Ninja: Complex sensor attribute processing */
-    stored_attr = &vic_dev->sensor_attr;
+    /* Choose target attribute storage */
+    {
+        struct tx_isp_sensor_attribute *target = sensor->video.attr ? sensor->video.attr : &sensor->attr;
+        if (attr == NULL) {
+            memset(target, 0, sizeof(*target));
+            pr_info("ispcore_sync_sensor_attr: cleared sensor attributes\n");
+            return 0;
+        }
+        memcpy(target, attr, sizeof(*target));
+        stored_attr = target;
+    }
 
     /* Binary Ninja: Extract and process sensor timing parameters */
     integration_time = stored_attr->integration_time;
