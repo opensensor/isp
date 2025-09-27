@@ -195,21 +195,13 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         vic_dev->irq_handler(vic_dev->irq_priv);
     }
 
-    /* CRITICAL FIX: Enable VIC interrupt at kernel level - this is what the callback should do! */
-    if (vic_dev->irq > 0) {
-        pr_info("*** tx_vic_enable_irq: CRITICAL FIX - Enabling VIC interrupt (IRQ %d) at kernel level ***\n", vic_dev->irq);
-        enable_irq(vic_dev->irq);
-        pr_info("*** tx_vic_enable_irq: VIC interrupt (IRQ %d) ENABLED at kernel level ***\n", vic_dev->irq);
-    } else if (vic_dev->sd.irq_info.irq > 0) {
-        pr_info("*** tx_vic_enable_irq: CRITICAL FIX - Enabling VIC interrupt (IRQ %d) from irq_info at kernel level ***\n", vic_dev->sd.irq_info.irq);
-        enable_irq(vic_dev->sd.irq_info.irq);
-        pr_info("*** tx_vic_enable_irq: VIC interrupt (IRQ %d) ENABLED at kernel level ***\n", vic_dev->sd.irq_info.irq);
-    } else {
-        pr_err("*** tx_vic_enable_irq: CRITICAL ERROR - No VIC IRQ found! vic_dev->irq=%d, irq_info.irq=%d ***\n",
-               vic_dev->irq, vic_dev->sd.irq_info.irq);
-    }
+    /* CRITICAL FIX: Don't call enable_irq() here - tx_isp_enable_irq() already handles kernel-level IRQ management */
+    /* The problem was that both tx_isp_enable_irq() and tx_vic_enable_irq() were calling enable_irq(38) */
+    /* This caused enable_irq() to be called twice but disable_irq() only once, creating an imbalance */
+    pr_info("*** tx_vic_enable_irq: CRITICAL FIX - Skipping kernel enable_irq() to prevent double-enable imbalance ***\n");
+    pr_info("*** tx_vic_enable_irq: Kernel IRQ management handled by tx_isp_enable_irq() callback ***\n");
 
-    pr_info("tx_vic_enable_irq: VIC interrupt flag set and kernel interrupt enabled\n");
+    pr_info("tx_vic_enable_irq: VIC interrupt flag set, kernel IRQ managed by callback\n");
 
     /* Binary Ninja: private_spin_unlock_irqrestore(dump_vsd_3 + 0x130, var_18) */
     spin_unlock_irqrestore(&vic_dev->lock, flags);
@@ -1233,15 +1225,15 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
         wmb();
 
+        /* Binary Ninja: 00010ab4-00010ac0 - Unlock sequence - EXACT REFERENCE IMPLEMENTATION */
+        /* Binary Ninja: EXACT reference driver unlock sequence */
+        writel(2, vic_regs + 0x0);
+        wmb();
+
         /* CRITICAL FIX: Skip remaining unlock sequence during streaming restart */
         if (vic_start_ok == 1) {
             pr_info("*** VIC: SKIPPING remaining unlock sequence - VIC interrupts already working ***\n");
         } else {
-        	/* Binary Ninja: 00010ab4-00010ac0 - Unlock sequence - EXACT REFERENCE IMPLEMENTATION */
-        	/* Binary Ninja: EXACT reference driver unlock sequence */
-        	writel(2, vic_regs + 0x0);
-        	wmb();
-
             writel(4, vic_regs + 0x0);
             wmb();
 
@@ -2338,7 +2330,7 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
         /* Binary Ninja: if ($v0_2 != 2) */
         if (current_state != 2) {
             /* Binary Ninja: tx_vic_disable_irq() */
-            //tx_vic_disable_irq(vic_dev);
+            tx_vic_disable_irq(vic_dev);
 
             /* Binary Ninja: *($s1_1 + 0x128) = 2 */
             vic_dev->state = 2;
