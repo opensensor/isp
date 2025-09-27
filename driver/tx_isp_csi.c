@@ -305,136 +305,52 @@ int tx_isp_csi_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *config
     return 0;
 }
 
-/* CSI video streaming control - FIXED: MIPS memory alignment */
+
+/* CSI video streaming control - EXACT Binary Ninja implementation */
 int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
 {
-    struct tx_isp_sensor_attribute *attr;
     struct tx_isp_csi_device *csi_dev;
-    void __iomem *csi_base;
-    int ret = 0;
 
     pr_info("*** csi_video_s_stream: EXACT Binary Ninja implementation - FIXED for MIPS ***\n");
     pr_info("csi_video_s_stream: sd=%p, enable=%d\n", sd, enable);
 
-    /* CRITICAL FIX: Use safe struct member access instead of dangerous offset 0xd4 */
-    csi_dev = ourISPdev->csi_dev;
-    if (!csi_dev) {
-        pr_info("CSI device is NULL\n");
-
-        /* Try to get the CSI device from ourISPdev as a fallback */
-        if (ourISPdev && ourISPdev->csi_dev) {
-            csi_dev = ourISPdev->csi_dev;
-            pr_info("Using CSI device from ourISPdev: %p\n", csi_dev);
-
-            /* Update the subdevice data with the CSI device */
-            tx_isp_set_subdevdata(sd, csi_dev);
-        } else {
-            return 0xffffffea;
-        }
-    }
-
-    /* CRITICAL FIX: Binary Ninja exact check - if (*(*(arg1 + 0x110) + 0x14) != 1) return 0 */
-    /* Replace dangerous offset arithmetic with safe struct member access */
-    if (csi_dev->state < 2) { /* Use struct member instead of *(*(arg1 + 0x110) + 0x14) */
-        pr_info("csi_video_s_stream: CSI device state=%d < 2, returning 0\n", csi_dev->state);
-        return 0;
-    }
-
-    /* CRITICAL FIX: Use safe struct member access instead of dangerous offset 0x13c */
-    csi_base = csi_dev->csi_regs; /* Use struct member instead of *(void **)(((char *)csi_dev) + 0x13c) */
-    if (!csi_base) {
-        pr_info("CSI base address is NULL\n");
+    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 0xffffffea */
+    if (!sd || (unsigned long)sd >= 0xfffff001) {
+        pr_err("csi_video_s_stream: Invalid subdev pointer\n");
         return 0xffffffea;
     }
 
-    /* Create a default sensor attribute if none exists */
-    if (sd->active_sensor) {
-        attr = &sd->active_sensor->attr;
-    } else if (ourISPdev && ourISPdev->sensor_sd && ourISPdev->sensor_sd->active_sensor) {
-        /* Try to get the sensor attribute from ourISPdev as a fallback */
-        attr = &ourISPdev->sensor_sd->active_sensor->attr;
-        pr_info("Using sensor attribute from ourISPdev\n");
-
-        /* Copy the sensor to our subdevice */
-        sd->active_sensor = ourISPdev->sensor_sd->active_sensor;
-    } else if (ourISPdev && ourISPdev->sensor_width > 0 && ourISPdev->sensor_height > 0) {
-        /* Create a default sensor if we have dimensions */
-        struct tx_isp_sensor *sensor = kzalloc(sizeof(struct tx_isp_sensor), GFP_ATOMIC);
-        if (!sensor) {
-            pr_info("Failed to allocate sensor structure\n");
-            return -ENOMEM;
-        }
-
-        /* Initialize with default values */
-        sensor->attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;
-        sensor->attr.mipi.lans = 2; /* Default to 2 lanes */
-        sensor->attr.mipi.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10; /* Default to RAW10 */
-        sensor->attr.total_width = ourISPdev->sensor_width;
-        sensor->attr.total_height = ourISPdev->sensor_height;
-
-        /* Store in subdevice */
-        sd->active_sensor = sensor;
-        attr = &sensor->attr;
-
-        pr_info("Created default sensor attribute: %dx%d, MIPI, RAW10, 2 lanes\n",
-                attr->total_width, attr->total_height);
-    } else {
-        /* Create a default sensor with hardcoded values */
-        struct tx_isp_sensor *sensor = kzalloc(sizeof(struct tx_isp_sensor), GFP_ATOMIC);
-        if (!sensor) {
-            pr_info("Failed to allocate sensor structure\n");
-            return -ENOMEM;
-        }
-
-        /* Initialize with default values */
-        sensor->attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;
-        sensor->attr.mipi.lans = 2; /* Default to 2 lanes */
-        sensor->attr.mipi.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10; /* Default to RAW10 */
-        sensor->attr.total_width = 1920;  /* Default to 1418p */
-        sensor->attr.total_height = 1080;
-
-        /* Store in subdevice */
-        sd->active_sensor = sensor;
-        attr = &sensor->attr;
-
-        pr_info("Created default sensor attribute: 2200x1418, MIPI, RAW10, 2 lanes\n");
-    }
-
-    /* Only handle MIPI sensors */
-    if (attr->dbus_type != TX_SENSOR_DATA_INTERFACE_MIPI)
+    /* CRITICAL FIX: Binary Ninja exact check - if (*(*(arg1 + 0x110) + 0x14) != 1) return 0 */
+    /* This checks if sensor interface type is MIPI (1) - if not MIPI, return 0 */
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+    if (!sensor || !sensor->video.attr || sensor->video.attr->dbus_type != TX_SENSOR_DATA_INTERFACE_MIPI) {
+        pr_info("csi_video_s_stream: Sensor interface type is not MIPI (1), returning 0\n");
         return 0;
-
-    /* Initialize CSI hardware if needed */
-    if (enable && csi_dev->state < 4) {
-        pr_info("*** CSI STREAMING: Configuring CSI hardware for streaming (current state=%d) ***\n", csi_dev->state);
-        ret = csi_core_ops_init(sd, 1);
-        if (ret) {
-            pr_info("Failed to initialize CSI hardware for streaming: %d\n", ret);
-            return ret;
-        }
-        pr_info("*** CSI STREAMING: CSI hardware configured successfully for streaming ***\n");
-    } else if (enable) {
-        pr_info("*** CSI STREAMING: CSI already in streaming state (%d), skipping hardware config ***\n", csi_dev->state);
     }
 
-    /* Binary Ninja: int32_t $v0_4 = 4, if (arg2 == 0) $v0_4 = 3 */
-    if (enable) {
-        /* Binary Ninja: *(arg1 + 0x128) = 4 */
-        /* CRITICAL FIX: Use CORRECT Binary Ninja state 4 for streaming! */
-        csi_dev->state = 4;  /* 4 = STREAMING (Binary Ninja reference) */
-        pr_info("CSI streaming enabled - state=%d (STREAMING)\n", csi_dev->state);
-    } else {
-        pr_info("*** CSI VIDEO STREAMING DISABLE ***\n");
+    /* Get CSI device from subdev private data */
+    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+    if (!csi_dev) {
+        pr_err("CSI device is NULL from subdev private data\n");
+        return 0xffffffea;
+    }
 
-        /* Binary Ninja: *(arg1 + 0x128) = 3 */
-        /* CRITICAL FIX: Use CORRECT Binary Ninja state 3 for disable */
-        csi_dev->state = 3;  /* 3 = DISABLED (Binary Ninja reference) */
-        pr_info("CSI streaming disabled - state=%d (DISABLED)\n", csi_dev->state);
+    /* Binary Ninja: int32_t $v0_4 = 4 */
+    /* Binary Ninja: if (arg2 == 0) $v0_4 = 3 */
+    /* Binary Ninja: *(arg1 + 0x128) = $v0_4 */
+    if (enable == 0) {
+        csi_dev->state = 3;
+        pr_info("csi_video_s_stream: Stream OFF - CSI state set to 3\n");
+    } else {
+        csi_dev->state = 4;
+        pr_info("csi_video_s_stream: Stream ON - CSI state set to 4\n");
     }
 
     /* Binary Ninja: return 0 */
     return 0;
 }
+
 
 /* CSI sensor operations IOCTL handler */
 int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)

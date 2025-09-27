@@ -74,6 +74,7 @@ void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
 void system_reg_write(u32 reg, u32 value);
 int tisp_lsc_write_lut_datas(void);
 irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
+int csi_video_s_stream(struct tx_isp_subdev *sd, int enable);
 
 /* Map V4L2 mbus Bayer codes to ISP Bayer mode (register 0x8) per reference-standardize */
 static inline u32 mbus_to_bayer_mode(u32 config)
@@ -581,8 +582,6 @@ struct isp_core_channel_state {
 struct isp_core_channel {
     struct isp_core_channel_state state;
 };
-
-static struct isp_core_channel frame_channels[3] = {0};  /* Channel 0, 1, 2 */
 
 /* Frame channel wakeup function - placeholder implementation */
 void frame_channel_wakeup_waiters(struct frame_channel_device *channel);
