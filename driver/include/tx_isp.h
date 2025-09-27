@@ -117,6 +117,7 @@ struct tx_isp_event_callback {
 } __attribute__((packed));
 
 struct tx_isp_dev {
+    struct tx_isp_subdev sd;        // Base subdev at offset 0
     /* Global device info (core subdev moved to separate core_dev) */
     struct device *dev;                      /* 0x00: Device pointer (4 bytes) */
     struct device *tisp_device;              /* 0x04: TISP device pointer (4 bytes) */
