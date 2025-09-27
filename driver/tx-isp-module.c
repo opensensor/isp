@@ -2524,52 +2524,7 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
         s4 = &s4[1];
     }
 
-    /* After all subdevs s_stream(enable) calls, re-trigger CSI init once sensor is streaming */
-    if (enable == 1) {
-        struct tx_isp_subdev *csi_sd_rt = tx_isp_get_csi_subdev(dev);
-        if (csi_sd_rt && csi_sd_rt->ops && csi_sd_rt->ops->core && csi_sd_rt->ops->core->init) {
-            struct tx_isp_csi_device *csid = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(csi_sd_rt);
-            if (csid && csid->interface_type == 1) {
-                pr_info("*** tx_isp_video_s_stream: Post-sensor s_stream re-trigger of CSI core->init ***\n");
-                /* Small delay to let sensor assert MIPI lanes */
-                private_msleep(2);
-                csi_sd_rt->ops->core->init(csi_sd_rt, 1);
-            }
-        }
-    }
-
-    /* Post-sensor stream-on: re-assert VIC routing/mask to match working timing */
-    if (enable == 1) {
-        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)dev->vic_dev;
-        if (vic_dev && vic_dev->vic_regs) {
-            void __iomem *vr = vic_dev->vic_regs;
-            u32 s0, s1; int i;
-            pr_info("*** VIC POST-SENSOR REASSERT: re-applying routing/mask after sensor stream-on ***\n");
-            /* Clear pending (W1C) */
-            writel(0xFFFFFFFF, vr + 0x1f0);
-            writel(0xFFFFFFFF, vr + 0x1f4);
-            /* Route/control values from working reference */
-            writel(0x000002d0, vr + 0x100);
-            writel(0x00000630, vr + 0x14);
-            wmb();
-            /* Enable sources and unmask framedone (MainMask=frame-done only) */
-            writel(0xFFFFFFFF, vr + 0x1e0);
-            writel(0xFFFFFFFE, vr + 0x1e8);
-            wmb();
-            /* Small sampling window to catch first assertion post sensor stream-on */
-            for (i = 0; i < 20; i++) {
-                s0 = readl(vr + 0x1f0);
-                s1 = readl(vr + 0x1f4);
-                if (s0 || s1) {
-                    pr_warn("*** VIC POST-SENSOR REASSERT: Status asserted: [0x1f0]=0x%08x [0x1f4]=0x%08x (iter=%d) ***\n", s0, s1, i);
-                    break;
-                }
-                udelay(1000);
-            }
-            if (i == 20)
-                pr_info("*** VIC POST-SENSOR REASSERT: No status bits asserted in 20ms window ***\n");
-        }
-    }
+    /* Skipping post-sensor CSI re-init and VIC reassert to preserve VIC interrupts (matches good-things behavior) */
 
     /* All subdevs processed successfully */
     return 0;

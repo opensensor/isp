@@ -2455,6 +2455,12 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
             vic_state = vic_dev->state;
 
             pr_info("ispcore_slake_module: VIC device=%p, state=%d", vic_dev, vic_state);
+            /* Preserve VIC interrupts: if VIC is ACTIVE/STREAMING, skip slake to avoid toggling CSI/clock */
+            if (vic_state >= 3) {
+                pr_info("*** ispcore_slake_module: VIC state >= 3; skipping slake to preserve interrupts ***\n");
+                return 0;
+            }
+
 
             /* Binary Ninja: if ($v0 != 1) */
             if (vic_state != 1) {
