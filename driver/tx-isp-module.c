@@ -2320,7 +2320,7 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                             unsigned long current_rate = clk_get_rate(clk_array[i]);
                             if (current_rate != 0xffff) {
                                 /* Binary Ninja: private_clk_set_rate(*$s2_1, get_isp_clk()) */
-                                clk_set_rate(clk_array[i], clk_get(ourISPdev->dev, "isp"));
+                                clk_set_rate(clk_array[i], &clk_get(ourISPdev->dev, "isp"));
                             }
 
                             /* Binary Ninja: private_clk_enable(*$s2_1) */
