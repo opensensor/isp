@@ -2555,6 +2555,12 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         if (vic_base) {
             /* SAFE: $s0 + 0x218 = active_buffer_count */
             u32 buffer_count = vic_dev->active_buffer_count;
+            if (buffer_count == 0) {
+                /* Guard: do not clobber a valid control with 0 buffers; default to 2 like reference */
+                buffer_count = 2;
+            } else if (buffer_count > 5) {
+                buffer_count = 5;
+            }
             u32 stream_ctrl = (buffer_count << 16) | 0x80000020;  /* Binary Ninja EXACT formula */
             void __iomem *vic_ctrl = vic_dev->vic_regs_control;
             writel(stream_ctrl, vic_base + 0x300);
@@ -2562,7 +2568,7 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
                 writel(stream_ctrl, vic_ctrl + 0x300);
             wmb();
 
-            pr_info("*** Binary Ninja EXACT: Wrote 0x%x to reg 0x300 (%d buffers) ***\n", stream_ctrl, buffer_count);
+            pr_info("*** Binary Ninja EXACT: Wrote 0x%x to reg 0x300 (%d buffers, guarded) ***\n", stream_ctrl, buffer_count);
         }
 
         /* Binary Ninja EXACT: *($s0 + 0x210) = 1 */

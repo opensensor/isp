@@ -4709,7 +4709,7 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
      */
     pr_info("*** Deferring hardware interrupt enables until VIC is configured and streaming ***\n");
 
-    pr_info("*** BOTH VIC AND ISP CORE INTERRUPTS NOW ENABLED! ***\n");
+
 
 
 
