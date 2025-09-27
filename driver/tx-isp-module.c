@@ -406,8 +406,6 @@ static struct resource tx_isp_vic_resources[] = {
 
 /* VIC clock configuration array - EXACT Binary Ninja MCP */
 static struct tx_isp_device_clk vic_clks[] = {
-    {"cgu_isp", 100000000},  /* 100MHz CGU ISP clock */
-    {"isp", 0xffff},         /* Auto-rate ISP clock */
 };
 
 /* VIC platform data - CRITICAL for tx_isp_subdev_init to work */
@@ -446,7 +444,7 @@ static struct tx_isp_device_clk csi_clks[] = {
 /* CSI platform data - CRITICAL for tx_isp_subdev_init to work */
 static struct tx_isp_subdev_platform_data csi_pdata = {
     .interface_type = 1,  /* MIPI interface */
-    .clk_num = 2,         /* Number of clocks needed */
+    .clk_num = 1,         /* Number of clocks needed */
     .sensor_type = 0,     /* Default sensor type */
     .clks = csi_clks,     /* CRITICAL: Clock configuration array - Binary Ninja: *($s1_1 + 8) */
 };
@@ -531,13 +529,12 @@ static struct resource tx_isp_core_resources[] = {
 static struct tx_isp_device_clk core_clks[] = {
     {"cgu_isp", 100000000},  /* 100MHz CGU ISP clock */
     {"isp", 0xffff},         /* Auto-rate ISP clock */
-    {"csi", 0xffff},         /* Auto-rate CSI clock */
 };
 
 /* CORE platform data - CRITICAL for tx_isp_subdev_init to work */
 static struct tx_isp_subdev_platform_data core_pdata = {
     .interface_type = 1,  /* ISP Core interface */
-    .clk_num = 3,         /* Number of clocks needed (ISP, CSI, VPU) */
+    .clk_num = 2,         /* Number of clocks needed (isp, cgu_isp) */
     .sensor_type = 0,     /* Default sensor type */
     .clks = core_clks,    /* CRITICAL: Clock configuration array - Binary Ninja: *($s1_1 + 8) */
 };
