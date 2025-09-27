@@ -2594,25 +2594,7 @@ slake_error:
 clock_management:
             /* Binary Ninja: Clock management loop */
             /* int32_t $s2_2 = $s0_3 - 1; while (true) */
-            pr_info("ispcore_slake_module: Managing ISP clocks");
-
-            /* SAFE: Disable individual clocks instead of array access */
-            if (isp_dev->csi_clk) {
-                clk_disable(isp_dev->csi_clk);
-                pr_info("ispcore_slake_module: Disabled CSI clock");
-            }
-            if (isp_dev->core_dev && isp_dev->core_dev->ipu_clk) {
-                clk_disable(isp_dev->core_dev->ipu_clk);
-                pr_info("ispcore_slake_module: Disabled IPU clock");
-            }
-            if (isp_dev->core_dev && isp_dev->core_dev->core_clk) {
-                clk_disable(isp_dev->core_dev->core_clk);
-                pr_info("ispcore_slake_module: Disabled ISP clock");
-            }
-            if (isp_dev->cgu_isp) {
-                clk_disable(isp_dev->cgu_isp);
-                pr_info("ispcore_slake_module: Disabled CGU ISP clock");
-            }
+            pr_info("ispcore_slake_module: Skipping Disabling ISP clocks");
 
             /* Binary Ninja: return 0 */
             result = 0;
