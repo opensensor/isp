@@ -1802,6 +1802,18 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 
                 pr_info("*** ispcore_core_ops_init: VIC state check passed, proceeding with initialization ***");
 
+                /* Ensure ISP/CSI/IPU clocks are configured and enabled once at init time */
+                if (!isp_dev->isp_clk || !isp_dev->csi_clk || !isp_dev->ipu_clk || !isp_dev->cgu_isp) {
+                    int clk_ret = tx_isp_configure_clocks(isp_dev);
+                    if (clk_ret) {
+                        pr_warn("ispcore_core_ops_init: tx_isp_configure_clocks failed: %d (continuing)\n", clk_ret);
+                    } else {
+                        pr_info("*** ispcore_core_ops_init: Clocks configured and enabled ***\n");
+                    }
+                } else {
+                    pr_info("*** ispcore_core_ops_init: Clocks already configured (skipping) ***\n");
+                }
+
                 /* CRITICAL: Call tisp_init() TWICE as shown in Binary Ninja MCP */
                 /* Binary Ninja MCP shows two calls: 00079050 and 00079058 */
                 extern struct tx_isp_sensor *tx_isp_get_sensor(void);
