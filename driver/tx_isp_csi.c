@@ -541,9 +541,19 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                     extern struct tx_isp_sensor *tx_isp_get_sensor(void);
                     struct tx_isp_sensor *sensor = tx_isp_get_sensor();
                     if (sensor) {
-                        sensor_attr = &sensor->info;
+                        /* Prefer dynamic attributes if available; fallback to inline attr */
+                        if (sensor->video.attr)
+                            sensor_attr = sensor->video.attr;
+                        else
+                            sensor_attr = &sensor->attr;
                     } else {
                         sensor_attr = NULL;
+                    }
+
+                    /* If no sensor attributes are available, skip CSI init safely */
+                    if (!sensor_attr) {
+                        pr_info("csi_core_ops_init: No sensor attributes available; skipping CSI init.\n");
+                        return 0;
                     }
 
                     /* Binary Ninja: int32_t $s2_1 = *($v1_5 + 0x14) */

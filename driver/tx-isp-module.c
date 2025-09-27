@@ -1612,26 +1612,8 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     isp_dev->csi_dev = csi_dev;
     pr_info("*** CSI DEVICE LINKED: isp_dev->csi_dev = %p ***\n", isp_dev->csi_dev);
 
-    /* *** CRITICAL FIX: INITIALIZE CSI HARDWARE DURING PROBE *** */
-    pr_info("*** CRITICAL: INITIALIZING CSI HARDWARE AFTER DEVICE CREATION ***\n");
-
-    /* Set state to 2 so csi_core_ops_init will proceed with hardware initialization */
-    csi_dev->state = 2;
-    pr_info("*** CSI: State updated to 2 for hardware initialization ***\n");
-
-    /* Call CSI hardware initialization - this was missing! */
-    ret = csi_core_ops_init(&csi_dev->sd, 1);
-    if (ret) {
-        pr_info("*** CSI: Hardware initialization failed: %d ***\n", ret);
-        goto err_release_mem;
-    }
-
-    pr_info("*** CSI: Hardware initialization completed successfully ***\n");
-    pr_info("*** CSI: Final state = %d ***\n", csi_dev->state);
-    /* Apply CSI/MIPI lane configuration sequence (port from reference-standardize) */
-    pr_info("*** CSI: Applying CSI/MIPI lane configuration sequence (probe path) ***\n");
-    tx_isp_vic_write_csi_phy_sequence();
-
+    /* Deferring CSI hardware initialization until first VIDIOC_STREAMON */
+    pr_info("*** CSI: Deferring hardware initialization until STREAMON ***\n");
 
     pr_info("*** csi_device_probe: Binary Ninja CSI device created successfully ***\n");
     return 0;
@@ -3395,6 +3377,24 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
         }
 
+        /* Initialize CSI on first STREAMON if a sensor is present */
+        if (ourISPdev && ourISPdev->csi_dev) {
+            struct tx_isp_csi_device *csi = (struct tx_isp_csi_device *)ourISPdev->csi_dev;
+            extern int csi_core_ops_init(struct tx_isp_subdev *sd, int enable);
+
+            if (!ourISPdev->sensor) {
+                pr_info("*** Channel %d: STREAMON aborted - no sensor registered yet ***\n", channel);
+                return -ENODEV;
+            }
+
+            ret = csi_core_ops_init(&csi->sd, 1);
+            if (ret) {
+                pr_info("Channel %d: CSI init failed: %d\n", channel, ret);
+                return ret;
+            }
+            pr_info("*** Channel %d: CSI initialized on STREAMON ***\n", channel);
+        }
+
         // Enable channel
         state->enabled = true;
         state->streaming = true;
@@ -3413,6 +3413,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
             /* Ensure VIC dimensions are set */
             if (vic->width == 0 || vic->height == 0) {
+
                 vic->width = 1920;
                 vic->height = 1080;
                 pr_info("*** CHANNEL %d STREAMON: Set VIC dimensions %dx%d ***\n",
