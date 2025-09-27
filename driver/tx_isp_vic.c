@@ -29,6 +29,7 @@ extern void isp_frame_done_wakeup(void);
 int ispvic_frame_channel_qbuf(void *arg1, void *arg2);
 int ispvic_frame_channel_clearbuf(void);
 int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
+void tx_isp_fs_trigger_frame_event(int channel, u32 event, void *edata);
 extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 
