@@ -1729,17 +1729,17 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         } while (0);
 
 
-        v1_7 = (~reg_1e8) & reg_1e0;
-        v1_10 = (~reg_1ec) & reg_1e4;
-        printk(KERN_ALERT "*** VIC IRQ: Calculated v1_7 = 0x%x v1_10 = 0x%x ***\n", v1_7, v1_10);
+        /* Use raw status bits for detection and unconditionally clear all pendings (W1C).
+         * This matches good-things behavior and avoids stalls if mask registers drift.
+         */
+        v1_7 = reg_1e0;
+        v1_10 = reg_1e4;
+        printk(KERN_ALERT "*** VIC IRQ: Using STATUS for detection v1_7=0x%x v1_10=0x%x ***\n", v1_7, v1_10);
 
-        /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7 */
-        printk(KERN_ALERT "*** VIC IRQ: About to write v1_7=0x%x to reg 0x1f0 (base=%p) ***\n", v1_7, base_for_irq);
-        writel(v1_7, base_for_irq + 0x1f0);
-
-        /* Binary Ninja: *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
-        printk(KERN_ALERT "*** VIC IRQ: About to write v1_10=0x%x to reg 0x1f4 (base=%p) ***\n", v1_10, base_for_irq);
-        writel(v1_10, base_for_irq + 0x1f4);
+        /* Clear pending interrupts (W1C) regardless of mask state */
+        printk(KERN_ALERT "*** VIC IRQ: Clearing all pending with 0xFFFFFFFF to 0x1f0/0x1f4 (base=%p) ***\n", base_for_irq);
+        writel(0xFFFFFFFF, base_for_irq + 0x1f0);
+        writel(0xFFFFFFFF, base_for_irq + 0x1f4);
         wmb();
 
         /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
@@ -4765,32 +4765,9 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
 
 
 
-    /* *** CRITICAL: Register BOTH IRQ handlers for complete interrupt support (match good-things) *** */
-    pr_info("*** REGISTERING BOTH IRQ HANDLERS (37 + 38) FOR COMPLETE INTERRUPT SUPPORT ***\n");
-
-    /* Register IRQ 37 (isp-m0) - Primary ISP processing */
-    ret = request_threaded_irq(37,
-                               isp_irq_handle,
-                               isp_irq_thread_handle,
-                               IRQF_SHARED,
-                               "isp-m0",                /* Match stock driver name */
-                               ourISPdev);
-    if (ret != 0) {
-        pr_err("*** FAILED TO REQUEST IRQ 37 (isp-m0): %d ***\n", ret);
-    }
-
-    /* Register IRQ 38 (isp-w02) - VIC channel */
-    ret = request_threaded_irq(38,
-                               isp_irq_handle,          /* Same handlers work for both IRQs */
-                               isp_irq_thread_handle,
-                               IRQF_SHARED,
-                               "isp-w02",               /* Match stock driver name */
-                               ourISPdev);
-    if (ret != 0) {
-        pr_err("*** FAILED TO REQUEST IRQ 38 (isp-w02): %d ***\n", ret);
-    } else {
-        pr_info("*** SUCCESS: IRQ 38 (isp-w02) REGISTERED ***\n");
-    }
+    /* IRQ registration happens during subdevice init (tx_isp_subdev_init/auto-link).
+     * Avoid duplicate registrations here to prevent double handlers.
+     */
 
     pr_info("*** tx_isp_module_init: Binary Ninja reference implementation complete ***\n");
     return 0;

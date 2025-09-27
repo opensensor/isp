@@ -401,12 +401,16 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             strcmp(dev_name_str, "isp-fs") != 0) {   /* FS - no IRQ */
             /* Binary Ninja: tx_isp_request_irq(arg1, arg2 + 0x80) */
             /* SAFE: Use struct member access for IRQ setup */
-            ret = tx_isp_request_irq(pdev, &sd->irq_info);
-            if (ret != 0) {
-                /* Binary Ninja: isp_printf(2, " %d, %d\n", $a2_1) */
-                isp_printf(2, " %d, %d\n", ret);
-                tx_isp_module_deinit(sd);
-                return ret;
+            if (sd->irq_info.irq <= 0) {
+                ret = tx_isp_request_irq(pdev, &sd->irq_info);
+                if (ret != 0) {
+                    /* Binary Ninja: isp_printf(2, " %d, %d\n", $a2_1) */
+                    isp_printf(2, " %d, %d\n", ret);
+                    tx_isp_module_deinit(sd);
+                    return ret;
+                }
+            } else {
+                pr_info("*** %s: IRQ already registered on subdev init (irq=%d) - skipping duplicate request ***\n", dev_name_str, sd->irq_info.irq);
             }
         } else {
             pr_info("*** %s: Skipping IRQ request - device has no IRQ resource ***\n", dev_name_str);
