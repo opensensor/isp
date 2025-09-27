@@ -3156,7 +3156,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Use actual reference driver functions: tx_isp_enable_irq and tx_isp_disable_irq */
 
     /* SAFE: Use proper struct members instead of unsafe offset math */
-    // vic_dev->irq_handler = (void (*)(void *))tx_isp_enable_irq;
+    vic_dev->irq_handler = (void (*)(void *))tx_isp_enable_irq;
     vic_dev->irq_disable = (void (*)(void *))tx_isp_disable_irq;
     vic_dev->irq_priv = &vic_dev->sd.irq_info;  /* Pass IRQ info structure */
 
