@@ -1743,17 +1743,12 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         wmb();
         printk(KERN_ALERT "*** VIC IRQ: Register writes completed (at base=%p) ***\n", base_for_irq);
 
-        /* Restore interrupts on PRIMARY: clear pending, ensure frame-done enabled, and permit bit21 for debug */
-        if (vic_dev && vic_dev->vic_regs) {
-            void __iomem *vrp = vic_dev->vic_regs;
-            u32 en = readl(vrp + 0x1e0);
-            /* Clear pending */
-            writel(0xFFFFFFFF, vrp + 0x1f0);
-            writel(0xFFFFFFFF, vrp + 0x1f4);
-            wmb();
-            /* Skip mask/ctrl restore in ISR to match good-things: no MainMask/CTRL writes here. */
-            /* writel(0xFFDFFFFE, vrp + 0x1e8);  -- SKIPPED */
-            wmb();
+        /* CRITICAL FIX: Remove duplicate interrupt clearing that breaks continuous interrupts */
+        /* The working good-things version ONLY clears the specific bits (v1_7, v1_10) and doesn't do this */
+        /* This duplicate clearing of ALL bits (0xFFFFFFFF) interferes with hardware interrupt generation */
+        printk(KERN_ALERT "*** VIC IRQ: CRITICAL FIX - Skipping duplicate interrupt clearing to match working good-things version ***\n");
+        /* REMOVED: writel(0xFFFFFFFF, vrp + 0x1f0); */
+        /* REMOVED: writel(0xFFFFFFFF, vrp + 0x1f4); */
             /* If control bits lost in 0x300, re-assert them like reference -- SKIPPED */
             if (0) {
                 u32 ctrl = readl(vrp + 0x300);
