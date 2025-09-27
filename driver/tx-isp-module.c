@@ -106,6 +106,39 @@ long get_isp_clk(void)
 }
 
 
+/* Video link pad structure for Binary Ninja compatibility */
+struct tx_isp_video_pad {
+    struct tx_isp_subdev *sd;
+    int pad_type;  /* 1 = source, 2 = sink */
+    int pad_index;
+    int flags;
+    int state;     /* 2 = disconnected, 3 = connected */
+    void *link_src;
+    void *link_dst;
+    void *link_src_pad;
+    void *link_dst_pad;
+    int link_flags;
+};
+
+/* Use tx_isp_link_config from header file - removed duplicate definition */
+
+/* Global link configurations - Binary Ninja reference at 0x7ad50 and configs array */
+static struct tx_isp_link_config link_configs[][2] = {
+    /* Config 0 - Basic pipeline */
+    {
+        {{"tx-isp-csi", 0, 0}, {"isp-w02", 0, 0}, 0x1},
+        {{"isp-w02", 0, 0}, {"tx-isp-vin", 0, 0}, 0x1}
+    },
+    /* Config 1 - Alternative pipeline */
+    {
+        {{"tx-isp-csi", 0, 0}, {"tx-isp-vin", 0, 0}, 0x1},
+        {{"tx-isp-vin", 0, 0}, {"isp-w02", 0, 0}, 0x1}
+    }
+};
+
+static int link_config_counts[] = {2, 2};  /* Number of links per config */
+
+
 /* MIPS-SAFE I2C infrastructure - Fixed for unaligned access crash */
 static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
                                                    struct i2c_board_info *info)
