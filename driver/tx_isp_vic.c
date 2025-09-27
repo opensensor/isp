@@ -216,10 +216,6 @@ static void tx_isp_vic_frame_done(struct tx_isp_subdev *sd, int channel)
 int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 
-
-extern struct tx_isp_dev *ourISPdev;
-uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
-
 /* Static variables to cache sensor dimensions (read once during probe) */
 static u32 cached_sensor_width = 1920;   /* Default fallback */
 static u32 cached_sensor_height = 1080;  /* Default fallback */
