@@ -1332,10 +1332,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("tx_isp_vic_start: Linear mode enabled\n");
     }
 
-    /* Binary Ninja: 00010b84 - Set vic_start_ok */
-    vic_start_ok = 1;
-    pr_info("*** VIC start completed - vic_start_ok = 1 ***\n");
-
     /* CRITICAL: Enable ISP core interrupt generation - EXACT Binary Ninja reference */
     /* This was the missing piece that caused interrupts to stall out */
     if (ourISPdev && ourISPdev->core_regs) {
@@ -2649,7 +2645,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
                 /* CRITICAL FIX: Disable VIC interrupts during initialization to prevent control limit errors */
                 pr_info("*** DISABLING VIC INTERRUPTS DURING INITIALIZATION ***\n");
-                vic_start_ok = 1;  /* Disable interrupt processing */
+                vic_start_ok = 0;  /* Disable interrupt processing */
 
                 /* CRITICAL FIX: Correct the register base mapping! */
                 /* vic_regs = 0x133e0000 = CSI PHY (isp-w02 in trace) */
@@ -2775,12 +2771,12 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 }
 
             /* VIC CONTROL: enter RUN state after all config (write 1) */
-            if (vic_dev && vic_dev->vic_regs) {
+            if (vic_dev && vic_dev->vic_regs && vic_start_ok != 1) { /* SKIP: post-run re-arm and IMR/IMCR gating */
                 void __iomem *vr = vic_dev->vic_regs;
                 writel(1, vr + 0x0);
                 wmb();
                 pr_info("*** VIC CONTROL (PRIMARY): WROTE 1 to [0x0] before enabling IRQ ***\n");
-            /* Post-RUN re-arm: commit dance so enables latch without touching masks */
+            	/* Post-RUN re-arm: commit dance so enables latch without touching masks */
                 /* Program PRIMARY IMR/IMCR routing once (match good-things), no re-arm */
                 if (vic_dev && vic_dev->vic_regs) {
                     void __iomem *vr_gate = vic_dev->vic_regs;
@@ -2793,8 +2789,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                             readl(vr_gate + 0x04), readl(vr_gate + 0x0c));
                 }
 
-            if (vic_dev && vic_dev->vic_regs) { /* SKIP: post-run re-arm and IMR/IMCR gating */
-                void __iomem *vr = vic_dev->vic_regs;
+
                 /* Clear pending first (W1C) */
                 writel(0xFFFFFFFF, vr + 0x1f0);
                 writel(0xFFFFFFFF, vr + 0x1f4);
@@ -2814,9 +2809,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 wmb();
                 pr_info("*** VIC PRIMARY GATE (POST-RUN): IMR=0x%08x IMCR=0x%08x ***\n",
                         readl(vr + 0x04), readl(vr + 0x0c));
-            }
-
-            }
+            	}
 
                 /* STEP 9: CRITICAL FIX - Only call VIC start if VIC interrupts are not already working */
                 /* This prevents the destructive VIC unlock sequence that breaks working interrupts */
