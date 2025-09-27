@@ -1899,17 +1899,44 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
             /* CRITICAL: Handle vic_state == 1 case - This is the main initialization path */
             pr_info("*** ispcore_core_ops_init: VIC state is 1 - MAIN INITIALIZATION PATH ***");
 
-            /* Ensure ISP/CSI/IPU clocks are configured and enabled once at init time */
-            if (!isp_dev->isp_clk || !isp_dev->csi_clk || !isp_dev->ipu_clk || !isp_dev->cgu_isp) {
-                int clk_ret = tx_isp_configure_clocks(isp_dev);
-                if (clk_ret) {
-                    pr_warn("ispcore_core_ops_init: tx_isp_configure_clocks failed: %d (continuing)\n", clk_ret);
+            /* CRITICAL: Simple clock enablement approach (matches working version) */
+            pr_info("*** ispcore_core_ops_init: Enabling ISP clocks with simple approach ***");
+
+            /* Enable CGU_ISP clock */
+            struct clk *cgu_isp_clk = clk_get(NULL, "cgu_isp");
+            if (!IS_ERR(cgu_isp_clk)) {
+                clk_set_rate(cgu_isp_clk, 120000000);
+                int ret_cgu = clk_prepare_enable(cgu_isp_clk);
+                if (ret_cgu == 0) {
+                    pr_info("*** CGU_ISP clock enabled at 120MHz ***");
                 } else {
-                    pr_info("*** ispcore_core_ops_init: Clocks configured and enabled ***\n");
+                    pr_warn("Failed to enable CGU_ISP clock: %d", ret_cgu);
                 }
-            } else {
-                pr_info("*** ispcore_core_ops_init: Clocks already configured (skipping) ***\n");
             }
+
+            /* Enable ISP clock */
+            struct clk *isp_clk = clk_get(NULL, "isp");
+            if (!IS_ERR(isp_clk)) {
+                int ret_isp = clk_prepare_enable(isp_clk);
+                if (ret_isp == 0) {
+                    pr_info("*** ISP clock enabled ***");
+                } else {
+                    pr_warn("Failed to enable ISP clock: %d", ret_isp);
+                }
+            }
+
+            /* Enable CSI clock */
+            struct clk *csi_clk = clk_get(NULL, "csi");
+            if (!IS_ERR(csi_clk)) {
+                int ret_csi = clk_prepare_enable(csi_clk);
+                if (ret_csi == 0) {
+                    pr_info("*** CSI clock enabled ***");
+                } else {
+                    pr_warn("Failed to enable CSI clock: %d", ret_csi);
+                }
+            }
+
+            pr_info("*** ispcore_core_ops_init: Simple clock enablement complete ***");
 
             /* CRITICAL: Call tisp_init() for sensor initialization */
             if (sensor_attr) {
