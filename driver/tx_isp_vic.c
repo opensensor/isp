@@ -1092,9 +1092,16 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             if (buffer_count == 0) buffer_count = 2;
             if (buffer_count > 5) buffer_count = 5;
             u32 stream_ctrl = (buffer_count << 16) | 0x80000020;
-            writel(stream_ctrl, vic_regs + 0x300);
-            wmb();
-            pr_info("*** POST-ENABLE(A): Rewrote VIC[0x300]=0x%x (buffer_count=%u) ***\n", stream_ctrl, buffer_count);
+            {
+                u32 cur = readl(vic_regs + 0x300);
+                if (cur != stream_ctrl) {
+                    writel(stream_ctrl, vic_regs + 0x300);
+                    wmb();
+                    pr_info("*** POST-ENABLE(A): Wrote VIC[0x300]=0x%x (buffer_count=%u) ***\n", stream_ctrl, buffer_count);
+                } else {
+                    pr_info("*** POST-ENABLE(A): Skipped redundant write to VIC[0x300] (0x%x) ***\n", stream_ctrl);
+                }
+            }
         }
 
         /* Format detection logic - Binary Ninja 000107f8-00010a04 */
@@ -1717,18 +1724,28 @@ int vic_mdma_enable(struct tx_isp_vic_device *vic_dev, int channel, int dual_cha
         writel(base_addr + frame_size + (buffer_offset * 4), vic_regs + 0x33c);
     }
 
-    /* Binary Ninja EXACT: Calculate VIC control register value */
+    /* Binary Ninja EXACT: Calculate VIC control register value (guard buffer_count) */
+    if (buffer_count <= 0) {
+        buffer_count = 2; /* Reference behavior: never program 0 buffers */
+    } else if (buffer_count > 8) {
+        buffer_count = 8;
+    }
     if (buffer_count < 8) {
         vic_control = (buffer_count << 16) | 0x80000020 | format_type;
     } else {
         vic_control = 0x80080020 | format_type;
     }
 
-    /* Binary Ninja EXACT: Write VIC control register */
-    writel(vic_control, vic_regs + 0x300);
-    wmb();
+    /* Binary Ninja EXACT: Write VIC control register (avoid redundant write) */
+    {
+        u32 cur = readl(vic_regs + 0x300);
+        if (cur != vic_control) {
+            writel(vic_control, vic_regs + 0x300);
+            wmb();
+        }
+    }
 
-    pr_err("*** vic_mdma_enable: VIC[0x300] = 0x%x (MDMA ENABLED) ***\n", vic_control);
+    pr_err("*** vic_mdma_enable: VIC[0x300] = 0x%x (MDMA ENABLED, buffers=%d) ***\n", vic_control, buffer_count);
     pr_err("*** vic_mdma_enable: Frame size=%d, buffer_offset=%d ***\n", frame_size, buffer_offset);
     pr_err("*** vic_mdma_enable: SUCCESS - returning 0 ***\n");
 
@@ -2563,12 +2580,16 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             }
             u32 stream_ctrl = (buffer_count << 16) | 0x80000020;  /* Binary Ninja EXACT formula */
             void __iomem *vic_ctrl = vic_dev->vic_regs_control;
-            writel(stream_ctrl, vic_base + 0x300);
-            if (vic_ctrl)
-                writel(stream_ctrl, vic_ctrl + 0x300);
-            wmb();
-
-            pr_info("*** Binary Ninja EXACT: Wrote 0x%x to reg 0x300 (%d buffers, guarded) ***\n", stream_ctrl, buffer_count);
+            u32 cur = readl(vic_base + 0x300);
+            if (cur != stream_ctrl) {
+                writel(stream_ctrl, vic_base + 0x300);
+                if (vic_ctrl)
+                    writel(stream_ctrl, vic_ctrl + 0x300);
+                wmb();
+                pr_info("*** Binary Ninja EXACT: Wrote 0x%x to reg 0x300 (%d buffers, guarded) ***\n", stream_ctrl, buffer_count);
+            } else {
+                pr_info("*** Binary Ninja EXACT: Skipped redundant write to reg 0x300 (0x%x) ***\n", stream_ctrl);
+            }
         }
 
         /* Binary Ninja EXACT: *($s0 + 0x210) = 1 */
