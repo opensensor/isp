@@ -424,17 +424,22 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             pr_info("tx_isp_subdev_init: No memory resource for device %s (logical device - OK)\n", dev_name(&pdev->dev));
         }
 
-        /* Avoid double-claiming the main ISP region (0x13300000..) across CORE/VIN/FS.
-         * We map once in tx_isp_core_probe (isp->core_regs) and share it here. */
-        if (mem_res) {
+        /* Special-case CORE (isp-m0): never claim the full ISP region here.
+         * Core mappings are handled in tx_isp_core_probe; other subdevs may
+         * have already claimed overlapping sub-ranges. */
+        if (mem_res && !strcmp(dev_name(&pdev->dev), "isp-m0")) {
+            if (ourISPdev && ourISPdev->core_regs)
+                sd->regs = ourISPdev->core_regs;
+            else
+                sd->regs = NULL; /* will be available after core probe completes */
+            pr_info("tx_isp_subdev_init: Skipping request_mem_region/ioremap for isp-m0; using shared core_regs when available\n");
+        } else if (mem_res) {
             const char *name = dev_name(&pdev->dev);
             bool overlaps_core = (mem_res->start >= 0x13300000 && mem_res->start <= 0x133FFFFF);
 
             if (overlaps_core && ourISPdev && ourISPdev->core_regs) {
                 /* Share existing core mapping; skip request_mem_region/ioremap to avoid conflicts */
-                if (!strcmp(name, "isp-m0")) {
-                    sd->regs = ourISPdev->core_regs;
-                } else if (!strcmp(name, "isp-w01")) {
+                if (!strcmp(name, "isp-w01")) {
                     /* VIN uses ISP core region; share base mapping */
                     sd->regs = ourISPdev->core_regs; /* if needed, add offset in specific code paths */
                 } else if (!strcmp(name, "tx-isp-fs")) {
