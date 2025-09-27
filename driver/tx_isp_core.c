@@ -1042,7 +1042,14 @@ int tx_isp_init_memory_mappings(struct tx_isp_dev *isp)
         goto err_unmap_core;
     }
     pr_info("VIC registers mapped at 0x10023000\n");
-	isp->csi_regs = isp->vic_dev->vic_regs - 0x9a00 + 0x10000; /* ISP base + CSI offset */
+
+    /* Map CSI registers directly */
+    isp->csi_regs = ioremap(0x10022000, 0x1000);
+    if (!isp->csi_regs) {
+        pr_info("Failed to map CSI registers\n");
+        goto err_unmap_vic;
+    }
+    pr_info("CSI registers mapped at 0x10022000\n");
 
     /* Map PHY registers */
     isp->phy_base = ioremap(0x10021000, 0x1000);
@@ -1055,9 +1062,15 @@ int tx_isp_init_memory_mappings(struct tx_isp_dev *isp)
     pr_info("All ISP memory mappings initialized successfully\n");
     return 0;
 
+err_unmap_phy:
+    iounmap(isp->phy_base);
+    isp->phy_base = NULL;
 err_unmap_csi:
     iounmap(isp->csi_regs);
     isp->csi_regs = NULL;
+err_unmap_vic:
+    iounmap(isp->vic_regs);
+    isp->vic_regs = NULL;
 err_unmap_vic:
     iounmap(isp->vic_regs);
     isp->vic_regs = NULL;
@@ -3651,6 +3664,22 @@ int tx_isp_core_probe(struct platform_device *pdev)
                     /* CRITICAL: Update global ISP device with register base IMMEDIATELY */
                     ourISPdev = isp_dev;
                     pr_info("*** tx_isp_core_probe: Global ISP device updated with register base ***\n");
+
+                    /* NOW initialize tuning system AFTER memory mappings are available */
+                    pr_info("*** tx_isp_core_probe: Calling isp_core_tuning_init AFTER memory mappings ***\n");
+                    tuning_dev = (void*)isp_core_tuning_init(isp_dev);
+
+                    /* SAFE: Store tuning device using proper member access */
+                    isp_dev->tuning_data = (struct isp_tuning_data *)tuning_dev;
+
+                    if (tuning_dev != NULL) {
+                        pr_info("*** tx_isp_core_probe: Tuning init SUCCESS (with mapped registers) ***\n");
+                        pr_info("*** tx_isp_core_probe: SAFE tuning pointer - using tuning_dev=%p directly ***\n", tuning_dev);
+                        pr_info("*** tx_isp_core_probe: SUCCESS - Core device fully initialized ***\n");
+                        pr_info("***   - Tuning device: %p ***\n", tuning_dev);
+                    } else {
+                        pr_info("*** tx_isp_core_probe: Tuning init FAILED ***\n");
+                    }
                 } else {
                     pr_info("*** tx_isp_core_probe: Failed to initialize ISP memory mappings: %d ***\n", result);
                     return result;
