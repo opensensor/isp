@@ -133,11 +133,10 @@ static struct tx_isp_subdev_sensor_ops fs_sensor_ops = {
 };
 
 /* FS complete subdev operations structure */
-struct tx_isp_subdev_ops fs_subdev_ops = {
+static struct tx_isp_subdev_ops fs_subdev_ops = {
     .core = &fs_core_ops,
     .sensor = &fs_sensor_ops,
 };
-EXPORT_SYMBOL(fs_subdev_ops);
 
 /* Frame source file operations - matching isp_framesource_fops */
 static int fs_chardev_open(struct inode *inode, struct file *file)
@@ -427,7 +426,7 @@ int tx_isp_fs_remove(struct platform_device *pdev)
 
 
 /* FS platform driver structure */
-struct platform_driver tx_isp_fs_platform_driver = {
+static struct platform_driver tx_isp_fs_platform_driver = {
     .probe = tx_isp_fs_probe,
     .remove = tx_isp_fs_remove,
     .driver = {
@@ -435,7 +434,6 @@ struct platform_driver tx_isp_fs_platform_driver = {
         .owner = THIS_MODULE,
     },
 };
-EXPORT_SYMBOL(tx_isp_fs_platform_driver);
 
 
 /* FS platform init/exit functions */
