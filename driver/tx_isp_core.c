@@ -1099,76 +1099,60 @@ int tx_isp_configure_clocks(struct tx_isp_dev *isp)
 
     pr_info("Configuring ISP system clocks\n");
 
-    /* Get the CGU ISP clock (try device first, then global fallback) */
+    /* Get the CGU ISP clock */
     cgu_isp = clk_get(isp->dev, "cgu_isp");
     if (IS_ERR(cgu_isp)) {
-        pr_info("Failed to get CGU ISP clock via device, trying global fallback\n");
-        cgu_isp = clk_get(NULL, "cgu_isp");
-        if (IS_ERR(cgu_isp)) {
-            pr_info("Failed to get CGU ISP clock (dev+global)\n");
-            return PTR_ERR(cgu_isp);
-        }
+        pr_err("Failed to get CGU ISP clock\n");
+        return PTR_ERR(cgu_isp);
     }
 
-    /* Get the ISP core clock (try device first, then global fallback) */
+    /* Get the ISP core clock */
     isp_clk = clk_get(isp->dev, "isp");
     if (IS_ERR(isp_clk)) {
-        pr_info("Failed to get ISP clock via device, trying global fallback\n");
-        isp_clk = clk_get(NULL, "isp");
-        if (IS_ERR(isp_clk)) {
-            pr_info("Failed to get ISP clock (dev+global)\n");
-            ret = PTR_ERR(isp_clk);
-            goto err_put_cgu_isp;
-        }
+        pr_err("Failed to get ISP clock\n");
+        ret = PTR_ERR(isp_clk);
+        goto err_put_cgu_isp;
     }
 
-    /* Get the IPU clock (try device first, then global fallback) */
+    /* Get the IPU clock */
     ipu_clk = clk_get(isp->dev, "ipu");
     if (IS_ERR(ipu_clk)) {
-        pr_info("Failed to get IPU clock via device, trying global fallback\n");
-        ipu_clk = clk_get(NULL, "ipu");
-        if (IS_ERR(ipu_clk)) {
-            pr_info("Failed to get IPU clock (dev+global)\n");
-            ret = PTR_ERR(ipu_clk);
-            goto err_put_isp_clk;
-        }
+        pr_err("Failed to get IPU clock\n");
+        ret = PTR_ERR(ipu_clk);
+        goto err_put_isp_clk;
     }
 
-    /* Get the CSI clock (try device first, then global fallback) */
+    /* Get the CSI clock */
     csi_clk = clk_get(isp->dev, "csi");
     if (IS_ERR(csi_clk)) {
-        pr_info("Failed to get CSI clock via device, trying global fallback\n");
-        csi_clk = clk_get(NULL, "csi");
-        if (IS_ERR(csi_clk)) {
-            pr_info("Failed to get CSI clock (dev+global)\n");
-            ret = PTR_ERR(csi_clk);
-            goto err_put_ipu_clk;
-        }
+        pr_err("Failed to get CSI clock\n");
+        ret = PTR_ERR(csi_clk);
+        goto err_put_ipu_clk;
     }
 
     /* Set clock rates */
     ret = clk_set_rate(cgu_isp, 120000000);
     if (ret) {
-        pr_info("Failed to set CGU ISP clock rate\n");
+        pr_err("Failed to set CGU ISP clock rate\n");
         goto err_put_csi_clk;
     }
 
     ret = clk_set_rate(isp_clk, 200000000);
     if (ret) {
-        pr_info("Failed to set ISP clock rate\n");
+        pr_err("Failed to set ISP clock rate\n");
         goto err_put_csi_clk;
     }
 
     ret = clk_set_rate(ipu_clk, 200000000);
     if (ret) {
-        pr_info("Failed to set IPU clock rate\n");
+        pr_err("Failed to set IPU clock rate\n");
         goto err_put_csi_clk;
     }
 
     /* Initialize CSI clock to 100MHz */
     ret = clk_set_rate(csi_clk, 100000000);
     if (ret) {
-        pr_info("Failed to set CSI clock rate\n");
+        pr_err("Failed to set CSI clock rate\n");
         goto err_put_csi_clk;
     }
     pr_info("CSI clock initialized: rate=%lu Hz\n", clk_get_rate(csi_clk));
@@ -1176,32 +1160,34 @@ int tx_isp_configure_clocks(struct tx_isp_dev *isp)
     /* Enable clocks */
     ret = clk_prepare_enable(cgu_isp);
     if (ret) {
-        pr_info("Failed to enable CGU ISP clock\n");
+        pr_err("Failed to enable CGU ISP clock\n");
         goto err_put_csi_clk;
     }
 
     ret = clk_prepare_enable(isp_clk);
     if (ret) {
-        pr_info("Failed to enable ISP clock\n");
+        pr_err("Failed to enable ISP clock\n");
         goto err_disable_cgu_isp;
     }
 
     ret = clk_prepare_enable(ipu_clk);
     if (ret) {
-        pr_info("Failed to enable IPU clock\n");
+        pr_err("Failed to enable IPU clock\n");
         goto err_disable_isp_clk;
     }
 
     ret = clk_prepare_enable(csi_clk);
     if (ret) {
-        pr_info("Failed to enable CSI clock\n");
+        pr_err("Failed to enable CSI clock\n");
         goto err_disable_ipu_clk;
     }
 
     /* Store clocks in ISP device structure */
     isp->cgu_isp = cgu_isp;
-    isp->isp_clk = isp_clk;
-    isp->ipu_clk = ipu_clk;
+    if (isp->core_dev) {
+        isp->core_dev->core_clk = isp_clk;
+        isp->core_dev->ipu_clk = ipu_clk;
+    }
     isp->csi_clk = csi_clk;
 
     /* Allow clocks to stabilize before proceeding - critical for CSI PHY */
@@ -1209,21 +1195,25 @@ int tx_isp_configure_clocks(struct tx_isp_dev *isp)
 
     /* Validate that clocks are actually running at expected rates */
     if (abs(clk_get_rate(csi_clk) - 100000000) > 1000000) {
-        pr_info("CSI clock rate deviation: expected 100MHz, got %luHz\n",
+        pr_warn("CSI clock rate deviation: expected 100MHz, got %luHz\n",
                 clk_get_rate(csi_clk));
     }
 
     if (abs(clk_get_rate(isp_clk) - 200000000) > 2000000) {
-        pr_info("ISP clock rate deviation: expected 200MHz, got %luHz\n",
+        pr_warn("ISP clock rate deviation: expected 200MHz, got %luHz\n",
                 clk_get_rate(isp_clk));
     }
 
     pr_info("Clock configuration completed. Rates:\n");
     pr_info("  CSI Core: %lu Hz\n", clk_get_rate(isp->csi_clk));
-    pr_info("  ISP Core: %lu Hz\n", clk_get_rate(isp->isp_clk));
+    if (isp->core_dev && isp->core_dev->core_clk) {
+        pr_info("  ISP Core: %lu Hz\n", clk_get_rate(isp->core_dev->core_clk));
+    }
     pr_info("  CGU ISP: %lu Hz\n", clk_get_rate(isp->cgu_isp));
     pr_info("  CSI: %lu Hz\n", clk_get_rate(isp->csi_clk));
-    pr_info("  IPU: %lu Hz\n", clk_get_rate(isp->ipu_clk));
+    if (isp->core_dev && isp->core_dev->ipu_clk) {
+        pr_info("  IPU: %lu Hz\n", clk_get_rate(isp->core_dev->ipu_clk));
+    }
 
     return 0;
 
