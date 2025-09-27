@@ -2195,8 +2195,34 @@ int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
         vic_dev->state = 2; /* INIT -> READY */
         pr_info("VIC activated: state %d -> 2 (READY)\n", 1);
 
+        /* Ensure CSI clocks are initialized before enabling */
+        if (!sd->clks && sd->clk_num > 0) {
+            extern int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_num);
+            pr_info("tx_isp_csi_activate_subdev: Initializing %d clocks for CSI before enabling\n", sd->clk_num);
+            if (isp_subdev_init_clks(sd, sd->clk_num) != 0) {
+                pr_warn("tx_isp_csi_activate_subdev: isp_subdev_init_clks failed; continuing without clocks\n");
+            }
+        }
+
+        /* Binary Ninja: int32_t* $s1_2 = *(arg1 + 0xbc) */
+        clks = sd->clks;
+
+        /* Binary Ninja: if ($s1_2 != 0) */
+        if (clks != NULL) {
+            /* Binary Ninja: if ($s1_2 u< 0xfffff001) */
+            if ((unsigned long)clks < 0xfffff001) {
+                /* Binary Ninja: while (i u< *(arg1 + 0xc0)) */
+                clk_count = sd->clk_num;
+                for (i = 0; i < clk_count; i++) {
+                    /* Binary Ninja: private_clk_enable(*$s1_2) */
+                    clk_enable(clks[i]);
+                }
+            }
+        } else {
+            pr_warn("tx_isp_csi_activate_subdev: No CSI clocks available to enable (clks=NULL, clk_num=%d)\n", sd->clk_num);
+        }
+
         /* *** CRITICAL: GOOD-THINGS APPROACH - Defer buffer allocation to prevent memory exhaustion *** */
-        pr_info("*** VIC ACTIVATION: Buffer allocation DEFERRED to prevent Wyze Cam memory exhaustion ***\n");
         pr_info("*** VIC ACTIVATION: Buffers will be allocated on-demand during QBUF operations ***\n");
 
         /* Initialize empty lists - buffers allocated later when needed */
