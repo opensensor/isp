@@ -3271,7 +3271,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
                         pr_info("*** tx_isp_core_probe: Tuning init SUCCESS (with mapped registers) ***\n");
 
                         /* SAFE: Use tuning_dev directly instead of adding dangerous offset */
-                        isp_dev->tuning_enabled = 1;
+                        isp_dev->core_dev->tuning_enabled = 1;
                         pr_info("*** tx_isp_core_probe: SAFE tuning pointer - using tuning_dev=%p directly ***\n", tuning_dev);
 
                         /* NOW we can report full success */
