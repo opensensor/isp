@@ -76,6 +76,7 @@ void system_reg_write(u32 reg, u32 value);
 int tisp_lsc_write_lut_datas(void);
 irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 int csi_video_s_stream(struct tx_isp_subdev *sd, int enable);
+void tisp_dmsc_set_cfa_from_mbus(uint32_t mbus_code, int hflip, int vflip);
 
 /* Map V4L2 mbus Bayer codes to ISP Bayer mode (register 0x8) per reference-standardize */
 static inline u32 mbus_to_bayer_mode(u32 config)
@@ -314,7 +315,6 @@ int tx_isp_core_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *confi
         unsigned int shvflip = isp_dev->sensor->video.shvflip;
         int hflip = (shvflip & 0x1) ? 1 : 0;
         int vflip = (shvflip & 0x2) ? 1 : 0;
-        extern void tisp_dmsc_set_cfa_from_mbus(u32 mbus_code, int hflip, int vflip);
         tisp_dmsc_set_cfa_from_mbus(code, hflip, vflip);
         pr_info("tx_isp_core_set_format: DMSC CFA programmed from mbus=0x%x, h=%d, v=%d\n", code, hflip, vflip);
         {
@@ -1365,10 +1365,6 @@ int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
             system_reg_write(0x220, 0x16);
             pr_info("tx_isp_configure_format_propagation: Minimal ISP demosaic+CSC programmed\n");
         }
-    } else {
-        /* Fallback: program default RGGB (index 0) if sensor not yet linked */
-        tisp_dmsc_set_cfa_from_mbus(0 /* unknown mbus -> default RGGB */, 0, 0);
-        pr_info("tx_isp_configure_format_propagation: Sensor not present; programmed default CFA RGGB\n");
     }
 
     pr_info("Format propagation configured\n");
