@@ -1233,15 +1233,15 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
         wmb();
 
-        /* Binary Ninja: 00010ab4-00010ac0 - Unlock sequence - EXACT REFERENCE IMPLEMENTATION */
-        /* Binary Ninja: EXACT reference driver unlock sequence */
-        writel(2, vic_regs + 0x0);
-        wmb();
-
         /* CRITICAL FIX: Skip remaining unlock sequence during streaming restart */
         if (vic_start_ok == 1) {
             pr_info("*** VIC: SKIPPING remaining unlock sequence - VIC interrupts already working ***\n");
         } else {
+        	/* Binary Ninja: 00010ab4-00010ac0 - Unlock sequence - EXACT REFERENCE IMPLEMENTATION */
+        	/* Binary Ninja: EXACT reference driver unlock sequence */
+        	writel(2, vic_regs + 0x0);
+        	wmb();
+
             writel(4, vic_regs + 0x0);
             wmb();
 
