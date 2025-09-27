@@ -5922,7 +5922,7 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
 }
 
 /* isp_irq_thread_handle - EXACT Binary Ninja implementation with CORRECT structure access */
-`irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
+irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
 {
     void *s0_1;
     void *s1_1;
