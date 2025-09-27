@@ -621,7 +621,7 @@ extern struct tx_isp_subdev_ops vic_subdev_ops;
 extern void tx_isp_fs_enqueue_qbuf(int channel, u32 index, u32 phys, u32 size);
 extern int tx_isp_fs_dequeue_done(int channel, u32 *index, u32 *phys, u32 *size);
 
-extern struct tx_isp_subdev_ops csi_subdev_ops;
+/* no cross-file ops symbol references; CSI sets its ops in its own driver */
 
 /* Reference driver function declarations - Binary Ninja exact names */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);  /* FIXED: Correct signature to match tx_isp_vic.c */
@@ -4039,9 +4039,9 @@ static struct tx_isp_subdev_sensor_ops sensor_subdev_sensor_ops = {
 };
 
 /* vic_subdev_ops is defined in tx_isp_vic.c - use external reference */
-extern struct tx_isp_subdev_ops vic_subdev_ops;
+/* no cross-file ops symbol references; VIC sets its ops in its own driver */
 
-extern struct tx_isp_subdev_ops csi_subdev_ops;
+/* no cross-file ops symbol references; CSI sets its ops in its own driver */
 
 
 /* Complete sensor subdev ops structure */
@@ -5073,8 +5073,7 @@ static int tx_isp_init(void)
     if (ourISPdev->csi_dev) {
         struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)ourISPdev->csi_dev;
 
-        /* Set up CSI subdev with ops pointing to csi_subdev_ops */
-        csi_dev->sd.ops = &csi_subdev_ops;
+        /* CSI driver sets its own sd.ops during probe. Just add to subdev array. */
         csi_dev->sd.isp = (void*)ourISPdev;
 
         /* SAFE: Add CSI to subdev array at index 1 using proper struct member */
@@ -5188,8 +5187,7 @@ static int tx_isp_init(void)
     if (ourISPdev->vic_dev) {
         struct tx_isp_vic_device *vic_dev = &ourISPdev->vic_dev;
 
-        /* Set up VIC subdev with ops pointing to vic_subdev_ops */
-        vic_dev->sd.ops = &vic_subdev_ops;
+        /* VIC driver sets its own sd.ops during probe. Just add to subdev array. */
 
         /* SAFE: Add VIC to subdev array at index 0 using proper struct member */
         ourISPdev->subdevs[0] = &vic_dev->sd;
@@ -5204,8 +5202,7 @@ static int tx_isp_init(void)
     if (ourISPdev->csi_dev) {
         struct tx_isp_csi_device *csi_dev = &ourISPdev->csi_dev;
 
-        /* Set up CSI subdev with ops pointing to csi_subdev_ops */
-        csi_dev->sd.ops = &csi_subdev_ops;
+        /* CSI driver sets its own sd.ops during probe. Just add to subdev array. */
         // csi_dev->sd.isp = (void*)ourISPdev;
 
         /* SAFE: Add CSI to subdev array at index 1 using proper struct member */
