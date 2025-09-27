@@ -547,6 +547,30 @@ int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
     /* Binary Ninja: int32_t $v1_2 = *($s0_1 + 0x128) */
     state = csi_dev->state;
 
+    /* Preserve clocks/links during on->off->on timing like good-things */
+    do {
+        extern uint32_t vic_start_ok;
+        bool preserve = false;
+        if (vic_start_ok == 1)
+            preserve = true;
+        if (!preserve && ourISPdev && ourISPdev->pipeline_state >= 2)
+            preserve = true;
+        if (preserve) {
+            pr_info("tx_isp_csi_slake_subdev: PRESERVE path active (vic_start_ok/pipeline>=2)\n");
+            if (state == 4) {
+                pr_info("tx_isp_csi_slake_subdev: Skipping csi_video_s_stream(0) to keep CSI running\n");
+            }
+            if (csi_dev->state == 3) {
+                pr_info("tx_isp_csi_slake_subdev: Skipping csi_core_ops_init(disable) to preserve lanes\n");
+            }
+            if (csi_dev->state == 2) {
+                pr_info("tx_isp_csi_slake_subdev: State 2 -> PRESERVE (keeping clocks enabled, not forcing 1)\n");
+            }
+            /* Do not change state or disable any clocks */
+            return 0;
+        }
+    } while (0);
+
     /* Binary Ninja: if ($v1_2 == 4) csi_video_s_stream(arg1, 0) */
     if (state == 4) {
         pr_info("tx_isp_csi_slake_subdev: CSI in streaming state, stopping stream\n");
