@@ -1441,32 +1441,58 @@ static const struct file_operations frame_channel_fops = {
     .compat_ioctl = frame_channel_unlocked_ioctl,
 };
 
-// Helper functions matching reference driver patterns - SDK compatible
-static void* find_subdev_link_pad(struct tx_isp_dev *isp_dev, char *name)
+
+/**
+ * find_subdev_link_pad - Find subdev pad by name and type
+ * @isp_dev: ISP device
+ * @config: Link configuration entry
+ * Returns: Pointer to pad structure or NULL if not found
+ *
+ * Binary Ninja reference implementation
+ */
+static struct tx_isp_video_pad *find_subdev_link_pad(struct tx_isp_dev *isp_dev,
+                                                    struct tx_isp_link_config *config)
 {
-    if (!isp_dev || !name) {
+    int i;
+
+    if (!isp_dev || !config) {
         return NULL;
     }
 
-    pr_info("find_subdev_link_pad: searching for %s\n", name);
+    /* Search through subdevices for matching name */
+    for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+        struct tx_isp_subdev *sd = isp_dev->subdevs[i];
+        if (!sd || !sd->module.name) {
+            continue;
+        }
 
-    // Work with actual SDK structure - check individual device pointers
-    if (strstr(name, "sensor") && isp_dev->sensor) {
-        pr_info("Found sensor device\n");
-        return &isp_dev->sensor->sd; // Return sensor subdev
+        /* Compare subdev name with config source name */
+        if (strcmp(sd->module.name, config->src.name) == 0) {
+            /* Found matching subdev - create/return pad structure */
+            static struct tx_isp_video_pad pad;
+            memset(&pad, 0, sizeof(pad));
+            pad.sd = sd;
+            pad.pad_type = 1;  /* Source pad */
+            pad.pad_index = config->src.index;
+            pad.flags = config->flag;
+            pad.state = 2;  /* Initially disconnected */
+            return &pad;
+        }
+
+        /* Compare subdev name with config destination name */
+        if (strcmp(sd->module.name, config->dst.name) == 0) {
+            /* Found matching subdev - create/return pad structure */
+            static struct tx_isp_video_pad pad;
+            memset(&pad, 0, sizeof(pad));
+            pad.sd = sd;
+            pad.pad_type = 2;  /* Sink pad */
+            pad.pad_index = config->dst.index;
+            pad.flags = config->flag;
+            pad.state = 2;  /* Initially disconnected */
+            return &pad;
+        }
     }
 
-    if (strstr(name, "csi") && isp_dev->csi_dev) {
-        pr_info("Found CSI device\n");
-        return &((struct tx_isp_csi_device *)isp_dev->csi_dev)->sd; // Return CSI subdev pointer
-    }
-
-    if (strstr(name, "vic") && isp_dev->vic_dev) {
-        pr_info("Found VIC device\n");
-        return &((struct tx_isp_vic_device *)isp_dev->vic_dev)->sd; // Return VIC subdev pointer
-    }
-
-    pr_info("Subdev %s not found\n", name);
     return NULL;
 }
 
