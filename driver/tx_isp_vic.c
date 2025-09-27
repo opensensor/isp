@@ -988,7 +988,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         timeout = 10000;  /* 10ms timeout */
 
         /* CRITICAL: Check CSI PHY coordination in SECONDARY VIC space (0x10023000) */
-        void __iomem *secondary_regs = vic_dev->vic_regs_secondary;
+        void __iomem *secondary_regs = vic_dev->vic_regs_control;
         u32 secondary_val = secondary_regs ? readl(secondary_regs + 0x0) : 0;
         u32 primary_val = readl(vic_regs + 0x0);
 
@@ -1388,10 +1388,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
 
     /* Also enable the kernel IRQ line if it was registered earlier */
-    if (ourISPdev && ourISPdev->isp_irq > 0) {
-        enable_irq(ourISPdev->isp_irq);
-        pr_info("*** ISP CORE IRQ: enable_irq(%d) called ***\n", ourISPdev->isp_irq);
-    }
+    enable_irq(37);
 
     return 0;
 }
