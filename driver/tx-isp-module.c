@@ -4053,6 +4053,103 @@ static struct tx_isp_subdev_ops sensor_subdev_ops = {
     .sensor = &sensor_subdev_sensor_ops,  /* Now points to delegation structure */
 };
 
+
+/* Helper function to perform sensor operations using helper functions */
+static int tx_isp_sensor_operation_helper(struct tx_isp_dev *isp_dev, unsigned int cmd, void *arg)
+{
+    struct tx_isp_subdev *sensor_sd;
+    int ret = 0;
+
+    if (!isp_dev) {
+        return -EINVAL;
+    }
+
+    /* Use helper function to find sensor instead of hardcoded array access */
+    sensor_sd = tx_isp_get_sensor_subdev(isp_dev);
+    if (!sensor_sd) {
+        pr_warn("tx_isp_sensor_operation_helper: No sensor subdev found\n");
+        return -ENODEV;
+    }
+
+    /* Validate sensor subdev has proper ops */
+    if (!sensor_sd->ops || !sensor_sd->ops->sensor || !sensor_sd->ops->sensor->ioctl) {
+        pr_warn("tx_isp_sensor_operation_helper: Sensor subdev has no ioctl function\n");
+        return -ENOSYS;
+    }
+
+    /* Perform the sensor operation */
+    ret = sensor_sd->ops->sensor->ioctl(sensor_sd, cmd, arg);
+    pr_debug("tx_isp_sensor_operation_helper: sensor ioctl(0x%x) returned %d\n", cmd, ret);
+
+    return ret;
+}
+
+
+/**
+ * tx_isp_video_link_destroy - Destroy all video links
+ * @isp_dev: ISP device
+ * Returns: 0 on success, negative error code on failure
+ *
+ * Binary Ninja reference implementation
+ */
+static int tx_isp_video_link_destroy(struct tx_isp_dev *isp_dev)
+{
+    int current_config;
+    int i, ret = 0;
+
+    if (!isp_dev) {
+        pr_err("tx_isp_video_link_destroy: No ISP device\n");
+        return -ENODEV;
+    }
+
+    /* Binary Ninja: int32_t $v1_1 = *(arg1 + 0x118) - get current link config */
+    current_config = isp_dev->link_config;  /* Stored at offset 0x10c in Binary Ninja */
+
+    pr_info("tx_isp_video_link_destroy: Destroying links for config %d\n", current_config);
+
+    /* Binary Ninja: if ($v1_1 s>= 0) - check if valid config */
+    if (current_config >= 0 && current_config < ARRAY_SIZE(link_configs)) {
+        int link_count = link_config_counts[current_config];
+        struct tx_isp_link_config *config = link_configs[current_config];
+
+        /* Binary Ninja: Loop through all links in current configuration */
+        for (i = 0; i < link_count; i++) {
+            struct tx_isp_video_pad *src_pad, *dst_pad;
+
+            /* Find source and destination pads */
+            src_pad = find_subdev_link_pad(isp_dev, &config[i]);
+            dst_pad = find_subdev_link_pad(isp_dev, &config[i]);
+
+            if (src_pad && dst_pad) {
+                /* Destroy the link between these pads */
+                ret = subdev_video_destroy_link(src_pad);
+                if (ret != 0 && ret != -ENOTCONN) {  /* -ENOTCONN = 0xfffffdfd */
+                    pr_err("tx_isp_video_link_destroy: Failed to destroy link %d: %d\n", i, ret);
+                    break;
+                }
+
+                /* Also destroy the reverse link */
+                ret = subdev_video_destroy_link(dst_pad);
+                if (ret != 0 && ret != -ENOTCONN) {
+                    pr_err("tx_isp_video_link_destroy: Failed to destroy reverse link %d: %d\n", i, ret);
+                    break;
+                }
+
+                pr_info("tx_isp_video_link_destroy: Destroyed link %s->%s\n",
+                        config[i].src.name, config[i].dst.name);
+            }
+        }
+
+        /* Binary Ninja: *(arg1 + 0x118) = 0xffffffff - mark config as destroyed */
+        isp_dev->link_config = -1;
+
+        pr_info("tx_isp_video_link_destroy: All links destroyed, config reset to -1\n");
+    }
+
+    return ret;
+}
+
+
 // Binary Ninja MCP EXACT reference implementation
 static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
