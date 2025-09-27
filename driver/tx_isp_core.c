@@ -49,7 +49,7 @@ extern int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
 extern int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev);
 
 /* Critical ISP Core initialization functions - MISSING FROM LOGS! */
-int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr);
+int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on);
 
 /* Global flag to prevent multiple tisp_init calls */
 static bool tisp_initialized = false;
@@ -358,7 +358,7 @@ static int core_subdev_core_init_bridge(struct tx_isp_subdev *sd, int enable)
     if (enable && isp->sensor && isp->sensor->video.attr) {
         attr = isp->sensor->video.attr;
     }
-    return ispcore_core_ops_init(isp, attr);
+    return ispcore_core_ops_init(isp, enable);
 }
 
 /* Core subdev operations - matches the pattern used by other devices */
@@ -1477,7 +1477,7 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
                 pr_info("ispcore_slake_module: No sensor attributes available, using NULL");
             }
 
-            ret = ispcore_core_ops_init(isp, sensor_attr);
+            ret = ispcore_core_ops_init(isp, 0);
             if (ret < 0) {
                 pr_info("ispcore_slake_module: ispcore_core_ops_init failed: %d", ret);
                 return ret;
