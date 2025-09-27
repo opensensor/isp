@@ -2798,7 +2798,35 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 
                 pr_info("*** ispcore_core_ops_init: VIC state check passed, proceeding with initialization ***");
 
-                /* CRITICAL: Call tisp_init() TWICE as shown in Binary Ninja MCP */
+
+
+                /* CRITICAL: Initialize clocks now that streaming is starting */
+                pr_info("*** VIC STATE 4: Initializing clocks for streaming ***\n");
+                extern int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count);
+                extern struct tx_isp_subdev *tx_isp_find_subdev_by_name(struct tx_isp_dev *isp_dev, const char *name);
+                extern struct tx_isp_dev *ourISPdev;
+                if (ourISPdev) {
+                    /* Initialize clocks for all subdevs that need them */
+                    struct tx_isp_subdev *csi_sd = tx_isp_find_subdev_by_name(ourISPdev, "isp-w00");
+                    struct tx_isp_subdev *vic_sd = tx_isp_find_subdev_by_name(ourISPdev, "isp-w02");
+
+                    if (csi_sd && csi_sd->clk_num > 0) {
+                        pr_info("*** Initializing CSI clocks (%d clocks) ***\n", csi_sd->clk_num);
+                        int clk_ret = isp_subdev_init_clks(csi_sd, csi_sd->clk_num);
+                        if (clk_ret != 0) {
+                            pr_err("*** CSI clock initialization failed: %d ***\n", clk_ret);
+                        }
+                    }
+
+                    if (vic_sd && vic_sd->clk_num > 0) {
+                        pr_info("*** Initializing VIC clocks (%d clocks) ***\n", vic_sd->clk_num);
+                        int clk_ret = isp_subdev_init_clks(vic_sd, vic_sd->clk_num);
+                        if (clk_ret != 0) {
+                            pr_err("*** VIC clock initialization failed: %d ***\n", clk_ret);
+                        }
+                    }
+                }
+
                 /* Binary Ninja MCP shows two calls: 00079050 and 00079058 */
                 extern struct tx_isp_sensor *tx_isp_get_sensor(void);
                 struct tx_isp_sensor *init_sensor = tx_isp_get_sensor();

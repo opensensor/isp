@@ -312,25 +312,6 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
         pr_info("csi_core_ops_init: sd=%p, csi_dev=%p, enable=%d\n", sd, csi_dev, enable);
         result = 0xffffffea;
 
-        /* Resolve register bases: isp_csi_regs (ISP region, e.g., 0x133e0000) and csi_base_regs (CSI base, 0x10022000) */
-        {
-            void __iomem *csi_base_regs = NULL;
-            void __iomem *isp_csi_regs_local = NULL;
-            if (ourISPdev) {
-                if (ourISPdev->csi_regs)
-                    csi_base_regs = ourISPdev->csi_regs; /* 0x10022000 */
-                if (ourISPdev->vic_dev && ourISPdev->vic_dev->vic_regs)
-                    isp_csi_regs_local = ourISPdev->vic_dev->vic_regs; /* 0x133e0000 */
-            }
-            if (isp_csi_regs_local)
-                isp_csi_regs = isp_csi_regs_local; /* Prefer ISP CSI regs if available */
-            pr_info("*** csi_core_ops_init: bases: isp_csi_regs=%p, csi_base_regs=%p ***\n", isp_csi_regs, csi_base_regs);
-
-            /* Stash base regs into csi_dev for later if not already set */
-            if (!csi_dev->csi_regs && csi_base_regs)
-                csi_dev->csi_regs = csi_base_regs;
-        }
-
         /* Binary Ninja: if ($s0_1 != 0 && $s0_1 u< 0xfffff001) */
         if (csi_dev != NULL && (unsigned long)csi_dev < 0xfffff001) {
             result = 0;

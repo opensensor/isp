@@ -1512,29 +1512,8 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
         pr_info("*** CSI BASIC REGISTERS: Not available yet (will be set by platform device probe) ***\n");
     }
 
-    /* *** CRITICAL: Map ISP CSI registers - Binary Ninja offset +0x13c region *** */
-    /* Binary Ninja shows *($s0_1 + 0x13c) points to ISP CSI register region */
-    /* This is the MIPI-specific CSI control registers within ISP */
-
-    /* CRITICAL FIX: Check if VIC device is ready before accessing vic_regs */
-    if (isp_dev->vic_dev && isp_dev->vic_dev->vic_regs) {
-        isp_csi_regs = isp_dev->vic_dev->vic_regs - 0x9a00 + 0x10000; /* ISP base + CSI offset */
-        pr_info("*** ISP CSI REGISTERS MAPPED: %p (Binary Ninja +0x13c region) ***\n", isp_csi_regs);
-    } else {
-        /* VIC device not ready yet - defer ISP CSI register mapping */
-        pr_info("*** ISP CSI REGISTERS: VIC device not ready - will map later when VIC is initialized ***\n");
-        isp_csi_regs = NULL;
-    }
-
-    /* Binary Ninja: Store register addresses at correct offsets */
-    /* *($v0 + 0xb8) = csi_basic_regs (basic CSI control) */
+    /* Use CSI device mapped registers provided by CSI probe */
     csi_dev->csi_regs = csi_basic_regs;
-
-    /* SAFE: Use proper struct members instead of unsafe offset access */
-    /* These offsets should correspond to actual struct members in tx_isp_csi_device */
-    /* For now, store in the main csi_regs field - the reference driver will handle proper mapping */
-    csi_dev->csi_regs = isp_csi_regs;  /* Use primary register field */
-    /* mem_resource is already stored in the platform device structure */
 
     /* Binary Ninja: private_raw_mutex_init($v0 + 0x12c) */
     mutex_init(&csi_dev->mlock);
