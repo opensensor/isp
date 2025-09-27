@@ -2448,6 +2448,7 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 
     if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
         int i;
+        int configured_count = 0;
         pr_info("*** VIC BUFFER ACCESS: Found %d VBM buffer addresses at %p ***\n",
                 state->vbm_buffer_count, state->vbm_buffer_addresses);
 
@@ -2460,13 +2461,17 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
                 if (vic_ctrl)
                     writel(buffer_addr, vic_ctrl + reg_offset);
                 wmb();
+                configured_count++;
                 pr_info("*** VIC BUFFER %d: Wrote VBM address 0x%x to reg 0x%x ***\n",
                         i, buffer_addr, reg_offset);
             } else {
                 pr_warn("*** VIC BUFFER %d: No VBM address available (0x0) ***\n", i);
             }
         }
-        pr_info("*** CRITICAL: VIC buffer addresses configured from VBM - hardware can now generate interrupts! ***\n");
+        if (configured_count == 0) configured_count = 1;  /* Ensure at least 1 buffer */
+        vic_dev->active_buffer_count = configured_count;
+        pr_info("*** CRITICAL: VIC buffer addresses configured from VBM (count=%d) - hardware can now generate interrupts! ***\n",
+                configured_count);
     } else {
         /* CRITICAL FIX: Use fallback buffer addresses like working reference */
         pr_warn("*** CRITICAL: No VBM buffer addresses - using fallback addresses from reserved memory ***\n");
@@ -2489,7 +2494,8 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
             pr_info("*** VIC FALLBACK BUFFER %d: Wrote reserved memory address 0x%x to reg 0x%x ***\n",
                     i, buffer_addr, reg_offset);
         }
-        pr_info("*** CRITICAL: VIC fallback buffer addresses configured - hardware can now generate interrupts! ***\n");
+        vic_dev->active_buffer_count = 5;
+        pr_info("*** CRITICAL: VIC fallback buffer addresses configured (count=5) - hardware can now generate interrupts! ***\n");
     }
 
     pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - VIC should now generate interrupts! ***\n");
