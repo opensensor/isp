@@ -3383,6 +3383,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
     uint32_t channel_count;
     void *channel_array;
     void *tuning_dev;
+    struct tx_isp_core_device *core_dev;
 
     pr_info("*** tx_isp_core_probe: SAFE implementation using proper struct member access ***\n");
 
@@ -3479,6 +3480,25 @@ int tx_isp_core_probe(struct platform_device *pdev)
     pr_info("*** tx_isp_core_probe: Core subdev initialized with ops=%p ***\n", &core_subdev_ops);
     pr_info("***   - Core ops: start=%p, stop=%p, set_format=%p ***\n",
             tx_isp_core_start, tx_isp_core_stop, tx_isp_core_set_format);
+    /* Create and link a minimal core_dev so tuning and auto-linking have a valid object */
+    core_dev = kzalloc(sizeof(*core_dev), GFP_KERNEL);
+    if (!core_dev) {
+        pr_err("*** tx_isp_core_probe: Failed to allocate core_dev ***\n");
+        kfree(isp_dev);
+        return -ENOMEM;
+    }
+    memset(core_dev, 0, sizeof(*core_dev));
+    core_dev->self_ptr = core_dev;
+    core_dev->magic = 0x434F5245; /* 'CORE' */
+    core_dev->isp_dev = isp_dev;
+    core_dev->sd.isp = isp_dev;
+
+    /* Expose core_dev via subdev dev_priv so tx_isp_subdev_auto_link can retrieve it */
+    tx_isp_set_subdevdata(&isp_dev->sd, core_dev);
+
+    /* Also attach to isp_dev so early users (e.g., tuning path) can see it */
+    isp_dev->core_dev = core_dev;
+
 
     /* Binary Ninja: if (tx_isp_subdev_init(arg1, $v0, &core_subdev_ops) == 0) */
     if (tx_isp_subdev_init(pdev, &isp_dev->sd, &core_subdev_ops) == 0) {
