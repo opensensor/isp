@@ -47,6 +47,7 @@
 #include "../include/tx-isp-device.h"
 #include "../include/tx_isp_tuning.h"
 #include "../include/tx-libimp.h"
+#include "../include/tx_isp_core_device.h"
 
 /* Forward declaration for exported ISP event callback array */
 extern struct tx_isp_dev *ourISPdev;
