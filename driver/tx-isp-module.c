@@ -2343,6 +2343,16 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
             }
         }
 
+       	/* Ensure VIC is ACTIVATED (state 2) before VIC core->init so clks activate */
+        if (vic_sd) {
+            struct tx_isp_vic_device *vic_dev_for_state = (struct vic_dev_for_state *)tx_isp_get_subdevdata(vic_sd);
+            if (vic_dev_for_state && vic_dev_for_state->state < 2) {
+                pr_info("*** tx_isp_video_s_stream: Activating VIC subdev (state %d -> 2) before CSI init ***\n", vic_dev_for_state->state);
+                tx_isp_vic_activate_subdev(vic_sd);
+                pr_info("*** tx_isp_video_s_stream: VIC subdev activation done, state=%d ***\n", vic_dev_for_state->state);
+            }
+        }
+
         /* Initialize CSI second */
         if (csi_sd && csi_sd->ops && csi_sd->ops->core && csi_sd->ops->core->init) {
             pr_info("*** tx_isp_video_s_stream: Initializing CSI subdev ***\n");
