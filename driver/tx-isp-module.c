@@ -650,8 +650,6 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable);
 /* Forward declarations for initialization functions */
 extern int tx_isp_vic_platform_init(void);
 extern void tx_isp_vic_platform_exit(void);
-extern int tx_isp_fs_platform_init(void);
-extern void tx_isp_fs_platform_exit(void);
 extern int tx_isp_fs_probe(struct platform_device *pdev);
 
 /* V4L2 video device functions */
@@ -5151,14 +5149,6 @@ static int tx_isp_init(void)
     }
 
     pr_info("*** ALL PLATFORM DEVICES REGISTERED - SHOULD SEE IRQ 37 + 38 IN /proc/interrupts ***\n");
-
-    /* *** CRITICAL: Initialize FS platform driver (creates /proc/jz/isp/isp-fs like reference) *** */
-    ret = tx_isp_fs_platform_init();
-    if (ret) {
-        pr_info("Failed to initialize FS platform driver: %d\n", ret);
-        goto err_cleanup_platforms;
-    }
-    pr_info("*** FS PLATFORM DRIVER INITIALIZED - /proc/jz/isp/isp-fs SHOULD NOW EXIST ***\n");
 
     /* *** CRITICAL: Initialize subdev platform drivers (CSI, VIC, VIN, CORE) *** */
     /* NOTE: VIC driver is registered inside tx_isp_subdev_platform_init() to avoid double registration */
