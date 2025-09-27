@@ -1719,6 +1719,16 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         /* Extra debug: control and geometry */
         printk(KERN_ALERT "*** VIC IRQ: CTRL[0x300]=0x%x DIMS[0x304]=0x%x STRIDE[0x310]=0x%x ***\n",
                readl(vic_regs + 0x300), readl(vic_regs + 0x304), readl(vic_regs + 0x310));
+        /* Extra debug: read core VIC gate bits to catch if they drop mid-stream */
+        do {
+            if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
+                void __iomem *core = ourISPdev->core_dev->core_regs;
+                u32 g0 = readl(core + 0x9ac0);
+                u32 g1 = readl(core + 0x9ac8);
+                printk(KERN_ALERT "*** VIC IRQ: CORE GATES [9ac0]=0x%x [9ac8]=0x%x ***\n", g0, g1);
+            }
+        } while (0);
+
 
         v1_7 = (~reg_1e8) & reg_1e0;
         v1_10 = (~reg_1ec) & reg_1e4;
@@ -4754,21 +4764,13 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
             writel(0xb5742249, vr + 0x0c);   /* IMCR key */
             wmb();
 
-            /* Our early VIC source enables (kept) on both banks */
-            writel(0x3FFFFFFF, vr + 0x1e0); /* Enable VIC sources early */
-            writel(0x0000000F, vr + 0x1e4); /* Enable MDMA subset early */
-            if (vc) {
-                writel(0x3FFFFFFF, vc + 0x1e0);
-                writel(0x0000000F, vc + 0x1e4);
-            }
+            /* SKIP early writes to 0x1e0/0x1e4 (status W1C) to match good-things; do not touch these here */
+            /* writel(0x3FFFFFFF, vr + 0x1e0);  */
+            /* writel(0x0000000F, vr + 0x1e4);  */
+            /* if (vc) { writel(0x3FFFFFFF, vc + 0x1e0); writel(0x0000000F, vc + 0x1e4); } */
             wmb();
 
-            pr_info("*** EARLY VIC ENABLES (MODULE INIT): PRIMARY [1e0]=0x%08x [1e4]=0x%08x ***\n",
-                    readl(vr + 0x1e0), readl(vr + 0x1e4));
-            if (vc) {
-                pr_info("*** EARLY VIC ENABLES (MODULE INIT): CONTROL [1e0]=0x%08x [1e4]=0x%08x ***\n",
-                        readl(vc + 0x1e0), readl(vc + 0x1e4));
-            }
+            pr_info("*** EARLY VIC ENABLES (MODULE INIT): SKIPPED 0x1e0/0x1e4 programming to preserve W1C semantics ***\n");
         } else {
             pr_warn("*** EARLY VIC ENABLES (MODULE INIT): vic_regs not mapped yet ***\n");
         }

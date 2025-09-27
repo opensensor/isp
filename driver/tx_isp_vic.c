@@ -2779,16 +2779,12 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Clear pending (if mapped similarly, W1C) */
                 writel(0xFFFFFFFF, vc + 0x1f0);
                 writel(0xFFFFFFFF, vc + 0x1f4);
-                /* Route/control asserts at CONTROL bank (matches reference) */
-                writel(0x000002d0, vc + 0x100);
-                writel(0x00000630, vc + 0x14);
-                /* Key unlock/IMCR observed in working reference */
-                writel(0xb5742249, vc + 0x0c);
-                /* Set MainMask to allow framedone + bit21 (debug); do NOT touch status regs 0x1e0/0x1e4 */
-                writel(0xFFDFFFFE, vc + 0x1e8);
-                /* Leave 0x1ec as-is */
-                /* Global interrupt enable at 0x30c (if present) */
-                writel(0xFFFFFFFF, vc + 0x30c);
+                /* Route/control asserts at CONTROL bank -- SKIPPED to match good-things */
+                /* writel(0x000002d0, vc + 0x100); */
+                /* writel(0x00000630, vc + 0x14);  */
+                /* writel(0xb5742249, vc + 0x0c);  */
+                /* writel(0xFFDFFFFE, vc + 0x1e8); */
+                /* writel(0xFFFFFFFF, vc + 0x30c); */
                 wmb();
                 pr_info("*** VIC VERIFY (CONTROL): [0x0]=0x%08x [0x4]=0x%08x [0x0c]=0x%08x [0x100]=0x%08x [0x14]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (MainMask=0xFFFFFFFE)***\n",
                         readl(vc + 0x0), readl(vc + 0x4), readl(vc + 0x0c), readl(vc + 0x100), readl(vc + 0x14), readl(vc + 0x300), readl(vc + 0x30c), readl(vc + 0x1e0), readl(vc + 0x1e4), readl(vc + 0x1e8), readl(vc + 0x1ec));
