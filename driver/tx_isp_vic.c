@@ -2750,7 +2750,11 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         wmb();
                         writel(1, vcc + 0x0);
                         wmb();
-                        pr_info("*** VIC CONTROL BANK: Post-enable [0x0]=0x%08x ***\n", readl(vcc + 0x0));
+                        /* Also assert VIC IRQ gate in CONTROL bank to mirror core 0x9ac0/0x9ac8 */
+                        writel(0x200, vcc + 0x14);
+                        wmb();
+                        pr_info("*** VIC CONTROL BANK: Post-enable [0x0]=0x%08x, [0x14]=0x%08x ***\n",
+                                readl(vcc + 0x0), readl(vcc + 0x14));
                     }
                 }
 
