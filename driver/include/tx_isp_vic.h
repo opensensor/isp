@@ -120,7 +120,8 @@ struct tx_isp_vic_device {
     bool processing;                            /* 0x214: Processing flag */
     
     uint32_t active_buffer_count;               /* 0x218: Active buffer count */
-    
+    int last_idx;                                /* Tracks last slot index advanced for fallback when CURR doesn't match */
+
     /* Additional buffer management */
     uint32_t buffer_count;                      /* General buffer count */
 

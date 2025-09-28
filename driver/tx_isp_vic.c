@@ -439,7 +439,17 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 slots[j] = readl(vic_base + (0x318 + j * 4));
                 if (slots[j] == current_buffer) cur_idx = j;
             }
-            if (cur_idx >= 0) next_idx = (cur_idx + 1) % count; else next_idx = 0;
+            if (cur_idx >= 0) next_idx = (cur_idx + 1) % count;
+            else {
+                /* Hardware CURR didn't match our slots: advance based on last_idx */
+                if (vic_dev->last_idx < 0 || vic_dev->last_idx >= count) vic_dev->last_idx = 0;
+                next_idx = (vic_dev->last_idx + 1) % count;
+            }
+
+            /* Commit via CONFIG->RUN so the stream control latches reliably */
+            writel(0x2, vic_base + 0x0);
+            if (vic_dev->vic_regs_control) writel(0x2, vic_dev->vic_regs_control + 0x0);
+            wmb();
 
             /* Write full stream control (preserve control bits and set count=slots) */
             u32 stream_ctrl = (count << 16) | 0x80000020;
@@ -453,6 +463,13 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             writel(reg_val, vic_base + 0x300);
             if (vic_dev->vic_regs_control)
                 writel(reg_val, vic_dev->vic_regs_control + 0x300);
+
+            /* Back to RUN */
+            writel(0x1, vic_base + 0x0);
+            if (vic_dev->vic_regs_control) writel(0x1, vic_dev->vic_regs_control + 0x0);
+            wmb();
+
+            vic_dev->last_idx = next_idx;
 
             pr_info("*** VIC FRAME DONE: Updated VIC[0x300] = 0x%x (count=%u, cur_idx=%d, next_idx=%d) ***\n",
                     reg_val, count, cur_idx, next_idx);

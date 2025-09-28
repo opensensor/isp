@@ -1853,11 +1853,16 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                                 writel(rot[i], vrb + off);
                                 if (vcb) writel(rot[i], vcb + off);
                             }
-                            /* Also set count and index nibble to next slot */
+                            /* Also set count and index nibble to next slot, latched via CONFIG->RUN */
                             {
                                 u32 count = vic_dev->active_buffer_count ? vic_dev->active_buffer_count : 5;
                                 if (count > 5) count = 5;
                                 u32 next_idx = (idx + 1) % count;
+                                /* CONFIG */
+                                writel(0x2, vrb + 0x0);
+                                if (vcb) writel(0x2, vcb + 0x0);
+                                wmb();
+                                /* Program stream control */
                                 u32 stream_ctrl = (count << 16) | 0x80000020;
                                 writel(stream_ctrl, vrb + 0x300);
                                 if (vcb) writel(stream_ctrl, vcb + 0x300);
@@ -1865,6 +1870,10 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                                 reg2 = (reg2 & 0xfff0ffff) | ((next_idx & 0xF) << 16);
                                 writel(reg2, vrb + 0x300);
                                 if (vcb) writel(reg2, vcb + 0x300);
+                                /* RUN */
+                                writel(0x1, vrb + 0x0);
+                                if (vcb) writel(0x1, vcb + 0x0);
+                                wmb();
                                 printk(KERN_ALERT "*** VIC RING ROTATE: current=0x%x idx=%d -> next_idx=%u, wrote 0x300=0x%x ***\n", cur, idx, next_idx, reg2);
                             }
                         }
