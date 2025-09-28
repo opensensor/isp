@@ -51,7 +51,6 @@ EXPORT_SYMBOL(num_channels);
 /* Helper function to perform sensor operations using helper functions */
 static int tx_isp_sensor_operation_helper(struct tx_isp_dev *isp_dev, unsigned int cmd, void *arg)
 {
-    struct tx_isp_subdev *sensor_sd;
     struct tx_isp_sensor sensor;
     int ret = 0;
 
@@ -64,17 +63,16 @@ static int tx_isp_sensor_operation_helper(struct tx_isp_dev *isp_dev, unsigned i
     if (!sensor) {
         pr_warn("tx_isp_sensor_operation_helper: No sensor found\n");
         return -ENODEV;
-    }
 	sensor_sd = sensor->sd;
 
     /* Validate sensor subdev has proper ops */
-    if (!sensor->ops || !sensor_sd->ops->sensor || !sensor_sd->ops->sensor->ioctl) {
+    if (!sensor->ops || !sensor->ops->sensor || !sensor>ops->sensor->ioctl) {
         pr_warn("tx_isp_sensor_operation_helper: Sensor subdev has no ioctl function\n");
         return -ENOSYS;
     }
 
     /* Perform the sensor operation */
-    ret = sensor_sd->ops->sensor->ioctl(sensor_sd, cmd, arg);
+    ret = sensor>ops->sensor->ioctl(sensor, cmd, arg);
     pr_debug("tx_isp_sensor_operation_helper: sensor ioctl(0x%x) returned %d\n", cmd, ret);
 
     return ret;
