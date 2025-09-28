@@ -2812,8 +2812,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         /* Fallback: program VIC slot directly if remote event not handled */
                         if (vic_dev_buf->vic_regs) {
                             u32 reg_offset = (v.index + 0xc6) << 2; /* 0x318 + 4*index */
-                            writel(v.phys_addr, vic_dev_buf->vic_regs + reg_offset);
-                            wmb();
+                            //writel(v.phys_addr, vic_dev_buf->vic_regs + reg_offset);
+                            //wmb();
                             pr_info("*** VIC QBUF (fallback): slot[%u] addr=0x%x -> VIC[0x%x] size=%u ch=%u ***\n",
                                     v.index, v.phys_addr, reg_offset, v.size, v.channel);
                         } else {
