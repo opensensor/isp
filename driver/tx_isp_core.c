@@ -580,6 +580,10 @@ irqreturn_t ispcore_irq_thread_handle(int irq, void *dev_id)
         /* Binary Ninja: Handle VIC interrupts */
         pr_info("*** ispcore_irq_thread_handle: Processing VIC interrupt 0x%08x ***\n", irq_status);
 
+        /* Clear interrupt status */
+        writel(irq_status, vic_dev->vic_regs + 0x1e0);
+        wmb();
+
         /* Binary Ninja: Signal frame completion */
         if (irq_status & 0x1) {  /* Frame done interrupt */
             complete(&isp_dev->frame_complete);
@@ -2493,6 +2497,10 @@ clock_management:
             if (isp_dev->core_dev && isp_dev->core_dev->ipu_clk) {
                 clk_disable(isp_dev->core_dev->ipu_clk);
                 pr_info("ispcore_slake_module: Disabled IPU clock");
+            }
+            if (isp_dev->core_dev && isp_dev->core_dev->core_clk) {
+                clk_disable(isp_dev->core_dev->core_clk);
+                pr_info("ispcore_slake_module: Disabled ISP clock");
             }
             if (isp_dev->cgu_isp) {
                 clk_disable(isp_dev->cgu_isp);
