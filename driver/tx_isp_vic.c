@@ -2804,7 +2804,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
                 /* STEP 9: CRITICAL FIX - Only call VIC start if VIC interrupts are not already working */
                 /* This prevents the destructive VIC unlock sequence that breaks working interrupts */
-                if (current_state != 4 && vic_start_ok != 1) {
+                if (vic_start_ok != 1) {
                     pr_info("*** STEP 9: vic_start_ok=%d, state=%d - calling tx_isp_vic_start ***\n", vic_start_ok, current_state);
                     ret = tx_isp_vic_start(vic_dev);
                   	pr_info("vic_core_s_stream: Stream ON - tx_isp_vic_start called after proper sub-device init\n");
