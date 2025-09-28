@@ -505,6 +505,24 @@ label_123f4:
         int qbuf_ret = ispvic_frame_channel_qbuf(&vic_dev->sd, NULL);
         if (qbuf_ret == 0) {
             pr_info("*** VIC FRAME DONE: New buffer queued successfully - interrupts should continue ***\n");
+
+            /* CRITICAL FIX: Re-arm VIC control registers to continue interrupt generation */
+            /* This is the missing piece - VIC needs to be re-triggered after each frame */
+            if (vic_dev && vic_dev->vic_regs) {
+                void __iomem *vr = vic_dev->vic_regs;
+                writel(1, vr + 0x0);
+                wmb();
+                pr_info("*** VIC FRAME DONE: Re-armed VIC control [0x0]=1 to continue interrupts ***\n");
+
+                /* Re-apply IMR/IMCR routing to ensure interrupt path stays active */
+                writel(0x00000001, vr + 0x04);   /* IMR baseline */
+                writel(0x00000000, vr + 0x24);   /* IMR1 baseline */
+                writel(0x07800438, vr + 0x04);   /* IMR routing/mask */
+                writel(0xb5742249, vr + 0x0c);   /* IMCR key */
+                wmb();
+                pr_info("*** VIC FRAME DONE: Re-applied IMR/IMCR routing - IMR=0x%08x IMCR=0x%08x ***\n",
+                        readl(vr + 0x04), readl(vr + 0x0c));
+            }
         } else {
             pr_warn("*** VIC FRAME DONE: Failed to queue new buffer: %d ***\n", qbuf_ret);
         }
