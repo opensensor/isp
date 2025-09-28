@@ -2804,8 +2804,14 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             	/* Post-RUN re-arm: commit dance so enables latch without touching masks */
                 /* Program PRIMARY IMR/IMCR routing once (match good-things), no re-arm */
                 if (vic_dev && vic_dev->vic_regs) {
-                    /* Skip IMR/IMCR re-route here to match working reference ordering */
-                    pr_info("*** SKIP: IMR/IMCR re-route at pre-run stage (match good-things) ***\n");
+                    void __iomem *vr_gate = vic_dev->vic_regs;
+                    writel(0x00000001, vr_gate + 0x04);   /* IMR baseline */
+                    writel(0x00000000, vr_gate + 0x24);   /* IMR1 baseline */
+                    writel(0x07800438, vr_gate + 0x04);   /* IMR routing/mask */
+                    writel(0xb5742249, vr_gate + 0x0c);   /* IMCR key */
+                    wmb();
+                    pr_info("*** VIC PRIMARY GATE: IMR/IMCR routed (no re-arm) IMR=0x%08x IMCR=0x%08x ***\n",
+                            readl(vr_gate + 0x04), readl(vr_gate + 0x0c));
                 }
 
 
@@ -2841,8 +2847,13 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
 
                 /* Re-apply IMR/IMCR gating on PRIMARY bank as seen in good-things */
-                /* Skip IMR/IMCR re-route at post-run stage to match working reference */
-                pr_info("*** SKIP: IMR/IMCR re-route at post-run (match good-things) ***\n");
+                writel(0x00000001, vr + 0x04);   /* IMR baseline */
+                writel(0x00000000, vr + 0x24);   /* IMR1 baseline */
+                writel(0x07800438, vr + 0x04);   /* IMR routing/mask */
+                writel(0xb5742249, vr + 0x0c);   /* IMCR key */
+                wmb();
+                pr_info("*** VIC PRIMARY GATE (POST-RUN): IMR=0x%08x IMCR=0x%08x ***\n",
+                        readl(vr + 0x04), readl(vr + 0x0c));
             	}
 
                 /* STEP 9: CRITICAL FIX - Only call VIC start if VIC interrupts are not already working */

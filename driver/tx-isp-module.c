@@ -1735,11 +1735,12 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         printk(KERN_ALERT "*** VIC IRQ: Calculated v1_7 = 0x%x v1_10 = 0x%x ***\n", v1_7, v1_10);
 
         /* Binary Ninja: ack using the computed masked status */
-        /* Working reference clears all pending with W1C (0xFFFFFFFF) */
-        writel(0xFFFFFFFF, base_for_irq + 0x1f0);
-        writel(0xFFFFFFFF, base_for_irq + 0x1f4);
+        /* Binary Ninja: ack using the computed masked status */
+        printk(KERN_ALERT "*** VIC IRQ: About to write v1_7=0x%x to reg 0x1f0 (base=%p) ***\n", v1_7, base_for_irq);
+        writel(v1_7, base_for_irq + 0x1f0);
+        printk(KERN_ALERT "*** VIC IRQ: About to write v1_10=0x%x to reg 0x1f4 (base=%p) ***\n", v1_10, base_for_irq);
+        writel(v1_10, base_for_irq + 0x1f4);
         wmb();
-        printk(KERN_ALERT "*** VIC IRQ: Cleared all pending (W1C 0xFFFFFFFF to 0x1f0/0x1f4) ***\n");
 
         /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
         printk(KERN_ALERT "*** VIC IRQ: vic_start_ok=%u, v1_7=0x%x, v1_10=0x%x ***\n", vic_start_ok, v1_7, v1_10);
