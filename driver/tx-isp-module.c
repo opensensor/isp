@@ -1678,7 +1678,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         vic_framedone_irq_function(vic_dev_fast);
         /* Bump frame counters and wake waiters */
         if (ourISPdev) {
-            ourISPdev->frame_count++;
+            ourISPdev->vic_dev->frame_count++;
             isp_frame_done_wakeup();
         }
         return IRQ_HANDLED; /* Early return to bypass complex path that may stop after 2 frames */
