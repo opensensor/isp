@@ -25,6 +25,11 @@
 extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 
+/* Auto-detected current-address register (offset and space: 1=primary,2=secondary) */
+static u32 vic_curraddr_offset = 0;        /* e.g., 0x380 on some variants */
+static int vic_curraddr_space = 0;         /* 0=unknown, 1=primary, 2=secondary */
+static int vic_curraddr_detected = 0;      /* sticky once found */
+
 /* Static variables to cache sensor dimensions (read once during probe) */
 static u32 cached_sensor_width = 1920;   /* Default fallback */
 static u32 cached_sensor_height = 1080;  /* Default fallback */
@@ -441,9 +446,29 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             }
             if (cur_idx >= 0) next_idx = (cur_idx + 1) % count;
             else {
-                /* Hardware CURR didn't match our slots: advance based on last_idx */
-                if (vic_dev->last_idx < 0 || vic_dev->last_idx >= count) vic_dev->last_idx = 0;
-                next_idx = (vic_dev->last_idx + 1) % count;
+                /* Attempt auto-detect of current-address register across 0x320..0x3c0 in both banks */
+                int found = 0; int off; int sidx;
+                for (off = 0x320; off <= 0x3c0 && !found; off += 4) {
+                    u32 v1 = readl(vic_base + off);
+                    if (v1) {
+                        for (sidx = 0; sidx < count; ++sidx) if (v1 == slots[sidx]) { cur_idx = sidx; vic_curraddr_offset = off; vic_curraddr_space = 1; vic_curraddr_detected = 1; found = 1; break; }
+                    }
+                    if (!found && vic_dev->vic_regs_control) {
+                        u32 v2 = readl(vic_dev->vic_regs_control + off);
+                        if (v2) {
+                            for (sidx = 0; sidx < count; ++sidx) if (v2 == slots[sidx]) { cur_idx = sidx; vic_curraddr_offset = off; vic_curraddr_space = 2; vic_curraddr_detected = 1; found = 1; break; }
+                        }
+                    }
+                }
+                if (found) {
+                    pr_info("VIC CURR_ADDR DETECTED: space=%s offset=0x%x matched slot %d\n",
+                            vic_curraddr_space == 1 ? "PRIMARY" : "SECONDARY", vic_curraddr_offset, cur_idx);
+                    next_idx = (cur_idx + 1) % count;
+                } else {
+                    pr_info("VIC CURR_ADDR DETECT: no match in 0x320..0x3c0 this frame; fallback index\n");
+                    if (vic_dev->last_idx < 0 || vic_dev->last_idx >= count) vic_dev->last_idx = 0;
+                    next_idx = (vic_dev->last_idx + 1) % count;
+                }
             }
 
             /* Commit via CONFIG->RUN so the stream control latches reliably */
@@ -471,8 +496,12 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 
             vic_dev->last_idx = next_idx;
 
-            pr_info("*** VIC FRAME DONE: Updated VIC[0x300] = 0x%x (count=%u, cur_idx=%d, next_idx=%d) ***\n",
-                    reg_val, count, cur_idx, next_idx);
+            {
+                u32 reg_p = readl(vic_base + 0x300);
+                u32 reg_c = (vic_dev->vic_regs_control ? readl(vic_dev->vic_regs_control + 0x300) : 0);
+                pr_info("*** VIC FRAME DONE: Updated VIC[0x300] PRIMARY=0x%x CONTROL=0x%x (count=%u, cur_idx=%d, next_idx=%d) ***\n",
+                        reg_p, reg_c, count, cur_idx, next_idx);
+            }
 
             /* Binary Ninja: result = &data_b0000 */
             result = &data_b0000;
