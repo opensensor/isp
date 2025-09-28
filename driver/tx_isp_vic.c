@@ -1119,6 +1119,11 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x6acade, vic_regs + 0xdc);      /* Processing config */
         pr_info("*** CRITICAL FIX: Added missing VIC color space and processing registers (0xc0-0xdc) ***\n");
 
+        /* CRITICAL FIX: Preserve timing parameter register 0x18 */
+        /* Reference driver shows this must be 0xf00 for MIPI, not sensor width */
+        writel(0xf00, vic_regs + 0x18);  /* Timing parameter - MUST NOT be overwritten */
+        pr_info("*** CRITICAL FIX: Set register 0x18 = 0xf00 (timing parameter, not sensor width) ***\n");
+
         /* 9. BINARY NINJA EXACT: Hardware enable sequence */
         writel(0x2, vic_regs + 0x0);  /* Pre-enable */
         wmb();
