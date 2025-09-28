@@ -3223,14 +3223,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             extern int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
 
             if (vic->stream_state != 1) {
-                pr_info("*** Channel %d: VIC not streaming (state=%d), calling ispvic_frame_channel_s_stream ***\n",
-                        channel, vic->stream_state);
-                ret = ispvic_frame_channel_s_stream(vic, 1);
-                if (ret != 0) {
-                    pr_err("Channel %d: Failed to start VIC streaming: %d\n", channel, ret);
-                    state->streaming = false;
-                    return ret;
-                }
 
 			/* Reference: on STREAMON, enqueue any prepared buffers to VIC */
 			if (fcd && state->buffer_count > 0) {
