@@ -507,7 +507,7 @@ int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sens
 }
 
 /* Program CSI PHY and LANE registers to match BN MCP reference trace */
-static void csi_program_ref_sequence(void __iomem *base)
+void csi_program_ref_sequence(void __iomem *base)
 {
     struct { u32 off, val; } ctrl_writes[] = {
         {0x00, 0x7d}, {0x04, 0xe3}, {0x08, 0xa0}, {0x0c, 0x83}, {0x10, 0xfa},
@@ -1091,3 +1091,5 @@ EXPORT_SYMBOL(tx_isp_csi_activate_subdev);
 EXPORT_SYMBOL(tx_isp_csi_slake_subdev);
 /* CRITICAL: Export the real CSI s_stream function for hardware configuration */
 EXPORT_SYMBOL(csi_video_s_stream);
+/* CRITICAL: Export the CSI PHY lane configuration function */
+EXPORT_SYMBOL(csi_program_ref_sequence);

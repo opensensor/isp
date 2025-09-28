@@ -22,6 +22,9 @@ int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd);
 /* CSI Video Operations - REAL hardware implementation */
 int csi_video_s_stream(struct tx_isp_subdev *sd, int enable);
 
+/* CSI PHY Lane Configuration */
+void csi_program_ref_sequence(void __iomem *base);
+
 /* CSI States */
 #define CSI_STATE_OFF       0
 #define CSI_STATE_IDLE     1
