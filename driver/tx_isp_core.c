@@ -1635,6 +1635,51 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
                 }
             }
         }
+
+        /* CRITICAL FIX: Stop the CSI PHY Control offset 0x90 continuous writes */
+        /* The infinite loop in the trace is caused by continuous writes to isp-w02 offset 0x90 */
+        /* We need to find and disable the source of these writes */
+        if (isp->csi_dev && isp->csi_dev->csi_regs) {
+            void __iomem *csi_w02_regs = isp->csi_dev->csi_regs;
+
+            /* Check if we have the w02 region (0x133e0000) */
+            /* Based on trace, isp-w02 is the region causing the 0x90 writes */
+            u32 current_90_val = readl(csi_w02_regs + 0x90);
+
+            /* Disable the CSI PHY calibration/adjustment loop that writes to 0x90 */
+            /* Set 0x8c to 0x0 to disable the calibration loop (matches good trace line 121) */
+            writel(0x0, csi_w02_regs + 0x8c);
+
+            /* Set 0xa0 and 0xb0 to 0x0 to disable PHY adjustment (matches good trace lines 254-255) */
+            writel(0x0, csi_w02_regs + 0xa0);
+            writel(0x0, csi_w02_regs + 0xb0);
+
+            pr_info("ispcore_slake_module: CSI PHY calibration loop disabled (0x8c=0x0, 0xa0=0x0, 0xb0=0x0)");
+            pr_info("ispcore_slake_module: Previous 0x90 value was 0x%x - should stop changing now", current_90_val);
+
+            /* Final slaking sequence - matches good trace lines 258-261 */
+            /* Reset CSI PHY registers to stable slaked state */
+            u32 current_a8 = readl(csi_regs + 0xa8);
+            if (current_a8 != 0x58050000) {
+                writel(0x58050000, csi_regs + 0xa8);
+                pr_info("ispcore_slake_module: CSI PHY A8 reset (0xa8: 0x%x -> 0x58050000)", current_a8);
+            }
+
+            /* Reset CSI PHY Config to disabled state */
+            u32 current_100 = readl(csi_regs + 0x100);
+            if (current_100 != 0x0) {
+                writel(0x0, csi_regs + 0x100);
+                pr_info("ispcore_slake_module: CSI PHY Config disabled (0x100: 0x%x -> 0x0)", current_100);
+            }
+        }
+
+        /* Final Core Control register cleanup to match good trace */
+        if (isp->isp_regs) {
+            /* Reset Core Control registers that were modified during streaming */
+            writel(0x0, isp->isp_regs + 0xb054);
+            writel(0x0, isp->isp_regs + 0xb05c);
+            pr_info("ispcore_slake_module: Core Control registers reset (0xb054=0x0, 0xb05c=0x0)");
+        }
     }
 
     pr_info("ispcore_slake_module: HYBRID COMPLETE - Continuous interrupts + MIPI config!");
