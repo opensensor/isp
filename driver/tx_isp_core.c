@@ -1500,8 +1500,8 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
         pr_info("ispcore_slake_module: HYBRID - Applying clock slaking sequence to trigger MIPI lane config");
 
         /* CRITICAL: Apply the missing clock slaking sequence that triggers MIPI lane config */
-        if (isp->core_dev && isp->core_dev->core_regs) {
-            void __iomem *core_regs = isp->core_dev->core_regs;
+        if (isp && isp->core_regs) {
+            void __iomem *core_regs = isp->core_regs;
 
             pr_info("*** HYBRID: Applying clock slaking sequence (enable->disable->enable) ***");
 
