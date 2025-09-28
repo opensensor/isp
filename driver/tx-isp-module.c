@@ -2187,33 +2187,7 @@ static int tx_isp_video_link_destroy(struct tx_isp_dev *isp_dev)
         int link_count = link_config_counts[current_config];
         struct tx_isp_link_config *config = link_configs[current_config];
 
-        /* Binary Ninja: Loop through all links in current configuration */
-        for (i = 0; i < link_count; i++) {
-            struct tx_isp_video_pad *src_pad, *dst_pad;
-
-            /* Find source and destination pads */
-            src_pad = find_subdev_link_pad(isp_dev, &config[i]);
-            dst_pad = find_subdev_link_pad(isp_dev, &config[i]);
-
-            if (src_pad && dst_pad) {
-                /* Destroy the link between these pads */
-                ret = subdev_video_destroy_link(src_pad);
-                if (ret != 0 && ret != -ENOTCONN) {  /* -ENOTCONN = 0xfffffdfd */
-                    pr_err("tx_isp_video_link_destroy: Failed to destroy link %d: %d\n", i, ret);
-                    break;
-                }
-
-                /* Also destroy the reverse link */
-                ret = subdev_video_destroy_link(dst_pad);
-                if (ret != 0 && ret != -ENOTCONN) {
-                    pr_err("tx_isp_video_link_destroy: Failed to destroy reverse link %d: %d\n", i, ret);
-                    break;
-                }
-
-                pr_info("tx_isp_video_link_destroy: Destroyed link %s->%s\n",
-                        config[i].src.name, config[i].dst.name);
-            }
-        }
+		// TODO we removed the link destroy because it may be interferring
 
         /* Binary Ninja: *(arg1 + 0x118) = 0xffffffff - mark config as destroyed */
         isp_dev->link_config = -1;
