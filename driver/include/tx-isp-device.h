@@ -961,6 +961,7 @@ struct isp_tuning_data {
 
 #include "tx_isp.h"
 #include "tx-isp-device.h"
+#define ISP_MAX_SUBDEVS          16
 
 /* Helper functions to find subdevices by name instead of hardcoded array indices */
 
