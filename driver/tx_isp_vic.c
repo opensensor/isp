@@ -2852,18 +2852,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(1, vr + 0x0);
                 wmb();
                 pr_info("*** VIC CONTROL (PRIMARY): WROTE 1 to [0x0] before enabling IRQ ***\n");
-            	/* Post-RUN re-arm: commit dance so enables latch without touching masks */
-                /* Program PRIMARY IMR/IMCR routing once (match good-things), no re-arm */
-                if (vic_dev && vic_dev->vic_regs) {
-                    void __iomem *vr_gate = vic_dev->vic_regs;
-                    writel(0x00000001, vr_gate + 0x04);   /* IMR baseline */
-                    writel(0x00000000, vr_gate + 0x24);   /* IMR1 baseline */
-                    writel(0x07800438, vr_gate + 0x04);   /* IMR routing/mask */
-                    writel(0xb5742249, vr_gate + 0x0c);   /* IMCR key */
-                    wmb();
-                    pr_info("*** VIC PRIMARY GATE: IMR/IMCR routed (no re-arm) IMR=0x%08x IMCR=0x%08x ***\n",
-                            readl(vr_gate + 0x04), readl(vr_gate + 0x0c));
-                }
+        		// TODO
             }
 
 
