@@ -1413,6 +1413,40 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     return 0;
 }
 
+
+/* VIC sensor operations sync_sensor_attr - EXACT Binary Ninja implementation */
+int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr)
+{
+    struct tx_isp_vic_device *vic_dev;
+
+    pr_info("vic_sensor_ops_sync_sensor_attr: sd=%p, attr=%p\n", sd, attr);
+
+    if (!sd || (unsigned long)sd >= 0xfffff001) {
+        pr_info("The parameter is invalid!\n");
+        return -EINVAL;
+    }
+
+    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
+        pr_info("The parameter is invalid!\n");
+        return -EINVAL;
+    }
+
+    /* Binary Ninja: $v0_1 = arg2 == 0 ? memset : memcpy */
+    if (attr == NULL) {
+        /* Clear sensor attribute */
+        memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
+        pr_info("vic_sensor_ops_sync_sensor_attr: cleared sensor attributes\n");
+    } else {
+        /* Copy sensor attribute */
+        memcpy(&vic_dev->sensor_attr, attr, sizeof(vic_dev->sensor_attr));
+        pr_info("vic_sensor_ops_sync_sensor_attr: copied sensor attributes\n");
+    }
+
+    return 0;
+}
+
+
 /* VIC sensor operations sync_sensor_attr - REMOVED
  * Modern hardware supports multiple sensors, so VIC doesn't store sensor attributes
  * Sensor attributes are managed by the sensor subdevices themselves in the subdev array
