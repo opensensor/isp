@@ -2183,11 +2183,11 @@ int tx_isp_video_link_stream(struct tx_isp_dev *arg1, int arg2)
             struct tx_isp_subdev *subdev = s4[i];
             if (subdev != NULL && subdev->ops && subdev->ops->internal && subdev->ops->internal->activate_module) {
                 pr_info("*** tx_isp_video_link_stream: Calling activate_module on subdev[%d] ***\n", i);
-                result = subdev->ops->internal->activate_module(subdev);
-                if (result != 0 && result != -ENOIOCTLCMD) {
-                    pr_err("tx_isp_video_link_stream: activate_module failed on subdev[%d]: %d\n", i, result);
-                    return result;
-                }
+                //result = subdev->ops->internal->activate_module(subdev);
+                //if (result != 0 && result != -ENOIOCTLCMD) {
+                //    pr_err("tx_isp_video_link_stream: activate_module failed on subdev[%d]: %d\n", i, result);
+                //    return result;
+                //}
                 pr_info("*** tx_isp_video_link_stream: activate_module SUCCESS on subdev[%d] ***\n", i);
             }
         }
