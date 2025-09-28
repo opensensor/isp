@@ -2062,7 +2062,7 @@ static int tx_isp_video_link_destroy(struct tx_isp_dev *isp_dev)
     /* Binary Ninja: int32_t $v1_1 = *(arg1 + 0x118) - get current link config */
     current_config = isp_dev->link_config;  /* Stored at offset 0x10c in Binary Ninja */
 
-    pr_info("tx_isp_video_link_destroy: Destroying links for config %d\n", current_config);
+    pr_info("tx_isp_video_link_destroy: Destroying links for config -- noop %d\n", current_config);
 
     /* Binary Ninja: if ($v1_1 s>= 0) - check if valid config */
     if (current_config >= 0 && current_config < ARRAY_SIZE(link_configs)) {
@@ -2072,9 +2072,9 @@ static int tx_isp_video_link_destroy(struct tx_isp_dev *isp_dev)
 		// TODO we removed the link destroy because it may be interferring
 
         /* Binary Ninja: *(arg1 + 0x118) = 0xffffffff - mark config as destroyed */
-        isp_dev->link_config = -1;
+        //isp_dev->link_config = -1;
 
-        pr_info("tx_isp_video_link_destroy: All links destroyed, config reset to -1\n");
+        //pr_info("tx_isp_video_link_destroy: All links destroyed, config reset to -1\n");
     }
 
     return ret;
