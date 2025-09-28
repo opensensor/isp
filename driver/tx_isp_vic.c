@@ -2813,7 +2813,17 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** VIC CONTROL: Deferring CONFIG/RUN to tx_isp_vic_start() (no 2->1 here) ***\n");
             }
 
-                /* Defer IMR/IMCR routing to tx_isp_vic_start just-before-RUN */
+                /* Route IMR/IMCR once here to ensure global gate is open before start */
+                if (vic_dev && vic_dev->vic_regs) {
+                    void __iomem *vr_gate = vic_dev->vic_regs;
+                    writel(0x00000001, vr_gate + 0x04);   /* IMR baseline */
+                    writel(0x00000000, vr_gate + 0x24);   /* IMR1 baseline */
+                    writel(0x07800438, vr_gate + 0x04);   /* IMR routing/mask */
+                    writel(0xb5742249, vr_gate + 0x0c);   /* IMCR key */
+                    wmb();
+                    pr_info("*** VIC PRIMARY GATE: IMR/IMCR routed (pre-start) IMR=0x%08x IMCR=0x%08x ***\n",
+                            readl(vr_gate + 0x04), readl(vr_gate + 0x0c));
+                }
 
                 /* STEP 9: CRITICAL FIX - Only call VIC start if VIC interrupts are not already working */
                 /* This prevents the destructive VIC unlock sequence that breaks working interrupts */
