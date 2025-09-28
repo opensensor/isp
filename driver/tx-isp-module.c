@@ -1728,21 +1728,6 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         v1_10 = (~reg_1ec) & reg_1e4;
         printk(KERN_ALERT "*** VIC IRQ: Calculated v1_7 = 0x%x v1_10 = 0x%x ***\n", v1_7, v1_10);
 
-        /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7 */
-        printk(KERN_ALERT "*** VIC IRQ: About to write v1_7=0x%x to reg 0x1f0 (base=%p) ***\n", v1_7, base_for_irq);
-        writel(v1_7, base_for_irq + 0x1f0);
-
-        /* Binary Ninja: *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
-        printk(KERN_ALERT "*** VIC IRQ: About to write v1_10=0x%x to reg 0x1f4 (base=%p) ***\n", v1_10, base_for_irq);
-        writel(v1_10, base_for_irq + 0x1f4);
-        wmb();
-        printk(KERN_ALERT "*** VIC IRQ: Register writes completed (at base=%p) ***\n", base_for_irq);
-
-        /* CRITICAL DEBUG: Add the missing debugging right after register writes */
-        printk(KERN_ALERT "*** VIC IRQ: About to check vic_start_ok - vic_start_ok=%u ***\n", vic_start_ok);
-
-        /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
-        printk(KERN_ALERT "*** VIC IRQ: vic_start_ok=%u, v1_7=0x%x, v1_10=0x%x ***\n", vic_start_ok, v1_7, v1_10);
 
         if (vic_start_ok != 0) {
             /* Binary Ninja: if (($v1_7 & 1) != 0) */
