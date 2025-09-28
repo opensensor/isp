@@ -2380,7 +2380,7 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
             /* Binary Ninja: if ($v0 != 1) */
             if (vic_state != 1) {
                 /* Binary Ninja: if ($v0 s>= 3) */
-                if (vic_state >= 3) {
+                if (vic_state == 3) {
                     pr_info("ispcore_slake_module: ISP state >= 3, calling ispcore_core_ops_init");
 
                     /* CRITICAL FIX: Use good-things approach - get sensor attributes from connected sensor */
