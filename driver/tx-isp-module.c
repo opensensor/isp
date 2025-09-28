@@ -2361,8 +2361,15 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
         /* SAFETY: Check for NULL subdev */
         if (a0 != 0) {
             pr_debug("*** tx_isp_video_s_stream: Processing subdev[%d] = %p ***\n", i, a0);
+
+            /* SAFETY: Validate subdev structure */
+            if (!a0->ops) {
+                pr_debug("*** tx_isp_video_s_stream: subdev[%d] has NULL ops, skipping ***\n", i);
+                continue;
+            }
+
             /* Binary Ninja: int32_t* $v0_3 = *(*($a0 + 0xc4) + 4) */
-            struct tx_isp_subdev_video_ops *v0_3 = a0->ops ? a0->ops->video : NULL;
+            struct tx_isp_subdev_video_ops *v0_3 = a0->ops->video;
 
             if (v0_3 != 0) {
                 /* Binary Ninja: int32_t $v0_4 = *$v0_3 */
