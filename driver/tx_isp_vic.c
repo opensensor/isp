@@ -2823,6 +2823,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 			if (vic_dev->state < 2) {
             	pr_info("*** vic_core_s_stream: Enabling VIC IRQ AFTER final re-assert/verify ***\n");
             	tx_vic_enable_irq(vic_dev);
+			}
 
 
             /* CRITICAL FIX: Follow proper state machine - don't jump directly to state 4 */
