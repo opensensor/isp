@@ -29,6 +29,7 @@ uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 static u32 cached_sensor_width = 1920;   /* Default fallback */
 static u32 cached_sensor_height = 1080;  /* Default fallback */
 static int sensor_dimensions_cached = 0; /* Flag to indicate if dimensions were read */
+static int vic_armed = 0;
 
 /* Helper function to read sensor dimensions from /proc/jz/sensor/ files */
 static int read_sensor_dimensions(u32 *width, u32 *height)
@@ -2822,7 +2823,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
 
                 /* Attempt control-bank re-unlock/enable if key regs are zero */
-                if (vic_dev->vic_regs_control) {
+                if (vic_dev->vic_regs_control && !vic_armed) {
                     void __iomem *vcc = vic_dev->vic_regs_control;
                     u32 ctrl300_c_pre = readl(vcc + 0x300);
                     u32 buf318_c_pre = readl(vcc + 0x318);
@@ -2844,6 +2845,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         pr_info("*** VIC CONTROL BANK: Post-enable [0x0]=0x%08x, [0x14]=0x%08x, [0x0c]=0x%08x, [0x100]=0x%08x ***\n",
                                 readl(vcc + 0x0), readl(vcc + 0x14), readl(vcc + 0x0c), readl(vcc + 0x100));
                     }
+					vic_armed = 1;
                 }
 
             /* VIC CONTROL: enter RUN state after all config (write 1) */
@@ -2852,7 +2854,18 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(1, vr + 0x0);
                 wmb();
                 pr_info("*** VIC CONTROL (PRIMARY): WROTE 1 to [0x0] before enabling IRQ ***\n");
-        		// TODO
+            	/* Post-RUN re-arm: commit dance so enables latch without touching masks */
+                /* Program PRIMARY IMR/IMCR routing once (match good-things), no re-arm */
+                if (vic_dev && vic_dev->vic_regs) {
+                    void __iomem *vr_gate = vic_dev->vic_regs;
+                    writel(0x00000001, vr_gate + 0x04);   /* IMR baseline */
+                    writel(0x00000000, vr_gate + 0x24);   /* IMR1 baseline */
+                    writel(0x07800438, vr_gate + 0x04);   /* IMR routing/mask */
+                    writel(0xb5742249, vr_gate + 0x0c);   /* IMCR key */
+                    wmb();
+                    pr_info("*** VIC PRIMARY GATE: IMR/IMCR routed (no re-arm) IMR=0x%08x IMCR=0x%08x ***\n",
+                            readl(vr_gate + 0x04), readl(vr_gate + 0x0c));
+                }
             }
 
 
