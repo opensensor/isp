@@ -1505,6 +1505,22 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
         extern void tx_isp_vic_write_csi_phy_sequence(void);
         tx_isp_vic_write_csi_phy_sequence();
 
+        /* HYBRID: Ensure CSI hardware is properly configured for MIPI lanes */
+        if (isp->csi_dev) {
+            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp->csi_dev;
+            if (csi_dev && csi_dev->csi_regs) {
+                pr_info("*** HYBRID: Configuring CSI MIPI lane settings ***");
+
+                /* Configure for 2-lane MIPI (default) */
+                u32 lane_config = readl(csi_dev->csi_regs + 0x4);
+                lane_config = (lane_config & ~0x3) | 0x1; /* 2 lanes - 1 = 1 */
+                writel(lane_config, csi_dev->csi_regs + 0x4);
+                wmb();
+
+                pr_info("*** HYBRID: CSI lane configuration applied (2 lanes) ***");
+            }
+        }
+
         /* Initialize CSI subdevice if present - PRESERVE WORKING STATE */
         if (isp->csi_dev) {
             pr_info("ispcore_slake_module: HYBRID - Preserving CSI hardware state");
