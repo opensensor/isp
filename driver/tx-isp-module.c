@@ -3188,9 +3188,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             } else if (reqbuf.memory == 2) { /* V4L2_MEMORY_USERPTR - client allocates */
                 pr_info("Channel %d: USERPTR mode - client will provide buffers\n", channel);
 
-                /* USERPTR: allow at least 5 to feed VIC ring continuously */
-                reqbuf.count = max(reqbuf.count, 5U);
-                reqbuf.count = min(reqbuf.count, 8U); /* Cap at 8 */
+                /* Do not change user's requested count; just cap upper bound */
+                reqbuf.count = min(reqbuf.count, 8U);
 
                 /* No driver allocation needed - client provides buffers */
                 pr_info("Channel %d: USERPTR mode - %d user buffers expected\n",
@@ -3224,13 +3223,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             /* CRITICAL: Update VIC active_buffer_count for streaming */
             if (ourISPdev && ourISPdev->vic_dev) {
                 struct tx_isp_vic_device *vic = ourISPdev->vic_dev;
-                /* Ensure a full 5-slot ring when possible */
-                if (reqbuf.memory == 2) {
-                    /* USERPTR: target full 5-slot ring; client will supply buffers */
-                    vic->active_buffer_count = 5;
-                } else {
-                    vic->active_buffer_count = (reqbuf.count > 5) ? 5 : reqbuf.count;
-                }
+                /* Match VIC ring count to the user's requested buffers (max 5) */
+                vic->active_buffer_count = (reqbuf.count > 5) ? 5 : reqbuf.count;
                 pr_info("*** Channel %d: VIC active_buffer_count set to %d (memory=%u) ***\n",
                         channel, vic->active_buffer_count, reqbuf.memory);
 
