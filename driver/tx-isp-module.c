@@ -35,6 +35,7 @@
 #include "../include/tx-libimp.h"
 #include "../include/tx_isp_core_device.h"
 #include "../include/tx_isp_subdev_helpers.h"
+#include "../include/tx_isp_vic_buffer.h"
 
 /* Forward declaration needed early */
 struct tx_isp_sensor *tx_isp_get_sensor(void);  /* Defined in tx_isp_tuning.c */
@@ -50,10 +51,10 @@ int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
 EXPORT_SYMBOL(frame_channels);
 EXPORT_SYMBOL(num_channels);
 
+
 /* Helper function to perform sensor operations using helper functions */
 static int tx_isp_sensor_operation_helper(struct tx_isp_dev *isp_dev, unsigned int cmd, void *arg)
 {
-    struct tx_isp_sensor *sensor;
     struct tx_isp_subdev *sensor_sd;
     int ret = 0;
 
@@ -62,26 +63,24 @@ static int tx_isp_sensor_operation_helper(struct tx_isp_dev *isp_dev, unsigned i
     }
 
     /* Use helper function to find sensor instead of hardcoded array access */
-    sensor = tx_isp_get_sensor();
-    if (!sensor) {
-        pr_warn("tx_isp_sensor_operation_helper: No sensor found\n");
+    sensor_sd = tx_isp_get_sensor_subdev(isp_dev);
+    if (!sensor_sd) {
+        pr_warn("tx_isp_sensor_operation_helper: No sensor subdev found\n");
         return -ENODEV;
     }
-    sensor_sd = &sensor->sd;
 
     /* Validate sensor subdev has proper ops */
-    if (!sensor->sd.ops || !sensor->sd.ops->sensor || !sensor->sd.ops->sensor->ioctl) {
+    if (!sensor_sd->ops || !sensor_sd->ops->sensor || !sensor_sd->ops->sensor->ioctl) {
         pr_warn("tx_isp_sensor_operation_helper: Sensor subdev has no ioctl function\n");
         return -ENOSYS;
     }
 
     /* Perform the sensor operation */
-    ret = sensor->sd.ops->sensor->ioctl(&sensor->sd, cmd, arg);
+    ret = sensor_sd->ops->sensor->ioctl(sensor_sd, cmd, arg);
     pr_debug("tx_isp_sensor_operation_helper: sensor ioctl(0x%x) returned %d\n", cmd, ret);
 
     return ret;
 }
-#include "../include/tx_isp_vic_buffer.h"
 
 /* CSI State constants - needed for proper state management */
 #define CSI_STATE_OFF       0
