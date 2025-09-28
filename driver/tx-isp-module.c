@@ -1745,11 +1745,11 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         printk(KERN_ALERT "*** VIC IRQ: vic_start_ok=%u, v1_7=0x%x, v1_10=0x%x ***\n", vic_start_ok, v1_7, v1_10);
 
         if (vic_start_ok != 0) {
-            /* Binary Ninja: if (($v1_7 & 1) != 0) */
-            if ((v1_7 & 1) != 0) {
+            /* Frame-done bit for this silicon appears at bit21 per mask (0xFFDFFFFE). Accept bit0 or bit21. */
+            if ((v1_7 & (0x1 | 0x200000)) != 0) {
                 /* Binary Ninja: *($s0 + 0x160) += 1 */
                 vic_dev->frame_count++;
-                printk(KERN_ALERT "*** VIC SUCCESS: FRAME DONE INTERRUPT detected (count=%u) ***\n", vic_dev->frame_count);
+                printk(KERN_ALERT "*** VIC SUCCESS: FRAME DONE (status=0x%x) count=%u ***\n", v1_7, vic_dev->frame_count);
 
                 /* CRITICAL: Also increment main ISP frame counter for /proc/jz/isp/isp-w02 */
                 if (isp_dev) {

@@ -2670,8 +2670,12 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** CRITICAL: Following EXACT reference driver sub-device initialization sequence ***\n");
 
                 /* CRITICAL FIX: Disable VIC interrupts during initialization to prevent control limit errors */
-                pr_info("*** DISABLING VIC INTERRUPTS DURING INITIALIZATION ***\n");
-                vic_start_ok = 0;  /* Disable interrupt processing */
+                if (current_state < 3) {
+                    pr_info("*** DISABLING VIC INTERRUPTS DURING INITIALIZATION (state=%d) ***\n", current_state);
+                    vic_start_ok = 0;  /* Disable interrupt processing only before ACTIVE */
+                } else {
+                    pr_info("*** SKIP disabling VIC interrupts (state=%d) — preserve streaming ***\n", current_state);
+                }
 
                 /* CRITICAL FIX: Correct the register base mapping! */
                 /* vic_regs = 0x133e0000 = CSI PHY (isp-w02 in trace) */
