@@ -429,26 +429,33 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 }
             }
 
-            /* Preserve working count: prefer active_buffer_count if our list is empty */
+            /* Determine buffer count (slots) and current index from hardware ring */
+            u32 slots[5] = {0};
             u32 count = vic_dev->active_buffer_count;
-            if (count == 0) count = 2;             /* Safe minimum */
-            if (buffer_count > 0) {
-                /* If we actually have queued entries, follow reference index logic */
-                int buffer_index;
-                if (match_found == 0) buffer_index = buffer_count << 16;
-                else buffer_index = high_bits << 16;
-                count = (buffer_index >> 16);
+            int j, cur_idx = -1, next_idx = 0;
+            if (count == 0) count = 2;           /* Safe minimum */
+            if (count > 5) count = 5;
+            for (j = 0; j < 5; j++) {
+                slots[j] = readl(vic_base + (0x318 + j * 4));
+                if (slots[j] == current_buffer) cur_idx = j;
             }
+            if (cur_idx >= 0) next_idx = (cur_idx + 1) % count; else next_idx = 0;
 
-            /* Re-write VIC[0x300] with correct buffer-count in upper 16 bits */
+            /* Write full stream control (preserve control bits and set count=slots) */
+            u32 stream_ctrl = (count << 16) | 0x80000020;
+            writel(stream_ctrl, vic_base + 0x300);
+            if (vic_dev->vic_regs_control)
+                writel(stream_ctrl, vic_dev->vic_regs_control + 0x300);
+
+            /* Then set the index nibble [19:16] to next_idx to advance ring */
             u32 reg_val = readl(vic_base + 0x300);
-            reg_val = (reg_val & 0xfff0ffff) | (count << 16);
+            reg_val = (reg_val & 0xfff0ffff) | ((next_idx & 0xF) << 16);
             writel(reg_val, vic_base + 0x300);
             if (vic_dev->vic_regs_control)
                 writel(reg_val, vic_dev->vic_regs_control + 0x300);
 
-            pr_info("*** VIC FRAME DONE: Updated VIC[0x300] = 0x%x (using count=%u, qlen=%d, match=%d) ***\n",
-                    reg_val, count, buffer_count, match_found);
+            pr_info("*** VIC FRAME DONE: Updated VIC[0x300] = 0x%x (count=%u, cur_idx=%d, next_idx=%d) ***\n",
+                    reg_val, count, cur_idx, next_idx);
 
             /* Binary Ninja: result = &data_b0000 */
             result = &data_b0000;
