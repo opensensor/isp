@@ -1658,6 +1658,9 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 /* isp_vic_interrupt_service_routine - EXACT Binary Ninja MCP implementation */
 irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
 {
+
+    printk(KERN_ALERT "*** Iisp_vic_interrupt_service_routine: IRQ 38 called");
+
     /* Minimal good-things style ISR: clear pending, notify, and requeue via vic_framedone_irq_function */
     do {
         struct tx_isp_dev *isp_dev_cast = (struct tx_isp_dev *)arg1;
