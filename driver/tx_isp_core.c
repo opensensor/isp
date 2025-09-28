@@ -1568,10 +1568,10 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
         pr_info("ispcore_slake_module: SURGICAL - Implementing proper clock slaking for on/off/on flow");
 
         /* Disable ISP Control register to stall interrupts (matches reference trace line 97) */
-        if (isp->isp_regs) {
-            u32 current_isp_ctrl = readl(isp->isp_regs + 0x9804);
+        if (isp->core_regs) {
+            u32 current_isp_ctrl = readl(isp->core_regs + 0x9804);
             if (current_isp_ctrl != 0) {
-                writel(0x0, isp->isp_regs + 0x9804);
+                writel(0x0, isp->core_regs + 0x9804);
                 pr_info("ispcore_slake_module: ISP Control disabled (0x9804: 0x%x -> 0x0)", current_isp_ctrl);
             }
         }
