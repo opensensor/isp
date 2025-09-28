@@ -40,6 +40,10 @@ void isp_frame_done_wakeup(void)
     /* Wake up any processes waiting for frame completion */
     wake_up(&frame_done_wait);
 
+    /* CRITICAL FIX: Wake up individual frame channel waiters like good-things driver */
+    extern void tx_isp_wakeup_frame_channels(void);
+    tx_isp_wakeup_frame_channels();
+
     pr_info("*** ISP FRAME DONE WAKEUP: Frame %lld ready for processing ***\n",
              atomic64_read(&frame_done_cnt));
 }
