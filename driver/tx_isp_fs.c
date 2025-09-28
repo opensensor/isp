@@ -34,6 +34,12 @@ struct fs_buffer_entry {
 };
 
 
+/* Frame channel registry for IRQ bridging */
+static struct tx_isp_frame_channel *g_fs_channels[4] = {NULL};
+static int (*g_fs_cb[4])(void *, u32, void *) = {NULL};
+static int g_fs_channel_count = 0;
+
+
 /* Forward declarations */
 static int frame_chan_event(void *data);
 int fs_slake_module(struct tx_isp_subdev *sd);
