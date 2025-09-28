@@ -2720,18 +2720,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             /* Program minimal VIC timing/packing block like good-things (PRIMARY bank) */
 
                 /* Guard: if hardware cleared 0x300 to zero-buffers (0x80000020), restore expected value */
-                {
-                    u32 cur_ctrl = readl(vr + 0x300);
-                    if (cur_ctrl == 0x80000020) {
-                        u32 buffer_count = vic_dev->active_buffer_count;
-                        if (buffer_count == 0) buffer_count = 2;
-                        if (buffer_count > 5) buffer_count = 5;
-                        u32 expect_ctrl = (buffer_count << 16) | 0x80000020;
-                        writel(expect_ctrl, vr + 0x300);
-                        wmb();
-                        pr_info("*** VIC CTRL REASSERT: Restored 0x300=0x%x (buffer_count=%u) ***\n", expect_ctrl, buffer_count);
-                    }
-                }
 
             if (vic_dev->vic_regs) {
                 void __iomem *vr_t = vic_dev->vic_regs;
