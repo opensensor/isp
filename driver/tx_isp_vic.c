@@ -2802,7 +2802,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(1, vr + 0x0);
                 wmb();
                 pr_info("*** VIC CONTROL (PRIMARY): WROTE 1 to [0x0] before enabling IRQ ***\n");
-            /* Post-RUN re-arm: commit dance so enables latch without touching masks */
+            	/* Post-RUN re-arm: commit dance so enables latch without touching masks */
                 /* Program PRIMARY IMR/IMCR routing once (match good-things), no re-arm */
                 if (vic_dev && vic_dev->vic_regs) {
                     void __iomem *vr_gate = vic_dev->vic_regs;
@@ -2814,27 +2814,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     pr_info("*** VIC PRIMARY GATE: IMR/IMCR routed (no re-arm) IMR=0x%08x IMCR=0x%08x ***\n",
                             readl(vr_gate + 0x04), readl(vr_gate + 0x0c));
                 }
-
-
-            if (vic_dev && vic_dev->vic_regs_control) {
-                void __iomem *vc = vic_dev->vic_regs_control;
-                /* Clear pending first (W1C) */
-                writel(0xFFFFFFFF, vc + 0x1f0);
-                writel(0xFFFFFFFF, vc + 0x1f4);
-                /* Write enables, CONFIG, re-write enables, then RUN */
-                writel(0x3FFFFFFF, vc + 0x1e0);
-                writel(0x0000000F, vc + 0x1e4);
-                writel(2, vc + 0x0);
-                wmb();
-                writel(0x3FFFFFFF, vc + 0x1e0);
-                writel(0x0000000F, vc + 0x1e4);
-                writel(1, vc + 0x0);
-                wmb();
-                udelay(100);
-                pr_info("*** VIC CONTROL ENABLES (POST-RUN COMMIT): [0x1e0]=0x%08x [0x1e4]=0x%08x ***\n",
-                        readl(vc + 0x1e0), readl(vc + 0x1e4));
-            }
-
             }
 
 
@@ -2842,7 +2821,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 			if (vic_dev->state < 2) {
             	pr_info("*** vic_core_s_stream: Enabling VIC IRQ AFTER final re-assert/verify ***\n");
             	tx_vic_enable_irq(vic_dev);
-			}
+			
 
             /* Post-IRQ-enable: sample status a bit longer to catch first frame */
             if (vic_dev->vic_regs) {
@@ -2860,6 +2839,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 }
                 if (i == 200)
                     pr_info("*** VIC POST-IRQ SAMPLE: No status bits asserted in 200ms window ***\n");
+			}
             }
 
 
