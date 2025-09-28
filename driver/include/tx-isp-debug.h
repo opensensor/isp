@@ -40,7 +40,8 @@ void private_dma_sync_single_for_device(struct device *dev,
 							      dma_addr_t addr, size_t size, enum dma_data_direction dir);
 __must_check int private_get_driver_interface(struct jz_driver_common_interfaces **pfaces);
 
-/* VIC register tracing function */
+/* VIC register tracing and protection functions */
 void trace_vic_registers(void __iomem *vic_regs, const char *context);
+void protect_vic_registers(void __iomem *vic_regs, const char *context);
 
 #endif /* _ISP_DEBUG_H_ */

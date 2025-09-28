@@ -52,6 +52,10 @@ struct vic_reg_monitor {
 
 static struct vic_reg_monitor vic_monitor = {0};
 
+// Periodic VIC register monitoring
+static struct delayed_work vic_protection_work;
+static bool vic_protection_enabled = false;
+
 // Register ranges to classify regions
 struct reg_range {
     u32 start;
@@ -202,7 +206,48 @@ void trace_vic_registers(void __iomem *vic_regs, const char *context)
         vic_monitor.last_0x24 = reg_0x24;
     }
 
+    // CRITICAL: Detect if registers are being cleared to zero (hardware reset)
+    if ((reg_0x04 == 0 || reg_0x0c == 0) && (vic_monitor.last_0x04 != 0 || vic_monitor.last_0x0c != 0)) {
+        printk(KERN_ALERT "*** VIC CRITICAL: HARDWARE RESET DETECTED! IMR=0x%08x IMCR=0x%08x from %s ***\n",
+               reg_0x04, reg_0x0c, context);
+        printk(KERN_ALERT "*** VIC CRITICAL: This indicates system-level reset or clock gating! ***\n");
+
+        // Dump stack trace to see what's calling the reset
+        dump_stack();
+    }
+
     vic_monitor.last_check_time = now;
+}
+
+// Aggressive VIC register protection - restore if cleared
+void protect_vic_registers(void __iomem *vic_regs, const char *context)
+{
+    u32 reg_0x04, reg_0x0c, reg_0x24;
+    bool need_restore = false;
+
+    if (!vic_regs) return;
+
+    reg_0x04 = readl(vic_regs + 0x04);
+    reg_0x0c = readl(vic_regs + 0x0c);
+    reg_0x24 = readl(vic_regs + 0x24);
+
+    // Check if critical registers have been cleared
+    if (reg_0x04 == 0 && vic_monitor.last_0x04 == 0x07800438) {
+        printk(KERN_ALERT "*** VIC PROTECTION [%s]: Restoring cleared IMR register ***\n", context);
+        writel(0x07800438, vic_regs + 0x04);
+        need_restore = true;
+    }
+
+    if (reg_0x0c == 0 && vic_monitor.last_0x0c == 0xb5742249) {
+        printk(KERN_ALERT "*** VIC PROTECTION [%s]: Restoring cleared IMCR register ***\n", context);
+        writel(0xb5742249, vic_regs + 0x0c);
+        need_restore = true;
+    }
+
+    if (need_restore) {
+        wmb();
+        printk(KERN_ALERT "*** VIC PROTECTION [%s]: Critical registers restored! ***\n", context);
+    }
 }
 EXPORT_SYMBOL(trace_vic_registers);
 
