@@ -2712,11 +2712,9 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Clear pending (W1C) */
                 writel(0xFFFFFFFF, vr + 0x1f0);
                 writel(0xFFFFFFFF, vr + 0x1f4);
-                /* Set MainMask to allow framedone + bit21 (debug) */
-                writel(0xFFDFFFFE, vr + 0x1e8); /* allow frame-done + bit21 (debug) */
-                /* CRITICAL FIX: Enable VIC interrupts in PRIMARY bank (not CONTROL bank) */
-                writel(0x3FFFFFFF, vr + 0x1e0); /* Enable frame done and other interrupts */
-                writel(0x0000000F, vr + 0x1e4); /* Enable MDMA interrupts */
+                /* CRITICAL FIX: Use EXACT good-things configuration */
+                writel(0xffffffff, vr + 0x1e0); /* Enable ALL interrupts (good-things: 0xffffffff) */
+                writel(0x0, vr + 0x1e8); /* Clear interrupt masks (good-things: 0x0) */
                 /* Leave 0x1ec (MDMA mask) as-is per working reference */
                 /* Global interrupt enable at 0x30c (if implemented) */
                 writel(0xFFFFFFFF, vr + 0x30c);
