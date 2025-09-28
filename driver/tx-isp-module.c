@@ -63,6 +63,7 @@ static int tx_isp_sensor_operation_helper(struct tx_isp_dev *isp_dev, unsigned i
     if (!sensor) {
         pr_warn("tx_isp_sensor_operation_helper: No sensor found\n");
         return -ENODEV;
+	}
 	sensor_sd = sensor->sd;
 
     /* Validate sensor subdev has proper ops */
