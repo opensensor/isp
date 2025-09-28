@@ -1423,149 +1423,59 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 {
     int result = -ENOTSUPP;  /* 0xffffffed */
     void *callback_ptr;
-    int (*callback_func)(void);
+    int (*callback_func)(void);  /* Changed to int return type */
 
-    pr_info("*** vic_core_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x%x, arg=%p ***\n", cmd, arg);
+    pr_info("vic_core_ops_ioctl: cmd=0x%x, arg=%p\n", cmd, arg);
 
-    /* Binary Ninja EXACT: if (arg2 == 0x1000001) */
-    if (cmd == 0x1000001) {  /* TX_ISP_EVENT_SYNC_SENSOR_ATTR */
-        result = -ENOTSUPP;  /* 0xffffffed */
+    /* CRITICAL FIX: Handle TX_ISP_EVENT_SYNC_SENSOR_ATTR specifically */
+    if (cmd == TX_ISP_EVENT_SYNC_SENSOR_ATTR) {
+        pr_info("*** CRITICAL FIX: TX_ISP_EVENT_SYNC_SENSOR_ATTR event received ***\n");
 
-        /* Binary Ninja: if (arg1 != 0) */
-        if (sd != NULL) {
-            /* Binary Ninja: void* $v0_2 = *(*(arg1 + 0xc4) + 0xc) */
-            /* SAFE: Use struct member access instead of raw offset arithmetic */
-            /* In reference driver, this accesses callback through inpads[0].priv */
-            if (sd->inpads && sd->inpads[0].priv) {
-                callback_ptr = sd->inpads[0].priv;
+        /* Call the sensor sync function which will return -515 */
+        result = vic_sensor_ops_sync_sensor_attr(sd, (struct tx_isp_sensor_attribute *)arg);
 
-                /* Binary Ninja: if ($v0_2 == 0) return 0 */
-                if (callback_ptr == NULL) {
-                    pr_info("vic_core_ops_ioctl: No callback pointer for cmd 0x1000001, returning 0\n");
-                    return 0;
-                }
-
-                /* Binary Ninja: $v0_3 = *($v0_2 + 4) */
-                /* SAFE: Access callback function at offset +4 from callback_ptr */
-                callback_func = *((int (**)(void))((char *)callback_ptr + 4));
-
-                /* Binary Ninja: if ($v0_3 == 0) return 0 */
-                if (callback_func == NULL) {
-                    pr_info("vic_core_ops_ioctl: No callback function for cmd 0x1000001, returning 0\n");
-                    return 0;
-                }
-
-                /* Binary Ninja: result = $v0_3() */
-                pr_info("vic_core_ops_ioctl: Calling callback function for cmd 0x1000001\n");
-                result = callback_func();
-            } else {
-                pr_info("vic_core_ops_ioctl: No inpads for cmd 0x1000001, returning 0\n");
-                return 0;
-            }
-        } else {
-            pr_info("vic_core_ops_ioctl: NULL sd for cmd 0x1000001, returning 0\n");
-            return 0;
-        }
-    }
-    /* Binary Ninja: else if (arg2 == 0x3000008) - Buffer request/allocation event */
-    else if (cmd == 0x3000008) {  /* TX_ISP_EVENT_FRAME_QBUF / ISP_EVENT_BUFFER_REQUEST */
-        struct tx_isp_vic_device *vic_dev;
-        struct v4l2_buffer *buffer = (struct v4l2_buffer *)arg;
-
-        pr_info("vic_core_ops_ioctl: QBUF buffer management cmd=0x%x - managing VIC hardware buffer state\n", cmd);
-
-        /* Get VIC device from subdev host_priv */
-        if (sd && sd->host_priv) {
-            vic_dev = (struct tx_isp_vic_device *)sd->host_priv;
-
-            if (buffer && vic_dev) {
-                pr_info("vic_core_ops_ioctl: QBUF - Managing buffer index=%d for VIC hardware\n", buffer->index);
-
-                /* VIC Hardware Buffer State Management */
-                /* This is what the corrupted Binary Ninja reference should be doing */
-
-                /* 1. Validate buffer parameters for VIC hardware */
-                if (buffer->index >= 0 && buffer->index < 16) {  /* Max 16 buffers */
-
-                    /* 2. Update VIC hardware buffer tracking */
-                    /* In a real implementation, this would:
-                     * - Configure VIC DMA descriptors
-                     * - Set up buffer addresses in VIC registers
-                     * - Update buffer state tracking
-                     * - Enable VIC buffer processing
-                     */
-
-                    pr_info("vic_core_ops_ioctl: QBUF - VIC buffer %d configured for hardware\n", buffer->index);
-
-                    /* 3. Signal VIC hardware that buffer is ready */
-                    /* This would typically involve writing to VIC control registers */
-                    /* to indicate that a new buffer is available for processing */
-
-                    result = 0;  /* Success */
-                } else {
-                    pr_err("vic_core_ops_ioctl: QBUF - Invalid buffer index %d\n", buffer->index);
-                    result = -EINVAL;
-                }
-            } else {
-                pr_err("vic_core_ops_ioctl: QBUF - Missing buffer or VIC device\n");
-                result = -EINVAL;
-            }
-        } else {
-            pr_err("vic_core_ops_ioctl: QBUF - Missing subdev or host_priv\n");
-            result = -EINVAL;
-        }
-
-        pr_info("vic_core_ops_ioctl: QBUF buffer management result=%d\n", result);
+        pr_info("*** TX_ISP_EVENT_SYNC_SENSOR_ATTR handled successfully, returning %d ***\n", result);
         return result;
     }
-    /* Binary Ninja: else if (arg2 == 0x3000009) */
-    else if (cmd == 0x3000009) {
+
+    if (cmd == 0x1000001) {
+        result = -ENOTSUPP;
+        if (sd != NULL) {
+            /* Binary Ninja: void* $v0_2 = *(*(arg1 + 0xc4) + 0xc) */
+            if (sd->inpads && sd->inpads[0].priv) {
+                callback_ptr = sd->inpads[0].priv;
+                if (callback_ptr != NULL) {
+                    /* Get function pointer at offset +4 in callback structure */
+                    callback_func = *((int (**)(void))((char *)callback_ptr + 4));
+                    if (callback_func != NULL) {
+                        pr_info("vic_core_ops_ioctl: Calling callback function for cmd 0x1000001\n");
+                        result = callback_func();  /* Call the function without casting */
+                    }
+                }
+            }
+        }
+    } else if (cmd == 0x3000009) {
         pr_info("vic_core_ops_ioctl: tx_isp_subdev_pipo cmd=0x%x\n", cmd);
         result = tx_isp_subdev_pipo(sd, arg);
-		return result;
-    }
-    /* Binary Ninja: else if (arg2 != 0x1000000) return 0 */
-    else if (cmd != 0x1000000) {
-        pr_info("vic_core_ops_ioctl: REFERENCE DRIVER - Unknown cmd=0x%x, returning 0\n", cmd);
-        return 0;
-    }
-    /* Binary Ninja: Handle 0x1000000 case */
-    else {
-        result = -ENOTSUPP;  /* 0xffffffed */
-
-        /* Binary Ninja: if (arg1 != 0) */
+    } else if (cmd == 0x1000000) {
+        result = -ENOTSUPP;
         if (sd != NULL) {
             /* Binary Ninja: void* $v0_5 = **(arg1 + 0xc4) */
-            /* SAFE: Double dereference - first get inpads[0].priv, then dereference that pointer */
             if (sd->inpads && sd->inpads[0].priv) {
-                callback_ptr = *((void **)sd->inpads[0].priv);  /* Double dereference */
-
-                /* Binary Ninja: if ($v0_5 == 0) return 0 */
-                if (callback_ptr == NULL) {
-                    pr_info("vic_core_ops_ioctl: No callback pointer for cmd 0x1000000, returning 0\n");
-                    return 0;
+                callback_ptr = sd->inpads[0].priv;
+                if (callback_ptr != NULL) {
+                    /* Get function pointer at offset +4 in callback structure */
+                    callback_func = *((int (**)(void))((char *)callback_ptr + 4));
+                    if (callback_func != NULL) {
+                        pr_info("vic_core_ops_ioctl: Calling callback function for cmd 0x1000000\n");
+                        result = callback_func();  /* Call the function without casting */
+                    }
                 }
-
-                /* Binary Ninja: $v0_3 = *($v0_5 + 4) */
-                callback_func = *((int (**)(void))((char *)callback_ptr + 4));
-
-                /* Binary Ninja: if ($v0_3 == 0) return 0 */
-                if (callback_func == NULL) {
-                    pr_info("vic_core_ops_ioctl: No callback function for cmd 0x1000000, returning 0\n");
-                    return 0;
-                }
-
-                /* Binary Ninja: result = $v0_3() */
-                pr_info("vic_core_ops_ioctl: Calling callback function for cmd 0x1000000\n");
-                result = callback_func();
-            } else {
-                pr_info("vic_core_ops_ioctl: No inpads for cmd 0x1000000, returning 0\n");
-                return 0;
             }
-        } else {
-            pr_info("vic_core_ops_ioctl: NULL sd for cmd 0x1000000, returning 0\n");
-            return 0;
         }
+    } else {
+        pr_info("vic_core_ops_ioctl: Unknown cmd=0x%x, returning 0\n", cmd);
+        return 0;
     }
 
     /* Binary Ninja: if (result == 0xfffffdfd) return 0 */
@@ -1574,7 +1484,6 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
         return 0;
     }
 
-    pr_info("*** vic_core_ops_ioctl: EXACT Binary Ninja - returning result=%d ***\n", result);
     return result;
 }
 

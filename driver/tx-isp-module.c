@@ -3216,7 +3216,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
             /* VIC hardware initialization now handled by vic_core_s_stream only */
             pr_info("*** Channel %d: VIC hardware initialization deferred to vic_core_s_stream ***\n", channel);
-            pr_info("*** CHANNEL %d STREAMON: VIC hardware started successfully ***\n", channel);
 
             /* CRITICAL FIX: Only call VIC streaming restart if VIC is not already streaming */
             /* This prevents the destructive VIC unlock sequence during normal operations */

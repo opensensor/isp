@@ -1914,21 +1914,21 @@ int tisp_init(void *sensor_info, char *param_name)
     }
 
     /* Binary Ninja: system_reg_write(0x1c, $a1_7) - Control register */
-    system_reg_write(0x1c, 0x3f00);
+    //system_reg_write(0x1c, 0x3f00);
 
     /* Binary Ninja: Call tisp_set_csc_version(0) */
     tisp_set_csc_version(0);
 
     /* Configure top control bypass register per reference-standardize (avoid green frames) */
-    uint32_t bypass_val = 0x80700008; /* EXACT reference driver value from reference-standardize */
-    system_reg_write(0xc, bypass_val);
-    pr_info("tisp_init: Set ISP top bypass to 0x%x (reference-standardize)\n", bypass_val);
+    //uint32_t bypass_val = 0x80700008; /* EXACT reference driver value from reference-standardize */
+    //system_reg_write(0xc, bypass_val);
+    //pr_info("tisp_init: Set ISP top bypass to 0x%x (reference-standardize)\n", bypass_val);
 
     /* Binary Ninja: system_reg_write(0x30, 0xffffffff) - Enable all interrupts */
-    system_reg_write(0x30, 0xffffffff);
+    //system_reg_write(0x30, 0xffffffff);
 
     /* Binary Ninja: system_reg_write(0x10, $a1_9) - Main ISP enable */
-    system_reg_write(0x10, 0x133);
+    //system_reg_write(0x10, 0x133);
 
     /* Binary Ninja: Allocate and configure memory buffers - simplified version */
     /* In real implementation, this would allocate DMA buffers for ISP processing */
@@ -2018,10 +2018,10 @@ int tisp_init(void *sensor_info, char *param_name)
     }
 
     /* Binary Ninja: Final ISP configuration registers */
-    uint32_t isp_mode = (sensor_params.mode >= 4) ? 0x12 : 0x1e;
-    system_reg_write(0x804, isp_mode);
-    system_reg_write(0x1c, 8);
-    system_reg_write(0x800, 1);
+    //uint32_t isp_mode = (sensor_params.mode >= 4) ? 0x12 : 0x1e;
+    //system_reg_write(0x804, isp_mode);
+    //system_reg_write(0x1c, 8);
+    //system_reg_write(0x800, 1);
 
     /* Binary Ninja: CRITICAL - Initialize all ISP sub-modules */
     pr_info("*** tisp_init: INITIALIZING ISP SUB-MODULES ***\n");
