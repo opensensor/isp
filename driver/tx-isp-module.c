@@ -3439,26 +3439,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_err("Channel %d: SENSOR STREAMING NOT AVAILABLE - VIDEO WILL BE GREEN!\n", channel);
             }
 
-            // *** CRITICAL: TRIGGER VIC STREAMING CHAIN - THIS GENERATES THE REGISTER ACTIVITY! ***
-            if (ourISPdev && ourISPdev->vic_dev) {
-                struct tx_isp_vic_device *vic_streaming = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-
-                pr_info("*** Channel %d: NOW CALLING VIC STREAMING CHAIN - THIS SHOULD GENERATE REGISTER ACTIVITY! ***\n", channel);
-
-                // CRITICAL: Call vic_core_s_stream which calls tx_isp_vic_start when streaming
-                ret = vic_core_s_stream(&vic_streaming->sd, 1);
-
-                pr_info("*** Channel %d: VIC STREAMING RETURNED %d - REGISTER ACTIVITY SHOULD NOW BE VISIBLE! ***\n", channel, ret);
-
-                if (ret) {
-                    pr_err("Channel %d: VIC streaming failed: %d\n", channel, ret);
-                } else {
-                    pr_info("*** Channel %d: VIC STREAMING SUCCESS - ALL HARDWARE SHOULD BE ACTIVE! ***\n", channel);
-                }
-            } else {
-                pr_err("*** Channel %d: NO VIC DEVICE - CANNOT TRIGGER HARDWARE STREAMING! ***\n", channel);
-            }
-
             // Trigger Core Streaming - using ourISPdev directly as it contains the core functionality
             pr_info("*** Channel %d: Core streaming functionality integrated in main ISP device ***\n", channel);
 
