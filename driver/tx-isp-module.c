@@ -2344,49 +2344,6 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
     /* Debug: Show current subdev array status using helper function */
     tx_isp_debug_print_subdevs(dev);
 
-    /* CRITICAL FIX: Initialize core before streaming starts */
-    if (enable == 1) {  /* Stream ON */
-        pr_info("*** tx_isp_video_s_stream: STREAM ON - Initializing core first ***\n");
-
-        /* CRITICAL FIX: Step 1: Activate core module (VIC 1 → 2 state transition) */
-        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)dev->vic_dev;
-        if (vic_dev && vic_dev->state == 1) {
-            pr_info("*** tx_isp_video_s_stream: VIC state is 1, calling activate_module ***\n");
-            result = ispcore_activate_module(dev);
-            if (result != 0) {
-                pr_err("tx_isp_video_s_stream: ispcore_activate_module failed: %d\n", result);
-                return result;
-            }
-            pr_info("*** tx_isp_video_s_stream: ispcore_activate_module completed ***\n");
-        }
-
-        /* CRITICAL FIX: Step 2: Initialize VIC core (VIC 2 → 3 state transition) */
-        if (vic_dev && vic_dev->state == 2) {
-            /* CRITICAL FIX: Call VIC subdev's core->init, not ISP core's init */
-            struct tx_isp_subdev *vic_sd = &vic_dev->sd;
-            if (vic_sd->ops && vic_sd->ops->core && vic_sd->ops->core->init) {
-                pr_info("*** tx_isp_video_s_stream: VIC state is 2, calling VIC core->init ***\n");
-                result = vic_sd->ops->core->init(vic_sd, 1);
-                if (result != 0) {
-                    pr_err("tx_isp_video_s_stream: VIC core->init failed: %d\n", result);
-                    return result;
-                }
-                pr_info("*** tx_isp_video_s_stream: VIC core->init completed, VIC should now be state 3 ***\n");
-            } else {
-                pr_err("tx_isp_video_s_stream: VIC core->init not available\n");
-                return -EINVAL;
-            }
-        }
-
-        /* CRITICAL FIX: Verify VIC is ready for streaming */
-        if (vic_dev && vic_dev->state < 3) {
-            pr_err("tx_isp_video_s_stream: VIC state %d < 3, not ready for streaming\n", vic_dev->state);
-            return -EINVAL;
-        }
-
-        pr_info("*** tx_isp_video_s_stream: Core initialization complete, proceeding with subdev streaming ***\n");
-    }
-
     /* Binary Ninja: int32_t* $s4 = dev + 0x38 */
     s4 = dev->subdevs;
 
