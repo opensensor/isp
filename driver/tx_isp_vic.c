@@ -430,9 +430,6 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
              */
             pr_debug("vic_framedone_irq_function: NOT updating VIC[0x300] in ISR (buffer_index=0x%x)\n", buffer_index);
 
-            pr_info("*** VIC FRAME DONE: Updated VIC[0x300] = 0x%x (buffers: index=%d, match=%d) ***\n",
-                    reg_val, buffer_count, match_found);
-
             /* Binary Ninja: result = &data_b0000 */
             result = &data_b0000;
             goto label_123f4;
