@@ -12,11 +12,6 @@
 #include "../include/tx_isp_vic.h"
 #include "../include/tx-isp-debug.h"
 
-/* Subdevice type definitions */
-enum tx_isp_subdev_type {
-    TX_ISP_SUBDEV_TYPE_SOURCE = 1,  /* Source devices (CSI, VIN, FS) */
-    TX_ISP_SUBDEV_TYPE_SINK = 2,    /* Sink devices (VIC, CORE) */
-};
 
 /* Subdevice descriptor - cleaner than Binary Ninja struct */
 struct tx_isp_subdev_desc {
