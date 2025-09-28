@@ -14,6 +14,11 @@
 /* External reference to global ISP device */
 extern struct tx_isp_dev *ourISPdev;
 
+/* Global subdevice registry */
+struct tx_isp_subdev_runtime *subdev_registry[ISP_MAX_SUBDEVS];
+int subdev_count = 0;
+DEFINE_MUTEX(subdev_registry_mutex);
+
 /* Function declarations for Binary Ninja compatibility */
 int tx_isp_module_init(struct platform_device *pdev, struct tx_isp_subdev *sd);
 void tx_isp_module_deinit(struct tx_isp_subdev *sd);
@@ -49,7 +54,7 @@ static void __vb2_queue_free(void *queue, void *alloc_ctx);
 int frame_channel_open(struct inode *inode, struct file *file);
 int frame_channel_release(struct inode *inode, struct file *file);
 long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
-
+int tx_isp_init_sink_subdev(struct tx_isp_dev *isp, struct tx_isp_subdev_runtime *runtime);
 
 /* Frame buffer structure */
 struct frame_channel_buffer {
@@ -121,6 +126,155 @@ extern struct tx_isp_dev *ourISPdev;
 #define TX_ISP_PADLINK_VIC     0x1
 #define TX_ISP_PADLINK_DDR     0x2
 #define TX_ISP_PADLINK_ISP     0x4
+
+
+
+/* Subdevice descriptor - cleaner than Binary Ninja struct */
+struct tx_isp_subdev_desc {
+    const char *name;
+    enum tx_isp_subdev_type type;
+    uint32_t device_id;
+    uint32_t src_index;
+    uint32_t dst_index;
+    struct platform_device *pdev;
+    const struct file_operations *fops;
+    bool create_misc_device;
+    bool create_proc_entry;
+};
+
+/* Subdevice runtime data */
+struct tx_isp_subdev_runtime {
+    struct tx_isp_subdev_desc *desc;
+    struct miscdevice *misc_dev;
+    struct proc_dir_entry *proc_entry;
+    void *driver_data;
+    bool initialized;
+};
+
+
+/* Forward declarations */
+static int tx_isp_init_source_subdev(struct tx_isp_dev *isp,
+                                    struct tx_isp_subdev_runtime *runtime);
+static int tx_isp_init_sink_subdev(struct tx_isp_dev *isp,
+                                  struct tx_isp_subdev_runtime *runtime);
+static int tx_isp_create_subdev_link(void *src_subdev, void *dst_subdev,
+                                    struct tx_isp_subdev_desc *desc);
+static int tx_isp_create_misc_device(struct tx_isp_subdev_runtime *runtime);
+/* REMOVED: tx_isp_create_basic_pipeline - not in reference driver */
+static void *tx_isp_create_driver_data(struct tx_isp_subdev_desc *desc);
+
+/* Frame channel device operation forward declarations */
+int frame_channel_open(struct inode *inode, struct file *file);
+int frame_channel_release(struct inode *inode, struct file *file);
+long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+
+static const struct file_operations frame_channel_fops = {
+    .owner = THIS_MODULE,
+    .open = frame_channel_open,
+    .release = frame_channel_release,
+    .unlocked_ioctl = frame_channel_unlocked_ioctl,
+    .compat_ioctl = frame_channel_unlocked_ioctl,
+};
+
+static int graph_proc_show(struct seq_file *m, void *v)
+{
+    struct tx_isp_dev *isp = m->private;
+
+    seq_printf(m, "TX ISP Subdevice Graph Status\n");
+    seq_printf(m, "=============================\n");
+    seq_printf(m, "Registry count: %d\n", subdev_count);
+    seq_printf(m, "ISP device: %p\n", isp);
+
+    return 0;
+}
+
+static int graph_proc_open(struct inode *inode, struct file *file)
+{
+    return single_open(file, graph_proc_show, PDE_DATA(inode));
+}
+
+const struct file_operations graph_proc_fops = {
+    .owner = THIS_MODULE,
+    .open = graph_proc_open,
+    .read = seq_read,
+    .llseek = seq_lseek,
+    .release = single_release,
+};
+
+/* Binary Ninja compatible subdevice data structure */
+struct isp_subdev_data {
+    uint32_t device_type;     /* 0x00: Device type (1=source, 2=sink) */
+    uint32_t device_id;       /* 0x04: Device ID */
+    uint32_t src_index;       /* 0x08: Source index (for type 2) */
+    uint32_t dst_index;       /* 0x0C: Destination index */
+    struct miscdevice misc;   /* 0x10: Misc device (starts at 0xC, but we pad) */
+    char device_name[16];     /* 0x20: Device name */
+    void *file_ops;           /* 0x30: File operations pointer */
+    void *proc_ops;           /* 0x34: Proc operations pointer */
+    char padding[0x100];      /* Padding to match Binary Ninja expectations */
+};
+
+/* Subdevice descriptors - cleaner definition than hardcoded structs */
+static struct tx_isp_subdev_desc isp_subdev_descriptors[] = {
+    {
+        .name = "tx-isp-csi",
+        .type = TX_ISP_SUBDEV_TYPE_SOURCE,
+        .device_id = 0,
+        .src_index = 0,
+        .dst_index = 0,
+        .pdev = NULL,  /* Will be set during registration */
+        .fops = &frame_channel_fops,
+        .create_misc_device = true,
+        .create_proc_entry = true,
+    },
+    {
+        .name = "isp-w02",
+        .type = TX_ISP_SUBDEV_TYPE_SOURCE,  /* VIC is a source in the pipeline CSI->VIC->Core */
+        .device_id = 1,
+        .src_index = 0,  /* Connect from CSI (not used for sources) */
+        .dst_index = 1,  /* Store VIC at index 1 for Core to find */
+        .pdev = NULL,
+        .fops = &frame_channel_fops,
+        .create_misc_device = true,
+        .create_proc_entry = true,
+    },
+    {
+        .name = "tx-isp-vin",
+        .type = TX_ISP_SUBDEV_TYPE_SOURCE,
+        .device_id = 2,
+        .src_index = 0,
+        .dst_index = 2,
+        .pdev = NULL,
+        .fops = &frame_channel_fops,
+        .create_misc_device = false,
+        .create_proc_entry = true,
+    },
+    {
+        .name = "tx-isp-fs",
+        .type = TX_ISP_SUBDEV_TYPE_SOURCE,
+        .device_id = 3,
+        .src_index = 0,
+        .dst_index = 3,
+        .pdev = NULL,
+        .fops = &frame_channel_fops,
+        .create_misc_device = true,
+        .create_proc_entry = true,
+    },
+    {
+        .name = "tx-isp-core",
+        .type = TX_ISP_SUBDEV_TYPE_SINK,
+        .device_id = 4,
+        .src_index = 1,  /* Connect from VIC at index 1 */
+        .dst_index = 4,
+        .pdev = NULL,
+        .fops = &frame_channel_fops,
+        .create_misc_device = false,
+        .create_proc_entry = true,
+    },
+};
+
+#define NUM_ISP_SUBDEVS ARRAY_SIZE(isp_subdev_descriptors)
+
 
 /* isp_subdev_init_clks - EXACT Binary Ninja MCP implementation using platform data */
 int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count)
@@ -1174,3 +1328,344 @@ unlock:
     mutex_unlock(&subdev_registry_mutex);
     return ret;
 }
+
+
+
+/**
+ * tx_isp_subdev_register - Register a subdevice with the management system
+ * @desc: Subdevice descriptor
+ * @pdev: Platform device
+ * @driver_data: Driver-specific data
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+int tx_isp_subdev_register(struct tx_isp_subdev_desc *desc,
+                          struct platform_device *pdev,
+                          void *driver_data)
+{
+    struct tx_isp_subdev_runtime *runtime;
+    int ret = 0;
+
+    if (!desc || !pdev) {
+        pr_err("tx_isp_subdev_register: Invalid parameters\n");
+        return -EINVAL;
+    }
+
+    mutex_lock(&subdev_registry_mutex);
+
+    if (subdev_count >= ISP_MAX_SUBDEVS) {
+        pr_err("tx_isp_subdev_register: Too many subdevices\n");
+        ret = -ENOSPC;
+        goto unlock;
+    }
+
+    /* Allocate runtime structure */
+    runtime = kzalloc(sizeof(*runtime), GFP_KERNEL);
+    if (!runtime) {
+        ret = -ENOMEM;
+        goto unlock;
+    }
+
+    /* Initialize runtime data */
+    runtime->desc = desc;
+    runtime->driver_data = driver_data;
+    runtime->initialized = false;
+
+    /* Update descriptor with platform device */
+    desc->pdev = pdev;
+
+    /* Set platform device driver data */
+    platform_set_drvdata(pdev, driver_data);
+
+    /* Add to registry */
+    subdev_registry[subdev_count] = runtime;
+    subdev_count++;
+
+    pr_info("tx_isp_subdev_register: Registered subdevice '%s' (type=%d, id=%d)\n",
+            desc->name, desc->type, desc->device_id);
+
+unlock:
+    mutex_unlock(&subdev_registry_mutex);
+    return ret;
+}
+
+/**
+ * tx_isp_subdev_unregister - Unregister a subdevice
+ * @pdev: Platform device to unregister
+ */
+void tx_isp_subdev_unregister(struct platform_device *pdev)
+{
+    int i;
+
+    if (!pdev)
+        return;
+
+    mutex_lock(&subdev_registry_mutex);
+
+    for (i = 0; i < subdev_count; i++) {
+        if (subdev_registry[i] && subdev_registry[i]->desc->pdev == pdev) {
+            struct tx_isp_subdev_runtime *runtime = subdev_registry[i];
+
+            /* Cleanup misc device if created */
+            if (runtime->misc_dev) {
+                misc_deregister(runtime->misc_dev);
+                kfree(runtime->misc_dev->name);
+                kfree(runtime->misc_dev);
+            }
+
+            /* Cleanup proc entry if created */
+            if (runtime->proc_entry) {
+                proc_remove(runtime->proc_entry);
+            }
+
+            kfree(runtime);
+            subdev_registry[i] = NULL;
+
+            /* Compact the array */
+            for (int j = i; j < subdev_count - 1; j++) {
+                subdev_registry[j] = subdev_registry[j + 1];
+            }
+            subdev_count--;
+
+            pr_info("tx_isp_subdev_unregister: Unregistered subdevice\n");
+            break;
+        }
+    }
+
+    mutex_unlock(&subdev_registry_mutex);
+}
+
+/**
+ * tx_isp_init_source_subdev - Initialize a source subdevice
+ */
+static int tx_isp_init_source_subdev(struct tx_isp_dev *isp,
+                                    struct tx_isp_subdev_runtime *runtime)
+{
+    struct tx_isp_subdev_desc *desc = runtime->desc;
+    void *driver_data = platform_get_drvdata(desc->pdev);
+
+    if (!driver_data) {
+        pr_warn("tx_isp_init_source_subdev: No driver data for %s\n", desc->name);
+        return 0;
+    }
+
+    /* CRITICAL FIX: Only store tx_isp_subdev* in subdev_graph, not arbitrary driver_data */
+    /* Check if driver_data is actually a tx_isp_subdev structure */
+    if (desc->dst_index < ISP_MAX_SUBDEVS) {
+        /* Try to extract tx_isp_subdev from driver_data if it's a device structure */
+        struct tx_isp_subdev *sd = NULL;
+
+        /* For CSI device, extract subdev from csi_device structure */
+        if (strcmp(desc->name, "tx-isp-csi") == 0) {
+            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)driver_data;
+            if (csi_dev) {
+                sd = &csi_dev->sd;
+            }
+        }
+        /* For VIC device, extract subdev from vic_device structure */
+        else if (strcmp(desc->name, "isp-w02") == 0) {
+            struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)driver_data;
+            if (vic_dev) {
+                sd = &vic_dev->sd;
+            }
+        }
+        /* For other devices, assume driver_data is already a subdev */
+        else {
+            sd = (struct tx_isp_subdev *)driver_data;
+        }
+
+        if (sd) {
+            isp->subdev_graph[desc->dst_index] = sd;  /* Store tx_isp_subdev*, not driver_data */
+            pr_info("tx_isp_init_source_subdev: %s subdev stored at index %d\n",
+                    desc->name, desc->dst_index);
+        } else {
+            pr_warn("tx_isp_init_source_subdev: Could not extract subdev from %s driver_data\n", desc->name);
+        }
+    }
+
+    runtime->initialized = true;
+    return 0;
+}
+
+/**
+ * tx_isp_init_sink_subdev - Initialize a sink subdevice and create links
+ */
+int tx_isp_init_sink_subdev(struct tx_isp_dev *isp, struct tx_isp_subdev_runtime *runtime) {
+    struct tx_isp_subdev_desc *desc = runtime->desc;
+    void *driver_data = platform_get_drvdata(desc->pdev);
+    void *src_subdev;
+
+    if (!driver_data) {
+        pr_warn("tx_isp_init_sink_subdev: No driver data for %s\n", desc->name);
+        return 0;
+    }
+
+    /* Find source subdevice */
+    if (desc->src_index >= ISP_MAX_SUBDEVS) {
+        pr_err("tx_isp_init_sink_subdev: Invalid source index %d for %s\n",
+               desc->src_index, desc->name);
+        return -EINVAL;
+    }
+
+    src_subdev = isp->subdev_graph[desc->src_index];
+    if (!src_subdev) {
+        pr_err("tx_isp_init_sink_subdev: Source subdev %d not found for %s\n",
+               desc->src_index, desc->name);
+        return -ENODEV;
+    }
+
+    /* Create link: source -> sink */
+    int ret = tx_isp_create_subdev_link(src_subdev, driver_data, desc);
+    if (ret < 0) {
+        pr_err("tx_isp_init_sink_subdev: Failed to create link for %s: %d\n",
+               desc->name, ret);
+        return ret;
+    }
+
+    pr_info("tx_isp_init_sink_subdev: Created link %s[%d] -> %s[%d]\n",
+            "source", desc->src_index, desc->name, desc->dst_index);
+
+    runtime->initialized = true;
+    return 0;
+}
+
+/**
+ * tx_isp_create_subdev_link - Create a link between two subdevices
+ */
+static int tx_isp_create_subdev_link(void *src_subdev, void *dst_subdev,
+                                    struct tx_isp_subdev_desc *desc)
+{
+    /* This replaces the complex Binary Ninja pointer arithmetic with
+     * a cleaner approach. In a real implementation, this would configure
+     * the hardware routing between subdevices. */
+
+    pr_info("tx_isp_create_subdev_link: Linking %s (src=%p, dst=%p)\n",
+            desc->name, src_subdev, dst_subdev);
+
+    /* Store the link information for later use */
+    /* In the original code, this did:
+     * *((void**)((char*)src_subdev + link_offset)) = dst_subdev;
+     * We can implement this more safely with proper structures */
+
+    return 0;
+}
+
+/**
+ * tx_isp_create_misc_device - Create a misc device for a subdevice
+ */
+static int tx_isp_create_misc_device(struct tx_isp_subdev_runtime *runtime)
+{
+    struct miscdevice *misc_dev;
+    int ret;
+
+    misc_dev = kzalloc(sizeof(struct miscdevice), GFP_KERNEL);
+    if (!misc_dev) {
+        return -ENOMEM;
+    }
+
+    misc_dev->name = kstrdup(runtime->desc->name, GFP_KERNEL);
+    misc_dev->minor = MISC_DYNAMIC_MINOR;
+    misc_dev->fops = runtime->desc->fops;
+
+    ret = misc_register(misc_dev);
+    if (ret < 0) {
+        pr_err("Failed to register misc device %s: %d\n",
+               runtime->desc->name, ret);
+        kfree(misc_dev->name);
+        kfree(misc_dev);
+        return ret;
+    }
+
+    runtime->misc_dev = misc_dev;
+    pr_info("Created misc device: /dev/%s\n", runtime->desc->name);
+    return 0;
+}
+
+
+/* Initialize CSI device */
+static int tx_isp_csi_device_init(struct tx_isp_dev *isp)
+{
+    struct tx_isp_csi_device *csi_dev;
+
+    pr_info("Initializing CSI device\n");
+
+    /* Allocate CSI device structure if not already present */
+    if (!isp->csi_dev) {
+        csi_dev = kzalloc(sizeof(struct tx_isp_csi_device), GFP_KERNEL);
+        if (!csi_dev) {
+            pr_err("Failed to allocate CSI device\n");
+            return -ENOMEM;
+        }
+
+        /* Initialize CSI device structure */
+        strcpy(csi_dev->device_name, "tx_isp_csi");
+        csi_dev->dev = isp->dev;
+        csi_dev->state = 1; /* INIT state */
+        mutex_init(&csi_dev->mutex);
+        spin_lock_init(&csi_dev->lock);
+
+        isp->csi_dev = csi_dev;
+    }
+
+    pr_info("CSI device initialized\n");
+    return 0;
+}
+
+
+/* REMOVED: tx_isp_create_basic_pipeline function - not in reference driver
+ * All subdevices should be created by their respective probe functions
+ * and registered through tx_isp_subdev_init, not through manual initialization
+ */
+
+/**
+ * tx_isp_create_driver_data - Create appropriate driver data structure for subdevice
+ */
+static void *tx_isp_create_driver_data(struct tx_isp_subdev_desc *desc)
+{
+    void *data = NULL;
+
+    /* Create appropriate data structure based on device type */
+    if (strcmp(desc->name, "tx-isp-csi") == 0) {
+        struct isp_subdev_data *csi_data = kzalloc(sizeof(struct isp_subdev_data), GFP_KERNEL);
+        if (csi_data) {
+            csi_data->device_type = desc->type;
+            csi_data->device_id = desc->device_id;
+            csi_data->src_index = desc->src_index;
+            csi_data->dst_index = desc->dst_index;
+            strcpy(csi_data->device_name, "csi");
+            csi_data->file_ops = desc->fops;
+            data = csi_data;
+        }
+    } else if (strcmp(desc->name, "isp-w02") == 0) {
+        struct isp_subdev_data *vic_data = kzalloc(sizeof(struct isp_subdev_data), GFP_KERNEL);
+        if (vic_data) {
+            vic_data->device_type = desc->type;
+            vic_data->device_id = desc->device_id;
+            vic_data->src_index = desc->src_index;
+            vic_data->dst_index = desc->dst_index;
+            strcpy(vic_data->device_name, "vic");
+            vic_data->file_ops = desc->fops;
+            data = vic_data;
+        }
+    } else {
+        /* Generic subdevice data */
+        struct isp_subdev_data *generic_data = kzalloc(sizeof(struct isp_subdev_data), GFP_KERNEL);
+        if (generic_data) {
+            generic_data->device_type = desc->type;
+            generic_data->device_id = desc->device_id;
+            generic_data->src_index = desc->src_index;
+            generic_data->dst_index = desc->dst_index;
+            strncpy(generic_data->device_name, desc->name, sizeof(generic_data->device_name) - 1);
+            generic_data->file_ops = desc->fops;
+            data = generic_data;
+        }
+    }
+
+    return data;
+}
+
+
+/* Export symbols for use by other modules */
+EXPORT_SYMBOL(tx_isp_subdev_register);
+EXPORT_SYMBOL(tx_isp_subdev_unregister);
+
