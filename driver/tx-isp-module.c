@@ -1674,12 +1674,23 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
             writel(0xFFFFFFFF, vic_dev_fast->vic_regs_control + 0x1f0);
             writel(0xFFFFFFFF, vic_dev_fast->vic_regs_control + 0x1f4);
         }
-        /* CRITICAL FIX: Read interrupt status registers like Binary Ninja reference */
+        /* CRITICAL FIX: Read actual interrupt status registers */
         void __iomem *vr = vic_dev_fast->vic_regs;
-        u32 v1_7 = (~readl(vr + 0x1e8)) & readl(vr + 0x1e0);  /* Frame done and error interrupts */
-        u32 v1_10 = (~readl(vr + 0x1ec)) & readl(vr + 0x1e4); /* MDMA interrupts */
 
-        pr_info("*** VIC ISR: v1_7=0x%x (frame/errors), v1_10=0x%x (MDMA) ***\n", v1_7, v1_10);
+        /* Read the actual interrupt status registers (not enable registers) */
+        u32 status1 = readl(vr + 0x1f0);  /* Primary interrupt status */
+        u32 status2 = readl(vr + 0x1f4);  /* Secondary interrupt status */
+        u32 enable1 = readl(vr + 0x1e0);  /* Primary interrupt enable */
+        u32 enable2 = readl(vr + 0x1e4);  /* Secondary interrupt enable */
+        u32 mask1 = readl(vr + 0x1e8);    /* Primary interrupt mask */
+        u32 mask2 = readl(vr + 0x1ec);    /* Secondary interrupt mask */
+
+        /* Binary Ninja logic: enabled interrupts that are not masked */
+        u32 v1_7 = status1 & enable1 & (~mask1);   /* Frame done and error interrupts */
+        u32 v1_10 = status2 & enable2 & (~mask2);  /* MDMA interrupts */
+
+        pr_info("*** VIC ISR: status1=0x%x, status2=0x%x, v1_7=0x%x (frame/errors), v1_10=0x%x (MDMA) ***\n",
+                status1, status2, v1_7, v1_10);
 
         /* Handle frame-done interrupt (bit 0) */
         if (v1_7 & 1) {
