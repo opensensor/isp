@@ -1660,7 +1660,7 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
             /* Reset CSI PHY Config to disabled state */
             u32 current_100 = readl(ourISPdev->csi_regs + 0x100);
             if (current_100 != 0x0) {
-                writel(0x0, csi_regs + 0x100);
+                writel(0x0, ourISPdev->csi_regs + 0x100);
                 pr_info("ispcore_slake_module: CSI PHY Config disabled (0x100: 0x%x -> 0x0)", current_100);
             }
         }
