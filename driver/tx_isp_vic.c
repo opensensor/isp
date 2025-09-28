@@ -2825,6 +2825,26 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 wmb();
                 udelay(100);
                 pr_info("*** VIC POST-RUN: Re-armed control (2->1), masks preserved; NOT touching 0x1e0/0x1e4 ***\n");
+                /* Re-assert stream control if hardware cleared buffer_count (guard against 0x80000020) */
+                {
+                    u32 cur_ctrl = readl(vr + 0x300);
+                    u32 buf_cnt = vic_dev->active_buffer_count;
+                    if (buf_cnt == 0) buf_cnt = 2; else if (buf_cnt > 8) buf_cnt = 8;
+                    u32 desired_ctrl = (buf_cnt < 8) ? ((buf_cnt << 16) | 0x80000020) : 0x80080020;
+                    if ((cur_ctrl & 0x000F0000) == 0 || cur_ctrl == 0x80000020) {
+                        if (cur_ctrl != desired_ctrl) {
+                            writel(desired_ctrl, vr + 0x300);
+                            wmb();
+                            pr_info("*** VIC POST-RUN: Re-asserted [0x300]=0x%x (buf_cnt=%u) from 0x%x ***\n",
+                                    desired_ctrl, buf_cnt, cur_ctrl);
+                        } else {
+                            pr_info("*** VIC POST-RUN: [0x300] already correct (0x%x) ***\n", cur_ctrl);
+                        }
+                    } else {
+                        pr_info("*** VIC POST-RUN: [0x300] preserved (0x%x) ***\n", cur_ctrl);
+                    }
+                }
+
 
                 /* Re-apply IMR/IMCR gating on PRIMARY bank as seen in good-things */
                 writel(0x00000001, vr + 0x04);   /* IMR baseline */
