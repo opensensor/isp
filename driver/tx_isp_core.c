@@ -580,10 +580,6 @@ irqreturn_t ispcore_irq_thread_handle(int irq, void *dev_id)
         /* Binary Ninja: Handle VIC interrupts */
         pr_info("*** ispcore_irq_thread_handle: Processing VIC interrupt 0x%08x ***\n", irq_status);
 
-        /* Clear VIC interrupt status */
-        writel(irq_status, vic_dev->vic_regs + 0x1e0);
-        wmb();
-
         /* Binary Ninja: Signal frame completion */
         if (irq_status & 0x1) {  /* Frame done interrupt */
             complete(&isp_dev->frame_complete);
