@@ -2380,7 +2380,7 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
             /* Binary Ninja: if ($v0 != 1) */
             if (vic_state != 1) {
                 /* Binary Ninja: if ($v0 s>= 3) */
-                if (vic_state == 2) {
+                if (vic_state >= 3) {
                     pr_info("ispcore_slake_module: ISP state >= 3, calling ispcore_core_ops_init");
 
                     /* CRITICAL FIX: Use good-things approach - get sensor attributes from connected sensor */
@@ -2409,22 +2409,6 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
                     /* Binary Ninja: *($a2_1 + *($s0_1 + 0x150) + 0x74) = 1 - SAFE: Set channel enabled */
                     isp_dev->channels[i].enabled = true;
                     pr_info("ispcore_slake_module: Channel %d enabled", i);
-                }
-
-                /* CRITICAL FIX: Binary Ninja VIC control function call */
-                /* Binary Ninja: void* $a0_1 = *($s0_1 + 0x1bc) - Get VIC control function */
-                /* Binary Ninja: (*($a0_1 + 0x40cc))($a0_1, 0x4000001, 0) */
-                if (vic_dev && vic_dev->vic_regs) {
-                    pr_info("ispcore_slake_module: Calling VIC control function (0x4000001, 0)");
-                    /* CRITICAL: This is the missing VIC control call that enables proper state transitions */
-                    /* The function at offset 0x40cc is likely a VIC register configuration function */
-                    /* For T31 hardware, this would configure VIC for proper operation */
-                    uint32_t *vic_control_reg = (uint32_t *)((char *)vic_dev->vic_regs + 0x40cc);
-                    if (vic_control_reg) {
-                        /* Write the control value 0x4000001 to enable VIC operation */
-                        writel(0x4000001, vic_control_reg);
-                        pr_info("ispcore_slake_module: VIC control register written: 0x4000001");
-                    }
                 }
 
                 /* Binary Ninja: *($s0_1 + 0xe8) = 1 - SAFE: Set VIC state to 1 */
@@ -2477,18 +2461,6 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
                     pr_info("ispcore_slake_module: FS slake success");
                 } else if (ret != -0x203) {
                     isp_printf(2, (unsigned char*)"error handler!!!\n", fs_sd->module.name);
-                    goto slake_error;
-                }
-            }
-
-            /* Process Core fourth (Note: Core should NOT have slake_module to avoid recursion) */
-            if (core_sd && core_sd->ops && core_sd->ops->internal && core_sd->ops->internal->slake_module) {
-                pr_info("*** ispcore_slake_module: Calling slake_module for Core subdev ***\n");
-                int ret = core_sd->ops->internal->slake_module(core_sd);
-                if (ret == 0) {
-                    pr_info("ispcore_slake_module: Core slake success");
-                } else if (ret != -0x203) {
-                    isp_printf(2, (unsigned char*)"error handler!!!\n", core_sd->module.name);
                     goto slake_error;
                 }
             }
