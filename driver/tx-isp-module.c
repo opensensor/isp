@@ -42,6 +42,12 @@
 #define FRAME_CHANNEL_MAGIC 0xDEADBEEF
 #endif
 
+
+struct frame_channel_device frame_channels[4]; /* Support up to 4 video channels */
+int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
+EXPORT_SYMBOL(frame_channels);
+EXPORT_SYMBOL(num_channels);
+
 /* Helper function to perform sensor operations using helper functions */
 static int tx_isp_sensor_operation_helper(struct tx_isp_dev *isp_dev, unsigned int cmd, void *arg)
 {

@@ -622,8 +622,6 @@ struct frame_channel_device {
     uint32_t vbm_frame_size;             /* Per-frame size provided/derived from libimp */
 };
 
-struct frame_channel_device frame_channels[4]; /* Support up to 4 video channels */
-int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
 
 /* Global per-channel cache of legacy SET_BUF base/step for robustness across FDs */
 static u32 g_setbuf_base[4] = {0};
