@@ -1089,13 +1089,19 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
 
         /* Route IMR/IMCR and program MainMask immediately before final RUN (match working sequence) */
-        /* Clear pending (W1C) and unmask framedone + bit21 per silicon */
+        /* Clear pending (W1C) and unmask framedone + bit21 per silicon (PRIMARY + CONTROL banks) */
         writel(0xFFFFFFFF, vic_regs + 0x1f0);
         writel(0xFFFFFFFF, vic_regs + 0x1f4);
         writel(0xFFDFFFFE, vic_regs + 0x1e8); /* unmask bit0 + bit21 (silicon uses bit21) */
+        if (vic_dev->vic_regs_control) {
+            void __iomem *ctrl = vic_dev->vic_regs_control;
+            writel(0xFFFFFFFF, ctrl + 0x1f0);
+            writel(0xFFFFFFFF, ctrl + 0x1f4);
+            writel(0xFFDFFFFE, ctrl + 0x1e8);
+        }
         /* Do NOT re-program IMR/IMCR here; route once pre-start to avoid race with RUN */
         wmb();
-        pr_info("*** VIC ENABLE: MainMask programmed just before RUN (IMR/IMCR left as pre-start) ***\n");
+        pr_info("*** VIC ENABLE: MainMask programmed in BOTH banks just before RUN (IMR/IMCR left as pre-start) ***\n");
 
         writel(0x1, vic_regs + 0x0);  /* Final enable */
         wmb();
