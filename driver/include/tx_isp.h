@@ -23,6 +23,7 @@
 
 #include "tx-isp-common.h"
 
+int isp_printf(unsigned int level, unsigned char *fmt, ...);
 
 #define ISP_INFO_LEVEL		0x0
 #define ISP_WARN_LEVEL	0x1
