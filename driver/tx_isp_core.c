@@ -1506,7 +1506,6 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
                 pr_info("*** HYBRID: Calling CSI PHY lane configuration directly ***");
 
                 /* Call the CSI PHY lane configuration function that was missing */
-                extern void csi_program_ref_sequence(void __iomem *base);
                 csi_program_ref_sequence(csi_dev->csi_regs);
 
                 pr_info("*** HYBRID: CSI PHY lane configuration applied successfully ***");
