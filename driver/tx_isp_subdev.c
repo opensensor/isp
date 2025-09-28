@@ -1081,7 +1081,30 @@ void tx_isp_cleanup_subdev_graph(struct tx_isp_dev *isp)
     pr_info("tx_isp_cleanup_subdev_graph: Cleanup completed\n");
 }
 
+/**
+ * tx_isp_init_source_subdev - Initialize a source subdevice
+ */
+static int tx_isp_init_source_subdev(struct tx_isp_dev *isp,
+                                    struct tx_isp_subdev_runtime *runtime)
+{
+    struct tx_isp_subdev_desc *desc = runtime->desc;
+    void *driver_data = platform_get_drvdata(desc->pdev);
 
+    if (!driver_data) {
+        pr_warn("tx_isp_init_source_subdev: No driver data for %s\n", desc->name);
+        return 0;
+    }
+
+    /* Store in ISP device graph array for compatibility */
+    if (desc->dst_index < ISP_MAX_SUBDEVS) {
+        isp->subdev_graph[desc->dst_index] = driver_data;
+        pr_info("tx_isp_init_source_subdev: %s stored at index %d\n",
+                desc->name, desc->dst_index);
+    }
+
+    runtime->initialized = true;
+    return 0;
+}
 
 /**
  * tx_isp_create_subdev_graph - Create ISP processing graph (refactored version)
