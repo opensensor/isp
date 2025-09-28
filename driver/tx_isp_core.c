@@ -1657,14 +1657,6 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
             pr_info("ispcore_slake_module: CSI PHY calibration loop disabled (0x8c=0x0, 0xa0=0x0, 0xb0=0x0)");
             pr_info("ispcore_slake_module: Previous 0x90 value was 0x%x - should stop changing now", current_90_val);
 
-            /* Final slaking sequence - matches good trace lines 258-261 */
-            /* Reset CSI PHY registers to stable slaked state */
-            u32 current_a8 = readl(csi_regs + 0xa8);
-            if (current_a8 != 0x58050000) {
-                writel(0x58050000, csi_regs + 0xa8);
-                pr_info("ispcore_slake_module: CSI PHY A8 reset (0xa8: 0x%x -> 0x58050000)", current_a8);
-            }
-
             /* Reset CSI PHY Config to disabled state */
             u32 current_100 = readl(csi_regs + 0x100);
             if (current_100 != 0x0) {
@@ -1674,10 +1666,10 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
         }
 
         /* Final Core Control register cleanup to match good trace */
-        if (isp->isp_regs) {
+        if (isp->core_regs) {
             /* Reset Core Control registers that were modified during streaming */
-            writel(0x0, isp->isp_regs + 0xb054);
-            writel(0x0, isp->isp_regs + 0xb05c);
+            writel(0x0, isp->core_regs + 0xb054);
+            writel(0x0, isp->core_regs + 0xb05c);
             pr_info("ispcore_slake_module: Core Control registers reset (0xb054=0x0, 0xb05c=0x0)");
         }
     }
