@@ -1742,6 +1742,19 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         writel(v1_10, base_for_irq + 0x1f4);
         wmb();
 
+        /* Safety: ensure no lingering pending bits in either bank */
+        do {
+            void __iomem *p = vic_regs;
+            writel(0xFFFFFFFF, p + 0x1f0);
+            writel(0xFFFFFFFF, p + 0x1f4);
+            if (vic_dev && vic_dev->vic_regs_control) {
+                void __iomem *c = vic_dev->vic_regs_control;
+                writel(0xFFFFFFFF, c + 0x1f0);
+                writel(0xFFFFFFFF, c + 0x1f4);
+            }
+            wmb();
+        } while (0);
+
         /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
         printk(KERN_ALERT "*** VIC IRQ: vic_start_ok=%u, v1_7=0x%x, v1_10=0x%x ***\n", vic_start_ok, v1_7, v1_10);
 
