@@ -2549,23 +2549,7 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
     /* Binary Ninja EXACT: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
     __private_spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, &var_18);
 
-    if (arg2 == 0) {
-        /* Stream OFF */
-        /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = 0 */
-        void __iomem *vic_base = vic_dev->vic_regs;  /* SAFE: $s0 + 0xb8 = vic_regs */
-        if (vic_base) {
-            void __iomem *vic_ctrl = vic_dev->vic_regs_control;
-            writel(0, vic_base + 0x300);
-            if (vic_ctrl)
-                writel(0, vic_ctrl + 0x300);
-            wmb();
-            pr_info("ispvic_frame_channel_s_stream: Stream OFF - wrote 0 to reg 0x300\n");
-        }
-
-        /* Binary Ninja EXACT: *($s0 + 0x210) = 0 */
-        vic_dev->stream_state = 0;  /* SAFE: $s0 + 0x210 = stream_state */
-
-    } else {
+    if (arg2 != 0) {
         /* Stream ON */
         /* Binary Ninja EXACT: vic_pipo_mdma_enable($s0) */
         pr_info("*** CRITICAL: Calling vic_pipo_mdma_enable - required for VIC interrupts ***\n");

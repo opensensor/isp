@@ -2521,6 +2521,18 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
     INIT_WORK(&ispcore_fs_work, ispcore_irq_fs_work);
     pr_info("*** ispcore_core_ops_init: Frame sync work structure initialized ***");
 
+    /* CRITICAL: Create fs_workqueue if it doesn't exist */
+    if (!fs_workqueue) {
+        fs_workqueue = create_singlethread_workqueue("fs_workqueue");
+        if (!fs_workqueue) {
+            pr_err("*** ispcore_core_ops_init: Failed to create fs_workqueue ***");
+            return -ENOMEM;
+        }
+        pr_info("*** ispcore_core_ops_init: fs_workqueue created successfully: %p ***", fs_workqueue);
+    } else {
+        pr_info("*** ispcore_core_ops_init: fs_workqueue already exists: %p ***", fs_workqueue);
+    }
+
     /* Convert 'on' parameter to sensor_attr for Binary Ninja compatibility */
     if (on == 0) {
         sensor_attr = NULL;  /* Disable/deinit */
@@ -2596,6 +2608,13 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 /* CRITICAL: Cancel any pending frame sync work before deinit */
                 pr_info("ispcore_core_ops_init: Canceling frame sync work during deinit");
                 cancel_work_sync(&ispcore_fs_work);
+
+                /* CRITICAL: Destroy fs_workqueue during deinit */
+                if (fs_workqueue) {
+                    pr_info("*** ispcore_core_ops_init: Destroying fs_workqueue during deinit ***");
+                    destroy_workqueue(fs_workqueue);
+                    fs_workqueue = NULL;
+                }
 
                 /* Binary Ninja: tisp_deinit() */
                 tisp_deinit();
@@ -4469,6 +4488,14 @@ int tx_isp_core_remove(struct platform_device *pdev)
     pr_info("*** tx_isp_core_remove: Canceling frame sync work ***\n");
     cancel_work_sync(&ispcore_fs_work);
     pr_info("*** tx_isp_core_remove: Frame sync work canceled successfully ***\n");
+
+    /* CRITICAL: Destroy fs_workqueue during module removal */
+    if (fs_workqueue) {
+        pr_info("*** tx_isp_core_remove: Destroying fs_workqueue ***\n");
+        destroy_workqueue(fs_workqueue);
+        fs_workqueue = NULL;
+        pr_info("*** tx_isp_core_remove: fs_workqueue destroyed successfully ***\n");
+    }
 
     if (tx_isp_core_device_is_valid(core_dev)) {
         /* Binary Ninja: int32_t* $s0 = *($v0 + 0xd4) - Get ISP device from core device */
