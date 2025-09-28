@@ -1496,28 +1496,58 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
         vic_dev->state = 1;
         pr_info("ispcore_slake_module: Set ISP state to INIT (1)");
 
-        /* HYBRID APPROACH: Add MIPI lane configuration without breaking interrupts */
-        pr_info("ispcore_slake_module: HYBRID - Adding MIPI lane configuration");
+        /* HYBRID APPROACH: Ensure proper MIPI sensor attributes without breaking interrupts */
+        pr_info("ispcore_slake_module: HYBRID - Ensuring MIPI sensor attributes are properly configured");
 
-        /* CRITICAL: Apply CSI/MIPI lane configuration sequence */
-        /* This is the missing piece that the new version was trying to add */
-        pr_info("*** HYBRID: Applying CSI/MIPI lane configuration sequence ***");
-        extern void tx_isp_vic_write_csi_phy_sequence(void);
-        tx_isp_vic_write_csi_phy_sequence();
+        /* CRITICAL: Ensure sensor has proper MIPI attributes for lane configuration */
+        if (isp->sensor && isp->sensor->video.attr) {
+            struct tx_isp_sensor_attribute *sensor_attr = isp->sensor->video.attr;
 
-        /* HYBRID: Ensure CSI hardware is properly configured for MIPI lanes */
-        if (isp->csi_dev) {
-            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp->csi_dev;
-            if (csi_dev && csi_dev->csi_regs) {
-                pr_info("*** HYBRID: Configuring CSI MIPI lane settings ***");
+            /* Ensure MIPI interface is properly configured */
+            if (sensor_attr->dbus_type != TX_SENSOR_DATA_INTERFACE_MIPI) {
+                pr_info("*** HYBRID: Setting sensor to MIPI interface ***");
+                sensor_attr->dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;
+            }
 
-                /* Configure for 2-lane MIPI (default) */
-                u32 lane_config = readl(csi_dev->csi_regs + 0x4);
-                lane_config = (lane_config & ~0x3) | 0x1; /* 2 lanes - 1 = 1 */
-                writel(lane_config, csi_dev->csi_regs + 0x4);
-                wmb();
+            /* Ensure MIPI lanes are properly configured */
+            if (sensor_attr->mipi.lans == 0) {
+                pr_info("*** HYBRID: Setting MIPI lanes to 2 ***");
+                sensor_attr->mipi.lans = 2; /* Default to 2 lanes */
+            }
 
-                pr_info("*** HYBRID: CSI lane configuration applied (2 lanes) ***");
+            /* Ensure sensor format is set */
+            if (sensor_attr->mipi.mipi_sc.sensor_csi_fmt == 0) {
+                pr_info("*** HYBRID: Setting sensor format to RAW10 ***");
+                sensor_attr->mipi.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10;
+            }
+
+            pr_info("*** HYBRID: Sensor attributes configured - MIPI, %d lanes, format %d ***",
+                    sensor_attr->mipi.lans, sensor_attr->mipi.mipi_sc.sensor_csi_fmt);
+
+            /* CRITICAL: Trigger sensor attribute synchronization to CSI */
+            pr_info("*** HYBRID: Triggering sensor attribute sync to CSI ***");
+            extern int tx_isp_send_event_to_remote(struct tx_isp_subdev *sd, int event_type, void *data);
+            if (isp->csi_dev) {
+                struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp->csi_dev;
+                int sync_result = tx_isp_send_event_to_remote(&csi_dev->sd, TX_ISP_EVENT_SYNC_SENSOR_ATTR, sensor_attr);
+                pr_info("*** HYBRID: Sensor attr sync result: %d ***", sync_result);
+            }
+        } else {
+            pr_info("*** HYBRID: No sensor attributes available - creating default MIPI attributes ***");
+
+            /* Create default sensor attributes if none exist */
+            if (isp->sensor && !isp->sensor->video.attr) {
+                struct tx_isp_sensor_attribute *default_attr = kzalloc(sizeof(struct tx_isp_sensor_attribute), GFP_KERNEL);
+                if (default_attr) {
+                    default_attr->dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;
+                    default_attr->mipi.lans = 2;
+                    default_attr->mipi.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10;
+                    default_attr->total_width = 1920;
+                    default_attr->total_height = 1080;
+
+                    isp->sensor->video.attr = default_attr;
+                    pr_info("*** HYBRID: Created default MIPI sensor attributes ***");
+                }
             }
         }
 
@@ -1553,6 +1583,95 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
     return 0;
 }
 EXPORT_SYMBOL(ispcore_slake_module);
+
+/**
+ * ispcore_apply_mipi_config - Apply MIPI lane configuration through proper sensor attribute sync
+ * This function ensures MIPI configuration is applied through the correct mechanism
+ */
+int ispcore_apply_mipi_config(struct tx_isp_dev *isp)
+{
+    if (!isp) {
+        pr_info("ispcore_apply_mipi_config: Invalid ISP device");
+        return -EINVAL;
+    }
+
+    pr_info("*** ispcore_apply_mipi_config: Applying MIPI configuration through sensor attributes ***");
+
+    /* Ensure sensor has proper MIPI attributes */
+    if (isp->sensor && isp->sensor->video.attr) {
+        struct tx_isp_sensor_attribute *sensor_attr = isp->sensor->video.attr;
+
+        /* Ensure MIPI configuration is correct */
+        sensor_attr->dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;
+        sensor_attr->mipi.lans = 2; /* 2 lanes */
+        sensor_attr->mipi.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10;
+
+        pr_info("*** ispcore_apply_mipi_config: Sensor attributes configured for MIPI ***");
+
+        /* Synchronize to CSI subsystem */
+        if (isp->csi_dev) {
+            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp->csi_dev;
+            extern int tx_isp_send_event_to_remote(struct tx_isp_subdev *sd, int event_type, void *data);
+
+            int sync_result = tx_isp_send_event_to_remote(&csi_dev->sd, TX_ISP_EVENT_SYNC_SENSOR_ATTR, sensor_attr);
+            pr_info("*** ispcore_apply_mipi_config: CSI sync result: %d ***", sync_result);
+        }
+    } else {
+        pr_info("*** ispcore_apply_mipi_config: No sensor attributes - cannot configure MIPI ***");
+        return -ENODEV;
+    }
+
+    pr_info("*** ispcore_apply_mipi_config: MIPI configuration applied through sensor attributes ***");
+    return 0;
+}
+EXPORT_SYMBOL(ispcore_apply_mipi_config);
+
+/**
+ * ispcore_ensure_mipi_sensor_attributes - Ensure sensor has proper MIPI attributes
+ * This function can be called to ensure sensor attributes are properly set up
+ */
+int ispcore_ensure_mipi_sensor_attributes(struct tx_isp_dev *isp)
+{
+    struct tx_isp_sensor_attribute *sensor_attr;
+
+    if (!isp) {
+        return -EINVAL;
+    }
+
+    pr_info("*** ispcore_ensure_mipi_sensor_attributes: Ensuring MIPI sensor attributes ***");
+
+    /* Check if sensor exists and has attributes */
+    if (!isp->sensor) {
+        pr_info("*** No sensor device - cannot configure MIPI attributes ***");
+        return -ENODEV;
+    }
+
+    /* Ensure sensor has attribute structure */
+    if (!isp->sensor->video.attr) {
+        pr_info("*** Creating sensor attribute structure ***");
+        isp->sensor->video.attr = kzalloc(sizeof(struct tx_isp_sensor_attribute), GFP_KERNEL);
+        if (!isp->sensor->video.attr) {
+            pr_info("*** Failed to allocate sensor attributes ***");
+            return -ENOMEM;
+        }
+    }
+
+    sensor_attr = isp->sensor->video.attr;
+
+    /* Configure MIPI attributes */
+    sensor_attr->dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI;
+    sensor_attr->mipi.lans = 2; /* 2 lanes */
+    sensor_attr->mipi.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10;
+    sensor_attr->total_width = isp->sensor_width ? isp->sensor_width : 1920;
+    sensor_attr->total_height = isp->sensor_height ? isp->sensor_height : 1080;
+
+    pr_info("*** ispcore_ensure_mipi_sensor_attributes: MIPI attributes configured ***");
+    pr_info("*** Interface: MIPI, Lanes: %d, Format: RAW10, Size: %dx%d ***",
+            sensor_attr->mipi.lans, sensor_attr->total_width, sensor_attr->total_height);
+
+    return 0;
+}
+EXPORT_SYMBOL(ispcore_ensure_mipi_sensor_attributes);
 
 
 /* Global variables for tisp_init - Binary Ninja exact data structures */
