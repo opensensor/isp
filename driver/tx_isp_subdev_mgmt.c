@@ -35,10 +35,6 @@ struct tx_isp_subdev_runtime {
     bool initialized;
 };
 
-/* Global subdevice registry */
-static struct tx_isp_subdev_runtime *subdev_registry[ISP_MAX_SUBDEVS];
-static int subdev_count = 0;
-static DEFINE_MUTEX(subdev_registry_mutex);
 
 /* Forward declarations */
 static int tx_isp_init_source_subdev(struct tx_isp_dev *isp, 

@@ -139,6 +139,10 @@ struct ae_statistics {
 
 
 
+/* Global subdevice registry */
+struct tx_isp_subdev_runtime *subdev_registry[ISP_MAX_SUBDEVS];
+int subdev_count = 0;
+DEFINE_MUTEX(subdev_registry_mutex);
 
 /* Declare functions but don't define them */
 /* isp_read32 removed - use system_reg_read from reference driver instead */
