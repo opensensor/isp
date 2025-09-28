@@ -1834,6 +1834,29 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                     /* Call frame-done handler to rotate buffers and keep DMA moving */
                     vic_framedone_irq_function(vic_dev);
 
+                    /* Proactively rotate VIC MDMA ring by one slot to simulate consumption */
+                    do {
+                        void __iomem *vrb = vic_dev->vic_regs;
+                        void __iomem *vcb = vic_dev->vic_regs_control;
+                        u32 bufs[5];
+                        int i, idx = -1;
+                        u32 cur = readl(vrb + 0x380);
+                        for (i = 0; i < 5; i++) {
+                            bufs[i] = readl(vrb + (0x318 + i * 4));
+                            if (bufs[i] == cur) idx = i;
+                        }
+                        if (idx >= 0) {
+                            u32 rot[5];
+                            for (i = 0; i < 5; i++) rot[i] = bufs[(idx + 1 + i) % 5];
+                            for (i = 0; i < 5; i++) {
+                                u32 off = 0x318 + i * 4;
+                                writel(rot[i], vrb + off);
+                                if (vcb) writel(rot[i], vcb + off);
+                            }
+                            printk(KERN_ALERT "*** VIC RING ROTATE: current=0x%x idx=%d -> advanced ring order ***\n", cur, idx);
+                        }
+                    } while (0);
+
                     /* Notify core and frame channels to avoid pipeline stall */
                     do {
                         extern struct frame_channel_device frame_channels[];
