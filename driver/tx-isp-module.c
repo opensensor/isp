@@ -1723,9 +1723,9 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         printk(KERN_ALERT "*** VIC IRQ: CTRL[0x300]=0x%x DIMS[0x304]=0x%x STRIDE[0x310]=0x%x ***\n",
                readl(vic_regs + 0x300), readl(vic_regs + 0x304), readl(vic_regs + 0x310));
 
-        /* CRITICAL: Check if VIC control registers have been cleared by system */
-        trace_vic_registers(vic_regs, "VIC_IRQ_HANDLER");
-        //protect_vic_registers(vic_regs, "VIC_IRQ_HANDLER");
+        /* DISABLED: VIC register monitoring in interrupt handler can cause interference */
+        // trace_vic_registers(vic_regs, "VIC_IRQ_HANDLER");
+        // protect_vic_registers(vic_regs, "VIC_IRQ_HANDLER");
 
 
         v1_7 = (~reg_1e8) & reg_1e0;

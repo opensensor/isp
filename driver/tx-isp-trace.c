@@ -52,10 +52,6 @@ struct vic_reg_monitor {
 
 static struct vic_reg_monitor vic_monitor = {0};
 
-// Periodic VIC register monitoring
-static struct delayed_work vic_protection_work;
-static bool vic_protection_enabled = false;
-
 // Register ranges to classify regions
 struct reg_range {
     u32 start;
@@ -311,10 +307,12 @@ static void check_region_changes(struct work_struct *work)
     if (region->seq_write.in_progress)
         end_sequence(&region->seq_write, region->name);
 
+    // DISABLED: Periodic monitoring can interfere with VIC interrupt generation
+    // The 10ms periodic register reads could be disrupting hardware state
     // Reschedule if still monitoring
-    if (region->monitoring) {
-        schedule_delayed_work(&region->monitor_work, HZ/100); // 10ms interval to catch rapid changes
-    }
+    // if (region->monitoring) {
+    //     schedule_delayed_work(&region->monitor_work, HZ/100); // 10ms interval to catch rapid changes
+    // }
 }
 
 static int init_region(struct isp_region *region)
@@ -354,8 +352,9 @@ static int init_region(struct isp_region *region)
         region->last_change_time[i] = 0;
     }
 
-    region->monitoring = true;
-    schedule_delayed_work(&region->monitor_work, HZ/100); // Start with 10ms interval
+    // DISABLED: Periodic monitoring can interfere with VIC interrupt generation
+    region->monitoring = false;  // Disable periodic monitoring
+    // schedule_delayed_work(&region->monitor_work, HZ/100); // Start with 10ms interval
 
     pr_info("ISP Monitor: initialized region %s at phys 0x%pap size 0x%zx\n",
             region->name, &region->phys_addr, region->size);
