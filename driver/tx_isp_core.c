@@ -1496,23 +1496,8 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
         vic_dev->state = 1;
         pr_info("ispcore_slake_module: Set ISP state to INIT (1)");
 
-        /* HYBRID APPROACH: Apply MIPI lane configuration directly without breaking interrupts */
-        pr_info("ispcore_slake_module: HYBRID - Applying MIPI lane configuration directly");
-
-        /* CRITICAL: Apply the missing CSI PHY lane configuration */
-        if (isp->csi_dev) {
-            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp->csi_dev;
-            if (csi_dev && csi_dev->csi_regs) {
-                pr_info("*** HYBRID: Calling CSI PHY lane configuration directly ***");
-
-                /* Call the CSI PHY lane configuration function that was missing */
-                csi_program_ref_sequence(csi_dev->csi_regs);
-
-                pr_info("*** HYBRID: CSI PHY lane configuration applied successfully ***");
-            } else {
-                pr_info("*** HYBRID: CSI device or registers not available ***");
-            }
-        }
+        /* HYBRID APPROACH: Ensure proper MIPI sensor attributes without breaking interrupts */
+        pr_info("ispcore_slake_module: HYBRID - Ensuring MIPI sensor attributes are properly configured");
 
         /* HYBRID: Also ensure sensor has proper MIPI attributes */
         if (isp->sensor && isp->sensor->video.attr) {
