@@ -2714,8 +2714,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Clear pending (W1C) */
                 writel(0xFFFFFFFF, vr + 0x1f0);
                 writel(0xFFFFFFFF, vr + 0x1f4);
-                /* Set MainMask to allow framedone + bit21 (debug); do NOT touch status regs 0x1e0/0x1e4 */
-                writel(0xFFDFFFFE, vr + 0x1e8); /* allow frame-done + bit21 (debug) */
+                /* Set MainMask to unmask only frame-done (bit0) per reference */
+                writel(0xFFFFFFFE, vr + 0x1e8); /* allow frame-done only */
                 /* Leave 0x1ec (MDMA mask) as-is per working reference */
                 /* Global interrupt enable at 0x30c (if implemented) */
                 writel(0xFFFFFFFF, vr + 0x30c);
@@ -2790,10 +2790,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     writel(0xFFFFFFFF, vr + 0x1f0);
                     writel(0xFFFFFFFF, vr + 0x1f4);
                     wmb();
-                    /* Set MainMask to allow frame-done + bit21 during bring-up */
-                    writel(0xFFDFFFFE, vr + 0x1e8);
+                    /* Set MainMask to unmask only frame-done (bit0) per reference */
+                    writel(0xFFFFFFFE, vr + 0x1e8);
                     wmb();
-                    pr_info("*** VIC MASK: Set MainMask=0xFFDFFFFE (frame-done + bit21) before RUN ***\n");
+                    pr_info("*** VIC MASK: Set MainMask=0xFFFFFFFE (frame-done only) before RUN ***\n");
                 }
 
             /* VIC CONTROL: enter RUN state after all config (write 1) */
