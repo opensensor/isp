@@ -2753,15 +2753,28 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Clear pending (W1C) */
                 writel(0xFFFFFFFF, vr + 0x1f0);
                 writel(0xFFFFFFFF, vr + 0x1f4);
-                /* CRITICAL FIX: Enable VIC interrupts - this was the missing piece! */
+                /* CRITICAL FIX: Enable VIC interrupts in PRIMARY register space */
                 writel(0x00000001, vr + 0x1e0); /* Enable frame done interrupt (bit 0) */
                 writel(0x00000003, vr + 0x1e4); /* Enable MDMA channel 0 and 1 interrupts */
                 writel(0x00000000, vr + 0x1e8); /* Clear interrupt masks (0 = not masked) */
                 writel(0x00000000, vr + 0x1ec); /* Clear MDMA interrupt masks */
-                /* Global interrupt enable at 0x30c (if implemented) */
-                writel(0xFFFFFFFF, vr + 0x30c);
+                writel(0xFFFFFFFF, vr + 0x30c); /* Global interrupt enable */
 
-                pr_info("*** CRITICAL FIX: VIC interrupts enabled - [0x1e0]=0x1, [0x1e4]=0x3, masks cleared ***\n");
+                pr_info("*** CRITICAL FIX: VIC PRIMARY interrupts enabled - [0x1e0]=0x1, [0x1e4]=0x3 ***\n");
+            }
+
+            /* CRITICAL FIX: Also enable interrupts in CONTROL register space */
+            if (vic_dev && vic_dev->vic_regs_control) {
+                void __iomem *vr_ctrl = vic_dev->vic_regs_control;
+
+                writel(0x00000001, vr_ctrl + 0x1e0); /* Enable frame done interrupt */
+                writel(0x00000003, vr_ctrl + 0x1e4); /* Enable MDMA interrupts */
+                writel(0x00000000, vr_ctrl + 0x1e8); /* Clear interrupt masks */
+                writel(0x00000000, vr_ctrl + 0x1ec); /* Clear MDMA interrupt masks */
+                writel(0xFFFFFFFF, vr_ctrl + 0x30c); /* Global interrupt enable */
+                wmb();
+
+                pr_info("*** CRITICAL FIX: VIC CONTROL interrupts enabled - [0x1e0]=0x1, [0x1e4]=0x3 ***\n");
                 wmb();
                 pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (MainMask=0xFFFFFFFE)***\n",
                         readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x30c), readl(vr + 0x1e0), readl(vr + 0x1e4), readl(vr + 0x1e8), readl(vr + 0x1ec));
