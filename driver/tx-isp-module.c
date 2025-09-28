@@ -585,7 +585,7 @@ int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id)
 /* VIC PIPO/MDMA setup entry point (Binary Ninja MCP) */
 extern int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg);
 /* Direct access to VIC event handler (bypass event dispatch) */
-int vic_core_ops_ioctl(struct tx_isp_subdev *sd, int cmd, void *arg);
+int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 
 
 /* Forward declarations for initialization functions */
