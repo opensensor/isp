@@ -2712,8 +2712,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Clear pending (W1C) */
                 writel(0xFFFFFFFF, vr + 0x1f0);
                 writel(0xFFFFFFFF, vr + 0x1f4);
-                /* CRITICAL FIX: Use EXACT good-things configuration */
-                writel(0xffffffff, vr + 0x1e0); /* Enable ALL interrupts (good-things: 0xffffffff) */
+                /* CRITICAL FIX: Enable frame done interrupt (bit 0) + control limit (bit 21) */
+                writel(0x00200001, vr + 0x1e0); /* Enable frame done (bit 0) + control limit (bit 21) */
                 writel(0x0, vr + 0x1e8); /* Clear interrupt masks (good-things: 0x0) */
                 /* Leave 0x1ec (MDMA mask) as-is per working reference */
                 /* Global interrupt enable at 0x30c (if implemented) */
