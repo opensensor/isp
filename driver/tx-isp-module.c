@@ -1957,21 +1957,57 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
     /* Conditional VIC re-arm to maintain continuous interrupts (conservative) */
     do {
         if (vic_dev && vic_dev->vic_regs) {
-            void __iomem *vr = vic_dev->vic_regs;
+            void __iomem *vr = vic_dev->vic_regs;               /* Primary VIC space (0x133e0000) */
+            void __iomem *vc = vic_dev->vic_regs_control;       /* Control VIC space (0x10023000), may be NULL */
             u32 ctrl = readl(vr + 0x300);
             int lost_ctrl = ((ctrl & 0x80000020) != 0x80000020);
-            if (lost_ctrl) {
-                printk(KERN_ALERT "*** VIC RE-ARM: ctrl=0x%x lost enable bits, re-applying 2->1 and IMR/IMCR ***\n", ctrl);
-                /* Clear any pending status (W1C) */
+            int stalled = ((v1_7 & 1) == 0) && ((v1_7 & 0x200000) != 0);
+            if (lost_ctrl || stalled) {
+                u32 count = vic_dev->active_buffer_count;
+                u32 new_ctrl;
+                if (count == 0) count = 2;
+                new_ctrl = (count << 16) | 0x80000020;
+
+                printk(KERN_ALERT "*** VIC RE-ARM: reason=%s ctrl=0x%x -> reassert, stream_ctrl=0x%x (count=%u) ***\n",
+                       lost_ctrl ? "lost_ctrl" : "stalled(no FD + limit)", ctrl, new_ctrl, count);
+
+                /* Clear any pending status (W1C) in both banks if present */
                 writel(0xFFFFFFFF, vr + 0x1f0);
                 writel(0xFFFFFFFF, vr + 0x1f4);
+                if (vc) {
+                    writel(0xFFFFFFFF, vc + 0x1f0);
+                    writel(0xFFFFFFFF, vc + 0x1f4);
+                }
                 wmb();
-                /* Enter config then re-run */
+
+                /* Ensure frame-done (bit0) is enabled in enable registers (1e0) */
+                do {
+                    u32 en = readl(vr + 0x1e0);
+                    if ((en & 0x1) == 0) {
+                        writel(en | 0x1, vr + 0x1e0);
+                        printk(KERN_ALERT "*** VIC RE-ARM: set PRIMARY 1e0 from 0x%x to 0x%x (enable FD) ***\n", en, en | 0x1);
+                    }
+                    if (vc) {
+                        u32 en2 = readl(vc + 0x1e0);
+                        if ((en2 & 0x1) == 0) {
+                            writel(en2 | 0x1, vc + 0x1e0);
+                            printk(KERN_ALERT "*** VIC RE-ARM: set CONTROL 1e0 from 0x%x to 0x%x (enable FD) ***\n", en2, en2 | 0x1);
+                        }
+                    }
+                } while (0);
+
+                /* Re-apply stream control bits and enable sequence */
+                writel(new_ctrl, vr + 0x300);
+                wmb();
                 writel(2, vr + 0x0);
                 wmb();
-                /* Re-apply IMR/IMCR routing as per working reference */
+                /* Re-apply IMR/IMCR routing as per working reference (both banks) */
                 writel(0x07800438, vr + 0x04);
                 writel(0xb5742249, vr + 0x0c);
+                if (vc) {
+                    writel(0x07800438, vc + 0x04);
+                    writel(0xb5742249, vc + 0x0c);
+                }
                 wmb();
                 writel(1, vr + 0x0);
                 wmb();
