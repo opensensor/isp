@@ -1085,7 +1085,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* Clear pending (W1C) and unmask framedone + bit21 per silicon */
         writel(0xFFFFFFFF, vic_regs + 0x1f0);
         writel(0xFFFFFFFF, vic_regs + 0x1f4);
-        writel(0xFFDFFFFE, vic_regs + 0x1e8);
+        writel(0xFFFFFFFE, vic_regs + 0x1e8);
         /* Program IMR/IMCR (primary gate) */
         writel(0x00000001, vic_regs + 0x04);
         writel(0x00000000, vic_regs + 0x24);
