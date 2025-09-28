@@ -1908,6 +1908,25 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         }
     }
 
+    /* CRITICAL FIX: Re-arm VIC interrupt generation after processing */
+    /* The VIC hardware needs to be re-armed to continue generating interrupts */
+    /* This is the missing piece that prevents continuous interrupt generation */
+    if (vic_start_ok != 0) {
+        printk(KERN_ALERT "*** VIC RE-ARM: Re-enabling VIC interrupt generation ***\n");
+
+        /* Step 1: Write 1 to VIC control register to re-arm */
+        writel(1, vic_regs + 0x0);
+        wmb();
+
+        /* Step 2: Re-apply IMR/IMCR routing to restore interrupt routing */
+        writel(0x00000001, vic_regs + 0x04);   /* IMR baseline */
+        writel(0x07800438, vic_regs + 0x04);   /* IMR routing/mask */
+        writel(0xb5742249, vic_regs + 0x0c);   /* IMCR key */
+        wmb();
+
+        printk(KERN_ALERT "*** VIC RE-ARM: VIC interrupt generation restored ***\n");
+    }
+
     /* Binary Ninja: return 1 */
     printk(KERN_ALERT "*** VIC IRQ COMPLETE: Processed v1_7=0x%x, v1_10=0x%x - returning IRQ_HANDLED ***\n", v1_7, v1_10);
     return IRQ_HANDLED;
