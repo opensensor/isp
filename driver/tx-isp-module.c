@@ -2390,29 +2390,6 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
     /* Binary Ninja: int32_t* $s4 = dev + 0x38 */
     s4 = dev->subdevs;
 
-    /* CRITICAL FIX: Initialize all subdevs BEFORE calling s_stream */
-    if (enable == 1) {  /* Stream ON - initialize subdevs first */
-        pr_info("*** tx_isp_video_s_stream: CRITICAL FIX - Initializing all subdevs before streaming ***\n");
-
-        /* Initialize subdevs in proper order using helper functions: Core → CSI → VIC → Sensors */
-        struct tx_isp_subdev *csi_sd = tx_isp_get_csi_subdev(dev);
-        struct tx_isp_subdev *vic_sd = tx_isp_get_vic_subdev(dev);
-        struct tx_isp_subdev *core_sd = tx_isp_get_core_subdev(dev);
-        struct tx_isp_subdev *sensor_sd = tx_isp_get_sensor_subdev(dev);
-
-        /* Initialize Sensor last */
-        if (sensor_sd && sensor_sd->ops && sensor_sd->ops->core && sensor_sd->ops->core->init) {
-            pr_info("*** tx_isp_video_s_stream: Initializing Sensor subdev ***\n");
-            result = sensor_sd->ops->core->init(sensor_sd, 1);
-            if (result != 0 && result != -ENOIOCTLCMD) {
-                pr_err("tx_isp_video_s_stream: Sensor init failed: %d\n", result);
-                return result;
-            }
-            pr_info("*** tx_isp_video_s_stream: Sensor init SUCCESS ***\n");
-        }
-        pr_info("*** tx_isp_video_s_stream: All subdev initialization complete - proceeding with s_stream ***\n");
-    }
-
     /* Binary Ninja: for (int32_t i = 0; i != 0x10; ) */
     for (i = 0; i != 0x10; ) {
         /* Binary Ninja: void* $a0 = *$s4 */
