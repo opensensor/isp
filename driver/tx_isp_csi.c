@@ -601,7 +601,7 @@ struct tx_isp_subdev_core_ops csi_core_ops = {
 /* Define the video operations */
 struct tx_isp_subdev_video_ops csi_video_ops = {
     .s_stream = csi_video_s_stream,
-    .link_stream = csi_video_s_stream,  /* CRITICAL FIX: tx_isp_video_link_stream calls link_stream! */
+    .link_stream = NULL,
 };
 
 /* Define the sensor operations */
