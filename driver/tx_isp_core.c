@@ -1577,8 +1577,8 @@ clock_management:
                 clk_disable(isp_dev->ipu_clk);
                 pr_info("ispcore_slake_module: Disabled IPU clock");
             }
-            if (isp_dev && isp_dev->core_clk) {
-                clk_disable(isp_dev->core_clk);
+            if (isp_dev && isp_dev->isp_clk) {
+                clk_disable(isp_dev->isp_clk);
                 pr_info("ispcore_slake_module: Disabled ISP clock");
             }
             if (isp_dev->cgu_isp) {

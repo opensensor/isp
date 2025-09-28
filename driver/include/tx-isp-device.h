@@ -179,7 +179,174 @@ struct tx_isp_config {
 };
 
 /* Forward declaration of device structure */
-struct tx_isp_dev;
+
+struct tx_isp_dev {
+    /* Global device info (core subdev moved to separate core_dev) */
+    struct device *dev;                      /* 0x00: Device pointer (4 bytes) */
+    struct device *tisp_device;              /* 0x04: TISP device pointer (4 bytes) */
+    uint32_t padding_to_0xc;                 /* 0x08: Padding to align event_callback to 0xc */
+    struct tx_isp_event_callback *event_callback; /* 0x0c: Event callback structure pointer - Binary Ninja EXACT */
+    struct miscdevice miscdev;
+    struct cdev tisp_cdev;
+    spinlock_t lock;
+    struct mutex mutex;          /* General mutex for device operations */
+    struct proc_context *proc_context;
+    struct list_head periph_clocks;
+    spinlock_t clock_lock;
+
+    int refcnt;
+    //struct tx_isp_subdev_ops *ops;
+
+    /* Device identifiers */
+    int major;
+    int minor;
+    char sensor_name[32];
+    u32 sensor_type;
+    u32 sensor_mode;
+    uint32_t sensor_height;
+    uint32_t sensor_width;
+    u32 sensor_interface_type;
+    u32 vic_status;
+    bool is_open;
+    struct tx_isp_chip_ident *chip;
+    int active_link;
+
+    /* VIC specific */
+    uint32_t vic_started;
+    int vic_processing;
+    u32 vic_frame_size;
+    struct list_head vic_buf_queue;
+
+    /* Centralized register mappings - CRITICAL for system_reg_write */
+    void __iomem *core_regs;     /* ISP core registers - MATCHES REFERENCE DRIVER */
+    void __iomem *csi_regs;      /* CSI registers */
+    void __iomem *phy_base;      /* PHY registers */
+
+    /* Memory management */
+    dma_addr_t rmem_addr;
+    size_t rmem_size;
+    dma_addr_t dma_addr;
+    size_t dma_size;
+    void *dma_buf;
+    dma_addr_t param_addr;
+    void *param_virt;
+    uint32_t frame_buf_offset;
+    void *y_virt;
+    dma_addr_t y_phys;
+    void *uv_virt;
+    dma_addr_t uv_phys;
+    struct resource *mem_region;
+    struct resource *csi_region;
+
+    /* Frame sources */
+    struct isp_channel channels[ISP_MAX_CHAN];
+    struct tx_isp_sensor_win_setting *sensor_window_size;
+
+    /* Hardware subsystems */
+    struct tx_isp_csi_device *csi_dev;
+    atomic_t csi_configured;
+
+    /* VIC device - positioned for proper struct member access */
+    struct tx_isp_vic_device *vic_dev;
+
+    /* Core device - separate subdevice like VIC/VIN/CSI */
+    struct tx_isp_core_device *core_dev;
+
+    /* Status tracking */
+    struct isp_device_status status;
+    struct isp_device_link_state link_state;
+    struct isp_component_status core;
+    struct isp_component_status vic;
+    struct isp_component_status vin;
+
+    /* Platform devices */
+    struct platform_device *pdev;
+    struct platform_device *vic_pdev;
+    struct platform_device *csi_pdev;
+    struct platform_device *vin_pdev;
+    struct platform_device *core_pdev;
+    struct platform_device *fs_pdev;
+
+    /* Global clocks (core-specific clocks moved to core_dev) */
+    struct clk *cgu_isp;         /* Global CGU ISP clock */
+    struct clk *csi_clk;         /* CSI clock (CSI-specific) */
+
+    /* GPIO control */
+    int reset_gpio;
+    int pwdn_gpio;
+
+    /* I2C */
+    struct i2c_client *sensor_i2c_client;
+    struct i2c_adapter *i2c_adapter;
+    /* REMOVED: sensor_attr - use vic_dev->sensor_attr or sensor->video.attr instead */
+    struct tx_isp_subdev_ops *sensor_subdev_ops;  /* Sensor subdev operations */
+    bool sensor_ops_initialized;                  /* Sensor operations initialization flag */
+
+    /* Global IRQ management (core-specific IRQs moved to core_dev) */
+    spinlock_t irq_lock;         /* Global IRQ lock */
+    struct completion frame_complete;  /* Global frame completion */
+
+    /* IRQ management */
+    void (*vic_irq_handler)(void *);
+    void (*vic_irq_disable)(void *);
+    void *vic_irq_priv;
+    volatile u32 vic_irq_enabled;
+    struct irq_handler_data *vic_irq_data;
+    /* vic_dev moved to offset 0xd4 above - REMOVED duplicate declaration */
+    struct ddr_device *ddr_dev;
+    struct tx_isp_vin_device *vin_dev;
+    struct frame_source_device *fs_dev;
+
+    /* Statistics */
+    struct ae_statistics ae_stats;
+    spinlock_t ae_lock;
+    bool ae_valid;
+
+    /* Module support */
+    struct list_head modules;
+    spinlock_t modules_lock;
+    int module_count;
+
+    /* Format info */
+    uint32_t width;
+    uint32_t height;
+    uint32_t format;
+    uint32_t frame_wait_cnt;
+    uint32_t buffer_count;
+
+    /* AE Algorithm */
+    int ae_algo_enabled;
+    void (*ae_algo_cb)(void *priv, int, int);
+    void *ae_priv_data;
+
+    /* Global device attributes (core-specific tuning moved to core_dev) */
+    bool streaming_enabled;      /* Global streaming state */
+    bool links_enabled;          /* Global link state */
+    u32 instance;               /* Device instance */
+    uint32_t poll_state;        /* Global poll state */
+    wait_queue_head_t poll_wait; /* Global poll wait queue */
+
+    /* Pipeline state management */
+    int pipeline_state;
+
+    /* Binary Ninja compatibility members */
+    int subdev_count;                        /* Number of subdevices at offset 0x80 */
+    struct platform_device **subdev_list;   /* Subdevice list at offset 0x84 */
+    void *subdev_graph[ISP_MAX_SUBDEVS];     /* Subdevice graph array */
+    struct proc_dir_entry *proc_dir;         /* Proc directory at offset 0x11c */
+
+    /* CRITICAL: Binary Ninja subdev array at offset 0x38 - tx_isp_video_link_stream depends on this */
+    struct tx_isp_subdev *subdevs[ISP_MAX_SUBDEVS];       /* Subdev array at offset 0x38 for tx_isp_video_link_stream */
+
+    /* Video link configuration - Binary Ninja reference at offset 0x10c */
+    int link_config;                         /* Current link configuration (-1 = destroyed, 0-1 = valid configs) */
+
+    /* Frame channel devices - needed for tx_isp_create_framechan_devices */
+    struct miscdevice *fs_miscdevs[4];       /* Frame source misc devices (/dev/isp-fs*) */
+
+    /* ISP proc directory - needed for tx_isp_create_graph_proc_entries */
+    struct proc_dir_entry *isp_proc_dir;     /* ISP-specific proc directory */
+} __attribute__((aligned(4)));
 
 /* Device operations structure */
 struct tx_isp_ops {
