@@ -36,6 +36,8 @@
 #include "../include/tx_isp_core_device.h"
 #include "../include/tx_isp_subdev_helpers.h"
 
+/* Forward declaration needed early */
+struct tx_isp_sensor *tx_isp_get_sensor(void);  /* Defined in tx_isp_tuning.c */
 
 /* CRITICAL: Magic number for frame channel validation */
 #ifndef FRAME_CHANNEL_MAGIC
@@ -88,7 +90,6 @@ static int tx_isp_sensor_operation_helper(struct tx_isp_dev *isp_dev, unsigned i
 #define CSI_STATE_ERROR     3
 
 /* Forward declarations */
-struct tx_isp_sensor *tx_isp_get_sensor(void);  /* Defined in tx_isp_tuning.c */
 int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd);
 int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd);
 int tx_isp_vin_activate_subdev(void* arg1);  /* Binary Ninja signature */
