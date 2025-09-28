@@ -2814,32 +2814,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                             readl(vr_gate + 0x04), readl(vr_gate + 0x0c));
                 }
 
-            if (vic_dev && vic_dev->vic_regs) { /* CRITICAL FIX: Enable VIC interrupt enable registers */
-                void __iomem *vr = vic_dev->vic_regs;
-                /* Clear pending first (W1C) */
-                writel(0xFFFFFFFF, vr + 0x1f0);
-                writel(0xFFFFFFFF, vr + 0x1f4);
-                /* Write enables, CONFIG, re-write enables, then RUN */
-                writel(0x3FFFFFFF, vr + 0x1e0);
-                writel(0x0000000F, vr + 0x1e4);
-                writel(2, vr + 0x0);
-                wmb();
-                writel(0x3FFFFFFF, vr + 0x1e0);
-                writel(0x0000000F, vr + 0x1e4);
-                writel(1, vr + 0x0);
-                wmb();
-                udelay(100);
-                pr_info("*** VIC POST-RUN: Re-armed control (2->1), masks preserved; NOT touching 0x1e0/0x1e4 ***\n");
 
-                /* Re-apply IMR/IMCR gating on PRIMARY bank as seen in good-things */
-                writel(0x00000001, vr + 0x04);   /* IMR baseline */
-                writel(0x00000000, vr + 0x24);   /* IMR1 baseline */
-                writel(0x07800438, vr + 0x04);   /* IMR routing/mask */
-                writel(0xb5742249, vr + 0x0c);   /* IMCR key */
-                wmb();
-                pr_info("*** VIC PRIMARY GATE (POST-RUN): IMR=0x%08x IMCR=0x%08x ***\n",
-                        readl(vr + 0x04), readl(vr + 0x0c));
-            }
             if (vic_dev && vic_dev->vic_regs_control) {
                 void __iomem *vc = vic_dev->vic_regs_control;
                 /* Clear pending first (W1C) */
