@@ -602,13 +602,12 @@ struct tx_isp_channel_state {
 };
 
 // Frame channel devices - create video channel devices like reference
-// CRITICAL: Add proper alignment and validation for MIPS
 struct frame_channel_device {
     struct miscdevice miscdev;
     int channel_num;
     struct tx_isp_channel_state state;
 
-    /* Binary Ninja buffer management fields - ALIGNED for MIPS */
+    /* Binary Ninja buffer management fields */
     struct mutex buffer_mutex;           /* Offset 0x28 - private_mutex_lock($s0 + 0x28) */
     spinlock_t buffer_queue_lock;        /* Offset 0x2c4 - __private_spin_lock_irqsave($s0 + 0x2c4) */
     void *buffer_queue_head;             /* Offset 0x214 - *($s0 + 0x214) */
@@ -620,15 +619,29 @@ struct frame_channel_device {
     int field;                           /* Offset 0x3c - *($s0 + 0x3c) */
     void *buffer_array[64];              /* Buffer array for index lookup */
 
-    /* CRITICAL: Add validation magic number to detect corruption */
-    uint32_t magic;                      /* Magic number for validation */
-} __attribute__((aligned(8), packed));   /* MIPS-safe alignment */
+    /* VBM integration */
+    void *vbm_pool_ptr;                  /* Pointer to VBM pool (kernel address), if registered */
+    uint32_t vbm_base_phys;              /* Legacy base phys provided via TX_ISP_SET_BUF */
+    uint32_t vbm_frame_size;             /* Per-frame size provided/derived from libimp */
+};
+
+static struct frame_channel_device frame_channels[4]; /* Support up to 4 video channels */
+static int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
+
+/* Global per-channel cache of legacy SET_BUF base/step for robustness across FDs */
+static u32 g_setbuf_base[4] = {0};
+static u32 g_setbuf_step[4] = {0};
+
+/* Provide access to frame_channel_device pointer for V4L2 shim */
+void *get_frame_channel_device_ptr(int channel)
+{
+    if (channel >= 0 && channel < num_channels)
+        return (void *)&frame_channels[channel];
+    return NULL;
+}
 
 #define FRAME_CHANNEL_MAGIC 0xDEADBEEF
 
-/* External declarations for frame channel arrays */
-extern struct frame_channel_device frame_channels[];
-extern int num_channels;
 
 /*
  * Internal ops. Never call this from drivers, only the tx isp device can call

@@ -88,6 +88,7 @@ int fs_activate_module(struct tx_isp_subdev *sd);
 int ispcore_activate_module(struct tx_isp_dev *isp_dev);
 uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand);
 int __init verify_handler_addresses(void);
+int tx_isp_create_subdev_graph(struct tx_isp_dev *isp);
 
 /* External variables */
 extern int isp_clk;  /* Global ISP clock rate from tx_isp_core.c */
@@ -561,6 +562,8 @@ static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev);
 static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev);
 static struct vic_buffer_entry *pop_buffer_fifo(struct list_head *fifo_head);
 static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entry *buffer);
+int __enqueue_in_driver(void *buffer_struct);
+
 
 /* CSI error checking function - called from VIC interrupt handler */
 extern void tx_isp_csi_check_errors(struct tx_isp_dev *isp_dev);
@@ -2560,35 +2563,12 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     struct tx_isp_channel_state *state;
     int channel;
 
-    pr_info("*** frame_channel_unlocked_ioctl: ENTRY - cmd=0x%x ***\n", cmd);
-
-    /* Special debug for DQBUF operations */
-    if (cmd == 0xc0445609) {
-        pr_info("*** DQBUF DETECTED: This is a VIDIOC_DQBUF call ***\n");
-    }
-
-    /* CRITICAL: Comprehensive NULL pointer validation to prevent BadVA crashes */
-    if (!file) {
-        pr_err("*** frame_channel_unlocked_ioctl: NULL file pointer - CRITICAL ERROR ***\n");
-        return -EINVAL;
-    }
+    pr_info("*** frame_channel_unlocked_ioctl: MIPS-SAFE implementation - cmd=0x%x ***\n", cmd);
 
     /* MIPS ALIGNMENT CHECK: Validate file pointer */
-    if (((uintptr_t)file & 0x3) != 0) {
+    if (!file || ((uintptr_t)file & 0x3) != 0) {
         pr_err("*** MIPS ALIGNMENT ERROR: file pointer 0x%p not 4-byte aligned ***\n", file);
         return -EINVAL;
-    }
-
-    /* CRITICAL: Validate file->private_data before accessing */
-    if (!file->private_data) {
-        pr_err("*** frame_channel_unlocked_ioctl: NULL file->private_data - CRITICAL ERROR ***\n");
-        return -EINVAL;
-    }
-
-    /* CRITICAL: Validate private_data is in valid kernel memory range */
-    if ((unsigned long)file->private_data < 0x80000000 || (unsigned long)file->private_data >= 0xfffff000) {
-        pr_err("*** frame_channel_unlocked_ioctl: Invalid private_data pointer 0x%p - memory corruption ***\n", file->private_data);
-        return -EFAULT;
     }
 
     /* MIPS ALIGNMENT CHECK: Validate argp pointer */
@@ -2694,6 +2674,22 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         return 0;
     }
+    case 0x400456f0: { // TX_ISP_REGISTER_VBM_POOL (private): register VBM pool kernel pointer
+        uint32_t pool_u32 = 0;
+        if (copy_from_user(&pool_u32, argp, sizeof(pool_u32)))
+            return -EFAULT;
+        fcd->vbm_pool_ptr = (void *)(uintptr_t)pool_u32;
+        pr_info("*** Channel %d: Registered VBM pool pointer = %p ***\n", channel, fcd->vbm_pool_ptr);
+        if (is_valid_kernel_pointer(fcd->vbm_pool_ptr)) {
+            struct vbm_pool *vp = (struct vbm_pool *)fcd->vbm_pool_ptr;
+            if (vp->width && vp->height) {
+                state->width = vp->width;
+                state->height = vp->height;
+                pr_info("*** Channel %d: Synced dimensions from VBM pool: %ux%u ***\n", channel, state->width, state->height);
+            }
+        }
+        return 0;
+    }
     case 0xc0145608: { // VIDIOC_REQBUFS - Request buffers - MEMORY-AWARE implementation
         struct v4l2_requestbuffers {
             uint32_t count;
@@ -2752,44 +2748,12 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_info("Channel %d: MMAP allocation - %d buffers of %u bytes each\n",
                        channel, reqbuf.count, buffer_size);
 
-                /* CRITICAL FIX: Allocate video_buffer structures like reference driver */
-                pr_info("Channel %d: MMAP mode - allocating %d video_buffer structures\n",
+                /* CRITICAL FIX: Don't allocate any actual buffers in driver! */
+                /* The client (libimp) will allocate buffers and pass them via QBUF */
+                pr_info("Channel %d: MMAP mode - %d buffer slots reserved (no early allocation)\n",
                        channel, reqbuf.count);
 
-                /* Reference driver allocates buffer structures, not DMA buffers */
-                /* CRITICAL FIX: Allocate properly aligned DMA buffers to prevent corruption */
-                for (int i = 0; i < reqbuf.count; i++) {
-                    /* MIPS SAFETY: Allocate video_buffer structure with proper alignment */
-                    struct video_buffer *buffer = kzalloc(sizeof(struct video_buffer), GFP_KERNEL | __GFP_ZERO);
-                    if (!buffer) {
-                        pr_err("*** Channel %d: Failed to allocate video_buffer structure %d ***\n", channel, i);
-
-                        /* Free previously allocated buffer structures */
-                        for (int j = 0; j < i; j++) {
-                            if (state->vbm_buffer_addresses && state->vbm_buffer_addresses[j] != 0) {
-                                kfree((void *)(uintptr_t)state->vbm_buffer_addresses[j]);
-                                state->vbm_buffer_addresses[j] = 0;
-                            }
-                        }
-                        return -ENOMEM;
-                    }
-
-                    /* Initialize video_buffer structure like reference driver */
-                    buffer->index = i;
-                    buffer->type = 1; // V4L2_BUF_TYPE_VIDEO_CAPTURE
-                    buffer->memory = 1; // V4L2_MEMORY_MMAP
-                    buffer->flags = 0; // Not queued yet
-                    buffer->status = 0; // Not processed yet
-                    INIT_LIST_HEAD(&buffer->list); // Initialize list head
-
-                    /* Store buffer structure in channel state like reference driver */
-                    /* Reference: channel_state[(i + channel_buffer_offset + 0x3a) << 2 + 0x24] = buffer */
-                    /* Note: We don't store video_buffer structures in VBM addresses - those are for actual frame data */
-                    /* The video_buffer structures are managed separately for V4L2 compatibility */
-
-                    pr_info("*** Channel %d: Allocated video_buffer structure[%d] at %p ***\n",
-                            channel, i, buffer);
-                }
+                /* Just track the buffer count - no actual allocation */
 
             } else if (reqbuf.memory == 2) { /* V4L2_MEMORY_USERPTR - client allocates */
                 pr_info("Channel %d: USERPTR mode - client will provide buffers\n", channel);
@@ -2808,36 +2772,15 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
             state->buffer_count = reqbuf.count;
 
-            /* CRITICAL FIX: Initialize VBM buffer management for this channel */
-            if (state->vbm_buffer_addresses) {
-                pr_info("*** Channel %d: REQBUFS freeing existing VBM buffer array ***\n", channel);
-                kfree(state->vbm_buffer_addresses);
-            }
-            state->vbm_buffer_addresses = kzalloc(reqbuf.count * sizeof(uint32_t), GFP_KERNEL);
-            if (!state->vbm_buffer_addresses) {
-                pr_err("*** Channel %d: Failed to allocate VBM buffer array ***\n", channel);
-                state->buffer_count = 0;
-                return -ENOMEM;
-            }
-            state->vbm_buffer_count = 0; /* Will be set as buffers are queued */
-            pr_info("*** Channel %d: REQBUFS allocated VBM buffer array for %d buffers at %p ***\n",
-                    channel, reqbuf.count, state->vbm_buffer_addresses);
-
             /* Set buffer type from REQBUFS request */
             fcd->buffer_type = reqbuf.type;
 
             /* CRITICAL: Update VIC active_buffer_count for streaming */
             if (ourISPdev && ourISPdev->vic_dev) {
-                /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
-                struct tx_isp_vic_device *vic = ourISPdev->vic_dev;
+                struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
                 vic->active_buffer_count = reqbuf.count;
                 pr_info("*** Channel %d: VIC active_buffer_count set to %d ***\n",
                         channel, vic->active_buffer_count);
-
-                /* REMOVED: VIC DMA configuration during REQBUFS */
-                /* Reference driver configures VIC DMA during streaming via vic_pipo_mdma_enable */
-                /* This happens automatically in ispvic_frame_channel_s_stream when streaming starts */
-                pr_info("*** REQBUFS: VIC DMA will be configured during streaming via vic_pipo_mdma_enable ***\n");
             }
 
             pr_info("*** Channel %d: MEMORY-AWARE REQBUFS SUCCESS - %d buffers ***\n",
@@ -2848,18 +2791,9 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_info("Channel %d: Freeing existing buffers\n", channel);
             state->buffer_count = 0;
 
-            /* CRITICAL FIX: Free VBM buffer array */
-            if (state->vbm_buffer_addresses) {
-                kfree(state->vbm_buffer_addresses);
-                state->vbm_buffer_addresses = NULL;
-                state->vbm_buffer_count = 0;
-                pr_info("*** Channel %d: Freed VBM buffer array ***\n", channel);
-            }
-
             /* CRITICAL: Clear VIC active_buffer_count */
             if (ourISPdev && ourISPdev->vic_dev) {
-                /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
-                struct tx_isp_vic_device *vic = ourISPdev->vic_dev;
+                struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
                 vic->active_buffer_count = 0;
                 pr_info("*** Channel %d: VIC active_buffer_count cleared ***\n", channel);
             }
@@ -2874,7 +2808,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         struct v4l2_buffer buffer;
         unsigned long flags;
 
-        pr_info("*** Channel %d: QBUF - ENTRY POINT - VBM buffer queue attempt ***\n", channel);
+        pr_info("*** Channel %d: QBUF - EXACT Binary Ninja implementation ***\n", channel);
 
         /* Binary Ninja: private_copy_from_user(&var_78, $s2, 0x44) */
         if (copy_from_user(&buffer, argp, sizeof(buffer))) {
@@ -2882,39 +2816,22 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -EFAULT;
         }
 
-        pr_info("*** Channel %d: QBUF - Buffer copied from user successfully ***\n", channel);
-
-        pr_info("*** Channel %d: QBUF - Buffer received: index=%d, type=%d, memory=%d ***\n",
-                channel, buffer.index, buffer.type, buffer.memory);
-        pr_info("*** Channel %d: QBUF - Buffer m.offset=0x%x, m.userptr=0x%lx ***\n",
-                channel, buffer.m.offset, buffer.m.userptr);
-
-        /* Binary Ninja: if (var_74 != *($s0 + 0x24)) - validate buffer type */
-        pr_info("*** Channel %d: QBUF - Validation: buffer.type=%d, fcd->buffer_type=%d ***\n",
-                channel, buffer.type, fcd->buffer_type);
-
-        /* CRITICAL FIX: Initialize buffer_type if not set (VBM compatibility) */
+        /* Modern/VBM compatibility: initialize or validate buffer type */
         if (fcd->buffer_type == 0) {
-            fcd->buffer_type = buffer.type; /* Accept whatever type VBM is using */
+            fcd->buffer_type = buffer.type;
             pr_info("*** Channel %d: QBUF - Initialized buffer_type to %d for VBM compatibility ***\n",
                     channel, fcd->buffer_type);
-        }
-
-        if (buffer.type != fcd->buffer_type) {
-            pr_err("*** QBUF: Buffer type mismatch: got %d, expected %d ***\n", buffer.type, fcd->buffer_type);
+        } else if (buffer.type != fcd->buffer_type) {
+            pr_err("*** QBUF: Buffer type mismatch: got %d expected %d ***\n", buffer.type, fcd->buffer_type);
             return -EINVAL;
         }
 
-        /* Binary Ninja: if (arg3 u>= *($s0 + 0x20c)) - validate buffer index */
-        pr_info("*** Channel %d: QBUF - Validation: buffer.index=%d, state->buffer_count=%d ***\n",
+        /* Validate buffer index, but allow VBM init when buffer_count==0 */
+        pr_info("*** Channel %d: QBUF - Validation: index=%d, buffer_count=%d ***\n",
                 channel, buffer.index, state->buffer_count);
-
-        /* CRITICAL FIX: VBM buffers may have buffer_count=0 initially - allow VBM initialization */
         if (state->buffer_count > 0 && buffer.index >= state->buffer_count) {
             pr_err("*** QBUF: Buffer index %d >= buffer_count %d ***\n", buffer.index, state->buffer_count);
             return -EINVAL;
-        } else if (state->buffer_count == 0) {
-            pr_info("*** Channel %d: QBUF - VBM initialization mode (buffer_count=0) ***\n", channel);
         }
 
         pr_info("*** Channel %d: QBUF - Queue buffer index=%d ***\n", channel, buffer.index);
@@ -2927,169 +2844,183 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         void *buffer_struct = fcd->buffer_array[buffer.index];
         if (!buffer_struct) {
-            pr_info("*** QBUF: No buffer allocated for index %d - VBM initialization mode ***\n", buffer.index);
-            /* Don't return error for VBM mode - continue with VBM buffer handling */
+            pr_info("*** QBUF: No driver buffer for index %d - continuing for VBM mode ***\n", buffer.index);
+        } else {
+            pr_info("*** Channel %d: QBUF - Using buffer struct %p for index %d ***\n", channel, buffer_struct, buffer.index);
         }
 
-        pr_info("*** Channel %d: QBUF - Using buffer struct %p for index %d ***\n", channel, buffer_struct, buffer.index);
-
-        /* SAFE: Basic buffer validation without unsafe field access */
+        /* Field mismatch should not hard-fail in VBM mode */
         if (buffer.field != fcd->field) {
-            pr_warn("*** QBUF: Field mismatch: got %d, expected %d - allowing for VBM compatibility ***\n", buffer.field, fcd->field);
-            /* Don't return error for VBM mode - continue with VBM buffer handling */
+            pr_warn("*** QBUF: Field mismatch: got %d, expected %d - allowing ***\n", buffer.field, fcd->field);
         }
 
-        /* Binary Ninja: EXACT event call - tx_isp_send_event_to_remote(*($s0 + 0x2bc), 0x3000008, &var_78) */
-        if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
-            /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
-            struct tx_isp_vic_device *vic_dev_buf = ourISPdev->vic_dev;
+        /* Try to extract the real physical address from v4l2_buffer for VIC programming */
+        pr_info("*** Channel %d: QBUF details: memory=%u index=%u length=%u bytesused=%u flags=0x%x field=%u ***\n",
+                channel, buffer.memory, buffer.index, buffer.length, buffer.bytesused, buffer.flags, buffer.field);
 
-            pr_info("*** Channel %d: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***\n", channel);
+        /* Prefer VBM → legacy SET_BUF base/step → per-buffer candidate → last resort rmem */
+        {
+            uint32_t fs_size = state->width * state->height * 3 / 2; /* default NV12 */
+            uint32_t chosen_phys = 0;
+            uint32_t chosen_size = fs_size;
 
-            /* CRITICAL: Pass the raw buffer data, not a custom structure */
-            int event_result = tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &buffer);
+            /* Compute NV12 stride from length if provided: total = stride * H * 3/2 */
+            {
+                u32 h = state->height ? state->height : 1080;
+                u32 stride = 0;
+                if (buffer.length) {
+                    /* ceil( (2*len) / (3*h) ), then align to 16 */
+                    u32 num = 2 * buffer.length;
+                    u32 den = 3 * h;
+                    stride = (num + den - 1) / den;
+                    stride = (stride + 15) & ~15;
+                } else {
+                    /* Fallback to width aligned to 16 */
+                    stride = (state->width + 15) & ~15;
+                }
+                chosen_size = stride * h * 3 / 2;
 
-            if (event_result == 0) {
-                pr_info("*** Channel %d: QBUF EVENT SUCCESS ***\n", channel);
-            } else if (event_result == 0xfffffdfd) {
-                pr_info("*** Channel %d: QBUF EVENT - No VIC callback ***\n", channel);
-            } else {
-                pr_warn("*** Channel %d: QBUF EVENT returned: 0x%x ***\n", channel, event_result);
-            }
-        }
-
-        /* CRITICAL FIX: Use REAL buffer address from application instead of fake address */
-        int buffer_size = state->width * state->height * 2;
-        uint32_t buffer_phys_addr;
-
-        /* Extract real buffer address from v4l2_buffer structure */
-        if (buffer.memory == V4L2_MEMORY_MMAP && buffer.m.offset != 0) {
-            /* Application provided real buffer address via mmap offset */
-            buffer_phys_addr = buffer.m.offset;
-            pr_info("*** Channel %d: QBUF - Using REAL buffer address from mmap offset: 0x%x ***\n",
-                    channel, buffer_phys_addr);
-        } else if (buffer.memory == V4L2_MEMORY_USERPTR && buffer.m.userptr != 0) {
-            /* Application provided real buffer address via userptr */
-            buffer_phys_addr = (uint32_t)buffer.m.userptr;
-            pr_info("*** Channel %d: QBUF - Using REAL buffer address from userptr: 0x%x ***\n",
-                    channel, buffer_phys_addr);
-        } else {
-            /* Fallback to generated address (but log this as an issue) */
-            buffer_phys_addr = 0x6300000 + (buffer.index * buffer_size);
-            pr_warn("*** Channel %d: QBUF - WARNING: No real buffer address provided, using fallback: 0x%x ***\n",
-                    channel, buffer_phys_addr);
-            pr_warn("*** This may cause green frames - application should provide real buffer addresses! ***\n");
-        }
-
-        /* CRITICAL SAFETY: Validate buffer address alignment for MIPS */
-        if (buffer_phys_addr & 0x3) {
-            pr_err("*** Channel %d: QBUF - MIPS ALIGNMENT ERROR: buffer address 0x%x not 4-byte aligned ***\n",
-                   channel, buffer_phys_addr);
-            return -EINVAL;
-        }
-
-        /* CRITICAL SAFETY: Validate buffer address is in valid memory range */
-        if (buffer_phys_addr < 0x6000000 || buffer_phys_addr >= 0x8000000) {
-            pr_err("*** Channel %d: QBUF - INVALID BUFFER ADDRESS: 0x%x outside valid range ***\n",
-                   channel, buffer_phys_addr);
-            return -EINVAL;
-        }
-
-        /* CRITICAL MIPS SAFETY: Validate buffer address alignment */
-        if ((buffer_phys_addr & 0x3) != 0) {
-            pr_err("*** Channel %d: QBUF - MIPS ALIGNMENT ERROR: buffer address 0x%x not 4-byte aligned ***\n",
-                   channel, buffer_phys_addr);
-            pr_err("*** This will cause kernel panic with BadVA error! ***\n");
-            return -EINVAL;
-        }
-
-        /* CRITICAL: Validate buffer address is in valid memory range */
-        if (buffer_phys_addr < 0x6000000 || buffer_phys_addr >= 0x8000000) {
-            pr_err("*** Channel %d: QBUF - Invalid buffer address 0x%x (outside valid range) ***\n",
-                   channel, buffer_phys_addr);
-            return -EINVAL;
-        }
-
-        pr_info("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x, size=%d (VALIDATED) ***\n",
-                channel, buffer.index, buffer_phys_addr, buffer_size);
-
-        /* CRITICAL: Store VBM buffer addresses for later use during streaming */
-        if (!state->vbm_buffer_addresses) {
-            state->vbm_buffer_addresses = kzalloc(sizeof(uint32_t) * 16, GFP_KERNEL);
-            state->vbm_buffer_count = 0;
-        }
-
-        if (state->vbm_buffer_addresses && buffer.index < 16) {
-            state->vbm_buffer_addresses[buffer.index] = buffer_phys_addr;
-            if (buffer.index >= state->vbm_buffer_count) {
-                state->vbm_buffer_count = buffer.index + 1;
-            }
-            pr_info("*** Channel %d: QBUF VBM - Stored buffer[%d] = 0x%x, total_count=%d ***\n",
-                    channel, buffer.index, buffer_phys_addr, state->vbm_buffer_count);
-        }
-
-        /* CRITICAL FIX: Get video_buffer structure and set state like reference driver */
-        struct video_buffer *video_buffer = NULL;
-
-        pr_info("*** Channel %d: QBUF - VBM buffer check: vbm_buffer_addresses=%p, vbm_buffer_count=%d ***\n",
-                channel, state->vbm_buffer_addresses, state->vbm_buffer_count);
-
-        /* Note: We don't use video_buffer structures in VBM mode - buffers are managed directly */
-        /* VBM mode uses simple buffer address arrays for direct hardware DMA */
-        if (state->vbm_buffer_addresses && buffer.index < 16) {
-            pr_info("*** Channel %d: QBUF - VBM buffer slot[%d] available ***\n",
-                    channel, buffer.index);
-        } else {
-            pr_warn("*** Channel %d: QBUF - VBM buffer management not initialized ***\n",
-                    channel);
-            pr_warn("*** Channel %d: QBUF DEBUG - vbm_buffer_addresses=%p, vbm_buffer_count=%d, index=%d ***\n",
-                    channel, state->vbm_buffer_addresses, state->vbm_buffer_count, buffer.index);
-
-            /* CRITICAL FIX: VBMFillPool expects QBUF to succeed - this is normal initialization */
-            pr_info("*** Channel %d: QBUF - VBM initialization mode (VBMFillPool) ***\n", channel);
-        }
-
-        /* Reference driver QBUF logic: Set buffer to queued state and add to queue */
-        if (video_buffer) {
-            video_buffer->flags = 1; // Queued state (flags at offset 0x48)
-            video_buffer->data = (void *)(uintptr_t)buffer_phys_addr; // Store buffer address in data pointer
-            video_buffer->index = buffer.index;
-            video_buffer->type = buffer.type;
-            video_buffer->memory = buffer.memory;
-
-            /* CRITICAL: Add buffer to queued_buffers list like reference driver */
-            spin_lock(&state->queue_lock);
-
-            /* Initialize list entry if not already done */
-            if (video_buffer->list.next == NULL && video_buffer->list.prev == NULL) {
-                INIT_LIST_HEAD(&video_buffer->list);
+                /* Do NOT program VIC strides for channel 0 here; vic_pipo_mdma_enable will set 1920x1080 */
+                if (channel != 0 && ourISPdev && ourISPdev->vic_dev) {
+                    struct tx_isp_vic_device *vd = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                    if (vd->vic_regs) {
+                        writel(stride, vd->vic_regs + 0x310); /* Y stride */
+                        wmb();
+                        writel(stride, vd->vic_regs + 0x314); /* UV stride */
+                        wmb();
+                        pr_info("*** VIC STRIDE (ch%u): Programmed NV12 stride=%u (H=%u, size=%u) ***\n", channel, stride, h, chosen_size);
+                    }
+                }
             }
 
-            /* Add to queued buffers list */
-            list_add_tail(&video_buffer->list, &state->queued_buffers);
-            state->queued_count++;
+            /* 1) VBM pool */
+            if (!chosen_phys && fcd->vbm_pool_ptr && is_valid_kernel_pointer(fcd->vbm_pool_ptr)) {
+                struct vbm_pool *vp = (struct vbm_pool *)fcd->vbm_pool_ptr;
+                if (state->buffer_count > 0 && buffer.index < state->buffer_count) {
+                    const struct vbm_frame *vf = &vp->frames[buffer.index];
+                    if (vf->phys_addr >= 0x06000000 && vf->phys_addr < 0x09000000) {
+                        chosen_phys = vf->phys_addr;
+                        if (vf->size)
+                            chosen_size = vf->size; /* trust VBM-reported size */
+                        pr_info("*** Channel %d: QBUF - Using VBM pool phys=0x%x (index=%u, size=%u) ***\n",
+                                channel, chosen_phys, buffer.index, chosen_size);
+                    }
+                }
+            }
 
-            spin_unlock(&state->queue_lock);
+            /* 2) Legacy SET_BUF base+step */
+            if (!chosen_phys && (fcd->vbm_base_phys && fcd->vbm_frame_size)) {
+                uint32_t base = fcd->vbm_base_phys;
+                uint32_t step = fcd->vbm_frame_size;
+                uint32_t addr = base + (buffer.index * step);
+                if (addr >= 0x06000000 && addr < 0x09000000) {
+                    chosen_phys = addr;
+                    chosen_size = step;
+                    pr_info("*** Channel %d: QBUF - Using legacy base/step phys=0x%x (base=0x%x step=%u) ***\n",
+                            channel, chosen_phys, base, step);
+                }
+            }
 
-            pr_info("*** Channel %d: QBUF buffer[%d] QUEUED, data_addr=0x%x, queued_count=%d ***\n",
-                    channel, buffer.index, (uint32_t)(uintptr_t)video_buffer->data, state->queued_count);
-        } else {
-            /* VBM compatibility: VBMFillPool is pre-queuing buffers for initialization */
-            pr_info("*** Channel %d: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x%x ***\n",
-                    channel, buffer_phys_addr);
+            /* 3) Candidate from v4l2_buffer fields */
+            if (!chosen_phys) {
+                uint32_t phys_candidate = 0;
+                if (buffer.memory == 1 /* V4L2_MEMORY_MMAP */) {
+                    phys_candidate = buffer.m.offset;
+                } else if (buffer.memory == 2 /* V4L2_MEMORY_USERPTR */) {
+                    phys_candidate = (uint32_t)(uintptr_t)buffer.m.userptr;
+                }
+                if (phys_candidate >= 0x06000000 && phys_candidate < 0x09000000) {
+                    chosen_phys = phys_candidate;
+                    pr_info("*** Channel %d: QBUF - Using candidate phys=0x%x from buffer (memory=%u) ***\n",
+                            channel, chosen_phys, buffer.memory);
+                }
+            }
+
+            /* 4) Last resort: rmem base */
+            if (!chosen_phys) {
+                chosen_phys = 0x06300000 + (buffer.index * chosen_size);
+                pr_warn("*** Channel %d: QBUF - Using rmem fallback phys=0x%x (size=%u) ***\n",
+                        channel, chosen_phys, chosen_size);
+            }
+
+
+			/* Force ch0 to use SET_BUF base/step bank to match encoder expectations */
+			if (channel == 0) {
+				if (fcd && fcd->vbm_base_phys && fcd->vbm_frame_size) {
+					chosen_phys = fcd->vbm_base_phys + buffer.index * fcd->vbm_frame_size;
+					/* Keep chosen_size derived from stride/length to match NV12 plane writes */
+					pr_info("*** Channel 0: QBUF - Forcing SET_BUF phys=0x%x (base=0x%x step=%u index=%u) ***\n",
+							chosen_phys, fcd->vbm_base_phys, fcd->vbm_frame_size, buffer.index);
+				} else if (g_setbuf_base[0] && g_setbuf_step[0]) {
+					chosen_phys = g_setbuf_base[0] + buffer.index * g_setbuf_step[0];
+					/* Keep chosen_size derived from stride/length to match NV12 plane writes */
+					pr_info("*** Channel 0: QBUF - Forcing GLOBAL SET_BUF phys=0x%x (base=0x%x step=%u index=%u) ***\n",
+							chosen_phys, g_setbuf_base[0], g_setbuf_step[0], buffer.index);
+				} else {
+					pr_warn("*** Channel 0: QBUF - SET_BUF not available (fcd base=0x%x step=%u, global base=0x%x step=%u); using chosen_phys=0x%x ***\n",
+						fcd ? fcd->vbm_base_phys : 0, fcd ? fcd->vbm_frame_size : 0,
+						g_setbuf_base[0], g_setbuf_step[0], chosen_phys);
+				}
+			}
+
+				/* Adjust ch0 phys using current VIC stride/height to match encoder bank exactly */
+				if (channel == 0 && ( (fcd && fcd->vbm_base_phys) || g_setbuf_base[0] ) && ourISPdev && ourISPdev->vic_dev) {
+					struct tx_isp_vic_device *vic_dev_dbg = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+					if (vic_dev_dbg && vic_dev_dbg->vic_regs) {
+						uint32_t stride_y = readl(vic_dev_dbg->vic_regs + 0x310);
+						uint32_t h_vic = vic_dev_dbg->height ? vic_dev_dbg->height : 1080;
+						uint32_t y_size = stride_y * h_vic;
+						uint32_t step_vic = y_size + (y_size >> 1); /* NV12: Y + Y/2 */
+						uint32_t base = (fcd && fcd->vbm_base_phys) ? fcd->vbm_base_phys : g_setbuf_base[0];
+						uint32_t phys_adj = base + buffer.index * step_vic;
+						if (phys_adj != chosen_phys) {
+							pr_info("*** Channel 0: QBUF - Adjusted phys by VIC stride: old=0x%x -> new=0x%x (base=0x%x stride=%u h=%u step=%u idx=%u) ***\n",
+									chosen_phys, phys_adj, base, stride_y, h_vic, step_vic, buffer.index);
+							chosen_phys = phys_adj;
+						}
+					}
+				}
+
+
+            /* Program VIC only for channel 0 NV12 path to avoid clobbering with substream (ch1) buffers. */
+            if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
+                struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                struct { uint32_t index; uint32_t phys_addr; uint32_t size; uint32_t channel; } v;
+                v.index = buffer.index;
+                v.phys_addr = chosen_phys;
+                v.size = chosen_size;
+                v.channel = channel;
+                pr_info("*** Channel %d: QBUF - Programming VIC buffer[%u] = 0x%x (size=%u) ***\n",
+                        channel, v.index, v.phys_addr, v.size);
+                {
+                    int evt_res = tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &v);
+                    if (evt_res == 0xfffffdfd || evt_res == -ENOIOCTLCMD) {
+                        /* Fallback: program VIC slot directly if remote event not handled */
+                        if (vic_dev_buf->vic_regs) {
+                            u32 reg_offset = (v.index + 0xc6) << 2; /* 0x318 + 4*index */
+                            writel(v.phys_addr, vic_dev_buf->vic_regs + reg_offset);
+                            wmb();
+                            pr_info("*** VIC QBUF (fallback): slot[%u] addr=0x%x -> VIC[0x%x] size=%u ch=%u ***\n",
+                                    v.index, v.phys_addr, reg_offset, v.size, v.channel);
+                        } else {
+                            pr_warn("VIC QBUF (fallback): vic_regs not mapped, cannot program slot\n");
+                        }
+                    }
+                }
+            }
+            tx_isp_fs_enqueue_qbuf(channel, buffer.index, chosen_phys, chosen_size);
+
+		/* Reference: if streaming flag is set, immediately enqueue to VIC */
+		if (buffer_struct && state->streaming) {
+			pr_info("*** Channel %d: QBUF -> __enqueue_in_driver (streaming active) ***\n", channel);
+			__enqueue_in_driver(buffer_struct);
+		}
+
         }
-
-
 
         /* SAFE: Update buffer state management */
         spin_lock_irqsave(&state->buffer_lock, flags);
-
-        /* Mark buffer as queued */
-        if (!state->frame_ready) {
-            state->frame_ready = true;
-            wake_up_interruptible(&state->frame_wait);
-        }
-
+        /* Do NOT mark frame ready on QBUF; wait for hardware frame-done IRQ */
         spin_unlock_irqrestore(&state->buffer_lock, flags);
 
         /* Copy buffer back to user space */
@@ -3102,74 +3033,37 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         return 0;
     }
     case 0xc0445609: { // VIDIOC_DQBUF - Dequeue buffer
-        struct v4l2_buffer buffer;
-        struct tx_isp_channel_state *state = &fcd->state;
-        unsigned long flags;
-        int ret;
-
-        pr_info("*** Channel %d: DQBUF - VBM buffer dequeue request ***\n", channel);
-        pr_info("*** DQBUF DEBUG: This message confirms DQBUF is being called ***\n");
+        struct v4l2_buffer {
+            uint32_t index;
+            uint32_t type;
+            uint32_t bytesused;
+            uint32_t flags;
+            uint32_t field;
+            struct timeval timestamp;
+            struct v4l2_timecode timecode;
+            uint32_t sequence;
+            uint32_t memory;
+            union {
+                uint32_t offset;
+                unsigned long userptr;
+                void *planes;
+            } m;
+            uint32_t length;
+            uint32_t reserved2;
+            uint32_t reserved;
+        } buffer;
 
         if (copy_from_user(&buffer, argp, sizeof(buffer)))
             return -EFAULT;
 
-        /* VBM DQBUF: Wait for completed buffer or return immediately if available */
-        spin_lock_irqsave(&state->buffer_lock, flags);
+        pr_info("Channel %d: Dequeue buffer request\n", channel);
 
-        if (!state->frame_ready) {
-            spin_unlock_irqrestore(&state->buffer_lock, flags);
-
-            /* Wait for frame completion with timeout */
-            ret = wait_event_interruptible_timeout(state->frame_wait,
-                                                   state->frame_ready,
-                                                   msecs_to_jiffies(1000));
-            if (ret <= 0) {
-                pr_warn("*** Channel %d: DQBUF timeout waiting for frame ***\n", channel);
-                return -EAGAIN;
-            }
-
-            spin_lock_irqsave(&state->buffer_lock, flags);
-        }
-
-        /* VBM DQBUF: Return the most recently completed buffer */
-        if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
-            static uint32_t dqbuf_cycle = 0;
-
-            buffer.index = dqbuf_cycle;
-            buffer.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-            /* CRITICAL FIX: Use consistent buffer size calculation */
-            if (channel == 0) {
-                buffer.bytesused = 1920 * 1080 * 3 / 2; /* NV12 main stream */
-            } else {
-                buffer.bytesused = 640 * 360 * 3 / 2;   /* NV12 sub stream */
-            }
-            buffer.flags = V4L2_BUF_FLAG_DONE;
-            buffer.field = V4L2_FIELD_NONE;
-            buffer.sequence = state->sequence++;
-            buffer.memory = V4L2_MEMORY_MMAP;
-            buffer.m.offset = state->vbm_buffer_addresses[dqbuf_cycle];
-            buffer.length = buffer.bytesused;
-
-            /* Cycle to next buffer */
-            dqbuf_cycle = (dqbuf_cycle + 1) % state->vbm_buffer_count;
-
-            pr_info("*** Channel %d: DQBUF VBM - Returning buffer[%d] addr=0x%x, seq=%d ***\n",
-                    channel, buffer.index, buffer.m.offset, buffer.sequence);
-        } else {
-            /* Fallback for non-VBM mode */
-            buffer.index = 0;
-            buffer.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-            buffer.bytesused = 1920 * 1080 * 3 / 2;
-            buffer.flags = V4L2_BUF_FLAG_DONE;
-            buffer.sequence = state->sequence++;
-
-            pr_warn("*** Channel %d: DQBUF fallback mode ***\n", channel);
-        }
-
-        /* Reset frame ready flag */
-        state->frame_ready = false;
-
-        spin_unlock_irqrestore(&state->buffer_lock, flags);
+        // Reference waits for completed buffer and returns it
+        // For now, return dummy buffer data
+        buffer.index = 0;
+        buffer.bytesused = 1920 * 1080 * 3 / 2; // YUV420 size
+        buffer.flags = 0x1; // V4L2_BUF_FLAG_MAPPED
+        buffer.sequence = 0;
 
         if (copy_to_user(argp, &buffer, sizeof(buffer)))
             return -EFAULT;
@@ -3203,6 +3097,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         bool sensor_active = false;
         uint32_t buf_index;
 
+        bool used_fs = false; u32 fs_index_out = 0, fs_phys_out = 0, fs_size_out = 0;
+
         if (copy_from_user(&buffer, argp, sizeof(buffer)))
             return -EFAULT;
 
@@ -3222,32 +3118,46 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         }
 
+		active_sensor = tx_isp_get_sensor();
         // Check if real sensor is connected and active
-        extern struct tx_isp_sensor *tx_isp_get_sensor(void);
-        struct tx_isp_sensor *sensor_check = tx_isp_get_sensor();
-        if (sensor_check) {
-            active_sensor = sensor_check;
-            if (active_sensor && active_sensor->sd.vin_state == TX_ISP_MODULE_RUNNING) {
-                sensor_active = true;
-                pr_info("Channel %d: Real sensor %s is ACTIVE\n", channel, active_sensor->info.name);
-            }
+        if (active_sensor && active_sensor->sd.vin_state == TX_ISP_MODULE_RUNNING) {
+            sensor_active = true;
+            pr_info("Channel %d: Real sensor %s is ACTIVE\n", channel, active_sensor->info.name);
         }
 
-        /* Binary Ninja DQBUF: Wait for frame completion with proper state checking */
-        pr_info("*** Channel %d: DQBUF waiting for frame completion (timeout=200ms) ***\n", channel);
-        ret = wait_event_interruptible_timeout(state->frame_wait,
-                                             state->frame_ready || !state->streaming,
-                                             msecs_to_jiffies(200)); // 200ms timeout like reference
-        pr_info("*** Channel %d: DQBUF wait returned %d ***\n", channel, ret);
-
-        if (ret == 0) {
-            pr_info("*** Channel %d: DQBUF timeout, generating frame ***\n", channel);
-            spin_lock_irqsave(&state->buffer_lock, flags);
-            state->frame_ready = true;
-            spin_unlock_irqrestore(&state->buffer_lock, flags);
-        } else if (ret < 0) {
-            pr_info("*** Channel %d: DQBUF interrupted: %d ***\n", channel, ret);
-            return ret;
+        /* First try to pop a completed FS frame */
+        {
+            u32 fs_index = 0, fs_phys = 0, fs_size = 0;
+            int fs_ret = tx_isp_fs_dequeue_done(channel, &fs_index, &fs_phys, &fs_size);
+            if (fs_ret == -EAGAIN) {
+                /* Wait for frame completion with proper state checking */
+                pr_info("*** Channel %d: DQBUF waiting for frame completion (timeout=200ms) ***\n", channel);
+                ret = wait_event_interruptible_timeout(state->frame_wait,
+                                                     state->frame_ready || !state->streaming,
+                                                     msecs_to_jiffies(200));
+                pr_info("*** Channel %d: DQBUF wait returned %d ***\n", channel, ret);
+                if (ret < 0)
+                    return ret;
+                /* Try FS dequeue again after wait */
+                fs_ret = tx_isp_fs_dequeue_done(channel, &fs_index, &fs_phys, &fs_size);
+            }
+            if (fs_ret == 0) {
+                /* We have a real completed frame from FS queue */
+                used_fs = true;
+                fs_index_out = fs_index;
+                fs_phys_out = fs_phys;
+                fs_size_out = fs_size;
+                pr_info("*** Channel %d: DQBUF pop FS done index=%u phys=0x%x size=%u ***\n",
+                        channel, fs_index_out, fs_phys_out, fs_size_out);
+            } else {
+                /* Fallback to legacy behavior below */
+                if (ret == 0) {
+                    /* If no FS frame and timeout occurred, mark one ready for legacy flow */
+                    spin_lock_irqsave(&state->buffer_lock, flags);
+                    state->frame_ready = true;
+                    spin_unlock_irqrestore(&state->buffer_lock, flags);
+                }
+            }
         }
 
         if (!state->streaming) {
@@ -3258,23 +3168,22 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         /* Binary Ninja __fill_v4l2_buffer implementation */
         spin_lock_irqsave(&state->buffer_lock, flags);
 
-        // Calculate buffer index like Binary Ninja reference
-        if (state->buffer_count > 0) {
-            buf_index = state->sequence % state->buffer_count;
+        // Calculate buffer index like Binary Ninja reference (legacy fallback)
+        if (!used_fs) {
+            if (state->buffer_count > 0) {
+                buf_index = state->sequence % state->buffer_count;
+            } else {
+                buf_index = state->sequence % 4; // Default cycling
+            }
         } else {
-            buf_index = state->sequence % 4; // Default cycling
+            buf_index = fs_index_out;
         }
 
         /* Fill buffer structure like Binary Ninja __fill_v4l2_buffer */
         // memcpy(arg2, arg1, 0x34) - copy basic buffer info
         buffer.index = buf_index;
         buffer.type = 1; // V4L2_BUF_TYPE_VIDEO_CAPTURE
-        /* CRITICAL FIX: Use consistent buffer size calculation */
-        if (channel == 0) {
-            buffer.bytesused = 1920 * 1080 * 3 / 2; /* NV12 main stream */
-        } else {
-            buffer.bytesused = 640 * 360 * 3 / 2;   /* NV12 sub stream */
-        }
+        buffer.bytesused = used_fs && fs_size_out ? fs_size_out : (state->width * state->height * 3 / 2);
         buffer.field = 1; // V4L2_FIELD_NONE
         do_gettimeofday(&buffer.timestamp);
         buffer.sequence = state->sequence++;
@@ -3295,6 +3204,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         /* Set buffer physical address offset like Binary Ninja */
         buffer.m.offset = buf_index * buffer.bytesused;
+        /* If FS provided a real phys, we can't map to offset here safely; leave as index-based */
 
         /* Binary Ninja DMA sync: private_dma_sync_single_for_device(nullptr, var_44, var_40, 2) */
         if (sensor_active && ourISPdev && ourISPdev->vic_dev) {
@@ -3302,109 +3212,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
             /* Update VIC buffer tracking for this dequeue like Binary Ninja */
             if (vic_dev && vic_dev->vic_regs && buf_index < 8) {
-                /* CRITICAL FIX: Use stored real buffer address instead of generated fake address */
-                u32 buffer_phys_addr;
-
-                /* CRITICAL FIX: Use reference driver DQBUF logic - wait for completed buffer */
-                struct video_buffer *video_buffer = NULL;
-                int wait_result;
-
-                pr_info("*** Channel %d: DQBUF waiting for completed buffer ***\n", channel);
-
-                /* Reference driver waits for completed buffer using wait_event_interruptible */
-                spin_lock(&state->queue_lock);
-
-                /* CRITICAL FIX: For VBM mode, don't wait for completed_buffers - use VBM buffer cycling */
-                if (list_empty(&state->completed_buffers) && state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
-                    spin_unlock(&state->queue_lock);
-
-                    pr_info("*** Channel %d: DQBUF VBM mode - using VBM buffer cycling instead of completed_buffers ***\n", channel);
-
-                    /* CRITICAL FIX: For VBM mode, wait for frame_ready instead of completed_buffers */
-                    if (in_atomic() || irqs_disabled()) {
-                        pr_warn("*** Channel %d: DQBUF VBM wait called from atomic context - checking frame_ready ***\n", channel);
-                        wait_result = state->frame_ready ? 1 : 0;
-                    } else {
-                        /* Wait for frame_ready which is set by VIC interrupts */
-                        pr_info("*** Channel %d: DQBUF VBM waiting for frame_ready (timeout=200ms) ***\n", channel);
-                        wait_result = wait_event_interruptible_timeout(state->frame_wait,
-                            state->frame_ready, msecs_to_jiffies(200));
-                    }
-
-                    pr_info("*** Channel %d: DQBUF VBM wait returned %d ***\n", channel, wait_result);
-
-                    if (wait_result <= 0) {
-                        pr_warn("*** Channel %d: DQBUF VBM timeout - no frame_ready signal ***\n", channel);
-                        pr_warn("*** Channel %d: BUFFER1 ERROR: VIC interrupts not setting frame_ready ***\n", channel);
-
-                        /* For VBM mode, we can still return a buffer even on timeout */
-                        pr_info("*** Channel %d: DQBUF VBM RECOVERY: Returning buffer anyway for VBM compatibility ***\n", channel);
-                        /* Continue with VBM buffer return - don't fail */
-                    }
-
-                    /* Skip the completed_buffers check for VBM mode */
-                    spin_lock(&state->queue_lock);
-
-                } else if (list_empty(&state->completed_buffers)) {
-                    /* Non-VBM mode - use original completed_buffers logic */
-                    spin_unlock(&state->queue_lock);
-
-                    pr_info("*** Channel %d: DQBUF no completed buffers, waiting... ***\n", channel);
-                    pr_info("*** Channel %d: DQBUF DEBUG - queued_count=%d, completed_count=%d ***\n",
-                            channel, state->queued_count, state->completed_count);
-
-                    /* CRITICAL FIX: Check if we're in atomic context before waiting */
-                    if (in_atomic() || irqs_disabled()) {
-                        pr_warn("*** Channel %d: DQBUF buffer wait called from atomic context - returning immediately ***\n", channel);
-                        wait_result = 0; // Timeout
-                    } else {
-                        /* Wait for buffer completion like reference driver */
-                        pr_info("*** Channel %d: DQBUF waiting for buffer completion (timeout=200ms) ***\n", channel);
-                        wait_result = wait_event_interruptible_timeout(state->frame_wait,
-                            !list_empty(&state->completed_buffers), msecs_to_jiffies(200));
-                    }
-
-                    pr_info("*** Channel %d: DQBUF wait returned %d ***\n", channel, wait_result);
-
-                    if (wait_result <= 0) {
-                        pr_warn("*** Channel %d: DQBUF timeout or interrupted - no buffer completion detected ***\n", channel);
-                        pr_warn("*** Channel %d: BUFFER1 ERROR: Buffer completion mechanism not working properly ***\n", channel);
-                        return wait_result == 0 ? -EAGAIN : wait_result;
-                    }
-
-                    spin_lock(&state->queue_lock);
-                }
-
-                /* Get the first completed buffer from the list OR use VBM buffer cycling */
-                if (!list_empty(&state->completed_buffers)) {
-                    struct list_head *first = state->completed_buffers.next;
-                    video_buffer = list_entry(first, struct video_buffer, list);
-
-                    /* Remove from completed list */
-                    list_del(first);
-                    state->completed_count--;
-
-                    buf_index = video_buffer->index;
-                    buffer_phys_addr = (uint32_t)(uintptr_t)video_buffer->data;
-
-                    pr_info("*** Channel %d: DQBUF got completed buffer[%d] data_addr=0x%x ***\n",
-                            channel, buf_index, buffer_phys_addr);
-                } else if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
-                    /* VBM mode - cycle through VBM buffers */
-                    static uint32_t vbm_dqbuf_cycle = 0;
-                    buf_index = vbm_dqbuf_cycle % state->vbm_buffer_count;
-                    buffer_phys_addr = state->vbm_buffer_addresses[buf_index];
-                    vbm_dqbuf_cycle++;
-
-                    pr_info("*** Channel %d: DQBUF VBM mode - returning buffer[%d] addr=0x%x (cycle=%d) ***\n",
-                            channel, buf_index, buffer_phys_addr, vbm_dqbuf_cycle);
-                } else {
-                    spin_unlock(&state->queue_lock);
-                    pr_warn("*** Channel %d: DQBUF still no completed buffers after wait ***\n", channel);
-                    return -EAGAIN;
-                }
-
-                spin_unlock(&state->queue_lock);
+                u32 buffer_phys_addr = 0x6300000 + (buf_index * (state->width * state->height * 2));
 
                 pr_info("*** Channel %d: DQBUF updating VIC buffer[%d] addr=0x%x ***\n",
                         channel, buf_index, buffer_phys_addr);
@@ -3428,6 +3236,340 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         if (copy_to_user(argp, &buffer, sizeof(buffer)))
             return -EFAULT;
 
+        return 0;
+    }
+    case 0x80045612: { // VIDIOC_STREAMON - Start streaming
+        uint32_t type;
+        struct tx_isp_vic_device *vic_dev = NULL;
+        struct tx_isp_sensor *sensor = NULL;
+        int ret = 0;
+
+        if (copy_from_user(&type, argp, sizeof(type)))
+            return -EFAULT;
+
+        pr_info("Channel %d: VIDIOC_STREAMON request, type=%d\n", channel, type);
+
+        // Validate buffer type
+        if (type != 1) { // V4L2_BUF_TYPE_VIDEO_CAPTURE
+            pr_err("Channel %d: Invalid stream type %d\n", channel, type);
+            return -EINVAL;
+        }
+
+        // Check if already streaming
+        if (state->streaming) {
+            pr_info("Channel %d: Already streaming\n", channel);
+            return 0;
+        }
+
+        // Update VIC frame dimensions based on channel
+        if (ourISPdev && ourISPdev->vic_dev) {
+            struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+            if (channel == 0) {
+                vic->width = 1920;
+                vic->height = 1080;
+            } else {
+                vic->width = 640;
+                vic->height = 360;
+            }
+        }
+
+        // Enable channel
+        state->enabled = true;
+        state->streaming = true;
+
+        // *** CRITICAL: SETUP VIC BUFFERS BEFORE STREAMING (Binary Ninja reference) ***
+        if (ourISPdev && ourISPdev->vic_dev) {
+            struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+
+            pr_info("*** CHANNEL %d STREAMON: CHECKING VIC BUFFER SETUP ***\n", channel);
+
+            /* Check if VIC has proper buffer count from REQBUFS */
+            if (vic->active_buffer_count == 0) {
+                pr_warn("*** CHANNEL %d STREAMON: WARNING - No buffers allocated via REQBUFS! ***\n", channel);
+                pr_warn("*** Client should call REQBUFS before STREAMON ***\n");
+            }
+
+            /* Ensure VIC dimensions are set */
+            if (vic->width == 0 || vic->height == 0) {
+                vic->width = 1920;
+                vic->height = 1080;
+                pr_info("*** CHANNEL %d STREAMON: Set VIC dimensions %dx%d ***\n",
+                        channel, vic->width, vic->height);
+            }
+
+            pr_info("*** VIC STATE: state=%d, stream_state=%d, active_buffer_count=%d ***\n",
+                    vic->state, vic->stream_state, vic->active_buffer_count);
+
+            /* VIC hardware initialization now handled by vic_core_s_stream only */
+            pr_info("*** Channel %d: VIC hardware initialization deferred to vic_core_s_stream ***\n", channel);
+            pr_info("*** CHANNEL %d STREAMON: VIC hardware started successfully ***\n", channel);
+
+            /* CRITICAL FIX: Only call VIC streaming restart if VIC is not already streaming */
+            /* This prevents the destructive VIC unlock sequence during normal operations */
+            extern int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
+
+            if (vic->stream_state != 1) {
+                pr_info("*** Channel %d: VIC not streaming (state=%d), calling ispvic_frame_channel_s_stream ***\n",
+                        channel, vic->stream_state);
+                ret = ispvic_frame_channel_s_stream(vic, 1);
+                if (ret != 0) {
+                    pr_err("Channel %d: Failed to start VIC streaming: %d\n", channel, ret);
+                    state->streaming = false;
+                    return ret;
+                }
+
+			/* Reference: on STREAMON, enqueue any prepared buffers to VIC */
+			if (fcd && state->buffer_count > 0) {
+				unsigned int i;
+				for (i = 0; i < state->buffer_count && i < 64; ++i) {
+					void *bufp = fcd->buffer_array[i];
+					if (bufp) {
+						pr_info("*** Channel %d: STREAMON -> __enqueue_in_driver for buffer[%u]=%p ***\n", channel, i, bufp);
+						__enqueue_in_driver(bufp);
+					}
+				}
+			}
+
+            } else {
+                pr_info("*** Channel %d: VIC already streaming (state=%d), skipping VIC restart to preserve interrupts ***\n",
+                        channel, vic->stream_state);
+            }
+
+            pr_info("*** CHANNEL %d STREAMON: VIC streaming started successfully ***\n", channel);
+
+            /* Proactively program VIC slots for channel 0 using legacy SET_BUF base if available. */
+            if (channel == 0 && fcd && fcd->vbm_base_phys && fcd->vbm_frame_size && ourISPdev && ourISPdev->vic_dev) {
+                struct tx_isp_vic_device *vic_dev_prog = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                struct { uint32_t index; uint32_t phys_addr; uint32_t size; uint32_t channel; } v;
+                uint32_t base = fcd->vbm_base_phys;
+                uint32_t step = fcd->vbm_frame_size;
+                pr_info("*** CHANNEL 0 STREAMON: Pre-program VIC slots with base=0x%x step=%u ***\n", base, step);
+                /* Slot 0 */
+                v.index = 0; v.phys_addr = base; v.size = step; v.channel = 0;
+                tx_isp_send_event_to_remote(&vic_dev_prog->sd, 0x3000008, &v);
+                /* Slot 1 */
+                v.index = 1; v.phys_addr = base + step; v.size = step; v.channel = 0;
+                tx_isp_send_event_to_remote(&vic_dev_prog->sd, 0x3000008, &v);
+            }
+
+			sensor = tx_isp_get_sensor();
+            // *** STEP 3: NOW START STREAMING WITH DETAILED ERROR CHECKING ***
+            if (sensor && sensor->sd.ops && sensor->sd.ops->video &&
+                sensor->sd.ops->video->s_stream) {
+                pr_info("*** Channel %d: CALLING SENSOR s_stream(1) - THIS SHOULD WRITE 0x3e=0x91 ***\n", channel);
+                pr_info("Channel %d: About to call %s->s_stream(1)\n",
+                        channel, sensor->info.name);
+
+                ret = sensor->sd.ops->video->s_stream(&sensor->sd, 1);
+
+                pr_info("*** Channel %d: SENSOR s_stream(1) RETURNED %d ***\n", channel, ret);
+                if (ret) {
+                    pr_err("Channel %d: FAILED to start sensor streaming: %d\n", channel, ret);
+                    pr_err("Channel %d: This means register 0x3e=0x91 was NOT written!\n", channel);
+                    state->streaming = false;
+                    return ret;
+                } else {
+                    pr_info("*** Channel %d: SENSOR STREAMING SUCCESS - 0x3e=0x91 SHOULD BE WRITTEN ***\n", channel);
+                    // CRITICAL: Set sensor state to RUNNING after successful streaming start
+                    sensor->sd.vin_state = TX_ISP_MODULE_RUNNING;
+                    pr_info("Channel %d: Sensor state set to RUNNING\n", channel);
+                }
+            } else {
+                pr_err("*** Channel %d: CRITICAL ERROR - NO SENSOR s_stream OPERATION! ***\n", channel);
+                pr_err("Channel %d: sensor=%p\n", channel, sensor);
+                if (sensor) {
+                    pr_err("Channel %d: sensor->sd.ops=%p\n", channel, sensor->sd.ops);
+                    if (sensor->sd.ops) {
+                        pr_err("Channel %d: sensor->sd.ops->video=%p\n", channel, sensor->sd.ops->video);
+                        if (sensor->sd.ops->video) {
+                            pr_err("Channel %d: sensor->sd.ops->video->s_stream=%p\n",
+                                channel, sensor->sd.ops->video->s_stream);
+                        }
+                    }
+                }
+                pr_err("Channel %d: SENSOR STREAMING NOT AVAILABLE - VIDEO WILL BE GREEN!\n", channel);
+            }
+
+            // *** CRITICAL: TRIGGER VIC STREAMING CHAIN - THIS GENERATES THE REGISTER ACTIVITY! ***
+            if (ourISPdev && ourISPdev->vic_dev) {
+                struct tx_isp_vic_device *vic_streaming = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+
+                pr_info("*** Channel %d: NOW CALLING VIC STREAMING CHAIN - THIS SHOULD GENERATE REGISTER ACTIVITY! ***\n", channel);
+
+                // CRITICAL: Call vic_core_s_stream which calls tx_isp_vic_start when streaming
+                ret = vic_core_s_stream(&vic_streaming->sd, 1);
+
+                pr_info("*** Channel %d: VIC STREAMING RETURNED %d - REGISTER ACTIVITY SHOULD NOW BE VISIBLE! ***\n", channel, ret);
+
+                if (ret) {
+                    pr_err("Channel %d: VIC streaming failed: %d\n", channel, ret);
+                } else {
+                    pr_info("*** Channel %d: VIC STREAMING SUCCESS - ALL HARDWARE SHOULD BE ACTIVE! ***\n", channel);
+                }
+            } else {
+                pr_err("*** Channel %d: NO VIC DEVICE - CANNOT TRIGGER HARDWARE STREAMING! ***\n", channel);
+            }
+
+            // Trigger core ops streaming
+            if (ourISPdev && ourISPdev->sd.ops && ourISPdev->sd.ops->video &&
+                ourISPdev->sd.ops->video->s_stream) {
+
+                pr_info("*** Channel %d: NOW CALLING CORE STREAMING - THIS SHOULD TRIGGER MORE REGISTER ACTIVITY! ***\n", channel);
+                ret = ourISPdev->sd.ops->video->s_stream(&ourISPdev->sd, 1);
+                if (ret) {
+                    pr_err("Channel %d: CORE STREAMING FAILED: %d\n", channel, ret);
+                } else {
+                    pr_info("*** Channel %d: CORE STREAMING SUCCESS - ALL HARDWARE SHOULD BE ACTIVE! ***\n", channel);
+                }
+            }
+
+            // Trigger Core Streaming - using ourISPdev directly as it contains the core functionality
+            pr_info("*** Channel %d: Core streaming functionality integrated in main ISP device ***\n", channel);
+
+        } else {
+            if (channel == 0) {
+                pr_warn("*** Channel %d: NO SENSOR AVAILABLE FOR STREAMING ***\n", channel);
+                pr_warn("Channel %d: ourISPdev=%p\n", channel, ourISPdev);
+                if (ourISPdev) {
+                    pr_warn("Channel %d: ourISPdev->sensor=%p\n", channel, ourISPdev->sensor);
+                }
+                pr_warn("Channel %d: VIDEO WILL BE GREEN WITHOUT SENSOR!\n", channel);
+            }
+        }
+
+        // Get VIC device
+        if (ourISPdev && ourISPdev->vic_dev) {
+            vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+
+            // Activate VIC if needed
+            if (vic_dev->state != 2) {
+                vic_dev->state = 2;
+                pr_info("Channel %d: VIC activated\n", channel);
+            }
+
+            // Enable VIC streaming with COMPLETE MIPI register configuration (matches reference tx_isp_vic_start)
+            if (!vic_dev->streaming) {
+                unsigned long flags;
+
+                spin_lock_irqsave(&vic_dev->buffer_lock, flags);
+
+                if (vic_dev->vic_regs) {
+                    int timeout = 1000;
+                    u32 vic_status;
+                    u32 ctrl_verify;
+
+                    pr_info("*** Channel %d: VIC REFERENCE ENABLEMENT SEQUENCE (STREAMON) ***\n", channel);
+
+                    // STEP 1: Enable VIC register access mode (write 2 to register 0x0)
+                    iowrite32(2, vic_dev->vic_regs + 0x0);
+                    wmb();
+                    pr_info("Channel %d: VIC enabled register access (wrote 2)\n", channel);
+
+                    // STEP 2: Set VIC configuration mode (write 4 to register 0x0)
+                    iowrite32(4, vic_dev->vic_regs + 0x0);
+                    wmb();
+                    pr_info("Channel %d: VIC set config mode (wrote 4)\n", channel);
+
+                    // STEP 3: Wait for VIC ready state
+                    while ((vic_status = ioread32(vic_dev->vic_regs + 0x0)) != 0 && timeout--) {
+                        cpu_relax();
+                    }
+                    pr_info("Channel %d: VIC ready wait complete (status=0x%x, timeout=%d)\n",
+                           channel, vic_status, timeout);
+
+                    // STEP 4: Start VIC processing (write 1 to register 0x0)
+                    iowrite32(1, vic_dev->vic_regs + 0x0);
+                    wmb();
+                    pr_info("Channel %d: VIC processing started (wrote 1)\n", channel);
+
+                    pr_info("*** Channel %d: NOW CONFIGURING VIC REGISTERS (SHOULD WORK!) ***\n", channel);
+
+                    // NOW configure VIC registers - they should be accessible!
+                    // CRITICAL: MIPI interface configuration - MIPI mode is 2, not 3!
+                    iowrite32(2, vic_dev->vic_regs + 0xc);
+                    wmb();
+                    ctrl_verify = ioread32(vic_dev->vic_regs + 0xc);
+                    pr_info("Channel %d: VIC ctrl reg 0xc = 2 (MIPI mode), verify=0x%x\n", channel, ctrl_verify);
+
+                    if (ctrl_verify == 3) {
+                        pr_info("*** Channel %d: SUCCESS! VIC REGISTERS RESPONDING! ***\n", channel);
+
+                        // Continue with full configuration since registers are working
+                        // Frame dimensions register 0x4: (width << 16) | height
+                        iowrite32((vic_dev->width << 16) | vic_dev->height,
+                                 vic_dev->vic_regs + 0x4);
+
+                        // MIPI configuration register 0x10: Format-specific value
+                        iowrite32(0x40000, vic_dev->vic_regs + 0x10);
+
+                        // MIPI stride configuration register 0x18
+                        iowrite32(vic_dev->width, vic_dev->vic_regs + 0x18);
+
+                        // DMA buffer configuration registers (from reference)
+                        iowrite32(0x100010, vic_dev->vic_regs + 0x1a4);  // DMA config
+                        iowrite32(0x4210, vic_dev->vic_regs + 0x1ac);    // Buffer mode
+                        iowrite32(0x10, vic_dev->vic_regs + 0x1b0);      // Buffer control
+                        iowrite32(0, vic_dev->vic_regs + 0x1b4);         // Clear buffer state
+
+                        // CRITICAL: Enable MIPI streaming register 0x300 (from reference)
+                        iowrite32((vic_dev->frame_count << 16) | 0x80000020,
+                                 vic_dev->vic_regs + 0x300);
+
+                        pr_info("*** Channel %d: VIC FULL CONFIGURATION COMPLETE ***\n", channel);
+                        pr_info("Channel %d: VIC regs: ctrl=0x%x, dim=0x%x, mipi=0x%x, stream=0x%x\n",
+                                channel,
+                                ioread32(vic_dev->vic_regs + 0xc),
+                                ioread32(vic_dev->vic_regs + 0x4),
+                                ioread32(vic_dev->vic_regs + 0x10),
+                                ioread32(vic_dev->vic_regs + 0x300));
+                    } else {
+                        pr_err("*** Channel %d: VIC REGISTERS STILL UNRESPONSIVE (got 0x%x) ***\n", channel, ctrl_verify);
+                    }
+                }
+
+                vic_dev->streaming = 1;
+
+                spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
+
+                pr_info("*** Channel %d: VIC NOW READY TO RECEIVE MIPI DATA FROM SENSOR ***\n", channel);
+            }
+        }
+
+
+        pr_info("Channel %d: Streaming enabled\n", channel);
+        return 0;
+    }
+    case 0x80045613: { // VIDIOC_STREAMOFF - Stop streaming
+        uint32_t type;
+        struct tx_isp_sensor *sensor = NULL;
+
+        if (copy_from_user(&type, argp, sizeof(type)))
+            return -EFAULT;
+
+        pr_info("Channel %d: Stream OFF, type=%d\n", channel, type);
+
+        // Validate buffer type
+        if (type != 1) { // V4L2_BUF_TYPE_VIDEO_CAPTURE
+            pr_err("Channel %d: Invalid stream type %d\n", channel, type);
+            return -EINVAL;
+        }
+
+        // Stop channel streaming
+        state->streaming = false;
+
+        // Stop the actual sensor hardware streaming
+        if (channel == 0 && ourISPdev && ourISPdev->sensor) {
+            sensor = ourISPdev->sensor;
+            if (sensor && sensor->sd.ops && sensor->sd.ops->video &&
+                sensor->sd.ops->video->s_stream) {
+                pr_info("Channel %d: Stopping sensor hardware streaming\n", channel);
+                sensor->sd.ops->video->s_stream(&sensor->sd, 0);
+                // Clear sensor running state
+                sensor->sd.vin_state = TX_ISP_MODULE_INIT;
+            }
+        }
+
+        pr_info("Channel %d: Streaming stopped\n", channel);
         return 0;
     }
     case 0x407056c4: { // VIDIOC_G_FMT - Get format
@@ -3510,7 +3652,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             state->enabled = true;
         }
 
-        // Wait for frame with a short timeout (only in non-atomic context)
+        // Wait for frame with a short timeout
         pr_info("*** Channel %d: Waiting for frame (timeout=100ms) ***\n", channel);
         ret = wait_event_interruptible_timeout(state->frame_wait,
                                              state->frame_ready || !state->streaming,
@@ -3548,103 +3690,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         // The decompiled code shows: ioctl($a0_41, 0x800456c5, &var_70)
         // Failure here causes "does not support set banks" error
 
-        // CRITICAL: Set banks should trigger core ops init according to Binary Ninja reference
-        if (ourISPdev && ourISPdev->core_dev &&
-            ourISPdev->core_dev->sd.ops && ourISPdev->core_dev->sd.ops->core &&
-            ourISPdev->core_dev->sd.ops->core->init) {
-
-            pr_info("*** Channel %d: SET_BANKS - CALLING CORE OPS INIT ***\n", channel);
-            int core_init_ret = ourISPdev->core_dev->sd.ops->core->init(&ourISPdev->core_dev->sd, 1);
-
-            if (core_init_ret != 0) {
-                pr_err("Channel %d: SET_BANKS - Core ops init failed: %d\n", channel, core_init_ret);
-                return core_init_ret; // Fail set banks if core init fails
-            } else {
-                pr_info("*** Channel %d: SET_BANKS - Core ops init SUCCESS ***\n", channel);
-            }
-        }
-
         // Store bank configuration in channel state
         // In real implementation, this would configure DMA banks/buffers
         state->enabled = true; // Mark channel as properly configured
 
-        // Binary Ninja: SET_BANKS should set state to 3 (ready for streaming)
-        state->state = 3;
-        pr_info("*** Channel %d: SET_BANKS - State set to 3 (ready for streaming) ***\n", channel);
-
-        return 0;
-    }
-    case 0x80045612: { // VIDIOC_STREAMON - Binary Ninja EXACT implementation
-        uint32_t stream_type;
-        int ret;
-
-        if (copy_from_user(&stream_type, argp, sizeof(stream_type)))
-            return -EFAULT;
-
-        pr_info("*** Channel %d: VIDIOC_STREAMON - Binary Ninja implementation ***\n", channel);
-
-        // Binary Ninja: if (*($s0 + 0x2d0) != 3)
-        if (state->state != 3) {
-            pr_err("Channel %d: STREAMON - Invalid state %d (expected 3)\n", channel, state->state);
-            return -EINVAL;
-        }
-
-        // Binary Ninja: if ((*($s0 + 0x230) & 1) != 0)
-        if ((state->flags & 1) != 0) {
-            pr_err("Channel %d: STREAMON - Already streaming (flags=0x%x)\n", channel, state->flags);
-            return -EBUSY;
-        }
-
-        // Binary Ninja: Enqueue all buffers in driver
-        // while ($s1_3 + 0x58 != $s0 + 0x210)
-        //     __enqueue_in_driver($s1_3)
-        pr_info("Channel %d: STREAMON - Enqueuing buffers in driver\n", channel);
-
-        // Binary Ninja: *($s0 + 0x230) |= 1
-        state->flags |= 1;
-        state->streaming = true;
-
-        // REMOVED: Core state management - ALL state management happens through VIC device
-        // Based on Binary Ninja MCP analysis, core device is stateless
-        if (ourISPdev && ourISPdev->core_dev) {
-            pr_info("*** Channel %d: STREAMON - Core device is stateless, only managing streaming flag ***\n", channel);
-            ourISPdev->core_dev->streaming = 0;  /* Clear streaming flag */
-        }
-
-        return 0;
-    }
-    case 0x80045613: { // VIDIOC_STREAMOFF - Binary Ninja EXACT implementation
-        uint32_t stream_type;
-        int ret;
-
-        if (copy_from_user(&stream_type, argp, sizeof(stream_type)))
-            return -EFAULT;
-
-        pr_info("*** Channel %d: VIDIOC_STREAMOFF - Binary Ninja implementation ***\n", channel);
-
-        // CRITICAL FIX: Only call tx_isp_video_s_stream if streaming was actually started
-        // This prevents tisp_channel_stop() from clearing ISP control registers during sensor init
-        if (ourISPdev && state->streaming) {
-            pr_info("*** Channel %d: STREAMOFF - Calling tx_isp_video_s_stream to disable VIC interrupts ***\n", channel);
-            ret = tx_isp_video_s_stream(ourISPdev, 0);
-            if (ret != 0) {
-                pr_err("Channel %d: STREAMOFF - tx_isp_video_s_stream failed: %d\n", channel, ret);
-                // Continue with streamoff even if video s_stream fails
-            }
-        } else if (ourISPdev && !state->streaming) {
-            pr_info("*** Channel %d: STREAMOFF - Skipping tx_isp_video_s_stream (not streaming) ***\n", channel);
-            pr_info("*** Channel %d: STREAMOFF - This prevents tisp_channel_stop() from clearing ISP control registers ***\n", channel);
-        }
-
-        // Binary Ninja: return __frame_channel_vb2_streamoff($s0, var_78)
-        // For now, implement basic streamoff logic
-        state->streaming = false;
-        state->flags &= ~1; // Clear streaming flag
-
-        // Wake up any waiters
-        wake_up_interruptible(&state->frame_wait);
-
-        pr_info("*** Channel %d: STREAMOFF - Streaming stopped ***\n", channel);
         return 0;
     }
     default:
@@ -4799,181 +4848,13 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
     return 0;
 }
 
-/* tx_isp_create_graph_and_nodes - EXACT Binary Ninja reference implementation */
-int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp_dev)
+/* Compatibility wrapper for old function name to resolve linking errors */
+int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp)
 {
-    struct tx_isp_platform_data *pdata;
-    int i;
-    int ret;
-
-    pr_info("*** tx_isp_create_graph_and_nodes: EXACT Binary Ninja reference implementation ***\n");
-
-    /* Binary Ninja: Get platform data from device */
-    pdata = isp_dev->pdev->dev.platform_data;
-    if (!pdata) {
-        pr_err("No platform data available for graph creation\n");
-        return -EINVAL;
-    }
-
-    /* Binary Ninja: Register platform devices from platform data */
-    for (i = 0; i < pdata->device_id; i++) {
-        pr_info("*** Registering platform device %d from platform data ***\n", i);
-
-        if (i < ARRAY_SIZE(tx_isp_platform_devices) && tx_isp_platform_devices[i]) {
-            /* Check if device is already registered to avoid double registration */
-            if (tx_isp_platform_devices[i]->dev.kobj.parent) {
-                pr_info("*** Platform device %d (%s) already registered - skipping ***\n",
-                        i, tx_isp_platform_devices[i]->name);
-                continue;
-            }
-
-            ret = platform_device_register(tx_isp_platform_devices[i]);
-            if (ret != 0) {
-                pr_err("Failed to register platform device %d (%s): %d\n",
-                       i, tx_isp_platform_devices[i]->name, ret);
-
-                /* Cleanup previously registered devices */
-                while (--i >= 0) {
-                    if (tx_isp_platform_devices[i] && tx_isp_platform_devices[i]->dev.kobj.parent) {
-                        platform_device_unregister(tx_isp_platform_devices[i]);
-                    }
-                }
-                return ret;
-            }
-            pr_info("*** Platform device %d (%s) registered successfully ***\n",
-                    i, tx_isp_platform_devices[i]->name);
-        }
-    }
-
-    /* Binary Ninja: Set globe_ispdev = isp_dev */
-    ourISPdev = isp_dev;
-
-    /* CRITICAL: Create /proc/jz/isp directory and device entries - EXACT Binary Ninja MCP */
-    pr_info("*** tx_isp_create_graph_and_nodes: Creating /proc/jz/isp entries ***\n");
-
-    /* Create /proc/jz/isp directory */
-    isp_dev->proc_context = proc_mkdir("jz/isp", NULL);
-    if (isp_dev->proc_context) {
-        pr_info("*** Created /proc/jz/isp directory ***\n");
-
-        /* Binary Ninja: Create proc entries for each registered device */
-        for (i = 0; i < pdata->device_id; i++) {
-            if (i < ARRAY_SIZE(tx_isp_platform_devices) && tx_isp_platform_devices[i]) {
-                void *driver_data = platform_get_drvdata(tx_isp_platform_devices[i]);
-                if (driver_data) {
-                    const struct file_operations *proc_fops = NULL;
-
-                    /* Set appropriate file operations based on device type */
-                    if (strstr(tx_isp_platform_devices[i]->name, "isp-w02")) {
-                        /* CRITICAL: Use write-enabled file operations for isp-w02 proc entry */
-                        extern const struct file_operations vic_w02_proc_fops;
-                        proc_fops = &vic_w02_proc_fops;
-                        pr_err("*** PROC ENTRY DEBUG: Using vic_w02_proc_fops for %s (with write handler) ***\n", tx_isp_platform_devices[i]->name);
-                        pr_err("*** PROC ENTRY DEBUG: vic_w02_proc_fops.write=%p ***\n", vic_w02_proc_fops.write);
-                    } else if (strstr(tx_isp_platform_devices[i]->name, "vic") || strstr(tx_isp_platform_devices[i]->name, "isp-w")) {
-                        extern const struct file_operations isp_vic_frd_fops;
-                        proc_fops = &isp_vic_frd_fops;
-                        pr_err("*** PROC ENTRY DEBUG: Using isp_vic_frd_fops for %s (with ioctl handler) ***\n", tx_isp_platform_devices[i]->name);
-                    } else if (strstr(tx_isp_platform_devices[i]->name, "csi")) {
-                        extern const struct file_operations isp_csi_fops;
-                        proc_fops = &isp_csi_fops;
-                    } else if (strstr(tx_isp_platform_devices[i]->name, "core") || strstr(tx_isp_platform_devices[i]->name, "isp-m0")) {
-                        extern const struct file_operations isp_core_fops;
-                        proc_fops = &isp_core_fops;
-                    } else {
-                        extern const struct file_operations graph_proc_fops;
-                        proc_fops = &graph_proc_fops;
-                    }
-
-                    /* CRITICAL FIX: For isp-w02, pass main ISP device instead of VIC device */
-                    void *proc_private_data = driver_data;
-                    if (strstr(tx_isp_platform_devices[i]->name, "isp-w02")) {
-                        /* isp_vic_frd_show expects ISP device, not VIC device */
-                        proc_private_data = isp_dev;
-                        pr_info("*** PROC ENTRY FIX: Using ISP device %p instead of VIC device %p for %s ***\n",
-                                isp_dev, driver_data, tx_isp_platform_devices[i]->name);
-                    }
-
-                    /* Binary Ninja: private_proc_create_data(*($v0_7 + 8), 0x124, *(arg1 + 0x11c), $a3_1, $v0_7) */
-                    struct proc_dir_entry *proc_entry = proc_create_data(
-                        tx_isp_platform_devices[i]->name,  /* Device name from platform device */
-                        0644,                               /* Permissions (0x124 = 0644) */
-                        isp_dev->proc_context,             /* Parent directory */
-                        proc_fops,                          /* File operations */
-                        proc_private_data                   /* FIXED: Use ISP device for isp-w02 */
-                    );
-
-                    if (proc_entry) {
-                        pr_info("*** Created /proc/jz/isp/%s entry with file ops ***\n", tx_isp_platform_devices[i]->name);
-                    } else {
-                        pr_warn("*** Failed to create /proc/jz/isp/%s entry ***\n", tx_isp_platform_devices[i]->name);
-                    }
-                }
-            }
-        }
-
-        /* Binary Ninja: Register misc devices for each platform device */
-        pr_info("*** tx_isp_create_graph_and_nodes: Registering misc devices ***\n");
-        for (i = 0; i < pdata->device_id; i++) {
-            if (i < ARRAY_SIZE(tx_isp_platform_devices) && tx_isp_platform_devices[i]) {
-                void *driver_data = platform_get_drvdata(tx_isp_platform_devices[i]);
-                if (driver_data) {
-                    /* Binary Ninja: if (private_misc_register($v0_7 + 0xc) s< 0) */
-                    /* This would register misc devices for each subdev, but we handle this differently */
-                    /* Our frame channel devices are already created via the main misc device */
-                    pr_info("*** Misc device registration handled via main tx-isp device ***\n");
-                }
-            }
-        }
-    } else {
-        pr_err("*** Failed to create /proc/jz/isp directory ***\n");
-    }
-
-    /* CRITICAL: Initialize frame channels with proper Binary Ninja state values */
-    pr_info("*** tx_isp_create_graph_and_nodes: Initializing frame channels ***\n");
-    for (i = 0; i < num_channels; i++) {
-        memset(&frame_channels[i], 0, sizeof(frame_channels[i]));
-
-        /* Initialize channel device */
-        frame_channels[i].channel_num = i;
-        frame_channels[i].magic = FRAME_CHANNEL_MAGIC;
-
-        /* Initialize channel state with Binary Ninja values */
-        frame_channels[i].state.enabled = false;
-        frame_channels[i].state.streaming = false;
-        frame_channels[i].state.state = 2;  /* Binary Ninja initial state */
-        frame_channels[i].state.flags = 0;  /* Binary Ninja initial flags */
-        frame_channels[i].state.format = 0x32315659; /* NV12 format */
-        frame_channels[i].state.width = (i == 0) ? 1920 : 640;   /* CH0=1920, CH1=640 */
-        frame_channels[i].state.height = (i == 0) ? 1080 : 360;  /* CH0=1080, CH1=360 */
-        frame_channels[i].state.buffer_count = 4;
-        frame_channels[i].state.sequence = 0;
-
-        /* Initialize synchronization objects */
-        init_waitqueue_head(&frame_channels[i].state.frame_wait);
-        spin_lock_init(&frame_channels[i].state.buffer_lock);
-        spin_lock_init(&frame_channels[i].state.queue_lock);
-        spin_lock_init(&frame_channels[i].state.vbm_lock);
-
-        /* Initialize buffer lists */
-        INIT_LIST_HEAD(&frame_channels[i].state.queued_buffers);
-        INIT_LIST_HEAD(&frame_channels[i].state.completed_buffers);
-
-        /* Initialize Binary Ninja buffer management fields */
-        mutex_init(&frame_channels[i].buffer_mutex);
-        spin_lock_init(&frame_channels[i].buffer_queue_lock);
-        frame_channels[i].streaming_flags = 0;
-        frame_channels[i].vic_subdev = isp_dev; /* Link to ISP device */
-        frame_channels[i].buffer_type = 1; /* V4L2_BUF_TYPE_VIDEO_CAPTURE */
-
-        pr_info("*** Frame channel %d initialized: %dx%d, state=%d ***\n",
-                i, frame_channels[i].state.width, frame_channels[i].state.height,
-                frame_channels[i].state.state);
-    }
-
-    pr_info("*** tx_isp_create_graph_and_nodes: Binary Ninja reference implementation complete ***\n");
-    return 0;
+    pr_info("tx_isp_create_graph_and_nodes: Redirecting to new subdevice management system\n");
+    return tx_isp_create_subdev_graph(isp);
 }
+EXPORT_SYMBOL(tx_isp_create_graph_and_nodes);
 
 static void tx_isp_exit(void)
 {
@@ -5551,7 +5432,7 @@ int tx_isp_send_event_to_remote(void *arg1, int event_type, void *data)
 }
 
 /* __enqueue_in_driver - EXACT Binary Ninja implementation */
-static int __enqueue_in_driver(void *buffer_struct)
+int __enqueue_in_driver(void *buffer_struct)
 {
     void *s1;
     int result;

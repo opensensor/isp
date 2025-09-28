@@ -1039,3 +1039,87 @@ void __exit tx_isp_subdev_platform_exit(void)
 /* Export symbols for main module to call these functions */
 EXPORT_SYMBOL(tx_isp_subdev_platform_init);
 EXPORT_SYMBOL(tx_isp_subdev_platform_exit);
+
+
+
+/**
+ * tx_isp_create_subdev_graph - Create ISP processing graph (refactored version)
+ * @isp: ISP device
+ *
+ * This is a cleaner, more maintainable version of tx_isp_create_graph_and_nodes
+ * that doesn't rely on Binary Ninja offsets and unsafe pointer arithmetic.
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+int tx_isp_create_subdev_graph(struct tx_isp_dev *isp)
+{
+    int ret = 0;
+    int i;
+
+    if (!isp) {
+        pr_err("tx_isp_create_subdev_graph: Invalid ISP device\n");
+        return -EINVAL;
+    }
+
+    pr_info("*** tx_isp_create_subdev_graph: Creating ISP processing graph ***\n");
+
+    mutex_lock(&subdev_registry_mutex);
+
+    if (subdev_count == 0) {
+        pr_info("tx_isp_create_subdev_graph: No subdevices registered, creating basic setup\n");
+
+        /* Create basic CSI and VIC setup when no subdevices exist */
+        ret = tx_isp_create_basic_pipeline(isp);
+        if (ret < 0) {
+            pr_err("Failed to create basic pipeline: %d\n", ret);
+        }
+        goto unlock;
+    }
+
+    pr_info("tx_isp_create_subdev_graph: Processing %d registered subdevices\n", subdev_count);
+
+    /* Step 1: Initialize all source subdevices */
+    for (i = 0; i < subdev_count; i++) {
+        struct tx_isp_subdev_runtime *runtime = subdev_registry[i];
+
+        if (!runtime || !runtime->desc)
+            continue;
+
+        if (runtime->desc->type == TX_ISP_SUBDEV_TYPE_SOURCE) {
+            ret = tx_isp_init_source_subdev(isp, runtime);
+            if (ret < 0) {
+                pr_err("Failed to initialize source subdev %s: %d\n",
+                       runtime->desc->name, ret);
+                goto cleanup;
+            }
+        }
+    }
+
+    /* Step 2: Initialize all sink subdevices and create links */
+    for (i = 0; i < subdev_count; i++) {
+        struct tx_isp_subdev_runtime *runtime = subdev_registry[i];
+
+        if (!runtime || !runtime->desc)
+            continue;
+
+        if (runtime->desc->type == TX_ISP_SUBDEV_TYPE_SINK) {
+            ret = tx_isp_init_sink_subdev(isp, runtime);
+            if (ret < 0) {
+                pr_err("Failed to initialize sink subdev %s: %d\n",
+                       runtime->desc->name, ret);
+                goto cleanup;
+            }
+        }
+    }
+
+    pr_info("*** tx_isp_create_subdev_graph: Graph creation completed successfully ***\n");
+    goto unlock;
+
+cleanup:
+    pr_err("tx_isp_create_subdev_graph: Graph creation failed, cleaning up\n");
+    tx_isp_cleanup_subdev_graph(isp);
+
+unlock:
+    mutex_unlock(&subdev_registry_mutex);
+    return ret;
+}
