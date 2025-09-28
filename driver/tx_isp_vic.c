@@ -2355,9 +2355,6 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
             /* This is where VIC hardware should be initialized for interrupt generation */
             extern uint32_t vic_start_ok;
 
-            /* Binary Ninja: tx_vic_enable_irq() */
-            tx_vic_enable_irq(vic_dev);
-
             /* Binary Ninja: *($s1_1 + 0x128) = 3 */
             vic_dev->state = 3;
         }
