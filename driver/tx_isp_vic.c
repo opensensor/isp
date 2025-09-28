@@ -2763,18 +2763,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** VIC VERIFY (PRIMARY EXTRA): [0x100]=0x%08x [0x14]=0x%08x (PRIMARY 0x14=stride) ***\n",
                         readl(vr + 0x100), readl(vr + 0x14));
                 udelay(50);
-            /* Program minimal VIC timing/packing block like good-things (PRIMARY bank) */
-            if (vic_dev->vic_regs) {
-                void __iomem *vr_t = vic_dev->vic_regs;
-                writel(0x0002c000, vr_t + 0x10c);
-                writel(0x07800000, vr_t + 0x110);
-                writel(0x00000000, vr_t + 0x114);
-                writel(0x00000000, vr_t + 0x118);
-                writel(0x00000000, vr_t + 0x11c);
-                wmb();
-                pr_info("*** VIC TIMING (PRIMARY): [0x10c]=0x%08x [0x110]=0x%08x [0x114]=0x%08x [0x118]=0x%08x [0x11c]=0x%08x ***\n",
-                        readl(vr_t + 0x10c), readl(vr_t + 0x110), readl(vr_t + 0x114), readl(vr_t + 0x118), readl(vr_t + 0x11c));
-            }
 
 
             }
@@ -2820,7 +2808,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
 
                 /* Attempt control-bank re-unlock/enable if key regs are zero */
-                if (false && vic_dev->vic_regs_control) { /* SKIP: match good-things, avoid CONTROL re-enable */
+                if (vic_dev->vic_regs_control) {
                     void __iomem *vcc = vic_dev->vic_regs_control;
                     u32 ctrl300_c_pre = readl(vcc + 0x300);
                     u32 buf318_c_pre = readl(vcc + 0x318);
@@ -2882,8 +2870,12 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0xFFFFFFFF, vr + 0x1f0);
                 writel(0xFFFFFFFF, vr + 0x1f4);
                 /* Write enables, CONFIG, re-write enables, then RUN */
+                writel(0x3FFFFFFF, vr + 0x1e0);
+                writel(0x0000000F, vr + 0x1e4);
                 writel(2, vr + 0x0);
                 wmb();
+                writel(0x3FFFFFFF, vr + 0x1e0);
+                writel(0x0000000F, vr + 0x1e4);
                 writel(1, vr + 0x0);
                 wmb();
                 udelay(100);
@@ -2898,36 +2890,27 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** VIC PRIMARY GATE (POST-RUN): IMR=0x%08x IMCR=0x%08x ***\n",
                         readl(vr + 0x04), readl(vr + 0x0c));
             }
-            if (false && vic_dev && vic_dev->vic_regs_control) { /* SKIP: post-run re-arm on CONTROL bank */
+            if (vic_dev && vic_dev->vic_regs_control) {
                 void __iomem *vc = vic_dev->vic_regs_control;
                 /* Clear pending first (W1C) */
                 writel(0xFFFFFFFF, vc + 0x1f0);
                 writel(0xFFFFFFFF, vc + 0x1f4);
                 /* Write enables, CONFIG, re-write enables, then RUN */
+                writel(0x3FFFFFFF, vc + 0x1e0);
+                writel(0x0000000F, vc + 0x1e4);
                 writel(2, vc + 0x0);
                 wmb();
+                writel(0x3FFFFFFF, vc + 0x1e0);
+                writel(0x0000000F, vc + 0x1e4);
                 writel(1, vc + 0x0);
                 wmb();
                 udelay(100);
-                pr_info("*** VIC POST-RUN (CONTROL): Re-armed control (2->1), masks preserved; NOT touching 0x1e0/0x1e4 ***\n");
+                pr_info("*** VIC CONTROL ENABLES (POST-RUN COMMIT): [0x1e0]=0x%08x [0x1e4]=0x%08x ***\n",
+                        readl(vc + 0x1e0), readl(vc + 0x1e4));
             }
 
             }
 
-            /* Re-assert ISP core VIC IRQ gate before enabling CPU IRQ (observed to drop to 0) */
-            do {
-                struct tx_isp_dev *isp_dev = ourISPdev;
-                if (false && isp_dev && isp_dev->core_dev && isp_dev->core_dev->core_regs) { /* SKIP: avoid CORE VIC GATE REASSERT */
-                    void __iomem *core = isp_dev->core_dev->core_regs;
-                    writel(0x200, core + 0x9ac0);
-                    writel(0x200, core + 0x9ac8);
-                    wmb();
-                    pr_info("*** CORE VIC GATE REASSERT: [0x9ac0]=0x%08x [0x9ac8]=0x%08x ***\n",
-                            readl(core + 0x9ac0), readl(core + 0x9ac8));
-                } else {
-                    pr_warn("*** CORE VIC GATE REASSERT: core_regs not mapped, skipping ***\n");
-                }
-            } while (0);
 
             /* Enable VIC IRQ after final re-assert and verification */
             pr_info("*** vic_core_s_stream: Enabling VIC IRQ AFTER final re-assert/verify ***\n");
