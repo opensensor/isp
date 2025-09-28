@@ -2725,14 +2725,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             /* Re-assert interrupt mask and clear pending in BOTH banks, verify key regs */
             if (vic_dev->vic_regs) {
                 void __iomem *vr = vic_dev->vic_regs;
-                /* Clear pending (W1C) */
-                writel(0xFFFFFFFF, vr + 0x1f0);
-                writel(0xFFFFFFFF, vr + 0x1f4);
-                /* Set MainMask to allow frame-done (bit0) and bit21 per silicon logs */
-                writel(0xFFDFFFFE, vr + 0x1e8); /* unmask bit0 and bit21 */
-                /* Leave 0x1ec (MDMA mask) as-is per working reference */
-                /* Skip global interrupt register 0x30c: not used in working reference */
-                /* wmb(); */
+                /* Defer clear/mask to tx_isp_vic_start just-before-RUN (avoid early gating) */
                 pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (MainMask=0xFFFFFFFE)***\n",
                         readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x30c), readl(vr + 0x1e0), readl(vr + 0x1e4), readl(vr + 0x1e8), readl(vr + 0x1ec));
                 /* Primary bank: only verify 0x100; do NOT write 0x14 here (0x14 is stride on PRIMARY) */
@@ -2742,6 +2735,21 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         readl(vr + 0x100), readl(vr + 0x14));
                 udelay(50);
             /* Program minimal VIC timing/packing block like good-things (PRIMARY bank) */
+
+                /* Guard: if hardware cleared 0x300 to zero-buffers (0x80000020), restore expected value */
+                {
+                    u32 cur_ctrl = readl(vr + 0x300);
+                    if (cur_ctrl == 0x80000020) {
+                        u32 buffer_count = vic_dev->active_buffer_count;
+                        if (buffer_count == 0) buffer_count = 2;
+                        if (buffer_count > 5) buffer_count = 5;
+                        u32 expect_ctrl = (buffer_count << 16) | 0x80000020;
+                        writel(expect_ctrl, vr + 0x300);
+                        wmb();
+                        pr_info("*** VIC CTRL REASSERT: Restored 0x300=0x%x (buffer_count=%u) ***\n", expect_ctrl, buffer_count);
+                    }
+                }
+
             if (vic_dev->vic_regs) {
                 void __iomem *vr_t = vic_dev->vic_regs;
                 writel(0x0002c000, vr_t + 0x10c);
@@ -2796,18 +2804,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     pr_info("*** VIC CTRL (CONTROL): [0x300]=0x%08x ***\n", readl(vcb + 0x300));
                 }
 
-                /* Apply working mask up front: frame-done only, like good-things */
-                if (vic_dev->vic_regs) {
-                    void __iomem *vr = vic_dev->vic_regs;
-                    /* Clear any pending first */
-                    writel(0xFFFFFFFF, vr + 0x1f0);
-                    writel(0xFFFFFFFF, vr + 0x1f4);
-                    wmb();
-                    /* Set MainMask to allow frame-done (bit0) and bit21 per silicon logs */
-                    writel(0xFFDFFFFE, vr + 0x1e8);
-                    wmb();
-                    pr_info("*** VIC MASK: Set MainMask=0xFFDFFFFE (bit0 + bit21) before RUN ***\n");
-                }
+                /* Defer MainMask/clear to tx_isp_vic_start just-before-RUN */
 
             /* VIC CONTROL: Defer CONFIG/RUN sequencing entirely to tx_isp_vic_start()
              * to avoid on/off/on toggles. We purposefully do not write 2/1 here.
@@ -2816,18 +2813,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** VIC CONTROL: Deferring CONFIG/RUN to tx_isp_vic_start() (no 2->1 here) ***\n");
             }
 
-                /* Route IMR/IMCR once (like good-things), without any control toggling here */
-                if (vic_dev && vic_dev->vic_regs) {
-                    void __iomem *vr_gate = vic_dev->vic_regs;
-                    writel(0x00000001, vr_gate + 0x04);   /* IMR baseline */
-                    writel(0x00000000, vr_gate + 0x24);   /* IMR1 baseline */
-                    writel(0x07800438, vr_gate + 0x04);   /* IMR routing/mask */
-                    writel(0xb5742249, vr_gate + 0x0c);   /* IMCR key */
-                    wmb();
-                    pr_info("*** VIC PRIMARY GATE: IMR/IMCR routed (no re-arm) IMR=0x%08x IMCR=0x%08x ***\n",
-                            readl(vr_gate + 0x04), readl(vr_gate + 0x0c));
-                }
-
+                /* Defer IMR/IMCR routing to tx_isp_vic_start just-before-RUN */
 
                 /* STEP 9: CRITICAL FIX - Only call VIC start if VIC interrupts are not already working */
                 /* This prevents the destructive VIC unlock sequence that breaks working interrupts */
