@@ -2638,7 +2638,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                             readl(vr_gate + 0x04), readl(vr_gate + 0x0c));
                 }
 				vic_armed = 1;
-            	tx_vic_enable_irq(vic_dev);
+            	//tx_vic_enable_irq(vic_dev);
             }
 
             /* CRITICAL FIX: Follow proper state machine - don't jump directly to state 4 */
