@@ -2400,57 +2400,6 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
         struct tx_isp_subdev *core_sd = tx_isp_get_core_subdev(dev);
         struct tx_isp_subdev *sensor_sd = tx_isp_get_sensor_subdev(dev);
 
-        /* Initialize Core first */
-        if (core_sd && core_sd->ops && core_sd->ops->core && core_sd->ops->core->init) {
-            pr_info("*** tx_isp_video_s_stream: Initializing Core subdev ***\n");
-            result = core_sd->ops->core->init(core_sd, 1);
-            if (result != 0 && result != -ENOIOCTLCMD) {
-                pr_err("tx_isp_video_s_stream: Core init failed: %d\n", result);
-                return result;
-            }
-            pr_info("*** tx_isp_video_s_stream: Core init SUCCESS ***\n");
-        }
-
-       	/* Ensure VIC is ACTIVATED (state 2) before VIC core->init so clks activate */
-        if (vic_sd) {
-            struct tx_isp_vic_device *vic_dev_for_state = (struct vic_dev_for_state *)tx_isp_get_subdevdata(vic_sd);
-            pr_info("*** tx_isp_video_s_stream: Activating VIC subdev (state %d -> 2) before CSI init ***\n", vic_dev_for_state->state);
-            tx_isp_vic_activate_subdev(vic_sd);
-            pr_info("*** tx_isp_video_s_stream: VIC subdev activation done, state=%d ***\n", vic_dev_for_state->state);
-        }
-
-        /* Ensure CSI is ACTIVATED (state 2) before CSI core->init so csi_core_ops_init runs */
-        if (csi_sd) {
-            struct tx_isp_csi_device *csi_dev_for_state = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(csi_sd);
-            if (csi_dev_for_state && csi_dev_for_state->state < 2) {
-                pr_info("*** tx_isp_video_s_stream: Activating CSI subdev (state %d -> 2) before CSI init ***\n", csi_dev_for_state->state);
-                tx_isp_csi_activate_subdev(csi_sd);
-                pr_info("*** tx_isp_video_s_stream: CSI subdev activation done, state=%d ***\n", csi_dev_for_state->state);
-            }
-        }
-
-        /* Initialize CSI second */
-        if (csi_sd && csi_sd->ops && csi_sd->ops->core && csi_sd->ops->core->init) {
-            pr_info("*** tx_isp_video_s_stream: Initializing CSI subdev ***\n");
-            result = csi_sd->ops->core->init(csi_sd, 1);
-            if (result != 0 && result != -ENOIOCTLCMD) {
-                pr_err("tx_isp_video_s_stream: CSI init failed: %d\n", result);
-                return result;
-            }
-            pr_info("*** tx_isp_video_s_stream: CSI init SUCCESS ***\n");
-        }
-
-        /* Initialize VIC third */
-        if (vic_sd && vic_sd->ops && vic_sd->ops->core && vic_sd->ops->core->init) {
-            pr_info("*** tx_isp_video_s_stream: Initializing VIC subdev ***\n");
-            result = vic_sd->ops->core->init(vic_sd, 1);
-            if (result != 0 && result != -ENOIOCTLCMD) {
-                pr_err("tx_isp_video_s_stream: VIC init failed: %d\n", result);
-                return result;
-            }
-            pr_info("*** tx_isp_video_s_stream: VIC init SUCCESS ***\n");
-        }
-
         /* Initialize Sensor last */
         if (sensor_sd && sensor_sd->ops && sensor_sd->ops->core && sensor_sd->ops->core->init) {
             pr_info("*** tx_isp_video_s_stream: Initializing Sensor subdev ***\n");
@@ -2543,8 +2492,6 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
         /* Binary Ninja: $s4 = &$s4[1] */
         s4 = &s4[1];
     }
-
-    /* Skipping post-sensor CSI re-init and VIC reassert to preserve VIC interrupts (matches good-things behavior) */
 
     /* All subdevs processed successfully */
     return 0;
