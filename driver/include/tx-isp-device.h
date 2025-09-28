@@ -627,14 +627,6 @@ struct frame_channel_device {
 static u32 g_setbuf_base[4] = {0};
 static u32 g_setbuf_step[4] = {0};
 
-/* Provide access to frame_channel_device pointer for V4L2 shim */
-void *get_frame_channel_device_ptr(int channel)
-{
-    if (channel >= 0 && channel < num_channels)
-        return (void *)&frame_channels[channel];
-    return NULL;
-}
-
 #define FRAME_CHANNEL_MAGIC 0xDEADBEEF
 
 
