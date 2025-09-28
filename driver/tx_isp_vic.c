@@ -2901,7 +2901,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
 /* Define VIC video operations */
 static struct tx_isp_subdev_video_ops vic_video_ops = {
-    .s_stream = NULL,
+    .s_stream = vic_core_s_stream,
     .link_stream = NULL,  /* CRITICAL FIX: tx_isp_video_link_stream calls link_stream! */
 };
 

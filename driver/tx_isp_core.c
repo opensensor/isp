@@ -1857,13 +1857,13 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
                 pr_debug("*** ISP CORE: Work was already queued - acknowledging interrupt anyway ***\n");
             }
         } else {
-            pr_warn("*** ISP CORE: fs_workqueue is NULL - using system workqueue ***\n");
+            pr_warn("*** ISP CORE: fs_workqueue is NULL - using system workqueue TODO ***\n");
             /* REFERENCE DRIVER: Use schedule_work_on for CPU 0 */
-            if (schedule_work_on(0, &fs_work)) {
-                pr_debug("*** ISP CORE: Work scheduled successfully on CPU 0 ***\n");
-            } else {
-                pr_debug("*** ISP CORE: Work was already scheduled - acknowledging interrupt anyway ***\n");
-            }
+            //if (schedule_work_on(0, &fs_work)) {
+            //    pr_debug("*** ISP CORE: Work scheduled successfully on CPU 0 ***\n");
+            //} else {
+            //    pr_debug("*** ISP CORE: Work was already scheduled - acknowledging interrupt anyway ***\n");
+            //}
         }
 
         /* Binary Ninja: Frame timing measurement */
