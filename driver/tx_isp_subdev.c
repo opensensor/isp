@@ -815,12 +815,13 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
                 vin_dev->sd.ops->core, vin_dev->sd.ops->video,
                 vin_dev->sd.ops->video ? vin_dev->sd.ops->video->s_stream : NULL);
 
-        /* VIN - register using helper function instead of hardcoded index */
-        int slot = tx_isp_register_subdev_by_name(ourISPdev, &vin_dev->sd);
-        if (slot >= 0) {
-            pr_info("*** REGISTERED VIN SUBDEV AT SLOT %d WITH VIDEO OPS ***\n", slot);
+        /* VIN - register at slot 2 */
+        if (ourISPdev->subdevs[2] == NULL) {
+            ourISPdev->subdevs[2] = &vin_dev->sd;
+            vin_dev->sd.isp = ourISPdev;
+            pr_info("*** REGISTERED VIN SUBDEV AT SLOT 2 WITH VIDEO OPS ***\n");
         } else {
-            pr_err("*** Failed to register VIN subdev - no available slots ***\n");
+            pr_err("*** Failed to register VIN subdev - slot 2 already occupied ***\n");
         }
 
     } else if (strcmp(dev_name, "isp-fs") == 0) {
