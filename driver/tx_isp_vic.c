@@ -2823,19 +2823,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     }
                 }
 
-                /* Apply working mask up front: frame-done only, like good-things */
-                if (vic_dev->vic_regs) {
-                    void __iomem *vr = vic_dev->vic_regs;
-                    /* Clear any pending first */
-                    writel(0xFFFFFFFF, vr + 0x1f0);
-                    writel(0xFFFFFFFF, vr + 0x1f4);
-                    wmb();
-                    /* Set MainMask to allow frame-done + bit21 during bring-up */
-                    writel(0xFFDFFFFE, vr + 0x1e8);
-                    wmb();
-                    pr_info("*** VIC MASK: Set MainMask=0xFFDFFFFE (frame-done + bit21) before RUN ***\n");
-                }
-
             /* VIC CONTROL: enter RUN state after all config (write 1) */
             if (vic_dev && vic_dev->vic_regs) {
                 void __iomem *vr = vic_dev->vic_regs;
