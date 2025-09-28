@@ -3265,12 +3265,6 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
         return -ENODEV;  /* Device not available */
     }
 
-    /* CRITICAL: Validate ourISPdev is in valid kernel memory range */
-    if ((unsigned long)ourISPdev < 0x80000000 || (unsigned long)ourISPdev >= 0xfffff000) {
-        pr_info("*** TUNING IOCTL: Invalid ourISPdev pointer 0x%p - memory corruption ***\n", ourISPdev);
-        return -EFAULT;  /* Bad address */
-    }
-
     /* SAFE: Use global device reference - no dangerous pointer arithmetic */
     dev = ourISPdev;
     if (!dev) {
@@ -3349,8 +3343,8 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     }
                 }
 
-                ret = apical_isp_core_ops_s_ctrl(dev, &ctrl);
-
+                //ret = apical_isp_core_ops_s_ctrl(dev, &ctrl);
+				ret = 0;
                 if (ret == 0 && copy_to_user((void __user *)arg, &ctrl, sizeof(ctrl))) {
                     pr_info("isp_core_tunning_unlocked_ioctl: Failed to copy control data to user\n");
                     return -EFAULT;
@@ -3445,131 +3439,6 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                     ret = 0;
                     break;
 
-                            /* 1. AE (Auto Exposure) Updates - WITH NULL CHECKS */
-                            pr_info("*** TUNING DEBUG: Starting AE updates ***");
-                            extern int tisp_tgain_update(void);
-                            extern int tisp_again_update(void);
-                            extern int tisp_ev_update(void);
-                            extern int tisp_ae_ir_update(void);
-
-                            pr_info("*** TUNING DEBUG: About to call tisp_tgain_update ***");
-                            int ae_ret = 0;
-                            if (tisp_tgain_update) ae_ret = tisp_tgain_update();
-                            pr_info("*** TUNING DEBUG: tisp_tgain_update completed: %d ***", ae_ret);
-
-                            if (ae_ret == 0 && tisp_again_update) {
-                                pr_info("*** TUNING DEBUG: About to call tisp_again_update ***");
-                                ae_ret = tisp_again_update();
-                                pr_info("*** TUNING DEBUG: tisp_again_update completed: %d ***", ae_ret);
-                            }
-
-                            if (ae_ret == 0 && tisp_ev_update) {
-                                pr_info("*** TUNING DEBUG: About to call tisp_ev_update ***");
-                                ae_ret = tisp_ev_update();
-                                pr_info("*** TUNING DEBUG: tisp_ev_update completed: %d ***", ae_ret);
-                            }
-
-                            if (ae_ret == 0 && tisp_ae_ir_update) {
-                                pr_info("*** TUNING DEBUG: About to call tisp_ae_ir_update ***");
-                                ae_ret = tisp_ae_ir_update();
-                                pr_info("*** TUNING DEBUG: tisp_ae_ir_update completed: %d ***", ae_ret);
-                            }
-                            pr_info("TUNING: AE updates completed: %d\n", ae_ret);
-
-                            /* 2. AWB (Auto White Balance) Updates */
-                            pr_info("*** TUNING DEBUG: Starting AWB updates ***");
-                            extern int tisp_ct_update(void);
-                            extern int tisp_ccm_ct_update(void);
-                            extern int tisp_ccm_ev_update(void);
-
-                            pr_info("*** TUNING DEBUG: About to call tisp_ct_update ***");
-                            int awb_ret = tisp_ct_update();
-                            pr_info("*** TUNING DEBUG: tisp_ct_update completed: %d ***", awb_ret);
-
-                            if (awb_ret == 0) {
-                                pr_info("*** TUNING DEBUG: About to call tisp_ccm_ct_update ***");
-                                awb_ret = tisp_ccm_ct_update();
-                                pr_info("*** TUNING DEBUG: tisp_ccm_ct_update completed: %d ***", awb_ret);
-                            }
-
-                            if (awb_ret == 0) {
-                                pr_info("*** TUNING DEBUG: About to call tisp_ccm_ev_update ***");
-                                awb_ret = tisp_ccm_ev_update();
-                                pr_info("*** TUNING DEBUG: tisp_ccm_ev_update completed: %d ***", awb_ret);
-                            }
-                            pr_info("TUNING: AWB/CCM updates completed: %d\n", awb_ret);
-
-                            /* 3. Gamma Correction Updates */
-                            pr_info("*** TUNING DEBUG: Starting Gamma updates ***");
-                            extern int tiziano_gamma_lut_parameter(void);
-                            pr_info("*** TUNING DEBUG: About to call tiziano_gamma_lut_parameter ***");
-                            int gamma_ret = tiziano_gamma_lut_parameter();
-                            pr_info("*** TUNING DEBUG: tiziano_gamma_lut_parameter completed: %d ***", gamma_ret);
-                            pr_info("TUNING: Gamma LUT update completed: %d\n", gamma_ret);
-
-                            /* 4. LSC (Lens Shading Correction) Updates */
-                            pr_info("*** TUNING DEBUG: Starting LSC updates ***");
-                            extern int tisp_lsc_write_lut_datas(void);
-                            pr_info("*** TUNING DEBUG: About to call tisp_lsc_write_lut_datas ***");
-                            int lsc_ret = tisp_lsc_write_lut_datas();
-                            pr_info("*** TUNING DEBUG: tisp_lsc_write_lut_datas completed: %d ***", lsc_ret);
-                            pr_info("TUNING: LSC update completed: %d\n", lsc_ret);
-
-                            /* 5. DPC (Dead Pixel Correction) Updates */
-                            extern int tisp_dpc_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write);
-                            int dpc_ret = tisp_dpc_par_refresh((dev && dev->tuning_data) ? ((struct isp_tuning_data *)ourISPdev->tuning_data)->exposure >> 10 : 0x100, 0x20, 0);
-                            pr_info("TUNING: DPC refresh completed: %d\n", dpc_ret);
-
-                            /* 6. Sharpening Updates */
-                            extern int tisp_sharpen_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write);
-                            int sharpen_ret = tisp_sharpen_par_refresh((dev && dev->tuning_data) ? ((struct isp_tuning_data *)ourISPdev->tuning_data)->exposure >> 10 : 0x100, 0x20, 0);
-                            pr_info("TUNING: Sharpening refresh completed: %d\n", sharpen_ret);
-
-                            /* 7. SDNS (Spatial Denoising) Updates */
-                            extern int tisp_sdns_par_refresh(uint32_t ev_value, uint32_t threshold, int enable_write);
-                            extern int tisp_s_sdns_ratio(int ratio);
-                            int sdns_ret = tisp_sdns_par_refresh((dev && dev->tuning_data) ? ((struct isp_tuning_data *)ourISPdev->tuning_data)->exposure >> 10 : 0x100, 0x20, 0);
-                            if (sdns_ret == 0) sdns_ret = tisp_s_sdns_ratio(128);
-                            pr_info("TUNING: SDNS updates completed: %d\n", sdns_ret);
-
-                            /* 8. MDNS (Motion Denoising) Updates */
-                            extern int tisp_s_mdns_ratio(int ratio);
-                            int mdns_ret = tisp_s_mdns_ratio(128);
-                            pr_info("TUNING: MDNS update completed: %d\n", mdns_ret);
-
-                            /* 9. CCM (Color Correction Matrix) Updates */
-                            extern int jz_isp_ccm(void);
-                            extern int32_t *tiziano_ccm_a_now;
-                            extern uint32_t *cm_ev_list_now;
-                            if (tiziano_ccm_a_now != NULL && cm_ev_list_now != NULL) {
-                                int ccm_ret = jz_isp_ccm();
-                                pr_info("TUNING: CCM update completed: %d\n", ccm_ret);
-                            } else {
-                                pr_info("TUNING: CCM not initialized - skipping\n");
-                            }
-
-                            /* 10. ADR (Adaptive Dynamic Range) Updates */
-                            extern int tisp_adr_process(void);
-                            int adr_ret = tisp_adr_process();
-                            pr_info("TUNING: ADR process completed: %d\n", adr_ret);
-
-                            /* 11. Parameter Refresh Functions */
-                            extern void tiziano_ccm_params_refresh(void);
-                            extern void tiziano_lsc_params_refresh(void);
-                            extern void tiziano_dpc_params_refresh(void);
-                            extern void tiziano_sharpen_params_refresh(void);
-                            extern void tiziano_sdns_params_refresh(void);
-                            extern void tiziano_adr_params_refresh(void);
-
-                            tiziano_ccm_params_refresh();
-                            tiziano_lsc_params_refresh();
-                            tiziano_dpc_params_refresh();
-                            tiziano_sharpen_params_refresh();
-                            tiziano_sdns_params_refresh();
-                            tiziano_adr_params_refresh();
-                            pr_info("TUNING: All parameter refresh functions completed\n");
-
-                            pr_info("*** This should maintain proper ISP pipeline control and prevent CSI PHY timeouts ***\n");
                 }
 
                 if (enable) {
@@ -3892,7 +3761,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         }
 
                         /* SECURITY FIX: Safe string operations with proper bounds checking */
-                        tisp_par_ioctl_ptr[1] = 0xb;  /* Set param at offset 4 */
+                        //tisp_par_ioctl_ptr[1] = 0xb;  /* Set param at offset 4 */
 
                         /* CRITICAL FIX: Use safe string copy with proper length */
                         const char *safe_msg = "SONY mode";  /* Safe 9-byte string */
@@ -3926,7 +3795,7 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         }
 
                         /* SECURITY FIX: Safe string operations with proper bounds checking */
-                        tisp_par_ioctl_ptr[1] = 0xf;  /* Set param at offset 4 */
+                        //tisp_par_ioctl_ptr[1] = 0xf;  /* Set param at offset 4 */
 
                         /* CRITICAL FIX: Use safe string copy with proper length */
                         const char *safe_msg = "DVP mode";  /* Safe 8-byte string */
