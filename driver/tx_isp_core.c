@@ -1496,48 +1496,8 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
         vic_dev->state = 1;
         pr_info("ispcore_slake_module: Set ISP state to INIT (1)");
 
-        /* HYBRID APPROACH: Apply clock slaking sequence to trigger MIPI lane config */
-        pr_info("ispcore_slake_module: HYBRID - Applying clock slaking sequence to trigger MIPI lane config");
-
-        /* CRITICAL: Apply the missing clock slaking sequence that triggers MIPI lane config */
-        if (isp && isp->core_regs) {
-            void __iomem *core_regs = isp->core_regs;
-
-            pr_info("*** HYBRID: Applying clock slaking sequence (enable->disable->enable) ***");
-
-            /* Step 1: Disable ISP Control (0x9804: 0x3f00 -> 0x0) */
-            u32 isp_ctrl_orig = readl(core_regs + 0x9804);
-            writel(0x0, core_regs + 0x9804);
-            wmb();
-            pr_info("*** CLOCK SLAKE: ISP Control 0x9804: 0x%08x -> 0x0 ***", isp_ctrl_orig);
-
-            /* Step 2: Disable VIC Control gates (0x9ac0, 0x9ac8: 0x200 -> 0x0) */
-            u32 vic_ctrl1_orig = readl(core_regs + 0x9ac0);
-            u32 vic_ctrl2_orig = readl(core_regs + 0x9ac8);
-            writel(0x0, core_regs + 0x9ac0);
-            writel(0x0, core_regs + 0x9ac8);
-            wmb();
-            pr_info("*** CLOCK SLAKE: VIC Control 0x9ac0: 0x%08x -> 0x0 ***", vic_ctrl1_orig);
-            pr_info("*** CLOCK SLAKE: VIC Control 0x9ac8: 0x%08x -> 0x0 ***", vic_ctrl2_orig);
-
-            /* Step 3: Wait for hardware to settle */
-            msleep(10);
-
-            /* Step 4: Re-enable in reverse order (VIC first, then ISP) */
-            writel(vic_ctrl1_orig, core_regs + 0x9ac0);
-            writel(vic_ctrl2_orig, core_regs + 0x9ac8);
-            wmb();
-            pr_info("*** CLOCK SLAKE: VIC Control restored: 0x9ac0=0x%08x, 0x9ac8=0x%08x ***",
-                    vic_ctrl1_orig, vic_ctrl2_orig);
-
-            writel(isp_ctrl_orig, core_regs + 0x9804);
-            wmb();
-            pr_info("*** CLOCK SLAKE: ISP Control restored: 0x9804=0x%08x ***", isp_ctrl_orig);
-
-            pr_info("*** HYBRID: Clock slaking sequence complete - MIPI lane config should now be triggered ***");
-        } else {
-            pr_info("*** HYBRID: Core device or registers not available for clock slaking ***");
-        }
+        /* HYBRID APPROACH: Ensure proper MIPI sensor attributes without breaking interrupts */
+        pr_info("ispcore_slake_module: HYBRID - Ensuring MIPI sensor attributes are properly configured");
 
         /* HYBRID: Also ensure sensor has proper MIPI attributes */
         if (isp->sensor && isp->sensor->video.attr) {
