@@ -643,6 +643,15 @@ void *get_frame_channel_device_ptr(int channel)
 #define FRAME_CHANNEL_MAGIC 0xDEADBEEF
 
 
+/* Subdevice runtime data */
+struct tx_isp_subdev_runtime {
+    struct tx_isp_subdev_desc *desc;
+    struct miscdevice *misc_dev;
+    struct proc_dir_entry *proc_entry;
+    void *driver_data;
+    bool initialized;
+};
+
 /*
  * Internal ops. Never call this from drivers, only the tx isp device can call
  * these ops.

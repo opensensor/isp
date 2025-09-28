@@ -66,15 +66,6 @@ enum tx_isp_subdev_type {
 };
 
 
-/* Subdevice runtime data */
-struct tx_isp_subdev_runtime {
-    struct tx_isp_subdev_desc *desc;
-    struct miscdevice *misc_dev;
-    struct proc_dir_entry *proc_entry;
-    void *driver_data;
-    bool initialized;
-};
-
 /* Helper function implementations */
 static int __frame_channel_vb2_streamoff(void *chan, void *queue)
 {
@@ -1110,22 +1101,9 @@ int tx_isp_create_subdev_graph(struct tx_isp_dev *isp)
         return -EINVAL;
     }
 
-    pr_info("*** tx_isp_create_subdev_graph: Creating ISP processing graph ***\n");
+    pr_info("tx_isp_create_subdev_graph: Processing %d registered subdevices\n", subdev_count);
 
     mutex_lock(&subdev_registry_mutex);
-
-    if (subdev_count == 0) {
-        pr_info("tx_isp_create_subdev_graph: No subdevices registered, creating basic setup\n");
-
-        /* Create basic CSI and VIC setup when no subdevices exist */
-        ret = tx_isp_create_basic_pipeline(isp);
-        if (ret < 0) {
-            pr_err("Failed to create basic pipeline: %d\n", ret);
-        }
-        goto unlock;
-    }
-
-    pr_info("tx_isp_create_subdev_graph: Processing %d registered subdevices\n", subdev_count);
 
     /* Step 1: Initialize all source subdevices */
     for (i = 0; i < subdev_count; i++) {
