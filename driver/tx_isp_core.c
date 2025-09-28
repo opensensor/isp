@@ -1599,8 +1599,8 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
             clk_disable_unprepare(isp->ipu_clk);
             pr_info("ispcore_slake_module: Disabled IPU clock");
         }
-        if (isp && isp->core_clk) {
-            clk_disable_unprepare(isp->core_clk);
+        if (isp && isp->isp_clk) {
+            clk_disable_unprepare(isp->isp_clk);
             pr_info("ispcore_slake_module: Disabled ISP clock");
         }
         if (isp->cgu_isp) {
