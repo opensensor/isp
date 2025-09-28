@@ -2869,7 +2869,7 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
                 ret = -EINVAL;
                 goto out;
             }
-            writel(ctrl->value ? 1 : 0, tuning->regs + 0x3ad * 4);
+            //writel(ctrl->value ? 1 : 0, tuning->regs + 0x3ad * 4);
             tuning->hflip = ctrl->value ? 1 : 0;
             //set_framesource_changewait_cnt();
             break;
@@ -2879,7 +2879,7 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
                 ret = -EINVAL;
                 goto out;
             }
-            writel(ctrl->value ? 1 : 0, tuning->regs + 0x3ac * 4);
+            //writel(ctrl->value ? 1 : 0, tuning->regs + 0x3ac * 4);
             tuning->vflip = ctrl->value ? 1 : 0;
             //set_framesource_changewait_cnt();
             break;
@@ -7059,7 +7059,7 @@ int tisp_lsc_write_lut_datas(void)
             }
 
             /* Final LSC configuration register */
-            writel(0, lsc_reg + 0xc);
+            //writel(0, lsc_reg + 0xc);
             iounmap(lsc_reg);
         }
 
@@ -7404,10 +7404,10 @@ int jz_isp_ccm(void)
     uint32_t reg_data[9];
     jz_isp_ccm_para2reg(reg_data, final_matrix);
 
-    int ret = tiziano_ccm_lut_parameter((int32_t *)reg_data);
-    if (ret) {
-        return ret;
-    }
+    //int ret = tiziano_ccm_lut_parameter((int32_t *)reg_data);
+    //if (ret) {
+    //    return ret;
+    //}
 
     ccm_real.real = 0;  /* Clear update flag */
     return 0;
