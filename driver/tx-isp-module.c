@@ -1785,18 +1785,6 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
                 printk(KERN_ALERT "*** VIC SUCCESS: Calling vic_framedone_irq_function ***\n");
                 vic_framedone_irq_function(vic_dev);
-
-                /* GOOD-THINGS PRESERVATION: notify frame channel that a frame is ready */
-                do {
-                    unsigned long flags_local;
-                    if (fcd) {
-                        spin_lock_irqsave(&fcd->state.buffer_lock, flags_local);
-                        fcd->state.frame_ready = true;
-                        spin_unlock_irqrestore(&fcd->state.buffer_lock, flags_local);
-                        wake_up_interruptible(&fcd->state.frame_wait);
-                        printk(KERN_ALERT "*** VIC IRQ: frame_ready signaled to frame channel 0 ***\n");
-                    }
-                } while (0);
             } else {
                 printk(KERN_ALERT "*** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***\n");
             }
