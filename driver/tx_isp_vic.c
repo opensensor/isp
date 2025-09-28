@@ -2798,9 +2798,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             /* VIC CONTROL: enter RUN state after all config (write 1) */
             if (vic_dev && vic_dev->vic_regs && vic_start_ok != 1) { /* SKIP: post-run re-arm and IMR/IMCR gating */
                 void __iomem *vr = vic_dev->vic_regs;
-                writel(1, vr + 0x0);
-                wmb();
-                pr_info("*** VIC CONTROL (PRIMARY): WROTE 1 to [0x0] before enabling IRQ ***\n");
+                /* Align to working sequence: do NOT write 1 before CONFIG; only perform 2->1 once */
+                /* Begin enable sequence (no early RUN write) */
             	/* Post-RUN re-arm: commit dance so enables latch without touching masks */
                 /* Program PRIMARY IMR/IMCR routing once (match good-things), no re-arm */
                 if (vic_dev && vic_dev->vic_regs) {
