@@ -3486,144 +3486,103 @@ static int ispvic_frame_channel_clearbuf(void)
     return 0;
 }
 
-/* tx_isp_subdev_pipo - EXACT Binary Ninja MCP implementation */
+
+/* tx_isp_subdev_pipo - EXACT Binary Ninja implementation */
 int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
 {
     struct tx_isp_vic_device *vic_dev = NULL;
     void **raw_pipe = (void **)arg;
     int i;
 
-    pr_info("*** tx_isp_subdev_pipo: EXACT Binary Ninja MCP implementation ***\n");
+    pr_info("*** tx_isp_subdev_pipo: SAFE struct member access implementation ***\n");
     pr_info("tx_isp_subdev_pipo: entry - sd=%p, arg=%p\n", sd, arg);
 
     /* Binary Ninja EXACT: if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = *(arg1 + 0xd4) */
     if (sd != NULL && (unsigned long)sd < 0xfffff001) {
-        vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdev_hostdata(sd);  /* offset 0xd4 = host_priv */
-        pr_info("tx_isp_subdev_pipo: vic_dev retrieved from host_priv: %p\n", vic_dev);
+        vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+        pr_info("tx_isp_subdev_pipo: vic_dev retrieved: %p\n", vic_dev);
     }
 
     if (!vic_dev) {
-        pr_err("tx_isp_subdev_pipo: vic_dev is NULL - getting from global ISP device\n");
-
-        /* CRITICAL FIX: Get the actual VIC device from global ISP device */
-        extern struct tx_isp_dev *ourISPdev;
-        if (ourISPdev && ourISPdev->vic_dev) {
-            vic_dev = ourISPdev->vic_dev;
-            pr_info("*** tx_isp_subdev_pipo: Retrieved VIC device from global ISP device: %p ***\n", vic_dev);
-        } else {
-            pr_err("tx_isp_subdev_pipo: No VIC device available in global ISP device\n");
-            return 0;  /* Binary Ninja returns 0 even on error */
-        }
+        pr_err("tx_isp_subdev_pipo: vic_dev is NULL\n");
+        return 0;  /* Binary Ninja returns 0 even on error */
     }
 
     /* Binary Ninja EXACT: *($s0 + 0x20c) = 1 */
     vic_dev->processing = 1;
-    pr_info("tx_isp_subdev_pipo: set processing = 1 (Binary Ninja offset 0x20c)\n");
+    pr_info("tx_isp_subdev_pipo: set processing = 1 (safe struct access)\n");
 
-    /* Binary Ninja EXACT: if (arg2 == 0) *($s0 + 0x214) = 0 */
+    /* Binary Ninja EXACT: if (arg2 == 0) */
     if (arg == NULL) {
-        vic_dev->processing = 0;  /* Use processing field for offset 0x214 */
-        pr_info("tx_isp_subdev_pipo: arg is NULL - set processing = 0 (Binary Ninja offset 0x214)\n");
+        /* Binary Ninja EXACT: *($s0 + 0x214) = 0 */
+        vic_dev->processing = 0;
+        pr_info("tx_isp_subdev_pipo: arg is NULL - set processing = 0 (safe struct access)\n");
     } else {
-        pr_info("tx_isp_subdev_pipo: arg is not NULL - initializing pipe structures (Binary Ninja MCP)\n");
+        pr_info("tx_isp_subdev_pipo: arg is not NULL - initializing pipe structures\n");
 
-        /* Binary Ninja EXACT: Initialize linked list pointers */
+        /* Binary Ninja EXACT: Initialize linked lists */
         /* *($s0 + 0x204) = $s0 + 0x204 */
-        /* *($s0 + 0x208) = $s0 + 0x204 */
-        INIT_LIST_HEAD(&vic_dev->queue_head);
         INIT_LIST_HEAD(&vic_dev->done_head);
+        /* *($s0 + 0x208) = $s0 + 0x204 */
+        /* *($s0 + 0x1f4) = $s0 + 0x1f4 */
+        INIT_LIST_HEAD(&vic_dev->queue_head);
+        /* *($s0 + 0x1f8) = $s0 + 0x1f4 */
+        /* *($s0 + 0x1fc) = $s0 + 0x1fc */
         INIT_LIST_HEAD(&vic_dev->free_head);
+        /* *($s0 + 0x200) = $s0 + 0x1fc */
 
-        pr_info("tx_isp_subdev_pipo: initialized linked list heads (Binary Ninja MCP)\n");
+        pr_info("tx_isp_subdev_pipo: initialized linked list heads (safe Linux API)\n");
 
         /* Binary Ninja EXACT: private_spin_lock_init() */
         spin_lock_init(&vic_dev->buffer_mgmt_lock);
-        pr_info("tx_isp_subdev_pipo: initialized spinlock (Binary Ninja MCP)\n");
+        pr_info("tx_isp_subdev_pipo: initialized spinlock\n");
 
-        /* CRITICAL BINARY NINJA MCP: Set up function pointer table */
+        /* Binary Ninja EXACT: Set function pointers */
         /* *raw_pipe = ispvic_frame_channel_qbuf */
+        raw_pipe[0] = (void *)ispvic_frame_channel_qbuf;
         /* *(raw_pipe_1 + 8) = ispvic_frame_channel_clearbuf */
+        raw_pipe[2] = (void *)ispvic_frame_channel_clearbuf;  /* offset 8 / 4 = index 2 */
         /* *(raw_pipe_1 + 0xc) = ispvic_frame_channel_s_stream */
+        raw_pipe[3] = (void *)ispvic_frame_channel_s_stream;  /* offset 0xc / 4 = index 3 */
         /* *(raw_pipe_1 + 0x10) = arg1 */
-        if (raw_pipe) {
-            raw_pipe[0] = (void *)ispvic_frame_channel_qbuf;      /* offset 0x0 */
-            raw_pipe[2] = (void *)ispvic_frame_channel_clearbuf;  /* offset 0x8 */
-            raw_pipe[3] = (void *)ispvic_frame_channel_s_stream;  /* offset 0xc - CRITICAL! */
-            raw_pipe[4] = (void *)sd;                             /* offset 0x10 */
-            pr_info("*** CRITICAL: Set ispvic_frame_channel_s_stream at raw_pipe[3] (offset 0xc) ***\n");
-        }
+        raw_pipe[4] = (void *)sd;                             /* offset 0x10 / 4 = index 4 */
 
-        /* SAFE: Set function pointers using proper array indexing */  // TODO
-        //raw_pipe[0] = (void *)ispvic_frame_channel_qbuf;
-        //raw_pipe[2] = (void *)ispvic_frame_channel_clearbuf;  /* offset 8 / 4 = index 2 */
-        //raw_pipe[3] = (void *)ispvic_frame_channel_s_stream;  /* offset 0xc / 4 = index 3 */
-        //raw_pipe[4] = (void *)sd;                             /* offset 0x10 / 4 = index 4 */
+        pr_info("tx_isp_subdev_pipo: set function pointers - qbuf=%p, clearbuf=%p, s_stream=%p, sd=%p\n",
+                ispvic_frame_channel_qbuf, ispvic_frame_channel_clearbuf,
+                ispvic_frame_channel_s_stream, sd);
 
-        /* GOOD-THINGS APPROACH: Defer buffer allocation to prevent memory exhaustion */
-        pr_info("*** tx_isp_subdev_pipo: GOOD-THINGS approach - deferring buffer allocation ***\n");
-        pr_info("*** Buffers will be allocated on-demand during QBUF operations ***\n");
-
-        /* Initialize buffer indices but don't allocate buffer structures yet */
+        /* Binary Ninja EXACT: Initialize 5 buffer structures */
+        /* do { $v0_3[4] = i; ... } while (i != 5) */
         for (i = 0; i < 5; i++) {
-            uint32_t reg_offset;  /* C90 compliance: declare at top */
+            /* CRITICAL FIX: Create buffer entries using EXACT Binary Ninja layout */
+            /* Binary Ninja uses 7-word structures starting at offset 0x168 */
+            struct vic_buffer_entry *buffer_entry = kzalloc(sizeof(struct vic_buffer_entry), GFP_KERNEL);
+            if (buffer_entry) {
+                /* Binary Ninja EXACT: $v0_3[4] = i */
+                buffer_entry->buffer_index = i;
+                buffer_entry->buffer_addr = 0;  /* Will be set during QBUF */
+                buffer_entry->buffer_status = VIC_BUFFER_STATUS_FREE;
 
-            /* SAFE: Use proper buffer index array instead of unsafe pointer arithmetic */
-            if (i < sizeof(vic_dev->buffer_index) / sizeof(vic_dev->buffer_index[0])) {
-                vic_dev->buffer_index[i] = i;
+                /* Binary Ninja EXACT: Add to free list */
+                /* void*** $a0_1 = *($s0 + 0x200); *($s0 + 0x200) = $v0_3; $v0_3[1] = $a0_1; *$v0_3 = $s0 + 0x1fc; *$a0_1 = $v0_3 */
+                list_add_tail(&buffer_entry->list, &vic_dev->free_head);
+                pr_info("tx_isp_subdev_pipo: added buffer entry %d to free list\n", i);
             }
 
-            /* GOOD-THINGS: No buffer allocation here - deferred to QBUF operations */
-            pr_info("tx_isp_subdev_pipo: initialized buffer index %d (allocation deferred)\n", i);
-
-            /* SAFE: Clear VIC register using validated register access */
-            reg_offset = (i + 0xc6) << 2;
+            /* Binary Ninja EXACT: Clear VIC register */
+            /* *(*($s0 + 0xb8) + $a1) = 0 */
+            uint32_t reg_offset = (i + 0xc6) << 2;
             if (vic_dev->vic_regs && reg_offset < 0x1000) {
                 writel(0, vic_dev->vic_regs + reg_offset);
                 pr_info("tx_isp_subdev_pipo: cleared VIC register at offset 0x%x for buffer %d\n", reg_offset, i);
             }
         }
 
-        /* Set buffer count to 0 - buffers will be allocated on-demand */
-        vic_dev->buffer_count = 0;
-        pr_info("*** tx_isp_subdev_pipo: Using GOOD-THINGS deferred buffer allocation strategy ***\n");
-
         pr_info("tx_isp_subdev_pipo: initialized %d buffer structures (safe implementation)\n", i);
 
-        /* SAFE: Use proper struct member access instead of offset 0x214 */
+        /* Binary Ninja EXACT: *($s0 + 0x214) = 1 */
         vic_dev->processing = 1;
         pr_info("tx_isp_subdev_pipo: set processing = 1 (pipe enabled, safe struct access)\n");
-
-        /* CRITICAL FIX: Reset stream state before calling ispvic_frame_channel_s_stream */
-        pr_info("*** tx_isp_subdev_pipo: RESETTING stream_state to 0 before calling ispvic_frame_channel_s_stream ***\n");
-        vic_dev->stream_state = 0;  /* Ensure stream state is 0 so MDMA enable will be called */
-
-        /* CRITICAL: Call ispvic_frame_channel_qbuf to write buffer addresses to VIC hardware */
-        pr_info("*** tx_isp_subdev_pipo: CALLING ispvic_frame_channel_qbuf to write buffer addresses ***\n");
-        int qbuf_ret = ispvic_frame_channel_qbuf(sd, NULL);
-        if (qbuf_ret == 0) {
-            pr_info("*** tx_isp_subdev_pipo: ispvic_frame_channel_qbuf SUCCESS - buffer addresses written to VIC hardware ***\n");
-        } else {
-            pr_err("*** tx_isp_subdev_pipo: ispvic_frame_channel_qbuf FAILED: %d ***\n", qbuf_ret);
-        }
-
-        /* CRITICAL MISSING CALL: Start VIC frame channel streaming */
-        pr_info("*** tx_isp_subdev_pipo: CALLING ispvic_frame_channel_s_stream to start VIC streaming ***\n");
-        int stream_ret = ispvic_frame_channel_s_stream(sd, 1);  /* Enable streaming */
-        if (stream_ret == 0) {
-            pr_info("*** tx_isp_subdev_pipo: ispvic_frame_channel_s_stream SUCCESS - VIC streaming started! ***\n");
-
-            /* CRITICAL FIX: Call vic_core_s_stream to enable VIC interrupts - this was missing! */
-            pr_info("*** tx_isp_subdev_pipo: CALLING vic_core_s_stream to enable VIC interrupts ***\n");
-            stream_ret = vic_core_s_stream(sd, 1);  /* Enable VIC interrupts */
-            if (stream_ret == 0) {
-                pr_info("*** tx_isp_subdev_pipo: vic_core_s_stream SUCCESS - VIC interrupts should now be ENABLED! ***\n");
-            } else {
-                pr_err("*** tx_isp_subdev_pipo: vic_core_s_stream FAILED: %d ***\n", stream_ret);
-            }
-        } else {
-            pr_err("*** tx_isp_subdev_pipo: ispvic_frame_channel_s_stream FAILED: %d ***\n", stream_ret);
-			return stream_ret;
-        }
     }
 
     pr_info("tx_isp_subdev_pipo: completed successfully, returning 0\n");
