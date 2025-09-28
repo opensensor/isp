@@ -23,8 +23,27 @@
 
 #include "tx-isp-common.h"
 
-#include "tx_isp.h"
-#include "tx-isp-device.h"
+/* Forward declarations to avoid circular dependencies */
+struct tx_isp_subdev;
+struct tx_isp_subdev_pad;
+struct tx_isp_subdev_link;
+struct tx_isp_subdev_ops;
+struct tx_isp_module;
+struct tx_isp_irq_device;
+struct tx_isp_chip_ident;
+struct isp_event_handler;
+struct isp_channel_event;
+struct frame_thread_data;
+struct vbm_pool;
+struct vbm_ctrl;
+struct frame_queue;
+struct frame_group;
+struct group_data;
+struct frame_node;
+
+/* Event callback type */
+typedef int (*isp_event_cb)(void *priv, u32 event, void *data);
+
 #define ISP_MAX_SUBDEVS          16
 
 enum tx_isp_subdev_id {
@@ -168,6 +187,163 @@ struct ae_statistics {
 	bool converged;
 };
 
+
+
+/* The description of module entity */
+struct tx_isp_subdev_link {
+	struct tx_isp_subdev_pad *source;	/* Source pad */
+	struct tx_isp_subdev_pad *sink;		/* Sink pad  */
+	struct tx_isp_subdev_link *reverse;	/* Link in the reverse direction */
+	unsigned int flag;				/* Link flag (TX_ISP_LINKTYPE_*) */
+	unsigned int state;				/* Link state (TX_ISP_MODULE_*) */
+};
+
+struct tx_isp_subdev_pad {
+	struct tx_isp_subdev *sd;	/* Subdev this pad belongs to */
+	unsigned char index;			/* Pad index in the entity pads array */
+	unsigned char type;			/* Pad type (TX_ISP_PADTYPE_*) */
+	unsigned char links_type;			/* Pad link type (TX_ISP_PADLINK_*) */
+	unsigned char state;				/* Pad state (TX_ISP_PADSTATE_*) */
+	struct tx_isp_subdev_link link;	/* The active link */
+	int (*event)(struct tx_isp_subdev_pad *, unsigned int event, void *data);
+    void (*event_callback)(struct tx_isp_subdev_pad *pad, void *priv);
+	void *priv;
+};
+
+
+struct tx_isp_subdev_core_ops {
+	int (*g_chip_ident)(struct tx_isp_subdev *sd, struct tx_isp_chip_ident *chip);
+	int (*init)(struct tx_isp_subdev *sd, int on);		// clk's, power's and init ops.
+	int (*reset)(struct tx_isp_subdev *sd, int on);
+	int (*g_register)(struct tx_isp_subdev *sd, struct tx_isp_dbg_register *reg);
+	int (*g_register_list)(struct tx_isp_subdev *sd, struct tx_isp_dbg_register_list *reg);
+	int (*g_register_all)(struct tx_isp_subdev *sd, struct tx_isp_dbg_register_list *reg);
+	int (*s_register)(struct tx_isp_subdev *sd, const struct tx_isp_dbg_register *reg);
+	int (*ioctl)(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+	irqreturn_t (*interrupt_service_routine)(struct tx_isp_subdev *sd, u32 status, bool *handled);
+	irqreturn_t (*interrupt_service_thread)(struct tx_isp_subdev *sd, void *data);
+};
+
+struct tx_isp_subdev_video_ops {
+	int (*s_stream)(struct tx_isp_subdev *sd, int enable);
+	int (*link_stream)(struct tx_isp_subdev *sd, int enable);
+	int (*link_setup)(const struct tx_isp_subdev_pad *local,
+			  const struct tx_isp_subdev_pad *remote, u32 flags);
+};
+
+struct tx_isp_subdev_sensor_ops {
+	int (*release_all_sensor)(struct tx_isp_subdev *sd);
+	int (*sync_sensor_attr)(struct tx_isp_subdev *sd, void *arg);
+	int (*ioctl)(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+};
+
+/* Sensor operations structure - needed for sensor_init */
+struct tx_isp_sensor_ops {
+	int (*s_stream)(struct tx_isp_subdev *sd, int enable);
+	int (*g_register)(struct tx_isp_subdev *sd, struct tx_isp_dbg_register *reg);
+	int (*s_register)(struct tx_isp_subdev *sd, const struct tx_isp_dbg_register *reg);
+};
+
+struct tx_isp_subdev_pad_ops {
+	int (*g_fmt)(struct tx_isp_subdev *sd, struct v4l2_format *f);
+	int (*s_fmt)(struct tx_isp_subdev *sd, struct v4l2_format *f);
+	int (*streamon)(struct tx_isp_subdev *sd, void *data);
+	int (*streamoff)(struct tx_isp_subdev *sd, void *data);
+};
+
+struct tx_isp_irq_device {
+	spinlock_t slock;
+	/*struct mutex mlock;*/
+	int irq;
+	void (*enable_irq)(struct tx_isp_irq_device *irq_dev);
+	void (*disable_irq)(struct tx_isp_irq_device *irq_dev);
+};
+
+enum tx_isp_module_state {
+	TX_ISP_MODULE_UNDEFINE = 0,
+	TX_ISP_MODULE_SLAKE,
+	TX_ISP_MODULE_ACTIVATE,
+	TX_ISP_MODULE_DEINIT = TX_ISP_MODULE_ACTIVATE,
+	TX_ISP_MODULE_INIT,
+	TX_ISP_MODULE_RUNNING,
+};
+
+
+
+/* All TX descriptors have these 2 fields at the beginning */
+struct tx_isp_descriptor {
+	unsigned char  type;
+	unsigned char  subtype;
+	unsigned char  parentid;
+	unsigned char  unitid;
+};
+
+
+struct tx_isp_module {
+	struct tx_isp_descriptor desc;
+	struct device *dev;
+	const char *name;
+	struct miscdevice miscdev;
+	struct file_operations *ops;
+	struct file_operations *debug_ops;
+	void *parent;
+	int (*notify)(struct tx_isp_module *module, unsigned int notification, void *data);
+};
+
+
+struct tx_isp_subdev {
+	/* Base module */
+	struct tx_isp_module module;
+	struct tx_isp_irq_device irqdev;
+	struct tx_isp_chip_ident chip;
+
+	/* Basic device info */
+	struct device *dev;
+	struct platform_device *pdev;
+	struct resource *res;
+	struct tx_isp_subdev_ops *ops;
+	void *dev_priv;
+	void *host_priv;
+
+	/* Memory mappings */
+	void __iomem *base;         /* Common register base */
+	void __iomem *isp;          /* ISP register base */
+	void __iomem *csi_base;     /* CSI register base */
+
+	/* Clocks */
+	struct clk **clks;
+	unsigned int clk_num;
+
+	/* Synchronization */
+	spinlock_t lock;
+	spinlock_t vic_lock;
+	struct mutex mutex;
+	struct mutex vic_frame_end_lock;
+	struct mutex csi_lock;
+	struct mutex vin_lbc_lock;
+	struct completion frame_end;
+	struct completion vic_frame_end_completion[VIC_MAX_CHAN];
+
+	/* Pad configuration */
+	unsigned short num_outpads;    /* Number of sink pads */
+	unsigned short num_inpads;     /* Number of source pads */
+	struct tx_isp_subdev_pad *outpads;  /* OutPads array */
+	struct tx_isp_subdev_pad *inpads;   /* InPads array */
+
+	/* Specific subsystem data */
+	void *fs_wdr_shadow;      /* FS specific shadow memory */
+
+	/* VIN specific fields needed to match OEM behavior */
+	struct tx_isp_sensor *active_sensor;  /* Replaces sensor field */
+	int vin_state;                        /* Replaces state field */
+
+     /* Sensor list management */
+    struct list_head sensor_list;       /* Head of the sensor list */
+    struct list_head sensor_list_next;  /* Next entry in sensor list */
+
+    struct tx_isp_frame_channel *frame_chans;
+    int num_channels;
+};
 
 
 
@@ -633,27 +809,6 @@ struct tx_isp_link_configs {
 	unsigned int length;
 };
 
-/* The description of module entity */
-struct tx_isp_subdev_link {
-	struct tx_isp_subdev_pad *source;	/* Source pad */
-	struct tx_isp_subdev_pad *sink;		/* Sink pad  */
-	struct tx_isp_subdev_link *reverse;	/* Link in the reverse direction */
-	unsigned int flag;				/* Link flag (TX_ISP_LINKTYPE_*) */
-	unsigned int state;				/* Link state (TX_ISP_MODULE_*) */
-};
-
-struct tx_isp_subdev_pad {
-	struct tx_isp_subdev *sd;	/* Subdev this pad belongs to */
-	unsigned char index;			/* Pad index in the entity pads array */
-	unsigned char type;			/* Pad type (TX_ISP_PADTYPE_*) */
-	unsigned char links_type;			/* Pad link type (TX_ISP_PADLINK_*) */
-	unsigned char state;				/* Pad state (TX_ISP_PADSTATE_*) */
-	struct tx_isp_subdev_link link;	/* The active link */
-	int (*event)(struct tx_isp_subdev_pad *, unsigned int event, void *data);
-    void (*event_callback)(struct tx_isp_subdev_pad *pad, void *priv);
-	void *priv;
-};
-
 struct tx_isp_dbg_register {
 	char *name;
 	unsigned int size;
@@ -671,140 +826,6 @@ struct tx_isp_chip_ident {
 	char name[32];
 	char *revision;
 	unsigned int ident;
-};
-
-struct tx_isp_subdev_core_ops {
-	int (*g_chip_ident)(struct tx_isp_subdev *sd, struct tx_isp_chip_ident *chip);
-	int (*init)(struct tx_isp_subdev *sd, int on);		// clk's, power's and init ops.
-	int (*reset)(struct tx_isp_subdev *sd, int on);
-	int (*g_register)(struct tx_isp_subdev *sd, struct tx_isp_dbg_register *reg);
-	int (*g_register_list)(struct tx_isp_subdev *sd, struct tx_isp_dbg_register_list *reg);
-	int (*g_register_all)(struct tx_isp_subdev *sd, struct tx_isp_dbg_register_list *reg);
-	int (*s_register)(struct tx_isp_subdev *sd, const struct tx_isp_dbg_register *reg);
-	int (*ioctl)(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
-	irqreturn_t (*interrupt_service_routine)(struct tx_isp_subdev *sd, u32 status, bool *handled);
-	irqreturn_t (*interrupt_service_thread)(struct tx_isp_subdev *sd, void *data);
-};
-
-struct tx_isp_subdev_video_ops {
-	int (*s_stream)(struct tx_isp_subdev *sd, int enable);
-	int (*link_stream)(struct tx_isp_subdev *sd, int enable);
-	int (*link_setup)(const struct tx_isp_subdev_pad *local,
-			  const struct tx_isp_subdev_pad *remote, u32 flags);
-};
-
-struct tx_isp_subdev_sensor_ops {
-	int (*release_all_sensor)(struct tx_isp_subdev *sd);
-	int (*sync_sensor_attr)(struct tx_isp_subdev *sd, void *arg);
-	int (*ioctl)(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
-};
-
-/* Sensor operations structure - needed for sensor_init */
-struct tx_isp_sensor_ops {
-	int (*s_stream)(struct tx_isp_subdev *sd, int enable);
-	int (*g_register)(struct tx_isp_subdev *sd, struct tx_isp_dbg_register *reg);
-	int (*s_register)(struct tx_isp_subdev *sd, const struct tx_isp_dbg_register *reg);
-};
-
-struct tx_isp_subdev_pad_ops {
-	int (*g_fmt)(struct tx_isp_subdev *sd, struct v4l2_format *f);
-	int (*s_fmt)(struct tx_isp_subdev *sd, struct v4l2_format *f);
-	int (*streamon)(struct tx_isp_subdev *sd, void *data);
-	int (*streamoff)(struct tx_isp_subdev *sd, void *data);
-};
-
-struct tx_isp_irq_device {
-	spinlock_t slock;
-	/*struct mutex mlock;*/
-	int irq;
-	void (*enable_irq)(struct tx_isp_irq_device *irq_dev);
-	void (*disable_irq)(struct tx_isp_irq_device *irq_dev);
-};
-
-enum tx_isp_module_state {
-	TX_ISP_MODULE_UNDEFINE = 0,
-	TX_ISP_MODULE_SLAKE,
-	TX_ISP_MODULE_ACTIVATE,
-	TX_ISP_MODULE_DEINIT = TX_ISP_MODULE_ACTIVATE,
-	TX_ISP_MODULE_INIT,
-	TX_ISP_MODULE_RUNNING,
-};
-
-
-
-/* All TX descriptors have these 2 fields at the beginning */
-struct tx_isp_descriptor {
-	unsigned char  type;
-	unsigned char  subtype;
-	unsigned char  parentid;
-	unsigned char  unitid;
-};
-
-
-struct tx_isp_module {
-	struct tx_isp_descriptor desc;
-	struct device *dev;
-	const char *name;
-	struct miscdevice miscdev;
-	struct file_operations *ops;
-	struct file_operations *debug_ops;
-	void *parent;
-	int (*notify)(struct tx_isp_module *module, unsigned int notification, void *data);
-};
-
-
-struct tx_isp_subdev {
-	/* Base module */
-	struct tx_isp_module module;
-	struct tx_isp_irq_device irqdev;
-	struct tx_isp_chip_ident chip;
-
-	/* Basic device info */
-	struct device *dev;
-	struct platform_device *pdev;
-	struct resource *res;
-	struct tx_isp_subdev_ops *ops;
-	void *dev_priv;
-	void *host_priv;
-
-	/* Memory mappings */
-	void __iomem *base;         /* Common register base */
-	void __iomem *isp;          /* ISP register base */
-	void __iomem *csi_base;     /* CSI register base */
-
-	/* Clocks */
-	struct clk **clks;
-	unsigned int clk_num;
-
-	/* Synchronization */
-	spinlock_t lock;
-	spinlock_t vic_lock;
-	struct mutex mutex;
-	struct mutex vic_frame_end_lock;
-	struct mutex csi_lock;
-	struct mutex vin_lbc_lock;
-	struct completion frame_end;
-	struct completion vic_frame_end_completion[VIC_MAX_CHAN];
-
-	/* Pad configuration */
-	unsigned short num_outpads;    /* Number of sink pads */
-	unsigned short num_inpads;     /* Number of source pads */
-	struct tx_isp_subdev_pad *outpads;  /* OutPads array */
-	struct tx_isp_subdev_pad *inpads;   /* InPads array */
-
-	/* Specific subsystem data */
-	void *fs_wdr_shadow;      /* FS specific shadow memory */
-
-	/* VIN specific fields needed to match OEM behavior */
-	struct tx_isp_sensor *active_sensor;  /* Replaces sensor field */
-	int vin_state;                        /* Replaces state field */
-
-     /* Sensor list management */
-    struct list_head sensor_list;       /* Head of the sensor list */
-    struct list_head sensor_list_next;  /* Next entry in sensor list */
-
-    struct tx_isp_frame_channel *frame_chans;
-    int num_channels;
 };
 
 
