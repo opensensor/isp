@@ -495,6 +495,23 @@ label_123f4:
     complete(&vic_dev->frame_complete);
     pr_info("*** VIC FRAME DONE: Frame completion signaled ***\n");
 
+    /* CRITICAL FIX: Queue new buffer to keep VIC hardware supplied with buffers */
+    /* This is why interrupts stop after 2 frames - VIC runs out of buffers! */
+    if (vic_dev->stream_state != 0) {
+        pr_info("*** VIC FRAME DONE: Queuing new buffer to maintain continuous interrupts ***\n");
+
+        /* Call ispvic_frame_channel_qbuf to supply VIC with next buffer */
+        /* This writes buffer addresses to VIC registers 0x318-0x328 */
+        int qbuf_ret = ispvic_frame_channel_qbuf(&vic_dev->sd, NULL);
+        if (qbuf_ret == 0) {
+            pr_info("*** VIC FRAME DONE: New buffer queued successfully - interrupts should continue ***\n");
+        } else {
+            pr_warn("*** VIC FRAME DONE: Failed to queue new buffer: %d ***\n", qbuf_ret);
+        }
+    } else {
+        pr_info("*** VIC FRAME DONE: Stream not active, skipping buffer queue ***\n");
+    }
+
     /* Binary Ninja: return result */
     return (int)(uintptr_t)result;
 }
