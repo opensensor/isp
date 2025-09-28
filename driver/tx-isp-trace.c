@@ -9,7 +9,6 @@
 #include <linux/fs.h>
 #include <linux/uaccess.h>
 #include <linux/mutex.h>
-#include <linux/stdarg.h>
 
 #define ISP_MONITOR_VERSION "1.3"
 #define TRACE_FILE_PATH "/opt/trace.txt"
