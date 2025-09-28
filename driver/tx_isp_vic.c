@@ -2714,10 +2714,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0xFFFFFFFF, vr + 0x1f4);
                 /* CRITICAL FIX: Enable frame done interrupt (bit 0) + control limit (bit 21) */
                 writel(0x00200001, vr + 0x1e0); /* Enable frame done (bit 0) + control limit (bit 21) */
-                writel(0x0, vr + 0x1e8); /* Clear interrupt masks (good-things: 0x0) */
+                //writel(0x0, vr + 0x1e8); /* Clear interrupt masks (good-things: 0x0) */
                 /* Leave 0x1ec (MDMA mask) as-is per working reference */
                 /* Global interrupt enable at 0x30c (if implemented) */
-                writel(0xFFFFFFFF, vr + 0x30c);
+                //writel(0xFFFFFFFF, vr + 0x30c);
                 wmb();
                 pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (MainMask=0xFFFFFFFE)***\n",
                         readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x30c), readl(vr + 0x1e0), readl(vr + 0x1e4), readl(vr + 0x1e8), readl(vr + 0x1ec));
@@ -2821,7 +2821,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 			if (vic_dev->state < 2) {
             	pr_info("*** vic_core_s_stream: Enabling VIC IRQ AFTER final re-assert/verify ***\n");
             	tx_vic_enable_irq(vic_dev);
-			
+
 
             /* Post-IRQ-enable: sample status a bit longer to catch first frame */
             if (vic_dev->vic_regs) {
