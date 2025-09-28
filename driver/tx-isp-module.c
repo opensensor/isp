@@ -2410,12 +2410,12 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
                     }
                 }
             }
+        } else {
+            pr_debug("*** tx_isp_video_s_stream: subdev[%d] is NULL, skipping ***\n", i);
         }
-
-        /* Binary Ninja: $s4 = &$s4[1] */
-        s4 = &s4[1];
     }
-    /* All subdevs processed successfully */
+
+    pr_info("*** tx_isp_video_s_stream: All subdevs processed successfully in custom order ***\n");
     return 0;
 }
 
