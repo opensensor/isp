@@ -1420,8 +1420,8 @@ static int tx_isp_vic_device_deinit(struct tx_isp_dev *isp)
 }
 
 /**
- * ispcore_slake_module - CRITICAL: ISP Core Module Slaking/Initialization
- * This is the EXACT implementation from Binary Ninja decompilation
+ * ispcore_slake_module - HYBRID: Keep continuous VIC interrupts + Add MIPI lane config
+ * This version combines the working interrupt flow with MIPI lane configuration
  */
 int ispcore_slake_module(struct tx_isp_dev *isp)
 {
@@ -1431,16 +1431,13 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
     int isp_state;
 
     /* Add MCP logging for method entry */
-    pr_info("ispcore_slake_module: entry with isp=%p", isp);
+    pr_info("ispcore_slake_module: HYBRID version - continuous interrupts + MIPI config");
 
     /* Binary Ninja: int32_t result = 0xffffffea; if (arg1 != 0) */
     if (!isp) {
         pr_info("ispcore_slake_module: Invalid ISP device");
         return -EINVAL;
     }
-
-    /* Binary Ninja: if (arg1 u>= 0xfffff001) return 0xffffffea */
-    /* Skip this check as it's for kernel pointer validation */
 
     /* Binary Ninja: void* $s0_1 = arg1[0x35] */
     vic_dev = isp->vic_dev;
@@ -1499,12 +1496,18 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
         vic_dev->state = 1;
         pr_info("ispcore_slake_module: Set ISP state to INIT (1)");
 
-        /* Binary Ninja: Subdevice initialization loop */
-        pr_info("ispcore_slake_module: Initializing subdevices");
+        /* HYBRID APPROACH: Add MIPI lane configuration without breaking interrupts */
+        pr_info("ispcore_slake_module: HYBRID - Adding MIPI lane configuration");
 
-        /* Initialize CSI subdevice if present */
+        /* CRITICAL: Apply CSI/MIPI lane configuration sequence */
+        /* This is the missing piece that the new version was trying to add */
+        pr_info("*** HYBRID: Applying CSI/MIPI lane configuration sequence ***");
+        extern void tx_isp_vic_write_csi_phy_sequence(void);
+        tx_isp_vic_write_csi_phy_sequence();
+
+        /* Initialize CSI subdevice if present - PRESERVE WORKING STATE */
         if (isp->csi_dev) {
-            pr_info("ispcore_slake_module: Initializing CSI subdevice");
+            pr_info("ispcore_slake_module: HYBRID - Preserving CSI hardware state");
 
             /* CRITICAL FIX: DO NOT RESET CSI STATE IF HARDWARE IS ALREADY INITIALIZED */
             /* The CSI hardware initialization during probe should be preserved */
@@ -1523,12 +1526,14 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
             vic_dev->state = 1;  /* Set VIC to INIT state */
         }
 
-        /* Binary Ninja: Clock management loop */
-        pr_info("ispcore_slake_module: Managing ISP clocks");
-        /* The reference has a clock disable loop at the end, but we'll keep clocks enabled for now */
+        /* HYBRID APPROACH: Skip problematic clock disabling and subdev slaking */
+        /* The new version was disabling clocks and calling subdev slake operations */
+        /* which was breaking the continuous VIC interrupts */
+        pr_info("ispcore_slake_module: HYBRID - Skipping clock disable to preserve interrupts");
+        pr_info("ispcore_slake_module: HYBRID - Skipping subdev slaking to preserve working state");
     }
 
-    pr_info("ispcore_slake_module: ISP MODULE SLAKING COMPLETE - SUCCESS!");
+    pr_info("ispcore_slake_module: HYBRID COMPLETE - Continuous interrupts + MIPI config!");
     return 0;
 }
 EXPORT_SYMBOL(ispcore_slake_module);
