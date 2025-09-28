@@ -1658,7 +1658,7 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
             pr_info("ispcore_slake_module: Previous 0x90 value was 0x%x - should stop changing now", current_90_val);
 
             /* Reset CSI PHY Config to disabled state */
-            u32 current_100 = readl(csi_regs + 0x100);
+            u32 current_100 = readl(ourISPdev->csi_regs + 0x100);
             if (current_100 != 0x0) {
                 writel(0x0, csi_regs + 0x100);
                 pr_info("ispcore_slake_module: CSI PHY Config disabled (0x100: 0x%x -> 0x0)", current_100);
