@@ -3271,60 +3271,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         }
 
-        // Get VIC device
-        if (ourISPdev && ourISPdev->vic_dev) {
-            vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-
-            // Activate VIC if needed
-            if (vic_dev->state != 2) {
-                vic_dev->state = 2;
-                pr_info("Channel %d: VIC activated\n", channel);
-            }
-
-            // Enable VIC streaming with COMPLETE MIPI register configuration (matches reference tx_isp_vic_start)
-            if (!vic_dev->streaming) {
-                unsigned long flags;
-
-                spin_lock_irqsave(&vic_dev->buffer_lock, flags);
-
-                if (vic_dev->vic_regs) {
-                    int timeout = 1000;
-                    u32 vic_status;
-                    u32 ctrl_verify;
-
-                    pr_info("*** Channel %d: VIC REFERENCE ENABLEMENT SEQUENCE (STREAMON) ***\n", channel);
-
-                    // STEP 1: Enable VIC register access mode (write 2 to register 0x0)
-                    iowrite32(2, vic_dev->vic_regs + 0x0);
-                    wmb();
-                    pr_info("Channel %d: VIC enabled register access (wrote 2)\n", channel);
-
-                    // STEP 2: Set VIC configuration mode (write 4 to register 0x0)
-                    iowrite32(4, vic_dev->vic_regs + 0x0);
-                    wmb();
-                    pr_info("Channel %d: VIC set config mode (wrote 4)\n", channel);
-
-                    // STEP 3: Wait for VIC ready state
-                    while ((vic_status = ioread32(vic_dev->vic_regs + 0x0)) != 0 && timeout--) {
-                        cpu_relax();
-                    }
-                    pr_info("Channel %d: VIC ready wait complete (status=0x%x, timeout=%d)\n",
-                           channel, vic_status, timeout);
-
-                    // STEP 4: Start VIC processing (write 1 to register 0x0)
-                    iowrite32(1, vic_dev->vic_regs + 0x0);
-                    wmb();
-                    pr_info("Channel %d: VIC processing started (wrote 1)\n", channel);
-                }
-
-                vic_dev->streaming = 1;
-
-                spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
-
-                pr_info("*** Channel %d: VIC NOW READY TO RECEIVE MIPI DATA FROM SENSOR ***\n", channel);
-            }
-        }
-
 
         pr_info("Channel %d: Streaming enabled\n", channel);
         return 0;
