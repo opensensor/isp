@@ -1820,6 +1820,39 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 } while (0);
             } else {
                 printk(KERN_ALERT "*** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***\n");
+                /* Fallback path: if control limit error is set, advance frame processing like continuous-interrupts */
+                if ((v1_7 & 0x200000) != 0) {
+                    printk(KERN_ALERT "*** VIC FALLBACK: control-limit set without FD; invoking vic_framedone_irq_function and FS wakeups ***\n");
+                    /* Increment counters to keep /proc in sync */
+                    vic_dev->frame_count++;
+                    if (isp_dev && isp_dev->core_dev)
+                        isp_dev->core_dev->frame_count++;
+
+                    /* Call frame-done handler to rotate buffers and keep DMA moving */
+                    vic_framedone_irq_function(vic_dev);
+
+                    /* Notify core and frame channels to avoid pipeline stall */
+                    do {
+                        extern struct frame_channel_device frame_channels[];
+                        extern int num_channels;
+                        int i;
+
+                        isp_frame_done_wakeup();
+                        for (i = 0; i < num_channels; i++) {
+                            struct frame_channel_device *fcd = &frame_channels[i];
+                            unsigned long flags_local;
+                            if (!fcd || !fcd->state.streaming)
+                                continue;
+                            spin_lock_irqsave(&fcd->state.buffer_lock, flags_local);
+                            if (!fcd->state.frame_ready) {
+                                fcd->state.frame_ready = true;
+                                wake_up_interruptible(&fcd->state.frame_wait);
+                                printk(KERN_ALERT "*** VIC FALLBACK: frame_ready signaled to frame channel %d ***\n", i);
+                            }
+                            spin_unlock_irqrestore(&fcd->state.buffer_lock, flags_local);
+                        }
+                    } while (0);
+                }
             }
 
             /* Binary Ninja: Error handling for frame asfifo overflow */
