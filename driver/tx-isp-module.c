@@ -3529,17 +3529,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         // Stop channel streaming
         state->streaming = false;
 
-        // Stop the actual sensor hardware streaming
-        if (channel == 0 && ourISPdev && ourISPdev->sensor) {
-            sensor = ourISPdev->sensor;
-            if (sensor && sensor->sd.ops && sensor->sd.ops->video &&
-                sensor->sd.ops->video->s_stream) {
-                pr_info("Channel %d: Stopping sensor hardware streaming\n", channel);
-                sensor->sd.ops->video->s_stream(&sensor->sd, 0);
-                // Clear sensor running state
-                sensor->sd.vin_state = TX_ISP_MODULE_INIT;
-            }
-        }
+		// TODO stop the actual hardware from streaming
 
         pr_info("Channel %d: Streaming stopped\n", channel);
         return 0;
