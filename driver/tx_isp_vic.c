@@ -2814,7 +2814,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                             readl(vr_gate + 0x04), readl(vr_gate + 0x0c));
                 }
 
-            if (false && vic_dev && vic_dev->vic_regs) { /* SKIP: post-run re-arm and IMR/IMCR gating */
+            if (vic_dev && vic_dev->vic_regs) { /* CRITICAL FIX: Enable VIC interrupt enable registers */
                 void __iomem *vr = vic_dev->vic_regs;
                 /* Clear pending first (W1C) */
                 writel(0xFFFFFFFF, vr + 0x1f0);
