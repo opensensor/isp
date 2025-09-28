@@ -517,16 +517,25 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             sd->module.notify = tx_isp_module_notify_handler;
             pr_info("*** tx_isp_subdev_init: Set up sensor module notify handler ***\n");
 
-            /* SENSOR - register using helper function */
-            int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
-            if (slot >= 0) {
-                pr_info("*** tx_isp_subdev_init: SENSOR subdev registered at slot %d, sd=%p ***\n", slot, sd);
+            /* SENSOR - register in sensor slots (5+) specifically */
+            int sensor_slot = -1;
+            for (int i = 5; i < ISP_MAX_SUBDEVS; i++) {
+                if (ourISPdev->subdevs[i] == NULL) {
+                    sensor_slot = i;
+                    break;
+                }
+            }
+
+            if (sensor_slot >= 0) {
+                ourISPdev->subdevs[sensor_slot] = sd;
+                sd->isp = ourISPdev;
+                pr_info("*** tx_isp_subdev_init: SENSOR subdev registered at slot %d, sd=%p ***\n", sensor_slot, sd);
                 pr_info("*** tx_isp_subdev_init: SENSOR ops=%p, ops->sensor=%p ***\n", sd->ops, sd->ops->sensor);
 
                 /* State transitions are now handled by ispcore_slake_module during probe */
                 pr_info("*** tx_isp_subdev_init: Core state transitions handled by slake_module ***\n");
             } else {
-                pr_err("*** tx_isp_subdev_init: No available slot for sensor subdev ***\n");
+                pr_err("*** tx_isp_subdev_init: No available sensor slot (5+) for sensor subdev ***\n");
             }
         } else {
             pr_info("*** tx_isp_subdev_init: NOT A SENSOR - ops=%p ***\n", ops);
