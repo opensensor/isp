@@ -210,6 +210,13 @@ struct tx_isp_subdev_pad {
 	void *priv;
 };
 
+struct tx_isp_chip_ident {
+	char name[32];
+	char *revision;
+	unsigned int ident;
+};
+
+
 
 struct tx_isp_subdev_core_ops {
 	int (*g_chip_ident)(struct tx_isp_subdev *sd, struct tx_isp_chip_ident *chip);
@@ -821,13 +828,6 @@ struct tx_isp_dbg_register_list {
 	unsigned int size;
 	unsigned short *reg;
 };
-
-struct tx_isp_chip_ident {
-	char name[32];
-	char *revision;
-	unsigned int ident;
-};
-
 
 
 /* Device structures */
