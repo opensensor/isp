@@ -4217,13 +4217,18 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
     /* Binary Ninja: Handle 0x800456d0 - TX_ISP_VIDEO_LINK_SETUP */
     if (cmd == 0x800456d0) {
-       int link_config;
-
-        if (copy_from_user(&link_config, argp, sizeof(link_config)))
+        /* Binary Ninja: if (private_copy_from_user(&var_98, arg3, 4) != 0) */
+        if (copy_from_user(&var_98, (void __user *)arg, 4) != 0) {
+            pr_err("TX_ISP_VIDEO_LINK_SETUP: Failed to copy link config\n");
             return -EFAULT;
+        }
 
+        /* Binary Ninja: uint32_t $a2_4 = var_98 */
+        uint32_t link_config = var_98.as_uint32;
+
+        /* Binary Ninja: if ($a2_4 u>= 2) */
         if (link_config >= 2) {
-            pr_err("Invalid video link config: %d (valid: 0-1)\n", link_config);
+            pr_err("Invalid video link config: %d\n", link_config);
             return -EINVAL;
         }
 
