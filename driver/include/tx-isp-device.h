@@ -181,6 +181,118 @@ struct tx_isp_config {
 
 /* Forward declaration of device structure */
 
+/* Channel structures - must be defined before tx_isp_dev */
+struct isp_channel {
+    int id;
+    /* Core identification */
+    uint32_t magic;                    // Magic identifier
+    int channel_id;                    // Channel number
+    uint32_t state;                    // Channel state flags
+    uint32_t type;                     // Channel type
+    struct device *dev;                // Parent device
+    struct tx_isp_subdev subdev;  // Add this
+    struct tx_isp_subdev_pad pad; // And this
+    uint32_t flags;                    // Channel flags
+    uint32_t is_open;                  // Open count
+    bool enabled;                    // Streaming state
+    struct vm_area_struct *vma;
+
+    /* Channel attributes */
+    struct imp_channel_attr attr;      // Channel attributes (maintains firmware layout)
+    struct frame_thread_data *thread_data;    // Thread data
+
+    /* Format and frame info */
+    uint32_t width;                    // Frame width
+    uint32_t height;                   // Frame height
+    uint32_t fmt;                      // Pixel format
+    uint32_t sequence;                 // Frame sequence number
+
+    /* VBM Pool Management */
+    struct {
+        uint32_t pool_id;
+        uint32_t pool_flags;  // Add pool flags from reqbuf
+        bool bound;
+        void *pool_ptr;      // VBM pool pointer
+        void *ctrl_ptr;      // VBM control pointer
+    } pool;                  // Consolidate pool-related fields
+
+    /* Event Management */
+    void *remote_dev;             // 0x2bc: Remote device handlers
+    struct isp_event_handler *event_hdlr;  // Event handler structure
+    spinlock_t event_lock;        // 0x2c4: Event lock
+    struct completion done;       // 0x2d4: Completion
+    struct isp_channel_event *event;
+    isp_event_cb event_cb;
+    void *event_priv;
+
+    /* Memory management */
+    void *buf_base;                    // Virtual base address
+    dma_addr_t dma_addr;               // DMA base address
+    dma_addr_t *buffer_dma_addrs;      // DMA addresses of each video_buffer
+    void *dma_y_virt;
+    dma_addr_t dma_y_phys;
+    void *dma_uv_virt;
+    dma_addr_t dma_uv_phys;
+    uint32_t group_offset;             // Group offset
+    uint32_t buf_size;                 // Size per buffer
+    uint32_t buffer_count;                // Number of buffers
+    uint32_t channel_offset;           // Channel memory offset
+    uint32_t memory_type;              // Memory allocation type
+    uint32_t required_size;            // Required buffer size
+    void **vbm_table;                  // VBM entries array
+    u32 vbm_count;                     // Number of VBM entries
+    uint32_t data_offset;              // Frame data offset
+    uint32_t metadata_offset;          // Metadata offset
+    dma_addr_t *meta_dma;              // Array of metadata DMA addresses
+    uint32_t phys_size;                // Physical memory size per buffer
+    uint32_t virt_size;                // Virtual memory size per buffer
+    struct vbm_pool *vbm_ptr;          // Pointer to VBM pool structure
+    struct vbm_ctrl *ctrl_ptr;
+    void __iomem *mapped_vbm;  // Mapped VBM pool memory
+    uint32_t stride;                   // Line stride in bytes for frame data
+    uint32_t buffer_stride;            // Total stride between buffers including metadata
+    bool pre_dequeue_enabled;          // Whether pre-dequeue is enabled for ch0
+    void __iomem *ctrl_block;     // Mapped control block
+    bool ctrl_block_mapped;       // Control block mapping status
+    // For 3.10, just store the physical address and size
+    unsigned long ctrl_phys;
+    size_t ctrl_size;
+
+    /* Queue and buffer management */
+    struct frame_queue *queue;
+    atomic_t queued_bufs;              // Available buffer count
+    struct frame_group *group;          // Frame grouping info
+    struct group_data *group_data;      // Group data
+    unsigned long group_phys_mem;       // Physical memory pages
+    void __iomem *group_mapped_addr;    // Mapped memory address
+    struct frame_node *last_frame;      // Last processed frame
+
+    /* Thread management */
+    struct task_struct *frame_thread;   // Frame processing thread
+    atomic_t thread_running;            // Thread state
+    atomic_t thread_should_stop;        // Thread stop flag
+
+    /* Synchronization */
+    spinlock_t vbm_lock;               // VBM access protection
+    spinlock_t state_lock;             // State protection
+    struct completion frame_complete;   // Frame completion tracking
+
+    /* Statistics */
+    struct ae_statistics ae_stats;      // AE statistics
+    spinlock_t ae_lock;                // AE lock
+    bool ae_valid;                     // AE validity flag
+    uint32_t last_irq;                 // Last IRQ status
+    uint32_t error_count;              // Error counter
+} __attribute__((aligned(8)));
+
+// Frame thread data structure
+struct frame_thread_data {
+    struct isp_channel *chn;    // Channel being processed
+    atomic_t should_stop;       // Stop flag
+    atomic_t thread_running;    // Running state
+    struct task_struct *task;   // Thread task structure
+};
+
 struct tx_isp_dev {
     /* Global device info (core subdev moved to separate core_dev) */
     struct device *dev;                      /* 0x00: Device pointer (4 bytes) */
@@ -586,116 +698,7 @@ struct imp_channel_attr {
     uint32_t reserved[4];     // Pad to 0x50 bytes
 } __attribute__((aligned(4)));
 
-struct isp_channel {
-    int id;
-    /* Core identification */
-    uint32_t magic;                    // Magic identifier
-    int channel_id;                    // Channel number
-    uint32_t state;                    // Channel state flags
-    uint32_t type;                     // Channel type
-    struct device *dev;                // Parent device
-    struct tx_isp_subdev subdev;  // Add this
-    struct tx_isp_subdev_pad pad; // And this
-    uint32_t flags;                    // Channel flags
-    uint32_t is_open;                  // Open count
-    bool enabled;                    // Streaming state
-    struct vm_area_struct *vma;
 
-    /* Channel attributes */
-    struct imp_channel_attr attr;      // Channel attributes (maintains firmware layout)
-    struct frame_thread_data *thread_data;    // Thread data
-
-    /* Format and frame info */
-    uint32_t width;                    // Frame width
-    uint32_t height;                   // Frame height
-    uint32_t fmt;                      // Pixel format
-    uint32_t sequence;                 // Frame sequence number
-
-    /* VBM Pool Management */
-    struct {
-        uint32_t pool_id;
-        uint32_t pool_flags;  // Add pool flags from reqbuf
-        bool bound;
-        void *pool_ptr;      // VBM pool pointer
-        void *ctrl_ptr;      // VBM control pointer
-    } pool;                  // Consolidate pool-related fields
-
-    /* Event Management */
-    void *remote_dev;             // 0x2bc: Remote device handlers
-    struct isp_event_handler *event_hdlr;  // Event handler structure
-    spinlock_t event_lock;        // 0x2c4: Event lock
-    struct completion done;       // 0x2d4: Completion
-    struct isp_channel_event *event;
-    isp_event_cb event_cb;
-    void *event_priv;
-
-    /* Memory management */
-    void *buf_base;                    // Virtual base address
-    dma_addr_t dma_addr;               // DMA base address
-    dma_addr_t *buffer_dma_addrs;      // DMA addresses of each video_buffer
-    void *dma_y_virt;
-    dma_addr_t dma_y_phys;
-    void *dma_uv_virt;
-    dma_addr_t dma_uv_phys;
-    uint32_t group_offset;             // Group offset
-    uint32_t buf_size;                 // Size per buffer
-    uint32_t buffer_count;                // Number of buffers
-    uint32_t channel_offset;           // Channel memory offset
-    uint32_t memory_type;              // Memory allocation type
-    uint32_t required_size;            // Required buffer size
-    void **vbm_table;                  // VBM entries array
-    u32 vbm_count;                     // Number of VBM entries
-    uint32_t data_offset;              // Frame data offset
-    uint32_t metadata_offset;          // Metadata offset
-    dma_addr_t *meta_dma;              // Array of metadata DMA addresses
-    uint32_t phys_size;                // Physical memory size per buffer
-    uint32_t virt_size;                // Virtual memory size per buffer
-    struct vbm_pool *vbm_ptr;          // Pointer to VBM pool structure
-    struct vbm_ctrl *ctrl_ptr;
-    void __iomem *mapped_vbm;  // Mapped VBM pool memory
-    uint32_t stride;                   // Line stride in bytes for frame data
-    uint32_t buffer_stride;            // Total stride between buffers including metadata
-    bool pre_dequeue_enabled;          // Whether pre-dequeue is enabled for ch0
-    void __iomem *ctrl_block;     // Mapped control block
-    bool ctrl_block_mapped;       // Control block mapping status
-    // For 3.10, just store the physical address and size
-    unsigned long ctrl_phys;
-    size_t ctrl_size;
-
-    /* Queue and buffer management */
-    struct frame_queue *queue;
-    atomic_t queued_bufs;              // Available buffer count
-    struct frame_group *group;          // Frame grouping info
-    struct group_data *group_data;      // Group data
-    unsigned long group_phys_mem;       // Physical memory pages
-    void __iomem *group_mapped_addr;    // Mapped memory address
-    struct frame_node *last_frame;      // Last processed frame
-
-    /* Thread management */
-    struct task_struct *frame_thread;   // Frame processing thread
-    atomic_t thread_running;            // Thread state
-    atomic_t thread_should_stop;        // Thread stop flag
-
-    /* Synchronization */
-    spinlock_t vbm_lock;               // VBM access protection
-    spinlock_t state_lock;             // State protection
-    struct completion frame_complete;   // Frame completion tracking
-
-    /* Statistics */
-    struct ae_statistics ae_stats;      // AE statistics
-    spinlock_t ae_lock;                // AE lock
-    bool ae_valid;                     // AE validity flag
-    uint32_t last_irq;                 // Last IRQ status
-    uint32_t error_count;              // Error counter
-} __attribute__((aligned(8)));
-
-// Frame thread data structure
-struct frame_thread_data {
-    struct isp_channel *chn;    // Channel being processed
-    atomic_t should_stop;       // Stop flag
-    atomic_t thread_running;    // Running state
-    struct task_struct *task;   // Thread task structure
-};
 
 struct tx_isp_frame_channel {
     struct miscdevice misc;
