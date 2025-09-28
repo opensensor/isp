@@ -1725,7 +1725,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
 
         /* CRITICAL: Check if VIC control registers have been cleared by system */
         trace_vic_registers(vic_regs, "VIC_IRQ_HANDLER");
-        protect_vic_registers(vic_regs, "VIC_IRQ_HANDLER");
+        //protect_vic_registers(vic_regs, "VIC_IRQ_HANDLER");
 
 
         v1_7 = (~reg_1e8) & reg_1e0;
