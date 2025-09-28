@@ -1235,10 +1235,6 @@ static char isp_tuning_buffer[0x500c]; // Tuning parameter buffer from reference
 
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable);
 
-/* Frame channel device instances - make non-static so they can be accessed from other files */
-struct frame_channel_device frame_channels[4]; /* Support up to 4 video channels */
-int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
-
 /* REMOVED: VIC continuous frame generation work queue - NOT in reference driver */
 /* Reference driver is purely interrupt-driven, no continuous polling */
 
