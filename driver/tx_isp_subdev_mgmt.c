@@ -11,6 +11,7 @@
 #include "../include/tx_isp.h"
 #include "../include/tx_isp_vic.h"
 #include "../include/tx-isp-debug.h"
+#include "../include/tx-isp-device.h"
 
 /* Subdevice type definitions */
 enum tx_isp_subdev_type {
