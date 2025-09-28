@@ -1932,6 +1932,36 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                                     }
                                 } while (0);
 
+                                /* Restore interrupt masks/enables like working reference */
+                                writel(0xFFFFFFFE, vr2 + 0x1e8); /* MainMask: unmask FD */
+                                if (vc2) writel(0xFFFFFFFE, vc2 + 0x1e8);
+                                {
+                                    u32 en0b = readl(vr2 + 0x1e0) | 0x1;
+                                    writel(en0b, vr2 + 0x1e0);
+                                    writel(0x0000000F, vr2 + 0x1e4);
+                                    if (vc2) {
+                                        u32 en2b = readl(vc2 + 0x1e0) | 0x1;
+                                        writel(en2b, vc2 + 0x1e0);
+                                        writel(0x0000000F, vc2 + 0x1e4);
+                                    }
+                                }
+                                wmb();
+
+                                /* Clear ISP core latched VIC status bits to allow next HW IRQ */
+                                do {
+                                    struct tx_isp_dev *ispd = ourISPdev;
+                                    void __iomem *core = NULL;
+                                    if (ispd && ispd->core_dev && ispd->core_dev->core_regs)
+                                        core = ispd->core_dev->core_regs;
+                                    else if (ispd && ispd->core_regs)
+                                        core = ispd->core_regs;
+                                    if (core) {
+                                        writel(0x1, core + 0x9a70);
+                                        writel(0x1, core + 0x9a7c);
+                                        wmb();
+                                    }
+                                } while (0);
+
                                 /* Route interrupts and RUN */
                                 writel(0x07800438, vr2 + 0x04); writel(0xb5742249, vr2 + 0x0c);
                                 if (vc2) { writel(0x07800438, vc2 + 0x04); writel(0xb5742249, vc2 + 0x0c); }
@@ -2183,6 +2213,37 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                     } while (0);
                 } while (0);
                 wmb();
+
+                /* Restore interrupt masks/enables like working reference */
+                writel(0xFFFFFFFE, vr + 0x1e8); /* MainMask: unmask FD */
+                if (vc) writel(0xFFFFFFFE, vc + 0x1e8);
+                /* Ensure FD enabled in both banks */
+                {
+                    u32 en0 = readl(vr + 0x1e0) | 0x1;
+                    writel(en0, vr + 0x1e0);
+                    writel(0x0000000F, vr + 0x1e4);
+                    if (vc) {
+                        u32 en2 = readl(vc + 0x1e0) | 0x1;
+                        writel(en2, vc + 0x1e0);
+                        writel(0x0000000F, vc + 0x1e4);
+                    }
+                }
+                wmb();
+
+                /* Clear ISP core latched VIC status bits to allow next HW IRQ */
+                do {
+                    struct tx_isp_dev *ispd = ourISPdev;
+                    void __iomem *core = NULL;
+                    if (ispd && ispd->core_dev && ispd->core_dev->core_regs)
+                        core = ispd->core_dev->core_regs;
+                    else if (ispd && ispd->core_regs)
+                        core = ispd->core_regs;
+                    if (core) {
+                        writel(0x1, core + 0x9a70);
+                        writel(0x1, core + 0x9a7c);
+                        wmb();
+                    }
+                } while (0);
 
                 /* Re-apply IMR/IMCR routing as per working reference (both banks) */
                 writel(0x07800438, vr + 0x04);
