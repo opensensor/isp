@@ -2170,11 +2170,11 @@ int tx_isp_video_link_stream(struct tx_isp_dev *arg1, int arg2)
             struct tx_isp_subdev *subdev = s4[i];
             if (subdev != NULL && subdev->ops && subdev->ops->internal && subdev->ops->internal->activate_module) {
                 pr_info("*** tx_isp_video_link_stream: Calling activate_module on subdev[%d] ***\n", i);
-                //result = subdev->ops->internal->activate_module(subdev);
-                //if (result != 0 && result != -ENOIOCTLCMD) {
-                //    pr_err("tx_isp_video_link_stream: activate_module failed on subdev[%d]: %d\n", i, result);
-                //    return result;
-                //}
+                result = subdev->ops->internal->activate_module(subdev);
+                if (result != 0 && result != -ENOIOCTLCMD) {
+                    pr_err("tx_isp_video_link_stream: activate_module failed on subdev[%d]: %d\n", i, result);
+                    return result;
+                }
                 pr_info("*** tx_isp_video_link_stream: activate_module SUCCESS on subdev[%d] ***\n", i);
             }
         }
@@ -2547,12 +2547,35 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     struct tx_isp_channel_state *state;
     int channel;
 
-    pr_info("*** frame_channel_unlocked_ioctl: MIPS-SAFE implementation - cmd=0x%x ***\n", cmd);
+    pr_info("*** frame_channel_unlocked_ioctl: ENTRY - cmd=0x%x ***\n", cmd);
+
+    /* Special debug for DQBUF operations */
+    if (cmd == 0xc0445609) {
+        pr_info("*** DQBUF DETECTED: This is a VIDIOC_DQBUF call ***\n");
+    }
+
+    /* CRITICAL: Comprehensive NULL pointer validation to prevent BadVA crashes */
+    if (!file) {
+        pr_err("*** frame_channel_unlocked_ioctl: NULL file pointer - CRITICAL ERROR ***\n");
+        return -EINVAL;
+    }
 
     /* MIPS ALIGNMENT CHECK: Validate file pointer */
-    if (!file || ((uintptr_t)file & 0x3) != 0) {
+    if (((uintptr_t)file & 0x3) != 0) {
         pr_err("*** MIPS ALIGNMENT ERROR: file pointer 0x%p not 4-byte aligned ***\n", file);
         return -EINVAL;
+    }
+
+    /* CRITICAL: Validate file->private_data before accessing */
+    if (!file->private_data) {
+        pr_err("*** frame_channel_unlocked_ioctl: NULL file->private_data - CRITICAL ERROR ***\n");
+        return -EINVAL;
+    }
+
+    /* CRITICAL: Validate private_data is in valid kernel memory range */
+    if ((unsigned long)file->private_data < 0x80000000 || (unsigned long)file->private_data >= 0xfffff000) {
+        pr_err("*** frame_channel_unlocked_ioctl: Invalid private_data pointer 0x%p - memory corruption ***\n", file->private_data);
+        return -EFAULT;
     }
 
     /* MIPS ALIGNMENT CHECK: Validate argp pointer */
@@ -2732,12 +2755,44 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_info("Channel %d: MMAP allocation - %d buffers of %u bytes each\n",
                        channel, reqbuf.count, buffer_size);
 
-                /* CRITICAL FIX: Don't allocate any actual buffers in driver! */
-                /* The client (libimp) will allocate buffers and pass them via QBUF */
-                pr_info("Channel %d: MMAP mode - %d buffer slots reserved (no early allocation)\n",
+                /* CRITICAL FIX: Allocate video_buffer structures like reference driver */
+                pr_info("Channel %d: MMAP mode - allocating %d video_buffer structures\n",
                        channel, reqbuf.count);
 
-                /* Just track the buffer count - no actual allocation */
+                /* Reference driver allocates buffer structures, not DMA buffers */
+                /* CRITICAL FIX: Allocate properly aligned DMA buffers to prevent corruption */
+                for (int i = 0; i < reqbuf.count; i++) {
+                    /* MIPS SAFETY: Allocate video_buffer structure with proper alignment */
+                    struct video_buffer *buffer = kzalloc(sizeof(struct video_buffer), GFP_KERNEL | __GFP_ZERO);
+                    if (!buffer) {
+                        pr_err("*** Channel %d: Failed to allocate video_buffer structure %d ***\n", channel, i);
+
+                        /* Free previously allocated buffer structures */
+                        for (int j = 0; j < i; j++) {
+                            if (state->vbm_buffer_addresses && state->vbm_buffer_addresses[j] != 0) {
+                                kfree((void *)(uintptr_t)state->vbm_buffer_addresses[j]);
+                                state->vbm_buffer_addresses[j] = 0;
+                            }
+                        }
+                        return -ENOMEM;
+                    }
+
+                    /* Initialize video_buffer structure like reference driver */
+                    buffer->index = i;
+                    buffer->type = 1; // V4L2_BUF_TYPE_VIDEO_CAPTURE
+                    buffer->memory = 1; // V4L2_MEMORY_MMAP
+                    buffer->flags = 0; // Not queued yet
+                    buffer->status = 0; // Not processed yet
+                    INIT_LIST_HEAD(&buffer->list); // Initialize list head
+
+                    /* Store buffer structure in channel state like reference driver */
+                    /* Reference: channel_state[(i + channel_buffer_offset + 0x3a) << 2 + 0x24] = buffer */
+                    /* Note: We don't store video_buffer structures in VBM addresses - those are for actual frame data */
+                    /* The video_buffer structures are managed separately for V4L2 compatibility */
+
+                    pr_info("*** Channel %d: Allocated video_buffer structure[%d] at %p ***\n",
+                            channel, i, buffer);
+                }
 
             } else if (reqbuf.memory == 2) { /* V4L2_MEMORY_USERPTR - client allocates */
                 pr_info("Channel %d: USERPTR mode - client will provide buffers\n", channel);
@@ -2756,15 +2811,36 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
             state->buffer_count = reqbuf.count;
 
+            /* CRITICAL FIX: Initialize VBM buffer management for this channel */
+            if (state->vbm_buffer_addresses) {
+                pr_info("*** Channel %d: REQBUFS freeing existing VBM buffer array ***\n", channel);
+                kfree(state->vbm_buffer_addresses);
+            }
+            state->vbm_buffer_addresses = kzalloc(reqbuf.count * sizeof(uint32_t), GFP_KERNEL);
+            if (!state->vbm_buffer_addresses) {
+                pr_err("*** Channel %d: Failed to allocate VBM buffer array ***\n", channel);
+                state->buffer_count = 0;
+                return -ENOMEM;
+            }
+            state->vbm_buffer_count = 0; /* Will be set as buffers are queued */
+            pr_info("*** Channel %d: REQBUFS allocated VBM buffer array for %d buffers at %p ***\n",
+                    channel, reqbuf.count, state->vbm_buffer_addresses);
+
             /* Set buffer type from REQBUFS request */
             fcd->buffer_type = reqbuf.type;
 
             /* CRITICAL: Update VIC active_buffer_count for streaming */
             if (ourISPdev && ourISPdev->vic_dev) {
-                struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+                struct tx_isp_vic_device *vic = ourISPdev->vic_dev;
                 vic->active_buffer_count = reqbuf.count;
                 pr_info("*** Channel %d: VIC active_buffer_count set to %d ***\n",
                         channel, vic->active_buffer_count);
+
+                /* REMOVED: VIC DMA configuration during REQBUFS */
+                /* Reference driver configures VIC DMA during streaming via vic_pipo_mdma_enable */
+                /* This happens automatically in ispvic_frame_channel_s_stream when streaming starts */
+                pr_info("*** REQBUFS: VIC DMA will be configured during streaming via vic_pipo_mdma_enable ***\n");
             }
 
             pr_info("*** Channel %d: MEMORY-AWARE REQBUFS SUCCESS - %d buffers ***\n",
@@ -2775,9 +2851,18 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_info("Channel %d: Freeing existing buffers\n", channel);
             state->buffer_count = 0;
 
+            /* CRITICAL FIX: Free VBM buffer array */
+            if (state->vbm_buffer_addresses) {
+                kfree(state->vbm_buffer_addresses);
+                state->vbm_buffer_addresses = NULL;
+                state->vbm_buffer_count = 0;
+                pr_info("*** Channel %d: Freed VBM buffer array ***\n", channel);
+            }
+
             /* CRITICAL: Clear VIC active_buffer_count */
             if (ourISPdev && ourISPdev->vic_dev) {
-                struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+                struct tx_isp_vic_device *vic = ourISPdev->vic_dev;
                 vic->active_buffer_count = 0;
                 pr_info("*** Channel %d: VIC active_buffer_count cleared ***\n", channel);
             }
@@ -3642,6 +3727,22 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         // The decompiled code shows: ioctl($a0_41, 0x800456c5, &var_70)
         // Failure here causes "does not support set banks" error
 
+        // CRITICAL: Set banks should trigger core ops init according to Binary Ninja reference
+        if (ourISPdev && ourISPdev->core_dev &&
+            ourISPdev->core_dev->sd.ops && ourISPdev->core_dev->sd.ops->core &&
+            ourISPdev->core_dev->sd.ops->core->init) {
+
+            pr_info("*** Channel %d: SET_BANKS - CALLING CORE OPS INIT ***\n", channel);
+            int core_init_ret = ourISPdev->core_dev->sd.ops->core->init(&ourISPdev->core_dev->sd, 1);
+
+            if (core_init_ret != 0) {
+                pr_err("Channel %d: SET_BANKS - Core ops init failed: %d\n", channel, core_init_ret);
+                return core_init_ret; // Fail set banks if core init fails
+            } else {
+                pr_info("*** Channel %d: SET_BANKS - Core ops init SUCCESS ***\n", channel);
+            }
+        }
+
         // Store bank configuration in channel state
         // In real implementation, this would configure DMA banks/buffers
         state->enabled = true; // Mark channel as properly configured
@@ -4253,8 +4354,6 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         return 0;
     }
-
-
 
     /* Binary Ninja: Handle 0xc0045627 - TX_ISP_SENSOR_SET_INPUT */
     if (cmd == 0xc0045627) {
