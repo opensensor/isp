@@ -26,7 +26,7 @@ enum tx_isp_subdev_id {
 #define WDR_SHADOW_SIZE (64 * 1024)
 #define ISP_CLK_RATE 100000000
 
-
+#define ISP_MAX_SUBDEVS          16
 #define TX_ISP_ENTITY_ENUM_MAX_DEPTH	16
 
 /* Pad state definitions */

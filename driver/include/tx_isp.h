@@ -36,7 +36,7 @@
 #define ISP_PIPELINE_STREAMING   2
 
 /* ISP constants for Binary Ninja compatibility */
-#define ISP_MAX_SUBDEVS          32
+#define ISP_MAX_SUBDEVS          16
 
 /* Forward declarations */
 struct tx_isp_subdev;
