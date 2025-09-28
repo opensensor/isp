@@ -5,6 +5,8 @@
 #include "../include/tx_isp.h"
 #include "../include/tx_isp_csi.h"
 #include "../include/tx-isp-device.h"
+#include "../include/txx-funcs.h"
+#include "../include/tx-isp-debug.h"
 
 /* Forward declarations */
 int csi_core_ops_init(struct tx_isp_subdev *sd, int enable);

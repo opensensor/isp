@@ -3548,11 +3548,13 @@ void * private_kmalloc(size_t s, gfp_t gfp)
     void *addr = kmalloc(s, gfp);
     return addr;
 }
+EXPORT_SYMBOL(private_kmalloc);
 
 void private_kfree(void *p)
 {
     kfree(p);
 }
+EXPORT_SYMBOL(private_kfree);
 
 void private_i2c_del_driver(struct i2c_driver *driver)
 {
