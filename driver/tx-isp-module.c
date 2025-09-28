@@ -1663,6 +1663,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
     void __iomem *vic_regs;
     u32 v1_7, v1_10;
     extern uint32_t vic_start_ok;
+    static int nofd_limit_stall_count = 0;  /* Count consecutive (no FD + control-limit) stalls */
     printk(KERN_ALERT "*** VIC INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***\n");
 
     /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
@@ -1788,6 +1789,8 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                     isp_dev->core_dev->frame_count++;
                     printk(KERN_ALERT "*** VIC SUCCESS: ISP FRAME COUNT UPDATED: %u (for /proc/jz/isp/isp-w02) ***\n", isp_dev->core_dev->frame_count);
                 }
+                /* Reset stall counter on real frame-done */
+                nofd_limit_stall_count = 0;
 
                 /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
                 printk(KERN_ALERT "*** VIC SUCCESS: Calling vic_framedone_irq_function ***\n");
@@ -1850,6 +1853,96 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                                 printk(KERN_ALERT "*** VIC FALLBACK: frame_ready signaled to frame channel %d ***\n", i);
                             }
                             spin_unlock_irqrestore(&fcd->state.buffer_lock, flags_local);
+
+                        /* Escalate recovery when repeated stalls occur */
+                        nofd_limit_stall_count++;
+                        if (nofd_limit_stall_count >= 3) {
+                            printk(KERN_ALERT "*** VIC RECOVERY: 3 consecutive (no FD + control-limit) stalls; resetting VIC and refreshing MDMA ring ***\n");
+                            {
+                                void __iomem *vr2 = vic_dev->vic_regs;
+                                void __iomem *vc2 = vic_dev->vic_regs_control;
+                                u32 dims2 = readl(vr2 + 0x304);
+                                u32 stride_y2 = readl(vr2 + 0x310);
+                                u32 stride_uv2 = readl(vr2 + 0x314);
+                                u32 height2 = dims2 & 0xFFFF;
+                                u32 frame_size2 = stride_y2 * (height2 ? height2 : 1);
+                                u32 count2 = vic_dev->active_buffer_count ? vic_dev->active_buffer_count : 5;
+                                u32 new_ctrl2 = (readl(vr2 + 0x300) & 0x0000ffff) | (count2 << 16);
+                                unsigned int tmo = 10000;
+
+                                /* Reset */
+                                writel(4, vr2 + 0x0);
+                                while ((readl(vr2 + 0x0) != 0) && --tmo) udelay(1);
+                                if (vc2) {
+                                    writel(4, vc2 + 0x0);
+                                    tmo = 10000;
+                                    while ((readl(vc2 + 0x0) != 0) && --tmo) udelay(1);
+                                }
+
+                                /* Clear pending */
+                                writel(0xFFFFFFFF, vr2 + 0x1f0); writel(0xFFFFFFFF, vr2 + 0x1f4);
+                                if (vc2) { writel(0xFFFFFFFF, vc2 + 0x1f0); writel(0xFFFFFFFF, vc2 + 0x1f4); }
+
+                                /* Config */
+                                writel(new_ctrl2, vr2 + 0x300);
+                                if (vc2) writel(new_ctrl2, vc2 + 0x300);
+                                wmb();
+                                writel(2, vr2 + 0x0);
+                                if (vc2) writel(2, vc2 + 0x0);
+                                wmb();
+
+                                /* MDMA knobs */
+                                writel(1, vr2 + 0x308);
+                                writel(dims2, vr2 + 0x304); writel(stride_y2, vr2 + 0x310); writel(stride_uv2, vr2 + 0x314);
+                                if (vc2) {
+                                    writel(1, vc2 + 0x308);
+                                    writel(dims2, vc2 + 0x304); writel(stride_y2, vc2 + 0x310); writel(stride_uv2, vc2 + 0x314);
+                                }
+
+                                /* Refresh buffer addresses (prefer VBM, fallback to rmem) */
+                                do {
+                                    extern struct frame_channel_device frame_channels[];
+                                    extern int num_channels;
+                                    int configured2 = 0;
+                                    if (frame_channels && num_channels > 0) {
+                                        struct tx_isp_channel_state *state2 = &frame_channels[0].state;
+                                        int i2;
+                                        if (state2->vbm_buffer_addresses && state2->vbm_buffer_count > 0) {
+                                            for (i2 = 0; i2 < state2->vbm_buffer_count && i2 < 5; i2++) {
+                                                u32 buf2 = state2->vbm_buffer_addresses[i2];
+                                                u32 off2 = 0x318 + (i2 * 4);
+                                                if (buf2) {
+                                                    writel(buf2, vr2 + off2);
+                                                    if (vc2) writel(buf2, vc2 + off2);
+                                                    configured2++;
+                                                }
+                                            }
+                                        } else {
+                                            u32 base2 = 0x06300000;
+                                            int i2;
+                                            for (i2 = 0; i2 < 5; i2++) {
+                                                u32 buf2 = base2 + (i2 * frame_size2);
+                                                u32 off2 = 0x318 + (i2 * 4);
+                                                writel(buf2, vr2 + off2);
+                                                if (vc2) writel(buf2, vc2 + off2);
+                                                configured2++;
+                                            }
+                                        }
+                                        if (configured2) vic_dev->active_buffer_count = configured2;
+                                    }
+                                } while (0);
+
+                                /* Route interrupts and RUN */
+                                writel(0x07800438, vr2 + 0x04); writel(0xb5742249, vr2 + 0x0c);
+                                if (vc2) { writel(0x07800438, vc2 + 0x04); writel(0xb5742249, vc2 + 0x0c); }
+                                wmb();
+                                writel(1, vr2 + 0x0);
+                                if (vc2) writel(1, vc2 + 0x0);
+                                wmb();
+                            }
+                            nofd_limit_stall_count = 0;
+                        }
+
                         }
                     } while (0);
                 }
