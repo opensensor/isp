@@ -1659,6 +1659,31 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 /* isp_vic_interrupt_service_routine - EXACT Binary Ninja MCP implementation */
 irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
 {
+    /* Minimal good-things style ISR: clear pending, notify, and requeue via vic_framedone_irq_function */
+    do {
+        struct tx_isp_dev *isp_dev_cast = (struct tx_isp_dev *)arg1;
+        struct tx_isp_vic_device *vic_dev_fast = isp_dev_cast ? isp_dev_cast->vic_dev : NULL;
+        if (!vic_dev_fast || !vic_dev_fast->vic_regs) {
+            return IRQ_NONE;
+        }
+        /* Clear pending (W1C) on PRIMARY bank */
+        writel(0xFFFFFFFF, vic_dev_fast->vic_regs + 0x1f0);
+        writel(0xFFFFFFFF, vic_dev_fast->vic_regs + 0x1f4);
+        /* Also clear CONTROL bank if present */
+        if (vic_dev_fast->vic_regs_control) {
+            writel(0xFFFFFFFF, vic_dev_fast->vic_regs_control + 0x1f0);
+            writel(0xFFFFFFFF, vic_dev_fast->vic_regs_control + 0x1f4);
+        }
+        /* Handle frame-done path which replenishes buffers to keep interrupts flowing */
+        vic_framedone_irq_function(vic_dev_fast);
+        /* Bump frame counters and wake waiters */
+        if (ourISPdev) {
+            ourISPdev->frame_count++;
+            isp_frame_done_wakeup();
+        }
+        return IRQ_HANDLED; /* Early return to bypass complex path that may stop after 2 frames */
+    } while (0);
+
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)arg1;
     struct tx_isp_vic_device *vic_dev;
     void __iomem *vic_regs;
