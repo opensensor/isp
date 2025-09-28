@@ -423,10 +423,12 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 buffer_index = high_bits << 16;
             }
 
-            /* Binary Ninja: *($a3_1 + 0x300) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff) */
-            u32 reg_val = readl(vic_base + 0x300);
-            reg_val = (reg_val & 0xfff0ffff) | buffer_index;
-            writel(reg_val, vic_base + 0x300);
+            /* Reference driver: do NOT rewrite reg 0x300 in framedone path. BN sets it at stream-on. */
+            /* u32 reg_val = readl(vic_base + 0x300);
+             * reg_val = (reg_val & 0xfff0ffff) | buffer_index;
+             * writel(reg_val, vic_base + 0x300);
+             */
+            pr_debug("vic_framedone_irq_function: NOT updating VIC[0x300] in ISR (buffer_index=0x%x)\n", buffer_index);
 
             pr_info("*** VIC FRAME DONE: Updated VIC[0x300] = 0x%x (buffers: index=%d, match=%d) ***\n",
                     reg_val, buffer_count, match_found);
