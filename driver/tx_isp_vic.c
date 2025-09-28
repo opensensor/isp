@@ -475,7 +475,14 @@ label_123f4:
 
     /* Signal frame completion for waiting processes */
     complete(&vic_dev->frame_complete);
-    pr_info("*** VIC FRAME DONE: Frame completion signaled ***\n");
+
+    /* Notify ISP core/frame sync subsystems like the working reference */
+    do {
+        extern void isp_frame_done_wakeup(void);
+        isp_frame_done_wakeup();
+    } while (0);
+
+    pr_info("*** VIC FRAME DONE: Frame completion signaled + ISP notified ***\n");
 
     /* Binary Ninja: return result */
     return (int)(uintptr_t)result;
@@ -1086,13 +1093,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0xFFFFFFFF, vic_regs + 0x1f0);
         writel(0xFFFFFFFF, vic_regs + 0x1f4);
         writel(0xFFDFFFFE, vic_regs + 0x1e8); /* unmask bit0 + bit21 (silicon uses bit21) */
-        /* Program IMR/IMCR (primary gate) */
-        writel(0x00000001, vic_regs + 0x04);
-        writel(0x00000000, vic_regs + 0x24);
-        writel(0x07800438, vic_regs + 0x04);
-        writel(0xb5742249, vic_regs + 0x0c);
+        /* Do NOT re-program IMR/IMCR here; route once pre-start to avoid race with RUN */
         wmb();
-        pr_info("*** VIC ENABLE: Mask + IMR/IMCR programmed just before RUN ***\n");
+        pr_info("*** VIC ENABLE: MainMask programmed just before RUN (IMR/IMCR left as pre-start) ***\n");
 
         writel(0x1, vic_regs + 0x0);  /* Final enable */
         wmb();
