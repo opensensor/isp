@@ -1674,23 +1674,26 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
             writel(0xFFFFFFFF, vic_dev_fast->vic_regs_control + 0x1f0);
             writel(0xFFFFFFFF, vic_dev_fast->vic_regs_control + 0x1f4);
         }
-        /* CRITICAL FIX: Read actual interrupt status registers */
+        /* CRITICAL FIX: EXACT Binary Ninja interrupt detection logic */
         void __iomem *vr = vic_dev_fast->vic_regs;
 
-        /* Read the actual interrupt status registers (not enable registers) */
-        u32 status1 = readl(vr + 0x1f0);  /* Primary interrupt status */
-        u32 status2 = readl(vr + 0x1f4);  /* Secondary interrupt status */
+        /* Binary Ninja EXACT: Calculate active interrupts from enable and mask registers */
         u32 enable1 = readl(vr + 0x1e0);  /* Primary interrupt enable */
         u32 enable2 = readl(vr + 0x1e4);  /* Secondary interrupt enable */
         u32 mask1 = readl(vr + 0x1e8);    /* Primary interrupt mask */
         u32 mask2 = readl(vr + 0x1ec);    /* Secondary interrupt mask */
 
-        /* Binary Ninja logic: enabled interrupts that are not masked */
-        u32 v1_7 = status1 & enable1 & (~mask1);   /* Frame done and error interrupts */
-        u32 v1_10 = status2 & enable2 & (~mask2);  /* MDMA interrupts */
+        /* Binary Ninja EXACT: v1_7 = not.d(mask1) & enable1 */
+        u32 v1_7 = (~mask1) & enable1;    /* Frame done and error interrupts */
+        u32 v1_10 = (~mask2) & enable2;   /* MDMA interrupts */
 
-        pr_info("*** VIC ISR: status1=0x%x, status2=0x%x, v1_7=0x%x (frame/errors), v1_10=0x%x (MDMA) ***\n",
-                status1, status2, v1_7, v1_10);
+        /* Binary Ninja EXACT: Write to 0x1f0/0x1f4 to acknowledge interrupts */
+        writel(v1_7, vr + 0x1f0);
+        writel(v1_10, vr + 0x1f4);
+        wmb();
+
+        pr_info("*** VIC ISR: enable1=0x%x, mask1=0x%x, v1_7=0x%x (frame/errors), v1_10=0x%x (MDMA) ***\n",
+                enable1, mask1, v1_7, v1_10);
 
         /* Handle frame-done interrupt (bit 0) */
         if (v1_7 & 1) {
