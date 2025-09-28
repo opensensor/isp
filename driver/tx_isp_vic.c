@@ -581,20 +581,41 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
         /* Binary Ninja: int32_t $s0_3 = $s0_2 << 1 */
         frame_size = frame_size << 1;  /* RAW10 = 2 bytes per pixel */
 
-        /* CRITICAL DMA SYNC: Handle buffer completion with proper DMA operations */
-        struct tx_isp_dev *isp_dev = vic_dev->sd.isp;
+        /* CRITICAL FIX: Binary Ninja buffer cycling logic for continuous operation */
+        /* This is the missing piece that keeps interrupts flowing */
+        if (channel == 0 && vic_mdma_ch0_sub_get_num > 0) {
+            /* Channel 0 buffer rotation */
+            u32 buffer_addr = 0x6300000 + (vic_mdma_ch0_set_buff_index * frame_size);
+            u32 reg_offset = (vic_mdma_ch0_set_buff_index + 0xc6) << 2;  /* 0x318-0x328 */
 
-        if (isp_dev && isp_dev->dma_buf && isp_dev->dma_size > 0) {
-            /* DMA sync for CPU access to completed buffer */
-            mips_dma_cache_sync(isp_dev->dma_addr, frame_size, DMA_FROM_DEVICE);
+            vic_mdma_ch0_set_buff_index = (vic_mdma_ch0_set_buff_index + 1) % 5;
+            writel(buffer_addr, vic_dev->vic_regs + reg_offset);
+            wmb();
+            vic_mdma_ch0_sub_get_num--;
 
-            pr_info("*** VIC MDMA IRQ: ISP buffer addr=0x%x completed and synced for CPU ***\n",
-                    isp_dev->dma_addr);
+            pr_info("*** MDMA CH0: Buffer rotated to index %d, addr=0x%x ***\n",
+                    vic_mdma_ch0_set_buff_index, buffer_addr);
+        } else if (channel == 1 && vic_mdma_ch1_sub_get_num > 0) {
+            /* Channel 1 buffer rotation */
+            u32 buffer_addr = 0x6300000 + (vic_mdma_ch1_set_buff_index * frame_size);
+            u32 reg_offset = (vic_mdma_ch1_set_buff_index + 0xc6) << 2;  /* 0x318-0x328 */
 
-            /* Signal frame completion */
-            complete(&vic_dev->frame_complete);
-        } else {
-            pr_info("*** VIC MDMA IRQ: No ISP DMA buffer available for sync ***\n");
+            vic_mdma_ch1_set_buff_index = (vic_mdma_ch1_set_buff_index + 1) % 5;
+            writel(buffer_addr, vic_dev->vic_regs + reg_offset);
+            wmb();
+            vic_mdma_ch1_sub_get_num--;
+
+            pr_info("*** MDMA CH1: Buffer rotated to index %d, addr=0x%x ***\n",
+                    vic_mdma_ch1_set_buff_index, buffer_addr);
+        }
+
+        /* Binary Ninja: Update VIC control register if needed */
+        if (vic_mdma_ch0_sub_get_num == 7) {
+            u32 control_val = readl(vic_dev->vic_regs + 0x300);
+            control_val = (control_val & 0xfff0ffff) | 0x70000;
+            writel(control_val, vic_dev->vic_regs + 0x300);
+            wmb();
+            pr_info("*** MDMA: Updated VIC control register for buffer count=7 ***\n");
         }
 
         /* Binary Ninja: return private_complete(arg1 + 0x148) */

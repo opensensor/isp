@@ -1674,8 +1674,32 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
             writel(0xFFFFFFFF, vic_dev_fast->vic_regs_control + 0x1f0);
             writel(0xFFFFFFFF, vic_dev_fast->vic_regs_control + 0x1f4);
         }
-        /* Handle frame-done path which replenishes buffers to keep interrupts flowing */
-        vic_framedone_irq_function(vic_dev_fast);
+        /* CRITICAL FIX: Read interrupt status registers like Binary Ninja reference */
+        void __iomem *vr = vic_dev_fast->vic_regs;
+        u32 v1_7 = (~readl(vr + 0x1e8)) & readl(vr + 0x1e0);  /* Frame done and error interrupts */
+        u32 v1_10 = (~readl(vr + 0x1ec)) & readl(vr + 0x1e4); /* MDMA interrupts */
+
+        pr_info("*** VIC ISR: v1_7=0x%x (frame/errors), v1_10=0x%x (MDMA) ***\n", v1_7, v1_10);
+
+        /* Handle frame-done interrupt (bit 0) */
+        if (v1_7 & 1) {
+            pr_info("*** VIC ISR: Frame done interrupt - calling vic_framedone_irq_function ***\n");
+            vic_framedone_irq_function(vic_dev_fast);
+        }
+
+        /* CRITICAL FIX: Handle MDMA interrupts like Binary Ninja reference */
+        if (v1_10 & 1) {
+            pr_info("*** VIC ISR: MDMA channel 0 interrupt - calling vic_mdma_irq_function ***\n");
+            extern int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
+            vic_mdma_irq_function(vic_dev_fast, 0);
+        }
+
+        if (v1_10 & 2) {
+            pr_info("*** VIC ISR: MDMA channel 1 interrupt - calling vic_mdma_irq_function ***\n");
+            extern int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
+            vic_mdma_irq_function(vic_dev_fast, 1);
+        }
+
         /* Bump frame counters and wake waiters */
         if (ourISPdev) {
             ourISPdev->vic_dev->frame_count++;
