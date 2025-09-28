@@ -1100,6 +1100,25 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x100010, vic_regs + 0x1a4);  /* Binary Ninja exact value */
         pr_info("*** BINARY NINJA: reg 0x1a4 = 0x100010 (control) ***\n");
 
+        /* CRITICAL FIX: Add missing VIC configuration registers from reference trace */
+        /* These registers are essential for preventing control limit errors */
+        writel(0x800800, vic_regs + 0x60);      /* Control register */
+        writel(0x9d09d0, vic_regs + 0x64);      /* Control register */
+        writel(0x6002, vic_regs + 0x70);        /* Control register */
+        writel(0x7003, vic_regs + 0x74);        /* Control register */
+        pr_info("*** CRITICAL FIX: Added missing VIC control registers (0x60-0x74) ***\n");
+
+        /* Color space configuration (missing from original implementation) */
+        writel(0xeb8080, vic_regs + 0xc0);      /* Color space config */
+        writel(0x108080, vic_regs + 0xc4);      /* Color space config */
+        writel(0x29f06e, vic_regs + 0xc8);      /* Color space config */
+        writel(0x913622, vic_regs + 0xcc);      /* Color space config */
+        writel(0x515af0, vic_regs + 0xd0);      /* Processing config */
+        writel(0xaaa610, vic_regs + 0xd4);      /* Processing config */
+        writel(0xd21092, vic_regs + 0xd8);      /* Processing config */
+        writel(0x6acade, vic_regs + 0xdc);      /* Processing config */
+        pr_info("*** CRITICAL FIX: Added missing VIC color space and processing registers (0xc0-0xdc) ***\n");
+
         /* 9. BINARY NINJA EXACT: Hardware enable sequence */
         writel(0x2, vic_regs + 0x0);  /* Pre-enable */
         wmb();
