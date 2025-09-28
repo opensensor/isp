@@ -2847,7 +2847,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 }
 
             /* VIC CONTROL: enter RUN state after all config (write 1) */
-            if (vic_dev && vic_dev->vic_regs && vic_dev->state == 1) {
+            if (vic_dev && vic_dev->vic_regs) {
                 void __iomem *vr = vic_dev->vic_regs;
                 writel(1, vr + 0x0);
                 wmb();
