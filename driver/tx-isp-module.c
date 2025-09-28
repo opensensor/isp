@@ -2035,11 +2035,15 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 writel(2, vr + 0x0);
                 wmb();
 
-                /* Re-assert MDMA config knobs (idempotent): 0x308=1, DIMS/STRIDE */
+                /* Re-assert MDMA config knobs (idempotent): 0x308=1, DIMS/STRIDE and refresh buffer addresses */
                 do {
                     u32 dims = readl(vr + 0x304);
                     u32 stride_y = readl(vr + 0x310);
                     u32 stride_uv = readl(vr + 0x314);
+                    u32 width = (dims >> 16) & 0xFFFF;
+                    u32 height = dims & 0xFFFF;
+                    u32 frame_size = stride_y * (height ? height : 1);
+
                     writel(1, vr + 0x308);
                     writel(dims, vr + 0x304);
                     writel(stride_y, vr + 0x310);
@@ -2050,6 +2054,40 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                         writel(stride_y, vc + 0x310);
                         writel(stride_uv, vc + 0x314);
                     }
+
+                    /* Refresh buffer addresses 0x318..0x328 from VBM if available; else fallback to rmem */
+                    do {
+                        extern struct frame_channel_device frame_channels[];
+                        extern int num_channels;
+                        u32 configured = 0;
+
+                        if (vic_dev && frame_channels && num_channels > 0) {
+                            struct tx_isp_channel_state *state = &frame_channels[0].state;
+                            int i;
+                            if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
+                                for (i = 0; i < state->vbm_buffer_count && i < 5; i++) {
+                                    u32 buf = state->vbm_buffer_addresses[i];
+                                    u32 off = 0x318 + (i * 4);
+                                    if (buf) {
+                                        writel(buf, vr + off);
+                                        if (vc) writel(buf, vc + off);
+                                        configured++;
+                                    }
+                                }
+                            } else {
+                                /* Fallback: use rmem base 0x06300000 like working reference */
+                                u32 base = 0x06300000;
+                                for (i = 0; i < 5; i++) {
+                                    u32 buf = base + (i * frame_size);
+                                    u32 off = 0x318 + (i * 4);
+                                    writel(buf, vr + off);
+                                    if (vc) writel(buf, vc + off);
+                                    configured++;
+                                }
+                            }
+                            if (configured) vic_dev->active_buffer_count = configured;
+                        }
+                    } while (0);
                 } while (0);
                 wmb();
 
