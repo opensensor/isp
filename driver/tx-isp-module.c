@@ -3404,19 +3404,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_err("*** Channel %d: NO VIC DEVICE - CANNOT TRIGGER HARDWARE STREAMING! ***\n", channel);
             }
 
-            // Trigger core ops streaming
-            if (ourISPdev && ourISPdev->sd.ops && ourISPdev->sd.ops->video &&
-                ourISPdev->sd.ops->video->s_stream) {
-
-                pr_info("*** Channel %d: NOW CALLING CORE STREAMING - THIS SHOULD TRIGGER MORE REGISTER ACTIVITY! ***\n", channel);
-                ret = ourISPdev->sd.ops->video->s_stream(&ourISPdev->sd, 1);
-                if (ret) {
-                    pr_err("Channel %d: CORE STREAMING FAILED: %d\n", channel, ret);
-                } else {
-                    pr_info("*** Channel %d: CORE STREAMING SUCCESS - ALL HARDWARE SHOULD BE ACTIVE! ***\n", channel);
-                }
-            }
-
             // Trigger Core Streaming - using ourISPdev directly as it contains the core functionality
             pr_info("*** Channel %d: Core streaming functionality integrated in main ISP device ***\n", channel);
 
