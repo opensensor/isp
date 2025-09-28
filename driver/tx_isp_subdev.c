@@ -59,6 +59,22 @@ struct frame_channel_buffer {
     dma_addr_t dma_addr;         // DMA address
 };
 
+/* Subdevice type definitions */
+enum tx_isp_subdev_type {
+    TX_ISP_SUBDEV_TYPE_SOURCE = 1,  /* Source devices (CSI, VIN, FS) */
+    TX_ISP_SUBDEV_TYPE_SINK = 2,    /* Sink devices (VIC, CORE) */
+};
+
+
+/* Subdevice runtime data */
+struct tx_isp_subdev_runtime {
+    struct tx_isp_subdev_desc *desc;
+    struct miscdevice *misc_dev;
+    struct proc_dir_entry *proc_entry;
+    void *driver_data;
+    bool initialized;
+};
+
 /* Helper function implementations */
 static int __frame_channel_vb2_streamoff(void *chan, void *queue)
 {
@@ -1039,6 +1055,39 @@ void __exit tx_isp_subdev_platform_exit(void)
 /* Export symbols for main module to call these functions */
 EXPORT_SYMBOL(tx_isp_subdev_platform_init);
 EXPORT_SYMBOL(tx_isp_subdev_platform_exit);
+
+
+
+/**
+ * tx_isp_cleanup_subdev_graph - Clean up the subdevice graph
+ */
+void tx_isp_cleanup_subdev_graph(struct tx_isp_dev *isp)
+{
+    int i;
+
+    pr_info("tx_isp_cleanup_subdev_graph: Cleaning up subdevice graph\n");
+
+    /* Cleanup frame channels */
+    for (i = 0; i < 4; i++) {
+        if (isp->fs_miscdevs[i]) {
+            misc_deregister(isp->fs_miscdevs[i]);
+            kfree(isp->fs_miscdevs[i]->name);
+            kfree(isp->fs_miscdevs[i]);
+            isp->fs_miscdevs[i] = NULL;
+        }
+    }
+
+    /* Cleanup proc entries */
+    if (isp->isp_proc_dir) {
+        proc_remove(isp->isp_proc_dir);
+        isp->isp_proc_dir = NULL;
+    }
+
+    /* Cleanup subdev graph */
+    memset(isp->subdev_graph, 0, sizeof(isp->subdev_graph));
+
+    pr_info("tx_isp_cleanup_subdev_graph: Cleanup completed\n");
+}
 
 
 
