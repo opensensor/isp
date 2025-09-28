@@ -3410,6 +3410,25 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         }
     }
 
+    /* CRITICAL FIX: Increment active buffer count to replenish VIC hardware buffer supply */
+    /* This is the missing piece - VIC hardware decrements buffer count as it processes frames */
+    /* We must increment it back when new buffers are queued to prevent control limit errors */
+    vic_dev->active_buffer_count += 1;
+    pr_info("*** CRITICAL FIX: Incremented active_buffer_count to %d - VIC hardware buffer supply replenished ***\n",
+            vic_dev->active_buffer_count);
+
+    /* CRITICAL FIX: Update VIC control register with new buffer count */
+    /* The VIC hardware needs to know about the increased buffer availability */
+    if (vic_dev->vic_regs && vic_dev->stream_state != 0) {
+        u32 buffer_count = vic_dev->active_buffer_count;
+        if (buffer_count > 5) buffer_count = 5;  /* VIC has 5 slots max */
+        u32 stream_ctrl = (buffer_count << 16) | 0x80000020;
+        writel(stream_ctrl, vic_dev->vic_regs + 0x300);
+        wmb();
+        pr_info("*** CRITICAL FIX: Updated VIC control register 0x300 = 0x%x (buffer_count=%d) ***\n",
+                stream_ctrl, buffer_count);
+    }
+
     /* Binary Ninja EXACT: private_spin_unlock_irqrestore($s0 + 0x1f4, $a1_4) */
     private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, var_18);
 
