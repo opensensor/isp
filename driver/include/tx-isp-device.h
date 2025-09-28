@@ -1,18 +1,27 @@
 #ifndef __TX_ISP_DEVICE_H__
 #define __TX_ISP_DEVICE_H__
 
-#include <linux/errno.h>
-#include <linux/err.h>
-#include <linux/interrupt.h>
+#include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/device.h>
+#include <linux/cdev.h>
+#include <linux/fs.h>
+#include <linux/interrupt.h>
+#include <linux/slab.h>
+#include <linux/dma-mapping.h>
+#include <linux/clk.h>
+#include <linux/io.h>
+#include <linux/i2c.h>
+#include <linux/completion.h>
+#include <linux/spinlock.h>
+#include <linux/mutex.h>
+#include <linux/wait.h>
+#include <linux/proc_fs.h>
+#include <linux/gpio.h>
+#include <linux/delay.h>
 #include <linux/miscdevice.h>
-#include <linux/types.h>
-#include <asm/irq.h>
-#include <asm/io.h>
-#include <linux/miscdevice.h>
-#include <linux/v4l2-common.h>
-#include "tx-isp-debug.h"
-#include "tx-libimp.h"
+
+#include "tx-isp-common.h"
 
 
 enum tx_isp_subdev_id {
