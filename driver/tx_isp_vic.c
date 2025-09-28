@@ -3512,6 +3512,23 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
                 }
             }
             pr_info("*** CRITICAL: VIC buffer addresses written to hardware from VBM - interrupts should now work! ***\n");
+
+            /* Ensure all 5 VIC slots are populated: fill remainder with reserved memory */
+            if (state->vbm_buffer_count < 5) {
+                u32 frame_size = cached_sensor_width * cached_sensor_height * 2;  /* RAW10 = 2 bytes/pixel */
+                u32 base_addr = 0x6300000;  /* Reserved memory base */
+                int j;
+                for (j = state->vbm_buffer_count; j < 5; j++) {
+                    u32 filler = base_addr + (j * frame_size);
+                    u32 off = (j + 0xc6) << 2;  /* 0x318..0x328 */
+                    writel(filler, vic_dev->vic_regs + off);
+                    wmb();
+                    pr_info("*** CRITICAL: VIC BUFFER %d FILLER: Wrote reserved memory address 0x%x to reg 0x%x ***\n",
+                            j, filler, off);
+                }
+                pr_info("*** CRITICAL: Filled remaining %d VIC slots with reserved memory to maintain 5-slot ring ***\n",
+                        5 - state->vbm_buffer_count);
+            }
         } else {
             /* CRITICAL FIX: Use fallback buffer addresses like working reference */
             pr_warn("ispvic_frame_channel_qbuf: No VBM buffer addresses - using fallback addresses\n");

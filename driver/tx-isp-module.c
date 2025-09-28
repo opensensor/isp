@@ -3138,8 +3138,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     total_memory_needed = reqbuf.count * buffer_size;
                 }
 
-                /* Additional safety: Limit to 4 buffers max for memory efficiency */
-                reqbuf.count = min(reqbuf.count, 4U);
+                /* Additional safety for MMAP only: limit to 4 to avoid over-allocation */
+                if (reqbuf.memory == 1) {
+                    reqbuf.count = min(reqbuf.count, 4U);
+                }
 
                 pr_info("Channel %d: MMAP allocation - %d buffers of %u bytes each\n",
                        channel, reqbuf.count, buffer_size);
@@ -3186,8 +3188,9 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             } else if (reqbuf.memory == 2) { /* V4L2_MEMORY_USERPTR - client allocates */
                 pr_info("Channel %d: USERPTR mode - client will provide buffers\n", channel);
 
-                /* Validate client can provide reasonable buffer count */
-                reqbuf.count = min(reqbuf.count, 8U); /* Max 8 user buffers */
+                /* USERPTR: allow at least 5 to feed VIC ring continuously */
+                reqbuf.count = max(reqbuf.count, 5U);
+                reqbuf.count = min(reqbuf.count, 8U); /* Cap at 8 */
 
                 /* No driver allocation needed - client provides buffers */
                 pr_info("Channel %d: USERPTR mode - %d user buffers expected\n",
@@ -3220,15 +3223,18 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
             /* CRITICAL: Update VIC active_buffer_count for streaming */
             if (ourISPdev && ourISPdev->vic_dev) {
-                /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
                 struct tx_isp_vic_device *vic = ourISPdev->vic_dev;
-                vic->active_buffer_count = reqbuf.count;
-                pr_info("*** Channel %d: VIC active_buffer_count set to %d ***\n",
-                        channel, vic->active_buffer_count);
+                /* Ensure a full 5-slot ring when possible */
+                if (reqbuf.memory == 2) {
+                    /* USERPTR: target full 5-slot ring; client will supply buffers */
+                    vic->active_buffer_count = 5;
+                } else {
+                    vic->active_buffer_count = (reqbuf.count > 5) ? 5 : reqbuf.count;
+                }
+                pr_info("*** Channel %d: VIC active_buffer_count set to %d (memory=%u) ***\n",
+                        channel, vic->active_buffer_count, reqbuf.memory);
 
-                /* REMOVED: VIC DMA configuration during REQBUFS */
                 /* Reference driver configures VIC DMA during streaming via vic_pipo_mdma_enable */
-                /* This happens automatically in ispvic_frame_channel_s_stream when streaming starts */
                 pr_info("*** REQBUFS: VIC DMA will be configured during streaming via vic_pipo_mdma_enable ***\n");
             }
 
