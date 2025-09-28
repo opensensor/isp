@@ -2795,65 +2795,12 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     pr_info("*** VIC MASK: Set MainMask=0xFFDFFFFE (bit0 + bit21) before RUN ***\n");
                 }
 
-            /* VIC CONTROL: enter RUN state after all config (write 1) */
-            if (vic_dev && vic_dev->vic_regs && vic_start_ok != 1) { /* SKIP: post-run re-arm and IMR/IMCR gating */
-                void __iomem *vr = vic_dev->vic_regs;
-                /* Align to working sequence: do NOT write 1 before CONFIG; only perform 2->1 once */
-                /* Begin enable sequence (no early RUN write) */
-            	/* Post-RUN re-arm: commit dance so enables latch without touching masks */
-                /* Program PRIMARY IMR/IMCR routing once (match good-things), no re-arm */
-                if (vic_dev && vic_dev->vic_regs) {
-                    void __iomem *vr_gate = vic_dev->vic_regs;
-                    writel(0x00000001, vr_gate + 0x04);   /* IMR baseline */
-                    writel(0x00000000, vr_gate + 0x24);   /* IMR1 baseline */
-                    writel(0x07800438, vr_gate + 0x04);   /* IMR routing/mask */
-                    writel(0xb5742249, vr_gate + 0x0c);   /* IMCR key */
-                    wmb();
-                    pr_info("*** VIC PRIMARY GATE: IMR/IMCR routed (no re-arm) IMR=0x%08x IMCR=0x%08x ***\n",
-                            readl(vr_gate + 0x04), readl(vr_gate + 0x0c));
-                }
-
-
-                /* Clear pending first (W1C) */
-                writel(0xFFFFFFFF, vr + 0x1f0);
-                writel(0xFFFFFFFF, vr + 0x1f4);
-                /* Write enables, CONFIG, re-write enables, then RUN */
-                writel(2, vr + 0x0);
-                wmb();
-                writel(1, vr + 0x0);
-                wmb();
-                udelay(100);
-                pr_info("*** VIC POST-RUN: Re-armed control (2->1), masks preserved; NOT touching 0x1e0/0x1e4 ***\n");
-                /* Re-assert stream control if hardware cleared buffer_count (guard against 0x80000020) */
-                {
-                    u32 cur_ctrl = readl(vr + 0x300);
-                    u32 buf_cnt = vic_dev->active_buffer_count;
-                    if (buf_cnt == 0) buf_cnt = 2; else if (buf_cnt > 8) buf_cnt = 8;
-                    u32 desired_ctrl = (buf_cnt < 8) ? ((buf_cnt << 16) | 0x80000020) : 0x80080020;
-                    if ((cur_ctrl & 0x000F0000) == 0 || cur_ctrl == 0x80000020) {
-                        if (cur_ctrl != desired_ctrl) {
-                            writel(desired_ctrl, vr + 0x300);
-                            wmb();
-                            pr_info("*** VIC POST-RUN: Re-asserted [0x300]=0x%x (buf_cnt=%u) from 0x%x ***\n",
-                                    desired_ctrl, buf_cnt, cur_ctrl);
-                        } else {
-                            pr_info("*** VIC POST-RUN: [0x300] already correct (0x%x) ***\n", cur_ctrl);
-                        }
-                    } else {
-                        pr_info("*** VIC POST-RUN: [0x300] preserved (0x%x) ***\n", cur_ctrl);
-                    }
-                }
-
-
-                /* Re-apply IMR/IMCR gating on PRIMARY bank as seen in good-things */
-                writel(0x00000001, vr + 0x04);   /* IMR baseline */
-                writel(0x00000000, vr + 0x24);   /* IMR1 baseline */
-                writel(0x07800438, vr + 0x04);   /* IMR routing/mask */
-                writel(0xb5742249, vr + 0x0c);   /* IMCR key */
-                wmb();
-                pr_info("*** VIC PRIMARY GATE (POST-RUN): IMR=0x%08x IMCR=0x%08x ***\n",
-                        readl(vr + 0x04), readl(vr + 0x0c));
-            	}
+            /* VIC CONTROL: Defer CONFIG/RUN sequencing entirely to tx_isp_vic_start()
+             * to avoid on/off/on toggles. We purposefully do not write 2/1 here.
+             */
+            if (vic_dev && vic_dev->vic_regs && vic_start_ok != 1) {
+                pr_info("*** VIC CONTROL: Deferring CONFIG/RUN to tx_isp_vic_start() (no 2->1 here) ***\n");
+            }
 
                 /* STEP 9: CRITICAL FIX - Only call VIC start if VIC interrupts are not already working */
                 /* This prevents the destructive VIC unlock sequence that breaks working interrupts */
