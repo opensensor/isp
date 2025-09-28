@@ -2776,13 +2776,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
                 pr_info("*** CRITICAL FIX: VIC CONTROL interrupts enabled - [0x1e0]=0x1, [0x1e4]=0x3 ***\n");
                 wmb();
-                pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (MainMask=0xFFFFFFFE)***\n",
-                        readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x30c), readl(vr + 0x1e0), readl(vr + 0x1e4), readl(vr + 0x1e8), readl(vr + 0x1ec));
-                /* Primary bank: only verify 0x100; do NOT write 0x14 here (0x14 is stride on PRIMARY) */
-                writel(0x000002d0, vr + 0x100);
-                wmb();
-                pr_info("*** VIC VERIFY (PRIMARY EXTRA): [0x100]=0x%08x [0x14]=0x%08x (PRIMARY 0x14=stride) ***\n",
-                        readl(vr + 0x100), readl(vr + 0x14));
                 udelay(50);
 
 
