@@ -155,8 +155,6 @@ struct tx_isp_subdev_runtime {
 /* Forward declarations */
 static int tx_isp_init_source_subdev(struct tx_isp_dev *isp,
                                     struct tx_isp_subdev_runtime *runtime);
-static int tx_isp_init_sink_subdev(struct tx_isp_dev *isp,
-                                  struct tx_isp_subdev_runtime *runtime);
 static int tx_isp_create_subdev_link(void *src_subdev, void *dst_subdev,
                                     struct tx_isp_subdev_desc *desc);
 static int tx_isp_create_misc_device(struct tx_isp_subdev_runtime *runtime);
