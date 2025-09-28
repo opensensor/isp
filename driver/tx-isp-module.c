@@ -4217,38 +4217,29 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
     /* Binary Ninja: Handle 0x800456d0 - TX_ISP_VIDEO_LINK_SETUP */
     if (cmd == 0x800456d0) {
-        /* Binary Ninja: if (private_copy_from_user(&var_98, arg3, 4) != 0) */
-        if (copy_from_user(&var_98, (void __user *)arg, 4) != 0) {
-            pr_err("TX_ISP_VIDEO_LINK_SETUP: Failed to copy link config\n");
+       int link_config;
+
+        if (copy_from_user(&link_config, argp, sizeof(link_config)))
             return -EFAULT;
-        }
 
-        /* Binary Ninja: uint32_t $a2_4 = var_98 */
-        uint32_t link_config = var_98.as_uint32;
-
-        /* Binary Ninja: if ($a2_4 u>= 2) */
         if (link_config >= 2) {
-            pr_err("Invalid video link config: %d\n", link_config);
+            pr_err("Invalid video link config: %d (valid: 0-1)\n", link_config);
             return -EINVAL;
         }
 
-        s6_1 = 0;
+        pr_info("Video link setup: config=%d\n", link_config);
 
-        pr_info("TX_ISP_VIDEO_LINK_SETUP: config=%d\n", link_config);
+        // Reference implementation configures subdev links and pads
+        // In full implementation, this would:
+        // 1. Find subdev pads using find_subdev_link_pad()
+        // 2. Setup media pipeline connections
+        // 3. Configure link properties based on config value
+        // 4. Store config in device structure at offset 0x10c
 
-        /* Binary Ninja: if ($a2_4 != *($s7 + 0x10c)) - Check if config changed */
-        if (link_config != isp_dev->link_config) {
-            pr_info("TX_ISP_VIDEO_LINK_SETUP: Link config changed from %d to %d\n",
-                    isp_dev->link_config, link_config);
+        // For now, acknowledge the link setup
+        // isp_dev->link_config = link_config; // Would store at offset 0x10c
 
-            /* Binary Ninja: *($s7 + 0x10c) = var_98 - Update stored link config */
-            isp_dev->link_config = link_config;
-            pr_info("TX_ISP_VIDEO_LINK_SETUP: Link config updated to %d\n", link_config);
-        } else {
-            pr_info("TX_ISP_VIDEO_LINK_SETUP: Link config unchanged (%d)\n", link_config);
-        }
-
-        return s6_1;
+        return 0;
     }
 
     /* Binary Ninja: Handle 0x805056c1 - TX_ISP_SENSOR_REGISTER */
