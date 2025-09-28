@@ -848,8 +848,9 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         pr_info("*** DETECTED SENSOR DEVICE: '%s' - checking for existing registration ***\n", dev_name);
 
         /* CRITICAL FIX: Check if this subdev is already registered to prevent duplicates */
+        /* FIXED: Check ALL slots (0 to ISP_MAX_SUBDEVS), not just slots 5+ */
         bool already_registered = false;
-        for (int i = 5; i < ISP_MAX_SUBDEVS; i++) {
+        for (int i = 0; i < ISP_MAX_SUBDEVS; i++) {
             if (ourISPdev->subdevs[i] == sd) {
                 already_registered = true;
                 pr_info("*** SENSOR '%s' already registered at subdev index %d (sd=%p) ***\n", dev_name, i, sd);
