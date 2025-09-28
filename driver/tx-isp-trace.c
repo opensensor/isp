@@ -419,6 +419,12 @@ static void __exit isp_monitor_exit(void)
 {
     int i;
 
+    // Remove proc entry
+    if (vic_monitor.proc_entry) {
+        proc_remove(vic_monitor.proc_entry);
+        vic_monitor.proc_entry = NULL;
+    }
+
     for (i = 0; i < NUM_REGIONS; i++)
         cleanup_region(&isp_regions[i]);
 

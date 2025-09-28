@@ -523,6 +523,9 @@ label_123f4:
                 wmb();
                 pr_info("*** VIC FRAME DONE: Re-applied IMR/IMCR routing - IMR=0x%08x IMCR=0x%08x ***\n",
                         readl(vr + 0x04), readl(vr + 0x0c));
+
+                /* TRACE: Monitor VIC register changes */
+                trace_vic_registers(vr, "VIC_FRAME_DONE_REARM");
             }
         } else {
             pr_warn("*** VIC FRAME DONE: Failed to queue new buffer: %d ***\n", qbuf_ret);
@@ -2636,6 +2639,9 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     wmb();
                     pr_info("*** VIC PRIMARY GATE: IMR/IMCR routed (no re-arm) IMR=0x%08x IMCR=0x%08x ***\n",
                             readl(vr_gate + 0x04), readl(vr_gate + 0x0c));
+
+                    /* TRACE: Monitor VIC register changes */
+                    trace_vic_registers(vr_gate, "VIC_STREAM_START_GATE");
                 }
 				vic_armed = 1;
             	//tx_vic_enable_irq(vic_dev);
