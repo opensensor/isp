@@ -1099,23 +1099,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** BINARY NINJA EXACT: Hardware sequence 2->4->wait(%d us)->1 ***\n", wait_count);
 
 
-        /* Re-assert stream control after this enable too, to guard against register clearing */
-        {
-            u32 buffer_count = vic_dev->active_buffer_count;
-            if (buffer_count == 0) buffer_count = 2;
-            if (buffer_count > 5) buffer_count = 5;
-            u32 stream_ctrl = (buffer_count << 16) | 0x80000020;
-            {
-                u32 cur = readl(vic_regs + 0x300);
-                if (cur != stream_ctrl) {
-                    writel(stream_ctrl, vic_regs + 0x300);
-                    wmb();
-                    pr_info("*** POST-ENABLE(A): Wrote VIC[0x300]=0x%x (buffer_count=%u) ***\n", stream_ctrl, buffer_count);
-                } else {
-                    pr_info("*** POST-ENABLE(A): Skipped redundant write to VIC[0x300] (0x%x) ***\n", stream_ctrl);
-                }
-            }
-        }
 
         /* Format detection logic - Binary Ninja 000107f8-00010a04 */
         u32 mipi_config;
