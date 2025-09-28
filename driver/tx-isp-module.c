@@ -2336,83 +2336,65 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
         pr_info("*** tx_isp_video_s_stream: Core initialization complete, proceeding with subdev streaming ***\n");
     }
 
-    /* Binary Ninja: int32_t* $s4 = dev + 0x38 */
+    /* MODIFIED: Custom streaming order - CSI, Sensors, VIC, VIN, FS, Core */
     s4 = dev->subdevs;
 
-    /* Binary Ninja: for (int32_t i = 0; i != 0x10; ) */
-    for (i = 0; i != 0x10; ) {
+    /* Define the streaming order: CSI (0) → Sensors (5+) → VIC (1) → VIN (2) → FS (3) → Core (4) */
+    int streaming_order[] = {0, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 1, 2, 3, 4};
+    int order_count = sizeof(streaming_order) / sizeof(streaming_order[0]);
+
+    pr_info("*** tx_isp_video_s_stream: Using custom streaming order: CSI → Sensors → VIC → VIN → FS → Core ***\n");
+
+    /* Iterate through subdevs in the custom order */
+    for (int order_idx = 0; order_idx < order_count; order_idx++) {
+        i = streaming_order[order_idx];
+
         /* Binary Ninja: void* $a0 = *$s4 */
-        struct tx_isp_subdev *a0 = *s4;
+        struct tx_isp_subdev *a0 = s4[i];
 
         if (a0 != 0) {
             /* Binary Ninja: int32_t* $v0_3 = *(*($a0 + 0xc4) + 4) */
             struct tx_isp_subdev_video_ops *v0_3 = a0->ops ? a0->ops->video : NULL;
 
-            if (v0_3 == 0) {
-                i += 1;
-            } else {
+            if (v0_3 != 0) {
                 /* Binary Ninja: int32_t $v0_4 = *$v0_3 */
                 int (*v0_4)(struct tx_isp_subdev *, int) = v0_3->s_stream;
 
-                if (v0_4 == 0) {
-                    i += 1;
-                } else {
+                if (v0_4 != 0) {
                     /* Binary Ninja: int32_t result = $v0_4($a0, enable) */
                     pr_info("*** tx_isp_video_s_stream: Calling subdev[%d]->ops->video->s_stream(%d) ***\n", i, enable);
                     result = v0_4(a0, enable);
 
                     if (result == 0) {
                         pr_info("*** tx_isp_video_s_stream: subdev[%d] s_stream SUCCESS ***\n", i);
-                        i += 1;
+                        /* Continue to next subdev in custom order */
                     } else {
                         /* Binary Ninja: if (result != 0xfffffdfd) */
-                        if (result != 0xfffffdfd) {
-                            /* Binary Ninja: void* $s0_1 = dev + (i << 2) */
-                            struct tx_isp_subdev **s0_1 = &dev->subdevs[i];
+                        if (result != -ENOIOCTLCMD) {
+                            pr_err("tx_isp_video_s_stream: s_stream failed on subdev[%d]: %d\n", i, result);
 
-                            /* Binary Ninja: while (dev != $s0_1) */
-                            while (&dev->subdevs[0] != s0_1) {
-                                /* Binary Ninja: void* $a0_1 = *($s0_1 + 0x38) */
-                                /* Move back one position */
-                                s0_1 -= 1;
-                                struct tx_isp_subdev *a0_1 = *s0_1;
-
-                                if (a0_1 == 0) {
-                                    /* Binary Ninja: $s0_1 -= 4 */
-                                    continue;
-                                } else {
-                                    /* Binary Ninja: int32_t* $v0_6 = *(*($a0_1 + 0xc4) + 4) */
-                                    struct tx_isp_subdev_video_ops *v0_6 = a0_1->ops ? a0_1->ops->video : NULL;
-
-                                    if (v0_6 == 0) {
-                                        /* Binary Ninja: $s0_1 -= 4 */
-                                        continue;
-                                    } else {
-                                        /* Binary Ninja: int32_t $v0_7 = *$v0_6 */
-                                        int (*v0_7)(struct tx_isp_subdev *, int) = v0_6->s_stream;
-
-                                        if (v0_7 == 0) {
-                                            /* Binary Ninja: $s0_1 -= 4 */
-                                            continue;
-                                        } else {
-                                            /* Binary Ninja: $v0_7($a0_1, enable u< 1 ? 1 : 0) */
-                                            int rollback_enable = (enable < 1) ? 1 : 0;
-                                            v0_7(a0_1, rollback_enable);
-                                            /* Binary Ninja: $s0_1 -= 4 */
-                                        }
+                            /* Cleanup: disable previously enabled subdevs in reverse order */
+                            if (enable == 1) {  /* Only cleanup if we were enabling */
+                                pr_info("*** tx_isp_video_s_stream: CLEANUP - Disabling previously enabled subdevs ***\n");
+                                for (int cleanup_order_idx = order_idx - 1; cleanup_order_idx >= 0; cleanup_order_idx--) {
+                                    int cleanup_i = streaming_order[cleanup_order_idx];
+                                    struct tx_isp_subdev *cleanup_subdev = s4[cleanup_i];
+                                    if (cleanup_subdev && cleanup_subdev->ops && cleanup_subdev->ops->video && cleanup_subdev->ops->video->s_stream) {
+                                        pr_info("*** tx_isp_video_s_stream: CLEANUP - Disabling subdev[%d] ***\n", cleanup_i);
+                                        cleanup_subdev->ops->video->s_stream(cleanup_subdev, 0);
                                     }
                                 }
                             }
 
                             /* Binary Ninja: return result */
                             return result;
+                        } else {
+                            /* Binary Ninja: result == -ENOIOCTLCMD, continue */
+                            pr_info("*** tx_isp_video_s_stream: subdev[%d] returned -ENOIOCTLCMD, continuing ***\n", i);
                         }
-                        i += 1;
                     }
                 }
             }
-        } else {
-            i += 1;
         }
 
         /* Binary Ninja: $s4 = &$s4[1] */
