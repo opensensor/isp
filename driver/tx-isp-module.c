@@ -655,6 +655,20 @@ void system_reg_write(u32 reg, u32 value)
         return;
     }
 
+    /* CRITICAL FIX: Block ALL writes to VIC control registers during streaming */
+    /* The tuning system writes to these registers are clearing VIC interrupt configuration */
+    if (vic_start_ok && (reg >= 0x9a00 && reg <= 0x9aff)) {
+        pr_info("system_reg_write: BLOCKED VIC control reg[0x%x]=0x%x during streaming (prevent VIC reset)\n", reg, value);
+        return;
+    }
+
+    /* CRITICAL FIX: Protect VIC interrupt routing registers from tuning system */
+    /* These specific registers control VIC interrupt generation and must not be modified during streaming */
+    if (vic_start_ok && (reg == 0x04 || reg == 0x0c || reg == 0x24)) {
+        pr_info("system_reg_write: BLOCKED VIC interrupt routing reg[0x%x]=0x%x during streaming (preserve interrupts)\n", reg, value);
+        return;
+    }
+
     /* Guard: When streaming, block writes that disrupt VIC/ISP interrupts */
     extern uint32_t vic_start_ok; /* set when VIC is running/streaming */
     if (vic_start_ok) {
