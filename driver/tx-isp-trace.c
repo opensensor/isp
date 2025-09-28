@@ -79,14 +79,17 @@ static const struct reg_range isp_ranges[] = {
 // File logging functions
 static int open_trace_file(void)
 {
+    int ret;
+
     if (trace_file)
         return 0;
 
     trace_file = filp_open(TRACE_FILE_PATH, O_WRONLY | O_CREAT | O_APPEND, 0644);
     if (IS_ERR(trace_file)) {
-        pr_err("Failed to open trace file %s: %ld\n", TRACE_FILE_PATH, PTR_ERR(trace_file));
+        ret = PTR_ERR(trace_file);
+        pr_err("Failed to open trace file %s: %d\n", TRACE_FILE_PATH, ret);
         trace_file = NULL;
-        return PTR_ERR(trace_file);
+        return ret;
     }
     return 0;
 }
@@ -104,7 +107,7 @@ static void write_to_trace_file(const char *fmt, ...)
     va_list args;
     char buffer[512];
     int len;
-    loff_t pos = 0;
+    mm_segment_t old_fs;
 
     if (!trace_file)
         return;
@@ -116,7 +119,10 @@ static void write_to_trace_file(const char *fmt, ...)
     if (len > 0 && len < sizeof(buffer)) {
         mutex_lock(&trace_file_mutex);
         if (trace_file && !IS_ERR(trace_file)) {
-            kernel_write(trace_file, buffer, len, &pos);
+            old_fs = get_fs();
+            set_fs(KERNEL_DS);
+            vfs_write(trace_file, buffer, len, &trace_file->f_pos);
+            set_fs(old_fs);
         }
         mutex_unlock(&trace_file_mutex);
     }
