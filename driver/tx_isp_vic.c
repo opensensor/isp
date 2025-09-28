@@ -2649,6 +2649,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             }
 
 
+			pr_info("Clear ISP core VIC status and re-assert gate so next framedone can assert HW IRQ");
             /* Guarded: Clear ISP core VIC status and re-assert gate so next framedone can assert HW IRQ */
             do {
                 struct tx_isp_dev *ispd = ourISPdev;
@@ -2822,26 +2823,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 			if (vic_dev->state < 2) {
             	pr_info("*** vic_core_s_stream: Enabling VIC IRQ AFTER final re-assert/verify ***\n");
             	tx_vic_enable_irq(vic_dev);
-
-
-            /* Post-IRQ-enable: sample status a bit longer to catch first frame */
-            if (vic_dev->vic_regs) {
-
-                void __iomem *vr = vic_dev->vic_regs;
-                u32 s0, s1; int i;
-                for (i = 0; i < 200; i++) { /* ~200ms total if udelay(1000) */
-                    s0 = readl(vr + 0x1f0);
-                    s1 = readl(vr + 0x1f4);
-                    if (s0 || s1) {
-                        pr_warn("*** VIC POST-IRQ SAMPLE: Status asserted: [0x1f0]=0x%08x [0x1f4]=0x%08x (iter=%d) ***\n", s0, s1, i);
-                        break;
-                    }
-                    udelay(1000);
-                }
-                if (i == 200)
-                    pr_info("*** VIC POST-IRQ SAMPLE: No status bits asserted in 200ms window ***\n");
-			}
-            }
 
 
             /* CRITICAL FIX: Follow proper state machine - don't jump directly to state 4 */
@@ -3373,6 +3354,18 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
     vic_dev->active_buffer_count += 1;
     pr_info("*** CRITICAL FIX: Incremented active_buffer_count to %d - VIC hardware buffer supply replenished ***\n",
             vic_dev->active_buffer_count);
+
+    /* CRITICAL FIX: Update VIC control register with new buffer count */
+    /* The VIC hardware needs to know about the increased buffer availability */
+    if (vic_dev->vic_regs && vic_dev->stream_state != 0) {
+        u32 buffer_count = vic_dev->active_buffer_count;
+        if (buffer_count > 5) buffer_count = 5;  /* VIC has 5 slots max */
+        u32 stream_ctrl = (buffer_count << 16) | 0x80000020;
+        writel(stream_ctrl, vic_dev->vic_regs + 0x300);
+        wmb();
+        pr_info("*** CRITICAL FIX: Updated VIC control register 0x300 = 0x%x (buffer_count=%d) ***\n",
+                stream_ctrl, buffer_count);
+    }
 
     /* Binary Ninja EXACT: private_spin_unlock_irqrestore($s0 + 0x1f4, $a1_4) */
     private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, var_18);
