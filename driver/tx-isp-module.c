@@ -569,7 +569,6 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id);
 irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
 int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data);
 static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev);
-static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev);
 static struct vic_buffer_entry *pop_buffer_fifo(struct list_head *fifo_head);
 static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entry *buffer);
 int __enqueue_in_driver(void *buffer_struct);
@@ -2243,22 +2242,10 @@ int tx_isp_video_link_stream(struct tx_isp_dev *arg1, int arg2)
     pr_info("*** tx_isp_video_link_stream: EXACT Binary Ninja MCP implementation - enable=%d ***\n", arg2);
 
     /* CRITICAL FIX: Call activate_module on all subdevs FIRST to get them from state 1->2 */
-    if (arg2 == 1 && ourISPdev->vic_dev->state < 3) {  /* Stream ON */
+    if (arg2 == 1) {  /* Stream ON */
         pr_info("*** tx_isp_video_link_stream: CRITICAL FIX - Calling activate_module on all subdevs first ***\n");
         s4 = arg1->subdevs;
-        for (i = 0; i != 0x10; i++) {
-            struct tx_isp_subdev *subdev = s4[i];
-            if (subdev != NULL && subdev->ops && subdev->ops->internal && subdev->ops->internal->activate_module) {
-                pr_info("*** tx_isp_video_link_stream: Calling activate_module on subdev[%d] ***\n", i);
-                result = subdev->ops->internal->activate_module(subdev);
-                if (result != 0 && result != -ENOIOCTLCMD) {
-                    pr_err("tx_isp_video_link_stream: activate_module failed on subdev[%d]: %d\n", i, result);
-                    return result;
-                }
-                pr_info("*** tx_isp_video_link_stream: activate_module SUCCESS on subdev[%d] ***\n", i);
-            }
-        }
-        pr_info("*** tx_isp_video_link_stream: All activate_module calls complete ***\n");
+		// TODO calling  this might be clearing the vic interrupts
     }
 
     /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
@@ -5191,12 +5178,6 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
     return result;
 }
 
-/* Simple VIC activation - minimal like reference driver */
-static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev)
-{
-    /* This function now just calls the main ispcore_activate_module */
-    return ispcore_activate_module(isp_dev);
-}
 
 /* ===== BINARY NINJA INTERRUPT HANDLER IMPLEMENTATIONS ===== */
 
