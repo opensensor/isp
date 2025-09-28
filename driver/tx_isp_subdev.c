@@ -1102,7 +1102,7 @@ int tx_isp_create_subdev_graph(struct tx_isp_dev *isp)
         return -EINVAL;
     }
 
-    pr_info("tx_isp_create_subdev_graph: Processing %d registered subdevices\n", subdev_count);
+    pr_info("tx_isp_create_subdev_graph: Processing registered subdevices\n");
 
     mutex_lock(&subdev_registry_mutex);
 
