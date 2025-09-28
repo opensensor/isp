@@ -157,7 +157,7 @@ struct ae_statistics {
 };
 
 
-struct isp_channel;
+extern struct isp_channel;
 
 /* Declare functions but don't define them */
 u32 isp_read32(u32 reg);
