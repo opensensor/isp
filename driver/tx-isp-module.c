@@ -1720,6 +1720,24 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
 
         printk(KERN_ALERT "*** VIC IRQ: Using base %p [1e0]=0x%x [1e4]=0x%x [1e8]=0x%x [1ec]=0x%x ***\n",
                base_for_irq, reg_1e0, reg_1e4, reg_1e8, reg_1ec);
+
+        /* Enforce FD enable/unmask on every IRQ if something cleared them mid-stream */
+        if (((reg_1e0 & 0x1) == 0) || ((reg_1e8 & 0x1) != 0) || (reg_1e4 != 0x0000000F)) {
+            printk(KERN_ALERT "*** VIC IRQ: FIXUP enable/mask — before: 1e0=0x%x 1e4=0x%x 1e8=0x%x ***\n",
+                   reg_1e0, reg_1e4, reg_1e8);
+            /* Unmask FD: MainMask bit0 must be 0 (0xFFFFFFFE) */
+            writel(0xFFFFFFFE, base_for_irq + 0x1e8);
+            reg_1e8 = readl(base_for_irq + 0x1e8);
+            /* Enable FD bit0 */
+            writel(reg_1e0 | 0x1, base_for_irq + 0x1e0);
+            reg_1e0 = readl(base_for_irq + 0x1e0);
+            /* Enable group bits */
+            writel(0x0000000F, base_for_irq + 0x1e4);
+            reg_1e4 = readl(base_for_irq + 0x1e4);
+            printk(KERN_ALERT "*** VIC IRQ: FIXUP enable/mask — after: 1e0=0x%x 1e4=0x%x 1e8=0x%x ***\n",
+                   reg_1e0, reg_1e4, reg_1e8);
+        }
+
         /* Extra debug: control and geometry */
         printk(KERN_ALERT "*** VIC IRQ: CTRL[0x300]=0x%x DIMS[0x304]=0x%x STRIDE[0x310]=0x%x ***\n",
                readl(vic_regs + 0x300), readl(vic_regs + 0x304), readl(vic_regs + 0x310));
