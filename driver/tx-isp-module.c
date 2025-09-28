@@ -2349,10 +2349,18 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
     for (int order_idx = 0; order_idx < order_count; order_idx++) {
         i = streaming_order[order_idx];
 
+        /* SAFETY: Validate array index bounds */
+        if (i < 0 || i >= ISP_MAX_SUBDEVS) {
+            pr_debug("*** tx_isp_video_s_stream: Invalid subdev index %d, skipping ***\n", i);
+            continue;
+        }
+
         /* Binary Ninja: void* $a0 = *$s4 */
         struct tx_isp_subdev *a0 = s4[i];
 
+        /* SAFETY: Check for NULL subdev */
         if (a0 != 0) {
+            pr_debug("*** tx_isp_video_s_stream: Processing subdev[%d] = %p ***\n", i, a0);
             /* Binary Ninja: int32_t* $v0_3 = *(*($a0 + 0xc4) + 4) */
             struct tx_isp_subdev_video_ops *v0_3 = a0->ops ? a0->ops->video : NULL;
 
