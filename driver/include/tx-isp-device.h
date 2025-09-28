@@ -643,6 +643,19 @@ void *get_frame_channel_device_ptr(int channel)
 #define FRAME_CHANNEL_MAGIC 0xDEADBEEF
 
 
+/* Subdevice descriptor - cleaner than Binary Ninja struct */
+struct tx_isp_subdev_desc {
+    const char *name;
+    enum tx_isp_subdev_type type;
+    uint32_t device_id;
+    uint32_t src_index;
+    uint32_t dst_index;
+    struct platform_device *pdev;
+    const struct file_operations *fops;
+    bool create_misc_device;
+    bool create_proc_entry;
+};
+
 /* Subdevice runtime data */
 struct tx_isp_subdev_runtime {
     struct tx_isp_subdev_desc *desc;
