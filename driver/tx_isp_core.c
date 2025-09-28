@@ -1595,12 +1595,12 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
             clk_disable_unprepare(isp->csi_clk);
             pr_info("ispcore_slake_module: Disabled CSI clock");
         }
-        if (isp->core_dev && isp->core_dev->ipu_clk) {
-            clk_disable_unprepare(isp->core_dev->ipu_clk);
+        if (isp && isp->ipu_clk) {
+            clk_disable_unprepare(isp->ipu_clk);
             pr_info("ispcore_slake_module: Disabled IPU clock");
         }
-        if (isp->core_dev && isp->core_dev->core_clk) {
-            clk_disable_unprepare(isp->core_dev->core_clk);
+        if (isp && isp->core_clk) {
+            clk_disable_unprepare(isp->core_clk);
             pr_info("ispcore_slake_module: Disabled ISP clock");
         }
         if (isp->cgu_isp) {
