@@ -2217,7 +2217,7 @@ int tx_isp_video_link_stream(struct tx_isp_dev *arg1, int arg2)
 
     /* CRITICAL FIX: Call activate_module on all subdevs FIRST to get them from state 1->2 */
     if (arg2 == 1) {  /* Stream ON */
-        pr_info("*** tx_isp_video_link_stream: CRITICAL FIX - Calling activate_module on all subdevs first ***\n");
+        pr_info("*** tx_isp_video_link_stream: no-op ***\n");
         s4 = arg1->subdevs;
 		// TODO calling  this might be clearing the vic interrupts
     }
