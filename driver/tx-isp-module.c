@@ -1674,26 +1674,43 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
             writel(0xFFFFFFFF, vic_dev_fast->vic_regs_control + 0x1f0);
             writel(0xFFFFFFFF, vic_dev_fast->vic_regs_control + 0x1f4);
         }
-        /* CRITICAL FIX: EXACT Binary Ninja interrupt detection logic */
-        void __iomem *vr = vic_dev_fast->vic_regs;
+        /* CRITICAL FIX: Check BOTH VIC register spaces for interrupt status */
+        void __iomem *vr_primary = vic_dev_fast->vic_regs;
+        void __iomem *vr_control = vic_dev_fast->vic_regs_control;
 
-        /* Binary Ninja EXACT: Calculate active interrupts from enable and mask registers */
-        u32 enable1 = readl(vr + 0x1e0);  /* Primary interrupt enable */
-        u32 enable2 = readl(vr + 0x1e4);  /* Secondary interrupt enable */
-        u32 mask1 = readl(vr + 0x1e8);    /* Primary interrupt mask */
-        u32 mask2 = readl(vr + 0x1ec);    /* Secondary interrupt mask */
+        /* Try PRIMARY register space first */
+        u32 enable1_pri = readl(vr_primary + 0x1e0);
+        u32 enable2_pri = readl(vr_primary + 0x1e4);
+        u32 mask1_pri = readl(vr_primary + 0x1e8);
+        u32 mask2_pri = readl(vr_primary + 0x1ec);
 
-        /* Binary Ninja EXACT: v1_7 = not.d(mask1) & enable1 */
-        u32 v1_7 = (~mask1) & enable1;    /* Frame done and error interrupts */
-        u32 v1_10 = (~mask2) & enable2;   /* MDMA interrupts */
+        /* Try CONTROL register space */
+        u32 enable1_ctrl = vr_control ? readl(vr_control + 0x1e0) : 0;
+        u32 enable2_ctrl = vr_control ? readl(vr_control + 0x1e4) : 0;
+        u32 mask1_ctrl = vr_control ? readl(vr_control + 0x1e8) : 0;
+        u32 mask2_ctrl = vr_control ? readl(vr_control + 0x1ec) : 0;
 
-        /* Binary Ninja EXACT: Write to 0x1f0/0x1f4 to acknowledge interrupts */
-        writel(v1_7, vr + 0x1f0);
-        writel(v1_10, vr + 0x1f4);
+        /* Binary Ninja logic on both register spaces */
+        u32 v1_7_pri = (~mask1_pri) & enable1_pri;
+        u32 v1_10_pri = (~mask2_pri) & enable2_pri;
+        u32 v1_7_ctrl = (~mask1_ctrl) & enable1_ctrl;
+        u32 v1_10_ctrl = (~mask2_ctrl) & enable2_ctrl;
+
+        /* Use whichever register space has active interrupts */
+        u32 v1_7 = v1_7_pri | v1_7_ctrl;
+        u32 v1_10 = v1_10_pri | v1_10_ctrl;
+
+        /* Acknowledge interrupts in both spaces */
+        writel(v1_7_pri, vr_primary + 0x1f0);
+        writel(v1_10_pri, vr_primary + 0x1f4);
+        if (vr_control) {
+            writel(v1_7_ctrl, vr_control + 0x1f0);
+            writel(v1_10_ctrl, vr_control + 0x1f4);
+        }
         wmb();
 
-        pr_info("*** VIC ISR: enable1=0x%x, mask1=0x%x, v1_7=0x%x (frame/errors), v1_10=0x%x (MDMA) ***\n",
-                enable1, mask1, v1_7, v1_10);
+        pr_info("*** VIC ISR: PRI(en1=0x%x,mask1=0x%x,v1_7=0x%x,v1_10=0x%x) CTRL(en1=0x%x,mask1=0x%x,v1_7=0x%x,v1_10=0x%x) FINAL(v1_7=0x%x,v1_10=0x%x) ***\n",
+                enable1_pri, mask1_pri, v1_7_pri, v1_10_pri, enable1_ctrl, mask1_ctrl, v1_7_ctrl, v1_10_ctrl, v1_7, v1_10);
 
         /* Handle frame-done interrupt (bit 0) */
         if (v1_7 & 1) {
@@ -2929,17 +2946,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 }
                 chosen_size = stride * h * 3 / 2;
 
-                /* Do NOT program VIC strides for channel 0 here; vic_pipo_mdma_enable will set 1920x1080 */
-                if (channel != 0 && ourISPdev && ourISPdev->vic_dev) {
-                    struct tx_isp_vic_device *vd = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-                    if (vd->vic_regs) {
-                        writel(stride, vd->vic_regs + 0x310); /* Y stride */
-                        wmb();
-                        writel(stride, vd->vic_regs + 0x314); /* UV stride */
-                        wmb();
-                        pr_info("*** VIC STRIDE (ch%u): Programmed NV12 stride=%u (H=%u, size=%u) ***\n", channel, stride, h, chosen_size);
-                    }
-                }
+				// TODO?
             }
 
             /* 1) VBM pool */
@@ -3437,6 +3444,26 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     }
                 }
                 pr_err("Channel %d: SENSOR STREAMING NOT AVAILABLE - VIDEO WILL BE GREEN!\n", channel);
+            }
+
+            // *** CRITICAL: TRIGGER VIC STREAMING CHAIN - THIS GENERATES THE REGISTER ACTIVITY! ***
+            if (ourISPdev && ourISPdev->vic_dev) {
+                struct tx_isp_vic_device *vic_streaming = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+
+                pr_info("*** Channel %d: NOW CALLING VIC STREAMING CHAIN - THIS SHOULD GENERATE REGISTER ACTIVITY! ***\n", channel);
+
+                // CRITICAL: Call vic_core_s_stream which calls tx_isp_vic_start when streaming
+                ret = vic_core_s_stream(&vic_streaming->sd, 1);
+
+                pr_info("*** Channel %d: VIC STREAMING RETURNED %d - REGISTER ACTIVITY SHOULD NOW BE VISIBLE! ***\n", channel, ret);
+
+                if (ret) {
+                    pr_err("Channel %d: VIC streaming failed: %d\n", channel, ret);
+                } else {
+                    pr_info("*** Channel %d: VIC STREAMING SUCCESS - ALL HARDWARE SHOULD BE ACTIVE! ***\n", channel);
+                }
+            } else {
+                pr_err("*** Channel %d: NO VIC DEVICE - CANNOT TRIGGER HARDWARE STREAMING! ***\n", channel);
             }
 
             // Trigger Core Streaming - using ourISPdev directly as it contains the core functionality
