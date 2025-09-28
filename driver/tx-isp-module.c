@@ -3407,15 +3407,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             // Trigger Core Streaming - using ourISPdev directly as it contains the core functionality
             pr_info("*** Channel %d: Core streaming functionality integrated in main ISP device ***\n", channel);
 
-        } else {
-            if (channel == 0) {
-                pr_warn("*** Channel %d: NO SENSOR AVAILABLE FOR STREAMING ***\n", channel);
-                pr_warn("Channel %d: ourISPdev=%p\n", channel, ourISPdev);
-                if (ourISPdev) {
-                    pr_warn("Channel %d: ourISPdev->sensor=%p\n", channel, ourISPdev->sensor);
-                }
-                pr_warn("Channel %d: VIDEO WILL BE GREEN WITHOUT SENSOR!\n", channel);
-            }
         }
 
         // Get VIC device
