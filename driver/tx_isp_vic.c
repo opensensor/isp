@@ -2653,7 +2653,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
         /* EXACT Binary Ninja MCP reference logic */
         /* Binary Ninja: if ($v1_3 != 4) */
-        if (current_state == 1 || current_state == 2) {
+        if (current_state == 1) {
             pr_info("*** vic_core_s_stream: EXACT Binary Ninja - State != 4, calling VIC start sequence ***\n");
 
             /* SKIP disabling kernel IRQ before VIC start to avoid missing first frame */
