@@ -1080,6 +1080,20 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             udelay(1);
         }
 
+
+        /* Route IMR/IMCR and program MainMask immediately before final RUN (match working sequence) */
+        /* Clear pending (W1C) and unmask framedone + bit21 per silicon */
+        writel(0xFFFFFFFF, vic_regs + 0x1f0);
+        writel(0xFFFFFFFF, vic_regs + 0x1f4);
+        writel(0xFFDFFFFE, vic_regs + 0x1e8);
+        /* Program IMR/IMCR (primary gate) */
+        writel(0x00000001, vic_regs + 0x04);
+        writel(0x00000000, vic_regs + 0x24);
+        writel(0x07800438, vic_regs + 0x04);
+        writel(0xb5742249, vic_regs + 0x0c);
+        wmb();
+        pr_info("*** VIC ENABLE: Mask + IMR/IMCR programmed just before RUN ***\n");
+
         writel(0x1, vic_regs + 0x0);  /* Final enable */
         wmb();
         pr_info("*** BINARY NINJA EXACT: Hardware sequence 2->4->wait(%d us)->1 ***\n", wait_count);
