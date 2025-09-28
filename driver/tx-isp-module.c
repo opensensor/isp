@@ -1970,7 +1970,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                                 }
                                 wmb();
 
-                                /* Clear ISP core latched VIC status bits to allow next HW IRQ */
+                                /* Clear ISP core latched VIC status bits to allow next HW IRQ and restore core gates */
                                 do {
                                     struct tx_isp_dev *ispd = ourISPdev;
                                     void __iomem *core = NULL;
@@ -1979,8 +1979,12 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                                     else if (ispd && ispd->core_regs)
                                         core = ispd->core_regs;
                                     if (core) {
+                                        /* W1C clear */
                                         writel(0x1, core + 0x9a70);
                                         writel(0x1, core + 0x9a7c);
+                                        /* Re-apply core gate routing observed in working sequence */
+                                        writel(0x00000001, core + 0x9ac0);
+                                        writel(0x00000000, core + 0x9ac8);
                                         wmb();
                                     }
                                 } while (0);
@@ -2253,7 +2257,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 }
                 wmb();
 
-                /* Clear ISP core latched VIC status bits to allow next HW IRQ */
+                /* Clear ISP core latched VIC status bits to allow next HW IRQ and restore core gates */
                 do {
                     struct tx_isp_dev *ispd = ourISPdev;
                     void __iomem *core = NULL;
@@ -2262,8 +2266,12 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                     else if (ispd && ispd->core_regs)
                         core = ispd->core_regs;
                     if (core) {
+                        /* W1C clear */
                         writel(0x1, core + 0x9a70);
                         writel(0x1, core + 0x9a7c);
+                        /* Re-apply core gate routing observed in working sequence */
+                        writel(0x00000001, core + 0x9ac0);
+                        writel(0x00000000, core + 0x9ac8);
                         wmb();
                     }
                 } while (0);
