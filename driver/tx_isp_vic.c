@@ -2907,9 +2907,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
 
             /* Enable VIC IRQ after final re-assert and verification */
-            pr_info("*** vic_core_s_stream: Enabling VIC IRQ AFTER final re-assert/verify ***\n");
-            tx_vic_enable_irq(vic_dev);
-
+			if (vic_dev->state < 2) {
+            	pr_info("*** vic_core_s_stream: Enabling VIC IRQ AFTER final re-assert/verify ***\n");
+            	tx_vic_enable_irq(vic_dev);
+			}
 
             /* Post-IRQ-enable: sample status a bit longer to catch first frame */
             if (vic_dev->vic_regs) {
