@@ -6,8 +6,11 @@
 #include <linux/workqueue.h>
 #include <linux/slab.h>
 #include <linux/jiffies.h>
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
+#include <linux/uaccess.h>
 
-#define ISP_MONITOR_VERSION "1.3"
+#define ISP_MONITOR_VERSION "1.4"
 
 // Region types for classification
 enum region_type {
@@ -37,6 +40,17 @@ struct isp_region {
     bool monitoring;
     struct seq_write_info seq_write;
 };
+
+// VIC register monitoring structure
+struct vic_reg_monitor {
+    u32 last_0x04;
+    u32 last_0x0c;
+    u32 last_0x24;
+    unsigned long last_check_time;
+    struct proc_dir_entry *proc_entry;
+};
+
+static struct vic_reg_monitor vic_monitor = {0};
 
 // Register ranges to classify regions
 struct reg_range {
@@ -148,6 +162,49 @@ static void end_sequence(struct seq_write_info *seq, const char *region_name)
     }
     seq->in_progress = false;
 }
+
+// VIC register monitoring function - called from driver code
+void trace_vic_registers(void __iomem *vic_regs, const char *context)
+{
+    u32 reg_0x04, reg_0x0c, reg_0x24;
+    unsigned long now = jiffies;
+    unsigned long delta_ms = 0;
+
+    if (!vic_regs) {
+        printk(KERN_ALERT "*** VIC TRACE: NULL vic_regs pointer from %s ***\n", context);
+        return;
+    }
+
+    // Read the critical VIC registers
+    reg_0x04 = readl(vic_regs + 0x04);  // IMR
+    reg_0x0c = readl(vic_regs + 0x0c);  // IMCR
+    reg_0x24 = readl(vic_regs + 0x24);  // IMR1
+
+    if (vic_monitor.last_check_time)
+        delta_ms = jiffies_to_msecs(now - vic_monitor.last_check_time);
+
+    // Check for changes and log both to printk and trace
+    if (reg_0x04 != vic_monitor.last_0x04) {
+        printk(KERN_ALERT "*** VIC TRACE [%s]: IMR [0x04] changed: 0x%08x -> 0x%08x (delta: %lu ms) ***\n",
+               context, vic_monitor.last_0x04, reg_0x04, delta_ms);
+        vic_monitor.last_0x04 = reg_0x04;
+    }
+
+    if (reg_0x0c != vic_monitor.last_0x0c) {
+        printk(KERN_ALERT "*** VIC TRACE [%s]: IMCR [0x0c] changed: 0x%08x -> 0x%08x (delta: %lu ms) ***\n",
+               context, vic_monitor.last_0x0c, reg_0x0c, delta_ms);
+        vic_monitor.last_0x0c = reg_0x0c;
+    }
+
+    if (reg_0x24 != vic_monitor.last_0x24) {
+        printk(KERN_ALERT "*** VIC TRACE [%s]: IMR1 [0x24] changed: 0x%08x -> 0x%08x (delta: %lu ms) ***\n",
+               context, vic_monitor.last_0x24, reg_0x24, delta_ms);
+        vic_monitor.last_0x24 = reg_0x24;
+    }
+
+    vic_monitor.last_check_time = now;
+}
+EXPORT_SYMBOL(trace_vic_registers);
 
 static void check_region_changes(struct work_struct *work)
 {
@@ -285,6 +342,52 @@ static void cleanup_region(struct isp_region *region)
     }
 }
 
+// Proc entry for VIC register status
+static int vic_regs_show(struct seq_file *m, void *v)
+{
+    void __iomem *vic_regs = NULL;
+    struct isp_region *vic_region = NULL;
+    int i;
+
+    // Find the VIC region (isp-w02)
+    for (i = 0; i < NUM_REGIONS; i++) {
+        if (strcmp(isp_regions[i].name, "isp-w02") == 0) {
+            vic_region = &isp_regions[i];
+            vic_regs = vic_region->virt_addr;
+            break;
+        }
+    }
+
+    if (!vic_regs) {
+        seq_printf(m, "VIC registers not mapped\n");
+        return 0;
+    }
+
+    seq_printf(m, "VIC Register Status:\n");
+    seq_printf(m, "IMR  [0x04]: 0x%08x (last tracked: 0x%08x)\n",
+               readl(vic_regs + 0x04), vic_monitor.last_0x04);
+    seq_printf(m, "IMCR [0x0c]: 0x%08x (last tracked: 0x%08x)\n",
+               readl(vic_regs + 0x0c), vic_monitor.last_0x0c);
+    seq_printf(m, "IMR1 [0x24]: 0x%08x (last tracked: 0x%08x)\n",
+               readl(vic_regs + 0x24), vic_monitor.last_0x24);
+    seq_printf(m, "Last check: %lu jiffies ago\n",
+               vic_monitor.last_check_time ? jiffies - vic_monitor.last_check_time : 0);
+
+    return 0;
+}
+
+static int vic_regs_open(struct inode *inode, struct file *file)
+{
+    return single_open(file, vic_regs_show, NULL);
+}
+
+static const struct file_operations vic_regs_fops = {
+    .open = vic_regs_open,
+    .read = seq_read,
+    .llseek = seq_lseek,
+    .release = single_release,
+};
+
 static int __init isp_monitor_init(void)
 {
     int i, ret;
@@ -299,6 +402,14 @@ static int __init isp_monitor_init(void)
                 cleanup_region(&isp_regions[i]);
             return ret;
         }
+    }
+
+    // Create proc entry for VIC register monitoring
+    vic_monitor.proc_entry = proc_create("vic_regs", 0444, NULL, &vic_regs_fops);
+    if (!vic_monitor.proc_entry) {
+        pr_warn("Failed to create /proc/vic_regs entry\n");
+    } else {
+        pr_info("Created /proc/vic_regs for VIC register monitoring\n");
     }
 
     return 0;

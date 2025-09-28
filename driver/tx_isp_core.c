@@ -2688,22 +2688,6 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 extern struct tx_isp_sensor *tx_isp_get_sensor(void);
                 struct tx_isp_sensor *init_sensor = tx_isp_get_sensor();
 
-                pr_info("*** ispcore_core_ops_init: BINARY NINJA MCP - Second tisp_init call (00079058) ***");
-                if (init_sensor && init_sensor->video.attr) {
-                    ret = tisp_init(init_sensor->video.attr, NULL);
-                    if (ret != 0) {
-                        pr_err("ispcore_core_ops_init: Second tisp_init failed: %d\n", ret);
-                        return ret;
-                    }
-                    pr_info("*** ispcore_core_ops_init: Second tisp_init completed ***");
-                } else {
-                    ret = tisp_init(NULL, NULL);
-                    if (ret != 0) {
-                        pr_err("ispcore_core_ops_init: Second tisp_init failed: %d\n", ret);
-                        return ret;
-                    }
-                }
-
                 /* CRITICAL FIX: Don't reset VIC state if it's already streaming (state 4) */
                 /* The issue is that VIC gets initialized to state 4, then ISP core resets it to 3, causing reinitialization */
                 if (vic_dev->state != 4) {
