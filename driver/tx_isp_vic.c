@@ -2678,7 +2678,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 if (vic_dev && vic_dev->vic_regs) {
                     void __iomem *vr_gate = vic_dev->vic_regs;
                     writel(0x00000001, vr_gate + 0x04);   /* IMR baseline */
-                    writel(0x00000000, vr_gate + 0x24);   /* IMR1 baseline */
+                    //writel(0x00000000, vr_gate + 0x24);   /* IMR1 baseline */
                     writel(0x07800438, vr_gate + 0x04);   /* IMR routing/mask */
                     writel(0xb5742249, vr_gate + 0x0c);   /* IMCR key */
                     wmb();
