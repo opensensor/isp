@@ -1563,11 +1563,78 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
             vic_dev->state = 1;  /* Set VIC to INIT state */
         }
 
-        /* HYBRID APPROACH: Skip problematic clock disabling and subdev slaking */
-        /* The new version was disabling clocks and calling subdev slake operations */
-        /* which was breaking the continuous VIC interrupts */
-        pr_info("ispcore_slake_module: HYBRID - Skipping clock disable to preserve interrupts");
-        pr_info("ispcore_slake_module: HYBRID - Skipping subdev slaking to preserve working state");
+        /* SURGICAL FIX: Implement proper clock slaking like good-control-flow version */
+        /* This is critical for proper on/off/on flow - we need to disable clocks to stall interrupts */
+        pr_info("ispcore_slake_module: SURGICAL - Implementing proper clock slaking for on/off/on flow");
+
+        /* Disable ISP Control register to stall interrupts (matches reference trace line 97) */
+        if (isp->isp_regs) {
+            u32 current_isp_ctrl = readl(isp->isp_regs + 0x9804);
+            if (current_isp_ctrl != 0) {
+                writel(0x0, isp->isp_regs + 0x9804);
+                pr_info("ispcore_slake_module: ISP Control disabled (0x9804: 0x%x -> 0x0)", current_isp_ctrl);
+            }
+        }
+
+        /* Disable VIC Control registers to stall VIC interrupts (matches reference trace lines 98-99) */
+        if (vic_dev && vic_dev->vic_regs) {
+            u32 vic_ctrl1 = readl(vic_dev->vic_regs + 0xc0);
+            u32 vic_ctrl2 = readl(vic_dev->vic_regs + 0xc8);
+            if (vic_ctrl1 != 0) {
+                writel(0x0, vic_dev->vic_regs + 0xc0);
+                pr_info("ispcore_slake_module: VIC Control 1 disabled (0x9ac0: 0x%x -> 0x0)", vic_ctrl1);
+            }
+            if (vic_ctrl2 != 0) {
+                writel(0x0, vic_dev->vic_regs + 0xc8);
+                pr_info("ispcore_slake_module: VIC Control 2 disabled (0x9ac8: 0x%x -> 0x0)", vic_ctrl2);
+            }
+        }
+
+        /* Disable individual clocks to complete the slaking process */
+        if (isp->csi_clk) {
+            clk_disable_unprepare(isp->csi_clk);
+            pr_info("ispcore_slake_module: Disabled CSI clock");
+        }
+        if (isp->core_dev && isp->core_dev->ipu_clk) {
+            clk_disable_unprepare(isp->core_dev->ipu_clk);
+            pr_info("ispcore_slake_module: Disabled IPU clock");
+        }
+        if (isp->core_dev && isp->core_dev->core_clk) {
+            clk_disable_unprepare(isp->core_dev->core_clk);
+            pr_info("ispcore_slake_module: Disabled ISP clock");
+        }
+        if (isp->cgu_isp) {
+            clk_disable_unprepare(isp->cgu_isp);
+            pr_info("ispcore_slake_module: Disabled CGU ISP clock");
+        }
+
+        /* CRITICAL: Manage CSI PHY Control register to properly stall CSI interrupts */
+        /* This matches the good-control-flow version pattern in trace-ours.txt lines 104, 253, 262 */
+        if (isp->csi_dev && isp->csi_dev->csi_regs) {
+            void __iomem *csi_regs = isp->csi_dev->csi_regs;
+            u32 current_csi_ctrl = readl(csi_regs + 0xc);
+
+            /* Disable CSI PHY Control to stall CSI interrupts (0x80700008 -> 0x0) */
+            if (current_csi_ctrl == 0x80700008) {
+                writel(0x0, csi_regs + 0xc);
+                pr_info("ispcore_slake_module: CSI PHY Control disabled (0xc: 0x%x -> 0x0)", current_csi_ctrl);
+
+                /* Add the complementary register writes that follow in the good trace */
+                writel(0x133, csi_regs + 0x10);
+                writel(0x8, csi_regs + 0x1c);
+                writel(0x8fffffff, csi_regs + 0x30);
+                writel(0x1, csi_regs + 0x60);
+                writel(0x3fff, csi_regs + 0xb0);
+                pr_info("ispcore_slake_module: CSI PHY Control sequence completed");
+
+                /* Also manage CSI PHY Config register (matches trace line 111: 0x80007000 -> 0x20210000) */
+                u32 current_csi_config = readl(csi_regs + 0x110);
+                if (current_csi_config == 0x80007000) {
+                    writel(0x20210000, csi_regs + 0x110);
+                    pr_info("ispcore_slake_module: CSI PHY Config updated (0x110: 0x%x -> 0x20210000)", current_csi_config);
+                }
+            }
+        }
     }
 
     pr_info("ispcore_slake_module: HYBRID COMPLETE - Continuous interrupts + MIPI config!");
