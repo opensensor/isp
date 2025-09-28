@@ -2717,9 +2717,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Set MainMask to unmask only frame-done (bit0) per reference */
                 writel(0xFFFFFFFE, vr + 0x1e8); /* allow frame-done only */
                 /* Leave 0x1ec (MDMA mask) as-is per working reference */
-                /* Global interrupt enable at 0x30c (if implemented) */
-                writel(0xFFFFFFFF, vr + 0x30c);
-                wmb();
+                /* Skip global interrupt register 0x30c: not used in working reference */
+                /* wmb(); */
                 pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (MainMask=0xFFFFFFFE)***\n",
                         readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x30c), readl(vr + 0x1e0), readl(vr + 0x1e4), readl(vr + 0x1e8), readl(vr + 0x1ec));
                 /* Primary bank: only verify 0x100; do NOT write 0x14 here (0x14 is stride on PRIMARY) */
