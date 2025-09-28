@@ -2243,7 +2243,7 @@ int tx_isp_video_link_stream(struct tx_isp_dev *arg1, int arg2)
     pr_info("*** tx_isp_video_link_stream: EXACT Binary Ninja MCP implementation - enable=%d ***\n", arg2);
 
     /* CRITICAL FIX: Call activate_module on all subdevs FIRST to get them from state 1->2 */
-    if (arg2 == 1 && ourISPdev->vic_dev->state < 2) {  /* Stream ON */
+    if (arg2 == 1 && ourISPdev->vic_dev->state < 3) {  /* Stream ON */
         pr_info("*** tx_isp_video_link_stream: CRITICAL FIX - Calling activate_module on all subdevs first ***\n");
         s4 = arg1->subdevs;
         for (i = 0; i != 0x10; i++) {
