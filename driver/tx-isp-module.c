@@ -1661,86 +1661,6 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
 
     printk(KERN_ALERT "*** Iisp_vic_interrupt_service_routine: IRQ 38 called");
 
-    /* Minimal good-things style ISR: clear pending, notify, and requeue via vic_framedone_irq_function */
-    do {
-        struct tx_isp_dev *isp_dev_cast = (struct tx_isp_dev *)arg1;
-        struct tx_isp_vic_device *vic_dev_fast = isp_dev_cast ? isp_dev_cast->vic_dev : NULL;
-        if (!vic_dev_fast || !vic_dev_fast->vic_regs) {
-            return IRQ_NONE;
-        }
-        /* Clear pending (W1C) on PRIMARY bank */
-        writel(0xFFFFFFFF, vic_dev_fast->vic_regs + 0x1f0);
-        writel(0xFFFFFFFF, vic_dev_fast->vic_regs + 0x1f4);
-        /* Also clear CONTROL bank if present */
-        if (vic_dev_fast->vic_regs_control) {
-            writel(0xFFFFFFFF, vic_dev_fast->vic_regs_control + 0x1f0);
-            writel(0xFFFFFFFF, vic_dev_fast->vic_regs_control + 0x1f4);
-        }
-        /* CRITICAL FIX: Check BOTH VIC register spaces for interrupt status */
-        void __iomem *vr_primary = vic_dev_fast->vic_regs;
-        void __iomem *vr_control = vic_dev_fast->vic_regs_control;
-
-        /* Try PRIMARY register space first */
-        u32 enable1_pri = readl(vr_primary + 0x1e0);
-        u32 enable2_pri = readl(vr_primary + 0x1e4);
-        u32 mask1_pri = readl(vr_primary + 0x1e8);
-        u32 mask2_pri = readl(vr_primary + 0x1ec);
-
-        /* Try CONTROL register space */
-        u32 enable1_ctrl = vr_control ? readl(vr_control + 0x1e0) : 0;
-        u32 enable2_ctrl = vr_control ? readl(vr_control + 0x1e4) : 0;
-        u32 mask1_ctrl = vr_control ? readl(vr_control + 0x1e8) : 0;
-        u32 mask2_ctrl = vr_control ? readl(vr_control + 0x1ec) : 0;
-
-        /* Binary Ninja logic on both register spaces */
-        u32 v1_7_pri = (~mask1_pri) & enable1_pri;
-        u32 v1_10_pri = (~mask2_pri) & enable2_pri;
-        u32 v1_7_ctrl = (~mask1_ctrl) & enable1_ctrl;
-        u32 v1_10_ctrl = (~mask2_ctrl) & enable2_ctrl;
-
-        /* Use whichever register space has active interrupts */
-        u32 v1_7 = v1_7_pri | v1_7_ctrl;
-        u32 v1_10 = v1_10_pri | v1_10_ctrl;
-
-        /* Acknowledge interrupts in both spaces */
-        writel(v1_7_pri, vr_primary + 0x1f0);
-        writel(v1_10_pri, vr_primary + 0x1f4);
-        if (vr_control) {
-            writel(v1_7_ctrl, vr_control + 0x1f0);
-            writel(v1_10_ctrl, vr_control + 0x1f4);
-        }
-        wmb();
-
-        pr_info("*** VIC ISR: PRI(en1=0x%x,mask1=0x%x,v1_7=0x%x,v1_10=0x%x) CTRL(en1=0x%x,mask1=0x%x,v1_7=0x%x,v1_10=0x%x) FINAL(v1_7=0x%x,v1_10=0x%x) ***\n",
-                enable1_pri, mask1_pri, v1_7_pri, v1_10_pri, enable1_ctrl, mask1_ctrl, v1_7_ctrl, v1_10_ctrl, v1_7, v1_10);
-
-        /* Handle frame-done interrupt (bit 0) */
-        if (v1_7 & 1) {
-            pr_info("*** VIC ISR: Frame done interrupt - calling vic_framedone_irq_function ***\n");
-            vic_framedone_irq_function(vic_dev_fast);
-        }
-
-        /* CRITICAL FIX: Handle MDMA interrupts like Binary Ninja reference */
-        if (v1_10 & 1) {
-            pr_info("*** VIC ISR: MDMA channel 0 interrupt - calling vic_mdma_irq_function ***\n");
-            extern int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
-            vic_mdma_irq_function(vic_dev_fast, 0);
-        }
-
-        if (v1_10 & 2) {
-            pr_info("*** VIC ISR: MDMA channel 1 interrupt - calling vic_mdma_irq_function ***\n");
-            extern int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
-            vic_mdma_irq_function(vic_dev_fast, 1);
-        }
-
-        /* Bump frame counters and wake waiters */
-        if (ourISPdev) {
-            ourISPdev->vic_dev->frame_count++;
-            isp_frame_done_wakeup();
-        }
-        return IRQ_HANDLED; /* Early return to bypass complex path that may stop after 2 frames */
-    } while (0);
-
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)arg1;
     struct tx_isp_vic_device *vic_dev;
     void __iomem *vic_regs;
@@ -1802,15 +1722,6 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         /* Extra debug: control and geometry */
         printk(KERN_ALERT "*** VIC IRQ: CTRL[0x300]=0x%x DIMS[0x304]=0x%x STRIDE[0x310]=0x%x ***\n",
                readl(vic_regs + 0x300), readl(vic_regs + 0x304), readl(vic_regs + 0x310));
-        /* Extra debug: read core VIC gate bits to catch if they drop mid-stream */
-        do {
-            if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
-                void __iomem *core = ourISPdev->core_dev->core_regs;
-                u32 g0 = readl(core + 0x9ac0);
-                u32 g1 = readl(core + 0x9ac8);
-                printk(KERN_ALERT "*** VIC IRQ: CORE GATES [9ac0]=0x%x [9ac8]=0x%x ***\n", g0, g1);
-            }
-        } while (0);
 
 
         v1_7 = (~reg_1e8) & reg_1e0;
@@ -1826,32 +1737,6 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         writel(v1_10, base_for_irq + 0x1f4);
         wmb();
         printk(KERN_ALERT "*** VIC IRQ: Register writes completed (at base=%p) ***\n", base_for_irq);
-
-        /* Restore interrupts on PRIMARY: clear pending, ensure frame-done enabled, and permit bit21 for debug */
-        if (vic_dev && vic_dev->vic_regs) {
-            void __iomem *vrp = vic_dev->vic_regs;
-            u32 en = readl(vrp + 0x1e0);
-            /* Clear pending */
-            writel(0xFFFFFFFF, vrp + 0x1f0);
-            writel(0xFFFFFFFF, vrp + 0x1f4);
-            wmb();
-            /* Skip mask/ctrl restore in ISR to match good-things: no MainMask/CTRL writes here. */
-            /* writel(0xFFDFFFFE, vrp + 0x1e8);  -- SKIPPED */
-            wmb();
-            /* If control bits lost in 0x300, re-assert them like reference -- SKIPPED */
-            if (0) {
-                u32 ctrl = readl(vrp + 0x300);
-                if ((ctrl & 0x80000020) != 0x80000020) {
-                    u32 count = vic_dev->active_buffer_count;
-                    if (count == 0) count = 2;
-                    ctrl = (count << 16) | 0x80000020;
-                    writel(ctrl, vrp + 0x300);
-                    wmb();
-                    printk(KERN_ALERT "*** VIC IRQ: Rewrote CTRL[0x300]=0x%x (count=%u) to preserve control bits ***\n", ctrl, count);
-                }
-            }
-            /* printk(KERN_ALERT "*** VIC IRQ: Restored MainMask=0xFFDFFFFE (frame-done+bit21 for debug) ***\n"); */
-        }
 
         /* CRITICAL DEBUG: Add the missing debugging right after register writes */
         printk(KERN_ALERT "*** VIC IRQ: About to check vic_start_ok - vic_start_ok=%u ***\n", vic_start_ok);
