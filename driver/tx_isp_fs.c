@@ -25,6 +25,14 @@
 static struct tx_isp_fs_device *dump_fsd = NULL;  /* Global FS device pointer */
 extern struct tx_isp_dev *ourISPdev;
 
+/* FS queue entry to track QBUF items through to frame-done */
+struct fs_buffer_entry {
+    struct list_head list;
+    u32 index;
+    u32 phys;
+    u32 size;
+};
+
 
 /* Forward declarations */
 static int frame_chan_event(void *data);
