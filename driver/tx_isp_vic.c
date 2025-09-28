@@ -1432,16 +1432,9 @@ int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sens
         return -EINVAL;
     }
 
+
     /* Binary Ninja: $v0_1 = arg2 == 0 ? memset : memcpy */
-    if (attr == NULL) {
-        /* Clear sensor attribute */
-        memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
-        pr_info("vic_sensor_ops_sync_sensor_attr: cleared sensor attributes\n");
-    } else {
-        /* Copy sensor attribute */
-        memcpy(&vic_dev->sensor_attr, attr, sizeof(vic_dev->sensor_attr));
-        pr_info("vic_sensor_ops_sync_sensor_attr: copied sensor attributes\n");
-    }
+    // TODO
 
     return 0;
 }
