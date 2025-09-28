@@ -89,6 +89,8 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev);
 uint32_t fix_point_mult3_32(uint32_t shift_bits, uint32_t multiplier, uint32_t multiplicand);
 int __init verify_handler_addresses(void);
 int tx_isp_create_subdev_graph(struct tx_isp_dev *isp);
+int tx_isp_fs_dequeue_done(int channel, u32 *index, u32 *phys, u32 *size);
+void tx_isp_fs_enqueue_qbuf(int channel, u32 index, u32 phys, u32 size);
 
 /* External variables */
 extern int isp_clk;  /* Global ISP clock rate from tx_isp_core.c */
