@@ -584,6 +584,9 @@ int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id)
 
 /* VIC PIPO/MDMA setup entry point (Binary Ninja MCP) */
 extern int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg);
+/* Direct access to VIC event handler (bypass event dispatch) */
+int vic_core_ops_ioctl(struct tx_isp_subdev *sd, int cmd, void *arg);
+
 
 /* Forward declarations for initialization functions */
 extern int tx_isp_fs_platform_init(void);
@@ -3323,10 +3326,14 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             if (event_result == 0) {
                 pr_info("*** Channel %d: QBUF EVENT SUCCESS ***\n", channel);
             } else if (event_result == 0xfffffdfd) {
-                pr_info("*** Channel %d: QBUF EVENT - No VIC callback ***\n", channel);
+                pr_info("*** Channel %d: QBUF EVENT - No VIC callback (falling back to direct call) ***\n", channel);
             } else {
-                pr_warn("*** Channel %d: QBUF EVENT returned: 0x%x ***\n", channel, event_result);
+                pr_warn("*** Channel %d: QBUF EVENT returned: 0x%x (falling back to direct call) ***\n", channel, event_result);
             }
+
+            /* DIRECT PATH: Call VIC handler explicitly to ensure buffers are programmed */
+            pr_info("*** Channel %d: QBUF -> direct VIC buffer management via vic_core_ops_ioctl ***\n", channel);
+            (void)vic_core_ops_ioctl(&vic_dev_buf->sd, 0x3000008, &buffer);
         }
 
         /* CRITICAL FIX: Use REAL buffer address from application instead of fake address */
@@ -3974,6 +3981,16 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         // Binary Ninja: *($s0 + 0x230) |= 1
         state->flags |= 1;
         state->streaming = true;
+
+        // Start the full ISP/VIC streaming pipeline like the reference
+        if (ourISPdev) {
+            int ret_stream;
+            pr_info("*** Channel %d: STREAMON - calling tx_isp_video_s_stream(ON) to arm VIC/MDMA ***\n", channel);
+            ret_stream = tx_isp_video_s_stream(ourISPdev, 1);
+            if (ret_stream != 0) {
+                pr_warn("Channel %d: STREAMON - tx_isp_video_s_stream failed: %d (continuing)\n", channel, ret_stream);
+            }
+        }
 
         // REMOVED: Core state management - ALL state management happens through VIC device
         // Based on Binary Ninja MCP analysis, core device is stateless
