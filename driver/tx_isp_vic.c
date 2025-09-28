@@ -2938,6 +2938,14 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     pr_info("*** DELAYED VIC HARDWARE ENABLE: Enabling VIC hardware after complete initialization ***\n");
                     void __iomem *vic_regs = vic_dev->vic_regs;
                     if (vic_regs) {
+                        /* CRITICAL: Add VIC enable register writes that trigger MIPI lane config */
+                        pr_info("*** CRITICAL: Writing VIC enable registers 0x1e0/0x1e4 to trigger MIPI lane config ***\n");
+                        writel(0x3FFFFFFF, vic_regs + 0x1e0);
+                        writel(0x0000000F, vic_regs + 0x1e4);
+                        wmb();
+                        pr_info("*** VIC ENABLES: [0x1e0]=0x%08x [0x1e4]=0x%08x ***\n",
+                                readl(vic_regs + 0x1e0), readl(vic_regs + 0x1e4));
+
                         /* BINARY NINJA EXACT: Hardware enable sequence */
                         /* Binary Ninja: **(arg1 + 0xb8) = 2; **(arg1 + 0xb8) = 4; while (*$v1_30 != 0) nop; **(arg1 + 0xb8) = 1 */
                         writel(0x2, vic_regs + 0x0);        /* Binary Ninja: Pre-enable state */
@@ -2954,6 +2962,14 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
                         writel(0x1, vic_regs + 0x0);        /* Binary Ninja: Final enable */
                         wmb();
+
+                        /* CRITICAL: Re-write VIC enable registers after final enable to ensure MIPI lane config */
+                        writel(0x3FFFFFFF, vic_regs + 0x1e0);
+                        writel(0x0000000F, vic_regs + 0x1e4);
+                        wmb();
+                        pr_info("*** VIC ENABLES (POST-FINAL): [0x1e0]=0x%08x [0x1e4]=0x%08x ***\n",
+                                readl(vic_regs + 0x1e0), readl(vic_regs + 0x1e4));
+
                         pr_info("*** BINARY NINJA EXACT: Hardware enable sequence 2->4->wait->1 (waited %d us) ***\n", wait_count);
 
                         /* Re-assert stream control after final enable: hardware may clear 0x300 during 2->4->1 */
