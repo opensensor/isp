@@ -1788,8 +1788,6 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
 
                 /* GOOD-THINGS PRESERVATION: notify frame channel that a frame is ready */
                 do {
-                    extern struct frame_channel_device frame_channels[];
-                    struct frame_channel_device *fcd = &frame_channels[0];
                     unsigned long flags_local;
                     if (fcd) {
                         spin_lock_irqsave(&fcd->state.buffer_lock, flags_local);
