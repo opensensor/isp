@@ -2034,6 +2034,25 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 wmb();
                 writel(2, vr + 0x0);
                 wmb();
+
+                /* Re-assert MDMA config knobs (idempotent): 0x308=1, DIMS/STRIDE */
+                do {
+                    u32 dims = readl(vr + 0x304);
+                    u32 stride_y = readl(vr + 0x310);
+                    u32 stride_uv = readl(vr + 0x314);
+                    writel(1, vr + 0x308);
+                    writel(dims, vr + 0x304);
+                    writel(stride_y, vr + 0x310);
+                    writel(stride_uv, vr + 0x314);
+                    if (vc) {
+                        writel(1, vc + 0x308);
+                        writel(dims, vc + 0x304);
+                        writel(stride_y, vc + 0x310);
+                        writel(stride_uv, vc + 0x314);
+                    }
+                } while (0);
+                wmb();
+
                 /* Re-apply IMR/IMCR routing as per working reference (both banks) */
                 writel(0x07800438, vr + 0x04);
                 writel(0xb5742249, vr + 0x0c);

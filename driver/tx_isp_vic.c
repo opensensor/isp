@@ -429,22 +429,26 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 }
             }
 
-            /* Binary Ninja: int32_t $v1_2 = $v1_1 << 0x10 */
-            int buffer_index;
-            if (match_found == 0) {
-                /* Binary Ninja: $v1_2 = $a1_1 << 0x10 */
-                buffer_index = buffer_count << 16;
-            } else {
-                buffer_index = high_bits << 16;
+            /* Preserve working count: prefer active_buffer_count if our list is empty */
+            u32 count = vic_dev->active_buffer_count;
+            if (count == 0) count = 2;             /* Safe minimum */
+            if (buffer_count > 0) {
+                /* If we actually have queued entries, follow reference index logic */
+                int buffer_index;
+                if (match_found == 0) buffer_index = buffer_count << 16;
+                else buffer_index = high_bits << 16;
+                count = (buffer_index >> 16);
             }
 
-            /* Binary Ninja: *($a3_1 + 0x300) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff) */
+            /* Re-write VIC[0x300] with correct buffer-count in upper 16 bits */
             u32 reg_val = readl(vic_base + 0x300);
-            reg_val = (reg_val & 0xfff0ffff) | buffer_index;
+            reg_val = (reg_val & 0xfff0ffff) | (count << 16);
             writel(reg_val, vic_base + 0x300);
+            if (vic_dev->vic_regs_control)
+                writel(reg_val, vic_dev->vic_regs_control + 0x300);
 
-            pr_info("*** VIC FRAME DONE: Updated VIC[0x300] = 0x%x (buffers: index=%d, match=%d) ***\n",
-                    reg_val, buffer_count, match_found);
+            pr_info("*** VIC FRAME DONE: Updated VIC[0x300] = 0x%x (using count=%u, qlen=%d, match=%d) ***\n",
+                    reg_val, count, buffer_count, match_found);
 
             /* Binary Ninja: result = &data_b0000 */
             result = &data_b0000;
