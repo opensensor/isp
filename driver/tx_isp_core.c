@@ -40,6 +40,7 @@ static int tx_isp_csi_device_deinit(struct tx_isp_dev *isp);
 static int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
 int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev);
 int tx_isp_send_event_to_remote(struct tx_isp_subdev *sd, int event_type, void *data);
+struct tx_isp_sensor *tx_isp_get_sensor(void);
 
 /* Forward declaration for VIC device creation from tx_isp_vic.c */
 extern int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
