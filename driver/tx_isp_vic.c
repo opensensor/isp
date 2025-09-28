@@ -2878,19 +2878,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             } else if (vic_dev->state == 3) {
                 vic_dev->state = 4;
                 pr_info("*** vic_core_s_stream: VIC state transition 3 → 4 (STREAMING) ***\n");
-
-                /* CRITICAL: Call ispcore_slake_module when VIC state reaches 4 (>= 3) */
-                pr_info("*** VIC STATE 4: Calling ispcore_slake_module to initialize ISP core ***\n");
-                extern int ispcore_slake_module(struct tx_isp_dev *isp_dev);
-                if (ourISPdev) {
-                    int slake_ret = ispcore_slake_module(ourISPdev);
-                    if (slake_ret == 0) {
-                        pr_info("*** ispcore_slake_module SUCCESS - ISP core should now be initialized ***\n");
-                    } else {
-                        pr_info("*** ispcore_slake_module FAILED: %d ***\n", slake_ret);
-                    }
-                }
-
                 /* CRITICAL: Apply full VIC configuration now that VIC is in streaming state */
             } else {
                 pr_info("*** vic_core_s_stream: VIC state %d - letting tx_isp_video_s_stream handle state 2 → 3 transition ***\n", vic_dev->state);
