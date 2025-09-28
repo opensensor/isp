@@ -502,13 +502,12 @@ label_123f4:
 
         /* Call ispvic_frame_channel_qbuf to supply VIC with next buffer */
         /* This writes buffer addresses to VIC registers 0x318-0x328 */
-        //int qbuf_ret = ispvic_frame_channel_qbuf(&vic_dev->sd, NULL);
-		// TODO should not be null
-        //if (qbuf_ret == 0) {
-        //    pr_info("*** VIC FRAME DONE: New buffer queued successfully - interrupts should continue ***\n");
-        //} else {
-        //    pr_warn("*** VIC FRAME DONE: Failed to queue new buffer: %d ***\n", qbuf_ret);
-        //}
+        int qbuf_ret = ispvic_frame_channel_qbuf(&vic_dev->sd, NULL);
+        if (qbuf_ret == 0) {
+            pr_info("*** VIC FRAME DONE: New buffer queued successfully - interrupts should continue ***\n");
+        } else {
+            pr_warn("*** VIC FRAME DONE: Failed to queue new buffer: %d ***\n", qbuf_ret);
+        }
     } else {
         pr_info("*** VIC FRAME DONE: Stream not active, skipping buffer queue ***\n");
     }
