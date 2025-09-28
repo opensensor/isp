@@ -1793,17 +1793,29 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 printk(KERN_ALERT "*** VIC SUCCESS: Calling vic_framedone_irq_function ***\n");
                 vic_framedone_irq_function(vic_dev);
 
-                /* GOOD-THINGS PRESERVATION: notify frame channel that a frame is ready */
+                /* GOOD-THINGS PRESERVATION + FS/V4L2 notifications: wake all streaming channels and core */
                 do {
                     extern struct frame_channel_device frame_channels[];
-                    struct frame_channel_device *fcd = &frame_channels[0];
-                    unsigned long flags_local;
-                    if (fcd) {
+                    extern int num_channels;
+                    int i;
+
+                    /* Global ISP frame-done notification (used by core/tuning paths) */
+                    isp_frame_done_wakeup();
+
+                    for (i = 0; i < num_channels; i++) {
+                        struct frame_channel_device *fcd = &frame_channels[i];
+                        unsigned long flags_local;
+                        if (!fcd)
+                            continue;
+                        if (!fcd->state.streaming)
+                            continue;
                         spin_lock_irqsave(&fcd->state.buffer_lock, flags_local);
-                        fcd->state.frame_ready = true;
+                        if (!fcd->state.frame_ready) {
+                            fcd->state.frame_ready = true;
+                            wake_up_interruptible(&fcd->state.frame_wait);
+                            printk(KERN_ALERT "*** VIC IRQ: frame_ready signaled to frame channel %d ***\n", i);
+                        }
                         spin_unlock_irqrestore(&fcd->state.buffer_lock, flags_local);
-                        wake_up_interruptible(&fcd->state.frame_wait);
-                        printk(KERN_ALERT "*** VIC IRQ: frame_ready signaled to frame channel 0 ***\n");
                     }
                 } while (0);
             } else {
@@ -1942,6 +1954,31 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         }
     }
 
+    /* Conditional VIC re-arm to maintain continuous interrupts (conservative) */
+    do {
+        if (vic_dev && vic_dev->vic_regs) {
+            void __iomem *vr = vic_dev->vic_regs;
+            u32 ctrl = readl(vr + 0x300);
+            int lost_ctrl = ((ctrl & 0x80000020) != 0x80000020);
+            if (lost_ctrl) {
+                printk(KERN_ALERT "*** VIC RE-ARM: ctrl=0x%x lost enable bits, re-applying 2->1 and IMR/IMCR ***\n", ctrl);
+                /* Clear any pending status (W1C) */
+                writel(0xFFFFFFFF, vr + 0x1f0);
+                writel(0xFFFFFFFF, vr + 0x1f4);
+                wmb();
+                /* Enter config then re-run */
+                writel(2, vr + 0x0);
+                wmb();
+                /* Re-apply IMR/IMCR routing as per working reference */
+                writel(0x07800438, vr + 0x04);
+                writel(0xb5742249, vr + 0x0c);
+                wmb();
+                writel(1, vr + 0x0);
+                wmb();
+            }
+        }
+    } while (0);
+
     /* Binary Ninja: return 1 */
     printk(KERN_ALERT "*** VIC IRQ COMPLETE: Processed v1_7=0x%x, v1_10=0x%x - returning IRQ_HANDLED ***\n", v1_7, v1_10);
     return IRQ_HANDLED;
@@ -1967,6 +2004,7 @@ struct tx_isp_video_pad {
     void *link_src;
     void *link_dst;
     void *link_src_pad;
+
     void *link_dst_pad;
     int link_flags;
 };
