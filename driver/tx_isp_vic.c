@@ -2932,13 +2932,6 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
     /* Binary Ninja: int32_t $v1_2 = *($s0_1 + 0xe8) */
     state = vic_dev->state;
 
-    /* Binary Ninja: if ($v1_2 == 4) vic_video_s_stream(arg1, 0) */
-    if (state == 4) {
-        pr_info("tx_isp_vic_slake_subdev: VIC in streaming state, stopping stream\n");
-        vic_core_s_stream(sd, 0);
-        state = vic_dev->state;  /* Update state after s_stream */
-    }
-
     /* Binary Ninja: if ($v1_2 == 3) vic_core_ops_init(arg1, 0) */
     if (vic_dev->state == 3) {
         pr_info("tx_isp_vic_slake_subdev: VIC in state 3, calling core_ops_init(disable)\n");
