@@ -285,6 +285,32 @@ struct tx_isp_config {
     u32 lane_num;
 };
 
+
+struct imp_channel_attr {
+    uint32_t enable;          // 0x00
+    uint32_t width;           // 0x04
+    uint32_t height;          // 0x08
+    uint32_t format;          // 0x0c
+    uint32_t crop_enable;     // 0x10
+    struct {
+        uint32_t x;           // 0x14
+        uint32_t y;           // 0x18
+        uint32_t width;       // 0x1c
+        uint32_t height;      // 0x20
+    } crop;
+    uint32_t scaler_enable;   // 0x24
+    uint32_t scaler_outwidth; // 0x28
+    uint32_t scaler_outheight;// 0x2c
+    uint32_t picwidth;        // 0x30
+    uint32_t picheight;       // 0x34
+    uint32_t fps_num;         // 0x38
+    uint32_t fps_den;         // 0x3c
+    // Total size must be 0x50 bytes to match firmware copy size
+    uint32_t reserved[4];     // Pad to 0x50 bytes
+} __attribute__((aligned(4)));
+
+
+
 /* Forward declaration of device structure */
 
 /* Channel structures - must be defined before tx_isp_dev */
@@ -780,30 +806,6 @@ struct tx_isp_subdev {
 //	u32 height;
 //	void *private;
 //};
-
-struct imp_channel_attr {
-    uint32_t enable;          // 0x00
-    uint32_t width;           // 0x04
-    uint32_t height;          // 0x08
-    uint32_t format;          // 0x0c
-    uint32_t crop_enable;     // 0x10
-    struct {
-        uint32_t x;           // 0x14
-        uint32_t y;           // 0x18
-        uint32_t width;       // 0x1c
-        uint32_t height;      // 0x20
-    } crop;
-    uint32_t scaler_enable;   // 0x24
-    uint32_t scaler_outwidth; // 0x28
-    uint32_t scaler_outheight;// 0x2c
-    uint32_t picwidth;        // 0x30
-    uint32_t picheight;       // 0x34
-    uint32_t fps_num;         // 0x38
-    uint32_t fps_den;         // 0x3c
-    // Total size must be 0x50 bytes to match firmware copy size
-    uint32_t reserved[4];     // Pad to 0x50 bytes
-} __attribute__((aligned(4)));
-
 
 
 struct tx_isp_frame_channel {
