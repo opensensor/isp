@@ -1728,6 +1728,14 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         v1_10 = (~reg_1ec) & reg_1e4;
         printk(KERN_ALERT "*** VIC IRQ: Calculated v1_7 = 0x%x v1_10 = 0x%x ***\n", v1_7, v1_10);
 
+        /* CRITICAL FIX: Binary Ninja shows these register writes are ESSENTIAL */
+        /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7 */
+        /* Binary Ninja: *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
+        writel(v1_7, base_for_irq + 0x1f0);   /* Clear interrupt status register 1 */
+        writel(v1_10, base_for_irq + 0x1f4);  /* Clear interrupt status register 2 */
+        wmb();
+        printk(KERN_ALERT "*** VIC IRQ: CRITICAL - Wrote v1_7=0x%x to [0x1f0], v1_10=0x%x to [0x1f4] ***\n", v1_7, v1_10);
+
 
         if (vic_start_ok != 0) {
             /* Binary Ninja: if (($v1_7 & 1) != 0) */
@@ -1775,6 +1783,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
             if ((v1_7 & 0x8000) != 0) {
                 printk(KERN_ALERT "*** VIC ERROR: vertical error ch1 (bit 15) ***\n");
             }
+            /* FIXED: Binary Ninja decompilation corruption - these should be 0x10000 and 0x20000 */
             if ((v1_7 & 0x10000) != 0) {
                 printk(KERN_ALERT "*** VIC ERROR: vertical error ch2 (bit 16) ***\n");
             }
