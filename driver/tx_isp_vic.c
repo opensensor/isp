@@ -423,12 +423,18 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 buffer_index = high_bits << 16;
             }
 
-            /* Reference driver: do NOT rewrite reg 0x300 in framedone path. BN sets it at stream-on. */
-            /* u32 reg_val = readl(vic_base + 0x300);
-             * reg_val = (reg_val & 0xfff0ffff) | buffer_index;
-             * writel(reg_val, vic_base + 0x300);
-             */
-            pr_debug("vic_framedone_irq_function: NOT updating VIC[0x300] in ISR (buffer_index=0x%x)\n", buffer_index);
+            /* BN MCP: Update only buffer index bits in VIC[0x300], preserve 0x80000020 control */
+            {
+                u32 reg_val = readl(vic_base + 0x300);
+                u32 new_val = (reg_val & 0xfff0ffff) | buffer_index;
+                if (new_val != reg_val) {
+                    writel(new_val, vic_base + 0x300);
+                    wmb();
+                    pr_debug("vic_framedone_irq_function: Updated VIC[0x300] idx -> 0x%x (was 0x%x)\n", new_val, reg_val);
+                } else {
+                    pr_debug("vic_framedone_irq_function: Buffer index unchanged (0x%x)\n", reg_val);
+                }
+            }
 
             /* Binary Ninja: result = &data_b0000 */
             result = &data_b0000;
@@ -1093,15 +1099,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0xFFFFFFFF, vic_regs + 0x1f0);
         writel(0xFFFFFFFF, vic_regs + 0x1f4);
         writel(0xFFDFFFFE, vic_regs + 0x1e8); /* unmask bit0 + bit21 (silicon uses bit21) */
-        if (vic_dev->vic_regs_control) {
-            void __iomem *ctrl = vic_dev->vic_regs_control;
-            writel(0xFFFFFFFF, ctrl + 0x1f0);
-            writel(0xFFFFFFFF, ctrl + 0x1f4);
-            writel(0xFFDFFFFE, ctrl + 0x1e8);
-        }
         /* Do NOT re-program IMR/IMCR here; route once pre-start to avoid race with RUN */
         wmb();
-        pr_info("*** VIC ENABLE: MainMask programmed in BOTH banks just before RUN (IMR/IMCR left as pre-start) ***\n");
+        pr_info("*** VIC ENABLE: MainMask programmed just before RUN (IMR/IMCR left as pre-start) ***\n");
 
         writel(0x1, vic_regs + 0x0);  /* Final enable */
         wmb();
