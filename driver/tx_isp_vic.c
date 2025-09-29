@@ -1297,10 +1297,15 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             u32 buffer_count = vic_dev->active_buffer_count;
             if (buffer_count == 0) buffer_count = 2;
             if (buffer_count > 5) buffer_count = 5;
-            u32 stream_ctrl = (buffer_count << 16) | 0x80000020;
+
+            /* CRITICAL FIX: Do NOT overwrite hardware-managed buffer index */
+            u32 current_ctrl = readl(vic_regs + 0x300);
+            u32 hardware_index = current_ctrl & 0x000F0000;  /* Preserve hardware buffer index */
+            u32 stream_ctrl = hardware_index | 0x80000020;   /* Keep hardware index, set control flags */
             writel(stream_ctrl, vic_regs + 0x300);
             wmb();
-            pr_info("*** POST-ENABLE(A): Rewrote VIC[0x300]=0x%x (buffer_count=%u) ***\n", stream_ctrl, buffer_count);
+            pr_info("*** POST-ENABLE(A): PRESERVED hardware buffer index VIC[0x300]=0x%x (was 0x%x, hw_index=%u) ***\n",
+                    stream_ctrl, current_ctrl, hardware_index >> 16);
         }
 
         /* Format detection logic - Binary Ninja 000107f8-00010a04 */
@@ -1952,22 +1957,30 @@ int vic_mdma_enable(struct tx_isp_vic_device *vic_dev, int channel, int dual_cha
         writel(base_addr + frame_size + (buffer_offset * 4), vic_regs + 0x33c);
     }
 
-    /* Binary Ninja EXACT: Calculate VIC control register value */
-    if (buffer_count < 8) {
-        vic_control = (buffer_count << 16) | 0x80000020 | format_type;
-    } else {
-        vic_control = 0x80080020 | format_type;
-    }
+    /* CRITICAL FIX: Do NOT write buffer count to hardware-managed buffer index field */
+    /* The Binary Ninja MCP reference shows hardware manages buffer index automatically */
+    /* Writing buffer_count to bits 16-19 corrupts the hardware buffer cycling */
 
-    /* Binary Ninja EXACT: Write VIC control register to BOTH spaces */
-    writel(vic_control, vic_regs + 0x300);
+    /* Use base control value without buffer count in index field */
+    vic_control = 0x80000020 | format_type;  /* Base control + format, NO buffer count */
+
+    /* CRITICAL FIX: Preserve hardware-managed buffer index when writing control register */
+    u32 current_primary = readl(vic_regs + 0x300);
+    u32 hardware_index = current_primary & 0x000F0000;  /* Preserve hardware buffer index */
+    u32 final_control = vic_control | hardware_index;   /* Combine with hardware index */
+
+    writel(final_control, vic_regs + 0x300);
     wmb();
 
-    /* CRITICAL FIX: Also write to CONTROL space - this was missing! */
+    /* CRITICAL FIX: Also write to CONTROL space - preserve hardware state there too */
     if (vic_dev->vic_regs_control) {
-        writel(vic_control, vic_dev->vic_regs_control + 0x300);
+        u32 current_control = readl(vic_dev->vic_regs_control + 0x300);
+        u32 control_index = current_control & 0x000F0000;
+        u32 control_final = vic_control | control_index;
+        writel(control_final, vic_dev->vic_regs_control + 0x300);
         wmb();
-        pr_err("*** vic_mdma_enable: VIC CONTROL[0x300] = 0x%x (DUAL-SPACE PROGRAMMING) ***\n", vic_control);
+        pr_err("*** vic_mdma_enable: PRESERVED hardware indices PRIMARY=0x%x CONTROL=0x%x ***\n",
+               final_control, control_final);
     }
 
     pr_err("*** vic_mdma_enable: VIC PRIMARY[0x300] = 0x%x (MDMA ENABLED) ***\n", vic_control);
