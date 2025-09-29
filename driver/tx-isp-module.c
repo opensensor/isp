@@ -1725,38 +1725,76 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         if (((reg_1e0 & 0x1) == 0) || ((reg_1e8 & 0x1) != 0) || (reg_1e4 != 0x0000000F)) {
             printk(KERN_ALERT "*** VIC IRQ: FIXUP enable/mask — before: 1e0=0x%x 1e4=0x%x 1e8=0x%x ***\n",
                    reg_1e0, reg_1e4, reg_1e8);
-            /* Unmask FD: MainMask bit0 must be 0 (0xFFFFFFFE) */
+            /* Clear pending status (W1C) and set global enable before enabling FD */
+            writel(0xFFFFFFFF, base_for_irq + 0x1f0);
+            writel(0xFFFFFFFF, base_for_irq + 0x1f4);
+            writel(0xFFFFFFFF, base_for_irq + 0x30c);
+            wmb();
+
+            /* Unmask FD and MDMA group on active bank */
             writel(0xFFFFFFFE, base_for_irq + 0x1e8);
-            /* Also unmask MDMA group if required */
             writel(0xFFFFFFFF, base_for_irq + 0x1ec);
             wmb();
-            reg_1e8 = readl(base_for_irq + 0x1e8);
-            /* Enable FD bit0 */
-            writel(reg_1e0 | 0x1, base_for_irq + 0x1e0);
-            /* Enable group bits */
-            writel(0x0000000F, base_for_irq + 0x1e4);
-            wmb();
-            reg_1e0 = readl(base_for_irq + 0x1e0);
-            reg_1e4 = readl(base_for_irq + 0x1e4);
 
-            /* Mirror to the other bank as well to prevent mid-stream clobber from CSI/tuning */
+            /* Enable group bits first, then FD bit0 */
+            writel(0x0000000F, base_for_irq + 0x1e4);
+            writel(readl(base_for_irq + 0x1e0) | 0x1, base_for_irq + 0x1e0);
+            wmb();
+
+            /* Mirror to both banks to prevent mid-stream clobber */
             if (ourISPdev && ourISPdev->vic_dev) {
                 void __iomem *vrp = ourISPdev->vic_dev->vic_regs;
                 void __iomem *vrc = ourISPdev->vic_dev->vic_regs_control;
                 if (vrp) {
+                    writel(0xFFFFFFFF, vrp + 0x1f0);
+                    writel(0xFFFFFFFF, vrp + 0x1f4);
+                    writel(0xFFFFFFFF, vrp + 0x30c);
                     writel(0xFFFFFFFE, vrp + 0x1e8);
                     writel(0xFFFFFFFF, vrp + 0x1ec);
-                    writel(readl(vrp + 0x1e0) | 0x1, vrp + 0x1e0);
                     writel(0x0000000F, vrp + 0x1e4);
+                    writel(readl(vrp + 0x1e0) | 0x1, vrp + 0x1e0);
                     wmb();
                 }
                 if (vrc) {
+                    writel(0xFFFFFFFF, vrc + 0x1f0);
+                    writel(0xFFFFFFFF, vrc + 0x1f4);
+                    writel(0xFFFFFFFF, vrc + 0x30c);
                     writel(0xFFFFFFFE, vrc + 0x1e8);
                     writel(0xFFFFFFFF, vrc + 0x1ec);
-                    writel(readl(vrc + 0x1e0) | 0x1, vrc + 0x1e0);
                     writel(0x0000000F, vrc + 0x1e4);
+                    writel(readl(vrc + 0x1e0) | 0x1, vrc + 0x1e0);
                     wmb();
                 }
+
+                /* If neither bank latched, do CONFIG->RUN latch around enable/mask */
+                do {
+                    int need_latch = 0;
+                    if (vrc) {
+                        u32 c_e0 = readl(vrc + 0x1e0);
+                        u32 c_e4 = readl(vrc + 0x1e4);
+                        if (!((c_e0 & 0x1) && (c_e4 & 0xF))) need_latch = 1;
+                    }
+                    if (vrp) {
+                        u32 p_e0 = readl(vrp + 0x1e0);
+                        u32 p_e4 = readl(vrp + 0x1e4);
+                        if (!((p_e0 & 0x1) && (p_e4 & 0xF))) need_latch = 1;
+                    }
+                    if (need_latch) {
+                        void __iomem *banks[2] = { vrc, vrp };
+                        int bi;
+                        for (bi = 0; bi < 2; bi++) {
+                            void __iomem *b = banks[bi];
+                            if (!b) continue;
+                            writel(2, b + 0x0); wmb(); /* CONFIG */
+                            writel(0xFFFFFFFE, b + 0x1e8);
+                            writel(0xFFFFFFFF, b + 0x1ec);
+                            writel(0x0000000F, b + 0x1e4);
+                            writel(readl(b + 0x1e0) | 0x1, b + 0x1e0);
+                            writel(1, b + 0x0); wmb(); /* RUN */
+                        }
+                    }
+                } while (0);
+
                 /* Choose the bank that actually latched FD enable + group */
                 if (vrc) {
                     u32 c_e0 = readl(vrc + 0x1e0);
