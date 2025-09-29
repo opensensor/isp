@@ -736,9 +736,9 @@ static int vic_initialize_buffer_ring(struct tx_isp_vic_device *vic_dev)
         }
     }
 
-    /* Set buffer counts */
-    vic_dev->buffer_count = 5;
-    vic_dev->active_buffer_count = 5;  /* CRITICAL FIX: Set to 5 to match VIC hardware configuration */
+    /* Set buffer counts - HARDWARE LIMITATION: VIC only supports 4 buffers in RUN mode */
+    vic_dev->buffer_count = 4;
+    vic_dev->active_buffer_count = 4;  /* CRITICAL FIX: Set to 4 to match VIC hardware limitation */
 
     spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
 
@@ -2919,12 +2919,12 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             /* SAFE: $s0 + 0x218 = active_buffer_count */
             u32 buffer_count = vic_dev->active_buffer_count;
 
-            /* CRITICAL FIX: Force 5 buffers to prevent control register corruption */
-            /* The active_buffer_count is being corrupted somewhere, so force the correct value */
-            if (buffer_count != 5) {
-                pr_info("*** CRITICAL: active_buffer_count=%u corrupted, forcing to 5 buffers ***\n", buffer_count);
-                buffer_count = 5;
-                vic_dev->active_buffer_count = 5;  /* Fix the corruption */
+            /* CRITICAL FIX: Force 4 buffers to match VIC hardware limitation */
+            /* The VIC hardware only supports 4 buffers in RUN mode, not 5 */
+            if (buffer_count != 4) {
+                pr_info("*** CRITICAL: active_buffer_count=%u incorrect, forcing to 4 buffers (VIC hardware limitation) ***\n", buffer_count);
+                buffer_count = 4;
+                vic_dev->active_buffer_count = 4;  /* Match hardware limitation */
             }
 
             if (buffer_count > 5) buffer_count = 5;        /* 5-slot ring cap */
