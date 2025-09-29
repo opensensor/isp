@@ -1854,6 +1854,18 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         v1_10 = (~reg_1ec) & reg_1e4;
         printk(KERN_ALERT "*** VIC IRQ: Calculated v1_7 = 0x%x v1_10 = 0x%x ***\n", v1_7, v1_10);
 
+        /* Compact, rate-limited status line to avoid log spam: ring ctrl/top16 and index nibble */
+        do {
+            static u32 __vic_stat_counter;
+            if (((++__vic_stat_counter) & 0x7) == 0) { /* every 8th IRQ */
+                u32 __ctrl = readl(vic_regs + 0x300);
+                u32 __top16 = (__ctrl >> 16) & 0xFFFF;
+                u32 __idxNib = (__ctrl >> 16) & 0xF; /* bits [19:16] */
+                printk(KERN_ALERT "*** VIC STAT: ctrl=0x%08x top16=0x%04x idxNib=%u v1_7=0x%08x 1e0=0x%08x 1e8=0x%08x ***\n",
+                       __ctrl, __top16, __idxNib, v1_7, reg_1e0, reg_1e8);
+            }
+        } while (0);
+
         /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7 */
         printk(KERN_ALERT "*** VIC IRQ: About to write v1_7=0x%x to reg 0x1f0 (base=%p) ***\n", v1_7, base_for_irq);
         writel(v1_7, base_for_irq + 0x1f0);
