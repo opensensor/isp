@@ -1168,7 +1168,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* CRITICAL FIX: Use correct enum values - MIPI=1, DVP=2 */
     if (interface_type == TX_SENSOR_DATA_INTERFACE_MIPI) {  /* MIPI = 1 */
         /* MIPI interface - Binary Ninja 00010688-00010a50 */
-        pr_info("MIPI interface configuration\n");
+        pr_info("*** MIPI PATH 1: interface configuration (dbus_type check path) ***\n");
 
         /* Binary Ninja: Check flags at 00010260 */
         if (sensor_attr->dbus_type != interface_type) {
@@ -1276,7 +1276,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_MIPI) {  /* MIPI = 1 in our enum */
         /* MIPI interface - Binary Ninja 000107ec-00010b04 */
-        pr_info("MIPI interface configuration\n");
+        pr_info("*** MIPI PATH 2: interface configuration (second MIPI path - SHOULD NEVER EXECUTE!) ***\n");
 
         /* CRITICAL: VIC hardware should already be initialized by platform driver */
         pr_info("*** VIC hardware should be ready - proceeding with unlock sequence ***\n");
@@ -1357,9 +1357,27 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             udelay(1);
         }
 
+        /* CRITICAL FIX: Binary Ninja EXACT - Write AE window registers 0x104 and 0x108 BEFORE final enable */
+        /* These registers configure the Auto Exposure window for frame processing */
+        /* Binary Ninja: $v1_30[0x41] = zx.d(*($a0_9 + 0x52)) << 0x10 | zx.d(*($a0_9 + 0x4e)) */
+        /* Binary Ninja: *(*(arg1 + 0xb8) + 0x108) = zx.d(*($v1_31 + 0x5a)) << 0x10 | zx.d(*($v1_31 + 0x56)) */
+        /* Use default AE window values (full frame) since sensor_attr doesn't have these fields yet */
+        u32 ae_window_x = 0;      /* AE window X start */
+        u32 ae_window_y = 0;      /* AE window Y start */
+        u32 ae_window_w = actual_width;   /* AE window width */
+        u32 ae_window_h = actual_height;  /* AE window height */
+
+        writel((ae_window_w << 16) | ae_window_x, vic_regs + 0x104);
+        writel((ae_window_h << 16) | ae_window_y, vic_regs + 0x108);
+        wmb();
+
+        pr_info("*** CRITICAL FIX: AE window registers - [0x104]=0x%08x (w=%u x=%u), [0x108]=0x%08x (h=%u y=%u) ***\n",
+                (ae_window_w << 16) | ae_window_x, ae_window_w, ae_window_x,
+                (ae_window_h << 16) | ae_window_y, ae_window_h, ae_window_y);
+
         writel(0x1, vic_regs + 0x0);  /* Final enable */
         wmb();
-        pr_info("*** BINARY NINJA EXACT: Hardware sequence 2->4->wait(%d us)->1 ***\n", wait_count);
+        pr_info("*** BINARY NINJA EXACT: Hardware sequence 2->4->wait(%d us)->AE_windows->1 ***\n", wait_count);
 
 
         /* Re-assert stream control after this enable too, to guard against register clearing */
@@ -3207,8 +3225,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Clear pending (W1C) */
                 writel(0xFFFFFFFF, vr + 0x1f0);
                 writel(0xFFFFFFFF, vr + 0x1f4);
-                /* Set MainMask to allow framedone + bit21 (debug); do NOT touch status regs 0x1e0/0x1e4 */
-                writel(0xFFDFFFFE, vr + 0x1e8); /* allow frame-done + bit21 (debug) */
+                /* CRITICAL FIX: Mask control limit error (bit 21 = 1), only allow frame done (bit 0 = 0) */
+                /* Reference driver does NOT enable control limit error interrupts */
+                writel(0xFFFFFFFE, vr + 0x1e8); /* allow ONLY frame-done, mask control limit error */
+                pr_info("*** CRITICAL FIX: Set interrupt mask=0xFFFFFFFE (frame-done ONLY, control limit MASKED) ***\n");
                 /* Leave 0x1ec (MDMA mask) as-is per working reference */
                 /* DO NOT touch 0x30c here; suspected global mask/enable */
                 wmb();
