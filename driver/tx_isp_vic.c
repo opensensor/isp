@@ -1203,6 +1203,13 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(sensor_format, vic_regs + 0x14);
         writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
 
+        /* CRITICAL FIX: Register 0x18 - Timing parameter (MUST be 0xf00 for MIPI) */
+        /* From vic_control_limit_analysis.md: This register MUST NOT be overwritten */
+        /* Reference driver always uses 0xf00 for MIPI - this prevents control limit error */
+        writel(0xf00, vic_regs + 0x18);
+        wmb();
+        pr_info("*** CRITICAL FIX: reg 0x18 = 0xf00 (timing parameter - prevents control limit error) ***\n");
+
         /* Frame mode based on WDR - Binary Ninja 00010414-00010478 */
         u32 wdr_mode = sensor_attr->wdr_cache;
         u32 frame_mode = (wdr_mode == 0) ? 0x4440 :
