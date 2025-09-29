@@ -1805,7 +1805,8 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                         u32 p_e4 = readl(vrp + 0x1e4);
                         if (!((p_e0 & 0x1) && (p_e4 & 0xF))) need_latch = 1;
                     }
-                    if (need_latch) {
+                    /* Force latch every fixup to ensure enables/masks stick on both banks */
+                    if (1) {
                         void __iomem *banks[2] = { vrc, vrp };
                         int bi;
                         for (bi = 0; bi < 2; bi++) {
