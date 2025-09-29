@@ -1,0 +1,72 @@
+[   97.549531] *** VIC MASK: Set MainMask=0xFFDFFFFE (frame-done + bit21) before RUN ***
+[   97.549537] *** VIC CONTROL (PRIMARY): WROTE 1 to [0x0] before enabling IRQ ***
+[   97.549546] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=85fb0000 ***
+[   97.556999] *** isp_irq_handle: IRQ 37 received, dev_id=85fb0000 ***
+[   97.557005] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
+[   97.564726] *** ISP CORE INTERRUPT HANDLER: IRQ 37 called, dev_id=85fb0000 ***
+[   97.572180] *** ISP CORE: Read interrupt status - interrupt_status=0x00000500 ***
+[   97.579897] *** ISP CORE: Clearing legacy interrupt 0x00000500 to reg +0xb8 ***
+[   97.587430] *** ISP CORE: After clearing - legacy=0x00000000 ***
+[   97.593621] *** ISP CORE: About to process IRQ callbacks - interrupt_status=0x500 ***
+[   97.601696] *** ISP CORE: Callback[8] for bit 8 is NULL - skipping ***
+[   97.608428] *** ISP CORE: Callback[10] for bit 10 is NULL - skipping ***
+[   97.615339] *** ISP CORE INTERRUPT PROCESSING COMPLETE - returning IRQ_HANDLED ***
+[   97.623187] *** CRITICAL: isp_irq_handle: IRQ 38 received, dev_id=85fb0000 ***
+[   97.630640] *** isp_irq_handle: IRQ 38 received, dev_id=85fb0000 ***
+[   97.630646] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
+[   97.638369] *** VIC INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
+[   97.646448] *** VIC IRQ: About to access isp_dev->vic_dev, isp_dev=85fb0000 ***
+[   97.653982] *** VIC IRQ: Got vic_dev=85fd4000 ***
+[   97.658829] *** VIC IRQ: Checking vic_dev validity: vic_dev=85fd4000 ***
+[   97.665740] *** VIC IRQ: About to access vic_dev->vic_regs ***
+[   97.671749] *** VIC IRQ: Got vic_regs=b33e0000 ***
+[   97.676686] *** VIC IRQ: Checking vic_regs validity: vic_regs=b33e0000 ***
+[   97.683779] *** VIC IRQ: vic_regs passed validity check - proceeding with register access ***
+[   97.692571] *** VIC IRQ: About to read VIC registers at b33e0000 ***
+[   97.699129] *** VIC IRQ: Using base b33e0000 [1e0]=0x200000 [1e4]=0x0 [1e8]=0xffdffffe [1ec]=0xf ***
+[   97.708560] *** VIC IRQ: FIXUP enable/mask — before: 1e0=0x200000 1e4=0x0 1e8=0xffdffffe ***
+[   97.717450] *** VIC IRQ: FIXUP enable/mask — after: 1e0=0x0 1e4=0x0 1e8=0xfffffffe ***
+[   97.725791] *** VIC IRQ: CTRL[0x300]=0x80000020 DIMS[0x304]=0x7800438 STRIDE[0x310]=0x780 ***
+[   97.734591] *** VIC IRQ: CORE GATES [9ac0]=0x0 [9ac8]=0x0 ***
+[   97.740519] *** VIC IRQ: Calculated v1_7 = 0x200000 v1_10 = 0x0 ***
+[   97.746982] *** VIC STAT: ctrl=0x80000020 top16=0x8000 idxNib=0 v1_7=0x00200000 1e0=0x00200000 1e8=0xffdffffe ***
+[   97.757576] *** VIC IRQ: About to write v1_7=0x200000 to reg 0x1f0 (base=b33e0000) ***
+[   97.765749] *** VIC IRQ: About to write v1_10=0x0 to reg 0x1f4 (base=b33e0000) ***
+[   97.773557] *** VIC IRQ: Register writes completed (at base=b33e0000) ***
+[   97.780558] *** VIC IRQ: About to check vic_start_ok - vic_start_ok=1 ***
+[   97.787558] *** VIC IRQ: vic_start_ok=1, v1_7=0x200000, v1_10=0x0 ***
+[   97.794195] *** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***
+[   97.800662] *** VIC FALLBACK: control-limit set without FD; invoking vic_framedone_irq_function and FS wakeups ***
+[   97.811350] *** VIC FRAME DONE: Updated VIC[0x300] PRIMARY=0x80000020 CONTROL=0x0 (count=4, cur_idx=4, next_idx=1) ***
+[   97.811356] *** VIC FRAME DONE: Frame completion signaled ***
+[   97.811367] *** VIC RING ROTATE: current=0x0 idx=4 -> next_idx=1, wrote 0x300=0x80010020 ***
+[   97.820075] *** FRAME SYNC: Frame done count = 6 ***
+[   97.820081] *** ISP FRAME DONE WAKEUP: Frame 6 ready for processing ***
+[   97.820091] *** VIC FALLBACK: frame_ready signaled to frame channel 0 ***
+[   97.827101] *** VIC FALLBACK: frame_ready signaled to frame channel 1 ***
+[   97.834105] *** VIC RECOVERY: 3 consecutive (no FD + control-limit) stalls; resetting VIC and refreshing MDMA ring ***
+[   97.856545] *** VIC ERROR: control limit error (bit 21) ***
+[   97.862300] *** VIC RE-ARM: reason=lost_ctrl ctrl=0x20 -> reassert, stream_ctrl=0x80040020 (count=4) ***
+[   97.872089] *** VIC RE-ARM: set PRIMARY 1e0 from 0x0 to 0x1 (enable FD) ***
+[   97.879273] *** VIC RE-ARM: set CONTROL 1e0 from 0x0 to 0x1 (enable FD) ***
+[   97.886463] *** VIC IRQ COMPLETE: Processed v1_7=0x200000, v1_10=0x0 - returning IRQ_HANDLED ***
+[   97.895551] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=85fb0000 ***
+[   97.903009] *** isp_irq_handle: IRQ 37 received, dev_id=85fb0000 ***
+[   97.903015] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
+[   97.910741] *** ISP CORE INTERRUPT HANDLER: IRQ 37 called, dev_id=85fb0000 ***
+[   97.918188] *** ISP CORE: Read interrupt status - interrupt_status=0x00001000 ***
+[   97.925905] *** ISP CORE: Clearing legacy interrupt 0x00001000 to reg +0xb8 ***
+[   97.933444] *** ISP CORE: After clearing - legacy=0x00000000 ***
+[   97.939639] *** ISP CORE: fs_workqueue is NULL - using system workqueue ***
+[   97.939647] *** ISP CORE: About to process IRQ callbacks - interrupt_status=0x1000 ***
+[   97.947813] *** ISP CORE: Callback[12] for bit 12 is NULL - skipping ***
+[   97.954725] *** ISP CORE INTERRUPT PROCESSING COMPLETE - returning IRQ_HANDLED ***
+[   97.962658] *** Channel 0: DQBUF wait returned 1 ***
+[   97.962670] *** Channel 0: DQBUF complete - buffer[3] seq=2 flags=0x3 ***
+[   97.962694] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[   97.962701] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: ENABLE
+[   97.962707] isp_core_tunning_unlocked_ioctl: Suppressing tuning ENABLE during streaming (vic_start_ok=1)
+[   97.962829] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[   97.962841] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[   97.962847] *** Channel 0: DQBUF - dequeue buffer request ***
+[   97.962854] *** tx_isp_get_sensor: Searching subdev array for sensors ***

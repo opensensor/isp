@@ -1731,15 +1731,17 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
             writel(0xFFFFFFFF, base_for_irq + 0x30c);
             wmb();
 
-            /* Unmask FD and MDMA group on active bank */
-            writel(0xFFFFFFFE, base_for_irq + 0x1e8);
-            writel(0xFFFFFFFF, base_for_irq + 0x1ec);
-            wmb();
-
-            /* Enable group bits first, then FD bit0 */
-            writel(0x0000000F, base_for_irq + 0x1e4);
-            writel(readl(base_for_irq + 0x1e0) | 0x1, base_for_irq + 0x1e0);
-            wmb();
+            /* Unmask FD and MDMA group on active bank WITH proper latch + routing */
+            writel(0x2, base_for_irq + 0x0); wmb(); /* CONFIG */
+            writel(0x00000001, base_for_irq + 0x04);   /* IMR baseline unlock */
+            writel(0x00000000, base_for_irq + 0x24);   /* IMR1 baseline */
+            writel(0x07800438, base_for_irq + 0x04);   /* IMR routing/mask */
+            writel(0xb5742249, base_for_irq + 0x0c);   /* IMCR key */
+            writel(0xFFFFFFFE, base_for_irq + 0x1e8);  /* MainMask: unmask FD */
+            writel(0xFFFFFFFF, base_for_irq + 0x1ec);  /* SubMask: allow all MDMA sub-bits */
+            writel(0x0000000F, base_for_irq + 0x1e4);  /* Enable GROUP bits */
+            writel(readl(base_for_irq + 0x1e0) | 0x1, base_for_irq + 0x1e0); /* Enable FD bit0 */
+            writel(0x1, base_for_irq + 0x0); wmb();    /* RUN */
 
             /* Mirror to both banks to prevent mid-stream clobber */
             if (ourISPdev && ourISPdev->vic_dev) {
