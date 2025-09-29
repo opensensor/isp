@@ -1134,7 +1134,14 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         else if (sensor_format == 7) stride_mult = 0x10;
 
         u32 buffer_calc = stride_mult * sensor_attr->integration_time;
-        writel((buffer_calc >> 5) + ((buffer_calc & 0x1f) ? 1 : 0), vic_regs + 0x100);
+        u32 reg_100_dvp_value = (buffer_calc >> 5) + ((buffer_calc & 0x1f) ? 1 : 0);
+        writel(reg_100_dvp_value, vic_regs + 0x100);
+
+        /* CRITICAL FIX: Also write to CONTROL space */
+        if (vic_dev->vic_regs_control) {
+            writel(reg_100_dvp_value, vic_dev->vic_regs_control + 0x100);
+            wmb();
+        }
 
         /* Binary Ninja: Core DVP registers 00010310-00010338 */
         writel(2, vic_regs + 0xc);
@@ -1229,7 +1236,14 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* 3. Register 0x100 - Complex calculation for MIPI */
         u32 reg_100_value = 0x1;  /* Basic value for MIPI RAW10 */
         writel(reg_100_value, vic_regs + 0x100);
-        pr_info("*** BINARY NINJA: reg 0x100 = 0x%x (MIPI calculation) ***\n", reg_100_value);
+
+        /* CRITICAL FIX: Also write to CONTROL space */
+        if (vic_dev->vic_regs_control) {
+            writel(reg_100_value, vic_dev->vic_regs_control + 0x100);
+            wmb();
+        }
+
+        pr_info("*** BINARY NINJA: reg 0x100 = 0x%x (MIPI calculation, DUAL-SPACE) ***\n", reg_100_value);
 
         /* 4. Register 0x10c - Use hardware-expected value instead of 0x0 */
         u32 reg_10c_value = 0x2c000;  /* Hardware auto-correction shows this is the expected value */
