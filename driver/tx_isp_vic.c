@@ -561,6 +561,15 @@ label_123f4:
     complete(&vic_dev->frame_complete);
     pr_info("*** VIC FRAME DONE: Frame completion signaled ***\n");
 
+    /* Keep the pipeline fed: periodically refresh QBUF while streaming (safe, bounded) */
+    do {
+        static unsigned int fd_tick;
+        fd_tick++;
+        if ((fd_tick & 0x7) == 0) { /* every 8 frames */
+            (void) ispvic_frame_channel_qbuf(&vic_dev->sd, NULL);
+        }
+    } while (0);
+
     /* Binary Ninja: return result */
     return (int)(uintptr_t)result;
 }
@@ -1574,9 +1583,39 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     }
     else if (cmd == 0x3000005) {  /* TX_ISP_EVENT_BUFFER_ENQUEUE - keep pipeline fed */
         pr_info("vic_core_ops_ioctl: BUFFER_ENQUEUE cmd=0x%x - refreshing VIC buffer state\n", cmd);
-        /* Minimal action: re-program buffer addresses from VBM and keep MDMA/stream ctrl consistent */
         if (sd) {
+            /* 1) Ensure buffers are programmed (idempotent) */
             (void) ispvic_frame_channel_qbuf(sd, NULL);
+
+            /* 2) Re-assert MDMA enable and stream control with current buffer count */
+            {
+                struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdev_hostdata(sd);
+                if (vic_dev) {
+                    void __iomem *vr = vic_dev->vic_regs;
+                    void __iomem *vc = vic_dev->vic_regs_control;
+                    u32 buffer_count = vic_dev->active_buffer_count;
+                    if (buffer_count == 0) buffer_count = 2;
+                    if (buffer_count > 5) buffer_count = 5;
+                    u32 stream_ctrl = (buffer_count << 16) | 0x80000020;
+
+                    if (vr) {
+                        /* Keep MDMA on and W1C pending, then assert stream ctrl */
+                        writel(0x1, vr + 0x308);
+                        writel(0xFFFFFFFF, vr + 0x1f0);
+                        writel(0xFFFFFFFF, vr + 0x1f4);
+                        writel(stream_ctrl, vr + 0x300);
+                        wmb();
+                    }
+                    if (vc) {
+                        writel(0x1, vc + 0x308);
+                        writel(0xFFFFFFFF, vc + 0x1f0);
+                        writel(0xFFFFFFFF, vc + 0x1f4);
+                        writel(stream_ctrl, vc + 0x300);
+                        wmb();
+                    }
+                    pr_info("vic_core_ops_ioctl: BUFFER_ENQUEUE reasserted stream_ctrl=0x%x (buffers=%u)\n", stream_ctrl, buffer_count);
+                }
+            }
             result = 0;
         } else {
             result = -EINVAL;

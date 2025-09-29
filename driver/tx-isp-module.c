@@ -557,6 +557,8 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 irqreturn_t isp_irq_handle(int irq, void *dev_id);
 irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
 int tx_isp_send_event_to_remote(void *subdev, int event_type, void *data);
+int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+
 static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev);
 static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev);
 static struct vic_buffer_entry *pop_buffer_fifo(struct list_head *fifo_head);
@@ -4130,7 +4132,12 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 int i;
                 struct tx_isp_subdev *vic_sd = &ourISPdev->vic_dev->sd;
                 for (i = 0; i < st->vbm_buffer_count && i < 5; i++) {
-                    tx_isp_send_event_to_remote(vic_sd, 0x3000005, NULL);
+                    int er = tx_isp_send_event_to_remote(vic_sd, 0x3000005, NULL);
+                    if (er == -0x203) {
+                        /* No VIC callback wired yet: call VIC core ioctl directly (conservative fallback) */
+                        pr_info("STREAMON: BUFFER_ENQUEUE event fell back to direct vic_core_ops_ioctl\n");
+                        vic_core_ops_ioctl(vic_sd, 0x3000005, NULL);
+                    }
                 }
             }
         } while (0);
