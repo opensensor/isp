@@ -2633,9 +2633,9 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
             sensor_attr = sensor->video.attr;
             pr_info("ispcore_core_ops_init: Using sensor attributes from sensor: %s", sensor_attr->name);
             pr_info("*** DEBUG: sensor=%p, sensor->video.attr=%p ***", sensor, sensor->video.attr);
-            pr_info("*** DEBUG: sensor_attr dimensions: %ux%u@%u, mode=%u ***",
+            pr_info("*** DEBUG: sensor_attr dimensions: %ux%u@%u, wdr_cache=%u ***",
                     sensor_attr->total_width, sensor_attr->total_height,
-                    sensor_attr->fps, sensor_attr->wdr_mode);
+                    sensor_attr->fps, sensor_attr->wdr_cache);
         } else if (sensor) {
             pr_info("ispcore_core_ops_init: Sensor found but no attributes - sensor_attr will be NULL");
         } else {
