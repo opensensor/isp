@@ -736,9 +736,9 @@ static int vic_initialize_buffer_ring(struct tx_isp_vic_device *vic_dev)
         }
     }
 
-    /* Set buffer counts - HARDWARE LIMITATION: VIC only supports 4 buffers in RUN mode */
-    vic_dev->buffer_count = 4;
-    vic_dev->active_buffer_count = 4;  /* CRITICAL FIX: Set to 4 to match VIC hardware limitation */
+    /* Set buffer counts - HARDWARE BUG: VIC corrupts 4->3 buffers, so configure for 3 */
+    vic_dev->buffer_count = 3;
+    vic_dev->active_buffer_count = 3;  /* CRITICAL FIX: Set to 3 to match VIC hardware bug */
 
     spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
 
@@ -2909,9 +2909,9 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         }
 
         /* Binary Ninja EXACT: vic_mdma_enable_complete - COMPLETE MDMA setup */
-        /* CRITICAL FIX: Use 4 buffers to match VIC hardware limitation (not 5) */
+        /* CRITICAL FIX: Use 3 buffers to match VIC hardware bug (hardware corrupts 4->3) */
         pr_info("*** CRITICAL: Calling vic_mdma_enable_complete - COMPLETE MDMA setup for VIC interrupts ***\n");
-        u32 control_result = vic_mdma_enable_complete(vic_dev, vic_dev->width, vic_dev->height, 0, 4, 0x6300000, 0);
+        u32 control_result = vic_mdma_enable_complete(vic_dev, vic_dev->width, vic_dev->height, 0, 3, 0x6300000, 0);
         pr_info("*** vic_mdma_enable_complete completed - VIC MDMA fully configured! control=0x%x ***\n", control_result);
 
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
@@ -2920,12 +2920,12 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             /* SAFE: $s0 + 0x218 = active_buffer_count */
             u32 buffer_count = vic_dev->active_buffer_count;
 
-            /* CRITICAL FIX: Force 4 buffers to match VIC hardware limitation */
-            /* The VIC hardware only supports 4 buffers in RUN mode, not 5 */
-            if (buffer_count != 4) {
-                pr_info("*** CRITICAL: active_buffer_count=%u incorrect, forcing to 4 buffers (VIC hardware limitation) ***\n", buffer_count);
-                buffer_count = 4;
-                vic_dev->active_buffer_count = 4;  /* Match hardware limitation */
+            /* CRITICAL FIX: Force 3 buffers to match VIC hardware bug */
+            /* The VIC hardware corrupts 4->3 buffers, so work with 3 buffers */
+            if (buffer_count != 3) {
+                pr_info("*** CRITICAL: active_buffer_count=%u incorrect, forcing to 4 buffers (VIC hardware bug) ***\n", buffer_count);
+                buffer_count = 3;
+                vic_dev->active_buffer_count = 3;  /* Match hardware bug */
             }
 
             if (buffer_count > 5) buffer_count = 5;        /* 5-slot ring cap */
