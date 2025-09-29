@@ -476,23 +476,33 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 }
             }
 
-            /* CRITICAL FIX: Force VIC hardware to use different buffer addresses */
-            /* The VIC hardware is stuck reading from slot 2 (0x320) and never advances */
-            /* We need to manually program the VIC current address register to force buffer cycling */
+            /* CRITICAL FIX: Binary Ninja MCP software buffer circulation */
+            /* The VIC hardware is stuck reading from slot 2 and never advances automatically */
+            /* Use Binary Ninja reference method: dynamically calculate new buffer addresses */
 
-            /* Calculate the actual buffer address for the next slot */
-            u32 slot_offset = 0x318 + (next_idx * 4);  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
-            u32 next_buffer_addr = readl(vic_base + slot_offset);
+            /* Binary Ninja: Channel 0 software buffer circulation */
+            u32 current_index = cur_idx;
+            u32 next_index = next_idx;
 
-            /* CRITICAL: Force VIC hardware to read from the next buffer address */
-            /* Write the next buffer address to VIC current address register 0x380 */
-            writel(next_buffer_addr, vic_base + 0x380);
+            u32 width = vic_dev->width;
+            u32 height = vic_dev->height;
+            u32 frame_size = width << 1;  /* RAW10 = 2 bytes per pixel */
+            u32 frame_area = frame_size * height;
+
+            /* Binary Ninja: Calculate current and next buffer addresses */
+            u32 current_reg_offset = (current_index + 0xc6) << 2;  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
+            u32 current_buffer_addr = readl(vic_base + current_reg_offset);
+            u32 next_buffer_addr = frame_area + current_buffer_addr;  /* Advance by one frame */
+
+            /* Binary Ninja: Program next buffer address to next slot register */
+            u32 next_reg_offset = (next_index + 0xc6) << 2;
+            writel(next_buffer_addr, vic_base + next_reg_offset);
             if (vic_dev->vic_regs_control) {
-                writel(next_buffer_addr, vic_dev->vic_regs_control + 0x380);
+                writel(next_buffer_addr, vic_dev->vic_regs_control + next_reg_offset);
             }
             wmb();
 
-            /* Also update the control register buffer index for consistency */
+            /* Update the control register buffer index to point to the next slot */
             u32 current_ctrl = readl(vic_base + 0x300);
             u32 control_flags = current_ctrl & 0xFFF0FFFF;  /* Preserve all except buffer index (bits 16-19) */
             u32 new_buffer_index = (next_idx & 0xF) << 16;  /* Set new buffer index in bits 16-19 */
@@ -506,8 +516,8 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             }
             wmb();
 
-            pr_info("*** VIC FRAME DONE: FORCED VIC to read from slot %d addr=0x%x, VIC[0x300]=0x%x, VIC[0x380]=0x%x ***\n",
-                    next_idx, next_buffer_addr, new_ctrl, next_buffer_addr);
+            pr_info("*** VIC FRAME DONE: Binary Ninja buffer circulation - slot %d (0x%x) -> slot %d (0x%x), frame_area=0x%x ***\n",
+                    current_index, current_buffer_addr, next_index, next_buffer_addr, frame_area);
 
             /* Keep MDMA enabled and set to RUN state */
             writel(0x1, vic_base + 0x308);
@@ -3415,17 +3425,15 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 vic_dev->state = 4;
                 pr_info("*** vic_core_s_stream: VIC state transition 3 → 4 (STREAMING) ***\n");
 
-                /* CRITICAL: Call ispcore_slake_module when VIC state reaches 4 (>= 3) */
-                pr_info("*** VIC STATE 4: Calling ispcore_slake_module to initialize ISP core ***\n");
-                extern int ispcore_slake_module(struct tx_isp_dev *isp_dev);
-                if (ourISPdev) {
-                    int slake_ret = ispcore_slake_module(ourISPdev);
-                    if (slake_ret == 0) {
-                        pr_info("*** ispcore_slake_module SUCCESS - ISP core should now be initialized ***\n");
-                    } else {
-                        pr_info("*** ispcore_slake_module FAILED: %d ***\n", slake_ret);
-                    }
-                }
+                /* CRITICAL FIX: Do NOT call ispcore_slake_module during streaming - it kills VIC interrupts */
+                /* The 10.10 stall is caused by ISP core initialization disrupting VIC interrupt generation */
+                /* ISP core should be initialized BEFORE streaming starts, not during streaming */
+                pr_info("*** VIC STATE 4: SKIPPING ispcore_slake_module to preserve VIC interrupt generation ***\n");
+                pr_info("*** VIC STATE 4: ISP core initialization should happen during device open, not during streaming ***\n");
+
+                /* CRITICAL: Mark that VIC is now in full streaming mode */
+                vic_dev->stream_state = 1;  /* Enable processing mode */
+                pr_info("*** VIC STATE 4: VIC now in full streaming mode - interrupts should continue indefinitely ***\n");
 
                 /* CRITICAL: Apply full VIC configuration now that VIC is in streaming state */
             } else {
