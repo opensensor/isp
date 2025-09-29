@@ -1727,12 +1727,16 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                    reg_1e0, reg_1e4, reg_1e8);
             /* Unmask FD: MainMask bit0 must be 0 (0xFFFFFFFE) */
             writel(0xFFFFFFFE, base_for_irq + 0x1e8);
+            /* Also unmask MDMA group if required */
+            writel(0xFFFFFFFF, base_for_irq + 0x1ec);
+            wmb();
             reg_1e8 = readl(base_for_irq + 0x1e8);
             /* Enable FD bit0 */
             writel(reg_1e0 | 0x1, base_for_irq + 0x1e0);
-            reg_1e0 = readl(base_for_irq + 0x1e0);
             /* Enable group bits */
             writel(0x0000000F, base_for_irq + 0x1e4);
+            wmb();
+            reg_1e0 = readl(base_for_irq + 0x1e0);
             reg_1e4 = readl(base_for_irq + 0x1e4);
 
             /* Mirror to the other bank as well to prevent mid-stream clobber from CSI/tuning */
@@ -1741,18 +1745,33 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 void __iomem *vrc = ourISPdev->vic_dev->vic_regs_control;
                 if (vrp) {
                     writel(0xFFFFFFFE, vrp + 0x1e8);
+                    writel(0xFFFFFFFF, vrp + 0x1ec);
                     writel(readl(vrp + 0x1e0) | 0x1, vrp + 0x1e0);
                     writel(0x0000000F, vrp + 0x1e4);
+                    wmb();
                 }
                 if (vrc) {
                     writel(0xFFFFFFFE, vrc + 0x1e8);
+                    writel(0xFFFFFFFF, vrc + 0x1ec);
                     writel(readl(vrc + 0x1e0) | 0x1, vrc + 0x1e0);
                     writel(0x0000000F, vrc + 0x1e4);
+                    wmb();
+                }
+                /* Choose the bank that actually latched FD enable + group */
+                if (vrc) {
+                    u32 c_e0 = readl(vrc + 0x1e0);
+                    u32 c_e4 = readl(vrc + 0x1e4);
+                    if ((c_e0 & 0x1) && (c_e4 & 0xF)) base_for_irq = vrc;
+                }
+                if (vrp) {
+                    u32 p_e0 = readl(vrp + 0x1e0);
+                    u32 p_e4 = readl(vrp + 0x1e4);
+                    if ((p_e0 & 0x1) && (p_e4 & 0xF)) base_for_irq = vrp;
                 }
             }
 
             printk(KERN_ALERT "*** VIC IRQ: FIXUP enable/mask — after: 1e0=0x%x 1e4=0x%x 1e8=0x%x ***\n",
-                   reg_1e0, reg_1e4, reg_1e8);
+                   readl(base_for_irq + 0x1e0), readl(base_for_irq + 0x1e4), readl(base_for_irq + 0x1e8));
         }
 
         /* Extra debug: control and geometry */
