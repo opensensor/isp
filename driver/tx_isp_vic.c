@@ -502,10 +502,9 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             u32 current_ctrl = readl(vic_base + 0x300);
             u32 new_ctrl = (current_ctrl & 0xFFF0FFFF) | control_update;
 
+            /* CRITICAL FIX: Only write to PRIMARY VIC space (0x133e0000) */
+            /* vic_regs_control (0x10023000) is CSI PHY, NOT VIC registers! */
             writel(new_ctrl, vic_base + 0x300);
-            if (vic_dev->vic_regs_control) {
-                writel(new_ctrl, vic_dev->vic_regs_control + 0x300);
-            }
             wmb();
 
             pr_info("*** VIC FRAME DONE: Binary Ninja - Updated VIC[0x300]=0x%x (buffer_pos=%u, was 0x%x) ***\n",
@@ -513,18 +512,15 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 
             /* Keep MDMA enabled and set to RUN state */
             writel(0x1, vic_base + 0x308);
-            if (vic_dev->vic_regs_control) writel(0x1, vic_dev->vic_regs_control + 0x308);
             writel(0x1, vic_base + 0x0);
-            if (vic_dev->vic_regs_control) writel(0x1, vic_dev->vic_regs_control + 0x0);
             wmb();
 
             vic_dev->last_idx = next_idx;
 
             {
                 u32 reg_p = readl(vic_base + 0x300);
-                u32 reg_c = (vic_dev->vic_regs_control ? readl(vic_dev->vic_regs_control + 0x300) : 0);
-                pr_info("*** VIC FRAME DONE: Updated VIC[0x300] PRIMARY=0x%x CONTROL=0x%x (count=%u, cur_idx=%d, next_idx=%d) ***\n",
-                        reg_p, reg_c, count, cur_idx, next_idx);
+                pr_info("*** VIC FRAME DONE: Updated VIC[0x300]=0x%x (count=%u, cur_idx=%d, next_idx=%d) ***\n",
+                        reg_p, count, cur_idx, next_idx);
             }
 
             /* Binary Ninja: result = &data_b0000 */
