@@ -3078,6 +3078,20 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                                 pr_info("*** VIC CONTROL BANK: Buffer %d addr=0x%x -> CONTROL[0x%x] ***\n",
                                         i, buffer_addr, reg_offset);
                             }
+
+                            /* CRITICAL FIX: Program VIC control register 0x300 in CONTROL space */
+                            /* The CONTROL space VIC control register is always 0, which disables DMA */
+                            /* We need to copy the PRIMARY space control value to CONTROL space */
+                            u32 primary_ctrl = readl(vic_dev->vic_regs + 0x300);
+                            writel(primary_ctrl, vcc + 0x300);
+                            wmb();
+                            pr_info("*** VIC CONTROL BANK: Copied PRIMARY control 0x%08x to CONTROL[0x300] ***\n", primary_ctrl);
+
+                            /* CRITICAL: Verify CONTROL space buffer addresses after reprogramming */
+                            pr_info("*** VIC CONTROL BANK: VERIFICATION AFTER REPROGRAMMING ***\n");
+                            pr_info("*** VIC BUFS (CONTROL AFTER): [0x318]=0x%08x [0x31c]=0x%08x [0x320]=0x%08x [0x324]=0x%08x [0x328]=0x%08x ***\n",
+                                    readl(vcc + 0x318), readl(vcc + 0x31c), readl(vcc + 0x320), readl(vcc + 0x324), readl(vcc + 0x328));
+                            pr_info("*** VIC CTRL (CONTROL AFTER): [0x300]=0x%08x ***\n", readl(vcc + 0x300));
                         }
                     }
                 }
