@@ -471,23 +471,18 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 }
             }
 
-            /* Commit via CONFIG->RUN so the stream control latches reliably */
-            writel(0x2, vic_base + 0x0);
-            if (vic_dev->vic_regs_control) writel(0x2, vic_dev->vic_regs_control + 0x0);
-            wmb();
-
-            /* Write full stream control (preserve control bits and set count=slots) */
-            u32 stream_ctrl = (count << 16) | 0x80000020;
-            writel(stream_ctrl, vic_base + 0x300);
-            if (vic_dev->vic_regs_control)
-                writel(stream_ctrl, vic_dev->vic_regs_control + 0x300);
-
-            /* Then set the index nibble [19:16] to next_idx to advance ring */
+            /* Preserve 0x300 control bits; only update index nibble [19:16] per reference */
             u32 reg_val = readl(vic_base + 0x300);
             reg_val = (reg_val & 0xfff0ffff) | ((next_idx & 0xF) << 16);
             writel(reg_val, vic_base + 0x300);
             if (vic_dev->vic_regs_control)
                 writel(reg_val, vic_dev->vic_regs_control + 0x300);
+
+            /* Keep RUN asserted and re-apply IMR/IMCR routing (idempotent) to avoid latch loss */
+            writel(0x1, vic_base + 0x0);
+            if (vic_dev->vic_regs_control) writel(0x1, vic_dev->vic_regs_control + 0x0);
+            writel(0x07800438, vic_base + 0x04);
+            writel(0xb5742249, vic_base + 0x0c);
 
             /* Refresh buffer slot addresses from VBM on every frame to avoid stale/zero entries */
             do {
