@@ -885,9 +885,34 @@ struct isp_tuning_data {
 	uint32_t bcsh_saturation_max;        /* 0x18c: Max saturation */
 	uint32_t bcsh_saturation_min;        /* 0x190: Min saturation */
 	uint32_t bcsh_saturation_mult;       /* 0x194: Saturation multiplier */
-	
+
+	/* BCSH matrix arrays - from arrays.txt */
+	uint32_t bcsh_au32HMatrix_now[16];   /* 0x198: H Matrix array */
+	uint32_t bcsh_au32HLSP_now[16];      /* 0x1d8: HLSP array */
+	uint32_t bcsh_au32HBP_now[16];       /* 0x218: HBP array */
+	uint32_t bcsh_au32HDP_now[16];       /* 0x258: HDP array */
+	uint32_t bcsh_au32OffsetRGB_now[16]; /* 0x298: OffsetRGB array */
+
+	/* CSC arrays */
+	uint32_t csc_manual_now[16];         /* 0x2d8: CSC manual array */
+
+	/* Weight arrays for different resolutions */
+	uint32_t weight5_1920_1080_now[16];  /* 0x318: Weight5 1920x1080 */
+	uint32_t weight3_1920_1080_now[16];  /* 0x358: Weight3 1920x1080 */
+
+	/* Block size arrays */
+	uint32_t block_sizen_1920_now[16];   /* 0x398: Block size N 1920 */
+	uint32_t block_sizem_1080_now[16];   /* 0x3d8: Block size M 1080 */
+
+	/* Defog arrays */
+	uint32_t defog_block_air_light_r_now[16]; /* 0x418: Defog air light R */
+	uint32_t defog_block_air_light_g_now[16]; /* 0x458: Defog air light G */
+	uint32_t defog_block_air_light_b_now[16]; /* 0x498: Defog air light B */
+	uint32_t defog_block_transmit_t_now[16];  /* 0x4d8: Defog transmit T */
+	uint32_t param_defog_main_para_array_now[16]; /* 0x518: Defog main parameters */
+
 	/* Padding to ensure structure is large enough for all accesses */
-	uint32_t reserved2[1000];            /* 0x198+: Reserved for future use and safety */
+	uint32_t reserved2[700];             /* 0x558+: Reserved for future use and safety */
 } __attribute__((aligned(4)));
 
 #endif/*__TX_ISP_DEVICE_H__*/

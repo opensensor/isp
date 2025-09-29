@@ -101,6 +101,15 @@ static void tisp_prime_arrays_if_needed(struct isp_tuning_data *t)
             t->block_sizem_1080_now[i] = read_le32_uc(&block_sizem_1080[i*4]);
         }
 
+        // Seed defog arrays (16 entries each)
+        for (i = 0; i < 16; i++) {
+            t->defog_block_air_light_r_now[i] = read_le32_uc(&defog_block_air_light_r[i*4]);
+            t->defog_block_air_light_g_now[i] = read_le32_uc(&defog_block_air_light_g[i*4]);
+            t->defog_block_air_light_b_now[i] = read_le32_uc(&defog_block_air_light_b[i*4]);
+            t->defog_block_transmit_t_now[i] = read_le32_uc(&defog_block_transmit_t[i*4]);
+            t->param_defog_main_para_array_now[i] = read_le32_uc(&param_defog_main_para_array[i*4]);
+        }
+
         pr_info("[tuning] Seeded tuning arrays from tuning_constants.h (first EV=%u, last EV=%u)\n",
                 t->bcsh_au32EvList_now[0], t->bcsh_au32EvList_now[8]);
     }
@@ -299,7 +308,24 @@ static int tiziano_gib_deir_reg(uint32_t *r, uint32_t *g, uint32_t *b) { return 
 static int tiziano_dmsc_params_refresh(void) { return 0; }
 static int tiziano_mdns_params_refresh(void) { return 0; }
 static int tisp_mdns_par_refresh(uint32_t p1, uint32_t p2, int p3) { return 0; }
-static int tiziano_wdr_params_refresh(void) { return 0; }
+static int tiziano_wdr_params_refresh(void)
+{
+    struct isp_tuning_data *tuning;
+
+    if (!ourISPdev || !ourISPdev->core_dev || !ourISPdev->core_dev->tuning_data) {
+        pr_err("tiziano_wdr_params_refresh: ISP device or tuning data not available\n");
+        return -1;
+    }
+
+    tuning = ourISPdev->core_dev->tuning_data;
+
+    // Ensure arrays are seeded with proper initial values
+    tisp_prime_arrays_if_needed(tuning);
+
+    // Additional WDR parameter refresh logic would go here
+    // This matches the BN MCP reference structure
+    return 0;
+}
 static int tisp_wdr_par_refresh(uint32_t p1, uint32_t p2, int p3) { return 0; }
 static int tiziano_bcsh_params_refresh(void)
 {
@@ -323,7 +349,24 @@ static int tiziano_bcsh_lut_parameter(void)
     // This matches the BN MCP reference structure
     return 0;
 }
-static int tiziano_defog_params_refresh(void) { return 0; }
+static int tiziano_defog_params_refresh(void)
+{
+    struct isp_tuning_data *tuning;
+
+    if (!ourISPdev || !ourISPdev->core_dev || !ourISPdev->core_dev->tuning_data) {
+        pr_err("tiziano_defog_params_refresh: ISP device or tuning data not available\n");
+        return -1;
+    }
+
+    tuning = ourISPdev->core_dev->tuning_data;
+
+    // Ensure arrays are seeded with proper initial values
+    tisp_prime_arrays_if_needed(tuning);
+
+    // Additional defog parameter refresh logic would go here
+    // This matches the BN MCP reference structure
+    return 0;
+}
 static int tisp_defog_par_refresh(uint32_t p1, uint32_t p2, int p3) { return 0; }
 static int tiziano_awb_params_refresh(void) { return 0; }
 static int tisp_awb_par_refresh(uint32_t p1, uint32_t p2, int p3) { return 0; }
