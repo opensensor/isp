@@ -476,16 +476,29 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 }
             }
 
-            /* Do not rewrite 0x300 during FD; hardware advances index itself */
-            writel(0x1, vic_base + 0x0);
-            if (vic_dev->vic_regs_control) writel(0x1, vic_dev->vic_regs_control + 0x0);
+            /* CRITICAL FIX: Manually advance VIC buffer index since hardware cycling is broken */
+            /* The VIC hardware is stuck on slot 2 and never advances automatically */
+            /* We need to manually update the buffer index in the control register */
 
-            /* Do not rewrite slot addresses here. Slot programming is owned by ENQUEUE/QBUF paths. */
+            u32 current_ctrl = readl(vic_base + 0x300);
+            u32 control_flags = current_ctrl & 0xFFF0FFFF;  /* Preserve all except buffer index (bits 16-19) */
+            u32 new_buffer_index = (next_idx & 0xF) << 16;  /* Set new buffer index in bits 16-19 */
+            u32 new_ctrl = control_flags | new_buffer_index;
 
-            /* Keep MDMA enabled (idempotent) */
+            writel(new_ctrl, vic_base + 0x300);
+            if (vic_dev->vic_regs_control) {
+                u32 ctrl_current = readl(vic_dev->vic_regs_control + 0x300);
+                u32 ctrl_flags = ctrl_current & 0xFFF0FFFF;
+                writel(ctrl_flags | new_buffer_index, vic_dev->vic_regs_control + 0x300);
+            }
+            wmb();
+
+            pr_info("*** VIC FRAME DONE: MANUALLY advanced buffer index from %d to %d, VIC[0x300]=0x%x ***\n",
+                    cur_idx, next_idx, new_ctrl);
+
+            /* Keep MDMA enabled and set to RUN state */
             writel(0x1, vic_base + 0x308);
             if (vic_dev->vic_regs_control) writel(0x1, vic_dev->vic_regs_control + 0x308);
-            /* Back to RUN */
             writel(0x1, vic_base + 0x0);
             if (vic_dev->vic_regs_control) writel(0x1, vic_dev->vic_regs_control + 0x0);
             wmb();
@@ -1298,14 +1311,14 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             if (buffer_count == 0) buffer_count = 2;
             if (buffer_count > 5) buffer_count = 5;
 
-            /* CRITICAL FIX: Do NOT overwrite hardware-managed buffer index */
+            /* CRITICAL FIX: Use manual buffer index management since hardware cycling is broken */
             u32 current_ctrl = readl(vic_regs + 0x300);
-            u32 hardware_index = current_ctrl & 0x000F0000;  /* Preserve hardware buffer index */
-            u32 stream_ctrl = hardware_index | 0x80000020;   /* Keep hardware index, set control flags */
+            u32 manual_index = (vic_dev->last_idx & 0xF) << 16;  /* Use last known good index */
+            u32 stream_ctrl = manual_index | 0x80000020;   /* Set manual index, set control flags */
             writel(stream_ctrl, vic_regs + 0x300);
             wmb();
-            pr_info("*** POST-ENABLE(A): PRESERVED hardware buffer index VIC[0x300]=0x%x (was 0x%x, hw_index=%u) ***\n",
-                    stream_ctrl, current_ctrl, hardware_index >> 16);
+            pr_info("*** POST-ENABLE(A): MANUAL buffer index management VIC[0x300]=0x%x (was 0x%x, manual_index=%u) ***\n",
+                    stream_ctrl, current_ctrl, vic_dev->last_idx);
         }
 
         /* Format detection logic - Binary Ninja 000107f8-00010a04 */
@@ -1964,22 +1977,19 @@ int vic_mdma_enable(struct tx_isp_vic_device *vic_dev, int channel, int dual_cha
     /* Use base control value without buffer count in index field */
     vic_control = 0x80000020 | format_type;  /* Base control + format, NO buffer count */
 
-    /* CRITICAL FIX: Preserve hardware-managed buffer index when writing control register */
-    u32 current_primary = readl(vic_regs + 0x300);
-    u32 hardware_index = current_primary & 0x000F0000;  /* Preserve hardware buffer index */
-    u32 final_control = vic_control | hardware_index;   /* Combine with hardware index */
+    /* CRITICAL FIX: Use manual buffer index management since hardware cycling is broken */
+    u32 manual_index = (0 << 16);  /* Start with buffer index 0 for manual cycling */
+    u32 final_control = vic_control | manual_index;   /* Combine with manual index */
 
     writel(final_control, vic_regs + 0x300);
     wmb();
 
-    /* CRITICAL FIX: Also write to CONTROL space - preserve hardware state there too */
+    /* CRITICAL FIX: Also write to CONTROL space with manual buffer index */
     if (vic_dev->vic_regs_control) {
-        u32 current_control = readl(vic_dev->vic_regs_control + 0x300);
-        u32 control_index = current_control & 0x000F0000;
-        u32 control_final = vic_control | control_index;
+        u32 control_final = vic_control | manual_index;
         writel(control_final, vic_dev->vic_regs_control + 0x300);
         wmb();
-        pr_err("*** vic_mdma_enable: PRESERVED hardware indices PRIMARY=0x%x CONTROL=0x%x ***\n",
+        pr_err("*** vic_mdma_enable: MANUAL buffer index management PRIMARY=0x%x CONTROL=0x%x ***\n",
                final_control, control_final);
     }
 
@@ -2687,29 +2697,24 @@ static u32 vic_mdma_enable_complete(struct tx_isp_vic_device *vic_dev, u32 width
     }
     wmb();
 
-    /* CRITICAL FIX: Do NOT write buffer count to VIC control register 0x300 */
-    /* The Binary Ninja MCP reference shows hardware manages buffer index automatically */
-    /* The original formula (arg4 << 16) corrupts hardware buffer cycling causing 10.10 stalls */
+    /* CRITICAL FIX: VIC hardware buffer cycling is broken - manually manage buffer index */
+    /* The VIC hardware gets stuck on slot 2 and never advances automatically */
+    /* We need to manually set the initial buffer index to 0 and advance it in frame done handler */
 
-    /* Use base control value without buffer count in index field */
-    control_value = 0x80000020 | arg6;  /* Base control + format, NO buffer count */
-
-    /* Read current register to preserve any hardware-managed buffer index */
-    u32 current_primary = readl(vic_regs + 0x300);
-    u32 hardware_index = current_primary & 0x000F0000;  /* Preserve hardware buffer index */
-    control_value |= hardware_index;  /* Combine with our control flags */
+    /* Use base control value with manually managed buffer index starting at 0 */
+    control_value = 0x80000020 | arg6;  /* Base control + format */
+    /* Set initial buffer index to 0 (bits 16-19) for manual buffer cycling */
+    control_value |= (0 << 16);  /* Start with buffer index 0 */
 
     writel(control_value, vic_regs + 0x300);
     wmb();
 
-    /* CRITICAL FIX: Also write to CONTROL space - preserve hardware state there too */
+    /* CRITICAL FIX: Also write to CONTROL space with manual buffer index management */
     if (vic_dev->vic_regs_control) {
-        u32 current_control = readl(vic_dev->vic_regs_control + 0x300);
-        u32 control_index = current_control & 0x000F0000;
-        u32 control_final = (0x80000020 | arg6) | control_index;
+        u32 control_final = (0x80000020 | arg6) | (0 << 16);  /* Start with buffer index 0 */
         writel(control_final, vic_dev->vic_regs_control + 0x300);
         wmb();
-        pr_info("*** vic_mdma_enable_complete: PRESERVED hardware buffer indices PRIMARY=0x%x CONTROL=0x%x ***\n",
+        pr_info("*** vic_mdma_enable_complete: MANUAL buffer index management PRIMARY=0x%x CONTROL=0x%x ***\n",
                 control_value, control_final);
     }
 
@@ -2953,26 +2958,24 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
 
             if (buffer_count > 5) buffer_count = 5;        /* 5-slot ring cap */
 
-            /* CRITICAL FIX: Do NOT write buffer count to VIC control register 0x300 */
-            /* The Binary Ninja MCP reference shows hardware manages buffer index automatically */
-            /* Writing buffer_count to bits 16-19 corrupts hardware-managed buffer cycling */
+            /* CRITICAL FIX: Use manual buffer index management since hardware cycling is broken */
+            /* The VIC hardware gets stuck on slot 2 and never advances automatically */
+            /* We manually manage buffer index advancement in the frame done interrupt handler */
 
-            /* Read current VIC control register to preserve hardware-managed buffer index */
+            /* Initialize with buffer index 0 for manual cycling */
             u32 current_ctrl = readl(vic_base + 0x300);
-            u32 hardware_index = current_ctrl & 0x000F0000;  /* Preserve bits 16-19 (hardware index) */
-            u32 stream_ctrl = hardware_index | 0x80000020;   /* Keep hardware index, set control flags */
+            u32 manual_index = (0 << 16);  /* Start with buffer index 0 */
+            u32 stream_ctrl = manual_index | 0x80000020;   /* Set manual index, set control flags */
 
             void __iomem *vic_ctrl = vic_dev->vic_regs_control;
             writel(stream_ctrl, vic_base + 0x300);
             if (vic_ctrl) {
-                u32 ctrl_current = readl(vic_ctrl + 0x300);
-                u32 ctrl_index = ctrl_current & 0x000F0000;
-                writel(ctrl_index | 0x80000020, vic_ctrl + 0x300);
+                writel(manual_index | 0x80000020, vic_ctrl + 0x300);
             }
             wmb();
 
-            pr_info("*** CRITICAL FIX: Preserved hardware buffer index in VIC[0x300]=0x%x (was 0x%x, hw_index=0x%x) ***\n",
-                    stream_ctrl, current_ctrl, hardware_index >> 16);
+            pr_info("*** CRITICAL FIX: MANUAL buffer index management VIC[0x300]=0x%x (was 0x%x, starting at index 0) ***\n",
+                    stream_ctrl, current_ctrl);
         }
 
         /* Binary Ninja EXACT: *($s0 + 0x210) = 1 */
