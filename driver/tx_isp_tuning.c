@@ -3387,13 +3387,18 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 
                 pr_info("isp_core_tunning_unlocked_ioctl: Tuning enable/disable: %s\n", enable ? "ENABLE" : "DISABLE");
 
-                /* VIC-SAFE GUARD: Suppress tuning enable while streaming to avoid VIC/CSI clobber */
+                /* VIC-SAFE GUARD: Allow limited tuning enable during streaming (no register touching).
+                 * This unblocks clients that gate subsequent controls (e.g., FPS) on tuning being enabled.
+                 */
                 extern uint32_t vic_start_ok;
                 if (enable && vic_start_ok == 1) {
-                    pr_info("isp_core_tunning_unlocked_ioctl: Suppressing tuning ENABLE during streaming (vic_start_ok=1)\n");
-                    /* Pretend success but do not change any hardware state or flags */
+                    pr_info("isp_core_tunning_unlocked_ioctl: Allowing LIMITED tuning ENABLE during streaming (vic_start_ok=1)\n");
+                    /* Do NOT touch ISP/VIC registers here. Just mark tuning as enabled so client can send controls. */
+                    if (ourISPdev && ourISPdev->core_dev) ourISPdev->core_dev->tuning_enabled = 3;
+                    /* Ensure parameter buffer exists for 0x20007400-series if the client uses them. */
+                    if (!tisp_par_ioctl) { tisp_par_ioctl = kmalloc(0x500c, GFP_KERNEL); }
                     ret = 0;
-                    break;
+                    /* Fall through to normal enable bookkeeping below (no hardware ops). */
                 }
 
                 /* BINARY NINJA REFERENCE: Simple tuning enable acknowledgment */

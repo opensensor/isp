@@ -4122,6 +4122,18 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         // while ($s1_3 + 0x58 != $s0 + 0x210)
         //     __enqueue_in_driver($s1_3)
         pr_info("Channel %d: STREAMON - Enqueuing buffers in driver\n", channel);
+        /* Minimal event path: notify VIC of initial enqueues to keep ring fed (VBM only) */
+        do {
+            extern struct frame_channel_device frame_channels[];
+            struct tx_isp_channel_state *st = &frame_channels[channel].state;
+            if (ourISPdev && ourISPdev->vic_dev && st->vbm_buffer_addresses && st->vbm_buffer_count > 0) {
+                int i;
+                struct tx_isp_subdev *vic_sd = &ourISPdev->vic_dev->sd;
+                for (i = 0; i < st->vbm_buffer_count && i < 5; i++) {
+                    tx_isp_send_event_to_remote(vic_sd, 0x3000005, NULL);
+                }
+            }
+        } while (0);
 
         // Binary Ninja: *($s0 + 0x230) |= 1
         state->flags |= 1;

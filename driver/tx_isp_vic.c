@@ -1572,6 +1572,17 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
         pr_info("vic_core_ops_ioctl: QBUF buffer management result=%d\n", result);
         return result;
     }
+    else if (cmd == 0x3000005) {  /* TX_ISP_EVENT_BUFFER_ENQUEUE - keep pipeline fed */
+        pr_info("vic_core_ops_ioctl: BUFFER_ENQUEUE cmd=0x%x - refreshing VIC buffer state\n", cmd);
+        /* Minimal action: re-program buffer addresses from VBM and keep MDMA/stream ctrl consistent */
+        if (sd) {
+            (void) ispvic_frame_channel_qbuf(sd, NULL);
+            result = 0;
+        } else {
+            result = -EINVAL;
+        }
+        return result;
+    }
     /* Binary Ninja: else if (arg2 == 0x3000009) */
     else if (cmd == 0x3000009) {
         pr_info("vic_core_ops_ioctl: tx_isp_subdev_pipo cmd=0x%x\n", cmd);
@@ -2833,11 +2844,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Set MainMask to allow framedone + bit21 (debug); do NOT touch status regs 0x1e0/0x1e4 */
                 writel(0xFFDFFFFE, vr + 0x1e8); /* allow frame-done + bit21 (debug) */
                 /* Leave 0x1ec (MDMA mask) as-is per working reference */
-                /* Global interrupt enable at 0x30c (if implemented) */
-                writel(0xFFFFFFFF, vr + 0x30c);
+                /* DO NOT touch 0x30c here; suspected global mask/enable */
                 wmb();
-                pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (MainMask=0xFFFFFFFE)***\n",
-                        readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x30c), readl(vr + 0x1e0), readl(vr + 0x1e4), readl(vr + 0x1e8), readl(vr + 0x1ec));
+                pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (MainMask=0xFFFFFFFE)***\n",
+                        readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x1e0), readl(vr + 0x1e4), readl(vr + 0x1e8), readl(vr + 0x1ec));
                 /* Primary bank: only verify 0x100; do NOT write 0x14 here (0x14 is stride on PRIMARY) */
                 writel(0x000002d0, vr + 0x100);
                 wmb();
