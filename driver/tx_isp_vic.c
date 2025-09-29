@@ -2570,14 +2570,19 @@ static u32 vic_mdma_enable_complete(struct tx_isp_vic_device *vic_dev, u32 width
         stride = width << 1;  /* Double stride for non-7 formats */
     }
 
-    /* Binary Ninja: vic_mdma_ch0_set_buff_index = 4; vic_mdma_ch1_set_buff_index = 4 */
-    vic_mdma_ch0_set_buff_index = 4;
-    vic_mdma_ch1_set_buff_index = 4;
-
-    /* Binary Ninja: vic_mdma_ch0_sub_get_num = arg4; if (arg3 != 0) vic_mdma_ch1_sub_get_num = arg4 */
-    vic_mdma_ch0_sub_get_num = arg4;
-    if (arg3 != 0) {
-        vic_mdma_ch1_sub_get_num = arg4;
+    /* Binary Ninja: ONLY initialize global variables if they haven't been initialized yet */
+    /* This prevents resetting the buffer circulation state during repeated streaming */
+    if (vic_mdma_ch0_sub_get_num == 0) {
+        vic_mdma_ch0_set_buff_index = 4;
+        vic_mdma_ch1_set_buff_index = 4;
+        vic_mdma_ch0_sub_get_num = arg4;
+        if (arg3 != 0) {
+            vic_mdma_ch1_sub_get_num = arg4;
+        }
+        pr_info("*** vic_mdma_enable_complete: FIRST TIME - initialized global variables ***\n");
+    } else {
+        pr_info("*** vic_mdma_enable_complete: SKIP - global variables already initialized (ch0_count=%d, ch0_index=%d) ***\n",
+                vic_mdma_ch0_sub_get_num, vic_mdma_ch0_set_buff_index);
     }
 
     /* CRITICAL: Update vic_dev->active_buffer_count to match our buffer setup */
