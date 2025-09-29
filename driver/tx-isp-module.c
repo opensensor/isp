@@ -1954,9 +1954,8 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 printk(KERN_ALERT "*** VIC SUCCESS: Calling vic_framedone_irq_function ***\n");
                 vic_framedone_irq_function(vic_dev);
 
-                /* CRITICAL: Call MDMA function to maintain buffer circulation on every frame */
-                printk(KERN_ALERT "*** VIC SUCCESS: Calling vic_mdma_irq_function for buffer circulation ***\n");
-                vic_mdma_irq_function(vic_dev, 0);  /* Channel 0 for buffer circulation */
+                /* Binary Ninja MCP: DO NOT call vic_mdma_irq_function on frame done - only on MDMA interrupts */
+                printk(KERN_ALERT "*** VIC SUCCESS: Frame done processed - MDMA function will be called only if MDMA interrupts are set ***\n");
 
                 /* GOOD-THINGS PRESERVATION + FS/V4L2 notifications: wake all streaming channels and core */
                 do {
@@ -1996,9 +1995,8 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                     /* Call frame-done handler to rotate buffers and keep DMA moving */
                     vic_framedone_irq_function(vic_dev);
 
-                    /* CRITICAL: Call MDMA function to maintain buffer circulation in fallback path */
-                    printk(KERN_ALERT "*** VIC FALLBACK: Calling vic_mdma_irq_function for buffer circulation ***\n");
-                    vic_mdma_irq_function(vic_dev, 0);  /* Channel 0 for buffer circulation */
+                    /* Binary Ninja MCP: DO NOT call vic_mdma_irq_function in fallback - only on MDMA interrupts */
+                    printk(KERN_ALERT "*** VIC FALLBACK: Control limit error processed - MDMA function will be called only if MDMA interrupts are set ***\n");
 
                     /* Proactively rotate VIC MDMA ring by one slot to simulate consumption */
                     do {
