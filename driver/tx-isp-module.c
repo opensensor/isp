@@ -1731,6 +1731,20 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
             writel(0xFFFFFFFF, base_for_irq + 0x30c);
             wmb();
 
+            /* Ensure ISP core gate path is open before latching VIC enables */
+            do {
+                if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
+                    void __iomem *core = ourISPdev->core_dev->core_regs;
+                    /* Clear core W1C status that may block gate changes */
+                    writel(0x1, core + 0x9a70);
+                    writel(0x1, core + 0x9a7c);
+                    /* Re-apply core gate routing observed in working sequence */
+                    writel(0x00000001, core + 0x9ac0);
+                    writel(0x00000000, core + 0x9ac8);
+                    wmb();
+                }
+            } while (0);
+
             /* Unmask FD and MDMA group on active bank WITH proper latch + routing */
             writel(0x2, base_for_irq + 0x0); wmb(); /* CONFIG */
             writel(0x00000001, base_for_irq + 0x04);   /* IMR baseline unlock */
@@ -1849,6 +1863,9 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 u32 g0 = readl(core + 0x9ac0);
                 u32 g1 = readl(core + 0x9ac8);
                 if (g0 != 0x00000001 || g1 != 0x00000000) {
+                    /* Clear core W1C status first, then re-apply gate routing */
+                    writel(0x1, core + 0x9a70);
+                    writel(0x1, core + 0x9a7c);
                     writel(0x00000001, core + 0x9ac0);
                     writel(0x00000000, core + 0x9ac8);
                     wmb();
