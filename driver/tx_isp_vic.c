@@ -609,48 +609,48 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
         complete(&vic_dev->frame_complete);
     }
 
-    /* Binary Ninja EXACT: vic_mdma_irq_function buffer circulation logic */
-    /* Use global buffer index variables instead of trying to detect current slot */
+    /* Binary Ninja MCP: Check processing mode to determine buffer management strategy */
+    if (vic_dev->processing == false) {
+        /* Mode 1: Software Buffer Circulation - *(arg1 + 0x214) == 0 */
+        pr_info("*** VIC MDMA: SOFTWARE buffer circulation mode ***\n");
 
-    if (vic_mdma_ch0_sub_get_num > 0) {
-        /* Binary Ninja: Channel 0 buffer circulation */
-        u32 current_index = vic_mdma_ch0_set_buff_index;
-        u32 next_index = (current_index + 1) % 5;  /* Binary Ninja: (vic_mdma_ch0_set_buff_index_1 + 1) u% 5 */
+        if (vic_mdma_ch0_sub_get_num > 0) {
+            /* Binary Ninja: Channel 0 software buffer circulation */
+            u32 current_index = vic_mdma_ch0_set_buff_index;
+            u32 next_index = (current_index + 1) % 5;
 
-        /* Binary Ninja EXACT: Frame size calculation - $a1 = *(arg1 + 0xdc); if ($t1 != 7) $a1 <<= 1 */
-        u32 width = vic_dev->width;   /* Binary Ninja: *(arg1 + 0xdc) */
-        u32 height = vic_dev->height; /* Binary Ninja: *(arg1 + 0xe0) */
-        u32 frame_size = width << 1;  /* Binary Ninja: $a1 <<= 1 (assuming format != 7) */
-        u32 frame_area = frame_size * height;  /* Binary Ninja: $v1_2 = $a1 * $v1_1 */
+            u32 width = vic_dev->width;
+            u32 height = vic_dev->height;
+            u32 frame_size = width << 1;
+            u32 frame_area = frame_size * height;
 
-        /* Binary Ninja: Read current buffer address from VIC register */
-        u32 current_reg_offset = (current_index + 0xc6) << 2;
-        u32 current_buffer_addr = readl(vic_regs + current_reg_offset);
+            u32 current_reg_offset = (current_index + 0xc6) << 2;
+            u32 current_buffer_addr = readl(vic_regs + current_reg_offset);
+            u32 next_buffer_addr = frame_area + current_buffer_addr;
 
-        /* Binary Ninja EXACT: Calculate next buffer address - $s0_4 = $s0_3 + *($a2_8 + ...) */
-        u32 next_buffer_addr = frame_area + current_buffer_addr;  /* Binary Ninja: frame_area, not frame_size */
+            u32 next_reg_offset = (next_index + 0xc6) << 2;
+            writel(next_buffer_addr, vic_regs + next_reg_offset);
+            wmb();
 
-        /* Binary Ninja: Program next buffer address to next slot */
-        u32 next_reg_offset = (next_index + 0xc6) << 2;
-        writel(next_buffer_addr, vic_regs + next_reg_offset);  /* Binary Ninja: *($a2_8 + (($hi_1 + 0xc6) << 2)) = $s0_4 */
-        wmb();
+            vic_mdma_ch0_set_buff_index = next_index;
+            vic_mdma_ch0_sub_get_num--;
 
-        /* Binary Ninja: Update buffer index for next time */
-        vic_mdma_ch0_set_buff_index = next_index;  /* Binary Ninja: vic_mdma_ch0_set_buff_index = $hi_1 */
-
-        /* Binary Ninja: Decrement buffer count */
-        vic_mdma_ch0_sub_get_num--;  /* Binary Ninja: vic_mdma_ch0_sub_get_num -= 1 */
-
-        pr_info("*** VIC MDMA: BN EXACT - ch0 index %d->%d, addr 0x%x->0x%x, reg[0x%x], count=%d ***\n",
-                current_index, next_index, current_buffer_addr, next_buffer_addr, next_reg_offset, vic_mdma_ch0_sub_get_num);
-
-        /* CRITICAL: Replenish buffer count BEFORE it reaches 0 to prevent VIC hardware from stopping */
-        if (vic_mdma_ch0_sub_get_num == 1) {
-            vic_mdma_ch0_sub_get_num = 5;  /* Replenish to 5 buffers BEFORE reaching 0 */
-            pr_info("*** VIC MDMA: EARLY REPLENISH - count=1, replenished to 5 to prevent VIC hardware stop ***\n");
+            pr_info("*** VIC MDMA: SOFTWARE - ch0 index %d->%d, addr 0x%x->0x%x, count=%d ***\n",
+                    current_index, next_index, current_buffer_addr, next_buffer_addr, vic_mdma_ch0_sub_get_num);
         }
     } else {
-        pr_info("*** VIC MDMA: BN EXACT - ch0 buffer count is 0, no circulation ***\n");
+        /* Mode 2: Hardware Buffer Management - *(arg1 + 0x214) != 0 */
+        pr_info("*** VIC MDMA: HARDWARE buffer management mode ***\n");
+
+        /* Binary Ninja: Read current buffer address from VIC hardware register 0x380 */
+        u32 current_buffer_addr = readl(vic_regs + 0x380);  /* $s5_1 = *(*(arg1 + 0xb8) + 0x380) */
+
+        pr_info("*** VIC MDMA: HARDWARE - current_addr=0x%x from VIC[0x380] ***\n", current_buffer_addr);
+
+        /* Binary Ninja: Hardware buffer queue management */
+        /* TODO: Implement pop_buffer_fifo() and buffer queue management */
+        /* For now, let hardware manage rotation and just log the activity */
+        pr_info("*** VIC MDMA: HARDWARE - letting VIC hardware manage buffer rotation ***\n");
     }
 
     spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
@@ -2599,6 +2599,10 @@ static u32 vic_mdma_enable_complete(struct tx_isp_vic_device *vic_dev, u32 width
     /* CRITICAL: Update vic_dev->active_buffer_count to match our buffer setup */
     vic_dev->active_buffer_count = arg4;
     pr_info("*** vic_mdma_enable_complete: Set active_buffer_count = %d ***\n", arg4);
+
+    /* CRITICAL: Enable hardware buffer management mode - Binary Ninja MCP architecture */
+    vic_dev->processing = true;  /* *(arg1 + 0x214) = true enables hardware buffer management */
+    pr_info("*** vic_mdma_enable_complete: ENABLED hardware buffer management mode (processing=true) ***\n");
 
     /* Binary Ninja: Basic register setup */
     writel(1, vic_regs + 0x308);
