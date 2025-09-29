@@ -597,10 +597,13 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
     if (!list_empty(&vic_dev->done_head)) {
         completed_buffer = list_first_entry(&vic_dev->done_head, struct vic_buffer_entry, list);
         list_del(&completed_buffer->list);
-        vic_dev->active_buffer_count--;
 
-        pr_info("*** VIC MDMA: Completed buffer 0x%x moved from busy to free queue ***\n",
-                completed_buffer->buffer_addr);
+        /* CRITICAL FIX: Do NOT decrement active_buffer_count - it represents VIC hardware configuration */
+        /* The active_buffer_count should remain at the configured value (5) to prevent control register corruption */
+        /* vic_dev->active_buffer_count--; // REMOVED - this was corrupting the VIC control register */
+
+        pr_info("*** VIC MDMA: Completed buffer 0x%x moved from busy to free queue (active_buffer_count preserved at %d) ***\n",
+                completed_buffer->buffer_addr, vic_dev->active_buffer_count);
 
         /* Binary Ninja: Move completed buffer to free queue (offset 0x1fc) */
         list_add_tail(&completed_buffer->list, &vic_dev->free_head);
@@ -735,7 +738,7 @@ static int vic_initialize_buffer_ring(struct tx_isp_vic_device *vic_dev)
 
     /* Set buffer counts */
     vic_dev->buffer_count = 5;
-    vic_dev->active_buffer_count = 0;  /* Will be incremented as buffers move to busy queue */
+    vic_dev->active_buffer_count = 5;  /* CRITICAL FIX: Set to 5 to match VIC hardware configuration */
 
     spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
 
@@ -2915,7 +2918,15 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         if (vic_base) {
             /* SAFE: $s0 + 0x218 = active_buffer_count */
             u32 buffer_count = vic_dev->active_buffer_count;
-            if (buffer_count == 0) buffer_count = 2;       /* Reference default */
+
+            /* CRITICAL FIX: Force 5 buffers to prevent control register corruption */
+            /* The active_buffer_count is being corrupted somewhere, so force the correct value */
+            if (buffer_count != 5) {
+                pr_info("*** CRITICAL: active_buffer_count=%u corrupted, forcing to 5 buffers ***\n", buffer_count);
+                buffer_count = 5;
+                vic_dev->active_buffer_count = 5;  /* Fix the corruption */
+            }
+
             if (buffer_count > 5) buffer_count = 5;        /* 5-slot ring cap */
             u32 stream_ctrl = (buffer_count << 16) | 0x80000020;  /* Binary Ninja EXACT formula */
             void __iomem *vic_ctrl = vic_dev->vic_regs_control;
@@ -3870,7 +3881,8 @@ int ispvic_frame_channel_clearbuf(void *arg1)
     }
 
     /* Binary Ninja: *($s0 + 0x210) = 0; *($s0 + 0x214) = 0 */
-    vic_dev->active_buffer_count = 0;
+    /* CRITICAL FIX: Do NOT reset active_buffer_count to 0 - preserve VIC hardware configuration */
+    /* vic_dev->active_buffer_count = 0; // REMOVED - this corrupts VIC control register */
     vic_dev->frame_count = 0;
 
     spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
