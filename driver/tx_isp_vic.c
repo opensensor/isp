@@ -523,6 +523,28 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                         reg_p, count, cur_idx, next_idx);
             }
 
+            /* CRITICAL FIX: Binary Ninja reference - Call __enqueue_in_driver to keep pipeline primed */
+            /* This sends event 0x3000005 to re-queue the completed buffer back to the driver */
+            /* Without this, the pipeline runs out of buffers after initial frames are consumed */
+            if (buffer_list && !list_empty(buffer_list)) {
+                struct list_head *first = buffer_list->next;
+                struct vic_buffer_entry *completed_buffer = list_entry(first, struct vic_buffer_entry, list);
+
+                if (completed_buffer) {
+                    pr_info("*** VIC FRAME DONE: Calling __enqueue_in_driver to re-queue buffer (addr=0x%x, idx=%u) ***\n",
+                            completed_buffer->buffer_addr, completed_buffer->buffer_index);
+
+                    /* Binary Ninja: __enqueue_in_driver sends event 0x3000005 */
+                    extern int __enqueue_in_driver(void *buffer_struct);
+                    int enqueue_result = __enqueue_in_driver(completed_buffer);
+
+                    if (enqueue_result != 0) {
+                        pr_info("*** VIC FRAME DONE: __enqueue_in_driver returned %d (0xfffffdfd means event not wired) ***\n",
+                                enqueue_result);
+                    }
+                }
+            }
+
             /* Binary Ninja: result = &data_b0000 */
             result = &data_b0000;
             goto label_123f4;
