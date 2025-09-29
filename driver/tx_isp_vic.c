@@ -1613,6 +1613,7 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                     writel(~0U, vr + 0x1f0);
                     writel(~0U, vr + 0x1f4);
                     writel(stream_ctrl, vr + 0x300);
+                    writel(0xFFFFFFFE, vr + 0x1e8);
                     wmb();
                 }
                 if (vc) {
@@ -1620,6 +1621,7 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                     writel(~0U, vc + 0x1f0);
                     writel(~0U, vc + 0x1f4);
                     writel(stream_ctrl, vc + 0x300);
+                    writel(0xFFFFFFFE, vc + 0x1e8);
                     wmb();
                 }
                 pr_info("vic_core_ops_ioctl: QBUF reasserted stream_ctrl=0x%x (buffers=%u)\n", stream_ctrl, n);
@@ -1650,6 +1652,8 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                         writel(0xFFFFFFFF, vr + 0x1f0);
                         writel(0xFFFFFFFF, vr + 0x1f4);
                         writel(stream_ctrl, vr + 0x300);
+                        /* Re-allow FrameDone in MainMask */
+                        writel(0xFFFFFFFE, vr + 0x1e8);
                         wmb();
                     }
                     if (vc) {
@@ -1657,6 +1661,7 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                         writel(0xFFFFFFFF, vc + 0x1f0);
                         writel(0xFFFFFFFF, vc + 0x1f4);
                         writel(stream_ctrl, vc + 0x300);
+                        writel(0xFFFFFFFE, vc + 0x1e8);
                         wmb();
                     }
                     pr_info("vic_core_ops_ioctl: BUFFER_ENQUEUE reasserted stream_ctrl=0x%x (buffers=%u)\n", stream_ctrl, buffer_count);
@@ -3601,11 +3606,22 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         buffer_addr = node->buffer_addr;
         buffer_index = node->buffer_index;
         reg_offset = (buffer_index + 0xc6) << 2;  /* 0x318..0x328 */
+
+        /* Enter CONFIG state before programming buffer slots, then back to RUN */
+        if (vic_dev->vic_regs) writel(2, vic_dev->vic_regs + 0x0);
+        if (vic_dev->vic_regs_control) writel(2, vic_dev->vic_regs_control + 0x0);
+        wmb();
+
         writel(buffer_addr, vic_dev->vic_regs + reg_offset);
         if (vic_dev->vic_regs_control)
             writel(buffer_addr, vic_dev->vic_regs_control + reg_offset);
         wmb();
-        pr_info("*** VIC QBUF: wrote slot %u addr=0x%x to reg_off=0x%x ***\n", buffer_index, buffer_addr, reg_offset);
+
+        if (vic_dev->vic_regs) writel(1, vic_dev->vic_regs + 0x0);
+        if (vic_dev->vic_regs_control) writel(1, vic_dev->vic_regs_control + 0x0);
+        wmb();
+
+        pr_info("*** VIC QBUF: wrote slot %u addr=0x%x to reg_off=0x%x (CONFIG->RUN) ***\n", buffer_index, buffer_addr, reg_offset);
 
         /* Done for this node */
     }
