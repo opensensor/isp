@@ -149,10 +149,11 @@ static void *test_addr = NULL;  /* Test address pointer */
 irqreturn_t isp_vic_interrupt_service_routine(void *arg1);
 
 /* Binary Ninja MDMA global variables */
+/* Binary Ninja MCP reference global variables - CRITICAL for proper MDMA operation */
 static uint32_t vic_mdma_ch0_sub_get_num = 0;
 static uint32_t vic_mdma_ch1_sub_get_num = 0;
-static uint32_t vic_mdma_ch0_set_buff_index = 0;
-static uint32_t vic_mdma_ch1_set_buff_index = 0;
+static uint32_t vic_mdma_ch0_set_buff_index = 4;  /* BN MCP: initialized to 4 */
+static uint32_t vic_mdma_ch1_set_buff_index = 4;  /* BN MCP: initialized to 4 */
 
 /* Binary Ninja raw_pipe structure - function pointer table */
 extern void *raw_pipe;
@@ -2597,14 +2598,8 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
     return result;
 }
 
-/* Global variables for VIC MDMA state - Binary Ninja MCP reference */
-static u32 vic_mdma_ch0_set_buff_index = 4;
-static u32 vic_mdma_ch1_set_buff_index = 4;
-static u32 vic_mdma_ch0_sub_get_num = 0;
-static u32 vic_mdma_ch1_sub_get_num = 0;
-
-/* Binary Ninja EXACT: vic_mdma_enable implementation - COMPLETE MDMA setup */
-static u32 vic_mdma_enable(struct tx_isp_vic_device *vic_dev, u32 width, u32 height, u32 arg3, u32 arg4, u32 arg5, u32 arg6)
+/* Binary Ninja EXACT: vic_mdma_enable_complete implementation - COMPLETE MDMA setup */
+static u32 vic_mdma_enable_complete(struct tx_isp_vic_device *vic_dev, u32 width, u32 height, u32 arg3, u32 arg4, u32 arg5, u32 arg6)
 {
     void __iomem *vic_regs = vic_dev->vic_regs;
     u32 stride = width;
@@ -2903,10 +2898,10 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             pr_info("*** VIC CONTROL (PRIMARY): WROTE 2 to [0x0] before MDMA/config ***\n");
         }
 
-        /* Binary Ninja EXACT: vic_mdma_enable - COMPLETE MDMA setup */
-        pr_info("*** CRITICAL: Calling vic_mdma_enable - COMPLETE MDMA setup for VIC interrupts ***\n");
-        u32 control_result = vic_mdma_enable(vic_dev, vic_dev->width, vic_dev->height, 0, 5, 0x6300000, 0);
-        pr_info("*** vic_mdma_enable completed - VIC MDMA fully configured! control=0x%x ***\n", control_result);
+        /* Binary Ninja EXACT: vic_mdma_enable_complete - COMPLETE MDMA setup */
+        pr_info("*** CRITICAL: Calling vic_mdma_enable_complete - COMPLETE MDMA setup for VIC interrupts ***\n");
+        u32 control_result = vic_mdma_enable_complete(vic_dev, vic_dev->width, vic_dev->height, 0, 5, 0x6300000, 0);
+        pr_info("*** vic_mdma_enable_complete completed - VIC MDMA fully configured! control=0x%x ***\n", control_result);
 
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
         void __iomem *vic_base = vic_dev->vic_regs;  /* SAFE: $s0 + 0xb8 = vic_regs */
