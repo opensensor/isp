@@ -638,6 +638,12 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
 
         pr_info("*** VIC MDMA: BN EXACT - ch0 index %d->%d, addr 0x%x->0x%x, reg[0x%x], count=%d ***\n",
                 current_index, next_index, current_buffer_addr, next_buffer_addr, next_reg_offset, vic_mdma_ch0_sub_get_num);
+
+        /* CRITICAL: Replenish buffer count when it reaches 0 to enable continuous streaming */
+        if (vic_mdma_ch0_sub_get_num == 0) {
+            vic_mdma_ch0_sub_get_num = 5;  /* Replenish to 5 buffers for continuous operation */
+            pr_info("*** VIC MDMA: REPLENISH - buffer count reached 0, replenished to 5 for continuous streaming ***\n");
+        }
     } else {
         pr_info("*** VIC MDMA: BN EXACT - ch0 buffer count is 0, no circulation ***\n");
     }
