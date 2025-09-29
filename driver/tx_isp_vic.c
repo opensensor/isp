@@ -735,8 +735,8 @@ static int vic_initialize_buffer_ring(struct tx_isp_vic_device *vic_dev)
         wmb();
 
         /* CRITICAL: Program to CONTROL VIC space (0x10023000) as well */
-        if (ourISPdev && ourISPdev->vic_control_regs) {
-            writel(buffer_entry->buffer_addr, ourISPdev->vic_control_regs + reg_offset);
+        if (vic_dev->vic_regs_control) {
+            writel(buffer_entry->buffer_addr, vic_dev->vic_regs_control + reg_offset);
             wmb();
         }
 
