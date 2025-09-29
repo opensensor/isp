@@ -637,15 +637,18 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
         }
 
         if (slot_buffer) {
-            /* CRITICAL FIX: VIC hardware doesn't auto-advance - we must manually program the CURRENT slot */
-            /* VIC is stuck on slot 2 (0x320), so we need to program a new buffer into slot 2 */
-            u32 current_reg_offset = (current_slot + 0xc6) << 2;  /* Program current slot, not next slot */
+            /* Binary Ninja EXACT: Program buffer to slot and update current address register */
+            u32 current_reg_offset = (current_slot + 0xc6) << 2;  /* Program current slot */
 
-            /* Program new buffer address to the CURRENT slot that VIC is reading from */
+            /* Program new buffer address to the slot */
             writel(slot_buffer->buffer_addr, vic_regs + current_reg_offset);
             wmb();
 
-            pr_info("*** VIC MDMA: Manual buffer advance - VIC stuck on slot=%d, programming new buffer 0x%x to PRIMARY[0x%x] ***\n",
+            /* CRITICAL: Update VIC current address register (0x380) - Binary Ninja reference */
+            writel(slot_buffer->buffer_addr, vic_regs + 0x380);
+            wmb();
+
+            pr_info("*** VIC MDMA: BN MCP - slot=%d, buffer 0x%x to PRIMARY[0x%x] and current_addr[0x380] ***\n",
                     current_slot, slot_buffer->buffer_addr, current_reg_offset);
         } else {
             pr_warn("*** VIC MDMA: No buffer found for slot %d ***\n", current_slot);
@@ -663,7 +666,11 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
             writel(buffer_addr, vic_regs + reg_offset);
             wmb();
 
-            pr_info("*** VIC MDMA: FALLBACK - Fresh buffer 0x%x programmed to PRIMARY[0x%x] ***\n",
+            /* CRITICAL: Update VIC current address register (0x380) - Binary Ninja reference */
+            writel(buffer_addr, vic_regs + 0x380);
+            wmb();
+
+            pr_info("*** VIC MDMA: FALLBACK - Fresh buffer 0x%x programmed to PRIMARY[0x%x] and current_addr[0x380] ***\n",
                     buffer_addr, reg_offset);
         }
     }
@@ -732,6 +739,14 @@ static int vic_initialize_buffer_ring(struct tx_isp_vic_device *vic_dev)
         if (vic_dev->vic_regs_control) {
             writel(buffer_entry->buffer_addr, vic_dev->vic_regs_control + reg_offset);
             wmb();
+        }
+
+        /* CRITICAL: Initialize VIC current address register (0x380) with first buffer */
+        if (i == 0) {
+            writel(buffer_entry->buffer_addr, vic_regs + 0x380);
+            wmb();
+            pr_info("*** VIC INIT: Set current address register 0x380 = 0x%x (first buffer) ***\n",
+                    buffer_entry->buffer_addr);
         }
 
             pr_info("*** VIC BUFFER %d: addr=0x%x programmed to PRIMARY[0x%x] and CONTROL[0x%x] ***\n",
