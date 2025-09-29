@@ -1608,8 +1608,8 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     else if (cmd == 0x3000005) {  /* TX_ISP_EVENT_BUFFER_ENQUEUE - keep pipeline fed */
         pr_info("vic_core_ops_ioctl: BUFFER_ENQUEUE cmd=0x%x - refreshing VIC buffer state\n", cmd);
         if (sd) {
-            /* 1) Ensure buffers are programmed (idempotent) */
-            (void) ispvic_frame_channel_qbuf(sd, NULL);
+            /* 1) Program this specific buffer node into VIC via qbuf (arg is node) */
+            (void) ispvic_frame_channel_qbuf(sd, arg);
 
             /* 2) Re-assert MDMA enable and stream control with current buffer count */
             {
@@ -3574,73 +3574,19 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 
     /* Binary Ninja EXACT: Buffer queue management with VIC register writes */
     if (buffer_entry) {
-        /* Binary Ninja: int32_t $a1_2 = *($a3_1 + 8) - get buffer address */
-        /* For now, we'll get buffer address from our VBM system */
-        /* This is a simplified approach - the full reference uses complex buffer management */
+        /* Use the provided node (BN: arg2 points to a node whose +8 holds buffer addr) */
+        struct vic_buffer_entry *node = (struct vic_buffer_entry *)buffer_entry;
+        buffer_addr = node->buffer_addr;
+        buffer_index = node->buffer_index;
+        reg_offset = (buffer_index + 0xc6) << 2;  /* 0x318..0x328 */
+        writel(buffer_addr, vic_dev->vic_regs + reg_offset);
+        if (vic_dev->vic_regs_control)
+            writel(buffer_addr, vic_dev->vic_regs_control + reg_offset);
+        wmb();
+        pr_info("*** VIC QBUF: wrote slot %u addr=0x%x to reg_off=0x%x ***\n", buffer_index, buffer_addr, reg_offset);
 
-        /* Get buffer address from VBM system (this is where QBUF stores addresses) */
-        extern struct frame_channel_device frame_channels[];
-        struct tx_isp_channel_state *state = &frame_channels[0].state;
 
-        if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
-            int i;
-            pr_info("*** ispvic_frame_channel_qbuf: Writing %d VBM buffer addresses to VIC hardware ***\n",
-                    state->vbm_buffer_count);
-
-            for (i = 0; i < state->vbm_buffer_count && i < 5; i++) {
-                buffer_addr = state->vbm_buffer_addresses[i];
-                if (buffer_addr != 0) {
-                    /* Binary Ninja EXACT: int32_t $v1_1 = $v0_5[4] - get buffer index */
-                    buffer_index = i;
-
-                    /* Binary Ninja EXACT: *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2 */
-                    reg_offset = (buffer_index + 0xc6) << 2;  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
-                    writel(buffer_addr, vic_dev->vic_regs + reg_offset);
-                    wmb();
-
-                    pr_info("*** CRITICAL: VIC BUFFER %d: Wrote VBM address 0x%x to reg 0x%x ***\n",
-                            buffer_index, buffer_addr, reg_offset);
-                }
-            }
-            pr_info("*** CRITICAL: VIC buffer addresses written to hardware from VBM - interrupts should now work! ***\n");
-
-            /* Ensure all 5 VIC slots are populated: fill remainder with reserved memory */
-            if (state->vbm_buffer_count < 5) {
-                u32 frame_size = cached_sensor_width * cached_sensor_height * 2;  /* RAW10 = 2 bytes/pixel */
-                u32 base_addr = 0x6300000;  /* Reserved memory base */
-                int j;
-                for (j = state->vbm_buffer_count; j < 5; j++) {
-                    u32 filler = base_addr + (j * frame_size);
-                    u32 off = (j + 0xc6) << 2;  /* 0x318..0x328 */
-                    writel(filler, vic_dev->vic_regs + off);
-                    wmb();
-                    pr_info("*** CRITICAL: VIC BUFFER %d FILLER: Wrote reserved memory address 0x%x to reg 0x%x ***\n",
-                            j, filler, off);
-                }
-                pr_info("*** CRITICAL: Filled remaining %d VIC slots with reserved memory to maintain 5-slot ring ***\n",
-                        5 - state->vbm_buffer_count);
-            }
-        } else {
-            /* CRITICAL FIX: Use fallback buffer addresses like working reference */
-            pr_warn("ispvic_frame_channel_qbuf: No VBM buffer addresses - using fallback addresses\n");
-            pr_warn("*** vbm_buffer_addresses=%p, vbm_buffer_count=%d ***\n",
-                    state->vbm_buffer_addresses, state->vbm_buffer_count);
-
-            /* Use reserved memory region 0x6300000 like working reference */
-            u32 frame_size = cached_sensor_width * cached_sensor_height * 2;  /* RAW10 = 2 bytes/pixel */
-            u32 base_addr = 0x6300000;  /* Reserved memory base */
-
-            int i;
-            for (i = 0; i < 5; i++) {
-                u32 buffer_addr = base_addr + (i * frame_size);
-                u32 reg_offset = (i + 0xc6) << 2;  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
-
-                writel(buffer_addr, vic_dev->vic_regs + reg_offset);
-                wmb();
-                pr_info("*** QBUF FALLBACK BUFFER %d: Wrote reserved memory address 0x%x to reg 0x%x ***\n",
-                        i, buffer_addr, reg_offset);
-            }
-            pr_info("*** CRITICAL: QBUF fallback buffer addresses configured - hardware can now generate interrupts! ***\n");
+        /* Done for this node */
         }
     }
 

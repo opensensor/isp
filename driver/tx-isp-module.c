@@ -4132,11 +4132,20 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 int i;
                 struct tx_isp_subdev *vic_sd = &ourISPdev->vic_dev->sd;
                 for (i = 0; i < st->vbm_buffer_count && i < 5; i++) {
-                    int er = tx_isp_send_event_to_remote(vic_sd, 0x3000005, NULL);
+                    struct vic_buffer_entry *node = VIC_BUFFER_ALLOC();
+                    if (!node) {
+                        pr_warn("STREAMON: Failed to alloc vic_buffer_entry for slot %d\n", i);
+                        continue;
+                    }
+                    node->buffer_addr = st->vbm_buffer_addresses[i];
+                    node->buffer_index = i;
+                    node->buffer_status = VIC_BUFFER_STATUS_QUEUED;
+                    pr_info("STREAMON: ENQUEUE slot %d addr=0x%x via 0x3000005\n", i, node->buffer_addr);
+                    int er = tx_isp_send_event_to_remote(vic_sd, 0x3000005, node);
                     if (er == -0x203) {
                         /* No VIC callback wired yet: call VIC core ioctl directly (conservative fallback) */
                         pr_info("STREAMON: BUFFER_ENQUEUE event fell back to direct vic_core_ops_ioctl\n");
-                        vic_core_ops_ioctl(vic_sd, 0x3000005, NULL);
+                        vic_core_ops_ioctl(vic_sd, 0x3000005, node);
                     }
                 }
             }
