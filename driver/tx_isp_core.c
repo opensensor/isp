@@ -2632,6 +2632,10 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
             /* Use the actual sensor attributes */
             sensor_attr = sensor->video.attr;
             pr_info("ispcore_core_ops_init: Using sensor attributes from sensor: %s", sensor_attr->name);
+            pr_info("*** DEBUG: sensor=%p, sensor->video.attr=%p ***", sensor, sensor->video.attr);
+            pr_info("*** DEBUG: sensor_attr dimensions: %ux%u@%u, mode=%u ***",
+                    sensor_attr->total_width, sensor_attr->total_height,
+                    sensor_attr->fps, sensor_attr->wdr_mode);
         } else if (sensor) {
             pr_info("ispcore_core_ops_init: Sensor found but no attributes - sensor_attr will be NULL");
         } else {
@@ -2861,6 +2865,9 @@ int ispcore_core_ops_init_with_sensor(struct tx_isp_dev *isp, struct tx_isp_sens
 
         /* CRITICAL FIX: Call tisp_init with sensor name like good-things driver */
         const char *sensor_name = sensor_attr->name ? sensor_attr->name : "gc2053";
+        pr_info("*** DEBUG: sensor_params BEFORE tisp_init: width=%u, height=%u, fps=%u, mode=%u ***",
+                sensor_params.width, sensor_params.height, sensor_params.fps, sensor_params.mode);
+        pr_info("*** DEBUG: &sensor_params=%p, sensor_name=%s ***", &sensor_params, sensor_name);
         pr_info("*** ispcore_core_ops_init_with_sensor: Calling tisp_init(&sensor_params, \"%s\") ***", sensor_name);
 
         ret = tisp_init(&sensor_params, (char *)sensor_name);

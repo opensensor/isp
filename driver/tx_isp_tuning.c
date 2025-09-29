@@ -2001,7 +2001,12 @@ int tisp_init(void *sensor_info, char *param_name)
     /* CRITICAL FIX: Properly extract dimensions from sensor attribute structure */
     if (sensor_info) {
         /* Use provided sensor info if available */
+        pr_info("*** DEBUG tisp_init: sensor_info=%p, copying %zu bytes ***", sensor_info, sizeof(sensor_params));
         memcpy(&sensor_params, sensor_info, sizeof(sensor_params));
+        pr_info("*** DEBUG tisp_init: After memcpy - width=%u, height=%u, fps=%u, mode=%u ***",
+                sensor_params.width, sensor_params.height, sensor_params.fps, sensor_params.mode);
+    } else {
+        pr_info("*** DEBUG tisp_init: sensor_info is NULL, using defaults ***");
     }
 
     pr_info("tisp_init: Using sensor parameters - %dx%d@%d, mode=%d\n",
