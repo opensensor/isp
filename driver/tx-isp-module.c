@@ -1754,7 +1754,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
             writel(0xFFFFFFFE, base_for_irq + 0x1e8);  /* MainMask: unmask FD */
             writel(0xFFFFFFFF, base_for_irq + 0x1ec);  /* SubMask: allow all MDMA sub-bits */
             writel(0x0000000F, base_for_irq + 0x1e4);  /* Enable GROUP bits */
-            writel(readl(base_for_irq + 0x1e0) | 0x1, base_for_irq + 0x1e0); /* Enable FD bit0 */
+            /* Do NOT write 0x1e0 here; 0x1e0 is status, not an enable */
             writel(0x1, base_for_irq + 0x0); wmb();    /* RUN */
 
             /* Mirror to both banks to prevent mid-stream clobber */
@@ -1778,9 +1778,8 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                     writel(0xFFFFFFFE, vrp + 0x1e8);
                     writel(0xFFFFFFFF, vrp + 0x1ec);
 
-                    /* Enable GROUP first, then FD */
+                    /* Enable GROUP first; do NOT touch 0x1e0 (status) */
                     writel(0x0000000F, vrp + 0x1e4);
-                    writel(readl(vrp + 0x1e0) | 0x1, vrp + 0x1e0);
                     wmb();
                 }
                 if (vrc) {
@@ -1800,9 +1799,8 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                     writel(0xFFFFFFFE, vrc + 0x1e8);
                     writel(0xFFFFFFFF, vrc + 0x1ec);
 
-                    /* Enable GROUP first, then FD */
+                    /* Enable GROUP first; do NOT touch 0x1e0 (status) */
                     writel(0x0000000F, vrc + 0x1e4);
-                    writel(readl(vrc + 0x1e0) | 0x1, vrc + 0x1e0);
                     wmb();
                 }
 
@@ -1830,7 +1828,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                             writel(0xFFFFFFFE, b + 0x1e8);
                             writel(0xFFFFFFFF, b + 0x1ec);
                             writel(0x0000000F, b + 0x1e4);
-                            writel(readl(b + 0x1e0) | 0x1, b + 0x1e0);
+                            /* Do NOT write 0x1e0 (status) here */
                             writel(1, b + 0x0); wmb(); /* RUN */
                         }
                     }
@@ -2345,21 +2343,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 }
                 wmb();
 
-                /* Ensure frame-done (bit0) is enabled in enable registers (1e0) */
-                do {
-                    u32 en = readl(vr + 0x1e0);
-                    if ((en & 0x1) == 0) {
-                        writel(en | 0x1, vr + 0x1e0);
-                        printk(KERN_ALERT "*** VIC RE-ARM: set PRIMARY 1e0 from 0x%x to 0x%x (enable FD) ***\n", en, en | 0x1);
-                    }
-                    if (vc) {
-                        u32 en2 = readl(vc + 0x1e0);
-                        if ((en2 & 0x1) == 0) {
-                            writel(en2 | 0x1, vc + 0x1e0);
-                            printk(KERN_ALERT "*** VIC RE-ARM: set CONTROL 1e0 from 0x%x to 0x%x (enable FD) ***\n", en2, en2 | 0x1);
-                        }
-                    }
-                } while (0);
+                /* Do not write to 0x1e0 here; it's a status register (W1C is at 0x1f0/0x1f4) */
 
                 /* Re-apply stream control bits and enable sequence */
                 writel(new_ctrl, vr + 0x300);

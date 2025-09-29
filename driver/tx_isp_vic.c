@@ -2800,9 +2800,9 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         writel(w, core + 0x9a98);     /* observed as 0x500 in logs when width was 1280 */
                         /* 0x9a94 already set to 1 earlier; leave as-is */
 
-                        /* Now (re)assert the core VIC IRQ gate */
-                        writel(0x200, core + 0x9ac0);
-                        writel(0x200, core + 0x9ac8);
+                        /* Now (re)assert the core VIC IRQ gate (working values 1/0) */
+                        writel(0x00000001, core + 0x9ac0);
+                        writel(0x00000000, core + 0x9ac8);
                         wmb();
                         pr_info("*** CORE VIC ROUTE INIT: [9a00]=0x%08x [9a04]=0x%08x [9a2c]=0x%08x [9a34]=0x%08x [9a88]=0x%08x [9a80]=0x%08x [9a98]=0x%08x; GATE [9ac0]=0x%08x [9ac8]=0x%08x ***\n",
                                 readl(core + 0x9a00), readl(core + 0x9a04), readl(core + 0x9a2c),
