@@ -504,7 +504,10 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                             configured++;
                         }
                     }
-                    if (configured) vic_dev->active_buffer_count = configured;
+                    if (configured) {
+                        if (configured > 5) configured = 5; /* VIC has max 5 slots */
+                        vic_dev->active_buffer_count = configured;
+                    }
                 }
             } while (0);
 
@@ -2549,6 +2552,7 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
             }
         }
         if (configured_count == 0) configured_count = 1;  /* Ensure at least 1 buffer */
+        if (configured_count > 5) configured_count = 5;    /* VIC has max 5 slots */
         vic_dev->active_buffer_count = configured_count;
         pr_info("*** CRITICAL: VIC buffer addresses configured from VBM (count=%d) - hardware can now generate interrupts! ***\n",
                 configured_count);
@@ -2663,6 +2667,8 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         if (vic_base) {
             /* SAFE: $s0 + 0x218 = active_buffer_count */
             u32 buffer_count = vic_dev->active_buffer_count;
+            if (buffer_count == 0) buffer_count = 2;       /* Reference default */
+            if (buffer_count > 5) buffer_count = 5;        /* 5-slot ring cap */
             u32 stream_ctrl = (buffer_count << 16) | 0x80000020;  /* Binary Ninja EXACT formula */
             void __iomem *vic_ctrl = vic_dev->vic_regs_control;
             writel(stream_ctrl, vic_base + 0x300);

@@ -2290,6 +2290,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 u32 count = vic_dev->active_buffer_count;
                 u32 new_ctrl;
                 if (count == 0) count = 2;
+                if (count > 5) count = 5; /* VIC has max 5 slots */
                 new_ctrl = (count << 16) | 0x80000020;
 
                 printk(KERN_ALERT "*** VIC RE-ARM: reason=%s ctrl=0x%x -> reassert, stream_ctrl=0x%x (count=%u) ***\n",
