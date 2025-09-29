@@ -641,8 +641,8 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
             wmb();
 
             /* CRITICAL: Program to CONTROL VIC space as well */
-            if (ourISPdev && ourISPdev->vic_control_regs) {
-                writel(slot_buffer->buffer_addr, ourISPdev->vic_control_regs + reg_offset);
+            if (vic_dev->vic_regs_control) {
+                writel(slot_buffer->buffer_addr, vic_dev->vic_regs_control + reg_offset);
                 wmb();
             }
 
