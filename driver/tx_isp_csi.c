@@ -547,11 +547,32 @@ int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
     /* Binary Ninja: int32_t $v1_2 = *($s0_1 + 0x128) */
     state = csi_dev->state;
 
-    /* Binary Ninja: if ($v1_2 == 4) csi_video_s_stream(arg1, 0) */
+    /* CRITICAL FIX: Do NOT stop CSI stream when VIC is actively streaming */
+    /* The slake module needs to configure silicon bits without disrupting active video flow */
     if (state == 4) {
-        pr_info("tx_isp_csi_slake_subdev: CSI in streaming state, stopping stream\n");
-        csi_video_s_stream(sd, 0);
-        state = csi_dev->state;  /* Update state after s_stream */
+        /* Check if VIC is actively streaming - if so, preserve CSI stream */
+        extern struct tx_isp_dev *tx_isp_get_device(void);
+        struct tx_isp_dev *isp_dev = tx_isp_get_device();
+        bool vic_streaming = false;
+
+        if (isp_dev && isp_dev->subdevs[1]) {  /* VIC is at index 1 */
+            struct tx_isp_subdev *vic_sd = isp_dev->subdevs[1];
+            if (vic_sd) {
+                struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(vic_sd);
+                if (vic_dev && vic_dev->stream_state == 1) {
+                    vic_streaming = true;
+                }
+            }
+        }
+
+        if (vic_streaming) {
+            pr_info("tx_isp_csi_slake_subdev: CSI in streaming state but VIC actively streaming - PRESERVING CSI stream\n");
+            pr_info("tx_isp_csi_slake_subdev: Silicon configuration will proceed without stopping camera data flow\n");
+        } else {
+            pr_info("tx_isp_csi_slake_subdev: CSI in streaming state, stopping stream\n");
+            csi_video_s_stream(sd, 0);
+            state = csi_dev->state;  /* Update state after s_stream */
+        }
     }
 
     /* Binary Ninja: void* $s2_1 = $s0_1 + 0x12c - Get mutex */
