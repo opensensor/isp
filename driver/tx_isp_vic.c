@@ -1942,11 +1942,18 @@ int vic_mdma_enable(struct tx_isp_vic_device *vic_dev, int channel, int dual_cha
         vic_control = 0x80080020 | format_type;
     }
 
-    /* Binary Ninja EXACT: Write VIC control register */
+    /* Binary Ninja EXACT: Write VIC control register to BOTH spaces */
     writel(vic_control, vic_regs + 0x300);
     wmb();
 
-    pr_err("*** vic_mdma_enable: VIC[0x300] = 0x%x (MDMA ENABLED) ***\n", vic_control);
+    /* CRITICAL FIX: Also write to CONTROL space - this was missing! */
+    if (vic_dev->vic_regs_control) {
+        writel(vic_control, vic_dev->vic_regs_control + 0x300);
+        wmb();
+        pr_err("*** vic_mdma_enable: VIC CONTROL[0x300] = 0x%x (DUAL-SPACE PROGRAMMING) ***\n", vic_control);
+    }
+
+    pr_err("*** vic_mdma_enable: VIC PRIMARY[0x300] = 0x%x (MDMA ENABLED) ***\n", vic_control);
     pr_err("*** vic_mdma_enable: Frame size=%d, buffer_offset=%d ***\n", frame_size, buffer_offset);
     pr_err("*** vic_mdma_enable: SUCCESS - returning 0 ***\n");
 
@@ -2659,7 +2666,14 @@ static u32 vic_mdma_enable_complete(struct tx_isp_vic_device *vic_dev, u32 width
     writel(control_value, vic_regs + 0x300);
     wmb();
 
-    pr_info("*** vic_mdma_enable: COMPLETE - control=0x%x, buffers programmed (0x318-0x350) ***\n", control_value);
+    /* CRITICAL FIX: Also write to CONTROL space - this was missing! */
+    if (vic_dev->vic_regs_control) {
+        writel(control_value, vic_dev->vic_regs_control + 0x300);
+        wmb();
+        pr_info("*** vic_mdma_enable_complete: VIC CONTROL[0x300] = 0x%x (DUAL-SPACE PROGRAMMING) ***\n", control_value);
+    }
+
+    pr_info("*** vic_mdma_enable_complete: COMPLETE - control=0x%x, buffers programmed (0x318-0x350) ***\n", control_value);
     return control_value;
 }
 
