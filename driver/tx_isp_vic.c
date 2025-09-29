@@ -489,39 +489,27 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             u32 frame_size = width << 1;  /* RAW10 = 2 bytes per pixel */
             u32 frame_area = frame_size * height;
 
-            /* CRITICAL FIX: Read buffer addresses from VIC registers instead of calculating */
-            /* VBM mode uses non-contiguous buffers, so we can't assume next = current + frame_area */
-            u32 current_reg_offset = (current_index + 0xc6) << 2;  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
-            u32 current_buffer_addr = readl(vic_base + current_reg_offset);
+            /* Binary Ninja EXACT: Update control register with buffer position in list */
+            /* Reference: *($a3_1 + 0x300) = $v1_2 | (*($a3_1 + 0x300) & 0xfff0ffff) */
+            /* where $v1_2 = (found_position << 16) or (buffer_count << 16) if not found */
 
-            /* Read the next buffer address from the next slot register (already programmed by QBUF) */
-            u32 next_reg_offset = (next_index + 0xc6) << 2;
-            u32 next_buffer_addr = readl(vic_base + next_reg_offset);
+            /* The control register bits 16-19 should contain the position of the current buffer in the list */
+            /* NOT the hardware slot number, but the position in the buffer queue */
 
-            /* Verify the next buffer address is valid (non-zero) */
-            if (next_buffer_addr == 0) {
-                pr_err("*** VIC FRAME DONE ERROR: Next buffer slot %d has invalid address 0x0 ***\n", next_index);
-                /* Fallback: keep using current slot to prevent hardware crash */
-                next_index = current_index;
-                next_buffer_addr = current_buffer_addr;
-            }
+            u32 buffer_position = (cur_idx >= 0) ? cur_idx : 0;  /* Position in buffer list */
+            u32 control_update = (buffer_position << 16);
 
-            pr_info("*** VIC FRAME DONE: Buffer circulation - slot %d (0x%x) -> slot %d (0x%x) ***\n",
-                    current_index, current_buffer_addr, next_index, next_buffer_addr);
-
-            /* Update the control register buffer index to point to the next slot */
             u32 current_ctrl = readl(vic_base + 0x300);
-            u32 control_flags = current_ctrl & 0xFFF0FFFF;  /* Preserve all except buffer index (bits 16-19) */
-            u32 new_buffer_index = (next_idx & 0xF) << 16;  /* Set new buffer index in bits 16-19 */
-            u32 new_ctrl = control_flags | new_buffer_index;
+            u32 new_ctrl = (current_ctrl & 0xFFF0FFFF) | control_update;
 
             writel(new_ctrl, vic_base + 0x300);
             if (vic_dev->vic_regs_control) {
-                u32 ctrl_current = readl(vic_dev->vic_regs_control + 0x300);
-                u32 ctrl_flags = ctrl_current & 0xFFF0FFFF;
-                writel(ctrl_flags | new_buffer_index, vic_dev->vic_regs_control + 0x300);
+                writel(new_ctrl, vic_dev->vic_regs_control + 0x300);
             }
             wmb();
+
+            pr_info("*** VIC FRAME DONE: Binary Ninja - Updated VIC[0x300]=0x%x (buffer_pos=%u, was 0x%x) ***\n",
+                    new_ctrl, buffer_position, current_ctrl);
 
             /* Keep MDMA enabled and set to RUN state */
             writel(0x1, vic_base + 0x308);
@@ -3009,24 +2997,23 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
 
             if (buffer_count > 5) buffer_count = 5;        /* 5-slot ring cap */
 
-            /* CRITICAL FIX: Use manual buffer index management since hardware cycling is broken */
-            /* The VIC hardware gets stuck on slot 2 and never advances automatically */
-            /* We manually manage buffer index advancement in the frame done interrupt handler */
+            /* Binary Ninja EXACT: Write buffer COUNT (not index) to control register */
+            /* Reference: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
+            /* $s0 + 0x218 = active_buffer_count */
 
-            /* Initialize with buffer index 0 for manual cycling */
             u32 current_ctrl = readl(vic_base + 0x300);
-            u32 manual_index = (0 << 16);  /* Start with buffer index 0 */
-            u32 stream_ctrl = manual_index | 0x80000020;   /* Set manual index, set control flags */
+            u32 buffer_count_field = (buffer_count << 16);  /* Write buffer COUNT to bits 16-19 */
+            u32 stream_ctrl = buffer_count_field | 0x80000020;   /* Combine with control flags */
 
             void __iomem *vic_ctrl = vic_dev->vic_regs_control;
             writel(stream_ctrl, vic_base + 0x300);
             if (vic_ctrl) {
-                writel(manual_index | 0x80000020, vic_ctrl + 0x300);
+                writel(stream_ctrl, vic_ctrl + 0x300);
             }
             wmb();
 
-            pr_info("*** CRITICAL FIX: MANUAL buffer index management VIC[0x300]=0x%x (was 0x%x, starting at index 0) ***\n",
-                    stream_ctrl, current_ctrl);
+            pr_info("*** BINARY NINJA EXACT: VIC[0x300]=0x%x (buffer_count=%u << 16 | 0x80000020, was 0x%x) ***\n",
+                    stream_ctrl, buffer_count, current_ctrl);
         }
 
         /* Binary Ninja EXACT: *($s0 + 0x210) = 1 */
