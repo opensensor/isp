@@ -3276,6 +3276,21 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
         return -ENODEV;
     }
 
+    /* Streaming guard: during VIC streaming, block disruptive tuning IOCTLs to test 6/6 stall hypothesis */
+    extern uint32_t vic_start_ok;
+    if (vic_start_ok == 1) {
+        /* Block 0x74 (tuning param) calls entirely while streaming */
+        if (magic == 0x74) {
+            pr_info("[tuning] Blocking 0x74 tuning command 0x%x during streaming to preserve CSI/VIC state\n", cmd);
+            return 0;
+        }
+        /* For 0x56 core controls, allow only minimal safe operations: GET_CTRL and TUNING_ENABLE */
+        if (magic == 0x56 && cmd != 0xc008561b /* G_CTRL */ && cmd != 0xc00c56c6 /* TUNING_ENABLE */) {
+            pr_info("[tuning] Blocking 0x56 core control 0x%x during streaming (except G_CTRL/ENABLE)\n", cmd);
+            return 0;
+        }
+    }
+
     /* CRITICAL: Auto-initialize tuning for V4L2 controls ONLY ONCE to prevent init/release cycle */
     if (magic == 0x56 && (!ourISPdev || ourISPdev->core_dev->tuning_enabled != 3) && !auto_init_done) {
         pr_info("isp_core_tunning_unlocked_ioctl: Auto-initializing tuning for V4L2 control (one-time)\n");
