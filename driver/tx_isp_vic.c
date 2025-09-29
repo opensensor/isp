@@ -616,14 +616,19 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
         /* Binary Ninja: Channel 0 buffer circulation */
         u32 current_index = vic_mdma_ch0_set_buff_index;
         u32 next_index = (current_index + 1) % 5;  /* Binary Ninja: (vic_mdma_ch0_set_buff_index_1 + 1) u% 5 */
-        u32 frame_size = vic_dev->width * vic_dev->height * 2;  /* Binary Ninja: $s0_3 = $s0_2 << 1 */
+
+        /* Binary Ninja EXACT: Frame size calculation - $a1 = *(arg1 + 0xdc); if ($t1 != 7) $a1 <<= 1 */
+        u32 width = vic_dev->width;   /* Binary Ninja: *(arg1 + 0xdc) */
+        u32 height = vic_dev->height; /* Binary Ninja: *(arg1 + 0xe0) */
+        u32 frame_size = width << 1;  /* Binary Ninja: $a1 <<= 1 (assuming format != 7) */
+        u32 frame_area = frame_size * height;  /* Binary Ninja: $v1_2 = $a1 * $v1_1 */
 
         /* Binary Ninja: Read current buffer address from VIC register */
         u32 current_reg_offset = (current_index + 0xc6) << 2;
         u32 current_buffer_addr = readl(vic_regs + current_reg_offset);
 
-        /* Binary Ninja: Calculate next buffer address */
-        u32 next_buffer_addr = frame_size + current_buffer_addr;  /* Binary Ninja: $s0_4 = $s0_3 + *($a2_8 + ...) */
+        /* Binary Ninja EXACT: Calculate next buffer address - $s0_4 = $s0_3 + *($a2_8 + ...) */
+        u32 next_buffer_addr = frame_area + current_buffer_addr;  /* Binary Ninja: frame_area, not frame_size */
 
         /* Binary Ninja: Program next buffer address to next slot */
         u32 next_reg_offset = (next_index + 0xc6) << 2;
