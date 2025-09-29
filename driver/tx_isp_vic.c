@@ -3552,8 +3552,8 @@ static int ispvic_frame_channel_clearbuf(void);
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 {
     struct tx_isp_vic_device *vic_dev = NULL;
-    int32_t var_18 = 0;
-    void **buffer_entry = (void **)arg2;
+    unsigned long irq_flags = 0;
+    void *buffer_entry = arg2;
     u32 buffer_addr, buffer_index, reg_offset;
 
     pr_info("*** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***\n");
@@ -3569,8 +3569,8 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         return 0;
     }
 
-    /* Binary Ninja EXACT: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
-    __private_spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, &var_18);
+    /* Lock buffer management */
+    spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, irq_flags);
 
     /* Binary Ninja EXACT: Buffer queue management with VIC register writes */
     if (buffer_entry) {
@@ -3585,13 +3585,11 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         wmb();
         pr_info("*** VIC QBUF: wrote slot %u addr=0x%x to reg_off=0x%x ***\n", buffer_index, buffer_addr, reg_offset);
 
-
         /* Done for this node */
-        }
     }
 
-    /* Binary Ninja EXACT: private_spin_unlock_irqrestore($s0 + 0x1f4, $a1_4) */
-    private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, var_18);
+    /* Unlock buffer management */
+    spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
 
     return 0;
 }
