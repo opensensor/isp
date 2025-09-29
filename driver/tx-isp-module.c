@@ -1789,10 +1789,9 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                     writel(0xb5742249, vrc + 0x0c);
                     wmb();
 
-                    /* Clear pending + global interrupt enable */
+                    /* Clear pending status only; do NOT touch 0x30c here */
                     writel(0xFFFFFFFF, vrc + 0x1f0);
                     writel(0xFFFFFFFF, vrc + 0x1f4);
-                    writel(0xFFFFFFFF, vrc + 0x30c);
 
                     /* MainMask: unmask FD only; allow all MDMA sub-bits */
                     writel(0xFFFFFFFE, vrc + 0x1e8);
