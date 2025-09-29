@@ -475,27 +475,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             writel(0x1, vic_base + 0x0);
             if (vic_dev->vic_regs_control) writel(0x1, vic_dev->vic_regs_control + 0x0);
 
-            /* Refresh buffer slot addresses from VBM on every frame to avoid stale/zero entries */
-            do {
-                extern struct frame_channel_device frame_channels[];
-                struct tx_isp_channel_state *state = &frame_channels[0].state;
-                if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
-                    int i, configured = 0;
-                    for (i = 0; i < state->vbm_buffer_count && i < 5; i++) {
-                        u32 addr = state->vbm_buffer_addresses[i];
-                        u32 off = 0x318 + (i * 4);
-                        if (addr) {
-                            writel(addr, vic_base + off);
-                            if (vic_dev->vic_regs_control) writel(addr, vic_dev->vic_regs_control + off);
-                            configured++;
-                        }
-                    }
-                    if (configured) {
-                        if (configured > 5) configured = 5; /* VIC has max 5 slots */
-                        vic_dev->active_buffer_count = configured;
-                    }
-                }
-            } while (0);
+            /* Do not rewrite slot addresses here. Slot programming is owned by ENQUEUE/QBUF paths. */
 
             /* Keep MDMA enabled (idempotent) */
             writel(0x1, vic_base + 0x308);
@@ -1613,7 +1593,6 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                     writel(~0U, vr + 0x1f0);
                     writel(~0U, vr + 0x1f4);
                     writel(stream_ctrl, vr + 0x300);
-                    writel(0xFFFFFFFE, vr + 0x1e8);
                     wmb();
                 }
                 if (vc) {
@@ -1621,7 +1600,6 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                     writel(~0U, vc + 0x1f0);
                     writel(~0U, vc + 0x1f4);
                     writel(stream_ctrl, vc + 0x300);
-                    writel(0xFFFFFFFE, vc + 0x1e8);
                     wmb();
                 }
                 pr_info("vic_core_ops_ioctl: QBUF reasserted stream_ctrl=0x%x (buffers=%u)\n", stream_ctrl, n);
@@ -1652,8 +1630,6 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                         writel(0xFFFFFFFF, vr + 0x1f0);
                         writel(0xFFFFFFFF, vr + 0x1f4);
                         writel(stream_ctrl, vr + 0x300);
-                        /* Re-allow FrameDone in MainMask */
-                        writel(0xFFFFFFFE, vr + 0x1e8);
                         wmb();
                     }
                     if (vc) {
@@ -1661,7 +1637,6 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                         writel(0xFFFFFFFF, vc + 0x1f0);
                         writel(0xFFFFFFFF, vc + 0x1f4);
                         writel(stream_ctrl, vc + 0x300);
-                        writel(0xFFFFFFFE, vc + 0x1e8);
                         wmb();
                     }
                     pr_info("vic_core_ops_ioctl: BUFFER_ENQUEUE reasserted stream_ctrl=0x%x (buffers=%u)\n", stream_ctrl, buffer_count);
