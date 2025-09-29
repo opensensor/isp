@@ -1857,7 +1857,8 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         /* Compact, rate-limited status line to avoid log spam: ring ctrl/top16 and index nibble */
         do {
             static u32 __vic_stat_counter;
-            if (((++__vic_stat_counter) & 0x7) == 0) { /* every 8th IRQ */
+            __vic_stat_counter++;
+            if (__vic_stat_counter <= 16 || (__vic_stat_counter % 8) == 0) {
                 u32 __ctrl = readl(vic_regs + 0x300);
                 u32 __top16 = (__ctrl >> 16) & 0xFFFF;
                 u32 __idxNib = (__ctrl >> 16) & 0xF; /* bits [19:16] */
