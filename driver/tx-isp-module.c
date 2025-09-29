@@ -1755,7 +1755,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
             writel(0xb5742249, base_for_irq + 0x0c);   /* IMCR key */
             writel(0xFFFFFFFE, base_for_irq + 0x1e8);  /* MainMask: unmask FD */
             writel(0xFFFFFFFF, base_for_irq + 0x1ec);  /* SubMask: allow all MDMA sub-bits */
-            writel(0x0000000F, base_for_irq + 0x1e4);  /* Enable GROUP bits */
+            /* skip 0x1e4 group enable (status/W1C) */  /* was: writel(0x0000000F, base_for_irq + 0x1e4); */
             /* Do NOT write 0x1e0 here; 0x1e0 is status, not an enable */
             writel(0x1, base_for_irq + 0x0); wmb();    /* RUN */
 
@@ -1780,7 +1780,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                     writel(0xFFFFFFFF, vrp + 0x1ec);
 
                     /* Enable GROUP first; do NOT touch 0x1e0 (status) */
-                    writel(0x0000000F, vrp + 0x1e4);
+                    /* skip 0x1e4 group enable (status/W1C) */  /* was: writel(0x0000000F, vrp + 0x1e4); */
                     wmb();
                 }
                 if (vrc) {
@@ -1800,7 +1800,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                     writel(0xFFFFFFFF, vrc + 0x1ec);
 
                     /* Enable GROUP first; do NOT touch 0x1e0 (status) */
-                    writel(0x0000000F, vrc + 0x1e4);
+                    /* skip 0x1e4 group enable (status/W1C) */  /* was: writel(0x0000000F, vrc + 0x1e4); */
                     wmb();
                 }
 
@@ -1827,7 +1827,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                             writel(2, b + 0x0); wmb(); /* CONFIG */
                             writel(0xFFFFFFFE, b + 0x1e8);
                             writel(0xFFFFFFFF, b + 0x1ec);
-                            writel(0x0000000F, b + 0x1e4);
+                            /* skip 0x1e4 group enable (status/W1C) */  /* was: writel(0x0000000F, b + 0x1e4); */
                             /* Do NOT write 0x1e0 (status) here */
                             writel(1, b + 0x0); wmb(); /* RUN */
                         }
@@ -2139,12 +2139,12 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                                 if (vc2) writel(0xFFFFFFFE, vc2 + 0x1e8);
                                 {
                                     u32 en0b = readl(vr2 + 0x1e0) | 0x1;
-                                    writel(en0b, vr2 + 0x1e0);
-                                    writel(0x0000000F, vr2 + 0x1e4);
+                                    /* skip 0x1e0 (status/W1C) */  /* was: writel(en0b, vr2 + 0x1e0); */
+                                    /* skip 0x1e4 group enable (status/W1C) */  /* was: writel(0x0000000F, vr2 + 0x1e4); */
                                     if (vc2) {
                                         u32 en2b = readl(vc2 + 0x1e0) | 0x1;
-                                        writel(en2b, vc2 + 0x1e0);
-                                        writel(0x0000000F, vc2 + 0x1e4);
+                                        /* skip 0x1e0 (status/W1C) */  /* was: writel(en2b, vc2 + 0x1e0); */
+                                        /* skip 0x1e4 group enable (status/W1C) */  /* was: writel(0x0000000F, vc2 + 0x1e4); */
                                     }
                                 }
                                 wmb();
@@ -2426,12 +2426,12 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 /* Ensure FD enabled in both banks */
                 {
                     u32 en0 = readl(vr + 0x1e0) | 0x1;
-                    writel(en0, vr + 0x1e0);
-                    writel(0x0000000F, vr + 0x1e4);
+                    /* skip 0x1e0 (status/W1C) */  /* was: writel(en0, vr + 0x1e0); */
+                    /* skip 0x1e4 group enable (status/W1C) */  /* was: writel(0x0000000F, vr + 0x1e4); */
                     if (vc) {
                         u32 en2 = readl(vc + 0x1e0) | 0x1;
-                        writel(en2, vc + 0x1e0);
-                        writel(0x0000000F, vc + 0x1e4);
+                        /* skip 0x1e0 (status/W1C) */  /* was: writel(en2, vc + 0x1e0); */
+                        /* skip 0x1e4 group enable (status/W1C) */  /* was: writel(0x0000000F, vc + 0x1e4); */
                     }
                 }
                 wmb();
