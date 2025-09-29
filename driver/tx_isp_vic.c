@@ -489,18 +489,25 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             u32 frame_size = width << 1;  /* RAW10 = 2 bytes per pixel */
             u32 frame_area = frame_size * height;
 
-            /* Binary Ninja: Calculate current and next buffer addresses */
+            /* CRITICAL FIX: Read buffer addresses from VIC registers instead of calculating */
+            /* VBM mode uses non-contiguous buffers, so we can't assume next = current + frame_area */
             u32 current_reg_offset = (current_index + 0xc6) << 2;  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
             u32 current_buffer_addr = readl(vic_base + current_reg_offset);
-            u32 next_buffer_addr = frame_area + current_buffer_addr;  /* Advance by one frame */
 
-            /* Binary Ninja: Program next buffer address to next slot register */
+            /* Read the next buffer address from the next slot register (already programmed by QBUF) */
             u32 next_reg_offset = (next_index + 0xc6) << 2;
-            writel(next_buffer_addr, vic_base + next_reg_offset);
-            if (vic_dev->vic_regs_control) {
-                writel(next_buffer_addr, vic_dev->vic_regs_control + next_reg_offset);
+            u32 next_buffer_addr = readl(vic_base + next_reg_offset);
+
+            /* Verify the next buffer address is valid (non-zero) */
+            if (next_buffer_addr == 0) {
+                pr_err("*** VIC FRAME DONE ERROR: Next buffer slot %d has invalid address 0x0 ***\n", next_index);
+                /* Fallback: keep using current slot to prevent hardware crash */
+                next_index = current_index;
+                next_buffer_addr = current_buffer_addr;
             }
-            wmb();
+
+            pr_info("*** VIC FRAME DONE: Buffer circulation - slot %d (0x%x) -> slot %d (0x%x) ***\n",
+                    current_index, current_buffer_addr, next_index, next_buffer_addr);
 
             /* Update the control register buffer index to point to the next slot */
             u32 current_ctrl = readl(vic_base + 0x300);
@@ -515,9 +522,6 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 writel(ctrl_flags | new_buffer_index, vic_dev->vic_regs_control + 0x300);
             }
             wmb();
-
-            pr_info("*** VIC FRAME DONE: Binary Ninja buffer circulation - slot %d (0x%x) -> slot %d (0x%x), frame_area=0x%x ***\n",
-                    current_index, current_buffer_addr, next_index, next_buffer_addr, frame_area);
 
             /* Keep MDMA enabled and set to RUN state */
             writel(0x1, vic_base + 0x308);
