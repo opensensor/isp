@@ -6148,7 +6148,7 @@ int tx_isp_send_event_to_remote(void *arg1, int event_type, void *data)
 }
 
 /* __enqueue_in_driver - EXACT Binary Ninja implementation */
-static int __enqueue_in_driver(void *buffer_struct)
+int __enqueue_in_driver(void *buffer_struct)
 {
     void *s1;
     int result;
