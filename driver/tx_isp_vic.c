@@ -3061,6 +3061,24 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         wmb();
                         pr_info("*** VIC CONTROL BANK: Post-enable [0x0]=0x%08x, [0x14]=0x%08x, [0x0c]=0x%08x, [0x100]=0x%08x ***\n",
                                 readl(vcc + 0x0), readl(vcc + 0x14), readl(vcc + 0x0c), readl(vcc + 0x100));
+
+                        /* CRITICAL FIX: Reprogram CONTROL space buffer addresses after control bank init */
+                        /* The control bank re-initialization clears buffer registers, so we must reprogram them */
+                        pr_info("*** VIC CONTROL BANK: Reprogramming buffer addresses after control bank init ***\n");
+                        {
+                            u32 frame_size = vic_dev->width * vic_dev->height * 2;  /* RAW10 = 2 bytes per pixel */
+                            u32 base_addr = 0x6300000;  /* Reserved memory base */
+                            int i;
+
+                            for (i = 0; i < 5; i++) {
+                                u32 buffer_addr = base_addr + (i * frame_size);
+                                u32 reg_offset = (i + 0xc6) << 2;  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
+                                writel(buffer_addr, vcc + reg_offset);
+                                wmb();
+                                pr_info("*** VIC CONTROL BANK: Buffer %d addr=0x%x -> CONTROL[0x%x] ***\n",
+                                        i, buffer_addr, reg_offset);
+                            }
+                        }
                     }
                 }
 
