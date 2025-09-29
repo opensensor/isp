@@ -2427,9 +2427,17 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
                     }
                 }
 
-                /* Binary Ninja: *($s0_1 + 0xe8) = 1 - SAFE: Set VIC state to 1 */
-                vic_dev->state = 1;
-                pr_info("ispcore_slake_module: Set VIC state to INIT (1)");
+                /* CRITICAL FIX: Do NOT reset VIC state to 1 when actively streaming */
+                /* The slake module needs to configure silicon bits without disrupting VIC state machine */
+                if (vic_dev->stream_state == 1) {
+                    /* VIC is actively streaming - preserve state to prevent reinitialization */
+                    pr_info("ispcore_slake_module: VIC actively streaming - PRESERVING VIC state %d", vic_dev->state);
+                    pr_info("ispcore_slake_module: Silicon configuration will proceed without resetting VIC state machine");
+                } else {
+                    /* VIC not streaming - safe to reset state */
+                    vic_dev->state = 1;
+                    pr_info("ispcore_slake_module: Set VIC state to INIT (1)");
+                }
             }
 
             /* CRITICAL FIX: Subdev processing should happen regardless of VIC state */
