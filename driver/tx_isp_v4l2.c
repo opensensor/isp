@@ -616,6 +616,21 @@ static int tx_isp_v4l2_open(struct file *file)
     if (ret)
         return ret;
 
+    /* Ensure ISP core is initialized on device open (per reference: init on open, not mid-stream) */
+    do {
+        extern struct tx_isp_dev *ourISPdev;
+        if (!ourISPdev || !ourISPdev->vic_dev)
+            break;
+        /* If VIC already active/streaming, nothing to do */
+        if (ourISPdev->vic_dev->state >= 3)
+            break;
+        pr_info("*** V4L2 open: Initializing ISP core (vic_state=%d) ***\n", ourISPdev->vic_dev->state);
+        extern int ispcore_core_ops_init_with_sensor(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr);
+        /* Pass NULL to let core init pull dynamic sensor attributes */
+        ret = ispcore_core_ops_init_with_sensor(ourISPdev, NULL);
+        pr_info("*** V4L2 open: core init result=%d, vic_state now=%d ***\n", ret, ourISPdev->vic_dev->state);
+    } while (0);
+
     /* Store channel info in the V4L2 file handle for our IOCTLs */
     /* The v4l2_fh structure should be in file->private_data now */
     /* We'll pass the channel number through dev which is accessible via video_drvdata */
