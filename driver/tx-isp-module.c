@@ -1825,12 +1825,28 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                         for (bi = 0; bi < 2; bi++) {
                             void __iomem *b = banks[bi];
                             if (!b) continue;
+
+                            /* CRITICAL FIX: Preserve control register 0x300 before CONFIG mode */
+                            u32 saved_ctrl = readl(b + 0x300);
+
                             writel(2, b + 0x0); wmb(); /* CONFIG */
                             writel(0xFFFFFFFE, b + 0x1e8);
                             writel(0xFFFFFFFF, b + 0x1ec);
                             /* skip 0x1e4 group enable (status/W1C) */  /* was: writel(0x0000000F, b + 0x1e4); */
                             /* Do NOT write 0x1e0 (status) here */
+
+                            /* CRITICAL FIX: Restore control register 0x300 before RUN mode */
+                            writel(saved_ctrl, b + 0x300);
+                            wmb();
+
                             writel(1, b + 0x0); wmb(); /* RUN */
+
+                            /* Verify the fix worked */
+                            u32 final_ctrl = readl(b + 0x300);
+                            if (final_ctrl != saved_ctrl) {
+                                printk(KERN_ALERT "*** VIC IRQ: CONTROL REGISTER CORRUPTION DETECTED! saved=0x%x final=0x%x (bank=%s) ***\n",
+                                       saved_ctrl, final_ctrl, (b == vrc) ? "CONTROL" : "PRIMARY");
+                            }
                         }
                     }
                 } while (0);
