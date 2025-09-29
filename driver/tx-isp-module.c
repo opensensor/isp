@@ -4149,6 +4149,16 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     }
                 }
             }
+            /* Initialize VIC ring rotation to last filled slot */
+            if (ourISPdev && ourISPdev->vic_dev) {
+                ourISPdev->vic_dev->active_buffer_count = (st->vbm_buffer_count > 5) ? 5 : st->vbm_buffer_count;
+                if (ourISPdev->vic_dev->active_buffer_count == 0) ourISPdev->vic_dev->active_buffer_count = 2;
+                ourISPdev->vic_dev->last_idx = (ourISPdev->vic_dev->active_buffer_count ? ourISPdev->vic_dev->active_buffer_count - 1 : 0);
+                pr_info("STREAMON: VIC ring active_count=%u last_idx=%d\n",
+                        ourISPdev->vic_dev->active_buffer_count,
+                        ourISPdev->vic_dev->last_idx);
+            }
+
         } while (0);
 
         // Binary Ninja: *($s0 + 0x230) |= 1

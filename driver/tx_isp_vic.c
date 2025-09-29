@@ -1555,55 +1555,77 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
         }
     }
     /* Binary Ninja: else if (arg2 == 0x3000008) - Buffer request/allocation event */
-    else if (cmd == 0x3000008) {  /* TX_ISP_EVENT_FRAME_QBUF / ISP_EVENT_BUFFER_REQUEST */
+    else if (cmd == 0x3000008) {  /* TX_ISP_EVENT_FRAME_QBUF / VIDIOC_QBUF */
         struct tx_isp_vic_device *vic_dev;
         struct v4l2_buffer *buffer = (struct v4l2_buffer *)arg;
+        u32 phys = 0;
 
-        pr_info("vic_core_ops_ioctl: QBUF buffer management cmd=0x%x - managing VIC hardware buffer state\n", cmd);
+        pr_info("vic_core_ops_ioctl: QBUF cmd=0x%x - program VIC slot from v4l2_buffer\n", cmd);
 
-        /* Get VIC device from subdev host_priv */
-        if (sd && sd->host_priv) {
-            vic_dev = (struct tx_isp_vic_device *)sd->host_priv;
+        if (!sd || !sd->host_priv || !buffer) {
+            pr_err("vic_core_ops_ioctl: QBUF - missing sd/host_priv/buffer\n");
+            return -EINVAL;
+        }
+        vic_dev = (struct tx_isp_vic_device *)sd->host_priv;
 
-            if (buffer && vic_dev) {
-                pr_info("vic_core_ops_ioctl: QBUF - Managing buffer index=%d for VIC hardware\n", buffer->index);
-
-                /* VIC Hardware Buffer State Management */
-                /* This is what the corrupted Binary Ninja reference should be doing */
-
-                /* 1. Validate buffer parameters for VIC hardware */
-                if (buffer->index >= 0 && buffer->index < 16) {  /* Max 16 buffers */
-
-                    /* 2. Update VIC hardware buffer tracking */
-                    /* In a real implementation, this would:
-                     * - Configure VIC DMA descriptors
-                     * - Set up buffer addresses in VIC registers
-                     * - Update buffer state tracking
-                     * - Enable VIC buffer processing
-                     */
-
-                    pr_info("vic_core_ops_ioctl: QBUF - VIC buffer %d configured for hardware\n", buffer->index);
-
-                    /* 3. Signal VIC hardware that buffer is ready */
-                    /* This would typically involve writing to VIC control registers */
-                    /* to indicate that a new buffer is available for processing */
-
-                    result = 0;  /* Success */
-                } else {
-                    pr_err("vic_core_ops_ioctl: QBUF - Invalid buffer index %d\n", buffer->index);
-                    result = -EINVAL;
-                }
-            } else {
-                pr_err("vic_core_ops_ioctl: QBUF - Missing buffer or VIC device\n");
-                result = -EINVAL;
-            }
+        /* Extract physical address from v4l2_buffer like module QBUF path */
+        if (buffer->memory == V4L2_MEMORY_MMAP && buffer->m.offset) {
+            phys = buffer->m.offset;
+        } else if (buffer->memory == V4L2_MEMORY_USERPTR && buffer->m.userptr) {
+            phys = (u32)buffer->m.userptr;
         } else {
-            pr_err("vic_core_ops_ioctl: QBUF - Missing subdev or host_priv\n");
-            result = -EINVAL;
+            /* Fallback: we cannot see VBM state here reliably */
+            pr_warn("QBUF: No phys addr in v4l2_buffer; using 0 (ignored by HW)\n");
+            phys = 0;
         }
 
-        pr_info("vic_core_ops_ioctl: QBUF buffer management result=%d\n", result);
-        return result;
+        if (buffer->index >= 5) {
+            pr_err("vic_core_ops_ioctl: QBUF - invalid index %u (max 4)\n", buffer->index);
+            return -EINVAL;
+        }
+
+        /* Build a transient vic_buffer_entry and program this slot */
+        {
+            struct vic_buffer_entry node;
+            memset(&node, 0, sizeof(node));
+            {
+                u32 nslots = vic_dev->active_buffer_count ? ((vic_dev->active_buffer_count > 5) ? 5 : vic_dev->active_buffer_count) : 5;
+                u32 slot = (vic_dev->last_idx + 1) % nslots;
+                node.buffer_index = slot;
+                vic_dev->last_idx = slot;
+            }
+            node.buffer_addr  = phys;
+            node.buffer_status = VIC_BUFFER_STATUS_QUEUED;
+
+            (void) ispvic_frame_channel_qbuf(sd, &node);
+        }
+
+        /* Reassert MDMA and stream control with current active_buffer_count */
+        if (vic_dev) {
+            void __iomem *vr = vic_dev->vic_regs;
+            void __iomem *vc = vic_dev->vic_regs_control;
+            u32 n = vic_dev->active_buffer_count;
+            if (n == 0) n = 2; if (n > 5) n = 5;
+            {
+                u32 stream_ctrl = (n << 16) | 0x80000020;
+                if (vr) {
+                    writel(1, vr + 0x308);
+                    writel(~0U, vr + 0x1f0);
+                    writel(~0U, vr + 0x1f4);
+                    writel(stream_ctrl, vr + 0x300);
+                    wmb();
+                }
+                if (vc) {
+                    writel(1, vc + 0x308);
+                    writel(~0U, vc + 0x1f0);
+                    writel(~0U, vc + 0x1f4);
+                    writel(stream_ctrl, vc + 0x300);
+                    wmb();
+                }
+                pr_info("vic_core_ops_ioctl: QBUF reasserted stream_ctrl=0x%x (buffers=%u)\n", stream_ctrl, n);
+            }
+        }
+        return 0;
     }
     else if (cmd == 0x3000005) {  /* TX_ISP_EVENT_BUFFER_ENQUEUE - keep pipeline fed */
         pr_info("vic_core_ops_ioctl: BUFFER_ENQUEUE cmd=0x%x - refreshing VIC buffer state\n", cmd);
