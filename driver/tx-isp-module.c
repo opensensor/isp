@@ -1724,8 +1724,8 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         printk(KERN_ALERT "*** VIC IRQ: Using base %p [1e0]=0x%x [1e4]=0x%x [1e8]=0x%x [1ec]=0x%x ***\n",
                base_for_irq, reg_1e0, reg_1e4, reg_1e8, reg_1ec);
 
-        /* Enforce FD enable/unmask on every IRQ if something cleared them mid-stream */
-        if (((reg_1e0 & 0x1) == 0) || ((reg_1e8 & 0x1) != 0) || (reg_1e4 != 0x0000000F)) {
+        /* Enforce FD enable/unmask on every IRQ if something cleared them mid-stream (DISABLED to match working ISR: keep ISR minimal) */
+        if (0 && (((reg_1e0 & 0x1) == 0) || ((reg_1e8 & 0x1) != 0) || (reg_1e4 != 0x0000000F))) {
             printk(KERN_ALERT "*** VIC IRQ: FIXUP enable/mask — before: 1e0=0x%x 1e4=0x%x 1e8=0x%x ***\n",
                    reg_1e0, reg_1e4, reg_1e8);
             /* Clear pending status (W1C) and set global enable before enabling FD */
@@ -2319,7 +2319,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
 
     /* Conditional VIC re-arm to maintain continuous interrupts (conservative) */
     do {
-        if (vic_dev && vic_dev->vic_regs) {
+        if (0 && vic_dev && vic_dev->vic_regs) {
             void __iomem *vr = vic_dev->vic_regs;               /* Primary VIC space (0x133e0000) */
             void __iomem *vc = vic_dev->vic_regs_control;       /* Control VIC space (0x10023000), may be NULL */
             u32 ctrl = readl(vr + 0x300);

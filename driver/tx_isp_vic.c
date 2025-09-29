@@ -541,38 +541,9 @@ label_123f4:
     complete(&vic_dev->frame_complete);
     pr_info("*** VIC FRAME DONE: Frame completion signaled ***\n");
 
-    /* Post-frame RE-ARM: re-apply IMR/IMCR routing to keep FD flowing (reference workaround) */
-    do {
-        void __iomem *vr = vic_dev->vic_regs;
-        void __iomem *vc = vic_dev->vic_regs_control;
-        if (vr) {
-            /* Keep RUN asserted, then re-apply routing */
-            writel(1, vr + 0x0); wmb();
-            writel(0x00000001, vr + 0x04);   /* IMR baseline */
-            writel(0x00000000, vr + 0x24);   /* IMR1 baseline */
-            writel(0x07800438, vr + 0x04);   /* IMR routing/mask */
-            writel(0xb5742249, vr + 0x0c);   /* IMCR key */
-            wmb();
-        }
-        if (vc) {
-            writel(1, vc + 0x0); wmb();
-            writel(0x00000001, vc + 0x04);
-            writel(0x00000000, vc + 0x24);
-            writel(0x07800438, vc + 0x04);
-            writel(0xb5742249, vc + 0x0c);
-            wmb();
-        }
-        pr_info("*** VIC POST-FD RE-ARM: IMR/IMCR re-applied on both banks ***\n");
-    } while (0);
+    /* Post-frame: keep ISR minimal; do not touch IMR/IMCR here. Ack is handled in top-level ISR. */
 
-    /* Keep the pipeline fed: periodically refresh QBUF while streaming (safe, bounded) */
-    do {
-        static unsigned int fd_tick;
-        fd_tick++;
-        if ((fd_tick & 0x7) == 0) { /* every 8 frames */
-            (void) ispvic_frame_channel_qbuf(&vic_dev->sd, NULL);
-        }
-    } while (0);
+    /* Do not schedule helper QBUF from ISR; ring feeding is owned by ENQUEUE/QBUF paths. */
 
     /* Binary Ninja: return result */
     return (int)(uintptr_t)result;
