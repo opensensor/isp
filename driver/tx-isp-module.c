@@ -2286,7 +2286,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
             u32 ctrl = readl(vr + 0x300);
             int lost_ctrl = ((ctrl & 0x80000020) != 0x80000020);
             int stalled = ((v1_7 & 1) == 0) && ((v1_7 & 0x200000) != 0);
-            if (lost_ctrl || stalled) {
+            if (lost_ctrl) {
                 u32 count = vic_dev->active_buffer_count;
                 u32 new_ctrl;
                 if (count == 0) count = 2;
