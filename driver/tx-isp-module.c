@@ -1746,21 +1746,45 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 void __iomem *vrp = ourISPdev->vic_dev->vic_regs;
                 void __iomem *vrc = ourISPdev->vic_dev->vic_regs_control;
                 if (vrp) {
+                    /* Unlock/route IMR/IMCR before enables so writes latch */
+                    writel(0x00000001, vrp + 0x04);
+                    writel(0x00000000, vrp + 0x24);
+                    writel(0x07800438, vrp + 0x04);
+                    writel(0xb5742249, vrp + 0x0c);
+                    wmb();
+
+                    /* Clear pending + global interrupt enable */
                     writel(0xFFFFFFFF, vrp + 0x1f0);
                     writel(0xFFFFFFFF, vrp + 0x1f4);
                     writel(0xFFFFFFFF, vrp + 0x30c);
+
+                    /* MainMask: unmask FD only; allow all MDMA sub-bits */
                     writel(0xFFFFFFFE, vrp + 0x1e8);
                     writel(0xFFFFFFFF, vrp + 0x1ec);
+
+                    /* Enable GROUP first, then FD */
                     writel(0x0000000F, vrp + 0x1e4);
                     writel(readl(vrp + 0x1e0) | 0x1, vrp + 0x1e0);
                     wmb();
                 }
                 if (vrc) {
+                    /* CONTROL bank: unlock/route IMR/IMCR before enables */
+                    writel(0x00000001, vrc + 0x04);
+                    writel(0x00000000, vrc + 0x24);
+                    writel(0x07800438, vrc + 0x04);
+                    writel(0xb5742249, vrc + 0x0c);
+                    wmb();
+
+                    /* Clear pending + global interrupt enable */
                     writel(0xFFFFFFFF, vrc + 0x1f0);
                     writel(0xFFFFFFFF, vrc + 0x1f4);
                     writel(0xFFFFFFFF, vrc + 0x30c);
+
+                    /* MainMask: unmask FD only; allow all MDMA sub-bits */
                     writel(0xFFFFFFFE, vrc + 0x1e8);
                     writel(0xFFFFFFFF, vrc + 0x1ec);
+
+                    /* Enable GROUP first, then FD */
                     writel(0x0000000F, vrc + 0x1e4);
                     writel(readl(vrc + 0x1e0) | 0x1, vrc + 0x1e0);
                     wmb();
@@ -2358,6 +2382,19 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 } while (0);
                 wmb();
 
+                /* Apply IMR/IMCR routing FIRST (unlock), then restore masks/enables */
+                writel(0x00000001, vr + 0x04);   /* IMR baseline */
+                writel(0x00000000, vr + 0x24);   /* IMR1 baseline */
+                writel(0x07800438, vr + 0x04);   /* IMR routing/mask */
+                writel(0xb5742249, vr + 0x0c);   /* IMCR key */
+                if (vc) {
+                    writel(0x00000001, vc + 0x04);
+                    writel(0x00000000, vc + 0x24);
+                    writel(0x07800438, vc + 0x04);
+                    writel(0xb5742249, vc + 0x0c);
+                }
+                wmb();
+
                 /* Restore interrupt masks/enables like working reference */
                 writel(0xFFFFFFFE, vr + 0x1e8); /* MainMask: unmask FD */
                 if (vc) writel(0xFFFFFFFE, vc + 0x1e8);
@@ -2393,14 +2430,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                     }
                 } while (0);
 
-                /* Re-apply IMR/IMCR routing as per working reference (both banks) */
-                writel(0x07800438, vr + 0x04);
-                writel(0xb5742249, vr + 0x0c);
-                if (vc) {
-                    writel(0x07800438, vc + 0x04);
-                    writel(0xb5742249, vc + 0x0c);
-                }
-                wmb();
+                /* RUN + final barrier */
                 writel(1, vr + 0x0);
                 wmb();
             }
