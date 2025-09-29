@@ -728,7 +728,8 @@ static int vic_initialize_buffer_ring(struct tx_isp_vic_device *vic_dev)
         list_add_tail(&buffer_entry->list, &vic_dev->free_head);
 
         /* Binary Ninja: Program buffer address to BOTH VIC register spaces */
-        u32 reg_offset = (i + 0xc6) << 2;  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
+        {
+            u32 reg_offset = (i + 0xc6) << 2;  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
 
         /* Program to PRIMARY VIC space (0x133e0000) */
         writel(buffer_entry->buffer_addr, vic_regs + reg_offset);
