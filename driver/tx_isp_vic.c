@@ -1267,6 +1267,24 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
         pr_info("*** VIC UNLOCK: Unlock sequence completed, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
 
+        /* CRITICAL FIX: Binary Ninja EXACT - Write AE window registers 0x104 and 0x108 BEFORE final enable */
+        /* These registers configure the Auto Exposure window for frame processing */
+        /* Binary Ninja: $v1_30[0x41] = zx.d(*($a0_9 + 0x52)) << 0x10 | zx.d(*($a0_9 + 0x4e)) */
+        /* Binary Ninja: *(*(arg1 + 0xb8) + 0x108) = zx.d(*($v1_31 + 0x5a)) << 0x10 | zx.d(*($v1_31 + 0x56)) */
+        /* Use default AE window values (full frame) since sensor_attr doesn't have these fields yet */
+        u32 ae_window_x = 0;      /* AE window X start */
+        u32 ae_window_y = 0;      /* AE window Y start */
+        u32 ae_window_w = actual_width;   /* AE window width */
+        u32 ae_window_h = actual_height;  /* AE window height */
+
+        writel((ae_window_w << 16) | ae_window_x, vic_regs + 0x104);
+        writel((ae_window_h << 16) | ae_window_y, vic_regs + 0x108);
+        wmb();
+
+        pr_info("*** CRITICAL FIX: AE window registers - [0x104]=0x%08x (w=%u x=%u), [0x108]=0x%08x (h=%u y=%u) ***\n",
+                (ae_window_w << 16) | ae_window_x, ae_window_w, ae_window_x,
+                (ae_window_h << 16) | ae_window_y, ae_window_h, ae_window_y);
+
         /* vic_start_ok flag setting moved to END of function after CSI PHY setup */
 
         /* Enable VIC - Binary Ninja 000107d4 */
