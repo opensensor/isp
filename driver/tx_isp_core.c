@@ -2890,18 +2890,13 @@ int ispcore_core_ops_init_with_sensor(struct tx_isp_dev *isp, struct tx_isp_sens
         }
     }
 
-    /* GOOD-THINGS SEQUENCE: Program VIC PIPO/MDMA and enable interrupts now */
+    /* SEQUENCE CHANGE: Defer VIC PIPO/MDMA and IRQ enable to STREAMON path.
+     * Reference driver arms VIC after stream setup, not during core init, to avoid mid-init ring resets.
+     */
     if (isp->vic_dev) {
-        struct tx_isp_subdev *vic_sd = &isp->vic_dev->sd;
-        pr_info("*** ispcore_core_ops_init_with_sensor: Calling tx_isp_subdev_pipo to program VIC and start MDMA/IRQs ***");
-        /* Pass non-NULL arg to follow initialization path; content unused by our implementation */
-        ret = tx_isp_subdev_pipo(vic_sd, isp);
-        if (ret != 0) {
-            pr_err("ispcore_core_ops_init_with_sensor: tx_isp_subdev_pipo failed: %d", ret);
-            return ret;
-        }
+        pr_info("*** ispcore_core_ops_init_with_sensor: Deferring VIC PIPO/MDMA to STREAMON ***");
     } else {
-        pr_warn("*** ispcore_core_ops_init_with_sensor: No VIC device present; skipping pipo/MDMA start ***");
+        pr_warn("*** ispcore_core_ops_init_with_sensor: No VIC device present; will rely on STREAMON later ***");
     }
 
     pr_info("*** ispcore_core_ops_init_with_sensor: SUCCESS - Core initialized and VIC streaming/IRQs armed ***");
