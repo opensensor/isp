@@ -489,6 +489,28 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             if (vic_dev->vic_regs_control)
                 writel(reg_val, vic_dev->vic_regs_control + 0x300);
 
+            /* Refresh buffer slot addresses from VBM on every frame to avoid stale/zero entries */
+            do {
+                extern struct frame_channel_device frame_channels[];
+                struct tx_isp_channel_state *state = &frame_channels[0].state;
+                if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
+                    int i, configured = 0;
+                    for (i = 0; i < state->vbm_buffer_count && i < 5; i++) {
+                        u32 addr = state->vbm_buffer_addresses[i];
+                        u32 off = 0x318 + (i * 4);
+                        if (addr) {
+                            writel(addr, vic_base + off);
+                            if (vic_dev->vic_regs_control) writel(addr, vic_dev->vic_regs_control + off);
+                            configured++;
+                        }
+                    }
+                    if (configured) vic_dev->active_buffer_count = configured;
+                }
+            } while (0);
+
+            /* Keep MDMA enabled (idempotent) */
+            writel(0x1, vic_base + 0x308);
+            if (vic_dev->vic_regs_control) writel(0x1, vic_dev->vic_regs_control + 0x308);
             /* Back to RUN */
             writel(0x1, vic_base + 0x0);
             if (vic_dev->vic_regs_control) writel(0x1, vic_dev->vic_regs_control + 0x0);
