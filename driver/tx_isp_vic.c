@@ -605,25 +605,74 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
     }
 
     /* CRITICAL: Queue next buffer to keep VIC hardware fed */
-    /* Binary Ninja: if (vic_mdma_ch1_sub_get_num_1 != arg1 + 0x1fc) */
-    if (!list_empty(&vic_dev->free_head)) {
-        /* Binary Ninja: Pop next buffer from free queue */
-        next_buffer = list_first_entry(&vic_dev->free_head, struct vic_buffer_entry, list);
-        list_del(&next_buffer->list);
+    /* Binary Ninja: Determine which buffer slot to program next based on current VIC state */
+    u32 current_addr = readl(vic_regs + 0x380);  /* VIC current buffer address */
+    int current_slot = -1;
+    int next_slot;
 
-        /* Binary Ninja: Move to busy queue and program VIC hardware */
-        list_add_tail(&next_buffer->list, &vic_dev->done_head);
-        vic_dev->active_buffer_count++;
+    /* Find which slot is currently being processed */
+    for (int i = 0; i < 5; i++) {
+        u32 slot_addr = readl(vic_regs + ((i + 0xc6) << 2));
+        if (slot_addr == current_addr) {
+            current_slot = i;
+            break;
+        }
+    }
 
-        /* Binary Ninja: Program buffer address to VIC register */
-        u32 reg_offset = (next_buffer->buffer_index + 0xc6) << 2;
-        writel(next_buffer->buffer_addr, vic_regs + reg_offset);
-        wmb();
+    if (current_slot >= 0) {
+        /* Calculate next slot in ring (0->1->2->3->4->0) */
+        next_slot = (current_slot + 1) % 5;
 
-        pr_info("*** VIC MDMA: Next buffer 0x%x queued to VIC[0x%x] - continuous interrupts maintained ***\n",
-                next_buffer->buffer_addr, reg_offset);
+        /* Find buffer entry for next slot */
+        struct vic_buffer_entry *slot_buffer = NULL;
+        list_for_each_entry(next_buffer, &vic_dev->free_head, list) {
+            if (next_buffer->buffer_index == next_slot) {
+                slot_buffer = next_buffer;
+                break;
+            }
+        }
+
+        if (slot_buffer) {
+            /* Program the next slot with its designated buffer to BOTH VIC spaces */
+            u32 reg_offset = (next_slot + 0xc6) << 2;
+
+            /* Program to PRIMARY VIC space */
+            writel(slot_buffer->buffer_addr, vic_regs + reg_offset);
+            wmb();
+
+            /* CRITICAL: Program to CONTROL VIC space as well */
+            if (ourISPdev && ourISPdev->vic_control_regs) {
+                writel(slot_buffer->buffer_addr, ourISPdev->vic_control_regs + reg_offset);
+                wmb();
+            }
+
+            pr_info("*** VIC MDMA: Ring advance - current_slot=%d, next_slot=%d, addr=0x%x to PRIMARY[0x%x] and CONTROL[0x%x] ***\n",
+                    current_slot, next_slot, slot_buffer->buffer_addr, reg_offset, reg_offset);
+        } else {
+            pr_warn("*** VIC MDMA: No buffer found for next slot %d ***\n", next_slot);
+        }
     } else {
-        pr_warn("*** VIC MDMA: No free buffers available - interrupts may stop! ***\n");
+        pr_warn("*** VIC MDMA: Could not determine current VIC slot (addr=0x%x) ***\n", current_addr);
+
+        /* FALLBACK: Ensure all slots have valid buffers programmed to BOTH VIC spaces */
+        pr_info("*** VIC MDMA: FALLBACK - Reprogramming all buffer slots to PRIMARY and CONTROL ***\n");
+        for (int i = 0; i < 5; i++) {
+            u32 buffer_addr = 0x6300000 + (i * frame_size);
+            u32 reg_offset = (i + 0xc6) << 2;
+
+            /* Program to PRIMARY VIC space */
+            writel(buffer_addr, vic_regs + reg_offset);
+            wmb();
+
+            /* CRITICAL: Program to CONTROL VIC space as well */
+            if (ourISPdev && ourISPdev->vic_control_regs) {
+                writel(buffer_addr, ourISPdev->vic_control_regs + reg_offset);
+                wmb();
+            }
+
+            pr_info("*** VIC MDMA: FALLBACK - Slot %d: addr=0x%x to PRIMARY[0x%x] and CONTROL[0x%x] ***\n",
+                    i, buffer_addr, reg_offset, reg_offset);
+        }
     }
 
     spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
@@ -678,13 +727,21 @@ static int vic_initialize_buffer_ring(struct tx_isp_vic_device *vic_dev)
         /* Add to free queue */
         list_add_tail(&buffer_entry->list, &vic_dev->free_head);
 
-        /* Binary Ninja: Program buffer address to VIC register */
+        /* Binary Ninja: Program buffer address to BOTH VIC register spaces */
         u32 reg_offset = (i + 0xc6) << 2;  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
+
+        /* Program to PRIMARY VIC space (0x133e0000) */
         writel(buffer_entry->buffer_addr, vic_regs + reg_offset);
         wmb();
 
-        pr_info("*** VIC BUFFER %d: addr=0x%x programmed to reg[0x%x] ***\n",
-                i, buffer_entry->buffer_addr, reg_offset);
+        /* CRITICAL: Program to CONTROL VIC space (0x10023000) as well */
+        if (ourISPdev && ourISPdev->vic_control_regs) {
+            writel(buffer_entry->buffer_addr, ourISPdev->vic_control_regs + reg_offset);
+            wmb();
+        }
+
+        pr_info("*** VIC BUFFER %d: addr=0x%x programmed to PRIMARY[0x%x] and CONTROL[0x%x] ***\n",
+                i, buffer_entry->buffer_addr, reg_offset, reg_offset);
     }
 
     /* Set buffer counts */
