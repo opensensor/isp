@@ -2806,8 +2806,9 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                     } else {
                         ret = tisp_init(NULL, NULL);
                         if (ret != 0) {
-                        pr_err("ispcore_core_ops_init: Second tisp_init failed: %d\n", ret);
-                        return ret;
+                            pr_err("ispcore_core_ops_init: Second tisp_init failed: %d\n", ret);
+                            return ret;
+                        }
                     }
                 }
 
