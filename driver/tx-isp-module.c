@@ -812,6 +812,7 @@ int sensor_fps_control(int fps);
 static int sensor_get_id(void);
 static int sensor_disable_isp(void);
 static int sensor_get_lines_per_second(void);
+int __enqueue_in_driver(void *buffer_struct);
 
 /* BCSH and tuning function declarations */
 int tisp_bcsh_brightness(int brightness);
