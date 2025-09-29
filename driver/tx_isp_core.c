@@ -2775,7 +2775,24 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 
                 pr_info("*** ispcore_core_ops_init: BINARY NINJA MCP - Second tisp_init call (00079058) ***");
                 if (init_sensor && init_sensor->video.attr) {
-                    ret = tisp_init(init_sensor->video.attr, NULL);
+                    /* CRITICAL FIX: Create sensor_params struct instead of passing sensor_attr directly */
+                    struct tx_isp_sensor_attribute *attr = init_sensor->video.attr;
+                    struct {
+                        uint32_t width;
+                        uint32_t height;
+                        uint32_t fps;
+                        uint32_t mode;
+                    } sensor_params = {
+                        .width = attr->total_width ? attr->total_width : 1920,
+                        .height = attr->total_height ? attr->total_height : 1080,
+                        .fps = 25,
+                        .mode = 0
+                    };
+
+                    pr_info("*** DEBUG: Second tisp_init - sensor_params: %ux%u@%u, mode=%u ***",
+                            sensor_params.width, sensor_params.height, sensor_params.fps, sensor_params.mode);
+
+                    ret = tisp_init(&sensor_params, NULL);
                     if (ret != 0) {
                         pr_err("ispcore_core_ops_init: Second tisp_init failed: %d\n", ret);
                         return ret;
