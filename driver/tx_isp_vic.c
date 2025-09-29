@@ -1229,6 +1229,14 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         wmb();
         pr_info("*** VIC UNLOCK: After writing 4, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
 
+        /* CRITICAL: Register 0x1a0 - Frame configuration from sensor attributes */
+        /* Binary Ninja: *(vic_regs + 0x1a0) = (wdr_cache << 4) | data_type */
+        u32 reg_1a0_value = (sensor_attr->wdr_cache << 4) | sensor_attr->data_type;
+        writel(reg_1a0_value, vic_regs + 0x1a0);
+        wmb();
+        pr_info("*** CRITICAL: reg 0x1a0 = 0x%x (wdr=%d, data_type=%d) ***\n",
+                reg_1a0_value, sensor_attr->wdr_cache, sensor_attr->data_type);
+
         /* Wait for unlock - Binary Ninja 000104b8 - DUAL VIC SPACE COORDINATION */
         timeout = 10000;  /* 10ms timeout */
 
