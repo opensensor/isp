@@ -476,10 +476,23 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 }
             }
 
-            /* CRITICAL FIX: Manually advance VIC buffer index since hardware cycling is broken */
-            /* The VIC hardware is stuck on slot 2 and never advances automatically */
-            /* We need to manually update the buffer index in the control register */
+            /* CRITICAL FIX: Force VIC hardware to use different buffer addresses */
+            /* The VIC hardware is stuck reading from slot 2 (0x320) and never advances */
+            /* We need to manually program the VIC current address register to force buffer cycling */
 
+            /* Calculate the actual buffer address for the next slot */
+            u32 slot_offset = 0x318 + (next_idx * 4);  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
+            u32 next_buffer_addr = readl(vic_base + slot_offset);
+
+            /* CRITICAL: Force VIC hardware to read from the next buffer address */
+            /* Write the next buffer address to VIC current address register 0x380 */
+            writel(next_buffer_addr, vic_base + 0x380);
+            if (vic_dev->vic_regs_control) {
+                writel(next_buffer_addr, vic_dev->vic_regs_control + 0x380);
+            }
+            wmb();
+
+            /* Also update the control register buffer index for consistency */
             u32 current_ctrl = readl(vic_base + 0x300);
             u32 control_flags = current_ctrl & 0xFFF0FFFF;  /* Preserve all except buffer index (bits 16-19) */
             u32 new_buffer_index = (next_idx & 0xF) << 16;  /* Set new buffer index in bits 16-19 */
@@ -493,8 +506,8 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             }
             wmb();
 
-            pr_info("*** VIC FRAME DONE: MANUALLY advanced buffer index from %d to %d, VIC[0x300]=0x%x ***\n",
-                    cur_idx, next_idx, new_ctrl);
+            pr_info("*** VIC FRAME DONE: FORCED VIC to read from slot %d addr=0x%x, VIC[0x300]=0x%x, VIC[0x380]=0x%x ***\n",
+                    next_idx, next_buffer_addr, new_ctrl, next_buffer_addr);
 
             /* Keep MDMA enabled and set to RUN state */
             writel(0x1, vic_base + 0x308);
@@ -744,8 +757,18 @@ static int vic_initialize_buffer_ring(struct tx_isp_vic_device *vic_dev)
                     buffer_entry->buffer_addr, readback);
         }
 
-            pr_info("*** VIC BUFFER %d: addr=0x%x programmed to PRIMARY[0x%x] and CONTROL[0x%x] ***\n",
-                    i, buffer_entry->buffer_addr, reg_offset, reg_offset);
+            /* CRITICAL: Verify buffer address was written correctly */
+            u32 verify_primary = readl(vic_regs + reg_offset);
+            u32 verify_control = vic_dev->vic_regs_control ? readl(vic_dev->vic_regs_control + reg_offset) : 0;
+
+            pr_info("*** VIC BUFFER %d: addr=0x%x -> PRIMARY[0x%x]=0x%x, CONTROL[0x%x]=0x%x ***\n",
+                    i, buffer_entry->buffer_addr, reg_offset, verify_primary, reg_offset, verify_control);
+
+            /* CRITICAL: If buffer addresses are not being written correctly, this is the root cause */
+            if (verify_primary != buffer_entry->buffer_addr) {
+                pr_err("*** VIC BUFFER ERROR: PRIMARY slot %d write FAILED! Expected 0x%x, got 0x%x ***\n",
+                       i, buffer_entry->buffer_addr, verify_primary);
+            }
         }
     }
 
@@ -754,6 +777,20 @@ static int vic_initialize_buffer_ring(struct tx_isp_vic_device *vic_dev)
     vic_dev->active_buffer_count = 3;  /* CRITICAL FIX: Set to 3 to match VIC hardware bug */
 
     spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
+
+    /* CRITICAL: Verify all buffer slots have different addresses */
+    pr_info("*** VIC BUFFER RING: Final verification of all buffer slots ***\n");
+    for (i = 0; i < 5; i++) {
+        u32 reg_offset = (i + 0xc6) << 2;
+        u32 primary_addr = readl(vic_regs + reg_offset);
+        u32 control_addr = vic_dev->vic_regs_control ? readl(vic_dev->vic_regs_control + reg_offset) : 0;
+        pr_info("*** VIC VERIFY: Slot %d [0x%x] PRIMARY=0x%x CONTROL=0x%x ***\n",
+                i, reg_offset, primary_addr, control_addr);
+    }
+
+    /* CRITICAL: Verify VIC current address register */
+    u32 current_addr = readl(vic_regs + 0x380);
+    pr_info("*** VIC VERIFY: Current address register [0x380] = 0x%x ***\n", current_addr);
 
     pr_info("*** VIC BUFFER RING: Initialization complete - 5 buffers ready for DMA ***\n");
     return 0;
