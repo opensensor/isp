@@ -609,82 +609,37 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
         complete(&vic_dev->frame_complete);
     }
 
-    /* CRITICAL: Queue next buffer to keep VIC hardware fed */
-    /* Binary Ninja: Determine which buffer slot to program next based on current VIC state */
-    u32 current_addr = readl(vic_regs + 0x380);  /* VIC current buffer address */
+    /* Binary Ninja EXACT: vic_mdma_irq_function buffer circulation logic */
+    /* Use global buffer index variables instead of trying to detect current slot */
 
-    /* DEBUG: Check multiple potential current address registers */
-    u32 addr_300 = readl(vic_regs + 0x300);  /* VIC control register */
-    u32 addr_304 = readl(vic_regs + 0x304);  /* VIC dimensions register */
-    u32 addr_384 = readl(vic_regs + 0x384);  /* Alternative current address? */
-    u32 addr_388 = readl(vic_regs + 0x388);  /* Alternative current address? */
+    if (vic_mdma_ch0_sub_get_num > 0) {
+        /* Binary Ninja: Channel 0 buffer circulation */
+        u32 current_index = vic_mdma_ch0_set_buff_index;
+        u32 next_index = (current_index + 1) % 5;  /* Binary Ninja: (vic_mdma_ch0_set_buff_index_1 + 1) u% 5 */
+        u32 frame_size = vic_dev->width * vic_dev->height * 2;  /* Binary Ninja: $s0_3 = $s0_2 << 1 */
 
-    pr_info("*** VIC MDMA: DEBUG - reg[0x380]=0x%x, reg[0x300]=0x%x, reg[0x304]=0x%x, reg[0x384]=0x%x, reg[0x388]=0x%x ***\n",
-            current_addr, addr_300, addr_304, addr_384, addr_388);
+        /* Binary Ninja: Read current buffer address from VIC register */
+        u32 current_reg_offset = (current_index + 0xc6) << 2;
+        u32 current_buffer_addr = readl(vic_regs + current_reg_offset);
 
-    int current_slot = -1;
-    int next_slot;
+        /* Binary Ninja: Calculate next buffer address */
+        u32 next_buffer_addr = frame_size + current_buffer_addr;  /* Binary Ninja: $s0_4 = $s0_3 + *($a2_8 + ...) */
 
-    /* Find which slot is currently being processed */
-    for (int i = 0; i < 5; i++) {
-        u32 slot_addr = readl(vic_regs + ((i + 0xc6) << 2));
-        if (slot_addr == current_addr) {
-            current_slot = i;
-            break;
-        }
-    }
+        /* Binary Ninja: Program next buffer address to next slot */
+        u32 next_reg_offset = (next_index + 0xc6) << 2;
+        writel(next_buffer_addr, vic_regs + next_reg_offset);  /* Binary Ninja: *($a2_8 + (($hi_1 + 0xc6) << 2)) = $s0_4 */
+        wmb();
 
-    if (current_slot >= 0) {
-        /* Calculate next slot in ring (0->1->2->3->4->0) */
-        next_slot = (current_slot + 1) % 5;
+        /* Binary Ninja: Update buffer index for next time */
+        vic_mdma_ch0_set_buff_index = next_index;  /* Binary Ninja: vic_mdma_ch0_set_buff_index = $hi_1 */
 
-        /* Find buffer entry for next slot */
-        struct vic_buffer_entry *slot_buffer = NULL;
-        list_for_each_entry(next_buffer, &vic_dev->free_head, list) {
-            if (next_buffer->buffer_index == next_slot) {
-                slot_buffer = next_buffer;
-                break;
-            }
-        }
+        /* Binary Ninja: Decrement buffer count */
+        vic_mdma_ch0_sub_get_num--;  /* Binary Ninja: vic_mdma_ch0_sub_get_num -= 1 */
 
-        if (slot_buffer) {
-            /* Binary Ninja EXACT: Program buffer to slot and update current address register */
-            u32 current_reg_offset = (current_slot + 0xc6) << 2;  /* Program current slot */
-
-            /* Program new buffer address to the slot */
-            writel(slot_buffer->buffer_addr, vic_regs + current_reg_offset);
-            wmb();
-
-            /* CRITICAL: Update VIC current address register (0x380) - Binary Ninja reference */
-            writel(slot_buffer->buffer_addr, vic_regs + 0x380);
-            wmb();
-
-            pr_info("*** VIC MDMA: BN MCP - slot=%d, buffer 0x%x to PRIMARY[0x%x] and current_addr[0x380] ***\n",
-                    current_slot, slot_buffer->buffer_addr, current_reg_offset);
-        } else {
-            pr_warn("*** VIC MDMA: No buffer found for slot %d ***\n", current_slot);
-        }
+        pr_info("*** VIC MDMA: BN EXACT - ch0 index %d->%d, addr 0x%x->0x%x, reg[0x%x], count=%d ***\n",
+                current_index, next_index, current_buffer_addr, next_buffer_addr, next_reg_offset, vic_mdma_ch0_sub_get_num);
     } else {
-        pr_warn("*** VIC MDMA: Could not determine current VIC slot (addr=0x%x) ***\n", current_addr);
-
-        /* FALLBACK: Program a fresh buffer into slot 2 (where VIC is stuck) */
-        pr_info("*** VIC MDMA: FALLBACK - VIC stuck, programming fresh buffer to slot 2 ***\n");
-        {
-            u32 buffer_addr = 0x6300000;  /* Use first buffer */
-            u32 reg_offset = (2 + 0xc6) << 2;  /* Slot 2 = 0x320 */
-
-            /* Program fresh buffer to PRIMARY VIC space slot 2 */
-            writel(buffer_addr, vic_regs + reg_offset);
-            wmb();
-
-            /* CRITICAL: Update VIC current address register (0x380) - Binary Ninja reference */
-            writel(buffer_addr, vic_regs + 0x380);
-            wmb();
-            u32 readback_380 = readl(vic_regs + 0x380);
-
-            pr_info("*** VIC MDMA: FALLBACK - Fresh buffer 0x%x programmed to PRIMARY[0x%x] and current_addr[0x380], readback=0x%x ***\n",
-                    buffer_addr, reg_offset, readback_380);
-        }
+        pr_info("*** VIC MDMA: BN EXACT - ch0 buffer count is 0, no circulation ***\n");
     }
 
     spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
