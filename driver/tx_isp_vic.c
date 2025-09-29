@@ -3295,11 +3295,17 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 vic_dev->state = 4;
                 pr_info("*** vic_core_s_stream: VIC state transition 3 → 4 (STREAMING) ***\n");
 
-                /* DO NOT call ispcore_slake_module during 3 → 4 transition.
-                 * It shuts CSI/VIC down mid-stream and causes ring resets (observed 12/10 stalls).
-                 * Reference driver does not slake during streaming; core init happens elsewhere (file open/IOCTL).
-                 */
-                pr_info("*** VIC STATE 4: Skipping ispcore_slake_module during streaming (avoids shutdown/reset) ***\n");
+                /* CRITICAL: Call ispcore_slake_module when VIC state reaches 4 (>= 3) */
+                pr_info("*** VIC STATE 4: Calling ispcore_slake_module to initialize ISP core ***\n");
+                extern int ispcore_slake_module(struct tx_isp_dev *isp_dev);
+                if (ourISPdev) {
+                    int slake_ret = ispcore_slake_module(ourISPdev);
+                    if (slake_ret == 0) {
+                        pr_info("*** ispcore_slake_module SUCCESS - ISP core should now be initialized ***\n");
+                    } else {
+                        pr_info("*** ispcore_slake_module FAILED: %d ***\n", slake_ret);
+                    }
+                }
 
                 /* CRITICAL: Apply full VIC configuration now that VIC is in streaming state */
             } else {
