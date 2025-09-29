@@ -611,6 +611,16 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
     /* CRITICAL: Queue next buffer to keep VIC hardware fed */
     /* Binary Ninja: Determine which buffer slot to program next based on current VIC state */
     u32 current_addr = readl(vic_regs + 0x380);  /* VIC current buffer address */
+
+    /* DEBUG: Check multiple potential current address registers */
+    u32 addr_300 = readl(vic_regs + 0x300);  /* VIC control register */
+    u32 addr_304 = readl(vic_regs + 0x304);  /* VIC dimensions register */
+    u32 addr_384 = readl(vic_regs + 0x384);  /* Alternative current address? */
+    u32 addr_388 = readl(vic_regs + 0x388);  /* Alternative current address? */
+
+    pr_info("*** VIC MDMA: DEBUG - reg[0x380]=0x%x, reg[0x300]=0x%x, reg[0x304]=0x%x, reg[0x384]=0x%x, reg[0x388]=0x%x ***\n",
+            current_addr, addr_300, addr_304, addr_384, addr_388);
+
     int current_slot = -1;
     int next_slot;
 
@@ -669,9 +679,10 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
             /* CRITICAL: Update VIC current address register (0x380) - Binary Ninja reference */
             writel(buffer_addr, vic_regs + 0x380);
             wmb();
+            u32 readback_380 = readl(vic_regs + 0x380);
 
-            pr_info("*** VIC MDMA: FALLBACK - Fresh buffer 0x%x programmed to PRIMARY[0x%x] and current_addr[0x380] ***\n",
-                    buffer_addr, reg_offset);
+            pr_info("*** VIC MDMA: FALLBACK - Fresh buffer 0x%x programmed to PRIMARY[0x%x] and current_addr[0x380], readback=0x%x ***\n",
+                    buffer_addr, reg_offset, readback_380);
         }
     }
 
@@ -745,8 +756,9 @@ static int vic_initialize_buffer_ring(struct tx_isp_vic_device *vic_dev)
         if (i == 0) {
             writel(buffer_entry->buffer_addr, vic_regs + 0x380);
             wmb();
-            pr_info("*** VIC INIT: Set current address register 0x380 = 0x%x (first buffer) ***\n",
-                    buffer_entry->buffer_addr);
+            u32 readback = readl(vic_regs + 0x380);
+            pr_info("*** VIC INIT: Set current address register 0x380 = 0x%x, readback = 0x%x ***\n",
+                    buffer_entry->buffer_addr, readback);
         }
 
             pr_info("*** VIC BUFFER %d: addr=0x%x programmed to PRIMARY[0x%x] and CONTROL[0x%x] ***\n",
@@ -2585,6 +2597,98 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
     return result;
 }
 
+/* Global variables for VIC MDMA state - Binary Ninja MCP reference */
+static u32 vic_mdma_ch0_set_buff_index = 4;
+static u32 vic_mdma_ch1_set_buff_index = 4;
+static u32 vic_mdma_ch0_sub_get_num = 0;
+static u32 vic_mdma_ch1_sub_get_num = 0;
+
+/* Binary Ninja EXACT: vic_mdma_enable implementation - COMPLETE MDMA setup */
+static u32 vic_mdma_enable(struct tx_isp_vic_device *vic_dev, u32 width, u32 height, u32 arg3, u32 arg4, u32 arg5, u32 arg6)
+{
+    void __iomem *vic_regs = vic_dev->vic_regs;
+    u32 stride = width;
+    u32 frame_size = width * height;
+    u32 buffer_stride, buffer_size;
+    u32 control_value;
+
+    pr_info("*** vic_mdma_enable: COMPLETE MDMA setup - w=%d, h=%d, arg3=%d, arg4=%d, arg5=0x%x, arg6=%d ***\n",
+            width, height, arg3, arg4, arg5, arg6);
+
+    /* Binary Ninja: int32_t $a1 = *(arg1 + 0xdc); if ($t1 != 7) $a1 <<= 1 */
+    if (arg6 != 7) {
+        stride = width << 1;  /* Double stride for non-7 formats */
+    }
+
+    /* Binary Ninja: vic_mdma_ch0_set_buff_index = 4; vic_mdma_ch1_set_buff_index = 4 */
+    vic_mdma_ch0_set_buff_index = 4;
+    vic_mdma_ch1_set_buff_index = 4;
+
+    /* Binary Ninja: vic_mdma_ch0_sub_get_num = arg4; if (arg3 != 0) vic_mdma_ch1_sub_get_num = arg4 */
+    vic_mdma_ch0_sub_get_num = arg4;
+    if (arg3 != 0) {
+        vic_mdma_ch1_sub_get_num = arg4;
+    }
+
+    /* Binary Ninja: Basic register setup */
+    writel(1, vic_regs + 0x308);
+    writel((width << 16) | height, vic_regs + 0x304);
+    writel(stride, vic_regs + 0x310);
+    writel(stride, vic_regs + 0x314);
+    wmb();
+
+    /* Binary Ninja: Calculate buffer addresses and program ALL buffer registers */
+    buffer_size = frame_size << 1;  /* $v1_2 = $a1 * $v1_1; $a1_1 = $v1_2 << 1 */
+    buffer_stride = buffer_size + arg5;  /* $t0_7 = $v1_2 + arg5 */
+
+    /* Binary Ninja: Program primary buffer registers (0x318-0x328) */
+    writel(arg5, vic_regs + 0x318);  /* *(*(arg1 + 0xb8) + 0x318) = arg5 */
+
+    if (arg3 == 0) {
+        /* Binary Ninja: Channel 0 buffer calculation */
+        writel(buffer_stride, vic_regs + 0x31c);
+        writel(buffer_size + buffer_stride, vic_regs + 0x320);
+        writel(buffer_size + (buffer_size + buffer_stride), vic_regs + 0x324);
+        writel(buffer_size + (buffer_size + (buffer_size + buffer_stride)), vic_regs + 0x328);
+    } else {
+        /* Binary Ninja: Channel 1 buffer calculation */
+        u32 stride_2x = arg5 + (buffer_size << 1);  /* $v1_3 = arg5 + $a1_1 */
+        writel(stride_2x, vic_regs + 0x31c);
+        writel((buffer_size << 1) + stride_2x, vic_regs + 0x320);
+        writel((buffer_size << 1) + ((buffer_size << 1) + stride_2x), vic_regs + 0x324);
+        writel((buffer_size << 1) + ((buffer_size << 1) + ((buffer_size << 1) + stride_2x)), vic_regs + 0x328);
+    }
+
+    /* Binary Ninja: Program secondary buffer registers (0x340-0x350) */
+    writel(buffer_stride, vic_regs + 0x340);
+    writel(buffer_stride + (buffer_size << 1), vic_regs + 0x344);
+    writel((buffer_stride + (buffer_size << 1)) + (buffer_size << 1), vic_regs + 0x348);
+    writel(((buffer_stride + (buffer_size << 1)) + (buffer_size << 1)) + (buffer_size << 1), vic_regs + 0x34c);
+    writel((((buffer_stride + (buffer_size << 1)) + (buffer_size << 1)) + (buffer_size << 1)) + (buffer_size << 1), vic_regs + 0x350);
+
+    /* Binary Ninja: Additional buffers for format 7 */
+    if (arg6 == 7) {
+        writel(buffer_stride, vic_regs + 0x32c);
+        writel(buffer_stride + (buffer_size << 1), vic_regs + 0x330);
+        writel((buffer_stride + (buffer_size << 1)) + (buffer_size << 1), vic_regs + 0x334);
+        writel(((buffer_stride + (buffer_size << 1)) + (buffer_size << 1)) + (buffer_size << 1), vic_regs + 0x338);
+        writel((((buffer_stride + (buffer_size << 1)) + (buffer_size << 1)) + (buffer_size << 1)) + (buffer_size << 1), vic_regs + 0x33c);
+    }
+    wmb();
+
+    /* Binary Ninja: Set control register with buffer count */
+    if (arg4 < 8) {
+        control_value = (arg4 << 16) | 0x80000020 | arg6;
+    } else {
+        control_value = 0x80080020 | arg6;
+    }
+    writel(control_value, vic_regs + 0x300);
+    wmb();
+
+    pr_info("*** vic_mdma_enable: COMPLETE - control=0x%x, buffers programmed (0x318-0x350) ***\n", control_value);
+    return control_value;
+}
+
 /* VIC PIPO MDMA Enable function - EXACT Binary Ninja implementation */
 static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 {
@@ -2799,10 +2903,10 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             pr_info("*** VIC CONTROL (PRIMARY): WROTE 2 to [0x0] before MDMA/config ***\n");
         }
 
-        /* Binary Ninja EXACT: vic_pipo_mdma_enable($s0) */
-        pr_info("*** CRITICAL: Calling vic_pipo_mdma_enable - required for VIC interrupts ***\n");
-        vic_pipo_mdma_enable(vic_dev);
-        pr_info("*** vic_pipo_mdma_enable completed - VIC MDMA should now generate interrupts! ***\n");
+        /* Binary Ninja EXACT: vic_mdma_enable - COMPLETE MDMA setup */
+        pr_info("*** CRITICAL: Calling vic_mdma_enable - COMPLETE MDMA setup for VIC interrupts ***\n");
+        u32 control_result = vic_mdma_enable(vic_dev, vic_dev->width, vic_dev->height, 0, 5, 0x6300000, 0);
+        pr_info("*** vic_mdma_enable completed - VIC MDMA fully configured! control=0x%x ***\n", control_result);
 
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
         void __iomem *vic_base = vic_dev->vic_regs;  /* SAFE: $s0 + 0xb8 = vic_regs */
