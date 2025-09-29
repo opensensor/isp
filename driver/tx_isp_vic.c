@@ -2625,6 +2625,10 @@ static u32 vic_mdma_enable_complete(struct tx_isp_vic_device *vic_dev, u32 width
         vic_mdma_ch1_sub_get_num = arg4;
     }
 
+    /* CRITICAL: Update vic_dev->active_buffer_count to match our buffer setup */
+    vic_dev->active_buffer_count = arg4;
+    pr_info("*** vic_mdma_enable_complete: Set active_buffer_count = %d ***\n", arg4);
+
     /* Binary Ninja: Basic register setup */
     writel(1, vic_regs + 0x308);
     writel((width << 16) | height, vic_regs + 0x304);
