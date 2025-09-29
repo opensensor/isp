@@ -2766,6 +2766,10 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         /* Binary Ninja EXACT: *($s0 + 0x210) = 0 */
         vic_dev->stream_state = 0;  /* SAFE: $s0 + 0x210 = stream_state */
 
+        /* CRITICAL: Clear all buffers when streaming stops to prevent OCD template issues */
+        pr_info("*** ispvic_frame_channel_s_stream: Clearing buffers on stream stop ***\n");
+        ispvic_frame_channel_clearbuf(arg1);
+
     } else {
         /* Stream ON */
         /* VIC CONTROL: reset state before (re)configuration per reference (write 2) */
@@ -3696,10 +3700,53 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
     return 0;
 }
 
-/* ISPVIC Frame Channel Clear Buffer - placeholder matching Binary Ninja reference */
-static int ispvic_frame_channel_clearbuf(void)
+/* ISPVIC Frame Channel Clear Buffer - Binary Ninja MCP reference implementation */
+static int ispvic_frame_channel_clearbuf(void *arg1)
 {
-    pr_info("ispvic_frame_channel_clearbuf called\n");
+    struct tx_isp_vic_device *vic_dev = NULL;
+    unsigned long flags;
+
+    pr_info("*** ispvic_frame_channel_clearbuf: Starting buffer clear ***\n");
+
+    /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = *(arg1 + 0xd4) */
+    if (arg1 != NULL && (uintptr_t)arg1 < 0xfffff001) {
+        vic_dev = *((struct tx_isp_vic_device **)((char *)arg1 + 0xd4));
+    }
+
+    if (!vic_dev) {
+        pr_warn("*** ispvic_frame_channel_clearbuf: No VIC device found ***\n");
+        return 0;
+    }
+
+    /* Binary Ninja: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
+    spin_lock_irqsave(&vic_dev->buffer_lock, flags);
+
+    /* Binary Ninja: Clear all buffer entries from the queue */
+    while (!list_empty(&vic_dev->free_head)) {
+        struct vic_buffer_entry *entry = list_first_entry(&vic_dev->free_head, struct vic_buffer_entry, list);
+        list_del(&entry->list);
+        /* Binary Ninja: *$v0_2 = 0x100100; $v0_2[1] = 0x200200 */
+        entry->list.next = (struct list_head *)0x100100;
+        entry->list.prev = (struct list_head *)0x200200;
+        kfree(entry);
+    }
+
+    /* Clear done queue as well */
+    while (!list_empty(&vic_dev->done_head)) {
+        struct vic_buffer_entry *entry = list_first_entry(&vic_dev->done_head, struct vic_buffer_entry, list);
+        list_del(&entry->list);
+        entry->list.next = (struct list_head *)0x100100;
+        entry->list.prev = (struct list_head *)0x200200;
+        kfree(entry);
+    }
+
+    /* Binary Ninja: *($s0 + 0x210) = 0; *($s0 + 0x214) = 0 */
+    vic_dev->active_buffer_count = 0;
+    vic_dev->frame_count = 0;
+
+    spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
+
+    pr_info("*** ispvic_frame_channel_clearbuf: All buffers cleared ***\n");
     return 0;
 }
 
