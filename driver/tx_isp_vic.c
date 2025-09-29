@@ -643,6 +643,17 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
         if (vic_mdma_ch0_sub_get_num == 0) {
             vic_mdma_ch0_sub_get_num = 5;  /* Replenish to 5 buffers for continuous operation */
             pr_info("*** VIC MDMA: REPLENISH - buffer count reached 0, replenished to 5 for continuous streaming ***\n");
+
+            /* CRITICAL: Re-trigger VIC MDMA circulation after replenishment */
+            /* Binary Ninja: When count reaches 0, VIC hardware stops - need to restart circulation */
+            void __iomem *vic_regs = vic_dev->vic_regs;
+            if (vic_regs) {
+                /* Re-enable VIC MDMA circulation by writing to control register */
+                u32 control_value = (5 << 16) | 0x80000020;  /* 5 buffers, enable MDMA */
+                writel(control_value, vic_regs + 0x300);
+                wmb();
+                pr_info("*** VIC MDMA: REPLENISH - re-triggered VIC control=0x%x to restart circulation ***\n", control_value);
+            }
         }
     } else {
         pr_info("*** VIC MDMA: BN EXACT - ch0 buffer count is 0, no circulation ***\n");
