@@ -741,8 +741,9 @@ static int vic_initialize_buffer_ring(struct tx_isp_vic_device *vic_dev)
             wmb();
         }
 
-        pr_info("*** VIC BUFFER %d: addr=0x%x programmed to PRIMARY[0x%x] and CONTROL[0x%x] ***\n",
-                i, buffer_entry->buffer_addr, reg_offset, reg_offset);
+            pr_info("*** VIC BUFFER %d: addr=0x%x programmed to PRIMARY[0x%x] and CONTROL[0x%x] ***\n",
+                    i, buffer_entry->buffer_addr, reg_offset, reg_offset);
+        }
     }
 
     /* Set buffer counts */
