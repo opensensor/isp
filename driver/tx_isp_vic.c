@@ -3649,7 +3649,7 @@ int tx_isp_vic_remove(struct platform_device *pdev)
 }
 /* Forward declarations for callback functions referenced in pipo */
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2);
-static int ispvic_frame_channel_clearbuf(void);
+static int ispvic_frame_channel_clearbuf(void *arg1);
 
 /* ISPVIC Frame Channel QBUF - EXACT Binary Ninja MCP implementation */
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
