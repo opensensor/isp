@@ -3425,15 +3425,45 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 vic_dev->state = 4;
                 pr_info("*** vic_core_s_stream: VIC state transition 3 → 4 (STREAMING) ***\n");
 
-                /* CRITICAL FIX: Do NOT call ispcore_slake_module during streaming - it kills VIC interrupts */
-                /* The 10.10 stall is caused by ISP core initialization disrupting VIC interrupt generation */
-                /* ISP core should be initialized BEFORE streaming starts, not during streaming */
-                pr_info("*** VIC STATE 4: SKIPPING ispcore_slake_module to preserve VIC interrupt generation ***\n");
-                pr_info("*** VIC STATE 4: ISP core initialization should happen during device open, not during streaming ***\n");
+                /* CRITICAL FIX: Call ispcore_slake_module but preserve VIC interrupt state */
+                /* The slake module is needed for silicon bit transitions and clock control */
+                /* But we need to prevent it from disrupting VIC interrupt generation */
+                pr_info("*** VIC STATE 4: Calling ispcore_slake_module with VIC interrupt preservation ***\n");
+
+                /* CRITICAL: Save VIC interrupt state before slake module call */
+                u32 saved_vic_ctrl = 0;
+                u32 saved_vic_imr = 0;
+                u32 saved_vic_imcr = 0;
+                if (vic_dev->vic_regs) {
+                    saved_vic_ctrl = readl(vic_dev->vic_regs + 0x300);
+                    saved_vic_imr = readl(vic_dev->vic_regs + 0x1e8);
+                    saved_vic_imcr = readl(vic_dev->vic_regs + 0x1ec);
+                    pr_info("*** VIC STATE 4: Saved VIC state - ctrl=0x%x, imr=0x%x, imcr=0x%x ***\n",
+                            saved_vic_ctrl, saved_vic_imr, saved_vic_imcr);
+                }
+
+                extern int ispcore_slake_module(struct tx_isp_dev *isp_dev);
+                if (ourISPdev) {
+                    int slake_ret = ispcore_slake_module(ourISPdev);
+                    if (slake_ret == 0) {
+                        pr_info("*** ispcore_slake_module SUCCESS - silicon bits and clocks configured ***\n");
+                    } else {
+                        pr_info("*** ispcore_slake_module FAILED: %d ***\n", slake_ret);
+                    }
+                }
+
+                /* CRITICAL: Restore VIC interrupt state after slake module call */
+                if (vic_dev->vic_regs) {
+                    writel(saved_vic_ctrl, vic_dev->vic_regs + 0x300);
+                    writel(saved_vic_imr, vic_dev->vic_regs + 0x1e8);
+                    writel(saved_vic_imcr, vic_dev->vic_regs + 0x1ec);
+                    wmb();
+                    pr_info("*** VIC STATE 4: Restored VIC interrupt state after slake module ***\n");
+                }
 
                 /* CRITICAL: Mark that VIC is now in full streaming mode */
                 vic_dev->stream_state = 1;  /* Enable processing mode */
-                pr_info("*** VIC STATE 4: VIC now in full streaming mode - interrupts should continue indefinitely ***\n");
+                pr_info("*** VIC STATE 4: VIC now in full streaming mode with preserved interrupts ***\n");
 
                 /* CRITICAL: Apply full VIC configuration now that VIC is in streaming state */
             } else {
