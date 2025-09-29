@@ -3425,21 +3425,24 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 vic_dev->state = 4;
                 pr_info("*** vic_core_s_stream: VIC state transition 3 → 4 (STREAMING) ***\n");
 
-                /* CRITICAL FIX: Call ispcore_slake_module but preserve VIC interrupt state */
+                /* CRITICAL FIX: Call ispcore_slake_module but preserve VIC streaming state */
                 /* The slake module is needed for silicon bit transitions and clock control */
-                /* But we need to prevent it from disrupting VIC interrupt generation */
-                pr_info("*** VIC STATE 4: Calling ispcore_slake_module with VIC interrupt preservation ***\n");
+                /* But we need to prevent it from resetting VIC state from 4 (STREAMING) to 1 (INIT) */
+                pr_info("*** VIC STATE 4: Calling ispcore_slake_module with VIC state preservation ***\n");
 
-                /* CRITICAL: Save VIC interrupt state before slake module call */
+                /* CRITICAL: Save complete VIC state before slake module call */
                 u32 saved_vic_ctrl = 0;
                 u32 saved_vic_imr = 0;
                 u32 saved_vic_imcr = 0;
+                u32 saved_vic_state = vic_dev->state;  /* Save VIC state machine state */
+                u32 saved_stream_state = vic_dev->stream_state;  /* Save stream state */
+
                 if (vic_dev->vic_regs) {
                     saved_vic_ctrl = readl(vic_dev->vic_regs + 0x300);
                     saved_vic_imr = readl(vic_dev->vic_regs + 0x1e8);
                     saved_vic_imcr = readl(vic_dev->vic_regs + 0x1ec);
-                    pr_info("*** VIC STATE 4: Saved VIC state - ctrl=0x%x, imr=0x%x, imcr=0x%x ***\n",
-                            saved_vic_ctrl, saved_vic_imr, saved_vic_imcr);
+                    pr_info("*** VIC STATE 4: Saved VIC state - ctrl=0x%x, imr=0x%x, imcr=0x%x, state=%d, stream=%d ***\n",
+                            saved_vic_ctrl, saved_vic_imr, saved_vic_imcr, saved_vic_state, saved_stream_state);
                 }
 
                 extern int ispcore_slake_module(struct tx_isp_dev *isp_dev);
@@ -3452,18 +3455,22 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     }
                 }
 
-                /* CRITICAL: Restore VIC interrupt state after slake module call */
+                /* CRITICAL: Restore complete VIC state after slake module call */
+                vic_dev->state = saved_vic_state;  /* Restore VIC state machine state */
+                vic_dev->stream_state = saved_stream_state;  /* Restore stream state */
+
                 if (vic_dev->vic_regs) {
                     writel(saved_vic_ctrl, vic_dev->vic_regs + 0x300);
                     writel(saved_vic_imr, vic_dev->vic_regs + 0x1e8);
                     writel(saved_vic_imcr, vic_dev->vic_regs + 0x1ec);
                     wmb();
-                    pr_info("*** VIC STATE 4: Restored VIC interrupt state after slake module ***\n");
+                    pr_info("*** VIC STATE 4: Restored complete VIC state - state=%d, stream=%d ***\n",
+                            vic_dev->state, vic_dev->stream_state);
                 }
 
-                /* CRITICAL: Mark that VIC is now in full streaming mode */
+                /* CRITICAL: Ensure VIC remains in streaming mode */
                 vic_dev->stream_state = 1;  /* Enable processing mode */
-                pr_info("*** VIC STATE 4: VIC now in full streaming mode with preserved interrupts ***\n");
+                pr_info("*** VIC STATE 4: VIC preserved in streaming mode - interrupts should continue ***\n");
 
                 /* CRITICAL: Apply full VIC configuration now that VIC is in streaming state */
             } else {
