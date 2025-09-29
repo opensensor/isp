@@ -633,45 +633,34 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
         }
 
         if (slot_buffer) {
-            /* Program the next slot with its designated buffer to BOTH VIC spaces */
-            u32 reg_offset = (next_slot + 0xc6) << 2;
+            /* CRITICAL FIX: VIC hardware doesn't auto-advance - we must manually program the CURRENT slot */
+            /* VIC is stuck on slot 2 (0x320), so we need to program a new buffer into slot 2 */
+            u32 current_reg_offset = (current_slot + 0xc6) << 2;  /* Program current slot, not next slot */
 
-            /* Program to PRIMARY VIC space */
-            writel(slot_buffer->buffer_addr, vic_regs + reg_offset);
+            /* Program new buffer address to the CURRENT slot that VIC is reading from */
+            writel(slot_buffer->buffer_addr, vic_regs + current_reg_offset);
             wmb();
 
-            /* CRITICAL: Program to CONTROL VIC space as well */
-            if (vic_dev->vic_regs_control) {
-                writel(slot_buffer->buffer_addr, vic_dev->vic_regs_control + reg_offset);
-                wmb();
-            }
-
-            pr_info("*** VIC MDMA: Ring advance - current_slot=%d, next_slot=%d, addr=0x%x to PRIMARY[0x%x] and CONTROL[0x%x] ***\n",
-                    current_slot, next_slot, slot_buffer->buffer_addr, reg_offset, reg_offset);
+            pr_info("*** VIC MDMA: Manual buffer advance - VIC stuck on slot=%d, programming new buffer 0x%x to PRIMARY[0x%x] ***\n",
+                    current_slot, slot_buffer->buffer_addr, current_reg_offset);
         } else {
-            pr_warn("*** VIC MDMA: No buffer found for next slot %d ***\n", next_slot);
+            pr_warn("*** VIC MDMA: No buffer found for slot %d ***\n", current_slot);
         }
     } else {
         pr_warn("*** VIC MDMA: Could not determine current VIC slot (addr=0x%x) ***\n", current_addr);
 
-        /* FALLBACK: Ensure all slots have valid buffers programmed to BOTH VIC spaces */
-        pr_info("*** VIC MDMA: FALLBACK - Reprogramming all buffer slots to PRIMARY and CONTROL ***\n");
-        for (int i = 0; i < 5; i++) {
-            u32 buffer_addr = 0x6300000 + (i * frame_size);
-            u32 reg_offset = (i + 0xc6) << 2;
+        /* FALLBACK: Program a fresh buffer into slot 2 (where VIC is stuck) */
+        pr_info("*** VIC MDMA: FALLBACK - VIC stuck, programming fresh buffer to slot 2 ***\n");
+        {
+            u32 buffer_addr = 0x6300000;  /* Use first buffer */
+            u32 reg_offset = (2 + 0xc6) << 2;  /* Slot 2 = 0x320 */
 
-            /* Program to PRIMARY VIC space */
+            /* Program fresh buffer to PRIMARY VIC space slot 2 */
             writel(buffer_addr, vic_regs + reg_offset);
             wmb();
 
-            /* CRITICAL: Program to CONTROL VIC space as well */
-            if (vic_dev->vic_regs_control) {
-                writel(buffer_addr, vic_dev->vic_regs_control + reg_offset);
-                wmb();
-            }
-
-            pr_info("*** VIC MDMA: FALLBACK - Slot %d: addr=0x%x to PRIMARY[0x%x] and CONTROL[0x%x] ***\n",
-                    i, buffer_addr, reg_offset, reg_offset);
+            pr_info("*** VIC MDMA: FALLBACK - Fresh buffer 0x%x programmed to PRIMARY[0x%x] ***\n",
+                    buffer_addr, reg_offset);
         }
     }
 
