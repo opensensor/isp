@@ -1734,6 +1734,23 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
             /* Enable group bits */
             writel(0x0000000F, base_for_irq + 0x1e4);
             reg_1e4 = readl(base_for_irq + 0x1e4);
+
+            /* Mirror to the other bank as well to prevent mid-stream clobber from CSI/tuning */
+            if (ourISPdev && ourISPdev->vic_dev) {
+                void __iomem *vrp = ourISPdev->vic_dev->vic_regs;
+                void __iomem *vrc = ourISPdev->vic_dev->vic_regs_control;
+                if (vrp) {
+                    writel(0xFFFFFFFE, vrp + 0x1e8);
+                    writel(readl(vrp + 0x1e0) | 0x1, vrp + 0x1e0);
+                    writel(0x0000000F, vrp + 0x1e4);
+                }
+                if (vrc) {
+                    writel(0xFFFFFFFE, vrc + 0x1e8);
+                    writel(readl(vrc + 0x1e0) | 0x1, vrc + 0x1e0);
+                    writel(0x0000000F, vrc + 0x1e4);
+                }
+            }
+
             printk(KERN_ALERT "*** VIC IRQ: FIXUP enable/mask — after: 1e0=0x%x 1e4=0x%x 1e8=0x%x ***\n",
                    reg_1e0, reg_1e4, reg_1e8);
         }

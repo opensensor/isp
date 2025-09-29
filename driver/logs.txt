@@ -1,111 +1,21 @@
-I/Alloc Manager( 3126): MEM Manager Method is continuous
-D/System( 3126): IMP_System_Init SDK Version:1.1.6-a6394f42-Mon Dec 5 14:39:51 2022 +0800, built: Dec 29 2022 15:38:51
-D/System( 3126): system_init()
-D/System( 3126): Calling DSystem
-D/System( 3126): Calling FrameSource
-D/System( 3126): [ignored]read /proc/cpuinfo ret is NULLD/System( 3126): Calling IVS
-D/System( 3126): Calling OSD
-D/System( 3126): Calling Encoder
-D/System( 3126): Calling FB
-E/Framesource( 3126): IMP_FrameSource_GetChnAttr(): chnAttr was not set yet
-D/Encoder( 3126): IMP_Encoder_SetbufshareChn: encChn:2, shareChn:0
-E/MemPool( 3126): IMP_Encoder_GetPool(64):chnNum: 0 not bind pool
-I/Encoder( 3126): encChn=0,srcFrameCnt=3,srcFrameSize=3133440
-I/Encoder( 3126): encChn=0,srcStreamCnt=2,enc_chn->stream_frame_size=949248
-I/OSD( 3126): IMP_OSD_SetPoolSize:1048576
-E/IMP-ISP( 3126): err:video drop 
-I/OSD( 3126): IMP_OSD_CreateRgn(1227) create handle=0 success
-I/OSD( 3126): IMP_OSD_CreateRgn(1227) create handle=1 success
-I/OSD( 3126): IMP_OSD_CreateRgn(1227) create handle=2 success
-I/OSD( 3126): IMP_OSD_CreateRgn(1227) create handle=3 success
-D/System( 3126): system_bind(): bind DST-OSD-0(4.0.0) to SRC-Framesource-0(0.0.0)
-D/System( 3126): system_bind(): bind DST-Encoder-0(1.0.0) to SRC-OSD-0(4.0.0)
-I/Framesource( 3126): [chn0]: width = 1920 height = 1080
-I/VBM( 3126): VBMCreatePool()-0: w=1920 h=1080 f=842094158 nrVBs=4
-I/VBM( 3126): VBMCreatePool()-0: pool->config.fmt.fmt.pix.sizeimage=0 sizeimage=3133440
-E/Framesource( 3126): IMP_FrameSource_GetPool(3294):chnNum: 0 not bind pool
-E/VBM( 3126): VBMCreatePool()-0: sizeimage=3133440
-I/VBM( 3126): PoolId:0, frame=0x74ca3790, frame->priv=0x74ca37bc, frame[0].virAddr=75c46000, frame[0].phyAddr=70d9000
-I/VBM( 3126): PoolId:0, frame=0x74ca3bb8, frame->priv=0x74ca3be4, frame[1].virAddr=75f43000, frame[1].phyAddr=73d6000
-I/VBM( 3126): PoolId:0, frame=0x74ca3fe0, frame->priv=0x74ca400c, frame[2].virAddr=76240000, frame[2].phyAddr=76d3000
-I/VBM( 3126): PoolId:0, frame=0x74ca4408, frame->priv=0x74ca4434, frame[3].virAddr=7653d000, frame[3].phyAddr=79d0000
-E/Framesource( 3126): get_frame: buf.index >= total_buf_nums 
-
-
-000a9f30    int32_t get_frame(int32_t* arg1, void* arg2)
-
-000a9f44        int32_t $s2 = arg1[1]
-000a9f74        int32_t str
-000a9f74        
-000a9f74        if ($s2 == 0 && *(arg2 + 0x2e8) == 0)
-000aa168            int32_t var_20 = 0
-000aa16c            int32_t var_24 = 0
-000aa174            str = 0
-000aa174            
-000aa178            if (get_mapped_addr(0x13309888, 0x20, 0, &var_20, &var_24, &str) s< 0)
-000aa25c                *(arg2 + 0x2e8) = 0xffffffff
-000aa178            else
-000aa188                *(arg2 + 0x2e8) = var_20
-000aa188        
-000a9f94        memset(&str, c: 0, n: 0x44)
-000a9fa8        void* $s1_2 = arg2 + $s2 * 0x2e8
-000a9fb8        int32_t var_64 = 1
-000a9fd0        int32_t var_38 = 2
-000a9fd4        int32_t result = ioctl(*($s1_2 + 0x1c4), 0xc0445611, &str)
-000a9fd4        
-000a9fdc        if (result == 0xffffffff)
-000aa2c4            imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfcaec, 0xfcb0c, 0x10b, 0xfe574, 
-000aa2c4                0xfcbf8, 0xfe574, *($s1_2 + 0x1c4), arg1[1])  {"Framesource"}  {"
-000aa2c4                /home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries.c"}  {"
-000aa2c4                %s: VIDIOC_DQBUF failed, channel->fs_fd = %d, chnNum=%d\n"}  {"get_frame"}
-000a9fdc        else
-000a9fec            int32_t str_2 = str
-000a9fec            
-000a9ff8            if (str_2 u>= *($s1_2 + 0x54) + *($s1_2 + 0x258))
-000aa1f8                result = 0xffffffff
-000aa244                imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfcaec, 0xfcb0c, 0x110, 0xfe574, 
-000aa244                    0xfcc34, 0xfe574)  {"Framesource"}  {"
-000aa244                    /home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries.c"}  {"
-000aa244                    %s: buf.index >= total_buf_nums \n"}  {"get_frame"}
-000a9ff8            else
-000aa024                *($s1_2 + 0x230) += 1
-000aa028                int32_t var_54
-000aa028                int32_t var_50
-000aa028                int32_t $lo_2
-000aa028                int32_t $hi_2
-000aa028                $hi_2:$lo_2 = (var_50 s>> 0x1f):var_50 + muls.dp.d(var_54, "oiOI")
-000aa038                int32_t $a1_1 = *timestamp_base
-000aa03c                int32_t var_30
-000aa03c                arg1[5] = var_30
-000aa040                int32_t $a0_3 = *(timestamp_base + 4)
-000aa04c                *arg1 = str_2
-000aa050                int32_t var_3c
-000aa050                arg1[0x11] = var_3c
-000aa054                int32_t var_28
-000aa054                arg1[0xf9].b = var_28.b
-000aa058                *(arg1 + 0x3e6) = (var_28 u>> 0x10).w
-000aa064                int32_t $a1_2 = $lo_2 - $a1_1
-000aa078                arg1[8] = $a1_2
-000aa07c                arg1[9] = $hi_2 - $a0_3 - ($lo_2 u< $a1_2 ? 1 : 0)
-000aa088                arg1[0xfa] = *($s1_2 + 0x2e8)
-000aa084                int32_t $v0_11 = Rtos_GetTime()
-000aa090                int32_t str_1 = str
-000aa094                int32_t $a0_4 = arg1[1]
-000aa0a0                arg1[0xfb] = $v0_11
-000aa0a8                arg1[0xfc] = $v0_11 s>> 0x1f
-000aa0a4                int32_t $v0_12 = vbm_get_frame($a0_4, str_1)
-000aa0a4                
-000aa0ac                if ($v0_12 == 0)
-000aa1e0                    imp_log_fun(6, IMP_Log_Get_Option(), 2, 0xfcaec, 0xfcb0c, 0x133, 
-000aa1e0                        0xfe574, 0xfcc58, 0xfe574)  {"Framesource"}  {"/home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries.c"
-000aa1e0                        }  {"%s: true frame is null \n"}  {"get_frame"}
-000aa0ac                else
-000aa0c8                    *($v0_12 + 0x3e0) += 1
-000aa0c8                
-000aa120                result = 0
-000aa11c                imp_log_fun(2, IMP_Log_Get_Option(), 2, 0xfcaec, 0xfcb0c, 0x135, 0xfe574, 
-000aa11c                    0xfcc74, str)  {"Framesource"}  {"
-000aa11c                    /home/user/git/proj/sdk-lv3/src/imp/framesource/framesource_tseries.c"}  {"
-000aa11c                    get cluster:%d \n"}  {"get_frame"}
-000aa11c        
-000aa140        return result
+root@ing-wyze-cam3-a000 ~# cat /proc/interrupts 
+           CPU0       
+  9:          0   jz-intc  i2s_irq
+ 11:      33318   jz-intc  jz-timerost
+ 14:        692   jz-intc  ipu
+ 15:      94996   jz-intc  jz-sfc
+ 18:          0   jz-intc  pdma
+ 23:          0   jz-intc  GPIO C
+ 24:          1   jz-intc  GPIO B
+ 25:          0   jz-intc  GPIO A
+ 29:          1   jz-intc  dwc2
+ 37:         10   jz-intc  isp-m0
+ 38:         10   jz-intc  isp-w02
+ 44:      15620   jz-intc  jzmmc_v1.2.1
+ 45:          0   jz-intc  jzmmc_v1.2.0
+ 58:        384   jz-intc  uart1
+ 68:        169   jz-intc  jz-i2c.0
+ 70:        176   jz-intc  avpu.0
+126:          0    GPIO B  GPIO Button
+134:          1    GPIO B  mmc-insert-detect
+ERR:          0

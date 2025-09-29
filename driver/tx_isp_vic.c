@@ -2428,6 +2428,7 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     void __iomem *vic_base;
     void __iomem *vic_ctrl;
     u32 width, height, stride;
+    extern unsigned int tx_isp_current_pixfmt;
 
     pr_info("*** vic_pipo_mdma_enable: EXACT Binary Ninja MCP implementation ***\n");
 
@@ -2461,8 +2462,17 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x308 = 1 (MDMA enable)\n");
 
-    /* Binary Ninja EXACT: int32_t $v1_1 = $v1 << 1 (stride = width * 2) */
-    stride = width << 1;
+    /* Choose stride based on current V4L2 pixel format */
+    if (tx_isp_current_pixfmt == 0x3231564e /* NV12 */) {
+        stride = width;        /* Y plane stride */
+        pr_info("vic_pipo_mdma_enable: Using NV12 stride=%u (pixfmt=0x%x)\n", stride, tx_isp_current_pixfmt);
+    } else if (tx_isp_current_pixfmt == 0x56595559 /* 'YUYV' */) {
+        stride = width << 1;   /* 2 bytes/pixel */
+        pr_info("vic_pipo_mdma_enable: Using YUYV stride=%u (pixfmt=0x%x)\n", stride, tx_isp_current_pixfmt);
+    } else {
+        stride = width << 1;   /* Default RAW-like */
+        pr_info("vic_pipo_mdma_enable: Using RAW-like stride=%u (pixfmt=0x%x)\n", stride, tx_isp_current_pixfmt);
+    }
 
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x304) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
     writel((width << 16) | height, vic_base + 0x304);
