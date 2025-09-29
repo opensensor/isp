@@ -35,6 +35,10 @@ static u32 cached_sensor_width = 1920;   /* Default fallback */
 static u32 cached_sensor_height = 1080;  /* Default fallback */
 static int sensor_dimensions_cached = 0; /* Flag to indicate if dimensions were read */
 
+/* Forward declarations for callback functions referenced in pipo */
+static int ispvic_frame_channel_qbuf(void *arg1, void *arg2);
+int ispvic_frame_channel_clearbuf(void *arg1);
+
 /* Helper function to read sensor dimensions from /proc/jz/sensor/ files */
 static int read_sensor_dimensions(u32 *width, u32 *height)
 {
@@ -3647,9 +3651,7 @@ int tx_isp_vic_remove(struct platform_device *pdev)
 
     return 0;
 }
-/* Forward declarations for callback functions referenced in pipo */
-static int ispvic_frame_channel_qbuf(void *arg1, void *arg2);
-static int ispvic_frame_channel_clearbuf(void *arg1);
+
 
 /* ISPVIC Frame Channel QBUF - EXACT Binary Ninja MCP implementation */
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
@@ -3701,7 +3703,7 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 }
 
 /* ISPVIC Frame Channel Clear Buffer - Binary Ninja MCP reference implementation */
-static int ispvic_frame_channel_clearbuf(void *arg1)
+int ispvic_frame_channel_clearbuf(void *arg1)
 {
     struct tx_isp_vic_device *vic_dev = NULL;
     unsigned long flags;
