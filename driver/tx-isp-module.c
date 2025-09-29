@@ -3571,12 +3571,26 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 struct tx_isp_vic_device *vic = ourISPdev->vic_dev;
                 struct vic_buffer_entry *node = VIC_BUFFER_ALLOC();
                 if (node) {
+                    /* Choose next slot based on current hardware slot to avoid clashes */
                     u32 nslots = vic->active_buffer_count ? ((vic->active_buffer_count > 5) ? 5 : vic->active_buffer_count) : (state->vbm_buffer_count ? ((state->vbm_buffer_count > 5) ? 5 : state->vbm_buffer_count) : 2);
-                    u32 slot = (vic->last_idx + 1) % nslots;
+                    u32 slots[5] = {0};
+                    int j, cur_idx = -1;
+                    u32 current_buffer = 0;
+                    if (vic->vic_regs)
+                        current_buffer = readl(vic->vic_regs + 0x380);
+                    for (j = 0; j < 5 && j < (int)nslots; j++) {
+                        slots[j] = readl(vic->vic_regs + (0x318 + j * 4));
+                        if (slots[j] == current_buffer) cur_idx = j;
+                    }
+                    if (cur_idx < 0) {
+                        cur_idx = (vic->last_idx >= 0 && vic->last_idx < (int)nslots) ? vic->last_idx : 0;
+                    }
+                    u32 slot = (cur_idx + 1) % nslots;
                     node->buffer_addr   = buffer_phys_addr;
                     node->buffer_index  = slot;
                     node->buffer_status = VIC_BUFFER_STATUS_QUEUED;
-                    pr_info("*** Channel %d: QBUF -> enqueue_in_driver slot=%u addr=0x%x ***\n", channel, slot, buffer_phys_addr);
+                    vic->last_idx = slot;
+                    pr_info("*** Channel %d: QBUF -> enqueue_in_driver slot=%u addr=0x%x (cur_idx=%d) ***\n", channel, slot, buffer_phys_addr, cur_idx);
                     {
                         int er = __enqueue_in_driver((void *)node);
                         if (er == -0x203) {

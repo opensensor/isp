@@ -1540,8 +1540,22 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
             struct vic_buffer_entry node;
             memset(&node, 0, sizeof(node));
             {
-                u32 nslots = vic_dev->active_buffer_count ? ((vic_dev->active_buffer_count > 5) ? 5 : vic_dev->active_buffer_count) : 5;
-                u32 slot = (vic_dev->last_idx + 1) % nslots;
+                /* Choose next slot based on current hardware slot to avoid clashes */
+                u32 nslots = vic_dev->active_buffer_count ? ((vic_dev->active_buffer_count > 5) ? 5 : vic_dev->active_buffer_count) : 2;
+                u32 slots[5] = {0};
+                int j, cur_idx = -1;
+                u32 current_buffer = 0;
+                if (vic_dev->vic_regs)
+                    current_buffer = readl(vic_dev->vic_regs + 0x380);
+                for (j = 0; j < 5 && j < nslots; j++) {
+                    slots[j] = readl(vic_dev->vic_regs + (0x318 + j * 4));
+                    if (slots[j] == current_buffer) cur_idx = j;
+                }
+                if (cur_idx < 0) {
+                    /* Fallback to last_idx rotation if current not detectable */
+                    cur_idx = (vic_dev->last_idx >= 0 && vic_dev->last_idx < nslots) ? vic_dev->last_idx : 0;
+                }
+                u32 slot = (cur_idx + 1) % nslots;
                 node.buffer_index = slot;
                 vic_dev->last_idx = slot;
             }
@@ -1551,31 +1565,7 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
             (void) ispvic_frame_channel_qbuf(sd, &node);
         }
 
-        /* Reassert MDMA and stream control with current active_buffer_count */
-        if (vic_dev) {
-            void __iomem *vr = vic_dev->vic_regs;
-            void __iomem *vc = vic_dev->vic_regs_control;
-            u32 n = vic_dev->active_buffer_count;
-            if (n == 0) n = 2; if (n > 5) n = 5;
-            {
-                u32 stream_ctrl = (n << 16) | 0x80000020;
-                if (vr) {
-                    writel(1, vr + 0x308);
-                    writel(~0U, vr + 0x1f0);
-                    writel(~0U, vr + 0x1f4);
-                    writel(stream_ctrl, vr + 0x300);
-                    wmb();
-                }
-                if (vc) {
-                    writel(1, vc + 0x308);
-                    writel(~0U, vc + 0x1f0);
-                    writel(~0U, vc + 0x1f4);
-                    writel(stream_ctrl, vc + 0x300);
-                    wmb();
-                }
-                pr_info("vic_core_ops_ioctl: QBUF reasserted stream_ctrl=0x%x (buffers=%u)\n", stream_ctrl, n);
-            }
-        }
+        /* Keep ISR/stream control stable: do not touch MDMA or 0x300 here */
         return 0;
     }
     else if (cmd == 0x3000005) {  /* TX_ISP_EVENT_BUFFER_ENQUEUE - keep pipeline fed */
@@ -1584,35 +1574,7 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
             /* 1) Program this specific buffer node into VIC via qbuf (arg is node) */
             (void) ispvic_frame_channel_qbuf(sd, arg);
 
-            /* 2) Re-assert MDMA enable and stream control with current buffer count */
-            {
-                struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdev_hostdata(sd);
-                if (vic_dev) {
-                    void __iomem *vr = vic_dev->vic_regs;
-                    void __iomem *vc = vic_dev->vic_regs_control;
-                    u32 buffer_count = vic_dev->active_buffer_count;
-                    if (buffer_count == 0) buffer_count = 2;
-                    if (buffer_count > 5) buffer_count = 5;
-                    u32 stream_ctrl = (buffer_count << 16) | 0x80000020;
-
-                    if (vr) {
-                        /* Keep MDMA on and W1C pending, then assert stream ctrl */
-                        writel(0x1, vr + 0x308);
-                        writel(0xFFFFFFFF, vr + 0x1f0);
-                        writel(0xFFFFFFFF, vr + 0x1f4);
-                        writel(stream_ctrl, vr + 0x300);
-                        wmb();
-                    }
-                    if (vc) {
-                        writel(0x1, vc + 0x308);
-                        writel(0xFFFFFFFF, vc + 0x1f0);
-                        writel(0xFFFFFFFF, vc + 0x1f4);
-                        writel(stream_ctrl, vc + 0x300);
-                        wmb();
-                    }
-                    pr_info("vic_core_ops_ioctl: BUFFER_ENQUEUE reasserted stream_ctrl=0x%x (buffers=%u)\n", stream_ctrl, buffer_count);
-                }
-            }
+            /* Keep stream stable during BUFFER_ENQUEUE: do not touch MDMA or 0x300 here */
             result = 0;
         } else {
             result = -EINVAL;
@@ -3553,18 +3515,10 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         buffer_index = node->buffer_index;
         reg_offset = (buffer_index + 0xc6) << 2;  /* 0x318..0x328 */
 
-        /* Enter CONFIG state before programming buffer slots, then back to RUN */
-        if (vic_dev->vic_regs) writel(2, vic_dev->vic_regs + 0x0);
-        if (vic_dev->vic_regs_control) writel(2, vic_dev->vic_regs_control + 0x0);
-        wmb();
-
+        /* Program slot address while streaming (no CONFIG/RUN toggle) */
         writel(buffer_addr, vic_dev->vic_regs + reg_offset);
         if (vic_dev->vic_regs_control)
             writel(buffer_addr, vic_dev->vic_regs_control + reg_offset);
-        wmb();
-
-        if (vic_dev->vic_regs) writel(1, vic_dev->vic_regs + 0x0);
-        if (vic_dev->vic_regs_control) writel(1, vic_dev->vic_regs_control + 0x0);
         wmb();
 
         pr_info("*** VIC QBUF: wrote slot %u addr=0x%x to reg_off=0x%x (CONFIG->RUN) ***\n", buffer_index, buffer_addr, reg_offset);
