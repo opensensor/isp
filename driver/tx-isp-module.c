@@ -1728,7 +1728,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
             /* Clear pending status (W1C) and set global enable before enabling FD */
             writel(0xFFFFFFFF, base_for_irq + 0x1f0);
             writel(0xFFFFFFFF, base_for_irq + 0x1f4);
-            writel(0xFFFFFFFF, base_for_irq + 0x30c);
+            /* DO NOT touch 0x30c here; suspected global mask clear */
             wmb();
 
             /* Ensure ISP core gate path is open before latching VIC enables */
@@ -1769,10 +1769,9 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                     writel(0xb5742249, vrp + 0x0c);
                     wmb();
 
-                    /* Clear pending + global interrupt enable */
+                    /* Clear pending status only; do NOT touch 0x30c here */
                     writel(0xFFFFFFFF, vrp + 0x1f0);
                     writel(0xFFFFFFFF, vrp + 0x1f4);
-                    writel(0xFFFFFFFF, vrp + 0x30c);
 
                     /* MainMask: unmask FD only; allow all MDMA sub-bits */
                     writel(0xFFFFFFFE, vrp + 0x1e8);
