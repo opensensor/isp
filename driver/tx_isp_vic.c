@@ -1288,6 +1288,13 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x0, vic_regs + 0x14);  /* Start with safe default */
         pr_info("*** BINARY NINJA: reg 0x14 = 0x0 (interrupt config) ***\n");
 
+        /* CRITICAL FIX: Register 0x18 - Timing parameter (MUST be 0xf00 for MIPI) */
+        /* From vic_control_limit_analysis.md: This register MUST NOT be overwritten */
+        /* Reference driver always uses 0xf00 for MIPI - this prevents control limit error */
+        writel(0xf00, vic_regs + 0x18);
+        wmb();
+        pr_info("*** CRITICAL FIX: reg 0x18 = 0xf00 (timing parameter - prevents control limit error) ***\n");
+
         /* 3. Register 0x100 - Complex calculation for MIPI */
         u32 reg_100_value = 0x1;  /* Basic value for MIPI RAW10 */
         writel(reg_100_value, vic_regs + 0x100);
