@@ -3564,6 +3564,32 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         if (state->vbm_buffer_addresses && buffer.index < 16) {
             pr_info("*** Channel %d: QBUF - VBM buffer slot[%d] available ***\n",
                     channel, buffer.index);
+        /* BN: Enqueue into driver so VIC ring is fed (0x3000005 with node) */
+        do {
+            if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
+                struct tx_isp_vic_device *vic = ourISPdev->vic_dev;
+                struct vic_buffer_entry *node = VIC_BUFFER_ALLOC();
+                if (node) {
+                    u32 nslots = vic->active_buffer_count ? ((vic->active_buffer_count > 5) ? 5 : vic->active_buffer_count) : (state->vbm_buffer_count ? ((state->vbm_buffer_count > 5) ? 5 : state->vbm_buffer_count) : 2);
+                    u32 slot = (vic->last_idx + 1) % nslots;
+                    node->buffer_addr   = buffer_phys_addr;
+                    node->buffer_index  = slot;
+                    node->buffer_status = VIC_BUFFER_STATUS_QUEUED;
+                    pr_info("*** Channel %d: QBUF -> enqueue_in_driver slot=%u addr=0x%x ***\n", channel, slot, buffer_phys_addr);
+                    {
+                        int er = __enqueue_in_driver((void *)node);
+                        if (er == -0x203) {
+                            pr_info("QBUF: enqueue event not wired; fallback to direct vic_core_ops_ioctl\n");
+                            vic_core_ops_ioctl(&vic->sd, 0x3000005, node);
+                        }
+                    }
+                    kfree(node);
+                } else {
+                    pr_warn("QBUF: failed to allocate vic_buffer_entry\n");
+                }
+            }
+        } while (0);
+
         } else {
             pr_warn("*** Channel %d: QBUF - VBM buffer management not initialized ***\n",
                     channel);
@@ -6139,18 +6165,13 @@ static int __enqueue_in_driver(void *buffer_struct)
     /* Buffer state management should use proper struct members */
     /* For now, skip unsafe buffer state manipulation */
 
-    /* Binary Ninja: int32_t result = tx_isp_send_event_to_remote(*($s1 + 0x298), 0x3000005, arg1 + 0x68) */
-    if (s1 && ourISPdev && ourISPdev->vic_dev) {
-        /* Get VIC subdev for event routing */
-        /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
+    /* Route directly to VIC subdev (synchronous call) */
+    if (ourISPdev && ourISPdev->vic_dev) {
         struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
-        /* SAFE: Use proper struct member instead of unsafe offset */
-        void *event_data = buffer_struct;  /* Use the buffer struct itself as event data */
-
-        pr_info("__enqueue_in_driver: Sending BUFFER_ENQUEUE event to VIC\n");
-        result = tx_isp_send_event_to_remote(vic_dev, 0x3000005, event_data);
-
-        /* Binary Ninja: if (result != 0 && result != 0xfffffdfd) */
+        struct tx_isp_subdev *vic_sd = &vic_dev->sd;
+        void *event_data = buffer_struct;  /* BN passes node pointer */
+        pr_info("__enqueue_in_driver: Sending BUFFER_ENQUEUE (0x3000005) to VIC\n");
+        result = tx_isp_send_event_to_remote(vic_sd, 0x3000005, event_data);
         if (result != 0 && result != 0xfffffdfd) {
             pr_err("__enqueue_in_driver: flags = 0x%08x\n", result);
         }
