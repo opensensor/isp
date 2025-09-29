@@ -49,6 +49,39 @@
 #include "../include/tx-libimp.h"
 #include "../include/tx_isp_core_device.h"
 
+#include "../include/tuning_constants.h"  /* Static tuning arrays copied from arrays.txt (subset) */
+
+/* Helper to read little-endian 32-bit from unsigned char arrays */
+static inline uint32_t read_le32_uc(const unsigned char *p)
+{
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
+/* One-time seeding of critical BCSH arrays into tuning_data if they look zeroed */
+static void tisp_prime_arrays_if_needed(struct isp_tuning_data *t)
+{
+    int i;
+    if (!t) return;
+
+    /* If EV list appears empty, seed from arrays.txt */
+    bool ev_zero = true;
+    for (i = 0; i < 9; i++) {
+        if (t->bcsh_au32EvList_now[i] != 0) { ev_zero = false; break; }
+    }
+
+    if (ev_zero) {
+        for (i = 0; i < 9; i++) {
+            t->bcsh_au32EvList_now[i]    = read_le32_uc(&tisp_BCSH_au32EvList[i*4]);
+            t->bcsh_au32SminListS_now[i] = read_le32_uc(&tisp_BCSH_au32SminListS[i*4]);
+            t->bcsh_au32SmaxListS_now[i] = read_le32_uc(&tisp_BCSH_au32SmaxListS[i*4]);
+            t->bcsh_au32SminListM_now[i] = read_le32_uc(&tisp_BCSH_au32SminListM[i*4]);
+            t->bcsh_au32SmaxListM_now[i] = read_le32_uc(&tisp_BCSH_au32SmaxListM[i*4]);
+        }
+        pr_info("[tuning] Seeded BCSH EV/S lists from arrays.txt (first EV=%u, last EV=%u)\n",
+                t->bcsh_au32EvList_now[0], t->bcsh_au32EvList_now[8]);
+    }
+}
+
 /* Forward declaration for exported ISP event callback array */
 extern struct tx_isp_dev *ourISPdev;
 
@@ -3629,6 +3662,9 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         ret = 0;  /* Success - just enable tuning without hardware reset */
 
                         ourISPdev->core_dev->tuning_enabled = 3;
+                        /* Seed static arrays once tuning is enabled and data exists */
+                        if (ourISPdev->core_dev->tuning_data)
+                            tisp_prime_arrays_if_needed((struct isp_tuning_data *)ourISPdev->core_dev->tuning_data);
                         auto_init_done = true;  /* Mark as auto-initialized */
                         pr_info("isp_core_tunning_unlocked_ioctl: ISP tuning enabled\n");
                     } else {
@@ -10721,6 +10757,9 @@ void *isp_core_tuning_init(void *arg1)
     pr_info("isp_core_tuning_init: Tuning data structure initialized at %p\n", tuning_data);
     pr_info("isp_core_tuning_init: Structure size: %zu bytes (vs Binary Ninja 0x40d0)\n", sizeof(struct isp_tuning_data));
     pr_info("*** SAFE: mode_flag properly initialized using struct member access ***\n");
+
+    /* Seed static tuning arrays (BCSH EV/S lists) if needed */
+    tisp_prime_arrays_if_needed(tuning_data);
 
     return tuning_data;
 }
