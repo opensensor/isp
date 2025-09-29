@@ -1595,9 +1595,9 @@ static void restore_isp_control_interrupt_registers_after_reset(void)
     writel(0x1010001,   core_regs + 0x989c);  /* ISP interrupt configuration */
     writel(0x1010001,   core_regs + 0x98a8);  /* ISP interrupt configuration */
 
-    /* Also restore VIC Control registers for interrupt generation */
-    writel(0x200,       core_regs + 0x9ac0);  /* VIC Control - interrupt related */
-    writel(0x200,       core_regs + 0x9ac8);  /* VIC Control - interrupt related */
+    /* Also restore VIC->ISP core gate routing (observed working values) */
+    writel(0x00000001, core_regs + 0x9ac0);  /* CORE GATE 0: route enabled */
+    writel(0x00000000, core_regs + 0x9ac8);  /* CORE GATE 1: route disabled */
     wmb();
 
     /* Read-back verification to confirm the gate values stuck */
@@ -1605,10 +1605,10 @@ static void restore_isp_control_interrupt_registers_after_reset(void)
         u32 g0 = readl(core_regs + 0x9ac0);
         u32 g1 = readl(core_regs + 0x9ac8);
         pr_info("*** CRITICAL: ISP Control interrupt registers restored - hardware should now generate interrupts (9ac0=0x%08x, 9ac8=0x%08x) ***\n", g0, g1);
-        if (g0 != 0x200 || g1 != 0x200) {
-            pr_warn("restore_isp_control_interrupt_registers_after_reset: gate readback not 0x200, re-writing 0x200 to 9ac0/9ac8\n");
-            writel(0x200, core_regs + 0x9ac0);
-            writel(0x200, core_regs + 0x9ac8);
+        if (g0 != 0x00000001 || g1 != 0x00000000) {
+            pr_warn("restore_isp_control_interrupt_registers_after_reset: gate readback not 1/0, re-writing 1/0 to 9ac0/9ac8\n");
+            writel(0x00000001, core_regs + 0x9ac0);
+            writel(0x00000000, core_regs + 0x9ac8);
             wmb();
             pr_info("restore_isp_control_interrupt_registers_after_reset: re-read 9ac0=0x%08x 9ac8=0x%08x\n",
                     readl(core_regs + 0x9ac0), readl(core_regs + 0x9ac8));
@@ -1848,6 +1848,13 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 void __iomem *core = ourISPdev->core_dev->core_regs;
                 u32 g0 = readl(core + 0x9ac0);
                 u32 g1 = readl(core + 0x9ac8);
+                if (g0 != 0x00000001 || g1 != 0x00000000) {
+                    writel(0x00000001, core + 0x9ac0);
+                    writel(0x00000000, core + 0x9ac8);
+                    wmb();
+                    g0 = readl(core + 0x9ac0);
+                    g1 = readl(core + 0x9ac8);
+                }
                 printk(KERN_ALERT "*** VIC IRQ: CORE GATES [9ac0]=0x%x [9ac8]=0x%x ***\n", g0, g1);
             }
         } while (0);
