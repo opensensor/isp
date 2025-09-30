@@ -1,0 +1,53 @@
+========================================
+ISP DRIVER TEST ANALYSIS
+========================================
+
+Timestamp: 20250930_185236
+Build: c3fe7437719ef4ee676e05994197ca90
+
+=== KEY METRICS ===
+VIC START messages: 0
+0
+VIN linked: 13
+VIN input configured: 0
+0
+CSI input configured: 0
+0
+VIC input configured: 0
+0
+Complete pipeline configured: 0
+0
+Control limit errors: 0
+0
+Frame done interrupts: 
+
+=== INTERRUPT COUNTS ===
+ 37:          0   jz-intc  isp-m0
+ 37:          0   jz-intc  isp-m0
+
+=== PIPELINE CONFIGURATION ===
+
+=== ERRORS ===
+[    0.000000] CPU0 RESET ERROR PC:801ADC84
+[    0.121582] jz-dwc2 jz-dwc2: cgu clk gate get error
+[   18.867407] tx_isp_subdev_init: request_mem_region failed for isp-w02 (0x10023000-0x10023fff)
+[   18.867881] Failed to init isp module(131072.394)
+[   18.868300] isp-w02: probe of isp-w02 failed with error -14
+[    0.000000] CPU0 RESET ERROR PC:801ADC84
+[    0.121582] jz-dwc2 jz-dwc2: cgu clk gate get error
+[   18.867407] tx_isp_subdev_init: request_mem_region failed for isp-w02 (0x10023000-0x10023fff)
+[   18.867881] Failed to init isp module(131072.394)
+[   18.868300] isp-w02: probe of isp-w02 failed with error -14
+[    0.000000] CPU0 RESET ERROR PC:801ADC84
+[    0.121582] jz-dwc2 jz-dwc2: cgu clk gate get error
+[   18.867407] tx_isp_subdev_init: request_mem_region failed for isp-w02 (0x10023000-0x10023fff)
+[   18.867881] Failed to init isp module(131072.394)
+[   18.868300] isp-w02: probe of isp-w02 failed with error -14
+[   20.070478] TX_ISP_SENSOR_ENUM_INPUT: No sensor at index 1 - returning error to end enumeration
+[    0.000000] CPU0 RESET ERROR PC:801ADC84
+[    0.121582] jz-dwc2 jz-dwc2: cgu clk gate get error
+[   18.867407] tx_isp_subdev_init: request_mem_region failed for isp-w02 (0x10023000-0x10023fff)
+[   18.867881] Failed to init isp module(131072.394)
+
+=== KEY REGISTER WRITES ===
+
