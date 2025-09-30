@@ -492,7 +492,11 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0x10) = 1 */
                         pr_info("*** CSI MIPI: CRITICAL - Enabling CSI PHY: CSI[0x10] = 1 ***\n");
+                        pr_info("*** CSI DEBUG: csi_dev=%p, csi_regs=%p ***\n", csi_dev, csi_dev->csi_regs);
                         writel(1, csi_dev->csi_regs + 0x10);
+                        wmb(); /* Memory barrier to ensure write completes */
+                        u32 readback = readl(csi_dev->csi_regs + 0x10);
+                        pr_info("*** CSI MIPI: PHY write complete - readback CSI[0x10] = 0x%08x (expected 0x1) ***\n", readback);
                         pr_info("*** CSI MIPI: PHY ENABLED - MIPI data should now flow from sensor! ***\n");
 
                         /* Binary Ninja: private_msleep(0xa) */
