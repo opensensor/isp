@@ -3166,6 +3166,18 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
         /* Binary Ninja: $v0 = 0 */
         ret = 0;
 
+        /* CRITICAL FIX: Prevent multiple VIC re-initializations during streaming */
+        /* If VIC is already in state 3 (INITIALIZED) or 4 (STREAMING), don't re-initialize */
+        if (current_state >= 3) {
+            pr_info("*** vic_core_s_stream: VIC already initialized (state=%d), skipping re-initialization ***\n", current_state);
+            /* Just transition to streaming state if not already there */
+            if (current_state != 4) {
+                vic_dev->state = 4;
+                pr_info("*** vic_core_s_stream: State %d -> 4 (STREAMING) ***\n", current_state);
+            }
+            return 0;
+        }
+
         /* EXACT Binary Ninja MCP reference logic */
         /* Binary Ninja: if ($v1_3 != 4) */
         if (current_state != 4) {
