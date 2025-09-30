@@ -3413,12 +3413,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     writel(0xFFFFFFFF, vr + 0x1f0);
                     writel(0xFFFFFFFF, vr + 0x1f4);
                     wmb();
-                    /* CRITICAL FIX: Match continuous-interrupts mask - ONLY frame-done enabled */
-                    /* continuous-interrupts uses 0xFFFFFFFE (only bit 0 enabled) */
-                    /* DO NOT enable bit 21 (control limit) - it causes control limit errors! */
-                    writel(0xFFFFFFFE, vr + 0x1e8);
+                    /* Set MainMask to allow frame-done + bit21 to see what's actually happening */
+                    writel(0xFFDFFFFE, vr + 0x1e8);
                     wmb();
-                    pr_info("*** CRITICAL FIX: Set interrupt mask=0xFFFFFFFE (frame-done ONLY, control limit MASKED) ***\n");
+                    pr_info("*** VIC MASK: Set MainMask=0xFFDFFFFE (frame-done + bit21) before RUN ***\n");
                 }
 
             /* VIC CONTROL: enter RUN state after all config (write 1) */
