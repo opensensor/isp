@@ -1075,6 +1075,29 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
+    /* CRITICAL: MAGIC UNLOCK SEQUENCE from reference-trace.txt! */
+    /* ISP isp-w01: [CSI PHY Control] write at offset 0x0: 0x0 -> 0x3130322a */
+    /* isp-w01 is VIC control space at 0x10023000 */
+    /* This magic unlock enables CSI/VIC hardware! */
+    if (vic_dev->vic_regs_control) {
+        pr_info("*** VIC MAGIC UNLOCK: Writing 0x3130322a to VIC_CONTROL[0x0] ***\n");
+        writel(0x3130322a, vic_dev->vic_regs_control + 0x0);
+        wmb();
+        msleep(1);
+        u32 unlock_readback = readl(vic_dev->vic_regs_control + 0x0);
+        pr_info("*** VIC MAGIC UNLOCK: Readback = 0x%08x (expected 0x3130322a) ***\n", unlock_readback);
+
+        /* Also write the other values from trace */
+        /* ISP isp-w01: [CSI PHY Control] write at offset 0x4: 0x0 -> 0x1 */
+        writel(0x1, vic_dev->vic_regs_control + 0x4);
+        /* ISP isp-w01: [CSI PHY Control] write at offset 0x14: 0x0 -> 0x200 */
+        writel(0x200, vic_dev->vic_regs_control + 0x14);
+        wmb();
+        pr_info("*** VIC MAGIC UNLOCK: Complete - VIC control registers initialized ***\n");
+    } else {
+        pr_warn("*** VIC MAGIC UNLOCK: WARNING - vic_regs_control is NULL! ***\n");
+    }
+
     /* Calculate base addresses for register blocks */
     void __iomem *main_isp_base = vic_regs - 0x9a00;
     void __iomem *csi_base = main_isp_base + 0x10000;

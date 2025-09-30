@@ -431,8 +431,8 @@ struct platform_device tx_isp_vic_platform_device = {
 /* CSI platform device resources - NO IRQ (CSI doesn't need separate IRQ) */
 static struct resource tx_isp_csi_resources[] = {
     [0] = {
-        .start = 0x10023000,           /* CRITICAL FIX: T31 CSI base address from reference-trace.txt! */
-        .end   = 0x10023FFF,           /* T31 CSI end address */
+        .start = 0x10022000,           /* T31 CSI PHY base address (isp-csi in trace) */
+        .end   = 0x10022FFF,           /* T31 CSI end address */
         .flags = IORESOURCE_MEM,
         .name = "mipi-phy",            /* EXACT name from stock driver */
     },
