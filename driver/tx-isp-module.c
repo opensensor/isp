@@ -2731,6 +2731,20 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
     if (enable == 1) {  /* Stream ON - initialize subdevs first */
         pr_info("*** tx_isp_video_s_stream: CRITICAL FIX - Initializing all subdevs before streaming ***\n");
 
+        /* CRITICAL FIX: Activate VIN FIRST before any s_stream calls */
+        /* VIN must transition 1→2 via activate_module BEFORE s_stream sets it to 4 */
+        if (dev->vin_dev) {
+            struct tx_isp_vin_device *vin_dev = (struct tx_isp_vin_device *)dev->vin_dev;
+            if (vin_dev->state == 1) {
+                pr_info("*** tx_isp_video_s_stream: Activating VIN subdev (state 1 -> 2) BEFORE any streaming ***\n");
+                extern int tx_isp_vin_activate_subdev(void* arg1);
+                tx_isp_vin_activate_subdev(vin_dev);
+                pr_info("*** tx_isp_video_s_stream: VIN activation done, state=%d ***\n", vin_dev->state);
+            } else {
+                pr_info("*** tx_isp_video_s_stream: VIN already in state %d, skipping activation ***\n", vin_dev->state);
+            }
+        }
+
         /* Initialize subdevs in proper order using helper functions: Core → CSI → VIC → Sensors */
         struct tx_isp_subdev *csi_sd = tx_isp_get_csi_subdev(dev);
         struct tx_isp_subdev *vic_sd = tx_isp_get_vic_subdev(dev);
