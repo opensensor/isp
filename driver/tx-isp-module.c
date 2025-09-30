@@ -1754,7 +1754,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
             writel(0x00000000, base_for_irq + 0x24);   /* IMR1 baseline */
             writel(0x07800438, base_for_irq + 0x04);   /* IMR routing/mask */
             writel(0xb5742249, base_for_irq + 0x0c);   /* IMCR key */
-            writel(0xFFFFFFFE, base_for_irq + 0x1e8);  /* MainMask: unmask FD */
+            writel(0xFFDFFFFF, base_for_irq + 0x1e8);  /* MainMask: enable FD (bit 0), mask control limit (bit 21) */
             writel(0xFFFFFFFF, base_for_irq + 0x1ec);  /* SubMask: allow all MDMA sub-bits */
             /* skip 0x1e4 group enable (status/W1C) */  /* was: writel(0x0000000F, base_for_irq + 0x1e4); */
             /* Do NOT write 0x1e0 here; 0x1e0 is status, not an enable */
@@ -1776,8 +1776,8 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                     writel(0xFFFFFFFF, vrp + 0x1f0);
                     writel(0xFFFFFFFF, vrp + 0x1f4);
 
-                    /* MainMask: unmask FD only; allow all MDMA sub-bits */
-                    writel(0xFFFFFFFE, vrp + 0x1e8);
+                    /* MainMask: enable FD (bit 0), mask control limit (bit 21) */
+                    writel(0xFFDFFFFF, vrp + 0x1e8);
                     writel(0xFFFFFFFF, vrp + 0x1ec);
 
                     /* Enable GROUP first; do NOT touch 0x1e0 (status) */
@@ -1796,8 +1796,8 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                     writel(0xFFFFFFFF, vrc + 0x1f0);
                     writel(0xFFFFFFFF, vrc + 0x1f4);
 
-                    /* MainMask: unmask FD only; allow all MDMA sub-bits */
-                    writel(0xFFFFFFFE, vrc + 0x1e8);
+                    /* MainMask: enable FD (bit 0), mask control limit (bit 21) */
+                    writel(0xFFDFFFFF, vrc + 0x1e8);
                     writel(0xFFFFFFFF, vrc + 0x1ec);
 
                     /* Enable GROUP first; do NOT touch 0x1e0 (status) */
@@ -1830,7 +1830,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                             u32 saved_ctrl = readl(b + 0x300);
 
                             writel(2, b + 0x0); wmb(); /* CONFIG */
-                            writel(0xFFFFFFFE, b + 0x1e8);
+                            writel(0xFFDFFFFF, b + 0x1e8);  /* Enable FD, mask control limit */
                             writel(0xFFFFFFFF, b + 0x1ec);
                             /* skip 0x1e4 group enable (status/W1C) */  /* was: writel(0x0000000F, b + 0x1e4); */
                             /* Do NOT write 0x1e0 (status) here */
@@ -2242,8 +2242,8 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 wmb();
 
                 /* Restore interrupt masks/enables like working reference */
-                writel(0xFFFFFFFE, vr + 0x1e8); /* MainMask: unmask FD */
-                if (vc) writel(0xFFFFFFFE, vc + 0x1e8);
+                writel(0xFFDFFFFF, vr + 0x1e8); /* MainMask: enable FD, mask control limit */
+                if (vc) writel(0xFFDFFFFF, vc + 0x1e8);
                 /* Ensure FD enabled in both banks */
                 {
                     u32 en0 = readl(vr + 0x1e0) | 0x1;

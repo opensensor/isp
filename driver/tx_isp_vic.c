@@ -497,10 +497,14 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             /* NOT the hardware slot number, but the position in the buffer queue */
 
             u32 buffer_position = (cur_idx >= 0) ? cur_idx : 0;  /* Position in buffer list */
-            u32 control_update = (buffer_position << 16);
+            /* CRITICAL FIX: Mask buffer_position to 4 bits (0-15) to prevent overflow into bit 17 */
+            /* When buffer_position=2, (2<<16)=0x00020000 which sets bit 17 (control limit enable)! */
+            u32 control_update = ((buffer_position & 0xF) << 16);
 
             u32 current_ctrl = readl(vic_base + 0x300);
-            u32 new_ctrl = (current_ctrl & 0xFFF0FFFF) | control_update;
+            /* CRITICAL FIX: Clear bit 17 (0x00020000) in addition to bits 16-19 to prevent control limit errors */
+            /* Mask 0xFFFDFFFF clears bits 16-19 AND bit 17 */
+            u32 new_ctrl = (current_ctrl & 0xFFFDFFFF) | control_update;
 
             /* CRITICAL FIX: Only write to PRIMARY VIC space (0x133e0000) */
             /* vic_regs_control (0x10023000) is CSI PHY, NOT VIC registers! */
@@ -2783,9 +2787,11 @@ static u32 vic_mdma_enable_complete(struct tx_isp_vic_device *vic_dev, u32 width
     vic_dev->active_buffer_count = arg4;
     pr_info("*** vic_mdma_enable_complete: Set active_buffer_count = %d ***\n", arg4);
 
-    /* CRITICAL: Enable hardware buffer management mode - Binary Ninja MCP architecture */
-    vic_dev->processing = true;  /* *(arg1 + 0x214) = true enables hardware buffer management */
-    pr_info("*** vic_mdma_enable_complete: ENABLED hardware buffer management mode (processing=true) ***\n");
+    /* CRITICAL FIX: Keep processing = 0 to match working version behavior */
+    /* When processing = 0, frame done handler skips buffer index updates that cause bit 17 issues */
+    /* The working version does NOT set processing = 1 in vic_mdma_enable */
+    vic_dev->processing = 0;  /* Keep at 0 - working version behavior */
+    pr_info("*** vic_mdma_enable_complete: processing = 0 (matching working version - no buffer index updates) ***\n");
 
     /* Binary Ninja: Basic register setup */
     writel(1, vic_regs + 0x308);
@@ -2837,8 +2843,11 @@ static u32 vic_mdma_enable_complete(struct tx_isp_vic_device *vic_dev, u32 width
     /* The VIC hardware gets stuck on slot 2 and never advances automatically */
     /* We need to manually set the initial buffer index to 0 and advance it in frame done handler */
 
-    /* Use base control value with manually managed buffer index starting at 0 */
-    control_value = 0x80000020 | arg6;  /* Base control + format */
+    /* CRITICAL FIX: Use 0x80000020 (NOT 0x80020020) to disable control limit protection
+     * Bit 17 (0x20000) enables hardware control limit checking which causes error interrupts
+     * Working version uses 0x80000020 without bit 17 set
+     */
+    control_value = 0x80000020 | arg6;  /* Base control + format (NO control limit bit) */
     /* Set initial buffer index to 0 (bits 16-19) for manual buffer cycling */
     control_value |= (0 << 16);  /* Start with buffer index 0 */
 
@@ -2847,10 +2856,10 @@ static u32 vic_mdma_enable_complete(struct tx_isp_vic_device *vic_dev, u32 width
 
     /* CRITICAL FIX: Also write to CONTROL space with manual buffer index management */
     if (vic_dev->vic_regs_control) {
-        u32 control_final = (0x80000020 | arg6) | (0 << 16);  /* Start with buffer index 0 */
+        u32 control_final = (0x80000020 | arg6) | (0 << 16);  /* Start with buffer index 0 (NO control limit bit) */
         writel(control_final, vic_dev->vic_regs_control + 0x300);
         wmb();
-        pr_info("*** vic_mdma_enable_complete: MANUAL buffer index management PRIMARY=0x%x CONTROL=0x%x ***\n",
+        pr_info("*** vic_mdma_enable_complete: MANUAL buffer index management PRIMARY=0x%x CONTROL=0x%x (control limit DISABLED) ***\n",
                 control_value, control_final);
     }
 
@@ -3290,10 +3299,11 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Clear pending (W1C) */
                 writel(0xFFFFFFFF, vr + 0x1f0);
                 writel(0xFFFFFFFF, vr + 0x1f4);
-                /* CRITICAL FIX: Mask control limit error (bit 21 = 1), only allow frame done (bit 0 = 0) */
-                /* Reference driver does NOT enable control limit error interrupts */
-                writel(0xFFFFFFFE, vr + 0x1e8); /* allow ONLY frame-done, mask control limit error */
-                pr_info("*** CRITICAL FIX: Set interrupt mask=0xFFFFFFFE (frame-done ONLY, control limit MASKED) ***\n");
+                /* CRITICAL FIX: VIC interrupt mask register - 1=ENABLED, 0=MASKED */
+                /* We want: bit 0 (frame done) = ENABLED, bit 21 (control limit) = MASKED */
+                /* 0xFFDFFFFF = all bits set except bit 21 (control limit error masked) */
+                writel(0xFFDFFFFF, vr + 0x1e8); /* Enable frame done, mask control limit error */
+                pr_info("*** CRITICAL FIX: Set interrupt mask=0xFFDFFFFF (frame-done ENABLED, control limit MASKED) ***\n");
                 /* Leave 0x1ec (MDMA mask) as-is per working reference */
                 /* DO NOT touch 0x30c here; suspected global mask/enable */
                 wmb();
@@ -3363,10 +3373,11 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     writel(0xFFFFFFFF, vr + 0x1f0);
                     writel(0xFFFFFFFF, vr + 0x1f4);
                     wmb();
-                    /* Set MainMask to allow frame-done + bit21 to see what's actually happening */
-                    writel(0xFFDFFFFE, vr + 0x1e8);
+                    /* CRITICAL FIX: Enable frame done (bit 0 = 1), mask control limit (bit 21 = 0) */
+                    writel(0xFFDFFFFF, vr + 0x1e8);
                     wmb();
-                    pr_info("*** VIC MASK: Set MainMask=0xFFDFFFFE (frame-done + bit21) before RUN ***\n");
+                    u32 readback_mask = readl(vr + 0x1e8);
+                    pr_info("*** VIC MASK: Set MainMask=0xFFDFFFFF, readback=0x%08x (frame-done ENABLED, control limit MASKED) before RUN ***\n", readback_mask);
                 }
 
             /* VIC CONTROL: enter RUN state after all config (write 1) */
@@ -3374,7 +3385,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 void __iomem *vr = vic_dev->vic_regs;
                 writel(1, vr + 0x0);
                 wmb();
-                pr_info("*** VIC CONTROL (PRIMARY): WROTE 1 to [0x0] before enabling IRQ ***\n");
+                u32 mask_after_run = readl(vr + 0x1e8);
+                pr_info("*** VIC CONTROL (PRIMARY): WROTE 1 to [0x0], mask after RUN=0x%08x ***\n", mask_after_run);
             /* Post-RUN re-arm: commit dance so enables latch without touching masks */
                 /* Program PRIMARY IMR/IMCR routing once (match good-things), no re-arm */
                 if (vic_dev && vic_dev->vic_regs) {
@@ -3507,6 +3519,21 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     writel(saved_vic_imcr, vic_dev->vic_regs + 0x1ec);
                     wmb();
                     pr_info("*** VIC STATE 4: Restored VIC interrupt registers after slake module ***\n");
+                }
+
+                /* CRITICAL FIX: Re-enable VIC interrupts at kernel level after slake module disabled them */
+                /* The slake module calls tx_vic_disable_irq which calls disable_irq() */
+                /* We need to call enable_irq() to re-enable interrupts at kernel level */
+                if (vic_dev->irq > 0) {
+                    pr_info("*** VIC STATE 4: Re-enabling VIC interrupt (IRQ %d) at kernel level after slake module ***\n", vic_dev->irq);
+                    enable_irq(vic_dev->irq);
+                    vic_dev->irq_enabled = 1;  /* Update flag */
+                    pr_info("*** VIC STATE 4: VIC interrupt (IRQ %d) RE-ENABLED at kernel level ***\n", vic_dev->irq);
+                } else if (vic_dev->sd.irq_info.irq > 0) {
+                    pr_info("*** VIC STATE 4: Re-enabling VIC interrupt (IRQ %d) from irq_info at kernel level after slake module ***\n", vic_dev->sd.irq_info.irq);
+                    enable_irq(vic_dev->sd.irq_info.irq);
+                    vic_dev->irq_enabled = 1;  /* Update flag */
+                    pr_info("*** VIC STATE 4: VIC interrupt (IRQ %d) RE-ENABLED at kernel level ***\n", vic_dev->sd.irq_info.irq);
                 }
 
                 /* CRITICAL: Ensure VIC remains in streaming mode */
