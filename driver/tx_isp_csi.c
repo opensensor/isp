@@ -846,12 +846,13 @@ int tx_isp_csi_probe(struct platform_device *pdev)
         /* CRITICAL FIX: isp_csi_regs should point to CSI SHADOW registers in ISP Core space! */
         /* Based on user insight: manufacturer uses shadow registers in ISP space to obscure architecture */
         /* Binary Ninja shows writes to isp_csi_regs + 0x0, 0x128, 0x160, 0x1e0, 0x260 */
-        /* These are CSI control shadow registers within the ISP Core, likely at offset 0x10000 */
+        /* These are CSI control shadow registers within the ISP Core */
+        /* Let's try ISP Core + 0x20000 (common offset for CSI in many ISP designs) */
         extern struct tx_isp_dev *ourISPdev;
         if (ourISPdev && ourISPdev->core_regs) {
-            /* Try ISP Core + 0x10000 as CSI shadow register base */
-            csi_dev->isp_csi_regs = ourISPdev->core_regs + 0x10000;
-            pr_info("*** CSI PROBE: isp_csi_regs (offset 0x13c) mapped to ISP CORE + 0x10000 (CSI SHADOW): %p ***\n", csi_dev->isp_csi_regs);
+            /* Try ISP Core + 0x20000 as CSI shadow register base */
+            csi_dev->isp_csi_regs = ourISPdev->core_regs + 0x20000;
+            pr_info("*** CSI PROBE: isp_csi_regs (offset 0x13c) mapped to ISP CORE + 0x20000 (CSI SHADOW): %p ***\n", csi_dev->isp_csi_regs);
         } else {
             pr_err("*** CSI PROBE: ERROR - ISP Core registers not available! ***\n");
             csi_dev->isp_csi_regs = csi_dev->sd.regs;
