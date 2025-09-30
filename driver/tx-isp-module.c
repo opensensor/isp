@@ -1999,101 +1999,10 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                     }
                 } while (0);
             } else {
+                /* Binary Ninja MCP: No frame done interrupt - just log it */
                 printk(KERN_ALERT "*** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***\n");
-                /* Fallback path: if control limit error is set, advance frame processing like continuous-interrupts */
-                if ((v1_7 & 0x200000) != 0) {
-                    printk(KERN_ALERT "*** VIC FALLBACK: control-limit set without FD; invoking vic_framedone_irq_function and FS wakeups ***\n");
-                    /* Increment counters to keep /proc in sync */
-                    vic_dev->frame_count++;
-                    if (isp_dev && isp_dev->core_dev)
-                        isp_dev->core_dev->frame_count++;
-
-                    /* Call frame-done handler to rotate buffers and keep DMA moving */
-                    vic_framedone_irq_function(vic_dev);
-
-                    /* Binary Ninja MCP: DO NOT call vic_mdma_irq_function in fallback - only on MDMA interrupts */
-                    printk(KERN_ALERT "*** VIC FALLBACK: Control limit error processed - MDMA function will be called only if MDMA interrupts are set ***\n");
-
-                    /* Proactively rotate VIC MDMA ring by one slot to simulate consumption */
-                    do {
-                        void __iomem *vrb = vic_dev->vic_regs;
-                        void __iomem *vcb = vic_dev->vic_regs_control;
-                        u32 bufs[5];
-                        int i, idx = -1;
-                        u32 cur = readl(vrb + 0x380);
-                        for (i = 0; i < 5; i++) {
-                            bufs[i] = readl(vrb + (0x318 + i * 4));
-                            if (bufs[i] == cur) idx = i;
-                        }
-                        if (idx >= 0) {
-                            u32 rot[5];
-                            for (i = 0; i < 5; i++) rot[i] = bufs[(idx + 1 + i) % 5];
-                            for (i = 0; i < 5; i++) {
-                                u32 off = 0x318 + i * 4;
-                                writel(rot[i], vrb + off);
-                                if (vcb) writel(rot[i], vcb + off);
-                            }
-                            /* Also set count and index nibble to next slot, latched via CONFIG->RUN */
-                            {
-                                u32 count = vic_dev->active_buffer_count ? vic_dev->active_buffer_count : 5;
-                                if (count > 5) count = 5;
-                                u32 next_idx = (idx + 1) % count;
-                                /* CONFIG */
-                                writel(0x2, vrb + 0x0);
-                                if (vcb) writel(0x2, vcb + 0x0);
-                                wmb();
-                                /* Program stream control */
-                                u32 stream_ctrl = (count << 16) | 0x80000020;
-                                writel(stream_ctrl, vrb + 0x300);
-                                if (vcb) writel(stream_ctrl, vcb + 0x300);
-                                u32 reg2 = readl(vrb + 0x300);
-                                reg2 = (reg2 & 0xfff0ffff) | ((next_idx & 0xF) << 16);
-                                writel(reg2, vrb + 0x300);
-                                if (vcb) writel(reg2, vcb + 0x300);
-                                /* RUN */
-                                writel(0x1, vrb + 0x0);
-                                if (vcb) writel(0x1, vcb + 0x0);
-                                wmb();
-                                printk(KERN_ALERT "*** VIC RING ROTATE: current=0x%x idx=%d -> next_idx=%u, wrote 0x300=0x%x ***\n", cur, idx, next_idx, reg2);
-                            }
-                        }
-                    } while (0);
-
-                    /* Notify core and frame channels to avoid pipeline stall */
-                    do {
-                        extern struct frame_channel_device frame_channels[];
-                        extern int num_channels;
-                        int i;
-
-                        isp_frame_done_wakeup();
-                        for (i = 0; i < num_channels; i++) {
-                            struct frame_channel_device *fcd = &frame_channels[i];
-                            unsigned long flags_local;
-                            if (!fcd || !fcd->state.streaming)
-                                continue;
-                            spin_lock_irqsave(&fcd->state.buffer_lock, flags_local);
-                            if (!fcd->state.frame_ready) {
-                                fcd->state.frame_ready = true;
-                                wake_up_interruptible(&fcd->state.frame_wait);
-                                printk(KERN_ALERT "*** VIC FALLBACK: frame_ready signaled to frame channel %d ***\n", i);
-                            }
-                            spin_unlock_irqrestore(&fcd->state.buffer_lock, flags_local);
-
-                        /* REMOVED: VIC RECOVERY system - not in Binary Ninja MCP reference driver */
-                        /* This recovery system was actively corrupting the VIC control register */
-                        /* and resetting the VIC hardware, causing control limit errors */
-                        /* The Binary Ninja MCP reference driver does not have this recovery logic */
-
-                        /* Simply increment stall count for logging but do not reset VIC hardware */
-                        nofd_limit_stall_count++;
-                        if (nofd_limit_stall_count >= 3) {
-                            printk(KERN_ALERT "*** VIC: 3 consecutive control-limit stalls detected (recovery disabled - following Binary Ninja MCP reference) ***\n");
-                            nofd_limit_stall_count = 0;  /* Reset counter */
-                        }
-
-                        }
-                    } while (0);
-                }
+                /* Binary Ninja MCP reference: NO fallback processing for control limit errors */
+                /* Control limit errors indicate configuration issues that must be fixed, not worked around */
             }
 
             /* Binary Ninja: Error handling for frame asfifo overflow */
