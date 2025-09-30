@@ -3245,9 +3245,18 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         /* 0x9a94 already set to 1 earlier; leave as-is */
 
                         /* Now (re)assert the core VIC IRQ gate (working values 1/0) */
+                        pr_info("*** GATE WRITE: About to write 1/0 to gates 0x9ac0/0x9ac8, core=%p ***\n", core);
+                        pr_info("*** GATE WRITE: Before write - [9ac0]=0x%08x [9ac8]=0x%08x ***\n",
+                                readl(core + 0x9ac0), readl(core + 0x9ac8));
+
                         writel(0x00000001, core + 0x9ac0);
+                        wmb();
+                        pr_info("*** GATE WRITE: After writing 1 to 0x9ac0 - [9ac0]=0x%08x ***\n", readl(core + 0x9ac0));
+
                         writel(0x00000000, core + 0x9ac8);
                         wmb();
+                        pr_info("*** GATE WRITE: After writing 0 to 0x9ac8 - [9ac8]=0x%08x ***\n", readl(core + 0x9ac8));
+
                         pr_info("*** CORE VIC ROUTE INIT: [9a00]=0x%08x [9a04]=0x%08x [9a2c]=0x%08x [9a34]=0x%08x [9a88]=0x%08x [9a80]=0x%08x [9a98]=0x%08x; GATE [9ac0]=0x%08x [9ac8]=0x%08x ***\n",
                                 readl(core + 0x9a00), readl(core + 0x9a04), readl(core + 0x9a2c),
                                 readl(core + 0x9a34), readl(core + 0x9a88), readl(core + 0x9a80), readl(core + 0x9a98),
