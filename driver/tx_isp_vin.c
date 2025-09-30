@@ -250,6 +250,15 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
      * }
      */
 
+    /* CRITICAL FIX: Activate VIN if state is 1 before streaming */
+    if (enable != 0 && vin_state == 1) {
+        pr_info("vin_s_stream: VIN state is 1, calling activate_module to transition 1->2\n");
+        extern int tx_isp_vin_activate_subdev(void* arg1);
+        tx_isp_vin_activate_subdev(vin_dev);
+        vin_state = vin_dev->state;  /* Update state after activation */
+        pr_info("vin_s_stream: VIN activation complete, new state=%d\n", vin_state);
+    }
+
     /* Check if we should process or return early */
     int should_process = 0;
     if (enable != 0) {
