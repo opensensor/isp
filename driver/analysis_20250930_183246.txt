@@ -1,0 +1,53 @@
+========================================
+ISP DRIVER TEST ANALYSIS
+========================================
+
+Timestamp: 20250930_183246
+Build: 8b1675ab3f249c66aed0ccb4a70543bc
+
+=== KEY METRICS ===
+VIC START messages: 0
+0
+VIN linked: 2
+VIN input configured: 0
+0
+CSI input configured: 0
+0
+VIC input configured: 0
+0
+Complete pipeline configured: 0
+0
+Control limit errors: 0
+0
+Frame done interrupts: 
+
+=== INTERRUPT COUNTS ===
+ 37:          0   jz-intc  isp-m0
+ 38:          0   jz-intc  isp-w02
+
+=== PIPELINE CONFIGURATION ===
+
+=== ERRORS ===
+[    0.000000] CPU0 RESET ERROR PC:801ADC80
+[    0.121610] jz-dwc2 jz-dwc2: cgu clk gate get error
+[    0.000000] CPU0 RESET ERROR PC:801ADC80
+[    0.121610] jz-dwc2 jz-dwc2: cgu clk gate get error
+[   20.330155] *** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***
+[   20.459578] sensor_write: reg=0xfe val=0x80 FAILED ret=-5
+[   20.459842] sensor_write_array: Failed to write reg 0xfe=0x80 (error -5)
+[   20.460239] sensor_write: reg=0xfe val=0x80 FAILED ret=-5
+[   20.460487] sensor_write_array: Failed to write reg 0xfe=0x80 (error -5)
+[   20.460972] sensor_write: reg=0xfe val=0x80 FAILED ret=-5
+[   20.461224] sensor_write_array: Failed to write reg 0xfe=0x80 (error -5)
+[   20.461623] sensor_write: reg=0xfe val=0x00 FAILED ret=-5
+[   20.461871] sensor_write_array: Failed to write reg 0xfe=0x00 (error -5)
+[   20.462268] sensor_write: reg=0xf2 val=0x00 FAILED ret=-5
+[   20.462515] sensor_write_array: Failed to write reg 0xf2=0x00 (error -5)
+[   20.469173] sensor_write: reg=0xf3 val=0x00 FAILED ret=-5
+[   20.469433] sensor_write_array: Failed to write reg 0xf3=0x00 (error -5)
+[   20.469837] sensor_write: reg=0xf4 val=0x36 FAILED ret=-5
+[   20.470086] sensor_write_array: Failed to write reg 0xf4=0x36 (error -5)
+[   20.470490] sensor_write: reg=0xf5 val=0xc0 FAILED ret=-5
+
+=== KEY REGISTER WRITES ===
+

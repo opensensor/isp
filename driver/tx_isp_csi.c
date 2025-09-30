@@ -503,30 +503,30 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         if (cpm_regs) {
                             pr_info("*** CSI PHY UNLOCK SEQUENCE: START ***\n");
 
-                            /* Step 1: Put CSI PHY into reset/bypass mode (similar to DDR DLL reset) */
-                            /* Try CPM offset 0xD4 (CSI Control Register - CSCR) */
-                            u32 cscr = readl(cpm_regs + 0xD4);
-                            pr_info("*** CPM_CSCR (0xD4) BEFORE: 0x%08x ***\n", cscr);
+                            /* Step 1: Try multiple potential CSI control registers */
+                            /* Check CPM 0xE0, 0xE4, 0xE8 for CSI/MIPI control */
+                            u32 reg_e0 = readl(cpm_regs + 0xE0);
+                            u32 reg_e4 = readl(cpm_regs + 0xE4);
+                            u32 reg_e8 = readl(cpm_regs + 0xE8);
+                            pr_info("*** CPM[0xE0]=0x%08x, CPM[0xE4]=0x%08x, CPM[0xE8]=0x%08x ***\n", reg_e0, reg_e4, reg_e8);
 
-                            /* Set bit 1 to put CSI PHY in reset (similar to DDR_DRCG[1]) */
-                            cscr |= (1 << 1);
-                            writel(cscr, cpm_regs + 0xD4);
+                            /* Try writing to 0xE0 with CSI PHY enable pattern */
+                            writel(0x00000001, cpm_regs + 0xE0);  /* Enable CSI PHY */
                             wmb();
                             msleep(1);
 
-                            pr_info("*** CPM_CSCR (0xD4) RESET MODE: 0x%08x ***\n", readl(cpm_regs + 0xD4));
+                            u32 reg_e0_after = readl(cpm_regs + 0xE0);
+                            pr_info("*** CPM[0xE0] AFTER WRITE: 0x%08x ***\n", reg_e0_after);
 
-                            /* Step 2: Configure CSI PHY registers while in reset */
-                            /* (CSI register writes go here) */
+                            /* Step 2: Check if write worked, if not try other registers */
+                            if (reg_e0_after == reg_e0) {
+                                pr_info("*** CPM[0xE0] write failed, trying 0xE4 ***\n");
+                                writel(0x00000001, cpm_regs + 0xE4);
+                                wmb();
+                                msleep(1);
+                                pr_info("*** CPM[0xE4] AFTER: 0x%08x ***\n", readl(cpm_regs + 0xE4));
+                            }
 
-                            /* Step 3: Release CSI PHY from reset */
-                            cscr &= ~(1 << 1);
-                            writel(cscr, cpm_regs + 0xD4);
-                            wmb();
-                            msleep(10);
-
-                            u32 cscr_after = readl(cpm_regs + 0xD4);
-                            pr_info("*** CPM_CSCR (0xD4) AFTER UNLOCK: 0x%08x ***\n", cscr_after);
                             pr_info("*** CSI PHY UNLOCK SEQUENCE: COMPLETE ***\n");
 
                             iounmap(cpm_regs);
