@@ -244,8 +244,9 @@ int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count)
         if (cpm_regs) {
             u32 clkgr0 = readl(cpm_regs + 0x20);
             u32 clkgr1 = readl(cpm_regs + 0x28);
+            u32 opcr = readl(cpm_regs + 0x24);  // OPCR register
 
-            pr_info("*** CPM BEFORE: CLKGR0=0x%08x, CLKGR1=0x%08x ***\n", clkgr0, clkgr1);
+            pr_info("*** CPM BEFORE: CLKGR0=0x%08x, CLKGR1=0x%08x, OPCR=0x%08x ***\n", clkgr0, clkgr1, opcr);
 
             clkgr0 &= ~(1 << 13); // ISP
             clkgr0 &= ~(1 << 21); // Alternative ISP
@@ -253,17 +254,22 @@ int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count)
             clkgr0 &= ~(1 << 31); // CSI (bit 31 in CLKGR0)
             clkgr1 &= ~(1 << 30); // VIC in CLKGR1
 
+            /* CRITICAL: Enable CSI PHY power in OPCR */
+            opcr |= (1 << 4);  // MIPI CSI PHY power enable (bit 4)
+
             writel(clkgr0, cpm_regs + 0x20);
             writel(clkgr1, cpm_regs + 0x28);
+            writel(opcr, cpm_regs + 0x24);
             wmb();
 
             u32 clkgr0_after = readl(cpm_regs + 0x20);
             u32 clkgr1_after = readl(cpm_regs + 0x28);
-            pr_info("*** CPM AFTER: CLKGR0=0x%08x, CLKGR1=0x%08x ***\n", clkgr0_after, clkgr1_after);
+            u32 opcr_after = readl(cpm_regs + 0x24);
+            pr_info("*** CPM AFTER: CLKGR0=0x%08x, CLKGR1=0x%08x, OPCR=0x%08x ***\n", clkgr0_after, clkgr1_after, opcr_after);
 
             msleep(20);
             iounmap(cpm_regs);
-            pr_info("CPM clock gates configured (including CSI bit 31)\n");
+            pr_info("CPM clock gates configured (including CSI bit 31 and CSI PHY power)\n");
         }
 
         /* Binary Ninja: *(arg1 + 0xbc) = $v0_1 */
