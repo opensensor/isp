@@ -485,10 +485,16 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         /* Binary Ninja: *$v0_8 = 0x7d */
                         pr_info("*** CSI MIPI: Writing ISP_CSI[0x0] = 0x7d (timing config) ***\n");
                         writel(0x7d, v0_8);
+                        wmb();
+                        u32 readback_0 = readl(v0_8);
+                        pr_info("*** CSI MIPI: IMMEDIATE READBACK ISP_CSI[0x0] = 0x%08x (expected 0x7d) ***\n", readback_0);
 
                         /* Binary Ninja: *(*($s0_1 + 0x13c) + 0x128) = 0x3f */
                         pr_info("*** CSI MIPI: Writing ISP_CSI[0x128] = 0x3f (lane config) ***\n");
                         writel(0x3f, isp_csi_regs + 0x128);
+                        wmb();
+                        u32 readback_128 = readl(isp_csi_regs + 0x128);
+                        pr_info("*** CSI MIPI: IMMEDIATE READBACK ISP_CSI[0x128] = 0x%08x (expected 0x3f) ***\n", readback_128);
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0x10) = 1 */
                         pr_info("*** CSI MIPI: CRITICAL - Enabling CSI PHY: CSI[0x10] = 1 ***\n");
