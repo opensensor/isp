@@ -316,13 +316,18 @@ int tx_isp_vin_activate_subdev(void* arg1)
 {
     struct tx_isp_vin_device *vin_dev = (struct tx_isp_vin_device *)arg1;
 
+    pr_info("*** tx_isp_vin_activate_subdev: ENTRY - vin_dev=%p, state=%d ***\n", vin_dev, vin_dev ? vin_dev->state : -1);
+
     /* EXACT Binary Ninja reference implementation */
     /* private_mutex_lock(arg1 + 0xe8) */
     mutex_lock(&vin_dev->mlock);
 
     /* if (*(arg1 + 0xf4) == 1) *(arg1 + 0xf4) = 2 */
     if (vin_dev->state == 1) {
+        pr_info("*** tx_isp_vin_activate_subdev: VIN state 1 → 2 (ACTIVATED) ***\n");
         vin_dev->state = 2;
+    } else {
+        pr_info("*** tx_isp_vin_activate_subdev: VIN state already %d, no change ***\n", vin_dev->state);
     }
 
     /* private_mutex_unlock(arg1 + 0xe8) */
@@ -330,11 +335,9 @@ int tx_isp_vin_activate_subdev(void* arg1)
 
     /* *(arg1 + 0xf8) += 1 */
     vin_dev->refcnt += 1;
+    pr_info("*** tx_isp_vin_activate_subdev: VIN refcnt incremented to %d ***\n", vin_dev->refcnt);
 
     /* return 0 */
-    return 0;
-    
-    /* Binary Ninja: return 0 */
     return 0;
 }
 

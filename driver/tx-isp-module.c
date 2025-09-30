@@ -5786,37 +5786,67 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                     pr_info("*** VIC control register written with 0x4000000 to ISP+0x9a00 ***\n");
                 }
 
-                /* CRITICAL: Subdevice initialization loop - Fixed for our layout */
-                pr_info("*** SUBDEVICE INITIALIZATION LOOP ***\n");
+                /* CRITICAL: Subdevice activate_module loop - EXACT Binary Ninja implementation */
+                pr_info("*** SUBDEVICE ACTIVATE_MODULE LOOP (EXACT Binary Ninja) ***\n");
 
-                /* FIXED: Use our actual subdev array at offset 0x38 in tx_isp_dev */
-                /* CRITICAL FIX: Initialize subdevs in REVERSE order so sensors initialize BEFORE VIC streaming */
-                /* This prevents CSI PHY reconfiguration conflicts when VIC is already active */
-                pr_info("*** SUBDEVICE INITIALIZATION: Traversing backwards to initialize sensors first ***\n");
-                for (i = ISP_MAX_SUBDEVS - 1; i >= 0; i--) {
-                    current_subdev = isp_dev->subdevs[i];
+                /* Binary Ninja: Loop through subdev array and call activate_module callbacks */
+                /* Reference: for (int32_t i_1 = 0; i_1 u< *($s0_1 + 0x154); i_1 += 1) */
+                /* But we use ISP_MAX_SUBDEVS since we don't have a count field */
+                struct tx_isp_subdev **subdev_array = isp_dev->subdevs;  /* Array at offset 0x38 */
+
+                for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+                    current_subdev = subdev_array[i];
+
+                    /* Binary Ninja: Skip NULL subdevs */
                     if (!current_subdev) {
-                        continue;  /* Skip empty slots */
+                        continue;
                     }
 
+                    /* Binary Ninja: Skip invalid pointers */
                     if ((uintptr_t)current_subdev >= 0xfffff001) {
-                        continue;  /* Skip invalid pointers */
+                        continue;
                     }
 
-                    /* Binary Ninja: Call subdev init function */
                     struct tx_isp_subdev *sd = (struct tx_isp_subdev *)current_subdev;
-                    if (sd->ops && sd->ops->core && sd->ops->core->init) {
-                        pr_info("Calling subdev %d initialization (REVERSE ORDER - sensors first)\n", i);
-                        subdev_result = sd->ops->core->init(sd, 1);
 
-                        /* Binary Ninja: if ($v0_12 != 0 && $v0_12 != 0xfffffdfd) */
-                        if (subdev_result != 0 && subdev_result != 0xfffffdfd) {
-                            /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch1 hcomp err !!!\n", *($s1_2 + 8)) */
-                            isp_printf(2, "Err [VIC_INT] : mipi ch1 hcomp err !!!\n", i);
-                            break;
-                        }
+                    /* Binary Ninja: int32_t* $v0_10 = *(*($s1_2 + 0xc4) + 0x10) */
+                    /* Check if subdev has internal ops with activate_module callback */
+                    if (!sd->ops) {
+                        continue;
                     }
+
+                    if (!sd->ops->internal) {
+                        continue;
+                    }
+
+                    /* Binary Ninja: int32_t $v0_11 = *$v0_10 */
+                    int (*activate_func)(struct tx_isp_subdev *) = sd->ops->internal->activate_module;
+
+                    if (!activate_func) {
+                        pr_info("*** Subdev %d (%s): No activate_module callback ***\n",
+                                i, sd->module.name ? sd->module.name : "unknown");
+                        continue;
+                    }
+
+                    /* Binary Ninja: int32_t $v0_12 = $v0_11($s1_2) */
+                    pr_info("*** Calling activate_module for subdev %d (%s) ***\n",
+                            i, sd->module.name ? sd->module.name : "unknown");
+                    subdev_result = activate_func(sd);
+
+                    /* Binary Ninja: if ($v0_12 != 0 && $v0_12 != 0xfffffdfd) */
+                    if (subdev_result != 0 && subdev_result != 0xfffffdfd) {
+                        /* Binary Ninja: isp_printf(2, "Failed to activate %s\n", *($s1_2 + 8)) */
+                        isp_printf(2, "Failed to activate %s\n", sd->module.name ? sd->module.name : "unknown");
+                        pr_err("*** ispcore_activate_module: activate_module failed for subdev %d: %d ***\n",
+                               i, subdev_result);
+                        break;
+                    }
+
+                    pr_info("*** Subdev %d (%s): activate_module SUCCESS (result=%d) ***\n",
+                            i, sd->module.name ? sd->module.name : "unknown", subdev_result);
                 }
+
+                pr_info("*** SUBDEVICE ACTIVATE_MODULE LOOP COMPLETE ***\n");
 
                 /* Binary Ninja: *($s0_1 + 0xe8) = 2 - Final VIC state set */
                 vic_dev->state = 2;
