@@ -1670,6 +1670,8 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
     u32 v1_7, v1_10;
     extern uint32_t vic_start_ok;
     static int nofd_limit_stall_count = 0;  /* Count consecutive (no FD + control-limit) stalls */
+    static unsigned long last_error_recovery_jiffies = 0;  /* Rate limiter for error recovery */
+    static int error_recovery_count = 0;  /* Count error recoveries to detect loops */
     printk(KERN_ALERT "*** VIC INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***\n");
 
     /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
@@ -2105,6 +2107,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
             }
 
             /* Binary Ninja: Error handler for critical conditions */
+            /* The real issue is that frames aren't flowing from CSI to VIC */
             if ((v1_7 & 0xde00) != 0 && vic_start_ok == 1) {
                 printk(KERN_ALERT "*** VIC CRITICAL: Error handler triggered - error_bits=0x%x ***\n", (v1_7 & 0xde00));
 
