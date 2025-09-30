@@ -1155,16 +1155,18 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
-    /* SAFETY: Use default RAW10 format if sensor_attr access fails */
-    sensor_format = 0x2b;  /* Default to RAW10 MIPI data type value */
+    /* CRITICAL FIX: sensor_format should be VIC format code, NOT MIPI data type! */
+    /* VIC format codes: 1=10-bit (RAW10), 2=12-bit (RAW12), 7=16-bit */
+    /* MIPI data type 0x2b = RAW10, but VIC register 0x14 expects format code 1 */
+    sensor_format = 1;  /* VIC format code for 10-bit (RAW10) */
 
     /* Try to get actual sensor format, but use default if it fails */
     if (sensor_attr) {
-        /* For now, just use the default RAW10 format to avoid potential crashes */
-        pr_info("*** SAFETY: Using default RAW10 format (0x2b) to avoid sensor_attr access issues ***\n");
+        /* For now, just use the default RAW10 format (code 1) to avoid potential crashes */
+        pr_info("*** SAFETY: Using VIC format code 1 (10-bit RAW10) ***\n");
     }
 
-    pr_info("*** Interface type: %d, Format: 0x%x (RAW10) ***\n", interface_type, sensor_format);
+    pr_info("*** Interface type: %d, VIC Format Code: %d (1=10-bit RAW10) ***\n", interface_type, sensor_format);
 
     /* Get VIC register base - offset 0xb8 in Binary Ninja */
     vic_regs = vic_dev->vic_regs;
