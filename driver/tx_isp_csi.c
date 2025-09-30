@@ -496,41 +496,9 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         u32 readback_128 = readl(isp_csi_regs + 0x128);
                         pr_info("*** CSI MIPI: IMMEDIATE READBACK ISP_CSI[0x128] = 0x%08x (expected 0x3f) ***\n", readback_128);
 
-                        /* CRITICAL: CSI PHY UNLOCK SEQUENCE (similar to DDR PHY unlock in T21 PM) */
-                        /* Based on T21 PM section 8.7.3: DDR PHY unlock uses CPM_DRCG register */
-                        /* CSI PHY likely has similar unlock register - try CPM offset 0xD4 (next after DRCG) */
-                        void __iomem *cpm_regs = ioremap(0x10000000, 0x1000);
-                        if (cpm_regs) {
-                            pr_info("*** CSI PHY UNLOCK SEQUENCE: START ***\n");
-
-                            /* Step 1: Try multiple potential CSI control registers */
-                            /* Check CPM 0xE0, 0xE4, 0xE8 for CSI/MIPI control */
-                            u32 reg_e0 = readl(cpm_regs + 0xE0);
-                            u32 reg_e4 = readl(cpm_regs + 0xE4);
-                            u32 reg_e8 = readl(cpm_regs + 0xE8);
-                            pr_info("*** CPM[0xE0]=0x%08x, CPM[0xE4]=0x%08x, CPM[0xE8]=0x%08x ***\n", reg_e0, reg_e4, reg_e8);
-
-                            /* Try writing to 0xE0 with CSI PHY enable pattern */
-                            writel(0x00000001, cpm_regs + 0xE0);  /* Enable CSI PHY */
-                            wmb();
-                            msleep(1);
-
-                            u32 reg_e0_after = readl(cpm_regs + 0xE0);
-                            pr_info("*** CPM[0xE0] AFTER WRITE: 0x%08x ***\n", reg_e0_after);
-
-                            /* Step 2: Check if write worked, if not try other registers */
-                            if (reg_e0_after == reg_e0) {
-                                pr_info("*** CPM[0xE0] write failed, trying 0xE4 ***\n");
-                                writel(0x00000001, cpm_regs + 0xE4);
-                                wmb();
-                                msleep(1);
-                                pr_info("*** CPM[0xE4] AFTER: 0x%08x ***\n", readl(cpm_regs + 0xE4));
-                            }
-
-                            pr_info("*** CSI PHY UNLOCK SEQUENCE: COMPLETE ***\n");
-
-                            iounmap(cpm_regs);
-                        }
+                        /* REMOVED DANGEROUS CPM WRITES - They broke the system! */
+                        /* CPM[0xE0] changed from 0x0640510d to 0x00000009 and killed I2C/interrupts */
+                        /* DO NOT write to unknown CPM registers without understanding them first! */
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0x10) = 1 */
                         pr_info("*** CSI MIPI: CRITICAL - Enabling CSI PHY: CSI[0x10] = 1 ***\n");
