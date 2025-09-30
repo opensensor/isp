@@ -245,17 +245,25 @@ int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count)
             u32 clkgr0 = readl(cpm_regs + 0x20);
             u32 clkgr1 = readl(cpm_regs + 0x28);
 
+            pr_info("*** CPM BEFORE: CLKGR0=0x%08x, CLKGR1=0x%08x ***\n", clkgr0, clkgr1);
+
             clkgr0 &= ~(1 << 13); // ISP
             clkgr0 &= ~(1 << 21); // Alternative ISP
             clkgr0 &= ~(1 << 30); // VIC in CLKGR0
+            clkgr0 &= ~(1 << 31); // CSI (bit 31 in CLKGR0)
             clkgr1 &= ~(1 << 30); // VIC in CLKGR1
 
             writel(clkgr0, cpm_regs + 0x20);
             writel(clkgr1, cpm_regs + 0x28);
             wmb();
+
+            u32 clkgr0_after = readl(cpm_regs + 0x20);
+            u32 clkgr1_after = readl(cpm_regs + 0x28);
+            pr_info("*** CPM AFTER: CLKGR0=0x%08x, CLKGR1=0x%08x ***\n", clkgr0_after, clkgr1_after);
+
             msleep(20);
             iounmap(cpm_regs);
-            pr_info("CPM clock gates configured\n");
+            pr_info("CPM clock gates configured (including CSI bit 31)\n");
         }
 
         /* Binary Ninja: *(arg1 + 0xbc) = $v0_1 */
