@@ -334,15 +334,23 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
         /* CRITICAL FIX: Enable CSI clocks BEFORE accessing CSI PHY registers! */
         /* This is why all CSI registers read as 0x00000000 - no clock! */
-        if (enable && sd->clks == NULL && sd->clk_num > 0) {
-            extern int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_num);
-            pr_info("*** csi_core_ops_init: CRITICAL - Enabling CSI clocks BEFORE register access ***\n");
-            if (isp_subdev_init_clks(sd, sd->clk_num) != 0) {
-                pr_err("*** csi_core_ops_init: CSI clock init failed! ***\n");
-            } else {
-                /* Enable the clocks */
+        if (enable) {
+            pr_info("*** csi_core_ops_init: CRITICAL - Ensuring CSI clocks are enabled BEFORE register access ***\n");
+
+            /* Initialize clocks if not already done */
+            if (sd->clks == NULL && sd->clk_num > 0) {
+                extern int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_num);
+                pr_info("*** csi_core_ops_init: Initializing CSI clocks ***\n");
+                if (isp_subdev_init_clks(sd, sd->clk_num) != 0) {
+                    pr_err("*** csi_core_ops_init: CSI clock init failed! ***\n");
+                }
+            }
+
+            /* Enable the clocks (whether just initialized or already present) */
+            if (sd->clks && sd->clk_num > 0) {
                 struct clk **clks = sd->clks;
                 int i;
+                pr_info("*** csi_core_ops_init: Enabling %d CSI clocks ***\n", sd->clk_num);
                 for (i = 0; i < sd->clk_num; i++) {
                     if (clks[i]) {
                         clk_enable(clks[i]);
@@ -350,6 +358,8 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                     }
                 }
                 pr_info("*** csi_core_ops_init: CSI clocks enabled - PHY should now respond! ***\n");
+            } else {
+                pr_warn("*** csi_core_ops_init: WARNING - No CSI clocks available! (clks=%p, clk_num=%d) ***\n", sd->clks, sd->clk_num);
             }
         }
 
