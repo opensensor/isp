@@ -498,6 +498,10 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         /* Binary Ninja: private_msleep(0xa) */
                         private_msleep(0xa);
 
+                        /* CRITICAL DEBUG: Dump CSI registers to check PHY state */
+                        pr_info("*** CSI STATUS CHECK: Dumping CSI registers after PHY enable ***\n");
+                        dump_csi_reg(sd);
+
                         v0_17 = 3;
 
                     } else if (interface_type != 2) {
@@ -918,31 +922,38 @@ int tx_isp_csi_remove(struct platform_device *pdev)
 /* dump_csi_reg - EXACT Binary Ninja implementation */
 void dump_csi_reg(struct tx_isp_subdev *sd)
 {
+    struct tx_isp_csi_device *csi_dev;
     void __iomem *csi_regs;
 
-    /* Binary Ninja: isp_printf(0, "%s[%d] do not support this interface\n", entry_$a2) */
-    isp_printf(0, "%s[%d] do not support this interface\n", "dump_csi_reg");
+    if (!sd) {
+        pr_err("dump_csi_reg: NULL subdev\n");
+        return;
+    }
 
-    /* Binary Ninja: **(arg1 + 0xb8) */
-    csi_regs = ((struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd))->csi_regs;
+    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+    if (!csi_dev || !csi_dev->csi_regs) {
+        pr_err("dump_csi_reg: Invalid CSI device or registers\n");
+        return;
+    }
 
-    /* Binary Ninja: All the register reads and prints */
-    isp_printf(0, "%s:%d::linear mode\n", readl(csi_regs + 0x00));
-    isp_printf(0, "%s:%d::wdr mode\n", readl(csi_regs + 0x04));
-    isp_printf(0, "qbuffer null\n", readl(csi_regs + 0x08));
-    isp_printf(0, "bank no free\n", readl(csi_regs + 0x0c));
-    isp_printf(0, "Failed to allocate vic device\n", readl(csi_regs + 0x10));
-    isp_printf(0, "Failed to init isp module(%d.%d)\n", readl(csi_regs + 0x14));
-    isp_printf(0, "&vsd->mlock", readl(csi_regs + 0x18));
-    isp_printf(0, "&vsd->snap_mlock", readl(csi_regs + 0x1c));
-    isp_printf(0, " %d, %d\n", readl(csi_regs + 0x20));
-    isp_printf(0, "%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d\n", readl(csi_regs + 0x24));
-    isp_printf(0, "The parameter is invalid!\n", readl(csi_regs + 0x28));
-    isp_printf(0, "vic_done_gpio%d", readl(csi_regs + 0x2c));
-    isp_printf(0, "register is 0x%x, value is 0x%x\n", readl(csi_regs + 0x30));
+    csi_regs = csi_dev->csi_regs;
 
-    /* Binary Ninja: return isp_printf(0, "count is %d\n", *(*(arg1 + 0xb8) + 0x34)) __tailcall */
-    isp_printf(0, "count is %d\n", readl(csi_regs + 0x34));
+    /* Binary Ninja: Dump all CSI registers */
+    pr_info("****>>>>> dump csi reg <<<<<****\n");
+    pr_info("**********VERSION =%08x\n", readl(csi_regs + 0x00));
+    pr_info("**********N_LANES =%08x\n", readl(csi_regs + 0x04));
+    pr_info("**********PHY_SHUTDOWNZ = %08x\n", readl(csi_regs + 0x08));
+    pr_info("**********DPHY_RSTZ = %08x\n", readl(csi_regs + 0x0c));
+    pr_info("**********CSI2_RESETN =%08x\n", readl(csi_regs + 0x10));
+    pr_info("**********PHY_STATE = %08x\n", readl(csi_regs + 0x14));
+    pr_info("**********DATA_IDS_1 = %08x\n", readl(csi_regs + 0x18));
+    pr_info("**********DATA_IDS_2 = %08x\n", readl(csi_regs + 0x1c));
+    pr_info("**********ERR1 = %08x\n", readl(csi_regs + 0x20));
+    pr_info("**********ERR2 = %08x\n", readl(csi_regs + 0x24));
+    pr_info("**********MASK1 =%08x\n", readl(csi_regs + 0x28));
+    pr_info("**********MASK2 =%08x\n", readl(csi_regs + 0x2c));
+    pr_info("**********PHY_TST_CTRL0 = %08x\n", readl(csi_regs + 0x30));
+    pr_info("**********PHY_TST_CTRL1 = %08x\n", readl(csi_regs + 0x34));
 }
 
 /* tx_isp_csi_activate_subdev - EXACT Binary Ninja implementation */
