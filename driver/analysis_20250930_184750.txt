@@ -1,0 +1,57 @@
+========================================
+ISP DRIVER TEST ANALYSIS
+========================================
+
+Timestamp: 20250930_184750
+Build: d58a997f3b9cf3f1e26c4f0bc86af3d6
+
+=== KEY METRICS ===
+VIC START messages: 8
+VIN linked: 2
+VIN input configured: 4
+CSI input configured: 4
+VIC input configured: 8
+Complete pipeline configured: 4
+Control limit errors: 3
+Frame done interrupts: 
+
+=== INTERRUPT COUNTS ===
+ 37:          4   jz-intc  isp-m0
+ 38:          8   jz-intc  isp-w02
+
+=== PIPELINE CONFIGURATION ===
+[   20.521074] *** VIC START: VIC input source configured - CSI->VIC link enabled ***
+[   20.521220] *** VIC STREAM ON: VIN input configured: 0x00000003 (Sensor->VIN link) ***
+[   20.521226] *** VIC STREAM ON: CSI input configured: 0x1 (VIN->CSI link) ***
+[   20.521238] *** VIC STREAM ON: VIC input source configured - CSI->VIC link enabled ***
+[   20.521074] *** VIC START: VIC input source configured - CSI->VIC link enabled ***
+[   20.521220] *** VIC STREAM ON: VIN input configured: 0x00000003 (Sensor->VIN link) ***
+[   20.521226] *** VIC STREAM ON: CSI input configured: 0x1 (VIN->CSI link) ***
+[   20.521238] *** VIC STREAM ON: VIC input source configured - CSI->VIC link enabled ***
+[   23.017327] *** VIC START: VIC input source configured - CSI->VIC link enabled ***
+[   23.017474] *** VIC STREAM ON: VIN input configured: 0x00000003 (Sensor->VIN link) ***
+
+=== ERRORS ===
+[    0.000000] CPU0 RESET ERROR PC:801ADC84
+[    0.121583] jz-dwc2 jz-dwc2: cgu clk gate get error
+[    0.000000] CPU0 RESET ERROR PC:801ADC84
+[    0.121583] jz-dwc2 jz-dwc2: cgu clk gate get error
+[   20.269892] *** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***
+[   20.470584] sensor_write_array: Complete - wrote 137 registers, 0 errors
+[   20.767076] *** VIC ERROR: control limit error (bit 21) ***
+[   20.470584] sensor_write_array: Complete - wrote 137 registers, 0 errors
+[   20.767076] *** VIC ERROR: control limit error (bit 21) ***
+[   21.427333] *** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***
+[   21.428329] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   21.429087] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   21.429813] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   21.430709] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   21.431421] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   22.638919] *** Channel 0: Frame wait timeout/error, generating frame ***
+[   22.739160] *** Channel 0: Frame wait timeout/error, generating frame ***
+[   22.838888] *** Channel 0: Frame wait timeout/error, generating frame ***
+[   22.843165] *** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***
+[   22.939175] *** Channel 0: Frame wait timeout/error, generating frame ***
+
+=== KEY REGISTER WRITES ===
+
