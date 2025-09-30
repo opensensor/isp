@@ -3169,6 +3169,14 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
         /* EXACT Binary Ninja MCP reference logic */
         /* Binary Ninja: if ($v1_3 != 4) */
         if (current_state != 4) {
+            /* CRITICAL FIX: Only initialize if state is 1 or 2, not 3 */
+            /* State 3 means VIC is already initialized and ready to stream */
+            if (current_state == 3) {
+                pr_info("*** vic_core_s_stream: VIC already initialized (state 3), transitioning to streaming (state 4) ***\n");
+                vic_dev->state = 4;
+                return 0;
+            }
+
             pr_info("*** vic_core_s_stream: EXACT Binary Ninja - State != 4, calling VIC start sequence ***\n");
 
             /* CRITICAL: Initialize VIC buffer ring BEFORE starting VIC hardware */
