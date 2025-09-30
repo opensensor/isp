@@ -2741,12 +2741,19 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
             pr_info("*** tx_isp_video_s_stream: Core init SUCCESS ***\n");
         }
 
-       	/* Ensure VIC is ACTIVATED (state 2) before VIC core->init so clks activate */
+       	/* CRITICAL FIX: Only activate VIC if it's in state < 2 */
+        /* DO NOT downgrade VIC from state 3 or 4 back to state 2! */
         if (vic_sd) {
             struct tx_isp_vic_device *vic_dev_for_state = (struct vic_dev_for_state *)tx_isp_get_subdevdata(vic_sd);
-            pr_info("*** tx_isp_video_s_stream: Activating VIC subdev (state %d -> 2) before CSI init ***\n", vic_dev_for_state->state);
-            tx_isp_vic_activate_subdev(vic_sd);
-            pr_info("*** tx_isp_video_s_stream: VIC subdev activation done, state=%d ***\n", vic_dev_for_state->state);
+            pr_info("*** tx_isp_video_s_stream: VIC current state=%d ***\n", vic_dev_for_state->state);
+
+            if (vic_dev_for_state->state < 2) {
+                pr_info("*** tx_isp_video_s_stream: Activating VIC subdev (state %d -> 2) ***\n", vic_dev_for_state->state);
+                tx_isp_vic_activate_subdev(vic_sd);
+                pr_info("*** tx_isp_video_s_stream: VIC subdev activation done, state=%d ***\n", vic_dev_for_state->state);
+            } else {
+                pr_info("*** tx_isp_video_s_stream: VIC already in state %d (>= 2), skipping activation to prevent downgrade ***\n", vic_dev_for_state->state);
+            }
         }
 
         /* Ensure CSI is ACTIVATED (state 2) before CSI core->init so csi_core_ops_init runs */
