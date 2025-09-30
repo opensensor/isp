@@ -721,113 +721,10 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
     return 0;
 }
 
-/* vic_initialize_buffer_ring - Initialize VIC hardware buffer ring like BN MCP reference */
-static int vic_initialize_buffer_ring(struct tx_isp_vic_device *vic_dev)
-{
-    void __iomem *vic_regs;
-    u32 frame_size, base_addr;
-    int i;
-    unsigned long flags;
-
-    if (!vic_dev || !vic_dev->vic_regs) {
-        pr_err("vic_initialize_buffer_ring: Invalid VIC device\n");
-        return -EINVAL;
-    }
-
-    vic_regs = vic_dev->vic_regs;
-    frame_size = vic_dev->width * vic_dev->height * 2;  /* RAW10 = 2 bytes per pixel */
-    base_addr = 0x6300000;  /* Reserved memory base like working reference */
-
-    pr_info("*** VIC BUFFER RING: Initializing 5-buffer ring (frame_size=%u, base=0x%x) ***\n",
-            frame_size, base_addr);
-
-    spin_lock_irqsave(&vic_dev->buffer_lock, flags);
-
-    /* Clear existing buffer lists */
-    while (!list_empty(&vic_dev->free_head)) {
-        struct vic_buffer_entry *entry = list_first_entry(&vic_dev->free_head, struct vic_buffer_entry, list);
-        list_del(&entry->list);
-        kfree(entry);
-    }
-
-    /* Binary Ninja: Initialize 5 buffer entries and program VIC hardware */
-    for (i = 0; i < 5; i++) {
-        struct vic_buffer_entry *buffer_entry = kzalloc(sizeof(struct vic_buffer_entry), GFP_ATOMIC);
-        if (!buffer_entry) {
-            pr_err("vic_initialize_buffer_ring: Failed to allocate buffer entry %d\n", i);
-            continue;
-        }
-
-        /* Binary Ninja: Set buffer properties */
-        buffer_entry->buffer_index = i;
-        buffer_entry->buffer_addr = base_addr + (i * frame_size);
-        buffer_entry->buffer_status = VIC_BUFFER_STATUS_FREE;
-        INIT_LIST_HEAD(&buffer_entry->list);
-
-        /* Add to free queue */
-        list_add_tail(&buffer_entry->list, &vic_dev->free_head);
-
-        /* Binary Ninja: Program buffer address to BOTH VIC register spaces */
-        {
-            u32 reg_offset = (i + 0xc6) << 2;  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
-
-        /* Program to PRIMARY VIC space (0x133e0000) */
-        writel(buffer_entry->buffer_addr, vic_regs + reg_offset);
-        wmb();
-
-        /* CRITICAL: Program to CONTROL VIC space (0x10023000) as well */
-        if (vic_dev->vic_regs_control) {
-            writel(buffer_entry->buffer_addr, vic_dev->vic_regs_control + reg_offset);
-            wmb();
-        }
-
-        /* CRITICAL: Initialize VIC current address register (0x380) with first buffer */
-        if (i == 0) {
-            writel(buffer_entry->buffer_addr, vic_regs + 0x380);
-            wmb();
-            u32 readback = readl(vic_regs + 0x380);
-            pr_info("*** VIC INIT: Set current address register 0x380 = 0x%x, readback = 0x%x ***\n",
-                    buffer_entry->buffer_addr, readback);
-        }
-
-            /* CRITICAL: Verify buffer address was written correctly */
-            u32 verify_primary = readl(vic_regs + reg_offset);
-            u32 verify_control = vic_dev->vic_regs_control ? readl(vic_dev->vic_regs_control + reg_offset) : 0;
-
-            pr_info("*** VIC BUFFER %d: addr=0x%x -> PRIMARY[0x%x]=0x%x, CONTROL[0x%x]=0x%x ***\n",
-                    i, buffer_entry->buffer_addr, reg_offset, verify_primary, reg_offset, verify_control);
-
-            /* CRITICAL: If buffer addresses are not being written correctly, this is the root cause */
-            if (verify_primary != buffer_entry->buffer_addr) {
-                pr_err("*** VIC BUFFER ERROR: PRIMARY slot %d write FAILED! Expected 0x%x, got 0x%x ***\n",
-                       i, buffer_entry->buffer_addr, verify_primary);
-            }
-        }
-    }
-
-    /* Set buffer counts - HARDWARE BUG: VIC corrupts 4->3 buffers, so configure for 3 */
-    vic_dev->buffer_count = 3;
-    vic_dev->active_buffer_count = 3;  /* CRITICAL FIX: Set to 3 to match VIC hardware bug */
-
-    spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
-
-    /* CRITICAL: Verify all buffer slots have different addresses */
-    pr_info("*** VIC BUFFER RING: Final verification of all buffer slots ***\n");
-    for (i = 0; i < 5; i++) {
-        u32 reg_offset = (i + 0xc6) << 2;
-        u32 primary_addr = readl(vic_regs + reg_offset);
-        u32 control_addr = vic_dev->vic_regs_control ? readl(vic_dev->vic_regs_control + reg_offset) : 0;
-        pr_info("*** VIC VERIFY: Slot %d [0x%x] PRIMARY=0x%x CONTROL=0x%x ***\n",
-                i, reg_offset, primary_addr, control_addr);
-    }
-
-    /* CRITICAL: Verify VIC current address register */
-    u32 current_addr = readl(vic_regs + 0x380);
-    pr_info("*** VIC VERIFY: Current address register [0x380] = 0x%x ***\n", current_addr);
-
-    pr_info("*** VIC BUFFER RING: Initialization complete - 5 buffers ready for DMA ***\n");
-    return 0;
-}
+/* REMOVED: vic_initialize_buffer_ring - This function doesn't exist in reference driver
+ * Buffer initialization happens inline during vic_pipo_mdma_enable or vic_mdma_enable
+ * The reference driver programs buffer registers directly when needed, not in a separate init function
+ */
 
 int vic_saveraw(struct tx_isp_subdev *sd, unsigned int savenum)
 {
@@ -1700,6 +1597,23 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("tx_isp_vic_start: WDR mode enabled\n");
     } else {
         pr_info("tx_isp_vic_start: Linear mode enabled\n");
+    }
+
+    /* CRITICAL FIX: Configure VIC input source from CSI BEFORE setting vic_start_ok */
+    /* This writes register 0x380 to connect CSI->VIC data path */
+    /* Direct register write instead of calling ispcore_link_setup */
+    if (vic_dev && vic_dev->vic_regs && sensor_attr) {
+        u32 vic_input_config = 0x1;  /* Enable VIC input */
+        vic_input_config |= (sensor_attr->dbus_type << 4);
+
+        pr_info("*** VIC START: Writing VIC input config to 0x380: 0x%08x (dbus_type=%d) ***\n",
+                vic_input_config, sensor_attr->dbus_type);
+        writel(vic_input_config, vic_dev->vic_regs + 0x380);
+        wmb();
+        pr_info("*** VIC START: VIC input source configured - CSI->VIC link enabled ***\n");
+    } else {
+        pr_err("*** VIC START: Cannot configure VIC input - vic_dev=%p vic_regs=%p sensor_attr=%p ***\n",
+               vic_dev, vic_dev ? vic_dev->vic_regs : NULL, sensor_attr);
     }
 
     /* Binary Ninja: 00010b84 - Set vic_start_ok */
@@ -3079,6 +2993,51 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             writel(2, vr + 0x0);
             wmb();
             pr_info("*** VIC CONTROL (PRIMARY): WROTE 2 to [0x0] before MDMA/config ***\n");
+
+            /* CRITICAL: Configure complete pipeline: Sensor->VIN->CSI->VIC */
+            /* This must be done in CONFIG state (after write 2, before write 1) */
+            extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+            struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+            if (sensor && sensor->video.attr) {
+                struct tx_isp_sensor_attribute *attr = sensor->video.attr;
+
+                /* 1. Configure VIN input (Sensor->VIN link) */
+                pr_info("*** VIC STREAM ON: Checking VIN: ourISPdev=%p ***\n", ourISPdev);
+                if (ourISPdev) {
+                    pr_info("*** VIC STREAM ON: vin_dev=%p ***\n", ourISPdev->vin_dev);
+                    if (ourISPdev->vin_dev) {
+                        pr_info("*** VIC STREAM ON: vin_dev->base=%p ***\n", ourISPdev->vin_dev->base);
+                        if (ourISPdev->vin_dev->base) {
+                            u32 vin_config = 0x1;  /* Enable VIN input */
+                            if (attr->dbus_type == 1) {
+                                vin_config |= 0x2;  /* MIPI interface */
+                            }
+                            writel(vin_config, ourISPdev->vin_dev->base + 0x10);
+                            wmb();
+                            pr_info("*** VIC STREAM ON: VIN input configured: 0x%08x (Sensor->VIN link) ***\n", vin_config);
+                        }
+                    }
+                }
+
+                /* 2. Configure CSI input (VIN->CSI link) */
+                if (ourISPdev && ourISPdev->csi_dev && ourISPdev->csi_dev->csi_regs) {
+                    writel(0x1, ourISPdev->csi_dev->csi_regs + 0x20);
+                    wmb();
+                    pr_info("*** VIC STREAM ON: CSI input configured: 0x1 (VIN->CSI link) ***\n");
+                }
+
+                /* 3. Configure VIC input (CSI->VIC link) */
+                u32 vic_input_config = 0x1;  /* Enable VIC input */
+                vic_input_config |= (attr->dbus_type << 4);
+                pr_info("*** VIC STREAM ON: Writing VIC input config to 0x380: 0x%08x (dbus_type=%d) ***\n",
+                        vic_input_config, attr->dbus_type);
+                writel(vic_input_config, vr + 0x380);
+                wmb();
+                pr_info("*** VIC STREAM ON: VIC input source configured - CSI->VIC link enabled ***\n");
+                pr_info("*** VIC STREAM ON: Complete pipeline configured: Sensor->VIN->CSI->VIC ***\n");
+            } else {
+                pr_err("*** VIC STREAM ON: Cannot configure pipeline - sensor or sensor->video.attr is NULL! ***\n");
+            }
         }
 
         /* Binary Ninja EXACT: vic_pipo_mdma_enable($s0) */
@@ -3193,13 +3152,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
         if (current_state != 4) {
             pr_info("*** vic_core_s_stream: EXACT Binary Ninja - State != 4, calling VIC start sequence ***\n");
 
-            /* CRITICAL: Initialize VIC buffer ring BEFORE starting VIC hardware */
-            pr_info("*** vic_core_s_stream: Initializing VIC buffer ring before VIC start ***\n");
-            ret = vic_initialize_buffer_ring(vic_dev);
-            if (ret != 0) {
-                pr_err("*** vic_core_s_stream: vic_initialize_buffer_ring FAILED: %d ***\n", ret);
-                return ret;
-            }
+            /* REMOVED: vic_initialize_buffer_ring call - reference driver doesn't have this function
+             * Buffer initialization happens inline during vic_pipo_mdma_enable which is called later
+             * The reference driver programs buffer registers when MDMA is enabled, not separately
+             */
 
             /* SKIP disabling kernel IRQ before VIC start to avoid missing first frame */
             pr_info("*** vic_core_s_stream: SKIPPING tx_vic_disable_irq before VIC start to preserve first frame IRQ ***\n");

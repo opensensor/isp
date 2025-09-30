@@ -764,9 +764,18 @@ int tx_isp_vin_probe(struct platform_device *pdev)
     /* Binary Ninja: memset($v0, 0, 0xfc) */
     memset(vin, 0, sizeof(struct tx_isp_vin_device));
 
-    /* Initialize VIN register base for video_input_cmd functions */
-    /* This will be set to the actual register base when hardware is mapped */
-    vin->vin_regs = NULL;  /* Will be set during hardware initialization */
+    /* CRITICAL FIX: Map VIN register base - VIN registers are part of ISP Core space */
+    /* VIN doesn't have its own register space - it uses ISP Core registers */
+    extern struct tx_isp_dev *ourISPdev;
+    if (ourISPdev && ourISPdev->core_regs) {
+        vin->base = ourISPdev->core_regs;
+        vin->vin_regs = ourISPdev->core_regs;
+        pr_info("*** VIN PROBE: VIN registers mapped to ISP Core: %p (0x13300000) ***\n", vin->base);
+    } else {
+        pr_err("*** VIN PROBE: ERROR - ISP Core registers not available! ***\n");
+        private_kfree(vin);
+        return -ENOMEM;
+    }
 
     /* Binary Ninja: private_raw_mutex_init($v0 + 0xe8, "not support the gpio mode!\n", 0) */
     private_raw_mutex_init(&vin->mlock, "not support the gpio mode!\n", 0);

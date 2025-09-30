@@ -615,8 +615,8 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
             pr_err("*** VIC AUTO-LINK: Registers not mapped - cannot register interrupt ***\n");
         }
 
-    } else if (strcmp(dev_name, "isp-w01") == 0) {
-        /* Link VIN device - device name is now "isp-w01" */
+    } else if (strcmp(dev_name, "isp-w00") == 0) {
+        /* Link VIN device - device name is "isp-w00" */
         pr_info("*** DEBUG: VIN device name matched! Setting up VIN device ***\n");
         struct tx_isp_vin_device *vin_dev = container_of(sd, struct tx_isp_vin_device, sd);
         ourISPdev->vin_dev = vin_dev;

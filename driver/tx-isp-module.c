@@ -4598,9 +4598,83 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_info("TX_ISP_VIDEO_LINK_SETUP: Link config changed from %d to %d\n",
                     isp_dev->link_config, link_config);
 
+            /* Binary Ninja: Get link configuration array for this config */
+            /* int32_t $v0_36 = *(($a2_2 << 3) + 0x6ad80) */
+            int link_count = link_config_counts[link_config];
+            /* int32_t* $s1_1 = (&configs)[$a2_2 * 2] */
+            struct tx_isp_link_config *config = link_configs[link_config];
+
+            pr_info("TX_ISP_VIDEO_LINK_SETUP: Setting up %d links for config %d\n", link_count, link_config);
+
+            /* Binary Ninja: Loop through all links in configuration */
+            /* int32_t $s2_2 = 0; while ($s2_2 s< $v0_36) */
+            for (int i = 0; i < link_count; i++) {
+                struct tx_isp_video_pad *src_pad, *dst_pad;
+
+                /* Binary Ninja: void* $v0_39 = find_subdev_link_pad($s7 - 0xc, $s1_1) */
+                src_pad = find_subdev_link_pad(isp_dev, &config[i]);
+                /* Binary Ninja: $v0_40, $a2_5 = find_subdev_link_pad($s7 - 0xc, &$s1_1[2]) */
+                dst_pad = find_subdev_link_pad(isp_dev, &config[i]);
+
+                if (!src_pad) {
+                    pr_warn("TX_ISP_VIDEO_LINK_SETUP: Source pad not found for link %d (%s)\n",
+                            i, config[i].src.name);
+                    continue;
+                }
+
+                if (!dst_pad) {
+                    pr_warn("TX_ISP_VIDEO_LINK_SETUP: Destination pad not found for link %d (%s)\n",
+                            i, config[i].dst.name);
+                    continue;
+                }
+
+                pr_info("TX_ISP_VIDEO_LINK_SETUP: Setting up link %d: %s -> %s\n",
+                        i, config[i].src.name, config[i].dst.name);
+
+                /* Binary Ninja: Set up link between pads */
+                /* *($v0_39 + 8) = $v0_39; *($v0_39 + 0xc) = $t0_2; etc. */
+                src_pad->link_src = src_pad;
+                src_pad->link_dst = dst_pad;
+                src_pad->link_src_pad = src_pad;
+                src_pad->link_dst_pad = dst_pad;
+                src_pad->link_flags = config[i].flag | 1;
+                src_pad->state = 3;  /* Connected */
+
+                dst_pad->link_src = dst_pad;
+                dst_pad->link_dst = src_pad;
+                dst_pad->link_src_pad = dst_pad;
+                dst_pad->link_dst_pad = src_pad;
+                dst_pad->link_flags = config[i].flag | 1;
+                dst_pad->state = 3;  /* Connected */
+
+                /* CRITICAL: Call link_setup callback to configure hardware routing */
+                if (src_pad->sd && src_pad->sd->ops && src_pad->sd->ops->video &&
+                    src_pad->sd->ops->video->link_setup) {
+                    /* Convert tx_isp_video_pad to tx_isp_subdev_pad for callback */
+                    struct tx_isp_subdev_pad local_pad = {
+                        .sd = src_pad->sd,
+                        .index = src_pad->pad_index,
+                        .type = src_pad->pad_type
+                    };
+                    struct tx_isp_subdev_pad remote_pad = {
+                        .sd = dst_pad->sd,
+                        .index = dst_pad->pad_index,
+                        .type = dst_pad->pad_type
+                    };
+
+                    pr_info("TX_ISP_VIDEO_LINK_SETUP: Calling link_setup for %s\n", config[i].src.name);
+                    int ret = src_pad->sd->ops->video->link_setup(&local_pad, &remote_pad, config[i].flag | 1);
+                    if (ret != 0) {
+                        pr_err("TX_ISP_VIDEO_LINK_SETUP: link_setup failed for %s: %d\n",
+                               config[i].src.name, ret);
+                        return ret;
+                    }
+                }
+            }
+
             /* Binary Ninja: *($s7 + 0x10c) = var_98 - Update stored link config */
             isp_dev->link_config = link_config;
-            pr_info("TX_ISP_VIDEO_LINK_SETUP: Link config updated to %d\n", link_config);
+            pr_info("TX_ISP_VIDEO_LINK_SETUP: All links configured, config updated to %d\n", link_config);
         } else {
             pr_info("TX_ISP_VIDEO_LINK_SETUP: Link config unchanged (%d)\n", link_config);
         }

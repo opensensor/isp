@@ -1,0 +1,51 @@
+========================================
+ISP DRIVER TEST ANALYSIS
+========================================
+
+Timestamp: 20250930_161635
+Build: f0e5b9063dfbe63f7bf2fcfa5fcfbded
+
+=== KEY METRICS ===
+VIC START messages: 2
+VIN linked: 2
+VIN input configured: 1
+CSI input configured: 1
+VIC input configured: 2
+Complete pipeline configured: 1
+Control limit errors: 1
+Frame done interrupts: 
+
+=== INTERRUPT COUNTS ===
+ 37:          4   jz-intc  isp-m0
+ 38:          4   jz-intc  isp-w02
+
+=== PIPELINE CONFIGURATION ===
+[   20.840398] *** VIC START: VIC input source configured - CSI->VIC link enabled ***
+[   20.840544] *** VIC STREAM ON: VIN input configured: 0x00000003 (Sensor->VIN link) ***
+[   20.840550] *** VIC STREAM ON: CSI input configured: 0x1 (VIN->CSI link) ***
+[   20.840563] *** VIC STREAM ON: VIC input source configured - CSI->VIC link enabled ***
+
+=== ERRORS ===
+[    0.000000] CPU0 RESET ERROR PC:801ADC84
+[    0.121594] jz-dwc2 jz-dwc2: cgu clk gate get error
+[    0.000000] CPU0 RESET ERROR PC:801ADC84
+[    0.121594] jz-dwc2 jz-dwc2: cgu clk gate get error
+[   20.376282] *** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***
+[   20.720816] *** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***
+[   20.720816] *** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***
+[   21.069510] *** VIC ERROR: control limit error (bit 21) ***
+[   22.815944] *** Channel 0: Frame wait timeout/error, generating frame ***
+[   22.912598] *** Channel 0: Frame wait timeout/error, generating frame ***
+[   23.015709] *** Channel 0: Frame wait timeout/error, generating frame ***
+[   23.119373] *** Channel 0: Frame wait timeout/error, generating frame ***
+[   23.212435] *** Channel 0: Frame wait timeout/error, generating frame ***
+[   23.284869] *** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***
+[   24.413292] *** Channel 1: Frame wait timeout/error, generating frame ***
+[   24.513034] *** Channel 1: Frame wait timeout/error, generating frame ***
+[   24.615469] *** Channel 1: Frame wait timeout/error, generating frame ***
+[   24.665834] *** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***
+[   24.713116] *** Channel 1: Frame wait timeout/error, generating frame ***
+[   25.377949] *** Channel 1: Frame wait timeout/error, generating frame ***
+
+=== KEY REGISTER WRITES ===
+
