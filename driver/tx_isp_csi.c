@@ -496,22 +496,40 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         u32 readback_128 = readl(isp_csi_regs + 0x128);
                         pr_info("*** CSI MIPI: IMMEDIATE READBACK ISP_CSI[0x128] = 0x%08x (expected 0x3f) ***\n", readback_128);
 
-                        /* CRITICAL: Enable CSI PHY through CPM first! */
+                        /* CRITICAL: CSI PHY UNLOCK SEQUENCE (similar to DDR PHY unlock in T21 PM) */
+                        /* Based on T21 PM section 8.7.3: DDR PHY unlock uses CPM_DRCG register */
+                        /* CSI PHY likely has similar unlock register - try CPM offset 0xD4 (next after DRCG) */
                         void __iomem *cpm_regs = ioremap(0x10000000, 0x1000);
                         if (cpm_regs) {
-                            /* Check CPM MIPI PHY control register (offset 0xE0 or similar) */
-                            u32 mipi_ctrl = readl(cpm_regs + 0x3c);  /* MIPI CSI PHY control */
-                            pr_info("*** CPM MIPI_CTRL (0x3c) BEFORE: 0x%08x ***\n", mipi_ctrl);
+                            pr_info("*** CSI PHY UNLOCK SEQUENCE: START ***\n");
 
-                            /* Enable MIPI CSI PHY in CPM */
-                            mipi_ctrl |= (1 << 0);  /* Enable CSI PHY */
-                            writel(mipi_ctrl, cpm_regs + 0x3c);
+                            /* Step 1: Put CSI PHY into reset/bypass mode (similar to DDR DLL reset) */
+                            /* Try CPM offset 0xD4 (CSI Control Register - CSCR) */
+                            u32 cscr = readl(cpm_regs + 0xD4);
+                            pr_info("*** CPM_CSCR (0xD4) BEFORE: 0x%08x ***\n", cscr);
+
+                            /* Set bit 1 to put CSI PHY in reset (similar to DDR_DRCG[1]) */
+                            cscr |= (1 << 1);
+                            writel(cscr, cpm_regs + 0xD4);
                             wmb();
+                            msleep(1);
 
-                            u32 mipi_ctrl_after = readl(cpm_regs + 0x3c);
-                            pr_info("*** CPM MIPI_CTRL (0x3c) AFTER: 0x%08x ***\n", mipi_ctrl_after);
-                            iounmap(cpm_regs);
+                            pr_info("*** CPM_CSCR (0xD4) RESET MODE: 0x%08x ***\n", readl(cpm_regs + 0xD4));
+
+                            /* Step 2: Configure CSI PHY registers while in reset */
+                            /* (CSI register writes go here) */
+
+                            /* Step 3: Release CSI PHY from reset */
+                            cscr &= ~(1 << 1);
+                            writel(cscr, cpm_regs + 0xD4);
+                            wmb();
                             msleep(10);
+
+                            u32 cscr_after = readl(cpm_regs + 0xD4);
+                            pr_info("*** CPM_CSCR (0xD4) AFTER UNLOCK: 0x%08x ***\n", cscr_after);
+                            pr_info("*** CSI PHY UNLOCK SEQUENCE: COMPLETE ***\n");
+
+                            iounmap(cpm_regs);
                         }
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0x10) = 1 */
@@ -850,9 +868,10 @@ int tx_isp_csi_probe(struct platform_device *pdev)
         /* Testing ISP Core + 0x1000 (smaller offset, more common for control registers) */
         extern struct tx_isp_dev *ourISPdev;
         if (ourISPdev && ourISPdev->core_regs) {
-            /* Try ISP Core + 0x1000 as CSI shadow register base */
-            csi_dev->isp_csi_regs = ourISPdev->core_regs + 0x1000;
-            pr_info("*** CSI PROBE: isp_csi_regs (offset 0x13c) mapped to ISP CORE + 0x1000 (CSI SHADOW): %p ***\n", csi_dev->isp_csi_regs);
+            /* HYPOTHESIS: CSI shadow registers might be at ISP Core base itself! */
+            /* The writes to offsets 0x0, 0x128, 0x160 might be relative to ISP Core base */
+            csi_dev->isp_csi_regs = ourISPdev->core_regs;
+            pr_info("*** CSI PROBE: isp_csi_regs (offset 0x13c) mapped to ISP CORE BASE (CSI SHADOW): %p ***\n", csi_dev->isp_csi_regs);
         } else {
             pr_err("*** CSI PROBE: ERROR - ISP Core registers not available! ***\n");
             csi_dev->isp_csi_regs = csi_dev->sd.regs;
