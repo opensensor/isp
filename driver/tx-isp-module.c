@@ -1999,8 +1999,12 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                     }
                 } while (0);
             } else {
-                /* Binary Ninja MCP: No frame done interrupt - just log it */
-                printk(KERN_ALERT "*** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***\n");
+                /* Binary Ninja MCP: No frame done interrupt - check CSI errors */
+                printk(KERN_ALERT "*** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) - checking CSI ***\n");
+
+                /* Check CSI for errors - frames may not be arriving from sensor */
+                extern void tx_isp_csi_check_errors(struct tx_isp_dev *isp_dev);
+                tx_isp_csi_check_errors(ourISPdev);
                 /* Binary Ninja MCP reference: NO fallback processing for control limit errors */
                 /* Control limit errors indicate configuration issues that must be fixed, not worked around */
             }

@@ -381,30 +381,39 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                     pr_info("*** csi_core_ops_init: Set csi_dev->interface_type = %d ***\n", interface_type);
 
                     if (interface_type == 1) {
+                        pr_info("*** CSI MIPI INIT: Configuring MIPI CSI for %d lanes ***\n", sensor_attr->mipi.lans);
+
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 4) = zx.d(*($v1_5 + 0x24)) - 1 */
                         writel(sensor_attr->mipi.lans - 1, csi_dev->csi_regs + 4);
+                        pr_info("*** CSI[0x4] = %d (lanes - 1) ***\n", sensor_attr->mipi.lans - 1);
 
                         /* Binary Ninja: void* $v0_2 = *($s0_1 + 0xb8) */
                         csi_regs = csi_dev->csi_regs;
 
                         /* Binary Ninja: *($v0_2 + 8) &= 0xfffffffe */
-                        writel(readl(csi_regs + 8) & 0xfffffffe, csi_regs + 8);
+                        u32 reg8_val = readl(csi_regs + 8) & 0xfffffffe;
+                        writel(reg8_val, csi_regs + 8);
+                        pr_info("*** CSI[0x8] = 0x%x (clear bit 0) ***\n", reg8_val);
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0xc) = 0 */
                         writel(0, csi_regs + 0xc);
+                        pr_info("*** CSI[0xc] = 0 (reset) ***\n");
 
                         /* Binary Ninja: private_msleep(1) */
                         private_msleep(1);
 
                         /* Binary Ninja: void* $v1_9 = *($s0_1 + 0xb8) */
                         /* Binary Ninja: *($v1_9 + 0x10) &= 0xfffffffe */
-                        writel(readl(csi_regs + 0x10) & 0xfffffffe, csi_regs + 0x10);
+                        u32 reg10_val = readl(csi_regs + 0x10) & 0xfffffffe;
+                        writel(reg10_val, csi_regs + 0x10);
+                        pr_info("*** CSI[0x10] = 0x%x (PHY disable) ***\n", reg10_val);
 
                         /* Binary Ninja: private_msleep(1) */
                         private_msleep(1);
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0xc) = $s2_1 */
                         writel(interface_type, csi_regs + 0xc);
+                        pr_info("*** CSI[0xc] = %d (MIPI enable) ***\n", interface_type);
 
                         /* Binary Ninja: private_msleep(1) */
                         private_msleep(1);
@@ -474,13 +483,17 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         }
 
                         /* Binary Ninja: *$v0_8 = 0x7d */
+                        pr_info("*** CSI MIPI: Writing ISP_CSI[0x0] = 0x7d (timing config) ***\n");
                         writel(0x7d, v0_8);
 
                         /* Binary Ninja: *(*($s0_1 + 0x13c) + 0x128) = 0x3f */
+                        pr_info("*** CSI MIPI: Writing ISP_CSI[0x128] = 0x3f (lane config) ***\n");
                         writel(0x3f, isp_csi_regs + 0x128);
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0x10) = 1 */
+                        pr_info("*** CSI MIPI: CRITICAL - Enabling CSI PHY: CSI[0x10] = 1 ***\n");
                         writel(1, csi_dev->csi_regs + 0x10);
+                        pr_info("*** CSI MIPI: PHY ENABLED - MIPI data should now flow from sensor! ***\n");
 
                         /* Binary Ninja: private_msleep(0xa) */
                         private_msleep(0xa);
@@ -792,11 +805,19 @@ int tx_isp_csi_probe(struct platform_device *pdev)
         csi_dev->csi_regs = csi_dev->sd.regs;
         pr_info("*** CSI PROBE: csi_regs (offset 0xb8) mapped to: %p ***\n", csi_dev->csi_regs);
 
-        /* Binary Ninja: *($v0 + 0x13c) = isp_csi_regs (ISP CSI PHY registers) */
-        /* CRITICAL: These are the SAME physical registers, but accessed through different struct member */
-        /* The Binary Ninja uses two different offsets to access the same register base */
-        csi_dev->isp_csi_regs = csi_dev->sd.regs;
-        pr_info("*** CSI PROBE: isp_csi_regs (offset 0x13c) mapped to: %p ***\n", csi_dev->isp_csi_regs);
+        /* Binary Ninja: *($v0 + 0x13c) = isp_csi_regs (ISP Core CSI registers) */
+        /* CRITICAL FIX: isp_csi_regs should point to ISP CORE space (0x13300000), NOT CSI space! */
+        /* The ISP Core has CSI-related registers at 0x13300000 + offsets like 0x160, 0x128, etc. */
+        /* These are DIFFERENT from the CSI PHY registers at 0x10022000! */
+        extern struct tx_isp_dev *ourISPdev;
+        if (ourISPdev && ourISPdev->core_regs) {
+            csi_dev->isp_csi_regs = ourISPdev->core_regs;
+            pr_info("*** CSI PROBE: isp_csi_regs (offset 0x13c) mapped to ISP CORE: %p (0x13300000) ***\n", csi_dev->isp_csi_regs);
+        } else {
+            pr_err("*** CSI PROBE: ERROR - ISP Core registers not available! ***\n");
+            csi_dev->isp_csi_regs = csi_dev->sd.regs;  /* Fallback to CSI regs */
+            pr_err("*** CSI PROBE: FALLBACK - Using CSI regs for isp_csi_regs (WRONG!) ***\n");
+        }
     } else {
         /* Binary Ninja: isp_printf(2, "sensor type is BT1120!\n", "tx_isp_csi_probe") */
         pr_err("*** CSI PROBE: tx_isp_subdev_init failed to map registers ***\n");

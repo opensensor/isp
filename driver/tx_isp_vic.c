@@ -1207,9 +1207,12 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** MIPI PATH 1: interface configuration (dbus_type check path) ***\n");
 
         /* Binary Ninja: Check flags at 00010260 */
+        pr_info("*** VIC MIPI: dbus_type=%d, interface_type=%d ***\n", sensor_attr->dbus_type, interface_type);
         if (sensor_attr->dbus_type != interface_type) {
+            pr_info("*** VIC MIPI: OTHER_MIPI - Writing 0x1a4=0xa000a ***\n");
             writel(0xa000a, vic_regs + 0x1a4);
         } else {
+            pr_info("*** VIC MIPI: SONY_MIPI - Writing 0x10=0x20000, 0x1a4=0x100010 ***\n");
             writel(0x20000, vic_regs + 0x10);
             writel(0x100010, vic_regs + 0x1a4);
         }
@@ -1234,6 +1237,14 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(2, vic_regs + 0xc);
         writel(sensor_format, vic_regs + 0x14);
         writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
+
+        /* CRITICAL: Register 0x10c - Complex bit field configuration */
+        /* Binary Ninja: *(*(arg1 + 0xb8) + 0x10c) = $a2_3 | *($a3_1 + 0x68) << 0xc | *($a3_1 + 0x6c) << 8 | *($a3_1 + 0x74) << 4 | *($a3_1 + 0x70) << 2 */
+        /* This register controls MIPI data format and processing */
+        /* Use default value for RAW10 MIPI: 0x0 (simple pass-through) */
+        u32 reg_10c_value = 0x0;
+        writel(reg_10c_value, vic_regs + 0x10c);
+        pr_info("*** VIC MIPI: reg 0x10c = 0x%x (MIPI format control) ***\n", reg_10c_value);
 
         /* REMOVED: Register 0x18 write - continuous-interrupts version doesn't write this */
         /* The working version with continuous interrupts does NOT write to register 0x18 */
@@ -3097,12 +3108,14 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             if (buffer_count > 5) buffer_count = 5;        /* 5-slot ring cap */
 
             /* Binary Ninja EXACT: Write buffer COUNT (not index) to control register */
-            /* Reference: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
-            /* $s0 + 0x218 = active_buffer_count */
+            /* CRITICAL FIX: Do NOT write buffer_count to control register! */
+            /* Reference shows: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
+            /* But when buffer_count=3, hardware cycles to 2, which sets bit 17! */
+            /* 3 << 16 = 0x00030000, hardware cycles to 2 << 16 = 0x00020000 = bit 17! */
 
             u32 current_ctrl = readl(vic_base + 0x300);
-            u32 buffer_count_field = (buffer_count << 16);  /* Write buffer COUNT to bits 16-19 */
-            u32 stream_ctrl = buffer_count_field | 0x80000020;   /* Combine with control flags */
+            /* CRITICAL FIX: Use 0x80000020 WITHOUT buffer count to avoid bit 17 */
+            u32 stream_ctrl = 0x80000020;   /* Base control, NO buffer count */
 
             void __iomem *vic_ctrl = vic_dev->vic_regs_control;
             writel(stream_ctrl, vic_base + 0x300);
@@ -3111,8 +3124,8 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             }
             wmb();
 
-            pr_info("*** BINARY NINJA EXACT: VIC[0x300]=0x%x (buffer_count=%u << 16 | 0x80000020, was 0x%x) ***\n",
-                    stream_ctrl, buffer_count, current_ctrl);
+            pr_info("*** CRITICAL FIX: VIC[0x300]=0x%x (NO buffer_count to avoid bit 17, was 0x%x) ***\n",
+                    stream_ctrl, current_ctrl);
         }
 
         /* Binary Ninja EXACT: *($s0 + 0x210) = 1 */
@@ -4111,9 +4124,10 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
         }
     }
 
-    /* Binary Ninja EXACT: *($s0 + 0x20c) = 1 */
-    vic_dev->processing = 1;
-    pr_info("tx_isp_subdev_pipo: set processing = 1 (Binary Ninja offset 0x20c)\n");
+    /* CRITICAL FIX: Keep processing = 0 to match working version */
+    /* Binary Ninja shows processing = 1, but working version uses 0 to avoid buffer index updates */
+    vic_dev->processing = 0;
+    pr_info("tx_isp_subdev_pipo: set processing = 0 (FIXED - matching working version)\n");
 
     /* Binary Ninja EXACT: if (arg2 == 0) *($s0 + 0x214) = 0 */
     if (arg == NULL) {
@@ -4184,13 +4198,15 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
 
         pr_info("tx_isp_subdev_pipo: initialized %d buffer structures (safe implementation)\n", i);
 
+        /* CRITICAL FIX: Keep processing = 0 to match working version */
         /* SAFE: Use proper struct member access instead of offset 0x214 */
-        vic_dev->processing = 1;
-        pr_info("tx_isp_subdev_pipo: set processing = 1 (pipe enabled, safe struct access)\n");
+        vic_dev->processing = 0;
+        pr_info("tx_isp_subdev_pipo: set processing = 0 (FIXED - pipe enabled, matching working version)\n");
 
-        /* CRITICAL FIX: Reset stream state before calling ispvic_frame_channel_s_stream */
-        pr_info("*** tx_isp_subdev_pipo: RESETTING stream_state to 0 before calling ispvic_frame_channel_s_stream ***\n");
-        vic_dev->stream_state = 0;  /* Ensure stream state is 0 so MDMA enable will be called */
+        /* CRITICAL FIX: DO NOT reset stream_state! Let the state machine track it properly! */
+        /* Resetting stream_state causes ispvic_frame_channel_s_stream to re-initialize on every call */
+        /* This breaks the state machine and causes repeated VIC start attempts */
+        pr_info("*** tx_isp_subdev_pipo: Preserving stream_state=%d (state machine fix) ***\n", vic_dev->stream_state);
 
         /* CRITICAL: Call ispvic_frame_channel_qbuf to write buffer addresses to VIC hardware */
         pr_info("*** tx_isp_subdev_pipo: CALLING ispvic_frame_channel_qbuf to write buffer addresses ***\n");

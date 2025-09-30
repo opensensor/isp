@@ -2050,9 +2050,11 @@ int tisp_init(void *sensor_info, char *param_name)
     pr_info("tisp_init: Set ISP top bypass to 0x%x (reference-standardize)\n", bypass_val);
 
     /* Binary Ninja: system_reg_write(0x30, 0xffffffff) - Enable all interrupts */
+    pr_info("*** tisp_init: Enabling ISP interrupts (0x30=0xffffffff) ***\n");
     system_reg_write(0x30, 0xffffffff);
 
     /* Binary Ninja: system_reg_write(0x10, $a1_9) - Main ISP enable */
+    pr_info("*** tisp_init: Enabling ISP main control (0x10=0x133) ***\n");
     system_reg_write(0x10, 0x133);
 
     /* Binary Ninja: Allocate and configure memory buffers - simplified version */
@@ -2143,10 +2145,14 @@ int tisp_init(void *sensor_info, char *param_name)
     }
 
     /* Binary Ninja: Final ISP configuration registers */
-    uint32_t isp_mode = (sensor_params.mode >= 4) ? 0x12 : 0x1e;
+    /* CRITICAL FIX: Use 0x1c for normal mode, NOT 0x1e! */
+    /* BN MCP shows: normal mode = 0x1c, WDR mode = 0x10/0x12 */
+    uint32_t isp_mode = (sensor_params.mode >= 4) ? 0x12 : 0x1c;
+    pr_info("*** tisp_init: CRITICAL - Enabling ISP pipeline: 0x804=0x%x, 0x1c=8, 0x800=1 ***\n", isp_mode);
     system_reg_write(0x804, isp_mode);
     system_reg_write(0x1c, 8);
     system_reg_write(0x800, 1);
+    pr_info("*** tisp_init: ISP pipeline ENABLED - frames should now flow from CSI->ISP->VIC ***\n");
 
     /* Binary Ninja: CRITICAL - Initialize all ISP sub-modules */
     pr_info("*** tisp_init: INITIALIZING ISP SUB-MODULES ***\n");
