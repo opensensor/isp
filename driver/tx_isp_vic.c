@@ -1155,18 +1155,17 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
-    /* CRITICAL FIX: sensor_format should be VIC format code, NOT MIPI data type! */
-    /* VIC format codes: 1=10-bit (RAW10), 2=12-bit (RAW12), 7=16-bit */
-    /* MIPI data type 0x2b = RAW10, but VIC register 0x14 expects format code 1 */
-    sensor_format = 1;  /* VIC format code for 10-bit (RAW10) */
+    /* SAFETY: Use default RAW10 format if sensor_attr access fails */
+    /* Working version uses 0x2b (MIPI data type for RAW10) */
+    sensor_format = 0x2b;  /* Default to RAW10 MIPI data type value */
 
     /* Try to get actual sensor format, but use default if it fails */
     if (sensor_attr) {
-        /* For now, just use the default RAW10 format (code 1) to avoid potential crashes */
-        pr_info("*** SAFETY: Using VIC format code 1 (10-bit RAW10) ***\n");
+        /* For now, just use the default RAW10 format to avoid potential crashes */
+        pr_info("*** SAFETY: Using default RAW10 format (0x2b) to avoid sensor_attr access issues ***\n");
     }
 
-    pr_info("*** Interface type: %d, VIC Format Code: %d (1=10-bit RAW10) ***\n", interface_type, sensor_format);
+    pr_info("*** Interface type: %d, Format: 0x%x (RAW10) ***\n", interface_type, sensor_format);
 
     /* Get VIC register base - offset 0xb8 in Binary Ninja */
     vic_regs = vic_dev->vic_regs;
@@ -1232,12 +1231,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(sensor_format, vic_regs + 0x14);
         writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
 
-        /* CRITICAL FIX: Register 0x18 - Timing parameter (MUST be 0xf00 for MIPI) */
-        /* From vic_control_limit_analysis.md: This register MUST NOT be overwritten */
-        /* Reference driver always uses 0xf00 for MIPI - this prevents control limit error */
-        writel(0xf00, vic_regs + 0x18);
-        wmb();
-        pr_info("*** CRITICAL FIX: reg 0x18 = 0xf00 (timing parameter - prevents control limit error) ***\n");
+        /* REMOVED: Register 0x18 write - continuous-interrupts version doesn't write this */
+        /* The working version with continuous interrupts does NOT write to register 0x18 */
+        /* Writing 0xf00 to register 0x18 may be causing the control limit errors! */
 
         /* Frame mode based on WDR - Binary Ninja 00010414-00010478 */
         u32 wdr_mode = sensor_attr->wdr_cache;
