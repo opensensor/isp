@@ -229,7 +229,7 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
     int result = 0;
     int32_t vin_state;
 
-    pr_info("*** vin_s_stream: SAFE implementation - sd=%p, enable=%d ***\n", sd, enable);
+    pr_info("*** vin_s_stream: EXACT Binary Ninja - sd=%p, enable=%d ***\n", sd, enable);
 
     /* SAFE: Validate container_of result */
     vin_dev = container_of(sd, struct tx_isp_vin_device, sd);
@@ -238,42 +238,72 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
         return -EINVAL;
     }
 
-    /* SAFE: Validate VIN device structure integrity */
-    if (!virt_addr_valid(vin_dev)) {
-        pr_err("vin_s_stream: VIN device not in valid memory\n");
-        return -EINVAL;
-    }
-
+    /* Binary Ninja: int32_t $v1 = *(arg1 + 0xf4) */
     vin_state = vin_dev->state;
     pr_info("vin_s_stream: VIN state = %d, enable = %d\n", vin_state, enable);
 
-    /* SAFE: Validate sensor pointer before access */
+    /* EXACT Binary Ninja logic:
+     * if (arg2 != 0) {
+     *     if ($v1 != 4) goto label_3314;
+     * } else if ($v1 == 4) {
+     *     label_3314: ...
+     * }
+     */
+
+    /* Check if we should process or return early */
+    int should_process = 0;
+    if (enable != 0) {
+        /* Enable: only process if state != 4 */
+        if (vin_state != 4) {
+            should_process = 1;
+            pr_info("vin_s_stream: Enable requested, state != 4, will process\n");
+        } else {
+            pr_info("vin_s_stream: Enable requested but state already 4, returning early\n");
+            return 0;  /* EXACT Binary Ninja: do nothing if already streaming */
+        }
+    } else {
+        /* Disable: only process if state == 4 */
+        if (vin_state == 4) {
+            should_process = 1;
+            pr_info("vin_s_stream: Disable requested, state == 4, will process\n");
+        } else {
+            pr_info("vin_s_stream: Disable requested but state != 4, returning early\n");
+            return 0;  /* EXACT Binary Ninja: do nothing if not streaming */
+        }
+    }
+
+    /* Binary Ninja: label_3314 - Process streaming change */
+    /* Get active sensor from VIN device */
     extern struct tx_isp_sensor *tx_isp_get_sensor(void);
     struct tx_isp_sensor *sensor = tx_isp_get_sensor();
 
-    /* SAFE: Check sensor ops with proper validation */
-    if (!sensor->sd.ops) {
-        pr_info("vin_s_stream: No sensor ops available\n");
-        goto safe_state_update;
+    if (!sensor) {
+        pr_info("vin_s_stream: No active sensor, updating state only\n");
+        goto update_state;
     }
 
-    if (!sensor->sd.ops->video) {
-        pr_info("vin_s_stream: No sensor video ops available\n");
-        goto safe_state_update;
+    /* Binary Ninja: Call sensor's s_stream callback */
+    if (sensor->sd.ops && sensor->sd.ops->video && sensor->sd.ops->video->s_stream) {
+        pr_info("vin_s_stream: Calling sensor s_stream(enable=%d)\n", enable);
+        result = sensor->sd.ops->video->s_stream(&sensor->sd, enable);
+
+        /* Binary Ninja: if (result == 0xfffffdfd) result = 0 */
+        if (result == 0xfffffdfd || result == -0x203) {
+            pr_info("vin_s_stream: Sensor returned special code, treating as success\n");
+            result = 0;
+        }
+        pr_info("vin_s_stream: Sensor s_stream returned %d\n", result);
+    } else {
+        pr_info("vin_s_stream: No sensor s_stream callback available\n");
     }
 
-    /* CRITICAL FIX: Don't call sensor s_stream directly to prevent race conditions */
-    /* Let the core loop handle sensor independently to prevent crashes */
-    pr_info("vin_s_stream: VIN processing complete - sensor will be handled by core loop\n");
-    result = 0;  /* VIN processing successful */
-
-safe_state_update:
-    /* SAFE: Update VIN state only */
+update_state:
+    /* Binary Ninja: Update VIN state */
     int32_t new_state = enable ? 4 : 3;
     vin_dev->state = new_state;
+    pr_info("vin_s_stream: VIN state set to %d (EXACT Binary Ninja)\n", new_state);
 
-    pr_info("vin_s_stream: VIN state set to %d (SAFE implementation)\n", new_state);
-    return 0;
+    return result;
 }
 
 /**
