@@ -414,6 +414,16 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                     if (interface_type == 1) {
                         pr_info("*** CSI MIPI INIT: Configuring MIPI CSI for %d lanes ***\n", sensor_attr->mipi.lans);
 
+                        /* CRITICAL: MAGIC UNLOCK SEQUENCE from reference-trace.txt! */
+                        /* ISP isp-w01: [CSI PHY Control] write at offset 0x0: 0x0 -> 0x3130322a */
+                        /* This is "012*" in ASCII - hardware unlock key! */
+                        pr_info("*** CSI MAGIC UNLOCK: Writing 0x3130322a to CSI[0x0] ***\n");
+                        writel(0x3130322a, csi_dev->csi_regs + 0x0);
+                        wmb();
+                        msleep(1);
+                        u32 unlock_readback = readl(csi_dev->csi_regs + 0x0);
+                        pr_info("*** CSI MAGIC UNLOCK: Readback CSI[0x0] = 0x%08x (expected 0x3130322a) ***\n", unlock_readback);
+
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 4) = zx.d(*($v1_5 + 0x24)) - 1 */
                         writel(sensor_attr->mipi.lans - 1, csi_dev->csi_regs + 4);
                         pr_info("*** CSI[0x4] = %d (lanes - 1) ***\n", sensor_attr->mipi.lans - 1);
@@ -538,6 +548,14 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         wmb(); /* Memory barrier to ensure write completes */
                         u32 readback = readl(csi_dev->csi_regs + 0x10);
                         pr_info("*** CSI MIPI: PHY write complete - readback CSI[0x10] = 0x%08x (expected 0x1) ***\n", readback);
+
+                        /* CRITICAL: Additional PHY control from reference-trace.txt */
+                        /* ISP isp-w01: [CSI PHY Control] write at offset 0x14: 0x0 -> 0x200 */
+                        pr_info("*** CSI MIPI: Writing PHY control CSI[0x14] = 0x200 ***\n");
+                        writel(0x200, csi_dev->csi_regs + 0x14);
+                        wmb();
+                        u32 readback_14 = readl(csi_dev->csi_regs + 0x14);
+                        pr_info("*** CSI MIPI: PHY control readback CSI[0x14] = 0x%08x (expected 0x200) ***\n", readback_14);
                         pr_info("*** CSI MIPI: PHY ENABLED - MIPI data should now flow from sensor! ***\n");
 
                         /* Binary Ninja: private_msleep(0xa) */
