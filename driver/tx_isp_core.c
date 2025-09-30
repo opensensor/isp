@@ -2807,6 +2807,19 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                     }
                 }
 
+                /* CRITICAL FIX: Call ispcore_activate_module if VIC state is 1 */
+                /* This transitions VIC from state 1 → 2 and calls all subdev activate_module callbacks */
+                if (vic_dev->state == 1) {
+                    pr_info("*** ispcore_core_ops_init: VIC state is 1, calling ispcore_activate_module ***");
+                    extern int ispcore_activate_module(struct tx_isp_dev *isp_dev);
+                    ret = ispcore_activate_module(isp_dev);
+                    if (ret != 0) {
+                        pr_err("ispcore_core_ops_init: ispcore_activate_module failed: %d\n", ret);
+                        return ret;
+                    }
+                    pr_info("*** ispcore_activate_module: SUCCESS - VIC transitioned 1 → 2, all subdevs activated ***");
+                }
+
                 /* CRITICAL FIX: Don't reset VIC state if it's already streaming (state 4) */
                 /* The issue is that VIC gets initialized to state 4, then ISP core resets it to 3, causing reinitialization */
                 if (vic_dev->state != 4) {
