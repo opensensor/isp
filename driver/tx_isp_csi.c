@@ -825,18 +825,14 @@ int tx_isp_csi_probe(struct platform_device *pdev)
         pr_info("*** CSI PROBE: csi_regs (offset 0xb8) mapped to: %p ***\n", csi_dev->csi_regs);
 
         /* Binary Ninja: *($v0 + 0x13c) = isp_csi_regs (ISP Core CSI registers) */
-        /* CRITICAL FIX: isp_csi_regs should point to ISP CORE space (0x13300000), NOT CSI space! */
-        /* The ISP Core has CSI-related registers at 0x13300000 + offsets like 0x160, 0x128, etc. */
-        /* These are DIFFERENT from the CSI PHY registers at 0x10022000! */
-        extern struct tx_isp_dev *ourISPdev;
-        if (ourISPdev && ourISPdev->core_regs) {
-            csi_dev->isp_csi_regs = ourISPdev->core_regs;
-            pr_info("*** CSI PROBE: isp_csi_regs (offset 0x13c) mapped to ISP CORE: %p (0x13300000) ***\n", csi_dev->isp_csi_regs);
-        } else {
-            pr_err("*** CSI PROBE: ERROR - ISP Core registers not available! ***\n");
-            csi_dev->isp_csi_regs = csi_dev->sd.regs;  /* Fallback to CSI regs */
-            pr_err("*** CSI PROBE: FALLBACK - Using CSI regs for isp_csi_regs (WRONG!) ***\n");
-        }
+        /* CRITICAL FIX: isp_csi_regs (offset 0x13c) should point to a THIRD CSI register space! */
+        /* Binary Ninja shows isp_csi_regs is used for writes to offsets 0x0, 0x128, 0x160, 0x1e0, 0x260 */
+        /* These offsets are too large for CSI PHY (which only goes to 0x34) */
+        /* These offsets don't match ISP Core CSI registers either */
+        /* HYPOTHESIS: There's a third CSI register space at 0x10023000 (isp-w01 device) */
+        /* Let's use the CSI subdev registers (sd.regs) which should be mapped to 0x10023000 */
+        csi_dev->isp_csi_regs = csi_dev->sd.regs;
+        pr_info("*** CSI PROBE: isp_csi_regs (offset 0x13c) mapped to CSI SUBDEV regs: %p (0x10023000) ***\n", csi_dev->isp_csi_regs);
     } else {
         /* Binary Ninja: isp_printf(2, "sensor type is BT1120!\n", "tx_isp_csi_probe") */
         pr_err("*** CSI PROBE: tx_isp_subdev_init failed to map registers ***\n");
