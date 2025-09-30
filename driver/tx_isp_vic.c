@@ -2893,6 +2893,7 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 
     pr_info("vic_pipo_mdma_enable: Using cached sensor dimensions %dx%d (ATOMIC CONTEXT SAFE)\n", width, height);
 
+    /* Binary Ninja EXACT: int32_t $v1 = *(arg1 + 0xdc) */
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x308) = 1 */
     writel(1, vic_base + 0x308);
     if (vic_ctrl)
@@ -2900,17 +2901,10 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x308 = 1 (MDMA enable)\n");
 
-    /* Choose stride based on current V4L2 pixel format */
-    if (tx_isp_current_pixfmt == 0x3231564e /* NV12 */) {
-        stride = width;        /* Y plane stride */
-        pr_info("vic_pipo_mdma_enable: Using NV12 stride=%u (pixfmt=0x%x)\n", stride, tx_isp_current_pixfmt);
-    } else if (tx_isp_current_pixfmt == 0x56595559 /* 'YUYV' */) {
-        stride = width << 1;   /* 2 bytes/pixel */
-        pr_info("vic_pipo_mdma_enable: Using YUYV stride=%u (pixfmt=0x%x)\n", stride, tx_isp_current_pixfmt);
-    } else {
-        stride = width << 1;   /* Default RAW-like */
-        pr_info("vic_pipo_mdma_enable: Using RAW-like stride=%u (pixfmt=0x%x)\n", stride, tx_isp_current_pixfmt);
-    }
+    /* Binary Ninja EXACT: $v1_1 = $v1 << 1 */
+    /* ALWAYS width * 2, regardless of pixel format! */
+    stride = width << 1;
+    pr_info("vic_pipo_mdma_enable: Binary Ninja EXACT stride=%u (width << 1)\n", stride);
 
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x304) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
     writel((width << 16) | height, vic_base + 0x304);
