@@ -506,6 +506,11 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         pr_info("*** CSI STATUS CHECK: Dumping CSI registers after PHY enable ***\n");
                         dump_csi_reg(sd);
 
+                        /* CRITICAL DEBUG: Read back ISP Core CSI registers to verify they're working */
+                        u32 isp_csi_0 = readl(csi_dev->isp_csi_regs + 0x0);
+                        u32 isp_csi_128 = readl(csi_dev->isp_csi_regs + 0x128);
+                        pr_info("*** ISP_CSI READBACK: [0x0]=0x%08x (expected 0x7d), [0x128]=0x%08x (expected 0x3f) ***\n", isp_csi_0, isp_csi_128);
+
                         v0_17 = 3;
 
                     } else if (interface_type != 2) {
