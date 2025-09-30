@@ -397,8 +397,8 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         /* Binary Ninja: if ($v1_10 != 0) */
                         if (v1_10 != 0) {
                             /* Binary Ninja: $v0_8 = *($s0_1 + 0x13c) */
-                            /* SAFE: Use proper struct member access instead of dangerous offset */
-                            isp_csi_regs = csi_dev->csi_regs;
+                            /* CRITICAL FIX: Use isp_csi_regs (offset 0x13c), NOT csi_regs (offset 0xb8)! */
+                            isp_csi_regs = csi_dev->isp_csi_regs;
                             v0_8 = isp_csi_regs;
                         } else {
                             /* Binary Ninja: int32_t $v0_9 = *($v0_7 + 0x1c) */
@@ -407,8 +407,8 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                             /* Binary Ninja: Complex frame rate calculation based on width */
                             if (v0_9 - 0x50 < 0x1e) {
                                 /* Binary Ninja: $a0_2 = *($s0_1 + 0x13c) */
-                                /* SAFE: Use proper struct member access instead of dangerous offset */
-                                isp_csi_regs = csi_dev->csi_regs;
+                                /* CRITICAL FIX: Use isp_csi_regs (offset 0x13c), NOT csi_regs (offset 0xb8)! */
+                                isp_csi_regs = csi_dev->isp_csi_regs;
                             } else {
                                 v1_10 = 1;
                                 if (v0_9 - 0x6e >= 0x28) {
@@ -441,8 +441,8 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                                         }
                                     }
                                 }
-                                /* SAFE: Use proper struct member access instead of dangerous offset */
-                                isp_csi_regs = csi_dev->csi_regs;
+                                /* CRITICAL FIX: Use isp_csi_regs (offset 0x13c), NOT csi_regs (offset 0xb8)! */
+                                isp_csi_regs = csi_dev->isp_csi_regs;
                             }
 
                             /* Binary Ninja: int32_t $v0_14 = (*($a0_2 + 0x160) & 0xfffffff0) | $v1_10 */
@@ -768,8 +768,15 @@ int tx_isp_csi_probe(struct platform_device *pdev)
 
     /* FIXED: Use memory mapping from tx_isp_subdev_init instead of duplicate mapping */
     if (csi_dev->sd.regs) {
+        /* Binary Ninja: *($v0 + 0xb8) = csi_regs (CSI control registers) */
         csi_dev->csi_regs = csi_dev->sd.regs;
-        pr_info("*** CSI PROBE: Using register mapping from tx_isp_subdev_init: %p ***\n", csi_dev->csi_regs);
+        pr_info("*** CSI PROBE: csi_regs (offset 0xb8) mapped to: %p ***\n", csi_dev->csi_regs);
+
+        /* Binary Ninja: *($v0 + 0x13c) = isp_csi_regs (ISP CSI PHY registers) */
+        /* CRITICAL: These are the SAME physical registers, but accessed through different struct member */
+        /* The Binary Ninja uses two different offsets to access the same register base */
+        csi_dev->isp_csi_regs = csi_dev->sd.regs;
+        pr_info("*** CSI PROBE: isp_csi_regs (offset 0x13c) mapped to: %p ***\n", csi_dev->isp_csi_regs);
     } else {
         /* Binary Ninja: isp_printf(2, "sensor type is BT1120!\n", "tx_isp_csi_probe") */
         pr_err("*** CSI PROBE: tx_isp_subdev_init failed to map registers ***\n");

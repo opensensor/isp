@@ -97,11 +97,16 @@ struct tx_isp_csi_device {
     uint32_t offset_10;       // 0x10: Referenced in init
     struct IspModule *module_info;  // Module info pointer
 
-    // CSI register access - changed to single pointer like VIC
+    // CSI register access - Binary Ninja EXACT offsets
     void __iomem *cpm_regs;   // CPM registers
     void __iomem *phy_regs;   // MIPI PHY registers
-    void __iomem *csi_regs;   // Single pointer to mapped csi regs
+    void __iomem *csi_regs;   // 0xb8: CSI control registers (0x10023000)
     struct resource *phy_res;  // PHY memory resource
+
+    /* CRITICAL: Binary Ninja offset 0x13c - ISP CSI PHY registers */
+    /* This is DIFFERENT from csi_regs at 0xb8! */
+    /* Binary Ninja: *($s0_1 + 0x13c) = ISP CSI PHY register base */
+    void __iomem *isp_csi_regs;  // 0x13c: ISP CSI PHY registers (different from csi_regs!)
 
     // State management
     struct clk *clk;
