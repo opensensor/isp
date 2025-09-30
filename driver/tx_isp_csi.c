@@ -414,15 +414,18 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                     if (interface_type == 1) {
                         pr_info("*** CSI MIPI INIT: Configuring MIPI CSI for %d lanes ***\n", sensor_attr->mipi.lans);
 
-                        /* CRITICAL: MAGIC UNLOCK SEQUENCE from reference-trace.txt! */
-                        /* ISP isp-w01: [CSI PHY Control] write at offset 0x0: 0x0 -> 0x3130322a */
-                        /* This is "012*" in ASCII - hardware unlock key! */
-                        pr_info("*** CSI MAGIC UNLOCK: Writing 0x3130322a to CSI[0x0] ***\n");
-                        writel(0x3130322a, csi_dev->csi_regs + 0x0);
-                        wmb();
-                        msleep(1);
-                        u32 unlock_readback = readl(csi_dev->csi_regs + 0x0);
-                        pr_info("*** CSI MAGIC UNLOCK: Readback CSI[0x0] = 0x%08x (expected 0x3130322a) ***\n", unlock_readback);
+                        /* CRITICAL: VIC magic unlock at 0x10023000 should enable CSI PHY access! */
+                        /* Check if CSI PHY at 0x10022000 is now accessible */
+                        pr_info("*** CSI PHY: Checking if CSI PHY is accessible after VIC unlock ***\n");
+                        u32 csi_version = readl(csi_dev->csi_regs + 0x0);
+                        pr_info("*** CSI PHY: CSI[0x0] (VERSION) = 0x%08x ***\n", csi_version);
+
+                        if (csi_version == 0x00000000) {
+                            pr_err("*** CSI PHY: CRITICAL - CSI PHY still not accessible! All registers = 0! ***\n");
+                            pr_err("*** CSI PHY: VIC magic unlock did not enable CSI PHY access! ***\n");
+                        } else {
+                            pr_info("*** CSI PHY: SUCCESS - CSI PHY is now accessible! ***\n");
+                        }
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 4) = zx.d(*($v1_5 + 0x24)) - 1 */
                         writel(sensor_attr->mipi.lans - 1, csi_dev->csi_regs + 4);
