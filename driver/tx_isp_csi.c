@@ -430,34 +430,58 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                             pr_err("*** CSI PHY ENABLE: ERROR - ISP Core registers not available! ***\n");
                         }
 
-                        /* CRITICAL DISCOVERY: CSI PHY registers are WRITE-ONLY! */
-                        /* Stock driver NEVER reads from isp-csi - all registers read as 0! */
-                        /* We must write the CSI PHY configuration from reference-trace.txt */
-                        pr_info("*** CSI PHY: Writing CSI PHY configuration to physical 0x10022000 (virt %p) ***\n", csi_dev->csi_regs);
-                        pr_info("*** CSI PHY: [0x0] = 0x7d ***\n");
-                        writel(0x7d, csi_dev->csi_regs + 0x0);
-                        writel(0xe3, csi_dev->csi_regs + 0x4);
-                        writel(0xa0, csi_dev->csi_regs + 0x8);
-                        writel(0x83, csi_dev->csi_regs + 0xc);
-                        writel(0xfa, csi_dev->csi_regs + 0x10);
-                        writel(0x88, csi_dev->csi_regs + 0x1c);
-                        writel(0x4e, csi_dev->csi_regs + 0x20);
-                        writel(0xdd, csi_dev->csi_regs + 0x24);
-                        writel(0x84, csi_dev->csi_regs + 0x28);
-                        writel(0x5e, csi_dev->csi_regs + 0x2c);
-                        writel(0xf0, csi_dev->csi_regs + 0x30);
-                        writel(0xc0, csi_dev->csi_regs + 0x34);
-                        writel(0x36, csi_dev->csi_regs + 0x38);
-                        writel(0xdb, csi_dev->csi_regs + 0x3c);
-                        writel(0x3, csi_dev->csi_regs + 0x40);
-                        writel(0x80, csi_dev->csi_regs + 0x44);
-                        writel(0x10, csi_dev->csi_regs + 0x48);
-                        writel(0x3, csi_dev->csi_regs + 0x54);
-                        writel(0xff, csi_dev->csi_regs + 0x58);
-                        pr_info("*** CSI PHY: [0x5c] = 0x42 (last write) ***\n");
-                        writel(0x42, csi_dev->csi_regs + 0x5c);
-                        wmb();
-                        pr_info("*** CSI PHY: CSI PHY configuration complete! 20 registers written! ***\n");
+                        /* Binary Ninja EXACT: Calculate CSI PHY timing parameter based on FPS */
+                        /* Binary Ninja: int32_t $v0_9 = *($v0_7 + 0x1c) - sensor FPS */
+                        int32_t fps = sensor_attr->fps;
+                        int32_t timing_param;
+
+                        if (sensor_attr->mipi.clk != 0) {
+                            /* Binary Ninja: if ($v1_10 != 0) - use explicit clock value */
+                            timing_param = sensor_attr->mipi.clk;
+                            pr_info("*** CSI MIPI: Using explicit clock value: %d ***\n", timing_param);
+                        } else {
+                            /* Binary Ninja: Calculate timing based on FPS ranges */
+                            if (fps - 0x50 < 0x1e) {  /* 80-109 FPS */
+                                timing_param = 1;
+                            } else if (fps - 0x6e < 0x28) {  /* 110-149 FPS */
+                                timing_param = 2;
+                            } else if (fps - 0x96 < 0x32) {  /* 150-199 FPS */
+                                timing_param = 3;
+                            } else if (fps - 0xc8 < 0x32) {  /* 200-249 FPS */
+                                timing_param = 4;
+                            } else if (fps - 0xfa < 0x32) {  /* 250-299 FPS */
+                                timing_param = 5;
+                            } else if (fps - 0x12c < 0x64) {  /* 300-399 FPS */
+                                timing_param = 6;
+                            } else if (fps - 0x190 < 0x64) {  /* 400-499 FPS */
+                                timing_param = 7;
+                            } else if (fps - 0x1f4 < 0x64) {  /* 500-599 FPS */
+                                timing_param = 8;
+                            } else if (fps - 0x258 < 0x64) {  /* 600-699 FPS */
+                                timing_param = 9;
+                            } else if (fps - 0x2bc < 0x64) {  /* 700-799 FPS */
+                                timing_param = 0xa;
+                            } else if (fps - 0x320 < 0xc8) {  /* 800-999 FPS */
+                                timing_param = 0xb;
+                            } else {
+                                timing_param = 1;  /* Default */
+                            }
+                            pr_info("*** CSI MIPI: Calculated timing param %d for FPS %d ***\n", timing_param, fps);
+                        }
+
+                        /* Binary Ninja: int32_t $v0_14 = (*($a0_2 + 0x160) & 0xfffffff0) | $v1_10 */
+                        u32 reg_val = (readl(csi_dev->isp_csi_regs + 0x160) & 0xfffffff0) | timing_param;
+                        writel(reg_val, csi_dev->isp_csi_regs + 0x160);
+                        /* Binary Ninja: *(*($s0_1 + 0x13c) + 0x1e0) = $v0_14 */
+                        writel(reg_val, csi_dev->isp_csi_regs + 0x1e0);
+                        /* Binary Ninja: *(*($s0_1 + 0x13c) + 0x260) = $v0_14 */
+                        writel(reg_val, csi_dev->isp_csi_regs + 0x260);
+
+                        /* Binary Ninja: *$v0_8 = 0x7d */
+                        writel(0x7d, csi_dev->isp_csi_regs + 0x0);
+                        /* Binary Ninja: *(*($s0_1 + 0x13c) + 0x128) = 0x3f */
+                        writel(0x3f, csi_dev->isp_csi_regs + 0x128);
+                        pr_info("*** CSI MIPI: Wrote 0x7d to isp_csi_regs[0x0], 0x3f to isp_csi_regs[0x128] ***\n");
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 4) = zx.d(*($v1_5 + 0x24)) - 1 */
                         writel(sensor_attr->mipi.lans - 1, csi_dev->csi_regs + 4);
