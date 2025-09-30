@@ -3351,59 +3351,9 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
                 /* Attempt control-bank re-unlock/enable if key regs are zero */
                 if (vic_dev->vic_regs_control) {
-                    void __iomem *vcc = vic_dev->vic_regs_control;
-                    u32 ctrl300_c_pre = readl(vcc + 0x300);
-                    u32 buf318_c_pre = readl(vcc + 0x318);
-                    if (ctrl300_c_pre == 0 && buf318_c_pre == 0) {
-                        pr_warn("*** VIC CONTROL BANK: Re-applying enable sequence on CONTROL bank ***\n");
-                        /* Minimal enable sequence on CONTROL bank */
-                        writel(2, vcc + 0x0);
-                        wmb();
-                        writel(4, vcc + 0x0);
-                        wmb();
-                        writel(1, vcc + 0x0);
-                        wmb();
-                        /* Also assert VIC IRQ gate in CONTROL bank to mirror core 0x9ac0/0x9ac8 */
-                        writel(0x200, vcc + 0x14);
-                        /* Program IMCR/key and route bits mirrored from reference */
-                        writel(0xb5742249, vcc + 0x0c);
-                        writel(0x000002d0, vcc + 0x100);
-                        wmb();
-                        pr_info("*** VIC CONTROL BANK: Post-enable [0x0]=0x%08x, [0x14]=0x%08x, [0x0c]=0x%08x, [0x100]=0x%08x ***\n",
-                                readl(vcc + 0x0), readl(vcc + 0x14), readl(vcc + 0x0c), readl(vcc + 0x100));
-
-                        /* CRITICAL FIX: Reprogram CONTROL space buffer addresses after control bank init */
-                        /* The control bank re-initialization clears buffer registers, so we must reprogram them */
-                        pr_info("*** VIC CONTROL BANK: Reprogramming buffer addresses after control bank init ***\n");
-                        {
-                            u32 frame_size = vic_dev->width * vic_dev->height * 2;  /* RAW10 = 2 bytes per pixel */
-                            u32 base_addr = 0x6300000;  /* Reserved memory base */
-                            int i;
-
-                            for (i = 0; i < 5; i++) {
-                                u32 buffer_addr = base_addr + (i * frame_size);
-                                u32 reg_offset = (i + 0xc6) << 2;  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
-                                writel(buffer_addr, vcc + reg_offset);
-                                wmb();
-                                pr_info("*** VIC CONTROL BANK: Buffer %d addr=0x%x -> CONTROL[0x%x] ***\n",
-                                        i, buffer_addr, reg_offset);
-                            }
-
-                            /* CRITICAL FIX: Program VIC control register 0x300 in CONTROL space */
-                            /* The CONTROL space VIC control register is always 0, which disables DMA */
-                            /* We need to copy the PRIMARY space control value to CONTROL space */
-                            u32 primary_ctrl = readl(vic_dev->vic_regs + 0x300);
-                            writel(primary_ctrl, vcc + 0x300);
-                            wmb();
-                            pr_info("*** VIC CONTROL BANK: Copied PRIMARY control 0x%08x to CONTROL[0x300] ***\n", primary_ctrl);
-
-                            /* CRITICAL: Verify CONTROL space buffer addresses after reprogramming */
-                            pr_info("*** VIC CONTROL BANK: VERIFICATION AFTER REPROGRAMMING ***\n");
-                            pr_info("*** VIC BUFS (CONTROL AFTER): [0x318]=0x%08x [0x31c]=0x%08x [0x320]=0x%08x [0x324]=0x%08x [0x328]=0x%08x ***\n",
-                                    readl(vcc + 0x318), readl(vcc + 0x31c), readl(vcc + 0x320), readl(vcc + 0x324), readl(vcc + 0x328));
-                            pr_info("*** VIC CTRL (CONTROL AFTER): [0x300]=0x%08x ***\n", readl(vcc + 0x300));
-                        }
-                    }
+                    /* REMOVED: CONTROL bank (0x10023000) is CSI PHY, not VIC! */
+                    /* Do NOT write VIC buffer addresses to CSI PHY space! */
+                    /* The PRIMARY bank (0x133e0000) is the ONLY VIC register space! */
                 }
 
                 /* Apply working mask up front: frame-done only, like good-things */
