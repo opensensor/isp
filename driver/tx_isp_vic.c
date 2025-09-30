@@ -3074,11 +3074,10 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             pr_info("*** VIC CONTROL (PRIMARY): WROTE 2 to [0x0] before MDMA/config ***\n");
         }
 
-        /* Binary Ninja EXACT: vic_mdma_enable_complete - COMPLETE MDMA setup */
-        /* CRITICAL FIX: Use 3 buffers to match VIC hardware bug (hardware corrupts 4->3) */
-        pr_info("*** CRITICAL: Calling vic_mdma_enable_complete - COMPLETE MDMA setup for VIC interrupts ***\n");
-        u32 control_result = vic_mdma_enable_complete(vic_dev, vic_dev->width, vic_dev->height, 0, 3, 0x6300000, 0);
-        pr_info("*** vic_mdma_enable_complete completed - VIC MDMA fully configured! control=0x%x ***\n", control_result);
+        /* Binary Ninja EXACT: vic_pipo_mdma_enable($s0) */
+        pr_info("*** CRITICAL: Calling vic_pipo_mdma_enable - Binary Ninja EXACT ***\n");
+        vic_pipo_mdma_enable(vic_dev);
+        pr_info("*** vic_pipo_mdma_enable completed ***\n");
 
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
         void __iomem *vic_base = vic_dev->vic_regs;  /* SAFE: $s0 + 0xb8 = vic_regs */
