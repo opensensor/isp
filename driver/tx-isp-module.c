@@ -2791,6 +2791,20 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
             }
         }
 
+        /* CRITICAL: Initialize CSI clocks BEFORE CSI init */
+        if (csi_sd && csi_sd->clk_num > 0) {
+            pr_info("*** tx_isp_video_s_stream: CRITICAL - Initializing CSI clocks (%d clocks) BEFORE CSI init ***\n", csi_sd->clk_num);
+            extern int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count);
+            int clk_ret = isp_subdev_init_clks(csi_sd, csi_sd->clk_num);
+            if (clk_ret != 0) {
+                pr_err("*** tx_isp_video_s_stream: CSI clock initialization failed: %d ***\n", clk_ret);
+            } else {
+                pr_info("*** tx_isp_video_s_stream: CSI clocks initialized successfully ***\n");
+            }
+        } else {
+            pr_warn("*** tx_isp_video_s_stream: WARNING - CSI has no clocks defined (clk_num=%d) ***\n", csi_sd ? csi_sd->clk_num : -1);
+        }
+
         /* Initialize CSI second */
         if (csi_sd && csi_sd->ops && csi_sd->ops->core && csi_sd->ops->core->init) {
             pr_info("*** tx_isp_video_s_stream: Initializing CSI subdev ***\n");
