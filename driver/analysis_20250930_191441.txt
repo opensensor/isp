@@ -1,0 +1,57 @@
+========================================
+ISP DRIVER TEST ANALYSIS
+========================================
+
+Timestamp: 20250930_191441
+Build: 9b4af61f89070f8643560ada8a573996
+
+=== KEY METRICS ===
+VIC START messages: 6
+VIN linked: 2
+VIN input configured: 3
+CSI input configured: 3
+VIC input configured: 6
+Complete pipeline configured: 3
+Control limit errors: 3
+Frame done interrupts: 
+
+=== INTERRUPT COUNTS ===
+ 37:          4   jz-intc  isp-m0
+ 38:          8   jz-intc  isp-w02
+
+=== PIPELINE CONFIGURATION ===
+[   20.662913] *** VIC START: VIC input source configured - CSI->VIC link enabled ***
+[   20.663058] *** VIC STREAM ON: VIN input configured: 0x00000003 (Sensor->VIN link) ***
+[   20.663064] *** VIC STREAM ON: CSI input configured: 0x1 (VIN->CSI link) ***
+[   20.663076] *** VIC STREAM ON: VIC input source configured - CSI->VIC link enabled ***
+[   20.662913] *** VIC START: VIC input source configured - CSI->VIC link enabled ***
+[   20.663058] *** VIC STREAM ON: VIN input configured: 0x00000003 (Sensor->VIN link) ***
+[   20.663064] *** VIC STREAM ON: CSI input configured: 0x1 (VIN->CSI link) ***
+[   20.663076] *** VIC STREAM ON: VIC input source configured - CSI->VIC link enabled ***
+[   24.159927] *** VIC START: VIC input source configured - CSI->VIC link enabled ***
+[   24.160073] *** VIC STREAM ON: VIN input configured: 0x00000003 (Sensor->VIN link) ***
+
+=== ERRORS ===
+[    0.000000] CPU0 RESET ERROR PC:801ADC84
+[    0.121605] jz-dwc2 jz-dwc2: cgu clk gate get error
+[    0.000000] CPU0 RESET ERROR PC:801ADC84
+[    0.121605] jz-dwc2 jz-dwc2: cgu clk gate get error
+[   20.382271] *** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***
+[   20.599811] sensor_write_array: Complete - wrote 137 registers, 0 errors
+[   20.893485] *** VIC ERROR: control limit error (bit 21) ***
+[   20.599811] sensor_write_array: Complete - wrote 137 registers, 0 errors
+[   20.893485] *** VIC ERROR: control limit error (bit 21) ***
+[   22.619613] *** Channel 0: Frame wait timeout/error, generating frame ***
+[   22.724851] *** Channel 0: Frame wait timeout/error, generating frame ***
+[   22.824463] *** Channel 0: Frame wait timeout/error, generating frame ***
+[   22.849301] *** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***
+[   22.919395] *** Channel 0: Frame wait timeout/error, generating frame ***
+[   23.951819] *** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***
+[   24.009115] *** Channel 1: Frame wait timeout/error, generating frame ***
+[   24.109401] *** Channel 1: Frame wait timeout/error, generating frame ***
+[   24.271639] *** Channel 1: Frame wait timeout/error, generating frame ***
+[   24.409195] *** Channel 1: Frame wait timeout/error, generating frame ***
+[   24.637688] *** VIC ERROR: control limit error (bit 21) ***
+
+=== KEY REGISTER WRITES ===
+

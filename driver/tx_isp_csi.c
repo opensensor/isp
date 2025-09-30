@@ -430,17 +430,32 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                             pr_err("*** CSI PHY ENABLE: ERROR - ISP Core registers not available! ***\n");
                         }
 
-                        /* Now check if CSI PHY at 0x10022000 is accessible */
-                        pr_info("*** CSI PHY: Checking if CSI PHY is accessible after enable ***\n");
-                        u32 csi_version = readl(csi_dev->csi_regs + 0x0);
-                        pr_info("*** CSI PHY: CSI[0x0] (VERSION) = 0x%08x ***\n", csi_version);
-
-                        if (csi_version == 0x00000000) {
-                            pr_err("*** CSI PHY: CRITICAL - CSI PHY still not accessible! All registers = 0! ***\n");
-                            pr_err("*** CSI PHY: This means ISP_CORE[0xb078] write did not enable CSI PHY! ***\n");
-                        } else {
-                            pr_info("*** CSI PHY: SUCCESS - CSI PHY is now accessible! VERSION = 0x%08x ***\n", csi_version);
-                        }
+                        /* CRITICAL DISCOVERY: CSI PHY registers are WRITE-ONLY! */
+                        /* Stock driver NEVER reads from isp-csi - all registers read as 0! */
+                        /* We must write the CSI PHY configuration from reference-trace.txt */
+                        pr_info("*** CSI PHY: Writing CSI PHY configuration from reference trace ***\n");
+                        writel(0x7d, csi_dev->csi_regs + 0x0);
+                        writel(0xe3, csi_dev->csi_regs + 0x4);
+                        writel(0xa0, csi_dev->csi_regs + 0x8);
+                        writel(0x83, csi_dev->csi_regs + 0xc);
+                        writel(0xfa, csi_dev->csi_regs + 0x10);
+                        writel(0x88, csi_dev->csi_regs + 0x1c);
+                        writel(0x4e, csi_dev->csi_regs + 0x20);
+                        writel(0xdd, csi_dev->csi_regs + 0x24);
+                        writel(0x84, csi_dev->csi_regs + 0x28);
+                        writel(0x5e, csi_dev->csi_regs + 0x2c);
+                        writel(0xf0, csi_dev->csi_regs + 0x30);
+                        writel(0xc0, csi_dev->csi_regs + 0x34);
+                        writel(0x36, csi_dev->csi_regs + 0x38);
+                        writel(0xdb, csi_dev->csi_regs + 0x3c);
+                        writel(0x3, csi_dev->csi_regs + 0x40);
+                        writel(0x80, csi_dev->csi_regs + 0x44);
+                        writel(0x10, csi_dev->csi_regs + 0x48);
+                        writel(0x3, csi_dev->csi_regs + 0x54);
+                        writel(0xff, csi_dev->csi_regs + 0x58);
+                        writel(0x42, csi_dev->csi_regs + 0x5c);
+                        wmb();
+                        pr_info("*** CSI PHY: CSI PHY configuration complete! ***\n");
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 4) = zx.d(*($v1_5 + 0x24)) - 1 */
                         writel(sensor_attr->mipi.lans - 1, csi_dev->csi_regs + 4);
