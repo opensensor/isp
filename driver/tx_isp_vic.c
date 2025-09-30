@@ -1260,6 +1260,20 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         wmb();
         pr_info("*** VIC UNLOCK: After writing 4, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
 
+        /* CRITICAL: Binary Ninja EXACT - Wait for register 0x0 to become 0 */
+        /* Binary Ninja: while (*$v1_30 != 0) nop */
+        pr_info("*** VIC UNLOCK: Waiting for register 0x0 to become 0 ***\n");
+        int timeout = 1000;
+        while (readl(vic_regs + 0x0) != 0 && timeout > 0) {
+            cpu_relax();
+            timeout--;
+        }
+        if (timeout == 0) {
+            pr_err("*** VIC UNLOCK: TIMEOUT waiting for register 0x0 to become 0! Current value = 0x%08x ***\n", readl(vic_regs + 0x0));
+        } else {
+            pr_info("*** VIC UNLOCK: Register 0x0 is now 0, VIC unlocked! ***\n");
+        }
+
         /* CRITICAL: Register 0x1a0 - Frame configuration from sensor attributes */
         /* Binary Ninja: *(vic_regs + 0x1a0) = (wdr_cache << 4) | data_type */
         u32 reg_1a0_value = (sensor_attr->wdr_cache << 4) | sensor_attr->data_type;
