@@ -187,11 +187,31 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
         return 0xffffffea;
     }
 
-    /* Binary Ninja: if (*(*(arg1 + 0x110) + 0x14) != 1) return 0 */
-    /* This checks CSI device interface type - if not MIPI (1), return 0 */
-    if (csi_dev->interface_type != 1) {
-        pr_info("csi_video_s_stream: Interface type %d != 1 (MIPI), returning 0\n", csi_dev->interface_type);
-        return 0;
+    /* CRITICAL FIX: Check sensor interface type instead of CSI device interface_type
+     * The working version checks sensor attributes directly because csi_dev->interface_type
+     * may not be initialized yet when this function is called.
+     * Binary Ninja: if (*(*(arg1 + 0x110) + 0x14) != 1) return 0
+     */
+    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+
+    /* First try to check sensor attributes (more reliable) */
+    if (sensor && sensor->video.attr) {
+        if (sensor->video.attr->dbus_type != TX_SENSOR_DATA_INTERFACE_MIPI) {
+            pr_info("csi_video_s_stream: Sensor interface type %d != 1 (MIPI), returning 0\n",
+                    sensor->video.attr->dbus_type);
+            return 0;
+        }
+        pr_info("csi_video_s_stream: Sensor interface type is MIPI (1) - proceeding\n");
+    } else {
+        /* Fallback to CSI device interface_type if sensor not available */
+        pr_info("csi_video_s_stream: Sensor not available, checking csi_dev->interface_type=%d\n",
+                csi_dev->interface_type);
+        if (csi_dev->interface_type != 1) {
+            pr_info("csi_video_s_stream: CSI device interface type %d != 1 (MIPI), returning 0\n",
+                    csi_dev->interface_type);
+            return 0;
+        }
     }
 
     /* Binary Ninja: int32_t $v0_4 = 4 */
