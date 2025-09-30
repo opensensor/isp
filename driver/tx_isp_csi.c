@@ -496,6 +496,24 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         u32 readback_128 = readl(isp_csi_regs + 0x128);
                         pr_info("*** CSI MIPI: IMMEDIATE READBACK ISP_CSI[0x128] = 0x%08x (expected 0x3f) ***\n", readback_128);
 
+                        /* CRITICAL: Enable CSI PHY through CPM first! */
+                        void __iomem *cpm_regs = ioremap(0x10000000, 0x1000);
+                        if (cpm_regs) {
+                            /* Check CPM MIPI PHY control register (offset 0xE0 or similar) */
+                            u32 mipi_ctrl = readl(cpm_regs + 0x3c);  /* MIPI CSI PHY control */
+                            pr_info("*** CPM MIPI_CTRL (0x3c) BEFORE: 0x%08x ***\n", mipi_ctrl);
+
+                            /* Enable MIPI CSI PHY in CPM */
+                            mipi_ctrl |= (1 << 0);  /* Enable CSI PHY */
+                            writel(mipi_ctrl, cpm_regs + 0x3c);
+                            wmb();
+
+                            u32 mipi_ctrl_after = readl(cpm_regs + 0x3c);
+                            pr_info("*** CPM MIPI_CTRL (0x3c) AFTER: 0x%08x ***\n", mipi_ctrl_after);
+                            iounmap(cpm_regs);
+                            msleep(10);
+                        }
+
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0x10) = 1 */
                         pr_info("*** CSI MIPI: CRITICAL - Enabling CSI PHY: CSI[0x10] = 1 ***\n");
                         pr_info("*** CSI DEBUG: csi_dev=%p, csi_regs=%p ***\n", csi_dev, csi_dev->csi_regs);
@@ -825,14 +843,20 @@ int tx_isp_csi_probe(struct platform_device *pdev)
         pr_info("*** CSI PROBE: csi_regs (offset 0xb8) mapped to: %p ***\n", csi_dev->csi_regs);
 
         /* Binary Ninja: *($v0 + 0x13c) = isp_csi_regs (ISP Core CSI registers) */
-        /* CRITICAL FIX: isp_csi_regs (offset 0x13c) should point to a THIRD CSI register space! */
-        /* Binary Ninja shows isp_csi_regs is used for writes to offsets 0x0, 0x128, 0x160, 0x1e0, 0x260 */
-        /* These offsets are too large for CSI PHY (which only goes to 0x34) */
-        /* These offsets don't match ISP Core CSI registers either */
-        /* HYPOTHESIS: There's a third CSI register space at 0x10023000 (isp-w01 device) */
-        /* Let's use the CSI subdev registers (sd.regs) which should be mapped to 0x10023000 */
-        csi_dev->isp_csi_regs = csi_dev->sd.regs;
-        pr_info("*** CSI PROBE: isp_csi_regs (offset 0x13c) mapped to CSI SUBDEV regs: %p (0x10023000) ***\n", csi_dev->isp_csi_regs);
+        /* CRITICAL FIX: isp_csi_regs should point to CSI SHADOW registers in ISP Core space! */
+        /* Based on user insight: manufacturer uses shadow registers in ISP space to obscure architecture */
+        /* Binary Ninja shows writes to isp_csi_regs + 0x0, 0x128, 0x160, 0x1e0, 0x260 */
+        /* These are CSI control shadow registers within the ISP Core, likely at offset 0x10000 */
+        extern struct tx_isp_dev *ourISPdev;
+        if (ourISPdev && ourISPdev->core_regs) {
+            /* Try ISP Core + 0x10000 as CSI shadow register base */
+            csi_dev->isp_csi_regs = ourISPdev->core_regs + 0x10000;
+            pr_info("*** CSI PROBE: isp_csi_regs (offset 0x13c) mapped to ISP CORE + 0x10000 (CSI SHADOW): %p ***\n", csi_dev->isp_csi_regs);
+        } else {
+            pr_err("*** CSI PROBE: ERROR - ISP Core registers not available! ***\n");
+            csi_dev->isp_csi_regs = csi_dev->sd.regs;
+            pr_err("*** CSI PROBE: FALLBACK - Using CSI subdev regs ***\n");
+        }
     } else {
         /* Binary Ninja: isp_printf(2, "sensor type is BT1120!\n", "tx_isp_csi_probe") */
         pr_err("*** CSI PROBE: tx_isp_subdev_init failed to map registers ***\n");
