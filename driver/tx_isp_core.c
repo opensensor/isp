@@ -526,8 +526,9 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         }
         /* Binary Ninja: $a0_6 = arg1 */
         /* Binary Ninja: $v0_11 = tx_isp_disable_irq */
-        tx_isp_disable_irq(isp_dev);
-        pr_info("*** ispcore_video_s_stream: IRQ disabled ***\n");
+        //tx_isp_disable_irq(isp_dev);
+        //pr_info("*** ispcore_video_s_stream: IRQ disabled ***\n");
+		// Leave them enabled
     } else {
         /* Binary Ninja: *($v0_10 + 0xb0) = 0xffffffff */
         if (core_dev) {
