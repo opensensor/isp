@@ -2733,8 +2733,10 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
 
         /* CRITICAL FIX: Activate VIN FIRST before any s_stream calls */
         /* VIN must transition 1→2 via activate_module BEFORE s_stream sets it to 4 */
+        pr_info("*** tx_isp_video_s_stream: Checking VIN device: dev->vin_dev=%p ***\n", dev->vin_dev);
         if (dev->vin_dev) {
             struct tx_isp_vin_device *vin_dev = (struct tx_isp_vin_device *)dev->vin_dev;
+            pr_info("*** tx_isp_video_s_stream: VIN device found, current state=%d ***\n", vin_dev->state);
             if (vin_dev->state == 1) {
                 pr_info("*** tx_isp_video_s_stream: Activating VIN subdev (state 1 -> 2) BEFORE any streaming ***\n");
                 extern int tx_isp_vin_activate_subdev(void* arg1);
@@ -2743,6 +2745,8 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
             } else {
                 pr_info("*** tx_isp_video_s_stream: VIN already in state %d, skipping activation ***\n", vin_dev->state);
             }
+        } else {
+            pr_info("*** tx_isp_video_s_stream: VIN device is NULL! ***\n");
         }
 
         /* Initialize subdevs in proper order using helper functions: Core → CSI → VIC → Sensors */
