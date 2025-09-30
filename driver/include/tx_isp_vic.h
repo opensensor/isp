@@ -110,7 +110,10 @@ struct tx_isp_vic_device {
     /* CRITICAL: Device state (4-byte aligned) */
     int state __attribute__((aligned(4)));                          /* State: 1=init, 2=ready, 3=active, 4=streaming */
     int streaming __attribute__((aligned(4)));                      /* Streaming state */
-    
+
+    /* CRITICAL: ISP firmware processing thread */
+    struct task_struct *fw_thread;                                  /* 0x1b8: ISP firmware processing thread (Binary Ninja) */
+
     /* CRITICAL: Buffer management with proper alignment and expected offsets */
     /* These need to be at specific offsets for Binary Ninja compatibility */
     spinlock_t buffer_mgmt_lock;                /* 0x1f4: Buffer management spinlock */

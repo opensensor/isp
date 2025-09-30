@@ -2692,8 +2692,11 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 /* Binary Ninja: if ($v1_55 == 3) - Stop kernel thread if in state 3 */
                 if (vic_state == 3) {
                     /* Binary Ninja: private_kthread_stop(*($s0 + 0x1b8)) */
-                    /* Note: fw_thread management removed - handled by separate thread management system */
-                    pr_info("ispcore_core_ops_init: Thread management handled by separate system");
+                    if (vic_dev->fw_thread) {
+                        pr_info("ispcore_core_ops_init: Stopping ISP firmware processing thread");
+                        kthread_stop(vic_dev->fw_thread);
+                        vic_dev->fw_thread = NULL;
+                    }
                     /* Binary Ninja: *($s0 + 0xe8) = 2 */
                     vic_dev->state = 2;
                 }
@@ -2819,6 +2822,18 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                     }
                     pr_info("*** ispcore_activate_module: SUCCESS - VIC transitioned 1 → 2, all subdevs activated ***");
                 }
+
+                /* CRITICAL FIX: Start ISP firmware processing thread */
+                /* Binary Ninja: int32_t $v0_27 = private_kthread_run(isp_fw_process, 0, "isp_fw_process") */
+                /* Binary Ninja: *($s0 + 0x1b8) = $v0_27 */
+                pr_info("*** ispcore_core_ops_init: Starting ISP firmware processing thread ***");
+                struct task_struct *fw_thread = kthread_run(isp_fw_process, vic_dev, "isp_fw_process");
+                if (IS_ERR(fw_thread)) {
+                    pr_err("ispcore_core_ops_init: Failed to start isp_fw_process thread: %ld\n", PTR_ERR(fw_thread));
+                    return PTR_ERR(fw_thread);
+                }
+                vic_dev->fw_thread = fw_thread;
+                pr_info("*** ispcore_core_ops_init: ISP firmware processing thread started successfully ***");
 
                 /* CRITICAL FIX: Don't reset VIC state if it's already streaming (state 4) */
                 /* The issue is that VIC gets initialized to state 4, then ISP core resets it to 3, causing reinitialization */
