@@ -32,11 +32,16 @@ sshpass -p "${REMOTE_PASS}" ssh root@${REMOTE_HOST} 'cat > /tmp/sensor_gc2053_t3
 sshpass -p "${REMOTE_PASS}" ssh root@${REMOTE_HOST} 'insmod /tmp/tx-isp-t31.ko isp_clk=200000000 print_level=1 && insmod /tmp/sensor_gc2053_t31.ko sensor_max_fps=30 data_interface=1'
 
 echo "Waiting for initialization..."
-sleep 5
+sleep 2
+
+echo "Starting prudynt to trigger streaming..."
+sshpass -p "${REMOTE_PASS}" ssh root@${REMOTE_HOST} 'prudynt > /dev/null 2>&1 &'
+sleep 3
 
 echo "Capturing trace..."
 sshpass -p "${REMOTE_PASS}" ssh root@${REMOTE_HOST} 'cat /opt/trace.txt' > /home/matteius/isp-latest/driver/our-trace.txt
 
 echo "Done! Trace saved to driver/our-trace.txt"
+wc -l /home/matteius/isp-latest/driver/our-trace.txt
 echo "Compare with reference-trace.txt to see differences"
 

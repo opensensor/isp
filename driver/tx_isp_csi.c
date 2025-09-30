@@ -414,17 +414,32 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                     if (interface_type == 1) {
                         pr_info("*** CSI MIPI INIT: Configuring MIPI CSI for %d lanes ***\n", sensor_attr->mipi.lans);
 
-                        /* CRITICAL: VIC magic unlock at 0x10023000 should enable CSI PHY access! */
-                        /* Check if CSI PHY at 0x10022000 is now accessible */
-                        pr_info("*** CSI PHY: Checking if CSI PHY is accessible after VIC unlock ***\n");
+                        /* CRITICAL: Enable CSI PHY access via ISP Core register! */
+                        /* From reference-trace.txt line 114: */
+                        /* ISP isp-m0: [Core Control] write at offset 0xb078: 0x0 -> 0x10000000 */
+                        /* This write ENABLES access to CSI PHY at 0x10022000! */
+                        extern struct tx_isp_dev *ourISPdev;
+                        if (ourISPdev && ourISPdev->core_regs) {
+                            pr_info("*** CSI PHY ENABLE: Writing 0x10000000 to ISP_CORE[0xb078] to enable CSI PHY access ***\n");
+                            writel(0x10000000, ourISPdev->core_regs + 0xb078);
+                            wmb();
+                            msleep(1);
+                            u32 readback = readl(ourISPdev->core_regs + 0xb078);
+                            pr_info("*** CSI PHY ENABLE: Readback ISP_CORE[0xb078] = 0x%08x (expected 0x10000000) ***\n", readback);
+                        } else {
+                            pr_err("*** CSI PHY ENABLE: ERROR - ISP Core registers not available! ***\n");
+                        }
+
+                        /* Now check if CSI PHY at 0x10022000 is accessible */
+                        pr_info("*** CSI PHY: Checking if CSI PHY is accessible after enable ***\n");
                         u32 csi_version = readl(csi_dev->csi_regs + 0x0);
                         pr_info("*** CSI PHY: CSI[0x0] (VERSION) = 0x%08x ***\n", csi_version);
 
                         if (csi_version == 0x00000000) {
                             pr_err("*** CSI PHY: CRITICAL - CSI PHY still not accessible! All registers = 0! ***\n");
-                            pr_err("*** CSI PHY: VIC magic unlock did not enable CSI PHY access! ***\n");
+                            pr_err("*** CSI PHY: This means ISP_CORE[0xb078] write did not enable CSI PHY! ***\n");
                         } else {
-                            pr_info("*** CSI PHY: SUCCESS - CSI PHY is now accessible! ***\n");
+                            pr_info("*** CSI PHY: SUCCESS - CSI PHY is now accessible! VERSION = 0x%08x ***\n", csi_version);
                         }
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 4) = zx.d(*($v1_5 + 0x24)) - 1 */
