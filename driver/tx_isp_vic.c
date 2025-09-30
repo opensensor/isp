@@ -526,9 +526,14 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             /* CRITICAL FIX: Binary Ninja reference - Call __enqueue_in_driver to keep pipeline primed */
             /* This sends event 0x3000005 to re-queue the completed buffer back to the driver */
             /* Without this, the pipeline runs out of buffers after initial frames are consumed */
+            pr_info("*** VIC FRAME DONE: Checking buffer_list=%p, empty=%d ***\n",
+                    buffer_list, buffer_list ? list_empty(buffer_list) : -1);
+
             if (buffer_list && !list_empty(buffer_list)) {
                 struct list_head *first = buffer_list->next;
                 struct vic_buffer_entry *completed_buffer = list_entry(first, struct vic_buffer_entry, list);
+
+                pr_info("*** VIC FRAME DONE: first=%p, completed_buffer=%p ***\n", first, completed_buffer);
 
                 if (completed_buffer) {
                     pr_info("*** VIC FRAME DONE: Calling __enqueue_in_driver to re-queue buffer (addr=0x%x, idx=%u) ***\n",
@@ -542,7 +547,11 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                         pr_info("*** VIC FRAME DONE: __enqueue_in_driver returned %d (0xfffffdfd means event not wired) ***\n",
                                 enqueue_result);
                     }
+                } else {
+                    pr_info("*** VIC FRAME DONE: completed_buffer is NULL! ***\n");
                 }
+            } else {
+                pr_info("*** VIC FRAME DONE: buffer_list is empty or NULL, cannot re-queue ***\n");
             }
 
             /* Binary Ninja: result = &data_b0000 */
@@ -3388,10 +3397,12 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     writel(0xFFFFFFFF, vr + 0x1f0);
                     writel(0xFFFFFFFF, vr + 0x1f4);
                     wmb();
-                    /* Set MainMask to allow frame-done + bit21 during bring-up */
-                    writel(0xFFDFFFFE, vr + 0x1e8);
+                    /* CRITICAL FIX: Mask control limit interrupts (bit 21) - only enable frame done (bit 0) */
+                    /* 0xFFFFFFFE = all bits set except bit 0 (frame done enabled) */
+                    /* Bit 21 (control limit) is SET in mask = DISABLED */
+                    writel(0xFFFFFFFE, vr + 0x1e8);
                     wmb();
-                    pr_info("*** VIC MASK: Set MainMask=0xFFDFFFFE (frame-done + bit21) before RUN ***\n");
+                    pr_info("*** VIC MASK: Set MainMask=0xFFFFFFFE (frame-done ONLY, control limit MASKED) before RUN ***\n");
                 }
 
             /* VIC CONTROL: enter RUN state after all config (write 1) */
