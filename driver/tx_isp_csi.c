@@ -433,7 +433,8 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         /* CRITICAL DISCOVERY: CSI PHY registers are WRITE-ONLY! */
                         /* Stock driver NEVER reads from isp-csi - all registers read as 0! */
                         /* We must write the CSI PHY configuration from reference-trace.txt */
-                        pr_info("*** CSI PHY: Writing CSI PHY configuration from reference trace ***\n");
+                        pr_info("*** CSI PHY: Writing CSI PHY configuration to physical 0x10022000 (virt %p) ***\n", csi_dev->csi_regs);
+                        pr_info("*** CSI PHY: [0x0] = 0x7d ***\n");
                         writel(0x7d, csi_dev->csi_regs + 0x0);
                         writel(0xe3, csi_dev->csi_regs + 0x4);
                         writel(0xa0, csi_dev->csi_regs + 0x8);
@@ -453,9 +454,10 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         writel(0x10, csi_dev->csi_regs + 0x48);
                         writel(0x3, csi_dev->csi_regs + 0x54);
                         writel(0xff, csi_dev->csi_regs + 0x58);
+                        pr_info("*** CSI PHY: [0x5c] = 0x42 (last write) ***\n");
                         writel(0x42, csi_dev->csi_regs + 0x5c);
                         wmb();
-                        pr_info("*** CSI PHY: CSI PHY configuration complete! ***\n");
+                        pr_info("*** CSI PHY: CSI PHY configuration complete! 20 registers written! ***\n");
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 4) = zx.d(*($v1_5 + 0x24)) - 1 */
                         writel(sensor_attr->mipi.lans - 1, csi_dev->csi_regs + 4);
