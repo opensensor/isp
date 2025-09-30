@@ -2827,7 +2827,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 /* Binary Ninja: int32_t $v0_27 = private_kthread_run(isp_fw_process, 0, "isp_fw_process") */
                 /* Binary Ninja: *($s0 + 0x1b8) = $v0_27 */
                 pr_info("*** ispcore_core_ops_init: Starting ISP firmware processing thread ***");
-                struct task_struct *fw_thread = kthread_run(isp_fw_process, vic_dev, "isp_fw_process");
+                struct task_struct *fw_thread = kthread_run(isp_fw_process, isp_dev->core_dev, "isp_fw_process");
                 if (IS_ERR(fw_thread)) {
                     pr_err("ispcore_core_ops_init: Failed to start isp_fw_process thread: %ld\n", PTR_ERR(fw_thread));
                     return PTR_ERR(fw_thread);
