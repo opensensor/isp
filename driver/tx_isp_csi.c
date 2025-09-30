@@ -332,6 +332,27 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
         pr_info("csi_core_ops_init: sd=%p, csi_dev=%p, enable=%d\n", sd, csi_dev, enable);
         result = 0xffffffea;
 
+        /* CRITICAL FIX: Enable CSI clocks BEFORE accessing CSI PHY registers! */
+        /* This is why all CSI registers read as 0x00000000 - no clock! */
+        if (enable && sd->clks == NULL && sd->clk_num > 0) {
+            extern int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_num);
+            pr_info("*** csi_core_ops_init: CRITICAL - Enabling CSI clocks BEFORE register access ***\n");
+            if (isp_subdev_init_clks(sd, sd->clk_num) != 0) {
+                pr_err("*** csi_core_ops_init: CSI clock init failed! ***\n");
+            } else {
+                /* Enable the clocks */
+                struct clk **clks = sd->clks;
+                int i;
+                for (i = 0; i < sd->clk_num; i++) {
+                    if (clks[i]) {
+                        clk_enable(clks[i]);
+                        pr_info("*** csi_core_ops_init: Enabled CSI clock %d ***\n", i);
+                    }
+                }
+                pr_info("*** csi_core_ops_init: CSI clocks enabled - PHY should now respond! ***\n");
+            }
+        }
+
         /* Binary Ninja: if ($s0_1 != 0 && $s0_1 u< 0xfffff001) */
         if (csi_dev != NULL && (unsigned long)csi_dev < 0xfffff001) {
             result = 0;
@@ -968,7 +989,7 @@ void dump_csi_reg(struct tx_isp_subdev *sd)
     pr_info("**********PHY_SHUTDOWNZ = %08x\n", readl(csi_regs + 0x08));
     pr_info("**********DPHY_RSTZ = %08x\n", readl(csi_regs + 0x0c));
     pr_info("**********CSI2_RESETN =%08x\n", readl(csi_regs + 0x10));
-    pr_info("**********PHY_STATE = %08x\n", readl(csi_regs + 0x14));
+    pr_info("**********PHY_STATE = %08x (CRITICAL: shows if PHY locked to MIPI lanes!)\n", readl(csi_regs + 0x14));
     pr_info("**********DATA_IDS_1 = %08x\n", readl(csi_regs + 0x18));
     pr_info("**********DATA_IDS_2 = %08x\n", readl(csi_regs + 0x1c));
     pr_info("**********ERR1 = %08x\n", readl(csi_regs + 0x20));
