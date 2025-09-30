@@ -936,24 +936,13 @@ int tx_isp_csi_probe(struct platform_device *pdev)
         csi_dev->csi_regs = csi_dev->sd.regs;
         pr_info("*** CSI PROBE: csi_regs (offset 0xb8) mapped to: %p ***\n", csi_dev->csi_regs);
 
-        /* Binary Ninja: *($v0 + 0x13c) = isp_csi_regs (ISP Core CSI registers) */
-        /* CRITICAL DISCOVERY: CSI PHY at 0x10022000 is DEAD (all registers = 0x00000000)! */
-        /* The REAL CSI control is through shadow registers in ISP Core space! */
-        /* Binary Ninja shows writes to isp_csi_regs + 0x0, 0x128, 0x160, 0x1e0, 0x260 */
-        /* We need to find the correct offset in ISP Core where these shadow registers work */
-        extern struct tx_isp_dev *ourISPdev;
-        if (ourISPdev && ourISPdev->core_regs) {
-            /* Test ISP Core + 0x10000 for CSI shadow registers */
-            /* Common offsets for peripheral control blocks: 0x1000, 0x2000, 0x3000, 0x10000, 0x20000 */
-            void __iomem *test_base = ourISPdev->core_regs + 0x10000;
-            csi_dev->isp_csi_regs = test_base;
-            pr_info("*** CSI PROBE: Testing ISP Core + 0x10000 for CSI shadow registers: %p ***\n", csi_dev->isp_csi_regs);
-            pr_info("*** CSI PROBE: Will verify by checking if writes stick during init ***\n");
-        } else {
-            pr_err("*** CSI PROBE: ERROR - ISP Core registers not available! ***\n");
-            csi_dev->isp_csi_regs = csi_dev->sd.regs;
-            pr_err("*** CSI PROBE: FALLBACK - Using CSI subdev regs ***\n");
-        }
+        /* Binary Ninja EXACT: *($v0 + 0x13c) = private_ioremap(0x10022000, 0x1000) */
+        /* Binary Ninja maps isp_csi_regs to CSI PHY at 0x10022000, NOT ISP Core! */
+        /* The stock driver does: */
+        /* int32_t* $v0_3 = private_request_mem_region(0x10022000, 0x1000, "mipi-phy") */
+        /* *($v0 + 0x13c) = private_ioremap($a0_2, $v0_3[1] + 1 - $a0_2) */
+        csi_dev->isp_csi_regs = csi_dev->sd.regs;  /* Same as csi_regs - both point to 0x10022000 */
+        pr_info("*** CSI PROBE: isp_csi_regs (offset 0x13c) mapped to CSI PHY: %p (0x10022000) ***\n", csi_dev->isp_csi_regs);
     } else {
         /* Binary Ninja: isp_printf(2, "sensor type is BT1120!\n", "tx_isp_csi_probe") */
         pr_err("*** CSI PROBE: tx_isp_subdev_init failed to map registers ***\n");
