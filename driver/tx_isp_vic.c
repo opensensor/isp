@@ -2975,8 +2975,9 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
     pr_info("*** ispvic_frame_channel_s_stream: Checking stream state - current=%d, requested=%d ***\n",
             vic_dev->stream_state, arg2);
     if (arg2 == vic_dev->stream_state) {
-        pr_info("*** ispvic_frame_channel_s_stream: Stream state matches - EARLY RETURN (no MDMA enable) ***\n");
-        return 0;  /* Binary Ninja EXACT: early return without any MDMA operations */
+        pr_info("*** ispvic_frame_channel_s_stream: Stream state matches - SKIPPING early return to force MDMA enable ***\n");
+        /* TEMPORARY FIX: Don't return early - always enable MDMA when requested */
+        /* return 0;  */ /* Binary Ninja EXACT: early return without any MDMA operations */
     }
     pr_info("*** ispvic_frame_channel_s_stream: Stream state different - proceeding with streaming setup ***\n");
     /* Binary Ninja EXACT: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
