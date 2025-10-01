@@ -4175,21 +4175,39 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
         //raw_pipe[3] = (void *)ispvic_frame_channel_s_stream;  /* offset 0xc / 4 = index 3 */
         //raw_pipe[4] = (void *)sd;                             /* offset 0x10 / 4 = index 4 */
 
-        /* GOOD-THINGS APPROACH: Defer buffer allocation to prevent memory exhaustion */
-        pr_info("*** tx_isp_subdev_pipo: GOOD-THINGS approach - deferring buffer allocation ***\n");
-        pr_info("*** Buffers will be allocated on-demand during QBUF operations ***\n");
+        /* CRITICAL FIX: Allocate buffers IMMEDIATELY during pipo setup (stock driver behavior) */
+        /* The stock driver allocates buffer structures during tx_isp_subdev_pipo, NOT during QBUF! */
+        /* Deferring buffer allocation causes VIC to start without valid buffer addresses, */
+        /* which triggers control limit errors! */
+        pr_info("*** tx_isp_subdev_pipo: STOCK DRIVER approach - allocating buffers IMMEDIATELY ***\n");
 
-        /* Initialize buffer indices but don't allocate buffer structures yet */
+        /* Allocate buffer structures and program VIC registers */
         for (i = 0; i < 5; i++) {
+            struct vic_buffer_entry *entry;
             uint32_t reg_offset;  /* C90 compliance: declare at top */
+
+            /* Allocate buffer entry structure */
+            entry = kzalloc(sizeof(struct vic_buffer_entry), GFP_KERNEL);
+            if (!entry) {
+                pr_err("tx_isp_subdev_pipo: Failed to allocate buffer entry %d\n", i);
+                continue;
+            }
+
+            /* Initialize buffer entry */
+            entry->buffer_index = i;
+            entry->buffer_addr = 0;  /* Will be set during QBUF */
+            entry->buffer_status = VIC_BUFFER_STATUS_FREE;
+            INIT_LIST_HEAD(&entry->list);
+
+            /* Add to free list */
+            list_add_tail(&entry->list, &vic_dev->free_head);
 
             /* SAFE: Use proper buffer index array instead of unsafe pointer arithmetic */
             if (i < sizeof(vic_dev->buffer_index) / sizeof(vic_dev->buffer_index[0])) {
                 vic_dev->buffer_index[i] = i;
             }
 
-            /* GOOD-THINGS: No buffer allocation here - deferred to QBUF operations */
-            pr_info("tx_isp_subdev_pipo: initialized buffer index %d (allocation deferred)\n", i);
+            pr_info("tx_isp_subdev_pipo: allocated buffer entry %d (addr will be set during QBUF)\n", i);
 
             /* SAFE: Clear VIC register using validated register access */
             reg_offset = (i + 0xc6) << 2;
@@ -4199,9 +4217,9 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
             }
         }
 
-        /* Set buffer count to 0 - buffers will be allocated on-demand */
-        vic_dev->buffer_count = 0;
-        pr_info("*** tx_isp_subdev_pipo: Using GOOD-THINGS deferred buffer allocation strategy ***\n");
+        /* Set buffer count to 5 - buffers are now allocated */
+        vic_dev->buffer_count = 5;
+        pr_info("*** tx_isp_subdev_pipo: Allocated %d buffer structures (stock driver behavior) ***\n", vic_dev->buffer_count);
 
         pr_info("tx_isp_subdev_pipo: initialized %d buffer structures (safe implementation)\n", i);
 
