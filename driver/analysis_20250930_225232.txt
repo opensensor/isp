@@ -1,0 +1,54 @@
+========================================
+ISP DRIVER TEST ANALYSIS
+========================================
+
+Timestamp: 20250930_225232
+Build: 2720c9893262b6e0aca89f836ac474cf
+
+=== KEY METRICS ===
+VIC START messages: 4
+VIN linked: 2
+VIN input configured: 0
+0
+CSI input configured: 0
+0
+VIC input configured: 2
+Complete pipeline configured: 0
+0
+Control limit errors: 0
+0
+Frame done interrupts: 
+
+=== INTERRUPT COUNTS ===
+ 37:          0   jz-intc  isp-m0
+ 38:          0   jz-intc  isp-w02
+
+=== PIPELINE CONFIGURATION ===
+[   20.858215] *** VIC START: VIC input source configured - CSI->VIC link enabled ***
+[   21.031335] *** VIC START: VIC input source configured - CSI->VIC link enabled ***
+
+=== ERRORS ===
+[    0.000000] CPU0 RESET ERROR PC:801ADC80
+[    0.121579] jz-dwc2 jz-dwc2: cgu clk gate get error
+[    0.000000] CPU0 RESET ERROR PC:801ADC80
+[    0.121579] jz-dwc2 jz-dwc2: cgu clk gate get error
+[   20.789460] sensor_write_array: Complete - wrote 137 registers, 0 errors
+[   20.862610] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   20.869152] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   20.869882] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   20.870816] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   20.871532] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   20.965784] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   20.970473] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   21.032166] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   21.032879] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   21.302583] *** Channel 0: Frame wait timeout/error, generating frame ***
+[   21.399457] *** Channel 0: Frame wait timeout/error, generating frame ***
+[   21.499136] *** Channel 0: Frame wait timeout/error, generating frame ***
+[   21.556984] *** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***
+[   21.599415] *** Channel 0: Frame wait timeout/error, generating frame ***
+[   22.029138] *** Channel 1: Frame wait timeout/error, generating frame ***
+
+=== KEY REGISTER WRITES ===
+[   22.099310] *** CSI ERROR 1: CSI[0x20] = 0x00000000 (no errors) ***
+
