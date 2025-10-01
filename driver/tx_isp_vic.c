@@ -1027,14 +1027,15 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* DEBUG: Check if sensor_attr is properly initialized */
     pr_info("*** DEBUG: sensor_attr=%p, dbus_type=%d ***\n", sensor_attr, sensor_attr ? sensor_attr->dbus_type : -1);
 
-    /* CRITICAL FIX: Use ACTUAL sensor output dimensions, not total dimensions */
-    /* GC2053 sensor outputs 1920x1080 but reports total dimensions 2200x1418 */
-    actual_width = 1920;   /* ACTUAL sensor output width */
-    actual_height = 1080;  /* ACTUAL sensor output height */
+    /* CRITICAL FIX: Use TOTAL sensor dimensions (including blanking), not active image size! */
+    /* GC2053 sensor sends total_width=2184 (0x44c*2), total_height=1418 (0x58a) over MIPI */
+    /* VIC must be configured for the SAME dimensions to receive frames correctly! */
+    actual_width = 2184;   /* GC2053 total width (0x44c * 2) */
+    actual_height = 1418;  /* GC2053 total height (0x58a) */
 
-    pr_info("*** DIMENSION FIX: Using ACTUAL sensor output dimensions %dx%d for VIC configuration ***\n",
+    pr_info("*** DIMENSION FIX: Using TOTAL sensor dimensions %dx%d for VIC configuration ***\n",
             actual_width, actual_height);
-    pr_info("*** CRITICAL: VIC configured for sensor OUTPUT, not sensor TOTAL dimensions ***\n");
+    pr_info("*** CRITICAL: VIC configured for sensor TOTAL dimensions (includes blanking) ***\n");
 
     /* Binary Ninja: 0001024c int32_t $v0 = *($v1 + 0x14) - interface type at offset 0x14 */
     interface_type = sensor_attr->dbus_type;
@@ -1278,10 +1279,11 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* BINARY NINJA EXACT: All missing register configurations */
 
         /* 1. Register 0x4 - Dimensions (Binary Ninja exact) */
-        u32 width = 1920;   /* sensor output width */
-        u32 height = 1080;  /* sensor output height */
+        /* CRITICAL FIX: Use TOTAL dimensions (including blanking), not active image size! */
+        u32 width = 2184;   /* GC2053 total width (0x44c * 2) */
+        u32 height = 1418;  /* GC2053 total height (0x58a) */
         writel((width << 16) | height, vic_regs + 0x4);
-        pr_info("*** BINARY NINJA: reg 0x4 = 0x%x (dimensions %dx%d) ***\n", (width << 16) | height, width, height);
+        pr_info("*** BINARY NINJA: reg 0x4 = 0x%x (TOTAL dimensions %dx%d) ***\n", (width << 16) | height, width, height);
 
         /* 2. Register 0x14 - Interrupt config (from sensor attributes) */
         writel(0x0, vic_regs + 0x14);  /* Start with safe default */
