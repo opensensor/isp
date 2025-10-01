@@ -1,0 +1,53 @@
+========================================
+ISP DRIVER TEST ANALYSIS
+========================================
+
+Timestamp: 20250930_221522
+Build: b58fd8ee56f61522a722cea605a995a0
+
+=== KEY METRICS ===
+VIC START messages: 0
+0
+VIN linked: 13
+VIN input configured: 0
+0
+CSI input configured: 0
+0
+VIC input configured: 0
+0
+Complete pipeline configured: 0
+0
+Control limit errors: 0
+0
+Frame done interrupts: 
+
+=== INTERRUPT COUNTS ===
+ 37:          0   jz-intc  isp-m0
+ 38:          0   jz-intc  isp-w02
+
+=== PIPELINE CONFIGURATION ===
+
+=== ERRORS ===
+[    0.000000] CPU0 RESET ERROR PC:801ADC80
+[    0.121602] jz-dwc2 jz-dwc2: cgu clk gate get error
+[    0.000000] CPU0 RESET ERROR PC:801ADC80
+[    0.121602] jz-dwc2 jz-dwc2: cgu clk gate get error
+[    0.000000] CPU0 RESET ERROR PC:801ADC80
+[    0.121602] jz-dwc2 jz-dwc2: cgu clk gate get error
+[   20.069821] TX_ISP_SENSOR_ENUM_INPUT: No sensor at index 1 - returning error to end enumeration
+[    0.000000] CPU0 RESET ERROR PC:801ADC80
+[    0.121602] jz-dwc2 jz-dwc2: cgu clk gate get error
+[   20.069821] TX_ISP_SENSOR_ENUM_INPUT: No sensor at index 1 - returning error to end enumeration
+[    0.000000] CPU0 RESET ERROR PC:801ADC80
+[    0.121602] jz-dwc2 jz-dwc2: cgu clk gate get error
+[   20.069821] TX_ISP_SENSOR_ENUM_INPUT: No sensor at index 1 - returning error to end enumeration
+[    0.000000] CPU0 RESET ERROR PC:801ADC80
+[    0.121602] jz-dwc2 jz-dwc2: cgu clk gate get error
+[   20.069821] TX_ISP_SENSOR_ENUM_INPUT: No sensor at index 1 - returning error to end enumeration
+[    0.000000] CPU0 RESET ERROR PC:801ADC80
+[    0.121602] jz-dwc2 jz-dwc2: cgu clk gate get error
+[   20.069821] TX_ISP_SENSOR_ENUM_INPUT: No sensor at index 1 - returning error to end enumeration
+[    0.000000] CPU0 RESET ERROR PC:801ADC80
+
+=== KEY REGISTER WRITES ===
+

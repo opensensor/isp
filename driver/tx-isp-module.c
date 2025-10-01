@@ -3231,6 +3231,17 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_info("*** Channel %d: VIC active_buffer_count set to %d (memory=%u) ***\n",
                         channel, vic->active_buffer_count, reqbuf.memory);
 
+                /* CRITICAL FIX: Send BUFFER_ENQUEUE event to VIC like stock driver */
+                /* Binary Ninja EXACT: tx_isp_send_event_to_remote(*($s0 + 0x2bc), 0x3000008, &var_34) */
+                /* This is the FIRST buffer allocation pathway - REQBUFS triggers buffer programming */
+                pr_info("*** REQBUFS: Sending 0x3000008 event to VIC (Binary Ninja EXACT pathway) ***\n");
+                int event_result = tx_isp_send_event_to_remote(&vic->sd, 0x3000008, &reqbuf.count);
+                if (event_result != 0 && event_result != -ENOIOCTLCMD) {
+                    pr_warn("*** REQBUFS: VIC event 0x3000008 returned %d (continuing) ***\n", event_result);
+                } else {
+                    pr_info("*** REQBUFS: VIC event 0x3000008 SUCCESS - buffer count sent to VIC ***\n");
+                }
+
                 /* Reference driver configures VIC DMA during streaming via vic_pipo_mdma_enable */
                 pr_info("*** REQBUFS: VIC DMA will be configured during streaming via vic_pipo_mdma_enable ***\n");
             }
@@ -4906,16 +4917,10 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         return s6_1;
     }
 
-    /* Binary Ninja: Handle streaming commands */
-    if (cmd == 0x80045612) {
-        /* VIDIOC_STREAMON */
-        return tx_isp_video_s_stream(isp_dev, 1);
-    }
-
-    if (cmd == 0x80045613) {
-        /* VIDIOC_STREAMOFF */
-        return tx_isp_video_s_stream(isp_dev, 0);
-    }
+    /* CRITICAL FIX: VIDIOC_STREAMON/STREAMOFF should NOT be handled by ISP ioctl! */
+    /* These are V4L2 ioctls that should ONLY be handled by frame_channel_unlocked_ioctl */
+    /* The stock driver's tx_isp_unlocked_ioctl does NOT handle 0x80045612/0x80045613 */
+    /* It only handles ISP-specific ioctls like 0x800456d0 (link setup) and 0x800456d2 (link stream) */
 
     /* Binary Ninja: Handle video link commands */
     if (cmd >= 0x800456d1) {
