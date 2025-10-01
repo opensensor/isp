@@ -6090,22 +6090,22 @@ struct tx_isp_event_handler_table {
     int (*event_handler)(void *sd, int event_type, void *data);  /* +0x1c: Function pointer */
 };
 
-/* Default event handler implementation */
-static int default_event_handler(void *sd, int event_type, void *data)
+/* Default event handler implementation - FIXED to actually dispatch to subdev ioctl */
+static int default_event_handler(void *arg, int event_type, void *data)
 {
+    struct tx_isp_subdev *sd = (struct tx_isp_subdev *)arg;
+
     pr_debug("default_event_handler: sd=%p, event=0x%x, data=%p\n", sd, event_type, data);
 
-    switch (event_type) {
-        case 0x3000005:  /* Buffer enqueue event */
-            pr_debug("default_event_handler: Buffer enqueue event\n");
-            return 0;
-        case 0x3000008:  /* Buffer QBUF event */
-            pr_debug("default_event_handler: Buffer QBUF event\n");
-            return 0;
-        default:
-            pr_debug("default_event_handler: Unknown event 0x%x\n", event_type);
-            return 0;
+    /* CRITICAL FIX: The stock driver's event handler calls the subdev's ioctl function! */
+    /* This is how events are dispatched to VIC, CSI, Core, etc. */
+    if (sd && sd->ops && sd->ops->core && sd->ops->core->ioctl) {
+        pr_debug("default_event_handler: Dispatching event 0x%x to subdev ioctl\n", event_type);
+        return sd->ops->core->ioctl(sd, event_type, data);
     }
+
+    pr_debug("default_event_handler: No ioctl handler for event 0x%x\n", event_type);
+    return 0;
 }
 
 /* Global event dispatch structures */
