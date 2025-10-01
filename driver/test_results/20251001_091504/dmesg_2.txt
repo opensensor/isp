@@ -1,0 +1,100 @@
+[  933.092644] *** VIC FRAME DONE: Frame completion signaled ***
+[  933.092653] *** FRAME SYNC: Frame done count = 4 ***
+[  933.092660] *** ISP FRAME DONE WAKEUP: Frame 4 ready for processing ***
+[  933.092666] *** VIC ERROR: control limit error (bit 21) ***
+[  933.098416] *** VIC IRQ COMPLETE: Processed v1_7=0x200000, v1_10=0x0 - returning IRQ_HANDLED ***
+[  933.114032] ISP isp-w02: [CSI PHY Control] write at offset 0xc: 0x1 -> 0x2 (delta: 2820.000 ms)
+[  933.114096] ISP isp-w01: [CSI PHY Control] write at offset 0x14: 0x200 -> 0x630 (delta: 1050.000 ms)
+[  933.114131] ISP isp-csi: [CSI PHY Config] write at offset 0x1d0: 0x2b -> 0x1 (delta: 1060.000 ms)
+[  933.115243] *** VIC PRIMARY GATE: IMR/IMCR routed (no re-arm) IMR=0x07800438 IMCR=0x00000001 ***
+[  933.115452] *** VIC CONTROL ENABLES (POST-RUN COMMIT): [0x1e0]=0x00000000 [0x1e4]=0x00000000 ***
+[  933.115458] *** vic_core_s_stream: Enabling VIC IRQ AFTER final re-assert/verify ***
+[  933.115465] *** tx_vic_enable_irq: EXACT Binary Ninja implementation from working reference ***
+[  933.115471] tx_vic_enable_irq: VIC interrupts enabled (irq_enabled = 1)
+[  933.115476] tx_vic_enable_irq: Calling VIC interrupt callback
+[  933.115483] *** tx_isp_enable_irq: EXACT Binary Ninja - enabling IRQ 38 ***
+[  933.115490] *** tx_isp_enable_irq: IRQ 38 ENABLED ***
+[  933.115496] *** CRITICAL: Restoring ISP Control interrupt registers to enable hardware interrupt generation ***
+[  933.115506] *** CRITICAL: ISP Control interrupt registers restored - hardware should now generate interrupts (9ac0=0x00000000, 9ac8=0x00000000) ***
+[  933.115512] restore_isp_control_interrupt_registers_after_reset: gate readback not 1/0, re-writing 1/0 to 9ac0/9ac8
+[  933.115520] restore_isp_control_interrupt_registers_after_reset: re-read 9ac0=0x00000000 9ac8=0x00000000
+[  933.115526] *** tx_vic_enable_irq: CRITICAL FIX - Enabling VIC interrupt (IRQ 38) at kernel level ***
+[  933.115533] *** tx_vic_enable_irq: VIC interrupt (IRQ 38) ENABLED at kernel level ***
+[  933.115539] tx_vic_enable_irq: VIC interrupt flag set and kernel interrupt enabled
+[  933.115545] *** tx_vic_enable_irq: completed successfully ***
+[  933.117571] ISP isp-m0: [CSI PHY Control] write at offset 0xa8: 0x58410000 -> 0x58050000 (delta: 1070.000 ms)
+[  933.157614] ISP isp-w02: [CSI PHY Control] write at offset 0xc: 0x2 -> 0x1 (delta: 50.000 ms)
+[  933.253041] ISP isp-csi: [CSI Lane Config] write at offset 0x250: 0x60 -> 0x0 (delta: 1060.000 ms)
+[  933.258344] ISP isp-m0: [CSI PHY Config] write at offset 0x100: 0x78000000 -> 0x0 (delta: 1070.000 ms)
+[  933.290559] ISP isp-m0: [Core Control] write at offset 0xb054: 0x780 -> 0x0 (delta: 1070.000 ms)
+[  933.298251] ISP isp-m0: [Core Control] write at offset 0xb05c: 0x3c -> 0x0 (delta: 1070.000 ms)
+[  933.474958] *** VIC POST-IRQ SAMPLE: No status bits asserted in 200ms window ***
+[  933.474971] *** vic_core_s_stream: VIC state transition 3 → 4 (STREAMING) ***
+[  933.474977] *** VIC STATE 4: Skipping ispcore_slake_module during streaming (avoids shutdown/reset) ***
+[  933.474985] *** vic_core_s_stream: VIC initialized, final state=4 ***
+[  933.474995] gc2053: s_stream called with enable=1
+[  933.475003] gc2053: module data_interface=1, sensor data_interface=1 (1=MIPI, 2=DVP)
+[  933.475009] gc2053: *** STARTING SENSOR HARDWARE STREAMING ***
+[  933.475015] gc2053: About to write streaming registers for interface 1
+[  933.475022] gc2053: *** WRITING MIPI STREAM ON REGISTERS - INCLUDING 0x3e=0x91 ***
+[  933.475033] sensor_write: reg=0xfe val=0x00, client=85414d00, adapter=i2c0, addr=0x37
+[  933.475355] sensor_write: reg=0xfe val=0x00 SUCCESS
+[  933.475363] sensor_write_array: reg[1] 0xfe=0x00 OK
+[  933.475372] sensor_write: reg=0x3e val=0x91, client=85414d00, adapter=i2c0, addr=0x37
+[  933.479063] sensor_write: reg=0x3e val=0x91 SUCCESS
+[  933.479077] sensor_write_array: reg[2] 0x3e=0x91 OK
+[  933.479083] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[  933.479091] gc2053: *** MIPI STREAM ON REGISTER WRITE COMPLETE, ret=0 ***
+[  933.479098] gc2053: *** STREAMING REGISTERS WRITTEN SUCCESSFULLY ***
+[  933.479104] gc2053: CRITICAL: 0x3e=0x91 should now be written - sensor outputting MIPI data
+[  933.479111] gc2053: s_stream called with enable=1
+[  933.479119] gc2053: module data_interface=1, sensor data_interface=1 (1=MIPI, 2=DVP)
+[  933.479125] gc2053: *** STARTING SENSOR HARDWARE STREAMING ***
+[  933.479131] gc2053: About to write streaming registers for interface 1
+[  933.479138] gc2053: *** WRITING MIPI STREAM ON REGISTERS - INCLUDING 0x3e=0x91 ***
+[  933.479147] sensor_write: reg=0xfe val=0x00, client=85414d00, adapter=i2c0, addr=0x37
+[  933.479465] sensor_write: reg=0xfe val=0x00 SUCCESS
+[  933.479472] sensor_write_array: reg[1] 0xfe=0x00 OK
+[  933.479481] sensor_write: reg=0x3e val=0x91, client=85414d00, adapter=i2c0, addr=0x37
+[  933.479797] sensor_write: reg=0x3e val=0x91 SUCCESS
+[  933.479805] sensor_write_array: reg[2] 0x3e=0x91 OK
+[  933.479811] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[  933.479818] gc2053: *** MIPI STREAM ON REGISTER WRITE COMPLETE, ret=0 ***
+[  933.479824] gc2053: *** STREAMING REGISTERS WRITTEN SUCCESSFULLY ***
+[  933.479831] gc2053: CRITICAL: 0x3e=0x91 should now be written - sensor outputting MIPI data
+[  933.480049] [tuning] Blocking 0x56 core control 0xc008561c during streaming (except G_CTRL/ENABLE)
+[  933.480197] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  933.480207] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: DISABLE
+[  933.480214] *** BINARY NINJA REFERENCE: Tuning disable - no hardware reset performed ***
+[  933.480352] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  933.480361] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: DISABLE
+[  933.480367] *** BINARY NINJA REFERENCE: Tuning disable - no hardware reset performed ***
+[  933.480495] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  933.480503] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: DISABLE
+[  933.480509] *** BINARY NINJA REFERENCE: Tuning disable - no hardware reset performed ***
+[  933.481561] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  933.481573] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: DISABLE
+[  933.481579] *** BINARY NINJA REFERENCE: Tuning disable - no hardware reset performed ***
+[  933.481823] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  933.481833] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: DISABLE
+[  933.481839] *** BINARY NINJA REFERENCE: Tuning disable - no hardware reset performed ***
+[  933.482229] ISP isp-w01: [CSI PHY Control] write at offset 0x14: 0x630 -> 0x330 (delta: 370.000 ms)
+[  933.482441] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  933.482455] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: DISABLE
+[  933.482462] *** BINARY NINJA REFERENCE: Tuning disable - no hardware reset performed ***
+[  933.482703] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  933.482713] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: DISABLE
+[  933.482719] *** BINARY NINJA REFERENCE: Tuning disable - no hardware reset performed ***
+[  933.482861] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  933.482870] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: DISABLE
+[  933.482876] *** BINARY NINJA REFERENCE: Tuning disable - no hardware reset performed ***
+[  933.483313] ISP isp-csi: [CSI PHY Config] write at offset 0x1d0: 0x1 -> 0x2b (delta: 370.000 ms)
+[  933.483359] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  933.483367] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: DISABLE
+[  933.483373] *** BINARY NINJA REFERENCE: Tuning disable - no hardware reset performed ***
+[  933.487115] ISP isp-csi: [CSI PHY Config] write at offset 0x1d4: 0x12 -> 0x22 (delta: 1430.000 ms)
+[  933.487523] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  933.487792] ISP isp-csi: [CSI Lane Config] write at offset 0x250: 0x0 -> 0x60 (delta: 370.000 ms)
+[  933.488048] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: DISABLE
+[  933.488195] *** BINARY NINJA REFERENCE: Tuning disable - no hardware reset performed ***
+[  933.488376] ISP isp-csi: [CSI Lane Config] write at offset 0x254: 0x12 -> 0x22 (delta: 1430.000 ms)

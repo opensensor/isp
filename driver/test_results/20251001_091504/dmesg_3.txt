@@ -1,0 +1,100 @@
+[  935.004747] *** Channel 1: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x7e07100 ***
+[  935.004753] *** Channel 1: QBUF completed successfully (MIPS-safe) ***
+[  935.004763] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  935.004771] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  935.004777] *** Channel 1: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  935.004783] *** Channel 1: QBUF - Buffer copied from user successfully ***
+[  935.004791] *** Channel 1: QBUF - Buffer received: index=1, type=1, memory=2 ***
+[  935.004799] *** Channel 1: QBUF - Buffer m.offset=0x7e5d500, m.userptr=0x7e5d500 ***
+[  935.004805] *** Channel 1: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  935.004813] *** Channel 1: QBUF - Validation: buffer.index=1, state->buffer_count=2 ***
+[  935.004819] *** Channel 1: QBUF - Queue buffer index=1 ***
+[  935.004825] *** QBUF: No buffer allocated for index 1 - VBM initialization mode ***
+[  935.004833] *** Channel 1: QBUF - Using buffer struct   (null) for index 1 ***
+[  935.004839] *** Channel 1: QBUF - Using REAL buffer address from userptr: 0x7e5d500 ***
+[  935.004847] *** Channel 1: QBUF - Buffer 1: phys_addr=0x7e5d500, size=460800 (VALIDATED) ***
+[  935.004855] *** Channel 1: QBUF VBM - Stored buffer[1] = 0x7e5d500, total_count=2 ***
+[  935.004863] *** Channel 1: QBUF - VBM buffer check: vbm_buffer_addresses=82237e80, vbm_buffer_count=2 ***
+[  935.004870] *** Channel 1: QBUF - VBM buffer slot[1] available ***
+[  935.004877] *** Channel 1: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x7e5d500 ***
+[  935.004883] *** Channel 1: QBUF completed successfully (MIPS-safe) ***
+[  935.004977] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x80045612 ***
+[  935.004987] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0x80045612 ***
+[  935.004994] *** Channel 1: VIDIOC_STREAMON - Binary Ninja implementation ***
+[  935.005001] Channel 1: STREAMON - Enqueuing buffers in driver
+[  935.005008] STREAMON: ENQUEUE slot 0 addr=0x7e07100 via 0x3000005
+[  935.005015] STREAMON: BUFFER_ENQUEUE event fell back to direct vic_core_ops_ioctl
+[  935.005023] *** vic_core_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x3000005, arg=82237f00 ***
+[  935.005031] vic_core_ops_ioctl: BUFFER_ENQUEUE cmd=0x3000005 - refreshing VIC buffer state
+[  935.005037] *** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***
+[  935.005044] ispvic_frame_channel_qbuf: arg1=85428000, arg2=82237f00
+[  935.005053] *** VIC QBUF: wrote slot 0 addr=0x7e07100 to reg_off=0x318 (CONFIG->RUN) ***
+[  935.005060] STREAMON: ENQUEUE slot 1 addr=0x7e5d500 via 0x3000005
+[  935.005065] STREAMON: BUFFER_ENQUEUE event fell back to direct vic_core_ops_ioctl
+[  935.005073] *** vic_core_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x3000005, arg=82237f80 ***
+[  935.005079] vic_core_ops_ioctl: BUFFER_ENQUEUE cmd=0x3000005 - refreshing VIC buffer state
+[  935.005085] *** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***
+[  935.005093] ispvic_frame_channel_qbuf: arg1=85428000, arg2=82237f80
+[  935.005100] *** VIC QBUF: wrote slot 1 addr=0x7e5d500 to reg_off=0x31c (CONFIG->RUN) ***
+[  935.005107] STREAMON: VIC ring active_count=2 last_idx=1
+[  935.005113] *** Channel 1: STREAMON - calling tx_isp_video_s_stream(ON) to arm VIC/MDMA ***
+[  935.005120] *** tx_isp_video_s_stream: EXACT Binary Ninja reference implementation - enable=1 ***
+[  935.005125] === ISP Subdevice Array Status ===
+[  935.005133]   [0]: isp-w01 (sd=85428400)
+[  935.005140]   [1]: isp-w02 (sd=85428000)
+[  935.005147]   [2]: isp-m0 (sd=85428800)
+[  935.005154]   [3]: gc2053 (sd=85429400)
+[  935.005159]   [4]: (empty)
+[  935.005165]   [5]: gc2053 (sd=85429400)
+[  935.005171]   [6]: (empty)
+[  935.005176]   [7]: (empty)
+[  935.005181]   [8]: (empty)
+[  935.005187]   [9]: (empty)
+[  935.005192]   [10]: (empty)
+[  935.005197]   [11]: (empty)
+[  935.005203]   [12]: (empty)
+[  935.005208]   [13]: (empty)
+[  935.005213]   [14]: (empty)
+[  935.005218]   [15]: (empty)
+[  935.005223] === End Subdevice Array ===
+[  935.005229] *** tx_isp_video_s_stream: STREAM ON - Initializing core first ***
+[  935.005235] *** tx_isp_video_s_stream: Core initialization complete, proceeding with subdev streaming ***
+[  935.005241] *** tx_isp_video_s_stream: CRITICAL FIX - Initializing all subdevs before streaming ***
+[  935.005247] *** tx_isp_video_s_stream: Initializing Core subdev ***
+[  935.005255] *** ispcore_core_ops_init: ENTRY - sd=85428800, on=1 ***
+[  935.005263] *** ispcore_core_ops_init: sd->dev_priv=85428800, sd->host_priv=85428800 ***
+[  935.005269] *** ispcore_core_ops_init: sd->pdev=c06b8900, sd->ops=c06b9008 ***
+[  935.005276] *** ispcore_core_ops_init: EXACT Binary Ninja MCP implementation, on=1 ***
+[  935.005282] *** ispcore_core_ops_init: ISP device=81124000 ****** ispcore_core_ops_init: Frame sync work structure initialized ***
+[  935.005291] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  935.005299] *** tx_isp_get_sensor: Found real sensor subdev at index 5: 85429400 (name=gc2053) ***
+[  935.005306] *** tx_isp_get_sensor: Found real sensor: 85429400 ***
+[  935.005312] ispcore_core_ops_init: Using sensor attributes from sensor: gc2053
+[  935.005317] *** ispcore_core_ops_init: s0 (core_dev) = 85428800 from sd->host_priv ***
+[  935.005325] ispcore_core_ops_init: core_dev=85428800, vic_dev=85428000, vic_state=4
+[  935.005329] *** ispcore_core_ops_init: INITIALIZING CORE (on=1) ****** ispcore_core_ops_init: Current vic_state (VIC state): 4 ***
+[  935.005339] *** ispcore_core_ops_init: VIC already streaming (state 4) - initializing during streaming ****** ispcore_core_ops_init: VIC state check passed, proceeding with initialization ***
+[  935.005347] *** VIC STATE 4: Initializing clocks for streaming ***
+[  935.005354] *** Initializing CSI clocks (1 clocks) ***
+[  935.005361] isp_subdev_init_clks: EXACT Binary Ninja MCP - Initializing 1 clocks
+[  935.005367] isp_subdev_init_clks: Using platform data clock arrays: c06b8d20
+[  935.005375] isp_subdev_init_clks: Using platform data clock configs
+[  935.005381] Platform data clock[0]: name=csi, rate=65535
+[  935.005391] Clock csi enabled successfully
+[  935.007617] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  935.007631] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  935.007637] *** Channel 1: Frame completion wait ***
+[  935.007643] *** Channel 1: Waiting for frame (timeout=100ms) ***
+[  935.007650] *** Channel 1: Frame wait returned 10 ***
+[  935.007656] *** Channel 1: Frame was ready, consuming it ***
+[  935.007717] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  935.007725] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  935.007732] *** Channel 1: DQBUF - dequeue buffer request ***
+[  935.007738] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  935.007748] *** tx_isp_get_sensor: Found real sensor subdev at index 5: 85429400 (name=gc2053) ***
+[  935.007755] *** tx_isp_get_sensor: Found real sensor: 85429400 ***
+[  935.007762] *** Channel 1: DQBUF waiting for frame completion (timeout=200ms) ***
+[  935.007775] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  935.007783] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  935.007789] *** Channel 1: Frame completion wait ***
+[  935.007795] *** Channel 1: Waiting for frame (timeout=100ms) ***

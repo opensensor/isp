@@ -1,0 +1,46 @@
+ccflags-y += -I$(src)/include
+
+# CRITICAL: Add V4L2 subsystem dependencies
+ccflags-y += -DCONFIG_VIDEO_V4L2=y
+ccflags-y += -DCONFIG_MEDIA_SUPPORT=y
+
+# Main ISP module objects - note changed name to tx-isp-t31 (ensure tx-isp-module.o is first)
+tx-isp-t31-objs :=  $(DIR)/tx-isp-module.o \
+                $(DIR)/tx_isp_core.o \
+               $(DIR)/tx_isp_reset.o \
+               $(DIR)/tx_isp_subdev.o \
+               $(DIR)/tx_isp_vic.o \
+               $(DIR)/tx_isp_frame_done.o \
+               $(DIR)/tx_isp_csi.o \
+               $(DIR)/tx_isp_fs.o \
+               $(DIR)/tx_isp_tuning.o \
+               $(DIR)/tx_isp_v4l2.o \
+               $(DIR)/tx_isp_ae_zone.o \
+               $(DIR)/tx_isp_subdev_mgmt.o \
+               $(DIR)/tx_isp_vin.o \
+               $(DIR)/tx_isp_missing_funcs.o \
+               $(DIR)/tx_isp_awb_funcs.o \
+               $(DIR)/tx_isp_dmsc_funcs.o \
+               $(DIR)/tx_isp_bcsh_funcs.o \
+               $(DIR)/tx_isp_stubs.o
+
+# ISP trace module objects  
+tx-isp-trace-objs := $(DIR)/tx-isp-trace.o
+
+# Build both modules - changed tx-isp.o to tx-isp-t31.o
+obj-m := tx-isp-t31.o tx-isp-trace.o
+
+# CRITICAL: V4L2 symbol dependencies - ensure V4L2 subsystem is available
+# These dependencies tell the kernel that our module needs V4L2 symbols
+# Reference: https://www.kernel.org/doc/Documentation/video4linux/v4l2-framework.txt
+KBUILD_EXTRA_SYMBOLS += $(KERNEL_SRC)/drivers/media/v4l2-core/Module.symvers
+KBUILD_EXTRA_SYMBOLS += $(KERNEL_SRC)/drivers/media/media/Module.symvers
+
+# Alternative dependency specification for older kernels
+ifdef CONFIG_VIDEO_V4L2
+    ccflags-y += -DHAS_V4L2_SUPPORT=1
+endif
+
+ifdef CONFIG_MEDIA_SUPPORT  
+    ccflags-y += -DHAS_MEDIA_SUPPORT=1
+endif

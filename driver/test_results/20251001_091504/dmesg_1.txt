@@ -1,0 +1,100 @@
+[  931.119801] ISP isp-w02: [CSI PHY Control] write at offset 0x0: 0x1 -> 0x3 (delta: 830.000 ms)
+[  931.120141] *** VIC PRIMARY GATE: IMR/IMCR routed (no re-arm) IMR=0x07800438 IMCR=0x00000001 ***
+[  931.120251] *** VIC CONTROL ENABLES (POST-RUN COMMIT): [0x1e0]=0x00000000 [0x1e4]=0x00000000 ***
+[  931.120257] *** vic_core_s_stream: Enabling VIC IRQ AFTER final re-assert/verify ***
+[  931.120263] *** tx_vic_enable_irq: EXACT Binary Ninja implementation from working reference ***
+[  931.120269] tx_vic_enable_irq: VIC interrupts enabled (irq_enabled = 1)
+[  931.120274] tx_vic_enable_irq: Calling VIC interrupt callback
+[  931.120281] *** tx_isp_enable_irq: EXACT Binary Ninja - enabling IRQ 38 ***
+[  931.120288] *** tx_isp_enable_irq: IRQ 38 ENABLED ***
+[  931.120295] *** CRITICAL: Restoring ISP Control interrupt registers to enable hardware interrupt generation ***
+[  931.120304] *** CRITICAL: ISP Control interrupt registers restored - hardware should now generate interrupts (9ac0=0x00000000, 9ac8=0x00000000) ***
+[  931.120311] restore_isp_control_interrupt_registers_after_reset: gate readback not 1/0, re-writing 1/0 to 9ac0/9ac8
+[  931.120319] restore_isp_control_interrupt_registers_after_reset: re-read 9ac0=0x00000000 9ac8=0x00000000
+[  931.120325] *** tx_vic_enable_irq: CRITICAL FIX - Enabling VIC interrupt (IRQ 38) at kernel level ***
+[  931.120332] *** tx_vic_enable_irq: VIC interrupt (IRQ 38) ENABLED at kernel level ***
+[  931.120337] tx_vic_enable_irq: VIC interrupt flag set and kernel interrupt enabled
+[  931.120343] *** tx_vic_enable_irq: completed successfully ***
+[  931.127592] ISP isp-m0: [CSI PHY Control] write at offset 0xa8: 0x58410000 -> 0x58050000 (delta: 570.000 ms)
+[  931.147896] ISP isp-w02: [CSI PHY Control] write at offset 0x0: 0x3 -> 0x1 (delta: 30.000 ms)
+[  931.156389] ISP isp-m0: [CSI PHY Config] write at offset 0x100: 0x78000000 -> 0x0 (delta: 570.000 ms)
+[  931.159418] ISP isp-m0: [Core Control] write at offset 0xb054: 0x780 -> 0x0 (delta: 1210.000 ms)
+[  931.208293] ISP isp-m0: [Core Control] write at offset 0xb05c: 0x3c -> 0x0 (delta: 1210.000 ms)
+[  931.676294] *** VIC POST-IRQ SAMPLE: No status bits asserted in 200ms window ***
+[  931.676307] *** vic_core_s_stream: VIC state transition 3 → 4 (STREAMING) ***
+[  931.676313] *** VIC STATE 4: Skipping ispcore_slake_module during streaming (avoids shutdown/reset) ***
+[  931.676320] *** vic_core_s_stream: VIC initialized, final state=4 ***
+[  931.676326] *** tx_isp_subdev_pipo: vic_core_s_stream SUCCESS - VIC interrupts should now be ENABLED! ***
+[  931.676332] tx_isp_subdev_pipo: completed successfully, returning 0
+[  931.676338] *** SUCCESS: tx_isp_subdev_pipo completed - VIC buffer management initialized ***
+[  931.676344] *** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***
+[  931.676350] *** tisp_init: ISP HARDWARE PIPELINE FULLY INITIALIZED - THIS SHOULD TRIGGER REGISTER ACTIVITY ***
+[  931.676356] *** tisp_init: All hardware blocks enabled, registers configured, events ready ***
+[  931.676363] *** ispcore_core_ops_init: Second tisp_init completed ***
+[  931.676369] *** ispcore_core_ops_init: VIC already streaming (state 4) - preserving state to avoid reinitialization ****** ispcore_core_ops_init: Core device is stateless - only VIC state matters ***
+[  931.676378] *** tx_isp_core_enable_irq: Enabling ISP Core hardware interrupts ***
+[  931.676386] *** ISP PIPELINE: VIC->ISP connection ENABLED (0x800=1, 0x804=0x1c, 0x1c=8) ***
+[  931.676392] *** ISP CORE: Hardware interrupt generation ENABLED ***
+[  931.676398] *** VIC->ISP: Pipeline should now generate hardware interrupts when VIC completes frames! ***
+[  931.676404] *** ispcore_core_ops_init: ISP Core hardware interrupts ENABLED - Frame sync should now work! ***
+[  931.676408] ispcore_core_ops_init: Complete, result=0<6>[  931.676414] *** tx_isp_video_s_stream: Core init SUCCESS ***
+[  931.676421] *** tx_isp_video_s_stream: Activating VIC subdev (state 4 -> 2) before CSI init ***
+[  931.676428] *** tx_isp_video_s_stream: VIC subdev activation done, state=4 ***
+[  931.676435] *** tx_isp_video_s_stream: Activating CSI subdev (state 1 -> 2) before CSI init ***
+[  931.676443] *** tx_isp_video_s_stream: CSI subdev activation done, state=2 ***
+[  931.676449] *** tx_isp_video_s_stream: Initializing CSI subdev ***
+[  931.676457] csi_core_ops_init: sd=85428400, csi_dev=85428400, enable=1
+[  931.676464] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  931.676473] *** tx_isp_get_sensor: Found real sensor subdev at index 5: 85429400 (name=gc2053) ***
+[  931.676480] *** tx_isp_get_sensor: Found real sensor: 85429400 ***
+[  931.676486] *** csi_core_ops_init: interface_type=1 (1=MIPI, 2=DVP) ***
+[  931.676492] *** csi_core_ops_init: Set csi_dev->interface_type = 1 ***
+[  931.683896] ISP isp-csi: [CSI PHY Control] write at offset 0x4: 0xe3 -> 0x1 (delta: 1390.000 ms)
+[  931.690756] ISP isp-csi: [CSI PHY Control] write at offset 0xc: 0x83 -> 0x0 (delta: 1390.000 ms)
+[  931.747570] *** tx_isp_video_s_stream: CSI init SUCCESS ***
+[  931.747584] *** tx_isp_video_s_stream: Initializing VIC subdev ***
+[  931.747592] *** vic_core_ops_init: ENTRY - sd=85428000, enable=1 ***
+[  931.747599] *** vic_core_ops_init: vic_dev=85428000, current state check ***
+[  931.747606] *** vic_core_ops_init: current_state=4, enable=1 ***
+[  931.747612] *** tx_vic_enable_irq: EXACT Binary Ninja implementation from working reference ***
+[  931.747618] tx_vic_enable_irq: VIC interrupts enabled (irq_enabled = 1)
+[  931.747623] tx_vic_enable_irq: Calling VIC interrupt callback
+[  931.747630] *** tx_isp_enable_irq: EXACT Binary Ninja - enabling IRQ 38 ***
+[  931.747637] *** tx_isp_enable_irq: IRQ 38 ENABLED ***
+[  931.747643] *** CRITICAL: Restoring ISP Control interrupt registers to enable hardware interrupt generation ***
+[  931.747652] *** CRITICAL: ISP Control interrupt registers restored - hardware should now generate interrupts (9ac0=0x00000000, 9ac8=0x00000000) ***
+[  931.747659] restore_isp_control_interrupt_registers_after_reset: gate readback not 1/0, re-writing 1/0 to 9ac0/9ac8
+[  931.747667] restore_isp_control_interrupt_registers_after_reset: re-read 9ac0=0x00000000 9ac8=0x00000000
+[  931.747674] *** tx_vic_enable_irq: CRITICAL FIX - Enabling VIC interrupt (IRQ 38) at kernel level ***
+[  931.747680] *** tx_vic_enable_irq: VIC interrupt (IRQ 38) ENABLED at kernel level ***
+[  931.747686] tx_vic_enable_irq: VIC interrupt flag set and kernel interrupt enabled
+[  931.747692] *** tx_vic_enable_irq: completed successfully ***
+[  931.747697] *** tx_isp_video_s_stream: VIC init SUCCESS ***
+[  931.747703] *** tx_isp_video_s_stream: Initializing Sensor subdev ***
+[  931.747712] *** SENSOR_INIT: gc2053 enable=1 ***
+[  931.747718] *** SENSOR_INIT: gc2053 already initialized, skipping to prevent CSI PHY reconfiguration ***
+[  931.747725] *** SENSOR_INIT: This prevents register reset that disables ISP/VIC interrupts ***
+[  931.747731] *** tx_isp_video_s_stream: Sensor init SUCCESS ***
+[  931.747737] *** tx_isp_video_s_stream: All subdev initialization complete - proceeding with s_stream ***
+[  931.747744] *** tx_isp_video_s_stream: Calling subdev[0]->ops->video->s_stream(1) ***
+[  931.747750] *** csi_video_s_stream: EXACT Binary Ninja MCP implementation ***
+[  931.747757] csi_video_s_stream: sd=85428400, enable=1
+[  931.747764] csi_video_s_stream: EXACT Binary Ninja MCP - CSI state set to 4 (enable=1)
+[  931.747770] *** tx_isp_video_s_stream: subdev[0] s_stream SUCCESS ***
+[  931.747776] *** tx_isp_video_s_stream: Calling subdev[1]->ops->video->s_stream(1) ***
+[  931.747784] *** vic_core_s_stream: BINARY NINJA EXACT - sd=85428000, enable=1 ***
+[  931.747790] *** vic_core_s_stream: BINARY NINJA EXACT - current_state=3 ***
+[  931.747796] *** vic_core_s_stream: STREAM ON ***
+[  931.747801] *** vic_core_s_stream: EXACT Binary Ninja - State != 4, calling VIC start sequence ***
+[  931.747807] *** vic_core_s_stream: SKIPPING tx_vic_disable_irq before VIC start to preserve first frame IRQ ***
+[  931.747814] *** tx_isp_vic_start: Following EXACT Binary Ninja flow ***
+[  931.747820] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  931.747828] *** tx_isp_get_sensor: Found real sensor subdev at index 5: 85429400 (name=gc2053) ***
+[  931.747834] *** tx_isp_get_sensor: Found real sensor: 85429400 ***
+[  931.747842] *** DEBUG: sensor_attr=c06e521c, dbus_type=1 ***
+[  931.747849] *** DIMENSION FIX: Using ACTUAL sensor output dimensions 1920x1080 for VIC configuration ***
+[  931.747855] *** CRITICAL: VIC configured for sensor OUTPUT, not sensor TOTAL dimensions ***
+[  931.747861] *** VIC INTERFACE DETECTION: interface_type=1 (MIPI=1, DVP=2) ***
+[  931.747867] *** SENSOR ATTRIBUTE: dbus_type=1 ***
+[  931.747872] *** SAFETY: Using default RAW10 format (0x2b) to avoid sensor_attr access issues ***
+[  931.747879] *** Interface type: 1, Format: 0x2b (RAW10) ***

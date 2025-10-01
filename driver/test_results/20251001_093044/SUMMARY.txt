@@ -1,0 +1,31 @@
+ISP Driver Test Results
+=======================
+Timestamp: 20251001_093044
+Remote Host: 192.168.50.211
+Monitor Duration: s
+
+Files Generated:
+- dmesg_final.txt: Complete dmesg output
+- trace.txt: Hardware trace from /opt/trace.txt
+- prudynt.log: Streamer output
+- lsmod.txt: Loaded modules
+- proc_jz_isp.txt: /proc/jz/isp directory listing
+- dmesg_*.txt: Periodic dmesg snapshots
+
+Key Checks:
+0
+0 csi_core_ops_init calls (init)
+0
+0 vic_mdma_enable calls
+0
+0 vic_core_s_stream calls
+0
+0 CONTROL bank writes
+0
+0 errors in dmesg
+
+Next Steps:
+1. Review dmesg_final.txt for any errors
+2. Compare trace.txt with reference-trace.txt
+3. Check if VIC control register values are correct
+4. Verify MIPI lane configuration is preserved

@@ -1,0 +1,100 @@
+[  263.603921] *** VIC->ISP: Pipeline should now generate hardware interrupts when VIC completes frames! ***
+[  263.603929] *** vic_core_s_stream: Forcing ispvic_frame_channel_qbuf to program buffer addresses before MDMA ***
+[  263.603935] *** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***
+[  263.603944] ispvic_frame_channel_qbuf: arg1=85410000, arg2=  (null)
+[  263.603950] *** vic_core_s_stream: ispvic_frame_channel_qbuf SUCCESS ***
+[  263.603956] *** vic_core_s_stream: Calling ispvic_frame_channel_s_stream(ENABLE) to start MDMA before enabling IRQ ***
+[  263.603962] *** ispvic_frame_channel_s_stream: EXACT Binary Ninja implementation ***
+[  263.603969] ispvic_frame_channel_s_stream: arg1=85410000, arg2=1
+[  263.603975] ispvic_frame_channel_s_stream: s0 (vic_dev) = 85410000
+[  263.603982] ispvic_frame_channel_s_stream[2618]: streamon
+[  263.603989] *** ispvic_frame_channel_s_stream: Checking stream state - current=0, requested=1 ***
+[  263.603995] *** ispvic_frame_channel_s_stream: Stream state different - proceeding with streaming setup ***
+[  263.604002] *** VIC CONTROL (PRIMARY): WROTE 2 to [0x0] before MDMA/config ***
+[  263.604007] *** CRITICAL: Calling vic_pipo_mdma_enable - required for VIC interrupts ***
+[  263.604012] *** vic_pipo_mdma_enable: EXACT Binary Ninja MCP implementation ***
+[  263.604020] vic_pipo_mdma_enable: Using cached sensor dimensions 1920x1080 (ATOMIC CONTEXT SAFE)
+[  263.604026] vic_pipo_mdma_enable: reg 0x308 = 1 (MDMA enable)
+[  263.604032] vic_pipo_mdma_enable: Using NV12 stride=1920 (pixfmt=0x3231564e)
+[  263.604040] vic_pipo_mdma_enable: reg 0x304 = 0x7800438 (dimensions 1920x1080)
+[  263.604046] vic_pipo_mdma_enable: reg 0x310 = 1920 (stride)
+[  263.604052] vic_pipo_mdma_enable: reg 0x314 = 1920 (stride)
+[  263.604058] *** CRITICAL FIX: Writing buffer addresses to VIC hardware registers ***
+[  263.604064] *** CRITICAL: No VBM buffer addresses - using fallback addresses from reserved memory ***
+[  263.604070] *** vbm_buffer_addresses=  (null), vbm_buffer_count=0 ***
+[  263.604078] *** VIC FALLBACK BUFFER 0: Wrote reserved memory address 0x6300000 to reg 0x318 ***
+[  263.604086] *** VIC FALLBACK BUFFER 1: Wrote reserved memory address 0x66f4800 to reg 0x31c ***
+[  263.604094] *** VIC FALLBACK BUFFER 2: Wrote reserved memory address 0x6ae9000 to reg 0x320 ***
+[  263.604101] *** VIC FALLBACK BUFFER 3: Wrote reserved memory address 0x6edd800 to reg 0x324 ***
+[  263.604109] *** VIC FALLBACK BUFFER 4: Wrote reserved memory address 0x72d2000 to reg 0x328 ***
+[  263.604115] *** CRITICAL: VIC fallback buffer addresses configured (count=5) - hardware can now generate interrupts! ***
+[  263.604121] *** VIC PIPO MDMA ENABLE COMPLETE - VIC should now generate interrupts! ***
+[  263.604127] *** vic_pipo_mdma_enable completed - VIC MDMA should now generate interrupts! ***
+[  263.604134] *** Binary Ninja EXACT: Wrote 0x80050020 to reg 0x300 (5 buffers) ***
+[  263.604150] *** CORE VIC ROUTE INIT: [9a00]=0x050002d0 [9a04]=0x03000300 [9a2c]=0x050002d0 [9a34]=0x00000001 [9a88]=0x00000001 [9a80]=0x00000500 [9a98]=0x00000500; GATE [9ac0]=0x00000000 [9ac8]=0x00000000 ***
+[  263.604157] *** vic_core_s_stream: CORE W1C [9a70/9a7c] then ROUTE INIT + GATE REASSERT ***
+[  263.604163] *** vic_core_s_stream: Re-writing buffer addresses AFTER MDMA start ***
+[  263.604168] *** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***
+[  263.604175] ispvic_frame_channel_qbuf: arg1=85410000, arg2=  (null)
+[  263.604180] *** vic_core_s_stream: Post-MDMA QBUF SUCCESS ***
+[  263.604193] *** VIC VERIFY (PRIMARY): [0x0]=0x00000000 [0x4]=0x07800438 [0x300]=0x80050020 [0x1e0]=0x00000000 [0x1e4]=0x00000000 [0x1e8]=0xffdffffe [0x1ec]=0x00000000 (MainMask=0xFFFFFFFE)***
+[  263.604202] *** VIC VERIFY (PRIMARY EXTRA): [0x100]=0x000002d0 [0x14]=0x0000002b (PRIMARY 0x14=stride) ***
+[  263.604266] *** VIC VERIFY (CONTROL): [0x0]=0x3130322a [0x4]=0x00000001 [0x0c]=0x00000001 [0x100]=0x00000000 [0x14]=0x00000630 [0x300]=0x00000000 [0x30c]=0x00000000 [0x1e0]=0x00000000 [0x1e4]=0x00000000 [0x1e8]=0x00000000 [0x1ec]=0x00000000 (MainMask=0xFFFFFFFE)***
+[  263.604278] *** VIC BUFS (PRIMARY): [0x318]=0x06300000 [0x31c]=0x066f4800 [0x320]=0x06ae9000 [0x324]=0x06edd800 [0x328]=0x072d2000 ***
+[  263.604286] *** VIC CTRL (PRIMARY): [0x300]=0x80050020 ***
+[  263.604294] *** VIC BUFS (CONTROL): [0x318]=0x00000000 [0x31c]=0x00000000 [0x320]=0x00000000 [0x324]=0x00000000 [0x328]=0x00000000 ***
+[  263.604301] *** VIC CTRL (CONTROL): [0x300]=0x00000000 ***
+[  263.604306] *** VIC CONTROL BANK: Re-applying enable sequence on CONTROL bank ***
+[  263.604316] *** VIC CONTROL BANK: Post-enable [0x0]=0x3130322a, [0x14]=0x00000630, [0x0c]=0x00000001, [0x100]=0x00000000 ***
+[  263.604322] *** VIC MASK: Set MainMask=0xFFDFFFFE (frame-done + bit21) before RUN ***
+[  263.604328] *** VIC CONTROL (PRIMARY): WROTE 1 to [0x0] before enabling IRQ ***
+[  263.604338] *** CRITICAL: isp_irq_handle: IRQ 37 received, dev_id=85de8000 ***
+[  263.611788] *** isp_irq_handle: IRQ 37 received, dev_id=85de8000 ***
+[  263.611793] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
+[  263.619508] *** ISP CORE INTERRUPT HANDLER: IRQ 37 called, dev_id=85de8000 ***
+[  263.626956] *** ISP CORE: Read interrupt status - interrupt_status=0x00000500 ***
+[  263.634682] *** ISP CORE: Clearing legacy interrupt 0x00000500 to reg +0xb8 ***
+[  263.642228] *** ISP CORE: After clearing - legacy=0x00000000 ***
+[  263.648418] *** ISP CORE: About to process IRQ callbacks - interrupt_status=0x500 ***
+[  263.656502] *** ISP CORE: Callback[8] for bit 8 is NULL - skipping ***
+[  263.663236] *** ISP CORE: Callback[10] for bit 10 is NULL - skipping ***
+[  263.670144] *** ISP CORE INTERRUPT PROCESSING COMPLETE - returning IRQ_HANDLED ***
+[  263.677982] *** CRITICAL: isp_irq_handle: IRQ 38 received, dev_id=85de8000 ***
+[  263.685432] *** isp_irq_handle: IRQ 38 received, dev_id=85de8000 ***
+[  263.685438] *** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
+[  263.693148] *** VIC INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***
+[  263.701224] *** VIC IRQ: About to access isp_dev->vic_dev, isp_dev=85de8000 ***
+[  263.708757] *** VIC IRQ: Got vic_dev=85410000 ***
+[  263.713602] *** VIC IRQ: Checking vic_dev validity: vic_dev=85410000 ***
+[  263.720513] *** VIC IRQ: About to access vic_dev->vic_regs ***
+[  263.726522] *** VIC IRQ: Got vic_regs=b33e0000 ***
+[  263.731457] *** VIC IRQ: Checking vic_regs validity: vic_regs=b33e0000 ***
+[  263.738542] *** VIC IRQ: vic_regs passed validity check - proceeding with register access ***
+[  263.747333] *** VIC IRQ: About to read VIC registers at b33e0000 ***
+[  263.753891] *** VIC IRQ: Using base b33e0000 [1e0]=0x200000 [1e4]=0x0 [1e8]=0xffdffffe [1ec]=0x0 ***
+[  263.763311] *** VIC IRQ: CTRL[0x300]=0x80000020 DIMS[0x304]=0x7800438 STRIDE[0x310]=0x780 ***
+[  263.772106] *** VIC IRQ: CORE GATES [9ac0]=0x0 [9ac8]=0x0 ***
+[  263.778026] *** VIC IRQ: Calculated v1_7 = 0x200000 v1_10 = 0x0 ***
+[  263.784498] *** VIC STAT: ctrl=0x80000020 top16=0x8000 idxNib=0 v1_7=0x00200000 1e0=0x00200000 1e8=0xffdffffe ***
+[  263.795090] *** VIC IRQ: About to write v1_7=0x200000 to reg 0x1f0 (base=b33e0000) ***
+[  263.803260] *** VIC IRQ: About to write v1_10=0x0 to reg 0x1f4 (base=b33e0000) ***
+[  263.811064] *** VIC IRQ: Register writes completed (at base=b33e0000) ***
+[  263.818063] *** VIC IRQ: About to check vic_start_ok - vic_start_ok=1 ***
+[  263.825062] *** VIC IRQ: vic_start_ok=1, v1_7=0x200000, v1_10=0x0 ***
+[  263.831706] *** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***
+[  263.838168] *** VIC FALLBACK: control-limit set without FD; invoking vic_framedone_irq_function and FS wakeups ***
+[  263.848851] VIC CURR_ADDR DETECTED: space=PRIMARY offset=0x320 matched slot 2
+[  263.848861] *** VIC FRAME DONE: Updated VIC[0x300] PRIMARY=0x80000020 CONTROL=0x0 (count=5, cur_idx=2, next_idx=3) ***
+[  263.848868] *** VIC FRAME DONE: Frame completion signaled ***
+[  263.848876] *** FRAME SYNC: Frame done count = 4 ***
+[  263.848882] *** ISP FRAME DONE WAKEUP: Frame 4 ready for processing ***
+[  263.848889] *** VIC ERROR: control limit error (bit 21) ***
+[  263.854632] *** VIC IRQ COMPLETE: Processed v1_7=0x200000, v1_10=0x0 - returning IRQ_HANDLED ***
+[  263.884818] ISP isp-w02: [CSI PHY Control] write at offset 0xc: 0x1 -> 0x2 (delta: 2010.000 ms)
+[  263.885096] ISP isp-csi: [CSI PHY Config] write at offset 0x1d0: 0x2b -> 0x1 (delta: 1070.000 ms)
+[  263.885954] ISP isp-csi: [CSI Lane Config] write at offset 0x250: 0x60 -> 0x0 (delta: 1070.000 ms)
+[  263.890968] ISP isp-w01: [CSI PHY Control] write at offset 0x14: 0x200 -> 0x630 (delta: 670.000 ms)
+[  263.893898] ISP isp-m0: [CSI PHY Control] write at offset 0xa8: 0x58410000 -> 0x58050000 (delta: 1070.000 ms)
+[  263.894906] ISP isp-m0: [CSI PHY Config] write at offset 0x100: 0x78000000 -> 0x0 (delta: 1070.000 ms)
+[  263.897720] ISP isp-m0: [Core Control] write at offset 0xb054: 0x780 -> 0x0 (delta: 1070.000 ms)
+[  263.901142] ISP isp-m0: [Core Control] write at offset 0xb05c: 0x3c -> 0x0 (delta: 1070.000 ms)

@@ -1,0 +1,767 @@
+[  959.907642] *** Channel 0: QBUF - Buffer m.offset=0x70d9000, m.userptr=0x70d9000 ***
+[  959.907650] *** Channel 0: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  959.907658] *** Channel 0: QBUF - Validation: buffer.index=0, state->buffer_count=4 ***
+[  959.907664] *** Channel 0: QBUF - Queue buffer index=0 ***
+[  959.907670] *** QBUF: No buffer allocated for index 0 - VBM initialization mode ***
+[  959.907678] *** Channel 0: QBUF - Using buffer struct   (null) for index 0 ***
+[  959.907685] *** Channel 0: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***
+[  959.907692] *** Channel 0: QBUF EVENT - No VIC callback (falling back to direct call) ***
+[  959.907699] *** Channel 0: QBUF -> direct VIC buffer management via vic_core_ops_ioctl ***
+[  959.907708] *** vic_core_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x3000008, arg=805dfdb8 ***
+[  959.907714] vic_core_ops_ioctl: QBUF cmd=0x3000008 - program VIC slot from v4l2_buffer
+[  959.907722] *** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***
+[  959.907730] ispvic_frame_channel_qbuf: arg1=85428000, arg2=805dfd40
+[  959.907738] *** VIC QBUF: wrote slot 0 addr=0x70d9000 to reg_off=0x318 (CONFIG->RUN) ***
+[  959.907745] *** Channel 0: QBUF - Using REAL buffer address from userptr: 0x70d9000 ***
+[  959.907754] *** Channel 0: QBUF - Buffer 0: phys_addr=0x70d9000, size=4147200 (VALIDATED) ***
+[  959.907762] *** Channel 0: QBUF VBM - Stored buffer[0] = 0x70d9000, total_count=4 ***
+[  959.907769] *** Channel 0: QBUF - VBM buffer check: vbm_buffer_addresses=82237800, vbm_buffer_count=4 ***
+[  959.907776] *** Channel 0: QBUF - VBM buffer slot[0] available ***
+[  959.907786] *** Channel 0: QBUF -> enqueue_in_driver slot=1 addr=0x70d9000 (cur_idx=0) ***
+[  959.907792] __enqueue_in_driver: Sending BUFFER_ENQUEUE (0x3000005) to VIC
+[  959.907798] QBUF: enqueue event not wired; fallback to direct vic_core_ops_ioctl
+[  959.907824] *** vic_core_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x3000005, arg=811fec00 ***
+[  959.907831] vic_core_ops_ioctl: BUFFER_ENQUEUE cmd=0x3000005 - refreshing VIC buffer state
+[  959.907837] *** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***
+[  959.907844] ispvic_frame_channel_qbuf: arg1=85428000, arg2=811fec00
+[  959.907852] *** VIC QBUF: wrote slot 1 addr=0x70d9000 to reg_off=0x31c (CONFIG->RUN) ***
+[  959.907860] *** Channel 0: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x70d9000 ***
+[  959.907871] *** Channel 0: QBUF completed successfully (MIPS-safe) ***
+[  959.907962] *** Channel 0: Frame wait returned 9 ***
+[  959.907970] *** Channel 0: Frame was ready, consuming it ***
+[  960.006801] ISP isp-w01: [CSI PHY Control] write at offset 0x14: 0x300 -> 0x330 (delta: 180.000 ms)
+[  960.087400] *** Channel 1: DQBUF wait returned 0 ***
+[  960.087412] *** Channel 1: DQBUF timeout, generating frame ***
+[  960.087421] *** Channel 1: DQBUF complete - buffer[1] seq=122 flags=0x3 ***
+[  960.087532] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  960.087540] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  960.087546] *** Channel 1: DQBUF - dequeue buffer request ***
+[  960.087552] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  960.087563] *** tx_isp_get_sensor: Found real sensor subdev at index 5: 85429400 (name=gc2053) ***
+[  960.087570] *** tx_isp_get_sensor: Found real sensor: 85429400 ***
+[  960.087576] *** Channel 1: DQBUF waiting for frame completion (timeout=200ms) ***
+[  960.087781] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  960.087795] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  960.087802] *** Channel 1: Frame completion wait ***
+[  960.087808] *** Channel 1: Waiting for frame (timeout=100ms) ***
+[  960.088579] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  960.088593] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  960.088600] *** Channel 1: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  960.088606] *** Channel 1: QBUF - Buffer copied from user successfully ***
+[  960.088614] *** Channel 1: QBUF - Buffer received: index=1, type=1, memory=2 ***
+[  960.088621] *** Channel 1: QBUF - Buffer m.offset=0x7e5d500, m.userptr=0x7e5d500 ***
+[  960.088628] *** Channel 1: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  960.088636] *** Channel 1: QBUF - Validation: buffer.index=1, state->buffer_count=2 ***
+[  960.088642] *** Channel 1: QBUF - Queue buffer index=1 ***
+[  960.088648] *** QBUF: No buffer allocated for index 1 - VBM initialization mode ***
+[  960.088656] *** Channel 1: QBUF - Using buffer struct   (null) for index 1 ***
+[  960.088663] *** Channel 1: QBUF - Using REAL buffer address from userptr: 0x7e5d500 ***
+[  960.088672] *** Channel 1: QBUF - Buffer 1: phys_addr=0x7e5d500, size=460800 (VALIDATED) ***
+[  960.088680] *** Channel 1: QBUF VBM - Stored buffer[1] = 0x7e5d500, total_count=2 ***
+[  960.088688] *** Channel 1: QBUF - VBM buffer check: vbm_buffer_addresses=82237e80, vbm_buffer_count=2 ***
+[  960.088694] *** Channel 1: QBUF - VBM buffer slot[1] available ***
+[  960.088702] *** Channel 1: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x7e5d500 ***
+[  960.088714] *** Channel 1: QBUF completed successfully (MIPS-safe) ***
+[  960.088736] *** Channel 1: Frame wait returned 10 ***
+[  960.088743] *** Channel 1: Frame was ready, consuming it ***
+[  960.097419] *** Channel 0: DQBUF wait returned 0 ***
+[  960.097430] *** Channel 0: DQBUF timeout, generating frame ***
+[  960.097440] *** Channel 0: DQBUF complete - buffer[1] seq=128 flags=0x3 ***
+[  960.097466] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  960.097473] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: ENABLE
+[  960.097480] isp_core_tunning_unlocked_ioctl: Allowing LIMITED tuning ENABLE during streaming (vic_start_ok=1)
+[  960.097486] *** DEBUG: enable=1, dev->core_dev->tuning_enabled=1 ***
+[  960.097492] *** BINARY NINJA REFERENCE: Tuning enable - no hardware reset performed ***
+[  960.097498] isp_core_tunning_unlocked_ioctl: ISP tuning enabled
+[  960.097618] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  960.097628] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  960.097634] *** Channel 0: DQBUF - dequeue buffer request ***
+[  960.097641] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  960.097651] *** tx_isp_get_sensor: Found real sensor subdev at index 5: 85429400 (name=gc2053) ***
+[  960.097658] *** tx_isp_get_sensor: Found real sensor: 85429400 ***
+[  960.097664] *** Channel 0: DQBUF waiting for frame completion (timeout=200ms) ***
+[  960.097926] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  960.097941] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  960.097948] *** Channel 0: Frame completion wait ***
+[  960.097954] *** Channel 0: Waiting for frame (timeout=100ms) ***
+[  960.107608] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  960.107622] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  960.107628] *** Channel 0: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  960.107635] *** Channel 0: QBUF - Buffer copied from user successfully ***
+[  960.107642] *** Channel 0: QBUF - Buffer received: index=1, type=1, memory=2 ***
+[  960.107650] *** Channel 0: QBUF - Buffer m.offset=0x73d6000, m.userptr=0x73d6000 ***
+[  960.107657] *** Channel 0: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  960.107664] *** Channel 0: QBUF - Validation: buffer.index=1, state->buffer_count=4 ***
+[  960.107671] *** Channel 0: QBUF - Queue buffer index=1 ***
+[  960.107677] *** QBUF: No buffer allocated for index 1 - VBM initialization mode ***
+[  960.107685] *** Channel 0: QBUF - Using buffer struct   (null) for index 1 ***
+[  960.107692] *** Channel 0: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***
+[  960.107700] *** Channel 0: QBUF EVENT - No VIC callback (falling back to direct call) ***
+[  960.107706] *** Channel 0: QBUF -> direct VIC buffer management via vic_core_ops_ioctl ***
+[  960.107714] *** vic_core_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x3000008, arg=805dfdb8 ***
+[  960.107722] vic_core_ops_ioctl: QBUF cmd=0x3000008 - program VIC slot from v4l2_buffer
+[  960.107729] *** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***
+[  960.107736] ispvic_frame_channel_qbuf: arg1=85428000, arg2=805dfd40
+[  960.107744] *** VIC QBUF: wrote slot 2 addr=0x73d6000 to reg_off=0x320 (CONFIG->RUN) ***
+[  960.107752] *** Channel 0: QBUF - Using REAL buffer address from userptr: 0x73d6000 ***
+[  960.107760] *** Channel 0: QBUF - Buffer 1: phys_addr=0x73d6000, size=4147200 (VALIDATED) ***
+[  960.107768] *** Channel 0: QBUF VBM - Stored buffer[1] = 0x73d6000, total_count=4 ***
+[  960.107776] *** Channel 0: QBUF - VBM buffer check: vbm_buffer_addresses=82237800, vbm_buffer_count=4 ***
+[  960.107782] *** Channel 0: QBUF - VBM buffer slot[1] available ***
+[  960.107792] *** Channel 0: QBUF -> enqueue_in_driver slot=3 addr=0x73d6000 (cur_idx=2) ***
+[  960.107815] __enqueue_in_driver: Sending BUFFER_ENQUEUE (0x3000005) to VIC
+[  960.107821] QBUF: enqueue event not wired; fallback to direct vic_core_ops_ioctl
+[  960.107828] *** vic_core_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x3000005, arg=811fec00 ***
+[  960.107836] vic_core_ops_ioctl: BUFFER_ENQUEUE cmd=0x3000005 - refreshing VIC buffer state
+[  960.107841] *** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***
+[  960.107848] ispvic_frame_channel_qbuf: arg1=85428000, arg2=811fec00
+[  960.107856] *** VIC QBUF: wrote slot 3 addr=0x73d6000 to reg_off=0x324 (CONFIG->RUN) ***
+[  960.107864] *** Channel 0: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x73d6000 ***
+[  960.107875] *** Channel 0: QBUF completed successfully (MIPS-safe) ***
+[  960.107964] *** Channel 0: Frame wait returned 9 ***
+[  960.107972] *** Channel 0: Frame was ready, consuming it ***
+[  960.130491] ISP isp-w01: [CSI PHY Control] write at offset 0x14: 0x330 -> 0x300 (delta: 130.000 ms)
+[  960.287403] *** Channel 1: DQBUF wait returned 0 ***
+[  960.287414] *** Channel 1: DQBUF timeout, generating frame ***
+[  960.287424] *** Channel 1: DQBUF complete - buffer[0] seq=123 flags=0x3 ***
+[  960.287534] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  960.287544] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  960.287550] *** Channel 1: DQBUF - dequeue buffer request ***
+[  960.287556] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  960.287567] *** tx_isp_get_sensor: Found real sensor subdev at index 5: 85429400 (name=gc2053) ***
+[  960.287574] *** tx_isp_get_sensor: Found real sensor: 85429400 ***
+[  960.287580] *** Channel 1: DQBUF waiting for frame completion (timeout=200ms) ***
+[  960.287788] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  960.287801] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  960.287808] *** Channel 1: Frame completion wait ***
+[  960.287814] *** Channel 1: Waiting for frame (timeout=100ms) ***
+[  960.288593] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  960.288606] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  960.288612] *** Channel 1: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  960.288619] *** Channel 1: QBUF - Buffer copied from user successfully ***
+[  960.288626] *** Channel 1: QBUF - Buffer received: index=0, type=1, memory=2 ***
+[  960.288634] *** Channel 1: QBUF - Buffer m.offset=0x7e07100, m.userptr=0x7e07100 ***
+[  960.288641] *** Channel 1: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  960.288648] *** Channel 1: QBUF - Validation: buffer.index=0, state->buffer_count=2 ***
+[  960.288655] *** Channel 1: QBUF - Queue buffer index=0 ***
+[  960.288661] *** QBUF: No buffer allocated for index 0 - VBM initialization mode ***
+[  960.288669] *** Channel 1: QBUF - Using buffer struct   (null) for index 0 ***
+[  960.288676] *** Channel 1: QBUF - Using REAL buffer address from userptr: 0x7e07100 ***
+[  960.288685] *** Channel 1: QBUF - Buffer 0: phys_addr=0x7e07100, size=460800 (VALIDATED) ***
+[  960.288693] *** Channel 1: QBUF VBM - Stored buffer[0] = 0x7e07100, total_count=2 ***
+[  960.288701] *** Channel 1: QBUF - VBM buffer check: vbm_buffer_addresses=82237e80, vbm_buffer_count=2 ***
+[  960.288708] *** Channel 1: QBUF - VBM buffer slot[0] available ***
+[  960.288714] *** Channel 1: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x7e07100 ***
+[  960.288726] *** Channel 1: QBUF completed successfully (MIPS-safe) ***
+[  960.288748] *** Channel 1: Frame wait returned 10 ***
+[  960.288754] *** Channel 1: Frame was ready, consuming it ***
+[  960.297410] *** Channel 0: DQBUF wait returned 0 ***
+[  960.297422] *** Channel 0: DQBUF timeout, generating frame ***
+[  960.297431] *** Channel 0: DQBUF complete - buffer[2] seq=129 flags=0x3 ***
+[  960.297457] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  960.297465] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: ENABLE
+[  960.297471] isp_core_tunning_unlocked_ioctl: Allowing LIMITED tuning ENABLE during streaming (vic_start_ok=1)
+[  960.297478] *** DEBUG: enable=1, dev->core_dev->tuning_enabled=1 ***
+[  960.297484] *** BINARY NINJA REFERENCE: Tuning enable - no hardware reset performed ***
+[  960.297490] isp_core_tunning_unlocked_ioctl: ISP tuning enabled
+[  960.297614] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  960.297624] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  960.297631] *** Channel 0: DQBUF - dequeue buffer request ***
+[  960.297637] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  960.297647] *** tx_isp_get_sensor: Found real sensor subdev at index 5: 85429400 (name=gc2053) ***
+[  960.297654] *** tx_isp_get_sensor: Found real sensor: 85429400 ***
+[  960.297660] *** Channel 0: DQBUF waiting for frame completion (timeout=200ms) ***
+[  960.297925] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  960.297940] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  960.297947] *** Channel 0: Frame completion wait ***
+[  960.297953] *** Channel 0: Waiting for frame (timeout=100ms) ***
+[  960.308129] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  960.308143] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  960.308150] *** Channel 0: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  960.308156] *** Channel 0: QBUF - Buffer copied from user successfully ***
+[  960.308163] *** Channel 0: QBUF - Buffer received: index=2, type=1, memory=2 ***
+[  960.308171] *** Channel 0: QBUF - Buffer m.offset=0x76d3000, m.userptr=0x76d3000 ***
+[  960.308178] *** Channel 0: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  960.308186] *** Channel 0: QBUF - Validation: buffer.index=2, state->buffer_count=4 ***
+[  960.308192] *** Channel 0: QBUF - Queue buffer index=2 ***
+[  960.308198] *** QBUF: No buffer allocated for index 2 - VBM initialization mode ***
+[  960.308206] *** Channel 0: QBUF - Using buffer struct   (null) for index 2 ***
+[  960.308213] *** Channel 0: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***
+[  960.308220] *** Channel 0: QBUF EVENT - No VIC callback (falling back to direct call) ***
+[  960.308227] *** Channel 0: QBUF -> direct VIC buffer management via vic_core_ops_ioctl ***
+[  960.308235] *** vic_core_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x3000008, arg=805dfdb8 ***
+[  960.308242] vic_core_ops_ioctl: QBUF cmd=0x3000008 - program VIC slot from v4l2_buffer
+[  960.308250] *** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***
+[  960.308257] ispvic_frame_channel_qbuf: arg1=85428000, arg2=805dfd40
+[  960.308265] *** VIC QBUF: wrote slot 0 addr=0x76d3000 to reg_off=0x318 (CONFIG->RUN) ***
+[  960.308272] *** Channel 0: QBUF - Using REAL buffer address from userptr: 0x76d3000 ***
+[  960.308281] *** Channel 0: QBUF - Buffer 2: phys_addr=0x76d3000, size=4147200 (VALIDATED) ***
+[  960.308289] *** Channel 0: QBUF VBM - Stored buffer[2] = 0x76d3000, total_count=4 ***
+[  960.308297] *** Channel 0: QBUF - VBM buffer check: vbm_buffer_addresses=82237800, vbm_buffer_count=4 ***
+[  960.308304] *** Channel 0: QBUF - VBM buffer slot[2] available ***
+[  960.308314] *** Channel 0: QBUF -> enqueue_in_driver slot=1 addr=0x76d3000 (cur_idx=0) ***
+[  960.308320] __enqueue_in_driver: Sending BUFFER_ENQUEUE (0x3000005) to VIC
+[  960.308326] QBUF: enqueue event not wired; fallback to direct vic_core_ops_ioctl
+[  960.308333] *** vic_core_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x3000005, arg=811fe180 ***
+[  960.308340] vic_core_ops_ioctl: BUFFER_ENQUEUE cmd=0x3000005 - refreshing VIC buffer state
+[  960.308346] *** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***
+[  960.308352] ispvic_frame_channel_qbuf: arg1=85428000, arg2=811fe180
+[  960.308360] *** VIC QBUF: wrote slot 1 addr=0x76d3000 to reg_off=0x31c (CONFIG->RUN) ***
+[  960.308368] *** Channel 0: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x76d3000 ***
+[  960.308382] *** Channel 0: QBUF completed successfully (MIPS-safe) ***
+[  960.308451] *** Channel 0: Frame wait returned 9 ***
+[  960.308458] *** Channel 0: Frame was ready, consuming it ***
+[  960.487415] *** Channel 1: DQBUF wait returned 0 ***
+[  960.487426] *** Channel 1: DQBUF timeout, generating frame ***
+[  960.487436] *** Channel 1: DQBUF complete - buffer[1] seq=124 flags=0x3 ***
+[  960.487546] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  960.487555] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  960.487562] *** Channel 1: DQBUF - dequeue buffer request ***
+[  960.487568] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  960.487578] *** tx_isp_get_sensor: Found real sensor subdev at index 5: 85429400 (name=gc2053) ***
+[  960.487585] *** tx_isp_get_sensor: Found real sensor: 85429400 ***
+[  960.487592] *** Channel 1: DQBUF waiting for frame completion (timeout=200ms) ***
+[  960.487798] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  960.487811] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  960.487818] *** Channel 1: Frame completion wait ***
+[  960.487824] *** Channel 1: Waiting for frame (timeout=100ms) ***
+[  960.488599] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  960.488612] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  960.488618] *** Channel 1: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  960.488625] *** Channel 1: QBUF - Buffer copied from user successfully ***
+[  960.488632] *** Channel 1: QBUF - Buffer received: index=1, type=1, memory=2 ***
+[  960.488640] *** Channel 1: QBUF - Buffer m.offset=0x7e5d500, m.userptr=0x7e5d500 ***
+[  960.488647] *** Channel 1: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  960.488654] *** Channel 1: QBUF - Validation: buffer.index=1, state->buffer_count=2 ***
+[  960.488661] *** Channel 1: QBUF - Queue buffer index=1 ***
+[  960.488667] *** QBUF: No buffer allocated for index 1 - VBM initialization mode ***
+[  960.488675] *** Channel 1: QBUF - Using buffer struct   (null) for index 1 ***
+[  960.488682] *** Channel 1: QBUF - Using REAL buffer address from userptr: 0x7e5d500 ***
+[  960.488690] *** Channel 1: QBUF - Buffer 1: phys_addr=0x7e5d500, size=460800 (VALIDATED) ***
+[  960.488698] *** Channel 1: QBUF VBM - Stored buffer[1] = 0x7e5d500, total_count=2 ***
+[  960.488706] *** Channel 1: QBUF - VBM buffer check: vbm_buffer_addresses=82237e80, vbm_buffer_count=2 ***
+[  960.488713] *** Channel 1: QBUF - VBM buffer slot[1] available ***
+[  960.488720] *** Channel 1: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x7e5d500 ***
+[  960.488733] *** Channel 1: QBUF completed successfully (MIPS-safe) ***
+[  960.488755] *** Channel 1: Frame wait returned 10 ***
+[  960.488762] *** Channel 1: Frame was ready, consuming it ***
+[  960.497415] *** Channel 0: DQBUF wait returned 0 ***
+[  960.497426] *** Channel 0: DQBUF timeout, generating frame ***
+[  960.497436] *** Channel 0: DQBUF complete - buffer[3] seq=130 flags=0x3 ***
+[  960.497460] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  960.497467] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: ENABLE
+[  960.497474] isp_core_tunning_unlocked_ioctl: Allowing LIMITED tuning ENABLE during streaming (vic_start_ok=1)
+[  960.497480] *** DEBUG: enable=1, dev->core_dev->tuning_enabled=1 ***
+[  960.497486] *** BINARY NINJA REFERENCE: Tuning enable - no hardware reset performed ***
+[  960.497492] isp_core_tunning_unlocked_ioctl: ISP tuning enabled
+[  960.497614] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  960.497624] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  960.497630] *** Channel 0: DQBUF - dequeue buffer request ***
+[  960.497637] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  960.497647] *** tx_isp_get_sensor: Found real sensor subdev at index 5: 85429400 (name=gc2053) ***
+[  960.497654] *** tx_isp_get_sensor: Found real sensor: 85429400 ***
+[  960.497660] *** Channel 0: DQBUF waiting for frame completion (timeout=200ms) ***
+[  960.497904] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  960.497919] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  960.497926] *** Channel 0: Frame completion wait ***
+[  960.497932] *** Channel 0: Waiting for frame (timeout=100ms) ***
+[  960.507640] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  960.507654] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  960.507661] *** Channel 0: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  960.507668] *** Channel 0: QBUF - Buffer copied from user successfully ***
+[  960.507675] *** Channel 0: QBUF - Buffer received: index=3, type=1, memory=2 ***
+[  960.507683] *** Channel 0: QBUF - Buffer m.offset=0x79d0000, m.userptr=0x79d0000 ***
+[  960.507690] *** Channel 0: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  960.507697] *** Channel 0: QBUF - Validation: buffer.index=3, state->buffer_count=4 ***
+[  960.507704] *** Channel 0: QBUF - Queue buffer index=3 ***
+[  960.507710] *** QBUF: No buffer allocated for index 3 - VBM initialization mode ***
+[  960.507718] *** Channel 0: QBUF - Using buffer struct   (null) for index 3 ***
+[  960.507725] *** Channel 0: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***
+[  960.507732] *** Channel 0: QBUF EVENT - No VIC callback (falling back to direct call) ***
+[  960.507738] *** Channel 0: QBUF -> direct VIC buffer management via vic_core_ops_ioctl ***
+[  960.507747] *** vic_core_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x3000008, arg=805dfdb8 ***
+[  960.507754] vic_core_ops_ioctl: QBUF cmd=0x3000008 - program VIC slot from v4l2_buffer
+[  960.507762] *** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***
+[  960.507769] ispvic_frame_channel_qbuf: arg1=85428000, arg2=805dfd40
+[  960.507776] *** VIC QBUF: wrote slot 2 addr=0x79d0000 to reg_off=0x320 (CONFIG->RUN) ***
+[  960.507784] *** Channel 0: QBUF - Using REAL buffer address from userptr: 0x79d0000 ***
+[  960.507792] *** Channel 0: QBUF - Buffer 3: phys_addr=0x79d0000, size=4147200 (VALIDATED) ***
+[  960.507800] *** Channel 0: QBUF VBM - Stored buffer[3] = 0x79d0000, total_count=4 ***
+[  960.507808] *** Channel 0: QBUF - VBM buffer check: vbm_buffer_addresses=82237800, vbm_buffer_count=4 ***
+[  960.507815] *** Channel 0: QBUF - VBM buffer slot[3] available ***
+[  960.507824] *** Channel 0: QBUF -> enqueue_in_driver slot=3 addr=0x79d0000 (cur_idx=2) ***
+[  960.507830] __enqueue_in_driver: Sending BUFFER_ENQUEUE (0x3000005) to VIC
+[  960.507836] QBUF: enqueue event not wired; fallback to direct vic_core_ops_ioctl
+[  960.507844] *** vic_core_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x3000005, arg=811fe180 ***
+[  960.507850] vic_core_ops_ioctl: BUFFER_ENQUEUE cmd=0x3000005 - refreshing VIC buffer state
+[  960.507856] *** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***
+[  960.507863] ispvic_frame_channel_qbuf: arg1=85428000, arg2=811fe180
+[  960.507870] *** VIC QBUF: wrote slot 3 addr=0x79d0000 to reg_off=0x324 (CONFIG->RUN) ***
+[  960.507879] *** Channel 0: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x79d0000 ***
+[  960.507892] *** Channel 0: QBUF completed successfully (MIPS-safe) ***
+[  960.507960] *** Channel 0: Frame wait returned 9 ***
+[  960.507966] *** Channel 0: Frame was ready, consuming it ***
+[  960.630617] ISP isp-w01: [CSI PHY Control] write at offset 0x14: 0x300 -> 0x330 (delta: 500.000 ms)
+[  960.687418] *** Channel 1: DQBUF wait returned 0 ***
+[  960.687430] *** Channel 1: DQBUF timeout, generating frame ***
+[  960.687440] *** Channel 1: DQBUF complete - buffer[0] seq=125 flags=0x3 ***
+[  960.687553] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  960.687561] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  960.687568] *** Channel 1: DQBUF - dequeue buffer request ***
+[  960.687574] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  960.687584] *** tx_isp_get_sensor: Found real sensor subdev at index 5: 85429400 (name=gc2053) ***
+[  960.687591] *** tx_isp_get_sensor: Found real sensor: 85429400 ***
+[  960.687597] *** Channel 1: DQBUF waiting for frame completion (timeout=200ms) ***
+[  960.687841] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  960.687855] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  960.687861] *** Channel 1: Frame completion wait ***
+[  960.687867] *** Channel 1: Waiting for frame (timeout=100ms) ***
+[  960.688727] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  960.688741] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  960.688747] *** Channel 1: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  960.688754] *** Channel 1: QBUF - Buffer copied from user successfully ***
+[  960.688761] *** Channel 1: QBUF - Buffer received: index=0, type=1, memory=2 ***
+[  960.688769] *** Channel 1: QBUF - Buffer m.offset=0x7e07100, m.userptr=0x7e07100 ***
+[  960.688776] *** Channel 1: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  960.688783] *** Channel 1: QBUF - Validation: buffer.index=0, state->buffer_count=2 ***
+[  960.688790] *** Channel 1: QBUF - Queue buffer index=0 ***
+[  960.688796] *** QBUF: No buffer allocated for index 0 - VBM initialization mode ***
+[  960.688804] *** Channel 1: QBUF - Using buffer struct   (null) for index 0 ***
+[  960.688811] *** Channel 1: QBUF - Using REAL buffer address from userptr: 0x7e07100 ***
+[  960.688819] *** Channel 1: QBUF - Buffer 0: phys_addr=0x7e07100, size=460800 (VALIDATED) ***
+[  960.688827] *** Channel 1: QBUF VBM - Stored buffer[0] = 0x7e07100, total_count=2 ***
+[  960.688835] *** Channel 1: QBUF - VBM buffer check: vbm_buffer_addresses=82237e80, vbm_buffer_count=2 ***
+[  960.688842] *** Channel 1: QBUF - VBM buffer slot[0] available ***
+[  960.688849] *** Channel 1: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x7e07100 ***
+[  960.688861] *** Channel 1: QBUF completed successfully (MIPS-safe) ***
+[  960.688884] *** Channel 1: Frame wait returned 10 ***
+[  960.688891] *** Channel 1: Frame was ready, consuming it ***
+[  960.697427] *** Channel 0: DQBUF wait returned 0 ***
+[  960.697438] *** Channel 0: DQBUF timeout, generating frame ***
+[  960.697447] *** Channel 0: DQBUF complete - buffer[0] seq=131 flags=0x3 ***
+[  960.697473] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  960.697481] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: ENABLE
+[  960.697487] isp_core_tunning_unlocked_ioctl: Allowing LIMITED tuning ENABLE during streaming (vic_start_ok=1)
+[  960.697495] *** DEBUG: enable=1, dev->core_dev->tuning_enabled=1 ***
+[  960.697500] *** BINARY NINJA REFERENCE: Tuning enable - no hardware reset performed ***
+[  960.697507] isp_core_tunning_unlocked_ioctl: ISP tuning enabled
+[  960.697666] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  960.697677] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  960.697684] *** Channel 0: DQBUF - dequeue buffer request ***
+[  960.697690] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  960.697700] *** tx_isp_get_sensor: Found real sensor subdev at index 5: 85429400 (name=gc2053) ***
+[  960.697707] *** tx_isp_get_sensor: Found real sensor: 85429400 ***
+[  960.697713] *** Channel 0: DQBUF waiting for frame completion (timeout=200ms) ***
+[  960.698030] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  960.698051] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  960.698063] *** Channel 0: Frame completion wait ***
+[  960.698069] *** Channel 0: Waiting for frame (timeout=100ms) ***
+[  960.707773] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  960.707787] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  960.707793] *** Channel 0: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  960.707799] *** Channel 0: QBUF - Buffer copied from user successfully ***
+[  960.707807] *** Channel 0: QBUF - Buffer received: index=0, type=1, memory=2 ***
+[  960.707815] *** Channel 0: QBUF - Buffer m.offset=0x70d9000, m.userptr=0x70d9000 ***
+[  960.707822] *** Channel 0: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  960.707829] *** Channel 0: QBUF - Validation: buffer.index=0, state->buffer_count=4 ***
+[  960.707835] *** Channel 0: QBUF - Queue buffer index=0 ***
+[  960.707842] *** QBUF: No buffer allocated for index 0 - VBM initialization mode ***
+[  960.707850] *** Channel 0: QBUF - Using buffer struct   (null) for index 0 ***
+[  960.707857] *** Channel 0: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***
+[  960.707864] *** Channel 0: QBUF EVENT - No VIC callback (falling back to direct call) ***
+[  960.707871] *** Channel 0: QBUF -> direct VIC buffer management via vic_core_ops_ioctl ***
+[  960.707879] *** vic_core_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x3000008, arg=805dfdb8 ***
+[  960.707885] vic_core_ops_ioctl: QBUF cmd=0x3000008 - program VIC slot from v4l2_buffer
+[  960.707893] *** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***
+[  960.707901] ispvic_frame_channel_qbuf: arg1=85428000, arg2=805dfd40
+[  960.707909] *** VIC QBUF: wrote slot 0 addr=0x70d9000 to reg_off=0x318 (CONFIG->RUN) ***
+[  960.707916] *** Channel 0: QBUF - Using REAL buffer address from userptr: 0x70d9000 ***
+[  960.707925] *** Channel 0: QBUF - Buffer 0: phys_addr=0x70d9000, size=4147200 (VALIDATED) ***
+[  960.707933] *** Channel 0: QBUF VBM - Stored buffer[0] = 0x70d9000, total_count=4 ***
+[  960.707940] *** Channel 0: QBUF - VBM buffer check: vbm_buffer_addresses=82237800, vbm_buffer_count=4 ***
+[  960.707947] *** Channel 0: QBUF - VBM buffer slot[0] available ***
+[  960.707957] *** Channel 0: QBUF -> enqueue_in_driver slot=1 addr=0x70d9000 (cur_idx=0) ***
+[  960.707963] __enqueue_in_driver: Sending BUFFER_ENQUEUE (0x3000005) to VIC
+[  960.707969] QBUF: enqueue event not wired; fallback to direct vic_core_ops_ioctl
+[  960.707976] *** vic_core_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x3000005, arg=811fe180 ***
+[  960.707983] vic_core_ops_ioctl: BUFFER_ENQUEUE cmd=0x3000005 - refreshing VIC buffer state
+[  960.707989] *** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***
+[  960.707995] ispvic_frame_channel_qbuf: arg1=85428000, arg2=811fe180
+[  960.708003] *** VIC QBUF: wrote slot 1 addr=0x70d9000 to reg_off=0x31c (CONFIG->RUN) ***
+[  960.708011] *** Channel 0: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x70d9000 ***
+[  960.708024] *** Channel 0: QBUF completed successfully (MIPS-safe) ***
+[  960.708092] *** Channel 0: Frame wait returned 9 ***
+[  960.708099] *** Channel 0: Frame was ready, consuming it ***
+[  960.720943] ISP isp-w01: [CSI PHY Control] write at offset 0x14: 0x330 -> 0x300 (delta: 90.000 ms)
+[  960.786582] ISP isp-w01: [CSI PHY Control] write at offset 0x14: 0x300 -> 0x330 (delta: 60.000 ms)
+[  960.835475] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  960.835487] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: ENABLE
+[  960.835494] isp_core_tunning_unlocked_ioctl: Allowing LIMITED tuning ENABLE during streaming (vic_start_ok=1)
+[  960.835501] *** DEBUG: enable=1, dev->core_dev->tuning_enabled=1 ***
+[  960.835507] *** BINARY NINJA REFERENCE: Tuning enable - no hardware reset performed ***
+[  960.835513] isp_core_tunning_unlocked_ioctl: ISP tuning enabled
+[  960.847184] ISP isp-w01: [CSI PHY Control] write at offset 0x14: 0x330 -> 0x300 (delta: 60.000 ms)
+[  960.887399] *** Channel 1: DQBUF wait returned 0 ***
+[  960.887410] *** Channel 1: DQBUF timeout, generating frame ***
+[  960.887419] *** Channel 1: DQBUF complete - buffer[1] seq=126 flags=0x3 ***
+[  960.887529] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  960.887538] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  960.887544] *** Channel 1: DQBUF - dequeue buffer request ***
+[  960.887551] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  960.887561] *** tx_isp_get_sensor: Found real sensor subdev at index 5: 85429400 (name=gc2053) ***
+[  960.887568] *** tx_isp_get_sensor: Found real sensor: 85429400 ***
+[  960.887575] *** Channel 1: DQBUF waiting for frame completion (timeout=200ms) ***
+[  960.887779] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  960.887792] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  960.887799] *** Channel 1: Frame completion wait ***
+[  960.887805] *** Channel 1: Waiting for frame (timeout=100ms) ***
+[  960.888577] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  960.888590] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  960.888597] *** Channel 1: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  960.888603] *** Channel 1: QBUF - Buffer copied from user successfully ***
+[  960.888611] *** Channel 1: QBUF - Buffer received: index=1, type=1, memory=2 ***
+[  960.888618] *** Channel 1: QBUF - Buffer m.offset=0x7e5d500, m.userptr=0x7e5d500 ***
+[  960.888625] *** Channel 1: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  960.888633] *** Channel 1: QBUF - Validation: buffer.index=1, state->buffer_count=2 ***
+[  960.888639] *** Channel 1: QBUF - Queue buffer index=1 ***
+[  960.888645] *** QBUF: No buffer allocated for index 1 - VBM initialization mode ***
+[  960.888653] *** Channel 1: QBUF - Using buffer struct   (null) for index 1 ***
+[  960.888660] *** Channel 1: QBUF - Using REAL buffer address from userptr: 0x7e5d500 ***
+[  960.888669] *** Channel 1: QBUF - Buffer 1: phys_addr=0x7e5d500, size=460800 (VALIDATED) ***
+[  960.888677] *** Channel 1: QBUF VBM - Stored buffer[1] = 0x7e5d500, total_count=2 ***
+[  960.888685] *** Channel 1: QBUF - VBM buffer check: vbm_buffer_addresses=82237e80, vbm_buffer_count=2 ***
+[  960.888691] *** Channel 1: QBUF - VBM buffer slot[1] available ***
+[  960.888699] *** Channel 1: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x7e5d500 ***
+[  960.888711] *** Channel 1: QBUF completed successfully (MIPS-safe) ***
+[  960.888733] *** Channel 1: Frame wait returned 10 ***
+[  960.888739] *** Channel 1: Frame was ready, consuming it ***
+[  960.897402] *** Channel 0: DQBUF wait returned 0 ***
+[  960.897413] *** Channel 0: DQBUF timeout, generating frame ***
+[  960.897423] *** Channel 0: DQBUF complete - buffer[1] seq=132 flags=0x3 ***
+[  960.897448] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  960.897456] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: ENABLE
+[  960.897462] isp_core_tunning_unlocked_ioctl: Allowing LIMITED tuning ENABLE during streaming (vic_start_ok=1)
+[  960.897469] *** DEBUG: enable=1, dev->core_dev->tuning_enabled=1 ***
+[  960.897475] *** BINARY NINJA REFERENCE: Tuning enable - no hardware reset performed ***
+[  960.897481] isp_core_tunning_unlocked_ioctl: ISP tuning enabled
+[  960.897601] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  960.897611] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  960.897617] *** Channel 0: DQBUF - dequeue buffer request ***
+[  960.897623] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  960.897633] *** tx_isp_get_sensor: Found real sensor subdev at index 5: 85429400 (name=gc2053) ***
+[  960.897641] *** tx_isp_get_sensor: Found real sensor: 85429400 ***
+[  960.897647] *** Channel 0: DQBUF waiting for frame completion (timeout=200ms) ***
+[  960.897910] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  960.897924] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  960.897931] *** Channel 0: Frame completion wait ***
+[  960.897937] *** Channel 0: Waiting for frame (timeout=100ms) ***
+[  960.907596] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  960.907609] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  960.907616] *** Channel 0: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  960.907622] *** Channel 0: QBUF - Buffer copied from user successfully ***
+[  960.907630] *** Channel 0: QBUF - Buffer received: index=1, type=1, memory=2 ***
+[  960.907637] *** Channel 0: QBUF - Buffer m.offset=0x73d6000, m.userptr=0x73d6000 ***
+[  960.907645] *** Channel 0: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  960.907652] *** Channel 0: QBUF - Validation: buffer.index=1, state->buffer_count=4 ***
+[  960.907659] *** Channel 0: QBUF - Queue buffer index=1 ***
+[  960.907665] *** QBUF: No buffer allocated for index 1 - VBM initialization mode ***
+[  960.907673] *** Channel 0: QBUF - Using buffer struct   (null) for index 1 ***
+[  960.907679] *** Channel 0: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***
+[  960.907687] *** Channel 0: QBUF EVENT - No VIC callback (falling back to direct call) ***
+[  960.907693] *** Channel 0: QBUF -> direct VIC buffer management via vic_core_ops_ioctl ***
+[  960.907701] *** vic_core_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x3000008, arg=805dfdb8 ***
+[  960.907709] vic_core_ops_ioctl: QBUF cmd=0x3000008 - program VIC slot from v4l2_buffer
+[  960.907716] *** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***
+[  960.907723] ispvic_frame_channel_qbuf: arg1=85428000, arg2=805dfd40
+[  960.907731] *** VIC QBUF: wrote slot 2 addr=0x73d6000 to reg_off=0x320 (CONFIG->RUN) ***
+[  960.907739] *** Channel 0: QBUF - Using REAL buffer address from userptr: 0x73d6000 ***
+[  960.907747] *** Channel 0: QBUF - Buffer 1: phys_addr=0x73d6000, size=4147200 (VALIDATED) ***
+[  960.907772] *** Channel 0: QBUF VBM - Stored buffer[1] = 0x73d6000, total_count=4 ***
+[  960.907780] *** Channel 0: QBUF - VBM buffer check: vbm_buffer_addresses=82237800, vbm_buffer_count=4 ***
+[  960.907787] *** Channel 0: QBUF - VBM buffer slot[1] available ***
+[  960.907797] *** Channel 0: QBUF -> enqueue_in_driver slot=3 addr=0x73d6000 (cur_idx=2) ***
+[  960.907803] __enqueue_in_driver: Sending BUFFER_ENQUEUE (0x3000005) to VIC
+[  960.907809] QBUF: enqueue event not wired; fallback to direct vic_core_ops_ioctl
+[  960.907816] *** vic_core_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x3000005, arg=811fe180 ***
+[  960.907823] vic_core_ops_ioctl: BUFFER_ENQUEUE cmd=0x3000005 - refreshing VIC buffer state
+[  960.907829] *** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***
+[  960.907835] ispvic_frame_channel_qbuf: arg1=85428000, arg2=811fe180
+[  960.907843] *** VIC QBUF: wrote slot 3 addr=0x73d6000 to reg_off=0x324 (CONFIG->RUN) ***
+[  960.907851] *** Channel 0: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x73d6000 ***
+[  960.907862] *** Channel 0: QBUF completed successfully (MIPS-safe) ***
+[  960.907952] *** Channel 0: Frame wait returned 9 ***
+[  960.907959] *** Channel 0: Frame was ready, consuming it ***
+[  960.911395] ISP isp-w01: [CSI PHY Control] write at offset 0x14: 0x300 -> 0x330 (delta: 70.000 ms)
+[  961.087395] *** Channel 1: DQBUF wait returned 0 ***
+[  961.087407] *** Channel 1: DQBUF timeout, generating frame ***
+[  961.087416] *** Channel 1: DQBUF complete - buffer[0] seq=127 flags=0x3 ***
+[  961.087539] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  961.087549] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  961.087555] *** Channel 1: DQBUF - dequeue buffer request ***
+[  961.087561] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  961.087572] *** tx_isp_get_sensor: Found real sensor subdev at index 5: 85429400 (name=gc2053) ***
+[  961.087579] *** tx_isp_get_sensor: Found real sensor: 85429400 ***
+[  961.087585] *** Channel 1: DQBUF waiting for frame completion (timeout=200ms) ***
+[  961.087827] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  961.087840] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  961.087847] *** Channel 1: Frame completion wait ***
+[  961.087853] *** Channel 1: Waiting for frame (timeout=100ms) ***
+[  961.088635] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  961.088649] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  961.088655] *** Channel 1: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  961.088662] *** Channel 1: QBUF - Buffer copied from user successfully ***
+[  961.088669] *** Channel 1: QBUF - Buffer received: index=0, type=1, memory=2 ***
+[  961.088677] *** Channel 1: QBUF - Buffer m.offset=0x7e07100, m.userptr=0x7e07100 ***
+[  961.088684] *** Channel 1: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  961.088691] *** Channel 1: QBUF - Validation: buffer.index=0, state->buffer_count=2 ***
+[  961.088698] *** Channel 1: QBUF - Queue buffer index=0 ***
+[  961.088704] *** QBUF: No buffer allocated for index 0 - VBM initialization mode ***
+[  961.088712] *** Channel 1: QBUF - Using buffer struct   (null) for index 0 ***
+[  961.088719] *** Channel 1: QBUF - Using REAL buffer address from userptr: 0x7e07100 ***
+[  961.088727] *** Channel 1: QBUF - Buffer 0: phys_addr=0x7e07100, size=460800 (VALIDATED) ***
+[  961.088735] *** Channel 1: QBUF VBM - Stored buffer[0] = 0x7e07100, total_count=2 ***
+[  961.088743] *** Channel 1: QBUF - VBM buffer check: vbm_buffer_addresses=82237e80, vbm_buffer_count=2 ***
+[  961.088751] *** Channel 1: QBUF - VBM buffer slot[0] available ***
+[  961.088758] *** Channel 1: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x7e07100 ***
+[  961.088770] *** Channel 1: QBUF completed successfully (MIPS-safe) ***
+[  961.088792] *** Channel 1: Frame wait returned 10 ***
+[  961.088799] *** Channel 1: Frame was ready, consuming it ***
+[  961.097401] *** Channel 0: DQBUF wait returned 0 ***
+[  961.097412] *** Channel 0: DQBUF timeout, generating frame ***
+[  961.097422] *** Channel 0: DQBUF complete - buffer[2] seq=133 flags=0x3 ***
+[  961.097447] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  961.097454] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: ENABLE
+[  961.097461] isp_core_tunning_unlocked_ioctl: Allowing LIMITED tuning ENABLE during streaming (vic_start_ok=1)
+[  961.097467] *** DEBUG: enable=1, dev->core_dev->tuning_enabled=1 ***
+[  961.097473] *** BINARY NINJA REFERENCE: Tuning enable - no hardware reset performed ***
+[  961.097479] isp_core_tunning_unlocked_ioctl: ISP tuning enabled
+[  961.097600] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  961.097610] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  961.097617] *** Channel 0: DQBUF - dequeue buffer request ***
+[  961.097623] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  961.097633] *** tx_isp_get_sensor: Found real sensor subdev at index 5: 85429400 (name=gc2053) ***
+[  961.097640] *** tx_isp_get_sensor: Found real sensor: 85429400 ***
+[  961.097647] *** Channel 0: DQBUF waiting for frame completion (timeout=200ms) ***
+[  961.097911] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  961.097927] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  961.097933] *** Channel 0: Frame completion wait ***
+[  961.097939] *** Channel 0: Waiting for frame (timeout=100ms) ***
+[  961.107610] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  961.107624] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  961.107631] *** Channel 0: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  961.107637] *** Channel 0: QBUF - Buffer copied from user successfully ***
+[  961.107645] *** Channel 0: QBUF - Buffer received: index=2, type=1, memory=2 ***
+[  961.107652] *** Channel 0: QBUF - Buffer m.offset=0x76d3000, m.userptr=0x76d3000 ***
+[  961.107659] *** Channel 0: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  961.107667] *** Channel 0: QBUF - Validation: buffer.index=2, state->buffer_count=4 ***
+[  961.107673] *** Channel 0: QBUF - Queue buffer index=2 ***
+[  961.107679] *** QBUF: No buffer allocated for index 2 - VBM initialization mode ***
+[  961.107687] *** Channel 0: QBUF - Using buffer struct   (null) for index 2 ***
+[  961.107695] *** Channel 0: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***
+[  961.107702] *** Channel 0: QBUF EVENT - No VIC callback (falling back to direct call) ***
+[  961.107709] *** Channel 0: QBUF -> direct VIC buffer management via vic_core_ops_ioctl ***
+[  961.107717] *** vic_core_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x3000008, arg=805dfdb8 ***
+[  961.107723] vic_core_ops_ioctl: QBUF cmd=0x3000008 - program VIC slot from v4l2_buffer
+[  961.107731] *** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***
+[  961.107739] ispvic_frame_channel_qbuf: arg1=85428000, arg2=805dfd40
+[  961.107747] *** VIC QBUF: wrote slot 0 addr=0x76d3000 to reg_off=0x318 (CONFIG->RUN) ***
+[  961.107754] *** Channel 0: QBUF - Using REAL buffer address from userptr: 0x76d3000 ***
+[  961.107762] *** Channel 0: QBUF - Buffer 2: phys_addr=0x76d3000, size=4147200 (VALIDATED) ***
+[  961.107771] *** Channel 0: QBUF VBM - Stored buffer[2] = 0x76d3000, total_count=4 ***
+[  961.107778] *** Channel 0: QBUF - VBM buffer check: vbm_buffer_addresses=82237800, vbm_buffer_count=4 ***
+[  961.107785] *** Channel 0: QBUF - VBM buffer slot[2] available ***
+[  961.107812] *** Channel 0: QBUF -> enqueue_in_driver slot=1 addr=0x76d3000 (cur_idx=0) ***
+[  961.107818] __enqueue_in_driver: Sending BUFFER_ENQUEUE (0x3000005) to VIC
+[  961.107824] QBUF: enqueue event not wired; fallback to direct vic_core_ops_ioctl
+[  961.107831] *** vic_core_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x3000005, arg=811fe180 ***
+[  961.107838] vic_core_ops_ioctl: BUFFER_ENQUEUE cmd=0x3000005 - refreshing VIC buffer state
+[  961.107844] *** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***
+[  961.107851] ispvic_frame_channel_qbuf: arg1=85428000, arg2=811fe180
+[  961.107859] *** VIC QBUF: wrote slot 1 addr=0x76d3000 to reg_off=0x31c (CONFIG->RUN) ***
+[  961.107867] *** Channel 0: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x76d3000 ***
+[  961.107878] *** Channel 0: QBUF completed successfully (MIPS-safe) ***
+[  961.107969] *** Channel 0: Frame wait returned 9 ***
+[  961.107977] *** Channel 0: Frame was ready, consuming it ***
+[  961.161082] ISP isp-w01: [CSI PHY Control] write at offset 0x14: 0x330 -> 0x300 (delta: 250.000 ms)
+[  961.245394] ISP isp-w01: [CSI PHY Control] write at offset 0x14: 0x300 -> 0x330 (delta: 80.000 ms)
+[  961.287396] *** Channel 1: DQBUF wait returned 0 ***
+[  961.287408] *** Channel 1: DQBUF timeout, generating frame ***
+[  961.287418] *** Channel 1: DQBUF complete - buffer[1] seq=128 flags=0x3 ***
+[  961.287530] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  961.287539] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  961.287546] *** Channel 1: DQBUF - dequeue buffer request ***
+[  961.287552] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  961.287580] *** tx_isp_get_sensor: Found real sensor subdev at index 5: 85429400 (name=gc2053) ***
+[  961.287587] *** tx_isp_get_sensor: Found real sensor: 85429400 ***
+[  961.287594] *** Channel 1: DQBUF waiting for frame completion (timeout=200ms) ***
+[  961.287816] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  961.287830] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  961.287836] *** Channel 1: Frame completion wait ***
+[  961.287842] *** Channel 1: Waiting for frame (timeout=100ms) ***
+[  961.288648] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  961.288661] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  961.288668] *** Channel 1: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  961.288674] *** Channel 1: QBUF - Buffer copied from user successfully ***
+[  961.288682] *** Channel 1: QBUF - Buffer received: index=1, type=1, memory=2 ***
+[  961.288689] *** Channel 1: QBUF - Buffer m.offset=0x7e5d500, m.userptr=0x7e5d500 ***
+[  961.288696] *** Channel 1: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  961.288704] *** Channel 1: QBUF - Validation: buffer.index=1, state->buffer_count=2 ***
+[  961.288710] *** Channel 1: QBUF - Queue buffer index=1 ***
+[  961.288716] *** QBUF: No buffer allocated for index 1 - VBM initialization mode ***
+[  961.288724] *** Channel 1: QBUF - Using buffer struct   (null) for index 1 ***
+[  961.288732] *** Channel 1: QBUF - Using REAL buffer address from userptr: 0x7e5d500 ***
+[  961.288740] *** Channel 1: QBUF - Buffer 1: phys_addr=0x7e5d500, size=460800 (VALIDATED) ***
+[  961.288748] *** Channel 1: QBUF VBM - Stored buffer[1] = 0x7e5d500, total_count=2 ***
+[  961.288756] *** Channel 1: QBUF - VBM buffer check: vbm_buffer_addresses=82237e80, vbm_buffer_count=2 ***
+[  961.288763] *** Channel 1: QBUF - VBM buffer slot[1] available ***
+[  961.288770] *** Channel 1: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x7e5d500 ***
+[  961.288782] *** Channel 1: QBUF completed successfully (MIPS-safe) ***
+[  961.288804] *** Channel 1: Frame wait returned 10 ***
+[  961.288811] *** Channel 1: Frame was ready, consuming it ***
+[  961.297398] *** Channel 0: DQBUF wait returned 0 ***
+[  961.297409] *** Channel 0: DQBUF timeout, generating frame ***
+[  961.297418] *** Channel 0: DQBUF complete - buffer[3] seq=134 flags=0x3 ***
+[  961.297454] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  961.297462] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: ENABLE
+[  961.297468] isp_core_tunning_unlocked_ioctl: Allowing LIMITED tuning ENABLE during streaming (vic_start_ok=1)
+[  961.297475] *** DEBUG: enable=1, dev->core_dev->tuning_enabled=1 ***
+[  961.297481] *** BINARY NINJA REFERENCE: Tuning enable - no hardware reset performed ***
+[  961.297487] isp_core_tunning_unlocked_ioctl: ISP tuning enabled
+[  961.297610] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  961.297620] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  961.297626] *** Channel 0: DQBUF - dequeue buffer request ***
+[  961.297633] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  961.297643] *** tx_isp_get_sensor: Found real sensor subdev at index 5: 85429400 (name=gc2053) ***
+[  961.297650] *** tx_isp_get_sensor: Found real sensor: 85429400 ***
+[  961.297656] *** Channel 0: DQBUF waiting for frame completion (timeout=200ms) ***
+[  961.297928] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  961.297942] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  961.297949] *** Channel 0: Frame completion wait ***
+[  961.297955] *** Channel 0: Waiting for frame (timeout=100ms) ***
+[  961.307612] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  961.307626] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  961.307632] *** Channel 0: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  961.307639] *** Channel 0: QBUF - Buffer copied from user successfully ***
+[  961.307647] *** Channel 0: QBUF - Buffer received: index=3, type=1, memory=2 ***
+[  961.307654] *** Channel 0: QBUF - Buffer m.offset=0x79d0000, m.userptr=0x79d0000 ***
+[  961.307662] *** Channel 0: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  961.307669] *** Channel 0: QBUF - Validation: buffer.index=3, state->buffer_count=4 ***
+[  961.307676] *** Channel 0: QBUF - Queue buffer index=3 ***
+[  961.307682] *** QBUF: No buffer allocated for index 3 - VBM initialization mode ***
+[  961.307690] *** Channel 0: QBUF - Using buffer struct   (null) for index 3 ***
+[  961.307697] *** Channel 0: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***
+[  961.307704] *** Channel 0: QBUF EVENT - No VIC callback (falling back to direct call) ***
+[  961.307711] *** Channel 0: QBUF -> direct VIC buffer management via vic_core_ops_ioctl ***
+[  961.307719] *** vic_core_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x3000008, arg=805dfdb8 ***
+[  961.307726] vic_core_ops_ioctl: QBUF cmd=0x3000008 - program VIC slot from v4l2_buffer
+[  961.307734] *** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***
+[  961.307741] ispvic_frame_channel_qbuf: arg1=85428000, arg2=805dfd40
+[  961.307749] *** VIC QBUF: wrote slot 2 addr=0x79d0000 to reg_off=0x320 (CONFIG->RUN) ***
+[  961.307756] *** Channel 0: QBUF - Using REAL buffer address from userptr: 0x79d0000 ***
+[  961.307765] *** Channel 0: QBUF - Buffer 3: phys_addr=0x79d0000, size=4147200 (VALIDATED) ***
+[  961.307773] *** Channel 0: QBUF VBM - Stored buffer[3] = 0x79d0000, total_count=4 ***
+[  961.307780] *** Channel 0: QBUF - VBM buffer check: vbm_buffer_addresses=82237800, vbm_buffer_count=4 ***
+[  961.307788] *** Channel 0: QBUF - VBM buffer slot[3] available ***
+[  961.307798] *** Channel 0: QBUF -> enqueue_in_driver slot=3 addr=0x79d0000 (cur_idx=2) ***
+[  961.307804] __enqueue_in_driver: Sending BUFFER_ENQUEUE (0x3000005) to VIC
+[  961.307809] QBUF: enqueue event not wired; fallback to direct vic_core_ops_ioctl
+[  961.307816] *** vic_core_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x3000005, arg=811fe400 ***
+[  961.307823] vic_core_ops_ioctl: BUFFER_ENQUEUE cmd=0x3000005 - refreshing VIC buffer state
+[  961.307829] *** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***
+[  961.307836] ispvic_frame_channel_qbuf: arg1=85428000, arg2=811fe400
+[  961.307844] *** VIC QBUF: wrote slot 3 addr=0x79d0000 to reg_off=0x324 (CONFIG->RUN) ***
+[  961.307852] *** Channel 0: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x79d0000 ***
+[  961.307865] *** Channel 0: QBUF completed successfully (MIPS-safe) ***
+[  961.307932] *** Channel 0: Frame wait returned 9 ***
+[  961.307939] *** Channel 0: Frame was ready, consuming it ***
+[  961.467832] ISP isp-w01: [CSI PHY Control] write at offset 0x14: 0x330 -> 0x300 (delta: 230.000 ms)
+[  961.487408] *** Channel 1: DQBUF wait returned 0 ***
+[  961.487419] *** Channel 1: DQBUF timeout, generating frame ***
+[  961.487428] *** Channel 1: DQBUF complete - buffer[0] seq=129 flags=0x3 ***
+[  961.487562] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  961.487570] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  961.487577] *** Channel 1: DQBUF - dequeue buffer request ***
+[  961.487584] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  961.487594] *** tx_isp_get_sensor: Found real sensor subdev at index 5: 85429400 (name=gc2053) ***
+[  961.487600] *** tx_isp_get_sensor: Found real sensor: 85429400 ***
+[  961.487607] *** Channel 1: DQBUF waiting for frame completion (timeout=200ms) ***
+[  961.487879] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  961.487893] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  961.487900] *** Channel 1: Frame completion wait ***
+[  961.487905] *** Channel 1: Waiting for frame (timeout=100ms) ***
+[  961.488770] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  961.488784] *** Frame channel 1 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  961.488790] *** Channel 1: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  961.488796] *** Channel 1: QBUF - Buffer copied from user successfully ***
+[  961.488804] *** Channel 1: QBUF - Buffer received: index=0, type=1, memory=2 ***
+[  961.488812] *** Channel 1: QBUF - Buffer m.offset=0x7e07100, m.userptr=0x7e07100 ***
+[  961.488819] *** Channel 1: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  961.488826] *** Channel 1: QBUF - Validation: buffer.index=0, state->buffer_count=2 ***
+[  961.488833] *** Channel 1: QBUF - Queue buffer index=0 ***
+[  961.488839] *** QBUF: No buffer allocated for index 0 - VBM initialization mode ***
+[  961.488847] *** Channel 1: QBUF - Using buffer struct   (null) for index 0 ***
+[  961.488854] *** Channel 1: QBUF - Using REAL buffer address from userptr: 0x7e07100 ***
+[  961.488862] *** Channel 1: QBUF - Buffer 0: phys_addr=0x7e07100, size=460800 (VALIDATED) ***
+[  961.488870] *** Channel 1: QBUF VBM - Stored buffer[0] = 0x7e07100, total_count=2 ***
+[  961.488878] *** Channel 1: QBUF - VBM buffer check: vbm_buffer_addresses=82237e80, vbm_buffer_count=2 ***
+[  961.488885] *** Channel 1: QBUF - VBM buffer slot[0] available ***
+[  961.488892] *** Channel 1: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x7e07100 ***
+[  961.488904] *** Channel 1: QBUF completed successfully (MIPS-safe) ***
+[  961.488926] *** Channel 1: Frame wait returned 10 ***
+[  961.488933] *** Channel 1: Frame was ready, consuming it ***
+[  961.497412] *** Channel 0: DQBUF wait returned 0 ***
+[  961.497423] *** Channel 0: DQBUF timeout, generating frame ***
+[  961.497432] *** Channel 0: DQBUF complete - buffer[0] seq=135 flags=0x3 ***
+[  961.497458] isp_core_tunning_unlocked_ioctl: Handling ISP core control command 0xc00c56c6
+[  961.497466] isp_core_tunning_unlocked_ioctl: Tuning enable/disable: ENABLE
+[  961.497472] isp_core_tunning_unlocked_ioctl: Allowing LIMITED tuning ENABLE during streaming (vic_start_ok=1)
+[  961.497479] *** DEBUG: enable=1, dev->core_dev->tuning_enabled=1 ***
+[  961.497484] *** BINARY NINJA REFERENCE: Tuning enable - no hardware reset performed ***
+[  961.497491] isp_core_tunning_unlocked_ioctl: ISP tuning enabled
+[  961.497612] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc0445611 ***
+[  961.497622] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc0445611 ***
+[  961.497629] *** Channel 0: DQBUF - dequeue buffer request ***
+[  961.497635] *** tx_isp_get_sensor: Searching subdev array for sensors ***
+[  961.497645] *** tx_isp_get_sensor: Found real sensor subdev at index 5: 85429400 (name=gc2053) ***
+[  961.497652] *** tx_isp_get_sensor: Found real sensor: 85429400 ***
+[  961.497659] *** Channel 0: DQBUF waiting for frame completion (timeout=200ms) ***
+[  961.497937] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0x400456bf ***
+[  961.497952] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0x400456bf ***
+[  961.497959] *** Channel 0: Frame completion wait ***
+[  961.497965] *** Channel 0: Waiting for frame (timeout=100ms) ***
+[  961.507790] *** frame_channel_unlocked_ioctl: ENTRY - cmd=0xc044560f ***
+[  961.507804] *** Frame channel 0 IOCTL: MIPS-safe processing - cmd=0xc044560f ***
+[  961.507811] *** Channel 0: QBUF - ENTRY POINT - VBM buffer queue attempt ***
+[  961.507817] *** Channel 0: QBUF - Buffer copied from user successfully ***
+[  961.507825] *** Channel 0: QBUF - Buffer received: index=0, type=1, memory=2 ***
+[  961.507832] *** Channel 0: QBUF - Buffer m.offset=0x70d9000, m.userptr=0x70d9000 ***
+[  961.507840] *** Channel 0: QBUF - Validation: buffer.type=1, fcd->buffer_type=1 ***
+[  961.507847] *** Channel 0: QBUF - Validation: buffer.index=0, state->buffer_count=4 ***
+[  961.507854] *** Channel 0: QBUF - Queue buffer index=0 ***
+[  961.507860] *** QBUF: No buffer allocated for index 0 - VBM initialization mode ***
+[  961.507868] *** Channel 0: QBUF - Using buffer struct   (null) for index 0 ***
+[  961.507874] *** Channel 0: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***
+[  961.507882] *** Channel 0: QBUF EVENT - No VIC callback (falling back to direct call) ***
+[  961.507888] *** Channel 0: QBUF -> direct VIC buffer management via vic_core_ops_ioctl ***
+[  961.507896] *** vic_core_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x3000008, arg=805dfdb8 ***
+[  961.507904] vic_core_ops_ioctl: QBUF cmd=0x3000008 - program VIC slot from v4l2_buffer
+[  961.507912] *** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***
+[  961.507919] ispvic_frame_channel_qbuf: arg1=85428000, arg2=805dfd40
+[  961.507927] *** VIC QBUF: wrote slot 0 addr=0x70d9000 to reg_off=0x318 (CONFIG->RUN) ***
+[  961.507934] *** Channel 0: QBUF - Using REAL buffer address from userptr: 0x70d9000 ***
+[  961.507943] *** Channel 0: QBUF - Buffer 0: phys_addr=0x70d9000, size=4147200 (VALIDATED) ***
+[  961.507951] *** Channel 0: QBUF VBM - Stored buffer[0] = 0x70d9000, total_count=4 ***
+[  961.507959] *** Channel 0: QBUF - VBM buffer check: vbm_buffer_addresses=82237800, vbm_buffer_count=4 ***
+[  961.507966] *** Channel 0: QBUF - VBM buffer slot[0] available ***
+[  961.507976] *** Channel 0: QBUF -> enqueue_in_driver slot=1 addr=0x70d9000 (cur_idx=0) ***
+[  961.507982] __enqueue_in_driver: Sending BUFFER_ENQUEUE (0x3000005) to VIC
+[  961.507988] QBUF: enqueue event not wired; fallback to direct vic_core_ops_ioctl
+[  961.507995] *** vic_core_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x3000005, arg=811fe400 ***
+[  961.508002] vic_core_ops_ioctl: BUFFER_ENQUEUE cmd=0x3000005 - refreshing VIC buffer state
+[  961.508008] *** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***
+[  961.508014] ispvic_frame_channel_qbuf: arg1=85428000, arg2=811fe400
+[  961.508022] *** VIC QBUF: wrote slot 1 addr=0x70d9000 to reg_off=0x31c (CONFIG->RUN) ***
+[  961.508030] *** Channel 0: QBUF VBM mode - VBMFillPool initialization with buffer_addr=0x70d9000 ***
+[  961.508044] *** Channel 0: QBUF completed successfully (MIPS-safe) ***
+[  961.508128] *** Channel 0: Frame wait returned 9 ***
+[  961.508136] *** Channel 0: Frame was ready, consuming it ***

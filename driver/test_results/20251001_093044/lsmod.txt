@@ -1,0 +1,15 @@
+Module                  Size  Used by    Tainted: G  
+sensor_gc2053_t31      22448  0 
+tx_isp_t31            421984  5 sensor_gc2053_t31
+tx_isp_trace            3392  0 
+8189fs               1431008  0 
+pwm_hal                 3184  0 
+pwm_core                 480  0 
+gpio_userkeys            768  0 
+avpu                   12704  2 
+audio                  61136  1 
+cp210x                 12480  0 
+ch341                   6992  0 
+usbserial              26416  2 cp210x,ch341
+exfat                  93488  0 
+jzmmc_v12              13328  0 
