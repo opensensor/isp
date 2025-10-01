@@ -624,6 +624,20 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         pr_info("*** CSI STATUS CHECK: Dumping CSI registers after PHY enable ***\n");
                         dump_csi_reg(sd);
 
+                        /* Binary Ninja check_csi_error: Check CSI error registers */
+                        u32 csi_err1 = readl(csi_dev->csi_regs + 0x20);
+                        u32 csi_err2 = readl(csi_dev->csi_regs + 0x24);
+                        if (csi_err1 != 0) {
+                            pr_err("*** CSI ERROR 1: CSI[0x20] = 0x%08x ***\n", csi_err1);
+                        } else {
+                            pr_info("*** CSI ERROR 1: CSI[0x20] = 0x%08x (no errors) ***\n", csi_err1);
+                        }
+                        if (csi_err2 != 0) {
+                            pr_err("*** CSI ERROR 2: CSI[0x24] = 0x%08x ***\n", csi_err2);
+                        } else {
+                            pr_info("*** CSI ERROR 2: CSI[0x24] = 0x%08x (no errors) ***\n", csi_err2);
+                        }
+
                         /* CRITICAL DEBUG: Read back ISP Core CSI registers to verify they're working */
                         u32 isp_csi_0 = readl(csi_dev->isp_csi_regs + 0x0);
                         u32 isp_csi_128 = readl(csi_dev->isp_csi_regs + 0x128);
