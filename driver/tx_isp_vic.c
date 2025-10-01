@@ -3079,8 +3079,28 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         vic_pipo_mdma_enable(vic_dev);
         pr_info("*** vic_pipo_mdma_enable completed ***\n");
 
-        /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
+        /* CRITICAL: Enable VIC interrupts AFTER MDMA is configured */
         void __iomem *vic_base = vic_dev->vic_regs;  /* SAFE: $s0 + 0xb8 = vic_regs */
+        if (vic_base) {
+            /* Clear any pending interrupts first */
+            writel(0xFFFFFFFF, vic_base + 0x1f0);  /* Clear pending bank 1 */
+            writel(0xFFFFFFFF, vic_base + 0x1f4);  /* Clear pending bank 2 */
+            wmb();
+
+            /* Enable frame done interrupt (bit 0), mask all others */
+            /* VIC interrupt mask: 1=ENABLED, 0=MASKED */
+            /* Enable bit 0 (frame done), mask bit 21 (control limit error) */
+            writel(0xFFDFFFFF, vic_base + 0x1e8);  /* Frame done enabled, control limit masked */
+            wmb();
+            pr_info("*** CRITICAL: VIC interrupts enabled - mask=0xFFDFFFFF (frame done ON, control limit OFF) ***\n");
+
+            /* Also enable global VIC interrupt enable if needed */
+            writel(0xFFFFFFFE, vic_base + 0x30c);  /* Global interrupt enable */
+            wmb();
+            pr_info("*** CRITICAL: VIC global interrupt enable - 0x30c=0xFFFFFFFE ***\n");
+        }
+
+        /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
         if (vic_base) {
             /* SAFE: $s0 + 0x218 = active_buffer_count */
             u32 buffer_count = vic_dev->active_buffer_count;
