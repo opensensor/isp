@@ -31,11 +31,9 @@ static int vic_curraddr_space = 0;         /* 0=unknown, 1=primary, 2=secondary 
 static int vic_curraddr_detected = 0;      /* sticky once found */
 
 /* Static variables to cache sensor dimensions (read once during probe) */
-/* CRITICAL FIX: Use sensor TOTAL dimensions (including blanking), not active image size! */
-/* GC2053 30fps MIPI: total_width=0x44c*2=2184, total_height=0x58a=1418 */
-/* VIC needs total frame size to properly receive frames from CSI! */
-static u32 cached_sensor_width = 2184;   /* GC2053 total width (0x44c * 2) */
-static u32 cached_sensor_height = 1418;  /* GC2053 total height (0x58a) */
+/* Use ACTIVE image dimensions (1920x1080), matching stock driver behavior */
+static u32 cached_sensor_width = 1920;   /* Active image width */
+static u32 cached_sensor_height = 1080;  /* Active image height */
 static int sensor_dimensions_cached = 0; /* Flag to indicate if dimensions were read */
 
 /* Forward declarations for callback functions referenced in pipo */
@@ -106,17 +104,13 @@ static int read_sensor_dimensions(u32 *width, u32 *height)
 /* Cache sensor dimensions during probe (process context - sleeping allowed) */
 void cache_sensor_dimensions_from_proc(void)
 {
-    /* CRITICAL FIX: Do NOT read from /proc/jz/sensor/ - it has active image size (1920x1080)
-     * but VIC needs TOTAL frame size including blanking (2184x1418)!
-     * The sensor sends total_width=2184, total_height=1418 over MIPI.
-     * VIC must be configured for the same dimensions to receive frames correctly.
-     */
-    pr_info("*** cache_sensor_dimensions_from_proc: Using hardcoded TOTAL dimensions (not /proc) ***\n");
+    /* Use hardcoded ACTIVE image dimensions (1920x1080) matching stock driver */
+    pr_info("*** cache_sensor_dimensions_from_proc: Using hardcoded ACTIVE dimensions (matching stock driver) ***\n");
 
-    /* GC2053 30fps MIPI: total_width=0x44c*2=2184, total_height=0x58a=1418 */
+    /* Stock driver uses 1920x1080 (active image size) for VIC configuration */
     /* These are already set as static defaults, just mark as cached */
     sensor_dimensions_cached = 1;
-    pr_info("*** cache_sensor_dimensions_from_proc: Using TOTAL dimensions %dx%d (includes blanking) ***\n",
+    pr_info("*** cache_sensor_dimensions_from_proc: Using ACTIVE dimensions %dx%d ***\n",
             cached_sensor_width, cached_sensor_height);
 }
 
@@ -1027,15 +1021,16 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* DEBUG: Check if sensor_attr is properly initialized */
     pr_info("*** DEBUG: sensor_attr=%p, dbus_type=%d ***\n", sensor_attr, sensor_attr ? sensor_attr->dbus_type : -1);
 
-    /* CRITICAL FIX: Use TOTAL sensor dimensions (including blanking), not active image size! */
-    /* GC2053 sensor sends total_width=2184 (0x44c*2), total_height=1418 (0x58a) over MIPI */
-    /* VIC must be configured for the SAME dimensions to receive frames correctly! */
-    actual_width = 2184;   /* GC2053 total width (0x44c * 2) */
-    actual_height = 1418;  /* GC2053 total height (0x58a) */
+    /* CRITICAL: Use ACTIVE image dimensions (1920x1080), NOT total dimensions! */
+    /* Reference trace shows stock driver writes 0x7800438 to VIC[0x4] = 1920x1080 */
+    /* The sensor sends total_width=2184, total_height=1418 over MIPI, */
+    /* but VIC extracts the active 1920x1080 image from within that frame */
+    actual_width = 1920;   /* Active image width */
+    actual_height = 1080;  /* Active image height */
 
-    pr_info("*** DIMENSION FIX: Using TOTAL sensor dimensions %dx%d for VIC configuration ***\n",
+    pr_info("*** DIMENSION FIX: Using ACTIVE image dimensions %dx%d for VIC configuration ***\n",
             actual_width, actual_height);
-    pr_info("*** CRITICAL: VIC configured for sensor TOTAL dimensions (includes blanking) ***\n");
+    pr_info("*** CRITICAL: VIC configured for ACTIVE image (stock driver uses 1920x1080) ***\n");
 
     /* Binary Ninja: 0001024c int32_t $v0 = *($v1 + 0x14) - interface type at offset 0x14 */
     interface_type = sensor_attr->dbus_type;
@@ -1279,11 +1274,11 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* BINARY NINJA EXACT: All missing register configurations */
 
         /* 1. Register 0x4 - Dimensions (Binary Ninja exact) */
-        /* CRITICAL FIX: Use TOTAL dimensions (including blanking), not active image size! */
-        u32 width = 2184;   /* GC2053 total width (0x44c * 2) */
-        u32 height = 1418;  /* GC2053 total height (0x58a) */
+        /* Stock driver uses ACTIVE image dimensions (1920x1080) */
+        u32 width = 1920;   /* Active image width */
+        u32 height = 1080;  /* Active image height */
         writel((width << 16) | height, vic_regs + 0x4);
-        pr_info("*** BINARY NINJA: reg 0x4 = 0x%x (TOTAL dimensions %dx%d) ***\n", (width << 16) | height, width, height);
+        pr_info("*** BINARY NINJA: reg 0x4 = 0x%x (ACTIVE dimensions %dx%d) ***\n", (width << 16) | height, width, height);
 
         /* 2. Register 0x14 - Interrupt config (from sensor attributes) */
         writel(0x0, vic_regs + 0x14);  /* Start with safe default */
@@ -3243,7 +3238,11 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         writel(stride, core + 0x9a2c);/* line step or related */
                         /* Override tuning’s stale width-like register with dynamic width */
                         writel(w, core + 0x9a98);     /* observed as 0x500 in logs when width was 1280 */
-                        /* 0x9a94 already set to 1 earlier; leave as-is */
+
+                        /* CRITICAL: Write 0x9a94 = 0x1 BEFORE gate writes (from reference trace line 73) */
+                        writel(0x1, core + 0x9a94);
+                        wmb();
+                        pr_info("*** GATE ENABLE: Wrote 0x1 to 0x9a94 (gate enable register) ***\n");
 
                         /* CRITICAL FIX: Binary Ninja reference trace shows 0x200/0x200, not 1/0! */
                         /* reference-trace.txt line 74-75: write at offset 0x9ac0: 0x0 -> 0x200 */
