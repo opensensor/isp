@@ -3095,15 +3095,13 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
 
             if (buffer_count > 5) buffer_count = 5;        /* 5-slot ring cap */
 
-            /* Binary Ninja EXACT: Write buffer COUNT (not index) to control register */
-            /* CRITICAL FIX: Do NOT write buffer_count to control register! */
+            /* Binary Ninja EXACT: Write buffer COUNT to control register */
             /* Reference shows: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
-            /* But when buffer_count=3, hardware cycles to 2, which sets bit 17! */
-            /* 3 << 16 = 0x00030000, hardware cycles to 2 << 16 = 0x00020000 = bit 17! */
+            /* This is: VIC[0x300] = (buffer_count << 16) | 0x80000020 */
 
             u32 current_ctrl = readl(vic_base + 0x300);
-            /* CRITICAL FIX: Use 0x80000020 WITHOUT buffer count to avoid bit 17 */
-            u32 stream_ctrl = 0x80000020;   /* Base control, NO buffer count */
+            /* STOCK DRIVER: Include buffer count in control register */
+            u32 stream_ctrl = (buffer_count << 16) | 0x80000020;
 
             void __iomem *vic_ctrl = vic_dev->vic_regs_control;
             writel(stream_ctrl, vic_base + 0x300);
@@ -3112,8 +3110,8 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             }
             wmb();
 
-            pr_info("*** CRITICAL FIX: VIC[0x300]=0x%x (NO buffer_count to avoid bit 17, was 0x%x) ***\n",
-                    stream_ctrl, current_ctrl);
+            pr_info("*** STOCK DRIVER: VIC[0x300]=0x%x (buffer_count=%d, was 0x%x) ***\n",
+                    stream_ctrl, buffer_count, current_ctrl);
         }
 
         /* Binary Ninja EXACT: *($s0 + 0x210) = 1 */
