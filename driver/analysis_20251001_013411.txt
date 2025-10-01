@@ -1,0 +1,55 @@
+========================================
+ISP DRIVER TEST ANALYSIS
+========================================
+
+Timestamp: 20251001_013411
+Build: 7a5e85310ef0c7c5efabbe4c54975425
+
+=== KEY METRICS ===
+VIC START messages: 4
+VIN linked: 2
+VIN input configured: 1
+CSI input configured: 1
+VIC input configured: 3
+Complete pipeline configured: 1
+Control limit errors: 0
+0
+Frame done interrupts: 
+
+=== INTERRUPT COUNTS ===
+ 37:          0   jz-intc  isp-m0
+ 38:          0   jz-intc  isp-w02
+
+=== PIPELINE CONFIGURATION ===
+[   20.577079] *** VIC START: VIC input source configured - CSI->VIC link enabled ***
+[   20.785759] *** VIC START: VIC input source configured - CSI->VIC link enabled ***
+[   21.910977] *** VIC STREAM ON: VIN input configured: 0x00000003 (Sensor->VIN link) ***
+[   21.910982] *** VIC STREAM ON: CSI input configured: 0x1 (VIN->CSI link) ***
+[   21.910995] *** VIC STREAM ON: VIC input source configured - CSI->VIC link enabled ***
+
+=== ERRORS ===
+[    0.000000] CPU0 RESET ERROR PC:801ADC80
+[    0.121598] jz-dwc2 jz-dwc2: cgu clk gate get error
+[    0.000000] CPU0 RESET ERROR PC:801ADC80
+[    0.121598] jz-dwc2 jz-dwc2: cgu clk gate get error
+[   20.399217] *** CSI ERROR 1: CSI[0x20] = 0x00000000 (no errors) ***
+[   20.399223] *** CSI ERROR 2: CSI[0x24] = 0x00000000 (no errors) ***
+[   20.503462] sensor_write_array: Complete - wrote 137 registers, 0 errors
+[   20.577970] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   20.581404] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   20.584123] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   20.585021] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   20.594207] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   20.713828] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   20.714537] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   20.796770] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   20.798354] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   21.154824] *** Channel 0: Frame wait timeout/error, generating frame ***
+[   21.254942] *** Channel 0: Frame wait timeout/error, generating frame ***
+[   21.349187] *** Channel 0: Frame wait timeout/error, generating frame ***
+[   21.379398] *** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***
+
+=== KEY REGISTER WRITES ===
+[   20.399217] *** CSI ERROR 1: CSI[0x20] = 0x00000000 (no errors) ***
+[   21.909213] *** CSI ERROR 1: CSI[0x20] = 0x00000000 (no errors) ***
+

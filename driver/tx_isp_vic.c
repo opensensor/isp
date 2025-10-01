@@ -3132,6 +3132,12 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
 
             pr_info("*** STOCK DRIVER: VIC[0x300]=0x%x (buffer_count=%d, was 0x%x) ***\n",
                     stream_ctrl, buffer_count, current_ctrl);
+
+            /* CRITICAL: Write 1 to VIC[0x0] to START VIC frame capture */
+            /* This is the final step in the sequence: 2 → 4 → wait → configure → 1 */
+            writel(1, vic_base + 0x0);
+            wmb();
+            pr_info("*** CRITICAL: VIC[0x0]=1 - VIC FRAME CAPTURE STARTED ***\n");
         }
 
         /* Binary Ninja EXACT: *($s0 + 0x210) = 1 */
