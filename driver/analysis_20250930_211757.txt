@@ -1,0 +1,59 @@
+========================================
+ISP DRIVER TEST ANALYSIS
+========================================
+
+Timestamp: 20250930_211757
+Build: 52674925b69a21cc52a0deb27aaf6ac4
+
+=== KEY METRICS ===
+VIC START messages: 6
+VIN linked: 2
+VIN input configured: 4
+CSI input configured: 4
+VIC input configured: 7
+Complete pipeline configured: 4
+Control limit errors: 4
+Frame done interrupts: 
+
+=== INTERRUPT COUNTS ===
+ 37:          4   jz-intc  isp-m0
+ 38:          8   jz-intc  isp-w02
+
+=== PIPELINE CONFIGURATION ===
+[   20.701294] *** VIC START: VIC input source configured - CSI->VIC link enabled ***
+[   20.701439] *** VIC STREAM ON: VIN input configured: 0x00000003 (Sensor->VIN link) ***
+[   20.701444] *** VIC STREAM ON: CSI input configured: 0x1 (VIN->CSI link) ***
+[   20.701457] *** VIC STREAM ON: VIC input source configured - CSI->VIC link enabled ***
+[   20.701439] *** VIC STREAM ON: VIN input configured: 0x00000003 (Sensor->VIN link) ***
+[   20.701444] *** VIC STREAM ON: CSI input configured: 0x1 (VIN->CSI link) ***
+[   20.701457] *** VIC STREAM ON: VIC input source configured - CSI->VIC link enabled ***
+[   22.964028] *** VIC START: VIC input source configured - CSI->VIC link enabled ***
+[   22.964174] *** VIC STREAM ON: VIN input configured: 0x00000003 (Sensor->VIN link) ***
+[   22.964180] *** VIC STREAM ON: CSI input configured: 0x1 (VIN->CSI link) ***
+
+=== ERRORS ===
+[    0.000000] CPU0 RESET ERROR PC:801ADC80
+[    0.121582] jz-dwc2 jz-dwc2: cgu clk gate get error
+[    0.000000] CPU0 RESET ERROR PC:801ADC80
+[    0.121582] jz-dwc2 jz-dwc2: cgu clk gate get error
+[   20.434708] *** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***
+[   20.559239] *** CSI ERROR 1: CSI[0x20] = 0x00000000 (no errors) ***
+[   20.559244] *** CSI ERROR 2: CSI[0x24] = 0x00000000 (no errors) ***
+[   20.647084] sensor_write_array: Complete - wrote 137 registers, 0 errors
+[   20.931300] *** VIC ERROR: control limit error (bit 21) ***
+[   20.931300] *** VIC ERROR: control limit error (bit 21) ***
+[   21.566973] *** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***
+[   21.567959] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   21.568699] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   21.569465] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   21.577660] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   21.578416] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   21.675047] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   21.675752] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   22.721687] *** Channel 0: Frame wait timeout/error, generating frame ***
+[   22.767666] *** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***
+
+=== KEY REGISTER WRITES ===
+[   20.559239] *** CSI ERROR 1: CSI[0x20] = 0x00000000 (no errors) ***
+[   22.889207] *** CSI ERROR 1: CSI[0x20] = 0x00000000 (no errors) ***
+

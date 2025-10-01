@@ -31,8 +31,11 @@ static int vic_curraddr_space = 0;         /* 0=unknown, 1=primary, 2=secondary 
 static int vic_curraddr_detected = 0;      /* sticky once found */
 
 /* Static variables to cache sensor dimensions (read once during probe) */
-static u32 cached_sensor_width = 1920;   /* Default fallback */
-static u32 cached_sensor_height = 1080;  /* Default fallback */
+/* CRITICAL FIX: Use sensor TOTAL dimensions (including blanking), not active image size! */
+/* GC2053 30fps MIPI: total_width=0x44c*2=2184, total_height=0x58a=1418 */
+/* VIC needs total frame size to properly receive frames from CSI! */
+static u32 cached_sensor_width = 2184;   /* GC2053 total width (0x44c * 2) */
+static u32 cached_sensor_height = 1418;  /* GC2053 total height (0x58a) */
 static int sensor_dimensions_cached = 0; /* Flag to indicate if dimensions were read */
 
 /* Forward declarations for callback functions referenced in pipo */
