@@ -106,25 +106,18 @@ static int read_sensor_dimensions(u32 *width, u32 *height)
 /* Cache sensor dimensions during probe (process context - sleeping allowed) */
 void cache_sensor_dimensions_from_proc(void)
 {
-    u32 width, height;
-    int ret;
+    /* CRITICAL FIX: Do NOT read from /proc/jz/sensor/ - it has active image size (1920x1080)
+     * but VIC needs TOTAL frame size including blanking (2184x1418)!
+     * The sensor sends total_width=2184, total_height=1418 over MIPI.
+     * VIC must be configured for the same dimensions to receive frames correctly.
+     */
+    pr_info("*** cache_sensor_dimensions_from_proc: Using hardcoded TOTAL dimensions (not /proc) ***\n");
 
-    pr_info("*** cache_sensor_dimensions_from_proc: Reading sensor dimensions during probe ***\n");
-
-    ret = read_sensor_dimensions(&width, &height);
-    if (ret == 0) {
-        cached_sensor_width = width;
-        cached_sensor_height = height;
-        sensor_dimensions_cached = 1;
-        pr_info("*** cache_sensor_dimensions_from_proc: Successfully cached %dx%d ***\n", width, height);
-    } else {
-        /* Keep defaults */
-        cached_sensor_width = 1920;
-        cached_sensor_height = 1080;
-        sensor_dimensions_cached = 1;  /* Mark as cached even with defaults */
-        pr_info("*** cache_sensor_dimensions_from_proc: Using default dimensions %dx%d ***\n",
-                cached_sensor_width, cached_sensor_height);
-    }
+    /* GC2053 30fps MIPI: total_width=0x44c*2=2184, total_height=0x58a=1418 */
+    /* These are already set as static defaults, just mark as cached */
+    sensor_dimensions_cached = 1;
+    pr_info("*** cache_sensor_dimensions_from_proc: Using TOTAL dimensions %dx%d (includes blanking) ***\n",
+            cached_sensor_width, cached_sensor_height);
 }
 
 /* Get cached sensor dimensions (safe for atomic context) */
