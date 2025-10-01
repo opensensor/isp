@@ -187,31 +187,11 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
         return 0xffffffea;
     }
 
-    /* CRITICAL FIX: Check sensor interface type instead of CSI device interface_type
-     * The working version checks sensor attributes directly because csi_dev->interface_type
-     * may not be initialized yet when this function is called.
-     * Binary Ninja: if (*(*(arg1 + 0x110) + 0x14) != 1) return 0
-     */
-    extern struct tx_isp_sensor *tx_isp_get_sensor(void);
-    struct tx_isp_sensor *sensor = tx_isp_get_sensor();
-
-    /* First try to check sensor attributes (more reliable) */
-    if (sensor && sensor->video.attr) {
-        if (sensor->video.attr->dbus_type != TX_SENSOR_DATA_INTERFACE_MIPI) {
-            pr_info("csi_video_s_stream: Sensor interface type %d != 1 (MIPI), returning 0\n",
-                    sensor->video.attr->dbus_type);
-            return 0;
-        }
-        pr_info("csi_video_s_stream: Sensor interface type is MIPI (1) - proceeding\n");
-    } else {
-        /* Fallback to CSI device interface_type if sensor not available */
-        pr_info("csi_video_s_stream: Sensor not available, checking csi_dev->interface_type=%d\n",
-                csi_dev->interface_type);
-        if (csi_dev->interface_type != 1) {
-            pr_info("csi_video_s_stream: CSI device interface type %d != 1 (MIPI), returning 0\n",
-                    csi_dev->interface_type);
-            return 0;
-        }
+    /* Binary Ninja: if (*(*(arg1 + 0x110) + 0x14) != 1) return 0 */
+    /* This checks CSI device interface type - if not MIPI (1), return 0 */
+    if (csi_dev->interface_type != 1) {
+        pr_info("csi_video_s_stream: Interface type %d != 1 (MIPI), returning 0\n", csi_dev->interface_type);
+        return 0;
     }
 
     /* Binary Ninja: int32_t $v0_4 = 4 */
@@ -331,37 +311,6 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
         pr_info("csi_core_ops_init: sd=%p, csi_dev=%p, enable=%d\n", sd, csi_dev, enable);
         result = 0xffffffea;
-
-        /* CRITICAL FIX: Enable CSI clocks BEFORE accessing CSI PHY registers! */
-        /* This is why all CSI registers read as 0x00000000 - no clock! */
-        if (enable) {
-            pr_info("*** csi_core_ops_init: CRITICAL - Ensuring CSI clocks are enabled BEFORE register access ***\n");
-
-            /* Initialize clocks if not already done */
-            if (sd->clks == NULL && sd->clk_num > 0) {
-                extern int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_num);
-                pr_info("*** csi_core_ops_init: Initializing CSI clocks ***\n");
-                if (isp_subdev_init_clks(sd, sd->clk_num) != 0) {
-                    pr_err("*** csi_core_ops_init: CSI clock init failed! ***\n");
-                }
-            }
-
-            /* Enable the clocks (whether just initialized or already present) */
-            if (sd->clks && sd->clk_num > 0) {
-                struct clk **clks = sd->clks;
-                int i;
-                pr_info("*** csi_core_ops_init: Enabling %d CSI clocks ***\n", sd->clk_num);
-                for (i = 0; i < sd->clk_num; i++) {
-                    if (clks[i]) {
-                        clk_enable(clks[i]);
-                        pr_info("*** csi_core_ops_init: Enabled CSI clock %d ***\n", i);
-                    }
-                }
-                pr_info("*** csi_core_ops_init: CSI clocks enabled - PHY should now respond! ***\n");
-            } else {
-                pr_warn("*** csi_core_ops_init: WARNING - No CSI clocks available! (clks=%p, clk_num=%d) ***\n", sd->clks, sd->clk_num);
-            }
-        }
 
         /* Binary Ninja: if ($s0_1 != 0 && $s0_1 u< 0xfffff001) */
         if (csi_dev != NULL && (unsigned long)csi_dev < 0xfffff001) {
@@ -725,32 +674,11 @@ int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
     /* Binary Ninja: int32_t $v1_2 = *($s0_1 + 0x128) */
     state = csi_dev->state;
 
-    /* CRITICAL FIX: Do NOT stop CSI stream when VIC is actively streaming */
-    /* The slake module needs to configure silicon bits without disrupting active video flow */
+    /* Binary Ninja: if ($v1_2 == 4) csi_video_s_stream(arg1, 0) */
     if (state == 4) {
-        /* Check if VIC is actively streaming - if so, preserve CSI stream */
-        extern struct tx_isp_dev *tx_isp_get_device(void);
-        struct tx_isp_dev *isp_dev = tx_isp_get_device();
-        bool vic_streaming = false;
-
-        if (isp_dev && isp_dev->subdevs[1]) {  /* VIC is at index 1 */
-            struct tx_isp_subdev *vic_sd = isp_dev->subdevs[1];
-            if (vic_sd) {
-                struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(vic_sd);
-                if (vic_dev && vic_dev->stream_state == 1) {
-                    vic_streaming = true;
-                }
-            }
-        }
-
-        if (vic_streaming) {
-            pr_info("tx_isp_csi_slake_subdev: CSI in streaming state but VIC actively streaming - PRESERVING CSI stream\n");
-            pr_info("tx_isp_csi_slake_subdev: Silicon configuration will proceed without stopping camera data flow\n");
-        } else {
-            pr_info("tx_isp_csi_slake_subdev: CSI in streaming state, stopping stream\n");
-            csi_video_s_stream(sd, 0);
-            state = csi_dev->state;  /* Update state after s_stream */
-        }
+        pr_info("tx_isp_csi_slake_subdev: CSI in streaming state, stopping stream\n");
+        csi_video_s_stream(sd, 0);
+        state = csi_dev->state;  /* Update state after s_stream */
     }
 
     /* Binary Ninja: void* $s2_1 = $s0_1 + 0x12c - Get mutex */
@@ -948,15 +876,7 @@ int tx_isp_csi_probe(struct platform_device *pdev)
     if (csi_dev->sd.regs) {
         /* Binary Ninja: *($v0 + 0xb8) = csi_regs (CSI control registers) */
         csi_dev->csi_regs = csi_dev->sd.regs;
-        pr_info("*** CSI PROBE: csi_regs (offset 0xb8) mapped to: %p ***\n", csi_dev->csi_regs);
-
-        /* Binary Ninja EXACT: *($v0 + 0x13c) = private_ioremap(0x10022000, 0x1000) */
-        /* Binary Ninja maps isp_csi_regs to CSI PHY at 0x10022000, NOT ISP Core! */
-        /* The stock driver does: */
-        /* int32_t* $v0_3 = private_request_mem_region(0x10022000, 0x1000, "mipi-phy") */
-        /* *($v0 + 0x13c) = private_ioremap($a0_2, $v0_3[1] + 1 - $a0_2) */
-        csi_dev->isp_csi_regs = csi_dev->sd.regs;  /* Same as csi_regs - both point to 0x10022000 */
-        pr_info("*** CSI PROBE: isp_csi_regs (offset 0x13c) mapped to CSI PHY: %p (0x10022000) ***\n", csi_dev->isp_csi_regs);
+        pr_info("*** CSI PROBE: Using register mapping from tx_isp_subdev_init: %p ***\n", csi_dev->csi_regs);
     } else {
         /* Binary Ninja: isp_printf(2, "sensor type is BT1120!\n", "tx_isp_csi_probe") */
         pr_err("*** CSI PROBE: tx_isp_subdev_init failed to map registers ***\n");

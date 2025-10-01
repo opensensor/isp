@@ -3273,16 +3273,7 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
         return -EINVAL;
     }
 
-    pr_info("*** tx_isp_vic_slake_subdev: VIC slake/shutdown - vic_dev=%p, current state=%d, stream_state=%d ***\n",
-            vic_dev, vic_dev->state, vic_dev->stream_state);
-
-    /* CRITICAL FIX: Check if VIC is actively streaming */
-    /* If stream_state == 1, VIC is in the middle of streaming and we should NOT reset state */
-    if (vic_dev->stream_state == 1) {
-        pr_info("*** tx_isp_vic_slake_subdev: VIC actively streaming - PRESERVING state %d (NOT resetting to 1) ***\n", vic_dev->state);
-        pr_info("*** tx_isp_vic_slake_subdev: Slake module will configure silicon bits without disrupting VIC state machine ***\n");
-        return 0;  /* Return early without resetting state */
-    }
+    pr_info("*** tx_isp_vic_slake_subdev: VIC slake/shutdown - vic_dev=%p, current state=%d ***\n", vic_dev, vic_dev->state);
 
     /* Binary Ninja: int32_t $v1_2 = *($s0_1 + 0xe8) */
     state = vic_dev->state;
