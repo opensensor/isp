@@ -3011,6 +3011,22 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             wmb();
             pr_info("*** VIC CONTROL (PRIMARY): WROTE 2 to [0x0] before MDMA/config ***\n");
 
+            /* CRITICAL: Binary Ninja EXACT sequence: 2 → 4 → wait → configure → 1 */
+            writel(4, vr + 0x0);
+            wmb();
+            pr_info("*** VIC CONTROL (PRIMARY): WROTE 4 to [0x0] (Binary Ninja EXACT) ***\n");
+
+            /* Binary Ninja: Wait for VIC[0x0] to become non-zero */
+            int timeout = 1000;
+            while (readl(vr + 0x0) == 0 && timeout-- > 0) {
+                cpu_relax();
+            }
+            if (timeout <= 0) {
+                pr_err("*** VIC CONTROL: TIMEOUT waiting for VIC[0x0] != 0 after write 4! ***\n");
+            } else {
+                pr_info("*** VIC CONTROL: VIC[0x0] became non-zero after %d iterations ***\n", 1000 - timeout);
+            }
+
             /* CRITICAL: Configure complete pipeline: Sensor->VIN->CSI->VIC */
             /* This must be done in CONFIG state (after write 2, before write 1) */
             extern struct tx_isp_sensor *tx_isp_get_sensor(void);
