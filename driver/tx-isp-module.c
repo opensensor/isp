@@ -4093,10 +4093,19 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         // Start the full ISP/VIC streaming pipeline like the reference
         if (ourISPdev) {
             int ret_stream;
-            pr_info("*** Channel %d: STREAMON - calling tx_isp_video_s_stream(ON) to arm VIC/MDMA ***\n", channel);
+            pr_info("*** Channel %d: STREAMON - calling tx_isp_video_s_stream(ON) to configure VIC hardware ***\n", channel);
             ret_stream = tx_isp_video_s_stream(ourISPdev, 1);
             if (ret_stream != 0) {
                 pr_warn("Channel %d: STREAMON - tx_isp_video_s_stream failed: %d (continuing)\n", channel, ret_stream);
+            }
+
+            // STOCK DRIVER: After VIC hardware is configured, start MDMA via frame channel s_stream
+            if (ourISPdev->vic_dev) {
+                pr_info("*** Channel %d: STREAMON - calling ispvic_frame_channel_s_stream(ON) to start MDMA ***\n", channel);
+                ret_stream = ispvic_frame_channel_s_stream(ourISPdev->vic_dev, 1);
+                if (ret_stream != 0) {
+                    pr_warn("Channel %d: STREAMON - ispvic_frame_channel_s_stream failed: %d (continuing)\n", channel, ret_stream);
+                }
             }
         }
 

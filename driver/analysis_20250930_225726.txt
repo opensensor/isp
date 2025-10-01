@@ -1,0 +1,54 @@
+========================================
+ISP DRIVER TEST ANALYSIS
+========================================
+
+Timestamp: 20250930_225726
+Build: afbb3ab9c9d858bed9658f0d7f430f63
+
+=== KEY METRICS ===
+VIC START messages: 2
+VIN linked: 2
+VIN input configured: 0
+0
+CSI input configured: 0
+0
+VIC input configured: 1
+Complete pipeline configured: 0
+0
+Control limit errors: 0
+0
+Frame done interrupts: 
+
+=== INTERRUPT COUNTS ===
+ 37:          0   jz-intc  isp-m0
+ 38:          0   jz-intc  isp-w02
+
+=== PIPELINE CONFIGURATION ===
+[   20.578314] *** VIC START: VIC input source configured - CSI->VIC link enabled ***
+
+=== ERRORS ===
+[    0.000000] CPU0 RESET ERROR PC:801ADC84
+[    0.121580] jz-dwc2 jz-dwc2: cgu clk gate get error
+[    0.000000] CPU0 RESET ERROR PC:801ADC84
+[    0.121580] jz-dwc2 jz-dwc2: cgu clk gate get error
+[   20.290303] *** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***
+[   20.419297] *** CSI ERROR 1: CSI[0x20] = 0x00000000 (no errors) ***
+[   20.419303] *** CSI ERROR 2: CSI[0x24] = 0x00000000 (no errors) ***
+[   20.509932] sensor_write_array: Complete - wrote 137 registers, 0 errors
+[   20.579252] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   20.581556] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   20.582284] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   20.585249] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   20.585962] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   20.683302] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   20.686023] sensor_write_array: Complete - wrote 2 registers, 0 errors
+[   21.030285] *** Channel 0: Frame wait timeout/error, generating frame ***
+[   21.129416] *** Channel 0: Frame wait timeout/error, generating frame ***
+[   21.230443] *** Channel 0: Frame wait timeout/error, generating frame ***
+[   21.248363] *** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***
+[   21.769219] *** CSI ERROR 1: CSI[0x20] = 0x00000000 (no errors) ***
+
+=== KEY REGISTER WRITES ===
+[   20.419297] *** CSI ERROR 1: CSI[0x20] = 0x00000000 (no errors) ***
+[   21.769219] *** CSI ERROR 1: CSI[0x20] = 0x00000000 (no errors) ***
+
