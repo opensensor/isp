@@ -4917,10 +4917,20 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         return s6_1;
     }
 
-    /* CRITICAL FIX: VIDIOC_STREAMON/STREAMOFF should NOT be handled by ISP ioctl! */
-    /* These are V4L2 ioctls that should ONLY be handled by frame_channel_unlocked_ioctl */
-    /* The stock driver's tx_isp_unlocked_ioctl does NOT handle 0x80045612/0x80045613 */
-    /* It only handles ISP-specific ioctls like 0x800456d0 (link setup) and 0x800456d2 (link stream) */
+    /* Binary Ninja EXACT: Handle VIDIOC_STREAMON/STREAMOFF in ISP ioctl */
+    /* The stock driver DOES handle these in tx_isp_unlocked_ioctl! */
+    /* This is for when prudynt calls STREAMON on /dev/isp instead of /dev/video0 */
+    if (cmd == 0x80045612) {
+        /* VIDIOC_STREAMON */
+        pr_info("*** ISP IOCTL: VIDIOC_STREAMON (0x80045612) - calling tx_isp_video_s_stream(1) ***\n");
+        return tx_isp_video_s_stream(isp_dev, 1);
+    }
+
+    if (cmd == 0x80045613) {
+        /* VIDIOC_STREAMOFF */
+        pr_info("*** ISP IOCTL: VIDIOC_STREAMOFF (0x80045613) - calling tx_isp_video_s_stream(0) ***\n");
+        return tx_isp_video_s_stream(isp_dev, 0);
+    }
 
     /* Binary Ninja: Handle video link commands */
     if (cmd >= 0x800456d1) {
