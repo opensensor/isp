@@ -2816,15 +2816,22 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
             pr_info("*** tx_isp_video_s_stream: CSI init SUCCESS ***\n");
         }
 
-        /* Initialize VIC third */
+        /* Initialize VIC third - BUT ONLY IF NOT ALREADY STREAMING! */
+        /* CRITICAL FIX: Do NOT call vic_core_ops_init if VIC is already in state 3 or 4! */
+        /* vic_core_ops_init(enable=1) sets state to 3, which would reset state 4 back to 3! */
         if (vic_sd && vic_sd->ops && vic_sd->ops->core && vic_sd->ops->core->init) {
-            pr_info("*** tx_isp_video_s_stream: Initializing VIC subdev ***\n");
-            result = vic_sd->ops->core->init(vic_sd, 1);
-            if (result != 0 && result != -ENOIOCTLCMD) {
-                pr_err("tx_isp_video_s_stream: VIC init failed: %d\n", result);
-                return result;
+            struct tx_isp_vic_device *vic_dev_check = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(vic_sd);
+            if (vic_dev_check && vic_dev_check->state >= 3) {
+                pr_info("*** tx_isp_video_s_stream: VIC already in state %d (>= 3), SKIPPING vic_core_ops_init to prevent state reset ***\n", vic_dev_check->state);
+            } else {
+                pr_info("*** tx_isp_video_s_stream: Initializing VIC subdev (state %d < 3) ***\n", vic_dev_check ? vic_dev_check->state : -1);
+                result = vic_sd->ops->core->init(vic_sd, 1);
+                if (result != 0 && result != -ENOIOCTLCMD) {
+                    pr_err("tx_isp_video_s_stream: VIC init failed: %d\n", result);
+                    return result;
+                }
+                pr_info("*** tx_isp_video_s_stream: VIC init SUCCESS ***\n");
             }
-            pr_info("*** tx_isp_video_s_stream: VIC init SUCCESS ***\n");
         }
 
         /* Initialize Sensor last */
