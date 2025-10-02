@@ -408,16 +408,37 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
         if (vic_dev->stream_state != 0) {
             /* Binary Ninja: Complex buffer management logic */
             void __iomem *vic_base = vic_regs;  /* $a3_1 = *(arg1 + 0xb8) */
-            struct list_head *buffer_list = &vic_dev->queue_head;  /* i_1 = *(arg1 + 0x204) */
-            int buffer_count = 0;  /* $a1_1 = 0 */
-            int match_found = 0;   /* $v0 = 0 */
-            int high_bits = 0;     /* $v1_1 = 0 */
+
+            /* CRITICAL FIX: Move completed buffer from queue_head to done_head */
+            /* This allows userspace to dequeue completed frames and re-queue new buffers */
+            unsigned long flags;
+            spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, flags);
 
             /* Binary Ninja: Current VIC buffer address from hardware */
             u32 current_buffer = readl(vic_base + 0x380);  /* *($a3_1 + 0x380) */
 
+            /* Find and move the completed buffer from queue_head to done_head */
+            struct list_head *pos, *n;
+            struct vic_buffer_entry *completed_entry = NULL;
+            list_for_each_safe(pos, n, &vic_dev->queue_head) {
+                struct vic_buffer_entry *entry = list_entry(pos, struct vic_buffer_entry, list);
+                if (entry && entry->buffer_addr == current_buffer) {
+                    /* Found the completed buffer - move it to done_head */
+                    list_move_tail(&entry->list, &vic_dev->done_head);
+                    completed_entry = entry;
+                    pr_info("*** VIC FRAME DONE: Moved buffer 0x%x from queue_head to done_head ***\n",
+                            current_buffer);
+                    break;
+                }
+            }
+
+            /* Now iterate through done_head to count buffers (matching was-better) */
+            struct list_head *buffer_list = &vic_dev->done_head;  /* i_1 = done_head */
+            int buffer_count = 0;  /* $a1_1 = 0 */
+            int match_found = 0;   /* $v0 = 0 */
+            int high_bits = 0;     /* $v1_1 = 0 */
+
             /* Binary Ninja: for (; i_1 != arg1 + 0x204; i_1 = *i_1) */
-            struct list_head *pos;
             list_for_each(pos, buffer_list) {
                 struct vic_buffer_entry *entry = list_entry(pos, struct vic_buffer_entry, list);
 
@@ -433,6 +454,8 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                     match_found = 1;
                 }
             }
+
+            spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
 
             /* Determine buffer count (slots) and current index from hardware ring */
             u32 slots[5] = {0};
@@ -506,7 +529,28 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             writel(0x1, vic_base + 0x0);
             if (vic_dev->vic_regs_control) writel(0x1, vic_dev->vic_regs_control + 0x0);
 
-            /* Do not rewrite slot addresses here. Slot programming is owned by ENQUEUE/QBUF paths. */
+            /* CRITICAL FIX: Re-write buffer addresses to keep VIC ring fed */
+            /* The VIC hardware consumes buffers as it processes frames */
+            /* We need to continuously replenish the buffer ring to keep frames flowing */
+            {
+                u32 width = vic_dev->width;
+                u32 height = vic_dev->height;
+                u32 frame_size = width * height * 2;  /* RAW10 = 2 bytes/pixel */
+                u32 base_addr = 0x6300000;  /* Reserved memory base */
+                int i;
+
+                for (i = 0; i < 5; i++) {
+                    u32 buffer_addr = base_addr + (i * frame_size);
+                    u32 reg_offset = 0x318 + (i * 4);  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
+
+                    writel(buffer_addr, vic_base + reg_offset);
+                    if (vic_dev->vic_regs_control) {
+                        writel(buffer_addr, vic_dev->vic_regs_control + reg_offset);
+                    }
+                }
+                wmb();
+                pr_info("*** VIC FRAME DONE: Replenished buffer addresses to keep ring fed ***\n");
+            }
 
             /* Keep MDMA enabled (idempotent) */
             writel(0x1, vic_base + 0x308);
@@ -3552,7 +3596,10 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
     /* Lock buffer management */
     spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, irq_flags);
 
-    /* Binary Ninja EXACT: Buffer queue management with VIC register writes */
+    /* CRITICAL FIX: Get VBM buffer addresses from frame channel state */
+    extern struct frame_channel_device frame_channels[];
+    struct tx_isp_channel_state *state = &frame_channels[0].state;
+
     if (buffer_entry) {
         /* Use the provided node (BN: arg2 points to a node whose +8 holds buffer addr) */
         struct vic_buffer_entry *node = (struct vic_buffer_entry *)buffer_entry;
@@ -3567,8 +3614,34 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         wmb();
 
         pr_info("*** VIC QBUF: wrote slot %u addr=0x%x to reg_off=0x%x (CONFIG->RUN) ***\n", buffer_index, buffer_addr, reg_offset);
+    } else if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
+        /* CRITICAL FIX: If no buffer_entry provided, write VBM buffers directly */
+        int i;
+        int configured_count = 0;
+        pr_info("*** VIC QBUF: No buffer_entry, writing %d VBM buffer addresses directly ***\n",
+                state->vbm_buffer_count);
 
-        /* Done for this node */
+        for (i = 0; i < state->vbm_buffer_count && i < 5; i++) {
+            buffer_addr = state->vbm_buffer_addresses[i];
+            reg_offset = 0x318 + (i * 4);  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
+
+            if (buffer_addr != 0) {
+                writel(buffer_addr, vic_dev->vic_regs + reg_offset);
+                if (vic_dev->vic_regs_control)
+                    writel(buffer_addr, vic_dev->vic_regs_control + reg_offset);
+                wmb();
+                configured_count++;
+                pr_info("*** VIC QBUF: Wrote VBM buffer %d addr=0x%x to reg 0x%x ***\n",
+                        i, buffer_addr, reg_offset);
+            }
+        }
+
+        if (configured_count > 0) {
+            vic_dev->active_buffer_count = configured_count;
+            pr_info("*** VIC QBUF: Configured %d VBM buffer addresses ***\n", configured_count);
+        }
+    } else {
+        pr_warn("*** VIC QBUF: No buffer_entry and no VBM buffers available! ***\n");
     }
 
     /* Unlock buffer management */

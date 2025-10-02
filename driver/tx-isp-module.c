@@ -3565,6 +3565,15 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         if (state->vbm_buffer_addresses && buffer.index < 16) {
             pr_info("*** Channel %d: QBUF - VBM buffer slot[%d] available ***\n",
                     channel, buffer.index);
+
+            /* CRITICAL FIX: Store buffer address in VBM buffer array */
+            state->vbm_buffer_addresses[buffer.index] = buffer_phys_addr;
+            if (buffer.index >= state->vbm_buffer_count) {
+                state->vbm_buffer_count = buffer.index + 1;
+            }
+            pr_info("*** Channel %d: QBUF - Stored VBM buffer[%d] addr=0x%x (count=%d) ***\n",
+                    channel, buffer.index, buffer_phys_addr, state->vbm_buffer_count);
+
         /* BN: Enqueue into driver so VIC ring is fed (0x3000005 with node) */
         do {
             if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
