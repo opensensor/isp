@@ -2644,13 +2644,8 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
 
     } else {
         /* Stream ON */
-        /* VIC CONTROL: reset state before (re)configuration per reference (write 2) */
-        if (vic_dev && vic_dev->vic_regs) {
-            void __iomem *vr = vic_dev->vic_regs;
-            writel(2, vr + 0x0);
-            wmb();
-            pr_info("*** VIC CONTROL (PRIMARY): WROTE 2 to [0x0] before MDMA/config ***\n");
-        }
+        /* REMOVED: VIC CONTROL reset state write - was causing buffer count to be cleared */
+        /* The VIC[0x0] sequence should happen AFTER writing VIC[0x300], not before */
 
         /* Binary Ninja EXACT: vic_pipo_mdma_enable($s0) */
         pr_info("*** CRITICAL: Calling vic_pipo_mdma_enable - required for VIC interrupts ***\n");
@@ -2660,6 +2655,12 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
         void __iomem *vic_base = vic_dev->vic_regs;  /* SAFE: $s0 + 0xb8 = vic_regs */
         if (vic_base) {
+            /* DEBUG: Check VIC state before writing buffer count */
+            u32 vic_state_before = readl(vic_base + 0x0);
+            u32 vic_ctrl_before = readl(vic_base + 0x300);
+            pr_info("*** DEBUG: Before writing VIC[0x300]: VIC[0x0]=0x%x VIC[0x300]=0x%x ***\n",
+                    vic_state_before, vic_ctrl_before);
+
             /* SAFE: $s0 + 0x218 = active_buffer_count */
             u32 buffer_count = vic_dev->active_buffer_count;
             if (buffer_count == 0) buffer_count = 2;       /* Reference default */
@@ -2672,6 +2673,19 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             wmb();
 
             pr_info("*** Binary Ninja EXACT: Wrote 0x%x to reg 0x300 (%d buffers) ***\n", stream_ctrl, buffer_count);
+
+            /* CRITICAL FIX: Transition VIC to RUN state (1) AFTER writing buffer count */
+            /* Hardware clears buffer count if we transition from RESET (2) to RUN (1) after writing 0x300 */
+            writel(1, vic_base + 0x0);
+            if (vic_ctrl)
+                writel(1, vic_ctrl + 0x0);
+            wmb();
+            pr_info("*** CRITICAL FIX: Wrote 1 to VIC[0x0] to transition to RUN state AFTER buffer count write ***\n");
+
+            /* DEBUG: Verify buffer count was retained */
+            u32 vic_ctrl_after = readl(vic_base + 0x300);
+            pr_info("*** DEBUG: After writing VIC[0x0]=1: VIC[0x300]=0x%x (buffer count %s) ***\n",
+                    vic_ctrl_after, (vic_ctrl_after & 0x000F0000) ? "RETAINED" : "CLEARED");
         }
 
         /* Binary Ninja EXACT: *($s0 + 0x210) = 1 */
