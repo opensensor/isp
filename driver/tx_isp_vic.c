@@ -56,34 +56,18 @@ static int parse_vbm_buffers_from_file(uint32_t *vbm_pool0_addr, uint32_t *vbm_p
     *vbm_pool1_addr = 0;
     *vbm_pool1_size = 0;
 
-    /* Wait for /tmp/continuous_mem_info to be created AND have content (up to 10 seconds) */
-    /* This file has text format with VBM pool information */
-    pr_info("VBM: Waiting for /tmp/continuous_mem_info to have content from libimp.so...\n");
+    /* Wait 10 seconds for libimp.so to create and populate /tmp/continuous_mem_info */
+    pr_info("VBM: Waiting 10 seconds for libimp.so to populate /tmp/continuous_mem_info...\n");
+    msleep(10000);
 
-    for (retry_count = 0; retry_count < max_retries; retry_count++) {
-        fp = filp_open("/tmp/continuous_mem_info", O_RDONLY, 0);
-        if (!IS_ERR(fp)) {
-            /* File exists, check if it has content */
-            loff_t size = i_size_read(fp->f_path.dentry->d_inode);
-            if (size > 0) {
-                pr_info("VBM: Found /tmp/continuous_mem_info with %lld bytes after %d ms\n",
-                        size, retry_count * 100);
-                break;
-            }
-            /* File exists but is empty, close and retry */
-            filp_close(fp, NULL);
-            fp = ERR_PTR(-ENOENT);
-        }
-
-        /* Sleep 100ms between retries */
-        msleep(100);
-    }
-
+    /* Now try to open the file */
+    fp = filp_open("/tmp/continuous_mem_info", O_RDONLY, 0);
     if (IS_ERR(fp)) {
-        pr_warn("VBM: Timeout waiting for /tmp/continuous_mem_info to have content (waited %d seconds)\n",
-                max_retries / 10);
+        pr_warn("VBM: Cannot open /tmp/continuous_mem_info after 10 second wait\n");
         return -ENOENT;
     }
+
+    pr_info("VBM: Successfully opened /tmp/continuous_mem_info\n");
 
     /* Allocate buffer for file content */
     buf = kmalloc(8192, GFP_KERNEL);
@@ -111,13 +95,19 @@ static int parse_vbm_buffers_from_file(uint32_t *vbm_pool0_addr, uint32_t *vbm_p
         buf[8191] = '\0';
     }
 
-    /* DEBUG: Print first 200 chars of file content */
+    /* DEBUG: Print first 64 bytes as hex dump */
     {
-        char preview[201];
-        int preview_len = (bytes_read < 200) ? bytes_read : 200;
-        memcpy(preview, buf, preview_len);
-        preview[preview_len] = '\0';
-        pr_info("VBM: File content preview (first %d bytes): %s\n", preview_len, preview);
+        int i;
+        int dump_len = (bytes_read < 64) ? bytes_read : 64;
+        pr_info("VBM: File content hex dump (first %d bytes):\n", dump_len);
+        for (i = 0; i < dump_len; i += 16) {
+            int j;
+            pr_info("  %04x:", i);
+            for (j = 0; j < 16 && (i + j) < dump_len; j++) {
+                printk(" %02x", (unsigned char)buf[i + j]);
+            }
+            printk("\n");
+        }
     }
 
     /* Parse line by line looking for VBMPool0 and VBMPool1 */
