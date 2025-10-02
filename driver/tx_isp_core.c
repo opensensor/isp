@@ -4500,13 +4500,27 @@ int tx_isp_core_probe(struct platform_device *pdev)
             /* This avoids duplicate registration and uses the actual frame_channels array */
             pr_info("*** tx_isp_core_probe: Frame channel devices will be created by tx_isp_create_graph_and_nodes ***\n");
 
-            /* Create the ISP M0 tuning device node */
-            pr_info("*** tx_isp_core_probe: Creating ISP M0 tuning device node ***\n");
+            /* Create /dev/isp-m0 character device using misc device */
+            pr_info("*** tx_isp_core_probe: Creating /dev/isp-m0 character device ***\n");
+            core_dev->isp_m0_miscdev.minor = MISC_DYNAMIC_MINOR;
+            core_dev->isp_m0_miscdev.name = "isp-m0";
+            core_dev->isp_m0_miscdev.fops = &isp_core_fops;
+
+            result = misc_register(&core_dev->isp_m0_miscdev);
+            if (result == 0) {
+                pr_info("*** /dev/isp-m0 CHARACTER DEVICE CREATED (minor=%d) ***\n",
+                        core_dev->isp_m0_miscdev.minor);
+            } else {
+                pr_err("*** Failed to create /dev/isp-m0 character device: %d ***\n", result);
+            }
+
+            /* Create the ISP TISP tuning device node (/dev/tisp) */
+            pr_info("*** tx_isp_core_probe: Creating TISP tuning device node ***\n");
             result = tisp_code_create_tuning_node();
             if (result == 0) {
-                pr_info("*** tx_isp_core_probe: ISP M0 tuning device node created successfully ***\n");
+                pr_info("*** tx_isp_core_probe: TISP tuning device node created successfully ***\n");
             } else {
-                pr_err("*** tx_isp_core_probe: Failed to create ISP M0 tuning device node: %d ***\n", result);
+                pr_err("*** tx_isp_core_probe: Failed to create TISP tuning device node: %d ***\n", result);
             }
 
             pr_info("*** tx_isp_core_probe: Core probe completed successfully ***\n");
@@ -4556,6 +4570,13 @@ int tx_isp_core_remove(struct platform_device *pdev)
     if (tx_isp_core_device_is_valid(core_dev)) {
         /* Binary Ninja: int32_t* $s0 = *($v0 + 0xd4) - Get ISP device from core device */
         /* In our implementation, we use the global ourISPdev */
+
+        /* Unregister /dev/isp-m0 misc device */
+        if (core_dev->isp_m0_miscdev.name) {
+            pr_info("*** tx_isp_core_remove: Unregistering /dev/isp-m0 misc device ***\n");
+            misc_deregister(&core_dev->isp_m0_miscdev);
+            core_dev->isp_m0_miscdev.name = NULL;
+        }
 
         /* Binary Ninja: int32_t $a0 = $s0[0x6f] - Get tuning device */
         /* Binary Ninja: if ($a0 != 0) isp_core_tuning_deinit($a0) */

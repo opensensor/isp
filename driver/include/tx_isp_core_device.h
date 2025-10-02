@@ -42,6 +42,9 @@ struct tx_isp_core_device {
     bool tuning_enabled;                       /* Tuning system enabled flag */
     bool bypass_enabled;                       /* ISP bypass mode enabled flag */
 
+    /* /dev/isp-m0 character device */
+    struct miscdevice isp_m0_miscdev;          /* Misc device for /dev/isp-m0 */
+
     /* Core processing */
     struct work_struct fs_work;                /* Frame sync work structure */
     atomic_t processing_counter;               /* Processing counter */
