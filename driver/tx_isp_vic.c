@@ -2809,10 +2809,9 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev,
             wmb();
             pr_info("*** VIC FALLBACK BUFFER %d: Wrote reserved memory address 0x%x to reg 0x%x ***\n",
                     i, buffer_addr, reg_offset);
-            }
-            vic_dev->active_buffer_count = 5;
-            pr_info("*** CRITICAL: VIC fallback buffer addresses configured (count=5) - hardware can now generate interrupts! ***\n");
         }
+        vic_dev->active_buffer_count = 5;
+        pr_info("*** CRITICAL: VIC fallback buffer addresses configured (count=5) - hardware can now generate interrupts! ***\n");
     }
 
     pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - VIC should now generate interrupts! ***\n");
