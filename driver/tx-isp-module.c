@@ -1364,6 +1364,11 @@ int frame_channel_open(struct inode *inode, struct file *file)
     /* file->private_data is already set above - no unsafe offset access needed */
     pr_info("*** SAFE: Frame channel device stored in file->private_data ***\n");
 
+    /* Parse VBM buffers from /tmp/continuous_mem_info (non-atomic context, safe to sleep) */
+    /* This is called once when first frame channel opens, before streaming starts */
+    extern void vic_parse_and_cache_vbm_buffers(void);
+    vic_parse_and_cache_vbm_buffers();
+
     pr_info("*** FRAME CHANNEL %d OPENED SUCCESSFULLY - NOW READY FOR IOCTLS ***\n", fcd->channel_num);
     pr_info("Channel %d: Format %dx%d, pixfmt=0x%x, minor=%d\n",
             fcd->channel_num, fcd->state.width, fcd->state.height, fcd->state.format, minor);

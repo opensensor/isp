@@ -29,6 +29,32 @@ uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 static u32 vic_curraddr_offset = 0;        /* e.g., 0x380 on some variants */
 static int vic_curraddr_space = 0;         /* 0=unknown, 1=primary, 2=secondary */
 
+/* Global VBM buffer addresses parsed from /tmp/continuous_mem_info */
+static uint32_t g_vbm_pool0_addr = 0;
+static uint32_t g_vbm_pool0_size = 0;
+static uint32_t g_vbm_pool1_addr = 0;
+static uint32_t g_vbm_pool1_size = 0;
+static int g_vbm_parsed = 0;
+
+/* Parse and cache VBM buffer addresses - called from frame_channel_open() in non-atomic context */
+void vic_parse_and_cache_vbm_buffers(void)
+{
+    if (g_vbm_parsed) {
+        pr_info("VBM: Already parsed, using cached values\n");
+        return;
+    }
+
+    pr_info("VBM: Parsing VBM buffers from /tmp/continuous_mem_info...\n");
+    if (parse_vbm_buffers_from_file(&g_vbm_pool0_addr, &g_vbm_pool0_size,
+                                     &g_vbm_pool1_addr, &g_vbm_pool1_size) == 0) {
+        g_vbm_parsed = 1;
+        pr_info("VBM: Successfully cached VBM pools\n");
+    } else {
+        pr_warn("VBM: Failed to parse VBM file\n");
+    }
+}
+EXPORT_SYMBOL(vic_parse_and_cache_vbm_buffers);
+
 /* Parse /tmp/continuous_mem_info to get VBM buffer addresses allocated by libimp.so
  * File format:
  * VBMPool0:
@@ -56,14 +82,10 @@ static int parse_vbm_buffers_from_file(uint32_t *vbm_pool0_addr, uint32_t *vbm_p
     *vbm_pool1_addr = 0;
     *vbm_pool1_size = 0;
 
-    /* Wait 10 seconds for libimp.so to create and populate /tmp/continuous_mem_info */
-    pr_info("VBM: Waiting 10 seconds for libimp.so to populate /tmp/continuous_mem_info...\n");
-    msleep(10000);
-
-    /* Now try to open the file */
+    /* Try to open the file - no waiting, called from non-atomic context */
     fp = filp_open("/tmp/continuous_mem_info", O_RDONLY, 0);
     if (IS_ERR(fp)) {
-        pr_warn("VBM: Cannot open /tmp/continuous_mem_info after 10 second wait\n");
+        pr_warn("VBM: Cannot open /tmp/continuous_mem_info (file may not exist yet)\n");
         return -ENOENT;
     }
 
@@ -2926,22 +2948,13 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         /* REMOVED: VIC CONTROL reset state write - was causing buffer count to be cleared */
         /* The VIC[0x0] sequence should happen AFTER writing VIC[0x300], not before */
 
-        /* Parse VBM buffer addresses from /tmp/alloc_manager_info BEFORE entering atomic context */
-        uint32_t vbm_pool0_addr = 0, vbm_pool0_size = 0;
-        uint32_t vbm_pool1_addr = 0, vbm_pool1_size = 0;
-
-        pr_info("*** VIC: Parsing VBM buffers from /tmp/alloc_manager_info (non-atomic context) ***\n");
-        if (parse_vbm_buffers_from_file(&vbm_pool0_addr, &vbm_pool0_size,
-                                         &vbm_pool1_addr, &vbm_pool1_size) == 0) {
-            pr_info("*** VIC: Successfully parsed VBM pools - Pool0: 0x%08x (%u bytes), Pool1: 0x%08x (%u bytes) ***\n",
-                    vbm_pool0_addr, vbm_pool0_size, vbm_pool1_addr, vbm_pool1_size);
-        } else {
-            pr_warn("*** VIC: Could not parse VBM file, will use fallback addresses ***\n");
-        }
+        /* Use cached VBM buffer addresses (parsed earlier in frame_channel_open) */
+        pr_info("*** VIC: Using cached VBM buffers - Pool0: 0x%08x (%u bytes), Pool1: 0x%08x (%u bytes) ***\n",
+                g_vbm_pool0_addr, g_vbm_pool0_size, g_vbm_pool1_addr, g_vbm_pool1_size);
 
         /* Binary Ninja EXACT: vic_pipo_mdma_enable($s0) */
         pr_info("*** CRITICAL: Calling vic_pipo_mdma_enable - required for VIC interrupts ***\n");
-        vic_pipo_mdma_enable(vic_dev, vbm_pool0_addr, vbm_pool0_size, vbm_pool1_addr, vbm_pool1_size);
+        vic_pipo_mdma_enable(vic_dev, g_vbm_pool0_addr, g_vbm_pool0_size, g_vbm_pool1_addr, g_vbm_pool1_size);
         pr_info("*** vic_pipo_mdma_enable completed - VIC MDMA should now generate interrupts! ***\n");
 
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
