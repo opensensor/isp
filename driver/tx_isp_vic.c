@@ -471,7 +471,38 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 }
             }
 
-            /* Do not rewrite 0x300 during FD; hardware advances index itself */
+            /* CRITICAL FIX: Update VIC[0x300] to replenish buffer count (from was-better) */
+            /* The hardware decrements the buffer count as it processes frames */
+            /* We need to update it in the interrupt handler to keep frames flowing */
+            {
+                u32 vic_state_before = readl(vic_base + 0x0);
+                u32 reg_val = readl(vic_base + 0x300);
+                u32 shifted_value = count << 16;  /* Put buffer count in bits 16-19 */
+
+                pr_info("*** VIC FRAME DONE: Before update: VIC[0x0]=0x%x VIC[0x300]=0x%x ***\n",
+                        vic_state_before, reg_val);
+
+                /* Preserve control bits (0x80000020) and only update buffer count in bits 16-19 */
+                reg_val = (reg_val & 0xfff0ffff) | shifted_value;  /* Clear bits 16-19, set new buffer count */
+
+                /* FORCE control bits if they were lost */
+                if ((reg_val & 0x80000020) != 0x80000020) {
+                    reg_val |= 0x80000020;  /* Force control bits back on */
+                    pr_warn("*** VIC FRAME DONE: FORCED control bits 0x80000020 back on! ***\n");
+                }
+
+                writel(reg_val, vic_base + 0x300);
+                if (vic_dev->vic_regs_control) {
+                    writel(reg_val, vic_dev->vic_regs_control + 0x300);
+                }
+                wmb();
+
+                u32 vic_state_after = readl(vic_base + 0x0);
+                u32 reg_val_after = readl(vic_base + 0x300);
+                pr_info("*** VIC FRAME DONE: After update: VIC[0x0]=0x%x VIC[0x300]=0x%x (wrote 0x%x, buffer count=%u) ***\n",
+                        vic_state_after, reg_val_after, reg_val, count);
+            }
+
             writel(0x1, vic_base + 0x0);
             if (vic_dev->vic_regs_control) writel(0x1, vic_dev->vic_regs_control + 0x0);
 
@@ -490,7 +521,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             {
                 u32 reg_p = readl(vic_base + 0x300);
                 u32 reg_c = (vic_dev->vic_regs_control ? readl(vic_dev->vic_regs_control + 0x300) : 0);
-                pr_info("*** VIC FRAME DONE: Updated VIC[0x300] PRIMARY=0x%x CONTROL=0x%x (count=%u, cur_idx=%d, next_idx=%d) ***\n",
+                pr_info("*** VIC FRAME DONE: Verified VIC[0x300] PRIMARY=0x%x CONTROL=0x%x (count=%u, cur_idx=%d, next_idx=%d) ***\n",
                         reg_p, reg_c, count, cur_idx, next_idx);
             }
 
