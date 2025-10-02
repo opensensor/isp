@@ -28,6 +28,124 @@ uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 /* Auto-detected current-address register (offset and space: 1=primary,2=secondary) */
 static u32 vic_curraddr_offset = 0;        /* e.g., 0x380 on some variants */
 static int vic_curraddr_space = 0;         /* 0=unknown, 1=primary, 2=secondary */
+
+/* Parse /tmp/alloc_manager_info to get VBM buffer addresses allocated by libimp.so */
+static int parse_vbm_buffers_from_file(uint32_t *vbm_pool0_addr, uint32_t *vbm_pool0_size,
+                                        uint32_t *vbm_pool1_addr, uint32_t *vbm_pool1_size)
+{
+    struct file *fp;
+    char *buf;
+    loff_t pos = 0;
+    ssize_t bytes_read;
+    char *line, *next_line;
+    int found_pool0 = 0, found_pool1 = 0;
+
+    *vbm_pool0_addr = 0;
+    *vbm_pool0_size = 0;
+    *vbm_pool1_addr = 0;
+    *vbm_pool1_size = 0;
+
+    /* Open /tmp/alloc_manager_info created by libimp.so */
+    fp = filp_open("/tmp/alloc_manager_info", O_RDONLY, 0);
+    if (IS_ERR(fp)) {
+        pr_debug("VBM: Cannot open /tmp/alloc_manager_info (libimp.so may not have started yet)\n");
+        return -ENOENT;
+    }
+
+    /* Allocate buffer for file content */
+    buf = kmalloc(8192, GFP_KERNEL);
+    if (!buf) {
+        filp_close(fp, NULL);
+        return -ENOMEM;
+    }
+
+    /* Read file content */
+    bytes_read = kernel_read(fp, buf, 8192, &pos);
+    filp_close(fp, NULL);
+
+    if (bytes_read <= 0) {
+        kfree(buf);
+        return -EIO;
+    }
+
+    /* Null-terminate */
+    if (bytes_read < 8192) {
+        buf[bytes_read] = '\0';
+    } else {
+        buf[8191] = '\0';
+    }
+
+    /* Parse line by line looking for VBMPool0 and VBMPool1 */
+    line = buf;
+    while (line && *line) {
+        next_line = strchr(line, '\n');
+        if (next_line) {
+            *next_line = '\0';
+            next_line++;
+        }
+
+        /* Look for "info->owner = VBMPool0" or "info->owner = VBMPool1" */
+        if (strstr(line, "info->owner = VBMPool0")) {
+            found_pool0 = 1;
+            found_pool1 = 0;
+        } else if (strstr(line, "info->owner = VBMPool1")) {
+            found_pool1 = 1;
+            found_pool0 = 0;
+        } else if (found_pool0 && strstr(line, "info->paddr = 0x")) {
+            /* Extract physical address for VBMPool0 */
+            char *addr_str = strstr(line, "0x");
+            if (addr_str) {
+                unsigned long addr;
+                if (kstrtoul(addr_str, 16, &addr) == 0) {
+                    *vbm_pool0_addr = (uint32_t)addr;
+                }
+            }
+        } else if (found_pool0 && strstr(line, "info->length = ")) {
+            /* Extract size for VBMPool0 */
+            char *len_str = strstr(line, "info->length = ");
+            if (len_str) {
+                unsigned long len;
+                len_str += strlen("info->length = ");
+                if (kstrtoul(len_str, 10, &len) == 0) {
+                    *vbm_pool0_size = (uint32_t)len;
+                }
+            }
+        } else if (found_pool1 && strstr(line, "info->paddr = 0x")) {
+            /* Extract physical address for VBMPool1 */
+            char *addr_str = strstr(line, "0x");
+            if (addr_str) {
+                unsigned long addr;
+                if (kstrtoul(addr_str, 16, &addr) == 0) {
+                    *vbm_pool1_addr = (uint32_t)addr;
+                }
+            }
+        } else if (found_pool1 && strstr(line, "info->length = ")) {
+            /* Extract size for VBMPool1 */
+            char *len_str = strstr(line, "info->length = ");
+            if (len_str) {
+                unsigned long len;
+                len_str += strlen("info->length = ");
+                if (kstrtoul(len_str, 10, &len) == 0) {
+                    *vbm_pool1_size = (uint32_t)len;
+                }
+            }
+        }
+
+        line = next_line;
+    }
+
+    kfree(buf);
+
+    if (*vbm_pool0_addr && *vbm_pool1_addr) {
+        pr_info("*** VBM: Parsed from /tmp/alloc_manager_info ***\n");
+        pr_info("*** VBMPool0: paddr=0x%08x, size=%u bytes ***\n", *vbm_pool0_addr, *vbm_pool0_size);
+        pr_info("*** VBMPool1: paddr=0x%08x, size=%u bytes ***\n", *vbm_pool1_addr, *vbm_pool1_size);
+        return 0;
+    }
+
+    pr_debug("VBM: Could not find VBMPool addresses in /tmp/alloc_manager_info\n");
+    return -ENODATA;
+}
 static int vic_curraddr_detected = 0;      /* sticky once found */
 
 /* Static variables to cache sensor dimensions (read once during probe) */
@@ -2627,18 +2745,63 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         pr_info("*** CRITICAL: VIC buffer addresses configured from VBM (count=%d) - hardware can now generate interrupts! ***\n",
                 configured_count);
     } else {
-        /* CRITICAL FIX: Use fallback buffer addresses like working reference */
-        pr_warn("*** CRITICAL: No VBM buffer addresses - using fallback addresses from reserved memory ***\n");
-        pr_warn("*** vbm_buffer_addresses=%p, vbm_buffer_count=%d ***\n",
-               state->vbm_buffer_addresses, state->vbm_buffer_count);
+        /* CRITICAL: Try to parse VBM buffer addresses from /tmp/alloc_manager_info */
+        uint32_t vbm_pool0_addr = 0, vbm_pool0_size = 0;
+        uint32_t vbm_pool1_addr = 0, vbm_pool1_size = 0;
 
-        /* Use reserved memory region 0x6300000 like working reference */
-        u32 frame_size = width * height * 2;  /* RAW10 = 2 bytes/pixel */
-        u32 base_addr = 0x6300000;  /* Reserved memory base from boot parameter rmem=29M@0x6300000 */
+        pr_info("*** VIC: No VBM buffers from ioctl, trying to parse /tmp/alloc_manager_info ***\n");
 
-        int i;
-        for (i = 0; i < 5; i++) {
-            u32 buffer_addr = base_addr + (i * frame_size);
+        if (parse_vbm_buffers_from_file(&vbm_pool0_addr, &vbm_pool0_size,
+                                         &vbm_pool1_addr, &vbm_pool1_size) == 0) {
+            /* Successfully parsed VBM pools from file! */
+            pr_info("*** VIC: Successfully parsed VBM pools from /tmp/alloc_manager_info! ***\n");
+
+            /* Use VBMPool0 for main stream (1920x1080) */
+            /* Calculate how many buffers fit in the pool */
+            u32 frame_size = width * height * 2;  /* RAW10 = 2 bytes/pixel */
+            u32 buffers_in_pool = vbm_pool0_size / frame_size;
+            if (buffers_in_pool > 5) buffers_in_pool = 5;  /* VIC max 5 slots */
+            if (buffers_in_pool < 1) buffers_in_pool = 1;  /* At least 1 */
+
+            pr_info("*** VIC: VBMPool0 can hold %d buffers of %u bytes each ***\n",
+                    buffers_in_pool, frame_size);
+
+            int i;
+            for (i = 0; i < buffers_in_pool; i++) {
+                u32 buffer_addr = vbm_pool0_addr + (i * frame_size);
+
+                pr_info("*** VIC: Programming buffer %d at VBMPool0 address 0x%08x ***\n", i, buffer_addr);
+
+                /* Program VIC slot */
+                writel(buffer_addr, vic_dev->base + 0x100 + (i * 4));
+
+                /* Verify write */
+                u32 readback = readl(vic_dev->base + 0x100 + (i * 4));
+                if (readback == buffer_addr) {
+                    pr_info("*** VIC slot %d: VERIFIED 0x%08x ***\n", i, readback);
+                } else {
+                    pr_err("*** VIC slot %d: MISMATCH! wrote 0x%08x, read 0x%08x ***\n",
+                           i, buffer_addr, readback);
+                }
+            }
+
+            vic_dev->active_buffer_count = buffers_in_pool;
+            pr_info("*** VIC: Configured %d buffers from VBMPool0 (paddr=0x%08x, size=%u) ***\n",
+                    buffers_in_pool, vbm_pool0_addr, vbm_pool0_size);
+
+        } else {
+            /* Fallback to reserved memory if file parsing fails */
+            pr_warn("*** CRITICAL: No VBM buffer addresses - using fallback addresses from reserved memory ***\n");
+            pr_warn("*** vbm_buffer_addresses=%p, vbm_buffer_count=%d ***\n",
+                   state->vbm_buffer_addresses, state->vbm_buffer_count);
+
+            /* Use reserved memory region 0x6300000 like working reference */
+            u32 frame_size = width * height * 2;  /* RAW10 = 2 bytes/pixel */
+            u32 base_addr = 0x6300000;  /* Reserved memory base from boot parameter rmem=29M@0x6300000 */
+
+            int i;
+            for (i = 0; i < 5; i++) {
+                u32 buffer_addr = base_addr + (i * frame_size);
             u32 reg_offset = 0x318 + (i * 4);  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
 
             writel(buffer_addr, vic_base + reg_offset);
