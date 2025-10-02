@@ -76,7 +76,10 @@ struct tx_isp_core_device {
     /* Core-specific status */
     uint32_t core_status;                      /* Core status flags */
     bool is_initialized;                       /* Initialization complete flag */
-    
+
+    /* Default bin path (SET/GET via ioctls 0xc00456c7/0xc00456c8) */
+    char default_bin_path[0x40];               /* Buffer for default bin path */
+
     /* Binary Ninja compatibility */
     void *self_ptr;                           /* Self-pointer for validation */
     uint32_t magic;                           /* Magic number for validation */

@@ -610,10 +610,6 @@ int private_platform_device_register(struct platform_device *pdev);
 int private_platform_driver_register(struct platform_driver *drv);
 void private_platform_device_unregister(struct platform_device *pdev);
 
-/* V4L2 video device functions */
-extern int tx_isp_v4l2_init(void);
-extern void tx_isp_v4l2_cleanup(void);
-
 int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
 
 /* Forward declaration for hardware initialization */
@@ -1670,7 +1666,8 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
     u32 v1_7, v1_10;
     extern uint32_t vic_start_ok;
     static int nofd_limit_stall_count = 0;  /* Count consecutive (no FD + control-limit) stalls */
-    printk(KERN_ALERT "*** VIC INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***\n");
+    if (printk_ratelimit())
+        pr_debug("*** VIC IRQ: handler entered ***\n");
 
     /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
     if (arg1 == NULL || (uintptr_t)arg1 >= 0xfffff001) {
@@ -1678,29 +1675,38 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
     }
 
     /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
-    printk(KERN_ALERT "*** VIC IRQ: About to access isp_dev->vic_dev, isp_dev=%p ***\n", isp_dev);
+    if (printk_ratelimit())
+        pr_debug("*** VIC IRQ: About to access isp_dev->vic_dev, isp_dev=%p ***\n", isp_dev);
     vic_dev = isp_dev->vic_dev;
-    printk(KERN_ALERT "*** VIC IRQ: Got vic_dev=%p ***\n", vic_dev);
+    if (printk_ratelimit())
+        pr_debug("*** VIC IRQ: Got vic_dev=%p ***\n", vic_dev);
 
     /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
-    printk(KERN_ALERT "*** VIC IRQ: Checking vic_dev validity: vic_dev=%p ***\n", vic_dev);
+    if (printk_ratelimit())
+        pr_debug("*** VIC IRQ: Checking vic_dev validity: vic_dev=%p ***\n", vic_dev);
     if (vic_dev != NULL && (uintptr_t)vic_dev < 0xfffff001) {
         /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
-        printk(KERN_ALERT "*** VIC IRQ: About to access vic_dev->vic_regs ***\n");
+        if (printk_ratelimit())
+            pr_debug("*** VIC IRQ: About to access vic_dev->vic_regs ***\n");
         vic_regs = vic_dev->vic_regs;
-        printk(KERN_ALERT "*** VIC IRQ: Got vic_regs=%p ***\n", vic_regs);
+        if (printk_ratelimit())
+            pr_debug("*** VIC IRQ: Got vic_regs=%p ***\n", vic_regs);
 
         /* CRITICAL SAFETY: Check if VIC registers are properly mapped before access */
-        printk(KERN_ALERT "*** VIC IRQ: Checking vic_regs validity: vic_regs=%p ***\n", vic_regs);
+        if (printk_ratelimit())
+            pr_debug("*** VIC IRQ: Checking vic_regs validity: vic_regs=%p ***\n", vic_regs);
         if (!vic_regs) {
-            printk(KERN_ALERT "*** VIC IRQ: VIC registers are NULL ***\n");
+            if (printk_ratelimit())
+                pr_err("*** VIC IRQ: VIC registers are NULL ***\n");
             return IRQ_HANDLED;
         }
         /* NOTE: virt_addr_valid() doesn't work for ioremap'd addresses - they're in vmalloc area */
-        printk(KERN_ALERT "*** VIC IRQ: vic_regs passed validity check - proceeding with register access ***\n");
+        if (printk_ratelimit())
+            pr_debug("*** VIC IRQ: vic_regs passed validity check - proceeding with register access ***\n");
 
         /* CRITICAL SAFETY: Add memory barrier and exception handling for register access */
-        printk(KERN_ALERT "*** VIC IRQ: About to read VIC registers at %p ***\n", vic_regs);
+        if (printk_ratelimit())
+            pr_debug("*** VIC IRQ: About to read VIC registers at %p ***\n", vic_regs);
 
         /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
         /* If PRIMARY enable/mask read as 0, fall back to CONTROL bank per reference behavior */
@@ -1718,16 +1724,19 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
             reg_1e0 = readl(base_for_irq + 0x1e0);
             reg_1e4 = readl(base_for_irq + 0x1e4);
             reg_1ec = readl(base_for_irq + 0x1ec);
-            printk(KERN_ALERT "*** VIC IRQ: PRIMARY [1e0/1e4] zero; using CONTROL bank for mask/enable ***\n");
+            if (printk_ratelimit())
+                pr_debug("*** VIC IRQ: PRIMARY [1e0/1e4] zero; using CONTROL bank for mask/enable ***\n");
         }
 
-        printk(KERN_ALERT "*** VIC IRQ: Using base %p [1e0]=0x%x [1e4]=0x%x [1e8]=0x%x [1ec]=0x%x ***\n",
-               base_for_irq, reg_1e0, reg_1e4, reg_1e8, reg_1ec);
+        if (printk_ratelimit())
+            pr_debug("*** VIC IRQ: Using base %p [1e0]=0x%x [1e4]=0x%x [1e8]=0x%x [1ec]=0x%x ***\n",
+                   base_for_irq, reg_1e0, reg_1e4, reg_1e8, reg_1ec);
 
         /* Enforce FD enable/unmask on every IRQ if something cleared them mid-stream (DISABLED to match working ISR: keep ISR minimal) */
         if (0 && (((reg_1e0 & 0x1) == 0) || ((reg_1e8 & 0x1) != 0) || (reg_1e4 != 0x0000000F))) {
-            printk(KERN_ALERT "*** VIC IRQ: FIXUP enable/mask — before: 1e0=0x%x 1e4=0x%x 1e8=0x%x ***\n",
-                   reg_1e0, reg_1e4, reg_1e8);
+            if (printk_ratelimit())
+                pr_debug("*** VIC IRQ: FIXUP enable/mask — before: 1e0=0x%x 1e4=0x%x 1e8=0x%x ***\n",
+                       reg_1e0, reg_1e4, reg_1e8);
             /* Clear pending status (W1C) and set global enable before enabling FD */
             writel(0xFFFFFFFF, base_for_irq + 0x1f0);
             writel(0xFFFFFFFF, base_for_irq + 0x1f4);
@@ -1853,8 +1862,9 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
         }
 
         /* Extra debug: control and geometry */
-        printk(KERN_ALERT "*** VIC IRQ: CTRL[0x300]=0x%x DIMS[0x304]=0x%x STRIDE[0x310]=0x%x ***\n",
-               readl(vic_regs + 0x300), readl(vic_regs + 0x304), readl(vic_regs + 0x310));
+        if (printk_ratelimit())
+            pr_debug("*** VIC IRQ: CTRL[0x300]=0x%x DIMS[0x304]=0x%x STRIDE[0x310]=0x%x ***\n",
+                   readl(vic_regs + 0x300), readl(vic_regs + 0x304), readl(vic_regs + 0x310));
         /* Extra debug: read core VIC gate bits to catch if they drop mid-stream */
         do {
             if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
@@ -1888,8 +1898,9 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 u32 __ctrl = readl(vic_regs + 0x300);
                 u32 __top16 = (__ctrl >> 16) & 0xFFFF;
                 u32 __idxNib = (__ctrl >> 16) & 0xF; /* bits [19:16] */
-                printk(KERN_ALERT "*** VIC STAT: ctrl=0x%08x top16=0x%04x idxNib=%u v1_7=0x%08x 1e0=0x%08x 1e8=0x%08x ***\n",
-                       __ctrl, __top16, __idxNib, v1_7, reg_1e0, reg_1e8);
+                if (printk_ratelimit())
+                    pr_debug("*** VIC STAT: ctrl=0x%08x top16=0x%04x idxNib=%u v1_7=0x%08x 1e0=0x%08x 1e8=0x%08x ***\n",
+                           __ctrl, __top16, __idxNib, v1_7, reg_1e0, reg_1e8);
             }
         } while (0);
 
@@ -1923,17 +1934,20 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                     ctrl = (count << 16) | 0x80000020;
                     writel(ctrl, vrp + 0x300);
                     wmb();
-                    printk(KERN_ALERT "*** VIC IRQ: Rewrote CTRL[0x300]=0x%x (count=%u) to preserve control bits ***\n", ctrl, count);
+                    if (printk_ratelimit())
+                            pr_debug("*** VIC IRQ: Rewrote CTRL[0x300]=0x%x (count=%u) to preserve control bits ***\n", ctrl, count);
                 }
             }
             /* printk(KERN_ALERT "*** VIC IRQ: Restored MainMask=0xFFDFFFFE (frame-done+bit21 for debug) ***\n"); */
         }
 
         /* CRITICAL DEBUG: Add the missing debugging right after register writes */
-        printk(KERN_ALERT "*** VIC IRQ: About to check vic_start_ok - vic_start_ok=%u ***\n", vic_start_ok);
+        if (printk_ratelimit())
+            pr_debug("*** VIC IRQ: About to check vic_start_ok - vic_start_ok=%u ***\n", vic_start_ok);
 
         /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
-        printk(KERN_ALERT "*** VIC IRQ: vic_start_ok=%u, v1_7=0x%x, v1_10=0x%x ***\n", vic_start_ok, v1_7, v1_10);
+        if (printk_ratelimit())
+            pr_debug("*** VIC IRQ: vic_start_ok=%u, v1_7=0x%x, v1_10=0x%x ***\n", vic_start_ok, v1_7, v1_10);
 
         if (vic_start_ok != 0) {
             /* Binary Ninja: if (($v1_7 & 1) != 0) */
@@ -1980,11 +1994,13 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                     }
                 } while (0);
             } else {
-                printk(KERN_ALERT "*** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***\n");
+                if (printk_ratelimit())
+                    pr_debug("*** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***\n");
                 /* CRITICAL FIX: Binary Ninja MCP shows reference driver does NOT treat control limit as frame done */
                 /* Control limit error (bit 21) is a separate error condition that should only be logged */
                 if ((v1_7 & 0x200000) != 0) {
-                    printk(KERN_ALERT "*** VIC ERROR: control limit error (bit 21) - NOT calling vic_framedone_irq_function ***\n");
+                    if (printk_ratelimit())
+                        pr_warn("*** VIC ERROR: control limit error (bit 21) - NOT calling vic_framedone_irq_function ***\n");
                     /* Reference driver only increments error counter and prints message */
                     /* Do NOT call vic_framedone_irq_function() or fake frame completion */
                 }
@@ -2187,7 +2203,7 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                             struct tx_isp_channel_state *state = &frame_channels[0].state;
                             int i;
                             if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
-                                for (i = 0; i < state->vbm_buffer_count && i < 5; i++) {
+                                for (i = 0; i < state->vbm_buffer_count && i < 2; i++) {
                                     u32 buf = state->vbm_buffer_addresses[i];
                                     u32 off = 0x318 + (i * 4);
                                     if (buf) {
@@ -2197,9 +2213,9 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                                     }
                                 }
                             } else {
-                                /* Fallback: use rmem base 0x06300000 like working reference */
+                                /* Fallback: use rmem base 0x06300000, cap to 2 buffers */
                                 u32 base = 0x06300000;
-                                for (i = 0; i < 5; i++) {
+                                for (i = 0; i < 2; i++) {
                                     u32 buf = base + (i * frame_size);
                                     u32 off = 0x318 + (i * 4);
                                     writel(buf, vr + off);
@@ -2718,12 +2734,34 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
         /* Initialize Core first */
         if (core_sd && core_sd->ops && core_sd->ops->core && core_sd->ops->core->init) {
             pr_info("*** tx_isp_video_s_stream: Initializing Core subdev ***\n");
+
+            /* CRITICAL FIX: Disable VIC interrupts before core init to prevent race conditions */
+            /* Core init calls tisp_init which reconfigures VIC hardware */
+            if (vic_sd) {
+                struct tx_isp_vic_device *vic_dev_temp = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(vic_sd);
+                if (vic_dev_temp && vic_dev_temp->irq_enabled) {
+                    pr_info("*** tx_isp_video_s_stream: Disabling VIC IRQ before core init to prevent race ***\n");
+                    extern void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev);
+                    tx_vic_disable_irq(vic_dev_temp);
+                }
+            }
+
             result = core_sd->ops->core->init(core_sd, 1);
             if (result != 0 && result != -ENOIOCTLCMD) {
                 pr_err("tx_isp_video_s_stream: Core init failed: %d\n", result);
                 return result;
             }
             pr_info("*** tx_isp_video_s_stream: Core init SUCCESS ***\n");
+
+            /* CRITICAL FIX: Re-enable VIC interrupts after core init completes */
+            if (vic_sd) {
+                struct tx_isp_vic_device *vic_dev_temp = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(vic_sd);
+                if (vic_dev_temp && !vic_dev_temp->irq_enabled) {
+                    pr_info("*** tx_isp_video_s_stream: Re-enabling VIC IRQ after core init ***\n");
+                    extern void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev);
+                    tx_vic_enable_irq(vic_dev_temp);
+                }
+            }
         }
 
        	/* Ensure VIC is ACTIVATED (state 2) before VIC core->init so clks activate */
@@ -4368,28 +4406,30 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
             return s6_1;
         } else if (cmd == 0xc00456c7) {
-            /* TX_ISP_SET_DEFAULT_BIN_PATH - Binary Ninja exact implementation */
+            /* TX_ISP_SET_DEFAULT_BIN_PATH */
             if (copy_from_user(&var_98, (void __user *)arg, 0x40) != 0) {
                 pr_err("TX_ISP_SET_DEFAULT_BIN_PATH: Failed to copy bin path data\n");
                 return -EFAULT;
             }
-
-            pr_info("TX_ISP_SET_DEFAULT_BIN_PATH: Default bin path set\n");
-            /* Binary Ninja: memcpy(*(*($s7 + 0x2c) + 0xd4) + 0x1d8, &var_98, 0x40) */
+            if (isp_dev && isp_dev->core_dev) {
+                struct tx_isp_core_device *core = (struct tx_isp_core_device *)isp_dev->core_dev;
+                memcpy(core->default_bin_path, &var_98, 0x40);
+                core->default_bin_path[0x3f] = '\0'; /* Ensure NUL */
+                pr_info("TX_ISP_SET_DEFAULT_BIN_PATH: path='%s'\n", core->default_bin_path);
+            }
             return 0;
         } else if (cmd == 0xc00456c8) {
-            /* TX_ISP_GET_DEFAULT_BIN_PATH - Binary Ninja exact implementation */
-            memset(&var_98, 0, sizeof(var_98));
-
-            /* Binary Ninja: sprintf(&var_98, *(*($s7 + 0x2c) + 0xd4) + 0x1d8) */
-            pr_info("TX_ISP_GET_DEFAULT_BIN_PATH: Getting default bin path\n");
-            s6_1 = 0;
-
-            if (copy_to_user((void __user *)arg, &var_98, 0x40) != 0) {
+            /* TX_ISP_GET_DEFAULT_BIN_PATH */
+            char out[0x40] = {0};
+            if (isp_dev && isp_dev->core_dev) {
+                struct tx_isp_core_device *core = (struct tx_isp_core_device *)isp_dev->core_dev;
+                memcpy(out, core->default_bin_path, 0x40);
+            }
+            if (copy_to_user((void __user *)arg, out, 0x40) != 0) {
                 pr_err("TX_ISP_GET_DEFAULT_BIN_PATH: Failed to copy bin path to user\n");
                 return -EFAULT;
             }
-            return s6_1;
+            return 0;
         }
     }
 
@@ -4430,19 +4470,53 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         /* Binary Ninja: void* $s4_5 = *(*($s7 + 0x2c) + 0xd4) */
         void *core_dev = isp_dev->core_dev;
 
-        /* Binary Ninja: if (private_copy_from_user(&var_98, arg3, 8) != 0) */
-        if (copy_from_user(&var_98, (void __user *)arg, 8) != 0) {
+        /* Userspace passes [paddr(4)][size(4)] just like GET_BUF returns */
+        struct { uint32_t paddr; uint32_t size; } __attribute__((packed)) user_buf;
+        if (copy_from_user(&user_buf, (void __user *)arg, sizeof(user_buf)) != 0) {
             pr_err("TX_ISP_SET_BUF: Failed to copy buffer data\n");
             return -EFAULT;
         }
+        var_98.as_uint32 = user_buf.paddr;
+        var_94 = user_buf.size;
 
-        if (core_dev) {
-            struct tx_isp_core_device *core = (struct tx_isp_core_device *)core_dev;
-            /* Binary Ninja: Complex buffer setup with system register writes */
-            /* This would involve actual hardware register programming */
-            pr_info("TX_ISP_SET_BUF: addr=0x%x size=%d\n", var_98.as_uint32, var_94);
-        }
+        pr_info("TX_ISP_SET_BUF: addr=0x%x size=%u\n", var_98.as_uint32, var_94);
 
+        /* Seed VBM state when V4L2 QBUF hasn’t run yet (keeps VIC from falling back) */
+        do {
+            extern struct frame_channel_device frame_channels[];
+            struct tx_isp_channel_state *state = &frame_channels[0].state;
+            if (!state->vbm_buffer_addresses) {
+                state->vbm_buffer_addresses = kzalloc(sizeof(uint32_t) * 16, GFP_KERNEL);
+                state->vbm_buffer_count = 0;
+            }
+            if (state->vbm_buffer_addresses) {
+                int i, found = -1, empty = -1;
+                for (i = 0; i < 16; i++) {
+                    if (state->vbm_buffer_addresses[i] == var_98.as_uint32) { found = i; break; }
+                    if (empty == -1 && state->vbm_buffer_addresses[i] == 0) empty = i;
+                }
+                if (found == -1 && empty != -1) {
+                    state->vbm_buffer_addresses[empty] = var_98.as_uint32;
+                    if (state->vbm_buffer_count <= empty) state->vbm_buffer_count = empty + 1;
+                    pr_info("*** SET_BUF: Added VBM[%d]=0x%x, new_count=%d ***\n",
+                           empty, var_98.as_uint32, state->vbm_buffer_count);
+                } else if (found != -1) {
+                    pr_info("*** SET_BUF: VBM already contains addr at index %d ***\n", found);
+                } else {
+                    pr_warn("*** SET_BUF: No empty VBM slot available (capacity=16) ***\n");
+                }
+                state->vbm_buffer_size = var_94;
+                /* Optional: reflect desired ring size (cap to 2 buffers as per prudynt expectations) */
+                if (ourISPdev && ourISPdev->vic_dev) {
+                    struct tx_isp_vic_device *vic = ourISPdev->vic_dev;
+                    int desired = state->vbm_buffer_count;
+                    if (desired > 2) desired = 2;
+                    vic->active_buffer_count = desired;
+                }
+            }
+        } while (0);
+
+        /* No immediate hardware writes here; VIC MDMA config happens during stream enable */
         return 0;
     }
 
@@ -4533,17 +4607,16 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         /* Binary Ninja: void* $s2_23 = *(*($s7 + 0x2c) + 0xd4) */
         void *core_dev = isp_dev->core_dev;
 
-        /* Binary Ninja: if (private_copy_from_user(&var_98, arg3, 8) != 0) */
-        if (copy_from_user(&var_98, (void __user *)arg, 8) != 0) {
+        /* Userspace passes [paddr(4)][size(4)] */
+        struct { uint32_t paddr; uint32_t size; } __attribute__((packed)) user_buf;
+        if (copy_from_user(&user_buf, (void __user *)arg, sizeof(user_buf)) != 0) {
             pr_err("TX_ISP_WDR_SET_BUF: Failed to copy WDR buffer data\n");
             return -EFAULT;
         }
+        var_98.as_uint32 = user_buf.paddr;
+        var_94 = user_buf.size;
 
-        if (core_dev) {
-            /* Binary Ninja: WDR buffer configuration with register writes */
-            pr_info("TX_ISP_WDR_SET_BUF: addr=0x%x size=%d\n", var_98.as_uint32, var_94);
-        }
-
+        pr_info("TX_ISP_WDR_SET_BUF: addr=0x%x size=%u\n", var_98.as_uint32, var_94);
         return 0;
     }
 
@@ -5408,10 +5481,6 @@ static void tx_isp_exit(void)
     pr_info("*** Using reference driver interrupt-based cleanup ***\n");
 
     if (ourISPdev) {
-        /* *** CRITICAL: Cleanup V4L2 video devices *** */
-        tx_isp_v4l2_cleanup();
-        pr_info("*** V4L2 VIDEO DEVICES CLEANED UP ***\n");
-
         /* *** CRITICAL: Destroy ISP M0 tuning device node (matches reference driver) *** */
         tisp_code_destroy_tuning_node();
         pr_info("*** ISP M0 TUNING DEVICE NODE DESTROYED ***\n");
@@ -5801,12 +5870,9 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
         return IRQ_NONE;
     }
 
-    /* CRITICAL: Use printk with KERN_ALERT to ensure this message is ALWAYS visible */
-    printk(KERN_ALERT "*** CRITICAL: isp_irq_handle: IRQ %d received, dev_id=%p ***\n", irq, dev_id);
-    pr_info("*** isp_irq_handle: IRQ %d received, dev_id=%p ***\n", irq, dev_id);
-
-    /* CRITICAL DEBUG: Force console output - NO SLEEP IN ATOMIC CONTEXT */
-    printk(KERN_ALERT "*** INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***\n");
+    /* Reduce IRQ logging to avoid flooding and watchdog resets */
+    if (printk_ratelimit())
+        pr_info("*** isp_irq_handle: IRQ %d, dev_id=%p ***\n", irq, dev_id);
 
     /* Binary Ninja reference shows this is the main interrupt processing function */
     /* It handles VIC interrupts directly, not through a dispatcher */

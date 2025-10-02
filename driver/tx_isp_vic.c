@@ -597,9 +597,22 @@ label_123f4:
     }
 
     /* Signal frame completion for waiting processes */
+    /* CRITICAL FIX: Validate vic_dev and completion structure before calling complete() */
+    if (!vic_dev || (unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff000) {
+        pr_err("*** VIC FRAME DONE: CRITICAL - vic_dev pointer is invalid: %p ***\n", vic_dev);
+        return 0;
+    }
+
+    /* CRITICAL FIX: Validate completion structure pointer */
+    struct completion *comp = &vic_dev->frame_complete;
+    if ((unsigned long)comp < 0x80000000 || (unsigned long)comp >= 0xfffff000) {
+        pr_err("*** VIC FRAME DONE: CRITICAL - frame_complete pointer is invalid: %p ***\n", comp);
+        return 0;
+    }
+
     pr_info("*** VIC FRAME DONE: About to call complete(), vic_dev=%p, &frame_complete=%p ***\n",
-            vic_dev, &vic_dev->frame_complete);
-    complete(&vic_dev->frame_complete);
+            vic_dev, comp);
+    complete(comp);
     pr_info("*** VIC FRAME DONE: Frame completion signaled successfully ***\n");
 
     /* Post-frame: keep ISR minimal; do not touch IMR/IMCR here. Ack is handled in top-level ISR. */
@@ -668,6 +681,12 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
                     isp_dev->dma_addr);
 
             /* Signal frame completion */
+            /* CRITICAL FIX: Validate vic_dev before calling complete() */
+            if (!vic_dev || (unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff000) {
+                pr_err("*** VIC MDMA IRQ: CRITICAL - vic_dev pointer is invalid: %p ***\n", vic_dev);
+                return 0;
+            }
+
             pr_info("*** VIC MDMA IRQ: About to call complete() #1, vic_dev=%p, &frame_complete=%p ***\n",
                     vic_dev, &vic_dev->frame_complete);
             complete(&vic_dev->frame_complete);
@@ -676,6 +695,12 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
         }
 
         /* Binary Ninja: return private_complete(arg1 + 0x148) */
+        /* CRITICAL FIX: Validate vic_dev before calling complete() */
+        if (!vic_dev || (unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff000) {
+            pr_err("*** VIC MDMA IRQ: CRITICAL - vic_dev pointer is invalid before complete() #2: %p ***\n", vic_dev);
+            return 0;
+        }
+
         pr_info("*** VIC MDMA IRQ: About to call complete() #2, vic_dev=%p, &frame_complete=%p ***\n",
                 vic_dev, &vic_dev->frame_complete);
         complete(&vic_dev->frame_complete);
@@ -2512,7 +2537,7 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     void __iomem *vic_base;
     void __iomem *vic_ctrl;
     u32 width, height, stride;
-    extern unsigned int tx_isp_current_pixfmt;
+    unsigned int tx_isp_current_pixfmt = 0x3231564e; // NV12 TODO
 
     pr_info("*** vic_pipo_mdma_enable: EXACT Binary Ninja MCP implementation ***\n");
 
@@ -2547,7 +2572,7 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     pr_info("vic_pipo_mdma_enable: reg 0x308 = 1 (MDMA enable)\n");
 
     /* Choose stride based on current V4L2 pixel format */
-    if (tx_isp_current_pixfmt == 0x3231564e /* NV12 */) {
+    if (0 || tx_isp_current_pixfmt == 0x3231564e /* NV12 */) {
         stride = width;        /* Y plane stride */
         pr_info("vic_pipo_mdma_enable: Using NV12 stride=%u (pixfmt=0x%x)\n", stride, tx_isp_current_pixfmt);
     } else if (tx_isp_current_pixfmt == 0x56595559 /* 'YUYV' */) {
@@ -2594,7 +2619,7 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         pr_info("*** VIC BUFFER ACCESS: Found %d VBM buffer addresses at %p ***\n",
                 state->vbm_buffer_count, state->vbm_buffer_addresses);
 
-        for (i = 0; i < state->vbm_buffer_count && i < 5; i++) {
+        for (i = 0; i < state->vbm_buffer_count && i < 2; i++) {
             u32 buffer_addr = state->vbm_buffer_addresses[i];
             u32 reg_offset = 0x318 + (i * 4);  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
 
@@ -2611,7 +2636,7 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
             }
         }
         if (configured_count == 0) configured_count = 1;  /* Ensure at least 1 buffer */
-        if (configured_count > 5) configured_count = 5;    /* VIC has max 5 slots */
+        if (configured_count > 2) configured_count = 2;    /* Cap ring to 2 buffers */
         vic_dev->active_buffer_count = configured_count;
         pr_info("*** CRITICAL: VIC buffer addresses configured from VBM (count=%d) - hardware can now generate interrupts! ***\n",
                 configured_count);
@@ -2621,12 +2646,12 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         pr_warn("*** vbm_buffer_addresses=%p, vbm_buffer_count=%d ***\n",
                state->vbm_buffer_addresses, state->vbm_buffer_count);
 
-        /* Use reserved memory region 0x6300000 like working reference */
+        /* Use reserved memory region 0x6300000; cap fallback to 2 buffers */
         u32 frame_size = width * height * 2;  /* RAW10 = 2 bytes/pixel */
         u32 base_addr = 0x6300000;  /* Reserved memory base from boot parameter rmem=29M@0x6300000 */
 
         int i;
-        for (i = 0; i < 5; i++) {
+        for (i = 0; i < 2; i++) {
             u32 buffer_addr = base_addr + (i * frame_size);
             u32 reg_offset = 0x318 + (i * 4);  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
 
@@ -2637,8 +2662,8 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
             pr_info("*** VIC FALLBACK BUFFER %d: Wrote reserved memory address 0x%x to reg 0x%x ***\n",
                     i, buffer_addr, reg_offset);
         }
-        vic_dev->active_buffer_count = 5;
-        pr_info("*** CRITICAL: VIC fallback buffer addresses configured (count=5) - hardware can now generate interrupts! ***\n");
+        vic_dev->active_buffer_count = 2;
+        pr_info("*** CRITICAL: VIC fallback buffer addresses configured (count=2) - hardware can now generate interrupts! ***\n");
     }
 
     pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - VIC should now generate interrupts! ***\n");
@@ -3083,24 +3108,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             pr_info("*** vic_core_s_stream: Enabling VIC IRQ AFTER final re-assert/verify ***\n");
             tx_vic_enable_irq(vic_dev);
 
-
-            /* Post-IRQ-enable: sample status a bit longer to catch first frame */
-            if (vic_dev->vic_regs) {
-
-                void __iomem *vr = vic_dev->vic_regs;
-                u32 s0, s1; int i;
-                for (i = 0; i < 200; i++) { /* ~200ms total if udelay(1000) */
-                    s0 = readl(vr + 0x1f0);
-                    s1 = readl(vr + 0x1f4);
-                    if (s0 || s1) {
-                        pr_warn("*** VIC POST-IRQ SAMPLE: Status asserted: [0x1f0]=0x%08x [0x1f4]=0x%08x (iter=%d) ***\n", s0, s1, i);
-                        break;
-                    }
-                    udelay(1000);
-                }
-                if (i == 200)
-                    pr_info("*** VIC POST-IRQ SAMPLE: No status bits asserted in 200ms window ***\n");
-            }
+            /* CRITICAL FIX: Remove polling loop that was causing 200ms+ hangs */
+            /* VIC interrupts are now enabled - they will fire asynchronously */
+            /* No need to poll for status here - just return and let interrupts handle it */
+            pr_info("*** vic_core_s_stream: VIC IRQ enabled - returning immediately (interrupt-driven) ***\n");
 
 
             /* CRITICAL FIX: Follow proper state machine - don't jump directly to state 4 */
@@ -3349,7 +3360,13 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     vic_dev->irq_number = 38;   /* VIC uses IRQ 38 */
     vic_dev->irq_enabled = 0;   /* Initially disabled */
     vic_dev->hw_irq_enabled = 0; /* Hardware interrupt initially disabled */
-    pr_info("*** VIC PROBE: IRQ numbers initialized to 38 ***\n");
+
+    /* CRITICAL FIX: Initialize sd.irq_info structure - THIS WAS MISSING! */
+    vic_dev->sd.irq_info.irq = 38;      /* VIC IRQ number */
+    vic_dev->sd.irq_info.handler = NULL; /* Handler set later */
+    vic_dev->sd.irq_info.data = vic_dev; /* Pass vic_dev as data */
+
+    pr_info("*** VIC PROBE: IRQ numbers initialized to 38 (including sd.irq_info.irq) ***\n");
 
     /* CRITICAL FIX: Map VIC register spaces - THIS WAS MISSING! */
     /* Primary VIC register space (0x133e0000) - main VIC control */

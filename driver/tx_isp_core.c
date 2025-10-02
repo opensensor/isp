@@ -2163,8 +2163,12 @@ static int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
         top = isp_irq_handle;
         thread = isp_irq_thread_handle;
     }
-    ret = request_threaded_irq(irq_number, top, thread,
-                               IRQF_SHARED, name, irq_info);
+    {
+        extern struct tx_isp_dev *ourISPdev;
+        void *correct_dev_id = ourISPdev;
+        ret = request_threaded_irq(irq_number, top, thread,
+                                   IRQF_SHARED, name, correct_dev_id);
+    }
     if (ret != 0) {
         pr_err("tx_isp_request_irq: Failed to request IRQ %d: %d\n", irq_number, ret);
         return ret;
