@@ -10147,9 +10147,10 @@ int tisp_code_create_tuning_node(void)
         return 0;
     }
 
-    /* Binary Ninja: if (major == 0) alloc_chrdev_region, else register_chrdev_region */
+    /* Binary Ninja EXACT: if (major == 0) alloc_chrdev_region, else register_chrdev_region */
+    /* Reference driver uses "tisp" as device name, NOT "isp-m0" */
     if (tuning_major == 0) {
-        ret = alloc_chrdev_region(&tuning_devno, 0, 1, "isp-m0");
+        ret = alloc_chrdev_region(&tuning_devno, 0, 1, "tisp");
         if (ret < 0) {
             pr_err("tisp_code_create_tuning_node: Failed to allocate chrdev region: %d\n", ret);
             return ret;
@@ -10158,7 +10159,7 @@ int tisp_code_create_tuning_node(void)
         pr_info("tisp_code_create_tuning_node: Allocated dynamic major %d\n", tuning_major);
     } else {
         tuning_devno = MKDEV(tuning_major, 0);
-        ret = register_chrdev_region(tuning_devno, 1, "isp-m0");
+        ret = register_chrdev_region(tuning_devno, 1, "tisp");
         if (ret < 0) {
             pr_err("tisp_code_create_tuning_node: Failed to register chrdev region: %d\n", ret);
             return ret;
@@ -10166,10 +10167,10 @@ int tisp_code_create_tuning_node(void)
         pr_info("tisp_code_create_tuning_node: Registered static major %d\n", tuning_major);
     }
 
-    /* Binary Ninja: cdev_init(&tuning_cdev, &isp_core_tunning_fops) */
+    /* Binary Ninja EXACT: cdev_init(&tisp_cdev, &tisp_fops) */
     cdev_init(&tuning_cdev, &isp_core_tunning_fops);
 
-    /* Binary Ninja: cdev_add(&tuning_cdev, tuning_devno, 1) */
+    /* Binary Ninja EXACT: cdev_add(&tisp_cdev, tuning_devno, 1) */
     ret = cdev_add(&tuning_cdev, tuning_devno, 1);
     if (ret < 0) {
         pr_err("tisp_code_create_tuning_node: Failed to add cdev: %d\n", ret);
@@ -10177,8 +10178,8 @@ int tisp_code_create_tuning_node(void)
         return ret;
     }
 
-    /* Binary Ninja: tuning_class = __class_create(&__this_module, "isp-m0", 0) */
-    tuning_class = class_create(THIS_MODULE, "isp-m0");
+    /* Binary Ninja EXACT: tuning_class = __class_create(&__this_module, "tisp", 0) */
+    tuning_class = class_create(THIS_MODULE, "tisp");
     if (IS_ERR(tuning_class)) {
         ret = PTR_ERR(tuning_class);
         pr_err("tisp_code_create_tuning_node: Failed to create class: %d\n", ret);
@@ -10187,8 +10188,8 @@ int tisp_code_create_tuning_node(void)
         return ret;
     }
 
-    /* Binary Ninja: device_create(tuning_class, 0, tuning_devno, 0, "isp-m0") */
-    if (device_create(tuning_class, NULL, tuning_devno, NULL, "isp-m0") == NULL) {
+    /* Binary Ninja EXACT: device_create(tuning_class, 0, tuning_devno, 0, "tisp") */
+    if (device_create(tuning_class, NULL, tuning_devno, NULL, "tisp") == NULL) {
         pr_err("tisp_code_create_tuning_node: Failed to create device\n");
         class_destroy(tuning_class);
         cdev_del(&tuning_cdev);
@@ -10199,7 +10200,7 @@ int tisp_code_create_tuning_node(void)
     /* Set flag to prevent duplicate creation */
     tuning_device_created = true;
 
-    pr_info("*** ISP M0 TUNING DEVICE CREATED: /dev/isp-m0 (major=%d, minor=0) ***\n", tuning_major);
+    pr_info("*** TISP DEVICE CREATED: /dev/tisp (major=%d, minor=0) - Binary Ninja EXACT ***\n", tuning_major);
     return 0;
 }
 
