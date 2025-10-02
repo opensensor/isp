@@ -78,7 +78,10 @@ static int parse_vbm_buffers_from_file(uint32_t *vbm_pool0_addr, uint32_t *vbm_p
     bytes_read = kernel_read(fp, pos, buf, 8192);
     filp_close(fp, NULL);
 
+    pr_info("VBM: Read %zd bytes from /tmp/alloc_manager_info\n", bytes_read);
+
     if (bytes_read <= 0) {
+        pr_warn("VBM: Failed to read file content (bytes_read=%zd)\n", bytes_read);
         kfree(buf);
         return -EIO;
     }
@@ -151,6 +154,9 @@ static int parse_vbm_buffers_from_file(uint32_t *vbm_pool0_addr, uint32_t *vbm_p
 
     kfree(buf);
 
+    pr_info("VBM: Parsing complete - Pool0: addr=0x%08x size=%u, Pool1: addr=0x%08x size=%u\n",
+            *vbm_pool0_addr, *vbm_pool0_size, *vbm_pool1_addr, *vbm_pool1_size);
+
     if (*vbm_pool0_addr && *vbm_pool1_addr) {
         pr_info("*** VBM: Parsed from /tmp/alloc_manager_info ***\n");
         pr_info("*** VBMPool0: paddr=0x%08x, size=%u bytes ***\n", *vbm_pool0_addr, *vbm_pool0_size);
@@ -158,7 +164,7 @@ static int parse_vbm_buffers_from_file(uint32_t *vbm_pool0_addr, uint32_t *vbm_p
         return 0;
     }
 
-    pr_debug("VBM: Could not find VBMPool addresses in /tmp/alloc_manager_info\n");
+    pr_warn("VBM: Parsing failed - could not find both VBMPool0 and VBMPool1\n");
     return -ENODATA;
 }
 static int vic_curraddr_detected = 0;      /* sticky once found */
