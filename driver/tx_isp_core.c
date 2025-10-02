@@ -536,6 +536,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     void __iomem *isp_regs;
     void __iomem *vic_regs;
     u32 interrupt_status;
+    u32 status_legacy, status_new;  /* Moved outside block for later reference */
     u32 error_check;
     int i;
 
@@ -564,8 +565,8 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     }
     /* Support both legacy (+0xb*) and new (+0x98b*) interrupt banks */
     {
-        u32 status_legacy = readl(isp_regs + 0xb4);
-        u32 status_new    = readl(isp_regs + 0x98b4);
+        status_legacy = readl(isp_regs + 0xb4);
+        status_new    = readl(isp_regs + 0x98b4);
         interrupt_status  = status_legacy ? status_legacy : status_new;
         /* Clear pending in the corresponding bank(s) */
         if (status_legacy)
@@ -577,8 +578,21 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             pr_info("*** ISP CORE INTERRUPT: bank=%s status=0x%08x (legacy=0x%08x new=0x%08x) ***\n",
                     status_legacy ? "legacy(+0xb*)" : "new(+0x98b*)",
                     interrupt_status, status_legacy, status_new);
+
+            /* DEBUGGING: Decode interrupt type */
+            pr_info("*** INTERRUPT TYPE ANALYSIS: ***\n");
+            pr_info("  - Frame Done CH0 (bit 0):    %s\n", (interrupt_status & 0x1) ? "YES" : "NO");
+            pr_info("  - Frame Done CH1 (bit 1):    %s\n", (interrupt_status & 0x2) ? "YES" : "NO");
+            pr_info("  - Frame Done CH2 (bit 2):    %s\n", (interrupt_status & 0x4) ? "YES" : "NO");
+            pr_info("  - Error Type 2 (bit 0x100):  %s\n", (interrupt_status & 0x100) ? "YES" : "NO");
+            pr_info("  - Error Type 1 (bit 0x200):  %s\n", (interrupt_status & 0x200) ? "YES" : "NO");
+            pr_info("  - Error Mask (0x3f8):        0x%x %s\n",
+                    (interrupt_status & 0x3f8),
+                    (interrupt_status & 0x3f8) ? "ERROR PRESENT" : "NO ERROR");
+            pr_info("  - Additional (bit 0x2000):   %s\n", (interrupt_status & 0x2000) ? "YES" : "NO");
         } else if (isp_force_core_isr) {
             pr_info("*** ISP CORE: FORCED FRAME DONE VIA VIC (no pending) ***\n");
+            pr_info("*** WARNING: This is a FAKE frame done - no real hardware interrupt! ***\n");
             interrupt_status = 1; /* Force Channel 0 frame-done path */
         } else {
             pr_info("*** ISP CORE INTERRUPT: no pending (legacy=0x%08x new=0x%08x) ***\n",
@@ -589,7 +603,8 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* Binary Ninja: if (($s1 & 0x3f8) == 0) */
     if ((interrupt_status & 0x3f8) == 0) {
-        /* Normal interrupt processing */
+        /* Normal interrupt processing - NO ERRORS */
+        pr_info("*** INTERRUPT PATH: NORMAL (no error bits set) ***\n");
         error_check = readl(isp_regs + 0xc) & 0x40;
         if (error_check == 0) {
             /* Binary Ninja: tisp_lsc_write_lut_datas() - LSC LUT processing */
@@ -597,6 +612,8 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         }
     } else {
         /* Binary Ninja: Error interrupt processing - EXACT reference behavior */
+        pr_info("*** INTERRUPT PATH: ERROR DETECTED (error bits = 0x%x) ***\n",
+                (interrupt_status & 0x3f8));
         u32 error_reg_84c = readl(vic_regs + 0x84c);
         pr_info("ispcore: irq-status 0x%08x, err is 0x%x,0x%x,084c is 0x%x\n",
                 interrupt_status, (interrupt_status & 0x3f8) >> 3,
@@ -662,7 +679,8 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* Binary Ninja: Error interrupt processing */
     if (interrupt_status & 0x200) {  /* Error interrupt type 1 */
-        pr_info("ISP CORE: Error interrupt type 1 - PIPELINE CONFIGURATION ERROR\n");
+        pr_info("*** ERROR INTERRUPT TYPE 1 (bit 0x200): PIPELINE CONFIGURATION ERROR ***\n");
+        pr_info("*** WARNING: This is a CONTROL ERROR, NOT a frame done interrupt! ***\n");
 
         /* CRITICAL FIX: This error interrupt indicates pipeline misconfiguration */
         /* Clear the error condition by reading/clearing error registers */
@@ -682,7 +700,8 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     }
 
     if (interrupt_status & 0x100) {  /* Error interrupt type 2 */
-        pr_info("ISP CORE: Error interrupt type 2\n");
+        pr_info("*** ERROR INTERRUPT TYPE 2 (bit 0x100): CONTROL ERROR ***\n");
+        pr_info("*** WARNING: This is a CONTROL ERROR, NOT a frame done interrupt! ***\n");
         /* Binary Ninja: exception_handle() */
         /* Error handling would be here */
     }
@@ -697,6 +716,17 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     /* *** CRITICAL: CHANNEL 0 FRAME COMPLETION PROCESSING *** */
     if (interrupt_status & 1) {  /* Channel 0 frame done */
         pr_info("*** ISP CORE: CHANNEL 0 FRAME DONE INTERRUPT ***\n");
+
+        /* DEBUGGING: Determine if this is a real or fake frame done */
+        if (isp_force_core_isr && (status_legacy == 0 && status_new == 0)) {
+            pr_info("*** FRAME DONE TYPE: FAKE (forced via isp_force_core_isr, no hardware interrupt) ***\n");
+        } else if (interrupt_status & 0x3f8) {
+            pr_info("*** FRAME DONE TYPE: QUESTIONABLE (frame done bit set BUT error bits also set: 0x%x) ***\n",
+                    (interrupt_status & 0x3f8));
+            pr_info("*** This may be a control error being misinterpreted as frame done! ***\n");
+        } else {
+            pr_info("*** FRAME DONE TYPE: GENUINE (hardware interrupt, no error bits) ***\n");
+        }
 
         /* Binary Ninja: data_ca584 += 1 - increment frame counter */
         if (isp_dev) {
@@ -730,6 +760,14 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     if (interrupt_status & 2) {  /* Channel 1 frame done */
         pr_info("*** ISP CORE: CHANNEL 1 FRAME DONE INTERRUPT ***\n");
 
+        /* DEBUGGING: Determine if this is a real or fake frame done */
+        if (interrupt_status & 0x3f8) {
+            pr_info("*** CH1 FRAME DONE TYPE: QUESTIONABLE (error bits also set: 0x%x) ***\n",
+                    (interrupt_status & 0x3f8));
+        } else {
+            pr_info("*** CH1 FRAME DONE TYPE: GENUINE (no error bits) ***\n");
+        }
+
         /* Binary Ninja: Similar processing for channel 1 */
         while ((readl(vic_regs + 0x9a7c) & 1) == 0) {
             u32 frame_buffer_addr = readl(vic_regs + 0x9a74);
@@ -748,7 +786,16 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
     /* Binary Ninja: Channel 2 frame completion */
     if (interrupt_status & 4) {
-        pr_info("ISP CORE: Channel 2 frame done\n");
+        pr_info("*** ISP CORE: CHANNEL 2 FRAME DONE INTERRUPT ***\n");
+
+        /* DEBUGGING: Determine if this is a real or fake frame done */
+        if (interrupt_status & 0x3f8) {
+            pr_info("*** CH2 FRAME DONE TYPE: QUESTIONABLE (error bits also set: 0x%x) ***\n",
+                    (interrupt_status & 0x3f8));
+        } else {
+            pr_info("*** CH2 FRAME DONE TYPE: GENUINE (no error bits) ***\n");
+        }
+
         /* Similar processing for channel 2 */
         while ((readl(vic_regs + 0x9b7c) & 1) == 0) {
             /* Channel 2 frame processing */
