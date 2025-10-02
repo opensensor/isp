@@ -5593,17 +5593,29 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp_dev)
 
         /* CRITICAL FIX: Register frame channel as misc device (like /dev/framechan0, /dev/framechan1) */
         /* Binary Ninja libimp.so: sprintf(&str, "/dev/framechan%d", channel_id) */
-        snprintf(frame_channels[i].miscdev.name, sizeof(frame_channels[i].miscdev.name),
-                 "framechan%d", i);
+        char dev_name[32];
+        snprintf(dev_name, sizeof(dev_name), "framechan%d", i);
+        frame_channels[i].miscdev.name = kstrdup(dev_name, GFP_KERNEL);
+        if (!frame_channels[i].miscdev.name) {
+            pr_err("*** Failed to allocate name for frame channel %d ***\n", i);
+            /* Clean up previously registered channels */
+            for (int j = 0; j < i; j++) {
+                misc_deregister(&frame_channels[j].miscdev);
+                kfree(frame_channels[j].miscdev.name);
+            }
+            return -ENOMEM;
+        }
         frame_channels[i].miscdev.minor = MISC_DYNAMIC_MINOR;
         frame_channels[i].miscdev.fops = &frame_channel_fops;
 
         ret = misc_register(&frame_channels[i].miscdev);
         if (ret < 0) {
             pr_err("*** Failed to register frame channel %d device: %d ***\n", i, ret);
+            kfree(frame_channels[i].miscdev.name);
             /* Clean up previously registered channels */
             for (int j = 0; j < i; j++) {
                 misc_deregister(&frame_channels[j].miscdev);
+                kfree(frame_channels[j].miscdev.name);
             }
             return ret;
         }
@@ -5625,8 +5637,10 @@ static void tx_isp_exit(void)
 
     /* CRITICAL FIX: Unregister frame channel devices */
     for (i = 0; i < num_channels; i++) {
-        if (frame_channels[i].miscdev.minor != MISC_DYNAMIC_MINOR) {
+        if (frame_channels[i].miscdev.name) {
             misc_deregister(&frame_channels[i].miscdev);
+            kfree(frame_channels[i].miscdev.name);
+            frame_channels[i].miscdev.name = NULL;
             pr_info("*** Frame channel %d device unregistered ***\n", i);
         }
     }
