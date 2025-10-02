@@ -51,7 +51,7 @@ void vic_parse_and_cache_vbm_buffers(void)
     }
 
     /* Wait up to 10 seconds for libimp.so to populate the file */
-    pr_info("VBM: Waiting for libimp.so to populate /tmp/continuous_mem_info...\n");
+    pr_info("VBM: Waiting for libimp.so to populate /tmp/alloc_manager_info...\n");
     for (retry = 0; retry < 100; retry++) {
         if (parse_vbm_buffers_from_file(&g_vbm_pool0_addr, &g_vbm_pool0_size,
                                          &g_vbm_pool1_addr, &g_vbm_pool1_size) == 0) {
@@ -67,15 +67,15 @@ void vic_parse_and_cache_vbm_buffers(void)
 }
 EXPORT_SYMBOL(vic_parse_and_cache_vbm_buffers);
 
-/* Parse /tmp/continuous_mem_info to get VBM buffer addresses allocated by libimp.so
+/* Parse /tmp/alloc_manager_info to get VBM buffer addresses allocated by libimp.so
  * File format:
- * VBMPool0:
- * paddr: 0x070d9000
- * length: 12533760
+ * info->owner = VBMPool0
+ * info->paddr = 0x070d9000
+ * info->length = 12533760
  * ...
- * VBMPool1:
- * paddr: 0x07e07100
- * length: 706560
+ * info->owner = VBMPool1
+ * info->paddr = 0x07e07100
+ * info->length = 706560
  */
 static int parse_vbm_buffers_from_file(uint32_t *vbm_pool0_addr, uint32_t *vbm_pool0_size,
                                         uint32_t *vbm_pool1_addr, uint32_t *vbm_pool1_size)
@@ -95,13 +95,13 @@ static int parse_vbm_buffers_from_file(uint32_t *vbm_pool0_addr, uint32_t *vbm_p
     *vbm_pool1_size = 0;
 
     /* Try to open the file - no waiting, called from non-atomic context */
-    fp = filp_open("/tmp/continuous_mem_info", O_RDONLY, 0);
+    fp = filp_open("/tmp/alloc_manager_info", O_RDONLY, 0);
     if (IS_ERR(fp)) {
-        pr_warn("VBM: Cannot open /tmp/continuous_mem_info (file may not exist yet)\n");
+        pr_warn("VBM: Cannot open /tmp/alloc_manager_info (file may not exist yet)\n");
         return -ENOENT;
     }
 
-    pr_info("VBM: Successfully opened /tmp/continuous_mem_info\n");
+    pr_info("VBM: Successfully opened /tmp/alloc_manager_info\n");
 
     /* Allocate buffer for file content */
     buf = kmalloc(8192, GFP_KERNEL);
@@ -153,15 +153,15 @@ static int parse_vbm_buffers_from_file(uint32_t *vbm_pool0_addr, uint32_t *vbm_p
             next_line++;
         }
 
-        /* Look for "VBMPool0:" or "VBMPool1:" */
-        if (strstr(line, "VBMPool0:")) {
+        /* Look for "info->owner = VBMPool0" or "info->owner = VBMPool1" */
+        if (strstr(line, "info->owner = VBMPool0")) {
             found_pool0 = 1;
             found_pool1 = 0;
-        } else if (strstr(line, "VBMPool1:")) {
+        } else if (strstr(line, "info->owner = VBMPool1")) {
             found_pool1 = 1;
             found_pool0 = 0;
-        } else if (found_pool0 && strstr(line, "paddr:")) {
-            /* Extract physical address for VBMPool0 - format: "paddr: 0x070d9000" */
+        } else if (found_pool0 && strstr(line, "info->paddr = 0x")) {
+            /* Extract physical address for VBMPool0 - format: "info->paddr = 0x070d9000" */
             char *addr_str = strstr(line, "0x");
             if (addr_str) {
                 unsigned long addr;
@@ -169,19 +169,17 @@ static int parse_vbm_buffers_from_file(uint32_t *vbm_pool0_addr, uint32_t *vbm_p
                     *vbm_pool0_addr = (uint32_t)addr;
                 }
             }
-        } else if (found_pool0 && strstr(line, "length:")) {
-            /* Extract size for VBMPool0 - format: "length: 12533760" */
-            char *len_str = strstr(line, "length:");
+        } else if (found_pool0 && strstr(line, "info->length = ")) {
+            /* Extract size for VBMPool0 - format: "info->length = 12533760" */
+            char *len_str = strstr(line, "info->length = ");
             if (len_str) {
                 unsigned long len;
-                len_str += strlen("length:");
-                /* Skip whitespace */
-                while (*len_str == ' ' || *len_str == '\t') len_str++;
+                len_str += strlen("info->length = ");
                 if (kstrtoul(len_str, 10, &len) == 0) {
                     *vbm_pool0_size = (uint32_t)len;
                 }
             }
-        } else if (found_pool1 && strstr(line, "paddr:")) {
+        } else if (found_pool1 && strstr(line, "info->paddr = 0x")) {
             /* Extract physical address for VBMPool1 */
             char *addr_str = strstr(line, "0x");
             if (addr_str) {
@@ -190,14 +188,12 @@ static int parse_vbm_buffers_from_file(uint32_t *vbm_pool0_addr, uint32_t *vbm_p
                     *vbm_pool1_addr = (uint32_t)addr;
                 }
             }
-        } else if (found_pool1 && strstr(line, "length:")) {
+        } else if (found_pool1 && strstr(line, "info->length = ")) {
             /* Extract size for VBMPool1 */
-            char *len_str = strstr(line, "length:");
+            char *len_str = strstr(line, "info->length = ");
             if (len_str) {
                 unsigned long len;
-                len_str += strlen("length:");
-                /* Skip whitespace */
-                while (*len_str == ' ' || *len_str == '\t') len_str++;
+                len_str += strlen("info->length = ");
                 if (kstrtoul(len_str, 10, &len) == 0) {
                     *vbm_pool1_size = (uint32_t)len;
                 }
