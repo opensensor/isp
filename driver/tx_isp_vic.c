@@ -2788,7 +2788,6 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
             vic_dev->active_buffer_count = buffers_in_pool;
             pr_info("*** VIC: Configured %d buffers from VBMPool0 (paddr=0x%08x, size=%u) ***\n",
                     buffers_in_pool, vbm_pool0_addr, vbm_pool0_size);
-
         } else {
             /* Fallback to reserved memory if file parsing fails */
             pr_warn("*** CRITICAL: No VBM buffer addresses - using fallback addresses from reserved memory ***\n");
@@ -2810,9 +2809,10 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
             wmb();
             pr_info("*** VIC FALLBACK BUFFER %d: Wrote reserved memory address 0x%x to reg 0x%x ***\n",
                     i, buffer_addr, reg_offset);
+            }
+            vic_dev->active_buffer_count = 5;
+            pr_info("*** CRITICAL: VIC fallback buffer addresses configured (count=5) - hardware can now generate interrupts! ***\n");
         }
-        vic_dev->active_buffer_count = 5;
-        pr_info("*** CRITICAL: VIC fallback buffer addresses configured (count=5) - hardware can now generate interrupts! ***\n");
     }
 
     pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - VIC should now generate interrupts! ***\n");
