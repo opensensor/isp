@@ -5343,6 +5343,7 @@ static int tx_isp_module_init(struct tx_isp_dev *isp_dev)
         tx_isp_subdev_platform_exit();  /* Cleanup platform drivers */
         return ret;
     }
+    pr_info("*** /dev/tx-isp CHARACTER DEVICE CREATED (minor=%d) ***\n", tx_isp_miscdev.minor);
 
     /* Binary Ninja: Call tx_isp_create_graph_and_nodes() */
     ret = tx_isp_create_graph_and_nodes(isp_dev);
