@@ -4495,14 +4495,10 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 return -EINVAL;
             }
 
-            /* Create frame channel devices using global ISP device */
-            pr_info("*** tx_isp_core_probe: Creating frame channel devices ***\n");
-            result = tx_isp_create_framechan_devices(ourISPdev);
-            if (result == 0) {
-                pr_info("*** tx_isp_core_probe: Frame channel devices created successfully ***\n");
-            } else {
-                pr_err("*** tx_isp_core_probe: Failed to create frame channel devices: %d ***\n", result);
-            }
+            /* REMOVED: Frame channel device creation moved to tx-isp-module.c */
+            /* Frame channels are now created in tx_isp_create_graph_and_nodes() */
+            /* This avoids duplicate registration and uses the actual frame_channels array */
+            pr_info("*** tx_isp_core_probe: Frame channel devices will be created by tx_isp_create_graph_and_nodes ***\n");
 
             /* Create the ISP M0 tuning device node */
             pr_info("*** tx_isp_core_probe: Creating ISP M0 tuning device node ***\n");
