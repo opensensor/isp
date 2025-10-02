@@ -93,6 +93,15 @@ static int parse_vbm_buffers_from_file(uint32_t *vbm_pool0_addr, uint32_t *vbm_p
         buf[8191] = '\0';
     }
 
+    /* DEBUG: Print first 200 chars of file content */
+    {
+        char preview[201];
+        int preview_len = (bytes_read < 200) ? bytes_read : 200;
+        memcpy(preview, buf, preview_len);
+        preview[preview_len] = '\0';
+        pr_info("VBM: File content preview (first %d bytes): %s\n", preview_len, preview);
+    }
+
     /* Parse line by line looking for VBMPool0 and VBMPool1 */
     line = buf;
     while (line && *line) {
