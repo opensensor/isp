@@ -5590,6 +5590,26 @@ int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp_dev)
         pr_info("*** Frame channel %d initialized: %dx%d, state=%d ***\n",
                 i, frame_channels[i].state.width, frame_channels[i].state.height,
                 frame_channels[i].state.state);
+
+        /* CRITICAL FIX: Register frame channel as misc device (like /dev/framechan0, /dev/framechan1) */
+        /* Binary Ninja libimp.so: sprintf(&str, "/dev/framechan%d", channel_id) */
+        snprintf(frame_channels[i].miscdev.name, sizeof(frame_channels[i].miscdev.name),
+                 "framechan%d", i);
+        frame_channels[i].miscdev.minor = MISC_DYNAMIC_MINOR;
+        frame_channels[i].miscdev.fops = &frame_channel_fops;
+
+        ret = misc_register(&frame_channels[i].miscdev);
+        if (ret < 0) {
+            pr_err("*** Failed to register frame channel %d device: %d ***\n", i, ret);
+            /* Clean up previously registered channels */
+            for (int j = 0; j < i; j++) {
+                misc_deregister(&frame_channels[j].miscdev);
+            }
+            return ret;
+        }
+
+        pr_info("*** Frame channel %d registered as /dev/%s (minor=%d) ***\n",
+                i, frame_channels[i].miscdev.name, frame_channels[i].miscdev.minor);
     }
 
     pr_info("*** tx_isp_create_graph_and_nodes: Binary Ninja reference implementation complete ***\n");
@@ -5602,6 +5622,14 @@ static void tx_isp_exit(void)
     int i;
 
     pr_info("TX ISP driver exiting...\n");
+
+    /* CRITICAL FIX: Unregister frame channel devices */
+    for (i = 0; i < num_channels; i++) {
+        if (frame_channels[i].miscdev.minor != MISC_DYNAMIC_MINOR) {
+            misc_deregister(&frame_channels[i].miscdev);
+            pr_info("*** Frame channel %d device unregistered ***\n", i);
+        }
+    }
 
     /* REMOVED: Frame work shutdown - NOT in reference driver */
     /* Reference driver cleanup is purely interrupt and hardware based */
