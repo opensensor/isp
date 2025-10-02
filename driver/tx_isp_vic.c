@@ -2773,10 +2773,14 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
                 pr_info("*** VIC: Programming buffer %d at VBMPool0 address 0x%08x ***\n", i, buffer_addr);
 
                 /* Program VIC slot */
-                writel(buffer_addr, vic_dev->base + 0x100 + (i * 4));
+                u32 reg_offset = 0x318 + (i * 4);
+                writel(buffer_addr, vic_base + reg_offset);
+                if (vic_ctrl)
+                    writel(buffer_addr, vic_ctrl + reg_offset);
+                wmb();
 
                 /* Verify write */
-                u32 readback = readl(vic_dev->base + 0x100 + (i * 4));
+                u32 readback = readl(vic_base + reg_offset);
                 if (readback == buffer_addr) {
                     pr_info("*** VIC slot %d: VERIFIED 0x%08x ***\n", i, readback);
                 } else {
