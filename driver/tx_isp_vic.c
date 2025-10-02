@@ -2636,7 +2636,9 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
 }
 
 /* VIC PIPO MDMA Enable function - EXACT Binary Ninja implementation */
-static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
+static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev,
+                                   uint32_t vbm_pool0_addr, uint32_t vbm_pool0_size,
+                                   uint32_t vbm_pool1_addr, uint32_t vbm_pool1_size)
 {
     void __iomem *vic_base;
     void __iomem *vic_ctrl;
@@ -2744,17 +2746,10 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         vic_dev->active_buffer_count = configured_count;
         pr_info("*** CRITICAL: VIC buffer addresses configured from VBM (count=%d) - hardware can now generate interrupts! ***\n",
                 configured_count);
-    } else {
-        /* CRITICAL: Try to parse VBM buffer addresses from /tmp/alloc_manager_info */
-        uint32_t vbm_pool0_addr = 0, vbm_pool0_size = 0;
-        uint32_t vbm_pool1_addr = 0, vbm_pool1_size = 0;
-
-        pr_info("*** VIC: No VBM buffers from ioctl, trying to parse /tmp/alloc_manager_info ***\n");
-
-        if (parse_vbm_buffers_from_file(&vbm_pool0_addr, &vbm_pool0_size,
-                                         &vbm_pool1_addr, &vbm_pool1_size) == 0) {
-            /* Successfully parsed VBM pools from file! */
-            pr_info("*** VIC: Successfully parsed VBM pools from /tmp/alloc_manager_info! ***\n");
+    } else if (vbm_pool0_addr != 0 && vbm_pool0_size != 0) {
+        /* Use VBM buffer addresses passed as parameters */
+        pr_info("*** VIC: Using VBM buffers from parameters (paddr=0x%08x, size=%u) ***\n",
+                vbm_pool0_addr, vbm_pool0_size);
 
             /* Use VBMPool0 for main stream (1920x1080) */
             /* Calculate how many buffers fit in the pool */
@@ -2789,11 +2784,12 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
                 }
             }
 
-            vic_dev->active_buffer_count = buffers_in_pool;
-            pr_info("*** VIC: Configured %d buffers from VBMPool0 (paddr=0x%08x, size=%u) ***\n",
-                    buffers_in_pool, vbm_pool0_addr, vbm_pool0_size);
-        } else {
-            /* Fallback to reserved memory if file parsing fails */
+        vic_dev->active_buffer_count = buffers_in_pool;
+        pr_info("*** VIC: Configured %d buffers from VBMPool0 (paddr=0x%08x, size=%u) ***\n",
+                buffers_in_pool, vbm_pool0_addr, vbm_pool0_size);
+
+    } else {
+        /* Fallback to reserved memory if no VBM buffers available */
             pr_warn("*** CRITICAL: No VBM buffer addresses - using fallback addresses from reserved memory ***\n");
             pr_warn("*** vbm_buffer_addresses=%p, vbm_buffer_count=%d ***\n",
                    state->vbm_buffer_addresses, state->vbm_buffer_count);
@@ -2889,9 +2885,22 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         /* REMOVED: VIC CONTROL reset state write - was causing buffer count to be cleared */
         /* The VIC[0x0] sequence should happen AFTER writing VIC[0x300], not before */
 
+        /* Parse VBM buffer addresses from /tmp/alloc_manager_info BEFORE entering atomic context */
+        uint32_t vbm_pool0_addr = 0, vbm_pool0_size = 0;
+        uint32_t vbm_pool1_addr = 0, vbm_pool1_size = 0;
+
+        pr_info("*** VIC: Parsing VBM buffers from /tmp/alloc_manager_info (non-atomic context) ***\n");
+        if (parse_vbm_buffers_from_file(&vbm_pool0_addr, &vbm_pool0_size,
+                                         &vbm_pool1_addr, &vbm_pool1_size) == 0) {
+            pr_info("*** VIC: Successfully parsed VBM pools - Pool0: 0x%08x (%u bytes), Pool1: 0x%08x (%u bytes) ***\n",
+                    vbm_pool0_addr, vbm_pool0_size, vbm_pool1_addr, vbm_pool1_size);
+        } else {
+            pr_warn("*** VIC: Could not parse VBM file, will use fallback addresses ***\n");
+        }
+
         /* Binary Ninja EXACT: vic_pipo_mdma_enable($s0) */
         pr_info("*** CRITICAL: Calling vic_pipo_mdma_enable - required for VIC interrupts ***\n");
-        vic_pipo_mdma_enable(vic_dev);
+        vic_pipo_mdma_enable(vic_dev, vbm_pool0_addr, vbm_pool0_size, vbm_pool1_addr, vbm_pool1_size);
         pr_info("*** vic_pipo_mdma_enable completed - VIC MDMA should now generate interrupts! ***\n");
 
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
