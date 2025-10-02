@@ -36,6 +36,10 @@ static uint32_t g_vbm_pool1_addr = 0;
 static uint32_t g_vbm_pool1_size = 0;
 static int g_vbm_parsed = 0;
 
+/* Forward declaration */
+static int parse_vbm_buffers_from_file(uint32_t *vbm_pool0_addr, uint32_t *vbm_pool0_size,
+                                        uint32_t *vbm_pool1_addr, uint32_t *vbm_pool1_size);
+
 /* Parse and cache VBM buffer addresses - called from frame_channel_open() in non-atomic context */
 void vic_parse_and_cache_vbm_buffers(void)
 {
