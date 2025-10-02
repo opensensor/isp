@@ -43,19 +43,27 @@ static int parse_vbm_buffers_from_file(uint32_t *vbm_pool0_addr, uint32_t *vbm_p
 /* Parse and cache VBM buffer addresses - called from frame_channel_open() in non-atomic context */
 void vic_parse_and_cache_vbm_buffers(void)
 {
+    int retry;
+
     if (g_vbm_parsed) {
         pr_info("VBM: Already parsed, using cached values\n");
         return;
     }
 
-    pr_info("VBM: Parsing VBM buffers from /tmp/continuous_mem_info...\n");
-    if (parse_vbm_buffers_from_file(&g_vbm_pool0_addr, &g_vbm_pool0_size,
-                                     &g_vbm_pool1_addr, &g_vbm_pool1_size) == 0) {
-        g_vbm_parsed = 1;
-        pr_info("VBM: Successfully cached VBM pools\n");
-    } else {
-        pr_warn("VBM: Failed to parse VBM file\n");
+    /* Wait up to 10 seconds for libimp.so to populate the file */
+    pr_info("VBM: Waiting for libimp.so to populate /tmp/continuous_mem_info...\n");
+    for (retry = 0; retry < 100; retry++) {
+        if (parse_vbm_buffers_from_file(&g_vbm_pool0_addr, &g_vbm_pool0_size,
+                                         &g_vbm_pool1_addr, &g_vbm_pool1_size) == 0) {
+            g_vbm_parsed = 1;
+            pr_info("VBM: Successfully cached VBM pools after %d ms - Pool0: 0x%08x (%u bytes), Pool1: 0x%08x (%u bytes)\n",
+                    retry * 100, g_vbm_pool0_addr, g_vbm_pool0_size, g_vbm_pool1_addr, g_vbm_pool1_size);
+            return;
+        }
+        msleep(100);  /* Safe - we're in non-atomic context */
     }
+
+    pr_warn("VBM: Failed to parse VBM file after 10 seconds\n");
 }
 EXPORT_SYMBOL(vic_parse_and_cache_vbm_buffers);
 
