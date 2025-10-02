@@ -59,8 +59,8 @@ static int parse_vbm_buffers_from_file(uint32_t *vbm_pool0_addr, uint32_t *vbm_p
         return -ENOMEM;
     }
 
-    /* Read file content */
-    bytes_read = kernel_read(fp, buf, 8192, &pos);
+    /* Read file content - Linux 3.10 kernel_read signature: kernel_read(file, offset, buf, size) */
+    bytes_read = kernel_read(fp, pos, buf, 8192);
     filp_close(fp, NULL);
 
     if (bytes_read <= 0) {
