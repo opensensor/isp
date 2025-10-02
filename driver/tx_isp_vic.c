@@ -56,15 +56,23 @@ static int parse_vbm_buffers_from_file(uint32_t *vbm_pool0_addr, uint32_t *vbm_p
     *vbm_pool1_addr = 0;
     *vbm_pool1_size = 0;
 
-    /* Wait for /tmp/continuous_mem_info to be created by libimp.so (up to 10 seconds) */
+    /* Wait for /tmp/continuous_mem_info to be created AND have content (up to 10 seconds) */
     /* This file has text format with VBM pool information */
-    pr_info("VBM: Waiting for /tmp/continuous_mem_info to be created by libimp.so...\n");
+    pr_info("VBM: Waiting for /tmp/continuous_mem_info to have content from libimp.so...\n");
 
     for (retry_count = 0; retry_count < max_retries; retry_count++) {
         fp = filp_open("/tmp/continuous_mem_info", O_RDONLY, 0);
         if (!IS_ERR(fp)) {
-            pr_info("VBM: Found /tmp/continuous_mem_info after %d ms\n", retry_count * 100);
-            break;
+            /* File exists, check if it has content */
+            loff_t size = i_size_read(fp->f_path.dentry->d_inode);
+            if (size > 0) {
+                pr_info("VBM: Found /tmp/continuous_mem_info with %lld bytes after %d ms\n",
+                        size, retry_count * 100);
+                break;
+            }
+            /* File exists but is empty, close and retry */
+            filp_close(fp, NULL);
+            fp = ERR_PTR(-ENOENT);
         }
 
         /* Sleep 100ms between retries */
@@ -72,7 +80,7 @@ static int parse_vbm_buffers_from_file(uint32_t *vbm_pool0_addr, uint32_t *vbm_p
     }
 
     if (IS_ERR(fp)) {
-        pr_warn("VBM: Timeout waiting for /tmp/continuous_mem_info (waited %d seconds)\n",
+        pr_warn("VBM: Timeout waiting for /tmp/continuous_mem_info to have content (waited %d seconds)\n",
                 max_retries / 10);
         return -ENOENT;
     }
@@ -88,7 +96,7 @@ static int parse_vbm_buffers_from_file(uint32_t *vbm_pool0_addr, uint32_t *vbm_p
     bytes_read = kernel_read(fp, pos, buf, 8192);
     filp_close(fp, NULL);
 
-    pr_info("VBM: Read %zd bytes from /tmp/alloc_manager_info\n", bytes_read);
+    pr_info("VBM: Read %zd bytes from /tmp/continuous_mem_info\n", bytes_read);
 
     if (bytes_read <= 0) {
         pr_warn("VBM: Failed to read file content (bytes_read=%zd)\n", bytes_read);
