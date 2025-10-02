@@ -945,7 +945,7 @@ struct tx_isp_subdev_core_ops core_subdev_core_ops = {
 
 /* Core subdev video operations - GLOBAL to ensure proper accessibility */
 struct tx_isp_subdev_video_ops core_subdev_video_ops = {
-    .s_stream = NULL,  /* CRITICAL: Wire in the video streaming function */
+    .s_stream = ispcore_video_s_stream,  /* CRITICAL FIX: Wire in the core video streaming function */
     .link_stream = NULL,  /* CRITICAL FIX: Core subdev should NOT have link_stream to prevent infinite loop */
     .link_setup = ispcore_link_setup,    /* CRITICAL: Wire in the link setup function */
 };
@@ -2775,6 +2775,61 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                         pr_err("ispcore_core_ops_init: Second tisp_init failed: %d\n", ret);
                         return ret;
                     }
+                }
+
+                /* CRITICAL: Enable ISP core pipeline registers - EXACT Binary Ninja reference implementation */
+                /* This is what transforms error 0x200 interrupts into genuine frame done interrupts! */
+                if (isp_dev && isp_dev->core_regs) {
+                    void __iomem *core = isp_dev->core_regs;
+
+                    pr_info("*** ISP CORE: Configuring pipeline registers to enable frame processing ***\n");
+
+                    /* Clear any pending interrupts first */
+                    u32 pend_legacy = readl(core + 0xb4);
+                    u32 pend_new = readl(core + 0x98b4);
+                    if (pend_legacy) {
+                        writel(pend_legacy, core + 0xb8);   /* Clear legacy pending */
+                        pr_info("*** ISP CORE: Cleared legacy pending interrupts: 0x%x ***\n", pend_legacy);
+                    }
+                    if (pend_new) {
+                        writel(pend_new, core + 0x98b8);    /* Clear new pending */
+                        pr_info("*** ISP CORE: Cleared new pending interrupts: 0x%x ***\n", pend_new);
+                    }
+
+                    /* CRITICAL: Enable ISP pipeline first - this connects VIC to ISP core */
+                    /* Binary Ninja: system_reg_write(0x800, 1) - Enable ISP pipeline */
+                    writel(1, core + 0x800);
+                    pr_info("*** ISP CORE: Pipeline ENABLED (0x800 = 1) ***\n");
+
+                    /* Binary Ninja: system_reg_write(0x804, routing) - Configure ISP routing */
+                    writel(0x1c, core + 0x804);         /* Normal mode routing */
+                    pr_info("*** ISP CORE: Routing configured (0x804 = 0x1c) ***\n");
+
+                    /* Binary Ninja: system_reg_write(0x1c, 8) - Set ISP control mode */
+                    writel(8, core + 0x1c);
+                    pr_info("*** ISP CORE: Control mode set (0x1c = 8) ***\n");
+
+                    /* CRITICAL: Enable interrupt generation at hardware level */
+                    /* Binary Ninja: system_reg_write(0x30, 0xffffffff) */
+                    writel(0xffffffff, core + 0x30);    /* Enable all interrupt sources */
+                    pr_info("*** ISP CORE: Interrupt sources enabled (0x30 = 0xffffffff) ***\n");
+
+                    /* Binary Ninja: system_reg_write(0x10, 0x133 or 0x33f) */
+                    writel(0x133, core + 0x10);         /* Enable specific interrupt types */
+                    pr_info("*** ISP CORE: Interrupt types enabled (0x10 = 0x133) ***\n");
+
+                    /* CRITICAL FIX: Enable frame sync + essential interrupts, but MASK error interrupts */
+                    /* This allows ISP interrupts to work while preventing error interrupt storms */
+                    writel(0x3FFF, core + 0xb0);        /* Legacy enable - all interrupt sources */
+                    writel(0x1000, core + 0xbc);        /* Legacy unmask - ONLY frame sync initially */
+                    writel(0x3FFF, core + 0x98b0);      /* New enable - all interrupt sources */
+                    writel(0x1000, core + 0x98bc);      /* New unmask - ONLY frame sync initially */
+                    wmb();
+
+                    pr_info("*** ISP CORE: Interrupt masks configured (0xbc/0x98bc = 0x1000 - frame sync only) ***\n");
+                    pr_info("*** ISP CORE: Pipeline configuration COMPLETE - VIC->ISP pipeline should now generate frame done interrupts! ***\n");
+                } else {
+                    pr_warn("*** ISP CORE: Cannot configure pipeline - isp_regs not available ***\n");
                 }
 
                 /* CRITICAL FIX: Don't reset VIC state if it's already streaming (state 4) */

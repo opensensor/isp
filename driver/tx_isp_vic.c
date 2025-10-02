@@ -416,9 +416,36 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             /* Binary Ninja: Current VIC buffer address from hardware */
             u32 current_buffer = readl(vic_base + 0x380);  /* *($a3_1 + 0x380) */
 
+            /* CRITICAL FIX: Validate list head before walking it */
+            if (!buffer_list || !buffer_list->next || !buffer_list->prev) {
+                pr_err("*** VIC FRAME DONE: Corrupted buffer_list, skipping buffer walk ***\n");
+                goto skip_buffer_walk;
+            }
+
+            /* CRITICAL FIX: Validate list pointers are in kernel memory */
+            if ((unsigned long)buffer_list->next < 0x80000000 ||
+                (unsigned long)buffer_list->next >= 0xfffff000) {
+                pr_err("*** VIC FRAME DONE: buffer_list->next=0x%p is invalid, skipping buffer walk ***\n",
+                       buffer_list->next);
+                goto skip_buffer_walk;
+            }
+
             /* Binary Ninja: for (; i_1 != arg1 + 0x204; i_1 = *i_1) */
             struct list_head *pos;
+            int loop_safety = 0;  /* CRITICAL: Prevent infinite loops from corrupted list */
             list_for_each(pos, buffer_list) {
+                /* CRITICAL FIX: Prevent infinite loop in IRQ handler */
+                if (++loop_safety > 100) {
+                    pr_err("*** VIC FRAME DONE: Infinite loop detected in buffer list (>100 iterations), breaking ***\n");
+                    break;
+                }
+
+                /* CRITICAL FIX: Validate pos before dereferencing */
+                if (!pos || (unsigned long)pos < 0x80000000 || (unsigned long)pos >= 0xfffff000) {
+                    pr_err("*** VIC FRAME DONE: Corrupted list entry pos=0x%p, breaking loop ***\n", pos);
+                    break;
+                }
+
                 struct vic_buffer_entry *entry = list_entry(pos, struct vic_buffer_entry, list);
 
                 /* Binary Ninja: $v1_1 += 0 u< $v0 ? 1 : 0 */
@@ -434,6 +461,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 }
             }
 
+skip_buffer_walk:
             /* Determine buffer count (slots) and current index from hardware ring */
             u32 slots[5] = {0};
             u32 count = vic_dev->active_buffer_count;
@@ -569,8 +597,10 @@ label_123f4:
     }
 
     /* Signal frame completion for waiting processes */
+    pr_info("*** VIC FRAME DONE: About to call complete(), vic_dev=%p, &frame_complete=%p ***\n",
+            vic_dev, &vic_dev->frame_complete);
     complete(&vic_dev->frame_complete);
-    pr_info("*** VIC FRAME DONE: Frame completion signaled ***\n");
+    pr_info("*** VIC FRAME DONE: Frame completion signaled successfully ***\n");
 
     /* Post-frame: keep ISR minimal; do not touch IMR/IMCR here. Ack is handled in top-level ISR. */
 
@@ -638,13 +668,18 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
                     isp_dev->dma_addr);
 
             /* Signal frame completion */
+            pr_info("*** VIC MDMA IRQ: About to call complete() #1, vic_dev=%p, &frame_complete=%p ***\n",
+                    vic_dev, &vic_dev->frame_complete);
             complete(&vic_dev->frame_complete);
         } else {
             pr_info("*** VIC MDMA IRQ: No ISP DMA buffer available for sync ***\n");
         }
 
         /* Binary Ninja: return private_complete(arg1 + 0x148) */
+        pr_info("*** VIC MDMA IRQ: About to call complete() #2, vic_dev=%p, &frame_complete=%p ***\n",
+                vic_dev, &vic_dev->frame_complete);
         complete(&vic_dev->frame_complete);
+        pr_info("*** VIC MDMA IRQ: complete() #2 returned successfully ***\n");
         return 0;
     }
 
@@ -1762,12 +1797,10 @@ int vic_mdma_enable(struct tx_isp_vic_device *vic_dev, int channel, int dual_cha
 
     vic_regs = vic_dev->vic_regs;
 
-    /* CRITICAL SAFETY: Validate width/height fields before access (offset 0xdc/0xe0) */
-    if (!virt_addr_valid(&vic_dev->width) || !virt_addr_valid(&vic_dev->height)) {
-        pr_err("vic_mdma_enable: Invalid width/height field addresses\n");
-        return -EINVAL;
-    }
-
+    /* CRITICAL FIX: Direct access to width/height - DO NOT use virt_addr_valid(&vic_dev->width)! */
+    /* If vic_dev is NULL, &vic_dev->width evaluates to 0xdc, causing virt_addr_valid(0xdc) */
+    /* which tries to dereference 0xdc as a pointer, causing BadVA 0xdc crash! */
+    /* The vic_dev pointer itself was already validated above, so direct access is safe */
     width = vic_dev->width;   /* Binary Ninja: *(arg1 + 0xdc) */
     height = vic_dev->height; /* Binary Ninja: *(arg1 + 0xe0) */
 
@@ -3445,6 +3478,17 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     private_raw_mutex_init(&vic_dev->state_lock, "&vsd->state_lock", 0);
 
     /* Binary Ninja: private_init_completion($v0 + 0x148) */
+    pr_info("*** VIC PROBE: STRUCT OFFSET CHECK ***\n");
+    pr_info("*** offsetof(width) = %zu (expected 0xdc = %d) ***\n",
+            offsetof(struct tx_isp_vic_device, width), 0xdc);
+    pr_info("*** offsetof(height) = %zu (expected 0xe0 = %d) ***\n",
+            offsetof(struct tx_isp_vic_device, height), 0xe0);
+    pr_info("*** offsetof(frame_complete) = %zu (expected 0x148 = %d) ***\n",
+            offsetof(struct tx_isp_vic_device, frame_complete), 0x148);
+    pr_info("*** vic_dev=%p, &vic_dev->frame_complete=%p (offset=%zu) ***\n",
+            vic_dev, &vic_dev->frame_complete,
+            (char*)&vic_dev->frame_complete - (char*)vic_dev);
+
     private_init_completion(&vic_dev->frame_complete);
 
     /* Binary Ninja: *($v0 + 0x128) = 1 */

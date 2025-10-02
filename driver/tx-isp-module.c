@@ -1647,7 +1647,7 @@ void tx_isp_enable_irq(void *arg1)
 
     /* CRITICAL FIX: Restore ISP Control interrupt registers after IRQ enable */
     /* This ensures hardware interrupt generation works even after register resets */
-    restore_isp_control_interrupt_registers_after_reset();
+    // restore_isp_control_interrupt_registers_after_reset();
 }
 
 
@@ -1981,207 +1981,12 @@ irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
                 } while (0);
             } else {
                 printk(KERN_ALERT "*** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***\n");
-                /* Fallback path: if control limit error is set, advance frame processing like continuous-interrupts */
+                /* CRITICAL FIX: Binary Ninja MCP shows reference driver does NOT treat control limit as frame done */
+                /* Control limit error (bit 21) is a separate error condition that should only be logged */
                 if ((v1_7 & 0x200000) != 0) {
-                    printk(KERN_ALERT "*** VIC FALLBACK: control-limit set without FD; invoking vic_framedone_irq_function and FS wakeups ***\n");
-                    /* Increment counters to keep /proc in sync */
-                    vic_dev->frame_count++;
-                    if (isp_dev && isp_dev->core_dev)
-                        isp_dev->core_dev->frame_count++;
-
-                    /* Call frame-done handler to rotate buffers and keep DMA moving */
-                    vic_framedone_irq_function(vic_dev);
-
-                    /* Proactively rotate VIC MDMA ring by one slot to simulate consumption */
-                    do {
-                        void __iomem *vrb = vic_dev->vic_regs;
-                        void __iomem *vcb = vic_dev->vic_regs_control;
-                        u32 bufs[5];
-                        int i, idx = -1;
-                        u32 cur = readl(vrb + 0x380);
-                        for (i = 0; i < 5; i++) {
-                            bufs[i] = readl(vrb + (0x318 + i * 4));
-                            if (bufs[i] == cur) idx = i;
-                        }
-                        if (idx >= 0) {
-                            u32 rot[5];
-                            for (i = 0; i < 5; i++) rot[i] = bufs[(idx + 1 + i) % 5];
-                            for (i = 0; i < 5; i++) {
-                                u32 off = 0x318 + i * 4;
-                                writel(rot[i], vrb + off);
-                                if (vcb) writel(rot[i], vcb + off);
-                            }
-                            /* Also set count and index nibble to next slot, latched via CONFIG->RUN */
-                            {
-                                u32 count = vic_dev->active_buffer_count ? vic_dev->active_buffer_count : 5;
-                                if (count > 5) count = 5;
-                                u32 next_idx = (idx + 1) % count;
-                                /* CONFIG */
-                                writel(0x2, vrb + 0x0);
-                                if (vcb) writel(0x2, vcb + 0x0);
-                                wmb();
-                                /* Program stream control */
-                                u32 stream_ctrl = (count << 16) | 0x80000020;
-                                writel(stream_ctrl, vrb + 0x300);
-                                if (vcb) writel(stream_ctrl, vcb + 0x300);
-                                u32 reg2 = readl(vrb + 0x300);
-                                reg2 = (reg2 & 0xfff0ffff) | ((next_idx & 0xF) << 16);
-                                writel(reg2, vrb + 0x300);
-                                if (vcb) writel(reg2, vcb + 0x300);
-                                /* RUN */
-                                writel(0x1, vrb + 0x0);
-                                if (vcb) writel(0x1, vcb + 0x0);
-                                wmb();
-                                printk(KERN_ALERT "*** VIC RING ROTATE: current=0x%x idx=%d -> next_idx=%u, wrote 0x300=0x%x ***\n", cur, idx, next_idx, reg2);
-                            }
-                        }
-                    } while (0);
-
-                    /* Notify core and frame channels to avoid pipeline stall */
-                    do {
-                        extern struct frame_channel_device frame_channels[];
-                        extern int num_channels;
-                        int i;
-
-                        isp_frame_done_wakeup();
-                        for (i = 0; i < num_channels; i++) {
-                            struct frame_channel_device *fcd = &frame_channels[i];
-                            unsigned long flags_local;
-                            if (!fcd || !fcd->state.streaming)
-                                continue;
-                            spin_lock_irqsave(&fcd->state.buffer_lock, flags_local);
-                            if (!fcd->state.frame_ready) {
-                                fcd->state.frame_ready = true;
-                                wake_up_interruptible(&fcd->state.frame_wait);
-                                printk(KERN_ALERT "*** VIC FALLBACK: frame_ready signaled to frame channel %d ***\n", i);
-                            }
-                            spin_unlock_irqrestore(&fcd->state.buffer_lock, flags_local);
-
-                        /* Escalate recovery when repeated stalls occur */
-                        nofd_limit_stall_count++;
-                        if (nofd_limit_stall_count >= 3) {
-                            printk(KERN_ALERT "*** VIC RECOVERY: 3 consecutive (no FD + control-limit) stalls; resetting VIC and refreshing MDMA ring ***\n");
-                            {
-                                void __iomem *vr2 = vic_dev->vic_regs;
-                                void __iomem *vc2 = vic_dev->vic_regs_control;
-                                u32 dims2 = readl(vr2 + 0x304);
-                                u32 stride_y2 = readl(vr2 + 0x310);
-                                u32 stride_uv2 = readl(vr2 + 0x314);
-                                u32 height2 = dims2 & 0xFFFF;
-                                u32 frame_size2 = stride_y2 * (height2 ? height2 : 1);
-                                u32 count2 = vic_dev->active_buffer_count ? vic_dev->active_buffer_count : 5;
-                                u32 new_ctrl2 = (readl(vr2 + 0x300) & 0x0000ffff) | (count2 << 16);
-                                unsigned int tmo = 10000;
-
-                                /* Reset */
-                                writel(4, vr2 + 0x0);
-                                while ((readl(vr2 + 0x0) != 0) && --tmo) udelay(1);
-                                if (vc2) {
-                                    writel(4, vc2 + 0x0);
-                                    tmo = 10000;
-                                    while ((readl(vc2 + 0x0) != 0) && --tmo) udelay(1);
-                                }
-
-                                /* Clear pending */
-                                writel(0xFFFFFFFF, vr2 + 0x1f0); writel(0xFFFFFFFF, vr2 + 0x1f4);
-                                if (vc2) { writel(0xFFFFFFFF, vc2 + 0x1f0); writel(0xFFFFFFFF, vc2 + 0x1f4); }
-
-                                /* Config */
-                                writel(new_ctrl2, vr2 + 0x300);
-                                if (vc2) writel(new_ctrl2, vc2 + 0x300);
-                                wmb();
-                                writel(2, vr2 + 0x0);
-                                if (vc2) writel(2, vc2 + 0x0);
-                                wmb();
-
-                                /* MDMA knobs */
-                                writel(1, vr2 + 0x308);
-                                writel(dims2, vr2 + 0x304); writel(stride_y2, vr2 + 0x310); writel(stride_uv2, vr2 + 0x314);
-                                if (vc2) {
-                                    writel(1, vc2 + 0x308);
-                                    writel(dims2, vc2 + 0x304); writel(stride_y2, vc2 + 0x310); writel(stride_uv2, vc2 + 0x314);
-                                }
-
-                                /* Refresh buffer addresses (prefer VBM, fallback to rmem) */
-                                do {
-                                    extern struct frame_channel_device frame_channels[];
-                                    extern int num_channels;
-                                    int configured2 = 0;
-                                    if (frame_channels && num_channels > 0) {
-                                        struct tx_isp_channel_state *state2 = &frame_channels[0].state;
-                                        int i2;
-                                        if (state2->vbm_buffer_addresses && state2->vbm_buffer_count > 0) {
-                                            for (i2 = 0; i2 < state2->vbm_buffer_count && i2 < 5; i2++) {
-                                                u32 buf2 = state2->vbm_buffer_addresses[i2];
-                                                u32 off2 = 0x318 + (i2 * 4);
-                                                if (buf2) {
-                                                    writel(buf2, vr2 + off2);
-                                                    if (vc2) writel(buf2, vc2 + off2);
-                                                    configured2++;
-                                                }
-                                            }
-                                        } else {
-                                            u32 base2 = 0x06300000;
-                                            int i2;
-                                            for (i2 = 0; i2 < 5; i2++) {
-                                                u32 buf2 = base2 + (i2 * frame_size2);
-                                                u32 off2 = 0x318 + (i2 * 4);
-                                                writel(buf2, vr2 + off2);
-                                                if (vc2) writel(buf2, vc2 + off2);
-                                                configured2++;
-                                            }
-                                        }
-                                        if (configured2) vic_dev->active_buffer_count = configured2;
-                                    }
-                                } while (0);
-
-                                /* Restore interrupt masks/enables like working reference */
-                                writel(0xFFFFFFFE, vr2 + 0x1e8); /* MainMask: unmask FD */
-                                if (vc2) writel(0xFFFFFFFE, vc2 + 0x1e8);
-                                {
-                                    u32 en0b = readl(vr2 + 0x1e0) | 0x1;
-                                    /* skip 0x1e0 (status/W1C) */  /* was: writel(en0b, vr2 + 0x1e0); */
-                                    /* skip 0x1e4 group enable (status/W1C) */  /* was: writel(0x0000000F, vr2 + 0x1e4); */
-                                    if (vc2) {
-                                        u32 en2b = readl(vc2 + 0x1e0) | 0x1;
-                                        /* skip 0x1e0 (status/W1C) */  /* was: writel(en2b, vc2 + 0x1e0); */
-                                        /* skip 0x1e4 group enable (status/W1C) */  /* was: writel(0x0000000F, vc2 + 0x1e4); */
-                                    }
-                                }
-                                wmb();
-
-                                /* Clear ISP core latched VIC status bits to allow next HW IRQ and restore core gates */
-                                do {
-                                    struct tx_isp_dev *ispd = ourISPdev;
-                                    void __iomem *core = NULL;
-                                    if (ispd && ispd->core_dev && ispd->core_dev->core_regs)
-                                        core = ispd->core_dev->core_regs;
-                                    else if (ispd && ispd->core_regs)
-                                        core = ispd->core_regs;
-                                    if (core) {
-                                        /* W1C clear */
-                                        writel(0x1, core + 0x9a70);
-                                        writel(0x1, core + 0x9a7c);
-                                        /* Re-apply core gate routing observed in working sequence */
-                                        writel(0x00000001, core + 0x9ac0);
-                                        writel(0x00000000, core + 0x9ac8);
-                                        wmb();
-                                    }
-                                } while (0);
-
-                                /* Route interrupts and RUN */
-                                writel(0x07800438, vr2 + 0x04); writel(0xb5742249, vr2 + 0x0c);
-                                if (vc2) { writel(0x07800438, vc2 + 0x04); writel(0xb5742249, vc2 + 0x0c); }
-                                wmb();
-                                writel(1, vr2 + 0x0);
-                                if (vc2) writel(1, vc2 + 0x0);
-                                wmb();
-                            }
-                            nofd_limit_stall_count = 0;
-                        }
-
-                        }
-                    } while (0);
+                    printk(KERN_ALERT "*** VIC ERROR: control limit error (bit 21) - NOT calling vic_framedone_irq_function ***\n");
+                    /* Reference driver only increments error counter and prints message */
+                    /* Do NOT call vic_framedone_irq_function() or fake frame completion */
                 }
             }
 
@@ -3800,17 +3605,19 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
 
         /* Binary Ninja DQBUF: Wait for frame completion with proper state checking */
-        pr_info("*** Channel %d: DQBUF waiting for frame completion (timeout=200ms) ***\n", channel);
+        /* CRITICAL FIX: Use shorter timeout to prevent long hangs during debugging */
+        pr_info("*** Channel %d: DQBUF waiting for frame completion (timeout=100ms) ***\n", channel);
         ret = wait_event_interruptible_timeout(state->frame_wait,
                                              state->frame_ready || !state->streaming,
-                                             msecs_to_jiffies(200)); // 200ms timeout like reference
+                                             msecs_to_jiffies(100)); // 100ms timeout for faster debugging
         pr_info("*** Channel %d: DQBUF wait returned %d ***\n", channel, ret);
 
         if (ret == 0) {
-            pr_info("*** Channel %d: DQBUF timeout, generating frame ***\n", channel);
-            spin_lock_irqsave(&state->buffer_lock, flags);
-            state->frame_ready = true;
-            spin_unlock_irqrestore(&state->buffer_lock, flags);
+            pr_warn("*** Channel %d: DQBUF timeout - NO FRAMES FROM VIC! ***\n", channel);
+            pr_warn("*** This means VIC is not generating frame done interrupts ***\n");
+            pr_warn("*** Check: 1) CSI/sensor streaming 2) VIC interrupts enabled 3) Control limit errors ***\n");
+            /* CRITICAL FIX: Return error instead of faking a frame */
+            return -EAGAIN;
         } else if (ret < 0) {
             pr_info("*** Channel %d: DQBUF interrupted: %d ***\n", channel, ret);
             return ret;
@@ -3892,20 +3699,20 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         wait_result = state->frame_ready ? 1 : 0;
                     } else {
                         /* Wait for frame_ready which is set by VIC interrupts */
-                        pr_info("*** Channel %d: DQBUF VBM waiting for frame_ready (timeout=200ms) ***\n", channel);
+                        /* CRITICAL FIX: Use shorter timeout to prevent long hangs */
+                        pr_info("*** Channel %d: DQBUF VBM waiting for frame_ready (timeout=100ms) ***\n", channel);
                         wait_result = wait_event_interruptible_timeout(state->frame_wait,
-                            state->frame_ready, msecs_to_jiffies(200));
+                            state->frame_ready, msecs_to_jiffies(100));
                     }
 
                     pr_info("*** Channel %d: DQBUF VBM wait returned %d ***\n", channel, wait_result);
 
                     if (wait_result <= 0) {
-                        pr_warn("*** Channel %d: DQBUF VBM timeout - no frame_ready signal ***\n", channel);
-                        pr_warn("*** Channel %d: BUFFER1 ERROR: VIC interrupts not setting frame_ready ***\n", channel);
-
-                        /* For VBM mode, we can still return a buffer even on timeout */
-                        pr_info("*** Channel %d: DQBUF VBM RECOVERY: Returning buffer anyway for VBM compatibility ***\n", channel);
-                        /* Continue with VBM buffer return - don't fail */
+                        pr_err("*** Channel %d: DQBUF VBM timeout - NO FRAMES! ***\n", channel);
+                        pr_err("*** VIC is not generating frame done interrupts ***\n");
+                        pr_err("*** Possible causes: CSI not streaming, sensor not configured, control limit error ***\n");
+                        /* CRITICAL FIX: Return error instead of faking success */
+                        return -EAGAIN;
                     }
 
                     /* Skip the completed_buffers check for VBM mode */
@@ -3925,16 +3732,18 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         wait_result = 0; // Timeout
                     } else {
                         /* Wait for buffer completion like reference driver */
-                        pr_info("*** Channel %d: DQBUF waiting for buffer completion (timeout=200ms) ***\n", channel);
+                        /* CRITICAL FIX: Use shorter timeout to prevent long hangs */
+                        pr_info("*** Channel %d: DQBUF waiting for buffer completion (timeout=100ms) ***\n", channel);
                         wait_result = wait_event_interruptible_timeout(state->frame_wait,
-                            !list_empty(&state->completed_buffers), msecs_to_jiffies(200));
+                            !list_empty(&state->completed_buffers), msecs_to_jiffies(100));
                     }
 
                     pr_info("*** Channel %d: DQBUF wait returned %d ***\n", channel, wait_result);
 
                     if (wait_result <= 0) {
-                        pr_warn("*** Channel %d: DQBUF timeout or interrupted - no buffer completion detected ***\n", channel);
-                        pr_warn("*** Channel %d: BUFFER1 ERROR: Buffer completion mechanism not working properly ***\n", channel);
+                        pr_err("*** Channel %d: DQBUF timeout - NO BUFFER COMPLETION! ***\n", channel);
+                        pr_err("*** VIC frame done interrupts are not completing buffers ***\n");
+                        pr_err("*** Check VIC interrupt handler and buffer management ***\n");
                         return wait_result == 0 ? -EAGAIN : wait_result;
                     }
 
