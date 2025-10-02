@@ -2619,22 +2619,43 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         pr_info("*** VIC BUFFER ACCESS: Found %d VBM buffer addresses at %p ***\n",
                 state->vbm_buffer_count, state->vbm_buffer_addresses);
 
-        for (i = 0; i < state->vbm_buffer_count && i < 2; i++) {
-            u32 buffer_addr = state->vbm_buffer_addresses[i];
-            u32 reg_offset = 0x318 + (i * 4);  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
+        /* CRITICAL FIX: If only 1 buffer, duplicate it for ping-pong operation */
+        if (state->vbm_buffer_count == 1) {
+            u32 buffer_addr = state->vbm_buffer_addresses[0];
+            pr_info("*** VIC BUFFER FIX: Only 1 VBM buffer (0x%x) - duplicating for ping-pong ***\n", buffer_addr);
 
-            if (buffer_addr != 0) {
-                writel(buffer_addr, vic_base + reg_offset);
-                if (vic_ctrl)
-                    writel(buffer_addr, vic_ctrl + reg_offset);
-                wmb();
-                configured_count++;
-                pr_info("*** VIC BUFFER %d: Wrote VBM address 0x%x to reg 0x%x ***\n",
-                        i, buffer_addr, reg_offset);
-            } else {
-                pr_warn("*** VIC BUFFER %d: No VBM address available (0x0) ***\n", i);
+            /* Write same buffer address to both slots */
+            writel(buffer_addr, vic_base + 0x318);
+            writel(buffer_addr, vic_base + 0x31c);
+            if (vic_ctrl) {
+                writel(buffer_addr, vic_ctrl + 0x318);
+                writel(buffer_addr, vic_ctrl + 0x31c);
+            }
+            wmb();
+
+            configured_count = 2;  /* Report 2 buffers to hardware */
+            pr_info("*** VIC BUFFER 0: Wrote VBM address 0x%x to reg 0x318 ***\n", buffer_addr);
+            pr_info("*** VIC BUFFER 1: Wrote VBM address 0x%x to reg 0x31c (DUPLICATE) ***\n", buffer_addr);
+        } else {
+            /* Normal path: 2 or more buffers */
+            for (i = 0; i < state->vbm_buffer_count && i < 2; i++) {
+                u32 buffer_addr = state->vbm_buffer_addresses[i];
+                u32 reg_offset = 0x318 + (i * 4);  /* 0x318, 0x31c */
+
+                if (buffer_addr != 0) {
+                    writel(buffer_addr, vic_base + reg_offset);
+                    if (vic_ctrl)
+                        writel(buffer_addr, vic_ctrl + reg_offset);
+                    wmb();
+                    configured_count++;
+                    pr_info("*** VIC BUFFER %d: Wrote VBM address 0x%x to reg 0x%x ***\n",
+                            i, buffer_addr, reg_offset);
+                } else {
+                    pr_warn("*** VIC BUFFER %d: No VBM address available (0x0) ***\n", i);
+                }
             }
         }
+
         if (configured_count == 0) configured_count = 1;  /* Ensure at least 1 buffer */
         if (configured_count > 2) configured_count = 2;    /* Cap ring to 2 buffers */
         vic_dev->active_buffer_count = configured_count;
@@ -2664,6 +2685,28 @@ static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         }
         vic_dev->active_buffer_count = 2;
         pr_info("*** CRITICAL: VIC fallback buffer addresses configured (count=2) - hardware can now generate interrupts! ***\n");
+    }
+
+    /* CRITICAL VERIFICATION: Ensure CONTROL bank has buffer addresses */
+    if (vic_ctrl) {
+        u32 ctrl_buf0 = readl(vic_ctrl + 0x318);
+        u32 ctrl_buf1 = readl(vic_ctrl + 0x31c);
+        u32 ctrl_mdma = readl(vic_ctrl + 0x308);
+        u32 ctrl_dim = readl(vic_ctrl + 0x304);
+
+        pr_info("*** VIC PIPO MDMA: CONTROL bank buffer verification ***\n");
+        pr_info("  CONTROL [0x308] MDMA enable = 0x%08x (should be 0x1)\n", ctrl_mdma);
+        pr_info("  CONTROL [0x304] dimensions = 0x%08x\n", ctrl_dim);
+        pr_info("  CONTROL [0x318] buffer 0 = 0x%08x\n", ctrl_buf0);
+        pr_info("  CONTROL [0x31c] buffer 1 = 0x%08x\n", ctrl_buf1);
+
+        if (ctrl_buf0 == 0 && ctrl_buf1 == 0) {
+            pr_err("*** CRITICAL: CONTROL bank buffers are 0 after write! ***\n");
+            pr_err("*** This will prevent VIC from generating interrupts! ***\n");
+        }
+        if (ctrl_mdma == 0) {
+            pr_err("*** CRITICAL: CONTROL bank MDMA is disabled! ***\n");
+        }
     }
 
     pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - VIC should now generate interrupts! ***\n");
@@ -2963,15 +3006,46 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Clear pending (if mapped similarly, W1C) */
                 writel(0xFFFFFFFF, vc + 0x1f0);
                 writel(0xFFFFFFFF, vc + 0x1f4);
+
+                /* CRITICAL FIX: Enable interrupt mask on CONTROL bank */
+                /* This is REQUIRED for VIC to generate frame done interrupts! */
+                writel(0xFFDFFFFE, vc + 0x1e8);  /* Enable frame-done interrupts */
+                wmb();
+                pr_info("*** VIC CONTROL BANK: Enabled interrupt mask 0x1e8=0xFFDFFFFE ***\n");
+
                 /* Route/control asserts at CONTROL bank -- SKIPPED to match good-things */
                 /* writel(0x000002d0, vc + 0x100); */
                 /* writel(0x00000630, vc + 0x14);  */
                 /* writel(0xb5742249, vc + 0x0c);  */
-                /* writel(0xFFDFFFFE, vc + 0x1e8); */
                 /* writel(0xFFFFFFFF, vc + 0x30c); */
                 wmb();
                 pr_info("*** VIC VERIFY (CONTROL): [0x0]=0x%08x [0x4]=0x%08x [0x0c]=0x%08x [0x100]=0x%08x [0x14]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (MainMask=0xFFFFFFFE)***\n",
                         readl(vc + 0x0), readl(vc + 0x4), readl(vc + 0x0c), readl(vc + 0x100), readl(vc + 0x14), readl(vc + 0x300), readl(vc + 0x30c), readl(vc + 0x1e0), readl(vc + 0x1e4), readl(vc + 0x1e8), readl(vc + 0x1ec));
+
+                /* CRITICAL VERIFICATION: Check CONTROL bank is properly configured */
+                u32 ctrl_mask = readl(vc + 0x1e8);
+                u32 ctrl_buf0 = readl(vc + 0x318);
+                u32 ctrl_buf1 = readl(vc + 0x31c);
+                u32 ctrl_reg = readl(vc + 0x300);
+
+                pr_info("*** VIC CONTROL BANK VERIFICATION ***\n");
+                pr_info("  Interrupt Mask [0x1e8] = 0x%08x (should be 0xFFDFFFFE)\n", ctrl_mask);
+                pr_info("  Buffer 0 [0x318] = 0x%08x (should be non-zero)\n", ctrl_buf0);
+                pr_info("  Buffer 1 [0x31c] = 0x%08x (should be non-zero)\n", ctrl_buf1);
+                pr_info("  Control [0x300] = 0x%08x (should be 0x80020020 or similar)\n", ctrl_reg);
+
+                if (ctrl_mask == 0) {
+                    pr_err("*** CRITICAL ERROR: CONTROL bank interrupt mask is 0! ***\n");
+                    pr_err("*** VIC will NOT generate interrupts! ***\n");
+                }
+                if (ctrl_buf0 == 0 && ctrl_buf1 == 0) {
+                    pr_err("*** CRITICAL ERROR: CONTROL bank has no buffer addresses! ***\n");
+                    pr_err("*** VIC will NOT perform DMA! ***\n");
+                }
+                if (ctrl_reg == 0) {
+                    pr_err("*** CRITICAL ERROR: CONTROL bank control register is 0! ***\n");
+                    pr_err("*** VIC is DISABLED! ***\n");
+                }
             }
 
                 /* Read-back verification of buffer/control registers in BOTH banks */

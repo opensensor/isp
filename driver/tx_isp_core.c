@@ -945,7 +945,7 @@ struct tx_isp_subdev_core_ops core_subdev_core_ops = {
 
 /* Core subdev video operations - GLOBAL to ensure proper accessibility */
 struct tx_isp_subdev_video_ops core_subdev_video_ops = {
-    .s_stream = ispcore_video_s_stream,  /* CRITICAL FIX: Wire in the core video streaming function */
+    .s_stream = NULL,  /* CRITICAL: Wire in the video streaming function */
     .link_stream = NULL,  /* CRITICAL FIX: Core subdev should NOT have link_stream to prevent infinite loop */
     .link_setup = ispcore_link_setup,    /* CRITICAL: Wire in the link setup function */
 };
@@ -2719,6 +2719,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                     pr_info("*** ispcore_core_ops_init: VIC already streaming (state 4) - initializing during streaming ***");
                 } else {
                     pr_info("*** ispcore_core_ops_init: VIC in ready state (%d) - normal initialization ***", vic_state);
+                   	ispcore_video_s_stream(sd, 1);
                 }
 
                 pr_info("*** ispcore_core_ops_init: VIC state check passed, proceeding with initialization ***");
