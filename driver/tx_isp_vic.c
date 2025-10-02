@@ -39,16 +39,31 @@ static int parse_vbm_buffers_from_file(uint32_t *vbm_pool0_addr, uint32_t *vbm_p
     ssize_t bytes_read;
     char *line, *next_line;
     int found_pool0 = 0, found_pool1 = 0;
+    int retry_count = 0;
+    int max_retries = 100;  /* 100 * 100ms = 10 seconds */
 
     *vbm_pool0_addr = 0;
     *vbm_pool0_size = 0;
     *vbm_pool1_addr = 0;
     *vbm_pool1_size = 0;
 
-    /* Open /tmp/alloc_manager_info created by libimp.so */
-    fp = filp_open("/tmp/alloc_manager_info", O_RDONLY, 0);
+    /* Wait for /tmp/alloc_manager_info to be created by libimp.so (up to 10 seconds) */
+    pr_info("VBM: Waiting for /tmp/alloc_manager_info to be created by libimp.so...\n");
+
+    for (retry_count = 0; retry_count < max_retries; retry_count++) {
+        fp = filp_open("/tmp/alloc_manager_info", O_RDONLY, 0);
+        if (!IS_ERR(fp)) {
+            pr_info("VBM: Found /tmp/alloc_manager_info after %d ms\n", retry_count * 100);
+            break;
+        }
+
+        /* Sleep 100ms between retries */
+        msleep(100);
+    }
+
     if (IS_ERR(fp)) {
-        pr_debug("VBM: Cannot open /tmp/alloc_manager_info (libimp.so may not have started yet)\n");
+        pr_warn("VBM: Timeout waiting for /tmp/alloc_manager_info (waited %d seconds)\n",
+                max_retries / 10);
         return -ENOENT;
     }
 
