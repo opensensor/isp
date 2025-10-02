@@ -310,14 +310,17 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
         }
 
         pr_info("csi_core_ops_init: sd=%p, csi_dev=%p, enable=%d\n", sd, csi_dev, enable);
+        pr_info("*** csi_core_ops_init: CSI state=%d (need >= 2 for init) ***\n", csi_dev->state);
         result = 0xffffffea;
 
         /* Binary Ninja: if ($s0_1 != 0 && $s0_1 u< 0xfffff001) */
         if (csi_dev != NULL && (unsigned long)csi_dev < 0xfffff001) {
             result = 0;
+            pr_info("*** csi_core_ops_init: CSI device valid, checking state ***\n");
 
             /* Binary Ninja: if (*($s0_1 + 0x128) s>= 2) */
             if (csi_dev->state >= 2) {
+                pr_info("*** csi_core_ops_init: CSI state >= 2, proceeding with init ***\n");
                 int v0_17;
 
                 /* Binary Ninja: if (arg2 == 0) */
@@ -361,30 +364,38 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                     pr_info("*** csi_core_ops_init: Set csi_dev->interface_type = %d ***\n", interface_type);
 
                     if (interface_type == 1) {
+                        pr_info("*** CSI MIPI INIT: Configuring MIPI CSI for %d lanes ***\n", sensor_attr->mipi.lans);
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 4) = zx.d(*($v1_5 + 0x24)) - 1 */
                         writel(sensor_attr->mipi.lans - 1, csi_dev->csi_regs + 4);
+                        pr_info("*** CSI[0x4] = %d (lanes - 1) ***\n", sensor_attr->mipi.lans - 1);
 
                         /* Binary Ninja: void* $v0_2 = *($s0_1 + 0xb8) */
                         csi_regs = csi_dev->csi_regs;
 
                         /* Binary Ninja: *($v0_2 + 8) &= 0xfffffffe */
-                        writel(readl(csi_regs + 8) & 0xfffffffe, csi_regs + 8);
+                        u32 reg8_val = readl(csi_regs + 8) & 0xfffffffe;
+                        writel(reg8_val, csi_regs + 8);
+                        pr_info("*** CSI[0x8] = 0x%x (clear bit 0) ***\n", reg8_val);
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0xc) = 0 */
                         writel(0, csi_regs + 0xc);
+                        pr_info("*** CSI[0xc] = 0 (reset) ***\n");
 
                         /* Binary Ninja: private_msleep(1) */
                         private_msleep(1);
 
                         /* Binary Ninja: void* $v1_9 = *($s0_1 + 0xb8) */
                         /* Binary Ninja: *($v1_9 + 0x10) &= 0xfffffffe */
-                        writel(readl(csi_regs + 0x10) & 0xfffffffe, csi_regs + 0x10);
+                        u32 reg10_val = readl(csi_regs + 0x10) & 0xfffffffe;
+                        writel(reg10_val, csi_regs + 0x10);
+                        pr_info("*** CSI[0x10] = 0x%x (PHY disable) ***\n", reg10_val);
 
                         /* Binary Ninja: private_msleep(1) */
                         private_msleep(1);
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0xc) = $s2_1 */
                         writel(interface_type, csi_regs + 0xc);
+                        pr_info("*** CSI[0xc] = %d (MIPI enable) ***\n", interface_type);
 
                         /* Binary Ninja: private_msleep(1) */
                         private_msleep(1);
@@ -455,12 +466,16 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
                         /* Binary Ninja: *$v0_8 = 0x7d */
                         writel(0x7d, v0_8);
+                        pr_info("*** CSI MIPI: Writing ISP_CSI[0x0] = 0x7d (timing config) ***\n");
 
                         /* Binary Ninja: *(*($s0_1 + 0x13c) + 0x128) = 0x3f */
                         writel(0x3f, isp_csi_regs + 0x128);
+                        pr_info("*** CSI MIPI: Writing ISP_CSI[0x128] = 0x3f (lane config) ***\n");
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0x10) = 1 */
                         writel(1, csi_dev->csi_regs + 0x10);
+                        pr_info("*** CSI MIPI: CRITICAL - Enabling CSI PHY: CSI[0x10] = 1 ***\n");
+                        pr_info("*** CSI MIPI: PHY ENABLED - MIPI data should now flow! ***\n");
 
                         /* Binary Ninja: private_msleep(0xa) */
                         private_msleep(0xa);
@@ -494,11 +509,19 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
                 /* Binary Ninja: *($s0_1 + 0x128) = $v0_17 */
                 csi_dev->state = v0_17;
+                pr_info("*** csi_core_ops_init: CSI init complete, new state=%d ***\n", v0_17);
                 return 0;
+            } else {
+                pr_err("*** csi_core_ops_init: CSI state < 2 (state=%d), skipping init! ***\n", csi_dev->state);
             }
+        } else {
+            pr_err("*** csi_core_ops_init: CSI device invalid! ***\n");
         }
+    } else {
+        pr_err("*** csi_core_ops_init: sd is NULL! ***\n");
     }
 
+    pr_err("*** csi_core_ops_init: FAILED, returning result=%d ***\n", result);
     return result;
 }
 
