@@ -426,7 +426,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                     /* Found the completed buffer - move it to done_head */
                     list_move_tail(&entry->list, &vic_dev->done_head);
                     completed_entry = entry;
-                    pr_info("*** VIC FRAME DONE: Moved buffer 0x%x from queue_head to done_head ***\n",
+                    pr_debug("VIC FRAME DONE: Moved buffer 0x%x from queue_head to done_head\n",
                             current_buffer);
                     break;
                 }
@@ -502,7 +502,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 u32 reg_val = readl(vic_base + 0x300);
                 u32 shifted_value = count << 16;  /* Put buffer count in bits 16-19 */
 
-                pr_info("*** VIC FRAME DONE: Before update: VIC[0x0]=0x%x VIC[0x300]=0x%x ***\n",
+                pr_debug("VIC FRAME DONE: Before update: VIC[0x0]=0x%x VIC[0x300]=0x%x\n",
                         vic_state_before, reg_val);
 
                 /* Preserve control bits (0x80000020) and only update buffer count in bits 16-19 */
@@ -549,7 +549,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                     }
                 }
                 wmb();
-                pr_info("*** VIC FRAME DONE: Replenished buffer addresses to keep ring fed ***\n");
+                pr_debug("VIC FRAME DONE: Replenished buffer addresses to keep ring fed\n");
             }
 
             /* Keep MDMA enabled (idempotent) */
@@ -565,7 +565,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             {
                 u32 reg_p = readl(vic_base + 0x300);
                 u32 reg_c = (vic_dev->vic_regs_control ? readl(vic_dev->vic_regs_control + 0x300) : 0);
-                pr_info("*** VIC FRAME DONE: Verified VIC[0x300] PRIMARY=0x%x CONTROL=0x%x (count=%u, cur_idx=%d, next_idx=%d) ***\n",
+                pr_debug("VIC FRAME DONE: Verified VIC[0x300] PRIMARY=0x%x CONTROL=0x%x (count=%u, cur_idx=%d, next_idx=%d)\n",
                         reg_p, reg_c, count, cur_idx, next_idx);
             }
 
@@ -614,7 +614,7 @@ label_123f4:
 
     /* Signal frame completion for waiting processes */
     complete(&vic_dev->frame_complete);
-    pr_info("*** VIC FRAME DONE: Frame completion signaled ***\n");
+    pr_debug("VIC FRAME DONE: Frame completion signaled\n");
 
     /* Post-frame: keep ISR minimal; do not touch IMR/IMCR here. Ack is handled in top-level ISR. */
 
