@@ -3656,11 +3656,25 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         if (ret == 0) {
             pr_info("*** Channel %d: DQBUF timeout, generating frame ***\n", channel);
 
-            /* CRITICAL FIX: When generating fake frame, we MUST move buffers from busy to done queue */
-            /* Otherwise active_buffer_count keeps growing and buffer ring fills up causing 5/5 stall! */
+            /* CRITICAL FIX: When generating fake frame, we MUST:
+             * 1. Increment frame counters (for /proc/jz/isp/isp-w02)
+             * 2. Move buffers from busy to done queue (to prevent buffer ring overflow)
+             * Otherwise active_buffer_count keeps growing and buffer ring fills up causing 5/5 stall!
+             */
             extern int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
             extern struct tx_isp_dev *ourISPdev;
             if (ourISPdev && ourISPdev->vic_dev) {
+                /* Increment VIC frame counter */
+                ourISPdev->vic_dev->frame_count++;
+
+                /* Increment ISP core frame counter (for /proc/jz/isp/isp-w02) */
+                if (ourISPdev->core_dev) {
+                    ourISPdev->core_dev->frame_count++;
+                    pr_info("*** Channel %d: FAKE FRAME - Incremented frame_count to %u (for /proc/jz/isp/isp-w02) ***\n",
+                            channel, ourISPdev->core_dev->frame_count);
+                }
+
+                /* Move buffers from busy to done queue */
                 pr_info("*** Channel %d: Calling vic_framedone_irq_function to move buffers ***\n", channel);
                 vic_framedone_irq_function(ourISPdev->vic_dev);
             }
