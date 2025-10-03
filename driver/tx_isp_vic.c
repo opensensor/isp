@@ -142,7 +142,8 @@ struct vic_event_callback {
 /* Binary Ninja reference global variables */
 static struct tx_isp_vic_device *dump_vsd = NULL;  /* Global VIC device pointer */
 static void *test_addr = NULL;  /* Test address pointer */
-irqreturn_t isp_vic_interrupt_service_routine(void *arg1);
+/* CRITICAL FIX: Correct signature to match Linux IRQ handler requirements and implementation in tx-isp-module.c */
+irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);
 
 /* Binary Ninja MDMA global variables */
 static uint32_t vic_mdma_ch0_sub_get_num = 0;
@@ -2915,10 +2916,13 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0xFFFFFFFF, vc + 0x1f4);
 
                 /* CRITICAL FIX: Enable interrupt mask on CONTROL bank */
-                /* This is REQUIRED for VIC to generate frame done interrupts! */
-                writel(0xFFDFFFFE, vc + 0x1e8);  /* Enable frame-done interrupts */
+                /* VIC interrupt mask uses INVERTED logic: v1_7 = (~reg_1e8) & reg_1e0 */
+                /* In register 0x1e8: 1=MASKED, 0=ENABLED (gets inverted in formula) */
+                /* We want: bit 0 (frame done) = ENABLED, bit 21 (control limit) = MASKED */
+                /* 0xFFFFFFFE = bit 0 is 0 (ENABLED after ~), bit 21 is 1 (MASKED after ~) */
+                writel(0xFFFFFFFE, vc + 0x1e8);  /* Enable ONLY frame-done, mask all errors */
                 wmb();
-                printk(KERN_ALERT "*** VIC CONTROL BANK: Enabled interrupt mask 0x1e8=0xFFDFFFFE ***\n");
+                printk(KERN_ALERT "*** VIC CONTROL BANK: Enabled interrupt mask 0x1e8=0xFFFFFFFE (frame-done ENABLED, errors MASKED) ***\n");
 
                 /* Route/control asserts at CONTROL bank -- SKIPPED to match good-things */
                 /* writel(0x000002d0, vc + 0x100); */
@@ -2993,10 +2997,13 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     writel(0xFFFFFFFF, vr + 0x1f0);
                     writel(0xFFFFFFFF, vr + 0x1f4);
                     wmb();
-                    /* Set MainMask to allow frame-done + bit21 during bring-up */
-                    writel(0xFFDFFFFE, vr + 0x1e8);
+                    /* CRITICAL FIX: VIC interrupt mask uses INVERTED logic: v1_7 = (~reg_1e8) & reg_1e0 */
+                    /* In register 0x1e8: 1=MASKED, 0=ENABLED (gets inverted in formula) */
+                    /* We want: bit 0 (frame done) = ENABLED, bit 21 (control limit) = MASKED */
+                    /* 0xFFFFFFFE = bit 0 is 0 (ENABLED after ~), all other bits are 1 (MASKED after ~) */
+                    writel(0xFFFFFFFE, vr + 0x1e8);
                     wmb();
-                    printk(KERN_ALERT "*** VIC MASK: Set MainMask=0xFFDFFFFE (frame-done + bit21) before RUN ***\n");
+                    printk(KERN_ALERT "*** VIC MASK: Set MainMask=0xFFFFFFFE (frame-done ENABLED, errors MASKED) before RUN ***\n");
                 }
 
             /* VIC CONTROL: enter RUN state after all config (write 1) */

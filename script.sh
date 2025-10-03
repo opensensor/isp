@@ -89,14 +89,14 @@ upload_modules() {
 
 # Function to pull latest changes (only if in ISP root)
 pull_updates() {
-    
-    print_status "Pulling latest changes from git..."
-    if git pull; then
-        print_status "Git pull completed successfully"
-    else
-        print_error "Git pull failed"
-        exit 1
-    fi
+
+    print_status "Skipping git pull (not in git repo)..."
+    # if git pull; then
+    #     print_status "Git pull completed successfully"
+    # else
+    #     print_error "Git pull failed"
+    #     exit 1
+    # fi
 }
 
 # Function to copy driver files (only if in ISP root)
@@ -131,15 +131,15 @@ main() {
     print_status "Sensor Model: ${SENSOR_MODEL}"
     print_status "Target: ${TARGET}"
     print_status "Remote Host: ${REMOTE_HOST}"
-    
-    cd ../..
+
+    # cd ../..
     pull_updates
     copy_drivers
-    cd external/ingenic-sdk
-    
+    # cd external/ingenic-sdk - removed, build_project will cd to SDK_DIR
+
     build_project
     upload_modules
-    
+
     print_status "All operations completed successfully!"
     print_status "Kernel modules have been uploaded to ${REMOTE_HOST}:${REMOTE_PATH}"
 }

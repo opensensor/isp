@@ -65,7 +65,7 @@ irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
 
 /* Frame sync work queue - CRITICAL for sensor I2C communication */
 static struct workqueue_struct *fs_workqueue = NULL;
-static struct work_struct fs_work;
+/* REMOVED: static struct work_struct fs_work; - was duplicate/uninitialized, use ispcore_fs_work instead */
 static void ispcore_irq_fs_work(struct work_struct *work);
 
 
@@ -1755,12 +1755,13 @@ static void ispcore_irq_fs_work(struct work_struct *work)
 /* Signature MUST match: int (*handler)(void) - NO PARAMETERS */
 int frame_sync_interrupt_callback(void)
 {
+    /* CRITICAL FIX: Use ispcore_fs_work (which is initialized) instead of fs_work (uninitialized) */
     /* Queue work to handle frame sync in process context */
     /* This is the same work that's queued in ispcore_interrupt_service_routine */
     if (fs_workqueue) {
-        queue_work_on(0, fs_workqueue, &fs_work);
+        queue_work_on(0, fs_workqueue, &ispcore_fs_work);
     } else {
-        schedule_work_on(0, &fs_work);
+        schedule_work_on(0, &ispcore_fs_work);
     }
 
     /* Return 1 to indicate interrupt was handled */
@@ -1931,9 +1932,9 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         pr_debug("*** ISP CORE: Using reference driver work scheduling ***\n");
 
         if (fs_workqueue) {
-            pr_debug("*** ISP CORE: fs_workqueue=%p, fs_work=%p ***\n", fs_workqueue, &fs_work);
+            pr_debug("*** ISP CORE: fs_workqueue=%p, ispcore_fs_work=%p ***\n", fs_workqueue, &ispcore_fs_work);
             /* REFERENCE DRIVER: Use queue_work_on for CPU 0 like private_schedule_work */
-            if (queue_work_on(0, fs_workqueue, &fs_work)) {
+            if (queue_work_on(0, fs_workqueue, &ispcore_fs_work)) {
                 pr_debug("*** ISP CORE: Work queued successfully on CPU 0 ***\n");
             } else {
                 pr_debug("*** ISP CORE: Work was already queued - acknowledging interrupt anyway ***\n");
@@ -1941,7 +1942,7 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         } else {
             pr_warn("*** ISP CORE: fs_workqueue is NULL - using system workqueue ***\n");
             /* REFERENCE DRIVER: Use schedule_work_on for CPU 0 */
-            if (schedule_work_on(0, &fs_work)) {
+            if (schedule_work_on(0, &ispcore_fs_work)) {
                 pr_debug("*** ISP CORE: Work scheduled successfully on CPU 0 ***\n");
             } else {
                 pr_debug("*** ISP CORE: Work was already scheduled - acknowledging interrupt anyway ***\n");
