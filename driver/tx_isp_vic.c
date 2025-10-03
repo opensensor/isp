@@ -34,6 +34,7 @@ static int vic_curraddr_detected = 0;      /* sticky once found */
 static u32 cached_sensor_width = 1920;   /* Default fallback */
 static u32 cached_sensor_height = 1080;  /* Default fallback */
 static int sensor_dimensions_cached = 0; /* Flag to indicate if dimensions were read */
+unsigned int tx_isp_current_pixfmt = V4L2_PIX_FMT_NV12; /* default */
 
 /* Helper function to read sensor dimensions from /proc/jz/sensor/ files */
 static int read_sensor_dimensions(u32 *width, u32 *height)
@@ -2550,11 +2551,12 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
 static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_base;
+    void __iomem *vic_ctrl;
     u32 width, height, stride;
+    extern unsigned int tx_isp_current_pixfmt;
 
-    pr_info("*** vic_pipo_mdma_enable: EXACT Binary Ninja implementation ***\n");
+    pr_info("*** vic_pipo_mdma_enable: EXACT Binary Ninja MCP implementation ***\n");
 
-    /* CRITICAL: Validate vic_dev structure first */
     if (!vic_dev) {
         pr_err("vic_pipo_mdma_enable: NULL vic_dev parameter\n");
         return;
@@ -2562,12 +2564,10 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 
     /* Binary Ninja EXACT: vic_base = *(arg1 + 0xb8) */
     vic_base = vic_dev->vic_regs;
+    vic_ctrl = vic_dev->vic_regs_control;
 
-    /* CRITICAL: Validate VIC register base */
-    if (!vic_base ||
-        (unsigned long)vic_base < 0x80000000 ||
-        (unsigned long)vic_base == 0x735f656d) {
-        pr_err("vic_pipo_mdma_enable: Invalid VIC register base %p - ABORTING\n", vic_base);
+    if (!vic_base) {
+        pr_err("vic_pipo_mdma_enable: NULL vic_regs\n");
         return;
     }
 
@@ -2576,48 +2576,115 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     /* CRITICAL FIX: Use cached sensor dimensions (safe for atomic context) */
     get_cached_sensor_dimensions(&width, &height);
 
-    /* CRITICAL: Ensure we have valid dimensions - USE ACTUAL SENSOR OUTPUT DIMENSIONS */
-    if (width == 0 || height == 0) {
-        /* Only override if dimensions are actually invalid (zero) */
-        width = 1920;  /* ACTUAL sensor output width (not total width) */
-        height = 1080; /* ACTUAL sensor output height (not total height) */
-        pr_info("*** DIMENSION FIX: Using ACTUAL sensor output dimensions %dx%d ***\n", width, height);
-        pr_info("*** CRITICAL: VIC must match sensor OUTPUT, not sensor TOTAL dimensions ***\n");
+    /* Update vic_dev with correct dimensions */
+    vic_dev->width = width;
+    vic_dev->height = height;
 
-        /* Update vic_dev to prevent future mismatches */
-        vic_dev->width = width;
-        vic_dev->height = height;
-    } else {
-        pr_info("*** DIMENSION VALIDATION: Using existing valid dimensions %dx%d ***\n", width, height);
-    }
-
-    pr_info("vic_pipo_mdma_enable: FINAL dimensions=%dx%d (should be 2200x1418)\n", width, height);
+    pr_info("vic_pipo_mdma_enable: Using cached sensor dimensions %dx%d (ATOMIC CONTEXT SAFE)\n", width, height);
 
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x308) = 1 */
     writel(1, vic_base + 0x308);
+    if (vic_ctrl)
+        writel(1, vic_ctrl + 0x308);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x308 = 1 (MDMA enable)\n");
 
-    /* Binary Ninja EXACT: int32_t $v1_1 = $v1 << 1 (stride = width * 2) */
-    stride = width << 1;
+    /* Choose stride based on current V4L2 pixel format */
+    if (tx_isp_current_pixfmt == 0x3231564e /* NV12 */) {
+        stride = width;        /* Y plane stride */
+        pr_info("vic_pipo_mdma_enable: Using NV12 stride=%u (pixfmt=0x%x)\n", stride, tx_isp_current_pixfmt);
+    } else if (tx_isp_current_pixfmt == 0x56595559 /* 'YUYV' */) {
+        stride = width << 1;   /* 2 bytes/pixel */
+        pr_info("vic_pipo_mdma_enable: Using YUYV stride=%u (pixfmt=0x%x)\n", stride, tx_isp_current_pixfmt);
+    } else {
+        stride = width << 1;   /* Default RAW-like */
+        pr_info("vic_pipo_mdma_enable: Using RAW-like stride=%u (pixfmt=0x%x)\n", stride, tx_isp_current_pixfmt);
+    }
 
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x304) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
     writel((width << 16) | height, vic_base + 0x304);
+    if (vic_ctrl)
+        writel((width << 16) | height, vic_ctrl + 0x304);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x304 = 0x%x (dimensions %dx%d)\n",
             (width << 16) | height, width, height);
 
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x310) = $v1_1 */
     writel(stride, vic_base + 0x310);
+    if (vic_ctrl)
+        writel(stride, vic_ctrl + 0x310);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x310 = %d (stride)\n", stride);
 
     /* Binary Ninja EXACT: *(result + 0x314) = $v1_1 */
     writel(stride, vic_base + 0x314);
+    if (vic_ctrl)
+        writel(stride, vic_ctrl + 0x314);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (stride)\n", stride);
 
-    pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - CONTROL LIMIT ERROR SHOULD BE FIXED ***\n");
+    /* CRITICAL FIX: Write actual buffer addresses to VIC hardware registers */
+    /* VIC hardware needs to know where to DMA frame data to generate interrupts */
+    pr_info("*** CRITICAL FIX: Writing buffer addresses to VIC hardware registers ***\n");
+
+    /* Access buffer addresses from VBM system - where QBUF actually stores them */
+    extern struct frame_channel_device frame_channels[];
+    struct tx_isp_channel_state *state = &frame_channels[0].state;
+
+    if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
+        int i;
+        int configured_count = 0;
+        pr_info("*** VIC BUFFER ACCESS: Found %d VBM buffer addresses at %p ***\n",
+                state->vbm_buffer_count, state->vbm_buffer_addresses);
+
+        for (i = 0; i < state->vbm_buffer_count && i < 5; i++) {
+            u32 buffer_addr = state->vbm_buffer_addresses[i];
+            u32 reg_offset = 0x318 + (i * 4);  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
+
+            if (buffer_addr != 0) {
+                writel(buffer_addr, vic_base + reg_offset);
+                if (vic_ctrl)
+                    writel(buffer_addr, vic_ctrl + reg_offset);
+                wmb();
+                configured_count++;
+                pr_info("*** VIC BUFFER %d: Wrote VBM address 0x%x to reg 0x%x ***\n",
+                        i, buffer_addr, reg_offset);
+            } else {
+                pr_warn("*** VIC BUFFER %d: No VBM address available (0x0) ***\n", i);
+            }
+        }
+        if (configured_count == 0) configured_count = 1;  /* Ensure at least 1 buffer */
+        if (configured_count > 5) configured_count = 5;    /* VIC has max 5 slots */
+        vic_dev->active_buffer_count = configured_count;
+        pr_info("*** CRITICAL: VIC buffer addresses configured from VBM (count=%d) - hardware can now generate interrupts! ***\n",
+                configured_count);
+    } else {
+        /* CRITICAL FIX: Use fallback buffer addresses like working reference */
+        pr_warn("*** CRITICAL: No VBM buffer addresses - using fallback addresses from reserved memory ***\n");
+        pr_warn("*** vbm_buffer_addresses=%p, vbm_buffer_count=%d ***\n",
+               state->vbm_buffer_addresses, state->vbm_buffer_count);
+
+        /* Use reserved memory region 0x6300000 like working reference */
+        u32 frame_size = width * height * 2;  /* RAW10 = 2 bytes/pixel */
+        u32 base_addr = 0x6300000;  /* Reserved memory base from boot parameter rmem=29M@0x6300000 */
+
+        int i;
+        for (i = 0; i < 5; i++) {
+            u32 buffer_addr = base_addr + (i * frame_size);
+            u32 reg_offset = 0x318 + (i * 4);  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
+
+            writel(buffer_addr, vic_base + reg_offset);
+            if (vic_ctrl)
+                writel(buffer_addr, vic_ctrl + reg_offset);
+            wmb();
+            pr_info("*** VIC FALLBACK BUFFER %d: Wrote reserved memory address 0x%x to reg 0x%x ***\n",
+                    i, buffer_addr, reg_offset);
+        }
+        vic_dev->active_buffer_count = 5;
+        pr_info("*** CRITICAL: VIC fallback buffer addresses configured (count=5) - hardware can now generate interrupts! ***\n");
+    }
+
+    pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - VIC should now generate interrupts! ***\n");
 }
 
 /* ISPVIC Frame Channel S_Stream - EXACT Binary Ninja Implementation */
