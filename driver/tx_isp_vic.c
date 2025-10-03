@@ -2733,11 +2733,13 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             pr_info("*** DEBUG: Before writing VIC[0x300]: VIC[0x0]=0x%x VIC[0x300]=0x%x ***\n",
                     vic_state_before, vic_ctrl_before);
 
-            /* SAFE: $s0 + 0x218 = active_buffer_count */
-            u32 buffer_count = vic_dev->active_buffer_count;
-            if (buffer_count == 0) buffer_count = 2;       /* Reference default */
-            if (buffer_count > 5) buffer_count = 5;        /* 5-slot ring cap */
+            /* CRITICAL SIMPLIFICATION: Use 1 buffer per channel to eliminate rotation complexity */
+            /* VIC MDMA supports 2 DMA channels (0 and 1) for video streaming */
+            /* Channel 2 is for ISP-M0 JPEG snapshots, NOT VIC MDMA */
+            /* Start with single-buffer mode to get basic streaming working */
+            u32 buffer_count = 1;  /* SIMPLIFIED: 1 buffer per channel */
             u32 stream_ctrl = (buffer_count << 16) | 0x80000020;  /* Binary Ninja EXACT formula */
+            pr_info("*** VIC MDMA SIMPLIFIED: buffer_count=%d (1 buffer per channel, 2 DMA channels) ***\n", buffer_count);
             void __iomem *vic_ctrl = vic_dev->vic_regs_control;
             writel(stream_ctrl, vic_base + 0x300);
             if (vic_ctrl)
@@ -2745,6 +2747,11 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             wmb();
 
             pr_info("*** Binary Ninja EXACT: Wrote 0x%x to reg 0x300 (%d buffers) ***\n", stream_ctrl, buffer_count);
+
+            /* CRITICAL DEBUG: Read back what we just wrote to verify */
+            u32 readback_300 = readl(vic_base + 0x300);
+            u32 readback_count = (readback_300 >> 16) & 0xF;
+            pr_info("*** READBACK: VIC[0x300]=0x%x, buffer_count_field=%d ***\n", readback_300, readback_count);
 
             /* CRITICAL FIX: Transition VIC to RUN state (1) AFTER writing buffer count */
             /* Hardware clears buffer count if we transition from RESET (2) to RUN (1) after writing 0x300 */
