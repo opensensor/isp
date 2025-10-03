@@ -463,37 +463,12 @@ skip_buffer_walk:
                 }
             }
 
-            /* CRITICAL FIX: Update VIC[0x300] to replenish buffer count (from was-better) */
-            /* The hardware decrements the buffer count as it processes frames */
-            /* We need to update it in the interrupt handler to keep frames flowing */
-            {
-                u32 vic_state_before = readl(vic_base + 0x0);
-                u32 reg_val = readl(vic_base + 0x300);
-                u32 shifted_value = count << 16;  /* Put buffer count in bits 16-19 */
-
-                pr_info("*** VIC FRAME DONE: Before update: VIC[0x0]=0x%x VIC[0x300]=0x%x ***\n",
-                        vic_state_before, reg_val);
-
-                /* Preserve control bits (0x80000020) and only update buffer count in bits 16-19 */
-                reg_val = (reg_val & 0xfff0ffff) | shifted_value;  /* Clear bits 16-19, set new buffer count */
-
-                /* FORCE control bits if they were lost */
-                if ((reg_val & 0x80000020) != 0x80000020) {
-                    reg_val |= 0x80000020;  /* Force control bits back on */
-                    pr_warn("*** VIC FRAME DONE: FORCED control bits 0x80000020 back on! ***\n");
-                }
-
-                writel(reg_val, vic_base + 0x300);
-                if (vic_dev->vic_regs_control) {
-                    writel(reg_val, vic_dev->vic_regs_control + 0x300);
-                }
-                wmb();
-
-                u32 vic_state_after = readl(vic_base + 0x0);
-                u32 reg_val_after = readl(vic_base + 0x300);
-                pr_info("*** VIC FRAME DONE: After update: VIC[0x0]=0x%x VIC[0x300]=0x%x (wrote 0x%x, buffer count=%u) ***\n",
-                        vic_state_after, reg_val_after, reg_val, count);
-            }
+            /* CRITICAL FIX: DO NOT update VIC[0x300] in single-buffer mode! */
+            /* In single-buffer mode (buffer_count=1), the buffer count field should NEVER change */
+            /* The reference driver only updates this register during multi-buffer rotation */
+            /* Writing to this register clears the buffer count field we set during stream ON */
+            pr_info("*** VIC FRAME DONE: SKIPPING VIC[0x300] update - single-buffer mode (count=%d) ***\n", count);
+            pr_info("*** VIC FRAME DONE: Buffer count field should remain 1, not be overwritten with %d ***\n", count);
 
             writel(0x1, vic_base + 0x0);
             if (vic_dev->vic_regs_control) writel(0x1, vic_dev->vic_regs_control + 0x0);
@@ -2753,18 +2728,12 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             u32 readback_count = (readback_300 >> 16) & 0xF;
             pr_info("*** READBACK: VIC[0x300]=0x%x, buffer_count_field=%d ***\n", readback_300, readback_count);
 
-            /* CRITICAL FIX: Transition VIC to RUN state (1) AFTER writing buffer count */
-            /* Hardware clears buffer count if we transition from RESET (2) to RUN (1) after writing 0x300 */
-            writel(1, vic_base + 0x0);
-            if (vic_ctrl)
-                writel(1, vic_ctrl + 0x0);
-            wmb();
-            pr_info("*** CRITICAL FIX: Wrote 1 to VIC[0x0] to transition to RUN state AFTER buffer count write ***\n");
-
-            /* DEBUG: Verify buffer count was retained */
-            u32 vic_ctrl_after = readl(vic_base + 0x300);
-            pr_info("*** DEBUG: After writing VIC[0x0]=1: VIC[0x300]=0x%x (buffer count %s) ***\n",
-                    vic_ctrl_after, (vic_ctrl_after & 0x000F0000) ? "RETAINED" : "CLEARED");
+            /* CRITICAL FIX FROM BINARY NINJA: Reference driver does NOT write to VIC[0x0] here! */
+            /* Writing to VIC[0x0] clears the buffer count field in register 0x300 */
+            /* The reference driver only writes to 0x308, 0x304, 0x310, 0x314, then 0x300 */
+            /* VIC state transitions happen elsewhere, not during stream ON */
+            pr_info("*** BINARY NINJA FIX: Skipping VIC[0x0] write - reference driver doesn't do it ***\n");
+            pr_info("*** VIC state should already be correct from earlier initialization ***\n");
         }
 
         /* Binary Ninja EXACT: *($s0 + 0x210) = 1 */
