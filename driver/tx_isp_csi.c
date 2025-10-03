@@ -373,29 +373,23 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         csi_regs = csi_dev->csi_regs;
 
                         /* Binary Ninja: *($v0_2 + 8) &= 0xfffffffe */
-                        u32 reg8_val = readl(csi_regs + 8) & 0xfffffffe;
-                        writel(reg8_val, csi_regs + 8);
-                        pr_info("*** CSI[0x8] = 0x%x (clear bit 0) ***\n", reg8_val);
+                        writel(readl(csi_regs + 8) & 0xfffffffe, csi_regs + 8);
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0xc) = 0 */
                         writel(0, csi_regs + 0xc);
-                        pr_info("*** CSI[0xc] = 0 (reset) ***\n");
 
                         /* Binary Ninja: private_msleep(1) */
                         private_msleep(1);
 
                         /* Binary Ninja: void* $v1_9 = *($s0_1 + 0xb8) */
                         /* Binary Ninja: *($v1_9 + 0x10) &= 0xfffffffe */
-                        u32 reg10_val = readl(csi_regs + 0x10) & 0xfffffffe;
-                        writel(reg10_val, csi_regs + 0x10);
-                        pr_info("*** CSI[0x10] = 0x%x (PHY disable) ***\n", reg10_val);
+                        writel(readl(csi_regs + 0x10) & 0xfffffffe, csi_regs + 0x10);
 
                         /* Binary Ninja: private_msleep(1) */
                         private_msleep(1);
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0xc) = $s2_1 */
                         writel(interface_type, csi_regs + 0xc);
-                        pr_info("*** CSI[0xc] = %d (MIPI enable) ***\n", interface_type);
 
                         /* Binary Ninja: private_msleep(1) */
                         private_msleep(1);
