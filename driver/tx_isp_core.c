@@ -1868,19 +1868,36 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     } else {
         return IRQ_NONE;
     }
-    /* Support both legacy (+0xb*) and new (+0x98b*) interrupt banks */
+    /* CRITICAL FIX: Support both legacy (+0xb*) and new (+0x98b*) interrupt banks */
     {
-        interrupt_status = readl(isp_regs + 0xb4);
-        printk(KERN_ALERT "*** ISP CORE: Read interrupt status - interrupt_status=0x%08x ***\n", interrupt_status);
+        u32 status_legacy, status_new;
 
-        /* Clear pending in the corresponding bank(s) */
-        printk(KERN_ALERT "*** ISP CORE: Clearing legacy interrupt 0x%08x to reg +0xb8 ***\n", interrupt_status);
-        writel(interrupt_status, isp_regs + 0xb8);
+        /* Read BOTH interrupt banks like working driver */
+        status_legacy = readl(isp_regs + 0xb4);
+        status_new    = readl(isp_regs + 0x98b4);
+
+        /* Use whichever bank has pending interrupts */
+        interrupt_status = status_legacy ? status_legacy : status_new;
+
+        printk(KERN_ALERT "*** ISP CORE: DUAL BANK - legacy=0x%08x new=0x%08x final=0x%08x ***\n",
+               status_legacy, status_new, interrupt_status);
+
+        /* Clear pending in BOTH banks (working driver behavior) */
+        if (status_legacy) {
+            printk(KERN_ALERT "*** ISP CORE: Clearing legacy bank 0x%08x to reg +0xb8 ***\n", status_legacy);
+            writel(status_legacy, isp_regs + 0xb8);
+        }
+        if (status_new) {
+            printk(KERN_ALERT "*** ISP CORE: Clearing new bank 0x%08x to reg +0x98b8 ***\n", status_new);
+            writel(status_new, isp_regs + 0x98b8);
+        }
         wmb();
 
-        /* CRITICAL DEBUG: Verify interrupt was actually cleared */
+        /* CRITICAL DEBUG: Verify interrupts were actually cleared */
         u32 verify_legacy = readl(isp_regs + 0xb4);
-        printk(KERN_ALERT "*** ISP CORE: After clearing - legacy=0x%08x ***\n", verify_legacy);
+        u32 verify_new = readl(isp_regs + 0x98b4);
+        printk(KERN_ALERT "*** ISP CORE: After clearing - legacy=0x%08x new=0x%08x ***\n",
+               verify_legacy, verify_new);
     }
 
     /* Binary Ninja: if (($s1 & 0x3f8) == 0) */

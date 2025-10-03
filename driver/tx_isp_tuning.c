@@ -1169,6 +1169,13 @@ static int tisp_ae0_process_impl(void);
 /* tisp_event_push implemented as non-static below */
 static int system_reg_write_ae(int ae_id, uint32_t reg, uint32_t value);
 
+/* CRITICAL FIX: DMA cache sync helper wrapper for AE interrupt handlers */
+static inline void tisp_dma_cache_sync_helper(struct device *dev, void *vaddr, size_t size, enum dma_data_direction direction)
+{
+    /* Wrapper around private_dma_cache_sync for AE interrupt handlers */
+    private_dma_cache_sync(dev, vaddr, size, direction);
+}
+
 
 
 /* ===== MISSING TIZIANO ISP PIPELINE COMPONENTS - Binary Ninja Reference ===== */
@@ -1666,115 +1673,153 @@ int tiziano_ae_set_hardware_param(int ae_id, uint8_t *param_array, int update_on
 }
 
 /* ae0_interrupt_static - CRITICAL FIX: Prevent 22-second DMA hang */
+/* CRITICAL FIX: ae0_interrupt_static - FULL PROCESSING like working driver */
 int ae0_interrupt_static(void)
 {
-    pr_info("ae0_interrupt_static: Processing AE0 static interrupt\n");
+    uint32_t ae0_status;
+    uint32_t buffer_offset;
+    void *buffer_addr;
 
-    /* CRITICAL FIX: data_b2f3c is 0, causing 22-second virt_to_phys() hang! */
+    pr_info("ae0_interrupt_static: FULL PROCESSING (working driver pattern)\n");
+
     /* Binary Ninja: Read AE0 status and calculate buffer offset */
-    uint32_t ae0_status = system_reg_read(0xa050);
+    ae0_status = system_reg_read(0xa050);
+    buffer_offset = (ae0_status & 3) << 11;  /* Extract bits 0-1, shift to get offset */
+    buffer_addr = (void *)(buffer_offset + data_b2f3c);
 
-    /* CRITICAL SAFETY: Validate data_b2f3c is initialized before using it */
-    if (data_b2f3c == 0) {
-        pr_err("*** CRITICAL: data_b2f3c is 0 - this would cause 22-second virt_to_phys() hang! ***\n");
-        pr_err("*** AE0 interrupt DISABLED to prevent system deadlock ***\n");
-        return 1;  /* Return success to prevent repeated calls */
+    pr_info("ae0_interrupt_static: status=0x%08x offset=0x%x addr=%p\n",
+            ae0_status, buffer_offset, buffer_addr);
+
+    /* CRITICAL: DMA cache sync - working driver does this */
+    if (data_b2f3c != 0 && virt_addr_valid(buffer_addr)) {
+        tisp_dma_cache_sync_helper(NULL, buffer_addr, 0x1000, DMA_FROM_DEVICE);
+
+        /* CRITICAL: Get statistics - working driver does this */
+        tisp_ae0_get_statistics(buffer_addr, 0xf001f001);
+    } else {
+        pr_info("ae0_interrupt_static: Skipping DMA sync (buffer not ready)\n");
     }
 
-    void *buffer_addr = (void *)((ae0_status << 8) & 0x3000) + data_b2f3c;
+    /* CRITICAL: Set completion flag - working driver does this */
+    data_b0df8 = 1;
 
-    /* CRITICAL SAFETY: Validate calculated buffer address is in valid memory range */
-    if ((unsigned long)buffer_addr < 0x80000000 || (unsigned long)buffer_addr >= 0xfffff000) {
-        pr_err("*** CRITICAL: AE0 buffer_addr 0x%p outside kernel memory - would cause virt_to_phys() hang ***\n", buffer_addr);
-        pr_err("*** This would cause 22-second deadlock in DMA cache sync! ***\n");
-        return 1;  /* Return success to prevent repeated calls */
-    }
-
-    /* CRITICAL SAFETY: Additional validation - check if address is actually mapped */
-    if (!virt_addr_valid(buffer_addr)) {
-        pr_err("*** CRITICAL: AE0 buffer_addr 0x%p not valid virtual address ***\n", buffer_addr);
-        pr_info("*** AE0: Processing interrupt using register reads only (Binary Ninja MCP reference) ***\n");
-        return 1;  /* Return success to prevent repeated calls */
-    }
-
-    /* Binary Ninja MCP reference: Process AE0 interrupt using register reads only */
-    /* No DMA cache sync in reference driver - just read statistics from registers */
-    pr_info("*** AE0: Processing interrupt using register-based statistics (Binary Ninja MCP) ***\n");
-
-    /* Binary Ninja: Get AE0 statistics from registers (no buffer access) */
-    /* tisp_ae0_get_statistics(buffer_addr, 0xf001f001); - REMOVED: causes DMA issues */
-
-    /* Binary Ninja: Handle DMSC interrupt flag */
-    //if (data_b0e00 == 1) {
-    //    uint32_t *dmsc_ptr = (uint32_t *)dmsc_fc_t3_stren_intp;
-    //    data_b0e00 = 0;
-    //    if (dmsc_ptr) {
-    //        dmsc_ptr[1] = 0;  /* *(dmsc_fc_t3_stren_intp + 4) = 0 */
-    //    }
-    //}
-
-    pr_info("ae0_interrupt_static: AE0 static interrupt processed\n");
+    pr_info("ae0_interrupt_static: Completed (flag set)\n");
     return 1;
 }
 
-/* ae0_interrupt_hist - Binary Ninja MCP reference implementation */
+/* CRITICAL FIX: ae0_interrupt_hist - FULL PROCESSING like working driver */
 int ae0_interrupt_hist(void)
 {
-    pr_info("ae0_interrupt_hist: Processing AE0 histogram interrupt\n");
+    uint32_t ae0_status;
+    uint32_t buffer_offset;
+    void *buffer_addr;
+    void *hist_base;
+    int hist_flag;
+    struct {
+        uint32_t pad1[2];
+        uint32_t event_id;
+        uint32_t pad2[8];
+    } event_data = {0};
 
-    /* CRITICAL SAFETY: Skip processing if data buffers not initialized */
-    if (data_b2f3c == 0) {
-        pr_info("ae0_interrupt_hist: Data buffers not initialized - skipping safely\n");
-        return 1;  /* Return success to prevent repeated calls */
+    pr_info("ae0_interrupt_hist: FULL PROCESSING (working driver pattern)\n");
+
+    /* Binary Ninja: Read AE0 status and calculate buffer offset */
+    ae0_status = system_reg_read(0xa050);
+    buffer_offset = (ae0_status & 3) << 11;
+    buffer_addr = (void *)(buffer_offset + data_b2f48);
+
+    pr_info("ae0_interrupt_hist: status=0x%08x offset=0x%x addr=%p\n",
+            ae0_status, buffer_offset, buffer_addr);
+
+    /* CRITICAL: DMA cache sync - working driver does this */
+    if (data_b2f48 != 0 && virt_addr_valid(buffer_addr)) {
+        tisp_dma_cache_sync_helper(NULL, buffer_addr, 0x800, DMA_FROM_DEVICE);
+
+        /* CRITICAL: Get histogram - working driver does this */
+        hist_base = (void *)data_b2f48;
+        hist_flag = (data_b0e10 != 1) ? 1 : 0;
+        tisp_ae0_get_hist(buffer_offset + hist_base, 1, hist_flag);
+
+        /* CRITICAL: Push event - working driver does this */
+        event_data.event_id = 1;
+        tisp_event_push(&event_data);
+    } else {
+        pr_info("ae0_interrupt_hist: Skipping processing (buffer not ready)\n");
     }
 
-    /* Binary Ninja: Read AE0 histogram status */
-    uint32_t ae0_hist_status = system_reg_read(0xa054);
-
-    /* Binary Ninja: Process histogram data */
-    pr_info("ae0_interrupt_hist: AE0 histogram status = 0x%08x\n", ae0_hist_status);
-
-    return 1;
+    pr_info("ae0_interrupt_hist: Completed\n");
+    return 2;  /* Working driver returns 2 for histogram interrupts */
 }
 
-/* ae1_interrupt_static - Binary Ninja MCP reference implementation */
+/* CRITICAL FIX: ae1_interrupt_static - FULL PROCESSING like working driver */
 int ae1_interrupt_static(void)
 {
-    pr_info("ae1_interrupt_static: Processing AE1 static interrupt\n");
+    uint32_t ae1_status;
+    void *buffer_addr;
 
-    /* CRITICAL SAFETY: Skip processing if data buffers not initialized */
-    if (data_b2f3c == 0) {
-        pr_info("ae1_interrupt_static: Data buffers not initialized - skipping safely\n");
-        return 1;  /* Return success to prevent repeated calls */
-    }
+    pr_info("ae1_interrupt_static: FULL PROCESSING (working driver pattern)\n");
 
     /* Binary Ninja: Read AE1 status */
-    uint32_t ae1_status = system_reg_read(0xa850);
+    ae1_status = system_reg_read(0xa850);
+    buffer_addr = (void *)((ae1_status << 8) & 0x3000) + data_b2f54;
 
-    /* Binary Ninja: Process AE1 statistics */
-    pr_info("ae1_interrupt_static: AE1 status = 0x%08x\n", ae1_status);
+    pr_info("ae1_interrupt_static: status=0x%08x addr=%p\n", ae1_status, buffer_addr);
 
+    /* CRITICAL: DMA cache sync - working driver does this */
+    if (data_b2f54 != 0 && virt_addr_valid(buffer_addr)) {
+        tisp_dma_cache_sync_helper(NULL, buffer_addr, 0x1000, DMA_FROM_DEVICE);
+
+        /* CRITICAL: Get statistics - working driver does this */
+        tisp_ae1_get_statistics(buffer_addr, 0xf001f001);
+    } else {
+        pr_info("ae1_interrupt_static: Skipping DMA sync (buffer not ready)\n");
+    }
+
+    /* CRITICAL: Set completion flag - working driver does this */
+    data_b0dfc = 1;
+
+    pr_info("ae1_interrupt_static: Completed (flag set)\n");
     return 1;
 }
 
-/* ae1_interrupt_hist - Binary Ninja MCP reference implementation */
+/* CRITICAL FIX: ae1_interrupt_hist - FULL PROCESSING like working driver */
 int ae1_interrupt_hist(void)
 {
-    pr_info("ae1_interrupt_hist: Processing AE1 histogram interrupt\n");
+    uint32_t ae1_status;
+    uint32_t buffer_offset;
+    void *buffer_addr;
+    struct {
+        uint32_t pad1[2];
+        uint32_t event_id;
+        uint32_t pad2[8];
+    } event_data = {0};
 
-    /* CRITICAL SAFETY: Skip processing if data buffers not initialized */
-    if (data_b2f3c == 0) {
-        pr_info("ae1_interrupt_hist: Data buffers not initialized - skipping safely\n");
-        return 1;  /* Return success to prevent repeated calls */
+    pr_info("ae1_interrupt_hist: FULL PROCESSING (working driver pattern)\n");
+
+    /* Binary Ninja: Read AE1 status and calculate buffer offset */
+    ae1_status = system_reg_read(0xa850);
+    buffer_offset = (ae1_status & 3) << 11;
+    buffer_addr = (void *)(buffer_offset + data_b2f60);
+
+    pr_info("ae1_interrupt_hist: status=0x%08x offset=0x%x addr=%p\n",
+            ae1_status, buffer_offset, buffer_addr);
+
+    /* CRITICAL: DMA cache sync - working driver does this */
+    if (data_b2f60 != 0 && virt_addr_valid(buffer_addr)) {
+        private_dma_cache_sync(NULL, buffer_addr, 0x800, DMA_FROM_DEVICE);
+
+        /* CRITICAL: Get histogram - working driver does this */
+        tisp_ae1_get_hist(buffer_addr);
+
+        /* CRITICAL: Push event - working driver does this */
+        event_data.event_id = 6;
+        tisp_event_push(&event_data);
+    } else {
+        pr_info("ae1_interrupt_hist: Skipping processing (buffer not ready)\n");
     }
 
-    /* Binary Ninja: Read AE1 histogram status */
-    uint32_t ae1_hist_status = system_reg_read(0xa854);
-
-    /* Binary Ninja: Process histogram data */
-    pr_info("ae1_interrupt_hist: AE1 histogram status = 0x%08x\n", ae1_hist_status);
-
-    return 1;
+    pr_info("ae1_interrupt_hist: Completed\n");
+    return 2;  /* Working driver returns 2 for histogram interrupts */
 }
 
 /* awb_interrupt_static - Binary Ninja MCP reference implementation */

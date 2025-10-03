@@ -175,12 +175,13 @@ static void *pop_buffer_fifo(struct list_head *fifo_head)
     return entry;
 }
 
-/* BINARY NINJA EXACT: tx_vic_enable_irq implementation - WORKING REFERENCE VERSION */
+/* CRITICAL FIX: Simplified tx_vic_enable_irq - Remove kernel IRQ manipulation */
+/* Working driver just sets flag - no enable_irq() calls */
 void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 {
     unsigned long flags;
 
-    pr_info("*** tx_vic_enable_irq: EXACT Binary Ninja implementation from working reference ***\n");
+    pr_info("*** tx_vic_enable_irq: SIMPLIFIED version (working driver pattern) ***\n");
 
     /* Binary Ninja: if (dump_vsd_5 == 0 || dump_vsd_5 u>= 0xfffff001) return */
     if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
@@ -191,41 +192,19 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
     /* Binary Ninja: __private_spin_lock_irqsave(dump_vsd_2 + 0x130, &var_18) */
     spin_lock_irqsave(&vic_dev->lock, flags);
 
-    /* Binary Ninja: if (*(dump_vsd_1 + 0x13c) != 0) */
-
     /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 1 */
     vic_dev->irq_enabled = 1;
     pr_info("tx_vic_enable_irq: VIC interrupts enabled (irq_enabled = 1)\n");
 
-    /* Binary Ninja: $v0_1 = *(dump_vsd_5 + 0x84); if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
-    if (vic_dev->irq_handler && vic_dev->irq_priv) {
-        pr_info("tx_vic_enable_irq: Calling VIC interrupt callback\n");
-        vic_dev->irq_handler(vic_dev->irq_priv);
-    }
-
-    /* CRITICAL FIX: Enable VIC interrupt at kernel level - this is what the callback should do! */
-    if (vic_dev->irq > 0) {
-        pr_info("*** tx_vic_enable_irq: CRITICAL FIX - Enabling VIC interrupt (IRQ %d) at kernel level ***\n", vic_dev->irq);
-        enable_irq(vic_dev->irq);
-        pr_info("*** tx_vic_enable_irq: VIC interrupt (IRQ %d) ENABLED at kernel level ***\n", vic_dev->irq);
-    } else if (vic_dev->sd.irq_info.irq > 0) {
-        pr_info("*** tx_vic_enable_irq: CRITICAL FIX - Enabling VIC interrupt (IRQ %d) from irq_info at kernel level ***\n", vic_dev->sd.irq_info.irq);
-        enable_irq(vic_dev->sd.irq_info.irq);
-        pr_info("*** tx_vic_enable_irq: VIC interrupt (IRQ %d) ENABLED at kernel level ***\n", vic_dev->sd.irq_info.irq);
-    } else {
-        pr_err("*** tx_vic_enable_irq: CRITICAL ERROR - No VIC IRQ found! vic_dev->irq=%d, irq_info.irq=%d ***\n",
-               vic_dev->irq, vic_dev->sd.irq_info.irq);
-    }
-
-    pr_info("tx_vic_enable_irq: VIC interrupt flag set and kernel interrupt enabled\n");
-
+    /* REMOVED: No kernel-level enable_irq() call - working driver doesn't do this */
     /* Binary Ninja: private_spin_unlock_irqrestore(dump_vsd_3 + 0x130, var_18) */
     spin_unlock_irqrestore(&vic_dev->lock, flags);
 
-    pr_info("*** tx_vic_enable_irq: completed successfully ***\n");
+    pr_info("*** tx_vic_enable_irq: completed successfully (flag set only) ***\n");
 }
 
-/* BINARY NINJA EXACT: tx_vic_disable_irq implementation */
+/* CRITICAL FIX: Simplified tx_vic_disable_irq - Remove kernel IRQ manipulation */
+/* Working driver just clears flag - no disable_irq() calls */
 void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
 {
     unsigned long flags;
@@ -244,29 +223,11 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
         vic_dev->irq_enabled = 0;
         pr_info("tx_vic_disable_irq: VIC interrupts disabled (irq_enabled = 0)\n");
 
-        /* Binary Ninja: $v0_2 = *(dump_vsd_5 + 0x88); if ($v0_2 != 0) $v0_2(dump_vsd_5 + 0x80) */
-        if (vic_dev->irq_disable && vic_dev->irq_priv) {
-            pr_info("tx_vic_disable_irq: Calling VIC interrupt disable callback\n");
-            vic_dev->irq_disable(vic_dev->irq_priv);
-        }
-
-        /* CRITICAL FIX: Disable VIC interrupt at kernel level */
-        if (vic_dev->irq > 0) {
-            pr_info("*** tx_vic_disable_irq: CRITICAL FIX - Disabling VIC interrupt (IRQ %d) at kernel level ***\n", vic_dev->irq);
-            disable_irq(vic_dev->irq);
-            pr_info("*** tx_vic_disable_irq: VIC interrupt (IRQ %d) DISABLED at kernel level ***\n", vic_dev->irq);
-        } else if (vic_dev->sd.irq_info.irq > 0) {
-            pr_info("*** tx_vic_disable_irq: CRITICAL FIX - Disabling VIC interrupt (IRQ %d) from irq_info at kernel level ***\n", vic_dev->sd.irq_info.irq);
-            disable_irq(vic_dev->sd.irq_info.irq);
-            pr_info("*** tx_vic_disable_irq: VIC interrupt (IRQ %d) DISABLED at kernel level ***\n", vic_dev->sd.irq_info.irq);
-        }
-
-        pr_info("tx_vic_disable_irq: VIC interrupt flag cleared and kernel interrupt disabled\n");
+        /* REMOVED: No kernel-level disable_irq() call - working driver doesn't do this */
+        /* The hardware interrupt remains enabled but irq_enabled flag controls processing */
     } else {
         pr_info("tx_vic_disable_irq: VIC interrupts already disabled\n");
     }
-
-
 
     /* Binary Ninja: private_spin_unlock_irqrestore(dump_vsd_3 + 0x130, var_18) */
     spin_unlock_irqrestore(&vic_dev->lock, flags);
@@ -728,11 +689,13 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
         vic_dev->active_buffer_count--;
 
         /* Binary Ninja: Call raw_pipe callback to deliver completed buffer */
+        /* (*(raw_pipe_1 + 4))(*(raw_pipe_1 + 0x14), $v0_2) */
+        /* raw_pipe[1] is the callback, raw_pipe[5] is the argument (offset 0x14 / 4 = 5) */
         extern void *raw_pipe;  /* Global pointer to pipe function array */
         void **pipe = (void **)raw_pipe;
         if (pipe && pipe[1]) {
             void (*callback)(void *, struct vic_buffer_entry *) = pipe[1];
-            void *callback_arg = pipe[4];
+            void *callback_arg = pipe[5];  /* Binary Ninja: offset 0x14 = index 5 */
             callback(callback_arg, completed_buffer);
         }
 
@@ -762,7 +725,7 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
                 /* Binary Ninja: Call raw_pipe callback */
                 if (pipe && pipe[1]) {
                     void (*callback)(void *, struct vic_buffer_entry *) = pipe[1];
-                    void *callback_arg = pipe[4];
+                    void *callback_arg = pipe[5];  /* Binary Ninja: offset 0x14 = index 5 */
                     callback(callback_arg, buf);
                 }
 
@@ -790,15 +753,23 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
                                                                  struct vic_buffer_entry, list);
             list_del(&free_buf->list);
 
-            /* Binary Ninja: Copy buffer address */
+            /* Binary Ninja: Copy buffer address and index */
+            /* $v0_15[2] = *($a1_2 + 8) */
             free_buf->buffer_addr = next_buffer->buffer_addr;
+            free_buf->buffer_index = next_buffer->buffer_index;
+            free_buf->buffer_status = VIC_BUFFER_STATUS_ACTIVE;
 
             /* Binary Ninja: Add to busy queue */
             list_add_tail(&free_buf->list, &vic_dev->busy_head);
             vic_dev->active_buffer_count++;
 
             /* Binary Ninja: Write buffer address to VIC register */
+            /* result = $v1_1 + (($v0_15[4] + 0xc6) << 2) */
+            /* *result = $v0_15[2] */
             writel(free_buf->buffer_addr, vic_regs + ((free_buf->buffer_index + 0xc6) << 2));
+
+            /* CRITICAL: Free the done entry since we copied its data */
+            kfree(next_buffer);
         }
 
         spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
@@ -1275,6 +1246,13 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* CRITICAL: VIC hardware should already be initialized by platform driver */
         pr_info("*** VIC hardware should be ready - proceeding with unlock sequence ***\n");
 
+        /* CRITICAL FIX: Get actual sensor format from sensor attributes */
+        u32 vic_sensor_format = TX_SENSOR_RAW10;  /* Default to RAW10 */
+        if (sensor_attr && sensor_attr->mipi.mipi_sc.sensor_csi_fmt >= 0) {
+            vic_sensor_format = sensor_attr->mipi.mipi_sc.sensor_csi_fmt;
+        }
+        pr_info("*** VIC FORMAT: Using sensor format %d (0=RAW8, 1=RAW10, 2=RAW12) ***\n", vic_sensor_format);
+
         /* Binary Ninja: EXACT reference driver MIPI mode configuration */
         /* Binary Ninja: 000107ec - Set CSI mode */
         writel(3, vic_regs + 0xc);  /* BINARY NINJA EXACT: VIC mode = 3 for MIPI interface */
@@ -1289,9 +1267,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel((width << 16) | height, vic_regs + 0x4);
         pr_info("*** BINARY NINJA: reg 0x4 = 0x%x (dimensions %dx%d) ***\n", (width << 16) | height, width, height);
 
-        /* 2. Register 0x14 - Interrupt config (from sensor attributes) */
-        writel(0x0, vic_regs + 0x14);  /* Start with safe default */
-        pr_info("*** BINARY NINJA: reg 0x14 = 0x0 (interrupt config) ***\n");
+        /* 2. Register 0x14 - CRITICAL FIX: Write sensor format (RAW10 = 1) */
+        writel(vic_sensor_format, vic_regs + 0x14);  /* CRITICAL: Sensor format, not 0! */
+        pr_info("*** CRITICAL FIX: reg 0x14 = 0x%x (sensor format RAW10) ***\n", vic_sensor_format);
 
         /* 3. Register 0x100 - Complex calculation for MIPI */
         u32 reg_100_value = 0x1;  /* Basic value for MIPI RAW10 */
@@ -2550,72 +2528,37 @@ int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
     return 0;
 }
 
-/* vic_core_ops_init - EXACT Binary Ninja reference implementation */
+/* CRITICAL FIX: Simplified vic_core_ops_init - Remove IRQ enable/disable calls */
+/* Working driver just manages state transitions - no IRQ manipulation */
 int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vic_device *vic_dev;
-    int current_state;
-    int result;
+    int old_state;
 
-    /* CRITICAL DEBUG: Log entry to verify this function is being called */
-    pr_info("*** vic_core_ops_init: ENTRY - sd=%p, enable=%d ***\n", sd, enable);
+    pr_info("*** vic_core_ops_init: SIMPLIFIED version (working driver pattern) - enable=%d ***\n", enable);
 
-    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) */
-    if (sd == NULL || (unsigned long)sd >= 0xfffff001) {
-        /* Binary Ninja: isp_printf(2, "The parameter is invalid!\n", arg3) */
-        pr_err("*** vic_core_ops_init: INVALID PARAMETER - sd=%p, enable=%d ***\n", sd, enable);
-        isp_printf(2, "The parameter is invalid!\n", enable);
-        return 0xffffffea;  /* Binary Ninja: return 0xffffffea */
-    }
-
-    /* Binary Ninja: void* $s1_1 = *(arg1 + 0xd4) */
-    /* SAFE: Use proper struct member access instead of dangerous offset */
-    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
-
-    /* CRITICAL DEBUG: Verify VIC device is valid */
-    if (!vic_dev) {
-        pr_err("*** vic_core_ops_init: CRITICAL ERROR - vic_dev is NULL! ***\n");
+    if (!sd)
         return -EINVAL;
-    }
-    pr_info("*** vic_core_ops_init: vic_dev=%p, current state check ***\n", vic_dev);
 
-    /* Binary Ninja: int32_t $v0_2 = *($s1_1 + 0x128) */
-    current_state = vic_dev->state;
-    pr_info("*** vic_core_ops_init: current_state=%d, enable=%d ***\n", current_state, enable);
+    vic_dev = tx_isp_get_subdevdata(sd);
+    if (!vic_dev)
+        return -EINVAL;
 
-    /* Binary Ninja: if (arg2 == 0) */
-    if (enable == 0) {
-        /* Binary Ninja: result = 0 */
-        result = 0;
+    old_state = vic_dev->state;
 
-        /* Binary Ninja: if ($v0_2 != 2) */
-        if (current_state != 2) {
-            /* Binary Ninja: tx_vic_disable_irq() */
-            tx_vic_disable_irq(vic_dev);
-
-            /* Binary Ninja: *($s1_1 + 0x128) = 2 */
-            vic_dev->state = 2;
+    if (enable) {
+        if (old_state != 3) {
+            pr_info("vic_core_ops_init: State transition %d -> 3 (READY -> ACTIVE)\n", old_state);
+            vic_dev->state = 3; /* READY -> ACTIVE */
         }
     } else {
-        /* Binary Ninja: result = 0 */
-        result = 0;
-
-        /* Binary Ninja: if ($v0_2 != 3) */
-        if (current_state != 3) {
-            /* CRITICAL FIX: Call tx_isp_vic_start BEFORE enabling interrupts */
-            /* This is where VIC hardware should be initialized for interrupt generation */
-            extern uint32_t vic_start_ok;
-
-            /* Binary Ninja: tx_vic_enable_irq() */
-            tx_vic_enable_irq(vic_dev);
-
-            /* Binary Ninja: *($s1_1 + 0x128) = 3 */
-            vic_dev->state = 3;
+        if (old_state != 2) {
+            pr_info("vic_core_ops_init: State transition %d -> 2 (ACTIVE -> READY)\n", old_state);
+            vic_dev->state = 2; /* ACTIVE -> READY */
         }
     }
 
-    /* Binary Ninja: return result */
-    return result;
+    return 0;
 }
 
 /* VIC PIPO MDMA Enable function - EXACT Binary Ninja implementation */
