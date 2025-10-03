@@ -325,10 +325,19 @@ static DEFINE_SPINLOCK(irq_cb_lock);
 /* REMOVED: Duplicate vic_buffer_entry definition - use shared header instead */
 
 /* VIC MDMA channel state - Binary Ninja global variables */
-static uint32_t vic_mdma_ch0_sub_get_num = 0;
-static uint32_t vic_mdma_ch1_sub_get_num = 0;
-static uint32_t vic_mdma_ch0_set_buff_index = 0;
-static uint32_t vic_mdma_ch1_set_buff_index = 0;
+uint32_t vic_mdma_ch0_sub_get_num = 0;
+uint32_t vic_mdma_ch1_sub_get_num = 0;
+uint32_t vic_mdma_ch0_set_buff_index = 0;
+uint32_t vic_mdma_ch1_set_buff_index = 0;
+EXPORT_SYMBOL(vic_mdma_ch0_sub_get_num);
+EXPORT_SYMBOL(vic_mdma_ch1_sub_get_num);
+EXPORT_SYMBOL(vic_mdma_ch0_set_buff_index);
+EXPORT_SYMBOL(vic_mdma_ch1_set_buff_index);
+
+/* Binary Ninja raw_pipe - function pointer table for VIC callbacks */
+void *raw_pipe[8] = {NULL};
+EXPORT_SYMBOL(raw_pipe);
+
 static struct list_head vic_buffer_fifo;
 
 /* GPIO switch state for VIC frame done - Binary Ninja reference */

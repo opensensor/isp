@@ -145,9 +145,10 @@ struct tx_isp_vic_device {
     /* Buffer management structures (properly aligned) */
     spinlock_t buffer_lock __attribute__((aligned(4)));             /* Buffer lock */
     struct list_head queue_head __attribute__((aligned(4)));        /* Buffer queues */
-    struct list_head free_head __attribute__((aligned(4)));
-    struct list_head done_head __attribute__((aligned(4)));
-    
+    struct list_head free_head __attribute__((aligned(4)));         /* 0x1fc: Free buffer queue */
+    struct list_head done_head __attribute__((aligned(4)));         /* Done buffer queue */
+    struct list_head busy_head __attribute__((aligned(4)));         /* 0x204: Busy buffer queue */
+
     /* Buffer index array for VIC register mapping */
     int buffer_index[5] __attribute__((aligned(4)));                /* Buffer index array (5 buffers max) */
 

@@ -146,14 +146,14 @@ static void *test_addr = NULL;  /* Test address pointer */
 /* CRITICAL FIX: Correct signature to match Linux IRQ handler requirements and implementation in tx-isp-module.c */
 irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);
 
-/* Binary Ninja MDMA global variables */
-static uint32_t vic_mdma_ch0_sub_get_num = 0;
-static uint32_t vic_mdma_ch1_sub_get_num = 0;
-static uint32_t vic_mdma_ch0_set_buff_index = 0;
-static uint32_t vic_mdma_ch1_set_buff_index = 0;
+/* Binary Ninja MDMA global variables - declared in tx-isp-module.c */
+extern uint32_t vic_mdma_ch0_sub_get_num;
+extern uint32_t vic_mdma_ch1_sub_get_num;
+extern uint32_t vic_mdma_ch0_set_buff_index;
+extern uint32_t vic_mdma_ch1_set_buff_index;
 
-/* Binary Ninja raw_pipe structure - function pointer table */
-extern void *raw_pipe;
+/* Binary Ninja raw_pipe structure - function pointer table - declared in tx-isp-module.c */
+extern void *raw_pipe[];
 
 /* Forward declarations for actual reference driver functions */
 void tx_isp_enable_irq(void *arg1);
@@ -629,41 +629,26 @@ label_123f4:
 int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
 {
     u32 frame_size;
+    void __iomem *vic_regs;
+    u32 current_buffer_addr;
+    struct vic_buffer_entry *completed_buffer;
+    struct vic_buffer_entry *next_buffer;
+    unsigned long flags;
+    int i;
 
     if (!vic_dev) {
         pr_err("vic_mdma_irq_function: NULL vic_dev\n");
         return -EINVAL;
     }
 
-    /* CRITICAL SAFETY: Additional validation for interrupt context */
-    if ((unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff000) {
-        pr_err("vic_mdma_irq_function: Invalid vic_dev pointer 0x%p\n", vic_dev);
+    vic_regs = vic_dev->vic_regs;
+    if (!vic_regs) {
+        pr_err("vic_mdma_irq_function: NULL vic_regs\n");
         return -EINVAL;
     }
 
-    if (!virt_addr_valid(vic_dev)) {
-        pr_err("vic_mdma_irq_function: vic_dev pointer 0x%p not valid virtual address\n", vic_dev);
-        return -EINVAL;
-    }
-
-    /* CRITICAL SAFETY: Validate vic_dev structure integrity before accessing any fields */
-    if (!virt_addr_valid(vic_dev) ||
-        !virt_addr_valid((char*)vic_dev + sizeof(struct tx_isp_vic_device) - 1)) {
-        pr_err("vic_mdma_irq_function: vic_dev structure spans invalid memory\n");
-        return -EINVAL;
-    }
-
-    /* CRITICAL SAFETY: Check if vic_dev structure is properly initialized */
-    if (vic_dev->width == 0 || vic_dev->height == 0 ||
-        vic_dev->width > 8192 || vic_dev->height > 8192) {
-        pr_err("vic_mdma_irq_function: Invalid dimensions %dx%d - vic_dev not properly initialized\n",
-               vic_dev->width, vic_dev->height);
-        return -EINVAL;
-    }
-
-    /* Binary Ninja: if (*(arg1 + 0x214) == 0) */
+    /* Binary Ninja: if (*(arg1 + 0x214) == 0) - SAVERAW MODE */
     if (vic_dev->stream_state == 0) {
-        /* CRITICAL FIX: Safe access to width/height at offsets 0xdc/0xe0 */
         /* Binary Ninja: int32_t $s0_2 = *(arg1 + 0xdc) * *(arg1 + 0xe0) */
         frame_size = vic_dev->width * vic_dev->height;
 
@@ -672,45 +657,151 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
         /* Binary Ninja: int32_t $s0_3 = $s0_2 << 1 */
         frame_size = frame_size << 1;  /* RAW10 = 2 bytes per pixel */
 
-        /* CRITICAL DMA SYNC: Handle buffer completion with proper DMA operations */
-        struct tx_isp_dev *isp_dev = vic_dev->sd.isp;
+        /* Binary Ninja: Handle channel-specific buffer rotation */
+        if (channel == 0) {
+            /* Binary Ninja: if (vic_mdma_ch0_sub_get_num != 0) */
+            extern uint32_t vic_mdma_ch0_sub_get_num;
+            extern uint32_t vic_mdma_ch0_set_buff_index;
 
-        if (isp_dev && isp_dev->dma_buf && isp_dev->dma_size > 0) {
-            /* DMA sync for CPU access to completed buffer */
-            mips_dma_cache_sync(isp_dev->dma_addr, frame_size, DMA_FROM_DEVICE);
+            if (vic_mdma_ch0_sub_get_num != 0) {
+                u32 buff_index = vic_mdma_ch0_set_buff_index;
+                u32 next_index = (buff_index + 1) % 5;
+                u32 current_addr = readl(vic_regs + ((buff_index + 0xc6) << 2));
+                u32 next_addr = current_addr + frame_size;
 
-            pr_info("*** VIC MDMA IRQ: ISP buffer addr=0x%x completed and synced for CPU ***\n",
-                    isp_dev->dma_addr);
+                vic_mdma_ch0_set_buff_index = next_index;
+                writel(next_addr, vic_regs + ((next_index + 0xc6) << 2));
+                vic_mdma_ch0_sub_get_num -= 1;
 
-            /* Signal frame completion */
-            /* CRITICAL FIX: Validate vic_dev before calling complete() */
-            if (!vic_dev || (unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff000) {
-                pr_err("*** VIC MDMA IRQ: CRITICAL - vic_dev pointer is invalid: %p ***\n", vic_dev);
-                return 0;
+                /* Binary Ninja: if ($v0_28 == 7) - special case for buffer count */
+                if (vic_mdma_ch0_sub_get_num == 7) {
+                    u32 ctrl = readl(vic_regs + 0x300);
+                    ctrl = (ctrl & 0xfff0ffff) | 0x00080000;  /* Set buffer count to 8 */
+                    writel(ctrl, vic_regs + 0x300);
+                }
             }
+        } else if (channel == 1) {
+            /* Binary Ninja: if (vic_mdma_ch1_sub_get_num != 0) */
+            extern uint32_t vic_mdma_ch1_sub_get_num;
+            extern uint32_t vic_mdma_ch1_set_buff_index;
 
-            pr_info("*** VIC MDMA IRQ: About to call complete() #1, vic_dev=%p, &frame_complete=%p ***\n",
-                    vic_dev, &vic_dev->frame_complete);
+            if (vic_mdma_ch1_sub_get_num != 0) {
+                u32 buff_index = vic_mdma_ch1_set_buff_index;
+                u32 next_index = (buff_index + 1) % 5;
+                u32 current_addr = readl(vic_regs + ((buff_index + 0xc6) << 2));
+                u32 next_addr = current_addr + frame_size;
+
+                vic_mdma_ch1_set_buff_index = next_index;
+                writel(next_addr, vic_regs + ((next_index + 0xc6) << 2));
+                vic_mdma_ch1_sub_get_num -= 1;
+            }
+        }
+
+        /* Binary Ninja: if (vic_mdma_ch0_sub_get_num == 0 && vic_mdma_ch1_sub_get_num == 0) */
+        extern uint32_t vic_mdma_ch0_sub_get_num;
+        extern uint32_t vic_mdma_ch1_sub_get_num;
+        if (vic_mdma_ch0_sub_get_num == 0 && vic_mdma_ch1_sub_get_num == 0) {
+            /* Binary Ninja: return private_complete(arg1 + 0x148) */
             complete(&vic_dev->frame_complete);
-        } else {
-            pr_info("*** VIC MDMA IRQ: No ISP DMA buffer available for sync ***\n");
         }
 
-        /* Binary Ninja: return private_complete(arg1 + 0x148) */
-        /* CRITICAL FIX: Validate vic_dev before calling complete() */
-        if (!vic_dev || (unsigned long)vic_dev < 0x80000000 || (unsigned long)vic_dev >= 0xfffff000) {
-            pr_err("*** VIC MDMA IRQ: CRITICAL - vic_dev pointer is invalid before complete() #2: %p ***\n", vic_dev);
-            return 0;
-        }
-
-        pr_info("*** VIC MDMA IRQ: About to call complete() #2, vic_dev=%p, &frame_complete=%p ***\n",
-                vic_dev, &vic_dev->frame_complete);
-        complete(&vic_dev->frame_complete);
-        pr_info("*** VIC MDMA IRQ: complete() #2 returned successfully ***\n");
         return 0;
     }
 
-    pr_info("vic_mdma_irq_function: Stream not active, skipping\n");
+    /* Binary Ninja: STREAMING MODE - *(arg1 + 0x210) != 0 */
+    if (vic_dev->stream_state != 0) {
+        /* Binary Ninja: int32_t $s5_1 = *(*(arg1 + 0xb8) + 0x380) */
+        current_buffer_addr = readl(vic_regs + 0x380);
+
+        /* Binary Ninja: pop_buffer_fifo(arg1 + 0x204) - pop from busy queue */
+        spin_lock_irqsave(&vic_dev->buffer_lock, flags);
+
+        if (list_empty(&vic_dev->busy_head)) {
+            pr_err("busy_buf null; busy_buf_count=%d\n", vic_dev->active_buffer_count);
+            spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
+            return 0;
+        }
+
+        completed_buffer = list_first_entry(&vic_dev->busy_head, struct vic_buffer_entry, list);
+        list_del(&completed_buffer->list);
+        vic_dev->active_buffer_count--;
+
+        /* Binary Ninja: Call raw_pipe callback to deliver completed buffer */
+        extern void *raw_pipe[];
+        if (raw_pipe && raw_pipe[1]) {
+            void (*callback)(void *, struct vic_buffer_entry *) = raw_pipe[1];
+            void *callback_arg = raw_pipe[4];
+            callback(callback_arg, completed_buffer);
+        }
+
+        /* Binary Ninja: Move completed buffer to free queue */
+        list_add_tail(&completed_buffer->list, &vic_dev->free_head);
+
+        /* Binary Ninja: Check if completed buffer address matches current DMA address */
+        if (completed_buffer->buffer_addr != current_buffer_addr) {
+            /* Binary Ninja: Search busy queue for matching buffer */
+            int num_busy = vic_dev->active_buffer_count;
+
+            for (i = 0; i < num_busy; i++) {
+                if (list_empty(&vic_dev->busy_head)) {
+                    pr_err("line = %d, i=%d ;num = %d;busy_buf_count=%d\n",
+                           668, i, num_busy, vic_dev->active_buffer_count);
+                    break;
+                }
+
+                struct vic_buffer_entry *buf = list_first_entry(&vic_dev->busy_head,
+                                                                struct vic_buffer_entry, list);
+                list_del(&buf->list);
+                vic_dev->active_buffer_count--;
+
+                pr_info("line : %d; bank_addr:0x%x; addr:0x%x\n",
+                        662, buf->buffer_addr, current_buffer_addr);
+
+                /* Binary Ninja: Call raw_pipe callback */
+                if (raw_pipe && raw_pipe[1]) {
+                    void (*callback)(void *, struct vic_buffer_entry *) = raw_pipe[1];
+                    void *callback_arg = raw_pipe[4];
+                    callback(callback_arg, buf);
+                }
+
+                /* Binary Ninja: Move to free queue */
+                list_add_tail(&buf->list, &vic_dev->free_head);
+
+                if (buf->buffer_addr == current_buffer_addr) {
+                    break;
+                }
+            }
+
+            if (i == num_busy) {
+                pr_err("function: %s ; vic dma addrrss error!\n", __func__);
+                pr_err("VIC_ADDR_DMA_CONTROL : 0x%x\n", readl(vic_regs + 0x300));
+            }
+        }
+
+        /* Binary Ninja: Queue next buffer if available */
+        if (!list_empty(&vic_dev->free_head) && !list_empty(&vic_dev->done_head)) {
+            /* Binary Ninja: pop from done queue and free queue */
+            next_buffer = list_first_entry(&vic_dev->done_head, struct vic_buffer_entry, list);
+            list_del(&next_buffer->list);
+
+            struct vic_buffer_entry *free_buf = list_first_entry(&vic_dev->free_head,
+                                                                 struct vic_buffer_entry, list);
+            list_del(&free_buf->list);
+
+            /* Binary Ninja: Copy buffer address */
+            free_buf->buffer_addr = next_buffer->buffer_addr;
+
+            /* Binary Ninja: Add to busy queue */
+            list_add_tail(&free_buf->list, &vic_dev->busy_head);
+            vic_dev->active_buffer_count++;
+
+            /* Binary Ninja: Write buffer address to VIC register */
+            writel(free_buf->buffer_addr, vic_regs + ((free_buf->buffer_index + 0xc6) << 2));
+        }
+
+        spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
+    }
+
     return 0;
 }
 

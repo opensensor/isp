@@ -2237,8 +2237,8 @@ int tisp_init(void *sensor_info, char *param_name)
     pr_info("*** CRITICAL: Calling tx_isp_subdev_pipo to initialize VIC buffer management ***\n");
 
     if (ourISPdev->vic_dev) {
-        /* Create a dummy raw_pipe structure for the call */
-        void *raw_pipe[8] = {NULL}; /* 8 function pointers as per Binary Ninja */
+        /* Use global raw_pipe structure */
+        extern void *raw_pipe[];
 
         /* Call tx_isp_subdev_pipo with the VIC subdev and raw_pipe structure */
         int pipo_ret = tx_isp_subdev_pipo(ourISPdev->vic_dev, raw_pipe);
