@@ -2714,68 +2714,9 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (stride)\n", stride);
 
-    /* CRITICAL FIX: Write actual buffer addresses to VIC hardware registers */
-    /* VIC hardware needs to know where to DMA frame data to generate interrupts */
-    pr_info("*** CRITICAL FIX: Writing buffer addresses to VIC hardware registers ***\n");
-
-    /* Access buffer addresses from VBM system - where QBUF actually stores them */
-    extern struct frame_channel_device frame_channels[];
-    struct tx_isp_channel_state *state = &frame_channels[0].state;
-
-    if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
-        int i;
-        int configured_count = 0;
-        pr_info("*** VIC BUFFER ACCESS: Found %d VBM buffer addresses at %p ***\n",
-                state->vbm_buffer_count, state->vbm_buffer_addresses);
-
-        for (i = 0; i < state->vbm_buffer_count && i < 5; i++) {
-            u32 buffer_addr = state->vbm_buffer_addresses[i];
-            u32 reg_offset = 0x318 + (i * 4);  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
-
-            if (buffer_addr != 0) {
-                writel(buffer_addr, vic_base + reg_offset);
-                if (vic_ctrl)
-                    writel(buffer_addr, vic_ctrl + reg_offset);
-                wmb();
-                configured_count++;
-                pr_info("*** VIC BUFFER %d: Wrote VBM address 0x%x to reg 0x%x ***\n",
-                        i, buffer_addr, reg_offset);
-            } else {
-                pr_warn("*** VIC BUFFER %d: No VBM address available (0x0) ***\n", i);
-            }
-        }
-        if (configured_count == 0) configured_count = 1;  /* Ensure at least 1 buffer */
-        if (configured_count > 5) configured_count = 5;    /* VIC has max 5 slots */
-        vic_dev->active_buffer_count = configured_count;
-        pr_info("*** CRITICAL: VIC buffer addresses configured from VBM (count=%d) - hardware can now generate interrupts! ***\n",
-                configured_count);
-    } else {
-        /* CRITICAL FIX: Use fallback buffer addresses like working reference */
-        pr_warn("*** CRITICAL: No VBM buffer addresses - using fallback addresses from reserved memory ***\n");
-        pr_warn("*** vbm_buffer_addresses=%p, vbm_buffer_count=%d ***\n",
-               state->vbm_buffer_addresses, state->vbm_buffer_count);
-
-        /* Use reserved memory region 0x6300000 like working reference */
-        u32 frame_size = width * height * 2;  /* RAW10 = 2 bytes/pixel */
-        u32 base_addr = 0x6300000;  /* Reserved memory base from boot parameter rmem=29M@0x6300000 */
-
-        int i;
-        for (i = 0; i < 5; i++) {
-            u32 buffer_addr = base_addr + (i * frame_size);
-            u32 reg_offset = 0x318 + (i * 4);  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
-
-            writel(buffer_addr, vic_base + reg_offset);
-            if (vic_ctrl)
-                writel(buffer_addr, vic_ctrl + reg_offset);
-            wmb();
-            pr_info("*** VIC FALLBACK BUFFER %d: Wrote reserved memory address 0x%x to reg 0x%x ***\n",
-                    i, buffer_addr, reg_offset);
-        }
-        vic_dev->active_buffer_count = 5;
-        pr_info("*** CRITICAL: VIC fallback buffer addresses configured (count=5) - hardware can now generate interrupts! ***\n");
-    }
-
-    pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - VIC should now generate interrupts! ***\n");
+    /* Binary Ninja EXACT: Function ends here - does NOT write buffer addresses */
+    /* Buffer addresses are written by ispvic_frame_channel_qbuf, not here! */
+    pr_info("*** VIC PIPO MDMA ENABLE COMPLETE (Binary Ninja EXACT - no buffer address writes) ***\n");
 }
 
 /* ISPVIC Frame Channel S_Stream - EXACT Binary Ninja Implementation */
@@ -3722,7 +3663,9 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 {
     struct tx_isp_vic_device *vic_dev = NULL;
     unsigned long irq_flags = 0;
-    void *buffer_entry = arg2;
+    struct vic_buffer_entry *new_buffer = (struct vic_buffer_entry *)arg2;
+    struct vic_buffer_entry *free_entry, *buffer_to_program;
+    struct list_head *pos;
     u32 buffer_addr, buffer_index, reg_offset;
 
     pr_info("*** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***\n");
@@ -3738,30 +3681,70 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         return 0;
     }
 
-    /* Lock buffer management */
-    spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, irq_flags);
+    /* Binary Ninja EXACT: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
+    __private_spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, &irq_flags);
 
-    /* Binary Ninja EXACT: Buffer queue management with VIC register writes */
-    if (buffer_entry) {
-        /* Use the provided node (BN: arg2 points to a node whose +8 holds buffer addr) */
-        struct vic_buffer_entry *node = (struct vic_buffer_entry *)buffer_entry;
-        buffer_addr = node->buffer_addr;
-        buffer_index = node->buffer_index;
-        reg_offset = (buffer_index + 0xc6) << 2;  /* 0x318..0x328 */
-
-        /* Program slot address while streaming (no CONFIG/RUN toggle) */
-        writel(buffer_addr, vic_dev->vic_regs + reg_offset);
-        if (vic_dev->vic_regs_control)
-            writel(buffer_addr, vic_dev->vic_regs_control + reg_offset);
-        wmb();
-
-        pr_info("*** VIC QBUF: wrote slot %u addr=0x%x to reg_off=0x%x (CONFIG->RUN) ***\n", buffer_index, buffer_addr, reg_offset);
-
-        /* Done for this node */
+    /* Binary Ninja EXACT: Add new buffer to done queue if provided */
+    if (new_buffer) {
+        /* Binary Ninja: Add arg2 to done queue tail */
+        list_add_tail(&new_buffer->list, &vic_dev->done_head);
+        pr_info("ispvic_frame_channel_qbuf: Added new buffer (addr=0x%x, index=%d) to done queue\n",
+                new_buffer->buffer_addr, new_buffer->buffer_index);
     }
 
-    /* Unlock buffer management */
-    spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
+    /* Binary Ninja EXACT: if ($s0 + 0x1fc == *($s0 + 0x1fc)) - check if free queue is empty */
+    if (list_empty(&vic_dev->free_head)) {
+        pr_err("ispvic_frame_channel_qbuf: bank no free\n");
+        private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
+        return 0;
+    }
+
+    /* Binary Ninja EXACT: if ($s0 + 0x1f4 == *($s0 + 0x1f4)) - check if done queue is empty */
+    if (list_empty(&vic_dev->done_head)) {
+        pr_err("ispvic_frame_channel_qbuf: qbuffer null\n");
+        private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
+        return 0;
+    }
+
+    /* Binary Ninja EXACT: $a1_1, $a2_1 = pop_buffer_fifo($s0 + 0x1f4) */
+    /* Pop from done queue */
+    pos = vic_dev->done_head.next;
+    buffer_to_program = list_entry(pos, struct vic_buffer_entry, list);
+    list_del(pos);
+    pr_info("ispvic_frame_channel_qbuf: Popped buffer from done queue (addr=0x%x, index=%d)\n",
+            buffer_to_program->buffer_addr, buffer_to_program->buffer_index);
+
+    /* Binary Ninja EXACT: Pop from free queue to get a free entry */
+    pos = vic_dev->free_head.next;
+    free_entry = list_entry(pos, struct vic_buffer_entry, list);
+    list_del(pos);
+
+    /* Binary Ninja EXACT: Copy buffer info to free entry */
+    free_entry->buffer_addr = buffer_to_program->buffer_addr;
+    free_entry->buffer_index = buffer_to_program->buffer_index;
+    buffer_addr = free_entry->buffer_addr;
+    buffer_index = free_entry->buffer_index;
+
+    /* Binary Ninja EXACT: *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2 */
+    reg_offset = (buffer_index + 0xc6) << 2;  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
+    writel(buffer_addr, vic_dev->vic_regs + reg_offset);
+    if (vic_dev->vic_regs_control)
+        writel(buffer_addr, vic_dev->vic_regs_control + reg_offset);
+    wmb();
+    pr_info("*** VIC QBUF: Wrote buffer addr=0x%x to reg 0x%x (index=%d) ***\n",
+            buffer_addr, reg_offset, buffer_index);
+
+    /* Binary Ninja EXACT: Add free entry to busy queue */
+    list_add_tail(&free_entry->list, &vic_dev->busy_head);
+    pr_info("ispvic_frame_channel_qbuf: Added entry to busy queue\n");
+
+    /* Binary Ninja EXACT: *($s0 + 0x218) += 1 */
+    vic_dev->active_buffer_count++;
+    pr_info("ispvic_frame_channel_qbuf: Incremented active_buffer_count to %d\n",
+            vic_dev->active_buffer_count);
+
+    /* Binary Ninja EXACT: private_spin_unlock_irqrestore($s0 + 0x1f4, var_18) */
+    private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
 
     return 0;
 }
@@ -3820,6 +3803,7 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
         INIT_LIST_HEAD(&vic_dev->queue_head);
         INIT_LIST_HEAD(&vic_dev->done_head);
         INIT_LIST_HEAD(&vic_dev->free_head);
+        INIT_LIST_HEAD(&vic_dev->busy_head);
 
         pr_info("tx_isp_subdev_pipo: initialized linked list heads (Binary Ninja MCP)\n");
 
@@ -3846,21 +3830,34 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
         //raw_pipe[3] = (void *)ispvic_frame_channel_s_stream;  /* offset 0xc / 4 = index 3 */
         //raw_pipe[4] = (void *)sd;                             /* offset 0x10 / 4 = index 4 */
 
-        /* GOOD-THINGS APPROACH: Defer buffer allocation to prevent memory exhaustion */
-        pr_info("*** tx_isp_subdev_pipo: GOOD-THINGS approach - deferring buffer allocation ***\n");
-        pr_info("*** Buffers will be allocated on-demand during QBUF operations ***\n");
+        /* Binary Ninja EXACT: Allocate buffer entries and add to free queue */
+        pr_info("*** tx_isp_subdev_pipo: Allocating buffer entries for free queue ***\n");
 
-        /* Initialize buffer indices but don't allocate buffer structures yet */
         for (i = 0; i < 5; i++) {
+            struct vic_buffer_entry *entry;
             uint32_t reg_offset;  /* C90 compliance: declare at top */
+
+            /* Allocate buffer entry */
+            entry = VIC_BUFFER_ALLOC();
+            if (!entry) {
+                pr_err("tx_isp_subdev_pipo: Failed to allocate buffer entry %d\n", i);
+                continue;
+            }
+
+            /* Initialize buffer entry */
+            INIT_LIST_HEAD(&entry->list);
+            entry->buffer_addr = 0;  /* Will be set when buffer is queued */
+            entry->buffer_index = i;
+            entry->buffer_status = VIC_BUFFER_STATUS_FREE;
+
+            /* Add to free queue */
+            list_add_tail(&entry->list, &vic_dev->free_head);
+            pr_info("tx_isp_subdev_pipo: Allocated and added buffer entry %d to free queue\n", i);
 
             /* SAFE: Use proper buffer index array instead of unsafe pointer arithmetic */
             if (i < sizeof(vic_dev->buffer_index) / sizeof(vic_dev->buffer_index[0])) {
                 vic_dev->buffer_index[i] = i;
             }
-
-            /* GOOD-THINGS: No buffer allocation here - deferred to QBUF operations */
-            pr_info("tx_isp_subdev_pipo: initialized buffer index %d (allocation deferred)\n", i);
 
             /* SAFE: Clear VIC register using validated register access */
             reg_offset = (i + 0xc6) << 2;
@@ -3870,11 +3867,12 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
             }
         }
 
-        /* Set buffer count to 0 - buffers will be allocated on-demand */
+        /* Set buffer count to 0 - will be incremented by qbuf */
         vic_dev->buffer_count = 0;
-        pr_info("*** tx_isp_subdev_pipo: Using GOOD-THINGS deferred buffer allocation strategy ***\n");
+        vic_dev->active_buffer_count = 0;
+        pr_info("*** tx_isp_subdev_pipo: Buffer entries allocated and added to free queue ***\n");
 
-        pr_info("tx_isp_subdev_pipo: initialized %d buffer structures (safe implementation)\n", i);
+        pr_info("tx_isp_subdev_pipo: initialized %d buffer structures\n", i);
 
         /* SAFE: Use proper struct member access instead of offset 0x214 */
         vic_dev->processing = 1;
@@ -3884,13 +3882,86 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
         pr_info("*** tx_isp_subdev_pipo: RESETTING stream_state to 0 before calling ispvic_frame_channel_s_stream ***\n");
         vic_dev->stream_state = 0;  /* Ensure stream state is 0 so MDMA enable will be called */
 
+        /* CRITICAL: Populate done queue with VBM buffer addresses */
+        pr_info("*** tx_isp_subdev_pipo: Populating done queue with VBM buffer addresses ***\n");
+        {
+            extern struct frame_channel_device frame_channels[];
+            struct tx_isp_channel_state *state = &frame_channels[0].state;
+            int j;
+
+            if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
+                pr_info("*** Found %d VBM buffer addresses ***\n", state->vbm_buffer_count);
+                for (j = 0; j < state->vbm_buffer_count && j < 5; j++) {
+                    struct vic_buffer_entry *done_entry;
+                    u32 vbm_addr = state->vbm_buffer_addresses[j];
+
+                    if (vbm_addr == 0) {
+                        pr_warn("*** VBM buffer %d has address 0x0, skipping ***\n", j);
+                        continue;
+                    }
+
+                    /* Allocate a done entry */
+                    done_entry = VIC_BUFFER_ALLOC();
+                    if (!done_entry) {
+                        pr_err("*** Failed to allocate done entry for VBM buffer %d ***\n", j);
+                        continue;
+                    }
+
+                    /* Initialize done entry with VBM address */
+                    INIT_LIST_HEAD(&done_entry->list);
+                    done_entry->buffer_addr = vbm_addr;
+                    done_entry->buffer_index = j;
+                    done_entry->buffer_status = VIC_BUFFER_STATUS_QUEUED;
+
+                    /* Add to done queue */
+                    list_add_tail(&done_entry->list, &vic_dev->done_head);
+                    pr_info("*** Added VBM buffer %d (addr=0x%x) to done queue ***\n", j, vbm_addr);
+                }
+            } else {
+                /* Use fallback addresses from reserved memory */
+                pr_warn("*** No VBM buffers, using fallback addresses from reserved memory ***\n");
+                u32 width = 1920, height = 1080;  /* Default dimensions */
+                u32 frame_size = width * height * 2;  /* RAW10 = 2 bytes/pixel */
+                u32 base_addr = 0x6300000;  /* Reserved memory base */
+
+                for (j = 0; j < 5; j++) {
+                    struct vic_buffer_entry *done_entry;
+                    u32 buffer_addr = base_addr + (j * frame_size);
+
+                    /* Allocate a done entry */
+                    done_entry = VIC_BUFFER_ALLOC();
+                    if (!done_entry) {
+                        pr_err("*** Failed to allocate done entry for fallback buffer %d ***\n", j);
+                        continue;
+                    }
+
+                    /* Initialize done entry with fallback address */
+                    INIT_LIST_HEAD(&done_entry->list);
+                    done_entry->buffer_addr = buffer_addr;
+                    done_entry->buffer_index = j;
+                    done_entry->buffer_status = VIC_BUFFER_STATUS_QUEUED;
+
+                    /* Add to done queue */
+                    list_add_tail(&done_entry->list, &vic_dev->done_head);
+                    pr_info("*** Added fallback buffer %d (addr=0x%x) to done queue ***\n", j, buffer_addr);
+                }
+            }
+        }
+
         /* CRITICAL: Call ispvic_frame_channel_qbuf to write buffer addresses to VIC hardware */
         pr_info("*** tx_isp_subdev_pipo: CALLING ispvic_frame_channel_qbuf to write buffer addresses ***\n");
-        int qbuf_ret = ispvic_frame_channel_qbuf(sd, NULL);
-        if (qbuf_ret == 0) {
-            pr_info("*** tx_isp_subdev_pipo: ispvic_frame_channel_qbuf SUCCESS - buffer addresses written to VIC hardware ***\n");
-        } else {
-            pr_err("*** tx_isp_subdev_pipo: ispvic_frame_channel_qbuf FAILED: %d ***\n", qbuf_ret);
+        {
+            int j;
+            /* Call qbuf multiple times to program all buffers */
+            for (j = 0; j < 5; j++) {
+                int qbuf_ret = ispvic_frame_channel_qbuf(sd, NULL);
+                if (qbuf_ret == 0) {
+                    pr_info("*** tx_isp_subdev_pipo: ispvic_frame_channel_qbuf[%d] SUCCESS ***\n", j);
+                } else {
+                    pr_err("*** tx_isp_subdev_pipo: ispvic_frame_channel_qbuf[%d] FAILED: %d ***\n", j, qbuf_ret);
+                    break;  /* Stop on first failure */
+                }
+            }
         }
 
         /* CRITICAL MISSING CALL: Start VIC frame channel streaming */
