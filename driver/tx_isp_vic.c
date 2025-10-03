@@ -2528,37 +2528,45 @@ int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
     return 0;
 }
 
-/* CRITICAL FIX: Simplified vic_core_ops_init - Remove IRQ enable/disable calls */
-/* Working driver just manages state transitions - no IRQ manipulation */
+/* REVERT TO ORIGINAL: vic_core_ops_init with IRQ enable/disable calls */
+/* The "latest" driver needs these calls - they're part of the proper flow */
 int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vic_device *vic_dev;
-    int old_state;
+    int current_state;
+    int result;
 
-    pr_info("*** vic_core_ops_init: SIMPLIFIED version (working driver pattern) - enable=%d ***\n", enable);
+    pr_info("*** vic_core_ops_init: ORIGINAL version - enable=%d ***\n", enable);
 
-    if (!sd)
+    if (!sd || (unsigned long)sd >= 0xfffff001) {
+        pr_err("*** vic_core_ops_init: INVALID PARAMETER ***\n");
         return -EINVAL;
+    }
 
-    vic_dev = tx_isp_get_subdevdata(sd);
-    if (!vic_dev)
+    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+    if (!vic_dev) {
+        pr_err("*** vic_core_ops_init: vic_dev is NULL! ***\n");
         return -EINVAL;
+    }
 
-    old_state = vic_dev->state;
+    current_state = vic_dev->state;
+    pr_info("*** vic_core_ops_init: current_state=%d, enable=%d ***\n", current_state, enable);
 
-    if (enable) {
-        if (old_state != 3) {
-            pr_info("vic_core_ops_init: State transition %d -> 3 (READY -> ACTIVE)\n", old_state);
-            vic_dev->state = 3; /* READY -> ACTIVE */
+    if (enable == 0) {
+        result = 0;
+        if (current_state != 2) {
+            tx_vic_disable_irq(vic_dev);
+            vic_dev->state = 2;
         }
     } else {
-        if (old_state != 2) {
-            pr_info("vic_core_ops_init: State transition %d -> 2 (ACTIVE -> READY)\n", old_state);
-            vic_dev->state = 2; /* ACTIVE -> READY */
+        result = 0;
+        if (current_state != 3) {
+            tx_vic_enable_irq(vic_dev);
+            vic_dev->state = 3;
         }
     }
 
-    return 0;
+    return result;
 }
 
 /* VIC PIPO MDMA Enable function - EXACT Binary Ninja implementation */
