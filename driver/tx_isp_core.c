@@ -110,7 +110,7 @@ int parse_rmem_bootarg(unsigned long *base, unsigned long *size)
     base_str = end_ptr + 1;  /* Skip '@' */
     *base = simple_strtoul(base_str, &end_ptr, 0);  /* Auto-detect hex/decimal */
 
-    printk(KERN_ALERT "parse_rmem_bootarg: Found rmem=%luM@0x%08lx (size=0x%08lx)\n",
+    pr_info("parse_rmem_bootarg: Found rmem=%luM@0x%08lx (size=0x%08lx)\n",
             *size / (1024 * 1024), *base, *size);
 
     return 0;
@@ -235,7 +235,7 @@ static int tisp_event_process(void)
     ret = wait_for_completion_timeout(&tevent_info, 20); /* 0x14 = 20 jiffies */
 
     if (ret == -512) { /* 0xfffffe00 = -512 */
-        printk(KERN_ALERT "tisp_event_process: Event processing interrupted by signal\n");
+        pr_info("tisp_event_process: Event processing interrupted by signal\n");
         return 0;
     }
 
@@ -296,7 +296,7 @@ int isp_fw_process(void *data)
         return -EINVAL;
     }
 
-    printk(KERN_ALERT "*** isp_fw_process: ISP firmware processing thread started (core_dev=%p) ***\n", core_dev);
+    pr_info("*** isp_fw_process: ISP firmware processing thread started (core_dev=%p) ***\n", core_dev);
 
     /* Binary Ninja: while (private_kthread_should_stop() == 0) */
     while (!kthread_should_stop()) {
@@ -307,7 +307,7 @@ int isp_fw_process(void *data)
         msleep(10);
     }
 
-    printk(KERN_ALERT "*** isp_fw_process: ISP firmware processing thread stopped ***\n");
+    pr_info("*** isp_fw_process: ISP firmware processing thread stopped ***\n");
     return 0;
 }
 
@@ -322,7 +322,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     int a0_4;
     int vic_state;
 
-    printk(KERN_ALERT "*** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=%d ***\n", enable);
+    pr_info("*** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=%d ***\n", enable);
 
     if (!sd) {
         pr_err("ispcore_video_s_stream: Invalid subdev\n");
@@ -348,7 +348,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
     /* Binary Ninja: if (*($s0 + 0xe8) s< 3) */
     vic_state = vic_dev->state;
-    printk(KERN_ALERT "*** VIC STATE CHECK: vic_dev->state=%d (need >=3), enable=%d ***\n", vic_state, enable);
+    pr_info("*** VIC STATE CHECK: vic_dev->state=%d (need >=3), enable=%d ***\n", vic_state, enable);
 
     if (vic_state < 3) {
         pr_err("*** VIC STATE ERROR: Current VIC state=%d, need >=3 for streaming ***\n", vic_state);
@@ -403,17 +403,17 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Binary Ninja: $s2_1 += 0xc4 */
                 s2_1 += 0xc4;
 
-                printk(KERN_ALERT "*** DEBUG: Frame channel loop - s2_1=0x%x, v0_6=%p ***\n", s2_1, v0_6);
+                pr_info("*** DEBUG: Frame channel loop - s2_1=0x%x, v0_6=%p ***\n", s2_1, v0_6);
 
                 channel = (struct tx_isp_frame_channel*)v0_6;
 
                 /* Binary Ninja: if (*($v0_6 + 0x74) == 4) */
                 if (channel->state == 4) {
-                    printk(KERN_ALERT "*** DEBUG: Channel in streaming state, calling streamoff ***\n");
+                    pr_info("*** DEBUG: Channel in streaming state, calling streamoff ***\n");
                     /* Binary Ninja: ispcore_frame_channel_streamoff(*($v0_6 + 0x78)) */
                     /* SAFE: Just set the channel state to non-streaming */
                     channel->state = 3;
-                    printk(KERN_ALERT "*** DEBUG: Channel state changed from 4 to 3 ***\n");
+                    pr_info("*** DEBUG: Channel state changed from 4 to 3 ***\n");
                 }
 
                 /* Binary Ninja: if ($s2_1 == 0x24c) break */
@@ -427,7 +427,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
             /* Binary Ninja: *($s0 + 0xe8) = 3 */
             vic_dev->state = 3;
-            printk(KERN_ALERT "*** ispcore_video_s_stream: VIC state set to 3 after stream OFF ***\n");
+            pr_info("*** ispcore_video_s_stream: VIC state set to 3 after stream OFF ***\n");
         }
         /* Binary Ninja: $s3_1 = arg1 + 0x38 */
         s3_1 = &isp_dev->subdevs[0];
@@ -437,7 +437,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     } else {
         /* Binary Ninja: *($s0 + 0xe8) = 4 */
         vic_dev->state = 4;
-        printk(KERN_ALERT "*** ispcore_video_s_stream: VIC state set to 4 for stream ON ***\n");
+        pr_info("*** ispcore_video_s_stream: VIC state set to 4 for stream ON ***\n");
         /* Binary Ninja: $s3_1 = arg1 + 0x38 */
         s3_1 = &isp_dev->subdevs[0];
     }
@@ -473,7 +473,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
                     int result_1 = s_stream_func(a0_5, enable);
                     result = result_1;
 
-                    printk(KERN_ALERT "*** ispcore_video_s_stream: Called s_stream on subdev %s: result=%d ***\n",
+                    pr_info("*** ispcore_video_s_stream: Called s_stream on subdev %s: result=%d ***\n",
                             a0_5->pdev ? a0_5->pdev->name : "unknown", result_1);
 
                     /* Binary Ninja: if (result_1 != 0) */
@@ -527,7 +527,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         /* Binary Ninja: $a0_6 = arg1 */
         /* Binary Ninja: $v0_11 = tx_isp_disable_irq */
         tx_isp_disable_irq(isp_dev);
-        printk(KERN_ALERT "*** ispcore_video_s_stream: IRQ disabled ***\n");
+        pr_info("*** ispcore_video_s_stream: IRQ disabled ***\n");
     } else {
         /* Binary Ninja: *($v0_10 + 0xb0) = 0xffffffff */
         if (core_dev) {
@@ -536,7 +536,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         /* Binary Ninja: $a0_6 = arg1 */
         /* Binary Ninja: $v0_11 = tx_isp_enable_irq */
         tx_isp_enable_irq(isp_dev);
-        printk(KERN_ALERT "*** ispcore_video_s_stream: IRQ enabled ***\n");
+        pr_info("*** ispcore_video_s_stream: IRQ enabled ***\n");
     }
 
     /* Binary Ninja: $v0_11($a0_6) - IRQ function call already done above */
@@ -563,7 +563,7 @@ irqreturn_t ispcore_irq_thread_handle(int irq, void *dev_id)
         return IRQ_NONE;
     }
 
-    printk(KERN_ALERT "*** ispcore_irq_thread_handle: EXACT Binary Ninja implementation - IRQ %d ***\n", irq);
+    pr_info("*** ispcore_irq_thread_handle: EXACT Binary Ninja implementation - IRQ %d ***\n", irq);
 
     vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
     if (!vic_dev || !vic_dev->vic_regs) {
@@ -574,11 +574,11 @@ irqreturn_t ispcore_irq_thread_handle(int irq, void *dev_id)
     /* Binary Ninja: Read VIC interrupt status */
     irq_status = readl(vic_dev->vic_regs + 0x1e0);  /* VIC interrupt status register */
 
-    printk(KERN_ALERT "*** ispcore_irq_thread_handle: VIC IRQ status = 0x%08x ***\n", irq_status);
+    pr_info("*** ispcore_irq_thread_handle: VIC IRQ status = 0x%08x ***\n", irq_status);
 
     if (irq_status != 0) {
         /* Binary Ninja: Handle VIC interrupts */
-        printk(KERN_ALERT "*** ispcore_irq_thread_handle: Processing VIC interrupt 0x%08x ***\n", irq_status);
+        pr_info("*** ispcore_irq_thread_handle: Processing VIC interrupt 0x%08x ***\n", irq_status);
 
         /* Clear VIC interrupt status */
         writel(irq_status, vic_dev->vic_regs + 0x1e0);
@@ -587,7 +587,7 @@ irqreturn_t ispcore_irq_thread_handle(int irq, void *dev_id)
         /* Binary Ninja: Signal frame completion */
         if (irq_status & 0x1) {  /* Frame done interrupt */
             complete(&isp_dev->frame_complete);
-            printk(KERN_ALERT "*** ispcore_irq_thread_handle: Frame completion signaled ***\n");
+            pr_info("*** ispcore_irq_thread_handle: Frame completion signaled ***\n");
         }
 
         /* Binary Ninja: Update frame count */
@@ -603,7 +603,7 @@ irqreturn_t ispcore_irq_thread_handle(int irq, void *dev_id)
         u32 core_irq_status = readl(isp_dev->core_dev->core_regs + 0x10);  /* ISP core interrupt status */
 
         if (core_irq_status != 0) {
-            printk(KERN_ALERT "*** ispcore_irq_thread_handle: ISP core IRQ status = 0x%08x ***\n", core_irq_status);
+            pr_info("*** ispcore_irq_thread_handle: ISP core IRQ status = 0x%08x ***\n", core_irq_status);
 
             /* Clear ISP core interrupt status */
             writel(core_irq_status, isp_dev->core_dev->core_regs + 0x10);
@@ -613,7 +613,7 @@ irqreturn_t ispcore_irq_thread_handle(int irq, void *dev_id)
         }
     }
 
-    printk(KERN_ALERT "*** ispcore_irq_thread_handle: IRQ processing complete, ret=%d ***\n", ret);
+    pr_info("*** ispcore_irq_thread_handle: IRQ processing complete, ret=%d ***\n", ret);
     return ret;
 }
 
@@ -643,7 +643,7 @@ int ispcore_link_setup(const struct tx_isp_subdev_pad *local,
     /* Convert flags to config: 0 = disable, 1 = enable */
     config = (flags & 1) ? 1 : 0;
 
-    printk(KERN_ALERT "*** ispcore_link_setup: EXACT Binary Ninja implementation - flags=0x%x, config=%d ***\n", flags, config);
+    pr_info("*** ispcore_link_setup: EXACT Binary Ninja implementation - flags=0x%x, config=%d ***\n", flags, config);
 
     vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
     csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
@@ -651,11 +651,11 @@ int ispcore_link_setup(const struct tx_isp_subdev_pad *local,
 
     if (config == 0) {
         /* Binary Ninja: Disable pipeline links */
-        printk(KERN_ALERT "*** ispcore_link_setup: DISABLING pipeline links ***\n");
+        pr_info("*** ispcore_link_setup: DISABLING pipeline links ***\n");
 
         /* Disable VIC to CSI link */
         if (vic_dev && csi_dev) {
-            printk(KERN_ALERT "ispcore_link_setup: Disabling VIC->CSI link\n");
+            pr_info("ispcore_link_setup: Disabling VIC->CSI link\n");
             /* Binary Ninja: Clear link configuration registers */
             if (vic_dev->vic_regs) {
                 writel(0, vic_dev->vic_regs + 0x380);  /* Clear VIC output configuration */
@@ -665,7 +665,7 @@ int ispcore_link_setup(const struct tx_isp_subdev_pad *local,
 
         /* Disable CSI to VIN link */
         if (csi_dev && vin_dev) {
-            printk(KERN_ALERT "ispcore_link_setup: Disabling CSI->VIN link\n");
+            pr_info("ispcore_link_setup: Disabling CSI->VIN link\n");
             /* Binary Ninja: Clear CSI output configuration */
             if (csi_dev->csi_regs) {
                 writel(0, csi_dev->csi_regs + 0x20);  /* Clear CSI output configuration */
@@ -677,7 +677,7 @@ int ispcore_link_setup(const struct tx_isp_subdev_pad *local,
         extern struct tx_isp_sensor *tx_isp_get_sensor(void);
         struct tx_isp_sensor *sensor = tx_isp_get_sensor();
         if (vin_dev && sensor) {
-            printk(KERN_ALERT "ispcore_link_setup: Disabling VIN->sensor link\n");
+            pr_info("ispcore_link_setup: Disabling VIN->sensor link\n");
             /* Binary Ninja: Clear VIN input configuration */
             if (vin_dev->base) {
                 writel(0, vin_dev->base + 0x10);  /* Clear VIN input configuration */
@@ -687,13 +687,13 @@ int ispcore_link_setup(const struct tx_isp_subdev_pad *local,
 
     } else {
         /* Binary Ninja: Enable pipeline links */
-        printk(KERN_ALERT "*** ispcore_link_setup: ENABLING pipeline links ***\n");
+        pr_info("*** ispcore_link_setup: ENABLING pipeline links ***\n");
 
         /* Enable sensor to VIN link */
         extern struct tx_isp_sensor *tx_isp_get_sensor(void);
         struct tx_isp_sensor *sensor = tx_isp_get_sensor();
         if (sensor && vin_dev) {
-            printk(KERN_ALERT "ispcore_link_setup: Enabling sensor->VIN link\n");
+            pr_info("ispcore_link_setup: Enabling sensor->VIN link\n");
             /* Binary Ninja: Configure VIN input for sensor */
             if (vin_dev->base) {
                 u32 vin_config = 0x1;  /* Enable VIN input */
@@ -702,13 +702,13 @@ int ispcore_link_setup(const struct tx_isp_subdev_pad *local,
                 }
                 writel(vin_config, vin_dev->base + 0x10);
                 wmb();
-                printk(KERN_ALERT "ispcore_link_setup: VIN input configured: 0x%08x\n", vin_config);
+                pr_info("ispcore_link_setup: VIN input configured: 0x%08x\n", vin_config);
             }
         }
 
         /* Enable VIN to CSI link */
         if (vin_dev && csi_dev) {
-            printk(KERN_ALERT "ispcore_link_setup: Enabling VIN->CSI link\n");
+            pr_info("ispcore_link_setup: Enabling VIN->CSI link\n");
             /* Binary Ninja: Configure CSI input from VIN */
             if (csi_dev->csi_regs) {
                 writel(0x1, csi_dev->csi_regs + 0x20);  /* Enable CSI input from VIN */
@@ -718,7 +718,7 @@ int ispcore_link_setup(const struct tx_isp_subdev_pad *local,
 
         /* Enable CSI to VIC link */
         if (csi_dev && vic_dev) {
-            printk(KERN_ALERT "ispcore_link_setup: Enabling CSI->VIC link\n");
+            pr_info("ispcore_link_setup: Enabling CSI->VIC link\n");
             /* Binary Ninja: Configure VIC input from CSI */
             if (vic_dev->vic_regs) {
                 u32 vic_input_config = 0x1;  /* Enable VIC input */
@@ -728,12 +728,12 @@ int ispcore_link_setup(const struct tx_isp_subdev_pad *local,
                 }
                 writel(vic_input_config, vic_dev->vic_regs + 0x380);
                 wmb();
-                printk(KERN_ALERT "ispcore_link_setup: VIC input configured: 0x%08x\n", vic_input_config);
+                pr_info("ispcore_link_setup: VIC input configured: 0x%08x\n", vic_input_config);
             }
         }
     }
 
-    printk(KERN_ALERT "*** ispcore_link_setup: Pipeline link setup complete, ret=%d ***\n", ret);
+    pr_info("*** ispcore_link_setup: Pipeline link setup complete, ret=%d ***\n", ret);
     return ret;
 }
 EXPORT_SYMBOL(ispcore_irq_thread_handle);
@@ -819,7 +819,7 @@ int tx_isp_core_enable_irq(struct tx_isp_core_device *core_dev)
 {
     extern struct tx_isp_dev *ourISPdev;
 
-    printk(KERN_ALERT "*** tx_isp_core_enable_irq: Enabling ISP Core hardware interrupts ***\n");
+    pr_info("*** tx_isp_core_enable_irq: Enabling ISP Core hardware interrupts ***\n");
 
     if (!core_dev || !core_dev->core_regs) {
         pr_err("tx_isp_core_enable_irq: Invalid ISP device or core registers\n");
@@ -860,9 +860,9 @@ int tx_isp_core_enable_irq(struct tx_isp_core_device *core_dev)
     writel(0x1000, core + 0x98bc);      /* New unmask - ONLY frame sync initially */
     wmb();
 
-    printk(KERN_ALERT "*** ISP PIPELINE: VIC->ISP connection ENABLED (0x800=1, 0x804=0x1c, 0x1c=8) ***\n");
-    printk(KERN_ALERT "*** ISP CORE: Hardware interrupt generation ENABLED ***\n");
-    printk(KERN_ALERT "*** VIC->ISP: Pipeline should now generate hardware interrupts when VIC completes frames! ***\n");
+    pr_info("*** ISP PIPELINE: VIC->ISP connection ENABLED (0x800=1, 0x804=0x1c, 0x1c=8) ***\n");
+    pr_info("*** ISP CORE: Hardware interrupt generation ENABLED ***\n");
+    pr_info("*** VIC->ISP: Pipeline should now generate hardware interrupts when VIC completes frames! ***\n");
 
     /* Set software flag */
     core_dev->irq_enabled = 1;
@@ -888,7 +888,7 @@ int tx_isp_core_stop(struct tx_isp_subdev *sd)
     /* Set pipeline to idle state */
     isp_dev->pipeline_state = ISP_PIPELINE_IDLE;
 
-    printk(KERN_ALERT "*** tx_isp_core_stop: ISP core stopped successfully ***\n");
+    pr_info("*** tx_isp_core_stop: ISP core stopped successfully ***\n");
     return 0;
 }
 EXPORT_SYMBOL(tx_isp_core_stop);
@@ -909,7 +909,7 @@ int tx_isp_core_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *confi
         return -EINVAL;
     }
 
-    printk(KERN_ALERT "*** tx_isp_core_set_format: Setting format %dx%d ***\n",
+    pr_info("*** tx_isp_core_set_format: Setting format %dx%d ***\n",
             config->width, config->height);
 
     /* Store format configuration */
@@ -928,7 +928,7 @@ int tx_isp_core_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *confi
         return ret;
     }
 
-    printk(KERN_ALERT "*** tx_isp_core_set_format: Format set successfully ***\n");
+    pr_info("*** tx_isp_core_set_format: Format set successfully ***\n");
     return 0;
 }
 EXPORT_SYMBOL(tx_isp_core_set_format);
@@ -1019,7 +1019,7 @@ int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg
     struct tx_isp_subdev *current_subdev;
     int i;
 
-    printk(KERN_ALERT "ispcore_core_ops_ioctl: cmd=0x%x, arg=%p\n", cmd, arg);
+    pr_info("ispcore_core_ops_ioctl: cmd=0x%x, arg=%p\n", cmd, arg);
 
     /* Binary Ninja: Check for valid subdev */
     if (!sd) {
@@ -1031,7 +1031,7 @@ int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg
     if (cmd == 0x1000000) {
         /* CRITICAL FIX: Don't call core->ioctl on main subdev - it would recurse infinitely! */
         /* The main subdev's core->ioctl points back to this function, causing stack overflow */
-        printk(KERN_ALERT "ispcore_core_ops_ioctl: Main subdev core cmd=0x%x - handled locally to prevent recursion\n", cmd);
+        pr_info("ispcore_core_ops_ioctl: Main subdev core cmd=0x%x - handled locally to prevent recursion\n", cmd);
         result = 0;  /* Success - main subdev core operations handled */
     } else if (cmd == 0x1000001) {
         /* CRITICAL FIX: Call sensor operations ioctl with proper parameters */
@@ -1057,7 +1057,7 @@ int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg
         isp_dev = ourISPdev;
     }
     if (!isp_dev) {
-        printk(KERN_ALERT "ispcore_core_ops_ioctl: No ISP device found\n");
+        pr_info("ispcore_core_ops_ioctl: No ISP device found\n");
         goto exit_check;
     }
 
@@ -1087,7 +1087,7 @@ int ispcore_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg
             if (current_subdev->ops && current_subdev->ops->core && current_subdev->ops->core->ioctl) {
                 /* CRITICAL: Check if this would cause infinite recursion */
                 if (current_subdev->ops->core->ioctl == ispcore_core_ops_ioctl) {
-                    printk(KERN_ALERT "ispcore_core_ops_ioctl: Subdev %d core->ioctl points to self - skipping to prevent recursion\n", i);
+                    pr_info("ispcore_core_ops_ioctl: Subdev %d core->ioctl points to self - skipping to prevent recursion\n", i);
                     result = 0;  /* Success - handled locally */
                     continue;
                 }
@@ -1133,7 +1133,7 @@ exit_check:
         result = 0;
     }
 
-    printk(KERN_ALERT "ispcore_core_ops_ioctl: cmd=0x%x completed with result=%d\n", cmd, result);
+    pr_info("ispcore_core_ops_ioctl: cmd=0x%x completed with result=%d\n", cmd, result);
     return result;
 }
 EXPORT_SYMBOL(ispcore_core_ops_ioctl);
@@ -1177,7 +1177,7 @@ void isp_ch1_frame_dequeue_delay(void)
 
     /* Binary Ninja: tx_isp_send_event_to_remote() call */
     if (ourISPdev && ourISPdev->vic_dev) {
-        printk(KERN_ALERT "isp_ch1_frame_dequeue_delay: Sending frame dequeue event\n");
+        pr_info("isp_ch1_frame_dequeue_delay: Sending frame dequeue event\n");
         /* In reference driver, this sends event 0x3000006 with ch1_buf data */
     }
 }
@@ -1279,7 +1279,7 @@ int isp_core_tunning_open(struct inode *inode, struct file *file)
     atomic64_set(&frame_done_cnt_local, 0);
     tuning_state = 1;  /* Tuning state */
 
-    printk(KERN_ALERT "isp_core_tunning_open: Tuning interface opened\n");
+    pr_info("isp_core_tunning_open: Tuning interface opened\n");
     return 0;
 }
 EXPORT_SYMBOL(isp_core_tunning_open);
@@ -1292,7 +1292,7 @@ int isp_core_tunning_release(struct inode *inode, struct file *file)
 {
     extern struct tx_isp_dev *ourISPdev;
 
-    printk(KERN_ALERT "isp_core_tunning_release\n");
+    pr_info("isp_core_tunning_release\n");
 
     if (!ourISPdev)
         return 0;
@@ -1338,7 +1338,7 @@ int isp_pre_frame_dequeue(void)
     }
 
     /* Binary Ninja: tx_isp_send_event_to_remote() call */
-    printk(KERN_ALERT "isp_pre_frame_dequeue: Processing frame dequeue event\n");
+    pr_info("isp_pre_frame_dequeue: Processing frame dequeue event\n");
 
     return 0;
 }
@@ -1359,7 +1359,7 @@ int isp_subdev_release_clks(struct tx_isp_subdev *sd)
     for (i = 0; i < sd->clk_num; i++) {
         if (sd->clks[i]) {
             clk_put(sd->clks[i]);
-            printk(KERN_ALERT "isp_subdev_release_clks: Released clock %d\n", i);
+            pr_info("isp_subdev_release_clks: Released clock %d\n", i);
         }
     }
 
@@ -1599,7 +1599,7 @@ int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
         return -ENODEV;
     }
 
-    printk(KERN_ALERT "*** ispcore_sensor_ops_ioctl: Looking for actual sensor device ***\n");
+    pr_info("*** ispcore_sensor_ops_ioctl: Looking for actual sensor device ***\n");
 
     /* CRITICAL: Don't iterate through subdevs - call the real sensor directly */
     /* The real sensor is accessed via helper function */
@@ -1608,7 +1608,7 @@ int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
     if (sensor && sensor->sd.ops &&
         sensor->sd.ops->sensor && sensor->sd.ops->sensor->ioctl) {
 
-        printk(KERN_ALERT "*** ispcore_sensor_ops_ioctl: Found real sensor device - calling sensor IOCTL ***\n");
+        pr_info("*** ispcore_sensor_ops_ioctl: Found real sensor device - calling sensor IOCTL ***\n");
 
         /* CRITICAL: Sensor expects FPS in format (fps_num << 16) | fps_den */
 
@@ -1618,7 +1618,7 @@ int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
             int new_fps = (30 << 16) | 1;  /* Default FPS for now - TODO: access actual tuning_data */
             if (new_fps != fps_value) {
                 fps_value = new_fps;
-                printk(KERN_ALERT "*** ispcore_sensor_ops_ioctl: Updated FPS to 0x%x from tuning data ***\n", fps_value);
+                pr_info("*** ispcore_sensor_ops_ioctl: Updated FPS to 0x%x from tuning data ***\n", fps_value);
             }
         }
 
@@ -1628,15 +1628,15 @@ int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
         /* The GC2053 sensor doesn't support TX_ISP_EVENT_SENSOR_FPS, causing -515 errors */
         /* Frame sync work should do Auto Exposure (AE) operations instead */
 
-        printk(KERN_ALERT "*** ispcore_sensor_ops_ioctl: Calling sensor with EXPO=0x%x (AE operation) ***\n", expo_value);
+        pr_info("*** ispcore_sensor_ops_ioctl: Calling sensor with EXPO=0x%x (AE operation) ***\n", expo_value);
 
         /* Call the real sensor's IOCTL with supported EXPO command - this triggers I2C communication */
         result = sensor->sd.ops->sensor->ioctl(&sensor->sd, TX_ISP_EVENT_SENSOR_EXPO, &expo_value);
 
-        printk(KERN_ALERT "*** ispcore_sensor_ops_ioctl: Real sensor IOCTL result: %d ***\n", result);
+        pr_info("*** ispcore_sensor_ops_ioctl: Real sensor IOCTL result: %d ***\n", result);
 
         if (result == 0) {
-            printk(KERN_ALERT "*** ispcore_sensor_ops_ioctl: Sensor AE operation successful - should see exposure I2C writes ***\n");
+            pr_info("*** ispcore_sensor_ops_ioctl: Sensor AE operation successful - should see exposure I2C writes ***\n");
         } else {
             pr_warn("*** ispcore_sensor_ops_ioctl: Sensor AE operation failed: %d ***\n", result);
         }
@@ -1720,7 +1720,7 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     /* CRITICAL: Take local reference to prevent race condition */
     isp_dev = ourISPdev;
     if (!isp_dev) {
-        printk(KERN_ALERT "*** ispcore_irq_fs_work: ourISPdev is NULL, skipping work ***\n");
+        pr_info("*** ispcore_irq_fs_work: ourISPdev is NULL, skipping work ***\n");
         return;
     }
 
@@ -2210,7 +2210,7 @@ static int tx_isp_setup_media_links(struct tx_isp_dev *isp)
 {
     int ret;
 
-    printk(KERN_ALERT "Setting up media entity links\n");
+    pr_info("Setting up media entity links\n");
 
     /* Initialize pad configurations for each subdevice */
     ret = tx_isp_init_subdev_pads(isp);
@@ -2226,30 +2226,30 @@ static int tx_isp_setup_media_links(struct tx_isp_dev *isp)
         return ret;
     }
 
-    printk(KERN_ALERT "Media entity links setup completed\n");
+    pr_info("Media entity links setup completed\n");
     return 0;
 }
 
 /* Initialize pad configurations for subdevices */
 static int tx_isp_init_subdev_pads(struct tx_isp_dev *isp)
 {
-    printk(KERN_ALERT "Initializing subdevice pads\n");
+    pr_info("Initializing subdevice pads\n");
 
     /* CSI pads: 1 output pad */
     if (isp->csi_dev) {
         /* CSI has one output pad that connects to VIC */
-        printk(KERN_ALERT "CSI pad 0: OUTPUT -> VIC pad 0\n");
+        pr_info("CSI pad 0: OUTPUT -> VIC pad 0\n");
     }
 
     /* VIC pads: 1 input pad, 1 output pad */
     if (isp->vic_dev) {
         /* VIC input pad 0 receives from CSI */
         /* VIC output pad 1 sends to application/capture */
-        printk(KERN_ALERT "VIC pad 0: INPUT <- CSI pad 0\n");
-        printk(KERN_ALERT "VIC pad 1: OUTPUT -> Capture interface\n");
+        pr_info("VIC pad 0: INPUT <- CSI pad 0\n");
+        pr_info("VIC pad 1: OUTPUT -> Capture interface\n");
     }
 
-    printk(KERN_ALERT "Subdevice pads initialized\n");
+    pr_info("Subdevice pads initialized\n");
     return 0;
 }
 
@@ -2259,7 +2259,7 @@ static int tx_isp_create_subdev_links(struct tx_isp_dev *isp)
     struct link_config csi_to_vic_link;
     int ret;
 
-    printk(KERN_ALERT "Creating subdevice links\n");
+    pr_info("Creating subdevice links\n");
 
     /* Create CSI -> VIC link */
     if (isp->csi_dev && isp->vic_dev) {
@@ -2283,10 +2283,10 @@ static int tx_isp_create_subdev_links(struct tx_isp_dev *isp)
             return ret;
         }
 
-        printk(KERN_ALERT "Created CSI->VIC link successfully\n");
+        pr_info("Created CSI->VIC link successfully\n");
     }
 
-    printk(KERN_ALERT "Subdevice links created\n");
+    pr_info("Subdevice links created\n");
     return 0;
 }
 
@@ -2298,7 +2298,7 @@ static int tx_isp_register_link(struct tx_isp_dev *isp, struct link_config *link
         return -EINVAL;
     }
 
-    printk(KERN_ALERT "Registering link: %s[%d] -> %s[%d] (flags=0x%x)\n",
+    pr_info("Registering link: %s[%d] -> %s[%d] (flags=0x%x)\n",
             link->src.name, link->src.index,
             link->dst.name, link->dst.index,
             link->flags);
@@ -2307,7 +2307,7 @@ static int tx_isp_register_link(struct tx_isp_dev *isp, struct link_config *link
      * and configure the hardware routing. For now, just validate and log. */
 
     if (link->flags & TX_ISP_LINKFLAG_ENABLED) {
-        printk(KERN_ALERT "Link enabled and configured\n");
+        pr_info("Link enabled and configured\n");
     }
 
     return 0;
@@ -2316,36 +2316,36 @@ static int tx_isp_register_link(struct tx_isp_dev *isp, struct link_config *link
 /* Configure default link routing */
 static int tx_isp_configure_default_links(struct tx_isp_dev *isp)
 {
-    printk(KERN_ALERT "Configuring default link routing\n");
+    pr_info("Configuring default link routing\n");
 
     /* Set pipeline to configured state */
     isp->pipeline_state = ISP_PIPELINE_CONFIGURED;
 
     /* Enable default data flow: CSI -> VIC -> Output */
     if (isp->csi_dev && isp->vic_dev) {
-        printk(KERN_ALERT "Default routing: Sensor -> CSI -> VIC -> Capture\n");
+        pr_info("Default routing: Sensor -> CSI -> VIC -> Capture\n");
 
         /* Configure data format propagation */
         tx_isp_configure_format_propagation(isp);
     }
 
-    printk(KERN_ALERT "Default link routing configured\n");
+    pr_info("Default link routing configured\n");
     return 0;
 }
 
 /* Configure format propagation through the pipeline */
 int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
 {
-    printk(KERN_ALERT "Configuring format propagation\n");
+    pr_info("Configuring format propagation\n");
 
     /* Ensure format compatibility between pipeline stages */
     if (isp->sensor_width > 0 && isp->sensor_height > 0) {
-        printk(KERN_ALERT "Propagating format: %dx%d through pipeline\n",
+        pr_info("Propagating format: %dx%d through pipeline\n",
                 isp->sensor_width, isp->sensor_height);
 
         /* Configure CSI format */
         if (isp->csi_dev) {
-            printk(KERN_ALERT "CSI configured for %dx%d\n", isp->sensor_width, isp->sensor_height);
+            pr_info("CSI configured for %dx%d\n", isp->sensor_width, isp->sensor_height);
         }
 
         /* Configure VIC format */
@@ -2353,12 +2353,12 @@ int tx_isp_configure_format_propagation(struct tx_isp_dev *isp)
             isp->vic_dev->width = isp->sensor_width;
             isp->vic_dev->height = isp->sensor_height;
             isp->vic_dev->stride = isp->sensor_width * 2; /* Assume 16-bit per pixel */
-            printk(KERN_ALERT "VIC configured for %dx%d, stride=%d\n",
+            pr_info("VIC configured for %dx%d, stride=%d\n",
                     isp->vic_dev->width, isp->vic_dev->height, isp->vic_dev->stride);
         }
     }
 
-    printk(KERN_ALERT "Format propagation configured\n");
+    pr_info("Format propagation configured\n");
     return 0;
 }
 
@@ -2373,7 +2373,7 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
     int32_t vic_state;
     int i;
 
-    printk(KERN_ALERT "*** ispcore_slake_module: EXACT Binary Ninja MCP implementation ***");
+    pr_info("*** ispcore_slake_module: EXACT Binary Ninja MCP implementation ***");
 
     /* Binary Ninja: if (arg1 != 0) */
     if (isp_dev != NULL) {
@@ -2398,47 +2398,47 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
             /* Binary Ninja: int32_t $v0 = *($s0_1 + 0xe8) - SAFE: Get VIC state */
             vic_state = vic_dev->state;
 
-            printk(KERN_ALERT "ispcore_slake_module: VIC device=%p, state=%d", vic_dev, vic_state);
+            pr_info("ispcore_slake_module: VIC device=%p, state=%d", vic_dev, vic_state);
 
             /* Binary Ninja: if ($v0 != 1) */
             if (vic_state != 1) {
                 /* Binary Ninja: if ($v0 s>= 3) */
                 if (vic_state >= 3) {
-                    printk(KERN_ALERT "ispcore_slake_module: ISP state >= 3, calling ispcore_core_ops_init");
+                    pr_info("ispcore_slake_module: ISP state >= 3, calling ispcore_core_ops_init");
 
                     /* CRITICAL FIX: Use good-things approach - get sensor attributes from connected sensor */
                     struct tx_isp_sensor_attribute *sensor_attr = NULL;
                     struct tx_isp_sensor *sensor = tx_isp_get_sensor();
                     if (sensor && sensor->video.attr) {
                         sensor_attr = sensor->video.attr;
-                        printk(KERN_ALERT "ispcore_slake_module: Using sensor attributes from connected sensor");
+                        pr_info("ispcore_slake_module: Using sensor attributes from connected sensor");
                     } else {
-                        printk(KERN_ALERT "ispcore_slake_module: No sensor attributes available, using NULL");
+                        pr_info("ispcore_slake_module: No sensor attributes available, using NULL");
                     }
 
                     /* GOOD-THINGS APPROACH: Call ispcore_core_ops_init with ISP device and sensor attributes */
                     int ret = ispcore_core_ops_init_with_sensor(isp_dev, sensor_attr);
                     if (ret < 0) {
-                        printk(KERN_ALERT "ispcore_slake_module: ispcore_core_ops_init failed: %d", ret);
+                        pr_info("ispcore_slake_module: ispcore_core_ops_init failed: %d", ret);
                         return ret;
                     }
                 }
 
                 /* Binary Ninja: Channel initialization loop */
                 /* int32_t $v0_2 = 0; while (true) */
-                printk(KERN_ALERT "ispcore_slake_module: Initializing channels");
+                pr_info("ispcore_slake_module: Initializing channels");
                 for (i = 0; i < ISP_MAX_CHAN; i++) {
                     /* Binary Ninja: if ($v0_2 u>= *($s0_1 + 0x154)) break */
                     /* Binary Ninja: *($a2_1 + *($s0_1 + 0x150) + 0x74) = 1 - SAFE: Set channel enabled */
                     isp_dev->channels[i].enabled = true;
-                    printk(KERN_ALERT "ispcore_slake_module: Channel %d enabled", i);
+                    pr_info("ispcore_slake_module: Channel %d enabled", i);
                 }
 
                 /* CRITICAL FIX: Binary Ninja VIC control function call */
                 /* Binary Ninja: void* $a0_1 = *($s0_1 + 0x1bc) - Get VIC control function */
                 /* Binary Ninja: (*($a0_1 + 0x40cc))($a0_1, 0x4000001, 0) */
                 if (vic_dev && vic_dev->vic_regs) {
-                    printk(KERN_ALERT "ispcore_slake_module: Calling VIC control function (0x4000001, 0)");
+                    pr_info("ispcore_slake_module: Calling VIC control function (0x4000001, 0)");
                     /* CRITICAL: This is the missing VIC control call that enables proper state transitions */
                     /* The function at offset 0x40cc is likely a VIC register configuration function */
                     /* For T31 hardware, this would configure VIC for proper operation */
@@ -2446,20 +2446,20 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
                     if (vic_control_reg) {
                         /* Write the control value 0x4000001 to enable VIC operation */
                         writel(0x4000001, vic_control_reg);
-                        printk(KERN_ALERT "ispcore_slake_module: VIC control register written: 0x4000001");
+                        pr_info("ispcore_slake_module: VIC control register written: 0x4000001");
                     }
                 }
 
                 /* Binary Ninja: *($s0_1 + 0xe8) = 1 - SAFE: Set VIC state to 1 */
                 vic_dev->state = 1;
-                printk(KERN_ALERT "ispcore_slake_module: Set VIC state to INIT (1)");
+                pr_info("ispcore_slake_module: Set VIC state to INIT (1)");
             }
 
             /* CRITICAL FIX: Subdev processing should happen regardless of VIC state */
             /* Binary Ninja: Subdevice slake loop */
             /* void* $s3_1 = $s0_1 + 0x38 - SAFE: Get subdev array */
-            printk(KERN_ALERT "ispcore_slake_module: Processing subdevices");
-            printk(KERN_ALERT "*** DEBUG: isp_dev=%p, isp_dev->subdevs=%p ***", isp_dev, isp_dev->subdevs);
+            pr_info("ispcore_slake_module: Processing subdevices");
+            pr_info("*** DEBUG: isp_dev=%p, isp_dev->subdevs=%p ***", isp_dev, isp_dev->subdevs);
 
             /* Process specific subdevices using helper functions in proper order */
             struct tx_isp_subdev *csi_sd = tx_isp_get_csi_subdev(isp_dev);
@@ -2470,10 +2470,10 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
 
             /* Process CSI first */
             if (csi_sd && csi_sd->ops && csi_sd->ops->internal && csi_sd->ops->internal->slake_module) {
-                printk(KERN_ALERT "*** ispcore_slake_module: Calling slake_module for CSI subdev ***\n");
+                pr_info("*** ispcore_slake_module: Calling slake_module for CSI subdev ***\n");
                 int ret = csi_sd->ops->internal->slake_module(csi_sd);
                 if (ret == 0) {
-                    printk(KERN_ALERT "ispcore_slake_module: CSI slake success");
+                    pr_info("ispcore_slake_module: CSI slake success");
                 } else if (ret != -0x203) {
                     isp_printf(2, (unsigned char*)"error handler!!!\n", csi_sd->module.name);
                     goto slake_error;
@@ -2482,10 +2482,10 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
 
             /* Process VIC second */
             if (vic_sd && vic_sd->ops && vic_sd->ops->internal && vic_sd->ops->internal->slake_module) {
-                printk(KERN_ALERT "*** ispcore_slake_module: Calling slake_module for VIC subdev ***\n");
+                pr_info("*** ispcore_slake_module: Calling slake_module for VIC subdev ***\n");
                 int ret = vic_sd->ops->internal->slake_module(vic_sd);
                 if (ret == 0) {
-                    printk(KERN_ALERT "ispcore_slake_module: VIC slake success");
+                    pr_info("ispcore_slake_module: VIC slake success");
                 } else if (ret != -0x203) {
                     isp_printf(2, (unsigned char*)"error handler!!!\n", vic_sd->module.name);
                     goto slake_error;
@@ -2494,10 +2494,10 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
 
             /* Process FS third */
             if (fs_sd && fs_sd->ops && fs_sd->ops->internal && fs_sd->ops->internal->slake_module) {
-                printk(KERN_ALERT "*** ispcore_slake_module: Calling slake_module for FS subdev ***\n");
+                pr_info("*** ispcore_slake_module: Calling slake_module for FS subdev ***\n");
                 int ret = fs_sd->ops->internal->slake_module(fs_sd);
                 if (ret == 0) {
-                    printk(KERN_ALERT "ispcore_slake_module: FS slake success");
+                    pr_info("ispcore_slake_module: FS slake success");
                 } else if (ret != -0x203) {
                     isp_printf(2, (unsigned char*)"error handler!!!\n", fs_sd->module.name);
                     goto slake_error;
@@ -2506,10 +2506,10 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
 
             /* Process Core fourth (Note: Core should NOT have slake_module to avoid recursion) */
             if (core_sd && core_sd->ops && core_sd->ops->internal && core_sd->ops->internal->slake_module) {
-                printk(KERN_ALERT "*** ispcore_slake_module: Calling slake_module for Core subdev ***\n");
+                pr_info("*** ispcore_slake_module: Calling slake_module for Core subdev ***\n");
                 int ret = core_sd->ops->internal->slake_module(core_sd);
                 if (ret == 0) {
-                    printk(KERN_ALERT "ispcore_slake_module: Core slake success");
+                    pr_info("ispcore_slake_module: Core slake success");
                 } else if (ret != -0x203) {
                     isp_printf(2, (unsigned char*)"error handler!!!\n", core_sd->module.name);
                     goto slake_error;
@@ -2518,17 +2518,17 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
 
             /* Process Sensor last */
             if (sensor_sd && sensor_sd->ops && sensor_sd->ops->internal && sensor_sd->ops->internal->slake_module) {
-                printk(KERN_ALERT "*** ispcore_slake_module: Calling slake_module for Sensor subdev ***\n");
+                pr_info("*** ispcore_slake_module: Calling slake_module for Sensor subdev ***\n");
                 int ret = sensor_sd->ops->internal->slake_module(sensor_sd);
                 if (ret == 0) {
-                    printk(KERN_ALERT "ispcore_slake_module: Sensor slake success");
+                    pr_info("ispcore_slake_module: Sensor slake success");
                 } else if (ret != -0x203) {
                     isp_printf(2, (unsigned char*)"error handler!!!\n", sensor_sd->module.name);
                     goto slake_error;
                 }
             }
 
-            printk(KERN_ALERT "*** ispcore_slake_module: All subdev slake operations completed using helper functions ***\n");
+            pr_info("*** ispcore_slake_module: All subdev slake operations completed using helper functions ***\n");
             goto clock_management;
 
 slake_error:
@@ -2538,24 +2538,24 @@ slake_error:
 clock_management:
             /* Binary Ninja: Clock management loop */
             /* int32_t $s2_2 = $s0_3 - 1; while (true) */
-            printk(KERN_ALERT "ispcore_slake_module: Managing ISP clocks");
+            pr_info("ispcore_slake_module: Managing ISP clocks");
 
             /* SAFE: Disable individual clocks instead of array access */
             if (isp_dev->csi_clk) {
                 clk_disable(isp_dev->csi_clk);
-                printk(KERN_ALERT "ispcore_slake_module: Disabled CSI clock");
+                pr_info("ispcore_slake_module: Disabled CSI clock");
             }
             if (isp_dev->core_dev && isp_dev->core_dev->ipu_clk) {
                 clk_disable(isp_dev->core_dev->ipu_clk);
-                printk(KERN_ALERT "ispcore_slake_module: Disabled IPU clock");
+                pr_info("ispcore_slake_module: Disabled IPU clock");
             }
             if (isp_dev->core_dev && isp_dev->core_dev->core_clk) {
                 clk_disable(isp_dev->core_dev->core_clk);
-                printk(KERN_ALERT "ispcore_slake_module: Disabled ISP clock");
+                pr_info("ispcore_slake_module: Disabled ISP clock");
             }
             if (isp_dev->cgu_isp) {
                 clk_disable(isp_dev->cgu_isp);
-                printk(KERN_ALERT "ispcore_slake_module: Disabled CGU ISP clock");
+                pr_info("ispcore_slake_module: Disabled CGU ISP clock");
             }
 
             /* Binary Ninja: return 0 */
@@ -2563,7 +2563,7 @@ clock_management:
         }
     }
 
-    printk(KERN_ALERT "ispcore_slake_module: Complete, result=%d", result);
+    pr_info("ispcore_slake_module: Complete, result=%d", result);
     return result;
 }
 
@@ -2601,10 +2601,10 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
     struct tx_isp_sensor_attribute *sensor_attr = NULL;
     void* s0 = NULL;
 
-    printk(KERN_ALERT "*** ispcore_core_ops_init: ENTRY - sd=%p, on=%d ***\n", sd, on);
+    pr_info("*** ispcore_core_ops_init: ENTRY - sd=%p, on=%d ***\n", sd, on);
     if (sd) {
-        printk(KERN_ALERT "*** ispcore_core_ops_init: sd->dev_priv=%p, sd->host_priv=%p ***\n", sd->dev_priv, sd->host_priv);
-        printk(KERN_ALERT "*** ispcore_core_ops_init: sd->pdev=%p, sd->ops=%p ***\n", sd->pdev, sd->ops);
+        pr_info("*** ispcore_core_ops_init: sd->dev_priv=%p, sd->host_priv=%p ***\n", sd->dev_priv, sd->host_priv);
+        pr_info("*** ispcore_core_ops_init: sd->pdev=%p, sd->ops=%p ***\n", sd->pdev, sd->ops);
     } else {
         pr_err("*** ispcore_core_ops_init: ERROR - sd is NULL! ***\n");
         return -EINVAL;
@@ -2615,7 +2615,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
     int32_t vic_state;  /* CRITICAL FIX: This should be VIC state, not core state */
     int ret;
 
-    printk(KERN_ALERT "*** ispcore_core_ops_init: EXACT Binary Ninja MCP implementation, on=%d ***", on);
+    pr_info("*** ispcore_core_ops_init: EXACT Binary Ninja MCP implementation, on=%d ***", on);
 
     /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) */
     if (!sd || (unsigned long)sd >= 0xfffff001) {
@@ -2630,11 +2630,11 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
         return -EINVAL;
     }
 
-    printk(KERN_ALERT "*** ispcore_core_ops_init: ISP device=%p ***", isp_dev);
+    pr_info("*** ispcore_core_ops_init: ISP device=%p ***", isp_dev);
 
     /* CRITICAL: Initialize frame sync work structure - MUST be done before any interrupts */
     INIT_WORK(&ispcore_fs_work, ispcore_irq_fs_work);
-    printk(KERN_ALERT "*** ispcore_core_ops_init: Frame sync work structure initialized ***");
+    pr_info("*** ispcore_core_ops_init: Frame sync work structure initialized ***");
 
     /* Convert 'on' parameter to sensor_attr for Binary Ninja compatibility */
     if (on == 0) {
@@ -2646,11 +2646,11 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
         if (sensor && sensor->video.attr) {
             /* Use the actual sensor attributes */
             sensor_attr = sensor->video.attr;
-            printk(KERN_ALERT "ispcore_core_ops_init: Using sensor attributes from sensor: %s", sensor_attr->name);
+            pr_info("ispcore_core_ops_init: Using sensor attributes from sensor: %s", sensor_attr->name);
         } else if (sensor) {
-            printk(KERN_ALERT "ispcore_core_ops_init: Sensor found but no attributes - sensor_attr will be NULL");
+            pr_info("ispcore_core_ops_init: Sensor found but no attributes - sensor_attr will be NULL");
         } else {
-            printk(KERN_ALERT "ispcore_core_ops_init: No sensor found - sensor_attr will be NULL");
+            pr_info("ispcore_core_ops_init: No sensor found - sensor_attr will be NULL");
         }
         /* sensor_attr can be NULL for initial core init */
     }
@@ -2660,7 +2660,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
     if (sd != NULL && (unsigned long)sd < 0xfffff001) {
         /* Binary Ninja: $s0 = arg1[0x35] - This is sd->host_priv (core device) */
         s0 = sd->host_priv;  /* This should be the core device */
-        printk(KERN_ALERT "*** ispcore_core_ops_init: s0 (core_dev) = %p from sd->host_priv ***\n", s0);
+        pr_info("*** ispcore_core_ops_init: s0 (core_dev) = %p from sd->host_priv ***\n", s0);
     }
 
     /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
@@ -2673,7 +2673,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 /* Binary Ninja: int32_t $v0_3 = *($s0 + 0xe8) - Get VIC state */
                 vic_state = vic_dev->state;  /* This is VIC state at offset 0xe8 */
                 result = 0;
-                printk(KERN_ALERT "ispcore_core_ops_init: core_dev=%p, vic_dev=%p, vic_state=%d", core_dev, vic_dev, vic_state);
+                pr_info("ispcore_core_ops_init: core_dev=%p, vic_dev=%p, vic_state=%d", core_dev, vic_dev, vic_state);
             } else {
                 pr_err("ispcore_core_ops_init: No VIC device found in core device's ISP device");
                 return -ENODEV;
@@ -2687,7 +2687,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
         if (vic_state != 1) {
             /* Binary Ninja: if (arg2 == 0) - Deinitialize if no sensor attributes */
             if (on == 0) {  /* CRITICAL FIX: Only call ispcore_video_s_stream during DEINITIALIZATION */
-                printk(KERN_ALERT "ispcore_core_ops_init: Deinitializing (sensor_attr=NULL, on=0)");
+                pr_info("ispcore_core_ops_init: Deinitializing (sensor_attr=NULL, on=0)");
 
                 /* Binary Ninja: Check current VIC state and handle streaming */
                 if (vic_state == 4) {
@@ -2703,13 +2703,13 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 if (vic_state == 3) {
                     /* Binary Ninja: private_kthread_stop(*($s0 + 0x1b8)) */
                     /* Note: fw_thread management removed - handled by separate thread management system */
-                    printk(KERN_ALERT "ispcore_core_ops_init: Thread management handled by separate system");
+                    pr_info("ispcore_core_ops_init: Thread management handled by separate system");
                     /* Binary Ninja: *($s0 + 0xe8) = 2 */
                     vic_dev->state = 2;
                 }
 
                 /* CRITICAL: Cancel any pending frame sync work before deinit */
-                printk(KERN_ALERT "ispcore_core_ops_init: Canceling frame sync work during deinit");
+                pr_info("ispcore_core_ops_init: Canceling frame sync work during deinit");
                 cancel_work_sync(&ispcore_fs_work);
 
                 /* Binary Ninja: tisp_deinit() */
@@ -2724,8 +2724,8 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 
             /* CRITICAL: Handle initialization case (on=1) */
             if (on == 1) {
-                printk(KERN_ALERT "*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***");
-                printk(KERN_ALERT "*** ispcore_core_ops_init: Current vic_state (VIC state): %d ***", vic_state);
+                pr_info("*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***");
+                pr_info("*** ispcore_core_ops_init: Current vic_state (VIC state): %d ***", vic_state);
 
                 /* CRITICAL FIX: Allow ISP core initialization in streaming state */
                 /* The original check required state 2 (ready), but VIC may already be streaming (state 4) */
@@ -2735,18 +2735,18 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 }
 
                 if (vic_state == 4) {
-                    printk(KERN_ALERT "*** ispcore_core_ops_init: VIC already streaming (state 4) - initializing during streaming ***");
+                    pr_info("*** ispcore_core_ops_init: VIC already streaming (state 4) - initializing during streaming ***");
                 } else {
-                    printk(KERN_ALERT "*** ispcore_core_ops_init: VIC in ready state (%d) - normal initialization ***", vic_state);
+                    pr_info("*** ispcore_core_ops_init: VIC in ready state (%d) - normal initialization ***", vic_state);
                    	ispcore_video_s_stream(sd, 1);
                 }
 
-                printk(KERN_ALERT "*** ispcore_core_ops_init: VIC state check passed, proceeding with initialization ***");
+                pr_info("*** ispcore_core_ops_init: VIC state check passed, proceeding with initialization ***");
 
 
 
                 /* CRITICAL: Initialize clocks now that streaming is starting */
-                printk(KERN_ALERT "*** VIC STATE 4: Initializing clocks for streaming ***\n");
+                pr_info("*** VIC STATE 4: Initializing clocks for streaming ***\n");
                 extern int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count);
                 extern struct tx_isp_subdev *tx_isp_find_subdev_by_name(struct tx_isp_dev *isp_dev, const char *name);
                 extern struct tx_isp_dev *ourISPdev;
@@ -2757,7 +2757,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                     struct tx_isp_subdev *vic_sd = tx_isp_find_subdev_by_name(ourISPdev, "isp-w02");
 
                     if (core_sd && core_sd->clk_num > 0) {
-                        printk(KERN_ALERT "*** Initializing ISP clocks (%d clocks) ***\n", core_sd->clk_num);
+                        pr_info("*** Initializing ISP clocks (%d clocks) ***\n", core_sd->clk_num);
                         int clk_ret = isp_subdev_init_clks(core_sd, core_sd->clk_num);
                         if (clk_ret != 0) {
                             pr_err("*** ISP clock initialization failed: %d ***\n", clk_ret);
@@ -2765,7 +2765,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                     }
 
                     if (csi_sd && csi_sd->clk_num > 0) {
-                        printk(KERN_ALERT "*** Initializing CSI clocks (%d clocks) ***\n", csi_sd->clk_num);
+                        pr_info("*** Initializing CSI clocks (%d clocks) ***\n", csi_sd->clk_num);
                         int clk_ret = isp_subdev_init_clks(csi_sd, csi_sd->clk_num);
                         if (clk_ret != 0) {
                             pr_err("*** CSI clock initialization failed: %d ***\n", clk_ret);
@@ -2773,7 +2773,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                     }
 
                     if (vic_sd && vic_sd->clk_num > 0) {
-                        printk(KERN_ALERT "*** Initializing VIC clocks (%d clocks) ***\n", vic_sd->clk_num);
+                        pr_info("*** Initializing VIC clocks (%d clocks) ***\n", vic_sd->clk_num);
                         int clk_ret = isp_subdev_init_clks(vic_sd, vic_sd->clk_num);
                         if (clk_ret != 0) {
                             pr_err("*** VIC clock initialization failed: %d ***\n", clk_ret);
@@ -2785,14 +2785,14 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 extern struct tx_isp_sensor *tx_isp_get_sensor(void);
                 struct tx_isp_sensor *init_sensor = tx_isp_get_sensor();
 
-                printk(KERN_ALERT "*** ispcore_core_ops_init: BINARY NINJA MCP - Second tisp_init call (00079058) ***");
+                pr_info("*** ispcore_core_ops_init: BINARY NINJA MCP - Second tisp_init call (00079058) ***");
                 if (init_sensor && init_sensor->video.attr) {
                     ret = tisp_init(init_sensor->video.attr, NULL);
                     if (ret != 0) {
                         pr_err("ispcore_core_ops_init: Second tisp_init failed: %d\n", ret);
                         return ret;
                     }
-                    printk(KERN_ALERT "*** ispcore_core_ops_init: Second tisp_init completed ***");
+                    pr_info("*** ispcore_core_ops_init: Second tisp_init completed ***");
                 } else {
                     ret = tisp_init(NULL, NULL);
                     if (ret != 0) {
@@ -2806,41 +2806,41 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 if (isp_dev && isp_dev->core_regs) {
                     void __iomem *core = isp_dev->core_regs;
 
-                    printk(KERN_ALERT "*** ISP CORE: Configuring pipeline registers to enable frame processing ***\n");
+                    pr_info("*** ISP CORE: Configuring pipeline registers to enable frame processing ***\n");
 
                     /* Clear any pending interrupts first */
                     u32 pend_legacy = readl(core + 0xb4);
                     u32 pend_new = readl(core + 0x98b4);
                     if (pend_legacy) {
                         writel(pend_legacy, core + 0xb8);   /* Clear legacy pending */
-                        printk(KERN_ALERT "*** ISP CORE: Cleared legacy pending interrupts: 0x%x ***\n", pend_legacy);
+                        pr_info("*** ISP CORE: Cleared legacy pending interrupts: 0x%x ***\n", pend_legacy);
                     }
                     if (pend_new) {
                         writel(pend_new, core + 0x98b8);    /* Clear new pending */
-                        printk(KERN_ALERT "*** ISP CORE: Cleared new pending interrupts: 0x%x ***\n", pend_new);
+                        pr_info("*** ISP CORE: Cleared new pending interrupts: 0x%x ***\n", pend_new);
                     }
 
                     /* CRITICAL: Enable ISP pipeline first - this connects VIC to ISP core */
                     /* Binary Ninja: system_reg_write(0x800, 1) - Enable ISP pipeline */
                     writel(1, core + 0x800);
-                    printk(KERN_ALERT "*** ISP CORE: Pipeline ENABLED (0x800 = 1) ***\n");
+                    pr_info("*** ISP CORE: Pipeline ENABLED (0x800 = 1) ***\n");
 
                     /* Binary Ninja: system_reg_write(0x804, routing) - Configure ISP routing */
                     writel(0x1c, core + 0x804);         /* Normal mode routing */
-                    printk(KERN_ALERT "*** ISP CORE: Routing configured (0x804 = 0x1c) ***\n");
+                    pr_info("*** ISP CORE: Routing configured (0x804 = 0x1c) ***\n");
 
                     /* Binary Ninja: system_reg_write(0x1c, 8) - Set ISP control mode */
                     writel(8, core + 0x1c);
-                    printk(KERN_ALERT "*** ISP CORE: Control mode set (0x1c = 8) ***\n");
+                    pr_info("*** ISP CORE: Control mode set (0x1c = 8) ***\n");
 
                     /* CRITICAL: Enable interrupt generation at hardware level */
                     /* Binary Ninja: system_reg_write(0x30, 0xffffffff) */
                     writel(0xffffffff, core + 0x30);    /* Enable all interrupt sources */
-                    printk(KERN_ALERT "*** ISP CORE: Interrupt sources enabled (0x30 = 0xffffffff) ***\n");
+                    pr_info("*** ISP CORE: Interrupt sources enabled (0x30 = 0xffffffff) ***\n");
 
                     /* Binary Ninja: system_reg_write(0x10, 0x133 or 0x33f) */
                     writel(0x133, core + 0x10);         /* Enable specific interrupt types */
-                    printk(KERN_ALERT "*** ISP CORE: Interrupt types enabled (0x10 = 0x133) ***\n");
+                    pr_info("*** ISP CORE: Interrupt types enabled (0x10 = 0x133) ***\n");
 
                     /* CRITICAL FIX: Enable frame sync + essential interrupts, but MASK error interrupts */
                     /* This allows ISP interrupts to work while preventing error interrupt storms */
@@ -2850,8 +2850,8 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                     writel(0x1000, core + 0x98bc);      /* New unmask - ONLY frame sync initially */
                     wmb();
 
-                    printk(KERN_ALERT "*** ISP CORE: Interrupt masks configured (0xbc/0x98bc = 0x1000 - frame sync only) ***\n");
-                    printk(KERN_ALERT "*** ISP CORE: Pipeline configuration COMPLETE - VIC->ISP pipeline should now generate frame done interrupts! ***\n");
+                    pr_info("*** ISP CORE: Interrupt masks configured (0xbc/0x98bc = 0x1000 - frame sync only) ***\n");
+                    pr_info("*** ISP CORE: Pipeline configuration COMPLETE - VIC->ISP pipeline should now generate frame done interrupts! ***\n");
                 } else {
                     pr_warn("*** ISP CORE: Cannot configure pipeline - isp_regs not available ***\n");
                 }
@@ -2861,27 +2861,27 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 if (vic_dev->state != 4) {
                     /* Binary Ninja: *($s0 + 0xe8) = 3 - Set VIC state to 3 (ACTIVE) */
                     vic_dev->state = 3;
-                    printk(KERN_ALERT "*** ispcore_core_ops_init: VIC state set to 3 (ACTIVE) - CORE READY FOR STREAMING ***");
+                    pr_info("*** ispcore_core_ops_init: VIC state set to 3 (ACTIVE) - CORE READY FOR STREAMING ***");
                 } else {
-                    printk(KERN_ALERT "*** ispcore_core_ops_init: VIC already streaming (state 4) - preserving state to avoid reinitialization ***");
+                    pr_info("*** ispcore_core_ops_init: VIC already streaming (state 4) - preserving state to avoid reinitialization ***");
                 }
 
                 /* REMOVED: Core device state management - ALL state management happens through VIC device */
                 /* Based on Binary Ninja MCP analysis, core device is stateless */
-                printk(KERN_ALERT "*** ispcore_core_ops_init: Core device is stateless - only VIC state matters ***");
+                pr_info("*** ispcore_core_ops_init: Core device is stateless - only VIC state matters ***");
 
                 /* CRITICAL FIX: Don't enable ISP core interrupts during streaming - it causes hardware reset */
                 /* The register writes in tx_isp_core_enable_irq corrupt ISP control logic when called during streaming */
                 if (vic_state == 4) {
-                    printk(KERN_ALERT "*** ispcore_core_ops_init: STREAMING ACTIVE - Skipping ISP core interrupt enable to prevent hardware reset ***");
-                    printk(KERN_ALERT "*** ispcore_core_ops_init: ISP core interrupts should be enabled BEFORE streaming starts ***");
+                    pr_info("*** ispcore_core_ops_init: STREAMING ACTIVE - Skipping ISP core interrupt enable to prevent hardware reset ***");
+                    pr_info("*** ispcore_core_ops_init: ISP core interrupts should be enabled BEFORE streaming starts ***");
                 } else if (isp_dev && isp_dev->core_dev) {
                     ret = tx_isp_core_enable_irq(isp_dev->core_dev);
                     if (ret != 0) {
                         pr_err("ispcore_core_ops_init: Failed to enable ISP core interrupts: %d\n", ret);
                         /* Don't fail initialization, but log the error */
                     } else {
-                        printk(KERN_ALERT "*** ispcore_core_ops_init: ISP Core hardware interrupts ENABLED - Frame sync should now work! ***");
+                        pr_info("*** ispcore_core_ops_init: ISP Core hardware interrupts ENABLED - Frame sync should now work! ***");
                     }
                 } else {
                     pr_warn("*** ispcore_core_ops_init: No ISP core device available for interrupt enabling ***");
@@ -2892,7 +2892,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
         }
     }
 
-    printk(KERN_ALERT "ispcore_core_ops_init: Complete, result=%d", result);
+    pr_info("ispcore_core_ops_init: Complete, result=%d", result);
     return result;
 }
 EXPORT_SYMBOL(ispcore_core_ops_init);
@@ -2905,7 +2905,7 @@ int ispcore_core_ops_init_with_sensor(struct tx_isp_dev *isp, struct tx_isp_sens
 {
     int ret = 0;
 
-    printk(KERN_ALERT "*** ispcore_core_ops_init_with_sensor: GOOD-THINGS approach - isp=%p, sensor_attr=%p ***", isp, sensor_attr);
+    pr_info("*** ispcore_core_ops_init_with_sensor: GOOD-THINGS approach - isp=%p, sensor_attr=%p ***", isp, sensor_attr);
 
     if (!isp) {
         pr_err("ispcore_core_ops_init_with_sensor: Invalid ISP device");
@@ -2914,8 +2914,8 @@ int ispcore_core_ops_init_with_sensor(struct tx_isp_dev *isp, struct tx_isp_sens
 
     /* CRITICAL: Call tisp_init with sensor parameters like good-things driver */
     if (sensor_attr) {
-        printk(KERN_ALERT "*** ispcore_core_ops_init_with_sensor: Calling tisp_init with sensor parameters (good-things approach) ***");
-        printk(KERN_ALERT "*** This will configure MIPI CSI lanes and enable proper interrupt flow ***");
+        pr_info("*** ispcore_core_ops_init_with_sensor: Calling tisp_init with sensor parameters (good-things approach) ***");
+        pr_info("*** This will configure MIPI CSI lanes and enable proper interrupt flow ***");
 
         /* GOOD-THINGS APPROACH: Create sensor parameters struct like good-things driver */
         struct {
@@ -2932,7 +2932,7 @@ int ispcore_core_ops_init_with_sensor(struct tx_isp_dev *isp, struct tx_isp_sens
 
         /* CRITICAL FIX: Call tisp_init with sensor name like good-things driver */
         const char *sensor_name = sensor_attr->name ? sensor_attr->name : "gc2053";
-        printk(KERN_ALERT "*** ispcore_core_ops_init_with_sensor: Calling tisp_init(&sensor_params, \"%s\") ***", sensor_name);
+        pr_info("*** ispcore_core_ops_init_with_sensor: Calling tisp_init(&sensor_params, \"%s\") ***", sensor_name);
 
         ret = tisp_init(&sensor_params, (char *)sensor_name);
         if (ret != 0) {
@@ -2940,7 +2940,7 @@ int ispcore_core_ops_init_with_sensor(struct tx_isp_dev *isp, struct tx_isp_sens
             return ret;
         }
 
-        printk(KERN_ALERT "*** ispcore_core_ops_init_with_sensor: tisp_init SUCCESS - MIPI CSI should now be configured ***");
+        pr_info("*** ispcore_core_ops_init_with_sensor: tisp_init SUCCESS - MIPI CSI should now be configured ***");
     } else {
         pr_warn("ispcore_core_ops_init_with_sensor: No sensor attributes - using default parameters");
 
@@ -2963,9 +2963,9 @@ int ispcore_core_ops_init_with_sensor(struct tx_isp_dev *isp, struct tx_isp_sens
     if (isp->vic_dev) {
         if (isp->vic_dev->state < 3) {
             isp->vic_dev->state = 3;
-            printk(KERN_ALERT "*** ispcore_core_ops_init_with_sensor: VIC state set to 3 (ACTIVE) ***");
+            pr_info("*** ispcore_core_ops_init_with_sensor: VIC state set to 3 (ACTIVE) ***");
         } else {
-            printk(KERN_ALERT "*** ispcore_core_ops_init_with_sensor: VIC already in state %d (>= 3) ***", isp->vic_dev->state);
+            pr_info("*** ispcore_core_ops_init_with_sensor: VIC already in state %d (>= 3) ***", isp->vic_dev->state);
         }
     }
 
@@ -2973,12 +2973,12 @@ int ispcore_core_ops_init_with_sensor(struct tx_isp_dev *isp, struct tx_isp_sens
      * Reference driver arms VIC after stream setup, not during core init, to avoid mid-init ring resets.
      */
     if (isp->vic_dev) {
-        printk(KERN_ALERT "*** ispcore_core_ops_init_with_sensor: Deferring VIC PIPO/MDMA to STREAMON ***");
+        pr_info("*** ispcore_core_ops_init_with_sensor: Deferring VIC PIPO/MDMA to STREAMON ***");
     } else {
         pr_warn("*** ispcore_core_ops_init_with_sensor: No VIC device present; will rely on STREAMON later ***");
     }
 
-    printk(KERN_ALERT "*** ispcore_core_ops_init_with_sensor: SUCCESS - Core initialized and VIC streaming/IRQs armed ***");
+    pr_info("*** ispcore_core_ops_init_with_sensor: SUCCESS - Core initialized and VIC streaming/IRQs armed ***");
     return 0;
 }
 EXPORT_SYMBOL(ispcore_core_ops_init_with_sensor);
@@ -2997,7 +2997,7 @@ int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, d
         return -EINVAL;
     }
 
-    printk(KERN_ALERT "*** isp_malloc_buffer: FIXED - Using regular kernel memory instead of rmem ***\n");
+    pr_info("*** isp_malloc_buffer: FIXED - Using regular kernel memory instead of rmem ***\n");
 
     /* FIXED: Use vmalloc instead of precious rmem - saves rmem for critical video buffers */
     virt = vmalloc(size);
@@ -3007,7 +3007,7 @@ int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, d
     }
 
     /* TEMPORARY: Skip memset to prevent potential buffer overflow */
-    printk(KERN_ALERT "*** DEBUGGING: memset disabled to prevent potential buffer overflow ***\n");
+    pr_info("*** DEBUGGING: memset disabled to prevent potential buffer overflow ***\n");
 
     /* Get physical address for DMA operations */
     phys = virt_to_phys(virt);
@@ -3015,10 +3015,10 @@ int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, d
     *virt_addr = virt;
     *phys_addr = phys;
 
-    printk(KERN_ALERT "*** isp_malloc_buffer: FIXED - Allocated %u bytes from kernel memory ***\n", size);
-    printk(KERN_ALERT "*** isp_malloc_buffer: virt=%p, phys=0x%08x (using vmalloc instead of rmem) ***\n",
+    pr_info("*** isp_malloc_buffer: FIXED - Allocated %u bytes from kernel memory ***\n", size);
+    pr_info("*** isp_malloc_buffer: virt=%p, phys=0x%08x (using vmalloc instead of rmem) ***\n",
              virt, (uint32_t)phys);
-    printk(KERN_ALERT "*** isp_malloc_buffer: This saves %u bytes of precious rmem for VBMPool0! ***\n", size);
+    pr_info("*** isp_malloc_buffer: This saves %u bytes of precious rmem for VBMPool0! ***\n", size);
 
     return 0;
 }
@@ -3068,7 +3068,7 @@ void *isp_mem_init(void)
         /* Successfully parsed rmem boot parameter */
         ispmem.ispmem_value = (uint32_t)rmem_base;
         data_b2a64 = (uint32_t)rmem_size;
-        printk(KERN_ALERT "isp_mem_init: Using rmem base=0x%08x, size=0x%08x (%luMB)\n",
+        pr_info("isp_mem_init: Using rmem base=0x%08x, size=0x%08x (%luMB)\n",
                 ispmem.ispmem_value, data_b2a64, rmem_size / (1024 * 1024));
     } else {
         /* Fallback to hardcoded values if rmem parsing fails */
@@ -3120,7 +3120,7 @@ static int isp_tuning_open(struct inode *inode, struct file *file)
 {
     extern int tisp_code_tuning_open(struct inode *inode, struct file *file);
 
-    printk(KERN_ALERT "ISP tuning device opened - routing to tx_isp_tuning.c\n");
+    pr_info("ISP tuning device opened - routing to tx_isp_tuning.c\n");
 
     /* CRITICAL: Route to the proper implementation in tx_isp_tuning.c */
     return tisp_code_tuning_open(inode, file);
@@ -3130,7 +3130,7 @@ static int isp_tuning_release(struct inode *inode, struct file *file)
 {
     extern int isp_m0_chardev_release(struct inode *inode, struct file *file);
 
-    printk(KERN_ALERT "ISP tuning device released - routing to tx_isp_tuning.c\n");
+    pr_info("ISP tuning device released - routing to tx_isp_tuning.c\n");
 
     /* CRITICAL: Route to the proper implementation in tx_isp_tuning.c */
     return isp_m0_chardev_release(inode, file);
@@ -3143,13 +3143,13 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
     void __user *argp = (void __user *)arg;
     int param_type;
 
-    printk(KERN_ALERT "ISP Tuning IOCTL: cmd=0x%x\n", cmd);
+    pr_info("ISP Tuning IOCTL: cmd=0x%x\n", cmd);
 
     // Handle V4L2 control IOCTLs (VIDIOC_S_CTRL, VIDIOC_G_CTRL) - ROUTE TO tx_isp_tuning.c
     if (cmd == 0xc008561c || cmd == 0xc008561b) { // VIDIOC_S_CTRL / VIDIOC_G_CTRL
         extern int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __user *arg);
 
-        printk(KERN_ALERT "V4L2 Control: Routing to tx_isp_tuning.c implementation\n");
+        pr_info("V4L2 Control: Routing to tx_isp_tuning.c implementation\n");
 
         /* CRITICAL: Route to the proper implementation in tx_isp_tuning.c */
         return isp_core_tunning_unlocked_ioctl(file, cmd, argp);
@@ -3159,7 +3159,7 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
     if (cmd == 0xc00c56c6) { // VIDIOC_S_EXT_CTRLS or similar
         extern int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __user *arg);
 
-        printk(KERN_ALERT "Extended V4L2 control: Routing to tx_isp_tuning.c implementation\n");
+        pr_info("Extended V4L2 control: Routing to tx_isp_tuning.c implementation\n");
 
         /* CRITICAL: Route to the proper implementation in tx_isp_tuning.c */
         return isp_core_tunning_unlocked_ioctl(file, cmd, argp);
@@ -3178,7 +3178,7 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
 
                     // Reference processes various ISP parameter types (0-24)
                     param_type = *(int*)isp_tuning_buffer;
-                    printk(KERN_ALERT "ISP get tuning param type: %d\n", param_type);
+                    pr_info("ISP get tuning param type: %d\n", param_type);
 
                     // For now, return success with dummy data
                     memset(isp_tuning_buffer + 4, 0x5A, 16); // Dummy tuning data
@@ -3194,14 +3194,14 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
                         return -EFAULT;
 
                     param_type = *(int*)isp_tuning_buffer;
-                    printk(KERN_ALERT "ISP set tuning param type: %d\n", param_type);
+                    pr_info("ISP set tuning param type: %d\n", param_type);
 
                     // Reference calls various tisp_*_set_par_cfg() functions
                     // For now, acknowledge the parameter set
                     return 0;
                 }
                 case ISP_TUNING_GET_AE_INFO: {
-                    printk(KERN_ALERT "ISP get AE info\n");
+                    pr_info("ISP get AE info\n");
 
                     // Get AE (Auto Exposure) information
                     memset(isp_tuning_buffer, 0, sizeof(isp_tuning_buffer));
@@ -3213,7 +3213,7 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
                     return 0;
                 }
                 case ISP_TUNING_SET_AE_INFO: {
-                    printk(KERN_ALERT "ISP set AE info\n");
+                    pr_info("ISP set AE info\n");
 
                     if (copy_from_user(isp_tuning_buffer, argp, sizeof(isp_tuning_buffer)))
                         return -EFAULT;
@@ -3222,7 +3222,7 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
                     return 0;
                 }
                 case ISP_TUNING_GET_AWB_INFO: {
-                    printk(KERN_ALERT "ISP get AWB info\n");
+                    pr_info("ISP get AWB info\n");
 
                     // Get AWB (Auto White Balance) information
                     memset(isp_tuning_buffer, 0, sizeof(isp_tuning_buffer));
@@ -3234,7 +3234,7 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
                     return 0;
                 }
                 case ISP_TUNING_SET_AWB_INFO: {
-                    printk(KERN_ALERT "ISP set AWB info\n");
+                    pr_info("ISP set AWB info\n");
 
                     if (copy_from_user(isp_tuning_buffer, argp, sizeof(isp_tuning_buffer)))
                         return -EFAULT;
@@ -3244,7 +3244,7 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
                 }
                 case ISP_TUNING_GET_STATS:
                 case ISP_TUNING_GET_STATS2: {
-                    printk(KERN_ALERT "ISP get statistics\n");
+                    pr_info("ISP get statistics\n");
 
                     // Get ISP statistics information
                     memset(isp_tuning_buffer, 0, sizeof(isp_tuning_buffer));
@@ -3256,14 +3256,14 @@ static long isp_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long 
                     return 0;
                 }
                 default:
-                    printk(KERN_ALERT "Unhandled ISP tuning cmd: 0x%x\n", cmd);
+                    pr_info("Unhandled ISP tuning cmd: 0x%x\n", cmd);
                     return 0;
                 }
             }
         }
     }
 
-    printk(KERN_ALERT "Invalid ISP tuning command: 0x%x\n", cmd);
+    pr_info("Invalid ISP tuning command: 0x%x\n", cmd);
     return -EINVAL;
 }
 
@@ -3488,7 +3488,7 @@ void ispcore_frame_channel_streamoff(int32_t* arg1)
     void* s3 = core_dev->frame_channels;  /* Use frame_channels instead of raw offset */
     int32_t var_28 = 0;
 
-    printk(KERN_ALERT "ispcore_frame_channel_streamoff: core_dev=%p, vic_state=%d, v1_2=%d\n",
+    pr_info("ispcore_frame_channel_streamoff: core_dev=%p, vic_state=%d, v1_2=%d\n",
              core_dev, vic_dev ? vic_dev->state : -1, v1_2);
 
     if (v1_2 != 1) {
@@ -3687,7 +3687,7 @@ int tisp_channel_fifo_clear(uint32_t channel_id)
     system_reg_write(s1 + 0x1a4, 1);
     system_reg_write(s1 + 0x1a8, 1);
 
-    printk(KERN_ALERT "tisp_channel_fifo_clear: Cleared FIFOs for channel %u (base=0x%x)\n", channel_id, s1);
+    pr_info("tisp_channel_fifo_clear: Cleared FIFOs for channel %u (base=0x%x)\n", channel_id, s1);
     return 0;
 }
 
@@ -3703,7 +3703,7 @@ int tisp_channel_stop(uint32_t channel_id)
         return -EINVAL;
     }
 
-    printk(KERN_ALERT "*** tisp_channel_stop: Stopping channel %d ***\n", channel_id);
+    pr_info("*** tisp_channel_stop: Stopping channel %d ***\n", channel_id);
 
     /* Calculate channel register base */
     channel_base = (channel_id + 0x98) << 8;
@@ -3721,17 +3721,17 @@ int tisp_channel_stop(uint32_t channel_id)
     /* CRITICAL FIX: Don't modify ISP Control register during streaming */
     extern uint32_t vic_start_ok;
     if (vic_start_ok == 1) {
-        printk(KERN_ALERT "*** tisp_channel_stop: STREAMING ACTIVE - Preserving ISP Control register (0x9804) ***\n");
-        printk(KERN_ALERT "*** tisp_channel_stop: Would clear bit %d but keeping current value to prevent shutdown ***\n", channel_id);
+        pr_info("*** tisp_channel_stop: STREAMING ACTIVE - Preserving ISP Control register (0x9804) ***\n");
+        pr_info("*** tisp_channel_stop: Would clear bit %d but keeping current value to prevent shutdown ***\n", channel_id);
     } else {
         /* Disable channel in master control register */
         reg_val = system_reg_read(0x9804);  /* Use system_reg_read from reference driver */
         reg_val &= ~(1 << channel_id);
         system_reg_write(0x9804, reg_val);
-        printk(KERN_ALERT "*** tisp_channel_stop: ISP Control register updated: cleared bit %d (not streaming) ***\n", channel_id);
+        pr_info("*** tisp_channel_stop: ISP Control register updated: cleared bit %d (not streaming) ***\n", channel_id);
     }
 
-    printk(KERN_ALERT "*** tisp_channel_stop: Channel %d stopped successfully ***\n", channel_id);
+    pr_info("*** tisp_channel_stop: Channel %d stopped successfully ***\n", channel_id);
     return 0;
 }
 EXPORT_SYMBOL(tisp_channel_stop);
@@ -3823,11 +3823,11 @@ int tisp_s_fcrop_control(int32_t arg1, int32_t arg2, int32_t arg3, int32_t arg4,
     /* CRITICAL FIX: Don't modify ISP Control register during streaming */
     extern uint32_t vic_start_ok;
     if (vic_start_ok == 1) {
-        printk(KERN_ALERT "*** tisp_s_fcrop_control: STREAMING ACTIVE - Preserving ISP Control register (0x9804) ***\n");
-        printk(KERN_ALERT "*** tisp_s_fcrop_control: Would write 0x%x but keeping current value to prevent shutdown ***\n", a1_15);
+        pr_info("*** tisp_s_fcrop_control: STREAMING ACTIVE - Preserving ISP Control register (0x9804) ***\n");
+        pr_info("*** tisp_s_fcrop_control: Would write 0x%x but keeping current value to prevent shutdown ***\n", a1_15);
     } else {
         system_reg_write(0x9804, a1_15);
-        printk(KERN_ALERT "*** tisp_s_fcrop_control: ISP Control register written: 0x%x (not streaming) ***\n", a1_15);
+        pr_info("*** tisp_s_fcrop_control: ISP Control register written: 0x%x (not streaming) ***\n", a1_15);
     }
     return 0;
 }
@@ -4339,7 +4339,7 @@ static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
         return -EINVAL;
     }
 
-    printk(KERN_ALERT "*** tx_isp_create_framechan_devices: Creating frame channel devices ***\n");
+    pr_info("*** tx_isp_create_framechan_devices: Creating frame channel devices ***\n");
 
     /* Create frame channel devices /dev/isp-fs0, /dev/isp-fs1, etc. */
     for (i = 0; i < 4; i++) {  /* Create 4 frame channels like reference */
@@ -4370,14 +4370,14 @@ static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
             return ret;
         }
 
-        printk(KERN_ALERT "*** Created frame channel device: /dev/%s (major=10, minor=%d) ***\n",
+        pr_info("*** Created frame channel device: /dev/%s (major=10, minor=%d) ***\n",
                 dev_name, fs_miscdev->minor);
 
         /* Store misc device reference for cleanup */
         isp_dev->fs_miscdevs[i] = fs_miscdev;
     }
 
-    printk(KERN_ALERT "*** tx_isp_create_framechan_devices: All frame channel devices created ***\n");
+    pr_info("*** tx_isp_create_framechan_devices: All frame channel devices created ***\n");
     return 0;
 }
 
@@ -4393,7 +4393,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
     void *channel_array;
     void *tuning_dev;
 
-    printk(KERN_ALERT "*** tx_isp_core_probe: NEW ARCHITECTURE - Creating separate core device ***\n");
+    pr_info("*** tx_isp_core_probe: NEW ARCHITECTURE - Creating separate core device ***\n");
 
     /* Create separate core device instead of embedding in main device */
     core_dev = tx_isp_create_core_device(pdev);
@@ -4404,17 +4404,17 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
     /* CRITICAL FIX: Set core device pointers in subdev BEFORE init */
     tx_isp_set_subdevdata(&core_dev->sd, core_dev);
-    printk(KERN_ALERT "*** CORE PROBE: Set dev_priv to core_dev %p ***\n", core_dev);
+    pr_info("*** CORE PROBE: Set dev_priv to core_dev %p ***\n", core_dev);
 
     /* CRITICAL FIX: Set host_priv to core device for Binary Ninja compatibility */
     /* This prevents BadVA crashes when accessing *(host_priv + 0x15c) */
     tx_isp_set_subdev_hostdata(&core_dev->sd, core_dev);
-    printk(KERN_ALERT "*** CORE PROBE: Set host_priv to core_dev %p - PREVENTS BadVA CRASH ***\n", core_dev);
+    pr_info("*** CORE PROBE: Set host_priv to core_dev %p - PREVENTS BadVA CRASH ***\n", core_dev);
 
     /* Initialize core subdev using the new core device's subdev */
     if (tx_isp_subdev_init(pdev, &core_dev->sd, &core_subdev_ops) == 0) {
 
-        printk(KERN_ALERT "*** tx_isp_core_probe: Core subdev initialized successfully ***\n");
+        pr_info("*** tx_isp_core_probe: Core subdev initialized successfully ***\n");
 
         /* Initialize core device hardware */
         result = tx_isp_core_device_init(core_dev);
@@ -4487,24 +4487,24 @@ int tx_isp_core_probe(struct platform_device *pdev)
             /* CRITICAL FIX: Assign channel_array to core_dev->frame_channels - THIS WAS MISSING! */
             /* This is required for ispcore_video_s_stream to access frame channels during stream OFF */
             core_dev->frame_channels = (struct tx_isp_frame_channel *)channel_array;
-            printk(KERN_ALERT "*** tx_isp_core_probe: Assigned frame_channels=%p to core_dev ***\n", core_dev->frame_channels);
+            pr_info("*** tx_isp_core_probe: Assigned frame_channels=%p to core_dev ***\n", core_dev->frame_channels);
 
             /* Set basic platform data first */
             platform_set_drvdata(pdev, ourISPdev);
 
             /* REMOVED: Manual VIC device creation - will be handled by platform driver system */
-            printk(KERN_ALERT "*** tx_isp_core_probe: VIC device creation deferred to platform driver system ***\n");
-            printk(KERN_ALERT "*** tx_isp_core_probe: Platform drivers will call tx_isp_subdev_init for proper initialization ***\n");
+            pr_info("*** tx_isp_core_probe: VIC device creation deferred to platform driver system ***\n");
+            pr_info("*** tx_isp_core_probe: Platform drivers will call tx_isp_subdev_init for proper initialization ***\n");
 
             /* Binary Ninja: sensor_early_init($v0) - just sets g_ispcore global */
-            printk(KERN_ALERT "*** tx_isp_core_probe: Calling sensor_early_init ***\n");
+            pr_info("*** tx_isp_core_probe: Calling sensor_early_init ***\n");
             sensor_early_init(ourISPdev);
 
             /* Binary Ninja: uint32_t isp_clk_1 = get_isp_clk() */
             /* Binary Ninja: if (isp_clk_1 == 0) isp_clk_1 = isp_clk */
             /* Binary Ninja: isp_clk = isp_clk_1 */
             /* Clock management is handled by our clock infrastructure */
-            printk(KERN_ALERT "*** tx_isp_core_probe: ISP clock management handled by infrastructure ***\n");
+            pr_info("*** tx_isp_core_probe: ISP clock management handled by infrastructure ***\n");
 
             /* Store channel array in core device */
             core_dev->frame_channels = channel_array;
@@ -4513,19 +4513,19 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
             /* CRITICAL FIX: Don't call ispcore_slake_module during probe */
             /* It should be called when VIC reaches streaming state (state 4) through IOCTL operations */
-            printk(KERN_ALERT "*** tx_isp_core_probe: ispcore_slake_module will be called when VIC reaches streaming state ***\n");
+            pr_info("*** tx_isp_core_probe: ispcore_slake_module will be called when VIC reaches streaming state ***\n");
 
-            printk(KERN_ALERT "*** tx_isp_core_probe: Core device setup complete ***\n");
-            printk(KERN_ALERT "***   - Core device: %p ***\n", core_dev);
-            printk(KERN_ALERT "***   - Channel count: %d ***\n", channel_count);
-            printk(KERN_ALERT "***   - Linked to ISP device: %p ***\n", ourISPdev);
+            pr_info("*** tx_isp_core_probe: Core device setup complete ***\n");
+            pr_info("***   - Core device: %p ***\n", core_dev);
+            pr_info("***   - Channel count: %d ***\n", channel_count);
+            pr_info("***   - Linked to ISP device: %p ***\n", ourISPdev);
 
             /* Initialize tuning system for core device */
-            printk(KERN_ALERT "*** tx_isp_core_probe: Initializing core tuning system ***\n");
+            pr_info("*** tx_isp_core_probe: Initializing core tuning system ***\n");
             tuning_dev = (void*)isp_core_tuning_init(core_dev);
 
             if (tuning_dev != NULL) {
-                printk(KERN_ALERT "*** tx_isp_core_probe: Tuning init SUCCESS ***\n");
+                pr_info("*** tx_isp_core_probe: Tuning init SUCCESS ***\n");
 
                 /* Store tuning device in core device */
                 core_dev->tuning_dev = tuning_dev;
@@ -4536,25 +4536,25 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
                 /* Binary Ninja: private_platform_set_drvdata(arg1, $v0) */
                 platform_set_drvdata(pdev, core_dev);
-                printk(KERN_ALERT "*** tx_isp_core_probe: Set platform driver data ***\n");
+                pr_info("*** tx_isp_core_probe: Set platform driver data ***\n");
 
                 /* Binary Ninja: mdns_y_pspa_cur_bi_wei0_array = $v0 */
                 /* This sets a global reference - we use ourISPdev->core_dev */
                 if (ourISPdev) {
                     ourISPdev->core_dev = core_dev;
-                    printk(KERN_ALERT "*** tx_isp_core_probe: Set global core device reference ***\n");
+                    pr_info("*** tx_isp_core_probe: Set global core device reference ***\n");
                 }
 
-                printk(KERN_ALERT "*** tx_isp_core_probe: SUCCESS - Core device fully initialized ***\n");
-                printk(KERN_ALERT "***   - Core device: %p ***\n", core_dev);
-                printk(KERN_ALERT "***   - Tuning device: %p ***\n", tuning_dev);
+                pr_info("*** tx_isp_core_probe: SUCCESS - Core device fully initialized ***\n");
+                pr_info("***   - Core device: %p ***\n", core_dev);
+                pr_info("***   - Tuning device: %p ***\n", tuning_dev);
             } else {
                 pr_err("*** tx_isp_core_probe: Tuning init FAILED ***\n");
 
                 /* CRITICAL FIX: Binary Ninja: if ($v0[0x3a] s>= 2) ispcore_slake_module($v0) */
                 /* The check should be against ISP device pipeline state, not core state */
                 if (ourISPdev && ourISPdev->pipeline_state >= 2) {
-                    printk(KERN_ALERT "*** tx_isp_core_probe: Calling ispcore_slake_module for cleanup (pipeline_state=%d) ***\n", ourISPdev->pipeline_state);
+                    pr_info("*** tx_isp_core_probe: Calling ispcore_slake_module for cleanup (pipeline_state=%d) ***\n", ourISPdev->pipeline_state);
                     ispcore_slake_module(ourISPdev);
                 }
 
@@ -4575,24 +4575,24 @@ int tx_isp_core_probe(struct platform_device *pdev)
             }
 
             /* Create frame channel devices using global ISP device */
-            printk(KERN_ALERT "*** tx_isp_core_probe: Creating frame channel devices ***\n");
+            pr_info("*** tx_isp_core_probe: Creating frame channel devices ***\n");
             result = tx_isp_create_framechan_devices(ourISPdev);
             if (result == 0) {
-                printk(KERN_ALERT "*** tx_isp_core_probe: Frame channel devices created successfully ***\n");
+                pr_info("*** tx_isp_core_probe: Frame channel devices created successfully ***\n");
             } else {
                 pr_err("*** tx_isp_core_probe: Failed to create frame channel devices: %d ***\n", result);
             }
 
             /* Create the ISP M0 tuning device node */
-            printk(KERN_ALERT "*** tx_isp_core_probe: Creating ISP M0 tuning device node ***\n");
+            pr_info("*** tx_isp_core_probe: Creating ISP M0 tuning device node ***\n");
             result = tisp_code_create_tuning_node();
             if (result == 0) {
-                printk(KERN_ALERT "*** tx_isp_core_probe: ISP M0 tuning device node created successfully ***\n");
+                pr_info("*** tx_isp_core_probe: ISP M0 tuning device node created successfully ***\n");
             } else {
                 pr_err("*** tx_isp_core_probe: Failed to create ISP M0 tuning device node: %d ***\n", result);
             }
 
-            printk(KERN_ALERT "*** tx_isp_core_probe: Core probe completed successfully ***\n");
+            pr_info("*** tx_isp_core_probe: Core probe completed successfully ***\n");
 
             /* Binary Ninja: return 0 */
             return 0;
@@ -4629,12 +4629,12 @@ int tx_isp_core_remove(struct platform_device *pdev)
     /* Binary Ninja: void* $v0 = private_platform_get_drvdata() */
     struct tx_isp_core_device *core_dev = platform_get_drvdata(pdev);
 
-    printk(KERN_ALERT "*** tx_isp_core_remove: EXACT Binary Ninja MCP implementation ***\n");
+    pr_info("*** tx_isp_core_remove: EXACT Binary Ninja MCP implementation ***\n");
 
     /* Cancel any pending frame sync work to prevent use-after-free */
-    printk(KERN_ALERT "*** tx_isp_core_remove: Canceling frame sync work ***\n");
+    pr_info("*** tx_isp_core_remove: Canceling frame sync work ***\n");
     cancel_work_sync(&ispcore_fs_work);
-    printk(KERN_ALERT "*** tx_isp_core_remove: Frame sync work canceled successfully ***\n");
+    pr_info("*** tx_isp_core_remove: Frame sync work canceled successfully ***\n");
 
     if (tx_isp_core_device_is_valid(core_dev)) {
         /* Binary Ninja: int32_t* $s0 = *($v0 + 0xd4) - Get ISP device from core device */
@@ -4643,7 +4643,7 @@ int tx_isp_core_remove(struct platform_device *pdev)
         /* Binary Ninja: int32_t $a0 = $s0[0x6f] - Get tuning device */
         /* Binary Ninja: if ($a0 != 0) isp_core_tuning_deinit($a0) */
         if (core_dev->tuning_dev) {
-            printk(KERN_ALERT "*** tx_isp_core_remove: Deinitializing tuning system ***\n");
+            pr_info("*** tx_isp_core_remove: Deinitializing tuning system ***\n");
             isp_core_tuning_deinit(core_dev->tuning_dev);
             core_dev->tuning_dev = NULL;
         }
@@ -4651,13 +4651,13 @@ int tx_isp_core_remove(struct platform_device *pdev)
         /* CRITICAL FIX: Binary Ninja: if ($s0[0x3a] s>= 2) ispcore_slake_module($s0) */
         /* The check is against ISP device state at offset 0x3a, not core device state */
         if (ourISPdev && ourISPdev->pipeline_state >= 2) {
-            printk(KERN_ALERT "*** tx_isp_core_remove: Calling ispcore_slake_module (ISP pipeline_state=%d) ***\n", ourISPdev->pipeline_state);
+            pr_info("*** tx_isp_core_remove: Calling ispcore_slake_module (ISP pipeline_state=%d) ***\n", ourISPdev->pipeline_state);
             ispcore_slake_module(ourISPdev);
         }
 
         /* Binary Ninja: private_kfree($s0[0x54]) */
         if (core_dev->channel_array) {
-            printk(KERN_ALERT "*** tx_isp_core_remove: Freeing channel array ***\n");
+            pr_info("*** tx_isp_core_remove: Freeing channel array ***\n");
             kfree(core_dev->channel_array);
             core_dev->channel_array = NULL;
         }
@@ -4667,19 +4667,19 @@ int tx_isp_core_remove(struct platform_device *pdev)
         /* These are handled by our destroy function */
 
         /* Binary Ninja: tx_isp_subdev_deinit($v0) */
-        printk(KERN_ALERT "*** tx_isp_core_remove: Deinitializing subdev ***\n");
+        pr_info("*** tx_isp_core_remove: Deinitializing subdev ***\n");
         tx_isp_subdev_deinit(&core_dev->sd);
 
         /* Binary Ninja: tisp_deinit() */
-        printk(KERN_ALERT "*** tx_isp_core_remove: Calling tisp_deinit ***\n");
+        pr_info("*** tx_isp_core_remove: Calling tisp_deinit ***\n");
         tisp_deinit();
 
         /* Binary Ninja: private_kfree($s0) */
-        printk(KERN_ALERT "*** tx_isp_core_remove: Destroying core device ***\n");
+        pr_info("*** tx_isp_core_remove: Destroying core device ***\n");
         tx_isp_destroy_core_device(core_dev);
     }
 
-    printk(KERN_ALERT "*** tx_isp_core_remove: Core device removed successfully ***\n");
+    pr_info("*** tx_isp_core_remove: Core device removed successfully ***\n");
     return 0;
 }
 
@@ -5008,7 +5008,7 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     uint32_t integration_time, again, dgain;
     uint16_t fps, calculated_fps;
 
-    printk(KERN_ALERT "*** ispcore_sync_sensor_attr: entry - sd=%p, attr=%p ***\n", sd, attr);
+    pr_info("*** ispcore_sync_sensor_attr: entry - sd=%p, attr=%p ***\n", sd, attr);
 
     isp_dev = ourISPdev;
 
@@ -5028,7 +5028,7 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     if (attr == NULL) {
         /* Clear real sensor attributes */
         memset(sensor->video.attr, 0, sizeof(struct tx_isp_sensor_attribute));
-        printk(KERN_ALERT "ispcore_sync_sensor_attr: cleared REAL sensor attributes\n");
+        pr_info("ispcore_sync_sensor_attr: cleared REAL sensor attributes\n");
         return 0;
     }
 
@@ -5056,10 +5056,10 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     stored_attr->dgain = dgain;
 
     /* Binary Ninja: tiziano_sync_sensor_attr(&var_68) */
-    printk(KERN_ALERT "*** ispcore_sync_sensor_attr: Calling tiziano_sync_sensor_attr ***\n");
+    pr_info("*** ispcore_sync_sensor_attr: Calling tiziano_sync_sensor_attr ***\n");
     tiziano_sync_sensor_attr(stored_attr);
 
-    printk(KERN_ALERT "*** ispcore_sync_sensor_attr: SUCCESS ***\n");
+    pr_info("*** ispcore_sync_sensor_attr: SUCCESS ***\n");
     return 0;  /* Return success directly - no need for the quirky -515 pattern */
 }
 EXPORT_SYMBOL(ispcore_sync_sensor_attr);
@@ -5069,13 +5069,13 @@ int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd, struct tx_isp
 {
     int ret;
 
-    printk(KERN_ALERT "*** tx_isp_handle_sync_sensor_attr_event: Processing TX_ISP_EVENT_SYNC_SENSOR_ATTR ***\n");
+    pr_info("*** tx_isp_handle_sync_sensor_attr_event: Processing TX_ISP_EVENT_SYNC_SENSOR_ATTR ***\n");
 
     /* Call the actual sync sensor attribute function */
     ret = ispcore_sync_sensor_attr(sd, attr);
 
     /* Now that ispcore_sync_sensor_attr returns 0 directly, no conversion needed */
-    printk(KERN_ALERT "*** tx_isp_handle_sync_sensor_attr_event: returning %d ***\n", ret);
+    pr_info("*** tx_isp_handle_sync_sensor_attr_event: returning %d ***\n", ret);
     return ret;
 }
 EXPORT_SYMBOL(tx_isp_handle_sync_sensor_attr_event);
@@ -5130,7 +5130,7 @@ int tiziano_sync_sensor_attr(struct tx_isp_sensor_attribute *attr)
         return -EINVAL;
     }
 
-    printk(KERN_ALERT "*** tiziano_sync_sensor_attr: EXACT Binary Ninja implementation ***\n");
+    pr_info("*** tiziano_sync_sensor_attr: EXACT Binary Ninja implementation ***\n");
 
     /* Binary Ninja: int32_t $a0 = arg1[7] */
     again_val = attr->again;
@@ -5206,10 +5206,10 @@ int tiziano_sync_sensor_attr(struct tx_isp_sensor_attribute *attr)
     data_b2ecc = data_b2e62;
     data_b2ed4 = attr->max_dgain;
 
-    printk(KERN_ALERT "*** tiziano_sync_sensor_attr: Sensor attributes synchronized successfully ***\n");
-    printk(KERN_ALERT "***   - Again: 0x%x -> 0x%x ***\n", again_val, data_b2e34);
-    printk(KERN_ALERT "***   - Dgain: 0x%x -> 0x%x ***\n", dgain_val, data_b2e38);
-    printk(KERN_ALERT "***   - Dimensions: %dx%d ***\n", data_b2e44, data_b2e48);
+    pr_info("*** tiziano_sync_sensor_attr: Sensor attributes synchronized successfully ***\n");
+    pr_info("***   - Again: 0x%x -> 0x%x ***\n", again_val, data_b2e34);
+    pr_info("***   - Dgain: 0x%x -> 0x%x ***\n", dgain_val, data_b2e38);
+    pr_info("***   - Dimensions: %dx%d ***\n", data_b2e44, data_b2e48);
 
     return 0;
 }
@@ -5218,7 +5218,7 @@ EXPORT_SYMBOL(tiziano_sync_sensor_attr);
 /* private_dma_sync_single_for_device - EXACT Binary Ninja implementation with correct signature */
 void private_dma_sync_single_for_device(struct device *dev, dma_addr_t addr, size_t size, enum dma_data_direction dir)
 {
-    printk(KERN_ALERT "*** private_dma_sync_single_for_device: dev=%p, addr=0x%x, size=%zu ***\n",
+    pr_info("*** private_dma_sync_single_for_device: dev=%p, addr=0x%x, size=%zu ***\n",
              dev, (uint32_t)addr, size);
 
     /* Binary Ninja: if (arg1 != 0) result = *(arg1 + 0x80) */
@@ -5226,7 +5226,7 @@ void private_dma_sync_single_for_device(struct device *dev, dma_addr_t addr, siz
         /* In the reference, this accesses a function pointer at offset 0x80 in the device structure */
         /* For now, we'll use the standard Linux DMA sync function */
         dma_sync_single_for_device(dev, addr, size, dir);
-        printk(KERN_ALERT "private_dma_sync_single_for_device: DMA sync completed\n");
+        pr_info("private_dma_sync_single_for_device: DMA sync completed\n");
     }
 }
 EXPORT_SYMBOL(private_dma_sync_single_for_device);
@@ -5234,7 +5234,7 @@ EXPORT_SYMBOL(private_dma_sync_single_for_device);
 /* private_dma_cache_sync - Fixed implementation using standard Linux DMA API */
 void private_dma_cache_sync(struct device *dev, void *vaddr, size_t size, enum dma_data_direction direction)
 {
-    printk(KERN_ALERT "*** private_dma_cache_sync: dev=%p, vaddr=%p, size=%zu, dir=%d ***\n",
+    pr_info("*** private_dma_cache_sync: dev=%p, vaddr=%p, size=%zu, dir=%d ***\n",
              dev, vaddr, size, direction);
 
     if (!vaddr || size == 0) {
@@ -5246,7 +5246,7 @@ void private_dma_cache_sync(struct device *dev, void *vaddr, size_t size, enum d
     /* This matches the reference implementation in external/ingenic-sdk/3.10/avpu/t31/avpu_main.c */
     dma_cache_sync(dev, vaddr, size, direction);
 
-    printk(KERN_ALERT "private_dma_cache_sync: Cache sync completed using dma_cache_sync\n");
+    pr_info("private_dma_cache_sync: Cache sync completed using dma_cache_sync\n");
 }
 EXPORT_SYMBOL(private_dma_cache_sync);
 
@@ -5265,7 +5265,7 @@ struct tx_isp_core_device *tx_isp_create_core_device(struct platform_device *pde
     struct tx_isp_core_device *core_dev;
     int ret;
 
-    printk(KERN_ALERT "*** tx_isp_create_core_device: Creating ISP core device ***\n");
+    pr_info("*** tx_isp_create_core_device: Creating ISP core device ***\n");
 
     /* Allocate core device structure */
     core_dev = kzalloc(sizeof(struct tx_isp_core_device), GFP_KERNEL);
@@ -5308,7 +5308,7 @@ struct tx_isp_core_device *tx_isp_create_core_device(struct platform_device *pde
     core_dev->width = 1920;   /* Default width at offset 0xec */
     core_dev->height = 1080;  /* Default height at offset 0xf0 */
 
-    printk(KERN_ALERT "*** tx_isp_create_core_device: Core device created successfully: %p ***\n", core_dev);
+    pr_info("*** tx_isp_create_core_device: Core device created successfully: %p ***\n", core_dev);
     return core_dev;
 }
 EXPORT_SYMBOL(tx_isp_create_core_device);
@@ -5324,7 +5324,7 @@ void tx_isp_destroy_core_device(struct tx_isp_core_device *core_dev)
         return;
     }
 
-    printk(KERN_ALERT "*** tx_isp_destroy_core_device: Destroying core device: %p ***\n", core_dev);
+    pr_info("*** tx_isp_destroy_core_device: Destroying core device: %p ***\n", core_dev);
 
     /* Deinitialize if needed */
     if (core_dev->is_initialized) {
@@ -5357,7 +5357,7 @@ void tx_isp_destroy_core_device(struct tx_isp_core_device *core_dev)
 
     /* Free the structure */
     kfree(core_dev);
-    printk(KERN_ALERT "*** tx_isp_destroy_core_device: Core device destroyed ***\n");
+    pr_info("*** tx_isp_destroy_core_device: Core device destroyed ***\n");
 }
 EXPORT_SYMBOL(tx_isp_destroy_core_device);
 
@@ -5377,11 +5377,11 @@ int tx_isp_core_device_init(struct tx_isp_core_device *core_dev)
     }
 
     if (core_dev->is_initialized) {
-        printk(KERN_ALERT "tx_isp_core_device_init: Core device already initialized\n");
+        pr_info("tx_isp_core_device_init: Core device already initialized\n");
         return 0;
     }
 
-    printk(KERN_ALERT "*** tx_isp_core_device_init: Initializing core device: %p ***\n", core_dev);
+    pr_info("*** tx_isp_core_device_init: Initializing core device: %p ***\n", core_dev);
 
     /* Initialize clocks */
     core_dev->core_clk = clk_get(core_dev->dev, "isp");
@@ -5397,12 +5397,12 @@ int tx_isp_core_device_init(struct tx_isp_core_device *core_dev)
     }
 
     /* State transitions are now handled by ispcore_slake_module during probe */
-    printk(KERN_ALERT "*** tx_isp_core_device_init: State transitions handled by slake_module ***\n");
+    pr_info("*** tx_isp_core_device_init: State transitions handled by slake_module ***\n");
 
     core_dev->is_initialized = true;
 
-    printk(KERN_ALERT "*** tx_isp_core_device_init: Core device initialized successfully ***\n");
-    printk(KERN_ALERT "*** tx_isp_core_device_init: Core sensor IOCTL handler set for sensor registration ***\n");
+    pr_info("*** tx_isp_core_device_init: Core device initialized successfully ***\n");
+    pr_info("*** tx_isp_core_device_init: Core sensor IOCTL handler set for sensor registration ***\n");
     return 0;
 }
 EXPORT_SYMBOL(tx_isp_core_device_init);
@@ -5420,7 +5420,7 @@ int tx_isp_core_device_deinit(struct tx_isp_core_device *core_dev)
         return -EINVAL;
     }
 
-    printk(KERN_ALERT "*** tx_isp_core_device_deinit: Deinitializing core device: %p ***\n", core_dev);
+    pr_info("*** tx_isp_core_device_deinit: Deinitializing core device: %p ***\n", core_dev);
 
     /* Stop streaming if active */
     if (core_dev->streaming) {
@@ -5430,7 +5430,7 @@ int tx_isp_core_device_deinit(struct tx_isp_core_device *core_dev)
     /* REMOVED: Core state management - ALL state management happens through VIC device */
     core_dev->is_initialized = false;
 
-    printk(KERN_ALERT "*** tx_isp_core_device_deinit: Core device deinitialized ***\n");
+    pr_info("*** tx_isp_core_device_deinit: Core device deinitialized ***\n");
     return 0;
 }
 EXPORT_SYMBOL(tx_isp_core_device_deinit);
@@ -5449,7 +5449,7 @@ int tx_isp_link_core_device(struct tx_isp_dev *isp_dev, struct tx_isp_core_devic
         return -EINVAL;
     }
 
-    printk(KERN_ALERT "*** tx_isp_link_core_device: Linking core device %p to ISP device %p ***\n",
+    pr_info("*** tx_isp_link_core_device: Linking core device %p to ISP device %p ***\n",
             core_dev, isp_dev);
 
     /* Set up bidirectional linking */
@@ -5467,9 +5467,9 @@ int tx_isp_link_core_device(struct tx_isp_dev *isp_dev, struct tx_isp_core_devic
         }
     }
 
-    printk(KERN_ALERT "*** tx_isp_link_core_device: Core device linked successfully ***\n");
+    pr_info("*** tx_isp_link_core_device: Core device linked successfully ***\n");
     if (slot >= 0) {
-        printk(KERN_ALERT "*** Core subdev already registered at slot %d: %p ***\n", slot, &core_dev->sd);
+        pr_info("*** Core subdev already registered at slot %d: %p ***\n", slot, &core_dev->sd);
     } else {
         pr_warn("*** Core subdev not found in subdev array - this may cause issues ***\n");
     }
@@ -5495,17 +5495,17 @@ int tx_isp_core_device_start_streaming(struct tx_isp_core_device *core_dev)
     }
 
     if (core_dev->streaming) {
-        printk(KERN_ALERT "tx_isp_core_device_start_streaming: Already streaming\n");
+        pr_info("tx_isp_core_device_start_streaming: Already streaming\n");
         return 0;
     }
 
-    printk(KERN_ALERT "*** tx_isp_core_device_start_streaming: Starting core streaming ***\n");
+    pr_info("*** tx_isp_core_device_start_streaming: Starting core streaming ***\n");
 
     /* Set streaming state */
     core_dev->streaming = 1;
     /* REMOVED: Core state management - ALL state management happens through VIC device */
 
-    printk(KERN_ALERT "*** tx_isp_core_device_start_streaming: Core streaming started ***\n");
+    pr_info("*** tx_isp_core_device_start_streaming: Core streaming started ***\n");
     return 0;
 }
 EXPORT_SYMBOL(tx_isp_core_device_start_streaming);
@@ -5524,17 +5524,17 @@ int tx_isp_core_device_stop_streaming(struct tx_isp_core_device *core_dev)
     }
 
     if (!core_dev->streaming) {
-        printk(KERN_ALERT "tx_isp_core_device_stop_streaming: Not streaming\n");
+        pr_info("tx_isp_core_device_stop_streaming: Not streaming\n");
         return 0;
     }
 
-    printk(KERN_ALERT "*** tx_isp_core_device_stop_streaming: Stopping core streaming ***\n");
+    pr_info("*** tx_isp_core_device_stop_streaming: Stopping core streaming ***\n");
 
     /* Clear streaming state */
     core_dev->streaming = 0;
     /* REMOVED: Core state management - ALL state management happens through VIC device */
 
-    printk(KERN_ALERT "*** tx_isp_core_device_stop_streaming: Core streaming stopped ***\n");
+    pr_info("*** tx_isp_core_device_stop_streaming: Core streaming stopped ***\n");
     return 0;
 }
 EXPORT_SYMBOL(tx_isp_core_device_stop_streaming);
@@ -5554,7 +5554,7 @@ int tx_isp_core_device_set_sensor_attr(struct tx_isp_core_device *core_dev,
         return -EINVAL;
     }
 
-    printk(KERN_ALERT "*** tx_isp_core_device_set_sensor_attr: Setting sensor attributes ***\n");
+    pr_info("*** tx_isp_core_device_set_sensor_attr: Setting sensor attributes ***\n");
 
     /* Store sensor attributes - REMOVED: No sensor_attr field on core device */
     /* Sensor attributes are accessed via tx_isp_get_sensor() helper method */
@@ -5563,11 +5563,11 @@ int tx_isp_core_device_set_sensor_attr(struct tx_isp_core_device *core_dev,
     if (attr->total_width > 0 && attr->total_height > 0) {
         core_dev->width = attr->total_width;
         core_dev->height = attr->total_height;
-        printk(KERN_ALERT "*** tx_isp_core_device_set_sensor_attr: Updated dimensions to %dx%d ***\n",
+        pr_info("*** tx_isp_core_device_set_sensor_attr: Updated dimensions to %dx%d ***\n",
                 core_dev->width, core_dev->height);
     }
 
-    printk(KERN_ALERT "*** tx_isp_core_device_set_sensor_attr: Sensor attributes set ***\n");
+    pr_info("*** tx_isp_core_device_set_sensor_attr: Sensor attributes set ***\n");
     return 0;
 }
 EXPORT_SYMBOL(tx_isp_core_device_set_sensor_attr);

@@ -766,7 +766,7 @@ int tisp_set_fps(uint32_t fps_packed)
     data_b2e64 = (int16_t)(data_b2ed0 & 0xffff);
     data_b2e56 = (int16_t)(data_b2e80 & 0xffff);
 
-    printk(KERN_ALERT "tisp_set_fps: Set FPS to %d/%d\n", fps_num, fps_den);
+    pr_info("tisp_set_fps: Set FPS to %d/%d\n", fps_num, fps_den);
 
     /* Handle deflicker if enabled */
     if (flicker_hz != 0) {

@@ -54,7 +54,7 @@ void csi_write32(u32 reg, u32 val)
                 return; /* Block disabling writes while streaming */
             }
             /* Otherwise allow, but log */
-            printk(KERN_ALERT "*** CSI WRITE during streaming: reg[0x%03x] prev=0x%08x -> val=0x%08x ***\n", reg, prev, val);
+            pr_info("*** CSI WRITE during streaming: reg[0x%03x] prev=0x%08x -> val=0x%08x ***\n", reg, prev, val);
         }
 
         writel(val, base + reg);
@@ -103,7 +103,7 @@ void tx_isp_csi_check_errors(struct tx_isp_dev *isp_dev)
 
     /* Only log if there are actual errors */
     if (err1 || err2) {
-        printk(KERN_ALERT "*** CSI ERROR CHECK: err1=0x%08x, err2=0x%08x, phy_state=0x%08x ***\n",
+        pr_info("*** CSI ERROR CHECK: err1=0x%08x, err2=0x%08x, phy_state=0x%08x ***\n",
                 err1, err2, phy_state);
 
         /* Handle protocol errors (ERR1) */
@@ -169,8 +169,8 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_csi_device *csi_dev;
 
-    printk(KERN_ALERT "*** csi_video_s_stream: EXACT Binary Ninja MCP implementation ***\n");
-    printk(KERN_ALERT "csi_video_s_stream: sd=%p, enable=%d\n", sd, enable);
+    pr_info("*** csi_video_s_stream: EXACT Binary Ninja MCP implementation ***\n");
+    pr_info("csi_video_s_stream: sd=%p, enable=%d\n", sd, enable);
 
     /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) */
     if (sd == NULL || (unsigned long)sd >= 0xfffff001) {
@@ -190,7 +190,7 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     /* Binary Ninja: if (*(*(arg1 + 0x110) + 0x14) != 1) return 0 */
     /* This checks CSI device interface type - if not MIPI (1), return 0 */
     if (csi_dev->interface_type != 1) {
-        printk(KERN_ALERT "csi_video_s_stream: Interface type %d != 1 (MIPI), returning 0\n", csi_dev->interface_type);
+        pr_info("csi_video_s_stream: Interface type %d != 1 (MIPI), returning 0\n", csi_dev->interface_type);
         return 0;
     }
 
@@ -205,7 +205,7 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     /* Binary Ninja: *(arg1 + 0x128) = $v0_4 */
     csi_dev->state = v0_4;
 
-    printk(KERN_ALERT "csi_video_s_stream: EXACT Binary Ninja MCP - CSI state set to %d (enable=%d)\n", v0_4, enable);
+    pr_info("csi_video_s_stream: EXACT Binary Ninja MCP - CSI state set to %d (enable=%d)\n", v0_4, enable);
 
     /* Binary Ninja: return 0 */
     return 0;
@@ -309,18 +309,18 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
             return 0xffffffea;
         }
 
-        printk(KERN_ALERT "csi_core_ops_init: sd=%p, csi_dev=%p, enable=%d\n", sd, csi_dev, enable);
-        printk(KERN_ALERT "*** csi_core_ops_init: CSI state=%d (need >= 2 for init) ***\n", csi_dev->state);
+        pr_info("csi_core_ops_init: sd=%p, csi_dev=%p, enable=%d\n", sd, csi_dev, enable);
+        pr_info("*** csi_core_ops_init: CSI state=%d (need >= 2 for init) ***\n", csi_dev->state);
         result = 0xffffffea;
 
         /* Binary Ninja: if ($s0_1 != 0 && $s0_1 u< 0xfffff001) */
         if (csi_dev != NULL && (unsigned long)csi_dev < 0xfffff001) {
             result = 0;
-            printk(KERN_ALERT "*** csi_core_ops_init: CSI device valid, checking state ***\n");
+            pr_info("*** csi_core_ops_init: CSI device valid, checking state ***\n");
 
             /* Binary Ninja: if (*($s0_1 + 0x128) s>= 2) */
             if (csi_dev->state >= 2) {
-                printk(KERN_ALERT "*** csi_core_ops_init: CSI state >= 2, proceeding with init ***\n");
+                pr_info("*** csi_core_ops_init: CSI state >= 2, proceeding with init ***\n");
                 int v0_17;
 
                 /* Binary Ninja: if (arg2 == 0) */
@@ -357,17 +357,17 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
                     /* Binary Ninja: int32_t $s2_1 = *($v1_5 + 0x14) */
                     int interface_type = sensor_attr->dbus_type;
-                    printk(KERN_ALERT "*** csi_core_ops_init: interface_type=%d (1=MIPI, 2=DVP) ***\n", interface_type);
+                    pr_info("*** csi_core_ops_init: interface_type=%d (1=MIPI, 2=DVP) ***\n", interface_type);
 
                     /* CRITICAL FIX: Store interface type in CSI device for later use */
                     csi_dev->interface_type = interface_type;
-                    printk(KERN_ALERT "*** csi_core_ops_init: Set csi_dev->interface_type = %d ***\n", interface_type);
+                    pr_info("*** csi_core_ops_init: Set csi_dev->interface_type = %d ***\n", interface_type);
 
                     if (interface_type == 1) {
-                        printk(KERN_ALERT "*** CSI MIPI INIT: Configuring MIPI CSI for %d lanes ***\n", sensor_attr->mipi.lans);
+                        pr_info("*** CSI MIPI INIT: Configuring MIPI CSI for %d lanes ***\n", sensor_attr->mipi.lans);
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 4) = zx.d(*($v1_5 + 0x24)) - 1 */
                         writel(sensor_attr->mipi.lans - 1, csi_dev->csi_regs + 4);
-                        printk(KERN_ALERT "*** CSI[0x4] = %d (lanes - 1) ***\n", sensor_attr->mipi.lans - 1);
+                        pr_info("*** CSI[0x4] = %d (lanes - 1) ***\n", sensor_attr->mipi.lans - 1);
 
                         /* Binary Ninja: void* $v0_2 = *($s0_1 + 0xb8) */
                         csi_regs = csi_dev->csi_regs;
@@ -375,11 +375,11 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         /* Binary Ninja: *($v0_2 + 8) &= 0xfffffffe */
                         u32 reg8_val = readl(csi_regs + 8) & 0xfffffffe;
                         writel(reg8_val, csi_regs + 8);
-                        printk(KERN_ALERT "*** CSI[0x8] = 0x%x (clear bit 0) ***\n", reg8_val);
+                        pr_info("*** CSI[0x8] = 0x%x (clear bit 0) ***\n", reg8_val);
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0xc) = 0 */
                         writel(0, csi_regs + 0xc);
-                        printk(KERN_ALERT "*** CSI[0xc] = 0 (reset) ***\n");
+                        pr_info("*** CSI[0xc] = 0 (reset) ***\n");
 
                         /* Binary Ninja: private_msleep(1) */
                         private_msleep(1);
@@ -388,14 +388,14 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         /* Binary Ninja: *($v1_9 + 0x10) &= 0xfffffffe */
                         u32 reg10_val = readl(csi_regs + 0x10) & 0xfffffffe;
                         writel(reg10_val, csi_regs + 0x10);
-                        printk(KERN_ALERT "*** CSI[0x10] = 0x%x (PHY disable) ***\n", reg10_val);
+                        pr_info("*** CSI[0x10] = 0x%x (PHY disable) ***\n", reg10_val);
 
                         /* Binary Ninja: private_msleep(1) */
                         private_msleep(1);
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0xc) = $s2_1 */
                         writel(interface_type, csi_regs + 0xc);
-                        printk(KERN_ALERT "*** CSI[0xc] = %d (MIPI enable) ***\n", interface_type);
+                        pr_info("*** CSI[0xc] = %d (MIPI enable) ***\n", interface_type);
 
                         /* Binary Ninja: private_msleep(1) */
                         private_msleep(1);
@@ -466,16 +466,16 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
                         /* Binary Ninja: *$v0_8 = 0x7d */
                         writel(0x7d, v0_8);
-                        printk(KERN_ALERT "*** CSI MIPI: Writing ISP_CSI[0x0] = 0x7d (timing config) ***\n");
+                        pr_info("*** CSI MIPI: Writing ISP_CSI[0x0] = 0x7d (timing config) ***\n");
 
                         /* Binary Ninja: *(*($s0_1 + 0x13c) + 0x128) = 0x3f */
                         writel(0x3f, isp_csi_regs + 0x128);
-                        printk(KERN_ALERT "*** CSI MIPI: Writing ISP_CSI[0x128] = 0x3f (lane config) ***\n");
+                        pr_info("*** CSI MIPI: Writing ISP_CSI[0x128] = 0x3f (lane config) ***\n");
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0x10) = 1 */
                         writel(1, csi_dev->csi_regs + 0x10);
-                        printk(KERN_ALERT "*** CSI MIPI: CRITICAL - Enabling CSI PHY: CSI[0x10] = 1 ***\n");
-                        printk(KERN_ALERT "*** CSI MIPI: PHY ENABLED - MIPI data should now flow! ***\n");
+                        pr_info("*** CSI MIPI: CRITICAL - Enabling CSI PHY: CSI[0x10] = 1 ***\n");
+                        pr_info("*** CSI MIPI: PHY ENABLED - MIPI data should now flow! ***\n");
 
                         /* Binary Ninja: private_msleep(0xa) */
                         private_msleep(0xa);
@@ -509,7 +509,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
                 /* Binary Ninja: *($s0_1 + 0x128) = $v0_17 */
                 csi_dev->state = v0_17;
-                printk(KERN_ALERT "*** csi_core_ops_init: CSI init complete, new state=%d ***\n", v0_17);
+                pr_info("*** csi_core_ops_init: CSI init complete, new state=%d ***\n", v0_17);
                 return 0;
             } else {
                 pr_err("*** csi_core_ops_init: CSI state < 2 (state=%d), skipping init! ***\n", csi_dev->state);
@@ -565,14 +565,14 @@ int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
         return -EINVAL;
     }
 
-    printk(KERN_ALERT "*** tx_isp_csi_slake_subdev: CSI slake/shutdown - current state=%d ***\n", csi_dev->state);
+    pr_info("*** tx_isp_csi_slake_subdev: CSI slake/shutdown - current state=%d ***\n", csi_dev->state);
 
     /* Binary Ninja: int32_t $v1_2 = *($s0_1 + 0x128) */
     state = csi_dev->state;
 
     /* Binary Ninja: if ($v1_2 == 4) csi_video_s_stream(arg1, 0) */
     if (state == 4) {
-        printk(KERN_ALERT "tx_isp_csi_slake_subdev: CSI in streaming state, stopping stream\n");
+        pr_info("tx_isp_csi_slake_subdev: CSI in streaming state, stopping stream\n");
         csi_video_s_stream(sd, 0);
         state = csi_dev->state;  /* Update state after s_stream */
     }
@@ -580,7 +580,7 @@ int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
     /* Binary Ninja: void* $s2_1 = $s0_1 + 0x12c - Get mutex */
     /* Binary Ninja: if ($v1_2 == 3) csi_core_ops_init(arg1, 0) */
     if (csi_dev->state == 3) {
-        printk(KERN_ALERT "tx_isp_csi_slake_subdev: CSI in state 3, calling core_ops_init(disable)\n");
+        pr_info("tx_isp_csi_slake_subdev: CSI in state 3, calling core_ops_init(disable)\n");
         csi_core_ops_init(sd, 0);
     }
 
@@ -589,7 +589,7 @@ int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
 
     /* Binary Ninja: if (*($s0_1 + 0x128) == 2) *($s0_1 + 0x128) = 1 */
     if (csi_dev->state == 2) {
-        printk(KERN_ALERT "tx_isp_csi_slake_subdev: CSI state 2->1, disabling clocks\n");
+        pr_info("tx_isp_csi_slake_subdev: CSI state 2->1, disabling clocks\n");
         csi_dev->state = 1;
 
         /* Binary Ninja: void* $v0 = *(arg1 + 0xbc) - Get clocks array */
@@ -601,14 +601,14 @@ int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
                 if (sd->clks[i]) {
                     /* Binary Ninja: private_clk_disable(*$s0_4) */
                     clk_disable(sd->clks[i]);
-                    printk(KERN_ALERT "tx_isp_csi_slake_subdev: Disabled clock %d\n", i);
+                    pr_info("tx_isp_csi_slake_subdev: Disabled clock %d\n", i);
                 }
             }
         }
     }
 
     mutex_unlock(&csi_dev->mlock);
-    printk(KERN_ALERT "*** tx_isp_csi_slake_subdev: CSI slake complete, final state=%d ***\n", csi_dev->state);
+    pr_info("*** tx_isp_csi_slake_subdev: CSI slake complete, final state=%d ***\n", csi_dev->state);
     return 0;
 }
 
@@ -762,16 +762,16 @@ int tx_isp_csi_probe(struct platform_device *pdev)
     /* CRITICAL FIX: Set dev_priv and host_priv AFTER tx_isp_subdev_init to prevent overwrite */
     /* csi_video_s_stream() uses tx_isp_get_subdevdata() which reads dev_priv */
     tx_isp_set_subdevdata(&csi_dev->sd, csi_dev);
-    printk(KERN_ALERT "*** CSI PROBE: Set dev_priv to csi_dev %p AFTER subdev_init ***\n", csi_dev);
+    pr_info("*** CSI PROBE: Set dev_priv to csi_dev %p AFTER subdev_init ***\n", csi_dev);
 
     /* Binary Ninja expects CSI device at offset 0xd4 (host_priv field) */
     tx_isp_set_subdev_hostdata(&csi_dev->sd, csi_dev);
-    printk(KERN_ALERT "*** CSI PROBE: Set host_priv to csi_dev %p AFTER subdev_init ***\n", csi_dev);
+    pr_info("*** CSI PROBE: Set host_priv to csi_dev %p AFTER subdev_init ***\n", csi_dev);
 
     /* FIXED: Use memory mapping from tx_isp_subdev_init instead of duplicate mapping */
     if (csi_dev->sd.regs) {
         csi_dev->csi_regs = csi_dev->sd.regs;
-        printk(KERN_ALERT "*** CSI PROBE: Using register mapping from tx_isp_subdev_init: %p ***\n", csi_dev->csi_regs);
+        pr_info("*** CSI PROBE: Using register mapping from tx_isp_subdev_init: %p ***\n", csi_dev->csi_regs);
     } else {
         /* Binary Ninja: isp_printf(2, "sensor type is BT1120!\n", "tx_isp_csi_probe") */
         pr_err("*** CSI PROBE: tx_isp_subdev_init failed to map registers ***\n");
@@ -803,7 +803,7 @@ int tx_isp_csi_probe(struct platform_device *pdev)
     /* Note: self_ptr member not present in current CSI device structure */
 
     /* REMOVED: Manual linking - now handled automatically by tx_isp_subdev_init */
-    printk(KERN_ALERT "*** CSI PROBE: Device linking handled automatically by tx_isp_subdev_init ***\n");
+    pr_info("*** CSI PROBE: Device linking handled automatically by tx_isp_subdev_init ***\n");
 
     return 0;
 }
@@ -932,7 +932,7 @@ int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
                 /* Ensure CSI clocks are initialized before enabling */
                 if (!sd->clks && sd->clk_num > 0) {
                     extern int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_num);
-                    printk(KERN_ALERT "tx_isp_csi_activate_subdev: Initializing %d clocks for CSI before enabling\n", sd->clk_num);
+                    pr_info("tx_isp_csi_activate_subdev: Initializing %d clocks for CSI before enabling\n", sd->clk_num);
                     if (isp_subdev_init_clks(sd, sd->clk_num) != 0) {
                         pr_warn("tx_isp_csi_activate_subdev: isp_subdev_init_clks failed; continuing without clocks\n");
                     }

@@ -203,7 +203,7 @@ static void start_sequence(struct seq_write_info *seq, u32 offset, u32 value)
 static void end_sequence(struct seq_write_info *seq, const char *region_name)
 {
     if (seq->count > 4) {
-        printk(KERN_ALERT "ISP %s: Sequential write at 0x%x: %d registers from 0x%x\n",
+        pr_info("ISP %s: Sequential write at 0x%x: %d registers from 0x%x\n",
                 region_name, seq->start_offset, seq->count, seq->last_value);
         write_to_trace_file("ISP %s: Sequential write at 0x%x: %d registers from 0x%x\n",
                 region_name, seq->start_offset, seq->count, seq->last_value);
@@ -255,7 +255,7 @@ static void check_region_changes(struct work_struct *work)
                     end_sequence(&region->seq_write, region->name);
 
                 // Log control and VIC register writes with timing
-                printk(KERN_ALERT "ISP %s: [%s] write at offset 0x%x: 0x%x -> 0x%x (delta: %lu.%03lu ms)\n",
+                pr_info("ISP %s: [%s] write at offset 0x%x: 0x%x -> 0x%x (delta: %lu.%03lu ms)\n",
                        region->name, reg_desc, offset,
                        region->last_values[i], current_val,
                        jiffies_to_msecs(delta_jiffies),
@@ -322,7 +322,7 @@ static int init_region(struct isp_region *region)
     region->monitoring = true;
     schedule_delayed_work(&region->monitor_work, HZ/100); // Start with 10ms interval
 
-    printk(KERN_ALERT "ISP Monitor: initialized region %s at phys 0x%pap size 0x%zx\n",
+    pr_info("ISP Monitor: initialized region %s at phys 0x%pap size 0x%zx\n",
             region->name, &region->phys_addr, region->size);
     write_to_trace_file("ISP Monitor: initialized region %s at phys 0x%pap size 0x%zx\n",
             region->name, &region->phys_addr, region->size);
@@ -358,7 +358,7 @@ static int __init isp_monitor_init(void)
 {
     int i, ret;
 
-    printk(KERN_ALERT "ISP Register Monitor v%s initializing\n", ISP_MONITOR_VERSION);
+    pr_info("ISP Register Monitor v%s initializing\n", ISP_MONITOR_VERSION);
 
     // Open trace file
     ret = open_trace_file();
@@ -389,7 +389,7 @@ static void __exit isp_monitor_exit(void)
     for (i = 0; i < NUM_REGIONS; i++)
         cleanup_region(&isp_regions[i]);
 
-    printk(KERN_ALERT "ISP Register Monitor unloaded\n");
+    pr_info("ISP Register Monitor unloaded\n");
     write_to_trace_file("ISP Register Monitor unloaded\n");
 
     // Close trace file

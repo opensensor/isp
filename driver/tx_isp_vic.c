@@ -90,7 +90,7 @@ static int read_sensor_dimensions(u32 *width, u32 *height)
         *height = 1080;
         ret = -1;
     } else {
-        printk(KERN_ALERT "read_sensor_dimensions: Successfully read %dx%d from /proc/jz/sensor/\n", *width, *height);
+        pr_info("read_sensor_dimensions: Successfully read %dx%d from /proc/jz/sensor/\n", *width, *height);
     }
 
     return ret;
@@ -102,20 +102,20 @@ void cache_sensor_dimensions_from_proc(void)
     u32 width, height;
     int ret;
 
-    printk(KERN_ALERT "*** cache_sensor_dimensions_from_proc: Reading sensor dimensions during probe ***\n");
+    pr_info("*** cache_sensor_dimensions_from_proc: Reading sensor dimensions during probe ***\n");
 
     ret = read_sensor_dimensions(&width, &height);
     if (ret == 0) {
         cached_sensor_width = width;
         cached_sensor_height = height;
         sensor_dimensions_cached = 1;
-        printk(KERN_ALERT "*** cache_sensor_dimensions_from_proc: Successfully cached %dx%d ***\n", width, height);
+        pr_info("*** cache_sensor_dimensions_from_proc: Successfully cached %dx%d ***\n", width, height);
     } else {
         /* Keep defaults */
         cached_sensor_width = 1920;
         cached_sensor_height = 1080;
         sensor_dimensions_cached = 1;  /* Mark as cached even with defaults */
-        printk(KERN_ALERT "*** cache_sensor_dimensions_from_proc: Using default dimensions %dx%d ***\n",
+        pr_info("*** cache_sensor_dimensions_from_proc: Using default dimensions %dx%d ***\n",
                 cached_sensor_width, cached_sensor_height);
     }
 }
@@ -178,7 +178,7 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 {
     unsigned long flags;
 
-    printk(KERN_ALERT "*** tx_vic_enable_irq: EXACT Binary Ninja implementation from working reference ***\n");
+    pr_info("*** tx_vic_enable_irq: EXACT Binary Ninja implementation from working reference ***\n");
 
     /* Binary Ninja: if (dump_vsd_5 == 0 || dump_vsd_5 u>= 0xfffff001) return */
     if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
@@ -193,34 +193,34 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 
     /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 1 */
     vic_dev->irq_enabled = 1;
-    printk(KERN_ALERT "tx_vic_enable_irq: VIC interrupts enabled (irq_enabled = 1)\n");
+    pr_info("tx_vic_enable_irq: VIC interrupts enabled (irq_enabled = 1)\n");
 
     /* Binary Ninja: $v0_1 = *(dump_vsd_5 + 0x84); if ($v0_1 != 0) $v0_1(dump_vsd_5 + 0x80) */
     if (vic_dev->irq_handler && vic_dev->irq_priv) {
-        printk(KERN_ALERT "tx_vic_enable_irq: Calling VIC interrupt callback\n");
+        pr_info("tx_vic_enable_irq: Calling VIC interrupt callback\n");
         vic_dev->irq_handler(vic_dev->irq_priv);
     }
 
     /* CRITICAL FIX: Enable VIC interrupt at kernel level - this is what the callback should do! */
     if (vic_dev->irq > 0) {
-        printk(KERN_ALERT "*** tx_vic_enable_irq: CRITICAL FIX - Enabling VIC interrupt (IRQ %d) at kernel level ***\n", vic_dev->irq);
+        pr_info("*** tx_vic_enable_irq: CRITICAL FIX - Enabling VIC interrupt (IRQ %d) at kernel level ***\n", vic_dev->irq);
         enable_irq(vic_dev->irq);
-        printk(KERN_ALERT "*** tx_vic_enable_irq: VIC interrupt (IRQ %d) ENABLED at kernel level ***\n", vic_dev->irq);
+        pr_info("*** tx_vic_enable_irq: VIC interrupt (IRQ %d) ENABLED at kernel level ***\n", vic_dev->irq);
     } else if (vic_dev->sd.irq_info.irq > 0) {
-        printk(KERN_ALERT "*** tx_vic_enable_irq: CRITICAL FIX - Enabling VIC interrupt (IRQ %d) from irq_info at kernel level ***\n", vic_dev->sd.irq_info.irq);
+        pr_info("*** tx_vic_enable_irq: CRITICAL FIX - Enabling VIC interrupt (IRQ %d) from irq_info at kernel level ***\n", vic_dev->sd.irq_info.irq);
         enable_irq(vic_dev->sd.irq_info.irq);
-        printk(KERN_ALERT "*** tx_vic_enable_irq: VIC interrupt (IRQ %d) ENABLED at kernel level ***\n", vic_dev->sd.irq_info.irq);
+        pr_info("*** tx_vic_enable_irq: VIC interrupt (IRQ %d) ENABLED at kernel level ***\n", vic_dev->sd.irq_info.irq);
     } else {
         pr_err("*** tx_vic_enable_irq: CRITICAL ERROR - No VIC IRQ found! vic_dev->irq=%d, irq_info.irq=%d ***\n",
                vic_dev->irq, vic_dev->sd.irq_info.irq);
     }
 
-    printk(KERN_ALERT "tx_vic_enable_irq: VIC interrupt flag set and kernel interrupt enabled\n");
+    pr_info("tx_vic_enable_irq: VIC interrupt flag set and kernel interrupt enabled\n");
 
     /* Binary Ninja: private_spin_unlock_irqrestore(dump_vsd_3 + 0x130, var_18) */
     spin_unlock_irqrestore(&vic_dev->lock, flags);
 
-    printk(KERN_ALERT "*** tx_vic_enable_irq: completed successfully ***\n");
+    pr_info("*** tx_vic_enable_irq: completed successfully ***\n");
 }
 
 /* BINARY NINJA EXACT: tx_vic_disable_irq implementation */
@@ -240,28 +240,28 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
     if (vic_dev->irq_enabled != 0) {
         /* Binary Ninja: *(dump_vsd_1 + 0x13c) = 0 */
         vic_dev->irq_enabled = 0;
-        printk(KERN_ALERT "tx_vic_disable_irq: VIC interrupts disabled (irq_enabled = 0)\n");
+        pr_info("tx_vic_disable_irq: VIC interrupts disabled (irq_enabled = 0)\n");
 
         /* Binary Ninja: $v0_2 = *(dump_vsd_5 + 0x88); if ($v0_2 != 0) $v0_2(dump_vsd_5 + 0x80) */
         if (vic_dev->irq_disable && vic_dev->irq_priv) {
-            printk(KERN_ALERT "tx_vic_disable_irq: Calling VIC interrupt disable callback\n");
+            pr_info("tx_vic_disable_irq: Calling VIC interrupt disable callback\n");
             vic_dev->irq_disable(vic_dev->irq_priv);
         }
 
         /* CRITICAL FIX: Disable VIC interrupt at kernel level */
         if (vic_dev->irq > 0) {
-            printk(KERN_ALERT "*** tx_vic_disable_irq: CRITICAL FIX - Disabling VIC interrupt (IRQ %d) at kernel level ***\n", vic_dev->irq);
+            pr_info("*** tx_vic_disable_irq: CRITICAL FIX - Disabling VIC interrupt (IRQ %d) at kernel level ***\n", vic_dev->irq);
             disable_irq(vic_dev->irq);
-            printk(KERN_ALERT "*** tx_vic_disable_irq: VIC interrupt (IRQ %d) DISABLED at kernel level ***\n", vic_dev->irq);
+            pr_info("*** tx_vic_disable_irq: VIC interrupt (IRQ %d) DISABLED at kernel level ***\n", vic_dev->irq);
         } else if (vic_dev->sd.irq_info.irq > 0) {
-            printk(KERN_ALERT "*** tx_vic_disable_irq: CRITICAL FIX - Disabling VIC interrupt (IRQ %d) from irq_info at kernel level ***\n", vic_dev->sd.irq_info.irq);
+            pr_info("*** tx_vic_disable_irq: CRITICAL FIX - Disabling VIC interrupt (IRQ %d) from irq_info at kernel level ***\n", vic_dev->sd.irq_info.irq);
             disable_irq(vic_dev->sd.irq_info.irq);
-            printk(KERN_ALERT "*** tx_vic_disable_irq: VIC interrupt (IRQ %d) DISABLED at kernel level ***\n", vic_dev->sd.irq_info.irq);
+            pr_info("*** tx_vic_disable_irq: VIC interrupt (IRQ %d) DISABLED at kernel level ***\n", vic_dev->sd.irq_info.irq);
         }
 
-        printk(KERN_ALERT "tx_vic_disable_irq: VIC interrupt flag cleared and kernel interrupt disabled\n");
+        pr_info("tx_vic_disable_irq: VIC interrupt flag cleared and kernel interrupt disabled\n");
     } else {
-        printk(KERN_ALERT "tx_vic_disable_irq: VIC interrupts already disabled\n");
+        pr_info("tx_vic_disable_irq: VIC interrupts already disabled\n");
     }
 
 
@@ -283,7 +283,7 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
 
     // CRITICAL: Use PRIMARY VIC space for interrupt configuration
     vic_base = vic_dev->vic_regs;  // Use primary VIC space (0x133e0000)
-    printk(KERN_ALERT "*** VIC HW INIT: Using PRIMARY VIC space for interrupt configuration ***\n");
+    pr_info("*** VIC HW INIT: Using PRIMARY VIC space for interrupt configuration ***\n");
 
     /* CRITICAL FIX: Configure VIC interrupts during hardware init - EXACTLY like working branch */
     /* The working branch configures registers 0x04 and 0x0c in tx_isp_vic_hw_init() */
@@ -291,33 +291,33 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
 
     /* CRITICAL ROOT CAUSE FIX: Configure ACTUAL VIC interrupt registers from Binary Ninja reference */
     /* The reference uses registers 0x1e0-0x1f4 for VIC interrupts, NOT 0x04/0x0c! */
-    printk(KERN_ALERT "*** VIC HW INIT: Configuring ACTUAL VIC interrupt registers (0x1e0-0x1f4 range) ***\n");
+    pr_info("*** VIC HW INIT: Configuring ACTUAL VIC interrupt registers (0x1e0-0x1f4 range) ***\n");
 
     // Clear any pending interrupts first
     writel(0, vic_base + 0x00);  // Clear ISR
     writel(0, vic_base + 0x20);  // Clear ISR1
     wmb();
 
-    printk(KERN_ALERT "*** VIC HW INIT: Basic interrupt clearing complete - full interrupt config happens later ***\n");
+    pr_info("*** VIC HW INIT: Basic interrupt clearing complete - full interrupt config happens later ***\n");
 
     /* CRITICAL FIX: Do NOT register interrupt handler here - main module already handles IRQ 38 */
     /* The main module registers IRQ 38 as "isp-w02" and routes VIC interrupts through isp_irq_handle */
-    printk(KERN_ALERT "*** VIC HW INIT: Interrupt handler registration SKIPPED - main module handles IRQ 38 routing ***\n");
+    pr_info("*** VIC HW INIT: Interrupt handler registration SKIPPED - main module handles IRQ 38 routing ***\n");
 
     /* Verify basic VIC hardware initialization */
     u32 verify_0x00 = readl(vic_base + 0x00);
     u32 verify_0x20 = readl(vic_base + 0x20);
 
-    printk(KERN_ALERT "*** VIC HW INIT VERIFY: 0x00=0x%08x (should be 0), 0x20=0x%08x (should be 0) ***\n",
+    pr_info("*** VIC HW INIT VERIFY: 0x00=0x%08x (should be 0), 0x20=0x%08x (should be 0) ***\n",
             verify_0x00, verify_0x20);
 
     if (verify_0x00 == 0 && verify_0x20 == 0) {
-        printk(KERN_ALERT "*** VIC HW INIT: SUCCESS - Basic VIC hardware initialization complete ***\n");
+        pr_info("*** VIC HW INIT: SUCCESS - Basic VIC hardware initialization complete ***\n");
     } else {
         pr_warn("*** VIC HW INIT: WARNING - Basic VIC hardware initialization may have issues ***\n");
     }
 
-    printk(KERN_ALERT "*** VIC HW INIT: Hardware interrupt configuration complete - ready for main module IRQ routing ***\n");
+    pr_info("*** VIC HW INIT: Hardware interrupt configuration complete - ready for main module IRQ routing ***\n");
     return 0;
 }
 
@@ -356,7 +356,7 @@ static void mips_dma_cache_sync(dma_addr_t addr, size_t size, int direction)
     /* Memory barrier to ensure cache operations complete */
     wmb();
 
-    printk(KERN_ALERT "*** DMA CACHE SYNC: addr=0x%x size=%d direction=%d ***\n",
+    pr_info("*** DMA CACHE SYNC: addr=0x%x size=%d direction=%d ***\n",
              addr, size, direction);
 }
 
@@ -490,11 +490,11 @@ skip_buffer_walk:
                     }
                 }
                 if (found) {
-                    printk(KERN_ALERT "VIC CURR_ADDR DETECTED: space=%s offset=0x%x matched slot %d\n",
+                    pr_info("VIC CURR_ADDR DETECTED: space=%s offset=0x%x matched slot %d\n",
                             vic_curraddr_space == 1 ? "PRIMARY" : "SECONDARY", vic_curraddr_offset, cur_idx);
                     next_idx = (cur_idx + 1) % count;
                 } else {
-                    printk(KERN_ALERT "VIC CURR_ADDR DETECT: no match in 0x320..0x3c0 this frame; fallback index\n");
+                    pr_info("VIC CURR_ADDR DETECT: no match in 0x320..0x3c0 this frame; fallback index\n");
                     if (vic_dev->last_idx < 0 || vic_dev->last_idx >= count) vic_dev->last_idx = 0;
                     next_idx = (vic_dev->last_idx + 1) % count;
                 }
@@ -508,7 +508,7 @@ skip_buffer_walk:
                 u32 reg_val = readl(vic_base + 0x300);
                 u32 shifted_value = count << 16;  /* Put buffer count in bits 16-19 */
 
-                printk(KERN_ALERT "*** VIC FRAME DONE: Before update: VIC[0x0]=0x%x VIC[0x300]=0x%x ***\n",
+                pr_info("*** VIC FRAME DONE: Before update: VIC[0x0]=0x%x VIC[0x300]=0x%x ***\n",
                         vic_state_before, reg_val);
 
                 /* Preserve control bits (0x80000020) and only update buffer count in bits 16-19 */
@@ -528,7 +528,7 @@ skip_buffer_walk:
 
                 u32 vic_state_after = readl(vic_base + 0x0);
                 u32 reg_val_after = readl(vic_base + 0x300);
-                printk(KERN_ALERT "*** VIC FRAME DONE: After update: VIC[0x0]=0x%x VIC[0x300]=0x%x (wrote 0x%x, buffer count=%u) ***\n",
+                pr_info("*** VIC FRAME DONE: After update: VIC[0x0]=0x%x VIC[0x300]=0x%x (wrote 0x%x, buffer count=%u) ***\n",
                         vic_state_after, reg_val_after, reg_val, count);
             }
 
@@ -550,7 +550,7 @@ skip_buffer_walk:
             {
                 u32 reg_p = readl(vic_base + 0x300);
                 u32 reg_c = (vic_dev->vic_regs_control ? readl(vic_dev->vic_regs_control + 0x300) : 0);
-                printk(KERN_ALERT "*** VIC FRAME DONE: Verified VIC[0x300] PRIMARY=0x%x CONTROL=0x%x (count=%u, cur_idx=%d, next_idx=%d) ***\n",
+                pr_info("*** VIC FRAME DONE: Verified VIC[0x300] PRIMARY=0x%x CONTROL=0x%x (count=%u, cur_idx=%d, next_idx=%d) ***\n",
                         reg_p, reg_c, count, cur_idx, next_idx);
             }
 
@@ -593,7 +593,7 @@ label_123f4:
                 return gpio_result;
             }
 
-            printk(KERN_ALERT "vic_framedone_irq_function: GPIO %d set to state %d\n", gpio_pin, gpio_state);
+            pr_info("vic_framedone_irq_function: GPIO %d set to state %d\n", gpio_pin, gpio_state);
         }
     }
 
@@ -611,10 +611,10 @@ label_123f4:
         return 0;
     }
 
-    printk(KERN_ALERT "*** VIC FRAME DONE: About to call complete(), vic_dev=%p, &frame_complete=%p ***\n",
+    pr_info("*** VIC FRAME DONE: About to call complete(), vic_dev=%p, &frame_complete=%p ***\n",
             vic_dev, comp);
     complete(comp);
-    printk(KERN_ALERT "*** VIC FRAME DONE: Frame completion signaled successfully ***\n");
+    pr_info("*** VIC FRAME DONE: Frame completion signaled successfully ***\n");
 
     /* Post-frame: keep ISR minimal; do not touch IMR/IMCR here. Ack is handled in top-level ISR. */
 
@@ -666,7 +666,7 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
         /* Binary Ninja: int32_t $s0_2 = *(arg1 + 0xdc) * *(arg1 + 0xe0) */
         frame_size = vic_dev->width * vic_dev->height;
 
-        printk(KERN_ALERT "Info[VIC_MDAM_IRQ] : channel[%d] frame done\n", channel);
+        pr_info("Info[VIC_MDAM_IRQ] : channel[%d] frame done\n", channel);
 
         /* Binary Ninja: int32_t $s0_3 = $s0_2 << 1 */
         frame_size = frame_size << 1;  /* RAW10 = 2 bytes per pixel */
@@ -678,7 +678,7 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
             /* DMA sync for CPU access to completed buffer */
             mips_dma_cache_sync(isp_dev->dma_addr, frame_size, DMA_FROM_DEVICE);
 
-            printk(KERN_ALERT "*** VIC MDMA IRQ: ISP buffer addr=0x%x completed and synced for CPU ***\n",
+            pr_info("*** VIC MDMA IRQ: ISP buffer addr=0x%x completed and synced for CPU ***\n",
                     isp_dev->dma_addr);
 
             /* Signal frame completion */
@@ -688,11 +688,11 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
                 return 0;
             }
 
-            printk(KERN_ALERT "*** VIC MDMA IRQ: About to call complete() #1, vic_dev=%p, &frame_complete=%p ***\n",
+            pr_info("*** VIC MDMA IRQ: About to call complete() #1, vic_dev=%p, &frame_complete=%p ***\n",
                     vic_dev, &vic_dev->frame_complete);
             complete(&vic_dev->frame_complete);
         } else {
-            printk(KERN_ALERT "*** VIC MDMA IRQ: No ISP DMA buffer available for sync ***\n");
+            pr_info("*** VIC MDMA IRQ: No ISP DMA buffer available for sync ***\n");
         }
 
         /* Binary Ninja: return private_complete(arg1 + 0x148) */
@@ -702,14 +702,14 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
             return 0;
         }
 
-        printk(KERN_ALERT "*** VIC MDMA IRQ: About to call complete() #2, vic_dev=%p, &frame_complete=%p ***\n",
+        pr_info("*** VIC MDMA IRQ: About to call complete() #2, vic_dev=%p, &frame_complete=%p ***\n",
                 vic_dev, &vic_dev->frame_complete);
         complete(&vic_dev->frame_complete);
-        printk(KERN_ALERT "*** VIC MDMA IRQ: complete() #2 returned successfully ***\n");
+        pr_info("*** VIC MDMA IRQ: complete() #2 returned successfully ***\n");
         return 0;
     }
 
-    printk(KERN_ALERT "vic_mdma_irq_function: Stream not active, skipping\n");
+    pr_info("vic_mdma_irq_function: Stream not active, skipping\n");
     return 0;
 }
 
@@ -744,7 +744,7 @@ int vic_saveraw(struct tx_isp_subdev *sd, unsigned int savenum)
     frame_size = width * height * 2;
     buf_size = frame_size * savenum;
 
-    printk(KERN_ALERT "width=%d height=%d frame_size=%d total_size=%d savenum=%d\n",
+    pr_info("width=%d height=%d frame_size=%d total_size=%d savenum=%d\n",
             width, height, frame_size, buf_size, savenum);
 
     vic_base = ioremap(0x10023000, 0x1000);
@@ -775,7 +775,7 @@ int vic_saveraw(struct tx_isp_subdev *sd, unsigned int savenum)
         return -EINVAL;
     }
 
-    printk(KERN_ALERT "*** VIC: Using ALIGNED DMA buffer at virt=%p, phys=0x%08x, size=%u (with safety padding) ***\n",
+    pr_info("*** VIC: Using ALIGNED DMA buffer at virt=%p, phys=0x%08x, size=%u (with safety padding) ***\n",
             capture_buf, (uint32_t)dma_addr, padded_buf_size);
     // Read original register values
     vic_ctrl = readl(vic_base + 0x7810);
@@ -876,7 +876,7 @@ int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum)
     frame_size = width * height * 2;
     buf_size = frame_size * savenum;
 
-    printk(KERN_ALERT "width=%d height=%d frame_size=%d total_size=%d savenum=%d\n",
+    pr_info("width=%d height=%d frame_size=%d total_size=%d savenum=%d\n",
             width, height, frame_size, buf_size, savenum);
 
     // Map VIC registers
@@ -909,7 +909,7 @@ int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum)
         return -EINVAL;
     }
 
-    printk(KERN_ALERT "*** VIC: Using ALIGNED DMA buffer at virt=%p, phys=0x%08x, size=%u (with safety padding) ***\n",
+    pr_info("*** VIC: Using ALIGNED DMA buffer at virt=%p, phys=0x%08x, size=%u (with safety padding) ***\n",
             capture_buf, (uint32_t)dma_addr, padded_buf_size);
 
     // Read original register values
@@ -1001,7 +1001,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* CRITICAL FIX: Define actual sensor dimensions for consistent use throughout function */
     u32 actual_width, actual_height;
 
-    printk(KERN_ALERT "*** tx_isp_vic_start: Following EXACT Binary Ninja flow ***\n");
+    pr_info("*** tx_isp_vic_start: Following EXACT Binary Ninja flow ***\n");
 
     /* Binary Ninja: 00010244 void* $v1 = *(arg1 + 0x110) */
     if (!vic_dev) {
@@ -1019,22 +1019,22 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     sensor_attr = sensor->video.attr;
 
     /* DEBUG: Check if sensor_attr is properly initialized */
-    printk(KERN_ALERT "*** DEBUG: sensor_attr=%p, dbus_type=%d ***\n", sensor_attr, sensor_attr ? sensor_attr->dbus_type : -1);
+    pr_info("*** DEBUG: sensor_attr=%p, dbus_type=%d ***\n", sensor_attr, sensor_attr ? sensor_attr->dbus_type : -1);
 
     /* CRITICAL FIX: Use ACTUAL sensor output dimensions, not total dimensions */
     /* GC2053 sensor outputs 1920x1080 but reports total dimensions 2200x1418 */
     actual_width = 1920;   /* ACTUAL sensor output width */
     actual_height = 1080;  /* ACTUAL sensor output height */
 
-    printk(KERN_ALERT "*** DIMENSION FIX: Using ACTUAL sensor output dimensions %dx%d for VIC configuration ***\n",
+    pr_info("*** DIMENSION FIX: Using ACTUAL sensor output dimensions %dx%d for VIC configuration ***\n",
             actual_width, actual_height);
-    printk(KERN_ALERT "*** CRITICAL: VIC configured for sensor OUTPUT, not sensor TOTAL dimensions ***\n");
+    pr_info("*** CRITICAL: VIC configured for sensor OUTPUT, not sensor TOTAL dimensions ***\n");
 
     /* Binary Ninja: 0001024c int32_t $v0 = *($v1 + 0x14) - interface type at offset 0x14 */
     interface_type = sensor_attr->dbus_type;
 
-    printk(KERN_ALERT "*** VIC INTERFACE DETECTION: interface_type=%d (MIPI=1, DVP=2) ***\n", interface_type);
-    printk(KERN_ALERT "*** SENSOR ATTRIBUTE: dbus_type=%d ***\n", sensor_attr->dbus_type);
+    pr_info("*** VIC INTERFACE DETECTION: interface_type=%d (MIPI=1, DVP=2) ***\n", interface_type);
+    pr_info("*** SENSOR ATTRIBUTE: dbus_type=%d ***\n", sensor_attr->dbus_type);
 
     /* CRITICAL FIX: Use CSI format instead of data_type for RAW10 */
     /* sensor_attr->data_type = TX_SENSOR_DATA_TYPE_LINEAR (not what we need) */
@@ -1052,10 +1052,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* Try to get actual sensor format, but use default if it fails */
     if (sensor_attr) {
         /* For now, just use the default RAW10 format to avoid potential crashes */
-        printk(KERN_ALERT "*** SAFETY: Using default RAW10 format (0x2b) to avoid sensor_attr access issues ***\n");
+        pr_info("*** SAFETY: Using default RAW10 format (0x2b) to avoid sensor_attr access issues ***\n");
     }
 
-    printk(KERN_ALERT "*** Interface type: %d, Format: 0x%x (RAW10) ***\n", interface_type, sensor_format);
+    pr_info("*** Interface type: %d, Format: 0x%x (RAW10) ***\n", interface_type, sensor_format);
 
     /* Get VIC register base - offset 0xb8 in Binary Ninja */
     vic_regs = vic_dev->vic_regs;
@@ -1074,7 +1074,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         clk_set_rate(cgu_isp_clk, 100000000);
         ret = clk_prepare_enable(cgu_isp_clk);
         if (ret == 0) {
-            printk(KERN_ALERT "CGU_ISP clock enabled at 100MHz\n");
+            pr_info("CGU_ISP clock enabled at 100MHz\n");
         }
     }
 
@@ -1110,7 +1110,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* CRITICAL FIX: Use correct enum values - MIPI=1, DVP=2 */
     if (interface_type == TX_SENSOR_DATA_INTERFACE_MIPI) {  /* MIPI = 1 */
         /* MIPI interface - Binary Ninja 00010688-00010a50 */
-        printk(KERN_ALERT "MIPI interface configuration\n");
+        pr_info("MIPI interface configuration\n");
 
         /* Binary Ninja: Check flags at 00010260 */
         if (sensor_attr->dbus_type != interface_type) {
@@ -1143,19 +1143,19 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x10, vic_regs + 0x1b0);
 
         /* VIC interrupt initialization moved to END of function after CSI PHY setup */
-        printk(KERN_ALERT "*** VIC INTERRUPT INIT: VIC interrupt setup deferred until after CSI PHY writes ***\n");
+        pr_info("*** VIC INTERRUPT INIT: VIC interrupt setup deferred until after CSI PHY writes ***\n");
 
         /* Unlock sequence - Binary Ninja 00010484-00010490 - EXACT REFERENCE IMPLEMENTATION */
-        printk(KERN_ALERT "*** VIC UNLOCK SEQUENCE: Starting unlock sequence ***\n");
-        printk(KERN_ALERT "*** VIC UNLOCK: Initial register 0x0 value = 0x%08x ***\n", readl(vic_regs + 0x0));
+        pr_info("*** VIC UNLOCK SEQUENCE: Starting unlock sequence ***\n");
+        pr_info("*** VIC UNLOCK: Initial register 0x0 value = 0x%08x ***\n", readl(vic_regs + 0x0));
 
         writel(2, vic_regs + 0x0);
         wmb();
-        printk(KERN_ALERT "*** VIC UNLOCK: After writing 2, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
+        pr_info("*** VIC UNLOCK: After writing 2, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
 
         writel(4, vic_regs + 0x0);
         wmb();
-        printk(KERN_ALERT "*** VIC UNLOCK: After writing 4, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
+        pr_info("*** VIC UNLOCK: After writing 4, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
 
         /* Wait for unlock - Binary Ninja 000104b8 - DUAL VIC SPACE COORDINATION */
         timeout = 10000;  /* 10ms timeout */
@@ -1165,12 +1165,12 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         u32 secondary_val = secondary_regs ? readl(secondary_regs + 0x0) : 0;
         u32 primary_val = readl(vic_regs + 0x0);
 
-        printk(KERN_ALERT "*** VIC UNLOCK: Primary space (0x133e0000) = 0x%08x, Secondary space (0x10023000) = 0x%08x ***\n",
+        pr_info("*** VIC UNLOCK: Primary space (0x133e0000) = 0x%08x, Secondary space (0x10023000) = 0x%08x ***\n",
                 primary_val, secondary_val);
 
         /* Handle CSI PHY coordination - 0x3130322a in secondary space is expected */
         if (secondary_val == 0x3130322a) {
-            printk(KERN_ALERT "*** VIC UNLOCK: CSI PHY coordination complete in secondary space ***\n");
+            pr_info("*** VIC UNLOCK: CSI PHY coordination complete in secondary space ***\n");
         }
 
         /* Wait for primary VIC space unlock */
@@ -1185,27 +1185,27 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             }
         }
 
-        printk(KERN_ALERT "*** VIC UNLOCK: Unlock sequence completed, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
+        pr_info("*** VIC UNLOCK: Unlock sequence completed, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
 
         /* vic_start_ok flag setting moved to END of function after CSI PHY setup */
 
         /* Enable VIC - Binary Ninja 000107d4 */
-        printk(KERN_ALERT "*** VIC UNLOCK: Enabling VIC (writing 1 to register 0x0) ***\n");
+        pr_info("*** VIC UNLOCK: Enabling VIC (writing 1 to register 0x0) ***\n");
         writel(1, vic_regs + 0x0);
-        printk(KERN_ALERT "*** VIC UNLOCK: VIC enabled, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
+        pr_info("*** VIC UNLOCK: VIC enabled, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
 
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_MIPI) {  /* MIPI = 1 in our enum */
         /* MIPI interface - Binary Ninja 000107ec-00010b04 */
-        printk(KERN_ALERT "MIPI interface configuration\n");
+        pr_info("MIPI interface configuration\n");
 
         /* CRITICAL: VIC hardware should already be initialized by platform driver */
-        printk(KERN_ALERT "*** VIC hardware should be ready - proceeding with unlock sequence ***\n");
+        pr_info("*** VIC hardware should be ready - proceeding with unlock sequence ***\n");
 
         /* Binary Ninja: EXACT reference driver MIPI mode configuration */
         /* Binary Ninja: 000107ec - Set CSI mode */
         writel(3, vic_regs + 0xc);  /* BINARY NINJA EXACT: VIC mode = 3 for MIPI interface */
         wmb();
-        printk(KERN_ALERT "*** VIC: Set MIPI mode (3) to VIC control register 0xc - BINARY NINJA EXACT ***\n");
+        pr_info("*** VIC: Set MIPI mode (3) to VIC control register 0xc - BINARY NINJA EXACT ***\n");
 
         /* BINARY NINJA EXACT: All missing register configurations */
 
@@ -1213,42 +1213,42 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         u32 width = 1920;   /* sensor output width */
         u32 height = 1080;  /* sensor output height */
         writel((width << 16) | height, vic_regs + 0x4);
-        printk(KERN_ALERT "*** BINARY NINJA: reg 0x4 = 0x%x (dimensions %dx%d) ***\n", (width << 16) | height, width, height);
+        pr_info("*** BINARY NINJA: reg 0x4 = 0x%x (dimensions %dx%d) ***\n", (width << 16) | height, width, height);
 
         /* 2. Register 0x14 - Interrupt config (from sensor attributes) */
         writel(0x0, vic_regs + 0x14);  /* Start with safe default */
-        printk(KERN_ALERT "*** BINARY NINJA: reg 0x14 = 0x0 (interrupt config) ***\n");
+        pr_info("*** BINARY NINJA: reg 0x14 = 0x0 (interrupt config) ***\n");
 
         /* 3. Register 0x100 - Complex calculation for MIPI */
         u32 reg_100_value = 0x1;  /* Basic value for MIPI RAW10 */
         writel(reg_100_value, vic_regs + 0x100);
-        printk(KERN_ALERT "*** BINARY NINJA: reg 0x100 = 0x%x (MIPI calculation) ***\n", reg_100_value);
+        pr_info("*** BINARY NINJA: reg 0x100 = 0x%x (MIPI calculation) ***\n", reg_100_value);
 
         /* 4. Register 0x10c - Use hardware-expected value instead of 0x0 */
         u32 reg_10c_value = 0x2c000;  /* Hardware auto-correction shows this is the expected value */
         writel(reg_10c_value, vic_regs + 0x10c);
-        printk(KERN_ALERT "*** BINARY NINJA: reg 0x10c = 0x%x (hardware-expected value) ***\n", reg_10c_value);
+        pr_info("*** BINARY NINJA: reg 0x10c = 0x%x (hardware-expected value) ***\n", reg_10c_value);
 
         /* 5. Registers 0x110-0x11c - Use hardware-expected values */
         writel(0x7800000, vic_regs + 0x110);  /* Hardware auto-correction shows this is expected */
         writel(0x0, vic_regs + 0x114);
         writel(0x0, vic_regs + 0x118);
         writel(0x0, vic_regs + 0x11c);
-        printk(KERN_ALERT "*** BINARY NINJA: regs 0x110-0x11c configured with hardware-expected values ***\n");
+        pr_info("*** BINARY NINJA: regs 0x110-0x11c configured with hardware-expected values ***\n");
 
         /* 6. Frame mode registers */
         writel(0x4440, vic_regs + 0x1ac);  /* Binary Ninja default for interface type 1 */
         writel(0x4440, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
-        printk(KERN_ALERT "*** BINARY NINJA: frame mode regs configured (0x4440, 0x4440, 0x10) ***\n");
+        pr_info("*** BINARY NINJA: frame mode regs configured (0x4440, 0x4440, 0x10) ***\n");
 
         /* 7. Register 0x1a0 - Additional frame config */
         writel(0x0, vic_regs + 0x1a0);  /* Binary Ninja: frame config */
-        printk(KERN_ALERT "*** BINARY NINJA: reg 0x1a0 = 0x0 (frame config) ***\n");
+        pr_info("*** BINARY NINJA: reg 0x1a0 = 0x0 (frame config) ***\n");
 
         /* 8. Register 0x1a4 - Control register */
         writel(0x100010, vic_regs + 0x1a4);  /* Binary Ninja exact value */
-        printk(KERN_ALERT "*** BINARY NINJA: reg 0x1a4 = 0x100010 (control) ***\n");
+        pr_info("*** BINARY NINJA: reg 0x1a4 = 0x100010 (control) ***\n");
 
         /* 9. BINARY NINJA EXACT: Hardware enable sequence */
         writel(0x2, vic_regs + 0x0);  /* Pre-enable */
@@ -1265,7 +1265,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
         writel(0x1, vic_regs + 0x0);  /* Final enable */
         wmb();
-        printk(KERN_ALERT "*** BINARY NINJA EXACT: Hardware sequence 2->4->wait(%d us)->1 ***\n", wait_count);
+        pr_info("*** BINARY NINJA EXACT: Hardware sequence 2->4->wait(%d us)->1 ***\n", wait_count);
 
         /* Format detection logic - Binary Ninja 000107f8-00010a04 */
         u32 mipi_config;
@@ -1374,7 +1374,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         /* The reference driver sets 0x18 = 0xf00 (3840) and it must stay that way */
         /* DO NOT overwrite register 0x18 with sensor width - this causes control limit errors */
         u32 integration_time = sensor_attr->integration_time;
-        printk(KERN_ALERT "*** CRITICAL: Skipping register 0x18 write - it's a timing parameter (0xf00), not width! ***\n");
+        pr_info("*** CRITICAL: Skipping register 0x18 write - it's a timing parameter (0xf00), not width! ***\n");
 
         u32 again = sensor_attr->again;
         if (again != 0) {
@@ -1395,7 +1395,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
         /* CRITICAL FIX: Skip remaining unlock sequence during streaming restart */
         if (vic_start_ok == 1) {
-            printk(KERN_ALERT "*** VIC: SKIPPING remaining unlock sequence - VIC interrupts already working ***\n");
+            pr_info("*** VIC: SKIPPING remaining unlock sequence - VIC interrupts already working ***\n");
         } else {
             writel(4, vic_regs + 0x0);
             wmb();
@@ -1423,7 +1423,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_BT601) {
         /* BT601 - Binary Ninja 00010688-000107d4 */
-        printk(KERN_ALERT "BT601 interface configuration\n");
+        pr_info("BT601 interface configuration\n");
 
         writel(1, vic_regs + 0xc);
 
@@ -1458,7 +1458,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_BT656) {
         /* BT656 - Binary Ninja 000105b0-00010684 */
-        printk(KERN_ALERT "BT656 interface configuration\n");
+        pr_info("BT656 interface configuration\n");
 
         writel(0, vic_regs + 0xc);
         writel(0x800c0000, vic_regs + 0x10);
@@ -1476,7 +1476,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_BT1120) {
         /* BT1120 - Binary Ninja 00010500-00010684 */
-        printk(KERN_ALERT "BT1120 interface configuration\n");
+        pr_info("BT1120 interface configuration\n");
 
         writel(4, vic_regs + 0xc);
         writel(0x800c0000, vic_regs + 0x10);
@@ -1497,14 +1497,14 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     /* Binary Ninja: 00010b48-00010b74 - Log WDR mode */
     if (sensor_attr->wdr_cache != 0) {
-        printk(KERN_ALERT "tx_isp_vic_start: WDR mode enabled\n");
+        pr_info("tx_isp_vic_start: WDR mode enabled\n");
     } else {
-        printk(KERN_ALERT "tx_isp_vic_start: Linear mode enabled\n");
+        pr_info("tx_isp_vic_start: Linear mode enabled\n");
     }
 
     /* Binary Ninja: 00010b84 - Set vic_start_ok */
     vic_start_ok = 1;
-    printk(KERN_ALERT "*** VIC start completed - vic_start_ok = 1 ***\n");
+    pr_info("*** VIC start completed - vic_start_ok = 1 ***\n");
 
     /* CRITICAL: Enable ISP core interrupt generation - EXACT Binary Ninja reference */
     /* This was the missing piece that caused interrupts to stall out */
@@ -1541,9 +1541,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x3FFF, core + 0x98bc);
         wmb();
 
-        printk(KERN_ALERT "*** ISP PIPELINE: VIC->ISP connection ENABLED (0x800=1, 0x804=0x1c, 0x1c=8) ***\n");
-        printk(KERN_ALERT "*** ISP CORE: Hardware interrupt generation ENABLED during VIC init ***\n");
-        printk(KERN_ALERT "*** VIC->ISP: Pipeline should now generate hardware interrupts when VIC completes frames! ***\n");
+        pr_info("*** ISP PIPELINE: VIC->ISP connection ENABLED (0x800=1, 0x804=0x1c, 0x1c=8) ***\n");
+        pr_info("*** ISP CORE: Hardware interrupt generation ENABLED during VIC init ***\n");
+        pr_info("*** VIC->ISP: Pipeline should now generate hardware interrupts when VIC completes frames! ***\n");
     } else {
         pr_warn("*** ISP CORE IRQ: core_regs not mapped; unable to enable core interrupts here ***\n");
     }
@@ -1567,7 +1567,7 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     void *callback_ptr;
     int (*callback_func)(void);
 
-    printk(KERN_ALERT "*** vic_core_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x%x, arg=%p ***\n", cmd, arg);
+    pr_info("*** vic_core_ops_ioctl: EXACT Binary Ninja implementation - cmd=0x%x, arg=%p ***\n", cmd, arg);
 
     /* Binary Ninja EXACT: if (arg2 == 0x1000001) */
     if (cmd == 0x1000001) {  /* TX_ISP_EVENT_SYNC_SENSOR_ATTR */
@@ -1583,7 +1583,7 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 
                 /* Binary Ninja: if ($v0_2 == 0) return 0 */
                 if (callback_ptr == NULL) {
-                    printk(KERN_ALERT "vic_core_ops_ioctl: No callback pointer for cmd 0x1000001, returning 0\n");
+                    pr_info("vic_core_ops_ioctl: No callback pointer for cmd 0x1000001, returning 0\n");
                     return 0;
                 }
 
@@ -1593,19 +1593,19 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 
                 /* Binary Ninja: if ($v0_3 == 0) return 0 */
                 if (callback_func == NULL) {
-                    printk(KERN_ALERT "vic_core_ops_ioctl: No callback function for cmd 0x1000001, returning 0\n");
+                    pr_info("vic_core_ops_ioctl: No callback function for cmd 0x1000001, returning 0\n");
                     return 0;
                 }
 
                 /* Binary Ninja: result = $v0_3() */
-                printk(KERN_ALERT "vic_core_ops_ioctl: Calling callback function for cmd 0x1000001\n");
+                pr_info("vic_core_ops_ioctl: Calling callback function for cmd 0x1000001\n");
                 result = callback_func();
             } else {
-                printk(KERN_ALERT "vic_core_ops_ioctl: No inpads for cmd 0x1000001, returning 0\n");
+                pr_info("vic_core_ops_ioctl: No inpads for cmd 0x1000001, returning 0\n");
                 return 0;
             }
         } else {
-            printk(KERN_ALERT "vic_core_ops_ioctl: NULL sd for cmd 0x1000001, returning 0\n");
+            pr_info("vic_core_ops_ioctl: NULL sd for cmd 0x1000001, returning 0\n");
             return 0;
         }
     }
@@ -1615,7 +1615,7 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
         struct v4l2_buffer *buffer = (struct v4l2_buffer *)arg;
         u32 phys = 0;
 
-        printk(KERN_ALERT "vic_core_ops_ioctl: QBUF cmd=0x%x - program VIC slot from v4l2_buffer\n", cmd);
+        pr_info("vic_core_ops_ioctl: QBUF cmd=0x%x - program VIC slot from v4l2_buffer\n", cmd);
 
         if (!sd || !sd->host_priv || !buffer) {
             pr_err("vic_core_ops_ioctl: QBUF - missing sd/host_priv/buffer\n");
@@ -1673,7 +1673,7 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
         return 0;
     }
     else if (cmd == 0x3000005) {  /* TX_ISP_EVENT_BUFFER_ENQUEUE - keep pipeline fed */
-        printk(KERN_ALERT "vic_core_ops_ioctl: BUFFER_ENQUEUE cmd=0x%x - refreshing VIC buffer state\n", cmd);
+        pr_info("vic_core_ops_ioctl: BUFFER_ENQUEUE cmd=0x%x - refreshing VIC buffer state\n", cmd);
         if (sd) {
             /* 1) Program this specific buffer node into VIC via qbuf (arg is node) */
             (void) ispvic_frame_channel_qbuf(sd, arg);
@@ -1687,13 +1687,13 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     }
     /* Binary Ninja: else if (arg2 == 0x3000009) */
     else if (cmd == 0x3000009) {
-        printk(KERN_ALERT "vic_core_ops_ioctl: tx_isp_subdev_pipo cmd=0x%x\n", cmd);
+        pr_info("vic_core_ops_ioctl: tx_isp_subdev_pipo cmd=0x%x\n", cmd);
         result = tx_isp_subdev_pipo(sd, arg);
 		return result;
     }
     /* Binary Ninja: else if (arg2 != 0x1000000) return 0 */
     else if (cmd != 0x1000000) {
-        printk(KERN_ALERT "vic_core_ops_ioctl: REFERENCE DRIVER - Unknown cmd=0x%x, returning 0\n", cmd);
+        pr_info("vic_core_ops_ioctl: REFERENCE DRIVER - Unknown cmd=0x%x, returning 0\n", cmd);
         return 0;
     }
     /* Binary Ninja: Handle 0x1000000 case */
@@ -1709,7 +1709,7 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 
                 /* Binary Ninja: if ($v0_5 == 0) return 0 */
                 if (callback_ptr == NULL) {
-                    printk(KERN_ALERT "vic_core_ops_ioctl: No callback pointer for cmd 0x1000000, returning 0\n");
+                    pr_info("vic_core_ops_ioctl: No callback pointer for cmd 0x1000000, returning 0\n");
                     return 0;
                 }
 
@@ -1718,30 +1718,30 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 
                 /* Binary Ninja: if ($v0_3 == 0) return 0 */
                 if (callback_func == NULL) {
-                    printk(KERN_ALERT "vic_core_ops_ioctl: No callback function for cmd 0x1000000, returning 0\n");
+                    pr_info("vic_core_ops_ioctl: No callback function for cmd 0x1000000, returning 0\n");
                     return 0;
                 }
 
                 /* Binary Ninja: result = $v0_3() */
-                printk(KERN_ALERT "vic_core_ops_ioctl: Calling callback function for cmd 0x1000000\n");
+                pr_info("vic_core_ops_ioctl: Calling callback function for cmd 0x1000000\n");
                 result = callback_func();
             } else {
-                printk(KERN_ALERT "vic_core_ops_ioctl: No inpads for cmd 0x1000000, returning 0\n");
+                pr_info("vic_core_ops_ioctl: No inpads for cmd 0x1000000, returning 0\n");
                 return 0;
             }
         } else {
-            printk(KERN_ALERT "vic_core_ops_ioctl: NULL sd for cmd 0x1000000, returning 0\n");
+            pr_info("vic_core_ops_ioctl: NULL sd for cmd 0x1000000, returning 0\n");
             return 0;
         }
     }
 
     /* Binary Ninja: if (result == 0xfffffdfd) return 0 */
     if (result == -515) {  /* 0xfffffdfd */
-        printk(KERN_ALERT "vic_core_ops_ioctl: Result -515, returning 0\n");
+        pr_info("vic_core_ops_ioctl: Result -515, returning 0\n");
         return 0;
     }
 
-    printk(KERN_ALERT "*** vic_core_ops_ioctl: EXACT Binary Ninja - returning result=%d ***\n", result);
+    pr_info("*** vic_core_ops_ioctl: EXACT Binary Ninja - returning result=%d ***\n", result);
     return result;
 }
 
@@ -1842,8 +1842,8 @@ int vic_mdma_enable(struct tx_isp_vic_device *vic_dev, int channel, int dual_cha
     width = vic_dev->width;   /* Binary Ninja: *(arg1 + 0xdc) */
     height = vic_dev->height; /* Binary Ninja: *(arg1 + 0xe0) */
 
-    printk(KERN_ALERT "*** vic_mdma_enable: EXACT Binary Ninja implementation ***\n");
-    printk(KERN_ALERT "vic_mdma_enable: width=%d, height=%d, buffers=%d, format=%d\n",
+    pr_info("*** vic_mdma_enable: EXACT Binary Ninja implementation ***\n");
+    pr_info("vic_mdma_enable: width=%d, height=%d, buffers=%d, format=%d\n",
             width, height, buffer_count, format_type);
 
     /* Binary Ninja: Calculate stride based on format */
@@ -1954,8 +1954,8 @@ long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg)
         vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
     }
 
-    printk(KERN_ALERT "*** isp_vic_cmd_set: EXACT Binary Ninja implementation ***\n");
-    printk(KERN_ALERT "isp_vic_cmd_set: count=%lu\n", arg);
+    pr_info("*** isp_vic_cmd_set: EXACT Binary Ninja implementation ***\n");
+    pr_info("isp_vic_cmd_set: count=%lu\n", arg);
 
     if (!vic_dev) {
         return seq_printf(seq, "Can't ops the node!\n");
@@ -1983,7 +1983,7 @@ long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg)
 
     /* Binary Ninja EXACT: Check for "snapraw" command */
     if (strncmp(cmd_buf, "snapraw", 7) == 0) {
-        printk(KERN_ALERT "*** isp_vic_cmd_set: Processing 'snapraw' command ***\n");
+        pr_info("*** isp_vic_cmd_set: Processing 'snapraw' command ***\n");
 
         /* Parse save number from command */
         unsigned long save_num = 1;
@@ -1992,7 +1992,7 @@ long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg)
             if (save_num < 2) save_num = 1;
         }
 
-        printk(KERN_ALERT "isp_vic_cmd_set: snapraw save_num=%lu\n", save_num);
+        pr_info("isp_vic_cmd_set: snapraw save_num=%lu\n", save_num);
 
         /* Binary Ninja: Check width limit */
         if (vic_dev->width >= 0xa81) {
@@ -2017,12 +2017,12 @@ long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg)
                 format_type = 0;  /* Keep as RAW for now */
             }
 
-            printk(KERN_ALERT "*** isp_vic_cmd_set: Calling vic_mdma_enable for snapraw with VBM buffer ***\n");
+            pr_info("*** isp_vic_cmd_set: Calling vic_mdma_enable for snapraw with VBM buffer ***\n");
             ret = vic_mdma_enable(vic_dev, 0, dual_channel, save_num,
                                 state->vbm_buffer_addresses[0], format_type);
 
             if (ret == 0) {
-                printk(KERN_ALERT "*** isp_vic_cmd_set: vic_mdma_enable SUCCESS - VIC MDMA enabled for snapraw ***\n");
+                pr_info("*** isp_vic_cmd_set: vic_mdma_enable SUCCESS - VIC MDMA enabled for snapraw ***\n");
                 ret = arg;  /* Return success */
             } else {
                 pr_err("isp_vic_cmd_set: vic_mdma_enable failed: %d\n", ret);
@@ -2034,7 +2034,7 @@ long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg)
     }
     /* Binary Ninja EXACT: Check for "saveraw" command */
     else if (strncmp(cmd_buf, "saveraw", 7) == 0) {
-        printk(KERN_ALERT "*** isp_vic_cmd_set: Processing 'saveraw' command ***\n");
+        pr_info("*** isp_vic_cmd_set: Processing 'saveraw' command ***\n");
 
         /* Parse save number from command */
         unsigned long save_num = 1;
@@ -2043,7 +2043,7 @@ long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg)
             if (save_num < 2) save_num = 1;
         }
 
-        printk(KERN_ALERT "isp_vic_cmd_set: saveraw save_num=%lu\n", save_num);
+        pr_info("isp_vic_cmd_set: saveraw save_num=%lu\n", save_num);
 
         /* Binary Ninja: Check width limit */
         if (vic_dev->width >= 0xa81) {
@@ -2060,12 +2060,12 @@ long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg)
             int format_type = 0;  /* Default to RAW format */
             int dual_channel = 0; /* Single channel mode */
 
-            printk(KERN_ALERT "*** isp_vic_cmd_set: Calling vic_mdma_enable for saveraw with VBM buffer ***\n");
+            pr_info("*** isp_vic_cmd_set: Calling vic_mdma_enable for saveraw with VBM buffer ***\n");
             ret = vic_mdma_enable(vic_dev, 0, dual_channel, save_num,
                                 state->vbm_buffer_addresses[0], format_type);
 
             if (ret == 0) {
-                printk(KERN_ALERT "*** isp_vic_cmd_set: vic_mdma_enable SUCCESS - VIC MDMA enabled for saveraw ***\n");
+                pr_info("*** isp_vic_cmd_set: vic_mdma_enable SUCCESS - VIC MDMA enabled for saveraw ***\n");
                 ret = arg;  /* Return success */
             } else {
                 pr_err("isp_vic_cmd_set: vic_mdma_enable failed: %d\n", ret);
@@ -2088,7 +2088,7 @@ long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg)
         ret = arg;
     }
     else {
-        printk(KERN_ALERT "isp_vic_cmd_set: Unknown command: %s\n", cmd_buf);
+        pr_info("isp_vic_cmd_set: Unknown command: %s\n", cmd_buf);
         ret = arg;  /* Return success for unknown commands */
     }
 
@@ -2097,7 +2097,7 @@ cleanup:
         kfree(cmd_buf);
     }
 
-    printk(KERN_ALERT "*** isp_vic_cmd_set: Completed with ret=%d ***\n", ret);
+    pr_info("*** isp_vic_cmd_set: Completed with ret=%d ***\n", ret);
     return ret;
 }
 
@@ -2221,7 +2221,7 @@ ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, 
 
     /* Process "snapraw" command */
     if (strncmp(cmd_buf, "snapraw", 7) == 0) {
-        printk(KERN_ALERT "*** vic_proc_write: Processing 'snapraw' command ***\n");
+        pr_info("*** vic_proc_write: Processing 'snapraw' command ***\n");
 
         /* Parse save number from command */
         unsigned long save_num = 1;
@@ -2230,7 +2230,7 @@ ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, 
             if (save_num < 2) save_num = 1;
         }
 
-        printk(KERN_ALERT "vic_proc_write: snapraw save_num=%lu\n", save_num);
+        pr_info("vic_proc_write: snapraw save_num=%lu\n", save_num);
 
         /* Check width limit */
         if (vic_dev->width >= 0xa81) {
@@ -2249,11 +2249,11 @@ ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, 
         if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
             /* Use existing VBM buffer */
             buffer_addr = state->vbm_buffer_addresses[0];
-            printk(KERN_ALERT "*** vic_proc_write: Using VBM buffer address 0x%x ***\n", buffer_addr);
+            pr_info("*** vic_proc_write: Using VBM buffer address 0x%x ***\n", buffer_addr);
         } else {
             /* Allocate temporary buffer for snapraw operation */
             u32 frame_size = vic_dev->width * vic_dev->height * 2;  /* RAW10 = 2 bytes/pixel */
-            printk(KERN_ALERT "*** vic_proc_write: No VBM buffers, allocating temporary buffer (size=%u) ***\n", frame_size);
+            pr_info("*** vic_proc_write: No VBM buffers, allocating temporary buffer (size=%u) ***\n", frame_size);
 
             temp_buffer = dma_alloc_coherent(NULL, frame_size, &buffer_addr, GFP_KERNEL);
             if (!temp_buffer || !buffer_addr) {
@@ -2262,21 +2262,21 @@ ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, 
                 goto cleanup;
             }
             allocated_temp_buffer = true;
-            printk(KERN_ALERT "*** vic_proc_write: Allocated temporary buffer at 0x%x ***\n", buffer_addr);
+            pr_info("*** vic_proc_write: Allocated temporary buffer at 0x%x ***\n", buffer_addr);
         }
 
         if (buffer_addr) {
             int format_type = 0;  /* Default to RAW format */
             int dual_channel = 0; /* Single channel mode */
 
-            printk(KERN_ALERT "*** vic_proc_write: Calling vic_mdma_enable for snapraw with buffer 0x%x ***\n", buffer_addr);
+            pr_info("*** vic_proc_write: Calling vic_mdma_enable for snapraw with buffer 0x%x ***\n", buffer_addr);
             ret = vic_mdma_enable(vic_dev, 0, dual_channel, save_num, buffer_addr, format_type);
 
             if (ret == 0) {
-                printk(KERN_ALERT "*** vic_proc_write: vic_mdma_enable SUCCESS - VIC MDMA enabled for snapraw ***\n");
+                pr_info("*** vic_proc_write: vic_mdma_enable SUCCESS - VIC MDMA enabled for snapraw ***\n");
 
                 /* CRITICAL: Wait for frame capture to complete, then save to file */
-                printk(KERN_ALERT "*** vic_proc_write: Waiting for frame capture to complete (500ms timeout) ***\n");
+                pr_info("*** vic_proc_write: Waiting for frame capture to complete (500ms timeout) ***\n");
                 msleep(500);  /* Wait for VIC to capture frame */
 
                 /* Save captured frame to /opt/snapraw.raw */
@@ -2295,7 +2295,7 @@ ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, 
                     if (mapped_buffer) {
                         ssize_t bytes_written = vfs_write(output_file, mapped_buffer, frame_size, &pos);
                         if (bytes_written == frame_size) {
-                            printk(KERN_ALERT "*** vic_proc_write: SUCCESS - Saved %d bytes to /opt/snapraw.raw ***\n", bytes_written);
+                            pr_info("*** vic_proc_write: SUCCESS - Saved %d bytes to /opt/snapraw.raw ***\n", bytes_written);
                         } else {
                             pr_err("vic_proc_write: Failed to write complete frame: %d/%d bytes\n", bytes_written, frame_size);
                         }
@@ -2320,12 +2320,12 @@ ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, 
         if (allocated_temp_buffer && temp_buffer) {
             u32 frame_size = vic_dev->width * vic_dev->height * 2;
             dma_free_coherent(NULL, frame_size, temp_buffer, buffer_addr);
-            printk(KERN_ALERT "*** vic_proc_write: Freed temporary buffer ***\n");
+            pr_info("*** vic_proc_write: Freed temporary buffer ***\n");
         }
     }
     /* Process "saveraw" command */
     else if (strncmp(cmd_buf, "saveraw", 7) == 0) {
-        printk(KERN_ALERT "*** vic_proc_write: Processing 'saveraw' command ***\n");
+        pr_info("*** vic_proc_write: Processing 'saveraw' command ***\n");
 
         /* Parse save number from command */
         unsigned long save_num = 1;
@@ -2334,7 +2334,7 @@ ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, 
             if (save_num < 2) save_num = 1;
         }
 
-        printk(KERN_ALERT "vic_proc_write: saveraw save_num=%lu\n", save_num);
+        pr_info("vic_proc_write: saveraw save_num=%lu\n", save_num);
 
         /* Check width limit */
         if (vic_dev->width >= 0xa81) {
@@ -2353,11 +2353,11 @@ ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, 
         if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
             /* Use existing VBM buffer */
             buffer_addr = state->vbm_buffer_addresses[0];
-            printk(KERN_ALERT "*** vic_proc_write: Using VBM buffer address 0x%x ***\n", buffer_addr);
+            pr_info("*** vic_proc_write: Using VBM buffer address 0x%x ***\n", buffer_addr);
         } else {
             /* Allocate temporary buffer for saveraw operation */
             u32 frame_size = vic_dev->width * vic_dev->height * 2;  /* RAW10 = 2 bytes/pixel */
-            printk(KERN_ALERT "*** vic_proc_write: No VBM buffers, allocating temporary buffer (size=%u) ***\n", frame_size);
+            pr_info("*** vic_proc_write: No VBM buffers, allocating temporary buffer (size=%u) ***\n", frame_size);
 
             temp_buffer = dma_alloc_coherent(NULL, frame_size, &buffer_addr, GFP_KERNEL);
             if (!temp_buffer || !buffer_addr) {
@@ -2366,18 +2366,18 @@ ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, 
                 goto cleanup;
             }
             allocated_temp_buffer = true;
-            printk(KERN_ALERT "*** vic_proc_write: Allocated temporary buffer at 0x%x ***\n", buffer_addr);
+            pr_info("*** vic_proc_write: Allocated temporary buffer at 0x%x ***\n", buffer_addr);
         }
 
         if (buffer_addr) {
             int format_type = 0;  /* Default to RAW format */
             int dual_channel = 0; /* Single channel mode */
 
-            printk(KERN_ALERT "*** vic_proc_write: Calling vic_mdma_enable for saveraw with buffer 0x%x ***\n", buffer_addr);
+            pr_info("*** vic_proc_write: Calling vic_mdma_enable for saveraw with buffer 0x%x ***\n", buffer_addr);
             ret = vic_mdma_enable(vic_dev, 0, dual_channel, save_num, buffer_addr, format_type);
 
             if (ret == 0) {
-                printk(KERN_ALERT "*** vic_proc_write: vic_mdma_enable SUCCESS - VIC MDMA enabled for saveraw ***\n");
+                pr_info("*** vic_proc_write: vic_mdma_enable SUCCESS - VIC MDMA enabled for saveraw ***\n");
                 ret = count;  /* Return success */
             } else {
                 pr_err("vic_proc_write: vic_mdma_enable failed: %d\n", ret);
@@ -2388,7 +2388,7 @@ ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t count, 
         if (allocated_temp_buffer && temp_buffer) {
             u32 frame_size = vic_dev->width * vic_dev->height * 2;
             dma_free_coherent(NULL, frame_size, temp_buffer, buffer_addr);
-            printk(KERN_ALERT "*** vic_proc_write: Freed temporary buffer ***\n");
+            pr_info("*** vic_proc_write: Freed temporary buffer ***\n");
         }
     }
     else {
@@ -2401,7 +2401,7 @@ cleanup:
         kfree(cmd_buf);
     }
 
-    printk(KERN_ALERT "*** vic_proc_write: Completed with ret=%d ***\n", ret);
+    pr_info("*** vic_proc_write: Completed with ret=%d ***\n", ret);
     return ret;
 }
 
@@ -2429,12 +2429,12 @@ int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
 
     if (vic_dev->state == 1) {
         vic_dev->state = 2; /* INIT -> READY */
-        printk(KERN_ALERT "VIC activated: state %d -> 2 (READY)\n", 1);
+        pr_info("VIC activated: state %d -> 2 (READY)\n", 1);
 
         /* Ensure CSI clocks are initialized before enabling */
         if (!sd->clks && sd->clk_num > 0) {
             extern int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_num);
-            printk(KERN_ALERT "tx_isp_csi_activate_subdev: Initializing %d clocks for CSI before enabling\n", sd->clk_num);
+            pr_info("tx_isp_csi_activate_subdev: Initializing %d clocks for CSI before enabling\n", sd->clk_num);
             if (isp_subdev_init_clks(sd, sd->clk_num) != 0) {
                 pr_warn("tx_isp_csi_activate_subdev: isp_subdev_init_clks failed; continuing without clocks\n");
             }
@@ -2459,16 +2459,16 @@ int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
         }
 
         /* *** CRITICAL: GOOD-THINGS APPROACH - Defer buffer allocation to prevent memory exhaustion *** */
-        printk(KERN_ALERT "*** VIC ACTIVATION: Buffers will be allocated on-demand during QBUF operations ***\n");
+        pr_info("*** VIC ACTIVATION: Buffers will be allocated on-demand during QBUF operations ***\n");
 
         /* Initialize empty lists - buffers allocated later when needed */
         if (list_empty(&vic_dev->free_head)) {
-            printk(KERN_ALERT "*** VIC ACTIVATION: Free buffer list initialized (empty) - allocation deferred ***\n");
+            pr_info("*** VIC ACTIVATION: Free buffer list initialized (empty) - allocation deferred ***\n");
         }
 
         /* Set buffer management to deferred mode */
         vic_dev->buffer_count = 0;  /* No buffers allocated yet */
-        printk(KERN_ALERT "*** VIC ACTIVATION: Using GOOD-THINGS deferred buffer allocation strategy ***\n");
+        pr_info("*** VIC ACTIVATION: Using GOOD-THINGS deferred buffer allocation strategy ***\n");
     }
 
     /* CRITICAL FIX: Use spinlock instead of mutex to prevent "sleeping in atomic context" */
@@ -2484,7 +2484,7 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
     int result;
 
     /* CRITICAL DEBUG: Log entry to verify this function is being called */
-    printk(KERN_ALERT "*** vic_core_ops_init: ENTRY - sd=%p, enable=%d ***\n", sd, enable);
+    pr_info("*** vic_core_ops_init: ENTRY - sd=%p, enable=%d ***\n", sd, enable);
 
     /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) */
     if (sd == NULL || (unsigned long)sd >= 0xfffff001) {
@@ -2503,11 +2503,11 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
         pr_err("*** vic_core_ops_init: CRITICAL ERROR - vic_dev is NULL! ***\n");
         return -EINVAL;
     }
-    printk(KERN_ALERT "*** vic_core_ops_init: vic_dev=%p, current state check ***\n", vic_dev);
+    pr_info("*** vic_core_ops_init: vic_dev=%p, current state check ***\n", vic_dev);
 
     /* Binary Ninja: int32_t $v0_2 = *($s1_1 + 0x128) */
     current_state = vic_dev->state;
-    printk(KERN_ALERT "*** vic_core_ops_init: current_state=%d, enable=%d ***\n", current_state, enable);
+    pr_info("*** vic_core_ops_init: current_state=%d, enable=%d ***\n", current_state, enable);
 
     /* Binary Ninja: if (arg2 == 0) */
     if (enable == 0) {
@@ -2552,7 +2552,7 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     void __iomem *vic_base;
     u32 width, height, stride;
 
-    printk(KERN_ALERT "*** vic_pipo_mdma_enable: EXACT Binary Ninja implementation ***\n");
+    pr_info("*** vic_pipo_mdma_enable: EXACT Binary Ninja implementation ***\n");
 
     /* CRITICAL: Validate vic_dev structure first */
     if (!vic_dev) {
@@ -2581,22 +2581,22 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         /* Only override if dimensions are actually invalid (zero) */
         width = 1920;  /* ACTUAL sensor output width (not total width) */
         height = 1080; /* ACTUAL sensor output height (not total height) */
-        printk(KERN_ALERT "*** DIMENSION FIX: Using ACTUAL sensor output dimensions %dx%d ***\n", width, height);
-        printk(KERN_ALERT "*** CRITICAL: VIC must match sensor OUTPUT, not sensor TOTAL dimensions ***\n");
+        pr_info("*** DIMENSION FIX: Using ACTUAL sensor output dimensions %dx%d ***\n", width, height);
+        pr_info("*** CRITICAL: VIC must match sensor OUTPUT, not sensor TOTAL dimensions ***\n");
 
         /* Update vic_dev to prevent future mismatches */
         vic_dev->width = width;
         vic_dev->height = height;
     } else {
-        printk(KERN_ALERT "*** DIMENSION VALIDATION: Using existing valid dimensions %dx%d ***\n", width, height);
+        pr_info("*** DIMENSION VALIDATION: Using existing valid dimensions %dx%d ***\n", width, height);
     }
 
-    printk(KERN_ALERT "vic_pipo_mdma_enable: FINAL dimensions=%dx%d (should be 2200x1418)\n", width, height);
+    pr_info("vic_pipo_mdma_enable: FINAL dimensions=%dx%d (should be 2200x1418)\n", width, height);
 
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x308) = 1 */
     writel(1, vic_base + 0x308);
     wmb();
-    printk(KERN_ALERT "vic_pipo_mdma_enable: reg 0x308 = 1 (MDMA enable)\n");
+    pr_info("vic_pipo_mdma_enable: reg 0x308 = 1 (MDMA enable)\n");
 
     /* Binary Ninja EXACT: int32_t $v1_1 = $v1 << 1 (stride = width * 2) */
     stride = width << 1;
@@ -2604,20 +2604,20 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x304) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
     writel((width << 16) | height, vic_base + 0x304);
     wmb();
-    printk(KERN_ALERT "vic_pipo_mdma_enable: reg 0x304 = 0x%x (dimensions %dx%d)\n",
+    pr_info("vic_pipo_mdma_enable: reg 0x304 = 0x%x (dimensions %dx%d)\n",
             (width << 16) | height, width, height);
 
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x310) = $v1_1 */
     writel(stride, vic_base + 0x310);
     wmb();
-    printk(KERN_ALERT "vic_pipo_mdma_enable: reg 0x310 = %d (stride)\n", stride);
+    pr_info("vic_pipo_mdma_enable: reg 0x310 = %d (stride)\n", stride);
 
     /* Binary Ninja EXACT: *(result + 0x314) = $v1_1 */
     writel(stride, vic_base + 0x314);
     wmb();
-    printk(KERN_ALERT "vic_pipo_mdma_enable: reg 0x314 = %d (stride)\n", stride);
+    pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (stride)\n", stride);
 
-    printk(KERN_ALERT "*** VIC PIPO MDMA ENABLE COMPLETE - CONTROL LIMIT ERROR SHOULD BE FIXED ***\n");
+    pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - CONTROL LIMIT ERROR SHOULD BE FIXED ***\n");
 }
 
 /* ISPVIC Frame Channel S_Stream - EXACT Binary Ninja Implementation */
@@ -2627,15 +2627,15 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
     int32_t var_18 = 0;
     const char *stream_op;
 
-    printk(KERN_ALERT "*** ispvic_frame_channel_s_stream: EXACT Binary Ninja implementation ***\n");
-    printk(KERN_ALERT "ispvic_frame_channel_s_stream: arg1=%p, arg2=%d\n", arg1, arg2);
+    pr_info("*** ispvic_frame_channel_s_stream: EXACT Binary Ninja implementation ***\n");
+    pr_info("ispvic_frame_channel_s_stream: arg1=%p, arg2=%d\n", arg1, arg2);
 
     /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = *(arg1 + 0xd4) */
     if (arg1 != 0 && (unsigned long)arg1 < 0xfffff001) {
         /* SAFE: Get vic_dev from subdev->host_priv using struct member access */
         struct tx_isp_subdev *sd = (struct tx_isp_subdev *)arg1;
         s0 = sd->host_priv;  /* Binary Ninja: $s0 = *(arg1 + 0xd4) */
-        printk(KERN_ALERT "ispvic_frame_channel_s_stream: s0 (vic_dev) = %p\n", s0);
+        pr_info("ispvic_frame_channel_s_stream: s0 (vic_dev) = %p\n", s0);
     }
 
     /* Binary Ninja EXACT: if (arg1 == 0) return 0xffffffea */
@@ -2646,7 +2646,7 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
 
     /* Binary Ninja: Set stream operation string */
     stream_op = (arg2 != 0) ? "streamon" : "streamoff";
-    printk(KERN_ALERT "%s[%d]: %s\n", "ispvic_frame_channel_s_stream", __LINE__, stream_op);
+    pr_info("%s[%d]: %s\n", "ispvic_frame_channel_s_stream", __LINE__, stream_op);
 
     /* Binary Ninja EXACT: if (arg2 == *($s0 + 0x210)) return 0 */
     /* SAFE: Use struct member access for stream_state */
@@ -2656,13 +2656,13 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         return 0xffffffea;
     }
 
-    printk(KERN_ALERT "*** ispvic_frame_channel_s_stream: Checking stream state - current=%d, requested=%d ***\n",
+    pr_info("*** ispvic_frame_channel_s_stream: Checking stream state - current=%d, requested=%d ***\n",
             vic_dev->stream_state, arg2);
     if (arg2 == vic_dev->stream_state) {
-        printk(KERN_ALERT "*** ispvic_frame_channel_s_stream: Stream state matches - EARLY RETURN (no MDMA enable) ***\n");
+        pr_info("*** ispvic_frame_channel_s_stream: Stream state matches - EARLY RETURN (no MDMA enable) ***\n");
         return 0;  /* Binary Ninja EXACT: early return without any MDMA operations */
     }
-    printk(KERN_ALERT "*** ispvic_frame_channel_s_stream: Stream state different - proceeding with streaming setup ***\n");
+    pr_info("*** ispvic_frame_channel_s_stream: Stream state different - proceeding with streaming setup ***\n");
     /* Binary Ninja EXACT: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
     __private_spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, &var_18);
 
@@ -2676,7 +2676,7 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             if (vic_ctrl)
                 writel(0, vic_ctrl + 0x300);
             wmb();
-            printk(KERN_ALERT "ispvic_frame_channel_s_stream: Stream OFF - wrote 0 to reg 0x300\n");
+            pr_info("ispvic_frame_channel_s_stream: Stream OFF - wrote 0 to reg 0x300\n");
         }
 
         /* Binary Ninja EXACT: *($s0 + 0x210) = 0 */
@@ -2688,9 +2688,9 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         /* The VIC[0x0] sequence should happen AFTER writing VIC[0x300], not before */
 
         /* Binary Ninja EXACT: vic_pipo_mdma_enable($s0) */
-        printk(KERN_ALERT "*** CRITICAL: Calling vic_pipo_mdma_enable - required for VIC interrupts ***\n");
+        pr_info("*** CRITICAL: Calling vic_pipo_mdma_enable - required for VIC interrupts ***\n");
         vic_pipo_mdma_enable(vic_dev);
-        printk(KERN_ALERT "*** vic_pipo_mdma_enable completed - VIC MDMA should now generate interrupts! ***\n");
+        pr_info("*** vic_pipo_mdma_enable completed - VIC MDMA should now generate interrupts! ***\n");
 
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
         void __iomem *vic_base = vic_dev->vic_regs;  /* SAFE: $s0 + 0xb8 = vic_regs */
@@ -2698,7 +2698,7 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             /* DEBUG: Check VIC state before writing buffer count */
             u32 vic_state_before = readl(vic_base + 0x0);
             u32 vic_ctrl_before = readl(vic_base + 0x300);
-            printk(KERN_ALERT "*** DEBUG: Before writing VIC[0x300]: VIC[0x0]=0x%x VIC[0x300]=0x%x ***\n",
+            pr_info("*** DEBUG: Before writing VIC[0x300]: VIC[0x0]=0x%x VIC[0x300]=0x%x ***\n",
                     vic_state_before, vic_ctrl_before);
 
             /* SAFE: $s0 + 0x218 = active_buffer_count */
@@ -2712,7 +2712,7 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
                 writel(stream_ctrl, vic_ctrl + 0x300);
             wmb();
 
-            printk(KERN_ALERT "*** Binary Ninja EXACT: Wrote 0x%x to reg 0x300 (%d buffers) ***\n", stream_ctrl, buffer_count);
+            pr_info("*** Binary Ninja EXACT: Wrote 0x%x to reg 0x300 (%d buffers) ***\n", stream_ctrl, buffer_count);
 
             /* CRITICAL FIX: Transition VIC to RUN state (1) AFTER writing buffer count */
             /* Hardware clears buffer count if we transition from RESET (2) to RUN (1) after writing 0x300 */
@@ -2720,11 +2720,11 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             if (vic_ctrl)
                 writel(1, vic_ctrl + 0x0);
             wmb();
-            printk(KERN_ALERT "*** CRITICAL FIX: Wrote 1 to VIC[0x0] to transition to RUN state AFTER buffer count write ***\n");
+            pr_info("*** CRITICAL FIX: Wrote 1 to VIC[0x0] to transition to RUN state AFTER buffer count write ***\n");
 
             /* DEBUG: Verify buffer count was retained */
             u32 vic_ctrl_after = readl(vic_base + 0x300);
-            printk(KERN_ALERT "*** DEBUG: After writing VIC[0x0]=1: VIC[0x300]=0x%x (buffer count %s) ***\n",
+            pr_info("*** DEBUG: After writing VIC[0x0]=1: VIC[0x300]=0x%x (buffer count %s) ***\n",
                     vic_ctrl_after, (vic_ctrl_after & 0x000F0000) ? "RETAINED" : "CLEARED");
         }
 
@@ -2746,7 +2746,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
     int current_state;
     int ret = -EINVAL;
 
-    printk(KERN_ALERT "*** vic_core_s_stream: BINARY NINJA EXACT - sd=%p, enable=%d ***\n", sd, enable);
+    pr_info("*** vic_core_s_stream: BINARY NINJA EXACT - sd=%p, enable=%d ***\n", sd, enable);
 
     /* Binary Ninja: if (arg1 != 0) if (arg1 u>= 0xfffff001) return 0xffffffea */
     if (!sd) {
@@ -2769,12 +2769,12 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
     /* Binary Ninja: int32_t $v1_3 = *($s1_1 + 0x128) */
     current_state = vic_dev->state;
 
-    printk(KERN_ALERT "*** vic_core_s_stream: BINARY NINJA EXACT - current_state=%d ***\n", current_state);
+    pr_info("*** vic_core_s_stream: BINARY NINJA EXACT - current_state=%d ***\n", current_state);
 
     /* Binary Ninja: if (arg2 == 0) */
     if (enable == 0) {
         /* Stream OFF */
-        printk(KERN_ALERT "*** vic_core_s_stream: STREAM OFF ***\n");
+        pr_info("*** vic_core_s_stream: STREAM OFF ***\n");
 
         /* Binary Ninja: $v0 = 0 */
         ret = 0;
@@ -2782,13 +2782,13 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
         /* Binary Ninja: if ($v1_3 == 4) *($s1_1 + 0x128) = 3 */
         if (current_state == 4) {
             vic_dev->state = 3;
-            printk(KERN_ALERT "vic_core_s_stream: Stream OFF - state 4 -> 3\n");
+            pr_info("vic_core_s_stream: Stream OFF - state 4 -> 3\n");
         }
 
         return ret;
     } else {
         /* Stream ON */
-        printk(KERN_ALERT "*** vic_core_s_stream: STREAM ON ***\n");
+        pr_info("*** vic_core_s_stream: STREAM ON ***\n");
 
         /* Binary Ninja: $v0 = 0 */
         ret = 0;
@@ -2796,10 +2796,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
         /* EXACT Binary Ninja MCP reference logic */
         /* Binary Ninja: if ($v1_3 != 4) */
         if (current_state != 4) {
-            printk(KERN_ALERT "*** vic_core_s_stream: EXACT Binary Ninja - State != 4, calling VIC start sequence ***\n");
+            pr_info("*** vic_core_s_stream: EXACT Binary Ninja - State != 4, calling VIC start sequence ***\n");
 
             /* SKIP disabling kernel IRQ before VIC start to avoid missing first frame */
-            printk(KERN_ALERT "*** vic_core_s_stream: SKIPPING tx_vic_disable_irq before VIC start to preserve first frame IRQ ***\n");
+            pr_info("*** vic_core_s_stream: SKIPPING tx_vic_disable_irq before VIC start to preserve first frame IRQ ***\n");
 
             /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
             ret = tx_isp_vic_start(vic_dev);
@@ -2812,17 +2812,17 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             vic_dev->stream_state = 0;
 
             /* Force QBUF write to program buffer addresses before MDMA start */
-            printk(KERN_ALERT "*** vic_core_s_stream: Forcing ispvic_frame_channel_qbuf to program buffer addresses before MDMA ***\n");
+            pr_info("*** vic_core_s_stream: Forcing ispvic_frame_channel_qbuf to program buffer addresses before MDMA ***\n");
             {
                 int qret = ispvic_frame_channel_qbuf(sd, NULL);
                 if (qret != 0) {
                     pr_warn("*** vic_core_s_stream: ispvic_frame_channel_qbuf returned %d (continuing) ***\n", qret);
                 } else {
-                    printk(KERN_ALERT "*** vic_core_s_stream: ispvic_frame_channel_qbuf SUCCESS ***\n");
+                    pr_info("*** vic_core_s_stream: ispvic_frame_channel_qbuf SUCCESS ***\n");
                 }
             }
 
-            printk(KERN_ALERT "*** vic_core_s_stream: Calling ispvic_frame_channel_s_stream(ENABLE) to start MDMA before enabling IRQ ***\n");
+            pr_info("*** vic_core_s_stream: Calling ispvic_frame_channel_s_stream(ENABLE) to start MDMA before enabling IRQ ***\n");
             ret = ispvic_frame_channel_s_stream(sd, 1);
             if (ret != 0) {
                 pr_err("*** vic_core_s_stream: ispvic_frame_channel_s_stream FAILED: %d ***\n", ret);
@@ -2867,23 +2867,23 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         writel(0x00000001, core + 0x9ac0);
                         writel(0x00000000, core + 0x9ac8);
                         wmb();
-                        printk(KERN_ALERT "*** CORE VIC ROUTE INIT: [9a00]=0x%08x [9a04]=0x%08x [9a2c]=0x%08x [9a34]=0x%08x [9a88]=0x%08x [9a80]=0x%08x [9a98]=0x%08x; GATE [9ac0]=0x%08x [9ac8]=0x%08x ***\n",
+                        pr_info("*** CORE VIC ROUTE INIT: [9a00]=0x%08x [9a04]=0x%08x [9a2c]=0x%08x [9a34]=0x%08x [9a88]=0x%08x [9a80]=0x%08x [9a98]=0x%08x; GATE [9ac0]=0x%08x [9ac8]=0x%08x ***\n",
                                 readl(core + 0x9a00), readl(core + 0x9a04), readl(core + 0x9a2c),
                                 readl(core + 0x9a34), readl(core + 0x9a88), readl(core + 0x9a80), readl(core + 0x9a98),
                                 readl(core + 0x9ac0), readl(core + 0x9ac8));
                     } while (0);
-                    printk(KERN_ALERT "*** vic_core_s_stream: CORE W1C [9a70/9a7c] then ROUTE INIT + GATE REASSERT ***\n");
+                    pr_info("*** vic_core_s_stream: CORE W1C [9a70/9a7c] then ROUTE INIT + GATE REASSERT ***\n");
                 }
             } while (0);
 
             /* Re-write buffer addresses AFTER MDMA start to ensure hardware sees them */
-            printk(KERN_ALERT "*** vic_core_s_stream: Re-writing buffer addresses AFTER MDMA start ***\n");
+            pr_info("*** vic_core_s_stream: Re-writing buffer addresses AFTER MDMA start ***\n");
             {
                 int qret2 = ispvic_frame_channel_qbuf(sd, NULL);
                 if (qret2 != 0) {
                     pr_warn("*** vic_core_s_stream: ispvic_frame_channel_qbuf (post-MDMA) returned %d (continuing) ***\n", qret2);
                 } else {
-                    printk(KERN_ALERT "*** vic_core_s_stream: Post-MDMA QBUF SUCCESS ***\n");
+                    pr_info("*** vic_core_s_stream: Post-MDMA QBUF SUCCESS ***\n");
                 }
             }
 
@@ -2898,12 +2898,12 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* Leave 0x1ec (MDMA mask) as-is per working reference */
                 /* DO NOT touch 0x30c here; suspected global mask/enable */
                 wmb();
-                printk(KERN_ALERT "*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (MainMask=0xFFFFFFFE)***\n",
+                pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (MainMask=0xFFFFFFFE)***\n",
                         readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x1e0), readl(vr + 0x1e4), readl(vr + 0x1e8), readl(vr + 0x1ec));
                 /* Primary bank: only verify 0x100; do NOT write 0x14 here (0x14 is stride on PRIMARY) */
                 writel(0x000002d0, vr + 0x100);
                 wmb();
-                printk(KERN_ALERT "*** VIC VERIFY (PRIMARY EXTRA): [0x100]=0x%08x [0x14]=0x%08x (PRIMARY 0x14=stride) ***\n",
+                pr_info("*** VIC VERIFY (PRIMARY EXTRA): [0x100]=0x%08x [0x14]=0x%08x (PRIMARY 0x14=stride) ***\n",
                         readl(vr + 0x100), readl(vr + 0x14));
                 udelay(50);
 
@@ -2922,7 +2922,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* 0xFFFFFFFE = bit 0 is 0 (ENABLED after ~), bit 21 is 1 (MASKED after ~) */
                 writel(0xFFFFFFFE, vc + 0x1e8);  /* Enable ONLY frame-done, mask all errors */
                 wmb();
-                printk(KERN_ALERT "*** VIC CONTROL BANK: Enabled interrupt mask 0x1e8=0xFFFFFFFE (frame-done ENABLED, errors MASKED) ***\n");
+
+                pr_info("*** VIC CONTROL BANK: Enabled interrupt mask 0x1e8=0xFFDFFFFE ***\n");
 
                 /* Route/control asserts at CONTROL bank -- SKIPPED to match good-things */
                 /* writel(0x000002d0, vc + 0x100); */
@@ -2930,14 +2931,14 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 /* writel(0xb5742249, vc + 0x0c);  */
                 /* writel(0xFFFFFFFF, vc + 0x30c); */
                 wmb();
-                printk(KERN_ALERT "*** VIC VERIFY (CONTROL): [0x0]=0x%08x [0x4]=0x%08x [0x0c]=0x%08x [0x100]=0x%08x [0x14]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (MainMask=0xFFFFFFFE)***\n",
+                pr_info("*** VIC VERIFY (CONTROL): [0x0]=0x%08x [0x4]=0x%08x [0x0c]=0x%08x [0x100]=0x%08x [0x14]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (MainMask=0xFFFFFFFE)***\n",
                         readl(vc + 0x0), readl(vc + 0x4), readl(vc + 0x0c), readl(vc + 0x100), readl(vc + 0x14), readl(vc + 0x300), readl(vc + 0x30c), readl(vc + 0x1e0), readl(vc + 0x1e4), readl(vc + 0x1e8), readl(vc + 0x1ec));
 
                 /* CRITICAL VERIFICATION: Check CONTROL bank is properly configured */
                 /* CONTROL bank is READ-ONLY (hardware ID register) - don't verify it */
                 /* The CONTROL bank at 0x10023000 always reads 0x3130322a at offset 0x0 */
                 /* All other registers in CONTROL bank are hardware-managed and read as 0 */
-                printk(KERN_ALERT "*** VIC CONTROL BANK: Skipping verification (read-only hardware ID) ***\n");
+                pr_info("*** VIC CONTROL BANK: Skipping verification (read-only hardware ID) ***\n");
             }
 
                 /* Read-back verification of buffer/control registers in BOTH banks */
@@ -2948,9 +2949,9 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     u32 b2 = readl(vrb + 0x320);
                     u32 b3 = readl(vrb + 0x324);
                     u32 b4 = readl(vrb + 0x328);
-                    printk(KERN_ALERT "*** VIC BUFS (PRIMARY): [0x318]=0x%08x [0x31c]=0x%08x [0x320]=0x%08x [0x324]=0x%08x [0x328]=0x%08x ***\n",
+                    pr_info("*** VIC BUFS (PRIMARY): [0x318]=0x%08x [0x31c]=0x%08x [0x320]=0x%08x [0x324]=0x%08x [0x328]=0x%08x ***\n",
                             b0, b1, b2, b3, b4);
-                    printk(KERN_ALERT "*** VIC CTRL (PRIMARY): [0x300]=0x%08x ***\n", readl(vrb + 0x300));
+                    pr_info("*** VIC CTRL (PRIMARY): [0x300]=0x%08x ***\n", readl(vrb + 0x300));
                 }
                 if (vic_dev->vic_regs_control) {
                     void __iomem *vcb = vic_dev->vic_regs_control;
@@ -2959,9 +2960,9 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     u32 b2 = readl(vcb + 0x320);
                     u32 b3 = readl(vcb + 0x324);
                     u32 b4 = readl(vcb + 0x328);
-                    printk(KERN_ALERT "*** VIC BUFS (CONTROL): [0x318]=0x%08x [0x31c]=0x%08x [0x320]=0x%08x [0x324]=0x%08x [0x328]=0x%08x ***\n",
+                    pr_info("*** VIC BUFS (CONTROL): [0x318]=0x%08x [0x31c]=0x%08x [0x320]=0x%08x [0x324]=0x%08x [0x328]=0x%08x ***\n",
                             b0, b1, b2, b3, b4);
-                    printk(KERN_ALERT "*** VIC CTRL (CONTROL): [0x300]=0x%08x ***\n", readl(vcb + 0x300));
+                    pr_info("*** VIC CTRL (CONTROL): [0x300]=0x%08x ***\n", readl(vcb + 0x300));
                 }
 
 
@@ -2985,7 +2986,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         writel(0xb5742249, vcc + 0x0c);
                         writel(0x000002d0, vcc + 0x100);
                         wmb();
-                        printk(KERN_ALERT "*** VIC CONTROL BANK: Post-enable [0x0]=0x%08x, [0x14]=0x%08x, [0x0c]=0x%08x, [0x100]=0x%08x ***\n",
+                        pr_info("*** VIC CONTROL BANK: Post-enable [0x0]=0x%08x, [0x14]=0x%08x, [0x0c]=0x%08x, [0x100]=0x%08x ***\n",
                                 readl(vcc + 0x0), readl(vcc + 0x14), readl(vcc + 0x0c), readl(vcc + 0x100));
                     }
                 }
@@ -3003,7 +3004,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     /* 0xFFFFFFFE = bit 0 is 0 (ENABLED after ~), all other bits are 1 (MASKED after ~) */
                     writel(0xFFFFFFFE, vr + 0x1e8);
                     wmb();
-                    printk(KERN_ALERT "*** VIC MASK: Set MainMask=0xFFFFFFFE (frame-done ENABLED, errors MASKED) before RUN ***\n");
+                    pr_info("*** VIC MASK: Set MainMask=0xFFDFFFFE (frame-done + bit21) before RUN ***\n");
                 }
 
             /* VIC CONTROL: enter RUN state after all config (write 1) */
@@ -3011,7 +3012,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 void __iomem *vr = vic_dev->vic_regs;
                 writel(1, vr + 0x0);
                 wmb();
-                printk(KERN_ALERT "*** VIC CONTROL (PRIMARY): WROTE 1 to [0x0] before enabling IRQ ***\n");
+                pr_info("*** VIC CONTROL (PRIMARY): WROTE 1 to [0x0] before enabling IRQ ***\n");
             /* Post-RUN re-arm: commit dance so enables latch without touching masks */
                 /* Program PRIMARY IMR/IMCR routing once (match good-things), no re-arm */
                 if (vic_dev && vic_dev->vic_regs) {
@@ -3021,7 +3022,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     writel(0x07800438, vr_gate + 0x04);   /* IMR routing/mask */
                     writel(0xb5742249, vr_gate + 0x0c);   /* IMCR key */
                     wmb();
-                    printk(KERN_ALERT "*** VIC PRIMARY GATE: IMR/IMCR routed (no re-arm) IMR=0x%08x IMCR=0x%08x ***\n",
+                    pr_info("*** VIC PRIMARY GATE: IMR/IMCR routed (no re-arm) IMR=0x%08x IMCR=0x%08x ***\n",
                             readl(vr_gate + 0x04), readl(vr_gate + 0x0c));
                 }
 
@@ -3040,7 +3041,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(1, vr + 0x0);
                 wmb();
                 udelay(100);
-                printk(KERN_ALERT "*** VIC POST-RUN: Re-armed control (2->1), masks preserved; NOT touching 0x1e0/0x1e4 ***\n");
+                pr_info("*** VIC POST-RUN: Re-armed control (2->1), masks preserved; NOT touching 0x1e0/0x1e4 ***\n");
 
                 /* Re-apply IMR/IMCR gating on PRIMARY bank as seen in good-things */
                 writel(0x00000001, vr + 0x04);   /* IMR baseline */
@@ -3048,7 +3049,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x07800438, vr + 0x04);   /* IMR routing/mask */
                 writel(0xb5742249, vr + 0x0c);   /* IMCR key */
                 wmb();
-                printk(KERN_ALERT "*** VIC PRIMARY GATE (POST-RUN): IMR=0x%08x IMCR=0x%08x ***\n",
+                pr_info("*** VIC PRIMARY GATE (POST-RUN): IMR=0x%08x IMCR=0x%08x ***\n",
                         readl(vr + 0x04), readl(vr + 0x0c));
             }
             if (vic_dev && vic_dev->vic_regs_control) {
@@ -3066,7 +3067,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(1, vc + 0x0);
                 wmb();
                 udelay(100);
-                printk(KERN_ALERT "*** VIC CONTROL ENABLES (POST-RUN COMMIT): [0x1e0]=0x%08x [0x1e4]=0x%08x ***\n",
+                pr_info("*** VIC CONTROL ENABLES (POST-RUN COMMIT): [0x1e0]=0x%08x [0x1e4]=0x%08x ***\n",
                         readl(vc + 0x1e0), readl(vc + 0x1e4));
             }
 
@@ -3074,42 +3075,42 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
 
             /* Enable VIC IRQ after final re-assert and verification */
-            printk(KERN_ALERT "*** vic_core_s_stream: Enabling VIC IRQ AFTER final re-assert/verify ***\n");
+            pr_info("*** vic_core_s_stream: Enabling VIC IRQ AFTER final re-assert/verify ***\n");
             tx_vic_enable_irq(vic_dev);
 
             /* CRITICAL FIX: Remove polling loop that was causing 200ms+ hangs */
             /* VIC interrupts are now enabled - they will fire asynchronously */
             /* No need to poll for status here - just return and let interrupts handle it */
-            printk(KERN_ALERT "*** vic_core_s_stream: VIC IRQ enabled - returning immediately (interrupt-driven) ***\n");
+            pr_info("*** vic_core_s_stream: VIC IRQ enabled - returning immediately (interrupt-driven) ***\n");
 
 
             /* CRITICAL FIX: Follow proper state machine - don't jump directly to state 4 */
             /* The proper flow is: 1 → 2 → 3 → 4, not 1 → 4 */
             if (vic_dev->state == 1) {
                 vic_dev->state = 2;
-                printk(KERN_ALERT "*** vic_core_s_stream: VIC state transition 1 → 2 (CONFIGURED) ***\n");
+                pr_info("*** vic_core_s_stream: VIC state transition 1 → 2 (CONFIGURED) ***\n");
             } else if (vic_dev->state == 3) {
                 vic_dev->state = 4;
-                printk(KERN_ALERT "*** vic_core_s_stream: VIC state transition 3 → 4 (STREAMING) ***\n");
+                pr_info("*** vic_core_s_stream: VIC state transition 3 → 4 (STREAMING) ***\n");
 
                 /* DO NOT call ispcore_slake_module during 3 → 4 transition.
                  * It shuts CSI/VIC down mid-stream and causes ring resets (observed 12/10 stalls).
                  * Reference driver does not slake during streaming; core init happens elsewhere (file open/IOCTL).
                  */
-                printk(KERN_ALERT "*** VIC STATE 4: Skipping ispcore_slake_module during streaming (avoids shutdown/reset) ***\n");
+                pr_info("*** VIC STATE 4: Skipping ispcore_slake_module during streaming (avoids shutdown/reset) ***\n");
 
                 /* CRITICAL: Apply full VIC configuration now that VIC is in streaming state */
             } else {
-                printk(KERN_ALERT "*** vic_core_s_stream: VIC state %d - letting tx_isp_video_s_stream handle state 2 → 3 transition ***\n", vic_dev->state);
+                pr_info("*** vic_core_s_stream: VIC state %d - letting tx_isp_video_s_stream handle state 2 → 3 transition ***\n", vic_dev->state);
             }
 
 
-            printk(KERN_ALERT "*** vic_core_s_stream: VIC initialized, final state=%d ***\n", vic_dev->state);
+            pr_info("*** vic_core_s_stream: VIC initialized, final state=%d ***\n", vic_dev->state);
 
             /* Binary Ninja: return $v0_1 */
             return ret;
         } else {
-            printk(KERN_ALERT "*** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***\n");
+            pr_info("*** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***\n");
             return ret;
         }
     }
@@ -3131,7 +3132,7 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
     int i;
 
     /* CRITICAL DEBUG: Log entry to verify this function is being called */
-    printk(KERN_ALERT "*** tx_isp_vic_slake_subdev: ENTRY - sd=%p ***\n", sd);
+    pr_info("*** tx_isp_vic_slake_subdev: ENTRY - sd=%p ***\n", sd);
 
     /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 0xffffffea */
     if (!sd || (unsigned long)sd >= 0xfffff001) {
@@ -3147,21 +3148,21 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
         return -EINVAL;
     }
 
-    printk(KERN_ALERT "*** tx_isp_vic_slake_subdev: VIC slake/shutdown - vic_dev=%p, current state=%d ***\n", vic_dev, vic_dev->state);
+    pr_info("*** tx_isp_vic_slake_subdev: VIC slake/shutdown - vic_dev=%p, current state=%d ***\n", vic_dev, vic_dev->state);
 
     /* Binary Ninja: int32_t $v1_2 = *($s0_1 + 0xe8) */
     state = vic_dev->state;
 
     /* Binary Ninja: if ($v1_2 == 4) vic_video_s_stream(arg1, 0) */
     if (state == 4) {
-        printk(KERN_ALERT "tx_isp_vic_slake_subdev: VIC in streaming state, stopping stream\n");
+        pr_info("tx_isp_vic_slake_subdev: VIC in streaming state, stopping stream\n");
         vic_core_s_stream(sd, 0);
         state = vic_dev->state;  /* Update state after s_stream */
     }
 
     /* Binary Ninja: if ($v1_2 == 3) vic_core_ops_init(arg1, 0) */
     if (vic_dev->state == 3) {
-        printk(KERN_ALERT "tx_isp_vic_slake_subdev: VIC in state 3, calling core_ops_init(disable)\n");
+        pr_info("tx_isp_vic_slake_subdev: VIC in state 3, calling core_ops_init(disable)\n");
         vic_core_ops_init(sd, 0);
     }
 
@@ -3171,14 +3172,14 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
 
     /* Binary Ninja: if (*($s0_1 + 0x128) == 2) *($s0_1 + 0x128) = 1 */
     if (vic_dev->state == 2) {
-        printk(KERN_ALERT "tx_isp_vic_slake_subdev: VIC state 2->1\n");
+        pr_info("tx_isp_vic_slake_subdev: VIC state 2->1\n");
         vic_dev->state = 1;
     }
 
     /* Binary Ninja: private_mutex_unlock($s1_2) */
     mutex_unlock(&vic_dev->mlock);
 
-    printk(KERN_ALERT "*** tx_isp_vic_slake_subdev: VIC slake complete, final state=%d ***\n", vic_dev->state);
+    pr_info("*** tx_isp_vic_slake_subdev: VIC slake complete, final state=%d ***\n", vic_dev->state);
     return 0;
 }
 
@@ -3233,12 +3234,12 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 
                 case 0x2000017:
                     /* GPIO management - simplified implementation */
-                    printk(KERN_ALERT "vic_sensor_ops_ioctl: GPIO management 0x2000017 - not implemented\n");
+                    pr_info("vic_sensor_ops_ioctl: GPIO management 0x2000017 - not implemented\n");
                     return 0;
 
                 case 0x2000018:
                     /* GPIO switch state - simplified implementation */
-                    printk(KERN_ALERT "vic_sensor_ops_ioctl: GPIO switch state 0x2000018 - not implemented\n");
+                    pr_info("vic_sensor_ops_ioctl: GPIO switch state 0x2000018 - not implemented\n");
                     return 0;
             }
         }
@@ -3335,7 +3336,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     vic_dev->sd.irq_info.handler = NULL; /* Handler set later */
     vic_dev->sd.irq_info.data = vic_dev; /* Pass vic_dev as data */
 
-    printk(KERN_ALERT "*** VIC PROBE: IRQ numbers initialized to 38 (including sd.irq_info.irq) ***\n");
+    pr_info("*** VIC PROBE: IRQ numbers initialized to 38 (including sd.irq_info.irq) ***\n");
 
     /* CRITICAL FIX: Map VIC register spaces - THIS WAS MISSING! */
     /* Primary VIC register space (0x133e0000) - main VIC control */
@@ -3345,7 +3346,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         private_kfree(vic_dev);
         return -ENOMEM;
     }
-    printk(KERN_ALERT "*** VIC PROBE: Primary VIC registers mapped at 0x133e0000 -> %p ***\n", vic_dev->vic_regs);
+    pr_info("*** VIC PROBE: Primary VIC registers mapped at 0x133e0000 -> %p ***\n", vic_dev->vic_regs);
 
     /* Secondary VIC register space (0x10023000) - VIC control operations */
     vic_dev->vic_regs_control = ioremap(0x10023000, 0x10000);
@@ -3355,7 +3356,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         private_kfree(vic_dev);
         return -ENOMEM;
     }
-    printk(KERN_ALERT "*** VIC PROBE: VIC control registers mapped at 0x10023000 -> %p ***\n", vic_dev->vic_regs_control);
+    pr_info("*** VIC PROBE: VIC control registers mapped at 0x10023000 -> %p ***\n", vic_dev->vic_regs_control);
 
     /* CRITICAL: Initialize list heads for buffer management FIRST */
     INIT_LIST_HEAD(&vic_dev->queue_head);
@@ -3375,21 +3376,21 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     vic_dev->irq_disable = (void (*)(void *))tx_isp_disable_irq;
     vic_dev->irq_priv = &vic_dev->sd.irq_info;  /* Pass IRQ info structure */
 
-    printk(KERN_ALERT "*** VIC PROBE: Hardware IRQ function pointers set using SAFE struct members (tx_isp_enable/disable_irq) ***\n");
+    pr_info("*** VIC PROBE: Hardware IRQ function pointers set using SAFE struct members (tx_isp_enable/disable_irq) ***\n");
 
     /* CRITICAL: Test VIC secondary register access to verify mapping */
     if (vic_dev->vic_regs) {
         u32 test_val = readl(vic_dev->vic_regs + 0x1e0);
-        printk(KERN_ALERT "*** VIC PROBE: Secondary VIC register test - 0x1e0 = 0x%08x (mapping verified) ***\n", test_val);
-        printk(KERN_ALERT "*** VIC PROBE: VIC interrupt registers will be configured during tx_isp_vic_start ***\n");
+        pr_info("*** VIC PROBE: Secondary VIC register test - 0x1e0 = 0x%08x (mapping verified) ***\n", test_val);
+        pr_info("*** VIC PROBE: VIC interrupt registers will be configured during tx_isp_vic_start ***\n");
     } else {
         pr_err("*** VIC PROBE: CRITICAL - Secondary VIC registers NOT MAPPED! ***\n");
     }
 
     /* BINARY NINJA MCP: Proper VIC buffer management initialization */
     /* Initialize ALL required fields for proper operation */
-    printk(KERN_ALERT "*** BINARY NINJA MCP: VIC buffer management ENABLED - following reference driver ***\n");
-    printk(KERN_ALERT "*** VIC will operate in FULL mode with complete buffer operations ***\n");
+    pr_info("*** BINARY NINJA MCP: VIC buffer management ENABLED - following reference driver ***\n");
+    pr_info("*** VIC will operate in FULL mode with complete buffer operations ***\n");
 
     /* Initialize all fields properly */
     vic_dev->active_buffer_count = 4;  /* Default buffer count */
@@ -3397,9 +3398,9 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     vic_dev->processing = 0;
     vic_dev->stream_state = 0;
 
-    printk(KERN_ALERT "*** BINARY NINJA MCP: VIC full initialization complete - buffer management ENABLED ***\n");
+    pr_info("*** BINARY NINJA MCP: VIC full initialization complete - buffer management ENABLED ***\n");
 
-    printk(KERN_ALERT "*** VIC PROBE: Initialized default dimensions %dx%d and critical fields ***\n", vic_dev->width, vic_dev->height);
+    pr_info("*** VIC PROBE: Initialized default dimensions %dx%d and critical fields ***\n", vic_dev->width, vic_dev->height);
 
     /* Binary Ninja: void* $s2_1 = arg1[0x16] */
     pdata = pdev->dev.platform_data;
@@ -3415,7 +3416,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         /* Store callback in a VIC device field to avoid conflicts with subdev fields */
         vic_dev->event_callback = callback_struct;
 
-        printk(KERN_ALERT "*** VIC PROBE: Event callback structure stored in VIC device field ***\n");
+        pr_info("*** VIC PROBE: Event callback structure stored in VIC device field ***\n");
     } else {
         pr_err("*** VIC PROBE: Failed to allocate callback structure ***\n");
     }
@@ -3423,16 +3424,16 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* CRITICAL FIX: Store VIC device pointer in subdev private data */
     /* This MUST be the VIC device pointer for auto-link to work */
     tx_isp_set_subdevdata(&vic_dev->sd, vic_dev);
-    printk(KERN_ALERT "*** VIC PROBE: Stored vic_dev pointer %p in subdev dev_priv ***\n", vic_dev);
+    pr_info("*** VIC PROBE: Stored vic_dev pointer %p in subdev dev_priv ***\n", vic_dev);
 
     /* CRITICAL FIX: Set host_priv to VIC device for Binary Ninja compatibility */
     /* Binary Ninja expects VIC device at offset 0xd4 (host_priv field) */
     tx_isp_set_subdev_hostdata(&vic_dev->sd, vic_dev);
-    printk(KERN_ALERT "*** VIC PROBE: Set host_priv to vic_dev %p for Binary Ninja compatibility ***\n", vic_dev);
+    pr_info("*** VIC PROBE: Set host_priv to vic_dev %p for Binary Ninja compatibility ***\n", vic_dev);
 
     /* CRITICAL FIX: Do NOT call tx_isp_vic_hw_init during probe - working branch doesn't! */
     /* VIC interrupt configuration happens during actual VIC operations, not during probe */
-    printk(KERN_ALERT "*** VIC PROBE: Skipping tx_isp_vic_hw_init - working branch configures interrupts during VIC operations ***\n");
+    pr_info("*** VIC PROBE: Skipping tx_isp_vic_hw_init - working branch configures interrupts during VIC operations ***\n");
 
     /* Binary Ninja: tx_isp_subdev_init(arg1, $v0, &vic_subdev_ops) */
     ret = tx_isp_subdev_init(pdev, &vic_dev->sd, &vic_subdev_ops);
@@ -3464,14 +3465,14 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     private_raw_mutex_init(&vic_dev->state_lock, "&vsd->state_lock", 0);
 
     /* Binary Ninja: private_init_completion($v0 + 0x148) */
-    printk(KERN_ALERT "*** VIC PROBE: STRUCT OFFSET CHECK ***\n");
-    printk(KERN_ALERT "*** offsetof(width) = %zu (expected 0xdc = %d) ***\n",
+    pr_info("*** VIC PROBE: STRUCT OFFSET CHECK ***\n");
+    pr_info("*** offsetof(width) = %zu (expected 0xdc = %d) ***\n",
             offsetof(struct tx_isp_vic_device, width), 0xdc);
-    printk(KERN_ALERT "*** offsetof(height) = %zu (expected 0xe0 = %d) ***\n",
+    pr_info("*** offsetof(height) = %zu (expected 0xe0 = %d) ***\n",
             offsetof(struct tx_isp_vic_device, height), 0xe0);
-    printk(KERN_ALERT "*** offsetof(frame_complete) = %zu (expected 0x148 = %d) ***\n",
+    pr_info("*** offsetof(frame_complete) = %zu (expected 0x148 = %d) ***\n",
             offsetof(struct tx_isp_vic_device, frame_complete), 0x148);
-    printk(KERN_ALERT "*** vic_dev=%p, &vic_dev->frame_complete=%p (offset=%zu) ***\n",
+    pr_info("*** vic_dev=%p, &vic_dev->frame_complete=%p (offset=%zu) ***\n",
             vic_dev, &vic_dev->frame_complete,
             (char*)&vic_dev->frame_complete - (char*)vic_dev);
 
@@ -3490,15 +3491,15 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     test_addr = (char *)vic_dev + 0x80;  /* Test address pointer */
 
     /* REMOVED: Manual linking - now handled automatically by tx_isp_subdev_init */
-    printk(KERN_ALERT "*** VIC PROBE: Device linking handled automatically by tx_isp_subdev_init ***\n");
+    pr_info("*** VIC PROBE: Device linking handled automatically by tx_isp_subdev_init ***\n");
 
     /* CRITICAL FIX: Sensor dimensions will be cached when sensor module loads and calls tx_isp_subdev_init */
-    printk(KERN_ALERT "*** VIC PROBE: Sensor dimensions will be cached when sensor module loads ***\n");
+    pr_info("*** VIC PROBE: Sensor dimensions will be cached when sensor module loads ***\n");
 
     /* CRITICAL FIX: tx_isp_subdev_pipo will be called from tisp_init during core initialization */
     /* This matches the working reference where it's called from tisp_init, not probe */
-    printk(KERN_ALERT "*** VIC PROBE: VIC frame channel streaming will be initialized via tisp_init ***\n");
-    printk(KERN_ALERT "*** VIC PROBE: Waiting for core subdev init to call tisp_init which calls tx_isp_subdev_pipo ***\n");
+    pr_info("*** VIC PROBE: VIC frame channel streaming will be initialized via tisp_init ***\n");
+    pr_info("*** VIC PROBE: Waiting for core subdev init to call tisp_init which calls tx_isp_subdev_pipo ***\n");
 
     return 0;
 }
@@ -3530,12 +3531,12 @@ int tx_isp_vic_remove(struct platform_device *pdev)
         if (vic_dev->vic_regs) {
             iounmap(vic_dev->vic_regs);
             vic_dev->vic_regs = NULL;
-            printk(KERN_ALERT "*** VIC REMOVE: Primary VIC registers unmapped ***\n");
+            pr_info("*** VIC REMOVE: Primary VIC registers unmapped ***\n");
         }
         if (vic_dev->vic_regs_control) {
             iounmap(vic_dev->vic_regs_control);
             vic_dev->vic_regs_control = NULL;
-            printk(KERN_ALERT "*** VIC REMOVE: Secondary VIC registers unmapped ***\n");
+            pr_info("*** VIC REMOVE: Secondary VIC registers unmapped ***\n");
         }
     }
 
@@ -3546,7 +3547,7 @@ int tx_isp_vic_remove(struct platform_device *pdev)
         release_mem_region(res->start, resource_size(res));
 
     /* REMOVED: Manual memory unmapping - tx_isp_subdev_deinit handles memory per reference driver */
-    printk(KERN_ALERT "*** VIC REMOVE: Memory cleanup handled by tx_isp_subdev_deinit ***\n");
+    pr_info("*** VIC REMOVE: Memory cleanup handled by tx_isp_subdev_deinit ***\n");
 
     /* Clean up subdev */
     tx_isp_subdev_deinit(sd);
@@ -3566,8 +3567,8 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
     void *buffer_entry = arg2;
     u32 buffer_addr, buffer_index, reg_offset;
 
-    printk(KERN_ALERT "*** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***\n");
-    printk(KERN_ALERT "ispvic_frame_channel_qbuf: arg1=%p, arg2=%p\n", arg1, arg2);
+    pr_info("*** ispvic_frame_channel_qbuf: EXACT Binary Ninja MCP implementation ***\n");
+    pr_info("ispvic_frame_channel_qbuf: arg1=%p, arg2=%p\n", arg1, arg2);
 
     /* Binary Ninja EXACT: if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = *(arg1 + 0xd4) */
     if (arg1 != NULL && (unsigned long)arg1 < 0xfffff001) {
@@ -3596,7 +3597,7 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
             writel(buffer_addr, vic_dev->vic_regs_control + reg_offset);
         wmb();
 
-        printk(KERN_ALERT "*** VIC QBUF: wrote slot %u addr=0x%x to reg_off=0x%x (CONFIG->RUN) ***\n", buffer_index, buffer_addr, reg_offset);
+        pr_info("*** VIC QBUF: wrote slot %u addr=0x%x to reg_off=0x%x (CONFIG->RUN) ***\n", buffer_index, buffer_addr, reg_offset);
 
         /* Done for this node */
     }
@@ -3610,7 +3611,7 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 /* ISPVIC Frame Channel Clear Buffer - placeholder matching Binary Ninja reference */
 static int ispvic_frame_channel_clearbuf(void)
 {
-    printk(KERN_ALERT "ispvic_frame_channel_clearbuf called\n");
+    pr_info("ispvic_frame_channel_clearbuf called\n");
     return 0;
 }
 
@@ -3621,13 +3622,13 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
     void **raw_pipe = (void **)arg;
     int i;
 
-    printk(KERN_ALERT "*** tx_isp_subdev_pipo: EXACT Binary Ninja MCP implementation ***\n");
-    printk(KERN_ALERT "tx_isp_subdev_pipo: entry - sd=%p, arg=%p\n", sd, arg);
+    pr_info("*** tx_isp_subdev_pipo: EXACT Binary Ninja MCP implementation ***\n");
+    pr_info("tx_isp_subdev_pipo: entry - sd=%p, arg=%p\n", sd, arg);
 
     /* Binary Ninja EXACT: if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = *(arg1 + 0xd4) */
     if (sd != NULL && (unsigned long)sd < 0xfffff001) {
         vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdev_hostdata(sd);  /* offset 0xd4 = host_priv */
-        printk(KERN_ALERT "tx_isp_subdev_pipo: vic_dev retrieved from host_priv: %p\n", vic_dev);
+        pr_info("tx_isp_subdev_pipo: vic_dev retrieved from host_priv: %p\n", vic_dev);
     }
 
     if (!vic_dev) {
@@ -3637,7 +3638,7 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
         extern struct tx_isp_dev *ourISPdev;
         if (ourISPdev && ourISPdev->vic_dev) {
             vic_dev = ourISPdev->vic_dev;
-            printk(KERN_ALERT "*** tx_isp_subdev_pipo: Retrieved VIC device from global ISP device: %p ***\n", vic_dev);
+            pr_info("*** tx_isp_subdev_pipo: Retrieved VIC device from global ISP device: %p ***\n", vic_dev);
         } else {
             pr_err("tx_isp_subdev_pipo: No VIC device available in global ISP device\n");
             return 0;  /* Binary Ninja returns 0 even on error */
@@ -3646,14 +3647,14 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
 
     /* Binary Ninja EXACT: *($s0 + 0x20c) = 1 */
     vic_dev->processing = 1;
-    printk(KERN_ALERT "tx_isp_subdev_pipo: set processing = 1 (Binary Ninja offset 0x20c)\n");
+    pr_info("tx_isp_subdev_pipo: set processing = 1 (Binary Ninja offset 0x20c)\n");
 
     /* Binary Ninja EXACT: if (arg2 == 0) *($s0 + 0x214) = 0 */
     if (arg == NULL) {
         vic_dev->processing = 0;  /* Use processing field for offset 0x214 */
-        printk(KERN_ALERT "tx_isp_subdev_pipo: arg is NULL - set processing = 0 (Binary Ninja offset 0x214)\n");
+        pr_info("tx_isp_subdev_pipo: arg is NULL - set processing = 0 (Binary Ninja offset 0x214)\n");
     } else {
-        printk(KERN_ALERT "tx_isp_subdev_pipo: arg is not NULL - initializing pipe structures (Binary Ninja MCP)\n");
+        pr_info("tx_isp_subdev_pipo: arg is not NULL - initializing pipe structures (Binary Ninja MCP)\n");
 
         /* Binary Ninja EXACT: Initialize linked list pointers */
         /* *($s0 + 0x204) = $s0 + 0x204 */
@@ -3662,11 +3663,11 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
         INIT_LIST_HEAD(&vic_dev->done_head);
         INIT_LIST_HEAD(&vic_dev->free_head);
 
-        printk(KERN_ALERT "tx_isp_subdev_pipo: initialized linked list heads (Binary Ninja MCP)\n");
+        pr_info("tx_isp_subdev_pipo: initialized linked list heads (Binary Ninja MCP)\n");
 
         /* Binary Ninja EXACT: private_spin_lock_init() */
         spin_lock_init(&vic_dev->buffer_mgmt_lock);
-        printk(KERN_ALERT "tx_isp_subdev_pipo: initialized spinlock (Binary Ninja MCP)\n");
+        pr_info("tx_isp_subdev_pipo: initialized spinlock (Binary Ninja MCP)\n");
 
         /* CRITICAL BINARY NINJA MCP: Set up function pointer table */
         /* *raw_pipe = ispvic_frame_channel_qbuf */
@@ -3678,7 +3679,7 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
             raw_pipe[2] = (void *)ispvic_frame_channel_clearbuf;  /* offset 0x8 */
             raw_pipe[3] = (void *)ispvic_frame_channel_s_stream;  /* offset 0xc - CRITICAL! */
             raw_pipe[4] = (void *)sd;                             /* offset 0x10 */
-            printk(KERN_ALERT "*** CRITICAL: Set ispvic_frame_channel_s_stream at raw_pipe[3] (offset 0xc) ***\n");
+            pr_info("*** CRITICAL: Set ispvic_frame_channel_s_stream at raw_pipe[3] (offset 0xc) ***\n");
         }
 
         /* SAFE: Set function pointers using proper array indexing */  // TODO
@@ -3688,8 +3689,8 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
         //raw_pipe[4] = (void *)sd;                             /* offset 0x10 / 4 = index 4 */
 
         /* GOOD-THINGS APPROACH: Defer buffer allocation to prevent memory exhaustion */
-        printk(KERN_ALERT "*** tx_isp_subdev_pipo: GOOD-THINGS approach - deferring buffer allocation ***\n");
-        printk(KERN_ALERT "*** Buffers will be allocated on-demand during QBUF operations ***\n");
+        pr_info("*** tx_isp_subdev_pipo: GOOD-THINGS approach - deferring buffer allocation ***\n");
+        pr_info("*** Buffers will be allocated on-demand during QBUF operations ***\n");
 
         /* Initialize buffer indices but don't allocate buffer structures yet */
         for (i = 0; i < 5; i++) {
@@ -3701,50 +3702,50 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
             }
 
             /* GOOD-THINGS: No buffer allocation here - deferred to QBUF operations */
-            printk(KERN_ALERT "tx_isp_subdev_pipo: initialized buffer index %d (allocation deferred)\n", i);
+            pr_info("tx_isp_subdev_pipo: initialized buffer index %d (allocation deferred)\n", i);
 
             /* SAFE: Clear VIC register using validated register access */
             reg_offset = (i + 0xc6) << 2;
             if (vic_dev->vic_regs && reg_offset < 0x1000) {
                 writel(0, vic_dev->vic_regs + reg_offset);
-                printk(KERN_ALERT "tx_isp_subdev_pipo: cleared VIC register at offset 0x%x for buffer %d\n", reg_offset, i);
+                pr_info("tx_isp_subdev_pipo: cleared VIC register at offset 0x%x for buffer %d\n", reg_offset, i);
             }
         }
 
         /* Set buffer count to 0 - buffers will be allocated on-demand */
         vic_dev->buffer_count = 0;
-        printk(KERN_ALERT "*** tx_isp_subdev_pipo: Using GOOD-THINGS deferred buffer allocation strategy ***\n");
+        pr_info("*** tx_isp_subdev_pipo: Using GOOD-THINGS deferred buffer allocation strategy ***\n");
 
-        printk(KERN_ALERT "tx_isp_subdev_pipo: initialized %d buffer structures (safe implementation)\n", i);
+        pr_info("tx_isp_subdev_pipo: initialized %d buffer structures (safe implementation)\n", i);
 
         /* SAFE: Use proper struct member access instead of offset 0x214 */
         vic_dev->processing = 1;
-        printk(KERN_ALERT "tx_isp_subdev_pipo: set processing = 1 (pipe enabled, safe struct access)\n");
+        pr_info("tx_isp_subdev_pipo: set processing = 1 (pipe enabled, safe struct access)\n");
 
         /* CRITICAL FIX: Reset stream state before calling ispvic_frame_channel_s_stream */
-        printk(KERN_ALERT "*** tx_isp_subdev_pipo: RESETTING stream_state to 0 before calling ispvic_frame_channel_s_stream ***\n");
+        pr_info("*** tx_isp_subdev_pipo: RESETTING stream_state to 0 before calling ispvic_frame_channel_s_stream ***\n");
         vic_dev->stream_state = 0;  /* Ensure stream state is 0 so MDMA enable will be called */
 
         /* CRITICAL: Call ispvic_frame_channel_qbuf to write buffer addresses to VIC hardware */
-        printk(KERN_ALERT "*** tx_isp_subdev_pipo: CALLING ispvic_frame_channel_qbuf to write buffer addresses ***\n");
+        pr_info("*** tx_isp_subdev_pipo: CALLING ispvic_frame_channel_qbuf to write buffer addresses ***\n");
         int qbuf_ret = ispvic_frame_channel_qbuf(sd, NULL);
         if (qbuf_ret == 0) {
-            printk(KERN_ALERT "*** tx_isp_subdev_pipo: ispvic_frame_channel_qbuf SUCCESS - buffer addresses written to VIC hardware ***\n");
+            pr_info("*** tx_isp_subdev_pipo: ispvic_frame_channel_qbuf SUCCESS - buffer addresses written to VIC hardware ***\n");
         } else {
             pr_err("*** tx_isp_subdev_pipo: ispvic_frame_channel_qbuf FAILED: %d ***\n", qbuf_ret);
         }
 
         /* CRITICAL MISSING CALL: Start VIC frame channel streaming */
-        printk(KERN_ALERT "*** tx_isp_subdev_pipo: CALLING ispvic_frame_channel_s_stream to start VIC streaming ***\n");
+        pr_info("*** tx_isp_subdev_pipo: CALLING ispvic_frame_channel_s_stream to start VIC streaming ***\n");
         int stream_ret = ispvic_frame_channel_s_stream(sd, 1);  /* Enable streaming */
         if (stream_ret == 0) {
-            printk(KERN_ALERT "*** tx_isp_subdev_pipo: ispvic_frame_channel_s_stream SUCCESS - VIC streaming started! ***\n");
+            pr_info("*** tx_isp_subdev_pipo: ispvic_frame_channel_s_stream SUCCESS - VIC streaming started! ***\n");
 
             /* CRITICAL FIX: Call vic_core_s_stream to enable VIC interrupts - this was missing! */
-            printk(KERN_ALERT "*** tx_isp_subdev_pipo: CALLING vic_core_s_stream to enable VIC interrupts ***\n");
+            pr_info("*** tx_isp_subdev_pipo: CALLING vic_core_s_stream to enable VIC interrupts ***\n");
             stream_ret = vic_core_s_stream(sd, 1);  /* Enable VIC interrupts */
             if (stream_ret == 0) {
-                printk(KERN_ALERT "*** tx_isp_subdev_pipo: vic_core_s_stream SUCCESS - VIC interrupts should now be ENABLED! ***\n");
+                pr_info("*** tx_isp_subdev_pipo: vic_core_s_stream SUCCESS - VIC interrupts should now be ENABLED! ***\n");
             } else {
                 pr_err("*** tx_isp_subdev_pipo: vic_core_s_stream FAILED: %d ***\n", stream_ret);
             }
@@ -3754,7 +3755,7 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
         }
     }
 
-    printk(KERN_ALERT "tx_isp_subdev_pipo: completed successfully, returning 0\n");
+    pr_info("tx_isp_subdev_pipo: completed successfully, returning 0\n");
     return 0;
 }
 EXPORT_SYMBOL(tx_isp_subdev_pipo);
