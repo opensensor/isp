@@ -2708,13 +2708,14 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             pr_info("*** DEBUG: Before writing VIC[0x300]: VIC[0x0]=0x%x VIC[0x300]=0x%x ***\n",
                     vic_state_before, vic_ctrl_before);
 
-            /* CRITICAL SIMPLIFICATION: Use 1 buffer per channel to eliminate rotation complexity */
+            /* CRITICAL FIX: Force active_buffer_count to 1 for single-buffer mode */
             /* VIC MDMA supports 2 DMA channels (0 and 1) for video streaming */
             /* Channel 2 is for ISP-M0 JPEG snapshots, NOT VIC MDMA */
             /* Start with single-buffer mode to get basic streaming working */
+            vic_dev->active_buffer_count = 1;  /* FORCE to 1 for simplification */
             u32 buffer_count = 1;  /* SIMPLIFIED: 1 buffer per channel */
             u32 stream_ctrl = (buffer_count << 16) | 0x80000020;  /* Binary Ninja EXACT formula */
-            pr_info("*** VIC MDMA SIMPLIFIED: buffer_count=%d (1 buffer per channel, 2 DMA channels) ***\n", buffer_count);
+            pr_info("*** VIC MDMA SIMPLIFIED: FORCED active_buffer_count=1, buffer_count=%d ***\n", buffer_count);
             void __iomem *vic_ctrl = vic_dev->vic_regs_control;
             writel(stream_ctrl, vic_base + 0x300);
             if (vic_ctrl)
@@ -2869,7 +2870,12 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         writel(stride, core + 0x9a2c);/* line step or related */
                         /* Override tuning’s stale width-like register with dynamic width */
                         writel(w, core + 0x9a98);     /* observed as 0x500 in logs when width was 1280 */
-                        /* 0x9a94 already set to 1 earlier; leave as-is */
+
+                        /* CRITICAL: Write 0x9a94 = 0x1 BEFORE gate writes (from reference trace) */
+                        /* This is the GATE ENABLE register - without it, gates at 0x9ac0/0x9ac8 won't work! */
+                        writel(0x1, core + 0x9a94);
+                        wmb();
+                        pr_info("*** CRITICAL FIX: Wrote 0x1 to 0x9a94 (gate enable) BEFORE gate writes ***\n");
 
                         /* Now (re)assert the core VIC IRQ gate (working values 1/0) */
                         writel(0x00000001, core + 0x9ac0);

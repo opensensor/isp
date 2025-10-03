@@ -1874,11 +1874,24 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
                     /* Clear core W1C status first, then re-apply gate routing */
                     writel(0x1, core + 0x9a70);
                     writel(0x1, core + 0x9a7c);
+
+                    /* CRITICAL: Write prerequisite registers BEFORE gate enable! */
+                    /* These must be set for the gate control to work */
+                    writel(0x1, core + 0x9a34);   /* enable bit */
+                    writel(0x1, core + 0x9a88);   /* enable/route latch bit */
+                    wmb();
+
+                    /* CRITICAL: Write 0x9a94 = 0x1 BEFORE gate writes! */
+                    /* This is the GATE ENABLE register - without it, gate writes are ignored */
+                    writel(0x1, core + 0x9a94);
+                    wmb();
+
                     writel(0x00000001, core + 0x9ac0);
                     writel(0x00000000, core + 0x9ac8);
                     wmb();
                     g0 = readl(core + 0x9ac0);
                     g1 = readl(core + 0x9ac8);
+                    printk(KERN_ALERT "*** VIC IRQ: Re-asserted gates after writing 0x9a34/0x9a88/0x9a94 - [9ac0]=0x%x [9ac8]=0x%x ***\n", g0, g1);
                 }
                 printk(KERN_ALERT "*** VIC IRQ: CORE GATES [9ac0]=0x%x [9ac8]=0x%x ***\n", g0, g1);
             }
@@ -2132,21 +2145,26 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 
     /* Conditional VIC re-arm to maintain continuous interrupts (conservative) */
     do {
-        if (0 && vic_dev && vic_dev->vic_regs) {
+        if (vic_dev && vic_dev->vic_regs) {  /* ENABLED: Was disabled with "if (0 &&" */
             void __iomem *vr = vic_dev->vic_regs;               /* Primary VIC space (0x133e0000) */
             void __iomem *vc = vic_dev->vic_regs_control;       /* Control VIC space (0x10023000), may be NULL */
             u32 ctrl = readl(vr + 0x300);
+            u32 ctrl_buffer_count = (ctrl >> 16) & 0xF;  /* Extract buffer count field */
+            u32 expected_count = vic_dev->active_buffer_count;
+            if (expected_count == 0) expected_count = 1;  /* Default to 1 for single-buffer mode */
             int lost_ctrl = ((ctrl & 0x80000020) != 0x80000020);
+            int wrong_count = (ctrl_buffer_count != expected_count);  /* Check if buffer count is wrong */
             int stalled = ((v1_7 & 1) == 0) && ((v1_7 & 0x200000) != 0);
-            if (lost_ctrl) {
+            if (lost_ctrl || wrong_count) {
                 u32 count = vic_dev->active_buffer_count;
                 u32 new_ctrl;
-                if (count == 0) count = 2;
+                if (count == 0) count = 1;  /* CHANGED: Default to 1 for single-buffer mode */
                 if (count > 5) count = 5; /* VIC has max 5 slots */
                 new_ctrl = (count << 16) | 0x80000020;
 
-                printk(KERN_ALERT "*** VIC RE-ARM: reason=%s ctrl=0x%x -> reassert, stream_ctrl=0x%x (count=%u) ***\n",
-                       lost_ctrl ? "lost_ctrl" : "stalled(no FD + limit)", ctrl, new_ctrl, count);
+                printk(KERN_ALERT "*** VIC RE-ARM: reason=%s ctrl=0x%x (buf_count=%u, expected=%u) -> reassert, stream_ctrl=0x%x (count=%u) ***\n",
+                       lost_ctrl ? "lost_ctrl" : (wrong_count ? "wrong_buffer_count" : "stalled"),
+                       ctrl, ctrl_buffer_count, expected_count, new_ctrl, count);
 
                 /* Clear any pending status (W1C) in both banks if present */
                 writel(0xFFFFFFFF, vr + 0x1f0);
