@@ -1886,12 +1886,15 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
                     writel(0x1, core + 0x9a94);
                     wmb();
 
-                    writel(0x00000001, core + 0x9ac0);
-                    writel(0x00000000, core + 0x9ac8);
+                    /* CRITICAL FIX: Binary Ninja reference trace shows 0x200/0x200, not 0x1/0x0! */
+                    /* reference-trace.txt line 74-75: write at offset 0x9ac0: 0x0 -> 0x200 */
+                    /*                                  write at offset 0x9ac8: 0x0 -> 0x200 */
+                    writel(0x00000200, core + 0x9ac0);
+                    writel(0x00000200, core + 0x9ac8);
                     wmb();
                     g0 = readl(core + 0x9ac0);
                     g1 = readl(core + 0x9ac8);
-                    printk(KERN_ALERT "*** VIC IRQ: Re-asserted gates after writing 0x9a34/0x9a88/0x9a94 - [9ac0]=0x%x [9ac8]=0x%x ***\n", g0, g1);
+                    printk(KERN_ALERT "*** VIC IRQ: Re-asserted gates after writing 0x9a34/0x9a88/0x9a94 - [9ac0]=0x%x [9ac8]=0x%x (BINARY NINJA: 0x200/0x200) ***\n", g0, g1);
                 }
                 printk(KERN_ALERT "*** VIC IRQ: CORE GATES [9ac0]=0x%x [9ac8]=0x%x ***\n", g0, g1);
             }
@@ -2179,9 +2182,19 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 
                 /* Re-apply stream control bits and enable sequence */
                 writel(new_ctrl, vr + 0x300);
+                if (vc) writel(new_ctrl, vc + 0x300);  /* Also write to control space */
                 wmb();
-                writel(2, vr + 0x0);
+
+                /* CRITICAL FIX: DO NOT write to VIC[0x0] - it clears the buffer count field! */
+                /* Reference driver does NOT write to VIC[0x0] after writing buffer count */
+                /* writel(2, vr + 0x0); */  /* DISABLED - clears buffer count */
                 wmb();
+
+                /* Verify the write stuck */
+                u32 readback_ctrl = readl(vr + 0x300);
+                u32 readback_count = (readback_ctrl >> 16) & 0xF;
+                printk(KERN_ALERT "*** VIC RE-ARM: Wrote 0x%x to VIC[0x300], readback=0x%x (count=%u) ***\n",
+                       new_ctrl, readback_ctrl, readback_count);
 
                 /* Re-assert MDMA config knobs (idempotent): 0x308=1, DIMS/STRIDE and refresh buffer addresses */
                 do {
@@ -2280,9 +2293,12 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
                         /* W1C clear */
                         writel(0x1, core + 0x9a70);
                         writel(0x1, core + 0x9a7c);
-                        /* Re-apply core gate routing observed in working sequence */
-                        writel(0x00000001, core + 0x9ac0);
-                        writel(0x00000000, core + 0x9ac8);
+                        /* CRITICAL: Write gate enable BEFORE gate values */
+                        writel(0x1, core + 0x9a94);
+                        wmb();
+                        /* CRITICAL FIX: Binary Ninja reference trace shows 0x200/0x200, not 0x1/0x0! */
+                        writel(0x00000200, core + 0x9ac0);
+                        writel(0x00000200, core + 0x9ac8);
                         wmb();
                     }
                 } while (0);
@@ -3639,6 +3655,16 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         if (ret == 0) {
             pr_info("*** Channel %d: DQBUF timeout, generating frame ***\n", channel);
+
+            /* CRITICAL FIX: When generating fake frame, we MUST move buffers from busy to done queue */
+            /* Otherwise active_buffer_count keeps growing and buffer ring fills up causing 5/5 stall! */
+            extern int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
+            extern struct tx_isp_dev *ourISPdev;
+            if (ourISPdev && ourISPdev->vic_dev) {
+                pr_info("*** Channel %d: Calling vic_framedone_irq_function to move buffers ***\n", channel);
+                vic_framedone_irq_function(ourISPdev->vic_dev);
+            }
+
             spin_lock_irqsave(&state->buffer_lock, flags);
             state->frame_ready = true;
             spin_unlock_irqrestore(&state->buffer_lock, flags);
@@ -4878,13 +4904,24 @@ int tx_isp_open(struct inode *inode, struct file *file)
         return 0;
     }
 
+    /* CRITICAL: Create /dev/tisp when streamer starts (when /dev/tx-isp opens) */
+    /* This matches reference driver behavior - /dev/tisp is created dynamically */
+    extern int tisp_code_create_tuning_node(void);
+    ret = tisp_code_create_tuning_node();
+    if (ret != 0) {
+        pr_err("tx_isp_open: Failed to create /dev/tisp: %d\n", ret);
+        /* Continue anyway - not fatal */
+    } else {
+        pr_info("*** tx_isp_open: /dev/tisp created successfully (streamer start) ***\n");
+    }
+
     /* Mark as open */
     isp->refcnt = 1;
     isp->is_open = true;
     file->private_data = isp;
 
     pr_info("ISP opened successfully\n");
-    return ret;
+    return 0;  /* Always return 0 even if tisp creation failed */
 }
 
 // Simple release handler

@@ -4600,14 +4600,17 @@ int tx_isp_core_probe(struct platform_device *pdev)
                 pr_err("*** tx_isp_core_probe: Failed to create frame channel devices: %d ***\n", result);
             }
 
-            /* Create the ISP M0 tuning device node */
-            pr_info("*** tx_isp_core_probe: Creating ISP M0 tuning device node ***\n");
-            result = tisp_code_create_tuning_node();
+            /* Create /dev/isp-m0 during module load (for IMP system init) */
+            /* /dev/tisp will be created later when streamer starts (tx_isp_open) */
+            extern int create_isp_m0_device(void);
+            pr_info("*** tx_isp_core_probe: Creating /dev/isp-m0 device node ***\n");
+            result = create_isp_m0_device();
             if (result == 0) {
-                pr_info("*** tx_isp_core_probe: ISP M0 tuning device node created successfully ***\n");
+                pr_info("*** tx_isp_core_probe: /dev/isp-m0 created successfully ***\n");
             } else {
-                pr_err("*** tx_isp_core_probe: Failed to create ISP M0 tuning device node: %d ***\n", result);
+                pr_err("*** tx_isp_core_probe: Failed to create /dev/isp-m0: %d ***\n", result);
             }
+            pr_info("*** tx_isp_core_probe: /dev/tisp will be created when streamer starts (tx_isp_open) ***\n");
 
             pr_info("*** tx_isp_core_probe: Core probe completed successfully ***\n");
 

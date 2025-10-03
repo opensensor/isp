@@ -1,0 +1,766 @@
+[0;32m[INFO][0m Starting ISP build automation...
+[0;32m[INFO][0m Sensor Model: gc2053
+[0;32m[INFO][0m Target: t31
+[0;32m[INFO][0m Remote Host: 192.168.50.211
+[0;32m[INFO][0m Skipping git pull (not in git repo)...
+[0;32m[INFO][0m Copying driver files to external/ingenic-sdk/3.10/isp/t31/
+[0;32m[INFO][0m Driver files copied successfully
+[0;32m[INFO][0m Building project with SENSOR_MODEL=gc2053 for target t31...
+Building for SoC: t31, Kernel: 3.10
+Using kernel directory: /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/
+Using cross compiler: mipsel-linux-gcc
+make: Entering directory '/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81'
+test -e include/generated/autoconf.h -a -e include/config/auto.conf || (		\
+echo >&2;							\
+echo >&2 "  ERROR: Kernel configuration is invalid.";		\
+echo >&2 "         include/generated/autoconf.h or include/config/auto.conf are missing.";\
+echo >&2 "         Run 'make oldconfig && make prepare' on kernel src to fix it.";	\
+echo >&2 ;							\
+/bin/false)
+mkdir -p /home/matteius/isp-latest/external/ingenic-sdk/.tmp_versions ; rm -f /home/matteius/isp-latest/external/ingenic-sdk/.tmp_versions/*
+make -f scripts/Makefile.build obj=/home/matteius/isp-latest/external/ingenic-sdk
+Building for SoC t31
+Building for Kernel 3.10
+Building ISP for Kernel 3.10
+Building GPIO-UserKeys for Kernel 3.10
+Building PWM for Kernel 3.10
+Building Motor for Kernel 3.10
+Building Motor SPI for Kernel 3.10
+Building Audio for Kernel 3.10 using oss2
+Building AVPU for Kernel 3.10
+Building for sensor gc2053
+  mipsel-linux-gcc -Wp,-MD,/home/matteius/isp-latest/external/ingenic-sdk/3.10/audio/t31/oss2/devices/ex_codecs/.codec_i2c_dev.o.d -nostdinc -isystem /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/per-package/toolchain-external-custom/host/opt/ext-toolchain/bin/../lib/gcc/mipsel-thingino-linux-musl/14.3.0/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include -Iarch/mips/include/generated  -Iinclude -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/uapi -Iarch/mips/include/generated/uapi -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/uapi -Iinclude/generated/uapi -include /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h -D__KERNEL__ -DVMLINUX_LOAD_ADDRESS=0xffffffff80010000 -DDATAOFFSET=0 -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -fno-delete-null-pointer-checks -std=gnu11 -Os -Wno-maybe-uninitialized -mno-check-zero-division -mabi=32 -mgp32 -mfp32 -G 0 -mno-abicalls -fno-pic -pipe -msoft-float -ffreestanding -march=mips32 -Wa,-mips32 -Wa,--trap -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/core/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/soc-t31/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/asm/mach-generic -Wno-array-bounds -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -Wno-attributes -Wno-unused-variable -Wno-incompatible-pointer-types -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -DCC_HAVE_ASM_GOTO -DRELEASE -DUSER_BIT_32 -DKERNEL_BIT_32 -Wno-date-time -D_GNU_SOURCE -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -DCONFIG_VIDEO_V4L2=y -DCONFIG_MEDIA_SUPPORT=y -DHAS_V4L2_SUPPORT=1 -DHAS_MEDIA_SUPPORT=1 -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/include -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/include -DCONFIG_PWM0 -DCONFIG_PWM1 -DCONFIG_PWM2 -DCONFIG_PWM3  -DMODULE -mlong-calls  -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(codec_i2c_dev)"  -D"KBUILD_MODNAME=KBUILD_STR(audio)" -c -o /home/matteius/isp-latest/external/ingenic-sdk/3.10/audio/t31/oss2/devices/ex_codecs/codec_i2c_dev.o /home/matteius/isp-latest/external/ingenic-sdk/3.10/audio/t31/oss2/devices/ex_codecs/codec_i2c_dev.c
+In file included from /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h:4,
+                 from <command-line>:
+include/generated/autoconf.h:142:9: warning: "CONFIG_MEDIA_SUPPORT" redefined
+  142 | #define CONFIG_MEDIA_SUPPORT 1
+      |         ^~~~~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+include/generated/autoconf.h:424:9: warning: "CONFIG_VIDEO_V4L2" redefined
+  424 | #define CONFIG_VIDEO_V4L2 1
+      |         ^~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+  mipsel-linux-gcc -Wp,-MD,/home/matteius/isp-latest/external/ingenic-sdk/3.10/audio/t31/oss2/devices/ex_codecs/.es8374_codec.o.d -nostdinc -isystem /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/per-package/toolchain-external-custom/host/opt/ext-toolchain/bin/../lib/gcc/mipsel-thingino-linux-musl/14.3.0/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include -Iarch/mips/include/generated  -Iinclude -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/uapi -Iarch/mips/include/generated/uapi -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/uapi -Iinclude/generated/uapi -include /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h -D__KERNEL__ -DVMLINUX_LOAD_ADDRESS=0xffffffff80010000 -DDATAOFFSET=0 -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -fno-delete-null-pointer-checks -std=gnu11 -Os -Wno-maybe-uninitialized -mno-check-zero-division -mabi=32 -mgp32 -mfp32 -G 0 -mno-abicalls -fno-pic -pipe -msoft-float -ffreestanding -march=mips32 -Wa,-mips32 -Wa,--trap -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/core/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/soc-t31/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/asm/mach-generic -Wno-array-bounds -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -Wno-attributes -Wno-unused-variable -Wno-incompatible-pointer-types -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -DCC_HAVE_ASM_GOTO -DRELEASE -DUSER_BIT_32 -DKERNEL_BIT_32 -Wno-date-time -D_GNU_SOURCE -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -DCONFIG_VIDEO_V4L2=y -DCONFIG_MEDIA_SUPPORT=y -DHAS_V4L2_SUPPORT=1 -DHAS_MEDIA_SUPPORT=1 -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/include -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/include -DCONFIG_PWM0 -DCONFIG_PWM1 -DCONFIG_PWM2 -DCONFIG_PWM3  -DMODULE -mlong-calls  -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(es8374_codec)"  -D"KBUILD_MODNAME=KBUILD_STR(audio)" -c -o /home/matteius/isp-latest/external/ingenic-sdk/3.10/audio/t31/oss2/devices/ex_codecs/es8374_codec.o /home/matteius/isp-latest/external/ingenic-sdk/3.10/audio/t31/oss2/devices/ex_codecs/es8374_codec.c
+In file included from /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h:4,
+                 from <command-line>:
+include/generated/autoconf.h:142:9: warning: "CONFIG_MEDIA_SUPPORT" redefined
+  142 | #define CONFIG_MEDIA_SUPPORT 1
+      |         ^~~~~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+include/generated/autoconf.h:424:9: warning: "CONFIG_VIDEO_V4L2" redefined
+  424 | #define CONFIG_VIDEO_V4L2 1
+      |         ^~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+  mipsel-linux-gcc -Wp,-MD,/home/matteius/isp-latest/external/ingenic-sdk/3.10/audio/t31/oss2/devices/codecs/.jz_t10_codec.o.d -nostdinc -isystem /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/per-package/toolchain-external-custom/host/opt/ext-toolchain/bin/../lib/gcc/mipsel-thingino-linux-musl/14.3.0/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include -Iarch/mips/include/generated  -Iinclude -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/uapi -Iarch/mips/include/generated/uapi -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/uapi -Iinclude/generated/uapi -include /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h -D__KERNEL__ -DVMLINUX_LOAD_ADDRESS=0xffffffff80010000 -DDATAOFFSET=0 -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -fno-delete-null-pointer-checks -std=gnu11 -Os -Wno-maybe-uninitialized -mno-check-zero-division -mabi=32 -mgp32 -mfp32 -G 0 -mno-abicalls -fno-pic -pipe -msoft-float -ffreestanding -march=mips32 -Wa,-mips32 -Wa,--trap -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/core/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/soc-t31/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/asm/mach-generic -Wno-array-bounds -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -Wno-attributes -Wno-unused-variable -Wno-incompatible-pointer-types -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -DCC_HAVE_ASM_GOTO -DRELEASE -DUSER_BIT_32 -DKERNEL_BIT_32 -Wno-date-time -D_GNU_SOURCE -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -DCONFIG_VIDEO_V4L2=y -DCONFIG_MEDIA_SUPPORT=y -DHAS_V4L2_SUPPORT=1 -DHAS_MEDIA_SUPPORT=1 -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/include -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/include -DCONFIG_PWM0 -DCONFIG_PWM1 -DCONFIG_PWM2 -DCONFIG_PWM3  -DMODULE -mlong-calls  -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(jz_t10_codec)"  -D"KBUILD_MODNAME=KBUILD_STR(audio)" -c -o /home/matteius/isp-latest/external/ingenic-sdk/3.10/audio/t31/oss2/devices/codecs/jz_t10_codec.o /home/matteius/isp-latest/external/ingenic-sdk/3.10/audio/t31/oss2/devices/codecs/jz_t10_codec.c
+In file included from /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h:4,
+                 from <command-line>:
+include/generated/autoconf.h:142:9: warning: "CONFIG_MEDIA_SUPPORT" redefined
+  142 | #define CONFIG_MEDIA_SUPPORT 1
+      |         ^~~~~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+include/generated/autoconf.h:424:9: warning: "CONFIG_VIDEO_V4L2" redefined
+  424 | #define CONFIG_VIDEO_V4L2 1
+      |         ^~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+  mipsel-linux-gcc -Wp,-MD,/home/matteius/isp-latest/external/ingenic-sdk/3.10/audio/t31/oss2/devices/.xb47xx_i2s_v12.o.d -nostdinc -isystem /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/per-package/toolchain-external-custom/host/opt/ext-toolchain/bin/../lib/gcc/mipsel-thingino-linux-musl/14.3.0/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include -Iarch/mips/include/generated  -Iinclude -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/uapi -Iarch/mips/include/generated/uapi -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/uapi -Iinclude/generated/uapi -include /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h -D__KERNEL__ -DVMLINUX_LOAD_ADDRESS=0xffffffff80010000 -DDATAOFFSET=0 -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -fno-delete-null-pointer-checks -std=gnu11 -Os -Wno-maybe-uninitialized -mno-check-zero-division -mabi=32 -mgp32 -mfp32 -G 0 -mno-abicalls -fno-pic -pipe -msoft-float -ffreestanding -march=mips32 -Wa,-mips32 -Wa,--trap -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/core/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/soc-t31/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/asm/mach-generic -Wno-array-bounds -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -Wno-attributes -Wno-unused-variable -Wno-incompatible-pointer-types -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -DCC_HAVE_ASM_GOTO -DRELEASE -DUSER_BIT_32 -DKERNEL_BIT_32 -Wno-date-time -D_GNU_SOURCE -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -DCONFIG_VIDEO_V4L2=y -DCONFIG_MEDIA_SUPPORT=y -DHAS_V4L2_SUPPORT=1 -DHAS_MEDIA_SUPPORT=1 -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/include -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/include -DCONFIG_PWM0 -DCONFIG_PWM1 -DCONFIG_PWM2 -DCONFIG_PWM3  -DMODULE -mlong-calls  -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(xb47xx_i2s_v12)"  -D"KBUILD_MODNAME=KBUILD_STR(audio)" -c -o /home/matteius/isp-latest/external/ingenic-sdk/3.10/audio/t31/oss2/devices/xb47xx_i2s_v12.o /home/matteius/isp-latest/external/ingenic-sdk/3.10/audio/t31/oss2/devices/xb47xx_i2s_v12.c
+In file included from /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h:4,
+                 from <command-line>:
+include/generated/autoconf.h:142:9: warning: "CONFIG_MEDIA_SUPPORT" redefined
+  142 | #define CONFIG_MEDIA_SUPPORT 1
+      |         ^~~~~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+include/generated/autoconf.h:424:9: warning: "CONFIG_VIDEO_V4L2" redefined
+  424 | #define CONFIG_VIDEO_V4L2 1
+      |         ^~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+  mipsel-linux-gcc -Wp,-MD,/home/matteius/isp-latest/external/ingenic-sdk/3.10/audio/t31/oss2/interface/.xb_snd_dsp.o.d -nostdinc -isystem /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/per-package/toolchain-external-custom/host/opt/ext-toolchain/bin/../lib/gcc/mipsel-thingino-linux-musl/14.3.0/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include -Iarch/mips/include/generated  -Iinclude -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/uapi -Iarch/mips/include/generated/uapi -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/uapi -Iinclude/generated/uapi -include /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h -D__KERNEL__ -DVMLINUX_LOAD_ADDRESS=0xffffffff80010000 -DDATAOFFSET=0 -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -fno-delete-null-pointer-checks -std=gnu11 -Os -Wno-maybe-uninitialized -mno-check-zero-division -mabi=32 -mgp32 -mfp32 -G 0 -mno-abicalls -fno-pic -pipe -msoft-float -ffreestanding -march=mips32 -Wa,-mips32 -Wa,--trap -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/core/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/soc-t31/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/asm/mach-generic -Wno-array-bounds -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -Wno-attributes -Wno-unused-variable -Wno-incompatible-pointer-types -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -DCC_HAVE_ASM_GOTO -DRELEASE -DUSER_BIT_32 -DKERNEL_BIT_32 -Wno-date-time -D_GNU_SOURCE -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -DCONFIG_VIDEO_V4L2=y -DCONFIG_MEDIA_SUPPORT=y -DHAS_V4L2_SUPPORT=1 -DHAS_MEDIA_SUPPORT=1 -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/include -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/include -DCONFIG_PWM0 -DCONFIG_PWM1 -DCONFIG_PWM2 -DCONFIG_PWM3  -DMODULE -mlong-calls  -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(xb_snd_dsp)"  -D"KBUILD_MODNAME=KBUILD_STR(audio)" -c -o /home/matteius/isp-latest/external/ingenic-sdk/3.10/audio/t31/oss2/interface/xb_snd_dsp.o /home/matteius/isp-latest/external/ingenic-sdk/3.10/audio/t31/oss2/interface/xb_snd_dsp.c
+In file included from /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h:4,
+                 from <command-line>:
+include/generated/autoconf.h:142:9: warning: "CONFIG_MEDIA_SUPPORT" redefined
+  142 | #define CONFIG_MEDIA_SUPPORT 1
+      |         ^~~~~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+include/generated/autoconf.h:424:9: warning: "CONFIG_VIDEO_V4L2" redefined
+  424 | #define CONFIG_VIDEO_V4L2 1
+      |         ^~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+  mipsel-linux-gcc -Wp,-MD,/home/matteius/isp-latest/external/ingenic-sdk/3.10/audio/t31/oss2/.xb_snd_card.o.d -nostdinc -isystem /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/per-package/toolchain-external-custom/host/opt/ext-toolchain/bin/../lib/gcc/mipsel-thingino-linux-musl/14.3.0/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include -Iarch/mips/include/generated  -Iinclude -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/uapi -Iarch/mips/include/generated/uapi -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/uapi -Iinclude/generated/uapi -include /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h -D__KERNEL__ -DVMLINUX_LOAD_ADDRESS=0xffffffff80010000 -DDATAOFFSET=0 -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -fno-delete-null-pointer-checks -std=gnu11 -Os -Wno-maybe-uninitialized -mno-check-zero-division -mabi=32 -mgp32 -mfp32 -G 0 -mno-abicalls -fno-pic -pipe -msoft-float -ffreestanding -march=mips32 -Wa,-mips32 -Wa,--trap -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/core/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/soc-t31/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/asm/mach-generic -Wno-array-bounds -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -Wno-attributes -Wno-unused-variable -Wno-incompatible-pointer-types -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -DCC_HAVE_ASM_GOTO -DRELEASE -DUSER_BIT_32 -DKERNEL_BIT_32 -Wno-date-time -D_GNU_SOURCE -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -DCONFIG_VIDEO_V4L2=y -DCONFIG_MEDIA_SUPPORT=y -DHAS_V4L2_SUPPORT=1 -DHAS_MEDIA_SUPPORT=1 -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/include -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/include -DCONFIG_PWM0 -DCONFIG_PWM1 -DCONFIG_PWM2 -DCONFIG_PWM3  -DMODULE -mlong-calls  -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(xb_snd_card)"  -D"KBUILD_MODNAME=KBUILD_STR(audio)" -c -o /home/matteius/isp-latest/external/ingenic-sdk/3.10/audio/t31/oss2/xb_snd_card.o /home/matteius/isp-latest/external/ingenic-sdk/3.10/audio/t31/oss2/xb_snd_card.c
+In file included from /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h:4,
+                 from <command-line>:
+include/generated/autoconf.h:142:9: warning: "CONFIG_MEDIA_SUPPORT" redefined
+  142 | #define CONFIG_MEDIA_SUPPORT 1
+      |         ^~~~~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+include/generated/autoconf.h:424:9: warning: "CONFIG_VIDEO_V4L2" redefined
+  424 | #define CONFIG_VIDEO_V4L2 1
+      |         ^~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+  mipsel-linux-gcc -Wp,-MD,/home/matteius/isp-latest/external/ingenic-sdk/3.10/avpu/t31/.avpu_main.o.d -nostdinc -isystem /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/per-package/toolchain-external-custom/host/opt/ext-toolchain/bin/../lib/gcc/mipsel-thingino-linux-musl/14.3.0/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include -Iarch/mips/include/generated  -Iinclude -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/uapi -Iarch/mips/include/generated/uapi -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/uapi -Iinclude/generated/uapi -include /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h -D__KERNEL__ -DVMLINUX_LOAD_ADDRESS=0xffffffff80010000 -DDATAOFFSET=0 -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -fno-delete-null-pointer-checks -std=gnu11 -Os -Wno-maybe-uninitialized -mno-check-zero-division -mabi=32 -mgp32 -mfp32 -G 0 -mno-abicalls -fno-pic -pipe -msoft-float -ffreestanding -march=mips32 -Wa,-mips32 -Wa,--trap -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/core/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/soc-t31/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/asm/mach-generic -Wno-array-bounds -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -Wno-attributes -Wno-unused-variable -Wno-incompatible-pointer-types -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -DCC_HAVE_ASM_GOTO -DRELEASE -DUSER_BIT_32 -DKERNEL_BIT_32 -Wno-date-time -D_GNU_SOURCE -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -DCONFIG_VIDEO_V4L2=y -DCONFIG_MEDIA_SUPPORT=y -DHAS_V4L2_SUPPORT=1 -DHAS_MEDIA_SUPPORT=1 -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/include -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/include -DCONFIG_PWM0 -DCONFIG_PWM1 -DCONFIG_PWM2 -DCONFIG_PWM3  -DMODULE -mlong-calls  -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(avpu_main)"  -D"KBUILD_MODNAME=KBUILD_STR(avpu)" -c -o /home/matteius/isp-latest/external/ingenic-sdk/3.10/avpu/t31/avpu_main.o /home/matteius/isp-latest/external/ingenic-sdk/3.10/avpu/t31/avpu_main.c
+In file included from /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h:4,
+                 from <command-line>:
+include/generated/autoconf.h:142:9: warning: "CONFIG_MEDIA_SUPPORT" redefined
+  142 | #define CONFIG_MEDIA_SUPPORT 1
+      |         ^~~~~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+include/generated/autoconf.h:424:9: warning: "CONFIG_VIDEO_V4L2" redefined
+  424 | #define CONFIG_VIDEO_V4L2 1
+      |         ^~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+  mipsel-linux-gcc -Wp,-MD,/home/matteius/isp-latest/external/ingenic-sdk/3.10/avpu/t31/.avpu_ip.o.d -nostdinc -isystem /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/per-package/toolchain-external-custom/host/opt/ext-toolchain/bin/../lib/gcc/mipsel-thingino-linux-musl/14.3.0/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include -Iarch/mips/include/generated  -Iinclude -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/uapi -Iarch/mips/include/generated/uapi -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/uapi -Iinclude/generated/uapi -include /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h -D__KERNEL__ -DVMLINUX_LOAD_ADDRESS=0xffffffff80010000 -DDATAOFFSET=0 -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -fno-delete-null-pointer-checks -std=gnu11 -Os -Wno-maybe-uninitialized -mno-check-zero-division -mabi=32 -mgp32 -mfp32 -G 0 -mno-abicalls -fno-pic -pipe -msoft-float -ffreestanding -march=mips32 -Wa,-mips32 -Wa,--trap -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/core/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/soc-t31/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/asm/mach-generic -Wno-array-bounds -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -Wno-attributes -Wno-unused-variable -Wno-incompatible-pointer-types -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -DCC_HAVE_ASM_GOTO -DRELEASE -DUSER_BIT_32 -DKERNEL_BIT_32 -Wno-date-time -D_GNU_SOURCE -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -DCONFIG_VIDEO_V4L2=y -DCONFIG_MEDIA_SUPPORT=y -DHAS_V4L2_SUPPORT=1 -DHAS_MEDIA_SUPPORT=1 -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/include -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/include -DCONFIG_PWM0 -DCONFIG_PWM1 -DCONFIG_PWM2 -DCONFIG_PWM3  -DMODULE -mlong-calls  -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(avpu_ip)"  -D"KBUILD_MODNAME=KBUILD_STR(avpu)" -c -o /home/matteius/isp-latest/external/ingenic-sdk/3.10/avpu/t31/avpu_ip.o /home/matteius/isp-latest/external/ingenic-sdk/3.10/avpu/t31/avpu_ip.c
+In file included from /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h:4,
+                 from <command-line>:
+include/generated/autoconf.h:142:9: warning: "CONFIG_MEDIA_SUPPORT" redefined
+  142 | #define CONFIG_MEDIA_SUPPORT 1
+      |         ^~~~~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+include/generated/autoconf.h:424:9: warning: "CONFIG_VIDEO_V4L2" redefined
+  424 | #define CONFIG_VIDEO_V4L2 1
+      |         ^~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+  mipsel-linux-gcc -Wp,-MD,/home/matteius/isp-latest/external/ingenic-sdk/3.10/avpu/t31/.avpu_alloc.o.d -nostdinc -isystem /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/per-package/toolchain-external-custom/host/opt/ext-toolchain/bin/../lib/gcc/mipsel-thingino-linux-musl/14.3.0/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include -Iarch/mips/include/generated  -Iinclude -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/uapi -Iarch/mips/include/generated/uapi -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/uapi -Iinclude/generated/uapi -include /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h -D__KERNEL__ -DVMLINUX_LOAD_ADDRESS=0xffffffff80010000 -DDATAOFFSET=0 -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -fno-delete-null-pointer-checks -std=gnu11 -Os -Wno-maybe-uninitialized -mno-check-zero-division -mabi=32 -mgp32 -mfp32 -G 0 -mno-abicalls -fno-pic -pipe -msoft-float -ffreestanding -march=mips32 -Wa,-mips32 -Wa,--trap -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/core/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/soc-t31/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/asm/mach-generic -Wno-array-bounds -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -Wno-attributes -Wno-unused-variable -Wno-incompatible-pointer-types -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -DCC_HAVE_ASM_GOTO -DRELEASE -DUSER_BIT_32 -DKERNEL_BIT_32 -Wno-date-time -D_GNU_SOURCE -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -DCONFIG_VIDEO_V4L2=y -DCONFIG_MEDIA_SUPPORT=y -DHAS_V4L2_SUPPORT=1 -DHAS_MEDIA_SUPPORT=1 -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/include -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/include -DCONFIG_PWM0 -DCONFIG_PWM1 -DCONFIG_PWM2 -DCONFIG_PWM3  -DMODULE -mlong-calls  -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(avpu_alloc)"  -D"KBUILD_MODNAME=KBUILD_STR(avpu)" -c -o /home/matteius/isp-latest/external/ingenic-sdk/3.10/avpu/t31/avpu_alloc.o /home/matteius/isp-latest/external/ingenic-sdk/3.10/avpu/t31/avpu_alloc.c
+In file included from /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h:4,
+                 from <command-line>:
+include/generated/autoconf.h:142:9: warning: "CONFIG_MEDIA_SUPPORT" redefined
+  142 | #define CONFIG_MEDIA_SUPPORT 1
+      |         ^~~~~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+include/generated/autoconf.h:424:9: warning: "CONFIG_VIDEO_V4L2" redefined
+  424 | #define CONFIG_VIDEO_V4L2 1
+      |         ^~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+  mipsel-linux-gcc -Wp,-MD,/home/matteius/isp-latest/external/ingenic-sdk/3.10/avpu/t31/.avpu_alloc_ioctl.o.d -nostdinc -isystem /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/per-package/toolchain-external-custom/host/opt/ext-toolchain/bin/../lib/gcc/mipsel-thingino-linux-musl/14.3.0/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include -Iarch/mips/include/generated  -Iinclude -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/uapi -Iarch/mips/include/generated/uapi -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/uapi -Iinclude/generated/uapi -include /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h -D__KERNEL__ -DVMLINUX_LOAD_ADDRESS=0xffffffff80010000 -DDATAOFFSET=0 -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -fno-delete-null-pointer-checks -std=gnu11 -Os -Wno-maybe-uninitialized -mno-check-zero-division -mabi=32 -mgp32 -mfp32 -G 0 -mno-abicalls -fno-pic -pipe -msoft-float -ffreestanding -march=mips32 -Wa,-mips32 -Wa,--trap -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/core/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/soc-t31/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/asm/mach-generic -Wno-array-bounds -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -Wno-attributes -Wno-unused-variable -Wno-incompatible-pointer-types -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -DCC_HAVE_ASM_GOTO -DRELEASE -DUSER_BIT_32 -DKERNEL_BIT_32 -Wno-date-time -D_GNU_SOURCE -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -DCONFIG_VIDEO_V4L2=y -DCONFIG_MEDIA_SUPPORT=y -DHAS_V4L2_SUPPORT=1 -DHAS_MEDIA_SUPPORT=1 -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/include -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/include -DCONFIG_PWM0 -DCONFIG_PWM1 -DCONFIG_PWM2 -DCONFIG_PWM3  -DMODULE -mlong-calls  -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(avpu_alloc_ioctl)"  -D"KBUILD_MODNAME=KBUILD_STR(avpu)" -c -o /home/matteius/isp-latest/external/ingenic-sdk/3.10/avpu/t31/avpu_alloc_ioctl.o /home/matteius/isp-latest/external/ingenic-sdk/3.10/avpu/t31/avpu_alloc_ioctl.c
+In file included from /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h:4,
+                 from <command-line>:
+include/generated/autoconf.h:142:9: warning: "CONFIG_MEDIA_SUPPORT" redefined
+  142 | #define CONFIG_MEDIA_SUPPORT 1
+      |         ^~~~~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+include/generated/autoconf.h:424:9: warning: "CONFIG_VIDEO_V4L2" redefined
+  424 | #define CONFIG_VIDEO_V4L2 1
+      |         ^~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+  mipsel-linux-gcc -Wp,-MD,/home/matteius/isp-latest/external/ingenic-sdk/3.10/avpu/t31/.avpu_dmabuf.o.d -nostdinc -isystem /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/per-package/toolchain-external-custom/host/opt/ext-toolchain/bin/../lib/gcc/mipsel-thingino-linux-musl/14.3.0/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include -Iarch/mips/include/generated  -Iinclude -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/uapi -Iarch/mips/include/generated/uapi -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/uapi -Iinclude/generated/uapi -include /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h -D__KERNEL__ -DVMLINUX_LOAD_ADDRESS=0xffffffff80010000 -DDATAOFFSET=0 -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -fno-delete-null-pointer-checks -std=gnu11 -Os -Wno-maybe-uninitialized -mno-check-zero-division -mabi=32 -mgp32 -mfp32 -G 0 -mno-abicalls -fno-pic -pipe -msoft-float -ffreestanding -march=mips32 -Wa,-mips32 -Wa,--trap -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/core/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/soc-t31/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/asm/mach-generic -Wno-array-bounds -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -Wno-attributes -Wno-unused-variable -Wno-incompatible-pointer-types -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -DCC_HAVE_ASM_GOTO -DRELEASE -DUSER_BIT_32 -DKERNEL_BIT_32 -Wno-date-time -D_GNU_SOURCE -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -DCONFIG_VIDEO_V4L2=y -DCONFIG_MEDIA_SUPPORT=y -DHAS_V4L2_SUPPORT=1 -DHAS_MEDIA_SUPPORT=1 -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/include -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/include -DCONFIG_PWM0 -DCONFIG_PWM1 -DCONFIG_PWM2 -DCONFIG_PWM3  -DMODULE -mlong-calls  -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(avpu_dmabuf)"  -D"KBUILD_MODNAME=KBUILD_STR(avpu)" -c -o /home/matteius/isp-latest/external/ingenic-sdk/3.10/avpu/t31/avpu_dmabuf.o /home/matteius/isp-latest/external/ingenic-sdk/3.10/avpu/t31/avpu_dmabuf.c
+In file included from /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h:4,
+                 from <command-line>:
+include/generated/autoconf.h:142:9: warning: "CONFIG_MEDIA_SUPPORT" redefined
+  142 | #define CONFIG_MEDIA_SUPPORT 1
+      |         ^~~~~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+include/generated/autoconf.h:424:9: warning: "CONFIG_VIDEO_V4L2" redefined
+  424 | #define CONFIG_VIDEO_V4L2 1
+      |         ^~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+  mipsel-linux-gcc -Wp,-MD,/home/matteius/isp-latest/external/ingenic-sdk/3.10/misc/gpio-userkeys/.gpio-userkeys.o.d -nostdinc -isystem /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/per-package/toolchain-external-custom/host/opt/ext-toolchain/bin/../lib/gcc/mipsel-thingino-linux-musl/14.3.0/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include -Iarch/mips/include/generated  -Iinclude -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/uapi -Iarch/mips/include/generated/uapi -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/uapi -Iinclude/generated/uapi -include /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h -D__KERNEL__ -DVMLINUX_LOAD_ADDRESS=0xffffffff80010000 -DDATAOFFSET=0 -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -fno-delete-null-pointer-checks -std=gnu11 -Os -Wno-maybe-uninitialized -mno-check-zero-division -mabi=32 -mgp32 -mfp32 -G 0 -mno-abicalls -fno-pic -pipe -msoft-float -ffreestanding -march=mips32 -Wa,-mips32 -Wa,--trap -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/core/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/soc-t31/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/asm/mach-generic -Wno-array-bounds -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -Wno-attributes -Wno-unused-variable -Wno-incompatible-pointer-types -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -DCC_HAVE_ASM_GOTO -DRELEASE -DUSER_BIT_32 -DKERNEL_BIT_32 -Wno-date-time -D_GNU_SOURCE -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -DCONFIG_VIDEO_V4L2=y -DCONFIG_MEDIA_SUPPORT=y -DHAS_V4L2_SUPPORT=1 -DHAS_MEDIA_SUPPORT=1 -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/include -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/include -DCONFIG_PWM0 -DCONFIG_PWM1 -DCONFIG_PWM2 -DCONFIG_PWM3  -DMODULE -mlong-calls  -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(gpio_userkeys)"  -D"KBUILD_MODNAME=KBUILD_STR(gpio_userkeys)" -c -o /home/matteius/isp-latest/external/ingenic-sdk/3.10/misc/gpio-userkeys/gpio-userkeys.o /home/matteius/isp-latest/external/ingenic-sdk/3.10/misc/gpio-userkeys/gpio-userkeys.c
+In file included from /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h:4,
+                 from <command-line>:
+include/generated/autoconf.h:142:9: warning: "CONFIG_MEDIA_SUPPORT" redefined
+  142 | #define CONFIG_MEDIA_SUPPORT 1
+      |         ^~~~~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+include/generated/autoconf.h:424:9: warning: "CONFIG_VIDEO_V4L2" redefined
+  424 | #define CONFIG_VIDEO_V4L2 1
+      |         ^~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+  mipsel-linux-gcc -Wp,-MD,/home/matteius/isp-latest/external/ingenic-sdk/3.10/misc/motor/.motor.o.d -nostdinc -isystem /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/per-package/toolchain-external-custom/host/opt/ext-toolchain/bin/../lib/gcc/mipsel-thingino-linux-musl/14.3.0/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include -Iarch/mips/include/generated  -Iinclude -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/uapi -Iarch/mips/include/generated/uapi -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/uapi -Iinclude/generated/uapi -include /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h -D__KERNEL__ -DVMLINUX_LOAD_ADDRESS=0xffffffff80010000 -DDATAOFFSET=0 -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -fno-delete-null-pointer-checks -std=gnu11 -Os -Wno-maybe-uninitialized -mno-check-zero-division -mabi=32 -mgp32 -mfp32 -G 0 -mno-abicalls -fno-pic -pipe -msoft-float -ffreestanding -march=mips32 -Wa,-mips32 -Wa,--trap -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/core/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/soc-t31/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/asm/mach-generic -Wno-array-bounds -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -Wno-attributes -Wno-unused-variable -Wno-incompatible-pointer-types -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -DCC_HAVE_ASM_GOTO -DRELEASE -DUSER_BIT_32 -DKERNEL_BIT_32 -Wno-date-time -D_GNU_SOURCE -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -DCONFIG_VIDEO_V4L2=y -DCONFIG_MEDIA_SUPPORT=y -DHAS_V4L2_SUPPORT=1 -DHAS_MEDIA_SUPPORT=1 -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/include -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/include -DCONFIG_PWM0 -DCONFIG_PWM1 -DCONFIG_PWM2 -DCONFIG_PWM3  -DMODULE -mlong-calls  -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(motor)"  -D"KBUILD_MODNAME=KBUILD_STR(motor)" -c -o /home/matteius/isp-latest/external/ingenic-sdk/3.10/misc/motor/motor.o /home/matteius/isp-latest/external/ingenic-sdk/3.10/misc/motor/motor.c
+In file included from /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h:4,
+                 from <command-line>:
+include/generated/autoconf.h:142:9: warning: "CONFIG_MEDIA_SUPPORT" redefined
+  142 | #define CONFIG_MEDIA_SUPPORT 1
+      |         ^~~~~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+include/generated/autoconf.h:424:9: warning: "CONFIG_VIDEO_V4L2" redefined
+  424 | #define CONFIG_VIDEO_V4L2 1
+      |         ^~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+  mipsel-linux-gcc -Wp,-MD,/home/matteius/isp-latest/external/ingenic-sdk/3.10/misc/ms419xx/.ms419xx_spi_dev.o.d -nostdinc -isystem /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/per-package/toolchain-external-custom/host/opt/ext-toolchain/bin/../lib/gcc/mipsel-thingino-linux-musl/14.3.0/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include -Iarch/mips/include/generated  -Iinclude -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/uapi -Iarch/mips/include/generated/uapi -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/uapi -Iinclude/generated/uapi -include /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h -D__KERNEL__ -DVMLINUX_LOAD_ADDRESS=0xffffffff80010000 -DDATAOFFSET=0 -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -fno-delete-null-pointer-checks -std=gnu11 -Os -Wno-maybe-uninitialized -mno-check-zero-division -mabi=32 -mgp32 -mfp32 -G 0 -mno-abicalls -fno-pic -pipe -msoft-float -ffreestanding -march=mips32 -Wa,-mips32 -Wa,--trap -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/core/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/soc-t31/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/asm/mach-generic -Wno-array-bounds -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -Wno-attributes -Wno-unused-variable -Wno-incompatible-pointer-types -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -DCC_HAVE_ASM_GOTO -DRELEASE -DUSER_BIT_32 -DKERNEL_BIT_32 -Wno-date-time -D_GNU_SOURCE -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -DCONFIG_VIDEO_V4L2=y -DCONFIG_MEDIA_SUPPORT=y -DHAS_V4L2_SUPPORT=1 -DHAS_MEDIA_SUPPORT=1 -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/include -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/include -DCONFIG_PWM0 -DCONFIG_PWM1 -DCONFIG_PWM2 -DCONFIG_PWM3  -DMODULE -mlong-calls  -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(ms419xx_spi_dev)"  -D"KBUILD_MODNAME=KBUILD_STR(ms419xx)" -c -o /home/matteius/isp-latest/external/ingenic-sdk/3.10/misc/ms419xx/ms419xx_spi_dev.o /home/matteius/isp-latest/external/ingenic-sdk/3.10/misc/ms419xx/ms419xx_spi_dev.c
+In file included from /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h:4,
+                 from <command-line>:
+include/generated/autoconf.h:142:9: warning: "CONFIG_MEDIA_SUPPORT" redefined
+  142 | #define CONFIG_MEDIA_SUPPORT 1
+      |         ^~~~~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+include/generated/autoconf.h:424:9: warning: "CONFIG_VIDEO_V4L2" redefined
+  424 | #define CONFIG_VIDEO_V4L2 1
+      |         ^~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+  mipsel-linux-gcc -Wp,-MD,/home/matteius/isp-latest/external/ingenic-sdk/3.10/misc/ms419xx/.motor.o.d -nostdinc -isystem /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/per-package/toolchain-external-custom/host/opt/ext-toolchain/bin/../lib/gcc/mipsel-thingino-linux-musl/14.3.0/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include -Iarch/mips/include/generated  -Iinclude -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/uapi -Iarch/mips/include/generated/uapi -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/uapi -Iinclude/generated/uapi -include /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h -D__KERNEL__ -DVMLINUX_LOAD_ADDRESS=0xffffffff80010000 -DDATAOFFSET=0 -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -fno-delete-null-pointer-checks -std=gnu11 -Os -Wno-maybe-uninitialized -mno-check-zero-division -mabi=32 -mgp32 -mfp32 -G 0 -mno-abicalls -fno-pic -pipe -msoft-float -ffreestanding -march=mips32 -Wa,-mips32 -Wa,--trap -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/core/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/soc-t31/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/asm/mach-generic -Wno-array-bounds -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -Wno-attributes -Wno-unused-variable -Wno-incompatible-pointer-types -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -DCC_HAVE_ASM_GOTO -DRELEASE -DUSER_BIT_32 -DKERNEL_BIT_32 -Wno-date-time -D_GNU_SOURCE -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -DCONFIG_VIDEO_V4L2=y -DCONFIG_MEDIA_SUPPORT=y -DHAS_V4L2_SUPPORT=1 -DHAS_MEDIA_SUPPORT=1 -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/include -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/include -DCONFIG_PWM0 -DCONFIG_PWM1 -DCONFIG_PWM2 -DCONFIG_PWM3  -DMODULE -mlong-calls  -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(motor)"  -D"KBUILD_MODNAME=KBUILD_STR(ms419xx)" -c -o /home/matteius/isp-latest/external/ingenic-sdk/3.10/misc/ms419xx/motor.o /home/matteius/isp-latest/external/ingenic-sdk/3.10/misc/ms419xx/motor.c
+In file included from /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h:4,
+                 from <command-line>:
+include/generated/autoconf.h:142:9: warning: "CONFIG_MEDIA_SUPPORT" redefined
+  142 | #define CONFIG_MEDIA_SUPPORT 1
+      |         ^~~~~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+include/generated/autoconf.h:424:9: warning: "CONFIG_VIDEO_V4L2" redefined
+  424 | #define CONFIG_VIDEO_V4L2 1
+      |         ^~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+  mipsel-linux-gcc -Wp,-MD,/home/matteius/isp-latest/external/ingenic-sdk/3.10/misc/pwm/.pwm_core.o.d -nostdinc -isystem /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/per-package/toolchain-external-custom/host/opt/ext-toolchain/bin/../lib/gcc/mipsel-thingino-linux-musl/14.3.0/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include -Iarch/mips/include/generated  -Iinclude -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/uapi -Iarch/mips/include/generated/uapi -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/uapi -Iinclude/generated/uapi -include /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h -D__KERNEL__ -DVMLINUX_LOAD_ADDRESS=0xffffffff80010000 -DDATAOFFSET=0 -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -fno-delete-null-pointer-checks -std=gnu11 -Os -Wno-maybe-uninitialized -mno-check-zero-division -mabi=32 -mgp32 -mfp32 -G 0 -mno-abicalls -fno-pic -pipe -msoft-float -ffreestanding -march=mips32 -Wa,-mips32 -Wa,--trap -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/core/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/soc-t31/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/asm/mach-generic -Wno-array-bounds -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -Wno-attributes -Wno-unused-variable -Wno-incompatible-pointer-types -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -DCC_HAVE_ASM_GOTO -DRELEASE -DUSER_BIT_32 -DKERNEL_BIT_32 -Wno-date-time -D_GNU_SOURCE -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -DCONFIG_VIDEO_V4L2=y -DCONFIG_MEDIA_SUPPORT=y -DHAS_V4L2_SUPPORT=1 -DHAS_MEDIA_SUPPORT=1 -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/include -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/include -DCONFIG_PWM0 -DCONFIG_PWM1 -DCONFIG_PWM2 -DCONFIG_PWM3  -DMODULE -mlong-calls  -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(pwm_core)"  -D"KBUILD_MODNAME=KBUILD_STR(pwm_core)" -c -o /home/matteius/isp-latest/external/ingenic-sdk/3.10/misc/pwm/pwm_core.o /home/matteius/isp-latest/external/ingenic-sdk/3.10/misc/pwm/pwm_core.c
+In file included from /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h:4,
+                 from <command-line>:
+include/generated/autoconf.h:142:9: warning: "CONFIG_MEDIA_SUPPORT" redefined
+  142 | #define CONFIG_MEDIA_SUPPORT 1
+      |         ^~~~~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+include/generated/autoconf.h:424:9: warning: "CONFIG_VIDEO_V4L2" redefined
+  424 | #define CONFIG_VIDEO_V4L2 1
+      |         ^~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+  mipsel-linux-gcc -Wp,-MD,/home/matteius/isp-latest/external/ingenic-sdk/3.10/misc/pwm/.pwm_hal.o.d -nostdinc -isystem /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/per-package/toolchain-external-custom/host/opt/ext-toolchain/bin/../lib/gcc/mipsel-thingino-linux-musl/14.3.0/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include -Iarch/mips/include/generated  -Iinclude -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/uapi -Iarch/mips/include/generated/uapi -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/uapi -Iinclude/generated/uapi -include /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h -D__KERNEL__ -DVMLINUX_LOAD_ADDRESS=0xffffffff80010000 -DDATAOFFSET=0 -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -fno-delete-null-pointer-checks -std=gnu11 -Os -Wno-maybe-uninitialized -mno-check-zero-division -mabi=32 -mgp32 -mfp32 -G 0 -mno-abicalls -fno-pic -pipe -msoft-float -ffreestanding -march=mips32 -Wa,-mips32 -Wa,--trap -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/core/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/soc-t31/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/asm/mach-generic -Wno-array-bounds -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -Wno-attributes -Wno-unused-variable -Wno-incompatible-pointer-types -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -DCC_HAVE_ASM_GOTO -DRELEASE -DUSER_BIT_32 -DKERNEL_BIT_32 -Wno-date-time -D_GNU_SOURCE -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -DCONFIG_VIDEO_V4L2=y -DCONFIG_MEDIA_SUPPORT=y -DHAS_V4L2_SUPPORT=1 -DHAS_MEDIA_SUPPORT=1 -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/include -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/include -DCONFIG_PWM0 -DCONFIG_PWM1 -DCONFIG_PWM2 -DCONFIG_PWM3  -DMODULE -mlong-calls  -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(pwm_hal)"  -D"KBUILD_MODNAME=KBUILD_STR(pwm_hal)" -c -o /home/matteius/isp-latest/external/ingenic-sdk/3.10/misc/pwm/pwm_hal.o /home/matteius/isp-latest/external/ingenic-sdk/3.10/misc/pwm/pwm_hal.c
+In file included from /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h:4,
+                 from <command-line>:
+include/generated/autoconf.h:142:9: warning: "CONFIG_MEDIA_SUPPORT" redefined
+  142 | #define CONFIG_MEDIA_SUPPORT 1
+      |         ^~~~~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+include/generated/autoconf.h:424:9: warning: "CONFIG_VIDEO_V4L2" redefined
+  424 | #define CONFIG_VIDEO_V4L2 1
+      |         ^~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+  mipsel-linux-gcc -Wp,-MD,/home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/t31/.gc2053.o.d -nostdinc -isystem /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/per-package/toolchain-external-custom/host/opt/ext-toolchain/bin/../lib/gcc/mipsel-thingino-linux-musl/14.3.0/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include -Iarch/mips/include/generated  -Iinclude -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/uapi -Iarch/mips/include/generated/uapi -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/uapi -Iinclude/generated/uapi -include /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h -D__KERNEL__ -DVMLINUX_LOAD_ADDRESS=0xffffffff80010000 -DDATAOFFSET=0 -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -fno-delete-null-pointer-checks -std=gnu11 -Os -Wno-maybe-uninitialized -mno-check-zero-division -mabi=32 -mgp32 -mfp32 -G 0 -mno-abicalls -fno-pic -pipe -msoft-float -ffreestanding -march=mips32 -Wa,-mips32 -Wa,--trap -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/core/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/soc-t31/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/asm/mach-generic -Wno-array-bounds -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -Wno-attributes -Wno-unused-variable -Wno-incompatible-pointer-types -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -DCC_HAVE_ASM_GOTO -DRELEASE -DUSER_BIT_32 -DKERNEL_BIT_32 -Wno-date-time -D_GNU_SOURCE -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -DCONFIG_VIDEO_V4L2=y -DCONFIG_MEDIA_SUPPORT=y -DHAS_V4L2_SUPPORT=1 -DHAS_MEDIA_SUPPORT=1 -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/include -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/include -DCONFIG_PWM0 -DCONFIG_PWM1 -DCONFIG_PWM2 -DCONFIG_PWM3  -DMODULE -mlong-calls  -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(gc2053)"  -D"KBUILD_MODNAME=KBUILD_STR(sensor_gc2053_t31)" -c -o /home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/t31/gc2053.o /home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/t31/gc2053.c
+In file included from /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h:4,
+                 from <command-line>:
+include/generated/autoconf.h:142:9: warning: "CONFIG_MEDIA_SUPPORT" redefined
+  142 | #define CONFIG_MEDIA_SUPPORT 1
+      |         ^~~~~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+include/generated/autoconf.h:424:9: warning: "CONFIG_VIDEO_V4L2" redefined
+  424 | #define CONFIG_VIDEO_V4L2 1
+      |         ^~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+  mipsel-linux-gcc -Wp,-MD,/home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/common/.sensor-info.o.d -nostdinc -isystem /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/per-package/toolchain-external-custom/host/opt/ext-toolchain/bin/../lib/gcc/mipsel-thingino-linux-musl/14.3.0/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include -Iarch/mips/include/generated  -Iinclude -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/uapi -Iarch/mips/include/generated/uapi -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/uapi -Iinclude/generated/uapi -include /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h -D__KERNEL__ -DVMLINUX_LOAD_ADDRESS=0xffffffff80010000 -DDATAOFFSET=0 -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -fno-delete-null-pointer-checks -std=gnu11 -Os -Wno-maybe-uninitialized -mno-check-zero-division -mabi=32 -mgp32 -mfp32 -G 0 -mno-abicalls -fno-pic -pipe -msoft-float -ffreestanding -march=mips32 -Wa,-mips32 -Wa,--trap -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/core/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/soc-t31/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/asm/mach-generic -Wno-array-bounds -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -Wno-attributes -Wno-unused-variable -Wno-incompatible-pointer-types -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -DCC_HAVE_ASM_GOTO -DRELEASE -DUSER_BIT_32 -DKERNEL_BIT_32 -Wno-date-time -D_GNU_SOURCE -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -DCONFIG_VIDEO_V4L2=y -DCONFIG_MEDIA_SUPPORT=y -DHAS_V4L2_SUPPORT=1 -DHAS_MEDIA_SUPPORT=1 -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/include -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/include -DCONFIG_PWM0 -DCONFIG_PWM1 -DCONFIG_PWM2 -DCONFIG_PWM3  -DMODULE -mlong-calls  -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(sensor_info)"  -D"KBUILD_MODNAME=KBUILD_STR(sensor_gc2053_t31)" -c -o /home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/common/sensor-info.o /home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/common/sensor-info.c
+In file included from /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h:4,
+                 from <command-line>:
+include/generated/autoconf.h:142:9: warning: "CONFIG_MEDIA_SUPPORT" redefined
+  142 | #define CONFIG_MEDIA_SUPPORT 1
+      |         ^~~~~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+include/generated/autoconf.h:424:9: warning: "CONFIG_VIDEO_V4L2" redefined
+  424 | #define CONFIG_VIDEO_V4L2 1
+      |         ^~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+  mipsel-linux-gcc -Wp,-MD,/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/.tx-isp-module.o.d -nostdinc -isystem /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/per-package/toolchain-external-custom/host/opt/ext-toolchain/bin/../lib/gcc/mipsel-thingino-linux-musl/14.3.0/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include -Iarch/mips/include/generated  -Iinclude -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/uapi -Iarch/mips/include/generated/uapi -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/uapi -Iinclude/generated/uapi -include /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h -D__KERNEL__ -DVMLINUX_LOAD_ADDRESS=0xffffffff80010000 -DDATAOFFSET=0 -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -fno-delete-null-pointer-checks -std=gnu11 -Os -Wno-maybe-uninitialized -mno-check-zero-division -mabi=32 -mgp32 -mfp32 -G 0 -mno-abicalls -fno-pic -pipe -msoft-float -ffreestanding -march=mips32 -Wa,-mips32 -Wa,--trap -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/core/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/soc-t31/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/asm/mach-generic -Wno-array-bounds -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -Wno-attributes -Wno-unused-variable -Wno-incompatible-pointer-types -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -DCC_HAVE_ASM_GOTO -DRELEASE -DUSER_BIT_32 -DKERNEL_BIT_32 -Wno-date-time -D_GNU_SOURCE -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -DCONFIG_VIDEO_V4L2=y -DCONFIG_MEDIA_SUPPORT=y -DHAS_V4L2_SUPPORT=1 -DHAS_MEDIA_SUPPORT=1 -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/include -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/include -DCONFIG_PWM0 -DCONFIG_PWM1 -DCONFIG_PWM2 -DCONFIG_PWM3  -DMODULE -mlong-calls  -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(tx_isp_module)"  -D"KBUILD_MODNAME=KBUILD_STR(tx_isp_t31)" -c -o /home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.o /home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c
+In file included from /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h:4,
+                 from <command-line>:
+include/generated/autoconf.h:142:9: warning: "CONFIG_MEDIA_SUPPORT" redefined
+  142 | #define CONFIG_MEDIA_SUPPORT 1
+      |         ^~~~~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+include/generated/autoconf.h:424:9: warning: "CONFIG_VIDEO_V4L2" redefined
+  424 | #define CONFIG_VIDEO_V4L2 1
+      |         ^~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c: In function ‘system_reg_write’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:634:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+  634 |     void __iomem *reg_base = ourISPdev->core_regs;
+      |     ^~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:648:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+  648 |     extern uint32_t vic_start_ok; /* set when VIC is running/streaming */
+      |     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c: In function ‘tx_isp_disable_irq’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:1559:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 1559 |     int irq_num = *(int*)arg1;
+      |     ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c: In function ‘restore_isp_control_interrupt_registers_after_reset’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:1582:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 1582 |     void __iomem *core_regs = ourISPdev->core_dev->core_regs;
+      |     ^~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c: In function ‘tx_isp_enable_irq’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:1630:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 1630 |     int irq_num = *(int*)arg1;
+      |     ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c: In function ‘isp_vic_interrupt_service_routine’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:1715:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 1715 |         u32 reg_1e8, reg_1e0, reg_1ec, reg_1e4;
+      |         ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:2115:17: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2115 |                 u32 addr_ctl;
+      |                 ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:2128:17: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2128 |                 u32 reg_val = readl(vic_regs + 0x104);
+      |                 ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c: In function ‘tx_isp_video_link_stream’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:2583:33: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2583 |                                 struct tx_isp_subdev *a0_1 = *s0_1;
+      |                                 ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c: In function ‘tx_isp_video_s_stream’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:2685:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2685 |         struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)dev->vic_dev;
+      |         ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:2731:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2731 |         struct tx_isp_subdev *csi_sd = tx_isp_get_csi_subdev(dev);
+      |         ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:2746:21: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2746 |                     extern void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev);
+      |                     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:2763:21: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2763 |                     extern void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev);
+      |                     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:2858:33: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2858 |                                 struct tx_isp_subdev *a0_1 = *s0_1;
+      |                                 ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c: In function ‘frame_channel_unlocked_ioctl’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:3152:36: warning: taking address of packed member of ‘struct video_buffer’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+ 3152 |                     INIT_LIST_HEAD(&buffer->list); // Initialize list head
+      |                                    ^~~~~~~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:3295:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3295 |         void *buffer_struct = fcd->buffer_array[buffer.index];
+      |         ^~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:3317:13: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3317 |             int event_result = tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &buffer);
+      |             ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:3333:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3333 |         int buffer_size = state->width * state->height * 2;
+      |         ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:3403:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3403 |         struct video_buffer *video_buffer = NULL;
+      |         ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:3433:21: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3433 |                     u32 slot = (cur_idx + 1) % nslots;
+      |                     ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:3476:32: warning: taking address of packed member of ‘struct video_buffer’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+ 3476 |                 INIT_LIST_HEAD(&video_buffer->list);
+      |                                ^~~~~~~~~~~~~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:3480:27: warning: taking address of packed member of ‘struct video_buffer’ may result in an unaligned pointer value [-Waddress-of-packed-member]
+ 3480 |             list_add_tail(&video_buffer->list, &state->queued_buffers);
+      |                           ^~~~~~~~~~~~~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:3637:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3637 |         extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+      |         ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:3972:13: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3972 |             int core_init_ret = ourISPdev->core_dev->sd.ops->core->init(&ourISPdev->core_dev->sd, 1);
+      |             ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:4034:21: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4034 |                     int er = tx_isp_send_event_to_remote(vic_sd, 0x3000005, node);
+      |                     ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c: In function ‘tx_isp_unlocked_ioctl’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:4145:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4145 |     union {
+      |     ^~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:4251:17: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4251 |                 struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+      |                 ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:4272:17: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4272 |                 struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+      |                 ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:4368:13: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4368 |             struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+      |             ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:4381:13: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4381 |             struct tx_isp_sensor *sensor = tx_isp_get_sensor();
+      |             ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:4530:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4530 |         void *core_dev = isp_dev->core_dev;
+      |         ^~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:4537:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4537 |         int width, height;
+      |         ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:4558:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4558 |         int t0_3 = height << 3;
+      |         ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:4590:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4590 |         struct {
+      |         ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:4634:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4634 |         uint32_t link_config = var_98.as_uint32;
+      |         ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:4674:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4674 |         char sensor_name[32];
+      |         ^~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:4705:13: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4705 |             int32_t ret = sd->ops->sensor->ioctl(sd, 0x2000000, sensor_data);
+      |             ^~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:4763:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4763 |         int32_t ret = tx_isp_sensor_operation_helper(isp_dev, 0x2000004, &var_98);
+      |         ^~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:4831:13: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4831 |             int32_t copy_to_ret = copy_to_user((void __user *)arg, &var_98, 0x38);
+      |             ^~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c: In function ‘tx_isp_platform_probe’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:5027:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 5027 |     unsigned long rmem_base, rmem_size;
+      |     ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c: In function ‘tx_isp_create_graph_and_nodes’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:5385:21: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 5385 |                     void *proc_private_data = driver_data;
+      |                     ^~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:5394:21: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 5394 |                     struct proc_dir_entry *proc_entry = proc_create_data(
+      |                     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c: In function ‘tx_isp_exit’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:5505:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 5505 |         int isp_irq = (ourISPdev->core_dev) ? ourISPdev->core_dev->irq : -1;
+      |         ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:5556:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 5556 |         extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+      |         ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c: In function ‘ispcore_activate_module’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:5699:17: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 5699 |                 struct tx_isp_subdev *vic_subdev = &vic_dev->sd;
+      |                 ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:5753:21: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 5753 |                     void __iomem *isp_base = vic_dev->vic_regs - 0x9a00;
+      |                     ^~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:5779:21: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 5779 |                     struct tx_isp_subdev *sd = (struct tx_isp_subdev *)current_subdev;
+      |                     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c: In function ‘ispmodule_ip_done_irq_handler’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:5959:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 5959 |     extern atomic64_t frame_done_cnt;
+      |     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c: In function ‘tx_isp_send_event_to_remote’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:6023:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 6023 |     struct tx_isp_event_dispatch *dispatch = (struct tx_isp_event_dispatch *)sd->host_priv;
+      |     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:6031:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 6031 |     int (*handler)(void *, int, void *) = dispatch->handler_table->event_handler;
+      |     ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c: In function ‘tisp_ae1_expt’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:6150:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 6150 |     uint32_t integration_time = (arg1 * arg2) / arg3;
+      |     ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c: In function ‘tisp_set_sensor_integration_time_short’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:6166:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 6166 |     extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+      |     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c: In function ‘tisp_set_sensor_analog_gain_short’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:6197:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 6197 |     extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+      |     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c: In function ‘subdev_sensor_ops_ioctl’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:6265:17: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 6265 |                 uint32_t *sensor_data = (uint32_t *)arg;
+      |                 ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:6271:17: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 6271 |                 struct i2c_adapter *adapter = i2c_get_adapter(i2c_adapter_num);
+      |                 ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:6278:17: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 6278 |                 struct i2c_board_info sensor_board_info;
+      |                 ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:6287:17: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 6287 |                 struct i2c_client *client = isp_i2c_new_subdev_board(adapter, &sensor_board_info);
+      |                 ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c: In function ‘subdev_sensor_ops_set_input’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:6505:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 6505 |     extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+      |     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:6534:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 6534 |     struct tx_isp_subdev *found_sensor = NULL;
+      |     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c: In function ‘ispcore_sensor_ops_release_all_sensor’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:6673:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 6673 |     extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+      |     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c: In function ‘tisp_set_ae1_ag’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:6901:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 6901 |     extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+      |     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c: In function ‘tisp_ae1_ctrls_update’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:6933:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 6933 |     uint32_t v1_1 = data_c4700;
+      |     ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:6943:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 6943 |     uint32_t v0_5 = tisp_math_exp2(data_b2ed4, 0x10, 0xa);
+      |     ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:6954:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 6954 |     uint32_t v0_9 = data_c4704;
+      |     ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:6964:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 6964 |     uint32_t v1_5 = data_c4708;
+      |     ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:6970:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 6970 |     uint32_t v1_6 = data_c4730;
+      |     ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:6980:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 6980 |     uint32_t dmsc_val = dmsc_sp_ud_ns_thres_array;
+      |     ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:6988:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 6988 |     uint32_t v0_19 = data_c4734;
+      |     ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:6996:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 6996 |     uint32_t v1_11 = data_c4738;
+      |     ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c: In function ‘tisp_ae1_process_impl’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx-isp-module.c:7033:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 7033 |     uint32_t v0_1 = data_b0cec;
+      |     ^~~~~~~~
+  mipsel-linux-gcc -Wp,-MD,/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/.tx_isp_core.o.d -nostdinc -isystem /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/per-package/toolchain-external-custom/host/opt/ext-toolchain/bin/../lib/gcc/mipsel-thingino-linux-musl/14.3.0/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include -Iarch/mips/include/generated  -Iinclude -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/uapi -Iarch/mips/include/generated/uapi -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/uapi -Iinclude/generated/uapi -include /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h -D__KERNEL__ -DVMLINUX_LOAD_ADDRESS=0xffffffff80010000 -DDATAOFFSET=0 -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -fno-delete-null-pointer-checks -std=gnu11 -Os -Wno-maybe-uninitialized -mno-check-zero-division -mabi=32 -mgp32 -mfp32 -G 0 -mno-abicalls -fno-pic -pipe -msoft-float -ffreestanding -march=mips32 -Wa,-mips32 -Wa,--trap -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/core/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/xburst/soc-t31/include -I/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/asm/mach-generic -Wno-array-bounds -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -Wno-attributes -Wno-unused-variable -Wno-incompatible-pointer-types -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -DCC_HAVE_ASM_GOTO -DRELEASE -DUSER_BIT_32 -DKERNEL_BIT_32 -Wno-date-time -D_GNU_SOURCE -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -I/home/matteius/isp-latest/external/ingenic-sdk/include -DCONFIG_VIDEO_V4L2=y -DCONFIG_MEDIA_SUPPORT=y -DHAS_V4L2_SUPPORT=1 -DHAS_MEDIA_SUPPORT=1 -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/include -I/home/matteius/isp-latest/external/ingenic-sdk/3.10/sensor-src/include -DCONFIG_PWM0 -DCONFIG_PWM1 -DCONFIG_PWM2 -DCONFIG_PWM3  -DMODULE -mlong-calls  -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(tx_isp_core)"  -D"KBUILD_MODNAME=KBUILD_STR(tx_isp_t31)" -c -o /home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.o /home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c
+In file included from /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/linux/kconfig.h:4,
+                 from <command-line>:
+include/generated/autoconf.h:142:9: warning: "CONFIG_MEDIA_SUPPORT" redefined
+  142 | #define CONFIG_MEDIA_SUPPORT 1
+      |         ^~~~~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+include/generated/autoconf.h:424:9: warning: "CONFIG_VIDEO_V4L2" redefined
+  424 | #define CONFIG_VIDEO_V4L2 1
+      |         ^~~~~~~~~~~~~~~~~
+<command-line>: note: this is the location of the previous definition
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘ispcore_video_s_stream’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:375:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+  375 |     int v0_3 = vic_state;
+      |     ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:516:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+  516 |     struct tx_isp_core_device *core_dev = isp_dev->core_dev;
+      |     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘ispcore_irq_thread_handle’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:595:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+  595 |         extern atomic64_t frame_done_cnt;
+      |         ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘ispcore_link_setup’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:677:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+  677 |         extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+      |         ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:693:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+  693 |         extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+      |         ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘tx_isp_core_enable_irq’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:830:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+  830 |     void __iomem *core = core_dev->core_regs;
+      |     ^~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘isp_core_tunning_open’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:1274:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 1274 |     static int tuning_state = 0;
+      |     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘isp_core_tunning_release’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:1302:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 1302 |     static int tuning_state = 0;
+      |     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘isp_info_show_isra_0’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:1440:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 1440 |     static int device_state = 2;  /* Default ready state */
+      |     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘ispcore_sensor_ops_ioctl’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:1606:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 1606 |     extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+      |     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘ip_done_interrupt_static’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:1818:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 1818 |     uint32_t reg_val = system_reg_read(0xc);
+      |     ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘ispcore_interrupt_service_routine’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:1882:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 1882 |         u32 verify_legacy = readl(isp_regs + 0xb4);
+      |         ^~~
+In file included from include/linux/kernel.h:14,
+                 from include/linux/cache.h:4,
+                 from include/linux/time.h:4,
+                 from include/linux/stat.h:18,
+                 from include/linux/module.h:10,
+                 from /home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:8:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:1935:88: error: ‘fs_work’ undeclared (first use in this function)
+ 1935 |             pr_debug("*** ISP CORE: fs_workqueue=%p, fs_work=%p ***\n", fs_workqueue, &fs_work);
+      |                                                                                        ^~~~~~~
+include/linux/dynamic_debug.h:79:38: note: in definition of macro ‘dynamic_pr_debug’
+   79 |                                    ##__VA_ARGS__);              \
+      |                                      ^~~~~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:1935:13: note: in expansion of macro ‘pr_debug’
+ 1935 |             pr_debug("*** ISP CORE: fs_workqueue=%p, fs_work=%p ***\n", fs_workqueue, &fs_work);
+      |             ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:1935:88: note: each undeclared identifier is reported only once for each function it appears in
+ 1935 |             pr_debug("*** ISP CORE: fs_workqueue=%p, fs_work=%p ***\n", fs_workqueue, &fs_work);
+      |                                                                                        ^~~~~~~
+include/linux/dynamic_debug.h:79:38: note: in definition of macro ‘dynamic_pr_debug’
+   79 |                                    ##__VA_ARGS__);              \
+      |                                      ^~~~~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:1935:13: note: in expansion of macro ‘pr_debug’
+ 1935 |             pr_debug("*** ISP CORE: fs_workqueue=%p, fs_work=%p ***\n", fs_workqueue, &fs_work);
+      |             ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:2100:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2100 |     int result = 1;  /* Binary Ninja: result = 1 */
+      |     ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:2116:17: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2116 |                 int result_1 = v0_47();
+      |                 ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘tx_isp_request_irq’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:2178:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2178 |     irq_handler_t top = tx_isp_core_irq_handle;
+      |     ^~~~~~~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘ispcore_slake_module’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:2410:21: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2410 |                     struct tx_isp_sensor_attribute *sensor_attr = NULL;
+      |                     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:2420:21: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2420 |                     int ret = ispcore_core_ops_init_with_sensor(isp_dev, sensor_attr);
+      |                     ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:2445:21: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2445 |                     uint32_t *vic_control_reg = (uint32_t *)((char *)vic_dev->vic_regs + 0x40cc);
+      |                     ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:2465:13: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2465 |             struct tx_isp_subdev *csi_sd = tx_isp_get_csi_subdev(isp_dev);
+      |             ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:2474:17: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2474 |                 int ret = csi_sd->ops->internal->slake_module(csi_sd);
+      |                 ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:2486:17: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2486 |                 int ret = vic_sd->ops->internal->slake_module(vic_sd);
+      |                 ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:2498:17: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2498 |                 int ret = fs_sd->ops->internal->slake_module(fs_sd);
+      |                 ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:2510:17: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2510 |                 int ret = core_sd->ops->internal->slake_module(core_sd);
+      |                 ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:2522:17: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2522 |                 int ret = sensor_sd->ops->internal->slake_module(sensor_sd);
+      |                 ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘ispcore_core_ops_init’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:2612:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2612 |     int32_t var_18 = 0;
+      |     ^~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:2750:17: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2750 |                 extern int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count);
+      |                 ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:2761:25: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2761 |                         int clk_ret = isp_subdev_init_clks(core_sd, core_sd->clk_num);
+      |                         ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:2769:25: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2769 |                         int clk_ret = isp_subdev_init_clks(csi_sd, csi_sd->clk_num);
+      |                         ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:2777:25: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2777 |                         int clk_ret = isp_subdev_init_clks(vic_sd, vic_sd->clk_num);
+      |                         ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:2785:17: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2785 |                 extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+      |                 ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:2812:21: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2812 |                     u32 pend_legacy = readl(core + 0xb4);
+      |                     ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘ispcore_core_ops_init_with_sensor’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:2921:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2921 |         struct {
+      |         ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:2948:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 2948 |         struct {
+      |         ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘isp_mem_init’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:3064:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3064 |     unsigned long rmem_base, rmem_size;
+      |     ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:3096:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3096 |     int ispmem_1 = ispmem.ispmem_value;
+      |     ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘ispcore_frame_channel_streamoff’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:3476:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3476 |         struct tx_isp_subdev *sd = (struct tx_isp_subdev *)v0;
+      |         ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:3481:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3481 |     struct tx_isp_core_device *core_dev = (struct tx_isp_core_device *)s0;
+      |     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:3503:13: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3503 |             int32_t a1_2 = var_28;
+      |             ^~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:3508:17: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3508 |                 extern int tisp_channel_stop(uint32_t channel_id);
+      |                 ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘tisp_channel_attr_set’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:3578:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3578 |     extern uint8_t ds0_attr[], ds1_attr[], ds2_attr[];
+      |     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:3587:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3587 |     int32_t tispinfo_2 = tispinfo_1;
+      |     ^~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:3617:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3617 |     int32_t tispinfo_4;
+      |     ^~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:3630:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3630 |     int32_t s1_2 = ((channel_id + 0x99) << 8);
+      |     ^~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘tisp_channel_fifo_clear’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:3676:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3676 |     int32_t s1 = ((channel_id + 0x98) << 8);
+      |     ^~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘tisp_channel_stop’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:3722:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3722 |     extern uint32_t vic_start_ok;
+      |     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘tisp_s_fcrop_control’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:3772:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3772 |     int32_t arg_4 = arg2;
+      |     ^~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:3777:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3777 |     uint32_t msca_ch_en_4;
+      |     ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:3792:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3792 |         uint32_t msca_ch_en_2 = msca_ch_en;
+      |         ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:3801:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3801 |         uint32_t msca_ch_en_3 = msca_ch_en;
+      |         ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:3820:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3820 |     uint32_t a1_15 = 0xf0000 | msca_ch_en_4;
+      |     ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:3824:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3824 |     extern uint32_t vic_start_ok;
+      |     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘tisp_g_fcrop_control’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:3847:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3847 |         extern uint8_t tispinfo[];
+      |         ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:3850:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3850 |         extern uint32_t data_b2f34;
+      |         ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘ispcore_pad_event_handle’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:3917:17: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3917 |                 int32_t v0_6 = *((uint32_t*)a1_3 + 1);
+      |                 ^~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:3948:21: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3948 |                     struct tx_isp_subdev *sd_10 = (struct tx_isp_subdev *)v0_10;
+      |                     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:3972:29: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 3972 |                             void* a0_3 = *((void**)s2);
+      |                             ^~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:4012:25: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4012 |                         uint32_t a0_25 = (uint32_t)arg1[1] & 0xff; /* zx.d(arg1[1].b) */
+      |                         ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:4054:21: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4054 |                     struct tx_isp_subdev *sd_6 = (struct tx_isp_subdev *)v1_6;
+      |                     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:4062:13: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4062 |             void* s2_1 = (void*)arg1[8];
+      |             ^~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:4085:13: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4085 |             struct frame_channel_binary_ninja *channel_s2 = (struct frame_channel_binary_ninja *)s2_1;
+      |             ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:4094:17: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4094 |                 uint32_t a1_6 = var_58;
+      |                 ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:4118:13: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4118 |             void* v0_21;  /* Removed const qualifier */
+      |             ^~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:4139:21: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4139 |                     struct tx_isp_subdev *sd_34 = (struct tx_isp_subdev *)s3_4;
+      |                     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:4159:21: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4159 |                     struct frame_channel_binary_ninja *channel_s1_2 = (struct frame_channel_binary_ninja *)s1_2;
+      |                     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:4168:21: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4168 |                     int32_t v0_26 = ((*((uint32_t*)s1_2 + 2) + 0xf) & 0xfffffff0); /* (*(s1_2 + 8) + 0xf) & 0xfffffff0 */
+      |                     ^~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:4171:21: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4171 |                     int32_t a0_13 = *((uint32_t*)arg3 + 2);   /* *(arg3 + 8) */
+      |                     ^~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:4176:21: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4176 |                     uint32_t base_addr = *((uint32_t*)s3_4 + 0x2e);   /* *(s3_4 + 0xb8) */
+      |                     ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:4224:21: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4224 |                     struct tx_isp_subdev *sd_17 = (struct tx_isp_subdev *)v1_17;
+      |                     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘tx_isp_create_framechan_devices’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:4361:9: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4361 |         extern const struct file_operations frame_channel_fops;
+      |         ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘tx_isp_core_probe’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:4453:13: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4453 |             int channel_idx;
+      |             ^~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘ispcore_sync_sensor_attr’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:5020:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 5020 |     extern struct tx_isp_sensor *tx_isp_get_sensor(void);
+      |     ^~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c: In function ‘tx_isp_link_core_device’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.c:5462:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 5462 |     int slot = -1;
+      |     ^~~
+make[1]: *** [scripts/Makefile.build:309: /home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_core.o] Error 1
+make: *** [Makefile:1231: _module_/home/matteius/isp-latest/external/ingenic-sdk] Error 2
+make: Leaving directory '/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81'
+[0;31m[ERROR][0m Build failed

@@ -1,0 +1,12 @@
+=== ISP Driver Test Script ===
+Remote host: 192.168.50.211
+Monitoring interval: 0.5s
+Monitor iterations: 10
+
+[1/9] Uploading trace module...
+  ⚠️  WARNING: Trace module not found, skipping
+[2/9] Removing old trace file...
+  ✓ Old trace removed
+[3/9] Checking if modules are on device...
+ls: /tmp/*.ko: No such file or directory
+ERROR: Modules not found on device. Please run build script first.

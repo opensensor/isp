@@ -2860,6 +2860,21 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         if (w == 0) w = 1280; /* safe fallback */
                         stride = w << 1;      /* RAW10-like: 2 bytes/pixel */
 
+
+                        /* CRITICAL FIX: Write ISP Control registers BEFORE gates (reference trace lines 56-63) */
+                        /* These are PREREQUISITES for gates to work - without them, gates won't open! */
+                        pr_info("*** CRITICAL FIX: Writing ISP Control registers (0x9804-0x98a8) BEFORE gates ***\n");
+                        writel(0x3f00, core + 0x9804);       /* ISP Control - channel enable */
+                        writel(0x7800438, core + 0x9864);    /* ISP Control - dimensions */
+                        writel(0xc0000000, core + 0x987c);   /* ISP Control - config */
+                        writel(0x1, core + 0x9880);          /* ISP Control - enable */
+                        writel(0x1, core + 0x9884);          /* ISP Control - enable */
+                        writel(0x1010001, core + 0x9890);    /* ISP Control - config */
+                        writel(0x1010001, core + 0x989c);    /* ISP Control - config */
+                        writel(0x1010001, core + 0x98a8);    /* ISP Control - config */
+                        wmb();
+                        pr_info("*** ISP Control registers written - gates should now be able to open ***\n");
+
                         /* Program only the minimally safe core VIC regs seen in reference */
                         writel(0x1, core + 0x9a34);   /* enable bit observed in reference */
                         writel(0x1, core + 0x9a88);   /* enable/route latch bit */
@@ -2877,11 +2892,13 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         wmb();
                         pr_info("*** CRITICAL FIX: Wrote 0x1 to 0x9a94 (gate enable) BEFORE gate writes ***\n");
 
-                        /* Now (re)assert the core VIC IRQ gate (working values 1/0) */
-                        writel(0x00000001, core + 0x9ac0);
-                        writel(0x00000000, core + 0x9ac8);
+                        /* CRITICAL FIX: Binary Ninja reference trace shows 0x200/0x200, not 0x1/0x0! */
+                        /* reference-trace.txt line 74-75: write at offset 0x9ac0: 0x0 -> 0x200 */
+                        /*                                  write at offset 0x9ac8: 0x0 -> 0x200 */
+                        writel(0x00000200, core + 0x9ac0);
+                        writel(0x00000200, core + 0x9ac8);
                         wmb();
-                        pr_info("*** CORE VIC ROUTE INIT: [9a00]=0x%08x [9a04]=0x%08x [9a2c]=0x%08x [9a34]=0x%08x [9a88]=0x%08x [9a80]=0x%08x [9a98]=0x%08x; GATE [9ac0]=0x%08x [9ac8]=0x%08x ***\n",
+                        pr_info("*** CORE VIC ROUTE INIT: [9a00]=0x%08x [9a04]=0x%08x [9a2c]=0x%08x [9a34]=0x%08x [9a88]=0x%08x [9a80]=0x%08x [9a98]=0x%08x; GATE [9ac0]=0x%08x [9ac8]=0x%08x (BINARY NINJA: 0x200/0x200) ***\n",
                                 readl(core + 0x9a00), readl(core + 0x9a04), readl(core + 0x9a2c),
                                 readl(core + 0x9a34), readl(core + 0x9a88), readl(core + 0x9a80), readl(core + 0x9a98),
                                 readl(core + 0x9ac0), readl(core + 0x9ac8));
