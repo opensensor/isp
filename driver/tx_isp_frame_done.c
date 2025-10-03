@@ -30,7 +30,7 @@ void isp_frame_done_wakeup(void)
     /* CRITICAL FIX: Frame counter now managed by frame_done_cnt only */
     extern struct tx_isp_dev *ourISPdev;
     if (ourISPdev) {
-        pr_info("*** FRAME SYNC: Frame done count = %lld ***\n",
+        printk(KERN_ALERT "*** FRAME SYNC: Frame done count = %lld ***\n",
                 atomic64_read(&frame_done_cnt));
     }
 
@@ -40,7 +40,7 @@ void isp_frame_done_wakeup(void)
     /* Wake up any processes waiting for frame completion */
     wake_up(&frame_done_wait);
 
-    pr_info("*** ISP FRAME DONE WAKEUP: Frame %lld ready for processing ***\n",
+    printk(KERN_ALERT "*** ISP FRAME DONE WAKEUP: Frame %lld ready for processing ***\n",
              atomic64_read(&frame_done_cnt));
 }
 EXPORT_SYMBOL(isp_frame_done_wakeup);
