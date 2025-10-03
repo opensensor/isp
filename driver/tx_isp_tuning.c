@@ -9857,24 +9857,11 @@ struct tx_isp_sensor *tx_isp_get_sensor(void)
 
     pr_info("*** tx_isp_get_sensor: Searching subdev array for sensors ***\n");
 
-    /* Check if any real sensor modules are actually loaded */
-    bool real_sensor_found = false;
-    for (int i = 5; i < ISP_MAX_SUBDEVS; i++) {
-        if (ourISPdev->subdevs[i] != NULL) {
-            real_sensor_found = true;
-            break;
-        }
-    }
-
-    if (!real_sensor_found) {
-        pr_info("*** tx_isp_get_sensor: No real sensor modules found - returning NULL ***\n");
-        return NULL;
-    }
-
-    /* CRITICAL FIX: Search for REAL sensor subdevs starting from index 4 */
-    /* Subdev layout: 0=CSI, 1=VIC, 2=VIN, 3=Core, 4+=REAL_SENSORS */
+    /* CRITICAL FIX: Search for REAL sensor subdevs starting from index 0 */
+    /* The sensor can be at ANY index depending on registration order */
+    /* We identify sensors by checking if they have ops->sensor and are NOT core devices */
     struct tx_isp_subdev *sd = NULL;
-    for (int i = 4; i < ISP_MAX_SUBDEVS; i++) {
+    for (int i = 0; i < ISP_MAX_SUBDEVS; i++) {
         struct tx_isp_subdev *candidate = ourISPdev->subdevs[i];
         if (candidate && candidate->ops && candidate->ops->sensor) {
             /* Additional check: make sure this is NOT a core device */
@@ -9910,12 +9897,11 @@ struct tx_isp_sensor *tx_isp_get_sensor(void)
                     pr_err("*** tx_isp_get_sensor: Failed to allocate sensor structure ***\n");
                     return NULL;
                 }
-                /* CRITICAL FIX: Don't copy entire subdev structure - just link pointers */
-                /* Copying the entire subdev structure causes pointer corruption */
-                sensor->sd.isp = sd->isp;  /* Link to ISP device */
-                sensor->sd.pdev = sd->pdev;  /* Link to platform device */
-                sensor->sd.ops = sd->ops;   /* Link to operations */
-                /* Don't copy other fields that may contain invalid pointers */
+                /* CRITICAL FIX: Copy the ENTIRE subdev structure to sensor->sd */
+                /* This ensures all fields (including dev, pdev, ops, regs, etc.) are properly initialized */
+                /* VIN init will crash trying to access uninitialized fields at offset 2 if we don't do this! */
+                memcpy(&sensor->sd, sd, sizeof(struct tx_isp_subdev));
+                pr_info("*** tx_isp_get_sensor: Copied entire subdev structure to sensor->sd ***\n");
                 tx_isp_set_subdev_hostdata(sd, sensor);
             }
             pr_info("*** tx_isp_get_sensor: Found real sensor: %p ***\n", sensor);

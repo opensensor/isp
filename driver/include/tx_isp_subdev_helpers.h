@@ -86,8 +86,9 @@ static inline struct tx_isp_subdev *tx_isp_find_sensor_subdev(struct tx_isp_dev 
         return NULL;
     }
 
-    /* CRITICAL FIX: Start search from index 4 to avoid finding ISP core devices */
-    for (i = 4; i < ISP_MAX_SUBDEVS; i++) {
+    /* CRITICAL FIX: Search ALL slots (0 to ISP_MAX_SUBDEVS) to find sensor */
+    /* The sensor can be at any index depending on registration order */
+    for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
         struct tx_isp_subdev *sd = isp_dev->subdevs[i];
         if (sd && sd->ops && sd->ops->sensor) {
             /* Additional validation: make sure this is NOT an ISP core device */
@@ -151,11 +152,21 @@ static inline int tx_isp_find_free_subdev_slot(struct tx_isp_dev *isp_dev)
 static inline int tx_isp_register_subdev_by_name(struct tx_isp_dev *isp_dev, struct tx_isp_subdev *sd)
 {
     int slot;
-    
+    int i;
+
     if (!isp_dev || !sd) {
         return -1;
     }
-    
+
+    /* CRITICAL FIX: Check if this subdev is already registered to prevent duplicates */
+    for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+        if (isp_dev->subdevs[i] == sd) {
+            /* Already registered - return existing slot */
+            pr_info("*** tx_isp_register_subdev_by_name: DUPLICATE DETECTED - sd=%p already at slot %d ***\n", sd, i);
+            return i;
+        }
+    }
+
     slot = tx_isp_find_free_subdev_slot(isp_dev);
     if (slot >= 0) {
         isp_dev->subdevs[slot] = sd;

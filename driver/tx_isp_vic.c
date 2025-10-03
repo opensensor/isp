@@ -1539,6 +1539,40 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* Also enable the kernel IRQ line if it was registered earlier */
     enable_irq(37);
 
+    /* CRITICAL: Initialize ISP Core Control registers from working driver's STEP 3! */
+    /* These 0xb0xx registers configure the ISP pipeline and are ESSENTIAL for interrupts! */
+    if (ourISPdev && ourISPdev->core_regs) {
+        void __iomem *core = ourISPdev->core_regs;
+
+        pr_info("*** VIC INIT: Initializing ISP Core Control registers (STEP 3 from working driver) ***\n");
+
+        /* STEP 3: ISP Core Control registers - EXACT sequence from working driver */
+        writel(0xf001f001, core + 0xb004);
+        writel(0x40404040, core + 0xb008);
+        writel(0x40404040, core + 0xb00c);
+        writel(0x40404040, core + 0xb010);
+        writel(0x404040, core + 0xb014);
+
+        /* CRITICAL: Skip 0xb018-0xb024 - working driver says these "kill VIC interrupts"! */
+        pr_info("*** VIC INIT: Skipping Core Control registers 0xb018-0xb024 (kill VIC interrupts) ***\n");
+
+        writel(0x1000080, core + 0xb028);
+        writel(0x1000080, core + 0xb02c);
+        writel(0x100, core + 0xb030);
+        writel(0xffff0100, core + 0xb034);
+        writel(0x1ff00, core + 0xb038);
+        writel(0x103, core + 0xb04c);
+        writel(0x3, core + 0xb050);
+        writel(0x1fffff, core + 0xb07c);
+        writel(0x1fffff, core + 0xb080);
+        writel(0x1fffff, core + 0xb084);
+        writel(0x1fdeff, core + 0xb088);
+        writel(0x1fff, core + 0xb08c);
+        wmb();
+
+        pr_info("*** VIC INIT: ISP Core Control registers initialized! ***\n");
+    }
+
     return 0;
 }
 
