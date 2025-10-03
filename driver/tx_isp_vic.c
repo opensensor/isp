@@ -985,12 +985,15 @@ cleanup:
 }
 
 /* tx_isp_vic_start - Following EXACT Binary Ninja flow with reference driver sequences */
+
+/* tx_isp_vic_start - Following EXACT Binary Ninja flow with reference driver sequences */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_regs;
     struct tx_isp_sensor_attribute *sensor_attr;
     u32 interface_type, sensor_format;
     u32 timeout = 10000;
+    struct clk *isp_clk, *cgu_isp_clk, *csi_clk, *ipu_clk;
     void __iomem *cpm_regs;
     int ret;
 
@@ -1001,7 +1004,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     /* Binary Ninja: 00010244 void* $v1 = *(arg1 + 0x110) */
     if (!vic_dev) {
-        pr_info("*** CRITICAL: Invalid vic_dev pointer ***\n");
+        pr_err("*** CRITICAL: Invalid vic_dev pointer ***\n");
         return -EINVAL;
     }
 
@@ -1038,7 +1041,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     /* SAFETY: Check if sensor_attr is valid before accessing nested structures */
     if (!sensor_attr) {
-        pr_info("*** CRITICAL: sensor_attr is NULL ***\n");
+        pr_err("*** CRITICAL: sensor_attr is NULL ***\n");
         return -EINVAL;
     }
 
@@ -1056,13 +1059,33 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* Get VIC register base - offset 0xb8 in Binary Ninja */
     vic_regs = vic_dev->vic_regs;
     if (!vic_regs) {
-        pr_info("*** CRITICAL: No VIC register base ***\n");
+        pr_err("*** CRITICAL: No VIC register base ***\n");
         return -EINVAL;
     }
 
     /* Calculate base addresses for register blocks */
     void __iomem *main_isp_base = vic_regs - 0x9a00;
     void __iomem *csi_base = main_isp_base + 0x10000;
+
+    /* STEP 1: Enable clocks - Critical for VIC operation */
+    cgu_isp_clk = clk_get(NULL, "cgu_isp");
+    if (!IS_ERR(cgu_isp_clk)) {
+        clk_set_rate(cgu_isp_clk, 100000000);
+        ret = clk_prepare_enable(cgu_isp_clk);
+        if (ret == 0) {
+            pr_info("CGU_ISP clock enabled at 100MHz\n");
+        }
+    }
+
+    isp_clk = clk_get(NULL, "isp");
+    if (!IS_ERR(isp_clk)) {
+        clk_prepare_enable(isp_clk);
+    }
+
+    csi_clk = clk_get(NULL, "csi");
+    if (!IS_ERR(csi_clk)) {
+        clk_prepare_enable(csi_clk);
+    }
 
     /* STEP 2: CPM register setup */
     cpm_regs = ioremap(0x10000000, 0x1000);
@@ -1155,8 +1178,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             if (--timeout == 0) {
                 primary_val = readl(vic_regs + 0x0);
                 secondary_val = secondary_regs ? readl(secondary_regs + 0x0) : 0;
-                pr_info("*** VIC UNLOCK TIMEOUT: Primary=0x%08x, Secondary=0x%08x ***\n", primary_val, secondary_val);
-                pr_info("*** Continuing anyway to prevent infinite hang ***\n");
+                pr_err("*** VIC UNLOCK TIMEOUT: Primary=0x%08x, Secondary=0x%08x ***\n", primary_val, secondary_val);
+                pr_err("*** Continuing anyway to prevent infinite hang ***\n");
                 break;  /* Continue instead of returning error to prevent hang */
             }
         }
@@ -1178,10 +1201,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** VIC hardware should be ready - proceeding with unlock sequence ***\n");
 
         /* Binary Ninja: EXACT reference driver MIPI mode configuration */
-        /* Binary Ninja: 000107ec - Set CSI mode (match working logs) */
-        writel(2, vic_regs + 0xc);  /* Set VIC MIPI mode = 2 */
+        /* Binary Ninja: 000107ec - Set CSI mode */
+        writel(3, vic_regs + 0xc);  /* BINARY NINJA EXACT: VIC mode = 3 for MIPI interface */
         wmb();
-        pr_info("*** VIC: Set MIPI mode (2) to VIC control register 0xc (matches working logs) ***\n");
+        pr_info("*** VIC: Set MIPI mode (3) to VIC control register 0xc - BINARY NINJA EXACT ***\n");
 
         /* BINARY NINJA EXACT: All missing register configurations */
 
@@ -1243,18 +1266,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         wmb();
         pr_info("*** BINARY NINJA EXACT: Hardware sequence 2->4->wait(%d us)->1 ***\n", wait_count);
 
-
-        /* Re-assert stream control after this enable too, to guard against register clearing */
-        {
-            u32 buffer_count = vic_dev->active_buffer_count;
-            if (buffer_count == 0) buffer_count = 2;
-            if (buffer_count > 5) buffer_count = 5;
-            u32 stream_ctrl = (buffer_count << 16) | 0x80000020;
-            writel(stream_ctrl, vic_regs + 0x300);
-            wmb();
-            pr_info("*** POST-ENABLE(A): Rewrote VIC[0x300]=0x%x (buffer_count=%u) ***\n", stream_ctrl, buffer_count);
-        }
-
         /* Format detection logic - Binary Ninja 000107f8-00010a04 */
         u32 mipi_config;
 
@@ -1269,7 +1280,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
                             mipi_config = 0x50000;
                         }
                     } else {
-                        pr_info("Format 0x%x not supported\n", sensor_format);
+                        pr_err("Format 0x%x not supported\n", sensor_format);
                         return -1;
                     }
                 } else {
@@ -1282,7 +1293,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
                 } else if (gpio_mode == 4) {
                     mipi_config = 0x100000;
                 } else {
-                    pr_info("DVP mode config failed\n");
+                    pr_err("DVP mode config failed\n");
                     return -1;
                 }
             } else if (sensor_format >= 0x3013 && sensor_format < 0x3015) {
@@ -1292,7 +1303,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
                 } else if (gpio_mode == 4) {
                     mipi_config = 0x100000;
                 } else {
-                    pr_info("DVP mode config failed\n");
+                    pr_err("DVP mode config failed\n");
                     return -1;
                 }
             } else {
@@ -1316,11 +1327,11 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
                     } else if (gpio_mode == 4) {
                         mipi_config = 0x100000;
                     } else {
-                        pr_info("DVP mode config failed\n");
+                        pr_err("DVP mode config failed\n");
                         return -1;
                     }
                 } else {
-                    pr_info("Format 0x%x not supported\n", sensor_format);
+                    pr_err("Format 0x%x not supported\n", sensor_format);
                     return -1;
                 }
             } else if (sensor_format == 0x3008) {
@@ -1331,14 +1342,14 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             } else if (sensor_format == 0x300a) {
                 mipi_config = 0x20000;
             } else {
-                pr_info("Format 0x%x not supported\n", sensor_format);
+                pr_err("Format 0x%x not supported\n", sensor_format);
                 return -1;
             }
         } else if (sensor_format == 0x1008) {
             mipi_config = 0x80000;
         } else if (sensor_format >= 0x1009) {
             if ((sensor_format - 0x2002) >= 4) {
-                pr_info("Format 0x%x not supported\n", sensor_format);
+                pr_err("Format 0x%x not supported\n", sensor_format);
                 return -1;
             }
             mipi_config = 0xc0000;
@@ -1392,7 +1403,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             while (readl(vic_regs + 0x0) != 0) {
                 udelay(1);
                 if (--timeout == 0) {
-                    pr_info("VIC unlock timeout\n");
+                    pr_err("VIC unlock timeout\n");
                     return -ETIMEDOUT;
                 }
             }
@@ -1423,7 +1434,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         } else if (gpio_mode == 1) {
             bt601_config = 0x88060820;
         } else {
-            pr_info("Unsupported GPIO mode\n");
+            pr_err("Unsupported GPIO mode\n");
             return -1;
         }
 
@@ -1479,7 +1490,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(1, vic_regs + 0x0);
 
     } else {
-        pr_info("Unsupported interface type %d\n", interface_type);
+        pr_err("Unsupported interface type %d\n", interface_type);
         return -1;
     }
 
@@ -1533,45 +1544,12 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** ISP CORE: Hardware interrupt generation ENABLED during VIC init ***\n");
         pr_info("*** VIC->ISP: Pipeline should now generate hardware interrupts when VIC completes frames! ***\n");
     } else {
-        pr_info("*** ISP CORE IRQ: core_regs not mapped; unable to enable core interrupts here ***\n");
+        pr_warn("*** ISP CORE IRQ: core_regs not mapped; unable to enable core interrupts here ***\n");
     }
 
     /* Also enable the kernel IRQ line if it was registered earlier */
     enable_irq(37);
-
-    /* CRITICAL: Initialize ISP Core Control registers from working driver's STEP 3! */
-    /* These 0xb0xx registers configure the ISP pipeline and are ESSENTIAL for interrupts! */
-    if (ourISPdev && ourISPdev->core_regs) {
-        void __iomem *core = ourISPdev->core_regs;
-
-        pr_info("*** VIC INIT: Initializing ISP Core Control registers (STEP 3 from working driver) ***\n");
-
-        /* STEP 3: ISP Core Control registers - EXACT sequence from working driver */
-        writel(0xf001f001, core + 0xb004);
-        writel(0x40404040, core + 0xb008);
-        writel(0x40404040, core + 0xb00c);
-        writel(0x40404040, core + 0xb010);
-        writel(0x404040, core + 0xb014);
-
-        /* CRITICAL: Skip 0xb018-0xb024 - working driver says these "kill VIC interrupts"! */
-        pr_info("*** VIC INIT: Skipping Core Control registers 0xb018-0xb024 (kill VIC interrupts) ***\n");
-
-        writel(0x1000080, core + 0xb028);
-        writel(0x1000080, core + 0xb02c);
-        writel(0x100, core + 0xb030);
-        writel(0xffff0100, core + 0xb034);
-        writel(0x1ff00, core + 0xb038);
-        writel(0x103, core + 0xb04c);
-        writel(0x3, core + 0xb050);
-        writel(0x1fffff, core + 0xb07c);
-        writel(0x1fffff, core + 0xb080);
-        writel(0x1fffff, core + 0xb084);
-        writel(0x1fdeff, core + 0xb088);
-        writel(0x1fff, core + 0xb08c);
-        wmb();
-
-        pr_info("*** VIC INIT: ISP Core Control registers initialized! ***\n");
-    }
+    enable_irq(38);
 
     return 0;
 }
@@ -2566,184 +2544,79 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
 }
 
 /* VIC PIPO MDMA Enable function - EXACT Binary Ninja implementation */
-static void* vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
+
+/* VIC PIPO MDMA Enable function - EXACT Binary Ninja implementation */
+static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_base;
-    void __iomem *vic_ctrl;
     u32 width, height, stride;
-    unsigned int tx_isp_current_pixfmt = 0x3231564e; // NV12 TODO
 
-    pr_info("*** vic_pipo_mdma_enable: EXACT Binary Ninja MCP implementation ***\n");
+    pr_info("*** vic_pipo_mdma_enable: EXACT Binary Ninja implementation ***\n");
 
+    /* CRITICAL: Validate vic_dev structure first */
     if (!vic_dev) {
         pr_err("vic_pipo_mdma_enable: NULL vic_dev parameter\n");
-        return NULL;
+        return;
     }
 
     /* Binary Ninja EXACT: vic_base = *(arg1 + 0xb8) */
     vic_base = vic_dev->vic_regs;
-    vic_ctrl = vic_dev->vic_regs_control;
 
-    if (!vic_base) {
-        pr_err("vic_pipo_mdma_enable: NULL vic_regs\n");
-        return NULL;
+    /* CRITICAL: Validate VIC register base */
+    if (!vic_base ||
+        (unsigned long)vic_base < 0x80000000 ||
+        (unsigned long)vic_base == 0x735f656d) {
+        pr_err("vic_pipo_mdma_enable: Invalid VIC register base %p - ABORTING\n", vic_base);
+        return;
     }
 
+    /* CRITICAL FIX: Get dimensions from sensor attributes directly to prevent stale values */
+    /* The issue is vic_dev->width/height might be stale - get fresh values from sensor */
     /* CRITICAL FIX: Use cached sensor dimensions (safe for atomic context) */
     get_cached_sensor_dimensions(&width, &height);
 
-    /* Update vic_dev with correct dimensions */
-    vic_dev->width = width;
-    vic_dev->height = height;
+    /* CRITICAL: Ensure we have valid dimensions - USE ACTUAL SENSOR OUTPUT DIMENSIONS */
+    if (width == 0 || height == 0) {
+        /* Only override if dimensions are actually invalid (zero) */
+        width = 1920;  /* ACTUAL sensor output width (not total width) */
+        height = 1080; /* ACTUAL sensor output height (not total height) */
+        pr_info("*** DIMENSION FIX: Using ACTUAL sensor output dimensions %dx%d ***\n", width, height);
+        pr_info("*** CRITICAL: VIC must match sensor OUTPUT, not sensor TOTAL dimensions ***\n");
 
-    pr_info("vic_pipo_mdma_enable: Using cached sensor dimensions %dx%d (ATOMIC CONTEXT SAFE)\n", width, height);
+        /* Update vic_dev to prevent future mismatches */
+        vic_dev->width = width;
+        vic_dev->height = height;
+    } else {
+        pr_info("*** DIMENSION VALIDATION: Using existing valid dimensions %dx%d ***\n", width, height);
+    }
+
+    pr_info("vic_pipo_mdma_enable: FINAL dimensions=%dx%d (should be 2200x1418)\n", width, height);
 
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x308) = 1 */
     writel(1, vic_base + 0x308);
-    if (vic_ctrl)
-        writel(1, vic_ctrl + 0x308);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x308 = 1 (MDMA enable)\n");
 
-    /* Choose stride based on current V4L2 pixel format */
-    if (0 || tx_isp_current_pixfmt == 0x3231564e /* NV12 */) {
-        stride = width;        /* Y plane stride */
-        pr_info("vic_pipo_mdma_enable: Using NV12 stride=%u (pixfmt=0x%x)\n", stride, tx_isp_current_pixfmt);
-    } else if (tx_isp_current_pixfmt == 0x56595559 /* 'YUYV' */) {
-        stride = width << 1;   /* 2 bytes/pixel */
-        pr_info("vic_pipo_mdma_enable: Using YUYV stride=%u (pixfmt=0x%x)\n", stride, tx_isp_current_pixfmt);
-    } else {
-        stride = width << 1;   /* Default RAW-like */
-        pr_info("vic_pipo_mdma_enable: Using RAW-like stride=%u (pixfmt=0x%x)\n", stride, tx_isp_current_pixfmt);
-    }
+    /* Binary Ninja EXACT: int32_t $v1_1 = $v1 << 1 (stride = width * 2) */
+    stride = width << 1;
 
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x304) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
     writel((width << 16) | height, vic_base + 0x304);
-    if (vic_ctrl)
-        writel((width << 16) | height, vic_ctrl + 0x304);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x304 = 0x%x (dimensions %dx%d)\n",
             (width << 16) | height, width, height);
 
     /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x310) = $v1_1 */
     writel(stride, vic_base + 0x310);
-    if (vic_ctrl)
-        writel(stride, vic_ctrl + 0x310);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x310 = %d (stride)\n", stride);
 
     /* Binary Ninja EXACT: *(result + 0x314) = $v1_1 */
     writel(stride, vic_base + 0x314);
-    if (vic_ctrl)
-        writel(stride, vic_ctrl + 0x314);
     wmb();
     pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (stride)\n", stride);
 
-    /* CRITICAL FIX: Write actual buffer addresses to VIC hardware registers */
-    /* VIC hardware needs to know where to DMA frame data to generate interrupts */
-    pr_info("*** CRITICAL FIX: Writing buffer addresses to VIC hardware registers ***\n");
-
-    /* Access buffer addresses from VBM system - where QBUF actually stores them */
-    extern struct frame_channel_device frame_channels[];
-    struct tx_isp_channel_state *state = &frame_channels[0].state;
-
-    if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
-        int i;
-        int configured_count = 0;
-        pr_info("*** VIC BUFFER ACCESS: Found %d VBM buffer addresses at %p ***\n",
-                state->vbm_buffer_count, state->vbm_buffer_addresses);
-
-        /* CRITICAL FIX: If only 1 buffer, duplicate it for ping-pong operation */
-        if (state->vbm_buffer_count == 1) {
-            u32 buffer_addr = state->vbm_buffer_addresses[0];
-            pr_info("*** VIC BUFFER FIX: Only 1 VBM buffer (0x%x) - duplicating for ping-pong ***\n", buffer_addr);
-
-            /* Write same buffer address to both slots */
-            writel(buffer_addr, vic_base + 0x318);
-            writel(buffer_addr, vic_base + 0x31c);
-            if (vic_ctrl) {
-                writel(buffer_addr, vic_ctrl + 0x318);
-                writel(buffer_addr, vic_ctrl + 0x31c);
-            }
-            wmb();
-
-            configured_count = 2;  /* Report 2 buffers to hardware */
-            pr_info("*** VIC BUFFER 0: Wrote VBM address 0x%x to reg 0x318 ***\n", buffer_addr);
-            pr_info("*** VIC BUFFER 1: Wrote VBM address 0x%x to reg 0x31c (DUPLICATE) ***\n", buffer_addr);
-        } else {
-            /* Normal path: 2 or more buffers */
-            for (i = 0; i < state->vbm_buffer_count && i < 2; i++) {
-                u32 buffer_addr = state->vbm_buffer_addresses[i];
-                u32 reg_offset = 0x318 + (i * 4);  /* 0x318, 0x31c */
-
-                if (buffer_addr != 0) {
-                    writel(buffer_addr, vic_base + reg_offset);
-                    if (vic_ctrl)
-                        writel(buffer_addr, vic_ctrl + reg_offset);
-                    wmb();
-                    configured_count++;
-                    pr_info("*** VIC BUFFER %d: Wrote VBM address 0x%x to reg 0x%x ***\n",
-                            i, buffer_addr, reg_offset);
-                } else {
-                    pr_warn("*** VIC BUFFER %d: No VBM address available (0x0) ***\n", i);
-                }
-            }
-        }
-
-        if (configured_count == 0) configured_count = 1;  /* Ensure at least 1 buffer */
-        if (configured_count > 2) configured_count = 2;    /* Cap ring to 2 buffers */
-        vic_dev->active_buffer_count = configured_count;
-        pr_info("*** CRITICAL: VIC buffer addresses configured from VBM (count=%d) - hardware can now generate interrupts! ***\n",
-                configured_count);
-    } else {
-        /* CRITICAL FIX: Use fallback buffer addresses like working reference */
-        pr_warn("*** CRITICAL: No VBM buffer addresses - using fallback addresses from reserved memory ***\n");
-        pr_warn("*** vbm_buffer_addresses=%p, vbm_buffer_count=%d ***\n",
-               state->vbm_buffer_addresses, state->vbm_buffer_count);
-
-        /* Use reserved memory region 0x6300000; cap fallback to 2 buffers */
-        u32 frame_size = width * height * 2;  /* RAW10 = 2 bytes/pixel */
-        u32 base_addr = 0x6300000;  /* Reserved memory base from boot parameter rmem=29M@0x6300000 */
-
-        int i;
-        for (i = 0; i < 2; i++) {
-            u32 buffer_addr = base_addr + (i * frame_size);
-            u32 reg_offset = 0x318 + (i * 4);  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
-
-            writel(buffer_addr, vic_base + reg_offset);
-            if (vic_ctrl)
-                writel(buffer_addr, vic_ctrl + reg_offset);
-            wmb();
-            pr_info("*** VIC FALLBACK BUFFER %d: Wrote reserved memory address 0x%x to reg 0x%x ***\n",
-                    i, buffer_addr, reg_offset);
-        }
-        vic_dev->active_buffer_count = 2;
-        pr_info("*** CRITICAL: VIC fallback buffer addresses configured (count=2) - hardware can now generate interrupts! ***\n");
-    }
-
-    /* CRITICAL VERIFICATION: Ensure CONTROL bank has buffer addresses */
-    if (vic_ctrl) {
-        u32 ctrl_buf0 = readl(vic_ctrl + 0x318);
-        u32 ctrl_buf1 = readl(vic_ctrl + 0x31c);
-        u32 ctrl_mdma = readl(vic_ctrl + 0x308);
-        u32 ctrl_dim = readl(vic_ctrl + 0x304);
-
-        pr_info("*** VIC PIPO MDMA: CONTROL bank buffer verification ***\n");
-        pr_info("  CONTROL [0x308] MDMA enable = 0x%08x (should be 0x1)\n", ctrl_mdma);
-        pr_info("  CONTROL [0x304] dimensions = 0x%08x\n", ctrl_dim);
-        pr_info("  CONTROL [0x318] buffer 0 = 0x%08x\n", ctrl_buf0);
-        pr_info("  CONTROL [0x31c] buffer 1 = 0x%08x\n", ctrl_buf1);
-
-        if (ctrl_buf0 == 0 && ctrl_buf1 == 0) {
-            pr_err("*** CRITICAL: CONTROL bank buffers are 0 after write! ***\n");
-            pr_err("*** This will prevent VIC from generating interrupts! ***\n");
-        }
-        if (ctrl_mdma == 0) {
-            pr_err("*** CRITICAL: CONTROL bank MDMA is disabled! ***\n");
-        }
-    }
-
-    pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - VIC should now generate interrupts! ***\n");
+    pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - CONTROL LIMIT ERROR SHOULD BE FIXED ***\n");
 }
 
 /* ISPVIC Frame Channel S_Stream - EXACT Binary Ninja Implementation */

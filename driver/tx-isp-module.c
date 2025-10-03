@@ -580,7 +580,7 @@ static struct tx_isp_subdev_ops csi_subdev_ops;
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);  /* FIXED: Correct signature to match tx_isp_vic.c */
 int csi_video_s_stream(struct tx_isp_subdev *sd, int enable);
 void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev);
-irqreturn_t isp_vic_interrupt_service_routine(void *arg1);
+irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);  /* CRITICAL FIX: Correct IRQ handler signature */
 static int private_reset_tx_isp_module(int arg);
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
 
@@ -1658,9 +1658,11 @@ void tx_isp_enable_irq(void *arg1)
 irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 
 /* isp_vic_interrupt_service_routine - EXACT Binary Ninja MCP implementation */
-irqreturn_t isp_vic_interrupt_service_routine(void *arg1)
+/* CRITICAL FIX: Correct signature to match Linux IRQ handler requirements */
+irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
-    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)arg1;
+    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
+    void *arg1 = dev_id;  /* For compatibility with Binary Ninja variable names */
     struct tx_isp_vic_device *vic_dev;
     void __iomem *vic_regs;
     u32 v1_7, v1_10;
@@ -5880,7 +5882,8 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
     /* For VIC interrupts (IRQ 38), call the VIC handler directly */
     if (irq == 38) {
         /* Binary Ninja: Call VIC interrupt service routine with ISP device */
-        result = isp_vic_interrupt_service_routine(isp_dev);
+        /* CRITICAL FIX: Pass both irq and dev_id parameters */
+        result = isp_vic_interrupt_service_routine(irq, isp_dev);
         return result;
     }
 
