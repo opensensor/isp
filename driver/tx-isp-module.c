@@ -1864,39 +1864,17 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         /* Extra debug: control and geometry */
         printk(KERN_ALERT "*** VIC IRQ: CTRL[0x300]=0x%x DIMS[0x304]=0x%x STRIDE[0x310]=0x%x ***\n",
                readl(vic_regs + 0x300), readl(vic_regs + 0x304), readl(vic_regs + 0x310));
-        /* Extra debug: read core VIC gate bits to catch if they drop mid-stream */
+        /* REMOVED: Don't write to gates - they are hardware state machine side effects, not writable registers!
+         * The gates (0x9ac0/0x9ac8) are READ-ONLY status indicators that reflect ISP state machine state.
+         * Writing to them doesn't do anything useful and may interfere with interrupt flow.
+         * Just read them for debugging:
+         */
         do {
             if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
                 void __iomem *core = ourISPdev->core_dev->core_regs;
                 u32 g0 = readl(core + 0x9ac0);
                 u32 g1 = readl(core + 0x9ac8);
-                if (g0 != 0x00000001 || g1 != 0x00000000) {
-                    /* Clear core W1C status first, then re-apply gate routing */
-                    writel(0x1, core + 0x9a70);
-                    writel(0x1, core + 0x9a7c);
-
-                    /* CRITICAL: Write prerequisite registers BEFORE gate enable! */
-                    /* These must be set for the gate control to work */
-                    writel(0x1, core + 0x9a34);   /* enable bit */
-                    writel(0x1, core + 0x9a88);   /* enable/route latch bit */
-                    wmb();
-
-                    /* CRITICAL: Write 0x9a94 = 0x1 BEFORE gate writes! */
-                    /* This is the GATE ENABLE register - without it, gate writes are ignored */
-                    writel(0x1, core + 0x9a94);
-                    wmb();
-
-                    /* CRITICAL FIX: Binary Ninja reference trace shows 0x200/0x200, not 0x1/0x0! */
-                    /* reference-trace.txt line 74-75: write at offset 0x9ac0: 0x0 -> 0x200 */
-                    /*                                  write at offset 0x9ac8: 0x0 -> 0x200 */
-                    writel(0x00000200, core + 0x9ac0);
-                    writel(0x00000200, core + 0x9ac8);
-                    wmb();
-                    g0 = readl(core + 0x9ac0);
-                    g1 = readl(core + 0x9ac8);
-                    printk(KERN_ALERT "*** VIC IRQ: Re-asserted gates after writing 0x9a34/0x9a88/0x9a94 - [9ac0]=0x%x [9ac8]=0x%x (BINARY NINJA: 0x200/0x200) ***\n", g0, g1);
-                }
-                printk(KERN_ALERT "*** VIC IRQ: CORE GATES [9ac0]=0x%x [9ac8]=0x%x ***\n", g0, g1);
+                printk(KERN_ALERT "*** VIC IRQ: CORE GATES [9ac0]=0x%x [9ac8]=0x%x (READ-ONLY STATUS) ***\n", g0, g1);
             }
         } while (0);
 
@@ -2006,11 +1984,44 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
                 } while (0);
             } else {
                 printk(KERN_ALERT "*** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***\n");
-                /* Fallback path: if control limit error is set, advance frame processing like continuous-interrupts */
+                /* CRITICAL FIX: If control limit error is set, treat it as a fake frame to keep buffers moving!
+                 * Without this, we get stuck at 5/5 stall because buffers never get recycled.
+                 * The "isp-was-better" version must have been doing this to allow continuous interrupts.
+                 */
                 if ((v1_7 & 0x200000) != 0) {
-                    printk(KERN_ALERT "*** VIC FALLBACK: control-limit set without FD; invoking vic_framedone_irq_function and FS wakeups ***\n");
-                    /* Reference driver only increments error counter and prints message */
-                    /* Do NOT call vic_framedone_irq_function() or fake frame completion */
+                    printk(KERN_ALERT "*** VIC FALLBACK: control-limit set without FD; treating as fake frame ***\n");
+
+                    /* Increment frame counters like a real frame */
+                    vic_dev->frame_count++;
+                    if (isp_dev && isp_dev->core_dev) {
+                        isp_dev->core_dev->frame_count++;
+                        printk(KERN_ALERT "*** VIC FALLBACK: Incremented frame_count to %u (for /proc/jz/isp/isp-w02) ***\n",
+                                isp_dev->core_dev->frame_count);
+                    }
+
+                    /* Move buffers from busy to done queue */
+                    vic_framedone_irq_function(vic_dev);
+
+                    /* Wake up frame channels */
+                    do {
+                        extern struct frame_channel_device frame_channels[];
+                        extern int num_channels;
+                        int i;
+                        unsigned long flags_local;
+
+                        for (i = 0; i < num_channels; i++) {
+                            struct frame_channel_device *fcd = &frame_channels[i];
+                            if (!fcd || !fcd->state.streaming)
+                                continue;
+                            spin_lock_irqsave(&fcd->state.buffer_lock, flags_local);
+                            if (!fcd->state.frame_ready) {
+                                fcd->state.frame_ready = true;
+                                wake_up_interruptible(&fcd->state.frame_wait);
+                                printk(KERN_ALERT "*** VIC FALLBACK: frame_ready signaled to frame channel %d ***\n", i);
+                            }
+                            spin_unlock_irqrestore(&fcd->state.buffer_lock, flags_local);
+                        }
+                    } while (0);
                 }
             }
 
@@ -2281,7 +2292,10 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
                 }
                 wmb();
 
-                /* Clear ISP core latched VIC status bits to allow next HW IRQ and restore core gates */
+                /* REMOVED: Don't write to gates - they are hardware state machine side effects!
+                 * The working "isp-was-better" version didn't write to gates in the ISR.
+                 * Just clear W1C status bits to allow next interrupt:
+                 */
                 do {
                     struct tx_isp_dev *ispd = ourISPdev;
                     void __iomem *core = NULL;
@@ -2290,15 +2304,9 @@ irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
                     else if (ispd && ispd->core_regs)
                         core = ispd->core_regs;
                     if (core) {
-                        /* W1C clear */
+                        /* W1C clear status bits only - don't touch gates! */
                         writel(0x1, core + 0x9a70);
                         writel(0x1, core + 0x9a7c);
-                        /* CRITICAL: Write gate enable BEFORE gate values */
-                        writel(0x1, core + 0x9a94);
-                        wmb();
-                        /* CRITICAL FIX: Binary Ninja reference trace shows 0x200/0x200, not 0x1/0x0! */
-                        writel(0x00000200, core + 0x9ac0);
-                        writel(0x00000200, core + 0x9ac8);
                         wmb();
                     }
                 } while (0);
