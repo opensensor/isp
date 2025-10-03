@@ -1747,8 +1747,26 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     /* CRITICAL: Reference driver behavior - minimal work, no continuous operations */
     /* The reference driver's frame sync work is very lightweight */
 
-    pr_info("*** ispcore_irq_fs_work: Frame sync work completed safely ***\n");
+    pr_debug("*** ispcore_irq_fs_work: Frame sync work completed safely ***\n");
 }
+
+/* Frame sync interrupt callback - registered via system_irq_func_set for bit 12 */
+/* CRITICAL: This callback is called from interrupt context, must be FAST */
+/* Signature MUST match: int (*handler)(void) - NO PARAMETERS */
+int frame_sync_interrupt_callback(void)
+{
+    /* Queue work to handle frame sync in process context */
+    /* This is the same work that's queued in ispcore_interrupt_service_routine */
+    if (fs_workqueue) {
+        queue_work_on(0, fs_workqueue, &fs_work);
+    } else {
+        schedule_work_on(0, &fs_work);
+    }
+
+    /* Return 1 to indicate interrupt was handled */
+    return 1;
+}
+EXPORT_SYMBOL(frame_sync_interrupt_callback);
 
 /* Forward declarations for frame channel functions - avoid naming conflicts */
 struct isp_core_channel_state {

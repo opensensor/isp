@@ -2202,6 +2202,17 @@ int tisp_init(void *sensor_info, char *param_name)
     pr_info("*** tisp_init: STARTING EVENT PROCESSING THREAD ***\n");
     extern int tisp_event_process(void);
 
+    /* CRITICAL: Register frame sync interrupt callback for bit 12 (0x1000) */
+    /* This prevents soft lockup from unhandled frame sync interrupts */
+    extern int frame_sync_interrupt_callback(void);
+
+    int fs_ret = system_irq_func_set(0xc, frame_sync_interrupt_callback);
+    if (fs_ret == 0) {
+        pr_info("*** tisp_init: Frame sync callback registered (index=0xc, bit 12) ***\n");
+    } else {
+        pr_err("*** tisp_init: Failed to register frame sync callback: %d ***\n", fs_ret);
+    }
+
     /* Binary Ninja: system_irq_func_set(0xd, ip_done_interrupt_static) - Set IRQ handler */
     /* CRITICAL: This sets up the ISP processing completion callback - missing piece! */
     extern irqreturn_t ip_done_interrupt_static(int irq, void *dev_id);
