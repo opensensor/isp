@@ -334,8 +334,10 @@ EXPORT_SYMBOL(vic_mdma_ch1_sub_get_num);
 EXPORT_SYMBOL(vic_mdma_ch0_set_buff_index);
 EXPORT_SYMBOL(vic_mdma_ch1_set_buff_index);
 
-/* Binary Ninja raw_pipe - function pointer table for VIC callbacks */
-void *raw_pipe[8] = {NULL};
+/* Binary Ninja raw_pipe - CRITICAL: This is a POINTER, not an array! */
+/* Assembly shows: sw $a1, 0x295c($s3) - stores arg2 pointer to this global */
+/* The actual array is passed as arg2 to tx_isp_subdev_pipo */
+void *raw_pipe = NULL;  /* Global pointer to the pipe function array */
 EXPORT_SYMBOL(raw_pipe);
 
 static struct list_head vic_buffer_fifo;

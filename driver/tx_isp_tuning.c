@@ -2237,11 +2237,13 @@ int tisp_init(void *sensor_info, char *param_name)
     pr_info("*** CRITICAL: Calling tx_isp_subdev_pipo to initialize VIC buffer management ***\n");
 
     if (ourISPdev->vic_dev) {
-        /* Use global raw_pipe structure */
-        extern void *raw_pipe[];
+        /* CRITICAL: Create pipe function array to pass to tx_isp_subdev_pipo */
+        /* Binary Ninja shows tx_isp_subdev_pipo stores this pointer in global raw_pipe */
+        static void *pipe_functions[8] = {NULL};  /* Static so it persists after function returns */
 
-        /* Call tx_isp_subdev_pipo with the VIC subdev and raw_pipe structure */
-        int pipo_ret = tx_isp_subdev_pipo(ourISPdev->vic_dev, raw_pipe);
+        /* Call tx_isp_subdev_pipo with the VIC subdev and pipe array */
+        /* tx_isp_subdev_pipo will set global raw_pipe = pipe_functions */
+        int pipo_ret = tx_isp_subdev_pipo(ourISPdev->vic_dev, pipe_functions);
         if (pipo_ret == 0) {
             pr_info("*** SUCCESS: tx_isp_subdev_pipo completed - VIC buffer management initialized ***\n");
             pr_info("*** NO MORE 'qbuffer null' or 'bank no free' errors should occur ***\n");
