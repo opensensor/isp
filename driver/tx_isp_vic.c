@@ -661,7 +661,8 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
 
         completed_buffer = list_first_entry(&vic_dev->busy_head, struct vic_buffer_entry, list);
         list_del(&completed_buffer->list);
-        vic_dev->active_buffer_count--;
+        /* CRITICAL FIX: Do NOT decrement active_buffer_count! */
+        /* active_buffer_count is the ring size, not a busy queue counter */
 
         /* Binary Ninja: Call raw_pipe callback to deliver completed buffer */
         /* (*(raw_pipe_1 + 4))(*(raw_pipe_1 + 0x14), $v0_2) */
@@ -1231,10 +1232,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** VIC FORMAT: Using sensor format %d (0=RAW8, 1=RAW10, 2=RAW12) ***\n", vic_sensor_format);
 
         /* Binary Ninja: EXACT reference driver MIPI mode configuration */
-        /* Binary Ninja: 000107ec - Set CSI mode */
-        writel(3, vic_regs + 0xc);  /* BINARY NINJA EXACT: VIC mode = 3 for MIPI interface */
+        /* Binary Ninja: 000107ec - Set CSI mode (match working logs) */
+        writel(2, vic_regs + 0xc);  /* Set VIC MIPI mode = 2 */
         wmb();
-        pr_info("*** VIC: Set MIPI mode (3) to VIC control register 0xc - BINARY NINJA EXACT ***\n");
+        pr_info("*** VIC: Set MIPI mode (2) to VIC control register 0xc (matches working logs) ***\n");
 
         /* BINARY NINJA EXACT: All missing register configurations */
 
@@ -1639,23 +1640,26 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
         }
     }
     /* Binary Ninja: else if (arg2 == 0x3000008) - Buffer allocation event (called during REQBUFS) */
-    else if (cmd == 0x3000008) {  /* TX_ISP_EVENT_FRAME_QBUF / Buffer allocation */
+    else if (cmd == 0x3000008) {  /* TX_ISP_EVENT_BUFFER_REQUEST / Buffer allocation */
         struct tx_isp_vic_device *vic_dev;
-        int32_t *buffer_count_ptr = (int32_t *)arg;
+        struct {
+            int32_t channel_id;
+            int32_t buffer_count;
+        } *event_data = (void *)arg;
+        int32_t channel_id;
         int32_t buffer_count;
 
-        pr_info("*** vic_core_ops_ioctl: 0x3000008 - Buffer allocation event (Binary Ninja EXACT) ***\n");
-
-        if (!sd || !sd->host_priv || !buffer_count_ptr) {
+        if (!sd || !sd->host_priv || !event_data) {
             pr_err("vic_core_ops_ioctl: 0x3000008 - missing sd/host_priv/arg\n");
             return -EINVAL;
         }
 
         vic_dev = (struct tx_isp_vic_device *)sd->host_priv;
-        buffer_count = *buffer_count_ptr;
+        channel_id = event_data->channel_id;
+        buffer_count = event_data->buffer_count;
 
-        pr_info("*** vic_core_ops_ioctl: 0x3000008 - Buffer allocation request: count=%d ***\n",
-                buffer_count);
+        pr_info("*** vic_core_ops_ioctl: 0x3000008 - Channel %d buffer allocation: count=%d ***\n",
+                channel_id, buffer_count);
 
         /* Validate buffer count */
         if (buffer_count < 0 || buffer_count > 64) {
@@ -1663,14 +1667,21 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
             return -EINVAL;
         }
 
-        /* Set VIC active buffer count (max 5 for hardware ring) */
-        vic_dev->active_buffer_count = (buffer_count > 5) ? 5 : buffer_count;
+        /* CRITICAL: Only Channel 0 controls VIC hardware buffer count */
+        /* Channel 1+ are software-only streams that don't control VIC hardware */
+        if (channel_id == 0) {
+            /* Set VIC active buffer count (max 5 for hardware ring) */
+            vic_dev->active_buffer_count = (buffer_count > 5) ? 5 : buffer_count;
 
-        pr_info("*** vic_core_ops_ioctl: VIC active_buffer_count set to %d (Binary Ninja EXACT) ***\n",
-                vic_dev->active_buffer_count);
+            pr_info("*** vic_core_ops_ioctl: Channel 0 - VIC active_buffer_count set to %d ***\n",
+                    vic_dev->active_buffer_count);
+        } else {
+            pr_info("*** vic_core_ops_ioctl: Channel %d - VIC active_buffer_count unchanged (%d) - software-only ***\n",
+                    channel_id, vic_dev->active_buffer_count);
+        }
 
-        /* Binary Ninja reference: This event is called during REQBUFS, not QBUF */
-        /* The actual buffer addresses are programmed during STREAMON via ispvic_frame_channel_qbuf */
+        /* Each channel stores its own buffer count in channel state */
+        /* VIC only cares about Channel 0's count for hardware configuration */
 
         return 0;
     }
@@ -1692,6 +1703,14 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
         pr_info("vic_core_ops_ioctl: tx_isp_subdev_pipo cmd=0x%x\n", cmd);
         result = tx_isp_subdev_pipo(sd, arg);
 		return result;
+    }
+    /* CRITICAL FIX: Handle 0x3000003 (TX_ISP_EVENT_FRAME_STREAMON) from frame channel STREAMON */
+    else if (cmd == 0x3000003) {
+        int enable = arg ? *((int *)arg) : 1;  /* Default to stream ON if arg is NULL */
+        pr_info("vic_core_ops_ioctl: 0x3000003 (FRAME_STREAMON) - calling ispvic_frame_channel_s_stream(%d)\n", enable);
+        result = ispvic_frame_channel_s_stream(sd, enable);
+        pr_info("vic_core_ops_ioctl: 0x3000003 - ispvic_frame_channel_s_stream returned %d\n", result);
+        return result;
     }
     /* Binary Ninja: else if (arg2 != 0x1000000) return 0 */
     else if (cmd != 0x1000000) {
@@ -2666,6 +2685,8 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             vic_dev->stream_state, arg2);
     if (arg2 == vic_dev->stream_state) {
         pr_info("*** ispvic_frame_channel_s_stream: Stream state matches - EARLY RETURN (no MDMA enable) ***\n");
+        pr_info("*** CRITICAL: VIC[0x300] will NOT be written! This causes control limit errors! ***\n");
+        pr_info("*** CRITICAL: Check if tx_isp_subdev_pipo properly reset stream_state to 0 ***\n");
         return 0;  /* Binary Ninja EXACT: early return without any MDMA operations */
     }
     pr_info("*** ispvic_frame_channel_s_stream: Stream state different - proceeding with streaming setup ***\n");
@@ -2873,6 +2894,75 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             /* CRITICAL FIX: Binary Ninja shows vic_core_s_stream does NOT call ispvic_frame_channel_qbuf */
             /* Buffer addresses are written by userspace QBUF calls, not during STREAMON */
             pr_info("*** vic_core_s_stream: MDMA started (Binary Ninja EXACT - no qbuf calls) ***\n");
+
+            /* Guarded: Clear ISP core VIC status and re-assert gate so next framedone can assert HW IRQ */
+            do {
+                struct tx_isp_dev *ispd = ourISPdev;
+                void __iomem *core = NULL;
+                if (ispd && ispd->core_dev && ispd->core_dev->core_regs)
+                    core = ispd->core_dev->core_regs;
+                else if (ispd && ispd->core_regs)
+                    core = ispd->core_regs;
+                if (core) {
+                    /* W1C clear any latched framedone bits first */
+                    writel(0x1, core + 0x9a70);
+                    writel(0x1, core + 0x9a7c);
+                    wmb();
+
+                    /* Mirror good-things minimal core VIC route init using dynamic stride */
+                    do {
+                        u32 w = 0, h = 0, stride = 0;
+                        get_cached_sensor_dimensions(&w, &h);
+                        if (w == 0) w = 1280; /* safe fallback */
+                        stride = w << 1;      /* RAW10-like: 2 bytes/pixel */
+
+                        /* Program only the minimally safe core VIC regs seen in reference */
+                        writel(0x1, core + 0x9a34);   /* enable bit observed in reference */
+                        writel(0x1, core + 0x9a88);   /* enable/route latch bit */
+                        writel(stride, core + 0x9a80);/* stride to match VIC MDMA */
+                        /* Also program minimal geometry at core side (width/height/stride-like) */
+                        writel(w, core + 0x9a00);     /* width */
+                        writel(h, core + 0x9a04);     /* height */
+                        writel(stride, core + 0x9a2c);/* line step or related */
+                        /* Override tuning's stale width-like register with dynamic width */
+                        writel(w, core + 0x9a98);     /* observed as 0x500 in logs when width was 1280 */
+                        /* 0x9a94 already set to 1 earlier; leave as-is */
+
+                        /* Now (re)assert the core VIC IRQ gate (working values 1/0) */
+                        writel(0x00000001, core + 0x9ac0);
+                        writel(0x00000000, core + 0x9ac8);
+                        wmb();
+                        pr_info("*** CORE VIC ROUTE INIT: [9a00]=0x%08x [9a04]=0x%08x [9a2c]=0x%08x [9a34]=0x%08x [9a88]=0x%08x [9a80]=0x%08x [9a98]=0x%08x; GATE [9ac0]=0x%08x [9ac8]=0x%08x ***\n",
+                                readl(core + 0x9a00), readl(core + 0x9a04), readl(core + 0x9a2c),
+                                readl(core + 0x9a34), readl(core + 0x9a88), readl(core + 0x9a80), readl(core + 0x9a98),
+                                readl(core + 0x9ac0), readl(core + 0x9ac8));
+                    } while (0);
+                    pr_info("*** vic_core_s_stream: CORE W1C [9a70/9a7c] then ROUTE INIT + GATE REASSERT ***\n");
+                }
+            } while (0);
+
+            /* Re-assert interrupt mask and clear pending in BOTH banks, verify key regs */
+            if (vic_dev->vic_regs) {
+                void __iomem *vr = vic_dev->vic_regs;
+                /* Clear pending (W1C) */
+                writel(0xFFFFFFFF, vr + 0x1f0);
+                writel(0xFFFFFFFF, vr + 0x1f4);
+                /* Set MainMask to allow framedone + bit21 (debug); do NOT touch status regs 0x1e0/0x1e4 */
+                writel(0xFFDFFFFE, vr + 0x1e8); /* allow frame-done + bit21 (debug) */
+                /* Leave 0x1ec (MDMA mask) as-is per working reference */
+                /* DO NOT touch 0x30c here; suspected global mask/enable */
+                wmb();
+                pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (MainMask=0xFFFFFFFE)***\n",
+                        readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x1e0), readl(vr + 0x1e4), readl(vr + 0x1e8), readl(vr + 0x1ec));
+                /* Primary bank: only verify 0x100; do NOT write 0x14 here (0x14 is stride on PRIMARY) */
+                writel(0x000002d0, vr + 0x100);
+                wmb();
+                pr_info("*** VIC VERIFY (PRIMARY EXTRA): [0x100]=0x%08x [0x14]=0x%08x (PRIMARY 0x14=stride) ***\n",
+                        readl(vr + 0x100), readl(vr + 0x14));
+                udelay(50);
+
+
+            }
             if (vic_dev->vic_regs_control) {
                 void __iomem *vc = vic_dev->vic_regs_control;
                 /* Clear pending (if mapped similarly, W1C) */
@@ -2887,12 +2977,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 wmb();
                 pr_info("*** VIC VERIFY (CONTROL): [0x0]=0x%08x [0x4]=0x%08x [0x0c]=0x%08x [0x100]=0x%08x [0x14]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (MainMask=0xFFFFFFFE)***\n",
                         readl(vc + 0x0), readl(vc + 0x4), readl(vc + 0x0c), readl(vc + 0x100), readl(vc + 0x14), readl(vc + 0x300), readl(vc + 0x30c), readl(vc + 0x1e0), readl(vc + 0x1e4), readl(vc + 0x1e8), readl(vc + 0x1ec));
-
-                /* CRITICAL VERIFICATION: Check CONTROL bank is properly configured */
-                /* CONTROL bank is READ-ONLY (hardware ID register) - don't verify it */
-                /* The CONTROL bank at 0x10023000 always reads 0x3130322a at offset 0x0 */
-                /* All other registers in CONTROL bank are hardware-managed and read as 0 */
-                pr_info("*** VIC CONTROL BANK: Skipping verification (read-only hardware ID) ***\n");
             }
 
                 /* Read-back verification of buffer/control registers in BOTH banks */
@@ -2939,7 +3023,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(1, vr + 0x0);
                 wmb();
                 pr_info("*** VIC CONTROL (PRIMARY): WROTE 1 to [0x0] before enabling IRQ ***\n");
-            /* Post-RUN re-arm: commit dance so enables latch without touching masks */
+                /* Post-RUN re-arm: commit dance so enables latch without touching masks */
                 /* Program PRIMARY IMR/IMCR routing once (match good-things), no re-arm */
                 if (vic_dev && vic_dev->vic_regs) {
                     void __iomem *vr_gate = vic_dev->vic_regs;
@@ -2969,13 +3053,19 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 vic_dev->state = 4;
                 pr_info("*** vic_core_s_stream: VIC state transition 3 → 4 (STREAMING) ***\n");
 
-                /* DO NOT call ispcore_slake_module during 3 → 4 transition.
-                 * It shuts CSI/VIC down mid-stream and causes ring resets (observed 12/10 stalls).
-                 * Reference driver does not slake during streaming; core init happens elsewhere (file open/IOCTL).
-                 */
-                pr_info("*** VIC STATE 4: Skipping ispcore_slake_module during streaming (avoids shutdown/reset) ***\n");
+                /* Reference BN MCP: Call ispcore_slake_module during 3 → 4 transition */
+                {
+                    extern int ispcore_slake_module(struct tx_isp_dev *isp_dev);
+                    extern struct tx_isp_dev *ourISPdev;
+                    if (ourISPdev) {
+                        pr_info("*** VIC STATE 4: Calling ispcore_slake_module (reference behavior) ***\n");
+                        ispcore_slake_module(ourISPdev);
+                    } else {
+                        pr_warn("*** VIC STATE 4: ourISPdev is NULL; cannot call ispcore_slake_module ***\n");
+                    }
+                }
 
-                /* CRITICAL: Apply full VIC configuration now that VIC is in streaming state */
+                /* Continue with VIC configuration in streaming state */
             } else {
                 pr_info("*** vic_core_s_stream: VIC state %d - letting tx_isp_video_s_stream handle state 2 → 3 transition ***\n", vic_dev->state);
             }
@@ -3697,9 +3787,6 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
             reg_offset = (i + 0xc6) << 2;
             if (vic_dev->vic_regs && reg_offset >= 0x318 && reg_offset <= 0x328) {
                 writel(0, vic_dev->vic_regs + reg_offset);
-                if (vic_dev->vic_regs_control)
-                    writel(0, vic_dev->vic_regs_control + reg_offset);
-                wmb();
                 pr_info("tx_isp_subdev_pipo: cleared VIC register at offset 0x%x for buffer %d\n", reg_offset, i);
             }
         }

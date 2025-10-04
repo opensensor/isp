@@ -13,6 +13,7 @@ int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes);
 void dump_csi_reg(struct tx_isp_subdev *sd);
 int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd);
 int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
 struct tx_isp_sensor *tx_isp_get_sensor(void);
 extern struct tx_isp_dev *ourISPdev;
 extern bool is_valid_kernel_pointer(const void *ptr);
@@ -525,8 +526,8 @@ int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes)
     void __iomem *csi_regs;
     u32 reg_val;
 
-    /* Binary Ninja: isp_printf(0, "Can't output the width(%d)!\n", "csi_set_on_lanes") */
-    isp_printf(0, "Can't output the width(%d)!\n", "csi_set_on_lanes");
+    /* Binary Ninja: isp_printf(0, "%s:----------> lane num: %d\n", "csi_set_on_lanes", lane_num) */
+    isp_printf(0, "%s:----------> lane num: %d\n", "csi_set_on_lanes", lanes);
 
     /* Binary Ninja: void* $v1 = *(arg1 + 0xb8) */
     csi_regs = csi_dev->csi_regs;
@@ -621,8 +622,36 @@ struct tx_isp_subdev_video_ops csi_video_ops = {
     .link_stream = csi_video_s_stream,  /* CRITICAL FIX: tx_isp_video_link_stream calls link_stream! */
 };
 
+/* CSI sensor ops sync_sensor_attr wrapper - calls csi_set_on_lanes */
+static int csi_sensor_ops_sync_sensor_attr_wrapper(struct tx_isp_subdev *sd, void *arg)
+{
+    struct tx_isp_csi_device *csi_dev;
+    struct tx_isp_sensor_attribute *sensor_attr = (struct tx_isp_sensor_attribute *)arg;
+
+    if (!sd || !arg) {
+        return -EINVAL;
+    }
+
+    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+    if (!csi_dev) {
+        pr_err("csi_sensor_ops_sync_sensor_attr_wrapper: No CSI device\n");
+        return -ENODEV;
+    }
+
+    /* Call csi_set_on_lanes if this is a MIPI interface */
+    if (sensor_attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) {
+        int lanes = sensor_attr->mipi.lans;
+        pr_info("*** csi_sensor_ops_sync_sensor_attr_wrapper: Calling csi_set_on_lanes with %d lanes ***\n", lanes);
+        csi_set_on_lanes(csi_dev, lanes);
+    }
+
+    /* Also call the original sync function if it exists */
+    return csi_sensor_ops_sync_sensor_attr(sd, arg);
+}
+
 /* Define the sensor operations */
 struct tx_isp_subdev_sensor_ops csi_sensor_ops = {
+    .sync_sensor_attr = csi_sensor_ops_sync_sensor_attr_wrapper,
     .ioctl = csi_sensor_ops_ioctl,
 };
 

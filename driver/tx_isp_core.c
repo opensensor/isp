@@ -518,25 +518,15 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     /* Binary Ninja: int32_t (* $v0_11)(int32_t* arg1) */
     /* Binary Ninja: void* $a0_6 */
 
-    /* Binary Ninja: if ($a0_4 == 1 || arg2 == 0) */
-    if (a0_4 == 1 || enable == 0) {
-        /* Binary Ninja: *($v0_10 + 0xb0) = 0 */
-        if (core_dev) {
-            core_dev->irq_enabled = 0;
-        }
-        /* Binary Ninja: $a0_6 = arg1 */
-        /* Binary Ninja: $v0_11 = tx_isp_disable_irq */
+    /* Enable IRQs on stream ON; disable on stream OFF. Do not invert based on vic_dev->irq_enabled. */
+    if (enable == 0) {
+        if (core_dev) core_dev->irq_enabled = 0;
         tx_isp_disable_irq(isp_dev);
-        pr_info("*** ispcore_video_s_stream: IRQ disabled ***\n");
+        pr_info("*** ispcore_video_s_stream: IRQ disabled (stream OFF) ***\n");
     } else {
-        /* Binary Ninja: *($v0_10 + 0xb0) = 0xffffffff */
-        if (core_dev) {
-            core_dev->irq_enabled = 1;
-        }
-        /* Binary Ninja: $a0_6 = arg1 */
-        /* Binary Ninja: $v0_11 = tx_isp_enable_irq */
+        if (core_dev) core_dev->irq_enabled = 1;
         tx_isp_enable_irq(isp_dev);
-        pr_info("*** ispcore_video_s_stream: IRQ enabled ***\n");
+        pr_info("*** ispcore_video_s_stream: IRQ enabled (stream ON) ***\n");
     }
 
     /* Binary Ninja: $v0_11($a0_6) - IRQ function call already done above */
@@ -580,14 +570,22 @@ irqreturn_t ispcore_irq_thread_handle(int irq, void *dev_id)
         /* Binary Ninja: Handle VIC interrupts */
         pr_info("*** ispcore_irq_thread_handle: Processing VIC interrupt 0x%08x ***\n", irq_status);
 
-        /* Clear VIC interrupt status */
-        writel(irq_status, vic_dev->vic_regs + 0x1e0);
+        /* Clear VIC interrupt status (W1C at 0x1f0, not 0x1e0) */
+        writel(irq_status, vic_dev->vic_regs + 0x1f0);
         wmb();
 
-        /* Binary Ninja: Signal frame completion */
-        if (irq_status & 0x1) {  /* Frame done interrupt */
+        /* Binary Ninja: Signal frame completion and rotate VIC ring */
+        if (irq_status & 0x1) {  /* Frame done interrupt (channel 0) */
+            /* Signal completion for any waiters */
             complete(&isp_dev->frame_complete);
             pr_info("*** ispcore_irq_thread_handle: Frame completion signaled ***\n");
+
+            /* CRITICAL: Rotate VIC buffer ring like stock driver */
+            {
+                extern int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
+                int mdma_ret = vic_mdma_irq_function(vic_dev, 0); /* assume channel 0 stream */
+                pr_info("*** ispcore_irq_thread_handle: vic_mdma_irq_function(ch=0) -> %d ***\n", mdma_ret);
+            }
         }
 
         /* Binary Ninja: Update frame count */
@@ -945,7 +943,7 @@ struct tx_isp_subdev_core_ops core_subdev_core_ops = {
 
 /* Core subdev video operations - GLOBAL to ensure proper accessibility */
 struct tx_isp_subdev_video_ops core_subdev_video_ops = {
-    .s_stream = NULL,  /* CRITICAL: Wire in the video streaming function */
+    .s_stream = NULL,  /* CRITICAL FIX: Core subdev should NOT have s_stream - ispcore_video_s_stream is called directly from ioctl, not as part of subdev iteration */
     .link_stream = NULL,  /* CRITICAL FIX: Core subdev should NOT have link_stream to prevent infinite loop */
     .link_setup = ispcore_link_setup,    /* CRITICAL: Wire in the link setup function */
 };
@@ -1716,6 +1714,22 @@ static void ispcore_irq_fs_work(struct work_struct *work)
 {
     extern struct tx_isp_dev *ourISPdev;
     struct tx_isp_dev *isp_dev;
+    u32 *work_items;
+    u32 ioctl_param;
+    void *ctrl;
+    u32 *flag;
+    int i;
+
+    /* IOCTL command codes for each case (from Binary Ninja jump table analysis) */
+    static const u32 ioctl_cmds[7] = {
+        0x20016,  /* case 0 */
+        0x20008,  /* case 1 */
+        0x20009,  /* case 2 */
+        0x20005,  /* case 3 */
+        0x20006,  /* case 4 */
+        0,        /* case 5 (special - skipped in loop) */
+        0x20007   /* case 6 */
+    };
 
     /* CRITICAL: Take local reference to prevent race condition */
     isp_dev = ourISPdev;
@@ -1738,14 +1752,59 @@ static void ispcore_irq_fs_work(struct work_struct *work)
         return;
     }
 
-    /* Binary Ninja: Simple loop through 7 items, minimal processing */
-    /* Reference driver does very little work here - just checks conditions */
+    /* Binary Ninja: Work items array at offset 0x184 in isp_dev structure */
+    /* Each work item is 8 bytes: [pending_flag, data] */
+    work_items = (u32 *)((char *)isp_dev + 0x184);
 
-    /* Binary Ninja: Only call sensor operations when specific conditions are met */
-    /* Most of the time, this function does nothing and returns quickly */
+    /* Process each of 7 work items */
+    for (i = 0; i < 7; i++) {
+        /* Check if work pending (every 8 bytes, first u32) */
+        if (work_items[i * 2] == 0) {
+            continue;
+        }
 
-    /* CRITICAL: Reference driver behavior - minimal work, no continuous operations */
-    /* The reference driver's frame sync work is very lightweight */
+        /* Skip case 5 in the switch logic (Binary Ninja shows this is special) */
+        if (i == 5) {
+            continue;
+        }
+
+        /* Get work data and IOCTL command */
+        ioctl_param = work_items[i * 2 + 1];
+
+        /* Check if IOCTL should be called */
+        /* Binary Ninja: ctrl = *(void **)((char *)isp_dev + 0x120) */
+        /* Binary Ninja: flag = (u32 *)((char *)ctrl + 0xf4) */
+        ctrl = *(void **)((char *)isp_dev + 0x120);
+        if (!ctrl) {
+            pr_debug("*** ispcore_irq_fs_work: ctrl is NULL, skipping work item %d ***\n", i);
+            work_items[i * 2] = 0;
+            continue;
+        }
+
+        flag = (u32 *)((char *)ctrl + 0xf4);
+
+        if (*flag == 1) {
+            /* Call sensor IOCTL with command and parameter */
+            /* Binary Ninja: ispcore_sensor_ops_ioctl(sd, cmd, &ioctl_param) */
+            /* Get the core subdev to call sensor ops */
+            struct tx_isp_subdev *core_sd = tx_isp_get_core_subdev(isp_dev);
+            if (core_sd && core_sd->ops && core_sd->ops->sensor && core_sd->ops->sensor->ioctl) {
+                int ret;
+                pr_debug("*** ispcore_irq_fs_work: Calling sensor ioctl cmd=0x%x param=0x%x ***\n",
+                         ioctl_cmds[i], ioctl_param);
+                ret = core_sd->ops->sensor->ioctl(core_sd, ioctl_cmds[i], &ioctl_param);
+                if (ret != 0 && ret != -ENOIOCTLCMD) {
+                    pr_debug("*** ispcore_irq_fs_work: Sensor ioctl returned %d ***\n", ret);
+                }
+            } else {
+                pr_debug("*** ispcore_irq_fs_work: No sensor ops available for cmd=0x%x ***\n",
+                         ioctl_cmds[i]);
+            }
+        }
+
+        /* Clear pending flag */
+        work_items[i * 2] = 0;
+    }
 
     pr_debug("*** ispcore_irq_fs_work: Frame sync work completed safely ***\n");
 }
@@ -1868,36 +1927,19 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
     } else {
         return IRQ_NONE;
     }
-    /* CRITICAL FIX: Support both legacy (+0xb*) and new (+0x98b*) interrupt banks */
+    /* Support both legacy (+0xb*) and new (+0x98b*) interrupt banks */
     {
-        u32 status_legacy, status_new;
+        interrupt_status = readl(isp_regs + 0xb4);
+        printk(KERN_ALERT "*** ISP CORE: Read interrupt status - interrupt_status=0x%08x ***\n", interrupt_status);
 
-        /* Read BOTH interrupt banks like working driver */
-        status_legacy = readl(isp_regs + 0xb4);
-        status_new    = readl(isp_regs + 0x98b4);
-
-        /* Use whichever bank has pending interrupts */
-        interrupt_status = status_legacy ? status_legacy : status_new;
-
-        printk(KERN_ALERT "*** ISP CORE: DUAL BANK - legacy=0x%08x new=0x%08x final=0x%08x ***\n",
-               status_legacy, status_new, interrupt_status);
-
-        /* Clear pending in BOTH banks (working driver behavior) */
-        if (status_legacy) {
-            printk(KERN_ALERT "*** ISP CORE: Clearing legacy bank 0x%08x to reg +0xb8 ***\n", status_legacy);
-            writel(status_legacy, isp_regs + 0xb8);
-        }
-        if (status_new) {
-            printk(KERN_ALERT "*** ISP CORE: Clearing new bank 0x%08x to reg +0x98b8 ***\n", status_new);
-            writel(status_new, isp_regs + 0x98b8);
-        }
+        /* Clear pending in the corresponding bank(s) */
+        printk(KERN_ALERT "*** ISP CORE: Clearing legacy interrupt 0x%08x to reg +0xb8 ***\n", interrupt_status);
+        writel(interrupt_status, isp_regs + 0xb8);
         wmb();
 
-        /* CRITICAL DEBUG: Verify interrupts were actually cleared */
+        /* CRITICAL DEBUG: Verify interrupt was actually cleared */
         u32 verify_legacy = readl(isp_regs + 0xb4);
-        u32 verify_new = readl(isp_regs + 0x98b4);
-        printk(KERN_ALERT "*** ISP CORE: After clearing - legacy=0x%08x new=0x%08x ***\n",
-               verify_legacy, verify_new);
+        printk(KERN_ALERT "*** ISP CORE: After clearing - legacy=0x%08x ***\n", verify_legacy);
     }
 
     /* Binary Ninja: if (($s1 & 0x3f8) == 0) */
@@ -2064,13 +2106,15 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             pr_debug("*** FRAME COMPLETION: addr=0x%x, info1=0x%x, info2=0x%x ***\n",
                    frame_buffer_addr, frame_info1, frame_info2);
 
-            /* Binary Ninja: tx_isp_send_event_to_remote(*($s3_2 + 0x78), 0x3000006, &var_40) */
-            /* This is the CRITICAL event that notifies frame channels of completion */
+            /* Notify frame channel 0 of completion: set frame_ready and wake waiters */
             if (vic_dev) {
-                /* Wake up channel 0 waiters */
-                if (isp_core_channels[0].state.streaming) {
-                    frame_channel_wakeup_waiters(&isp_core_channels[0]);
-                }
+                extern struct frame_channel_device frame_channels[];
+                struct tx_isp_channel_state *st0 = &frame_channels[0].state;
+                unsigned long f;
+                spin_lock_irqsave(&st0->buffer_lock, f);
+                st0->frame_ready = true;
+                spin_unlock_irqrestore(&st0->buffer_lock, f);
+                wake_up_interruptible(&st0->frame_wait);
             }
         }
 
@@ -2091,9 +2135,15 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
             printk(KERN_ALERT "*** CH1 FRAME COMPLETION: addr=0x%x, info1=0x%x, info2=0x%x ***\n",
                    frame_buffer_addr, frame_info1, frame_info2);
 
-            /* Wake up channel 1 waiters */
-            if (isp_core_channels[1].state.streaming) {
-                frame_channel_wakeup_waiters(&isp_core_channels[1]);
+            /* Notify frame channel 1 of completion: set frame_ready and wake waiters */
+            {
+                extern struct frame_channel_device frame_channels[];
+                struct tx_isp_channel_state *st1 = &frame_channels[1].state;
+                unsigned long f1;
+                spin_lock_irqsave(&st1->buffer_lock, f1);
+                st1->frame_ready = true;
+                spin_unlock_irqrestore(&st1->buffer_lock, f1);
+                wake_up_interruptible(&st1->frame_wait);
             }
         }
     }
@@ -2802,76 +2852,6 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 extern struct tx_isp_sensor *tx_isp_get_sensor(void);
                 struct tx_isp_sensor *init_sensor = tx_isp_get_sensor();
 
-                pr_info("*** ispcore_core_ops_init: BINARY NINJA MCP - Second tisp_init call (00079058) ***");
-                if (init_sensor && init_sensor->video.attr) {
-                    ret = tisp_init(init_sensor->video.attr, NULL);
-                    if (ret != 0) {
-                        pr_err("ispcore_core_ops_init: Second tisp_init failed: %d\n", ret);
-                        return ret;
-                    }
-                    pr_info("*** ispcore_core_ops_init: Second tisp_init completed ***");
-                } else {
-                    ret = tisp_init(NULL, NULL);
-                    if (ret != 0) {
-                        pr_err("ispcore_core_ops_init: Second tisp_init failed: %d\n", ret);
-                        return ret;
-                    }
-                }
-
-                /* CRITICAL: Enable ISP core pipeline registers - EXACT Binary Ninja reference implementation */
-                /* This is what transforms error 0x200 interrupts into genuine frame done interrupts! */
-                if (isp_dev && isp_dev->core_regs) {
-                    void __iomem *core = isp_dev->core_regs;
-
-                    pr_info("*** ISP CORE: Configuring pipeline registers to enable frame processing ***\n");
-
-                    /* Clear any pending interrupts first */
-                    u32 pend_legacy = readl(core + 0xb4);
-                    u32 pend_new = readl(core + 0x98b4);
-                    if (pend_legacy) {
-                        writel(pend_legacy, core + 0xb8);   /* Clear legacy pending */
-                        pr_info("*** ISP CORE: Cleared legacy pending interrupts: 0x%x ***\n", pend_legacy);
-                    }
-                    if (pend_new) {
-                        writel(pend_new, core + 0x98b8);    /* Clear new pending */
-                        pr_info("*** ISP CORE: Cleared new pending interrupts: 0x%x ***\n", pend_new);
-                    }
-
-                    /* CRITICAL: Enable ISP pipeline first - this connects VIC to ISP core */
-                    /* Binary Ninja: system_reg_write(0x800, 1) - Enable ISP pipeline */
-                    writel(1, core + 0x800);
-                    pr_info("*** ISP CORE: Pipeline ENABLED (0x800 = 1) ***\n");
-
-                    /* Binary Ninja: system_reg_write(0x804, routing) - Configure ISP routing */
-                    writel(0x1c, core + 0x804);         /* Normal mode routing */
-                    pr_info("*** ISP CORE: Routing configured (0x804 = 0x1c) ***\n");
-
-                    /* Binary Ninja: system_reg_write(0x1c, 8) - Set ISP control mode */
-                    writel(8, core + 0x1c);
-                    pr_info("*** ISP CORE: Control mode set (0x1c = 8) ***\n");
-
-                    /* CRITICAL: Enable interrupt generation at hardware level */
-                    /* Binary Ninja: system_reg_write(0x30, 0xffffffff) */
-                    writel(0xffffffff, core + 0x30);    /* Enable all interrupt sources */
-                    pr_info("*** ISP CORE: Interrupt sources enabled (0x30 = 0xffffffff) ***\n");
-
-                    /* Binary Ninja: system_reg_write(0x10, 0x133 or 0x33f) */
-                    writel(0x133, core + 0x10);         /* Enable specific interrupt types */
-                    pr_info("*** ISP CORE: Interrupt types enabled (0x10 = 0x133) ***\n");
-
-                    /* CRITICAL FIX: Enable frame sync + essential interrupts, but MASK error interrupts */
-                    /* This allows ISP interrupts to work while preventing error interrupt storms */
-                    writel(0x3FFF, core + 0xb0);        /* Legacy enable - all interrupt sources */
-                    writel(0x1000, core + 0xbc);        /* Legacy unmask - ONLY frame sync initially */
-                    writel(0x3FFF, core + 0x98b0);      /* New enable - all interrupt sources */
-                    writel(0x1000, core + 0x98bc);      /* New unmask - ONLY frame sync initially */
-                    wmb();
-
-                    pr_info("*** ISP CORE: Interrupt masks configured (0xbc/0x98bc = 0x1000 - frame sync only) ***\n");
-                    pr_info("*** ISP CORE: Pipeline configuration COMPLETE - VIC->ISP pipeline should now generate frame done interrupts! ***\n");
-                } else {
-                    pr_warn("*** ISP CORE: Cannot configure pipeline - isp_regs not available ***\n");
-                }
 
                 /* CRITICAL FIX: Don't reset VIC state if it's already streaming (state 4) */
                 /* The issue is that VIC gets initialized to state 4, then ISP core resets it to 3, causing reinitialization */

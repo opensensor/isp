@@ -621,7 +621,7 @@ int private_platform_device_register(struct platform_device *pdev);
 int private_platform_driver_register(struct platform_driver *drv);
 void private_platform_device_unregister(struct platform_device *pdev);
 
-int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
+int ispvic_frame_channel_s_stream(struct tx_isp_subdev *sd, int enable);
 
 /* Forward declaration for hardware initialization */
 static int tx_isp_hardware_init(struct tx_isp_dev *isp_dev);
@@ -2947,39 +2947,37 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             /* Set buffer type from REQBUFS request */
             fcd->buffer_type = reqbuf.type;
 
-            /* CRITICAL: Update VIC active_buffer_count for streaming */
-            if (ourISPdev && ourISPdev->vic_dev) {
-                struct tx_isp_vic_device *vic = ourISPdev->vic_dev;
-                /* Match VIC ring count to the user's requested buffers (max 5) */
-                vic->active_buffer_count = (reqbuf.count > 5) ? 5 : reqbuf.count;
-                pr_info("*** Channel %d: VIC active_buffer_count set to %d (memory=%u) ***\n",
-                        channel, vic->active_buffer_count, reqbuf.memory);
-
-                /* Reference driver configures VIC DMA during streaming via vic_pipo_mdma_enable */
-                pr_info("*** REQBUFS: VIC DMA will be configured during streaming via vic_pipo_mdma_enable ***\n");
-            }
-
             pr_info("*** Channel %d: MEMORY-AWARE REQBUFS SUCCESS - %d buffers ***\n",
                    channel, state->buffer_count);
 
-            /* CRITICAL: Send 0x3000008 event to VIC with buffer count - Binary Ninja EXACT */
-            if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
+            /* CRITICAL: Send 0x3000008 event to VIC with channel ID and buffer count */
+            /* Reference driver: ALL channels send this event with their buffer count */
+            if (ourISPdev && ourISPdev->vic_dev) {
                 struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
-                int32_t buffer_count_for_vic = reqbuf.count;
 
-                pr_info("*** REQBUFS: Sending 0x3000008 event to VIC with buffer_count=%d (Binary Ninja EXACT) ***\n",
-                        buffer_count_for_vic);
+                /* Pass both channel ID and buffer count so VIC can store per-channel */
+                struct {
+                    int32_t channel_id;
+                    int32_t buffer_count;
+                } event_data = {
+                    .channel_id = channel,
+                    .buffer_count = reqbuf.count
+                };
 
-                int event_result = tx_isp_send_event_to_remote(&vic_dev->sd, 0x3000008, &buffer_count_for_vic);
+                pr_info("*** REQBUFS: Channel %d sending 0x3000008 event with buffer_count=%d ***\n",
+                        channel, reqbuf.count);
+
+                int event_result = tx_isp_send_event_to_remote(&vic_dev->sd, 0x3000008, &event_data);
 
                 if (event_result == 0) {
-                    pr_info("*** REQBUFS: VIC 0x3000008 event SUCCESS ***\n");
+                    pr_info("*** REQBUFS: Channel %d - VIC 0x3000008 event SUCCESS ***\n", channel);
                 } else if (event_result == 0xfffffdfd) {
                     pr_info("*** REQBUFS: VIC has no 0x3000008 event handler (calling direct) ***\n");
                     /* Fallback: Call VIC handler directly */
-                    (void)vic_core_ops_ioctl(&vic_dev->sd, 0x3000008, &buffer_count_for_vic);
+                    (void)vic_core_ops_ioctl(&vic_dev->sd, 0x3000008, &event_data);
                 } else {
-                    pr_warn("*** REQBUFS: VIC 0x3000008 event returned: 0x%x ***\n", event_result);
+                    pr_warn("*** REQBUFS: Channel %d - VIC 0x3000008 event returned: 0x%x ***\n",
+                            channel, event_result);
                 }
             }
 
@@ -3863,13 +3861,30 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         state->flags |= 1;
         state->streaming = true;
 
-        // Start the full ISP/VIC streaming pipeline like the reference
-        if (ourISPdev) {
-            int ret_stream;
-            pr_info("*** Channel %d: STREAMON - calling tx_isp_video_s_stream(ON) to arm VIC/MDMA ***\n", channel);
-            ret_stream = tx_isp_video_s_stream(ourISPdev, 1);
-            if (ret_stream != 0) {
-                pr_warn("Channel %d: STREAMON - tx_isp_video_s_stream failed: %d (continuing)\n", channel, ret_stream);
+        // Binary Ninja EXACT: Send 0x3000003 event (TX_ISP_EVENT_FRAME_STREAMON)
+        // Reference: tx_isp_send_event_to_remote(*($s0 + 0x2bc), 0x3000003, 0)
+        // This triggers ispvic_frame_channel_s_stream via pipe callback
+        if (ourISPdev && ourISPdev->vic_dev) {
+            extern struct frame_channel_device frame_channels[];
+            struct frame_channel_device *fcd = &frame_channels[channel];
+            struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
+            int event_result;
+
+            pr_info("*** Channel %d: STREAMON - Sending 0x3000003 event (Binary Ninja EXACT) ***\n", channel);
+
+            // CRITICAL FIX: Send event directly to VIC subdev, not to fcd->vic_subdev (which is ISP device)
+            // The VIC subdev has vic_core_ops_ioctl which handles 0x3000003
+            event_result = tx_isp_send_event_to_remote(&vic_dev->sd, 0x3000003, NULL);
+
+            if (event_result == 0) {
+                pr_info("*** Channel %d: STREAMON - 0x3000003 event SUCCESS (ispvic_frame_channel_s_stream called) ***\n", channel);
+            } else if (event_result == 0xfffffdfd) {
+                pr_warn("*** Channel %d: STREAMON - 0x3000003 handler not implemented (trying direct call) ***\n", channel);
+                // Fallback: Call ispvic_frame_channel_s_stream directly
+                extern int ispvic_frame_channel_s_stream(struct tx_isp_subdev *sd, int enable);
+                ispvic_frame_channel_s_stream(&vic_dev->sd, 1);
+            } else {
+                pr_warn("*** Channel %d: STREAMON - 0x3000003 event returned: 0x%x ***\n", channel, event_result);
             }
         }
 
