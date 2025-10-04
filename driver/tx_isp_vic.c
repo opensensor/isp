@@ -1636,67 +1636,40 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
             return 0;
         }
     }
-    /* Binary Ninja: else if (arg2 == 0x3000008) - Buffer request/allocation event */
-    else if (cmd == 0x3000008) {  /* TX_ISP_EVENT_FRAME_QBUF / VIDIOC_QBUF */
+    /* Binary Ninja: else if (arg2 == 0x3000008) - Buffer allocation event (called during REQBUFS) */
+    else if (cmd == 0x3000008) {  /* TX_ISP_EVENT_FRAME_QBUF / Buffer allocation */
         struct tx_isp_vic_device *vic_dev;
-        struct v4l2_buffer *buffer = (struct v4l2_buffer *)arg;
-        u32 phys = 0;
+        int32_t *buffer_count_ptr = (int32_t *)arg;
+        int32_t buffer_count;
 
-        pr_info("vic_core_ops_ioctl: QBUF cmd=0x%x - program VIC slot from v4l2_buffer\n", cmd);
+        pr_info("*** vic_core_ops_ioctl: 0x3000008 - Buffer allocation event (Binary Ninja EXACT) ***\n");
 
-        if (!sd || !sd->host_priv || !buffer) {
-            pr_err("vic_core_ops_ioctl: QBUF - missing sd/host_priv/buffer\n");
+        if (!sd || !sd->host_priv || !buffer_count_ptr) {
+            pr_err("vic_core_ops_ioctl: 0x3000008 - missing sd/host_priv/arg\n");
             return -EINVAL;
         }
+
         vic_dev = (struct tx_isp_vic_device *)sd->host_priv;
+        buffer_count = *buffer_count_ptr;
 
-        /* Extract physical address from v4l2_buffer like module QBUF path */
-        if (buffer->memory == V4L2_MEMORY_MMAP && buffer->m.offset) {
-            phys = buffer->m.offset;
-        } else if (buffer->memory == V4L2_MEMORY_USERPTR && buffer->m.userptr) {
-            phys = (u32)buffer->m.userptr;
-        } else {
-            /* Fallback: we cannot see VBM state here reliably */
-            pr_warn("QBUF: No phys addr in v4l2_buffer; using 0 (ignored by HW)\n");
-            phys = 0;
-        }
+        pr_info("*** vic_core_ops_ioctl: 0x3000008 - Buffer allocation request: count=%d ***\n",
+                buffer_count);
 
-        if (buffer->index >= 5) {
-            pr_err("vic_core_ops_ioctl: QBUF - invalid index %u (max 4)\n", buffer->index);
+        /* Validate buffer count */
+        if (buffer_count < 0 || buffer_count > 64) {
+            pr_err("vic_core_ops_ioctl: 0x3000008 - invalid buffer count %d\n", buffer_count);
             return -EINVAL;
         }
 
-        /* Build a transient vic_buffer_entry and program this slot */
-        {
-            struct vic_buffer_entry node;
-            memset(&node, 0, sizeof(node));
-            {
-                /* Choose next slot based on current hardware slot to avoid clashes */
-                u32 nslots = vic_dev->active_buffer_count ? ((vic_dev->active_buffer_count > 5) ? 5 : vic_dev->active_buffer_count) : 2;
-                u32 slots[5] = {0};
-                int j, cur_idx = -1;
-                u32 current_buffer = 0;
-                if (vic_dev->vic_regs)
-                    current_buffer = readl(vic_dev->vic_regs + 0x380);
-                for (j = 0; j < 5 && j < nslots; j++) {
-                    slots[j] = readl(vic_dev->vic_regs + (0x318 + j * 4));
-                    if (slots[j] == current_buffer) cur_idx = j;
-                }
-                if (cur_idx < 0) {
-                    /* Fallback to last_idx rotation if current not detectable */
-                    cur_idx = (vic_dev->last_idx >= 0 && vic_dev->last_idx < nslots) ? vic_dev->last_idx : 0;
-                }
-                u32 slot = (cur_idx + 1) % nslots;
-                node.buffer_index = slot;
-                vic_dev->last_idx = slot;
-            }
-            node.buffer_addr  = phys;
-            node.buffer_status = VIC_BUFFER_STATUS_QUEUED;
+        /* Set VIC active buffer count (max 5 for hardware ring) */
+        vic_dev->active_buffer_count = (buffer_count > 5) ? 5 : buffer_count;
 
-            (void) ispvic_frame_channel_qbuf(sd, &node);
-        }
+        pr_info("*** vic_core_ops_ioctl: VIC active_buffer_count set to %d (Binary Ninja EXACT) ***\n",
+                vic_dev->active_buffer_count);
 
-        /* Keep ISR/stream control stable: do not touch MDMA or 0x300 here */
+        /* Binary Ninja reference: This event is called during REQBUFS, not QBUF */
+        /* The actual buffer addresses are programmed during STREAMON via ispvic_frame_channel_qbuf */
+
         return 0;
     }
     else if (cmd == 0x3000005) {  /* TX_ISP_EVENT_BUFFER_ENQUEUE - keep pipeline fed */
@@ -2518,29 +2491,53 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
         return -EINVAL;
     }
 
+    /* Binary Ninja: void* $s1_1 = *(arg1 + 0xd4) */
+    /* SAFE: Use proper struct member access instead of dangerous offset */
     vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+
+    /* CRITICAL DEBUG: Verify VIC device is valid */
     if (!vic_dev) {
-        pr_err("*** vic_core_ops_init: vic_dev is NULL! ***\n");
+        pr_err("*** vic_core_ops_init: CRITICAL ERROR - vic_dev is NULL! ***\n");
         return -EINVAL;
     }
+    pr_info("*** vic_core_ops_init: vic_dev=%p, current state check ***\n", vic_dev);
 
+    /* Binary Ninja: int32_t $v0_2 = *($s1_1 + 0x128) */
     current_state = vic_dev->state;
     pr_info("*** vic_core_ops_init: current_state=%d, enable=%d ***\n", current_state, enable);
 
+    /* Binary Ninja: if (arg2 == 0) */
     if (enable == 0) {
+        /* Binary Ninja: result = 0 */
         result = 0;
+
+        /* Binary Ninja: if ($v0_2 != 2) */
         if (current_state != 2) {
+            /* Binary Ninja: tx_vic_disable_irq() */
             tx_vic_disable_irq(vic_dev);
+
+            /* Binary Ninja: *($s1_1 + 0x128) = 2 */
             vic_dev->state = 2;
         }
     } else {
+        /* Binary Ninja: result = 0 */
         result = 0;
+
+        /* Binary Ninja: if ($v0_2 != 3) */
         if (current_state != 3) {
+            /* CRITICAL FIX: Call tx_isp_vic_start BEFORE enabling interrupts */
+            /* This is where VIC hardware should be initialized for interrupt generation */
+            extern uint32_t vic_start_ok;
+
+            /* Binary Ninja: tx_vic_enable_irq() */
             tx_vic_enable_irq(vic_dev);
+
+            /* Binary Ninja: *($s1_1 + 0x128) = 3 */
             vic_dev->state = 3;
         }
     }
 
+    /* Binary Ninja: return result */
     return result;
 }
 
@@ -2708,14 +2705,17 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             pr_info("*** DEBUG: Before writing VIC[0x300]: VIC[0x0]=0x%x VIC[0x300]=0x%x ***\n",
                     vic_state_before, vic_ctrl_before);
 
-            /* CRITICAL FIX: Use 3 buffers per channel for smooth streaming */
-            /* Channel 0 (1920x1080): 3 × 3,110,400 = 9,331,200 bytes */
-            /* Channel 1 (640x360):   3 × 345,600   = 1,036,800 bytes */
-            /* Total: 10,368,000 bytes (fits in 29M rmem with 20M to spare) */
-            vic_dev->active_buffer_count = 3;  /* 3 buffers for triple buffering */
-            u32 buffer_count = 3;  /* 3 buffers per channel */
+            /* CRITICAL FIX: Use active_buffer_count from REQBUFS, not hardcoded value! */
+            /* This was set during REQBUFS via 0x3000008 event */
+            u32 buffer_count = vic_dev->active_buffer_count;
+            if (buffer_count == 0) {
+                /* Fallback: Use default if not set */
+                buffer_count = 3;
+                vic_dev->active_buffer_count = 3;
+                pr_warn("*** VIC MDMA: active_buffer_count was 0, using default 3 ***\n");
+            }
             u32 stream_ctrl = (buffer_count << 16) | 0x80000020;  /* Binary Ninja EXACT formula */
-            pr_info("*** VIC MDMA: Using %d buffers for triple buffering ***\n", buffer_count);
+            pr_info("*** VIC MDMA: Using active_buffer_count=%d from REQBUFS (Binary Ninja EXACT) ***\n", buffer_count);
             void __iomem *vic_ctrl = vic_dev->vic_regs_control;
             writel(stream_ctrl, vic_base + 0x300);
             if (vic_ctrl)
@@ -2724,37 +2724,56 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
 
             pr_info("*** Binary Ninja EXACT: Wrote 0x%x to reg 0x300 (%d buffers) ***\n", stream_ctrl, buffer_count);
 
-            /* CRITICAL FIX: Program 3 buffer addresses from rmem BEFORE starting VIC */
+            /* CRITICAL FIX: Program buffer addresses from VBM pool BEFORE starting VIC */
             /* VIC needs multiple buffers for ping-pong operation to avoid control limit error */
+            /* NOTE: Buffer addresses should already be programmed by QBUF/STREAMON enqueue loop */
+            /* This is just a safety check to ensure buffers are programmed */
             {
                 extern struct tx_isp_dev *ourISPdev;
-                u32 rmem_base = 0x06300000;  /* Default T31 ISP rmem base */
-                if (ourISPdev && ourISPdev->rmem_addr) {
-                    rmem_base = (u32)ourISPdev->rmem_addr;
+                extern struct frame_channel_device frame_channels[];
+                struct frame_channel_device *fcd = &frame_channels[0]; /* Channel 0 */
+
+                /* Try to get buffer addresses from VBM pool first */
+                if (fcd->vbm_pool && fcd->vbm_pool->buffer_count >= buffer_count) {
+                    int i;
+                    pr_info("*** VIC BUFFER INIT: Using VBM pool buffers (Binary Ninja EXACT) ***\n");
+
+                    for (i = 0; i < buffer_count && i < 5; i++) {
+                        u32 buf_addr = (u32)fcd->vbm_pool->buffers[i].paddr;
+                        u32 reg_offset = 0x318 + (i * 4);
+
+                        writel(buf_addr, vic_base + reg_offset);
+                        if (vic_ctrl)
+                            writel(buf_addr, vic_ctrl + reg_offset);
+
+                        pr_info("*** VIC BUFFER %d: 0x%x (from VBM pool) ***\n", i, buf_addr);
+                    }
+                    wmb();
+                } else {
+                    /* Fallback: Use rmem addresses if VBM pool not available */
+                    u32 rmem_base = 0x06300000;  /* Default T31 ISP rmem base */
+                    if (ourISPdev && ourISPdev->rmem_addr) {
+                        rmem_base = (u32)ourISPdev->rmem_addr;
+                    }
+
+                    pr_warn("*** VIC BUFFER INIT: VBM pool not available, using rmem fallback ***\n");
+
+                    /* Calculate buffer addresses for channel 0 (1920x1080) */
+                    u32 frame_size = 3 * 1024 * 1024;  /* 3M per buffer */
+                    int i;
+
+                    for (i = 0; i < buffer_count && i < 5; i++) {
+                        u32 buf_addr = rmem_base + (frame_size * i);
+                        u32 reg_offset = 0x318 + (i * 4);
+
+                        writel(buf_addr, vic_base + reg_offset);
+                        if (vic_ctrl)
+                            writel(buf_addr, vic_ctrl + reg_offset);
+
+                        pr_info("*** VIC BUFFER %d: 0x%x (from rmem) ***\n", i, buf_addr);
+                    }
+                    wmb();
                 }
-
-                /* Calculate buffer addresses for channel 0 (1920x1080) */
-                /* Frame size: 3,114,816 bytes, rounded to 3M (3,145,728) for alignment */
-                u32 frame_size = 3 * 1024 * 1024;  /* 3M per buffer */
-                u32 buf0 = rmem_base;
-                u32 buf1 = rmem_base + frame_size;
-                u32 buf2 = rmem_base + (frame_size * 2);
-
-                /* Write buffer addresses to VIC registers */
-                writel(buf0, vic_base + 0x318);  /* Buffer 0 */
-                writel(buf1, vic_base + 0x31c);  /* Buffer 1 */
-                writel(buf2, vic_base + 0x320);  /* Buffer 2 */
-                if (vic_ctrl) {
-                    writel(buf0, vic_ctrl + 0x318);
-                    writel(buf1, vic_ctrl + 0x31c);
-                    writel(buf2, vic_ctrl + 0x320);
-                }
-                wmb();
-
-                pr_info("*** VIC BUFFER INIT: Programmed 3 buffers from rmem=0x%x ***\n", rmem_base);
-                pr_info("*** VIC BUFFER 0: 0x%x ***\n", buf0);
-                pr_info("*** VIC BUFFER 1: 0x%x ***\n", buf1);
-                pr_info("*** VIC BUFFER 2: 0x%x ***\n", buf2);
             }
 
             /* CRITICAL DEBUG: Read back what we just wrote to verify */
@@ -2893,21 +2912,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         if (w == 0) w = 1280; /* safe fallback */
                         stride = w << 1;      /* RAW10-like: 2 bytes/pixel */
 
-
-                        /* CRITICAL FIX: Write ISP Control registers BEFORE gates (reference trace lines 56-63) */
-                        /* These are PREREQUISITES for gates to work - without them, gates won't open! */
-                        pr_info("*** CRITICAL FIX: Writing ISP Control registers (0x9804-0x98a8) BEFORE gates ***\n");
-                        writel(0x3f00, core + 0x9804);       /* ISP Control - channel enable */
-                        writel(0x7800438, core + 0x9864);    /* ISP Control - dimensions */
-                        writel(0xc0000000, core + 0x987c);   /* ISP Control - config */
-                        writel(0x1, core + 0x9880);          /* ISP Control - enable */
-                        writel(0x1, core + 0x9884);          /* ISP Control - enable */
-                        writel(0x1010001, core + 0x9890);    /* ISP Control - config */
-                        writel(0x1010001, core + 0x989c);    /* ISP Control - config */
-                        writel(0x1010001, core + 0x98a8);    /* ISP Control - config */
-                        wmb();
-                        pr_info("*** ISP Control registers written - gates should now be able to open ***\n");
-
                         /* Program only the minimally safe core VIC regs seen in reference */
                         writel(0x1, core + 0x9a34);   /* enable bit observed in reference */
                         writel(0x1, core + 0x9a88);   /* enable/route latch bit */
@@ -2918,20 +2922,13 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         writel(stride, core + 0x9a2c);/* line step or related */
                         /* Override tuning’s stale width-like register with dynamic width */
                         writel(w, core + 0x9a98);     /* observed as 0x500 in logs when width was 1280 */
+                        /* 0x9a94 already set to 1 earlier; leave as-is */
 
-                        /* CRITICAL: Write 0x9a94 = 0x1 BEFORE gate writes (from reference trace) */
-                        /* This is the GATE ENABLE register - without it, gates at 0x9ac0/0x9ac8 won't work! */
-                        writel(0x1, core + 0x9a94);
+                        /* Now (re)assert the core VIC IRQ gate (working values 1/0) */
+                        writel(0x00000001, core + 0x9ac0);
+                        writel(0x00000000, core + 0x9ac8);
                         wmb();
-                        pr_info("*** CRITICAL FIX: Wrote 0x1 to 0x9a94 (gate enable) BEFORE gate writes ***\n");
-
-                        /* CRITICAL FIX: Binary Ninja reference trace shows 0x200/0x200, not 0x1/0x0! */
-                        /* reference-trace.txt line 74-75: write at offset 0x9ac0: 0x0 -> 0x200 */
-                        /*                                  write at offset 0x9ac8: 0x0 -> 0x200 */
-                        writel(0x00000200, core + 0x9ac0);
-                        writel(0x00000200, core + 0x9ac8);
-                        wmb();
-                        pr_info("*** CORE VIC ROUTE INIT: [9a00]=0x%08x [9a04]=0x%08x [9a2c]=0x%08x [9a34]=0x%08x [9a88]=0x%08x [9a80]=0x%08x [9a98]=0x%08x; GATE [9ac0]=0x%08x [9ac8]=0x%08x (BINARY NINJA: 0x200/0x200) ***\n",
+                        pr_info("*** CORE VIC ROUTE INIT: [9a00]=0x%08x [9a04]=0x%08x [9a2c]=0x%08x [9a34]=0x%08x [9a88]=0x%08x [9a80]=0x%08x [9a98]=0x%08x; GATE [9ac0]=0x%08x [9ac8]=0x%08x ***\n",
                                 readl(core + 0x9a00), readl(core + 0x9a04), readl(core + 0x9a2c),
                                 readl(core + 0x9a34), readl(core + 0x9a88), readl(core + 0x9a80), readl(core + 0x9a98),
                                 readl(core + 0x9ac0), readl(core + 0x9ac8));
@@ -3059,13 +3056,11 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 }
 
             /* VIC CONTROL: enter RUN state after all config (write 1) */
-            /* CRITICAL FIX: Don't start VIC here - tx_isp_vic_start will do it AFTER vic_start_ok=1 */
-            /* This was causing spurious interrupts before buffer management was ready */
             if (vic_dev && vic_dev->vic_regs) {
                 void __iomem *vr = vic_dev->vic_regs;
-                /* REMOVED: writel(1, vr + 0x0); - causes premature interrupt */
-                /* wmb(); */
-                pr_info("*** VIC CONTROL (PRIMARY): SKIPPING VIC[0x0]=1 write - tx_isp_vic_start will enable VIC ***\n");
+                writel(1, vr + 0x0);
+                wmb();
+                pr_info("*** VIC CONTROL (PRIMARY): WROTE 1 to [0x0] before enabling IRQ ***\n");
             /* Post-RUN re-arm: commit dance so enables latch without touching masks */
                 /* Program PRIMARY IMR/IMCR routing once (match good-things), no re-arm */
                 if (vic_dev && vic_dev->vic_regs) {

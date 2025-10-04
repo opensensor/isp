@@ -601,6 +601,43 @@ struct tx_isp_channel_state {
     bool frame_ready;                      /* Simple frame ready flag */
 };
 
+/* VBM Buffer Entry Structure - EXACT Binary Ninja layout (0x428 bytes) */
+struct vbm_buffer_entry {
+    int index;                      /* +0x00: Buffer index */
+    int channel;                    /* +0x04: Channel number */
+    int height;                     /* +0x08: Height */
+    int width;                      /* +0x0c: Width */
+    int format;                     /* +0x10: Format (PIX_FMT_NV12 = 0x22) */
+    int buffer_size;                /* +0x14: Buffer size in bytes */
+    void *vaddr;                    /* +0x18: Virtual address */
+    phys_addr_t paddr;              /* +0x1c: Physical address */
+    char metadata[44];              /* +0x2c: Additional metadata (44 bytes) */
+    char padding[0x3f8];            /* Pad to 0x428 bytes total */
+} __attribute__((packed));
+
+/* VBM Pool Structure - EXACT Binary Ninja layout */
+struct vbm_pool {
+    int channel;                    /* +0x00: Channel number */
+    void *parent;                   /* +0x04: Parent framesource pointer */
+    char reserved1[4];              /* +0x08: Reserved */
+    int height;                     /* +0x0c: Height */
+    int width;                      /* +0x10: Width */
+    int format;                     /* +0x14: Format */
+    char reserved2[8];              /* +0x18: Reserved */
+    int buffer_size;                /* +0x20: Buffer size per buffer */
+    char reserved3[180];            /* +0x24: Reserved space */
+    int buffer_count;               /* +0xd4: Number of buffers */
+    char pool_name[64];             /* +0xd8: Pool name string */
+    char reserved4[128];            /* +0x118: Reserved */
+    void *vaddr_base;               /* +0x158: Virtual address base */
+    phys_addr_t paddr_base;         /* +0x15c: Physical address base */
+    char reserved5[24];             /* +0x160: Reserved */
+    void *alloc_callback;           /* +0x174: Alloc callback function */
+    void *free_callback;            /* +0x178: Free callback function */
+    int pool_id;                    /* +0x17c: Pool ID (-1 = IMP_Alloc, >=0 = IMP_PoolAlloc) */
+    struct vbm_buffer_entry buffers[0]; /* +0x180: Buffer entries (0x428 bytes each) */
+} __attribute__((packed));
+
 // Frame channel devices - create video channel devices like reference
 // CRITICAL: Add proper alignment and validation for MIPS
 struct frame_channel_device {
@@ -619,6 +656,12 @@ struct frame_channel_device {
     int buffer_type;                     /* Offset 0x24 - *($s0 + 0x24) */
     int field;                           /* Offset 0x3c - *($s0 + 0x3c) */
     void *buffer_array[64];              /* Buffer array for index lookup */
+
+    /* VBM Pool Management - Binary Ninja VBMCreatePool/VBMFillPool support */
+    struct vbm_pool *vbm_pool;           /* VBM pool structure for this channel */
+    void *dma_vaddr;                     /* DMA virtual address for cleanup */
+    dma_addr_t dma_paddr;                /* DMA physical address for cleanup */
+    size_t dma_size;                     /* DMA allocation size for cleanup */
 
     /* CRITICAL: Add validation magic number to detect corruption */
     uint32_t magic;                      /* Magic number for validation */

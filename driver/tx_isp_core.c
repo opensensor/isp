@@ -2753,7 +2753,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 
                 if (vic_state == 4) {
                     pr_info("*** ispcore_core_ops_init: VIC already streaming (state 4) - initializing during streaming ***");
-                } else {
+                } else if (vic_state == 3) {
                     pr_info("*** ispcore_core_ops_init: VIC in ready state (%d) - normal initialization ***", vic_state);
                    	ispcore_video_s_stream(sd, 1);
                 }

@@ -1399,6 +1399,25 @@ int frame_channel_release(struct inode *inode, struct file *file)
         wake_up_interruptible(&fcd->state.frame_wait);
     }
 
+    /* CRITICAL: Free VBM pool resources */
+    if (fcd->vbm_pool) {
+        pr_info("*** Channel %d: Freeing VBM pool on release ***\n", fcd->channel_num);
+
+        /* Free DMA memory */
+        if (fcd->dma_vaddr && fcd->dma_size > 0) {
+            dma_free_coherent(NULL, fcd->dma_size, fcd->dma_vaddr, fcd->dma_paddr);
+            pr_info("*** Channel %d: Freed DMA memory (%zu bytes) ***\n", fcd->channel_num, fcd->dma_size);
+        }
+
+        /* Free VBM pool structure */
+        kfree(fcd->vbm_pool);
+        fcd->vbm_pool = NULL;
+        fcd->dma_vaddr = NULL;
+        fcd->dma_size = 0;
+
+        pr_info("*** Channel %d: VBM pool freed successfully ***\n", fcd->channel_num);
+    }
+
     file->private_data = NULL;
     return 0;
 }
@@ -2492,6 +2511,52 @@ static void destroy_isp_tuning_device(void)
     }
 }
 
+/* Write VBM pool info to /tmp/alloc_manager_info - Binary Ninja VBMCreatePool requirement */
+static int write_vbm_pool_info(struct vbm_pool *pool)
+{
+    struct file *fp;
+    char buf[256];
+    int i;
+    loff_t pos = 0;
+    mm_segment_t old_fs;
+
+    if (!pool) {
+        pr_err("*** write_vbm_pool_info: NULL pool pointer ***\n");
+        return -EINVAL;
+    }
+
+    pr_info("*** Writing VBM pool info to /tmp/alloc_manager_info ***\n");
+
+    /* Save current address space limit and set to kernel space for file operations */
+    old_fs = get_fs();
+    set_fs(KERNEL_DS);
+
+    fp = filp_open("/tmp/alloc_manager_info", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (IS_ERR(fp)) {
+        pr_err("*** Failed to open /tmp/alloc_manager_info: %ld ***\n", PTR_ERR(fp));
+        set_fs(old_fs);
+        return PTR_ERR(fp);
+    }
+
+    /* Write pool header - EXACT format from Binary Ninja */
+    snprintf(buf, sizeof(buf), "info->owner = %s\n", pool->pool_name);
+    vfs_write(fp, buf, strlen(buf), &pos);
+    pr_info("*** VBM Info: %s", buf);
+
+    /* Write each buffer address - EXACT format from Binary Ninja */
+    for (i = 0; i < pool->buffer_count; i++) {
+        snprintf(buf, sizeof(buf), "info->paddr = 0x%08x\n", (u32)pool->buffers[i].paddr);
+        vfs_write(fp, buf, strlen(buf), &pos);
+        pr_info("*** VBM Info: Buffer[%d] %s", i, buf);
+    }
+
+    filp_close(fp, NULL);
+    set_fs(old_fs);
+
+    pr_info("*** VBM pool info written successfully to /tmp/alloc_manager_info ***\n");
+    return 0;
+}
+
 long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
     void __user *argp = (void __user *)arg;
@@ -2749,6 +2814,85 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
             state->buffer_count = reqbuf.count;
 
+            /* CRITICAL: VBM Pool Creation - Binary Ninja VBMCreatePool implementation */
+            pr_info("*** Channel %d: Creating VBM pool (Binary Ninja VBMCreatePool) ***\n", channel);
+
+            /* Free existing VBM pool if present */
+            if (fcd->vbm_pool) {
+                pr_info("*** Channel %d: Freeing existing VBM pool ***\n", channel);
+                if (fcd->dma_vaddr && fcd->dma_size > 0) {
+                    dma_free_coherent(NULL, fcd->dma_size, fcd->dma_vaddr, fcd->dma_paddr);
+                }
+                kfree(fcd->vbm_pool);
+                fcd->vbm_pool = NULL;
+                fcd->dma_vaddr = NULL;
+                fcd->dma_size = 0;
+            }
+
+            /* Calculate VBM pool size: base (0x180) + (buffer_count * 0x428) */
+            size_t pool_size = 0x180 + (reqbuf.count * 0x428);
+            fcd->vbm_pool = kzalloc(pool_size, GFP_KERNEL);
+            if (!fcd->vbm_pool) {
+                pr_err("*** Channel %d: Failed to allocate VBM pool structure ***\n", channel);
+                state->buffer_count = 0;
+                return -ENOMEM;
+            }
+
+            /* Fill VBM pool configuration - EXACT Binary Ninja layout */
+            fcd->vbm_pool->channel = channel;
+            fcd->vbm_pool->parent = NULL; /* Will be set by libimp */
+            fcd->vbm_pool->width = state->width;
+            fcd->vbm_pool->height = state->height;
+            fcd->vbm_pool->format = 0x22; /* PIX_FMT_NV12 */
+            fcd->vbm_pool->buffer_size = state->width * state->height * 3 / 2; /* NV12 format */
+            fcd->vbm_pool->buffer_count = reqbuf.count;
+            snprintf(fcd->vbm_pool->pool_name, 64, "VBMPool%d", channel);
+            fcd->vbm_pool->pool_id = -1; /* Using IMP_Alloc, not IMP_PoolAlloc */
+
+            pr_info("*** VBM Pool: channel=%d, %dx%d, format=0x%x, buf_size=%d, count=%d ***\n",
+                    fcd->vbm_pool->channel, fcd->vbm_pool->width, fcd->vbm_pool->height,
+                    fcd->vbm_pool->format, fcd->vbm_pool->buffer_size, fcd->vbm_pool->buffer_count);
+
+            /* Allocate DMA memory for all buffers */
+            size_t total_dma_size = fcd->vbm_pool->buffer_size * reqbuf.count;
+            void *dma_vaddr = dma_alloc_coherent(NULL, total_dma_size, &fcd->dma_paddr, GFP_KERNEL);
+            if (!dma_vaddr) {
+                pr_err("*** Channel %d: Failed to allocate DMA memory (%zu bytes) ***\n", channel, total_dma_size);
+                kfree(fcd->vbm_pool);
+                fcd->vbm_pool = NULL;
+                state->buffer_count = 0;
+                return -ENOMEM;
+            }
+
+            fcd->dma_vaddr = dma_vaddr;
+            fcd->dma_size = total_dma_size;
+            fcd->vbm_pool->vaddr_base = dma_vaddr;
+            fcd->vbm_pool->paddr_base = fcd->dma_paddr;
+
+            pr_info("*** VBM Pool: Allocated DMA memory: vaddr=%p, paddr=0x%x, size=%zu ***\n",
+                    dma_vaddr, (u32)fcd->dma_paddr, total_dma_size);
+
+            /* Initialize buffer entries - EXACT Binary Ninja layout */
+            for (int i = 0; i < reqbuf.count; i++) {
+                struct vbm_buffer_entry *entry = &fcd->vbm_pool->buffers[i];
+                entry->index = i;
+                entry->channel = channel;
+                entry->width = fcd->vbm_pool->width;
+                entry->height = fcd->vbm_pool->height;
+                entry->format = fcd->vbm_pool->format;
+                entry->buffer_size = fcd->vbm_pool->buffer_size;
+                entry->vaddr = dma_vaddr + (i * fcd->vbm_pool->buffer_size);
+                entry->paddr = fcd->dma_paddr + (i * fcd->vbm_pool->buffer_size);
+
+                pr_info("*** VBM Buffer[%d]: vaddr=%p, paddr=0x%x, size=%d ***\n",
+                        i, entry->vaddr, (u32)entry->paddr, entry->buffer_size);
+            }
+
+            pr_info("*** Channel %d: VBM pool created successfully (Binary Ninja compatible) ***\n", channel);
+
+            /* CRITICAL: Write VBM pool info to /tmp/alloc_manager_info for libimp.so */
+            write_vbm_pool_info(fcd->vbm_pool);
+
             /* CRITICAL FIX: Initialize VBM buffer management for this channel */
             if (state->vbm_buffer_addresses) {
                 pr_info("*** Channel %d: REQBUFS freeing existing VBM buffer array ***\n", channel);
@@ -2781,6 +2925,27 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
             pr_info("*** Channel %d: MEMORY-AWARE REQBUFS SUCCESS - %d buffers ***\n",
                    channel, state->buffer_count);
+
+            /* CRITICAL: Send 0x3000008 event to VIC with buffer count - Binary Ninja EXACT */
+            if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
+                struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
+                int32_t buffer_count_for_vic = reqbuf.count;
+
+                pr_info("*** REQBUFS: Sending 0x3000008 event to VIC with buffer_count=%d (Binary Ninja EXACT) ***\n",
+                        buffer_count_for_vic);
+
+                int event_result = tx_isp_send_event_to_remote(&vic_dev->sd, 0x3000008, &buffer_count_for_vic);
+
+                if (event_result == 0) {
+                    pr_info("*** REQBUFS: VIC 0x3000008 event SUCCESS ***\n");
+                } else if (event_result == 0xfffffdfd) {
+                    pr_info("*** REQBUFS: VIC has no 0x3000008 event handler (calling direct) ***\n");
+                    /* Fallback: Call VIC handler directly */
+                    (void)vic_core_ops_ioctl(&vic_dev->sd, 0x3000008, &buffer_count_for_vic);
+                } else {
+                    pr_warn("*** REQBUFS: VIC 0x3000008 event returned: 0x%x ***\n", event_result);
+                }
+            }
 
         } else {
             /* Free existing buffers */
@@ -2878,56 +3043,88 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             /* Don't return error for VBM mode - continue with VBM buffer handling */
         }
 
-        /* Binary Ninja: EXACT event call - tx_isp_send_event_to_remote(*($s0 + 0x2bc), 0x3000008, &var_78) */
-        if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
-            /* CRITICAL FIX: Remove dangerous cast - vic_dev is already the correct type */
-            struct tx_isp_vic_device *vic_dev_buf = ourISPdev->vic_dev;
+        /* CRITICAL FIX: Binary Ninja shows reference driver does NOT call tx_isp_send_event_to_remote during QBUF! */
+        /* The 0x3000008 event is only sent during REQBUFS with buffer count, NOT during QBUF! */
+        /* Instead, QBUF calls __enqueue_in_driver which sends 0x3000005 event */
 
-            pr_info("*** Channel %d: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***\n", channel);
-
-            /* CRITICAL: Pass the raw buffer data, not a custom structure */
-            int event_result = tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000008, &buffer);
-
-            if (event_result == 0) {
-                pr_info("*** Channel %d: QBUF EVENT SUCCESS ***\n", channel);
-            } else if (event_result == 0xfffffdfd) {
-                pr_info("*** Channel %d: QBUF EVENT - No VIC callback (falling back to direct call) ***\n", channel);
-            } else {
-                pr_warn("*** Channel %d: QBUF EVENT returned: 0x%x (falling back to direct call) ***\n", channel, event_result);
-            }
-
-            /* DIRECT PATH: Call VIC handler explicitly to ensure buffers are programmed */
-            pr_info("*** Channel %d: QBUF -> direct VIC buffer management via vic_core_ops_ioctl ***\n", channel);
-            (void)vic_core_ops_ioctl(&vic_dev_buf->sd, 0x3000008, &buffer);
-        }
-
-        /* CRITICAL FIX: Use REAL buffer address from application instead of fake address */
-        int buffer_size = state->width * state->height * 2;
+        /* CRITICAL: Get buffer address from VBM pool */
         uint32_t buffer_phys_addr;
 
-        /* Extract real buffer address from v4l2_buffer structure */
-        if (buffer.memory == V4L2_MEMORY_MMAP && buffer.m.offset != 0) {
-            /* Application provided real buffer address via mmap offset */
+        if (fcd->vbm_pool && buffer.index < fcd->vbm_pool->buffer_count) {
+            /* Get buffer entry from VBM pool */
+            struct vbm_buffer_entry *entry = &fcd->vbm_pool->buffers[buffer.index];
+            buffer_phys_addr = (uint32_t)entry->paddr;
+
+            pr_info("*** Channel %d: QBUF - Using VBM pool buffer[%d]: paddr=0x%x, vaddr=%p ***\n",
+                    channel, buffer.index, buffer_phys_addr, entry->vaddr);
+
+            /* Store in VBM buffer array for tracking */
+            if (state->vbm_buffer_addresses && buffer.index < state->buffer_count) {
+                state->vbm_buffer_addresses[buffer.index] = buffer_phys_addr;
+                if (buffer.index >= state->vbm_buffer_count) {
+                    state->vbm_buffer_count = buffer.index + 1;
+                }
+                pr_info("*** QBUF: Stored buffer[%d] paddr=0x%x in VBM array (count=%d) ***\n",
+                        buffer.index, buffer_phys_addr, state->vbm_buffer_count);
+            }
+
+            /* CRITICAL: Binary Ninja EXACT - Call __enqueue_in_driver if streaming */
+            /* Reference: if ((*($s0 + 0x230) & 1) != 0) __enqueue_in_driver($s1_5) */
+            if (state->streaming && channel == 0 && ourISPdev && ourISPdev->vic_dev) {
+                struct vic_buffer_entry *node = kmalloc(sizeof(*node), GFP_KERNEL);
+                if (node) {
+                    INIT_LIST_HEAD(&node->list);
+                    node->buffer_addr = buffer_phys_addr;
+                    node->buffer_index = buffer.index;
+                    node->buffer_status = VIC_BUFFER_STATUS_QUEUED;
+
+                    pr_info("*** QBUF: Streaming active - calling __enqueue_in_driver (Binary Ninja EXACT) ***\n");
+                    int result = __enqueue_in_driver(node);
+
+                    if (result == 0) {
+                        pr_info("*** QBUF: __enqueue_in_driver SUCCESS ***\n");
+                    } else if (result == 0xfffffdfd || result == -0x203) {
+                        /* Fallback: Call VIC directly with 0x3000005 event */
+                        pr_info("*** QBUF: Fallback to vic_core_ops_ioctl(0x3000005) ***\n");
+                        if (ourISPdev && ourISPdev->vic_dev) {
+                            vic_core_ops_ioctl(&ourISPdev->vic_dev->sd, 0x3000005, node);
+                        }
+                    } else {
+                        pr_warn("*** QBUF: __enqueue_in_driver returned: 0x%x ***\n", result);
+                    }
+
+                    kfree(node);
+                } else {
+                    pr_err("*** QBUF: Failed to allocate vic_buffer_entry ***\n");
+                    return -ENOMEM;
+                }
+            } else {
+                pr_info("*** QBUF: Not streaming - buffer stored, will be enqueued during STREAMON ***\n");
+            }
+
+        } else if (buffer.memory == V4L2_MEMORY_MMAP && buffer.m.offset != 0) {
+            /* Fallback: Application provided buffer address via mmap offset */
             buffer_phys_addr = buffer.m.offset;
-            pr_info("*** Channel %d: QBUF - Using REAL buffer address from mmap offset: 0x%x ***\n",
+            pr_info("*** Channel %d: QBUF - Using buffer address from mmap offset: 0x%x ***\n",
                     channel, buffer_phys_addr);
         } else if (buffer.memory == V4L2_MEMORY_USERPTR && buffer.m.userptr != 0) {
-            /* Application provided real buffer address via userptr */
+            /* Fallback: Application provided buffer address via userptr */
             buffer_phys_addr = (uint32_t)buffer.m.userptr;
-            pr_info("*** Channel %d: QBUF - Using REAL buffer address from userptr: 0x%x ***\n",
+            pr_info("*** Channel %d: QBUF - Using buffer address from userptr: 0x%x ***\n",
                     channel, buffer_phys_addr);
         } else {
-            /* Fallback to generated address (but log this as an issue) */
-            buffer_phys_addr = 0x6300000 + (buffer.index * buffer_size);
-            pr_warn("*** Channel %d: QBUF - WARNING: No real buffer address provided, using fallback: 0x%x ***\n",
-                    channel, buffer_phys_addr);
-            pr_warn("*** This may cause green frames - application should provide real buffer addresses! ***\n");
+            /* Error: No valid buffer address source */
+            pr_err("*** Channel %d: QBUF - ERROR: No VBM pool and no buffer address provided! ***\n", channel);
+            pr_err("*** VBM pool: %p, buffer.index: %d, buffer.memory: %d ***\n",
+                   fcd->vbm_pool, buffer.index, buffer.memory);
+            return -EINVAL;
         }
 
         /* CRITICAL SAFETY: Validate buffer address alignment for MIPS */
         if (buffer_phys_addr & 0x3) {
             pr_err("*** Channel %d: QBUF - MIPS ALIGNMENT ERROR: buffer address 0x%x not 4-byte aligned ***\n",
                    channel, buffer_phys_addr);
+            pr_err("*** This will cause kernel panic with BadVA error! ***\n");
             return -EINVAL;
         }
 
@@ -2938,38 +3135,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -EINVAL;
         }
 
-        /* CRITICAL MIPS SAFETY: Validate buffer address alignment */
-        if ((buffer_phys_addr & 0x3) != 0) {
-            pr_err("*** Channel %d: QBUF - MIPS ALIGNMENT ERROR: buffer address 0x%x not 4-byte aligned ***\n",
-                   channel, buffer_phys_addr);
-            pr_err("*** This will cause kernel panic with BadVA error! ***\n");
-            return -EINVAL;
-        }
-
-        /* CRITICAL: Validate buffer address is in valid memory range */
-        if (buffer_phys_addr < 0x6000000 || buffer_phys_addr >= 0x8000000) {
-            pr_err("*** Channel %d: QBUF - Invalid buffer address 0x%x (outside valid range) ***\n",
-                   channel, buffer_phys_addr);
-            return -EINVAL;
-        }
-
-        pr_info("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x, size=%d (VALIDATED) ***\n",
-                channel, buffer.index, buffer_phys_addr, buffer_size);
-
-        /* CRITICAL: Store VBM buffer addresses for later use during streaming */
-        if (!state->vbm_buffer_addresses) {
-            state->vbm_buffer_addresses = kzalloc(sizeof(uint32_t) * 16, GFP_KERNEL);
-            state->vbm_buffer_count = 0;
-        }
-
-        if (state->vbm_buffer_addresses && buffer.index < 16) {
-            state->vbm_buffer_addresses[buffer.index] = buffer_phys_addr;
-            if (buffer.index >= state->vbm_buffer_count) {
-                state->vbm_buffer_count = buffer.index + 1;
-            }
-            pr_info("*** Channel %d: QBUF VBM - Stored buffer[%d] = 0x%x, total_count=%d ***\n",
-                    channel, buffer.index, buffer_phys_addr, state->vbm_buffer_count);
-        }
+        pr_info("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x (VALIDATED) ***\n",
+                channel, buffer.index, buffer_phys_addr);
 
         /* CRITICAL FIX: Get video_buffer structure and set state like reference driver */
         struct video_buffer *video_buffer = NULL;
@@ -3021,7 +3188,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 }
             }
         } while (0);
-
         } else {
             pr_warn("*** Channel %d: QBUF - VBM buffer management not initialized ***\n",
                     channel);

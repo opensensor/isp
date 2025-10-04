@@ -549,67 +549,6 @@ struct group_module {
 } __attribute__((packed, aligned(4)));
 
 
-struct vbm_frame {
-    __u32 index;          // 0x000
-    __u32 pool_id;        // 0x004
-    __u32 width;          // 0x008
-    __u32 height;         // 0x00c
-    __u32 format;         // 0x010
-    __u32 size;           // 0x014
-    __u32 virt_addr;      // 0x018
-    __u32 phys_addr;      // 0x01c
-    __u32 frame_data1;    // 0x020
-    __u32 frame_data2;    // 0x024
-    __u32 reserved1[0xD]; // 0x028-0x057 (52 bytes)
-    __u32 zone_info;      // 0x058
-    __u32 reserved2[0xE7];// 0x05c-0x3db (0x380 bytes)
-    __u32 q_count;        // 0x3dc
-    __u32 dq_count;       // 0x3e0
-    __u16 reserved3;      // 0x3e4-0x3e5
-    __u16 state_flags;    // 0x3e6
-    __u32 state1;         // 0x3e8
-    __u32 state2;         // 0x3ec
-    __u32 state3;         // 0x3f0
-    __u32 reserved4[0xE]; // 0x3f4-0x428 (56 bytes)
-} __attribute__((packed));
-
-struct vbm_pool {
-    __u32 pool_id;        // 0x000
-    __u32 user_id;        // 0x004
-    __u32 reserved1[1];   // 0x008-0x00b
-    __u32 width;          // 0x00c
-    __u32 height;         // 0x010
-    __u32 format;         // 0x014
-    __u32 reserved2[2];   // 0x018-0x01f
-    __u32 config_fmt;     // 0x020
-    __u32 reserved3[0x4D];// 0x024-0x157 (0x134 bytes)
-    __u32 base_phys;      // 0x158
-    __u32 base_virt;      // 0x15c
-    __u32 reserved4[3];   // 0x160-0x16b
-    __u32 phys_addr;      // 0x16c
-    __u32 virt_addr;      // 0x170
-    __u32 get_frame_fn;   // 0x174
-    __u32 rel_frame_fn;   // 0x178
-    __u32 bound_chn;      // 0x17c
-    struct vbm_frame frames[]; // 0x180
-} __attribute__((packed));
-
-
-// VBM Frame entry (size 0x428)
-struct vbm_frame_entry {
-    uint32_t index;         // 0x00
-    uint32_t pool_id;       // 0x04
-    uint32_t width;         // 0x08
-    uint32_t height;        // 0x0c
-    uint32_t format;        // 0x10
-    uint32_t size;          // 0x14
-    uint32_t virt_addr;     // 0x18
-    uint32_t phys_addr;     // 0x1c
-    uint8_t padding[0x408]; // Rest of frame struct
-} __attribute__((packed));
-
-
-
 struct reqbuf_request {
     // Standard V4L2 fields (0x00-0x13)
     __u32 count;           // 0x00: Number of buffers requested
