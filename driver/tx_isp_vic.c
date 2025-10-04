@@ -2873,29 +2873,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             /* CRITICAL FIX: Binary Ninja shows vic_core_s_stream does NOT call ispvic_frame_channel_qbuf */
             /* Buffer addresses are written by userspace QBUF calls, not during STREAMON */
             pr_info("*** vic_core_s_stream: MDMA started (Binary Ninja EXACT - no qbuf calls) ***\n");
-
-            /* Re-assert interrupt mask and clear pending in BOTH banks, verify key regs */
-            if (vic_dev->vic_regs) {
-                void __iomem *vr = vic_dev->vic_regs;
-                /* Clear pending (W1C) */
-                writel(0xFFFFFFFF, vr + 0x1f0);
-                writel(0xFFFFFFFF, vr + 0x1f4);
-                /* Set MainMask to allow framedone + bit21 (debug); do NOT touch status regs 0x1e0/0x1e4 */
-                writel(0xFFDFFFFE, vr + 0x1e8); /* allow frame-done + bit21 (debug) */
-                /* Leave 0x1ec (MDMA mask) as-is per working reference */
-                /* DO NOT touch 0x30c here; suspected global mask/enable */
-                wmb();
-                pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (MainMask=0xFFFFFFFE)***\n",
-                        readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x1e0), readl(vr + 0x1e4), readl(vr + 0x1e8), readl(vr + 0x1ec));
-                /* Primary bank: only verify 0x100; do NOT write 0x14 here (0x14 is stride on PRIMARY) */
-                writel(0x000002d0, vr + 0x100);
-                wmb();
-                pr_info("*** VIC VERIFY (PRIMARY EXTRA): [0x100]=0x%08x [0x14]=0x%08x (PRIMARY 0x14=stride) ***\n",
-                        readl(vr + 0x100), readl(vr + 0x14));
-                udelay(50);
-
-
-            }
             if (vic_dev->vic_regs_control) {
                 void __iomem *vc = vic_dev->vic_regs_control;
                 /* Clear pending (if mapped similarly, W1C) */
