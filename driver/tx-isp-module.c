@@ -1403,11 +1403,9 @@ int frame_channel_release(struct inode *inode, struct file *file)
     if (fcd->vbm_pool) {
         pr_info("*** Channel %d: Freeing VBM pool on release ***\n", fcd->channel_num);
 
-        /* Free DMA memory */
-        if (fcd->dma_vaddr && fcd->dma_size > 0) {
-            dma_free_coherent(NULL, fcd->dma_size, fcd->dma_vaddr, fcd->dma_paddr);
-            pr_info("*** Channel %d: Freed DMA memory (%zu bytes) ***\n", fcd->channel_num, fcd->dma_size);
-        }
+        /* NOTE: Do NOT free rmem memory - it's managed by ISP device */
+        /* We're using ISP's reserved memory region, not dma_alloc_coherent */
+        pr_info("*** Channel %d: VBM pool used rmem (not freeing, managed by ISP) ***\n", fcd->channel_num);
 
         /* Free VBM pool structure */
         kfree(fcd->vbm_pool);
@@ -2853,11 +2851,48 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     fcd->vbm_pool->channel, fcd->vbm_pool->width, fcd->vbm_pool->height,
                     fcd->vbm_pool->format, fcd->vbm_pool->buffer_size, fcd->vbm_pool->buffer_count);
 
-            /* Allocate DMA memory for all buffers */
+            /* CRITICAL FIX: Allocate from ISP reserved memory (rmem), not regular DMA memory! */
+            /* VIC hardware can only access rmem region (0x6000000-0x8000000) */
             size_t total_dma_size = fcd->vbm_pool->buffer_size * reqbuf.count;
-            void *dma_vaddr = dma_alloc_coherent(NULL, total_dma_size, &fcd->dma_paddr, GFP_KERNEL);
-            if (!dma_vaddr) {
-                pr_err("*** Channel %d: Failed to allocate DMA memory (%zu bytes) ***\n", channel, total_dma_size);
+            void *dma_vaddr = NULL;
+            dma_addr_t dma_paddr = 0;
+
+            /* Use ISP's rmem allocator instead of dma_alloc_coherent */
+            if (ourISPdev && ourISPdev->rmem_addr && ourISPdev->rmem_size) {
+                /* Calculate offset in rmem for this channel */
+                /* Channel 0 gets first portion of rmem */
+                size_t rmem_offset = 0;
+                if (channel == 1) {
+                    /* Channel 1 starts after channel 0's buffers */
+                    /* Assume channel 0 uses ~12MB (4 buffers × 3MB) */
+                    rmem_offset = 12 * 1024 * 1024;
+                }
+
+                /* Check if we have enough rmem space */
+                if (rmem_offset + total_dma_size > ourISPdev->rmem_size) {
+                    pr_err("*** Channel %d: Not enough rmem space (need %zu, have %zu) ***\n",
+                           channel, total_dma_size, ourISPdev->rmem_size - rmem_offset);
+                    kfree(fcd->vbm_pool);
+                    fcd->vbm_pool = NULL;
+                    state->buffer_count = 0;
+                    return -ENOMEM;
+                }
+
+                /* Use rmem region - map physical address to virtual */
+                dma_paddr = ourISPdev->rmem_addr + rmem_offset;
+                dma_vaddr = ioremap_nocache(dma_paddr, total_dma_size);
+                if (!dma_vaddr) {
+                    pr_err("*** Channel %d: Failed to ioremap rmem at 0x%x ***\n", channel, (u32)dma_paddr);
+                    kfree(fcd->vbm_pool);
+                    fcd->vbm_pool = NULL;
+                    state->buffer_count = 0;
+                    return -ENOMEM;
+                }
+
+                pr_info("*** VBM Pool: Using ISP rmem: vaddr=%p, paddr=0x%x, size=%zu (offset=0x%zx) ***\n",
+                        dma_vaddr, (u32)dma_paddr, total_dma_size, rmem_offset);
+            } else {
+                pr_err("*** Channel %d: ISP rmem not available! ***\n", channel);
                 kfree(fcd->vbm_pool);
                 fcd->vbm_pool = NULL;
                 state->buffer_count = 0;
@@ -2865,12 +2900,13 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
 
             fcd->dma_vaddr = dma_vaddr;
+            fcd->dma_paddr = dma_paddr;
             fcd->dma_size = total_dma_size;
             fcd->vbm_pool->vaddr_base = dma_vaddr;
-            fcd->vbm_pool->paddr_base = fcd->dma_paddr;
+            fcd->vbm_pool->paddr_base = dma_paddr;
 
-            pr_info("*** VBM Pool: Allocated DMA memory: vaddr=%p, paddr=0x%x, size=%zu ***\n",
-                    dma_vaddr, (u32)fcd->dma_paddr, total_dma_size);
+            pr_info("*** VBM Pool: Allocated from rmem: vaddr=%p, paddr=0x%x, size=%zu ***\n",
+                    dma_vaddr, (u32)dma_paddr, total_dma_size);
 
             /* Initialize buffer entries - EXACT Binary Ninja layout */
             for (int i = 0; i < reqbuf.count; i++) {
@@ -3799,12 +3835,26 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
             /* Initialize VIC ring rotation to last filled slot */
             if (ourISPdev && ourISPdev->vic_dev) {
-                ourISPdev->vic_dev->active_buffer_count = (st->vbm_buffer_count > 5) ? 5 : st->vbm_buffer_count;
-                if (ourISPdev->vic_dev->active_buffer_count == 0) ourISPdev->vic_dev->active_buffer_count = 2;
-                ourISPdev->vic_dev->last_idx = (ourISPdev->vic_dev->active_buffer_count ? ourISPdev->vic_dev->active_buffer_count - 1 : 0);
-                pr_info("STREAMON: VIC ring active_count=%u last_idx=%d\n",
+                /* CRITICAL FIX: Do NOT override active_buffer_count here! */
+                /* REQBUFS already set it via 0x3000008 event - trust that value */
+                int buffer_count = ourISPdev->vic_dev->active_buffer_count;
+
+                /* Fallback only if REQBUFS wasn't called (shouldn't happen with prudynt) */
+                if (buffer_count == 0) {
+                    buffer_count = (st->vbm_buffer_count > 5) ? 5 : st->vbm_buffer_count;
+                    if (buffer_count == 0) buffer_count = 2;
+                    pr_warn("STREAMON: REQBUFS not called, using fallback buffer_count=%d\n", buffer_count);
+                }
+
+                ourISPdev->vic_dev->last_idx = (buffer_count ? buffer_count - 1 : 0);
+
+                pr_info("STREAMON: VIC ring active_count=%u (from REQBUFS), last_idx=%d\n",
                         ourISPdev->vic_dev->active_buffer_count,
                         ourISPdev->vic_dev->last_idx);
+
+                /* REMOVED: Do NOT send 0x3000008 event here! */
+                /* REQBUFS already sent it with the correct buffer count */
+                /* Sending it again here causes the count to be overridden incorrectly */
             }
 
         } while (0);

@@ -692,7 +692,8 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
                 struct vic_buffer_entry *buf = list_first_entry(&vic_dev->busy_head,
                                                                 struct vic_buffer_entry, list);
                 list_del(&buf->list);
-                vic_dev->active_buffer_count--;
+                /* CRITICAL FIX: Do NOT decrement active_buffer_count! */
+                /* active_buffer_count is the ring size, not a busy queue counter */
 
                 pr_info("line : %d; bank_addr:0x%x; addr:0x%x\n",
                         662, buf->buffer_addr, current_buffer_addr);
@@ -736,7 +737,8 @@ int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
 
             /* Binary Ninja: Add to busy queue */
             list_add_tail(&free_buf->list, &vic_dev->busy_head);
-            vic_dev->active_buffer_count++;
+            /* CRITICAL FIX: Do NOT increment active_buffer_count! */
+            /* active_buffer_count is the ring size, not a busy queue counter */
 
             /* Binary Ninja: Write buffer address to VIC register */
             /* result = $v1_1 + (($v0_15[4] + 0xc6) << 2) */
@@ -2872,18 +2874,9 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             /* Ensure stream_state reset so ispvic_frame_channel_s_stream performs MDMA enable */
             vic_dev->stream_state = 0;
 
-            /* Force QBUF write to program buffer addresses before MDMA start */
-            pr_info("*** vic_core_s_stream: Forcing ispvic_frame_channel_qbuf to program buffer addresses before MDMA ***\n");
-            {
-                int qret = ispvic_frame_channel_qbuf(sd, NULL);
-                if (qret != 0) {
-                    pr_warn("*** vic_core_s_stream: ispvic_frame_channel_qbuf returned %d (continuing) ***\n", qret);
-                } else {
-                    pr_info("*** vic_core_s_stream: ispvic_frame_channel_qbuf SUCCESS ***\n");
-                }
-            }
-
-            pr_info("*** vic_core_s_stream: Calling ispvic_frame_channel_s_stream(ENABLE) to start MDMA before enabling IRQ ***\n");
+            /* CRITICAL FIX: Binary Ninja shows vic_core_s_stream does NOT call ispvic_frame_channel_qbuf */
+            /* Reference driver only calls tx_isp_vic_start (VIC config) then ispvic_frame_channel_s_stream (MDMA enable) */
+            pr_info("*** vic_core_s_stream: Calling ispvic_frame_channel_s_stream(ENABLE) to start MDMA (Binary Ninja EXACT) ***\n");
             ret = ispvic_frame_channel_s_stream(sd, 1);
             if (ret != 0) {
                 pr_err("*** vic_core_s_stream: ispvic_frame_channel_s_stream FAILED: %d ***\n", ret);
@@ -2937,16 +2930,9 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 }
             } while (0);
 
-            /* Re-write buffer addresses AFTER MDMA start to ensure hardware sees them */
-            pr_info("*** vic_core_s_stream: Re-writing buffer addresses AFTER MDMA start ***\n");
-            {
-                int qret2 = ispvic_frame_channel_qbuf(sd, NULL);
-                if (qret2 != 0) {
-                    pr_warn("*** vic_core_s_stream: ispvic_frame_channel_qbuf (post-MDMA) returned %d (continuing) ***\n", qret2);
-                } else {
-                    pr_info("*** vic_core_s_stream: Post-MDMA QBUF SUCCESS ***\n");
-                }
-            }
+            /* CRITICAL FIX: Binary Ninja shows vic_core_s_stream does NOT call ispvic_frame_channel_qbuf */
+            /* Buffer addresses are written by userspace QBUF calls, not during STREAMON */
+            pr_info("*** vic_core_s_stream: MDMA started (Binary Ninja EXACT - no qbuf calls) ***\n");
 
             /* Re-assert interrupt mask and clear pending in BOTH banks, verify key regs */
             if (vic_dev->vic_regs) {
@@ -3733,9 +3719,10 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
     list_add_tail(&buffer_to_program->list, &vic_dev->busy_head);
     pr_info("ispvic_frame_channel_qbuf: Added entry to busy queue\n");
 
-    /* SAFE: Increment active_buffer_count using struct member access */
-    vic_dev->active_buffer_count++;
-    pr_info("ispvic_frame_channel_qbuf: Incremented active_buffer_count to %d\n",
+    /* CRITICAL FIX: Do NOT increment active_buffer_count here! */
+    /* active_buffer_count is the TOTAL buffer ring size, set by REQBUFS via 0x3000008 event */
+    /* It should NOT be incremented on each QBUF - that's a counter, not a ring size! */
+    pr_info("ispvic_frame_channel_qbuf: Buffer queued (active_buffer_count=%d from REQBUFS)\n",
             vic_dev->active_buffer_count);
 
     /* SAFE: Unlock using proper spinlock API */
@@ -3891,8 +3878,11 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
 
         /* SAFE: Initialize buffer counts using struct member access */
         vic_dev->buffer_count = 0;
-        vic_dev->active_buffer_count = 0;
-        pr_info("*** tx_isp_subdev_pipo: Buffer entries allocated and added to free queue ***\n");
+        /* CRITICAL FIX: Do NOT reset active_buffer_count to 0! */
+        /* It was set to 4 during VIC probe and will be updated by REQBUFS */
+        /* Resetting it to 0 causes ispvic_frame_channel_s_stream to use fallback value of 3 */
+        pr_info("*** tx_isp_subdev_pipo: Buffer entries allocated, active_buffer_count=%d (preserved) ***\n",
+                vic_dev->active_buffer_count);
 
         pr_info("tx_isp_subdev_pipo: initialized %d buffer structures\n", i);
 
@@ -3986,40 +3976,27 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
             }
         }
 
-        /* CRITICAL: Call ispvic_frame_channel_qbuf to write buffer addresses to VIC hardware */
-        pr_info("*** tx_isp_subdev_pipo: CALLING ispvic_frame_channel_qbuf to write buffer addresses ***\n");
+        /* CRITICAL FIX: Binary Ninja shows reference driver CLEARS VIC buffer registers, not calls qbuf */
+        /* Reference: *(*($s0 + 0xb8) + $a1) = 0 where $a1 = (i + 0xc6) << 2 */
+        /* Binary Ninja EXACT: Writes to ONLY vic_regs (offset 0xb8), NOT vic_regs_control */
+        /* This clears registers 0x318, 0x31c, 0x320, 0x324, 0x328 (5 buffer registers) */
+        pr_info("*** tx_isp_subdev_pipo: Clearing VIC buffer registers (Binary Ninja EXACT) ***\n");
         {
+            void __iomem *vic_base = vic_dev->vic_regs;  /* Binary Ninja: *($s0 + 0xb8) */
             int j;
-            /* Call qbuf multiple times to program all buffers */
+
             for (j = 0; j < 5; j++) {
-                int qbuf_ret = ispvic_frame_channel_qbuf(sd, NULL);
-                if (qbuf_ret == 0) {
-                    pr_info("*** tx_isp_subdev_pipo: ispvic_frame_channel_qbuf[%d] SUCCESS ***\n", j);
-                } else {
-                    pr_err("*** tx_isp_subdev_pipo: ispvic_frame_channel_qbuf[%d] FAILED: %d ***\n", j, qbuf_ret);
-                    break;  /* Stop on first failure */
-                }
+                u32 reg_offset = 0x318 + (j * 4);  /* 0x318, 0x31c, 0x320, 0x324, 0x328 */
+                writel(0, vic_base + reg_offset);  /* Binary Ninja EXACT: single register base */
+                pr_info("*** Cleared VIC[0x%x] = 0 (Binary Ninja EXACT - vic_regs only) ***\n", reg_offset);
             }
+            wmb();
         }
 
-        /* CRITICAL MISSING CALL: Start VIC frame channel streaming */
-        pr_info("*** tx_isp_subdev_pipo: CALLING ispvic_frame_channel_s_stream to start VIC streaming ***\n");
-        int stream_ret = ispvic_frame_channel_s_stream(sd, 1);  /* Enable streaming */
-        if (stream_ret == 0) {
-            pr_info("*** tx_isp_subdev_pipo: ispvic_frame_channel_s_stream SUCCESS - VIC streaming started! ***\n");
-
-            /* CRITICAL FIX: Call vic_core_s_stream to enable VIC interrupts - this was missing! */
-            pr_info("*** tx_isp_subdev_pipo: CALLING vic_core_s_stream to enable VIC interrupts ***\n");
-            stream_ret = vic_core_s_stream(sd, 1);  /* Enable VIC interrupts */
-            if (stream_ret == 0) {
-                pr_info("*** tx_isp_subdev_pipo: vic_core_s_stream SUCCESS - VIC interrupts should now be ENABLED! ***\n");
-            } else {
-                pr_err("*** tx_isp_subdev_pipo: vic_core_s_stream FAILED: %d ***\n", stream_ret);
-            }
-        } else {
-            pr_err("*** tx_isp_subdev_pipo: ispvic_frame_channel_s_stream FAILED: %d ***\n", stream_ret);
-			return stream_ret;
-        }
+        /* CRITICAL FIX: Reference driver does NOT call ispvic_frame_channel_s_stream here! */
+        /* Binary Ninja decompilation shows tx_isp_subdev_pipo only sets up pipe callbacks */
+        /* and initializes buffer queues - streaming is started later by vic_core_s_stream */
+        pr_info("*** tx_isp_subdev_pipo: PIPO setup complete (Binary Ninja EXACT - no streaming calls) ***\n");
     }
 
     pr_info("tx_isp_subdev_pipo: completed successfully, returning 0\n");
