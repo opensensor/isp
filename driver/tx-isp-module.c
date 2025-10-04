@@ -4316,13 +4316,9 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     pr_warn("*** SET_BUF: No empty VBM slot available (capacity=16) ***\n");
                 }
                 state->vbm_buffer_size = var_94;
-                /* Optional: reflect desired ring size (cap to 2 buffers as per prudynt expectations) */
-                if (ourISPdev && ourISPdev->vic_dev) {
-                    struct tx_isp_vic_device *vic = ourISPdev->vic_dev;
-                    int desired = state->vbm_buffer_count;
-                    if (desired > 2) desired = 2;
-                    vic->active_buffer_count = desired;
-                }
+                /* CRITICAL FIX: Do NOT modify active_buffer_count here! */
+                /* active_buffer_count is set by REQBUFS via 0x3000008 event and should NOT be changed */
+                /* TX_ISP_SET_BUF is for VBM buffer management, not VIC ring configuration */
             }
         } while (0);
 
