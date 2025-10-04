@@ -2708,14 +2708,14 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             pr_info("*** DEBUG: Before writing VIC[0x300]: VIC[0x0]=0x%x VIC[0x300]=0x%x ***\n",
                     vic_state_before, vic_ctrl_before);
 
-            /* CRITICAL FIX: Force active_buffer_count to 1 for single-buffer mode */
-            /* VIC MDMA supports 2 DMA channels (0 and 1) for video streaming */
-            /* Channel 2 is for ISP-M0 JPEG snapshots, NOT VIC MDMA */
-            /* Start with single-buffer mode to get basic streaming working */
-            vic_dev->active_buffer_count = 1;  /* FORCE to 1 for simplification */
-            u32 buffer_count = 1;  /* SIMPLIFIED: 1 buffer per channel */
+            /* CRITICAL FIX: Use 3 buffers per channel for smooth streaming */
+            /* Channel 0 (1920x1080): 3 × 3,110,400 = 9,331,200 bytes */
+            /* Channel 1 (640x360):   3 × 345,600   = 1,036,800 bytes */
+            /* Total: 10,368,000 bytes (fits in 29M rmem with 20M to spare) */
+            vic_dev->active_buffer_count = 3;  /* 3 buffers for triple buffering */
+            u32 buffer_count = 3;  /* 3 buffers per channel */
             u32 stream_ctrl = (buffer_count << 16) | 0x80000020;  /* Binary Ninja EXACT formula */
-            pr_info("*** VIC MDMA SIMPLIFIED: FORCED active_buffer_count=1, buffer_count=%d ***\n", buffer_count);
+            pr_info("*** VIC MDMA: Using %d buffers for triple buffering ***\n", buffer_count);
             void __iomem *vic_ctrl = vic_dev->vic_regs_control;
             writel(stream_ctrl, vic_base + 0x300);
             if (vic_ctrl)
@@ -2723,6 +2723,39 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             wmb();
 
             pr_info("*** Binary Ninja EXACT: Wrote 0x%x to reg 0x300 (%d buffers) ***\n", stream_ctrl, buffer_count);
+
+            /* CRITICAL FIX: Program 3 buffer addresses from rmem BEFORE starting VIC */
+            /* VIC needs multiple buffers for ping-pong operation to avoid control limit error */
+            {
+                extern struct tx_isp_dev *ourISPdev;
+                u32 rmem_base = 0x06300000;  /* Default T31 ISP rmem base */
+                if (ourISPdev && ourISPdev->rmem_addr) {
+                    rmem_base = (u32)ourISPdev->rmem_addr;
+                }
+
+                /* Calculate buffer addresses for channel 0 (1920x1080) */
+                /* Frame size: 3,114,816 bytes, rounded to 3M (3,145,728) for alignment */
+                u32 frame_size = 3 * 1024 * 1024;  /* 3M per buffer */
+                u32 buf0 = rmem_base;
+                u32 buf1 = rmem_base + frame_size;
+                u32 buf2 = rmem_base + (frame_size * 2);
+
+                /* Write buffer addresses to VIC registers */
+                writel(buf0, vic_base + 0x318);  /* Buffer 0 */
+                writel(buf1, vic_base + 0x31c);  /* Buffer 1 */
+                writel(buf2, vic_base + 0x320);  /* Buffer 2 */
+                if (vic_ctrl) {
+                    writel(buf0, vic_ctrl + 0x318);
+                    writel(buf1, vic_ctrl + 0x31c);
+                    writel(buf2, vic_ctrl + 0x320);
+                }
+                wmb();
+
+                pr_info("*** VIC BUFFER INIT: Programmed 3 buffers from rmem=0x%x ***\n", rmem_base);
+                pr_info("*** VIC BUFFER 0: 0x%x ***\n", buf0);
+                pr_info("*** VIC BUFFER 1: 0x%x ***\n", buf1);
+                pr_info("*** VIC BUFFER 2: 0x%x ***\n", buf2);
+            }
 
             /* CRITICAL DEBUG: Read back what we just wrote to verify */
             u32 readback_300 = readl(vic_base + 0x300);
@@ -3026,11 +3059,13 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 }
 
             /* VIC CONTROL: enter RUN state after all config (write 1) */
+            /* CRITICAL FIX: Don't start VIC here - tx_isp_vic_start will do it AFTER vic_start_ok=1 */
+            /* This was causing spurious interrupts before buffer management was ready */
             if (vic_dev && vic_dev->vic_regs) {
                 void __iomem *vr = vic_dev->vic_regs;
-                writel(1, vr + 0x0);
-                wmb();
-                pr_info("*** VIC CONTROL (PRIMARY): WROTE 1 to [0x0] before enabling IRQ ***\n");
+                /* REMOVED: writel(1, vr + 0x0); - causes premature interrupt */
+                /* wmb(); */
+                pr_info("*** VIC CONTROL (PRIMARY): SKIPPING VIC[0x0]=1 write - tx_isp_vic_start will enable VIC ***\n");
             /* Post-RUN re-arm: commit dance so enables latch without touching masks */
                 /* Program PRIMARY IMR/IMCR routing once (match good-things), no re-arm */
                 if (vic_dev && vic_dev->vic_regs) {

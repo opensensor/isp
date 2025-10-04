@@ -1668,658 +1668,220 @@ void tx_isp_enable_irq(void *arg1)
 /* Forward declaration for ISP core interrupt handler */
 irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 
-/* isp_vic_interrupt_service_routine - EXACT Binary Ninja MCP implementation */
-/* CRITICAL FIX: Correct signature to match Linux IRQ handler requirements */
+/* isp_vic_interrupt_service_routine - Simplified to match working isp-was-better version */
+/* CRITICAL: This is the MINIMAL ISR that achieved continuous interrupts */
 irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 {
-    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
-    void *arg1 = dev_id;  /* For compatibility with Binary Ninja variable names */
+    struct tx_isp_dev *isp_dev = ourISPdev;  /* Use global like working version */
     struct tx_isp_vic_device *vic_dev;
     void __iomem *vic_regs;
     u32 v1_7, v1_10;
-    extern uint32_t vic_start_ok;
-    static int nofd_limit_stall_count = 0;  /* Count consecutive (no FD + control-limit) stalls */
-    printk(KERN_ALERT "*** VIC INTERRUPT HANDLER CALLED - THIS PROVES THE HANDLER IS WORKING ***\n");
-
-    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 1 */
-    if (arg1 == NULL || (uintptr_t)arg1 >= 0xfffff001) {
-        return IRQ_HANDLED;
-    }
+    uint32_t *vic_irq_enable_flag;
+    u32 addr_ctl;
+    u32 reg_val;
+    int timeout;
+    int i;
 
     /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
-    printk(KERN_ALERT "*** VIC IRQ: About to access isp_dev->vic_dev, isp_dev=%p ***\n", isp_dev);
-    vic_dev = isp_dev->vic_dev;
-    printk(KERN_ALERT "*** VIC IRQ: Got vic_dev=%p ***\n", vic_dev);
+    vic_dev = ourISPdev->vic_dev;
 
-    /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
-    printk(KERN_ALERT "*** VIC IRQ: Checking vic_dev validity: vic_dev=%p ***\n", vic_dev);
-    if (vic_dev != NULL && (uintptr_t)vic_dev < 0xfffff001) {
-        /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
-        printk(KERN_ALERT "*** VIC IRQ: About to access vic_dev->vic_regs ***\n");
-        vic_regs = vic_dev->vic_regs;
-        printk(KERN_ALERT "*** VIC IRQ: Got vic_regs=%p ***\n", vic_regs);
+    /* Binary Ninja: void* $v0_4 = *(arg1 + 0xb8) */
+    vic_regs = vic_dev->vic_regs;
 
-        /* CRITICAL SAFETY: Check if VIC registers are properly mapped before access */
-        printk(KERN_ALERT "*** VIC IRQ: Checking vic_regs validity: vic_regs=%p ***\n", vic_regs);
-        if (!vic_regs) {
-            printk(KERN_ALERT "*** VIC IRQ: VIC registers are NULL ***\n");
-            return IRQ_HANDLED;
-        }
-        /* NOTE: virt_addr_valid() doesn't work for ioremap'd addresses - they're in vmalloc area */
-        printk(KERN_ALERT "*** VIC IRQ: vic_regs passed validity check - proceeding with register access ***\n");
+    /* Get VIC interrupt enable flag at offset +0x13c */
+    vic_irq_enable_flag = (uint32_t*)((char*)vic_dev + 0x13c);
 
-        /* CRITICAL SAFETY: Add memory barrier and exception handling for register access */
-        printk(KERN_ALERT "*** VIC IRQ: About to read VIC registers at %p ***\n", vic_regs);
+    /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
+    /* Binary Ninja: int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
+    v1_7 = (~readl(vic_regs + 0x1e8)) & readl(vic_regs + 0x1e0);
+    v1_10 = (~readl(vic_regs + 0x1ec)) & readl(vic_regs + 0x1e4);
 
-        /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
-        /* If PRIMARY enable/mask read as 0, fall back to CONTROL bank per reference behavior */
-        u32 reg_1e8, reg_1e0, reg_1ec, reg_1e4;
-        void __iomem *base_for_irq = vic_regs;
+    /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7 */
+    writel(v1_7, vic_regs + 0x1f0);
+    /* Binary Ninja: *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
+    writel(v1_10, vic_regs + 0x1f4);
+    wmb();
 
-        reg_1e8 = readl(base_for_irq + 0x1e8);
-        reg_1e0 = readl(base_for_irq + 0x1e0);
-        reg_1e4 = readl(base_for_irq + 0x1e4);
-        reg_1ec = readl(base_for_irq + 0x1ec);
+    if (vic_start_ok != 0) {
+        pr_info("*** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
 
-        if (reg_1e0 == 0 && reg_1e4 == 0 && vic_dev && vic_dev->vic_regs_control) {
-            base_for_irq = vic_dev->vic_regs_control;
-            reg_1e8 = readl(base_for_irq + 0x1e8);
-            reg_1e0 = readl(base_for_irq + 0x1e0);
-            reg_1e4 = readl(base_for_irq + 0x1e4);
-            reg_1ec = readl(base_for_irq + 0x1ec);
-            printk(KERN_ALERT "*** VIC IRQ: PRIMARY [1e0/1e4] zero; using CONTROL bank for mask/enable ***\n");
+        /* Binary Ninja: if (($v1_7 & 1) != 0) */
+        if ((v1_7 & 1) != 0) {
+            pr_info("*** VIC ISR: Frame done bit SET (v1_7 & 1 = 1) ***\n");
+            /* Binary Ninja: *($s0 + 0x160) += 1 */
+            vic_dev->frame_count++;
+            pr_debug("*** VIC FRAME DONE INTERRUPT: Frame completion detected (count=%u) ***\n", vic_dev->frame_count);
+
+            /* CRITICAL: Also increment main ISP frame counter for /proc/jz/isp/isp-w02 */
+            if (ourISPdev && ourISPdev->core_dev) {
+                ourISPdev->core_dev->frame_count++;
+                pr_debug("*** ISP FRAME COUNT UPDATED: %u (for /proc/jz/isp/isp-w02) ***\n", ourISPdev->core_dev->frame_count);
+            }
+
+            /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
+            vic_framedone_irq_function(vic_dev);
+        } else {
+            pr_info("*** VIC ISR: Frame done bit NOT set (v1_7 & 1 = 0), v1_7=0x%x ***\n", v1_7);
         }
 
-        printk(KERN_ALERT "*** VIC IRQ: Using base %p [1e0]=0x%x [1e4]=0x%x [1e8]=0x%x [1ec]=0x%x ***\n",
-               base_for_irq, reg_1e0, reg_1e4, reg_1e8, reg_1ec);
+        /* Binary Ninja: Error handling for frame asfifo overflow */
+        if ((v1_7 & 0x200) != 0) {
+            pr_err("Err [VIC_INT] : frame asfifo ovf!!!!!\n");
+        }
 
-        /* Enforce FD enable/unmask on every IRQ if something cleared them mid-stream (DISABLED to match working ISR: keep ISR minimal) */
-        if (0 && (((reg_1e0 & 0x1) == 0) || ((reg_1e8 & 0x1) != 0) || (reg_1e4 != 0x0000000F))) {
-            printk(KERN_ALERT "*** VIC IRQ: FIXUP enable/mask — before: 1e0=0x%x 1e4=0x%x 1e8=0x%x ***\n",
-                   reg_1e0, reg_1e4, reg_1e8);
-            /* Clear pending status (W1C) and set global enable before enabling FD */
-            writel(0xFFFFFFFF, base_for_irq + 0x1f0);
-            writel(0xFFFFFFFF, base_for_irq + 0x1f4);
-            /* DO NOT touch 0x30c here; suspected global mask clear */
+        /* Binary Ninja: Error handling for horizontal errors */
+        if ((v1_7 & 0x400) != 0) {
+            u32 reg_3a8 = readl(vic_regs + 0x3a8);
+            pr_err("Err [VIC_INT] : hor err ch0 !!!!! 0x3a8 = 0x%08x\n", reg_3a8);
+        }
+
+        if ((v1_7 & 0x800) != 0) {
+            pr_err("Err [VIC_INT] : hor err ch1 !!!!!\n");
+        }
+
+        if ((v1_7 & 0x1000) != 0) {
+            pr_err("Err [VIC_INT] : hor err ch2 !!!!!\n");
+        }
+
+        if ((v1_7 & 0x2000) != 0) {
+            pr_err("Err [VIC_INT] : hor err ch3 !!!!!\n");
+        }
+
+        /* Binary Ninja: Error handling for vertical errors */
+        if ((v1_7 & 0x4000) != 0) {
+            pr_err("Err [VIC_INT] : ver err ch0 !!!!!\n");
+        }
+
+        if ((v1_7 & 0x8000) != 0) {
+            pr_err("Err [VIC_INT] : ver err ch1 !!!!!\n");
+        }
+
+        if ((v1_7 & 0x10000) != 0) {
+            pr_err("Err [VIC_INT] : ver err ch2 !!!!!\n");
+        }
+
+        if ((v1_7 & 0x20000) != 0) {
+            pr_err("Err [VIC_INT] : ver err ch3 !!!!!\n");
+        }
+
+        /* Binary Ninja: Additional error handling */
+        if ((v1_7 & 0x40000) != 0) {
+            pr_err("Err [VIC_INT] : hvf err !!!!!\n");
+        }
+
+        if ((v1_7 & 0x80000) != 0) {
+            pr_err("Err [VIC_INT] : dvp hcomp err!!!!\n");
+        }
+
+        if ((v1_7 & 0x100000) != 0) {
+            pr_err("Err [VIC_INT] : dma syfifo ovf!!!\n");
+        }
+
+        if ((v1_7 & 0x200000) != 0) {
+            pr_err("Err2 [VIC_INT] : control limit err!!!\n");
+        }
+
+        if ((v1_7 & 0x400000) != 0) {
+            pr_err("Err [VIC_INT] : image syfifo ovf !!!\n");
+        }
+
+        if ((v1_7 & 0x800000) != 0) {
+            pr_err("Err [VIC_INT] : mipi fid asfifo ovf!!!\n");
+        }
+
+        if ((v1_7 & 0x1000000) != 0) {
+            pr_err("Err [VIC_INT] : mipi ch0 hcomp err !!!\n");
+        }
+
+        if ((v1_7 & 0x2000000) != 0) {
+            pr_err("Err [VIC_INT] : mipi ch1 hcomp err !!!\n");
+        }
+
+        if ((v1_7 & 0x4000000) != 0) {
+            pr_err("Err [VIC_INT] : mipi ch2 hcomp err !!!\n");
+        }
+
+        if ((v1_7 & 0x8000000) != 0) {
+            pr_err("Err [VIC_INT] : mipi ch3 hcomp err !!!\n");
+        }
+
+        if ((v1_7 & 0x10000000) != 0) {
+            pr_err("Err [VIC_INT] : mipi ch0 vcomp err !!!\n");
+        }
+
+        if ((v1_7 & 0x20000000) != 0) {
+            pr_err("Err [VIC_INT] : mipi ch1 vcomp err !!!\n");
+        }
+
+        if ((v1_7 & 0x40000000) != 0) {
+            pr_err("Err [VIC_INT] : mipi ch2 vcomp err !!!\n");
+        }
+
+        if ((v1_7 & 0x80000000) != 0) {
+            pr_err("Err [VIC_INT] : mipi ch3 vcomp err !!!\n");
+        }
+
+        /* Binary Ninja: if (($v1_10 & 1) != 0) */
+        if ((v1_10 & 1) != 0) {
+            /* Binary Ninja: entry_$a2 = vic_mdma_irq_function($s0, 0) */
+            //vic_mdma_irq_function(vic_dev, 0);
+        }
+
+        /* Binary Ninja: if (($v1_10 & 2) != 0) */
+        if ((v1_10 & 2) != 0) {
+            /* Binary Ninja: entry_$a2 = vic_mdma_irq_function($s0, 1) */
+            //vic_mdma_irq_function(vic_dev, 1);
+        }
+
+        if ((v1_10 & 4) != 0) {
+            pr_err("Err [VIC_INT] : dma arb trans done ovf!!!\n");
+        }
+
+        if ((v1_10 & 8) != 0) {
+            pr_err("Err [VIC_INT] : dma chid ovf  !!!\n");
+        }
+
+        /* Binary Ninja: Error recovery sequence - focus on prevention, not recovery */
+        if ((v1_7 & 0xde00) != 0 && *vic_irq_enable_flag == 1) {
+            pr_info("*** VIC ERROR RECOVERY: Detected error condition 0x%x (control limit errors should be prevented by proper config) ***\n", v1_7);
+            pr_err("error handler!!!\n");
+
+            /* Binary Ninja: **($s0 + 0xb8) = 4 */
+            writel(4, vic_regs + 0x0);
             wmb();
 
-            /* Ensure ISP core gate path is open before latching VIC enables */
-            do {
-                if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
-                    void __iomem *core = ourISPdev->core_dev->core_regs;
-                    /* Clear core W1C status that may block gate changes */
-                    writel(0x1, core + 0x9a70);
-                    writel(0x1, core + 0x9a7c);
-                    /* Re-apply core gate routing observed in working sequence */
-                    writel(0x00000001, core + 0x9ac0);
-                    writel(0x00000000, core + 0x9ac8);
-                    wmb();
+            /* Binary Ninja: while (*$v0_70 != 0) */
+            timeout = 1000;
+            while (timeout-- > 0) {
+                addr_ctl = readl(vic_regs + 0x0);
+                if (addr_ctl == 0) {
+                    break;
                 }
-            } while (0);
-
-            /* Unmask FD and MDMA group on active bank WITH proper latch + routing */
-            writel(0x2, base_for_irq + 0x0); wmb(); /* CONFIG */
-            writel(0x00000001, base_for_irq + 0x04);   /* IMR baseline unlock */
-            writel(0x00000000, base_for_irq + 0x24);   /* IMR1 baseline */
-            writel(0x07800438, base_for_irq + 0x04);   /* IMR routing/mask */
-            writel(0xb5742249, base_for_irq + 0x0c);   /* IMCR key */
-            writel(0xFFFFFFFE, base_for_irq + 0x1e8);  /* MainMask: unmask FD */
-            writel(0xFFFFFFFF, base_for_irq + 0x1ec);  /* SubMask: allow all MDMA sub-bits */
-            /* skip 0x1e4 group enable (status/W1C) */  /* was: writel(0x0000000F, base_for_irq + 0x1e4); */
-            /* Do NOT write 0x1e0 here; 0x1e0 is status, not an enable */
-            writel(0x1, base_for_irq + 0x0); wmb();    /* RUN */
-
-            /* Mirror to both banks to prevent mid-stream clobber */
-            if (ourISPdev && ourISPdev->vic_dev) {
-                void __iomem *vrp = ourISPdev->vic_dev->vic_regs;
-                void __iomem *vrc = ourISPdev->vic_dev->vic_regs_control;
-                if (vrp) {
-                    /* Unlock/route IMR/IMCR before enables so writes latch */
-                    writel(0x00000001, vrp + 0x04);
-                    writel(0x00000000, vrp + 0x24);
-                    writel(0x07800438, vrp + 0x04);
-                    writel(0xb5742249, vrp + 0x0c);
-                    wmb();
-
-                    /* Clear pending status only; do NOT touch 0x30c here */
-                    writel(0xFFFFFFFF, vrp + 0x1f0);
-                    writel(0xFFFFFFFF, vrp + 0x1f4);
-
-                    /* MainMask: unmask FD only; allow all MDMA sub-bits */
-                    writel(0xFFFFFFFE, vrp + 0x1e8);
-                    writel(0xFFFFFFFF, vrp + 0x1ec);
-
-                    /* Enable GROUP first; do NOT touch 0x1e0 (status) */
-                    /* skip 0x1e4 group enable (status/W1C) */  /* was: writel(0x0000000F, vrp + 0x1e4); */
-                    wmb();
-                }
-                if (vrc) {
-                    /* CONTROL bank: unlock/route IMR/IMCR before enables */
-                    writel(0x00000001, vrc + 0x04);
-                    writel(0x00000000, vrc + 0x24);
-                    writel(0x07800438, vrc + 0x04);
-                    writel(0xb5742249, vrc + 0x0c);
-                    wmb();
-
-                    /* Clear pending status only; do NOT touch 0x30c here */
-                    writel(0xFFFFFFFF, vrc + 0x1f0);
-                    writel(0xFFFFFFFF, vrc + 0x1f4);
-
-                    /* MainMask: unmask FD only; allow all MDMA sub-bits */
-                    writel(0xFFFFFFFE, vrc + 0x1e8);
-                    writel(0xFFFFFFFF, vrc + 0x1ec);
-
-                    /* Enable GROUP first; do NOT touch 0x1e0 (status) */
-                    /* skip 0x1e4 group enable (status/W1C) */  /* was: writel(0x0000000F, vrc + 0x1e4); */
-                    wmb();
-                }
-
-                /* If neither bank latched, do CONFIG->RUN latch around enable/mask */
-                do {
-                    int need_latch = 0;
-                    if (vrc) {
-                        u32 c_e0 = readl(vrc + 0x1e0);
-                        u32 c_e4 = readl(vrc + 0x1e4);
-                        if (!((c_e0 & 0x1) && (c_e4 & 0xF))) need_latch = 1;
-                    }
-                    if (vrp) {
-                        u32 p_e0 = readl(vrp + 0x1e0);
-                        u32 p_e4 = readl(vrp + 0x1e4);
-                        if (!((p_e0 & 0x1) && (p_e4 & 0xF))) need_latch = 1;
-                    }
-                    /* Force latch every fixup to ensure enables/masks stick on both banks */
-                    if (1) {
-                        void __iomem *banks[2] = { vrc, vrp };
-                        int bi;
-                        for (bi = 0; bi < 2; bi++) {
-                            void __iomem *b = banks[bi];
-                            if (!b) continue;
-                            writel(2, b + 0x0); wmb(); /* CONFIG */
-                            writel(0xFFFFFFFE, b + 0x1e8);
-                            writel(0xFFFFFFFF, b + 0x1ec);
-                            /* skip 0x1e4 group enable (status/W1C) */  /* was: writel(0x0000000F, b + 0x1e4); */
-                            /* Do NOT write 0x1e0 (status) here */
-                            writel(1, b + 0x0); wmb(); /* RUN */
-                        }
-                    }
-                } while (0);
-
-                /* Choose the bank that actually latched FD enable + group */
-                if (vrc) {
-                    u32 c_e0 = readl(vrc + 0x1e0);
-                    u32 c_e4 = readl(vrc + 0x1e4);
-                    if ((c_e0 & 0x1) && (c_e4 & 0xF)) base_for_irq = vrc;
-                }
-                if (vrp) {
-                    u32 p_e0 = readl(vrp + 0x1e0);
-                    u32 p_e4 = readl(vrp + 0x1e4);
-                    if ((p_e0 & 0x1) && (p_e4 & 0xF)) base_for_irq = vrp;
-                }
+                pr_info("addr ctl is 0x%x\n", addr_ctl);
+                udelay(1);
             }
 
-            printk(KERN_ALERT "*** VIC IRQ: FIXUP enable/mask — after: 1e0=0x%x 1e4=0x%x 1e8=0x%x ***\n",
-                   readl(base_for_irq + 0x1e0), readl(base_for_irq + 0x1e4), readl(base_for_irq + 0x1e8));
-        }
+            /* Binary Ninja: Final recovery steps */
+            reg_val = readl(vic_regs + 0x104);
+            writel(reg_val, vic_regs + 0x104);  /* Self-write like Binary Ninja */
 
-        /* Extra debug: control and geometry */
-        printk(KERN_ALERT "*** VIC IRQ: CTRL[0x300]=0x%x DIMS[0x304]=0x%x STRIDE[0x310]=0x%x ***\n",
-               readl(vic_regs + 0x300), readl(vic_regs + 0x304), readl(vic_regs + 0x310));
-        /* REMOVED: Don't write to gates - they are hardware state machine side effects, not writable registers!
-         * The gates (0x9ac0/0x9ac8) are READ-ONLY status indicators that reflect ISP state machine state.
-         * Writing to them doesn't do anything useful and may interfere with interrupt flow.
-         * Just read them for debugging:
-         */
-        do {
-            if (ourISPdev && ourISPdev->core_dev && ourISPdev->core_dev->core_regs) {
-                void __iomem *core = ourISPdev->core_dev->core_regs;
-                u32 g0 = readl(core + 0x9ac0);
-                u32 g1 = readl(core + 0x9ac8);
-                printk(KERN_ALERT "*** VIC IRQ: CORE GATES [9ac0]=0x%x [9ac8]=0x%x (READ-ONLY STATUS) ***\n", g0, g1);
-            }
-        } while (0);
+            reg_val = readl(vic_regs + 0x108);
+            writel(reg_val, vic_regs + 0x108);  /* Self-write like Binary Ninja */
 
-
-        v1_7 = (~reg_1e8) & reg_1e0;
-        v1_10 = (~reg_1ec) & reg_1e4;
-        printk(KERN_ALERT "*** VIC IRQ: Calculated v1_7 = 0x%x v1_10 = 0x%x ***\n", v1_7, v1_10);
-
-        /* Compact, rate-limited status line to avoid log spam: ring ctrl/top16 and index nibble */
-        do {
-            static u32 __vic_stat_counter;
-            __vic_stat_counter++;
-            if (__vic_stat_counter <= 16 || (__vic_stat_counter % 8) == 0) {
-                u32 __ctrl = readl(vic_regs + 0x300);
-                u32 __top16 = (__ctrl >> 16) & 0xFFFF;
-                u32 __idxNib = (__ctrl >> 16) & 0xF; /* bits [19:16] */
-                printk(KERN_ALERT "*** VIC STAT: ctrl=0x%08x top16=0x%04x idxNib=%u v1_7=0x%08x 1e0=0x%08x 1e8=0x%08x ***\n",
-                       __ctrl, __top16, __idxNib, v1_7, reg_1e0, reg_1e8);
-            }
-        } while (0);
-
-        /* Binary Ninja: *($v0_4 + 0x1f0) = $v1_7 */
-        printk(KERN_ALERT "*** VIC IRQ: About to write v1_7=0x%x to reg 0x1f0 (base=%p) ***\n", v1_7, base_for_irq);
-        writel(v1_7, base_for_irq + 0x1f0);
-
-        /* Binary Ninja: *(*(arg1 + 0xb8) + 0x1f4) = $v1_10 */
-        printk(KERN_ALERT "*** VIC IRQ: About to write v1_10=0x%x to reg 0x1f4 (base=%p) ***\n", v1_10, base_for_irq);
-        writel(v1_10, base_for_irq + 0x1f4);
-        wmb();
-        printk(KERN_ALERT "*** VIC IRQ: Register writes completed (at base=%p) ***\n", base_for_irq);
-
-        /* Restore interrupts on PRIMARY: clear pending, ensure frame-done enabled, and permit bit21 for debug */
-        if (vic_dev && vic_dev->vic_regs) {
-            void __iomem *vrp = vic_dev->vic_regs;
-            u32 en = readl(vrp + 0x1e0);
-            /* Clear pending */
-            writel(0xFFFFFFFF, vrp + 0x1f0);
-            writel(0xFFFFFFFF, vrp + 0x1f4);
+            /* Binary Ninja: **($s0 + 0xb8) = 1 */
+            writel(1, vic_regs + 0x0);
             wmb();
-            /* Skip mask/ctrl restore in ISR to match good-things: no MainMask/CTRL writes here. */
-            /* writel(0xFFDFFFFE, vrp + 0x1e8);  -- SKIPPED */
-            wmb();
-            /* If control bits lost in 0x300, re-assert them like reference -- SKIPPED */
-            if (0) {
-                u32 ctrl = readl(vrp + 0x300);
-                if ((ctrl & 0x80000020) != 0x80000020) {
-                    u32 count = vic_dev->active_buffer_count;
-                    if (count == 0) count = 2;
-                    ctrl = (count << 16) | 0x80000020;
-                    writel(ctrl, vrp + 0x300);
-                    wmb();
-                    printk(KERN_ALERT "*** VIC IRQ: Rewrote CTRL[0x300]=0x%x (count=%u) to preserve control bits ***\n", ctrl, count);
-                }
-            }
-            /* printk(KERN_ALERT "*** VIC IRQ: Restored MainMask=0xFFDFFFFE (frame-done+bit21 for debug) ***\n"); */
         }
 
-        /* CRITICAL DEBUG: Add the missing debugging right after register writes */
-        printk(KERN_ALERT "*** VIC IRQ: About to check vic_start_ok - vic_start_ok=%u ***\n", vic_start_ok);
+        /* Wake up frame channels - use global wakeup function */
+        isp_frame_done_wakeup();
 
-        /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
-        printk(KERN_ALERT "*** VIC IRQ: vic_start_ok=%u, v1_7=0x%x, v1_10=0x%x ***\n", vic_start_ok, v1_7, v1_10);
-
-        if (vic_start_ok != 0) {
-            /* Binary Ninja: if (($v1_7 & 1) != 0) */
-            if ((v1_7 & 1) != 0) {
-                /* Binary Ninja: *($s0 + 0x160) += 1 */
-                vic_dev->frame_count++;
-                printk(KERN_ALERT "*** VIC SUCCESS: FRAME DONE INTERRUPT detected (count=%u) ***\n", vic_dev->frame_count);
-
-                /* CRITICAL: Also increment main ISP frame counter for /proc/jz/isp/isp-w02 */
-                if (isp_dev) {
-                    isp_dev->core_dev->frame_count++;
-                    printk(KERN_ALERT "*** VIC SUCCESS: ISP FRAME COUNT UPDATED: %u (for /proc/jz/isp/isp-w02) ***\n", isp_dev->core_dev->frame_count);
-                }
-                /* Reset stall counter on real frame-done */
-                nofd_limit_stall_count = 0;
-
-                /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
-                printk(KERN_ALERT "*** VIC SUCCESS: Calling vic_framedone_irq_function ***\n");
-                vic_framedone_irq_function(vic_dev);
-
-                /* GOOD-THINGS PRESERVATION + FS/V4L2 notifications: wake all streaming channels and core */
-                do {
-                    extern struct frame_channel_device frame_channels[];
-                    extern int num_channels;
-                    int i;
-
-                    /* Global ISP frame-done notification (used by core/tuning paths) */
-                    isp_frame_done_wakeup();
-
-                    for (i = 0; i < num_channels; i++) {
-                        struct frame_channel_device *fcd = &frame_channels[i];
-                        unsigned long flags_local;
-                        if (!fcd)
-                            continue;
-                        if (!fcd->state.streaming)
-                            continue;
-                        spin_lock_irqsave(&fcd->state.buffer_lock, flags_local);
-                        if (!fcd->state.frame_ready) {
-                            fcd->state.frame_ready = true;
-                            wake_up_interruptible(&fcd->state.frame_wait);
-                            printk(KERN_ALERT "*** VIC IRQ: frame_ready signaled to frame channel %d ***\n", i);
-                        }
-                        spin_unlock_irqrestore(&fcd->state.buffer_lock, flags_local);
-                    }
-                } while (0);
-            } else {
-                printk(KERN_ALERT "*** VIC IRQ: No frame done interrupt (v1_7 & 1 = 0) ***\n");
-                /* CRITICAL FIX: If control limit error is set, treat it as a fake frame to keep buffers moving!
-                 * Without this, we get stuck at 5/5 stall because buffers never get recycled.
-                 * The "isp-was-better" version must have been doing this to allow continuous interrupts.
-                 */
-                if ((v1_7 & 0x200000) != 0) {
-                    printk(KERN_ALERT "*** VIC FALLBACK: control-limit set without FD; treating as fake frame ***\n");
-
-                    /* Increment frame counters like a real frame */
-                    vic_dev->frame_count++;
-                    if (isp_dev && isp_dev->core_dev) {
-                        isp_dev->core_dev->frame_count++;
-                        printk(KERN_ALERT "*** VIC FALLBACK: Incremented frame_count to %u (for /proc/jz/isp/isp-w02) ***\n",
-                                isp_dev->core_dev->frame_count);
-                    }
-
-                    /* Move buffers from busy to done queue */
-                    vic_framedone_irq_function(vic_dev);
-
-                    /* Wake up frame channels */
-                    do {
-                        extern struct frame_channel_device frame_channels[];
-                        extern int num_channels;
-                        int i;
-                        unsigned long flags_local;
-
-                        for (i = 0; i < num_channels; i++) {
-                            struct frame_channel_device *fcd = &frame_channels[i];
-                            if (!fcd || !fcd->state.streaming)
-                                continue;
-                            spin_lock_irqsave(&fcd->state.buffer_lock, flags_local);
-                            if (!fcd->state.frame_ready) {
-                                fcd->state.frame_ready = true;
-                                wake_up_interruptible(&fcd->state.frame_wait);
-                                printk(KERN_ALERT "*** VIC FALLBACK: frame_ready signaled to frame channel %d ***\n", i);
-                            }
-                            spin_unlock_irqrestore(&fcd->state.buffer_lock, flags_local);
-                        }
-                    } while (0);
-                }
-            }
-
-            /* Binary Ninja: Error handling for frame asfifo overflow */
-            if ((v1_7 & 0x200) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: frame asfifo overflow (bit 9) ***\n");
-            }
-
-            /* Binary Ninja: Error handling for horizontal errors */
-            if ((v1_7 & 0x400) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: horizontal error ch0 (bit 10) - reg 0x3a8 = 0x%08x ***\n", readl(vic_regs + 0x3a8));
-            }
-            if ((v1_7 & 0x800) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: horizontal error ch1 (bit 11) ***\n");
-            }
-            if ((v1_7 & 0x1000) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: horizontal error ch2 (bit 12) ***\n");
-            }
-            if ((v1_7 & 0x2000) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: horizontal error ch3 (bit 13) ***\n");
-            }
-
-            /* Binary Ninja: Error handling for vertical errors */
-            if ((v1_7 & 0x4000) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: vertical error ch0 (bit 14) ***\n");
-            }
-            if ((v1_7 & 0x8000) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: vertical error ch1 (bit 15) ***\n");
-            }
-            if ((v1_7 & 0x10000) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: vertical error ch2 (bit 16) ***\n");
-            }
-            if ((v1_7 & 0x20000) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: vertical error ch3 (bit 17) ***\n");
-            }
-
-            /* Binary Ninja: More error conditions */
-            if ((v1_7 & 0x40000) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: hvf error (bit 18) ***\n");
-            }
-            if ((v1_7 & 0x80000) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: dvp hcomp error (bit 19) ***\n");
-            }
-            if ((v1_7 & 0x100000) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: dma syfifo overflow (bit 20) ***\n");
-            }
-            if ((v1_7 & 0x200000) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: control limit error (bit 21) ***\n");
-            }
-            if ((v1_7 & 0x400000) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: image syfifo overflow (bit 22) ***\n");
-            }
-            if ((v1_7 & 0x800000) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: mipi fid asfifo overflow (bit 23) ***\n");
-            }
-
-            /* Binary Ninja: MIPI error conditions */
-            if ((v1_7 & 0x1000000) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: mipi ch0 hcomp error (bit 24) ***\n");
-            }
-            if ((v1_7 & 0x2000000) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: mipi ch1 hcomp error (bit 25) ***\n");
-            }
-            if ((v1_7 & 0x4000000) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: mipi ch2 hcomp error (bit 26) ***\n");
-            }
-            if ((v1_7 & 0x8000000) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: mipi ch3 hcomp error (bit 27) ***\n");
-            }
-            if ((v1_7 & 0x10000000) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: mipi ch0 vcomp error (bit 28) ***\n");
-            }
-            if ((v1_7 & 0x20000000) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: mipi ch1 vcomp error (bit 29) ***\n");
-            }
-            if ((v1_7 & 0x40000000) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: mipi ch2 vcomp error (bit 30) ***\n");
-            }
-            if ((v1_7 & 0x80000000) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: mipi ch3 vcomp error (bit 31) ***\n");
-            }
-
-            /* Binary Ninja: MDMA interrupt handling */
-            if ((v1_10 & 1) != 0) {
-                printk(KERN_ALERT "*** VIC SUCCESS: MDMA channel 0 interrupt (bit 0) - calling function ***\n");
-                vic_mdma_irq_function(vic_dev, 0);
-            }
-            if ((v1_10 & 2) != 0) {
-                printk(KERN_ALERT "*** VIC SUCCESS: MDMA channel 1 interrupt (bit 1) - calling function ***\n");
-                vic_mdma_irq_function(vic_dev, 1);
-            }
-            if ((v1_10 & 4) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: dma arb trans done overflow (bit 2) ***\n");
-            }
-            if ((v1_10 & 8) != 0) {
-                printk(KERN_ALERT "*** VIC ERROR: dma chid overflow (bit 3) ***\n");
-            }
-
-            /* Binary Ninja: Error handler for critical conditions */
-            if ((v1_7 & 0xde00) != 0 && vic_start_ok == 1) {
-                printk(KERN_ALERT "*** VIC CRITICAL: Error handler triggered - error_bits=0x%x ***\n", (v1_7 & 0xde00));
-
-                /* Binary Ninja: **($s0 + 0xb8) = 4 */
-                printk(KERN_ALERT "*** VIC ERROR RECOVERY: Setting VIC control to 4 ***\n");
-                writel(4, vic_regs + 0x0);
-
-                /* Binary Ninja: while (*$v0_70 != 0) */
-                u32 addr_ctl;
-                int timeout = 10000;
-                while ((addr_ctl = readl(vic_regs + 0x0)) != 0) {
-                    printk(KERN_ALERT "*** VIC ERROR RECOVERY: addr ctl is 0x%x ***\n", addr_ctl);
-                    if (--timeout == 0) {
-                        printk(KERN_ALERT "*** VIC ERROR RECOVERY: TIMEOUT - breaking loop ***\n");
-                        break;
-                    }
-                    udelay(1);
-                }
-
-                /* Binary Ninja: Register restoration sequence */
-                printk(KERN_ALERT "*** VIC ERROR RECOVERY: Restoring registers 0x104 and 0x108 ***\n");
-                u32 reg_val = readl(vic_regs + 0x104);
-                writel(reg_val, vic_regs + 0x104);
-                printk(KERN_ALERT "*** VIC ERROR RECOVERY: Restored reg 0x104 = 0x%x ***\n", reg_val);
-
-                reg_val = readl(vic_regs + 0x108);
-                writel(reg_val, vic_regs + 0x108);
-                printk(KERN_ALERT "*** VIC ERROR RECOVERY: Restored reg 0x108 = 0x%x ***\n", reg_val);
-
-                /* Binary Ninja: **($s0 + 0xb8) = 1 */
-                printk(KERN_ALERT "*** VIC ERROR RECOVERY: Setting VIC control to 1 - recovery complete ***\n");
-                writel(1, vic_regs + 0x0);
-            }
-        }
+    } else {
+        pr_warn("*** VIC INTERRUPT IGNORED: vic_start_ok=0, interrupts disabled (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
+        pr_warn("*** This means VIC interrupts are firing but being ignored! ***\n");
     }
 
-    /* Conditional VIC re-arm to maintain continuous interrupts (conservative) */
-    do {
-        if (vic_dev && vic_dev->vic_regs) {  /* ENABLED: Was disabled with "if (0 &&" */
-            void __iomem *vr = vic_dev->vic_regs;               /* Primary VIC space (0x133e0000) */
-            void __iomem *vc = vic_dev->vic_regs_control;       /* Control VIC space (0x10023000), may be NULL */
-            u32 ctrl = readl(vr + 0x300);
-            u32 ctrl_buffer_count = (ctrl >> 16) & 0xF;  /* Extract buffer count field */
-            u32 expected_count = vic_dev->active_buffer_count;
-            if (expected_count == 0) expected_count = 1;  /* Default to 1 for single-buffer mode */
-            int lost_ctrl = ((ctrl & 0x80000020) != 0x80000020);
-            int wrong_count = (ctrl_buffer_count != expected_count);  /* Check if buffer count is wrong */
-            int stalled = ((v1_7 & 1) == 0) && ((v1_7 & 0x200000) != 0);
-            if (lost_ctrl || wrong_count) {
-                u32 count = vic_dev->active_buffer_count;
-                u32 new_ctrl;
-                if (count == 0) count = 1;  /* CHANGED: Default to 1 for single-buffer mode */
-                if (count > 5) count = 5; /* VIC has max 5 slots */
-                new_ctrl = (count << 16) | 0x80000020;
-
-                printk(KERN_ALERT "*** VIC RE-ARM: reason=%s ctrl=0x%x (buf_count=%u, expected=%u) -> reassert, stream_ctrl=0x%x (count=%u) ***\n",
-                       lost_ctrl ? "lost_ctrl" : (wrong_count ? "wrong_buffer_count" : "stalled"),
-                       ctrl, ctrl_buffer_count, expected_count, new_ctrl, count);
-
-                /* Clear any pending status (W1C) in both banks if present */
-                writel(0xFFFFFFFF, vr + 0x1f0);
-                writel(0xFFFFFFFF, vr + 0x1f4);
-                if (vc) {
-                    writel(0xFFFFFFFF, vc + 0x1f0);
-                    writel(0xFFFFFFFF, vc + 0x1f4);
-                }
-                wmb();
-
-                /* Do not write to 0x1e0 here; it's a status register (W1C is at 0x1f0/0x1f4) */
-
-                /* Re-apply stream control bits and enable sequence */
-                writel(new_ctrl, vr + 0x300);
-                if (vc) writel(new_ctrl, vc + 0x300);  /* Also write to control space */
-                wmb();
-
-                /* CRITICAL FIX: DO NOT write to VIC[0x0] - it clears the buffer count field! */
-                /* Reference driver does NOT write to VIC[0x0] after writing buffer count */
-                /* writel(2, vr + 0x0); */  /* DISABLED - clears buffer count */
-                wmb();
-
-                /* Verify the write stuck */
-                u32 readback_ctrl = readl(vr + 0x300);
-                u32 readback_count = (readback_ctrl >> 16) & 0xF;
-                printk(KERN_ALERT "*** VIC RE-ARM: Wrote 0x%x to VIC[0x300], readback=0x%x (count=%u) ***\n",
-                       new_ctrl, readback_ctrl, readback_count);
-
-                /* Re-assert MDMA config knobs (idempotent): 0x308=1, DIMS/STRIDE and refresh buffer addresses */
-                do {
-                    u32 dims = readl(vr + 0x304);
-                    u32 stride_y = readl(vr + 0x310);
-                    u32 stride_uv = readl(vr + 0x314);
-                    u32 width = (dims >> 16) & 0xFFFF;
-                    u32 height = dims & 0xFFFF;
-                    u32 frame_size = stride_y * (height ? height : 1);
-
-                    writel(1, vr + 0x308);
-                    writel(dims, vr + 0x304);
-                    writel(stride_y, vr + 0x310);
-                    writel(stride_uv, vr + 0x314);
-                    if (vc) {
-                        writel(1, vc + 0x308);
-                        writel(dims, vc + 0x304);
-                        writel(stride_y, vc + 0x310);
-                        writel(stride_uv, vc + 0x314);
-                    }
-
-                    /* Refresh buffer addresses 0x318..0x328 from VBM if available; else fallback to rmem */
-                    do {
-                        extern struct frame_channel_device frame_channels[];
-                        extern int num_channels;
-                        u32 configured = 0;
-
-                        if (vic_dev && frame_channels && num_channels > 0) {
-                            struct tx_isp_channel_state *state = &frame_channels[0].state;
-                            int i;
-                            if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
-                                for (i = 0; i < state->vbm_buffer_count && i < 2; i++) {
-                                    u32 buf = state->vbm_buffer_addresses[i];
-                                    u32 off = 0x318 + (i * 4);
-                                    if (buf) {
-                                        writel(buf, vr + off);
-                                        if (vc) writel(buf, vc + off);
-                                        configured++;
-                                    }
-                                }
-                            } else {
-                                /* Fallback: use rmem base 0x06300000, cap to 2 buffers */
-                                u32 base = 0x06300000;
-                                for (i = 0; i < 2; i++) {
-                                    u32 buf = base + (i * frame_size);
-                                    u32 off = 0x318 + (i * 4);
-                                    writel(buf, vr + off);
-                                    if (vc) writel(buf, vc + off);
-                                    configured++;
-                                }
-                            }
-                            if (configured) vic_dev->active_buffer_count = configured;
-                        }
-                    } while (0);
-                } while (0);
-                wmb();
-
-                /* Apply IMR/IMCR routing FIRST (unlock), then restore masks/enables */
-                writel(0x00000001, vr + 0x04);   /* IMR baseline */
-                writel(0x00000000, vr + 0x24);   /* IMR1 baseline */
-                writel(0x07800438, vr + 0x04);   /* IMR routing/mask */
-                writel(0xb5742249, vr + 0x0c);   /* IMCR key */
-                if (vc) {
-                    writel(0x00000001, vc + 0x04);
-                    writel(0x00000000, vc + 0x24);
-                    writel(0x07800438, vc + 0x04);
-                    writel(0xb5742249, vc + 0x0c);
-                }
-                wmb();
-
-                /* Restore interrupt masks/enables like working reference */
-                writel(0xFFFFFFFE, vr + 0x1e8); /* MainMask: unmask FD */
-                if (vc) writel(0xFFFFFFFE, vc + 0x1e8);
-                /* Ensure FD enabled in both banks */
-                {
-                    u32 en0 = readl(vr + 0x1e0) | 0x1;
-                    /* skip 0x1e0 (status/W1C) */  /* was: writel(en0, vr + 0x1e0); */
-                    /* skip 0x1e4 group enable (status/W1C) */  /* was: writel(0x0000000F, vr + 0x1e4); */
-                    if (vc) {
-                        u32 en2 = readl(vc + 0x1e0) | 0x1;
-                        /* skip 0x1e0 (status/W1C) */  /* was: writel(en2, vc + 0x1e0); */
-                        /* skip 0x1e4 group enable (status/W1C) */  /* was: writel(0x0000000F, vc + 0x1e4); */
-                    }
-                }
-                wmb();
-
-                /* REMOVED: Don't write to gates - they are hardware state machine side effects!
-                 * The working "isp-was-better" version didn't write to gates in the ISR.
-                 * Just clear W1C status bits to allow next interrupt:
-                 */
-                do {
-                    struct tx_isp_dev *ispd = ourISPdev;
-                    void __iomem *core = NULL;
-                    if (ispd && ispd->core_dev && ispd->core_dev->core_regs)
-                        core = ispd->core_dev->core_regs;
-                    else if (ispd && ispd->core_regs)
-                        core = ispd->core_regs;
-                    if (core) {
-                        /* W1C clear status bits only - don't touch gates! */
-                        writel(0x1, core + 0x9a70);
-                        writel(0x1, core + 0x9a7c);
-                        wmb();
-                    }
-                } while (0);
-
-                /* RUN + final barrier */
-                writel(1, vr + 0x0);
-                wmb();
-            }
-        }
-    } while (0);
-
     /* Binary Ninja: return 1 */
-    printk(KERN_ALERT "*** VIC IRQ COMPLETE: Processed v1_7=0x%x, v1_10=0x%x - returning IRQ_HANDLED ***\n", v1_7, v1_10);
     return IRQ_HANDLED;
 }
 

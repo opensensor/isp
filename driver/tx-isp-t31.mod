@@ -7,7 +7,6 @@
 /home/matteius/isp-latest/driver//tx_isp_csi.o
 /home/matteius/isp-latest/driver//tx_isp_fs.o
 /home/matteius/isp-latest/driver//tx_isp_tuning.o
-/home/matteius/isp-latest/driver//tx_isp_v4l2.o
 /home/matteius/isp-latest/driver//tx_isp_ae_zone.o
 /home/matteius/isp-latest/driver//tx_isp_subdev_mgmt.o
 /home/matteius/isp-latest/driver//tx_isp_vin.o
