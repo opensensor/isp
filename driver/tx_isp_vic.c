@@ -20,6 +20,7 @@
 #include "../include/tx-libimp.h"
 #include <linux/platform_device.h>
 #include <linux/device.h>
+#include <linux/jiffies.h>
 
 #include <linux/videodev2.h>
 
@@ -171,6 +172,9 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
 
     /* *** CRITICAL FIX: Ensure VIC subdev has proper ISP device back-reference *** */
     vic_dev->sd.isp = isp_dev;  /* This ensures tx_isp_vic_start can find the ISP device */
+
+    /* Also set host_priv so vic_core_ops_ioctl can retrieve vic_dev (QBUF path) */
+    tx_isp_set_subdev_hostdata(&vic_dev->sd, vic_dev);
 
     pr_info("*** CRITICAL: VIC DEVICE LINKED TO ISP CORE ***\n");
     pr_info("  isp_dev->vic_dev = %p\n", isp_dev->vic_dev);
@@ -347,19 +351,47 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                 /* Preserve control bits for NV12 (0x80000020 | format=7) and only update buffer index (bits 16-19) */
                 reg_val = (reg_val & 0xfff0ffff) | shifted_value;  /* Clear bits 16-19, set new buffer index */
 
-                /* Ensure control bits include NV12 format code (7) */
-                if ((reg_val & 0x80000027) != 0x80000027) {
-                    reg_val |= 0x80000027;  /* Force control bits and format back on */
-                    pr_warn("*** VIC FRAME DONE: FORCED control bits 0x80000027 back on (NV12) ***\n");
-                }
-
+                /* Reference: only update index bits [16..19], preserve other control/format bits */
                 writel(reg_val, vic_regs + 0x300);
 
-                pr_info("*** VIC FRAME DONE: Updated VIC[0x300] = 0x%x (CTRL NV12 %s) ***\n",
-                        reg_val, (reg_val & 0x80000027) == 0x80000027 ? "OK" : "MISMATCH");
+                pr_info("*** VIC FRAME DONE: Updated VIC[0x300] = 0x%x (index updated, control preserved) ***\n",
+                        reg_val);
                 pr_info("vic_framedone_irq_function: Updated VIC[0x300] = 0x%x (buffers: index=%d, high_bits=%d, match=%d)\n",
                          reg_val, buffer_index, high_bits, match_found);
             }
+            /* Update lightweight MDMA snapshot for proc (no printk; per-frame) */
+            {
+                u32 ctrl = 0, stride = 0, y0 = 0, uv0 = 0, uvsh0 = 0;
+                void __iomem *regs1 = vic_regs;
+                if (regs1) {
+                    ctrl   = readl(regs1 + 0x300);
+                    stride = readl(regs1 + 0x310);
+                    y0     = readl(regs1 + 0x318);
+                    uv0    = readl(regs1 + 0x340);
+                    uvsh0  = readl(regs1 + 0x32c);
+                    vic_dev->mdma_snap_pri.ctrl       = ctrl;
+                    vic_dev->mdma_snap_pri.strideY    = stride;
+                    vic_dev->mdma_snap_pri.y0         = y0;
+                    vic_dev->mdma_snap_pri.uv0        = uv0;
+                    vic_dev->mdma_snap_pri.uvsh0      = uvsh0;
+                    vic_dev->mdma_snap_pri.jiffies_ts = jiffies;
+                }
+                if (vic_dev->vic_regs_secondary) {
+                    regs1 = vic_dev->vic_regs_secondary;
+                    ctrl   = readl(regs1 + 0x300);
+                    stride = readl(regs1 + 0x310);
+                    y0     = readl(regs1 + 0x318);
+                    uv0    = readl(regs1 + 0x340);
+                    uvsh0  = readl(regs1 + 0x32c);
+                    vic_dev->mdma_snap_sec.ctrl       = ctrl;
+                    vic_dev->mdma_snap_sec.strideY    = stride;
+                    vic_dev->mdma_snap_sec.y0         = y0;
+                    vic_dev->mdma_snap_sec.uv0        = uv0;
+                    vic_dev->mdma_snap_sec.uvsh0      = uvsh0;
+                    vic_dev->mdma_snap_sec.jiffies_ts = jiffies;
+                }
+            }
+
 
             /* REFERENCE DRIVER: VIC frame done processing complete */
             /* The reference driver does NOT manually trigger ISP core interrupts */
@@ -2327,9 +2359,9 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         pr_info("*** DIMENSION FIX: fallback to %dx%d ***\n", width, height);
     }
 
-    /* NV12 streaming: Y is 8bpp, use 1 byte per pixel stride (align to 16 for safety) */
-    stride = (width + 15) & ~15; /* bytes per line for Y and UV */
-    pr_info("vic_pipo_mdma_enable: NV12 dims=%dx%d, stride=%u\n", width, height, stride);
+    /* Reference: pre-format stride = width<<1; final stride updated after 0x300 (format) is set */
+    stride = width << 1; /* bytes per line for packed paths; NV12 will be corrected post-ctrl */
+    pr_info("vic_pipo_mdma_enable: dims=%dx%d, pre-format stride=%u (ref)\n", width, height, stride);
 
     /* MDMA enable: 0x308 */
     writel(1, vic_base + 0x308);
@@ -2426,29 +2458,77 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             u32 reference_control_bits = 0x80000027;  /* NV12: reference control bits + format=7 */
 
             /* BINARY NINJA EXACT: Use exact reference driver formula to prevent control limit error */
-            /* Binary Ninja: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
+            /* Binary Ninja: program stride and buffer bases before writing control (0x300) */
             u32 buffer_count = vic_dev->active_buffer_count;
             if (buffer_count == 0) buffer_count = 2;       /* ensure at least double-buffering */
             if (buffer_count > 5) buffer_count = 5;        /* 5-slot ring cap */
-            u32 stream_ctrl = (buffer_count << 16) | 0x80000027;  /* Include NV12 format code (7) */
-            writel(stream_ctrl, vic_base + 0x300);
-            if (vic_dev->vic_regs_secondary)
-                writel(stream_ctrl, vic_dev->vic_regs_secondary + 0x300);
-            wmb();
 
-            pr_info("*** BINARY NINJA EXACT: Wrote 0x%x to reg 0x300 (buffer_count=%d, formula: (count<<16)|0x80000020) ***\n",
-                    stream_ctrl, buffer_count);
+            /* Set final NV12 stride first (bytes per line = width) to match reference */
+            {
+                u32 stride_nv12 = vic_dev->width; /* bytes per line */
+                writel(stride_nv12, vic_base + 0x310);
+                writel(stride_nv12, vic_base + 0x314);
+                if (vic_dev->vic_regs_secondary) {
+                    writel(stride_nv12, vic_dev->vic_regs_secondary + 0x310);
+                    writel(stride_nv12, vic_dev->vic_regs_secondary + 0x314);
+                }
+                wmb();
+                pr_info("*** REFERENCE MATCH: NV12 stride set to width=%u (0x310/0x314) ***\n", stride_nv12);
+            }
 
-            /* Transition to RUN after programming control, mirror if secondary present */
-            writel(1, vic_base + 0x0);
-            if (vic_dev->vic_regs_secondary)
-                writel(1, vic_dev->vic_regs_secondary + 0x0);
-            wmb();
-            pr_info("*** VIC RUN: Wrote 1 to VIC[0x0] (and secondary if mapped) ***\n");
+            /* Recompute UV base addresses for any pre-queued Y slots using final NV12 stride */
+            {
+                u32 count = buffer_count;
+                u32 stride_nv12 = vic_dev->width; /* final stride for NV12 */
+                for (u32 i = 0; i < count; ++i) {
+                    u32 yb = readl(vic_base + (0x318 + i*4));
+                    if (yb) {
+                        u32 uvb = yb + stride_nv12 * vic_dev->height;
+                        writel(uvb, vic_base + (0x340 + i*4));
+                        writel(uvb, vic_base + (0x32c + i*4));
+                        if (vic_dev->vic_regs_secondary) {
+                            writel(uvb, vic_dev->vic_regs_secondary + (0x340 + i*4));
+                            writel(uvb, vic_dev->vic_regs_secondary + (0x32c + i*4));
+                        }
+                    }
+                }
+                wmb();
+                pr_info("*** REFERENCE MATCH: Recomputed UV bases for %u slot(s) using stride=%u (pre-control) ***\n", count, stride_nv12);
+            }
 
-            /* MCP LOG: Stream ON completed */
-            pr_info("MCP_LOG: VIC streaming enabled - ctrl=0x%x, base=%p, state=%d\n",
-                    stream_ctrl, vic_base, 1);
+            /* Quick readback before writing control to aid debugging on short dmesg buffers */
+            {
+                u32 y0 = readl(vic_base + 0x318);
+                u32 uv0 = readl(vic_base + 0x340);
+                u32 uvsh0 = readl(vic_base + 0x32c);
+                u32 stride_y = readl(vic_base + 0x310);
+                u32 ctrl_pre = readl(vic_base + 0x300);
+                pr_info("*** VIC MDMA pre-ctrl: ctrl=0x%x strideY=%u slot0 Y=0x%x UV=0x%x UVsh=0x%x ***\n",
+                        ctrl_pre, stride_y, y0, uv0, uvsh0);
+            }
+
+            /* Now write control (0x300) with NV12 format AFTER bases are valid, then start RUN */
+            {
+                u32 stream_ctrl = (buffer_count << 16) | 0x80000027;  /* NV12 format code (7) */
+                writel(stream_ctrl, vic_base + 0x300);
+                if (vic_dev->vic_regs_secondary)
+                    writel(stream_ctrl, vic_dev->vic_regs_secondary + 0x300);
+                wmb();
+                pr_info("*** BINARY NINJA EXACT: Wrote 0x%x to reg 0x300 (buffer_count=%d, formula: (count<<16)|0x80000020|fmt) ***\n",
+                        stream_ctrl, buffer_count);
+
+                /* Transition to RUN after programming control, mirror if secondary present */
+                writel(1, vic_base + 0x0);
+                if (vic_dev->vic_regs_secondary)
+                    writel(1, vic_dev->vic_regs_secondary + 0x0);
+                wmb();
+                pr_info("*** VIC RUN: Wrote 1 to VIC[0x0] (and secondary if mapped) ***\n");
+
+                /* MCP LOG: Stream ON completed */
+                pr_info("MCP_LOG: VIC streaming enabled - ctrl=0x%x, base=%p, state=%d\n",
+                        stream_ctrl, vic_base, 1);
+            }
+
         }
 
         /* Binary Ninja EXACT: *($s0 + 0x210) = 1 */
@@ -3148,16 +3228,21 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
             u32 stride_nv12 = readl(vic_dev->vic_regs + 0x310);
             u32 uv_base = buffer_addr + stride_nv12 * vic_dev->height;
             u32 uv_reg_off = 0x340 + (buffer_index * 4);
+            u32 uv_shadow_off = 0x32c + (buffer_index * 4);
             writel(uv_base, vic_dev->vic_regs + uv_reg_off);
-            if (vic_dev->vic_regs_secondary)
+            writel(uv_base, vic_dev->vic_regs + uv_shadow_off);
+            if (vic_dev->vic_regs_secondary) {
                 writel(uv_base, vic_dev->vic_regs_secondary + uv_reg_off);
+                writel(uv_base, vic_dev->vic_regs_secondary + uv_shadow_off);
+            }
         }
         wmb();
-        pr_info("*** VIC QBUF: wrote slot %u Y=0x%x (off=0x%x) UV=Y+%u*%u -> 0x%x (off=0x%x) ***\n",
+        pr_info("*** VIC QBUF: slot%u Y=0x%x(off=0x%x) UV=0x%x(off=0x%x) UVsh=0x%x(off=0x%x) ***\n",
                 buffer_index, buffer_addr, reg_offset,
-                readl(vic_dev->vic_regs + 0x310), vic_dev->height,
                 buffer_addr + readl(vic_dev->vic_regs + 0x310) * vic_dev->height,
-                0x340 + (buffer_index * 4));
+                0x340 + (buffer_index * 4),
+                buffer_addr + readl(vic_dev->vic_regs + 0x310) * vic_dev->height,
+                0x32c + (buffer_index * 4));
         spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
         return 0;
     }
@@ -3184,15 +3269,21 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         u32 stride_nv12 = readl(vic_dev->vic_regs + 0x310);
         u32 uv_base = buffer_addr + stride_nv12 * vic_dev->height;
         u32 uv_reg_off = 0x340 + (buffer_index * 4);
+        u32 uv_shadow_off = 0x32c + (buffer_index * 4);
         writel(uv_base, vic_dev->vic_regs + uv_reg_off);
-        if (vic_dev->vic_regs_secondary)
+        writel(uv_base, vic_dev->vic_regs + uv_shadow_off);
+        if (vic_dev->vic_regs_secondary) {
             writel(uv_base, vic_dev->vic_regs_secondary + uv_reg_off);
+            writel(uv_base, vic_dev->vic_regs_secondary + uv_shadow_off);
+        }
     }
     wmb();
-    pr_info("*** VIC QBUF (fallback): wrote Y=0x%x(off=0x%x) UV=0x%x(off=0x%x) idx=%u ***\n",
+    pr_info("*** VIC QBUF (fallback): Y=0x%x(off=0x%x) UV=0x%x(off=0x%x) UVsh=0x%x(off=0x%x) idx=%u ***\n",
             buffer_addr, reg_offset,
             buffer_addr + readl(vic_dev->vic_regs + 0x310) * vic_dev->height,
             0x340 + (buffer_index * 4),
+            buffer_addr + readl(vic_dev->vic_regs + 0x310) * vic_dev->height,
+            0x32c + (buffer_index * 4),
             buffer_index);
 
     spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);

@@ -102,6 +102,24 @@ struct tx_isp_vic_device {
     void __iomem *vic_regs;                     /* 0xb8: Primary VIC register base (0x133e0000) */
     void __iomem *vic_regs_secondary;           /* 0xbc: Secondary VIC register base (0x10023000) */
 
+    /* Lightweight MDMA snapshot updated on frame-done (no printk) */
+    struct {
+        u32 ctrl;
+        u32 strideY;
+        u32 y0;
+        u32 uv0;
+        u32 uvsh0;
+        u32 jiffies_ts;
+    } mdma_snap_pri;
+    struct {
+        u32 ctrl;
+        u32 strideY;
+        u32 y0;
+        u32 uv0;
+        u32 uvsh0;
+        u32 jiffies_ts;
+    } mdma_snap_sec;
+
     /* CRITICAL: Frame dimensions at expected offsets */
     uint32_t width;                             /* 0xdc: Frame width (Binary Ninja expects this) */
     uint32_t height;                            /* 0xe0: Frame height (Binary Ninja expects this) */

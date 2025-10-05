@@ -629,6 +629,8 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);
 static int private_reset_tx_isp_module(int arg);
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
 
+int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+
 /* Forward declarations for initialization functions */
 extern int tx_isp_vic_platform_init(void);
 extern void tx_isp_vic_platform_exit(void);
@@ -2769,29 +2771,13 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_warn("*** QBUF: Field mismatch: got %d, expected %d — accepting ***\n", buffer.field, fcd->field);
         }
 
-        /* Binary Ninja: EXACT event call - tx_isp_send_event_to_remote(*($s0 + 0x2bc), 0x3000008, &var_78) */
-        if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
-            struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+        /* Defer forwarding to VIC until after we compute phys and populate buffer.m */
 
-            pr_info("*** Channel %d: QBUF - Calling tx_isp_send_event_to_remote(VIC, 0x3000008, &buffer) ***\n", channel);
-
-            /* CRITICAL: Pass the raw buffer data, not a custom structure */
-            int event_result = tx_isp_send_event_to_remote_local(&vic_dev_buf->sd, 0x3000008, &buffer);
-
-            if (event_result == 0) {
-                pr_info("*** Channel %d: QBUF EVENT SUCCESS ***\n", channel);
-            } else if (event_result == 0xfffffdfd) {
-                pr_info("*** Channel %d: QBUF EVENT - No VIC callback ***\n", channel);
-            } else {
-                pr_warn("*** Channel %d: QBUF EVENT returned: 0x%x ***\n", channel, event_result);
-            }
-        }
-
-        /* SAFE: Calculate buffer physical address */
-        int buffer_size = state->width * state->height * 2;
+        /* SAFE: Calculate buffer physical address for NV12 (YUV420) */
+        int buffer_size = state->width * state->height * 3 / 2;
         uint32_t buffer_phys_addr = 0x6300000 + (buffer.index * buffer_size);
 
-        pr_info("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x, size=%d ***\n",
+        pr_info("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x, size(NV12)=%d ***\n",
                 channel, buffer.index, buffer_phys_addr, buffer_size);
 
         /* SAFE: Update buffer state management */
@@ -2804,6 +2790,23 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
 
         spin_unlock_irqrestore(&state->buffer_lock, flags);
+        /* Now that we have a physical address, populate v4l2_buffer for VIC and forward */
+        buffer.memory = 1; /* V4L2_MEMORY_MMAP */
+        buffer.m.offset = buffer_phys_addr; /* carry phys addr in offset */
+        if (ourISPdev && ourISPdev->vic_dev) {
+            struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+            pr_info("*** Channel %d: QBUF - Forwarding to VIC (0x3000008) with phys=0x%x idx=%u ***\n",
+                    channel, buffer_phys_addr, buffer.index);
+            int event_result = tx_isp_send_event_to_remote_local(&vic_dev_buf->sd, 0x3000008, &buffer);
+            if (event_result == 0) {
+                pr_info("*** Channel %d: QBUF EVENT SUCCESS ***\n", channel);
+            } else if (event_result == 0xfffffdfd) {
+                pr_info("*** Channel %d: QBUF EVENT - No VIC callback ***\n", channel);
+            } else {
+                pr_warn("*** Channel %d: QBUF EVENT returned: 0x%x ***\n", channel, event_result);
+            }
+        }
+
 
         /* Copy buffer back to user space */
         if (copy_to_user(argp, &buffer, sizeof(buffer))) {
@@ -2820,6 +2823,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             uint32_t type;
             uint32_t bytesused;
             uint32_t flags;
+        /* Now that we have a physical address, populate v4l2_buffer for VIC and forward */
+
             uint32_t field;
             struct timeval timestamp;
             struct v4l2_timecode timecode;
@@ -4572,14 +4577,18 @@ static int tx_isp_init(void)
     INIT_DELAYED_WORK(&vic_frame_work, vic_frame_work_function);
     pr_info("*** Frame generation work queue initialized ***\n");
 
-    /* *** CRITICAL FIX: Create and link VIC device structure immediately *** */
-    pr_info("*** CREATING VIC DEVICE STRUCTURE AND LINKING TO ISP CORE ***\n");
-    ret = tx_isp_create_vic_device(ourISPdev);
-    if (ret) {
-        pr_err("Failed to create VIC device structure: %d\n", ret);
-        kfree(ourISPdev);
-        ourISPdev = NULL;
-        return ret;
+    /* Create VIC device structure only if not already created elsewhere */
+    if (!ourISPdev->vic_dev) {
+        pr_info("*** CREATING VIC DEVICE STRUCTURE AND LINKING TO ISP CORE ***\n");
+        ret = tx_isp_create_vic_device(ourISPdev);
+        if (ret) {
+            pr_err("Failed to create VIC device structure: %d\n", ret);
+            kfree(ourISPdev);
+            ourISPdev = NULL;
+            return ret;
+        }
+    } else {
+        pr_info("*** SKIP: VIC device already created (vic_dev=%p) ***\n", ourISPdev->vic_dev);
     }
 
     /* *** CRITICAL FIX: VIN device creation MUST be deferred until after memory mappings *** */
@@ -6243,52 +6252,8 @@ int vic_event_handler(void *subdev, int event_type, void *data)
         return tx_isp_vic_notify(vic_dev, event_type, data);
     }
     case 0x3000008: { /* TX_ISP_EVENT_FRAME_QBUF - ONLY buffer programming, NO VIC restart! */
-        pr_info("*** VIC EVENT: QBUF (0x3000008) - PROGRAMMING BUFFER TO VIC HARDWARE (NO VIC RESTART) ***\n");
-
-        /* CRITICAL FIX: QBUF should ONLY program buffer addresses - NO VIC streaming restart! */
-        /* The reference driver NEVER restarts VIC hardware during QBUF operations */
-        if (data) {
-            struct vic_buffer_data {
-                uint32_t index;
-                uint32_t phys_addr;
-                uint32_t size;
-                uint32_t channel;
-            } *buffer_data = (struct vic_buffer_data *)data;
-
-            pr_info("*** VIC QBUF: Processing buffer data - index=%d, addr=0x%x, size=%d, channel=%d ***\n",
-                    buffer_data->index, buffer_data->phys_addr, buffer_data->size, buffer_data->channel);
-
-            /* CRITICAL: Program the buffer directly to VIC hardware - BUFFER PROGRAMMING ONLY */
-            if (vic_dev->vic_regs && buffer_data->index < 8) {
-                u32 buffer_reg_offset = (buffer_data->index + 0xc6) << 2;
-
-                pr_info("*** VIC QBUF: WRITING BUFFER TO VIC HARDWARE - reg[0x%x] = 0x%x ***\n",
-                        buffer_reg_offset, buffer_data->phys_addr);
-
-                writel(buffer_data->phys_addr, vic_dev->vic_regs + buffer_reg_offset);
-                wmb();
-
-                /* Increment frame count to track programmed buffers */
-                vic_dev->frame_count++;
-
-                pr_info("*** VIC QBUF: BUFFER SUCCESSFULLY PROGRAMMED TO VIC HARDWARE! ***\n");
-                pr_info("*** VIC QBUF: Buffer[%d] addr=0x%x programmed, frame_count=%u ***\n",
-                        buffer_data->index, buffer_data->phys_addr, vic_dev->frame_count);
-
-                /* CRITICAL: Signal frame completion for waiting DQBUF operations */
-                complete(&vic_dev->frame_complete);
-                pr_info("*** VIC QBUF: Frame completion signaled for DQBUF waiters ***\n");
-
-                return 0; /* Success - buffer programmed */
-            } else {
-                pr_err("*** VIC QBUF: FAILED - No VIC registers or invalid buffer index %d ***\n",
-                       buffer_data->index);
-                return -EINVAL;
-            }
-        } else {
-            pr_err("*** VIC QBUF: FAILED - No buffer data provided ***\n");
-            return -EINVAL;
-        }
+        pr_info("*** VIC EVENT: QBUF (0x3000008) - forwarding to vic_core_ops_ioctl ***\n");
+        return vic_core_ops_ioctl(&vic_dev->sd, 0x3000008, data);
     }
     case 0x3000003: { /* TX_ISP_EVENT_FRAME_STREAMON - Start VIC streaming */
         pr_info("*** VIC EVENT: STREAM_START (0x3000003) - ACTIVATING VIC HARDWARE ***\n");
@@ -6543,8 +6508,7 @@ static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
         int channel = data ? *(int*)data : 0;
         pr_debug("VIC: Dequeue buffer event for channel %d\n", channel);
 
-        // Simulate frame completion
-        vic_framedone_irq_function(vic_dev);
+        /* Do not simulate frame completion here; rely on real hardware IRQ */
         return 0;
     }
     case TX_ISP_EVENT_FRAME_STREAMON: {

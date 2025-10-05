@@ -11,6 +11,8 @@
 #define TX_ISP_PROC_ISP_FS_FILE "isp-fs"
 #define TX_ISP_PROC_CSI_FILE "isp-m0"
 #define TX_ISP_PROC_VIC_FILE "isp-w02"
+#define TX_ISP_PROC_VIC_MDMA_FILE "vic-mdma"
+#define TX_ISP_PROC_VIC_DMA_ALIAS "vic-dma"
 
 struct proc_context {
     struct proc_dir_entry *isp_dir;
@@ -21,6 +23,8 @@ struct proc_context {
     struct proc_dir_entry *isp_m0_entry;
     struct proc_dir_entry *csi_entry;
     struct proc_dir_entry *vic_entry;
+    struct proc_dir_entry *vic_mdma_entry;
+    struct proc_dir_entry *vic_dma_alias_entry;
     struct tx_isp_dev *isp;
 };
 
@@ -34,9 +38,10 @@ static int tx_isp_proc_w00_show(struct seq_file *m, void *v)
         return 0;
     }
 
+
     /* Reference driver outputs single integer for vic frame counter */
     seq_printf(m, "%u", isp->frame_count);
-    
+
     return 0;
 }
 
@@ -65,7 +70,7 @@ static int tx_isp_proc_w01_show(struct seq_file *m, void *v)
 
     /* Reference driver outputs single integer for vic frame counter */
     seq_printf(m, "%u", isp->frame_count);
-    
+
     return 0;
 }
 
@@ -75,17 +80,17 @@ static ssize_t tx_isp_proc_w01_write(struct file *file, const char __user *buffe
     struct seq_file *m = file->private_data;
     struct tx_isp_dev *isp = m->private;
     char cmd[64];
-    
+
     if (count >= sizeof(cmd))
         return -EINVAL;
-        
+
     if (copy_from_user(cmd, buffer, count))
         return -EFAULT;
-        
+
     cmd[count] = '\0';
-    
+
     pr_info("ISP W01 proc command: %s\n", cmd);
-    
+
     /* Handle common ISP commands that userspace might send */
     if (strncmp(cmd, "snapraw", 7) == 0) {
         pr_info("ISP W01 snapraw command received\n");
@@ -99,7 +104,7 @@ static ssize_t tx_isp_proc_w01_write(struct file *file, const char __user *buffe
         if (isp)
             isp->streaming_enabled = false;
     }
-    
+
     return count;
 }
 
@@ -149,17 +154,17 @@ static ssize_t tx_isp_proc_w02_write(struct file *file, const char __user *buffe
     struct seq_file *m = file->private_data;
     struct tx_isp_dev *isp = m->private;
     char cmd[64];
-    
+
     if (count >= sizeof(cmd))
         return -EINVAL;
-        
+
     if (copy_from_user(cmd, buffer, count))
         return -EFAULT;
-        
+
     cmd[count] = '\0';
-    
+
     pr_info("ISP W02 proc command: %s\n", cmd);
-    
+
     /* Handle common ISP commands that userspace might send */
     if (!strncmp(cmd, "snapraw", 7) || !strncmp(cmd, "saveraw", 7) || !strncmp(cmd, "snapnv12", 8)) {
         char op[16] = {0};
@@ -205,6 +210,84 @@ static const struct file_operations tx_isp_proc_w02_fops = {
     .release = single_release,
 };
 
+/* VIC-MDMA proc file: dumps stride/control and first slot Y/UV bases */
+static int tx_isp_proc_vic_mdma_show(struct seq_file *m, void *v)
+{
+    struct tx_isp_dev *isp = m->private;
+    void __iomem *regs1, *regs2 = NULL;
+    u32 strideY1=0, ctrl1=0, y01=0, uv01=0, uvsh01=0;
+    u32 strideY2=0, ctrl2=0, y02=0, uv02=0, uvsh02=0;
+    int i;
+
+    if (!isp || !isp->vic_dev) {
+        seq_printf(m, "unavailable\n");
+        return 0;
+    }
+
+    /* First, print most recently captured per-frame snapshots (updated in ISR) */
+    seq_printf(m, "[snap sec] ctrl=0x%08x strideY=%u Y0=0x%08x UV0=0x%08x UVsh0=0x%08x\n",
+               isp->vic_dev->mdma_snap_sec.ctrl,
+               isp->vic_dev->mdma_snap_sec.strideY,
+               isp->vic_dev->mdma_snap_sec.y0,
+               isp->vic_dev->mdma_snap_sec.uv0,
+               isp->vic_dev->mdma_snap_sec.uvsh0);
+    seq_printf(m, "[snap pri] ctrl=0x%08x strideY=%u Y0=0x%08x UV0=0x%08x UVsh0=0x%08x\n",
+               isp->vic_dev->mdma_snap_pri.ctrl,
+               isp->vic_dev->mdma_snap_pri.strideY,
+               isp->vic_dev->mdma_snap_pri.y0,
+               isp->vic_dev->mdma_snap_pri.uv0,
+               isp->vic_dev->mdma_snap_pri.uvsh0);
+
+    /* Then read current live registers (just in case stream isn't advancing) */
+    regs1 = isp->vic_dev->vic_regs;
+    regs2 = isp->vic_dev->vic_regs_secondary;
+
+    if (regs1) {
+        strideY1 = readl(regs1 + 0x310);
+        ctrl1    = readl(regs1 + 0x300);
+        y01      = readl(regs1 + 0x318);
+        uv01     = readl(regs1 + 0x340);
+        uvsh01   = readl(regs1 + 0x32c);
+    }
+    if (regs2) {
+        strideY2 = readl(regs2 + 0x310);
+        ctrl2    = readl(regs2 + 0x300);
+        y02      = readl(regs2 + 0x318);
+        uv02     = readl(regs2 + 0x340);
+        uvsh02   = readl(regs2 + 0x32c);
+    }
+
+    seq_printf(m, "[sec] ctrl=0x%08x strideY=%u Y0=0x%08x UV0=0x%08x UVsh0=0x%08x\n",
+               ctrl2, strideY2, y02, uv02, uvsh02);
+    seq_printf(m, "[pri] ctrl=0x%08x strideY=%u Y0=0x%08x UV0=0x%08x UVsh0=0x%08x\n",
+               ctrl1, strideY1, y01, uv01, uvsh01);
+
+    /* Dump all five slots (primary) to detect non-slot0 programming) */
+    if (regs1) {
+        for (i = 0; i < 5; ++i) {
+            u32 y = readl(regs1 + (0x318 + i*4));
+            u32 uv = readl(regs1 + (0x340 + i*4));
+            u32 uvs = readl(regs1 + (0x32c + i*4));
+            seq_printf(m, "[pri slots] %d: Y=0x%08x UV=0x%08x UVsh=0x%08x\n", i, y, uv, uvs);
+        }
+    }
+    return 0;
+}
+
+static int tx_isp_proc_vic_mdma_open(struct inode *inode, struct file *file)
+{
+    return single_open(file, tx_isp_proc_vic_mdma_show, PDE_DATA(inode));
+}
+
+static const struct file_operations tx_isp_proc_vic_mdma_fops = {
+    .owner = THIS_MODULE,
+    .open = tx_isp_proc_vic_mdma_open,
+    .read = seq_read,
+    .llseek = seq_lseek,
+    .release = single_release,
+};
+
+
 /* ISP-FS file operations - CRITICAL MISSING PIECE */
 static int tx_isp_proc_fs_show(struct seq_file *m, void *v)
 {
@@ -217,7 +300,7 @@ static int tx_isp_proc_fs_show(struct seq_file *m, void *v)
 
     /* FS proc entry for Frame Source status */
     seq_printf(m, "%u", isp->frame_count);
-    
+
     return 0;
 }
 
@@ -227,17 +310,17 @@ static ssize_t tx_isp_proc_fs_write(struct file *file, const char __user *buffer
     struct seq_file *m = file->private_data;
     struct tx_isp_dev *isp = m->private;
     char cmd[64];
-    
+
     if (count >= sizeof(cmd))
         return -EINVAL;
-        
+
     if (copy_from_user(cmd, buffer, count))
         return -EFAULT;
-        
+
     cmd[count] = '\0';
-    
+
     pr_info("ISP FS proc command: %s\n", cmd);
-    
+
     /* Handle FS-specific commands */
     if (strncmp(cmd, "enable", 6) == 0) {
         pr_info("ISP FS enable command received\n");
@@ -248,7 +331,7 @@ static ssize_t tx_isp_proc_fs_write(struct file *file, const char __user *buffer
         if (isp)
             isp->streaming_enabled = false;
     }
-    
+
     return count;
 }
 
@@ -278,7 +361,7 @@ static int tx_isp_proc_m0_show(struct seq_file *m, void *v)
 
     /* M0 proc entry for main ISP core status */
     seq_printf(m, "%u", isp->frame_count);
-    
+
     return 0;
 }
 
@@ -288,17 +371,17 @@ static ssize_t tx_isp_proc_m0_write(struct file *file, const char __user *buffer
     struct seq_file *m = file->private_data;
     struct tx_isp_dev *isp = m->private;
     char cmd[64];
-    
+
     if (count >= sizeof(cmd))
         return -EINVAL;
-        
+
     if (copy_from_user(cmd, buffer, count))
         return -EFAULT;
-        
+
     cmd[count] = '\0';
-    
+
     pr_info("ISP M0 proc command: %s\n", cmd);
-    
+
     /* Handle M0-specific commands */
     if (strncmp(cmd, "enable", 6) == 0) {
         pr_info("ISP M0 enable command received\n");
@@ -309,7 +392,7 @@ static ssize_t tx_isp_proc_m0_write(struct file *file, const char __user *buffer
         if (isp)
             isp->streaming_enabled = false;
     }
-    
+
     return count;
 }
 
@@ -374,9 +457,9 @@ static struct proc_context *tx_isp_proc_ctx = NULL;
 static struct proc_dir_entry *get_or_create_proc_dir(const char *name, struct proc_dir_entry *parent, bool *created)
 {
     struct proc_dir_entry *dir = NULL;
-    
+
     *created = false;
-    
+
     /* On Linux 3.10, try proc_mkdir which should handle existing directories gracefully */
     dir = proc_mkdir(name, parent);
     if (dir) {
@@ -385,13 +468,13 @@ static struct proc_dir_entry *get_or_create_proc_dir(const char *name, struct pr
         pr_info("Created or accessed proc directory: %s\n", name);
         return dir;
     }
-    
-    /* 
+
+    /*
      * If proc_mkdir failed, it could be because:
      * 1. Directory exists but proc_mkdir doesn't return it (overlay fs issue)
      * 2. Insufficient permissions
      * 3. Out of memory
-     * 
+     *
      * For Linux 3.10 with overlays, we try a different approach:
      * Create a dummy file to test if the parent directory is writable
      */
@@ -401,7 +484,7 @@ static struct proc_dir_entry *get_or_create_proc_dir(const char *name, struct pr
         if (test_entry) {
             /* Parent is writable, remove test entry */
             proc_remove(test_entry);
-            
+
             /* The directory might exist but be inaccessible via proc_mkdir
              * In this case, we'll proceed without the jz directory reference
              * and create our subdirectory directly under proc root if needed
@@ -410,7 +493,7 @@ static struct proc_dir_entry *get_or_create_proc_dir(const char *name, struct pr
             return NULL;
         }
     }
-    
+
     pr_err("Failed to create or access proc directory: %s\n", name);
     return NULL;
 }
@@ -500,11 +583,34 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
     }
     pr_info("Created proc entry: /proc/jz/isp/vic\n");
 
+    /* Create /proc/jz/isp/vic-mdma (low-noise debug of VIC MDMA base/stride/control) */
+    ctx->vic_mdma_entry = proc_create_data(TX_ISP_PROC_VIC_MDMA_FILE, 0644, ctx->isp_dir,
+                                          &tx_isp_proc_vic_mdma_fops, isp);
+    if (!ctx->vic_mdma_entry) {
+        pr_err("Failed to create vic-mdma proc entry\n");
+        goto error_remove_vic;
+    }
+    pr_info("Created proc entry: /proc/jz/isp/%s\n", TX_ISP_PROC_VIC_MDMA_FILE);
+
+    /* Alias to match user expectations: /proc/jz/isp/vic-dma */
+    ctx->vic_dma_alias_entry = proc_create_data(TX_ISP_PROC_VIC_DMA_ALIAS, 0644, ctx->isp_dir,
+                                               &tx_isp_proc_vic_mdma_fops, isp);
+    if (!ctx->vic_dma_alias_entry) {
+        pr_err("Failed to create vic-dma alias proc entry\n");
+        goto error_remove_vicmdma;
+    }
+    pr_info("Created alias proc entry: /proc/jz/isp/%s\n", TX_ISP_PROC_VIC_DMA_ALIAS);
+
     pr_info("*** ALL PROC ENTRIES CREATED SUCCESSFULLY - MATCHES REFERENCE DRIVER LAYOUT ***\n");
-    pr_info("*** /proc/jz/isp/ now contains: isp-w00, isp-w01, isp-w02, isp-fs, isp-m0, csi, vic ***\n");
+    pr_info("*** /proc/jz/isp/ now contains: isp-w00, isp-w01, isp-w02, isp-fs, isp-m0, csi, vic, %s (and alias %s) ***\n",
+            TX_ISP_PROC_VIC_MDMA_FILE, TX_ISP_PROC_VIC_DMA_ALIAS);
 
     return 0;
 
+error_remove_vicmdma:
+    proc_remove(ctx->vic_mdma_entry);
+error_remove_vic:
+    proc_remove(ctx->vic_entry);
 error_remove_csi:
     proc_remove(ctx->csi_entry);
 error_remove_m0:
@@ -529,13 +635,19 @@ error_free_ctx:
 void tx_isp_remove_proc_entries(void)
 {
     struct proc_context *ctx = tx_isp_proc_ctx;
-    
+
     if (!ctx) {
         return;
     }
-    
+
     pr_info("*** tx_isp_remove_proc_entries: Cleaning up proc entries ***\n");
-    
+
+    if (ctx->vic_mdma_entry) {
+        proc_remove(ctx->vic_mdma_entry);
+    }
+    if (ctx->vic_dma_alias_entry) {
+        proc_remove(ctx->vic_dma_alias_entry);
+    }
     if (ctx->vic_entry) {
         proc_remove(ctx->vic_entry);
     }
@@ -560,10 +672,10 @@ void tx_isp_remove_proc_entries(void)
     if (ctx->isp_dir) {
         proc_remove(ctx->isp_dir);
     }
-    
+
     kfree(ctx);
     tx_isp_proc_ctx = NULL;
-    
+
     pr_info("All proc entries removed\n");
 }
 

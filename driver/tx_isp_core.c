@@ -443,6 +443,53 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     /* Reference driver ispcore_irq_fs_work calls ispcore_sensor_ops_ioctl for AE/AGC/AWB */
     pr_info("*** ISP FRAME SYNC WORK: Frame sync processing (calling sensor operations) ***\n");
 
+    /* One-shot VIC diagnostics to verify NV12 programming and UV plane activity */
+    do {
+        static int debug_dump_done = 0;
+        if (!debug_dump_done && vic_is_streaming && isp_dev->vic_dev) {
+            struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+            void __iomem *regs = vic->vic_regs;
+            if (regs) {
+                u32 ctrl = readl(regs + 0x300);
+                u32 dims = readl(regs + 0x304);
+                u32 strideY = readl(regs + 0x310);
+                u32 strideUV = readl(regs + 0x314);
+                u32 count = (ctrl >> 16) & 0xF;
+                pr_info("*** FS DEBUG: VIC[300]=0x%08x (fmt_ok=%d) dims=%ux%u strideY=%u strideUV=%u slots=%u ***\n",
+                        ctrl, ((ctrl & 0x80000027) == 0x80000027), dims >> 16, dims & 0xFFFF, strideY, strideUV, count);
+
+                /* Dump Y/UV base for active slots */
+                if (count == 0 || count > 5) count = 2;
+                for (u32 i = 0; i < count; ++i) {
+                    u32 yb = readl(regs + (0x318 + i*4));
+                    u32 uvb = readl(regs + (0x340 + i*4));
+                    pr_info("*** FS DEBUG: slot%u Y=0x%08x UV=0x%08x (UV=Y+%u*H=%u) ***\n",
+                            i, yb, uvb, strideY, strideY * vic->height);
+                }
+
+                /* Optional: peek UV bytes of slot 0 to detect all-zero chroma */
+                {
+                    u32 uv0 = readl(regs + 0x340);
+                    if (uv0) {
+                        phys_addr_t p = (phys_addr_t)uv0 & ~0xFFF;
+                        void __iomem *v = ioremap_nocache(p, 0x1000);
+                        if (v) {
+                            u32 off = uv0 & 0xFFF;
+                            u8 sample[16] = {0};
+                            for (int k = 0; k < 16 && (off + k) < 0x1000; ++k)
+                                sample[k] = readb(v + off + k);
+                            pr_info("*** FS DEBUG: UV[0] first 16 bytes: %*ph ***\n", 16, sample);
+                            iounmap(v);
+                        } else {
+                            pr_info("*** FS DEBUG: ioremap_nocache failed for UV base 0x%08x ***\n", uv0);
+                        }
+                    }
+                }
+            }
+            debug_dump_done = 1;
+        }
+    } while (0);
+
     if (isp_dev->sensor && isp_dev->streaming_enabled) {
         /* Per user request: do NOT trigger sensor IOCTL (FPS or any I2C) on frame events */
         pr_info("*** ISP FRAME SYNC WORK: Skipping per-frame sensor I2C/FPS ioctl ***\n");
