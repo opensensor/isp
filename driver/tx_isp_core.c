@@ -338,52 +338,70 @@ static void ispcore_irq_fs_work(struct work_struct *work);
 static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
 {
     int result = 0;
-    int i;
+    void **slot;
+    void **end;
 
-    if (!isp_dev) {
+    if (!isp_dev)
         return -ENODEV;
-    }
 
-    pr_info("*** ispcore_sensor_ops_ioctl: Looking for actual sensor device ***\n");
+    /* Binary Ninja exact behavior: iterate pointers from offset 0x38 to 0x78.
+     * For each entry, resolve nested ops and invoke function at +8, treating
+     * -ENOIOCTLCMD as "not handled" and continuing. If all return -ENOIOCTLCMD,
+     * return 0. Otherwise, return first non-zero error code encountered.
+     */
+    slot = (void **)((char *)isp_dev + 0x38);
+    end  = (void **)((char *)isp_dev + 0x78);
 
-    /* CRITICAL: Don't iterate through subdevs - call the real sensor directly */
-    /* The real sensor is stored in isp_dev->sensor, not in the subdevs array */
-    if (isp_dev->sensor && isp_dev->sensor->sd.ops &&
-        isp_dev->sensor->sd.ops->sensor && isp_dev->sensor->sd.ops->sensor->ioctl) {
+    while (slot < end) {
+        void *a0 = *slot;
 
-        pr_info("*** ispcore_sensor_ops_ioctl: Found real sensor device - calling sensor IOCTL ***\n");
+        if (a0) {
+            void **p1 = *(void ***)((char *)a0 + 0xc4);
+            void **v0_1 = NULL;
 
-        /* CRITICAL: Sensor expects FPS in format (fps_num << 16) | fps_den */
-        static int fps_value = (25 << 16) | 1;  /* Default 25/1 FPS in correct format */
+            if (p1)
+                v0_1 = *(void ***)((char *)p1 + 0x0c);
 
-        /* Update FPS from tuning data if available */
-        if (isp_dev->tuning_data && isp_dev->tuning_data->fps_num > 0 && isp_dev->tuning_data->fps_den > 0) {
-            int new_fps = (isp_dev->tuning_data->fps_num << 16) | isp_dev->tuning_data->fps_den;
-            if (new_fps != fps_value) {
-                fps_value = new_fps;
-                pr_info("*** ispcore_sensor_ops_ioctl: Updated FPS to %d/%d (0x%x) from tuning data ***\n",
-                        isp_dev->tuning_data->fps_num, isp_dev->tuning_data->fps_den, fps_value);
+            if (v0_1) {
+                int (*fn)(void) = *(int (**)(void))((char *)v0_1 + 0x08);
+
+                if (fn) {
+                    result = fn();
+
+                    if (result == 0) {
+                        slot++;
+                        continue;
+                    }
+
+                    if (result != -ENOIOCTLCMD)
+                        break;
+
+                    /* Normalize and continue on -ENOIOCTLCMD */
+                    result = -ENOIOCTLCMD;
+                    slot++;
+                    continue;
+                } else {
+                    result = -ENOIOCTLCMD;
+                    slot++;
+                    continue;
+                }
+            } else {
+                result = -ENOIOCTLCMD;
+                slot++;
+                continue;
             }
-        }
-
-        pr_info("*** ispcore_sensor_ops_ioctl: Calling sensor with FPS=0x%x (25/1) ***\n", fps_value);
-
-        /* Call the real sensor's IOCTL with valid FPS pointer - this triggers I2C communication */
-        result = isp_dev->sensor->sd.ops->sensor->ioctl(&isp_dev->sensor->sd, TX_ISP_EVENT_SENSOR_FPS, &fps_value);
-
-        pr_info("*** ispcore_sensor_ops_ioctl: Real sensor IOCTL result: %d ***\n", result);
-
-        if (result == 0) {
-            pr_info("*** ispcore_sensor_ops_ioctl: Sensor I2C communication successful - should see I2C writes to 0x41/0x42 ***\n");
         } else {
-            pr_warn("*** ispcore_sensor_ops_ioctl: Sensor I2C communication failed: %d ***\n", result);
+            slot++;
+            continue;
         }
-    } else {
-        pr_warn("*** ispcore_sensor_ops_ioctl: No real sensor device found ***\n");
-        result = -ENODEV;
     }
 
-    return (result == -ENOIOCTLCMD) ? 0 : result;
+    if (slot == end) {
+        if (result == -ENOIOCTLCMD)
+            return 0;
+    }
+
+    return result;
 }
 
 /* Frame sync work function - Safe implementation without dangerous offsets */
@@ -426,36 +444,10 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     pr_info("*** ISP FRAME SYNC WORK: Frame sync processing (calling sensor operations) ***\n");
 
     if (isp_dev->sensor && isp_dev->streaming_enabled) {
-        pr_info("*** ISP FRAME SYNC WORK: Calling sensor operations (like reference driver) ***\n");
-
-        /* CRITICAL: Call sensor operations like reference driver ispcore_irq_fs_work */
-        /* This triggers AE/AGC/AWB sensor I2C operations */
-        /* Add error handling to prevent work queue crashes */
-        extern int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev);
-
-        int sensor_result = -ENODEV;
-
-        /* CRITICAL FIX: Do proper per-frame sensor operations like reference driver */
-        /* Frame sync should do AE/AGC operations, NOT FPS control */
-        pr_info("*** ISP FRAME SYNC WORK: Performing per-frame sensor operations (AE/AGC) ***\n");
-
-        /* REFERENCE DRIVER: Call ispcore_sensor_ops_ioctl exactly like reference */
-        /* Binary Ninja: ispcore_sensor_ops_ioctl(mdns_y_pspa_cur_bi_wei0_array) */
-        pr_info("*** ISP FRAME SYNC WORK: Calling ispcore_sensor_ops_ioctl (reference driver) ***\n");
-        sensor_result = ispcore_sensor_ops_ioctl(isp_dev);
-        pr_info("*** ISP FRAME SYNC WORK: ispcore_sensor_ops_ioctl result: %d ***\n", sensor_result);
-
-        if (sensor_result == 0) {
-            pr_info("*** ISP FRAME SYNC WORK: All sensor operations successful ***\n");
-        } else if (sensor_result == -ENOIOCTLCMD) {
-            pr_info("*** ISP FRAME SYNC WORK: No sensor IOCTL command (normal) ***\n");
-        } else {
-            pr_warn("*** ISP FRAME SYNC WORK: Sensor operations failed: %d ***\n", sensor_result);
-        }
-
-        pr_info("*** ISP FRAME SYNC WORK: Frame sync event processed (sensor available) ***\n");
+        /* Per user request: do NOT trigger sensor IOCTL (FPS or any I2C) on frame events */
+        pr_info("*** ISP FRAME SYNC WORK: Skipping per-frame sensor I2C/FPS ioctl ***\n");
     } else {
-        pr_info("*** ISP FRAME SYNC WORK: Frame sync event processed (no sensor/not streaming) ***\n");
+        pr_info("*** ISP FRAME SYNC WORK: No sensor/not streaming - nothing to do ***\n");
     }
 
     pr_info("*** ISP FRAME SYNC WORK: Binary Ninja implementation complete - work finished ***\n");
@@ -2244,7 +2236,7 @@ int ispcore_frame_channel_dqbuf(void* arg1, void* arg2)
     if (arg1 == 0)
         return 0;
 
-    extern int tx_isp_send_event_to_remote(void* arg1, int32_t event, void* arg2);
+    /* Use already-declared symbol; no need for local extern */
     tx_isp_send_event_to_remote(arg1, 0x3000006, arg2);
     return 0;
 }

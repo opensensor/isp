@@ -6,6 +6,8 @@
 #include <linux/i2c.h>
 #include <linux/clk.h>
 #include <linux/vmalloc.h>
+#include <linux/slab.h>
+
 #include "../include/tx_isp.h"
 #include "../include/tx_isp_core.h"
 #include "../include/tx-isp-debug.h"
@@ -18,6 +20,8 @@
 #include "../include/tx-libimp.h"
 #include <linux/platform_device.h>
 #include <linux/device.h>
+
+#include <linux/videodev2.h>
 
 int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 extern struct tx_isp_dev *ourISPdev;
@@ -40,42 +44,46 @@ static int tx_isp_vic_apply_full_config(struct tx_isp_vic_device *vic_dev);
 static int vic_enabled = 0;
 
 /* *** CRITICAL: MISSING FUNCTION - tx_isp_create_vic_device *** */
+/* Forward declarations for PIPO callbacks used before definitions */
+static int ispvic_frame_channel_qbuf(void *arg1, void *arg2);
+static int ispvic_frame_channel_clearbuf(void);
+
 /* This function creates and links the VIC device structure to the ISP core */
 int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
 {
     struct tx_isp_vic_device *vic_dev;
     int ret = 0;
-    
+
     if (!isp_dev) {
         pr_err("tx_isp_create_vic_device: Invalid ISP device\n");
         return -EINVAL;
     }
-    
+
     pr_info("*** tx_isp_create_vic_device: Creating VIC device structure ***\n");
-    
+
     /* FIXED: Use regular kernel memory instead of precious rmem for small structures */
     vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
     if (!vic_dev) {
         pr_err("tx_isp_create_vic_device: Failed to allocate VIC device structure\n");
         return -ENOMEM;
     }
-    
+
     pr_info("*** VIC DEVICE ALLOCATED: %p (size=0x21c bytes) ***\n", vic_dev);
-    
+
     /* Initialize VIC device structure - Binary Ninja exact layout */
-    
+
     /* Initialize spinlock at offset 0x130 */
     spin_lock_init((spinlock_t *)((char *)vic_dev + 0x130));
-    
+
     /* Initialize mutex at offset 0x154 */
     mutex_init((struct mutex *)((char *)vic_dev + 0x154));
-    
+
     /* Initialize completion at offset 0x148 */
     init_completion((struct completion *)((char *)vic_dev + 0x148));
-    
+
     /* Set initial state to 1 (INIT) at offset 0x128 */
     *(uint32_t *)((char *)vic_dev + 0x128) = 1;
-    
+
     /* Set self-pointer at offset 0xd4 */
     *(void **)((char *)vic_dev + 0xd4) = vic_dev;
 
@@ -83,7 +91,7 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     /* The VIC interrupt handler checks for 0x3231564e (NV12) at offset 0xc */
     *(uint32_t *)((char *)vic_dev + 0xc) = 0x3231564e;  /* NV12 format magic number */
     pr_info("*** VIC DEVICE: Set NV12 format magic number 0x3231564e at offset 0xc ***\n");
-    
+
     /* *** CRITICAL FIX: Map BOTH VIC register spaces - dual VIC architecture *** */
     pr_info("*** CRITICAL: Mapping DUAL VIC register spaces for complete VIC control ***\n");
 
@@ -105,7 +113,7 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
         return -ENOMEM;
     }
     pr_info("*** Secondary VIC registers mapped: %p (0x10023000) ***\n", vic_dev->vic_regs_secondary);
-    
+
     /* Also store in ISP device for compatibility */
     if (!isp_dev->vic_regs) {
         isp_dev->vic_regs = vic_dev->vic_regs;
@@ -113,17 +121,17 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     if (!isp_dev->vic_regs2) {
         isp_dev->vic_regs2 = vic_dev->vic_regs_secondary;
     }
-    
+
     /* Initialize VIC device dimensions - CRITICAL: Use actual sensor output dimensions */
     vic_dev->width = 1920;  /* GC2053 actual output width */
     vic_dev->height = 1080; /* GC2053 actual output height */
-    
+
     /* Set up VIC subdev structure */
     memset(&vic_dev->sd, 0, sizeof(vic_dev->sd));
     vic_dev->sd.isp = isp_dev;
     vic_dev->sd.ops = &vic_subdev_ops;
     vic_dev->sd.vin_state = TX_ISP_MODULE_INIT;
-    
+
     /* Initialize buffer management */
     INIT_LIST_HEAD(&vic_dev->queue_head);
     INIT_LIST_HEAD(&vic_dev->done_head);
@@ -133,37 +141,37 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     mutex_init(&vic_dev->mlock);
     mutex_init(&vic_dev->state_lock);
     init_completion(&vic_dev->frame_complete);
-    
+
     /* Initialize VIC error counters */
     memset(vic_dev->vic_errors, 0, sizeof(vic_dev->vic_errors));
-    
+
     /* Set initial frame count */
     vic_dev->frame_count = 0;
     vic_dev->buffer_count = 0;
     vic_dev->streaming = 0;
     vic_dev->state = 1; /* INIT state */
-    
+
     /* *** CRITICAL: Initialize VIC hardware buffers - DEFERRED to prevent memory exhaustion *** */
     pr_info("*** CRITICAL: VIC buffer allocation DEFERRED to prevent Wyze Cam memory exhaustion ***\n");
     pr_info("*** Buffers will be allocated on-demand during QBUF operations ***\n");
-    
+
     /* Initialize empty lists - buffers allocated later when needed */
     pr_info("*** VIC: Buffer lists initialized - allocation deferred to prevent memory pressure ***\n");
-    
+
     /* Set up sensor attributes with defaults */
     memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
     vic_dev->sensor_attr.dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; /* MIPI interface (correct value from enum) */
     vic_dev->sensor_attr.total_width = 1920;
     vic_dev->sensor_attr.total_height = 1080;
     vic_dev->sensor_attr.data_type = 0x2b; /* Default RAW10 */
-    
+
     /* *** CRITICAL: Link VIC device to ISP core *** */
     /* Store the VIC device properly - the subdev is PART of the VIC device */
     isp_dev->vic_dev = (struct tx_isp_subdev *)&vic_dev->sd;
-    
+
     /* *** CRITICAL FIX: Ensure VIC subdev has proper ISP device back-reference *** */
     vic_dev->sd.isp = isp_dev;  /* This ensures tx_isp_vic_start can find the ISP device */
-    
+
     pr_info("*** CRITICAL: VIC DEVICE LINKED TO ISP CORE ***\n");
     pr_info("  isp_dev->vic_dev = %p\n", isp_dev->vic_dev);
     pr_info("  vic_dev->sd.isp = %p\n", vic_dev->sd.isp);
@@ -171,14 +179,14 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     pr_info("  vic_dev->vic_regs = %p\n", vic_dev->vic_regs);
     pr_info("  vic_dev->state = %d\n", vic_dev->state);
     pr_info("  vic_dev dimensions = %dx%d\n", vic_dev->width, vic_dev->height);
-    
+
     /* Set up tx_isp_get_subdevdata to work properly */
     /* This sets up the private data pointer so tx_isp_get_subdevdata can retrieve the VIC device */
     vic_dev->sd.dev_priv = vic_dev;
-    
+
     pr_info("*** tx_isp_create_vic_device: VIC device creation complete ***\n");
     pr_info("*** NO MORE 'NO VIC DEVICE' ERROR SHOULD OCCUR ***\n");
-    
+
     return 0;
 }
 EXPORT_SYMBOL(tx_isp_create_vic_device);
@@ -240,6 +248,7 @@ struct vic_buffer_entry {
     struct list_head list;
     u32 reserved;
     u32 buffer_addr;
+    u32 buffer_index; /* slot index 0..4 for VIC 0x318..0x328 */
 };
 
 /* Helper functions - removed conflicting declarations as they're already in SDK headers */
@@ -316,7 +325,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
                     } *entry = container_of(pos, struct vic_buffer_entry, list);
 
                     if (entry->buffer_addr == current_frame_addr) {
-                      
+
                         match_found = 1;  /* $v0 = 1 */
                     }
                 }
@@ -335,20 +344,19 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             /* The reference driver preserves control bits, we were clearing them! */
             if (vic_regs) {
                 u32 reg_val = readl(vic_regs + 0x300);
-                /* PRESERVE EXACT control bits (0x80000020) and only update buffer index in bits 16-19 */
-                /* Clear only the buffer index bits (16-19) and preserve everything else */
+                /* Preserve control bits for NV12 (0x80000020 | format=7) and only update buffer index (bits 16-19) */
                 reg_val = (reg_val & 0xfff0ffff) | shifted_value;  /* Clear bits 16-19, set new buffer index */
 
-                /* FORCE control bits if they were lost */
-                if ((reg_val & 0x80000020) != 0x80000020) {
-                    reg_val |= 0x80000020;  /* Force control bits back on */
-                    pr_warn("*** VIC FRAME DONE: FORCED control bits 0x80000020 back on! ***\n");
+                /* Ensure control bits include NV12 format code (7) */
+                if ((reg_val & 0x80000027) != 0x80000027) {
+                    reg_val |= 0x80000027;  /* Force control bits and format back on */
+                    pr_warn("*** VIC FRAME DONE: FORCED control bits 0x80000027 back on (NV12) ***\n");
                 }
 
                 writel(reg_val, vic_regs + 0x300);
 
-                pr_info("*** VIC FRAME DONE: Updated VIC[0x300] = 0x%x (CONTROL BITS: %s) ***\n",
-                        reg_val, (reg_val & 0x80000020) == 0x80000020 ? "PRESERVED" : "LOST");
+                pr_info("*** VIC FRAME DONE: Updated VIC[0x300] = 0x%x (CTRL NV12 %s) ***\n",
+                        reg_val, (reg_val & 0x80000027) == 0x80000027 ? "OK" : "MISMATCH");
                 pr_info("vic_framedone_irq_function: Updated VIC[0x300] = 0x%x (buffers: index=%d, high_bits=%d, match=%d)\n",
                          reg_val, buffer_index, high_bits, match_found);
             }
@@ -417,27 +425,27 @@ label_123f4:
 static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
 {
     void __iomem *vic_base = vic_dev->vic_regs;
-    
+
     pr_debug("*** vic_mdma_irq_function: channel=%d, vic_dev=%p ***\n", channel, vic_dev);
-    
+
     /* MDMA channel interrupt processing */
     if (channel == 0) {
         /* Channel 0 MDMA processing */
         pr_debug("vic_mdma_irq_function: Processing MDMA channel 0 interrupt\n");
-        
+
         /* Complete any pending frame operations for channel 0 */
         complete(&vic_dev->frame_complete);
-        
+
         /* Clear channel 0 specific MDMA status if needed */
         /* This would include hardware-specific register operations */
     } else if (channel == 1) {
         /* Channel 1 MDMA processing */
         pr_debug("vic_mdma_irq_function: Processing MDMA channel 1 interrupt\n");
-        
+
         /* Channel 1 specific processing would go here */
         /* This would include different buffer management or DMA operations */
     }
-    
+
     pr_debug("*** vic_mdma_irq_function: completed for channel %d ***\n", channel);
     return 0;  /* Success */
 }
@@ -679,7 +687,7 @@ cleanup:
 int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum)
 {
     uint32_t vic_ctrl, vic_status, vic_intr, vic_addr;
-    uint32_t width, height, frame_size, buf_size;
+    uint32_t width, height, frame_size, buf_size; /* capture dimensions */
     struct tx_isp_dev *isp_dev = ourISPdev;
     void __iomem *vic_base;
     void *capture_buf;
@@ -691,25 +699,58 @@ int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum)
     loff_t pos = 0;
     mm_segment_t old_fs;
     bool using_rmem = false;
+    /* Extra diagnostics for logging to file */
+    u32 dims_reg = 0, w_hw_snap = 0, h_hw_snap = 0;
+    u32 stride_reg = 0, stride_used = 0;
+    size_t sample_n = 0; u32 sample_sum = 0; u8 sample_min = 0xFF, sample_max = 0x00;
 
     if (!sd) {
         pr_err("No VIC or sensor device\n");
         return -EINVAL;
     }
 
+    /* Prefer live VIC hardware-configured dims over cached sensor totals */
     width = isp_dev->sensor_width;
     height = isp_dev->sensor_height;
+    if (isp_dev && isp_dev->vic_dev && isp_dev->vic_dev->vic_regs) {
+        u32 dims = readl(isp_dev->vic_dev->vic_regs + 0x304); /* [31:16]=width, [15:0]=height */
+        u32 w_hw = (dims >> 16) & 0xFFFF;
+        u32 h_hw = dims & 0xFFFF;
+        dims_reg = dims; w_hw_snap = w_hw; h_hw_snap = h_hw;
+        if (w_hw >= 64 && w_hw <= 8192 && h_hw >= 64 && h_hw <= 8192) {
+            pr_info("vic_snapraw: using VIC hw dims %ux%u (was %ux%u)\n", w_hw, h_hw, width, height);
+            width = w_hw;
+            height = h_hw;
+        } else {
+            pr_warn("vic_snapraw: VIC dims out of range (%u x %u), keeping %u x %u\n", w_hw, h_hw, width, height);
+        }
+    }
 
     if (width >= 0xa81) {
         pr_err("Can't output the width(%d)!\n", width);
         return -EINVAL;
     }
 
-    frame_size = width * height * 2;
-    buf_size = frame_size * savenum;
-
-    pr_info("width=%d height=%d frame_size=%d total_size=%d savenum=%d\n",
-            width, height, frame_size, buf_size, savenum);
+    /* Determine stride from VIC if available; fallback to 2 bytes per pixel */
+    {
+        /* Determine RAW10 stride: ceil(width*10/8), 16B aligned; prefer VIC stride regs if >= estimate */
+        u32 raw10_bpl = (width * 10 + 7) >> 3;           /* bytes per line, packed RAW10 */
+        u32 stride_tmp = (raw10_bpl + 15) & ~15;         /* 16-byte align fallback */
+        if (isp_dev && isp_dev->vic_dev && isp_dev->vic_dev->vic_regs) {
+            u32 s0 = readl(isp_dev->vic_dev->vic_regs + 0x310);
+            u32 s1 = readl(isp_dev->vic_dev->vic_regs + 0x314);
+            stride_reg = s0 ? s0 : s1;
+            if (s0 >= raw10_bpl && s0 <= 0x20000)
+                stride_tmp = s0;
+            else if (s1 >= raw10_bpl && s1 <= 0x20000)
+                stride_tmp = s1;
+        }
+        stride_used = stride_tmp;
+        frame_size = stride_tmp * height;                 /* RAW10 single plane */
+        buf_size = frame_size * savenum;
+        pr_info("vic_snapraw: RAW10 dims=%ux%u bpl_est=%u stride=%u frame_size=%u total_size=%u savenum=%u\n",
+                width, height, raw10_bpl, stride_tmp, frame_size, buf_size, savenum);
+    }
 
     // Map VIC registers
     vic_base = ioremap(0x10023000, 0x1000);
@@ -734,15 +775,16 @@ int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum)
     vic_intr = readl(vic_base + 0x7804);
     vic_addr = readl(vic_base + 0x7820);
 
-    // Configure VIC registers for capture
-    writel(vic_ctrl & 0x11110111, vic_base + 0x7810);
+    // Configure snapshot: clear status and enable snapshot interrupt; leave control unchanged
     writel(0, vic_base + 0x7814);
     writel(vic_intr | 1, vic_base + 0x7804);
 
     // Setup DMA
     writel(dma_addr, vic_base + 0x7820);  // DMA target address
-    writel(width * 2, vic_base + 0x7824);  // Stride
-    writel(height, vic_base + 0x7828);     // Height
+    /* Program stride/height for capture DMA using previously determined RAW10 stride */
+    writel(stride_used, vic_base + 0x7824);  // Stride (bytes per line)
+    writel(height,     vic_base + 0x7828);  // Number of lines
+    pr_info("vic_snapraw: programmed stride=%u height=%u\n", stride_used, height);
 
     // Start capture
     writel(1, vic_base + 0x7800);  // Start DMA
@@ -763,6 +805,19 @@ int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum)
         goto cleanup;
     }
 
+
+
+
+    /* Inspect first chunk for non-zero data and store stats */
+    do {
+        size_t n = frame_size < 4096 ? frame_size : 4096;
+        const unsigned char *p = (const unsigned char *)capture_buf;
+        unsigned int sum = 0; unsigned char mn = 0xFF, mx = 0x00;
+        size_t k; for (k = 0; k < n; ++k) { unsigned char v = p[k]; sum += v; if (v < mn) mn = v; if (v > mx) mx = v; }
+        sample_n = n; sample_sum = sum; sample_min = mn; sample_max = mx;
+        pr_info("vic_snapraw: sample bytes n=%zu sum=%u min=%u max=%u\n", n, sum, mn, mx);
+    } while (0);
+
     // Save frames to files
     old_fs = get_fs();
     set_fs(KERNEL_DS);
@@ -778,10 +833,72 @@ int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum)
         ret = vfs_write(fp, capture_buf + (i * frame_size), frame_size, &pos);
         if (ret != frame_size) {
             pr_err("Failed to write frame %d\n", i);
+    /* Now append a one-line summary (after sampling so stats are valid) */
+    do {
+        struct file *lfp; loff_t lpos = 0; char line[160]; int len;
+        old_fs = get_fs(); set_fs(KERNEL_DS);
+        lfp = filp_open("/tmp/vic_snapraw.log", O_WRONLY | O_CREAT | O_APPEND, 0644);
+        if (!IS_ERR(lfp)) {
+            len = snprintf(line, sizeof(line),
+                "dims=%ux%u (reg=0x%08x) stride_used=%u stride_reg=%u frame_size=%u sample(n=%zu sum=%u min=%u max=%u)\n",
+                width, height, dims_reg, stride_used, stride_reg, frame_size, sample_n, sample_sum, sample_min, sample_max);
+            vfs_write(lfp, line, len, &lpos);
+            filp_close(lfp, NULL);
         }
+        set_fs(old_fs);
+    } while (0);
 
+    /* If buffer looks all-zero, retry snapshot on primary VIC bank and resample */
+    if (sample_n > 0 && sample_sum == 0 && sample_max == 0) {
+        void __iomem *vic_base_pri = ioremap(0x133e0000, 0x1000);
+        if (vic_base_pri) {
+            unsigned long tmo;
+            /* Re-program snapshot on primary bank with same addr/stride/height */
+            writel(0,                vic_base_pri + 0x7814);
+            writel(1,                vic_base_pri + 0x7804);
+            writel(dma_addr,         vic_base_pri + 0x7820);
+            writel(stride_used,      vic_base_pri + 0x7824);
+            writel(height,           vic_base_pri + 0x7828);
+            writel(1,                vic_base_pri + 0x7800);
+            tmo = jiffies + msecs_to_jiffies(600);
+            while (time_before(jiffies, tmo)) {
+                if (!(readl(vic_base_pri + 0x7800) & 1)) break;
+                usleep_range(1000, 2000);
+            }
+            /* Re-sample */
+            {
+                size_t n2 = frame_size < 4096 ? frame_size : 4096;
+                const unsigned char *p2 = (const unsigned char *)capture_buf;
+                unsigned int sum2 = 0; unsigned char mn2 = 0xFF, mx2 = 0x00; size_t k2;
+                for (k2 = 0; k2 < n2; ++k2) { unsigned char v2 = p2[k2]; sum2 += v2; if (v2 < mn2) mn2 = v2; if (v2 > mx2) mx2 = v2; }
+                if (sum2 || mx2) {
+                    /* Overwrite preview with primary-bank data */
+                    struct file *fp2 = filp_open("/tmp/vic_frame_0_pri.raw", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                    if (!IS_ERR(fp2)) { loff_t p = 0; vfs_write(fp2, capture_buf, frame_size, &p); filp_close(fp2, NULL); }
+                    fp2 = filp_open("/tmp/snap0.raw", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                    if (!IS_ERR(fp2)) { loff_t p = 0; vfs_write(fp2, capture_buf, frame_size, &p); filp_close(fp2, NULL); }
+                    pr_info("vic_snapraw: primary VIC snapshot produced non-zero data (sum=%u max=%u)\n", sum2, mx2);
+                } else {
+                    pr_warn("vic_snapraw: primary VIC snapshot also zero data\n");
+                }
+            }
+            iounmap(vic_base_pri);
+        }
+    }
+
+        }
         filp_close(fp, NULL);
         pos = 0;
+
+        /* Also save first frame to /tmp/snap0.raw for web preview compatibility */
+        if (i == 0) {
+            struct file *fp2 = filp_open("/tmp/snap0.raw", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (!IS_ERR(fp2)) {
+                loff_t pos2 = 0;
+                vfs_write(fp2, capture_buf, frame_size, &pos2);
+                filp_close(fp2, NULL);
+            }
+        }
     }
 
     set_fs(old_fs);
@@ -797,9 +914,93 @@ cleanup:
         dma_free_coherent(sd->dev, buf_size, capture_buf, dma_addr);
     }
 
+
     iounmap(vic_base);
     return ret;
 }
+
+
+int vic_snapnv12(struct tx_isp_subdev *sd, unsigned int savenum)
+{
+    struct tx_isp_dev *isp_dev = ourISPdev;
+    void __iomem *vic_base;
+    u32 dims_reg = 0, stride_reg = 0;
+    u32 width = 0, height = 0, stride = 0;
+    u32 total_lines = 0; /* Y + UV lines */
+    u32 frame_size = 0, buf_size = 0;
+    void *capture_buf = NULL; dma_addr_t dma_addr = 0;
+    int i, ret = 0; unsigned long timeout;
+    struct file *fp; char filename[64]; loff_t pos = 0; mm_segment_t old_fs;
+
+    if (!sd || !isp_dev) return -EINVAL;
+
+    /* Read live VIC geometry */
+    if (isp_dev->vic_dev && isp_dev->vic_dev->vic_regs) {
+        dims_reg = readl(isp_dev->vic_dev->vic_regs + 0x304);
+        width  = (dims_reg >> 16) & 0xFFFF;
+        height = (dims_reg) & 0xFFFF;
+        stride_reg = readl(isp_dev->vic_dev->vic_regs + 0x310);
+    }
+    if (width < 64 || height < 64) { width = isp_dev->sensor_width; height = isp_dev->sensor_height; }
+    if (stride_reg >= width && stride_reg <= 0x20000) stride = stride_reg; else stride = ALIGN(width, 2);
+
+    /* NV12 size: Y plane (stride*H) + interleaved UV plane (stride*H/2) */
+    total_lines = height + (height >> 1);
+    frame_size = stride * total_lines;
+    buf_size = frame_size * savenum;
+    pr_info("vic_snapnv12: dims=%ux%u stride=%u total_lines=%u frame_size=%u\n", width, height, stride, total_lines, frame_size);
+
+    /* Map snapshot DMA bank (secondary) */
+    vic_base = ioremap(0x10023000, 0x1000);
+    if (!vic_base) return -ENOMEM;
+
+    capture_buf = dma_alloc_coherent(sd->dev, buf_size, &dma_addr, GFP_KERNEL);
+    if (!capture_buf) { iounmap(vic_base); return -ENOMEM; }
+
+    /* Program snapshot DMA: address, stride, and number of lines to copy */
+    writel(dma_addr,            vic_base + 0x7820);
+    writel(stride,              vic_base + 0x7824);
+    writel(total_lines,         vic_base + 0x7828);
+    writel(1,                   vic_base + 0x7800); /* start */
+
+    timeout = jiffies + msecs_to_jiffies(600);
+    while (time_before(jiffies, timeout)) {
+        if (!(readl(vic_base + 0x7800) & 1)) break;
+        usleep_range(1000, 2000);
+    }
+
+    if (readl(vic_base + 0x7800) & 1) { pr_err("vic_snapnv12: timeout\n"); ret = -ETIMEDOUT; goto out; }
+
+    old_fs = get_fs(); set_fs(KERNEL_DS);
+    for (i = 0; i < savenum; i++) {
+        snprintf(filename, sizeof(filename), "/tmp/vic_frame_%d_nv12.yuv", i);
+        fp = filp_open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (IS_ERR(fp)) continue;
+        vfs_write(fp, capture_buf + (i * frame_size), frame_size, &pos);
+        filp_close(fp, NULL); pos = 0;
+    }
+    set_fs(old_fs);
+
+    /* Append one-line summary to file */
+    do {
+        struct file *lfp; loff_t lpos = 0; char line[160]; int len;
+        old_fs = get_fs(); set_fs(KERNEL_DS);
+        lfp = filp_open("/tmp/vic_snapraw.log", O_WRONLY | O_CREAT | O_APPEND, 0644);
+        if (!IS_ERR(lfp)) {
+            len = snprintf(line, sizeof(line),
+              "NV12 dims=%ux%u stride=%u (reg=%u) total_lines=%u frame_size=%u\n",
+              width, height, stride, stride_reg, total_lines, frame_size);
+            vfs_write(lfp, line, len, &lpos); filp_close(lfp, NULL);
+        }
+        set_fs(old_fs);
+    } while (0);
+
+out:
+    if (capture_buf) dma_free_coherent(sd->dev, buf_size, capture_buf, dma_addr);
+    iounmap(vic_base);
+    return ret;
+}
+
 
 
 /* Move vic_proc_write outside of vic_snapraw */
@@ -858,18 +1059,18 @@ static ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t 
 void tx_isp_vic_write_csi_phy_sequence(void)
 {
     void __iomem *csi_base;
-    
+
     if (!ourISPdev || !ourISPdev->vic_regs) {
         pr_err("tx_isp_vic_write_csi_phy_sequence: No ISP registers available\n");
         return;
     }
-    
+
     /* Use the correct CSI register base - this should map to the CSI PHY registers */
     csi_base = ourISPdev->vic_regs - 0x9a00;  /* Calculate CSI base from VIC base */
-    
+
     pr_info("*** CRITICAL: Writing CSI PHY registers in CORRECT SEQUENCE matching reference driver ***\n");
     pr_info("*** CSI PHY SEQUENCE: Step 1 - CSI PHY Config registers (0x100-0x1f4) ***\n");
-    
+
     /* STEP 1: CSI PHY Config registers - ALL TOGETHER as in reference */
     writel(0x8a, csi_base + 0x100);
     writel(0x5, csi_base + 0x104);
@@ -922,9 +1123,9 @@ void tx_isp_vic_write_csi_phy_sequence(void)
     writel(0x4b, csi_base + 0x1ec);
     writel(0x3, csi_base + 0x1f4);
     wmb();
-    
+
     pr_info("*** CSI PHY SEQUENCE: Step 2 - CSI Lane Config registers (0x200-0x2f4) ***\n");
-    
+
     /* STEP 2: CSI Lane Config registers - ALL TOGETHER as in reference */
     writel(0x8a, csi_base + 0x200);
     writel(0x5, csi_base + 0x204);
@@ -977,14 +1178,14 @@ void tx_isp_vic_write_csi_phy_sequence(void)
     writel(0x4b, csi_base + 0x2ec);
     writel(0x3, csi_base + 0x2f4);
     wmb();
-    
+
     pr_info("*** CSI PHY SEQUENCE: Step 3 - Final CSI PHY Control registers (0xc, 0x10) ***\n");
-    
+
     /* STEP 3: Final CSI PHY Control registers - LAST as in reference */
     writel(0x1, csi_base + 0xc);
     writel(0x1, csi_base + 0x10);  /* CORRECTED: 0x1 not 0x133 */
     wmb();
-    
+
     pr_info("*** CRITICAL: CSI PHY SEQUENCE COMPLETE - NOW MATCHES REFERENCE DRIVER ORDER! ***\n");
 }
 
@@ -1197,12 +1398,12 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     if (cpm_regs) {
         u32 clkgr0 = readl(cpm_regs + 0x20);
         u32 clkgr1 = readl(cpm_regs + 0x28);
-        
+
         clkgr0 &= ~(1 << 13); // ISP
         clkgr0 &= ~(1 << 21); // Alternative ISP
         clkgr0 &= ~(1 << 30); // VIC in CLKGR0
         clkgr1 &= ~(1 << 30); // VIC in CLKGR1
-        
+
         writel(clkgr0, cpm_regs + 0x20);
         writel(clkgr1, cpm_regs + 0x28);
         wmb();
@@ -1215,7 +1416,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     if (interface_type == TX_SENSOR_DATA_INTERFACE_MIPI) {  /* MIPI = 1 */
         /* MIPI interface - Binary Ninja 00010688-00010a50 */
         pr_info("MIPI interface configuration\n");
-        
+
         /* Binary Ninja: Check flags at 00010260 */
         if (sensor_attr->dbus_type != interface_type) {
             writel(0xa000a, vic_regs + 0x1a4);
@@ -1223,29 +1424,29 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             writel(0x20000, vic_regs + 0x10);
             writel(0x100010, vic_regs + 0x1a4);
         }
-        
+
         /* Calculate buffer size - Binary Ninja 000102b8-00010308 */
         u32 stride_mult = 8;
         if (sensor_format == 1) stride_mult = 0xa;
         else if (sensor_format == 2) stride_mult = 0xc;
         else if (sensor_format == 7) stride_mult = 0x10;
-        
+
         u32 buffer_calc = stride_mult * sensor_attr->integration_time;
         writel((buffer_calc >> 5) + ((buffer_calc & 0x1f) ? 1 : 0), vic_regs + 0x100);
-        
+
         /* Binary Ninja: Core DVP registers 00010310-00010338 */
         writel(2, vic_regs + 0xc);
         writel(sensor_format, vic_regs + 0x14);
         writel((vic_dev->width << 16) | vic_dev->height, vic_regs + 0x4);
-        
+
         /* Frame mode based on WDR - Binary Ninja 00010414-00010478 */
         u32 wdr_mode = sensor_attr->wdr_cache;
-        u32 frame_mode = (wdr_mode == 0) ? 0x4440 : 
+        u32 frame_mode = (wdr_mode == 0) ? 0x4440 :
                         (wdr_mode == 1) ? 0x4140 : 0x4240;
         writel(frame_mode, vic_regs + 0x1ac);
         writel(frame_mode, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
-        
+
         /* VIC interrupt initialization moved to END of function after CSI PHY setup */
         pr_info("*** VIC INTERRUPT INIT: VIC interrupt setup deferred until after CSI PHY writes ***\n");
 
@@ -1297,7 +1498,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** VIC UNLOCK: Enabling VIC (writing 1 to register 0x0) ***\n");
         writel(1, vic_regs + 0x0);
         pr_info("*** VIC UNLOCK: VIC enabled, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
-        
+
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_MIPI) {  /* MIPI = 1 in our enum */
         /* MIPI interface - Binary Ninja 000107ec-00010b04 */
         pr_info("MIPI interface configuration\n");
@@ -1370,10 +1571,10 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x1, vic_regs + 0x0);  /* Final enable */
         wmb();
         pr_info("*** BINARY NINJA EXACT: Hardware sequence 2->4->wait(%d us)->1 ***\n", wait_count);
-        
+
         /* Format detection logic - Binary Ninja 000107f8-00010a04 */
         u32 mipi_config;
-        
+
         if (sensor_format >= 0x3010) {
             if (sensor_format >= 0x3110) {
                 if (sensor_format >= 0x3200) {
@@ -1464,7 +1665,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             /* Default case - includes RAW10 (0x2b) */
             mipi_config = 0x20000;
         }
-        
+
         /* Binary Ninja: 00010a08-00010a30 - Apply width/height flags */
         if (sensor_attr->total_width == 2) {
             mipi_config |= 2;
@@ -1472,26 +1673,26 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         if (sensor_attr->total_height == 2) {
             mipi_config |= 1;
         }
-        
+
         /* Binary Ninja: 00010a2c-00010a78 - Integration time and gain */
         /* CRITICAL FIX: Register 0x18 is a TIMING parameter, NOT a width register! */
         /* The reference driver sets 0x18 = 0xf00 (3840) and it must stay that way */
         /* DO NOT overwrite register 0x18 with sensor width - this causes control limit errors */
         u32 integration_time = sensor_attr->integration_time;
         pr_info("*** CRITICAL: Skipping register 0x18 write - it's a timing parameter (0xf00), not width! ***\n");
-        
+
         u32 again = sensor_attr->again;
         if (again != 0) {
             writel(again, vic_regs + 0x3c);
         }
-        
+
         /* Binary Ninja: EXACT reference driver MIPI configuration */
         /* Binary Ninja: 00010a90-00010aa8 - Final MIPI config */
         /* Use actual sensor output width instead of total width to prevent control limit error */
         writel((actual_width << 31) | mipi_config, vic_regs + 0x10);
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
         wmb();
-        
+
         /* Binary Ninja: 00010ab4-00010ac0 - Unlock sequence - EXACT REFERENCE IMPLEMENTATION */
         /* Binary Ninja: EXACT reference driver unlock sequence */
         writel(2, vic_regs + 0x0);
@@ -1517,23 +1718,23 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             writel(1, vic_regs + 0x0);
             wmb();
         }
-        
+
         /* Binary Ninja: 00010ae4-00010b04 - Final MIPI registers */
         writel(0x100010, vic_regs + 0x1a4);
         writel(0x4210, vic_regs + 0x1ac);
         writel(0x10, vic_regs + 0x1b0);
         writel(0, vic_regs + 0x1b4);
         wmb();
-        
+
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_BT601) {
         /* BT601 - Binary Ninja 00010688-000107d4 */
         pr_info("BT601 interface configuration\n");
-        
+
         writel(1, vic_regs + 0xc);
-        
+
         int gpio_mode = sensor_attr->dbus_type;
         u32 bt601_config;
-        
+
         if (gpio_mode == 0) {
             bt601_config = 0x800c8000;
         } else if (gpio_mode == 1) {
@@ -1542,7 +1743,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             pr_err("Unsupported GPIO mode\n");
             return -1;
         }
-        
+
         writel(bt601_config, vic_regs + 0x10);
         writel((actual_width << 1) | 0x100000, vic_regs + 0x18);
         writel(0x30, vic_regs + 0x3c);
@@ -1554,16 +1755,16 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x100010, vic_regs + 0x1a4);
         writel(0x4440, vic_regs + 0x1ac);
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
-        
+
         /* CRITICAL FIX: Complete unlock sequence matching reference driver */
         writel(2, vic_regs + 0x0);
         wmb();
         writel(1, vic_regs + 0x0);
-        
+
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_BT656) {
         /* BT656 - Binary Ninja 000105b0-00010684 */
         pr_info("BT656 interface configuration\n");
-        
+
         writel(0, vic_regs + 0xc);
         writel(0x800c0000, vic_regs + 0x10);
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
@@ -1572,7 +1773,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x4440, vic_regs + 0x1ac);
         writel(0x200, vic_regs + 0x1d0);
         writel(0x200, vic_regs + 0x1d4);
-        
+
         /* CRITICAL FIX: Complete unlock sequence matching reference driver */
         writel(2, vic_regs + 0x0);
         wmb();
@@ -1581,19 +1782,19 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_BT1120) {
         /* BT1120 - Binary Ninja 00010500-00010684 */
         pr_info("BT1120 interface configuration\n");
-        
+
         writel(4, vic_regs + 0xc);
         writel(0x800c0000, vic_regs + 0x10);
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
         writel(actual_width << 1, vic_regs + 0x18);
         writel(0x100010, vic_regs + 0x1a4);
         writel(0x4440, vic_regs + 0x1ac);
-        
+
         /* CRITICAL FIX: Complete unlock sequence matching reference driver */
         writel(2, vic_regs + 0x0);
         wmb();
         writel(1, vic_regs + 0x0);
-        
+
     } else {
         pr_err("Unsupported interface type %d\n", interface_type);
         return -1;
@@ -1667,40 +1868,40 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     struct tx_isp_vic_device *vic_dev;
     void __iomem *vic_regs;
     int result = 0;
-    
+
     pr_info("*** vic_sensor_ops_ioctl: cmd=0x%x, arg=%p ***\n", cmd, arg);
-    
+
     /* MIPS ALIGNMENT FIX: Validate sd parameter */
     if (!sd || (unsigned long)sd >= 0xfffff001) {
         pr_err("vic_sensor_ops_ioctl: Invalid sd parameter\n");
         return result;
     }
-    
+
     /* CRITICAL FIX: Use safe struct member access instead of dangerous offset 0xd4 */
     vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     pr_info("*** vic_sensor_ops_ioctl: Retrieved vic_dev using SAFE access: %p ***\n", vic_dev);
-    
+
     /* MIPS ALIGNMENT FIX: Validate vic_dev */
     if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
         pr_err("*** vic_sensor_ops_ioctl: Invalid vic_dev - using safe struct access ***\n");
         return result;
     }
-    
+
     /* Binary Ninja: if (arg2 - 0x200000c u>= 0xd) return 0 */
     if (cmd - 0x200000c >= 0xd) {
         pr_info("vic_sensor_ops_ioctl: cmd out of range, returning 0\n");
         return 0;
     }
-    
+
     /* Binary Ninja: **($a0 + 0xb8) - get VIC register base */
     vic_regs = vic_dev->vic_regs;  /* vic_regs should be at offset 0xb8 in vic_dev */
-    
+
     switch (cmd) {
         case 0x200000c:
         case 0x200000f:
             pr_info("*** vic_sensor_ops_ioctl: VIC start deferred to vic_core_s_stream (cmd=0x%x) ***\n", cmd);
             return 0;
-            
+
         case 0x200000d:
         case 0x2000010:
         case 0x2000011:
@@ -1710,7 +1911,7 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
         case 0x2000016:
             pr_info("vic_sensor_ops_ioctl: No-op cmd=0x%x\n", cmd);
             return 0;
-            
+
         case 0x200000e:
             pr_info("vic_sensor_ops_ioctl: Setting VIC register to 0x10 (cmd=0x%x)\n", cmd);
             /* Binary Ninja: **($a0 + 0xb8) = 0x10 */
@@ -1721,7 +1922,7 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                 pr_err("vic_sensor_ops_ioctl: No VIC register base available\n");
             }
             return 0;
-            
+
         case 0x2000013:
             pr_info("vic_sensor_ops_ioctl: Resetting and setting VIC register (cmd=0x%x)\n", cmd);
             /* Binary Ninja: **($a0 + 0xb8) = 0, then = 4 */
@@ -1733,7 +1934,7 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                 pr_err("vic_sensor_ops_ioctl: No VIC register base available\n");
             }
             return 0;
-            
+
         case 0x2000017:
             pr_info("vic_sensor_ops_ioctl: GPIO configuration (cmd=0x%x)\n", cmd);
             /* Binary Ninja GPIO configuration - simplified for now */
@@ -1743,7 +1944,7 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                 pr_info("vic_sensor_ops_ioctl: GPIO config processed\n");
             }
             return 0;
-            
+
         case 0x2000018:
             pr_info("vic_sensor_ops_ioctl: GPIO switch state (cmd=0x%x)\n", cmd);
             /* Binary Ninja: gpio_switch_state = 1, memcpy(&gpio_info, arg, 0x2a) */
@@ -1754,7 +1955,7 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                 pr_info("vic_sensor_ops_ioctl: GPIO switch state enabled, info copied\n");
             }
             return 0;
-            
+
         default:
             pr_info("vic_sensor_ops_ioctl: Unknown cmd=0x%x\n", cmd);
             return 0;
@@ -1765,20 +1966,20 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr)
 {
     struct tx_isp_vic_device *vic_dev;
-    
+
     pr_info("vic_sensor_ops_sync_sensor_attr: sd=%p, attr=%p\n", sd, attr);
-    
+
     if (!sd || (unsigned long)sd >= 0xfffff001) {
         pr_err("The parameter is invalid!\n");
         return -EINVAL;
     }
-    
+
     vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
         pr_err("The parameter is invalid!\n");
         return -EINVAL;
     }
-    
+
     /* Binary Ninja: $v0_1 = arg2 == 0 ? memset : memcpy */
     if (attr == NULL) {
         /* Clear sensor attribute */
@@ -1789,7 +1990,7 @@ int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sens
         memcpy(&vic_dev->sensor_attr, attr, sizeof(vic_dev->sensor_attr));
         pr_info("vic_sensor_ops_sync_sensor_attr: copied sensor attributes\n");
     }
-    
+
     return 0;
 }
 
@@ -1799,20 +2000,20 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     int result = -ENOTSUPP;  /* 0xffffffed */
     void *callback_ptr;
     int (*callback_func)(void);  /* Changed to int return type */
-    
+
     pr_info("vic_core_ops_ioctl: cmd=0x%x, arg=%p\n", cmd, arg);
-    
+
     /* CRITICAL FIX: Handle TX_ISP_EVENT_SYNC_SENSOR_ATTR specifically */
     if (cmd == TX_ISP_EVENT_SYNC_SENSOR_ATTR) {
         pr_info("*** CRITICAL FIX: TX_ISP_EVENT_SYNC_SENSOR_ATTR event received ***\n");
-        
+
         /* Call the sensor sync function which will return -515 */
         result = vic_sensor_ops_sync_sensor_attr(sd, (struct tx_isp_sensor_attribute *)arg);
-        
+
         pr_info("*** TX_ISP_EVENT_SYNC_SENSOR_ATTR handled successfully, returning %d ***\n", result);
         return result;
     }
-    
+
     if (cmd == 0x1000001) {
         result = -ENOTSUPP;
         if (sd != NULL) {
@@ -1829,6 +2030,47 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                 }
             }
         }
+    } else if (cmd == 0x3000008) {  /* QBUF: program VIC slot from v4l2_buffer */
+        struct tx_isp_vic_device *vic_dev;
+        struct v4l2_buffer *buffer = (struct v4l2_buffer *)arg;
+        u32 phys = 0;
+
+        if (!sd || !sd->host_priv || !buffer)
+            return -EINVAL;
+
+        vic_dev = (struct tx_isp_vic_device *)sd->host_priv;
+
+        if (buffer->memory == V4L2_MEMORY_MMAP && buffer->m.offset)
+            phys = buffer->m.offset;
+        else if (buffer->memory == V4L2_MEMORY_USERPTR && buffer->m.userptr)
+            phys = (u32)buffer->m.userptr;
+        else
+            phys = 0;
+
+        if (buffer->index >= 5)
+            return -EINVAL;
+
+        {
+            struct vic_buffer_entry node;
+            memset(&node, 0, sizeof(node));
+            node.buffer_addr = phys;
+            {
+                u32 nslots = vic_dev->active_buffer_count ?
+                             ((vic_dev->active_buffer_count > 5) ? 5 : vic_dev->active_buffer_count) : 2;
+                if (nslots == 0) nslots = 2;
+                node.buffer_index = (buffer->index % nslots);
+            }
+            (void) ispvic_frame_channel_qbuf(sd, &node);
+        }
+        return 0;
+    } else if (cmd == 0x3000005) {  /* BUFFER_ENQUEUE: program provided node */
+        if (sd) {
+            (void) ispvic_frame_channel_qbuf(sd, arg);
+            result = 0;
+        } else {
+            result = -EINVAL;
+        }
+        return result;
     } else if (cmd == 0x3000009) {
         pr_info("vic_core_ops_ioctl: tx_isp_subdev_pipo cmd=0x%x\n", cmd);
         result = tx_isp_subdev_pipo(sd, arg);
@@ -1852,13 +2094,13 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
         pr_info("vic_core_ops_ioctl: Unknown cmd=0x%x, returning 0\n", cmd);
         return 0;
     }
-    
+
     /* Binary Ninja: if (result == 0xfffffdfd) return 0 */
     if (result == -515) {  /* 0xfffffdfd */
         pr_info("vic_core_ops_ioctl: Result -515, returning 0\n");
         return 0;
     }
-    
+
     return result;
 }
 
@@ -1869,34 +2111,34 @@ int isp_vic_frd_show(struct seq_file *seq, void *v)
     struct tx_isp_vic_device *vic_dev;
     int i, total_errors = 0;
     int frame_count;
-    
+
     /* Binary Ninja: void* $v0 = *(arg1 + 0x3c) */
     sd = (struct tx_isp_subdev *)seq->private;
     if (!sd || (unsigned long)sd >= 0xfffff001) {
         pr_err("The parameter is invalid!\n");
         return 0;
     }
-    
+
     vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
         pr_err("The parameter is invalid!\n");
         return 0;
     }
-    
+
     /* Binary Ninja: *($v0_1 + 0x164) = 0 */
     vic_dev->total_errors = 0;
-    
+
     /* Binary Ninja: Sum up error counts from vic_err array */
     for (i = 0; i < 13; i++) {  /* 0x34 / 4 = 13 elements */
         total_errors += vic_dev->vic_errors[i];
     }
-    
+
     frame_count = vic_dev->frame_count;
     vic_dev->total_errors = total_errors;
-    
+
     /* Binary Ninja: private_seq_printf(arg1, " %d, %d\n", $a2) */
     seq_printf(seq, " %d, %d\n", frame_count, total_errors);
-    
+
     /* Binary Ninja: Print all error counts */
     return seq_printf(seq, "%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d\n",
                      vic_dev->vic_errors[0], vic_dev->vic_errors[1], vic_dev->vic_errors[2],
@@ -1917,14 +2159,14 @@ int dump_isp_vic_frd_open(struct inode *inode, struct file *file)
 long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg)
 {
     struct tx_isp_subdev *sd = file->private_data;
-    
+
     pr_info("isp_vic_cmd_set: cmd=0x%x, arg=0x%lx\n", cmd, arg);
-    
+
     if (!sd) {
         pr_err("isp_vic_cmd_set: No subdev in file private_data\n");
         return -EINVAL;
     }
-    
+
     /* Forward to the main VIC ioctl handler */
     return vic_chardev_ioctl(file, cmd, arg);
 }
@@ -1933,22 +2175,22 @@ long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg)
 int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
 {
     struct tx_isp_vic_device *vic_dev;
-    
+
     if (!sd)
         return -EINVAL;
-    
+
     vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     if (!vic_dev) {
         pr_err("VIC device is NULL\n");
         return -EINVAL;
     }
-    
+
     mutex_lock(&vic_dev->state_lock);
-    
+
     if (vic_dev->state == 1) {
         vic_dev->state = 2; /* INIT -> READY */
         pr_info("VIC activated: state %d -> 2 (READY)\n", 1);
-        
+
         /* *** CRITICAL: Ensure free buffers are available during activation *** */
         if (list_empty(&vic_dev->free_head)) {
             pr_info("*** VIC ACTIVATION: Replenishing free buffer pool ***\n");
@@ -1959,7 +2201,7 @@ int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
                     buffer_data[0] = 0;  /* Buffer address placeholder */
                     buffer_data[1] = i + 100;  /* Buffer index (activation batch) */
                     buffer_data[2] = 0;  /* Buffer status */
-                    
+
                     list_add_tail(free_buffer, &vic_dev->free_head);
                     pr_info("*** VIC ACTIVATION: Added free buffer %d ***\n", i);
                 }
@@ -1975,7 +2217,7 @@ int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
             pr_info("*** VIC ACTIVATION: %d free buffers available ***\n", free_count);
         }
     }
-    
+
     mutex_unlock(&vic_dev->state_lock);
     return 0;
 }
@@ -1985,18 +2227,18 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vic_device *vic_dev;
     int old_state;
-    
+
     if (!sd)
         return -EINVAL;
-    
+
     vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     if (!vic_dev) {
         pr_err("VIC device is NULL\n");
         return -EINVAL;
     }
-    
+
     old_state = vic_dev->state;
-    
+
     if (enable) {
         /* Enable VIC processing */
         if (old_state != 3) {
@@ -2012,10 +2254,10 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
             vic_dev->state = 2; /* ACTIVE -> READY */
         }
     }
-    
+
     pr_info("VIC core ops init: enable=%d, state %d -> %d\n",
             enable, old_state, vic_dev->state);
-    
+
     return 0;
 }
 
@@ -2023,23 +2265,23 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
 int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
 {
     struct tx_isp_vic_device *vic_dev;
-    
+
     if (!sd)
         return -EINVAL;
-        
+
     vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     if (!vic_dev) {
         pr_err("VIC device is NULL\n");
         return -EINVAL;
     }
-    
+
     mutex_lock(&vic_dev->state_lock);
-    
+
     if (vic_dev->state > 1) {
         vic_dev->state = 1; /* Back to INIT state */
         pr_info("VIC slaked: state -> 1 (INIT)\n");
     }
-    
+
     mutex_unlock(&vic_dev->state_lock);
     return 0;
 }
@@ -2049,81 +2291,70 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_base;
     u32 width, height, stride;
-    
-    pr_info("*** vic_pipo_mdma_enable: EXACT Binary Ninja implementation ***\n");
-    
-    /* CRITICAL: Validate vic_dev structure first */
+
+    pr_info("*** vic_pipo_mdma_enable: EXACT Binary Ninja implementation + control-bank mirror ***\n");
+
+    /* Validate vic_dev */
     if (!vic_dev) {
         pr_err("vic_pipo_mdma_enable: NULL vic_dev parameter\n");
         return;
     }
-    
-    /* Binary Ninja EXACT: vic_base = *(arg1 + 0xb8) */
+
     vic_base = vic_dev->vic_regs;
-    
-    /* CRITICAL: Validate VIC register base */
-    if (!vic_base || 
-        (unsigned long)vic_base < 0x80000000 ||
-        (unsigned long)vic_base == 0x735f656d) {
+
+    /* Validate VIC register base */
+    if (!vic_base || (unsigned long)vic_base < 0x80000000 || (unsigned long)vic_base == 0x735f656d) {
         pr_err("vic_pipo_mdma_enable: Invalid VIC register base %p - ABORTING\n", vic_base);
         return;
     }
-    
-    /* CRITICAL FIX: Get dimensions from sensor attributes directly to prevent stale values */
-    /* The issue is vic_dev->width/height might be stale - get fresh values from sensor */
+
+    /* Prefer fresh sensor dimensions, fallback to cached */
     if (vic_dev->sensor_attr.total_width != 0 && vic_dev->sensor_attr.total_height != 0) {
         width = vic_dev->sensor_attr.total_width;
         height = vic_dev->sensor_attr.total_height;
-        pr_info("*** CRITICAL FIX: Using FRESH sensor dimensions %dx%d from sensor_attr ***\n", width, height);
+        pr_info("*** Using sensor_attr dimensions %dx%d ***\n", width, height);
     } else {
-        /* Fallback to vic_dev dimensions if sensor_attr is not available */
         width = vic_dev->width;
         height = vic_dev->height;
-        pr_info("*** FALLBACK: Using vic_dev dimensions %dx%d ***\n", width, height);
+        pr_info("*** Using vic_dev dimensions %dx%d ***\n", width, height);
     }
-    
-    /* CRITICAL: Ensure we have valid dimensions - USE ACTUAL SENSOR OUTPUT DIMENSIONS */
-    if (width == 0 || height == 0) {
-        /* Only override if dimensions are actually invalid (zero) */
-        width = 1920;  /* ACTUAL sensor output width (not total width) */
-        height = 1080; /* ACTUAL sensor output height (not total height) */
-        pr_info("*** DIMENSION FIX: Using ACTUAL sensor output dimensions %dx%d ***\n", width, height);
-        pr_info("*** CRITICAL: VIC must match sensor OUTPUT, not sensor TOTAL dimensions ***\n");
 
-        /* Update vic_dev to prevent future mismatches */
+    if (width == 0 || height == 0) {
+        width = 1920;  /* fallback */
+        height = 1080; /* fallback */
         vic_dev->width = width;
         vic_dev->height = height;
-    } else {
-        pr_info("*** DIMENSION VALIDATION: Using existing valid dimensions %dx%d ***\n", width, height);
+        pr_info("*** DIMENSION FIX: fallback to %dx%d ***\n", width, height);
     }
-    
-    pr_info("vic_pipo_mdma_enable: FINAL dimensions=%dx%d (should be 2200x1418)\n", width, height);
-    
-    /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x308) = 1 */
+
+    /* NV12 streaming: Y is 8bpp, use 1 byte per pixel stride (align to 16 for safety) */
+    stride = (width + 15) & ~15; /* bytes per line for Y and UV */
+    pr_info("vic_pipo_mdma_enable: NV12 dims=%dx%d, stride=%u\n", width, height, stride);
+
+    /* MDMA enable: 0x308 */
     writel(1, vic_base + 0x308);
+    if (vic_dev->vic_regs_secondary)
+        writel(1, vic_dev->vic_regs_secondary + 0x308);
     wmb();
-    pr_info("vic_pipo_mdma_enable: reg 0x308 = 1 (MDMA enable)\n");
-    
-    /* Binary Ninja EXACT: int32_t $v1_1 = $v1 << 1 (stride = width * 2) */
-    stride = width << 1;
-    
-    /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x304) = *(arg1 + 0xdc) << 0x10 | *(arg1 + 0xe0) */
+
+    /* Frame size: 0x304 (width<<16 | height) */
     writel((width << 16) | height, vic_base + 0x304);
+    if (vic_dev->vic_regs_secondary)
+        writel((width << 16) | height, vic_dev->vic_regs_secondary + 0x304);
     wmb();
-    pr_info("vic_pipo_mdma_enable: reg 0x304 = 0x%x (dimensions %dx%d)\n", 
-            (width << 16) | height, width, height);
-    
-    /* Binary Ninja EXACT: *(*(arg1 + 0xb8) + 0x310) = $v1_1 */
+
+    /* Stride: 0x310 and 0x314 */
     writel(stride, vic_base + 0x310);
+    if (vic_dev->vic_regs_secondary)
+        writel(stride, vic_dev->vic_regs_secondary + 0x310);
     wmb();
-    pr_info("vic_pipo_mdma_enable: reg 0x310 = %d (stride)\n", stride);
-    
-    /* Binary Ninja EXACT: *(result + 0x314) = $v1_1 */
+
     writel(stride, vic_base + 0x314);
+    if (vic_dev->vic_regs_secondary)
+        writel(stride, vic_dev->vic_regs_secondary + 0x314);
     wmb();
-    pr_info("vic_pipo_mdma_enable: reg 0x314 = %d (stride)\n", stride);
-    
-    pr_info("*** VIC PIPO MDMA ENABLE COMPLETE - CONTROL LIMIT ERROR SHOULD BE FIXED ***\n");
+
+    pr_info("*** VIC PIPO MDMA ENABLE COMPLETE ***\n");
 }
 
 /* ISPVIC Frame Channel S_Stream - EXACT Binary Ninja Implementation */
@@ -2133,35 +2364,35 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
     void __iomem *vic_base = NULL;
     int32_t var_18 = 0;
     const char *stream_op;
-    
+
     pr_info("*** ispvic_frame_channel_s_stream: RACE CONDITION FIX ***\n");
     pr_info("ispvic_frame_channel_s_stream: vic_dev=%p, enable=%d\n", arg1, arg2);
-    
+
     /* Binary Ninja EXACT: if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = *(arg1 + 0xd4) */
     if (arg1 != 0 && (unsigned long)arg1 < 0xfffff001) {
         /* CRITICAL FIX: arg1 IS the vic_dev structure directly - Binary Ninja uses it directly */
         vic_dev = (struct tx_isp_vic_device *)arg1;
         pr_info("ispvic_frame_channel_s_stream: vic_dev retrieved using SAFE access: %p\n", vic_dev);
     }
-    
+
     /* Binary Ninja EXACT: if (arg1 == 0) return 0xffffffea */
     if (arg1 == 0) {
         pr_err("%s[%d]: invalid parameter\n", "ispvic_frame_channel_s_stream", __LINE__);
         return 0xffffffea; /* -EINVAL */
     }
-    
+
     /* Binary Ninja: Set stream operation string */
     stream_op = (arg2 != 0) ? "streamon" : "streamoff";
     pr_info("%s[%d]: %s\n", "ispvic_frame_channel_s_stream", __LINE__, stream_op);
-    
+
     /* Binary Ninja EXACT: if (arg2 == *($s0 + 0x210)) return 0 */
     if (arg2 == vic_dev->stream_state) {
         return 0;
     }
-    
+
     /* Binary Ninja EXACT: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
     __private_spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, &var_18);
-    
+
     if (arg2 == 0) {
         /* Stream OFF */
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = 0 */
@@ -2171,15 +2402,15 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             wmb();
             pr_info("ispvic_frame_channel_s_stream: Stream OFF - wrote 0 to reg 0x300\n");
         }
-        
+
         /* Binary Ninja EXACT: *($s0 + 0x210) = 0 */
         vic_dev->stream_state = 0;
-        
+
     } else {
         /* Stream ON */
         /* Binary Ninja EXACT: vic_pipo_mdma_enable($s0) */
         vic_pipo_mdma_enable(vic_dev);
-        
+
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
         vic_base = vic_dev->vic_regs;
         if (vic_base && (unsigned long)vic_base >= 0x80000000) {
@@ -2192,36 +2423,46 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             /* Binary Ninja EXACT: Use reference driver buffer management values */
             /* The reference driver uses specific buffer count and control values that prevent control limit errors */
             u32 reference_buffer_count = 2;  /* Reference driver uses 2 buffers */
-            u32 reference_control_bits = 0x80000020;  /* Exact reference driver control bits */
+            u32 reference_control_bits = 0x80000027;  /* NV12: reference control bits + format=7 */
 
             /* BINARY NINJA EXACT: Use exact reference driver formula to prevent control limit error */
             /* Binary Ninja: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
             u32 buffer_count = vic_dev->active_buffer_count;
-            u32 stream_ctrl = (buffer_count << 16) | 0x80000020;  /* EXACT Binary Ninja formula */
+            if (buffer_count == 0) buffer_count = 2;       /* ensure at least double-buffering */
+            if (buffer_count > 5) buffer_count = 5;        /* 5-slot ring cap */
+            u32 stream_ctrl = (buffer_count << 16) | 0x80000027;  /* Include NV12 format code (7) */
             writel(stream_ctrl, vic_base + 0x300);
+            if (vic_dev->vic_regs_secondary)
+                writel(stream_ctrl, vic_dev->vic_regs_secondary + 0x300);
             wmb();
 
             pr_info("*** BINARY NINJA EXACT: Wrote 0x%x to reg 0x300 (buffer_count=%d, formula: (count<<16)|0x80000020) ***\n",
                     stream_ctrl, buffer_count);
-            pr_info("*** This should prevent control limit error by using EXACT Binary Ninja reference driver formula ***\n");
+
+            /* Transition to RUN after programming control, mirror if secondary present */
+            writel(1, vic_base + 0x0);
+            if (vic_dev->vic_regs_secondary)
+                writel(1, vic_dev->vic_regs_secondary + 0x0);
+            wmb();
+            pr_info("*** VIC RUN: Wrote 1 to VIC[0x0] (and secondary if mapped) ***\n");
 
             /* MCP LOG: Stream ON completed */
             pr_info("MCP_LOG: VIC streaming enabled - ctrl=0x%x, base=%p, state=%d\n",
                     stream_ctrl, vic_base, 1);
         }
-        
+
         /* Binary Ninja EXACT: *($s0 + 0x210) = 1 */
         vic_dev->stream_state = 1;
     }
-    
+
     /* Binary Ninja EXACT: private_spin_unlock_irqrestore($s0 + 0x1f4, var_18) */
     private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, var_18);
-    
+
     /* Binary Ninja EXACT: return 0 */
     return 0;
 }
 
-/* VIC event callback structure - matching reference driver layout 
+/* VIC event callback structure - matching reference driver layout
  * CRITICAL: Must be exactly 32 bytes total with function pointer at offset 0x1c */
 struct vic_callback_struct {
     char padding[28];           /* Exact 28 bytes padding to reach offset 0x1c */
@@ -2234,25 +2475,25 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
     struct tx_isp_subdev *sd;
     struct tx_isp_vic_device *vic_dev;
     int ret = 0;
-    
+
     if (!pad || !pad->sd) {
         pr_err("VIC event callback: Invalid pad or subdev\n");
         return -EINVAL;
     }
-    
+
     sd = pad->sd;
     vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
     if (!vic_dev) {
         pr_err("VIC event callback: No vic_dev\n");
         return -EINVAL;
     }
-    
+
     pr_info("*** VIC EVENT CALLBACK: cmd=0x%x, data=%p ***\n", cmd, data);
-    
+
     switch (cmd) {
         case 0x3000008: /* QBUF event */
             pr_info("*** VIC: Processing QBUF event 0x3000008 ***\n");
-            
+
             /* Handle QBUF event - trigger frame processing */
             if (vic_dev->state == 4) { /* Streaming state */
                 /* Signal frame completion to wake up waiting processes */
@@ -2265,13 +2506,13 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
                 ret = 0;
             }
             break;
-            
+
         default:
             pr_info("VIC: Unknown event cmd=0x%x\n", cmd);
             ret = -ENOIOCTLCMD;
             break;
     }
-    
+
     pr_info("*** VIC EVENT CALLBACK: returning %d ***\n", ret);
     return ret;
 }
@@ -2340,27 +2581,27 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             } else {
                 /* Stream ON - CRITICAL: Follow EXACT reference driver sub-device sequence */
                 ret = 0;
-                
+
                 pr_info("*** CRITICAL: Following EXACT reference driver sub-device initialization sequence ***\n");
-                
+
                 /* CRITICAL FIX: Disable VIC interrupts during initialization to prevent control limit errors */
                 pr_info("*** DISABLING VIC INTERRUPTS DURING INITIALIZATION ***\n");
                 vic_start_ok = 1;  /* Disable interrupt processing */
-                
+
                 /* CRITICAL FIX: Correct the register base mapping! */
                 /* vic_regs = 0x133e0000 = CSI PHY (isp-w02 in trace) */
                 /* isp_base = 0x13300000 = Main ISP (isp-m0 in trace) - NEEDS SEPARATE MAPPING */
                 void __iomem *main_isp_base = ioremap(0x13300000, 0x100000);  /* Map main ISP separately */
                 void __iomem *vic_w01_base = ioremap(0x10023000, 0x1000);    /* Map isp-w01 separately */
-                
+
                 if (!main_isp_base || !vic_w01_base) {
                     pr_err("*** CRITICAL: Failed to map ISP register bases ***\n");
                     if (main_isp_base) iounmap(main_isp_base);
                     if (vic_w01_base) iounmap(vic_w01_base);
                     return -ENOMEM;
                 }
-                
-				
+
+
                 /* STEP 1: VIC Hardware Reset and Clean Configuration */
                 pr_info("*** STEP 1: VIC Hardware Reset and Clean Configuration ***\n");
 
@@ -2409,7 +2650,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** DEFERRING FULL VIC CONFIGURATION: Will apply after sensor initialization ***\n");
 
                 pr_info("*** VIC HARDWARE CONFIGURATION COMPLETE (hardware disabled until sensor ready) ***\n");
-                
+
                 /* STEP 2: ISP isp-w01 - Control registers */
                 pr_info("*** STEP 2: ISP isp-w01 - Control registers ***\n");
 
@@ -2419,7 +2660,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x200, vic_regs + 0x14);         /* Essential isp-w01 control */
                 wmb();
                 pr_info("*** isp-w01 CONFIGURATION COMPLETE ***\n");
-                
+
                 /* STEP 3: ISP isp-m0 - Main ISP registers (BEFORE sensor detection) */
                 pr_info("*** STEP 3: ISP isp-m0 - Main ISP registers (BEFORE sensor detection) ***\n");
                 /* Use the correct main_isp_base (0x13300000 = isp-m0) */
@@ -2491,12 +2732,12 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x1fdeff, main_isp_base + 0xb088);
                 writel(0x1fff, main_isp_base + 0xb08c);
                 wmb();
-                
+
                 /* STEP 4: Sensor initialization happens naturally through the normal driver flow */
                 pr_info("*** STEP 4: Sensor initialization handled by normal driver flow - NOT duplicating ***\n");
                 /* CRITICAL FIX: Do NOT call sensor initialization here - it's already done by the main driver */
                 /* The sensor s_stream will be called once by the main ISP driver, not by us */
-                
+
                 /* STEP 5: Apply 280ms delta register changes AFTER sensor detection */
                 pr_info("*** STEP 5: Applying 280ms delta register changes AFTER sensor detection ***\n");
                 /* Use the correct main_isp_base (0x13300000 = isp-m0) */
@@ -2521,11 +2762,11 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0x3, main_isp_base + 0xb04c);        /* 0x103 -> 0x3 */
                 writel(0x10000000, main_isp_base + 0xb078);  /* 0x0 -> 0x10000000 */
                 wmb();
-                
+
                 /* STEP 6: ISP isp-csi - Detailed CSI PHY configuration AFTER sensor detection */
                 pr_info("*** STEP 6: ISP isp-csi - Detailed CSI PHY configuration AFTER sensor detection ***\n");
                 void __iomem *csi_phy_base = csi_base;  /* CSI PHY base for detailed config */
-                
+
                 /* Write the exact ISP isp-csi sequence from the working trace */
                 writel(0x7d, csi_phy_base + 0x0);
                 writel(0xe3, csi_phy_base + 0x4);
@@ -2543,7 +2784,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 writel(0xdb, csi_phy_base + 0x3c);
                 /* Continue with the complete ISP isp-csi sequence... */
                 wmb();
-                
+
                 /* STEP 7: Final CSI PHY control sequence */
                 pr_info("*** STEP 7: Final CSI PHY control sequence ***\n");
 
@@ -2556,7 +2797,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     writel(0x630, vic_regs + 0x14);
                     wmb();
                 }
-                
+
                 /* STEP 8: CRITICAL - Copy real sensor attributes to VIC device before tx_isp_vic_start */
                 pr_info("*** STEP 8: CRITICAL - Synchronizing sensor attributes before VIC start ***\n");
 
@@ -2592,7 +2833,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     ret = 0;  /* Success - VIC is already working */
                 }
                 ispvic_frame_channel_s_stream(vic_dev, 1);
-                
+
                 if (current_state != 4) {
                     pr_info("vic_core_s_stream: Stream ON - tx_isp_vic_start called after proper sub-device init\n");
 
@@ -2870,153 +3111,91 @@ int tx_isp_vic_remove(struct platform_device *pdev)
 
     return 0;
 }
-/* Forward declarations for callback functions referenced in pipo */
-static int ispvic_frame_channel_qbuf(void *arg1, void *arg2);
-static int ispvic_frame_channel_clearbuf(void);
 
-/* ispvic_frame_channel_qbuf - FIXED: Handle event-based QBUF calls with pending buffer queue */
+/* ispvic_frame_channel_qbuf - Prefer explicit node (addr+index) when provided; fallback to queue */
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 {
     struct tx_isp_vic_device *vic_dev = NULL;
-    unsigned long var_18 = 0;
-    
-    pr_info("*** ispvic_frame_channel_qbuf: EVENT-BASED QBUF with pending buffer processing ***\n");
-    
-    /* SAFE: Use global ourISPdev reference instead of unsafe pointer arithmetic */
-    if (!ourISPdev || !ourISPdev->vic_dev) {
-        pr_info("ispvic_frame_channel_qbuf: qbuffer null (MIPS-safe)\n");
+    struct tx_isp_subdev *sd = (struct tx_isp_subdev *)arg1;
+    unsigned long irq_flags = 0;
+    struct vic_buffer_entry *new_buffer = (struct vic_buffer_entry *)arg2;
+    struct vic_buffer_entry *buffer_to_program;
+    u32 buffer_addr, buffer_index, reg_offset;
+
+    pr_info("*** ispvic_frame_channel_qbuf: entry arg1=%p, arg2=%p ***\n", arg1, arg2);
+
+    /* Get vic_dev from subdev */
+    if (sd != NULL && (unsigned long)sd < 0xfffff001)
+        vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdev_hostdata(sd);
+
+    if (!vic_dev || !vic_dev->vic_regs)
+        return 0;
+
+    spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, irq_flags);
+
+    /* Fast path: explicit node provided with address and slot index */
+    if (new_buffer) {
+        buffer_addr  = new_buffer->buffer_addr;
+        buffer_index = new_buffer->buffer_index; /* 0..4 */
+        reg_offset   = (buffer_index + 0xc6) << 2;  /* 0x318..0x328 */
+
+        /* Program Y base */
+        writel(buffer_addr, vic_dev->vic_regs + reg_offset);
+        if (vic_dev->vic_regs_secondary)
+            writel(buffer_addr, vic_dev->vic_regs_secondary + reg_offset);
+        /* Program UV base for NV12: 0x340 + index*4 = Y_base + stride*height */
+        {
+            u32 stride_nv12 = readl(vic_dev->vic_regs + 0x310);
+            u32 uv_base = buffer_addr + stride_nv12 * vic_dev->height;
+            u32 uv_reg_off = 0x340 + (buffer_index * 4);
+            writel(uv_base, vic_dev->vic_regs + uv_reg_off);
+            if (vic_dev->vic_regs_secondary)
+                writel(uv_base, vic_dev->vic_regs_secondary + uv_reg_off);
+        }
+        wmb();
+        pr_info("*** VIC QBUF: wrote slot %u Y=0x%x (off=0x%x) UV=Y+%u*%u -> 0x%x (off=0x%x) ***\n",
+                buffer_index, buffer_addr, reg_offset,
+                readl(vic_dev->vic_regs + 0x310), vic_dev->height,
+                buffer_addr + readl(vic_dev->vic_regs + 0x310) * vic_dev->height,
+                0x340 + (buffer_index * 4));
+        spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
         return 0;
     }
-    
-    /* SAFE: Get VIC device from global ISP device reference */
-    vic_dev = (struct tx_isp_vic_device *)container_of(ourISPdev->vic_dev, struct tx_isp_vic_device, sd);
-    if (!vic_dev) {
-        pr_info("ispvic_frame_channel_qbuf: qbuffer null (MIPS-safe)\n");
+
+    /* Fallback: use internal done queue when no explicit node is provided */
+    if (list_empty(&vic_dev->free_head) || list_empty(&vic_dev->done_head)) {
+        spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
         return 0;
     }
-    
-    /* Binary Ninja EXACT: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
-    __private_spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, &var_18);
-    
-    /* CRITICAL FIX: Handle event-based calls where arg2 might be NULL */
-    /* When called via event system, the buffer data isn't passed as arg2 */
-    /* Instead, we need to check if there are pending buffers in our queue */
-    
-    if (arg2) {
-        /* Direct call with buffer data - add to queue */
-        list_add_tail((struct list_head *)arg2, &vic_dev->queue_head);
-        pr_info("*** VIC QBUF: Added buffer %p to queue (direct call) ***\n", arg2);
-    } else {
-        /* Event-based call - check for pending buffers that were queued by framechan ioctl */
-        pr_info("*** VIC QBUF: Event-based call - checking for pending buffers ***\n");
-        
-        /* CRITICAL FIX: Create a dummy buffer entry if none exists but we have free buffers */
-        /* This simulates the case where framechan ioctl queued a buffer but it wasn't passed through events */
-        if (list_empty(&vic_dev->queue_head) && !list_empty(&vic_dev->free_head)) {
-            /* Create a temporary buffer entry to simulate a queued buffer */
-            struct list_head *temp_buffer = kzalloc(sizeof(struct list_head) + 64, GFP_ATOMIC);
-            if (temp_buffer) {
-                /* Initialize with a valid buffer address */
-                uint32_t *temp_data = (uint32_t *)((char *)temp_buffer + sizeof(struct list_head));
-                temp_data[0] = 0x30000000 + (vic_dev->active_buffer_count * 0x100000);  /* Valid physical address */
-                temp_data[1] = vic_dev->active_buffer_count;  /* Buffer index */
-                temp_data[2] = 0;  /* Buffer status */
-                
-                /* Add to queue */
-                list_add_tail(temp_buffer, &vic_dev->queue_head);
-                pr_info("*** VIC QBUF: Created pending buffer entry with addr 0x%x ***\n", temp_data[0]);
-            }
-        }
-    }
-    
-    /* Binary Ninja EXACT: if ($s0 + 0x1fc == *($s0 + 0x1fc)) */
-    if (list_empty(&vic_dev->free_head)) {
-        pr_info("ispvic_frame_channel_qbuf: bank no free\n");
-        goto unlock_exit;
-    }
-    /* Binary Ninja EXACT: else if ($s0 + 0x1f4 == *($s0 + 0x1f4)) */
-    else if (list_empty(&vic_dev->queue_head)) {
-        pr_info("ispvic_frame_channel_qbuf: qbuffer null (MIPS-safe)\n");
-        goto unlock_exit;
-    }
-    else {
-        /* *** CRITICAL FIX: Process the queued buffer *** */
-        struct list_head *queue_buffer, *free_buffer;
-        uint32_t *buffer_data;
-        uint32_t buffer_addr, buffer_index;
-        
-        /* Binary Ninja: pop_buffer_fifo($s0 + 0x1f4) */
-        queue_buffer = vic_dev->queue_head.next;
-        if (queue_buffer != &vic_dev->queue_head) {
-            list_del(queue_buffer);
-            
-            /* Get free buffer entry */
-            free_buffer = vic_dev->free_head.next;
-            if (free_buffer != &vic_dev->free_head) {
-                list_del(free_buffer);
-                
-                /* Binary Ninja: Extract buffer address from *($a3_1 + 8) */
-                /* In the reference, this extracts the physical address from the buffer structure */
-                buffer_data = (uint32_t *)((char *)queue_buffer + sizeof(struct list_head));
-                buffer_addr = buffer_data[0];  /* Get the actual buffer address */
-                
-                /* Ensure we have a valid buffer address */
-                if (buffer_addr == 0) {
-                    buffer_addr = 0x30000000 + (vic_dev->active_buffer_count * 0x100000);  /* Valid physical address */
-                    pr_info("*** VIC QBUF: Generated buffer address 0x%x ***\n", buffer_addr);
-                }
-                
-                /* Binary Ninja: $v1_1 = $v0_5[4] - get buffer index */
-                buffer_index = vic_dev->active_buffer_count % 5;  /* VIC has 5 buffer slots */
-                
-                /* Binary Ninja: $v0_5[2] = $a1_2 - store buffer address in free buffer */
-                uint32_t *free_data = (uint32_t *)((char *)free_buffer + sizeof(struct list_head));
-                free_data[2] = buffer_addr;
-                
-                /* Binary Ninja EXACT: *(*($s0 + 0xb8) + (($v1_1 + 0xc6) << 2)) = $a1_2 */
-                /* This is the CRITICAL hardware programming step! */
-                if (vic_dev->vic_regs) {
-                    uint32_t reg_offset = (buffer_index + 0xc6) << 2;
-                    if (reg_offset < 0x1000) {  /* Bounds check */
-                        writel(buffer_addr, vic_dev->vic_regs + reg_offset);
-                        wmb();
-                        pr_info("*** CRITICAL SUCCESS: Buffer 0x%x programmed to VIC[0x%x] ***\n",
-                                buffer_addr, reg_offset);
-                        pr_info("*** NO MORE 'qbuffer null' - VIC hardware now has buffer! ***\n");
 
-                        /* CRITICAL FIX: Check vic_start_ok status but don't change it here */
-                        pr_info("*** VIC INTERNAL QBUF: Checking vic_start_ok status: vic_start_ok=%d ***\n", vic_start_ok);
-                        if (vic_start_ok == 0) {
-                            pr_info("*** VIC INTERNAL QBUF: vic_start_ok=0 - interrupts will be enabled after complete pipeline setup ***\n");
-                        } else {
-                            pr_info("*** VIC INTERNAL QBUF: VIC interrupts already enabled (vic_start_ok=%d) ***\n", vic_start_ok);
-                        }
-                    }
-                }
-                
-                /* Binary Ninja: Add to done list */
-                list_add_tail(free_buffer, &vic_dev->done_head);
-                
-                /* Binary Ninja: *($s0 + 0x218) += 1 */
-                vic_dev->active_buffer_count += 1;
-                
-                pr_info("*** VIC QBUF: Buffer processing complete - active_count=%d ***\n", 
-                        vic_dev->active_buffer_count);
-                
-                /* Clean up temporary buffer if we created one */
-                if (!arg2) {
-                    kfree(queue_buffer);
-                }
-            }
-        }
-    }
+    buffer_to_program = list_first_entry(&vic_dev->done_head, struct vic_buffer_entry, list);
+    list_del(&buffer_to_program->list);
 
-unlock_exit:
-    /* Binary Ninja EXACT: private_spin_unlock_irqrestore($s0 + 0x1f4, $a1_4) */
-    private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, var_18);
-    
-    pr_info("*** ispvic_frame_channel_qbuf: MIPS-SAFE completion ***\n");
-    /* Binary Ninja EXACT: return 0 */
+    buffer_addr  = buffer_to_program->buffer_addr;
+    buffer_index = vic_dev->active_buffer_count % 5; /* derive index if no explicit node */
+    reg_offset   = (buffer_index + 0xc6) << 2;  /* 0x318..0x328 */
+
+    /* Program Y base */
+    writel(buffer_addr, vic_dev->vic_regs + reg_offset);
+    if (vic_dev->vic_regs_secondary)
+        writel(buffer_addr, vic_dev->vic_regs_secondary + reg_offset);
+    /* Program UV base for NV12: 0x340 + index*4 = Y_base + stride*height */
+    {
+        u32 stride_nv12 = readl(vic_dev->vic_regs + 0x310);
+        u32 uv_base = buffer_addr + stride_nv12 * vic_dev->height;
+        u32 uv_reg_off = 0x340 + (buffer_index * 4);
+        writel(uv_base, vic_dev->vic_regs + uv_reg_off);
+        if (vic_dev->vic_regs_secondary)
+            writel(uv_base, vic_dev->vic_regs_secondary + uv_reg_off);
+    }
+    wmb();
+    pr_info("*** VIC QBUF (fallback): wrote Y=0x%x(off=0x%x) UV=0x%x(off=0x%x) idx=%u ***\n",
+            buffer_addr, reg_offset,
+            buffer_addr + readl(vic_dev->vic_regs + 0x310) * vic_dev->height,
+            0x340 + (buffer_index * 4),
+            buffer_index);
+
+    spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
     return 0;
 }
 
@@ -3033,25 +3212,25 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
     struct tx_isp_vic_device *vic_dev = NULL;
     void **raw_pipe = (void **)arg;
     int i;
-    
+
     pr_info("*** tx_isp_subdev_pipo: SAFE struct member access implementation ***\n");
     pr_info("tx_isp_subdev_pipo: entry - sd=%p, arg=%p\n", sd, arg);
-    
+
     /* SAFE: Validate parameters */
     if (sd != NULL && (unsigned long)sd < 0xfffff001) {
         vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
         pr_info("tx_isp_subdev_pipo: vic_dev retrieved: %p\n", vic_dev);
     }
-    
+
     if (!vic_dev) {
         pr_err("tx_isp_subdev_pipo: vic_dev is NULL\n");
         return 0;  /* Binary Ninja returns 0 even on error */
     }
-    
+
     /* SAFE: Use proper struct member access instead of offset 0x20c */
     vic_dev->processing = 1;
     pr_info("tx_isp_subdev_pipo: set processing = 1 (safe struct access)\n");
-    
+
     /* SAFE: Check if arg is NULL */
     if (arg == NULL) {
         /* SAFE: Use proper struct member access instead of offset 0x214 */
@@ -3059,35 +3238,35 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
         pr_info("tx_isp_subdev_pipo: arg is NULL - set processing = 0 (safe struct access)\n");
     } else {
         pr_info("tx_isp_subdev_pipo: arg is not NULL - initializing pipe structures\n");
-        
+
         /* SAFE: Use Linux list initialization instead of manual pointer manipulation */
         INIT_LIST_HEAD(&vic_dev->queue_head);
         INIT_LIST_HEAD(&vic_dev->done_head);
         INIT_LIST_HEAD(&vic_dev->free_head);
-        
+
         pr_info("tx_isp_subdev_pipo: initialized linked list heads (safe Linux API)\n");
-        
+
         /* SAFE: Use proper spinlock initialization */
         spin_lock_init(&vic_dev->buffer_mgmt_lock);
         pr_info("tx_isp_subdev_pipo: initialized spinlock\n");
-        
+
         /* SAFE: Set function pointers using proper array indexing */
         raw_pipe[0] = (void *)ispvic_frame_channel_qbuf;
         raw_pipe[2] = (void *)ispvic_frame_channel_clearbuf;  /* offset 8 / 4 = index 2 */
         raw_pipe[3] = (void *)ispvic_frame_channel_s_stream;  /* offset 0xc / 4 = index 3 */
         raw_pipe[4] = (void *)sd;                             /* offset 0x10 / 4 = index 4 */
-        
+
         pr_info("tx_isp_subdev_pipo: set function pointers - qbuf=%p, clearbuf=%p, s_stream=%p, sd=%p\n",
-                ispvic_frame_channel_qbuf, ispvic_frame_channel_clearbuf, 
+                ispvic_frame_channel_qbuf, ispvic_frame_channel_clearbuf,
                 ispvic_frame_channel_s_stream, sd);
-        
+
         /* SAFE: Initialize buffer structures using proper struct members */
         for (i = 0; i < 5; i++) {
             /* SAFE: Use proper buffer index array instead of unsafe pointer arithmetic */
             if (i < sizeof(vic_dev->buffer_index) / sizeof(vic_dev->buffer_index[0])) {
                 vic_dev->buffer_index[i] = i;
             }
-            
+
             /* SAFE: Create proper buffer entries and add to free list */
             struct list_head *buffer_entry = kzalloc(sizeof(struct list_head) + 32, GFP_KERNEL);
             if (buffer_entry) {
@@ -3096,12 +3275,12 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
                 buffer_data[0] = 0;  /* Buffer address */
                 buffer_data[1] = i;  /* Buffer index */
                 buffer_data[2] = 0;  /* Buffer status */
-                
+
                 /* Add to free list using safe Linux API */
                 list_add_tail(buffer_entry, &vic_dev->free_head);
                 pr_info("tx_isp_subdev_pipo: added buffer entry %d to free list\n", i);
             }
-            
+
             /* SAFE: Clear VIC register using validated register access */
             uint32_t reg_offset = (i + 0xc6) << 2;
             if (vic_dev->vic_regs && reg_offset < 0x1000) {
@@ -3109,14 +3288,14 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
                 pr_info("tx_isp_subdev_pipo: cleared VIC register at offset 0x%x for buffer %d\n", reg_offset, i);
             }
         }
-        
+
         pr_info("tx_isp_subdev_pipo: initialized %d buffer structures (safe implementation)\n", i);
-        
+
         /* SAFE: Use proper struct member access instead of offset 0x214 */
         vic_dev->processing = 1;
         pr_info("tx_isp_subdev_pipo: set processing = 1 (pipe enabled, safe struct access)\n");
     }
-    
+
     pr_info("tx_isp_subdev_pipo: completed successfully, returning 0\n");
     return 0;
 }
@@ -3136,15 +3315,15 @@ static struct platform_driver tx_isp_vic_platform_driver = {
 int __init tx_isp_vic_platform_init(void)
 {
     int ret;
-    
+
     pr_info("*** TX ISP VIC PLATFORM DRIVER REGISTRATION ***\n");
-    
+
     ret = platform_driver_register(&tx_isp_vic_platform_driver);
     if (ret) {
         pr_err("Failed to register VIC platform driver: %d\n", ret);
         return ret;
     }
-    
+
     pr_info("VIC platform driver registered successfully\n");
     return 0;
 }

@@ -1529,7 +1529,7 @@ static int sensor_init(struct tx_isp_subdev *sd, int enable) {
 
 	ISP_WARNING("*** CALLING TX_ISP_EVENT_SYNC_SENSOR_ATTR ***\n");
 	/* FIXED: Call our properly implemented handler directly instead of using the broken macro */
-	ret = tx_isp_handle_sync_sensor_attr_event(sd, sensor->video.attr);
+	ret = tx_isp_call_subdev_notify(sd, TX_ISP_EVENT_SYNC_SENSOR_ATTR, &sensor->video);
 	ISP_WARNING("*** TX_ISP_EVENT_SYNC_SENSOR_ATTR RETURNED: %d ***\n", ret);
 	
 	sensor->priv = wsize;
@@ -1658,7 +1658,7 @@ static int sensor_set_fps(struct tx_isp_subdev *sd, int fps) {
 
 	/* CRITICAL FIX: Sync sensor attributes BEFORE I2C writes */
 	ISP_WARNING("sensor_set_fps: Syncing sensor attributes before I2C writes\n");
-	ret = tx_isp_handle_sync_sensor_attr_event(sd, sensor->video.attr);
+	ret = tx_isp_call_subdev_notify(sd, TX_ISP_EVENT_SYNC_SENSOR_ATTR, &sensor->video);
 	if (ret != 0) {
 		ISP_WARNING("sensor_set_fps: Attribute sync failed (%d), continuing with I2C writes\n", ret);
 		/* Continue with I2C writes even if sync fails */
@@ -1691,7 +1691,7 @@ static int sensor_set_mode(struct tx_isp_subdev *sd, int value) {
 		sensor->video.mbus.field = V4L2_FIELD_NONE;
 		sensor->video.mbus.colorspace = wsize->colorspace;
 		sensor->video.fps = wsize->fps;
-		ret = tx_isp_handle_sync_sensor_attr_event(sd, sensor->video.attr);
+		ret = tx_isp_call_subdev_notify(sd, TX_ISP_EVENT_SYNC_SENSOR_ATTR, &sensor->video);
 	}
 	return ret;
 }
@@ -1708,7 +1708,7 @@ static int sensor_set_vflip(struct tx_isp_subdev *sd, int enable) {
 		val &= 0xfd;
 	ret += sensor_write(sd, 0x17, val);
 	if (!ret)
-	 	ret = tx_isp_handle_sync_sensor_attr_event(sd, sensor->video.attr);
+	 	ret = tx_isp_call_subdev_notify(sd, TX_ISP_EVENT_SYNC_SENSOR_ATTR, &sensor->video);
 
 	return ret;
 }

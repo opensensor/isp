@@ -3,6 +3,7 @@
 #include <linux/seq_file.h>
 #include <linux/uaccess.h>
 #include "../include/tx_isp.h"
+#include "../include/tx_isp_vic.h"
 
 #define TX_ISP_PROC_ISP_DIR "jz/isp"
 #define TX_ISP_PROC_ISP_W00_FILE "isp-w00"
@@ -160,9 +161,23 @@ static ssize_t tx_isp_proc_w02_write(struct file *file, const char __user *buffe
     pr_info("ISP W02 proc command: %s\n", cmd);
     
     /* Handle common ISP commands that userspace might send */
-    if (strncmp(cmd, "snapraw", 7) == 0) {
-        pr_info("ISP W02 snapraw command received\n");
-        /* Handle raw snapshot command */
+    if (!strncmp(cmd, "snapraw", 7) || !strncmp(cmd, "saveraw", 7) || !strncmp(cmd, "snapnv12", 8)) {
+        char op[16] = {0};
+        unsigned int savenum = 0;
+        int parsed = sscanf(cmd, "%15s %u", op, &savenum);
+        if (parsed >= 1) {
+            if (savenum < 1) savenum = 1;
+            if (isp && isp->vic_dev) {
+                int rc = 0;
+                if (!strcmp(op, "snapnv12"))
+                    rc = vic_snapnv12(&isp->vic_dev->sd, savenum);
+                else
+                    rc = vic_snapraw(&isp->vic_dev->sd, savenum);
+                pr_info("ISP W02 %s: savenum=%u rc=%d\n", op, savenum, rc);
+            } else {
+                pr_err("ISP W02 %s: VIC device not available\n", op[0] ? op : "snapraw");
+            }
+        }
     } else if (strncmp(cmd, "enable", 6) == 0) {
         pr_info("ISP W02 enable command received\n");
         if (isp)
@@ -172,7 +187,7 @@ static ssize_t tx_isp_proc_w02_write(struct file *file, const char __user *buffe
         if (isp)
             isp->streaming_enabled = false;
     }
-    
+
     return count;
 }
 

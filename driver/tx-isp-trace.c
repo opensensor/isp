@@ -6,8 +6,16 @@
 #include <linux/workqueue.h>
 #include <linux/slab.h>
 #include <linux/jiffies.h>
+#include <linux/fs.h>
+#include <linux/uaccess.h>
+#include <linux/mutex.h>
 
 #define ISP_MONITOR_VERSION "1.3"
+#define TRACE_FILE_PATH "/opt/trace.txt"
+
+// File logging support
+static struct file *trace_file = NULL;
+static DEFINE_MUTEX(trace_file_mutex);
 
 // Region types for classification
 enum region_type {
@@ -68,6 +76,59 @@ static const struct reg_range isp_ranges[] = {
 
 #define NUM_RANGES ARRAY_SIZE(isp_ranges)
 
+// File logging functions
+static int open_trace_file(void)
+{
+    int ret;
+
+    if (trace_file)
+        return 0;
+
+    trace_file = filp_open(TRACE_FILE_PATH, O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (IS_ERR(trace_file)) {
+        ret = PTR_ERR(trace_file);
+        pr_err("Failed to open trace file %s: %d\n", TRACE_FILE_PATH, ret);
+        trace_file = NULL;
+        return ret;
+    }
+    return 0;
+}
+
+static void close_trace_file(void)
+{
+    if (trace_file && !IS_ERR(trace_file)) {
+        filp_close(trace_file, NULL);
+        trace_file = NULL;
+    }
+}
+
+static void write_to_trace_file(const char *fmt, ...)
+{
+    va_list args;
+    char buffer[512];
+    int len;
+    mm_segment_t old_fs;
+
+    if (!trace_file)
+        return;
+
+    va_start(args, fmt);
+    len = vsnprintf(buffer, sizeof(buffer), fmt, args);
+    va_end(args);
+
+    if (len > 0 && len < sizeof(buffer)) {
+        mutex_lock(&trace_file_mutex);
+        if (trace_file && !IS_ERR(trace_file)) {
+            old_fs = get_fs();
+            set_fs(KERNEL_DS);
+            vfs_write(trace_file, buffer, len, &trace_file->f_pos);
+            set_fs(old_fs);
+        }
+        mutex_unlock(&trace_file_mutex);
+    }
+}
+
+// Restored original addresses - trace module was working correctly
 static struct isp_region isp_regions[] = {
     {
         .phys_addr = 0x10023000,
@@ -85,7 +146,7 @@ static struct isp_region isp_regions[] = {
         .name = "isp-w02"
     },
     {
-        .phys_addr = 0x10022000,  // Adjust this to actual CSI PHY base address
+        .phys_addr = 0x10022000,  // CSI PHY base address
         .size = 0x1000,
         .name = "isp-csi"
     }
@@ -144,6 +205,8 @@ static void end_sequence(struct seq_write_info *seq, const char *region_name)
     if (seq->count > 4) {
         pr_info("ISP %s: Sequential write at 0x%x: %d registers from 0x%x\n",
                 region_name, seq->start_offset, seq->count, seq->last_value);
+        write_to_trace_file("ISP %s: Sequential write at 0x%x: %d registers from 0x%x\n",
+                region_name, seq->start_offset, seq->count, seq->last_value);
     }
     seq->in_progress = false;
 }
@@ -197,6 +260,11 @@ static void check_region_changes(struct work_struct *work)
                        region->last_values[i], current_val,
                        jiffies_to_msecs(delta_jiffies),
                        jiffies_to_usecs(delta_jiffies) % 1000);
+                write_to_trace_file("ISP %s: [%s] write at offset 0x%x: 0x%x -> 0x%x (delta: %lu.%03lu ms)\n",
+                       region->name, reg_desc, offset,
+                       region->last_values[i], current_val,
+                       jiffies_to_msecs(delta_jiffies),
+                       jiffies_to_usecs(delta_jiffies) % 1000);
             }
 
             region->last_values[i] = current_val;
@@ -210,7 +278,7 @@ static void check_region_changes(struct work_struct *work)
 
     // Reschedule if still monitoring
     if (region->monitoring) {
-        schedule_delayed_work(&region->monitor_work, HZ/100); // 10ms interval
+        schedule_delayed_work(&region->monitor_work, HZ/100); // 10ms interval to catch rapid changes
     }
 }
 
@@ -252,9 +320,11 @@ static int init_region(struct isp_region *region)
     }
 
     region->monitoring = true;
-    schedule_delayed_work(&region->monitor_work, HZ/100);
+    schedule_delayed_work(&region->monitor_work, HZ/100); // Start with 10ms interval
 
     pr_info("ISP Monitor: initialized region %s at phys 0x%pap size 0x%zx\n",
+            region->name, &region->phys_addr, region->size);
+    write_to_trace_file("ISP Monitor: initialized region %s at phys 0x%pap size 0x%zx\n",
             region->name, &region->phys_addr, region->size);
 
     return 0;
@@ -290,12 +360,21 @@ static int __init isp_monitor_init(void)
 
     pr_info("ISP Register Monitor v%s initializing\n", ISP_MONITOR_VERSION);
 
+    // Open trace file
+    ret = open_trace_file();
+    if (ret) {
+        pr_warn("Failed to open trace file, continuing with pr_info only\n");
+    } else {
+        write_to_trace_file("ISP Register Monitor v%s initializing\n", ISP_MONITOR_VERSION);
+    }
+
     for (i = 0; i < NUM_REGIONS; i++) {
         ret = init_region(&isp_regions[i]);
         if (ret) {
             // Cleanup any regions we managed to initialize
             while (--i >= 0)
                 cleanup_region(&isp_regions[i]);
+            close_trace_file();
             return ret;
         }
     }
@@ -311,6 +390,10 @@ static void __exit isp_monitor_exit(void)
         cleanup_region(&isp_regions[i]);
 
     pr_info("ISP Register Monitor unloaded\n");
+    write_to_trace_file("ISP Register Monitor unloaded\n");
+
+    // Close trace file
+    close_trace_file();
 }
 
 module_init(isp_monitor_init);

@@ -84,6 +84,12 @@ int sensor_early_init(void *core_dev);
 
 /* VIC Operation Structures - exported from implementation */
 extern struct tx_isp_subdev_ops vic_subdev_ops;
+/* Snapshot raw helper */
+int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum);
+
+
+/* NV12 snapshot helper */
+int vic_snapnv12(struct tx_isp_subdev *sd, unsigned int savenum);
 
 
 /* CRITICAL FIX: VIC device structure with proper MIPS alignment and Binary Ninja compatibility */
@@ -91,7 +97,7 @@ struct tx_isp_vic_device {
     /* CRITICAL: Base subdev structure MUST be first for container_of() to work */
     struct tx_isp_subdev sd;                    /* 0x00: Base subdev structure */
 
-    
+
     /* CRITICAL: VIC register bases - dual VIC architecture */
     void __iomem *vic_regs;                     /* 0xb8: Primary VIC register base (0x133e0000) */
     void __iomem *vic_regs_secondary;           /* 0xbc: Secondary VIC register base (0x10023000) */
@@ -99,48 +105,48 @@ struct tx_isp_vic_device {
     /* CRITICAL: Frame dimensions at expected offsets */
     uint32_t width;                             /* 0xdc: Frame width (Binary Ninja expects this) */
     uint32_t height;                            /* 0xe0: Frame height (Binary Ninja expects this) */
-    
+
     /* Device properties (properly aligned) */
     u32 stride;                                 /* Line stride */
     uint32_t pixel_format;                      /* Pixel format */
-    
+
     /* CRITICAL: Sensor attributes with proper alignment */
     struct tx_isp_sensor_attribute sensor_attr __attribute__((aligned(4))); /* Sensor attributes */
-    
+
     /* CRITICAL: Synchronization primitives with proper alignment */
     spinlock_t lock __attribute__((aligned(4)));                    /* General spinlock */
     struct mutex mlock __attribute__((aligned(4)));                 /* Main mutex */
     struct mutex state_lock __attribute__((aligned(4)));            /* State mutex */
     struct completion frame_complete __attribute__((aligned(4)));   /* Frame completion */
-    
+
     /* CRITICAL: Device state (4-byte aligned) */
     int state __attribute__((aligned(4)));                          /* State: 1=init, 2=ready, 3=active, 4=streaming */
     int streaming __attribute__((aligned(4)));                      /* Streaming state */
-    
+
     /* CRITICAL: Buffer management with proper alignment and expected offsets */
     /* These need to be at specific offsets for Binary Ninja compatibility */
     spinlock_t buffer_mgmt_lock;                /* 0x1f4: Buffer management spinlock */
-    
+
     int stream_state;                           /* 0x210: Stream state: 0=off, 1=on */
-    
+
     bool processing;                            /* 0x214: Processing flag */
-    
+
     uint32_t active_buffer_count;               /* 0x218: Active buffer count */
-    
+
     /* Additional buffer management */
     uint32_t buffer_count;                      /* General buffer count */
-    
+
     /* Error tracking (properly aligned) */
     uint32_t vic_errors[13] __attribute__((aligned(4)));            /* Error array (13 elements) */
     uint32_t total_errors __attribute__((aligned(4)));              /* Total error count */
     uint32_t frame_count __attribute__((aligned(4)));               /* Frame counter */
-    
+
     /* Buffer management structures (properly aligned) */
     spinlock_t buffer_lock __attribute__((aligned(4)));             /* Buffer lock */
     struct list_head queue_head __attribute__((aligned(4)));        /* Buffer queues */
     struct list_head free_head __attribute__((aligned(4)));
     struct list_head done_head __attribute__((aligned(4)));
-    
+
     /* Buffer index array for VIC register mapping */
     int buffer_index[5] __attribute__((aligned(4)));                /* Buffer index array (5 buffers max) */
 
@@ -152,7 +158,7 @@ struct tx_isp_vic_device {
     int irq_enabled __attribute__((aligned(4)));
     int irq_number __attribute__((aligned(4)));                     /* IRQ number from platform device */
     irq_handler_t irq_handler_func __attribute__((aligned(4)));     /* IRQ handler function pointer */
-    
+
     /* CRITICAL FIX: Hardware interrupt enable flag (replaces unsafe offset 0x13c access) */
     int hw_irq_enabled __attribute__((aligned(4)));                 /* Hardware interrupt enable flag - SAFE replacement for offset 0x13c */
 } __attribute__((aligned(4), packed));
