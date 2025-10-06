@@ -256,6 +256,19 @@ static uint32_t mdns_y_ref_wei_r_max_array[0x24/4] = {0};       /* 0x1a6 */
 static uint32_t mdns_y_ref_wei_r_min_array[0x24/4] = {0};       /* 0x1a7 */
 static uint32_t mdns_y_ref_wei_increase_array[0x24/4] = {0};    /* 0x1a8 */
 static uint32_t mdns_y_corner_length_t_array[0x24/4] = {0};     /* 0x1a9 */
+static uint32_t mdns_y_corner_length_b_array[0x24/4] = {0};    /* 0x1aa */
+static uint32_t mdns_y_corner_length_l_array[0x24/4] = {0};    /* 0x1ab */
+static uint32_t mdns_y_corner_length_r_array[0x24/4] = {0};    /* 0x1ac */
+static uint32_t mdns_y_edge_win_opt_array[0x24/4] = {0};       /* 0x1ad */
+static uint32_t mdns_y_edge_div_opt_array[0x24/4] = {0};       /* 0x1ae */
+static uint32_t mdns_y_edge_type_opt_array[0x24/4] = {0};      /* 0x1af */
+static uint32_t mdns_y_luma_win_opt_array[0x24/4] = {0};       /* 0x1b0 */
+static uint32_t mdns_y_dtb_div_opt_array[0x24/4] = {0};        /* 0x1b1 */
+static uint32_t mdns_y_dtb_squ_en_array[0x24/4] = {0};         /* 0x1b2 */
+static uint32_t mdns_y_dtb_squ_div_opt_array[0x24/4] = {0};    /* 0x1b3 */
+static uint32_t mdns_y_ass_win_opt_array[0x24/4] = {0};        /* 0x1b4 */
+static uint32_t mdns_y_ass_div_opt_array[0x24/4] = {0};        /* 0x1b5 */
+
 
 
 /* Helper: BN size mapping for MDNS IDs */
@@ -5093,6 +5106,19 @@ int tisp_mdns_param_array_set(int param_id, void *in_buf, int *size_buf)
     case 0x1a7: memcpy(&mdns_y_ref_wei_r_min_array, in_buf, 0x24); *size_buf = 0x24; return 0;
     case 0x1a8: memcpy(&mdns_y_ref_wei_increase_array, in_buf, 0x24); *size_buf = 0x24; return 0;
     case 0x1a9: memcpy(&mdns_y_corner_length_t_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1aa: memcpy(&mdns_y_corner_length_b_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1ab: memcpy(&mdns_y_corner_length_l_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1ac: memcpy(&mdns_y_corner_length_r_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1ad: memcpy(&mdns_y_edge_win_opt_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1ae: memcpy(&mdns_y_edge_div_opt_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1af: memcpy(&mdns_y_edge_type_opt_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1b0: memcpy(&mdns_y_luma_win_opt_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1b1: memcpy(&mdns_y_dtb_div_opt_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1b2: memcpy(&mdns_y_dtb_squ_en_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1b3: memcpy(&mdns_y_dtb_squ_div_opt_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1b4: memcpy(&mdns_y_ass_win_opt_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1b5: memcpy(&mdns_y_ass_div_opt_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+
 
     default:
         pr_err("tisp_mdns_param_array_set: Unsupported ID 0x%x (mapping pending)\n", param_id);
