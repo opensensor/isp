@@ -1,284 +1,149 @@
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:139:9: warning: "ISP_CTRL_REG" redefined
-  139 | #define ISP_CTRL_REG          0x00
-      |         ^~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:104:9: note: this is the location of the previous definition
-  104 | #define ISP_CTRL_REG         (ISP_REG_BASE + 0x00)
-      |         ^~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:146:9: warning: "ISP_AF_ZONE_BASE" redefined
-  146 | #define ISP_AF_ZONE_BASE      0x13380000   // Base address for AF zone registers
-      |         ^~~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:88:9: note: this is the location of the previous definition
-   88 | #define ISP_AF_ZONE_BASE    0x7000  // Base address for AF zone registers
-      |         ^~~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:774:9: warning: "ISP_NETLINK_PROTO" redefined
-  774 | #define ISP_NETLINK_PROTO 0x17
-      |         ^~~~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:765:9: note: this is the location of the previous definition
-  765 | #define ISP_NETLINK_PROTO    23       // 0x17 from decompilation
-      |         ^~~~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:785:9: warning: "ISP_EVENT_BUFFER_REQUEST" redefined
-  785 | #define ISP_EVENT_BUFFER_REQUEST  0x1000
-      |         ^~~~~~~~~~~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:763:9: note: this is the location of the previous definition
-  763 | #define ISP_EVENT_BUFFER_REQUEST  0x3000008  // Request buffer allocation
-      |         ^~~~~~~~~~~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:786:9: warning: "ISP_EVENT_BUFFER_ENQUEUE" redefined
-  786 | #define ISP_EVENT_BUFFER_ENQUEUE  0x1001
-      |         ^~~~~~~~~~~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:760:9: note: this is the location of the previous definition
-  760 | #define ISP_EVENT_BUFFER_ENQUEUE  0x3000005  // Buffer enqueued to driver
-      |         ^~~~~~~~~~~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:787:9: warning: "ISP_EVENT_BUFFER_DONE" redefined
-  787 | #define ISP_EVENT_BUFFER_DONE     0x1002
-      |         ^~~~~~~~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:761:9: note: this is the location of the previous definition
-  761 | #define ISP_EVENT_BUFFER_DONE     0x3000006  // Buffer completed by hardware
-      |         ^~~~~~~~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:790:9: warning: "ISP_EVENT_STREAM_START" redefined
-  790 | #define ISP_EVENT_STREAM_START    0x1005
-      |         ^~~~~~~~~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:758:9: note: this is the location of the previous definition
-  758 | #define ISP_EVENT_STREAM_START    0x3000003  // Start streaming
-      |         ^~~~~~~~~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:791:9: warning: "ISP_EVENT_STREAM_CANCEL" redefined
-  791 | #define ISP_EVENT_STREAM_CANCEL   0x1006
-      |         ^~~~~~~~~~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:759:9: note: this is the location of the previous definition
-  759 | #define ISP_EVENT_STREAM_CANCEL   0x3000004  // Cancel streaming
-      |         ^~~~~~~~~~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:792:9: warning: "ISP_EVENT_QUEUE_FREE" redefined
-  792 | #define ISP_EVENT_QUEUE_FREE      0x1007
-      |         ^~~~~~~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:762:9: note: this is the location of the previous definition
-  762 | #define ISP_EVENT_QUEUE_FREE      0x3000007  // Free/cleanup queue
-      |         ^~~~~~~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:1010:9: warning: "ISP_AE_HIST_BASE" redefined
- 1010 | #define ISP_AE_HIST_BASE        0x1000  // Example offset, need to confirm actual
-      |         ^~~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:60:9: note: this is the location of the previous definition
-   60 | #define ISP_AE_HIST_BASE   0x7000  // Base address for AE histogram data
-      |         ^~~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:1023:9: warning: "_IOC_NONE" redefined
- 1023 | #define _IOC_NONE   0U
-      |         ^~~~~~~~~
-In file included from /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/include/uapi/linux/ioctl.h:4,
-                 from include/uapi/linux/fs.h:10,
-                 from include/linux/fs.h:32,
-                 from /home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:24:
-/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/uapi/asm/ioctl.h:21:9: note: this is the location of the previous definition
-   21 | #define _IOC_NONE       1U
-      |         ^~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:1024:9: warning: "_IOC_WRITE" redefined
- 1024 | #define _IOC_WRITE  1U  /* userspace writing to kernel, aka "IN" */
-      |         ^~~~~~~~~~
-/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/uapi/asm/ioctl.h:23:9: note: this is the location of the previous definition
-   23 | #define _IOC_WRITE      4U
-      |         ^~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:1030:9: warning: "IOC_INOUT" redefined
- 1030 | #define IOC_INOUT   (((_IOC_WRITE|_IOC_READ) << _IOC_DIRSHIFT))
-      |         ^~~~~~~~~
-In file included from include/asm-generic/ioctl.h:4,
-                 from /home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/arch/mips/include/uapi/asm/ioctl.h:25:
-include/uapi/asm-generic/ioctl.h:94:9: note: this is the location of the previous definition
-   94 | #define IOC_INOUT       ((_IOC_WRITE|_IOC_READ) << _IOC_DIRSHIFT)
-      |         ^~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:676:9: warning: "MAX_AF_ZONES" redefined
-  676 | #define MAX_AF_ZONES 16
-      |         ^~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:83:9: note: this is the location of the previous definition
-   83 | #define MAX_AF_ZONES     225    // Typical 15x15 zone grid = 225 * 4 bytes = 900 bytes
-      |         ^~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-common.h:594:9: warning: "VIDIOC_SET_BUF_INFO" redefined
-  594 | #define VIDIOC_SET_BUF_INFO                     _IOW('V', BASE_VIDIOC_PRIVATE + 20, struct isp_buf_info)
-      |         ^~~~~~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:47:9: note: this is the location of the previous definition
-   47 | #define VIDIOC_SET_BUF_INFO      0x800856d4
-      |         ^~~~~~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-common.h:595:9: warning: "VIDIOC_GET_BUF_INFO" redefined
-  595 | #define VIDIOC_GET_BUF_INFO                     _IOW('V', BASE_VIDIOC_PRIVATE + 21, struct isp_buf_info)
-      |         ^~~~~~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:48:9: note: this is the location of the previous definition
-   48 | #define VIDIOC_GET_BUF_INFO      0x800856d5
-      |         ^~~~~~~~~~~~~~~~~~~
-In file included from /home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:44:
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vic.h:16:9: warning: "VIC_MAX_CHAN" redefined
-   16 | #define VIC_MAX_CHAN        2
-      |         ^~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:25:9: note: this is the location of the previous definition
-   25 | #define VIC_MAX_CHAN 6
-      |         ^~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vic.h:19:9: warning: "VIC_CTRL" redefined
-   19 | #define VIC_CTRL            0x00
-      |         ^~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:63:9: note: this is the location of the previous definition
-   63 | #define VIC_CTRL           0x0000
-      |         ^~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vic.h:20:9: warning: "VIC_STATUS" redefined
-   20 | #define VIC_STATUS          0x04
-      |         ^~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:64:9: note: this is the location of the previous definition
-   64 | #define VIC_STATUS         0x0004
-      |         ^~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vic.h:21:9: warning: "VIC_BUFFER_ADDR" redefined
-   21 | #define VIC_BUFFER_ADDR     0x08
-      |         ^~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:68:9: note: this is the location of the previous definition
-   68 | #define VIC_BUFFER_ADDR    0x0014
-      |         ^~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vic.h:22:9: warning: "VIC_FRAME_SIZE" redefined
-   22 | #define VIC_FRAME_SIZE      0x0C
-      |         ^~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:67:9: note: this is the location of the previous definition
-   67 | #define VIC_FRAME_SIZE     0x0010
-      |         ^~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vic.h:23:9: warning: "VIC_INT_STATUS" redefined
-   23 | #define VIC_INT_STATUS      0x10
-      |         ^~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:66:9: note: this is the location of the previous definition
-   66 | #define VIC_INT_STATUS     0x000C
-      |         ^~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vic.h:24:9: warning: "VIC_INT_MASK" redefined
-   24 | #define VIC_INT_MASK        0x14
-      |         ^~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:65:9: note: this is the location of the previous definition
-   65 | #define VIC_INT_MASK       0x0008
-      |         ^~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vic.h:28:9: warning: "VIC_CTRL_START" redefined
-   28 | #define VIC_CTRL_START      BIT(1)
-      |         ^~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:96:9: note: this is the location of the previous definition
-   96 | #define VIC_CTRL_START     BIT(2)
-      |         ^~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vic.h:29:9: warning: "VIC_CTRL_STOP" redefined
-   29 | #define VIC_CTRL_STOP       BIT(2)
-      |         ^~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:97:9: note: this is the location of the previous definition
-   97 | #define VIC_CTRL_STOP      BIT(3)
-      |         ^~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vic.h:30:9: warning: "VIC_CTRL_RST" redefined
-   30 | #define VIC_CTRL_RST        BIT(3)
-      |         ^~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:95:9: note: this is the location of the previous definition
-   95 | #define VIC_CTRL_RST       BIT(1)
-      |         ^~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vic.h:33:9: warning: "STATUS_BUSY" redefined
-   33 | #define STATUS_BUSY         BIT(0)
-      |         ^~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:127:9: note: this is the location of the previous definition
-  127 | #define STATUS_BUSY        BIT(1)
-      |         ^~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vic.h:34:9: warning: "STATUS_IDLE" redefined
-   34 | #define STATUS_IDLE         BIT(1)
-      |         ^~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:126:9: note: this is the location of the previous definition
-  126 | #define STATUS_IDLE        BIT(0)
-      |         ^~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vic.h:37:9: warning: "INT_FRAME_DONE" redefined
-   37 | #define INT_FRAME_DONE      BIT(0)
-      |         ^~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:114:9: note: this is the location of the previous definition
-  114 | #define INT_FRAME_DONE     BIT(1)
-      |         ^~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vic.h:38:9: warning: "INT_ERROR" redefined
-   38 | #define INT_ERROR           BIT(1)
-      |         ^~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:115:9: note: this is the location of the previous definition
-  115 | #define INT_ERROR          BIT(2)
-      |         ^~~~~~~~~
-In file included from /home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:46:
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vin.h:123:9: warning: "VIN_CTRL" redefined
-  123 | #define VIN_CTRL             0x00    /* VIN Control Register */
-      |         ^~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:79:9: note: this is the location of the previous definition
-   79 | #define VIN_CTRL           0x0000
-      |         ^~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vin.h:124:9: warning: "VIN_STATUS" redefined
-  124 | #define VIN_STATUS           0x04    /* VIN Status Register */
-      |         ^~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:80:9: note: this is the location of the previous definition
-   80 | #define VIN_STATUS         0x0004
-      |         ^~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vin.h:125:9: warning: "VIN_FORMAT" redefined
-  125 | #define VIN_FORMAT           0x08    /* VIN Format Register */
-      |         ^~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:84:9: note: this is the location of the previous definition
-   84 | #define VIN_FORMAT        0x0014
-      |         ^~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vin.h:126:9: warning: "VIN_FRAME_SIZE" redefined
-  126 | #define VIN_FRAME_SIZE       0x0C    /* VIN Frame Size Register */
-      |         ^~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:83:9: note: this is the location of the previous definition
-   83 | #define VIN_FRAME_SIZE     0x0010
-      |         ^~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vin.h:127:9: warning: "VIN_INT_STATUS" redefined
-  127 | #define VIN_INT_STATUS       0x10    /* VIN Interrupt Status Register */
-      |         ^~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:82:9: note: this is the location of the previous definition
-   82 | #define VIN_INT_STATUS     0x000C
-      |         ^~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vin.h:128:9: warning: "VIN_INT_MASK" redefined
-  128 | #define VIN_INT_MASK         0x14    /* VIN Interrupt Mask Register */
-      |         ^~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:81:9: note: this is the location of the previous definition
-   81 | #define VIN_INT_MASK       0x0008
-      |         ^~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vin.h:134:9: warning: "VIN_CTRL_START" redefined
-  134 | #define VIN_CTRL_START       BIT(1)  /* VIN Start */
-      |         ^~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:109:9: note: this is the location of the previous definition
-  109 | #define VIN_CTRL_START     BIT(2)
-      |         ^~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vin.h:135:9: warning: "VIN_CTRL_STOP" redefined
-  135 | #define VIN_CTRL_STOP        BIT(2)  /* VIN Stop */
-      |         ^~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:110:9: note: this is the location of the previous definition
-  110 | #define VIN_CTRL_STOP      BIT(3)
-      |         ^~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vin.h:136:9: warning: "VIN_CTRL_RST" redefined
-  136 | #define VIN_CTRL_RST         BIT(3)  /* VIN Reset */
-      |         ^~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:108:9: note: this is the location of the previous definition
-  108 | #define VIN_CTRL_RST       BIT(1)
-      |         ^~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vin.h:143:9: warning: "FMT_YUV422" redefined
-  143 | #define FMT_YUV422           0x00    /* YUV422 Format */
-      |         ^~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:122:9: note: this is the location of the previous definition
-  122 | #define FMT_YUV422        0x03
-      |         ^~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vin.h:144:9: warning: "FMT_RGB888" redefined
-  144 | #define FMT_RGB888           0x01    /* RGB888 Format */
-      |         ^~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:123:9: note: this is the location of the previous definition
-  123 | #define FMT_RGB888        0x04
-      |         ^~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vin.h:145:9: warning: "FMT_RAW8" redefined
-  145 | #define FMT_RAW8             0x02    /* RAW8 Format */
-      |         ^~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:119:9: note: this is the location of the previous definition
-  119 | #define FMT_RAW8          0x00
-      |         ^~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vin.h:146:9: warning: "FMT_RAW10" redefined
-  146 | #define FMT_RAW10            0x03    /* RAW10 Format */
-      |         ^~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:120:9: note: this is the location of the previous definition
-  120 | #define FMT_RAW10         0x01
-      |         ^~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx_isp_vin.h:147:9: warning: "FMT_RAW12" redefined
-  147 | #define FMT_RAW12            0x04    /* RAW12 Format */
-      |         ^~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-isp-device.h:121:9: note: this is the location of the previous definition
-  121 | #define FMT_RAW12         0x02
-      |         ^~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:343:9: warning: "ISP_AE_STATE_BASE" redefined
-  343 | #define ISP_AE_STATE_BASE    0x10000
-      |         ^~~~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:61:9: note: this is the location of the previous definition
-   61 | #define ISP_AE_STATE_BASE  0x7100  // Base address for AE state registers
-      |         ^~~~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:344:9: warning: "ISP_AF_ZONE_BASE" redefined
-  344 | #define ISP_AF_ZONE_BASE     0x12000
-      |         ^~~~~~~~~~~~~~~~
-/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/include/../include/tx-libimp.h:146:9: note: this is the location of the previous definition
-  146 | #define ISP_AF_ZONE_BASE      0x13380000   // Base address for AF zone registers
-      |         ^~~~~~~~~~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4842:31: error: ‘tiziano_ccm_dp_cfg’ undeclared (first use in this function); did you mean ‘tiziano_ccm_init’?
+ 4842 |             memcpy(&blob[0], &tiziano_ccm_dp_cfg, sizeof(tiziano_ccm_dp_cfg));
+      |                               ^~~~~~~~~~~~~~~~~~
+      |                               tiziano_ccm_init
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4842:31: note: each undeclared identifier is reported only once for each function it appears in
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4843:31: error: ‘data_aa470’ undeclared (first use in this function); did you mean ‘data_9a410’?
+ 4843 |             memcpy(&blob[4], &data_aa470, sizeof(data_aa470));
+      |                               ^~~~~~~~~~
+      |                               data_9a410
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4844:31: error: ‘data_aa474’ undeclared (first use in this function); did you mean ‘data_9a424’?
+ 4844 |             memcpy(&blob[8], &data_aa474, sizeof(data_aa474));
+      |                               ^~~~~~~~~~
+      |                               data_9a424
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4847:26: error: ‘tiziano_ccm_a_linear’ undeclared (first use in this function); did you mean ‘tiziano_gib_r_g_linear’?
+ 4847 |         case 0xaa: src = tiziano_ccm_a_linear; len = 0x24; break;
+      |                          ^~~~~~~~~~~~~~~~~~~~
+      |                          tiziano_gib_r_g_linear
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4848:26: error: ‘tiziano_ccm_t_linear’ undeclared (first use in this function); did you mean ‘tiziano_gib_r_g_linear’?
+ 4848 |         case 0xab: src = tiziano_ccm_t_linear; len = 0x24; break;
+      |                          ^~~~~~~~~~~~~~~~~~~~
+      |                          tiziano_gib_r_g_linear
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4849:26: error: ‘tiziano_ccm_d_linear’ undeclared (first use in this function); did you mean ‘tiziano_gib_r_g_linear’?
+ 4849 |         case 0xac: src = tiziano_ccm_d_linear; len = 0x24; break;
+      |                          ^~~~~~~~~~~~~~~~~~~~
+      |                          tiziano_gib_r_g_linear
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4850:26: error: ‘cm_ev_list’ undeclared (first use in this function); did you mean ‘ae_ev_list’?
+ 4850 |         case 0xad: src = cm_ev_list;          len = 0x24; break;
+      |                          ^~~~~~~~~~
+      |                          ae_ev_list
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4851:26: error: ‘cm_sat_list’ undeclared (first use in this function)
+ 4851 |         case 0xae: src = cm_sat_list;         len = 0x24; break;
+      |                          ^~~~~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4852:26: error: ‘tiziano_ccm_a_wdr’ undeclared (first use in this function); did you mean ‘tiziano_ccm_init’?
+ 4852 |         case 0xaf: src = tiziano_ccm_a_wdr;   len = 0x24; break;
+      |                          ^~~~~~~~~~~~~~~~~
+      |                          tiziano_ccm_init
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4853:26: error: ‘tiziano_ccm_t_wdr’ undeclared (first use in this function); did you mean ‘tiziano_ccm_init’?
+ 4853 |         case 0xb0: src = tiziano_ccm_t_wdr;   len = 0x24; break;
+      |                          ^~~~~~~~~~~~~~~~~
+      |                          tiziano_ccm_init
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4854:26: error: ‘tiziano_ccm_d_wdr’ undeclared (first use in this function); did you mean ‘tiziano_ccm_init’?
+ 4854 |         case 0xb1: src = tiziano_ccm_d_wdr;   len = 0x24; break;
+      |                          ^~~~~~~~~~~~~~~~~
+      |                          tiziano_ccm_init
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4855:26: error: ‘cm_ev_list_wdr’ undeclared (first use in this function); did you mean ‘adr_ev_list_wdr’?
+ 4855 |         case 0xb2: src = cm_ev_list_wdr;      len = 0x24; break;
+      |                          ^~~~~~~~~~~~~~
+      |                          adr_ev_list_wdr
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4856:26: error: ‘cm_sat_list_wdr’ undeclared (first use in this function); did you mean ‘_lum_list_wdr’?
+ 4856 |         case 0xb3: src = cm_sat_list_wdr;     len = 0x24; break;
+      |                          ^~~~~~~~~~~~~~~
+      |                          _lum_list_wdr
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4857:26: error: ‘cm_awb_list’ undeclared (first use in this function)
+ 4857 |         case 0xb4: src = cm_awb_list;         len = 8;    break;
+      |                          ^~~~~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c: In function ‘tisp_ccm_param_array_set’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4877:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4877 |     void *dst = NULL; int len = 0;
+      |     ^~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4884:21: error: ‘tiziano_ccm_dp_cfg’ undeclared (first use in this function); did you mean ‘tiziano_ccm_init’?
+ 4884 |             memcpy(&tiziano_ccm_dp_cfg, &blob[0], sizeof(tiziano_ccm_dp_cfg));
+      |                     ^~~~~~~~~~~~~~~~~~
+      |                     tiziano_ccm_init
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4885:21: error: ‘data_aa470’ undeclared (first use in this function); did you mean ‘data_9a410’?
+ 4885 |             memcpy(&data_aa470,         &blob[4], sizeof(data_aa470));
+      |                     ^~~~~~~~~~
+      |                     data_9a410
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4886:21: error: ‘data_aa474’ undeclared (first use in this function); did you mean ‘data_9a424’?
+ 4886 |             memcpy(&data_aa474,         &blob[8], sizeof(data_aa474));
+      |                     ^~~~~~~~~~
+      |                     data_9a424
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4888:13: error: ‘ccm_real’ undeclared (first use in this function)
+ 4888 |             ccm_real.real = 1;
+      |             ^~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4889:13: error: implicit declaration of function ‘jz_isp_ccm’ [-Wimplicit-function-declaration]
+ 4889 |             jz_isp_ccm();
+      |             ^~~~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:2960:40: note: previous declaration of ‘jz_isp_ccm’ with type ‘int(void)’
+ 2960 |                             extern int jz_isp_ccm(void);
+      |                                        ^~~~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4892:26: error: ‘tiziano_ccm_a_linear’ undeclared (first use in this function); did you mean ‘tiziano_gib_r_g_linear’?
+ 4892 |         case 0xaa: dst = tiziano_ccm_a_linear; len = 0x24; break;
+      |                          ^~~~~~~~~~~~~~~~~~~~
+      |                          tiziano_gib_r_g_linear
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4893:26: error: ‘tiziano_ccm_t_linear’ undeclared (first use in this function); did you mean ‘tiziano_gib_r_g_linear’?
+ 4893 |         case 0xab: dst = tiziano_ccm_t_linear; len = 0x24; break;
+      |                          ^~~~~~~~~~~~~~~~~~~~
+      |                          tiziano_gib_r_g_linear
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4894:26: error: ‘tiziano_ccm_d_linear’ undeclared (first use in this function); did you mean ‘tiziano_gib_r_g_linear’?
+ 4894 |         case 0xac: dst = tiziano_ccm_d_linear; len = 0x24; break;
+      |                          ^~~~~~~~~~~~~~~~~~~~
+      |                          tiziano_gib_r_g_linear
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4895:26: error: ‘cm_ev_list’ undeclared (first use in this function); did you mean ‘ae_ev_list’?
+ 4895 |         case 0xad: dst = cm_ev_list;          len = 0x24; break;
+      |                          ^~~~~~~~~~
+      |                          ae_ev_list
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4896:26: error: ‘cm_sat_list’ undeclared (first use in this function)
+ 4896 |         case 0xae: dst = cm_sat_list;         len = 0x24; break;
+      |                          ^~~~~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4897:26: error: ‘tiziano_ccm_a_wdr’ undeclared (first use in this function); did you mean ‘tiziano_ccm_init’?
+ 4897 |         case 0xaf: dst = tiziano_ccm_a_wdr;   len = 0x24; break;
+      |                          ^~~~~~~~~~~~~~~~~
+      |                          tiziano_ccm_init
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4898:26: error: ‘tiziano_ccm_t_wdr’ undeclared (first use in this function); did you mean ‘tiziano_ccm_init’?
+ 4898 |         case 0xb0: dst = tiziano_ccm_t_wdr;   len = 0x24; break;
+      |                          ^~~~~~~~~~~~~~~~~
+      |                          tiziano_ccm_init
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4899:26: error: ‘tiziano_ccm_d_wdr’ undeclared (first use in this function); did you mean ‘tiziano_ccm_init’?
+ 4899 |         case 0xb1: dst = tiziano_ccm_d_wdr;   len = 0x24; break;
+      |                          ^~~~~~~~~~~~~~~~~
+      |                          tiziano_ccm_init
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4900:26: error: ‘cm_ev_list_wdr’ undeclared (first use in this function); did you mean ‘adr_ev_list_wdr’?
+ 4900 |         case 0xb2: dst = cm_ev_list_wdr;      len = 0x24; break;
+      |                          ^~~~~~~~~~~~~~
+      |                          adr_ev_list_wdr
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4901:26: error: ‘cm_sat_list_wdr’ undeclared (first use in this function); did you mean ‘_lum_list_wdr’?
+ 4901 |         case 0xb3: dst = cm_sat_list_wdr;     len = 0x24; break;
+      |                          ^~~~~~~~~~~~~~~
+      |                          _lum_list_wdr
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4902:26: error: ‘cm_awb_list’ undeclared (first use in this function)
+ 4902 |         case 0xb4: dst = cm_awb_list;         len = 8;    break;
+      |                          ^~~~~~~~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c: In function ‘tisp_gamma_param_array_get’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4919:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4919 |     const void *src = NULL; int len = 0;
+      |     ^~~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4921:15: error: ‘tiziano_gamma_lut_linear’ undeclared (first use in this function); did you mean ‘tiziano_gib_b_ir_linear’?
+ 4921 |         src = tiziano_gamma_lut_linear; len = 0x102; /* BN: size 0x102 */
+      |               ^~~~~~~~~~~~~~~~~~~~~~~~
+      |               tiziano_gib_b_ir_linear
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4923:15: error: ‘tiziano_gamma_lut_wdr’ undeclared (first use in this function); did you mean ‘tiziano_gamma_init’?
+ 4923 |         src = tiziano_gamma_lut_wdr;    len = 0x102;
+      |               ^~~~~~~~~~~~~~~~~~~~~
+      |               tiziano_gamma_init
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c: In function ‘tisp_gamma_param_array_set’:
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4938:5: warning: ISO C90 forbids mixed declarations and code [-Wdeclaration-after-statement]
+ 4938 |     void *dst = NULL; int len = 0x102;
+      |     ^~~~
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4939:33: error: ‘tiziano_gamma_lut_linear’ undeclared (first use in this function); did you mean ‘tiziano_gib_b_ir_linear’?
+ 4939 |     if (param_id == 0x3c) dst = tiziano_gamma_lut_linear;
+      |                                 ^~~~~~~~~~~~~~~~~~~~~~~~
+      |                                 tiziano_gib_b_ir_linear
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4940:38: error: ‘tiziano_gamma_lut_wdr’ undeclared (first use in this function); did you mean ‘tiziano_gamma_init’?
+ 4940 |     else if (param_id == 0x3d) dst = tiziano_gamma_lut_wdr;
+      |                                      ^~~~~~~~~~~~~~~~~~~~~
+      |                                      tiziano_gamma_init
+/home/matteius/isp-latest/external/ingenic-sdk/3.10/isp/t31/tx_isp_tuning.c:4947:5: error: implicit declaration of function ‘tiziano_gamma_lut_parameter’ [-Wimplicit-function-declaration]
+ 4947 |     tiziano_gamma_lut_parameter();
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~

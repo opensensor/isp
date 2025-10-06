@@ -2625,6 +2625,28 @@ int tisp_hldc_param_array_get(int param_id, void *out_buf, int *size_buf);
 int tisp_ae_param_array_get(int param_id, void *out_buf, int *size_buf);
 int tisp_awb_param_array_get(int param_id, void *out_buf, int *size_buf);
 
+
+/* Forward declarations for CCM/Gamma symbols used below (defined later in this file) */
+extern uint32_t tiziano_ccm_dp_cfg;
+extern uint32_t data_aa470;
+extern uint32_t data_aa474;
+extern int32_t tiziano_ccm_a_linear[9];
+extern int32_t tiziano_ccm_t_linear[9];
+extern int32_t tiziano_ccm_d_linear[9];
+extern int32_t tiziano_ccm_a_wdr[9];
+extern int32_t tiziano_ccm_t_wdr[9];
+extern int32_t tiziano_ccm_d_wdr[9];
+extern uint32_t cm_ev_list[9];
+extern uint32_t cm_sat_list[9];
+extern uint32_t cm_ev_list_wdr[9];
+extern uint32_t cm_sat_list_wdr[9];
+extern uint32_t cm_awb_list[2];
+extern uint16_t tiziano_gamma_lut_linear[256];
+extern uint16_t tiziano_gamma_lut_wdr[256];
+extern int tiziano_gamma_lut_parameter(void);
+extern int jz_isp_ccm(void);
+
+
 int tisp_rdns_get_par_cfg(void *out_buf, void *size_buf);
 int tisp_adr_get_par_cfg(void *out_buf, void *size_buf);
 int tisp_ccm_get_par_cfg(void *out_buf, void *size_buf);
@@ -4803,21 +4825,146 @@ int tisp_adr_param_array_set(int param_id, void *in_buf, int *size_buf)
     return 0;
 }
 
+/* YDNS parameter arrays - BN reference sizes (0x24 bytes => 9 u32 entries) */
+static uint32_t ydns_edge_out_array = 0;              /* 0x3e6, size 4 */
+static uint32_t ydns_mv_thres0_array[0x24/4] = {0};   /* 0x3e7 */
+static uint32_t ydns_mv_thres1_array[0x24/4] = {0};   /* 0x3e8 */
+static uint32_t ydns_mv_thres2_array[0x24/4] = {0};   /* 0x3e9 */
+static uint32_t ydns_fus_level_array[0x24/4] = {0};   /* 0x3ea */
+static uint32_t ydns_fus_min_thres_array[0x24/4] = {0};
+static uint32_t ydns_fus_max_thres_array[0x24/4] = {0};
+static uint32_t ydns_fus_sswei_array[0x24/4] = {0};
+static uint32_t ydns_fus_sewei_array[0x24/4] = {0};
+static uint32_t ydns_fus_mswei_array[0x24/4] = {0};
+static uint32_t ydns_fus_mewei_array[0x24/4] = {0};
+static uint32_t ydns_fus_uvwei_array[0x24/4] = {0};
+static uint32_t ydns_edge_wei_array[0x24/4] = {0};
+static uint32_t ydns_edge_div_array[0x24/4] = {0};
+static uint32_t ydns_edge_thres_array[0x24/4] = {0};
+
+
 int tisp_ccm_param_array_get(int param_id, void *out_buf, int *size_buf)
 {
-    pr_debug("tisp_ccm_param_array_get: ID=0x%x (stub)\n", param_id);
-    if (out_buf && size_buf) {
-        *size_buf = 0;
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_ccm_param_array_get: NULL buffer pointers\n");
+        return -EINVAL;
     }
+    if ((param_id - 0xa9) >= 0xc) {
+        pr_err("tisp_ccm_param_array_get: Unsupported ID 0x%x\n", param_id);
+        return -1;
+    }
+
+    void *src = NULL; int len = 0;
+
+    switch (param_id) {
+        case 0xa9: {
+            /* Assemble 0x14-byte DP cfg blob from discrete fields */
+            static uint8_t blob[0x14];
+            memset(blob, 0, sizeof(blob));
+            memcpy(&blob[0], &tiziano_ccm_dp_cfg, sizeof(tiziano_ccm_dp_cfg));
+            memcpy(&blob[4], &data_aa470, sizeof(data_aa470));
+            memcpy(&blob[8], &data_aa474, sizeof(data_aa474));
+            src = blob; len = 0x14; break;
+        }
+        case 0xaa: src = tiziano_ccm_a_linear; len = 0x24; break;
+        case 0xab: src = tiziano_ccm_t_linear; len = 0x24; break;
+        case 0xac: src = tiziano_ccm_d_linear; len = 0x24; break;
+        case 0xad: src = cm_ev_list;          len = 0x24; break;
+        case 0xae: src = cm_sat_list;         len = 0x24; break;
+        case 0xaf: src = tiziano_ccm_a_wdr;   len = 0x24; break;
+        case 0xb0: src = tiziano_ccm_t_wdr;   len = 0x24; break;
+        case 0xb1: src = tiziano_ccm_d_wdr;   len = 0x24; break;
+        case 0xb2: src = cm_ev_list_wdr;      len = 0x24; break;
+        case 0xb3: src = cm_sat_list_wdr;     len = 0x24; break;
+        case 0xb4: src = cm_awb_list;         len = 8;    break;
+    }
+
+    memcpy(out_buf, src, len);
+    *size_buf = len;
+    return 0;
+}
+
+
+int tisp_ccm_param_array_set(int param_id, void *in_buf, int *size_buf)
+{
+    if (!in_buf || !size_buf) {
+        pr_err("tisp_ccm_param_array_set: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+    if ((param_id - 0xa9) >= 0xc) {
+        pr_err("tisp_ccm_param_array_set: Unsupported ID 0x%x\n", param_id);
+        return -1;
+    }
+
+    void *dst = NULL; int len = 0;
+
+    switch (param_id) {
+        case 0xa9: {
+            /* Accept 0x14-byte blob; pluck fields we use */
+            uint8_t blob[0x14];
+            memcpy(blob, in_buf, sizeof(blob));
+            memcpy(&tiziano_ccm_dp_cfg, &blob[0], sizeof(tiziano_ccm_dp_cfg));
+            memcpy(&data_aa470,         &blob[4], sizeof(data_aa470));
+            memcpy(&data_aa474,         &blob[8], sizeof(data_aa474));
+            *size_buf = sizeof(blob);
+            jz_isp_ccm();
+            return 0;
+        }
+        case 0xaa: dst = tiziano_ccm_a_linear; len = 0x24; break;
+        case 0xab: dst = tiziano_ccm_t_linear; len = 0x24; break;
+        case 0xac: dst = tiziano_ccm_d_linear; len = 0x24; break;
+        case 0xad: dst = cm_ev_list;          len = 0x24; break;
+        case 0xae: dst = cm_sat_list;         len = 0x24; break;
+        case 0xaf: dst = tiziano_ccm_a_wdr;   len = 0x24; break;
+        case 0xb0: dst = tiziano_ccm_t_wdr;   len = 0x24; break;
+        case 0xb1: dst = tiziano_ccm_d_wdr;   len = 0x24; break;
+        case 0xb2: dst = cm_ev_list_wdr;      len = 0x24; break;
+        case 0xb3: dst = cm_sat_list_wdr;     len = 0x24; break;
+        case 0xb4: dst = cm_awb_list;         len = 8;    break;
+    }
+
+    memcpy(dst, in_buf, len);
+    *size_buf = len;
+    jz_isp_ccm();
     return 0;
 }
 
 int tisp_gamma_param_array_get(int param_id, void *out_buf, int *size_buf)
 {
-    pr_debug("tisp_gamma_param_array_get: ID=0x%x (stub)\n", param_id);
-    if (out_buf && size_buf) {
-        *size_buf = 0;
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_gamma_param_array_get: NULL buffer pointers\n");
+        return -EINVAL;
     }
+
+    const void *src = NULL; int len = 0;
+    if (param_id == 0x3c) {
+        src = tiziano_gamma_lut_linear; len = 0x102; /* BN: size 0x102 */
+    } else if (param_id == 0x3d) {
+        src = tiziano_gamma_lut_wdr;    len = 0x102;
+    } else {
+        pr_err("tisp_gamma_param_array_get: Unsupported ID 0x%x\n", param_id);
+        return -1;
+    }
+
+    memcpy(out_buf, src, len);
+    *size_buf = len;
+    return 0;
+}
+
+/* BN: setter updates LUT(s) and refreshes */
+int tisp_gamma_param_array_set(int param_id, void *in_buf, int *size_buf)
+{
+    if (!in_buf || !size_buf) return -EINVAL;
+    void *dst = NULL; int len = 0x102;
+    if (param_id == 0x3c) dst = tiziano_gamma_lut_linear;
+    else if (param_id == 0x3d) dst = tiziano_gamma_lut_wdr;
+    else { pr_err("tisp_gamma_param_array_set: Unsupported ID 0x%x\n", param_id); return -1; }
+
+    memcpy(dst, in_buf, len);
+    *size_buf = len;
+
+    /* Apply to hardware; BN also refreshes ADR/WDR gamma; we drive the primary LUT write */
+    tiziano_gamma_lut_parameter();
     return 0;
 }
 
@@ -4839,12 +4986,69 @@ int tisp_mdns_param_array_get(int param_id, void *out_buf, int *size_buf)
     return 0;
 }
 
+int tisp_mdns_param_array_set(int param_id, void *in_buf, int *size_buf)
+{
+    pr_err("tisp_mdns_param_array_set: Unsupported ID 0x%x (MDNS mapping pending)\n", param_id);
+    if (size_buf) *size_buf = 0;
+    return -EINVAL;
+}
+
+
 int tisp_ydns_param_array_get(int param_id, void *out_buf, int *size_buf)
 {
-    pr_debug("tisp_ydns_param_array_get: ID=0x%x (stub)\n", param_id);
-    if (out_buf && size_buf) {
-        *size_buf = 0;
+    if (!out_buf || !size_buf) return -EINVAL;
+    const void *src = NULL; int len = 0;
+    switch (param_id) {
+        case 0x3e6: src = &ydns_edge_out_array;   len = 4;     break;
+        case 0x3e7: src = &ydns_mv_thres0_array;  len = 0x24;  break;
+        case 0x3e8: src = &ydns_mv_thres1_array;  len = 0x24;  break;
+        case 0x3e9: src = &ydns_mv_thres2_array;  len = 0x24;  break;
+        case 0x3ea: src = &ydns_fus_level_array;  len = 0x24;  break;
+        case 0x3eb: src = &ydns_fus_min_thres_array; len = 0x24; break;
+        case 0x3ec: src = &ydns_fus_max_thres_array; len = 0x24; break;
+        case 0x3ed: src = &ydns_fus_sswei_array;  len = 0x24;  break;
+        case 0x3ee: src = &ydns_fus_sewei_array;  len = 0x24;  break;
+        case 0x3ef: src = &ydns_fus_mswei_array;  len = 0x24;  break;
+        case 0x3f0: src = &ydns_fus_mewei_array;  len = 0x24;  break;
+        case 0x3f1: src = &ydns_fus_uvwei_array;  len = 0x24;  break;
+        case 0x3f2: src = &ydns_edge_wei_array;   len = 0x24;  break;
+        case 0x3f3: src = &ydns_edge_div_array;   len = 0x24;  break;
+        case 0x3f4: src = &ydns_edge_thres_array; len = 0x24;  break;
+        default:
+            pr_err("tisp_ydns_param_array_get: Unsupported ID 0x%x\n", param_id);
+            return -1;
     }
+    memcpy(out_buf, src, len);
+    *size_buf = len;
+    return 0;
+}
+
+int tisp_ydns_param_array_set(int param_id, void *in_buf, int *size_buf)
+{
+    if (!in_buf || !size_buf) return -EINVAL;
+    void *dst = NULL; int len = 0;
+    switch (param_id) {
+        case 0x3e6: dst = &ydns_edge_out_array;   len = 4;     break;
+        case 0x3e7: dst = &ydns_mv_thres0_array;  len = 0x24;  break;
+        case 0x3e8: dst = &ydns_mv_thres1_array;  len = 0x24;  break;
+        case 0x3e9: dst = &ydns_mv_thres2_array;  len = 0x24;  break;
+        case 0x3ea: dst = &ydns_fus_level_array;  len = 0x24;  break;
+        case 0x3eb: dst = &ydns_fus_min_thres_array; len = 0x24; break;
+        case 0x3ec: dst = &ydns_fus_max_thres_array; len = 0x24; break;
+        case 0x3ed: dst = &ydns_fus_sswei_array;  len = 0x24;  break;
+        case 0x3ee: dst = &ydns_fus_sewei_array;  len = 0x24;  break;
+        case 0x3ef: dst = &ydns_fus_mswei_array;  len = 0x24;  break;
+        case 0x3f0: dst = &ydns_fus_mewei_array;  len = 0x24;  break;
+        case 0x3f1: dst = &ydns_fus_uvwei_array;  len = 0x24;  break;
+        case 0x3f2: dst = &ydns_edge_wei_array;   len = 0x24;  break;
+        case 0x3f3: dst = &ydns_edge_div_array;   len = 0x24;  break;
+        case 0x3f4: dst = &ydns_edge_thres_array; len = 0x24;  break;
+        default:
+            pr_err("tisp_ydns_param_array_set: Unsupported ID 0x%x\n", param_id);
+            return -1;
+    }
+    memcpy(dst, in_buf, len);
+    *size_buf = len;
     return 0;
 }
 
@@ -5507,9 +5711,6 @@ int tisp_wdr_param_array_set(int param_id, void *in_buf, int *size_buf)
 EXPORT_SYMBOL(data_b2e74);
 EXPORT_SYMBOL(tisp_g_af_zone);
 
-EXPORT_SYMBOL(tisp_lsc_param_array_set);
-EXPORT_SYMBOL(tisp_wdr_param_array_set);
-EXPORT_SYMBOL(tisp_gib_param_array_set);
 
 int tisp_blc_set_par_cfg(void *in_buf)
 {
@@ -5603,11 +5804,49 @@ int tisp_adr_set_par_cfg(void *in_buf)
     return 0;
 }
 int tisp_dmsc_set_par_cfg(void *in_buf) { return 0; }
-int tisp_ccm_set_par_cfg(void *in_buf) { return 0; }
-int tisp_gamma_set_par_cfg(void *in_buf) { return 0; }
+int tisp_ccm_set_par_cfg(void *in_buf)
+{
+    int total = 0, sz = 0; char *p = (char *)in_buf;
+    for (int i = 0xa9; i < 0xb5; ++i) {
+        if (tisp_ccm_param_array_set(i, p, &sz) != 0) return -EINVAL;
+        p += sz; total += sz;
+    }
+    pr_debug("tisp_ccm_set_par_cfg: total=%d\n", total);
+    return 0;
+}
+
+int tisp_gamma_set_par_cfg(void *in_buf)
+{
+    int sz = 0; char *p = (char *)in_buf;
+    if (tisp_gamma_param_array_set(0x3c, p, &sz) != 0) return -EINVAL;
+    p += sz;
+    if (tisp_gamma_param_array_set(0x3d, p, &sz) != 0) return -EINVAL;
+    pr_debug("tisp_gamma_set_par_cfg: total=%d\n", (int)(p - (char *)in_buf));
+    return 0;
+}
+
 int tisp_defog_set_par_cfg(void *in_buf) { return 0; }
-int tisp_mdns_set_par_cfg(void *in_buf) { return 0; }
-int tisp_ydns_set_par_cfg(void *in_buf) { return 0; }
+int tisp_mdns_set_par_cfg(void *in_buf)
+{
+    int total = 0, sz = 0; char *p = (char *)in_buf;
+    for (int i = 0x180; i < 0x357; ++i) {
+        if (tisp_mdns_param_array_set(i, p, &sz) != 0) return -EINVAL;
+        p += sz; total += sz;
+    }
+    pr_debug("tisp_mdns_set_par_cfg: total=%d\n", total);
+    return 0;
+}
+
+int tisp_ydns_set_par_cfg(void *in_buf)
+{
+    int total = 0, sz = 0; char *p = (char *)in_buf;
+    for (int i = 0x3e6; i < 0x3f5; ++i) {
+        if (tisp_ydns_param_array_set(i, p, &sz) != 0) return -EINVAL;
+        p += sz; total += sz;
+    }
+    pr_debug("tisp_ydns_set_par_cfg: total=%d\n", total);
+    return 0;
+}
 int tisp_bcsh_set_par_cfg(void *in_buf) { return 0; }
 int tisp_clm_set_par_cfg(void *in_buf) { return 0; }
 int tisp_ysp_set_par_cfg(void *in_buf) { return 0; }
@@ -5803,102 +6042,6 @@ int tisp_ae_param_array_get(int param_type, void *buffer, int *size)
             break;
         case 0x16: /* ae_comp_param */
 
-/* tisp_wdr_param_array_set_extended - remaining WDR parameter cases */
-int tisp_wdr_param_array_set_extended(int param_id, void *in_buf, int *size_buf)
-{
-    void *dest_ptr = NULL;
-    int data_size = 0;
-
-    switch (param_id) {
-        case 0x414: dest_ptr = &param_computerModle_software_in_array; data_size = 0x10; break;
-        case 0x415: dest_ptr = &param_deviationPara_software_in_array; data_size = 0x14; break;
-        case 0x416: dest_ptr = &param_ratioPara_software_in_array; data_size = 0x1c; break;
-        case 0x417: dest_ptr = &param_x_thr_software_in_array; data_size = 0x10; break;
-        case 0x418: dest_ptr = &param_y_thr_software_in_array; data_size = 0x10; break;
-        case 0x419: dest_ptr = &param_thrPara_software_in_array; data_size = 0x50; break;
-        case 0x41a: dest_ptr = &param_xy_pix_low_software_in_array; data_size = 0x58; break;
-        case 0x41b: dest_ptr = &param_motionThrPara_software_in_array; data_size = 0x44; break;
-        case 0x41c: dest_ptr = &param_d_thr_normal_software_in_array; data_size = 0x68; break;
-        case 0x41d: dest_ptr = &param_d_thr_normal1_software_in_array; data_size = 0x68; break;
-        case 0x41e: dest_ptr = &param_d_thr_normal2_software_in_array; data_size = 0x68; break;
-        case 0x41f: dest_ptr = &param_d_thr_normal_min_software_in_array; data_size = 0x68; break;
-        case 0x420: dest_ptr = &param_multiValueLow_software_in_array; data_size = 0x68; break;
-        case 0x421: dest_ptr = &param_multiValueHigh_software_in_array; data_size = 0x68; break;
-        case 0x422: dest_ptr = &param_d_thr_2_software_in_array; data_size = 0x68; break;
-        case 0x423: dest_ptr = &param_wdr_detial_para_software_in_array; data_size = 0x20; break;
-        case 0x424: dest_ptr = &param_wdr_thrLable_array; data_size = 0x6c; break;
-        case 0x425: dest_ptr = &param_wdr_dbg_out_array; data_size = 8; break;
-        case 0x426: dest_ptr = &wdr_ev_list; data_size = 0x24; break;
-        case 0x427: dest_ptr = &wdr_weight_b_in_list; data_size = 0x24; break;
-        case 0x428: dest_ptr = &wdr_weight_p_in_list; data_size = 0x24; break;
-        case 0x429: dest_ptr = &wdr_ev_list_deghost; data_size = 0x24; break;
-        case 0x42a: dest_ptr = &wdr_weight_in_list_deghost; data_size = 0x24; break;
-        case 0x42b: dest_ptr = &wdr_detail_w_in0_list; data_size = 0x24; break;
-        case 0x42c: dest_ptr = &wdr_detail_w_in1_list; data_size = 0x24; break;
-        case 0x42d: dest_ptr = &wdr_detail_w_in2_list; data_size = 0x24; break;
-        case 0x42e: dest_ptr = &wdr_detail_w_in3_list; data_size = 0x24; break;
-        case 0x42f: dest_ptr = &wdr_detail_w_in4_list; data_size = 0x24; break;
-        case 0x430: dest_ptr = &mdns_y_fspa_ref_fus_wei_224_wdr_array; data_size = 0x40; break;
-        case 0x431: dest_ptr = &param_wdr_tool_control_array; data_size = 0x38; break;
-        default:
-            pr_err("tisp_wdr_param_array_set_extended: Unhandled parameter ID 0x%x\n", param_id);
-            return -1;
-    }
-
-    memcpy(dest_ptr, in_buf, data_size);
-    *size_buf = data_size;
-    pr_debug("tisp_wdr_param_array_set_extended: ID=0x%x, size=%d\n", param_id, data_size);
-    return 0;
-}
-
-/* tisp_gib_param_array_set - Mirror of BN mapping */
-int tisp_gib_param_array_set(int param_id, void *in_buf, int *size_buf)
-{
-    if ((param_id - 0x3e) >= 0x16) {
-        pr_err("tisp_gib_param_array_set: Invalid parameter ID 0x%x\n", param_id);
-        return -1;
-    }
-    if (!in_buf || !size_buf) {
-        pr_err("tisp_gib_param_array_set: NULL buffer pointers\n");
-        return -EINVAL;
-    }
-
-    void *dst = NULL; int len = 0;
-    switch (param_id) {
-        case 0x3e: dst = &tiziano_gib_config_line; len = 0x30; break;
-        case 0x3f: dst = &tiziano_gib_r_g_linear; len = 0x8; break;
-        case 0x40: dst = &tiziano_gib_b_ir_linear; len = 0x8; break;
-        case 0x41: dst = &tiziano_gib_deirm_blc_r_linear; len = 0x24; break;
-        case 0x42: dst = &tiziano_gib_deirm_blc_gr_linear; len = 0x24; break;
-        case 0x43: dst = &tiziano_gib_deirm_blc_gb_linear; len = 0x24; break;
-        case 0x44: dst = &tiziano_gib_deirm_blc_b_linear; len = 0x24; break;
-        case 0x45: dst = &tiziano_gib_deirm_blc_ir_linear; len = 0x24; break;
-        case 0x46: dst = &gib_ir_point; len = 0x10; break;
-        case 0x47: dst = &gib_ir_reser; len = 0x3c; break;
-        case 0x48: dst = &tiziano_gib_deir_r_h; len = 0x84; break;
-        case 0x49: dst = &tiziano_gib_deir_g_h; len = 0x84; break;
-        case 0x4a: dst = &tiziano_gib_deir_b_h; len = 0x84; break;
-        case 0x4b: dst = &tiziano_gib_deir_r_m; len = 0x84; break;
-        case 0x4c: dst = &tiziano_gib_deir_g_m; len = 0x84; break;
-        case 0x4d: dst = &tiziano_gib_deir_b_m; len = 0x84; break;
-        case 0x4e: dst = &tiziano_gib_deir_r_l; len = 0x84; break;
-        case 0x4f: dst = &tiziano_gib_deir_g_l; len = 0x84; break;
-        case 0x50: dst = &tiziano_gib_deir_b_l; len = 0x84; break;
-        case 0x51: dst = &tiziano_gib_deir_matrix_h; len = 0x3c; break;
-        case 0x52: dst = &tiziano_gib_deir_matrix_m; len = 0x3c; break;
-        case 0x53: dst = &tiziano_gib_deir_matrix_l; len = 0x3c; break;
-    }
-    memcpy(dst, in_buf, len);
-    *size_buf = len;
-    /* BN: tiziano_gib_lut_parameter(); trig_set_deir = 1; -- left out without context */
-    return 0;
-}
-
-/* Export symbols for kernel module loading */
-EXPORT_SYMBOL(tisp_lsc_param_array_set);
-EXPORT_SYMBOL(tisp_wdr_param_array_set);
-EXPORT_SYMBOL(tisp_wdr_param_array_set_extended);
-EXPORT_SYMBOL(tisp_gib_param_array_set);
 
             source_ptr = &ae_comp_param;
             data_size = 0x18;
@@ -7135,7 +7278,7 @@ int tiziano_awb_init(uint32_t height, uint32_t width)
 }
 
 /* Gamma LUT arrays - Binary Ninja reference */
-static uint16_t tiziano_gamma_lut_linear[256] = {
+uint16_t tiziano_gamma_lut_linear[256] = {
     0x000, 0x008, 0x010, 0x018, 0x020, 0x028, 0x030, 0x038,
     0x040, 0x048, 0x050, 0x058, 0x060, 0x068, 0x070, 0x078,
     0x080, 0x088, 0x090, 0x098, 0x0A0, 0x0A8, 0x0B0, 0x0B8,
@@ -7170,7 +7313,7 @@ static uint16_t tiziano_gamma_lut_linear[256] = {
     0x7C0, 0x7C8, 0x7D0, 0x7D8, 0x7E0, 0x7E8, 0x7F0, 0x7F8
 };
 
-static uint16_t tiziano_gamma_lut_wdr[256] = {
+uint16_t tiziano_gamma_lut_wdr[256] = {
     0x000, 0x006, 0x00C, 0x012, 0x018, 0x01E, 0x024, 0x02A,
     0x030, 0x036, 0x03C, 0x042, 0x048, 0x04E, 0x054, 0x05A,
     0x060, 0x066, 0x06C, 0x072, 0x078, 0x07E, 0x084, 0x08A,
@@ -7571,17 +7714,21 @@ int tiziano_lsc_init(void)
 }
 
 /* CCM parameter arrays - Binary Ninja reference */
-static int32_t tiziano_ccm_a_linear[9] = {0x100, 0, 0, 0, 0x100, 0, 0, 0, 0x100}; /* Identity matrix */
-static int32_t tiziano_ccm_t_linear[9] = {0x100, 0, 0, 0, 0x100, 0, 0, 0, 0x100};
-static int32_t tiziano_ccm_d_linear[9] = {0x100, 0, 0, 0, 0x100, 0, 0, 0, 0x100};
-static int32_t tiziano_ccm_a_wdr[9] = {0x120, -0x10, -0x10, -0x10, 0x120, -0x10, -0x10, -0x10, 0x120}; /* WDR enhanced */
-static int32_t tiziano_ccm_t_wdr[9] = {0x120, -0x10, -0x10, -0x10, 0x120, -0x10, -0x10, -0x10, 0x120};
-static int32_t tiziano_ccm_d_wdr[9] = {0x120, -0x10, -0x10, -0x10, 0x120, -0x10, -0x10, -0x10, 0x120};
+int32_t tiziano_ccm_a_linear[9] = {0x100, 0, 0, 0, 0x100, 0, 0, 0, 0x100}; /* Identity matrix */
+int32_t tiziano_ccm_t_linear[9] = {0x100, 0, 0, 0, 0x100, 0, 0, 0, 0x100};
+int32_t tiziano_ccm_d_linear[9] = {0x100, 0, 0, 0, 0x100, 0, 0, 0, 0x100};
+int32_t tiziano_ccm_a_wdr[9] = {0x120, -0x10, -0x10, -0x10, 0x120, -0x10, -0x10, -0x10, 0x120}; /* WDR enhanced */
+int32_t tiziano_ccm_t_wdr[9] = {0x120, -0x10, -0x10, -0x10, 0x120, -0x10, -0x10, -0x10, 0x120};
+int32_t tiziano_ccm_d_wdr[9] = {0x120, -0x10, -0x10, -0x10, 0x120, -0x10, -0x10, -0x10, 0x120};
 
-static uint32_t cm_ev_list[9] = {0x400, 0x800, 0x1000, 0x2000, 0x4000, 0x8000, 0x10000, 0x20000, 0x40000};
-static uint32_t cm_sat_list[9] = {0x80, 0x90, 0x100, 0x110, 0x120, 0x130, 0x140, 0x150, 0x160};
-static uint32_t cm_ev_list_wdr[9] = {0x200, 0x400, 0x800, 0x1000, 0x2000, 0x4000, 0x8000, 0x10000, 0x20000};
-static uint32_t cm_sat_list_wdr[9] = {0x70, 0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0};
+uint32_t cm_ev_list[9] = {0x400, 0x800, 0x1000, 0x2000, 0x4000, 0x8000, 0x10000, 0x20000, 0x40000};
+uint32_t cm_sat_list[9] = {0x80, 0x90, 0x100, 0x110, 0x120, 0x130, 0x140, 0x150, 0x160};
+uint32_t cm_ev_list_wdr[9] = {0x200, 0x400, 0x800, 0x1000, 0x2000, 0x4000, 0x8000, 0x10000, 0x20000};
+uint32_t cm_sat_list_wdr[9] = {0x70, 0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0};
+
+
+/* BN: AWB 2-entry list used by CCM param_id 0xb4 (size 8) */
+uint32_t cm_awb_list[2] = {0, 0};
 
 /* CCM control structures - Binary Ninja reference */
 static struct {
@@ -7614,9 +7761,9 @@ static uint32_t data_c52f4 = 0;         /* Previous CT */
 static uint32_t data_c52fc = 0x100;     /* Saturation value */
 static uint32_t data_c52f8 = 0x64;      /* CT threshold */
 static uint32_t data_c52f0 = 0x28;      /* EV threshold */
-static uint32_t tiziano_ccm_dp_cfg = 0; /* DP config */
-static uint32_t data_aa470 = 0x1000;    /* DP value 1 */
-static uint32_t data_aa474 = 0x1000;    /* DP value 2 */
+uint32_t tiziano_ccm_dp_cfg = 0; /* DP config */
+uint32_t data_aa470 = 0x1000;    /* DP value 1 */
+uint32_t data_aa474 = 0x1000;    /* DP value 2 */
 static uint32_t data_aa47c = 0x1000;    /* DP value 3 */
 static uint32_t data_aa478 = 0x1000;    /* DP value 4 */
 
