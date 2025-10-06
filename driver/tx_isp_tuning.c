@@ -268,6 +268,23 @@ static uint32_t mdns_y_dtb_squ_en_array[0x24/4] = {0};         /* 0x1b2 */
 static uint32_t mdns_y_dtb_squ_div_opt_array[0x24/4] = {0};    /* 0x1b3 */
 static uint32_t mdns_y_ass_win_opt_array[0x24/4] = {0};        /* 0x1b4 */
 static uint32_t mdns_y_ass_div_opt_array[0x24/4] = {0};        /* 0x1b5 */
+static uint32_t mdns_y_hist_sad_en_array[0x24/4] = {0};        /* 0x1b6 */
+static uint32_t mdns_y_hist_sta_en_array[0x24/4] = {0};        /* 0x1b7 */
+static uint32_t mdns_y_hist_num_thres_array[0x24/4] = {0};     /* 0x1b8 */
+static uint32_t mdns_y_hist_cmp_thres0_array[0x24/4] = {0};    /* 0x1b9 */
+static uint32_t mdns_y_hist_cmp_thres1_array[0x24/4] = {0};    /* 0x1ba */
+static uint32_t mdns_y_hist_cmp_thres2_array[0x24/4] = {0};    /* 0x1bb */
+static uint32_t mdns_y_hist_cmp_thres3_array[0x24/4] = {0};    /* 0x1bc */
+static uint32_t mdns_y_hist_thres0_array[0x24/4] = {0};        /* 0x1bd */
+static uint32_t mdns_y_hist_thres1_array[0x24/4] = {0};        /* 0x1be */
+static uint32_t mdns_y_hist_thres2_array[0x24/4] = {0};        /* 0x1bf */
+static uint32_t mdns_y_hist_thres3_array[0x24/4] = {0};        /* 0x1c0 */
+static uint32_t mdns_y_edge_thr_adj_seg_array[0x24/4] = {0};   /* 0x1c1 */
+static uint32_t mdns_y_luma_thr_adj_seg_array[0x24/4] = {0};   /* 0x1c2 */
+static uint32_t mdns_y_dtb_thr_adj_seg_array[0x24/4] = {0};    /* 0x1c3 */
+static uint32_t mdns_y_ass_thr_adj_seg_array[0x24/4] = {0};    /* 0x1c4 */
+static uint32_t mdns_y_corner_thr_adj_value_array[0x24/4] = {0}; /* 0x1c5 */
+
 
 
 
@@ -5118,6 +5135,23 @@ int tisp_mdns_param_array_set(int param_id, void *in_buf, int *size_buf)
     case 0x1b3: memcpy(&mdns_y_dtb_squ_div_opt_array, in_buf, 0x24); *size_buf = 0x24; return 0;
     case 0x1b4: memcpy(&mdns_y_ass_win_opt_array, in_buf, 0x24); *size_buf = 0x24; return 0;
     case 0x1b5: memcpy(&mdns_y_ass_div_opt_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+
+    case 0x1b6: memcpy(&mdns_y_hist_sad_en_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1b7: memcpy(&mdns_y_hist_sta_en_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1b8: memcpy(&mdns_y_hist_num_thres_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1b9: memcpy(&mdns_y_hist_cmp_thres0_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1ba: memcpy(&mdns_y_hist_cmp_thres1_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1bb: memcpy(&mdns_y_hist_cmp_thres2_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1bc: memcpy(&mdns_y_hist_cmp_thres3_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1bd: memcpy(&mdns_y_hist_thres0_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1be: memcpy(&mdns_y_hist_thres1_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1bf: memcpy(&mdns_y_hist_thres2_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1c0: memcpy(&mdns_y_hist_thres3_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1c1: memcpy(&mdns_y_edge_thr_adj_seg_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1c2: memcpy(&mdns_y_luma_thr_adj_seg_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1c3: memcpy(&mdns_y_dtb_thr_adj_seg_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1c4: memcpy(&mdns_y_ass_thr_adj_seg_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1c5: memcpy(&mdns_y_corner_thr_adj_value_array, in_buf, 0x24); *size_buf = 0x24; return 0;
 
 
     default:
