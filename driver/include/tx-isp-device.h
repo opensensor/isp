@@ -613,7 +613,7 @@ void tx_isp_subdev_deinit(struct tx_isp_subdev *sd);
 
 /* Provide event routing API used by core/VIC; visible to external t31 sources after sync */
 struct v4l2_subdev;
-int tx_isp_send_event_to_remote(struct v4l2_subdev *sd, unsigned int event, void *data);
+int tx_isp_send_event_to_remote(struct tx_isp_subdev *sd, unsigned int event, void *data);
 
 
 static inline void tx_isp_set_module_nodeops(struct tx_isp_module *module, struct file_operations *ops)

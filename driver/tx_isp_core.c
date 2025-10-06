@@ -2284,7 +2284,7 @@ int ispcore_frame_channel_dqbuf(void* arg1, void* arg2)
         return 0;
 
     /* Use already-declared symbol; no need for local extern */
-    tx_isp_send_event_to_remote(arg1, 0x3000006, arg2);
+    tx_isp_send_event_to_remote((struct tx_isp_subdev*)arg1, 0x3000006, arg2);
     return 0;
 }
 

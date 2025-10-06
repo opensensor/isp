@@ -88,7 +88,7 @@ static int tx_isp_register_event_handler(struct tx_isp_subdev *sd,
 }
 
 /* Hybrid tx_isp_send_event_to_remote: try registered dispatch; fallback to ops */
-int tx_isp_send_event_to_remote(struct v4l2_subdev *sd, unsigned int event, void *data)
+int tx_isp_send_event_to_remote(struct tx_isp_subdev *sd, unsigned int event, void *data)
 {
     pr_info("*** tx_isp_send_event_to_remote: sd=%p, event=0x%x ***\n", sd, event);
 

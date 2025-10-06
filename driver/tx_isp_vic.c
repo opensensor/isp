@@ -2985,6 +2985,29 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                         pr_err("*** ERROR: VIC registers not available for delayed enable ***\n");
                     }
 
+                        /* Safety: if VIC control (0x300) is still 0 here, force frame-channel start */
+                        if (vic_dev && vic_dev->vic_regs) {
+                            u32 ctrl_now = readl(vic_dev->vic_regs + 0x300);
+                            if (ctrl_now == 0) {
+                                pr_info("*** vic_core_s_stream: ctrl==0 after enable; forcing ispvic_frame_channel_s_stream(ON) ***\n");
+                                (void) ispvic_frame_channel_s_stream(vic_dev, 1);
+                            }
+
+    /* Safety outside of the initialization branch as well: ensure control set when already in state 4 */
+    if (enable && ourISPdev && ourISPdev->vic_dev) {
+        struct tx_isp_vic_device *vic_chk = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+        if (vic_chk->vic_regs) {
+            u32 ctrl_now2 = readl(vic_chk->vic_regs + 0x300);
+            if (ctrl_now2 == 0) {
+                pr_info("*** vic_core_s_stream: post-path ctrl==0; forcing ispvic_frame_channel_s_stream(ON) ***\n");
+                (void) ispvic_frame_channel_s_stream(vic_chk, 1);
+            }
+        }
+    }
+
+                        }
+
+
                     pr_info("vic_core_s_stream: tx_isp_vic_start returned %d, state -> 4\n", ret);
                     return ret;
                 }

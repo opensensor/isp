@@ -623,6 +623,7 @@ static struct tx_isp_subdev_ops csi_subdev_ops;
 /* Reference driver function declarations - Binary Ninja exact names */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);  /* FIXED: Correct signature to match tx_isp_vic.c */
 int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable);  /* FIXED: Forward declaration for CSI streaming */
+int csi_video_s_stream(struct tx_isp_subdev *sd, int enable);       /* Real CSI streaming (in tx_isp_csi.c) */
 void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev);
 static int ispvic_frame_channel_qbuf(struct tx_isp_vic_device *vic_dev, void *buffer);
 static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);
@@ -1628,8 +1629,8 @@ err_free_dev:
     return ret;
 }
 
-/* csi_video_s_stream - Binary Ninja exact implementation */
-static int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
+/* csi_video_s_stream - Binary Ninja exact implementation (renamed local copy) */
+static int csi_video_s_stream_BN_local(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_csi_device *csi_dev;
     struct tx_isp_sensor_attribute *sensor_attr;
@@ -2717,7 +2718,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_info("*** REQBUFS: Channel %d sending 0x3000008 with buffer_count=%d ***\n",
                         channel, reqbuf.count);
                 {
-                    int er = tx_isp_send_event_to_remote_local(&vic_dev->sd, 0x3000008, &event_data);
+                    int er = tx_isp_send_event_to_remote(&vic_dev->sd, 0x3000008, &event_data);
                     if (er == 0) {
                         pr_info("*** REQBUFS: VIC 0x3000008 SUCCESS ***\n");
                     } else if (er == 0xfffffdfd) {
@@ -2821,7 +2822,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_info("*** Channel %d: QBUF - Enqueue via 0x3000005 phys=0x%x idx=%u ***\n",
                     channel, buffer_phys_addr, node.buffer_index);
             {
-                int event_result = tx_isp_send_event_to_remote_local(&vic_dev_buf->sd, 0x3000005, &node);
+                int event_result = tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000005, &node);
                 if (event_result == 0) {
                     pr_info("*** Channel %d: BUFFER_ENQUEUE SUCCESS ***\n", channel);
                 } else if (event_result == 0xfffffdfd) {
@@ -3099,7 +3100,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 int ch = 0; /* VIC is owned by channel 0; force ch0 regardless of caller */
                 pr_info("*** CHANNEL %d STREAMON: SENDING FRAME STREAMON EVENT (0x3000003) TO VIC AS ch=0 ***\n", channel);
                 {
-                    int rc = tx_isp_send_event_to_remote_local(&vic->sd, 0x3000003, &ch);
+                    int rc = tx_isp_send_event_to_remote(&vic->sd, 0x3000003, &ch);
                     if (rc == 0xfffffdfd || rc < 0) {
                         pr_info("*** STREAMON fallback: calling ispvic_frame_channel_s_stream directly (rc=%d) ***\n", rc);
                         (void) ispvic_frame_channel_s_stream(vic, 1);
@@ -3654,7 +3655,7 @@ static struct tx_isp_subdev_video_ops sensor_subdev_video_ops = {
 
 /* CSI video operations structure - CRITICAL for tx_isp_video_link_stream */
 static struct tx_isp_subdev_video_ops csi_video_ops = {
-    .s_stream = csi_video_s_stream_impl,
+    .s_stream = csi_video_s_stream,
 };
 
 /* CRITICAL FIX: stored_sensor_ops moved to top of file for global access */
@@ -5193,27 +5194,10 @@ int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
 /* CSI video streaming function - MIPS-SAFE implementation */
 int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable)
 {
-    pr_info("*** CSI VIDEO STREAMING %s - MIPS-SAFE implementation ***\n", enable ? "ENABLE" : "DISABLE");
-
-    if (enable) {
-        struct tx_isp_csi_device *csi_dev = ourISPdev->csi_dev;
-        /* CRITICAL FIX: State 4 doesn't exist! Use CSI_STATE_ACTIVE (2) for streaming */
-        csi_dev->state = CSI_STATE_ACTIVE; /* 2 = ACTIVE, not 4 (invalid) */
-        pr_info("*** MIPS-SAFE: CSI device state set to ACTIVE (%d) ***\n", csi_dev->state);
-    } else {
-        pr_info("*** MIPS-SAFE: CSI streaming disable ***\n");
-
-        /* MIPS SAFE: Disable CSI streaming state */
-            struct tx_isp_csi_device *csi_dev = ourISPdev->csi_dev;
-            /* CRITICAL FIX: State 3 = CSI_STATE_ERROR! Use CSI_STATE_IDLE (1) for disable */
-            csi_dev->state = CSI_STATE_IDLE; /* 1 = IDLE, not 3 = ERROR */
-            pr_info("*** MIPS-SAFE: CSI device state set to IDLE (%d) ***\n", csi_dev->state);
-
-    }
-
-    pr_info("*** CSI VIDEO STREAMING: MIPS-SAFE completion - no dangerous register access ***\n");
-    return 0; /* Always return success to prevent cascade failures */
+    /* Delegate to the full CSI streaming implementation that programs CSI registers */
+    return csi_video_s_stream(sd, enable);
 }
+
 
 /* vic_sensor_ops_ioctl - FIXED with proper struct member access */
 static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
@@ -6497,7 +6481,7 @@ static int __enqueue_in_driver(void *buffer_struct)
         struct tx_isp_subdev *vic_sd = &vic_dev->sd;
         void *event_data = buffer_struct;  /* Pass node pointer directly */
         pr_info("__enqueue_in_driver: Sending BUFFER_ENQUEUE (0x3000005) to VIC\n");
-        result = tx_isp_send_event_to_remote_local(vic_sd, 0x3000005, event_data);
+        result = tx_isp_send_event_to_remote(vic_sd, 0x3000005, event_data);
         if (result != 0 && result != 0xfffffdfd) {
             pr_err("__enqueue_in_driver: flags = 0x%08x\n", result);
         }

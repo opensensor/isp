@@ -80,7 +80,6 @@
 #define ISP_TUNING_CID_AE_HIST_ORIGIN 0x8000031
 
 // Size definitions from decompiled AF zone function (0x384 = 900 bytes)
-#define MAX_AF_ZONES     225    // Typical 15x15 zone grid = 225 * 4 bytes = 900 bytes
 
 // Histogram/AE definitions from earlier decompiled code
 #define MAX_AE_ZONES     225    // Same 15x15 grid as AF
@@ -136,17 +135,6 @@
 #define ISP_BYPASS_CTRL       0x0004  // Base + offset for bypass control
 #define ISP_ANTIFLICKER_CTRL  0x0008  // Base + offset for antiflicker
 
-#define ISP_CTRL_REG          0x00
-#define ISP_LINK_ENABLE_REG   0x04
-#define ISP_ROUTE_REG         0x08
-#define ISP_BYPASS_REG        0x0C
-
-
-/* ISP AF Zone register definitions */
-#define ISP_AF_ZONE_BASE      0x13380000   // Base address for AF zone registers
-#define ISP_AF_ZONE_METRICS   0x00         // Offset to zone metrics
-#define ISP_AF_ZONE_STATUS    0x40         // Offset to zone status
-#define ISP_AF_ZONE_CONFIG    0x44         // Offset to zone configuration
 
 /* ISP Pipeline Register Structure */
 // Strucure for LIBIMP
@@ -771,8 +759,6 @@ struct isp_channel_event {
 #endif
 
 // From OEM driver, netlink protocol setup
-#define ISP_NETLINK_PROTO 0x17
-#define ISP_NETLINK_GROUP 0xca624
 
 /* Frame States - must match libimp */
 #define FRAME_STATE_FREE     0  // Initial state
@@ -782,14 +768,6 @@ struct isp_channel_event {
 #define FRAME_STATE_ERROR    4  // Error state
 
 /* ISP Event types */
-#define ISP_EVENT_BUFFER_REQUEST  0x1000
-#define ISP_EVENT_BUFFER_ENQUEUE  0x1001
-#define ISP_EVENT_BUFFER_DONE     0x1002
-#define ISP_EVENT_FRAME_DONE      0x1003
-#define ISP_EVENT_STATS_READY     0x1004
-#define ISP_EVENT_STREAM_START    0x1005
-#define ISP_EVENT_STREAM_CANCEL   0x1006
-#define ISP_EVENT_QUEUE_FREE      0x1007
 
 /* Event handler function type */
 typedef int (*isp_event_cb)(void *priv, u32 event, void *data);
@@ -1020,14 +998,6 @@ struct frame_entry { // Must match OEM offsets exactly
 #define ISP_AE_HIST_DATA        (ISP_AE_HIST_BASE + 0x40)
 
 /* Direction bits */
-#define _IOC_NONE   0U
-#define _IOC_WRITE  1U  /* userspace writing to kernel, aka "IN" */
-#define _IOC_READ   2U  /* userspace reading from kernel, aka "OUT" */
-
-/* Check the direction */
-#define IOC_IN      (_IOC_WRITE << _IOC_DIRSHIFT)
-#define IOC_OUT     (_IOC_READ << _IOC_DIRSHIFT)
-#define IOC_INOUT   (((_IOC_WRITE|_IOC_READ) << _IOC_DIRSHIFT))
 
 #define BCSH_SVALUE_REG     0x100  // Update with actual register offset
 #define BCSH_SMAX_REG       0x104
