@@ -13,29 +13,6 @@ struct tx_isp_config;
 struct tx_isp_sensor_attribute;
 
 /* VIC Constants */
-#define VIC_MAX_CHAN        2
-
-/* VIC Register Definitions */
-#define VIC_CTRL            0x00
-#define VIC_STATUS          0x04
-#define VIC_BUFFER_ADDR     0x08
-#define VIC_FRAME_SIZE      0x0C
-#define VIC_INT_STATUS      0x10
-#define VIC_INT_MASK        0x14
-
-/* VIC Control Register Bits */
-#define VIC_CTRL_EN         BIT(0)
-#define VIC_CTRL_START      BIT(1)
-#define VIC_CTRL_STOP       BIT(2)
-#define VIC_CTRL_RST        BIT(3)
-
-/* VIC Status Register Bits */
-#define STATUS_BUSY         BIT(0)
-#define STATUS_IDLE         BIT(1)
-
-/* VIC Interrupt Bits */
-#define INT_FRAME_DONE      BIT(0)
-#define INT_ERROR           BIT(1)
 
 extern uint32_t vic_start_ok;  /* Global VIC interrupt enable flag declaration */
 

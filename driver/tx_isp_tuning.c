@@ -340,8 +340,6 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
 uint32_t system_reg_read(u32 reg);
 
 /* ISP register base definitions for proper alignment */
-#define ISP_AE_STATE_BASE    0x10000
-#define ISP_AF_ZONE_BASE     0x12000
 
 /* Forward declaration for release function */
 int isp_core_tuning_release(struct tx_isp_dev *dev);
@@ -4043,43 +4041,6 @@ int tisp_lsc_param_array_get(int param_id, void *out_buf, int *size_buf)
             source_ptr = &lsc_mesh_scale;
             data_size = 4;
 
-/* tisp_lsc_param_array_set - Binary Ninja EXACT mirror of GET mapping */
-int tisp_lsc_param_array_set(int param_id, void *in_buf, int *size_buf)
-{
-    if ((param_id - 0x54) >= 0xb) {
-        pr_err("tisp_lsc_param_array_set: Invalid parameter ID 0x%x\n", param_id);
-        return -1;
-    }
-    if (!in_buf || !size_buf) {
-        pr_err("tisp_lsc_param_array_set: NULL buffer pointers\n");
-        return -EINVAL;
-    }
-
-    void *dest_ptr = NULL;
-    int data_size = 0;
-
-    switch (param_id) {
-        case 0x54:  dest_ptr = &data_9a428; data_size = 4; break;
-        case 0x55:  dest_ptr = &lsc_mesh_scale; data_size = 4; break;
-        case 0x56:  dest_ptr = &data_9a424; data_size = 4; break;
-        case 0x57:  dest_ptr = &lsc_mesh_size; data_size = 8; break;
-        case 0x58:  dest_ptr = &data_9a410; data_size = 0x10; break;
-        case 0x59:  dest_ptr = &lsc_a_lut; data_size = 0x1ffc; break;
-        case 0x5a:  dest_ptr = &lsc_t_lut; data_size = 0x1ffc; break;
-        case 0x5b:  dest_ptr = &lsc_d_lut; data_size = 0x1ffc; break;
-        case 0x5c:  dest_ptr = &lsc_mesh_str; data_size = 0x24; break;
-        case 0x5d:  dest_ptr = &lsc_mesh_str_wdr; data_size = 0x24; break;
-        case 0x5e:  dest_ptr = &lsc_mean_en; data_size = 4; break;
-        default:
-            pr_err("tisp_lsc_param_array_set: Unhandled parameter ID 0x%x\n", param_id);
-            return -1;
-    }
-
-    memcpy(dest_ptr, in_buf, data_size);
-    *size_buf = data_size;
-    pr_debug("tisp_lsc_param_array_set: ID=0x%x, size=%d\n", param_id, data_size);
-    return 0;
-}
 
 
             break;
@@ -4159,101 +4120,9 @@ int tisp_wdr_param_array_get(int param_id, void *out_buf, int *size_buf)
             data_size = 0x80;
             break;
 
-/* tisp_wdr_param_array_set - Binary Ninja mirror of GET mapping (first batch) */
-int tisp_wdr_param_array_set(int param_id, void *in_buf, int *size_buf)
-{
-    if ((param_id - 0x3ff) >= 0x33) {
-        pr_err("tisp_wdr_param_array_set: Invalid parameter ID 0x%x\n", param_id);
-        return -1;
-    }
-    if (!in_buf || !size_buf) {
-        pr_err("tisp_wdr_param_array_set: NULL buffer pointers\n");
-        return -EINVAL;
-    }
 
-    void *dest_ptr = NULL;
-    int data_size = 0;
 
-    switch (param_id) {
-        case 0x3ff: dest_ptr = &param_wdr_para_array; data_size = 0x28; break;
-        case 0x400: dest_ptr = &mdns_c_luma_wei_adj_value0_array; data_size = 0x80; break;
-        case 0x401: dest_ptr = &param_wdr_weightLUT02_array; data_size = 0x80; break;
-        case 0x402: dest_ptr = &param_openRatioMove0_array; data_size = 0x10; break;
-        case 0x403: dest_ptr = &param_openRatioMove1_array; data_size = 0x10; break;
-        case 0x404: dest_ptr = &param_openRatioMove2_array; data_size = 0x10; break;
-        case 0x405: dest_ptr = &param_closeRatioMove0_array; data_size = 0x10; break;
-        case 0x406: dest_ptr = &param_closeRatioMove1_array; data_size = 0x10; break;
-        case 0x407: dest_ptr = &param_closeRatioMove2_array; data_size = 0x10; break;
-        case 0x408: dest_ptr = &param_aeStren_array; data_size = 0x24; break;
-        case 0x409: dest_ptr = &param_dehazeThre_array; data_size = 0x24; break;
-        case 0x40a: dest_ptr = &param_specClipSharpenThr_a; data_size = 0x80; break;
-        case 0x40b: dest_ptr = &param_specClipSharpenThr_t; data_size = 0x80; break;
-        case 0x40c: dest_ptr = &param_specClipSharpenThr_d; data_size = 0x80; break;
-        case 0x40d: dest_ptr = &param_wdr_R1_Array; data_size = 0x14; break;
-        case 0x40e: dest_ptr = &param_wdr_R2_Array; data_size = 0x24; break;
-        case 0x40f: dest_ptr = &param_wdr_master_array; data_size = 0x4c; break;
-        case 0x410: dest_ptr = &param_Nr_Wdr_array; data_size = 0x24; break;
-        case 0x411: dest_ptr = &param_wdr_ui_para_array; data_size = 0x2c; break;
-        case 0x412: dest_ptr = &param_smallInfo_array; data_size = 0x28; break;
-        case 0x413: dest_ptr = &param_wdr_thrLable_array; data_size = 0x6c; break;
-        default:
-            /* Delegate remaining cases */
-            return tisp_wdr_param_array_set_extended(param_id, in_buf, size_buf);
-    }
 
-    memcpy(dest_ptr, in_buf, data_size);
-    *size_buf = data_size;
-    pr_debug("tisp_wdr_param_array_set: ID=0x%x, size=%d\n", param_id, data_size);
-    return 0;
-}
-
-/* tisp_wdr_param_array_set_extended - remaining WDR parameter cases */
-int tisp_wdr_param_array_set_extended(int param_id, void *in_buf, int *size_buf)
-{
-    void *dest_ptr = NULL;
-    int data_size = 0;
-
-    switch (param_id) {
-        case 0x414: dest_ptr = &param_computerModle_software_in_array; data_size = 0x10; break;
-        case 0x415: dest_ptr = &param_deviationPara_software_in_array; data_size = 0x14; break;
-        case 0x416: dest_ptr = &param_ratioPara_software_in_array; data_size = 0x1c; break;
-        case 0x417: dest_ptr = &param_x_thr_software_in_array; data_size = 0x10; break;
-        case 0x418: dest_ptr = &param_y_thr_software_in_array; data_size = 0x10; break;
-        case 0x419: dest_ptr = &param_thrPara_software_in_array; data_size = 0x50; break;
-        case 0x41a: dest_ptr = &param_xy_pix_low_software_in_array; data_size = 0x58; break;
-        case 0x41b: dest_ptr = &param_motionThrPara_software_in_array; data_size = 0x44; break;
-        case 0x41c: dest_ptr = &param_d_thr_normal_software_in_array; data_size = 0x68; break;
-        case 0x41d: dest_ptr = &param_d_thr_normal1_software_in_array; data_size = 0x68; break;
-        case 0x41e: dest_ptr = &param_d_thr_normal2_software_in_array; data_size = 0x68; break;
-        case 0x41f: dest_ptr = &param_d_thr_normal_min_software_in_array; data_size = 0x68; break;
-        case 0x420: dest_ptr = &param_multiValueLow_software_in_array; data_size = 0x68; break;
-        case 0x421: dest_ptr = &param_multiValueHigh_software_in_array; data_size = 0x68; break;
-        case 0x422: dest_ptr = &param_d_thr_2_software_in_array; data_size = 0x68; break;
-        case 0x423: dest_ptr = &param_wdr_detial_para_software_in_array; data_size = 0x20; break;
-        case 0x424: dest_ptr = &param_wdr_thrLable_array; data_size = 0x6c; break;
-        case 0x425: dest_ptr = &param_wdr_dbg_out_array; data_size = 8; break;
-        case 0x426: dest_ptr = &wdr_ev_list; data_size = 0x24; break;
-        case 0x427: dest_ptr = &wdr_weight_b_in_list; data_size = 0x24; break;
-        case 0x428: dest_ptr = &wdr_weight_p_in_list; data_size = 0x24; break;
-        case 0x429: dest_ptr = &wdr_ev_list_deghost; data_size = 0x24; break;
-        case 0x42a: dest_ptr = &wdr_weight_in_list_deghost; data_size = 0x24; break;
-        case 0x42b: dest_ptr = &wdr_detail_w_in0_list; data_size = 0x24; break;
-        case 0x42c: dest_ptr = &wdr_detail_w_in1_list; data_size = 0x24; break;
-        case 0x42d: dest_ptr = &wdr_detail_w_in2_list; data_size = 0x24; break;
-        case 0x42e: dest_ptr = &wdr_detail_w_in3_list; data_size = 0x24; break;
-        case 0x42f: dest_ptr = &wdr_detail_w_in4_list; data_size = 0x24; break;
-        case 0x430: dest_ptr = &mdns_y_fspa_ref_fus_wei_224_wdr_array; data_size = 0x40; break;
-        case 0x431: dest_ptr = &param_wdr_tool_control_array; data_size = 0x38; break;
-        default:
-            pr_err("tisp_wdr_param_array_set_extended: Unhandled parameter ID 0x%x\n", param_id);
-            return -1;
-    }
-
-    memcpy(dest_ptr, in_buf, data_size);
-    *size_buf = data_size;
-    pr_debug("tisp_wdr_param_array_set_extended: ID=0x%x, size=%d\n", param_id, data_size);
-    return 0;
-}
 
         case 0x401:  /* param_wdr_weightLUT02_array */
             source_ptr = &param_wdr_weightLUT02_array;
@@ -4437,6 +4306,8 @@ int tisp_wdr_param_array_get_extended(int param_id, void *out_buf, int *size_buf
             source_ptr = &wdr_weight_p_in_list;
             data_size = 0x24;
             break;
+
+
         case 0x429:  /* wdr_ev_list_deghost */
             source_ptr = &wdr_ev_list_deghost;
             data_size = 0x24;
@@ -4569,6 +4440,8 @@ int tisp_dpc_param_array_get(int param_id, void *out_buf, int *size_buf)
             data_size = 0x24;
             break;
         case 0xf6:  /* dpc_d_m2_p3_d2_thres_array */
+
+
             source_ptr = &dpc_d_m2_p3_d2_thres_array;
             data_size = 0x24;
             break;
@@ -5278,48 +5151,6 @@ int tisp_dpc_get_par_cfg(void *out_buf, void *size_buf)
     int temp_size = 0;
 
 
-/* tisp_gib_param_array_set - Mirror of BN mapping */
-int tisp_gib_param_array_set(int param_id, void *in_buf, int *size_buf)
-{
-    if ((param_id - 0x3e) >= 0x16) {
-        pr_err("tisp_gib_param_array_set: Invalid parameter ID 0x%x\n", param_id);
-        return -1;
-    }
-    if (!in_buf || !size_buf) {
-        pr_err("tisp_gib_param_array_set: NULL buffer pointers\n");
-        return -EINVAL;
-    }
-
-    void *dst = NULL; int len = 0;
-    switch (param_id) {
-        case 0x3e: dst = &tiziano_gib_config_line; len = 0x30; break;
-        case 0x3f: dst = &tiziano_gib_r_g_linear; len = 0x8; break;
-        case 0x40: dst = &tiziano_gib_b_ir_linear; len = 0x8; break;
-        case 0x41: dst = &tiziano_gib_deirm_blc_r_linear; len = 0x24; break;
-        case 0x42: dst = &tiziano_gib_deirm_blc_gr_linear; len = 0x24; break;
-        case 0x43: dst = &tiziano_gib_deirm_blc_gb_linear; len = 0x24; break;
-        case 0x44: dst = &tiziano_gib_deirm_blc_b_linear; len = 0x24; break;
-        case 0x45: dst = &tiziano_gib_deirm_blc_ir_linear; len = 0x24; break;
-        case 0x46: dst = &gib_ir_point; len = 0x10; break;
-        case 0x47: dst = &gib_ir_reser; len = 0x3c; break;
-        case 0x48: dst = &tiziano_gib_deir_r_h; len = 0x84; break;
-        case 0x49: dst = &tiziano_gib_deir_g_h; len = 0x84; break;
-        case 0x4a: dst = &tiziano_gib_deir_b_h; len = 0x84; break;
-        case 0x4b: dst = &tiziano_gib_deir_r_m; len = 0x84; break;
-        case 0x4c: dst = &tiziano_gib_deir_g_m; len = 0x84; break;
-        case 0x4d: dst = &tiziano_gib_deir_b_m; len = 0x84; break;
-        case 0x4e: dst = &tiziano_gib_deir_r_l; len = 0x84; break;
-        case 0x4f: dst = &tiziano_gib_deir_g_l; len = 0x84; break;
-        case 0x50: dst = &tiziano_gib_deir_b_l; len = 0x84; break;
-        case 0x51: dst = &tiziano_gib_deir_matrix_h; len = 0x3c; break;
-        case 0x52: dst = &tiziano_gib_deir_matrix_m; len = 0x3c; break;
-        case 0x53: dst = &tiziano_gib_deir_matrix_l; len = 0x3c; break;
-    }
-    memcpy(dst, in_buf, len);
-    *size_buf = len;
-    /* BN: tiziano_gib_lut_parameter(); trig_set_deir = 1; -- left out without context */
-    return 0;
-}
 
     /* Binary Ninja: for (int32_t i = 0xe6; i != 0x105; i++) */
     for (int i = 0xe6; i < 0x105; i++) {
@@ -5585,6 +5416,101 @@ int tisp_g_af_zone(void)
     return 0;
 }
 
+/* Export symbols for kernel module loading */
+
+/* tisp_lsc_param_array_set - Binary Ninja EXACT mirror of GET mapping */
+int tisp_lsc_param_array_set(int param_id, void *in_buf, int *size_buf)
+{
+    if ((param_id - 0x54) >= 0xb) {
+        pr_err("tisp_lsc_param_array_set: Invalid parameter ID 0x%x\n", param_id);
+        return -1;
+    }
+    if (!in_buf || !size_buf) {
+        pr_err("tisp_lsc_param_array_set: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    void *dest_ptr = NULL;
+    int data_size = 0;
+
+    switch (param_id) {
+        case 0x54:  dest_ptr = &data_9a428; data_size = 4; break;
+        case 0x55:  dest_ptr = &lsc_mesh_scale; data_size = 4; break;
+        case 0x56:  dest_ptr = &data_9a424; data_size = 4; break;
+        case 0x57:  dest_ptr = &lsc_mesh_size; data_size = 8; break;
+        case 0x58:  dest_ptr = &data_9a410; data_size = 0x10; break;
+        case 0x59:  dest_ptr = &lsc_a_lut; data_size = 0x1ffc; break;
+        case 0x5a:  dest_ptr = &lsc_t_lut; data_size = 0x1ffc; break;
+        case 0x5b:  dest_ptr = &lsc_d_lut; data_size = 0x1ffc; break;
+        case 0x5c:  dest_ptr = &lsc_mesh_str; data_size = 0x24; break;
+        case 0x5d:  dest_ptr = &lsc_mesh_str_wdr; data_size = 0x24; break;
+        case 0x5e:  dest_ptr = &lsc_mean_en; data_size = 4; break;
+        default:
+            pr_err("tisp_lsc_param_array_set: Unhandled parameter ID 0x%x\n", param_id);
+            return -1;
+    }
+
+    memcpy(dest_ptr, in_buf, data_size);
+    *size_buf = data_size;
+    pr_debug("tisp_lsc_param_array_set: ID=0x%x, size=%d\n", param_id, data_size);
+    return 0;
+}
+
+/* tisp_wdr_param_array_set - Binary Ninja mirror of GET mapping (first batch) */
+int tisp_wdr_param_array_set(int param_id, void *in_buf, int *size_buf)
+{
+    if ((param_id - 0x3ff) >= 0x33) {
+        pr_err("tisp_wdr_param_array_set: Invalid parameter ID 0x%x\n", param_id);
+        return -1;
+    }
+    if (!in_buf || !size_buf) {
+        pr_err("tisp_wdr_param_array_set: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    void *dest_ptr = NULL;
+    int data_size = 0;
+
+    switch (param_id) {
+        case 0x3ff: dest_ptr = &param_wdr_para_array; data_size = 0x28; break;
+        case 0x400: dest_ptr = &mdns_c_luma_wei_adj_value0_array; data_size = 0x80; break;
+        case 0x401: dest_ptr = &param_wdr_weightLUT02_array; data_size = 0x80; break;
+        case 0x402: dest_ptr = &param_openRatioMove0_array; data_size = 0x10; break;
+        case 0x403: dest_ptr = &param_openRatioMove1_array; data_size = 0x10; break;
+        case 0x404: dest_ptr = &param_openRatioMove2_array; data_size = 0x10; break;
+        case 0x405: dest_ptr = &param_closeRatioMove0_array; data_size = 0x10; break;
+        case 0x406: dest_ptr = &param_closeRatioMove1_array; data_size = 0x10; break;
+        case 0x407: dest_ptr = &param_closeRatioMove2_array; data_size = 0x10; break;
+        case 0x408: dest_ptr = &param_aeStren_array; data_size = 0x24; break;
+        case 0x409: dest_ptr = &param_dehazeThre_array; data_size = 0x24; break;
+        case 0x40a: dest_ptr = &param_specClipSharpenThr_a; data_size = 0x80; break;
+        case 0x40b: dest_ptr = &param_specClipSharpenThr_t; data_size = 0x80; break;
+        case 0x40c: dest_ptr = &param_specClipSharpenThr_d; data_size = 0x80; break;
+        case 0x40d: dest_ptr = &param_wdr_R1_Array; data_size = 0x14; break;
+        case 0x40e: dest_ptr = &param_wdr_R2_Array; data_size = 0x24; break;
+        case 0x40f: dest_ptr = &param_wdr_master_array; data_size = 0x4c; break;
+        case 0x410: dest_ptr = &param_Nr_Wdr_array; data_size = 0x24; break;
+        case 0x411: dest_ptr = &param_wdr_ui_para_array; data_size = 0x2c; break;
+        case 0x412: dest_ptr = &param_smallInfo_array; data_size = 0x28; break;
+        case 0x413: dest_ptr = &param_wdr_thrLable_array; data_size = 0x6c; break;
+        default:
+            /* Delegate remaining cases */
+            return tisp_wdr_param_array_set_extended(param_id, in_buf, size_buf);
+    }
+
+    memcpy(dest_ptr, in_buf, data_size);
+    *size_buf = data_size;
+    pr_debug("tisp_wdr_param_array_set: ID=0x%x, size=%d\n", param_id, data_size);
+    return 0;
+}
+
+EXPORT_SYMBOL(data_b2e74);
+EXPORT_SYMBOL(tisp_g_af_zone);
+
+EXPORT_SYMBOL(tisp_lsc_param_array_set);
+EXPORT_SYMBOL(tisp_wdr_param_array_set);
+EXPORT_SYMBOL(tisp_gib_param_array_set);
+
 int tisp_blc_set_par_cfg(void *in_buf)
 {
     int total = 0, sz = 0;
@@ -5666,6 +5592,8 @@ int tisp_rdns_set_par_cfg(void *in_buf)
 }
 int tisp_adr_set_par_cfg(void *in_buf)
 {
+
+
     int total = 0, sz = 0; char *p = (char *)in_buf;
     for (int i = 0x380; i < 0x3ac; ++i) {
         if (tisp_adr_param_array_set(i, p, &sz) != 0) return -EINVAL;
@@ -5771,6 +5699,8 @@ int tisp_g_ae_hist(void *buffer)
 {
     /* Binary Ninja: tisp_ae_get_hist_custome(arg1); return 0 */
 
+
+
     pr_debug("tisp_g_ae_hist: entry, buffer=%p\n", buffer);
 
     tisp_ae_get_hist_custome(buffer);
@@ -5872,6 +5802,104 @@ int tisp_ae_param_array_get(int param_type, void *buffer, int *size)
             data_size = 0x3c;
             break;
         case 0x16: /* ae_comp_param */
+
+/* tisp_wdr_param_array_set_extended - remaining WDR parameter cases */
+int tisp_wdr_param_array_set_extended(int param_id, void *in_buf, int *size_buf)
+{
+    void *dest_ptr = NULL;
+    int data_size = 0;
+
+    switch (param_id) {
+        case 0x414: dest_ptr = &param_computerModle_software_in_array; data_size = 0x10; break;
+        case 0x415: dest_ptr = &param_deviationPara_software_in_array; data_size = 0x14; break;
+        case 0x416: dest_ptr = &param_ratioPara_software_in_array; data_size = 0x1c; break;
+        case 0x417: dest_ptr = &param_x_thr_software_in_array; data_size = 0x10; break;
+        case 0x418: dest_ptr = &param_y_thr_software_in_array; data_size = 0x10; break;
+        case 0x419: dest_ptr = &param_thrPara_software_in_array; data_size = 0x50; break;
+        case 0x41a: dest_ptr = &param_xy_pix_low_software_in_array; data_size = 0x58; break;
+        case 0x41b: dest_ptr = &param_motionThrPara_software_in_array; data_size = 0x44; break;
+        case 0x41c: dest_ptr = &param_d_thr_normal_software_in_array; data_size = 0x68; break;
+        case 0x41d: dest_ptr = &param_d_thr_normal1_software_in_array; data_size = 0x68; break;
+        case 0x41e: dest_ptr = &param_d_thr_normal2_software_in_array; data_size = 0x68; break;
+        case 0x41f: dest_ptr = &param_d_thr_normal_min_software_in_array; data_size = 0x68; break;
+        case 0x420: dest_ptr = &param_multiValueLow_software_in_array; data_size = 0x68; break;
+        case 0x421: dest_ptr = &param_multiValueHigh_software_in_array; data_size = 0x68; break;
+        case 0x422: dest_ptr = &param_d_thr_2_software_in_array; data_size = 0x68; break;
+        case 0x423: dest_ptr = &param_wdr_detial_para_software_in_array; data_size = 0x20; break;
+        case 0x424: dest_ptr = &param_wdr_thrLable_array; data_size = 0x6c; break;
+        case 0x425: dest_ptr = &param_wdr_dbg_out_array; data_size = 8; break;
+        case 0x426: dest_ptr = &wdr_ev_list; data_size = 0x24; break;
+        case 0x427: dest_ptr = &wdr_weight_b_in_list; data_size = 0x24; break;
+        case 0x428: dest_ptr = &wdr_weight_p_in_list; data_size = 0x24; break;
+        case 0x429: dest_ptr = &wdr_ev_list_deghost; data_size = 0x24; break;
+        case 0x42a: dest_ptr = &wdr_weight_in_list_deghost; data_size = 0x24; break;
+        case 0x42b: dest_ptr = &wdr_detail_w_in0_list; data_size = 0x24; break;
+        case 0x42c: dest_ptr = &wdr_detail_w_in1_list; data_size = 0x24; break;
+        case 0x42d: dest_ptr = &wdr_detail_w_in2_list; data_size = 0x24; break;
+        case 0x42e: dest_ptr = &wdr_detail_w_in3_list; data_size = 0x24; break;
+        case 0x42f: dest_ptr = &wdr_detail_w_in4_list; data_size = 0x24; break;
+        case 0x430: dest_ptr = &mdns_y_fspa_ref_fus_wei_224_wdr_array; data_size = 0x40; break;
+        case 0x431: dest_ptr = &param_wdr_tool_control_array; data_size = 0x38; break;
+        default:
+            pr_err("tisp_wdr_param_array_set_extended: Unhandled parameter ID 0x%x\n", param_id);
+            return -1;
+    }
+
+    memcpy(dest_ptr, in_buf, data_size);
+    *size_buf = data_size;
+    pr_debug("tisp_wdr_param_array_set_extended: ID=0x%x, size=%d\n", param_id, data_size);
+    return 0;
+}
+
+/* tisp_gib_param_array_set - Mirror of BN mapping */
+int tisp_gib_param_array_set(int param_id, void *in_buf, int *size_buf)
+{
+    if ((param_id - 0x3e) >= 0x16) {
+        pr_err("tisp_gib_param_array_set: Invalid parameter ID 0x%x\n", param_id);
+        return -1;
+    }
+    if (!in_buf || !size_buf) {
+        pr_err("tisp_gib_param_array_set: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    void *dst = NULL; int len = 0;
+    switch (param_id) {
+        case 0x3e: dst = &tiziano_gib_config_line; len = 0x30; break;
+        case 0x3f: dst = &tiziano_gib_r_g_linear; len = 0x8; break;
+        case 0x40: dst = &tiziano_gib_b_ir_linear; len = 0x8; break;
+        case 0x41: dst = &tiziano_gib_deirm_blc_r_linear; len = 0x24; break;
+        case 0x42: dst = &tiziano_gib_deirm_blc_gr_linear; len = 0x24; break;
+        case 0x43: dst = &tiziano_gib_deirm_blc_gb_linear; len = 0x24; break;
+        case 0x44: dst = &tiziano_gib_deirm_blc_b_linear; len = 0x24; break;
+        case 0x45: dst = &tiziano_gib_deirm_blc_ir_linear; len = 0x24; break;
+        case 0x46: dst = &gib_ir_point; len = 0x10; break;
+        case 0x47: dst = &gib_ir_reser; len = 0x3c; break;
+        case 0x48: dst = &tiziano_gib_deir_r_h; len = 0x84; break;
+        case 0x49: dst = &tiziano_gib_deir_g_h; len = 0x84; break;
+        case 0x4a: dst = &tiziano_gib_deir_b_h; len = 0x84; break;
+        case 0x4b: dst = &tiziano_gib_deir_r_m; len = 0x84; break;
+        case 0x4c: dst = &tiziano_gib_deir_g_m; len = 0x84; break;
+        case 0x4d: dst = &tiziano_gib_deir_b_m; len = 0x84; break;
+        case 0x4e: dst = &tiziano_gib_deir_r_l; len = 0x84; break;
+        case 0x4f: dst = &tiziano_gib_deir_g_l; len = 0x84; break;
+        case 0x50: dst = &tiziano_gib_deir_b_l; len = 0x84; break;
+        case 0x51: dst = &tiziano_gib_deir_matrix_h; len = 0x3c; break;
+        case 0x52: dst = &tiziano_gib_deir_matrix_m; len = 0x3c; break;
+        case 0x53: dst = &tiziano_gib_deir_matrix_l; len = 0x3c; break;
+    }
+    memcpy(dst, in_buf, len);
+    *size_buf = len;
+    /* BN: tiziano_gib_lut_parameter(); trig_set_deir = 1; -- left out without context */
+    return 0;
+}
+
+/* Export symbols for kernel module loading */
+EXPORT_SYMBOL(tisp_lsc_param_array_set);
+EXPORT_SYMBOL(tisp_wdr_param_array_set);
+EXPORT_SYMBOL(tisp_wdr_param_array_set_extended);
+EXPORT_SYMBOL(tisp_gib_param_array_set);
+
             source_ptr = &ae_comp_param;
             data_size = 0x18;
             break;
@@ -6658,14 +6686,11 @@ static void tisp_ae1_process(void)
         /* Short exposure is programmed via SENSOR_EXPO in tisp_set_ae1_ag (BN reference) */
 
         /* Program AE1 DG regs derived via JZ_Isp_Ae_Dg2reg */
-        {
-            uint32_t q = _AePointPos.data[0] & 31; if (!q) q = 10;
-            uint32_t reg_100c, reg_1010;
-            JZ_Isp_Ae_Dg2reg(q, &reg_100c, ae1_dg_q10_cur, &reg_1010);
-            system_reg_write_ae(3, 0x100c, reg_100c);
-            system_reg_write_ae(3, 0x1010, reg_1010);
-        }
-
+        uint32_t q = _AePointPos.data[0] & 31; if (!q) q = 10;
+        uint32_t reg_100c, reg_1010;
+        JZ_Isp_Ae_Dg2reg(q, &reg_100c, ae1_dg_q10_cur, &reg_1010);
+        system_reg_write_ae(3, 0x100c, reg_100c);
+        system_reg_write_ae(3, 0x1010, reg_1010);
     }
 
     if (ta_custom_en == 1) {
@@ -10975,9 +11000,91 @@ static uint32_t tisp_log2_fixed_to_fixed(void)
     return 0x1000; /* Return default fixed point value */
 }
 
-/* Export symbols for kernel module loading */
-EXPORT_SYMBOL(data_b2e74);
-EXPORT_SYMBOL(tisp_g_af_zone);
+/* REMOVED: Static stub system_reg_write - use external implementation from tx-isp-module.c */
+/* The real system_reg_write() that does actual hardware writes is declared extern */
+
+
+/* Top-level definitions moved from accidental nesting: */
+int tisp_wdr_param_array_set_extended(int param_id, void *in_buf, int *size_buf)
+{
+    void *dest_ptr = NULL; int data_size = 0;
+    switch (param_id) {
+        case 0x414: dest_ptr = &param_computerModle_software_in_array; data_size = 0x10; break;
+        case 0x415: dest_ptr = &param_deviationPara_software_in_array; data_size = 0x14; break;
+        case 0x416: dest_ptr = &param_ratioPara_software_in_array; data_size = 0x1c; break;
+        case 0x417: dest_ptr = &param_x_thr_software_in_array; data_size = 0x10; break;
+        case 0x418: dest_ptr = &param_y_thr_software_in_array; data_size = 0x10; break;
+        case 0x419: dest_ptr = &param_thrPara_software_in_array; data_size = 0x50; break;
+        case 0x41a: dest_ptr = &param_xy_pix_low_software_in_array; data_size = 0x58; break;
+        case 0x41b: dest_ptr = &param_motionThrPara_software_in_array; data_size = 0x44; break;
+        case 0x41c: dest_ptr = &param_d_thr_normal_software_in_array; data_size = 0x68; break;
+        case 0x41d: dest_ptr = &param_d_thr_normal1_software_in_array; data_size = 0x68; break;
+        case 0x41e: dest_ptr = &param_d_thr_normal2_software_in_array; data_size = 0x68; break;
+        case 0x41f: dest_ptr = &param_d_thr_normal_min_software_in_array; data_size = 0x68; break;
+        case 0x420: dest_ptr = &param_multiValueLow_software_in_array; data_size = 0x68; break;
+        case 0x421: dest_ptr = &param_multiValueHigh_software_in_array; data_size = 0x68; break;
+        case 0x422: dest_ptr = &param_d_thr_2_software_in_array; data_size = 0x68; break;
+        case 0x423: dest_ptr = &param_wdr_detial_para_software_in_array; data_size = 0x20; break;
+        case 0x424: dest_ptr = &param_wdr_thrLable_array; data_size = 0x6c; break;
+        case 0x425: dest_ptr = &param_wdr_dbg_out_array; data_size = 8; break;
+        case 0x426: dest_ptr = &wdr_ev_list; data_size = 0x24; break;
+        case 0x427: dest_ptr = &wdr_weight_b_in_list; data_size = 0x24; break;
+        case 0x428: dest_ptr = &wdr_weight_p_in_list; data_size = 0x24; break;
+        case 0x429: dest_ptr = &wdr_ev_list_deghost; data_size = 0x24; break;
+        case 0x42a: dest_ptr = &wdr_weight_in_list_deghost; data_size = 0x24; break;
+        case 0x42b: dest_ptr = &wdr_detail_w_in0_list; data_size = 0x24; break;
+        case 0x42c: dest_ptr = &wdr_detail_w_in1_list; data_size = 0x24; break;
+        case 0x42d: dest_ptr = &wdr_detail_w_in2_list; data_size = 0x24; break;
+        case 0x42e: dest_ptr = &wdr_detail_w_in3_list; data_size = 0x24; break;
+        case 0x42f: dest_ptr = &wdr_detail_w_in4_list; data_size = 0x24; break;
+        case 0x430: dest_ptr = &mdns_y_fspa_ref_fus_wei_224_wdr_array; data_size = 0x40; break;
+        case 0x431: dest_ptr = &param_wdr_tool_control_array; data_size = 0x38; break;
+        default:
+            pr_err("tisp_wdr_param_array_set_extended: Unhandled parameter ID 0x%x\n", param_id);
+            return -1;
+    }
+    memcpy(dest_ptr, in_buf, data_size);
+    *size_buf = data_size;
+    pr_debug("tisp_wdr_param_array_set_extended: ID=0x%x, size=%d\n", param_id, data_size);
+    return 0;
+}
+
+int tisp_gib_param_array_set(int param_id, void *in_buf, int *size_buf)
+{
+    if ((param_id - 0x3e) >= 0x16) { pr_err("tisp_gib_param_array_set: Invalid parameter ID 0x%x\n", param_id); return -1; }
+    if (!in_buf || !size_buf) { pr_err("tisp_gib_param_array_set: NULL buffer pointers\n"); return -EINVAL; }
+    void *dst = NULL; int len = 0;
+    switch (param_id) {
+        case 0x3e: dst = &tiziano_gib_config_line; len = 0x30; break;
+        case 0x3f: dst = &tiziano_gib_r_g_linear; len = 0x8; break;
+        case 0x40: dst = &tiziano_gib_b_ir_linear; len = 0x8; break;
+        case 0x41: dst = &tiziano_gib_deirm_blc_r_linear; len = 0x24; break;
+        case 0x42: dst = &tiziano_gib_deirm_blc_gr_linear; len = 0x24; break;
+        case 0x43: dst = &tiziano_gib_deirm_blc_gb_linear; len = 0x24; break;
+        case 0x44: dst = &tiziano_gib_deirm_blc_b_linear; len = 0x24; break;
+        case 0x45: dst = &tiziano_gib_deirm_blc_ir_linear; len = 0x24; break;
+        case 0x46: dst = &gib_ir_point; len = 0x10; break;
+        case 0x47: dst = &gib_ir_reser; len = 0x3c; break;
+        case 0x48: dst = &tiziano_gib_deir_r_h; len = 0x84; break;
+        case 0x49: dst = &tiziano_gib_deir_g_h; len = 0x84; break;
+        case 0x4a: dst = &tiziano_gib_deir_b_h; len = 0x84; break;
+        case 0x4b: dst = &tiziano_gib_deir_r_m; len = 0x84; break;
+        case 0x4c: dst = &tiziano_gib_deir_g_m; len = 0x84; break;
+        case 0x4d: dst = &tiziano_gib_deir_b_m; len = 0x84; break;
+        case 0x4e: dst = &tiziano_gib_deir_r_l; len = 0x84; break;
+        case 0x4f: dst = &tiziano_gib_deir_g_l; len = 0x84; break;
+        case 0x50: dst = &tiziano_gib_deir_b_l; len = 0x84; break;
+        case 0x51: dst = &tiziano_gib_deir_matrix_h; len = 0x3c; break;
+        case 0x52: dst = &tiziano_gib_deir_matrix_m; len = 0x3c; break;
+        case 0x53: dst = &tiziano_gib_deir_matrix_l; len = 0x3c; break;
+    }
+    memcpy(dst, in_buf, len);
+    *size_buf = len;
+    return 0;
+}
+
+/* Export the ones needed across translation units */
 EXPORT_SYMBOL(tisp_lsc_param_array_set);
 EXPORT_SYMBOL(tisp_wdr_param_array_set);
+EXPORT_SYMBOL(tisp_wdr_param_array_set_extended);
 EXPORT_SYMBOL(tisp_gib_param_array_set);
