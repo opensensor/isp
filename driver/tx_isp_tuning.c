@@ -210,6 +210,34 @@ static uint32_t mdns_std_sad_ass_base[9] = {0x1c, 0x2c, 0x3c, 0x4c, 0x5c, 0x6c, 
 static uint32_t mdns_std_sta_ass_base[9] = {0x15, 0x25, 0x35, 0x45, 0x55, 0x65, 0x75, 0x85, 0x95};
 static uint32_t mdns_std_ref_wei_base[9] = {0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90};
 
+/* MDNS control flags (BN: 0x180..0x190 all size 4) */
+static uint32_t mdns_y_filter_en_array = 0;       /* 0x180 */
+static uint32_t mdns_y_sf_cur_en_array = 0;       /* 0x181 */
+static uint32_t mdns_y_sf_ref_en_array = 0;       /* 0x182 */
+static uint32_t mdns_y_debug_array = 0;           /* 0x183 */
+static uint32_t mdns_uv_filter_en_array = 0;      /* 0x184 */
+static uint32_t mdns_uv_sf_cur_en_array = 0;      /* 0x185 */
+static uint32_t mdns_uv_sf_ref_en_array = 0;      /* 0x186 */
+static uint32_t mdns_uv_debug_array = 0;          /* 0x187 */
+static uint32_t mdns_ass_enable_array = 0;        /* 0x188 */
+static uint32_t mdns_sta_inter_en_array = 0;      /* 0x189 */
+static uint32_t mdns_sta_group_num_array = 0;     /* 0x18a */
+static uint32_t mdns_sta_max_num_array = 0;       /* 0x18b */
+static uint32_t mdns_bgm_enable_array = 0;        /* 0x18c */
+static uint32_t mdns_bgm_inter_en_array = 0;      /* 0x18d */
+static uint32_t mdns_psn_enable_array = 0;        /* 0x18e */
+static uint32_t mdns_psn_max_num_array = 0;       /* 0x18f */
+static uint32_t mdns_ref_wei_byps_array = 0;      /* 0x190 */
+
+/* Helper: BN size mapping for MDNS IDs */
+static int tisp_mdns_param_size(int id)
+{
+    if (id < 0x180 || id > 0x356) return -1;
+    if (id <= 0x190) return 4;
+    if (id == 0x19c || id == 0x19d) return 0x40;
+    return 0x24; /* BN default for remaining IDs in 0x180..0x356 */
+}
+
 /* Function declarations for register refresh functions */
 static int tisp_sdns_all_reg_refresh(void);
 static int tisp_mdns_all_reg_refresh(uint32_t base_addr);
@@ -4988,9 +5016,34 @@ int tisp_mdns_param_array_get(int param_id, void *out_buf, int *size_buf)
 
 int tisp_mdns_param_array_set(int param_id, void *in_buf, int *size_buf)
 {
-    pr_err("tisp_mdns_param_array_set: Unsupported ID 0x%x (MDNS mapping pending)\n", param_id);
-    if (size_buf) *size_buf = 0;
-    return -EINVAL;
+    if (!in_buf || !size_buf) return -EINVAL;
+    switch (param_id) {
+    case 0x180: memcpy(&mdns_y_filter_en_array, in_buf, 4); *size_buf = 4; return 0;
+    case 0x181: memcpy(&mdns_y_sf_cur_en_array, in_buf, 4); *size_buf = 4; return 0;
+    case 0x182: memcpy(&mdns_y_sf_ref_en_array, in_buf, 4); *size_buf = 4; return 0;
+    case 0x183: memcpy(&mdns_y_debug_array, in_buf, 4); *size_buf = 4; return 0;
+    case 0x184: memcpy(&mdns_uv_filter_en_array, in_buf, 4); *size_buf = 4; return 0;
+    case 0x185: memcpy(&mdns_uv_sf_cur_en_array, in_buf, 4); *size_buf = 4; return 0;
+    case 0x186: memcpy(&mdns_uv_sf_ref_en_array, in_buf, 4); *size_buf = 4; return 0;
+    case 0x187: memcpy(&mdns_uv_debug_array, in_buf, 4); *size_buf = 4; return 0;
+    case 0x188: memcpy(&mdns_ass_enable_array, in_buf, 4); *size_buf = 4; return 0;
+    case 0x189: memcpy(&mdns_sta_inter_en_array, in_buf, 4); *size_buf = 4; return 0;
+    case 0x18a: memcpy(&mdns_sta_group_num_array, in_buf, 4); *size_buf = 4; return 0;
+    case 0x18b: memcpy(&mdns_sta_max_num_array, in_buf, 4); *size_buf = 4; return 0;
+    case 0x18c: memcpy(&mdns_bgm_enable_array, in_buf, 4); *size_buf = 4; return 0;
+    case 0x18d: memcpy(&mdns_bgm_inter_en_array, in_buf, 4); *size_buf = 4; return 0;
+    case 0x18e: memcpy(&mdns_psn_enable_array, in_buf, 4); *size_buf = 4; return 0;
+    case 0x18f: memcpy(&mdns_psn_max_num_array, in_buf, 4); *size_buf = 4; return 0;
+    case 0x190:
+        memcpy(&mdns_ref_wei_byps_array, in_buf, 4); *size_buf = 4;
+        tisp_mdns_all_reg_refresh(data_9a9d0);
+        tisp_mdns_reg_trigger();
+        return 0;
+    default:
+        pr_err("tisp_mdns_param_array_set: Unsupported ID 0x%x (mapping pending)\n", param_id);
+        *size_buf = 0;
+        return -EINVAL;
+    }
 }
 
 
@@ -5830,10 +5883,15 @@ int tisp_mdns_set_par_cfg(void *in_buf)
 {
     int total = 0, sz = 0; char *p = (char *)in_buf;
     for (int i = 0x180; i < 0x357; ++i) {
-        if (tisp_mdns_param_array_set(i, p, &sz) != 0) return -EINVAL;
+        if (tisp_mdns_param_array_set(i, p, &sz) != 0) {
+            int fsz = tisp_mdns_param_size(i);
+            if (fsz <= 0) return -EINVAL;
+            p += fsz; total += fsz;
+            continue;
+        }
         p += sz; total += sz;
     }
-    pr_debug("tisp_mdns_set_par_cfg: total=%d\n", total);
+    pr_debug("tisp_mdns_set_par_cfg: total=%d (with fallback advance)\n", total);
     return 0;
 }
 
