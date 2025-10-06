@@ -2705,12 +2705,25 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             /* Set buffer type from REQBUFS request */
             fcd->buffer_type = reqbuf.type;
 
-            /* CRITICAL: Update VIC active_buffer_count for streaming */
+            /* Notify VIC of buffer allocation via 0x3000008 (REQBUFS event) */
             if (ourISPdev && ourISPdev->vic_dev) {
-                struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-                vic->active_buffer_count = reqbuf.count;
-                pr_info("*** Channel %d: VIC active_buffer_count set to %d ***\n",
-                        channel, vic->active_buffer_count);
+                struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                struct { int32_t channel_id; int32_t buffer_count; } event_data = {
+                    .channel_id = channel,
+                    .buffer_count = reqbuf.count
+                };
+                pr_info("*** REQBUFS: Channel %d sending 0x3000008 with buffer_count=%d ***\n",
+                        channel, reqbuf.count);
+                {
+                    int er = tx_isp_send_event_to_remote_local(&vic_dev->sd, 0x3000008, &event_data);
+                    if (er == 0) {
+                        pr_info("*** REQBUFS: VIC 0x3000008 SUCCESS ***\n");
+                    } else if (er == 0xfffffdfd) {
+                        pr_info("*** REQBUFS: 0x3000008 has no callback (ignored) ***\n");
+                    } else {
+                        pr_warn("*** REQBUFS: 0x3000008 returned: 0x%x ***\n", er);
+                    }
+                }
             }
 
             pr_info("*** Channel %d: MEMORY-AWARE REQBUFS SUCCESS - %d buffers ***\n",
@@ -2790,20 +2803,30 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
 
         spin_unlock_irqrestore(&state->buffer_lock, flags);
-        /* Now that we have a physical address, populate v4l2_buffer for VIC and forward */
-        buffer.memory = 1; /* V4L2_MEMORY_MMAP */
-        buffer.m.offset = buffer_phys_addr; /* carry phys addr in offset */
+        /* Enqueue buffer into VIC ring via BUFFER_ENQUEUE (0x3000005) */
         if (ourISPdev && ourISPdev->vic_dev) {
             struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-            pr_info("*** Channel %d: QBUF - Forwarding to VIC (0x3000008) with phys=0x%x idx=%u ***\n",
-                    channel, buffer_phys_addr, buffer.index);
-            int event_result = tx_isp_send_event_to_remote_local(&vic_dev_buf->sd, 0x3000008, &buffer);
-            if (event_result == 0) {
-                pr_info("*** Channel %d: QBUF EVENT SUCCESS ***\n", channel);
-            } else if (event_result == 0xfffffdfd) {
-                pr_info("*** Channel %d: QBUF EVENT - No VIC callback ***\n", channel);
-            } else {
-                pr_warn("*** Channel %d: QBUF EVENT returned: 0x%x ***\n", channel, event_result);
+            struct vic_buffer_entry node;
+            memset(&node, 0, sizeof(node));
+            node.buffer_addr = buffer_phys_addr;
+            {
+                u32 nslots = vic_dev_buf->active_buffer_count ?
+                             ((vic_dev_buf->active_buffer_count > 5) ? 5 : vic_dev_buf->active_buffer_count) : 2;
+                if (nslots == 0) nslots = 2;
+                node.buffer_index = (buffer.index % nslots);
+            }
+            node.channel = channel;
+            pr_info("*** Channel %d: QBUF - Enqueue via 0x3000005 phys=0x%x idx=%u ***\n",
+                    channel, buffer_phys_addr, node.buffer_index);
+            {
+                int event_result = tx_isp_send_event_to_remote_local(&vic_dev_buf->sd, 0x3000005, &node);
+                if (event_result == 0) {
+                    pr_info("*** Channel %d: BUFFER_ENQUEUE SUCCESS ***\n", channel);
+                } else if (event_result == 0xfffffdfd) {
+                    pr_info("*** Channel %d: BUFFER_ENQUEUE - No VIC callback ***\n", channel);
+                } else {
+                    pr_warn("*** Channel %d: BUFFER_ENQUEUE returned: 0x%x ***\n", channel, event_result);
+                }
             }
         }
 
@@ -2976,7 +2999,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
             /* Update VIC buffer tracking for this dequeue like Binary Ninja */
             if (vic_dev && vic_dev->vic_regs && buf_index < 8) {
-                u32 buffer_phys_addr = 0x6300000 + (buf_index * (state->width * state->height * 2));
+                u32 buffer_phys_addr = 0x6300000 + (buf_index * (state->width * state->height * 3 / 2));
 
                 pr_info("*** Channel %d: DQBUF updating VIC buffer[%d] addr=0x%x ***\n",
                         channel, buf_index, buffer_phys_addr);
@@ -3068,25 +3091,13 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_info("*** Channel %d: VIC hardware initialization deferred to vic_core_s_stream ***\n", channel);
             pr_info("*** CHANNEL %d STREAMON: VIC hardware started successfully ***\n", channel);
 
-            /* CRITICAL FIX: Only call VIC streaming restart if VIC is not already streaming */
-            /* This prevents the destructive VIC unlock sequence during normal operations */
-            extern int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
-
-            if (vic->stream_state != 1) {
-                pr_info("*** Channel %d: VIC not streaming (state=%d), calling ispvic_frame_channel_s_stream ***\n",
-                        channel, vic->stream_state);
-                ret = ispvic_frame_channel_s_stream(vic, 1);
-                if (ret != 0) {
-                    pr_err("Channel %d: Failed to start VIC streaming: %d\n", channel, ret);
-                    state->streaming = false;
-                    return ret;
-                }
-            } else {
-                pr_info("*** Channel %d: VIC already streaming (state=%d), skipping VIC restart to preserve interrupts ***\n",
-                        channel, vic->stream_state);
+            /* Reference behavior: vic_core_s_stream handles VIC start. Now send frame-channel STREAMON event (0x3000003). */
+            if (ourISPdev && ourISPdev->vic_dev) {
+                struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+                int ch = 0; /* VIC is owned by channel 0; force ch0 regardless of caller */
+                pr_info("*** CHANNEL %d STREAMON: SENDING FRAME STREAMON EVENT (0x3000003) TO VIC AS ch=0 ***\n", channel);
+                (void) tx_isp_send_event_to_remote_local(&vic->sd, 0x3000003, &ch);
             }
-
-            pr_info("*** CHANNEL %d STREAMON: VIC streaming started successfully ***\n", channel);
         }
 
         // *** CRITICAL: TRIGGER SENSOR HARDWARE INITIALIZATION AND STREAMING ***
@@ -3197,24 +3208,28 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_err("Channel %d: SENSOR STREAMING NOT AVAILABLE - VIDEO WILL BE GREEN!\n", channel);
             }
 
-            // *** CRITICAL: TRIGGER VIC STREAMING CHAIN - THIS GENERATES THE REGISTER ACTIVITY! ***
-            if (ourISPdev && ourISPdev->vic_dev) {
-                struct tx_isp_vic_device *vic_streaming = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+            // *** CRITICAL: TRIGGER VIC STREAMING CHAIN - ONLY FROM CHANNEL 0 ***
+            if (channel == 0) {
+                if (ourISPdev && ourISPdev->vic_dev) {
+                    struct tx_isp_vic_device *vic_streaming = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
 
-                pr_info("*** Channel %d: NOW CALLING VIC STREAMING CHAIN - THIS SHOULD GENERATE REGISTER ACTIVITY! ***\n", channel);
+                    pr_info("*** Channel %d: CALLING VIC STREAMING CHAIN (chn0 only) ***\n", channel);
 
-                // CRITICAL: Call vic_core_s_stream which calls tx_isp_vic_start when streaming
-                ret = vic_core_s_stream(&vic_streaming->sd, 1);
+                    // CRITICAL: Call vic_core_s_stream which calls tx_isp_vic_start when streaming
+                    ret = vic_core_s_stream(&vic_streaming->sd, 1);
 
-                pr_info("*** Channel %d: VIC STREAMING RETURNED %d - REGISTER ACTIVITY SHOULD NOW BE VISIBLE! ***\n", channel, ret);
+                    pr_info("*** Channel %d: VIC STREAMING RETURNED %d ***\n", channel, ret);
 
-                if (ret) {
-                    pr_err("Channel %d: VIC streaming failed: %d\n", channel, ret);
+                    if (ret) {
+                        pr_err("Channel %d: VIC streaming failed: %d\n", channel, ret);
+                    } else {
+                        pr_info("*** Channel %d: VIC STREAMING SUCCESS - HARDWARE ACTIVE ***\n", channel);
+                    }
                 } else {
-                    pr_info("*** Channel %d: VIC STREAMING SUCCESS - ALL HARDWARE SHOULD BE ACTIVE! ***\n", channel);
+                    pr_err("*** Channel %d: NO VIC DEVICE - CANNOT TRIGGER HARDWARE STREAMING! ***\n", channel);
                 }
             } else {
-                pr_err("*** Channel %d: NO VIC DEVICE - CANNOT TRIGGER HARDWARE STREAMING! ***\n", channel);
+                pr_info("*** Channel %d: STREAMON does not control VIC (ignored for chn!=0) ***\n", channel);
             }
 
             // Trigger core ops streaming
@@ -3440,8 +3455,22 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("Channel %d: Set format %dx%d pixfmt=0x%x\n",
                 channel, format.fmt.pix.width, format.fmt.pix.height, format.fmt.pix.pixelformat);
 
-        // Reference validates and configures the format
-        // For now, acknowledge the format set
+        /* Persist format into channel state so REQBUFS/QBUF use correct dimensions */
+        state->width = format.fmt.pix.width;
+        state->height = format.fmt.pix.height;
+        state->format = format.fmt.pix.pixelformat;
+        /* Optional: bytesperline/size not strictly needed here */
+
+        /* Mirror into VIC device so pre-STREAMON QBUFs compute correct UV base
+         * Only for Channel 0 (VIC capture channel). Sub-streams (chn1) should not
+         * change VIC capture dimensions.
+         */
+        if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
+            struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+            vic->width = state->width;
+            vic->height = state->height;
+            pr_info("*** VIC dimensions primed from S_FMT (chn0 only): %ux%u ***\n", vic->width, vic->height);
+        }
 
         return 0;
     }
@@ -6256,11 +6285,16 @@ int vic_event_handler(void *subdev, int event_type, void *data)
         return vic_core_ops_ioctl(&vic_dev->sd, 0x3000008, data);
     }
     case 0x3000003: { /* TX_ISP_EVENT_FRAME_STREAMON - Start VIC streaming */
-        pr_info("*** VIC EVENT: STREAM_START (0x3000003) - ACTIVATING VIC HARDWARE ***\n");
+        pr_info("*** VIC EVENT: STREAM_START (0x3000003) - ACTIVATING VIC HARDWARE (chn0 only) ***\n");
 
-        /* CRITICAL: Only call VIC streaming restart for ACTUAL STREAMON events, not QBUF! */
-        pr_info("*** VIC STREAMON: This is a legitimate streaming start request ***\n");
-
+        /* Only Channel 0 controls VIC RUN; other channels do not start hardware */
+        if (data) {
+            int ch = *(int *)data; /* if event carries channel, else assume 0 */
+            if (ch != 0) {
+                pr_info("*** VIC STREAMON: Ignored for channel %d (VIC is owned by ch0) ***\n", ch);
+                return 0;
+            }
+        }
         /* Call Binary Ninja ispvic_frame_channel_s_stream implementation */
         return ispvic_frame_channel_s_stream(vic_dev, 1);
     }
@@ -6291,27 +6325,18 @@ int vic_event_handler(void *subdev, int event_type, void *data)
         }
     }
     case 0x3000005: { /* Buffer enqueue event from __enqueue_in_driver */
-        pr_info("*** VIC EVENT: BUFFER_ENQUEUE (0x3000005) - HARDWARE BUFFER SETUP ***\n");
-
-        /* Process buffer enqueue to VIC hardware */
-        if (data && vic_dev->vic_regs) {
-            /* Extract buffer information and program to VIC */
-            struct v4l2_buffer *buffer_data = (struct v4l2_buffer *)data;
-            if (buffer_data && buffer_data->index < 8) {
-                u32 buffer_phys_addr = 0x6300000 + (buffer_data->index * (1920 * 1080 * 2));
-                u32 buffer_reg_offset = (buffer_data->index + 0xc6) << 2;
-
-                pr_info("VIC EVENT: Programming buffer[%d] addr=0x%x to VIC reg 0x%x\n",
-                       buffer_data->index, buffer_phys_addr, buffer_reg_offset);
-
-                writel(buffer_phys_addr, vic_dev->vic_regs + buffer_reg_offset);
-                wmb();
-
-                /* Increment frame count like Binary Ninja */
-                vic_dev->frame_count++;
+        pr_info("*** VIC EVENT: BUFFER_ENQUEUE (0x3000005) ***\n");
+        /* Only Channel 0 programs VIC slots. Gate others to avoid wrong UV/stride. */
+        if (data) {
+            struct vic_buffer_entry *node = (struct vic_buffer_entry *)data;
+            pr_info("*** VIC ENQUEUE: node.channel=%u idx=%u phys=0x%x ***\n", node->channel, node->buffer_index, node->buffer_addr);
+            if (node->channel != 0) {
+                pr_info("*** VIC ENQUEUE: Skipping non-chn0 enqueue (channel=%u) ***\n", node->channel);
+                return 0; /* treat as handled to avoid retries */
             }
         }
-        return 0;
+        /* Forward to VIC core so it can program slots via ispvic_frame_channel_qbuf */
+        return vic_core_ops_ioctl(&vic_dev->sd, 0x3000005, data);
     }
     default:
         pr_info("*** vic_event_handler: UNHANDLED EVENT 0x%x - returning 0xfffffdfd ***\n", event_type);
