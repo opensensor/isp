@@ -55,8 +55,12 @@
 
 
 // ISP register definitions
+#ifndef ISP_AE_HIST_BASE
 #define ISP_AE_HIST_BASE   0x7000  // Base address for AE histogram data
+#endif
+#ifndef ISP_AE_STATE_BASE
 #define ISP_AE_STATE_BASE  0x7100  // Base address for AE state registers
+#endif
 
 #define ISP_CTRL_BRIGHTNESS  0x980900
 #define ISP_CTRL_CONTRAST    0x980901
