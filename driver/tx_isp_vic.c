@@ -2449,9 +2449,22 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
     stream_op = (enable != 0) ? "streamon" : "streamoff";
     pr_info("%s[%d]: %s\n", "ispvic_frame_channel_s_stream", __LINE__, stream_op);
 
-    /* Binary Ninja EXACT: if (arg2 == *($s0 + 0x210)) return 0 */
-    if (enable == vic_dev->stream_state) {
-        return 0;
+    /* Binary Ninja EXACT: if (enable == stream_state) return 0
+     * Exception: If enable==1 but hardware ctrl is 0 (not running), force a control write. */
+    {
+        u32 ctrl_peek = 0;
+        void __iomem *peek_base = vic_dev->vic_regs;
+        if (peek_base && (unsigned long)peek_base >= 0x80000000)
+            ctrl_peek = readl(peek_base + 0x300);
+        pr_info("ispvic_frame_channel_s_stream: pre-check stream_state=%d, enable=%d, ctrl_peek=0x%x\n",
+                vic_dev->stream_state, enable, ctrl_peek);
+        if (enable == vic_dev->stream_state) {
+            if (enable && ctrl_peek == 0) {
+                pr_info("ispvic_frame_channel_s_stream: stream_state=1 but ctrl=0, forcing control write\n");
+            } else {
+                return 0;
+            }
+        }
     }
 
     /* Binary Ninja EXACT: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
