@@ -629,6 +629,8 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);
 static int private_reset_tx_isp_module(int arg);
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id));
 
+
+
 int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 
 /* Forward declarations for initialization functions */
@@ -3096,7 +3098,13 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
                 int ch = 0; /* VIC is owned by channel 0; force ch0 regardless of caller */
                 pr_info("*** CHANNEL %d STREAMON: SENDING FRAME STREAMON EVENT (0x3000003) TO VIC AS ch=0 ***\n", channel);
-                (void) tx_isp_send_event_to_remote_local(&vic->sd, 0x3000003, &ch);
+                {
+                    int rc = tx_isp_send_event_to_remote_local(&vic->sd, 0x3000003, &ch);
+                    if (rc == 0xfffffdfd || rc < 0) {
+                        pr_info("*** STREAMON fallback: calling ispvic_frame_channel_s_stream directly (rc=%d) ***\n", rc);
+                        (void) ispvic_frame_channel_s_stream(vic, 1);
+                    }
+                }
             }
         }
 

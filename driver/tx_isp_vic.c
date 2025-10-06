@@ -276,7 +276,7 @@ struct vic_buffer_entry {
 
 
 /* Forward declaration for streaming functions */
-int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2);
+int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
 
 /* GPIO info and state for vic_framedone_irq_function - matching reference driver */
 static volatile int gpio_switch_state = 0;
@@ -2431,42 +2431,33 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 }
 
 /* ISPVIC Frame Channel S_Stream - EXACT Binary Ninja Implementation */
-int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
+int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 {
-    struct tx_isp_vic_device *vic_dev = NULL;
     void __iomem *vic_base = NULL;
     int32_t var_18 = 0;
     const char *stream_op;
 
     pr_info("*** ispvic_frame_channel_s_stream: RACE CONDITION FIX ***\n");
-    pr_info("ispvic_frame_channel_s_stream: vic_dev=%p, enable=%d\n", arg1, arg2);
+    pr_info("ispvic_frame_channel_s_stream: vic_dev=%p, enable=%d\n", vic_dev, enable);
 
-    /* Binary Ninja EXACT: if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = *(arg1 + 0xd4) */
-    if (arg1 != 0 && (unsigned long)arg1 < 0xfffff001) {
-        /* CRITICAL FIX: arg1 IS the vic_dev structure directly - Binary Ninja uses it directly */
-        vic_dev = (struct tx_isp_vic_device *)arg1;
-        pr_info("ispvic_frame_channel_s_stream: vic_dev retrieved using SAFE access: %p\n", vic_dev);
-    }
-
-    /* Binary Ninja EXACT: if (arg1 == 0) return 0xffffffea */
-    if (arg1 == 0) {
+    if (!vic_dev) {
         pr_err("%s[%d]: invalid parameter\n", "ispvic_frame_channel_s_stream", __LINE__);
-        return 0xffffffea; /* -EINVAL */
+        return -EINVAL;
     }
 
     /* Binary Ninja: Set stream operation string */
-    stream_op = (arg2 != 0) ? "streamon" : "streamoff";
+    stream_op = (enable != 0) ? "streamon" : "streamoff";
     pr_info("%s[%d]: %s\n", "ispvic_frame_channel_s_stream", __LINE__, stream_op);
 
     /* Binary Ninja EXACT: if (arg2 == *($s0 + 0x210)) return 0 */
-    if (arg2 == vic_dev->stream_state) {
+    if (enable == vic_dev->stream_state) {
         return 0;
     }
 
     /* Binary Ninja EXACT: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
     __private_spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, &var_18);
 
-    if (arg2 == 0) {
+    if (enable == 0) {
         /* Stream OFF */
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = 0 */
         vic_base = vic_dev->vic_regs;
