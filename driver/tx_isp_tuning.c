@@ -103,7 +103,7 @@ static uint32_t mdns_c_false_edg_thres1_intp[16];
 /* WDR Control Variables */
 /* static uint32_t param_wdr_tool_control_array = 0; - defined later as array */
 /* static uint32_t param_wdr_gam_y_array = 0; - defined later as array */
-static uint32_t mdns_y_pspa_ref_median_win_opt_array = 0;
+static uint32_t mdns_y_pspa_ref_median_win_opt_idx = 0;
 
 /* Binary Ninja Data Section Variables */
 static uint32_t data_b1bcc = 0;
@@ -196,7 +196,6 @@ static uint32_t *mdns_y_sta_ave_thres_array_now = NULL;
 static uint32_t *mdns_y_sad_ass_thres_array_now = NULL;
 static uint32_t *mdns_y_sta_ass_thres_array_now = NULL;
 static uint32_t *mdns_y_ref_wei_b_min_array_now = NULL;
-static uint32_t *mdns_y_pspa_cur_bi_wei0_array = NULL;
 
 /* MDNS base value arrays for different modes */
 static uint32_t mdns_wdr_sad_ave_base[9] = {0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0, 0xb0, 0xc0};
@@ -362,6 +361,26 @@ static uint32_t mdns_y_pspa_cur_bi_wei3_array[0x24/4] = {0}; /* 0x20f */
 static uint32_t mdns_y_pspa_cur_bi_wei4_array[0x24/4] = {0}; /* 0x210 */
 static uint32_t mdns_y_pspa_cur_lmt_op_en_array[0x24/4] = {0}; /* 0x211 */
 static uint32_t mdns_y_pspa_cur_lmt_wei_array[0x24/4] = {0}; /* 0x212 */
+
+static uint32_t mdns_y_pspa_ref_median_win_opt_array[0x24/4] = {0}; /* 0x213 */
+static uint32_t mdns_y_pspa_ref_bi_thres_array[0x24/4] = {0};        /* 0x214 */
+static uint32_t mdns_y_pspa_ref_bi_wei_seg_array[0x24/4] = {0};      /* 0x215 */
+static uint32_t mdns_y_pspa_ref_bi_wei0_array[0x24/4] = {0};         /* 0x216 */
+static uint32_t mdns_y_pspa_ref_bi_wei1_array[0x24/4] = {0};         /* 0x217 */
+static uint32_t mdns_y_pspa_ref_bi_wei2_array[0x24/4] = {0};         /* 0x218 */
+static uint32_t mdns_y_pspa_ref_bi_wei3_array[0x24/4] = {0};         /* 0x219 */
+static uint32_t mdns_y_pspa_ref_bi_wei4_array[0x24/4] = {0};         /* 0x21a */
+static uint32_t mdns_y_pspa_ref_lmt_op_en_array[0x24/4] = {0};       /* 0x21b */
+static uint32_t mdns_y_pspa_ref_lmt_wei_array[0x24/4] = {0};         /* 0x21c */
+static uint32_t mdns_y_piir_edge_thres0_array[0x24/4] = {0};         /* 0x21d */
+static uint32_t mdns_y_piir_edge_thres1_array[0x24/4] = {0};         /* 0x21e */
+static uint32_t mdns_y_piir_edge_thres2_array[0x24/4] = {0};         /* 0x21f */
+static uint32_t mdns_y_piir_edge_wei0_array[0x24/4] = {0};           /* 0x220 */
+static uint32_t mdns_y_piir_edge_wei1_array[0x24/4] = {0};           /* 0x221 */
+static uint32_t mdns_y_piir_edge_wei2_array[0x24/4] = {0};           /* 0x222 */
+static uint32_t mdns_y_piir_edge_wei3_array[0x24/4] = {0};           /* 0x223 */
+static uint32_t mdns_y_piir_cur_fs_wei_array[0x24/4] = {0};          /* 0x224 */
+static uint32_t mdns_y_piir_ref_fs_wei_array[0x24/4] = {0};          /* 0x225 */
 
 
 
@@ -5319,6 +5338,26 @@ int tisp_mdns_param_array_set(int param_id, void *in_buf, int *size_buf)
     case 0x211: memcpy(&mdns_y_pspa_cur_lmt_op_en_array, in_buf, 0x24); *size_buf = 0x24; return 0;
     case 0x212: memcpy(&mdns_y_pspa_cur_lmt_wei_array, in_buf, 0x24); *size_buf = 0x24; return 0;
 
+    case 0x213: memcpy(&mdns_y_pspa_ref_median_win_opt_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x214: memcpy(&mdns_y_pspa_ref_bi_thres_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x215: memcpy(&mdns_y_pspa_ref_bi_wei_seg_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x216: memcpy(&mdns_y_pspa_ref_bi_wei0_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x217: memcpy(&mdns_y_pspa_ref_bi_wei1_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x218: memcpy(&mdns_y_pspa_ref_bi_wei2_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x219: memcpy(&mdns_y_pspa_ref_bi_wei3_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x21a: memcpy(&mdns_y_pspa_ref_bi_wei4_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x21b: memcpy(&mdns_y_pspa_ref_lmt_op_en_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x21c: memcpy(&mdns_y_pspa_ref_lmt_wei_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x21d: memcpy(&mdns_y_piir_edge_thres0_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x21e: memcpy(&mdns_y_piir_edge_thres1_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x21f: memcpy(&mdns_y_piir_edge_thres2_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x220: memcpy(&mdns_y_piir_edge_wei0_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x221: memcpy(&mdns_y_piir_edge_wei1_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x222: memcpy(&mdns_y_piir_edge_wei2_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x223: memcpy(&mdns_y_piir_edge_wei3_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x224: memcpy(&mdns_y_piir_cur_fs_wei_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x225: memcpy(&mdns_y_piir_ref_fs_wei_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+
 
     default:
         pr_err("tisp_mdns_param_array_set: Unsupported ID 0x%x (mapping pending)\n", param_id);
@@ -6967,13 +7006,13 @@ int tisp_wdr_process(void)
     tiziano_wdr_soft_para_out();
 
     /* Binary Ninja: Update median window optimization array */
-    v0_1 = mdns_y_pspa_ref_median_win_opt_array + 1;
+    v0_1 = mdns_y_pspa_ref_median_win_opt_idx + 1;
 
     if (v0_1 == 0x1e) {
         v0_1 = 0;
     }
 
-    mdns_y_pspa_ref_median_win_opt_array = v0_1;
+    mdns_y_pspa_ref_median_win_opt_idx = v0_1;
 
     pr_info("tisp_wdr_process: WDR processing pipeline complete\n");
     return 0;
