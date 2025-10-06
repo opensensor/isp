@@ -239,6 +239,24 @@ static uint32_t mdns_y_sta_blk_size_array[0x24/4] = {0};     /* 0x196 */
 static uint32_t mdns_y_sta_win_opt_array[0x24/4] = {0};      /* 0x197 */
 static uint32_t mdns_y_sta_ave_thres_array[0x24/4] = {0};    /* 0x198 */
 static uint32_t mdns_y_sta_dtb_thres_array[0x24/4] = {0};    /* 0x199 */
+/* MDNS Y-channel parameter arrays continued (BN sizes mostly 0x24; 0x19c/0x19d are 0x40) */
+static uint32_t mdns_y_sta_ass_thres_array[0x24/4] = {0};       /* 0x19a */
+static uint32_t mdns_y_sta_motion_thres_array[0x24/4] = {0};    /* 0x19b */
+static uint32_t mdns_y_ref_wei_sta_array[0x40/4] = {0};         /* 0x19c */
+static uint32_t mdns_y_ref_wei_psn_array[0x40/4] = {0};         /* 0x19d */
+static uint32_t mdns_y_ref_wei_mv_array[0x24/4] = {0};          /* 0x19e */
+static uint32_t mdns_y_ref_wei_fake_array[0x24/4] = {0};        /* 0x19f */
+static uint32_t mdns_y_ref_wei_sta_fs_opt_array[0x24/4] = {0};  /* 0x1a0 */
+static uint32_t mdns_y_ref_wei_psn_fs_opt_array[0x24/4] = {0};  /* 0x1a1 */
+static uint32_t mdns_y_ref_wei_f_max_array[0x24/4] = {0};       /* 0x1a2 */
+static uint32_t mdns_y_ref_wei_f_min_array[0x24/4] = {0};       /* 0x1a3 */
+static uint32_t mdns_y_ref_wei_b_max_array[0x24/4] = {0};       /* 0x1a4 */
+static uint32_t mdns_y_ref_wei_b_min_array[0x24/4] = {0};       /* 0x1a5 */
+static uint32_t mdns_y_ref_wei_r_max_array[0x24/4] = {0};       /* 0x1a6 */
+static uint32_t mdns_y_ref_wei_r_min_array[0x24/4] = {0};       /* 0x1a7 */
+static uint32_t mdns_y_ref_wei_increase_array[0x24/4] = {0};    /* 0x1a8 */
+static uint32_t mdns_y_corner_length_t_array[0x24/4] = {0};     /* 0x1a9 */
+
 
 /* Helper: BN size mapping for MDNS IDs */
 static int tisp_mdns_param_size(int id)
@@ -5059,6 +5077,23 @@ int tisp_mdns_param_array_set(int param_id, void *in_buf, int *size_buf)
     case 0x197: memcpy(&mdns_y_sta_win_opt_array, in_buf, 0x24); *size_buf = 0x24; return 0;
     case 0x198: memcpy(&mdns_y_sta_ave_thres_array, in_buf, 0x24); *size_buf = 0x24; return 0;
     case 0x199: memcpy(&mdns_y_sta_dtb_thres_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x19a: memcpy(&mdns_y_sta_ass_thres_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x19b: memcpy(&mdns_y_sta_motion_thres_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x19c: memcpy(&mdns_y_ref_wei_sta_array, in_buf, 0x40); *size_buf = 0x40; return 0;
+    case 0x19d: memcpy(&mdns_y_ref_wei_psn_array, in_buf, 0x40); *size_buf = 0x40; return 0;
+    case 0x19e: memcpy(&mdns_y_ref_wei_mv_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x19f: memcpy(&mdns_y_ref_wei_fake_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1a0: memcpy(&mdns_y_ref_wei_sta_fs_opt_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1a1: memcpy(&mdns_y_ref_wei_psn_fs_opt_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1a2: memcpy(&mdns_y_ref_wei_f_max_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1a3: memcpy(&mdns_y_ref_wei_f_min_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1a4: memcpy(&mdns_y_ref_wei_b_max_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1a5: memcpy(&mdns_y_ref_wei_b_min_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1a6: memcpy(&mdns_y_ref_wei_r_max_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1a7: memcpy(&mdns_y_ref_wei_r_min_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1a8: memcpy(&mdns_y_ref_wei_increase_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x1a9: memcpy(&mdns_y_corner_length_t_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+
     default:
         pr_err("tisp_mdns_param_array_set: Unsupported ID 0x%x (mapping pending)\n", param_id);
         *size_buf = 0;
