@@ -229,6 +229,17 @@ static uint32_t mdns_psn_enable_array = 0;        /* 0x18e */
 static uint32_t mdns_psn_max_num_array = 0;       /* 0x18f */
 static uint32_t mdns_ref_wei_byps_array = 0;      /* 0x190 */
 
+/* MDNS Y-channel parameter arrays (BN sizes 0x24) */
+static uint32_t mdns_y_sad_win_opt_array[0x24/4] = {0};      /* 0x191 */
+static uint32_t mdns_y_sad_ave_thres_array[0x24/4] = {0};    /* 0x192 */
+static uint32_t mdns_y_sad_ave_slope_array[0x24/4] = {0};    /* 0x193 */
+static uint32_t mdns_y_sad_dtb_thres_array[0x24/4] = {0};    /* 0x194 */
+static uint32_t mdns_y_sad_ass_thres_array[0x24/4] = {0};    /* 0x195 */
+static uint32_t mdns_y_sta_blk_size_array[0x24/4] = {0};     /* 0x196 */
+static uint32_t mdns_y_sta_win_opt_array[0x24/4] = {0};      /* 0x197 */
+static uint32_t mdns_y_sta_ave_thres_array[0x24/4] = {0};    /* 0x198 */
+static uint32_t mdns_y_sta_dtb_thres_array[0x24/4] = {0};    /* 0x199 */
+
 /* Helper: BN size mapping for MDNS IDs */
 static int tisp_mdns_param_size(int id)
 {
@@ -5039,6 +5050,15 @@ int tisp_mdns_param_array_set(int param_id, void *in_buf, int *size_buf)
         tisp_mdns_all_reg_refresh(data_9a9d0);
         tisp_mdns_reg_trigger();
         return 0;
+    case 0x191: memcpy(&mdns_y_sad_win_opt_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x192: memcpy(&mdns_y_sad_ave_thres_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x193: memcpy(&mdns_y_sad_ave_slope_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x194: memcpy(&mdns_y_sad_dtb_thres_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x195: memcpy(&mdns_y_sad_ass_thres_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x196: memcpy(&mdns_y_sta_blk_size_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x197: memcpy(&mdns_y_sta_win_opt_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x198: memcpy(&mdns_y_sta_ave_thres_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x199: memcpy(&mdns_y_sta_dtb_thres_array, in_buf, 0x24); *size_buf = 0x24; return 0;
     default:
         pr_err("tisp_mdns_param_array_set: Unsupported ID 0x%x (mapping pending)\n", param_id);
         *size_buf = 0;
