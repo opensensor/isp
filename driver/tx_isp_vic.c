@@ -3,6 +3,8 @@
 #include <linux/miscdevice.h>
 #include <linux/of.h>
 #include <linux/interrupt.h>
+#include <linux/ratelimit.h>
+
 #include <linux/i2c.h>
 #include <linux/clk.h>
 #include <linux/vmalloc.h>
@@ -97,23 +99,37 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     pr_info("*** CRITICAL: Mapping DUAL VIC register spaces for complete VIC control ***\n");
 
     /* Primary VIC space (original CSI PHY shared space) */
-    vic_dev->vic_regs = ioremap(0x133e0000, 0x10000);
+    vic_dev->vic_regs = ioremap_nocache(0x133e0000, 0x10000);
     if (!vic_dev->vic_regs) {
         pr_err("tx_isp_create_vic_device: Failed to map primary VIC registers at 0x133e0000\n");
         kfree(vic_dev);
         return -ENOMEM;
     }
-    pr_info("*** Primary VIC registers mapped: %p (0x133e0000) ***\n", vic_dev->vic_regs);
+    pr_info("*** Primary VIC registers mapped (NC): %p (0x133e0000) ***\n", vic_dev->vic_regs);
 
     /* Secondary VIC space (isp-w01 - CSI PHY coordination space) */
-    vic_dev->vic_regs_secondary = ioremap(0x10023000, 0x1000);
+    vic_dev->vic_regs_secondary = ioremap_nocache(0x10023000, 0x1000);
     if (!vic_dev->vic_regs_secondary) {
         pr_err("tx_isp_create_vic_device: Failed to map secondary VIC registers at 0x10023000\n");
         iounmap(vic_dev->vic_regs);
         kfree(vic_dev);
         return -ENOMEM;
     }
-    pr_info("*** Secondary VIC registers mapped: %p (0x10023000) ***\n", vic_dev->vic_regs_secondary);
+    pr_info("*** Secondary VIC registers mapped (NC): %p (0x10023000) ***\n", vic_dev->vic_regs_secondary);
+
+    /* Detect which bank is the live MDMA bank (has non-zero stride or typical 3840 pre-NV12) */
+    {
+        u32 stride_a = readl(vic_dev->vic_regs + 0x310);
+        u32 stride_b = readl(vic_dev->vic_regs_secondary + 0x310);
+        pr_info("*** VIC MDMA bank detect: PRI strideY=%u, SEC strideY=%u ***\n", stride_a, stride_b);
+        if ((stride_b && !stride_a) || (stride_b == 3840 && stride_a != 3840)) {
+            /* Swap so vic_regs always points to the live MDMA bank */
+            void __iomem *tmp = vic_dev->vic_regs;
+            vic_dev->vic_regs = vic_dev->vic_regs_secondary;
+            vic_dev->vic_regs_secondary = tmp;
+            pr_info("*** VIC MDMA bank detect: swapped banks so vic_regs points to live MDMA window ***\n");
+        }
+    }
 
     /* Also store in ISP device for compatibility */
     if (!isp_dev->vic_regs) {
@@ -268,15 +284,21 @@ static struct {
     uint8_t pin;
     uint8_t pad[19];  /* Padding to reach offset 0x14 */
     uint8_t state;    /* GPIO state at offset 0x14 */
+
 } gpio_info[10];
 
 /* vic_framedone_irq_function - Updated to match BN MCP reference with safe struct access */
 int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 {
+
+/* Reduce IRQ log noise: log a concise info line every N frames; otherwise use pr_debug_ratelimited. */
+static u32 vic_irq_log_every = 60; /* frames */
+static u32 vic_irq_counter;
+
     void __iomem *vic_regs;
     void *result = &data_b0000;  /* Return value matching reference */
 
-    pr_info("*** vic_framedone_irq_function: entry - vic_dev=%p ***\n", vic_dev);
+    pr_debug_ratelimited("vic_framedone_irq: vic_dev=%p\n", vic_dev);
 
     /* Validate vic_dev first */
     if (!vic_dev) {
@@ -293,7 +315,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
 //    } else {
         /* Binary Ninja: result = *(arg1 + 0x210) */
         /* SAFE: Use proper struct member 'stream_state' instead of offset 0x210 */
-        pr_info("vic_framedone_irq_function: Stream state: %d\n", vic_dev->stream_state);
+        pr_debug_ratelimited("vic_irq: stream_state=%d\n", vic_dev->stream_state);
         result = (void *)(uintptr_t)vic_dev->stream_state;
 
         if (vic_dev->stream_state != 0) {
@@ -348,16 +370,22 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             /* The reference driver preserves control bits, we were clearing them! */
             if (vic_regs) {
                 u32 reg_val = readl(vic_regs + 0x300);
-                /* Preserve control bits for NV12 (0x80000020 | format=7) and only update buffer index (bits 16-19) */
-                reg_val = (reg_val & 0xfff0ffff) | shifted_value;  /* Clear bits 16-19, set new buffer index */
+                /* If control is 0 or no valid index computed, do not touch control. */
+                if (reg_val == 0 || shifted_value == 0) {
+                    pr_debug_ratelimited("vic_irq: skip idx update (ctrl=0x%x, shift=0x%x, idx=%d, match=%d)\n",
+                            reg_val, shifted_value, buffer_index, match_found);
+                } else {
+                    /* Preserve control bits for NV12 (0x80000020 | format=7) and only update buffer index (bits 16-19) */
+                    reg_val = (reg_val & 0xfff0ffff) | shifted_value;  /* Clear bits 16-19, set new buffer index */
 
-                /* Reference: only update index bits [16..19], preserve other control/format bits */
-                writel(reg_val, vic_regs + 0x300);
+                    /* Reference: only update index bits [16..19], preserve other control/format bits */
+                    writel(reg_val, vic_regs + 0x300);
 
-                pr_info("*** VIC FRAME DONE: Updated VIC[0x300] = 0x%x (index updated, control preserved) ***\n",
-                        reg_val);
-                pr_info("vic_framedone_irq_function: Updated VIC[0x300] = 0x%x (buffers: index=%d, high_bits=%d, match=%d)\n",
-                         reg_val, buffer_index, high_bits, match_found);
+                    pr_debug_ratelimited("vic_irq: VIC[0x300]=0x%x (idx updated)\n",
+                            reg_val);
+                    pr_debug_ratelimited("vic_irq: ctrl=0x%x idx=%d match=%d\n",
+                             reg_val, buffer_index, match_found);
+                }
             }
             /* Update lightweight MDMA snapshot for proc (no printk; per-frame) */
             {
@@ -396,7 +424,7 @@ int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev)
             /* REFERENCE DRIVER: VIC frame done processing complete */
             /* The reference driver does NOT manually trigger ISP core interrupts */
             /* ISP core interrupts should be triggered automatically by hardware */
-            pr_info("*** VIC FRAME DONE: Processing complete - hardware should trigger ISP interrupts ***\n");
+            pr_debug_ratelimited("vic_irq: frame processing complete\n");
         }
 
 //        /* Binary Ninja: result = &data_b0000, goto label_123f4 */
@@ -441,11 +469,21 @@ label_123f4:
                 return gpio_result;
             }
 
-            pr_info("vic_framedone_irq_function: GPIO %d set to state %d\n", gpio_pin, gpio_state);
+            pr_debug_ratelimited("vic_irq: GPIO %d -> %d\n", gpio_pin, gpio_state);
 
             /* Move to next GPIO info entry */
             gpio_ptr++;
         }
+    }
+
+    /* Occasional concise summary to keep logs useful without flooding */
+    if (++vic_irq_counter % vic_irq_log_every == 0) {
+        void __iomem *base = vic_dev->vic_regs ? vic_dev->vic_regs : vic_dev->vic_regs_secondary;
+        u32 ctrl = base ? readl(base + 0x300) : 0;
+        u32 idx = (ctrl >> 16) & 0xF;
+        u32 stride = base ? readl(base + 0x310) : 0;
+        pr_info("VIC IRQ summary: frames=%u idx=%u ctrl=0x%x strideY=%u\n",
+                vic_irq_counter, idx, ctrl, stride);
     }
 
     pr_debug("*** vic_framedone_irq_function: completed successfully ***\n");
@@ -2062,38 +2100,43 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                 }
             }
         }
-    } else if (cmd == 0x3000008) {  /* QBUF: program VIC slot from v4l2_buffer */
+    } else if (cmd == 0x3000008) {  /* TX_ISP_EVENT_BUFFER_REQUEST / Buffer allocation */
         struct tx_isp_vic_device *vic_dev;
-        struct v4l2_buffer *buffer = (struct v4l2_buffer *)arg;
-        u32 phys = 0;
+        struct {
+            int32_t channel_id;
+            int32_t buffer_count;
+        } *event_data = (void *)arg;
+        int32_t channel_id;
+        int32_t buffer_count;
 
-        if (!sd || !sd->host_priv || !buffer)
+        if (!sd || !sd->host_priv || !event_data) {
+            pr_err("vic_core_ops_ioctl: 0x3000008 - missing sd/host_priv/arg\n");
             return -EINVAL;
+        }
 
         vic_dev = (struct tx_isp_vic_device *)sd->host_priv;
+        channel_id = event_data->channel_id;
+        buffer_count = event_data->buffer_count;
 
-        if (buffer->memory == V4L2_MEMORY_MMAP && buffer->m.offset)
-            phys = buffer->m.offset;
-        else if (buffer->memory == V4L2_MEMORY_USERPTR && buffer->m.userptr)
-            phys = (u32)buffer->m.userptr;
-        else
-            phys = 0;
+        pr_info("*** vic_core_ops_ioctl: 0x3000008 - Channel %d buffer allocation: count=%d ***\n",
+                channel_id, buffer_count);
 
-        if (buffer->index >= 5)
+        /* Validate buffer count */
+        if (buffer_count < 0 || buffer_count > 64) {
+            pr_err("vic_core_ops_ioctl: 0x3000008 - invalid buffer count %d\n", buffer_count);
             return -EINVAL;
-
-        {
-            struct vic_buffer_entry node;
-            memset(&node, 0, sizeof(node));
-            node.buffer_addr = phys;
-            {
-                u32 nslots = vic_dev->active_buffer_count ?
-                             ((vic_dev->active_buffer_count > 5) ? 5 : vic_dev->active_buffer_count) : 2;
-                if (nslots == 0) nslots = 2;
-                node.buffer_index = (buffer->index % nslots);
-            }
-            (void) ispvic_frame_channel_qbuf(sd, &node);
         }
+
+        /* Only Channel 0 controls VIC hardware buffer count */
+        if (channel_id == 0) {
+            vic_dev->active_buffer_count = (buffer_count > 5) ? 5 : buffer_count;
+            pr_info("*** vic_core_ops_ioctl: Channel 0 - VIC active_buffer_count set to %d ***\n",
+                    vic_dev->active_buffer_count);
+        } else {
+            pr_info("*** vic_core_ops_ioctl: Channel %d - VIC active_buffer_count unchanged (%d) ***\n",
+                    channel_id, vic_dev->active_buffer_count);
+        }
+
         return 0;
     } else if (cmd == 0x3000005) {  /* BUFFER_ENQUEUE: program provided node */
         if (sd) {
@@ -2360,7 +2403,7 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     }
 
     /* Reference: pre-format stride = width<<1; final stride updated after 0x300 (format) is set */
-    stride = width << 1; /* bytes per line for packed paths; NV12 will be corrected post-ctrl */
+    stride = width << 1; /* Reference: stride = width*2 bytes; matches BN MCP */
     pr_info("vic_pipo_mdma_enable: dims=%dx%d, pre-format stride=%u (ref)\n", width, height, stride);
 
     /* MDMA enable: 0x308 */
@@ -2426,19 +2469,20 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
     __private_spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, &var_18);
 
     if (arg2 == 0) {
-        /* Stream OFF */
-        /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = 0 */
+        /* Stream OFF: reference driver clears VIC control (0x300) */
         vic_base = vic_dev->vic_regs;
         if (vic_base && (unsigned long)vic_base >= 0x80000000) {
             writel(0, vic_base + 0x300);
             wmb();
-            pr_info("ispvic_frame_channel_s_stream: Stream OFF - wrote 0 to reg 0x300\n");
+            pr_info("ispvic_frame_channel_s_stream: Stream OFF - wrote 0 to reg 0x300 (reference)\n");
         }
 
-        /* Binary Ninja EXACT: *($s0 + 0x210) = 0 */
         vic_dev->stream_state = 0;
 
     } else {
+        /* Reference driver performs RUN/unlock in tx_isp_vic_start; do not unlock here. */
+        vic_base = vic_dev->vic_regs;
+
         /* Stream ON */
         /* Binary Ninja EXACT: vic_pipo_mdma_enable($s0) */
         vic_pipo_mdma_enable(vic_dev);
@@ -2446,6 +2490,21 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
         vic_base = vic_dev->vic_regs;
         if (vic_base && (unsigned long)vic_base >= 0x80000000) {
+            /* Select the live MDMA bank at runtime based on non-zero Y0/stride */
+            {
+                void __iomem *pri = vic_dev->vic_regs;
+                void __iomem *sec = vic_dev->vic_regs_secondary;
+                u32 pry0 = pri ? readl(pri + 0x318) : 0;
+                u32 pryS = pri ? readl(pri + 0x310) : 0;
+                u32 secy0 = sec ? readl(sec + 0x318) : 0;
+                u32 secS = sec ? readl(sec + 0x310) : 0;
+                void __iomem *live = pri;
+                if ((secy0 || secS) && !(pry0 || pryS)) live = sec;
+                vic_base = live;
+                pr_info("*** VIC MDMA bank select: using %s (pri:Y0=0x%x,stride=%u sec:Y0=0x%x,stride=%u) ***\n",
+                        (live == pri) ? "PRI" : "SEC", pry0, pryS, secy0, secS);
+            }
+
             pr_info("ispvic_frame_channel_s_stream: BEFORE - active_buffer_count=%d\n", vic_dev->active_buffer_count);
 
             /* CRITICAL FIX: Follow EXACT reference driver buffer management sequence */
@@ -2459,19 +2518,27 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
 
             /* BINARY NINJA EXACT: Use exact reference driver formula to prevent control limit error */
             /* Binary Ninja: program stride and buffer bases before writing control (0x300) */
-            u32 buffer_count = vic_dev->active_buffer_count;
+            /* Determine buffer_count to match what VIC actually has queued */
+            u32 buffer_count = vic_dev->buffer_count ? vic_dev->buffer_count : vic_dev->active_buffer_count;
+            /* Fall back to scanning the live MDMA slot Y addresses to avoid 0 count */
+            if (buffer_count == 0) {
+                u32 scan = 0;
+                for (u32 i = 0; i < 5; ++i) {
+                    u32 yb = readl(vic_base + (0x318 + i*4));
+                    if (yb) scan = i + 1; /* track highest populated slot index+1 */
+                }
+                buffer_count = scan;
+            }
             if (buffer_count == 0) buffer_count = 2;       /* ensure at least double-buffering */
             if (buffer_count > 5) buffer_count = 5;        /* 5-slot ring cap */
+            pr_info("*** COMPUTED buffer_count=%u for VIC ctrl ***\n", buffer_count);
 
             /* Set final NV12 stride first (bytes per line = width) to match reference */
             {
-                u32 stride_nv12 = vic_dev->width; /* bytes per line */
+                u32 stride_nv12 = vic_dev->width << 1; /* reference: stride = width*2 bytes */
                 writel(stride_nv12, vic_base + 0x310);
                 writel(stride_nv12, vic_base + 0x314);
-                if (vic_dev->vic_regs_secondary) {
-                    writel(stride_nv12, vic_dev->vic_regs_secondary + 0x310);
-                    writel(stride_nv12, vic_dev->vic_regs_secondary + 0x314);
-                }
+                /* program only the selected live bank to avoid racing stale window */
                 wmb();
                 pr_info("*** REFERENCE MATCH: NV12 stride set to width=%u (0x310/0x314) ***\n", stride_nv12);
             }
@@ -2479,17 +2546,14 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             /* Recompute UV base addresses for any pre-queued Y slots using final NV12 stride */
             {
                 u32 count = buffer_count;
-                u32 stride_nv12 = vic_dev->width; /* final stride for NV12 */
+                u32 stride_nv12 = vic_dev->width << 1; /* final NV12 stride matches reference */
                 for (u32 i = 0; i < count; ++i) {
                     u32 yb = readl(vic_base + (0x318 + i*4));
                     if (yb) {
                         u32 uvb = yb + stride_nv12 * vic_dev->height;
                         writel(uvb, vic_base + (0x340 + i*4));
                         writel(uvb, vic_base + (0x32c + i*4));
-                        if (vic_dev->vic_regs_secondary) {
-                            writel(uvb, vic_dev->vic_regs_secondary + (0x340 + i*4));
-                            writel(uvb, vic_dev->vic_regs_secondary + (0x32c + i*4));
-                        }
+                        /* live bank only */
                     }
                 }
                 wmb();
@@ -2527,6 +2591,7 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
                 /* MCP LOG: Stream ON completed */
                 pr_info("MCP_LOG: VIC streaming enabled - ctrl=0x%x, base=%p, state=%d\n",
                         stream_ctrl, vic_base, 1);
+
             }
 
         }
@@ -2571,22 +2636,29 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
     pr_info("*** VIC EVENT CALLBACK: cmd=0x%x, data=%p ***\n", cmd, data);
 
     switch (cmd) {
-        case 0x3000008: /* QBUF event */
-            pr_info("*** VIC: Processing QBUF event 0x3000008 ***\n");
-
-            /* Handle QBUF event - trigger frame processing */
-            if (vic_dev->state == 4) { /* Streaming state */
-                /* Signal frame completion to wake up waiting processes */
-                complete(&vic_dev->frame_complete);
-                pr_info("*** VIC: QBUF event processed - frame completion signaled ***\n");
+        case 0x3000005: { /* BUFFER_ENQUEUE: program VIC slot from provided node */
+            pr_info("*** VIC EVENT: BUFFER_ENQUEUE (0x3000005) ***\n");
+            if (sd && data) {
+                (void) ispvic_frame_channel_qbuf(sd, data);
                 ret = 0;
             } else {
-                pr_info("VIC: QBUF event received but not streaming (state=%d) - allowing anyway\n", vic_dev->state);
-                complete(&vic_dev->frame_complete);
-                ret = 0;
+                ret = -EINVAL;
             }
             break;
-
+        }
+        case 0x3000008: { /* REQBUFS notification: {channel_id, buffer_count} */
+            struct { int32_t channel_id; int32_t buffer_count; } *e = data;
+            if (!e) { ret = -EINVAL; break; }
+            pr_info("*** VIC EVENT: REQBUFS (0x3000008) ch=%d count=%d ***\n", e->channel_id, e->buffer_count);
+            if (e->channel_id == 0) {
+                int cnt = e->buffer_count;
+                if (cnt < 0) cnt = 0; if (cnt > 5) cnt = 5;
+                vic_dev->active_buffer_count = cnt;
+                pr_info("*** VIC: active_buffer_count set to %d ***\n", vic_dev->active_buffer_count);
+            }
+            ret = 0;
+            break;
+        }
         default:
             pr_info("VIC: Unknown event cmd=0x%x\n", cmd);
             ret = -ENOIOCTLCMD;
@@ -2653,7 +2725,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             if (enable == 0) {
                 /* Stream OFF - BINARY NINJA REFERENCE: No adjustment function */
                 ret = 0;
-                ispvic_frame_channel_s_stream(vic_dev, 0);
+                /* Keep OFF path unchanged: do not force frame-channel on OFF */
                 if (current_state == 4) {
                     vic_dev->state = 3;
                     pr_info("vic_core_s_stream: Stream OFF - state 4 -> 3\n");
@@ -2664,9 +2736,9 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
                 pr_info("*** CRITICAL: Following EXACT reference driver sub-device initialization sequence ***\n");
 
-                /* CRITICAL FIX: Disable VIC interrupts during initialization to prevent control limit errors */
-                pr_info("*** DISABLING VIC INTERRUPTS DURING INITIALIZATION ***\n");
-                vic_start_ok = 1;  /* Disable interrupt processing */
+                /* During init, mark VIC interrupts as disabled (vic_start_ok=0) until tx_isp_vic_start completes */
+                pr_info("*** INIT: vic_start_ok=0 until tx_isp_vic_start completes ***\n");
+                vic_start_ok = 0;
 
                 /* CRITICAL FIX: Correct the register base mapping! */
                 /* vic_regs = 0x133e0000 = CSI PHY (isp-w02 in trace) */
@@ -2905,14 +2977,16 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
                 /* STEP 9: CRITICAL FIX - Only call VIC start if VIC interrupts are not already working */
                 /* This prevents the destructive VIC unlock sequence that breaks working interrupts */
-                if (current_state != 4 && vic_start_ok != 1) {
-                    pr_info("*** STEP 9: vic_start_ok=%d, state=%d - calling tx_isp_vic_start ***\n", vic_start_ok, current_state);
+                if (current_state != 4 && vic_start_ok == 0) {
+                    pr_info("*** STEP 9: vic_start_ok=%d, state=%d - calling tx_isp_vic_start (single time) ***\n", vic_start_ok, current_state);
                     ret = tx_isp_vic_start(vic_dev);
                 } else {
-                    pr_info("*** STEP 9: vic_start_ok=%d, state=%d - SKIPPING tx_isp_vic_start to preserve working interrupts ***\n", vic_start_ok, current_state);
+                    pr_info("*** STEP 9: vic_start_ok=%d, state=%d - SKIPPING tx_isp_vic_start (already started) ***\n", vic_start_ok, current_state);
+                    /* Keep interrupts enabled when skipping */
+                    vic_start_ok = 1;
                     ret = 0;  /* Success - VIC is already working */
                 }
-                ispvic_frame_channel_s_stream(vic_dev, 1);
+                /* Reference vic_core_s_stream does not call frame-channel s_stream here. */
 
                 if (current_state != 4) {
                     pr_info("vic_core_s_stream: Stream ON - tx_isp_vic_start called after proper sub-device init\n");
