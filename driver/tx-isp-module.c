@@ -4873,7 +4873,7 @@ static int tx_isp_init(void)
 
     /* Register VIC subdev with proper ops structure */
     if (ourISPdev->vic_dev) {
-        struct tx_isp_vic_device *vic_dev = &ourISPdev->vic_dev;
+        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
 
         /* Set up VIC subdev with ops pointing to vic_subdev_ops */
         vic_dev->sd.ops = &vic_subdev_ops;
@@ -4882,18 +4882,18 @@ static int tx_isp_init(void)
         ourISPdev->subdevs[0] = &vic_dev->sd;
 
         pr_info("*** REGISTERED VIC SUBDEV AT INDEX 0 WITH VIDEO OPS ***\n");
-//        pr_info("VIC subdev: %p, ops: %p, video: %p, s_stream: %p\n",
-//                &vic_dev->sd, vic_dev->sd.ops, vic_dev->sd.ops->video,
-//                vic_dev->sd.ops->video->s_stream);
+        pr_info("VIC subdev: %p, ops: %p, video: %p, s_stream: %p\n",
+                &vic_dev->sd, vic_dev->sd.ops, vic_dev->sd.ops->video,
+                vic_dev->sd.ops->video->s_stream);
     }
 
     /* Register CSI subdev with proper ops structure */
     if (ourISPdev->csi_dev) {
-        struct tx_isp_csi_device *csi_dev = &ourISPdev->csi_dev;
+        struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)ourISPdev->csi_dev;
 
         /* Set up CSI subdev with ops pointing to csi_subdev_ops */
         csi_dev->sd.ops = &csi_subdev_ops;
-        // csi_dev->sd.isp = (void*)ourISPdev;
+        csi_dev->sd.isp = (void*)ourISPdev;
 
         /* SAFE: Add CSI to subdev array at index 1 using proper struct member */
         ourISPdev->subdevs[1] = &csi_dev->sd;
@@ -4963,34 +4963,23 @@ static int tx_isp_init(void)
         pr_warn("No sensors detected, continuing with basic initialization: %d\n", ret);
     }
 
-    /* *** CRITICAL: Initialize hardware interrupt handling for BOTH IRQs *** */
-    pr_info("*** INITIALIZING HARDWARE INTERRUPTS FOR IRQ 37 AND 38 ***\n");
-    ret = tx_isp_init_hardware_interrupts(ourISPdev);
+    /* *** CRITICAL: Register IRQ 37 (isp-m0) for core ISP interrupts *** */
+    pr_info("*** REGISTERING IRQ 37 (isp-m0) FOR CORE ISP INTERRUPTS ***\n");
+
+    /* Use the core platform device to get the correct IRQ and device name */
+    extern struct platform_device tx_isp_core_platform_device;
+    ret = tx_isp_request_irq2(&tx_isp_core_platform_device, ourISPdev);
     if (ret) {
         pr_warn("Hardware interrupts not available: %d\n", ret);
     } else {
         pr_info("*** HARDWARE INTERRUPT INITIALIZATION COMPLETE ***\n");
-        pr_info("*** SHOULD SEE BOTH IRQ 37 AND 38 IN /proc/interrupts NOW ***\n");
+        pr_info("*** IRQ 37 (isp-m0) REGISTERED ***\n");
     }
 
-    /* *** CRITICAL: Register BOTH IRQ handlers for complete interrupt support *** */
-    pr_info("*** REGISTERING BOTH IRQ HANDLERS (37 + 38) FOR COMPLETE INTERRUPT SUPPORT ***\n");
+    /* *** CRITICAL: Register IRQ 38 (isp-w02) for VIC interrupts *** */
+    pr_info("*** REGISTERING IRQ 38 (isp-w02) FOR VIC INTERRUPTS ***\n");
 
-    /* Register IRQ 37 (isp-m0) - Primary ISP processing */
-    ret = request_threaded_irq(37,
-                              isp_irq_handle,
-                              isp_irq_thread_handle,
-                              IRQF_SHARED,
-                              "isp-m0",                /* Match stock driver name */
-                              ourISPdev);
-    if (ret != 0) {
-        pr_err("*** FAILED TO REQUEST IRQ 37 (isp-m0): %d ***\n", ret);
-    } else {
-        pr_info("*** SUCCESS: IRQ 37 (isp-m0) REGISTERED ***\n");
-        ourISPdev->isp_irq = 37;
-    }
-
-    /* Register IRQ 38 (isp-w02) - Secondary ISP channel */
+    /* Register IRQ 38 (isp-w02) - VIC/secondary ISP channel */
     ret = request_threaded_irq(38,
                               isp_irq_handle,          /* Same handlers work for both IRQs */
                               isp_irq_thread_handle,
