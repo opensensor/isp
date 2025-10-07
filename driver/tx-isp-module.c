@@ -622,7 +622,6 @@ static struct tx_isp_subdev_ops csi_subdev_ops;
 
 /* Reference driver function declarations - Binary Ninja exact names */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);  /* FIXED: Correct signature to match tx_isp_vic.c */
-int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable);  /* FIXED: Forward declaration for CSI streaming */
 int csi_video_s_stream(struct tx_isp_subdev *sd, int enable);       /* Real CSI streaming (in tx_isp_csi.c) */
 void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev);
 static int ispvic_frame_channel_qbuf(struct tx_isp_vic_device *vic_dev, void *buffer);
@@ -3632,9 +3631,6 @@ static void destroy_frame_channel_devices(void)
 
 /* ===== VIC SENSOR OPERATIONS - EXACT BINARY NINJA IMPLEMENTATIONS ===== */
 
-/* Forward declarations for streaming functions */
-/* csi_video_s_stream_impl declaration moved to top of file */
-
 /* Forward declarations for sensor ops structures */
 static int sensor_subdev_core_init(struct tx_isp_subdev *sd, int enable);
 static int sensor_subdev_core_reset(struct tx_isp_subdev *sd, int reset);
@@ -5190,14 +5186,6 @@ int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
         return vic_core_s_stream(sd, enable);
     }
 }
-
-/* CSI video streaming function - MIPS-SAFE implementation */
-int csi_video_s_stream_impl(struct tx_isp_subdev *sd, int enable)
-{
-    /* Delegate to the full CSI streaming implementation that programs CSI registers */
-    return csi_video_s_stream(sd, enable);
-}
-
 
 /* vic_sensor_ops_ioctl - FIXED with proper struct member access */
 static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
