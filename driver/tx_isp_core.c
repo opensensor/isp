@@ -278,9 +278,12 @@ static struct tx_isp_subdev_core_ops core_subdev_core_ops = {
     .ioctl = NULL,
 };
 
+/* Forward declaration for ispcore_video_s_stream */
+int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable);
+
 /* Core subdev video operations */
 static struct tx_isp_subdev_video_ops core_subdev_video_ops = {
-    .s_stream = NULL,  /* Will be set up when needed */
+    .s_stream = ispcore_video_s_stream,  /* CRITICAL: Main streaming orchestration function */
 };
 
 /* Core subdev pad operations */
@@ -317,6 +320,196 @@ static void ispcore_irq_fs_work(struct work_struct *work);
 
 
 
+
+/* ============================================================================
+ * ispcore_video_s_stream - CRITICAL MISSING FUNCTION
+ * ============================================================================
+ * This function orchestrates streaming state changes across all subdevices.
+ * It was DELETED from the new driver but is essential for proper hardware
+ * state machine operation during ON→OFF→ON cycles.
+ *
+ * Binary Ninja reference: ispcore_video_s_stream @ 0x6880c
+ * ============================================================================
+ */
+int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
+{
+    struct tx_isp_vic_device *vic_dev;
+    struct tx_isp_dev *isp_dev;
+    struct tx_isp_subdev **s3_1;
+    int result = 0;
+    int var_28 = 0;
+    int a0_4;
+    int vic_state;
+
+    pr_info("*** ispcore_video_s_stream: EXACT Binary Ninja - enable=%d ***\n", enable);
+
+    if (!sd) {
+        pr_err("ispcore_video_s_stream: Invalid subdev\n");
+        return -EINVAL;
+    }
+
+    /* Get ISP device from subdev */
+    isp_dev = (struct tx_isp_dev *)sd->isp;
+    if (!isp_dev) {
+        pr_err("ispcore_video_s_stream: No ISP device available\n");
+        return -EINVAL;
+    }
+
+    /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) - get VIC device */
+    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+    if (!vic_dev) {
+        pr_err("ispcore_video_s_stream: No VIC device available\n");
+        return -EINVAL;
+    }
+
+    /* Binary Ninja: __private_spin_lock_irqsave($s0 + 0xdc, &var_28) */
+    __private_spin_lock_irqsave(&vic_dev->lock, &var_28);
+
+    /* Binary Ninja: if (*($s0 + 0xe8) s< 3) */
+    vic_state = vic_dev->state;
+    pr_info("*** VIC STATE CHECK: vic_dev->state=%d (need >=3), enable=%d ***\n", vic_state, enable);
+
+    if (vic_state < 3) {
+        pr_err("*** VIC STATE ERROR: Current VIC state=%d, need >=3 for streaming ***\n", vic_state);
+        /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream") */
+        isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream");
+        /* Binary Ninja: private_spin_unlock_irqrestore($s0 + 0xdc, var_28) */
+        spin_unlock_irqrestore(&vic_dev->lock, var_28);
+        /* Binary Ninja: return 0xffffffff */
+        return -1;
+    }
+
+    /* Binary Ninja: private_spin_unlock_irqrestore($s0 + 0xdc, var_28) */
+    spin_unlock_irqrestore(&vic_dev->lock, var_28);
+
+    /* Binary Ninja: Reset frame counters */
+    vic_dev->frame_count = 0;
+    vic_dev->total_errors = 0;
+
+    /* Binary Ninja: int32_t $v0_3 = *($s0 + 0xe8) */
+    int v0_3 = vic_state;
+
+    /* Binary Ninja: if (arg2 == 0) - STREAM OFF */
+    if (enable == 0) {
+        /* Binary Ninja: $s3_1 = arg1 + 0x38 */
+        s3_1 = &isp_dev->subdevs[0];
+
+        /* Binary Ninja: if ($v0_3 == 4) - if currently streaming */
+        if (v0_3 == 4) {
+            /* Binary Ninja: Frame channel streamoff loop */
+            pr_info("*** ispcore_video_s_stream: Stopping frame channels (state 4→3) ***\n");
+
+            /* Binary Ninja: *($s0 + 0xe8) = 3 */
+            vic_dev->state = 3;
+            pr_info("*** ispcore_video_s_stream: VIC state set to 3 after stream OFF ***\n");
+        }
+        /* Binary Ninja: $s3_1 = arg1 + 0x38 */
+        s3_1 = &isp_dev->subdevs[0];
+    } else if (v0_3 != 3) {
+        /* Binary Ninja: Not in PREPARED state, can't start streaming */
+        s3_1 = &isp_dev->subdevs[0];
+    } else {
+        /* Binary Ninja: STREAM ON - transition from PREPARED (3) to STREAMING (4) */
+        /* Binary Ninja: *($s0 + 0xe8) = 4 */
+        vic_dev->state = 4;
+        pr_info("*** ispcore_video_s_stream: VIC state set to 4 for stream ON ***\n");
+        /* Binary Ninja: $s3_1 = arg1 + 0x38 */
+        s3_1 = &isp_dev->subdevs[0];
+    }
+
+    /* Binary Ninja: int32_t result = 0 */
+    result = 0;
+
+    /* CRITICAL: Binary Ninja shows the main subdev iteration loop here */
+    /* This calls s_stream on all registered subdevices (sensor, CSI, VIC, etc.) */
+    pr_info("*** ispcore_video_s_stream: Iterating through subdevs to call s_stream ***\n");
+
+    /* Binary Ninja: while (true) */
+    while (true) {
+        /* Binary Ninja: void* $a0_5 = *$s3_1 */
+        struct tx_isp_subdev *a0_5 = *s3_1;
+
+        /* Binary Ninja: if ($a0_5 != 0) */
+        if (a0_5 != NULL) {
+            /* Binary Ninja: int32_t* $v0_7 = *(*($a0_5 + 0xc4) + 4) */
+            struct tx_isp_subdev_video_ops *video_ops = NULL;
+            if (a0_5->ops && a0_5->ops->video) {
+                video_ops = a0_5->ops->video;
+            }
+
+            /* Binary Ninja: if ($v0_7 != 0) */
+            if (video_ops != NULL) {
+                /* Binary Ninja: int32_t $v0_8 = *$v0_7 */
+                int (*s_stream_func)(struct tx_isp_subdev *, int) = video_ops->s_stream;
+
+                /* Binary Ninja: if ($v0_8 == 0) */
+                if (s_stream_func == NULL) {
+                    /* Binary Ninja: result = 0xfffffdfd */
+                    result = -ENOIOCTLCMD;
+                } else {
+                    /* Binary Ninja: int32_t result_1 = $v0_8($a0_5, arg2) */
+                    int result_1 = s_stream_func(a0_5, enable);
+                    result = result_1;
+
+                    pr_info("*** ispcore_video_s_stream: Called s_stream on subdev %s: result=%d ***\n",
+                            a0_5->pdev ? a0_5->pdev->name : "unknown", result_1);
+
+                    /* Binary Ninja: if (result_1 != 0) */
+                    if (result_1 != 0) {
+                        /* Binary Ninja: if (result_1 != 0xfffffdfd) */
+                        if (result_1 != -ENOIOCTLCMD) {
+                            /* Binary Ninja: break on error */
+                            break;
+                        }
+
+                        /* Binary Ninja: result = 0xfffffdfd */
+                        result = -ENOIOCTLCMD;
+                    }
+                }
+            } else {
+                /* Binary Ninja: result = 0xfffffdfd */
+                result = -ENOIOCTLCMD;
+            }
+
+            /* Binary Ninja: $s3_1 += 4 */
+            s3_1++;
+        } else {
+            /* Binary Ninja: $s3_1 += 4 */
+            s3_1++;
+        }
+
+        /* Binary Ninja: if (arg1 + 0x78 == $s3_1) - reached end of subdev array */
+        if (s3_1 >= &isp_dev->subdevs[ISP_MAX_SUBDEVS]) {
+            /* Binary Ninja: break */
+            break;
+        }
+    }
+
+    /* Binary Ninja: Manage IRQ enable/disable based on streaming state */
+    /* Binary Ninja: $a0_4 = *($s0 + 0x15c) - Get IRQ enabled flag from VIC device */
+    a0_4 = vic_dev->irq_enabled;
+
+    /* Binary Ninja: if ($a0_4 == 1 || arg2 == 0) */
+    if (a0_4 == 1 || enable == 0) {
+        /* Disable IRQ when stopping or if already enabled */
+        tx_isp_disable_irq(isp_dev);
+        pr_info("*** ispcore_video_s_stream: IRQ disabled ***\n");
+    } else {
+        /* Enable IRQ when starting */
+        tx_isp_enable_irq(isp_dev);
+        pr_info("*** ispcore_video_s_stream: IRQ enabled ***\n");
+    }
+
+    /* Binary Ninja: if (result == 0xfffffdfd) return 0 */
+    if (result == -ENOIOCTLCMD) {
+        return 0;
+    }
+
+    /* Binary Ninja: return result */
+    pr_info("*** ispcore_video_s_stream: Complete - result=%d ***\n", result);
+    return result;
+}
+EXPORT_SYMBOL(ispcore_video_s_stream);
 
 /* Binary Ninja: ispcore_sensor_ops_ioctl - iterate through subdevices safely */
 static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
@@ -1615,7 +1808,8 @@ int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute
         if (current_state == 4) {
             /* Stop video streaming */
             ISP_INFO("*** ispcore_core_ops_init: Stopping video streaming (state 4) ***\n");
-            /* ispcore_video_s_stream(sd, 0) equivalent call would go here */
+            /* CRITICAL: Call ispcore_video_s_stream to properly stop streaming */
+            ispcore_video_s_stream(&isp->sd, 0);
             current_state = isp->vic_dev->state;  /* Re-read state after stopping */
         }
 
