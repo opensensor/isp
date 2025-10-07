@@ -742,33 +742,51 @@ int tx_isp_vin_activate_subdev(void* arg1)
  */
 int tx_isp_vin_slake_subdev(struct tx_isp_subdev *sd)
 {
-    struct tx_isp_vin_device *vin = sd_to_vin_device(sd);
-    
-    if (vin->refcnt > 0) {
-        vin->refcnt--;
+    struct tx_isp_vin_device *vin_dev;
+
+    if (!sd) {
+        return -EINVAL;
     }
-    
-    mcp_log_info("vin_slake: refcnt decremented", vin->refcnt);
-    
-    if (!vin->refcnt) {
-        /* Stop streaming if running */
-        if (vin->state == TX_ISP_MODULE_RUNNING) {
-            vin_s_stream(sd, 0);
-        }
-        
-        /* Deinitialize if initialized */
-        if (vin->state == TX_ISP_MODULE_INIT) {
-            tx_isp_vin_init(sd, 0);
-        }
-        
-        mutex_lock(&vin->mlock);
-        if (vin->state == TX_ISP_MODULE_ACTIVATE) {
-            vin->state = TX_ISP_MODULE_SLAKE;
-            mcp_log_info("vin_slake: state changed to slake", vin->state);
-        }
-        mutex_unlock(&vin->mlock);
+
+    /* Get VIN device using helper to match reference driver style */
+    vin_dev = sd_to_vin_device(sd);
+    if (!vin_dev) {
+        pr_err("tx_isp_vin_slake_subdev: Invalid VIN device\n");
+        return -EINVAL;
     }
-    
+
+    pr_info("*** tx_isp_vin_slake_subdev: ENTRY - state=%d, refcnt=%d ***\n", vin_dev->state, vin_dev->refcnt);
+
+    /* Reference counting: decrement and early-exit if still in use */
+    if (vin_dev->refcnt > 0) {
+        vin_dev->refcnt--;
+    }
+    if (vin_dev->refcnt != 0) {
+        pr_info("tx_isp_vin_slake_subdev: refcnt=%d, early exit\n", vin_dev->refcnt);
+        return 0;
+    }
+
+    /* If streaming, stop stream */
+    if (vin_dev->state == TX_ISP_MODULE_RUNNING) {
+        pr_info("tx_isp_vin_slake_subdev: VIN running, stopping stream\n");
+        vin_s_stream(sd, 0);
+    }
+
+    /* If initialized, deinitialize */
+    if (vin_dev->state == TX_ISP_MODULE_INIT) {
+        pr_info("tx_isp_vin_slake_subdev: VIN in INIT, calling vin_init(disable)\n");
+        tx_isp_vin_init(sd, 0);
+    }
+
+    /* Transition to SLAKE from ACTIVATE under lock */
+    mutex_lock(&vin_dev->mlock);
+    if (vin_dev->state == TX_ISP_MODULE_ACTIVATE) {
+        vin_dev->state = TX_ISP_MODULE_SLAKE;
+        pr_info("tx_isp_vin_slake_subdev: state -> SLAKE\n");
+    }
+    mutex_unlock(&vin_dev->mlock);
+
+    pr_info("*** tx_isp_vin_slake_subdev: EXIT - state=%d ***\n", vin_dev->state);
     return 0;
 }
 

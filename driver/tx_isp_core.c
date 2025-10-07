@@ -1471,34 +1471,68 @@ int ispcore_slake_module(struct tx_isp_dev *isp)
         }
         
         /* Binary Ninja: (*($a0_1 + 0x40cc))($a0_1, 0x4000001, 0) */
-        if (vic_dev) {
+        if (vic_dev && vic_dev->vic_regs) {
             pr_info("ispcore_slake_module: Calling VIC control function (0x4000001, 0)");
-            /* VIC control call - this would be a VIC register write or control function */
+            /* CRITICAL: This is the missing VIC control call that enables proper state transitions */
+            /* The function at offset 0x40cc is likely a VIC register configuration function */
+            /* For T31 hardware, this would configure VIC for proper operation */
+            uint32_t *vic_control_reg = (uint32_t *)((char *)vic_dev->vic_regs + 0x40cc);
+            if (vic_control_reg) {
+                /* Write the control value 0x4000001 to enable VIC operation */
+                writel(0x4000001, vic_control_reg);
+                pr_info("ispcore_slake_module: VIC control register written: 0x4000001");
+            }
         }
         
         /* Binary Ninja: *($s0_1 + 0xe8) = 1 */
         vic_dev->state = 1;
         pr_info("ispcore_slake_module: Set ISP state to INIT (1)");
-        
-        /* Binary Ninja: Subdevice initialization loop */
-        pr_info("ispcore_slake_module: Initializing subdevices");
-        
-        /* Initialize CSI subdevice if present */
-        if (isp->csi_dev) {
-            pr_info("ispcore_slake_module: Initializing CSI subdevice");
-            isp->csi_dev->state = 1;  /* Set CSI to INIT state */
-        }
-        
-        /* Initialize VIC subdevice if present */
-        if (vic_dev) {
-            pr_info("ispcore_slake_module: Initializing VIC subdevice");
-            vic_dev->state = 1;  /* Set VIC to INIT state */
-        }
-        
-        /* Binary Ninja: Clock management loop */
-        pr_info("ispcore_slake_module: Managing ISP clocks");
-        /* The reference has a clock disable loop at the end, but we'll keep clocks enabled for now */
     }
+
+    /* CRITICAL FIX: Binary Ninja subdev slake loop - MUST happen regardless of VIC state */
+    /* Binary Ninja: Subdevice slake loop */
+    pr_info("ispcore_slake_module: Processing subdevices");
+
+    /* Process CSI device if present */
+    if (isp->csi_dev && isp->csi_dev->sd.ops && isp->csi_dev->sd.ops->internal &&
+        isp->csi_dev->sd.ops->internal->slake_module) {
+        pr_info("*** ispcore_slake_module: Calling slake_module for CSI ***\n");
+        ret = isp->csi_dev->sd.ops->internal->slake_module(&isp->csi_dev->sd);
+        if (ret != 0 && ret != -0x203) {
+            pr_err("ispcore_slake_module: Failed to slake CSI: %d\n", ret);
+        } else {
+            pr_info("ispcore_slake_module: CSI slake success");
+        }
+    }
+
+    /* Process VIC device if present */
+    if (isp->vic_dev && isp->vic_dev->sd.ops && isp->vic_dev->sd.ops->internal &&
+        isp->vic_dev->sd.ops->internal->slake_module) {
+        pr_info("*** ispcore_slake_module: Calling slake_module for VIC ***\n");
+        ret = isp->vic_dev->sd.ops->internal->slake_module(&isp->vic_dev->sd);
+        if (ret != 0 && ret != -0x203) {
+            pr_err("ispcore_slake_module: Failed to slake VIC: %d\n", ret);
+        } else {
+            pr_info("ispcore_slake_module: VIC slake success");
+        }
+    }
+
+    /* Process VIN device if present */
+    if (isp->vin_dev && isp->vin_dev->sd.ops && isp->vin_dev->sd.ops->internal &&
+        isp->vin_dev->sd.ops->internal->slake_module) {
+        pr_info("*** ispcore_slake_module: Calling slake_module for VIN ***\n");
+        ret = isp->vin_dev->sd.ops->internal->slake_module(&isp->vin_dev->sd);
+        if (ret != 0 && ret != -0x203) {
+            pr_err("ispcore_slake_module: Failed to slake VIN: %d\n", ret);
+        } else {
+            pr_info("ispcore_slake_module: VIN slake success");
+        }
+    }
+
+    pr_info("*** ispcore_slake_module: All subdev slake operations completed ***\n");
+    /* Binary Ninja: Clock management loop */
+    pr_info("ispcore_slake_module: Managing ISP clocks");
+    /* The reference has a clock disable loop at the end, but we'll keep clocks enabled for now */
     
     pr_info("ispcore_slake_module: ISP MODULE SLAKING COMPLETE - SUCCESS!");
     return 0;

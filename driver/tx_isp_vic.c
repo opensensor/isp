@@ -26,6 +26,7 @@
 
 #include <linux/videodev2.h>
 
+int vic_core_s_stream(struct tx_isp_subdev *sd, int enable);
 int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
@@ -2348,14 +2349,29 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
         return -EINVAL;
     }
 
-    mutex_lock(&vic_dev->state_lock);
+    pr_info("*** tx_isp_vic_slake_subdev: ENTRY - state=%d ***\n", vic_dev->state);
 
+    /* If streaming, stop stream */
+    if (vic_dev->state == 4) {
+        pr_info("tx_isp_vic_slake_subdev: VIC streaming -> stop\n");
+        vic_core_s_stream(sd, 0);
+    }
+
+    /* If initialized/running, deinit core */
+    if (vic_dev->state == 3) {
+        pr_info("tx_isp_vic_slake_subdev: VIC state 3 -> core_ops_init(0)\n");
+        vic_core_ops_init(sd, 0);
+    }
+
+    /* Transition to INIT under state lock */
+    mutex_lock(&vic_dev->state_lock);
     if (vic_dev->state > 1) {
         vic_dev->state = 1; /* Back to INIT state */
         pr_info("VIC slaked: state -> 1 (INIT)\n");
     }
-
     mutex_unlock(&vic_dev->state_lock);
+
+    pr_info("*** tx_isp_vic_slake_subdev: EXIT - state=%d ***\n", vic_dev->state);
     return 0;
 }
 

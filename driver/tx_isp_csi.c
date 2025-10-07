@@ -960,23 +960,23 @@ pr_info("========================\n");
 int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
 {
     struct tx_isp_csi_device *csi_dev;
-    
+
     if (!sd)
         return -EINVAL;
-    
+
     csi_dev = ourISPdev->csi_dev;
     if (!csi_dev) {
         pr_err("CSI device is NULL\n");
         return -EINVAL;
     }
-    
+
     mutex_lock(&csi_dev->mutex);
-    
+
     if (csi_dev->state == 1) {
         csi_dev->state = 2; /* INIT -> READY */
         pr_info("CSI activated: state %d -> 2 (READY)\n", 1);
     }
-    
+
     mutex_unlock(&csi_dev->mutex);
     return 0;
 }
@@ -985,24 +985,53 @@ int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
 int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
 {
     struct tx_isp_csi_device *csi_dev;
-    
-    if (!sd)
+    int state;
+    int i;
+
+    if (!sd) {
         return -EINVAL;
-        
-    csi_dev = ourISPdev->csi_dev;
+    }
+
+    /* Get CSI device from subdev private data (reference driver behavior) */
+    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
     if (!csi_dev) {
-        pr_err("CSI device is NULL\n");
+        pr_err("tx_isp_csi_slake_subdev: CSI device is NULL from subdev data\n");
         return -EINVAL;
     }
-    
-    mutex_lock(&csi_dev->mutex);
-    
-    if (csi_dev->state > 1) {
-        csi_dev->state = 1; /* Back to INIT state */
-        pr_info("CSI slaked: state -> 1 (INIT)\n");
+
+    pr_info("*** tx_isp_csi_slake_subdev: ENTRY - current state=%d ***\n", csi_dev->state);
+
+    /* Stop streaming if currently streaming */
+    state = csi_dev->state;
+    if (state == 4) {
+        pr_info("tx_isp_csi_slake_subdev: CSI in streaming state, stopping stream\n");
+        csi_video_s_stream(sd, 0);
+        state = csi_dev->state;
     }
-    
-    mutex_unlock(&csi_dev->mutex);
+
+    /* Disable core if in INIT/DISABLE state per reference */
+    if (csi_dev->state == 3) {
+        pr_info("tx_isp_csi_slake_subdev: CSI in state 3, calling core_ops_init(disable)\n");
+        csi_core_ops_init(sd, 0);
+    }
+
+    /* Transition ACTIVE -> INIT and disable clocks in reverse order */
+    mutex_lock(&csi_dev->mlock);
+    if (csi_dev->state == 2) {
+        pr_info("tx_isp_csi_slake_subdev: CSI state 2->1, disabling clocks\n");
+        csi_dev->state = 1;
+        if (sd->clks && sd->clk_num > 0) {
+            for (i = sd->clk_num - 1; i >= 0; i--) {
+                if (sd->clks[i]) {
+                    clk_disable(sd->clks[i]);
+                    pr_info("tx_isp_csi_slake_subdev: Disabled clock %d\n", i);
+                }
+            }
+        }
+    }
+    mutex_unlock(&csi_dev->mlock);
+
+    pr_info("*** tx_isp_csi_slake_subdev: EXIT - final state=%d ***\n", csi_dev->state);
     return 0;
 }
 
