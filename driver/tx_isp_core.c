@@ -256,7 +256,8 @@ int tx_isp_core_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *confi
 EXPORT_SYMBOL(tx_isp_core_set_format);
 
 /* Bridge init to reference ispcore_core_ops_init so it actually runs */
-static int core_subdev_core_init_bridge(struct tx_isp_subdev *sd, int enable)
+/* CRITICAL: Made non-static so it can be referenced from tx-isp-module.c */
+int core_subdev_core_init_bridge(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_dev *isp = sd ? (struct tx_isp_dev *)sd->isp : NULL;
     struct tx_isp_sensor_attribute *attr = NULL;
@@ -270,6 +271,7 @@ static int core_subdev_core_init_bridge(struct tx_isp_subdev *sd, int enable)
     }
     return ispcore_core_ops_init(isp, attr);
 }
+EXPORT_SYMBOL(core_subdev_core_init_bridge);
 
 /* Core subdev operations - matches the pattern used by other devices */
 static struct tx_isp_subdev_core_ops core_subdev_core_ops = {
@@ -283,7 +285,8 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable);
 
 /* Core subdev video operations */
 static struct tx_isp_subdev_video_ops core_subdev_video_ops = {
-    .s_stream = ispcore_video_s_stream,  /* CRITICAL: Main streaming orchestration function */
+    .s_stream = NULL,  /* Core doesn't have individual s_stream */
+    .link_stream = ispcore_video_s_stream,  /* CRITICAL: Main streaming orchestration function called by tx_isp_video_link_stream */
 };
 
 /* Core subdev pad operations */
@@ -355,8 +358,22 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         return -EINVAL;
     }
 
-    /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) - get VIC device */
-    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+    /* CRITICAL: Get VIC device from subdevs[0] private data, NOT from isp_dev->vic_dev! */
+    /* The VIC device in isp_dev->vic_dev is a different instance created in core_probe */
+    /* The actual VIC device used by the subdev is in the subdev's private data */
+    struct tx_isp_subdev *vic_sd = isp_dev->subdevs[0];
+
+    if (vic_sd) {
+        vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(vic_sd);
+        pr_info("*** VIC device from subdev private data: vic_dev=%p ***\n", vic_dev);
+    }
+
+    if (!vic_dev) {
+        /* Fallback to isp_dev->vic_dev if subdev private data is not set */
+        vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+        pr_info("*** VIC device from isp_dev->vic_dev (fallback): vic_dev=%p ***\n", vic_dev);
+    }
+
     if (!vic_dev) {
         pr_err("ispcore_video_s_stream: No VIC device available\n");
         return -EINVAL;
@@ -367,16 +384,77 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
     /* Binary Ninja: if (*($s0 + 0xe8) s< 3) */
     vic_state = vic_dev->state;
-    pr_info("*** VIC STATE CHECK: vic_dev->state=%d (need >=3), enable=%d ***\n", vic_state, enable);
+    pr_info("*** VIC STATE CHECK: vic_dev=%p, vic_dev->state=%d (need >=3), enable=%d ***\n",
+            vic_dev, vic_state, enable);
 
     if (vic_state < 3) {
         pr_err("*** VIC STATE ERROR: Current VIC state=%d, need >=3 for streaming ***\n", vic_state);
-        /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream") */
-        isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream");
-        /* Binary Ninja: private_spin_unlock_irqrestore($s0 + 0xdc, var_28) */
+        pr_info("*** CRITICAL FIX: Initializing ISP core to transition VIC to state 3 ***\n");
+
         spin_unlock_irqrestore(&vic_dev->lock, var_28);
-        /* Binary Ninja: return 0xffffffff */
-        return -1;
+
+        /* STEP 1: Activate VIC to transition from state 1 → 2 */
+        if (vic_state == 1) {
+            pr_info("*** STEP 1: Activating VIC subdev to transition state 1 → 2 ***\n");
+            extern int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd);
+
+            /* Get VIC subdev from isp_dev->subdevs[0] (VIC is at index 0) */
+            struct tx_isp_subdev *vic_sd = isp_dev->subdevs[0];
+
+            pr_info("*** DEBUG: isp_dev=%p, isp_dev->subdevs=%p ***\n", isp_dev, isp_dev->subdevs);
+            pr_info("*** DEBUG: subdevs[0]=%p, subdevs[1]=%p, subdevs[2]=%p ***\n",
+                    isp_dev->subdevs[0], isp_dev->subdevs[1], isp_dev->subdevs[2]);
+            pr_info("*** DEBUG: vic_dev=%p, &vic_dev->sd=%p ***\n", vic_dev, &vic_dev->sd);
+
+            if (vic_sd && vic_sd->ops) {
+                pr_info("*** VIC subdev found at index 0: %p, ops: %p ***\n", vic_sd, vic_sd->ops);
+
+                /* Check if this is the correct VIC subdev */
+                if (vic_sd != &vic_dev->sd) {
+                    pr_err("*** ERROR: subdevs[0] (%p) != &vic_dev->sd (%p)! ***\n", vic_sd, &vic_dev->sd);
+                    pr_err("*** Fixing subdevs[0] to point to correct VIC subdev ***\n");
+                    isp_dev->subdevs[0] = &vic_dev->sd;
+                    vic_sd = &vic_dev->sd;
+                }
+
+                int activate_result = tx_isp_vic_activate_subdev(vic_sd);
+                if (activate_result < 0) {
+                    pr_err("*** VIC ACTIVATION FAILED: %d ***\n", activate_result);
+                    return activate_result;
+                }
+                pr_info("*** VIC ACTIVATION SUCCESS: VIC should now be in state 2 ***\n");
+            } else {
+                pr_err("*** NO VIC SUBDEV AVAILABLE FOR ACTIVATION! vic_sd=%p ***\n", vic_sd);
+                return -1;
+            }
+        }
+
+        /* STEP 2: Call core init to transition VIC from state 2 → 3 */
+        pr_info("*** STEP 2: Calling core init to transition state 2 → 3 ***\n");
+        if (sd->ops && sd->ops->core && sd->ops->core->init) {
+            int init_result = sd->ops->core->init(sd, 1);
+            if (init_result < 0) {
+                pr_err("*** CORE INIT FAILED: %d ***\n", init_result);
+                return init_result;
+            }
+            pr_info("*** CORE INIT SUCCESS: VIC should now be in state 3 ***\n");
+
+            /* Re-check VIC state after init */
+            __private_spin_lock_irqsave(&vic_dev->lock, &var_28);
+            vic_state = vic_dev->state;
+            pr_info("*** VIC STATE AFTER INIT: vic_dev->state=%d ***\n", vic_state);
+
+            if (vic_state < 3) {
+                pr_err("*** VIC STATE STILL < 3 AFTER INIT! ***\n");
+                spin_unlock_irqrestore(&vic_dev->lock, var_28);
+                return -1;
+            }
+            spin_unlock_irqrestore(&vic_dev->lock, var_28);
+            __private_spin_lock_irqsave(&vic_dev->lock, &var_28);
+        } else {
+            pr_err("*** NO CORE INIT FUNCTION AVAILABLE! ***\n");
+            return -1;
+        }
     }
 
     /* Binary Ninja: private_spin_unlock_irqrestore($s0 + 0xdc, var_28) */
@@ -425,22 +503,48 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     pr_info("*** ispcore_video_s_stream: Iterating through subdevs to call s_stream ***\n");
 
     /* Binary Ninja: while (true) */
+    int subdev_index = 0;
     while (true) {
         /* Binary Ninja: void* $a0_5 = *$s3_1 */
         struct tx_isp_subdev *a0_5 = *s3_1;
 
+        pr_info("*** DEBUG: Checking subdev at index %d: %p ***\n", subdev_index, a0_5);
+
         /* Binary Ninja: if ($a0_5 != 0) */
         if (a0_5 != NULL) {
+            /* Validate subdev pointer */
+            if ((unsigned long)a0_5 < 0x80000000) {
+                pr_err("*** ERROR: Invalid subdev pointer %p at index %d! Skipping ***\n", a0_5, subdev_index);
+                s3_1++;
+                subdev_index++;
+                continue;
+            }
+
+            pr_info("*** DEBUG: subdev %d: ops=%p ***\n", subdev_index, a0_5->ops);
+
             /* Binary Ninja: int32_t* $v0_7 = *(*($a0_5 + 0xc4) + 4) */
             struct tx_isp_subdev_video_ops *video_ops = NULL;
             if (a0_5->ops && a0_5->ops->video) {
                 video_ops = a0_5->ops->video;
             }
 
+            pr_info("*** DEBUG: subdev %d: video_ops=%p ***\n", subdev_index, video_ops);
+
             /* Binary Ninja: if ($v0_7 != 0) */
             if (video_ops != NULL) {
                 /* Binary Ninja: int32_t $v0_8 = *$v0_7 */
                 int (*s_stream_func)(struct tx_isp_subdev *, int) = video_ops->s_stream;
+
+                pr_info("*** DEBUG: subdev %d: s_stream=%p ***\n", subdev_index, s_stream_func);
+
+                /* Validate function pointer */
+                if (s_stream_func != NULL && (unsigned long)s_stream_func < 0x80000000) {
+                    pr_err("*** ERROR: Invalid s_stream function pointer %p at index %d! Skipping ***\n",
+                           s_stream_func, subdev_index);
+                    s3_1++;
+                    subdev_index++;
+                    continue;
+                }
 
                 /* Binary Ninja: if ($v0_8 == 0) */
                 if (s_stream_func == NULL) {
@@ -448,6 +552,8 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
                     result = -ENOIOCTLCMD;
                 } else {
                     /* Binary Ninja: int32_t result_1 = $v0_8($a0_5, arg2) */
+                    pr_info("*** Calling s_stream on subdev %d (%s) ***\n",
+                            subdev_index, a0_5->pdev ? a0_5->pdev->name : "unknown");
                     int result_1 = s_stream_func(a0_5, enable);
                     result = result_1;
 
@@ -473,9 +579,11 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
             /* Binary Ninja: $s3_1 += 4 */
             s3_1++;
+            subdev_index++;
         } else {
             /* Binary Ninja: $s3_1 += 4 */
             s3_1++;
+            subdev_index++;
         }
 
         /* Binary Ninja: if (arg1 + 0x78 == $s3_1) - reached end of subdev array */
@@ -3323,12 +3431,16 @@ int tx_isp_core_probe(struct platform_device *pdev)
 
     pr_info("*** tx_isp_core_probe: SAFE implementation using proper struct member access ***\n");
 
-    /* Allocate ISP device structure using proper size */
-    isp_dev = kzalloc(sizeof(struct tx_isp_dev), GFP_KERNEL);
-    if (isp_dev == NULL) {
-        isp_printf(2, "Failed to allocate ISP device structure\n");
-        return -ENOMEM;
+    /* CRITICAL: Use existing ourISPdev instead of allocating a new one! */
+    extern struct tx_isp_dev *ourISPdev;
+
+    if (!ourISPdev) {
+        pr_err("*** tx_isp_core_probe: ourISPdev is NULL! ***\n");
+        return -EINVAL;
     }
+
+    isp_dev = ourISPdev;
+    pr_info("*** tx_isp_core_probe: Using existing ourISPdev=%p ***\n", isp_dev);
 
     /* Initialize device pointer */
     isp_dev->dev = &pdev->dev;
@@ -3485,14 +3597,20 @@ int tx_isp_core_probe(struct platform_device *pdev)
             /* Set basic platform data first */
             platform_set_drvdata(pdev, isp_dev);
 
-            /* CRITICAL: Create VIC device BEFORE sensor_early_init */
-            pr_info("*** tx_isp_core_probe: Creating VIC device ***\n");
-            result = tx_isp_create_vic_device(isp_dev);
-            if (result != 0) {
-                pr_err("*** tx_isp_core_probe: Failed to create VIC device: %d ***\n", result);
-                return result;
+            /* CRITICAL: DO NOT create VIC device if it already exists! */
+            /* VIC device is created in tx_isp_module_init, not here */
+            if (!isp_dev->vic_dev) {
+                pr_info("*** tx_isp_core_probe: Creating VIC device ***\n");
+                result = tx_isp_create_vic_device(isp_dev);
+                if (result != 0) {
+                    pr_err("*** tx_isp_core_probe: Failed to create VIC device: %d ***\n", result);
+                    return result;
+                } else {
+                    pr_info("*** tx_isp_core_probe: VIC device created successfully ***\n");
+                }
             } else {
-                pr_info("*** tx_isp_core_probe: VIC device created successfully ***\n");
+                pr_info("*** tx_isp_core_probe: VIC device already exists at %p - NOT creating new one ***\n",
+                        isp_dev->vic_dev);
             }
 
             /* Binary Ninja: sensor_early_init($v0) */

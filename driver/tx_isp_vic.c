@@ -2324,6 +2324,7 @@ int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
     mutex_unlock(&vic_dev->state_lock);
     return 0;
 }
+EXPORT_SYMBOL(tx_isp_vic_activate_subdev);
 
 /* VIC core operations initialization - EXACT Binary Ninja reference implementation */
 int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
@@ -3017,18 +3018,18 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     struct tx_isp_subdev *sd;
     struct resource *res;
     int ret;
+    extern struct tx_isp_dev *ourISPdev;
 
     pr_info("*** tx_isp_vic_probe: Starting VIC device probe ***\n");
 
-    /* Binary allocates 0x21c (540) bytes, but we use proper struct size */
-    vic_dev = kzalloc(sizeof(struct tx_isp_vic_device), GFP_KERNEL);
-    if (!vic_dev) {
-        pr_err("Failed to allocate vic device\n");
-        return -ENOMEM;  /* Binary returns -1 but -ENOMEM is cleaner */
+    /* CRITICAL: Use existing VIC device from ourISPdev, DO NOT create a new one! */
+    if (ourISPdev && ourISPdev->vic_dev) {
+        vic_dev = ourISPdev->vic_dev;
+        pr_info("*** tx_isp_vic_probe: Using existing VIC device at %p ***\n", vic_dev);
+    } else {
+        pr_err("*** tx_isp_vic_probe: No existing VIC device found! ***\n");
+        return -EINVAL;
     }
-
-    /* Binary explicitly zeros the structure */
-    memset(vic_dev, 0, sizeof(struct tx_isp_vic_device));
 
     /* Get subdev pointer */
     sd = &vic_dev->sd;

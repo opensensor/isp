@@ -490,19 +490,16 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
 
     if (ourISPdev) {
         if (ops == &csi_subdev_ops) {
-            /* CSI - register using helper function */
-            int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
-            pr_info("*** tx_isp_subdev_init: CSI subdev registered at slot %d ***\n", slot);
+            /* CSI - already registered in tx_isp_module_init, just link VIC device */
+            pr_info("*** tx_isp_subdev_init: CSI subdev already registered in module_init ***\n");
         } else if (ops == &vic_subdev_ops) {
-            /* VIC - register using helper function and link VIC device */
+            /* VIC - already registered in tx_isp_module_init, just link VIC device */
             struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
             ourISPdev->vic_dev = vic_dev;
-            int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
-            pr_info("*** tx_isp_subdev_init: VIC device linked and registered at slot %d ***\n", slot);
+            pr_info("*** tx_isp_subdev_init: VIC device linked (already registered in module_init) ***\n");
         } else if (ops == &core_subdev_ops) {
-            /* CORE - register using helper function */
-            int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
-            pr_info("*** tx_isp_subdev_init: Core ISP subdev registered at slot %d ***\n", slot);
+            /* CORE - already registered in tx_isp_module_init */
+            pr_info("*** tx_isp_subdev_init: Core ISP subdev already registered in module_init ***\n");
 
             /* CRITICAL FIX: Call core init function like VIN does - this triggers tisp_init */
         } else if (ops && ops->sensor && ops != &csi_subdev_ops && ops != &vic_subdev_ops && ops != &fs_subdev_ops) {

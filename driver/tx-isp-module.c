@@ -2184,28 +2184,29 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
             /* Binary Ninja: void* $v0_3 = *(*($a0 + 0xc4) + 4) */
             if (subdev->ops && subdev->ops->video) {
                 /* Binary Ninja: int32_t $v0_4 = *($v0_3 + 4) */
-                if (subdev->ops->video->s_stream != 0) {
+                /* CRITICAL FIX: Binary Ninja shows offset +4 from video_ops = link_stream, NOT s_stream! */
+                if (subdev->ops->video->link_stream != 0) {
                     /* SAFETY: Validate function pointer */
-                    if (!is_valid_kernel_pointer(subdev->ops->video->s_stream)) {
-                        pr_debug("tx_isp_video_link_stream: Invalid s_stream function pointer for subdev %d\n", i);
+                    if (!is_valid_kernel_pointer(subdev->ops->video->link_stream)) {
+                        pr_debug("tx_isp_video_link_stream: Invalid link_stream function pointer for subdev %d\n", i);
                         continue; /* i += 1 in reference */
                     }
 
-                    pr_info("*** BINARY NINJA: Calling subdev %d s_stream (enable=%d) ***\n", i, enable);
-                    pr_info("*** DEBUG: subdev=%p, ops=%p, video=%p, s_stream=%p ***\n",
-                            subdev, subdev->ops, subdev->ops->video, subdev->ops->video->s_stream);
+                    pr_info("*** BINARY NINJA: Calling subdev %d link_stream (enable=%d) ***\n", i, enable);
+                    pr_info("*** DEBUG: subdev=%p, ops=%p, video=%p, link_stream=%p ***\n",
+                            subdev, subdev->ops, subdev->ops->video, subdev->ops->video->link_stream);
 
                     /* Binary Ninja: int32_t result = $v0_4($a0, arg2) */
-                    result = subdev->ops->video->s_stream(subdev, enable);
+                    result = subdev->ops->video->link_stream(subdev, enable);
 
                     /* Binary Ninja: if (result == 0) i += 1 */
                     if (result == 0) {
-                        pr_info("*** BINARY NINJA: Subdev %d s_stream SUCCESS ***\n", i);
+                        pr_info("*** BINARY NINJA: Subdev %d link_stream SUCCESS ***\n", i);
                         continue; /* i += 1 in reference */
                     } else {
                         /* Binary Ninja: if (result != 0xfffffdfd) */
                         if (result != -ENOIOCTLCMD) {
-                            pr_err("*** BINARY NINJA: Subdev %d s_stream FAILED: %d - ROLLING BACK ***\n", i, result);
+                            pr_err("*** BINARY NINJA: Subdev %d link_stream FAILED: %d - ROLLING BACK ***\n", i, result);
 
                             /* Binary Ninja rollback: while (arg1 != $s0_1) */
                             /* Roll back all previous subdevices */
@@ -2213,13 +2214,13 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
                                 struct tx_isp_subdev *rollback_subdev = subdevs_ptr[rollback_i];
 
                                 if (rollback_subdev != 0 && rollback_subdev->ops &&
-                                    rollback_subdev->ops->video && rollback_subdev->ops->video->s_stream) {
+                                    rollback_subdev->ops->video && rollback_subdev->ops->video->link_stream) {
 
                                     pr_info("*** BINARY NINJA: Rolling back subdev %d ***\n", rollback_i);
 
                                     /* Binary Ninja: $v0_7($a0_1, arg2 u< 1 ? 1 : 0) */
                                     int rollback_enable = (enable < 1) ? 1 : 0;
-                                    rollback_subdev->ops->video->s_stream(rollback_subdev, rollback_enable);
+                                    rollback_subdev->ops->video->link_stream(rollback_subdev, rollback_enable);
                                 }
                             }
 
@@ -2230,7 +2231,7 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
                         }
                     }
                 } else {
-                    pr_debug("tx_isp_video_link_stream: No s_stream function for subdev %d\n", i);
+                    pr_debug("tx_isp_video_link_stream: No link_stream function for subdev %d\n", i);
                     continue; /* i += 1 in reference */
                 }
             } else {
@@ -4901,6 +4902,47 @@ static int tx_isp_init(void)
         pr_info("CSI subdev: %p, ops: %p, video: %p, s_stream: %p\n",
                 &csi_dev->sd, csi_dev->sd.ops, csi_dev->sd.ops->video,
                 csi_dev->sd.ops->video->s_stream);
+    }
+
+    /* CRITICAL: Register CORE subdev at index 2 for link_stream orchestration */
+    /* The core subdev (isp_dev->sd) has link_stream = ispcore_video_s_stream */
+    /* which orchestrates all subdev streaming when called by tx_isp_video_link_stream */
+
+    /* CRITICAL FIX: Ensure core subdev has ops pointer set */
+    extern struct tx_isp_subdev_ops core_subdev_ops;
+    extern int core_subdev_core_init_bridge(struct tx_isp_subdev *sd, int enable);
+
+    if (!ourISPdev->sd.ops) {
+        pr_info("*** CRITICAL FIX: Core subdev ops is NULL, setting to core_subdev_ops ***\n");
+        ourISPdev->sd.ops = &core_subdev_ops;
+    }
+
+    /* CRITICAL FIX: Manually set core init function if it's NULL */
+    if (ourISPdev->sd.ops && ourISPdev->sd.ops->core) {
+        if (!ourISPdev->sd.ops->core->init) {
+            pr_info("*** CRITICAL FIX: Core init is NULL, setting to core_subdev_core_init_bridge ***\n");
+            /* Cast away const to set the function pointer */
+            ((struct tx_isp_subdev_core_ops *)ourISPdev->sd.ops->core)->init = core_subdev_core_init_bridge;
+        }
+    }
+
+    ourISPdev->subdevs[2] = &ourISPdev->sd;
+    pr_info("*** REGISTERED CORE SUBDEV AT INDEX 2 WITH LINK_STREAM OPS ***\n");
+    pr_info("CORE subdev: %p, ops: %p, video: %p, link_stream: %p\n",
+            &ourISPdev->sd, ourISPdev->sd.ops,
+            ourISPdev->sd.ops ? ourISPdev->sd.ops->video : NULL,
+            (ourISPdev->sd.ops && ourISPdev->sd.ops->video) ? ourISPdev->sd.ops->video->link_stream : NULL);
+
+    /* Debug: Print core ops details */
+    if (ourISPdev->sd.ops) {
+        pr_info("CORE ops: core=%p, video=%p, pad=%p, sensor=%p, internal=%p\n",
+                ourISPdev->sd.ops->core, ourISPdev->sd.ops->video, ourISPdev->sd.ops->pad,
+                ourISPdev->sd.ops->sensor, ourISPdev->sd.ops->internal);
+        if (ourISPdev->sd.ops->core) {
+            pr_info("CORE core_ops: init=%p, reset=%p, ioctl=%p\n",
+                    ourISPdev->sd.ops->core->init, ourISPdev->sd.ops->core->reset,
+                    ourISPdev->sd.ops->core->ioctl);
+        }
     }
 
     pr_info("*** SUBDEV ARRAY POPULATED SAFELY - tx_isp_video_link_stream SHOULD NOW WORK! ***\n");
