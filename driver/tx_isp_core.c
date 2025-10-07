@@ -1953,11 +1953,19 @@ int tisp_channel_start(int channel_id, struct tx_isp_channel_attr *attr)
         ISP_INFO("Channel %d: No scaling needed\n", channel_id);
     }
     
-    /* Enable channel in master control register */
-    reg_val = isp_read32(0x9804);
-    reg_val |= (1 << channel_id) | 0xf0000;
-    isp_write32(0x9804, reg_val);
-    
+    /* Binary Ninja: Global variable for channel enable mask */
+    extern uint32_t msca_ch_en;
+
+    /* Binary Ninja: msca_ch_en = 1 << (arg1 & 0x1f) | msca_ch_en_1 */
+    /* Enable channel in master control register AND update global msca_ch_en */
+    msca_ch_en |= (1 << channel_id);
+    msca_ch_en |= 0xf0000;  /* Binary Ninja: $a1_1 = 0xf0000 | msca_ch_en */
+
+    /* Binary Ninja: system_reg_write(0x9804, $a1_1) */
+    pr_info("*** tisp_channel_start: Writing 0x%08x to reg 0x9804 (enable channel %d) ***\n",
+            msca_ch_en, channel_id);
+    system_reg_write(0x9804, msca_ch_en);
+
     ISP_INFO("*** tisp_channel_start: Channel %d started successfully ***\n", channel_id);
     return 0;
 }
@@ -2479,39 +2487,54 @@ int tisp_channel_fifo_clear(uint32_t channel_id)
     return 0;
 }
 
-/* Missing tisp_channel_stop function */
+/* tisp_channel_stop - EXACT Binary Ninja implementation */
 int tisp_channel_stop(uint32_t channel_id)
 {
-    struct tx_isp_dev *isp_dev = tx_isp_get_device();
-    u32 reg_val;
-    u32 channel_base;
-    
-    if (!isp_dev || channel_id >= ISP_MAX_CHAN) {
-        pr_err("tisp_channel_stop: Invalid parameters\n");
-        return -EINVAL;
+    /* Binary Ninja: Global variable for channel enable mask */
+    extern uint32_t msca_ch_en;
+
+    /* Binary Ninja: int32_t $s0 = 1 << (arg1 & 0x1f) */
+    u32 channel_mask = 1 << (channel_id & 0x1f);
+    u32 new_ch_en;
+    u32 status;
+    int timeout = 0xbb9;  /* Binary Ninja: 3001 iterations */
+
+    pr_info("*** tisp_channel_stop: EXACT Binary Ninja - Stopping channel %d ***\n", channel_id);
+
+    /* Binary Ninja: if (not.d(msca_ch_en_1) == 0) msca_ch_en_1 = 0 */
+    /* Binary Ninja: int32_t $a1 = not.d($s0) & msca_ch_en_1 */
+    new_ch_en = (~channel_mask) & msca_ch_en;
+    msca_ch_en = new_ch_en;
+
+    /* Binary Ninja: system_reg_write(0x9804, $a1) */
+    pr_info("*** tisp_channel_stop: Writing 0x%08x to reg 0x9804 (disable channel %d) ***\n",
+            new_ch_en, channel_id);
+    system_reg_write(0x9804, new_ch_en);
+
+    /* Binary Ninja: Wait loop - do { $v0_2 = system_reg_read(0x9808); $s2 -= 1; private_msleep(1); } while (($s0 & $v0_2) != 0) */
+    pr_info("*** tisp_channel_stop: Waiting for channel %d to stop (checking reg 0x9808) ***\n", channel_id);
+
+    do {
+        status = system_reg_read(0x9808);
+        timeout--;
+        msleep(1);
+
+        if (timeout == 0) {
+            /* Binary Ninja: isp_printf(2, "error(%s,%d): wait ch%d stop too…", "tisp_channel_stop") */
+            pr_err("*** tisp_channel_stop: TIMEOUT waiting for channel %d to stop! ***\n", channel_id);
+            pr_err("*** tisp_channel_stop: reg 0x9808 = 0x%08x, expected bit %d clear ***\n",
+                   status, channel_id);
+            isp_printf(2, "error(%s,%d): wait ch%d stop timeout\n", "tisp_channel_stop", __LINE__, channel_id);
+            break;
+        }
+    } while ((channel_mask & status) != 0);
+
+    if (timeout > 0) {
+        pr_info("*** tisp_channel_stop: Channel %d stopped successfully (waited %d ms) ***\n",
+                channel_id, 0xbb9 - timeout);
     }
-    
-    pr_info("*** tisp_channel_stop: Stopping channel %d ***\n", channel_id);
-    
-    /* Calculate channel register base */
-    channel_base = (channel_id + 0x98) << 8;
-    
-    /* Disable channel scaling */
-    system_reg_write(channel_base + 0x1c0, 0);
-    system_reg_write(channel_base + 0x1c4, 0);
-    system_reg_write(channel_base + 0x1c8, 0);
-    system_reg_write(channel_base + 0x1cc, 0);
-    
-    /* Clear channel control registers */
-    system_reg_write(channel_base + 0x80, 0);
-    system_reg_write(channel_base + 0x98, 0);
-    
-    /* Disable channel in master control register */
-    reg_val = isp_read32(0x9804);
-    reg_val &= ~(1 << channel_id);
-    system_reg_write(0x9804, reg_val);
-    
-    pr_info("*** tisp_channel_stop: Channel %d stopped successfully ***\n", channel_id);
+
+    /* Binary Ninja: return 0 */
     return 0;
 }
 EXPORT_SYMBOL(tisp_channel_stop);
@@ -2519,7 +2542,7 @@ EXPORT_SYMBOL(tisp_channel_stop);
 /* Missing function implementations from the Binary Ninja decompilation */
 
 /* Global variable for channel mask control */
-static uint32_t msca_ch_en = 0;
+uint32_t msca_ch_en = 0;
 EXPORT_SYMBOL(msca_ch_en);
 
 /* Additional missing global variables referenced in Binary Ninja */

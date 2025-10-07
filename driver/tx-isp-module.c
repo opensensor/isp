@@ -4073,14 +4073,16 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         return 0;
     }
-    case 0x8038564f: { // TX_ISP_SENSOR_S_REGISTER - Set sensor register
+    case 0x8038564f: { // TX_ISP_SENSOR_S_REGISTER - Set sensor register (EXACT Binary Ninja)
         struct sensor_reg_write {
             uint32_t addr;
             uint32_t val;
             uint32_t size;
-            // Additional fields from reference
+            // Additional fields from reference (0x38 bytes total)
             uint32_t reserved[10];
         } reg_write;
+        int i;
+        int ret = 0;
 
         if (copy_from_user(&reg_write, argp, sizeof(reg_write)))
             return -EFAULT;
@@ -4088,8 +4090,28 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("Sensor register write: addr=0x%x val=0x%x size=%d\n",
                 reg_write.addr, reg_write.val, reg_write.size);
 
-        // In real implementation, this would write to sensor via I2C
-        // Following reference pattern of calling sensor ops
+        /* Binary Ninja: Iterate through subdevs at offset 0x2c (isp_dev->subdevs) */
+        /* Pattern: for (i = isp_dev + 0x2c; i != isp_dev + 0x6c; i += 4) */
+        for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+            struct tx_isp_subdev *subdev = isp_dev->subdevs[i];
+
+            if (!subdev)
+                continue;
+
+            /* Binary Ninja: Check if subdev has sensor ops */
+            if (subdev->ops && subdev->ops->sensor && subdev->ops->sensor->ioctl) {
+                /* Binary Ninja: Call sensor ioctl with register write data */
+                ret = subdev->ops->sensor->ioctl(subdev, cmd, &reg_write);
+
+                if (ret == 0) {
+                    /* Success - continue to next subdev */
+                    continue;
+                } else if (ret != -ENOIOCTLCMD) {
+                    /* Error other than "not supported" - return it */
+                    return ret;
+                }
+            }
+        }
 
         return 0;
     }
