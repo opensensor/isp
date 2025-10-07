@@ -562,13 +562,9 @@ struct platform_device tx_isp_fs_platform_device = {
 };
 
 /* ISP Core platform device resources - CORRECTED IRQ */
+/* FIXED: Removed memory resource to avoid conflict with VIN - CORE is a logical device */
 static struct resource tx_isp_core_resources[] = {
     [0] = {
-        .start = 0x13300000,           /* T31 ISP Core base address */
-        .end   = 0x133FFFFF,           /* T31 ISP Core end address */
-        .flags = IORESOURCE_MEM,
-    },
-    [1] = {
         .start = 37,                   /* T31 ISP Core IRQ 37 - MATCHES STOCK DRIVER isp-m0 */
         .end   = 37,
         .flags = IORESOURCE_IRQ,
