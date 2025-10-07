@@ -2335,10 +2335,11 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
     return 0;
 }
 
-/* VIC slake function - matching reference driver */
+/* VIC slake function - EXACT Binary Ninja reference implementation */
 int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
 {
     struct tx_isp_vic_device *vic_dev;
+    int state;
 
     if (!sd)
         return -EINVAL;
@@ -2351,24 +2352,31 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
 
     pr_info("*** tx_isp_vic_slake_subdev: ENTRY - state=%d ***\n", vic_dev->state);
 
-    /* If streaming, stop stream */
-    if (vic_dev->state == 4) {
-        pr_info("tx_isp_vic_slake_subdev: VIC streaming -> stop\n");
+    /* Binary Ninja: Read state at offset 0x128 */
+    state = vic_dev->state;
+
+    /* Binary Ninja: if (state == 4) call vic_core_s_stream and re-read state */
+    if (state == 4) {
+        pr_info("tx_isp_vic_slake_subdev: VIC streaming (state=4) -> stop stream\n");
         vic_core_s_stream(sd, 0);
+        state = vic_dev->state;  /* Re-read state after stopping stream */
     }
 
-    /* If initialized/running, deinit core */
-    if (vic_dev->state == 3) {
-        pr_info("tx_isp_vic_slake_subdev: VIC state 3 -> core_ops_init(0)\n");
+    /* Binary Ninja: if (state == 3) call vic_core_ops_init(sd, 0) */
+    if (state == 3) {
+        pr_info("tx_isp_vic_slake_subdev: VIC state 3 -> vic_core_ops_init(0)\n");
         vic_core_ops_init(sd, 0);
     }
 
-    /* Transition to INIT under state lock */
+    /* Binary Ninja: Lock mutex at offset 0x130 (state_lock) */
     mutex_lock(&vic_dev->state_lock);
-    if (vic_dev->state > 1) {
-        vic_dev->state = 1; /* Back to INIT state */
-        pr_info("VIC slaked: state -> 1 (INIT)\n");
+
+    /* Binary Ninja: Only transition from state 2 to state 1 */
+    if (vic_dev->state == 2) {
+        vic_dev->state = 1;
+        pr_info("tx_isp_vic_slake_subdev: VIC state 2 -> 1 (INIT)\n");
     }
+
     mutex_unlock(&vic_dev->state_lock);
 
     pr_info("*** tx_isp_vic_slake_subdev: EXIT - state=%d ***\n", vic_dev->state);

@@ -36,7 +36,7 @@
 #define ISP_PIPELINE_STREAMING   2
 
 /* ISP constants for Binary Ninja compatibility */
-#define ISP_MAX_SUBDEVS          32
+#define ISP_MAX_SUBDEVS          16
 
 /* Forward declarations */
 struct tx_isp_subdev;
@@ -265,7 +265,7 @@ struct tx_isp_dev {
     struct proc_dir_entry *proc_dir;         /* Proc directory at offset 0x11c */
     
     /* CRITICAL: Binary Ninja subdev array at offset 0x38 - tx_isp_video_link_stream depends on this */
-    struct tx_isp_subdev *subdevs[16];       /* Subdev array at offset 0x38 for tx_isp_video_link_stream */
+    struct tx_isp_subdev *subdevs[ISP_MAX_SUBDEVS];       /* Subdev array at offset 0x38 for tx_isp_video_link_stream */
     
     /* Frame channel devices - needed for tx_isp_create_framechan_devices */
     struct miscdevice *fs_miscdevs[4];       /* Frame source misc devices (/dev/isp-fs*) */
