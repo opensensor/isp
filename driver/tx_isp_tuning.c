@@ -9972,6 +9972,9 @@ EXPORT_SYMBOL(tisp_event_cleanup);
 static void *tisp_opmsg = NULL;
 static bool tisp_param_oper_inited = false;
 
+/* forward declaration to avoid implicit declaration */
+int tisp_code_create_tuning_node(void);
+
 int tisp_param_operate_init(void)
 {
     int ret = 0;
@@ -9989,12 +9992,10 @@ int tisp_param_operate_init(void)
         }
 
         /* Minimal alignment with BN: ensure tuning node exists here */
-        if (tisp_code_create_tuning_node) {
-            ret = tisp_code_create_tuning_node();
-            if (ret) {
-                pr_err("tisp_param_operate_init: tisp_code_create_tuning_node failed: %d\n", ret);
-                return ret;
-            }
+        ret = tisp_code_create_tuning_node();
+        if (ret) {
+            pr_err("tisp_param_operate_init: tisp_code_create_tuning_node failed: %d\n", ret);
+            return ret;
         }
 
         tisp_param_oper_inited = true;
