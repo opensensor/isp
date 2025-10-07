@@ -2296,11 +2296,11 @@ int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
     return 0;
 }
 
-/* VIC core operations initialization - matching reference driver */
+/* VIC core operations initialization - EXACT Binary Ninja reference implementation */
 int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vic_device *vic_dev;
-    int old_state;
+    int state;
 
     if (!sd)
         return -EINVAL;
@@ -2311,27 +2311,32 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
         return -EINVAL;
     }
 
-    old_state = vic_dev->state;
+    /* Binary Ninja: Read state at offset 0x128 */
+    state = vic_dev->state;
 
-    if (enable) {
-        /* Enable VIC processing */
-        if (old_state != 3) {
-            /* Enable VIC interrupts - placeholder register write */
-            pr_info("VIC: Enabling interrupts (enable=%d)\n", enable);
-            vic_dev->state = 3; /* READY -> ACTIVE */
+    /* Binary Ninja: if (arg2 == 0) - disable path */
+    if (enable == 0) {
+        /* Binary Ninja: if ($v0_2 != 2) */
+        if (state != 2) {
+            /* Binary Ninja: tx_vic_disable_irq() */
+            tx_vic_disable_irq(vic_dev);
+            /* Binary Ninja: *($s1_1 + 0x128) = 2 */
+            vic_dev->state = 2;
+            pr_info("vic_core_ops_init: Disabled VIC, state -> 2\n");
         }
     } else {
-        /* Disable VIC processing */
-        if (old_state != 2) {
-            /* Disable VIC interrupts - placeholder register write */
-            pr_info("VIC: Disabling interrupts (enable=%d)\n", enable);
-            vic_dev->state = 2; /* ACTIVE -> READY */
+        /* Binary Ninja: else - enable path */
+        /* Binary Ninja: if ($v0_2 != 3) */
+        if (state != 3) {
+            /* Binary Ninja: tx_vic_enable_irq() */
+            tx_vic_enable_irq(vic_dev);
+            /* Binary Ninja: *($s1_1 + 0x128) = 3 */
+            vic_dev->state = 3;
+            pr_info("vic_core_ops_init: Enabled VIC, state -> 3\n");
         }
     }
 
-    pr_info("VIC core ops init: enable=%d, state %d -> %d\n",
-            enable, old_state, vic_dev->state);
-
+    pr_info("vic_core_ops_init: enable=%d, final state=%d\n", enable, vic_dev->state);
     return 0;
 }
 
