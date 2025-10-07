@@ -490,7 +490,7 @@ static struct resource tx_isp_csi_resources[] = {
 };
 
 struct platform_device tx_isp_csi_platform_device = {
-    .name = "tx-isp-csi",
+    .name = "isp-w01",  /* FIXED: Must match tx_isp_csi_driver name for probe to be called */
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_csi_resources),
     .resource = tx_isp_csi_resources,
@@ -511,7 +511,7 @@ static struct resource tx_isp_vin_resources[] = {
 };
 
 struct platform_device tx_isp_vin_platform_device = {
-    .name = "tx-isp-vin",
+    .name = "isp-w00",  /* FIXED: Must match tx_isp_vin_driver name for probe to be called */
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_vin_resources),
     .resource = tx_isp_vin_resources,
@@ -552,7 +552,7 @@ static struct fs_platform_data fs_pdata = {
 };
 
 struct platform_device tx_isp_fs_platform_device = {
-    .name = "tx-isp-fs",
+    .name = "isp-fs",  /* FIXED: Must match tx_isp_fs_driver name for probe to be called */
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_fs_resources),
     .resource = tx_isp_fs_resources,
@@ -576,7 +576,7 @@ static struct resource tx_isp_core_resources[] = {
 };
 
 struct platform_device tx_isp_core_platform_device = {
-    .name = "tx-isp-core",
+    .name = "isp-m0",  /* FIXED: Must match tx_isp_core_driver name for probe to be called */
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_core_resources),
     .resource = tx_isp_core_resources,
@@ -586,7 +586,6 @@ struct platform_device tx_isp_core_platform_device = {
 
 /* Forward declarations - Using actual function names from reference driver */
 struct frame_channel_device; /* Forward declare struct */
-static void frame_channel_wakeup_waiters(struct frame_channel_device *fcd);
 static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data);
 int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
@@ -618,7 +617,7 @@ extern int sensor_init(struct tx_isp_dev *isp_dev);
 
 /* Forward declarations for subdev ops structures */
 extern struct tx_isp_subdev_ops vic_subdev_ops;
-static struct tx_isp_subdev_ops csi_subdev_ops;
+extern struct tx_isp_subdev_ops csi_subdev_ops;
 
 /* Reference driver function declarations - Binary Ninja exact names */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);  /* FIXED: Correct signature to match tx_isp_vic.c */
@@ -1212,45 +1211,6 @@ static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void
 /* VIC core s_stream - EXACT Binary Ninja implementation */
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable);
 
-/* Frame channel state management */
-struct tx_isp_channel_state {
-    bool enabled;
-    bool streaming;
-    int format;
-    int width;
-    int height;
-    int buffer_count;
-    uint32_t sequence;           /* Frame sequence counter */
-
-    /* Simplified buffer management for now */
-    struct frame_buffer current_buffer;     /* Current active buffer */
-    spinlock_t buffer_lock;                /* Protect buffer access */
-    wait_queue_head_t frame_wait;          /* Wait queue for frame completion */
-    bool frame_ready;                      /* Simple frame ready flag */
-};
-
-// Frame channel devices - create video channel devices like reference
-struct frame_channel_device {
-    struct miscdevice miscdev;
-    int channel_num;
-    struct tx_isp_channel_state state;
-
-    /* Binary Ninja buffer management fields */
-    struct mutex buffer_mutex;           /* Offset 0x28 - private_mutex_lock($s0 + 0x28) */
-    spinlock_t buffer_queue_lock;        /* Offset 0x2c4 - __private_spin_lock_irqsave($s0 + 0x2c4) */
-    void *buffer_queue_head;             /* Offset 0x214 - *($s0 + 0x214) */
-    void *buffer_queue_base;             /* Offset 0x210 - $s0 + 0x210 */
-    int buffer_queue_count;              /* Offset 0x218 - *($s0 + 0x218) */
-    int streaming_flags;                 /* Offset 0x230 - *($s0 + 0x230) & 1 */
-    void *vic_subdev;                    /* Offset 0x2bc - *($s0 + 0x2bc) */
-    int buffer_type;                     /* Offset 0x24 - *($s0 + 0x24) */
-    int field;                           /* Offset 0x3c - *($s0 + 0x3c) */
-    void *buffer_array[64];              /* Buffer array for index lookup */
-};
-
-static struct frame_channel_device frame_channels[4]; /* Support up to 4 video channels */
-static int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
-
 /* VIC continuous frame generation work queue */
 static struct delayed_work vic_frame_work;
 static void vic_frame_work_function(struct work_struct *work);
@@ -1830,7 +1790,7 @@ void tx_isp_disable_irq(struct tx_isp_dev *isp_dev)
 }
 
 /* tx_isp_request_irq - EXACT Binary Ninja implementation */
-static int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_dev *isp_dev)
+int tx_isp_request_irq2(struct platform_device *pdev, struct tx_isp_dev *isp_dev)
 {
     int irq_num;
     int ret;
@@ -1906,7 +1866,7 @@ static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev)
     pr_info("*** USING BINARY NINJA tx_isp_request_irq FOR HARDWARE INTERRUPTS ***\n");
 
     /* Call Binary Ninja exact interrupt registration using global platform device */
-    ret = tx_isp_request_irq(&tx_isp_platform_device, isp_dev);
+    ret = tx_isp_request_irq2(&tx_isp_platform_device, isp_dev);
     if (ret == 0) {
         pr_info("*** Hardware interrupts initialized with Binary Ninja method (IRQ %d) ***\n", isp_dev->isp_irq);
     } else {
@@ -2165,6 +2125,7 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd);
 static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
 {
     struct tx_isp_subdev **subdevs_ptr;    /* $s4 in reference: arg1 + 0x38 */
+    struct tx_isp_sensor *sensor;
     int i;
     int result;
 
@@ -2173,6 +2134,40 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
     if (!isp_dev) {
         pr_err("tx_isp_video_link_stream: Invalid ISP device\n");
         return -EINVAL;
+    }
+
+    /* CRITICAL: Initialize sensor BEFORE starting subdev streaming */
+    if (enable && isp_dev->sensor) {
+        sensor = isp_dev->sensor;
+
+        pr_info("*** tx_isp_video_link_stream: INITIALIZING SENSOR BEFORE STREAMING ***\n");
+        pr_info("*** Found sensor %s for streaming ***\n",
+                sensor ? sensor->info.name : "(unnamed)");
+
+        /* Call sensor init to write initialization registers and sync attributes */
+        if (sensor->sd.ops && sensor->sd.ops->core && sensor->sd.ops->core->init) {
+            pr_info("*** CALLING SENSOR_INIT - WRITING INITIALIZATION REGISTERS ***\n");
+            result = sensor->sd.ops->core->init(&sensor->sd, 1);
+            if (result) {
+                pr_err("SENSOR_INIT FAILED: %d\n", result);
+                return result;
+            } else {
+                pr_info("*** SENSOR_INIT SUCCESS - SENSOR REGISTERS PROGRAMMED ***\n");
+                pr_info("*** SENSOR ATTRIBUTES SHOULD NOW BE SYNCED TO VIC ***\n");
+            }
+        } else {
+            pr_err("*** NO SENSOR_INIT FUNCTION AVAILABLE! ***\n");
+            pr_err("sensor=%p\n", sensor);
+            if (sensor) {
+                pr_err("sensor->sd.ops=%p\n", sensor->sd.ops);
+                if (sensor->sd.ops) {
+                    pr_err("sensor->sd.ops->core=%p\n", sensor->sd.ops->core);
+                    if (sensor->sd.ops->core) {
+                        pr_err("sensor->sd.ops->core->init=%p\n", sensor->sd.ops->core->init);
+                    }
+                }
+            }
+        }
     }
 
     /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
@@ -3700,13 +3695,6 @@ static struct tx_isp_subdev_sensor_ops sensor_subdev_sensor_ops = {
 /* vic_subdev_ops is defined in tx_isp_vic.c - use external reference */
 extern struct tx_isp_subdev_ops vic_subdev_ops;
 
-static struct tx_isp_subdev_ops csi_subdev_ops = {
-    .video = &csi_video_ops,
-    .sensor = NULL,
-    .core = NULL,
-};
-
-
 /* Complete sensor subdev ops structure */
 static struct tx_isp_subdev_ops sensor_subdev_ops = {
     .core = &sensor_subdev_core_ops,
@@ -4784,20 +4772,11 @@ static int tx_isp_init(void)
 
     pr_info("*** ALL PLATFORM DEVICES REGISTERED - SHOULD SEE IRQ 37 + 38 IN /proc/interrupts ***\n");
 
-    /* *** CRITICAL: Initialize FS platform driver (creates /proc/jz/isp/isp-fs like reference) *** */
-    ret = tx_isp_fs_platform_init();
-    if (ret) {
-        pr_err("Failed to initialize FS platform driver: %d\n", ret);
-        goto err_cleanup_platforms;
-    }
-    pr_info("*** FS PLATFORM DRIVER INITIALIZED - /proc/jz/isp/isp-fs SHOULD NOW EXIST ***\n");
-
-    /* *** CRITICAL: Initialize subdev platform drivers (CSI, VIC, VIN, CORE) *** */
-    /* NOTE: VIC driver is registered inside tx_isp_subdev_platform_init() to avoid double registration */
+    /* *** CRITICAL: Initialize subdev platform drivers (CSI, VIC, VIN, FS, CORE) *** */
+    /* NOTE: FS driver is registered inside tx_isp_subdev_platform_init() along with other subdev drivers */
     ret = tx_isp_subdev_platform_init();
     if (ret) {
         pr_err("Failed to initialize subdev platform drivers: %d\n", ret);
-        tx_isp_fs_platform_exit();  /* Clean up FS driver */
         goto err_cleanup_platforms;
     }
     pr_info("*** SUBDEV PLATFORM DRIVERS INITIALIZED - CSI/VIC/VIN/CORE DRIVERS REGISTERED ***\n");
@@ -6544,7 +6523,7 @@ static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
 }
 
 /* Wake up waiters when frame is ready - matches reference driver pattern */
-static void frame_channel_wakeup_waiters(struct frame_channel_device *fcd)
+void frame_channel_wakeup_waiters(struct frame_channel_device *fcd)
 {
     unsigned long flags;
 
@@ -7324,6 +7303,101 @@ int tisp_ae1_process(void)
 
     /* Binary Ninja: return 0 */
     return 0;
+}
+
+
+/* tx_isp_module_init - EXACT Binary Ninja reference implementation */
+int tx_isp_module_init(struct tx_isp_dev *isp_dev)
+{
+    int ret;
+
+    pr_info("*** tx_isp_module_init: EXACT Binary Ninja reference implementation ***\n");
+
+    /* CRITICAL FIX: Register platform drivers BEFORE registering platform devices */
+    pr_info("*** tx_isp_module_init: Registering subdev platform drivers FIRST ***\n");
+    ret = tx_isp_subdev_platform_init();
+    if (ret != 0) {
+        pr_err("Failed to register subdev platform drivers: %d\n", ret);
+        return ret;
+    }
+
+    /* Binary Ninja: Register misc device to create /dev/tx-isp */
+    ret = misc_register(&tx_isp_miscdev);
+    if (ret != 0) {
+        pr_err("Failed to register misc device: %d\n", ret);
+        tx_isp_subdev_platform_exit();  /* Cleanup platform drivers */
+        return ret;
+    }
+    pr_info("*** /dev/tx-isp CHARACTER DEVICE CREATED (minor=%d) ***\n", tx_isp_miscdev.minor);
+
+    /* Binary Ninja: Call tx_isp_create_graph_and_nodes() */
+    ret = tx_isp_create_graph_and_nodes(isp_dev);
+    if (ret != 0) {
+        pr_err("Failed to create graph and nodes: %d\n", ret);
+        misc_deregister(&tx_isp_miscdev);
+        tx_isp_subdev_platform_exit();  /* Cleanup platform drivers */
+        return ret;
+    }
+
+    /* VIC IRQ registration now happens immediately after device linking in auto-link function */
+    pr_info("*** tx_isp_module_init: VIC device linkage check - isp_dev->vic_dev = %p ***\n", isp_dev->vic_dev);
+
+
+    /* *** CRITICAL: Enable interrupt generation at hardware level *** */
+    pr_info("*** ENABLING HARDWARE INTERRUPT GENERATION ***\n");
+
+            pr_info("*** WRITING VIC INTERRUPT ENABLE REGISTERS ***\n");
+    /* Program early VIC enables like the had-continuous-interrupts branch; masks untouched */
+    if (isp_dev->vic_dev) {
+        struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+        if (vic->vic_regs) {
+            void __iomem *vr = vic->vic_regs;
+            void __iomem *vc = vic->vic_regs_secondary;
+
+            /* Clear any pending first on both primary and control banks */
+            writel(0x00000000, vr + 0x00);
+            writel(0x00000000, vr + 0x20);
+            if (vc) {
+                writel(0x00000000, vc + 0x00);
+                writel(0x00000000, vc + 0x20);
+            }
+            wmb();
+
+            /* Good-things gating: IMR/IMCR on PRIMARY bank (matches reference trace) */
+            /* These gate the VIC line before detailed enables; required for interrupts to exit the block */
+            writel(0x00000001, vr + 0x04);   /* IMR baseline */
+            writel(0x00000000, vr + 0x24);   /* IMR1 baseline */
+            writel(0x07800438, vr + 0x04);   /* IMR routing/mask */
+            writel(0xb5742249, vr + 0x0c);   /* IMCR key */
+            wmb();
+
+            /* SKIP early writes to 0x1e0/0x1e4 (status W1C) to match good-things; do not touch these here */
+            /* writel(0x3FFFFFFF, vr + 0x1e0);  */
+            /* writel(0x0000000F, vr + 0x1e4);  */
+            /* if (vc) { writel(0x3FFFFFFF, vc + 0x1e0); writel(0x0000000F, vc + 0x1e4); } */
+            wmb();
+
+            pr_info("*** EARLY VIC ENABLES (MODULE INIT): SKIPPED 0x1e0/0x1e4 programming to preserve W1C semantics ***\n");
+        } else {
+            pr_warn("*** EARLY VIC ENABLES (MODULE INIT): vic_regs not mapped yet ***\n");
+        }
+    } else {
+        pr_warn("*** EARLY VIC ENABLES (MODULE INIT): VIC device not linked yet ***\n");
+    }
+
+    pr_info("*** tx_isp_module_init: Binary Ninja reference implementation complete ***\n");
+    return 0;
+}
+
+/* tx_isp_module_deinit - Binary Ninja stub implementation */
+void tx_isp_module_deinit(struct tx_isp_subdev *sd)
+{
+    if (!sd) {
+        pr_err("tx_isp_module_deinit: Invalid subdev\n");
+        return;
+    }
+
+    pr_info("tx_isp_module_deinit: Module deinitialized\n");
 }
 
 /* Export AE processing function for use by other modules */

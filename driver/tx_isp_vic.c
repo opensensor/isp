@@ -2249,7 +2249,9 @@ long isp_vic_cmd_set(struct file *file, unsigned int cmd, unsigned long arg)
 int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
 {
     struct tx_isp_vic_device *vic_dev;
-
+    struct clk **clks;
+    int clk_count;
+	int i;
     if (!sd)
         return -EINVAL;
 
@@ -2290,7 +2292,34 @@ int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
             }
             pr_info("*** VIC ACTIVATION: %d free buffers available ***\n", free_count);
         }
-    }
+
+        /* Ensure CSI clocks are initialized before enabling */
+        if (!sd->clks && sd->clk_num > 0) {
+            extern int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_num);
+            pr_info("tx_isp_csi_activate_subdev: Initializing %d clocks for CSI before enabling\n", sd->clk_num);
+            if (isp_subdev_init_clks(sd, sd->clk_num) != 0) {
+                pr_warn("tx_isp_csi_activate_subdev: isp_subdev_init_clks failed; continuing without clocks\n");
+            }
+        }
+
+        /* Binary Ninja: int32_t* $s1_2 = *(arg1 + 0xbc) */
+        clks = sd->clks;
+
+        /* Binary Ninja: if ($s1_2 != 0) */
+        if (clks != NULL) {
+            /* Binary Ninja: if ($s1_2 u< 0xfffff001) */
+            if ((unsigned long)clks < 0xfffff001) {
+                /* Binary Ninja: while (i u< *(arg1 + 0xc0)) */
+                clk_count = sd->clk_num;
+                for (i = 0; i < clk_count; i++) {
+                    /* Binary Ninja: private_clk_enable(*$s1_2) */
+                    clk_enable(clks[i]);
+                }
+            }
+        } else {
+            pr_warn("tx_isp_csi_activate_subdev: No CSI clocks available to enable (clks=NULL, clk_num=%d)\n", sd->clk_num);
+        }
+	}
 
     mutex_unlock(&vic_dev->state_lock);
     return 0;

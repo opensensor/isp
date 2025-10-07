@@ -297,6 +297,13 @@ struct tx_isp_irq_device {
 	void (*disable_irq)(struct tx_isp_irq_device *irq_dev);
 };
 
+/* IRQ info structure for Binary Ninja compatibility */
+struct tx_isp_irq_info {
+	int irq;
+	void *handler;
+	void *data;
+};
+
 enum tx_isp_module_state {
 	TX_ISP_MODULE_UNDEFINE = 0,
 	TX_ISP_MODULE_SLAKE,
@@ -345,12 +352,18 @@ struct tx_isp_subdev {
 
 	/* Memory mappings */
 	void __iomem *base;         /* Common register base */
+	void __iomem *regs;         /* Binary Ninja: *(arg2 + 0xb8) register mapping */
+	struct resource *mem_res;   /* Binary Ninja: *(arg2 + 0xb4) memory resource */
+	struct tx_isp_irq_info irq_info;  /* Binary Ninja: arg2 + 0x80 IRQ information */
+	int clk_num;                /* Binary Ninja: *(arg2 + 0xc0) clock count */
 	void __iomem *isp;          /* ISP register base */
 	void __iomem *csi_base;     /* CSI register base */
 
 	/* Clocks */
 	struct clk **clks;
-	unsigned int clk_num;
+
+	/* Event callback structure for Binary Ninja compatibility */
+	void *event_callback_struct;   /* Callback structure at offset 0xc equivalent */
 
 	/* Synchronization */
 	spinlock_t lock;
@@ -384,16 +397,19 @@ struct tx_isp_subdev {
 };
 
 
+/* Channel configuration structure - SAFE replacement for raw offset access */
+struct tx_isp_channel_config {
+    void *reserved[7];                       /* +0x00-0x18: Reserved space (28 bytes) */
+    int (*event_handler)(void*);             /* +0x1c: Event handler function - SAFE ACCESS */
+    uint32_t padding[2];                     /* +0x20-0x24: Padding to 0x24 size */
+} __attribute__((packed, aligned(4)));
 
-/* Device structures */
-//struct isp_channel {
-//	int id;
-//	bool enabled;
-//	u32 format;
-//	u32 width;
-//	u32 height;
-//	void *private;
-//};
+/* Netlink socket structure - SAFE replacement for raw offset access at 0x130 */
+struct tx_isp_netlink_socket {
+    char reserved[0x130];                    /* +0x00-0x12F: Reserved space */
+    struct socket *socket_ptr;               /* +0x130: Socket pointer - SAFE ACCESS */
+    uint32_t padding[4];                     /* Additional padding */
+} __attribute__((packed, aligned(4)));
 
 struct imp_channel_attr {
     uint32_t enable;          // 0x00
@@ -548,6 +564,68 @@ struct tx_isp_frame_channel {
     wait_queue_head_t wait;
 };
 
+/* Frame channel state management - shared between tx-isp-module.c and tx_isp_vic.c */
+struct tx_isp_channel_state {
+    bool enabled;
+    bool streaming;
+    int format;
+    int width;
+    int height;
+    int buffer_count;
+    uint32_t sequence;           /* Frame sequence counter */
+
+    /* Binary Ninja state fields - EXACT offsets from decompiled code */
+    int state;                   /* Offset 0x2d0 - *($s0 + 0x2d0) - channel state (3=ready, 4=streaming) */
+    uint32_t flags;              /* Offset 0x230 - *($s0 + 0x230) - streaming flags (bit 0 = streaming) */
+
+    /* VBM buffer management for VBMFillPool compatibility */
+    uint32_t *vbm_buffer_addresses;       /* Array of VBM buffer addresses */
+    int vbm_buffer_count;                 /* Number of VBM buffers */
+    uint32_t vbm_buffer_size;             /* Size of each VBM buffer */
+    spinlock_t vbm_lock;                  /* Protect VBM buffer access */
+
+    /* Reference driver buffer queue management */
+    struct list_head queued_buffers;       /* List of queued buffers (ready for VIC) */
+    struct list_head completed_buffers;    /* List of completed buffers (ready for DQBUF) */
+    spinlock_t queue_lock;                 /* Protect queue access */
+    wait_queue_head_t frame_wait;          /* Wait queue for frame completion */
+    int queued_count;                      /* Number of queued buffers */
+    int completed_count;                   /* Number of completed buffers */
+
+    /* Legacy fields for compatibility */
+    struct frame_buffer current_buffer;     /* Current active buffer */
+    spinlock_t buffer_lock;                /* Protect buffer access */
+    bool frame_ready;                      /* Simple frame ready flag */
+};
+
+// Frame channel devices - create video channel devices like reference
+// CRITICAL: Add proper alignment and validation for MIPS
+struct frame_channel_device {
+    struct miscdevice miscdev;
+    int channel_num;
+    struct tx_isp_channel_state state;
+
+    /* Binary Ninja buffer management fields - ALIGNED for MIPS */
+    struct mutex buffer_mutex;           /* Offset 0x28 - private_mutex_lock($s0 + 0x28) */
+    spinlock_t buffer_queue_lock;        /* Offset 0x2c4 - __private_spin_lock_irqsave($s0 + 0x2c4) */
+    void *buffer_queue_head;             /* Offset 0x214 - *($s0 + 0x214) */
+    void *buffer_queue_base;             /* Offset 0x210 - $s0 + 0x210 */
+    int buffer_queue_count;              /* Offset 0x218 - *($s0 + 0x218) */
+    int streaming_flags;                 /* Offset 0x230 - *($s0 + 0x230) & 1 */
+    void *vic_subdev;                    /* Offset 0x2bc - *($s0 + 0x2bc) */
+    int buffer_type;                     /* Offset 0x24 - *($s0 + 0x24) */
+    int field;                           /* Offset 0x3c - *($s0 + 0x3c) */
+    void *buffer_array[64];              /* Buffer array for index lookup */
+
+    /* CRITICAL: Add validation magic number to detect corruption */
+    uint32_t magic;                      /* Magic number for validation */
+} __attribute__((aligned(8), packed));   /* MIPS-safe alignment */
+
+#define FRAME_CHANNEL_MAGIC 0xDEADBEEF
+
+static struct frame_channel_device frame_channels[4]; /* Support up to 4 video channels */
+static int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
+
 /*
  * Internal ops. Never call this from drivers, only the tx isp device can call
  * these ops.
@@ -653,6 +731,24 @@ static inline void tx_isp_set_subdev_hostdata(struct tx_isp_subdev *sd, void *da
 
 static inline void *tx_isp_get_subdev_hostdata(struct tx_isp_subdev *sd)
 {
+	/* CRITICAL SAFETY: Validate subdev pointer before accessing */
+	if (!sd) {
+		pr_err("*** tx_isp_get_subdev_hostdata: NULL subdev pointer ***\n");
+		return NULL;
+	}
+
+	/* MIPS ALIGNMENT CHECK: Ensure subdev is properly aligned */
+	if (((unsigned long)sd & 0x3) != 0) {
+		pr_err("*** tx_isp_get_subdev_hostdata: subdev pointer %p not 4-byte aligned ***\n", sd);
+		return NULL;
+	}
+
+	/* Validate subdev is in valid kernel memory range */
+	if ((unsigned long)sd < 0x80000000 || (unsigned long)sd >= 0xfffff000) {
+		pr_err("*** tx_isp_get_subdev_hostdata: subdev pointer %p outside valid kernel memory range ***\n", sd);
+		return NULL;
+	}
+
 	return sd->host_priv;
 }
 
@@ -786,5 +882,8 @@ struct isp_tuning_data {
 	/* Padding to ensure structure is large enough for all accesses */
 	uint32_t reserved2[1000];            /* 0x198+: Reserved for future use and safety */
 } __attribute__((aligned(4)));
+
+
+void frame_channel_wakeup_waiters(struct frame_channel_device *fcd);
 
 #endif/*__TX_ISP_DEVICE_H__*/

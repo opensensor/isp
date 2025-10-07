@@ -80,7 +80,7 @@ Reference driver **clears** VIC buffer registers (0x318-0x328) by writing 0, doe
 **Fix**: Replaced `ispvic_frame_channel_qbuf` loop with direct register writes (tx_isp_vic.c lines 3995-4010).
 
 ### 6. tx_isp_subdev_pipo Writing to Both Register Spaces ✅ FIXED
-**Problem**: Our code was writing to both `vic_regs` and `vic_regs_control`.
+**Problem**: Our code was writing to both `vic_regs` and `vic_regs_secondary`.
 
 **Binary Ninja Shows**:
 ```c
@@ -169,7 +169,7 @@ Reference driver writes to **ONLY** `vic_regs` (offset 0xb8), not both register 
 ```c
 /* CRITICAL FIX: Binary Ninja shows reference driver CLEARS VIC buffer registers, not calls qbuf */
 /* Reference: *(*($s0 + 0xb8) + $a1) = 0 where $a1 = (i + 0xc6) << 2 */
-/* Binary Ninja EXACT: Writes to ONLY vic_regs (offset 0xb8), NOT vic_regs_control */
+/* Binary Ninja EXACT: Writes to ONLY vic_regs (offset 0xb8), NOT vic_regs_secondary */
 for (j = 0; j < 5; j++) {
     u32 reg_offset = 0x318 + (j * 4);
     writel(0, vic_base + reg_offset);  /* Binary Ninja EXACT: single register base */

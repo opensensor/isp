@@ -8,6 +8,7 @@
 #include <linux/vmalloc.h>
 #include "../include/tx_isp.h"
 #include "../include/tx_isp_core.h"
+#include "../include/tx_isp_core_device.h"
 #include "../include/tx-isp-debug.h"
 #include "../include/tx_isp_sysfs.h"
 #include "../include/tx_isp_vic.h"
@@ -40,6 +41,7 @@ static int tx_isp_vic_device_init(struct tx_isp_dev *isp);
 static int tx_isp_csi_device_deinit(struct tx_isp_dev *isp);
 static int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
 int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev);
+void frame_channel_wakeup_waiters(struct frame_channel_device *fcd);
 
 /* Forward declaration for VIC device creation from tx_isp_vic.c */
 extern int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
@@ -289,16 +291,6 @@ static struct tx_isp_subdev_pad_ops core_pad_ops = {
     .streamoff = NULL
 };
 
-
-/* Update the core subdev ops to include the core ops */
-static struct tx_isp_subdev_ops core_subdev_ops_full = {
-    .core = &core_subdev_core_ops,
-    .video = &core_subdev_video_ops,
-    .pad = &core_pad_ops,
-    .sensor = NULL,
-    .internal = NULL
-};
-
 /**
  * tx_isp_get_device - CRITICAL: Get global ISP device pointer
  * This function returns the global ISP device pointer that is needed
@@ -310,15 +302,6 @@ struct tx_isp_dev *tx_isp_get_device(void)
 }
 EXPORT_SYMBOL(tx_isp_get_device);
 
-
-/* Core subdev operations structure - CRITICAL for proper initialization */
-static struct tx_isp_subdev_ops core_subdev_ops = {
-    .core = NULL,     /* Core operations */
-    .video = NULL,    /* Video operations */ 
-    .pad = &core_pad_ops,  /* Pad operations */
-    .sensor = NULL,   /* Sensor operations */
-    .internal = NULL  /* Internal operations */
-};
 
 /* Global interrupt callback array - EXACT Binary Ninja implementation */
 static irqreturn_t (*irq_func_cb[32])(int irq, void *dev_id) = {0};
@@ -505,26 +488,6 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     pr_info("*** ISP FRAME SYNC WORK: Work completion #%d - ready for next interrupt ***\n", sensor_call_counter);
 }
 
-/* Forward declarations for frame channel functions - avoid naming conflicts */
-struct isp_core_channel_state {
-    int streaming;
-};
-
-struct isp_core_channel {
-    struct isp_core_channel_state state;
-};
-
-static struct isp_core_channel frame_channels[3] = {0};  /* Channel 0, 1, 2 */
-
-/* Frame channel wakeup function - placeholder implementation */
-static void frame_channel_wakeup_waiters(struct isp_core_channel *channel)
-{
-    if (channel) {
-        pr_debug("frame_channel_wakeup_waiters: Waking up waiters for channel\n");
-        /* In full implementation, this would wake up waiting processes */
-        isp_frame_done_wakeup();  /* Call the main frame done wakeup */
-    }
-}
 
 /* system_irq_func_set - EXACT Binary Ninja implementation */
 int system_irq_func_set(int index, irqreturn_t (*handler)(int irq, void *dev_id))
@@ -875,46 +838,13 @@ irqreturn_t tx_isp_core_irq_handle(int irq, void *dev_id)
 irqreturn_t tx_isp_core_irq_thread_handle(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = dev_id;
-    
+
     pr_debug("*** isp_irq_thread_handle: Thread IRQ %d, dev_id=%p ***\n", irq, dev_id);
-    
+
     /* Handle any thread-level interrupt processing here */
     /* For VIC, most processing is done in the main handler */
-    
-    return IRQ_HANDLED;
-}
 
-/* tx_isp_request_irq - EXACT Binary Ninja implementation */
-static int tx_isp_request_irq(struct platform_device *pdev, void *irq_info)
-{
-    int irq_number;
-    int ret;
-    
-    if (!pdev || !irq_info) {
-        pr_err("tx_isp_request_irq: Invalid parameters\n");
-        return -EINVAL;
-    }
-    
-    /* Binary Ninja: int32_t $v0_1 = private_platform_get_irq(arg1, 0) */
-    irq_number = platform_get_irq(pdev, 0);
-    if (irq_number < 0) {
-        pr_err("tx_isp_request_irq: Failed to get IRQ: %d\n", irq_number);
-        return irq_number;
-    }
-    
-    /* Binary Ninja: private_spin_lock_init(arg2) */
-    spin_lock_init((spinlock_t *)irq_info);
-    
-    /* Binary Ninja: private_request_threaded_irq($v0_1, isp_irq_handle, isp_irq_thread_handle, 0x2000, *arg1, arg2) */
-    ret = request_threaded_irq(irq_number, tx_isp_core_irq_handle, tx_isp_core_irq_thread_handle, 
-                               IRQF_SHARED, dev_name(&pdev->dev), irq_info);
-    if (ret != 0) {
-        pr_err("tx_isp_request_irq: Failed to request IRQ %d: %d\n", irq_number, ret);
-        return ret;
-    }
-    
-    pr_info("*** tx_isp_request_irq: IRQ %d registered successfully with dispatch system ***\n", irq_number);
-    return 0;
+    return IRQ_HANDLED;
 }
 
 /* Core ISP interrupt handler - now calls the dispatch system */
@@ -3149,13 +3079,15 @@ static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
 }
 
 
-/* Platform data structure for safe member access */
-struct tx_isp_platform_data {
-    uint16_t reserved;      /* Padding to offset 2 */
-    uint32_t device_id;     /* Device ID at offset 2 */
-    uint32_t flags;         /* Additional flags */
-    uint32_t version;       /* Version info */
-} __attribute__((packed));
+/* Update the core subdev ops to include the core ops */
+struct tx_isp_subdev_ops core_subdev_ops = {
+    .core = &core_subdev_core_ops,
+    .video = &core_subdev_video_ops,
+    .pad = &core_pad_ops,
+    .sensor = NULL,
+    .internal = NULL
+};
+EXPORT_SYMBOL(core_subdev_ops);
 
 /* tx_isp_core_probe - SAFE implementation using proper struct member access */
 int tx_isp_core_probe(struct platform_device *pdev)
@@ -3246,14 +3178,9 @@ int tx_isp_core_probe(struct platform_device *pdev)
     core_subdev_core_ops.reset = NULL; /* Will be set when needed */
     core_subdev_core_ops.ioctl = NULL; /* Will be set when needed */
     
-    /* Update the core subdev ops structure */
-    core_subdev_ops.core = &core_subdev_core_ops;
-    core_subdev_ops.video = &core_subdev_video_ops;
-    core_subdev_ops.pad = &core_pad_ops;
-    
     /* Initialize the subdev that's already the first member of tx_isp_dev */
     isp_dev->sd.isp = isp_dev;  /* Set back-reference */
-    isp_dev->sd.ops = &core_subdev_ops_full;  /* Set operations to the properly configured structure */
+    isp_dev->sd.ops = &core_subdev_ops;  /* Set operations to the properly configured structure */
     isp_dev->sd.vin_state = TX_ISP_MODULE_INIT;  /* Set initial state */
     
     /* Initialize subdev synchronization */

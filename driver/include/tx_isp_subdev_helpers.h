@@ -7,28 +7,27 @@
 /* Helper functions to find subdevices by name instead of hardcoded array indices */
 
 /**
- * tx_isp_find_subdev_by_name - Find subdevice by module name
+ * tx_isp_find_subdev_by_name - Find subdevice by platform device name
  * @isp_dev: Main ISP device
- * @name: Module name to search for
- *
+ * @name: Platform device name to search for
+ * 
  * Returns: Pointer to subdev if found, NULL otherwise
  */
 static inline struct tx_isp_subdev *tx_isp_find_subdev_by_name(struct tx_isp_dev *isp_dev, const char *name)
 {
     int i;
-
+    
     if (!isp_dev || !name) {
         return NULL;
     }
-
+    
     for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
         struct tx_isp_subdev *sd = isp_dev->subdevs[i];
-        /* Validate pointer is in kernel space before dereferencing */
-        if (sd && ((unsigned long)sd >= 0x80000000UL) && sd->module.name && strcmp(sd->module.name, name) == 0) {
+        if (sd && sd->pdev && sd->pdev->name && strcmp(sd->pdev->name, name) == 0) {
             return sd;
         }
     }
-
+    
     return NULL;
 }
 
@@ -90,16 +89,15 @@ static inline struct tx_isp_subdev *tx_isp_find_sensor_subdev(struct tx_isp_dev 
     /* CRITICAL FIX: Start search from index 4 to avoid finding ISP core devices */
     for (i = 4; i < ISP_MAX_SUBDEVS; i++) {
         struct tx_isp_subdev *sd = isp_dev->subdevs[i];
-        /* Validate pointer is in kernel space before dereferencing */
-        if (sd && ((unsigned long)sd >= 0x80000000UL) && sd->ops && sd->ops->sensor) {
+        if (sd && sd->ops && sd->ops->sensor) {
             /* Additional validation: make sure this is NOT an ISP core device */
-            if (sd->module.name) {
+            if (sd->pdev && sd->pdev->name) {
                 /* Exclude all known ISP core device names */
-                if (strcmp(sd->module.name, "isp-m0") != 0 &&
-                    strcmp(sd->module.name, "isp-w00") != 0 &&
-                    strcmp(sd->module.name, "isp-w01") != 0 &&
-                    strcmp(sd->module.name, "isp-w02") != 0 &&
-                    strcmp(sd->module.name, "isp-fs") != 0) {
+                if (strcmp(sd->pdev->name, "isp-m0") != 0 &&
+                    strcmp(sd->pdev->name, "isp-w00") != 0 &&
+                    strcmp(sd->pdev->name, "isp-w01") != 0 &&
+                    strcmp(sd->pdev->name, "isp-w02") != 0 &&
+                    strcmp(sd->pdev->name, "isp-fs") != 0) {
                     /* This looks like a real sensor device */
                     return sd;
                 }

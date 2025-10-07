@@ -166,8 +166,8 @@ struct tx_isp_mipi_bus sensor_mipi = {
 	.settle_time_apative_en = 1,
 	.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10,
 	.mipi_sc.hcrop_diff_en = 0,
-	.mipi_sc.mipi_vcomp_en = 0,
-	.mipi_sc.mipi_hcomp_en = 0,
+	.mipi_sc.mipi_vcomp_en = 1,  /* Enable vertical completion */
+	.mipi_sc.mipi_hcomp_en = 1,  /* Enable horizontal completion - required for proper MIPI operation */
 	.image_twidth = 1920,
 	.image_theight = 1080,
 	.mipi_sc.mipi_crop_start0x = 0,
@@ -178,10 +178,10 @@ struct tx_isp_mipi_bus sensor_mipi = {
 	.mipi_sc.mipi_crop_start2y = 0,
 	.mipi_sc.mipi_crop_start3x = 0,
 	.mipi_sc.mipi_crop_start3y = 0,
-	.mipi_sc.line_sync_mode = 0,
-	.mipi_sc.work_start_flag = 0,
-	.mipi_sc.data_type_en = 0,
-	.mipi_sc.data_type_value = 0,
+	.mipi_sc.line_sync_mode = 1,  /* Enable line sync for proper MIPI timing */
+	.mipi_sc.work_start_flag = 1,  /* Enable work start flag for MIPI channel sync */
+	.mipi_sc.data_type_en = 1,  /* Enable data type checking for RAW10 */
+	.mipi_sc.data_type_value = RAW10,  /* 0x2b for RAW10 format */
 	.mipi_sc.del_start = 0,
 	.mipi_sc.sensor_frame_mode = TX_SENSOR_DEFAULT_FRAME_MODE,
 	.mipi_sc.sensor_fid_mode = 0,
@@ -219,8 +219,8 @@ struct tx_isp_sensor_attribute sensor_attr = {
 	.min_integration_time_native = 4,
 	.max_integration_time_native = 0x58a - 8,
 	.integration_time_limit = 0x58a - 8,
-	.total_width = 1920,   /* ACTUAL sensor output width (not total frame width) */
-	.total_height = 1080,  /* ACTUAL sensor output height (not total frame height) */
+	.total_width = 0x44c * 2,
+	.total_height = 0x58a,
 	.max_integration_time = 0x58a - 8,
 	.integration_time_apply_delay = 2,
 	.again_apply_delay = 2,
@@ -1217,7 +1217,8 @@ static struct tx_isp_sensor_win_setting sensor_win_sizes[] = {
 	},
 };
 
-struct tx_isp_sensor_win_setting *wsize = &sensor_win_sizes[5];
+/* Default to 30fps MIPI mode (1920x1080) instead of 40fps mode */
+struct tx_isp_sensor_win_setting *wsize = &sensor_win_sizes[2];
 
 static struct regval_list sensor_stream_on_dvp[] = {
 	{0xfe, 0x00},  /* Page 0 */
@@ -1543,9 +1544,9 @@ static int sensor_s_stream(struct tx_isp_subdev *sd, int enable) {
 	int actual_interface = sensor->video.attr->dbus_type;
 	
 	ISP_WARNING("%s: s_stream called with enable=%d\n", SENSOR_NAME, enable);
-	ISP_WARNING("%s: module data_interface=%d, sensor data_interface=%d (1=DVP, 2=MIPI)\n",
+	ISP_WARNING("%s: module data_interface=%d, sensor data_interface=%d (1=MIPI, 2=DVP)\n",
 	            SENSOR_NAME, data_interface, actual_interface);
-	
+
 	/* Runtime correction: force MIPI if sensor interface type is wrong */
 	if (actual_interface == TX_SENSOR_DATA_INTERFACE_DVP && data_interface == TX_SENSOR_DATA_INTERFACE_MIPI) {
 		ISP_WARNING("%s: *** CORRECTING SENSOR INTERFACE FROM DVP TO MIPI ***\n", SENSOR_NAME);
@@ -1966,8 +1967,8 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 		memcpy((void *) (&(sensor_attr.dvp)), (void *) (&sensor_dvp), sizeof(sensor_dvp));
 		sensor_attr.max_integration_time_native = 0x546 - 8;
 		sensor_attr.integration_time_limit = 0x546 - 8;
-		sensor_attr.total_width = 1920;   /* ACTUAL sensor output width */
-		sensor_attr.total_height = 1080;  /* ACTUAL sensor output height */
+		sensor_attr.total_width = 0x44c * 2;
+		sensor_attr.total_height = 0x546;
 		sensor_attr.max_integration_time = 0x546 - 8;
 		sensor_attr.one_line_expr_in_us = 29;
 		vts0 = 0x05;
@@ -1985,8 +1986,8 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 		memcpy((void *) (&(sensor_attr.dvp)), (void *) (&sensor_dvp), sizeof(sensor_dvp));
 		sensor_attr.max_integration_time_native = 0x465 - 8;
 		sensor_attr.integration_time_limit = 0x465 - 8;
-		sensor_attr.total_width = 1920;   /* ACTUAL sensor output width */
-		sensor_attr.total_height = 1080;  /* ACTUAL sensor output height */
+		sensor_attr.total_width = 0x44c * 2;
+		sensor_attr.total_height = 0x465;
 		sensor_attr.max_integration_time = 0x465 - 8;
 		sensor_attr.one_line_expr_in_us = 59;
 		vts0 = 0x04;
@@ -1999,8 +2000,8 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 		memcpy((void *) (&(sensor_attr.mipi)), (void *) (&sensor_mipi), sizeof(sensor_mipi));
 		sensor_attr.max_integration_time_native = 0x58a - 8;
 		sensor_attr.integration_time_limit = 0x58a - 8;
-		sensor_attr.total_width = 1920;   /* ACTUAL sensor output width */
-		sensor_attr.total_height = 1080;  /* ACTUAL sensor output height */
+		sensor_attr.total_width = 0x44c * 2;
+		sensor_attr.total_height = 0x58a;
 		sensor_attr.max_integration_time = 0x58a - 8;
 		sensor_attr.one_line_expr_in_us = 28;
 		vts0 = 0x05;
@@ -2013,8 +2014,8 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 		memcpy((void *) (&(sensor_attr.mipi)), (void *) (&sensor_mipi), sizeof(sensor_mipi));
 		sensor_attr.max_integration_time_native = 0x51c - 8;
 		sensor_attr.integration_time_limit = 0x51c - 8;
-		sensor_attr.total_width = 1920;   /* ACTUAL sensor output width */
-		sensor_attr.total_height = 1080;  /* ACTUAL sensor output height */
+		sensor_attr.total_width = 0x44c * 2;
+		sensor_attr.total_height = 0x51c;
 		sensor_attr.max_integration_time = 0x51c - 8;
 		sensor_attr.one_line_expr_in_us = 31;
 		vts0 = 0x05;
@@ -2027,8 +2028,8 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 		memcpy((void *) (&(sensor_attr.mipi)), (void *) (&sensor_mipi), sizeof(sensor_mipi));
 		sensor_attr.max_integration_time_native = 0x49d - 8;
 		sensor_attr.integration_time_limit = 0x49d - 8;
-		sensor_attr.total_width = 1920;   /* ACTUAL sensor output width */
-		sensor_attr.total_height = 1080;  /* ACTUAL sensor output height */
+		sensor_attr.total_width = 0x44c * 2;
+		sensor_attr.total_height = 0x49d;
 		sensor_attr.max_integration_time = 0x49d - 8;
 		sensor_attr.one_line_expr_in_us = 57;
 		vts0 = 0x04;
@@ -2041,8 +2042,8 @@ static int sensor_probe(struct i2c_client *client, const struct i2c_device_id *i
 		memcpy((void *) (&(sensor_attr.mipi)), (void *) (&sensor_mipi), sizeof(sensor_mipi));
 		sensor_attr.max_integration_time_native = 0x465 - 8;
 		sensor_attr.integration_time_limit = 0x465 - 8;
-		sensor_attr.total_width = 1920;   /* ACTUAL sensor output width */
-		sensor_attr.total_height = 1080;  /* ACTUAL sensor output height */
+		sensor_attr.total_width = 0x44c * 2;
+		sensor_attr.total_height = 0x465;
 		sensor_attr.max_integration_time = 0x465 - 8;
 		sensor_attr.one_line_expr_in_us = 11;
 		vts0 = 0x04;

@@ -793,6 +793,16 @@ int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes)
     return 0;
 }
 
+/* CSI link setup stub - CSI doesn't need complex link management */
+static int csi_video_link_setup(struct tx_isp_subdev_pad *local,
+                                  struct tx_isp_subdev_pad *remote,
+                                  u32 flags)
+{
+    pr_info("*** csi_video_link_setup: CSI link setup (stub) - flags=0x%x ***\n", flags);
+    /* CSI links are managed by hardware configuration, not software links */
+    return 0;
+}
+
 /* Define the core operations */
 static struct tx_isp_subdev_core_ops csi_core_ops = {
     .init = csi_core_ops_init,
@@ -801,6 +811,7 @@ static struct tx_isp_subdev_core_ops csi_core_ops = {
 /* Define the video operations */
 static struct tx_isp_subdev_video_ops csi_video_ops = {
     .s_stream = csi_video_s_stream,
+    .link_setup = csi_video_link_setup,
 };
 
 /* Define the sensor operations */
@@ -815,7 +826,7 @@ static struct tx_isp_subdev_internal_ops csi_subdev_internal_ops = {
 };
 
 /* Initialize the subdev ops structure with pointers to the operations */
-static struct tx_isp_subdev_ops csi_subdev_ops = {
+struct tx_isp_subdev_ops csi_subdev_ops = {
     .core = &csi_core_ops,
     .video = &csi_video_ops,
     .sensor = &csi_sensor_ops,
