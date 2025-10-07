@@ -508,6 +508,42 @@ static uint32_t mdns_c_corner_thr_adj_value_array[0x24/4] = {0};       /* 0x28f 
 
 
 
+static uint32_t mdns_c_edge_thr_adj_value0_array[0x24/4] = {0};       /* 0x290 */
+static uint32_t mdns_c_edge_thr_adj_value1_array[0x24/4] = {0};       /* 0x291 */
+static uint32_t mdns_c_edge_thr_adj_value2_array[0x24/4] = {0};       /* 0x292 */
+static uint32_t mdns_c_edge_thr_adj_value3_array[0x24/4] = {0};       /* 0x293 */
+static uint32_t mdns_c_edge_thr_adj_value4_array[0x24/4] = {0};       /* 0x294 */
+static uint32_t mdns_c_edge_thr_adj_value5_array[0x24/4] = {0};       /* 0x295 */
+static uint32_t mdns_c_luma_thr_adj_value0_array[0x24/4] = {0};       /* 0x296 */
+static uint32_t mdns_c_luma_thr_adj_value1_array[0x24/4] = {0};       /* 0x297 */
+static uint32_t mdns_c_luma_thr_adj_value2_array[0x24/4] = {0};       /* 0x298 */
+static uint32_t mdns_c_luma_thr_adj_value3_array[0x24/4] = {0};       /* 0x299 */
+static uint32_t mdns_c_luma_thr_adj_value4_array[0x24/4] = {0};       /* 0x29a */
+static uint32_t mdns_c_luma_thr_adj_value5_array[0x24/4] = {0};       /* 0x29b */
+static uint32_t mdns_c_dtb_thr_adj_value0_array[0x24/4] = {0};        /* 0x29c */
+static uint32_t mdns_c_dtb_thr_adj_value1_array[0x24/4] = {0};        /* 0x29d */
+static uint32_t mdns_c_dtb_thr_adj_value2_array[0x24/4] = {0};        /* 0x29e */
+static uint32_t mdns_c_dtb_thr_adj_value3_array[0x24/4] = {0};        /* 0x29f */
+static uint32_t mdns_c_dtb_thr_adj_value4_array[0x24/4] = {0};        /* 0x2a0 */
+static uint32_t mdns_c_dtb_thr_adj_value5_array[0x24/4] = {0};        /* 0x2a1 */
+static uint32_t mdns_c_ass_thr_adj_value0_array[0x24/4] = {0};        /* 0x2a2 */
+static uint32_t mdns_c_ass_thr_adj_value1_array[0x24/4] = {0};        /* 0x2a3 */
+static uint32_t mdns_c_ass_thr_adj_value2_array[0x24/4] = {0};        /* 0x2a4 */
+static uint32_t mdns_c_ass_thr_adj_value3_array[0x24/4] = {0};        /* 0x2a5 */
+static uint32_t mdns_c_ass_thr_adj_value4_array[0x24/4] = {0};        /* 0x2a6 */
+static uint32_t mdns_c_ass_thr_adj_value5_array[0x24/4] = {0};        /* 0x2a7 */
+static uint32_t mdns_c_edge_wei_adj_seg_array[0x24/4] = {0};          /* 0x2a8 */
+static uint32_t mdns_c_luma_wei_adj_seg_array[0x24/4] = {0};          /* 0x2a9 */
+static uint32_t mdns_c_dtb_wei_adj_seg_array[0x24/4] = {0};           /* 0x2aa */
+static uint32_t mdns_c_ass_wei_adj_seg_array[0x24/4] = {0};           /* 0x2ab */
+static uint32_t mdns_c_sad_wei_adj_seg_array[0x24/4] = {0};           /* 0x2ac */
+static uint32_t mdns_c_corner_wei_adj_value_array[0x24/4] = {0};      /* 0x2ad */
+static uint32_t mdns_c_edge_wei_adj_value0_array[0x24/4] = {0};       /* 0x2ae */
+static uint32_t mdns_c_edge_wei_adj_value1_array[0x24/4] = {0};       /* 0x2af */
+static uint32_t mdns_c_edge_wei_adj_value2_array[0x24/4] = {0};       /* 0x2b0 */
+static uint32_t mdns_c_edge_wei_adj_value3_array[0x24/4] = {0};       /* 0x2b1 */
+
+
 
 
 
@@ -5556,6 +5592,42 @@ int tisp_mdns_param_array_set(int param_id, void *in_buf, int *size_buf)
     case 0x263: memcpy(&mdns_y_pspa_ref_bi_wei0_wdr_array, in_buf, 0x24); *size_buf = 0x24; return 0;
     case 0x264: memcpy(&mdns_y_piir_cur_fs_wei_wdr_array, in_buf, 0x24); *size_buf = 0x24; return 0;
     case 0x27d: memcpy(&mdns_c_sad_win_opt_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x290: memcpy(&mdns_c_edge_thr_adj_value0_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x291: memcpy(&mdns_c_edge_thr_adj_value1_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x292: memcpy(&mdns_c_edge_thr_adj_value2_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x293: memcpy(&mdns_c_edge_thr_adj_value3_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x294: memcpy(&mdns_c_edge_thr_adj_value4_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x295: memcpy(&mdns_c_edge_thr_adj_value5_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x2a2: memcpy(&mdns_c_ass_thr_adj_value0_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x2a3: memcpy(&mdns_c_ass_thr_adj_value1_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x2a4: memcpy(&mdns_c_ass_thr_adj_value2_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x2a5: memcpy(&mdns_c_ass_thr_adj_value3_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x2a6: memcpy(&mdns_c_ass_thr_adj_value4_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x2a7: memcpy(&mdns_c_ass_thr_adj_value5_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x2a8: memcpy(&mdns_c_edge_wei_adj_seg_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x2a9: memcpy(&mdns_c_luma_wei_adj_seg_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x2aa: memcpy(&mdns_c_dtb_wei_adj_seg_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x2ab: memcpy(&mdns_c_ass_wei_adj_seg_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x2ac: memcpy(&mdns_c_sad_wei_adj_seg_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x2ad: memcpy(&mdns_c_corner_wei_adj_value_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x2ae: memcpy(&mdns_c_edge_wei_adj_value0_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x2af: memcpy(&mdns_c_edge_wei_adj_value1_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x2b0: memcpy(&mdns_c_edge_wei_adj_value2_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x2b1: memcpy(&mdns_c_edge_wei_adj_value3_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+
+    case 0x296: memcpy(&mdns_c_luma_thr_adj_value0_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x297: memcpy(&mdns_c_luma_thr_adj_value1_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x298: memcpy(&mdns_c_luma_thr_adj_value2_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x299: memcpy(&mdns_c_luma_thr_adj_value3_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x29a: memcpy(&mdns_c_luma_thr_adj_value4_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x29b: memcpy(&mdns_c_luma_thr_adj_value5_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x29c: memcpy(&mdns_c_dtb_thr_adj_value0_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x29d: memcpy(&mdns_c_dtb_thr_adj_value1_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x29e: memcpy(&mdns_c_dtb_thr_adj_value2_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x29f: memcpy(&mdns_c_dtb_thr_adj_value3_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x2a0: memcpy(&mdns_c_dtb_thr_adj_value4_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+    case 0x2a1: memcpy(&mdns_c_dtb_thr_adj_value5_array, in_buf, 0x24); *size_buf = 0x24; return 0;
+
     case 0x27e: memcpy(&mdns_c_sad_ave_thres_array, in_buf, 0x24); *size_buf = 0x24; return 0;
     case 0x27f: memcpy(&mdns_c_sad_ave_slope_array, in_buf, 0x24); *size_buf = 0x24; return 0;
     case 0x280: memcpy(&mdns_c_sad_dtb_thres_array, in_buf, 0x24); *size_buf = 0x24; return 0;
@@ -9896,9 +9968,38 @@ void tisp_event_cleanup(void)
 }
 EXPORT_SYMBOL(tisp_event_cleanup);
 
+/**************** Parameter operation init (align with BN) ****************/
+static void *tisp_opmsg = NULL;
+static bool tisp_param_oper_inited = false;
+
 int tisp_param_operate_init(void)
 {
+    int ret = 0;
     pr_info("tisp_param_operate_init: Initializing parameter operations\n");
+
+    if (!tisp_param_oper_inited) {
+        /* Allocate small opmsg buffer (BN allocates ~0xd0) */
+        if (!tisp_opmsg) {
+            tisp_opmsg = kmalloc(0xd0, GFP_KERNEL);
+            if (!tisp_opmsg) {
+                pr_err("tisp_param_operate_init: kmalloc opmsg failed\n");
+                return -ENOMEM;
+            }
+            memset(tisp_opmsg, 0, 0xd0);
+        }
+
+        /* Minimal alignment with BN: ensure tuning node exists here */
+        if (tisp_code_create_tuning_node) {
+            ret = tisp_code_create_tuning_node();
+            if (ret) {
+                pr_err("tisp_param_operate_init: tisp_code_create_tuning_node failed: %d\n", ret);
+                return ret;
+            }
+        }
+
+        tisp_param_oper_inited = true;
+    }
+
     return 0;
 }
 
@@ -10258,17 +10359,24 @@ int tisp_code_create_tuning_node(void)
 
     /* Binary Ninja: device_create(tuning_class, 0, tuning_devno, 0, "isp-m0") */
     if (device_create(tuning_class, NULL, tuning_devno, NULL, "isp-m0") == NULL) {
-        pr_err("tisp_code_create_tuning_node: Failed to create device\n");
+        pr_err("tisp_code_create_tuning_node: Failed to create device /dev/isp-m0\n");
         class_destroy(tuning_class);
         cdev_del(&tuning_cdev);
         unregister_chrdev_region(tuning_devno, 1);
         return -EFAULT;
     }
 
+    /* Compatibility: also create /dev/tisp used by streamer */
+    if (device_create(tuning_class, NULL, tuning_devno, NULL, "tisp") == NULL) {
+        pr_warn("tisp_code_create_tuning_node: Failed to create compatibility node /dev/tisp (continuing)\n");
+    } else {
+        pr_info("tisp_code_create_tuning_node: Compatibility node /dev/tisp created\n");
+    }
+
     /* Set flag to prevent duplicate creation */
     tuning_device_created = true;
 
-    pr_info("*** ISP M0 TUNING DEVICE CREATED: /dev/isp-m0 (major=%d, minor=0) ***\n", tuning_major);
+    pr_info("*** ISP M0 TUNING DEVICE CREATED: /dev/isp-m0 and /dev/tisp (major=%d, minor=0) ***\n", tuning_major);
     return 0;
 }
 EXPORT_SYMBOL(tisp_code_create_tuning_node);
