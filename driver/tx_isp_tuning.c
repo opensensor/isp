@@ -10298,12 +10298,14 @@ static const struct file_operations isp_core_tunning_fops = {
     .compat_ioctl = isp_core_tunning_unlocked_ioctl,
 };
 
-/* Tuning device creation variables - Binary Ninja reference */
+/* Tuning device creation variables - Binary Ninja reference (extended for compat node) */
 static int tuning_major = 0;
 static struct class *tuning_class = NULL;
 static struct cdev tuning_cdev;
-static dev_t tuning_devno;
+static dev_t tuning_devno;           /* base dev (minor 0) */
+static dev_t tuning_devno_tisp;      /* compat dev (minor 1) */
 static bool tuning_device_created = false;  /* Guard flag to prevent duplicate creation */
+static bool tisp_compat_created = false;
 
 /* tisp_code_create_tuning_node - Binary Ninja EXACT implementation */
 int tisp_code_create_tuning_node(void)
@@ -10314,13 +10316,23 @@ int tisp_code_create_tuning_node(void)
 
     /* CRITICAL: Guard against duplicate device creation */
     if (tuning_device_created) {
-        pr_info("tisp_code_create_tuning_node: Device already created, skipping\n");
+        pr_info("tisp_code_create_tuning_node: Device already created, ensuring compat node exists\n");
+        if (tuning_class && !tisp_compat_created) {
+            tuning_devno_tisp = MKDEV(tuning_major, MINOR(tuning_devno) + 1);
+            if (device_create(tuning_class, NULL, tuning_devno_tisp, NULL, "tisp") == NULL) {
+                pr_warn("tisp_code_create_tuning_node: Could not create /dev/tisp on second pass\n");
+            } else {
+                tisp_compat_created = true;
+                pr_info("tisp_code_create_tuning_node: Created /dev/tisp on second pass\n");
+            }
+        }
         return 0;
     }
 
     /* Binary Ninja: if (major == 0) alloc_chrdev_region, else register_chrdev_region */
     if (tuning_major == 0) {
-        ret = alloc_chrdev_region(&tuning_devno, 0, 1, "isp-m0");
+        /* Reserve two minors: 0 for /dev/isp-m0, 1 for /dev/tisp */
+        ret = alloc_chrdev_region(&tuning_devno, 0, 2, "isp-m0");
         if (ret < 0) {
             pr_err("tisp_code_create_tuning_node: Failed to allocate chrdev region: %d\n", ret);
             return ret;
@@ -10329,7 +10341,8 @@ int tisp_code_create_tuning_node(void)
         pr_info("tisp_code_create_tuning_node: Allocated dynamic major %d\n", tuning_major);
     } else {
         tuning_devno = MKDEV(tuning_major, 0);
-        ret = register_chrdev_region(tuning_devno, 1, "isp-m0");
+        /* Reserve two minors when using static major */
+        ret = register_chrdev_region(tuning_devno, 2, "isp-m0");
         if (ret < 0) {
             pr_err("tisp_code_create_tuning_node: Failed to register chrdev region: %d\n", ret);
             return ret;
@@ -10340,8 +10353,8 @@ int tisp_code_create_tuning_node(void)
     /* Binary Ninja: cdev_init(&tuning_cdev, &isp_core_tunning_fops) */
     cdev_init(&tuning_cdev, &isp_core_tunning_fops);
 
-    /* Binary Ninja: cdev_add(&tuning_cdev, tuning_devno, 1) */
-    ret = cdev_add(&tuning_cdev, tuning_devno, 1);
+    /* Extended: support two minors so we can expose both names */
+    ret = cdev_add(&tuning_cdev, tuning_devno, 2);
     if (ret < 0) {
         pr_err("tisp_code_create_tuning_node: Failed to add cdev: %d\n", ret);
         unregister_chrdev_region(tuning_devno, 1);
@@ -10363,21 +10376,23 @@ int tisp_code_create_tuning_node(void)
         pr_err("tisp_code_create_tuning_node: Failed to create device /dev/isp-m0\n");
         class_destroy(tuning_class);
         cdev_del(&tuning_cdev);
-        unregister_chrdev_region(tuning_devno, 1);
+        unregister_chrdev_region(tuning_devno, 2);
         return -EFAULT;
     }
 
-    /* Compatibility: also create /dev/tisp used by streamer */
-    if (device_create(tuning_class, NULL, tuning_devno, NULL, "tisp") == NULL) {
+    /* Create second minor for compatibility node /dev/tisp */
+    tuning_devno_tisp = MKDEV(tuning_major, MINOR(tuning_devno) + 1);
+    if (device_create(tuning_class, NULL, tuning_devno_tisp, NULL, "tisp") == NULL) {
         pr_warn("tisp_code_create_tuning_node: Failed to create compatibility node /dev/tisp (continuing)\n");
     } else {
+        tisp_compat_created = true;
         pr_info("tisp_code_create_tuning_node: Compatibility node /dev/tisp created\n");
     }
 
     /* Set flag to prevent duplicate creation */
     tuning_device_created = true;
 
-    pr_info("*** ISP M0 TUNING DEVICE CREATED: /dev/isp-m0 and /dev/tisp (major=%d, minor=0) ***\n", tuning_major);
+    pr_info("*** ISP M0 TUNING DEVICE CREATED: /dev/isp-m0 (minor 0) and /dev/tisp (minor 1), major=%d ***\n", tuning_major);
     return 0;
 }
 EXPORT_SYMBOL(tisp_code_create_tuning_node);
@@ -10388,13 +10403,20 @@ int tisp_code_destroy_tuning_node(void)
     pr_info("tisp_code_destroy_tuning_node: Destroying ISP M0 tuning device node\n");
 
     if (tuning_class) {
-        /* Binary Ninja: device_destroy(tuning_class, tuning_devno) */
+        /* Destroy both device nodes if present */
         device_destroy(tuning_class, tuning_devno);
+        if (tisp_compat_created)
+            device_destroy(tuning_class, tuning_devno_tisp);
 
-        /* Binary Ninja: class_destroy(tuning_class) */
         class_destroy(tuning_class);
         tuning_class = NULL;
     }
+
+    /* Unregister cdev and region */
+    cdev_del(&tuning_cdev);
+    unregister_chrdev_region(tuning_devno, 2);
+    tuning_device_created = false;
+    tisp_compat_created = false;
 
     /* Binary Ninja: cdev_del(&tuning_cdev) */
     cdev_del(&tuning_cdev);
