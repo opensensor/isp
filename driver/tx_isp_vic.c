@@ -3036,7 +3036,14 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Get platform resource (binary uses this for error message) */
     res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
-    /* CRITICAL: Initialize subdev FIRST (matches binary flow) */
+    /* CRITICAL FIX: Set subdev private data BEFORE calling tx_isp_subdev_init
+     * because tx_isp_subdev_init calls tx_isp_subdev_auto_link which needs
+     * to retrieve vic_dev via tx_isp_get_subdevdata(sd)
+     */
+    tx_isp_set_subdevdata(sd, vic_dev);
+    pr_info("*** tx_isp_vic_probe: Set subdev private data to vic_dev=%p ***\n", vic_dev);
+
+    /* CRITICAL: Initialize subdev AFTER setting private data */
     ret = tx_isp_subdev_init(pdev, sd, &vic_subdev_ops);
     if (ret != 0) {
         pr_err("Failed to init isp module(%d.%d)\n",

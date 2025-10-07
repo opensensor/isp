@@ -1226,6 +1226,10 @@ int frame_channel_open(struct inode *inode, struct file *file);
 int frame_channel_release(struct inode *inode, struct file *file);
 long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
+// Forward declarations for ISP channel control functions
+extern int tisp_channel_start(int channel_id, struct tx_isp_channel_attr *attr);
+extern int tisp_channel_stop(uint32_t channel_id);
+
 /* Frame channel open handler - CRITICAL FIX for MIPS unaligned access crashes */
 int frame_channel_open(struct inode *inode, struct file *file)
 {
@@ -3057,6 +3061,16 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         state->enabled = true;
         state->streaming = true;
 
+        // *** CRITICAL: START ISP CHANNEL CONTROL (writes to register 0x9804) ***
+        pr_info("*** Channel %d: CALLING tisp_channel_start to enable ISP channel control ***\n", channel);
+        ret = tisp_channel_start(channel, NULL);  /* NULL = use default channel attributes */
+        if (ret) {
+            pr_err("Channel %d: tisp_channel_start FAILED: %d\n", channel, ret);
+            state->streaming = false;
+            return ret;
+        }
+        pr_info("*** Channel %d: tisp_channel_start SUCCESS - ISP channel enabled ***\n", channel);
+
         // *** CRITICAL: SETUP VIC BUFFERS BEFORE STREAMING (Binary Ninja reference) ***
         if (ourISPdev && ourISPdev->vic_dev) {
             struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
@@ -3363,6 +3377,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     case 0x80045613: { // VIDIOC_STREAMOFF - Stop streaming
         uint32_t type;
         struct tx_isp_sensor *sensor = NULL;
+        int ret;
 
         if (copy_from_user(&type, argp, sizeof(type)))
             return -EFAULT;
@@ -3377,6 +3392,15 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         // Stop channel streaming
         state->streaming = false;
+
+        // *** CRITICAL: STOP ISP CHANNEL CONTROL (writes to register 0x9804 and waits for 0x9808) ***
+        pr_info("*** Channel %d: CALLING tisp_channel_stop to disable ISP channel control ***\n", channel);
+        ret = tisp_channel_stop(channel);
+        if (ret) {
+            pr_warn("Channel %d: tisp_channel_stop returned %d (continuing anyway)\n", channel, ret);
+        } else {
+            pr_info("*** Channel %d: tisp_channel_stop SUCCESS - ISP channel disabled ***\n", channel);
+        }
 
         // Stop the actual sensor hardware streaming
         if (channel == 0 && ourISPdev && ourISPdev->sensor) {
@@ -3713,15 +3737,6 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     pr_info("ISP IOCTL: cmd=0x%x arg=0x%lx\n", cmd, arg);
 
     switch (cmd) {
-    case 0x40045626: {  // VIDIOC_GET_SENSOR_INFO - Simple success response
-        int __user *result = (int __user *)arg;
-        if (put_user(1, result)) {
-            pr_err("Failed to update sensor result\n");
-            return -EFAULT;
-        }
-        pr_info("Sensor info request: returning success (1)\n");
-        return 0;
-    }
     case 0x805056c1: { // TX_ISP_SENSOR_REGISTER - FIXED to actually connect sensor to ISP device
         char sensor_data[0x50];
         void **i_2;
@@ -3943,67 +3958,46 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         return final_result;
     }
-    case 0xc050561a: { // TX_ISP_SENSOR_ENUM_INPUT - MEMORY SAFE implementation
+    case 0xc050561a: { // TX_ISP_SENSOR_ENUM_INPUT - Enumerate sensors
         struct sensor_enum_data {
             int index;
             char name[32];
             int padding[4];  /* Extra padding to match 0x50 size */
         } input_data;
-        int sensor_found = 0;
 
-        pr_info("*** TX_ISP_SENSOR_ENUM_INPUT: MEMORY SAFE implementation ***\n");
+        pr_info("*** TX_ISP_SENSOR_ENUM_INPUT ***\n");
 
-        /* SAFE: Use properly aligned structure for user data copy */
+        /* Copy from user */
         if (copy_from_user(&input_data, argp, sizeof(input_data))) {
             pr_err("TX_ISP_SENSOR_ENUM_INPUT: Failed to copy input data\n");
             return -EFAULT;
         }
 
-        /* Validate input index to prevent array bounds issues */
-        if (input_data.index < 0 || input_data.index > 16) {
-            pr_warn("TX_ISP_SENSOR_ENUM_INPUT: Invalid sensor index %d (valid range: 0-16)\n",
-                    input_data.index);
-            return -EINVAL;
-        }
-
         pr_info("Sensor enumeration: requesting index %d\n", input_data.index);
 
-        /* SAFE: Check our registered sensor list first */
-        struct registered_sensor *sensor;
-        mutex_lock(&sensor_list_mutex);
-        list_for_each_entry(sensor, &sensor_list, list) {
-            if (sensor->index == input_data.index) {
-                strncpy(input_data.name, sensor->name, sizeof(input_data.name) - 1);
-                input_data.name[sizeof(input_data.name) - 1] = '\0';
-                sensor_found = 1;
-                pr_info("*** FOUND SENSOR: index=%d name=%s ***\n",
-                       input_data.index, input_data.name);
-                break;
-            }
-        }
-        mutex_unlock(&sensor_list_mutex);
-
-        /* SAFE: If not found in registered list, check if we have a fallback sensor */
-        if (!sensor_found && ourISPdev && ourISPdev->sensor && input_data.index == 0) {
-            /* Special case: if requesting index 0 and we have a connected sensor */
-            struct tx_isp_sensor *active_sensor = ourISPdev->sensor;
-            if (active_sensor && active_sensor->info.name[0] != '\0') {
-                strncpy(input_data.name, active_sensor->info.name, sizeof(input_data.name) - 1);
-                input_data.name[sizeof(input_data.name) - 1] = '\0';
-                sensor_found = 1;
-                pr_info("*** FOUND ACTIVE SENSOR: index=%d name=%s ***\n",
-                       input_data.index, input_data.name);
-            }
+        /* CRITICAL: Only support index 0 (single sensor system) */
+        if (input_data.index != 0) {
+            pr_info("Sensor enumeration: index %d out of range (only index 0 supported)\n", input_data.index);
+            return -EINVAL;  /* V4L2 spec: return EINVAL when index is out of range */
         }
 
-        /* SAFE: Early return for invalid sensor index to prevent crashes */
-        if (!sensor_found) {
-            pr_info("No sensor found at index %d (total registered: %d)\n",
-                    input_data.index, sensor_count);
+        /* Clear name field */
+        memset(input_data.name, 0, sizeof(input_data.name));
+
+        /* SIMPLE APPROACH: Use the connected sensor's name directly */
+        if (isp_dev->sensor && isp_dev->sensor->info.name[0] != '\0') {
+            /* Copy sensor name from the connected sensor */
+            strncpy(input_data.name, isp_dev->sensor->info.name, sizeof(input_data.name) - 1);
+            input_data.name[sizeof(input_data.name) - 1] = '\0';
+
+            pr_info("*** FOUND SENSOR: index=%d name=%s ***\n", input_data.index, input_data.name);
+        } else {
+            /* No sensor connected */
+            pr_info("Sensor enumeration: No sensor connected\n");
             return -EINVAL;
         }
 
-        /* SAFE: Copy result back to user with proper alignment */
+        /* Copy result back to user */
         if (copy_to_user(argp, &input_data, sizeof(input_data))) {
             pr_err("TX_ISP_SENSOR_ENUM_INPUT: Failed to copy result to user\n");
             return -EFAULT;
@@ -4012,63 +4006,80 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("Sensor enumeration: index=%d name=%s\n", input_data.index, input_data.name);
         return 0;
     }
-    case 0xc0045627: { // TX_ISP_SENSOR_SET_INPUT - Set active sensor input
+    case 0xc0045627: { // TX_ISP_SENSOR_SET_INPUT - Set active sensor input (EXACT Binary Ninja)
         int input_index;
-        struct registered_sensor *sensor;
-        int found = 0;
+        int i;
+        int ret = 0;
 
         if (copy_from_user(&input_index, argp, sizeof(input_index)))
             return -EFAULT;
 
-        // Validate sensor exists
-        mutex_lock(&sensor_list_mutex);
+        pr_info("Sensor set input: index=%d\n", input_index);
 
-        list_for_each_entry(sensor, &sensor_list, list) {
-            if (sensor->index == input_index) {
-                found = 1;
-                break;
+        /* Binary Ninja: Iterate through subdevs at offset 0x2c (isp_dev->subdevs) */
+        for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+            struct tx_isp_subdev *subdev = isp_dev->subdevs[i];
+
+            if (!subdev)
+                continue;
+
+            /* Binary Ninja: Check if subdev has sensor ops */
+            if (subdev->ops && subdev->ops->sensor && subdev->ops->sensor->ioctl) {
+                /* Binary Ninja: Call sensor ioctl with input index */
+                ret = subdev->ops->sensor->ioctl(subdev, cmd, &input_index);
+
+                if (ret == 0) {
+                    /* Success - continue to next subdev */
+                    continue;
+                } else if (ret != -ENOIOCTLCMD) {
+                    /* Error other than "not supported" - return it */
+                    return ret;
+                }
             }
         }
-        mutex_unlock(&sensor_list_mutex);
 
-        if (!found) {
-            pr_err("No sensor at index %d for set input\n", input_index);
-            return -EINVAL;
-        }
+        /* Binary Ninja: Copy result back to user */
+        if (copy_to_user(argp, &input_index, sizeof(input_index)))
+            return -EFAULT;
 
-        pr_info("Sensor input set to index %d (%s)\n", input_index, sensor->name);
         return 0;
     }
-    case 0x805056c2: { // TX_ISP_SENSOR_RELEASE_SENSOR - Release/unregister sensor
+    case 0x805056c2: { // TX_ISP_SENSOR_RELEASE_SENSOR - Release/unregister sensor (EXACT Binary Ninja)
         struct tx_isp_sensor_register_info {
             char name[32];
-            // Other fields would be here in real struct
+            // Other fields (0x50 bytes total in reference)
+            uint32_t reserved[8];
         } unreg_info;
-        struct registered_sensor *sensor, *tmp;
-        int found = 0;
+        int i;
+        int ret = 0;
 
         if (copy_from_user(&unreg_info, argp, sizeof(unreg_info)))
             return -EFAULT;
 
-        mutex_lock(&sensor_list_mutex);
+        pr_info("Sensor release request: name=%s\n", unreg_info.name);
 
-        // Find and remove sensor from list
+        /* Binary Ninja: Iterate through subdevs at offset 0x2c (isp_dev->subdevs) */
+        for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+            struct tx_isp_subdev *subdev = isp_dev->subdevs[i];
 
-        list_for_each_entry_safe(sensor, tmp, &sensor_list, list) {
-            if (strncmp(sensor->name, unreg_info.name, sizeof(sensor->name)) == 0) {
-                list_del(&sensor->list);
-                kfree(sensor);
-                found = 1;
-                break;
+            if (!subdev)
+                continue;
+
+            /* Binary Ninja: Check if subdev has sensor ops */
+            if (subdev->ops && subdev->ops->sensor && subdev->ops->sensor->ioctl) {
+                /* Binary Ninja: Call sensor ioctl with release data */
+                ret = subdev->ops->sensor->ioctl(subdev, cmd, &unreg_info);
+
+                if (ret == 0) {
+                    /* Success - continue to next subdev */
+                    pr_info("Sensor released via subdev %d\n", i);
+                    continue;
+                } else if (ret != -ENOIOCTLCMD) {
+                    /* Error other than "not supported" - but continue anyway */
+                    pr_warn("Sensor release error from subdev %d: %d\n", i, ret);
+                    continue;
+                }
             }
-        }
-
-        mutex_unlock(&sensor_list_mutex);
-
-        if (found) {
-            pr_info("Sensor released: %s\n", unreg_info.name);
-        } else {
-            pr_info("Sensor not found for release: %s\n", unreg_info.name);
         }
 
         return 0;
@@ -4115,14 +4126,16 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         return 0;
     }
-    case 0xc0385650: { // TX_ISP_SENSOR_G_REGISTER - Get sensor register
+    case 0xc0385650: { // TX_ISP_SENSOR_G_REGISTER - Get sensor register (EXACT Binary Ninja)
         struct sensor_reg_read {
             uint32_t addr;
             uint32_t val;    // Will be filled by driver
             uint32_t size;
-            // Additional fields from reference
+            // Additional fields from reference (0x38 bytes total)
             uint32_t reserved[10];
         } reg_read;
+        int i;
+        int ret = 0;
 
         if (copy_from_user(&reg_read, argp, sizeof(reg_read)))
             return -EFAULT;
@@ -4130,10 +4143,29 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("Sensor register read: addr=0x%x size=%d\n",
                 reg_read.addr, reg_read.size);
 
-        // In real implementation, this would read from sensor via I2C
-        // For now, return dummy data
-        reg_read.val = 0x5A; // Dummy sensor data
+        /* Binary Ninja: Iterate through subdevs at offset 0x2c (isp_dev->subdevs) */
+        for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+            struct tx_isp_subdev *subdev = isp_dev->subdevs[i];
 
+            if (!subdev)
+                continue;
+
+            /* Binary Ninja: Check if subdev has sensor ops */
+            if (subdev->ops && subdev->ops->sensor && subdev->ops->sensor->ioctl) {
+                /* Binary Ninja: Call sensor ioctl with register read data */
+                ret = subdev->ops->sensor->ioctl(subdev, cmd, &reg_read);
+
+                if (ret == 0) {
+                    /* Success - continue to next subdev */
+                    continue;
+                } else if (ret != -ENOIOCTLCMD) {
+                    /* Error other than "not supported" - return it */
+                    return ret;
+                }
+            }
+        }
+
+        /* Binary Ninja: Copy result back to user */
         if (copy_to_user(argp, &reg_read, sizeof(reg_read)))
             return -EFAULT;
 
@@ -4357,6 +4389,20 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     }
     case 0x80045613: { // VIDIOC_STREAMOFF - Stop video streaming
         return tx_isp_video_s_stream(isp_dev, 0);
+    }
+    case 0x40045626: {  // VIDIOC_GET_SENSOR_INFO - Simple success response (USERSPACE EXPECTS THIS!)
+        /* CRITICAL: Userspace (libimp/prudynt) expects this to return 1 for success
+         * The Binary Ninja implementation iterates through subdevs, but our sensor
+         * subdev doesn't have the ioctl handler implemented yet, causing crashes.
+         * Keep the simple stub until sensor ioctl handlers are fully implemented.
+         */
+        int __user *result = (int __user *)arg;
+        if (put_user(1, result)) {
+            pr_err("Failed to update sensor result\n");
+            return -EFAULT;
+        }
+        pr_info("Sensor info request: returning success (1)\n");
+        return 0;
     }
     case 0x800456d8: { // TX_ISP_WDR_ENABLE - Enable WDR mode
         int wdr_enable = 1;

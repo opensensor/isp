@@ -1923,34 +1923,39 @@ int tisp_channel_start(int channel_id, struct tx_isp_channel_attr *attr)
     struct tx_isp_dev *isp_dev = tx_isp_get_device();
     u32 reg_val;
     u32 channel_base;
-    
-    if (!isp_dev || !attr || channel_id < 0 || channel_id >= ISP_MAX_CHAN) {
+
+    if (!isp_dev || channel_id < 0 || channel_id >= ISP_MAX_CHAN) {
         ISP_ERROR("tisp_channel_start: Invalid parameters\n");
         return -EINVAL;
     }
-    
+
     ISP_INFO("*** tisp_channel_start: Starting channel %d ***\n", channel_id);
-    
-    /* Calculate channel register base */
-    channel_base = (channel_id + 0x98) << 8;
-    
-    /* Configure channel dimensions and scaling */
-    if (attr->width < isp_dev->sensor_width || attr->height < isp_dev->sensor_height) {
-        /* Enable scaling */
-        isp_write32(channel_base + 0x1c0, 0x40080);
-        isp_write32(channel_base + 0x1c4, 0x40080);
-        isp_write32(channel_base + 0x1c8, 0x40080);
-        isp_write32(channel_base + 0x1cc, 0x40080);
-        ISP_INFO("Channel %d: Scaling enabled for %dx%d -> %dx%d\n",
-                 channel_id, isp_dev->sensor_width, isp_dev->sensor_height,
-                 attr->width, attr->height);
+
+    /* If attr is provided, configure channel dimensions and scaling */
+    if (attr) {
+        /* Calculate channel register base */
+        channel_base = (channel_id + 0x98) << 8;
+
+        /* Configure channel dimensions and scaling */
+        if (attr->width < isp_dev->sensor_width || attr->height < isp_dev->sensor_height) {
+            /* Enable scaling */
+            isp_write32(channel_base + 0x1c0, 0x40080);
+            isp_write32(channel_base + 0x1c4, 0x40080);
+            isp_write32(channel_base + 0x1c8, 0x40080);
+            isp_write32(channel_base + 0x1cc, 0x40080);
+            ISP_INFO("Channel %d: Scaling enabled for %dx%d -> %dx%d\n",
+                     channel_id, isp_dev->sensor_width, isp_dev->sensor_height,
+                     attr->width, attr->height);
+        } else {
+            /* No scaling needed */
+            isp_write32(channel_base + 0x1c0, 0x200);
+            isp_write32(channel_base + 0x1c4, 0);
+            isp_write32(channel_base + 0x1c8, 0x200);
+            isp_write32(channel_base + 0x1cc, 0);
+            ISP_INFO("Channel %d: No scaling needed\n", channel_id);
+        }
     } else {
-        /* No scaling needed */
-        isp_write32(channel_base + 0x1c0, 0x200);
-        isp_write32(channel_base + 0x1c4, 0);
-        isp_write32(channel_base + 0x1c8, 0x200);
-        isp_write32(channel_base + 0x1cc, 0);
-        ISP_INFO("Channel %d: No scaling needed\n", channel_id);
+        ISP_INFO("Channel %d: No attr provided, skipping scaling configuration\n", channel_id);
     }
     
     /* Binary Ninja: Global variable for channel enable mask */
