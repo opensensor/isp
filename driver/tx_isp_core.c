@@ -1658,58 +1658,77 @@ int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute
     }
     
     ISP_INFO("*** ispcore_core_ops_init: EXACT Binary Ninja reference implementation ***\n");
-    
+
     /* Check ISP state - equivalent to reference check */
     if (!isp->vic_dev) {
         ISP_ERROR("*** ispcore_core_ops_init: No VIC device found ***\n");
         return -EINVAL;
     }
-    
+
     int isp_state = isp->vic_dev->state;
     ISP_INFO("*** ispcore_core_ops_init: Current ISP state = %d ***\n", isp_state);
-    
-    /* Reference logic: if (arg2 == 0) - arg2 is the second parameter */
+
+    /* Binary Ninja: if ($v0_3 != 1) - CRITICAL: Check state FIRST, before sensor_attr check */
+    if (isp_state == 1) {
+        ISP_INFO("*** ispcore_core_ops_init: State is 1 (IDLE) - early return ***\n");
+        return 0;
+    }
+
+    /* Binary Ninja: if (arg2 == 0) - Check sensor_attr AFTER state check */
     if (!sensor_attr) {
         /* Deinitialize path - matches reference when arg2 == 0 */
         ISP_INFO("*** ispcore_core_ops_init: Deinitialize path (sensor_attr == NULL) ***\n");
-        
-        if (isp_state != 1) {
-            /* Check for state transitions */
-            if (isp_state == 4) {
-                /* Stop video streaming */
-                ISP_INFO("*** ispcore_core_ops_init: Stopping video streaming (state 4) ***\n");
-                /* ispcore_video_s_stream equivalent call would go here */
-            }
-            
-            if (isp_state == 3) {
-                /* Stop kernel thread - matches reference kthread_stop */
-                ISP_INFO("*** ispcore_core_ops_init: Stopping ISP thread (state 3) ***\n");
-                /* Thread stopping logic would go here */
-                isp->vic_dev->state = 2;
-            }
-            
-            /* Call tisp_deinit - matches reference */
-            ISP_INFO("*** ispcore_core_ops_init: Calling tisp_deinit() ***\n");
-            /* tisp_deinit() call would go here */
-            
-            /* Clear memory regions - matches reference memset calls */
-            ISP_INFO("*** ispcore_core_ops_init: Clearing ISP memory regions ***\n");
+
+        /* Binary Ninja: Check for state transitions */
+        int current_state = isp_state;
+
+        if (current_state == 4) {
+            /* Stop video streaming */
+            ISP_INFO("*** ispcore_core_ops_init: Stopping video streaming (state 4) ***\n");
+            /* ispcore_video_s_stream(sd, 0) equivalent call would go here */
+            current_state = isp->vic_dev->state;  /* Re-read state after stopping */
         }
-        
+
+        if (current_state == 3) {
+            /* Stop kernel thread - matches reference kthread_stop */
+            ISP_INFO("*** ispcore_core_ops_init: Stopping ISP thread (state 3) ***\n");
+            /* kthread_stop() call would go here */
+            isp->vic_dev->state = 2;
+        }
+
+        /* Call tisp_deinit - matches reference */
+        ISP_INFO("*** ispcore_core_ops_init: Calling tisp_deinit() ***\n");
+        /* tisp_deinit() call would go here */
+
+        /* Clear memory regions - matches reference memset calls */
+        ISP_INFO("*** ispcore_core_ops_init: Clearing ISP memory regions ***\n");
+        /* memset(*($s0 + 0x1bc) + 4, 0, 0x40a4) */
+        /* memset($s0 + 0x1d8, 0, 0x40) */
+
         return 0;
     }
-    
-    /* Check ISP state with spinlock - matches reference spinlock usage */
+
+    /* Initialize path - sensor_attr is not NULL */
+    ISP_INFO("*** ispcore_core_ops_init: Initialize path (sensor_attr != NULL) ***\n");
+
+    /* Binary Ninja: Reset ISP module */
+    ret = 0;  /* private_reset_tx_isp_module(0) would go here */
+    if (ret != 0) {
+        ISP_ERROR("*** ispcore_core_ops_init: Failed to reset ISP module ***\n");
+        return -EINVAL;
+    }
+
+    /* Binary Ninja: Check ISP state with spinlock */
     unsigned long flags;
     spin_lock_irqsave(&isp->irq_lock, flags);
-    
-    if (isp->vic_dev->state < 2) {
+
+    if (isp->vic_dev->state != 2) {
         spin_unlock_irqrestore(&isp->irq_lock, flags);
-        ISP_ERROR("*** ispcore_core_ops_init: Invalid ISP state %d (expected >= 2) ***\n",
+        ISP_ERROR("*** ispcore_core_ops_init: Can't init ispcore when its state=%d (expected 2) ***\n",
                   isp->vic_dev->state);
         return -EINVAL;
     }
-    
+
     spin_unlock_irqrestore(&isp->irq_lock, flags);
     
     /* CRITICAL: Validate and fix sensor dimensions to prevent memory corruption */
