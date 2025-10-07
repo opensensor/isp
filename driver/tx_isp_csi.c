@@ -521,13 +521,8 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
         if (csi_dev != NULL && (unsigned long)csi_dev < 0xfffff001) {
             result = 0;
 
-            /* CRITICAL FIX: Ensure CSI device is activated before configuration */
-            if (csi_dev->state < 2) {
-                pr_info("*** CSI ACTIVATION: State %d -> 2 (activating for configuration) ***\n", csi_dev->state);
-                csi_dev->state = 2; /* Activate CSI device for configuration */
-            }
-
             /* Binary Ninja: if (*($s0_1 + 0x128) s>= 2) */
+            /* CRITICAL: Check state WITHOUT modifying it first - matches Binary Ninja exactly */
             pr_info("*** CSI DEBUG: csi_dev->state = %d (need >= 2 for configuration) ***\n", csi_dev->state);
             if (csi_dev->state >= 2) {
                 int v0_17;
