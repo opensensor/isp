@@ -1793,24 +1793,18 @@ EXPORT_SYMBOL(data_b2e14);
  */
 int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 {
-    struct tx_isp_core_device *core_dev;
     struct tx_isp_dev *isp_dev;
     struct tx_isp_sensor_attribute *sensor_attr = NULL;
-    void* s0 = NULL;
+    struct tx_isp_vic_device *vic_dev;
+    int vic_state;
+    int result = -EINVAL;
+    int ret;
 
     pr_info("*** ispcore_core_ops_init: ENTRY - sd=%p, on=%d ***\n", sd, on);
-    if (sd) {
-        pr_info("*** ispcore_core_ops_init: sd->dev_priv=%p, sd->host_priv=%p ***\n", sd->dev_priv, sd->host_priv);
-        pr_info("*** ispcore_core_ops_init: sd->pdev=%p, sd->ops=%p ***\n", sd->pdev, sd->ops);
-    } else {
+    if (!sd) {
         pr_err("*** ispcore_core_ops_init: ERROR - sd is NULL! ***\n");
         return -EINVAL;
     }
-    int32_t var_18 = 0;
-    int32_t result = -EINVAL;
-    struct tx_isp_vic_device *vic_dev;
-    int32_t vic_state;  /* CRITICAL FIX: This should be VIC state, not core state */
-    int ret;
 
     pr_info("*** ispcore_core_ops_init: EXACT Binary Ninja MCP implementation, on=%d ***", on);
 
@@ -1838,172 +1832,153 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
         sensor_attr = NULL;  /* Disable/deinit */
     } else {
         /* For enable, try to get sensor attributes if available */
-        struct tx_isp_subdev *sensor = tx_isp_get_sensor_subdev(isp_dev);
-        if (sensor && sensor->video.attr) {
+        /* CRITICAL FIX: Use isp_dev->sensor directly - it's already a struct tx_isp_sensor * */
+        if (isp_dev->sensor && isp_dev->sensor->video.attr) {
             /* Use the actual sensor attributes */
-            sensor_attr = sensor->video.attr;
+            sensor_attr = isp_dev->sensor->video.attr;
             pr_info("ispcore_core_ops_init: Using sensor attributes from sensor: %s", sensor_attr->name);
-        } else if (sensor) {
-            pr_info("ispcore_core_ops_init: Sensor found but no attributes - sensor_attr will be NULL");
         } else {
-            pr_info("ispcore_core_ops_init: No sensor found - sensor_attr will be NULL");
+            pr_info("ispcore_core_ops_init: No sensor found or no attributes - sensor_attr will be NULL");
         }
         /* sensor_attr can be NULL for initial core init */
     }
 
-    /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) */
-    /* CRITICAL FIX: arg1 is the subdev parameter, not isp_dev */
-    if (sd != NULL && (unsigned long)sd < 0xfffff001) {
-        /* Binary Ninja: $s0 = arg1[0x35] - This is sd->host_priv (core device) */
-        s0 = sd->host_priv;  /* This should be the core device */
-        pr_info("*** ispcore_core_ops_init: s0 (core_dev) = %p from sd->host_priv ***\n", s0);
+    /* CRITICAL FIX: Get VIC device directly from isp_dev instead of using host_priv
+     * The reference driver uses sd->host_priv to get core_dev, then core_dev->isp_dev to get VIC.
+     * In our implementation, we already have isp_dev, so we can get VIC directly.
+     */
+    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+    if (!vic_dev) {
+        pr_err("ispcore_core_ops_init: No VIC device found in ISP device");
+        return -ENODEV;
     }
 
-    /* Binary Ninja: if ($s0 != 0 && $s0 u< 0xfffff001) */
-    if (s0 != NULL && (unsigned long)s0 < 0xfffff001) {
-        /* s0 is the core device, get VIC device from core device's ISP device */
-        core_dev = (struct tx_isp_core_device *)s0;
-        if (core_dev && core_dev->isp_dev) {
-            vic_dev = (struct tx_isp_vic_device *)core_dev->isp_dev->vic_dev;
-            if (vic_dev) {
-                /* Binary Ninja: int32_t $v0_3 = *($s0 + 0xe8) - Get VIC state */
-                vic_state = vic_dev->state;  /* This is VIC state at offset 0xe8 */
-                result = 0;
-                pr_info("ispcore_core_ops_init: core_dev=%p, vic_dev=%p, vic_state=%d", core_dev, vic_dev, vic_state);
+    /* Binary Ninja: int32_t $v0_3 = *($s0 + 0xe8) - Get VIC state */
+    vic_state = vic_dev->state;  /* This is VIC state at offset 0xe8 */
+    result = 0;
+    pr_info("ispcore_core_ops_init: isp_dev=%p, vic_dev=%p, vic_state=%d", isp_dev, vic_dev, vic_state);
+
+    /* Binary Ninja: if ($v0_3 != 1) */
+    if (vic_state != 1) {
+        /* Binary Ninja: if (arg2 == 0) - Deinitialize if no sensor attributes */
+        if (on == 0) {  /* CRITICAL FIX: Only call ispcore_video_s_stream during DEINITIALIZATION */
+            pr_info("ispcore_core_ops_init: Deinitializing (sensor_attr=NULL, on=0)");
+
+            /* Binary Ninja: Check current VIC state and handle streaming */
+            if (vic_state == 4) {
+                /* Binary Ninja: ispcore_video_s_stream(arg1, 0) */
+                printk(KERN_ALERT "*** ispcore_core_ops_init: VIC streaming (state 4) - calling ispcore_video_s_stream(0) to stop ***");
+                ispcore_video_s_stream(sd, 0);
+                vic_state = vic_dev->state;  /* Update VIC state after s_stream */
             } else {
-                pr_err("ispcore_core_ops_init: No VIC device found in core device's ISP device");
-                return -ENODEV;
+                printk(KERN_ALERT "*** ispcore_core_ops_init: VIC not streaming (state %d) - no need to stop streaming ***", vic_state);
             }
-        } else {
-            pr_err("ispcore_core_ops_init: Invalid core device or no ISP device");
-            return -ENODEV;
+
+            /* Binary Ninja: if ($v1_55 == 3) - Stop kernel thread if in state 3 */
+            if (vic_state == 3) {
+                /* Binary Ninja: private_kthread_stop(*($s0 + 0x1b8)) */
+                /* Note: fw_thread management removed - handled by separate thread management system */
+                pr_info("ispcore_core_ops_init: Thread management handled by separate system");
+                /* Binary Ninja: *($s0 + 0xe8) = 2 */
+                vic_dev->state = 2;
+            }
+
+            /* CRITICAL: Cancel any pending frame sync work before deinit */
+            pr_info("ispcore_core_ops_init: Canceling frame sync work during deinit");
+            cancel_work_sync(&fs_work);
+
+            /* Binary Ninja: tisp_deinit() */
+            tisp_deinit();
+
+            /* Binary Ninja: memset(*($s0 + 0x1bc) + 4, 0, 0x40a4) */
+            /* Binary Ninja: memset($s0 + 0x1d8, 0, 0x40) */
+            /* Clear internal data structures */
+
+            return 0;
         }
 
-        /* Binary Ninja: if ($v0_3 != 1) */
-        if (vic_state != 1) {
-            /* Binary Ninja: if (arg2 == 0) - Deinitialize if no sensor attributes */
-            if (on == 0) {  /* CRITICAL FIX: Only call ispcore_video_s_stream during DEINITIALIZATION */
-                pr_info("ispcore_core_ops_init: Deinitializing (sensor_attr=NULL, on=0)");
+        /* CRITICAL: Handle initialization case (on=1) */
+        if (on == 1) {
+            pr_info("*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***");
+            pr_info("*** ispcore_core_ops_init: Current vic_state (VIC state): %d ***", vic_state);
 
-                /* Binary Ninja: Check current VIC state and handle streaming */
-                if (vic_state == 4) {
-                    /* Binary Ninja: ispcore_video_s_stream(arg1, 0) */
-                    printk(KERN_ALERT "*** ispcore_core_ops_init: VIC streaming (state 4) - calling ispcore_video_s_stream(0) to stop ***");
-                    ispcore_video_s_stream(sd, 0);
-                    vic_state = vic_dev->state;  /* Update VIC state after s_stream */
-                } else {
-                    printk(KERN_ALERT "*** ispcore_core_ops_init: VIC not streaming (state %d) - no need to stop streaming ***", vic_state);
-                }
-
-                /* Binary Ninja: if ($v1_55 == 3) - Stop kernel thread if in state 3 */
-                if (vic_state == 3) {
-                    /* Binary Ninja: private_kthread_stop(*($s0 + 0x1b8)) */
-                    /* Note: fw_thread management removed - handled by separate thread management system */
-                    pr_info("ispcore_core_ops_init: Thread management handled by separate system");
-                    /* Binary Ninja: *($s0 + 0xe8) = 2 */
-                    vic_dev->state = 2;
-                }
-
-                /* CRITICAL: Cancel any pending frame sync work before deinit */
-                pr_info("ispcore_core_ops_init: Canceling frame sync work during deinit");
-                cancel_work_sync(&fs_work);
-
-                /* Binary Ninja: tisp_deinit() */
-                tisp_deinit();
-
-                /* Binary Ninja: memset(*($s0 + 0x1bc) + 4, 0, 0x40a4) */
-                /* Binary Ninja: memset($s0 + 0x1d8, 0, 0x40) */
-                /* Clear internal data structures */
-
-                return 0;
+            /* CRITICAL FIX: Allow ISP core initialization in streaming state */
+            /* The original check required state 2 (ready), but VIC may already be streaming (state 4) */
+            if (vic_state < 2) {
+                pr_err("ispcore_core_ops_init: VIC state %d < 2, not ready for initialization\n", vic_state);
+                return -EINVAL;
             }
 
-            /* CRITICAL: Handle initialization case (on=1) */
-            if (on == 1) {
-                pr_info("*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***");
-                pr_info("*** ispcore_core_ops_init: Current vic_state (VIC state): %d ***", vic_state);
-
-                /* CRITICAL FIX: Allow ISP core initialization in streaming state */
-                /* The original check required state 2 (ready), but VIC may already be streaming (state 4) */
-                if (vic_state < 2) {
-                    pr_err("ispcore_core_ops_init: VIC state %d < 2, not ready for initialization\n", vic_state);
-                    return -EINVAL;
-                }
-
-                if (vic_state == 4) {
-                    pr_info("*** ispcore_core_ops_init: VIC already streaming (state 4) - initializing during streaming ***");
-                } else if (vic_state == 3) {
-                    pr_info("*** ispcore_core_ops_init: VIC in ready state (%d) - normal initialization ***", vic_state);
-                   	ispcore_video_s_stream(sd, 1);
-                }
-
-                pr_info("*** ispcore_core_ops_init: VIC state check passed, proceeding with initialization ***");
-
-
-
-                /* CRITICAL: Initialize clocks now that streaming is starting */
-                pr_info("*** VIC STATE 4: Initializing clocks for streaming ***\n");
-                extern int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count);
-                extern struct tx_isp_subdev *tx_isp_find_subdev_by_name(struct tx_isp_dev *isp_dev, const char *name);
-                extern struct tx_isp_dev *ourISPdev;
-                if (ourISPdev) {
-                    /* Initialize clocks for all subdevs that need them */
-                    struct tx_isp_subdev *core_sd = tx_isp_find_subdev_by_name(ourISPdev, "isp-m0");
-                    struct tx_isp_subdev *csi_sd = tx_isp_find_subdev_by_name(ourISPdev, "isp-w01");
-                    struct tx_isp_subdev *vic_sd = tx_isp_find_subdev_by_name(ourISPdev, "isp-w02");
-
-                    if (core_sd && core_sd->clk_num > 0) {
-                        pr_info("*** Initializing ISP clocks (%d clocks) ***\n", core_sd->clk_num);
-                        int clk_ret = isp_subdev_init_clks(core_sd, core_sd->clk_num);
-                        if (clk_ret != 0) {
-                            pr_err("*** ISP clock initialization failed: %d ***\n", clk_ret);
-                        }
-                    }
-
-                    if (csi_sd && csi_sd->clk_num > 0) {
-                        pr_info("*** Initializing CSI clocks (%d clocks) ***\n", csi_sd->clk_num);
-                        int clk_ret = isp_subdev_init_clks(csi_sd, csi_sd->clk_num);
-                        if (clk_ret != 0) {
-                            pr_err("*** CSI clock initialization failed: %d ***\n", clk_ret);
-                        }
-                    }
-
-                    if (vic_sd && vic_sd->clk_num > 0) {
-                        pr_info("*** Initializing VIC clocks (%d clocks) ***\n", vic_sd->clk_num);
-                        int clk_ret = isp_subdev_init_clks(vic_sd, vic_sd->clk_num);
-                        if (clk_ret != 0) {
-                            pr_err("*** VIC clock initialization failed: %d ***\n", clk_ret);
-                        }
-                    }
-                }
-
-                /* Binary Ninja MCP shows two calls: 00079050 and 00079058 */
-                struct tx_isp_subdev *init_sensor = tx_isp_get_sensor_subdev(isp_dev);
-
-
-                /* CRITICAL FIX: Don't reset VIC state if it's already streaming (state 4) */
-                /* The issue is that VIC gets initialized to state 4, then ISP core resets it to 3, causing reinitialization */
-                if (vic_dev->state != 4) {
-                    /* Binary Ninja: *($s0 + 0xe8) = 3 - Set VIC state to 3 (ACTIVE) */
-                    vic_dev->state = 3;
-                    pr_info("*** ispcore_core_ops_init: VIC state set to 3 (ACTIVE) - CORE READY FOR STREAMING ***");
-                } else {
-                    pr_info("*** ispcore_core_ops_init: VIC already streaming (state 4) - preserving state to avoid reinitialization ***");
-                }
-
-                /* REMOVED: Core device state management - ALL state management happens through VIC device */
-                /* Based on Binary Ninja MCP analysis, core device is stateless */
-                pr_info("*** ispcore_core_ops_init: Core device is stateless - only VIC state matters ***");
-
-                /* CRITICAL FIX: Don't enable ISP core interrupts during streaming - it causes hardware reset */
-                /* The register writes in tx_isp_core_enable_irq corrupt ISP control logic when called during streaming */
-                if (vic_state == 4) {
-                    pr_info("*** ispcore_core_ops_init: STREAMING ACTIVE - Skipping ISP core interrupt enable to prevent hardware reset ***");
-                    pr_info("*** ispcore_core_ops_init: ISP core interrupts should be enabled BEFORE streaming starts ***");
-                }
-
-                result = 0;
+            if (vic_state == 4) {
+                pr_info("*** ispcore_core_ops_init: VIC already streaming (state 4) - initializing during streaming ***");
+            } else if (vic_state == 3) {
+                pr_info("*** ispcore_core_ops_init: VIC in ready state (%d) - normal initialization ***", vic_state);
+                ispcore_video_s_stream(sd, 1);
             }
+
+            pr_info("*** ispcore_core_ops_init: VIC state check passed, proceeding with initialization ***");
+
+            /* CRITICAL: Initialize clocks now that streaming is starting */
+            pr_info("*** VIC STATE 4: Initializing clocks for streaming ***\n");
+            extern int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count);
+            extern struct tx_isp_subdev *tx_isp_find_subdev_by_name(struct tx_isp_dev *isp_dev, const char *name);
+            extern struct tx_isp_dev *ourISPdev;
+            if (ourISPdev) {
+                /* Initialize clocks for all subdevs that need them */
+                struct tx_isp_subdev *core_sd = tx_isp_find_subdev_by_name(ourISPdev, "isp-m0");
+                struct tx_isp_subdev *csi_sd = tx_isp_find_subdev_by_name(ourISPdev, "isp-w01");
+                struct tx_isp_subdev *vic_sd = tx_isp_find_subdev_by_name(ourISPdev, "isp-w02");
+
+                if (core_sd && core_sd->clk_num > 0) {
+                    pr_info("*** Initializing ISP clocks (%d clocks) ***\n", core_sd->clk_num);
+                    int clk_ret = isp_subdev_init_clks(core_sd, core_sd->clk_num);
+                    if (clk_ret != 0) {
+                        pr_err("*** ISP clock initialization failed: %d ***\n", clk_ret);
+                    }
+                }
+
+                if (csi_sd && csi_sd->clk_num > 0) {
+                    pr_info("*** Initializing CSI clocks (%d clocks) ***\n", csi_sd->clk_num);
+                    int clk_ret = isp_subdev_init_clks(csi_sd, csi_sd->clk_num);
+                    if (clk_ret != 0) {
+                        pr_err("*** CSI clock initialization failed: %d ***\n", clk_ret);
+                    }
+                }
+
+                if (vic_sd && vic_sd->clk_num > 0) {
+                    pr_info("*** Initializing VIC clocks (%d clocks) ***\n", vic_sd->clk_num);
+                    int clk_ret = isp_subdev_init_clks(vic_sd, vic_sd->clk_num);
+                    if (clk_ret != 0) {
+                        pr_err("*** VIC clock initialization failed: %d ***\n", clk_ret);
+                    }
+                }
+            }
+
+            /* Binary Ninja MCP shows two calls: 00079050 and 00079058 */
+            struct tx_isp_subdev *init_sensor = tx_isp_get_sensor_subdev(isp_dev);
+
+            /* CRITICAL FIX: Don't reset VIC state if it's already streaming (state 4) */
+            /* The issue is that VIC gets initialized to state 4, then ISP core resets it to 3, causing reinitialization */
+            if (vic_dev->state != 4) {
+                /* Binary Ninja: *($s0 + 0xe8) = 3 - Set VIC state to 3 (ACTIVE) */
+                vic_dev->state = 3;
+                pr_info("*** ispcore_core_ops_init: VIC state set to 3 (ACTIVE) - CORE READY FOR STREAMING ***");
+            } else {
+                pr_info("*** ispcore_core_ops_init: VIC already streaming (state 4) - preserving state to avoid reinitialization ***");
+            }
+
+            /* REMOVED: Core device state management - ALL state management happens through VIC device */
+            /* Based on Binary Ninja MCP analysis, core device is stateless */
+            pr_info("*** ispcore_core_ops_init: Core device is stateless - only VIC state matters ***");
+
+            /* CRITICAL FIX: Don't enable ISP core interrupts during streaming - it causes hardware reset */
+            /* The register writes in tx_isp_core_enable_irq corrupt ISP control logic when called during streaming */
+            if (vic_state == 4) {
+                pr_info("*** ispcore_core_ops_init: STREAMING ACTIVE - Skipping ISP core interrupt enable to prevent hardware reset ***");
+                pr_info("*** ispcore_core_ops_init: ISP core interrupts should be enabled BEFORE streaming starts ***");
+            }
+
+            result = 0;
         }
     }
 
