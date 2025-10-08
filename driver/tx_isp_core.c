@@ -27,6 +27,10 @@ module_param(print_level, int, S_IRUGO);
 MODULE_PARM_DESC(print_level, "isp print level");
 int tx_isp_configure_clocks(struct tx_isp_dev *isp);
 
+/* Global ISP register base for tuning subsystem */
+void __iomem *isp_reg_base = NULL;
+EXPORT_SYMBOL(isp_reg_base);
+
 /* Forward declarations */
 int tx_isp_init_memory_mappings(struct tx_isp_dev *isp);
 static int tx_isp_deinit_memory_mappings(struct tx_isp_dev *isp);
@@ -1182,6 +1186,11 @@ int tx_isp_init_memory_mappings(struct tx_isp_dev *isp)
         return -ENOMEM;
     }
     pr_info("ISP core registers mapped at 0x13300000\n");
+
+    /* Set global ISP register base for tuning subsystem */
+    extern void __iomem *isp_reg_base;
+    isp_reg_base = isp->core_regs;
+    pr_info("Global isp_reg_base set to %p for tuning subsystem\n", isp_reg_base);
     
     /* Map VIC registers */
     isp->vic_regs = ioremap(0x10023000, 0x1000);

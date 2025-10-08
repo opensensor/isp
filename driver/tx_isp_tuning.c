@@ -6550,7 +6550,42 @@ int tisp_af_set_par_cfg(void *in_buf) { return 0; }
 int tisp_hldc_set_par_cfg(void *in_buf) { return 0; }
 int tisp_ae_set_par_cfg(void *in_buf) { return 0; }
 int tisp_awb_set_par_cfg(void *in_buf) { return 0; }
-int tisp_reg_map_set(void *in_buf) { return 0; }
+/* tisp_reg_map_set - Binary Ninja EXACT implementation */
+int tisp_reg_map_set(void *in_buf)
+{
+    extern void __iomem *isp_reg_base;  /* Global ISP register base from tx_isp_core.c */
+
+    if (!in_buf) {
+        pr_debug("tisp_reg_map_set: NULL buffer, skipping\n");
+        return 0;
+    }
+
+    if (!isp_reg_base) {
+        pr_err("tisp_reg_map_set: ISP register base not mapped!\n");
+        return -EINVAL;
+    }
+
+    /* Binary Ninja: memcpy(&var_14, arg1 + 0xc, 4) - read register offset */
+    uint32_t reg_offset;
+    memcpy(&reg_offset, (char*)in_buf + 0xc, 4);
+
+    /* Binary Ninja: memcpy(&var_18, arg1 + 0x10, 4) - read value to write */
+    uint32_t reg_value;
+    memcpy(&reg_value, (char*)in_buf + 0x10, 4);
+
+    /* Binary Ninja: system_reg_write(0xecd00000 + var_14, var_18) */
+    /* Note: 0xecd00000 is subtracted from physical address 0x13300000 to get offset */
+    /* Physical ISP base = 0x13300000, so offset = phys - 0xecd00000 = 0x46300000 */
+    /* But we already have isp_reg_base mapped, so just use the offset directly */
+
+    pr_info("tisp_reg_map_set: Writing 0x%x to ISP register offset 0x%x\n", reg_value, reg_offset);
+
+    writel(reg_value, isp_reg_base + reg_offset);
+    wmb();
+
+    return 0;
+}
+EXPORT_SYMBOL(tisp_reg_map_set);
 int tisp_dn_mode_set(void *in_buf) { return 0; }
 
 int tisp_get_ae_info(void *out_buf) { return 0; }
