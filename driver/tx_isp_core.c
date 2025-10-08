@@ -273,7 +273,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable);
 
 /* Core subdev video operations */
 static struct tx_isp_subdev_video_ops core_subdev_video_ops = {
-    .s_stream = ispcore_video_s_stream,  /* Core doesn't have individual s_stream */
+    .s_stream = NULL,  /* CRITICAL FIX: Core orchestrates s_stream, doesn't have its own to prevent infinite recursion */
     .link_stream = NULL,  /* CRITICAL: Main streaming orchestration function called by tx_isp_video_link_stream */
 };
 
@@ -348,6 +348,13 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         return -EINVAL;
     }
 
+    /* CRITICAL FIX: Get VIC device from ISP device */
+    vic_dev = isp_dev->vic_dev;
+    if (!vic_dev) {
+        pr_err("ispcore_video_s_stream: No VIC device available\n");
+        return -EINVAL;
+    }
+
     /* Binary Ninja: __private_spin_lock_irqsave($s0 + 0xdc, &var_28) */
     __private_spin_lock_irqsave(&isp_dev->lock, &var_28);
 
@@ -382,8 +389,8 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     /* Binary Ninja: void* $s3_1 */
     /* Binary Ninja: if (arg2 == 0) */
     if (enable == 0) {
-        /* Binary Ninja: $s3_1 = arg1 + 0x38 */
-        s3_1 = tx_isp_get_core_subdev(isp_dev);
+        /* Binary Ninja: $s3_1 = arg1 + 0x38 - CRITICAL FIX: Use subdev array, not function call */
+        s3_1 = &isp_dev->subdevs[0];
 
         /* Binary Ninja: if ($v0_3 == 4) */
         if (v0_3 == 4) {
@@ -392,19 +399,18 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
             /* Binary Ninja: *($s0 + 0xe8) = 3 */
             isp_dev->state = 3;
-            pr_info("*** ispcore_video_s_stream: VIC state set to 3 after stream OFF ***\n");
+            pr_info("*** ispcore_video_s_stream: ISP state set to 3 after stream OFF ***\n");
         }
-        /* Binary Ninja: $s3_1 = arg1 + 0x38 */
-        s3_1 = tx_isp_get_core_subdev(isp_dev);
+        /* Binary Ninja: $s3_1 = arg1 + 0x38 - already set above */
     } else if (v0_3 != 3) {
-        /* Binary Ninja: $s3_1 = arg1 + 0x38 */
-        s3_1 = tx_isp_get_core_subdev(isp_dev);
+        /* Binary Ninja: $s3_1 = arg1 + 0x38 - CRITICAL FIX: Use subdev array, not function call */
+        s3_1 = &isp_dev->subdevs[0];
     } else {
         /* Binary Ninja: *($s0 + 0xe8) = 4 */
         isp_dev->state = 4;
-        pr_info("*** ispcore_video_s_stream: VIC state set to 4 for stream ON ***\n");
-        /* Binary Ninja: $s3_1 = arg1 + 0x38 */
-        s3_1 = tx_isp_get_core_subdev(isp_dev);
+        pr_info("*** ispcore_video_s_stream: ISP state set to 4 for stream ON ***\n");
+        /* Binary Ninja: $s3_1 = arg1 + 0x38 - CRITICAL FIX: Use subdev array, not function call */
+        s3_1 = &isp_dev->subdevs[0];
     }
 
     /* Binary Ninja: int32_t result = 0 */
@@ -418,6 +424,13 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
         /* Binary Ninja: if ($a0_5 != 0) */
         if (a0_5 != NULL) {
+            /* CRITICAL FIX: Skip the Core subdev to prevent infinite recursion */
+            if (a0_5 == sd) {
+                pr_info("*** ispcore_video_s_stream: Skipping Core subdev (self) to prevent recursion ***\n");
+                s3_1++;
+                continue;
+            }
+
             /* Binary Ninja: int32_t* $v0_7 = *(*($a0_5 + 0xc4) + 4) */
             struct tx_isp_subdev_video_ops *video_ops = NULL;
             if (a0_5->ops && a0_5->ops->video) {
