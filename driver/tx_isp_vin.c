@@ -590,7 +590,7 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
         /* CRITICAL FIX: VIN can transition from state 3 to 4 for streaming */
         /* The init function sets state to 3, then streaming sets it to 4 */
         /* Binary Ninja: if ($v1 != 4) goto label_132e4 */
-        if (vin_state != 4 && vin_state != 3) {
+        if (vin_state < 3) {
             /* CRITICAL: VIN must be in state 3 or 4 for streaming enable */
             mcp_log_error("vin_s_stream: VIN not in state 3 or 4 for streaming enable", vin_state);
             mcp_log_info("vin_s_stream: Expected state 3 or 4, got state", vin_state);
