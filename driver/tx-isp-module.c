@@ -88,6 +88,7 @@ void isp_process_frame_statistics(struct tx_isp_dev *dev);
 void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
 void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
 int tisp_init(void *sensor_info, char *param_name);
+int ispcore_link_setup(struct tx_isp_dev* isp_dev, u32 flags);
 
 /* Global I2C client tracking to prevent duplicate creation */
 static struct i2c_client *global_sensor_i2c_client = NULL;
@@ -4529,22 +4530,15 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         if (copy_from_user(&link_config, argp, sizeof(link_config)))
             return -EFAULT;
 
+        /* Binary Ninja: if ($a2_4 u>= 2) */
         if (link_config >= 2) {
-            pr_err("Invalid video link config: %d (valid: 0-1)\n", link_config);
+            pr_err("Invalid video link config: %d\n", link_config);
             return -EINVAL;
         }
 
-        pr_info("Video link setup: config=%d\n", link_config);
+        pr_info("TX_ISP_VIDEO_LINK_SETUP: config=%d\n", link_config);
 
-        // Reference implementation configures subdev links and pads
-        // In full implementation, this would:
-        // 1. Find subdev pads using find_subdev_link_pad()
-        // 2. Setup media pipeline connections
-        // 3. Configure link properties based on config value
-        // 4. Store config in device structure at offset 0x10c
-
-        // For now, acknowledge the link setup
-        // isp_dev->link_config = link_config; // Would store at offset 0x10c
+        ispcore_link_setup(isp_dev, link_config);
 
         return 0;
     }

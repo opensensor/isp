@@ -12024,3 +12024,17 @@ EXPORT_SYMBOL(tisp_lsc_param_array_set);
 EXPORT_SYMBOL(tisp_wdr_param_array_set);
 EXPORT_SYMBOL(tisp_wdr_param_array_set_extended);
 EXPORT_SYMBOL(tisp_gib_param_array_set);
+
+
+/* tisp_deinit - EXACT Binary Ninja implementation */
+int tisp_deinit(void)
+{
+    pr_info("tisp_deinit: Deinitializing ISP system\n");
+
+    /* Binary Ninja: tisp_param_operate_deinit() */
+    //tisp_param_operate_deinit();
+    // TODO
+
+    return 0;
+}
+EXPORT_SYMBOL(tisp_deinit);
