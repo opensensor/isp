@@ -2718,74 +2718,12 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             /* Ensure stream_state reset so ispvic_frame_channel_s_stream performs MDMA enable */
             vic_dev->stream_state = 0;
 
-            /* Re-assert interrupt mask and clear pending in BOTH banks, verify key regs */
-            if (vic_dev->vic_regs) {
-                void __iomem *vr = vic_dev->vic_regs;
-                /* Clear pending (W1C) */
-                writel(0xFFFFFFFF, vr + 0x1f0);
-                writel(0xFFFFFFFF, vr + 0x1f4);
-                /* Set MainMask to allow framedone + bit21 (debug); do NOT touch status regs 0x1e0/0x1e4 */
-                writel(0xFFDFFFFE, vr + 0x1e8); /* allow frame-done + bit21 (debug) */
-                /* Leave 0x1ec (MDMA mask) as-is per working reference */
-                /* Global interrupt enable at 0x30c (if implemented) */
-                writel(0xFFFFFFFF, vr + 0x30c);
-                wmb();
-                pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (MainMask=0xFFFFFFFE)***\n",
-                        readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x30c), readl(vr + 0x1e0), readl(vr + 0x1e4), readl(vr + 0x1e8), readl(vr + 0x1ec));
-                /* Primary bank: only verify 0x100; do NOT write 0x14 here (0x14 is stride on PRIMARY) */
-                writel(0x000002d0, vr + 0x100);
-                wmb();
-                pr_info("*** VIC VERIFY (PRIMARY EXTRA): [0x100]=0x%08x [0x14]=0x%08x (PRIMARY 0x14=stride) ***\n",
-                        readl(vr + 0x100), readl(vr + 0x14));
-                udelay(50);
-                /* REMOVED: VIC timing/packing block writes (0x10c-0x11c) per diff */
-            }
-            if (vic_dev->vic_regs_secondary) {
-                void __iomem *vc = vic_dev->vic_regs_secondary;
-                /* Clear pending (if mapped similarly, W1C) */
-                writel(0xFFFFFFFF, vc + 0x1f0);
-                writel(0xFFFFFFFF, vc + 0x1f4);
-                wmb();
-                pr_info("*** VIC VERIFY (CONTROL): [0x0]=0x%08x [0x4]=0x%08x [0x0c]=0x%08x [0x100]=0x%08x [0x14]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (MainMask=0xFFFFFFFE)***\n",
-                        readl(vc + 0x0), readl(vc + 0x4), readl(vc + 0x0c), readl(vc + 0x100), readl(vc + 0x14), readl(vc + 0x300), readl(vc + 0x30c), readl(vc + 0x1e0), readl(vc + 0x1e4), readl(vc + 0x1e8), readl(vc + 0x1ec));
-            }
-
-                /* Read-back verification of buffer/control registers in BOTH banks */
-                if (vic_dev->vic_regs) {
-                    void __iomem *vrb = vic_dev->vic_regs;
-                    u32 b0 = readl(vrb + 0x318);
-                    u32 b1 = readl(vrb + 0x31c);
-                    u32 b2 = readl(vrb + 0x320);
-                    u32 b3 = readl(vrb + 0x324);
-                    u32 b4 = readl(vrb + 0x328);
-                    pr_info("*** VIC BUFS (PRIMARY): [0x318]=0x%08x [0x31c]=0x%08x [0x320]=0x%08x [0x324]=0x%08x [0x328]=0x%08x ***\n",
-                            b0, b1, b2, b3, b4);
-                    pr_info("*** VIC CTRL (PRIMARY): [0x300]=0x%08x ***\n", readl(vrb + 0x300));
-                }
-                if (vic_dev->vic_regs_secondary) {
-                    void __iomem *vcb = vic_dev->vic_regs_secondary;
-                    u32 b0 = readl(vcb + 0x318);
-                    u32 b1 = readl(vcb + 0x31c);
-                    u32 b2 = readl(vcb + 0x320);
-                    u32 b3 = readl(vcb + 0x324);
-                    u32 b4 = readl(vcb + 0x328);
-                    pr_info("*** VIC BUFS (CONTROL): [0x318]=0x%08x [0x31c]=0x%08x [0x320]=0x%08x [0x324]=0x%08x [0x328]=0x%08x ***\n",
-                            b0, b1, b2, b3, b4);
-                    pr_info("*** VIC CTRL (CONTROL): [0x300]=0x%08x ***\n", readl(vcb + 0x300));
-                }
-
-
-                /* REMOVED: control-bank re-unlock/enable block per diff */
-
                 /* Apply working mask up front: frame-done only, like good-things */
                 if (vic_dev->vic_regs) {
                     void __iomem *vr = vic_dev->vic_regs;
                     /* Clear any pending first */
                     writel(0xFFFFFFFF, vr + 0x1f0);
                     writel(0xFFFFFFFF, vr + 0x1f4);
-                    wmb();
-                    /* Set MainMask to allow frame-done + bit21 during bring-up */
-                    writel(0xFFDFFFFE, vr + 0x1e8);
                     wmb();
                     pr_info("*** VIC MASK: Set MainMask=0xFFDFFFFE (frame-done + bit21) before RUN ***\n");
                 }
