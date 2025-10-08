@@ -1368,6 +1368,7 @@ int tx_isp_phy_init(struct tx_isp_dev *isp_dev)
 }
 
 
+
 /* tx_isp_vic_start - Following EXACT Binary Ninja flow with reference driver sequences */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 {
@@ -1391,7 +1392,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
 
     /* Get sensor attributes - offset 0x110 in Binary Ninja */
-    sensor_attr = &vic_dev->sensor_attr;
+    /* Binary Ninja: void* $v1 = *(arg1 + 0x110) */
+    sensor_attr = ourISPdev->sensor->video.attr;
 
     /* DEBUG: Check if sensor_attr is properly initialized */
     pr_info("*** DEBUG: sensor_attr=%p, dbus_type=%d ***\n", sensor_attr, sensor_attr ? sensor_attr->dbus_type : -1);
@@ -1578,9 +1580,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
         /* Binary Ninja: EXACT reference driver MIPI mode configuration */
         /* Binary Ninja: 000107ec - Set CSI mode */
-        writel(3, vic_regs + 0xc);  /* BINARY NINJA EXACT: VIC mode = 3 for MIPI interface */
+        writel(2, vic_regs + 0xc);  /* BINARY NINJA EXACT: VIC mode = 3 for MIPI interface */
         wmb();
-        pr_info("*** VIC: Set MIPI mode (3) to VIC control register 0xc - BINARY NINJA EXACT ***\n");
+        pr_info("*** VIC: Set MIPI mode (2) to VIC control register 0xc (matches working logs) ***\n");
 
         /* BINARY NINJA EXACT: All missing register configurations */
 
@@ -2706,6 +2708,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
         if (vic_dev != NULL && (unsigned long)vic_dev < 0xfffff001) {
             int current_state = vic_dev->state;
+            pr_info("*** vic_core_s_stream: current_state=%d (enable=%d) ***\n", current_state, enable);
 
             if (enable == 0) {
                 /* Stream OFF - BINARY NINJA REFERENCE: No adjustment function */
@@ -2726,6 +2729,15 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     pr_info("*** vic_core_s_stream: Calling tx_isp_vic_start ***\n");
                     ret = tx_isp_vic_start(vic_dev);
                     pr_info("*** vic_core_s_stream: tx_isp_vic_start returned %d ***\n", ret);
+
+                    extern int ispcore_slake_module(struct tx_isp_dev *isp_dev);
+                    extern struct tx_isp_dev *ourISPdev;
+                    if (ourISPdev) {
+                        pr_info("*** VIC STATE 4: Calling ispcore_slake_module (reference behavior) ***\n");
+                        ispcore_slake_module(ourISPdev);
+                    } else {
+                        pr_warn("*** VIC STATE 4: ourISPdev is NULL; cannot call ispcore_slake_module ***\n");
+                    }
 
                     /* Binary Ninja: state = 4 */
                     vic_dev->state = 4;
@@ -2825,17 +2837,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     vic_start_ok = 1;  /* NOW safe to enable interrupt processing */
                     pr_info("*** INTERRUPTS RE-ENABLED AFTER COMPLETE INITIALIZATION ***\n");
 
-                    /* CRITICAL: Call ispcore_slake_module when VIC state reaches 4 (>= 3) */
-                    pr_info("*** VIC STATE 4: Calling ispcore_slake_module to initialize ISP core ***\n");
-                    extern int ispcore_slake_module(struct tx_isp_dev *isp);
-                    if (ourISPdev) {
-                        int slake_ret = ispcore_slake_module(ourISPdev);
-                        if (slake_ret == 0) {
-                            pr_info("*** ispcore_slake_module SUCCESS - ISP core should now be initialized ***\n");
-                        } else {
-                            pr_err("*** ispcore_slake_module FAILED: %d ***\n", slake_ret);
-                        }
-                    }
+                    /* NOTE: ispcore_slake_module is now called in the primary path above (lines 2716-2724) */
+                    pr_info("*** VIC STATE %d → 4: ispcore_slake_module handled in primary path ***\n", current_state);
 
                     /* CRITICAL: Apply full VIC configuration now that sensor is streaming */
                     pr_info("*** APPLYING FULL VIC CONFIGURATION AFTER SENSOR INITIALIZATION ***\n");

@@ -1589,15 +1589,6 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
                 } else {
                     pr_info("ispcore_slake_module: No sensor attributes available, using NULL");
                 }
-
-                /* CRITICAL FIX: Call ispcore_core_ops_init with correct signature (subdev, enable) */
-                ret = ispcore_core_ops_init(&isp_dev->sd, 1);  /* enable=1 for initialization */
-
-                if (ret < 0) {
-                    pr_info("ispcore_slake_module: ispcore_core_ops_init failed: %d", ret);
-
-                    return ret;
-                }
             }
 
             /* Binary Ninja: Channel initialization loop */
@@ -2869,38 +2860,19 @@ int ispcore_link_setup(struct tx_isp_dev *isp_dev, u32 flags)
     vin_dev = (struct tx_isp_vin_device *)isp_dev->vin_dev;
 
     if (config == 0) {
-        /* Binary Ninja: Disable pipeline links */
-        pr_info("*** ispcore_link_setup: DISABLING pipeline links ***\n");
+        /* CRITICAL FIX: config=0 is called AFTER slake to indicate "no active links"
+         * but we should NOT disable hardware pipeline registers here!
+         * The hardware pipeline is already torn down by slake_module.
+         * Disabling hardware links here breaks the interrupt chain for the next init.
+         */
+        pr_info("*** ispcore_link_setup: config=0 (software link disable) - NOT touching hardware ***\n");
+        pr_info("*** ispcore_link_setup: Hardware pipeline already torn down by slake_module ***\n");
 
-        /* Disable VIC to CSI link */
-        if (vic_dev && csi_dev) {
-            pr_info("ispcore_link_setup: Disabling VIC->CSI link\n");
-            /* Binary Ninja: Clear link configuration registers */
-            if (vic_dev->vic_regs) {
-                writel(0, vic_dev->vic_regs + 0x380);  /* Clear VIC output configuration */
-                wmb();
-            }
-        }
-
-        /* Disable CSI to VIN link */
-        if (csi_dev && vin_dev) {
-            pr_info("ispcore_link_setup: Disabling CSI->VIN link\n");
-            /* Binary Ninja: Clear CSI output configuration */
-            if (csi_dev->csi_regs) {
-                writel(0, csi_dev->csi_regs + 0x20);  /* Clear CSI output configuration */
-                wmb();
-            }
-        }
-
-        /* Disable VIN to sensor link */
-        if (vin_dev) {
-            pr_info("ispcore_link_setup: Disabling VIN->sensor link\n");
-            /* Binary Ninja: Clear VIN input configuration */
-            if (vin_dev->base) {
-                writel(0, vin_dev->base + 0x10);  /* Clear VIN input configuration */
-                wmb();
-            }
-        }
+        /* NOTE: We do NOT write to hardware registers here because:
+         * 1. ispcore_slake_module already tore down the pipeline
+         * 2. Writing 0 to pipeline registers breaks the interrupt chain
+         * 3. The next LINK_STREAM_ON will re-enable everything
+         */
 
     } else {
         /* Binary Ninja: Enable pipeline links */
@@ -3402,13 +3374,19 @@ static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
 }
 
 
+/* CRITICAL: Core subdev should NOT have internal ops with slake_module to avoid recursion!
+ * ispcore_slake_module is the TOP-LEVEL function that calls slake on all OTHER subdevs.
+ * If core had slake_module, it would create infinite recursion:
+ *   ispcore_slake_module -> core_sd->slake_module -> ispcore_slake_module -> ...
+ */
+
 /* Update the core subdev ops to include the core ops */
 struct tx_isp_subdev_ops core_subdev_ops = {
     .core = &core_subdev_core_ops,
     .video = &core_subdev_video_ops,
     .pad = &core_pad_ops,
     .sensor = NULL,
-    .internal = NULL
+    .internal = NULL  /* CRITICAL: NULL to prevent recursion */
 };
 EXPORT_SYMBOL(core_subdev_ops);
 

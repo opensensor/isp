@@ -476,11 +476,28 @@ static struct resource tx_isp_vic_resources[] = {
     },
 };
 
+/* VIC clock configuration array - EXACT Binary Ninja MCP */
+static struct tx_isp_device_clk vic_clks[] = {
+    {"cgu_isp", 100000000},  /* 100MHz CGU ISP clock */
+    {"isp", 0xffff},         /* Auto-rate ISP clock */
+};
+
+/* VIC platform data - CRITICAL for tx_isp_subdev_init to work */
+static struct tx_isp_subdev_platform_data vic_pdata = {
+    .interface_type = 1,  /* VIC interface */
+    .clk_num = 2,         /* Number of clocks needed */
+    .sensor_type = 0,     /* Default sensor type */
+    .clks = vic_clks,     /* CRITICAL: Clock configuration array - Binary Ninja: *($s1_1 + 8) */
+};
+
 struct platform_device tx_isp_vic_platform_device = {
     .name = "isp-w02",
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_vic_resources),
     .resource = tx_isp_vic_resources,
+    .dev = {
+        .platform_data = &vic_pdata,  /* CRITICAL: Provide platform data */
+    },
 };
 
 /* CSI platform device resources - CORRECTED IRQ */
@@ -497,11 +514,27 @@ static struct resource tx_isp_csi_resources[] = {
     },
 };
 
+/* CSI clock configuration array - EXACT Binary Ninja MCP */
+static struct tx_isp_device_clk csi_clks[] = {
+    {"csi", 0xffff},  /* csi clock */
+};
+
+/* CSI platform data - CRITICAL for tx_isp_subdev_init to work */
+static struct tx_isp_subdev_platform_data csi_pdata = {
+    .interface_type = 1,  /* MIPI interface */
+    .clk_num = 1,         /* Number of clocks needed */
+    .sensor_type = 0,     /* Default sensor type */
+    .clks = csi_clks,     /* CRITICAL: Clock configuration array - Binary Ninja: *($s1_1 + 8) */
+};
+
 struct platform_device tx_isp_csi_platform_device = {
-    .name = "isp-w01",  /* FIXED: Must match tx_isp_csi_driver name for probe to be called */
+    .name = "isp-w01",  /* Stock driver name for CSI/frame channel 0 */
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_csi_resources),
     .resource = tx_isp_csi_resources,
+    .dev = {
+        .platform_data = &csi_pdata,  /* CSI needs platform data for register mapping */
+    },
 };
 
 /* VIN platform device resources - CORRECTED IRQ */
@@ -2074,6 +2107,14 @@ static int tx_isp_video_link_destroy_impl(struct tx_isp_dev *isp_dev)
     // 3. Call find_subdev_link_pad() and subdev_video_destroy_link()
     // 4. Set link_config to -1
 
+    /* NOTE: ispcore_slake_module should be called AFTER init, not before
+     * The ON → OFF → ON cycle is:
+     * 1. First ON: Initialize pipeline
+     * 2. OFF: Call slake to tear down
+     * 3. Second ON: Initialize again
+     *
+     */
+
     return 0;
 }
 
@@ -2099,6 +2140,17 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
         pr_err("tx_isp_video_link_stream: Invalid ISP device\n");
         return -EINVAL;
     }
+
+    /* NOTE: ispcore_slake_module is NOT called during normal operation
+     * The ON → OFF → ON cycle appears to be about SOFTWARE state transitions,
+     * not actually tearing down and rebuilding hardware.
+     *
+     * Calling slake breaks the interrupt chain by disabling clocks and
+     * resetting hardware state that doesn't get properly re-initialized.
+     *
+     * The "clock strobe" effect we're looking for might just be the normal
+     * init sequence running twice, not an actual teardown/rebuild.
+     */
 
     /* CRITICAL: Initialize sensor BEFORE starting subdev streaming */
     if (enable && isp_dev->sensor) {

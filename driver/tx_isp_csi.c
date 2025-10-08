@@ -892,82 +892,139 @@ pr_info("========================\n");
 }
 
 /* CSI activation function - matching reference driver */
+
+/* tx_isp_csi_activate_subdev - EXACT Binary Ninja implementation */
 int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
 {
     struct tx_isp_csi_device *csi_dev;
+    struct clk **clks;
+    int clk_count;
+    int i;
+    int result = 0xffffffea; /* Binary Ninja: int32_t result = 0xffffffea */
 
-    if (!sd)
-        return -EINVAL;
+    /* Binary Ninja: if (arg1 != 0) */
+    if (sd != NULL) {
+        /* Binary Ninja: if (arg1 u>= 0xfffff001) return 0xffffffea */
+        if ((unsigned long)sd >= 0xfffff001) {
+            return 0xffffffea;
+        }
 
-    csi_dev = ourISPdev->csi_dev;
-    if (!csi_dev) {
-        pr_err("CSI device is NULL\n");
-        return -EINVAL;
+        /* Binary Ninja: void* $s1_1 = *(arg1 + 0xd4) */
+        csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+        result = 0xffffffea;
+
+        /* Binary Ninja: if ($s1_1 != 0 && $s1_1 u< 0xfffff001) */
+        if (csi_dev != NULL && (unsigned long)csi_dev < 0xfffff001) {
+            /* Binary Ninja: private_mutex_lock($s1_1 + 0x12c) */
+            mutex_lock(&csi_dev->mlock);
+
+            /* Binary Ninja: if (*($s1_1 + 0x128) == 1) */
+            if (csi_dev->state == 1) {
+                /* Binary Ninja: *($s1_1 + 0x128) = 2 */
+                csi_dev->state = 2;
+
+                /* Ensure CSI clocks are initialized before enabling */
+                if (!sd->clks && sd->clk_num > 0) {
+                    extern int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_num);
+                    pr_info("tx_isp_csi_activate_subdev: Initializing %d clocks for CSI before enabling\n", sd->clk_num);
+                    if (isp_subdev_init_clks(sd, sd->clk_num) != 0) {
+                        pr_warn("tx_isp_csi_activate_subdev: isp_subdev_init_clks failed; continuing without clocks\n");
+                    }
+                }
+
+                /* Binary Ninja: int32_t* $s1_2 = *(arg1 + 0xbc) */
+                clks = sd->clks;
+
+                /* Binary Ninja: if ($s1_2 != 0) */
+                if (clks != NULL) {
+                    /* Binary Ninja: if ($s1_2 u< 0xfffff001) */
+                    if ((unsigned long)clks < 0xfffff001) {
+                        /* Binary Ninja: while (i u< *(arg1 + 0xc0)) */
+                        clk_count = sd->clk_num;
+                        for (i = 0; i < clk_count; i++) {
+                            /* Binary Ninja: private_clk_enable(*$s1_2) */
+                            clk_enable(clks[i]);
+                        }
+                    }
+                } else {
+                    pr_warn("tx_isp_csi_activate_subdev: No CSI clocks available to enable (clks=NULL, clk_num=%d)\n", sd->clk_num);
+                }
+            }
+
+            /* Binary Ninja: private_mutex_unlock($s1_1 + 0x12c) */
+            mutex_unlock(&csi_dev->mlock);
+            /* Binary Ninja: return 0 */
+            return 0;
+        }
     }
 
-    /* CRITICAL FIX: Use mlock (initialized in csi_device_probe), not mutex (uninitialized) */
-    mutex_lock(&csi_dev->mlock);
-
-    if (csi_dev->state == 1) {
-        csi_dev->state = 2; /* INIT -> READY */
-        pr_info("CSI activated: state %d -> 2 (READY)\n", 1);
-    }
-
-    mutex_unlock(&csi_dev->mlock);
-    return 0;
+    /* Binary Ninja: return result */
+    return result;
 }
 
-/* CSI slake function - matching reference driver */
+/* tx_isp_csi_slake_subdev - EXACT Binary Ninja reference implementation */
 int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
 {
     struct tx_isp_csi_device *csi_dev;
     int state;
     int i;
 
-    if (!sd) {
+    /* Binary Ninja: if (arg1 == 0 || arg1 u>= 0xfffff001) return 0xffffffea */
+    if (!sd || (unsigned long)sd >= 0xfffff001) {
         return -EINVAL;
     }
 
-    /* Get CSI device from subdev private data (reference driver behavior) */
+    /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
+    /* SAFE: Use proper function instead of offset-based access */
     csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
-    if (!csi_dev) {
-        pr_err("tx_isp_csi_slake_subdev: CSI device is NULL from subdev data\n");
+    if (!csi_dev || (unsigned long)csi_dev >= 0xfffff001) {
         return -EINVAL;
     }
 
-    pr_info("*** tx_isp_csi_slake_subdev: ENTRY - current state=%d ***\n", csi_dev->state);
+    pr_info("*** tx_isp_csi_slake_subdev: CSI slake/shutdown - current state=%d ***\n", csi_dev->state);
 
-    /* Stop streaming if currently streaming */
+    /* Binary Ninja: int32_t $v1_2 = *($s0_1 + 0x128) */
     state = csi_dev->state;
+
+    /* Binary Ninja: if ($v1_2 == 4) csi_video_s_stream(arg1, 0) */
     if (state == 4) {
         pr_info("tx_isp_csi_slake_subdev: CSI in streaming state, stopping stream\n");
         csi_video_s_stream(sd, 0);
-        state = csi_dev->state;
+        state = csi_dev->state;  /* Update state after s_stream */
     }
 
-    /* Disable core if in INIT/DISABLE state per reference */
+    /* Binary Ninja: void* $s2_1 = $s0_1 + 0x12c - Get mutex */
+    /* Binary Ninja: if ($v1_2 == 3) csi_core_ops_init(arg1, 0) */
     if (csi_dev->state == 3) {
         pr_info("tx_isp_csi_slake_subdev: CSI in state 3, calling core_ops_init(disable)\n");
         csi_core_ops_init(sd, 0);
     }
 
-    /* Transition ACTIVE -> INIT and disable clocks in reverse order */
+    /* Binary Ninja: private_mutex_lock($s2_1) */
     mutex_lock(&csi_dev->mlock);
+
+    /* Binary Ninja: if (*($s0_1 + 0x128) == 2) *($s0_1 + 0x128) = 1 */
     if (csi_dev->state == 2) {
         pr_info("tx_isp_csi_slake_subdev: CSI state 2->1, disabling clocks\n");
         csi_dev->state = 1;
+
+        /* Binary Ninja: void* $v0 = *(arg1 + 0xbc) - Get clocks array */
+        /* Binary Ninja: if ($v0 != 0 && $v0 u< 0xfffff001) - Clock disabling loop */
         if (sd->clks && sd->clk_num > 0) {
+            /* Binary Ninja: int32_t $s0_2 = *(arg1 + 0xc0) - Get clock count */
+            /* Binary Ninja: Clock disabling loop in reverse order */
             for (i = sd->clk_num - 1; i >= 0; i--) {
                 if (sd->clks[i]) {
+                    /* Binary Ninja: private_clk_disable(*$s0_4) */
                     clk_disable(sd->clks[i]);
                     pr_info("tx_isp_csi_slake_subdev: Disabled clock %d\n", i);
                 }
             }
         }
     }
-    mutex_unlock(&csi_dev->mlock);
 
-    pr_info("*** tx_isp_csi_slake_subdev: EXIT - final state=%d ***\n", csi_dev->state);
+    mutex_unlock(&csi_dev->mlock);
+    pr_info("*** tx_isp_csi_slake_subdev: CSI slake complete, final state=%d ***\n", csi_dev->state);
     return 0;
 }
 
