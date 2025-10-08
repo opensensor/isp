@@ -2646,6 +2646,7 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
 }
 
 /* BINARY NINJA EXACT: vic_core_s_stream implementation with CSI register updates */
+/* BINARY NINJA EXACT: vic_core_s_stream implementation with CSI register updates */
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vic_device *vic_dev;
@@ -2717,79 +2718,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             /* Ensure stream_state reset so ispvic_frame_channel_s_stream performs MDMA enable */
             vic_dev->stream_state = 0;
 
-            /* Force QBUF write to program buffer addresses before MDMA start */
-            pr_info("*** vic_core_s_stream: Forcing ispvic_frame_channel_qbuf to program buffer addresses before MDMA ***\n");
-            {
-                int qret = ispvic_frame_channel_qbuf(sd, NULL);
-                if (qret != 0) {
-                    pr_warn("*** vic_core_s_stream: ispvic_frame_channel_qbuf returned %d (continuing) ***\n", qret);
-                } else {
-                    pr_info("*** vic_core_s_stream: ispvic_frame_channel_qbuf SUCCESS ***\n");
-                }
-            }
-
-            pr_info("*** vic_core_s_stream: Calling ispvic_frame_channel_s_stream(ENABLE) to start MDMA before enabling IRQ ***\n");
-            ret = ispvic_frame_channel_s_stream(sd, 1);
-            if (ret != 0) {
-                pr_err("*** vic_core_s_stream: ispvic_frame_channel_s_stream FAILED: %d ***\n", ret);
-                return ret;
-            }
-
-
-            /* Guarded: Clear ISP core VIC status and re-assert gate so next framedone can assert HW IRQ */
-            do {
-                struct tx_isp_dev *ispd = ourISPdev;
-                void __iomem *core = NULL;
-                if (ispd && ispd->core_regs)
-                    core = ispd->core_regs;
-                if (core) {
-                    /* W1C clear any latched framedone bits first */
-                    writel(0x1, core + 0x9a70);
-                    writel(0x1, core + 0x9a7c);
-                    wmb();
-
-                    /* Mirror good-things minimal core VIC route init using dynamic stride */
-                    do {
-                        u32 w = 1920, h = 1280, stride = 0;
-                        if (w == 0) w = 1280; /* safe fallback */
-                        stride = w << 1;      /* RAW10-like: 2 bytes/pixel */
-
-                        /* Program only the minimally safe core VIC regs seen in reference */
-                        writel(0x1, core + 0x9a34);   /* enable bit observed in reference */
-                        writel(0x1, core + 0x9a88);   /* enable/route latch bit */
-                        writel(stride, core + 0x9a80);/* stride to match VIC MDMA */
-                        /* Also program minimal geometry at core side (width/height/stride-like) */
-                        writel(w, core + 0x9a00);     /* width */
-                        writel(h, core + 0x9a04);     /* height */
-                        writel(stride, core + 0x9a2c);/* line step or related */
-                        /* Override tuning's stale width-like register with dynamic width */
-                        writel(w, core + 0x9a98);     /* observed as 0x500 in logs when width was 1280 */
-                        /* 0x9a94 already set to 1 earlier; leave as-is */
-
-                        /* Now (re)assert the core VIC IRQ gate */
-                        writel(0x200, core + 0x9ac0);
-                        writel(0x200, core + 0x9ac8);
-                        wmb();
-                        pr_info("*** CORE VIC ROUTE INIT: [9a00]=0x%08x [9a04]=0x%08x [9a2c]=0x%08x [9a34]=0x%08x [9a88]=0x%08x [9a80]=0x%08x [9a98]=0x%08x; GATE [9ac0]=0x%08x [9ac8]=0x%08x ***\n",
-                                readl(core + 0x9a00), readl(core + 0x9a04), readl(core + 0x9a2c),
-                                readl(core + 0x9a34), readl(core + 0x9a88), readl(core + 0x9a80), readl(core + 0x9a98),
-                                readl(core + 0x9ac0), readl(core + 0x9ac8));
-                    } while (0);
-                    pr_info("*** vic_core_s_stream: CORE W1C [9a70/9a7c] then ROUTE INIT + GATE REASSERT ***\n");
-                }
-            } while (0);
-
-            /* Re-write buffer addresses AFTER MDMA start to ensure hardware sees them */
-            pr_info("*** vic_core_s_stream: Re-writing buffer addresses AFTER MDMA start ***\n");
-            {
-                int qret2 = ispvic_frame_channel_qbuf(sd, NULL);
-                if (qret2 != 0) {
-                    pr_warn("*** vic_core_s_stream: ispvic_frame_channel_qbuf (post-MDMA) returned %d (continuing) ***\n", qret2);
-                } else {
-                    pr_info("*** vic_core_s_stream: Post-MDMA QBUF SUCCESS ***\n");
-                }
-            }
-
             /* Re-assert interrupt mask and clear pending in BOTH banks, verify key regs */
             if (vic_dev->vic_regs) {
                 void __iomem *vr = vic_dev->vic_regs;
@@ -2847,30 +2775,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 }
 
 
-                /* UPDATED: RE-ENABLED control-bank re-unlock/enable per diff */
-                if (vic_dev->vic_regs_secondary) {
-                    void __iomem *vcc = vic_dev->vic_regs_secondary;
-                    u32 ctrl300_c_pre = readl(vcc + 0x300);
-                    u32 buf318_c_pre = readl(vcc + 0x318);
-                    if (ctrl300_c_pre == 0 && buf318_c_pre == 0) {
-                        pr_warn("*** VIC CONTROL BANK: Re-applying enable sequence on CONTROL bank ***\n");
-                        /* Minimal enable sequence on CONTROL bank */
-                        writel(2, vcc + 0x0);
-                        wmb();
-                        writel(4, vcc + 0x0);
-                        wmb();
-                        writel(1, vcc + 0x0);
-                        wmb();
-                        /* Also assert VIC IRQ gate in CONTROL bank to mirror core 0x9ac0/0x9ac8 */
-                        writel(0x200, vcc + 0x14);
-                        /* Program IMCR/key and route bits mirrored from reference */
-                        writel(0xb5742249, vcc + 0x0c);
-                        writel(0x000002d0, vcc + 0x100);
-                        wmb();
-                        pr_info("*** VIC CONTROL BANK: Post-enable [0x0]=0x%08x, [0x14]=0x%08x, [0x0c]=0x%08x, [0x100]=0x%08x ***\n",
-                                readl(vcc + 0x0), readl(vcc + 0x14), readl(vcc + 0x0c), readl(vcc + 0x100));
-                    }
-                }
+                /* REMOVED: control-bank re-unlock/enable block per diff */
 
                 /* Apply working mask up front: frame-done only, like good-things */
                 if (vic_dev->vic_regs) {
@@ -3017,7 +2922,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
         }
     }
 }
-
 /* Cleanup function remains the same */
 
 /* Define VIC video operations */
