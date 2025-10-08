@@ -8,9 +8,6 @@ static int print_level = ISP_WARN_LEVEL;
 module_param(print_level, int, S_IRUGO);
 MODULE_PARM_DESC(print_level, "isp print level");
 
-static int isp_clk = 100000000;
-module_param(isp_clk, int, S_IRUGO);
-MODULE_PARM_DESC(isp_clk, "isp clock freq");
 
 int isp_ch0_pre_dequeue_time;
 module_param(isp_ch0_pre_dequeue_time, int, S_IRUGO);

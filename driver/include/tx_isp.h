@@ -96,6 +96,7 @@ struct tx_isp_dev {
     struct proc_context *proc_context;
     struct list_head periph_clocks;
     spinlock_t clock_lock;
+    int state;                     // 1=init, 2=active, 3=streaming_off, 4=streaming_on
 
     int refcnt;
     //struct tx_isp_subdev_ops *ops;
@@ -254,9 +255,6 @@ struct tx_isp_dev {
     uint32_t custom_mode;
     uint32_t poll_state;
     wait_queue_head_t poll_wait;
-    
-    /* Pipeline state management */
-    int pipeline_state;
     
     /* Binary Ninja compatibility members */
     int subdev_count;                        /* Number of subdevices at offset 0x80 */

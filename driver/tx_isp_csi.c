@@ -905,14 +905,15 @@ int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
         return -EINVAL;
     }
 
-    mutex_lock(&csi_dev->mutex);
+    /* CRITICAL FIX: Use mlock (initialized in csi_device_probe), not mutex (uninitialized) */
+    mutex_lock(&csi_dev->mlock);
 
     if (csi_dev->state == 1) {
         csi_dev->state = 2; /* INIT -> READY */
         pr_info("CSI activated: state %d -> 2 (READY)\n", 1);
     }
 
-    mutex_unlock(&csi_dev->mutex);
+    mutex_unlock(&csi_dev->mlock);
     return 0;
 }
 

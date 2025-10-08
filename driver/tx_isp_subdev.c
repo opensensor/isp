@@ -502,16 +502,19 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
 
     if (ourISPdev) {
         if (ops == &csi_subdev_ops) {
-            /* CSI - already registered in tx_isp_module_init, just link VIC device */
-            pr_info("*** tx_isp_subdev_init: CSI subdev already registered in module_init ***\n");
+            /* CSI - register using helper function */
+            int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
+            pr_info("*** tx_isp_subdev_init: CSI subdev registered at slot %d ***\n", slot);
         } else if (ops == &vic_subdev_ops) {
-            /* VIC - already registered in tx_isp_module_init, just link VIC device */
+            /* VIC - register using helper function and link VIC device */
             struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
             ourISPdev->vic_dev = vic_dev;
-            pr_info("*** tx_isp_subdev_init: VIC device linked (already registered in module_init) ***\n");
+            int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
+            pr_info("*** tx_isp_subdev_init: VIC device linked and registered at slot %d ***\n", slot);
         } else if (ops == &core_subdev_ops) {
-            /* CORE - already registered in tx_isp_module_init */
-            pr_info("*** tx_isp_subdev_init: Core ISP subdev already registered in module_init ***\n");
+            /* CORE - register using helper function */
+            int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
+            pr_info("*** tx_isp_subdev_init: Core ISP subdev registered at slot %d ***\n", slot);
 
             /* CRITICAL FIX: Call core init function like VIN does - this triggers tisp_init */
         } else if (ops && ops->sensor && ops != &csi_subdev_ops && ops != &vic_subdev_ops && ops != &fs_subdev_ops) {
@@ -523,60 +526,6 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             extern int tx_isp_module_notify_handler(struct tx_isp_module *module, unsigned int cmd, void *arg);
             sd->module.notify = tx_isp_module_notify_handler;
             pr_info("*** tx_isp_subdev_init: Set up sensor module notify handler ***\n");
-
-            /* CRITICAL: Extract sensor pointer from host_priv (set by sensor driver via tx_isp_set_subdev_hostdata) */
-            struct tx_isp_sensor *sensor = (struct tx_isp_sensor *)tx_isp_get_subdev_hostdata(sd);
-            if (sensor) {
-                pr_info("*** tx_isp_subdev_init: Retrieved sensor from host_priv: %p (%s) ***\n",
-                        sensor, sensor->info.name[0] ? sensor->info.name : "(unnamed)");
-
-                /* CRITICAL: Connect sensor to ISP device (like tx_isp_register_sensor_subdev does) */
-                pr_info("*** tx_isp_subdev_init: CONNECTING SENSOR TO ISP DEVICE ***\n");
-                pr_info("Before: ourISPdev->sensor=%p\n", ourISPdev->sensor);
-
-                /* Always set as primary sensor (replace any existing) */
-                ourISPdev->sensor = sensor;
-                pr_info("After: ourISPdev->sensor=%p (%s)\n", ourISPdev->sensor,
-                        sensor->info.name[0] ? sensor->info.name : "(unnamed)");
-
-                /* Set the ISP reference in the sensor subdev */
-                sd->isp = (void *)ourISPdev;
-
-                /* Initialize sensor state */
-                sd->vin_state = TX_ISP_MODULE_INIT;
-                pr_info("Sensor subdev state initialized to INIT\n");
-
-                /* Add to sensor enumeration list */
-                struct registered_sensor *reg_sensor = kzalloc(sizeof(struct registered_sensor), GFP_KERNEL);
-                if (reg_sensor) {
-                    strncpy(reg_sensor->name, sensor->info.name, sizeof(reg_sensor->name) - 1);
-                    reg_sensor->name[sizeof(reg_sensor->name) - 1] = '\0';
-                    reg_sensor->subdev = sd;
-
-                    mutex_lock(&sensor_list_mutex);
-                    /* Replace any existing sensor with same name */
-                    struct registered_sensor *existing, *tmp;
-                    list_for_each_entry_safe(existing, tmp, &sensor_list, list) {
-                        if (strncmp(existing->name, reg_sensor->name, sizeof(existing->name)) == 0) {
-                            list_del(&existing->list);
-                            kfree(existing);
-                            sensor_count--;
-                            break;
-                        }
-                    }
-
-                    reg_sensor->index = sensor_count++;
-                    list_add_tail(&reg_sensor->list, &sensor_list);
-                    mutex_unlock(&sensor_list_mutex);
-
-                    pr_info("*** SENSOR SUCCESSFULLY ADDED TO LIST: index=%d name=%s ***\n",
-                           reg_sensor->index, reg_sensor->name);
-                }
-
-                pr_info("*** tx_isp_subdev_init: SENSOR CONNECTION COMPLETE ***\n");
-            } else {
-                pr_warn("*** tx_isp_subdev_init: Sensor ops detected but no sensor in host_priv ***\n");
-            }
 
             /* SENSOR - register using helper function */
             int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
@@ -613,8 +562,6 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             strcmp(dev_name_str, "isp-w01") != 0 &&  /* CSI - no IRQ */
             strcmp(dev_name_str, "isp-fs") != 0) {   /* FS - no IRQ */
             /* Binary Ninja: tx_isp_request_irq(arg1, arg2 + 0x80) */
-            /* SAFE: Use struct member access for IRQ setup */
-            // IRQs requested once in tx-isp-module
         } else {
             pr_info("*** %s: Skipping IRQ request - device has no IRQ resource ***\n", dev_name_str);
         }
@@ -659,19 +606,27 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
 
         /* Binary Ninja: Clock initialization based on platform data */
         /* Binary Ninja: uint32_t $v0_5 = zx.d(*$s1_1) */
-        if (pdata->interface_type == 1 || pdata->interface_type == 2) {
-            /* Binary Ninja: *(arg2 + 0xc0) = zx.d($s1_1[4]) */
-            /* SAFE: Use struct member access for clock count */
-            sd->clk_num = pdata->clk_num;
+        /* CRITICAL FIX: Only check interface_type for devices that have tx_isp_subdev_platform_data */
+        /* FS device has custom fs_platform_data, so skip this check for it */
+        const char *dev_name_check = dev_name(&pdev->dev);
+        if (strcmp(dev_name_check, "isp-fs") != 0) {
+            /* Only process interface_type for non-FS devices */
+            if (pdata->interface_type == 1 || pdata->interface_type == 2) {
+                /* Binary Ninja: *(arg2 + 0xc0) = zx.d($s1_1[4]) */
+                /* SAFE: Use struct member access for clock count */
+                sd->clk_num = pdata->clk_num;
 
-            /* CRITICAL FIX: Don't call isp_subdev_init_clks during insmod */
-            /* Clock initialization should be deferred until streaming starts */
-            pr_info("*** tx_isp_subdev_init: Clock initialization deferred until streaming starts ***\n");
-            pr_info("*** tx_isp_subdev_init: Clock count stored: %d ***\n", pdata->clk_num);
+                /* CRITICAL FIX: Don't call isp_subdev_init_clks during insmod */
+                /* Clock initialization should be deferred until streaming starts */
+                pr_info("*** tx_isp_subdev_init: Clock initialization deferred until streaming starts ***\n");
+                pr_info("*** tx_isp_subdev_init: Clock count stored: %d ***\n", pdata->clk_num);
+            } else {
+                /* Binary Ninja: isp_printf(0, tiziano_wdr_params_refresh, result_4) */
+                isp_printf(0, "tiziano_wdr_params_refresh", ret);
+                return 0;
+            }
         } else {
-            /* Binary Ninja: isp_printf(0, tiziano_wdr_params_refresh, result_4) */
-            isp_printf(0, "tiziano_wdr_params_refresh", ret);
-            return 0;
+            pr_info("*** tx_isp_subdev_init: FS device - skipping interface_type check ***\n");
         }
     }
 
@@ -700,7 +655,7 @@ cleanup_mem:
 cleanup_irq:
     /* Binary Ninja: tx_isp_free_irq(arg2 + 0x80) */
     tx_isp_free_irq(&sd->irq_info);
-    tx_isp_module_deinit(ourISPdev);
+    tx_isp_module_deinit(sd);
     return ret;
 }
 EXPORT_SYMBOL(tx_isp_subdev_init);
@@ -917,8 +872,8 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
             pr_err("*** VIC AUTO-LINK: Registers not mapped - cannot register interrupt ***\n");
         }
 
-    } else if (strcmp(dev_name, "isp-w01") == 0) {
-        /* Link VIN device - device name is now "isp-w01" */
+    } else if (strcmp(dev_name, "isp-w00") == 0) {
+        /* Link VIN device - device name is "isp-w00" */
         pr_info("*** DEBUG: VIN device name matched! Setting up VIN device ***\n");
         struct tx_isp_vin_device *vin_dev = container_of(sd, struct tx_isp_vin_device, sd);
         ourISPdev->vin_dev = vin_dev;

@@ -255,8 +255,17 @@ static int frame_chan_event(void *data)
 void tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan)
 {
     pr_info("Deinitializing frame channel\n");
-    if (chan->active) {
+
+    /* CRITICAL FIX: Check if channel and misc device are valid before deregistering */
+    if (!chan) {
+        pr_warn("tx_isp_frame_chan_deinit: NULL channel pointer\n");
+        return;
+    }
+
+    /* Only deregister if the misc device was successfully registered */
+    if (chan->active && chan->misc.minor != MISC_DYNAMIC_MINOR) {
         misc_deregister(&chan->misc);
+        pr_info("Frame channel misc device deregistered\n");
     }
 }
 
@@ -456,27 +465,35 @@ int tx_isp_fs_remove(struct platform_device *pdev)
     pr_info("*** tx_isp_fs_remove ***\n");
 
     if (!fs_dev) {
+        pr_info("*** tx_isp_fs_remove: No FS device to remove (probe may have failed) ***\n");
         return 0;
     }
 
     /* SAFE: Clean up frame channels with proper array indexing */
     channels_buffer = (struct tx_isp_frame_channel *)fs_dev->channel_buffer;
-    if (channels_buffer) {
+    if (channels_buffer && fs_dev->channel_count > 0) {
+        pr_info("*** tx_isp_fs_remove: Cleaning up %d frame channels ***\n", fs_dev->channel_count);
         for (i = 0; i < fs_dev->channel_count; i++) {
             current_channel = &channels_buffer[i];
-            if (current_channel->state) {
+            /* CRITICAL: Only deinit if channel was actually initialized */
+            if (current_channel && current_channel->state) {
+                pr_info("*** tx_isp_fs_remove: Deinitializing channel %d ***\n", i);
                 tx_isp_frame_chan_deinit(current_channel);
             }
         }
         kfree(channels_buffer);
+        fs_dev->channel_buffer = NULL;
     }
 
-    /* Clean up subdev */
-    tx_isp_subdev_deinit(&fs_dev->subdev);
+    /* Clean up subdev only if it was initialized */
+    if (fs_dev->subdev.pdev) {
+        pr_info("*** tx_isp_fs_remove: Deinitializing subdev ***\n");
+        tx_isp_subdev_deinit(&fs_dev->subdev);
+    }
 
     kfree(fs_dev);
 
-    pr_info("FS device removed\n");
+    pr_info("FS device removed successfully\n");
     return 0;
 }
 

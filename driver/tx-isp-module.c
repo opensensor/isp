@@ -18,6 +18,11 @@
 #include <media/v4l2-device.h>
 #include <media/v4l2-dev.h>
 #include <media/v4l2-fh.h>
+#include <media/v4l2-ctrls.h>
+#include <linux/dma-mapping.h>
+
+/* V4L2 control IDs - use standard V4L2 control IDs */
+/* Note: V4L2 structures and enums are already defined in kernel headers */
 #include "../include/tx_isp.h"
 #include "../include/tx_isp_core.h"
 #include "../include/tx-isp-debug.h"
@@ -28,6 +33,8 @@
 #include "../include/tx_isp_tuning.h"
 #include "../include/tx-isp-device.h"
 #include "../include/tx-libimp.h"
+#include "../include/tx_isp_core_device.h"
+#include "../include/tx_isp_subdev_helpers.h"
 
 /* CSI State constants - needed for proper state management */
 #define CSI_STATE_OFF       0
@@ -596,10 +603,7 @@ static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev);
 static struct vic_buffer_entry *pop_buffer_fifo(struct list_head *fifo_head);
 static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entry *buffer);
 
-/* Forward declarations for new subdevice management functions */
-extern int tx_isp_init_subdev_registry(struct tx_isp_dev *isp,
-                                      struct platform_device **platform_devices,
-                                      int count);
+
 extern int tx_isp_create_subdev_graph(struct tx_isp_dev *isp);
 extern void tx_isp_cleanup_subdev_graph(struct tx_isp_dev *isp);
 
@@ -1592,51 +1596,6 @@ err_free_dev:
     return ret;
 }
 
-/* csi_video_s_stream - Binary Ninja exact implementation (renamed local copy) */
-static int csi_video_s_stream_BN_local(struct tx_isp_subdev *sd, int enable)
-{
-    struct tx_isp_csi_device *csi_dev;
-    struct tx_isp_sensor_attribute *sensor_attr;
-    int interface_type;
-    int new_state;
-    struct tx_isp_dev *isp_dev;
-
-    if (!sd) {
-        pr_err("csi_video_s_stream: VIC failed to config DVP SONY mode!(10bits-sensor)\n");
-        return -EINVAL;
-    }
-
-    /* Cast isp pointer properly */
-    isp_dev = (struct tx_isp_dev *)sd->isp;
-    if (!isp_dev) {
-        pr_err("csi_video_s_stream: Invalid ISP device\n");
-        return -EINVAL;
-    }
-
-    /* Binary Ninja: if (*(*(arg1 + 0x110) + 0x14) != 1) return 0 */
-    sensor_attr = isp_dev->sensor ? isp_dev->sensor->video.attr : NULL;
-    if (!sensor_attr || sensor_attr->dbus_type != 1) {
-        pr_debug("csi_video_s_stream: Not DVP interface, skipping\n");
-        return 0;
-    }
-
-    csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
-    if (!csi_dev) {
-        return -EINVAL;
-    }
-
-    /* Binary Ninja: int32_t $v0_4 = 4; if (arg2 == 0) $v0_4 = 3 */
-    new_state = enable ? 4 : 3;
-
-    /* Binary Ninja: *(arg1 + 0x128) = $v0_4 */
-    csi_dev->state = new_state;
-
-    pr_info("csi_video_s_stream: %s, state=%d\n",
-            enable ? "ENABLE" : "DISABLE", csi_dev->state);
-
-    return 0;
-}
-
 /* CSI video streaming control - Updated to use standalone methods */
 static int tx_isp_csi_s_stream(struct tx_isp_dev *isp_dev, int enable)
 {
@@ -2279,188 +2238,379 @@ bool is_valid_kernel_pointer(const void *ptr)
             addr != 0x24a70688);   /* BadVA from crash log */
 }
 
+
+/* ispcore_activate_module - Fixed to match our actual struct layouts */
+int ispcore_activate_module(struct tx_isp_dev *isp_dev)
+{
+    struct tx_isp_vic_device *vic_dev;
+    struct clk **clk_array;
+    int clk_count;
+    int i;
+    int result = 0xffffffea;
+    void *current_subdev;
+    int subdev_result;
+    int a2_1;
+    extern int isp_clk;  /* Global isp_clk variable from tx_isp_core.c */
+
+    pr_info("*** ispcore_activate_module: Fixed for our struct layouts ***\n");
+
+    /* Binary Ninja: if (arg1 != 0) */
+    if (isp_dev != NULL) {
+        /* Binary Ninja: if (arg1 u>= 0xfffff001) return 0xffffffea */
+        if ((uintptr_t)isp_dev >= 0xfffff001) {
+            return 0xffffffea;
+        }
+
+        /* FIXED: Use our actual struct layout for VIC device access */
+        vic_dev = isp_dev->vic_dev;
+        result = 0xffffffea;
+
+        /* Binary Ninja: if ($s0_1 != 0 && $s0_1 u< 0xfffff001) */
+        if (vic_dev != NULL && (uintptr_t)vic_dev < 0xfffff001) {
+            result = 0;
+
+            /* Binary Ninja: if (*($s0_1 + 0xe8) == 1) - VIC state check */
+            if (vic_dev->state == 1) {
+                pr_info("*** VIC device in state 1, proceeding with activation ***\n");
+
+                /* CRITICAL: Clock configuration loop - Fixed for our struct layout */
+                /* FIXED: Access VIC device's subdev structure for clock array */
+                struct tx_isp_subdev *vic_subdev = &vic_dev->sd;
+                clk_array = vic_subdev->clks;      /* Our actual clock array location */
+                clk_count = vic_subdev->clk_num;   /* Our actual clock count location */
+
+                pr_info("*** CLOCK CONFIGURATION SECTION: clk_array=%p, clk_count=%d ***\n", clk_array, clk_count);
+
+                /* Binary Ninja clock loop implementation */
+                if (clk_array && clk_count > 0) {
+                    for (i = 0; i < clk_count; i++) {
+                        if (clk_array[i]) {
+                            /* Binary Ninja: if (private_clk_get_rate(*$s2_1) != 0xffff) */
+                            unsigned long current_rate = clk_get_rate(clk_array[i]);
+                            if (current_rate != 0xffff) {
+                                /* Binary Ninja: private_clk_set_rate(*$s2_1, isp_clk) */
+                                clk_set_rate(clk_array[i], isp_clk);
+                                pr_info("Clock %d set to %d Hz\n", i, isp_clk);
+                            }
+
+                            /* Binary Ninja: private_clk_enable(*$s2_1) */
+                            clk_prepare_enable(clk_array[i]);
+                            pr_info("Clock %d enabled\n", i);
+                        }
+                    }
+                }
+
+                /* CRITICAL: Subdevice validation loop - Simplified for our layout */
+                pr_info("*** SUBDEVICE VALIDATION SECTION ***\n");
+
+                /* Binary Ninja: Validate VIC device state */
+                a2_1 = 0;
+
+                /* Binary Ninja: Check VIC state and set to 2 */
+                if (vic_dev->state != 1) {
+                    /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch0 hcomp err !!!\n", $a2_1) */
+                    isp_printf(2, "Err [VIC_INT] : mipi ch0 hcomp err !!!\n", a2_1);
+                    /* Binary Ninja: return 0xffffffff */
+                    return 0xffffffff;
+                }
+
+                /* Binary Ninja: *($v0_6 + 0x74) = 2 - Set VIC state to activated */
+                vic_dev->state = 2;
+                pr_info("VIC device state set to 2 (activated)\n");
+
+                /* CRITICAL: Function pointer call that triggers register writes */
+                pr_info("*** CRITICAL FUNCTION POINTER CALL SECTION ***\n");
+
+                /* Binary Ninja: (*($a0_3 + 0x40cc))($a0_3, 0x4000000, 0, $a3_1) */
+                /* CRITICAL: This triggers the actual hardware initialization */
+                if (vic_dev && vic_dev->vic_regs) {
+                    pr_info("*** CALLING CRITICAL VIC INITIALIZATION FUNCTION ***\n");
+
+                    /* CRITICAL FIX: Write to the correct VIC control register */
+                    /* The register monitor shows VIC control at ISP base + 0x9a00 */
+                    /* vic_regs points to 0x133e0000, ISP base is vic_regs - 0x9a00 */
+                    void __iomem *isp_base = vic_dev->vic_regs - 0x9a00;
+
+                    /* Write to VIC control register at offset 0x9a00 from ISP base */
+                    writel(0x4000000, isp_base + 0x9a00);  /* VIC control register at 0x9a00 */
+                    wmb();
+                    pr_info("*** VIC control register written with 0x4000000 to ISP+0x9a00 ***\n");
+                }
+
+                /* CRITICAL: Subdevice initialization loop - Fixed for our layout */
+                pr_info("*** SUBDEVICE INITIALIZATION LOOP ***\n");
+
+                /* FIXED: Use our actual subdev array at offset 0x38 in tx_isp_dev */
+                /* CRITICAL FIX: Initialize subdevs in REVERSE order so sensors initialize BEFORE VIC streaming */
+                /* This prevents CSI PHY reconfiguration conflicts when VIC is already active */
+                pr_info("*** SUBDEVICE INITIALIZATION: Traversing backwards to initialize sensors first ***\n");
+                for (i = ISP_MAX_SUBDEVS - 1; i >= 0; i--) {
+                    current_subdev = isp_dev->subdevs[i];
+                    if (!current_subdev) {
+                        continue;  /* Skip empty slots */
+                    }
+
+                    if ((uintptr_t)current_subdev >= 0xfffff001) {
+                        continue;  /* Skip invalid pointers */
+                    }
+
+                    /* Binary Ninja: Call subdev init function */
+                    struct tx_isp_subdev *sd = (struct tx_isp_subdev *)current_subdev;
+                    if (sd->ops && sd->ops->core && sd->ops->core->init) {
+                        pr_info("Calling subdev %d initialization (REVERSE ORDER - sensors first)\n", i);
+                        subdev_result = sd->ops->core->init(sd, 1);
+
+                        /* Binary Ninja: if ($v0_12 != 0 && $v0_12 != 0xfffffdfd) */
+                        if (subdev_result != 0 && subdev_result != 0xfffffdfd) {
+                            /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch1 hcomp err !!!\n", *($s1_2 + 8)) */
+                            isp_printf(2, "Err [VIC_INT] : mipi ch1 hcomp err !!!\n", i);
+                            break;
+                        }
+                    }
+                }
+
+                /* Binary Ninja: *($s0_1 + 0xe8) = 2 - Final VIC state set */
+                vic_dev->state = 2;
+                pr_info("*** VIC device final state set to 2 (fully activated) ***\n");
+
+                /* Binary Ninja: return 0 */
+                pr_info("*** ispcore_activate_module: SUCCESS - ALL REGISTER WRITES SHOULD NOW BE TRIGGERED ***\n");
+                return 0;
+            }
+        }
+    }
+
+    /* Binary Ninja: return result */
+    pr_info("*** ispcore_activate_module: FAILED - result=0x%x ***\n", result);
+    return result;
+}
+
 /**
- * tx_isp_video_s_stream - CORRECTED implementation using direct device references
+ * tx_isp_video_s_stream - EXACT Binary Ninja reference implementation
  * @dev: ISP device
  * @enable: Stream enable flag
  *
- * The user is absolutely correct - this should use direct references to vic_dev,
- * csi_dev, etc. to call their sd->ops methods directly instead of the insane
- * and dangerous subdev array iteration with unsafe pointer arithmetic.
+ * Binary Ninja decompiled implementation:
+ * - Iterates through subdevs array at offset 0x38 (16 entries)
+ * - Calls s_stream function on each subdev's video ops
+ * - Handles cleanup on failure by rolling back previously enabled subdevs
  *
  * Returns 0 on success, negative error code on failure
  */
 int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
 {
-    void **subdevs_ptr;    /* $s4 in reference: arg1 + 0x38 */
+    struct tx_isp_subdev **s4;
     int i;
+    int result;
 
-    pr_info("*** tx_isp_video_s_stream: FIXED Binary Ninja implementation - enable=%d ***\n", enable);
+    pr_info("*** tx_isp_video_s_stream: EXACT Binary Ninja reference implementation - enable=%d ***\n", enable);
 
-    /* CRITICAL: Validate ISP device pointer first */
-    if (!is_valid_kernel_pointer(dev)) {
-        pr_err("tx_isp_video_s_stream: Invalid ISP device pointer %p\n", dev);
-        return -EINVAL;
+    /* Debug: Show current subdev array status using helper function */
+    tx_isp_debug_print_subdevs(dev);
+
+    /* CRITICAL FIX: Initialize core before streaming starts */
+    if (enable == 1) {  /* Stream ON */
+        pr_info("*** tx_isp_video_s_stream: STREAM ON - Initializing core first ***\n");
+
+        /* CRITICAL FIX: Step 1: Activate core module (VIC 1 → 2 state transition) */
+        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)dev->vic_dev;
+        if (vic_dev && vic_dev->state == 1) {
+            pr_info("*** tx_isp_video_s_stream: VIC state is 1, calling activate_module ***\n");
+            result = ispcore_activate_module(dev);
+            if (result != 0) {
+                pr_err("tx_isp_video_s_stream: ispcore_activate_module failed: %d\n", result);
+                return result;
+            }
+            pr_info("*** tx_isp_video_s_stream: ispcore_activate_module completed ***\n");
+        }
+
+        /* CRITICAL FIX: Step 2: Initialize VIC core (VIC 2 → 3 state transition) */
+        if (vic_dev && vic_dev->state == 2) {
+            /* CRITICAL FIX: Call VIC subdev's core->init, not ISP core's init */
+            struct tx_isp_subdev *vic_sd = &vic_dev->sd;
+            if (vic_sd->ops && vic_sd->ops->core && vic_sd->ops->core->init) {
+                pr_info("*** tx_isp_video_s_stream: VIC state is 2, calling VIC core->init ***\n");
+                result = vic_sd->ops->core->init(vic_sd, 1);
+                if (result != 0) {
+                    pr_err("tx_isp_video_s_stream: VIC core->init failed: %d\n", result);
+                    return result;
+                }
+                pr_info("*** tx_isp_video_s_stream: VIC core->init completed, VIC should now be state 3 ***\n");
+            } else {
+                pr_err("tx_isp_video_s_stream: VIC core->init not available\n");
+                return -EINVAL;
+            }
+        }
+
+        /* CRITICAL FIX: Verify VIC is ready for streaming */
+        if (vic_dev && vic_dev->state < 3) {
+            pr_err("tx_isp_video_s_stream: VIC state %d < 3, not ready for streaming\n", vic_dev->state);
+            return -EINVAL;
+        }
+
+        pr_info("*** tx_isp_video_s_stream: Core initialization complete, proceeding with subdev streaming ***\n");
     }
 
-    /* Memory barrier before accessing device structure */
-    rmb();
+    /* Binary Ninja: int32_t* $s4 = dev + 0x38 */
+    s4 = dev->subdevs;
 
-    /* Reference: $s4 = arg1 + 0x38 (get subdevs array pointer) */
-    subdevs_ptr = (void **)((char *)dev + 0x38);
+    /* CRITICAL FIX: Initialize all subdevs BEFORE calling s_stream */
+    if (enable == 1) {  /* Stream ON - initialize subdevs first */
+        pr_info("*** tx_isp_video_s_stream: CRITICAL FIX - Initializing all subdevs before streaming ***\n");
 
-    /* SAFETY: Validate subdevs array pointer */
-    if (!is_valid_kernel_pointer(subdevs_ptr)) {
-        pr_err("tx_isp_video_s_stream: Invalid subdevs array pointer at dev+0x38: %p\n", subdevs_ptr);
-        return -EINVAL;
+        /* Initialize subdevs in proper order using helper functions: Core → CSI → VIC → Sensors */
+        struct tx_isp_subdev *csi_sd = tx_isp_get_csi_subdev(dev);
+        struct tx_isp_subdev *vic_sd = tx_isp_get_vic_subdev(dev);
+        struct tx_isp_subdev *core_sd = tx_isp_get_core_subdev(dev);
+        struct tx_isp_subdev *sensor_sd = tx_isp_get_sensor_subdev(dev);
+
+        /* Initialize Core first */
+        if (core_sd && core_sd->ops && core_sd->ops->core && core_sd->ops->core->init) {
+            pr_info("*** tx_isp_video_s_stream: Initializing Core subdev ***\n");
+            result = core_sd->ops->core->init(core_sd, 1);
+            if (result != 0 && result != -ENOIOCTLCMD) {
+                pr_err("tx_isp_video_s_stream: Core init failed: %d\n", result);
+                return result;
+            }
+            pr_info("*** tx_isp_video_s_stream: Core init SUCCESS ***\n");
+        }
+
+       	/* Ensure VIC is ACTIVATED (state 2) before VIC core->init so clks activate */
+        if (vic_sd) {
+            struct tx_isp_vic_device *vic_dev_for_state = (struct vic_dev_for_state *)tx_isp_get_subdevdata(vic_sd);
+            pr_info("*** tx_isp_video_s_stream: Activating VIC subdev (state %d -> 2) before CSI init ***\n", vic_dev_for_state->state);
+            tx_isp_vic_activate_subdev(vic_sd);
+            pr_info("*** tx_isp_video_s_stream: VIC subdev activation done, state=%d ***\n", vic_dev_for_state->state);
+        }
+
+        /* Ensure CSI is ACTIVATED (state 2) before CSI core->init so csi_core_ops_init runs */
+        if (csi_sd) {
+            struct tx_isp_csi_device *csi_dev_for_state = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(csi_sd);
+            if (csi_dev_for_state && csi_dev_for_state->state < 2) {
+                pr_info("*** tx_isp_video_s_stream: Activating CSI subdev (state %d -> 2) before CSI init ***\n", csi_dev_for_state->state);
+                tx_isp_csi_activate_subdev(csi_sd);
+                pr_info("*** tx_isp_video_s_stream: CSI subdev activation done, state=%d ***\n", csi_dev_for_state->state);
+            }
+        }
+
+        /* Initialize CSI second */
+        if (csi_sd && csi_sd->ops && csi_sd->ops->core && csi_sd->ops->core->init) {
+            pr_info("*** tx_isp_video_s_stream: Initializing CSI subdev ***\n");
+            result = csi_sd->ops->core->init(csi_sd, 1);
+            if (result != 0 && result != -ENOIOCTLCMD) {
+                pr_err("tx_isp_video_s_stream: CSI init failed: %d\n", result);
+                return result;
+            }
+            pr_info("*** tx_isp_video_s_stream: CSI init SUCCESS ***\n");
+        }
+
+        /* Initialize VIC third */
+        if (vic_sd && vic_sd->ops && vic_sd->ops->core && vic_sd->ops->core->init) {
+            pr_info("*** tx_isp_video_s_stream: Initializing VIC subdev ***\n");
+            result = vic_sd->ops->core->init(vic_sd, 1);
+            if (result != 0 && result != -ENOIOCTLCMD) {
+                pr_err("tx_isp_video_s_stream: VIC init failed: %d\n", result);
+                return result;
+            }
+            pr_info("*** tx_isp_video_s_stream: VIC init SUCCESS ***\n");
+        }
+
+        /* Initialize Sensor last */
+        if (sensor_sd && sensor_sd->ops && sensor_sd->ops->core && sensor_sd->ops->core->init) {
+            pr_info("*** tx_isp_video_s_stream: Initializing Sensor subdev ***\n");
+            result = sensor_sd->ops->core->init(sensor_sd, 1);
+            if (result != 0 && result != -ENOIOCTLCMD) {
+                pr_err("tx_isp_video_s_stream: Sensor init failed: %d\n", result);
+                return result;
+            }
+            pr_info("*** tx_isp_video_s_stream: Sensor init SUCCESS ***\n");
+        }
+        pr_info("*** tx_isp_video_s_stream: All subdev initialization complete - proceeding with s_stream ***\n");
     }
 
-    pr_info("*** tx_isp_video_s_stream: Processing %s request for subdevs ***\n",
-            enable ? "ENABLE" : "DISABLE");
+    /* Binary Ninja: for (int32_t i = 0; i != 0x10; ) */
+    for (i = 0; i != 0x10; ) {
+        /* Binary Ninja: void* $a0 = *$s4 */
+        struct tx_isp_subdev *a0 = *s4;
 
-    /* Reference: for (int32_t i = 0; i != 0x10; ) - loop through 16 subdevs */
-    for (i = 0; i != 0x10; i++) {
-        void *subdev;                      /* $a0 in reference */
-        void **ops_ptr;                    /* $a0 + 0xc4 */
-        void **video_ops_ptr;              /* *($a0 + 0xc4) + 4 */
-        int (**s_stream_func_ptr)(void *, int);  /* $v0_3 */
-        int (*s_stream_func)(void *, int); /* $v0_4 */
-        int result;
+        if (a0 != 0) {
+            /* Binary Ninja: int32_t* $v0_3 = *(*($a0 + 0xc4) + 4) */
+            struct tx_isp_subdev_video_ops *v0_3 = a0->ops ? a0->ops->video : NULL;
 
-        /* Reference: void* $a0 = *$s4 (get subdev from array) */
-        subdev = subdevs_ptr[i];
+            if (v0_3 == 0) {
+                i += 1;
+            } else {
+                /* Binary Ninja: int32_t $v0_4 = *$v0_3 */
+                int (*v0_4)(struct tx_isp_subdev *, int) = v0_3->s_stream;
 
-        /* Reference: if ($a0 != 0) */
-        if (subdev != 0) {
-            /* SAFETY: Validate subdev pointer before dereferencing */
-            if (!is_valid_kernel_pointer(subdev)) {
-                pr_debug("tx_isp_video_s_stream: Invalid subdev %d pointer %p - skipping\n", i, subdev);
-                continue;
-            }
+                if (v0_4 == 0) {
+                    i += 1;
+                } else {
+                    /* Binary Ninja: int32_t result = $v0_4($a0, enable) */
+                    pr_info("*** tx_isp_video_s_stream: Calling subdev[%d]->ops->video->s_stream(%d) ***\n", i, enable);
+                    result = v0_4(a0, enable);
 
-            /* Memory barrier before accessing subdev structure */
-            rmb();
+                    if (result == 0) {
+                        pr_info("*** tx_isp_video_s_stream: subdev[%d] s_stream SUCCESS ***\n", i);
+                        i += 1;
+                    } else {
+                        /* Binary Ninja: if (result != 0xfffffdfd) */
+                        if (result != 0xfffffdfd) {
+                            /* Binary Ninja: void* $s0_1 = dev + (i << 2) */
+                            struct tx_isp_subdev **s0_1 = &dev->subdevs[i];
 
-            /* Reference: int32_t* $v0_3 = *(*($a0 + 0xc4) + 4) */
-            /* Step 1: $a0 + 0xc4 (get ops pointer location) */
-            ops_ptr = (void **)((char *)subdev + 0xc4);
+                            /* Binary Ninja: while (dev != $s0_1) */
+                            while (&dev->subdevs[0] != s0_1) {
+                                /* Binary Ninja: void* $a0_1 = *($s0_1 + 0x38) */
+                                /* Move back one position */
+                                s0_1 -= 1;
+                                struct tx_isp_subdev *a0_1 = *s0_1;
 
-            /* SAFETY: Validate ops pointer location */
-            if (!is_valid_kernel_pointer(ops_ptr)) {
-                pr_debug("tx_isp_video_s_stream: Invalid ops pointer location for subdev %d: %p\n", i, ops_ptr);
-                continue;
-            }
+                                if (a0_1 == 0) {
+                                    /* Binary Ninja: $s0_1 -= 4 */
+                                    continue;
+                                } else {
+                                    /* Binary Ninja: int32_t* $v0_6 = *(*($a0_1 + 0xc4) + 4) */
+                                    struct tx_isp_subdev_video_ops *v0_6 = a0_1->ops ? a0_1->ops->video : NULL;
 
-            /* Memory barrier before accessing ops structure */
-            rmb();
+                                    if (v0_6 == 0) {
+                                        /* Binary Ninja: $s0_1 -= 4 */
+                                        continue;
+                                    } else {
+                                        /* Binary Ninja: int32_t $v0_7 = *$v0_6 */
+                                        int (*v0_7)(struct tx_isp_subdev *, int) = v0_6->s_stream;
 
-            /* Step 2: *($a0 + 0xc4) (get ops structure) then +4 (get video ops) */
-            if (!is_valid_kernel_pointer(*ops_ptr)) {
-                pr_debug("tx_isp_video_s_stream: Invalid ops structure for subdev %d: %p\n", i, *ops_ptr);
-                continue;
-            }
-
-            video_ops_ptr = (void **)((char *)*ops_ptr + 4);
-
-            /* SAFETY: Validate video ops pointer location */
-            if (!is_valid_kernel_pointer(video_ops_ptr)) {
-                pr_debug("tx_isp_video_s_stream: Invalid video_ops pointer location for subdev %d: %p\n", i, video_ops_ptr);
-                continue;
-            }
-
-            /* Memory barrier before accessing video ops structure */
-            rmb();
-
-            /* Step 3: Get the s_stream function pointer */
-            s_stream_func_ptr = (int (**)(void *, int))video_ops_ptr;
-
-            /* Reference: if ($v0_3 == 0) */
-            if (*s_stream_func_ptr == 0) {
-                pr_debug("tx_isp_video_s_stream: No s_stream function for subdev %d\n", i);
-                continue; /* i += 1 in reference */
-            }
-
-            s_stream_func = *s_stream_func_ptr;
-
-            /* SAFETY: Validate function pointer */
-            if (!is_valid_kernel_pointer(s_stream_func)) {
-                pr_debug("tx_isp_video_s_stream: Invalid s_stream function pointer for subdev %d: %p\n", i, s_stream_func);
-                continue;
-            }
-
-            /* Reference: int32_t $v0_4 = *$v0_3 then if ($v0_4 == 0) */
-            /* (Already handled above in function pointer validation) */
-
-            pr_info("tx_isp_video_s_stream: Calling s_stream on subdev %d (func=%p, enable=%d)\n",
-                    i, s_stream_func, enable);
-
-            /* Reference: int32_t result = $v0_4($a0, arg2) */
-            result = s_stream_func(subdev, enable);
-
-            /* Reference: if (result == 0) i += 1 */
-            if (result == 0) {
-                pr_info("tx_isp_video_s_stream: Stream %s on subdev %d: SUCCESS\n",
-                        enable ? "ENABLED" : "DISABLED", i);
-                continue; /* Success, continue to next subdev */
-            }
-
-            /* Reference: if (result != 0xfffffdfd) - cleanup and return error */
-            if (result != 0xfffffdfd) {
-                pr_err("tx_isp_video_s_stream: Stream %s FAILED on subdev %d: %d\n",
-                       enable ? "enable" : "disable", i, result);
-
-                /* Reference cleanup logic: rollback previously enabled subdevs */
-                if (enable) {
-                    void **cleanup_ptr = (void **)((char *)dev + 0x38 + (i * sizeof(void *)));
-
-                    pr_info("tx_isp_video_s_stream: Rolling back previously enabled subdevs\n");
-
-                    /* Reference: while (arg1 != $s0_1) - cleanup loop */
-                    while ((void **)((char *)dev + 0x38) != cleanup_ptr) {
-                        void *cleanup_subdev = *cleanup_ptr;
-
-                        if (cleanup_subdev != 0 && is_valid_kernel_pointer(cleanup_subdev)) {
-                            /* Same logic as above but for disable */
-                            void **cleanup_ops_ptr = (void **)((char *)cleanup_subdev + 0xc4);
-
-                            if (is_valid_kernel_pointer(cleanup_ops_ptr) &&
-                                is_valid_kernel_pointer(*cleanup_ops_ptr)) {
-
-                                void **cleanup_video_ops_ptr = (void **)((char *)*cleanup_ops_ptr + 4);
-
-                                if (is_valid_kernel_pointer(cleanup_video_ops_ptr) &&
-                                    is_valid_kernel_pointer(*cleanup_video_ops_ptr)) {
-
-                                    int (**cleanup_func_ptr)(void *, int) = (int (**)(void *, int))cleanup_video_ops_ptr;
-                                    int (*cleanup_func)(void *, int) = *cleanup_func_ptr;
-
-                                    if (is_valid_kernel_pointer(cleanup_func)) {
-                                        int cleanup_result = cleanup_func(cleanup_subdev, 0);  /* Disable */
-                                        pr_info("tx_isp_video_s_stream: Cleanup: disabled subdev at %p (result=%d)\n",
-                                                cleanup_ptr, cleanup_result);
+                                        if (v0_7 == 0) {
+                                            /* Binary Ninja: $s0_1 -= 4 */
+                                            continue;
+                                        } else {
+                                            /* Binary Ninja: $v0_7($a0_1, enable u< 1 ? 1 : 0) */
+                                            int rollback_enable = (enable < 1) ? 1 : 0;
+                                            v0_7(a0_1, rollback_enable);
+                                            /* Binary Ninja: $s0_1 -= 4 */
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        cleanup_ptr -= 1; /* $s0_1 -= 4 in reference (pointer arithmetic) */
+                            /* Binary Ninja: return result */
+                            return result;
+                        }
+                        i += 1;
                     }
                 }
-
-                return result;
             }
-
-            /* Reference: Special case for result == 0xfffffdfd, continue with i += 1 */
-            pr_info("tx_isp_video_s_stream: Stream %s on subdev %d: special code 0xfffffdfd (ignored)\n",
-                    enable ? "enabled" : "disabled", i);
+        } else {
+            i += 1;
         }
 
-        /* Reference: i += 1 and $s4 = &$s4[1] (handled by for loop) */
+        /* Binary Ninja: $s4 = &$s4[1] */
+        s4 = &s4[1];
     }
 
-    pr_info("*** tx_isp_video_s_stream: FIXED implementation completed successfully ***\n");
+    /* Skipping post-sensor CSI re-init and VIC reassert to preserve VIC interrupts (matches good-things behavior) */
 
-    /* Reference: return 0 */
+    /* All subdevs processed successfully */
     return 0;
 }
 
@@ -4760,9 +4910,6 @@ static int tx_isp_init(void)
         /* Set up VIC subdev with ops pointing to vic_subdev_ops */
         vic_dev->sd.ops = &vic_subdev_ops;
 
-        /* SAFE: Add VIC to subdev array at index 0 using proper struct member */
-        ourISPdev->subdevs[0] = &vic_dev->sd;
-
         pr_info("*** REGISTERED VIC SUBDEV AT INDEX 0 WITH VIDEO OPS ***\n");
         pr_info("VIC subdev: %p, ops: %p, video: %p, s_stream: %p\n",
                 &vic_dev->sd, vic_dev->sd.ops, vic_dev->sd.ops->video,
@@ -4770,6 +4917,15 @@ static int tx_isp_init(void)
     }
 
     /* Register CSI subdev with proper ops structure */
+    /* *** CRITICAL: Create CSI device BEFORE registering platform devices *** */
+    pr_info("*** CREATING CSI DEVICE STRUCTURE BEFORE PLATFORM DEVICE REGISTRATION ***\n");
+    ret = tx_isp_init_csi_subdev(ourISPdev);
+    if (ret) {
+        pr_err("Failed to create CSI device structure: %d\n", ret);
+        goto err_cleanup_base;
+    }
+    pr_info("*** CSI DEVICE CREATED SUCCESSFULLY ***\n");
+
     if (ourISPdev->csi_dev) {
         struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)ourISPdev->csi_dev;
 
@@ -4777,13 +4933,9 @@ static int tx_isp_init(void)
         csi_dev->sd.ops = &csi_subdev_ops;
         csi_dev->sd.isp = (void*)ourISPdev;
 
-        /* SAFE: Add CSI to subdev array at index 1 using proper struct member */
-        ourISPdev->subdevs[1] = &csi_dev->sd;
-
-        pr_info("*** REGISTERED CSI SUBDEV AT INDEX 1 WITH VIDEO OPS ***\n");
-        pr_info("CSI subdev: %p, ops: %p, video: %p, s_stream: %p\n",
-                &csi_dev->sd, csi_dev->sd.ops, csi_dev->sd.ops->video,
-                csi_dev->sd.ops->video->s_stream);
+        pr_info("*** CSI SUBDEV OPS CONFIGURED: video=%p, s_stream=%p ***\n",
+                csi_dev->sd.ops->video,
+                csi_dev->sd.ops->video ? csi_dev->sd.ops->video->s_stream : NULL);
     }
 
     /* *** CRITICAL: Register platform devices with proper IRQ setup *** */
@@ -4850,27 +5002,8 @@ static int tx_isp_init(void)
     }
     pr_info("*** SUBDEV PLATFORM DRIVERS INITIALIZED - CSI/VIC/VIN/CORE DRIVERS REGISTERED ***\n");
 
-    /* Build platform device array for the new management system */
-    subdev_platforms[0] = &tx_isp_csi_platform_device;
-    subdev_platforms[1] = &tx_isp_vic_platform_device;
-    subdev_platforms[2] = &tx_isp_vin_platform_device;
-    subdev_platforms[3] = &tx_isp_fs_platform_device;
-    subdev_platforms[4] = &tx_isp_core_platform_device;
-
-    /* *** NEW: Initialize subdevice registry with cleaner management *** */
-    ret = tx_isp_init_subdev_registry(ourISPdev, subdev_platforms, 5);
-    if (ret) {
-        pr_err("Failed to initialize subdevice registry: %d\n", ret);
-        goto err_cleanup_platforms;
-    }
-    pr_info("*** SUBDEVICE REGISTRY INITIALIZED SUCCESSFULLY ***\n");
-
-    /* Initialize CSI */
-    ret = tx_isp_init_csi_subdev(ourISPdev);
-    if (ret) {
-        pr_err("Failed to initialize CSI subdev: %d\n", ret);
-        goto err_cleanup_platforms;
-    }
+    /* *** CSI device already created before platform device registration - skip duplicate init *** */
+    pr_info("*** CSI device already initialized at line 4922 - skipping duplicate init ***\n");
 
     /* *** FIXED: USE PROPER STRUCT MEMBER ACCESS INSTEAD OF DANGEROUS OFFSETS *** */
     pr_info("*** POPULATING SUBDEV ARRAY USING SAFE STRUCT MEMBER ACCESS ***\n");
@@ -4881,9 +5014,6 @@ static int tx_isp_init(void)
 
         /* Set up VIC subdev with ops pointing to vic_subdev_ops */
         vic_dev->sd.ops = &vic_subdev_ops;
-
-        /* SAFE: Add VIC to subdev array at index 0 using proper struct member */
-        ourISPdev->subdevs[0] = &vic_dev->sd;
 
         pr_info("*** REGISTERED VIC SUBDEV AT INDEX 0 WITH VIDEO OPS ***\n");
         pr_info("VIC subdev: %p, ops: %p, video: %p, s_stream: %p\n",
@@ -4898,9 +5028,6 @@ static int tx_isp_init(void)
         /* Set up CSI subdev with ops pointing to csi_subdev_ops */
         csi_dev->sd.ops = &csi_subdev_ops;
         csi_dev->sd.isp = (void*)ourISPdev;
-
-        /* SAFE: Add CSI to subdev array at index 1 using proper struct member */
-        ourISPdev->subdevs[1] = &csi_dev->sd;
 
         pr_info("*** REGISTERED CSI SUBDEV AT INDEX 1 WITH VIDEO OPS ***\n");
         pr_info("CSI subdev: %p, ops: %p, video: %p, s_stream: %p\n",
@@ -4930,8 +5057,6 @@ static int tx_isp_init(void)
         }
     }
 
-    ourISPdev->subdevs[2] = &ourISPdev->sd;
-    pr_info("*** REGISTERED CORE SUBDEV AT INDEX 2 WITH LINK_STREAM OPS ***\n");
     pr_info("CORE subdev: %p, ops: %p, video: %p, link_stream: %p\n",
             &ourISPdev->sd, ourISPdev->sd.ops,
             ourISPdev->sd.ops ? ourISPdev->sd.ops->video : NULL,
@@ -4948,8 +5073,6 @@ static int tx_isp_init(void)
                     ourISPdev->sd.ops->core->ioctl);
         }
     }
-
-    pr_info("*** SUBDEV ARRAY POPULATED SAFELY - tx_isp_video_link_stream SHOULD NOW WORK! ***\n");
 
     /* RACE CONDITION FIX: Mark subdev initialization as complete */
     mutex_lock(&subdev_init_lock);
@@ -5449,168 +5572,6 @@ static void tx_vic_disable_irq_complete(struct tx_isp_dev *isp_dev)
     local_irq_restore(flags);
 
     pr_info("*** tx_vic_disable_irq COMPLETE - VIC INTERRUPTS DISABLED ***\n");
-}
-
-/* ispcore_activate_module - EXACT Binary Ninja implementation that triggers register writes */
-int ispcore_activate_module(struct tx_isp_dev *isp_dev)
-{
-    struct tx_isp_vic_device *vic_dev;
-    struct clk **clk_array;
-    int clk_count;
-    int i;
-    int result = 0xffffffea;
-    void *subdev_array;
-    void *current_subdev;
-    int subdev_count;
-    void *subdev_entry;
-    int (*subdev_init_func)(void*);
-    int subdev_result;
-    void *function_ptr;
-    int a2_1, a3_1;
-
-    pr_info("*** ispcore_activate_module: EXACT Binary Ninja implementation ***\n");
-
-    /* Binary Ninja: if (arg1 != 0) */
-    if (isp_dev != NULL) {
-        /* Binary Ninja: if (arg1 u>= 0xfffff001) return 0xffffffea */
-        if ((uintptr_t)isp_dev >= 0xfffff001) {
-            return 0xffffffea;
-        }
-
-        /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
-        vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-        result = 0xffffffea;
-
-        /* Binary Ninja: if ($s0_1 != 0 && $s0_1 u< 0xfffff001) */
-        if (vic_dev != NULL && (uintptr_t)vic_dev < 0xfffff001) {
-            result = 0;
-
-            /* Binary Ninja: if (*($s0_1 + 0xe8) == 1) */
-            if (vic_dev->state == 1) {
-                pr_info("*** VIC device in state 1, proceeding with activation ***\n");
-
-                /* Binary Ninja: int32_t* $s2_1 = *(arg1 + 0xbc) */
-                /* Binary Ninja: int32_t i = 0 */
-                /* Binary Ninja: while (i u< *(arg1 + 0xc0)) */
-
-                /* CRITICAL: Clock configuration section */
-                pr_info("*** CLOCK CONFIGURATION SECTION ***\n");
-
-                /* For our implementation, we'll use the ISP device's clock array */
-                if (isp_dev->isp_clk) {
-                    /* Binary Ninja: if (private_clk_get_rate(*$s2_1) != 0xffff) */
-                    unsigned long current_rate = clk_get_rate(isp_dev->isp_clk);
-                    if (current_rate != 0xffff) {
-                        /* Binary Ninja: private_clk_set_rate(*$s2_1, isp_clk) */
-                        /* Set ISP clock to appropriate rate */
-                        clk_set_rate(isp_dev->isp_clk, 100000000); /* 100MHz ISP clock */
-                        pr_info("ISP clock set to 100MHz\n");
-                    }
-
-                    /* Binary Ninja: private_clk_enable(*$s2_1) */
-                    clk_prepare_enable(isp_dev->isp_clk);
-                    pr_info("ISP clock enabled\n");
-                }
-
-                /* CRITICAL: Subdevice validation loop */
-                pr_info("*** SUBDEVICE VALIDATION SECTION ***\n");
-
-                /* Binary Ninja: int32_t $a2_1 = 0; void* $a3_1 */
-                /* Binary Ninja: while (true) { $a3_1 = $a2_1 * 0xc4 */
-                a2_1 = 0;
-                subdev_count = 4; /* Assume max 4 subdevices for safety */
-
-                while (true) {
-                    a3_1 = a2_1 * 0xc4; /* Binary Ninja calculation */
-
-                    /* Binary Ninja: if ($a2_1 u>= *($s0_1 + 0x154)) break */
-                    if (a2_1 >= subdev_count) {
-                        break;
-                    }
-
-                    /* Binary Ninja: void* $v0_6 = $a3_1 + *($s0_1 + 0x150) */
-                    /* For our implementation, check if we have valid subdevices */
-                    if (a2_1 == 0 && isp_dev->vic_dev) {
-                        struct tx_isp_vic_device *check_vic = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-
-                        /* Binary Ninja: if (*($v0_6 + 0x74) != 1) */
-                        if (check_vic->state != 1) {
-                            /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch0 hcomp err !!!\n", $a2_1) */
-                            pr_err("Err [VIC_INT] : mipi ch0 hcomp err !!!\n");
-                            /* Binary Ninja: return 0xffffffff */
-                            return 0xffffffff;
-                        }
-
-                        /* Binary Ninja: *($v0_6 + 0x74) = 2 */
-                        check_vic->state = 2;
-                        pr_info("VIC device state set to 2 (activated)\n");
-                    }
-
-                    /* Binary Ninja: $a2_1 += 1 */
-                    a2_1 += 1;
-                }
-
-                /* CRITICAL: Function pointer call that triggers register writes */
-                pr_info("*** CRITICAL FUNCTION POINTER CALL SECTION ***\n");
-
-                /* Binary Ninja: void* $a0_3 = *($s0_1 + 0x1bc) */
-                /* Binary Ninja: (*($a0_3 + 0x40cc))($a0_3, 0x4000000, 0, $a3_1) */
-
-                /* VIC initialization now only handled by vic_core_s_stream - reference driver behavior */
-                if (vic_dev && vic_dev->vic_regs) {
-                    pr_info("*** VIC initialization deferred to vic_core_s_stream (reference driver behavior) ***\n");
-                }
-
-                /* CRITICAL: Subdevice initialization loop */
-                pr_info("*** SUBDEVICE INITIALIZATION LOOP ***\n");
-
-                /* Binary Ninja: void* $s2_2 = $s0_1 + 0x38; void* $s1_2 = *$s2_2 */
-                /* This iterates through the subdev array and calls their init functions */
-
-                /* For our implementation, initialize key subdevices */
-                if (isp_dev->csi_dev) {
-                    struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
-
-                    /* Binary Ninja: int32_t $v0_12 = $v0_11($s1_2) */
-                    /* Call CSI initialization */
-                    pr_info("Calling CSI subdevice initialization\n");
-                    int csi_result = csi_core_ops_init(&csi_dev->sd, 1);
-
-                    /* Binary Ninja: if ($v0_12 != 0 && $v0_12 != 0xfffffdfd) */
-                    if (csi_result != 0 && csi_result != 0xfffffdfd) {
-                        /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch1 hcomp err !!!\n", *($s1_2 + 8)) */
-                        pr_err("Err [VIC_INT] : mipi ch1 hcomp err !!!\n");
-                        return -1;
-                    }
-                }
-
-                /* Initialize other subdevices as needed */
-                if (isp_dev->sensor) {
-                    pr_info("Initializing sensor subdevice\n");
-                    /* Sensor initialization would go here */
-                }
-
-                /* Binary Ninja: *($s0_1 + 0xe8) = 2 */
-                vic_dev->state = 2;
-                pr_info("*** VIC device final state set to 2 (fully activated) ***\n");
-
-                /* Binary Ninja: return 0 */
-                pr_info("*** ispcore_activate_module: SUCCESS - ALL REGISTER WRITES SHOULD NOW BE TRIGGERED ***\n");
-                return 0;
-            }
-        }
-    }
-
-    /* Binary Ninja: return result */
-    pr_info("*** ispcore_activate_module: FAILED - result=0x%x ***\n", result);
-    return result;
-}
-
-/* Simple VIC activation - minimal like reference driver */
-static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev)
-{
-    /* This function now just calls the main ispcore_activate_module */
-    return ispcore_activate_module(isp_dev);
 }
 
 /* tx_vic_enable_irq - MIPS-SAFE implementation with no dangerous callback access */
@@ -6730,32 +6691,6 @@ static int sensor_subdev_core_init(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_sensor *sensor;
     int ret = 0;
-
-    pr_info("*** ISP SENSOR WRAPPER init: enable=%d ***\n", enable);
-
-    /* STEP 1: Do ISP's initialization work */
-    if (sd && sd->isp) {
-        sensor = ((struct tx_isp_dev*)sd->isp)->sensor;
-        if (sensor) {
-            pr_info("*** ISP: Initializing ISP-side for sensor %s enable=%d ***\n",
-                    sensor->info.name, enable);
-
-            if (enable) {
-                /* ISP initialization for this sensor */
-                if (sensor->video.attr) {
-                    pr_info("ISP INIT: Configuring %s (chip_id=0x%x, %dx%d)\n",
-                            sensor->info.name, sensor->video.attr->chip_id,
-                            sensor->video.attr->total_width, sensor->video.attr->total_height);
-                    /* Configure ISP for this sensor's resolution, format, etc */
-                }
-                sd->vin_state = TX_ISP_MODULE_INIT;
-            } else {
-                /* ISP deinitialization */
-                pr_info("ISP INIT: Deinitializing %s\n", sensor->info.name);
-                sd->vin_state = TX_ISP_MODULE_SLAKE;
-            }
-        }
-    }
 
     /* STEP 2: Now delegate to real sensor driver */
     pr_info("*** ISP DELEGATING TO REAL SENSOR_INIT: enable=%d ***\n", enable);
