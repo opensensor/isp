@@ -53,8 +53,8 @@ extern int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
 /* Forward declaration for VIN device creation from tx_isp_vin.c */
 extern int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev);
 
-/* Critical ISP Core initialization functions - MISSING FROM LOGS! */
-int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr);
+/* Critical ISP Core initialization functions - FIXED SIGNATURE TO MATCH REFERENCE */
+int ispcore_core_ops_init(struct tx_isp_subdev *sd, int enable);
 
 /* Global flag to prevent multiple tisp_init calls */
 static bool tisp_initialized = false;
@@ -260,27 +260,10 @@ int tx_isp_core_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *confi
 }
 EXPORT_SYMBOL(tx_isp_core_set_format);
 
-/* Bridge init to reference ispcore_core_ops_init so it actually runs */
-/* CRITICAL: Made non-static so it can be referenced from tx-isp-module.c */
-int core_subdev_core_init_bridge(struct tx_isp_subdev *sd, int enable)
-{
-    struct tx_isp_dev *isp = sd ? (struct tx_isp_dev *)sd->isp : NULL;
-    struct tx_isp_sensor_attribute *attr = NULL;
-    if (!isp) {
-        ISP_ERROR("core_subdev_core_init_bridge: invalid isp\n");
-        return -EINVAL;
-    }
-    /* When enabling, pass current sensor attributes; when disabling, pass NULL like reference */
-    if (enable && isp->sensor && isp->sensor->video.attr) {
-        attr = isp->sensor->video.attr;
-    }
-    return ispcore_core_ops_init(isp, attr);
-}
-EXPORT_SYMBOL(core_subdev_core_init_bridge);
-
 /* Core subdev operations - matches the pattern used by other devices */
+/* CRITICAL FIX: ispcore_core_ops_init now has the correct signature (sd, enable) */
 static struct tx_isp_subdev_core_ops core_subdev_core_ops = {
-    .init = ispcore_core_ops_init,
+    .init = ispcore_core_ops_init,  /* Direct call - signature now matches! */
     .reset = NULL,
     .ioctl = NULL,
 };
@@ -373,17 +356,17 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     pr_info("*** ISP STATE CHECK: vic_dev->state=%d (need >=3), enable=%d ***\n", isp_state, enable);
 
     if (isp_state < 3) {
-        pr_err("*** ISP STATE ERROR: Current VIC state=%d, need >=3 for streaming ***\n", isp_state);
+        pr_err("*** ISP STATE ERROR: Current ISP state=%d, need >=3 for streaming ***\n", isp_state);
         /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream") */
         isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream");
         /* Binary Ninja: private_spin_unlock_irqrestore($s0 + 0xdc, var_28) */
-        spin_unlock_irqrestore(&vic_dev->lock, var_28);
+        spin_unlock_irqrestore(&isp_dev->lock, var_28);  /* CRITICAL FIX: Use isp_dev->lock, not vic_dev->lock */
         /* Binary Ninja: return 0xffffffff */
         return -1;
     }
 
     /* Binary Ninja: private_spin_unlock_irqrestore($s0 + 0xdc, var_28) */
-    spin_unlock_irqrestore(&vic_dev->lock, var_28);
+    spin_unlock_irqrestore(&isp_dev->lock, var_28);  /* CRITICAL FIX: Use isp_dev->lock, not vic_dev->lock */
 
     /* Binary Ninja: Reset frame counters */
     /* *($s0 + 0x164) = 0 */
@@ -1578,8 +1561,8 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
                     pr_info("ispcore_slake_module: No sensor attributes available, using NULL");
                 }
 
-                /* GOOD-THINGS APPROACH: Call ispcore_core_ops_init with ISP device and sensor attributes */
-                ret = ispcore_core_ops_init(isp_dev, sensor_attr);
+                /* CRITICAL FIX: Call ispcore_core_ops_init with correct signature (subdev, enable) */
+                ret = ispcore_core_ops_init(&isp_dev->sd, 1);  /* enable=1 for initialization */
 
                 if (ret < 0) {
                     pr_info("ispcore_slake_module: ispcore_core_ops_init failed: %d", ret);
@@ -1778,32 +1761,57 @@ EXPORT_SYMBOL(data_b2e14);
  * ispcore_core_ops_init - CRITICAL: Initialize ISP Core Operations
  * This is the EXACT reference implementation from Binary Ninja decompilation
  * CRITICAL: tisp_init is called FROM THIS FUNCTION, not from handle_sensor_register
+ *
+ * CRITICAL FIX: Binary Ninja shows this takes (struct tx_isp_subdev *sd, int enable)
+ * NOT (struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr)!
  */
-int ispcore_core_ops_init(struct tx_isp_dev *isp, struct tx_isp_sensor_attribute *sensor_attr)
+int ispcore_core_ops_init(struct tx_isp_subdev *sd, int enable)
 {
+    struct tx_isp_dev *isp;
+    struct tx_isp_sensor_attribute *sensor_attr = NULL;
     u32 reg_val;
     int ret = 0;
-    
-    if (!isp) {
-        ISP_ERROR("*** ispcore_core_ops_init: Invalid ISP device ***\n");
+
+    pr_info("*** ispcore_core_ops_init: ENTRY - sd=%p, enable=%d ***\n", sd, enable);
+
+    /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) $s0 = *(arg1 + 0xd4) */
+    if (!sd || (unsigned long)sd >= 0xfffff001) {
+        pr_err("*** ispcore_core_ops_init: Invalid subdev pointer ***\n");
         return -EINVAL;
     }
-    
-    ISP_INFO("*** ispcore_core_ops_init: EXACT Binary Ninja reference implementation ***\n");
+
+    /* CRITICAL: For Core subdev, sd IS the first member of tx_isp_dev */
+    isp = container_of(sd, struct tx_isp_dev, sd);
+
+    if (!isp) {
+        pr_err("*** ispcore_core_ops_init: Invalid ISP device ***\n");
+        return -EINVAL;
+    }
+
+    pr_info("*** ispcore_core_ops_init: Got isp=%p from sd=%p ***\n", isp, sd);
+
+    /* Get sensor attributes if available (when enable=1) */
+    if (enable && isp->sensor && isp->sensor->video.attr) {
+        sensor_attr = isp->sensor->video.attr;
+        pr_info("*** ispcore_core_ops_init: Using sensor attributes from %s ***\n",
+                sensor_attr->name ? sensor_attr->name : "unknown");
+    }
+
+    pr_info("*** ispcore_core_ops_init: EXACT Binary Ninja reference implementation ***\n");
 
     int isp_state = isp->state;
-    ISP_INFO("*** ispcore_core_ops_init: Current ISP state = %d ***\n", isp_state);
+    pr_info("*** ispcore_core_ops_init: Current ISP state = %d ***\n", isp_state);
 
-    /* Binary Ninja: if ($v0_3 != 1) - CRITICAL: Check state FIRST, before sensor_attr check */
+    /* Binary Ninja: if ($v0_3 != 1) - CRITICAL: Check state FIRST, before enable check */
     if (isp_state == 1) {
-        ISP_INFO("*** ispcore_core_ops_init: State is 1 (IDLE) - early return ***\n");
+        pr_info("*** ispcore_core_ops_init: State is 1 (IDLE) - early return ***\n");
         return 0;
     }
 
-    /* Binary Ninja: if (arg2 == 0) - Check sensor_attr AFTER state check */
-    if (!sensor_attr) {
-        /* Deinitialize path - matches reference when arg2 == 0 */
-        ISP_INFO("*** ispcore_core_ops_init: Deinitialize path (sensor_attr == NULL) ***\n");
+    /* Binary Ninja: if (arg2 == 0) - Check enable (was sensor_attr) AFTER state check */
+    if (enable == 0) {
+        /* Deinitialize path - matches reference when enable == 0 */
+        pr_info("*** ispcore_core_ops_init: Deinitialize path (enable == 0) ***\n");
 
         /* Binary Ninja: Check for state transitions */
         int current_state = isp_state;
@@ -3413,6 +3421,11 @@ int tx_isp_core_probe(struct platform_device *pdev)
     pr_info("*** tx_isp_core_probe: Core subdev initialized with ops=%p ***\n", &core_subdev_ops);
     pr_info("***   - Core ops: start=%p, stop=%p, set_format=%p ***\n",
             tx_isp_core_start, tx_isp_core_stop, tx_isp_core_set_format);
+    pr_info("*** tx_isp_core_probe: core_subdev_ops.core=%p ***\n", core_subdev_ops.core);
+    if (core_subdev_ops.core) {
+        pr_info("*** tx_isp_core_probe: core_subdev_ops.core->init=%p (ispcore_core_ops_init) ***\n",
+                core_subdev_ops.core->init);
+    }
 
     /* Binary Ninja: if (tx_isp_subdev_init(arg1, $v0, &core_subdev_ops) == 0) */
     if (tx_isp_subdev_init(pdev, &isp_dev->sd, &core_subdev_ops) == 0) {

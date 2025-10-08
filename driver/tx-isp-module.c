@@ -2373,6 +2373,10 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                 vic_dev->state = 2;
                 pr_info("*** VIC device final state set to 2 (fully activated) ***\n");
 
+                /* CRITICAL FIX: Also set ISP Core state to 2 (READY) so ispcore_core_ops_init can run */
+                isp_dev->state = 2;
+                pr_info("*** ISP Core state set to 2 (READY) - ispcore_core_ops_init can now initialize ***\n");
+
                 /* Binary Ninja: return 0 */
                 pr_info("*** ispcore_activate_module: SUCCESS - ALL REGISTER WRITES SHOULD NOW BE TRIGGERED ***\n");
                 return 0;
@@ -2465,14 +2469,28 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
         struct tx_isp_subdev *sensor_sd = tx_isp_get_sensor_subdev(dev);
 
         /* Initialize Core first */
+        pr_info("*** DEBUG: core_sd=%p ***\n", core_sd);
+        if (core_sd) {
+            pr_info("*** DEBUG: core_sd->ops=%p ***\n", core_sd->ops);
+            if (core_sd->ops) {
+                pr_info("*** DEBUG: core_sd->ops->core=%p ***\n", core_sd->ops->core);
+                if (core_sd->ops->core) {
+                    pr_info("*** DEBUG: core_sd->ops->core->init=%p ***\n", core_sd->ops->core->init);
+                }
+            }
+        }
+
         if (core_sd && core_sd->ops && core_sd->ops->core && core_sd->ops->core->init) {
             pr_info("*** tx_isp_video_s_stream: Initializing Core subdev ***\n");
+            pr_info("*** tx_isp_video_s_stream: Calling core_sd->ops->core->init(%p, 1) ***\n", core_sd);
             result = core_sd->ops->core->init(core_sd, 1);
             if (result != 0 && result != -ENOIOCTLCMD) {
                 pr_err("tx_isp_video_s_stream: Core init failed: %d\n", result);
                 return result;
             }
-            pr_info("*** tx_isp_video_s_stream: Core init SUCCESS ***\n");
+            pr_info("*** tx_isp_video_s_stream: Core init SUCCESS, result=%d ***\n", result);
+        } else {
+            pr_warn("*** tx_isp_video_s_stream: Core subdev init NOT AVAILABLE - skipping ***\n");
         }
 
        	/* Ensure VIC is ACTIVATED (state 2) before VIC core->init so clks activate */
@@ -5041,20 +5059,16 @@ static int tx_isp_init(void)
 
     /* CRITICAL FIX: Ensure core subdev has ops pointer set */
     extern struct tx_isp_subdev_ops core_subdev_ops;
-    extern int core_subdev_core_init_bridge(struct tx_isp_subdev *sd, int enable);
 
     if (!ourISPdev->sd.ops) {
         pr_info("*** CRITICAL FIX: Core subdev ops is NULL, setting to core_subdev_ops ***\n");
         ourISPdev->sd.ops = &core_subdev_ops;
     }
 
-    /* CRITICAL FIX: Manually set core init function if it's NULL */
-    if (ourISPdev->sd.ops && ourISPdev->sd.ops->core) {
-        if (!ourISPdev->sd.ops->core->init) {
-            pr_info("*** CRITICAL FIX: Core init is NULL, setting to core_subdev_core_init_bridge ***\n");
-            /* Cast away const to set the function pointer */
-            ((struct tx_isp_subdev_core_ops *)ourISPdev->sd.ops->core)->init = core_subdev_core_init_bridge;
-        }
+    /* Core init function should already be set in core_subdev_ops structure */
+    if (ourISPdev->sd.ops && ourISPdev->sd.ops->core && ourISPdev->sd.ops->core->init) {
+        pr_info("*** Core subdev ops properly configured with init=%p ***\n",
+                ourISPdev->sd.ops->core->init);
     }
 
     pr_info("CORE subdev: %p, ops: %p, video: %p, link_stream: %p\n",
