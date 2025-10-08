@@ -60,9 +60,9 @@ struct registered_sensor {
 
 // Simple global device instance
 struct tx_isp_dev *ourISPdev = NULL;
-static LIST_HEAD(sensor_list);
-static DEFINE_MUTEX(sensor_list_mutex);
-static int sensor_count = 0;
+LIST_HEAD(sensor_list);
+DEFINE_MUTEX(sensor_list_mutex);
+int sensor_count = 0;
 static int isp_memopt = 0; // Memory optimization flag like reference
 
 /* CRITICAL: VIC interrupt control flag - Binary Ninja reference */
@@ -1577,6 +1577,10 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     pr_info("*** CRITICAL: LINKING CSI DEVICE TO ISP DEVICE ***\n");
     isp_dev->csi_dev = csi_dev;
     pr_info("*** CSI DEVICE LINKED: isp_dev->csi_dev = %p ***\n", isp_dev->csi_dev);
+
+    /* *** CRITICAL: Set subdev private data to point to csi_dev *** */
+    tx_isp_set_subdevdata(&csi_dev->sd, csi_dev);
+    pr_info("*** CSI SUBDEV PRIVATE DATA SET: sd=%p -> csi_dev=%p ***\n", &csi_dev->sd, csi_dev);
 
     pr_info("*** csi_device_probe: Binary Ninja CSI device created successfully ***\n");
     return 0;

@@ -14,6 +14,18 @@
 /* External reference to global ISP device */
 extern struct tx_isp_dev *ourISPdev;
 
+/* External sensor registration structures from tx-isp-module.c */
+struct registered_sensor {
+    char name[32];
+    int index;
+    struct tx_isp_subdev *subdev;
+    struct i2c_client *client;
+    struct list_head list;
+};
+extern struct list_head sensor_list;
+extern struct mutex sensor_list_mutex;
+extern int sensor_count;
+
 /* Function declarations for Binary Ninja compatibility */
 int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_num);
 void tx_isp_free_irq(struct tx_isp_irq_info *irq_info);
@@ -512,6 +524,60 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             sd->module.notify = tx_isp_module_notify_handler;
             pr_info("*** tx_isp_subdev_init: Set up sensor module notify handler ***\n");
 
+            /* CRITICAL: Extract sensor pointer from host_priv (set by sensor driver via tx_isp_set_subdev_hostdata) */
+            struct tx_isp_sensor *sensor = (struct tx_isp_sensor *)tx_isp_get_subdev_hostdata(sd);
+            if (sensor) {
+                pr_info("*** tx_isp_subdev_init: Retrieved sensor from host_priv: %p (%s) ***\n",
+                        sensor, sensor->info.name[0] ? sensor->info.name : "(unnamed)");
+
+                /* CRITICAL: Connect sensor to ISP device (like tx_isp_register_sensor_subdev does) */
+                pr_info("*** tx_isp_subdev_init: CONNECTING SENSOR TO ISP DEVICE ***\n");
+                pr_info("Before: ourISPdev->sensor=%p\n", ourISPdev->sensor);
+
+                /* Always set as primary sensor (replace any existing) */
+                ourISPdev->sensor = sensor;
+                pr_info("After: ourISPdev->sensor=%p (%s)\n", ourISPdev->sensor,
+                        sensor->info.name[0] ? sensor->info.name : "(unnamed)");
+
+                /* Set the ISP reference in the sensor subdev */
+                sd->isp = (void *)ourISPdev;
+
+                /* Initialize sensor state */
+                sd->vin_state = TX_ISP_MODULE_INIT;
+                pr_info("Sensor subdev state initialized to INIT\n");
+
+                /* Add to sensor enumeration list */
+                struct registered_sensor *reg_sensor = kzalloc(sizeof(struct registered_sensor), GFP_KERNEL);
+                if (reg_sensor) {
+                    strncpy(reg_sensor->name, sensor->info.name, sizeof(reg_sensor->name) - 1);
+                    reg_sensor->name[sizeof(reg_sensor->name) - 1] = '\0';
+                    reg_sensor->subdev = sd;
+
+                    mutex_lock(&sensor_list_mutex);
+                    /* Replace any existing sensor with same name */
+                    struct registered_sensor *existing, *tmp;
+                    list_for_each_entry_safe(existing, tmp, &sensor_list, list) {
+                        if (strncmp(existing->name, reg_sensor->name, sizeof(existing->name)) == 0) {
+                            list_del(&existing->list);
+                            kfree(existing);
+                            sensor_count--;
+                            break;
+                        }
+                    }
+
+                    reg_sensor->index = sensor_count++;
+                    list_add_tail(&reg_sensor->list, &sensor_list);
+                    mutex_unlock(&sensor_list_mutex);
+
+                    pr_info("*** SENSOR SUCCESSFULLY ADDED TO LIST: index=%d name=%s ***\n",
+                           reg_sensor->index, reg_sensor->name);
+                }
+
+                pr_info("*** tx_isp_subdev_init: SENSOR CONNECTION COMPLETE ***\n");
+            } else {
+                pr_warn("*** tx_isp_subdev_init: Sensor ops detected but no sensor in host_priv ***\n");
+            }
+
             /* SENSOR - register using helper function */
             int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
             if (slot >= 0) {
@@ -907,6 +973,7 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
             } else {
                 pr_err("*** CRITICAL ERROR: No core registers available for core device ***\n");
             }
+
         } else {
             pr_err("*** CRITICAL ERROR: Core device not found in subdev private data ***\n");
         }
