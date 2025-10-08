@@ -1387,7 +1387,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     /* Binary Ninja: 00010244 void* $v1 = *(arg1 + 0x110) */
     if (!vic_dev) {
-        pr_err("*** CRITICAL: Invalid vic_dev pointer ***\n");
+        pr_info("*** CRITICAL: Invalid vic_dev pointer ***\n");
         return -EINVAL;
     }
 
@@ -1419,7 +1419,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     /* SAFETY: Check if sensor_attr is valid before accessing nested structures */
     if (!sensor_attr) {
-        pr_err("*** CRITICAL: sensor_attr is NULL ***\n");
+        pr_info("*** CRITICAL: sensor_attr is NULL ***\n");
         return -EINVAL;
     }
 
@@ -1437,33 +1437,13 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* Get VIC register base - offset 0xb8 in Binary Ninja */
     vic_regs = vic_dev->vic_regs;
     if (!vic_regs) {
-        pr_err("*** CRITICAL: No VIC register base ***\n");
+        pr_info("*** CRITICAL: No VIC register base ***\n");
         return -EINVAL;
     }
 
     /* Calculate base addresses for register blocks */
     void __iomem *main_isp_base = vic_regs - 0x9a00;
     void __iomem *csi_base = main_isp_base + 0x10000;
-
-    /* STEP 1: Enable clocks - Critical for VIC operation */
-    cgu_isp_clk = clk_get(NULL, "cgu_isp");
-    if (!IS_ERR(cgu_isp_clk)) {
-        clk_set_rate(cgu_isp_clk, 100000000);
-        ret = clk_prepare_enable(cgu_isp_clk);
-        if (ret == 0) {
-            pr_info("CGU_ISP clock enabled at 100MHz\n");
-        }
-    }
-
-    isp_clk = clk_get(NULL, "isp");
-    if (!IS_ERR(isp_clk)) {
-        clk_prepare_enable(isp_clk);
-    }
-
-    csi_clk = clk_get(NULL, "csi");
-    if (!IS_ERR(csi_clk)) {
-        clk_prepare_enable(csi_clk);
-    }
 
     /* STEP 2: CPM register setup */
     cpm_regs = ioremap(0x10000000, 0x1000);
@@ -1556,8 +1536,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             if (--timeout == 0) {
                 primary_val = readl(vic_regs + 0x0);
                 secondary_val = secondary_regs ? readl(secondary_regs + 0x0) : 0;
-                pr_err("*** VIC UNLOCK TIMEOUT: Primary=0x%08x, Secondary=0x%08x ***\n", primary_val, secondary_val);
-                pr_err("*** Continuing anyway to prevent infinite hang ***\n");
+                pr_info("*** VIC UNLOCK TIMEOUT: Primary=0x%08x, Secondary=0x%08x ***\n", primary_val, secondary_val);
+                pr_info("*** Continuing anyway to prevent infinite hang ***\n");
                 break;  /* Continue instead of returning error to prevent hang */
             }
         }
@@ -1579,8 +1559,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** VIC hardware should be ready - proceeding with unlock sequence ***\n");
 
         /* Binary Ninja: EXACT reference driver MIPI mode configuration */
-        /* Binary Ninja: 000107ec - Set CSI mode */
-        writel(2, vic_regs + 0xc);  /* BINARY NINJA EXACT: VIC mode = 3 for MIPI interface */
+        /* Binary Ninja: 000107ec - Set CSI mode (match working logs) */
+        writel(2, vic_regs + 0xc);  /* Set VIC MIPI mode = 2 */
         wmb();
         pr_info("*** VIC: Set MIPI mode (2) to VIC control register 0xc (matches working logs) ***\n");
 
@@ -1644,6 +1624,18 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         wmb();
         pr_info("*** BINARY NINJA EXACT: Hardware sequence 2->4->wait(%d us)->1 ***\n", wait_count);
 
+
+        /* Re-assert stream control after this enable too, to guard against register clearing */
+        {
+            u32 buffer_count = vic_dev->active_buffer_count;
+            if (buffer_count == 0) buffer_count = 2;
+            if (buffer_count > 5) buffer_count = 5;
+            u32 stream_ctrl = (buffer_count << 16) | 0x80000020;
+            writel(stream_ctrl, vic_regs + 0x300);
+            wmb();
+            pr_info("*** POST-ENABLE(A): Rewrote VIC[0x300]=0x%x (buffer_count=%u) ***\n", stream_ctrl, buffer_count);
+        }
+
         /* Format detection logic - Binary Ninja 000107f8-00010a04 */
         u32 mipi_config;
 
@@ -1658,7 +1650,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
                             mipi_config = 0x50000;
                         }
                     } else {
-                        pr_err("Format 0x%x not supported\n", sensor_format);
+                        pr_info("Format 0x%x not supported\n", sensor_format);
                         return -1;
                     }
                 } else {
@@ -1671,7 +1663,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
                 } else if (gpio_mode == 4) {
                     mipi_config = 0x100000;
                 } else {
-                    pr_err("DVP mode config failed\n");
+                    pr_info("DVP mode config failed\n");
                     return -1;
                 }
             } else if (sensor_format >= 0x3013 && sensor_format < 0x3015) {
@@ -1681,7 +1673,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
                 } else if (gpio_mode == 4) {
                     mipi_config = 0x100000;
                 } else {
-                    pr_err("DVP mode config failed\n");
+                    pr_info("DVP mode config failed\n");
                     return -1;
                 }
             } else {
@@ -1705,11 +1697,11 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
                     } else if (gpio_mode == 4) {
                         mipi_config = 0x100000;
                     } else {
-                        pr_err("DVP mode config failed\n");
+                        pr_info("DVP mode config failed\n");
                         return -1;
                     }
                 } else {
-                    pr_err("Format 0x%x not supported\n", sensor_format);
+                    pr_info("Format 0x%x not supported\n", sensor_format);
                     return -1;
                 }
             } else if (sensor_format == 0x3008) {
@@ -1720,14 +1712,14 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             } else if (sensor_format == 0x300a) {
                 mipi_config = 0x20000;
             } else {
-                pr_err("Format 0x%x not supported\n", sensor_format);
+                pr_info("Format 0x%x not supported\n", sensor_format);
                 return -1;
             }
         } else if (sensor_format == 0x1008) {
             mipi_config = 0x80000;
         } else if (sensor_format >= 0x1009) {
             if ((sensor_format - 0x2002) >= 4) {
-                pr_err("Format 0x%x not supported\n", sensor_format);
+                pr_info("Format 0x%x not supported\n", sensor_format);
                 return -1;
             }
             mipi_config = 0xc0000;
@@ -1781,7 +1773,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             while (readl(vic_regs + 0x0) != 0) {
                 udelay(1);
                 if (--timeout == 0) {
-                    pr_err("VIC unlock timeout\n");
+                    pr_info("VIC unlock timeout\n");
                     return -ETIMEDOUT;
                 }
             }
@@ -1812,7 +1804,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         } else if (gpio_mode == 1) {
             bt601_config = 0x88060820;
         } else {
-            pr_err("Unsupported GPIO mode\n");
+            pr_info("Unsupported GPIO mode\n");
             return -1;
         }
 
@@ -1868,7 +1860,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(1, vic_regs + 0x0);
 
     } else {
-        pr_err("Unsupported interface type %d\n", interface_type);
+        pr_info("Unsupported interface type %d\n", interface_type);
         return -1;
     }
 
@@ -1922,14 +1914,11 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("*** ISP CORE: Hardware interrupt generation ENABLED during VIC init ***\n");
         pr_info("*** VIC->ISP: Pipeline should now generate hardware interrupts when VIC completes frames! ***\n");
     } else {
-        pr_warn("*** ISP CORE IRQ: core_regs not mapped; unable to enable core interrupts here ***\n");
+        pr_info("*** ISP CORE IRQ: core_regs not mapped; unable to enable core interrupts here ***\n");
     }
 
     /* Also enable the kernel IRQ line if it was registered earlier */
-    if (ourISPdev && ourISPdev->isp_irq > 0) {
-        enable_irq(ourISPdev->isp_irq);
-        pr_info("*** ISP CORE IRQ: enable_irq(%d) called ***\n", ourISPdev->isp_irq);
-    }
+    enable_irq(37);
 
     return 0;
 }
