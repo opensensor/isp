@@ -1560,20 +1560,14 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     csi_dev->sd.vin_state = TX_ISP_MODULE_INIT;
 
     /* *** CRITICAL: Map CSI basic control registers - Binary Ninja 0x10022000 *** */
-    /* Binary Ninja: private_request_mem_region(0x10022000, 0x1000, "Can not support this frame mode!!!\\n") */
-    mem_resource = request_mem_region(0x10022000, 0x1000, "tx-isp-csi");
-    if (!mem_resource) {
-        pr_err("csi_device_probe: Cannot request CSI memory region 0x10022000\n");
-        ret = -EBUSY;
-        goto err_free_dev;
-    }
-
+    /* NOTE: We do NOT call request_mem_region here because tx_isp_subdev_init will handle it */
+    /* This avoids double-requesting the same memory region which causes -EBUSY errors */
     /* Binary Ninja: private_ioremap($a0_2, $v0_3[1] + 1 - $a0_2) */
     csi_basic_regs = ioremap(0x10022000, 0x1000);
     if (!csi_basic_regs) {
         pr_err("csi_device_probe: Cannot map CSI basic registers\n");
         ret = -ENOMEM;
-        goto err_release_mem;
+        goto err_free_dev;
     }
 
     pr_info("*** CSI BASIC REGISTERS MAPPED: 0x10022000 -> %p ***\n", csi_basic_regs);
@@ -1594,7 +1588,9 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     *((void**)((char*)csi_dev + 0x13c)) = isp_csi_regs;
 
     /* Binary Ninja: *($v0 + 0x138) = $v0_3 (memory resource) */
-    *((struct resource**)((char*)csi_dev + 0x138)) = mem_resource;
+    /* NOTE: mem_resource is NULL here since we didn't call request_mem_region */
+    /* tx_isp_subdev_init will populate this field when it requests the region */
+    *((struct resource**)((char*)csi_dev + 0x138)) = NULL;
 
     /* Binary Ninja: private_raw_mutex_init($v0 + 0x12c) */
     mutex_init(&csi_dev->mlock);
@@ -1623,8 +1619,6 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     pr_info("*** csi_device_probe: Binary Ninja CSI device created successfully ***\n");
     return 0;
 
-err_release_mem:
-    release_mem_region(0x10022000, 0x1000);
 err_free_dev:
     kfree(csi_dev);
     return ret;

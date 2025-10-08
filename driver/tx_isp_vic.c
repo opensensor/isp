@@ -2645,7 +2645,6 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
     return ret;
 }
 
-/* BINARY NINJA REFERENCE: Simple vic_core_s_stream matching reference driver */
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vic_device *vic_dev;

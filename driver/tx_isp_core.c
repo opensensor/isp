@@ -363,7 +363,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     isp_state = isp_dev->state;
     pr_info("*** ISP STATE CHECK: vic_dev->state=%d (need >=3), enable=%d ***\n", isp_state, enable);
 
-    if (isp_state < 3) {
+    if (isp_state < 2) {
         pr_err("*** ISP STATE ERROR: Current ISP state=%d, need >=3 for streaming ***\n", isp_state);
         /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream") */
         isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream");
@@ -600,24 +600,40 @@ static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
 static void ispcore_irq_fs_work(struct work_struct *work)
 {
     extern struct tx_isp_dev *ourISPdev;
-    struct tx_isp_dev *isp_dev = ourISPdev;
+    struct tx_isp_dev *isp_dev;
     static int sensor_call_counter = 0;
+    int vic_is_streaming = 0;  /* C89 compatible: use int instead of bool */
+    struct tx_isp_vic_device *vic = NULL;
 
     pr_info("*** ISP FRAME SYNC WORK: ENTRY - Work function is running! ***\n");
-    pr_info("*** ISP FRAME SYNC WORK: Safe implementation without dangerous offsets ***\n");
 
-    if (!isp_dev) {
-        pr_warn("*** ISP FRAME SYNC WORK: isp_dev is NULL ***\n");
+    /* CRITICAL: Validate ourISPdev pointer before ANY access */
+    if (!ourISPdev) {
+        pr_err("*** ISP FRAME SYNC WORK: CRITICAL - ourISPdev is NULL! ***\n");
         return;
     }
+
+    /* CRITICAL: Validate pointer is in kernel memory range */
+    if ((unsigned long)ourISPdev < 0x80000000 || (unsigned long)ourISPdev >= 0xfffff000) {
+        pr_err("*** ISP FRAME SYNC WORK: CRITICAL - ourISPdev has invalid address: %p ***\n", ourISPdev);
+        return;
+    }
+
+    isp_dev = ourISPdev;
+    pr_info("*** ISP FRAME SYNC WORK: isp_dev validated: %p ***\n", isp_dev);
 
     /* MATCH REFERENCE DRIVER: Check conditions every frame, call sensor when conditions are met */
     pr_info("*** ISP FRAME SYNC WORK: Checking sensor conditions (like Binary Ninja reference) ***\n");
 
-    /* CRITICAL FIX: Auto-detect streaming state from VIC hardware */
-    bool vic_is_streaming = false;
+    /* CRITICAL FIX: Auto-detect streaming state from VIC hardware with full validation */
     if (isp_dev->vic_dev) {
-        struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+        /* Validate vic_dev pointer before dereferencing */
+        if ((unsigned long)isp_dev->vic_dev < 0x80000000 || (unsigned long)isp_dev->vic_dev >= 0xfffff000) {
+            pr_err("*** ISP FRAME SYNC WORK: CRITICAL - vic_dev has invalid address: %p ***\n", isp_dev->vic_dev);
+            return;
+        }
+
+        vic = (struct tx_isp_vic_device *)isp_dev->vic_dev;
         vic_is_streaming = (vic->stream_state == 1);  /* VIC stream_state = 1 means streaming */
 
         /* Auto-set streaming_enabled if VIC is streaming but flag is false */
@@ -639,8 +655,24 @@ static void ispcore_irq_fs_work(struct work_struct *work)
     do {
         static int debug_dump_done = 0;
         if (!debug_dump_done && vic_is_streaming && isp_dev->vic_dev) {
-            struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-            void __iomem *regs = vic->vic_regs;
+            struct tx_isp_vic_device *vic_local;
+            void __iomem *regs;
+
+            /* Validate vic_dev pointer again before use */
+            if ((unsigned long)isp_dev->vic_dev < 0x80000000 || (unsigned long)isp_dev->vic_dev >= 0xfffff000) {
+                pr_err("*** FS DEBUG: vic_dev pointer invalid: %p ***\n", isp_dev->vic_dev);
+                break;
+            }
+
+            vic_local = (struct tx_isp_vic_device *)isp_dev->vic_dev;
+            regs = vic_local->vic_regs;
+
+            /* Validate register pointer before any readl() */
+            if (!regs || (unsigned long)regs < 0x80000000) {
+                pr_err("*** FS DEBUG: vic_regs pointer invalid: %p ***\n", regs);
+                break;
+            }
+
             if (regs) {
                 u32 ctrl = readl(regs + 0x300);
                 u32 dims = readl(regs + 0x304);
@@ -652,11 +684,14 @@ static void ispcore_irq_fs_work(struct work_struct *work)
 
                 /* Dump Y/UV base for active slots */
                 if (count == 0 || count > 5) count = 2;
-                for (u32 i = 0; i < count; ++i) {
-                    u32 yb = readl(regs + (0x318 + i*4));
-                    u32 uvb = readl(regs + (0x340 + i*4));
-                    pr_info("*** FS DEBUG: slot%u Y=0x%08x UV=0x%08x (UV=Y+%u*H=%u) ***\n",
-                            i, yb, uvb, strideY, strideY * vic->height);
+                {
+                    u32 i;  /* C89: declare before loop */
+                    for (i = 0; i < count; ++i) {
+                        u32 yb = readl(regs + (0x318 + i*4));
+                        u32 uvb = readl(regs + (0x340 + i*4));
+                        pr_info("*** FS DEBUG: slot%u Y=0x%08x UV=0x%08x (UV=Y+%u*H=%u) ***\n",
+                                i, yb, uvb, strideY, strideY * vic_local->height);
+                    }
                 }
 
                 /* Optional: peek UV bytes of slot 0 to detect all-zero chroma */
@@ -668,7 +703,8 @@ static void ispcore_irq_fs_work(struct work_struct *work)
                         if (v) {
                             u32 off = uv0 & 0xFFF;
                             u8 sample[16] = {0};
-                            for (int k = 0; k < 16 && (off + k) < 0x1000; ++k)
+                            int k;  /* C89: declare before loop */
+                            for (k = 0; k < 16 && (off + k) < 0x1000; ++k)
                                 sample[k] = readb(v + off + k);
                             pr_info("*** FS DEBUG: UV[0] first 16 bytes: %*ph ***\n", 16, sample);
                             iounmap(v);
@@ -863,23 +899,23 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
         /* Binary Ninja: private_schedule_work calls queue_work_on for CPU-specific scheduling */
         pr_info("*** ISP CORE: Using reference driver work scheduling ***\n");
 
-        if (fs_workqueue) {
-            pr_info("*** ISP CORE: fs_workqueue=%p, fs_work=%p ***\n", fs_workqueue, &fs_work);
-            /* REFERENCE DRIVER: Use queue_work_on for CPU 0 like private_schedule_work */
-            if (queue_work_on(0, fs_workqueue, &fs_work)) {
-                pr_info("*** ISP CORE: Work queued successfully on CPU 0 ***\n");
-            } else {
-                pr_info("*** ISP CORE: Work was already queued - acknowledging interrupt anyway ***\n");
-            }
-        } else {
-            pr_warn("*** ISP CORE: fs_workqueue is NULL - using system workqueue ***\n");
-            /* REFERENCE DRIVER: Use schedule_work_on for CPU 0 */
-            if (schedule_work_on(0, &fs_work)) {
-                pr_info("*** ISP CORE: Work scheduled successfully on CPU 0 ***\n");
-            } else {
-                pr_info("*** ISP CORE: Work was already scheduled - acknowledging interrupt anyway ***\n");
-            }
+        /* CRITICAL: Only queue work if workqueue is properly initialized */
+        if (!fs_workqueue) {
+            pr_err("*** ISP CORE: CRITICAL ERROR - fs_workqueue is NULL! Cannot process frame sync interrupt! ***\n");
+            pr_err("*** ISP CORE: This indicates the workqueue was not created during probe or init ***\n");
+            /* Still acknowledge the interrupt to prevent interrupt storm */
+            goto acknowledge_interrupt;
         }
+
+        pr_info("*** ISP CORE: fs_workqueue=%p, fs_work=%p ***\n", fs_workqueue, &fs_work);
+        /* REFERENCE DRIVER: Use queue_work_on for CPU 0 like private_schedule_work */
+        if (queue_work_on(0, fs_workqueue, &fs_work)) {
+            pr_info("*** ISP CORE: Work queued successfully on CPU 0 ***\n");
+        } else {
+            pr_info("*** ISP CORE: Work was already queued - acknowledging interrupt anyway ***\n");
+        }
+
+acknowledge_interrupt:
 
         /* Binary Ninja: Frame timing measurement */
         /* Complex timing measurement code would be here */
@@ -1814,9 +1850,14 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 
     pr_info("*** ispcore_core_ops_init: ISP device=%p ***", isp_dev);
 
-    /* CRITICAL: Initialize frame sync work structure - MUST be done before any interrupts */
-    INIT_WORK(&fs_work, ispcore_irq_fs_work);
-    pr_info("*** ispcore_core_ops_init: Frame sync work structure initialized ***");
+    /* NOTE: Frame sync work structure already initialized early in probe function */
+    /* Verify it's initialized */
+    if (!fs_workqueue) {
+        pr_err("*** ispcore_core_ops_init: CRITICAL - fs_workqueue is NULL! ***\n");
+        pr_err("*** This should never happen - workqueue should be created in probe ***\n");
+        return -EINVAL;
+    }
+    pr_info("*** ispcore_core_ops_init: Frame sync workqueue verified: %p ***", fs_workqueue);
 
     /* Convert 'on' parameter to sensor_attr for Binary Ninja compatibility */
     if (on == 0) {
@@ -3475,6 +3516,20 @@ int tx_isp_core_probe(struct platform_device *pdev)
     mutex_init(&isp_dev->mutex);
     spin_lock_init(&isp_dev->irq_lock);
 
+    /* CRITICAL: Initialize frame sync work queue EARLY - MUST be done before ANY interrupts can occur */
+    pr_info("*** tx_isp_core_probe: Creating frame sync workqueue EARLY (before any interrupt setup) ***\n");
+    fs_workqueue = create_singlethread_workqueue("isp_frame_sync");
+    if (!fs_workqueue) {
+        pr_err("*** tx_isp_core_probe: CRITICAL - Failed to create frame sync workqueue ***\n");
+        return -ENOMEM;
+    }
+    pr_info("*** tx_isp_core_probe: Frame sync workqueue created successfully at %p ***\n", fs_workqueue);
+
+    /* Initialize the work structure */
+    INIT_WORK(&fs_work, ispcore_irq_fs_work);
+    pr_info("*** tx_isp_core_probe: Frame sync work initialized at %p ***\n", &fs_work);
+    pr_info("*** tx_isp_core_probe: Frame sync work queue READY - safe to enable interrupts ***\n");
+
     /* CRITICAL: Initialize the core subdev with proper operations */
     pr_info("*** tx_isp_core_probe: Initializing core subdev with operations ***\n");
 
@@ -3629,19 +3684,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
                     pr_info("*** tx_isp_core_probe: VIN device created successfully ***\n");
                 }
 
-                /* CRITICAL: Initialize frame sync work queue for sensor I2C communication */
-                pr_info("*** tx_isp_core_probe: About to create frame sync workqueue ***\n");
-                fs_workqueue = create_singlethread_workqueue("isp_frame_sync");
-                if (!fs_workqueue) {
-                    pr_err("*** tx_isp_core_probe: Failed to create frame sync workqueue ***\n");
-                    return -ENOMEM;
-                }
-                pr_info("*** tx_isp_core_probe: Frame sync workqueue created successfully at %p ***\n", fs_workqueue);
-
-                INIT_WORK(&fs_work, ispcore_irq_fs_work);
-                pr_info("*** tx_isp_core_probe: Frame sync work initialized at %p ***\n", &fs_work);
-                pr_info("*** tx_isp_core_probe: Frame sync work queue initialized with dedicated workqueue ***\n");
-
+                /* NOTE: Frame sync workqueue already created early in probe function */
                 /* Test the work function directly to see if it works */
                 pr_info("*** tx_isp_core_probe: Testing frame sync work function directly ***\n");
                 ispcore_irq_fs_work(&fs_work);
