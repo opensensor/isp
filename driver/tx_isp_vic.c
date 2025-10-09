@@ -1337,17 +1337,11 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(reg_100_value, vic_regs + 0x100);
         pr_info("*** BINARY NINJA: reg 0x100 = 0x%x (MIPI calculation) ***\n", reg_100_value);
 
-        /* 4. Register 0x10c - Use hardware-expected value instead of 0x0 */
-        u32 reg_10c_value = 0x2c000;  /* Hardware auto-correction shows this is the expected value */
-        writel(reg_10c_value, vic_regs + 0x10c);
-        pr_info("*** BINARY NINJA: reg 0x10c = 0x%x (hardware-expected value) ***\n", reg_10c_value);
+        /* DISABLED per working branch: defer MIPI timing/packing (0x10c, 0x110-0x11c)
+         * These writes interfered with CSI/MIPI bring-up. Allow sensor/CSI path to program them.
+         */
+        pr_info("*** VIC: Skipping writes to 0x10c and 0x110-0x11c (defer to CSI/MIPI path) ***\n");
 
-        /* 5. Registers 0x110-0x11c - Use hardware-expected values */
-        writel(0x7800000, vic_regs + 0x110);  /* Hardware auto-correction shows this is expected */
-        writel(0x0, vic_regs + 0x114);
-        writel(0x0, vic_regs + 0x118);
-        writel(0x0, vic_regs + 0x11c);
-        pr_info("*** BINARY NINJA: regs 0x110-0x11c configured with hardware-expected values ***\n");
 
         /* 6. Frame mode registers */
         writel(0x4440, vic_regs + 0x1ac);  /* Binary Ninja default for interface type 1 */
@@ -2274,6 +2268,16 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
                 wmb();
                 pr_info("*** BINARY NINJA EXACT: Wrote 0x%x to reg 0x300 (buffer_count=%d, formula: (count<<16)|0x80000020) ***\n",
                         stream_ctrl, buffer_count);
+
+                /* Enable VIC IRQs before CONFIG and RUN (per working branch) */
+                writel(0x3FFFFFFF, vic_base + 0x1e0);
+                writel(0x0000000F, vic_base + 0x1e4);
+                if (vic_dev->vic_regs_secondary) {
+                    writel(0x3FFFFFFF, vic_dev->vic_regs_secondary + 0x1e0);
+                    writel(0x0000000F, vic_dev->vic_regs_secondary + 0x1e4);
+                }
+                wmb();
+                pr_info("*** VIC IRQ enable: [0x1e0]=0x3FFFFFFF [0x1e4]=0x0000000F (mirrored if secondary) ***\n");
 
                 /* Transition to RUN after programming control, mirror if secondary present */
                 writel(1, vic_base + 0x0);

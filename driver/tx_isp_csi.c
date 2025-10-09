@@ -1081,8 +1081,8 @@ static void csi_dump_once_to_file(struct tx_isp_csi_device *csi_dev)
                    readl(csi_base + 0x20), readl(csi_base + 0x24), readl(csi_base + 0x40));
 
     if (isp_csi_regs) {
-        n += scnprintf(buf + n, sizeof(buf) - n, "[WRAP ] 0x000=%08x 0x080=%08x 0x110=%08x 0x114=%08x 0x128=%08x\n",
-                       readl(isp_csi_regs + 0x000), readl(isp_csi_regs + 0x080), readl(isp_csi_regs + 0x110),
+        n += scnprintf(buf + n, sizeof(buf) - n, "[WRAP ] 0x000=%08x 0x080=%08x 0x10C=%08x 0x110=%08x 0x114=%08x 0x128=%08x\n",
+                       readl(isp_csi_regs + 0x000), readl(isp_csi_regs + 0x080), readl(isp_csi_regs + 0x10C), readl(isp_csi_regs + 0x110),
                        readl(isp_csi_regs + 0x114), readl(isp_csi_regs + 0x128));
         n += scnprintf(buf + n, sizeof(buf) - n, "[WRAP ] 0x160=%08x 0x1E0=%08x 0x260=%08x\n",
                        readl(isp_csi_regs + 0x160), readl(isp_csi_regs + 0x1E0), readl(isp_csi_regs + 0x260));
@@ -1167,6 +1167,62 @@ int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
                  * via tx_isp_configure_clocks, so we don't need to initialize them here.
                  * The clocks are already enabled and ready to use. */
                 pr_info("tx_isp_csi_activate_subdev: CSI clocks already initialized centrally\n");
+
+                /* Ensure CPM ungate for CSI/MIPI path (mirrors vic_start pattern; read-modify-write) */
+                do {
+                    void __iomem *cpm = ioremap(0x10000000, 0x1000);
+                    if (cpm) {
+                        u32 clkgr1 = readl(cpm + 0x28);
+                        u32 before = clkgr1;
+                        /* Candidates expanded per dump: include 1,4,5,7,8,9 and now 12,13 (remaining in 0x33a0) */
+                        u32 mask = (1u << 1) | (1u << 4) | (1u << 5) | (1u << 7) | (1u << 8) | (1u << 9) | (1u << 12) | (1u << 13);
+                        clkgr1 &= ~mask;
+                        if (clkgr1 != before) {
+                            writel(clkgr1, cpm + 0x28);
+                            wmb();
+                            pr_info("[CPM] Ungate CLKGR1 bits mask=0x%08x: %08x -> %08x\n", mask, before, clkgr1);
+                            msleep(2);
+                        } else {
+                            pr_info("[CPM] CLKGR1 CSI/MIPI candidate bits already ungated: %08x\n", clkgr1);
+                        }
+
+                        /* Conservative CPM reset handshake (reference sequence) */
+                        do {
+                            u32 val = readl(cpm + 0xC4);
+                            pr_info("[CPM] Reset pre-status @0xC4 = 0x%08x\n", val);
+                            /* Trigger reset (bit 21) */
+                            val |= 0x00200000; /* TX_ISP_RESET_TRIGGER */
+                            writel(val, cpm + 0xC4);
+                            wmb();
+
+                            /* Wait up to ~1s for READY (bit 20) */
+                            {
+                                int timeout = 500;
+                                while (timeout-- > 0) {
+                                    val = readl(cpm + 0xC4);
+                                    if (val & 0x00100000) /* TX_ISP_RESET_READY */
+                                        break;
+                                    msleep(2);
+                                }
+                                pr_info("[CPM] Reset READY status @0xC4 = 0x%08x\n", val);
+                            }
+
+                            /* Complete reset: set bit22, then clear it */
+                            val = readl(cpm + 0xC4);
+                            val = (val | 0x00400000);           /* set COMPLETE */
+                            writel(val, cpm + 0xC4);
+                            wmb();
+                            val &= ~0x00400000;                 /* clear COMPLETE */
+                            writel(val, cpm + 0xC4);
+                            wmb();
+                            pr_info("[CPM] Reset post-status @0xC4 = 0x%08x\n", readl(cpm + 0xC4));
+                        } while (0);
+
+                        iounmap(cpm);
+                    } else {
+                        pr_warn("[CPM] Unable to ioremap CPM for CSI ungate\n");
+                    }
+                } while (0);
             }
 
             /* Binary Ninja: private_mutex_unlock($s1_1 + 0x12c) */
