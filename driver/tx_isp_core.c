@@ -1599,9 +1599,15 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
                 }
             }
 
-            /* Binary Ninja: *($s0_1 + 0xe8) = 1 - SAFE: Set VIC state to 1 */
+            /* Binary Ninja: *($s0_1 + 0xe8) = 1 - SAFE: Set ISP state to 1 */
             isp_dev->state = 1;
-            pr_info("ispcore_slake_module: Set VIC state to INIT (1)");
+            pr_info("ispcore_slake_module: Set ISP state to INIT (1)");
+
+            /* CRITICAL FIX: Also set VIC state to 1 so ispcore_activate_module will run on next stream-on */
+            if (vic_dev) {
+                vic_dev->state = 1;
+                pr_info("ispcore_slake_module: Set VIC state to INIT (1) - ispcore_activate_module will run on next stream-on");
+            }
         }
 
         /* CRITICAL FIX: Subdev processing should happen regardless of VIC state */

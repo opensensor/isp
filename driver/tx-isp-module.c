@@ -2403,6 +2403,14 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
 
                     /* Binary Ninja: Call subdev init function */
                     struct tx_isp_subdev *sd = (struct tx_isp_subdev *)current_subdev;
+                    pr_info("*** INIT LOOP: subdev[%d] sd=%p, ops=%p ***\n", i, sd, sd->ops);
+                    if (sd->ops) {
+                        pr_info("*** INIT LOOP: subdev[%d] ops->core=%p ***\n", i, sd->ops->core);
+                        if (sd->ops->core) {
+                            pr_info("*** INIT LOOP: subdev[%d] ops->core->init=%p ***\n", i, sd->ops->core->init);
+                        }
+                    }
+
                     if (sd->ops && sd->ops->core && sd->ops->core->init) {
                         pr_info("Calling subdev %d initialization (REVERSE ORDER - sensors first)\n", i);
                         subdev_result = sd->ops->core->init(sd, 1);
@@ -2413,6 +2421,8 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                             isp_printf(2, "Err [VIC_INT] : mipi ch1 hcomp err !!!\n", i);
                             break;
                         }
+                    } else {
+                        pr_info("*** INIT LOOP: subdev[%d] SKIPPED - no core->init function ***\n", i);
                     }
                 }
 
@@ -2465,8 +2475,16 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
 
         /* CRITICAL FIX: Step 1: Activate core module (VIC 1 → 2 state transition) */
         struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)dev->vic_dev;
-        if (vic_dev && vic_dev->state == 1) {
-            pr_info("*** tx_isp_video_s_stream: VIC state is 1, calling activate_module ***\n");
+
+        /* CRITICAL FIX: Run activate_module if VIC state < 4 (not streaming) */
+        /* This ensures CSI lane config runs even if stream-off didn't reset state to 1 */
+        if (vic_dev && vic_dev->state < 4) {
+            pr_info("*** tx_isp_video_s_stream: VIC state is %d (< 4), calling activate_module ***\n", vic_dev->state);
+
+            /* Force VIC state to 1 so ispcore_activate_module will run */
+            vic_dev->state = 1;
+            pr_info("*** tx_isp_video_s_stream: Forced VIC state to 1 for initialization ***\n");
+
             result = ispcore_activate_module(dev);
             if (result != 0) {
                 pr_err("tx_isp_video_s_stream: ispcore_activate_module failed: %d\n", result);

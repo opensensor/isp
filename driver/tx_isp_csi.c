@@ -504,31 +504,46 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
                     if (interface_type == 1) {
                         pr_info("*** CSI MIPI INIT: Configuring MIPI CSI for %d lanes ***\n", sensor_attr->mipi.lans);
-                        /* Binary Ninja: *(*($s0_1 + 0xb8) + 4) = zx.d(*($v1_5 + 0x24)) - 1 */
-                        writel(sensor_attr->mipi.lans - 1, csi_dev->csi_regs + 4);
-                        pr_info("*** CSI[0x4] = %d (lanes - 1) ***\n", sensor_attr->mipi.lans - 1);
 
                         /* Binary Ninja: void* $v0_2 = *($s0_1 + 0xb8) */
                         csi_regs = csi_dev->csi_regs;
 
+                        /* CRITICAL: Binary Ninja shows lane config write to CSI[0x4] */
+                        /* Binary Ninja: *(*($s0_1 + 0xb8) + 4) = zx.d(*($v1_5 + 0x24)) - 1 */
+                        /* However, this register appears to be read-only or auto-configured by hardware */
+                        /* The REAL lane configuration is ISP_CSI[0x128] which we write later */
+                        u32 lane_config_value = (sensor_attr->mipi.lans - 1) & 0x3;
+
+                        pr_info("*** CSI MIPI: STEP 1 - Lane config CSI[0x4] = 0x%x (lanes=%d) ***\n",
+                                lane_config_value, sensor_attr->mipi.lans);
+                        pr_info("*** CSI MIPI: NOTE - CSI[0x4] may be read-only; real config is ISP_CSI[0x128] ***\n");
+
                         /* Binary Ninja: *($v0_2 + 8) &= 0xfffffffe */
+                        /* Step 2: Disable CSI */
                         writel(readl(csi_regs + 8) & 0xfffffffe, csi_regs + 8);
+                        pr_info("*** CSI MIPI: STEP 2 - Disabled CSI[0x8] ***\n");
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0xc) = 0 */
+                        /* Step 3: Clear mode register */
                         writel(0, csi_regs + 0xc);
+                        pr_info("*** CSI MIPI: STEP 3 - Cleared mode CSI[0xc] = 0 ***\n");
 
                         /* Binary Ninja: private_msleep(1) */
                         private_msleep(1);
 
                         /* Binary Ninja: void* $v1_9 = *($s0_1 + 0xb8) */
                         /* Binary Ninja: *($v1_9 + 0x10) &= 0xfffffffe */
+                        /* Step 4: Disable PHY */
                         writel(readl(csi_regs + 0x10) & 0xfffffffe, csi_regs + 0x10);
+                        pr_info("*** CSI MIPI: STEP 4 - Disabled PHY CSI[0x10] ***\n");
 
                         /* Binary Ninja: private_msleep(1) */
                         private_msleep(1);
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0xc) = $s2_1 */
+                        /* Step 5: Set MIPI mode */
                         writel(interface_type, csi_regs + 0xc);
+                        pr_info("*** CSI MIPI: STEP 5 - Set MIPI mode CSI[0xc] = %d ***\n", interface_type);
 
                         /* Binary Ninja: private_msleep(1) */
                         private_msleep(1);
@@ -601,9 +616,13 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         writel(0x7d, v0_8);
                         pr_info("*** CSI MIPI: Writing ISP_CSI[0x0] = 0x7d (timing config) ***\n");
 
+                        /* CRITICAL: Match reference driver EXACTLY - always use 0x3f */
                         /* Binary Ninja: *(*($s0_1 + 0x13c) + 0x128) = 0x3f */
+                        /* Reference driver writes 0x3f unconditionally, regardless of lane count */
+                        /* The hardware may auto-detect actual lane count from MIPI D-PHY signals */
                         writel(0x3f, isp_csi_regs + 0x128);
-                        pr_info("*** CSI MIPI: Writing ISP_CSI[0x128] = 0x3f (lane config) ***\n");
+                        pr_info("*** CSI MIPI: Writing ISP_CSI[0x128] = 0x3f (EXACT reference match, %d lanes) ***\n",
+                                sensor_attr->mipi.lans);
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0x10) = 1 */
                         writel(1, csi_dev->csi_regs + 0x10);

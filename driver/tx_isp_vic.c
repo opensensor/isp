@@ -2430,12 +2430,21 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
             pr_info("*** vic_core_s_stream: current_state=%d (enable=%d) ***\n", current_state, enable);
 
             if (enable == 0) {
-                /* Stream OFF - BINARY NINJA REFERENCE: No adjustment function */
+                /* Stream OFF - Call slake to reset VIC state to 1 */
                 ret = 0;
-                /* Keep OFF path unchanged: do not force frame-channel on OFF */
                 if (current_state == 4) {
                     vic_dev->state = 3;
                     pr_info("vic_core_s_stream: Stream OFF - state 4 -> 3\n");
+
+                    /* CRITICAL FIX: Call ispcore_slake_module during stream-OFF to reset VIC state to 1 */
+                    /* This ensures that on the next stream-ON, ispcore_activate_module will run */
+                    extern int ispcore_slake_module(struct tx_isp_dev *isp_dev);
+                    extern struct tx_isp_dev *ourISPdev;
+                    if (ourISPdev) {
+                        pr_info("*** VIC STREAM OFF: Calling ispcore_slake_module to reset state to 1 ***\n");
+                        ispcore_slake_module(ourISPdev);
+                        pr_info("*** VIC STREAM OFF: ispcore_slake_module complete, VIC state should be 1 ***\n");
+                    }
                 }
             } else {
                 /* Stream ON - Binary Ninja: if (state != 4) */
@@ -2449,14 +2458,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                     ret = tx_isp_vic_start(vic_dev);
                     pr_info("*** vic_core_s_stream: tx_isp_vic_start returned %d ***\n", ret);
 
-                    extern int ispcore_slake_module(struct tx_isp_dev *isp_dev);
-                    extern struct tx_isp_dev *ourISPdev;
-                    if (ourISPdev) {
-                        pr_info("*** VIC STATE 4: Calling ispcore_slake_module (reference behavior) ***\n");
-                        ispcore_slake_module(ourISPdev);
-                    } else {
-                        pr_warn("*** VIC STATE 4: ourISPdev is NULL; cannot call ispcore_slake_module ***\n");
-                    }
+                    /* REMOVED: ispcore_slake_module call moved to stream-OFF path */
+                    /* This allows VIC state to remain 1 after stream-OFF, so ispcore_activate_module runs on next stream-ON */
 
                     /* Binary Ninja: state = 4 */
                     vic_dev->state = 4;
@@ -2754,8 +2757,12 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Set platform driver data after successful init */
     platform_set_drvdata(pdev, vic_dev);
 
-    /* Set file operations */
-    sd->ops = &isp_vic_frd_fops;
+    /* CRITICAL FIX: DO NOT overwrite sd->ops here!
+     * sd->ops was correctly set by tx_isp_subdev_init() to &vic_subdev_ops
+     * which contains the core->init function pointer needed for initialization.
+     * The isp_vic_frd_fops is a file_operations structure for /proc, not subdev ops!
+     */
+    /* REMOVED BUGGY LINE: sd->ops = &isp_vic_frd_fops; */
 
     /* Initialize synchronization primitives (binary order) */
     spin_lock_init(&vic_dev->lock);
