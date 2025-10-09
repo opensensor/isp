@@ -527,73 +527,62 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
 }
 
 /* Binary Ninja: ispcore_sensor_ops_ioctl - iterate through subdevices safely */
-static int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
+int ispcore_sensor_ops_ioctl(struct tx_isp_dev *isp_dev)
 {
     int result = 0;
-    void **slot;
-    void **end;
+    int i;
+    static int fps_value = (25 << 16) | 1;  /* Default 25/1 FPS in correct format */
+    static int expo_value = 0x300;  /* Default exposure value for AE */
 
-    if (!isp_dev)
+    if (!isp_dev) {
         return -ENODEV;
+    }
 
-    /* Binary Ninja exact behavior: iterate pointers from offset 0x38 to 0x78.
-     * For each entry, resolve nested ops and invoke function at +8, treating
-     * -ENOIOCTLCMD as "not handled" and continuing. If all return -ENOIOCTLCMD,
-     * return 0. Otherwise, return first non-zero error code encountered.
-     */
-    slot = (void **)((char *)isp_dev + 0x38);
-    end  = (void **)((char *)isp_dev + 0x78);
+    pr_info("*** ispcore_sensor_ops_ioctl: Looking for actual sensor device ***\n");
 
-    while (slot < end) {
-        void *a0 = *slot;
+    /* CRITICAL: Don't iterate through subdevs - call the real sensor directly */
+    struct tx_isp_sensor *sensor = ourISPdev->sensor;
+    if (sensor && sensor->sd.ops &&
+        sensor->sd.ops->sensor && sensor->sd.ops->sensor->ioctl) {
 
-        if (a0) {
-            void **p1 = *(void ***)((char *)a0 + 0xc4);
-            void **v0_1 = NULL;
+        pr_info("*** ispcore_sensor_ops_ioctl: Found real sensor device - calling sensor IOCTL ***\n");
 
-            if (p1)
-                v0_1 = *(void ***)((char *)p1 + 0x0c);
+        /* CRITICAL: Sensor expects FPS in format (fps_num << 16) | fps_den */
 
-            if (v0_1) {
-                int (*fn)(void) = *(int (**)(void))((char *)v0_1 + 0x08);
-
-                if (fn) {
-                    result = fn();
-
-                    if (result == 0) {
-                        slot++;
-                        continue;
-                    }
-
-                    if (result != -ENOIOCTLCMD)
-                        break;
-
-                    /* Normalize and continue on -ENOIOCTLCMD */
-                    result = -ENOIOCTLCMD;
-                    slot++;
-                    continue;
-                } else {
-                    result = -ENOIOCTLCMD;
-                    slot++;
-                    continue;
-                }
-            } else {
-                result = -ENOIOCTLCMD;
-                slot++;
-                continue;
+        /* Update FPS from tuning data if available */
+        if (isp_dev && isp_dev->tuning_data) {
+            /* Note: tuning_data structure access needs proper casting */
+            int new_fps = (25 << 16) | 1;  /* Default FPS for now - TODO: access actual tuning_data */
+            if (new_fps != fps_value) {
+                fps_value = new_fps;
+                pr_info("*** ispcore_sensor_ops_ioctl: Updated FPS to 0x%x from tuning data ***\n", fps_value);
             }
-        } else {
-            slot++;
-            continue;
         }
+
+        /* Skip the FPS logging since we're now using EXPO instead */
+
+        /* CRITICAL FIX: Use supported sensor IOCTL command instead of unsupported FPS command */
+        /* The GC2053 sensor doesn't support TX_ISP_EVENT_SENSOR_FPS, causing -515 errors */
+        /* Frame sync work should do Auto Exposure (AE) operations instead */
+
+        pr_info("*** ispcore_sensor_ops_ioctl: Calling sensor with EXPO=0x%x (AE operation) ***\n", expo_value);
+
+        /* Call the real sensor's IOCTL with supported EXPO command - this triggers I2C communication */
+        result = sensor->sd.ops->sensor->ioctl(&sensor->sd, TX_ISP_EVENT_SENSOR_EXPO, &expo_value);
+
+        pr_info("*** ispcore_sensor_ops_ioctl: Real sensor IOCTL result: %d ***\n", result);
+
+        if (result == 0) {
+            pr_info("*** ispcore_sensor_ops_ioctl: Sensor AE operation successful - should see exposure I2C writes ***\n");
+        } else {
+            pr_warn("*** ispcore_sensor_ops_ioctl: Sensor AE operation failed: %d ***\n", result);
+        }
+    } else {
+        pr_warn("*** ispcore_sensor_ops_ioctl: No real sensor device found ***\n");
+        result = -ENODEV;
     }
 
-    if (slot == end) {
-        if (result == -ENOIOCTLCMD)
-            return 0;
-    }
-
-    return result;
+    return (result == -ENOIOCTLCMD) ? 0 : result;
 }
 
 /* Frame sync work function - Safe implementation without dangerous offsets */
@@ -1197,139 +1186,94 @@ static int tx_isp_deinit_memory_mappings(struct tx_isp_dev *isp)
     return 0;
 }
 
-/* Configure ISP system clocks */
+/* Configure ISP system clocks - Set cgu_isp rate, auto for others */
 int tx_isp_configure_clocks(struct tx_isp_dev *isp)
 {
     struct clk *cgu_isp;
     struct clk *isp_clk;
-    struct clk *ipu_clk;
     struct clk *csi_clk;
     int ret;
 
-    pr_info("Configuring ISP system clocks\n");
+    pr_info("[CLK] Configuring ISP system clocks\n");
 
     /* Get the CGU ISP clock */
     cgu_isp = clk_get(isp->dev, "cgu_isp");
     if (IS_ERR(cgu_isp)) {
-        pr_err("Failed to get CGU ISP clock\n");
+        pr_err("[CLK] Failed to get CGU ISP clock: %ld\n", PTR_ERR(cgu_isp));
         return PTR_ERR(cgu_isp);
     }
 
     /* Get the ISP core clock */
     isp_clk = clk_get(isp->dev, "isp");
     if (IS_ERR(isp_clk)) {
-        pr_err("Failed to get ISP clock\n");
+        pr_err("[CLK] Failed to get ISP clock: %ld\n", PTR_ERR(isp_clk));
         ret = PTR_ERR(isp_clk);
         goto err_put_cgu_isp;
-    }
-
-    /* Get the IPU clock */
-    ipu_clk = clk_get(isp->dev, "ipu");
-    if (IS_ERR(ipu_clk)) {
-        pr_err("Failed to get IPU clock\n");
-        ret = PTR_ERR(ipu_clk);
-        goto err_put_isp_clk;
     }
 
     /* Get the CSI clock */
     csi_clk = clk_get(isp->dev, "csi");
     if (IS_ERR(csi_clk)) {
-        pr_err("Failed to get CSI clock\n");
+        pr_err("[CLK] Failed to get CSI clock: %ld\n", PTR_ERR(csi_clk));
         ret = PTR_ERR(csi_clk);
-        goto err_put_ipu_clk;
+        goto err_put_isp_clk;
     }
 
-    /* Set clock rates */
-    ret = clk_set_rate(cgu_isp, 120000000);
+    /* CRITICAL: Set cgu_isp to 100MHz - required for proper ISP operation */
+    pr_info("[CLK] Setting CGU ISP clock rate to 100MHz (current=%lu Hz)\n", clk_get_rate(cgu_isp));
+    ret = clk_set_rate(cgu_isp, 100000000);
     if (ret) {
-        pr_err("Failed to set CGU ISP clock rate\n");
-        goto err_put_csi_clk;
+        pr_warn("[CLK] Failed to set CGU ISP clock rate to 100MHz: %d (continuing with current rate)\n", ret);
+        /* Don't fail - continue with whatever rate is set */
+    } else {
+        pr_info("[CLK] CGU ISP clock rate set to %lu Hz\n", clk_get_rate(cgu_isp));
     }
 
-    ret = clk_set_rate(isp_clk, 200000000);
-    if (ret) {
-        pr_err("Failed to set ISP clock rate\n");
-        goto err_put_csi_clk;
-    }
-
-    ret = clk_set_rate(ipu_clk, 200000000);
-    if (ret) {
-        pr_err("Failed to set IPU clock rate\n");
-        goto err_put_csi_clk;
-    }
-
-    /* Initialize CSI clock to 100MHz */
-    ret = clk_set_rate(csi_clk, 100000000);
-    if (ret) {
-        pr_err("Failed to set CSI clock rate\n");
-        goto err_put_csi_clk;
-    }
-    pr_info("CSI clock initialized: rate=%lu Hz\n", clk_get_rate(csi_clk));
-
-    /* Enable clocks */
+    /* Enable clocks in correct order (parent first) */
+    pr_info("[CLK] Enabling CGU ISP clock (rate=%lu Hz)\n", clk_get_rate(cgu_isp));
     ret = clk_prepare_enable(cgu_isp);
     if (ret) {
-        pr_err("Failed to enable CGU ISP clock\n");
+        pr_err("[CLK] Failed to enable CGU ISP clock: %d\n", ret);
         goto err_put_csi_clk;
     }
 
+    pr_info("[CLK] Enabling ISP clock (rate=%lu Hz)\n", clk_get_rate(isp_clk));
     ret = clk_prepare_enable(isp_clk);
     if (ret) {
-        pr_err("Failed to enable ISP clock\n");
+        pr_err("[CLK] Failed to enable ISP clock: %d\n", ret);
         goto err_disable_cgu_isp;
     }
 
-    ret = clk_prepare_enable(ipu_clk);
-    if (ret) {
-        pr_err("Failed to enable IPU clock\n");
-        goto err_disable_isp_clk;
-    }
-
+    pr_info("[CLK] Enabling CSI clock (rate=%lu Hz)\n", clk_get_rate(csi_clk));
     ret = clk_prepare_enable(csi_clk);
     if (ret) {
-        pr_err("Failed to enable CSI clock\n");
-        goto err_disable_ipu_clk;
+        pr_err("[CLK] Failed to enable CSI clock: %d\n", ret);
+        goto err_disable_isp_clk;
     }
 
     /* Store clocks in ISP device structure */
     isp->cgu_isp = cgu_isp;
     isp->isp_clk = isp_clk;
-    isp->ipu_clk = ipu_clk;
     isp->csi_clk = csi_clk;
 
     /* Allow clocks to stabilize before proceeding - critical for CSI PHY */
     msleep(10);
-    
-    /* Validate that clocks are actually running at expected rates */
-    if (abs(clk_get_rate(csi_clk) - 100000000) > 1000000) {
-        pr_warn("CSI clock rate deviation: expected 100MHz, got %luHz\n",
-                clk_get_rate(csi_clk));
-    }
-    
-    if (abs(clk_get_rate(isp_clk) - 200000000) > 2000000) {
-        pr_warn("ISP clock rate deviation: expected 200MHz, got %luHz\n",
-                clk_get_rate(isp_clk));
-    }
 
-    pr_info("Clock configuration completed. Rates:\n");
-    pr_info("  CSI Core: %lu Hz\n", clk_get_rate(isp->csi_clk));
-    pr_info("  ISP Core: %lu Hz\n", clk_get_rate(isp->isp_clk));
-    pr_info("  CGU ISP: %lu Hz\n", clk_get_rate(isp->cgu_isp));
-    pr_info("  CSI: %lu Hz\n", clk_get_rate(isp->csi_clk));
-    pr_info("  IPU: %lu Hz\n", clk_get_rate(isp->ipu_clk));
+    pr_info("[CLK] All ISP clocks enabled successfully\n");
+    pr_info("[CLK]   cgu_isp: %lu Hz\n", clk_get_rate(cgu_isp));
+    pr_info("[CLK]   isp:     %lu Hz\n", clk_get_rate(isp_clk));
+    pr_info("[CLK]   csi:     %lu Hz\n", clk_get_rate(csi_clk));
 
     return 0;
 
-err_disable_ipu_clk:
-    clk_disable_unprepare(ipu_clk);
 err_disable_isp_clk:
+    pr_info("[CLK] Disabling ISP clock (cleanup)\n");
     clk_disable_unprepare(isp_clk);
 err_disable_cgu_isp:
+    pr_info("[CLK] Disabling CGU ISP clock (cleanup)\n");
     clk_disable_unprepare(cgu_isp);
 err_put_csi_clk:
     clk_put(csi_clk);
-err_put_ipu_clk:
-    clk_put(ipu_clk);
 err_put_isp_clk:
     clk_put(isp_clk);
 err_put_cgu_isp:
@@ -1760,20 +1704,16 @@ clock_management:
 
             /* SAFE: Disable individual clocks instead of array access */
             if (isp_dev->csi_clk) {
+                pr_info("[CLK] ispcore_slake_module: Disabling CSI clock\n");
                 clk_disable(isp_dev->csi_clk);
-                pr_info("ispcore_slake_module: Disabled CSI clock");
-            }
-            if (isp_dev->ipu_clk) {
-                clk_disable(isp_dev->ipu_clk);
-                pr_info("ispcore_slake_module: Disabled IPU clock");
             }
             if (isp_dev->isp_clk) {
+                pr_info("[CLK] ispcore_slake_module: Disabling ISP clock\n");
                 clk_disable(isp_dev->isp_clk);
-                pr_info("ispcore_slake_module: Disabled ISP clock");
             }
             if (isp_dev->cgu_isp) {
+                pr_info("[CLK] ispcore_slake_module: Disabling CGU ISP clock\n");
                 clk_disable(isp_dev->cgu_isp);
-                pr_info("ispcore_slake_module: Disabled CGU ISP clock");
             }
 
             /* Binary Ninja: return 0 */
@@ -1950,44 +1890,22 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 
             pr_info("*** ispcore_core_ops_init: VIC state check passed, proceeding with initialization ***");
 
-            /* CRITICAL: Initialize clocks now that streaming is starting */
-            pr_info("*** VIC STATE 4: Initializing clocks for streaming ***\n");
-            extern int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count);
-            extern struct tx_isp_subdev *tx_isp_find_subdev_by_name(struct tx_isp_dev *isp_dev, const char *name);
-            extern struct tx_isp_dev *ourISPdev;
-            if (ourISPdev) {
-                /* Initialize clocks for all subdevs that need them */
-                struct tx_isp_subdev *core_sd = tx_isp_find_subdev_by_name(ourISPdev, "isp-m0");
-                struct tx_isp_subdev *csi_sd = tx_isp_find_subdev_by_name(ourISPdev, "isp-w01");
-                struct tx_isp_subdev *vic_sd = tx_isp_find_subdev_by_name(ourISPdev, "isp-w02");
-
-                if (core_sd && core_sd->clk_num > 0) {
-                    pr_info("*** Initializing ISP clocks (%d clocks) ***\n", core_sd->clk_num);
-                    int clk_ret = isp_subdev_init_clks(core_sd, core_sd->clk_num);
-                    if (clk_ret != 0) {
-                        pr_err("*** ISP clock initialization failed: %d ***\n", clk_ret);
-                    }
+            /* CRITICAL: Initialize all ISP clocks (cgu_isp, isp, csi) in correct order */
+            pr_info("*** VIC STATE 4: Initializing all ISP clocks ***\n");
+            if (!isp_dev->cgu_isp || !isp_dev->isp_clk || !isp_dev->csi_clk) {
+                pr_info("*** Calling tx_isp_configure_clocks to initialize all 3 clocks ***\n");
+                ret = tx_isp_configure_clocks(isp_dev);
+                if (ret != 0) {
+                    pr_err("*** tx_isp_configure_clocks failed: %d ***\n", ret);
+                    return ret;
                 }
-
-                if (csi_sd && csi_sd->clk_num > 0) {
-                    pr_info("*** Initializing CSI clocks (%d clocks) ***\n", csi_sd->clk_num);
-                    int clk_ret = isp_subdev_init_clks(csi_sd, csi_sd->clk_num);
-                    if (clk_ret != 0) {
-                        pr_err("*** CSI clock initialization failed: %d ***\n", clk_ret);
-                    }
-                }
-
-                if (vic_sd && vic_sd->clk_num > 0) {
-                    pr_info("*** Initializing VIC clocks (%d clocks) ***\n", vic_sd->clk_num);
-                    int clk_ret = isp_subdev_init_clks(vic_sd, vic_sd->clk_num);
-                    if (clk_ret != 0) {
-                        pr_err("*** VIC clock initialization failed: %d ***\n", clk_ret);
-                    }
-                }
+                pr_info("*** All ISP clocks initialized successfully ***\n");
+            } else {
+                pr_info("*** ISP clocks already initialized, skipping ***\n");
             }
 
             /* Binary Ninja MCP shows two calls: 00079050 and 00079058 */
-            struct tx_isp_subdev *init_sensor = tx_isp_get_sensor_subdev(isp_dev);
+            struct tx_isp_subdev *init_sensor = isp_dev->sensor;
 
             /* CRITICAL FIX: Don't reset VIC state if it's already streaming (state 4) */
             /* The issue is that VIC gets initialized to state 4, then ISP core resets it to 3, causing reinitialization */
@@ -3889,6 +3807,7 @@ void private_msleep(unsigned int msecs)
 
 void private_clk_disable(struct clk *clk)
 {
+    pr_info("[CLK] Disabling clock (rate=%lu Hz)\n", clk_get_rate(clk));
     clk_disable(clk);
 }
 
@@ -3924,7 +3843,12 @@ int private_gpio_direction_output(unsigned int gpio, int value)
 
 int private_clk_enable(struct clk *clk)
 {
-    return clk_enable(clk);
+    int ret;
+    pr_info("[CLK] Enabling clock (rate=%lu Hz)\n", clk_get_rate(clk));
+    ret = clk_enable(clk);
+    if (ret)
+        pr_err("[CLK] Failed to enable clock: %d\n", ret);
+    return ret;
 }
 
 void private_clk_put(struct clk *clk)

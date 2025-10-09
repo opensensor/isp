@@ -265,7 +265,13 @@ extern struct tx_isp_dev *ourISPdev;
 #define TX_ISP_PADLINK_DDR     0x2
 #define TX_ISP_PADLINK_ISP     0x4
 
-/* isp_subdev_init_clks - EXACT Binary Ninja MCP implementation using platform data */
+/* isp_subdev_init_clks - DEPRECATED: Use tx_isp_configure_clocks instead
+ *
+ * This function is overly complex and tries to initialize clocks per-subdev.
+ * The correct approach is to call tx_isp_configure_clocks() once in
+ * ispcore_core_ops_init, which initializes all 3 clocks (cgu_isp, isp, csi)
+ * in the correct order and stores them in isp_dev.
+ */
 int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count)
 {
     struct clk **clk_array = NULL;
@@ -362,21 +368,22 @@ int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count)
 
                 /* Binary Ninja: if ($a1_1 == 0xffff || result_1 == 0) */
                 if (clk_rate == 0xffff || result == 0) {
+                    pr_info("[CLK] Subdev: Enabling clock '%s' (rate=%lu Hz)\n", clk_name, clk_get_rate(clk));
                     ret = clk_prepare_enable(clk);
                     if (ret == 0) {
-                        pr_info("Clock %s enabled successfully\n", clk_name);
+                        pr_info("[CLK] Subdev: Clock '%s' enabled successfully\n", clk_name);
                         i++;
                         /* Binary Ninja: continue to next clock */
                         continue;
                     } else {
                         /* Binary Ninja: isp_printf(2, "sensor type is BT1120!\n", *$s6_1) */
-                        pr_warn("Failed to enable clock %s, continuing anyway\n", clk_name);
+                        pr_warn("[CLK] Subdev: Failed to enable clock '%s', continuing anyway\n", clk_name);
                         i++;
                         continue;
                     }
                 } else {
                     /* Binary Ninja: isp_printf(2, "sensor type is BT1120!\n", *$s6_1) */
-                    pr_warn("Failed to set rate for clock %s, continuing anyway\n", clk_name);
+                    pr_warn("[CLK] Subdev: Failed to set rate for clock '%s', continuing anyway\n", clk_name);
                     /* Binary Ninja: $s0_3 = $s0_2 << 2 - goto cleanup */
                     break;
                 }
@@ -424,6 +431,7 @@ cleanup_clocks:
     /* Binary Ninja: Clock cleanup loop */
     for (int j = 0; j < i; j++) {
         if (clk_array[j] && !IS_ERR(clk_array[j])) {
+            pr_info("[CLK] Subdev: Cleanup - disabling clock %d\n", j);
             clk_disable_unprepare(clk_array[j]);
             clk_put(clk_array[j]);
         }

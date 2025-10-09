@@ -160,11 +160,10 @@ struct tx_isp_dev {
     struct platform_device *core_pdev;
     struct platform_device *fs_pdev;
 
-    /* Clocks */
-    struct clk *cgu_isp;
-    struct clk *isp_clk;
-    struct clk *ipu_clk;
-    struct clk *csi_clk;
+    /* Clocks - only the 3 clocks we actually use */
+    struct clk *cgu_isp;     /* CGU ISP parent clock */
+    struct clk *isp_clk;     /* ISP core clock */
+    struct clk *csi_clk;     /* CSI interface clock */
     
     /* Centralized register mappings */
     void __iomem *core_regs;     /* ISP core registers */

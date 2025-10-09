@@ -4,6 +4,7 @@
 #include <linux/uaccess.h>
 #include "../include/tx_isp.h"
 #include "../include/tx_isp_vic.h"
+#include "../include/tx_isp_vin.h"
 
 #define TX_ISP_PROC_ISP_DIR "jz/isp"
 #define TX_ISP_PROC_ISP_W00_FILE "isp-w00"
@@ -13,6 +14,7 @@
 #define TX_ISP_PROC_VIC_FILE "isp-w02"
 #define TX_ISP_PROC_VIC_MDMA_FILE "vic-mdma"
 #define TX_ISP_PROC_VIC_DMA_ALIAS "vic-dma"
+#define TX_ISP_PROC_CLKS_FILE "clks"
 
 struct proc_context {
     struct proc_dir_entry *isp_dir;
@@ -25,6 +27,7 @@ struct proc_context {
     struct proc_dir_entry *vic_entry;
     struct proc_dir_entry *vic_mdma_entry;
     struct proc_dir_entry *vic_dma_alias_entry;
+    struct proc_dir_entry *clks_entry;
     struct tx_isp_dev *isp;
 };
 
@@ -430,6 +433,91 @@ static const struct file_operations tx_isp_proc_csi_fops = {
     .release = single_release,
 };
 
+/* Clock tracking file operations */
+static int tx_isp_proc_clks_show(struct seq_file *m, void *v)
+{
+    struct tx_isp_dev *isp = m->private;
+
+    if (!isp) {
+        seq_printf(m, "ISP device not available\n");
+        return 0;
+    }
+
+    seq_printf(m, "ISP Clock Status\n");
+    seq_printf(m, "================\n\n");
+
+    /* Main ISP clocks */
+    if (isp->cgu_isp) {
+        seq_printf(m, "cgu_isp:  rate=%lu Hz\n", clk_get_rate(isp->cgu_isp));
+    } else {
+        seq_printf(m, "cgu_isp:  NOT ACQUIRED\n");
+    }
+
+    if (isp->isp_clk) {
+        seq_printf(m, "isp_clk:  rate=%lu Hz\n", clk_get_rate(isp->isp_clk));
+    } else {
+        seq_printf(m, "isp_clk:  NOT ACQUIRED\n");
+    }
+
+    if (isp->csi_clk) {
+        seq_printf(m, "csi_clk:  rate=%lu Hz\n", clk_get_rate(isp->csi_clk));
+    } else {
+        seq_printf(m, "csi_clk:  NOT ACQUIRED\n");
+    }
+
+    seq_printf(m, "\n");
+
+    /* CSI subdevice clocks */
+    if (isp->csi_dev && isp->csi_dev->sd.clks && isp->csi_dev->sd.clk_num > 0) {
+        int i;
+        seq_printf(m, "CSI Subdevice Clocks (%d):\n", isp->csi_dev->sd.clk_num);
+        for (i = 0; i < isp->csi_dev->sd.clk_num; i++) {
+            struct clk *clk = isp->csi_dev->sd.clks[i];
+            if (clk && !IS_ERR(clk)) {
+                seq_printf(m, "  csi[%d]:   rate=%lu Hz\n", i, clk_get_rate(clk));
+            }
+        }
+        seq_printf(m, "\n");
+    }
+
+    /* VIC subdevice clocks */
+    if (isp->vic_dev && isp->vic_dev->sd.clks && isp->vic_dev->sd.clk_num > 0) {
+        int i;
+        seq_printf(m, "VIC Subdevice Clocks (%d):\n", isp->vic_dev->sd.clk_num);
+        for (i = 0; i < isp->vic_dev->sd.clk_num; i++) {
+            struct clk *clk = isp->vic_dev->sd.clks[i];
+            if (clk && !IS_ERR(clk)) {
+                seq_printf(m, "  vic[%d]:   rate=%lu Hz\n", i, clk_get_rate(clk));
+            }
+        }
+        seq_printf(m, "\n");
+    }
+
+    /* VIN subdevice clocks */
+    if (isp->vin_dev && isp->vin_dev->vin_clk) {
+        seq_printf(m, "VIN Clock:\n");
+        seq_printf(m, "  vin_clk:  rate=%lu Hz\n", clk_get_rate(isp->vin_dev->vin_clk));
+        seq_printf(m, "\n");
+    }
+
+    seq_printf(m, "\nNote: Check dmesg for [CLK] tagged messages to see enable/disable events\n");
+
+    return 0;
+}
+
+static int tx_isp_proc_clks_open(struct inode *inode, struct file *file)
+{
+    return single_open(file, tx_isp_proc_clks_show, PDE_DATA(inode));
+}
+
+static const struct file_operations tx_isp_proc_clks_fops = {
+    .owner = THIS_MODULE,
+    .open = tx_isp_proc_clks_open,
+    .read = seq_read,
+    .llseek = seq_lseek,
+    .release = single_release,
+};
+
 /* VIC file operations */
 static int tx_isp_proc_vic_show(struct seq_file *m, void *v)
 {
@@ -601,11 +689,23 @@ int tx_isp_create_proc_entries(struct tx_isp_dev *isp)
     }
     pr_info("Created alias proc entry: /proc/jz/isp/%s\n", TX_ISP_PROC_VIC_DMA_ALIAS);
 
+    /* Create /proc/jz/isp/clks - Clock tracking */
+    ctx->clks_entry = proc_create_data(TX_ISP_PROC_CLKS_FILE, 0444, ctx->isp_dir,
+                                      &tx_isp_proc_clks_fops, isp);
+    if (!ctx->clks_entry) {
+        pr_err("Failed to create clks proc entry\n");
+        goto error_remove_vicdma;
+    }
+    pr_info("Created proc entry: /proc/jz/isp/%s (clock tracking)\n", TX_ISP_PROC_CLKS_FILE);
+
     pr_info("*** ALL PROC ENTRIES CREATED SUCCESSFULLY - MATCHES REFERENCE DRIVER LAYOUT ***\n");
-    pr_info("*** /proc/jz/isp/ now contains: isp-w00, isp-w01, isp-w02, isp-fs, isp-m0, csi, vic, %s (and alias %s) ***\n",
-            TX_ISP_PROC_VIC_MDMA_FILE, TX_ISP_PROC_VIC_DMA_ALIAS);
+    pr_info("*** /proc/jz/isp/ now contains: isp-w00, isp-w01, isp-w02, isp-fs, isp-m0, csi, vic, %s (and alias %s), %s ***\n",
+            TX_ISP_PROC_VIC_MDMA_FILE, TX_ISP_PROC_VIC_DMA_ALIAS, TX_ISP_PROC_CLKS_FILE);
 
     return 0;
+
+error_remove_vicdma:
+    proc_remove(ctx->vic_dma_alias_entry);
 
 error_remove_vicmdma:
     proc_remove(ctx->vic_mdma_entry);
@@ -642,6 +742,9 @@ void tx_isp_remove_proc_entries(void)
 
     pr_info("*** tx_isp_remove_proc_entries: Cleaning up proc entries ***\n");
 
+    if (ctx->clks_entry) {
+        proc_remove(ctx->clks_entry);
+    }
     if (ctx->vic_mdma_entry) {
         proc_remove(ctx->vic_mdma_entry);
     }

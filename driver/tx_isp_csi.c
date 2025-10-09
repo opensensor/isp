@@ -930,32 +930,10 @@ int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
                 /* Binary Ninja: *($s1_1 + 0x128) = 2 */
                 csi_dev->state = 2;
 
-                /* Ensure CSI clocks are initialized before enabling */
-                if (!sd->clks && sd->clk_num > 0) {
-                    extern int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_num);
-                    pr_info("tx_isp_csi_activate_subdev: Initializing %d clocks for CSI before enabling\n", sd->clk_num);
-                    if (isp_subdev_init_clks(sd, sd->clk_num) != 0) {
-                        pr_warn("tx_isp_csi_activate_subdev: isp_subdev_init_clks failed; continuing without clocks\n");
-                    }
-                }
-
-                /* Binary Ninja: int32_t* $s1_2 = *(arg1 + 0xbc) */
-                clks = sd->clks;
-
-                /* Binary Ninja: if ($s1_2 != 0) */
-                if (clks != NULL) {
-                    /* Binary Ninja: if ($s1_2 u< 0xfffff001) */
-                    if ((unsigned long)clks < 0xfffff001) {
-                        /* Binary Ninja: while (i u< *(arg1 + 0xc0)) */
-                        clk_count = sd->clk_num;
-                        for (i = 0; i < clk_count; i++) {
-                            /* Binary Ninja: private_clk_enable(*$s1_2) */
-                            clk_enable(clks[i]);
-                        }
-                    }
-                } else {
-                    pr_warn("tx_isp_csi_activate_subdev: No CSI clocks available to enable (clks=NULL, clk_num=%d)\n", sd->clk_num);
-                }
+                /* NOTE: CSI clocks are now initialized centrally in ispcore_core_ops_init
+                 * via tx_isp_configure_clocks, so we don't need to initialize them here.
+                 * The clocks are already enabled and ready to use. */
+                pr_info("tx_isp_csi_activate_subdev: CSI clocks already initialized centrally\n");
             }
 
             /* Binary Ninja: private_mutex_unlock($s1_1 + 0x12c) */
@@ -1023,8 +1001,8 @@ int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
             for (i = sd->clk_num - 1; i >= 0; i--) {
                 if (sd->clks[i]) {
                     /* Binary Ninja: private_clk_disable(*$s0_4) */
+                    pr_info("[CLK] CSI: Disabling clock %d\n", i);
                     clk_disable(sd->clks[i]);
-                    pr_info("tx_isp_csi_slake_subdev: Disabled clock %d\n", i);
                 }
             }
         }

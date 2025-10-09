@@ -1501,7 +1501,6 @@ static int sensor_get_black_pedestal(struct tx_isp_subdev *sd, int value) {
 static int sensor_init(struct tx_isp_subdev *sd, int enable) {
 	struct tx_isp_sensor *sensor = sd_to_sensor_device(sd);
 	int ret = 0;
-	static bool sensor_initialized = false;
 
 	ISP_WARNING("*** SENSOR_INIT: %s enable=%d ***\n", SENSOR_NAME, enable);
 
@@ -1510,15 +1509,7 @@ static int sensor_init(struct tx_isp_subdev *sd, int enable) {
 		return ISP_SUCCESS;
 	}
 
-	/* CRITICAL FIX: Prevent multiple sensor initializations that cause CSI PHY reconfiguration */
-	/* Multiple sensor inits trigger CSI PHY register changes that reset ISP/VIC control registers */
-	if (sensor_initialized) {
-		ISP_WARNING("*** SENSOR_INIT: %s already initialized, skipping to prevent CSI PHY reconfiguration ***\n", SENSOR_NAME);
-		ISP_WARNING("*** SENSOR_INIT: This prevents register reset that disables ISP/VIC interrupts ***\n");
-		return ISP_SUCCESS;
-	}
-
-	ISP_WARNING("SENSOR_INIT: Configuring %s (chip_id=0x%x, %dx%d)\n",
+	ISP_WARNING("SENSOR_INIT: Configuring %s (chip_id=0x%x, %dx%d)\n", 
 	            SENSOR_NAME, SENSOR_CHIP_ID, wsize->width, wsize->height);
 
 	sensor->video.mbus.width = wsize->width;
@@ -1541,10 +1532,9 @@ static int sensor_init(struct tx_isp_subdev *sd, int enable) {
 	/* FIXED: Call our properly implemented handler directly instead of using the broken macro */
 	ret = tx_isp_call_subdev_notify(sd, TX_ISP_EVENT_SYNC_SENSOR_ATTR, &sensor->video);
 	ISP_WARNING("*** TX_ISP_EVENT_SYNC_SENSOR_ATTR RETURNED: %d ***\n", ret);
-
+	
 	sensor->priv = wsize;
 	ISP_WARNING("*** SENSOR_INIT COMPLETE FOR %s ***\n", SENSOR_NAME);
-	sensor_initialized = true;
 	return 0;
 }
 
@@ -1839,7 +1829,6 @@ static struct tx_isp_subdev_core_ops sensor_core_ops = {
 
 static struct tx_isp_subdev_video_ops sensor_video_ops = {
 	.s_stream = sensor_s_stream,
-	.link_stream = sensor_s_stream,  /* CRITICAL FIX: tx_isp_video_link_stream calls link_stream! */
 };
 
 static struct tx_isp_subdev_sensor_ops sensor_sensor_ops = {

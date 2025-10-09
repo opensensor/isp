@@ -2336,13 +2336,13 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                             unsigned long current_rate = clk_get_rate(clk_array[i]);
                             if (current_rate != 0xffff) {
                                 /* Binary Ninja: private_clk_set_rate(*$s2_1, isp_clk) */
+                                pr_info("[CLK] Module: Setting clock %d to %d Hz\n", i, isp_clk);
                                 clk_set_rate(clk_array[i], isp_clk);
-                                pr_info("Clock %d set to %d Hz\n", i, isp_clk);
                             }
 
                             /* Binary Ninja: private_clk_enable(*$s2_1) */
+                            pr_info("[CLK] Module: Enabling clock %d (rate=%lu Hz)\n", i, clk_get_rate(clk_array[i]));
                             clk_prepare_enable(clk_array[i]);
-                            pr_info("Clock %d enabled\n", i);
                         }
                     }
                 }
@@ -5315,10 +5315,11 @@ static void tx_isp_exit(void)
 
         /* Clean up clocks properly using Linux Clock Framework */
         if (ourISPdev->isp_clk) {
+            pr_info("[CLK] Module cleanup: Disabling ISP clock\n");
             clk_disable_unprepare(ourISPdev->isp_clk);
             clk_put(ourISPdev->isp_clk);
             ourISPdev->isp_clk = NULL;
-            pr_info("ISP clock disabled and released\n");
+            pr_info("[CLK] Module cleanup: ISP clock disabled and released\n");
         }
 
         /* Note: CGU_ISP and VIC clocks managed locally, no storage in device struct */

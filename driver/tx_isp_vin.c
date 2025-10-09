@@ -623,7 +623,14 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
     if (sensor->sd.ops && is_valid_kernel_pointer(sensor->sd.ops) &&
         sensor->sd.ops->video && is_valid_kernel_pointer(sensor->sd.ops->video) &&
         sensor->sd.ops->video->s_stream && is_valid_kernel_pointer(sensor->sd.ops->video->s_stream)) {
-        
+        extern int tx_isp_configure_clocks(struct tx_isp_dev *isp);
+        mcp_log_info("vin_s_stream: Initializing ISP clocks before VIN streaming", 0);
+        ret = tx_isp_configure_clocks(ourISPdev);
+        if (ret != 0) {
+            mcp_log_error("vin_s_stream: Clock initialization failed", ret);
+            return ret;
+        }
+        mcp_log_info("vin_s_stream: ISP clocks initialized successfully", 0);
         /* Binary Ninja: int32_t $v1_1 = *$v0_2 */
         /* Binary Ninja: result = $v1_1($a0, arg2) */
         mcp_log_info("vin_s_stream: calling sensor s_stream", enable);
@@ -1049,6 +1056,7 @@ int tx_isp_vin_probe(struct platform_device *pdev)
         mcp_log_error("vin_probe: failed to get clock", PTR_ERR(vin->vin_clk));
         vin->vin_clk = NULL; /* Optional clock */
     } else {
+        pr_info("[CLK] VIN: Enabling VIN clock (rate=%lu Hz)\n", clk_get_rate(vin->vin_clk));
         clk_prepare_enable(vin->vin_clk);
         mcp_log_info("vin_probe: clock enabled", 0);
     }
@@ -1072,6 +1080,7 @@ int tx_isp_vin_probe(struct platform_device *pdev)
 
 err_clk:
     if (vin->vin_clk) {
+        pr_info("[CLK] VIN: Disabling VIN clock (cleanup)\n");
         clk_disable_unprepare(vin->vin_clk);
         clk_put(vin->vin_clk);
     }
@@ -1112,6 +1121,7 @@ int tx_isp_vin_remove(struct platform_device *pdev)
 
     /* Disable and release clock */
     if (vin->vin_clk) {
+        pr_info("[CLK] VIN: Disabling VIN clock (remove)\n");
         clk_disable_unprepare(vin->vin_clk);
         clk_put(vin->vin_clk);
         mcp_log_info("vin_remove: clock disabled", 0);
