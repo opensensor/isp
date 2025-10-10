@@ -19,6 +19,16 @@ static int csi_dump_interval_ms = 1000; /* default 1s */
 module_param(csi_dump_interval_ms, int, S_IRUGO);
 MODULE_PARM_DESC(csi_dump_interval_ms, "CSI dump interval in milliseconds");
 
+/* Gate to enable the CSI dump thread (default off to avoid instability) */
+static int csi_dump_enable = 0;
+module_param(csi_dump_enable, int, S_IRUGO);
+MODULE_PARM_DESC(csi_dump_enable, "Enable CSI periodic dump to /opt/csi.txt (0=off, 1=on)");
+
+
+
+
+
+
 static const char *csi_dump_path = "/opt/csi.txt";
 
 static int csi_dump_thread_fn(void *data);
@@ -121,6 +131,8 @@ void csi_write32(u32 reg, u32 val)
     }
     writel(val, tx_isp_csi_regs + reg);
 }
+
+
 
 /* CSI interrupt handler */
 static irqreturn_t tx_isp_csi_irq_handler(int irq, void *dev_id)
@@ -375,23 +387,6 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
         v0_4 = 3;
     }
 
-    /* Before updating state, ensure CSI lane count register matches sensor attr.
-     * This mirrors reference behavior (lane = lanes-1 to CSI[0x4]) and is a no-op if already set.
-     */
-    if (enable == 1 && csi_dev->interface_type == 1) {
-        void __iomem *csi_regs_local = csi_dev->csi_regs;
-        if (csi_regs_local && ourISPdev && ourISPdev->sensor && ourISPdev->sensor->video.attr) {
-            int lanes = ourISPdev->sensor->video.attr->mipi.lans;
-            u32 expected = (lanes - 1) & 0x3;
-            u32 cur_lanes = readl(csi_regs_local + 4) & 0x3;
-            if (cur_lanes != expected) {
-                pr_info("*** csi_video_s_stream: correcting CSI[0x4] lanes: current=0x%x expected=0x%x (lanes=%d) ***\n",
-                        cur_lanes, expected, lanes);
-                csi_set_on_lanes(csi_dev, lanes);
-                pr_info("*** csi_video_s_stream: CSI[0x4] after set=0x%x ***\n", readl(csi_regs_local + 4) & 0x3);
-            }
-        }
-    }
 
     /* Ensure MIPI CSI core ops init runs for interface_type==1 before moving to STREAMING */
     if (enable && csi_dev->interface_type == 1) {
@@ -399,6 +394,8 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
         if (rc)
             pr_warn("csi_video_s_stream: csi_core_ops_init returned %d\n", rc);
     }
+
+
 
     /* Binary Ninja: *(arg1 + 0x128) = $v0_4 */
     csi_dev->state = v0_4;
@@ -677,8 +674,6 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                             lane_enable_mask = 0x31;
                         } else if (sensor_attr->mipi.lans == 2) {
                             lane_enable_mask = 0x33;
-
-
                         } else if (sensor_attr->mipi.lans >= 4) {
                             lane_enable_mask = 0x3f;
                         } else {
@@ -1079,6 +1074,14 @@ static void csi_dump_once_to_file(struct tx_isp_csi_device *csi_dev)
                    readl(csi_base + 0x0C), readl(csi_base + 0x10), readl(csi_base + 0x14));
     n += scnprintf(buf + n, sizeof(buf) - n, "[BASIC] 0x20=%08x 0x24=%08x 0x40=%08x\n",
                    readl(csi_base + 0x20), readl(csi_base + 0x24), readl(csi_base + 0x40));
+    n += scnprintf(buf + n, sizeof(buf) - n, "[BASIC] 0x128=%08x\n", readl(csi_base + 0x128));
+    n += scnprintf(buf + n, sizeof(buf) - n,
+                   "[LANEC] 0x200=%08x 0x204=%08x 0x210=%08x 0x230=%08x 0x250=%08x 0x254=%08x 0x2F4=%08x\n",
+                   readl(csi_base + 0x200), readl(csi_base + 0x204), readl(csi_base + 0x210),
+                   readl(csi_base + 0x230), readl(csi_base + 0x250), readl(csi_base + 0x254), readl(csi_base + 0x2F4));
+    /* w01 diagnostic (primary mapping 0x10023000) */
+    n += scnprintf(buf + n, sizeof(buf) - n, "[W01  ] 0x14=%08x 0x40=%08x\n", vic_read32(0x14), vic_read32(0x40));
+
 
     if (isp_csi_regs) {
         n += scnprintf(buf + n, sizeof(buf) - n, "[WRAP ] 0x000=%08x 0x080=%08x 0x10C=%08x 0x110=%08x 0x114=%08x 0x128=%08x\n",
@@ -1111,7 +1114,10 @@ static int csi_dump_thread_fn(void *data)
 
 static void csi_start_dump_thread(struct tx_isp_csi_device *csi_dev)
 {
-
+    if (!csi_dump_enable) {
+        pr_info("CSI dump thread disabled (csi_dump_enable=0)\n");
+        return;
+    }
     if (!csi_dump_kthread && csi_dev) {
         csi_dump_kthread = kthread_run(csi_dump_thread_fn, csi_dev, "csi-dump");
         if (IS_ERR(csi_dump_kthread)) {
