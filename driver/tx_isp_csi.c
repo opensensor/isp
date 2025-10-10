@@ -34,6 +34,10 @@ static const char *csi_dump_path = "/opt/csi.txt";
 static int csi_dump_thread_fn(void *data);
 static void csi_start_dump_thread(struct tx_isp_csi_device *csi_dev);
 static void csi_stop_dump_thread(void);
+static void csi_dump_once_to_file(struct tx_isp_csi_device *csi_dev, const char *tag);
+static void csi_write_file(const char *buf, size_t len);
+
+
 
 /* Forward declarations */
 int csi_core_ops_init(struct tx_isp_subdev *sd, int enable);
@@ -41,6 +45,8 @@ int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes);
 void dump_csi_reg(struct tx_isp_subdev *sd);
 extern struct tx_isp_dev *ourISPdev;
 void __iomem *tx_isp_get_vic_primary_regs(void);
+static void csi_jit_ungate_clocks(void);
+
 
 static void __iomem *tx_isp_core_regs = NULL;
 
@@ -67,6 +73,141 @@ void isp_write32(u32 reg, u32 val)
     }
     writel(val, tx_isp_core_regs + reg);
 }
+
+/* JIT ungate CSI/DPHY and wrapper clocks before BASIC/WRAP access */
+static void csi_jit_ungate_clocks(void)
+{
+    void __iomem *cpm = ioremap(0x10000000, 0x1000);
+    if (!cpm) {
+        pr_warn("[CPM][CSI] ioremap failed; cannot JIT-ungate clocks\n");
+        return;
+    }
+    /* CLKGR0 bit7: CSI/DPHY gate: 1=gated, 0=ungated */
+    u32 g0_before = readl(cpm + 0x20);
+    if (g0_before & (1u << 7)) {
+        writel(g0_before & ~(1u << 7), cpm + 0x20);
+        wmb(); udelay(5);
+        pr_info("[CPM][CSI] JIT ungate CLKGR0 bit7: %08x -> %08x\n", g0_before, readl(cpm + 0x20));
+    } else {
+        pr_info("[CPM][CSI] CLKGR0 already ungated: %08x\n", g0_before);
+    }
+    /* CLKGR1 bit2: wrapper side gate sometimes needed for CSI interactions */
+    u32 g1_before = readl(cpm + 0x28);
+    if (g1_before & (1u << 2)) {
+        writel(g1_before & ~(1u << 2), cpm + 0x28);
+        wmb(); udelay(5);
+        pr_info("[CPM][CSI] JIT ungate CLKGR1 bit2: %08x -> %08x\n", g1_before, readl(cpm + 0x28));
+    } else {
+        pr_info("[CPM][CSI] CLKGR1 already ungated: %08x\n", g1_before);
+    }
+    iounmap(cpm);
+}
+
+/* Optional CPM reset deassert for CSI: guarded by module param */
+static int csi_cpm_reset_fix = 0;
+module_param(csi_cpm_reset_fix, int, 0644);
+MODULE_PARM_DESC(csi_cpm_reset_fix, "If 1, deassert CSI-related reset bits in CPM[0x34] after unlocking CPM[0x38]=0xA5A5");
+
+static void csi_cpm_deassert_reset_if_enabled(void)
+{
+    void __iomem *cpm = ioremap(0x10000000, 0x1000);
+    if (!cpm)
+        return;
+
+    u32 r_unlock = readl(cpm + 0x38);
+    u32 r_before = readl(cpm + 0x34);
+    u32 r30      = readl(cpm + 0x30);
+    u32 r3c      = readl(cpm + 0x3C);
+    pr_info("[CPM][CSI] Reset window: unlock=0x%08x, reset_before=0x%08x (r30=0x%08x r3c=0x%08x)\n", r_unlock, r_before, r30, r3c);
+
+    /* Also emit to /opt/csi.txt so it’s visible in field logs */
+    {
+        char fbuf[256];
+        int n = 0;
+        n += scnprintf(fbuf + n, sizeof(fbuf) - n, "=== CSI DUMP ===\n");
+        n += scnprintf(fbuf + n, sizeof(fbuf) - n, "[TAG  ] CPM_RESET_FIX BEFORE\n");
+        n += scnprintf(fbuf + n, sizeof(fbuf) - n, "[CPM  ] 0x30=%08x 0x34=%08x 0x38=%08x 0x3C=%08x\n", r30, r_before, r_unlock, r3c);
+        csi_write_file(fbuf, n);
+    }
+
+    if (!csi_cpm_reset_fix) {
+        pr_info("[CPM][CSI] csi_cpm_reset_fix=0 (disabled) — not modifying CPM resets\n");
+        iounmap(cpm);
+        return;
+    }
+
+    /* Unlock (many Ingenic parts require writing 0xA5A5 before modifying reset regs) */
+    writel(0x0000A5A5, cpm + 0x38);
+    wmb();
+
+    /* Try W1C semantics first: write 1s to clear bits 0 and 8, don't touch others */
+    {
+        u32 mask = (1u << 0) | (1u << 8);
+        writel(mask, cpm + 0x34);
+        wmb();
+        udelay(5);
+    }
+
+    u32 r_after1 = readl(cpm + 0x34);
+
+    /* If unchanged, try RMW clear (RW semantics) */
+    if ((r_after1 & ((1u << 0) | (1u << 8))) == ((1u << 0) | (1u << 8))) {
+        u32 rmw = r_after1 & ~((1u << 0) | (1u << 8));
+        writel(rmw, cpm + 0x34);
+        wmb();
+        udelay(5);
+    }
+
+    /* If 0x34 still shows bits set, attempt clear via 0x30 (alternate semantics) */
+    if ((readl(cpm + 0x34) & ((1u << 0) | (1u << 8))) != 0) {
+        u32 mask = (1u << 0) | (1u << 8);
+        u32 r30b = readl(cpm + 0x30);
+        /* Try W1C on 0x30 */
+        writel(mask, cpm + 0x30);
+        wmb();
+        udelay(5);
+        u32 r30c = readl(cpm + 0x30);
+        u32 r34c = readl(cpm + 0x34);
+        if ((r34c & mask) != 0) {
+            /* Try RMW clear on 0x30 */
+            u32 rmw30 = r30c & ~mask;
+            writel(rmw30, cpm + 0x30);
+            wmb();
+            udelay(5);
+        }
+        /* Mirror this attempt to /opt as well */
+        {
+            char fbuf3[256];
+            int n3 = 0;
+            u32 r30d = readl(cpm + 0x30);
+            u32 r34d = readl(cpm + 0x34);
+            n3 += scnprintf(fbuf3 + n3, sizeof(fbuf3) - n3, "=== CSI DUMP ===\n");
+            n3 += scnprintf(fbuf3 + n3, sizeof(fbuf3) - n3, "[TAG  ] CPM_RESET_FIX TRY 0x30\n");
+            n3 += scnprintf(fbuf3 + n3, sizeof(fbuf3) - n3, "[CPM  ] 0x30=%08x->%08x 0x34=%08x->%08x\n", r30b, r30d, r_after1, r34d);
+            csi_write_file(fbuf3, n3);
+        }
+    }
+
+    {
+        u32 r_unlock2 = readl(cpm + 0x38);
+        u32 r_final   = readl(cpm + 0x34);
+        u32 r30a      = readl(cpm + 0x30);
+        u32 r3ca      = readl(cpm + 0x3C);
+        pr_info("[CPM][CSI] Reset window after deassert: unlock=0x%08x, reset_after=0x%08x (r30=0x%08x r3c=0x%08x)\n",
+                r_unlock2, r_final, r30a, r3ca);
+
+        /* Mirror to /opt/csi.txt for guaranteed capture */
+        char fbuf2[256];
+        int n2 = 0;
+        n2 += scnprintf(fbuf2 + n2, sizeof(fbuf2) - n2, "=== CSI DUMP ===\n");
+        n2 += scnprintf(fbuf2 + n2, sizeof(fbuf2) - n2, "[TAG  ] CPM_RESET_FIX AFTER\n");
+        n2 += scnprintf(fbuf2 + n2, sizeof(fbuf2) - n2, "[CPM  ] 0x30=%08x 0x34=%08x 0x38=%08x 0x3C=%08x\n", r30a, r_final, r_unlock2, r3ca);
+        csi_write_file(fbuf2, n2);
+    }
+
+    iounmap(cpm);
+}
+
 
 static void __iomem *tx_isp_vic_regs = NULL;
 
@@ -373,10 +514,18 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     }
 
     /* Binary Ninja: if (*(*(arg1 + 0x110) + 0x14) != 1) return 0 */
-    /* This checks CSI device interface type - if not MIPI (1), return 0 */
-    if (csi_dev->interface_type != 1) {
-        pr_info("csi_video_s_stream: Interface type %d != 1 (MIPI), returning 0\n", csi_dev->interface_type);
-        return 0;
+    /* Check interface type; if unknown, try to derive from active sensor attr */
+    {
+        int interface_type = csi_dev->interface_type;
+        if (interface_type == 0 && ourISPdev && ourISPdev->sensor && ourISPdev->sensor->video.attr) {
+            interface_type = ourISPdev->sensor->video.attr->dbus_type;
+            csi_dev->interface_type = interface_type;
+            pr_info("csi_video_s_stream: derived interface_type=%d from sensor attr, cached\n", interface_type);
+        }
+        if (interface_type != 1) {
+            pr_info("csi_video_s_stream: Interface type %d != 1 (MIPI), returning 0\n", interface_type);
+            return 0;
+        }
     }
 
     /* Binary Ninja: int32_t $v0_4 = 4 */
@@ -390,6 +539,12 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
     /* Ensure MIPI CSI core ops init runs for interface_type==1 before moving to STREAMING */
     if (enable && csi_dev->interface_type == 1) {
+        /* Ensure state >= 2 so csi_core_ops_init actually runs (per BN check) */
+        if (csi_dev->state < 2) {
+            csi_dev->state = 2;
+            pr_info("csi_video_s_stream: pre-init state forced to 2 to satisfy init path\n");
+        }
+        csi_dump_once_to_file(csi_dev, "BEFORE csi_core_ops_init");
         int rc = csi_core_ops_init(sd, 1);
         if (rc)
             pr_warn("csi_video_s_stream: csi_core_ops_init returned %d\n", rc);
@@ -399,6 +554,10 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
     /* Binary Ninja: *(arg1 + 0x128) = $v0_4 */
     csi_dev->state = v0_4;
+
+    /* Emit a single snapshot after stream-on to create /opt/csi.txt */
+    if (enable == 1)
+        csi_dump_once_to_file(csi_dev, "AFTER s_stream enable=1");
 
     pr_info("csi_video_s_stream: EXACT Binary Ninja MCP - CSI state set to %d (enable=%d)\n", v0_4, enable);
 
@@ -567,6 +726,10 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
                         /* Ensure CSI/DPHY clock ungated locally (CLKGR0 bit7) right before touching CSI regs */
                         do {
+
+	                        /* Ensure CSI clocks are ungated before BASIC writes */
+	                        csi_jit_ungate_clocks();
+
                             void __iomem *cpm = ioremap(0x10000000, 0x1000);
                             if (cpm) {
                                 u32 g0_before = readl(cpm + 0x20);
@@ -584,6 +747,9 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                                 pr_warn("[CPM][CSI] ioremap failed; proceeding without local ungate\n");
                             }
                         } while (0);
+
+                        /* Ensure CPM reset is deasserted (optional, guarded) before BASIC writes */
+                        csi_cpm_deassert_reset_if_enabled();
 
                         u32 lane_config_value = (sensor_attr->mipi.lans - 1) & 0x3;
                         writel(lane_config_value, csi_regs + 4);
@@ -636,6 +802,10 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         /* Binary Ninja: private_msleep(1) */
                         private_msleep(1);
 
+	                        /* Snapshot after BASIC init (post interface_type write) */
+	                        csi_dump_once_to_file(csi_dev, "AFTER basic CSI init");
+
+
                         /* Binary Ninja: void* $v0_7 = *($s0_1 + 0x110) */
                         /* Binary Ninja: int32_t $v1_10 = *($v0_7 + 0x3c) */
                         int v1_10 = sensor_attr->fps;
@@ -677,27 +847,35 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                                                                 if (v0_9 - 0x2bc >= 0x64) {
                                                                     v1_10 = 0xa;
 
-                            /* Fallback: if wrapper regs pointer is NULL, derive from PRIMARY VIC regs via helper and cache at +0x13c */
+                            /* Map ISP CSI config regs (+0x13c) to ISP CORE if available; fallback to VIC-derived offset */
                             if (!isp_csi_regs) {
-                                void __iomem *base = tx_isp_get_vic_primary_regs();
-                                if (!base && ourISPdev) {
-                                    base = ourISPdev->vic_regs ? ourISPdev->vic_regs : ourISPdev->vic_regs2;
-                                }
-                                if (base) {
-                                    void __iomem *derived = base - 0x9a00 + 0x10000;
-                                    *((void __iomem **)((char*)csi_dev + 0x13c)) = derived;
-                                    isp_csi_regs = derived;
-                                    pr_warn("*** CSI MIPI: WRAP regs pointer was NULL; derived via helper: %p (base=%p) ***\n", isp_csi_regs, base);
+                                if (ourISPdev && ourISPdev->core_regs) {
+                                    *((void __iomem **)((char*)csi_dev + 0x13c)) = ourISPdev->core_regs;
+                                    isp_csi_regs = ourISPdev->core_regs;
+                                    pr_info("*** CSI PROBE: isp_csi_regs (offset 0x13c) mapped to ISP CORE: %p (expect phys 0x13300000) ***\n", isp_csi_regs);
+                                } else {
+                                    void __iomem *base = tx_isp_get_vic_primary_regs();
+                                    if (!base && ourISPdev) {
+                                        base = ourISPdev->vic_regs ? ourISPdev->vic_regs : ourISPdev->vic_regs2;
+                                    }
+                                    if (base) {
+                                        void __iomem *derived = base - 0x9a00 + 0x10000;
+                                        *((void __iomem **)((char*)csi_dev + 0x13c)) = derived;
+                                        isp_csi_regs = derived;
+                                        pr_warn("*** CSI MIPI: Fallback isp_csi_regs derived via VIC primary: %p (base=%p) ***\n", isp_csi_regs, base);
+                                    } else {
+                                        pr_err("*** CSI PROBE: ERROR - ISP CORE regs not available; unable to map isp_csi_regs ***\n");
+                                    }
                                 }
                             }
 
                             /* Debug: log base pointers and a few pre-init reads */
-                            pr_info("[CSI] Pointers: BASIC=%p WRAP=%p\n", csi_regs, isp_csi_regs);
+                            pr_info("[CSI] Pointers: BASIC=%p ISP_CORE=%p\n", csi_regs, isp_csi_regs);
                             if (csi_regs)
                                 pr_info("[CSI] BASIC pre: [0x4]=0x%08x [0x8]=0x%08x [0x10]=0x%08x\n",
                                         readl(csi_regs + 0x4), readl(csi_regs + 0x8), readl(csi_regs + 0x10));
                             if (isp_csi_regs)
-                                pr_info("[CSI] WRAP pre: [0x0]=0x%08x [0x80]=0x%08x [0x128]=0x%08x [0x160]=0x%08x\n",
+                                pr_info("[CSI] ISP_CORE pre: [0x0]=0x%08x [0x80]=0x%08x [0x128]=0x%08x [0x160]=0x%08x\n",
                                         readl(isp_csi_regs + 0x0), readl(isp_csi_regs + 0x80), readl(isp_csi_regs + 0x128), readl(isp_csi_regs + 0x160));
 
                                                                     if (v0_9 - 0x320 >= 0xc8) {
@@ -752,7 +930,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         /* Binary Ninja: *$v0_8 = 0x7d */
                         writel(0x7d, v0_8);
                         pr_info("*** CSI MIPI: Writing ISP_CSI[0x0] = 0x7d (timing config) ***\n");
-						pr_info("*** CSI MIPI: WRAP[0x0] READBACK = 0x%08x ***\n", readl(v0_8));
+						pr_info("*** CSI MIPI: ISP CORE[0x0] READBACK = 0x%08x ***\n", readl(v0_8));
 
 
                         /* Set lane enable mask based on lane count (1->0x31, 2->0x33, 4->0x3f) */
@@ -766,14 +944,17 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         } else {
                             lane_enable_mask = 0x3f; /* default safe mask */
                         }
-                        writel(lane_enable_mask, isp_csi_regs + 0x128);
-                        pr_info("*** CSI MIPI: Writing ISP_CSI[0x128] = 0x%x (lane enable mask for %d lanes) ***\n",
+                        /* Lane enable mask is in CSI BASIC space at 0x128 */
+                        writel(lane_enable_mask, csi_regs + 0x128);
+                        pr_info("*** CSI MIPI: Writing BASIC[0x128] = 0x%x (lane enable mask for %d lanes) ***\n",
                                 lane_enable_mask, sensor_attr->mipi.lans);
-						pr_info("*** CSI MIPI: WRAP[0x128] READBACK = 0x%08x ***\n", readl(isp_csi_regs + 0x128));
+                        pr_info("*** CSI MIPI: BASIC[0x128] READBACK = 0x%08x ***\n", readl(csi_regs + 0x128));
 
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0x10) = 1 */
                         writel(1, csi_dev->csi_regs + 0x10);
+                        pr_info("*** CSI MIPI: BASIC[0x10] READBACK = 0x%08x ***\n", readl(csi_dev->csi_regs + 0x10));
+
                         pr_info("*** CSI MIPI: CRITICAL - Enabling CSI PHY: CSI[0x10] = 1 ***\n");
                         pr_info("*** CSI MIPI: PHY ENABLED - MIPI data should now flow! ***\n");
 
@@ -797,8 +978,12 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         /* *(*($s0_1 + 0xb8) + 0xc) = 0 */
                         writel(0, csi_dev->csi_regs + 0xc);
 
+                        pr_info("*** CSI MIPI: BASIC[0x0C] READBACK = 0x%08x ***\n", readl(csi_dev->csi_regs + 0x0c));
+
                         /* *(*($s0_1 + 0xb8) + 0xc) = 1 */
                         writel(1, csi_dev->csi_regs + 0xc);
+                        pr_info("*** CSI MIPI: BASIC[0x0C] AFTER= 0x%08x ***\n", readl(csi_dev->csi_regs + 0x0c));
+
 
                         /* **($s0_1 + 0x13c) = 0x7d */
                         writel(0x7d, isp_csi_regs);
@@ -811,6 +996,9 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
                         v0_17 = 3;
                     }
+    /* Ungate clocks before toggling lanes */
+    csi_jit_ungate_clocks();
+
                 }
 
                 /* Binary Ninja: *($s0_1 + 0x128) = $v0_17 */
@@ -838,6 +1026,9 @@ int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes)
     void __iomem *csi_regs;
     u32 n_before, n_after;
     u32 shutdownz, dphyrstz, resetn;
+    /* Ensure clocks are ungated before lane/PHY toggles */
+    csi_jit_ungate_clocks();
+
     u32 reg_val;
 
     /* Binary Ninja: isp_printf(0, "%s:----------> lane num: %d\n", "csi_set_on_lanes", lane_num) */
@@ -1119,14 +1310,14 @@ pr_info("[BASIC] CSI_CTRL (0x40):      0x%08x\n", readl(csi_base + 0x40));
 {
     void __iomem *isp_csi_regs = *((void __iomem **)((char*)csi_dev + 0x13c));
     if (isp_csi_regs) {
-        pr_info("[WRAP ] TIMING (0x000):     0x%08x\n", readl(isp_csi_regs + 0x000));
-        pr_info("[WRAP ] ???    (0x080):     0x%08x\n", readl(isp_csi_regs + 0x080));
-        pr_info("[WRAP ] CFG0   (0x110):     0x%08x\n", readl(isp_csi_regs + 0x110));
-        pr_info("[WRAP ] CFG1   (0x114):     0x%08x\n", readl(isp_csi_regs + 0x114));
-        pr_info("[WRAP ] LANES  (0x128):     0x%08x\n", readl(isp_csi_regs + 0x128));
-        pr_info("[WRAP ] RATE0  (0x160):     0x%08x\n", readl(isp_csi_regs + 0x160));
-        pr_info("[WRAP ] RATE1  (0x1E0):     0x%08x\n", readl(isp_csi_regs + 0x1e0));
-        pr_info("[WRAP ] RATE2  (0x260):     0x%08x\n", readl(isp_csi_regs + 0x260));
+        pr_info("[ISP  ] TIMING (0x000):     0x%08x\n", readl(isp_csi_regs + 0x000));
+        pr_info("[ISP  ] ???    (0x080):     0x%08x\n", readl(isp_csi_regs + 0x080));
+        pr_info("[ISP  ] CFG0   (0x110):     0x%08x\n", readl(isp_csi_regs + 0x110));
+        pr_info("[ISP  ] CFG1   (0x114):     0x%08x\n", readl(isp_csi_regs + 0x114));
+        pr_info("[ISP  ] LANES  (0x128):     0x%08x\n", readl(isp_csi_regs + 0x128));
+        pr_info("[ISP  ] RATE0  (0x160):     0x%08x\n", readl(isp_csi_regs + 0x160));
+        pr_info("[ISP  ] RATE1  (0x1E0):     0x%08x\n", readl(isp_csi_regs + 0x1e0));
+        pr_info("[ISP  ] RATE2  (0x260):     0x%08x\n", readl(isp_csi_regs + 0x260));
     } else {
         pr_info("[WRAP ] isp_csi_regs is NULL (wrapper not mapped)\n");
     }
@@ -1159,7 +1350,7 @@ static void csi_write_file(const char *buf, size_t len)
     filp_close(filp, NULL);
 }
 
-static void csi_dump_once_to_file(struct tx_isp_csi_device *csi_dev)
+static void csi_dump_once_to_file(struct tx_isp_csi_device *csi_dev, const char *tag)
 {
     char buf[512];
     int n = 0;
@@ -1177,16 +1368,19 @@ static void csi_dump_once_to_file(struct tx_isp_csi_device *csi_dev)
     isp_csi_regs = *((void __iomem **)((char*)csi_dev + 0x13c));
 
     n += scnprintf(buf + n, sizeof(buf) - n, "=== CSI DUMP ===\n");
+    n += scnprintf(buf + n, sizeof(buf) - n, "[TAG  ] %s\n", tag ? tag : "UNTAGGED");
     n += scnprintf(buf + n, sizeof(buf) - n, "[PTRS ] csi_base=%p isp_csi=%p cpm[0xC4]=%08x\n", csi_base, isp_csi_regs, cpm_read32(0xC4));
     /* Read-only CPM diagnostics to locate gating/reset bits (mirrors vic_start path) */
-    n += scnprintf(buf + n, sizeof(buf) - n, "[CPM  ] 0x20=%08x 0x24=%08x 0x28=%08x 0x2C=%08x\n",
-                   cpm_read32(0x20), cpm_read32(0x24), cpm_read32(0x28), cpm_read32(0x2C));
+    n += scnprintf(buf + n, sizeof(buf) - n, "[CPM  ] 0x20=%08x 0x24=%08x 0x28=%08x 0x2C=%08x 0x34=%08x 0x38=%08x\n",
+                   cpm_read32(0x20), cpm_read32(0x24), cpm_read32(0x28), cpm_read32(0x2C), cpm_read32(0x34), cpm_read32(0x38));
+    n += scnprintf(buf + n, sizeof(buf) - n, "[CPM2 ] 0x30=%08x 0x3C=%08x\n",
+                   cpm_read32(0x30), cpm_read32(0x3C));
     n += scnprintf(buf + n, sizeof(buf) - n, "[BASIC] 0x00=%08x 0x04=%08x 0x08=%08x 0x0C=%08x 0x10=%08x 0x14=%08x\n",
                    readl(csi_base + 0x00), readl(csi_base + 0x04), readl(csi_base + 0x08),
                    readl(csi_base + 0x0C), readl(csi_base + 0x10), readl(csi_base + 0x14));
-    n += scnprintf(buf + n, sizeof(buf) - n, "[BASIC] 0x20=%08x 0x24=%08x 0x40=%08x\n",
-                   readl(csi_base + 0x20), readl(csi_base + 0x24), readl(csi_base + 0x40));
-    n += scnprintf(buf + n, sizeof(buf) - n, "[BASIC] 0x128=%08x\n", readl(csi_base + 0x128));
+    n += scnprintf(buf + n, sizeof(buf) - n, "[BASIC] 0x20=%08x 0x24=%08x 0x40=%08x 0x128=%08x\n",
+                   readl(csi_base + 0x20), readl(csi_base + 0x24), readl(csi_base + 0x40), readl(csi_base + 0x128));
+    n += scnprintf(buf + n, sizeof(buf) - n, "[ISP  ] 0x128=%08x\n", (isp_csi_regs ? readl(isp_csi_regs + 0x128) : 0));
     n += scnprintf(buf + n, sizeof(buf) - n,
                    "[LANEC] 0x200=%08x 0x204=%08x 0x210=%08x 0x230=%08x 0x250=%08x 0x254=%08x 0x2F4=%08x\n",
                    readl(csi_base + 0x200), readl(csi_base + 0x204), readl(csi_base + 0x210),
@@ -1196,13 +1390,13 @@ static void csi_dump_once_to_file(struct tx_isp_csi_device *csi_dev)
 
 
     if (isp_csi_regs) {
-        n += scnprintf(buf + n, sizeof(buf) - n, "[WRAP ] 0x000=%08x 0x080=%08x 0x10C=%08x 0x110=%08x 0x114=%08x 0x128=%08x\n",
+        n += scnprintf(buf + n, sizeof(buf) - n, "[ISP  ] 0x000=%08x 0x080=%08x 0x10C=%08x 0x110=%08x 0x114=%08x 0x128=%08x\n",
                        readl(isp_csi_regs + 0x000), readl(isp_csi_regs + 0x080), readl(isp_csi_regs + 0x10C), readl(isp_csi_regs + 0x110),
                        readl(isp_csi_regs + 0x114), readl(isp_csi_regs + 0x128));
-        n += scnprintf(buf + n, sizeof(buf) - n, "[WRAP ] 0x160=%08x 0x1E0=%08x 0x260=%08x\n",
+        n += scnprintf(buf + n, sizeof(buf) - n, "[ISP  ] 0x160=%08x 0x1E0=%08x 0x260=%08x\n",
                        readl(isp_csi_regs + 0x160), readl(isp_csi_regs + 0x1E0), readl(isp_csi_regs + 0x260));
     } else {
-        n += scnprintf(buf + n, sizeof(buf) - n, "[WRAP ] (null)\n");
+        n += scnprintf(buf + n, sizeof(buf) - n, "[ISP  ] (null)\n");
     }
     n += scnprintf(buf + n, sizeof(buf) - n, "\n");
 
@@ -1215,7 +1409,7 @@ static int csi_dump_thread_fn(void *data)
 
     pr_info("CSI dump thread started (interval=%d ms, path=%s)\n", csi_dump_interval_ms, csi_dump_path);
     while (!kthread_should_stop()) {
-        csi_dump_once_to_file(csi_dev);
+        csi_dump_once_to_file(csi_dev, "PERIODIC");
         if (csi_dump_interval_ms <= 0)
             csi_dump_interval_ms = 1000;
         msleep(csi_dump_interval_ms);
