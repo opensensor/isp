@@ -7,6 +7,154 @@
 #include "../include/tx_isp_vic.h"
 #include "../include/tx-isp-device.h"
 
+#include <linux/fs.h>
+#include <linux/uaccess.h>
+#include <linux/mutex.h>
+#include <linux/io.h>
+#include <linux/delay.h>
+
+/* ==== /opt/csi.txt instrumentation (self-contained) ==== */
+#define CSI_FILE_PATH "/opt/csi.txt"
+static struct file *csi_file_dbg;
+static DEFINE_MUTEX(csi_file_dbg_mutex);
+
+static int open_csi_dbg_file(void)
+{
+    int ret;
+    if (csi_file_dbg)
+        return 0;
+    csi_file_dbg = filp_open(CSI_FILE_PATH, O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (IS_ERR(csi_file_dbg)) {
+        ret = PTR_ERR(csi_file_dbg);
+        pr_warn("CSI DBG: failed to open %s: %d\n", CSI_FILE_PATH, ret);
+        csi_file_dbg = NULL;
+        return ret;
+    }
+    return 0;
+}
+
+static void write_to_csi_dbg(const char *fmt, ...)
+{
+    va_list args;
+    char buffer[512];
+    int len;
+    mm_segment_t old_fs;
+
+    if (!csi_file_dbg)
+        return;
+
+    va_start(args, fmt);
+    len = vsnprintf(buffer, sizeof(buffer), fmt, args);
+    va_end(args);
+
+    if (len > 0 && len < sizeof(buffer)) {
+        mutex_lock(&csi_file_dbg_mutex);
+        if (csi_file_dbg && !IS_ERR(csi_file_dbg)) {
+            old_fs = get_fs();
+            set_fs(KERNEL_DS);
+            vfs_write(csi_file_dbg, buffer, len, &csi_file_dbg->f_pos);
+            set_fs(old_fs);
+        }
+        mutex_unlock(&csi_file_dbg_mutex);
+    }
+}
+
+static void csi_debug_dump_now(const char *tag)
+{
+    void __iomem *cpm = NULL, *basic = NULL, *wrap = NULL, *w01 = NULL;
+    u32 cpm20=0, cpm24=0, cpm28=0, cpm2c=0;
+    u32 b00=0,b04=0,b08=0,b0c=0,b10=0,b14=0,b20=0,b24=0,b40=0;
+    u32 w000=0,w080=0,w10c=0,w110=0,w114=0,w128=0,w160=0,w1e0=0,w260=0;
+    u32 w01_14=0,w01_40=0;
+
+    if (open_csi_dbg_file())
+        return;
+
+    cpm  = ioremap(0x10000000, 0x1000);
+    basic= ioremap(0x10022000, 0x1000);
+    wrap = ioremap(0x133e6600, 0x1000);
+    w01  = ioremap(0x10023000, 0x1000);
+
+    write_to_csi_dbg("=== CSI DUMP ===\n");
+    write_to_csi_dbg("[TAG  ] %s\n", tag ? tag : "");
+
+    if (cpm) {
+        cpm20 = readl(cpm + 0x20);
+        cpm24 = readl(cpm + 0x24);
+        cpm28 = readl(cpm + 0x28);
+        cpm2c = readl(cpm + 0x2c);
+        write_to_csi_dbg("[CPM  ] 0x20=%08x 0x24=%08x 0x28=%08x 0x2C=%08x\n", cpm20, cpm24, cpm28, cpm2c);
+    } else {
+        write_to_csi_dbg("[CPM  ] (unmapped)\n");
+    }
+
+    if (basic) {
+        b00 = readl(basic + 0x0);
+        b04 = readl(basic + 0x4);
+        b08 = readl(basic + 0x8);
+        b0c = readl(basic + 0xc);
+        b10 = readl(basic + 0x10);
+        b14 = readl(basic + 0x14);
+        b20 = readl(basic + 0x20);
+        b24 = readl(basic + 0x24);
+        b40 = readl(basic + 0x40);
+        write_to_csi_dbg("[BASIC] 0x00=%08x 0x04=%08x 0x08=%08x 0x0C=%08x 0x10=%08x 0x14=%08x\n", b00,b04,b08,b0c,b10,b14);
+        write_to_csi_dbg("[BASIC] 0x20=%08x 0x24=%08x 0x40=%08x\n", b20,b24,b40);
+        /* Lane enable + key lane config registers from BASIC space */
+        {
+            u32 b128 = readl(basic + 0x128);
+            u32 b200 = readl(basic + 0x200);
+            u32 b204 = readl(basic + 0x204);
+            u32 b210 = readl(basic + 0x210);
+            u32 b230 = readl(basic + 0x230);
+            u32 b250 = readl(basic + 0x250);
+            u32 b254 = readl(basic + 0x254);
+            u32 b2f4 = readl(basic + 0x2f4);
+            write_to_csi_dbg("[BASIC] 0x128=%08x\n", b128);
+            write_to_csi_dbg("[LANEC] 0x200=%08x 0x204=%08x 0x210=%08x 0x230=%08x 0x250=%08x 0x254=%08x 0x2F4=%08x\n",
+                             b200,b204,b210,b230,b250,b254,b2f4);
+        }
+    } else {
+        write_to_csi_dbg("[BASIC] (unmapped)\n");
+    }
+
+    if (wrap) {
+        w000 = readl(wrap + 0x000);
+        w080 = readl(wrap + 0x080);
+        w10c = readl(wrap + 0x10c);
+        w110 = readl(wrap + 0x110);
+        w114 = readl(wrap + 0x114);
+        w128 = readl(wrap + 0x128);
+        w160 = readl(wrap + 0x160);
+        w1e0 = readl(wrap + 0x1e0);
+        w260 = readl(wrap + 0x260);
+        write_to_csi_dbg("[WRAP ] 0x000=%08x 0x080=%08x 0x10C=%08x 0x110=%08x 0x114=%08x 0x128=%08x\n",
+                         w000,w080,w10c,w110,w114,w128);
+        write_to_csi_dbg("[WRAP ] 0x160=%08x 0x1E0=%08x 0x260=%08x\n", w160,w1e0,w260);
+    } else {
+        write_to_csi_dbg("[WRAP ] (unmapped)\n");
+    }
+
+    if (w01) {
+        w01_14 = readl(w01 + 0x14);
+        w01_40 = readl(w01 + 0x40);
+        write_to_csi_dbg("[W01  ] 0x14=%08x 0x40=%08x\n", w01_14, w01_40);
+    }
+
+    write_to_csi_dbg("\n");
+
+    if (cpm)  iounmap(cpm);
+    if (basic) iounmap(basic);
+    if (wrap)  iounmap(wrap);
+    if (w01)   iounmap(w01);
+
+    /* Close file each dump to avoid keeping it pinned */
+    if (csi_file_dbg && !IS_ERR(csi_file_dbg)) {
+        filp_close(csi_file_dbg, NULL);
+        csi_file_dbg = NULL;
+    }
+}
+
 /* Forward declarations */
 int csi_core_ops_init(struct tx_isp_subdev *sd, int enable);
 int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes);
@@ -183,6 +331,8 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     /* Get CSI device from subdev private data */
     csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
     if (!csi_dev) {
+            /* CSI DBG */ csi_debug_dump_now("BEFORE csi_core_ops_init");
+
         pr_err("CSI device is NULL from subdev private data\n");
         return 0xffffffea;
     }
@@ -206,6 +356,8 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     csi_dev->state = v0_4;
 
     pr_info("csi_video_s_stream: EXACT Binary Ninja MCP - CSI state set to %d (enable=%d)\n", v0_4, enable);
+    /* CSI DBG */ { char tag[64]; snprintf(tag, sizeof(tag), "AFTER s_stream enable=%d", enable); csi_debug_dump_now(tag); }
+
 
     /* Binary Ninja: return 0 */
     return 0;
@@ -310,6 +462,8 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
         }
 
         pr_info("csi_core_ops_init: sd=%p, csi_dev=%p, enable=%d\n", sd, csi_dev, enable);
+	        /* CSI DBG */ csi_debug_dump_now("BEFORE csi_core_ops_init");
+
         result = 0xffffffea;
 
         /* Binary Ninja: if ($s0_1 != 0 && $s0_1 u< 0xfffff001) */
@@ -387,6 +541,9 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         writel(interface_type, csi_regs + 0xc);
 
                         /* Binary Ninja: private_msleep(1) */
+
+	                        /* CSI DBG */ csi_debug_dump_now("AFTER basic CSI init (post interface_type write)");
+
                         private_msleep(1);
 
                         /* Binary Ninja: void* $v0_7 = *($s0_1 + 0x110) */
