@@ -1204,18 +1204,23 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     /* STEP 2: CPM register setup */
     cpm_regs = ioremap(0x10000000, 0x1000);
     if (cpm_regs) {
-        u32 clkgr0 = readl(cpm_regs + 0x20);
-        u32 clkgr1 = readl(cpm_regs + 0x28);
+        u32 before0 = readl(cpm_regs + 0x20);
+        u32 before1 = readl(cpm_regs + 0x28);
+        u32 mask0 = (1u << 13) | (1u << 21) | (1u << 30); /* VIC/ISP only; leave CSI to CSI path */
+        u32 mask1 = (1u << 30);
+        u32 after0, after1;
 
-        clkgr0 &= ~(1 << 13); // ISP
-        clkgr0 &= ~(1 << 21); // Alternative ISP
-        clkgr0 &= ~(1 << 30); // VIC in CLKGR0
-        clkgr1 &= ~(1 << 30); // VIC in CLKGR1
-
-        writel(clkgr0, cpm_regs + 0x20);
-        writel(clkgr1, cpm_regs + 0x28);
+        /* Clear VIC/ISP gates only; do not touch CSI here to avoid group side-effects */
+        writel(before0 & ~mask0, cpm_regs + 0x20);
+        writel(before1 & ~mask1, cpm_regs + 0x28);
         wmb();
-        msleep(20);
+        udelay(5);
+        after0 = readl(cpm_regs + 0x20);
+        after1 = readl(cpm_regs + 0x28);
+        pr_info("[CPM] VIC start: CLKGR0 %08x->%08x (mask 0x%08x) | CLKGR1 %08x->%08x (mask 0x%08x)\n",
+                before0, after0, mask0, before1, after1, mask1);
+
+        msleep(10);
         iounmap(cpm_regs);
     }
 
@@ -1669,6 +1674,42 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     /* Also enable the kernel IRQ line if it was registered earlier */
     enable_irq(37);
+
+
+    /* Integrate IRQ enable + CONFIG/RUN sequencing into vic_start (per working branch) */
+    do {
+        void __iomem *vr = vic_dev->vic_regs;
+        if (vr) {
+            /* Clear pending (W1C), pre-CONFIG enables, CONFIG=2, re-enable, RUN=1 */
+            writel(0xFFFFFFFF, vr + 0x1f0);
+            writel(0xFFFFFFFF, vr + 0x1f4);
+            writel(0x3FFFFFFF, vr + 0x1e0);
+            writel(0x0000000F, vr + 0x1e4);
+            writel(2, vr + 0x0);
+            wmb();
+            writel(0x3FFFFFFF, vr + 0x1e0);
+            writel(0x0000000F, vr + 0x1e4);
+            writel(1, vr + 0x0);
+            wmb();
+            pr_info("*** VIC START: PRIMARY IRQ+CONFIG/RUN committed [1e0]=0x%08x [1e4]=0x%08x ctrl=0x%08x ***\n",
+                    readl(vr + 0x1e0), readl(vr + 0x1e4), readl(vr + 0x0));
+        }
+        if (vic_dev->vic_regs_secondary) {
+            void __iomem *vc = vic_dev->vic_regs_secondary;
+            writel(0xFFFFFFFF, vc + 0x1f0);
+            writel(0xFFFFFFFF, vc + 0x1f4);
+            writel(0x3FFFFFFF, vc + 0x1e0);
+            writel(0x0000000F, vc + 0x1e4);
+            writel(2, vc + 0x0);
+            wmb();
+            writel(0x3FFFFFFF, vc + 0x1e0);
+            writel(0x0000000F, vc + 0x1e4);
+            writel(1, vc + 0x0);
+            wmb();
+            pr_info("*** VIC START: CONTROL IRQ+CONFIG/RUN committed [1e0]=0x%08x [1e4]=0x%08x ctrl=0x%08x ***\n",
+                    readl(vc + 0x1e0), readl(vc + 0x1e4), readl(vc + 0x0));
+        }
+    } while (0);
 
     return 0;
 }
@@ -2269,22 +2310,7 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
                 pr_info("*** BINARY NINJA EXACT: Wrote 0x%x to reg 0x300 (buffer_count=%d, formula: (count<<16)|0x80000020) ***\n",
                         stream_ctrl, buffer_count);
 
-                /* Enable VIC IRQs before CONFIG and RUN (per working branch) */
-                writel(0x3FFFFFFF, vic_base + 0x1e0);
-                writel(0x0000000F, vic_base + 0x1e4);
-                if (vic_dev->vic_regs_secondary) {
-                    writel(0x3FFFFFFF, vic_dev->vic_regs_secondary + 0x1e0);
-                    writel(0x0000000F, vic_dev->vic_regs_secondary + 0x1e4);
-                }
-                wmb();
-                pr_info("*** VIC IRQ enable: [0x1e0]=0x3FFFFFFF [0x1e4]=0x0000000F (mirrored if secondary) ***\n");
 
-                /* Transition to RUN after programming control, mirror if secondary present */
-                writel(1, vic_base + 0x0);
-                if (vic_dev->vic_regs_secondary)
-                    writel(1, vic_dev->vic_regs_secondary + 0x0);
-                wmb();
-                pr_info("*** VIC RUN: Wrote 1 to VIC[0x0] (and secondary if mapped) ***\n");
 
                 /* MCP LOG: Stream ON completed */
                 pr_info("MCP_LOG: VIC streaming enabled - ctrl=0x%x, base=%p, state=%d\n",

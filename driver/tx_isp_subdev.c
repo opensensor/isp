@@ -397,24 +397,12 @@ int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count)
 
 
 
-        /* CPM register setup - following vic_start pattern */
-        cpm_regs = ioremap(0x10000000, 0x1000);
-        if (cpm_regs) {
-            u32 clkgr0 = readl(cpm_regs + 0x20);
-            u32 clkgr1 = readl(cpm_regs + 0x28);
-
-            clkgr0 &= ~(1 << 13); // ISP
-            clkgr0 &= ~(1 << 21); // Alternative ISP
-            clkgr0 &= ~(1 << 30); // VIC in CLKGR0
-            clkgr1 &= ~(1 << 30); // VIC in CLKGR1
-
-            writel(clkgr0, cpm_regs + 0x20);
-            writel(clkgr1, cpm_regs + 0x28);
-            wmb();
-            msleep(20);
-            iounmap(cpm_regs);
-            pr_info("CPM clock gates configured\n");
-        }
+        /* CPM register setup removed here: CPM gates are now managed only in
+         *  - tx_isp_vic_start() for VIC/ISP
+         *  - csi_core_ops_init() for CSI (just-in-time)
+         * This avoids side-effects on CSI gating during generic subdev clock init.
+         */
+        pr_info("[CPM] Subdev init: Skipping generic CPM gate config (delegated to VIC/CSI paths)\n");
 
         /* Binary Ninja: *(arg1 + 0xbc) = $v0_1 */
         sd->clks = clk_array;

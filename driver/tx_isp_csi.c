@@ -40,7 +40,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable);
 int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes);
 void dump_csi_reg(struct tx_isp_subdev *sd);
 extern struct tx_isp_dev *ourISPdev;
-
+void __iomem *tx_isp_get_vic_primary_regs(void);
 
 static void __iomem *tx_isp_core_regs = NULL;
 
@@ -564,11 +564,47 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                          * Binary Ninja: *(*($s0_1 + 0xb8) + 4) = zx.d(*($v1_5 + 0x24)) - 1
                          * Implement the exact write so trace captures the lane setup.
                          */
+
+                        /* Ensure CSI/DPHY clock ungated locally (CLKGR0 bit7) right before touching CSI regs */
+                        do {
+                            void __iomem *cpm = ioremap(0x10000000, 0x1000);
+                            if (cpm) {
+                                u32 g0_before = readl(cpm + 0x20);
+                                if (g0_before & (1u << 7)) {
+                                    u32 g0_after = g0_before & ~(1u << 7);
+                                    writel(g0_after, cpm + 0x20);
+                                    wmb();
+                                    udelay(5);
+                                    pr_info("[CPM][CSI] Ungate CLKGR0 bit7 locally: %08x -> %08x\n", g0_before, readl(cpm + 0x20));
+                                } else {
+                                    pr_info("[CPM][CSI] CLKGR0 bit7 already ungated: %08x\n", g0_before);
+                                }
+                                iounmap(cpm);
+                            } else {
+                                pr_warn("[CPM][CSI] ioremap failed; proceeding without local ungate\n");
+                            }
+                        } while (0);
+
                         u32 lane_config_value = (sensor_attr->mipi.lans - 1) & 0x3;
                         writel(lane_config_value, csi_regs + 4);
                         pr_info("*** CSI MIPI: STEP 1 - Lane config CSI[0x4] WRITE = 0x%x (lanes=%d) ***\n",
                                 lane_config_value, sensor_attr->mipi.lans);
                         pr_info("*** CSI MIPI: CSI[0x4] READBACK = 0x%x ***\n", readl(csi_regs + 4));
+                        /* Guard: if CPM CLKGR0 bit7 bounced back, clear it again before STEP 2 */
+                        do {
+                            void __iomem *cpm = ioremap(0x10000000, 0x1000);
+                            if (cpm) {
+                                u32 g0b = readl(cpm + 0x20);
+                                if (g0b & (1u << 7)) {
+                                    writel(g0b & ~(1u << 7), cpm + 0x20);
+                                    wmb();
+                                    udelay(5);
+                                    pr_warn("[CPM][CSI] Re-cleared CLKGR0 bit7 before STEP2: %08x -> %08x\n", g0b, readl(cpm + 0x20));
+                                }
+                                iounmap(cpm);
+                            }
+                        } while (0);
+
 
                         /* Binary Ninja: *($v0_2 + 8) &= 0xfffffffe */
                         /* Step 2: Disable CSI */
@@ -640,6 +676,30 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                                                                 v1_10 = 9;
                                                                 if (v0_9 - 0x2bc >= 0x64) {
                                                                     v1_10 = 0xa;
+
+                            /* Fallback: if wrapper regs pointer is NULL, derive from PRIMARY VIC regs via helper and cache at +0x13c */
+                            if (!isp_csi_regs) {
+                                void __iomem *base = tx_isp_get_vic_primary_regs();
+                                if (!base && ourISPdev) {
+                                    base = ourISPdev->vic_regs ? ourISPdev->vic_regs : ourISPdev->vic_regs2;
+                                }
+                                if (base) {
+                                    void __iomem *derived = base - 0x9a00 + 0x10000;
+                                    *((void __iomem **)((char*)csi_dev + 0x13c)) = derived;
+                                    isp_csi_regs = derived;
+                                    pr_warn("*** CSI MIPI: WRAP regs pointer was NULL; derived via helper: %p (base=%p) ***\n", isp_csi_regs, base);
+                                }
+                            }
+
+                            /* Debug: log base pointers and a few pre-init reads */
+                            pr_info("[CSI] Pointers: BASIC=%p WRAP=%p\n", csi_regs, isp_csi_regs);
+                            if (csi_regs)
+                                pr_info("[CSI] BASIC pre: [0x4]=0x%08x [0x8]=0x%08x [0x10]=0x%08x\n",
+                                        readl(csi_regs + 0x4), readl(csi_regs + 0x8), readl(csi_regs + 0x10));
+                            if (isp_csi_regs)
+                                pr_info("[CSI] WRAP pre: [0x0]=0x%08x [0x80]=0x%08x [0x128]=0x%08x [0x160]=0x%08x\n",
+                                        readl(isp_csi_regs + 0x0), readl(isp_csi_regs + 0x80), readl(isp_csi_regs + 0x128), readl(isp_csi_regs + 0x160));
+
                                                                     if (v0_9 - 0x320 >= 0xc8) {
                                                                         v1_10 = 0xb;
                                                                     }
@@ -664,9 +724,36 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                             v0_8 = isp_csi_regs;
                         }
 
+
+						/* JIT ungate before WRAP writes: ensure CLKGR1 bit2 and CLKGR0 bit7 are clear; log values even if unchanged */
+						do {
+							void __iomem *cpm = ioremap(0x10000000, 0x1000);
+							if (cpm) {
+								u32 g1b = readl(cpm + 0x28);
+								u32 g0b2 = readl(cpm + 0x20);
+								if (g1b & (1u << 2)) {
+									writel(g1b & ~(1u << 2), cpm + 0x28);
+									wmb(); udelay(5);
+									pr_info("[CPM][CSI] JIT ungate CLKGR1 bit2 before WRAP writes: %08x -> %08x\n", g1b, readl(cpm + 0x28));
+								} else {
+									pr_info("[CPM][CSI] JIT check: CLKGR1 (0x28) already ungated: %08x\n", g1b);
+								}
+								if (g0b2 & (1u << 7)) {
+									writel(g0b2 & ~(1u << 7), cpm + 0x20);
+									wmb(); udelay(5);
+									pr_info("[CPM][CSI] JIT ungate CLKGR0 bit7 before WRAP writes: %08x -> %08x\n", g0b2, readl(cpm + 0x20));
+								} else {
+									pr_info("[CPM][CSI] JIT check: CLKGR0 (0x20) already ungated: %08x\n", g0b2);
+								}
+								iounmap(cpm);
+							}
+						} while (0);
+
                         /* Binary Ninja: *$v0_8 = 0x7d */
                         writel(0x7d, v0_8);
                         pr_info("*** CSI MIPI: Writing ISP_CSI[0x0] = 0x7d (timing config) ***\n");
+						pr_info("*** CSI MIPI: WRAP[0x0] READBACK = 0x%08x ***\n", readl(v0_8));
+
 
                         /* Set lane enable mask based on lane count (1->0x31, 2->0x33, 4->0x3f) */
                         u32 lane_enable_mask;
@@ -682,6 +769,8 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         writel(lane_enable_mask, isp_csi_regs + 0x128);
                         pr_info("*** CSI MIPI: Writing ISP_CSI[0x128] = 0x%x (lane enable mask for %d lanes) ***\n",
                                 lane_enable_mask, sensor_attr->mipi.lans);
+						pr_info("*** CSI MIPI: WRAP[0x128] READBACK = 0x%08x ***\n", readl(isp_csi_regs + 0x128));
+
 
                         /* Binary Ninja: *(*($s0_1 + 0xb8) + 0x10) = 1 */
                         writel(1, csi_dev->csi_regs + 0x10);
@@ -820,6 +909,29 @@ static struct tx_isp_subdev_video_ops csi_video_ops = {
 /* CSI sensor ops sync_sensor_attr wrapper - calls csi_set_on_lanes */
 static int csi_sensor_ops_sync_sensor_attr_wrapper(struct tx_isp_subdev *sd, void *arg)
 {
+
+                            /* Just-in-time: ensure wrapper (CLKGR1 bit2?) and CSI (CLKGR0 bit7) are ungated before WRAP writes */
+                            do {
+                                void __iomem *cpm = ioremap(0x10000000, 0x1000);
+                                if (cpm) {
+                                    u32 g1b = readl(cpm + 0x28);
+                                    if (g1b & (1u << 2)) {
+                                        writel(g1b & ~(1u << 2), cpm + 0x28);
+                                        wmb();
+                                        udelay(5);
+                                        pr_info("[CPM][CSI] Ungate CLKGR1 bit2 locally (wrapper?): %08x -> %08x\n", g1b, readl(cpm + 0x28));
+                                    }
+                                    u32 g0b2 = readl(cpm + 0x20);
+                                    if (g0b2 & (1u << 7)) {
+                                        writel(g0b2 & ~(1u << 7), cpm + 0x20);
+                                        wmb();
+                                        udelay(5);
+                                        pr_info("[CPM][CSI] Ungate CLKGR0 bit7 again before WRAP writes: %08x -> %08x\n", g0b2, readl(cpm + 0x20));
+                                    }
+                                    iounmap(cpm);
+                                }
+                            } while (0);
+
     struct tx_isp_csi_device *csi_dev;
     struct tx_isp_sensor_attribute *sensor_attr = (struct tx_isp_sensor_attribute *)arg;
 
@@ -1192,38 +1304,8 @@ int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
                             pr_info("[CPM] CLKGR1 CSI/MIPI candidate bits already ungated: %08x\n", clkgr1);
                         }
 
-                        /* Conservative CPM reset handshake (reference sequence) */
-                        do {
-                            u32 val = readl(cpm + 0xC4);
-                            pr_info("[CPM] Reset pre-status @0xC4 = 0x%08x\n", val);
-                            /* Trigger reset (bit 21) */
-                            val |= 0x00200000; /* TX_ISP_RESET_TRIGGER */
-                            writel(val, cpm + 0xC4);
-                            wmb();
-
-                            /* Wait up to ~1s for READY (bit 20) */
-                            {
-                                int timeout = 500;
-                                while (timeout-- > 0) {
-                                    val = readl(cpm + 0xC4);
-                                    if (val & 0x00100000) /* TX_ISP_RESET_READY */
-                                        break;
-                                    msleep(2);
-                                }
-                                pr_info("[CPM] Reset READY status @0xC4 = 0x%08x\n", val);
-                            }
-
-                            /* Complete reset: set bit22, then clear it */
-                            val = readl(cpm + 0xC4);
-                            val = (val | 0x00400000);           /* set COMPLETE */
-                            writel(val, cpm + 0xC4);
-                            wmb();
-                            val &= ~0x00400000;                 /* clear COMPLETE */
-                            writel(val, cpm + 0xC4);
-                            wmb();
-                            pr_info("[CPM] Reset post-status @0xC4 = 0x%08x\n", readl(cpm + 0xC4));
-                        } while (0);
-
+                        /* NOTE: Skip CPM reset handshake here; it caused system lockup during streamer start.
+                         * If needed later, guard behind a module param and run only when ISP domain is idle. */
                         iounmap(cpm);
                     } else {
                         pr_warn("[CPM] Unable to ioremap CPM for CSI ungate\n");

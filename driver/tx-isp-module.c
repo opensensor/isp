@@ -1573,11 +1573,13 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     pr_info("*** CSI BASIC REGISTERS MAPPED: 0x10022000 -> %p ***\n", csi_basic_regs);
 
     /* *** CRITICAL: Map ISP CSI registers - Binary Ninja offset +0x13c region *** */
+    /* Derive ISP CSI wrapper base from VIC mapping available on isp_dev */
     if (isp_dev->vic_regs) {
-        /* Binary Ninja shows *($s0_1 + 0x13c) points to ISP CSI register region */
-        /* This is the MIPI-specific CSI control registers within ISP */
         isp_csi_regs = isp_dev->vic_regs - 0x9a00 + 0x10000; /* ISP base + CSI offset */
-        pr_info("*** ISP CSI REGISTERS MAPPED: %p (Binary Ninja +0x13c region) ***\n", isp_csi_regs);
+        pr_info("*** ISP CSI REGISTERS MAPPED (from isp_dev->vic_regs): %p ***\n", isp_csi_regs);
+    } else if (isp_dev->vic_regs2) {
+        isp_csi_regs = isp_dev->vic_regs2 - 0x9a00 + 0x10000;
+        pr_warn("*** ISP CSI REGISTERS MAPPED (from isp_dev->vic_regs2 fallback): %p ***\n", isp_csi_regs);
     }
 
     /* Binary Ninja: Store register addresses at correct offsets */
@@ -2611,10 +2613,54 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
         pr_info("*** tx_isp_video_s_stream: All subdev initialization complete - proceeding with s_stream ***\n");
     }
 
+    /* Explicit s_stream ordering for enable/disable to ensure sink-ready sequencing */
+    struct tx_isp_subdev *csi_sd_order = tx_isp_get_csi_subdev(dev);
+    struct tx_isp_subdev *vic_sd_order = tx_isp_get_vic_subdev(dev);
+    struct tx_isp_subdev *sensor_sd_order = tx_isp_get_sensor_subdev(dev);
+
+    if (enable == 1) {
+        /* Enable order: VIC -> CSI -> Sensor (sink to source) */
+        if (vic_sd_order && vic_sd_order->ops && vic_sd_order->ops->video && vic_sd_order->ops->video->s_stream) {
+            pr_info("*** tx_isp_video_s_stream: ORDERED CALL VIC.s_stream(1) ***\n");
+            vic_sd_order->ops->video->s_stream(vic_sd_order, 1);
+        }
+        if (csi_sd_order && csi_sd_order->ops && csi_sd_order->ops->video && csi_sd_order->ops->video->s_stream) {
+            pr_info("*** tx_isp_video_s_stream: ORDERED CALL CSI.s_stream(1) ***\n");
+            csi_sd_order->ops->video->s_stream(csi_sd_order, 1);
+        }
+        if (sensor_sd_order && sensor_sd_order->ops && sensor_sd_order->ops->video && sensor_sd_order->ops->video->s_stream) {
+            pr_info("*** tx_isp_video_s_stream: ORDERED CALL SENSOR.s_stream(1) ***\n");
+            sensor_sd_order->ops->video->s_stream(sensor_sd_order, 1);
+        }
+    } else {
+        /* Disable order: Sensor -> CSI -> VIC (source to sink) */
+        if (sensor_sd_order && sensor_sd_order->ops && sensor_sd_order->ops->video && sensor_sd_order->ops->video->s_stream) {
+            pr_info("*** tx_isp_video_s_stream: ORDERED CALL SENSOR.s_stream(0) ***\n");
+            sensor_sd_order->ops->video->s_stream(sensor_sd_order, 0);
+        }
+        if (csi_sd_order && csi_sd_order->ops && csi_sd_order->ops->video && csi_sd_order->ops->video->s_stream) {
+            pr_info("*** tx_isp_video_s_stream: ORDERED CALL CSI.s_stream(0) ***\n");
+            csi_sd_order->ops->video->s_stream(csi_sd_order, 0);
+        }
+        if (vic_sd_order && vic_sd_order->ops && vic_sd_order->ops->video && vic_sd_order->ops->video->s_stream) {
+            pr_info("*** tx_isp_video_s_stream: ORDERED CALL VIC.s_stream(0) ***\n");
+            vic_sd_order->ops->video->s_stream(vic_sd_order, 0);
+        }
+    }
+
+
     /* Binary Ninja: for (int32_t i = 0; i != 0x10; ) */
     for (i = 0; i != 0x10; ) {
         /* Binary Ninja: void* $a0 = *$s4 */
         struct tx_isp_subdev *a0 = *s4;
+
+        /* Skip duplicates: subdevs already called in ordered phase above */
+        if (a0 == vic_sd_order || a0 == csi_sd_order || a0 == sensor_sd_order) {
+            pr_info("*** tx_isp_video_s_stream: Skipping duplicate s_stream for ordered subdev at idx=%d ***\n", i);
+            i += 1;
+            s4 = &s4[1];
+            continue;
+        }
 
         if (a0 != 0) {
             /* Binary Ninja: int32_t* $v0_3 = *(*($a0 + 0xc4) + 4) */
@@ -2698,6 +2744,25 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
 }
 
 EXPORT_SYMBOL(tx_isp_video_s_stream);
+
+
+/* Helper to fetch PRIMARY VIC register base as a void __iomem* for other modules */
+void __iomem *tx_isp_get_vic_primary_regs(void)
+{
+    if (!ourISPdev) return NULL;
+    if (ourISPdev->vic_dev) {
+        struct tx_isp_vic_device *vd = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+        if (vd && vd->vic_regs)
+            return vd->vic_regs;
+    }
+    /* Fallbacks */
+    if (ourISPdev->vic_regs)
+        return ourISPdev->vic_regs;
+    if (ourISPdev->vic_regs2)
+        return ourISPdev->vic_regs2;
+    return NULL;
+}
+EXPORT_SYMBOL(tx_isp_get_vic_primary_regs);
 
 /* Real hardware frame completion detection - SDK compatible */
 static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int channel)
@@ -6811,10 +6876,7 @@ static int sensor_subdev_core_g_chip_ident(struct tx_isp_subdev *sd, struct tx_i
 {
     pr_info("*** ISP DELEGATING TO REAL SENSOR_G_CHIP_IDENT ***\n");
 
-    int ret = tx_isp_vic_start(ourISPdev->vic_dev);
-    if (ret != 0) {
-        pr_err("tx_isp_vic_start failed: %d\n", ret);
-    }
+    /* Do NOT call tx_isp_vic_start() here. Reference flow starts VIC in vic_core_s_stream only. */
 
     /* CRITICAL FIX: Delegate to the actual sensor driver's g_chip_ident function */
     if (stored_sensor_ops.original_ops &&
