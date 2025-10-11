@@ -130,11 +130,14 @@ static void csi_cpm_deassert_reset_if_enabled(void)
         csi_write_file(fbuf, n);
     }
 
+
+    /* Guard: if disabled, do not attempt any CPM reset writes */
     if (!csi_cpm_reset_fix) {
-        pr_info("[CPM][CSI] csi_cpm_reset_fix=0 (disabled) — not modifying CPM resets\n");
         iounmap(cpm);
         return;
     }
+
+    /* Always attempt CPM reset deassert now (risk-elevated per user) */
 
     /* Unlock (many Ingenic parts require writing 0xA5A5 before modifying reset regs) */
     writel(0x0000A5A5, cpm + 0x38);
@@ -822,10 +825,12 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                          * Implement the exact write so trace captures the lane setup.
                          */
 
-                        /* Working-sequence: skip CPM ungate here (BASIC should already be writable) */
-                        pr_info("[CPM][CSI] Skipping CPM ungate before BASIC writes (aligned with working branch)\n");
+                        /* Actively ungate CPM clocks before BASIC writes (risk-elevated) */
+                        csi_jit_ungate_clocks();
+                        pr_info("[CPM][CSI] JIT ungate done before BASIC writes\n");
+                        /* Optional: CPM reset deassert if module param enabled */
+                        csi_cpm_deassert_reset_if_enabled();
 
-                        /* Skipped CPM reset deassert per working sequence */
 
                         u32 lane_config_value = (sensor_attr->mipi.lans - 1) & 0x3;
                         writel(lane_config_value, csi_regs + 4);
@@ -914,9 +919,16 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                             /* Map ISP CSI config regs (+0x13c) to ISP CORE if available; fallback to VIC-derived offset */
                             if (!isp_csi_regs) {
                                 if (ourISPdev && ourISPdev->core_regs) {
-                                    *((void __iomem **)((char*)csi_dev + 0x13c)) = ourISPdev->core_regs;
-                                    isp_csi_regs = ourISPdev->core_regs;
-                                    pr_info("*** CSI PROBE: isp_csi_regs (offset 0x13c) mapped to ISP CORE: %p (expect phys 0x13300000) ***\n", isp_csi_regs);
+                                    /* Map to VIC primary + 0x6600: ISP wrapper (isp-w02) sub-block at 0x133e6600 */
+                                    if (ourISPdev->vic_regs) {
+                                        *((void __iomem **)((char*)csi_dev + 0x13c)) = ourISPdev->vic_regs + 0x6600;
+                                        isp_csi_regs = ourISPdev->vic_regs + 0x6600;
+                                        pr_info("*** CSI PROBE: isp_csi_regs (offset 0x13c) mapped to VIC+0x6600: %p (expect phys 0x133e6600) ***\n", isp_csi_regs);
+                                    } else {
+                                        *((void __iomem **)((char*)csi_dev + 0x13c)) = ourISPdev->core_regs;
+                                        isp_csi_regs = ourISPdev->core_regs;
+                                        pr_warn("*** CSI PROBE: VIC regs missing; falling back to ISP CORE base: %p ***\n", isp_csi_regs);
+                                    }
                                 } else {
                                     void __iomem *base = tx_isp_get_vic_primary_regs();
                                     if (!base && ourISPdev) {
@@ -968,6 +980,11 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
 
 						/* Working-sequence: skip WRAP CPM ungate before writes */
+							csi_jit_ungate_clocks();
+							csi_cpm_deassert_reset_if_enabled();
+
+							pr_info("[CPM][CSI] JIT ungate before WRAP writes\n");
+
 
                         /* Binary Ninja: *$v0_8 = 0x7d */
                         writel(0x7d, v0_8);
@@ -1012,8 +1029,10 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
                         v0_17 = 3;
                     }
-    /* Working-sequence: skip JIT ungate before toggling lanes (matches working branch) */
-    pr_info("[CPM][CSI] Skipping JIT ungate before toggling lanes (aligned with working branch)\n");
+    /* Actively ensure clocks ungated before toggling lanes (risk-elevated) */
+    csi_jit_ungate_clocks();
+    pr_info("[CPM][CSI] JIT ungate done before toggling lanes\n");
+    csi_cpm_deassert_reset_if_enabled();
 
                 }
 
@@ -1042,8 +1061,10 @@ int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes)
     void __iomem *csi_regs;
     u32 n_before, n_after;
     u32 shutdownz, dphyrstz, resetn;
-    /* Working-sequence: clocks assumed ready; skipping JIT ungate before lane/PHY toggles */
-    pr_info("[CPM][CSI] Skipping JIT ungate before lane/PHY toggles (aligned with working branch)\n");
+    /* Ensure clocks ungated before lane/PHY toggles (risk-elevated) */
+    csi_jit_ungate_clocks();
+    pr_info("[CPM][CSI] JIT ungate done before lane/PHY toggles\n");
+    csi_cpm_deassert_reset_if_enabled();
 
     u32 reg_val;
 

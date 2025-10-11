@@ -2122,6 +2122,45 @@ static volatile bool subdev_init_complete = false;
 int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable);
 int tx_isp_vic_hw_init(struct tx_isp_subdev *sd);
 
+
+/* BRUTAL: open all CPM clocks/resets to force CSI BASIC accessibility (file-scope) */
+static void isp_brutal_cpm_open_all(void)
+{
+    void __iomem *cpm = ioremap(0x10000000, 0x1000);
+    if (!cpm) {
+        pr_warn("[CPM][BRUTAL] ioremap failed\n");
+        return;
+    }
+    /* Snapshot before */
+    u32 g0b = readl(cpm + 0x20);
+    u32 g1b = readl(cpm + 0x28);
+    u32 r30b = readl(cpm + 0x30);
+    u32 r34b = readl(cpm + 0x34);
+    u32 unlb = readl(cpm + 0x38);
+    u32 r3cb = readl(cpm + 0x3C);
+    pr_info("[CPM][BRUTAL] BEFORE: g0=%08x g1=%08x r30=%08x r34=%08x unl=%08x r3c=%08x\n", g0b, g1b, r30b, r34b, unlb, r3cb);
+
+    /* Unlock and clear resets, ungate all clocks in GR0/GR1 */
+    writel(0x0000A5A5, cpm + 0x38);
+    wmb();
+    writel(0x00000000, cpm + 0x34);
+    writel(0x00000000, cpm + 0x30);
+    writel(0x00000000, cpm + 0x20);
+    writel(0x00000000, cpm + 0x28);
+    wmb();
+    udelay(10);
+
+    u32 g0a = readl(cpm + 0x20);
+    u32 g1a = readl(cpm + 0x28);
+    u32 r30a = readl(cpm + 0x30);
+    u32 r34a = readl(cpm + 0x34);
+    u32 unla = readl(cpm + 0x38);
+    u32 r3ca = readl(cpm + 0x3C);
+    pr_info("[CPM][BRUTAL] AFTER:  g0=%08x g1=%08x r30=%08x r34=%08x unl=%08x r3c=%08x\n", g0a, g1a, r30a, r34a, unla, r3ca);
+
+    iounmap(cpm);
+}
+
 /* tx_isp_video_link_stream - EXACT Binary Ninja reference implementation */
 static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
 {
@@ -2466,6 +2505,13 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
     int i;
     int result;
 
+
+    /* Call brutal CPM open at the very start of STREAM ON to remove any gating/reset */
+    if (enable == 1) {
+        pr_info("*** tx_isp_video_s_stream: BRUTAL CPM OPEN ALL ***\n");
+        isp_brutal_cpm_open_all();
+    }
+
     pr_info("*** tx_isp_video_s_stream: EXACT Binary Ninja reference implementation - enable=%d ***\n", enable);
 
     /* Debug: Show current subdev array status using helper function */
@@ -2534,6 +2580,20 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
         struct tx_isp_subdev *vic_sd = tx_isp_get_vic_subdev(dev);
         struct tx_isp_subdev *core_sd = tx_isp_get_core_subdev(dev);
         struct tx_isp_subdev *sensor_sd = tx_isp_get_sensor_subdev(dev);
+
+
+	        /* EXPERIMENTAL: Initialize and pre-stream Sensor before CSI init to power MIPI */
+	        if (sensor_sd) {
+	            if (sensor_sd->ops && sensor_sd->ops->core && sensor_sd->ops->core->init) {
+	                pr_info("*** EXPERIMENTAL: Sensor core->init before CSI init ***\n");
+	                (void)sensor_sd->ops->core->init(sensor_sd, 1);
+	            }
+	            if (sensor_sd->ops && sensor_sd->ops->video && sensor_sd->ops->video->s_stream) {
+	                pr_info("*** EXPERIMENTAL: PRE-STREAM SENSOR.s_stream(1) before CSI init ***\n");
+	                (void)sensor_sd->ops->video->s_stream(sensor_sd, 1);
+	                msleep(10);
+	            }
+	        }
 
         /* Initialize Core first */
         pr_info("*** DEBUG: core_sd=%p ***\n", core_sd);
@@ -2619,6 +2679,23 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
         }
 
         /* Initialize CSI third (after VIC) */
+
+            /* Pre-stream VIC.s_stream(1) to mirror working branch readiness before CSI init */
+            if (vic_sd && vic_sd->ops && vic_sd->ops->video && vic_sd->ops->video->s_stream) {
+                pr_info("*** tx_isp_video_s_stream: PRE-STREAM VIC.s_stream(1) before CSI init ***\n");
+                result = vic_sd->ops->video->s_stream(vic_sd, 1);
+                pr_info("*** tx_isp_video_s_stream: PRE-STREAM VIC.s_stream(1) returned %d ***\n", result);
+                /* Optional: brief wait for W01 movement */
+                do {
+                    struct tx_isp_vic_device *vd = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(vic_sd);
+                    void __iomem *w01 = vd ? vd->vic_regs_secondary : NULL;
+                    if (w01) {
+                        u32 w = readl(w01 + 0x14);
+                        pr_info("[W01 ] after PRE-STREAM VIC: 0x14=0x%08x\n", w);
+                    }
+                } while (0);
+            }
+
         if (csi_sd && csi_sd->ops && csi_sd->ops->core && csi_sd->ops->core->init) {
             pr_info("*** tx_isp_video_s_stream: Initializing CSI subdev (after VIC) ***\n");
             result = csi_sd->ops->core->init(csi_sd, 1);

@@ -2083,6 +2083,57 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
             /* Binary Ninja: *($s1_1 + 0x128) = 3 */
             vic_dev->state = 3;
             pr_info("vic_core_ops_init: Enabled VIC, state -> 3\n");
+
+
+            /* DRAMATIC: enable VIC hardware early, before CSI init, to match working branch */
+            if (vic_dev->vic_regs) {
+                void __iomem *vic_regs = vic_dev->vic_regs;
+                pr_info("*** VIC EARLY ENABLE: 2->4->wait->1 before CSI init ***\n");
+                writel(0x2, vic_regs + 0x0);
+                wmb();
+                writel(0x4, vic_regs + 0x0);
+                wmb();
+                {
+                    u32 wait_count = 0;
+                    while ((readl(vic_regs + 0x0) != 0) && (wait_count < 2000)) {
+                        wait_count++;
+                        udelay(1);
+                    }
+                    writel(0x1, vic_regs + 0x0);
+                    wmb();
+                    pr_info("*** VIC EARLY ENABLE done (waited %u us) ***\n", wait_count);
+                }
+            } else {
+                pr_warn("*** VIC EARLY ENABLE SKIPPED: vic_regs is NULL ***\n");
+            }
+
+            /* Early W01 status check only (no writes) */
+            if (vic_dev->vic_regs_secondary) {
+                void __iomem *w01 = vic_dev->vic_regs_secondary;
+                pr_info("vic_core_ops_init: early W01 status[0x14]=0x%08x\n", readl(w01 + 0x14));
+
+
+                /* Minimal BN-backed VIC control register setup prior to CSI init */
+                if (vic_dev->vic_regs) {
+                    void __iomem *vr = vic_dev->vic_regs;
+                    /* Set MIPI mode in VIC (BN: reg 0x0c = 2) */
+                    writel(2, vr + 0x0c);
+                    /* Frame mode defaults (BN: 0x1ac/0x1a8 = 0x4440; 0x1b0 = 0x10) */
+                    writel(0x4440, vr + 0x1ac);
+                    writel(0x4440, vr + 0x1a8);
+                    writel(0x10,   vr + 0x1b0);
+                    /* Control register (BN exact): 0x1a4 = 0x100010 */
+                    writel(0x100010, vr + 0x1a4);
+                    wmb();
+                    pr_info("*** VIC EARLY CTRL: mode(0x0c)=2, 1a8/1ac=0x4440, 1b0=0x10, 1a4=0x100010 ***\n");
+                }
+
+            /* Apply a minimal VIC configuration early to mirror working branch behavior */
+            tx_isp_vic_apply_full_config(vic_dev);
+
+            } else {
+                pr_warn("vic_core_ops_init: vic_regs_secondary is NULL; skipping early W01 status check\n");
+            }
         }
     }
 
@@ -2558,14 +2609,33 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 {
                     void __iomem *w01 = vic_dev->vic_regs_secondary ? vic_dev->vic_regs_secondary : vic_w01_base;
                     if (w01) {
-                        writel(0x3130322a, w01 + 0x0);     /* Essential isp-w01 control (secondary space 0x10023000) */
-                        writel(0x1,         w01 + 0x4);     /* Essential isp-w01 control */
-                        writel(0x200,       w01 + 0x14);    /* Essential isp-w01 control */
-                        wmb();
-                        pr_info("*** isp-w01 CONFIGURATION COMPLETE (secondary space) ***\n");
+                        /* Read-only: log W01 status; avoid programming control words for now */
+                        pr_info("*** isp-w01 STATUS (secondary space), [0x14]=0x%08x ***\n", readl(w01 + 0x14));
                     } else {
-                        pr_warn("*** isp-w01 CONFIG SKIPPED: secondary base is NULL ***\n");
+                        pr_warn("*** isp-w01 STATUS SKIPPED: secondary base is NULL ***\n");
                     }
+
+                /* EARLY VIC HARDWARE ENABLE: Mirror BN sequence before CSI init */
+                if (vic_regs) {
+                    pr_info("*** EARLY VIC ENABLE: 2->4->wait->1 sequence before CSI init ***\n");
+                    writel(0x2, vic_regs + 0x0);
+                    wmb();
+                    writel(0x4, vic_regs + 0x0);
+                    wmb();
+                    {
+                        u32 wait_count = 0;
+                        while ((readl(vic_regs + 0x0) != 0) && (wait_count < 1000)) {
+                            wait_count++;
+                            udelay(1);
+                        }
+                        writel(0x1, vic_regs + 0x0);
+                        wmb();
+                        pr_info("*** EARLY VIC ENABLE done (waited %u us) ***\n", wait_count);
+                    }
+                } else {
+                    pr_warn("*** EARLY VIC ENABLE SKIPPED: vic_regs is NULL ***\n");
+                }
+
                 }
 
                 /* STEP 3: ISP isp-m0 - Main ISP registers (BEFORE sensor detection) */
