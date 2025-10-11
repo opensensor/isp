@@ -1400,6 +1400,15 @@ static void csi_dump_once_to_file(struct tx_isp_csi_device *csi_dev, const char 
                    cpm_read32(0x20), cpm_read32(0x24), cpm_read32(0x28), cpm_read32(0x2C), cpm_read32(0x34), cpm_read32(0x38));
     n += scnprintf(buf + n, sizeof(buf) - n, "[CPM2 ] 0x30=%08x 0x3C=%08x\n",
                    cpm_read32(0x30), cpm_read32(0x3C));
+    {
+        u32 clkgr0 = cpm_read32(0x20);
+        u32 clkgr1 = cpm_read32(0x28);
+        int csi_dphy_gated = (clkgr0 >> 7) & 1;   /* 1=gated, 0=ungated */
+        int wrap_gated     = (clkgr1 >> 2) & 1;   /* 1=gated, 0=ungated */
+        n += scnprintf(buf + n, sizeof(buf) - n, "[CLKG ] CSI_DPHY=%s WRAP=%s\n",
+                       csi_dphy_gated ? "GATED" : "UNGATED",
+                       wrap_gated     ? "GATED" : "UNGATED");
+    }
     n += scnprintf(buf + n, sizeof(buf) - n, "[BASIC] 0x00=%08x 0x04=%08x 0x08=%08x 0x0C=%08x 0x10=%08x 0x14=%08x\n",
                    readl(csi_base + 0x00), readl(csi_base + 0x04), readl(csi_base + 0x08),
                    readl(csi_base + 0x0C), readl(csi_base + 0x10), readl(csi_base + 0x14));

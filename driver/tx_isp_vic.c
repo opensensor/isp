@@ -2555,11 +2555,18 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_info("*** STEP 2: ISP isp-w01 - Control registers ***\n");
 
                 /* ESSENTIAL isp-w01 configuration - needed for proper ISP operation */
-                writel(0x3130322a, vic_regs + 0x0);     /* Essential isp-w01 control */
-                writel(0x1, vic_regs + 0x4);            /* Essential isp-w01 control */
-                writel(0x200, vic_regs + 0x14);         /* Essential isp-w01 control */
-                wmb();
-                pr_info("*** isp-w01 CONFIGURATION COMPLETE ***\n");
+                {
+                    void __iomem *w01 = vic_dev->vic_regs_secondary ? vic_dev->vic_regs_secondary : vic_w01_base;
+                    if (w01) {
+                        writel(0x3130322a, w01 + 0x0);     /* Essential isp-w01 control (secondary space 0x10023000) */
+                        writel(0x1,         w01 + 0x4);     /* Essential isp-w01 control */
+                        writel(0x200,       w01 + 0x14);    /* Essential isp-w01 control */
+                        wmb();
+                        pr_info("*** isp-w01 CONFIGURATION COMPLETE (secondary space) ***\n");
+                    } else {
+                        pr_warn("*** isp-w01 CONFIG SKIPPED: secondary base is NULL ***\n");
+                    }
+                }
 
                 /* STEP 3: ISP isp-m0 - Main ISP registers (BEFORE sensor detection) */
                 pr_info("*** STEP 3: ISP isp-m0 - Main ISP registers (BEFORE sensor detection) ***\n");
