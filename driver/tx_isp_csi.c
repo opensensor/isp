@@ -235,6 +235,67 @@ void vic_write32(u32 reg, u32 val)
     writel(val, tx_isp_vic_regs + reg);
 }
 
+/* Wait until W01 (VIC) shows a non-zero stable state before BASIC writes.
+ * This mirrors the working branch where BASIC is alive pre-init.
+ * Read-only, small timeout, safe.
+ */
+static int csi_wait_w01_ready(int timeout_ms)
+{
+    u32 prev = vic_read32(0x14);
+    int stable = (prev != 0) ? 1 : 0;
+    int waited = 0;
+    while (waited < timeout_ms) {
+        private_msleep(1);
+        waited += 1;
+        u32 cur = vic_read32(0x14);
+        if (cur != 0 && cur == prev) {
+            stable++;
+            if (stable >= 2) {
+                pr_info("[W01 ] ready: 0x14=0x%08x (waited %d ms)\n", cur, waited);
+                return 1;
+            }
+        } else {
+            stable = (cur != 0) ? 1 : 0;
+        }
+        prev = cur;
+    }
+    pr_info("[W01 ] not-ready timeout: last 0x14=0x%08x (waited %d ms)\n", prev, waited);
+    return 0;
+}
+
+
+/* Wait for specific VIC/W01 phases observed on the working branch before BASIC writes.
+ * Safe (read-only) and bounded wait. Targets: 0x230, 0x300, 0x330.
+ */
+static int csi_wait_w01_phase(int timeout_ms)
+{
+    const u32 t0 = 0x00000230;
+    const u32 t1 = 0x00000300;
+    const u32 t2 = 0x00000330;
+    u32 prev = vic_read32(0x14);
+    int stable = 0;
+    int waited = 0;
+    while (waited < timeout_ms) {
+        private_msleep(1);
+        waited += 1;
+        u32 cur = vic_read32(0x14);
+        int match = (cur == t0) || (cur == t1) || (cur == t2);
+        if (match && cur == prev) {
+            stable++;
+            if (stable >= 2) {
+                pr_info("[W01 ] phase-ready: 0x14=0x%08x (waited %d ms)\n", cur, waited);
+                return 1;
+            }
+        } else {
+            stable = match ? 1 : 0;
+        }
+        prev = cur;
+    }
+    pr_info("[W01 ] phase not reached: last 0x14=0x%08x (waited %d ms)\n", prev, waited);
+    return 0;
+}
+
+
 /* Similarly for CSI... */
 static void __iomem *tx_isp_csi_regs = NULL;
 static void __iomem *tx_cpm_regs = NULL;
@@ -555,6 +616,35 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
     /* Binary Ninja: *(arg1 + 0x128) = $v0_4 */
     csi_dev->state = v0_4;
 
+    /* Working-sequence: assert CSI2_RESETN and set lane mask at stream-on */
+    if (enable == 1 && csi_dev->interface_type == 1) {
+        void __iomem *csi_regs = csi_dev->csi_regs;
+        if (csi_regs) {
+
+            /* Wait for wrapper readiness before asserting CSI2_RESETN/lane mask */
+            csi_wait_w01_ready(10);
+
+
+                /* Require VIC/W01 to reach known stream-on phases before BASIC writes */
+                csi_wait_w01_phase(20);
+
+            u32 v = readl(csi_regs + 0x10);
+            writel(v | 0x1, csi_regs + 0x10);
+            pr_info("*** CSI MIPI: STREAM-ON - Assert CSI[0x10] |= 1; readback=0x%08x ***\n", readl(csi_regs + 0x10));
+            u32 lane_enable_mask = 0x3f;
+            if (ourISPdev && ourISPdev->sensor && ourISPdev->sensor->video.attr) {
+                int lans = ourISPdev->sensor->video.attr->mipi.lans;
+                if (lans == 1) lane_enable_mask = 0x31;
+                else if (lans == 2) lane_enable_mask = 0x33;
+                else if (lans >= 4) lane_enable_mask = 0x3f;
+            }
+            writel(lane_enable_mask, csi_regs + 0x128);
+            pr_info("*** CSI MIPI: STREAM-ON - BASIC[0x128] lane mask = 0x%x ***\n", lane_enable_mask);
+            pr_info("*** CSI MIPI: STREAM-ON - BASIC[0x128] READBACK = 0x%08x ***\n", readl(csi_regs + 0x128));
+            private_msleep(10);
+        }
+    }
+
     /* Emit a single snapshot after stream-on to create /opt/csi.txt */
     if (enable == 1)
         csi_dump_once_to_file(csi_dev, "AFTER s_stream enable=1");
@@ -719,37 +809,23 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         /* Binary Ninja: void* $v0_2 = *($s0_1 + 0xb8) */
                         csi_regs = csi_dev->csi_regs;
 
+
+	                        /* Wait for wrapper readiness before BASIC writes */
+	                        csi_wait_w01_ready(10);
+
+
+		                        /* Require VIC/W01 to reach known phase before BASIC writes */
+		                        csi_wait_w01_phase(20);
+
                         /* CRITICAL: Binary Ninja shows lane config write to CSI[0x4]
                          * Binary Ninja: *(*($s0_1 + 0xb8) + 4) = zx.d(*($v1_5 + 0x24)) - 1
                          * Implement the exact write so trace captures the lane setup.
                          */
 
-                        /* Ensure CSI/DPHY clock ungated locally (CLKGR0 bit7) right before touching CSI regs */
-                        do {
+                        /* Working-sequence: skip CPM ungate here (BASIC should already be writable) */
+                        pr_info("[CPM][CSI] Skipping CPM ungate before BASIC writes (aligned with working branch)\n");
 
-	                        /* Ensure CSI clocks are ungated before BASIC writes */
-	                        csi_jit_ungate_clocks();
-
-                            void __iomem *cpm = ioremap(0x10000000, 0x1000);
-                            if (cpm) {
-                                u32 g0_before = readl(cpm + 0x20);
-                                if (g0_before & (1u << 7)) {
-                                    u32 g0_after = g0_before & ~(1u << 7);
-                                    writel(g0_after, cpm + 0x20);
-                                    wmb();
-                                    udelay(5);
-                                    pr_info("[CPM][CSI] Ungate CLKGR0 bit7 locally: %08x -> %08x\n", g0_before, readl(cpm + 0x20));
-                                } else {
-                                    pr_info("[CPM][CSI] CLKGR0 bit7 already ungated: %08x\n", g0_before);
-                                }
-                                iounmap(cpm);
-                            } else {
-                                pr_warn("[CPM][CSI] ioremap failed; proceeding without local ungate\n");
-                            }
-                        } while (0);
-
-                        /* Ensure CPM reset is deasserted (optional, guarded) before BASIC writes */
-                        csi_cpm_deassert_reset_if_enabled();
+                        /* Skipped CPM reset deassert per working sequence */
 
                         u32 lane_config_value = (sensor_attr->mipi.lans - 1) & 0x3;
                         writel(lane_config_value, csi_regs + 4);
@@ -757,19 +833,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                                 lane_config_value, sensor_attr->mipi.lans);
                         pr_info("*** CSI MIPI: CSI[0x4] READBACK = 0x%x ***\n", readl(csi_regs + 4));
                         /* Guard: if CPM CLKGR0 bit7 bounced back, clear it again before STEP 2 */
-                        do {
-                            void __iomem *cpm = ioremap(0x10000000, 0x1000);
-                            if (cpm) {
-                                u32 g0b = readl(cpm + 0x20);
-                                if (g0b & (1u << 7)) {
-                                    writel(g0b & ~(1u << 7), cpm + 0x20);
-                                    wmb();
-                                    udelay(5);
-                                    pr_warn("[CPM][CSI] Re-cleared CLKGR0 bit7 before STEP2: %08x -> %08x\n", g0b, readl(cpm + 0x20));
-                                }
-                                iounmap(cpm);
-                            }
-                        } while (0);
+                        /* Working-sequence: skip redundant CLKGR0 re-clear check */
 
 
                         /* Binary Ninja: *($v0_2 + 8) &= 0xfffffffe */
@@ -903,29 +967,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                         }
 
 
-						/* JIT ungate before WRAP writes: ensure CLKGR1 bit2 and CLKGR0 bit7 are clear; log values even if unchanged */
-						do {
-							void __iomem *cpm = ioremap(0x10000000, 0x1000);
-							if (cpm) {
-								u32 g1b = readl(cpm + 0x28);
-								u32 g0b2 = readl(cpm + 0x20);
-								if (g1b & (1u << 2)) {
-									writel(g1b & ~(1u << 2), cpm + 0x28);
-									wmb(); udelay(5);
-									pr_info("[CPM][CSI] JIT ungate CLKGR1 bit2 before WRAP writes: %08x -> %08x\n", g1b, readl(cpm + 0x28));
-								} else {
-									pr_info("[CPM][CSI] JIT check: CLKGR1 (0x28) already ungated: %08x\n", g1b);
-								}
-								if (g0b2 & (1u << 7)) {
-									writel(g0b2 & ~(1u << 7), cpm + 0x20);
-									wmb(); udelay(5);
-									pr_info("[CPM][CSI] JIT ungate CLKGR0 bit7 before WRAP writes: %08x -> %08x\n", g0b2, readl(cpm + 0x20));
-								} else {
-									pr_info("[CPM][CSI] JIT check: CLKGR0 (0x20) already ungated: %08x\n", g0b2);
-								}
-								iounmap(cpm);
-							}
-						} while (0);
+						/* Working-sequence: skip WRAP CPM ungate before writes */
 
                         /* Binary Ninja: *$v0_8 = 0x7d */
                         writel(0x7d, v0_8);
@@ -933,33 +975,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 						pr_info("*** CSI MIPI: ISP CORE[0x0] READBACK = 0x%08x ***\n", readl(v0_8));
 
 
-                        /* Set lane enable mask based on lane count (1->0x31, 2->0x33, 4->0x3f) */
-                        u32 lane_enable_mask;
-                        if (sensor_attr->mipi.lans == 1) {
-                            lane_enable_mask = 0x31;
-                        } else if (sensor_attr->mipi.lans == 2) {
-                            lane_enable_mask = 0x33;
-                        } else if (sensor_attr->mipi.lans >= 4) {
-                            lane_enable_mask = 0x3f;
-                        } else {
-                            lane_enable_mask = 0x3f; /* default safe mask */
-                        }
-                        /* Lane enable mask is in CSI BASIC space at 0x128 */
-                        writel(lane_enable_mask, csi_regs + 0x128);
-                        pr_info("*** CSI MIPI: Writing BASIC[0x128] = 0x%x (lane enable mask for %d lanes) ***\n",
-                                lane_enable_mask, sensor_attr->mipi.lans);
-                        pr_info("*** CSI MIPI: BASIC[0x128] READBACK = 0x%08x ***\n", readl(csi_regs + 0x128));
-
-
-                        /* Binary Ninja: *(*($s0_1 + 0xb8) + 0x10) = 1 */
-                        writel(1, csi_dev->csi_regs + 0x10);
-                        pr_info("*** CSI MIPI: BASIC[0x10] READBACK = 0x%08x ***\n", readl(csi_dev->csi_regs + 0x10));
-
-                        pr_info("*** CSI MIPI: CRITICAL - Enabling CSI PHY: CSI[0x10] = 1 ***\n");
-                        pr_info("*** CSI MIPI: PHY ENABLED - MIPI data should now flow! ***\n");
-
-                        /* Binary Ninja: private_msleep(0xa) */
-                        private_msleep(0xa);
+                        /* Defer lane mask and CSI2_RESETN assertion to stream-on (enable=1), per working branch */
 
                         v0_17 = 3;
 
@@ -996,8 +1012,8 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
                         v0_17 = 3;
                     }
-    /* Ungate clocks before toggling lanes */
-    csi_jit_ungate_clocks();
+    /* Working-sequence: skip JIT ungate before toggling lanes (matches working branch) */
+    pr_info("[CPM][CSI] Skipping JIT ungate before toggling lanes (aligned with working branch)\n");
 
                 }
 
@@ -1026,8 +1042,8 @@ int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes)
     void __iomem *csi_regs;
     u32 n_before, n_after;
     u32 shutdownz, dphyrstz, resetn;
-    /* Ensure clocks are ungated before lane/PHY toggles */
-    csi_jit_ungate_clocks();
+    /* Working-sequence: clocks assumed ready; skipping JIT ungate before lane/PHY toggles */
+    pr_info("[CPM][CSI] Skipping JIT ungate before lane/PHY toggles (aligned with working branch)\n");
 
     u32 reg_val;
 
@@ -1038,6 +1054,14 @@ int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes)
     csi_regs = csi_dev ? csi_dev->csi_regs : NULL;
     if (!csi_regs)
         return -EINVAL;
+
+
+    /* Wait for wrapper readiness before lane/PHY toggles */
+    csi_wait_w01_ready(10);
+
+
+    /* Require VIC/W01 to reach known phase before lane/PHY toggles */
+    csi_wait_w01_phase(20);
 
     /* Read current N_LANES and control signals */
     n_before = readl(csi_regs + 0x04) & 0x3;
@@ -1352,8 +1376,9 @@ static void csi_write_file(const char *buf, size_t len)
 
 static void csi_dump_once_to_file(struct tx_isp_csi_device *csi_dev, const char *tag)
 {
-    char buf[512];
+    char buf[1024];
     int n = 0;
+
     void __iomem *csi_base;
     void __iomem *isp_csi_regs = NULL;
 
@@ -1388,6 +1413,14 @@ static void csi_dump_once_to_file(struct tx_isp_csi_device *csi_dev, const char 
     /* w01 diagnostic (primary mapping 0x10023000) */
     n += scnprintf(buf + n, sizeof(buf) - n, "[W01  ] 0x14=%08x 0x40=%08x\n", vic_read32(0x14), vic_read32(0x40));
 
+    {
+        u32 w01_phase = vic_read32(0x14);
+        const char *phase_str = (w01_phase == 0x00000230 || w01_phase == 0x00000300 || w01_phase == 0x00000330)
+                                ? "GRANT"
+                                : (w01_phase == 0x00000200 ? "INIT" : "OTHER");
+        n += scnprintf(buf + n, sizeof(buf) - n, "[W01P ] %s 0x14=%08x\n", phase_str, w01_phase);
+    }
+
 
     if (isp_csi_regs) {
         n += scnprintf(buf + n, sizeof(buf) - n, "[ISP  ] 0x000=%08x 0x080=%08x 0x10C=%08x 0x110=%08x 0x114=%08x 0x128=%08x\n",
@@ -1395,12 +1428,20 @@ static void csi_dump_once_to_file(struct tx_isp_csi_device *csi_dev, const char 
                        readl(isp_csi_regs + 0x114), readl(isp_csi_regs + 0x128));
         n += scnprintf(buf + n, sizeof(buf) - n, "[ISP  ] 0x160=%08x 0x1E0=%08x 0x260=%08x\n",
                        readl(isp_csi_regs + 0x160), readl(isp_csi_regs + 0x1E0), readl(isp_csi_regs + 0x260));
+        n += scnprintf(buf + n, sizeof(buf) - n, "[ISP  ] 0x100=%08x 0x104=%08x 0x108=%08x 0x11C=%08x 0x120=%08x 0x124=%08x\n",
+                       readl(isp_csi_regs + 0x100), readl(isp_csi_regs + 0x104), readl(isp_csi_regs + 0x108),
+                       readl(isp_csi_regs + 0x11C), readl(isp_csi_regs + 0x120), readl(isp_csi_regs + 0x124));
+        n += scnprintf(buf + n, sizeof(buf) - n, "[ISP  ] 0x12C=%08x 0x130=%08x 0x140=%08x 0x144=%08x 0x148=%08x 0x150=%08x\n",
+                       readl(isp_csi_regs + 0x12C), readl(isp_csi_regs + 0x130), readl(isp_csi_regs + 0x140),
+                       readl(isp_csi_regs + 0x144), readl(isp_csi_regs + 0x148), readl(isp_csi_regs + 0x150));
+
     } else {
         n += scnprintf(buf + n, sizeof(buf) - n, "[ISP  ] (null)\n");
     }
     n += scnprintf(buf + n, sizeof(buf) - n, "\n");
 
     csi_write_file(buf, n);
+
 }
 
 static int csi_dump_thread_fn(void *data)

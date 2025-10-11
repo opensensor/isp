@@ -2578,26 +2578,55 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
             }
         }
 
-        /* Initialize CSI second */
-        if (csi_sd && csi_sd->ops && csi_sd->ops->core && csi_sd->ops->core->init) {
-            pr_info("*** tx_isp_video_s_stream: Initializing CSI subdev ***\n");
-            result = csi_sd->ops->core->init(csi_sd, 1);
-            if (result != 0 && result != -ENOIOCTLCMD) {
-                pr_err("tx_isp_video_s_stream: CSI init failed: %d\n", result);
-                return result;
-            }
-            pr_info("*** tx_isp_video_s_stream: CSI init SUCCESS ***\n");
-        }
-
-        /* Initialize VIC third */
+        /* Initialize VIC second (do this before CSI so wrapper can grant BASIC) */
         if (vic_sd && vic_sd->ops && vic_sd->ops->core && vic_sd->ops->core->init) {
-            pr_info("*** tx_isp_video_s_stream: Initializing VIC subdev ***\n");
+            pr_info("*** tx_isp_video_s_stream: Initializing VIC subdev (before CSI) ***\n");
             result = vic_sd->ops->core->init(vic_sd, 1);
             if (result != 0 && result != -ENOIOCTLCMD) {
                 pr_err("tx_isp_video_s_stream: VIC init failed: %d\n", result);
                 return result;
             }
             pr_info("*** tx_isp_video_s_stream: VIC init SUCCESS ***\n");
+
+            /* Read-only wait: allow W01 to reach known stream-on phases before CSI init */
+            do {
+                struct tx_isp_vic_device *vic_dev_for_regs = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(vic_sd);
+                void __iomem *w01 = vic_dev_for_regs ? vic_dev_for_regs->vic_regs_secondary : NULL;
+                if (w01) {
+                    u32 prev = readl(w01 + 0x14);
+                    int stable = 0;
+                    int waited = 0;
+                    while (waited < 20) { /* up to ~20ms */
+                        msleep(1);
+                        waited += 1;
+                        u32 cur = readl(w01 + 0x14);
+                        int match = (cur == 0x00000230) || (cur == 0x00000300) || (cur == 0x00000330);
+                        if (match && cur == prev) {
+                            if (++stable >= 2) {
+                                pr_info("[W01 ] phase-ready(before CSI init): 0x14=0x%08x (waited %d ms)\n", cur, waited);
+                                break;
+                            }
+                        } else {
+                            stable = match ? 1 : 0;
+                        }
+                        prev = cur;
+                    }
+                    if (stable < 2) {
+                        pr_info("[W01 ] phase not reached(before CSI init): last 0x14=0x%08x (waited 20 ms)\n", readl(w01 + 0x14));
+                    }
+                }
+            } while (0);
+        }
+
+        /* Initialize CSI third (after VIC) */
+        if (csi_sd && csi_sd->ops && csi_sd->ops->core && csi_sd->ops->core->init) {
+            pr_info("*** tx_isp_video_s_stream: Initializing CSI subdev (after VIC) ***\n");
+            result = csi_sd->ops->core->init(csi_sd, 1);
+            if (result != 0 && result != -ENOIOCTLCMD) {
+                pr_err("tx_isp_video_s_stream: CSI init failed: %d\n", result);
+                return result;
+            }
+            pr_info("*** tx_isp_video_s_stream: CSI init SUCCESS ***\n");
         }
 
         /* Initialize Sensor last */
@@ -2623,6 +2652,35 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
         if (vic_sd_order && vic_sd_order->ops && vic_sd_order->ops->video && vic_sd_order->ops->video->s_stream) {
             pr_info("*** tx_isp_video_s_stream: ORDERED CALL VIC.s_stream(1) ***\n");
             vic_sd_order->ops->video->s_stream(vic_sd_order, 1);
+
+            /* After VIC.s_stream, wait for VIC/W01 phase to reach grant state before CSI */
+            do {
+                struct tx_isp_vic_device *vd = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(vic_sd_order);
+                void __iomem *w01 = vd ? vd->vic_regs_secondary : NULL;
+                if (w01) {
+                    u32 prev = readl(w01 + 0x14);
+                    int stable = 0;
+                    int waited = 0;
+                    while (waited < 30) { /* up to ~30ms */
+                        msleep(1);
+                        waited += 1;
+                        u32 cur = readl(w01 + 0x14);
+                        int match = (cur == 0x00000230) || (cur == 0x00000300) || (cur == 0x00000330);
+                        if (match && cur == prev) {
+                            if (++stable >= 2) {
+                                pr_info("[W01 ] phase-ready(after VIC s_stream): 0x14=0x%08x (waited %d ms)\n", cur, waited);
+                                break;
+                            }
+                        } else {
+                            stable = match ? 1 : 0;
+                        }
+                        prev = cur;
+                    }
+                    if (stable < 2) {
+                        pr_info("[W01 ] phase not reached(after VIC s_stream): last 0x14=0x%08x (waited 30 ms)\n", readl(w01 + 0x14));
+                    }
+                }
+            } while (0);
         }
         if (csi_sd_order && csi_sd_order->ops && csi_sd_order->ops->video && csi_sd_order->ops->video->s_stream) {
             pr_info("*** tx_isp_video_s_stream: ORDERED CALL CSI.s_stream(1) ***\n");
