@@ -20,6 +20,8 @@
 #include <media/v4l2-fh.h>
 #include <media/v4l2-ctrls.h>
 #include <linux/dma-mapping.h>
+#include <linux/slab.h>
+
 
 /* V4L2 control IDs - use standard V4L2 control IDs */
 /* Note: V4L2 structures and enums are already defined in kernel headers */
@@ -406,6 +408,20 @@ static void cleanup_i2c_infrastructure(struct tx_isp_dev *dev)
 
 /* IRQ function callback array - Binary Ninja: irq_func_cb */
 static irqreturn_t (*irq_func_cb[MAX_IRQ_HANDLERS])(int irq, void *dev_id);
+/* Minimal node used for completed_buffers gating */
+struct completed_node {
+    struct list_head list;
+    u32 seq;
+    u32 index;
+    struct timeval ts; /* timestamp captured at completion time */
+};
+
+/* Node for queued_buffers: tracks buffer index queued by userspace */
+struct queued_node {
+    struct list_head list;
+    u32 index;
+};
+
 static void (*event_func_cb[MAX_EVENT_HANDLERS])(void *data);
 static DEFINE_SPINLOCK(irq_cb_lock);
 
@@ -800,14 +816,70 @@ int frame_chan_event(void *priv, int event, void *data)
     case TX_ISP_EVENT_FRAME_DQBUF: { /* 0x3000006 */
         unsigned long flags;
         struct tx_isp_channel_state *state = &fcd->state;
+        u32 enable = 0, period = 0, mask = 0;
+        bool drop = false;
 
-        /* Mark a frame as ready and wake any waiters (used by DQBUF) */
-        spin_lock_irqsave(&state->buffer_lock, flags);
-        state->frame_ready = true;
-        spin_unlock_irqrestore(&state->buffer_lock, flags);
+        /* Frame-drop window check using current HW settings */
+        tisp_get_frame_drop((u32)fcd->channel_num, &enable, &period, &mask);
+        if (enable && period) {
+            u32 pos = state->drop_counter++ % period;
+            drop = ((mask >> pos) & 0x1) != 0;
+            pr_debug("[DROP] ch%d enable=%u period=%u mask=0x%x pos=%u drop=%d\n",
+                     fcd->channel_num, enable, period, mask, pos, drop);
+        }
+        if (drop) {
+            /* In a drop window: do not make a frame deliverable */
+            return 0;
+        }
 
-        wake_up(&state->frame_wait);
-        return 0;
+        /* Make frame deliverable only if a queued buffer exists */
+        {
+            struct queued_node *qnode = NULL;
+            struct completed_node *cnode = NULL;
+
+            spin_lock_irqsave(&state->queue_lock, flags);
+            if (!list_empty(&state->queued_buffers)) {
+                struct list_head *head = state->queued_buffers.next;
+                list_del(head);
+                state->queued_count--;
+                qnode = list_entry(head, struct queued_node, list);
+            }
+            spin_unlock_irqrestore(&state->queue_lock, flags);
+
+            if (!qnode) {
+                /* No queued buffer -> cannot deliver; OEM would not wake */
+                pr_debug("[FRM] ch%d complete: no queued buffer, suppress wake\n", fcd->channel_num);
+                return 0;
+            }
+
+            /* Prefer completed_buffers; fallback to pre-dequeue */
+            cnode = kmalloc(sizeof(*cnode), GFP_ATOMIC);
+            if (cnode) {
+                cnode->seq = state->sequence++;
+                cnode->index = qnode->index;
+                do_gettimeofday(&cnode->ts);
+                spin_lock_irqsave(&state->queue_lock, flags);
+                list_add_tail(&cnode->list, &state->completed_buffers);
+                state->completed_count++;
+                spin_unlock_irqrestore(&state->queue_lock, flags);
+                pr_debug("[FRM] ch%d complete->done idx=%u seq=%u\n", fcd->channel_num, cnode->index, cnode->seq);
+                kfree(qnode);
+                wake_up_interruptible(&state->frame_wait);
+                return 0;
+            }
+
+            /* Allocation failed: use pre-dequeue path carrying the popped index */
+            spin_lock_irqsave(&state->queue_lock, flags);
+            state->pre_dequeue_index = qnode->index;
+            state->pre_dequeue_seq = state->sequence++;
+            do_gettimeofday(&state->pre_dequeue_ts);
+            state->pre_dequeue_ready = true;
+            spin_unlock_irqrestore(&state->queue_lock, flags);
+            pr_debug("[FRM] ch%d complete->pre idx=%u seq=%u\n", fcd->channel_num, state->pre_dequeue_index, state->pre_dequeue_seq);
+            kfree(qnode);
+            wake_up_interruptible(&state->frame_wait);
+            return 0;
+        }
     }
     case TX_ISP_EVENT_FRAME_QBUF: /* 0x3000008 */
         /* Optionally track queued buffers; no-op for now */
@@ -1423,7 +1495,21 @@ int frame_channel_open(struct inode *inode, struct file *file)
     }
 
     /* Initialize channel state - safe to call multiple times in kernel 3.10 */
+    /* Initialize queueing primitives for completed/queued buffers */
+    spin_lock_init(&fcd->state.queue_lock);
+    INIT_LIST_HEAD(&fcd->state.queued_buffers);
+    INIT_LIST_HEAD(&fcd->state.completed_buffers);
+    fcd->state.queued_count = 0;
+    fcd->state.completed_count = 0;
+    fcd->state.pre_dequeue_ready = false;
+    fcd->state.drop_counter = 0;
+
     spin_lock_init(&fcd->state.buffer_lock);
+    fcd->state.pre_dequeue_index = 0;
+    fcd->state.pre_dequeue_seq = 0;
+    memset(&fcd->state.pre_dequeue_ts, 0, sizeof(fcd->state.pre_dequeue_ts));
+
+
     init_waitqueue_head(&fcd->state.frame_wait);
 
     /* Set default format based on channel if not already set */
@@ -3332,16 +3418,22 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x, size(NV12)=%d ***\n",
                 channel, buffer.index, buffer_phys_addr, buffer_size);
 
-        /* SAFE: Update buffer state management */
-        spin_lock_irqsave(&state->buffer_lock, flags);
-
-        /* Mark buffer as queued */
-        if (!state->frame_ready) {
-            state->frame_ready = true;
-            wake_up_interruptible(&state->frame_wait);
+        /* Track queued buffer for deliverability gating */
+        {
+            struct queued_node *qnode = kmalloc(sizeof(*qnode), GFP_KERNEL);
+            if (qnode) {
+                qnode->index = buffer.index;
+                spin_lock_irqsave(&state->queue_lock, flags);
+                list_add_tail(&qnode->list, &state->queued_buffers);
+                state->queued_count++;
+                spin_unlock_irqrestore(&state->queue_lock, flags);
+                pr_debug("[QBUF] ch%d queued idx=%u (queued_count=%d)\n", channel, qnode->index, state->queued_count);
+            } else {
+                pr_warn("*** QBUF: Failed to allocate queued_node; proceeding but deliverability may be delayed ***\n");
+            }
         }
 
-        spin_unlock_irqrestore(&state->buffer_lock, flags);
+        /* Do not wake DQBUF on QBUF; OEM wakes on FRAME_DQBUF event */
         /* Enqueue buffer into VIC ring via BUFFER_ENQUEUE (0x3000005) */
         if (ourISPdev && ourISPdev->vic_dev) {
             struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
@@ -3467,60 +3559,76 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
         }
 
-        /* OEM-aligned DQBUF: interruptible wait until frame ready or streaming stops */
+        /* OEM-aligned DQBUF: wait until a deliverable buffer is available or streaming stops */
         ret = wait_event_interruptible(state->frame_wait,
-                                       state->frame_ready || !state->streaming);
+                                       !list_empty(&state->completed_buffers) ||
+                                       state->pre_dequeue_ready ||
+                                       !state->streaming);
         if (ret < 0)
             return ret; /* -ERESTARTSYS, etc. */
         if (!state->streaming)
             return -EAGAIN;
 
-        /* consume readiness */
-        spin_lock_irqsave(&state->buffer_lock, flags);
-        state->frame_ready = false;
-        spin_unlock_irqrestore(&state->buffer_lock, flags);
+        /* consume deliverable: pop completed node or consume pre-dequeue */
+        {
+            bool consumed_pre = false;
+            struct completed_node *cnode = NULL;
+            u32 delivered_idx = 0;
+            u32 delivered_seq = 0;
+            struct timeval delivered_ts = {0};
+            spin_lock_irqsave(&state->queue_lock, flags);
+            if (!list_empty(&state->completed_buffers)) {
+                struct list_head *head = state->completed_buffers.next;
+                list_del(head);
+                state->completed_count--;
+                cnode = list_entry(head, struct completed_node, list);
+            } else if (state->pre_dequeue_ready) {
+                state->pre_dequeue_ready = false;
+                consumed_pre = true;
+                delivered_idx = state->pre_dequeue_index;
+                delivered_seq = state->pre_dequeue_seq;
+                delivered_ts = state->pre_dequeue_ts;
+            }
+            spin_unlock_irqrestore(&state->queue_lock, flags);
+            if (cnode) {
+                delivered_idx = cnode->index;
+                delivered_seq = cnode->seq;
+                delivered_ts = cnode->ts;
+                kfree(cnode);
+            } else if (!consumed_pre) {
+                /* Spurious wake; no deliverable */
+                return -EAGAIN;
+            }
 
-        /* Binary Ninja __fill_v4l2_buffer implementation */
-        spin_lock_irqsave(&state->buffer_lock, flags);
+            /* Fill buffer with delivered idx/seq */
+            spin_lock_irqsave(&state->buffer_lock, flags);
+            buffer.index = delivered_idx;
+            buffer.type = 1; // V4L2_BUF_TYPE_VIDEO_CAPTURE
+            buffer.bytesused = state->width * state->height * 3 / 2; // YUV420 size
+            buffer.field = 1; // V4L2_FIELD_NONE
+            buffer.timestamp = delivered_ts;
+            buffer.sequence = delivered_seq;
+            buffer.memory = 1; // V4L2_MEMORY_MMAP
+            buffer.length = buffer.bytesused;
 
-        // Calculate buffer index like Binary Ninja reference
-        if (state->buffer_count > 0) {
-            buf_index = state->sequence % state->buffer_count;
-        } else {
-            buf_index = state->sequence % 4; // Default cycling
+            /* Binary Ninja/OEM-style flags */
+            buffer.flags = 0x1; // V4L2_BUF_FLAG_MAPPED
+            buffer.flags |= 0x2; // V4L2_BUF_FLAG_DONE
+
+            /* Offset based on delivered index */
+            buffer.m.offset = delivered_idx * buffer.bytesused;
         }
-
-        /* Fill buffer structure like Binary Ninja __fill_v4l2_buffer */
-        // memcpy(arg2, arg1, 0x34) - copy basic buffer info
-        buffer.index = buf_index;
-        buffer.type = 1; // V4L2_BUF_TYPE_VIDEO_CAPTURE
-        buffer.bytesused = state->width * state->height * 3 / 2; // YUV420 size
-        buffer.field = 1; // V4L2_FIELD_NONE
-        do_gettimeofday(&buffer.timestamp);
-        buffer.sequence = state->sequence++;
-        buffer.memory = 1; // V4L2_MEMORY_MMAP
-        buffer.length = buffer.bytesused;
-
-        /* Binary Ninja flag logic: *(arg2 + 0xc) = result
-         * Flags depend on buffer state */
-        buffer.flags = 0x1; // V4L2_BUF_FLAG_MAPPED
-
-        /* State-based flag setting: always mark DONE; avoid non-standard bits */
-        buffer.flags |= 0x2; // V4L2_BUF_FLAG_DONE
-
-        /* Set buffer physical address offset like Binary Ninja */
-        buffer.m.offset = buf_index * buffer.bytesused;
 
         /* Binary Ninja DMA sync: private_dma_sync_single_for_device(nullptr, var_44, var_40, 2) */
         if (sensor_active && ourISPdev && ourISPdev->vic_dev) {
             struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
 
             /* Update VIC buffer tracking for this dequeue like Binary Ninja */
-            if (vic_dev && vic_dev->vic_regs && buf_index < 8) {
-                u32 buffer_phys_addr = 0x6300000 + (buf_index * (state->width * state->height * 3 / 2));
+            if (vic_dev && vic_dev->vic_regs && buffer.index < 8) {
+                u32 buffer_phys_addr = 0x6300000 + (buffer.index * (state->width * state->height * 3 / 2));
 
                 pr_info("*** Channel %d: DQBUF updating VIC buffer[%d] addr=0x%x ***\n",
-                        channel, buf_index, buffer_phys_addr);
+                        channel, buffer.index, buffer_phys_addr);
 
                 /* Sync DMA for buffer completion like Binary Ninja reference */
                 // In real implementation: dma_sync_single_for_device()
@@ -3531,12 +3639,14 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
         }
 
-        // Mark frame as consumed
-        state->frame_ready = false;
+        /* release fill lock */
         spin_unlock_irqrestore(&state->buffer_lock, flags);
 
         pr_info("*** Channel %d: DQBUF complete - buffer[%d] seq=%d flags=0x%x ***\n",
-                channel, buffer.index, buffer.sequence - 1, buffer.flags);
+                channel, buffer.index, buffer.sequence, buffer.flags);
+        pr_debug("[DQBUF] ch%d delivered idx=%u seq=%u ts=%ld.%06ld\n",
+                 channel, buffer.index, buffer.sequence,
+                 (long)buffer.timestamp.tv_sec, (long)buffer.timestamp.tv_usec);
 
         if (copy_to_user(argp, &buffer, sizeof(buffer)))
             return -EFAULT;
@@ -3897,6 +4007,29 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     }
     case 0x80045613: { // VIDIOC_STREAMOFF - Stop streaming
         uint32_t type;
+        /* Drain deliverability queues and reset gating */
+        {
+            unsigned long qf;
+            spin_lock_irqsave(&state->queue_lock, qf);
+            while (!list_empty(&state->completed_buffers)) {
+                struct list_head *head = state->completed_buffers.next;
+                struct completed_node *cn = list_entry(head, struct completed_node, list);
+                list_del(head);
+                kfree(cn);
+            }
+            state->completed_count = 0;
+            while (!list_empty(&state->queued_buffers)) {
+                struct list_head *head = state->queued_buffers.next;
+                struct queued_node *qn = list_entry(head, struct queued_node, list);
+                list_del(head);
+                kfree(qn);
+            }
+            state->queued_count = 0;
+            state->pre_dequeue_ready = false;
+            spin_unlock_irqrestore(&state->queue_lock, qf);
+            wake_up_interruptible(&state->frame_wait);
+        }
+
         struct tx_isp_sensor *sensor = NULL;
         int ret;
 

@@ -590,6 +590,15 @@ struct tx_isp_channel_state {
     wait_queue_head_t frame_wait;          /* Wait queue for frame completion */
     int queued_count;                      /* Number of queued buffers */
     int completed_count;                   /* Number of completed buffers */
+    /* Deliverability gating */
+    bool pre_dequeue_ready;                 /* Pre-dequeue ready (for ch0 fast-path) */
+    u32 drop_counter;                       /* Frame drop counter for mask/period */
+
+    u32 pre_dequeue_index;                 /* Index reserved for pre-dequeue consumption */
+
+    u32 pre_dequeue_seq;                  /* Sequence reserved for pre-dequeue */
+    struct timeval pre_dequeue_ts;        /* Timestamp captured at completion */
+
 
     /* Legacy fields for compatibility */
     struct frame_buffer current_buffer;     /* Current active buffer */
