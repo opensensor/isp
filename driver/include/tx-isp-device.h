@@ -582,6 +582,10 @@ struct tx_isp_channel_state {
     int vbm_buffer_count;                 /* Number of VBM buffers */
     uint32_t vbm_buffer_size;             /* Size of each VBM buffer */
     spinlock_t vbm_lock;                  /* Protect VBM buffer access */
+    /* Geometry */
+    u32 bytesperline;                    /* Stride in bytes for Y (and UV) */
+    u32 sizeimage;                       /* Total image size for NV12 single-plane */
+
 
     /* Reference driver buffer queue management */
     struct list_head queued_buffers;       /* List of queued buffers (ready for VIC) */

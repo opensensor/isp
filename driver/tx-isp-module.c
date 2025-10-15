@@ -22,6 +22,9 @@
 #include <linux/dma-mapping.h>
 #include <linux/slab.h>
 
+#include <linux/ktime.h>
+#include <linux/timekeeping.h>
+
 
 /* V4L2 control IDs - use standard V4L2 control IDs */
 /* Note: V4L2 structures and enums are already defined in kernel headers */
@@ -778,6 +781,19 @@ int tisp_set_frame_drop(u32 channel_id, u32 enable, u32 period, u32 mask)
 EXPORT_SYMBOL_GPL(tisp_set_frame_drop);
 
 /* tisp_get_frame_drop - Read back frame drop parameters for a channel */
+/* Geometry helpers for NV12 single-plane reporting */
+static inline u32 nv12_stride(u32 width)
+{
+    /* Align to 8 bytes by default; adjust if OEM indicates larger alignment */
+    return (width + 7) & ~7U;
+}
+
+static inline u32 nv12_sizeimage(u32 width, u32 height)
+{
+    u32 stride = nv12_stride(width);
+    return (stride * height * 3) / 2;
+}
+
 int tisp_get_frame_drop(u32 channel_id, u32 *enable, u32 *period, u32 *mask)
 {
     u32 base, m, p;
@@ -1534,6 +1550,10 @@ int frame_channel_open(struct inode *inode, struct file *file)
 
         pr_info("*** FRAME CHANNEL %d: Initialized state ***\n", fcd->channel_num);
     }
+    /* Initialize geometry from defaults */
+    fcd->state.bytesperline = nv12_stride(fcd->state.width);
+    fcd->state.sizeimage = nv12_sizeimage(fcd->state.width, fcd->state.height);
+
 
     /* CRITICAL FIX: Store frame channel device at the exact offset expected by reference driver */
     /* Binary Ninja shows frame_channel_unlocked_ioctl expects device at *(file + 0x70) */
@@ -3267,11 +3287,11 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             u32 total_memory_needed;
             u32 available_memory = 96768; /* From Wyze Cam logs - only 94KB free */
 
-            /* Calculate buffer size based on channel */
-            if (channel == 0) {
-                buffer_size = 1920 * 1080 * 3 / 2; /* NV12 main stream */
-            } else {
-                buffer_size = 640 * 360 * 3 / 2;   /* NV12 sub stream */
+            /* Calculate buffer size based on current format geometry */
+            {
+                u32 w = state->width ? (u32)state->width : (channel == 0 ? 1920U : 640U);
+                u32 h = state->height ? (u32)state->height : (channel == 0 ? 1080U : 360U);
+                buffer_size = nv12_sizeimage(w, h);
             }
 
             /* Limit buffer count based on memory type and available memory */
@@ -3500,9 +3520,9 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("Channel %d: Dequeue buffer request\n", channel);
 
         // Reference waits for completed buffer and returns it
-        // For now, return dummy buffer data
+        // For now, return dummy buffer data using current geometry
         buffer.index = 0;
-        buffer.bytesused = 1920 * 1080 * 3 / 2; // YUV420 size
+        buffer.bytesused = state->sizeimage ? state->sizeimage : nv12_sizeimage(state->width ? state->width : 1920, state->height ? state->height : 1080);
         buffer.flags = 0x1; // V4L2_BUF_FLAG_MAPPED
         buffer.sequence = 0;
 
@@ -3604,19 +3624,22 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             spin_lock_irqsave(&state->buffer_lock, flags);
             buffer.index = delivered_idx;
             buffer.type = 1; // V4L2_BUF_TYPE_VIDEO_CAPTURE
-            buffer.bytesused = state->width * state->height * 3 / 2; // YUV420 size
+            /* Use stride-aligned sizeimage if available */
+            if (!state->bytesperline) state->bytesperline = nv12_stride(state->width);
+            if (!state->sizeimage) state->sizeimage = nv12_sizeimage(state->width, state->height);
+            buffer.bytesused = state->sizeimage;
             buffer.field = 1; // V4L2_FIELD_NONE
             buffer.timestamp = delivered_ts;
             buffer.sequence = delivered_seq;
             buffer.memory = 1; // V4L2_MEMORY_MMAP
-            buffer.length = buffer.bytesused;
+            buffer.length = state->sizeimage;
 
             /* Binary Ninja/OEM-style flags */
             buffer.flags = 0x1; // V4L2_BUF_FLAG_MAPPED
             buffer.flags |= 0x2; // V4L2_BUF_FLAG_DONE
 
-            /* Offset based on delivered index */
-            buffer.m.offset = delivered_idx * buffer.bytesused;
+            /* Offset based on delivered index and plane size */
+            buffer.m.offset = delivered_idx * state->sizeimage;
         }
 
         /* Binary Ninja DMA sync: private_dma_sync_single_for_device(nullptr, var_44, var_40, 2) */
@@ -3968,8 +3991,12 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         // MIPI configuration register 0x10: Format-specific value
                         iowrite32(0x40000, vic_dev->vic_regs + 0x10);
 
-                        // MIPI stride configuration register 0x18
-                        iowrite32(vic_dev->width, vic_dev->vic_regs + 0x18);
+                        // MIPI stride configuration register 0x18 -> use bytesperline (stride)
+                        {
+                            u32 stride = state->bytesperline ? state->bytesperline : nv12_stride(vic_dev->width);
+                            iowrite32(stride, vic_dev->vic_regs + 0x18);
+                            pr_info("Channel %d: VIC stride (0x18) set to %u bytes/line\n", channel, stride);
+                        }
 
                         // DMA buffer configuration registers (from reference)
                         iowrite32(0x100010, vic_dev->vic_regs + 0x1a4);  // DMA config
@@ -4094,13 +4121,13 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         pr_info("Channel %d: Get format, type=%d\n", channel, format.type);
 
-        // Set default HD format
-        format.fmt.pix.width = 1920;
-        format.fmt.pix.height = 1080;
-        format.fmt.pix.pixelformat = 0x3231564e; // NV12 format
+        // Report current format based on state
+        format.fmt.pix.width = state->width ? state->width : 1920;
+        format.fmt.pix.height = state->height ? state->height : 1080;
+        format.fmt.pix.pixelformat = state->format ? state->format : 0x3231564e; // NV12
         format.fmt.pix.field = 1; // V4L2_FIELD_NONE
-        format.fmt.pix.bytesperline = 1920;
-        format.fmt.pix.sizeimage = 1920 * 1080 * 3 / 2;
+        format.fmt.pix.bytesperline = state->bytesperline ? state->bytesperline : nv12_stride(format.fmt.pix.width);
+        format.fmt.pix.sizeimage = state->sizeimage ? state->sizeimage : nv12_sizeimage(format.fmt.pix.width, format.fmt.pix.height);
         format.fmt.pix.colorspace = 8; // V4L2_COLORSPACE_REC709
 
         if (copy_to_user(argp, &format, sizeof(format)))
@@ -4136,7 +4163,9 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         state->width = format.fmt.pix.width;
         state->height = format.fmt.pix.height;
         state->format = format.fmt.pix.pixelformat;
-        /* Optional: bytesperline/size not strictly needed here */
+        state->bytesperline = nv12_stride(state->width);
+        state->sizeimage = nv12_sizeimage(state->width, state->height);
+        pr_debug("[FMT] ch%d bpl=%u sizeimage=%u\n", channel, state->bytesperline, state->sizeimage);
 
         /* Mirror into VIC device so pre-STREAMON QBUFs compute correct UV base
          * Only for Channel 0 (VIC capture channel). Sub-streams (chn1) should not
@@ -4149,6 +4178,15 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_info("*** VIC dimensions primed from S_FMT (chn0 only): %ux%u ***\n", vic->width, vic->height);
         }
 
+        /* Reflect adjusted geometry back to userspace per V4L2 S_FMT contract */
+        format.fmt.pix.width       = state->width;
+        format.fmt.pix.height      = state->height;
+        format.fmt.pix.pixelformat = state->format;
+        format.fmt.pix.field       = 1; /* V4L2_FIELD_NONE */
+        format.fmt.pix.bytesperline= state->bytesperline;
+        format.fmt.pix.sizeimage   = state->sizeimage;
+        if (copy_to_user(argp, &format, sizeof(format)))
+            return -EFAULT;
         return 0;
     }
     case 0x400456bf: { // Frame completion wait
