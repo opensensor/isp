@@ -3108,6 +3108,36 @@ extern int tisp_s_wb_attr(int mode, uint32_t r_gain, uint32_t b_gain,
 /* AWB register write helper from tx-isp-module.c */
 extern void system_reg_write_awb(u32 block, u32 reg, u32 value);
 
+/* Vendor-accurate WB attribute setter: programs R/B gains; sets G to unity (256)
+ * Using system_reg_write_awb with block=0 to avoid re-enabling here.
+ */
+int tisp_s_wb_attr(int mode, uint32_t r_gain, uint32_t b_gain,
+                   uint32_t p4, uint32_t p5, uint32_t p6)
+{
+    (void)p4; (void)p5; (void)p6;
+    if (mode != 1)
+        return 0;
+
+    /* Update tuning cache if available */
+    if (ourISPdev && ourISPdev->tuning_data) {
+        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+        mutex_lock(&tuning->mutex);
+        tuning->wb_gains.r = r_gain;
+        tuning->wb_gains.b = b_gain;
+        /* Keep G unity for neutral balance unless updated elsewhere */
+        tuning->wb_gains.g = 256;
+        mutex_unlock(&tuning->mutex);
+    }
+
+    /* Program hardware gains */
+    system_reg_write_awb(0, ISP_WB_R_GAIN, r_gain);
+    system_reg_write_awb(0, ISP_WB_G_GAIN, 256);
+    system_reg_write_awb(0, ISP_WB_B_GAIN, b_gain);
+
+    pr_debug("tisp_s_wb_attr: mode=%u r=%u g=%u b=%u\n", mode, r_gain, 256, b_gain);
+    return 0;
+}
+
 
 /* File operations structure - Binary Ninja reference */
 static const struct file_operations tisp_fops = {
