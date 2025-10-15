@@ -24,6 +24,7 @@
 
 #include <linux/ktime.h>
 #include <linux/timekeeping.h>
+#include <linux/version.h>
 
 
 /* V4L2 control IDs - use standard V4L2 control IDs */
@@ -794,6 +795,28 @@ static inline u32 nv12_sizeimage(u32 width, u32 height)
     return (stride * height * 3) / 2;
 }
 
+/* Monotonic timestamp helper: fill timeval from CLOCK_MONOTONIC with kernel-version fallback */
+static inline void fill_timeval_mono(struct timeval *tv)
+{
+#if defined(ktime_get_ts64) || (LINUX_VERSION_CODE >= KERNEL_VERSION(4,20,0))
+    struct timespec64 ts;
+    ktime_get_ts64(&ts);
+    tv->tv_sec = ts.tv_sec;
+    tv->tv_usec = ts.tv_nsec / 1000;
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3,17,0))
+    struct timespec ts;
+    ktime_get_ts(&ts);
+    tv->tv_sec = ts.tv_sec;
+    tv->tv_usec = ts.tv_nsec / 1000;
+#else
+    /* Fallback: raw monotonic */
+    struct timespec ts;
+    getrawmonotonic(&ts);
+    tv->tv_sec = ts.tv_sec;
+    tv->tv_usec = ts.tv_nsec / 1000;
+#endif
+}
+
 int tisp_get_frame_drop(u32 channel_id, u32 *enable, u32 *period, u32 *mask)
 {
     u32 base, m, p;
@@ -873,7 +896,7 @@ int frame_chan_event(void *priv, int event, void *data)
             if (cnode) {
                 cnode->seq = state->sequence++;
                 cnode->index = qnode->index;
-                do_gettimeofday(&cnode->ts);
+                fill_timeval_mono(&cnode->ts);
                 spin_lock_irqsave(&state->queue_lock, flags);
                 list_add_tail(&cnode->list, &state->completed_buffers);
                 state->completed_count++;
@@ -888,7 +911,7 @@ int frame_chan_event(void *priv, int event, void *data)
             spin_lock_irqsave(&state->queue_lock, flags);
             state->pre_dequeue_index = qnode->index;
             state->pre_dequeue_seq = state->sequence++;
-            do_gettimeofday(&state->pre_dequeue_ts);
+            fill_timeval_mono(&state->pre_dequeue_ts);
             state->pre_dequeue_ready = true;
             spin_unlock_irqrestore(&state->queue_lock, flags);
             pr_debug("[FRM] ch%d complete->pre idx=%u seq=%u\n", fcd->channel_num, state->pre_dequeue_index, state->pre_dequeue_seq);
@@ -2991,6 +3014,42 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
             pr_info("*** tx_isp_video_s_stream: ORDERED CALL VIC.s_stream(0) ***\n");
             vic_sd_order->ops->video->s_stream(vic_sd_order, 0);
         }
+        /* Post-disable cleanup: mask VIC IRQs and drain rings (sink) */
+        if (dev && dev->vic_dev) {
+            struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)dev->vic_dev;
+            if (vic->vic_regs) {
+                pr_info("*** tx_isp_video_s_stream: POST-DISABLE VIC IRQ MASK + HALT ***\n");
+                writel(0xFFFFFFFF, vic->vic_regs + 0x1e8);  /* mask all */
+                writel(0xFFFFFFFF, vic->vic_regs + 0x1ec);  /* mask all (MDMA bank) */
+                writel(0x00000000, vic->vic_regs + 0x1e0);  /* disable all */
+                writel(0x00000000, vic->vic_regs + 0x1e4);  /* disable MDMA */
+                wmb();
+                /* W1C any pending */
+                writel(0x3FFFFFFF, vic->vic_regs + 0x1f0);
+                writel(0x0000000F, vic->vic_regs + 0x1f4);
+                wmb();
+                /* Stop streaming and halt */
+                writel(0x00000000, vic->vic_regs + 0x300);
+                writel(0x00000000, vic->vic_regs + 0x0);
+                /* Clear buffer control/state */
+                writel(0x00000000, vic->vic_regs + 0x1b0);
+                writel(0x00000000, vic->vic_regs + 0x1b4);
+                wmb();
+            }
+            spin_lock(&vic->buffer_lock);
+            while (!list_empty(&vic->queue_head)) {
+                struct list_head *head = vic->queue_head.next;
+                list_del(head);
+            }
+            while (!list_empty(&vic->done_head)) {
+                struct list_head *head = vic->done_head.next;
+                list_del(head);
+            }
+            spin_unlock(&vic->buffer_lock);
+            vic->stream_state = 0;
+            vic->streaming = 0;
+        }
+
     }
 
 
@@ -3637,6 +3696,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             /* Binary Ninja/OEM-style flags */
             buffer.flags = 0x1; // V4L2_BUF_FLAG_MAPPED
             buffer.flags |= 0x2; // V4L2_BUF_FLAG_DONE
+#ifdef V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC
+            buffer.flags |= V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
+#endif
+
 
             /* Offset based on delivered index and plane size */
             buffer.m.offset = delivered_idx * state->sizeimage;
@@ -4067,6 +4130,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         // Validate buffer type
         if (type != 1) { // V4L2_BUF_TYPE_VIDEO_CAPTURE
+
             pr_err("Channel %d: Invalid stream type %d\n", channel, type);
             return -EINVAL;
         }
@@ -4077,22 +4141,17 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         // *** CRITICAL: STOP ISP CHANNEL CONTROL (writes to register 0x9804 and waits for 0x9808) ***
         pr_info("*** Channel %d: CALLING tisp_channel_stop to disable ISP channel control ***\n", channel);
         ret = tisp_channel_stop(channel);
+
         if (ret) {
             pr_warn("Channel %d: tisp_channel_stop returned %d (continuing anyway)\n", channel, ret);
         } else {
             pr_info("*** Channel %d: tisp_channel_stop SUCCESS - ISP channel disabled ***\n", channel);
         }
 
-        // Stop the actual sensor hardware streaming
-        if (channel == 0 && ourISPdev && ourISPdev->sensor) {
-            sensor = ourISPdev->sensor;
-            if (sensor && sensor->sd.ops && sensor->sd.ops->video &&
-                sensor->sd.ops->video->s_stream) {
-                pr_info("Channel %d: Stopping sensor hardware streaming\n", channel);
-                sensor->sd.ops->video->s_stream(&sensor->sd, 0);
-                // Clear sensor running state
-                sensor->sd.vin_state = TX_ISP_MODULE_INIT;
-            }
+        /* Delegate device stop ordering to video orchestrator (strict source->sink) */
+        if (ourISPdev) {
+            pr_info("*** Delegating STREAMOFF to tx_isp_video_s_stream (source->sink) ***\n");
+            (void)tx_isp_video_s_stream(ourISPdev, 0);
         }
 
         pr_info("Channel %d: Streaming stopped\n", channel);
@@ -4115,6 +4174,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 uint8_t raw_data[200];
             } fmt;
         } format;
+
 
         if (copy_from_user(&format, argp, sizeof(format)))
             return -EFAULT;
