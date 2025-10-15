@@ -714,6 +714,111 @@ void system_reg_write(u32 reg, u32 value)
     wmb();
 }
 
+
+/* system_reg_read - Helper function to read ISP registers safely (paired with system_reg_write) */
+u32 system_reg_read(u32 reg)
+{
+    void __iomem *isp_regs = NULL;
+
+    if (!ourISPdev || !ourISPdev->vic_regs) {
+        pr_warn("system_reg_read: No ISP registers available for reg=0x%x\n", reg);
+        return 0;
+    }
+
+    /* ISP core registers are at 0x13300000 = vic_regs - 0xe0000 */
+    isp_regs = ourISPdev->vic_regs - 0xe0000;
+
+    return readl(isp_regs + reg);
+}
+EXPORT_SYMBOL_GPL(system_reg_read);
+
+/* tisp_set_frame_drop - Program frame drop parameters for a channel (OEM-compatible) */
+int tisp_set_frame_drop(u32 channel_id, u32 enable, u32 period, u32 mask)
+{
+    u32 base;
+
+    if (channel_id > 3)
+        return -EINVAL;
+
+    /* OEM constraint: mask and period are 5-bit values */
+    mask &= 0x1f;
+    period &= 0x1f;
+
+    base = ((channel_id + 0x98) << 8);
+
+    /* Program mask register first */
+    system_reg_write(base + 0x130, mask);
+
+    /* Enable/disable with period. Reference reads period from +0x134. */
+    if (enable)
+        system_reg_write(base + 0x134, period);
+    else
+        system_reg_write(base + 0x134, 0);
+
+    pr_info("tisp_set_frame_drop: ch=%u enable=%u period=%u mask=0x%x (base=0x%x)\n",
+            channel_id, enable, period, mask, base);
+    return 0;
+}
+EXPORT_SYMBOL_GPL(tisp_set_frame_drop);
+
+/* tisp_get_frame_drop - Read back frame drop parameters for a channel */
+int tisp_get_frame_drop(u32 channel_id, u32 *enable, u32 *period, u32 *mask)
+{
+    u32 base, m, p;
+
+    if (channel_id > 3 || !enable || !period || !mask)
+        return -EINVAL;
+
+    base = ((channel_id + 0x98) << 8);
+    m = system_reg_read(base + 0x130);
+    p = system_reg_read(base + 0x134);
+
+    *mask = (m & 0x1f);
+    if (p) {
+        *enable = 1;
+        *period = (p & 0x1f);
+    } else {
+        *enable = 0;
+        *period = 0;
+    }
+
+    pr_info("tisp_get_frame_drop: ch=%u -> enable=%u period=%u mask=0x%x (base=0x%x)\n",
+            channel_id, *enable, *period, *mask, base);
+    return 0;
+}
+EXPORT_SYMBOL_GPL(tisp_get_frame_drop);
+
+/* frame_chan_event - Handle frame events (DQBUF path, OEM-aligned semantics) */
+int frame_chan_event(void *priv, int event, void *data)
+{
+    struct frame_channel_device *fcd = (struct frame_channel_device *)priv;
+
+    if (!fcd)
+        return -EINVAL;
+
+    switch (event) {
+    case TX_ISP_EVENT_FRAME_DQBUF: { /* 0x3000006 */
+        unsigned long flags;
+        struct tx_isp_channel_state *state = &fcd->state;
+
+        /* Mark a frame as ready and wake any waiters (used by DQBUF) */
+        spin_lock_irqsave(&state->buffer_lock, flags);
+        state->frame_ready = true;
+        state->sequence++;
+        spin_unlock_irqrestore(&state->buffer_lock, flags);
+
+        wake_up(&state->frame_wait);
+        return 0;
+    }
+    case TX_ISP_EVENT_FRAME_QBUF: /* 0x3000008 */
+        /* Optionally track queued buffers; no-op for now */
+        return 0;
+    default:
+        return -ENOIOCTLCMD;
+    }
+}
+EXPORT_SYMBOL_GPL(frame_chan_event);
+
 /* system_reg_write_ae - EXACT Binary Ninja decompiled implementation */
 void system_reg_write_ae(u32 arg1, u32 arg2, u32 arg3)
 {
@@ -3417,13 +3522,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
          * Flags depend on buffer state */
         buffer.flags = 0x1; // V4L2_BUF_FLAG_MAPPED
 
-        /* Binary Ninja state-based flag setting */
-        if (sensor_active) {
-            buffer.flags |= 0x2; // V4L2_BUF_FLAG_DONE (real data)
-            buffer.flags |= 0x8; // Custom flag for real sensor
-        } else {
-            buffer.flags |= 0x2; // V4L2_BUF_FLAG_DONE (simulated data)
-        }
+        /* State-based flag setting: always mark DONE; avoid non-standard bits */
+        buffer.flags |= 0x2; // V4L2_BUF_FLAG_DONE
 
         /* Set buffer physical address offset like Binary Ninja */
         buffer.m.offset = buf_index * buffer.bytesused;
@@ -6590,11 +6690,23 @@ int vic_event_handler(void *subdev, int event_type, void *data)
         /* Call Binary Ninja ispvic_frame_channel_s_stream implementation */
         return ispvic_frame_channel_s_stream(vic_dev, 1);
     }
-    case 0x3000004: { /* TX_ISP_EVENT_SYNC_SENSOR_ATTR - Sync sensor attributes */
-        pr_info("*** VIC EVENT: SYNC_SENSOR_ATTR (0x3000004) - SYNCING SENSOR ATTRIBUTES ***\n");
+    case 0x3000004: { /* STREAM STOP or SYNC SENSOR ATTR (OEM uses 0x3000004 for stop) */
+        pr_info("*** VIC EVENT: 0x3000004 received ***\n");
 
-        /* Handle sensor attribute synchronization */
-        if (data && ourISPdev && ourISPdev->sensor) {
+        /* If no data, treat as STREAM STOP to match OEM */
+        if (!data) {
+            int rc = 0;
+            pr_info("*** INTERPRETING 0x3000004 AS STREAM STOP ***\n");
+            rc = ispvic_frame_channel_s_stream(vic_dev, 0);
+            if (rc < 0)
+                pr_warn("STREAM STOP via 0x3000004 returned %d\n", rc);
+            (void) ispvic_frame_channel_clearbuf();
+            return 0;
+        }
+
+        /* Otherwise, support sensor attribute sync for compatibility */
+        pr_info("*** SYNC SENSOR ATTR via 0x3000004 ***\n");
+        if (ourISPdev && ourISPdev->sensor) {
             struct tx_isp_sensor_attribute *sensor_attr = (struct tx_isp_sensor_attribute *)data;
             struct tx_isp_sensor *sensor = ourISPdev->sensor;
 
@@ -6602,19 +6714,17 @@ int vic_event_handler(void *subdev, int event_type, void *data)
                     sensor_attr->name ? sensor_attr->name : "(unnamed)",
                     sensor_attr->total_width, sensor_attr->total_height);
 
-            /* Copy sensor attributes to device sensor */
             if (sensor->video.attr) {
                 memcpy(sensor->video.attr, sensor_attr, sizeof(struct tx_isp_sensor_attribute));
                 pr_info("*** SENSOR ATTRIBUTES SYNCED SUCCESSFULLY ***\n");
-                return 0; /* Success */
+                return 0;
             } else {
                 pr_err("*** SENSOR ATTRIBUTES SYNC FAILED: No sensor attr structure ***\n");
                 return -EINVAL;
             }
-        } else {
-            pr_err("*** SENSOR ATTRIBUTES SYNC FAILED: Invalid parameters ***\n");
-            return -EINVAL;
         }
+        pr_err("*** 0x3000004: No sensor to sync ***\n");
+        return -EINVAL;
     }
     case 0x3000005: { /* Buffer enqueue event from __enqueue_in_driver */
         pr_info("*** VIC EVENT: BUFFER_ENQUEUE (0x3000005) ***\n");

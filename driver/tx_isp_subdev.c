@@ -56,6 +56,12 @@ int frame_channel_release(struct inode *inode, struct file *file);
 long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
 
+/* vb2 cancel stub: no-op placeholder until vb2 queues are adopted */
+static inline int __vb2_queue_cancel_stub(void *q)
+{
+    return 0;
+}
+
 /* Frame buffer structure */
 struct frame_channel_buffer {
     struct list_head list;      // For queue management
@@ -69,21 +75,29 @@ struct frame_channel_buffer {
 static int __frame_channel_vb2_streamoff(void *chan, void *queue)
 {
     struct tx_isp_frame_channel *fchan = (struct tx_isp_frame_channel *)chan;
-    int ret = 0;
 
     if (!fchan)
         return -EINVAL;
 
-    // Stop streaming
+    /* Stop streaming and reset queues/state safely */
+    __vb2_queue_cancel_stub(queue);
     spin_lock(&fchan->slock);
-    // Clear queues and reset state
+
     INIT_LIST_HEAD(&fchan->queue_head);
     INIT_LIST_HEAD(&fchan->done_head);
     fchan->queued_count = 0;
     fchan->done_count = 0;
+    fchan->active = false;
+    fchan->state = FRAME_CHAN_OPENED; /* Return to opened state */
+
+    /* Wake any waiters and complete pending completions */
+    complete_all(&fchan->frame_done);
     spin_unlock(&fchan->slock);
 
-    return ret;
+    if (&fchan->wait)
+        wake_up(&fchan->wait);
+
+    return 0;
 }
 
 static void __fill_v4l2_buffer(void *vb, struct v4l2_buffer *buf)

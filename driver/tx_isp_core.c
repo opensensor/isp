@@ -1135,6 +1135,47 @@ void tx_isp_frame_chan_init(struct tx_isp_frame_channel *chan)
 }
 
 
+/* tx_isp_frame_chan_deinit - Safe deinit for frame channel (OEM-compatible semantics) */
+void tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan)
+{
+    if (!chan)
+        return;
+
+    spin_lock(&chan->slock);
+    INIT_LIST_HEAD(&chan->queue_head);
+    INIT_LIST_HEAD(&chan->done_head);
+    chan->queued_count = 0;
+    chan->done_count = 0;
+    chan->active = false;
+    chan->state = 0;
+    complete_all(&chan->frame_done);
+    spin_unlock(&chan->slock);
+
+    pr_info("tx_isp_frame_chan_deinit: channel reset\n");
+}
+EXPORT_SYMBOL_GPL(tx_isp_frame_chan_deinit);
+
+/* isp_pre_frame_dequeue - Optional pre-dequeue delay (channel-aware) */
+int isp_pre_frame_dequeue(int channel)
+{
+    /* Follow module parameters if configured */
+    if (channel == 0 && isp_ch0_pre_dequeue_time > 0)
+        msleep(isp_ch0_pre_dequeue_time);
+
+    return 0;
+}
+EXPORT_SYMBOL_GPL(isp_pre_frame_dequeue);
+
+/* isp_ch1_frame_dequeue_delay - Optional delay path for channel 1 */
+int isp_ch1_frame_dequeue_delay(void)
+{
+    if (isp_ch1_dequeue_delay_time > 0)
+        msleep(isp_ch1_dequeue_delay_time);
+    return 0;
+}
+EXPORT_SYMBOL_GPL(isp_ch1_frame_dequeue_delay);
+
+
 /* Initialize memory mappings for ISP subsystems */
 int tx_isp_init_memory_mappings(struct tx_isp_dev *isp)
 {

@@ -307,6 +307,20 @@ static int tx_isp_proc_fs_show(struct seq_file *m, void *v)
     return 0;
 }
 
+/* OEM-compat wrappers: isp_framesource_show and dump_isp_framesource_open */
+int isp_framesource_show(struct seq_file *m, void *v)
+{
+    return tx_isp_proc_fs_show(m, v);
+}
+EXPORT_SYMBOL_GPL(isp_framesource_show);
+
+int dump_isp_framesource_open(struct inode *inode, struct file *file)
+{
+    return single_open(file, isp_framesource_show, PDE_DATA(inode));
+}
+EXPORT_SYMBOL_GPL(dump_isp_framesource_open);
+
+
 static ssize_t tx_isp_proc_fs_write(struct file *file, const char __user *buffer,
                                     size_t count, loff_t *ppos)
 {

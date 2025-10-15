@@ -3028,10 +3028,61 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
     return 0;
 }
 
-/* ISPVIC Frame Channel Clear Buffer - placeholder matching Binary Ninja reference */
+/* ISPVIC Frame Channel Clear Buffer - drain lists and clear slots safely */
 static int ispvic_frame_channel_clearbuf(void)
 {
-    pr_info("ispvic_frame_channel_clearbuf called\n");
+    struct tx_isp_vic_device *vic_dev = NULL;
+    unsigned long flags;
+    int i;
+
+    if (!ourISPdev)
+        return -ENODEV;
+    vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+    if (!vic_dev)
+        return -ENODEV;
+
+    /* Drain buffer lists: move queue/done entries back to free_head */
+    spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, flags);
+    if (!list_empty(&vic_dev->queue_head)) {
+        struct list_head *pos, *n;
+        list_for_each_safe(pos, n, &vic_dev->queue_head) {
+            list_del(pos);
+            list_add_tail(pos, &vic_dev->free_head);
+        }
+    }
+    if (!list_empty(&vic_dev->done_head)) {
+        struct list_head *pos, *n;
+        list_for_each_safe(pos, n, &vic_dev->done_head) {
+            list_del(pos);
+            list_add_tail(pos, &vic_dev->free_head);
+        }
+    }
+    vic_dev->active_buffer_count = 0;
+    vic_dev->processing = 0;
+    vic_dev->stream_state = 0; /* OEM clears 0x210 (stream) and 0x214 (processing) */
+    spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
+
+    /* Clear programmed VIC buffer slots safely */
+    if (vic_dev->vic_regs) {
+        void __iomem *r = vic_dev->vic_regs;
+        for (i = 0; i < 5; ++i) {
+            writel(0, r + (0x318 + (i * 4))); /* Y base */
+            writel(0, r + (0x32c + (i * 4))); /* shadow/alt base */
+            writel(0, r + (0x340 + (i * 4))); /* UV base */
+        }
+        wmb();
+    }
+    if (vic_dev->vic_regs_secondary) {
+        void __iomem *r2 = vic_dev->vic_regs_secondary;
+        for (i = 0; i < 5; ++i) {
+            writel(0, r2 + (0x318 + (i * 4)));
+            writel(0, r2 + (0x32c + (i * 4)));
+            writel(0, r2 + (0x340 + (i * 4)));
+        }
+        wmb();
+    }
+
+    pr_info("ispvic_frame_channel_clearbuf: drained lists, cleared slots\n");
     return 0;
 }
 

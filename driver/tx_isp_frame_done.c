@@ -1,6 +1,6 @@
 /*
  * TX ISP Frame Done Wakeup Implementation
- * 
+ *
  * This file implements the ISP frame done wakeup function
  * that is called by VIC when a frame is complete.
  */
@@ -52,12 +52,12 @@ EXPORT_SYMBOL(isp_frame_done_wakeup);
 int isp_frame_done_wait(int timeout_ms)
 {
     int ret;
-    
+
     /* Wait for frame done condition with timeout */
-    ret = wait_event_timeout(frame_done_wait, 
+    ret = wait_event_timeout(frame_done_wait,
                             frame_done_cond,
                             msecs_to_jiffies(timeout_ms));
-    
+
     if (ret > 0) {
         /* Frame done occurred, clear condition */
         frame_done_cond = 0;
@@ -66,10 +66,32 @@ int isp_frame_done_wait(int timeout_ms)
         /* Timeout */
         return -ETIMEDOUT;
     }
-    
+
     return ret;
 }
 EXPORT_SYMBOL(isp_frame_done_wait);
+
+/* Extended wait that also returns counters like OEM (out[0]=internal, out[1]=isp->frame_count) */
+int isp_frame_done_wait_ex(int timeout_ms, u32 out[2])
+{
+    int ret;
+    u64 cnt;
+    extern struct tx_isp_dev *ourISPdev;
+
+    if (!out)
+        return -EINVAL;
+
+    ret = wait_event_timeout(frame_done_wait, frame_done_cond, msecs_to_jiffies(timeout_ms));
+    frame_done_cond = 0;
+
+    cnt = atomic64_read(&frame_done_cnt);
+    out[0] = (u32)cnt;
+    out[1] = (ourISPdev ? ourISPdev->frame_count : 0);
+
+    return (ret > 0) ? 0 : (ret == 0 ? -ETIMEDOUT : ret);
+}
+EXPORT_SYMBOL_GPL(isp_frame_done_wait_ex);
+
 
 /**
  * isp_frame_done_get_count - Get current frame done count
