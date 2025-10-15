@@ -3102,6 +3102,12 @@ int tisp_get_ae_info(void *out_buf);
 int tisp_set_ae_info(void *in_buf);
 int tisp_get_awb_info(void *out_buf);
 int tisp_set_awb_info(void *in_buf);
+/* AWB algo attribute setter from vendor binary */
+extern int tisp_s_wb_attr(int mode, uint32_t r_gain, uint32_t b_gain,
+                          uint32_t p4, uint32_t p5, uint32_t p6);
+/* AWB register write helper from tx-isp-module.c */
+extern void system_reg_write_awb(u32 block, u32 reg, u32 value);
+
 
 /* File operations structure - Binary Ninja reference */
 static const struct file_operations tisp_fops = {
@@ -3834,6 +3840,11 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
 
     pr_debug("tisp_code_tuning_ioctl: cmd=0x%x, arg=0x%lx\n", cmd, arg);
 
+    /* Ensure global tuning buffer is available; fall back to this file's buffer */
+    if (!tisp_par_ioctl && file && file->private_data)
+        tisp_par_ioctl = file->private_data;
+
+
     /* Binary Ninja: if (zx.d((arg2 u>> 8).b) == 0x74) */
     if (((cmd >> 8) & 0xFF) == 0x74) {
         /* Binary Ninja: if ((arg2 & 0xff) u< 0x33) */
@@ -4214,10 +4225,21 @@ int tisp_code_tuning_release(struct inode *inode, struct file *file)
 
     pr_info("tisp_code_tuning_release: Releasing tuning interface\n");
 
-    if (tisp_par_ioctl) {
+    /* Free the per-file buffer first (authoritative owner) */
+    if (file && file->private_data) {
+        void *buf = file->private_data;
+        kfree(buf);
+        file->private_data = NULL;
+        /* If the global points at the same buffer, clear it */
+        if (tisp_par_ioctl == buf) {
+            tisp_par_ioctl = NULL;
+        }
+        pr_info("tisp_code_tuning_release: Freed file-private tuning buffer\n");
+    } else if (tisp_par_ioctl) {
+        /* Fallback: if no file-private pointer, avoid leaking but be conservative */
         kfree(tisp_par_ioctl);
         tisp_par_ioctl = NULL;
-        pr_info("tisp_code_tuning_release: Parameter buffer freed\n");
+        pr_info("tisp_code_tuning_release: Freed global tuning buffer (no private_data)\n");
     }
 
     return 0;
@@ -5857,14 +5879,153 @@ int tisp_hldc_param_array_get(int param_id, void *out_buf, int *size_buf)
     return 0;
 }
 
-int tisp_awb_param_array_get(int param_id, void *out_buf, int *size_buf)
+/* AWB state and parameter storage matching vendor binary (opaque blocks) */
+static uint8_t _awb_parameter[0xb4];
+static uint32_t _pixel_cnt_th;
+static uint32_t _awb_lowlight_rg_th[2];
+static uint32_t _AwbPointPos[2];
+static uint32_t _awb_cof[2];
+static uint8_t  _awb_mf_para[0x18];
+static uint32_t _awb_mode[3];
+static uint32_t _awb_ct;
+static uint32_t _awb_ct_last;
+static uint32_t _wb_static[2];
+static uint8_t  _light_src[0x50];
+static uint32_t _light_src_num;
+static uint8_t  _rg_pos[0x3c];
+static uint8_t  _bg_pos[0x3c];
+static uint8_t  _awb_ct_th_ot_luxhigh[0x10];
+static uint8_t  _awb_ct_th_ot_luxlow[0x10];
+static uint8_t  _awb_ct_th_in[0x10];
+static uint32_t _awb_ct_para_ot[2];
+static uint32_t _awb_ct_para_in[2];
+static uint32_t _awb_dis_tw[3];
+static uint8_t  _rgbg_weight[0x384];
+static uint8_t  _color_temp_mesh[0x384];
+static uint8_t  _awb_wght[0x384];
+static uint8_t  _rgbg_weight_ot[0x384];
+static uint8_t  _ls_w_lut[0x808];
+
+/* Additional AWB globals observed in binary */
+static uint8_t  awb_frz;               /* freeze flag (byte) */
+static int      tawb_custom_en;        /* AWB custom enable flag */
+static int      awb_moa;               /* modified-on-apply flag */
+static uint32_t awb_ct_trend[6];       /* 0x18 bytes trend buffer */
+static uint32_t _awb_cluster_head[3];  /* cluster heads */
+static uint32_t _awb_cluster_tail[7];  /* 0x1c bytes tail */
+static uint32_t _awb_cluster_ext1;     /* data_a9e4c */
+static uint32_t _awb_cluster_ext2;     /* data_a9e50 */
+static uint8_t  tisp_wb_zone_attr[0x2a3]; /* AWB zone attribute blob */
+static uint32_t awb_ev_data;           /* data_983b0 equivalent */
+
+/* Hardware apply hook: program AWB registers via system_reg_write_awb
+ * Conservative, real writes that (re)enable AWB blocks to latch new params.
+ */
+static int tiziano_awb_set_hardware_param(void)
 {
-    pr_debug("tisp_awb_param_array_get: ID=0x%x (stub)\n", param_id);
-    if (out_buf && size_buf) {
-        *size_buf = 0;
-    }
+    /* Re-enable AWB block 1 and 2 to apply parameter changes */
+    system_reg_write_awb(1, 0xb000, 1);
+    system_reg_write_awb(2, 0x1800, 1);
     return 0;
 }
+
+int tisp_awb_param_array_get(int param_id, void *out_buf, int *size_buf)
+{
+    if (!out_buf || !size_buf) {
+        pr_err("tisp_awb_param_array_get: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    if (param_id < 0x23 || param_id > 0x3b) {
+        pr_warn("tisp_awb_param_array_get: invalid ID=0x%x\n", param_id);
+        return -EINVAL;
+    }
+
+    void *src = NULL;
+    int sz = 0;
+
+    switch (param_id) {
+        case 0x23: src = _awb_parameter;              sz = 0xb4;  break;
+        case 0x24: src = &_pixel_cnt_th;              sz = 4;     break;
+        case 0x25: src = _awb_lowlight_rg_th;         sz = 8;     break;
+        case 0x26: src = _AwbPointPos;                sz = 8;     break;
+        case 0x27: src = _awb_cof;                    sz = 8;     break;
+        case 0x28: src = _awb_mf_para;                sz = 0x18;  break;
+        case 0x29: src = _awb_mode;                   sz = 0xc;   break;
+        case 0x2a: src = &_awb_ct;                    sz = 4;     break;
+        case 0x2b: src = &_awb_ct_last;               sz = 4;     break;
+        case 0x2c: src = _wb_static;                  sz = 8;     break;
+        case 0x2d: src = _light_src;                  sz = 0x50;  break;
+        case 0x2e: src = &_light_src_num;             sz = 4;     break;
+        case 0x2f: src = _rg_pos;                     sz = 0x3c;  break;
+        case 0x30: src = _bg_pos;                     sz = 0x3c;  break;
+        case 0x31: src = _awb_ct_th_ot_luxhigh;       sz = 0x10;  break;
+        case 0x32: src = _awb_ct_th_ot_luxlow;        sz = 0x10;  break;
+        case 0x33: src = _awb_ct_th_in;               sz = 0x10;  break;
+        case 0x34: src = _awb_ct_para_ot;             sz = 8;     break;
+        case 0x35: src = _awb_ct_para_in;             sz = 8;     break;
+        case 0x36: src = _awb_dis_tw;                 sz = 0xc;   break;
+        case 0x37: src = _rgbg_weight;                sz = 0x384; break;
+        case 0x38: src = _color_temp_mesh;            sz = 0x384; break;
+        case 0x39: src = _awb_wght;                   sz = 0x384; break;
+        case 0x3a: src = _rgbg_weight_ot;             sz = 0x384; break;
+        case 0x3b: src = _ls_w_lut;                   sz = 0x808; break;
+    }
+
+    memcpy(out_buf, src, sz);
+    *size_buf = sz;
+    return 0;
+}
+
+int tisp_awb_param_array_set(int param_id, void *in_buf, int *size_buf)
+{
+    if (!in_buf || !size_buf) {
+        pr_err("tisp_awb_param_array_set: NULL buffer pointers\n");
+        return -EINVAL;
+    }
+
+    if (param_id < 0x23 || param_id > 0x3b) {
+        pr_warn("tisp_awb_param_array_set: invalid ID=0x%x\n", param_id);
+        return -EINVAL;
+    }
+
+    void *dst = NULL;
+    int sz = 0;
+
+    switch (param_id) {
+        case 0x23: dst = _awb_parameter;              sz = 0xb4;  break;
+        case 0x24: dst = &_pixel_cnt_th;              sz = 4;     break;
+        case 0x25: dst = _awb_lowlight_rg_th;         sz = 8;     break;
+        case 0x26: dst = _AwbPointPos;                sz = 8;     break;
+        case 0x27: dst = _awb_cof;                    sz = 8;     break;
+        case 0x28: dst = _awb_mf_para;                sz = 0x18;  break;
+        case 0x29: dst = _awb_mode;                   sz = 0xc;   break;
+        case 0x2a: dst = &_awb_ct;                    sz = 4;     break;
+        case 0x2b: dst = &_awb_ct_last;               sz = 4;     break;
+        case 0x2c: dst = _wb_static;                  sz = 8;     break;
+        case 0x2d: dst = _light_src;                  sz = 0x50;  break;
+        case 0x2e: dst = &_light_src_num;             sz = 4;     break;
+        case 0x2f: dst = _rg_pos;                     sz = 0x3c;  break;
+        case 0x30: dst = _bg_pos;                     sz = 0x3c;  break;
+        case 0x31: dst = _awb_ct_th_ot_luxhigh;       sz = 0x10;  break;
+        case 0x32: dst = _awb_ct_th_ot_luxlow;        sz = 0x10;  break;
+        case 0x33: dst = _awb_ct_th_in;               sz = 0x10;  break;
+        case 0x34: dst = _awb_ct_para_ot;             sz = 8;     break;
+        case 0x35: dst = _awb_ct_para_in;             sz = 8;     break;
+        case 0x36: dst = _awb_dis_tw;                 sz = 0xc;   break;
+        case 0x37: dst = _rgbg_weight;                sz = 0x384; break;
+        case 0x38: dst = _color_temp_mesh;            sz = 0x384; break;
+        case 0x39: dst = _awb_wght;                   sz = 0x384; break;
+        case 0x3a: dst = _rgbg_weight_ot;             sz = 0x384; break;
+        case 0x3b: dst = _ls_w_lut;                   sz = 0x808; break;
+    }
+
+    memcpy(dst, in_buf, sz);
+    *size_buf = sz;
+    tiziano_awb_set_hardware_param();
+    return 0;
+}
+
 
 /* Implementation of the next batch of parameter functions */
 
@@ -6321,7 +6482,7 @@ int tisp_ae_get_par_cfg(void *out_buf, void *size_buf)
     return 0;
 }
 
-/* tisp_awb_get_par_cfg - Binary Ninja implementation (stub for now) */
+/* tisp_awb_get_par_cfg - aggregates AWB parameter arrays into out_buf */
 int tisp_awb_get_par_cfg(void *out_buf, void *size_buf)
 {
     if (!out_buf || !size_buf) {
@@ -6329,9 +6490,18 @@ int tisp_awb_get_par_cfg(void *out_buf, void *size_buf)
         return -EINVAL;
     }
 
-    /* Stub implementation - needs Binary Ninja decompilation */
-    *(int *)size_buf = 0;
-    pr_debug("tisp_awb_get_par_cfg: Stub implementation\n");
+    uint8_t *p = (uint8_t *)out_buf;
+    int total = 0;
+
+    for (int i = 0x23; i < 0x3c; ++i) {
+        int sz = 0;
+        if (tisp_awb_param_array_get(i, p, &sz) != 0)
+            return -EINVAL;
+        p += sz;
+        total += sz;
+    }
+
+    *(int *)size_buf = total;
     return 0;
 }
 
@@ -6610,7 +6780,137 @@ int tisp_sdns_set_par_cfg(void *in_buf) { return 0; }
 int tisp_af_set_par_cfg(void *in_buf) { return 0; }
 int tisp_hldc_set_par_cfg(void *in_buf) { return 0; }
 int tisp_ae_set_par_cfg(void *in_buf) { return 0; }
-int tisp_awb_set_par_cfg(void *in_buf) { return 0; }
+int tisp_awb_set_par_cfg(void *in_buf)
+{
+    if (!in_buf) return -EINVAL;
+    int total = 0, sz = 0;
+    char *p = (char *)in_buf;
+
+    for (int i = 0x23; i < 0x3c; ++i) {
+        if (tisp_awb_param_array_set(i, p, &sz) != 0)
+            return -EINVAL;
+        p += sz; total += sz;
+    }
+
+    pr_debug("tisp_awb_set_par_cfg: total=%d\n", total);
+    return 0;
+}
+
+/* === AWB helpers matching vendor binary semantics (safe implementations) === */
+int tisp_awb_set_frz(void *in_buf)
+{
+    if (!in_buf) return -EINVAL;
+    awb_frz = *(uint8_t *)in_buf;
+    return 0;
+}
+
+int tisp_awb_get_frz(void *out_buf)
+{
+    if (!out_buf) return -EINVAL;
+    *(uint8_t *)out_buf = awb_frz;
+    return awb_frz;
+}
+
+int tisp_awb_set_ct_trend(void *in_buf)
+{
+    if (!in_buf) return -EINVAL;
+    memcpy(awb_ct_trend, in_buf, sizeof(awb_ct_trend));
+    awb_moa = 1;
+    return 0;
+}
+
+int tisp_awb_get_ct_trend(void *out_buf)
+{
+    if (!out_buf) return -EINVAL;
+    memcpy(out_buf, awb_ct_trend, sizeof(awb_ct_trend));
+    return 0;
+}
+
+int tisp_awb_set_ct(void *in_buf)
+{
+    if (!in_buf) return -EINVAL;
+    _awb_ct = *(uint32_t *)in_buf;
+    return 0;
+}
+
+int tisp_awb_get_ct(void *out_buf)
+{
+    if (!out_buf) return -EINVAL;
+    *(uint32_t *)out_buf = _awb_ct;
+    return _awb_ct;
+}
+
+int tisp_awb_set_cluster_awb_params(void *in_buf, uint32_t ext1, uint32_t ext2)
+{
+    if (!in_buf) return -EINVAL;
+    uint32_t *p = (uint32_t *)in_buf;
+    _awb_cluster_head[0] = p[0];
+    _awb_cluster_head[1] = p[1];
+    _awb_cluster_head[2] = p[2];
+    memcpy(_awb_cluster_tail, p + 3, sizeof(_awb_cluster_tail));
+    _awb_cluster_ext1 = ext1;
+    _awb_cluster_ext2 = ext2;
+    return 0;
+}
+
+int tisp_awb_get_cluster_awb_params(void *out_buf)
+{
+    if (!out_buf) return -EINVAL;
+    uint32_t *p = (uint32_t *)out_buf;
+    p[0] = _awb_cluster_head[0];
+    p[1] = _awb_cluster_ext1;
+    p[2] = _awb_cluster_ext2;
+    memcpy((uint8_t *)out_buf + 0xc, _awb_cluster_tail, sizeof(_awb_cluster_tail));
+    return 0;
+}
+
+int tisp_awb_get_zone(void *out_buf)
+{
+    if (!out_buf) return -EINVAL;
+    memcpy(out_buf, tisp_wb_zone_attr, sizeof(tisp_wb_zone_attr));
+    return 0;
+}
+
+int tisp_awb_ev_update(uint32_t ev)
+{
+    awb_ev_data = ev;
+    return 0;
+}
+
+int tisp_awb_deinit(void)
+{
+    if (tawb_custom_en == 1)
+        tawb_custom_en = 0;
+    return 0;
+}
+
+int tisp_awb_algo_init(int enable)
+{
+    tawb_custom_en = enable;
+    return 0;
+}
+
+int tisp_awb_algo_handle(void *ctx)
+{
+    /* Vendor: if (*(arg1 + 8) != 1) return 1 */
+    if (!ctx) return -EINVAL;
+    uint32_t flag = 0, r_gain = 0, b_gain = 0;
+    memcpy(&flag,  (char *)ctx + 0x8,  4);
+    if (flag != 1) return 1;
+
+    /* Gains at offsets 0xc (R) and 0x10 (B) per decompile */
+    memcpy(&r_gain, (char *)ctx + 0xc,  4);
+    memcpy(&b_gain, (char *)ctx + 0x10, 4);
+
+    /* Call vendor attribute setter exactly like binary: tisp_s_wb_attr(1, r, b, 0,0,0) */
+    return tisp_s_wb_attr(1, r_gain, b_gain, 0, 0, 0);
+}
+
+int tisp_awb_algo_deinit(void)
+{
+    return tisp_awb_deinit();
+}
+
 /* tisp_reg_map_set - Binary Ninja EXACT implementation */
 int tisp_reg_map_set(void *in_buf)
 {
@@ -6649,10 +6949,155 @@ int tisp_reg_map_set(void *in_buf)
 EXPORT_SYMBOL(tisp_reg_map_set);
 int tisp_dn_mode_set(void *in_buf) { return 0; }
 
-int tisp_get_ae_info(void *out_buf) { return 0; }
-int tisp_set_ae_info(void *in_buf) { return 0; }
-int tisp_get_awb_info(void *out_buf) { return 0; }
-int tisp_set_awb_info(void *in_buf) { return 0; }
+int tisp_get_ae_info(void *out_buf)
+{
+    int32_t *param_ptr = (int32_t *)out_buf;
+    uint32_t *data;
+    size_t n = 0;
+
+    if (!param_ptr)
+        return -EINVAL;
+
+    data = (uint32_t *)&param_ptr[3];
+
+    if (!ourISPdev || !ourISPdev->tuning_data) {
+        param_ptr[1] = 0;
+        return -ENODEV;
+    }
+
+    /* Read AE-related fields from tuning_data safely */
+    {
+        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+        /* Compact AE summary */
+        data[n++] = tuning->total_gain;
+        data[n++] = tuning->exposure;
+        data[n++] = tuning->max_again;
+        data[n++] = tuning->max_dgain;
+        data[n++] = tuning->ae_comp;
+        data[n++] = tuning->fps_num;
+        data[n++] = tuning->fps_den;
+
+        /* Append EV attributes computed via tisp_g_ev_attr for parity */
+        {
+            uint32_t ev_buf[8] = {0};
+            tisp_g_ev_attr(ev_buf, tuning);
+            for (int i = 0; i < 8; ++i)
+                data[n++] = ev_buf[i];
+        }
+    }
+
+    /* Return byte size in param_ptr[1] per OEM pattern */
+    param_ptr[1] = (int32_t)(n * sizeof(uint32_t));
+    return 0;
+}
+
+int tisp_set_ae_info(void *in_buf)
+{
+    int32_t *param_ptr = (int32_t *)in_buf;
+    uint32_t *data;
+    size_t nwords;
+
+    if (!param_ptr)
+        return -EINVAL;
+
+    if (!ourISPdev || !ourISPdev->tuning_data)
+        return -ENODEV;
+
+    data = (uint32_t *)&param_ptr[3];
+    nwords = (param_ptr[1] > 0) ? (param_ptr[1] / sizeof(uint32_t)) : 0;
+
+    if (nwords == 0)
+        return -EINVAL;
+
+    /* Update AE-related fields conservatively if provided */
+    {
+        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+        /* Lock while updating shared tuning data */
+        mutex_lock(&tuning->mutex);
+        if (nwords > 0) tuning->total_gain = data[0];
+        if (nwords > 1) tuning->exposure   = data[1];
+        if (nwords > 2) tuning->max_again  = data[2];
+        if (nwords > 3) tuning->max_dgain  = data[3];
+        if (nwords > 4) tuning->ae_comp    = data[4];
+        if (nwords > 5) tuning->fps_num    = data[5];
+        if (nwords > 6) tuning->fps_den    = data[6];
+        mutex_unlock(&tuning->mutex);
+    }
+
+    /* Trigger AE-related updates to propagate changes */
+    if (tisp_tgain_update) tisp_tgain_update();
+    if (tisp_again_update) tisp_again_update();
+    if (tisp_ev_update)    tisp_ev_update();
+    if (tisp_ae_ir_update) tisp_ae_ir_update();
+
+    return 0;
+}
+
+int tisp_get_awb_info(void *out_buf)
+{
+    int32_t *param_ptr = (int32_t *)out_buf;
+    uint32_t *data;
+    size_t n = 0;
+
+    if (!param_ptr)
+        return -EINVAL;
+
+    data = (uint32_t *)&param_ptr[3];
+
+    if (!ourISPdev || !ourISPdev->tuning_data) {
+        param_ptr[1] = 0;
+        return -ENODEV;
+    }
+
+    /* Read AWB-related fields from tuning_data safely */
+    {
+        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+        data[n++] = tuning->wb_gains.r;
+        data[n++] = tuning->wb_gains.g;
+        data[n++] = tuning->wb_gains.b;
+        data[n++] = tuning->wb_temp;  /* color temperature */
+    }
+
+    param_ptr[1] = (int32_t)(n * sizeof(uint32_t));
+    return 0;
+}
+
+int tisp_set_awb_info(void *in_buf)
+{
+    int32_t *param_ptr = (int32_t *)in_buf;
+    uint32_t *data;
+    size_t nwords;
+
+    if (!param_ptr)
+        return -EINVAL;
+
+    if (!ourISPdev || !ourISPdev->tuning_data)
+        return -ENODEV;
+
+    data = (uint32_t *)&param_ptr[3];
+    nwords = (param_ptr[1] > 0) ? (param_ptr[1] / sizeof(uint32_t)) : 0;
+
+    if (nwords == 0)
+        return -EINVAL;
+
+    /* Update AWB fields */
+    {
+        struct isp_tuning_data *tuning = ourISPdev->tuning_data;
+        mutex_lock(&tuning->mutex);
+        if (nwords > 0) tuning->wb_gains.r = data[0];
+        if (nwords > 1) tuning->wb_gains.g = data[1];
+        if (nwords > 2) tuning->wb_gains.b = data[2];
+        if (nwords > 3) tuning->wb_temp    = data[3];
+        mutex_unlock(&tuning->mutex);
+    }
+
+    /* Trigger AWB/CCM updates to apply the new gains/CT */
+    if (tisp_ct_update)      tisp_ct_update();
+    if (tisp_ccm_ct_update)  tisp_ccm_ct_update();
+    if (tisp_ccm_ev_update)  tisp_ccm_ev_update();
+
+    return 0;
+}
 
 /* tisp_g_aeroi_weight - EXACT Binary Ninja reference implementation */
 int tisp_g_aeroi_weight(void *buffer)
