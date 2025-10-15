@@ -26,6 +26,11 @@
 #include <linux/timekeeping.h>
 #include <linux/version.h>
 
+#include <linux/netlink.h>
+#include <linux/skbuff.h>
+#include <net/sock.h>
+#include <net/netlink.h>
+
 
 /* V4L2 control IDs - use standard V4L2 control IDs */
 /* Note: V4L2 structures and enums are already defined in kernel headers */
@@ -95,6 +100,101 @@ void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
 void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
 int tisp_init(void *sensor_info, char *param_name);
 int ispcore_link_setup(struct tx_isp_dev* isp_dev, u32 flags);
+/* Minimal netlink scaffolding matching OEM shape */
+#define NETLINK_TISP 0x17
+static struct sock *tisp_nl_sock;
+typedef void (*tisp_net_event_cb_t)(const void *data, size_t len);
+static tisp_net_event_cb_t tisp_net_event_cb;
+
+/* Receiver: dispatch to callback if set */
+static void netlink_rcv_msg(struct sk_buff *skb)
+{
+    struct nlmsghdr *nlh;
+    void *payload;
+    size_t plen;
+
+    if (!skb)
+        return;
+    nlh = nlmsg_hdr(skb);
+    if (!nlh)
+        return;
+    payload = nlmsg_data(nlh);
+    plen = nlmsg_len(nlh);
+    if (tisp_net_event_cb)
+        tisp_net_event_cb(payload, plen);
+}
+
+/* Public: set event callback (OEM: returns 0) */
+int tisp_netlink_event_set_cb(tisp_net_event_cb_t cb)
+{
+    tisp_net_event_cb = cb;
+    return 0;
+}
+
+/* Create kernel netlink socket (protocol 0x17) */
+static struct sock* private_netlink_kernel_create(u32 proto)
+{
+    struct netlink_kernel_cfg cfg = {
+        .input = netlink_rcv_msg,
+    };
+    if (proto != NETLINK_TISP)
+        pr_warn("tisp netlink: unexpected proto %u, using %u\n", proto, NETLINK_TISP);
+    tisp_nl_sock = netlink_kernel_create(&init_net, NETLINK_TISP, &cfg);
+    return tisp_nl_sock;
+}
+
+/* OEM shape: unicast with fixed PID 0x32 using an skb */
+static int private_netlink_unicast_skb(struct sk_buff *skb)
+{
+    int rc;
+    if (!tisp_nl_sock) {
+        kfree_skb(skb);
+        return -ENOTCONN;
+    }
+    rc = netlink_unicast(tisp_nl_sock, skb, 0x32, MSG_DONTWAIT);
+    return rc < 0 ? rc : 0;
+}
+
+/* Public wrappers matching names seen in OEM */
+int tisp_netlink_init(void)
+{
+    if (tisp_nl_sock)
+        return 0;
+    if (!private_netlink_kernel_create(NETLINK_TISP))
+        return -ENOMEM;
+    pr_info("tisp netlink: initialized (proto=%u)\n", NETLINK_TISP);
+    return 0;
+}
+
+void tisp_netlink_exit(void)
+{
+    if (tisp_nl_sock) {
+        netlink_kernel_release(tisp_nl_sock);
+        tisp_nl_sock = NULL;
+        pr_info("tisp netlink: exited\n");
+    }
+}
+
+/* OEM shape: build nlmsg (type 0x17), payload=data, unicast to PID 0x32 */
+int netlink_send_msg(const void *data, size_t len)
+{
+    struct sk_buff *skb;
+    struct nlmsghdr *nlh;
+
+    if (!tisp_nl_sock)
+        return -ENOTCONN;
+    skb = nlmsg_new(len, GFP_KERNEL);
+    if (!skb)
+        return -ENOMEM;
+    nlh = nlmsg_put(skb, 0, 0, NETLINK_TISP, len, 0);
+    if (!nlh) {
+        kfree_skb(skb);
+        return -EMSGSIZE;
+    }
+    memcpy(nlmsg_data(nlh), data, len);
+    return private_netlink_unicast_skb(skb);
+}
+
 
 /* Global I2C client tracking to prevent duplicate creation */
 static struct i2c_client *global_sensor_i2c_client = NULL;
@@ -113,6 +213,7 @@ static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
 
     /* MIPS ALIGNMENT CHECK: Validate pointer alignment */
     if (!adapter || ((uintptr_t)adapter & 0x3) != 0) {
+
         pr_err("*** MIPS ALIGNMENT ERROR: adapter pointer 0x%p not 4-byte aligned ***\n", adapter);
         return NULL;
     }
@@ -1567,6 +1668,7 @@ int frame_channel_open(struct inode *inode, struct file *file)
 
         fcd->state.enabled = false;
         fcd->state.streaming = false;
+        fcd->state.capture_active = false;
         fcd->state.buffer_count = 0;
         fcd->state.sequence = 0;
         fcd->state.frame_ready = false;
@@ -1632,32 +1734,51 @@ static const struct file_operations frame_channel_fops = {
     .compat_ioctl = frame_channel_unlocked_ioctl,
 };
 
-// Helper functions matching reference driver patterns - SDK compatible
-static void* find_subdev_link_pad(struct tx_isp_dev *isp_dev, char *name)
+/* OEM-matching: find a pad by entity name, pad type and index.
+ * Note: OEM mapping uses type==1 for OUTPUT, type==2 for INPUT.
+ */
+static struct tx_isp_subdev_pad* find_subdev_link_pad(struct tx_isp_dev *isp_dev,
+                                                     const struct link_pad_description *desc)
 {
-    if (!isp_dev || !name) {
+    int i;
+    if (!isp_dev || !desc || !desc->name)
         return NULL;
+
+    for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+        struct tx_isp_subdev *sd = isp_dev->subdevs[i];
+        const char *sname;
+        if (!sd)
+            continue;
+
+        /* Prefer module->name; fall back to miscdev.name or device name */
+        sname = sd->module.name ? sd->module.name :
+                (sd->module.miscdev.name ? sd->module.miscdev.name :
+                 (sd->dev && sd->dev->kobj.name ? sd->dev->kobj.name : NULL));
+        if (!sname)
+            continue;
+
+        if (strcmp(sname, desc->name) == 0) {
+            /* Type 1 = OUTPUT pads (OEM), Type 2 = INPUT pads */
+            if (desc->type == 1) {
+                if (sd->outpads && desc->index < sd->num_outpads)
+                    return &sd->outpads[desc->index];
+                pr_warn("find_subdev_link_pad: outpad index %u out of range for %s (num_outpads=%u)\n",
+                        desc->index, sname, sd->num_outpads);
+                return NULL;
+            } else if (desc->type == 2) {
+                if (sd->inpads && desc->index < sd->num_inpads)
+                    return &sd->inpads[desc->index];
+                pr_warn("find_subdev_link_pad: inpad index %u out of range for %s (num_inpads=%u)\n",
+                        desc->index, sname, sd->num_inpads);
+                return NULL;
+            } else {
+                pr_warn("find_subdev_link_pad: unknown pad type %u for %s\n", desc->type, sname);
+                return NULL;
+            }
+        }
     }
 
-    pr_debug("find_subdev_link_pad: searching for %s\n", name);
-
-    // Work with actual SDK structure - check individual device pointers
-    if (strstr(name, "sensor") && isp_dev->sensor) {
-        pr_debug("Found sensor device\n");
-        return &isp_dev->sensor->sd; // Return sensor subdev
-    }
-
-    if (strstr(name, "csi") && isp_dev->csi_dev) {
-        pr_debug("Found CSI device\n");
-        return &((struct tx_isp_csi_device *)isp_dev->csi_dev)->sd; // Return CSI subdev pointer
-    }
-
-    if (strstr(name, "vic") && isp_dev->vic_dev) {
-        pr_debug("Found VIC device\n");
-        return &((struct tx_isp_vic_device *)isp_dev->vic_dev)->sd; // Return VIC subdev pointer
-    }
-
-    pr_debug("Subdev %s not found\n", name);
+    pr_debug("find_subdev_link_pad: entity '%s' not found\n", desc->name);
     return NULL;
 }
 
@@ -2323,20 +2444,97 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     return IRQ_HANDLED;
 }
 
+/* Destroy an active link between two pads, mirroring OEM behavior. */
+static int subdev_video_destroy_link(struct tx_isp_subdev_pad *src,
+                                     struct tx_isp_subdev_pad *dst)
+{
+    int ret_local = 0, ret_remote = 0;
+
+    if (!src || !dst)
+        return -EINVAL;
+
+    /* Inform subdevs via link_setup callback if available */
+    if (src->sd && src->sd->ops && src->sd->ops->video && src->sd->ops->video->link_setup)
+        ret_local = src->sd->ops->video->link_setup(src, dst, 0);
+    if (dst->sd && dst->sd->ops && dst->sd->ops->video && dst->sd->ops->video->link_setup)
+        ret_remote = dst->sd->ops->video->link_setup(dst, src, 0);
+
+    /* Clear linkage state on both pads */
+    src->link.sink = NULL;
+    src->link.reverse = NULL;
+    src->link.flag = 0;
+    src->link.state = TX_ISP_PADSTATE_FREE;
+    src->state = TX_ISP_PADSTATE_FREE;
+
+    dst->link.source = NULL;
+    dst->link.reverse = NULL;
+    dst->link.flag = 0;
+    dst->link.state = TX_ISP_PADSTATE_FREE;
+    dst->state = TX_ISP_PADSTATE_FREE;
+
+    /* Prefer first non-zero error if any callback rejected */
+    if (ret_local)
+        return ret_local;
+    if (ret_remote)
+        return ret_remote;
+    return 0;
+}
+
+/* Reference: tx_isp_video_link_destroy.isra.5
+ * Walk all subdevs and destroy any active links; set active_link to -1. */
 static int tx_isp_video_link_destroy_impl(struct tx_isp_dev *isp_dev)
 {
-    // Reference: tx_isp_video_link_destroy.isra.5
-    // Gets link_config from offset 0x118, destroys links, sets to -1
+    const struct tx_isp_link_configs *cfgs;
+    unsigned int i;
 
-    pr_info("Video link destroy: cleaning up pipeline connections\n");
+    if (!isp_dev)
+        return -EINVAL;
 
-    // In full implementation:
-    // 1. Get link_config from isp_dev->link_config (offset 0x118)
-    // 2. Iterate through configs array
-    // 3. Call find_subdev_link_pad() and subdev_video_destroy_link()
-    // 4. Set link_config to -1
+    cfgs = isp_dev->link_configs;
+    if (!cfgs || !cfgs->config || cfgs->length == 0) {
+        pr_info("Video link destroy: no configured links (link_configs is NULL), skipping pad iteration\n");
+        goto reset_state;
+    }
 
-    /* NOTE: ispcore_slake_module should be called AFTER init, not before
+    pr_info("Video link destroy: destroying %u configured link(s)\n", cfgs->length);
+
+    for (i = 0; i < cfgs->length; i++) {
+        const struct tx_isp_link_config *lc = &cfgs->config[i];
+        struct tx_isp_subdev_pad *src_pad;
+        struct tx_isp_subdev_pad *dst_pad;
+
+        src_pad = find_subdev_link_pad(isp_dev, &lc->src);
+        if (!src_pad) {
+            pr_warn("Link destroy: source pad not found for '%s' type=%u index=%u\n",
+                   lc->src.name ? lc->src.name : "(null)", lc->src.type, lc->src.index);
+            continue;
+        }
+
+        dst_pad = find_subdev_link_pad(isp_dev, &lc->dst);
+        if (!dst_pad) {
+            pr_warn("Link destroy: dest pad not found for '%s' type=%u index=%u\n",
+                   lc->dst.name ? lc->dst.name : "(null)", lc->dst.type, lc->dst.index);
+            continue;
+        }
+
+        pr_info("Unlinking configured: %s[%u]->%s[%u]\n",
+                (src_pad->sd && src_pad->sd->module.name) ? src_pad->sd->module.name : "(src)",
+                src_pad->index,
+                (dst_pad->sd && dst_pad->sd->module.name) ? dst_pad->sd->module.name : "(dst)",
+                dst_pad->index);
+
+        subdev_video_destroy_link(src_pad, dst_pad);
+    }
+
+reset_state:
+    /* Reset active link selection if tracked */
+    isp_dev->active_link = -1;
+    isp_dev->links_enabled = false;
+
+    return 0;
+}
+
+/* NOTE: ispcore_slake_module should be called AFTER init, not before
      * The ON → OFF → ON cycle is:
      * 1. First ON: Initialize pipeline
      * 2. OFF: Call slake to tear down
@@ -3476,6 +3674,11 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
 
         pr_info("*** Channel %d: QBUF - Queue buffer index=%d ***\n", channel, buffer.index);
+        if (!state->streaming || !state->capture_active) {
+            pr_warn("Channel %d: QBUF rejected - not streaming or inactive\n", channel);
+            return -EINVAL;
+        }
+
 
         /* Accept user-provided buffers (MMAP/USERPTR/DMABUF). Do not require driver-allocated buffer structs. */
         if (buffer.index >= 64) {
@@ -3642,11 +3845,12 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         ret = wait_event_interruptible(state->frame_wait,
                                        !list_empty(&state->completed_buffers) ||
                                        state->pre_dequeue_ready ||
-                                       !state->streaming);
+                                       !state->streaming ||
+                                       !state->capture_active);
         if (ret < 0)
             return ret; /* -ERESTARTSYS, etc. */
-        if (!state->streaming)
-            return -EAGAIN;
+        if (!state->streaming || !state->capture_active)
+            return -EINVAL;
 
         /* consume deliverable: pop completed node or consume pre-dequeue */
         {
@@ -3921,6 +4125,9 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     // CRITICAL: Set sensor state to RUNNING after successful streaming start
                     sensor->sd.vin_state = TX_ISP_MODULE_RUNNING;
                     pr_info("Channel %d: Sensor state set to RUNNING\n", channel);
+                    state->capture_active = true;
+                    wake_up_interruptible(&state->frame_wait);
+
                 }
             } else {
                 pr_err("*** Channel %d: CRITICAL ERROR - NO SENSOR s_stream OPERATION! ***\n", channel);
@@ -4137,6 +4344,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         // Stop channel streaming
         state->streaming = false;
+        state->capture_active = false;
 
         // *** CRITICAL: STOP ISP CHANNEL CONTROL (writes to register 0x9804 and waits for 0x9808) ***
         pr_info("*** Channel %d: CALLING tisp_channel_stop to disable ISP channel control ***\n", channel);
@@ -5702,6 +5910,7 @@ static int tx_isp_init(void)
     if (ret != 0) {
         pr_err("*** FAILED TO REQUEST IRQ 38 (isp-w02): %d ***\n", ret);
         pr_err("*** ONLY IRQ 37 WILL BE AVAILABLE ***\n");
+
     } else {
         pr_info("*** SUCCESS: IRQ 38 (isp-w02) REGISTERED ***\n");
         ourISPdev->isp_irq2 = 38;  /* Store secondary IRQ */
@@ -5712,6 +5921,13 @@ static int tx_isp_init(void)
     if (ourISPdev->vic_dev) {
         struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
         if (vic_dev->vic_regs) {
+    /* Initialize netlink channel (optional, non-fatal on error) */
+    {
+        int nlret = tisp_netlink_init();
+        if (nlret)
+            pr_warn("tisp netlink init failed: %d\n", nlret);
+    }
+
             void __iomem *isp_regs = vic_dev->vic_regs - 0x9a00;  /* Get ISP base from VIC base */
 
             pr_info("*** WRITING VIC INTERRUPT ENABLE REGISTERS ***\n");
@@ -5730,6 +5946,7 @@ static int tx_isp_init(void)
             if (ourISPdev->core_regs) {
                 void __iomem *core = ourISPdev->core_regs;
                 /* Enable/unmask core interrupts at both possible banks (legacy +0xb* and new +0x98b*) */
+
                 /* Legacy bank */
                 u32 pend_legacy = readl(core + 0xb4);
                 writel(pend_legacy, core + 0xb8);  /* Clear any pending */
@@ -5796,6 +6013,13 @@ static int tx_isp_init(void)
         goto err_cleanup_graph;
     }
     pr_info("*** V4L2 VIDEO DEVICES CREATED - /dev/video0, /dev/video1 NOW AVAILABLE ***\n");
+
+    /* Initialize netlink channel (optional, non-fatal on error) */
+    {
+        int nlret = tisp_netlink_init();
+        if (nlret)
+            pr_warn("tisp netlink init failed: %d\n", nlret);
+    }
 
     pr_info("TX ISP driver ready with new subdevice management system\n");
     return 0;
@@ -5941,8 +6165,13 @@ static void tx_isp_exit(void)
     sensor_count = 0;
     mutex_unlock(&sensor_list_mutex);
 
+
+    /* Tear down netlink channel */
+    tisp_netlink_exit();
+
     pr_info("TX ISP driver removed\n");
 }
+
 
 /* VIC video streaming function - CRITICAL for register activity */
 int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)

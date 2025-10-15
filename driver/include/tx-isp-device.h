@@ -567,6 +567,7 @@ struct tx_isp_frame_channel {
 struct tx_isp_channel_state {
     bool enabled;
     bool streaming;
+    bool capture_active;              /* True when sensor/link is active for capture */
     int format;
     int width;
     int height;

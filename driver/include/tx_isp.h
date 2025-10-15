@@ -263,10 +263,13 @@ struct tx_isp_dev {
     
     /* CRITICAL: Binary Ninja subdev array at offset 0x38 - tx_isp_video_link_stream depends on this */
     struct tx_isp_subdev *subdevs[ISP_MAX_SUBDEVS];       /* Subdev array at offset 0x38 for tx_isp_video_link_stream */
-    
+
+    /* Optional: Link configuration descriptor for pad graph setup/destroy */
+    struct tx_isp_link_configs *link_configs; /* NULL if not configured */
+
     /* Frame channel devices - needed for tx_isp_create_framechan_devices */
     struct miscdevice *fs_miscdevs[4];       /* Frame source misc devices (/dev/isp-fs*) */
-    
+
     /* ISP proc directory - needed for tx_isp_create_graph_proc_entries */
     struct proc_dir_entry *isp_proc_dir;     /* ISP-specific proc directory */
 } __attribute__((aligned(4)));
