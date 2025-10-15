@@ -3105,7 +3105,8 @@ int tisp_set_awb_info(void *in_buf);
 /* AWB algo attribute setter from vendor binary */
 extern int tisp_s_wb_attr(int mode, uint32_t r_gain, uint32_t b_gain,
                           uint32_t p4, uint32_t p5, uint32_t p6);
-/* AWB register write helper from tx-isp-module.c */
+/* AWB register write helpers from tx-isp-module.c */
+extern void system_reg_write(u32 reg, u32 value);
 extern void system_reg_write_awb(u32 block, u32 reg, u32 value);
 
 /* Vendor-accurate WB attribute setter: programs R/B gains; sets G to unity (256)
@@ -5953,21 +5954,49 @@ static uint32_t awb_ev_data;           /* data_983b0 equivalent */
  */
 static int tiziano_awb_set_hardware_param(void)
 {
-    /* Apply a subset of concrete AWB HW params as per vendor binary:
-     * - Lowlight RG thresholds to 0xb028, 0xb02c
-     * - Re-enable AWB blocks to latch changes
-     * Notes:
-     *   The vendor toggles these based on ModeFlag; we conservatively program
-     *   the lowlight case here (ModeFlag == 1):
-     *     0xb028 = (RG_TH_H << 16) | RG_TH_L
-     *     0xb02c = 0x03ff0001
-     */
+    /* One-time pack of _awb_parameter into AWB registers (0xb008..0xb024) */
+    static int awb_first;
+    if (!awb_first) {
+        awb_first = 1;
+        const uint8_t *p = _awb_parameter;
+        u32 val;
+        /* 0xb008: p[0..3] */
+        val = (u32)p[0] | ((u32)p[1] << 8) | ((u32)p[2] << 16) | ((u32)p[3] << 24);
+        system_reg_write(0x0b008, val);
+        /* 0xb00c: p[4..7] */
+        val = (u32)p[4] | ((u32)p[5] << 8) | ((u32)p[6] << 16) | ((u32)p[7] << 24);
+        system_reg_write(0x0b00c, val);
+        /* 0xb010: p[8..11] */
+        val = (u32)p[8] | ((u32)p[9] << 8) | ((u32)p[10] << 16) | ((u32)p[11] << 24);
+        system_reg_write(0x0b010, val);
+        /* 0xb014: p[12..14] */
+        val = (u32)p[12] | ((u32)p[13] << 8) | ((u32)p[14] << 16);
+        system_reg_write(0x0b014, val);
+        /* 0xb018: p[15..18] */
+        val = (u32)p[15] | ((u32)p[16] << 8) | ((u32)p[17] << 16) | ((u32)p[18] << 24);
+        system_reg_write(0x0b018, val);
+        /* 0xb01c: p[19..22] */
+        val = (u32)p[19] | ((u32)p[20] << 8) | ((u32)p[21] << 16) | ((u32)p[22] << 24);
+        system_reg_write(0x0b01c, val);
+        /* 0xb020: p[23..26] */
+        val = (u32)p[23] | ((u32)p[24] << 8) | ((u32)p[25] << 16) | ((u32)p[26] << 24);
+        system_reg_write(0x0b020, val);
+        /* 0xb024: p[27..29] */
+        val = (u32)p[27] | ((u32)p[28] << 8) | ((u32)p[29] << 16);
+        system_reg_write(0x0b024, val);
+    }
+
+    /* Lowlight RG thresholds to 0xb028/0xb02c (ModeFlag==1 path) */
     {
         u32 rg_lo = (_awb_lowlight_rg_th[0] & 0xFFFF);
         u32 rg_hi = (_awb_lowlight_rg_th[1] & 0xFFFF) << 16;
         system_reg_write_awb(1, 0x0b028, rg_hi | rg_lo);
         system_reg_write_awb(1, 0x0b02c, 0x03ff0001);
     }
+
+    /* Program additional thresholds per vendor default branch */
+    system_reg_write_awb(1, 0x0b030, 0x00000100);
+    system_reg_write_awb(1, 0x0b034, 0xffff0100);
 
     /* Re-enable AWB block 1 and 2 to apply parameter changes */
     system_reg_write_awb(1, 0x0b000, 1);
