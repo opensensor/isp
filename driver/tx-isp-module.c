@@ -804,7 +804,6 @@ int frame_chan_event(void *priv, int event, void *data)
         /* Mark a frame as ready and wake any waiters (used by DQBUF) */
         spin_lock_irqsave(&state->buffer_lock, flags);
         state->frame_ready = true;
-        state->sequence++;
         spin_unlock_irqrestore(&state->buffer_lock, flags);
 
         wake_up(&state->frame_wait);
@@ -3458,13 +3457,6 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             return -EINVAL;
         }
 
-        // Auto-start streaming if not already started
-        if (!state->streaming) {
-            pr_info("Channel %d: Auto-starting streaming for DQBUF\n", channel);
-            state->streaming = true;
-            state->enabled = true;
-
-        }
 
         // Check if real sensor is connected and active
         if (ourISPdev && ourISPdev->sensor) {
@@ -3475,27 +3467,18 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
         }
 
-        /* Binary Ninja DQBUF: Wait for frame completion with proper state checking */
-        pr_info("*** Channel %d: DQBUF waiting for frame completion (timeout=200ms) ***\n", channel);
-        ret = wait_event_interruptible_timeout(state->frame_wait,
-                                             state->frame_ready || !state->streaming,
-                                             msecs_to_jiffies(200)); // 200ms timeout like reference
-        pr_info("*** Channel %d: DQBUF wait returned %d ***\n", channel, ret);
-
-        if (ret == 0) {
-            pr_info("*** Channel %d: DQBUF timeout, generating frame ***\n", channel);
-            spin_lock_irqsave(&state->buffer_lock, flags);
-            state->frame_ready = true;
-            spin_unlock_irqrestore(&state->buffer_lock, flags);
-        } else if (ret < 0) {
-            pr_info("*** Channel %d: DQBUF interrupted: %d ***\n", channel, ret);
-            return ret;
-        }
-
-        if (!state->streaming) {
-            pr_info("Channel %d: Streaming stopped during DQBUF wait\n", channel);
+        /* OEM-aligned DQBUF: interruptible wait until frame ready or streaming stops */
+        ret = wait_event_interruptible(state->frame_wait,
+                                       state->frame_ready || !state->streaming);
+        if (ret < 0)
+            return ret; /* -ERESTARTSYS, etc. */
+        if (!state->streaming)
             return -EAGAIN;
-        }
+
+        /* consume readiness */
+        spin_lock_irqsave(&state->buffer_lock, flags);
+        state->frame_ready = false;
+        spin_unlock_irqrestore(&state->buffer_lock, flags);
 
         /* Binary Ninja __fill_v4l2_buffer implementation */
         spin_lock_irqsave(&state->buffer_lock, flags);
@@ -6690,23 +6673,11 @@ int vic_event_handler(void *subdev, int event_type, void *data)
         /* Call Binary Ninja ispvic_frame_channel_s_stream implementation */
         return ispvic_frame_channel_s_stream(vic_dev, 1);
     }
-    case 0x3000004: { /* STREAM STOP or SYNC SENSOR ATTR (OEM uses 0x3000004 for stop) */
-        pr_info("*** VIC EVENT: 0x3000004 received ***\n");
+    case 0x3000004: { /* TX_ISP_EVENT_SYNC_SENSOR_ATTR - Sync sensor attributes */
+        pr_info("*** VIC EVENT: SYNC_SENSOR_ATTR (0x3000004) - SYNCING SENSOR ATTRIBUTES ***\n");
 
-        /* If no data, treat as STREAM STOP to match OEM */
-        if (!data) {
-            int rc = 0;
-            pr_info("*** INTERPRETING 0x3000004 AS STREAM STOP ***\n");
-            rc = ispvic_frame_channel_s_stream(vic_dev, 0);
-            if (rc < 0)
-                pr_warn("STREAM STOP via 0x3000004 returned %d\n", rc);
-            (void) ispvic_frame_channel_clearbuf();
-            return 0;
-        }
-
-        /* Otherwise, support sensor attribute sync for compatibility */
-        pr_info("*** SYNC SENSOR ATTR via 0x3000004 ***\n");
-        if (ourISPdev && ourISPdev->sensor) {
+        /* Handle sensor attribute synchronization */
+        if (data && ourISPdev && ourISPdev->sensor) {
             struct tx_isp_sensor_attribute *sensor_attr = (struct tx_isp_sensor_attribute *)data;
             struct tx_isp_sensor *sensor = ourISPdev->sensor;
 
@@ -6714,17 +6685,19 @@ int vic_event_handler(void *subdev, int event_type, void *data)
                     sensor_attr->name ? sensor_attr->name : "(unnamed)",
                     sensor_attr->total_width, sensor_attr->total_height);
 
+            /* Copy sensor attributes to device sensor */
             if (sensor->video.attr) {
                 memcpy(sensor->video.attr, sensor_attr, sizeof(struct tx_isp_sensor_attribute));
                 pr_info("*** SENSOR ATTRIBUTES SYNCED SUCCESSFULLY ***\n");
-                return 0;
+                return 0; /* Success */
             } else {
                 pr_err("*** SENSOR ATTRIBUTES SYNC FAILED: No sensor attr structure ***\n");
                 return -EINVAL;
             }
+        } else {
+            pr_err("*** SENSOR ATTRIBUTES SYNC FAILED: Invalid parameters ***\n");
+            return -EINVAL;
         }
-        pr_err("*** 0x3000004: No sensor to sync ***\n");
-        return -EINVAL;
     }
     case 0x3000005: { /* Buffer enqueue event from __enqueue_in_driver */
         pr_info("*** VIC EVENT: BUFFER_ENQUEUE (0x3000005) ***\n");
