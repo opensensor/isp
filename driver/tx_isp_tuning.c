@@ -4227,6 +4227,48 @@ long tisp_code_tuning_ioctl(struct file *file, unsigned int cmd, unsigned long a
                         return 0;
                     }
 
+
+                    case 0x2000740a: /* Set AWB ModeFlag and gating */
+                    {
+                        int32_t flags[2];
+                        if (copy_from_user(flags, argp, sizeof(flags)))
+                            return -EFAULT;
+                        /* Normalize to 0/1 */
+                        _awb_mode[0] = flags[0] ? 1 : 0; /* ModeFlag: 0=normal,1=lowlight */
+                        _awb_mode[1] = flags[1] ? 1 : 0; /* gating flag */
+                        /* Apply to hardware immediately */
+                        return tiziano_awb_set_hardware_param();
+                    }
+
+                    case 0x2000740b: /* Get AWB ModeFlag and gating */
+                    {
+                        int32_t flags[2];
+                        flags[0] = _awb_mode[0];
+                        flags[1] = _awb_mode[1];
+                        if (copy_to_user(argp, flags, sizeof(flags)))
+                            return -EFAULT;
+                        return 0;
+                    }
+
+
+                    case 0x2000740c: /* Set AWB freeze flag */
+                    {
+                        uint8_t frz;
+                        if (copy_from_user(&frz, argp, sizeof(frz)))
+                            return -EFAULT;
+                        awb_frz = frz ? 1 : 0;
+                        return 0;
+                    }
+
+                    case 0x2000740d: /* Get AWB freeze flag */
+                    {
+                        uint8_t frz = awb_frz;
+                        if (copy_to_user(argp, &frz, sizeof(frz)))
+                            return -EFAULT;
+                        return 0;
+                    }
+
+
                     default:
                         pr_warn("tisp_code_tuning_ioctl: Unknown tuning command 0x%x\n", cmd);
                         return -EINVAL;
@@ -5960,6 +6002,11 @@ static int tiziano_awb_set_hardware_param(void)
         awb_first = 1;
         const uint8_t *p = _awb_parameter;
         u32 val;
+        /* 0xb004: write control dword directly from _awb_parameter[0..3] (BN Reg2par mapping) */
+        {
+            u32 ctrl = (u32)p[0] | ((u32)p[1] << 8) | ((u32)p[2] << 16) | ((u32)p[3] << 24);
+            system_reg_write(0x0b004, ctrl);
+        }
         /* 0xb008: p[0..3] */
         val = (u32)p[0] | ((u32)p[1] << 8) | ((u32)p[2] << 16) | ((u32)p[3] << 24);
         system_reg_write(0x0b008, val);
@@ -5986,31 +6033,44 @@ static int tiziano_awb_set_hardware_param(void)
         system_reg_write(0x0b024, val);
     }
 
-    /* Lowlight RG thresholds to 0xb028/0xb02c (ModeFlag==1 path) */
+    /* Gating flag path and ModeFlag-based thresholds; also programs 0xb030/0xb034 */
     {
-        u32 rg_lo = (_awb_lowlight_rg_th[0] & 0xFFFF);
-        u32 rg_hi = (_awb_lowlight_rg_th[1] & 0xFFFF) << 16;
-        system_reg_write_awb(1, 0x0b028, rg_hi | rg_lo);
-        system_reg_write_awb(1, 0x0b02c, 0x03ff0001);
-    }
-
-    /* Program 0xb030/0xb034 from mapped params when available; fallback to vendor defaults */
-    {
-        u32 p0 = _AwbPointPos[0], p1 = _AwbPointPos[1];
-        u32 c0 = _awb_cof[0],     c1 = _awb_cof[1];
-        u32 v30, v34;
-        if ((p0 | p1) == 0) {
-            v30 = 0x00000100; /* fallback matches vendor gating branch */
+        u32 gating = _awb_mode[1];
+        if (gating) {
+            /* Vendor gating branch */
+            system_reg_write_awb(1, 0x0b028, 0x0fff0001);
+            system_reg_write_awb(1, 0x0b02c, 0x0fff0001);
+            system_reg_write_awb(1, 0x0b030, 0x00000100);
+            system_reg_write_awb(1, 0x0b034, 0xffff0100);
         } else {
-            v30 = ((p1 & 0xFFFF) << 16) | (p0 & 0xFFFF);
+            /* 0xb028/0xb02c thresholds: select by ModeFlag (_awb_mode[0]) */
+            u32 mode = _awb_mode[0];
+            if (mode == 1) {
+                u32 rg_lo = (_awb_lowlight_rg_th[0] & 0x0FFF);
+                u32 rg_hi = (_awb_lowlight_rg_th[1] & 0x0FFF) << 16;
+                system_reg_write_awb(1, 0x0b028, rg_hi | rg_lo);
+                system_reg_write_awb(1, 0x0b02c, 0x03ff0001);
+            } else {
+                const uint8_t *q = _awb_parameter;
+                u32 w22 = (u32)q[0x22*4] | ((u32)q[0x22*4+1] << 8) | ((u32)q[0x22*4+2] << 16) | ((u32)q[0x22*4+3] << 24);
+                u32 w23 = (u32)q[0x23*4] | ((u32)q[0x23*4+1] << 8) | ((u32)q[0x23*4+2] << 16) | ((u32)q[0x23*4+3] << 24);
+                u32 w24 = (u32)q[0x24*4] | ((u32)q[0x24*4+1] << 8) | ((u32)q[0x24*4+2] << 16) | ((u32)q[0x24*4+3] << 24);
+                u32 w25 = (u32)q[0x25*4] | ((u32)q[0x25*4+1] << 8) | ((u32)q[0x25*4+2] << 16) | ((u32)q[0x25*4+3] << 24);
+                u32 rg_lo = (w22 & 0x0FFF);
+                u32 rg_hi = (w23 & 0x0FFF) << 16;
+                u32 bg_lo = (w24 & 0x0FFF);
+                u32 bg_hi = (w25 & 0x0FFF) << 16;
+                system_reg_write_awb(1, 0x0b028, rg_hi | rg_lo);
+                system_reg_write_awb(1, 0x0b02c, bg_hi | bg_lo);
+            }
+            /* Program 0xb030/0xb034 from mapped params when available; fallback to vendor defaults */
+            u32 p0 = _AwbPointPos[0], p1 = _AwbPointPos[1];
+            u32 c0 = _awb_cof[0],     c1 = _awb_cof[1];
+            u32 v30 = ((p0 | p1) == 0) ? 0x00000100 : (((p1 & 0xFFFF) << 16) | (p0 & 0xFFFF));
+            u32 v34 = ((c0 | c1) == 0) ? 0xffff0100 : (((c1 & 0xFFFF) << 16) | (c0 & 0xFFFF));
+            system_reg_write_awb(1, 0x0b030, v30);
+            system_reg_write_awb(1, 0x0b034, v34);
         }
-        if ((c0 | c1) == 0) {
-            v34 = 0xffff0100; /* fallback matches vendor gating branch */
-        } else {
-            v34 = ((c1 & 0xFFFF) << 16) | (c0 & 0xFFFF);
-        }
-        system_reg_write_awb(1, 0x0b030, v30);
-        system_reg_write_awb(1, 0x0b034, v34);
     }
 
     /* Re-enable AWB block 1 and 2 to apply parameter changes */
