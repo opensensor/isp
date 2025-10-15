@@ -2,6 +2,10 @@
 #include <linux/module.h>
 #include <tx-isp-debug.h>
 #include <linux/vmalloc.h>
+#include <linux/fs.h>
+#include <linux/uaccess.h>
+#include <linux/version.h>
+
 
 /* -------------------debugfs interface------------------- */
 static int print_level = ISP_WARN_LEVEL;
@@ -106,6 +110,59 @@ void private_dma_sync_single_for_device(struct device *dev,
 	dma_sync_single_for_device(dev, addr, size, dir);
 	return;
 }
+
+/* OEM-style wrappers for vfs read/write/llseek and addr_limit helpers */
+ssize_t private_vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
+{
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0)
+	return kernel_read(file, buf, count, pos);
+#else
+	mm_segment_t oldfs = get_fs();
+	set_fs(KERNEL_DS);
+	ssize_t ret = vfs_read(file, buf, count, pos);
+	set_fs(oldfs);
+	return ret;
+#endif
+}
+
+ssize_t private_vfs_write(struct file *file, const char __user *buf, size_t count, loff_t *pos)
+{
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0)
+	return kernel_write(file, buf, count, pos);
+#else
+	mm_segment_t oldfs = get_fs();
+	set_fs(KERNEL_DS);
+	ssize_t ret = vfs_write(file, buf, count, pos);
+	set_fs(oldfs);
+	return ret;
+#endif
+}
+
+loff_t private_vfs_llseek(struct file *file, loff_t offset, int whence)
+{
+	return vfs_llseek(file, offset, whence);
+}
+
+mm_segment_t private_get_fs(void)
+{
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,10,0)
+	return get_fs();
+#else
+	/* set_fs/get_fs removed; return KERNEL_DS as a harmless sentinel */
+	return KERNEL_DS;
+#endif
+}
+
+void private_set_fs(mm_segment_t val)
+{
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5,10,0)
+	set_fs(val);
+#else
+	/* No-op on modern kernels */
+	(void)val;
+#endif
+}
+
 
 
 

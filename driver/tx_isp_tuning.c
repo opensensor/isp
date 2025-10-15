@@ -1,4 +1,5 @@
 #include <linux/module.h>
+
 #include <linux/platform_device.h>
 #include <linux/of.h>
 #include <linux/interrupt.h>
@@ -43,6 +44,8 @@
 #include "../include/tx_isp_vic.h"
 #include "../include/tx_isp_csi.h"
 #include "../include/tx_isp_vin.h"
+#include "../include/tx_isp_fixpt.h"
+
 #include "../include/tx-isp-device.h"
 #include "../include/tx-libimp.h"
 
@@ -54,6 +57,65 @@ extern struct tx_isp_dev *ourISPdev;
 extern void tx_isp_wakeup_frame_channels(void);
 
 int isp_trigger_frame_data_transfer(struct tx_isp_dev *dev);
+
+/* Optional global conversion matrix used by tiziano_bcsh_Toffset_RGB2YUV */
+static int32_t tiziano_MMatrix[9] = {
+	/* Default to identity-ish until set by tuning */
+	1 << 16, 0, 0,
+	0, 1 << 16, 0,
+	0, 0, 1 << 16,
+};
+
+void tiziano_set_bcsh_matrix(const int32_t *m)
+{
+	int i;
+	if (!m) return;
+	for (i = 0; i < 9; ++i)
+		tiziano_MMatrix[i] = m[i];
+}
+
+/* OEM-shaped: fixed-point RGB->YUV offset multiply with sign handling */
+int tiziano_bcsh_Toffset_RGBYUV(int32_t out[3], const int32_t *M, const int32_t in[3])
+{
+	int c, i;
+	if (!out || !M || !in)
+		return -EINVAL;
+
+	for (c = 0; c < 3; ++c) {
+		int64_t acc = 0;
+		for (i = 0; i < 3; ++i) {
+			int32_t a = in[i];
+			int32_t b = M[c * 3 + i];
+			int s = 1;
+			uint32_t aa = (a < 0) ? -a : a;
+			uint32_t bb = (b < 0) ? -b : b;
+			if ((a < 0) ^ (b < 0)) s = -1;
+			/* Multiply in Q16; OEM right-shifts by 6 later */
+			uint32_t prod = fix_point_mult2_32(16, aa, bb);
+			acc += s * (int64_t)prod;
+		}
+		/* Final scaling matches OEM pattern (>>6 after Q16 accumulation) */
+		out[c] = (int32_t)(acc >> 6);
+	}
+	return 0;
+}
+
+int tiziano_bcsh_Toffset_RGB2YUV(int32_t out[3], const int32_t in[3])
+{
+	int32_t tmp_in[3], tmp_out[3];
+	int i, ret;
+	if (!out || !in)
+		return -EINVAL;
+	for (i = 0; i < 3; ++i)
+		tmp_in[i] = in[i] - 0x400;
+	ret = tiziano_bcsh_Toffset_RGBYUV(tmp_out, tiziano_MMatrix, tmp_in);
+	if (ret)
+		return ret;
+	for (i = 0; i < 3; ++i)
+		out[i] = tmp_out[i] + 0x400;
+	return 0;
+}
+
 /* ===== TIZIANO WDR PROCESSING PIPELINE - Binary Ninja Reference Implementation ===== */
 
 // ISP Tuning device support - missing component for /dev/isp-m0
