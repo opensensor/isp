@@ -5994,9 +5994,24 @@ static int tiziano_awb_set_hardware_param(void)
         system_reg_write_awb(1, 0x0b02c, 0x03ff0001);
     }
 
-    /* Program additional thresholds per vendor default branch */
-    system_reg_write_awb(1, 0x0b030, 0x00000100);
-    system_reg_write_awb(1, 0x0b034, 0xffff0100);
+    /* Program 0xb030/0xb034 from mapped params when available; fallback to vendor defaults */
+    {
+        u32 p0 = _AwbPointPos[0], p1 = _AwbPointPos[1];
+        u32 c0 = _awb_cof[0],     c1 = _awb_cof[1];
+        u32 v30, v34;
+        if ((p0 | p1) == 0) {
+            v30 = 0x00000100; /* fallback matches vendor gating branch */
+        } else {
+            v30 = ((p1 & 0xFFFF) << 16) | (p0 & 0xFFFF);
+        }
+        if ((c0 | c1) == 0) {
+            v34 = 0xffff0100; /* fallback matches vendor gating branch */
+        } else {
+            v34 = ((c1 & 0xFFFF) << 16) | (c0 & 0xFFFF);
+        }
+        system_reg_write_awb(1, 0x0b030, v30);
+        system_reg_write_awb(1, 0x0b034, v34);
+    }
 
     /* Re-enable AWB block 1 and 2 to apply parameter changes */
     system_reg_write_awb(1, 0x0b000, 1);
