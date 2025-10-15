@@ -5953,9 +5953,25 @@ static uint32_t awb_ev_data;           /* data_983b0 equivalent */
  */
 static int tiziano_awb_set_hardware_param(void)
 {
+    /* Apply a subset of concrete AWB HW params as per vendor binary:
+     * - Lowlight RG thresholds to 0xb028, 0xb02c
+     * - Re-enable AWB blocks to latch changes
+     * Notes:
+     *   The vendor toggles these based on ModeFlag; we conservatively program
+     *   the lowlight case here (ModeFlag == 1):
+     *     0xb028 = (RG_TH_H << 16) | RG_TH_L
+     *     0xb02c = 0x03ff0001
+     */
+    {
+        u32 rg_lo = (_awb_lowlight_rg_th[0] & 0xFFFF);
+        u32 rg_hi = (_awb_lowlight_rg_th[1] & 0xFFFF) << 16;
+        system_reg_write_awb(1, 0x0b028, rg_hi | rg_lo);
+        system_reg_write_awb(1, 0x0b02c, 0x03ff0001);
+    }
+
     /* Re-enable AWB block 1 and 2 to apply parameter changes */
-    system_reg_write_awb(1, 0xb000, 1);
-    system_reg_write_awb(2, 0x1800, 1);
+    system_reg_write_awb(1, 0x0b000, 1);
+    system_reg_write_awb(2, 0x01800, 1);
     return 0;
 }
 
