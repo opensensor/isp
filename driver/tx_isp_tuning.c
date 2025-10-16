@@ -148,6 +148,358 @@ static uint32_t bcsh_clip0_wdr[4],    bcsh_clip1_wdr[4],    bcsh_clip2_wdr[4];
 static int32_t tiziano_MinvMatrix[9];
 
 
+/* Build the HMatrix (RGB->YUV transform for BCSH) using OEM constant base
+ * as in tiziano_bcsh_Tccm_RGB2YUV: memcpy(var_38, 0x7b8a4, 0x24), then the
+ * OEM applies tiziano_bcsh_Tccm_RGBYUV and para2reg. We start by wiring the
+ * exact OEM constant; para2reg is applied later in reg_apply.
+ */
+static void tiziano_bcsh_build_HMatrix(int32_t out[9])
+{
+    static const int32_t oem_ccm_const[9] = {
+        0x00000401, /* 1025 */
+        (int32_t)0xfffffe04, /* -508 */
+        (int32_t)0xfffffef3, /* -269 */
+        (int32_t)0xffffffff, /* -1   */
+        0x00000905, /* 2309 */
+        0x0000015f, /* 351  */
+        (int32_t)0xffffffff, /* -1   */
+        0x000002f1, /* 753  */
+        0x00000a9b  /* 2715 */
+    };
+    if (!out)
+        return;
+
+    /* Start from OEM base constant, then apply full Tccm_RGBYUV chain */
+    int32_t tmp[9];
+    for (int i = 0; i < 9; ++i)
+        tmp[i] = oem_ccm_const[i];
+
+    /* Build active CCM from D/T/A sets using OEM CT interpolation */
+    int32_t active_ccm[9];
+    uint32_t ct = 0x1357; /* default to Daylight if CT unknown */
+    if (s_bcsh_ct_override_valid) {
+        ct = s_bcsh_ct_override;
+    } else if (ourISPdev && ourISPdev->tuning_data) {
+        ct = ourISPdev->tuning_data->wb_temp;
+    }
+    tiziano_bcsh_build_active_ccm(active_ccm, ct);
+
+    tiziano_bcsh_Tccm_RGBYUV(tmp, tiziano_MMatrix, active_ccm, tiziano_MinvMatrix);
+
+    for (int i = 0; i < 9; ++i)
+        out[i] = tmp[i];
+}
+/* BCSH CT override for CCM blending (optional; falls back to wb_temp when unset) */
+static uint32_t s_bcsh_ct_override = 0;
+static int s_bcsh_ct_override_valid = 0;
+
+/* Build active CCM (as32CCMMatrix) per OEM CT rules from D/T/A sets */
+static void tiziano_bcsh_build_active_ccm(int32_t out[9], uint32_t ct)
+{
+    const uint32_t *D = bcsh_wdr_enabled ? bcsh_CCM_d_wdr : bcsh_CCM_d;
+    const uint32_t *T = bcsh_wdr_enabled ? bcsh_CCM_t_wdr : bcsh_CCM_t;
+    const uint32_t *A = bcsh_wdr_enabled ? bcsh_CCM_a_wdr : bcsh_CCM_a;
+
+    /* OEM thresholds/pivots from HLIL */
+    const uint32_t CT_MAX_D   = 0x1357; /* >= -> D */
+    const uint32_t PIV_DT     = 0x0F0A; /* pivot between D and T */
+    const uint32_t PIV_TA     = 0x0B22; /* pivot between T and A */
+    const uint32_t DEN_DT     = 0x044C; /* 1100 */
+    const uint32_t DEN_TA     = 0x0384; /* 900  */
+
+    if (ct >= CT_MAX_D) {
+        for (int i = 0; i < 9; ++i) out[i] = (int32_t)D[i];
+        return;
+    }
+
+    if (ct >= (PIV_DT + 1)) { /* flag 1: interpolate D<->T over [PIV_DT..PIV_DT+DEN_DT] */
+        uint32_t w = (ct >= PIV_DT) ? (ct - PIV_DT) : (PIV_DT - ct);
+        if (w > DEN_DT) w = DEN_DT;
+        for (int i = 0; i < 9; ++i) {
+            int32_t d = (int32_t)D[i];
+            int32_t t = (int32_t)T[i];
+            int32_t v;
+            if (d >= t)
+                v = (int32_t)( ((int64_t)(d - t) * w) / DEN_DT ) + t;
+            else
+                v = t - (int32_t)( ((int64_t)(t - d) * w) / DEN_DT );
+            out[i] = v;
+        }
+        return;
+    }
+
+    if (ct >= 0x0EA7) { /* flag 2: copy T */
+        for (int i = 0; i < 9; ++i) out[i] = (int32_t)T[i];
+        return;
+    }
+
+    if (ct < (PIV_TA + 1)) { /* flag 4: copy A when ct < 0x0B23 */
+        if (ct < 0x0B23) {
+            for (int i = 0; i < 9; ++i) out[i] = (int32_t)A[i];
+            return;
+        }
+    }
+
+    /* flag 3: interpolate T<->A over [PIV_TA..PIV_TA+DEN_TA] */
+    {
+        uint32_t w = (ct >= PIV_TA) ? (ct - PIV_TA) : (PIV_TA - ct);
+        if (w > DEN_TA) w = DEN_TA;
+        for (int i = 0; i < 9; ++i) {
+            int32_t a = (int32_t)A[i];
+            int32_t t = (int32_t)T[i];
+            int32_t v;
+            if (t >= a)
+                v = (int32_t)( ((int64_t)(t - a) * w) / DEN_TA ) + a;
+            else
+                v = a - (int32_t)( ((int64_t)(a - t) * w) / DEN_TA );
+            out[i] = v;
+        }
+    }
+}
+
+
+/* Multiply two Q16 3x3 matrices with sign-aware fixed-point math */
+static void tiziano_matmul3_q16(const int32_t A[9], const int32_t B[9], int32_t O[9])
+{
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            int64_t acc = 0;
+            for (int k = 0; k < 3; ++k) {
+                int32_t a = A[i * 3 + k];
+                int32_t b = B[k * 3 + j];
+                int sa = (a < 0) ? -1 : 1;
+                int sb = (b < 0) ? -1 : 1;
+                uint32_t aa = (a < 0) ? (uint32_t)(-a) : (uint32_t)a;
+                uint32_t bb = (b < 0) ? (uint32_t)(-b) : (uint32_t)b;
+                uint32_t prod = fix_point_mult2_32(16, aa, bb);
+                acc += (int64_t)(sa * sb) * (int64_t)prod;
+            }
+            /* OEM applies >>6 post accumulation */
+            O[i * 3 + j] = (int32_t)(acc >> 6);
+        }
+    }
+}
+
+/* Build a chroma-plane rotation matrix (Q16) from hue with OEM piecewise behavior */
+static void tiziano_build_hue_rotation(int32_t R[9])
+{
+    /* Defaults from HLIL */
+    const int32_t CosValue = 0x8000;     /* 32768 */
+    const int32_t SinValue = 0xddb4;       /* from HLIL */
+    const int32_t A = 0x10000;           /* data_aa710 */
+    const int32_t Z = 0x0000;            /* data_aa704 */
+    const int32_t P = 0x3c;              /* data_aa71c */
+    const int32_t Q = 0x78;              /* data_aa720 */
+
+    uint8_t hue = 0x3c;
+    if (ourISPdev && ourISPdev->tuning_data)
+        hue = ourISPdev->tuning_data->bcsh_hue;
+
+    /* Derive s1 (cos-like), s2 (sin-like), and sign flag sgn per HLIL */
+    int32_t s1, s2; int sgn;
+    if (hue == P) {
+        s1 = A; s2 = Z; sgn = 1;
+    } else if (hue < (uint8_t)(P + 1)) {
+        /* Interpolate between (CosValue,SinValue) and (A,Z) around P */
+        int32_t dx = (int32_t)P - (int32_t)hue;
+        /* linear blend over span P (best-effort match) */
+        s1 = CosValue + (int32_t)(((int64_t)(A - CosValue) * dx) / P);
+        s2 = SinValue + (int32_t)(((int64_t)(Z - SinValue) * dx) / P);
+        sgn = -1; /* matches HLIL s6_5 = 0xffffffff path */
+    } else {
+        /* Interpolate between (A,Z) and (CosValue,SinValue) up to Q */
+        int32_t dx = (int32_t)hue - (int32_t)P;
+        int32_t span = (int32_t)Q - (int32_t)P;
+        if (span <= 0) span = 1;
+        s1 = A + (int32_t)(((int64_t)(CosValue - A) * dx) / span);
+        s2 = Z + (int32_t)(((int64_t)(SinValue - Z) * dx) / span);
+        sgn = 1;
+    }
+
+    /* Rotation in UV plane with sign per OEM */
+    R[0] = 1 << 16; R[1] = 0;       R[2] = 0;
+    R[3] = 0;       R[4] = s1;      R[5] = (sgn > 0) ? s2 : -s2;
+    R[6] = 0;       R[7] = (sgn > 0) ? -s2 : s2; R[8] = s1;
+}
+
+/* Full OEM-shaped chain: out = M * (CCM * R(hue) * Minv) */
+static void tiziano_bcsh_Tccm_RGBYUV(int32_t out[9], const int32_t *M, const int32_t *CCM, const int32_t *Minv)
+{
+    int32_t R[9], T1[9], T2[9];
+    tiziano_build_hue_rotation(R);
+
+    /* T1 = CCM * R */
+    tiziano_matmul3_q16(CCM, R, T1);
+    /* T2 = T1 * Minv */
+    tiziano_matmul3_q16(T1, Minv, T2);
+    /* out = M * T2 */
+    tiziano_matmul3_q16(M, T2, out);
+}
+
+/* Compute piecewise slopes used by OEM for C and for HDP/HBP transitions. */
+static void tiziano_bcsh_compute_slopes(const uint32_t Sth[3], const uint32_t C[5],
+                                        const uint32_t HDP[3], const uint32_t HBP[3],
+                                        uint32_t *cs0, uint32_t *cs1, uint32_t *cs2,
+                                        uint32_t *hdp_s, uint32_t *hbp_s)
+{
+    /* Cslope0 across [Sth0..Sth1] for C0->C1 */
+    uint32_t d0 = (Sth[1] > Sth[0]) ? (Sth[1] - Sth[0]) : 0;
+    *cs0 = d0 ? ((uint32_t)(abs((int)C[1] - (int)C[0])) << 10) / d0 : 0;
+
+    /* Cslope1 across [Sth1..Sth2] for C1->C2 */
+    uint32_t d1 = (Sth[2] > Sth[1]) ? (Sth[2] - Sth[1]) : 0;
+    *cs1 = d1 ? ((uint32_t)(abs((int)C[2] - (int)C[1])) << 10) / d1 : 0;
+
+    /* Cslope2 across [Sth2..1023] for C2->C4 (use full range upper bound 0x3ff) */
+    uint32_t d2 = (1023 > Sth[2]) ? (1023 - Sth[2]) : 0;
+    *cs2 = d2 ? ((uint32_t)(abs((int)C[4] - (int)C[2])) << 10) / d2 : 0;
+
+    /* HDP/HBP slopes: OEM uses 0x400/(end-mid) when increasing, else 0 */
+    uint32_t dhdp = (HDP[2] > HDP[1]) ? (HDP[2] - HDP[1]) : 0;
+    uint32_t dhbp = (HBP[2] > HBP[1]) ? (HBP[2] - HBP[1]) : 0;
+    *hdp_s = dhdp ? (0x400u / dhdp) : 0;
+    *hbp_s = dhbp ? (0x400u / dhbp) : 0;
+}
+/* Exact OEM StrenCal equations (from BN) */
+static inline uint32_t tiziano_bcsh_StrenCal_part0(uint32_t a1, uint32_t a2, uint32_t a3,
+                                                  uint32_t a4, uint32_t a5)
+{
+    /* part.0: ((|a2-a1|*|a4-a5|) + (|a2-a3|*a4)) / |a2-a3| */
+    uint32_t d21 = (a2 >= a1) ? (a2 - a1) : (a1 - a2);
+    uint32_t d23 = (a2 >= a3) ? (a2 - a3) : (a3 - a2);
+    uint32_t d45 = (a4 >= a5) ? (a4 - a5) : (a5 - a4);
+    if (d23 == 0) return a4;
+    uint64_t num = (uint64_t)d21 * d45 + (uint64_t)d23 * a4;
+    return (uint32_t)(num / d23);
+}
+
+static inline uint32_t tiziano_bcsh_StrenCal(uint32_t a1, uint32_t a2, uint32_t a3,
+                                            uint32_t a4, uint32_t a5, uint32_t a6)
+{
+    /* full: if a6==0 -> part0;
+     * else: ((|a3-a1|*|a4-a5|) + (|a2-a3|*a5)) / |a2-a3| */
+    if (a6 == 0)
+        return tiziano_bcsh_StrenCal_part0(a1, a2, a3, a4, a5);
+    uint32_t d31 = (a3 >= a1) ? (a3 - a1) : (a1 - a3);
+    uint32_t d23 = (a2 >= a3) ? (a2 - a3) : (a3 - a2);
+    uint32_t d45 = (a4 >= a5) ? (a4 - a5) : (a5 - a4);
+    if (d23 == 0) return a5;
+    uint64_t num = (uint64_t)d31 * d45 + (uint64_t)d23 * a5;
+    return (uint32_t)(num / d23);
+}
+
+/* Compute OEM-shaped S-vectors (StrenCal/TransitParam surrogate)
+ * Output: three 4-element vectors to feed arg1..arg3 at 0x8000..0x8014.
+ * We interpolate S-min/max lists by EV, then derive three segment vectors.
+ * This mirrors BN structure (ai32Svalue and companions) and is safe to refine. */
+static void tiziano_bcsh_compute_S_vectors(const struct isp_tuning_data *tuning,
+                                           const uint32_t *EvList,
+                                           const uint32_t *SminS, const uint32_t *SmaxS,
+                                           const uint32_t *SminM, const uint32_t *SmaxM,
+                                           uint16_t out1[4], uint16_t out2[4], uint16_t out3[4])
+{
+    /* BN sequence emulation: derive four base scalars by EV interpolation,
+     * then apply StrenCal with two controls (data_9a91d, data_9a91f)
+     * exactly as: first pass (c1) with 0/0x80 or 0x80/0x100 endpoints based on sign,
+     * second pass (c2) with (0,0x80, 0, current) when c2 signed >= 0. */
+    uint32_t ev_shifted, ev_low, ev_high, range, dist, w8;
+    uint32_t sminS_now = 0, smaxS_now = 0, sminM_now = 0, smaxM_now = 0;
+    uint32_t base0[4], base1[4], base2[4], base3[4];
+    uint32_t arr0[4], arr1[4], arr2[4], arr3[4];
+    uint32_t c1, c2;
+    int i;
+
+    if (!tuning || !EvList || !SminS || !SmaxS || !SminM || !SmaxM || !out1 || !out2 || !out3)
+        return;
+
+    /* EV interpolation to produce baseline anchors */
+    ev_shifted = tuning->bcsh_ev >> 10;
+    if (ev_shifted <= EvList[0]) {
+        sminS_now = SminS[0]; smaxS_now = SmaxS[0];
+        sminM_now = SminM[0]; smaxM_now = SmaxM[0];
+    } else if (ev_shifted >= EvList[8]) {
+        sminS_now = SminS[8]; smaxS_now = SmaxS[8];
+        sminM_now = SminM[8]; smaxM_now = SmaxM[8];
+    } else {
+        for (i = 0; i < 8; ++i) {
+            ev_low = EvList[i]; ev_high = EvList[i+1];
+            if (ev_shifted >= ev_low && ev_shifted < ev_high) {
+                range = ev_high - ev_low;
+                dist  = ev_shifted - ev_low;
+                w8    = range ? (dist << 8) / range : 0; /* 8.8 weight */
+                sminS_now = SminS[i] + (((SminS[i+1] - SminS[i]) * w8) >> 8);
+                smaxS_now = SmaxS[i] + (((SmaxS[i+1] - SmaxS[i]) * w8) >> 8);
+                sminM_now = SminM[i] + (((SminM[i+1] - SminM[i]) * w8) >> 8);
+                smaxM_now = SmaxM[i] + (((SmaxM[i+1] - SmaxM[i]) * w8) >> 8);
+                break;
+            }
+        }
+    }
+
+    /* Construct four base 4-lane anchors exactly as OEM TransitParam prepares them:
+     *   au32Svalue  <- EV-interpolated SminListS (scalar replicated to 4 lanes)
+     *   aa688       <- EV-interpolated SmaxListS (scalar replicated)
+     *   aa68c       <- EV-interpolated SminListM (scalar replicated)
+     *   aa690       <- EV-interpolated SmaxListM (scalar replicated)
+     */
+    for (i = 0; i < 4; ++i) {
+        base0[i] = sminS_now; /* tisp_BCSH_au32Svalue */
+        base1[i] = smaxS_now; /* data_aa688 */
+        base2[i] = sminM_now; /* data_aa68c */
+        base3[i] = smaxM_now; /* data_aa690 */
+    }
+
+    c1 = tuning->bcsh_saturation;   /* maps to data_9a91d */
+    c2 = tuning->bcsh_brightness;   /* maps to data_9a91f */
+
+    /* First pass (c1). BN: if c1==0x80 -> memcpy; else if signed<0 use (0x80,0x100, base, 0x1800);
+     * else use (0,0x80, 0, base). Use StrenCal.part0 per BN for S arrays. */
+    if (c1 == 0x80) {
+        for (i = 0; i < 4; ++i) { arr0[i] = base0[i]; arr1[i] = base1[i]; arr2[i] = base2[i]; arr3[i] = base3[i]; }
+    } else if ((int8_t)c1 < 0) {
+        for (i = 0; i < 4; ++i) {
+            arr0[i] = tiziano_bcsh_StrenCal_part0(c1, 0x80, 0x100, base0[i], 0x1800);
+            arr1[i] = tiziano_bcsh_StrenCal_part0(c1, 0x80, 0x100, base1[i], 0x1800);
+            arr2[i] = tiziano_bcsh_StrenCal_part0(c1, 0x80, 0x100, base2[i], 0x1800);
+            arr3[i] = tiziano_bcsh_StrenCal_part0(c1, 0x80, 0x100, base3[i], 0x1800);
+        }
+    } else {
+        for (i = 0; i < 4; ++i) {
+            arr0[i] = tiziano_bcsh_StrenCal_part0(c1, 0x00, 0x80, 0x00, base0[i]);
+            arr1[i] = tiziano_bcsh_StrenCal_part0(c1, 0x00, 0x80, 0x00, base1[i]);
+            arr2[i] = tiziano_bcsh_StrenCal_part0(c1, 0x00, 0x80, 0x00, base2[i]);
+            arr3[i] = tiziano_bcsh_StrenCal_part0(c1, 0x00, 0x80, 0x00, base3[i]);
+        }
+    }
+
+    /* Second pass (c2). BN: if signed >= 0, apply part0(c2, 0, 0x80, 0, current). */
+    if ((int8_t)c2 >= 0) {
+        for (i = 0; i < 4; ++i) {
+            arr0[i] = tiziano_bcsh_StrenCal_part0(c2, 0x00, 0x80, 0x00, arr0[i]);
+            arr1[i] = tiziano_bcsh_StrenCal_part0(c2, 0x00, 0x80, 0x00, arr1[i]);
+            arr2[i] = tiziano_bcsh_StrenCal_part0(c2, 0x00, 0x80, 0x00, arr2[i]);
+            arr3[i] = tiziano_bcsh_StrenCal_part0(c2, 0x00, 0x80, 0x00, arr3[i]);
+        }
+    }
+
+    /* Provide first three arrays as arg1..arg3 to lut_parameter. */
+    for (i = 0; i < 4; ++i) {
+        out1[i] = (uint16_t)(arr0[i] & 0xFFFF);
+        out2[i] = (uint16_t)(arr1[i] & 0xFFFF);
+        out3[i] = (uint16_t)(arr2[i] & 0xFFFF);
+    }
+}
+
+
+/* MJPEG contrast control state */
+static uint32_t s_bcsh_mjpeg_mode;
+static uint32_t s_bcsh_mjpeg_y_range_low;
+static uint32_t s_bcsh_fixed_contrast;
+
+/* Raw BCSH attr blob (0x28 bytes) as passed by OEM tooling) */
+static uint8_t bcsh_attr_blob[0x28];
+
+
 /* ===== TIZIANO WDR PROCESSING PIPELINE - Binary Ninja Reference Implementation ===== */
 
 // ISP Tuning device support - missing component for /dev/isp-m0
@@ -235,6 +587,173 @@ static uint32_t data_d7228 = 0;
 /* WDR Data Structure Pointers - From Binary Ninja */
 static void *TizianoWdrFpgaStructMe = NULL;
 static void *data_d94a8 = NULL;
+
+/* BCSH hardware apply: program registers if platform provides mapping */
+static void tiziano_bcsh_reg_apply(struct isp_tuning_data *tuning)
+{
+    /* BCSH hardware writes enabled unconditionally (OEM-style). */
+    const u32 BASE = 0x00008000; /* OEM BCSH block: 0x8000..0x8070 */
+
+    /* Helper to pack two 16-bit values into one 32-bit word, high:lo order */
+    #define PACK16(hi, lo) ((((u32)(hi) & 0xFFFF) << 16) | ((u32)(lo) & 0xFFFF))
+
+    /* Select banked arrays */
+    u32 *HDP  = bcsh_wdr_enabled ? bcsh_HDP_wdr  : bcsh_HDP;
+    u32 *HBP  = bcsh_wdr_enabled ? bcsh_HBP_wdr  : bcsh_HBP;
+    u32 *HLSP = bcsh_wdr_enabled ? bcsh_HLSP_wdr : bcsh_HLSP;
+    u32 *Sth  = bcsh_wdr_enabled ? bcsh_Sthres_wdr : bcsh_Sthres;
+    u32 *RGB  = bcsh_wdr_enabled ? bcsh_OffsetRGB_wdr : bcsh_OffsetRGB;
+    u32 *Carr = bcsh_wdr_enabled ? bcsh_C_wdr : bcsh_C;
+
+    /* Build HMatrix and compute slopes (Cslope0/1/2, HDPslope, HBPslope) */
+    int32_t H[9];
+    int32_t Hreg[9];
+    uint32_t cs0 = 0, cs1 = 0, cs2 = 0, hdp_s = 0, hbp_s = 0;
+    int i_h;
+    tiziano_bcsh_build_HMatrix(H);
+    /* Apply OEM para2reg sign/mask conversion: negative -> mask to 14-bit */
+    for (i_h = 0; i_h < 9; ++i_h) {
+        int32_t v = H[i_h];
+        Hreg[i_h] = (v < 0) ? (v & 0x3fff) : v;
+    }
+    tiziano_bcsh_compute_slopes(Sth, Carr, HDP, HBP, &cs0, &cs1, &cs2, &hdp_s, &hbp_s);
+
+    /* Compose and write 0x8000..0x8070 block (best-effort OEM-aligned packing) */
+    /* 0x8000..0x8014: Three 4-word S-vectors from StrenCal/TransitParam surrogate */
+    {
+        uint16_t svec1[4] = {0}, svec2[4] = {0}, svec3[4] = {0};
+        uint32_t *EvList = bcsh_wdr_enabled ? bcsh_EvList_wdr : bcsh_EvList;
+        uint32_t *SminS  = bcsh_wdr_enabled ? bcsh_SminListS_wdr : bcsh_SminListS;
+        uint32_t *SmaxS  = bcsh_wdr_enabled ? bcsh_SmaxListS_wdr : bcsh_SmaxListS;
+        uint32_t *SminM  = bcsh_wdr_enabled ? bcsh_SminListM_wdr : bcsh_SminListM;
+        uint32_t *SmaxM  = bcsh_wdr_enabled ? bcsh_SmaxListM_wdr : bcsh_SmaxListM;
+
+        tiziano_bcsh_compute_S_vectors(tuning, EvList, SminS, SmaxS, SminM, SmaxM,
+                                       svec1, svec2, svec3);
+
+        system_reg_write(BASE + 0x0000, PACK16(svec1[0], svec1[1]));
+        system_reg_write(BASE + 0x0004, PACK16(svec2[0], svec2[1]));
+        system_reg_write(BASE + 0x0008, PACK16(svec3[0], svec3[1]));
+        system_reg_write(BASE + 0x000c, PACK16(svec1[2], svec1[3]));
+        system_reg_write(BASE + 0x0010, PACK16(svec2[2], svec2[3]));
+        system_reg_write(BASE + 0x0014, PACK16(svec3[2], svec3[3]));
+    }
+
+    /* 0x8018..0x0020: HDP and HBP paired per-index */
+    system_reg_write(BASE + 0x0018, PACK16(HDP[0], HBP[0]));
+    system_reg_write(BASE + 0x001c, PACK16(HDP[1], HBP[1]));
+    system_reg_write(BASE + 0x0020, PACK16(HDP[2], HBP[2]));
+
+    /* 0x8024..0x8038: HMatrixReg (9 elements) in BN pattern */
+    system_reg_write(BASE + 0x0024, PACK16((u32)Hreg[1], (u32)Hreg[0]));
+    system_reg_write(BASE + 0x0028, (u32)Hreg[2]);
+    system_reg_write(BASE + 0x002c, PACK16((u32)Hreg[4], (u32)Hreg[3]));
+    system_reg_write(BASE + 0x0030, (u32)Hreg[5]);
+    system_reg_write(BASE + 0x0034, PACK16((u32)Hreg[7], (u32)Hreg[6]));
+    system_reg_write(BASE + 0x0038, (u32)Hreg[8]);
+
+    /* 0x803C..0x8040: Cslope0 (hi) and Sthres */
+    system_reg_write(BASE + 0x003c, PACK16(cs0, Sth[0]));
+    system_reg_write(BASE + 0x0040, PACK16(Sth[2], Sth[1]));
+
+    /* 0x8044..0x0048: HBPslope (hi) and HBP pack */
+    system_reg_write(BASE + 0x0044, PACK16(hbp_s, HBP[0]));
+    system_reg_write(BASE + 0x0048, PACK16(HBP[2], HBP[1]));
+
+    /* 0x804C: HDPslope (hi) with HLSP[0] (lo) per BN arg19/arg18 */
+    system_reg_write(BASE + 0x004c, PACK16(hdp_s, HLSP[0]));
+
+    /* 0x8050: EV/HLSP-gated mixed value (OEM-like). */
+    {
+        u32 ev10 = tuning->bcsh_ev >> 10; /* matches data_9a614 >> 10 */
+        u32 *EvList = bcsh_wdr_enabled ? bcsh_EvList_wdr : bcsh_EvList;
+        /* Clamp indices as per BN: [1..9] */
+        u32 idxA = 1; /* default for data_c53e4 */
+        u32 idxB = 9; /* default for data_c53ec */
+        if (idxA < 1) idxA = 1; if (idxA > 9) idxA = 9;
+        if (idxB < 1) idxB = 1; if (idxB > 9) idxB = 9;
+
+        u32 s1_3 = 0;
+        if (bcsh_clip0[0] == 1) {
+            u32 a0_48 = EvList[idxA - 1];
+            if (ev10 < a0_48) {
+                /* BN branch: uses HLSP[1] and HLSP[2] with special boundary handling */
+                u32 v1_7 = (ev10 < 2) ? 1 : 0;
+                u32 v0_8 = bcsh_clip0[0] - ev10;
+                u32 a2_11 = ev10 - 1;
+                if (v1_7) a2_11 = v0_8;
+                u32 clip0_2 = (a0_48 == 0) ? bcsh_clip0[0] : (a0_48 - 1);
+                if (!v1_7) v0_8 = ev10 - 1;
+                u32 v0_9 = (a0_48 == 0) ? 1 : (a0_48 - 1);
+                u32 lo = 0, hi = 0;
+                if (v0_9) lo = (v0_8 * HLSP[1]) / v0_9;
+                if (clip0_2) hi = (a2_11 * HLSP[2]) / clip0_2;
+                s1_3 = (hi << 16) | (lo & 0xFFFF);
+            }
+        } else {
+            /* BN alt branch when data_c53e8 == 1: approximate enable */
+            u32 v1_8 = EvList[8]; /* EvList[8] */
+            if (ev10 < v1_8) {
+                u32 a0_50 = EvList[idxB - 1];
+                if (a0_50 < ev10) {
+                    u32 t9_1 = HLSP[2];
+                    u32 s1_6 = HLSP[1];
+                    u32 hi_part;
+                    if (t9_1 == 0) {
+                        hi_part = 0;
+                    } else {
+                        u32 s0_1 = (v1_8 >= a0_50) ? (v1_8 - a0_50) : (a0_50 - v1_8);
+                        if (s0_1 == 0) s0_1 = 1;
+                        u32 dec = ((ev10 - a0_50) * t9_1) / s0_1;
+                        if (dec > t9_1) dec = t9_1;
+                        hi_part = (t9_1 - dec) & 0xFFFF;
+                    }
+                    u32 lo_part;
+                    if (s1_6 == 0) {
+                        lo_part = 0;
+                    } else {
+                        u32 v1_9 = (v1_8 >= a0_50) ? (v1_8 - a0_50) : (a0_50 - v1_8);
+                        if (v1_9 == 0) v1_9 = 1;
+                        u32 dec2 = ((ev10 - a0_50) * s1_6) / v1_9;
+                        if (dec2 > s1_6) dec2 = s1_6;
+                        lo_part = (s1_6 - dec2) & 0xFFFF;
+                    }
+                    s1_3 = (hi_part << 16) | lo_part;
+                } else {
+                    s1_3 = 0; /* as per BN when ev >= EvList[idxB-1] */
+                }
+            } else {
+                s1_3 = 0; /* ev >= EvList[8] */
+            }
+        }
+        system_reg_write(BASE + 0x0050, s1_3);
+    }
+
+    /* 0x8054..0x8060: B and C[0..4] in BN pattern */
+    system_reg_write(BASE + 0x0054, PACK16(bcsh_B, bcsh_C[0]));
+    system_reg_write(BASE + 0x0058, PACK16(cs2, cs1)); /* arg9:arg8 now Cslope2:Cslope1 */
+    system_reg_write(BASE + 0x005c, PACK16(bcsh_C[2], bcsh_C[1]));
+    system_reg_write(BASE + 0x0060, PACK16(bcsh_C[4], bcsh_C[3]));
+
+    /* 0x0064..0x0070: OffsetYUVy + clip0, then clip0[2:1], clip1[0..3] */
+    {
+        uint32_t off0 = bcsh_OffsetYUVy[0], off1 = bcsh_OffsetYUVy[1];
+        /* If not explicitly set, derive UV offsets from RGB via OEM Toffset chain */
+        if ((off0 | off1) == 0) {
+            int32_t rgb_in[3] = { (int32_t)RGB[0], (int32_t)RGB[1], (int32_t)RGB[2] };
+            int32_t yuv_out[3] = {0};
+            if (tiziano_bcsh_Toffset_RGB2YUV(yuv_out, rgb_in) == 0) {
+                /* Use U,V from yuv_out[1], yuv_out[2]; clamp to 13-bit before shift */
+                off0 = (uint32_t)(yuv_out[1] & 0x1FFF);
+                off1 = (uint32_t)(yuv_out[2] & 0xFFFF);
+            }
+        }
+        system_reg_write(BASE + 0x0064, PACK16(off1, ((off0 << 3) | (bcsh_clip0[0] & 0x7))));
+    }
+    system_reg_write(BASE + 0x0068, PACK16(bcsh_clip0[2], bcsh_clip0[1]));
+    system_reg_write(BASE + 0x006c, PACK16(bcsh_clip1[0], bcsh_clip1[1]));
+    system_reg_write(BASE + 0x0070, PACK16(bcsh_clip1[2], bcsh_clip1[3]));
+}
 
 /* ADR (Adaptive Dynamic Range) Variables */
 static uint32_t adr_ratio = 0;
@@ -2279,6 +2798,8 @@ static int tiziano_bcsh_update(struct isp_tuning_data *tuning)
         tuning->bcsh_saturation_max = tuning->bcsh_au32SmaxListS_now[0];
         tuning->bcsh_saturation_min = tuning->bcsh_au32SminListM_now[0];
         tuning->bcsh_saturation_mult = tuning->bcsh_au32SmaxListM_now[0];
+        /* Apply to hardware */
+        tiziano_bcsh_reg_apply(tuning);
         return 0;
     }
 
@@ -2290,6 +2811,8 @@ static int tiziano_bcsh_update(struct isp_tuning_data *tuning)
         tuning->bcsh_saturation_min = tuning->bcsh_au32SminListM_now[8];
         tuning->bcsh_saturation_mult = tuning->bcsh_au32SmaxListM_now[8];
         // Set other max values...
+        /* Apply to hardware */
+        tiziano_bcsh_reg_apply(tuning);
         return 0;
     }
 
@@ -2328,12 +2851,8 @@ static int tiziano_bcsh_update(struct isp_tuning_data *tuning)
         }
     }
 
-    // Update hardware registers
-//    writel(tuning->bcsh_saturation_value, ourISPdev->reg_base + BCSH_SVALUE_REG);
-//    writel(tuning->bcsh_saturation_max, ourISPdev->reg_base + BCSH_SMAX_REG);
-//    writel(tuning->bcsh_saturation_min, ourISPdev->reg_base + BCSH_SMIN_REG);
-//    writel(tuning->bcsh_saturation_mult, ourISPdev->reg_base + BCSH_SMAX_M_REG);
-
+    /* Apply to hardware */
+    tiziano_bcsh_reg_apply(tuning);
     return 0;
 }
 
@@ -2424,6 +2943,33 @@ int tisp_bcsh_g_contrast(void)
     return ourISPdev->tuning_data->bcsh_contrast;
 }
 
+int tisp_bcsh_set_mjpeg_contrast(uint32_t mode, uint32_t y_low, uint32_t fixed_contrast)
+{
+    s_bcsh_mjpeg_mode = mode;
+    s_bcsh_mjpeg_y_range_low = y_low;
+    s_bcsh_fixed_contrast = fixed_contrast;
+    if (ourISPdev && ourISPdev->tuning_data)
+        return tiziano_bcsh_update(ourISPdev->tuning_data);
+    return 0;
+}
+
+int tisp_bcsh_set_attr(const void *in)
+{
+    if (!in) return -EINVAL;
+    memcpy(bcsh_attr_blob, in, sizeof(bcsh_attr_blob));
+    BCSH_real = 1;
+    if (ourISPdev && ourISPdev->tuning_data)
+        return tiziano_bcsh_update(ourISPdev->tuning_data);
+    return 0;
+}
+
+int tisp_bcsh_get_attr(void *out)
+{
+    if (!out) return -EINVAL;
+    memcpy(out, bcsh_attr_blob, sizeof(bcsh_attr_blob));
+    return 0;
+}
+
 int tisp_bcsh_g_saturation(void)
 {
     if (!ourISPdev || !ourISPdev->tuning_data)
@@ -2445,9 +2991,9 @@ int tisp_bcsh_ct_update(uint32_t ct)
 {
     if (!ourISPdev || !ourISPdev->tuning_data)
         return -ENODEV;
-    /* Store CT in tuning for potential CCM coupling later; trigger BCSH update */
-    /* If coupling is later needed, wire to CCM OEM path; for now just update */
-    (void)ct; /* placeholder to avoid unused warning */
+    /* Cache CT override for BCSH CCM blending; do not alter AWB's wb_temp here */
+    s_bcsh_ct_override = ct;
+    s_bcsh_ct_override_valid = 1;
     return tiziano_bcsh_update(ourISPdev->tuning_data);
 }
 
@@ -6047,28 +6593,55 @@ int tisp_ydns_param_array_set(int param_id, void *in_buf, int *size_buf)
 
 int tisp_bcsh_param_array_get(int param_id, void *out_buf, int *size_buf)
 {
-    void *src = NULL;
+    const void *src = NULL;
     int size = 0;
-
     if (!out_buf || !size_buf)
         return -EINVAL;
 
     switch (param_id) {
     /* Normal bank */
-    case 0x3c7: src = bcsh_EvList;        size = 0x24; break;
-    case 0x3c8: src = bcsh_SminListS;     size = 0x24; break;
-    case 0x3c9: src = bcsh_SmaxListS;     size = 0x24; break;
-    case 0x3ca: src = bcsh_SminListM;     size = 0x24; break;
-    case 0x3cb: src = bcsh_SmaxListM;     size = 0x24; break;
-    case 0x3d2: src = bcsh_OffsetRGB;     size = 0x0c; break;
+    case 0x3c0: src = bcsh_CCM_d;        size = 0x24; break;
+    case 0x3c1: src = bcsh_CCM_t;        size = 0x24; break;
+    case 0x3c2: src = bcsh_CCM_a;        size = 0x24; break;
+    case 0x3c3: src = bcsh_HDP;          size = 0x0c; break;
+    case 0x3c4: src = bcsh_HBP;          size = 0x0c; break;
+    case 0x3c5: src = bcsh_HLSP;         size = 0x0c; break;
+    case 0x3c6: src = bcsh_Sthres;       size = 0x0c; break;
+    case 0x3c7: src = bcsh_EvList;       size = 0x24; break;
+    case 0x3c8: src = bcsh_SminListS;    size = 0x24; break;
+    case 0x3c9: src = bcsh_SmaxListS;    size = 0x24; break;
+    case 0x3ca: src = bcsh_SminListM;    size = 0x24; break;
+    case 0x3cb: src = bcsh_SmaxListM;    size = 0x24; break;
+    case 0x3cc: src = bcsh_C;            size = 0x14; break;
+    case 0x3cd: src = bcsh_Cxl;          size = 0x24; break;
+    case 0x3ce: src = bcsh_Cxh;          size = 0x24; break;
+    case 0x3cf: src = bcsh_Cyl;          size = 0x24; break;
+    case 0x3d0: src = bcsh_Cyh;          size = 0x24; break;
+    case 0x3d1: src = &bcsh_B;           size = 0x04; break;
+    case 0x3d2: src = bcsh_OffsetRGB;    size = 0x0c; break;
+    case 0x3d3: src = bcsh_OffsetYUVy;   size = 0x08; break;
+    case 0x3d4: src = bcsh_clip0;        size = 0x10; break;
+    case 0x3d5: src = bcsh_clip1;        size = 0x10; break;
 
     /* WDR bank */
-    case 0x3dd: src = bcsh_EvList_wdr;        size = 0x24; break;
-    case 0x3de: src = bcsh_SminListS_wdr;     size = 0x24; break;
-    case 0x3df: src = bcsh_SmaxListS_wdr;     size = 0x24; break;
-    case 0x3e0: src = bcsh_SminListM_wdr;     size = 0x24; break;
-    case 0x3e1: src = bcsh_SmaxListM_wdr;     size = 0x24; break;
-    case 0x3e2: src = bcsh_OffsetRGB_wdr;     size = 0x0c; break;
+    case 0x3d6: src = bcsh_CCM_d_wdr;        size = 0x24; break;
+    case 0x3d7: src = bcsh_CCM_t_wdr;        size = 0x24; break;
+    case 0x3d8: src = bcsh_CCM_a_wdr;        size = 0x24; break;
+    case 0x3d9: src = bcsh_HDP_wdr;          size = 0x0c; break;
+    case 0x3da: src = bcsh_HBP_wdr;          size = 0x0c; break;
+    case 0x3db: src = bcsh_HLSP_wdr;         size = 0x0c; break;
+    case 0x3dc: src = bcsh_Sthres_wdr;       size = 0x0c; break;
+    case 0x3dd: src = bcsh_EvList_wdr;       size = 0x24; break;
+    case 0x3de: src = bcsh_SminListS_wdr;    size = 0x24; break;
+    case 0x3df: src = bcsh_SmaxListS_wdr;    size = 0x24; break;
+    case 0x3e0: src = bcsh_SminListM_wdr;    size = 0x24; break;
+    case 0x3e1: src = bcsh_SmaxListM_wdr;    size = 0x24; break;
+    case 0x3e2: src = bcsh_OffsetRGB_wdr;    size = 0x0c; break;
+
+    /* Global matrices and clip2 */
+    case 0x3e3: src = tiziano_MMatrix;       size = 0x24; break;
+    case 0x3e4: src = tiziano_MinvMatrix;    size = 0x24; break;
+    case 0x3e5: src = bcsh_clip2;            size = 0x10; break;
 
     default:
         *size_buf = 0;
@@ -6080,30 +6653,56 @@ int tisp_bcsh_param_array_get(int param_id, void *out_buf, int *size_buf)
     return 0;
 }
 
-/* OEM-aligned minimal subset of param_array_set for BCSH EV/S lists and OffsetRGB */
 int tisp_bcsh_param_array_set(int param_id, void *in_buf, int *size_buf)
 {
     int size = 0;
-
     if (!in_buf || !size_buf)
         return -EINVAL;
 
     switch (param_id) {
     /* Normal bank */
-    case 0x3c7: memcpy(bcsh_EvList,        in_buf, (size = 0x24)); break;
-    case 0x3c8: memcpy(bcsh_SminListS,     in_buf, (size = 0x24)); break;
-    case 0x3c9: memcpy(bcsh_SmaxListS,     in_buf, (size = 0x24)); break;
-    case 0x3ca: memcpy(bcsh_SminListM,     in_buf, (size = 0x24)); break;
-    case 0x3cb: memcpy(bcsh_SmaxListM,     in_buf, (size = 0x24)); break;
-    case 0x3d2: memcpy(bcsh_OffsetRGB,     in_buf, (size = 0x0c)); break;
+    case 0x3c0: memcpy(bcsh_CCM_d,     in_buf, (size = 0x24)); break;
+    case 0x3c1: memcpy(bcsh_CCM_t,     in_buf, (size = 0x24)); break;
+    case 0x3c2: memcpy(bcsh_CCM_a,     in_buf, (size = 0x24)); break;
+    case 0x3c3: memcpy(bcsh_HDP,       in_buf, (size = 0x0c)); break;
+    case 0x3c4: memcpy(bcsh_HBP,       in_buf, (size = 0x0c)); break;
+    case 0x3c5: memcpy(bcsh_HLSP,      in_buf, (size = 0x0c)); break;
+    case 0x3c6: memcpy(bcsh_Sthres,    in_buf, (size = 0x0c)); break;
+    case 0x3c7: memcpy(bcsh_EvList,    in_buf, (size = 0x24)); break;
+    case 0x3c8: memcpy(bcsh_SminListS, in_buf, (size = 0x24)); break;
+    case 0x3c9: memcpy(bcsh_SmaxListS, in_buf, (size = 0x24)); break;
+    case 0x3ca: memcpy(bcsh_SminListM, in_buf, (size = 0x24)); break;
+    case 0x3cb: memcpy(bcsh_SmaxListM, in_buf, (size = 0x24)); break;
+    case 0x3cc: memcpy(bcsh_C,         in_buf, (size = 0x14)); break;
+    case 0x3cd: memcpy(bcsh_Cxl,       in_buf, (size = 0x24)); break;
+    case 0x3ce: memcpy(bcsh_Cxh,       in_buf, (size = 0x24)); break;
+    case 0x3cf: memcpy(bcsh_Cyl,       in_buf, (size = 0x24)); break;
+    case 0x3d0: memcpy(bcsh_Cyh,       in_buf, (size = 0x24)); break;
+    case 0x3d1: memcpy(&bcsh_B,        in_buf, (size = 0x04)); break;
+    case 0x3d2: memcpy(bcsh_OffsetRGB, in_buf, (size = 0x0c)); break;
+    case 0x3d3: memcpy(bcsh_OffsetYUVy,in_buf, (size = 0x08)); break;
+    case 0x3d4: memcpy(bcsh_clip0,     in_buf, (size = 0x10)); break;
+    case 0x3d5: memcpy(bcsh_clip1,     in_buf, (size = 0x10)); break;
 
     /* WDR bank */
-    case 0x3dd: memcpy(bcsh_EvList_wdr,        in_buf, (size = 0x24)); break;
-    case 0x3de: memcpy(bcsh_SminListS_wdr,     in_buf, (size = 0x24)); break;
-    case 0x3df: memcpy(bcsh_SmaxListS_wdr,     in_buf, (size = 0x24)); break;
-    case 0x3e0: memcpy(bcsh_SminListM_wdr,     in_buf, (size = 0x24)); break;
-    case 0x3e1: memcpy(bcsh_SmaxListM_wdr,     in_buf, (size = 0x24)); break;
-    case 0x3e2: memcpy(bcsh_OffsetRGB_wdr,     in_buf, (size = 0x0c)); break;
+    case 0x3d6: memcpy(bcsh_CCM_d_wdr,     in_buf, (size = 0x24)); break;
+    case 0x3d7: memcpy(bcsh_CCM_t_wdr,     in_buf, (size = 0x24)); break;
+    case 0x3d8: memcpy(bcsh_CCM_a_wdr,     in_buf, (size = 0x24)); break;
+    case 0x3d9: memcpy(bcsh_HDP_wdr,       in_buf, (size = 0x0c)); break;
+    case 0x3da: memcpy(bcsh_HBP_wdr,       in_buf, (size = 0x0c)); break;
+    case 0x3db: memcpy(bcsh_HLSP_wdr,      in_buf, (size = 0x0c)); break;
+    case 0x3dc: memcpy(bcsh_Sthres_wdr,    in_buf, (size = 0x0c)); break;
+    case 0x3dd: memcpy(bcsh_EvList_wdr,    in_buf, (size = 0x24)); break;
+    case 0x3de: memcpy(bcsh_SminListS_wdr, in_buf, (size = 0x24)); break;
+    case 0x3df: memcpy(bcsh_SmaxListS_wdr, in_buf, (size = 0x24)); break;
+    case 0x3e0: memcpy(bcsh_SminListM_wdr, in_buf, (size = 0x24)); break;
+    case 0x3e1: memcpy(bcsh_SmaxListM_wdr, in_buf, (size = 0x24)); break;
+    case 0x3e2: memcpy(bcsh_OffsetRGB_wdr, in_buf, (size = 0x0c)); break;
+
+    /* Global matrices and clip2 */
+    case 0x3e3: tiziano_set_bcsh_matrix((const int32_t *)in_buf); size = 0x24; break;
+    case 0x3e4: memcpy(tiziano_MinvMatrix, in_buf, (size = 0x24)); break;
+    case 0x3e5: memcpy(bcsh_clip2,         in_buf, (size = 0x10)); break;
 
     default:
         *size_buf = 0;
@@ -6112,7 +6711,7 @@ int tisp_bcsh_param_array_set(int param_id, void *in_buf, int *size_buf)
 
     *size_buf = size;
 
-    /* If changing the active bank, propagate into the runtime \"now\" arrays */
+    /* If changing the active bank, propagate into the runtime "now" arrays */
     if (ourISPdev && ourISPdev->tuning_data) {
         struct isp_tuning_data *tuning = ourISPdev->tuning_data;
         int i;
@@ -9466,25 +10065,61 @@ static int tiziano_ccm_lut_parameter(int32_t *ccm_data)
     return 0;
 }
 
-/* tiziano_ct_ccm_interpolation - Color temperature interpolation */
+/* tiziano_ct_ccm_interpolation - OEM CT blending D/T/A into ccm_parameter */
 static void tiziano_ct_ccm_interpolation(uint32_t ct_value, uint32_t ct_threshold)
 {
-    pr_debug("tiziano_ct_ccm_interpolation: CT=%u, threshold=%u\n", ct_value, ct_threshold);
+    /* OEM thresholds/pivots (same as BCSH HLIL, units match our wb_temp) */
+    const uint32_t CT_MAX_D = 0x1357;  /* >= -> D */
+    const uint32_t PIV_DT   = 0x0F0A;  /* pivot between D and T */
+    const uint32_t PIV_TA   = 0x0B22;  /* pivot between T and A */
+    const uint32_t DEN_DT   = 0x044C;  /* span for D<->T */
+    const uint32_t DEN_TA   = 0x0384;  /* span for T<->A */
 
-    /* Interpolate CCM matrix based on color temperature */
-    for (int i = 0; i < 9; i++) {
-        if (ct_value > 5000) {
-            /* Daylight - use A matrix */
-            ccm_parameter.data[i] = tiziano_ccm_a_now[i];
-        } else if (ct_value < 3000) {
-            /* Tungsten - use T matrix */
-            ccm_parameter.data[i] = tiziano_ccm_t_now[i];
-        } else {
-            /* Mixed lighting - interpolate between A and T */
-            uint32_t weight = ((ct_value - 3000) * 256) / 2000;
-            ccm_parameter.data[i] = ((tiziano_ccm_a_now[i] * weight) +
-                                   (tiziano_ccm_t_now[i] * (256 - weight))) >> 8;
+    /* Choose result per CT region */
+    if (ct_value >= CT_MAX_D) {
+        for (int i = 0; i < 9; ++i) ccm_parameter.data[i] = tiziano_ccm_d_now[i];
+        return;
+    }
+
+    if (ct_value >= (PIV_DT + 1)) {
+        /* Interpolate D -> T with span DEN_DT around PIV_DT */
+        uint32_t w = (ct_value >= PIV_DT) ? (ct_value - PIV_DT) : (PIV_DT - ct_value);
+        if (w > DEN_DT) w = DEN_DT;
+        for (int i = 0; i < 9; ++i) {
+            int32_t d = tiziano_ccm_d_now[i];
+            int32_t t = tiziano_ccm_t_now[i];
+            int32_t v;
+            if (d >= t)
+                v = (int32_t)(((int64_t)(d - t) * w) / DEN_DT) + t;
+            else
+                v = t - (int32_t)(((int64_t)(t - d) * w) / DEN_DT);
+            ccm_parameter.data[i] = (uint32_t)v;
         }
+        return;
+    }
+
+    if (ct_value >= 0x0EA7) { /* copy T in plateau */
+        for (int i = 0; i < 9; ++i) ccm_parameter.data[i] = tiziano_ccm_t_now[i];
+        return;
+    }
+
+    if (ct_value < 0x0B23) { /* copy A for warm */
+        for (int i = 0; i < 9; ++i) ccm_parameter.data[i] = tiziano_ccm_a_now[i];
+        return;
+    }
+
+    /* Interpolate T -> A in mid warm region */
+    uint32_t w = (ct_value >= PIV_TA) ? (ct_value - PIV_TA) : (PIV_TA - ct_value);
+    if (w > DEN_TA) w = DEN_TA;
+    for (int i = 0; i < 9; ++i) {
+        int32_t a = tiziano_ccm_a_now[i];
+        int32_t t = tiziano_ccm_t_now[i];
+        int32_t v;
+        if (t >= a)
+            v = (int32_t)(((int64_t)(t - a) * w) / DEN_TA) + a;
+        else
+            v = a - (int32_t)(((int64_t)(a - t) * w) / DEN_TA);
+        ccm_parameter.data[i] = (uint32_t)v;
     }
 }
 
@@ -9526,42 +10161,18 @@ void tiziano_ccm_params_refresh(void)
     data_c52f4 = data_9a450;        /* Update CT cache */
 }
 
-/* tisp_ccm_ct_update - Update CCM based on color temperature - SAFE VERSION */
+/* tisp_ccm_ct_update - OEM-like CT update: force jz_isp_ccm with current CT */
 int tisp_ccm_ct_update(void)
 {
-    pr_debug("tisp_ccm_ct_update: Updating CCM for color temperature changes (safe version)\n");
-
-    /* SAFE: Use global ISP device instead of complex parameter conversion */
     extern struct tx_isp_dev *ourISPdev;
-
-    if (!ourISPdev || !ourISPdev->tuning_data) {
-        pr_debug("tisp_ccm_ct_update: No ISP device or tuning data available\n");
+    if (!ourISPdev || !ourISPdev->tuning_data)
         return 0;
-    }
 
     int32_t current_ct = ourISPdev->tuning_data->wb_temp;
+    data_c52f4 = current_ct;   /* cache CT */
+    ccm_real.real = 1;         /* force update in jz_isp_ccm path */
 
-    /* Check if CT has changed significantly */
-    uint32_t ct_diff = (data_c52f4 >= current_ct) ?
-                      (data_c52f4 - current_ct) : (current_ct - data_c52f4);
-
-    if (ct_diff > data_c52f8) {  /* CT threshold check */
-        pr_debug("tisp_ccm_ct_update: Significant CT change detected (%d -> %d)\n",
-                 data_c52f4, current_ct);
-
-        /* Update CT cache - skip complex interpolation for now */
-        data_c52f4 = current_ct;
-
-        /* Simple CCM update - write basic values to hardware */
-        if (ourISPdev->core_regs) {
-            writel(0x100, ourISPdev->core_regs + 0x2800);  /* CCM enable */
-            writel(current_ct, ourISPdev->core_regs + 0x2804);  /* CT value */
-        }
-
-        return 1;  /* CT updated */
-    }
-
-    return 0;  /* No CT update needed */
+    return jz_isp_ccm();
 }
 
 /* tisp_ccm_ev_update - Update CCM based on exposure value - SAFE VERSION */
