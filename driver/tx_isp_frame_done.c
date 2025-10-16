@@ -11,6 +11,10 @@
 #include "../include/tx-isp-debug.h"
 #include "../include/tx_isp.h"
 
+/* Defog per-frame hook */
+extern void tisp_defog_on_frame(void);
+
+
 /* Frame done tracking variables */
 static atomic64_t frame_done_cnt = ATOMIC64_INIT(0);
 static int frame_done_cond = 0;
@@ -30,6 +34,9 @@ void isp_frame_done_wakeup(void)
     extern struct tx_isp_dev *ourISPdev;
     if (ourISPdev) {
         ourISPdev->frame_count++;
+    /* Kick defog per-frame update; it will no-op if no provider is registered */
+    tisp_defog_on_frame();
+
         pr_info("*** FRAME SYNC: ISP frame count = %u (internal count = %lld) ***\n",
                 ourISPdev->frame_count, atomic64_read(&frame_done_cnt));
     }
