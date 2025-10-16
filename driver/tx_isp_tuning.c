@@ -6165,21 +6165,274 @@ int tisp_gamma_param_array_set(int param_id, void *in_buf, int *size_buf)
     return 0;
 }
 
+/* Defog parameter storage and NOW pointers (mirrors OEM ID map 0x35a..0x37f) */
+static uint8_t defog_weightlut20[0x80];
+static uint8_t defog_weightlut02[0x80];
+static uint8_t defog_weightlut12[0x80];
+static uint8_t defog_weightlut22[0x80];
+static uint8_t defog_weightlut21[0x80];
+
+static uint8_t defog_col_ct_array[0x38];
+static uint8_t defog_cent3_w_dis_array[0x60];
+static uint8_t defog_cent5_w_dis_array[0x7c];
+
+static uint8_t defog_ev_list[0x24];
+static uint8_t defog_trsy0_list[0x24];
+static uint8_t defog_trsy1_list[0x24];
+static uint8_t defog_trsy2_list[0x24];
+static uint8_t defog_trsy3_list[0x24];
+static uint8_t defog_trsy4_list[0x24];
+static uint8_t defog_rgbra_list[0x24];
+
+static uint8_t defog_main_para_array[0x2c];
+static uint8_t defog_color_control_array[0x38];
+static uint8_t defog_lc_s_array[0x28];
+static uint8_t defog_lc_v_array[0x28];
+static uint8_t defog_cc_s_array[0x20];
+static uint8_t defog_cc_v_array[0x24];
+static uint8_t defog_dark_l1_array[0x28];
+static uint8_t defog_dark_l2_array[0x28];
+
+/* Non‑WDR block T lists (OEM returns 0x14 bytes for each) */
+static uint8_t defog_block_t_y_array[0x14];
+static uint8_t defog_block_t_x_array[0x14];
+
+static uint8_t defog_t_par_list1[0x2c];
+static uint8_t defog_t_par_list2[0x74];
+static uint8_t defog_manual_ctrl[0x1c];
+
+/* WDR banked items */
+static uint8_t defog_ev_list_wdr[0x24];
+static uint8_t defog_trsy0_list_wdr[0x24];
+static uint8_t defog_trsy1_list_wdr[0x24];
+static uint8_t defog_trsy2_list_wdr[0x24];
+static uint8_t defog_trsy3_list_wdr[0x24];
+static uint8_t defog_trsy4_list_wdr[0x24];
+static uint8_t param_defog_main_para_wdr_array[0x2c];
+static uint8_t param_defog_block_t_x_wdr_array[0x14];
+static uint8_t param_defog_fpga_para_wdr_array[0x40];
+
+/* Non‑WDR FPGA para */
+static uint8_t param_defog_fpga_para_array[0x40];
+
+/* NOW pointers reseated by tisp_defog_wdr_en */
+static uint8_t *defog_ev_list_now = defog_ev_list;
+static uint8_t *defog_trsy0_list_now = defog_trsy0_list;
+static uint8_t *defog_trsy1_list_now = defog_trsy1_list;
+static uint8_t *defog_trsy2_list_now = defog_trsy2_list;
+static uint8_t *defog_trsy3_list_now = defog_trsy3_list;
+static uint8_t *defog_trsy4_list_now = defog_trsy4_list;
+static uint8_t *param_defog_main_para_now = defog_main_para_array;
+static uint8_t *param_defog_fpga_para_now = param_defog_fpga_para_array;
+static uint8_t *param_defog_block_t_x_now = defog_block_t_x_array;
+
+static int tisp_defog_all_reg_refresh(void)
+{
+    /* TODO: implement real register writes (tiziano_defog_set_reg_params equivalent) */
+    pr_debug("tisp_defog_all_reg_refresh: applied defog parameters to hardware (stub)\n");
+    return 0;
+}
+
+static void tiziano_defog_params_init(void)
+{
+    /* OEM calls this after certain SETs; we route to HW refresh */
+    tisp_defog_all_reg_refresh();
+}
+
 int tisp_defog_param_array_get(int param_id, void *out_buf, int *size_buf)
 {
-    pr_debug("tisp_defog_param_array_get: ID=0x%x (stub)\n", param_id);
-    if (out_buf && size_buf) {
-        *size_buf = 0;
+    if (!out_buf || !size_buf) return -EINVAL;
+    const void *src = NULL; int len = 0;
+
+    switch (param_id) {
+        /* Weight LUTs (0x80 bytes each) */
+        case 0x35a: src = defog_weightlut20;                  len = 0x80; break;
+        case 0x35b: src = defog_weightlut02;                  len = 0x80; break;
+        case 0x35c: src = defog_weightlut12;                  len = 0x80; break;
+        case 0x35d: src = defog_weightlut22;                  len = 0x80; break;
+        case 0x35e: src = defog_weightlut21;                  len = 0x80; break;
+
+        /* Color-temp and central weight arrays */
+        case 0x35f: src = defog_col_ct_array;                 len = 0x38; break;
+        case 0x360: src = defog_cent3_w_dis_array;            len = 0x60; break;
+        case 0x361: src = defog_cent5_w_dis_array;            len = 0x7c; break;
+
+        /* Non-WDR EV and TRSY lists */
+        case 0x362: src = defog_ev_list;                      len = 0x24; break;
+        case 0x363: src = defog_trsy0_list;                   len = 0x24; break;
+        case 0x364: src = defog_trsy1_list;                   len = 0x24; break;
+        case 0x365: src = defog_trsy2_list;                   len = 0x24; break;
+        case 0x366: src = defog_trsy3_list;                   len = 0x24; break;
+        case 0x367: src = defog_trsy4_list;                   len = 0x24; break;
+        case 0x368: src = defog_rgbra_list;                   len = 0x24; break;
+
+        /* Main params and color controls */
+        case 0x369: src = defog_main_para_array;              len = 0x2c; break;
+        case 0x36a: src = defog_color_control_array;          len = 0x38; break;
+        case 0x36b: src = defog_lc_s_array;                   len = 0x28; break;
+        case 0x36c: src = defog_lc_v_array;                   len = 0x28; break;
+        case 0x36d: src = defog_cc_s_array;                   len = 0x20; break;
+        case 0x36e: src = defog_cc_v_array;                   len = 0x24; break;
+        case 0x36f: src = defog_dark_l1_array;                len = 0x28; break;
+        case 0x370: src = defog_dark_l2_array;                len = 0x28; break;
+
+        /* Block T lists (OEM exposes 0x14 bytes each) */
+        case 0x371: src = defog_block_t_x_array;              len = 0x14; break;
+        case 0x372: src = defog_block_t_y_array;              len = 0x14; break;
+
+        /* T parameter lists and manual ctrl */
+        case 0x373: src = defog_t_par_list1;                  len = 0x2c; break;
+        case 0x374: src = defog_t_par_list2;                  len = 0x74; break;
+        case 0x375: src = defog_manual_ctrl;                  len = 0x1c; break;
+
+        /* WDR banked lists and arrays */
+        case 0x376: src = defog_ev_list_wdr;                  len = 0x24; break;
+        case 0x377: src = defog_trsy0_list_wdr;               len = 0x24; break;
+        case 0x378: src = defog_trsy1_list_wdr;               len = 0x24; break;
+        case 0x379: src = defog_trsy2_list_wdr;               len = 0x24; break;
+        case 0x37a: src = defog_trsy3_list_wdr;               len = 0x24; break;
+        case 0x37b: src = defog_trsy4_list_wdr;               len = 0x24; break;
+        case 0x37c: src = param_defog_main_para_wdr_array;    len = 0x2c; break;
+        case 0x37d: src = param_defog_block_t_x_wdr_array;    len = 0x14; break;
+        case 0x37e: src = param_defog_fpga_para_wdr_array;    len = 0x40; break;
+        case 0x37f: src = param_defog_fpga_para_array;        len = 0x40; break;
+
+        default:
+            *size_buf = 0;
+            return 0;
     }
+
+    memcpy(out_buf, src, len);
+    *size_buf = len;
+    return 0;
+}
+
+static int tisp_defog_param_array_set(int param_id, void *in_buf, int *size_buf)
+{
+    if (!in_buf || !size_buf) return -EINVAL;
+    void *dst = NULL; int len = 0;
+
+    switch (param_id) {
+        /* Weight LUTs */
+        case 0x35a: dst = defog_weightlut20;               len = 0x80; break;
+        case 0x35b: dst = defog_weightlut02;               len = 0x80; break;
+        case 0x35c: dst = defog_weightlut12;               len = 0x80; break;
+        case 0x35d: dst = defog_weightlut22;               len = 0x80; break;
+        case 0x35e: dst = defog_weightlut21;               len = 0x80; break;
+
+        /* Color-temp and central weight arrays */
+        case 0x35f: dst = defog_col_ct_array;              len = 0x38; break;
+        case 0x360: dst = defog_cent3_w_dis_array;         len = 0x60; break;
+        case 0x361: dst = defog_cent5_w_dis_array;         len = 0x7c; break;
+
+        /* Non-WDR EV and TRSY lists */
+        case 0x362: dst = defog_ev_list;                   len = 0x24; break;
+        case 0x363: dst = defog_trsy0_list;                len = 0x24; break;
+        case 0x364: dst = defog_trsy1_list;                len = 0x24; break;
+        case 0x365: dst = defog_trsy2_list;                len = 0x24; break;
+        case 0x366: dst = defog_trsy3_list;                len = 0x24; break;
+        case 0x367: dst = defog_trsy4_list;                len = 0x24; break;
+
+        case 0x368: /* defog_rgbra_list with default reset fallback */
+        {
+            memcpy(defog_rgbra_list, in_buf, 0x24);
+            if (*(uint32_t *)defog_rgbra_list) {
+                *size_buf = 0x24;
+                return 0;
+            }
+            /* Fallback: reset key arrays to defaults (placeholder: zero them) */
+            memset(defog_cent3_w_dis_array, 0, sizeof(defog_cent3_w_dis_array));
+            memset(defog_cent5_w_dis_array, 0, sizeof(defog_cent5_w_dis_array));
+            memset(defog_weightlut22, 0, sizeof(defog_weightlut22));
+            memset(defog_weightlut12, 0, sizeof(defog_weightlut12));
+            memset(defog_weightlut21, 0, sizeof(defog_weightlut21));
+            memset(defog_weightlut02, 0, sizeof(defog_weightlut02));
+            memset(defog_weightlut20, 0, sizeof(defog_weightlut20));
+            *size_buf = 0x24;
+            return 0;
+        }
+
+        /* Main params and color controls */
+        case 0x369: dst = defog_main_para_array;           len = 0x2c; break;
+        case 0x36a: dst = defog_color_control_array;       len = 0x38; break;
+        case 0x36b: dst = defog_lc_s_array;                len = 0x28; break;
+        case 0x36c: dst = defog_lc_v_array;                len = 0x28; break;
+        case 0x36d: dst = defog_cc_s_array;                len = 0x20; break;
+        case 0x36e: dst = defog_cc_v_array;                len = 0x24; break;
+        case 0x36f: dst = defog_dark_l1_array;             len = 0x28; break;
+        case 0x370: dst = defog_dark_l2_array;             len = 0x28; break;
+
+        /* Block T lists (0x14 bytes each) */
+        case 0x371: dst = defog_block_t_x_array;           len = 0x14; break;
+        case 0x372: dst = defog_block_t_y_array;           len = 0x14; break;
+
+        /* T parameter lists and manual ctrl */
+        case 0x373: dst = defog_t_par_list1;               len = 0x2c; break;
+        case 0x374: dst = defog_t_par_list2;               len = 0x74; break;
+        case 0x375: dst = defog_manual_ctrl;               len = 0x1c; break;
+
+        /* WDR banked lists and arrays */
+        case 0x376: dst = defog_ev_list_wdr;               len = 0x24; break;
+        case 0x377: dst = defog_trsy0_list_wdr;            len = 0x24; break;
+        case 0x378: dst = defog_trsy1_list_wdr;            len = 0x24; break;
+        case 0x379: dst = defog_trsy2_list_wdr;            len = 0x24; break;
+        case 0x37a: dst = defog_trsy3_list_wdr;            len = 0x24; break;
+        case 0x37b: dst = defog_trsy4_list_wdr;            len = 0x24; break;
+        case 0x37c: dst = param_defog_main_para_wdr_array; len = 0x2c; break;
+        case 0x37d: dst = param_defog_block_t_x_wdr_array; len = 0x14; break;
+        case 0x37e: dst = param_defog_fpga_para_wdr_array; len = 0x40; break;
+        case 0x37f: dst = param_defog_fpga_para_array;     len = 0x40; break;
+
+        default:
+            *size_buf = 0;
+            return 0;
+    }
+
+    memcpy(dst, in_buf, len);
+    *size_buf = len;
     return 0;
 }
 
 int tisp_mdns_param_array_get(int param_id, void *out_buf, int *size_buf)
 {
-    pr_debug("tisp_mdns_param_array_get: ID=0x%x (stub)\n", param_id);
-    if (out_buf && size_buf) {
-        *size_buf = 0;
+    if (!out_buf || !size_buf) return -EINVAL;
+    const void *src = NULL; int len = 0;
+
+    /* Controls 0x180..0x190 (4 bytes each) */
+    switch (param_id) {
+        case 0x180: src = &mdns_y_filter_en_array;      len = 4;    break;
+        case 0x181: src = &mdns_y_sf_cur_en_array;      len = 4;    break;
+        case 0x182: src = &mdns_y_sf_ref_en_array;      len = 4;    break;
+        case 0x183: src = &mdns_y_debug_array;          len = 4;    break;
+        case 0x184: src = &mdns_uv_filter_en_array;     len = 4;    break;
+        case 0x185: src = &mdns_uv_sf_cur_en_array;     len = 4;    break;
+        case 0x186: src = &mdns_uv_sf_ref_en_array;     len = 4;    break;
+        case 0x187: src = &mdns_uv_debug_array;         len = 4;    break;
+        case 0x188: src = &mdns_ass_enable_array;       len = 4;    break;
+        case 0x189: src = &mdns_sta_inter_en_array;     len = 4;    break;
+        case 0x18a: src = &mdns_sta_group_num_array;    len = 4;    break;
+        case 0x18b: src = &mdns_sta_max_num_array;      len = 4;    break;
+        case 0x18c: src = &mdns_bgm_enable_array;       len = 4;    break;
+        case 0x18d: src = &mdns_bgm_inter_en_array;     len = 4;    break;
+        case 0x18e: src = &mdns_psn_enable_array;       len = 4;    break;
+        case 0x18f: src = &mdns_psn_max_num_array;      len = 4;    break;
+        case 0x190: src = &mdns_ref_wei_byps_array;     len = 4;    break;
+
+        /* Core Y-channel thresholds (prefer "now" pointers for WDR-aware values) */
+        case 0x192: src = mdns_y_sad_ave_thres_array_now;   len = 0x24; break;
+        case 0x195: src = mdns_y_sad_ass_thres_array_now;   len = 0x24; break;
+        case 0x198: src = mdns_y_sta_ave_thres_array_now;   len = 0x24; break;
+        case 0x19a: src = mdns_y_sta_ass_thres_array_now;   len = 0x24; break;
+        case 0x1a5: src = mdns_y_ref_wei_b_min_array_now;   len = 0x24; break;
+
+        default:
+            *size_buf = 0;
+            return 0;
     }
+
+    if (!src) { *size_buf = 0; return 0; }
+    memcpy(out_buf, src, len);
+    *size_buf = len;
     return 0;
 }
 
@@ -6748,19 +7001,121 @@ int tisp_clm_param_array_get(int param_id, void *out_buf, int *size_buf)
 
 int tisp_sharpen_param_array_get(int param_id, void *out_buf, int *size_buf)
 {
-    pr_debug("tisp_sharpen_param_array_get: ID=0x%x (stub)\n", param_id);
-    if (out_buf && size_buf) {
-        *size_buf = 0;
+    if (!out_buf || !size_buf) return -EINVAL;
+    const void *src = NULL; int len = 0;
+
+    /* OEM YSP block: implement core arrays and controls (0xb5..0xc0) */
+    switch (param_id) {
+        case 0x0b5: src = y_sp_uu_thres_array_now;        len = 0x40; break;
+        case 0x0b6: src = y_sp_w_sl_stren_0_array_now;    len = 0x40; break;
+        case 0x0b7: src = y_sp_w_sl_stren_1_array_now;    len = 0x40; break;
+        case 0x0b8: src = y_sp_w_sl_stren_2_array_now;    len = 0x40; break;
+        case 0x0b9: src = y_sp_w_sl_stren_3_array_now;    len = 0x40; break;
+        case 0x0ba: src = y_sp_b_sl_stren_0_array_now;    len = 0x40; break;
+        case 0x0bb: src = y_sp_b_sl_stren_1_array_now;    len = 0x40; break;
+        case 0x0bc: src = y_sp_b_sl_stren_2_array_now;    len = 0x40; break;
+        case 0x0bd: src = y_sp_b_sl_stren_3_array_now;    len = 0x40; break;
+        case 0x0be: src = &ysp_enable;                    len = 4;    break;
+        case 0x0bf: src = &ysp_mode;                      len = 4;    break;
+        case 0x0c0: src = &ysp_global_strength;           len = 4;    break;
+        default:
+            *size_buf = 0;
+            return 0;
     }
+
+    memcpy(out_buf, src, len);
+    *size_buf = len;
     return 0;
 }
 
 int tisp_sdns_param_array_get(int param_id, void *out_buf, int *size_buf)
 {
-    pr_debug("tisp_sdns_param_array_get: ID=0x%x (stub)\n", param_id);
-    if (out_buf && size_buf) {
-        *size_buf = 0;
+    if (!out_buf || !size_buf) return -EINVAL;
+    const void *src = NULL; int len = 0;
+
+    /* Map subset of OEM IDs 0x105.. to our SDNS arrays */
+    switch (param_id) {
+        case 0x105: src = sdns_std_thr1_array_now;           len = 0x40; break;
+        case 0x106: src = sdns_std_thr2_array_now;           len = 0x40; break;
+        case 0x107: src = sdns_grad_zx_thres_array_now;      len = 0x40; break;
+        case 0x108: src = sdns_grad_zy_thres_array_now;      len = 0x40; break;
+        case 0x109: src = sdns_h_mv_wei_now;                 len = 0x40; break;
+        case 0x10A: src = sdns_sp_uu_thres_array_now;        len = 0x40; break;
+        case 0x10B: src = sdns_sp_uu_stren_array_now;        len = 0x40; break;
+        case 0x10C: src = sdns_sp_mv_uu_thres_array_now;     len = 0x40; break;
+        case 0x10D: src = sdns_sp_mv_uu_stren_array_now;     len = 0x40; break;
+        case 0x10E: src = sdns_ave_thres_array_now;          len = 0x40; break;
+        case 0x10F: src = sdns_ave_fliter_now;               len = 0x40; break;
+        case 0x110: src = sdns_sharpen_tt_opt_array_now;     len = 0x40; break;
+        /* Strength arrays 1..16 */
+        case 0x111: src = sdns_wdr_en ? sdns_h_s_wdr_arrays[0]  : sdns_h_s_arrays[0];  len = 0x40; break;
+        case 0x112: src = sdns_wdr_en ? sdns_h_s_wdr_arrays[1]  : sdns_h_s_arrays[1];  len = 0x40; break;
+        case 0x113: src = sdns_wdr_en ? sdns_h_s_wdr_arrays[2]  : sdns_h_s_arrays[2];  len = 0x40; break;
+        case 0x114: src = sdns_wdr_en ? sdns_h_s_wdr_arrays[3]  : sdns_h_s_arrays[3];  len = 0x40; break;
+        case 0x115: src = sdns_wdr_en ? sdns_h_s_wdr_arrays[4]  : sdns_h_s_arrays[4];  len = 0x40; break;
+        case 0x116: src = sdns_wdr_en ? sdns_h_s_wdr_arrays[5]  : sdns_h_s_arrays[5];  len = 0x40; break;
+        case 0x117: src = sdns_wdr_en ? sdns_h_s_wdr_arrays[6]  : sdns_h_s_arrays[6];  len = 0x40; break;
+        case 0x118: src = sdns_wdr_en ? sdns_h_s_wdr_arrays[7]  : sdns_h_s_arrays[7];  len = 0x40; break;
+        case 0x119: src = sdns_wdr_en ? sdns_h_s_wdr_arrays[8]  : sdns_h_s_arrays[8];  len = 0x40; break;
+        case 0x11A: src = sdns_wdr_en ? sdns_h_s_wdr_arrays[9]  : sdns_h_s_arrays[9];  len = 0x40; break;
+        case 0x11B: src = sdns_wdr_en ? sdns_h_s_wdr_arrays[10] : sdns_h_s_arrays[10]; len = 0x40; break;
+        case 0x11C: src = sdns_wdr_en ? sdns_h_s_wdr_arrays[11] : sdns_h_s_arrays[11]; len = 0x40; break;
+        case 0x11D: src = sdns_wdr_en ? sdns_h_s_wdr_arrays[12] : sdns_h_s_arrays[12]; len = 0x40; break;
+        case 0x11E: src = sdns_wdr_en ? sdns_h_s_wdr_arrays[13] : sdns_h_s_arrays[13]; len = 0x40; break;
+        case 0x11F: src = sdns_wdr_en ? sdns_h_s_wdr_arrays[14] : sdns_h_s_arrays[14]; len = 0x40; break;
+        case 0x120: src = sdns_wdr_en ? sdns_h_s_wdr_arrays[15] : sdns_h_s_arrays[15]; len = 0x40; break;
+        default:
+            *size_buf = 0;
+            return 0;
     }
+
+    memcpy(out_buf, src, len);
+    *size_buf = len;
+    return 0;
+}
+
+static int tisp_sdns_param_array_set(int param_id, void *in_buf, int *size_buf)
+{
+    if (!in_buf || !size_buf) return -EINVAL;
+    void *dst = NULL; int len = 0;
+
+    switch (param_id) {
+        case 0x105: dst = sdns_wdr_en ? (void*)sdns_std_thr1_wdr_array : (void*)sdns_std_thr1_array; len = 0x40; break;
+        case 0x106: dst = sdns_wdr_en ? (void*)sdns_std_thr2_wdr_array : (void*)sdns_std_thr2_array; len = 0x40; break;
+        case 0x107: dst = sdns_wdr_en ? (void*)sdns_grad_zx_thres_wdr_array : (void*)sdns_grad_zx_thres_array; len = 0x40; break;
+        case 0x108: dst = sdns_wdr_en ? (void*)sdns_grad_zy_thres_wdr_array : (void*)sdns_grad_zy_thres_array; len = 0x40; break;
+        case 0x109: dst = sdns_wdr_en ? (void*)sdns_h_mv_wei_wdr : (void*)sdns_h_mv_wei; len = 0x40; break;
+        case 0x10A: dst = sdns_wdr_en ? (void*)sdns_sp_uu_thres_wdr_array : (void*)sdns_sp_uu_thres_array; len = 0x40; break;
+        case 0x10B: dst = sdns_wdr_en ? (void*)sdns_sp_uu_stren_wdr_array : (void*)sdns_sp_uu_stren_array; len = 0x40; break;
+        case 0x10C: dst = sdns_wdr_en ? (void*)sdns_sp_mv_uu_thres_wdr_array : (void*)sdns_sp_mv_uu_thres_array; len = 0x40; break;
+        case 0x10D: dst = sdns_wdr_en ? (void*)sdns_sp_mv_uu_stren_wdr_array : (void*)sdns_sp_mv_uu_stren_array; len = 0x40; break;
+        case 0x10E: dst = sdns_wdr_en ? (void*)sdns_ave_thres_wdr_array : (void*)sdns_ave_thres_array; len = 0x40; break;
+        case 0x10F: dst = sdns_wdr_en ? (void*)sdns_ave_fliter_wdr : (void*)sdns_ave_fliter; len = 0x40; break;
+        case 0x110: dst = sdns_wdr_en ? (void*)sdns_sharpen_tt_opt_wdr_array : (void*)sdns_sharpen_tt_opt_array; len = 0x40; break;
+        /* Strength arrays 1..16 */
+        case 0x111: dst = sdns_wdr_en ? (void*)sdns_h_s_wdr_arrays[0]  : (void*)sdns_h_s_arrays[0];  len = 0x40; break;
+        case 0x112: dst = sdns_wdr_en ? (void*)sdns_h_s_wdr_arrays[1]  : (void*)sdns_h_s_arrays[1];  len = 0x40; break;
+        case 0x113: dst = sdns_wdr_en ? (void*)sdns_h_s_wdr_arrays[2]  : (void*)sdns_h_s_arrays[2];  len = 0x40; break;
+        case 0x114: dst = sdns_wdr_en ? (void*)sdns_h_s_wdr_arrays[3]  : (void*)sdns_h_s_arrays[3];  len = 0x40; break;
+        case 0x115: dst = sdns_wdr_en ? (void*)sdns_h_s_wdr_arrays[4]  : (void*)sdns_h_s_arrays[4];  len = 0x40; break;
+        case 0x116: dst = sdns_wdr_en ? (void*)sdns_h_s_wdr_arrays[5]  : (void*)sdns_h_s_arrays[5];  len = 0x40; break;
+        case 0x117: dst = sdns_wdr_en ? (void*)sdns_h_s_wdr_arrays[6]  : (void*)sdns_h_s_arrays[6];  len = 0x40; break;
+        case 0x118: dst = sdns_wdr_en ? (void*)sdns_h_s_wdr_arrays[7]  : (void*)sdns_h_s_arrays[7];  len = 0x40; break;
+        case 0x119: dst = sdns_wdr_en ? (void*)sdns_h_s_wdr_arrays[8]  : (void*)sdns_h_s_arrays[8];  len = 0x40; break;
+        case 0x11A: dst = sdns_wdr_en ? (void*)sdns_h_s_wdr_arrays[9]  : (void*)sdns_h_s_arrays[9];  len = 0x40; break;
+        case 0x11B: dst = sdns_wdr_en ? (void*)sdns_h_s_wdr_arrays[10] : (void*)sdns_h_s_arrays[10]; len = 0x40; break;
+        case 0x11C: dst = sdns_wdr_en ? (void*)sdns_h_s_wdr_arrays[11] : (void*)sdns_h_s_arrays[11]; len = 0x40; break;
+        case 0x11D: dst = sdns_wdr_en ? (void*)sdns_h_s_wdr_arrays[12] : (void*)sdns_h_s_arrays[12]; len = 0x40; break;
+        case 0x11E: dst = sdns_wdr_en ? (void*)sdns_h_s_wdr_arrays[13] : (void*)sdns_h_s_arrays[13]; len = 0x40; break;
+        case 0x11F: dst = sdns_wdr_en ? (void*)sdns_h_s_wdr_arrays[14] : (void*)sdns_h_s_arrays[14]; len = 0x40; break;
+        case 0x120: dst = sdns_wdr_en ? (void*)sdns_h_s_wdr_arrays[15] : (void*)sdns_h_s_arrays[15]; len = 0x40; break;
+        default:
+            *size_buf = 0;
+            return 0;
+    }
+
+    memcpy(dst, in_buf, len);
+    *size_buf = len;
     return 0;
 }
 
@@ -7726,7 +8081,19 @@ int tisp_gamma_set_par_cfg(void *in_buf)
     return 0;
 }
 
-int tisp_defog_set_par_cfg(void *in_buf) { return 0; }
+int tisp_defog_set_par_cfg(void *in_buf)
+{
+    if (!in_buf) return -EINVAL;
+    int total = 0, sz = 0; char *p = (char *)in_buf;
+    for (int i = 0x35a; i < 0x380; ++i) {
+        tisp_defog_param_array_set(i, p, &sz);
+        p += sz; total += sz;
+    }
+    /* Apply to hardware via params init, per OEM */
+    tiziano_defog_params_init();
+    pr_debug("tisp_defog_set_par_cfg: total=%d\n", total);
+    return 0;
+}
 int tisp_mdns_set_par_cfg(void *in_buf)
 {
     int total = 0, sz = 0; char *p = (char *)in_buf;
@@ -7740,7 +8107,9 @@ int tisp_mdns_set_par_cfg(void *in_buf)
         p += sz; total += sz;
     }
     pr_debug("tisp_mdns_set_par_cfg: total=%d (with fallback advance)\n", total);
-    return 0;
+    /* Apply to hardware after param blob set */
+    tisp_mdns_all_reg_refresh(data_9a9d0);
+    return tisp_mdns_reg_trigger();
 }
 
 int tisp_ydns_set_par_cfg(void *in_buf)
@@ -7771,8 +8140,87 @@ int tisp_bcsh_set_par_cfg(void *in_buf)
 }
 
 int tisp_clm_set_par_cfg(void *in_buf) { return 0; }
-int tisp_ysp_set_par_cfg(void *in_buf) { return 0; }
-int tisp_sdns_set_par_cfg(void *in_buf) { return 0; }
+int tisp_ysp_set_par_cfg(void *in_buf)
+{
+    if (!in_buf) return -EINVAL;
+    const uint8_t *p = (const uint8_t *)in_buf;
+
+    /* Expect the same layout as returned by tisp_ysp_get_par_cfg: 0xb5..0xe5.
+       We will parse the first 9 blocks (0xb5..0xbd) that we implement and ignore the rest. */
+    int offset = 0;
+
+    /* Helper to select current bank arrays */
+    uint32_t *uu      = sharpen_wdr_en ? y_sp_uu_thres_wdr_array      : y_sp_uu_thres_array;
+    uint32_t *w0      = sharpen_wdr_en ? y_sp_w_sl_stren_0_wdr_array  : y_sp_w_sl_stren_0_array;
+    uint32_t *w1      = sharpen_wdr_en ? y_sp_w_sl_stren_1_wdr_array  : y_sp_w_sl_stren_1_array;
+    uint32_t *w2      = sharpen_wdr_en ? y_sp_w_sl_stren_2_wdr_array  : y_sp_w_sl_stren_2_array;
+    uint32_t *w3      = sharpen_wdr_en ? y_sp_w_sl_stren_3_wdr_array  : y_sp_w_sl_stren_3_array;
+    uint32_t *b0      = sharpen_wdr_en ? y_sp_b_sl_stren_0_wdr_array  : y_sp_b_sl_stren_0_array;
+    uint32_t *b1      = sharpen_wdr_en ? y_sp_b_sl_stren_1_wdr_array  : y_sp_b_sl_stren_1_array;
+    uint32_t *b2      = sharpen_wdr_en ? y_sp_b_sl_stren_2_wdr_array  : y_sp_b_sl_stren_2_array;
+    uint32_t *b3      = sharpen_wdr_en ? y_sp_b_sl_stren_3_wdr_array  : y_sp_b_sl_stren_3_array;
+
+    /* Each block is 16 u32 = 0x40 bytes */
+    memcpy(uu, p + offset, 0x40); offset += 0x40;  /* 0xb5 */
+    memcpy(w0, p + offset, 0x40); offset += 0x40;  /* 0xb6 */
+    memcpy(w1, p + offset, 0x40); offset += 0x40;  /* 0xb7 */
+    memcpy(w2, p + offset, 0x40); offset += 0x40;  /* 0xb8 */
+    memcpy(w3, p + offset, 0x40); offset += 0x40;  /* 0xb9 */
+    memcpy(b0, p + offset, 0x40); offset += 0x40;  /* 0xba */
+    memcpy(b1, p + offset, 0x40); offset += 0x40;  /* 0xbb */
+    memcpy(b2, p + offset, 0x40); offset += 0x40;  /* 0xbc */
+    memcpy(b3, p + offset, 0x40); offset += 0x40;  /* 0xbd */
+
+    /* Optional trailing controls if present: 0xbe..0xc0 */
+    memcpy(&ysp_enable, p + offset, 4); offset += 4;    /* 0xbe */
+    memcpy(&ysp_mode, p + offset, 4); offset += 4;      /* 0xbf */
+    memcpy(&ysp_global_strength, p + offset, 4); offset += 4; /* 0xc0 */
+
+    /* Update current pointers to reflect bank selection */
+    if (sharpen_wdr_en) {
+        y_sp_uu_thres_array_now = y_sp_uu_thres_wdr_array;
+        y_sp_w_sl_stren_0_array_now = y_sp_w_sl_stren_0_wdr_array;
+        y_sp_w_sl_stren_1_array_now = y_sp_w_sl_stren_1_wdr_array;
+        y_sp_w_sl_stren_2_array_now = y_sp_w_sl_stren_2_wdr_array;
+        y_sp_w_sl_stren_3_array_now = y_sp_w_sl_stren_3_wdr_array;
+        y_sp_b_sl_stren_0_array_now = y_sp_b_sl_stren_0_wdr_array;
+        y_sp_b_sl_stren_1_array_now = y_sp_b_sl_stren_1_wdr_array;
+        y_sp_b_sl_stren_2_array_now = y_sp_b_sl_stren_2_wdr_array;
+        y_sp_b_sl_stren_3_array_now = y_sp_b_sl_stren_3_wdr_array;
+    } else {
+        y_sp_uu_thres_array_now = y_sp_uu_thres_array;
+        y_sp_w_sl_stren_0_array_now = y_sp_w_sl_stren_0_array;
+        y_sp_w_sl_stren_1_array_now = y_sp_w_sl_stren_1_array;
+        y_sp_w_sl_stren_2_array_now = y_sp_w_sl_stren_2_array;
+        y_sp_w_sl_stren_3_array_now = y_sp_w_sl_stren_3_array;
+        y_sp_b_sl_stren_0_array_now = y_sp_b_sl_stren_0_array;
+        y_sp_b_sl_stren_1_array_now = y_sp_b_sl_stren_1_array;
+        y_sp_b_sl_stren_2_array_now = y_sp_b_sl_stren_2_array;
+        y_sp_b_sl_stren_3_array_now = y_sp_b_sl_stren_3_array;
+    }
+
+    /* Apply to hardware immediately */
+    tisp_sharpen_all_reg_refresh();
+    return 0;
+}
+
+int tisp_sdns_set_par_cfg(void *in_buf)
+{
+    if (!in_buf) return -EINVAL;
+    int total = 0, sz = 0; char *p = (char *)in_buf;
+
+    /* Parse subset of OEM IDs 0x105..0x120; unknown IDs beyond are ignored for now */
+    for (int i = 0x105; i <= 0x120; ++i) {
+        tisp_sdns_param_array_set(i, p, &sz);
+        p += sz; total += sz;
+    }
+
+    /* Apply to hardware */
+    tisp_sdns_all_reg_refresh();
+    pr_debug("tisp_sdns_set_par_cfg: total=%d\n", total);
+    return 0;
+}
+
 int tisp_af_set_par_cfg(void *in_buf) { return 0; }
 int tisp_hldc_set_par_cfg(void *in_buf) { return 0; }
 int tisp_ae_set_par_cfg(void *in_buf) { return 0; }
@@ -8360,7 +8808,8 @@ int apical_isp_max_dgain_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ct
 /* Additional stub implementations for missing functions */
 int tisp_get_defog_strength(uint32_t *value)
 {
-    if (value) *value = 0;
+    if (!value || !ourISPdev || !ourISPdev->tuning_data) return -EINVAL;
+    *value = ourISPdev->tuning_data->defog_strength & 0xFF;
     return 0;
 }
 
@@ -10395,6 +10844,11 @@ static uint32_t *y_sp_b_sl_stren_3_array_now = NULL;
 static uint32_t data_9a920 = 0xFFFFFFFF;  /* Sharpening state cache */
 static int sharpen_wdr_en = 0;
 
+/* Sharpening control registers (exposed via YSP IDs) */
+static uint32_t ysp_enable = 1;           /* maps to base+0x00 */
+static uint32_t ysp_mode = 0x7;           /* maps to base+0x04 */
+static uint32_t ysp_global_strength = 0x80; /* maps to base+0x08 */
+
 /* tiziano_sharpen_params_refresh - Refresh sharpening parameters - Simple version for init */
 void tiziano_sharpen_params_refresh(void)
 {
@@ -10428,9 +10882,9 @@ static int tisp_sharpen_all_reg_refresh(void)
     }
 
     /* Enable sharpening processing */
-    writel(1, base_reg + 0x00);       /* Enable sharpening */
-    writel(0x7, base_reg + 0x04);     /* Sharpening mode: all bands enabled */
-    writel(0x80, base_reg + 0x08);    /* Sharpening global strength */
+    writel(ysp_enable, base_reg + 0x00);       /* Enable sharpening */
+    writel(ysp_mode, base_reg + 0x04);         /* Sharpening mode */
+    writel(ysp_global_strength, base_reg + 0x08); /* Sharpening global strength */
 
     iounmap(base_reg);
     pr_info("tisp_sharpen_all_reg_refresh: Sharpening registers written to hardware\n");
@@ -11246,6 +11700,33 @@ int tisp_gamma_wdr_en(int enable)
 int tisp_sharpen_wdr_en(int enable)
 {
     pr_info("tisp_sharpen_wdr_en: %s Sharpen WDR mode\n", enable ? "Enable" : "Disable");
+    sharpen_wdr_en = enable ? 1 : 0;
+
+    /* Reselect active parameter arrays */
+    if (sharpen_wdr_en) {
+        y_sp_uu_thres_array_now = y_sp_uu_thres_wdr_array;
+        y_sp_w_sl_stren_0_array_now = y_sp_w_sl_stren_0_wdr_array;
+        y_sp_w_sl_stren_1_array_now = y_sp_w_sl_stren_1_wdr_array;
+        y_sp_w_sl_stren_2_array_now = y_sp_w_sl_stren_2_wdr_array;
+        y_sp_w_sl_stren_3_array_now = y_sp_w_sl_stren_3_wdr_array;
+        y_sp_b_sl_stren_0_array_now = y_sp_b_sl_stren_0_wdr_array;
+        y_sp_b_sl_stren_1_array_now = y_sp_b_sl_stren_1_wdr_array;
+        y_sp_b_sl_stren_2_array_now = y_sp_b_sl_stren_2_wdr_array;
+        y_sp_b_sl_stren_3_array_now = y_sp_b_sl_stren_3_wdr_array;
+    } else {
+        y_sp_uu_thres_array_now = y_sp_uu_thres_array;
+        y_sp_w_sl_stren_0_array_now = y_sp_w_sl_stren_0_array;
+        y_sp_w_sl_stren_1_array_now = y_sp_w_sl_stren_1_array;
+        y_sp_w_sl_stren_2_array_now = y_sp_w_sl_stren_2_array;
+        y_sp_w_sl_stren_3_array_now = y_sp_w_sl_stren_3_array;
+        y_sp_b_sl_stren_0_array_now = y_sp_b_sl_stren_0_array;
+        y_sp_b_sl_stren_1_array_now = y_sp_b_sl_stren_1_array;
+        y_sp_b_sl_stren_2_array_now = y_sp_b_sl_stren_2_array;
+        y_sp_b_sl_stren_3_array_now = y_sp_b_sl_stren_3_array;
+    }
+
+    /* Refresh sharpening registers to reflect new bank */
+    tisp_sharpen_all_reg_refresh();
     return 0;
 }
 
@@ -11304,16 +11785,61 @@ int tisp_adr_wdr_en(int enable)
     return 0;
 }
 
+static int defog_wdr_en = 0;
 int tisp_defog_wdr_en(int enable)
 {
     pr_info("tisp_defog_wdr_en: %s Defog WDR mode\n", enable ? "Enable" : "Disable");
+    defog_wdr_en = enable ? 1 : 0;
+
+    if (defog_wdr_en) {
+        defog_ev_list_now = defog_ev_list_wdr;
+        defog_trsy0_list_now = defog_trsy0_list_wdr;
+        defog_trsy1_list_now = defog_trsy1_list_wdr;
+        defog_trsy2_list_now = defog_trsy2_list_wdr;
+        defog_trsy3_list_now = defog_trsy3_list_wdr;
+        defog_trsy4_list_now = defog_trsy4_list_wdr;
+        param_defog_main_para_now = param_defog_main_para_wdr_array;
+        param_defog_fpga_para_now = param_defog_fpga_para_wdr_array;
+        param_defog_block_t_x_now = param_defog_block_t_x_wdr_array;
+    } else {
+        defog_ev_list_now = defog_ev_list;
+        defog_trsy0_list_now = defog_trsy0_list;
+        defog_trsy1_list_now = defog_trsy1_list;
+        defog_trsy2_list_now = defog_trsy2_list;
+        defog_trsy3_list_now = defog_trsy3_list;
+        defog_trsy4_list_now = defog_trsy4_list;
+        param_defog_main_para_now = defog_main_para_array;
+        param_defog_fpga_para_now = param_defog_fpga_para_array;
+        param_defog_block_t_x_now = defog_block_t_x_array;
+    }
+
+    tisp_defog_all_reg_refresh();
     return 0;
 }
 
 int tisp_mdns_wdr_en(int enable)
 {
     pr_info("tisp_mdns_wdr_en: %s MDNS WDR mode\n", enable ? "Enable" : "Disable");
-    return 0;
+    mdns_wdr_en = enable ? 1 : 0;
+
+    /* Reseat WDR-aware NOW pointers used by ratio/update paths */
+    if (mdns_wdr_en) {
+        mdns_y_sad_ave_thres_array_now = mdns_y_sad_ave_thres_wdr_array;
+        mdns_y_sta_ave_thres_array_now = mdns_y_sta_ave_thres_wdr_array;
+        mdns_y_sad_ass_thres_array_now = mdns_y_sad_ass_thres_wdr_array;
+        mdns_y_sta_ass_thres_array_now = mdns_y_sta_ass_thres_wdr_array;
+        mdns_y_ref_wei_b_min_array_now = mdns_y_ref_wei_b_min_wdr_array;
+    } else {
+        mdns_y_sad_ave_thres_array_now = mdns_y_sad_ave_thres_array;
+        mdns_y_sta_ave_thres_array_now = mdns_y_sta_ave_thres_array;
+        mdns_y_sad_ass_thres_array_now = mdns_y_sad_ass_thres_array;
+        mdns_y_sta_ass_thres_array_now = mdns_y_sta_ass_thres_array;
+        mdns_y_ref_wei_b_min_array_now = mdns_y_ref_wei_b_min_array;
+    }
+
+    /* Apply immediately */
+    tisp_mdns_all_reg_refresh(data_9a9d0);
+    return tisp_mdns_reg_trigger();
 }
 
 int tisp_dmsc_wdr_en(int enable)
@@ -11331,6 +11857,39 @@ int tisp_ae_wdr_en(int enable)
 int tisp_sdns_wdr_en(int enable)
 {
     pr_info("tisp_sdns_wdr_en: %s SDNS WDR mode\n", enable ? "Enable" : "Disable");
+    sdns_wdr_en = enable ? 1 : 0;
+
+    if (sdns_wdr_en) {
+        sdns_h_mv_wei_now = sdns_h_mv_wei_wdr;
+        sdns_std_thr2_array_now = sdns_std_thr2_wdr_array;
+        sdns_grad_zx_thres_array_now = sdns_grad_zx_thres_wdr_array;
+        sdns_grad_zy_thres_array_now = sdns_grad_zy_thres_wdr_array;
+        sdns_std_thr1_array_now = sdns_std_thr1_wdr_array;
+        sdns_h_s_1_array_now = sdns_h_s_wdr_arrays[0];
+        sdns_sharpen_tt_opt_array_now = sdns_sharpen_tt_opt_wdr_array;
+        sdns_ave_fliter_now = sdns_ave_fliter_wdr;
+        sdns_sp_uu_thres_array_now = sdns_sp_uu_thres_wdr_array;
+        sdns_sp_uu_stren_array_now = sdns_sp_uu_stren_wdr_array;
+        sdns_sp_mv_uu_thres_array_now = sdns_sp_mv_uu_thres_wdr_array;
+        sdns_sp_mv_uu_stren_array_now = sdns_sp_mv_uu_stren_wdr_array;
+        sdns_ave_thres_array_now = sdns_ave_thres_wdr_array;
+    } else {
+        sdns_h_mv_wei_now = sdns_h_mv_wei;
+        sdns_std_thr2_array_now = sdns_std_thr2_array;
+        sdns_grad_zx_thres_array_now = sdns_grad_zx_thres_array;
+        sdns_grad_zy_thres_array_now = sdns_grad_zy_thres_array;
+        sdns_std_thr1_array_now = sdns_std_thr1_array;
+        sdns_h_s_1_array_now = sdns_h_s_arrays[0];
+        sdns_sharpen_tt_opt_array_now = sdns_sharpen_tt_opt_array;
+        sdns_ave_fliter_now = sdns_ave_fliter;
+        sdns_sp_uu_thres_array_now = sdns_sp_uu_thres_array;
+        sdns_sp_uu_stren_array_now = sdns_sp_uu_stren_array;
+        sdns_sp_mv_uu_thres_array_now = sdns_sp_mv_uu_thres_array;
+        sdns_sp_mv_uu_stren_array_now = sdns_sp_mv_uu_stren_array;
+        sdns_ave_thres_array_now = rgbg_dis;
+    }
+
+    tisp_sdns_all_reg_refresh();
     return 0;
 }
 
