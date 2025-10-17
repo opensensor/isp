@@ -626,10 +626,13 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
                 /* SAFE: Use struct member access for clock count */
                 sd->clk_num = pdata->clk_num;
 
-                /* CRITICAL FIX: Don't call isp_subdev_init_clks during insmod */
-                /* Clock initialization should be deferred until streaming starts */
-                pr_info("*** tx_isp_subdev_init: Clock initialization deferred until streaming starts ***\n");
-                pr_info("*** tx_isp_subdev_init: Clock count stored: %d ***\n", pdata->clk_num);
+                /* Binary Ninja: Call isp_subdev_init_clks to initialize clocks */
+                ret = isp_subdev_init_clks(sd, pdata->clk_num);
+                if (ret != 0) {
+                    pr_err("*** tx_isp_subdev_init: Clock initialization failed: %d ***\n", ret);
+                    return ret;
+                }
+                pr_info("*** tx_isp_subdev_init: Clock initialization complete ***\n");
             } else {
                 /* Binary Ninja: isp_printf(0, tiziano_wdr_params_refresh, result_4) */
                 isp_printf(0, "tiziano_wdr_params_refresh", ret);
