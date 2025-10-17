@@ -49,6 +49,8 @@
 #include "../include/tx-isp-device.h"
 #include "../include/tx-libimp.h"
 
+#include "../include/tx_isp_regmap.h"
+
 /* Forward declaration for exported ISP event callback array */
 extern void (*isp_event_func_cb[32])(void);
 extern struct tx_isp_dev *ourISPdev;
@@ -863,6 +865,21 @@ static uint32_t *adr_mapb3_list_now = NULL;
 static uint32_t *adr_mapb4_list_now = NULL;
 static uint32_t adr_base_values[9] = {0x100, 0x120, 0x140, 0x160, 0x180, 0x1a0, 0x1c0, 0x1e0, 0x200};
 static uint32_t adr_min_thresholds[9] = {0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0, 0x100};
+/* Debug gate: set to 1 to enable ADR/YDNS HW param writes */
+static int s_adr_hw_apply = 1;
+static int s_ydns_hw_apply = 1;
+
+/* Helper: pack pairs of 16-bit lanes from a u32 array into 32-bit words */
+static inline void adr_pack_pairs(uint32_t *dst, int dst_cap, int *w, const uint32_t *src, int n)
+{
+    int j = 0;
+    while (j < n) {
+        uint32_t lo = src[j] & 0xFFFF;
+        uint32_t hi = (j + 1 < n) ? (src[j + 1] & 0xFFFF) : 0;
+        if (*w < dst_cap) dst[(*w)++] = PACK16_U32(hi, lo); else break;
+        j += 2;
+    }
+}
 
 /* Global parameter arrays */
 static void *tparams_day = NULL;
@@ -870,6 +887,23 @@ static void *tparams_night = NULL;
 static void *dmsc_sp_d_w_stren_wdr_array = NULL;
 static void *sensor_info_ptr = NULL;
 static uint32_t data_b2e1c = 1080; /* Sensor height */
+/* OEM register map self-checks for ADR and YDNS (addresses and counts only).
+ * These do not program hardware; they log the expected word counts per HLIL. */
+static void tisp_adr_regmap_selfcheck(void)
+{
+    pr_info("ADR REGMAP: CTRL [%#x..%#x] words=%u\n", ADR_CTRL_START, ADR_CTRL_END, ADR_CTRL_WORD_COUNT);
+    pr_info("ADR REGMAP: KNEE [%#x..%#x] words=%u\n", ADR_KNEE_START, ADR_KNEE_END, ADR_KNEE_WORD_COUNT);
+    pr_info("ADR REGMAP: LUT  [%#x..%#x] words=%u (packed 16:16)\n", ADR_LUT_START, ADR_LUT_END, ADR_LUT_WORD_COUNT);
+    pr_info("ADR REGMAP: EXTRA[%#x..%#x] words=%u\n", ADR_EXTRA_START, ADR_EXTRA_END, ADR_EXTRA_WORD_COUNT);
+    pr_info("ADR REGMAP: CTC  [%#x..%#x] words=%u\n", ADR_CTC_START, ADR_CTC_END, ADR_CTC_WORD_COUNT);
+}
+
+static void tisp_ydns_regmap_selfcheck(void)
+{
+    pr_info("YDNS REGMAP: [%#x..%#x] words=%u (packed fields per HLIL)\n",
+            YDNS_REG_START, YDNS_REG_END, YDNS_WORD_COUNT);
+}
+
 
 /* SDNS (Spatial Denoising) Variables */
 static uint32_t data_9a9c0 = 0;
@@ -11718,38 +11752,63 @@ void tiziano_adr_params_refresh(void)
     pr_debug("tiziano_adr_params_refresh: ADR ratio updated to 0x%x\n", adr_ratio);
 }
 
-/* tisp_adr_set_params - Set ADR parameters to hardware */
+/* tisp_adr_set_params - Set ADR parameters to hardware (ADR LUT window writes)
+ * Implements the HLIL pattern for 0x4084..0x4294: 16:16 packed writes.
+ * Note: Mapping of arrays to the LUT window is a best-effort placeholder and will be
+ * refined against OEM parity. Use s_adr_hw_apply to gate actual writes. */
 static int tisp_adr_set_params(void)
 {
-    void __iomem *base_reg = ioremap(0x1330C000, 0x1000); /* ADR register base */
+    uint32_t out_words[ADR_LUT_WORD_COUNT];
+    int w = 0;
 
-    if (!base_reg) {
-        pr_err("tisp_adr_set_params: Failed to map ADR registers\n");
-        return -ENOMEM;
+    /* Compose stream to exactly fill ADR_LUT_WORD_COUNT (133 words):
+     *  - weights: 5 x 32 entries => 5 x 16 words = 80
+     *  - mapb1..4: 4 x 9 entries => 4 x 5 words = 20 (total 100)
+     *  - ctc_map2cut_y: 9 entries => 5 words (105)
+     *  - light_end: 29 entries => 15 words (120)
+     *  - block_light: 15 entries => 8 words (128)
+     *  - blp2_list: 9 entries => 5 words (133)
+     * Banked variants are selected when adr_wdr_en != 0. */
+    const uint32_t *mapb1 = adr_wdr_en ? adr_mapb1_list_wdr : adr_mapb1_list;
+    const uint32_t *mapb2 = adr_wdr_en ? adr_mapb2_list_wdr : adr_mapb2_list;
+    const uint32_t *mapb3 = adr_wdr_en ? adr_mapb3_list_wdr : adr_mapb3_list;
+    const uint32_t *mapb4 = adr_wdr_en ? adr_mapb4_list_wdr : adr_mapb4_list;
+    const uint32_t *ctc_map2cut_y = adr_wdr_en ? adr_ctc_map2cut_y_wdr : adr_ctc_map2cut_y;
+    const uint32_t *light_end     = adr_wdr_en ? adr_light_end_wdr     : adr_light_end;
+    const uint32_t *block_light   = adr_wdr_en ? adr_block_light_wdr   : adr_block_light;
+    const uint32_t *blp2_list     = adr_wdr_en ? adr_blp2_list_wdr     : adr_blp2_list;
+
+    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, param_adr_weight_20_lut_array, (int)(sizeof(param_adr_weight_20_lut_array)/4));
+    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, param_adr_weight_02_lut_array, (int)(sizeof(param_adr_weight_02_lut_array)/4));
+    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, param_adr_weight_12_lut_array, (int)(sizeof(param_adr_weight_12_lut_array)/4));
+    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, param_adr_weight_22_lut_array, (int)(sizeof(param_adr_weight_22_lut_array)/4));
+    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, param_adr_weight_21_lut_array, (int)(sizeof(param_adr_weight_21_lut_array)/4));
+
+    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, mapb1,  (int)(sizeof(adr_mapb1_list)/4));
+    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, mapb2,  (int)(sizeof(adr_mapb2_list)/4));
+    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, mapb3,  (int)(sizeof(adr_mapb3_list)/4));
+    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, mapb4,  (int)(sizeof(adr_mapb4_list)/4));
+
+    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, ctc_map2cut_y, (int)(sizeof(adr_ctc_map2cut_y)/4));
+    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, light_end,     (int)(sizeof(adr_light_end)/4));
+    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, block_light,   (int)(sizeof(adr_block_light)/4));
+    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, blp2_list,     (int)(sizeof(adr_blp2_list)/4));
+
+    /* Pad or trim to exact window size (safety) */
+    while (w < (int)ADR_LUT_WORD_COUNT) out_words[w++] = 0;
+    if (w > (int)ADR_LUT_WORD_COUNT) w = (int)ADR_LUT_WORD_COUNT;
+
+    if (!s_adr_hw_apply) {
+        pr_info("tisp_adr_set_params: HW apply disabled; prepared %d/%u ADR LUT words\n", w, ADR_LUT_WORD_COUNT);
+        return 0;
     }
 
-    pr_info("tisp_adr_set_params: Writing ADR parameters to registers\n");
+    /* Perform the packed writes across the LUT window */
+    uint32_t addr = ADR_LUT_START;
+    for (int i = 0; i < (int)ADR_LUT_WORD_COUNT; ++i, addr += 4)
+        system_reg_write(addr, out_words[i]);
 
-    /* Write center weight distribution */
-    for (int i = 0; i < 31; i++) {
-        writel(param_adr_centre_w_dis_array[i], base_reg + 0x100 + (i * 4));
-    }
-
-    /* Write weight LUTs */
-    for (int i = 0; i < 32; i++) {
-        writel(param_adr_weight_20_lut_array[i], base_reg + 0x200 + (i * 4));
-        writel(param_adr_weight_02_lut_array[i], base_reg + 0x280 + (i * 4));
-        writel(param_adr_weight_12_lut_array[i], base_reg + 0x300 + (i * 4));
-        writel(param_adr_weight_22_lut_array[i], base_reg + 0x380 + (i * 4));
-        writel(param_adr_weight_21_lut_array[i], base_reg + 0x400 + (i * 4));
-    }
-
-    /* Enable ADR processing */
-    writel(1, base_reg + 0x00);        /* Enable ADR */
-    writel(data_ace54, base_reg + 0x04); /* ADR strength parameter */
-
-    iounmap(base_reg);
-    pr_info("tisp_adr_set_params: ADR parameters written to hardware\n");
+    pr_info("tisp_adr_set_params: Wrote %u ADR LUT words [%#x..%#x]\n", ADR_LUT_WORD_COUNT, ADR_LUT_START, ADR_LUT_END);
     return 0;
 }
 
@@ -11835,6 +11894,10 @@ int tiziano_adr_init(uint32_t width, uint32_t height)
         pr_err("tiziano_adr_init: Failed to set ADR parameters: %d\n", ret);
         return ret;
     }
+    /* Log expected register windows for ADR/YDNS (parity audit aid) */
+    tisp_adr_regmap_selfcheck();
+    tisp_ydns_regmap_selfcheck();
+
 
     /* Binary Ninja: Calculate final parameter */
     uint32_t width_calc = (width_div + 1) >> 1;
@@ -11904,10 +11967,32 @@ int tiziano_bcsh_init(void)
     return 0;
 }
 
+/* tisp_ydns_param_cfg - Program YDNS regs (0x7af0..0x7afc) with packed fields
+ * Placeholder mapping; refine per HLIL. Use s_ydns_hw_apply to gate writes. */
+static void tisp_ydns_param_cfg(void)
+{
+    uint32_t r0 = PACK16_U32(ydns_mv_thres0_array[0] & 0xFFFF, ydns_mv_thres1_array[0] & 0xFFFF);
+    uint32_t r1 = PACK16_U32(ydns_fus_level_array[0] & 0xFFFF, ydns_fus_min_thres_array[0] & 0xFFFF);
+    uint32_t r2 = PACK16_U32(ydns_edge_wei_array[0] & 0xFFFF, ydns_edge_thres_array[0] & 0xFFFF);
+    uint32_t r3 = PACK16_U32(ydns_edge_div_array[0] & 0xFFFF, ydns_edge_out_array & 0xFFFF);
+
+    if (!s_ydns_hw_apply) {
+        pr_info("tisp_ydns_param_cfg: HW apply disabled; R0=%#x R1=%#x R2=%#x R3=%#x\n", r0, r1, r2, r3);
+        return;
+    }
+
+    system_reg_write(YDNS_REG_START + 0x0, r0);
+    system_reg_write(YDNS_REG_START + 0x4, r1);
+    system_reg_write(YDNS_REG_START + 0x8, r2);
+    system_reg_write(YDNS_REG_START + 0xC, r3);
+}
+
 /* tiziano_ydns_init - YDNS initialization */
 int tiziano_ydns_init(void)
 {
     pr_info("tiziano_ydns_init: Initializing YDNS processing\n");
+    tisp_ydns_regmap_selfcheck();
+    tisp_ydns_param_cfg();
     return 0;
 }
 
