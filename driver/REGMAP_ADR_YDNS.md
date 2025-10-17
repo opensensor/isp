@@ -7,7 +7,7 @@ This sheet summarizes the relevant register windows, packing and sources for ADR
 - Programming ranges (absolute addresses used by system_reg_write):
   - CTRL: 0x4004..0x4068 (per‑module control params)
   - KNEE: 0x406c..0x4080 (map/CTC kneepoints header)
-  - LUT:  0x4084..0x4294 (main window; written in a loop with 16:16 packing)
+  - LUT:  0x4084..0x4290 (main window; HLIL loop writes [start..end), end=0x4294 exclusive)
   - EXTRA:0x4294..0x433c (additional params)
   - CTC:  0x4340..0x4458 (CTC/COC kneepoints and tails)
 
@@ -27,9 +27,20 @@ This sheet summarizes the relevant register windows, packing and sources for ADR
 - Expected word counts (inclusive ranges):
   - CTRL words = ((0x4068-0x4004)/4)+1
   - KNEE words = ((0x4080-0x406c)/4)+1
-  - LUT  words = ((0x4294-0x4084)/4)+1  ⇒ 133 writes
+  - LUT  words = ((0x4294-0x4084)/4)    ⇒ 132 writes (end exclusive)
   - EXTRAwords = ((0x433c-0x4294)/4)+1
   - CTC  words = ((0x4458-0x4340)/4)+1
+
+
+- ADR LUT window composition (HLIL-style, 16-bit lanes concatenated then globally 16:16-packed):
+  1) adr_map_mode_now: first 6 ints (WDR-banked)
+  2) Weights: param_adr_weight_20/02/12/22/21, 32 each (total 160 ints)
+  3) mapb1..mapb4: 9 each (36 ints, WDR-banked)
+  4) ctc_map2cut_y: 9 ints (WDR-banked)
+  5) light_end: 29 ints (WDR-banked)
+  6) block_light: 15 ints (WDR-banked)
+  7) blp2_list: 9 ints (WDR-banked)
+  = 6 + 160 + 36 + 9 + 29 + 15 + 9 = 264 lanes = 132 words
 
 - Primary source arrays (exposed via GET/SET param IDs, see tx_isp_tuning.c):
   - 0x380..0x3AB block: `param_adr_para_array`, kneepoint arrays, mapb[1..4], ctc/coc, EV/LIGB lists, gamma X/Y, tool control, etc.
@@ -65,7 +76,7 @@ This sheet summarizes the relevant register windows, packing and sources for ADR
 
 ## Quick parity checklist
 
-- [ ] LUT write counts match ranges above (ADR_LUT has 133 writes)
+- [ ] LUT write counts match ranges above (ADR_LUT has 132 writes)
 - [ ] All ADR banked arrays have both LIN and WDR sets; WDR toggle re-seats "now" pointers
 - [ ] Strength blending pivot at 0x80; clamps respected; `ev_changed` set and ISR path active
 - [ ] YDNS pack uses current SDNS arrays; sequencing prevents stale reads

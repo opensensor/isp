@@ -881,6 +881,67 @@ static inline void adr_pack_pairs(uint32_t *dst, int dst_cap, int *w, const uint
     }
 }
 
+/* Build ADR LUT payload per HLIL-style map_kneepoint_y concatenation.
+ * We assemble a single linear sequence of 16-bit values across all blocks in order,
+ * then pack globally into 32-bit words (hi16:lo16), so odd block tails pair with
+ * the next block's head — matching HLIL behavior. Returns words filled (<= out_cap). */
+static int tisp_adr_build_lut_payload(uint32_t *out_words, int out_cap)
+{
+    /* Collect 16-bit values linearly */
+    uint16_t vals[ADR_LUT_WORD_COUNT * 2];
+    int n = 0; /* count of 16-bit lanes */
+
+    /* Helper to append lower-16 lanes from a u32 array */
+    #define APPEND_LANES(arr, count) do { \
+        for (int _i = 0; _i < (count); ++_i) { \
+            if (n < (int)(ADR_LUT_WORD_COUNT * 2)) \
+                vals[n++] = (uint16_t)((arr)[_i] & 0xFFFF); \
+        } \
+    } while (0)
+
+    /* 1) Map mode head (first 6 ints) to reach exact 264 lanes with HLIL ordering */
+    const uint32_t *map_mode = adr_wdr_en ? adr_map_mode_wdr : adr_map_mode; /* 0x2c/4 = 11; HLIL uses subset */
+    APPEND_LANES(map_mode, 6);
+
+    /* 2) 5x weight LUTs (32 each) */
+    APPEND_LANES(param_adr_weight_20_lut_array, (int)(sizeof(param_adr_weight_20_lut_array)/4));
+    APPEND_LANES(param_adr_weight_02_lut_array, (int)(sizeof(param_adr_weight_02_lut_array)/4));
+    APPEND_LANES(param_adr_weight_12_lut_array, (int)(sizeof(param_adr_weight_12_lut_array)/4));
+    APPEND_LANES(param_adr_weight_22_lut_array, (int)(sizeof(param_adr_weight_22_lut_array)/4));
+    APPEND_LANES(param_adr_weight_21_lut_array, (int)(sizeof(param_adr_weight_21_lut_array)/4));
+
+    /* 3) Banked lists (WDR-aware) */
+    const uint32_t *mapb1 = adr_wdr_en ? adr_mapb1_list_wdr : adr_mapb1_list;
+    const uint32_t *mapb2 = adr_wdr_en ? adr_mapb2_list_wdr : adr_mapb2_list;
+    const uint32_t *mapb3 = adr_wdr_en ? adr_mapb3_list_wdr : adr_mapb3_list;
+    const uint32_t *mapb4 = adr_wdr_en ? adr_mapb4_list_wdr : adr_mapb4_list;
+    const uint32_t *ctc_map2cut_y = adr_wdr_en ? adr_ctc_map2cut_y_wdr : adr_ctc_map2cut_y;
+    const uint32_t *light_end     = adr_wdr_en ? adr_light_end_wdr     : adr_light_end;
+    const uint32_t *block_light   = adr_wdr_en ? adr_block_light_wdr   : adr_block_light;
+    const uint32_t *blp2_list     = adr_wdr_en ? adr_blp2_list_wdr     : adr_blp2_list;
+
+    APPEND_LANES(mapb1,      (int)(sizeof(adr_mapb1_list)/4)); /* 9 */
+    APPEND_LANES(mapb2,      (int)(sizeof(adr_mapb2_list)/4)); /* 9 */
+    APPEND_LANES(mapb3,      (int)(sizeof(adr_mapb3_list)/4)); /* 9 */
+    APPEND_LANES(mapb4,      (int)(sizeof(adr_mapb4_list)/4)); /* 9 */
+    APPEND_LANES(ctc_map2cut_y, (int)(sizeof(adr_ctc_map2cut_y)/4)); /* 9 */
+    APPEND_LANES(light_end,     (int)(sizeof(adr_light_end)/4));     /* 29 */
+    APPEND_LANES(block_light,   (int)(sizeof(adr_block_light)/4));   /* 15 */
+    APPEND_LANES(blp2_list,     (int)(sizeof(adr_blp2_list)/4));     /* 9 */
+
+    /* 3) Pack globally into words (hi:lo) */
+    int words = 0;
+    for (int i = 0; i < out_cap; ++i) {
+        uint16_t lo = (2*i + 0 < n) ? vals[2*i + 0] : 0;
+        uint16_t hi = (2*i + 1 < n) ? vals[2*i + 1] : 0;
+        out_words[i] = PACK16_U32(hi, lo);
+        words++;
+    }
+
+    #undef APPEND_LANES
+    return words;
+}
+
 /* Global parameter arrays */
 static void *tparams_day = NULL;
 static void *tparams_night = NULL;
@@ -11752,64 +11813,104 @@ void tiziano_adr_params_refresh(void)
     pr_debug("tiziano_adr_params_refresh: ADR ratio updated to 0x%x\n", adr_ratio);
 }
 
-/* tisp_adr_set_params - Set ADR parameters to hardware (ADR LUT window writes)
- * Implements the HLIL pattern for 0x4084..0x4294: 16:16 packed writes.
- * Note: Mapping of arrays to the LUT window is a best-effort placeholder and will be
- * refined against OEM parity. Use s_adr_hw_apply to gate actual writes. */
+/* tisp_adr_set_params - Program ADR params per HLIL flow
+ * 1) 0x4390..0x43a0: min_kneepoint_y pairs; 0x43a4: const
+ * 2) 0x4354..0x4360: ctc_kneepoint_y pairs; 0x4364: const
+ * 3) 0x4084..0x4290: LUT window payload (16:16 packed)
+ * For (3), until we implement the full map_kneepoint_y builder, we fall back to the
+ * existing composed payload to fill the exact 132 words. */
 static int tisp_adr_set_params(void)
 {
-    uint32_t out_words[ADR_LUT_WORD_COUNT];
-    int w = 0;
-
-    /* Compose stream to exactly fill ADR_LUT_WORD_COUNT (133 words):
-     *  - weights: 5 x 32 entries => 5 x 16 words = 80
-     *  - mapb1..4: 4 x 9 entries => 4 x 5 words = 20 (total 100)
-     *  - ctc_map2cut_y: 9 entries => 5 words (105)
-     *  - light_end: 29 entries => 15 words (120)
-     *  - block_light: 15 entries => 8 words (128)
-     *  - blp2_list: 9 entries => 5 words (133)
-     * Banked variants are selected when adr_wdr_en != 0. */
-    const uint32_t *mapb1 = adr_wdr_en ? adr_mapb1_list_wdr : adr_mapb1_list;
-    const uint32_t *mapb2 = adr_wdr_en ? adr_mapb2_list_wdr : adr_mapb2_list;
-    const uint32_t *mapb3 = adr_wdr_en ? adr_mapb3_list_wdr : adr_mapb3_list;
-    const uint32_t *mapb4 = adr_wdr_en ? adr_mapb4_list_wdr : adr_mapb4_list;
-    const uint32_t *ctc_map2cut_y = adr_wdr_en ? adr_ctc_map2cut_y_wdr : adr_ctc_map2cut_y;
-    const uint32_t *light_end     = adr_wdr_en ? adr_light_end_wdr     : adr_light_end;
-    const uint32_t *block_light   = adr_wdr_en ? adr_block_light_wdr   : adr_block_light;
-    const uint32_t *blp2_list     = adr_wdr_en ? adr_blp2_list_wdr     : adr_blp2_list;
-
-    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, param_adr_weight_20_lut_array, (int)(sizeof(param_adr_weight_20_lut_array)/4));
-    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, param_adr_weight_02_lut_array, (int)(sizeof(param_adr_weight_02_lut_array)/4));
-    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, param_adr_weight_12_lut_array, (int)(sizeof(param_adr_weight_12_lut_array)/4));
-    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, param_adr_weight_22_lut_array, (int)(sizeof(param_adr_weight_22_lut_array)/4));
-    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, param_adr_weight_21_lut_array, (int)(sizeof(param_adr_weight_21_lut_array)/4));
-
-    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, mapb1,  (int)(sizeof(adr_mapb1_list)/4));
-    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, mapb2,  (int)(sizeof(adr_mapb2_list)/4));
-    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, mapb3,  (int)(sizeof(adr_mapb3_list)/4));
-    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, mapb4,  (int)(sizeof(adr_mapb4_list)/4));
-
-    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, ctc_map2cut_y, (int)(sizeof(adr_ctc_map2cut_y)/4));
-    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, light_end,     (int)(sizeof(adr_light_end)/4));
-    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, block_light,   (int)(sizeof(adr_block_light)/4));
-    adr_pack_pairs(out_words, ADR_LUT_WORD_COUNT, &w, blp2_list,     (int)(sizeof(adr_blp2_list)/4));
-
-    /* Pad or trim to exact window size (safety) */
-    while (w < (int)ADR_LUT_WORD_COUNT) out_words[w++] = 0;
-    if (w > (int)ADR_LUT_WORD_COUNT) w = (int)ADR_LUT_WORD_COUNT;
-
     if (!s_adr_hw_apply) {
-        pr_info("tisp_adr_set_params: HW apply disabled; prepared %d/%u ADR LUT words\n", w, ADR_LUT_WORD_COUNT);
+        pr_info("tisp_adr_set_params: HW apply disabled (skipping writes)\n");
         return 0;
     }
 
-    /* Perform the packed writes across the LUT window */
-    uint32_t addr = ADR_LUT_START;
-    for (int i = 0; i < (int)ADR_LUT_WORD_COUNT; ++i, addr += 4)
-        system_reg_write(addr, out_words[i]);
+    /* 1) min_kneepoint_y: write 5 regs (10 entries as 5 pairs) starting at 0x4390 */
+    {
+        uint32_t base = 0x00004390;
+        /* Use first 10 entries from param_adr_min_kneepoint_array as proxy */
+        for (int k = 0; k < 10; k += 2, base += 4) {
+            uint32_t lo = param_adr_min_kneepoint_array[k] & 0xFFFF;
+            uint32_t hi = param_adr_min_kneepoint_array[k + 1] & 0xFFFF;
+            system_reg_write(base, PACK16_U32(hi, lo));
+        }
+        /* 0x43a4 constant per HLIL: data_af0b8 = 0x800 */
+        system_reg_write(0x000043a4, 0x800);
+    }
 
-    pr_info("tisp_adr_set_params: Wrote %u ADR LUT words [%#x..%#x]\n", ADR_LUT_WORD_COUNT, ADR_LUT_START, ADR_LUT_END);
+    /* 2) ctc_kneepoint_y: write 4 regs (8 entries as 4 pairs) starting at 0x4354 */
+    {
+        uint32_t base = 0x00004354;
+        for (int k = 0; k < 8; k += 2, base += 4) {
+            uint32_t lo = param_adr_ctc_kneepoint_array[k] & 0xFFFF;
+            uint32_t hi = param_adr_ctc_kneepoint_array[k + 1] & 0xFFFF;
+            system_reg_write(base, PACK16_U32(hi, lo));
+        }
+        /* 0x4364 constant per HLIL: data_af0dc = 0x400 */
+        system_reg_write(0x00004364, 0x400);
+    }
+
+    /* 3) LUT window payload: reuse existing composed payload to fill 132 words */
+    {
+        uint32_t out_words[ADR_LUT_WORD_COUNT];
+        int w = tisp_adr_build_lut_payload(out_words, ADR_LUT_WORD_COUNT);
+
+        while (w < (int)ADR_LUT_WORD_COUNT) out_words[w++] = 0;
+        if (w > (int)ADR_LUT_WORD_COUNT) w = (int)ADR_LUT_WORD_COUNT;
+
+        uint32_t addr = ADR_LUT_START;
+        for (int i = 0; i < (int)ADR_LUT_WORD_COUNT; ++i, addr += 4)
+            system_reg_write(addr, out_words[i]);
+
+        pr_info("tisp_adr_set_params: Wrote %u ADR LUT words [%#x..%#x]\n", ADR_LUT_WORD_COUNT, ADR_LUT_START, ADR_LUT_END);
+    }
+
     return 0;
+}
+
+
+/* Program ADR static header/control registers per HLIL (non-LUT regions) */
+static void tisp_adr_write_headers(void)
+{
+    /* 0x4004: param_adr_para_array << 4 | data_afae4 << 16 | data_afacc */
+    uint32_t para0 = param_adr_para_array[0] & 0xFFFF; /* HLIL uses 0xA */
+    system_reg_write(0x00004004, ((0x140 & 0xFFFF) << 16) | ((para0 & 0xFFFF) << 4) | 0x0);
+
+    /* 0x4448..0x4450: constants */
+    system_reg_write(0x00004448, (0x333 << 16) | 0x266);
+    system_reg_write(0x0000444c, (0x4cd << 16) | 0x400);
+    system_reg_write(0x00004450, 0x59a);
+
+    /* CTC knee header block 0x4340..0x4350 */
+    system_reg_write(0x00004340, (0x80 << 16) | (param_adr_ctc_kneepoint_array[0] & 0xFFFF));
+    system_reg_write(0x00004344, (0x200 << 16) | 0x100);
+    system_reg_write(0x00004348, (0x600 << 16) | 0x400);
+    system_reg_write(0x00004350, 0xF00);
+
+    /* Extra CTC/map constants 0x4368..0x4374 */
+    system_reg_write(0x00004368, (0x7 << 16) | 0x7);
+    system_reg_write(0x0000436c, (0x9 << 16) | 0x8);
+    system_reg_write(0x00004374, (0x8 << 16) | 0x9);
+
+    /* Map knee header block 0x406c..0x4080 */
+    system_reg_write(0x0000406c, (0x40 << 16) | (param_adr_map_kneepoint_array[0] & 0xFFFF));
+    system_reg_write(0x00004070, (0xC0 << 16) | 0x80);
+    system_reg_write(0x00004074, (0x180 << 16) | 0x100);
+    system_reg_write(0x00004078, (0x300 << 16) | 0x200);
+    system_reg_write(0x0000407c, (0x600 << 16) | 0x400);
+    system_reg_write(0x00004080, 0x800);
+
+    /* Misc header words 0x4334..0x433c */
+    system_reg_write(0x00004334, (0x6 << 24) | (0x6 << 16) | 0x5 | (0x5 << 8));
+    system_reg_write(0x00004338, (0x8 << 24) | (0x7 << 16) | 0x6 | (0x6 << 8));
+    system_reg_write(0x0000433c, (0xB << 24) | (0x9 << 16) | 0x7 | (0x9 << 8));
+
+    /* LUT header entries for weight arrays (HLIL constants are 0; program zeros) */
+    system_reg_write(0x00004294, 0x0);
+    system_reg_write(0x000042b4, 0x0);
+    system_reg_write(0x000042d4, 0x0);
+    system_reg_write(0x00004314, 0x0);
 }
 
 /* tiziano_adr_params_init - Initialize ADR parameters */
@@ -11889,6 +11990,9 @@ int tiziano_adr_init(uint32_t width, uint32_t height)
 
     /* Binary Ninja: Initialize and set parameters */
     tiziano_adr_params_init();
+    /* Program ADR static header/control registers per HLIL */
+    tisp_adr_write_headers();
+
     int ret = tisp_adr_set_params();
     if (ret) {
         pr_err("tiziano_adr_init: Failed to set ADR parameters: %d\n", ret);

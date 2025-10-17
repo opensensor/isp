@@ -16,8 +16,8 @@
 #define ADR_CTRL_END         0x00004068
 #define ADR_KNEE_START       0x0000406c  /* map/ctc kneepoints start */
 #define ADR_KNEE_END         0x00004080
-#define ADR_LUT_START        0x00004084  /* main LUT window (loop writes) */
-#define ADR_LUT_END          0x00004294
+#define ADR_LUT_START        0x00004084  /* main LUT window (loop writes), HLIL end is exclusive at 0x4294 */
+#define ADR_LUT_END          0x00004290  /* last written address (0x4294 is EXTRA start) */
 #define ADR_EXTRA_START      0x00004294  /* additional params */
 #define ADR_EXTRA_END        0x0000433c
 #define ADR_CTC_START        0x00004340  /* CTC/COC kneepoints */
