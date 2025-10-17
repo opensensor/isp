@@ -28,6 +28,7 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
+#include <linux/math64.h>  /* For div64_s64() and do_div() */
 #include <linux/io.h>
 #include <linux/ioport.h>
 #include <linux/dma-mapping.h>
@@ -318,10 +319,13 @@ static void tiziano_bcsh_build_active_ccm(int32_t out[9], uint32_t ct)
             int32_t d = (int32_t)D[i];
             int32_t t = (int32_t)T[i];
             int32_t v;
-            if (d >= t)
-                v = (int32_t)( ((int64_t)(d - t) * w) / DEN_DT ) + t;
-            else
-                v = t - (int32_t)( ((int64_t)(t - d) * w) / DEN_DT );
+            if (d >= t) {
+                int64_t tmp = (int64_t)(d - t) * w;
+                v = (int32_t)div64_s64(tmp, DEN_DT) + t;
+            } else {
+                int64_t tmp = (int64_t)(t - d) * w;
+                v = t - (int32_t)div64_s64(tmp, DEN_DT);
+            }
             out[i] = v;
         }
         return;
@@ -347,10 +351,13 @@ static void tiziano_bcsh_build_active_ccm(int32_t out[9], uint32_t ct)
             int32_t a = (int32_t)A[i];
             int32_t t = (int32_t)T[i];
             int32_t v;
-            if (t >= a)
-                v = (int32_t)( ((int64_t)(t - a) * w) / DEN_TA ) + a;
-            else
-                v = a - (int32_t)( ((int64_t)(a - t) * w) / DEN_TA );
+            if (t >= a) {
+                int64_t tmp = (int64_t)(t - a) * w;
+                v = (int32_t)div64_s64(tmp, DEN_TA) + a;
+            } else {
+                int64_t tmp = (int64_t)(a - t) * w;
+                v = a - (int32_t)div64_s64(tmp, DEN_TA);
+            }
             out[i] = v;
         }
     }
@@ -402,16 +409,20 @@ static void tiziano_build_hue_rotation(int32_t R[9])
         /* Interpolate between (CosValue,SinValue) and (A,Z) around P */
         int32_t dx = (int32_t)P - (int32_t)hue;
         /* linear blend over span P (best-effort match) */
-        s1 = CosValue + (int32_t)(((int64_t)(A - CosValue) * dx) / P);
-        s2 = SinValue + (int32_t)(((int64_t)(Z - SinValue) * dx) / P);
+        int64_t tmp1 = (int64_t)(A - CosValue) * dx;
+        int64_t tmp2 = (int64_t)(Z - SinValue) * dx;
+        s1 = CosValue + (int32_t)div64_s64(tmp1, P);
+        s2 = SinValue + (int32_t)div64_s64(tmp2, P);
         sgn = -1; /* matches HLIL s6_5 = 0xffffffff path */
     } else {
         /* Interpolate between (A,Z) and (CosValue,SinValue) up to Q */
         int32_t dx = (int32_t)hue - (int32_t)P;
         int32_t span = (int32_t)Q - (int32_t)P;
         if (span <= 0) span = 1;
-        s1 = A + (int32_t)(((int64_t)(CosValue - A) * dx) / span);
-        s2 = Z + (int32_t)(((int64_t)(SinValue - Z) * dx) / span);
+        int64_t tmp1 = (int64_t)(CosValue - A) * dx;
+        int64_t tmp2 = (int64_t)(SinValue - Z) * dx;
+        s1 = A + (int32_t)div64_s64(tmp1, span);
+        s2 = Z + (int32_t)div64_s64(tmp2, span);
         sgn = 1;
     }
 
@@ -2141,13 +2152,7 @@ static int tisp_event_push(void *event)
         return -EINVAL;
     }
 
-    /* Initialize completion if not already done */
-    static int tevent_initialized = 0;
-    if (!tevent_initialized) {
-        init_completion(&tevent_info);
-        tevent_initialized = 1;
-    }
-
+    /* Signal event completion - completion is initialized in tisp_event_init() */
     pr_debug("Event pushed\n");
     complete(&tevent_info);
     return 0;
@@ -6522,8 +6527,11 @@ static void tisp_defog_build_boundaries(void)
         memcpy(defog_block_sizem_work, block_sizem_1944_tbl, sizeof(block_sizem_1944_tbl));
     } else {
         /* Uniform fallback: 10 rows */
-        for (int i = 0; i < 11; ++i)
-            defog_block_sizem_work[i] = (uint32_t)((uint64_t)defog_frame_h * i / 10);
+        for (int i = 0; i < 11; ++i) {
+            u64 tmp = (u64)defog_frame_h * i;
+            do_div(tmp, 10);
+            defog_block_sizem_work[i] = (uint32_t)tmp;
+        }
     }
 
     /* X-axis (cols) */
@@ -6539,8 +6547,11 @@ static void tisp_defog_build_boundaries(void)
         memcpy(defog_block_sizen_work, block_sizen_2592_tbl, sizeof(block_sizen_2592_tbl));
     } else {
         /* Uniform fallback: 18 cols */
-        for (int i = 0; i < 19; ++i)
-            defog_block_sizen_work[i] = (uint32_t)((uint64_t)defog_frame_w * i / 18);
+        for (int i = 0; i < 19; ++i) {
+            u64 tmp = (u64)defog_frame_w * i;
+            do_div(tmp, 18);
+            defog_block_sizen_work[i] = (uint32_t)tmp;
+        }
     }
 }
 
@@ -9489,9 +9500,9 @@ static int tiziano_wdr_algorithm(void)
                 if (a1 == 0) {
                     v0_4 = t0_1; /* Default to input value */
                 } else if (v0_5 >= t0_1) {
-                    v0_4 = ((v0_5 - t0_1) * t6) / a1 + t0_1;
+                    v0_4 = ((v0_5 - t0_1) * t6) / (uint32_t)a1 + t0_1;
                 } else {
-                    v0_4 = t0_1 - ((t0_1 - v0_5) * t6) / a1;
+                    v0_4 = t0_1 - ((t0_1 - v0_5) * t6) / (uint32_t)a1;
                 }
             } else {
                 v0_4 = *((uint32_t*)v1);
@@ -9508,9 +9519,9 @@ static int tiziano_wdr_algorithm(void)
                 int32_t v0_2;
 
                 if (t5 >= t1) {
-                    v0_2 = ((t5 - t1) * t6) / a1 + t1;
+                    v0_2 = ((t5 - t1) * t6) / (uint32_t)a1 + t1;
                 } else {
-                    v0_2 = t1 - ((t1 - t5) * t6) / a1;
+                    v0_2 = t1 - ((t1 - t5) * t6) / (uint32_t)a1;
                 }
 
                 data_b16a8 = v0_2;
@@ -11009,10 +11020,13 @@ static void tiziano_ct_ccm_interpolation(uint32_t ct_value, uint32_t ct_threshol
             int32_t d = tiziano_ccm_d_now[i];
             int32_t t = tiziano_ccm_t_now[i];
             int32_t v;
-            if (d >= t)
-                v = (int32_t)(((int64_t)(d - t) * w) / DEN_DT) + t;
-            else
-                v = t - (int32_t)(((int64_t)(t - d) * w) / DEN_DT);
+            if (d >= t) {
+                int64_t tmp = (int64_t)(d - t) * w;
+                v = (int32_t)div64_s64(tmp, DEN_DT) + t;
+            } else {
+                int64_t tmp = (int64_t)(t - d) * w;
+                v = t - (int32_t)div64_s64(tmp, DEN_DT);
+            }
             ccm_parameter.data[i] = (uint32_t)v;
         }
         return;
@@ -11035,10 +11049,13 @@ static void tiziano_ct_ccm_interpolation(uint32_t ct_value, uint32_t ct_threshol
         int32_t a = tiziano_ccm_a_now[i];
         int32_t t = tiziano_ccm_t_now[i];
         int32_t v;
-        if (t >= a)
-            v = (int32_t)(((int64_t)(t - a) * w) / DEN_TA) + a;
-        else
-            v = a - (int32_t)(((int64_t)(a - t) * w) / DEN_TA);
+        if (t >= a) {
+            int64_t tmp = (int64_t)(t - a) * w;
+            v = (int32_t)div64_s64(tmp, DEN_TA) + a;
+        } else {
+            int64_t tmp = (int64_t)(a - t) * w;
+            v = a - (int32_t)div64_s64(tmp, DEN_TA);
+        }
         ccm_parameter.data[i] = (uint32_t)v;
     }
 }
@@ -12451,6 +12468,10 @@ int tisp_event_init(void)
         isp_irq_initialized = true;
     }
 
+    /* CRITICAL: Initialize event completion ONCE at system init */
+    init_completion(&tevent_info);
+    pr_info("tisp_event_init: Event completion initialized\n");
+
     pr_info("tisp_event_init: Event system initialized\n");
     return 0;
 }
@@ -12470,13 +12491,10 @@ int tisp_event_process(void)
 
     pr_info("tisp_event_process: Starting event processing loop\n");
 
-    /* Initialize completion if not already done */
-    static int tevent_initialized = 0;
-    if (!tevent_initialized) {
-        init_completion(&tevent_info);
-        tevent_initialized = 1;
-        pr_info("tisp_event_process: Event completion initialized\n");
-    }
+    /* CRITICAL FIX: Reinitialize completion before waiting to prevent deadlock
+     * Kernel 3.10 uses INIT_COMPLETION instead of reinit_completion
+     * Completion is initialized once in tisp_event_init() */
+    INIT_COMPLETION(tevent_info);
 
     /* Wait for event notification */
     ret = wait_for_completion_interruptible(&tevent_info);

@@ -4685,6 +4685,9 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     void __user *argp = (void __user *)arg;
     int ret = 0;
 
+    pr_info("*** tx_isp_unlocked_ioctl: ENTRY - pid=%d comm=%s cmd=0x%x arg=0x%lx ***\n",
+            current->pid, current->comm, cmd, arg);
+
     if (!isp_dev) {
         pr_err("ISP device not initialized\n");
         return -ENODEV;
@@ -5486,6 +5489,8 @@ int tx_isp_open(struct inode *inode, struct file *file)
     struct tx_isp_dev *isp = ourISPdev;
     int ret = 0;
 
+    pr_info("*** tx_isp_open: CALLED from pid=%d comm=%s ***\n", current->pid, current->comm);
+
     if (!isp) {
         pr_err("ISP device not initialized\n");
         return -ENODEV;
@@ -5504,7 +5509,7 @@ int tx_isp_open(struct inode *inode, struct file *file)
     isp->is_open = true;
     file->private_data = isp;
 
-    pr_info("ISP opened successfully\n");
+    pr_info("ISP opened successfully (refcnt=1)\n");
     return ret;
 }
 
