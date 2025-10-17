@@ -251,23 +251,8 @@ static int frame_chan_event(void *data)
     return 0;
 }
 
-/* Frame channel initialization/deinitialization */
-void tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan)
-{
-    pr_info("Deinitializing frame channel\n");
-
-    /* CRITICAL FIX: Check if channel and misc device are valid before deregistering */
-    if (!chan) {
-        pr_warn("tx_isp_frame_chan_deinit: NULL channel pointer\n");
-        return;
-    }
-
-    /* Only deregister if the misc device was successfully registered */
-    if (chan->active && chan->misc.minor != MISC_DYNAMIC_MINOR) {
-        misc_deregister(&chan->misc);
-        pr_info("Frame channel misc device deregistered\n");
-    }
-}
+/* Use tx_isp_frame_chan_deinit from tx_isp_core.c - declared here for reference */
+extern void tx_isp_frame_chan_deinit(struct tx_isp_frame_channel *chan);
 
 
 /* tx_isp_fs_probe - EXACT Binary Ninja reference implementation */

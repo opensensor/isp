@@ -23,7 +23,6 @@
 #include <linux/slab.h>
 
 #include <linux/ktime.h>
-#include <linux/timekeeping.h>
 #include <linux/version.h>
 
 #include <linux/netlink.h>
@@ -132,14 +131,11 @@ int tisp_netlink_event_set_cb(tisp_net_event_cb_t cb)
 }
 
 /* Create kernel netlink socket (protocol 0x17) */
-static struct sock* private_netlink_kernel_create(u32 proto)
+struct sock* private_netlink_kernel_create(struct net *net, int unit, struct netlink_kernel_cfg *cfg)
 {
-    struct netlink_kernel_cfg cfg = {
-        .input = netlink_rcv_msg,
-    };
-    if (proto != NETLINK_TISP)
-        pr_warn("tisp netlink: unexpected proto %u, using %u\n", proto, NETLINK_TISP);
-    tisp_nl_sock = netlink_kernel_create(&init_net, NETLINK_TISP, &cfg);
+    if (unit != NETLINK_TISP)
+        pr_warn("tisp netlink: unexpected proto %u, using %u\n", unit, NETLINK_TISP);
+    tisp_nl_sock = netlink_kernel_create(net, NETLINK_TISP, cfg);
     return tisp_nl_sock;
 }
 
@@ -158,9 +154,12 @@ static int private_netlink_unicast_skb(struct sk_buff *skb)
 /* Public wrappers matching names seen in OEM */
 int tisp_netlink_init(void)
 {
+    struct netlink_kernel_cfg cfg = {
+        .input = netlink_rcv_msg,
+    };
     if (tisp_nl_sock)
         return 0;
-    if (!private_netlink_kernel_create(NETLINK_TISP))
+    if (!private_netlink_kernel_create(&init_net, NETLINK_TISP, &cfg))
         return -ENOMEM;
     pr_info("tisp netlink: initialized (proto=%u)\n", NETLINK_TISP);
     return 0;
@@ -2541,9 +2540,6 @@ reset_state:
      * 3. Second ON: Initialize again
      *
      */
-
-    return 0;
-}
 
 /* RACE CONDITION SAFE: Global initialization lock for subdev array access */
 static DEFINE_MUTEX(subdev_init_lock);
