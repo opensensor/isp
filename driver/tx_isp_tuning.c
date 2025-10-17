@@ -881,6 +881,33 @@ static inline void adr_pack_pairs(uint32_t *dst, int dst_cap, int *w, const uint
     }
 }
 
+/* Forward externs for ADR arrays used by LUT builder (defined later in this file) */
+extern uint32_t param_adr_weight_20_lut_array[32];
+extern uint32_t param_adr_weight_02_lut_array[32];
+extern uint32_t param_adr_weight_12_lut_array[32];
+extern uint32_t param_adr_weight_22_lut_array[32];
+extern uint32_t param_adr_weight_21_lut_array[32];
+
+extern uint32_t adr_map_mode[0x2c/4];
+extern uint32_t adr_ctc_map2cut_y[0x24/4];
+extern uint32_t adr_light_end[0x74/4];
+extern uint32_t adr_block_light[0x3c/4];
+extern uint32_t adr_mapb1_list[0x24/4];
+extern uint32_t adr_mapb2_list[0x24/4];
+extern uint32_t adr_mapb3_list[0x24/4];
+extern uint32_t adr_mapb4_list[0x24/4];
+extern uint32_t adr_blp2_list[0x24/4];
+
+extern uint32_t adr_map_mode_wdr[0x2c/4];
+extern uint32_t adr_ctc_map2cut_y_wdr[0x24/4];
+extern uint32_t adr_light_end_wdr[0x74/4];
+extern uint32_t adr_block_light_wdr[0x3c/4];
+extern uint32_t adr_mapb1_list_wdr[0x24/4];
+extern uint32_t adr_mapb2_list_wdr[0x24/4];
+extern uint32_t adr_mapb3_list_wdr[0x24/4];
+extern uint32_t adr_mapb4_list_wdr[0x24/4];
+extern uint32_t adr_blp2_list_wdr[0x24/4];
+
 /* Build ADR LUT payload per HLIL-style map_kneepoint_y concatenation.
  * We assemble a single linear sequence of 16-bit values across all blocks in order,
  * then pack globally into 32-bit words (hi16:lo16), so odd block tails pair with
@@ -891,47 +918,51 @@ static int tisp_adr_build_lut_payload(uint32_t *out_words, int out_cap)
     uint16_t vals[ADR_LUT_WORD_COUNT * 2];
     int n = 0; /* count of 16-bit lanes */
 
-    /* Helper to append lower-16 lanes from a u32 array */
-    #define APPEND_LANES(arr, count) do { \
-        for (int _i = 0; _i < (count); ++_i) { \
-            if (n < (int)(ADR_LUT_WORD_COUNT * 2)) \
-                vals[n++] = (uint16_t)((arr)[_i] & 0xFFFF); \
-        } \
-    } while (0)
-
-    /* 1) Map mode head (first 6 ints) to reach exact 264 lanes with HLIL ordering */
-    const uint32_t *map_mode = adr_wdr_en ? adr_map_mode_wdr : adr_map_mode; /* 0x2c/4 = 11; HLIL uses subset */
-    APPEND_LANES(map_mode, 6);
-
-    /* 2) 5x weight LUTs (32 each) */
-    APPEND_LANES(param_adr_weight_20_lut_array, (int)(sizeof(param_adr_weight_20_lut_array)/4));
-    APPEND_LANES(param_adr_weight_02_lut_array, (int)(sizeof(param_adr_weight_02_lut_array)/4));
-    APPEND_LANES(param_adr_weight_12_lut_array, (int)(sizeof(param_adr_weight_12_lut_array)/4));
-    APPEND_LANES(param_adr_weight_22_lut_array, (int)(sizeof(param_adr_weight_22_lut_array)/4));
-    APPEND_LANES(param_adr_weight_21_lut_array, (int)(sizeof(param_adr_weight_21_lut_array)/4));
-
-    /* 3) Banked lists (WDR-aware) */
-    const uint32_t *mapb1 = adr_wdr_en ? adr_mapb1_list_wdr : adr_mapb1_list;
-    const uint32_t *mapb2 = adr_wdr_en ? adr_mapb2_list_wdr : adr_mapb2_list;
-    const uint32_t *mapb3 = adr_wdr_en ? adr_mapb3_list_wdr : adr_mapb3_list;
-    const uint32_t *mapb4 = adr_wdr_en ? adr_mapb4_list_wdr : adr_mapb4_list;
+    /* WDR-aware sources (declare before any statements to satisfy C90) */
+    const uint32_t *map_mode      = adr_wdr_en ? adr_map_mode_wdr      : adr_map_mode;
+    const uint32_t *mapb1         = adr_wdr_en ? adr_mapb1_list_wdr    : adr_mapb1_list;
+    const uint32_t *mapb2         = adr_wdr_en ? adr_mapb2_list_wdr    : adr_mapb2_list;
+    const uint32_t *mapb3         = adr_wdr_en ? adr_mapb3_list_wdr    : adr_mapb3_list;
+    const uint32_t *mapb4         = adr_wdr_en ? adr_mapb4_list_wdr    : adr_mapb4_list;
     const uint32_t *ctc_map2cut_y = adr_wdr_en ? adr_ctc_map2cut_y_wdr : adr_ctc_map2cut_y;
     const uint32_t *light_end     = adr_wdr_en ? adr_light_end_wdr     : adr_light_end;
     const uint32_t *block_light   = adr_wdr_en ? adr_block_light_wdr   : adr_block_light;
     const uint32_t *blp2_list     = adr_wdr_en ? adr_blp2_list_wdr     : adr_blp2_list;
 
-    APPEND_LANES(mapb1,      (int)(sizeof(adr_mapb1_list)/4)); /* 9 */
-    APPEND_LANES(mapb2,      (int)(sizeof(adr_mapb2_list)/4)); /* 9 */
-    APPEND_LANES(mapb3,      (int)(sizeof(adr_mapb3_list)/4)); /* 9 */
-    APPEND_LANES(mapb4,      (int)(sizeof(adr_mapb4_list)/4)); /* 9 */
-    APPEND_LANES(ctc_map2cut_y, (int)(sizeof(adr_ctc_map2cut_y)/4)); /* 9 */
-    APPEND_LANES(light_end,     (int)(sizeof(adr_light_end)/4));     /* 29 */
-    APPEND_LANES(block_light,   (int)(sizeof(adr_block_light)/4));   /* 15 */
-    APPEND_LANES(blp2_list,     (int)(sizeof(adr_blp2_list)/4));     /* 9 */
+    /* Helper to append lower-16 lanes from a u32 array */
+    #define APPEND_LANES(arr, count) do { \
+        int _limit = (count); \
+        int _i; \
+        for (_i = 0; _i < _limit; ++_i) { \
+            if (n < (int)(ADR_LUT_WORD_COUNT * 2)) \
+                vals[n++] = (uint16_t)((arr)[_i] & 0xFFFF); \
+        } \
+    } while (0)
 
-    /* 3) Pack globally into words (hi:lo) */
+    /* 1) Map mode head (first 6 ints) */
+    APPEND_LANES(map_mode, 6);
+
+    /* 2) 5x weight LUTs (32 each) */
+    APPEND_LANES(param_adr_weight_20_lut_array, 32);
+    APPEND_LANES(param_adr_weight_02_lut_array, 32);
+    APPEND_LANES(param_adr_weight_12_lut_array, 32);
+    APPEND_LANES(param_adr_weight_22_lut_array, 32);
+    APPEND_LANES(param_adr_weight_21_lut_array, 32);
+
+    /* 3) Banked lists (WDR-aware) with fixed counts per HLIL */
+    APPEND_LANES(mapb1, 9);
+    APPEND_LANES(mapb2, 9);
+    APPEND_LANES(mapb3, 9);
+    APPEND_LANES(mapb4, 9);
+    APPEND_LANES(ctc_map2cut_y, 9);
+    APPEND_LANES(light_end, 29);
+    APPEND_LANES(block_light, 15);
+    APPEND_LANES(blp2_list, 9);
+
+    /* 4) Pack globally into words (hi:lo) */
     int words = 0;
-    for (int i = 0; i < out_cap; ++i) {
+    int i;
+    for (i = 0; i < out_cap; ++i) {
         uint16_t lo = (2*i + 0 < n) ? vals[2*i + 0] : 0;
         uint16_t hi = (2*i + 1 < n) ? vals[2*i + 1] : 0;
         out_words[i] = PACK16_U32(hi, lo);
