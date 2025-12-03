@@ -1212,10 +1212,12 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
         /* vic_start_ok flag setting moved to END of function after CSI PHY setup */
 
-        /* Enable VIC - Binary Ninja 000107d4 */
-        pr_info("*** VIC UNLOCK: Enabling VIC (writing 1 to register 0x0) ***\n");
-        writel(1, vic_regs + 0x0);
-        pr_info("*** VIC UNLOCK: VIC enabled, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
+        /* CRITICAL FIX: Do NOT enable VIC here (write 1 to register 0x0) */
+        /* VIC[0x0] = 1 will be written by ispvic_frame_channel_s_stream AFTER buffers are programmed */
+        /* This prevents control limit error (0x200000) from VIC running without buffers */
+        pr_info("*** VIC UNLOCK: DEFERRED VIC enable to ispvic_frame_channel_s_stream ***\n");
+        pr_info("*** VIC UNLOCK: NOT writing 1 to VIC[0x0] - will be done after buffer setup ***\n");
+        pr_info("*** VIC UNLOCK: Current register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
 
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_MIPI) {  /* MIPI = 1 in our enum */
         /* MIPI interface - Binary Ninja 000107ec-00010b04 */
@@ -1280,7 +1282,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x100010, vic_regs + 0x1a4);  /* Binary Ninja exact value */
         pr_info("*** BINARY NINJA: reg 0x1a4 = 0x100010 (control) ***\n");
 
-        /* 9. BINARY NINJA EXACT: Hardware enable sequence */
+        /* 9. BINARY NINJA EXACT: Hardware unlock sequence (but NOT final enable) */
+        /* CRITICAL FIX: Do the unlock sequence (2->4->wait) but NOT the final enable (1) */
+        /* The final VIC[0x0] = 1 will be done by ispvic_frame_channel_s_stream AFTER buffers are programmed */
         writel(0x2, vic_regs + 0x0);  /* Pre-enable */
         wmb();
         writel(0x4, vic_regs + 0x0);  /* Wait state */
@@ -1293,9 +1297,11 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             udelay(1);
         }
 
-        writel(0x1, vic_regs + 0x0);  /* Final enable */
-        wmb();
-        pr_info("*** BINARY NINJA EXACT: Hardware sequence 2->4->wait(%d us)->1 ***\n", wait_count);
+        /* CRITICAL FIX: Do NOT write VIC[0x0] = 1 here */
+        /* VIC enable will be done by ispvic_frame_channel_s_stream AFTER buffers are programmed */
+        /* This prevents control limit error (0x200000) from VIC running without buffers */
+        pr_info("*** BINARY NINJA: Hardware unlock sequence 2->4->wait(%d us) - DEFERRED final enable ***\n", wait_count);
+        pr_info("*** VIC UNLOCK: NOT writing 1 to VIC[0x0] - will be done after buffer setup ***\n");
 
         /* Format detection logic - Binary Ninja 000107f8-00010a04 */
         u32 mipi_config;
@@ -2800,16 +2806,32 @@ int ispvic_frame_channel_s_stream(void* arg1, int32_t arg2)
             }
 
             /* CRITICAL DEBUG: Read back what we just wrote to verify */
-            u32 readback_300 = readl(vic_base + 0x300);
-            u32 readback_count = (readback_300 >> 16) & 0xF;
-            pr_info("*** READBACK: VIC[0x300]=0x%x, buffer_count_field=%d ***\n", readback_300, readback_count);
+            {
+                u32 readback_300 = readl(vic_base + 0x300);
+                u32 readback_count = (readback_300 >> 16) & 0xF;
+                pr_info("*** READBACK: VIC[0x300]=0x%x, buffer_count_field=%d ***\n", readback_300, readback_count);
+            }
 
-            /* CRITICAL FIX FROM BINARY NINJA: Reference driver does NOT write to VIC[0x0] here! */
-            /* Writing to VIC[0x0] clears the buffer count field in register 0x300 */
-            /* The reference driver only writes to 0x308, 0x304, 0x310, 0x314, then 0x300 */
-            /* VIC state transitions happen elsewhere, not during stream ON */
-            pr_info("*** BINARY NINJA FIX: Skipping VIC[0x0] write - reference driver doesn't do it ***\n");
-            pr_info("*** VIC state should already be correct from earlier initialization ***\n");
+            /* CRITICAL FIX: NOW enable VIC hardware after buffers are programmed */
+            /* VIC[0x0] = 1 was deferred from tx_isp_vic_start to here */
+            /* This ensures VIC has valid buffer addresses before starting DMA */
+            {
+                u32 vic_state_now = readl(vic_base + 0x0);
+                pr_info("*** VIC ENABLE: Current VIC[0x0]=0x%x, about to enable ***\n", vic_state_now);
+
+                if (vic_state_now != 1) {
+                    writel(1, vic_base + 0x0);
+                    wmb();
+                    pr_info("*** VIC ENABLE: Wrote 1 to VIC[0x0] - VIC hardware now running with buffers ***\n");
+                } else {
+                    pr_info("*** VIC ENABLE: VIC[0x0] already 1, skipping write ***\n");
+                }
+
+                /* Verify final state */
+                u32 vic_state_after = readl(vic_base + 0x0);
+                u32 final_300 = readl(vic_base + 0x300);
+                pr_info("*** VIC FINAL STATE: VIC[0x0]=0x%x, VIC[0x300]=0x%x ***\n", vic_state_after, final_300);
+            }
         }
 
         /* Binary Ninja EXACT: *($s0 + 0x210) = 1 */

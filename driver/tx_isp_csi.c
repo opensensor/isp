@@ -684,6 +684,7 @@ struct tx_isp_subdev_sensor_ops csi_sensor_ops = {
 
 /* CSI internal operations - EXACT Binary Ninja implementation */
 struct tx_isp_subdev_internal_ops csi_internal_ops = {
+    .activate_module = tx_isp_csi_activate_subdev,  /* CRITICAL: Must activate CSI (state 1→2) BEFORE PHY init! */
     .slake_module = tx_isp_csi_slake_subdev,
 };
 
@@ -824,31 +825,26 @@ int tx_isp_csi_probe(struct platform_device *pdev)
     }
 
     /* ============================================================================
-     * CRITICAL FIX: Map MIPI PHY registers separately at 0x10022000
-     * The kernel source (tx-isp-csi.c) shows TWO register mappings:
-     *   1. sd.base - CSI core registers (N_LANES, PHY_SHUTDOWNZ, etc.)
-     *   2. phy_base - PHY registers at MIPI_PHY_IOBASE (PHY_CRTL0, CK_LANE_CONFIG, etc.)
+     * T31 BINARY ANALYSIS (via smart-diff MCP):
      *
-     * The PHY registers are where the 0x3f lane enable mask MUST be written!
+     * The T31 binary shows:
+     *   - tx_isp_subdev_init maps 0x10022000 to sd.base (offset 0xb8)
+     *   - Probe then maps 0x10022000 AGAIN to offset 0x13c for PHY
+     *   - csi_core_ops_init uses BOTH:
+     *     * offset 0xb8 for CSI core writes (PHY_SHUTDOWNZ at +0x08, etc)
+     *     * offset 0x13c for PHY writes (PHY_CRTL0 at +0x00, CK_LANE_CONFIG at +0x128)
+     *
+     * BUT: The platform device only has ONE resource at 0x10022000!
+     * tx_isp_subdev_init already claims it, so we can't request it again.
+     *
+     * SOLUTION: Use csi_regs (sd.base) as phy_regs - they're the SAME address!
+     * The T31 just stores the same pointer in two places in the struct.
      * ============================================================================ */
-    phy_res = private_request_mem_region(MIPI_PHY_IOBASE, MIPI_PHY_SIZE, "mipi-phy");
-    if (!phy_res) {
-        pr_err("*** CSI PROBE: Failed to request MIPI PHY memory region at 0x%x ***\n", MIPI_PHY_IOBASE);
-        /* Continue without PHY - may work for DVP mode */
-        csi_dev->phy_regs = NULL;
-        csi_dev->phy_res = NULL;
-    } else {
-        csi_dev->phy_regs = private_ioremap(phy_res->start, phy_res->end - phy_res->start + 1);
-        if (!csi_dev->phy_regs) {
-            pr_err("*** CSI PROBE: Failed to ioremap MIPI PHY registers ***\n");
-            private_release_mem_region(phy_res->start, phy_res->end - phy_res->start + 1);
-            csi_dev->phy_res = NULL;
-        } else {
-            csi_dev->phy_res = phy_res;
-            pr_info("*** CSI PROBE: MIPI PHY regs mapped at %p (phys 0x%x) ***\n",
-                    csi_dev->phy_regs, MIPI_PHY_IOBASE);
-        }
-    }
+    csi_dev->phy_regs = csi_dev->csi_regs;  /* Same physical address 0x10022000 */
+    csi_dev->phy_res = NULL;  /* No separate resource - already claimed by subdev_init */
+
+    pr_info("*** CSI PROBE: PHY regs = CSI regs (same address 0x10022000) ***\n");
+    pr_info("*** CSI PROBE: csi_regs=%p, phy_regs=%p ***\n", csi_dev->csi_regs, csi_dev->phy_regs);
 
     tx_isp_set_subdev_nodeops(&csi_dev->sd, (struct file_operations *)&isp_csi_fops);
     private_raw_mutex_init(&csi_dev->mlock, "not support the gpio mode!\n", 0);
@@ -899,14 +895,9 @@ int tx_isp_csi_remove(struct platform_device *pdev)
 
     private_platform_set_drvdata(pdev, NULL);
 
-    /* Release PHY registers (separately mapped at 0x10022000) */
-    if (csi_dev->phy_regs) {
-        private_iounmap(csi_dev->phy_regs);
-        csi_dev->phy_regs = NULL;
-    }
-    if (phy_res) {
-        private_release_mem_region(phy_res->start, resource_size(phy_res));
-    }
+    /* PHY regs point to same address as csi_regs - no separate release needed */
+    csi_dev->phy_regs = NULL;
+    /* phy_res is NULL since we didn't request a separate region */
 
     /* CSI core registers are released by tx_isp_subdev_deinit */
     tx_isp_subdev_deinit(&csi_dev->sd);

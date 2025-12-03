@@ -585,7 +585,7 @@ extern int sensor_init(struct tx_isp_dev *isp_dev);
 /* Forward declarations for subdev ops structures */
 extern struct tx_isp_subdev_ops vic_subdev_ops;
 extern struct tx_isp_subdev_ops core_subdev_ops;  /* ISP core subdev ops */
-static struct tx_isp_subdev_ops csi_subdev_ops;
+extern struct tx_isp_subdev_ops csi_subdev_ops;  /* CRITICAL FIX: Use extern, not static - defined in tx_isp_csi.c */
 
 /* Reference driver function declarations - Binary Ninja exact names */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);  /* FIXED: Correct signature to match tx_isp_vic.c */
@@ -2137,6 +2137,15 @@ int tx_isp_video_link_stream(struct tx_isp_dev *arg1, int arg2)
         s4 = arg1->subdevs;
         for (i = 0; i != 0x10; i++) {
             struct tx_isp_subdev *subdev = s4[i];
+            /* DEBUG: Check what's happening with each subdev slot */
+            if (subdev != NULL) {
+                pr_info("*** DEBUG subdev[%d]: ptr=%p, ops=%p, ops->internal=%p ***\n",
+                        i, subdev, subdev->ops, subdev->ops ? subdev->ops->internal : NULL);
+                if (subdev->ops && subdev->ops->internal) {
+                    pr_info("*** DEBUG subdev[%d]: activate_module=%p ***\n",
+                            i, subdev->ops->internal->activate_module);
+                }
+            }
             if (subdev != NULL && subdev->ops && subdev->ops->internal && subdev->ops->internal->activate_module) {
                 pr_info("*** tx_isp_video_link_stream: Calling activate_module on subdev[%d] ***\n", i);
                 result = subdev->ops->internal->activate_module(subdev);
@@ -2234,6 +2243,37 @@ int tx_isp_video_link_stream(struct tx_isp_dev *arg1, int arg2)
 
         /* Binary Ninja: $s4 = &$s4[1] */
         s4 = &s4[1];
+    }
+
+    /* CRITICAL FIX: Do NOT call ispvic_frame_channel_s_stream here!
+     *
+     * The OEM libimp sequence is:
+     * 1. IMP_ISP_EnableSensor → ISP STREAMON, LINK_SETUP, LINK_STREAM_ON (this function)
+     * 2. IMP_FrameSource_EnableChn → VBM pool setup, REQBUFS, QBUF, frame channel STREAMON
+     *
+     * At this point (LINK_STREAM_ON), the VBM buffers haven't been allocated yet!
+     * REQBUFS happens AFTER this function returns.
+     *
+     * The frame channel STREAMON (via 0x3000003 event) will call ispvic_frame_channel_s_stream
+     * when the proper buffers are ready.
+     *
+     * Previous code was calling ispvic_frame_channel_s_stream(1) here with early-seeded
+     * buffers from SET_BUF, which caused:
+     * 1. stream_state set to 1 with only 1 buffer
+     * 2. Frame channel STREAMON early-returns because stream_state already 1
+     * 3. VIC control limit error (0x200000) because only 1 buffer was programmed
+     */
+    if (arg2 == 1) {  /* Stream ON */
+        pr_info("*** tx_isp_video_link_stream: Stream ON - NOT calling ispvic_frame_channel_s_stream ***\n");
+        pr_info("*** tx_isp_video_link_stream: Buffers will be programmed by frame channel STREAMON ***\n");
+
+        /* Just log the current VBM state for debugging */
+        {
+            extern struct frame_channel_device frame_channels[];
+            struct tx_isp_channel_state *state = &frame_channels[0].state;
+            pr_info("*** tx_isp_video_link_stream: VBM state - vbm_addrs=%p, vbm_count=%d ***\n",
+                   state->vbm_buffer_addresses, state->vbm_buffer_count);
+        }
     }
 
     /* Binary Ninja: return 0 */
@@ -5809,20 +5849,49 @@ struct tx_isp_event_handler_table {
     int (*event_handler)(void *sd, int event_type, void *data);  /* +0x1c: Function pointer */
 };
 
-/* Default event handler implementation */
+/* Default event handler implementation - CRITICAL FIX: Route events to VIC */
 static int default_event_handler(void *sd, int event_type, void *data)
 {
-    pr_debug("default_event_handler: sd=%p, event=0x%x, data=%p\n", sd, event_type, data);
+    struct tx_isp_subdev *subdev = (struct tx_isp_subdev *)sd;
+    int result = 0;
+
+    pr_info("default_event_handler: sd=%p, event=0x%x, data=%p\n", sd, event_type, data);
 
     switch (event_type) {
-        case 0x3000005:  /* Buffer enqueue event */
-            pr_debug("default_event_handler: Buffer enqueue event\n");
-            return 0;
-        case 0x3000008:  /* Buffer QBUF event */
-            pr_debug("default_event_handler: Buffer QBUF event\n");
-            return 0;
+        case 0x3000005:  /* TX_ISP_EVENT_BUFFER_ENQUEUE - CRITICAL: Route to VIC */
+            pr_info("default_event_handler: BUFFER_ENQUEUE (0x3000005) - routing to vic_core_ops_ioctl\n");
+            /* CRITICAL FIX: Actually call VIC to program buffer address! */
+            if (ourISPdev && ourISPdev->vic_dev) {
+                result = vic_core_ops_ioctl(&ourISPdev->vic_dev->sd, 0x3000005, data);
+                pr_info("default_event_handler: vic_core_ops_ioctl(0x3000005) returned %d\n", result);
+            } else {
+                pr_err("default_event_handler: No VIC device available!\n");
+                result = -ENODEV;
+            }
+            return result;
+        case 0x3000008:  /* TX_ISP_EVENT_BUFFER_COUNT - Route to VIC */
+            pr_info("default_event_handler: BUFFER_COUNT (0x3000008) - routing to vic_core_ops_ioctl\n");
+            if (ourISPdev && ourISPdev->vic_dev) {
+                result = vic_core_ops_ioctl(&ourISPdev->vic_dev->sd, 0x3000008, data);
+                pr_info("default_event_handler: vic_core_ops_ioctl(0x3000008) returned %d\n", result);
+            }
+            return result;
+        case 0x3000003:  /* TX_ISP_EVENT_FRAME_STREAMON - Route to VIC */
+            pr_info("default_event_handler: FRAME_STREAMON (0x3000003) - routing to vic_core_ops_ioctl\n");
+            if (ourISPdev && ourISPdev->vic_dev) {
+                result = vic_core_ops_ioctl(&ourISPdev->vic_dev->sd, 0x3000003, data);
+                pr_info("default_event_handler: vic_core_ops_ioctl(0x3000003) returned %d\n", result);
+            }
+            return result;
+        case 0x3000009:  /* TX_ISP_EVENT_PIPO - Route to VIC */
+            pr_info("default_event_handler: PIPO (0x3000009) - routing to vic_core_ops_ioctl\n");
+            if (ourISPdev && ourISPdev->vic_dev) {
+                result = vic_core_ops_ioctl(&ourISPdev->vic_dev->sd, 0x3000009, data);
+                pr_info("default_event_handler: vic_core_ops_ioctl(0x3000009) returned %d\n", result);
+            }
+            return result;
         default:
-            pr_debug("default_event_handler: Unknown event 0x%x\n", event_type);
+            pr_debug("default_event_handler: Unknown event 0x%x - passing through\n", event_type);
             return 0;
     }
 }
