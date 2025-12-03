@@ -7,7 +7,7 @@ set -e  # Exit on any error
 
 export CROSS_COMPILE=mipsel-linux-
 export KDIR=/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/
-export PATH=/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/per-package/toolchain-external-custom/host/bin/:$PATH
+export PATH=/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/host/bin/:$PATH
 
 
 # Configuration

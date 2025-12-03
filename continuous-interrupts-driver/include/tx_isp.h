@@ -83,31 +83,44 @@ struct tx_isp_platform_data {
     struct platform_device **devices;  /* Array of platform device pointers */
 } __attribute__((packed));
 
-// CSI device structure for MIPI interface (based on Binary Ninja analysis)
-struct tx_isp_csi_device {
-    struct tx_isp_subdev sd;        // Base subdev at offset 0
-    struct clk *csi_clk;           // CSI clock
-    int state;                     // 1=init, 2=active, 3=streaming_off, 4=streaming_on
-    struct mutex mlock;            // Mutex for state changes
-    int interface_type;            // 1=MIPI interface
-    int lanes;                     // Number of MIPI lanes
-
-    char device_name[32];     // 0x00: Device name
-    struct device *dev;       // Device pointer
-    uint32_t offset_10;       // 0x10: Referenced in init
-    struct IspModule *module_info;  // Module info pointer
-
-    // CSI register access - changed to single pointer like VIC
-    void __iomem *cpm_regs;   // CPM registers
-    void __iomem *phy_regs;   // MIPI PHY registers
-    void __iomem *csi_regs;   // Single pointer to mapped csi regs
-    struct resource *phy_res;  // PHY memory resource
-
-    // State management
-    struct clk *clk;
-    struct mutex mutex;       // Synchronization
-    spinlock_t lock;         // Protect register access
+/* ============================================================================
+ * Video Input Structure - from kernel source tx-isp-common.h
+ * ============================================================================ */
+struct tx_isp_video_in {
+    struct v4l2_mbus_framefmt mbus;
+    unsigned int mbus_change;
+    struct tx_isp_sensor_attribute *attr;
+    unsigned int vi_max_width;   /* Max width of sensor output setting */
+    unsigned int vi_max_height;  /* Max height of sensor output setting */
+    unsigned int fps;
+    int grp_id;
 };
+
+/* ============================================================================
+ * CSI Device Structure - CORRECTED from kernel source tx-isp-csi.h
+ *
+ * Key members from kernel source:
+ *   - sd: Base subdev structure
+ *   - vin: Video input info (contains sensor attributes)
+ *   - phy_base: MIPI PHY register base
+ *   - phy_res: PHY memory resource
+ *   - state: Module state (TX_ISP_MODULE_* enum)
+ *   - mlock: Mutex for state protection
+ * ============================================================================ */
+struct tx_isp_csi_device {
+    struct tx_isp_subdev sd;           /* Base subdev at offset 0 */
+    struct tx_isp_video_in vin;        /* Video input info with sensor attributes */
+    void __iomem *phy_base;            /* MIPI PHY register base (0x10022000) */
+    struct resource *phy_res;          /* PHY memory resource */
+    int state;                         /* TX_ISP_MODULE_* state */
+    struct mutex mlock;                /* Mutex for state changes */
+
+    /* Legacy compatibility - csi_regs points to sd.base (CSI core regs) */
+    void __iomem *csi_regs;            /* Alias for sd.base for legacy code */
+};
+
+/* Helper macro to get CSI device from subdev */
+#define sd_to_csi_device(sd) container_of(sd, struct tx_isp_csi_device, sd)
 
 /* Core ISP device structure - Global ISP device management only */
 /* Event callback structure for Binary Ninja compatibility */
