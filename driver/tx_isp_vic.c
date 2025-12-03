@@ -1210,14 +1210,11 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
         pr_info("*** VIC UNLOCK: Unlock sequence completed, register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
 
-        /* vic_start_ok flag setting moved to END of function after CSI PHY setup */
-
-        /* CRITICAL FIX: Do NOT enable VIC here (write 1 to register 0x0) */
-        /* VIC[0x0] = 1 will be written by ispvic_frame_channel_s_stream AFTER buffers are programmed */
-        /* This prevents control limit error (0x200000) from VIC running without buffers */
-        pr_info("*** VIC UNLOCK: DEFERRED VIC enable to ispvic_frame_channel_s_stream ***\n");
-        pr_info("*** VIC UNLOCK: NOT writing 1 to VIC[0x0] - will be done after buffer setup ***\n");
-        pr_info("*** VIC UNLOCK: Current register 0x0 = 0x%08x ***\n", readl(vic_regs + 0x0));
+        /* BINARY NINJA EXACT (label_7d4): Enable VIC hardware NOW */
+        /* This is what OEM does at the end of DVP unlock sequence */
+        writel(0x1, vic_regs + 0x0);
+        wmb();
+        pr_info("*** VIC ENABLE (DVP): Wrote 1 to VIC[0x0] - VIC hardware now running (OEM label_7d4) ***\n");
 
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_MIPI) {  /* MIPI = 1 in our enum */
         /* MIPI interface - Binary Ninja 000107ec-00010b04 */
@@ -1274,34 +1271,43 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(0x10, vic_regs + 0x1b0);
         pr_info("*** BINARY NINJA: frame mode regs configured (0x4440, 0x4440, 0x10) ***\n");
 
-        /* 7. Register 0x1a0 - Additional frame config */
-        writel(0x0, vic_regs + 0x1a0);  /* Binary Ninja: frame config */
-        pr_info("*** BINARY NINJA: reg 0x1a0 = 0x0 (frame config) ***\n");
-
-        /* 8. Register 0x1a4 - Control register */
+        /* 7. Register 0x1a4 - Control register (BEFORE unlock sequence) */
         writel(0x100010, vic_regs + 0x1a4);  /* Binary Ninja exact value */
         pr_info("*** BINARY NINJA: reg 0x1a4 = 0x100010 (control) ***\n");
 
-        /* 9. BINARY NINJA EXACT: Hardware unlock sequence (but NOT final enable) */
-        /* CRITICAL FIX: Do the unlock sequence (2->4->wait) but NOT the final enable (1) */
-        /* The final VIC[0x0] = 1 will be done by ispvic_frame_channel_s_stream AFTER buffers are programmed */
+        /* 8. BINARY NINJA EXACT: Hardware unlock sequence (label_7d4 path) */
+        /* OEM sequence: VIC[0x0] = 2, VIC[0x0] = 4, VIC[0x1a0] = frame_config, wait for 0, VIC[0x0] = 1 */
         writel(0x2, vic_regs + 0x0);  /* Pre-enable */
         wmb();
         writel(0x4, vic_regs + 0x0);  /* Wait state */
         wmb();
 
+        /* OEM writes 0x1a0 AFTER 2,4 but BEFORE waiting for 0 */
+        /* Binary Ninja: *(*(arg1 + 0xb8) + 0x1a0) = *($v1_27 + 0x74) << 4 | *($v1_27 + 0x78) */
+        /* This is (frame_mode << 4) | frame_type - use 0 for linear mode */
+        writel(0x0, vic_regs + 0x1a0);
+        wmb();
+        pr_info("*** BINARY NINJA: reg 0x1a0 = 0x0 (frame config - written AFTER 2,4 per OEM) ***\n");
+
         /* Wait for hardware ready (Binary Ninja: while (*$v1_30 != 0) nop) */
+        /* OEM spins forever - we add a timeout but continue anyway */
         u32 wait_count = 0;
-        while ((readl(vic_regs + 0x0) != 0) && (wait_count < 1000)) {
+        while ((readl(vic_regs + 0x0) != 0) && (wait_count < 10000)) {
             wait_count++;
             udelay(1);
         }
 
-        /* CRITICAL FIX: Do NOT write VIC[0x0] = 1 here */
-        /* VIC enable will be done by ispvic_frame_channel_s_stream AFTER buffers are programmed */
-        /* This prevents control limit error (0x200000) from VIC running without buffers */
-        pr_info("*** BINARY NINJA: Hardware unlock sequence 2->4->wait(%d us) - DEFERRED final enable ***\n", wait_count);
-        pr_info("*** VIC UNLOCK: NOT writing 1 to VIC[0x0] - will be done after buffer setup ***\n");
+        if (wait_count >= 10000) {
+            pr_warn("*** VIC UNLOCK: Timeout waiting for VIC[0x0]==0 (stuck at 0x%x), continuing anyway ***\n",
+                    readl(vic_regs + 0x0));
+        }
+        pr_info("*** BINARY NINJA: Hardware unlock sequence 2->4->0x1a0->wait(%d us) ***\n", wait_count);
+
+        /* BINARY NINJA EXACT (label_7d4): *$v0_47 = 1 - Enable VIC hardware NOW */
+        /* This is EXACTLY what OEM does after the unlock sequence completes */
+        writel(0x1, vic_regs + 0x0);
+        wmb();
+        pr_info("*** VIC ENABLE: Wrote 1 to VIC[0x0] - VIC hardware now running (OEM label_7d4) ***\n");
 
         /* Format detection logic - Binary Ninja 000107f8-00010a04 */
         u32 mipi_config;
@@ -2904,8 +2910,8 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
         if (current_state != 4) {
             pr_info("*** vic_core_s_stream: EXACT Binary Ninja - State != 4, calling VIC start sequence ***\n");
 
-            /* SKIP disabling kernel IRQ before VIC start to avoid missing first frame */
-            pr_info("*** vic_core_s_stream: SKIPPING tx_vic_disable_irq before VIC start to preserve first frame IRQ ***\n");
+            /* Binary Ninja EXACT: tx_vic_disable_irq() */
+            tx_vic_disable_irq(vic_dev);
 
             /* Binary Ninja: int32_t $v0_1 = tx_isp_vic_start($s1_1) */
             ret = tx_isp_vic_start(vic_dev);
@@ -2913,191 +2919,31 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
                 pr_err("*** vic_core_s_stream: tx_isp_vic_start FAILED: %d ***\n", ret);
                 return ret;
             }
-            /* CRITICAL FIX: Binary Ninja shows vic_core_s_stream does NOT call ispvic_frame_channel_qbuf */
-            /* Buffer addresses are written by userspace QBUF calls, not during STREAMON */
-            pr_info("*** vic_core_s_stream: MDMA started (Binary Ninja EXACT - no qbuf calls) ***\n");
 
-            /* Guarded: Clear ISP core VIC status and re-assert gate so next framedone can assert HW IRQ */
-            do {
-                struct tx_isp_dev *ispd = ourISPdev;
-                void __iomem *core = NULL;
-                if (ispd && ispd->core_dev && ispd->core_dev->core_regs)
-                    core = ispd->core_dev->core_regs;
-                else if (ispd && ispd->core_regs)
-                    core = ispd->core_regs;
-                if (core) {
-                    /* W1C clear any latched framedone bits first */
-                    writel(0x1, core + 0x9a70);
-                    writel(0x1, core + 0x9a7c);
-                    wmb();
+            /* CRITICAL: Reset stream_state so ispvic_frame_channel_s_stream performs MDMA enable */
+            vic_dev->stream_state = 0;
 
-                    /* Mirror good-things minimal core VIC route init using dynamic stride */
-                    do {
-                        u32 w = 0, h = 0, stride = 0;
-                        get_cached_sensor_dimensions(&w, &h);
-                        if (w == 0) w = 1280; /* safe fallback */
-                        stride = w << 1;      /* RAW10-like: 2 bytes/pixel */
-
-                        /* Program only the minimally safe core VIC regs seen in reference */
-                        writel(0x1, core + 0x9a34);   /* enable bit observed in reference */
-                        writel(0x1, core + 0x9a88);   /* enable/route latch bit */
-                        writel(stride, core + 0x9a80);/* stride to match VIC MDMA */
-                        /* Also program minimal geometry at core side (width/height/stride-like) */
-                        writel(w, core + 0x9a00);     /* width */
-                        writel(h, core + 0x9a04);     /* height */
-                        writel(stride, core + 0x9a2c);/* line step or related */
-                        /* Override tuning's stale width-like register with dynamic width */
-                        writel(w, core + 0x9a98);     /* observed as 0x500 in logs when width was 1280 */
-                        /* 0x9a94 already set to 1 earlier; leave as-is */
-
-                        /* Now (re)assert the core VIC IRQ gate (working values 1/0) */
-                        writel(0x00000001, core + 0x9ac0);
-                        writel(0x00000000, core + 0x9ac8);
-                        wmb();
-                        pr_info("*** CORE VIC ROUTE INIT: [9a00]=0x%08x [9a04]=0x%08x [9a2c]=0x%08x [9a34]=0x%08x [9a88]=0x%08x [9a80]=0x%08x [9a98]=0x%08x; GATE [9ac0]=0x%08x [9ac8]=0x%08x ***\n",
-                                readl(core + 0x9a00), readl(core + 0x9a04), readl(core + 0x9a2c),
-                                readl(core + 0x9a34), readl(core + 0x9a88), readl(core + 0x9a80), readl(core + 0x9a98),
-                                readl(core + 0x9ac0), readl(core + 0x9ac8));
-                    } while (0);
-                    pr_info("*** vic_core_s_stream: CORE W1C [9a70/9a7c] then ROUTE INIT + GATE REASSERT ***\n");
-                }
-            } while (0);
-
-            /* Re-assert interrupt mask and clear pending in BOTH banks, verify key regs */
-            if (vic_dev->vic_regs) {
-                void __iomem *vr = vic_dev->vic_regs;
-                /* Clear pending (W1C) */
-                writel(0xFFFFFFFF, vr + 0x1f0);
-                writel(0xFFFFFFFF, vr + 0x1f4);
-                /* Set MainMask to allow framedone + bit21 (debug); do NOT touch status regs 0x1e0/0x1e4 */
-                writel(0xFFDFFFFE, vr + 0x1e8); /* allow frame-done + bit21 (debug) */
-                /* Leave 0x1ec (MDMA mask) as-is per working reference */
-                /* DO NOT touch 0x30c here; suspected global mask/enable */
-                wmb();
-                pr_info("*** VIC VERIFY (PRIMARY): [0x0]=0x%08x [0x4]=0x%08x [0x300]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (MainMask=0xFFFFFFFE)***\n",
-                        readl(vr + 0x0), readl(vr + 0x4), readl(vr + 0x300), readl(vr + 0x1e0), readl(vr + 0x1e4), readl(vr + 0x1e8), readl(vr + 0x1ec));
-                /* Primary bank: only verify 0x100; do NOT write 0x14 here (0x14 is stride on PRIMARY) */
-                writel(0x000002d0, vr + 0x100);
-                wmb();
-                pr_info("*** VIC VERIFY (PRIMARY EXTRA): [0x100]=0x%08x [0x14]=0x%08x (PRIMARY 0x14=stride) ***\n",
-                        readl(vr + 0x100), readl(vr + 0x14));
-                udelay(50);
-
-
-            }
-            if (vic_dev->vic_regs_control) {
-                void __iomem *vc = vic_dev->vic_regs_control;
-                /* Clear pending (if mapped similarly, W1C) */
-                writel(0xFFFFFFFF, vc + 0x1f0);
-                writel(0xFFFFFFFF, vc + 0x1f4);
-                /* Route/control asserts at CONTROL bank -- SKIPPED to match good-things */
-                /* writel(0x000002d0, vc + 0x100); */
-                /* writel(0x00000630, vc + 0x14);  */
-                /* writel(0xb5742249, vc + 0x0c);  */
-                /* writel(0xFFDFFFFE, vc + 0x1e8); */
-                /* writel(0xFFFFFFFF, vc + 0x30c); */
-                wmb();
-                pr_info("*** VIC VERIFY (CONTROL): [0x0]=0x%08x [0x4]=0x%08x [0x0c]=0x%08x [0x100]=0x%08x [0x14]=0x%08x [0x300]=0x%08x [0x30c]=0x%08x [0x1e0]=0x%08x [0x1e4]=0x%08x [0x1e8]=0x%08x [0x1ec]=0x%08x (MainMask=0xFFFFFFFE)***\n",
-                        readl(vc + 0x0), readl(vc + 0x4), readl(vc + 0x0c), readl(vc + 0x100), readl(vc + 0x14), readl(vc + 0x300), readl(vc + 0x30c), readl(vc + 0x1e0), readl(vc + 0x1e4), readl(vc + 0x1e8), readl(vc + 0x1ec));
+            /* CRITICAL: Call ispvic_frame_channel_s_stream to enable MDMA (writes VIC[0x300]) */
+            /* Without this, VIC hardware never actually starts capturing! */
+            pr_info("*** vic_core_s_stream: Calling ispvic_frame_channel_s_stream(ENABLE) to start MDMA ***\n");
+            ret = ispvic_frame_channel_s_stream(sd, 1);
+            if (ret != 0) {
+                pr_err("*** vic_core_s_stream: ispvic_frame_channel_s_stream FAILED: %d ***\n", ret);
+                return ret;
             }
 
-                /* Read-back verification of buffer/control registers in BOTH banks */
-                if (vic_dev->vic_regs) {
-                    void __iomem *vrb = vic_dev->vic_regs;
-                    u32 b0 = readl(vrb + 0x318);
-                    u32 b1 = readl(vrb + 0x31c);
-                    u32 b2 = readl(vrb + 0x320);
-                    u32 b3 = readl(vrb + 0x324);
-                    u32 b4 = readl(vrb + 0x328);
-                    pr_info("*** VIC BUFS (PRIMARY): [0x318]=0x%08x [0x31c]=0x%08x [0x320]=0x%08x [0x324]=0x%08x [0x328]=0x%08x ***\n",
-                            b0, b1, b2, b3, b4);
-                    pr_info("*** VIC CTRL (PRIMARY): [0x300]=0x%08x ***\n", readl(vrb + 0x300));
-                }
-                if (vic_dev->vic_regs_control) {
-                    void __iomem *vcb = vic_dev->vic_regs_control;
-                    u32 b0 = readl(vcb + 0x318);
-                    u32 b1 = readl(vcb + 0x31c);
-                    u32 b2 = readl(vcb + 0x320);
-                    u32 b3 = readl(vcb + 0x324);
-                    u32 b4 = readl(vcb + 0x328);
-                    pr_info("*** VIC BUFS (CONTROL): [0x318]=0x%08x [0x31c]=0x%08x [0x320]=0x%08x [0x324]=0x%08x [0x328]=0x%08x ***\n",
-                            b0, b1, b2, b3, b4);
-                    pr_info("*** VIC CTRL (CONTROL): [0x300]=0x%08x ***\n", readl(vcb + 0x300));
-                }
+            /* Binary Ninja: *($s1_1 + 0x128) = 4 */
+            vic_dev->state = 4;
+            pr_info("*** vic_core_s_stream: Set vic_dev->state = 4 ***\n");
 
-
-                /* Apply working mask up front: frame-done only, like good-things */
-                if (vic_dev->vic_regs) {
-                    void __iomem *vr = vic_dev->vic_regs;
-                    /* Clear any pending first */
-                    writel(0xFFFFFFFF, vr + 0x1f0);
-                    writel(0xFFFFFFFF, vr + 0x1f4);
-                    wmb();
-                    /* Set MainMask to allow frame-done + bit21 during bring-up */
-                    writel(0xFFDFFFFE, vr + 0x1e8);
-                    wmb();
-                    pr_info("*** VIC MASK: Set MainMask=0xFFDFFFFE (frame-done + bit21) before RUN ***\n");
-                }
-
-            /* VIC CONTROL: enter RUN state after all config (write 1) */
-            if (vic_dev && vic_dev->vic_regs) {
-                void __iomem *vr = vic_dev->vic_regs;
-                writel(1, vr + 0x0);
-                wmb();
-                pr_info("*** VIC CONTROL (PRIMARY): WROTE 1 to [0x0] before enabling IRQ ***\n");
-                /* Post-RUN re-arm: commit dance so enables latch without touching masks */
-                /* Program PRIMARY IMR/IMCR routing once (match good-things), no re-arm */
-                if (vic_dev && vic_dev->vic_regs) {
-                    void __iomem *vr_gate = vic_dev->vic_regs;
-                    writel(0x00000001, vr_gate + 0x04);   /* IMR baseline */
-                    writel(0x00000000, vr_gate + 0x24);   /* IMR1 baseline */
-                    writel(0x07800438, vr_gate + 0x04);   /* IMR routing/mask */
-                    writel(0xb5742249, vr_gate + 0x0c);   /* IMCR key */
-                    wmb();
-                    pr_info("*** VIC PRIMARY GATE: IMR/IMCR routed (no re-arm) IMR=0x%08x IMCR=0x%08x ***\n",
-                            readl(vr_gate + 0x04), readl(vr_gate + 0x0c));
-                }
-
-            }
-
-
-            /* Enable VIC IRQ after final re-assert and verification */
-            pr_info("*** vic_core_s_stream: Enabling VIC IRQ AFTER final re-assert/verify ***\n");
+            /* Binary Ninja EXACT: tx_vic_enable_irq() */
             tx_vic_enable_irq(vic_dev);
 
-
-            /* CRITICAL FIX: Follow proper state machine - don't jump directly to state 4 */
-            /* The proper flow is: 1 → 2 → 3 → 4, not 1 → 4 */
-            if (vic_dev->state == 1) {
-                vic_dev->state = 2;
-                pr_info("*** vic_core_s_stream: VIC state transition 1 → 2 (CONFIGURED) ***\n");
-            } else if (vic_dev->state == 3) {
-                vic_dev->state = 4;
-                pr_info("*** vic_core_s_stream: VIC state transition 3 → 4 (STREAMING) ***\n");
-
-                /* Reference BN MCP: Call ispcore_slake_module during 3 → 4 transition */
-                {
-                    extern int ispcore_slake_module(struct tx_isp_dev *isp_dev);
-                    extern struct tx_isp_dev *ourISPdev;
-                    if (ourISPdev) {
-                        pr_info("*** VIC STATE 4: Calling ispcore_slake_module (reference behavior) ***\n");
-                        ispcore_slake_module(ourISPdev);
-                    } else {
-                        pr_warn("*** VIC STATE 4: ourISPdev is NULL; cannot call ispcore_slake_module ***\n");
-                    }
-                }
-
-                /* Continue with VIC configuration in streaming state */
-            } else {
-                pr_info("*** vic_core_s_stream: VIC state %d - letting tx_isp_video_s_stream handle state 2 → 3 transition ***\n", vic_dev->state);
-            }
-
-
-            pr_info("*** vic_core_s_stream: VIC initialized, final state=%d ***\n", vic_dev->state);
-
             /* Binary Ninja: return $v0_1 */
+            pr_info("*** vic_core_s_stream: EXACT Binary Ninja - returning %d ***\n", ret);
             return ret;
         } else {
+            /* Binary Ninja: state == 4, no action needed */
             pr_info("*** vic_core_s_stream: EXACT Binary Ninja - State=4, no action needed ***\n");
             return ret;
         }

@@ -2162,14 +2162,21 @@ int tx_isp_video_link_stream(struct tx_isp_dev *arg1, int arg2)
     /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
     s4 = arg1->subdevs;  /* Subdev array at offset 0x38 */
 
+    pr_info("*** tx_isp_video_link_stream: Starting subdev iteration, enable=%d ***\n", arg2);
+
     /* Binary Ninja: for (int32_t i = 0; i != 0x10; ) */
     for (i = 0; i != 0x10; ) {
         /* Binary Ninja: void* $a0 = *$s4 */
         struct tx_isp_subdev *a0 = *s4;
 
+        pr_info("*** tx_isp_video_link_stream: subdev[%d]=%p ***\n", i, a0);
+
         if (a0 != 0) {
             /* Binary Ninja: void* $v0_3 = *(*($a0 + 0xc4) + 4) */
             struct tx_isp_subdev_video_ops *v0_3 = a0->ops ? a0->ops->video : NULL;
+
+            pr_info("*** tx_isp_video_link_stream: subdev[%d] ops=%p, video=%p ***\n",
+                    i, a0->ops, v0_3);
 
             if (v0_3 == 0) {
                 /* Binary Ninja: i += 1 */
@@ -2178,12 +2185,17 @@ int tx_isp_video_link_stream(struct tx_isp_dev *arg1, int arg2)
                 /* Binary Ninja: int32_t $v0_4 = *($v0_3 + 4) */
                 int (*v0_4)(struct tx_isp_subdev *, int) = v0_3->link_stream;
 
+                pr_info("*** tx_isp_video_link_stream: subdev[%d] link_stream=%p ***\n",
+                        i, v0_4);
+
                 if (v0_4 == 0) {
                     /* Binary Ninja: i += 1 */
                     i += 1;
                 } else {
                     /* Binary Ninja: int32_t result = $v0_4($a0, arg2) */
+                    pr_info("*** tx_isp_video_link_stream: CALLING link_stream on subdev[%d] ***\n", i);
                     result = v0_4(a0, arg2);
+                    pr_info("*** tx_isp_video_link_stream: link_stream on subdev[%d] returned %d ***\n", i, result);
 
                     if (result == 0) {
                         /* Binary Ninja: i += 1 */
@@ -3324,75 +3336,31 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         pr_info("*** Channel %d: QBUF completed successfully (MIPS-safe) ***\n", channel);
         return 0;
     }
-    case 0xc0445609: { // VIDIOC_DQBUF - Dequeue buffer
+    case 0xc0445609: { // VIDIOC_QUERYBUF - Query buffer status (NOT DQBUF!)
         struct v4l2_buffer buffer;
         struct tx_isp_channel_state *state = &fcd->state;
-        unsigned long flags;
-        int ret;
-
-        pr_info("*** Channel %d: DQBUF - VBM buffer dequeue request ***\n", channel);
-        pr_info("*** DQBUF DEBUG: This message confirms DQBUF is being called ***\n");
 
         if (copy_from_user(&buffer, argp, sizeof(buffer)))
             return -EFAULT;
 
-        /* VBM DQBUF: Wait for completed buffer or return immediately if available */
-        spin_lock_irqsave(&state->buffer_lock, flags);
+        pr_info("*** Channel %d: QUERYBUF idx=%d ***\n", channel, buffer.index);
 
-        if (!state->frame_ready) {
-            spin_unlock_irqrestore(&state->buffer_lock, flags);
+        /* QUERYBUF just returns buffer info - no waiting, no state changes */
+        /* Stock driver allows any index - don't validate against vbm_buffer_count */
 
-            /* Wait for frame completion with timeout */
-            ret = wait_event_interruptible_timeout(state->frame_wait,
-                                                   state->frame_ready,
-                                                   msecs_to_jiffies(1000));
-            if (ret <= 0) {
-                pr_warn("*** Channel %d: DQBUF timeout waiting for frame ***\n", channel);
-                return -EAGAIN;
-            }
+        /* Return buffer information - match stock driver exactly */
+        buffer.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        buffer.memory = V4L2_MEMORY_USERPTR;
+        /* Stock driver returns flags=0x2000 (V4L2_BUF_FLAG_PREPARED) */
+        buffer.flags = 0x2000;  /* V4L2_BUF_FLAG_PREPARED - matches stock trace */
+        /* Stock driver returns length=0 for QUERYBUF */
+        buffer.length = 0;
+        buffer.bytesused = 0;
+        buffer.m.offset = state->vbm_buffer_addresses && buffer.index < state->vbm_buffer_count ?
+                          state->vbm_buffer_addresses[buffer.index] : 0;
 
-            spin_lock_irqsave(&state->buffer_lock, flags);
-        }
-
-        /* VBM DQBUF: Return the most recently completed buffer */
-        if (state->vbm_buffer_addresses && state->vbm_buffer_count > 0) {
-            static uint32_t dqbuf_cycle = 0;
-
-            buffer.index = dqbuf_cycle;
-            buffer.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-            /* CRITICAL FIX: Use consistent buffer size calculation */
-            if (channel == 0) {
-                buffer.bytesused = 1920 * 1080 * 3 / 2; /* NV12 main stream */
-            } else {
-                buffer.bytesused = 640 * 360 * 3 / 2;   /* NV12 sub stream */
-            }
-            buffer.flags = V4L2_BUF_FLAG_DONE;
-            buffer.field = V4L2_FIELD_NONE;
-            buffer.sequence = state->sequence++;
-            buffer.memory = V4L2_MEMORY_MMAP;
-            buffer.m.offset = state->vbm_buffer_addresses[dqbuf_cycle];
-            buffer.length = buffer.bytesused;
-
-            /* Cycle to next buffer */
-            dqbuf_cycle = (dqbuf_cycle + 1) % state->vbm_buffer_count;
-
-            pr_info("*** Channel %d: DQBUF VBM - Returning buffer[%d] addr=0x%x, seq=%d ***\n",
-                    channel, buffer.index, buffer.m.offset, buffer.sequence);
-        } else {
-            /* Fallback for non-VBM mode */
-            buffer.index = 0;
-            buffer.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-            buffer.bytesused = 1920 * 1080 * 3 / 2;
-            buffer.flags = V4L2_BUF_FLAG_DONE;
-            buffer.sequence = state->sequence++;
-
-            pr_warn("*** Channel %d: DQBUF fallback mode ***\n", channel);
-        }
-
-        /* Reset frame ready flag */
-        state->frame_ready = false;
-
-        spin_unlock_irqrestore(&state->buffer_lock, flags);
+        pr_info("*** Channel %d: QUERYBUF returning idx=%d flags=0x%x len=%d ***\n",
+                channel, buffer.index, buffer.flags, buffer.length);
 
         if (copy_to_user(argp, &buffer, sizeof(buffer)))
             return -EFAULT;
@@ -3526,19 +3494,11 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         do_gettimeofday(&buffer.timestamp);
         buffer.sequence = state->sequence++;
         buffer.memory = 1; // V4L2_MEMORY_MMAP
-        buffer.length = buffer.bytesused;
+        /* Stock driver returns length=0 for DQBUF */
+        buffer.length = 0;
 
-        /* Binary Ninja flag logic: *(arg2 + 0xc) = result
-         * Flags depend on buffer state */
-        buffer.flags = 0x1; // V4L2_BUF_FLAG_MAPPED
-
-        /* Binary Ninja state-based flag setting */
-        if (sensor_active) {
-            buffer.flags |= 0x2; // V4L2_BUF_FLAG_DONE (real data)
-            buffer.flags |= 0x8; // Custom flag for real sensor
-        } else {
-            buffer.flags |= 0x2; // V4L2_BUF_FLAG_DONE (simulated data)
-        }
+        /* Stock driver returns flags=0x2004 (V4L2_BUF_FLAG_PREPARED | V4L2_BUF_FLAG_DONE) */
+        buffer.flags = 0x2004;  /* Match stock trace exactly */
 
         /* Set buffer physical address offset like Binary Ninja */
         buffer.m.offset = buf_index * buffer.bytesused;
