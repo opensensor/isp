@@ -1,9 +1,9 @@
 #include <linux/module.h>
 #include <linux/spinlock.h>
 #include <linux/uaccess.h>
-#include "../include/tx_isp.h"
-#include "../include/tx_isp_core.h"
-#include "../include/tx-isp-debug.h"
+#include "include/tx_isp.h"
+#include "include/tx_isp_core.h"
+#include "include/tx-isp-debug.h"
 
 /* AE Zone Constants - Binary Ninja Reference */
 #define AE_ZONE_DATA_SIZE 0x384  /* 900 bytes - matches Binary Ninja */

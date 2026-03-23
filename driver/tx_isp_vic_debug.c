@@ -30,11 +30,11 @@
 #include <linux/seq_file.h>
 #include <linux/interrupt.h>
 
-#include "../include/tx_isp.h"
-#include "../include/tx_isp_core.h"
-#include "../include/tx_isp_vic.h"
-#include "../include/tx_isp_csi.h"
-#include "../include/tx-isp-debug.h"
+#include "include/tx_isp.h"
+#include "include/tx_isp_core.h"
+#include "include/tx_isp_vic.h"
+#include "include/tx_isp_csi.h"
+#include "include/tx-isp-debug.h"
 
 /* Global variables for VIC error tracking - EXACT Binary Ninja implementation */
 static uint32_t vic_err = 0;

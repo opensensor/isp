@@ -2,14 +2,14 @@
 #include <linux/platform_device.h>
 #include <linux/of.h>
 #include <linux/clk.h>
-#include "../include/tx_isp.h"
-#include "../include/tx_isp_csi.h"
-#include "../include/tx_isp_vin.h"
-#include "../include/tx_isp_core.h"
-#include "../include/tx_isp_core_device.h"
-#include "../include/tx_isp_subdev_helpers.h"
-#include "../include/tx_isp_vic.h"
-#include "../include/tx_isp_sysfs.h"
+#include "include/tx_isp.h"
+#include "include/tx_isp_csi.h"
+#include "include/tx_isp_vin.h"
+#include "include/tx_isp_core.h"
+#include "include/tx_isp_core_device.h"
+#include "include/tx_isp_subdev_helpers.h"
+#include "include/tx_isp_vic.h"
+#include "include/tx_isp_sysfs.h"
 
 /* External reference to global ISP device */
 extern struct tx_isp_dev *ourISPdev;

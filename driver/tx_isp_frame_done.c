@@ -8,8 +8,8 @@
 #include <linux/kernel.h>
 #include <linux/wait.h>
 #include <linux/atomic.h>
-#include "../include/tx-isp-debug.h"
-#include "../include/tx_isp.h"
+#include "include/tx-isp-debug.h"
+#include "include/tx_isp.h"
 
 /* Defog per-frame hook */
 extern void tisp_defog_on_frame(void);

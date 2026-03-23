@@ -6,18 +6,18 @@
 #include <linux/i2c.h>
 #include <linux/clk.h>
 #include <linux/vmalloc.h>
-#include "../include/tx_isp.h"
-#include "../include/tx_isp_core.h"
-#include "../include/tx_isp_core_device.h"
-#include "../include/tx-isp-debug.h"
-#include "../include/tx_isp_sysfs.h"
-#include "../include/tx_isp_vic.h"
-#include "../include/tx_isp_csi.h"
-#include "../include/tx_isp_vin.h"
-#include "../include/tx_isp_tuning.h"
-#include "../include/tx-isp-device.h"
-#include "../include/tx-libimp.h"
-#include "../include/tx_isp_subdev_helpers.h"
+#include "include/tx_isp.h"
+#include "include/tx_isp_core.h"
+#include "include/tx_isp_core_device.h"
+#include "include/tx-isp-debug.h"
+#include "include/tx_isp_sysfs.h"
+#include "include/tx_isp_vic.h"
+#include "include/tx_isp_csi.h"
+#include "include/tx_isp_vin.h"
+#include "include/tx_isp_tuning.h"
+#include "include/tx-isp-device.h"
+#include "include/tx-libimp.h"
+#include "include/tx_isp_subdev_helpers.h"
 #include <linux/platform_device.h>
 #include <linux/device.h>
 
@@ -275,7 +275,8 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable);
 /* Core subdev video operations */
 static struct tx_isp_subdev_video_ops core_subdev_video_ops = {
     .s_stream = NULL,  /* CRITICAL FIX: Core orchestrates s_stream, doesn't have its own to prevent infinite recursion */
-    .link_stream = NULL,  /* CRITICAL: Main streaming orchestration function called by tx_isp_video_link_stream */
+    .link_stream = ispcore_video_s_stream,
+    /* CRITICAL: Main streaming orchestration function called by tx_isp_video_link_stream */
 };
 
 /* Core subdev pad operations */
@@ -304,6 +305,11 @@ static int call_s_stream_slot(struct tx_isp_dev *isp_dev, int slot, int enable)
     pr_info("*** ispcore_video_s_stream: (ordered) called s_stream on slot %d (%s): result=%d ***\n",
             slot, sd_slot->pdev ? sd_slot->pdev->name : "unknown", ret);
     return ret;
+}
+
+static inline int ispcore_bypass_enabled(struct tx_isp_dev *isp_dev)
+{
+    return (isp_dev && isp_dev->bypass_enabled) ? 1 : 0;
 }
 
 /**
@@ -353,7 +359,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     int result = 0;
     int var_28 = 0;
     int a0_4;
-    int isp_state;
+    int vic_state;
 
     pr_info("*** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=%d ***\n", enable);
 
@@ -380,11 +386,11 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     __private_spin_lock_irqsave(&isp_dev->lock, &var_28);
 
     /* Binary Ninja: if (*($s0 + 0xe8) s< 3) */
-    isp_state = isp_dev->state;
-    pr_info("*** ISP STATE CHECK: vic_dev->state=%d (need >=3), enable=%d ***\n", isp_state, enable);
+    vic_state = vic_dev->state;
+    pr_info("*** VIC STATE CHECK: vic_dev->state=%d (need >=3), enable=%d ***\n", vic_state, enable);
 
-    if (isp_state < 2) {
-        pr_err("*** ISP STATE ERROR: Current ISP state=%d, need >=3 for streaming ***\n", isp_state);
+    if (vic_state < 2) {
+        pr_err("*** VIC STATE ERROR: Current VIC state=%d, need >=3 for streaming ***\n", vic_state);
         /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream") */
         isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream");
         /* Binary Ninja: private_spin_unlock_irqrestore($s0 + 0xdc, var_28) */
@@ -405,7 +411,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     /* *($s0 + 0x160) = 0 - Additional counter reset */
 
     /* Binary Ninja: int32_t $v0_3 = *($s0 + 0xe8) */
-    int v0_3 = isp_state;
+    int v0_3 = vic_state;
 
     /* Binary Ninja: void* $s3_1 */
     /* Binary Ninja: if (arg2 == 0) */
@@ -435,6 +441,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
             /* Binary Ninja: *($s0 + 0xe8) = 3 */
             isp_dev->state = 3;
+            vic_dev->state = 3;
             pr_info("*** ispcore_video_s_stream: ISP state set to 3 after stream OFF ***\n");
         }
         /* Binary Ninja: $s3_1 = arg1 + 0x38 - already set above */
@@ -444,6 +451,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     } else {
         /* Binary Ninja: *($s0 + 0xe8) = 4 */
         isp_dev->state = 4;
+        vic_dev->state = 4;
         /* Stream ON ordering fix: VIC (slot 1) -> CSI (slot 0) -> rest */
         if (enable == 1) {
             /* Call VIC first */
@@ -536,8 +544,8 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         }
     }
 
-    /* Binary Ninja: $a0_4 = *($s0 + 0x15c) - Get IRQ enabled flag from VIC device */
-    a0_4 = vic_dev->irq_enabled;
+    /* Binary Ninja: $a0_4 = *($s0 + 0x15c) - ISP bypass/process mode flag */
+    a0_4 = ispcore_bypass_enabled(isp_dev);
 
     /* Binary Ninja: if ($a0_4 == 1 || arg2 == 0) */
     if (a0_4 == 1 || enable == 0) {
@@ -893,6 +901,12 @@ irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id)
 
         /* Binary Ninja: data_ca57c += 1 - increment error counter */
         /* Error counter increment would be here */
+    }
+
+    /* Binary Ninja: if (*($s0 + 0x15c) == 1) return 1 */
+    if (ispcore_bypass_enabled(isp_dev)) {
+        pr_info("*** ISP CORE INTERRUPT: bypass enabled, skipping core ISR body ***\n");
+        return IRQ_HANDLED;
     }
 
     /* REFERENCE DRIVER: No VIC state checking - process all interrupts normally */
@@ -1965,7 +1979,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 pr_info("*** ispcore_core_ops_init: VIC already streaming (state 4) - initializing during streaming ***");
             } else if (vic_state == 3) {
                 pr_info("*** ispcore_core_ops_init: VIC in ready state (%d) - normal initialization ***", vic_state);
-                ispcore_video_s_stream(sd, 1);
+                pr_info("*** ispcore_core_ops_init: OEM init path does not auto-call ispcore_video_s_stream(1); deferring streaming to tx_isp_video_s_stream ***\n");
             }
 
             pr_info("*** ispcore_core_ops_init: VIC state check passed, proceeding with initialization ***");
@@ -2514,12 +2528,14 @@ void ispcore_frame_channel_streamoff(int32_t* arg1)
 {
     void* v0 = (void*)(uintptr_t)(*arg1);  /* Cast to avoid type mismatch */
     void* s0 = NULL;
+    struct tx_isp_dev *isp_dev;
 
     if (v0 != 0 && (uintptr_t)v0 < 0xfffff001) {
         s0 = *((void**)((char*)v0 + 0xd4));  /* *(v0 + 0xd4) */
     }
 
-    int32_t v1_2 = *((int32_t*)((char*)s0 + 0x15c));  /* *(s0 + 0x15c) */
+    isp_dev = (struct tx_isp_dev *)s0;
+    int32_t v1_2 = ispcore_bypass_enabled(isp_dev);  /* *(s0 + 0x15c) */
     void* s2 = (void*)arg1[8];
     void* s3 = *((void**)((char*)s0 + 0x120));  /* *(s0 + 0x120) */
     int32_t var_28 = 0;
@@ -2984,6 +3000,7 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
     uint32_t var_58;
     void* v0_13;  /* Removed const qualifier */
     int32_t v1_7;
+    struct tx_isp_dev *isp_dev = tx_isp_get_device();
 
     /* Add MCP logging for method entry */
     ISP_INFO("ispcore_pad_event_handle: entry with arg2=0x%x", arg2);
@@ -2999,7 +3016,7 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
 
             if (arg3 != 0 && a1_3 != 0) {
                 void* v0_38 = (void*)(*((uint32_t*)a1_3 + 0x1f)); /* a1_3 + 0x7c */
-                if (*((uint32_t*)v0_38 + 0x57) != 1) { /* *(*(a1_3 + 0x7c) + 0x15c) != 1 */
+                if (!ispcore_bypass_enabled(isp_dev)) { /* *(*(a1_3 + 0x7c) + 0x15c) != 1 */
                     memcpy(arg3, a1_3, 0x70);
                     ISP_INFO("ispcore_pad_event_handle: copied format data (0x70 bytes)");
                     return 0;
@@ -3038,7 +3055,7 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                         void* s3_1 = (void*)arg1[8];
                         void* s2 = (char*)v0_10 + 0x38;
 
-                        if (*((uint32_t*)s4_1 + 0x57) == 1) { /* *(s4_1 + 0x15c) == 1 */
+                        if (ispcore_bypass_enabled(isp_dev)) { /* *(s4_1 + 0x15c) == 1 */
                             memset((char*)s4_1 + 0x1c0, 0, 0x18);
                             *((void**)((char*)s4_1 + 0x1d4)) = arg1;
                             *((void**)((char*)s4_1 + 0x1c4)) = ispcore_frame_channel_dqbuf;
@@ -3127,7 +3144,7 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
 
             void* s2_1 = (void*)arg1[8];
 
-            if (*((uint32_t*)v0_13 + 0x57) == 1) { /* *(v0_13 + 0x15c) == 1 */
+            if (ispcore_bypass_enabled(isp_dev)) { /* *(v0_13 + 0x15c) == 1 */
                 v1_7 = *((int32_t*)v0_13 + 0x73); /* *(v0_13 + 0x1cc) */
                 if (v1_7 == 0)
                     return 0;
@@ -3189,7 +3206,7 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                 }
             }
 
-            if (*((uint32_t*)v0_21 + 0x57) != 1) { /* *(v0_21 + 0x15c) != 1 */
+            if (!ispcore_bypass_enabled(isp_dev)) { /* *(v0_21 + 0x15c) != 1 */
                 result = 0;
                 if ((arg1[5] & 0x20) == 0) {
                     void* s1_2 = (void*)arg1[8];
@@ -3262,7 +3279,7 @@ static int ispcore_pad_event_handle(int32_t* arg1, int32_t arg2, void* arg3)
                 }
             }
 
-            if (*((uint32_t*)v0_13 + 0x57) == 1) { /* *(v0_13 + 0x15c) == 1 */
+            if (ispcore_bypass_enabled(isp_dev)) { /* *(v0_13 + 0x15c) == 1 */
                 v1_7 = *((int32_t*)v0_13 + 0x72); /* *(v0_13 + 0x1c8) */
                 if (v1_7 == 0)
                     return 0;
@@ -3374,30 +3391,34 @@ static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
 
     /* Create frame channel devices /dev/isp-fs0, /dev/isp-fs1, etc. */
     for (i = 0; i < 4; i++) {  /* Create 4 frame channels like reference */
-        struct miscdevice *fs_miscdev;
-
-        /* Allocate misc device structure */
-        fs_miscdev = kzalloc(sizeof(struct miscdevice), GFP_KERNEL);
-        if (!fs_miscdev) {
-            pr_err("Failed to allocate misc device for framechan%d\n", i);
-            return -ENOMEM;
-        }
+        struct miscdevice *fs_miscdev = &frame_channels[i].miscdev;
 
         /* Set up device name */
         snprintf(dev_name, sizeof(dev_name), "framechan%d", i);
+        memset(&frame_channels[i], 0, sizeof(frame_channels[i]));
         fs_miscdev->name = kstrdup(dev_name, GFP_KERNEL);
+        if (!fs_miscdev->name) {
+            pr_err("Failed to allocate device name for framechan%d\n", i);
+            return -ENOMEM;
+        }
         fs_miscdev->minor = MISC_DYNAMIC_MINOR;
 
         /* Use the existing frame_channel_fops from tx-isp-module.c */
         extern const struct file_operations frame_channel_fops;
         fs_miscdev->fops = &frame_channel_fops;
+        frame_channels[i].channel_num = i;
+        frame_channels[i].buffer_type = 1;
+        frame_channels[i].field = 1;
+        frame_channels[i].magic = FRAME_CHANNEL_MAGIC;
+        if (isp_dev->vic_dev)
+            frame_channels[i].vic_subdev = &((struct tx_isp_vic_device *)isp_dev->vic_dev)->sd;
 
         /* Register the misc device */
         ret = misc_register(fs_miscdev);
         if (ret < 0) {
             pr_err("Failed to register /dev/%s: %d\n", dev_name, ret);
             kfree(fs_miscdev->name);
-            kfree(fs_miscdev);
+            fs_miscdev->name = NULL;
             return ret;
         }
 

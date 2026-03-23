@@ -8,9 +8,9 @@
 #include <linux/miscdevice.h>
 #include <linux/proc_fs.h>
 #include <linux/slab.h>
-#include "../include/tx_isp.h"
-#include "../include/tx_isp_vic.h"
-#include "../include/tx-isp-debug.h"
+#include "include/tx_isp.h"
+#include "include/tx_isp_vic.h"
+#include "include/tx-isp-debug.h"
 
 /* Subdevice type definitions */
 enum tx_isp_subdev_type {
@@ -568,7 +568,8 @@ void tx_isp_cleanup_subdev_graph(struct tx_isp_dev *isp)
         if (isp->fs_miscdevs[i]) {
             misc_deregister(isp->fs_miscdevs[i]);
             kfree(isp->fs_miscdevs[i]->name);
-            kfree(isp->fs_miscdevs[i]);
+            isp->fs_miscdevs[i]->name = NULL;
+            isp->fs_miscdevs[i]->minor = MISC_DYNAMIC_MINOR;
             isp->fs_miscdevs[i] = NULL;
         }
     }

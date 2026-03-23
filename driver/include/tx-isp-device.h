@@ -636,8 +636,8 @@ struct frame_channel_device {
 
 #define FRAME_CHANNEL_MAGIC 0xDEADBEEF
 
-static struct frame_channel_device frame_channels[4]; /* Support up to 4 video channels */
-static int num_channels = 2; /* Default to 2 channels (CH0, CH1) like reference */
+extern struct frame_channel_device frame_channels[4]; /* Shared frame channel array */
+extern int num_channels; /* Shared frame channel count */
 
 /*
  * Internal ops. Never call this from drivers, only the tx isp device can call

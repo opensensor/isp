@@ -38,19 +38,19 @@
 #include <linux/math64.h>
 #include <asm/cacheflush.h>
 #include <asm/page.h>
-#include "../include/tx_isp.h"
-#include "../include/tx_isp_core.h"
-#include "../include/tx-isp-debug.h"
-#include "../include/tx_isp_sysfs.h"
-#include "../include/tx_isp_vic.h"
-#include "../include/tx_isp_csi.h"
-#include "../include/tx_isp_vin.h"
-#include "../include/tx_isp_fixpt.h"
+#include "include/tx_isp.h"
+#include "include/tx_isp_core.h"
+#include "include/tx-isp-debug.h"
+#include "include/tx_isp_sysfs.h"
+#include "include/tx_isp_vic.h"
+#include "include/tx_isp_csi.h"
+#include "include/tx_isp_vin.h"
+#include "include/tx_isp_fixpt.h"
 
-#include "../include/tx-isp-device.h"
-#include "../include/tx-libimp.h"
+#include "include/tx-isp-device.h"
+#include "include/tx-libimp.h"
 
-#include "../include/tx_isp_regmap.h"
+#include "include/tx_isp_regmap.h"
 
 /* Forward declaration for exported ISP event callback array */
 extern void (*isp_event_func_cb[32])(void);
@@ -4184,15 +4184,9 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
                         pr_info("*** CRITICAL: Tuning parameter system activated ***\n");
                     }
 
-                    /* CRITICAL: Maintain frame flow without disrupting VIC hardware */
-                    if (ourISPdev->vic_dev) {
-                        /* Gentle frame processing trigger that doesn't disrupt VIC */
-                        extern void isp_frame_done_wakeup(void);
-                        isp_frame_done_wakeup();
-
-                        /* Update frame counter for userspace */
-                        ourISPdev->frame_count++;
-                    }
+                    /* OEM parity: tuning enable must not synthesize a frame-done.
+                     * Real frame completion must come from VIC/ISP frame-done paths.
+                     */
 
                     /* BINARY NINJA REFERENCE: Acknowledge tuning enable without heavy operations */
                     ret = 0;

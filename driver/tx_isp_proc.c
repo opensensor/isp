@@ -2,9 +2,9 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/uaccess.h>
-#include "../include/tx_isp.h"
-#include "../include/tx_isp_vic.h"
-#include "../include/tx_isp_vin.h"
+#include "include/tx_isp.h"
+#include "include/tx_isp_vic.h"
+#include "include/tx_isp_vin.h"
 
 #define TX_ISP_PROC_ISP_DIR "jz/isp"
 #define TX_ISP_PROC_ISP_W00_FILE "isp-w00"

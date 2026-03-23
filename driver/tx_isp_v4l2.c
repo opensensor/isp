@@ -17,8 +17,8 @@
 #include <media/v4l2-event.h>
 #include <media/v4l2-ioctl.h>
 #include <media/videobuf2-dma-contig.h>
-#include "../include/tx_isp.h"
-#include "../include/tx-isp-device.h"
+#include "include/tx_isp.h"
+#include "include/tx-isp-device.h"
 
 /* V4L2 frame channel device structure */
 struct tx_isp_v4l2_device {

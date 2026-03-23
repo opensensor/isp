@@ -5,9 +5,21 @@
 
 set -e  # Exit on any error
 
+DEFAULT_OUTPUT_ROOT=/home/matteius/output-stable/wyze_cam3_t31x_gc2053_rtl8189ftv
+FALLBACK_OUTPUT_ROOT=/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv
+OUTPUT_ROOT="${OUTPUT_ROOT:-$DEFAULT_OUTPUT_ROOT}"
+
+if [[ ! -d "$OUTPUT_ROOT/host/bin" ]]; then
+    OUTPUT_ROOT="$FALLBACK_OUTPUT_ROOT"
+fi
+
 export CROSS_COMPILE=mipsel-linux-
-export KDIR=/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/
-export PATH=/home/matteius/output/wyze_cam3_t31x_gc2053_rtl8189ftv/per-package/toolchain-external-custom/host/bin/:$PATH
+if ls "$OUTPUT_ROOT"/build/linux-* >/dev/null 2>&1; then
+    export KDIR="$(ls -d "$OUTPUT_ROOT"/build/linux-* | head -1)"
+else
+    export KDIR="$FALLBACK_OUTPUT_ROOT/build/linux-4fb8bc9f91c2951629f818014b7d3b5cc2a1ec81/"
+fi
+export PATH="$OUTPUT_ROOT/host/bin:$PATH"
 
 
 # Configuration

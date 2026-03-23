@@ -2,7 +2,7 @@
 #include <linux/device.h>
 #include <linux/slab.h>
 #include "include/tx_isp_sysfs.h"
-#include "../include/tx_isp.h"
+#include "include/tx_isp.h"
 
 /* Helper function to show sensor info */
 static ssize_t sensor_info_show(struct device *dev,

@@ -33,18 +33,18 @@
 
 /* V4L2 control IDs - use standard V4L2 control IDs */
 /* Note: V4L2 structures and enums are already defined in kernel headers */
-#include "../include/tx_isp.h"
-#include "../include/tx_isp_core.h"
-#include "../include/tx-isp-debug.h"
-#include "../include/tx_isp_sysfs.h"
-#include "../include/tx_isp_vic.h"
-#include "../include/tx_isp_csi.h"
-#include "../include/tx_isp_vin.h"
-#include "../include/tx_isp_tuning.h"
-#include "../include/tx-isp-device.h"
-#include "../include/tx-libimp.h"
-#include "../include/tx_isp_core_device.h"
-#include "../include/tx_isp_subdev_helpers.h"
+#include "include/tx_isp.h"
+#include "include/tx_isp_core.h"
+#include "include/tx-isp-debug.h"
+#include "include/tx_isp_sysfs.h"
+#include "include/tx_isp_vic.h"
+#include "include/tx_isp_csi.h"
+#include "include/tx_isp_vin.h"
+#include "include/tx_isp_tuning.h"
+#include "include/tx-isp-device.h"
+#include "include/tx-libimp.h"
+#include "include/tx_isp_core_device.h"
+#include "include/tx_isp_subdev_helpers.h"
 
 /* CSI State constants - needed for proper state management */
 #define CSI_STATE_OFF       0
@@ -712,6 +712,10 @@ static struct fs_platform_data fs_pdata = {
     }
 };
 
+/* Shared frame channel state used across the driver. */
+struct frame_channel_device frame_channels[4];
+int num_channels = 4;
+
 struct platform_device tx_isp_fs_platform_device = {
     .name = "isp-fs",  /* FIXED: Must match tx_isp_fs_driver name for probe to be called */
     .id = -1,
@@ -792,10 +796,6 @@ extern void tx_isp_vic_platform_exit(void);
 extern int tx_isp_fs_platform_init(void);
 extern void tx_isp_fs_platform_exit(void);
 extern int tx_isp_fs_probe(struct platform_device *pdev);
-
-/* V4L2 video device functions */
-extern int tx_isp_v4l2_init(void);
-extern void tx_isp_v4l2_cleanup(void);
 
 int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
 
@@ -1609,29 +1609,13 @@ int frame_channel_open(struct inode *inode, struct file *file)
         }
     }
 
-    /* FALLBACK: If not found in array, create a new frame channel entry */
-    /* This handles cases where devices were created externally */
     if (!fcd) {
-        pr_info("*** FRAME CHANNEL OPEN: Device not in array, creating new entry for minor %d ***\n", minor);
-
-        /* Determine channel number from minor - framechan0=minor X, framechan1=minor Y, etc */
-        /* Since we can't easily map minor to channel, we'll use the first available slot */
-        for (i = 0; i < 4; i++) { /* Max 4 channels */
-            if (frame_channels[i].miscdev.minor == 0 || frame_channels[i].miscdev.minor == MISC_DYNAMIC_MINOR) {
-                fcd = &frame_channels[i];
-                fcd->channel_num = i;
-                fcd->miscdev.minor = minor; /* Store the actual minor number */
-                channel_num = i;
-                pr_info("*** FRAME CHANNEL OPEN: Assigned to channel %d ***\n", i);
-                break;
-            }
-        }
-    }
-
-    if (!fcd) {
-        pr_err("Frame channel open: No available slot for minor %d\n", minor);
+        pr_err("Frame channel open: No registered channel for minor %d\n", minor);
         return -ENODEV;
     }
+
+    if (!fcd->vic_subdev && ourISPdev && ourISPdev->vic_dev)
+        fcd->vic_subdev = &((struct tx_isp_vic_device *)ourISPdev->vic_dev)->sd;
 
     /* Initialize channel state - safe to call multiple times in kernel 3.10 */
     /* Initialize queueing primitives for completed/queued buffers */
@@ -1671,6 +1655,7 @@ int frame_channel_open(struct inode *inode, struct file *file)
         fcd->state.buffer_count = 0;
         fcd->state.sequence = 0;
         fcd->state.frame_ready = false;
+        fcd->magic = FRAME_CHANNEL_MAGIC;
 
         pr_info("*** FRAME CHANNEL %d: Initialized state ***\n", fcd->channel_num);
     }
@@ -2648,6 +2633,69 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
         }
     }
 
+    if (enable) {
+        struct tx_isp_vic_device *vic_dev = isp_dev->vic_dev;
+        struct tx_isp_subdev *csi_sd = tx_isp_get_csi_subdev(isp_dev);
+        struct tx_isp_subdev *vic_sd = tx_isp_get_vic_subdev(isp_dev);
+        struct tx_isp_subdev *core_sd = tx_isp_get_core_subdev(isp_dev);
+
+        pr_info("*** tx_isp_video_link_stream: Preparing VIC/CSI/Core state before link_stream ***\n");
+
+        if (vic_dev && vic_dev->state < 2) {
+            pr_info("*** tx_isp_video_link_stream: VIC state=%d, calling ispcore_activate_module ***\n",
+                    vic_dev->state);
+            result = ispcore_activate_module(isp_dev);
+            if (result != 0) {
+                pr_err("tx_isp_video_link_stream: ispcore_activate_module failed: %d\n", result);
+                return result;
+            }
+        }
+
+        if (vic_sd && vic_dev && vic_dev->state == 2 &&
+            vic_sd->ops && vic_sd->ops->core && vic_sd->ops->core->init) {
+            pr_info("*** tx_isp_video_link_stream: Initializing VIC subdev to reach state 3 ***\n");
+            result = vic_sd->ops->core->init(vic_sd, 1);
+            if (result != 0 && result != -ENOIOCTLCMD) {
+                pr_err("tx_isp_video_link_stream: VIC init failed: %d\n", result);
+                return result;
+            }
+        }
+
+        if (core_sd && core_sd->ops && core_sd->ops->core && core_sd->ops->core->init) {
+            pr_info("*** tx_isp_video_link_stream: Initializing Core subdev before link_stream ***\n");
+            result = core_sd->ops->core->init(core_sd, 1);
+            if (result != 0 && result != -ENOIOCTLCMD) {
+                pr_err("tx_isp_video_link_stream: Core init failed: %d\n", result);
+                return result;
+            }
+        }
+
+        if (csi_sd) {
+            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(csi_sd);
+
+            if (csi_dev && csi_dev->state < 2) {
+                pr_info("*** tx_isp_video_link_stream: Activating CSI subdev (state %d -> 2) ***\n",
+                        csi_dev->state);
+                tx_isp_csi_activate_subdev(csi_sd);
+            }
+
+            if (csi_sd->ops && csi_sd->ops->core && csi_sd->ops->core->init) {
+                pr_info("*** tx_isp_video_link_stream: Initializing CSI subdev before link_stream ***\n");
+                result = csi_sd->ops->core->init(csi_sd, 1);
+                if (result != 0 && result != -ENOIOCTLCMD) {
+                    pr_err("tx_isp_video_link_stream: CSI init failed: %d\n", result);
+                    return result;
+                }
+            }
+        }
+
+        if (vic_dev && vic_dev->state < 3) {
+            pr_err("tx_isp_video_link_stream: VIC state %d < 3, not ready for link_stream\n",
+                   vic_dev->state);
+            return -EINVAL;
+        }
+    }
+
     /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
     subdevs_ptr = isp_dev->subdevs;  /* Subdev array at offset 0x38 */
 
@@ -2852,14 +2900,14 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                     pr_info("*** VIC control register written with 0x4000000 to ISP+0x9a00 ***\n");
                 }
 
-                /* CRITICAL: Subdevice initialization loop - Fixed for our layout */
-                pr_info("*** SUBDEVICE INITIALIZATION LOOP ***\n");
+                /* CRITICAL: Subdevice activation loop - match OEM activate_module walk */
+                pr_info("*** SUBDEVICE ACTIVATION LOOP ***\n");
 
-                /* FIXED: Use our actual subdev array at offset 0x38 in tx_isp_dev */
-                /* CRITICAL FIX: Initialize subdevs in REVERSE order so sensors initialize BEFORE VIC streaming */
-                /* This prevents CSI PHY reconfiguration conflicts when VIC is already active */
-                pr_info("*** SUBDEVICE INITIALIZATION: Traversing backwards to initialize sensors first ***\n");
-                for (i = ISP_MAX_SUBDEVS - 1; i >= 0; i--) {
+                /* Walk the registered subdev array in slot order and invoke internal
+                 * activate_module ops. Stock does activation here; core->init happens
+                 * later in the dedicated stream bring-up path. */
+                pr_info("*** SUBDEVICE ACTIVATION: Traversing forwards via internal->activate_module ***\n");
+                for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
                     current_subdev = isp_dev->subdevs[i];
                     if (!current_subdev) {
                         continue;  /* Skip empty slots */
@@ -2869,19 +2917,20 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                         continue;  /* Skip invalid pointers */
                     }
 
-                    /* Binary Ninja: Call subdev init function */
+                    /* Binary Ninja: Call subdev internal activate function */
                     struct tx_isp_subdev *sd = (struct tx_isp_subdev *)current_subdev;
                     pr_info("*** INIT LOOP: subdev[%d] sd=%p, ops=%p ***\n", i, sd, sd->ops);
                     if (sd->ops) {
-                        pr_info("*** INIT LOOP: subdev[%d] ops->core=%p ***\n", i, sd->ops->core);
-                        if (sd->ops->core) {
-                            pr_info("*** INIT LOOP: subdev[%d] ops->core->init=%p ***\n", i, sd->ops->core->init);
+                        pr_info("*** INIT LOOP: subdev[%d] ops->internal=%p ***\n", i, sd->ops->internal);
+                        if (sd->ops->internal) {
+                            pr_info("*** INIT LOOP: subdev[%d] ops->internal->activate_module=%p ***\n",
+                                    i, sd->ops->internal->activate_module);
                         }
                     }
 
-                    if (sd->ops && sd->ops->core && sd->ops->core->init) {
-                        pr_info("Calling subdev %d initialization (REVERSE ORDER - sensors first)\n", i);
-                        subdev_result = sd->ops->core->init(sd, 1);
+                    if (sd->ops && sd->ops->internal && sd->ops->internal->activate_module) {
+                        pr_info("Calling subdev %d activation via internal->activate_module\n", i);
+                        subdev_result = sd->ops->internal->activate_module(sd);
 
                         /* Binary Ninja: if ($v0_12 != 0 && $v0_12 != 0xfffffdfd) */
                         if (subdev_result != 0 && subdev_result != 0xfffffdfd) {
@@ -2890,7 +2939,7 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                             break;
                         }
                     } else {
-                        pr_info("*** INIT LOOP: subdev[%d] SKIPPED - no core->init function ***\n", i);
+                        pr_info("*** INIT LOOP: subdev[%d] SKIPPED - no internal->activate_module function ***\n", i);
                     }
                 }
 
@@ -3009,19 +3058,6 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
         struct tx_isp_subdev *sensor_sd = tx_isp_get_sensor_subdev(dev);
 
 
-	        /* EXPERIMENTAL: Initialize and pre-stream Sensor before CSI init to power MIPI */
-	        if (sensor_sd) {
-	            if (sensor_sd->ops && sensor_sd->ops->core && sensor_sd->ops->core->init) {
-	                pr_info("*** EXPERIMENTAL: Sensor core->init before CSI init ***\n");
-	                (void)sensor_sd->ops->core->init(sensor_sd, 1);
-	            }
-	            if (sensor_sd->ops && sensor_sd->ops->video && sensor_sd->ops->video->s_stream) {
-	                pr_info("*** EXPERIMENTAL: PRE-STREAM SENSOR.s_stream(1) before CSI init ***\n");
-	                (void)sensor_sd->ops->video->s_stream(sensor_sd, 1);
-	                msleep(10);
-	            }
-	        }
-
         /* Initialize Core first */
         pr_info("*** DEBUG: core_sd=%p ***\n", core_sd);
         if (core_sd) {
@@ -3074,54 +3110,9 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
                 return result;
             }
             pr_info("*** tx_isp_video_s_stream: VIC init SUCCESS ***\n");
-
-            /* Read-only wait: allow W01 to reach known stream-on phases before CSI init */
-            do {
-                struct tx_isp_vic_device *vic_dev_for_regs = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(vic_sd);
-                void __iomem *w01 = vic_dev_for_regs ? vic_dev_for_regs->vic_regs_secondary : NULL;
-                if (w01) {
-                    u32 prev = readl(w01 + 0x14);
-                    int stable = 0;
-                    int waited = 0;
-                    while (waited < 20) { /* up to ~20ms */
-                        msleep(1);
-                        waited += 1;
-                        u32 cur = readl(w01 + 0x14);
-                        int match = (cur == 0x00000230) || (cur == 0x00000300) || (cur == 0x00000330);
-                        if (match && cur == prev) {
-                            if (++stable >= 2) {
-                                pr_info("[W01 ] phase-ready(before CSI init): 0x14=0x%08x (waited %d ms)\n", cur, waited);
-                                break;
-                            }
-                        } else {
-                            stable = match ? 1 : 0;
-                        }
-                        prev = cur;
-                    }
-                    if (stable < 2) {
-                        pr_info("[W01 ] phase not reached(before CSI init): last 0x14=0x%08x (waited 20 ms)\n", readl(w01 + 0x14));
-                    }
-                }
-            } while (0);
         }
 
         /* Initialize CSI third (after VIC) */
-
-            /* Pre-stream VIC.s_stream(1) to mirror working branch readiness before CSI init */
-            if (vic_sd && vic_sd->ops && vic_sd->ops->video && vic_sd->ops->video->s_stream) {
-                pr_info("*** tx_isp_video_s_stream: PRE-STREAM VIC.s_stream(1) before CSI init ***\n");
-                result = vic_sd->ops->video->s_stream(vic_sd, 1);
-                pr_info("*** tx_isp_video_s_stream: PRE-STREAM VIC.s_stream(1) returned %d ***\n", result);
-                /* Optional: brief wait for W01 movement */
-                do {
-                    struct tx_isp_vic_device *vd = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(vic_sd);
-                    void __iomem *w01 = vd ? vd->vic_regs_secondary : NULL;
-                    if (w01) {
-                        u32 w = readl(w01 + 0x14);
-                        pr_info("[W01 ] after PRE-STREAM VIC: 0x14=0x%08x\n", w);
-                    }
-                } while (0);
-            }
 
         if (csi_sd && csi_sd->ops && csi_sd->ops->core && csi_sd->ops->core->init) {
             pr_info("*** tx_isp_video_s_stream: Initializing CSI subdev (after VIC) ***\n");
@@ -3156,35 +3147,6 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
         if (vic_sd_order && vic_sd_order->ops && vic_sd_order->ops->video && vic_sd_order->ops->video->s_stream) {
             pr_info("*** tx_isp_video_s_stream: ORDERED CALL VIC.s_stream(1) ***\n");
             vic_sd_order->ops->video->s_stream(vic_sd_order, 1);
-
-            /* After VIC.s_stream, wait for VIC/W01 phase to reach grant state before CSI */
-            do {
-                struct tx_isp_vic_device *vd = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(vic_sd_order);
-                void __iomem *w01 = vd ? vd->vic_regs_secondary : NULL;
-                if (w01) {
-                    u32 prev = readl(w01 + 0x14);
-                    int stable = 0;
-                    int waited = 0;
-                    while (waited < 30) { /* up to ~30ms */
-                        msleep(1);
-                        waited += 1;
-                        u32 cur = readl(w01 + 0x14);
-                        int match = (cur == 0x00000230) || (cur == 0x00000300) || (cur == 0x00000330);
-                        if (match && cur == prev) {
-                            if (++stable >= 2) {
-                                pr_info("[W01 ] phase-ready(after VIC s_stream): 0x14=0x%08x (waited %d ms)\n", cur, waited);
-                                break;
-                            }
-                        } else {
-                            stable = match ? 1 : 0;
-                        }
-                        prev = cur;
-                    }
-                    if (stable < 2) {
-                        pr_info("[W01 ] phase not reached(after VIC s_stream): last 0x14=0x%08x (waited 30 ms)\n", readl(w01 + 0x14));
-                    }
-                }
-            } while (0);
         }
         if (csi_sd_order && csi_sd_order->ops && csi_sd_order->ops->video && csi_sd_order->ops->video->s_stream) {
             pr_info("*** tx_isp_video_s_stream: ORDERED CALL CSI.s_stream(1) ***\n");
@@ -3599,9 +3561,12 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             }
 
             state->buffer_count = reqbuf.count;
+            state->state = 3;   /* OEM ready state after buffers are prepared */
+            state->flags = 0;
 
             /* Set buffer type from REQBUFS request */
             fcd->buffer_type = reqbuf.type;
+            fcd->streaming_flags = 0;
 
             /* Notify VIC of buffer allocation via 0x3000008 (REQBUFS event) */
             if (ourISPdev && ourISPdev->vic_dev) {
@@ -3631,6 +3596,9 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             /* Free existing buffers */
             pr_info("Channel %d: Freeing existing buffers\n", channel);
             state->buffer_count = 0;
+            state->state = 0;
+            state->flags = 0;
+            fcd->streaming_flags = 0;
 
             /* CRITICAL: Clear VIC active_buffer_count */
             if (ourISPdev && ourISPdev->vic_dev) {
@@ -3671,8 +3639,8 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         pr_info("*** Channel %d: QBUF - Queue buffer index=%d ***\n", channel, buffer.index);
         if (!state->streaming || !state->capture_active) {
-            pr_warn("Channel %d: QBUF rejected - not streaming or inactive\n", channel);
-            return -EINVAL;
+            pr_info("*** Channel %d: QBUF accepted before active streaming - staging buffer for later delivery ***\n",
+                    channel);
         }
 
 
@@ -3941,14 +3909,19 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     }
     case 0x80045612: { // VIDIOC_STREAMON - Start streaming
         uint32_t type;
-        struct tx_isp_vic_device *vic_dev = NULL;
-        struct tx_isp_sensor *sensor = NULL;
+        struct tx_isp_subdev *vic_sd = NULL;
         int ret = 0;
 
         if (copy_from_user(&type, argp, sizeof(type)))
             return -EFAULT;
 
         pr_info("Channel %d: VIDIOC_STREAMON request, type=%d\n", channel, type);
+
+        if (state->state != 3) {
+            pr_err("The state of frame channel%d is invalid(%d)!\n",
+                   channel, state->state);
+            return -EPERM;
+        }
 
         // Validate buffer type
         if (type != 1) { // V4L2_BUF_TYPE_VIDEO_CAPTURE
@@ -3957,344 +3930,46 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
 
         // Check if already streaming
-        if (state->streaming) {
-            pr_info("Channel %d: Already streaming\n", channel);
-            return 0;
+        if ((fcd->streaming_flags & 1) != 0 || (state->flags & 1) != 0 || state->streaming) {
+            pr_err("streamon: already streaming\n");
+            return -EBUSY;
         }
 
-        // Update VIC frame dimensions based on channel
-        if (ourISPdev && ourISPdev->vic_dev) {
-            struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-            if (channel == 0) {
-                vic->width = 1920;
-                vic->height = 1080;
-            } else {
-                vic->width = 640;
-                vic->height = 360;
-            }
-        }
-
-        // Enable channel
         state->enabled = true;
         state->streaming = true;
+        state->flags |= 1U;
+        fcd->streaming_flags |= 1;
 
-        // *** CRITICAL: START ISP CHANNEL CONTROL (writes to register 0x9804) ***
-        pr_info("*** Channel %d: CALLING tisp_channel_start to enable ISP channel control ***\n", channel);
-        ret = tisp_channel_start(channel, NULL);  /* NULL = use default channel attributes */
-        if (ret) {
-            pr_err("Channel %d: tisp_channel_start FAILED: %d\n", channel, ret);
+        vic_sd = (struct tx_isp_subdev *)fcd->vic_subdev;
+        if (!vic_sd) {
             state->streaming = false;
+            state->enabled = false;
+            state->flags &= ~1U;
+            fcd->streaming_flags &= ~1;
+            return -ENODEV;
+        }
+
+        ret = tx_isp_send_event_to_remote(vic_sd, 0x3000003, NULL);
+        if (ret != 0 && ret != 0xfffffdfd) {
+            pr_err("streamon: driver refused to start streaming\n");
+            state->streaming = false;
+            state->enabled = false;
+            state->flags &= ~1U;
+            fcd->streaming_flags &= ~1;
             return ret;
         }
-        pr_info("*** Channel %d: tisp_channel_start SUCCESS - ISP channel enabled ***\n", channel);
 
-        // *** CRITICAL: SETUP VIC BUFFERS BEFORE STREAMING (Binary Ninja reference) ***
-        if (ourISPdev && ourISPdev->vic_dev) {
-            struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+        state->state = 4;
 
-            pr_info("*** CHANNEL %d STREAMON: CHECKING VIC BUFFER SETUP ***\n", channel);
-
-            /* Check if VIC has proper buffer count from REQBUFS */
-            if (vic->active_buffer_count == 0) {
-                pr_warn("*** CHANNEL %d STREAMON: WARNING - No buffers allocated via REQBUFS! ***\n", channel);
-                pr_warn("*** Client should call REQBUFS before STREAMON ***\n");
-            }
-
-            /* Ensure VIC dimensions are set */
-            if (vic->width == 0 || vic->height == 0) {
-                vic->width = 1920;
-                vic->height = 1080;
-                pr_info("*** CHANNEL %d STREAMON: Set VIC dimensions %dx%d ***\n",
-                        channel, vic->width, vic->height);
-            }
-
-            pr_info("*** VIC STATE: state=%d, stream_state=%d, active_buffer_count=%d ***\n",
-                    vic->state, vic->stream_state, vic->active_buffer_count);
-
-            /* VIC hardware initialization now handled by vic_core_s_stream only */
-            pr_info("*** Channel %d: VIC hardware initialization deferred to vic_core_s_stream ***\n", channel);
-            pr_info("*** CHANNEL %d STREAMON: VIC hardware started successfully ***\n", channel);
-
-            /* Reference behavior: vic_core_s_stream handles VIC start. Now send frame-channel STREAMON event (0x3000003). */
-            if (ourISPdev && ourISPdev->vic_dev) {
-                struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-                int ch = 0; /* VIC is owned by channel 0; force ch0 regardless of caller */
-                pr_info("*** CHANNEL %d STREAMON: SENDING FRAME STREAMON EVENT (0x3000003) TO VIC AS ch=0 ***\n", channel);
-                {
-                    int rc = tx_isp_send_event_to_remote(&vic->sd, 0x3000003, &ch);
-                    if (rc == 0xfffffdfd || rc < 0) {
-                        pr_info("*** STREAMON fallback: calling ispvic_frame_channel_s_stream directly (rc=%d) ***\n", rc);
-                        (void) ispvic_frame_channel_s_stream(vic, 1);
-                    }
-                }
-            }
+        if (!state->capture_active && ourISPdev && ourISPdev->sensor &&
+            ourISPdev->sensor->sd.vin_state == TX_ISP_MODULE_RUNNING) {
+            state->capture_active = true;
+            pr_info("Channel %d: capture_active enabled via running sensor pipeline\n",
+                    channel);
+            wake_up_interruptible(&state->frame_wait);
         }
 
-        // *** CRITICAL: TRIGGER SENSOR HARDWARE INITIALIZATION AND STREAMING ***
-        if (channel == 0 && ourISPdev && ourISPdev->sensor) {
-            sensor = ourISPdev->sensor;
-
-            pr_info("*** CHANNEL %d STREAMON: INITIALIZING AND STARTING SENSOR HARDWARE ***\n", channel);
-            pr_info("Channel %d: Found sensor %s for streaming\n",
-                    channel, sensor ? sensor->info.name : "(unnamed)");
-
-            // core ops init
-            if (ourISPdev->sd.ops && ourISPdev->sd.ops->core && ourISPdev->sd.ops->core->init) {
-                pr_info("*** Channel %d: CALLING CORE INIT - WRITING INITIALIZATION REGISTERS ***\n", channel);
-                ret = ourISPdev->sd.ops->core->init(&ourISPdev->sd, 1);
-                if (ret) {
-                    pr_err("Channel %d: CORE INIT FAILED: %d\n", channel, ret);
-                } else {
-                    pr_info("*** Channel %d: CORE INIT SUCCESS - INITIALIZATION REGISTERS WRITTEN ***\n", channel);
-                }
-            }
-
-            // *** STEP 1: TRIGGER SENSOR HARDWARE INITIALIZATION (sensor_init) ***
-            if (sensor && sensor->sd.ops && sensor->sd.ops->core && sensor->sd.ops->core->init) {
-                pr_info("*** Channel %d: CALLING SENSOR_INIT - WRITING INITIALIZATION REGISTERS ***\n", channel);
-                ret = sensor->sd.ops->core->init(&sensor->sd, 1);
-                if (ret) {
-                    pr_err("Channel %d: SENSOR_INIT FAILED: %d\n", channel, ret);
-                } else {
-                    pr_info("*** Channel %d: SENSOR_INIT SUCCESS - SENSOR REGISTERS PROGRAMMED ***\n", channel);
-                }
-            } else {
-                pr_err("*** Channel %d: NO SENSOR_INIT FUNCTION AVAILABLE! ***\n", channel);
-                pr_err("Channel %d: sensor=%p\n", channel, sensor);
-                if (sensor) {
-                    pr_err("Channel %d: sensor->sd.ops=%p\n", channel, sensor->sd.ops);
-                    if (sensor->sd.ops) {
-                        pr_err("Channel %d: sensor->sd.ops->core=%p\n", channel, sensor->sd.ops->core);
-                        if (sensor->sd.ops->core) {
-                            pr_err("Channel %d: sensor->sd.ops->core->init=%p\n", channel, sensor->sd.ops->core->init);
-                        }
-                    }
-                }
-            }
-
-            // *** STEP 2: TRIGGER SENSOR g_chip_ident FOR PROPER HARDWARE RESET/SETUP ***
-            if (sensor && sensor->sd.ops && sensor->sd.ops->core && sensor->sd.ops->core->g_chip_ident) {
-                struct tx_isp_chip_ident chip_ident;
-                pr_info("*** Channel %d: CALLING SENSOR_G_CHIP_IDENT - HARDWARE RESET AND SETUP ***\n", channel);
-                ret = sensor->sd.ops->core->g_chip_ident(&sensor->sd, &chip_ident);
-                if (ret) {
-                    pr_err("Channel %d: SENSOR_G_CHIP_IDENT FAILED: %d\n", channel, ret);
-                } else {
-                    pr_info("*** Channel %d: SENSOR_G_CHIP_IDENT SUCCESS - HARDWARE READY ***\n", channel);
-                }
-            } else {
-                pr_warn("Channel %d: No g_chip_ident function available\n", channel);
-            }
-
-            // Detailed sensor structure debugging
-            if (sensor) {
-                pr_info("Channel %d: sensor=%p, sd=%p\n", channel, sensor, &sensor->sd);
-                pr_info("Channel %d: sensor->sd.ops=%p\n", channel, sensor->sd.ops);
-                if (sensor->sd.ops) {
-                    pr_info("Channel %d: sensor->sd.ops->video=%p\n", channel, sensor->sd.ops->video);
-                    if (sensor->sd.ops->video) {
-                        pr_info("Channel %d: sensor->sd.ops->video->s_stream=%p\n",
-                                channel, sensor->sd.ops->video->s_stream);
-                    }
-                }
-                pr_info("Channel %d: current vin_state=%d (need %d for active)\n",
-                        channel, sensor->sd.vin_state, TX_ISP_MODULE_RUNNING);
-            }
-
-            // *** STEP 3: NOW START STREAMING WITH DETAILED ERROR CHECKING ***
-            if (sensor && sensor->sd.ops && sensor->sd.ops->video &&
-                sensor->sd.ops->video->s_stream) {
-                pr_info("*** Channel %d: CALLING SENSOR s_stream(1) - THIS SHOULD WRITE 0x3e=0x91 ***\n", channel);
-                pr_info("Channel %d: About to call %s->s_stream(1)\n",
-                        channel, sensor->info.name);
-
-                ret = sensor->sd.ops->video->s_stream(&sensor->sd, 1);
-
-                pr_info("*** Channel %d: SENSOR s_stream(1) RETURNED %d ***\n", channel, ret);
-                if (ret) {
-                    pr_err("Channel %d: FAILED to start sensor streaming: %d\n", channel, ret);
-                    pr_err("Channel %d: This means register 0x3e=0x91 was NOT written!\n", channel);
-                    state->streaming = false;
-                    return ret;
-                } else {
-                    pr_info("*** Channel %d: SENSOR STREAMING SUCCESS - 0x3e=0x91 SHOULD BE WRITTEN ***\n", channel);
-                    // CRITICAL: Set sensor state to RUNNING after successful streaming start
-                    sensor->sd.vin_state = TX_ISP_MODULE_RUNNING;
-                    pr_info("Channel %d: Sensor state set to RUNNING\n", channel);
-                    state->capture_active = true;
-                    wake_up_interruptible(&state->frame_wait);
-
-                }
-            } else {
-                pr_err("*** Channel %d: CRITICAL ERROR - NO SENSOR s_stream OPERATION! ***\n", channel);
-                pr_err("Channel %d: sensor=%p\n", channel, sensor);
-                if (sensor) {
-                    pr_err("Channel %d: sensor->sd.ops=%p\n", channel, sensor->sd.ops);
-                    if (sensor->sd.ops) {
-                        pr_err("Channel %d: sensor->sd.ops->video=%p\n", channel, sensor->sd.ops->video);
-                        if (sensor->sd.ops->video) {
-                            pr_err("Channel %d: sensor->sd.ops->video->s_stream=%p\n",
-                                channel, sensor->sd.ops->video->s_stream);
-                        }
-                    }
-                }
-                pr_err("Channel %d: SENSOR STREAMING NOT AVAILABLE - VIDEO WILL BE GREEN!\n", channel);
-            }
-
-            // *** CRITICAL: TRIGGER VIC STREAMING CHAIN - ONLY FROM CHANNEL 0 ***
-            if (channel == 0) {
-                if (ourISPdev && ourISPdev->vic_dev) {
-                    struct tx_isp_vic_device *vic_streaming = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-
-                    pr_info("*** Channel %d: CALLING VIC STREAMING CHAIN (chn0 only) ***\n", channel);
-
-                    // CRITICAL: Call vic_core_s_stream which calls tx_isp_vic_start when streaming
-                    ret = vic_core_s_stream(&vic_streaming->sd, 1);
-
-                    pr_info("*** Channel %d: VIC STREAMING RETURNED %d ***\n", channel, ret);
-
-                    if (ret) {
-                        pr_err("Channel %d: VIC streaming failed: %d\n", channel, ret);
-                    } else {
-                        pr_info("*** Channel %d: VIC STREAMING SUCCESS - HARDWARE ACTIVE ***\n", channel);
-                    }
-                } else {
-                    pr_err("*** Channel %d: NO VIC DEVICE - CANNOT TRIGGER HARDWARE STREAMING! ***\n", channel);
-                }
-            } else {
-                pr_info("*** Channel %d: STREAMON does not control VIC (ignored for chn!=0) ***\n", channel);
-            }
-
-            // Trigger core ops streaming
-            if (ourISPdev && ourISPdev->sd.ops && ourISPdev->sd.ops->video &&
-                ourISPdev->sd.ops->video->s_stream) {
-
-                pr_info("*** Channel %d: NOW CALLING CORE STREAMING - THIS SHOULD TRIGGER MORE REGISTER ACTIVITY! ***\n", channel);
-                ret = ourISPdev->sd.ops->video->s_stream(&ourISPdev->sd, 1);
-                if (ret) {
-                    pr_err("Channel %d: CORE STREAMING FAILED: %d\n", channel, ret);
-                } else {
-                    pr_info("*** Channel %d: CORE STREAMING SUCCESS - ALL HARDWARE SHOULD BE ACTIVE! ***\n", channel);
-                }
-            }
-
-            // Trigger Core Streaming - using ourISPdev directly as it contains the core functionality
-            pr_info("*** Channel %d: Core streaming functionality integrated in main ISP device ***\n", channel);
-
-        } else {
-            if (channel == 0) {
-                pr_warn("*** Channel %d: NO SENSOR AVAILABLE FOR STREAMING ***\n", channel);
-                pr_warn("Channel %d: ourISPdev=%p\n", channel, ourISPdev);
-                if (ourISPdev) {
-                    pr_warn("Channel %d: ourISPdev->sensor=%p\n", channel, ourISPdev->sensor);
-                }
-                pr_warn("Channel %d: VIDEO WILL BE GREEN WITHOUT SENSOR!\n", channel);
-            }
-        }
-
-        // Get VIC device
-        if (ourISPdev && ourISPdev->vic_dev) {
-            vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-
-            // Activate VIC if needed
-            if (vic_dev->state != 2) {
-                vic_dev->state = 2;
-                pr_info("Channel %d: VIC activated\n", channel);
-            }
-
-            // Enable VIC streaming with COMPLETE MIPI register configuration (matches reference tx_isp_vic_start)
-            if (!vic_dev->streaming) {
-                unsigned long flags;
-
-                spin_lock_irqsave(&vic_dev->buffer_lock, flags);
-
-                if (vic_dev->vic_regs) {
-                    int timeout = 1000;
-                    u32 vic_status;
-                    u32 ctrl_verify;
-
-                    pr_info("*** Channel %d: VIC REFERENCE ENABLEMENT SEQUENCE (STREAMON) ***\n", channel);
-
-                    // STEP 1: Enable VIC register access mode (write 2 to register 0x0)
-                    iowrite32(2, vic_dev->vic_regs + 0x0);
-                    wmb();
-                    pr_info("Channel %d: VIC enabled register access (wrote 2)\n", channel);
-
-                    // STEP 2: Set VIC configuration mode (write 4 to register 0x0)
-                    iowrite32(4, vic_dev->vic_regs + 0x0);
-                    wmb();
-                    pr_info("Channel %d: VIC set config mode (wrote 4)\n", channel);
-
-                    // STEP 3: Wait for VIC ready state
-                    while ((vic_status = ioread32(vic_dev->vic_regs + 0x0)) != 0 && timeout--) {
-                        cpu_relax();
-                    }
-                    pr_info("Channel %d: VIC ready wait complete (status=0x%x, timeout=%d)\n",
-                           channel, vic_status, timeout);
-
-                    // STEP 4: Start VIC processing (write 1 to register 0x0)
-                    iowrite32(1, vic_dev->vic_regs + 0x0);
-                    wmb();
-                    pr_info("Channel %d: VIC processing started (wrote 1)\n", channel);
-
-                    pr_info("*** Channel %d: NOW CONFIGURING VIC REGISTERS (SHOULD WORK!) ***\n", channel);
-
-                    // NOW configure VIC registers - they should be accessible!
-                    // CRITICAL: MIPI interface configuration - MIPI mode is 2, not 3!
-                    iowrite32(2, vic_dev->vic_regs + 0xc);
-                    wmb();
-                    ctrl_verify = ioread32(vic_dev->vic_regs + 0xc);
-                    pr_info("Channel %d: VIC ctrl reg 0xc = 2 (MIPI mode), verify=0x%x\n", channel, ctrl_verify);
-
-                    if (ctrl_verify == 3) {
-                        pr_info("*** Channel %d: SUCCESS! VIC REGISTERS RESPONDING! ***\n", channel);
-
-                        // Continue with full configuration since registers are working
-                        // Frame dimensions register 0x4: (width << 16) | height
-                        iowrite32((vic_dev->width << 16) | vic_dev->height,
-                                 vic_dev->vic_regs + 0x4);
-
-                        // MIPI configuration register 0x10: Format-specific value
-                        iowrite32(0x40000, vic_dev->vic_regs + 0x10);
-
-                        // MIPI stride configuration register 0x18 -> use bytesperline (stride)
-                        {
-                            u32 stride = state->bytesperline ? state->bytesperline : nv12_stride(vic_dev->width);
-                            iowrite32(stride, vic_dev->vic_regs + 0x18);
-                            pr_info("Channel %d: VIC stride (0x18) set to %u bytes/line\n", channel, stride);
-                        }
-
-                        // DMA buffer configuration registers (from reference)
-                        iowrite32(0x100010, vic_dev->vic_regs + 0x1a4);  // DMA config
-                        iowrite32(0x4210, vic_dev->vic_regs + 0x1ac);    // Buffer mode
-                        iowrite32(0x10, vic_dev->vic_regs + 0x1b0);      // Buffer control
-                        iowrite32(0, vic_dev->vic_regs + 0x1b4);         // Clear buffer state
-
-                        // CRITICAL: Enable MIPI streaming register 0x300 (from reference)
-                        iowrite32((vic_dev->frame_count << 16) | 0x80000020,
-                                 vic_dev->vic_regs + 0x300);
-
-                        pr_info("*** Channel %d: VIC FULL CONFIGURATION COMPLETE ***\n", channel);
-                        pr_info("Channel %d: VIC regs: ctrl=0x%x, dim=0x%x, mipi=0x%x, stream=0x%x\n",
-                                channel,
-                                ioread32(vic_dev->vic_regs + 0xc),
-                                ioread32(vic_dev->vic_regs + 0x4),
-                                ioread32(vic_dev->vic_regs + 0x10),
-                                ioread32(vic_dev->vic_regs + 0x300));
-                    } else {
-                        pr_err("*** Channel %d: VIC REGISTERS STILL UNRESPONSIVE (got 0x%x) ***\n", channel, ctrl_verify);
-                    }
-                }
-
-                vic_dev->streaming = 1;
-
-                spin_unlock_irqrestore(&vic_dev->buffer_lock, flags);
-
-                pr_info("*** Channel %d: VIC NOW READY TO RECEIVE MIPI DATA FROM SENSOR ***\n", channel);
-            }
-        }
-
-
+        pr_info("Streamon successful\n");
         pr_info("Channel %d: Streaming enabled\n", channel);
         return 0;
     }
@@ -4341,6 +4016,9 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         // Stop channel streaming
         state->streaming = false;
         state->capture_active = false;
+        state->state = 3;
+        state->flags &= ~1U;
+        fcd->streaming_flags &= ~1;
 
         // *** CRITICAL: STOP ISP CHANNEL CONTROL (writes to register 0x9804 and waits for 0x9808) ***
         pr_info("*** Channel %d: CALLING tisp_channel_stop to disable ISP channel control ***\n", channel);
@@ -4470,23 +4148,25 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         // Wait for frame with a short timeout
         pr_info("*** Channel %d: Waiting for frame (timeout=100ms) ***\n", channel);
         ret = wait_event_interruptible_timeout(state->frame_wait,
-                                             state->frame_ready || !state->streaming,
+                                             !list_empty(&state->completed_buffers) ||
+                                             state->pre_dequeue_ready ||
+                                             !state->streaming ||
+                                             !state->capture_active,
                                              msecs_to_jiffies(100));
 
         pr_info("*** Channel %d: Frame wait returned %d ***\n", channel, ret);
 
-        spin_lock_irqsave(&state->buffer_lock, flags);
-        if (ret > 0 && state->frame_ready) {
-            result = 1; // Frame ready
-            state->frame_ready = false; // Consume the frame
-            pr_info("*** Channel %d: Frame was ready, consuming it ***\n", channel);
-        } else {
-            // Timeout or error - generate a frame
-            result = 1;
-            state->frame_ready = true;
-            pr_info("*** Channel %d: Frame wait timeout/error, generating frame ***\n", channel);
-        }
-        spin_unlock_irqrestore(&state->buffer_lock, flags);
+        if (ret < 0)
+            return ret;
+
+        spin_lock_irqsave(&state->queue_lock, flags);
+        result = (!list_empty(&state->completed_buffers) || state->pre_dequeue_ready) ? 1U : 0U;
+        spin_unlock_irqrestore(&state->queue_lock, flags);
+
+        if (result)
+            pr_info("*** Channel %d: Frame wait observed a real deliverable frame ***\n", channel);
+        else
+            pr_info("*** Channel %d: Frame wait timeout/no deliverable frame ***\n", channel);
 
         if (copy_to_user(argp, &result, sizeof(result)))
             return -EFAULT;
@@ -6006,14 +5686,7 @@ static int tx_isp_init(void)
     }
     pr_info("*** SUBDEVICE GRAPH CREATED - FRAME DEVICES SHOULD NOW EXIST ***\n");
 
-    /* *** CRITICAL: Initialize V4L2 video devices for encoder compatibility *** */
-    pr_info("*** INITIALIZING V4L2 VIDEO DEVICES FOR ENCODER SUPPORT ***\n");
-    ret = tx_isp_v4l2_init();
-    if (ret) {
-        pr_err("Failed to initialize V4L2 video devices: %d\n", ret);
-        goto err_cleanup_graph;
-    }
-    pr_info("*** V4L2 VIDEO DEVICES CREATED - /dev/video0, /dev/video1 NOW AVAILABLE ***\n");
+    pr_info("*** V4L2 VIDEO DEVICES DISABLED - skipping /dev/videoX registration ***\n");
 
     /* Initialize netlink channel (optional, non-fatal on error) */
     {
@@ -6025,10 +5698,9 @@ static int tx_isp_init(void)
     pr_info("TX ISP driver ready with new subdevice management system\n");
     return 0;
 
-err_cleanup_graph:
+err_cleanup_platforms:
     tx_isp_cleanup_subdev_graph(ourISPdev);
 
-err_cleanup_platforms:
     /* Clean up in reverse order */
     platform_device_unregister(&tx_isp_core_platform_device);
     platform_device_unregister(&tx_isp_fs_platform_device);
@@ -6061,10 +5733,6 @@ static void tx_isp_exit(void)
     if (ourISPdev) {
         /* Clean up subdevice graph */
         tx_isp_cleanup_subdev_graph(ourISPdev);
-
-        /* *** CRITICAL: Cleanup V4L2 video devices *** */
-        tx_isp_v4l2_cleanup();
-        pr_info("*** V4L2 VIDEO DEVICES CLEANED UP ***\n");
 
         /* *** CRITICAL: Destroy ISP M0 tuning device node (matches reference driver) *** */
         tisp_code_destroy_tuning_node();
@@ -6391,103 +6059,67 @@ static void tx_vic_disable_irq_complete(struct tx_isp_dev *isp_dev)
     pr_info("*** tx_vic_disable_irq COMPLETE - VIC INTERRUPTS DISABLED ***\n");
 }
 
-/* tx_vic_enable_irq - MIPS-SAFE implementation with no dangerous callback access */
+static int tx_vic_get_irq_number(struct tx_isp_vic_device *vic_dev)
+{
+    if (!vic_dev)
+        return 0;
+
+    if (vic_dev->irq > 0)
+        return vic_dev->irq;
+    if (vic_dev->irq_number > 0)
+        return vic_dev->irq_number;
+    if (vic_dev->sd.irq_info.irq > 0)
+        return vic_dev->sd.irq_info.irq;
+
+    return 0;
+}
+
 void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 {
     unsigned long flags;
+    int irq;
 
-    pr_info("*** tx_vic_enable_irq: MIPS-SAFE implementation - no dangerous callback access ***\n");
-
-    /* MIPS ALIGNMENT CHECK: Validate vic_dev pointer alignment */
-    if (!vic_dev || ((uintptr_t)vic_dev & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev pointer 0x%p not 4-byte aligned ***\n", vic_dev);
+    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001)
         return;
-    }
 
-    /* MIPS SAFE: Bounds validation */
-    if ((uintptr_t)vic_dev >= 0xfffff001) {
-        pr_err("*** MIPS ERROR: vic_dev pointer 0x%p out of valid range ***\n", vic_dev);
-        return;
-    }
-
-    /* MIPS SAFE: Validate lock structure alignment */
-    if (((uintptr_t)&vic_dev->lock & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->lock not aligned ***\n");
-        return;
-    }
-
-    /* MIPS SAFE: Use proper struct member access */
     spin_lock_irqsave(&vic_dev->lock, flags);
 
-    /* MIPS SAFE: Set interrupt enable state using safe struct member access */
-    /* Instead of dangerous offset access, use the state field */
-    if (vic_dev->state < 2) {
-        vic_dev->state = 2; /* Mark as interrupt-enabled active state */
-        pr_info("*** MIPS-SAFE: VIC interrupt state set to active (state=2) ***\n");
-    } else {
-        pr_info("*** MIPS-SAFE: VIC already in active interrupt state (state=%d) ***\n", vic_dev->state);
+    if (vic_dev->hw_irq_enabled == 0) {
+        vic_dev->hw_irq_enabled = 1;
+        vic_dev->irq_enabled = 1;
+
+        irq = tx_vic_get_irq_number(vic_dev);
+        if (irq > 0)
+            enable_irq(irq);
+        else
+            pr_warn("tx_vic_enable_irq: no VIC irq registered\n");
     }
 
-    /* MIPS SAFE: NO CALLBACK FUNCTION ACCESS - this was causing the crash */
-    /* The callback at offset +0x84 was pointing to invalid memory (ffffcc60) */
-    /* Instead, we'll just enable interrupts through the safe state mechanism */
-    pr_info("*** MIPS-SAFE: Skipping dangerous callback function access that caused crash ***\n");
-    pr_info("*** MIPS-SAFE: VIC interrupts enabled through safe state management ***\n");
-
-    /* MIPS SAFE: Use proper struct member access */
     spin_unlock_irqrestore(&vic_dev->lock, flags);
-
-    pr_info("*** tx_vic_enable_irq: MIPS-SAFE completion - no callback crash risk ***\n");
 }
 
-/* tx_vic_disable_irq - MIPS-SAFE implementation */
 void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
 {
     unsigned long flags;
+    int irq;
 
-    pr_info("*** tx_vic_disable_irq: MIPS-SAFE implementation ***\n");
-
-    /* MIPS ALIGNMENT CHECK: Validate vic_dev pointer alignment */
-    if (!vic_dev || ((uintptr_t)vic_dev & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev pointer 0x%p not 4-byte aligned ***\n", vic_dev);
+    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001)
         return;
-    }
 
-    /* MIPS SAFE: Bounds validation */
-    if ((uintptr_t)vic_dev >= 0xfffff001) {
-        pr_err("*** MIPS ERROR: vic_dev pointer 0x%p out of valid range ***\n", vic_dev);
-        return;
-    }
-
-    /* MIPS SAFE: Check for corrupted state before accessing */
-    if (vic_dev->state > 10) {
-        pr_err("*** MIPS ERROR: VIC device state corrupted (%d), cannot safely disable interrupts ***\n", vic_dev->state);
-        pr_err("*** MIPS SAFE: Skipping dangerous spinlock access on corrupted device ***\n");
-        return;
-    }
-
-    /* MIPS SAFE: Validate lock structure alignment */
-    if (((uintptr_t)&vic_dev->lock & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: vic_dev->lock not aligned ***\n");
-        return;
-    }
-
-    pr_info("*** MIPS-SAFE: VIC device state=%d, proceeding with safe disable ***\n", vic_dev->state);
-
-    /* MIPS SAFE: Use proper struct member access with validation */
     spin_lock_irqsave(&vic_dev->lock, flags);
 
-    /* MIPS SAFE: Set interrupt disable state using safe bounds checking */
-    if (vic_dev->state >= 0 && vic_dev->state <= 10) {
-        vic_dev->state = 0;  /* Mark as interrupt-disabled state */
-        pr_info("*** MIPS-SAFE: VIC interrupt state set to disabled (0) ***\n");
-    } else {
-        pr_err("*** MIPS ERROR: Cannot set state on corrupted device (state=%d) ***\n", vic_dev->state);
+    if (vic_dev->hw_irq_enabled != 0) {
+        vic_dev->hw_irq_enabled = 0;
+        vic_dev->irq_enabled = 0;
+
+        irq = tx_vic_get_irq_number(vic_dev);
+        if (irq > 0)
+            disable_irq(irq);
+        else
+            pr_warn("tx_vic_disable_irq: no VIC irq registered\n");
     }
 
     spin_unlock_irqrestore(&vic_dev->lock, flags);
-
-    pr_info("*** tx_vic_disable_irq: MIPS-SAFE completion ***\n");
 }
 
 
@@ -7402,23 +7034,17 @@ static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data)
 /* Wake up waiters when frame is ready - matches reference driver pattern */
 void frame_channel_wakeup_waiters(struct frame_channel_device *fcd)
 {
-    unsigned long flags;
-
     if (!fcd) {
         return;
     }
 
     pr_debug("Channel %d: Waking up frame waiters\n", fcd->channel_num);
 
-    /* Mark frame as ready and wake up waiters */
-    spin_lock_irqsave(&fcd->state.buffer_lock, flags);
-    fcd->state.frame_ready = true;
-    spin_unlock_irqrestore(&fcd->state.buffer_lock, flags);
-
-    /* Wake up any threads waiting for frame completion */
-    wake_up_interruptible(&fcd->state.frame_wait);
-
-    pr_debug("Channel %d: Frame ready\n", fcd->channel_num);
+    /* Route wakeups through the real completion path so DQBUF sees a
+     * deliverable buffer instead of a fabricated frame_ready bit.
+     */
+    if (frame_chan_event(fcd, TX_ISP_EVENT_FRAME_DQBUF, NULL) == 0)
+        pr_debug("Channel %d: Frame completion delivered\n", fcd->channel_num);
 }
 
 /* Public function to wake up all streaming frame channels - for tuning system */
@@ -7431,16 +7057,8 @@ void tx_isp_wakeup_frame_channels(void)
     for (i = 0; i < num_channels; i++) {
         struct frame_channel_device *fcd = &frame_channels[i];
         if (fcd && fcd->state.streaming) {
-            unsigned long flags;
-
-            /* Mark frame as ready and wake up waiters */
-            spin_lock_irqsave(&fcd->state.buffer_lock, flags);
-            if (!fcd->state.frame_ready) {
-                fcd->state.frame_ready = true;
-                wake_up_interruptible(&fcd->state.frame_wait);
-                pr_debug("*** Woke up channel %d for frame processing ***\n", i);
-            }
-            spin_unlock_irqrestore(&fcd->state.buffer_lock, flags);
+            frame_channel_wakeup_waiters(fcd);
+            pr_debug("*** Woke up channel %d for frame processing ***\n", i);
         }
     }
 }
