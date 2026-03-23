@@ -44,9 +44,16 @@ int tx_isp_configure_format_propagation(struct tx_isp_dev *isp);
 static int tx_isp_vic_device_init(struct tx_isp_dev *isp);
 static int tx_isp_csi_device_deinit(struct tx_isp_dev *isp);
 static int tx_isp_vic_device_deinit(struct tx_isp_dev *isp);
-int tisp_init(struct tx_isp_sensor_attribute *sensor_attr, struct tx_isp_dev *isp_dev);
+int tisp_init(void *sensor_info, char *param_name);
 void frame_channel_wakeup_waiters(struct frame_channel_device *fcd);
 int tisp_deinit(void);
+
+struct tisp_boot_sensor_info {
+    u32 width;
+    u32 height;
+    u32 fps;
+    u32 mode;
+};
 
 /* Forward declaration for VIC device creation from tx_isp_vic.c */
 extern int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
@@ -59,6 +66,128 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int enable);
 
 /* Global flag to prevent multiple tisp_init calls */
 static bool tisp_initialized = false;
+
+static u32 tisp_boot_fps_from_sensor(struct tx_isp_dev *isp_dev,
+                                     struct tx_isp_sensor_attribute *sensor_attr)
+{
+    u32 fps = 25;
+
+    if (isp_dev && isp_dev->sensor) {
+        u32 raw_fps = isp_dev->sensor->video.fps;
+        u32 num = raw_fps >> 16;
+        u32 den = raw_fps & 0xffff;
+
+        if (num != 0) {
+            if (den == 0)
+                fps = num;
+            else
+                fps = (num + (den / 2)) / den;
+        }
+    }
+
+    if ((fps == 0 || fps > 240) && sensor_attr && sensor_attr->fps && sensor_attr->fps <= 240)
+        fps = sensor_attr->fps;
+
+    return fps ? fps : 25;
+}
+
+static void tisp_fill_boot_sensor_info(struct tx_isp_dev *isp_dev,
+                                       struct tx_isp_sensor_attribute *sensor_attr,
+                                       struct tisp_boot_sensor_info *info)
+{
+    memset(info, 0, sizeof(*info));
+
+    info->width = 1920;
+    info->height = 1080;
+    info->fps = tisp_boot_fps_from_sensor(isp_dev, sensor_attr);
+    info->mode = 0;
+
+    if (isp_dev && isp_dev->sensor) {
+        if (isp_dev->sensor->video.mbus.width)
+            info->width = isp_dev->sensor->video.mbus.width;
+        if (isp_dev->sensor->video.mbus.height)
+            info->height = isp_dev->sensor->video.mbus.height;
+    }
+
+    if (sensor_attr) {
+        if ((info->width == 0 || info->height == 0) &&
+            sensor_attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) {
+            if (sensor_attr->mipi.image_twidth)
+                info->width = sensor_attr->mipi.image_twidth;
+            if (sensor_attr->mipi.image_theight)
+                info->height = sensor_attr->mipi.image_theight;
+        }
+
+        if (sensor_attr->data_type != TX_SENSOR_DATA_TYPE_LINEAR)
+            info->mode = 4;
+    }
+}
+
+static void isp_core_early_cpm_bringup(void)
+{
+    void __iomem *cpm;
+    u32 clkgr0_before;
+    u32 clkgr1_before;
+    u32 reset_before;
+    u32 unlock_before;
+    u32 r30_before;
+    u32 r3c_before;
+    u32 clkgr0_after;
+    u32 clkgr1_after;
+    u32 reset_after;
+    const u32 clkgr0_mask = (1u << 7) | (1u << 13) | (1u << 21) | (1u << 30);
+    const u32 clkgr1_mask = (1u << 2) | (1u << 30);
+    const u32 reset_mask = (1u << 0) | (1u << 8);
+
+    cpm = ioremap(0x10000000, 0x1000);
+    if (!cpm) {
+        pr_warn("[CPM][CORE] early bring-up: ioremap failed\n");
+        return;
+    }
+
+    clkgr0_before = readl(cpm + 0x20);
+    clkgr1_before = readl(cpm + 0x28);
+    r30_before = readl(cpm + 0x30);
+    reset_before = readl(cpm + 0x34);
+    unlock_before = readl(cpm + 0x38);
+    r3c_before = readl(cpm + 0x3c);
+
+    pr_info("[CPM][CORE] early bring-up before tisp_init: g0=%08x g1=%08x r30=%08x r34=%08x unl=%08x r3c=%08x\n",
+            clkgr0_before, clkgr1_before, r30_before, reset_before, unlock_before, r3c_before);
+
+    writel(clkgr0_before & ~clkgr0_mask, cpm + 0x20);
+    writel(clkgr1_before & ~clkgr1_mask, cpm + 0x28);
+    wmb();
+    udelay(5);
+
+    writel(0x0000A5A5, cpm + 0x38);
+    wmb();
+    udelay(1);
+
+    /* Some Ingenic reset windows behave W1C, others require RMW clear. */
+    writel(reset_mask, cpm + 0x34);
+    wmb();
+    udelay(5);
+
+    reset_after = readl(cpm + 0x34);
+    if (reset_after & reset_mask) {
+        writel(reset_after & ~reset_mask, cpm + 0x34);
+        wmb();
+        udelay(5);
+        reset_after = readl(cpm + 0x34);
+    }
+
+    clkgr0_after = readl(cpm + 0x20);
+    clkgr1_after = readl(cpm + 0x28);
+
+    pr_info("[CPM][CORE] early bring-up after preflight: g0=%08x g1=%08x r34=%08x\n",
+            clkgr0_after, clkgr1_after, reset_after);
+    if (reset_after & reset_mask)
+        pr_warn("[CPM][CORE] early bring-up: reset bits still asserted (mask=%08x, r34=%08x)\n",
+                reset_mask, reset_after);
+
+    iounmap(cpm);
+}
 
 /* Function to reset tisp initialization flag (for cleanup) */
 void tisp_reset_initialization_flag(void)
@@ -360,6 +489,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     int var_28 = 0;
     int a0_4;
     int vic_state;
+    int defer_streaming_state = 0;
 
     pr_info("*** ispcore_video_s_stream: EXACT Binary Ninja MCP implementation - enable=%d ***\n", enable);
 
@@ -389,7 +519,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     vic_state = vic_dev->state;
     pr_info("*** VIC STATE CHECK: vic_dev->state=%d (need >=3), enable=%d ***\n", vic_state, enable);
 
-    if (vic_state < 2) {
+    if (vic_state < 3) {
         pr_err("*** VIC STATE ERROR: Current VIC state=%d, need >=3 for streaming ***\n", vic_state);
         /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream") */
         isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream");
@@ -449,11 +579,15 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         /* Binary Ninja: $s3_1 = arg1 + 0x38 - CRITICAL FIX: Use subdev array, not function call */
         s3_1 = &isp_dev->subdevs[0];
     } else {
-        /* Binary Ninja: *($s0 + 0xe8) = 4 */
-        isp_dev->state = 4;
-        vic_dev->state = 4;
+        /* IMPORTANT: Do not pre-mark VIC as state 4 here.
+         * vic_core_s_stream() owns the real 3 -> 4 transition and will skip
+         * tx_isp_vic_start() if it sees state 4 on entry.
+         */
+        defer_streaming_state = (enable == 1);
+
         /* Stream ON ordering fix: VIC (slot 1) -> CSI (slot 0) -> rest */
         if (enable == 1) {
+            pr_info("*** ispcore_video_s_stream: Stream ON - deferring state 4 until ordered subdev stream-on completes ***\n");
             /* Call VIC first */
             call_s_stream_slot(isp_dev, 1, enable);
             /* Then CSI */
@@ -462,7 +596,6 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
             s3_1 = &isp_dev->subdevs[2];
         }
 
-        pr_info("*** ispcore_video_s_stream: ISP state set to 4 for stream ON ***\n");
         /* For stream ON, if we already issued VIC and CSI above, continue with the rest (skip 0 and 1) */
         if (enable == 1)
             s3_1 = &isp_dev->subdevs[2];
@@ -544,14 +677,29 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         }
     }
 
+    if (defer_streaming_state) {
+        if (vic_dev->state == 4) {
+            isp_dev->state = 4;
+            pr_info("*** ispcore_video_s_stream: Deferred stream ON complete - VIC reached state 4, ISP state set to 4 ***\n");
+        } else {
+            pr_warn("*** ispcore_video_s_stream: Deferred stream ON incomplete - VIC state=%d after ordered subdev start, keeping ISP state=%d ***\n",
+                    vic_dev->state, isp_dev->state);
+        }
+    }
+
     /* Binary Ninja: $a0_4 = *($s0 + 0x15c) - ISP bypass/process mode flag */
     a0_4 = ispcore_bypass_enabled(isp_dev);
 
-    /* Binary Ninja: if ($a0_4 == 1 || arg2 == 0) */
-    if (a0_4 == 1 || enable == 0) {
-        /* Disable IRQ when stopping or if already enabled */
+    /* Keep stream-off behavior strict, but do not disable IRQs on stream-on
+     * simply because ISP bypass mode is selected. The userspace stack enables
+     * bypass while still expecting the VIC/CSI pipeline to stream frames.
+     */
+    if (enable == 0) {
+        /* Disable IRQ when stopping */
         tx_isp_disable_irq(isp_dev);
         pr_info("*** ispcore_video_s_stream: IRQ disabled ***\n");
+    } else if (a0_4 == 1) {
+        pr_info("*** ispcore_video_s_stream: bypass enabled during stream ON - leaving IRQ state unchanged ***\n");
     } else {
         /* Enable IRQ when starting */
         tx_isp_enable_irq(isp_dev);
@@ -1669,22 +1817,13 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
                 pr_info("ispcore_slake_module: Channel %d enabled", i);
             }
 
-            /* CRITICAL FIX: Binary Ninja VIC control function call */
-            /* Binary Ninja: void* $a0_1 = *($s0_1 + 0x1bc) - Get VIC control function */
             /* Binary Ninja: (*($a0_1 + 0x40cc))($a0_1, 0x4000001, 0) */
-            if (vic_dev && vic_dev->vic_regs) {
-                uint32_t *vic_control_reg;
-
-                pr_info("ispcore_slake_module: Calling VIC control function (0x4000001, 0)");
-                /* CRITICAL: This is the missing VIC control call that enables proper state transitions */
-                /* The function at offset 0x40cc is likely a VIC register configuration function */
-                /* For T31 hardware, this would configure VIC for proper operation */
-                vic_control_reg = (uint32_t *)((char *)vic_dev->vic_regs + 0x40cc);
-                if (vic_control_reg) {
-                    /* Write the control value 0x4000001 to enable VIC operation */
-                    writel(0x4000001, vic_control_reg);
-                    pr_info("ispcore_slake_module: VIC control register written: 0x4000001");
-                }
+            pr_info("ispcore_slake_module: Applying tuning control event 0x4000001");
+            if (isp_dev->tuning_data) {
+                isp_dev->tuning_data->state = 1;
+                pr_info("ispcore_slake_module: tuning_data->state set to 1");
+            } else {
+                pr_warn("ispcore_slake_module: tuning_data missing for 0x4000001 handoff");
             }
 
             /* Binary Ninja: *($s0_1 + 0xe8) = 1 - SAFE: Set ISP state to 1 */
@@ -1955,6 +2094,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 
             /* Binary Ninja: tisp_deinit() */
             tisp_deinit();
+            tisp_reset_initialization_flag();
 
             /* Binary Ninja: memset(*($s0 + 0x1bc) + 4, 0, 0x40a4) */
             /* Binary Ninja: memset($s0 + 0x1d8, 0, 0x40) */
@@ -2000,6 +2140,27 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 
             /* Binary Ninja MCP shows two calls: 00079050 and 00079058 */
             struct tx_isp_subdev *init_sensor = isp_dev->sensor;
+            struct tisp_boot_sensor_info sensor_info;
+
+            (void)init_sensor;
+
+            if (!tisp_initialized) {
+	                isp_core_early_cpm_bringup();
+                tisp_fill_boot_sensor_info(isp_dev, sensor_attr, &sensor_info);
+                pr_info("*** ispcore_core_ops_init: Calling tisp_init width=%u height=%u fps=%u mode=%u ***\n",
+                        sensor_info.width, sensor_info.height, sensor_info.fps, sensor_info.mode);
+
+                ret = tisp_init(&sensor_info, isp_dev->sensor_name);
+                if (ret) {
+                    pr_err("*** ispcore_core_ops_init: tisp_init failed: %d ***\n", ret);
+                    return ret;
+                }
+
+                tisp_initialized = true;
+                pr_info("*** ispcore_core_ops_init: tisp_init completed successfully ***\n");
+            } else {
+                pr_info("*** ispcore_core_ops_init: tisp_init already completed - skipping duplicate init ***\n");
+            }
 
             /* CRITICAL FIX: Don't reset VIC state if it's already streaming (state 4) */
             /* The issue is that VIC gets initialized to state 4, then ISP core resets it to 3, causing reinitialization */

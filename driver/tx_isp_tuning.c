@@ -1478,6 +1478,7 @@ int tiziano_wdr_init(uint32_t width, uint32_t height);
 int tisp_wdr_init(void);
 
 /* Forward declarations for WDR enable functions */
+int tisp_s_wdr_en(int enable);
 int tisp_dpc_wdr_en(int enable);
 int tisp_lsc_wdr_en(int enable);
 int tisp_gamma_wdr_en(int enable);
@@ -2313,6 +2314,7 @@ EXPORT_SYMBOL(tisp_ae0_process);
 int tisp_init(void *sensor_info, char *param_name)
 {
     extern struct tx_isp_dev *ourISPdev;
+    int wdr_enable;
     struct {
         uint32_t width;
         uint32_t height;
@@ -2335,6 +2337,8 @@ int tisp_init(void *sensor_info, char *param_name)
 
     pr_info("tisp_init: Using sensor parameters - %dx%d@%d, mode=%d\n",
             sensor_params.width, sensor_params.height, sensor_params.fps, sensor_params.mode);
+
+    wdr_enable = (sensor_params.mode == 1) || (sensor_params.mode >= 4);
 
     /* Binary Ninja: system_reg_write(4, $v0_4 << 0x10 | arg1[1]) - Basic ISP config */
     system_reg_write(0x4, (sensor_params.width << 16) | sensor_params.height);
@@ -2454,6 +2458,9 @@ int tisp_init(void *sensor_info, char *param_name)
         system_reg_write(0xa84c, 0x33);
         pr_info("*** tisp_init: AE1 buffer allocated at 0x%08x ***\n", (uint32_t)ae1_phys);
     }
+
+    /* Binary Ninja: mode/WDR path performs the core release toggle first */
+    tisp_s_wdr_en(wdr_enable);
 
     /* Binary Ninja: Final ISP configuration registers */
     uint32_t isp_mode = (sensor_params.mode >= 4) ? 0x12 : 0x1e;
@@ -12153,6 +12160,63 @@ int tiziano_rdns_init(void)
 int tisp_gb_init(void)
 {
     pr_info("tisp_gb_init: Initializing GB processing for WDR\n");
+    return 0;
+}
+
+int tisp_s_wdr_en(int enable)
+{
+    u32 reg_20;
+    u32 reg_0c;
+    u32 reg_28 = 0;
+    unsigned int retries = 1000;
+
+    pr_info("tisp_s_wdr_en: %s WDR mode (BN core release sequence)\n",
+            enable ? "Enable" : "Disable");
+
+    system_reg_write(0x24, system_reg_read(0x24) | 1);
+
+    do {
+        reg_28 = system_reg_read(0x28);
+        if (reg_28 & 1)
+            break;
+        udelay(1);
+    } while (--retries != 0);
+
+    if ((reg_28 & 1) == 0)
+        pr_warn("tisp_s_wdr_en: timed out waiting for system_reg[0x28] ready\n");
+
+    reg_20 = system_reg_read(0x20);
+    system_reg_write(0x20, reg_20 | 4);
+    system_reg_write(0x20, reg_20 & ~4);
+
+    reg_0c = system_reg_read(0xc);
+    if (enable == 1) {
+        data_b2e74 = 1;
+        reg_0c = (reg_0c & 0xa1ffdf76) | 0x880002;
+    } else {
+        data_b2e74 = 0;
+        reg_0c = (reg_0c & 0xb577ff7d) | 0x34000009;
+    }
+
+    system_reg_write(0xc, reg_0c);
+
+    tisp_dpc_wdr_en(enable);
+    tisp_lsc_wdr_en(enable);
+    tisp_gamma_wdr_en(enable);
+    tisp_sharpen_wdr_en(enable);
+    tisp_ccm_wdr_en(enable);
+    tisp_bcsh_wdr_en(enable);
+    tisp_rdns_wdr_en(enable);
+    tisp_adr_wdr_en(enable);
+    tisp_defog_wdr_en(enable);
+    tisp_mdns_wdr_en(enable);
+    tisp_dmsc_wdr_en(enable);
+    tisp_ae_wdr_en(enable);
+    tisp_sdns_wdr_en(enable);
+    tiziano_clm_init();
+    tiziano_ydns_init();
+    system_reg_write(0x800, 1);
+
     return 0;
 }
 

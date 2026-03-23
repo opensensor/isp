@@ -684,7 +684,6 @@ static void __iomem **csi_wrapper_regs_slot(struct tx_isp_csi_device *csi_dev)
 static void __iomem *csi_get_wrapper_regs(struct tx_isp_csi_device *csi_dev)
 {
     void __iomem *isp_csi_regs;
-    void __iomem *vic_base;
 
     if (!csi_dev)
         return NULL;
@@ -693,13 +692,16 @@ static void __iomem *csi_get_wrapper_regs(struct tx_isp_csi_device *csi_dev)
     if (isp_csi_regs)
         return isp_csi_regs;
 
-    vic_base = tx_isp_get_vic_primary_regs();
-    if (!vic_base && ourISPdev)
-        vic_base = ourISPdev->vic_regs ? ourISPdev->vic_regs : ourISPdev->vic_regs2;
-    if (!vic_base)
+    /*
+     * BN tx_isp_csi_probe stores the 0x10022000 mem-region mapping in the
+     * +0x13c slot. Do not synthesize this slot from VIC space.
+     */
+    isp_csi_regs = csi_dev->csi_regs;
+    if (!isp_csi_regs && ourISPdev)
+        isp_csi_regs = ourISPdev->csi_regs;
+    if (!isp_csi_regs)
         return NULL;
 
-    isp_csi_regs = vic_base - 0x9a00 + 0x10000;
     *csi_wrapper_regs_slot(csi_dev) = isp_csi_regs;
 
     return isp_csi_regs;
@@ -758,7 +760,6 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
     struct tx_isp_sensor_attribute *sensor_attr;
     void __iomem *csi_regs;
     void __iomem *isp_csi_regs;
-    void __iomem *v0_8;
     int result = 0xffffffea;
     int v0_17;
     int interface_type;
@@ -799,11 +800,17 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
         return -EINVAL;
     }
 
+    /* Bring the CSI/DPHY clocks out of CPM gate before any BASIC/WRAP access.
+     * We already had the helper, but the live init path never invoked it.
+     */
+    csi_jit_ungate_clocks();
+    csi_cpm_deassert_reset_if_enabled();
+
     sensor_attr = ourISPdev->sensor->video.attr;
     interface_type = sensor_attr->dbus_type;
     csi_dev->interface_type = interface_type;
     isp_csi_regs = csi_get_wrapper_regs(csi_dev);
-    pr_info("csi_core_ops_init: sensor dbus=%d lanes=%d wrapper=%p\n",
+    pr_info("csi_core_ops_init: sensor dbus=%d lanes=%d slot13c=%p\n",
             interface_type, sensor_attr->mipi.lans, isp_csi_regs);
 
     if (interface_type == 1) {
@@ -813,7 +820,6 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
         }
 
         csi_dev->lanes = sensor_attr->mipi.lans;
-
         writel((sensor_attr->mipi.lans - 1) & 0x3, csi_regs + 0x04);
         writel(readl(csi_regs + 0x08) & 0xfffffffe, csi_regs + 0x08);
         writel(0, csi_regs + 0x0c);
@@ -823,7 +829,6 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
         writel(interface_type, csi_regs + 0x0c);
         private_msleep(1);
 
-        v0_8 = isp_csi_regs;
         if (sensor_attr->fps == 0) {
             u32 rate_reg;
             int rate_sel = csi_calc_rate_sel(sensor_attr);
@@ -834,7 +839,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
             writel(rate_reg, isp_csi_regs + 0x260);
         }
 
-        writel(0x7d, v0_8);
+        writel(0x7d, isp_csi_regs + 0x00);
         writel(0x3f, isp_csi_regs + 0x128);
         writel(1, csi_regs + 0x10);
         private_msleep(10);
@@ -1055,35 +1060,36 @@ void dump_csi_reg(struct tx_isp_subdev *sd)
         return;
     }
 
-pr_info("=== CSI Register Dump (Basic + Wrapper) ===\n");
-/* Basic CSI registers (0x10022000 space) */
-pr_info("[BASIC] VERSION (0x00):      0x%08x\n", readl(csi_base + 0x00));
-pr_info("[BASIC] N_LANES (0x04):      0x%08x\n", readl(csi_base + 0x04));
-pr_info("[BASIC] PHY_SHUTDOWNZ (0x08): 0x%08x\n", readl(csi_base + 0x08));
-pr_info("[BASIC] DPHY_RSTZ (0x0C):     0x%08x\n", readl(csi_base + 0x0C));
-pr_info("[BASIC] CSI2_RESETN (0x10):   0x%08x\n", readl(csi_base + 0x10));
-pr_info("[BASIC] PHY_STATE (0x14):     0x%08x\n", readl(csi_base + 0x14));
-pr_info("[BASIC] ERR1 (0x20):          0x%08x\n", readl(csi_base + 0x20));
-pr_info("[BASIC] ERR2 (0x24):          0x%08x\n", readl(csi_base + 0x24));
-pr_info("[BASIC] CSI_CTRL (0x40):      0x%08x\n", readl(csi_base + 0x40));
+    pr_info("=== CSI Register Dump (Basic + Wrapper) ===\n");
+    /* Basic CSI registers (0x10022000 space) */
+    pr_info("[BASIC] VERSION (0x00):      0x%08x\n", readl(csi_base + 0x00));
+    pr_info("[BASIC] N_LANES (0x04):      0x%08x\n", readl(csi_base + 0x04));
+    pr_info("[BASIC] PHY_SHUTDOWNZ (0x08): 0x%08x\n", readl(csi_base + 0x08));
+    pr_info("[BASIC] DPHY_RSTZ (0x0C):     0x%08x\n", readl(csi_base + 0x0C));
+    pr_info("[BASIC] CSI2_RESETN (0x10):   0x%08x\n", readl(csi_base + 0x10));
+    pr_info("[BASIC] PHY_STATE (0x14):     0x%08x\n", readl(csi_base + 0x14));
+    pr_info("[BASIC] ERR1 (0x20):          0x%08x\n", readl(csi_base + 0x20));
+    pr_info("[BASIC] ERR2 (0x24):          0x%08x\n", readl(csi_base + 0x24));
+    pr_info("[BASIC] CSI_CTRL (0x40):      0x%08x\n", readl(csi_base + 0x40));
 
-/* Wrapper/ISP CSI registers at +0x13c pointer inside csi_dev (Binary Ninja ref) */
-{
-    void __iomem *isp_csi_regs = *((void __iomem **)((char*)csi_dev + 0x13c));
-    if (isp_csi_regs) {
-        pr_info("[ISP  ] TIMING (0x000):     0x%08x\n", readl(isp_csi_regs + 0x000));
-        pr_info("[ISP  ] ???    (0x080):     0x%08x\n", readl(isp_csi_regs + 0x080));
-        pr_info("[ISP  ] CFG0   (0x110):     0x%08x\n", readl(isp_csi_regs + 0x110));
-        pr_info("[ISP  ] CFG1   (0x114):     0x%08x\n", readl(isp_csi_regs + 0x114));
-        pr_info("[ISP  ] LANES  (0x128):     0x%08x\n", readl(isp_csi_regs + 0x128));
-        pr_info("[ISP  ] RATE0  (0x160):     0x%08x\n", readl(isp_csi_regs + 0x160));
-        pr_info("[ISP  ] RATE1  (0x1E0):     0x%08x\n", readl(isp_csi_regs + 0x1e0));
-        pr_info("[ISP  ] RATE2  (0x260):     0x%08x\n", readl(isp_csi_regs + 0x260));
-    } else {
-        pr_info("[WRAP ] isp_csi_regs is NULL (wrapper not mapped)\n");
+    /* BN +0x13c slot (same 0x10022000 CSI mapping in tx_isp_csi_probe) */
+    {
+        void __iomem *isp_csi_regs = csi_get_wrapper_regs(csi_dev);
+
+        if (isp_csi_regs) {
+            pr_info("[ISP  ] TIMING (0x000):     0x%08x\n", readl(isp_csi_regs + 0x000));
+            pr_info("[ISP  ] ???    (0x080):     0x%08x\n", readl(isp_csi_regs + 0x080));
+            pr_info("[ISP  ] CFG0   (0x110):     0x%08x\n", readl(isp_csi_regs + 0x110));
+            pr_info("[ISP  ] CFG1   (0x114):     0x%08x\n", readl(isp_csi_regs + 0x114));
+            pr_info("[ISP  ] LANES  (0x128):     0x%08x\n", readl(isp_csi_regs + 0x128));
+            pr_info("[ISP  ] RATE0  (0x160):     0x%08x\n", readl(isp_csi_regs + 0x160));
+            pr_info("[ISP  ] RATE1  (0x1E0):     0x%08x\n", readl(isp_csi_regs + 0x1e0));
+            pr_info("[ISP  ] RATE2  (0x260):     0x%08x\n", readl(isp_csi_regs + 0x260));
+        } else {
+            pr_info("[SLOT ] +0x13c is NULL\n");
+        }
     }
-}
-pr_info("==========================================\n");
+    pr_info("==========================================\n");
 }
 
 /* Write buffer to file at csi_dump_path using kernel I/O (3.10 style) */
@@ -1126,8 +1132,8 @@ static void csi_dump_once_to_file(struct tx_isp_csi_device *csi_dev, const char 
     if (!csi_base)
         return;
 
-    /* Wrapper base pointer stored at +0x13c in csi_dev (per BN) */
-    isp_csi_regs = *((void __iomem **)((char*)csi_dev + 0x13c));
+    /* BN +0x13c slot resolves to the CSI mem-region mapping. */
+    isp_csi_regs = csi_get_wrapper_regs(csi_dev);
 
     n += scnprintf(buf + n, sizeof(buf) - n, "=== CSI DUMP ===\n");
     n += scnprintf(buf + n, sizeof(buf) - n, "[TAG  ] %s\n", tag ? tag : "UNTAGGED");
@@ -1262,36 +1268,15 @@ int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
                 /* Binary Ninja: *($s1_1 + 0x128) = 2 */
                 csi_dev->state = 2;
 
-                /* NOTE: CSI clocks are now initialized centrally in ispcore_core_ops_init
-                 * via tx_isp_configure_clocks, so we don't need to initialize them here.
-                 * The clocks are already enabled and ready to use. */
-                pr_info("tx_isp_csi_activate_subdev: CSI clocks already initialized centrally\n");
+                clks = sd->clks;
+                clk_count = sd->clk_num;
 
-                /* Ensure CPM ungate for CSI/MIPI path (mirrors vic_start pattern; read-modify-write) */
-                do {
-                    void __iomem *cpm = ioremap(0x10000000, 0x1000);
-                    if (cpm) {
-                        u32 clkgr1 = readl(cpm + 0x28);
-                        u32 before = clkgr1;
-                        /* Candidates expanded per dump: include 1,4,5,7,8,9 and now 12,13 (remaining in 0x33a0) */
-                        u32 mask = (1u << 1) | (1u << 4) | (1u << 5) | (1u << 7) | (1u << 8) | (1u << 9) | (1u << 12) | (1u << 13);
-                        clkgr1 &= ~mask;
-                        if (clkgr1 != before) {
-                            writel(clkgr1, cpm + 0x28);
-                            wmb();
-                            pr_info("[CPM] Ungate CLKGR1 bits mask=0x%08x: %08x -> %08x\n", mask, before, clkgr1);
-                            msleep(2);
-                        } else {
-                            pr_info("[CPM] CLKGR1 CSI/MIPI candidate bits already ungated: %08x\n", clkgr1);
-                        }
-
-                        /* NOTE: Skip CPM reset handshake here; it caused system lockup during streamer start.
-                         * If needed later, guard behind a module param and run only when ISP domain is idle. */
-                        iounmap(cpm);
-                    } else {
-                        pr_warn("[CPM] Unable to ioremap CPM for CSI ungate\n");
+                if (clks != NULL && (unsigned long)clks < 0xfffff001) {
+                    for (i = 0; i < clk_count; i++) {
+                        if (clks[i])
+                            private_clk_enable(clks[i]);
                     }
-                } while (0);
+                }
             }
 
             /* Binary Ninja: private_mutex_unlock($s1_1 + 0x12c) */

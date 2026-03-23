@@ -289,12 +289,10 @@ extern struct tx_isp_dev *ourISPdev;
 int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count)
 {
     struct clk **clk_array = NULL;
-    struct clk *cgu_isp_clk, *isp_clk, *csi_clk;
     struct tx_isp_subdev_platform_data *pdata;
     struct tx_isp_device_clk *clk_configs;
-    void __iomem *cpm_regs;
-    int ret;
     int i = 0;
+    int error = 0;
 
     /* Binary Ninja: int32_t $s5 = *(arg1 + 0xc0) */
     /* Binary Ninja: int32_t $s1 = $s5 << 2 */
@@ -382,41 +380,24 @@ int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count)
 
                 /* Binary Ninja: if ($a1_1 == 0xffff || result_1 == 0) */
                 if (clk_rate == 0xffff || result == 0) {
-                    pr_info("[CLK] Subdev: Enabling clock '%s' (rate=%lu Hz)\n", clk_name, clk_get_rate(clk));
-                    ret = clk_prepare_enable(clk);
-                    if (ret == 0) {
-                        pr_info("[CLK] Subdev: Clock '%s' enabled successfully\n", clk_name);
-                        i++;
-                        /* Binary Ninja: continue to next clock */
-                        continue;
-                    } else {
-                        /* Binary Ninja: isp_printf(2, "sensor type is BT1120!\n", *$s6_1) */
-                        pr_warn("[CLK] Subdev: Failed to enable clock '%s', continuing anyway\n", clk_name);
-                        i++;
-                        continue;
-                    }
+                    i++;
+                    /* Binary Ninja: continue to next clock */
+                    continue;
                 } else {
                     /* Binary Ninja: isp_printf(2, "sensor type is BT1120!\n", *$s6_1) */
-                    pr_warn("[CLK] Subdev: Failed to set rate for clock '%s', continuing anyway\n", clk_name);
+                    pr_warn("[CLK] Subdev: Failed to set rate for clock '%s'\n", clk_name);
                     /* Binary Ninja: $s0_3 = $s0_2 << 2 - goto cleanup */
-                    break;
+                    error = result;
+                    goto cleanup_clocks;
                 }
             } else {
                 /* Binary Ninja: isp_printf(2, "Can not support this frame mode!!!\n", *$s6_1) */
                 pr_warn("Failed to get clock %s\n", clk_name);
                 /* Binary Ninja: result = *$s4_1; $s0_3 = $s0_2 << 2 - goto cleanup */
-                break;
+                error = IS_ERR(clk) ? PTR_ERR(clk) : -ENODEV;
+                goto cleanup_clocks;
             }
         }
-
-
-
-        /* CPM register setup removed here: CPM gates are now managed only in
-         *  - tx_isp_vic_start() for VIC/ISP
-         *  - csi_core_ops_init() for CSI (just-in-time)
-         * This avoids side-effects on CSI gating during generic subdev clock init.
-         */
-        pr_info("[CPM] Subdev init: Skipping generic CPM gate config (delegated to VIC/CSI paths)\n");
 
         /* Binary Ninja: *(arg1 + 0xbc) = $v0_1 */
         sd->clks = clk_array;
@@ -433,15 +414,13 @@ cleanup_clocks:
     /* Binary Ninja: Clock cleanup loop */
     for (int j = 0; j < i; j++) {
         if (clk_array[j] && !IS_ERR(clk_array[j])) {
-            pr_info("[CLK] Subdev: Cleanup - disabling clock %d\n", j);
-            clk_disable_unprepare(clk_array[j]);
             clk_put(clk_array[j]);
         }
     }
 
     /* Binary Ninja: private_kfree($v0_1) */
     private_kfree(clk_array);
-    return -EFAULT;
+    return error ? error : -EFAULT;
 }
 
 
