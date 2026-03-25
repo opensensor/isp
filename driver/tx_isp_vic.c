@@ -1146,12 +1146,24 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
-    if (!ourISPdev || !ourISPdev->sensor || !ourISPdev->sensor->video.attr) {
-        pr_info("*** CRITICAL: sensor_attr is unavailable ***\n");
-        return -EINVAL;
-    }
+    /* Binary Ninja: arg1 + 0x110 points at VIC-cached sensor attributes.
+     * Prefer the synced VIC copy and only fall back if the cache is still
+     * clearly unpopulated.
+     */
+    sensor_attr = &vic_dev->sensor_attr;
+    if (!sensor_attr->name &&
+        !sensor_attr->mipi.image_twidth &&
+        !sensor_attr->mipi.image_theight) {
+        if (!ourISPdev || !ourISPdev->sensor || !ourISPdev->sensor->video.attr) {
+            pr_info("*** CRITICAL: VIC cached sensor_attr is unavailable ***\n");
+            return -EINVAL;
+        }
 
-    sensor_attr = ourISPdev->sensor->video.attr;
+        sensor_attr = ourISPdev->sensor->video.attr;
+        pr_info("*** tx_isp_vic_start: VIC sensor_attr cache empty, using global sensor attr fallback ***\n");
+    } else {
+        pr_info("*** tx_isp_vic_start: Using VIC-cached sensor_attr ***\n");
+    }
 
     interface_type = sensor_attr->dbus_type;
 
@@ -2354,6 +2366,20 @@ int tx_isp_vic_probe(struct platform_device *pdev)
 
     /* Set initial state to 1 (matches binary) */
     vic_dev->state = 1;
+
+    /* Restore load-time VIC MMIO bring-up so insmod reaches the real hardware
+     * path before userspace starts probing the pipeline.
+     */
+    pr_info("*** tx_isp_vic_probe: Calling tx_isp_vic_hw_init during probe ***\n");
+    ret = tx_isp_vic_hw_init(sd);
+    if (ret != 0) {
+        pr_err("*** tx_isp_vic_probe: tx_isp_vic_hw_init failed: %d ***\n", ret);
+        return ret;
+    }
+
+    vic_dev->state = 2;
+    pr_info("*** tx_isp_vic_probe: VIC hardware init complete, state -> %d ***\n",
+            vic_dev->state);
 
     /* Store global reference (binary uses 'dump_vsd' global) */
     dump_vsd = vic_dev;

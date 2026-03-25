@@ -1440,19 +1440,27 @@ int tx_isp_init_memory_mappings(struct tx_isp_dev *isp)
     isp_reg_base = isp->core_regs;
     pr_info("Global isp_reg_base set to %p for tuning subsystem\n", isp_reg_base);
 
-    /* Map VIC registers */
-    isp->vic_regs = ioremap(0x10023000, 0x1000);
+    /* Map PRIMARY VIC registers (header contract: vic_regs == 0x133e0000) */
+    isp->vic_regs = ioremap(0x133e0000, 0x1000);
     if (!isp->vic_regs) {
-        pr_err("Failed to map VIC registers\n");
+        pr_err("Failed to map primary VIC registers\n");
         goto err_unmap_core;
     }
-    pr_info("VIC registers mapped at 0x10023000\n");
+    pr_info("Primary VIC registers mapped at 0x133e0000\n");
+
+    /* Map SECONDARY/coordination VIC registers */
+    isp->vic_regs2 = ioremap(0x10023000, 0x1000);
+    if (!isp->vic_regs2) {
+        pr_err("Failed to map secondary VIC registers\n");
+        goto err_unmap_vic;
+    }
+    pr_info("Secondary VIC registers mapped at 0x10023000\n");
 
     /* Map CSI registers - use a different variable to avoid conflicts */
     isp->csi_regs = ioremap(0x10022000, 0x1000);
     if (!isp->csi_regs) {
         pr_err("Failed to map CSI registers\n");
-        goto err_unmap_vic;
+        goto err_unmap_vic2;
     }
     pr_info("CSI registers mapped at 0x10022000\n");
 
@@ -1470,6 +1478,9 @@ int tx_isp_init_memory_mappings(struct tx_isp_dev *isp)
 err_unmap_csi:
     iounmap(isp->csi_regs);
     isp->csi_regs = NULL;
+err_unmap_vic2:
+    iounmap(isp->vic_regs2);
+    isp->vic_regs2 = NULL;
 err_unmap_vic:
     iounmap(isp->vic_regs);
     isp->vic_regs = NULL;
@@ -1495,6 +1506,11 @@ static int tx_isp_deinit_memory_mappings(struct tx_isp_dev *isp)
     if (isp->vic_regs) {
         iounmap(isp->vic_regs);
         isp->vic_regs = NULL;
+    }
+
+    if (isp->vic_regs2) {
+        iounmap(isp->vic_regs2);
+        isp->vic_regs2 = NULL;
     }
 
     if (isp->core_regs) {
@@ -1608,21 +1624,33 @@ int tx_isp_setup_pipeline(struct tx_isp_dev *isp)
     pr_info("Setting up ISP processing pipeline: CSI -> VIC -> Output\n");
 
     /* Initialize the processing pipeline state */
-    isp->state = ISP_PIPELINE_IDLE;
-
-    isp->state = 1; /* INIT state */
-    pr_info("ISP device ready for configuration\n");
+    if (isp->state == ISP_PIPELINE_IDLE) {
+        isp->state = 1; /* INIT state */
+        pr_info("ISP device ready for configuration\n");
+    } else {
+        pr_info("ISP device already configured (state=%d), preserving state\n", isp->state);
+    }
 
 
     /* Configure default data path settings */
     if (isp->csi_dev) {
-        isp->csi_dev->state = 1; /* INIT state */
-        pr_info("CSI device ready for configuration\n");
+        if (isp->csi_dev->state < 1) {
+            isp->csi_dev->state = 1; /* INIT state */
+            pr_info("CSI device ready for configuration\n");
+        } else {
+            pr_info("CSI device already initialized (state=%d), preserving state\n",
+                    isp->csi_dev->state);
+        }
     }
 
     if (isp->vic_dev) {
-        isp->vic_dev->state = 1; /* INIT state */
-        pr_info("VIC device ready for configuration\n");
+        if (isp->vic_dev->state < 1) {
+            isp->vic_dev->state = 1; /* INIT state */
+            pr_info("VIC device ready for configuration\n");
+        } else {
+            pr_info("VIC device already initialized (state=%d), preserving state\n",
+                    isp->vic_dev->state);
+        }
     }
 
     /* Setup media entity links and pads */
@@ -1902,7 +1930,18 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
             }
 
             /* Binary Ninja: (*($a0_1 + 0x40cc))($a0_1, 0x4000001, 0) */
-            pr_info("ispcore_slake_module: Applying tuning control event 0x4000001");
+            if (vic_dev && vic_dev->vic_regs) {
+                uint32_t *vic_control_reg;
+
+                pr_info("ispcore_slake_module: Calling VIC control function (0x4000001, 0)");
+                vic_control_reg = (uint32_t *)((char *)vic_dev->vic_regs + 0x40cc);
+                if (vic_control_reg) {
+                    writel(0x4000001, vic_control_reg);
+                    wmb();
+                    pr_info("ispcore_slake_module: VIC control register written: 0x4000001");
+                }
+            }
+
             if (isp_dev->tuning_data) {
                 isp_dev->tuning_data->state = 1;
                 pr_info("ispcore_slake_module: tuning_data->state set to 1");
@@ -2083,7 +2122,6 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
     int vic_state;
     int result = -EINVAL;
     int ret;
-    int reset_ret;
 
     pr_info("*** ispcore_core_ops_init: ENTRY - sd=%p, on=%d ***\n", sd, on);
     if (!sd) {
@@ -2193,13 +2231,20 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
             pr_info("*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***");
             pr_info("*** ispcore_core_ops_init: Current vic_state (VIC state): %d ***", vic_state);
 
-            /* OEM core init contract: enter only from READY state 2. */
-            if (vic_state != 2) {
-                pr_err("ispcore_core_ops_init: OEM init expects state 2, got %d\n", vic_state);
+            /* Allow core init from READY or already-active states; old bring-up relied on this. */
+            if (vic_state < 2) {
+                pr_err("ispcore_core_ops_init: VIC state %d < 2, not ready for initialization\n", vic_state);
                 return -EINVAL;
             }
 
-            pr_info("*** ispcore_core_ops_init: OEM state check passed (state 2) ***\n");
+            if (vic_state == 4) {
+                pr_info("*** ispcore_core_ops_init: VIC already streaming (state 4) - initializing during streaming ***");
+            } else if (vic_state == 3) {
+                pr_info("*** ispcore_core_ops_init: VIC in ready state (%d) - normal initialization ***", vic_state);
+                ispcore_video_s_stream(sd, 1);
+            }
+
+            pr_info("*** ispcore_core_ops_init: VIC state check passed, proceeding with initialization ***");
 
             /* CRITICAL: Initialize all ISP clocks (cgu_isp, isp, csi) in correct order */
             pr_info("*** ispcore_core_ops_init: Initializing all ISP clocks ***\n");
@@ -2221,13 +2266,6 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 
             (void)init_sensor;
 
-            pr_info("*** ispcore_core_ops_init: invoking OEM CPM reset pulse before tisp_init ***\n");
-            reset_ret = private_reset_tx_isp_module(0);
-            if (reset_ret) {
-                pr_err("*** ispcore_core_ops_init: OEM CPM reset pulse failed: %d ***\n", reset_ret);
-                return reset_ret;
-            }
-
             if (!tisp_initialized) {
                 tisp_fill_boot_sensor_info(isp_dev, sensor_attr, &sensor_info);
                 pr_info("*** ispcore_core_ops_init: Calling tisp_init width=%u height=%u fps=%u mode=%u ***\n",
@@ -2245,9 +2283,13 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 pr_info("*** ispcore_core_ops_init: tisp_init already completed - skipping duplicate init ***\n");
             }
 
-            /* Binary Ninja: *($s0 + 0xe8) = 3 */
-            vic_dev->state = 3;
-            pr_info("*** ispcore_core_ops_init: VIC state set to 3 (ACTIVE) after OEM core init ***");
+            if (vic_dev->state != 4) {
+                /* Binary Ninja: *($s0 + 0xe8) = 3 */
+                vic_dev->state = 3;
+                pr_info("*** ispcore_core_ops_init: VIC state set to 3 (ACTIVE) - CORE READY FOR STREAMING ***");
+            } else {
+                pr_info("*** ispcore_core_ops_init: VIC already streaming (state 4) - preserving state to avoid reinitialization ***");
+            }
 
             /* REMOVED: Core device state management - ALL state management happens through VIC device */
             /* Based on Binary Ninja MCP analysis, core device is stateless */
@@ -3938,6 +3980,23 @@ int tx_isp_core_probe(struct platform_device *pdev)
                     return result;
                 } else {
                     pr_info("*** tx_isp_core_probe: VIN device created successfully ***\n");
+                }
+
+                if (isp_dev->vic_dev && isp_dev->vic_dev->state >= 2 &&
+                    core_subdev_ops.core && core_subdev_ops.core->init) {
+                    pr_info("*** tx_isp_core_probe: Calling core->init during probe (vic_state=%d) ***\n",
+                            isp_dev->vic_dev->state);
+                    result = core_subdev_ops.core->init(&isp_dev->sd, 1);
+                    if (result != 0 && result != -ENOIOCTLCMD) {
+                        pr_err("*** tx_isp_core_probe: core->init during probe failed: %d ***\n",
+                               result);
+                        return result;
+                    }
+                } else {
+                    pr_warn("*** tx_isp_core_probe: Skipping core->init during probe (vic=%p state=%d core_ops=%p) ***\n",
+                            isp_dev->vic_dev,
+                            isp_dev->vic_dev ? isp_dev->vic_dev->state : -1,
+                            core_subdev_ops.core ? core_subdev_ops.core->init : NULL);
                 }
 
                 /* NOTE: Frame sync workqueue already created early in probe function */

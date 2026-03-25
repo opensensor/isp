@@ -939,10 +939,6 @@ static void __iomem *tx_isp_get_system_reg_base(u32 reg, const char *op)
     if (ourISPdev->core_regs)
         return ourISPdev->core_regs;
 
-    /* If the core subdevice has been initialized first, use its direct mapping. */
-    if (ourISPdev->core_dev && ourISPdev->core_dev->core_regs)
-        return ourISPdev->core_dev->core_regs;
-
     /*
      * Last resort: derive the core base only from the PRIMARY VIC window.
      * Do not use ourISPdev->vic_regs here: tx_isp_core.c maps that field to the
@@ -954,8 +950,8 @@ static void __iomem *tx_isp_get_system_reg_base(u32 reg, const char *op)
         return ourISPdev->vic_dev->vic_regs - 0xe0000;
     }
 
-    pr_warn_ratelimited("system_reg_%s: no valid ISP core base for reg=0x%x (core_regs=%p core_dev=%p vic_dev=%p)\n",
-                        op, reg, ourISPdev->core_regs, ourISPdev->core_dev, ourISPdev->vic_dev);
+    pr_warn_ratelimited("system_reg_%s: no valid ISP core base for reg=0x%x (core_regs=%p vic_dev=%p)\n",
+                        op, reg, ourISPdev->core_regs, ourISPdev->vic_dev);
     return NULL;
 }
 
@@ -2752,15 +2748,30 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
      * init sequence running twice, not an actual teardown/rebuild.
      */
 
-    /* OEM sequencing note: do not pre-init the sensor here.
-     * Stream ON must remain sink-to-source (VIC -> CSI -> Sensor), and the
-     * sensor wrapper path already performs the needed VIN/sensor init during
-     * ordered Sensor.s_stream(1).
+    /* CRITICAL: Initialize sensor BEFORE starting subdev streaming.
+     * The older working path programmed sensor registers here before the
+     * rest of the pipeline moved forward.
      */
     if (enable && isp_dev->sensor) {
         sensor = isp_dev->sensor;
-        pr_info("*** tx_isp_video_link_stream: Deferring sensor init to ordered Sensor.s_stream for OEM sequencing (%s) ***\n",
+
+        pr_info("*** tx_isp_video_link_stream: INITIALIZING SENSOR BEFORE STREAMING ***\n");
+        pr_info("*** Found sensor %s for streaming ***\n",
                 sensor->info.name[0] ? sensor->info.name : "(unnamed)");
+
+        if (sensor->sd.ops && sensor->sd.ops->core && sensor->sd.ops->core->init) {
+            pr_info("*** CALLING SENSOR_INIT - WRITING INITIALIZATION REGISTERS ***\n");
+            result = sensor->sd.ops->core->init(&sensor->sd, 1);
+            if (result) {
+                pr_err("SENSOR_INIT FAILED: %d\n", result);
+                return result;
+            }
+
+            pr_info("*** SENSOR_INIT SUCCESS - SENSOR REGISTERS PROGRAMMED ***\n");
+            pr_info("*** SENSOR ATTRIBUTES SHOULD NOW BE SYNCED TO VIC ***\n");
+        } else {
+            pr_err("*** NO SENSOR_INIT FUNCTION AVAILABLE! ***\n");
+        }
     }
 
     if (enable) {
@@ -2770,7 +2781,14 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
 
         pr_info("*** tx_isp_video_link_stream: OEM-aligned pre-link checks ***\n");
 
-        if (vic_dev && vic_dev->state < 2) {
+        if (vic_dev && vic_dev->state != 2) {
+            if (vic_dev->state != 1) {
+                pr_info("*** tx_isp_video_link_stream: Forcing VIC state %d -> 1 before ispcore_activate_module ***\n",
+                        vic_dev->state);
+                vic_dev->state = 1;
+                isp_dev->state = 1;
+            }
+
             pr_info("*** tx_isp_video_link_stream: VIC state=%d, calling ispcore_activate_module ***\n",
                     vic_dev->state);
             result = ispcore_activate_module(isp_dev);
@@ -2780,9 +2798,10 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
             }
         }
 
-        if (core_sd && vic_dev && vic_dev->state == 2 &&
+        if (core_sd && vic_dev && vic_dev->state >= 2 &&
             core_sd->ops && core_sd->ops->core && core_sd->ops->core->init) {
-            pr_info("*** tx_isp_video_link_stream: OEM-aligned Core init from state 2 before link_stream ***\n");
+            pr_info("*** tx_isp_video_link_stream: OEM-aligned Core init from VIC state %d before link_stream ***\n",
+                    vic_dev->state);
             result = core_sd->ops->core->init(core_sd, 1);
             if (result != 0 && result != -ENOIOCTLCMD) {
                 pr_err("tx_isp_video_link_stream: Core init failed: %d\n", result);
@@ -2799,9 +2818,10 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
                 tx_isp_csi_activate_subdev(csi_sd);
             }
 
-            if (csi_dev && csi_dev->state == 2 &&
+            if (csi_dev && csi_dev->state >= 2 &&
                 csi_sd->ops && csi_sd->ops->core && csi_sd->ops->core->init) {
-                pr_info("*** tx_isp_video_link_stream: Initializing CSI subdev after OEM core init ***\n");
+                pr_info("*** tx_isp_video_link_stream: Initializing CSI subdev from state %d after OEM core init ***\n",
+                        csi_dev->state);
                 result = csi_sd->ops->core->init(csi_sd, 1);
                 if (result != 0 && result != -ENOIOCTLCMD) {
                     pr_err("tx_isp_video_link_stream: CSI init failed: %d\n", result);
@@ -3003,22 +3023,20 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                 }
 
                 /* Binary Ninja: (*($a0_3 + 0x40cc))($a0_3, 0x4000000, 0, $a3_1) */
-                pr_info("*** TUNING CONTROL HANDOFF SECTION ***\n");
-                if (isp_dev->tuning_data) {
-                    isp_dev->tuning_data->state = 2;
-                    pr_info("*** tuning_data->state set to 2 for ISP_TUNING_EVENT_MODE0 (0x4000000) ***\n");
-                } else {
-                    pr_warn("*** tuning_data missing for ISP_TUNING_EVENT_MODE0 handoff ***\n");
+                /* CRITICAL: This triggers the actual hardware initialization */
+                pr_info("*** CRITICAL FUNCTION POINTER CALL SECTION ***\n");
+                if (vic_dev && vic_dev->vic_regs) {
+                    void __iomem *isp_base = vic_dev->vic_regs - 0x9a00;
+
+                    writel(0x4000000, isp_base + 0x9a00);
+                    wmb();
+                    pr_info("*** VIC control register written with 0x4000000 to ISP+0x9a00 ***\n");
                 }
 
-                /* CRITICAL: Subdevice activation loop - match OEM activate_module walk */
-                pr_info("*** SUBDEVICE ACTIVATION LOOP ***\n");
-
-                /* Walk the registered subdev array in slot order and invoke internal
-                 * activate_module ops. Stock does activation here; core->init happens
-                 * later in the dedicated stream bring-up path. */
-                pr_info("*** SUBDEVICE ACTIVATION: Traversing forwards via internal->activate_module ***\n");
-                for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+                /* CRITICAL: Subdevice initialization loop - match older working path */
+                pr_info("*** SUBDEVICE INITIALIZATION LOOP ***\n");
+                pr_info("*** SUBDEVICE INITIALIZATION: Traversing backwards to initialize sensors first ***\n");
+                for (i = ISP_MAX_SUBDEVS - 1; i >= 0; i--) {
                     current_subdev = isp_dev->subdevs[i];
                     if (!current_subdev) {
                         continue;  /* Skip empty slots */
@@ -3032,16 +3050,16 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                     struct tx_isp_subdev *sd = (struct tx_isp_subdev *)current_subdev;
                     pr_info("*** INIT LOOP: subdev[%d] sd=%p, ops=%p ***\n", i, sd, sd->ops);
                     if (sd->ops) {
-                        pr_info("*** INIT LOOP: subdev[%d] ops->internal=%p ***\n", i, sd->ops->internal);
-                        if (sd->ops->internal) {
-                            pr_info("*** INIT LOOP: subdev[%d] ops->internal->activate_module=%p ***\n",
-                                    i, sd->ops->internal->activate_module);
+                        pr_info("*** INIT LOOP: subdev[%d] ops->core=%p ***\n", i, sd->ops->core);
+                        if (sd->ops->core) {
+                            pr_info("*** INIT LOOP: subdev[%d] ops->core->init=%p ***\n",
+                                    i, sd->ops->core->init);
                         }
                     }
 
-                    if (sd->ops && sd->ops->internal && sd->ops->internal->activate_module) {
-                        pr_info("Calling subdev %d activation via internal->activate_module\n", i);
-                        subdev_result = sd->ops->internal->activate_module(sd);
+                    if (sd->ops && sd->ops->core && sd->ops->core->init) {
+                        pr_info("Calling subdev %d initialization (REVERSE ORDER - sensors first)\n", i);
+                        subdev_result = sd->ops->core->init(sd, 1);
 
                         /* Binary Ninja: if ($v0_12 != 0 && $v0_12 != 0xfffffdfd) */
                         if (subdev_result != 0 && subdev_result != 0xfffffdfd) {
@@ -3050,7 +3068,7 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                             break;
                         }
                     } else {
-                        pr_info("*** INIT LOOP: subdev[%d] SKIPPED - no internal->activate_module function ***\n", i);
+                        pr_info("*** INIT LOOP: subdev[%d] SKIPPED - no core->init function ***\n", i);
                     }
                 }
 
