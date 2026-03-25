@@ -103,10 +103,10 @@ static void __maybe_unused csi_jit_ungate_clocks(void)
     iounmap(cpm);
 }
 
-/* Optional CPM reset deassert for CSI: guarded by module param */
-static int csi_cpm_reset_fix = 0;
+/* Optional CPM reset deassert for CSI: enabled by default while bring-up is unstable. */
+static int csi_cpm_reset_fix = 1;
 module_param(csi_cpm_reset_fix, int, 0644);
-MODULE_PARM_DESC(csi_cpm_reset_fix, "If 1, deassert CSI-related reset bits in CPM[0x34] after unlocking CPM[0x38]=0xA5A5");
+MODULE_PARM_DESC(csi_cpm_reset_fix, "If 1, deassert CSI-related reset bits in CPM[0x34] after unlocking CPM[0x38]=0xA5A5 (default: enabled)");
 
 static void __maybe_unused csi_cpm_deassert_reset_if_enabled(void)
 {
@@ -131,11 +131,14 @@ static void __maybe_unused csi_cpm_deassert_reset_if_enabled(void)
     }
 
 
-    /* Guard: if disabled, do not attempt any CPM reset writes */
+    /* Guard: allow manual disable for experiments, but default to active during bring-up. */
     if (!csi_cpm_reset_fix) {
+        pr_info("[CPM][CSI] Reset deassert helper disabled by module param; skipping CPM reset writes\n");
         iounmap(cpm);
         return;
     }
+
+    pr_info("[CPM][CSI] Reset deassert helper enabled; attempting CPM reset release\n");
 
     /* Always attempt CPM reset deassert now (risk-elevated per user) */
 
@@ -760,6 +763,8 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
     struct tx_isp_sensor_attribute *sensor_attr;
     void __iomem *csi_regs;
     void __iomem *isp_csi_regs;
+    u32 phy_en_readback;
+    u32 csi_version;
     int result = 0xffffffea;
     int v0_17;
     int interface_type;
@@ -818,6 +823,20 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
             pr_err("csi_core_ops_init: wrapper regs unavailable for MIPI init\n");
             return -ENODEV;
         }
+
+        /* Historical working bring-up wrote ISP_CORE[0xb078] before touching
+         * CSI BASIC/WRAP registers. Without this gate, 0x10022000 stays bus-dead.
+         */
+        pr_info("[CSI][PHY] enabling ISP_CORE[0xb078] <- 0x10000000 before MIPI init\n");
+        isp_write32(0xb078, 0x10000000);
+        wmb();
+        private_msleep(1);
+        phy_en_readback = isp_read32(0xb078);
+        pr_info("[CSI][PHY] ISP_CORE[0xb078] readback=0x%08x\n", phy_en_readback);
+
+        csi_version = readl(csi_regs + 0x00);
+        pr_info("[CSI][PHY] basic[0x00]=0x%08x after ISP_CORE[0xb078] enable\n",
+                csi_version);
 
         csi_dev->lanes = sensor_attr->mipi.lans;
         writel((sensor_attr->mipi.lans - 1) & 0x3, csi_regs + 0x04);

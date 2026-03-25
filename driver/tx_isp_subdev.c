@@ -33,6 +33,8 @@ void tx_isp_disable_irq(void *arg1);
 int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on);
 void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev *sd);
 void tx_isp_module_deinit(struct tx_isp_subdev *sd);
+int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
+int vic_event_handler(void *subdev, int event_type, void *data);
 
 /* Binary Ninja interrupt handlers - EXACT reference implementation */
 irqreturn_t isp_irq_handle(int irq, void *dev_id);
@@ -141,6 +143,36 @@ int tx_isp_send_event_to_remote(struct tx_isp_subdev *sd, unsigned int event, vo
 
     if (!sd)
         return -EINVAL;
+
+    /* OEM-style VIC event routing: frame/sensor events should hit the VIC event
+     * handler before generic ioctl/s_stream fallback. Our VIC subdev stores the
+     * device object in dev_priv, while host_priv is reused elsewhere; routing here
+     * avoids the wrong fallback path seen in logs for 0x3000003. */
+    if (sd->ops && sd->ops->core && sd->ops->core->ioctl == vic_core_ops_ioctl) {
+        switch (event) {
+        case 0x200000c:
+        case 0x200000f:
+        case 0x3000003:
+        case 0x3000005:
+        case 0x3000008: {
+            void *vic_dev = tx_isp_get_subdevdata(sd);
+            if (vic_dev) {
+                int r;
+
+                pr_info("*** tx_isp_send_event_to_remote: routing VIC event 0x%x via vic_event_handler ***\n",
+                        event);
+                r = vic_event_handler(vic_dev, event, data);
+                if (r != -ENOIOCTLCMD)
+                    return r;
+                pr_info("*** tx_isp_send_event_to_remote: vic_event_handler returned -ENOIOCTLCMD for 0x%x, falling back ***\n",
+                        event);
+            }
+            break;
+        }
+        default:
+            break;
+        }
+    }
 
     /* 1) Try explicit dispatch handler if registered (was-better style) */
     {

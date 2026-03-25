@@ -26,6 +26,7 @@ static int print_level = ISP_WARN_LEVEL;
 module_param(print_level, int, S_IRUGO);
 MODULE_PARM_DESC(print_level, "isp print level");
 int tx_isp_configure_clocks(struct tx_isp_dev *isp);
+extern int private_reset_tx_isp_module(int arg);
 
 /* Global ISP register base for tuning subsystem */
 void __iomem *isp_reg_base = NULL;
@@ -135,6 +136,7 @@ static void isp_core_early_cpm_bringup(void)
     u32 clkgr0_after;
     u32 clkgr1_after;
     u32 reset_after;
+    u32 r30_after;
     const u32 clkgr0_mask = (1u << 7) | (1u << 13) | (1u << 21) | (1u << 30);
     const u32 clkgr1_mask = (1u << 2) | (1u << 30);
     const u32 reset_mask = (1u << 0) | (1u << 8);
@@ -177,16 +179,89 @@ static void isp_core_early_cpm_bringup(void)
         reset_after = readl(cpm + 0x34);
     }
 
+    if (reset_after & reset_mask) {
+        u32 r30_try_before;
+
+        writel(0x0000A5A5, cpm + 0x38);
+        wmb();
+        udelay(1);
+
+        r30_try_before = readl(cpm + 0x30);
+        writel(reset_mask, cpm + 0x30);
+        wmb();
+        udelay(5);
+
+        r30_after = readl(cpm + 0x30);
+        reset_after = readl(cpm + 0x34);
+        if (reset_after & reset_mask) {
+            writel(r30_after & ~reset_mask, cpm + 0x30);
+            wmb();
+            udelay(5);
+            r30_after = readl(cpm + 0x30);
+            reset_after = readl(cpm + 0x34);
+        }
+
+        pr_info("[CPM][CORE] early bring-up 0x30 fallback: r30=%08x->%08x r34=%08x\n",
+                r30_try_before, r30_after, reset_after);
+    } else {
+        r30_after = readl(cpm + 0x30);
+    }
+
     clkgr0_after = readl(cpm + 0x20);
     clkgr1_after = readl(cpm + 0x28);
 
-    pr_info("[CPM][CORE] early bring-up after preflight: g0=%08x g1=%08x r34=%08x\n",
-            clkgr0_after, clkgr1_after, reset_after);
+    pr_info("[CPM][CORE] early bring-up after preflight: g0=%08x g1=%08x r30=%08x r34=%08x\n",
+            clkgr0_after, clkgr1_after, r30_after, reset_after);
     if (reset_after & reset_mask)
         pr_warn("[CPM][CORE] early bring-up: reset bits still asserted (mask=%08x, r34=%08x)\n",
                 reset_mask, reset_after);
 
     iounmap(cpm);
+}
+
+static int isp_core_enable_prestream_irqs(struct tx_isp_dev *isp_dev)
+{
+    void __iomem *core;
+    u32 pend_legacy;
+    u32 pend_new;
+
+    if (!isp_dev) {
+        pr_err("[IRQ][CORE] pre-stream enable: isp_dev is NULL\n");
+        return -EINVAL;
+    }
+
+    core = isp_dev->core_regs;
+    if (!core) {
+        pr_warn("[IRQ][CORE] pre-stream enable: core_regs missing\n");
+        return -ENODEV;
+    }
+
+    pend_legacy = readl(core + 0xb4);
+    pend_new = readl(core + 0x98b4);
+
+    writel(pend_legacy, core + 0xb8);
+    writel(pend_new, core + 0x98b8);
+
+    /* Historical interrupt-focused baseline: enable pipeline + frame-sync IRQs
+     * before VIC transitions into the streaming state.
+     */
+    writel(1, core + 0x800);
+    writel(0x1c, core + 0x804);
+    writel(8, core + 0x1c);
+    writel(0xffffffff, core + 0x30);
+    writel(0x133, core + 0x10);
+    writel(0x3fff, core + 0xb0);
+    writel(0x1000, core + 0xbc);
+    writel(0x3fff, core + 0x98b0);
+    writel(0x1000, core + 0x98bc);
+    wmb();
+
+    pr_info("[IRQ][CORE] pre-stream enable: pendL=%08x pendN=%08x enL=%08x maskL=%08x enN=%08x maskN=%08x\n",
+            pend_legacy, pend_new,
+            readl(core + 0xb0), readl(core + 0xbc),
+            readl(core + 0x98b0), readl(core + 0x98bc));
+
+    return 0;
 }
 
 /* Function to reset tisp initialization flag (for cleanup) */
@@ -484,6 +559,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vic_device *vic_dev;  /* Binary Ninja: void* $s0 = *(arg1 + 0xd4) */
     struct tx_isp_dev *isp_dev;
+    struct tx_isp_subdev *vin_sd;
     struct tx_isp_subdev **s3_1;
     int result = 0;
     int var_28 = 0;
@@ -511,6 +587,8 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         pr_err("ispcore_video_s_stream: No VIC device available\n");
         return -EINVAL;
     }
+
+    vin_sd = tx_isp_get_vin_subdev(isp_dev);
 
     /* Binary Ninja: __private_spin_lock_irqsave($s0 + 0xdc, &var_28) */
     __private_spin_lock_irqsave(&isp_dev->lock, &var_28);
@@ -617,6 +695,12 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
             /* CRITICAL FIX: Skip the Core subdev to prevent infinite recursion */
             if (a0_5 == sd) {
                 pr_info("*** ispcore_video_s_stream: Skipping Core subdev (self) to prevent recursion ***\n");
+                s3_1++;
+                continue;
+            }
+
+            if (a0_5 == vin_sd) {
+                pr_info("*** ispcore_video_s_stream: Skipping VIN subdev in ordered stream walk; Sensor.s_stream owns VIN transition for OEM ordering ***\n");
                 s3_1++;
                 continue;
             }
@@ -1999,6 +2083,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
     int vic_state;
     int result = -EINVAL;
     int ret;
+    int reset_ret;
 
     pr_info("*** ispcore_core_ops_init: ENTRY - sd=%p, on=%d ***\n", sd, on);
     if (!sd) {
@@ -2108,24 +2193,16 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
             pr_info("*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***");
             pr_info("*** ispcore_core_ops_init: Current vic_state (VIC state): %d ***", vic_state);
 
-            /* CRITICAL FIX: Allow ISP core initialization in streaming state */
-            /* The original check required state 2 (ready), but VIC may already be streaming (state 4) */
-            if (vic_state < 2) {
-                pr_err("ispcore_core_ops_init: VIC state %d < 2, not ready for initialization\n", vic_state);
+            /* OEM core init contract: enter only from READY state 2. */
+            if (vic_state != 2) {
+                pr_err("ispcore_core_ops_init: OEM init expects state 2, got %d\n", vic_state);
                 return -EINVAL;
             }
 
-            if (vic_state == 4) {
-                pr_info("*** ispcore_core_ops_init: VIC already streaming (state 4) - initializing during streaming ***");
-            } else if (vic_state == 3) {
-                pr_info("*** ispcore_core_ops_init: VIC in ready state (%d) - normal initialization ***", vic_state);
-                pr_info("*** ispcore_core_ops_init: OEM init path does not auto-call ispcore_video_s_stream(1); deferring streaming to tx_isp_video_s_stream ***\n");
-            }
-
-            pr_info("*** ispcore_core_ops_init: VIC state check passed, proceeding with initialization ***");
+            pr_info("*** ispcore_core_ops_init: OEM state check passed (state 2) ***\n");
 
             /* CRITICAL: Initialize all ISP clocks (cgu_isp, isp, csi) in correct order */
-            pr_info("*** VIC STATE 4: Initializing all ISP clocks ***\n");
+            pr_info("*** ispcore_core_ops_init: Initializing all ISP clocks ***\n");
             if (!isp_dev->cgu_isp || !isp_dev->isp_clk || !isp_dev->csi_clk) {
                 pr_info("*** Calling tx_isp_configure_clocks to initialize all 3 clocks ***\n");
                 ret = tx_isp_configure_clocks(isp_dev);
@@ -2144,8 +2221,14 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 
             (void)init_sensor;
 
+            pr_info("*** ispcore_core_ops_init: invoking OEM CPM reset pulse before tisp_init ***\n");
+            reset_ret = private_reset_tx_isp_module(0);
+            if (reset_ret) {
+                pr_err("*** ispcore_core_ops_init: OEM CPM reset pulse failed: %d ***\n", reset_ret);
+                return reset_ret;
+            }
+
             if (!tisp_initialized) {
-	                isp_core_early_cpm_bringup();
                 tisp_fill_boot_sensor_info(isp_dev, sensor_attr, &sensor_info);
                 pr_info("*** ispcore_core_ops_init: Calling tisp_init width=%u height=%u fps=%u mode=%u ***\n",
                         sensor_info.width, sensor_info.height, sensor_info.fps, sensor_info.mode);
@@ -2162,26 +2245,19 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 pr_info("*** ispcore_core_ops_init: tisp_init already completed - skipping duplicate init ***\n");
             }
 
-            /* CRITICAL FIX: Don't reset VIC state if it's already streaming (state 4) */
-            /* The issue is that VIC gets initialized to state 4, then ISP core resets it to 3, causing reinitialization */
-            if (vic_dev->state != 4) {
-                /* Binary Ninja: *($s0 + 0xe8) = 3 - Set VIC state to 3 (ACTIVE) */
-                vic_dev->state = 3;
-                pr_info("*** ispcore_core_ops_init: VIC state set to 3 (ACTIVE) - CORE READY FOR STREAMING ***");
-            } else {
-                pr_info("*** ispcore_core_ops_init: VIC already streaming (state 4) - preserving state to avoid reinitialization ***");
-            }
+            /* Binary Ninja: *($s0 + 0xe8) = 3 */
+            vic_dev->state = 3;
+            pr_info("*** ispcore_core_ops_init: VIC state set to 3 (ACTIVE) after OEM core init ***");
 
             /* REMOVED: Core device state management - ALL state management happens through VIC device */
             /* Based on Binary Ninja MCP analysis, core device is stateless */
             pr_info("*** ispcore_core_ops_init: Core device is stateless - only VIC state matters ***");
 
-            /* CRITICAL FIX: Don't enable ISP core interrupts during streaming - it causes hardware reset */
-            /* The register writes in tx_isp_core_enable_irq corrupt ISP control logic when called during streaming */
-            if (vic_state == 4) {
-                pr_info("*** ispcore_core_ops_init: STREAMING ACTIVE - Skipping ISP core interrupt enable to prevent hardware reset ***");
-                pr_info("*** ispcore_core_ops_init: ISP core interrupts should be enabled BEFORE streaming starts ***");
-            }
+            ret = isp_core_enable_prestream_irqs(isp_dev);
+            if (ret == 0)
+                pr_info("*** ispcore_core_ops_init: Pre-stream ISP core interrupts enabled ***\n");
+            else
+                pr_warn("*** ispcore_core_ops_init: Failed to enable pre-stream ISP core interrupts: %d ***\n", ret);
 
             result = 0;
         }

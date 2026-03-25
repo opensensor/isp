@@ -591,10 +591,13 @@ int vin_s_stream(struct tx_isp_subdev *sd, int enable)
         /* The init function sets state to 3, then streaming sets it to 4 */
         /* Binary Ninja: if ($v1 != 4) goto label_132e4 */
         if (vin_state < 3) {
-            /* CRITICAL: VIN must be in state 3 or 4 for streaming enable */
-            mcp_log_error("vin_s_stream: VIN not in state 3 or 4 for streaming enable", vin_state);
-            mcp_log_info("vin_s_stream: Expected state 3 or 4, got state", vin_state);
-            return -EINVAL;
+            /* Defer early generic stream walks until the later sensor-owned
+             * path initializes VIN. tx_isp_video_s_stream() treats
+             * -ENOIOCTLCMD as non-fatal and will continue to later subdevs.
+             */
+            mcp_log_info("vin_s_stream: deferring stream enable until VIN init path runs", vin_state);
+            mcp_log_info("vin_s_stream: returning -ENOIOCTLCMD for pre-init VIN state", vin_state);
+            return -ENOIOCTLCMD;
         }
         /* Allow streaming from state 3 (after init) or state 4 (already streaming) */
         mcp_log_info("vin_s_stream: VIN streaming enable from state", vin_state);

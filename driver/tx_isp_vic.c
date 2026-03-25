@@ -1136,11 +1136,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     struct tx_isp_sensor_attribute *sensor_attr;
     u32 interface_type;
     u32 timeout = 10000;
-    struct clk *isp_clk, *cgu_isp_clk, *csi_clk;
-    void __iomem *cpm_regs;
-    int ret;
-
-    /* CRITICAL FIX: Define actual sensor dimensions for consistent use throughout function */
     u32 actual_width, actual_height;
 
     pr_info("*** tx_isp_vic_start: Following EXACT Binary Ninja flow ***\n");
@@ -1151,87 +1146,37 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         return -EINVAL;
     }
 
-    /* Get sensor attributes - offset 0x110 in Binary Ninja */
-    /* Binary Ninja: void* $v1 = *(arg1 + 0x110) */
+    if (!ourISPdev || !ourISPdev->sensor || !ourISPdev->sensor->video.attr) {
+        pr_info("*** CRITICAL: sensor_attr is unavailable ***\n");
+        return -EINVAL;
+    }
+
     sensor_attr = ourISPdev->sensor->video.attr;
 
-    /* DEBUG: Check if sensor_attr is properly initialized */
-    pr_info("*** DEBUG: sensor_attr=%p, dbus_type=%d ***\n", sensor_attr, sensor_attr ? sensor_attr->dbus_type : -1);
-
-    /* CRITICAL FIX: Use ACTUAL sensor output dimensions, not total dimensions */
-    /* GC2053 sensor outputs 1920x1080 but reports total dimensions 2200x1418 */
-    actual_width = 1920;   /* ACTUAL sensor output width */
-    actual_height = 1080;  /* ACTUAL sensor output height */
-
-    pr_info("*** DIMENSION FIX: Using ACTUAL sensor output dimensions %dx%d for VIC configuration ***\n",
-            actual_width, actual_height);
-    pr_info("*** CRITICAL: VIC configured for sensor OUTPUT, not sensor TOTAL dimensions ***\n");
-
-    /* Binary Ninja: 0001024c int32_t $v0 = *($v1 + 0x14) - interface type at offset 0x14 */
     interface_type = sensor_attr->dbus_type;
 
-    pr_info("*** VIC INTERFACE DETECTION: interface_type=%d (MIPI=1, DVP=2) ***\n", interface_type);
-    pr_info("*** SENSOR ATTRIBUTE: dbus_type=%d ***\n", sensor_attr->dbus_type);
-
-    /* SAFETY: Check if sensor_attr is valid before accessing nested structures */
-    if (!sensor_attr) {
-        pr_info("*** CRITICAL: sensor_attr is NULL ***\n");
-        return -EINVAL;
+    actual_width = vic_dev->width;
+    actual_height = vic_dev->height;
+    if (!actual_width || !actual_height) {
+        actual_width = sensor_attr->mipi.image_twidth;
+        actual_height = sensor_attr->mipi.image_theight;
+    }
+    if (!actual_width || !actual_height) {
+        actual_width = sensor_attr->total_width ? sensor_attr->total_width : 1920;
+        actual_height = sensor_attr->total_height ? sensor_attr->total_height : 1080;
     }
 
     pr_info("*** Interface type: %d, CSI fmt=%u, MIPI mode=%u ***\n",
             interface_type,
             sensor_attr->mipi.mipi_sc.sensor_csi_fmt,
             sensor_attr->mipi.mode);
+    pr_info("tx_isp_vic_start: using dims %ux%u\n", actual_width, actual_height);
 
     /* Get VIC register base - offset 0xb8 in Binary Ninja */
     vic_regs = vic_dev->vic_regs;
     if (!vic_regs) {
         pr_info("*** CRITICAL: No VIC register base ***\n");
         return -EINVAL;
-    }
-
-    /* STEP 1: Enable clocks - Critical for VIC operation */
-    cgu_isp_clk = clk_get(NULL, "cgu_isp");
-    if (!IS_ERR(cgu_isp_clk)) {
-        clk_set_rate(cgu_isp_clk, 100000000);
-        ret = clk_prepare_enable(cgu_isp_clk);
-        if (ret == 0) {
-            pr_info("CGU_ISP clock enabled at 100MHz\n");
-        }
-    }
-
-    isp_clk = clk_get(NULL, "isp");
-    if (!IS_ERR(isp_clk)) {
-        clk_prepare_enable(isp_clk);
-    }
-
-    csi_clk = clk_get(NULL, "csi");
-    if (!IS_ERR(csi_clk)) {
-        clk_prepare_enable(csi_clk);
-    }
-
-    /* STEP 2: CPM register setup */
-    cpm_regs = ioremap(0x10000000, 0x1000);
-    if (cpm_regs) {
-        u32 before0 = readl(cpm_regs + 0x20);
-        u32 before1 = readl(cpm_regs + 0x28);
-        u32 mask0 = (1u << 13) | (1u << 21) | (1u << 30); /* VIC/ISP only; leave CSI to CSI path */
-        u32 mask1 = (1u << 30);
-        u32 after0, after1;
-
-        /* Clear VIC/ISP gates only; do not touch CSI here to avoid group side-effects */
-        writel(before0 & ~mask0, cpm_regs + 0x20);
-        writel(before1 & ~mask1, cpm_regs + 0x28);
-        wmb();
-        udelay(5);
-        after0 = readl(cpm_regs + 0x20);
-        after1 = readl(cpm_regs + 0x28);
-        pr_info("[CPM] VIC start: CLKGR0 %08x->%08x (mask 0x%08x) | CLKGR1 %08x->%08x (mask 0x%08x)\n",
-                before0, after0, mask0, before1, after1, mask1);
-
-        msleep(10);
-        iounmap(cpm_regs);
     }
 
     /* Binary Ninja: Branch on interface type at 00010250 */
@@ -1835,6 +1780,7 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
 static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_base;
+    void __iomem *vic_base_secondary;
     u32 width, height, stride;
 
     pr_info("*** vic_pipo_mdma_enable: EXACT Binary Ninja implementation + control-bank mirror ***\n");
@@ -1846,6 +1792,7 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     }
 
     vic_base = vic_dev->vic_regs;
+    vic_base_secondary = vic_dev->vic_regs_secondary;
 
     /* Validate VIC register base */
     if (!vic_base || (unsigned long)vic_base < 0x80000000 || (unsigned long)vic_base == 0x735f656d) {
@@ -1878,18 +1825,31 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 
     /* MDMA enable: 0x308 */
     writel(1, vic_base + 0x308);
+    if (vic_base_secondary)
+        writel(1, vic_base_secondary + 0x308);
     wmb();
 
     /* Frame size: 0x304 (width<<16 | height) */
     writel((width << 16) | height, vic_base + 0x304);
+    if (vic_base_secondary)
+        writel((width << 16) | height, vic_base_secondary + 0x304);
     wmb();
 
     /* Stride: 0x310 and 0x314 */
     writel(stride, vic_base + 0x310);
+    if (vic_base_secondary)
+        writel(stride, vic_base_secondary + 0x310);
     wmb();
 
     writel(stride, vic_base + 0x314);
+    if (vic_base_secondary)
+        writel(stride, vic_base_secondary + 0x314);
     wmb();
+
+    if (vic_base_secondary) {
+        pr_info("*** VIC PIPO MDMA ENABLE READBACK: PRI strideY=%u SEC strideY=%u ***\n",
+                readl(vic_base + 0x310), readl(vic_base_secondary + 0x310));
+    }
 
     pr_info("*** VIC PIPO MDMA ENABLE COMPLETE ***\n");
 }
@@ -1940,6 +1900,8 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
         vic_base = vic_dev->vic_regs;
         if (vic_base && (unsigned long)vic_base >= 0x80000000) {
             writel(0, vic_base + 0x300);
+            if (vic_dev->vic_regs_secondary)
+                writel(0, vic_dev->vic_regs_secondary + 0x300);
             wmb();
             pr_info("ispvic_frame_channel_s_stream: Stream OFF - wrote 0 to reg 0x300\n");
         }
@@ -1983,15 +1945,53 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
                 u32 ctrl_pre = readl(vic_base + 0x300);
                 pr_info("*** VIC MDMA pre-ctrl: ctrl=0x%x strideY=%u slot0 Y=0x%x UV=0x%x UVsh=0x%x ***\n",
                         ctrl_pre, stride_y, y0, uv0, uvsh0);
+                if (vic_dev->vic_regs_secondary) {
+                    pr_info("*** VIC MDMA pre-ctrl secondary: ctrl=0x%x strideY=%u slot0 Y=0x%x UV=0x%x UVsh=0x%x ***\n",
+                            readl(vic_dev->vic_regs_secondary + 0x300),
+                            readl(vic_dev->vic_regs_secondary + 0x310),
+                            readl(vic_dev->vic_regs_secondary + 0x318),
+                            readl(vic_dev->vic_regs_secondary + 0x340),
+                            readl(vic_dev->vic_regs_secondary + 0x32c));
+                }
             }
 
             /* Now write control (0x300) with NV12 format AFTER bases are valid, then start RUN */
             {
                 u32 stream_ctrl = (buffer_count << 16) | 0x80000020;  /* Reference driver: control bits only; format configured elsewhere */
                 writel(stream_ctrl, vic_base + 0x300);
+                if (vic_dev->vic_regs_secondary)
+                    writel(stream_ctrl, vic_dev->vic_regs_secondary + 0x300);
                 wmb();
                 pr_info("*** BINARY NINJA EXACT: Wrote 0x%x to reg 0x300 (buffer_count=%d, formula: (count<<16)|0x80000020) ***\n",
                         stream_ctrl, buffer_count);
+                if (vic_dev->vic_regs_secondary) {
+                    pr_info("*** VIC STREAM CTRL READBACK: PRI=0x%x SEC=0x%x ***\n",
+                            readl(vic_base + 0x300),
+                            readl(vic_dev->vic_regs_secondary + 0x300));
+                }
+
+                /* The alternate T31 path shows the hardware may require an explicit
+                 * RUN transition after stream control is programmed, otherwise the
+                 * control/slot writes never latch and read back as zero. */
+                writel(1, vic_base + 0x0);
+                if (vic_dev->vic_regs_secondary)
+                    writel(1, vic_dev->vic_regs_secondary + 0x0);
+                wmb();
+                pr_info("*** VIC RUN: Wrote 1 to VIC[0x0] (and secondary if mapped) ***\n");
+                if (vic_dev->vic_regs_secondary) {
+                    pr_info("*** VIC POST-RUN READBACK: PRI state=0x%x ctrl=0x%x slot0=0x%x | SEC state=0x%x ctrl=0x%x slot0=0x%x ***\n",
+                            readl(vic_base + 0x0),
+                            readl(vic_base + 0x300),
+                            readl(vic_base + 0x318),
+                            readl(vic_dev->vic_regs_secondary + 0x0),
+                            readl(vic_dev->vic_regs_secondary + 0x300),
+                            readl(vic_dev->vic_regs_secondary + 0x318));
+                } else {
+                    pr_info("*** VIC POST-RUN READBACK: state=0x%x ctrl=0x%x slot0=0x%x ***\n",
+                            readl(vic_base + 0x0),
+                            readl(vic_base + 0x300),
+                            readl(vic_base + 0x318));
+                }
 
 
 
@@ -2453,6 +2453,8 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 
         /* Program Y base */
         writel(buffer_addr, vic_dev->vic_regs + reg_offset);
+        if (vic_dev->vic_regs_secondary)
+            writel(buffer_addr, vic_dev->vic_regs_secondary + reg_offset);
         /* Program UV base for NV12: 0x340 + index*4 = Y_base + stride*height */
         {
             u32 stride_nv12 = readl(vic_dev->vic_regs + 0x310);
@@ -2461,6 +2463,10 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
             u32 uv_shadow_off = 0x32c + (buffer_index * 4);
             writel(uv_base, vic_dev->vic_regs + uv_reg_off);
             writel(uv_base, vic_dev->vic_regs + uv_shadow_off);
+            if (vic_dev->vic_regs_secondary) {
+                writel(uv_base, vic_dev->vic_regs_secondary + uv_reg_off);
+                writel(uv_base, vic_dev->vic_regs_secondary + uv_shadow_off);
+            }
         }
         wmb();
         pr_info("*** VIC QBUF: slot%u Y=0x%x(off=0x%x) UV=0x%x(off=0x%x) UVsh=0x%x(off=0x%x) ***\n",
@@ -2469,6 +2475,11 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
                 0x340 + (buffer_index * 4),
                 buffer_addr + readl(vic_dev->vic_regs + 0x310) * vic_dev->height,
                 0x32c + (buffer_index * 4));
+        if (vic_dev->vic_regs_secondary) {
+            pr_info("*** VIC QBUF READBACK: PRI slot%u Y=0x%x SEC slot%u Y=0x%x ***\n",
+                    buffer_index, readl(vic_dev->vic_regs + reg_offset),
+                    buffer_index, readl(vic_dev->vic_regs_secondary + reg_offset));
+        }
         spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
         return 0;
     }
@@ -2488,6 +2499,8 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 
     /* Program Y base */
     writel(buffer_addr, vic_dev->vic_regs + reg_offset);
+    if (vic_dev->vic_regs_secondary)
+        writel(buffer_addr, vic_dev->vic_regs_secondary + reg_offset);
     /* Program UV base for NV12: 0x340 + index*4 = Y_base + stride*height */
     {
         u32 stride_nv12 = readl(vic_dev->vic_regs + 0x310);
@@ -2496,6 +2509,10 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
         u32 uv_shadow_off = 0x32c + (buffer_index * 4);
         writel(uv_base, vic_dev->vic_regs + uv_reg_off);
         writel(uv_base, vic_dev->vic_regs + uv_shadow_off);
+        if (vic_dev->vic_regs_secondary) {
+            writel(uv_base, vic_dev->vic_regs_secondary + uv_reg_off);
+            writel(uv_base, vic_dev->vic_regs_secondary + uv_shadow_off);
+        }
     }
     wmb();
     pr_info("*** VIC QBUF (fallback): Y=0x%x(off=0x%x) UV=0x%x(off=0x%x) UVsh=0x%x(off=0x%x) idx=%u ***\n",
@@ -2551,6 +2568,15 @@ static int ispvic_frame_channel_clearbuf(void)
             writel(0, r + (0x318 + (i * 4))); /* Y base */
             writel(0, r + (0x32c + (i * 4))); /* shadow/alt base */
             writel(0, r + (0x340 + (i * 4))); /* UV base */
+        }
+        wmb();
+    }
+    if (vic_dev->vic_regs_secondary) {
+        void __iomem *r = vic_dev->vic_regs_secondary;
+        for (i = 0; i < 5; ++i) {
+            writel(0, r + (0x318 + (i * 4)));
+            writel(0, r + (0x32c + (i * 4)));
+            writel(0, r + (0x340 + (i * 4)));
         }
         wmb();
     }
