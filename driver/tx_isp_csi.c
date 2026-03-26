@@ -561,6 +561,7 @@ int tx_isp_csi_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *config
 int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_csi_device *csi_dev;
+    int ret = 0;
     int state;
 
     pr_info("*** csi_video_s_stream: EXACT Binary Ninja MCP implementation ***\n");
@@ -596,9 +597,35 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
         }
     }
 
-    state = 4;
-    if (enable == 0)
+    if (enable) {
+        if (csi_dev->state < 2) {
+            pr_info("csi_video_s_stream: activating CSI subdev from state %d before stream-on\n",
+                    csi_dev->state);
+            ret = tx_isp_csi_activate_subdev(sd);
+            if (ret) {
+                pr_err("csi_video_s_stream: CSI activation failed: %d\n", ret);
+                return ret;
+            }
+        }
+
+        ret = csi_core_ops_init(sd, 1);
+        if (ret) {
+            pr_err("csi_video_s_stream: CSI hardware init failed: %d\n", ret);
+            return ret;
+        }
+
+        state = 4;
+    } else {
+        if (csi_dev->state >= 3)
+            ret = csi_core_ops_init(sd, 0);
+
+        if (ret) {
+            pr_err("csi_video_s_stream: CSI hardware disable failed: %d\n", ret);
+            return ret;
+        }
+
         state = 3;
+    }
 
     csi_dev->state = state;
 
@@ -692,16 +719,29 @@ static void __iomem *csi_get_wrapper_regs(struct tx_isp_csi_device *csi_dev)
         return NULL;
 
     isp_csi_regs = *csi_wrapper_regs_slot(csi_dev);
-    if (isp_csi_regs)
+    if (isp_csi_regs) {
+        if (ourISPdev && ourISPdev->core_regs &&
+            isp_csi_regs == csi_dev->csi_regs &&
+            ourISPdev->core_regs != csi_dev->csi_regs) {
+            isp_csi_regs = ourISPdev->core_regs;
+            *csi_wrapper_regs_slot(csi_dev) = isp_csi_regs;
+            pr_info("csi_get_wrapper_regs: repaired stale +0x13c cache %p -> %p [core_regs]\n",
+                    csi_dev->csi_regs, isp_csi_regs);
+        }
         return isp_csi_regs;
+    }
 
     /*
-     * BN tx_isp_csi_probe stores the 0x10022000 mem-region mapping in the
-     * +0x13c slot. Do not synthesize this slot from VIC space.
+     * Keep CSI PHY/basic access on csi_dev->csi_regs (0x10022000), but use
+     * ISP core space for the CSI wrapper/config registers in the +0x13c slot.
      */
-    isp_csi_regs = csi_dev->csi_regs;
-    if (!isp_csi_regs && ourISPdev)
-        isp_csi_regs = ourISPdev->csi_regs;
+    if (ourISPdev)
+        isp_csi_regs = ourISPdev->core_regs;
+    else
+        isp_csi_regs = NULL;
+
+    if (!isp_csi_regs)
+        isp_csi_regs = csi_dev->csi_regs;
     if (!isp_csi_regs)
         return NULL;
 
@@ -763,6 +803,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
     struct tx_isp_sensor_attribute *sensor_attr;
     void __iomem *csi_regs;
     void __iomem *isp_csi_regs;
+    u32 lane_enable_mask;
     u32 phy_en_readback;
     u32 csi_version;
     int result = 0xffffffea;
@@ -819,10 +860,6 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
             interface_type, sensor_attr->mipi.lans, isp_csi_regs);
 
     if (interface_type == 1) {
-        if (!isp_csi_regs) {
-            pr_err("csi_core_ops_init: wrapper regs unavailable for MIPI init\n");
-            return -ENODEV;
-        }
 
         /* Historical working bring-up wrote ISP_CORE[0xb078] before touching
          * CSI BASIC/WRAP registers. Without this gate, 0x10022000 stays bus-dead.
@@ -838,8 +875,8 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
         pr_info("[CSI][PHY] basic[0x00]=0x%08x after ISP_CORE[0xb078] enable\n",
                 csi_version);
 
-        csi_dev->lanes = sensor_attr->mipi.lans;
-        writel((sensor_attr->mipi.lans - 1) & 0x3, csi_regs + 0x04);
+        csi_dev->lanes = sensor_attr->mipi.lans ? sensor_attr->mipi.lans : 2;
+        writel((csi_dev->lanes - 1) & 0x3, csi_regs + 0x04);
         writel(readl(csi_regs + 0x08) & 0xfffffffe, csi_regs + 0x08);
         writel(0, csi_regs + 0x0c);
         private_msleep(1);
@@ -858,13 +895,38 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
             writel(rate_reg, isp_csi_regs + 0x260);
         }
 
-        writel(0x7d, isp_csi_regs + 0x00);
-        writel(0x3f, isp_csi_regs + 0x128);
+        switch (csi_dev->lanes) {
+        case 1:
+            lane_enable_mask = 0x31;
+            break;
+        case 2:
+            lane_enable_mask = 0x33;
+            break;
+        case 4:
+        default:
+            lane_enable_mask = 0x3f;
+            break;
+        }
+
+        /*
+         * T31 sequencing notes and the live failure logs both point to the
+         * lane mask and final stream-on control living in CSI BASIC space,
+         * not WRAP. Keep slot13c only for diagnostics until the true wrapper
+         * base is proven.
+         */
+        writel(0x7d, csi_regs + 0x00);
+        writel(lane_enable_mask, csi_regs + 0x128);
         writel(1, csi_regs + 0x10);
         private_msleep(10);
-        pr_info("csi_core_ops_init: MIPI init programmed basic[0x04]=0x%08x basic[0x0c]=0x%08x basic[0x10]=0x%08x wrap[0x00]=0x%08x wrap[0x128]=0x%08x\n",
-                readl(csi_regs + 0x04), readl(csi_regs + 0x0c), readl(csi_regs + 0x10),
-                readl(isp_csi_regs + 0x00), readl(isp_csi_regs + 0x128));
+        pr_info("csi_core_ops_init: MIPI init programmed lanes=%u lane_mask=0x%02x basic[0x00]=0x%08x basic[0x04]=0x%08x basic[0x0c]=0x%08x basic[0x10]=0x%08x basic[0x128]=0x%08x lanec[0x200]=0x%08x lanec[0x204]=0x%08x lanec[0x210]=0x%08x lanec[0x230]=0x%08x lanec[0x250]=0x%08x lanec[0x254]=0x%08x lanec[0x2f4]=0x%08x wrap[0x00]=0x%08x wrap[0x128]=0x%08x\n",
+                csi_dev->lanes, lane_enable_mask,
+                readl(csi_regs + 0x00), readl(csi_regs + 0x04), readl(csi_regs + 0x0c),
+                readl(csi_regs + 0x10), readl(csi_regs + 0x128),
+                readl(csi_regs + 0x200), readl(csi_regs + 0x204), readl(csi_regs + 0x210),
+                readl(csi_regs + 0x230), readl(csi_regs + 0x250), readl(csi_regs + 0x254),
+                readl(csi_regs + 0x2f4),
+                isp_csi_regs ? readl(isp_csi_regs + 0x00) : 0,
+                isp_csi_regs ? readl(isp_csi_regs + 0x128) : 0);
         v0_17 = 3;
     } else if (interface_type != 2) {
         isp_printf(1, "%s[%d] VIC failed to config DVP mode!(10bits-sensor)\n",
@@ -967,6 +1029,7 @@ int tx_isp_csi_probe(struct platform_device *pdev)
     struct tx_isp_csi_device *csi_dev = NULL;
     struct tx_isp_subdev *sd = NULL;
     struct resource *res;
+    void __iomem *isp_csi_regs;
     int32_t ret = 0;
 
     pr_info("*** tx_isp_csi_probe: Starting CSI device probe ***\n");
@@ -1016,6 +1079,12 @@ int tx_isp_csi_probe(struct platform_device *pdev)
 
     /* Set platform driver data after successful init */
     platform_set_drvdata(pdev, csi_dev);
+
+    isp_csi_regs = csi_get_wrapper_regs(csi_dev);
+    pr_info("*** tx_isp_csi_probe: csi_regs (PHY/basic) = %p ***\n", csi_dev->csi_regs);
+    pr_info("*** tx_isp_csi_probe: slot13c / isp_csi_regs (wrapper) = %p%s ***\n",
+            isp_csi_regs,
+            (ourISPdev && isp_csi_regs == ourISPdev->core_regs) ? " [core_regs]" : "");
 
     pr_info("*** tx_isp_csi_probe: CSI device initialized successfully ***\n");
     pr_info("CSI device: csi_dev=%p, size=%zu\n", csi_dev, sizeof(struct tx_isp_csi_device));
@@ -1091,7 +1160,7 @@ void dump_csi_reg(struct tx_isp_subdev *sd)
     pr_info("[BASIC] ERR2 (0x24):          0x%08x\n", readl(csi_base + 0x24));
     pr_info("[BASIC] CSI_CTRL (0x40):      0x%08x\n", readl(csi_base + 0x40));
 
-    /* BN +0x13c slot (same 0x10022000 CSI mapping in tx_isp_csi_probe) */
+    /* BN +0x13c slot (ISP core wrapper/config mapping) */
     {
         void __iomem *isp_csi_regs = csi_get_wrapper_regs(csi_dev);
 
@@ -1151,7 +1220,7 @@ static void csi_dump_once_to_file(struct tx_isp_csi_device *csi_dev, const char 
     if (!csi_base)
         return;
 
-    /* BN +0x13c slot resolves to the CSI mem-region mapping. */
+    /* BN +0x13c slot resolves to ISP core wrapper/config mapping. */
     isp_csi_regs = csi_get_wrapper_regs(csi_dev);
 
     n += scnprintf(buf + n, sizeof(buf) - n, "=== CSI DUMP ===\n");

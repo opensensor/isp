@@ -153,6 +153,8 @@ static int isp_memopt = 0; // Memory optimization flag like reference
 /* This is now declared as extern - the actual definition is in tx_isp_vic.c */
 extern uint32_t vic_start_ok;
 bool is_valid_kernel_pointer(const void *ptr);
+int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd,
+                                         struct tx_isp_sensor_attribute *attr);
 
 /* Kernel symbol export for sensor drivers to register */
 static struct tx_isp_subdev *registered_sensor_subdev = NULL;
@@ -905,6 +907,7 @@ extern struct tx_isp_subdev_ops csi_subdev_ops;
 /* Reference driver function declarations - Binary Ninja exact names */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);  /* FIXED: Correct signature to match tx_isp_vic.c */
 int csi_video_s_stream(struct tx_isp_subdev *sd, int enable);       /* Real CSI streaming (in tx_isp_csi.c) */
+int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable);
 void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev);
 static int ispvic_frame_channel_qbuf(struct tx_isp_vic_device *vic_dev, void *buffer);
 static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);
@@ -1915,32 +1918,63 @@ static struct tx_isp_subdev_pad* find_subdev_link_pad(struct tx_isp_dev *isp_dev
 // Sensor synchronization matching reference ispcore_sync_sensor_attr - SDK compatible
 static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sensor_attribute *sensor_attr)
 {
+    struct tx_isp_sensor *sensor;
+    struct tx_isp_vic_device *vic_dev;
+    unsigned int actual_width;
+    unsigned int actual_height;
+    int ret = 0;
+
     if (!isp_dev || !sensor_attr) {
         pr_err("Invalid parameters for sensor sync\n");
         return -EINVAL;
     }
 
-    // Work with actual SDK sensor structure
-    if (isp_dev->sensor) {
-        // Copy sensor attributes to device sensor
-        memcpy(&isp_dev->sensor->attr, sensor_attr, sizeof(struct tx_isp_sensor_attribute));
-        pr_debug("Sensor attr sync completed for %s\n", sensor_attr->name);
-
-        // Update device sensor info
-        strncpy(isp_dev->sensor_name, sensor_attr->name, sizeof(isp_dev->sensor_name) - 1);
-        /* CRITICAL FIX: Use ACTUAL sensor output dimensions, not total dimensions */
-        /* The real sensor driver provides total dimensions (2200x1418) but VIC needs output dimensions (1920x1080) */
-        isp_dev->sensor_width = 1920;   /* ACTUAL sensor output width */
-        isp_dev->sensor_height = 1080;  /* ACTUAL sensor output height */
-        pr_info("*** DIMENSION FIX: Set global sensor dimensions to ACTUAL output %dx%d (not total %dx%d) ***\n",
-                isp_dev->sensor_width, isp_dev->sensor_height,
-                sensor_attr->total_width, sensor_attr->total_height);
-
-        return 0;
+    sensor = isp_dev->sensor;
+    if (!sensor) {
+        pr_debug("No active sensor for sync\n");
+        return -ENODEV;
     }
 
-    pr_debug("No active sensor for sync\n");
-    return -ENODEV;
+    memcpy(&sensor->attr, sensor_attr, sizeof(*sensor_attr));
+    if (!sensor->video.attr)
+        sensor->video.attr = &sensor->attr;
+    else if (sensor->video.attr != sensor_attr)
+        memcpy(sensor->video.attr, sensor_attr, sizeof(*sensor_attr));
+
+    if (sensor_attr->name) {
+        strncpy(isp_dev->sensor_name, sensor_attr->name,
+                sizeof(isp_dev->sensor_name) - 1);
+        isp_dev->sensor_name[sizeof(isp_dev->sensor_name) - 1] = '\0';
+    }
+
+    actual_width = sensor_attr->mipi.image_twidth ?
+                   sensor_attr->mipi.image_twidth : sensor_attr->total_width;
+    actual_height = sensor_attr->mipi.image_theight ?
+                    sensor_attr->mipi.image_theight : sensor_attr->total_height;
+    if (!actual_width)
+        actual_width = 1920;
+    if (!actual_height)
+        actual_height = 1080;
+
+    isp_dev->sensor_width = actual_width;
+    isp_dev->sensor_height = actual_height;
+    pr_info("*** tx_isp_sync_sensor_attr: synced %s dbus=%u lanes=%u dims=%ux%u ***\n",
+            sensor_attr->name ? sensor_attr->name : "(unnamed)",
+            sensor_attr->dbus_type, sensor_attr->mipi.lans,
+            actual_width, actual_height);
+
+    vic_dev = isp_dev->vic_dev;
+    if (vic_dev) {
+        ret = tx_isp_handle_sync_sensor_attr_event(&vic_dev->sd, sensor_attr);
+        if (ret) {
+            pr_warn("*** tx_isp_sync_sensor_attr: VIC cache refresh failed: %d ***\n",
+                    ret);
+        } else {
+            pr_info("*** tx_isp_sync_sensor_attr: VIC cache refreshed successfully ***\n");
+        }
+    }
+
+    return ret;
 }
 
 // Simplified VIC registration - removed complex platform device array
@@ -2057,17 +2091,24 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     pr_info("*** CSI BASIC REGISTERS MAPPED: 0x10022000 -> %p ***\n", csi_basic_regs);
 
     /*
-     * BN tx_isp_csi_probe stores the 0x10022000 mem-region mapping at +0x13c.
-     * Do not synthesize this slot from VIC space.
+     * +0x13c is used later as the CSI wrapper/config register pointer.
+     * Keep it on ISP core space when available; otherwise leave it empty and
+     * let tx_isp_csi_probe/csi_get_wrapper_regs populate it after core_regs
+     * has been mapped.
      */
-    isp_csi_regs = csi_basic_regs;
-    pr_info("*** CSI +0x13c SLOT MAPPED: 0x10022000 -> %p ***\n", isp_csi_regs);
+    if (isp_dev->core_regs)
+        isp_csi_regs = isp_dev->core_regs;
+    else
+        isp_csi_regs = NULL;
+    pr_info("*** CSI +0x13c SLOT INITIALIZED: %p%s ***\n",
+            isp_csi_regs,
+            isp_csi_regs ? " [core_regs]" : " [deferred]");
 
     /* Binary Ninja: Store register addresses at correct offsets */
     /* *($v0 + 0xb8) = csi_basic_regs (basic CSI control) */
     csi_dev->csi_regs = csi_basic_regs;
 
-    /* Store the BN +0x13c slot to the same 0x10022000 mapping */
+    /* Store the BN +0x13c slot as wrapper/config space (or defer until core probe) */
     *((void**)((char*)csi_dev + 0x13c)) = isp_csi_regs;
 
     /* Binary Ninja: *($v0 + 0x138) = $v0_3 (memory resource) */
@@ -2087,7 +2128,8 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     pr_info("*** CSI device structure initialized: ***\n");
     pr_info("  Size: 0x148 bytes\n");
     pr_info("  Basic regs (+0xb8): %p (0x10022000)\n", csi_basic_regs);
-    pr_info("  CSI slot (+0x13c): %p\n", isp_csi_regs);
+    pr_info("  CSI slot (+0x13c): %p%s\n", isp_csi_regs,
+            isp_csi_regs ? " [core_regs]" : " [deferred]");
     pr_info("  State (+0x128): %d\n", csi_dev->state);
 
     /* *** CRITICAL FIX: LINK CSI DEVICE TO ISP DEVICE *** */
@@ -3109,11 +3151,34 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
     struct tx_isp_subdev **s4;
     int i;
     int result;
+    int sync_ret;
 
     pr_info("*** tx_isp_video_s_stream: EXACT Binary Ninja reference implementation - enable=%d ***\n", enable);
 
+    if (enable && dev && dev->sensor && dev->sensor->video.attr) {
+        sync_ret = tx_isp_sync_sensor_attr(dev, dev->sensor->video.attr);
+        if (sync_ret) {
+            pr_warn("*** tx_isp_video_s_stream: sensor attr pre-sync returned %d ***\n",
+                    sync_ret);
+        }
+    }
+
     /* Debug: Show current subdev array status using helper function */
     tx_isp_debug_print_subdevs(dev);
+
+    /*
+     * Plain VIDIOC_STREAMON currently walks the raw subdev array as
+     * CSI -> VIC, but the live T31 bring-up notes require VIC -> CSI -> Sensor
+     * for CSI BASIC to come alive before VIC unlock.
+     *
+     * Reuse the existing ordered core orchestrator for stream-on instead of
+     * duplicating another custom walk here. Keep stream-off on the legacy path
+     * for now so this change stays narrowly focused on the unlock failure.
+     */
+    if (enable && dev) {
+        pr_info("*** tx_isp_video_s_stream: delegating STREAMON to ispcore_video_s_stream for ordered VIC->CSI->Sensor sequencing ***\n");
+        return ispcore_video_s_stream(&dev->sd, enable);
+    }
 
     /* Binary Ninja: int32_t* $s4 = dev + 0x38 */
     s4 = dev->subdevs;
@@ -4474,14 +4539,22 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                     /* SAFE INITIALIZATION: Set up basic sensor attributes for GC2053 */
                     if (strncmp(sensor_name, "gc2053", 6) == 0) {
                         sensor->video.attr->chip_id = 0x2053;
-                        /* CRITICAL FIX: Use ACTUAL sensor output dimensions, not total dimensions */
-                        /* VIC must be configured to match what sensor actually outputs */
-                        sensor->video.attr->total_width = 1920;   /* Actual output width */
-                        sensor->video.attr->total_height = 1080;  /* Actual output height */
+                        sensor->video.attr->total_width = 0x44c * 2;
+                        sensor->video.attr->total_height = 0x58a;
                         sensor->video.attr->dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; // MIPI interface (correct value from enum)
                         sensor->video.attr->data_type = TX_SENSOR_DATA_TYPE_LINEAR;
                         sensor->video.attr->integration_time = 1000;
-                        sensor->video.attr->max_again = 0x40000;
+                        sensor->video.attr->max_again = 444864;
+                        sensor->video.attr->max_dgain = 0;
+                        sensor->video.attr->min_integration_time = 1;
+                        sensor->video.attr->min_integration_time_native = 4;
+                        sensor->video.attr->max_integration_time_native = 0x58a - 8;
+                        sensor->video.attr->integration_time_limit = 0x58a - 8;
+                        sensor->video.attr->max_integration_time = 0x58a - 8;
+                        sensor->video.attr->integration_time_apply_delay = 2;
+                        sensor->video.attr->again_apply_delay = 2;
+                        sensor->video.attr->dgain_apply_delay = 2;
+                        sensor->video.attr->one_line_expr_in_us = 28;
                         sensor->video.attr->name = sensor_name; /* Safe pointer assignment */
                         sensor->video.attr->mipi.mode = SENSOR_MIPI_OTHER_MODE;
                         sensor->video.attr->mipi.clk = 600;
@@ -7419,11 +7492,20 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
         pr_info("Before: ourISPdev->sensor=%p\n", ourISPdev->sensor);
 
         if (tx_isp_sensor_has_usable_attachment(sensor)) {
+            int sync_ret;
+
             /* Only use the recovered sensor object as the ISP attachment when it
              * actually provides usable attr/name metadata for CSI/VIC setup.
              */
             tx_isp_refresh_sensor_attachment(ourISPdev, sd, sensor,
                                              "KERNEL SENSOR REGISTRATION");
+            if (sensor->video.attr) {
+                sync_ret = tx_isp_sync_sensor_attr(ourISPdev, sensor->video.attr);
+                if (sync_ret) {
+                    pr_warn("*** KERNEL SENSOR REGISTRATION: initial attr sync failed: %d ***\n",
+                            sync_ret);
+                }
+            }
             pr_info("After: ourISPdev->sensor=%p (%s)\n", ourISPdev->sensor,
                     sensor->info.name[0] ? sensor->info.name : "(unnamed)");
         } else {
