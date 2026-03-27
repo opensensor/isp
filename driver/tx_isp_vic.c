@@ -138,25 +138,19 @@ static inline void __iomem *vic_primary_regs_resolve(struct tx_isp_vic_device *v
 
     isp_dev = vic_dev->sd.isp;
 
-    /* T31 bring-up notes and the known-good README snapshots both point to the
-     * live W01/VIC control window at 0x10023000. Prefer that platform/resource
-     * mapping for the hot path while keeping vic_dev->vic_regs as the stable
-     * wrapper/alternate bank.
+    /* OEM source of truth (BN): tx_isp_subdev_init() stores the VIC MMIO base
+     * directly at +(0xb8) from the subdevice platform resource ioremap.
+     * Keep every VIC hot path on that same subdev mapping first.
      */
-    regs = raw_regs;
-    if (!regs || !vic_regs_is_secondary(vic_dev, regs)) {
-        if (vic_dev->sd.regs && vic_regs_is_secondary(vic_dev, vic_dev->sd.regs))
-            regs = vic_dev->sd.regs;
-        else if (vic_dev->vic_regs_secondary)
-            regs = vic_dev->vic_regs_secondary;
-        else if (isp_dev && isp_dev->vic_regs2)
-            regs = isp_dev->vic_regs2;
-        else if (ourISPdev && ourISPdev->vic_regs2)
-            regs = ourISPdev->vic_regs2;
-    }
-
+    regs = vic_dev->sd.regs;
     if (!regs)
         regs = raw_regs;
+    if (!regs && vic_dev->vic_regs_secondary)
+        regs = vic_dev->vic_regs_secondary;
+    if (!regs && isp_dev && isp_dev->vic_regs2)
+        regs = isp_dev->vic_regs2;
+    if (!regs && ourISPdev && ourISPdev->vic_regs2)
+        regs = ourISPdev->vic_regs2;
     if (!regs)
         regs = vic_dev->vic_regs;
     if (!regs && isp_dev)
@@ -177,6 +171,25 @@ static inline void __iomem *vic_primary_regs_resolve(struct tx_isp_vic_device *v
     return regs;
 }
 
+static inline void __iomem *vic_config_regs_resolve(struct tx_isp_vic_device *vic_dev)
+{
+    /* OEM BN: tx_isp_vic_start() uses the same +(0xb8) pointer as QBUF,
+     * stream arm, MDMA enable, and framedone.
+     */
+    return vic_primary_regs_resolve(vic_dev);
+}
+
+static inline void __iomem *vic_coord_regs_resolve(struct tx_isp_vic_device *vic_dev)
+{
+    if (!vic_dev)
+        return NULL;
+
+    /* Keep coordination/debug reads on the exact same OEM +(0xb8) mapping so
+     * tx_isp_vic_start() instrumentation reflects the real programmed bank.
+     */
+    return vic_primary_regs_resolve(vic_dev);
+}
+
 static inline void __iomem *vic_stream_regs_resolve(struct tx_isp_vic_device *vic_dev)
 {
     struct tx_isp_dev *isp_dev;
@@ -187,20 +200,15 @@ static inline void __iomem *vic_stream_regs_resolve(struct tx_isp_vic_device *vi
 
     isp_dev = vic_dev->sd.isp;
 
-    /* OEM tx_isp_vic_start() uses the cached raw register slot directly for its
-     * unlock/write sequence. Keep that slot on the stable primary VIC wrapper
-     * bank (0x133e0000) even when control/IRQ helpers target 0x10023000.
+    /* Stream/QBUF hot paths must follow the live W02/VIC control mapping used
+     * by the OEM raw +0xb8 slot. Delegate to the resolver that prefers the
+     * platform/resource window and refreshes the cached raw register pointer.
      */
-    regs = vic_dev->vic_regs;
+    regs = vic_primary_regs_resolve(vic_dev);
     if (!regs && isp_dev)
         regs = isp_dev->vic_regs;
     if (!regs && ourISPdev)
         regs = ourISPdev->vic_regs;
-    if (!regs)
-        regs = vic_raw_regs_get(vic_dev);
-
-    if (regs)
-        vic_raw_regs_set(vic_dev, regs);
 
     return regs;
 }
@@ -326,6 +334,7 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2);
 static int ispvic_frame_channel_clearbuf(void);
 static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev);
 static void vic_prime_mdma_before_unlock(struct tx_isp_vic_device *vic_dev);
+static void vic_bind_event_dispatch_table(struct tx_isp_vic_device *vic_dev);
 
 /* This function creates and links the VIC device structure to the ISP core */
 int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
@@ -411,8 +420,10 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
         isp_dev->vic_regs2 = vic_dev->vic_regs_secondary;
     }
 
-    /* Seed the OEM raw slots used by tx_isp_vic_start(). */
-    vic_raw_regs_set(vic_dev, vic_dev->vic_regs);
+    /* Seed the OEM raw slots used by tx_isp_vic_start()/QBUF from the live
+     * W02/resource bank so the hot path follows the same MMIO slot as OEM.
+     */
+    vic_raw_regs_set(vic_dev, vic_primary_regs_resolve(vic_dev));
 
     /* Initialize VIC device dimensions - CRITICAL: Use actual sensor output dimensions */
     vic_dev->width = 1920;  /* GC2053 actual output width */
@@ -476,6 +487,7 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
 
     /* Also set host_priv so vic_core_ops_ioctl can retrieve vic_dev (QBUF path) */
     tx_isp_set_subdev_hostdata(&vic_dev->sd, vic_dev);
+    vic_bind_event_dispatch_table(vic_dev);
 
     pr_info("*** CRITICAL: VIC DEVICE LINKED TO ISP CORE ***\n");
     pr_info("  isp_dev->vic_dev = %p\n", isp_dev->vic_dev);
@@ -509,7 +521,7 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
         vic_dev->height = seed_height;
 
         vic_raw_self_set(vic_dev);
-        vic_raw_regs_set(vic_dev, isp_dev->vic_regs);
+        vic_raw_regs_set(vic_dev, vic_primary_regs_resolve(vic_dev));
         vic_raw_dims_set(vic_dev, seed_width, seed_height);
     }
     vic_raw_sensor_attr_sync(vic_dev, &vic_dev->sensor_attr);
@@ -675,13 +687,16 @@ EXPORT_SYMBOL(tx_isp_vic_restore_interrupts);
 /* Global data symbol used by reference driver */
 static char data_b0000[1] = {0};
 
-/* VIC buffer entry structure for safe list handling */
-struct vic_buffer_entry {
-    struct list_head list;
-    u32 reserved;
-    u32 buffer_addr;
-    u32 buffer_index; /* slot index 0..4 for VIC 0x318..0x328 */
-};
+static void vic_free_buffer_list(struct list_head *head)
+{
+	while (!list_empty(head)) {
+		struct vic_buffer_entry *entry;
+
+		entry = list_first_entry(head, struct vic_buffer_entry, list);
+		list_del(&entry->list);
+		kfree(entry);
+	}
+}
 
 /* Helper functions - removed conflicting declarations as they're already in SDK headers */
 /* __private_spin_lock_irqsave and private_spin_unlock_irqrestore are defined in txx-funcs.h */
@@ -730,9 +745,11 @@ static u32 vic_irq_counter;
         result = (void *)(uintptr_t)vic_dev->stream_state;
 
         if (vic_dev->stream_state != 0) {
-            /* Binary Ninja: void* $a3_1 = *(arg1 + 0xb8) */
-            /* SAFE: Use vic_regs member instead of offset 0xb8 */
-            vic_regs = vic_dev->vic_regs;
+            /* Binary Ninja: void* $a3_1 = *(arg1 + 0xb8)
+             * Follow the live raw-slot/hot-path resolver here so framedone
+             * handling observes the same bank the OEM stream/QBUF path uses.
+             */
+            vic_regs = vic_stream_regs_resolve(vic_dev);
 
             /* Binary Ninja: void** i_1 = *(arg1 + 0x204) */
             /* SAFE: Use done_head list instead of offset 0x204 */
@@ -1525,6 +1542,7 @@ static ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t 
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_regs;
+    void __iomem *vic_coord_regs;
     struct tx_isp_sensor_attribute *sensor_attr;
     u32 interface_type;
     u32 timeout = 2000000;
@@ -1577,12 +1595,19 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             sensor_attr->mipi.mode);
     pr_info("tx_isp_vic_start: using dims %ux%u\n", actual_width, actual_height);
 
-    /* Get VIC register base - offset 0xb8 in Binary Ninja */
-    vic_regs = vic_stream_regs_resolve(vic_dev);
+    /* tx_isp_vic_start() configures the OEM VIC register block at +0xb8.
+     * The W01/resource bank is still useful for coordination/status, but its
+     * 0x14 semantics do not match the OEM config block (see fresh log 0x200).
+     */
+    vic_regs = vic_config_regs_resolve(vic_dev);
     if (!vic_regs) {
         pr_info("*** CRITICAL: No VIC register base ***\n");
         return -EINVAL;
     }
+    vic_coord_regs = vic_coord_regs_resolve(vic_dev);
+
+    pr_info("tx_isp_vic_start: cfg_regs=%p w01_regs=%p raw_slot=%p\n",
+            vic_regs, vic_coord_regs, vic_raw_regs_get(vic_dev));
 
     /* Binary Ninja: Branch on interface type at 00010250 */
     /* CRITICAL FIX: Use correct enum values - MIPI=1, DVP=2 */
@@ -1670,13 +1695,15 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(frame_mode_reg, vic_regs + 0x1ac);
         writel(frame_mode_reg, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
+	        wmb();
 
-		pr_info("*** VIC MIPI PRE-ARM: reg0=0x%x reg10=0x%x reg14=0x%x reg100=0x%x reg104=0x%x reg108=0x%x reg10c=0x%x reg110=0x%x reg1a0=0x%x reg1a4=0x%x reg1a8=0x%x reg1ac=0x%x reg1b0=0x%x ***\n",
+			pr_info("*** VIC MIPI PRE-ARM: cfg reg0=0x%x reg10=0x%x reg14=0x%x reg100=0x%x reg104=0x%x reg108=0x%x reg10c=0x%x reg110=0x%x reg1a0=0x%x reg1a4=0x%x reg1a8=0x%x reg1ac=0x%x reg1b0=0x%x w01_reg14=0x%x ***\n",
 		        readl(vic_regs + 0x0), readl(vic_regs + 0x10), readl(vic_regs + 0x14),
 		        readl(vic_regs + 0x100), readl(vic_regs + 0x104), readl(vic_regs + 0x108),
 		        readl(vic_regs + 0x10c), readl(vic_regs + 0x110), readl(vic_regs + 0x1a0),
 		        readl(vic_regs + 0x1a4), readl(vic_regs + 0x1a8), readl(vic_regs + 0x1ac),
-		        readl(vic_regs + 0x1b0));
+		        readl(vic_regs + 0x1b0),
+		        vic_coord_regs ? readl(vic_coord_regs + 0x14) : 0);
 
         writel(2, vic_regs + 0x0);
         wmb();
@@ -1688,12 +1715,13 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         pr_info("tx_isp_vic_start: post-arm frame regs reg1a0=0x%x reg1a8=0x%x reg1ac=0x%x\n",
                 readl(vic_regs + 0x1a0), readl(vic_regs + 0x1a8), readl(vic_regs + 0x1ac));
 
-		pr_info("*** VIC unlock wait: reg0=0x%x after arm (reg10=0x%x reg14=0x%x reg100=0x%x reg104=0x%x reg108=0x%x reg10c=0x%x reg110=0x%x reg1a0=0x%x reg1a4=0x%x reg1a8=0x%x reg1ac=0x%x reg1b0=0x%x) ***\n",
+			pr_info("*** VIC unlock wait: cfg reg0=0x%x after arm (reg10=0x%x reg14=0x%x reg100=0x%x reg104=0x%x reg108=0x%x reg10c=0x%x reg110=0x%x reg1a0=0x%x reg1a4=0x%x reg1a8=0x%x reg1ac=0x%x reg1b0=0x%x w01_reg14=0x%x) ***\n",
 		        readl(vic_regs + 0x0), readl(vic_regs + 0x10), readl(vic_regs + 0x14),
 		        readl(vic_regs + 0x100), readl(vic_regs + 0x104), readl(vic_regs + 0x108),
 		        readl(vic_regs + 0x10c), readl(vic_regs + 0x110), readl(vic_regs + 0x1a0),
 		        readl(vic_regs + 0x1a4), readl(vic_regs + 0x1a8), readl(vic_regs + 0x1ac),
-		        readl(vic_regs + 0x1b0));
+		        readl(vic_regs + 0x1b0),
+		        vic_coord_regs ? readl(vic_coord_regs + 0x14) : 0);
 
         while ((readl(vic_regs + 0x0) != 0) && timeout) {
             wait_count++;
@@ -1701,12 +1729,13 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             timeout--;
         }
         if (!timeout) {
-			pr_info("VIC unlock timeout (reg0=0x%x wait=%u reg10=0x%x reg14=0x%x reg100=0x%x reg104=0x%x reg108=0x%x reg10c=0x%x reg110=0x%x reg1a0=0x%x reg1a4=0x%x reg1a8=0x%x reg1ac=0x%x reg1b0=0x%x)\n",
+				pr_info("VIC unlock timeout (cfg reg0=0x%x wait=%u reg10=0x%x reg14=0x%x reg100=0x%x reg104=0x%x reg108=0x%x reg10c=0x%x reg110=0x%x reg1a0=0x%x reg1a4=0x%x reg1a8=0x%x reg1ac=0x%x reg1b0=0x%x w01_reg14=0x%x)\n",
 			        readl(vic_regs + 0x0), wait_count, readl(vic_regs + 0x10),
 			        readl(vic_regs + 0x14), readl(vic_regs + 0x100), readl(vic_regs + 0x104),
 			        readl(vic_regs + 0x108), readl(vic_regs + 0x10c), readl(vic_regs + 0x110),
 			        readl(vic_regs + 0x1a0), readl(vic_regs + 0x1a4), readl(vic_regs + 0x1a8),
-			        readl(vic_regs + 0x1ac), readl(vic_regs + 0x1b0));
+				        readl(vic_regs + 0x1ac), readl(vic_regs + 0x1b0),
+				        vic_coord_regs ? readl(vic_coord_regs + 0x14) : 0);
             return -ETIMEDOUT;
         }
 
@@ -2243,14 +2272,14 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
     return 0;
 }
 
-/* VIC PIPO MDMA Enable function - EXACT Binary Ninja implementation */
+/* VIC PIPO MDMA Enable function - OEM-style single active bank */
 static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_base;
     void __iomem *vic_base_secondary;
     u32 width, height, stride;
 
-    pr_info("*** vic_pipo_mdma_enable: EXACT Binary Ninja implementation + control-bank mirror ***\n");
+    pr_info("*** vic_pipo_mdma_enable: EXACT Binary Ninja implementation + active-bank selection ***\n");
 
     /* Validate vic_dev */
     if (!vic_dev) {
@@ -2258,8 +2287,9 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         return;
     }
 
-    vic_base = vic_dev->vic_regs;
-    vic_base_secondary = vic_dev->vic_regs_secondary;
+    vic_base = vic_primary_regs_resolve(vic_dev);
+    vic_base_secondary = (vic_base == vic_dev->vic_regs_secondary) ?
+                         vic_dev->vic_regs : vic_dev->vic_regs_secondary;
 
     /* Validate VIC register base */
     if (!vic_base || (unsigned long)vic_base < 0x80000000 || (unsigned long)vic_base == 0x735f656d) {
@@ -2292,29 +2322,21 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 
     /* MDMA enable: 0x308 */
     writel(1, vic_base + 0x308);
-    if (vic_base_secondary)
-        writel(1, vic_base_secondary + 0x308);
     wmb();
 
     /* Frame size: 0x304 (width<<16 | height) */
     writel((width << 16) | height, vic_base + 0x304);
-    if (vic_base_secondary)
-        writel((width << 16) | height, vic_base_secondary + 0x304);
     wmb();
 
     /* Stride: 0x310 and 0x314 */
     writel(stride, vic_base + 0x310);
-    if (vic_base_secondary)
-        writel(stride, vic_base_secondary + 0x310);
     wmb();
 
     writel(stride, vic_base + 0x314);
-    if (vic_base_secondary)
-        writel(stride, vic_base_secondary + 0x314);
     wmb();
 
     if (vic_base_secondary) {
-        pr_info("*** VIC PIPO MDMA ENABLE READBACK: PRI strideY=%u SEC strideY=%u ***\n",
+        pr_info("*** VIC PIPO MDMA ENABLE READBACK: ACT strideY=%u ALT strideY=%u ***\n",
                 readl(vic_base + 0x310), readl(vic_base_secondary + 0x310));
     }
 
@@ -2329,11 +2351,13 @@ static void vic_prime_mdma_before_unlock(struct tx_isp_vic_device *vic_dev)
 	u32 stream_ctrl;
 	int qret;
 
-	if (!vic_dev || !vic_dev->vic_regs)
+	if (!vic_dev)
 		return;
 
 	sd = &vic_dev->sd;
-	vic_base = vic_dev->vic_regs;
+	vic_base = vic_stream_regs_resolve(vic_dev);
+	if (!vic_base)
+		return;
 
 	pr_info("*** tx_isp_vic_start: priming MDMA/QBUF before unlock wait ***\n");
 
@@ -2360,19 +2384,20 @@ static void vic_prime_mdma_before_unlock(struct tx_isp_vic_device *vic_dev)
 	        readl(vic_base + 0x340));
 
 	writel(stream_ctrl, vic_base + 0x300);
-	if (vic_dev->vic_regs_secondary)
-		writel(stream_ctrl, vic_dev->vic_regs_secondary + 0x300);
 	wmb();
 
-	pr_info("*** tx_isp_vic_start: pre-unlock MDMA ctrl readback PRI=0x%x SEC=0x%x ***\n",
+	pr_info("*** tx_isp_vic_start: pre-unlock MDMA ctrl readback ACT=0x%x ALT=0x%x ***\n",
 	        readl(vic_base + 0x300),
-	        vic_dev->vic_regs_secondary ? readl(vic_dev->vic_regs_secondary + 0x300) : 0);
+	        (vic_base == vic_dev->vic_regs_secondary) ?
+	            (vic_dev->vic_regs ? readl(vic_dev->vic_regs + 0x300) : 0) :
+	            (vic_dev->vic_regs_secondary ? readl(vic_dev->vic_regs_secondary + 0x300) : 0));
 }
 
 /* ISPVIC Frame Channel S_Stream - EXACT Binary Ninja Implementation */
 int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 {
     void __iomem *vic_base = NULL;
+    void __iomem *vic_base_alt = NULL;
     int32_t var_18 = 0;
     const char *stream_op;
 
@@ -2388,6 +2413,18 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
     stream_op = (enable != 0) ? "streamon" : "streamoff";
     pr_info("%s[%d]: %s\n", "ispvic_frame_channel_s_stream", __LINE__, stream_op);
 
+    /* Binary Ninja hot path uses the raw +0xb8 slot for stream control.
+     * Keep frame-channel stream arm/disarm on the same live bank as QBUF.
+     */
+    vic_base = vic_stream_regs_resolve(vic_dev);
+    if (!vic_base || (unsigned long)vic_base < 0x80000000) {
+        pr_err("ispvic_frame_channel_s_stream: invalid VIC stream bank %p\n",
+               vic_base);
+        return -EINVAL;
+    }
+    vic_base_alt = (vic_base == vic_dev->vic_regs_secondary) ?
+                   vic_dev->vic_regs : vic_dev->vic_regs_secondary;
+
     if (enable == vic_dev->stream_state)
         return 0;
 
@@ -2397,9 +2434,12 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
     if (enable == 0) {
         /* Stream OFF */
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = 0 */
-        vic_base = vic_dev->vic_regs;
-        if (vic_base && (unsigned long)vic_base >= 0x80000000)
-            writel(0, vic_base + 0x300);
+        writel(0, vic_base + 0x300);
+        wmb();
+        pr_info("*** ispvic_frame_channel_s_stream: streamoff ctrl readback ACT=0x%x ALT=0x%x raw_slot=%p ***\n",
+                readl(vic_base + 0x300),
+                vic_base_alt ? readl(vic_base_alt + 0x300) : 0,
+                vic_raw_regs_get(vic_dev));
 
         /* Binary Ninja EXACT: *($s0 + 0x210) = 0 */
         vic_dev->stream_state = 0;
@@ -2410,8 +2450,7 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
         vic_pipo_mdma_enable(vic_dev);
 
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
-        vic_base = vic_dev->vic_regs;
-        if (vic_base && (unsigned long)vic_base >= 0x80000000) {
+        {
             u32 buffer_count = vic_dev->active_buffer_count;
 
             if (buffer_count == 0)
@@ -2420,6 +2459,12 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
                 buffer_count = 5;
 
             writel((buffer_count << 16) | 0x80000020, vic_base + 0x300);
+            wmb();
+            pr_info("*** ispvic_frame_channel_s_stream: streamon ctrl=0x%x readback ACT=0x%x ALT=0x%x raw_slot=%p ***\n",
+                    (buffer_count << 16) | 0x80000020,
+                    readl(vic_base + 0x300),
+                    vic_base_alt ? readl(vic_base_alt + 0x300) : 0,
+                    vic_raw_regs_get(vic_dev));
         }
 
         /* Binary Ninja EXACT: *($s0 + 0x210) = 1 */
@@ -2433,58 +2478,54 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
     return 0;
 }
 
-/* VIC event callback structure - matching reference driver layout
- * CRITICAL: Must be exactly 32 bytes total with function pointer at offset 0x1c */
-struct vic_callback_struct {
-    char padding[28];           /* Exact 28 bytes padding to reach offset 0x1c */
-    void *event_callback;       /* Function pointer at offset 0x1c */
-} __attribute__((packed));
+/* OEM-style event-dispatch object for the live VIC subdev.
+ * tx_isp_send_event_to_remote() treats sd->event_callback_struct as a
+ * tx_isp_channel_config-compatible table, so bind VIC the same way the core
+ * channels are bound: handler at +0x1c, priv/live object at +0x20.
+ */
+static struct tx_isp_channel_config vic_event_dispatch;
 
-/* VIC event callback handler for QBUF events */
-static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd, void *data)
+/* VIC event callback handler for frame-channel REQBUFS/QBUF/STREAM events. */
+static int vic_pad_event_handler(void *priv, unsigned int cmd, void *data)
 {
-    struct tx_isp_subdev *sd;
+    struct tx_isp_channel_config *dispatch = priv;
     struct tx_isp_vic_device *vic_dev;
+    struct tx_isp_subdev *sd;
     int ret = 0;
 
-    if (!pad || !pad->sd) {
-        pr_err("VIC event callback: Invalid pad or subdev\n");
+    if (!dispatch) {
+        pr_err("VIC event callback: Missing dispatch table\n");
         return -EINVAL;
     }
 
-    sd = pad->sd;
-    vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
-    if (!vic_dev) {
-        pr_err("VIC event callback: No vic_dev\n");
+    vic_dev = (struct tx_isp_vic_device *)dispatch->event_priv;
+    sd = vic_dev ? &vic_dev->sd : NULL;
+    if (!vic_dev || !sd) {
+        pr_err("VIC event callback: No vic_dev/subdev (dispatch=%p)\n",
+               dispatch);
         return -EINVAL;
     }
 
-    pr_info("*** VIC EVENT CALLBACK: cmd=0x%x, data=%p ***\n", cmd, data);
+    pr_info("*** VIC EVENT CALLBACK: cmd=0x%x, data=%p, vic_dev=%p ***\n",
+            cmd, data, vic_dev);
 
     switch (cmd) {
-        case 0x3000005: { /* BUFFER_ENQUEUE: program VIC slot from provided node */
-            pr_info("*** VIC EVENT: BUFFER_ENQUEUE (0x3000005) ***\n");
-            if (sd && data) {
-                (void) ispvic_frame_channel_qbuf(sd, data);
-                ret = 0;
-            } else {
-                ret = -EINVAL;
-            }
+        case 0x3000003:
+            pr_info("*** VIC EVENT: STREAM_START (0x3000003) - ACTIVATING VIC HARDWARE ***\n");
+            ret = ispvic_frame_channel_s_stream(vic_dev, 1);
             break;
-        }
-        case 0x3000008: { /* REQBUFS notification: {channel_id, buffer_count} */
-            struct { int32_t channel_id; int32_t buffer_count; } *e = data;
-            if (!e) { ret = -EINVAL; break; }
-            pr_info("*** VIC EVENT: REQBUFS (0x3000008) ch=%d count=%d ***\n", e->channel_id, e->buffer_count);
-            if (e->channel_id == 0) {
-                int cnt = e->buffer_count;
-                if (cnt < 0) cnt = 0; if (cnt > 5) cnt = 5;
-                vic_dev->active_buffer_count = cnt;
-                pr_info("*** VIC: active_buffer_count set to %d ***\n", vic_dev->active_buffer_count);
-            }
-            ret = 0;
+        case 0x3000004:
+            pr_info("*** VIC EVENT: STREAM_STOP/CANCEL (0x3000004) - DEACTIVATING VIC HARDWARE ***\n");
+            ret = ispvic_frame_channel_s_stream(vic_dev, 0);
             break;
-        }
+        case 0x3000005:
+            pr_info("*** VIC EVENT: BUFFER_ENQUEUE (0x3000005) via dispatch ***\n");
+            ret = data ? vic_core_ops_ioctl(sd, cmd, data) : -EINVAL;
+            break;
+        case 0x3000008:
+            pr_info("*** VIC EVENT: REQBUFS (0x3000008) via dispatch ***\n");
+            ret = data ? vic_core_ops_ioctl(sd, cmd, data) : -EINVAL;
+            break;
         default:
             pr_info("VIC: Unknown event cmd=0x%x\n", cmd);
             ret = -ENOIOCTLCMD;
@@ -2493,6 +2534,26 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
 
     pr_info("*** VIC EVENT CALLBACK: returning %d ***\n", ret);
     return ret;
+}
+
+static void vic_bind_event_dispatch_table(struct tx_isp_vic_device *vic_dev)
+{
+    if (!vic_dev)
+        return;
+
+    memset(&vic_event_dispatch, 0, sizeof(vic_event_dispatch));
+    vic_event_dispatch.channel_id = 0;
+    vic_event_dispatch.enabled = 1;
+    vic_event_dispatch.state = 3;
+    vic_event_dispatch.event_handler = vic_pad_event_handler;
+    vic_event_dispatch.event_priv = vic_dev;
+
+    vic_dev->sd.event_callback_struct = &vic_event_dispatch;
+
+    pr_info("*** VIC event dispatch bound: sd=%p table=%p handler=%p priv=%p ***\n",
+            &vic_dev->sd, &vic_event_dispatch,
+            vic_event_dispatch.event_handler,
+            vic_event_dispatch.event_priv);
 }
 
 /* BINARY NINJA EXACT: vic_core_s_stream implementation with CSI register updates */
@@ -2722,6 +2783,8 @@ int tx_isp_vic_probe(struct platform_device *pdev)
      * stream-on hot path sees the same layout assumptions as stock.
      */
     tx_isp_set_subdevdata(sd, vic_dev);
+    tx_isp_set_subdev_hostdata(sd, vic_dev);
+    vic_bind_event_dispatch_table(vic_dev);
     vic_raw_self_set(vic_dev);
     {
         void __iomem *seed_regs = vic_stream_regs_resolve(vic_dev);
@@ -2849,107 +2912,81 @@ int tx_isp_vic_remove(struct platform_device *pdev)
     return 0;
 }
 
-/* ispvic_frame_channel_qbuf - Prefer explicit node (addr+index) when provided; fallback to queue */
+/* OEM BN: queue incoming node, consume one free bank, program one slot, move bank to active list. */
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 {
-    struct tx_isp_vic_device *vic_dev = NULL;
-    struct tx_isp_subdev *sd = (struct tx_isp_subdev *)arg1;
-    unsigned long irq_flags = 0;
-    struct vic_buffer_entry *new_buffer = (struct vic_buffer_entry *)arg2;
-    struct vic_buffer_entry *buffer_to_program;
-    u32 buffer_addr, buffer_index, reg_offset;
+	struct tx_isp_vic_device *vic_dev = NULL;
+	struct tx_isp_subdev *sd = (struct tx_isp_subdev *)arg1;
+	struct vic_buffer_entry *incoming = (struct vic_buffer_entry *)arg2;
+	struct vic_buffer_entry *queued_buffer;
+	struct vic_buffer_entry *bank_buffer;
+	unsigned long irq_flags = 0;
+	void __iomem *vic_base;
+	void __iomem *vic_base_alt;
+	u32 buffer_addr, buffer_index, reg_offset;
 
-    pr_info("*** ispvic_frame_channel_qbuf: entry arg1=%p, arg2=%p ***\n", arg1, arg2);
+	pr_info("*** ispvic_frame_channel_qbuf: entry arg1=%p, arg2=%p ***\n", arg1, arg2);
 
-    /* Get vic_dev from subdev */
-    if (sd != NULL && (unsigned long)sd < 0xfffff001)
-        vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdev_hostdata(sd);
+	if (sd != NULL && (unsigned long)sd < 0xfffff001)
+		vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdev_hostdata(sd);
 
-    if (!vic_dev || !vic_dev->vic_regs)
-        return 0;
+	if (!vic_dev)
+		return 0;
 
-    spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, irq_flags);
+	vic_base = vic_stream_regs_resolve(vic_dev);
+	if (!vic_base)
+		return 0;
 
-    /* Fast path: explicit node provided with address and slot index */
-    if (new_buffer) {
-        buffer_addr  = new_buffer->buffer_addr;
-        buffer_index = new_buffer->buffer_index; /* 0..4 */
-        reg_offset   = (buffer_index + 0xc6) << 2;  /* 0x318..0x328 */
+	vic_base_alt = (vic_base == vic_dev->vic_regs_secondary) ?
+			       vic_dev->vic_regs : vic_dev->vic_regs_secondary;
 
-        /* Program Y base */
-        writel(buffer_addr, vic_dev->vic_regs + reg_offset);
-        if (vic_dev->vic_regs_secondary)
-            writel(buffer_addr, vic_dev->vic_regs_secondary + reg_offset);
-        /* Program UV base for NV12: 0x340 + index*4 = Y_base + stride*height */
-        {
-            u32 stride_nv12 = readl(vic_dev->vic_regs + 0x310);
-            u32 uv_base = buffer_addr + stride_nv12 * vic_dev->height;
-            u32 uv_reg_off = 0x340 + (buffer_index * 4);
-            u32 uv_shadow_off = 0x32c + (buffer_index * 4);
-            writel(uv_base, vic_dev->vic_regs + uv_reg_off);
-            writel(uv_base, vic_dev->vic_regs + uv_shadow_off);
-            if (vic_dev->vic_regs_secondary) {
-                writel(uv_base, vic_dev->vic_regs_secondary + uv_reg_off);
-                writel(uv_base, vic_dev->vic_regs_secondary + uv_shadow_off);
-            }
-        }
-        wmb();
-        pr_info("*** VIC QBUF: slot%u Y=0x%x(off=0x%x) UV=0x%x(off=0x%x) UVsh=0x%x(off=0x%x) ***\n",
-                buffer_index, buffer_addr, reg_offset,
-                buffer_addr + readl(vic_dev->vic_regs + 0x310) * vic_dev->height,
-                0x340 + (buffer_index * 4),
-                buffer_addr + readl(vic_dev->vic_regs + 0x310) * vic_dev->height,
-                0x32c + (buffer_index * 4));
-        if (vic_dev->vic_regs_secondary) {
-            pr_info("*** VIC QBUF READBACK: PRI slot%u Y=0x%x SEC slot%u Y=0x%x ***\n",
-                    buffer_index, readl(vic_dev->vic_regs + reg_offset),
-                    buffer_index, readl(vic_dev->vic_regs_secondary + reg_offset));
-        }
-        spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
-        return 0;
-    }
+	spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, irq_flags);
 
-    /* Fallback: use internal done queue when no explicit node is provided */
-    if (list_empty(&vic_dev->free_head) || list_empty(&vic_dev->done_head)) {
-        spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
-        return 0;
-    }
+	if (incoming)
+		list_add_tail(&incoming->list, &vic_dev->queue_head);
 
-    buffer_to_program = list_first_entry(&vic_dev->done_head, struct vic_buffer_entry, list);
-    list_del(&buffer_to_program->list);
+	if (list_empty(&vic_dev->free_head)) {
+		pr_info("ispvic_frame_channel_qbuf: bank no free\n");
+		spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
+		return 0;
+	}
 
-    buffer_addr  = buffer_to_program->buffer_addr;
-    buffer_index = vic_dev->active_buffer_count % 5; /* derive index if no explicit node */
-    reg_offset   = (buffer_index + 0xc6) << 2;  /* 0x318..0x328 */
+	if (list_empty(&vic_dev->queue_head)) {
+		pr_info("ispvic_frame_channel_qbuf: qbuffer null\n");
+		spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
+		return 0;
+	}
 
-    /* Program Y base */
-    writel(buffer_addr, vic_dev->vic_regs + reg_offset);
-    if (vic_dev->vic_regs_secondary)
-        writel(buffer_addr, vic_dev->vic_regs_secondary + reg_offset);
-    /* Program UV base for NV12: 0x340 + index*4 = Y_base + stride*height */
-    {
-        u32 stride_nv12 = readl(vic_dev->vic_regs + 0x310);
-        u32 uv_base = buffer_addr + stride_nv12 * vic_dev->height;
-        u32 uv_reg_off = 0x340 + (buffer_index * 4);
-        u32 uv_shadow_off = 0x32c + (buffer_index * 4);
-        writel(uv_base, vic_dev->vic_regs + uv_reg_off);
-        writel(uv_base, vic_dev->vic_regs + uv_shadow_off);
-        if (vic_dev->vic_regs_secondary) {
-            writel(uv_base, vic_dev->vic_regs_secondary + uv_reg_off);
-            writel(uv_base, vic_dev->vic_regs_secondary + uv_shadow_off);
-        }
-    }
-    wmb();
-    pr_info("*** VIC QBUF (fallback): Y=0x%x(off=0x%x) UV=0x%x(off=0x%x) UVsh=0x%x(off=0x%x) idx=%u ***\n",
-            buffer_addr, reg_offset,
-            buffer_addr + readl(vic_dev->vic_regs + 0x310) * vic_dev->height,
-            0x340 + (buffer_index * 4),
-            buffer_addr + readl(vic_dev->vic_regs + 0x310) * vic_dev->height,
-            0x32c + (buffer_index * 4),
-            buffer_index);
+	queued_buffer = list_first_entry(&vic_dev->queue_head, struct vic_buffer_entry, list);
+	list_del(&queued_buffer->list);
 
-    spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
-    return 0;
+	bank_buffer = list_first_entry(&vic_dev->free_head, struct vic_buffer_entry, list);
+	list_del(&bank_buffer->list);
+
+	buffer_addr = queued_buffer->buffer_addr;
+	buffer_index = bank_buffer->buffer_index;
+	bank_buffer->buffer_addr = buffer_addr;
+	bank_buffer->channel = queued_buffer->channel;
+	reg_offset = (buffer_index + 0xc6) << 2;
+
+	writel(buffer_addr, vic_base + reg_offset);
+	wmb();
+
+	list_add_tail(&bank_buffer->list, &vic_dev->done_head);
+	vic_dev->active_buffer_count += 1;
+
+	pr_info("*** VIC QBUF: bank=%u addr=0x%x reg_off=0x%x active=%u queued_channel=%u ***\n",
+		buffer_index, buffer_addr, reg_offset,
+		vic_dev->active_buffer_count, bank_buffer->channel);
+	if (vic_base_alt) {
+		pr_info("*** VIC QBUF READBACK: ACT bank%u Y=0x%x ALT bank%u Y=0x%x ***\n",
+			buffer_index, readl(vic_base + reg_offset),
+			buffer_index, readl(vic_base_alt + reg_offset));
+	}
+
+	spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
+	kfree(queued_buffer);
+	return 0;
 }
 
 /* ISPVIC Frame Channel Clear Buffer - drain lists and clear slots safely */
@@ -2965,18 +3002,21 @@ static int ispvic_frame_channel_clearbuf(void)
     if (!vic_dev)
         return -ENODEV;
 
-    /* Drain buffer lists: move queue/done entries back to free_head */
+	/* Drain pending queue nodes, recycle active bank nodes, and reset stream state. */
     spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, flags);
     if (!list_empty(&vic_dev->queue_head)) {
         struct list_head *pos, *n;
         list_for_each_safe(pos, n, &vic_dev->queue_head) {
             list_del(pos);
-            list_add_tail(pos, &vic_dev->free_head);
+			kfree(list_entry(pos, struct vic_buffer_entry, list));
         }
     }
     if (!list_empty(&vic_dev->done_head)) {
         struct list_head *pos, *n;
         list_for_each_safe(pos, n, &vic_dev->done_head) {
+			struct vic_buffer_entry *entry = list_entry(pos, struct vic_buffer_entry, list);
+			entry->buffer_addr = 0;
+			entry->channel = 0;
             list_del(pos);
             list_add_tail(pos, &vic_dev->free_head);
         }
@@ -3042,7 +3082,11 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
     } else {
         pr_info("tx_isp_subdev_pipo: arg is not NULL - initializing pipe structures\n");
 
-        /* SAFE: Use Linux list initialization instead of manual pointer manipulation */
+		/* Re-seed the OEM-style queue/free/active lists with persistent nodes. */
+		vic_free_buffer_list(&vic_dev->queue_head);
+		vic_free_buffer_list(&vic_dev->done_head);
+		vic_free_buffer_list(&vic_dev->free_head);
+
         INIT_LIST_HEAD(&vic_dev->queue_head);
         INIT_LIST_HEAD(&vic_dev->done_head);
         INIT_LIST_HEAD(&vic_dev->free_head);
@@ -3063,24 +3107,21 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
                 ispvic_frame_channel_qbuf, ispvic_frame_channel_clearbuf,
                 ispvic_frame_channel_s_stream, sd);
 
-        /* SAFE: Initialize buffer structures using proper struct members */
+		vic_dev->active_buffer_count = 0;
+
         for (i = 0; i < 5; i++) {
-            /* SAFE: Use proper buffer index array instead of unsafe pointer arithmetic */
+			struct vic_buffer_entry *buffer_entry;
+
             if (i < sizeof(vic_dev->buffer_index) / sizeof(vic_dev->buffer_index[0])) {
                 vic_dev->buffer_index[i] = i;
             }
 
-            /* SAFE: Create proper buffer entries and add to free list */
-            struct list_head *buffer_entry = kzalloc(sizeof(struct list_head) + 32, GFP_KERNEL);
+			buffer_entry = kzalloc(sizeof(*buffer_entry), GFP_KERNEL);
             if (buffer_entry) {
-                /* Initialize buffer data */
-                uint32_t *buffer_data = (uint32_t *)((char *)buffer_entry + sizeof(struct list_head));
-                buffer_data[0] = 0;  /* Buffer address */
-                buffer_data[1] = i;  /* Buffer index */
-                buffer_data[2] = 0;  /* Buffer status */
-
-                /* Add to free list using safe Linux API */
-                list_add_tail(buffer_entry, &vic_dev->free_head);
+				buffer_entry->buffer_addr = 0;
+				buffer_entry->buffer_index = i;
+				buffer_entry->channel = 0;
+				list_add_tail(&buffer_entry->list, &vic_dev->free_head);
                 pr_info("tx_isp_subdev_pipo: added buffer entry %d to free list\n", i);
             }
 

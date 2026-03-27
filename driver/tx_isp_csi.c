@@ -386,7 +386,7 @@ static void __iomem *tx_cpm_regs = NULL;
 u32 csi_read32(u32 reg)
 {
     if (!tx_isp_csi_regs) {
-        tx_isp_csi_regs = ioremap(0x10022000, 0x1000);
+        tx_isp_csi_regs = ioremap(0x10023000, 0x1000);
         if (!tx_isp_csi_regs) {
             pr_err("Failed to map CSI registers\n");
             return 0;
@@ -408,7 +408,7 @@ static inline u32 cpm_read32(u32 reg)
 void csi_write32(u32 reg, u32 val)
 {
     if (!tx_isp_csi_regs) {
-        tx_isp_csi_regs = ioremap(0x10022000, 0x1000);
+        tx_isp_csi_regs = ioremap(0x10023000, 0x1000);
         if (!tx_isp_csi_regs) {
             pr_err("Failed to map CSI registers\n");
             return;
@@ -800,9 +800,9 @@ static void __iomem *csi_get_wrapper_regs(struct tx_isp_csi_device *csi_dev)
      * OEM seeds +0x13c from a dedicated ioremap of the CSI register block.
      * Recreate that mapping here if probe has not populated the slot yet.
      */
-    isp_csi_regs = ioremap(0x10022000, 0x1000);
+    isp_csi_regs = ioremap(0x10023000, 0x1000);
     if (isp_csi_regs)
-        pr_info("csi_get_wrapper_regs: populated +0x13c with dedicated 0x10022000 mapping %p\n",
+        pr_info("csi_get_wrapper_regs: populated +0x13c with dedicated 0x10023000 mapping %p\n",
                 isp_csi_regs);
 
     if (!isp_csi_regs)
@@ -1049,8 +1049,8 @@ struct tx_isp_subdev_ops csi_subdev_ops = {
 // Define resources outside probe
 static struct resource tx_isp_csi_resources[] = {
     [0] = {
-        .start  = 0x10022000,  // CSI base address
-        .end    = 0x10022000 + 0x1000 - 1,
+        .start  = 0x10023000,  // OEM CSI base address
+        .end    = 0x10023000 + 0x1000 - 1,
         .flags  = IORESOURCE_MEM,
         .name   = "csi-regs",
     }

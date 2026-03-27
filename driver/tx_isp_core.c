@@ -1558,13 +1558,13 @@ int tx_isp_init_memory_mappings(struct tx_isp_dev *isp)
     }
     pr_info("Secondary VIC registers mapped at 0x10023000\n");
 
-    /* Map CSI registers - use a different variable to avoid conflicts */
-    isp->csi_regs = ioremap(0x10022000, 0x1000);
+    /* Map CSI registers - align with OEM tx_isp_csi_resource */
+    isp->csi_regs = ioremap(0x10023000, 0x1000);
     if (!isp->csi_regs) {
         pr_err("Failed to map CSI registers\n");
         goto err_unmap_vic2;
     }
-    pr_info("CSI registers mapped at 0x10022000\n");
+    pr_info("CSI registers mapped at 0x10023000\n");
 
     /* Map PHY registers */
     isp->phy_base = ioremap(0x10021000, 0x1000);

@@ -3612,7 +3612,10 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
             break;
 
         case 0x8000164:  // ISP_CTRL_BYPASS
-            ourISPdev->bypass_enabled = !!ctrl->value;
+            /* OEM parity: value==1 disables bypass, any other value enables it. */
+            ourISPdev->bypass_enabled = (ctrl->value != 1);
+            pr_info("Set control: ISP_CTRL_BYPASS value=%d -> bypass_enabled=%d\n",
+                    ctrl->value, ourISPdev->bypass_enabled);
             break;
 
         case 0x980918:  // ISP_CTRL_ANTIFLICKER

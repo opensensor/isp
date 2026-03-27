@@ -784,9 +784,29 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             pr_info("*** %s: Skipping IRQ request - device has no IRQ resource ***\n", dev_name_str);
         }
 
-        /* FIXED: Get first memory resource without string comparison */
-        mem_res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-        pr_info("tx_isp_subdev_init: platform_get_resource returned %p for device %s\n", mem_res, dev_name(&pdev->dev));
+	        /* OEM BN: walk memory resources and prefer the one named
+	         * "isp-device"; fall back to resource 0 if the synthetic platform
+	         * device only exposes a single unnamed window.
+	         */
+	        mem_res = NULL;
+	        for (i = 0; ; i++) {
+	            struct resource *candidate;
+
+	            candidate = platform_get_resource(pdev, IORESOURCE_MEM, i);
+	            if (!candidate)
+	                break;
+
+	            if (candidate->name && !strcmp(candidate->name, "isp-device")) {
+	                mem_res = candidate;
+	                pr_info("tx_isp_subdev_init: selected named isp-device resource[%d] for %s\n",
+	                        i, dev_name(&pdev->dev));
+	                break;
+	            }
+
+	            if (!mem_res)
+	                mem_res = candidate;
+	        }
+	        pr_info("tx_isp_subdev_init: platform_get_resource returned %p for device %s\n", mem_res, dev_name(&pdev->dev));
         if (mem_res) {
             pr_info("tx_isp_subdev_init: Memory resource found: start=0x%08x, end=0x%08x, size=0x%08x\n",
                     (u32)mem_res->start, (u32)mem_res->end, (u32)resource_size(mem_res));

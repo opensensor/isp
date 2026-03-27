@@ -3,6 +3,7 @@
 
 #include <linux/errno.h>
 #include <linux/err.h>
+#include <linux/list.h>
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
 #include <linux/completion.h>
@@ -67,6 +68,14 @@ int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum);
 
 /* NV12 snapshot helper */
 int vic_snapnv12(struct tx_isp_subdev *sd, unsigned int savenum);
+
+struct vic_buffer_entry {
+	struct list_head list;
+	u32 reserved;
+	u32 buffer_addr;
+	u32 buffer_index;
+	u32 channel;
+};
 
 
 /* CRITICAL FIX: VIC device structure with proper MIPS alignment and Binary Ninja compatibility */

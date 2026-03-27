@@ -689,15 +689,6 @@ static int frame_channel_track_buffer(struct frame_channel_device *fcd,
 static void (*event_func_cb[MAX_EVENT_HANDLERS])(void *data);
 static DEFINE_SPINLOCK(irq_cb_lock);
 
-/* Buffer management structures for VIC MDMA - Binary Ninja reference */
-struct vic_buffer_entry {
-    struct list_head list;
-    struct list_head *prev_entry;   /* prev pointer */
-    uint32_t buffer_addr;           /* Physical buffer address */
-    uint32_t buffer_index;          /* Buffer index in VIC */
-    uint32_t channel;               /* Channel number (0 or 1) */
-};
-
 /* VIC MDMA channel state - Binary Ninja global variables */
 static uint32_t vic_mdma_ch0_sub_get_num = 0;
 static uint32_t vic_mdma_ch1_sub_get_num = 0;
@@ -745,8 +736,9 @@ struct platform_device tx_isp_platform_device = {
 /* VIC platform device resources - CORRECTED IRQ */
 static struct resource tx_isp_vic_resources[] = {
     [0] = {
-        .start = 0x10023000,           /* T31 VIC base address */
-        .end   = 0x10023FFF,           /* T31 VIC end address */
+        .name  = "isp-device",
+        .start = 0x133e0000,           /* OEM VIC control/config window */
+        .end   = 0x133effff,
         .flags = IORESOURCE_MEM,
     },
     [1] = {
@@ -790,8 +782,9 @@ struct platform_device tx_isp_vic_platform_device = {
 /* CSI platform device resources - CORRECTED IRQ */
 static struct resource tx_isp_csi_resources[] = {
     [0] = {
-        .start = 0x10022000,           /* T31 CSI base address */
-        .end   = 0x10022FFF,           /* T31 CSI end address */
+        .name  = "isp-device",
+        .start = 0x10023000,           /* OEM CSI wrapper/basic window */
+        .end   = 0x10023FFF,
         .flags = IORESOURCE_MEM,
     },
     [1] = {
@@ -3889,29 +3882,31 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         /* Enqueue buffer via BUFFER_ENQUEUE (0x3000005) */
         if (fcd->vic_subdev && ourISPdev && ourISPdev->vic_dev) {
             struct tx_isp_subdev *remote_sd = (struct tx_isp_subdev *)fcd->vic_subdev;
-            struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-            struct vic_buffer_entry node;
-            memset(&node, 0, sizeof(node));
-            node.buffer_addr = buffer_phys_addr;
-            {
-                u32 nslots = vic_dev_buf->active_buffer_count ?
-                             ((vic_dev_buf->active_buffer_count > 5) ? 5 : vic_dev_buf->active_buffer_count) : 2;
-                if (nslots == 0) nslots = 2;
-                node.buffer_index = (buffer.index % nslots);
-            }
-            node.channel = channel;
-            pr_info("*** Channel %d: QBUF - Enqueue via 0x3000005 phys=0x%x idx=%u ***\n",
-                    channel, buffer_phys_addr, node.buffer_index);
-            {
-                int event_result = tx_isp_send_event_to_remote(remote_sd, 0x3000005, &node);
-                if (event_result == 0) {
-                    pr_info("*** Channel %d: BUFFER_ENQUEUE SUCCESS ***\n", channel);
-                } else if (event_result == 0xfffffdfd) {
-                    pr_info("*** Channel %d: BUFFER_ENQUEUE - No callback ***\n", channel);
-                } else {
-                    pr_warn("*** Channel %d: BUFFER_ENQUEUE returned: 0x%x ***\n", channel, event_result);
-                }
-            }
+			struct vic_buffer_entry *node = kzalloc(sizeof(*node), GFP_KERNEL);
+
+			if (!node) {
+				pr_warn("*** Channel %d: BUFFER_ENQUEUE node alloc failed ***\n", channel);
+			} else {
+				node->buffer_addr = buffer_phys_addr;
+				node->buffer_index = buffer.index;
+				node->channel = channel;
+				pr_info("*** Channel %d: QBUF - Enqueue via 0x3000005 phys=0x%x user_idx=%u ***\n",
+					channel, buffer_phys_addr, node->buffer_index);
+				{
+					int event_result = tx_isp_send_event_to_remote(remote_sd, 0x3000005, node);
+					if (event_result == 0) {
+						pr_info("*** Channel %d: BUFFER_ENQUEUE SUCCESS ***\n", channel);
+					} else {
+						if (event_result == 0xfffffdfd) {
+							pr_info("*** Channel %d: BUFFER_ENQUEUE - No callback ***\n", channel);
+						} else {
+							pr_warn("*** Channel %d: BUFFER_ENQUEUE returned: 0x%x ***\n",
+								channel, event_result);
+						}
+						kfree(node);
+					}
+				}
+			}
         }
 
 
