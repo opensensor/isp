@@ -2032,9 +2032,10 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 
         /* Only Channel 0 controls VIC hardware buffer count */
         if (channel_id == 0) {
-            vic_dev->active_buffer_count = (buffer_count > 5) ? 5 : buffer_count;
-            pr_info("*** vic_core_ops_ioctl: Channel 0 - VIC active_buffer_count set to %d ***\n",
-                    vic_dev->active_buffer_count);
+            vic_dev->buffer_count = (buffer_count > 5) ? 5 : buffer_count;
+            vic_dev->active_buffer_count = 0;
+            pr_info("*** vic_core_ops_ioctl: Channel 0 - buffer_count=%u active_buffer_count reset to %u ***\n",
+                    vic_dev->buffer_count, vic_dev->active_buffer_count);
         } else {
             pr_info("*** vic_core_ops_ioctl: Channel %d - VIC active_buffer_count unchanged (%d) ***\n",
                     channel_id, vic_dev->active_buffer_count);
@@ -2297,16 +2298,10 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         return;
     }
 
-    /* Prefer fresh sensor dimensions, fallback to cached */
-    if (vic_dev->sensor_attr.total_width != 0 && vic_dev->sensor_attr.total_height != 0) {
-        width = vic_dev->sensor_attr.total_width;
-        height = vic_dev->sensor_attr.total_height;
-        pr_info("*** Using sensor_attr dimensions %dx%d ***\n", width, height);
-    } else {
-        width = vic_dev->width;
-        height = vic_dev->height;
-        pr_info("*** Using vic_dev dimensions %dx%d ***\n", width, height);
-    }
+    /* Binary Ninja uses cached VIC dimensions at +0xdc/+0xe0, not sensor totals. */
+    width = vic_dev->width;
+    height = vic_dev->height;
+    pr_info("*** Using vic_dev dimensions %dx%d ***\n", width, height);
 
     if (width == 0 || height == 0) {
         width = 1920;  /* fallback */
@@ -2924,6 +2919,8 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	void __iomem *vic_base;
 	void __iomem *vic_base_alt;
 	u32 buffer_addr, buffer_index, reg_offset;
+	bool attempted_bootstrap = false;
+	void *raw_pipe[5] = { 0 };
 
 	pr_info("*** ispvic_frame_channel_qbuf: entry arg1=%p, arg2=%p ***\n", arg1, arg2);
 
@@ -2940,20 +2937,27 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	vic_base_alt = (vic_base == vic_dev->vic_regs_secondary) ?
 			       vic_dev->vic_regs : vic_dev->vic_regs_secondary;
 
-	spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, irq_flags);
+	retry_qbuf:
+	private_spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, irq_flags);
+
+	if (list_empty(&vic_dev->free_head)) {
+		private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
+		if (!attempted_bootstrap) {
+			attempted_bootstrap = true;
+			pr_info("*** ispvic_frame_channel_qbuf: free list empty, bootstrapping pipo ***\n");
+			tx_isp_subdev_pipo(sd, raw_pipe);
+			goto retry_qbuf;
+		}
+		pr_info("ispvic_frame_channel_qbuf: bank no free\n");
+		return 0;
+	}
 
 	if (incoming)
 		list_add_tail(&incoming->list, &vic_dev->queue_head);
 
-	if (list_empty(&vic_dev->free_head)) {
-		pr_info("ispvic_frame_channel_qbuf: bank no free\n");
-		spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
-		return 0;
-	}
-
 	if (list_empty(&vic_dev->queue_head)) {
 		pr_info("ispvic_frame_channel_qbuf: qbuffer null\n");
-		spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
+		private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
 		return 0;
 	}
 
@@ -2984,7 +2988,7 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 			buffer_index, readl(vic_base_alt + reg_offset));
 	}
 
-	spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
+	private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
 	kfree(queued_buffer);
 	return 0;
 }
