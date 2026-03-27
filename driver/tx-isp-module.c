@@ -6151,32 +6151,6 @@ static void tx_vic_disable_irq_complete(struct tx_isp_dev *isp_dev)
     pr_info("*** tx_vic_disable_irq COMPLETE - VIC INTERRUPTS DISABLED ***\n");
 }
 
-static int tx_vic_get_irq_number(struct tx_isp_vic_device *vic_dev)
-{
-    int irq = 0;
-
-    if (!vic_dev)
-        return 0;
-
-    if (vic_dev->sd.irq_info.irq > 0 && vic_dev->sd.irq_info.irq < 1024)
-        return vic_dev->sd.irq_info.irq;
-
-    if (ourISPdev && ourISPdev->isp_irq2 > 0)
-        return ourISPdev->isp_irq2;
-
-    if (vic_dev->sd.pdev)
-        irq = platform_get_irq(vic_dev->sd.pdev, 0);
-    if (irq > 0)
-        return irq;
-
-    if (vic_dev->irq > 0)
-        return vic_dev->irq;
-    if (vic_dev->irq_number > 0)
-        return vic_dev->irq_number;
-
-    return 0;
-}
-
 #define VIC_RAW_IRQ_LOCK_OFFSET 0x130
 #define VIC_RAW_IRQ_FLAG_OFFSET 0x13c
 
@@ -6262,7 +6236,6 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 
     if (tx_vic_raw_irq_flag_get(vic_dev) == 0) {
         tx_vic_raw_irq_flag_set(vic_dev, 1);
-        tx_vic_seed_irq_slots(vic_dev, tx_vic_get_irq_number(vic_dev));
         cb = (vic_irq_slot_cb_t)vic_dev->sd.irq_info.handler;
         if (cb) {
             pr_info("*** tx_vic_enable_irq: enabling VIC IRQ %d via raw slot callback ***\n",
@@ -6287,7 +6260,6 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
 
     if (tx_vic_raw_irq_flag_get(vic_dev) != 0) {
         tx_vic_raw_irq_flag_set(vic_dev, 0);
-        tx_vic_seed_irq_slots(vic_dev, tx_vic_get_irq_number(vic_dev));
         cb = (vic_irq_slot_cb_t)vic_dev->sd.irq_info.data;
         if (cb) {
             pr_info("*** tx_vic_disable_irq: disabling VIC IRQ %d via raw slot callback ***\n",

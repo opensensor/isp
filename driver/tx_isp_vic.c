@@ -1666,7 +1666,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 		writel(sensor_csi_fmt, vic_regs + 0x14);
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
 
-        writel((mipi_sc->sensor_frame_mode << 4) | mipi_sc->sensor_mode, vic_regs + 0x1a0);
         writel(reg_1a4, vic_regs + 0x1a4);
         reg_10c = (mipi_sc->hcrop_diff_en << 25) |
                   (mipi_vcomp_en << 24) |
@@ -1702,6 +1701,18 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(frame_mode_reg, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
 
+        /* Probe-time tx_isp_vic_hw_init() runs before the real ISP core mapping
+         * is guaranteed to exist, so reassert the VIC core route/gates here at
+         * the live stream point where core_regs should now be valid.
+         */
+        vic_reassert_core_irq_route(vic_dev,
+                                    actual_width,
+                                    actual_height,
+                                    image_twidth,
+                                    "tx_isp_vic_start");
+        vic_apply_core_run_phase(vic_dev, "tx_isp_vic_start");
+        vic_program_irq_registers(vic_dev, "tx_isp_vic_start");
+
 		pr_info("*** VIC MIPI PRE-ARM: reg0=0x%x reg10=0x%x reg14=0x%x reg100=0x%x reg104=0x%x reg108=0x%x reg10c=0x%x reg110=0x%x reg1a0=0x%x reg1a4=0x%x reg1a8=0x%x reg1ac=0x%x reg1b0=0x%x ***\n",
 		        readl(vic_regs + 0x0), readl(vic_regs + 0x10), readl(vic_regs + 0x14),
 		        readl(vic_regs + 0x100), readl(vic_regs + 0x104), readl(vic_regs + 0x108),
@@ -1709,16 +1720,12 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 		        readl(vic_regs + 0x1a4), readl(vic_regs + 0x1a8), readl(vic_regs + 0x1ac),
 		        readl(vic_regs + 0x1b0));
 
-		/* Prime MDMA/buffer control before the VIC unlock wait. The previous
-		 * vic_core_s_stream() kick happened only after tx_isp_vic_start()
-		 * returned, which was too late once the unlock timeout fired here.
-		 */
-		vic_prime_mdma_before_unlock(vic_dev);
-
         writel(2, vic_regs + 0x0);
         wmb();
         writel(4, vic_regs + 0x0);
         wmb();
+        writel((mipi_sc->sensor_frame_mode << 4) | mipi_sc->sensor_mode,
+               vic_regs + 0x1a0);
         pr_info("tx_isp_vic_start: post-arm frame regs reg1a0=0x%x reg1a8=0x%x reg1ac=0x%x\n",
                 readl(vic_regs + 0x1a0), readl(vic_regs + 0x1a8), readl(vic_regs + 0x1ac));
 
