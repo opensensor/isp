@@ -38,6 +38,19 @@
 /* ISP constants for Binary Ninja compatibility */
 #define ISP_MAX_SUBDEVS          16
 
+/* OEM-compatible pad metadata used by tx_isp_subdev_init() platform data */
+#define TX_ISP_PADTYPE_UNDEFINE  0x00
+#define TX_ISP_PADTYPE_INPUT     0x01
+#define TX_ISP_PADTYPE_OUTPUT    0x02
+#define TX_ISP_PADSTATE_FREE     0x02
+#define TX_ISP_PADSTATE_LINKED   0x03
+#define TX_ISP_PADSTATE_STREAM   0x04
+
+struct tx_isp_pad_descriptor {
+    unsigned char type;
+    unsigned char links_type;
+};
+
 /* Forward declarations */
 struct tx_isp_subdev;
 struct tx_isp_core;

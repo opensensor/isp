@@ -3109,6 +3109,42 @@ int tisp_bcsh_contrast(uint32_t val)
 
 int tisp_bcsh_saturation(struct isp_tuning_data *tuning, uint8_t value);
 
+int tisp_set_brightness(int32_t val)
+{
+    if (!ourISPdev || !ourISPdev->tuning_data)
+        return -ENODEV;
+
+    mutex_lock(&ourISPdev->tuning_data->mutex);
+    ourISPdev->tuning_data->brightness = (uint8_t)val;
+    mutex_unlock(&ourISPdev->tuning_data->mutex);
+
+    return tisp_bcsh_brightness((uint8_t)val);
+}
+
+int tisp_set_contrast(int32_t val)
+{
+    if (!ourISPdev || !ourISPdev->tuning_data)
+        return -ENODEV;
+
+    mutex_lock(&ourISPdev->tuning_data->mutex);
+    ourISPdev->tuning_data->contrast = (uint8_t)val;
+    mutex_unlock(&ourISPdev->tuning_data->mutex);
+
+    return tisp_bcsh_contrast((uint8_t)val);
+}
+
+int tisp_set_saturation(int32_t val)
+{
+    if (!ourISPdev || !ourISPdev->tuning_data)
+        return -ENODEV;
+
+    mutex_lock(&ourISPdev->tuning_data->mutex);
+    ourISPdev->tuning_data->saturation = (uint8_t)val;
+    mutex_unlock(&ourISPdev->tuning_data->mutex);
+
+    return tisp_bcsh_saturation(ourISPdev->tuning_data, (uint8_t)val);
+}
+
 int tisp_bcsh_g_brightness(void)
 {
     if (!ourISPdev || !ourISPdev->tuning_data)
@@ -3185,6 +3221,7 @@ int tisp_bcsh_saturation(struct isp_tuning_data *tuning, uint8_t value)
         return -EINVAL;
 
     tuning->saturation = value;
+    tuning->bcsh_saturation = value;
     return tiziano_bcsh_update(tuning);
 }
 
@@ -3453,46 +3490,15 @@ static int apical_isp_core_ops_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
     switch (ctrl->cmd) {
         pr_info("Get control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
         case 0x980900:  // Brightness
-            /* CRITICAL: SAFE access with validation like Binary Ninja reference */
-            if (!access_ok(VERIFY_READ, &tuning->brightness, sizeof(tuning->brightness))) {
-                pr_err("CRITICAL: Cannot access brightness field - PREVENTS BadVA CRASH\n");
-                return -EFAULT;
-            }
-
-            pr_debug("BCSH: Reading brightness from validated struct member\n");
             ctrl->value = tuning->brightness;
-            pr_debug("BCSH: Brightness read successfully: %d\n", ctrl->value);
             break;
 
         case 0x980901:  // Contrast
-            /* CRITICAL: SAFE access with validation */
-            if (!access_ok(VERIFY_READ, &tuning->contrast, sizeof(tuning->contrast))) {
-                pr_err("CRITICAL: Cannot access contrast field - PREVENTS BadVA CRASH\n");
-                return -EFAULT;
-            }
-
-            pr_debug("BCSH: Reading contrast from validated struct member\n");
             ctrl->value = tuning->contrast;
-            pr_debug("BCSH: Contrast read successfully: %d\n", ctrl->value);
             break;
 
-        case 0x980902:  // Saturation - CRITICAL FIX for BadVA crash
-            /* CRITICAL: Multiple validation layers to prevent BadVA crash */
-            if (!access_ok(VERIFY_READ, &tuning->saturation, sizeof(tuning->saturation))) {
-                pr_err("CRITICAL: Cannot access saturation field at %p - PREVENTING BadVA CRASH\n", &tuning->saturation);
-                return -EFAULT;
-            }
-
-            /* Additional safety check - verify field address is reasonable */
-            if ((unsigned long)&tuning->saturation < (unsigned long)tuning ||
-                (unsigned long)&tuning->saturation > (unsigned long)tuning + sizeof(*tuning)) {
-                pr_err("CRITICAL: Saturation field address out of bounds - PREVENTING BadVA CRASH\n");
-                return -EFAULT;
-            }
-
-            pr_info("CRITICAL: Using SAFE validated struct member access for saturation\n");
+        case 0x980902:  // Saturation
             ctrl->value = tuning->saturation;
-            pr_info("CRITICAL: Saturation read successfully: %d (BadVA crash prevented)\n", ctrl->value);
             break;
 
         case 0x98091b:  // Sharpness
@@ -3550,15 +3556,19 @@ static int apical_isp_core_ops_s_ctrl(struct tx_isp_dev *dev, struct isp_core_ct
     switch (ctrl->cmd) {
         pr_info("Set control: cmd=0x%x value=%d\n", ctrl->cmd, ctrl->value);
         case 0x980900:  // Brightness
-            tuning->brightness = ctrl->value;
+            ret = tisp_set_brightness((uint8_t)ctrl->value);
+            if (ret)
+                goto out;
             break;
 
         case 0x980901:  // Contrast
-            tuning->contrast = ctrl->value;
+            ret = tisp_set_contrast((uint8_t)ctrl->value);
+            if (ret)
+                goto out;
             break;
 
         case 0x980902:  // Saturation
-            ret = tisp_bcsh_saturation(tuning, ctrl->value);
+            ret = tisp_set_saturation((uint8_t)ctrl->value);
             if (ret)
                 goto out;
             break;

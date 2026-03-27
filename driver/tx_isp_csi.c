@@ -561,7 +561,6 @@ int tx_isp_csi_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *config
 int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_csi_device *csi_dev;
-    int ret = 0;
     int state;
 
     pr_info("*** csi_video_s_stream: EXACT Binary Ninja MCP implementation ***\n");
@@ -597,35 +596,10 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
         }
     }
 
-    if (enable) {
-        if (csi_dev->state < 2) {
-            pr_info("csi_video_s_stream: activating CSI subdev from state %d before stream-on\n",
-                    csi_dev->state);
-            ret = tx_isp_csi_activate_subdev(sd);
-            if (ret) {
-                pr_err("csi_video_s_stream: CSI activation failed: %d\n", ret);
-                return ret;
-            }
-        }
-
-        ret = csi_core_ops_init(sd, 1);
-        if (ret) {
-            pr_err("csi_video_s_stream: CSI hardware init failed: %d\n", ret);
-            return ret;
-        }
-
-        state = 4;
-    } else {
-        if (csi_dev->state >= 3)
-            ret = csi_core_ops_init(sd, 0);
-
-        if (ret) {
-            pr_err("csi_video_s_stream: CSI hardware disable failed: %d\n", ret);
-            return ret;
-        }
-
-        state = 3;
-    }
+    /* OEM BN reference: stream toggle is state-only for MIPI.
+     * Hardware bring-up stays in csi_core_ops_init()/core init path.
+     */
+    state = enable ? 4 : 3;
 
     csi_dev->state = state;
 
@@ -719,26 +693,18 @@ static void __iomem *csi_get_wrapper_regs(struct tx_isp_csi_device *csi_dev)
         return NULL;
 
     isp_csi_regs = *csi_wrapper_regs_slot(csi_dev);
-    if (isp_csi_regs) {
-        if (ourISPdev && ourISPdev->core_regs &&
-            isp_csi_regs == csi_dev->csi_regs &&
-            ourISPdev->core_regs != csi_dev->csi_regs) {
-            isp_csi_regs = ourISPdev->core_regs;
-            *csi_wrapper_regs_slot(csi_dev) = isp_csi_regs;
-            pr_info("csi_get_wrapper_regs: repaired stale +0x13c cache %p -> %p [core_regs]\n",
-                    csi_dev->csi_regs, isp_csi_regs);
-        }
+    if (isp_csi_regs)
         return isp_csi_regs;
-    }
 
     /*
-     * Keep CSI PHY/basic access on csi_dev->csi_regs (0x10022000), but use
-     * ISP core space for the CSI wrapper/config registers in the +0x13c slot.
+     * Real firmware seeds +0x13c from a dedicated 0x10022000 ioremap. If the
+     * slot is empty, recreate that mapping here instead of redirecting to
+     * ISP core space.
      */
-    if (ourISPdev)
-        isp_csi_regs = ourISPdev->core_regs;
-    else
-        isp_csi_regs = NULL;
+    isp_csi_regs = ioremap(0x10022000, 0x1000);
+    if (isp_csi_regs)
+        pr_info("csi_get_wrapper_regs: populated +0x13c with dedicated 0x10022000 mapping %p\n",
+                isp_csi_regs);
 
     if (!isp_csi_regs)
         isp_csi_regs = csi_dev->csi_regs;
@@ -752,36 +718,40 @@ static void __iomem *csi_get_wrapper_regs(struct tx_isp_csi_device *csi_dev)
 
 static int csi_calc_rate_sel(struct tx_isp_sensor_attribute *sensor_attr)
 {
-    unsigned int width;
-    int rate = sensor_attr->fps;
+    unsigned int clk;
+    int rate;
 
+    if (!sensor_attr)
+        return 0;
+
+    rate = sensor_attr->mipi.settle_time_apative_en;
     if (rate != 0)
         return rate;
 
-    width = sensor_attr->total_width;
-    if (width - 0x50 < 0x1e)
+    clk = sensor_attr->mipi.clk;
+    if (clk - 0x50 < 0x1e)
         return 0;
 
     rate = 1;
-    if (width - 0x6e >= 0x28) {
+    if (clk - 0x6e >= 0x28) {
         rate = 2;
-        if (width - 0x96 >= 0x32) {
+        if (clk - 0x96 >= 0x32) {
             rate = 3;
-            if (width - 0xc8 >= 0x32) {
+            if (clk - 0xc8 >= 0x32) {
                 rate = 4;
-                if (width - 0xfa >= 0x32) {
+                if (clk - 0xfa >= 0x32) {
                     rate = 5;
-                    if (width - 0x12c >= 0x64) {
+                    if (clk - 0x12c >= 0x64) {
                         rate = 6;
-                        if (width - 0x190 >= 0x64) {
+                        if (clk - 0x190 >= 0x64) {
                             rate = 7;
-                            if (width - 0x1f4 >= 0x64) {
+                            if (clk - 0x1f4 >= 0x64) {
                                 rate = 8;
-                                if (width - 0x258 >= 0x64) {
+                                if (clk - 0x258 >= 0x64) {
                                     rate = 9;
-                                    if (width - 0x2bc >= 0x64) {
+                                    if (clk - 0x2bc >= 0x64) {
                                         rate = 0xa;
-                                        if (width - 0x320 >= 0xc8)
+                                        if (clk - 0x320 >= 0xc8)
                                             rate = 0xb;
                                     }
                                 }
@@ -803,12 +773,11 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
     struct tx_isp_sensor_attribute *sensor_attr;
     void __iomem *csi_regs;
     void __iomem *isp_csi_regs;
-    u32 lane_enable_mask;
-    u32 phy_en_readback;
-    u32 csi_version;
+    u32 rate_reg;
     int result = 0xffffffea;
     int v0_17;
     int interface_type;
+    int rate_sel;
 
     if (!sd || (unsigned long)sd >= 0xfffff001)
         return result;
@@ -846,12 +815,6 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
         return -EINVAL;
     }
 
-    /* Bring the CSI/DPHY clocks out of CPM gate before any BASIC/WRAP access.
-     * We already had the helper, but the live init path never invoked it.
-     */
-    csi_jit_ungate_clocks();
-    csi_cpm_deassert_reset_if_enabled();
-
     sensor_attr = ourISPdev->sensor->video.attr;
     interface_type = sensor_attr->dbus_type;
     csi_dev->interface_type = interface_type;
@@ -861,21 +824,12 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
 
     if (interface_type == 1) {
 
-        /* Historical working bring-up wrote ISP_CORE[0xb078] before touching
-         * CSI BASIC/WRAP registers. Without this gate, 0x10022000 stays bus-dead.
-         */
-        pr_info("[CSI][PHY] enabling ISP_CORE[0xb078] <- 0x10000000 before MIPI init\n");
-        isp_write32(0xb078, 0x10000000);
-        wmb();
-        private_msleep(1);
-        phy_en_readback = isp_read32(0xb078);
-        pr_info("[CSI][PHY] ISP_CORE[0xb078] readback=0x%08x\n", phy_en_readback);
+        if (!isp_csi_regs) {
+            pr_err("csi_core_ops_init: wrapper regs unavailable for MIPI init\n");
+            return -ENODEV;
+        }
 
-        csi_version = readl(csi_regs + 0x00);
-        pr_info("[CSI][PHY] basic[0x00]=0x%08x after ISP_CORE[0xb078] enable\n",
-                csi_version);
-
-        csi_dev->lanes = sensor_attr->mipi.lans ? sensor_attr->mipi.lans : 2;
+        csi_dev->lanes = sensor_attr->mipi.lans;
         writel((csi_dev->lanes - 1) & 0x3, csi_regs + 0x04);
         writel(readl(csi_regs + 0x08) & 0xfffffffe, csi_regs + 0x08);
         writel(0, csi_regs + 0x0c);
@@ -885,41 +839,17 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
         writel(interface_type, csi_regs + 0x0c);
         private_msleep(1);
 
-        if (sensor_attr->fps == 0) {
-            u32 rate_reg;
-            int rate_sel = csi_calc_rate_sel(sensor_attr);
-
-            rate_reg = (readl(isp_csi_regs + 0x160) & 0xfffffff0) | rate_sel;
-            writel(rate_reg, isp_csi_regs + 0x160);
-            writel(rate_reg, isp_csi_regs + 0x1e0);
-            writel(rate_reg, isp_csi_regs + 0x260);
-        }
-
-        switch (csi_dev->lanes) {
-        case 1:
-            lane_enable_mask = 0x31;
-            break;
-        case 2:
-            lane_enable_mask = 0x33;
-            break;
-        case 4:
-        default:
-            lane_enable_mask = 0x3f;
-            break;
-        }
-
-        /*
-         * T31 sequencing notes and the live failure logs both point to the
-         * lane mask and final stream-on control living in CSI BASIC space,
-         * not WRAP. Keep slot13c only for diagnostics until the true wrapper
-         * base is proven.
-         */
-        writel(0x7d, csi_regs + 0x00);
-        writel(lane_enable_mask, csi_regs + 0x128);
+        rate_sel = csi_calc_rate_sel(sensor_attr);
+        rate_reg = (readl(isp_csi_regs + 0x160) & 0xfffffff0) | (rate_sel & 0xf);
+        writel(rate_reg, isp_csi_regs + 0x160);
+        writel(rate_reg, isp_csi_regs + 0x1e0);
+        writel(rate_reg, isp_csi_regs + 0x260);
+        writel(0x7d, isp_csi_regs + 0x00);
+        writel(0x3f, isp_csi_regs + 0x128);
         writel(1, csi_regs + 0x10);
         private_msleep(10);
-        pr_info("csi_core_ops_init: MIPI init programmed lanes=%u lane_mask=0x%02x basic[0x00]=0x%08x basic[0x04]=0x%08x basic[0x0c]=0x%08x basic[0x10]=0x%08x basic[0x128]=0x%08x lanec[0x200]=0x%08x lanec[0x204]=0x%08x lanec[0x210]=0x%08x lanec[0x230]=0x%08x lanec[0x250]=0x%08x lanec[0x254]=0x%08x lanec[0x2f4]=0x%08x wrap[0x00]=0x%08x wrap[0x128]=0x%08x\n",
-                csi_dev->lanes, lane_enable_mask,
+        pr_info("csi_core_ops_init: MIPI init programmed lanes=%u rate_sel=%d basic[0x00]=0x%08x basic[0x04]=0x%08x basic[0x0c]=0x%08x basic[0x10]=0x%08x basic[0x128]=0x%08x lanec[0x200]=0x%08x lanec[0x204]=0x%08x lanec[0x210]=0x%08x lanec[0x230]=0x%08x lanec[0x250]=0x%08x lanec[0x254]=0x%08x lanec[0x2f4]=0x%08x wrap[0x00]=0x%08x wrap[0x128]=0x%08x\n",
+                csi_dev->lanes, rate_sel,
                 readl(csi_regs + 0x00), readl(csi_regs + 0x04), readl(csi_regs + 0x0c),
                 readl(csi_regs + 0x10), readl(csi_regs + 0x128),
                 readl(csi_regs + 0x200), readl(csi_regs + 0x204), readl(csi_regs + 0x210),

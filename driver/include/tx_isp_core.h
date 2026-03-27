@@ -27,6 +27,7 @@ struct tx_isp_dev *tx_isp_get_device(void);
 void tx_isp_set_device(struct tx_isp_dev *isp);
 
 int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp);
+void tx_isp_core_bind_event_dispatch_tables(struct tx_isp_dev *isp_dev);
 
 /* Memory Management Functions */
 int isp_malloc_buffer(struct tx_isp_dev *isp, uint32_t size, void **virt_addr, dma_addr_t *phys_addr);

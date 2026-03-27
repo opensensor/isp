@@ -396,11 +396,19 @@ struct tx_isp_subdev {
 };
 
 
-/* Channel configuration structure - SAFE replacement for raw offset access */
+/* OEM event-dispatch object, 0x24 bytes per channel.
+ * Stock code uses byte +0x05 as the active flag, +0x1c as the handler,
+ * and +0x20 as the handler-private/live channel pointer.
+ */
 struct tx_isp_channel_config {
-    void *reserved[7];                       /* +0x00-0x18: Reserved space (28 bytes) */
-    int (*event_handler)(void*);             /* +0x1c: Event handler function - SAFE ACCESS */
-    uint32_t padding[2];                     /* +0x20-0x24: Padding to 0x24 size */
+    uint32_t reserved0;                      /* +0x00 */
+    uint8_t channel_id;                      /* +0x04 */
+    uint8_t enabled;                         /* +0x05 */
+    uint8_t reserved6;                       /* +0x06 */
+    uint8_t state;                           /* +0x07 */
+    uint32_t reserved1[5];                   /* +0x08-0x1b */
+    isp_event_cb event_handler;              /* +0x1c */
+    void *event_priv;                        /* +0x20 */
 } __attribute__((packed, aligned(4)));
 
 /* Netlink socket structure - SAFE replacement for raw offset access at 0x130 */
@@ -625,7 +633,7 @@ struct frame_channel_device {
     void *buffer_queue_base;             /* Offset 0x210 - $s0 + 0x210 */
     int buffer_queue_count;              /* Offset 0x218 - *($s0 + 0x218) */
     int streaming_flags;                 /* Offset 0x230 - *($s0 + 0x230) & 1 */
-    void *vic_subdev;                    /* Offset 0x2bc - *($s0 + 0x2bc) */
+    void *vic_subdev;                    /* Offset 0x2bc - remote event target subdev */
     int buffer_type;                     /* Offset 0x24 - *($s0 + 0x24) */
     int field;                           /* Offset 0x3c - *($s0 + 0x3c) */
     void *buffer_array[64];              /* Buffer array for index lookup */

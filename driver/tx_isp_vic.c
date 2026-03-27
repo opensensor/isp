@@ -18,6 +18,7 @@
 #include "include/tx_isp_csi.h"
 #include "include/tx_isp_vin.h"
 #include "include/tx_isp_tuning.h"
+#include "include/tx_isp_subdev_helpers.h"
 #include "include/tx-isp-device.h"
 #include "include/tx-libimp.h"
 #include <linux/platform_device.h>
@@ -32,6 +33,255 @@ extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 
 /* system_reg_write is now defined in tx-isp-module.c - removed duplicate */
+
+#define VIC_RAW_REGS_OFFSET        0xb8
+#define VIC_RAW_SELF_OFFSET        0xd4
+#define VIC_RAW_WIDTH_OFFSET       0xdc
+#define VIC_RAW_HEIGHT_OFFSET      0xe0
+#define VIC_RAW_IRQ_SLOT_OFFSET    0x80
+#define VIC_RAW_IRQ_ENABLE_OFFSET  0x84
+#define VIC_RAW_IRQ_DISABLE_OFFSET 0x88
+#define VIC_RAW_SENSOR_ATTR_OFFSET 0x110
+#define VIC_RAW_STATE_OFFSET       0x128
+#define VIC_RAW_IRQ_FLAG_OFFSET    0x13c
+
+static int vic_resolve_irq_number(struct tx_isp_vic_device *vic_dev)
+{
+    int irq = 0;
+
+    if (!vic_dev)
+        return 0;
+
+    if (vic_dev->sd.irq_info.irq > 0 && vic_dev->sd.irq_info.irq < 1024)
+        return vic_dev->sd.irq_info.irq;
+
+    if (ourISPdev && ourISPdev->isp_irq2 > 0)
+        return ourISPdev->isp_irq2;
+
+    if (vic_dev->irq > 0)
+        return vic_dev->irq;
+    if (vic_dev->irq_number > 0)
+        return vic_dev->irq_number;
+
+    if (vic_dev->sd.pdev)
+        irq = platform_get_irq(vic_dev->sd.pdev, 0);
+
+    if (irq > 0)
+        return irq;
+
+    /* The VIC shared line is isp-w02 / IRQ 38. */
+    return 38;
+}
+
+static inline void vic_raw_irq_slot_seed(struct tx_isp_vic_device *vic_dev, int irq)
+{
+    if (!vic_dev)
+        return;
+
+    if (irq <= 0)
+        irq = vic_resolve_irq_number(vic_dev);
+
+    /* Do not overwrite the OEM-owned raw +0x80 IRQ slot. Several runtime
+     * paths treat that field as a pointer-bearing object, so writing a bare
+     * integer IRQ there causes rollback-time crashes.
+     */
+    vic_dev->irq = irq;
+    vic_dev->irq_number = irq;
+}
+
+static inline void vic_raw_regs_set(struct tx_isp_vic_device *vic_dev, void __iomem *regs)
+{
+    if (!vic_dev)
+        return;
+
+    *(void __iomem **)((char *)vic_dev + VIC_RAW_REGS_OFFSET) = regs;
+}
+
+static inline void __iomem *vic_raw_regs_get(struct tx_isp_vic_device *vic_dev)
+{
+    if (!vic_dev)
+        return NULL;
+
+    return *(void __iomem **)((char *)vic_dev + VIC_RAW_REGS_OFFSET);
+}
+
+static inline int vic_regs_is_secondary(struct tx_isp_vic_device *vic_dev,
+                                        void __iomem *regs)
+{
+    struct tx_isp_dev *isp_dev;
+
+    if (!vic_dev || !regs)
+        return 0;
+
+    isp_dev = vic_dev->sd.isp;
+
+    if (regs == vic_dev->vic_regs_secondary)
+        return 1;
+    if (isp_dev && regs == isp_dev->vic_regs2)
+        return 1;
+    if (ourISPdev && regs == ourISPdev->vic_regs2)
+        return 1;
+
+    return 0;
+}
+
+static inline void __iomem *vic_primary_regs_resolve(struct tx_isp_vic_device *vic_dev)
+{
+    struct tx_isp_dev *isp_dev;
+    void __iomem *raw_regs;
+    void __iomem *regs;
+
+    if (!vic_dev)
+        return NULL;
+
+    raw_regs = vic_raw_regs_get(vic_dev);
+
+    /* OEM tx_isp_vic_start() dereferences vic_dev + 0xb8 as the active VIC
+     * MMIO base. In our rebuilt tree, generic tx_isp_subdev_init() also uses
+     * that same embedded subdev slot for sd->regs and populates it from the
+     * isp-w02 platform resource (0x10023000 secondary/control bank). Prefer the
+     * stable primary mapping carried in the named VIC members and only fall back
+     * to the raw slot when it is not the secondary bank.
+     */
+    regs = vic_dev->vic_regs;
+    if (!regs)
+        regs = raw_regs;
+
+    isp_dev = vic_dev->sd.isp;
+    if (!regs && isp_dev)
+        regs = isp_dev->vic_regs;
+    if (!regs && ourISPdev)
+        regs = ourISPdev->vic_regs;
+
+    if (vic_regs_is_secondary(vic_dev, regs)) {
+        regs = NULL;
+        if (vic_dev->vic_regs && !vic_regs_is_secondary(vic_dev, vic_dev->vic_regs))
+            regs = vic_dev->vic_regs;
+        if (!regs && isp_dev && isp_dev->vic_regs &&
+            !vic_regs_is_secondary(vic_dev, isp_dev->vic_regs))
+            regs = isp_dev->vic_regs;
+        if (!regs && ourISPdev && ourISPdev->vic_regs &&
+            !vic_regs_is_secondary(vic_dev, ourISPdev->vic_regs))
+            regs = ourISPdev->vic_regs;
+        if (!regs && raw_regs && !vic_regs_is_secondary(vic_dev, raw_regs))
+            regs = raw_regs;
+    }
+
+    if (regs) {
+        vic_dev->vic_regs = regs;
+        vic_raw_regs_set(vic_dev, regs);
+    }
+
+    if (!vic_dev->vic_regs_secondary) {
+        if (isp_dev && isp_dev->vic_regs2)
+            vic_dev->vic_regs_secondary = isp_dev->vic_regs2;
+        else if (ourISPdev && ourISPdev->vic_regs2)
+            vic_dev->vic_regs_secondary = ourISPdev->vic_regs2;
+    }
+
+    return regs;
+}
+
+static inline void vic_raw_dims_set(struct tx_isp_vic_device *vic_dev, u32 width, u32 height)
+{
+    if (!vic_dev)
+        return;
+
+    *(u32 *)((char *)vic_dev + VIC_RAW_WIDTH_OFFSET) = width;
+    *(u32 *)((char *)vic_dev + VIC_RAW_HEIGHT_OFFSET) = height;
+}
+
+static inline u32 vic_raw_width_get(struct tx_isp_vic_device *vic_dev)
+{
+    if (!vic_dev)
+        return 0;
+
+    return *(u32 *)((char *)vic_dev + VIC_RAW_WIDTH_OFFSET);
+}
+
+static inline u32 vic_raw_height_get(struct tx_isp_vic_device *vic_dev)
+{
+    if (!vic_dev)
+        return 0;
+
+    return *(u32 *)((char *)vic_dev + VIC_RAW_HEIGHT_OFFSET);
+}
+
+static inline struct tx_isp_sensor_attribute *vic_raw_sensor_attr_get(struct tx_isp_vic_device *vic_dev)
+{
+    if (!vic_dev)
+        return NULL;
+
+    /* OEM stores an inline sensor_attr cache at +0x110, but in our rebuilt
+     * layout that raw region overlaps live VIC state (for example, mipi.mode
+     * would alias the state word at +0x128). Use the safe named cache instead.
+     */
+    return &vic_dev->sensor_attr;
+}
+
+static inline void vic_raw_sensor_attr_sync(struct tx_isp_vic_device *vic_dev,
+                                            const struct tx_isp_sensor_attribute *attr)
+{
+    struct tx_isp_sensor_attribute *raw_attr;
+
+    if (!vic_dev)
+        return;
+
+    raw_attr = vic_raw_sensor_attr_get(vic_dev);
+    if (!raw_attr)
+        return;
+
+    if (attr)
+        memcpy(raw_attr, attr, sizeof(*raw_attr));
+    else
+        memset(raw_attr, 0, sizeof(*raw_attr));
+}
+
+static inline struct tx_isp_vic_device *vic_raw_self_from_sd(struct tx_isp_subdev *sd)
+{
+    if (!sd)
+        return NULL;
+
+    return *(struct tx_isp_vic_device **)((char *)sd + VIC_RAW_SELF_OFFSET);
+}
+
+static inline void vic_raw_self_set(struct tx_isp_vic_device *vic_dev)
+{
+    if (!vic_dev)
+        return;
+
+    /* tx_isp_subdev is the first field of tx_isp_vic_device, so the OEM raw
+     * self slot at +0xd4 is addressed from either sd or vic_dev base.
+     */
+    *(struct tx_isp_vic_device **)((char *)vic_dev + VIC_RAW_SELF_OFFSET) = vic_dev;
+}
+
+static inline u32 vic_raw_state_get(struct tx_isp_vic_device *vic_dev)
+{
+    if (!vic_dev)
+        return 0;
+
+    return *(u32 *)((char *)vic_dev + VIC_RAW_STATE_OFFSET);
+}
+
+static inline void vic_raw_state_set(struct tx_isp_vic_device *vic_dev, u32 state)
+{
+    if (!vic_dev)
+        return;
+
+    *(u32 *)((char *)vic_dev + VIC_RAW_STATE_OFFSET) = state;
+    vic_dev->state = state;
+}
+
+static inline void vic_raw_irq_flag_set(struct tx_isp_vic_device *vic_dev, u32 enabled)
+{
+    if (!vic_dev)
+        return;
+
+    *(u32 *)((char *)vic_dev + VIC_RAW_IRQ_FLAG_OFFSET) = enabled;
+    vic_dev->hw_irq_enabled = enabled;
+    vic_dev->irq_enabled = enabled;
+}
 
 /* Debug function to track vic_start_ok changes */
 static void debug_vic_start_ok_change(int new_value, const char *location, int line)
@@ -51,6 +301,8 @@ static int vic_enabled = 0;
 /* Forward declarations for PIPO callbacks used before definitions */
 static int ispvic_frame_channel_qbuf(void *arg1, void *arg2);
 static int ispvic_frame_channel_clearbuf(void);
+static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev);
+static void vic_prime_mdma_before_unlock(struct tx_isp_vic_device *vic_dev);
 
 /* This function creates and links the VIC device structure to the ISP core */
 int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
@@ -85,11 +337,11 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     /* Initialize completion at offset 0x148 */
     init_completion((struct completion *)((char *)vic_dev + 0x148));
 
-    /* Set initial state to 1 (INIT) at offset 0x128 */
-    *(uint32_t *)((char *)vic_dev + 0x128) = 1;
+    /* Set initial state to 1 (INIT) at the OEM raw offset. */
+    vic_raw_state_set(vic_dev, 1);
 
-    /* Set self-pointer at offset 0xd4 */
-    *(void **)((char *)vic_dev + 0xd4) = vic_dev;
+    /* Set self-pointer at the OEM raw slot used by vic_core_s_stream(). */
+    vic_raw_self_set(vic_dev);
 
     /* CRITICAL FIX: Set NV12 format magic number at offset 0xc to prevent control limit error */
     /* The VIC interrupt handler checks for 0x3231564e (NV12) at offset 0xc */
@@ -136,12 +388,19 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
         isp_dev->vic_regs2 = vic_dev->vic_regs_secondary;
     }
 
+    /* Seed the OEM raw slots used by tx_isp_vic_start(). */
+    vic_raw_regs_set(vic_dev, vic_dev->vic_regs);
+
     /* Initialize VIC device dimensions - CRITICAL: Use actual sensor output dimensions */
     vic_dev->width = 1920;  /* GC2053 actual output width */
     vic_dev->height = 1080; /* GC2053 actual output height */
+    vic_raw_dims_set(vic_dev, vic_dev->width, vic_dev->height);
 
-    /* Set up VIC subdev structure */
-    memset(&vic_dev->sd, 0, sizeof(vic_dev->sd));
+    /* Set up VIC subdev structure.
+     * Do NOT memset the embedded subdev here: kzalloc() already zeroed the
+     * whole object, and wiping sd at this point clobbers the drifted VIC
+     * fields/MMIO cache that live beyond the OEM subdev footprint.
+     */
     vic_dev->sd.isp = isp_dev;
     vic_dev->sd.ops = &vic_subdev_ops;
     vic_dev->sd.vin_state = TX_ISP_MODULE_INIT;
@@ -163,14 +422,12 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     vic_dev->frame_count = 0;
     vic_dev->buffer_count = 0;
     vic_dev->streaming = 0;
-    vic_dev->state = 1; /* INIT state */
-    vic_dev->irq = 38;
-    vic_dev->irq_number = 38;
+    vic_raw_state_set(vic_dev, 1);
+    vic_dev->irq = vic_resolve_irq_number(vic_dev);
+    vic_dev->irq_number = vic_dev->irq;
     vic_dev->irq_enabled = 0;
-    vic_dev->hw_irq_enabled = 0;
-    vic_dev->sd.irq_info.irq = 38;
-    vic_dev->sd.irq_info.handler = NULL;
-    vic_dev->sd.irq_info.data = vic_dev;
+    vic_raw_irq_flag_set(vic_dev, 0);
+    vic_raw_irq_slot_seed(vic_dev, vic_dev->irq);
 
     /* *** CRITICAL: Initialize VIC hardware buffers - DEFERRED to prevent memory exhaustion *** */
     pr_info("*** CRITICAL: VIC buffer allocation DEFERRED to prevent Wyze Cam memory exhaustion ***\n");
@@ -185,6 +442,7 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     vic_dev->sensor_attr.total_width = 1920;
     vic_dev->sensor_attr.total_height = 1080;
     vic_dev->sensor_attr.data_type = 0x2b; /* Default RAW10 */
+    vic_raw_sensor_attr_sync(vic_dev, &vic_dev->sensor_attr);
 
     /* *** CRITICAL: Link VIC device to ISP core *** */
     /* Store the VIC device properly - the subdev is PART of the VIC device */
@@ -208,6 +466,34 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     /* This sets up the private data pointer so tx_isp_get_subdevdata can retrieve the VIC device */
     vic_dev->sd.dev_priv = vic_dev;
 
+    /* Final reseed after subdev wiring so both the drifted named members and
+     * OEM raw slots are populated from the stable ISP-owned mappings/geometry
+     * before probe/stream-on touch the object.
+     */
+    {
+        u32 seed_width = 1920;
+        u32 seed_height = 1080;
+
+        if (isp_dev->sensor_width && isp_dev->sensor_height) {
+            seed_width = isp_dev->sensor_width;
+            seed_height = isp_dev->sensor_height;
+        }
+
+        vic_dev->vic_regs = isp_dev->vic_regs;
+        if (!vic_dev->vic_regs_secondary)
+            vic_dev->vic_regs_secondary = isp_dev->vic_regs2;
+        vic_dev->width = seed_width;
+        vic_dev->height = seed_height;
+
+        vic_raw_self_set(vic_dev);
+        vic_raw_regs_set(vic_dev, isp_dev->vic_regs);
+        vic_raw_dims_set(vic_dev, seed_width, seed_height);
+    }
+    vic_raw_sensor_attr_sync(vic_dev, &vic_dev->sensor_attr);
+    pr_info("*** tx_isp_create_vic_device: Final OEM slot seed stable=%p raw=%p dims=%ux%u raw_attr=%p ***\n",
+            isp_dev->vic_regs, vic_raw_regs_get(vic_dev), vic_raw_width_get(vic_dev),
+            vic_raw_height_get(vic_dev), vic_raw_sensor_attr_get(vic_dev));
+
     pr_info("*** tx_isp_create_vic_device: VIC device creation complete ***\n");
     pr_info("*** NO MORE 'NO VIC DEVICE' ERROR SHOULD OCCUR ***\n");
 
@@ -228,39 +514,181 @@ static void tx_isp_vic_frame_done(struct tx_isp_subdev *sd, int channel)
 int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
 
+static void vic_program_irq_registers(struct tx_isp_vic_device *vic_dev,
+                                      const char *origin)
+{
+    void __iomem *vic_base;
+
+    vic_base = vic_primary_regs_resolve(vic_dev);
+    if (!vic_base) {
+        pr_err("%s: No primary VIC registers available\n", origin);
+        return;
+    }
+
+    /* OEM ISR semantics:
+     *   0x1e0/0x1e4 = status
+     *   0x1e8/0x1ec = masks
+     *   0x1f0/0x1f4 = acknowledge/clear
+     * Only unmask frame-done on the main VIC bank for now.
+     */
+    writel(0xFFFFFFFF, vic_base + 0x1f0);
+    writel(0xFFFFFFFF, vic_base + 0x1f4);
+    wmb();
+
+    writel(0xFFFFFFFE, vic_base + 0x1e8);
+    writel(0xFFFFFFFF, vic_base + 0x1ec);
+    wmb();
+
+    pr_info("%s: VIC IRQ regs status=0x%08x/0x%08x mask=0x%08x/0x%08x\n",
+            origin,
+            readl(vic_base + 0x1e0), readl(vic_base + 0x1e4),
+            readl(vic_base + 0x1e8), readl(vic_base + 0x1ec));
+}
+
+static void vic_reassert_core_irq_route(struct tx_isp_vic_device *vic_dev,
+                                        u32 width, u32 height, u32 stride,
+                                        const char *origin)
+{
+    struct tx_isp_dev *isp_dev;
+    void __iomem *core = NULL;
+    void __iomem *vic_base;
+    u32 packed_geom;
+
+    if (!vic_dev)
+        return;
+
+    isp_dev = vic_dev->sd.isp ? vic_dev->sd.isp : ourISPdev;
+    if (isp_dev && isp_dev->core_regs)
+        core = isp_dev->core_regs;
+
+    vic_base = vic_primary_regs_resolve(vic_dev);
+    if (!core && vic_base)
+        core = vic_base - 0x9a00;
+
+    if (!core) {
+        pr_warn("%s: no ISP core regs for VIC route/gate reassert\n", origin);
+        return;
+    }
+
+    if (!width) {
+        width = vic_raw_width_get(vic_dev);
+        if (!width)
+            width = vic_dev->width;
+        if (!width)
+            width = 1920;
+    }
+
+    if (!height) {
+        height = vic_raw_height_get(vic_dev);
+        if (!height)
+            height = vic_dev->height;
+        if (!height)
+            height = 1080;
+    }
+
+    if (!stride) {
+        if (vic_base)
+            stride = readl(vic_base + 0x100);
+        if (!stride)
+            stride = width;
+    }
+
+    packed_geom = (width << 16) | (height & 0xffff);
+
+    writel(0x1, core + 0x9a70);
+    writel(0x1, core + 0x9a7c);
+    writel(0x1, core + 0x9a34);
+    writel(0x1, core + 0x9a88);
+    writel(0x1, core + 0x9a94);
+
+    if (readl(core + 0x9a00) == 0)
+        writel(packed_geom, core + 0x9a00);
+    if (readl(core + 0x9a04) == 0)
+        writel(0x3000300, core + 0x9a04);
+    if (readl(core + 0x9a2c) == 0)
+        writel(packed_geom, core + 0x9a2c);
+    if (readl(core + 0x9a80) == 0)
+        writel(stride, core + 0x9a80);
+    if (readl(core + 0x9a98) == 0)
+        writel(width, core + 0x9a98);
+    if (readl(core + 0x9ac0) == 0)
+        writel(0x200, core + 0x9ac0);
+    if (readl(core + 0x9ac8) == 0)
+        writel(0x200, core + 0x9ac8);
+
+    wmb();
+
+    pr_info("%s: core VIC route 9a04=0x%08x 9a34=0x%08x 9a88=0x%08x 9a94=0x%08x 9a80=0x%08x 9a98=0x%08x gate=0x%08x/0x%08x\n",
+            origin,
+            readl(core + 0x9a04),
+            readl(core + 0x9a34), readl(core + 0x9a88), readl(core + 0x9a94),
+            readl(core + 0x9a80), readl(core + 0x9a98),
+            readl(core + 0x9ac0), readl(core + 0x9ac8));
+}
+
+static void vic_apply_core_run_phase(struct tx_isp_vic_device *vic_dev,
+                                     const char *origin)
+{
+    struct tx_isp_dev *isp_dev;
+    void __iomem *core = NULL;
+    void __iomem *vic_base;
+
+    if (!vic_dev)
+        return;
+
+    isp_dev = vic_dev->sd.isp ? vic_dev->sd.isp : ourISPdev;
+    if (isp_dev && isp_dev->core_regs)
+        core = isp_dev->core_regs;
+
+    vic_base = vic_primary_regs_resolve(vic_dev);
+    if (!core && vic_base)
+        core = vic_base - 0x9a00;
+
+    if (!core) {
+        pr_warn("%s: no ISP core regs for VIC run phase\n", origin);
+        return;
+    }
+
+    writel(0x6000600, core + 0x9a04);
+    writel(0x3200, core + 0x9a70);
+    writel(0x33001, core + 0x9a7c);
+    writel(0x4100, core + 0x9a88);
+    writel(0x33001, core + 0x9a94);
+    writel(0x40080, core + 0x9ac0);
+    writel(0x40080, core + 0x9ac4);
+    writel(0x40080, core + 0x9ac8);
+    writel(0x40080, core + 0x9acc);
+    wmb();
+
+    pr_info("%s: core VIC run phase 9a04=0x%08x 9a70=0x%08x 9a7c=0x%08x 9a88=0x%08x 9a94=0x%08x gate=0x%08x/0x%08x/0x%08x/0x%08x\n",
+            origin,
+            readl(core + 0x9a04),
+            readl(core + 0x9a70), readl(core + 0x9a7c),
+            readl(core + 0x9a88), readl(core + 0x9a94),
+            readl(core + 0x9ac0), readl(core + 0x9ac4),
+            readl(core + 0x9ac8), readl(core + 0x9acc));
+}
+
 /* VIC interrupt restoration function - using correct VIC base */
 void tx_isp_vic_restore_interrupts(void)
 {
     extern struct tx_isp_dev *ourISPdev;
-    void __iomem *vic_interrupt_base;
+    struct tx_isp_vic_device *vic_dev;
 
-    if (!ourISPdev || !ourISPdev->vic_dev || vic_start_ok != 1) {
+    if (!ourISPdev || !ourISPdev->vic_dev || vic_start_ok != 1)
         return; /* VIC not active */
-    }
 
     pr_info("*** VIC INTERRUPT RESTORE: Restoring VIC interrupt registers in PRIMARY VIC space ***\n");
 
-    /* CRITICAL: Use PRIMARY VIC space for interrupt control (0x133e0000) */
-    struct tx_isp_vic_device *vic_dev = ourISPdev->vic_dev;
-    if (!vic_dev || !vic_dev->vic_regs) {
+    vic_dev = ourISPdev->vic_dev;
+    if (!vic_dev) {
         pr_err("*** VIC INTERRUPT RESTORE: No primary VIC registers available ***\n");
         return;
     }
 
     /* Restore VIC interrupt register values using WORKING ISP-activates configuration */
     pr_info("*** VIC INTERRUPT RESTORE: Using WORKING ISP-activates configuration (0x1e8/0x1ec) ***\n");
-
-    /* Clear pending interrupts first */
-    writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main interrupt status */
-    writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA interrupt status */
-    wmb();
-
-    /* Restore working interrupt masks - FOCUS ON MAIN INTERRUPT ONLY */
-    writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);  /* Enable frame done interrupt */
-    /* SKIP MDMA register 0x1ec - it doesn't work correctly */
-    wmb();
-
-    pr_info("*** VIC INTERRUPT RESTORE: WORKING configuration restored (MainMask=0xFFFFFFFE) ***\n");
+    vic_program_irq_registers(vic_dev, "tx_isp_vic_restore_interrupts");
 }
 EXPORT_SYMBOL(tx_isp_vic_restore_interrupts);
 
@@ -523,61 +951,44 @@ static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
     return 0;  /* Success */
 }
 
-/* VIC interrupt handler - Now uses the comprehensive Binary Ninja implementation */
-static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
-{
-    /* Forward to the comprehensive interrupt handler from tx_isp_vic_debug.c */
-    extern irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);
-    return isp_vic_interrupt_service_routine(irq, dev_id);
-}
-
 /* CRITICAL FIX: Initialize VIC hardware with proper interrupt configuration */
 int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
 {
     struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
     void __iomem *vic_base;
 
-    if (!vic_dev || !vic_dev->vic_regs) {
+    if (!vic_dev) {
+        pr_err("tx_isp_vic_hw_init: Invalid VIC device\n");
+        return -EINVAL;
+    }
+
+    vic_base = vic_primary_regs_resolve(vic_dev);
+    if (!vic_base) {
         pr_err("tx_isp_vic_hw_init: No primary VIC registers available\n");
         return -EINVAL;
     }
 
     // CRITICAL: Use PRIMARY VIC space for interrupt configuration
-    vic_base = vic_dev->vic_regs;  // Use primary VIC space (0x133e0000)
+    vic_dev->vic_regs = vic_base;  // Use primary VIC space (0x133e0000)
     pr_info("*** VIC HW INIT: Using PRIMARY VIC space for interrupt configuration ***\n");
 
-    // Clear any pending interrupts first
-    writel(0, vic_base + 0x00);  // Clear ISR
-    writel(0, vic_base + 0x20);  // Clear ISR1
-    wmb();
-
-    // Set up interrupt masks to match OEM
-    writel(0x00000001, vic_base + 0x04);  // IMR
-    wmb();
-    writel(0x00000000, vic_base + 0x24);  // IMR1
-    wmb();
-
-    // Configure ISP control interrupts
-    writel(0x07800438, vic_base + 0x04);  // IMR
-    wmb();
-    writel(0xb5742249, vic_base + 0x0c);  // IMCR
-    wmb();
+    vic_reassert_core_irq_route(vic_dev,
+                                vic_raw_width_get(vic_dev),
+                                vic_raw_height_get(vic_dev),
+                                0,
+                                "tx_isp_vic_hw_init");
+    vic_program_irq_registers(vic_dev, "tx_isp_vic_hw_init");
 
     pr_info("*** VIC HW INIT: Interrupt configuration applied to PRIMARY VIC space ***\n");
 
-    /* CRITICAL: Register the VIC interrupt handler - THIS WAS MISSING! */
-    int irq = 38;  /* VIC uses IRQ 38 (isp-w02) */
-    int ret = request_irq(irq, isp_vic_interrupt_service_routine, IRQF_SHARED, "tx-isp-vic", sd);
-    if (ret == 0) {
-        pr_info("*** VIC HW INIT: Interrupt handler registered for IRQ %d ***\n", irq);
-    } else {
-        pr_err("*** VIC HW INIT: Failed to register interrupt handler for IRQ %d: %d ***\n", irq, ret);
-        return ret;
-    }
-
-    /* Enable the interrupt at hardware level */
-    enable_irq(irq);
-    pr_info("*** VIC HW INIT: Hardware interrupt enabled for IRQ %d ***\n", irq);
+    /*
+     * Keep probe-time VIC init limited to hardware interrupt register setup.
+     * The shared Linux IRQ 38 handler is registered later via the module-owned
+     * request path; requesting it again here created a duplicate handler and
+     * dragged in a broken local ISR stub.
+     */
+    vic_raw_irq_flag_set(vic_dev, 0);
+    pr_info("*** VIC HW INIT: Deferring shared IRQ38 registration to module request path ***\n");
 
     return 0;
 }
@@ -1135,7 +1546,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     void __iomem *vic_regs;
     struct tx_isp_sensor_attribute *sensor_attr;
     u32 interface_type;
-    u32 timeout = 10000;
+    u32 timeout = 2000000;
     u32 actual_width, actual_height;
 
     pr_info("*** tx_isp_vic_start: Following EXACT Binary Ninja flow ***\n");
@@ -1150,7 +1561,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
      * Prefer the synced VIC copy and only fall back if the cache is still
      * clearly unpopulated.
      */
-    sensor_attr = &vic_dev->sensor_attr;
+    sensor_attr = vic_raw_sensor_attr_get(vic_dev);
     if (!sensor_attr->name &&
         !sensor_attr->mipi.image_twidth &&
         !sensor_attr->mipi.image_theight) {
@@ -1160,6 +1571,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         }
 
         sensor_attr = ourISPdev->sensor->video.attr;
+        vic_raw_sensor_attr_sync(vic_dev, sensor_attr);
         pr_info("*** tx_isp_vic_start: VIC sensor_attr cache empty, using global sensor attr fallback ***\n");
     } else {
         pr_info("*** tx_isp_vic_start: Using VIC-cached sensor_attr ***\n");
@@ -1167,8 +1579,8 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 
     interface_type = sensor_attr->dbus_type;
 
-    actual_width = vic_dev->width;
-    actual_height = vic_dev->height;
+    actual_width = vic_raw_width_get(vic_dev);
+    actual_height = vic_raw_height_get(vic_dev);
     if (!actual_width || !actual_height) {
         actual_width = sensor_attr->mipi.image_twidth;
         actual_height = sensor_attr->mipi.image_theight;
@@ -1185,7 +1597,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     pr_info("tx_isp_vic_start: using dims %ux%u\n", actual_width, actual_height);
 
     /* Get VIC register base - offset 0xb8 in Binary Ninja */
-    vic_regs = vic_dev->vic_regs;
+    vic_regs = vic_primary_regs_resolve(vic_dev);
     if (!vic_regs) {
         pr_info("*** CRITICAL: No VIC register base ***\n");
         return -EINVAL;
@@ -1196,23 +1608,42 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     if (interface_type == TX_SENSOR_DATA_INTERFACE_MIPI) {  /* MIPI = 1 in our enum */
         struct vic_mipi_sensor_ctl *mipi_sc = &sensor_attr->mipi.mipi_sc;
         u32 image_twidth = sensor_attr->mipi.image_twidth ? sensor_attr->mipi.image_twidth : actual_width;
-        u32 bits_per_pixel = 8;
+        u32 bits_per_pixel = 0;
         u32 frame_mode_reg = 0x4440;
+		u32 sensor_csi_fmt = mipi_sc->sensor_csi_fmt;
+        u32 mipi_vcomp_en = mipi_sc->mipi_vcomp_en;
+        u32 mipi_hcomp_en = mipi_sc->mipi_hcomp_en;
+        u32 line_sync_mode = mipi_sc->line_sync_mode;
+        u32 work_start_flag = mipi_sc->work_start_flag;
+        u32 data_type_en = mipi_sc->data_type_en;
+        u32 data_type_value = mipi_sc->data_type_value;
         u32 reg_10c;
+        u32 reg_1a4;
         u32 wait_count = 0;
 
         pr_info("MIPI interface configuration\n");
 
         if (sensor_attr->mipi.mode == SENSOR_MIPI_SONY_MODE) {
             writel(0x20000, vic_regs + 0x10);
-            writel(0x100010, vic_regs + 0x1a4);
+            reg_1a4 = 0x100010;
             pr_info("tx_isp_vic_start: SONY_MIPI mode\n");
         } else {
-            writel(0xa000a, vic_regs + 0x1a4);
+            reg_1a4 = 0xa000a;
             pr_info("tx_isp_vic_start: OTHER_MIPI mode\n");
         }
 
-        switch (mipi_sc->sensor_csi_fmt) {
+		if (sensor_attr->mipi.mode == SENSOR_MIPI_OTHER_MODE &&
+		    sensor_csi_fmt == TX_SENSOR_RAW10 &&
+		    !mipi_vcomp_en && !mipi_hcomp_en &&
+		    !line_sync_mode && !work_start_flag &&
+		    !data_type_en && !data_type_value) {
+			sensor_csi_fmt = TX_SENSOR_RAW12;
+			data_type_value = RAW12;
+			reg_1a4 = 0x100010;
+			pr_info("tx_isp_vic_start: applying OEM-style OTHER_MIPI zero-profile RAW12 fallback\n");
+		}
+
+		switch (sensor_csi_fmt) {
         case TX_SENSOR_RAW10:
             bits_per_pixel = 10;
             break;
@@ -1223,23 +1654,27 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             bits_per_pixel = 16;
             break;
         case TX_SENSOR_RAW8:
-        default:
             bits_per_pixel = 8;
+            break;
+        default:
+            bits_per_pixel = 0;
             break;
         }
 
         writel(((bits_per_pixel * image_twidth) + 0x1f) >> 5, vic_regs + 0x100);
         writel(2, vic_regs + 0xc);
-        writel(mipi_sc->sensor_csi_fmt, vic_regs + 0x14);
+		writel(sensor_csi_fmt, vic_regs + 0x14);
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
 
+        writel((mipi_sc->sensor_frame_mode << 4) | mipi_sc->sensor_mode, vic_regs + 0x1a0);
+        writel(reg_1a4, vic_regs + 0x1a4);
         reg_10c = (mipi_sc->hcrop_diff_en << 25) |
-                  (mipi_sc->mipi_vcomp_en << 24) |
-                  (mipi_sc->mipi_hcomp_en << 23) |
-                  (mipi_sc->line_sync_mode << 22) |
-                  (mipi_sc->work_start_flag << 20) |
-                  (mipi_sc->data_type_en << 18) |
-                  (mipi_sc->data_type_value << 12) |
+                  (mipi_vcomp_en << 24) |
+                  (mipi_hcomp_en << 23) |
+                  (line_sync_mode << 22) |
+                  (work_start_flag << 20) |
+                  (data_type_en << 18) |
+                  (data_type_value << 12) |
                   (mipi_sc->del_start << 8) |
                   (mipi_sc->sensor_frame_mode << 4) |
                   (mipi_sc->sensor_fid_mode << 2) |
@@ -1267,11 +1702,32 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(frame_mode_reg, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
 
+		pr_info("*** VIC MIPI PRE-ARM: reg0=0x%x reg10=0x%x reg14=0x%x reg100=0x%x reg104=0x%x reg108=0x%x reg10c=0x%x reg110=0x%x reg1a0=0x%x reg1a4=0x%x reg1a8=0x%x reg1ac=0x%x reg1b0=0x%x ***\n",
+		        readl(vic_regs + 0x0), readl(vic_regs + 0x10), readl(vic_regs + 0x14),
+		        readl(vic_regs + 0x100), readl(vic_regs + 0x104), readl(vic_regs + 0x108),
+		        readl(vic_regs + 0x10c), readl(vic_regs + 0x110), readl(vic_regs + 0x1a0),
+		        readl(vic_regs + 0x1a4), readl(vic_regs + 0x1a8), readl(vic_regs + 0x1ac),
+		        readl(vic_regs + 0x1b0));
+
+		/* Prime MDMA/buffer control before the VIC unlock wait. The previous
+		 * vic_core_s_stream() kick happened only after tx_isp_vic_start()
+		 * returned, which was too late once the unlock timeout fired here.
+		 */
+		vic_prime_mdma_before_unlock(vic_dev);
+
         writel(2, vic_regs + 0x0);
         wmb();
         writel(4, vic_regs + 0x0);
         wmb();
-        writel((mipi_sc->sensor_frame_mode << 4) | mipi_sc->sensor_mode, vic_regs + 0x1a0);
+        pr_info("tx_isp_vic_start: post-arm frame regs reg1a0=0x%x reg1a8=0x%x reg1ac=0x%x\n",
+                readl(vic_regs + 0x1a0), readl(vic_regs + 0x1a8), readl(vic_regs + 0x1ac));
+
+		pr_info("*** VIC unlock wait: reg0=0x%x after arm (reg10=0x%x reg14=0x%x reg100=0x%x reg104=0x%x reg108=0x%x reg10c=0x%x reg110=0x%x reg1a0=0x%x reg1a4=0x%x reg1a8=0x%x reg1ac=0x%x reg1b0=0x%x) ***\n",
+		        readl(vic_regs + 0x0), readl(vic_regs + 0x10), readl(vic_regs + 0x14),
+		        readl(vic_regs + 0x100), readl(vic_regs + 0x104), readl(vic_regs + 0x108),
+		        readl(vic_regs + 0x10c), readl(vic_regs + 0x110), readl(vic_regs + 0x1a0),
+		        readl(vic_regs + 0x1a4), readl(vic_regs + 0x1a8), readl(vic_regs + 0x1ac),
+		        readl(vic_regs + 0x1b0));
 
         while ((readl(vic_regs + 0x0) != 0) && timeout) {
             wait_count++;
@@ -1279,7 +1735,12 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             timeout--;
         }
         if (!timeout) {
-            pr_info("VIC unlock timeout\n");
+			pr_info("VIC unlock timeout (reg0=0x%x wait=%u reg10=0x%x reg14=0x%x reg100=0x%x reg104=0x%x reg108=0x%x reg10c=0x%x reg110=0x%x reg1a0=0x%x reg1a4=0x%x reg1a8=0x%x reg1ac=0x%x reg1b0=0x%x)\n",
+			        readl(vic_regs + 0x0), wait_count, readl(vic_regs + 0x10),
+			        readl(vic_regs + 0x14), readl(vic_regs + 0x100), readl(vic_regs + 0x104),
+			        readl(vic_regs + 0x108), readl(vic_regs + 0x10c), readl(vic_regs + 0x110),
+			        readl(vic_regs + 0x1a0), readl(vic_regs + 0x1a4), readl(vic_regs + 0x1a8),
+			        readl(vic_regs + 0x1ac), readl(vic_regs + 0x1b0));
             return -ETIMEDOUT;
         }
 
@@ -1287,10 +1748,16 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel((mipi_sc->mipi_crop_start3y << 16) | mipi_sc->mipi_crop_start2y, vic_regs + 0x108);
         writel(1, vic_regs + 0x0);
         wmb();
+        writel(reg_1a4, vic_regs + 0x1a4);
+        writel(frame_mode_reg, vic_regs + 0x1ac);
+        writel(0x10, vic_regs + 0x1b0);
+        writel(0, vic_regs + 0x1b4);
+        wmb();
 
-        pr_info("*** VIC MIPI CONFIG: reg14=0x%x reg100=0x%x reg10c=0x%x reg110=0x%x reg1a0=0x%x wait=%u ***\n",
+        pr_info("*** VIC MIPI CONFIG: reg14=0x%x reg100=0x%x reg10c=0x%x reg110=0x%x reg1a0=0x%x reg1ac=0x%x wait=%u ***\n",
                 readl(vic_regs + 0x14), readl(vic_regs + 0x100), readl(vic_regs + 0x10c),
-                readl(vic_regs + 0x110), readl(vic_regs + 0x1a0), wait_count);
+                readl(vic_regs + 0x110), readl(vic_regs + 0x1a0), readl(vic_regs + 0x1ac),
+                wait_count);
 
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_BT601) {
         /* BT601 - Binary Ninja 00010688-000107d4 */
@@ -1416,17 +1883,17 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                 case 0x200000e:
                     /* Binary Ninja: **($a0 + 0xb8) = 0x10 */
                     /* Set VIC register to 0x10 */
-                    if (vic_dev->vic_regs) {
-                        writel(0x10, vic_dev->vic_regs + 0xb8);
+                    if (vic_raw_regs_get(vic_dev)) {
+                        writel(0x10, vic_raw_regs_get(vic_dev) + 0xb8);
                     }
                     return 0;
 
                 case 0x2000013:
                     /* Binary Ninja: **($a0 + 0xb8) = 0, then = 4 */
                     /* Set VIC register to 0, then 4 */
-                    if (vic_dev->vic_regs) {
-                        writel(0, vic_dev->vic_regs + 0xb8);
-                        writel(4, vic_dev->vic_regs + 0xb8);
+                    if (vic_raw_regs_get(vic_dev)) {
+                        writel(0, vic_raw_regs_get(vic_dev) + 0xb8);
+                        writel(4, vic_raw_regs_get(vic_dev) + 0xb8);
                     }
                     return 0;
 
@@ -1461,6 +1928,8 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr)
 {
     struct tx_isp_vic_device *vic_dev;
+    u32 width = 0;
+    u32 height = 0;
 
     pr_info("vic_sensor_ops_sync_sensor_attr: sd=%p, attr=%p\n", sd, attr);
 
@@ -1479,12 +1948,28 @@ int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sens
     if (attr == NULL) {
         /* Clear sensor attribute */
         memset(&vic_dev->sensor_attr, 0, sizeof(vic_dev->sensor_attr));
+        vic_raw_sensor_attr_sync(vic_dev, NULL);
         pr_info("vic_sensor_ops_sync_sensor_attr: cleared sensor attributes\n");
     } else {
         /* Copy sensor attribute */
         memcpy(&vic_dev->sensor_attr, attr, sizeof(vic_dev->sensor_attr));
+        vic_raw_sensor_attr_sync(vic_dev, attr);
+
+        width = attr->mipi.image_twidth ? attr->mipi.image_twidth : attr->total_width;
+        height = attr->mipi.image_theight ? attr->mipi.image_theight : attr->total_height;
+        if (width && height) {
+            vic_dev->width = width;
+            vic_dev->height = height;
+            vic_raw_dims_set(vic_dev, width, height);
+        }
+
         pr_info("vic_sensor_ops_sync_sensor_attr: copied sensor attributes\n");
     }
+
+    vic_primary_regs_resolve(vic_dev);
+    pr_info("vic_sensor_ops_sync_sensor_attr: OEM slots regs=%p dims=%ux%u raw_attr=%p\n",
+            vic_raw_regs_get(vic_dev), vic_raw_width_get(vic_dev),
+            vic_raw_height_get(vic_dev), vic_raw_sensor_attr_get(vic_dev));
 
     return 0;
 }
@@ -1512,9 +1997,12 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     if (cmd == 0x1000001) {
         result = -ENOTSUPP;
         if (sd != NULL) {
+            struct tx_isp_subdev_pad *inpad0;
+
             /* Binary Ninja: void* $v0_2 = *(*(arg1 + 0xc4) + 0xc) */
-            if (sd->inpads && sd->inpads[0].priv) {
-                callback_ptr = sd->inpads[0].priv;
+            inpad0 = tx_isp_subdev_raw_inpad_get(sd, 0);
+            if (inpad0 && inpad0->priv) {
+                callback_ptr = inpad0->priv;
                 if (callback_ptr != NULL) {
                     /* Get function pointer at offset +4 in callback structure */
                     callback_func = *((int (**)(void))((char *)callback_ptr + 4));
@@ -1576,9 +2064,12 @@ int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     } else if (cmd == 0x1000000) {
         result = -ENOTSUPP;
         if (sd != NULL) {
+            struct tx_isp_subdev_pad *inpad0;
+
             /* Binary Ninja: void* $v0_5 = **(arg1 + 0xc4) */
-            if (sd->inpads && sd->inpads[0].priv) {
-                callback_ptr = sd->inpads[0].priv;
+            inpad0 = tx_isp_subdev_raw_inpad_get(sd, 0);
+            if (inpad0 && inpad0->priv) {
+                callback_ptr = inpad0->priv;
                 if (callback_ptr != NULL) {
                     /* Get function pointer at offset +4 in callback structure */
                     callback_func = *((int (**)(void))((char *)callback_ptr + 4));
@@ -1686,8 +2177,8 @@ int tx_isp_vic_activate_subdev(struct tx_isp_subdev *sd)
 
     mutex_lock(&vic_dev->state_lock);
 
-    if (vic_dev->state == 1) {
-        vic_dev->state = 2; /* INIT -> READY */
+    if (vic_raw_state_get(vic_dev) == 1) {
+        vic_raw_state_set(vic_dev, 2); /* INIT -> READY */
         pr_info("VIC activated: state %d -> 2 (READY)\n", 1);
 	}
 
@@ -1712,7 +2203,7 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
     }
 
     /* Binary Ninja: Read state at offset 0x128 */
-    state = vic_dev->state;
+    state = vic_raw_state_get(vic_dev);
 
     /* Binary Ninja: if (arg2 == 0) - disable path */
     if (enable == 0) {
@@ -1721,7 +2212,7 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
             /* Binary Ninja: tx_vic_disable_irq() */
             tx_vic_disable_irq(vic_dev);
             /* Binary Ninja: *($s1_1 + 0x128) = 2 */
-            vic_dev->state = 2;
+            vic_raw_state_set(vic_dev, 2);
             pr_info("vic_core_ops_init: Disabled VIC, state -> 2\n");
         }
     } else {
@@ -1731,12 +2222,13 @@ int vic_core_ops_init(struct tx_isp_subdev *sd, int enable)
             /* Binary Ninja: tx_vic_enable_irq() */
             tx_vic_enable_irq(vic_dev);
             /* Binary Ninja: *($s1_1 + 0x128) = 3 */
-            vic_dev->state = 3;
+            vic_raw_state_set(vic_dev, 3);
             pr_info("vic_core_ops_init: Enabled VIC, state -> 3\n");
         }
     }
 
-    pr_info("vic_core_ops_init: enable=%d, final state=%d\n", enable, vic_dev->state);
+    pr_info("vic_core_ops_init: enable=%d, final state=%d\n", enable,
+            vic_raw_state_get(vic_dev));
     return 0;
 }
 
@@ -1755,16 +2247,17 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
         return -EINVAL;
     }
 
-    pr_info("*** tx_isp_vic_slake_subdev: ENTRY - state=%d ***\n", vic_dev->state);
+    pr_info("*** tx_isp_vic_slake_subdev: ENTRY - state=%d ***\n",
+            vic_raw_state_get(vic_dev));
 
     /* Binary Ninja: Read state at offset 0x128 */
-    state = vic_dev->state;
+    state = vic_raw_state_get(vic_dev);
 
     /* Binary Ninja: if (state == 4) call vic_core_s_stream and re-read state */
     if (state == 4) {
         pr_info("tx_isp_vic_slake_subdev: VIC streaming (state=4) -> stop stream\n");
         vic_core_s_stream(sd, 0);
-        state = vic_dev->state;  /* Re-read state after stopping stream */
+        state = vic_raw_state_get(vic_dev);  /* Re-read state after stopping stream */
     }
 
     /* Binary Ninja: if (state == 3) call vic_core_ops_init(sd, 0) */
@@ -1777,14 +2270,15 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
     mutex_lock(&vic_dev->state_lock);
 
     /* Binary Ninja: Only transition from state 2 to state 1 */
-    if (vic_dev->state == 2) {
-        vic_dev->state = 1;
+    if (vic_raw_state_get(vic_dev) == 2) {
+        vic_raw_state_set(vic_dev, 1);
         pr_info("tx_isp_vic_slake_subdev: VIC state 2 -> 1 (INIT)\n");
     }
 
     mutex_unlock(&vic_dev->state_lock);
 
-    pr_info("*** tx_isp_vic_slake_subdev: EXIT - state=%d ***\n", vic_dev->state);
+    pr_info("*** tx_isp_vic_slake_subdev: EXIT - state=%d ***\n",
+            vic_raw_state_get(vic_dev));
     return 0;
 }
 
@@ -1864,6 +2358,54 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     }
 
     pr_info("*** VIC PIPO MDMA ENABLE COMPLETE ***\n");
+}
+
+static void vic_prime_mdma_before_unlock(struct tx_isp_vic_device *vic_dev)
+{
+	struct tx_isp_subdev *sd;
+	void __iomem *vic_base;
+	u32 buffer_count;
+	u32 stream_ctrl;
+	int qret;
+
+	if (!vic_dev || !vic_dev->vic_regs)
+		return;
+
+	sd = &vic_dev->sd;
+	vic_base = vic_dev->vic_regs;
+
+	pr_info("*** tx_isp_vic_start: priming MDMA/QBUF before unlock wait ***\n");
+
+	vic_pipo_mdma_enable(vic_dev);
+
+	qret = ispvic_frame_channel_qbuf(sd, NULL);
+	if (qret != 0)
+		pr_warn("*** tx_isp_vic_start: pre-unlock qbuf returned %d (continuing) ***\n",
+		        qret);
+	else
+		pr_info("*** tx_isp_vic_start: pre-unlock qbuf completed ***\n");
+
+	buffer_count = vic_dev->active_buffer_count;
+	if (buffer_count == 0)
+		buffer_count = 2;
+	if (buffer_count > 5)
+		buffer_count = 5;
+
+	stream_ctrl = (buffer_count << 16) | 0x80000020;
+	pr_info("*** tx_isp_vic_start: pre-unlock MDMA prime ctrl=0x%x strideY=%u slot0Y=0x%x slot0UV=0x%x ***\n",
+	        stream_ctrl,
+	        readl(vic_base + 0x310),
+	        readl(vic_base + 0x318),
+	        readl(vic_base + 0x340));
+
+	writel(stream_ctrl, vic_base + 0x300);
+	if (vic_dev->vic_regs_secondary)
+		writel(stream_ctrl, vic_dev->vic_regs_secondary + 0x300);
+	wmb();
+
+	pr_info("*** tx_isp_vic_start: pre-unlock MDMA ctrl readback PRI=0x%x SEC=0x%x ***\n",
+	        readl(vic_base + 0x300),
+	        vic_dev->vic_regs_secondary ? readl(vic_dev->vic_regs_secondary + 0x300) : 0);
 }
 
 /* ISPVIC Frame Channel S_Stream - EXACT Binary Ninja Implementation */
@@ -1982,31 +2524,6 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
                             readl(vic_dev->vic_regs_secondary + 0x300));
                 }
 
-                /* The alternate T31 path shows the hardware may require an explicit
-                 * RUN transition after stream control is programmed, otherwise the
-                 * control/slot writes never latch and read back as zero. */
-                writel(1, vic_base + 0x0);
-                if (vic_dev->vic_regs_secondary)
-                    writel(1, vic_dev->vic_regs_secondary + 0x0);
-                wmb();
-                pr_info("*** VIC RUN: Wrote 1 to VIC[0x0] (and secondary if mapped) ***\n");
-                if (vic_dev->vic_regs_secondary) {
-                    pr_info("*** VIC POST-RUN READBACK: PRI state=0x%x ctrl=0x%x slot0=0x%x | SEC state=0x%x ctrl=0x%x slot0=0x%x ***\n",
-                            readl(vic_base + 0x0),
-                            readl(vic_base + 0x300),
-                            readl(vic_base + 0x318),
-                            readl(vic_dev->vic_regs_secondary + 0x0),
-                            readl(vic_dev->vic_regs_secondary + 0x300),
-                            readl(vic_dev->vic_regs_secondary + 0x318));
-                } else {
-                    pr_info("*** VIC POST-RUN READBACK: state=0x%x ctrl=0x%x slot0=0x%x ***\n",
-                            readl(vic_base + 0x0),
-                            readl(vic_base + 0x300),
-                            readl(vic_base + 0x318));
-                }
-
-
-
                 /* MCP LOG: Stream ON completed */
                 pr_info("MCP_LOG: VIC streaming enabled - ctrl=0x%x, base=%p, state=%d\n",
                         stream_ctrl, vic_base, 1);
@@ -2092,107 +2609,92 @@ static int vic_pad_event_handler(struct tx_isp_subdev_pad *pad, unsigned int cmd
 int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 {
     struct tx_isp_vic_device *vic_dev;
-    void __iomem *vic_regs;
-    void __iomem *isp_base;
-    void __iomem *csi_base;
+    u32 current_state;
     int ret = -EINVAL;
 
     pr_info("*** vic_core_s_stream: ENTRY - sd=%p, enable=%d ***\n", sd, enable);
 
-    /* Validate parameters */
-    if (!sd || !ourISPdev || !ourISPdev->vic_dev) {
-        pr_err("vic_core_s_stream: Invalid parameters - sd=%p, ourISPdev=%p\n", sd, ourISPdev);
+    if (!sd || (unsigned long)sd >= 0xfffff001) {
+        pr_err("vic_core_s_stream: Invalid sd pointer\n");
         return -EINVAL;
     }
 
-    vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-    if (!vic_dev) {
+    /* OEM uses *(sd + 0xd4) as the VIC self-pointer; do not rely on the
+     * current C struct layout for this hot path.
+     */
+    vic_dev = vic_raw_self_from_sd(sd);
+    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
+        vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
+        if (vic_dev && (unsigned long)vic_dev < 0xfffff001) {
+            pr_warn("vic_core_s_stream: raw self missing, repairing from dev_priv=%p\n",
+                    vic_dev);
+            vic_raw_self_set(vic_dev);
+        }
+    }
+
+    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
         pr_err("vic_core_s_stream: Failed to get VIC device\n");
         return -EINVAL;
     }
 
-    /* REVERT: Ensure VIC registers are mapped to ORIGINAL working address */
-    vic_regs = vic_dev->vic_regs;
-    if (!vic_regs) {
-        pr_err("*** CRITICAL FIX: VIC registers not mapped - mapping now ***\n");
-        vic_regs = ioremap(0x133e0000, 0x10000);
-        if (!vic_regs) {
-            pr_err("vic_core_s_stream: Failed to map VIC registers at 0x133e0000\n");
-            return -ENOMEM;
-        }
-        vic_dev->vic_regs = vic_regs;
-        pr_info("*** VIC registers mapped successfully: %p ***\n", vic_regs);
+    current_state = vic_raw_state_get(vic_dev);
+    pr_info("*** vic_core_s_stream: current_state=%u (enable=%d) ***\n",
+            current_state, enable);
+
+    if (enable == 0) {
+        ret = 0;
+        if (current_state == 4)
+            vic_raw_state_set(vic_dev, 3);
+        return ret;
     }
 
-    /* Calculate base addresses safely */
-    isp_base = vic_regs - 0x9a00;  /* Correct ISP base calculation */
-    csi_base = isp_base + 0x10000;
+    if (current_state != 4) {
+        pr_info("*** vic_core_s_stream: Disabling VIC IRQ before start ***\n");
+        tx_vic_disable_irq(vic_dev);
 
-    pr_info("vic_core_s_stream: vic_regs=%p, isp_base=%p, csi_base=%p\n", vic_regs, isp_base, csi_base);
+        pr_info("*** vic_core_s_stream: Calling tx_isp_vic_start ***\n");
+        ret = tx_isp_vic_start(vic_dev);
+        pr_info("*** vic_core_s_stream: tx_isp_vic_start returned %d ***\n", ret);
 
-    if (sd != NULL) {
-        if ((unsigned long)sd >= 0xfffff001) {
-            pr_err("vic_core_s_stream: Invalid sd pointer\n");
-            return -EINVAL;
-        }
+        if (ret != 0)
+            return ret;
 
-        ret = -EINVAL;
+	        /* tx_isp_vic_start() now primes MDMA before the unlock wait. Keep the
+	         * older post-start kick only as a fallback when control never latched.
+	         */
+	        if (vic_dev->vic_regs && readl(vic_dev->vic_regs + 0x300) == 0) {
+	            vic_dev->stream_state = 0;
+	            pr_info("*** vic_core_s_stream: Forcing ispvic_frame_channel_qbuf before MDMA stream enable ***\n");
+	            {
+	                int qret = ispvic_frame_channel_qbuf(sd, NULL);
 
-        if (vic_dev != NULL && (unsigned long)vic_dev < 0xfffff001) {
-            int current_state = vic_dev->state;
-            pr_info("*** vic_core_s_stream: current_state=%d (enable=%d) ***\n", current_state, enable);
+	                if (qret != 0)
+	                    pr_warn("*** vic_core_s_stream: ispvic_frame_channel_qbuf returned %d (continuing) ***\n",
+	                            qret);
+	                else
+	                    pr_info("*** vic_core_s_stream: ispvic_frame_channel_qbuf completed ***\n");
+	            }
 
-            if (enable == 0) {
-                /* Stream OFF - Call slake to reset VIC state to 1 */
-                ret = 0;
-                if (current_state == 4) {
-                    vic_dev->state = 3;
-                    pr_info("vic_core_s_stream: Stream OFF - state 4 -> 3\n");
+	            pr_info("*** vic_core_s_stream: Calling ispvic_frame_channel_s_stream(ENABLE) before enabling VIC IRQ ***\n");
+	            ret = ispvic_frame_channel_s_stream(vic_dev, 1);
+	            if (ret != 0) {
+	                pr_err("*** vic_core_s_stream: ispvic_frame_channel_s_stream failed: %d ***\n",
+	                       ret);
+	                return ret;
+	            }
+	        } else {
+	            pr_info("*** vic_core_s_stream: skipping post-start MDMA kick; ctrl already primed (0x300=0x%x) ***\n",
+	                    vic_dev->vic_regs ? readl(vic_dev->vic_regs + 0x300) : 0);
+	        }
 
-                    /* CRITICAL FIX: Call ispcore_slake_module during stream-OFF to reset VIC state to 1 */
-                    /* This ensures that on the next stream-ON, ispcore_activate_module will run */
-                    extern int ispcore_slake_module(struct tx_isp_dev *isp_dev);
-                    extern struct tx_isp_dev *ourISPdev;
-                    if (ourISPdev) {
-                        pr_info("*** VIC STREAM OFF: Calling ispcore_slake_module to reset state to 1 ***\n");
-                        ispcore_slake_module(ourISPdev);
-                        pr_info("*** VIC STREAM OFF: ispcore_slake_module complete, VIC state should be 1 ***\n");
-                    }
-                }
-            } else {
-                /* Stream ON - Binary Ninja: if (state != 4) */
-                if (current_state != 4) {
-                    /* Binary Ninja: tx_vic_disable_irq() */
-                    pr_info("*** vic_core_s_stream: Disabling VIC IRQ before start ***\n");
-                    tx_vic_disable_irq(vic_dev);
+        vic_raw_state_set(vic_dev, 4);
 
-                    /* Binary Ninja: ret = tx_isp_vic_start(vic_dev) */
-                    pr_info("*** vic_core_s_stream: Calling tx_isp_vic_start ***\n");
-                    ret = tx_isp_vic_start(vic_dev);
-                    pr_info("*** vic_core_s_stream: tx_isp_vic_start returned %d ***\n", ret);
-
-                    /* REMOVED: ispcore_slake_module call moved to stream-OFF path */
-                    /* This allows VIC state to remain 1 after stream-OFF, so ispcore_activate_module runs on next stream-ON */
-
-                    /* Binary Ninja: state = 4 */
-                    vic_dev->state = 4;
-
-                    /* Binary Ninja: tx_vic_enable_irq() */
-                    pr_info("*** vic_core_s_stream: Enabling VIC IRQ after start ***\n");
-                    tx_vic_enable_irq(vic_dev);
-
-                    /* Binary Ninja: return ret */
-                    return ret;
-                }
-
-                /* OEM parity: if already streaming (state == 4), return success without reinitializing. */
-                pr_info("*** vic_core_s_stream: VIC already streaming (state 4) - OEM path returns success without reinit ***\n");
-                return 0;
-            }
-        }
+        pr_info("*** vic_core_s_stream: Enabling VIC IRQ after start ***\n");
+        tx_vic_enable_irq(vic_dev);
+        return ret;
     }
 
-    return ret;
+    return 0;
 }
 /* Cleanup function remains the same */
 
@@ -2352,6 +2854,45 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     /* Set platform driver data after successful init */
     platform_set_drvdata(pdev, vic_dev);
 
+    /* tx_isp_subdev_init() repopulates a large portion of the embedded subdev.
+     * Re-seed the OEM raw self slot and private-data pointer afterwards so the
+     * stream-on hot path sees the same layout assumptions as stock.
+     */
+    tx_isp_set_subdevdata(sd, vic_dev);
+    vic_raw_self_set(vic_dev);
+    {
+        void __iomem *seed_regs = vic_primary_regs_resolve(vic_dev);
+        u32 seed_width = vic_raw_width_get(vic_dev);
+        u32 seed_height = vic_raw_height_get(vic_dev);
+
+        if ((!seed_width || !seed_height) &&
+            vic_dev->sensor_attr.total_width && vic_dev->sensor_attr.total_height) {
+            seed_width = vic_dev->sensor_attr.total_width;
+            seed_height = vic_dev->sensor_attr.total_height;
+        }
+        if ((!seed_width || !seed_height) && ourISPdev &&
+            ourISPdev->sensor_width && ourISPdev->sensor_height) {
+            seed_width = ourISPdev->sensor_width;
+            seed_height = ourISPdev->sensor_height;
+        }
+        if (!seed_width || !seed_height) {
+            seed_width = 1920;
+            seed_height = 1080;
+        }
+
+        vic_dev->vic_regs = seed_regs;
+        vic_dev->width = seed_width;
+        vic_dev->height = seed_height;
+        vic_raw_regs_set(vic_dev, seed_regs);
+        vic_raw_dims_set(vic_dev, seed_width, seed_height);
+    }
+    vic_raw_sensor_attr_sync(vic_dev, &vic_dev->sensor_attr);
+    pr_info("*** tx_isp_vic_probe: Re-seeded raw self/dev_priv after subdev init (raw_self=%p dev_priv=%p) ***\n",
+            vic_raw_self_from_sd(sd), tx_isp_get_subdevdata(sd));
+    pr_info("*** tx_isp_vic_probe: Re-seeded OEM VIC slots regs=%p dims=%ux%u raw_attr=%p ***\n",
+            vic_raw_regs_get(vic_dev), vic_raw_width_get(vic_dev),
+            vic_raw_height_get(vic_dev), vic_raw_sensor_attr_get(vic_dev));
+
     /* CRITICAL FIX: DO NOT overwrite sd->ops here!
      * sd->ops was correctly set by tx_isp_subdev_init() to &vic_subdev_ops
      * which contains the core->init function pointer needed for initialization.
@@ -2377,28 +2918,25 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         return ret;
     }
 
-    vic_dev->state = 2;
+    vic_raw_state_set(vic_dev, 2);
     pr_info("*** tx_isp_vic_probe: VIC hardware init complete, state -> %d ***\n",
-            vic_dev->state);
+            vic_raw_state_get(vic_dev));
 
     /* Store global reference (binary uses 'dump_vsd' global) */
     dump_vsd = vic_dev;
-    vic_dev->irq = 38;
-    vic_dev->irq_number = 38;
-    vic_dev->irq_enabled = 0;
-    vic_dev->hw_irq_enabled = 0;
-    vic_dev->sd.irq_info.irq = 38;
-    vic_dev->sd.irq_info.handler = NULL;
-    vic_dev->sd.irq_info.data = vic_dev;
+    vic_dev->irq = vic_resolve_irq_number(vic_dev);
+    vic_dev->irq_number = vic_dev->irq;
+    vic_raw_irq_flag_set(vic_dev, 0);
+    vic_raw_irq_slot_seed(vic_dev, vic_dev->irq);
 
     /* Set test_addr to point to sensor_attr or appropriate member */
     /* Binary points to offset 0x80 in the structure */
-    test_addr = &vic_dev->sensor_attr;  /* Or another member around offset 0x80 */
+    test_addr = (char *)vic_dev + VIC_RAW_IRQ_SLOT_OFFSET;
 
     pr_info("*** tx_isp_vic_probe: VIC device initialized successfully ***\n");
     pr_info("VIC device: vic_dev=%p, size=%zu\n", vic_dev, sizeof(struct tx_isp_vic_device));
     pr_info("  sd: %p\n", sd);
-    pr_info("  state: %d\n", vic_dev->state);
+    pr_info("  state: %u\n", vic_raw_state_get(vic_dev));
     pr_info("  test_addr: %p\n", test_addr);
 
     return 0;

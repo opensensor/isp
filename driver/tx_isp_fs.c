@@ -26,9 +26,18 @@
 struct tx_isp_fs_device *dump_fsd = NULL;  /* Global FS device pointer */
 extern struct tx_isp_dev *ourISPdev;
 
+struct fs_platform_data {
+    int num_channels;
+    struct {
+        int enabled;
+        char name[16];
+        int index;
+    } channels[4];
+};
+
 
 /* Forward declarations */
-static int frame_chan_event(void *data);
+static int frame_chan_event(void *priv, u32 event, void *data);
 int fs_slake_module(struct tx_isp_subdev *sd);
 
 /* fs_slake_module - EXACT Binary Ninja reference implementation */
@@ -231,9 +240,17 @@ static const struct file_operations fs_channel_ops = {
 };
 
 /* Frame channel event handler - EXACT Binary Ninja implementation */
-static int frame_chan_event(void *data)
+static int frame_chan_event(void *priv, u32 event, void *data)
 {
-    struct tx_isp_frame_channel *chan = (struct tx_isp_frame_channel *)data;
+    struct tx_isp_channel_config *dispatch = priv;
+    struct tx_isp_frame_channel *chan;
+
+    if (event != 0x3000006)
+        return 0;
+
+    chan = dispatch ? (struct tx_isp_frame_channel *)dispatch->event_priv : NULL;
+    if (!chan)
+        chan = (struct tx_isp_frame_channel *)data;
 
     if (!chan) {
         pr_err("frame_chan_event: NULL channel data\n");
@@ -301,8 +318,21 @@ int tx_isp_fs_probe(struct platform_device *pdev)
         return -ENOMEM;
     }
 
-    /* Binary Ninja: uint32_t $a0_2 = zx.d(*($v0 + 0xc8)) */
-    channel_count = fs_dev->channel_count;  /* Get channel count from offset 0xc8 */
+    /* Seed channel count from platform configuration instead of the zeroed fs_dev. */
+    if (pdata) {
+        struct fs_platform_data *fs_pdata = (struct fs_platform_data *)pdata;
+        channel_count = fs_pdata->num_channels;
+    } else if (num_channels > 0) {
+        channel_count = num_channels;
+    } else {
+        channel_count = 4;
+    }
+
+    if (channel_count > 4)
+        channel_count = 4;
+
+    fs_dev->channel_count = channel_count;
+    pr_info("tx_isp_fs_probe: using channel_count=%u\n", channel_count);
 
     /* Binary Ninja: *($v0 + 0xe0) = $a0_2 */
     fs_dev->initialized = channel_count;  /* Store channel count at offset 0xe0 */
@@ -385,9 +415,11 @@ int tx_isp_fs_probe(struct platform_device *pdev)
             /* Binary Ninja: private_init_waitqueue_head(&$s0_2[0x8a]) */
             init_waitqueue_head(&current_channel->wait);
 
-            /* SAFE: Set up event callback using proper struct member access */
-            /* Binary Ninja: *($s6_1 + 0x1c) = frame_chan_event */
+            channel_config->channel_id = i;
+            channel_config->enabled = 1;
+            channel_config->state = 3;
             channel_config->event_handler = frame_chan_event;
+            channel_config->event_priv = current_channel;
 
             /* Binary Ninja: $s0_2[0xb4] = 1 */
             current_channel->state = 1;  /* Active state */
@@ -432,6 +464,9 @@ setup_complete:
 
     /* Binary Ninja: dump_fsd = $v0 */
     dump_fsd = fs_dev;
+
+    if (ourISPdev)
+        tx_isp_core_bind_event_dispatch_tables(ourISPdev);
 
     /* *** REMOVED MANUAL LINKING - Now handled by tx_isp_subdev_auto_link() *** */
     pr_info("*** FS PROBE: Device linking handled automatically by tx_isp_subdev_auto_link() ***\n");

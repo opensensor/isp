@@ -717,8 +717,8 @@ static struct resource tx_isp_vic_resources[] = {
         .flags = IORESOURCE_MEM,
     },
     [1] = {
-        .start = 37,                   /* T31 VIC IRQ 37 - MATCHES STOCK DRIVER isp-m0 */
-        .end   = 37,
+        .start = 38,                   /* T31 VIC IRQ 38 - isp-w02 shared VIC line */
+        .end   = 38,
         .flags = IORESOURCE_IRQ,
     },
 };
@@ -729,12 +729,19 @@ static struct tx_isp_device_clk vic_clks[] = {
     {"isp", 0xffff},         /* Auto-rate ISP clock */
 };
 
+static struct tx_isp_pad_descriptor vic_pads[] = {
+    { 0x01, 0x00 }, /* input  from isp-w01 */
+    { 0x02, 0x00 }, /* output to isp-w00 */
+};
+
 /* VIC platform data - CRITICAL for tx_isp_subdev_init to work */
 static struct tx_isp_subdev_platform_data vic_pdata = {
     .interface_type = 1,  /* VIC interface */
     .clk_num = 2,         /* Number of clocks needed */
     .sensor_type = 0,     /* Default sensor type */
     .clks = vic_clks,     /* CRITICAL: Clock configuration array - Binary Ninja: *($s1_1 + 8) */
+    .pads_num = ARRAY_SIZE(vic_pads),
+    .pads = vic_pads,
 };
 
 struct platform_device tx_isp_vic_platform_device = {
@@ -766,12 +773,31 @@ static struct tx_isp_device_clk csi_clks[] = {
     {"csi", 0xffff},  /* csi clock */
 };
 
+static struct tx_isp_pad_descriptor csi_pads[] = {
+    { 0x02, 0x00 }, /* output to isp-w02 */
+};
+
 /* CSI platform data - CRITICAL for tx_isp_subdev_init to work */
 static struct tx_isp_subdev_platform_data csi_pdata = {
     .interface_type = 1,  /* MIPI interface */
     .clk_num = 1,         /* Number of clocks needed */
     .sensor_type = 0,     /* Default sensor type */
     .clks = csi_clks,     /* CRITICAL: Clock configuration array - Binary Ninja: *($s1_1 + 8) */
+    .pads_num = ARRAY_SIZE(csi_pads),
+    .pads = csi_pads,
+};
+
+static struct tx_isp_pad_descriptor vin_pads[] = {
+    { 0x01, 0x00 }, /* input from isp-w02 */
+};
+
+static struct tx_isp_subdev_platform_data vin_pdata = {
+    .interface_type = 1,
+    .clk_num = 0,
+    .sensor_type = 0,
+    .clks = NULL,
+    .pads_num = ARRAY_SIZE(vin_pads),
+    .pads = vin_pads,
 };
 
 struct platform_device tx_isp_csi_platform_device = {
@@ -803,6 +829,9 @@ struct platform_device tx_isp_vin_platform_device = {
     .id = -1,
     .num_resources = ARRAY_SIZE(tx_isp_vin_resources),
     .resource = tx_isp_vin_resources,
+    .dev = {
+        .platform_data = &vin_pdata,
+    },
 };
 
 /* Frame Source platform device resources - CORRECTED IRQ */
@@ -907,8 +936,9 @@ extern struct tx_isp_subdev_ops csi_subdev_ops;
 /* Reference driver function declarations - Binary Ninja exact names */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);  /* FIXED: Correct signature to match tx_isp_vic.c */
 int csi_video_s_stream(struct tx_isp_subdev *sd, int enable);       /* Real CSI streaming (in tx_isp_csi.c) */
-int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable);
+extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev);
+static void tx_vic_seed_irq_slots(struct tx_isp_vic_device *vic_dev, int irq);
 static int ispvic_frame_channel_qbuf(struct tx_isp_vic_device *vic_dev, void *buffer);
 static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id);
 int private_reset_tx_isp_module(int arg);
@@ -1762,6 +1792,8 @@ int frame_channel_open(struct inode *inode, struct file *file)
 
     if (!fcd->vic_subdev && ourISPdev && ourISPdev->vic_dev)
         fcd->vic_subdev = &((struct tx_isp_vic_device *)ourISPdev->vic_dev)->sd;
+    if (!fcd->vic_subdev && ourISPdev && fcd->channel_num < ISP_MAX_CHAN)
+        fcd->vic_subdev = &ourISPdev->channels[fcd->channel_num].subdev;
 
     /* Initialize channel state - safe to call multiple times in kernel 3.10 */
     /* Initialize queueing primitives for completed/queued buffers */
@@ -1867,6 +1899,45 @@ static const struct file_operations frame_channel_fops = {
     .compat_ioctl = frame_channel_unlocked_ioctl,
 };
 
+/* OEM subdev layout used by find_subdev_link_pad() in the stock binary. */
+#define OEM_SUBDEV_NAME_OFFSET         0x08
+#define OEM_SUBDEV_NUM_INPADS_OFFSET   0xc8
+#define OEM_SUBDEV_NUM_OUTPADS_OFFSET  0xca
+#define OEM_SUBDEV_INPADS_OFFSET       0xcc
+#define OEM_SUBDEV_OUTPADS_OFFSET      0xd0
+#define OEM_SUBDEV_PAD_STRIDE          0x24
+
+static inline const char *subdev_raw_name_get(struct tx_isp_subdev *sd)
+{
+    return *(const char **)((char *)sd + OEM_SUBDEV_NAME_OFFSET);
+}
+
+static inline u8 subdev_raw_num_inpads_get(struct tx_isp_subdev *sd)
+{
+    return *(u8 *)((char *)sd + OEM_SUBDEV_NUM_INPADS_OFFSET);
+}
+
+static inline u8 subdev_raw_num_outpads_get(struct tx_isp_subdev *sd)
+{
+    return *(u8 *)((char *)sd + OEM_SUBDEV_NUM_OUTPADS_OFFSET);
+}
+
+static inline struct tx_isp_subdev_pad *subdev_raw_inpads_get(struct tx_isp_subdev *sd)
+{
+    return *(struct tx_isp_subdev_pad **)((char *)sd + OEM_SUBDEV_INPADS_OFFSET);
+}
+
+static inline struct tx_isp_subdev_pad *subdev_raw_outpads_get(struct tx_isp_subdev *sd)
+{
+    return *(struct tx_isp_subdev_pad **)((char *)sd + OEM_SUBDEV_OUTPADS_OFFSET);
+}
+
+static inline struct tx_isp_subdev_pad *subdev_raw_pad_at(struct tx_isp_subdev_pad *pads,
+                                                          unsigned int index)
+{
+    return (struct tx_isp_subdev_pad *)((char *)pads + (index * OEM_SUBDEV_PAD_STRIDE));
+}
+
 /* OEM-matching: find a pad by entity name, pad type and index.
  * Note: OEM mapping uses type==1 for OUTPUT, type==2 for INPUT.
  */
@@ -1880,11 +1951,18 @@ static struct tx_isp_subdev_pad* find_subdev_link_pad(struct tx_isp_dev *isp_dev
     for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
         struct tx_isp_subdev *sd = isp_dev->subdevs[i];
         const char *sname;
+        struct tx_isp_subdev_pad *pads;
+        u8 pad_count;
+
         if (!sd)
             continue;
 
-        /* Prefer module->name; fall back to miscdev.name or device name */
-        sname = sd->module.name ? sd->module.name :
+        /* OEM compares against the raw name pointer at +0x8. Fall back to the
+         * drifted named members only if that slot is NULL.
+         */
+        sname = subdev_raw_name_get(sd);
+        if (!sname)
+            sname = sd->module.name ? sd->module.name :
                 (sd->module.miscdev.name ? sd->module.miscdev.name :
                  (sd->dev && sd->dev->kobj.name ? sd->dev->kobj.name : NULL));
         if (!sname)
@@ -1893,16 +1971,20 @@ static struct tx_isp_subdev_pad* find_subdev_link_pad(struct tx_isp_dev *isp_dev
         if (strcmp(sname, desc->name) == 0) {
             /* Type 1 = OUTPUT pads (OEM), Type 2 = INPUT pads */
             if (desc->type == 1) {
-                if (sd->outpads && desc->index < sd->num_outpads)
-                    return &sd->outpads[desc->index];
-                pr_warn("find_subdev_link_pad: outpad index %u out of range for %s (num_outpads=%u)\n",
-                        desc->index, sname, sd->num_outpads);
+                pads = subdev_raw_outpads_get(sd);
+                pad_count = subdev_raw_num_outpads_get(sd);
+                if (pads && desc->index < pad_count)
+                    return subdev_raw_pad_at(pads, desc->index);
+                pr_warn("find_subdev_link_pad: outpad index %u out of range for %s (raw_outpads=%p raw_num_outpads=%u)\n",
+                        desc->index, sname, pads, pad_count);
                 return NULL;
             } else if (desc->type == 2) {
-                if (sd->inpads && desc->index < sd->num_inpads)
-                    return &sd->inpads[desc->index];
-                pr_warn("find_subdev_link_pad: inpad index %u out of range for %s (num_inpads=%u)\n",
-                        desc->index, sname, sd->num_inpads);
+                pads = subdev_raw_inpads_get(sd);
+                pad_count = subdev_raw_num_inpads_get(sd);
+                if (pads && desc->index < pad_count)
+                    return subdev_raw_pad_at(pads, desc->index);
+                pr_warn("find_subdev_link_pad: inpad index %u out of range for %s (raw_inpads=%p raw_num_inpads=%u)\n",
+                        desc->index, sname, pads, pad_count);
                 return NULL;
             } else {
                 pr_warn("find_subdev_link_pad: unknown pad type %u for %s\n", desc->type, sname);
@@ -2091,24 +2173,21 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     pr_info("*** CSI BASIC REGISTERS MAPPED: 0x10022000 -> %p ***\n", csi_basic_regs);
 
     /*
-     * +0x13c is used later as the CSI wrapper/config register pointer.
-     * Keep it on ISP core space when available; otherwise leave it empty and
-     * let tx_isp_csi_probe/csi_get_wrapper_regs populate it after core_regs
-     * has been mapped.
+     * Real firmware tx_isp_csi_probe() places +0x13c on its own ioremap of
+     * the 0x10022000 CSI register window rather than aliasing ISP core_regs.
      */
-    if (isp_dev->core_regs)
-        isp_csi_regs = isp_dev->core_regs;
-    else
-        isp_csi_regs = NULL;
+    isp_csi_regs = ioremap(0x10022000, 0x1000);
+    if (!isp_csi_regs)
+        pr_warn("csi_device_probe: failed to create dedicated +0x13c CSI mapping, will defer/fallback\n");
     pr_info("*** CSI +0x13c SLOT INITIALIZED: %p%s ***\n",
             isp_csi_regs,
-            isp_csi_regs ? " [core_regs]" : " [deferred]");
+            isp_csi_regs ? " [0x10022000 mirror]" : " [deferred]");
 
     /* Binary Ninja: Store register addresses at correct offsets */
     /* *($v0 + 0xb8) = csi_basic_regs (basic CSI control) */
     csi_dev->csi_regs = csi_basic_regs;
 
-    /* Store the BN +0x13c slot as wrapper/config space (or defer until core probe) */
+    /* Store the BN +0x13c slot exactly as a dedicated CSI-register mapping. */
     *((void**)((char*)csi_dev + 0x13c)) = isp_csi_regs;
 
     /* Binary Ninja: *($v0 + 0x138) = $v0_3 (memory resource) */
@@ -2129,7 +2208,7 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     pr_info("  Size: 0x148 bytes\n");
     pr_info("  Basic regs (+0xb8): %p (0x10022000)\n", csi_basic_regs);
     pr_info("  CSI slot (+0x13c): %p%s\n", isp_csi_regs,
-            isp_csi_regs ? " [core_regs]" : " [deferred]");
+            isp_csi_regs ? " [0x10022000 mirror]" : " [deferred]");
     pr_info("  State (+0x128): %d\n", csi_dev->state);
 
     /* *** CRITICAL FIX: LINK CSI DEVICE TO ISP DEVICE *** */
@@ -2357,9 +2436,9 @@ int tx_isp_request_irq2(struct platform_device *pdev, struct tx_isp_dev *isp_dev
         isp_dev->irq_disable_func = tx_isp_disable_irq; /* arg2[2] = tx_isp_disable_irq */
 
         /* Binary Ninja: tx_isp_disable_irq(arg2) */
-        //tx_isp_disable_irq(isp_dev);
+        tx_isp_disable_irq(isp_dev);
 
-        pr_info("*** tx_isp_request_irq: IRQ %d registered and stored in isp_dev->isp_irq ***\n", irq_num);
+        pr_info("*** tx_isp_request_irq: IRQ %d registered, stored, and left disabled until stream enable ***\n", irq_num);
 
     } else {
         /* Binary Ninja: *arg2 = 0 */
@@ -2401,7 +2480,6 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     struct tx_isp_vic_device *vic_dev;
     void __iomem *vic_regs;
     u32 v1_7, v1_10;
-    uint32_t *vic_irq_enable_flag;
     u32 addr_ctl;
     u32 reg_val;
     int timeout;
@@ -2419,9 +2497,6 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     vic_regs = isp_dev->vic_regs ? isp_dev->vic_regs : vic_dev->vic_regs;
     if (!vic_regs)
         return IRQ_HANDLED;
-
-    /* Get VIC interrupt enable flag at offset +0x13c */
-    vic_irq_enable_flag = (uint32_t*)((char*)vic_dev + 0x13c);
 
     /* Binary Ninja: int32_t $v1_7 = not.d(*($v0_4 + 0x1e8)) & *($v0_4 + 0x1e0) */
     /* Binary Ninja: int32_t $v1_10 = not.d(*($v0_4 + 0x1ec)) & *($v0_4 + 0x1e4) */
@@ -2571,7 +2646,7 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
         }
 
         /* Binary Ninja: Error recovery sequence - focus on prevention, not recovery */
-        if ((v1_7 & 0xde00) != 0 && *vic_irq_enable_flag == 1) {
+        if ((v1_7 & 0xde00) != 0 && vic_dev->hw_irq_enabled != 0) {
             pr_info("*** VIC ERROR RECOVERY: Detected error condition 0x%x (control limit errors should be prevented by proper config) ***\n", v1_7);
             pr_err("error handler!!!\n");
 
@@ -2622,18 +2697,11 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 static int subdev_video_destroy_link(struct tx_isp_subdev_pad *src,
                                      struct tx_isp_subdev_pad *dst)
 {
-    int ret_local = 0, ret_remote = 0;
-
     if (!src || !dst)
         return -EINVAL;
 
-    /* Inform subdevs via link_setup callback if available */
-    if (src->sd && src->sd->ops && src->sd->ops->video && src->sd->ops->video->link_setup)
-        ret_local = src->sd->ops->video->link_setup(src, dst, 0);
-    if (dst->sd && dst->sd->ops && dst->sd->ops->video && dst->sd->ops->video->link_setup)
-        ret_remote = dst->sd->ops->video->link_setup(dst, src, 0);
-
-    /* Clear linkage state on both pads */
+    /* OEM behavior: tear down the software link graph in-place without
+     * invoking subdev callbacks during destroy. */
     src->link.sink = NULL;
     src->link.reverse = NULL;
     src->link.flag = 0;
@@ -2646,34 +2714,47 @@ static int subdev_video_destroy_link(struct tx_isp_subdev_pad *src,
     dst->link.state = TX_ISP_PADSTATE_FREE;
     dst->state = TX_ISP_PADSTATE_FREE;
 
-    /* Prefer first non-zero error if any callback rejected */
-    if (ret_local)
-        return ret_local;
-    if (ret_remote)
-        return ret_remote;
     return 0;
 }
+
+/* OEM video-link destroy walks a static config table selected by active_link
+ * rather than a dynamic pointer stored in the device. */
+static struct tx_isp_link_config oem_video_link_configs[][2] = {
+    {
+        { {"isp-w01", 1, 0}, {"isp-w02", 2, 0}, TX_ISP_LINKFLAG_ENABLED },
+        { {"isp-w02", 1, 0}, {"isp-w00", 2, 0}, TX_ISP_LINKFLAG_ENABLED },
+    },
+    {
+        { {"isp-w01", 1, 0}, {"isp-w00", 2, 0}, TX_ISP_LINKFLAG_ENABLED },
+        { {"isp-w00", 1, 0}, {"isp-w02", 2, 0}, TX_ISP_LINKFLAG_ENABLED },
+    },
+};
+
+static int oem_video_link_config_counts[] = { 2, 2 };
 
 /* Reference: tx_isp_video_link_destroy.isra.5
  * Walk all subdevs and destroy any active links; set active_link to -1. */
 static int tx_isp_video_link_destroy_impl(struct tx_isp_dev *isp_dev)
 {
-    const struct tx_isp_link_configs *cfgs;
-    unsigned int i;
+    int active_link;
+    int i;
+    int ret = 0;
 
     if (!isp_dev)
         return -EINVAL;
 
-    cfgs = isp_dev->link_configs;
-    if (!cfgs || !cfgs->config || cfgs->length == 0) {
-        pr_info("Video link destroy: no configured links (link_configs is NULL), skipping pad iteration\n");
+    active_link = isp_dev->active_link;
+    if (active_link < 0 || active_link >= ARRAY_SIZE(oem_video_link_configs)) {
+        pr_info("Video link destroy: no active OEM config (active_link=%d), skipping pad iteration\n",
+                active_link);
         goto reset_state;
     }
 
-    pr_info("Video link destroy: destroying %u configured link(s)\n", cfgs->length);
+    pr_info("Video link destroy: active_link=%d destroying %d configured link(s)\n",
+            active_link, oem_video_link_config_counts[active_link]);
 
-    for (i = 0; i < cfgs->length; i++) {
-        const struct tx_isp_link_config *lc = &cfgs->config[i];
+    for (i = 0; i < oem_video_link_config_counts[active_link]; i++) {
+        const struct tx_isp_link_config *lc = &oem_video_link_configs[active_link][i];
         struct tx_isp_subdev_pad *src_pad;
         struct tx_isp_subdev_pad *dst_pad;
 
@@ -2697,7 +2778,9 @@ static int tx_isp_video_link_destroy_impl(struct tx_isp_dev *isp_dev)
                 (dst_pad->sd && dst_pad->sd->module.name) ? dst_pad->sd->module.name : "(dst)",
                 dst_pad->index);
 
-        subdev_video_destroy_link(src_pad, dst_pad);
+        ret = subdev_video_destroy_link(src_pad, dst_pad);
+        if (ret && ret != -ENOTCONN)
+            break;
     }
 
 reset_state:
@@ -2705,7 +2788,7 @@ reset_state:
     isp_dev->active_link = -1;
     isp_dev->links_enabled = false;
 
-    return 0;
+    return ret;
 }
 
 /* NOTE: ispcore_slake_module should be called AFTER init, not before
@@ -2768,7 +2851,6 @@ static void isp_brutal_cpm_open_all(void)
 static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
 {
     struct tx_isp_subdev **subdevs_ptr;    /* $s4 in reference: arg1 + 0x38 */
-    struct tx_isp_sensor *sensor;
     int i;
     int result;
 
@@ -2777,106 +2859,6 @@ static int tx_isp_video_link_stream(struct tx_isp_dev *isp_dev, int enable)
     if (!isp_dev) {
         pr_err("tx_isp_video_link_stream: Invalid ISP device\n");
         return -EINVAL;
-    }
-
-    /* NOTE: ispcore_slake_module is NOT called during normal operation
-     * The ON → OFF → ON cycle appears to be about SOFTWARE state transitions,
-     * not actually tearing down and rebuilding hardware.
-     *
-     * Calling slake breaks the interrupt chain by disabling clocks and
-     * resetting hardware state that doesn't get properly re-initialized.
-     *
-     * The "clock strobe" effect we're looking for might just be the normal
-     * init sequence running twice, not an actual teardown/rebuild.
-     */
-
-    /* CRITICAL: Initialize sensor BEFORE starting subdev streaming.
-     * The older working path programmed sensor registers here before the
-     * rest of the pipeline moved forward.
-     */
-    if (enable && isp_dev->sensor) {
-        sensor = isp_dev->sensor;
-
-        pr_info("*** tx_isp_video_link_stream: INITIALIZING SENSOR BEFORE STREAMING ***\n");
-        pr_info("*** Found sensor %s for streaming ***\n",
-                sensor->info.name[0] ? sensor->info.name : "(unnamed)");
-
-        if (sensor->sd.ops && sensor->sd.ops->core && sensor->sd.ops->core->init) {
-            pr_info("*** CALLING SENSOR_INIT - WRITING INITIALIZATION REGISTERS ***\n");
-            result = sensor->sd.ops->core->init(&sensor->sd, 1);
-            if (result) {
-                pr_err("SENSOR_INIT FAILED: %d\n", result);
-                return result;
-            }
-
-            pr_info("*** SENSOR_INIT SUCCESS - SENSOR REGISTERS PROGRAMMED ***\n");
-            pr_info("*** SENSOR ATTRIBUTES SHOULD NOW BE SYNCED TO VIC ***\n");
-        } else {
-            pr_err("*** NO SENSOR_INIT FUNCTION AVAILABLE! ***\n");
-        }
-    }
-
-    if (enable) {
-        struct tx_isp_vic_device *vic_dev = isp_dev->vic_dev;
-        struct tx_isp_subdev *csi_sd = tx_isp_get_csi_subdev(isp_dev);
-        struct tx_isp_subdev *core_sd = tx_isp_get_core_subdev(isp_dev);
-
-        pr_info("*** tx_isp_video_link_stream: OEM-aligned pre-link checks ***\n");
-
-        if (vic_dev && vic_dev->state != 2) {
-            if (vic_dev->state != 1) {
-                pr_info("*** tx_isp_video_link_stream: Forcing VIC state %d -> 1 before ispcore_activate_module ***\n",
-                        vic_dev->state);
-                vic_dev->state = 1;
-                isp_dev->state = 1;
-            }
-
-            pr_info("*** tx_isp_video_link_stream: VIC state=%d, calling ispcore_activate_module ***\n",
-                    vic_dev->state);
-            result = ispcore_activate_module(isp_dev);
-            if (result != 0) {
-                pr_err("tx_isp_video_link_stream: ispcore_activate_module failed: %d\n", result);
-                return result;
-            }
-        }
-
-        if (core_sd && vic_dev && vic_dev->state >= 2 &&
-            core_sd->ops && core_sd->ops->core && core_sd->ops->core->init) {
-            pr_info("*** tx_isp_video_link_stream: OEM-aligned Core init from VIC state %d before link_stream ***\n",
-                    vic_dev->state);
-            result = core_sd->ops->core->init(core_sd, 1);
-            if (result != 0 && result != -ENOIOCTLCMD) {
-                pr_err("tx_isp_video_link_stream: Core init failed: %d\n", result);
-                return result;
-            }
-        }
-
-        if (csi_sd) {
-            struct tx_isp_csi_device *csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(csi_sd);
-
-            if (csi_dev && csi_dev->state < 2) {
-                pr_info("*** tx_isp_video_link_stream: Activating CSI subdev (state %d -> 2) ***\n",
-                        csi_dev->state);
-                tx_isp_csi_activate_subdev(csi_sd);
-            }
-
-            if (csi_dev && csi_dev->state >= 2 &&
-                csi_sd->ops && csi_sd->ops->core && csi_sd->ops->core->init) {
-                pr_info("*** tx_isp_video_link_stream: Initializing CSI subdev from state %d after OEM core init ***\n",
-                        csi_dev->state);
-                result = csi_sd->ops->core->init(csi_sd, 1);
-                if (result != 0 && result != -ENOIOCTLCMD) {
-                    pr_err("tx_isp_video_link_stream: CSI init failed: %d\n", result);
-                    return result;
-                }
-            }
-        }
-
-        if (vic_dev && vic_dev->state < 3) {
-            pr_err("tx_isp_video_link_stream: VIC state %d < 3, not ready for link_stream\n",
-                   vic_dev->state);
-            return -EINVAL;
-        }
     }
 
     /* Binary Ninja: int32_t* $s4 = arg1 + 0x38 */
@@ -3151,34 +3133,8 @@ int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable)
     struct tx_isp_subdev **s4;
     int i;
     int result;
-    int sync_ret;
 
     pr_info("*** tx_isp_video_s_stream: EXACT Binary Ninja reference implementation - enable=%d ***\n", enable);
-
-    if (enable && dev && dev->sensor && dev->sensor->video.attr) {
-        sync_ret = tx_isp_sync_sensor_attr(dev, dev->sensor->video.attr);
-        if (sync_ret) {
-            pr_warn("*** tx_isp_video_s_stream: sensor attr pre-sync returned %d ***\n",
-                    sync_ret);
-        }
-    }
-
-    /* Debug: Show current subdev array status using helper function */
-    tx_isp_debug_print_subdevs(dev);
-
-    /*
-     * Plain VIDIOC_STREAMON currently walks the raw subdev array as
-     * CSI -> VIC, but the live T31 bring-up notes require VIC -> CSI -> Sensor
-     * for CSI BASIC to come alive before VIC unlock.
-     *
-     * Reuse the existing ordered core orchestrator for stream-on instead of
-     * duplicating another custom walk here. Keep stream-off on the legacy path
-     * for now so this change stays narrowly focused on the unlock failure.
-     */
-    if (enable && dev) {
-        pr_info("*** tx_isp_video_s_stream: delegating STREAMON to ispcore_video_s_stream for ordered VIC->CSI->Sensor sequencing ***\n");
-        return ispcore_video_s_stream(&dev->sd, enable);
-    }
 
     /* Binary Ninja: int32_t* $s4 = dev + 0x38 */
     s4 = dev->subdevs;
@@ -3537,9 +3493,9 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             fcd->buffer_type = reqbuf.type;
             fcd->streaming_flags = 0;
 
-            /* Notify VIC of buffer allocation via 0x3000008 (REQBUFS event) */
-            if (ourISPdev && ourISPdev->vic_dev) {
-                struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+            /* Notify remote handler of buffer allocation via 0x3000008 */
+            if (fcd->vic_subdev) {
+                struct tx_isp_subdev *remote_sd = (struct tx_isp_subdev *)fcd->vic_subdev;
                 struct { int32_t channel_id; int32_t buffer_count; } event_data = {
                     .channel_id = channel,
                     .buffer_count = reqbuf.count
@@ -3547,9 +3503,9 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                 pr_info("*** REQBUFS: Channel %d sending 0x3000008 with buffer_count=%d ***\n",
                         channel, reqbuf.count);
                 {
-                    int er = tx_isp_send_event_to_remote(&vic_dev->sd, 0x3000008, &event_data);
+                    int er = tx_isp_send_event_to_remote(remote_sd, 0x3000008, &event_data);
                     if (er == 0) {
-                        pr_info("*** REQBUFS: VIC 0x3000008 SUCCESS ***\n");
+                        pr_info("*** REQBUFS: 0x3000008 SUCCESS ***\n");
                     } else if (er == 0xfffffdfd) {
                         pr_info("*** REQBUFS: 0x3000008 has no callback (ignored) ***\n");
                     } else {
@@ -3668,8 +3624,9 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
 
         /* Do not wake DQBUF on QBUF; OEM wakes on FRAME_DQBUF event */
-        /* Enqueue buffer into VIC ring via BUFFER_ENQUEUE (0x3000005) */
-        if (ourISPdev && ourISPdev->vic_dev) {
+        /* Enqueue buffer via BUFFER_ENQUEUE (0x3000005) */
+        if (fcd->vic_subdev && ourISPdev && ourISPdev->vic_dev) {
+            struct tx_isp_subdev *remote_sd = (struct tx_isp_subdev *)fcd->vic_subdev;
             struct tx_isp_vic_device *vic_dev_buf = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
             struct vic_buffer_entry node;
             memset(&node, 0, sizeof(node));
@@ -3684,11 +3641,11 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             pr_info("*** Channel %d: QBUF - Enqueue via 0x3000005 phys=0x%x idx=%u ***\n",
                     channel, buffer_phys_addr, node.buffer_index);
             {
-                int event_result = tx_isp_send_event_to_remote(&vic_dev_buf->sd, 0x3000005, &node);
+                int event_result = tx_isp_send_event_to_remote(remote_sd, 0x3000005, &node);
                 if (event_result == 0) {
                     pr_info("*** Channel %d: BUFFER_ENQUEUE SUCCESS ***\n", channel);
                 } else if (event_result == 0xfffffdfd) {
-                    pr_info("*** Channel %d: BUFFER_ENQUEUE - No VIC callback ***\n", channel);
+                    pr_info("*** Channel %d: BUFFER_ENQUEUE - No callback ***\n", channel);
                 } else {
                     pr_warn("*** Channel %d: BUFFER_ENQUEUE returned: 0x%x ***\n", channel, event_result);
                 }
@@ -4241,9 +4198,11 @@ static int create_frame_channel_devices(void)
         frame_channels[i].field = 1;        /* V4L2_FIELD_NONE */
         memset(frame_channels[i].buffer_array, 0, sizeof(frame_channels[i].buffer_array));
 
-        /* Set VIC subdev reference if available */
+        /* Set remote event target for per-channel dispatch */
         if (ourISPdev && ourISPdev->vic_dev) {
             frame_channels[i].vic_subdev = &((struct tx_isp_vic_device *)ourISPdev->vic_dev)->sd;
+        } else if (ourISPdev && i < ISP_MAX_CHAN) {
+            frame_channels[i].vic_subdev = &ourISPdev->channels[i].subdev;
         } else {
             frame_channels[i].vic_subdev = NULL;
         }
@@ -4645,6 +4604,14 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
                         strncpy(ourISPdev->sensor_name, sensor_name,
                                 sizeof(ourISPdev->sensor_name) - 1);
                         ourISPdev->sensor_name[sizeof(ourISPdev->sensor_name) - 1] = '\0';
+
+                        if (sensor->video.attr) {
+                            int sync_ret = tx_isp_sync_sensor_attr(ourISPdev, sensor->video.attr);
+
+                            if (sync_ret)
+                                pr_warn("*** FALLBACK SENSOR ATTACH: initial attr sync returned %d ***\n",
+                                        sync_ret);
+                        }
 
                         if (reg_sensor) {
                             reg_sensor->subdev = &sensor->sd;
@@ -5103,6 +5070,9 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         pr_info("TX_ISP_VIDEO_LINK_SETUP: config=%d\n", link_config);
 
+        isp_dev->active_link = link_config;
+        isp_dev->links_enabled = true;
+
         ispcore_link_setup(isp_dev, link_config);
 
         return 0;
@@ -5392,6 +5362,7 @@ static int tx_isp_init(void)
     spin_lock_init(&ourISPdev->lock);
     ourISPdev->refcnt = 0;
     ourISPdev->is_open = false;
+    ourISPdev->active_link = -1;
 
     /* Initialize frame generation work queue */
     INIT_DELAYED_WORK(&vic_frame_work, vic_frame_work_function);
@@ -5530,11 +5501,11 @@ static int tx_isp_init(void)
 
     ret = platform_device_register(&tx_isp_vic_platform_device);
     if (ret) {
-        pr_err("Failed to register VIC platform device (IRQ 37): %d\n", ret);
+        pr_err("Failed to register VIC platform device (IRQ 38): %d\n", ret);
         platform_device_unregister(&tx_isp_csi_platform_device);
         goto err_cleanup_base;
     } else {
-        pr_info("*** VIC platform device registered for IRQ 37 (isp-m0) ***\n");
+        pr_info("*** VIC platform device registered for IRQ 38 (isp-w02) ***\n");
     }
 
     ret = platform_device_register(&tx_isp_vin_platform_device);
@@ -5695,6 +5666,10 @@ static int tx_isp_init(void)
     } else {
         pr_info("*** SUCCESS: IRQ 38 (isp-w02) REGISTERED ***\n");
         ourISPdev->isp_irq2 = 38;  /* Store secondary IRQ */
+        disable_irq(38);
+        if (ourISPdev->vic_dev)
+            tx_vic_seed_irq_slots((struct tx_isp_vic_device *)ourISPdev->vic_dev, 38);
+        pr_info("*** IRQ 38 (isp-w02) LEFT DISABLED UNTIL VIC STREAM ENABLE ***\n");
     }
 
     /* *** CRITICAL: Enable interrupt generation at hardware level *** */
@@ -5713,14 +5688,21 @@ static int tx_isp_init(void)
 
             pr_info("*** WRITING VIC INTERRUPT ENABLE REGISTERS ***\n");
 
-            /* Enable VIC interrupts - from reference driver */
-            writel(0x3FFFFFFF, vic_dev->vic_regs + 0x1e0);  /* Enable all VIC interrupts */
-            writel(0x0, vic_dev->vic_regs + 0x1e8);         /* Clear interrupt masks */
-            writel(0xF, vic_dev->vic_regs + 0x1e4);         /* Enable MDMA interrupts */
-            writel(0x0, vic_dev->vic_regs + 0x1ec);         /* Clear MDMA masks */
+            /* OEM ISR semantics:
+             *   0x1e0/0x1e4 = status
+             *   0x1e8/0x1ec = masks
+             *   0x1f0/0x1f4 = acknowledge/clear
+             * Do not write synthetic "enable" values into the status registers.
+             */
+            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main pending bits */
+            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA pending bits */
+            writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);  /* Unmask frame-done on main bank */
+            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1ec);  /* Mask MDMA until main IRQ works */
             wmb();
 
-            pr_info("*** VIC INTERRUPT REGISTERS ENABLED - INTERRUPTS SHOULD NOW FIRE! ***\n");
+            pr_info("*** VIC INTERRUPT REGISTERS ENABLED: status=0x%08x/0x%08x mask=0x%08x/0x%08x ***\n",
+                    readl(vic_dev->vic_regs + 0x1e0), readl(vic_dev->vic_regs + 0x1e4),
+                    readl(vic_dev->vic_regs + 0x1e8), readl(vic_dev->vic_regs + 0x1ec));
 
             /* CRITICAL FIX: Enable ISP core interrupts too! Use core_regs if available */
             pr_info("*** ENABLING ISP CORE INTERRUPT REGISTERS FOR MIPI DATA ***\n");
@@ -6171,65 +6153,151 @@ static void tx_vic_disable_irq_complete(struct tx_isp_dev *isp_dev)
 
 static int tx_vic_get_irq_number(struct tx_isp_vic_device *vic_dev)
 {
+    int irq = 0;
+
     if (!vic_dev)
         return 0;
+
+    if (vic_dev->sd.irq_info.irq > 0 && vic_dev->sd.irq_info.irq < 1024)
+        return vic_dev->sd.irq_info.irq;
+
+    if (ourISPdev && ourISPdev->isp_irq2 > 0)
+        return ourISPdev->isp_irq2;
+
+    if (vic_dev->sd.pdev)
+        irq = platform_get_irq(vic_dev->sd.pdev, 0);
+    if (irq > 0)
+        return irq;
 
     if (vic_dev->irq > 0)
         return vic_dev->irq;
     if (vic_dev->irq_number > 0)
         return vic_dev->irq_number;
-    if (vic_dev->sd.irq_info.irq > 0)
-        return vic_dev->sd.irq_info.irq;
 
     return 0;
+}
+
+#define VIC_RAW_IRQ_LOCK_OFFSET 0x130
+#define VIC_RAW_IRQ_FLAG_OFFSET 0x13c
+
+static inline spinlock_t *tx_vic_raw_irq_lock(struct tx_isp_vic_device *vic_dev)
+{
+    return (spinlock_t *)((char *)vic_dev + VIC_RAW_IRQ_LOCK_OFFSET);
+}
+
+static inline u32 tx_vic_raw_irq_flag_get(struct tx_isp_vic_device *vic_dev)
+{
+    return *(u32 *)((char *)vic_dev + VIC_RAW_IRQ_FLAG_OFFSET);
+}
+
+static inline void tx_vic_raw_irq_flag_set(struct tx_isp_vic_device *vic_dev, u32 enabled)
+{
+    *(u32 *)((char *)vic_dev + VIC_RAW_IRQ_FLAG_OFFSET) = enabled;
+    vic_dev->hw_irq_enabled = enabled;
+    vic_dev->irq_enabled = enabled;
+}
+
+typedef void (*vic_irq_slot_cb_t)(struct tx_isp_irq_info *irq_info);
+
+static void tx_vic_irq_slot_enable(struct tx_isp_irq_info *irq_info)
+{
+    int irq;
+
+    if (!irq_info)
+        return;
+
+    irq = irq_info->irq;
+    if (irq <= 0 && ourISPdev && ourISPdev->isp_irq2 > 0)
+        irq = ourISPdev->isp_irq2;
+    if (irq <= 0)
+        irq = 38;
+
+    irq_info->irq = irq;
+    enable_irq(irq);
+}
+
+static void tx_vic_irq_slot_disable(struct tx_isp_irq_info *irq_info)
+{
+    int irq;
+
+    if (!irq_info)
+        return;
+
+    irq = irq_info->irq;
+    if (irq <= 0 && ourISPdev && ourISPdev->isp_irq2 > 0)
+        irq = ourISPdev->isp_irq2;
+    if (irq <= 0)
+        irq = 38;
+
+    irq_info->irq = irq;
+    disable_irq(irq);
+}
+
+static void tx_vic_seed_irq_slots(struct tx_isp_vic_device *vic_dev, int irq)
+{
+    if (!vic_dev)
+        return;
+
+    if (irq <= 0 && ourISPdev && ourISPdev->isp_irq2 > 0)
+        irq = ourISPdev->isp_irq2;
+    if (irq <= 0)
+        irq = 38;
+
+    vic_dev->sd.irq_info.irq = irq;
+    vic_dev->sd.irq_info.handler = (void *)tx_vic_irq_slot_enable;
+    vic_dev->sd.irq_info.data = (void *)tx_vic_irq_slot_disable;
+    vic_dev->irq = irq;
+    vic_dev->irq_number = irq;
 }
 
 void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 {
     unsigned long flags;
-    int irq;
+    vic_irq_slot_cb_t cb;
 
     if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001)
         return;
 
-    spin_lock_irqsave(&vic_dev->lock, flags);
+    spin_lock_irqsave(tx_vic_raw_irq_lock(vic_dev), flags);
 
-    if (vic_dev->hw_irq_enabled == 0) {
-        vic_dev->hw_irq_enabled = 1;
-        vic_dev->irq_enabled = 1;
-
-        irq = tx_vic_get_irq_number(vic_dev);
-        if (irq > 0)
-            enable_irq(irq);
-        else
-            pr_warn("tx_vic_enable_irq: no VIC irq registered\n");
+    if (tx_vic_raw_irq_flag_get(vic_dev) == 0) {
+        tx_vic_raw_irq_flag_set(vic_dev, 1);
+        tx_vic_seed_irq_slots(vic_dev, tx_vic_get_irq_number(vic_dev));
+        cb = (vic_irq_slot_cb_t)vic_dev->sd.irq_info.handler;
+        if (cb) {
+            pr_info("*** tx_vic_enable_irq: enabling VIC IRQ %d via raw slot callback ***\n",
+                    vic_dev->sd.irq_info.irq);
+            cb(&vic_dev->sd.irq_info);
+        } else
+            pr_warn("tx_vic_enable_irq: no raw VIC enable callback seeded\n");
     }
 
-    spin_unlock_irqrestore(&vic_dev->lock, flags);
+    spin_unlock_irqrestore(tx_vic_raw_irq_lock(vic_dev), flags);
 }
 
 void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
 {
     unsigned long flags;
-    int irq;
+    vic_irq_slot_cb_t cb;
 
     if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001)
         return;
 
-    spin_lock_irqsave(&vic_dev->lock, flags);
+    spin_lock_irqsave(tx_vic_raw_irq_lock(vic_dev), flags);
 
-    if (vic_dev->hw_irq_enabled != 0) {
-        vic_dev->hw_irq_enabled = 0;
-        vic_dev->irq_enabled = 0;
-
-        irq = tx_vic_get_irq_number(vic_dev);
-        if (irq > 0)
-            disable_irq(irq);
-        else
-            pr_warn("tx_vic_disable_irq: no VIC irq registered\n");
+    if (tx_vic_raw_irq_flag_get(vic_dev) != 0) {
+        tx_vic_raw_irq_flag_set(vic_dev, 0);
+        tx_vic_seed_irq_slots(vic_dev, tx_vic_get_irq_number(vic_dev));
+        cb = (vic_irq_slot_cb_t)vic_dev->sd.irq_info.data;
+        if (cb) {
+            pr_info("*** tx_vic_disable_irq: disabling VIC IRQ %d via raw slot callback ***\n",
+                    vic_dev->sd.irq_info.irq);
+            cb(&vic_dev->sd.irq_info);
+        } else
+            pr_warn("tx_vic_disable_irq: no raw VIC disable callback seeded\n");
     }
 
-    spin_unlock_irqrestore(&vic_dev->lock, flags);
+    spin_unlock_irqrestore(tx_vic_raw_irq_lock(vic_dev), flags);
 }
 
 
@@ -6270,11 +6338,12 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
     spin_unlock_irqrestore(&irq_cb_lock, flags);
 }
 
-/* isp_irq_handle - FIXED to properly route to ISP core interrupt handler */
+/* isp_irq_handle - OEM-style generic subdevice walk */
 static irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
     irqreturn_t result = IRQ_HANDLED;
+    int i;
 
     pr_debug("*** isp_irq_handle: IRQ %d fired ***\n", irq);
 
@@ -6283,23 +6352,23 @@ static irqreturn_t isp_irq_handle(int irq, void *dev_id)
         return IRQ_NONE;
     }
 
-    /* CRITICAL FIX: Proper subdevice interrupt isolation - each IRQ goes to ONE handler only */
-    if (irq == 37) {
-        /* IRQ 37: ISP CORE ONLY - no VIC interference */
-        extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
-        pr_debug("*** IRQ 37: ISP CORE ONLY (isolated from VIC) ***\n");
-        result = ispcore_interrupt_service_routine(irq, dev_id);
-    } else if (irq == 38) {
-        /* IRQ 38: VIC ONLY - no ISP core interference */
-        pr_debug("*** IRQ 38: VIC ONLY (isolated from ISP core) ***\n");
-        if (isp_dev->vic_dev) {
-            result = isp_vic_interrupt_service_routine(irq, dev_id);
+    for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+        struct tx_isp_subdev *sd = isp_dev->subdevs[i];
+        irqreturn_t sub_result;
+
+        if (!sd)
+            continue;
+
+        if (sd == &isp_dev->sd) {
+            sub_result = ispcore_interrupt_service_routine(irq, isp_dev);
+        } else if (isp_dev->vic_dev && sd == &isp_dev->vic_dev->sd) {
+            sub_result = isp_vic_interrupt_service_routine(irq, isp_dev);
         } else {
-            pr_warn("*** IRQ 38: No VIC device available ***\n");
-            result = IRQ_NONE;
+            continue;
         }
-    } else {
-        pr_warn("*** isp_irq_handle: Unexpected IRQ %d ***\n", irq);
+
+        if (sub_result == IRQ_WAKE_THREAD)
+            result = IRQ_WAKE_THREAD;
     }
 
     pr_debug("*** isp_irq_handle: IRQ %d processed, result=%d ***\n", irq, result);

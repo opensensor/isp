@@ -114,84 +114,65 @@ static void __fill_v4l2_buffer(void *vb, struct v4l2_buffer *buf)
 }
 
 
-/* Minimal event dispatch types (hybrid with was-better) */
-struct tx_isp_event_handler_table {
-    int (*event_handler)(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
-};
-struct tx_isp_event_dispatch {
-    struct tx_isp_event_handler_table *handler_table;
-};
-
 /* Optional registration API (no-op if never used) */
 static int tx_isp_register_event_handler(struct tx_isp_subdev *sd,
-                                         int (*handler)(struct tx_isp_subdev *, unsigned int, void *))
+                                         isp_event_cb handler)
 {
-    /* Use a static table to avoid allocations in early init */
-    static struct tx_isp_event_handler_table tbl;
-    static struct tx_isp_event_dispatch disp = { .handler_table = &tbl };
+    static struct tx_isp_channel_config disp;
+
     if (!sd)
         return -EINVAL;
-    tbl.event_handler = handler;
-    tx_isp_set_subdev_hostdata(sd, &disp);
+
+    memset(&disp, 0, sizeof(disp));
+    disp.enabled = 1;
+    disp.state = 3;
+    disp.event_handler = handler;
+    sd->event_callback_struct = &disp;
     return 0;
 }
 
-/* Hybrid tx_isp_send_event_to_remote: try registered dispatch; fallback to ops */
+static int tx_isp_dispatch_event_callback(struct tx_isp_subdev *sd,
+                                          unsigned int event,
+                                          void *data)
+{
+    struct tx_isp_channel_config *dispatch;
+
+    if (!sd)
+        return -EINVAL;
+
+    dispatch = (struct tx_isp_channel_config *)sd->event_callback_struct;
+    if (!dispatch || !dispatch->event_handler)
+        return -ENOIOCTLCMD;
+
+    return dispatch->event_handler(dispatch, event, data);
+}
+
+/* OEM-style tx_isp_send_event_to_remote: table jump first, compatibility fallbacks second */
 int tx_isp_send_event_to_remote(struct tx_isp_subdev *sd, unsigned int event, void *data)
 {
+    int ret;
+
     pr_info("*** tx_isp_send_event_to_remote: sd=%p, event=0x%x ***\n", sd, event);
 
     if (!sd)
         return -EINVAL;
 
-    /* OEM-style VIC event routing: frame/sensor events should hit the VIC event
-     * handler before generic ioctl/s_stream fallback. Our VIC subdev stores the
-     * device object in dev_priv, while host_priv is reused elsewhere; routing here
-     * avoids the wrong fallback path seen in logs for 0x3000003. */
-    if (sd->ops && sd->ops->core && sd->ops->core->ioctl == vic_core_ops_ioctl) {
-        switch (event) {
-        case 0x200000c:
-        case 0x200000f:
-        case 0x3000003:
-        case 0x3000005:
-        case 0x3000008: {
-            void *vic_dev = tx_isp_get_subdevdata(sd);
-            if (vic_dev) {
-                int r;
+    ret = tx_isp_dispatch_event_callback(sd, event, data);
+    if (ret != -ENOIOCTLCMD)
+        return ret;
 
-                pr_info("*** tx_isp_send_event_to_remote: routing VIC event 0x%x via vic_event_handler ***\n",
-                        event);
-                r = vic_event_handler(vic_dev, event, data);
-                if (r != -ENOIOCTLCMD)
-                    return r;
-                pr_info("*** tx_isp_send_event_to_remote: vic_event_handler returned -ENOIOCTLCMD for 0x%x, falling back ***\n",
-                        event);
-            }
-            break;
-        }
-        default:
-            break;
-        }
-    }
-
-    /* 1) Try explicit dispatch handler if registered (was-better style) */
-    {
-        struct tx_isp_event_dispatch *disp = (struct tx_isp_event_dispatch *)tx_isp_get_subdev_hostdata((struct tx_isp_subdev *)sd);
-        if (disp && disp->handler_table && disp->handler_table->event_handler) {
-            int r = disp->handler_table->event_handler((struct tx_isp_subdev *)sd, event, data);
-            if (r != -ENOIOCTLCMD)
-                return r;
-        }
-    }
-
-    /* 2) Fallback to core ioctl if provided */
-    if (sd->ops && sd->ops->core && sd->ops->core->ioctl) {
-        int ret = sd->ops->core->ioctl(sd, event, data);
+    if (sd->ops && sd->ops->sensor && sd->ops->sensor->ioctl) {
+        ret = sd->ops->sensor->ioctl(sd, event, data);
         if (ret != -ENOIOCTLCMD)
             return ret;
     }
 
-    /* 3) Only handle actual stream start/stop via s_stream */
+    if (sd->ops && sd->ops->core && sd->ops->core->ioctl) {
+        ret = sd->ops->core->ioctl(sd, event, data);
+        if (ret != -ENOIOCTLCMD)
+            return ret;
+    }
+
     if (sd->ops && sd->ops->video && sd->ops->video->s_stream) {
         if (event == 0x3000003) /* STREAM START */
             return sd->ops->video->s_stream(sd, 1);
@@ -215,8 +196,19 @@ static const struct file_operations fs_channel_ops = {
 
 int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
     int ret;
+    struct tx_isp_subdev_pad *csi_inpad;
+    struct tx_isp_subdev_pad *csi_outpad;
+    struct tx_isp_subdev_pad *vic_inpad;
+    struct tx_isp_subdev_pad *vic_outpad0;
+    struct tx_isp_subdev_pad *vic_outpad1;
 
     pr_info("Setting up default links\n");
+
+    csi_inpad = dev && dev->csi_dev ? tx_isp_subdev_raw_inpad_get(&dev->csi_dev->sd, 0) : NULL;
+    csi_outpad = dev && dev->csi_dev ? tx_isp_subdev_raw_outpad_get(&dev->csi_dev->sd, 0) : NULL;
+    vic_inpad = dev && dev->vic_dev ? tx_isp_subdev_raw_inpad_get(&dev->vic_dev->sd, 0) : NULL;
+    vic_outpad0 = dev && dev->vic_dev ? tx_isp_subdev_raw_outpad_get(&dev->vic_dev->sd, 0) : NULL;
+    vic_outpad1 = dev && dev->vic_dev ? tx_isp_subdev_raw_outpad_get(&dev->vic_dev->sd, 1) : NULL;
 
     // Link sensor output -> CSI input
     if (dev->sensor_sd && dev->csi_dev) {
@@ -226,10 +218,15 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
             return -EINVAL;
         }
 
+        if (!csi_inpad) {
+            pr_err("CSI input pad not initialized\n");
+            return -EINVAL;
+        }
+
         pr_info("Setting up sensor -> CSI link\n");
         ret = dev->sensor_sd->ops->video->link_setup(
             &dev->sensor_sd->outpads[0],
-            &dev->csi_dev->sd.inpads[0],
+            csi_inpad,
             TX_ISP_LINKFLAG_ENABLED
         );
         if (ret && ret != -ENOIOCTLCMD) {
@@ -246,10 +243,16 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
             return -EINVAL;
         }
 
+        if (!csi_outpad || !vic_inpad) {
+            pr_err("CSI/VIC pad initialization missing (csi_out=%p vic_in=%p)\n",
+                   csi_outpad, vic_inpad);
+            return -EINVAL;
+        }
+
         pr_info("Setting up CSI -> VIC link\n");
         ret = dev->csi_dev->sd.ops->video->link_setup(
-            &dev->csi_dev->sd.outpads[0],
-            &dev->vic_dev->sd.inpads[0],
+            csi_outpad,
+            vic_inpad,
             TX_ISP_LINKFLAG_ENABLED
         );
         if (ret && ret != -ENOIOCTLCMD) {
@@ -266,9 +269,14 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
             return -EINVAL;
         }
 
+        if (!vic_outpad0) {
+            pr_err("VIC output pad 0 not initialized\n");
+            return -EINVAL;
+        }
+
         pr_info("Setting up VIC -> DDR link\n");
         ret = dev->vic_dev->sd.ops->video->link_setup(
-            &dev->vic_dev->sd.outpads[0],
+            vic_outpad0,
             &dev->ddr_dev->sd->inpads[0],
             TX_ISP_LINKFLAG_ENABLED
         );
@@ -278,10 +286,10 @@ int tx_isp_setup_default_links(struct tx_isp_dev *dev) {
         }
 
         // Link second VIC output if present
-        if (dev->vic_dev->sd.num_outpads > 1) {
+        if (tx_isp_subdev_raw_num_outpads_get(&dev->vic_dev->sd) > 1 && vic_outpad1) {
             pr_info("Setting up second VIC -> DDR link\n");
             ret = dev->vic_dev->sd.ops->video->link_setup(
-                &dev->vic_dev->sd.outpads[1],
+                vic_outpad1,
                 &dev->ddr_dev->sd->inpads[0],
                 TX_ISP_LINKFLAG_ENABLED
             );
@@ -302,14 +310,101 @@ extern struct tx_isp_dev *ourISPdev;
 /* No external function dependencies needed - using safe direct implementation */
 
 /* Subdevice initialization */
-/* First, let's define the missing enums/constants */
-#define TX_ISP_PADTYPE_INPUT   0x1
-#define TX_ISP_PADTYPE_OUTPUT  0x2
-#define TX_ISP_PADSTATE_FREE   0x0
 #define TX_ISP_LINKFLAG_DYNAMIC 0x1
 #define TX_ISP_PADLINK_VIC     0x1
 #define TX_ISP_PADLINK_DDR     0x2
 #define TX_ISP_PADLINK_ISP     0x4
+
+static int tx_isp_subdev_init_pads(struct tx_isp_subdev *sd,
+                                   struct tx_isp_subdev_platform_data *pdata)
+{
+    struct tx_isp_subdev_pad *inpads = NULL;
+    struct tx_isp_subdev_pad *outpads = NULL;
+    int i;
+    int input_count = 0;
+    int output_count = 0;
+
+    if (!sd || !pdata || !pdata->pads || pdata->pads_num <= 0)
+        return 0;
+
+    /* Only trust the OEM raw pad slots here.
+     * The drifted named struct members can alias unrelated per-subdev state
+     * before pad init runs (CSI is especially sensitive), which causes us to
+     * skip pad allocation even though the OEM pad slots are still empty.
+     */
+    if (tx_isp_subdev_raw_inpads_get(sd) || tx_isp_subdev_raw_outpads_get(sd) ||
+        tx_isp_subdev_raw_num_inpads_get(sd) || tx_isp_subdev_raw_num_outpads_get(sd))
+        return 0;
+
+    for (i = 0; i < pdata->pads_num; i++) {
+        if (pdata->pads[i].type == TX_ISP_PADTYPE_INPUT)
+            input_count++;
+        else if (pdata->pads[i].type == TX_ISP_PADTYPE_OUTPUT)
+            output_count++;
+    }
+
+    tx_isp_subdev_raw_num_inpads_set(sd, input_count);
+    tx_isp_subdev_raw_num_outpads_set(sd, output_count);
+
+    if (input_count > 0) {
+        inpads = kzalloc(TX_ISP_OEM_SUBDEV_PAD_STRIDE * input_count, GFP_KERNEL);
+        if (!inpads) {
+            pr_err("Failed to malloc %s's inpads\n", sd->module.name ? sd->module.name : dev_name(sd->dev));
+            tx_isp_subdev_raw_num_inpads_set(sd, 0);
+            tx_isp_subdev_raw_num_outpads_set(sd, 0);
+            return -ENOMEM;
+        }
+    }
+
+    if (output_count > 0) {
+        outpads = kzalloc(TX_ISP_OEM_SUBDEV_PAD_STRIDE * output_count, GFP_KERNEL);
+        if (!outpads) {
+            pr_err("Failed to malloc %s's outpads\n", sd->module.name ? sd->module.name : dev_name(sd->dev));
+            kfree(inpads);
+            tx_isp_subdev_raw_num_inpads_set(sd, 0);
+            tx_isp_subdev_raw_num_outpads_set(sd, 0);
+            return -ENOMEM;
+        }
+    }
+
+    input_count = 0;
+    output_count = 0;
+    for (i = 0; i < pdata->pads_num; i++) {
+        struct tx_isp_pad_descriptor *desc = &pdata->pads[i];
+        struct tx_isp_subdev_pad *pad;
+
+        if (desc->type == TX_ISP_PADTYPE_INPUT) {
+            pad = tx_isp_subdev_raw_pad_at(inpads, input_count++);
+        } else if (desc->type == TX_ISP_PADTYPE_OUTPUT) {
+            pad = tx_isp_subdev_raw_pad_at(outpads, output_count++);
+        } else {
+            continue;
+        }
+
+        pad->sd = sd;
+        pad->index = (desc->type == TX_ISP_PADTYPE_INPUT) ? (input_count - 1) : (output_count - 1);
+        pad->type = desc->type;
+        pad->links_type = desc->links_type;
+        pad->state = TX_ISP_PADSTATE_FREE;
+        pad->link.source = NULL;
+        pad->link.sink = NULL;
+        pad->link.reverse = NULL;
+        pad->link.flag = 0;
+        pad->link.state = 0;
+        pad->event = NULL;
+        pad->event_callback = NULL;
+        pad->priv = NULL;
+    }
+
+    tx_isp_subdev_raw_inpads_set(sd, inpads);
+    tx_isp_subdev_raw_outpads_set(sd, outpads);
+
+    pr_info("tx_isp_subdev_init_pads: %s inpads=%u outpads=%u\n",
+            sd->module.name ? sd->module.name : dev_name(sd->dev),
+            tx_isp_subdev_raw_num_inpads_get(sd),
+            tx_isp_subdev_raw_num_outpads_get(sd));
+    return 0;
+}
 
 /* isp_subdev_init_clks - DEPRECATED: Use tx_isp_configure_clocks instead
  *
@@ -644,6 +739,12 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
                     return ret;
                 }
                 pr_info("*** tx_isp_subdev_init: Clock initialization complete ***\n");
+
+                ret = tx_isp_subdev_init_pads(sd, pdata);
+                if (ret != 0) {
+                    pr_err("*** tx_isp_subdev_init: Pad initialization failed: %d ***\n", ret);
+                    return ret;
+                }
             } else {
                 /* Binary Ninja: isp_printf(0, tiziano_wdr_params_refresh, result_4) */
                 isp_printf(0, "tiziano_wdr_params_refresh", ret);
@@ -687,8 +788,31 @@ EXPORT_SYMBOL(tx_isp_subdev_init);
 /* Subdevice deinitialization */
 void tx_isp_subdev_deinit(struct tx_isp_subdev *sd)
 {
+    struct tx_isp_subdev_pad *inpads;
+    struct tx_isp_subdev_pad *outpads;
+
     if (!sd)
         return;
+
+    inpads = tx_isp_subdev_raw_inpads_get(sd);
+    outpads = tx_isp_subdev_raw_outpads_get(sd);
+    if (!inpads)
+        inpads = sd->inpads;
+    if (!outpads)
+        outpads = sd->outpads;
+
+    kfree(inpads);
+    sd->inpads = NULL;
+    tx_isp_subdev_raw_inpads_set(sd, NULL);
+
+    kfree(outpads);
+    sd->outpads = NULL;
+    tx_isp_subdev_raw_outpads_set(sd, NULL);
+
+    sd->num_inpads = 0;
+    sd->num_outpads = 0;
+    tx_isp_subdev_raw_num_inpads_set(sd, 0);
+    tx_isp_subdev_raw_num_outpads_set(sd, 0);
 
     /* Clean up secondary VIC register mapping if this is a VIC device */
     if (ourISPdev && ourISPdev->vic_dev == sd) {

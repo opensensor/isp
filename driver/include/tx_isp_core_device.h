@@ -159,6 +159,8 @@ struct tx_isp_subdev_platform_data {
     int clk_num;                          /* Offset 4: Number of clocks - Binary Ninja: $s1_1[4] */
     int sensor_type;                      /* Offset 8: Sensor type */
     struct tx_isp_device_clk *clks;       /* Offset 12: Clock configuration array - Binary Ninja: *($s1_1 + 8) */
+    int pads_num;                         /* OEM-compatible pad descriptor count */
+    struct tx_isp_pad_descriptor *pads;   /* OEM-compatible pad descriptor array */
     /* Additional platform-specific data */
 };
 

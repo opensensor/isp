@@ -4,6 +4,89 @@
 #include "tx_isp.h"
 #include "tx-isp-device.h"
 
+/* OEM subdev layout for name/pad metadata used by the stock binary. */
+#define TX_ISP_OEM_SUBDEV_NAME_OFFSET         0x08
+#define TX_ISP_OEM_SUBDEV_NUM_INPADS_OFFSET   0xc8
+#define TX_ISP_OEM_SUBDEV_NUM_OUTPADS_OFFSET  0xca
+#define TX_ISP_OEM_SUBDEV_INPADS_OFFSET       0xcc
+#define TX_ISP_OEM_SUBDEV_OUTPADS_OFFSET      0xd0
+#define TX_ISP_OEM_SUBDEV_PAD_STRIDE          0x24
+
+static inline u8 tx_isp_subdev_raw_num_inpads_get(struct tx_isp_subdev *sd)
+{
+    return sd ? *(u8 *)((char *)sd + TX_ISP_OEM_SUBDEV_NUM_INPADS_OFFSET) : 0;
+}
+
+static inline u8 tx_isp_subdev_raw_num_outpads_get(struct tx_isp_subdev *sd)
+{
+    return sd ? *(u8 *)((char *)sd + TX_ISP_OEM_SUBDEV_NUM_OUTPADS_OFFSET) : 0;
+}
+
+static inline void tx_isp_subdev_raw_num_inpads_set(struct tx_isp_subdev *sd, u8 count)
+{
+    if (sd)
+        *(u8 *)((char *)sd + TX_ISP_OEM_SUBDEV_NUM_INPADS_OFFSET) = count;
+}
+
+static inline void tx_isp_subdev_raw_num_outpads_set(struct tx_isp_subdev *sd, u8 count)
+{
+    if (sd)
+        *(u8 *)((char *)sd + TX_ISP_OEM_SUBDEV_NUM_OUTPADS_OFFSET) = count;
+}
+
+static inline struct tx_isp_subdev_pad *tx_isp_subdev_raw_inpads_get(struct tx_isp_subdev *sd)
+{
+    return sd ? *(struct tx_isp_subdev_pad **)((char *)sd + TX_ISP_OEM_SUBDEV_INPADS_OFFSET) : NULL;
+}
+
+static inline struct tx_isp_subdev_pad *tx_isp_subdev_raw_outpads_get(struct tx_isp_subdev *sd)
+{
+    return sd ? *(struct tx_isp_subdev_pad **)((char *)sd + TX_ISP_OEM_SUBDEV_OUTPADS_OFFSET) : NULL;
+}
+
+static inline void tx_isp_subdev_raw_inpads_set(struct tx_isp_subdev *sd,
+                                                struct tx_isp_subdev_pad *pads)
+{
+    if (sd)
+        *(struct tx_isp_subdev_pad **)((char *)sd + TX_ISP_OEM_SUBDEV_INPADS_OFFSET) = pads;
+}
+
+static inline void tx_isp_subdev_raw_outpads_set(struct tx_isp_subdev *sd,
+                                                 struct tx_isp_subdev_pad *pads)
+{
+    if (sd)
+        *(struct tx_isp_subdev_pad **)((char *)sd + TX_ISP_OEM_SUBDEV_OUTPADS_OFFSET) = pads;
+}
+
+static inline struct tx_isp_subdev_pad *tx_isp_subdev_raw_pad_at(struct tx_isp_subdev_pad *pads,
+                                                                 unsigned int index)
+{
+    return pads ? (struct tx_isp_subdev_pad *)((char *)pads +
+            (index * TX_ISP_OEM_SUBDEV_PAD_STRIDE)) : NULL;
+}
+
+static inline struct tx_isp_subdev_pad *tx_isp_subdev_raw_inpad_get(struct tx_isp_subdev *sd,
+                                                                    unsigned int index)
+{
+    struct tx_isp_subdev_pad *pads = tx_isp_subdev_raw_inpads_get(sd);
+
+    if (!pads || index >= tx_isp_subdev_raw_num_inpads_get(sd))
+        return NULL;
+
+    return tx_isp_subdev_raw_pad_at(pads, index);
+}
+
+static inline struct tx_isp_subdev_pad *tx_isp_subdev_raw_outpad_get(struct tx_isp_subdev *sd,
+                                                                     unsigned int index)
+{
+    struct tx_isp_subdev_pad *pads = tx_isp_subdev_raw_outpads_get(sd);
+
+    if (!pads || index >= tx_isp_subdev_raw_num_outpads_get(sd))
+        return NULL;
+
+    return tx_isp_subdev_raw_pad_at(pads, index);
+}
+
 /* Helper functions to find subdevices by name instead of hardcoded array indices */
 
 /**
