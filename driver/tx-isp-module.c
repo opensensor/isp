@@ -783,8 +783,8 @@ struct platform_device tx_isp_vic_platform_device = {
 static struct resource tx_isp_csi_resources[] = {
     [0] = {
         .name  = "isp-device",
-        .start = 0x10023000,           /* OEM CSI wrapper/basic window */
-        .end   = 0x10023FFF,
+        .start = 0x10022000,           /* OEM CSI basic/DPHY window; wrapper is separately mapped */
+        .end   = 0x10022FFF,
         .flags = IORESOURCE_MEM,
     },
     [1] = {
@@ -967,6 +967,7 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev);
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);  /* FIXED: Correct signature to match tx_isp_vic.c */
 int csi_video_s_stream(struct tx_isp_subdev *sd, int enable);       /* Real CSI streaming (in tx_isp_csi.c) */
 extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
+extern int tx_isp_core_ensure_powered(struct tx_isp_dev *isp_dev, const char *origin);
 void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev);
 static void tx_vic_seed_irq_slots(struct tx_isp_vic_device *vic_dev, int irq);
 static int ispvic_frame_channel_qbuf(struct tx_isp_vic_device *vic_dev, void *buffer);
@@ -2087,9 +2088,11 @@ static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sen
     struct tx_isp_csi_device *csi_dev;
     struct tx_isp_vic_device *vic_dev;
     int (*csi_sync_sensor_attr)(struct tx_isp_subdev *sd, void *arg) = NULL;
+    int (*csi_sensor_ioctl)(struct tx_isp_subdev *sd, unsigned int cmd, void *arg) = NULL;
     unsigned int actual_width;
     unsigned int actual_height;
     int core_ret = 0;
+    int csi_init_ret = 0;
     int csi_ret = 0;
     int ret = 0;
 
@@ -2176,6 +2179,30 @@ static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sen
             ret = core_ret;
         } else {
             pr_info("*** tx_isp_sync_sensor_attr: deferred activate_module completed successfully ***\n");
+        }
+    }
+
+    if (ret == 0 && csi_dev && sensor_attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) {
+        if (csi_dev->sd.ops && csi_dev->sd.ops->sensor && csi_dev->sd.ops->sensor->ioctl)
+            csi_sensor_ioctl = csi_dev->sd.ops->sensor->ioctl;
+        else if (csi_subdev_ops.sensor && csi_subdev_ops.sensor->ioctl)
+            csi_sensor_ioctl = csi_subdev_ops.sensor->ioctl;
+
+        if (csi_sensor_ioctl) {
+            pr_info("*** tx_isp_sync_sensor_attr: issuing CSI init ioctl 0x200000c after sensor sync ***\n");
+            csi_init_ret = csi_sensor_ioctl(&csi_dev->sd, 0x200000c, sensor_attr);
+        } else {
+            pr_warn("*** tx_isp_sync_sensor_attr: CSI init ioctl hook unavailable, calling csi_core_ops_init directly ***\n");
+            csi_init_ret = csi_core_ops_init(&csi_dev->sd, 1);
+        }
+
+        if (csi_init_ret) {
+            pr_warn("*** tx_isp_sync_sensor_attr: CSI init after sensor sync failed: %d ***\n",
+                    csi_init_ret);
+            if (ret == 0)
+                ret = csi_init_ret;
+        } else {
+            pr_info("*** tx_isp_sync_sensor_attr: CSI init after sensor sync completed successfully ***\n");
         }
     }
 
@@ -3280,11 +3307,23 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
             if (vic_dev->state == 1) {
                 pr_info("*** VIC device in state 1, proceeding with activation ***\n");
 
+                subdev_result = tx_isp_core_ensure_powered(isp_dev,
+                                                           "ispcore_activate_module");
+                if (subdev_result != 0) {
+                    pr_warn("*** ispcore_activate_module: core power/clock bring-up failed: %d ***\n",
+                            subdev_result);
+                    return subdev_result;
+                }
+
                 /* OEM walks the embedded ISP-device clock list, not VIC subdev clocks. */
                 clk_array = isp_dev->sd.clks;
                 clk_count = isp_dev->sd.clk_num;
 
                 pr_info("*** CLOCK CONFIGURATION SECTION: clk_array=%p, clk_count=%d ***\n", clk_array, clk_count);
+                if ((!clk_array || clk_count <= 0) &&
+                    isp_dev->cgu_isp && isp_dev->isp_clk && isp_dev->csi_clk) {
+                    pr_info("*** CLOCK CONFIGURATION SECTION: embedded core clock list empty, using dedicated ISP clock handles ***\n");
+                }
 
                 /* Binary Ninja clock loop implementation */
                 if (clk_array && clk_count > 0) {

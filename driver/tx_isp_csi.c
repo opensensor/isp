@@ -386,7 +386,8 @@ static void __iomem *tx_cpm_regs = NULL;
 u32 csi_read32(u32 reg)
 {
     if (!tx_isp_csi_regs) {
-        tx_isp_csi_regs = ioremap(0x10023000, 0x1000);
+        /* CSI basic/DPHY MMIO lives at 0x10022000; wrapper/W01 is separate at 0x10023000. */
+        tx_isp_csi_regs = ioremap(0x10022000, 0x1000);
         if (!tx_isp_csi_regs) {
             pr_err("Failed to map CSI registers\n");
             return 0;
@@ -408,7 +409,8 @@ static inline u32 cpm_read32(u32 reg)
 void csi_write32(u32 reg, u32 val)
 {
     if (!tx_isp_csi_regs) {
-        tx_isp_csi_regs = ioremap(0x10023000, 0x1000);
+        /* CSI basic/DPHY MMIO lives at 0x10022000; wrapper/W01 is separate at 0x10023000. */
+        tx_isp_csi_regs = ioremap(0x10022000, 0x1000);
         if (!tx_isp_csi_regs) {
             pr_err("Failed to map CSI registers\n");
             return;
@@ -931,6 +933,17 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
             return -ENODEV;
         }
 
+        csi_jit_ungate_clocks();
+        csi_cpm_deassert_reset_if_enabled();
+
+        pr_info("csi_core_ops_init: wrapper pre-arm before write wrap[0x0c]=0x%08x wrap[0x14]=0x%08x wrap[0x40]=0x%08x\n",
+                readl(isp_csi_regs + 0x0c), readl(isp_csi_regs + 0x14), readl(isp_csi_regs + 0x40));
+        writel(1, isp_csi_regs + 0x0c);
+        wmb();
+        private_msleep(1);
+        pr_info("csi_core_ops_init: wrapper pre-arm after  write wrap[0x0c]=0x%08x wrap[0x14]=0x%08x wrap[0x40]=0x%08x\n",
+                readl(isp_csi_regs + 0x0c), readl(isp_csi_regs + 0x14), readl(isp_csi_regs + 0x40));
+
         csi_dev->lanes = sensor_attr->mipi.lans;
         writel((csi_dev->lanes - 1) & 0x3, csi_regs + 0x04);
         writel(readl(csi_regs + 0x08) & 0xfffffffe, csi_regs + 0x08);
@@ -950,7 +963,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
         writel(0x3f, isp_csi_regs + 0x128);
         writel(1, csi_regs + 0x10);
         private_msleep(10);
-        pr_info("csi_core_ops_init: MIPI init programmed lanes=%u rate_sel=%d basic[0x00]=0x%08x basic[0x04]=0x%08x basic[0x0c]=0x%08x basic[0x10]=0x%08x basic[0x128]=0x%08x lanec[0x200]=0x%08x lanec[0x204]=0x%08x lanec[0x210]=0x%08x lanec[0x230]=0x%08x lanec[0x250]=0x%08x lanec[0x254]=0x%08x lanec[0x2f4]=0x%08x wrap[0x00]=0x%08x wrap[0x128]=0x%08x\n",
+        pr_info("csi_core_ops_init: MIPI init programmed lanes=%u rate_sel=%d basic[0x00]=0x%08x basic[0x04]=0x%08x basic[0x0c]=0x%08x basic[0x10]=0x%08x basic[0x128]=0x%08x lanec[0x200]=0x%08x lanec[0x204]=0x%08x lanec[0x210]=0x%08x lanec[0x230]=0x%08x lanec[0x250]=0x%08x lanec[0x254]=0x%08x lanec[0x2f4]=0x%08x wrap[0x00]=0x%08x wrap[0x0c]=0x%08x wrap[0x14]=0x%08x wrap[0x40]=0x%08x wrap[0x128]=0x%08x\n",
                 csi_dev->lanes, rate_sel,
                 readl(csi_regs + 0x00), readl(csi_regs + 0x04), readl(csi_regs + 0x0c),
                 readl(csi_regs + 0x10), readl(csi_regs + 0x128),
@@ -958,6 +971,9 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                 readl(csi_regs + 0x230), readl(csi_regs + 0x250), readl(csi_regs + 0x254),
                 readl(csi_regs + 0x2f4),
                 isp_csi_regs ? readl(isp_csi_regs + 0x00) : 0,
+                isp_csi_regs ? readl(isp_csi_regs + 0x0c) : 0,
+                isp_csi_regs ? readl(isp_csi_regs + 0x14) : 0,
+                isp_csi_regs ? readl(isp_csi_regs + 0x40) : 0,
                 isp_csi_regs ? readl(isp_csi_regs + 0x128) : 0);
         v0_17 = 3;
     } else if (interface_type != 2) {
@@ -1049,8 +1065,9 @@ struct tx_isp_subdev_ops csi_subdev_ops = {
 // Define resources outside probe
 static struct resource tx_isp_csi_resources[] = {
     [0] = {
-        .start  = 0x10023000,  // OEM CSI base address
-        .end    = 0x10023000 + 0x1000 - 1,
+        /* OEM CSI basic/DPHY block; wrapper/W01 is separately mapped at 0x10023000. */
+        .start  = 0x10022000,
+        .end    = 0x10022000 + 0x1000 - 1,
         .flags  = IORESOURCE_MEM,
         .name   = "csi-regs",
     }
@@ -1132,13 +1149,14 @@ int tx_isp_csi_probe(struct platform_device *pdev)
 
     *csi_mem_res_slot(csi_dev) = sd->mem_res;
 
-    isp_csi_regs = NULL;
-    if (res)
-        isp_csi_regs = ioremap(res->start, resource_size(res));
-    if (isp_csi_regs)
-        *csi_wrapper_regs_slot(csi_dev) = isp_csi_regs;
-    else
-        isp_csi_regs = csi_get_wrapper_regs(csi_dev);
+    /* Keep the wrapper/+0x13c bank distinct from the basic CSI regs. The
+     * OEM probe maps the basic block from the subdev resource, while wrapper
+     * accesses come from a dedicated 0x10023000 mapping.
+     */
+    if (old_wrapper_regs == old_basic_regs || old_wrapper_regs == csi_dev->csi_regs)
+        *csi_wrapper_regs_slot(csi_dev) = NULL;
+
+    isp_csi_regs = csi_get_wrapper_regs(csi_dev);
 
     pr_info("*** tx_isp_csi_probe: rebound live mappings basic %p -> %p raw138=%p wrapper %p -> %p ***\n",
             old_basic_regs, csi_dev->csi_regs, *csi_mem_res_slot(csi_dev),

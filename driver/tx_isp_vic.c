@@ -201,6 +201,48 @@ static inline void __iomem *vic_coord_regs_resolve(struct tx_isp_vic_device *vic
     return vic_primary_regs_resolve(vic_dev);
 }
 
+static int vic_wait_w01_phase(void __iomem *vic_coord_regs, unsigned int timeout_ms)
+{
+    const u32 t0 = 0x00000230;
+    const u32 t1 = 0x00000300;
+    const u32 t2 = 0x00000330;
+    u32 prev;
+    unsigned int stable = 0;
+    unsigned int waited = 0;
+
+    if (!vic_coord_regs)
+        return 0;
+
+    prev = readl(vic_coord_regs + 0x14);
+
+    while (waited < timeout_ms) {
+        u32 cur;
+        int match;
+
+        usleep_range(1000, 2000);
+        waited += 1;
+        cur = readl(vic_coord_regs + 0x14);
+        match = (cur == t0) || (cur == t1) || (cur == t2);
+
+        if (match && cur == prev) {
+            stable++;
+            if (stable >= 2) {
+                pr_info("tx_isp_vic_start: W01 phase-ready 0x14=0x%08x after %u ms\n",
+                        cur, waited);
+                return 1;
+            }
+        } else {
+            stable = match ? 1 : 0;
+        }
+
+        prev = cur;
+    }
+
+    pr_info("tx_isp_vic_start: W01 phase wait timed out, last 0x14=0x%08x after %u ms\n",
+            prev, waited);
+    return 0;
+}
+
 static inline void __iomem *vic_stream_regs_resolve(struct tx_isp_vic_device *vic_dev)
 {
     struct tx_isp_dev *isp_dev;
@@ -633,13 +675,6 @@ static void vic_reassert_core_irq_route(struct tx_isp_vic_device *vic_dev,
             height = 1080;
     }
 
-    if (!stride) {
-        if (vic_base)
-            stride = readl(vic_base + 0x100);
-        if (!stride)
-            stride = width;
-    }
-
     packed_geom = (width << 16) | (height & 0xffff);
 
     writel(0x1, core + 0x9a70);
@@ -648,26 +683,25 @@ static void vic_reassert_core_irq_route(struct tx_isp_vic_device *vic_dev,
     writel(0x1, core + 0x9a88);
     writel(0x1, core + 0x9a94);
 
-    if (readl(core + 0x9a00) == 0)
-        writel(packed_geom, core + 0x9a00);
-    if (readl(core + 0x9a04) == 0)
-        writel(0x3000300, core + 0x9a04);
-    if (readl(core + 0x9a2c) == 0)
-        writel(packed_geom, core + 0x9a2c);
-    if (readl(core + 0x9a80) == 0)
-        writel(stride, core + 0x9a80);
-    if (readl(core + 0x9a98) == 0)
-        writel(width, core + 0x9a98);
-    if (readl(core + 0x9ac0) == 0)
-        writel(0x200, core + 0x9ac0);
-    if (readl(core + 0x9ac8) == 0)
-        writel(0x200, core + 0x9ac8);
+    /* The OEM trace reprograms the VIC/core route block with live geometry.
+     * Do not preserve stale values from an earlier mode (e.g. 1280-wide route
+     * when VIC is now starting with a 1920-wide sensor).
+     */
+    writel(packed_geom, core + 0x9a00);
+    writel(0x3000300, core + 0x9a04);
+    writel(packed_geom, core + 0x9a2c);
+    writel(width, core + 0x9a80);
+    writel(width, core + 0x9a98);
+    writel(0x200, core + 0x9ac0);
+    writel(0x200, core + 0x9ac8);
 
     wmb();
 
-    pr_info("%s: core VIC route 9a04=0x%08x 9a34=0x%08x 9a88=0x%08x 9a94=0x%08x 9a80=0x%08x 9a98=0x%08x gate=0x%08x/0x%08x\n",
+    pr_info("%s: core VIC route 9a00=0x%08x 9a04=0x%08x 9a2c=0x%08x 9a34=0x%08x 9a88=0x%08x 9a94=0x%08x 9a80=0x%08x 9a98=0x%08x gate=0x%08x/0x%08x\n",
             origin,
+            readl(core + 0x9a00),
             readl(core + 0x9a04),
+            readl(core + 0x9a2c),
             readl(core + 0x9a34), readl(core + 0x9a88), readl(core + 0x9a94),
             readl(core + 0x9a80), readl(core + 0x9a98),
             readl(core + 0x9ac0), readl(core + 0x9ac8));
@@ -1712,6 +1746,9 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(frame_mode_reg, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
 	        wmb();
+
+		if (vic_coord_regs)
+			vic_wait_w01_phase(vic_coord_regs, 100);
 
 			pr_info("*** VIC MIPI PRE-ARM: cfg reg0=0x%x reg10=0x%x reg14=0x%x reg100=0x%x reg104=0x%x reg108=0x%x reg10c=0x%x reg110=0x%x reg1a0=0x%x reg1a4=0x%x reg1a8=0x%x reg1ac=0x%x reg1b0=0x%x w01_reg14=0x%x ***\n",
 		        readl(vic_regs + 0x0), readl(vic_regs + 0x10), readl(vic_regs + 0x14),

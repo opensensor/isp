@@ -27,6 +27,7 @@ module_param(print_level, int, S_IRUGO);
 MODULE_PARM_DESC(print_level, "isp print level");
 int tx_isp_configure_clocks(struct tx_isp_dev *isp);
 extern int private_reset_tx_isp_module(int arg);
+int tx_isp_core_ensure_powered(struct tx_isp_dev *isp, const char *origin);
 
 /* Global ISP register base for tuning subsystem */
 void __iomem *isp_reg_base = NULL;
@@ -229,6 +230,45 @@ static void isp_core_early_cpm_bringup(void)
     iounmap(cpm);
 }
 
+int tx_isp_core_ensure_powered(struct tx_isp_dev *isp, const char *origin)
+{
+    int ret;
+
+    if (!isp)
+        return -EINVAL;
+
+    if (!origin)
+        origin = "tx_isp_core_ensure_powered";
+
+    if (!isp->core_regs) {
+        ret = tx_isp_init_memory_mappings(isp);
+        if (ret < 0) {
+            pr_err("%s: Failed to initialize memory mappings: %d\n", origin, ret);
+            return ret;
+        }
+    }
+
+    /* Live logs show the dedicated CPM/clock bring-up helpers were never hit on
+     * the activation path, leaving MMIO readable but inert. Re-run them here on
+     * the exact paths that arm streaming.
+     */
+    isp_core_early_cpm_bringup();
+
+    if (!isp->cgu_isp || !isp->isp_clk || !isp->csi_clk) {
+        ret = tx_isp_configure_clocks(isp);
+        if (ret < 0) {
+            pr_err("%s: Failed to configure ISP clocks: %d\n", origin, ret);
+            return ret;
+        }
+    } else {
+        pr_info("%s: ISP clocks already configured (cgu_isp=%p isp=%p csi=%p)\n",
+                origin, isp->cgu_isp, isp->isp_clk, isp->csi_clk);
+    }
+
+    return 0;
+}
+EXPORT_SYMBOL(tx_isp_core_ensure_powered);
+
 static int isp_core_enable_prestream_irqs(struct tx_isp_dev *isp_dev)
 {
     void __iomem *core;
@@ -377,23 +417,9 @@ int tx_isp_core_start(struct tx_isp_subdev *sd)
 
     pr_info("*** tx_isp_core_start: Starting ISP core processing ***\n");
 
-    /* Initialize memory mappings if not already done */
-    if (!isp_dev->core_regs) {
-        ret = tx_isp_init_memory_mappings(isp_dev);
-        if (ret < 0) {
-            pr_err("tx_isp_core_start: Failed to initialize memory mappings: %d\n", ret);
-            return ret;
-        }
-    }
-
-    /* Configure clocks if not already done */
-//    if (!isp_dev->isp_clk) {
-//        ret = tx_isp_configure_clocks(isp_dev);
-//        if (ret < 0) {
-//            pr_err("tx_isp_core_start: Failed to configure clocks: %d\n", ret);
-//            return ret;
-//        }
-//    }
+    ret = tx_isp_core_ensure_powered(isp_dev, "tx_isp_core_start");
+    if (ret < 0)
+        return ret;
 
     /* Set up pipeline if not already done */
     if (isp_dev->state == ISP_PIPELINE_IDLE) {
