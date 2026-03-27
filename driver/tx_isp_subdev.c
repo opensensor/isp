@@ -28,6 +28,8 @@ extern int sensor_count;
 
 /* Function declarations for Binary Ninja compatibility */
 int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_num);
+int tx_isp_module_init(struct platform_device *pdev, struct tx_isp_subdev *sd);
+int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq_info);
 void tx_isp_free_irq(struct tx_isp_irq_info *irq_info);
 void tx_isp_disable_irq(void *arg1);
 int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on);
@@ -551,6 +553,104 @@ cleanup_clocks:
 }
 
 
+int tx_isp_notify(struct tx_isp_module *module, unsigned int notification, void *data)
+{
+	unsigned int notify_group = NOTIFICATION_TYPE_OPS(notification);
+	int result = -ENOIOCTLCMD;
+	int i;
+
+	(void)module;
+
+	if (!ourISPdev)
+		return 0;
+
+	for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+		struct tx_isp_subdev *sd = ourISPdev->subdevs[i];
+		int call_result = -ENOIOCTLCMD;
+
+		if (!sd || (uintptr_t)sd >= 0xfffff001 || !sd->ops)
+			continue;
+
+		switch (notify_group) {
+		case NOTIFICATION_TYPE_CORE_OPS:
+			if (sd->ops->core && sd->ops->core->ioctl)
+				call_result = sd->ops->core->ioctl(sd, notification, data);
+			break;
+		case NOTIFICATION_TYPE_SENSOR_OPS:
+			if (sd->ops->sensor && sd->ops->sensor->ioctl)
+				call_result = sd->ops->sensor->ioctl(sd, notification, data);
+			break;
+		default:
+			return 0;
+		}
+
+		if (call_result == -ENOIOCTLCMD)
+			continue;
+		if (call_result != 0)
+			return call_result;
+
+		result = 0;
+	}
+
+	return (result == -ENOIOCTLCMD) ? 0 : result;
+}
+
+int tx_isp_module_init(struct platform_device *pdev, struct tx_isp_subdev *sd)
+{
+	if (!pdev || !sd) {
+		pr_err("tx_isp_module_init: Invalid parameters\n");
+		return -EINVAL;
+	}
+
+	sd->module.dev = &pdev->dev;
+	sd->module.name = pdev->name;
+	sd->module.ops = NULL;
+	sd->module.debug_ops = NULL;
+	sd->module.parent = NULL;
+	sd->module.notify = tx_isp_notify;
+
+	return 0;
+}
+
+int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq_info)
+{
+	int irq_num;
+	int ret;
+
+	if (!pdev || !irq_info) {
+		isp_printf(2, "tx_isp_request_irq: Invalid parameters\n");
+		return -EINVAL;
+	}
+
+	irq_num = platform_get_irq(pdev, 0);
+	if (irq_num < 0) {
+		irq_info->irq = 0;
+		return 0;
+	}
+
+	ret = request_threaded_irq(irq_num,
+					   isp_irq_handle,
+					   isp_irq_thread_handle,
+					   IRQF_SHARED,
+					   dev_name(&pdev->dev),
+					   ourISPdev);
+	if (ret != 0) {
+		pr_err("tx_isp_request_irq: failed for %s irq=%d ret=%d\n",
+		       dev_name(&pdev->dev), irq_num, ret);
+		irq_info->irq = 0;
+		return -EBUSY;
+	}
+
+	irq_info->irq = irq_num;
+	irq_info->handler = isp_irq_handle;
+	irq_info->data = ourISPdev;
+	pr_info("tx_isp_request_irq: registered irq %d for %s\n",
+		irq_num, dev_name(&pdev->dev));
+
+	return 0;
+}
+
+
 /* tx_isp_free_irq - EXACT Binary Ninja reference implementation */
 void tx_isp_free_irq(struct tx_isp_irq_info *irq_info)
 {
@@ -593,6 +693,12 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     /* Binary Ninja: *(arg2 + 0xc4) = arg3 */
     /* SAFE: Use struct member access instead of offset */
     sd->ops = ops;
+
+	ret = tx_isp_module_init(pdev, sd);
+	if (ret != 0) {
+		isp_printf(2, "&vsd->snap_mlock", pdev->name);
+		return 0xfffffff4;
+	}
 
     /* DEBUG: Check what ops structure we're getting */
     pr_info("*** tx_isp_subdev_init: ops=%p, ops->core=%p ***\n", ops, ops ? ops->core : NULL);
@@ -637,12 +743,6 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             /* CRITICAL FIX: This is a REAL sensor subdev (not CSI, VIC, or FS which also have sensor ops) */
             pr_info("*** tx_isp_subdev_init: DETECTED SENSOR SUBDEV - ops=%p, ops->sensor=%p ***\n", ops, ops->sensor);
 
-            /* CRITICAL FIX: Set up the module notify function for TX_ISP_EVENT_SYNC_SENSOR_ATTR */
-            extern int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
-            extern int tx_isp_module_notify_handler(struct tx_isp_module *module, unsigned int cmd, void *arg);
-            sd->module.notify = tx_isp_module_notify_handler;
-            pr_info("*** tx_isp_subdev_init: Set up sensor module notify handler ***\n");
-
             /* SENSOR - register using helper function */
             int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
             if (slot >= 0) {
@@ -677,7 +777,9 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         if (strcmp(dev_name_str, "isp-w00") != 0 &&  /* VIN - no IRQ */
             strcmp(dev_name_str, "isp-w01") != 0 &&  /* CSI - no IRQ */
             strcmp(dev_name_str, "isp-fs") != 0) {   /* FS - no IRQ */
-            /* Binary Ninja: tx_isp_request_irq(arg1, arg2 + 0x80) */
+			ret = tx_isp_request_irq(pdev, &sd->irq_info);
+			if (ret != 0)
+				goto cleanup_irq;
         } else {
             pr_info("*** %s: Skipping IRQ request - device has no IRQ resource ***\n", dev_name_str);
         }
@@ -754,9 +856,6 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             pr_info("*** tx_isp_subdev_init: FS device - skipping interface_type check ***\n");
         }
     }
-
-    /* CRITICAL: Auto-link subdevices to global ISP device */
-    tx_isp_subdev_auto_link(pdev, sd);
 
     /* Binary Ninja: return 0 */
     return 0;
@@ -1096,7 +1195,7 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         }
 
         if (!already_registered) {
-            /* Find next available slot starting from index 5 (after CSI=0, VIC=1, VIN=2, FS=3, Core=4) */
+            /* Find next available slot starting from index 5 (after VIC=0, CSI=1, VIN=2, Core=3, FS=4) */
             int sensor_index = -1;
             for (int i = 5; i < ISP_MAX_SUBDEVS; i++) {
                 if (ourISPdev->subdevs[i] == NULL) {

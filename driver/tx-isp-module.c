@@ -35,6 +35,7 @@
 /* Note: V4L2 structures and enums are already defined in kernel headers */
 #include "include/tx_isp.h"
 #include "include/tx_isp_core.h"
+#include "include/tx-libimp.h"
 #include "include/tx-isp-debug.h"
 #include "include/tx_isp_sysfs.h"
 #include "include/tx_isp_vic.h"
@@ -906,14 +907,15 @@ struct frame_channel_device; /* Forward declare struct */
 static int tx_isp_vic_handle_event(void *vic_subdev, int event_type, void *data);
 int vic_framedone_irq_function(struct tx_isp_vic_device *vic_dev);
 static void vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel);
-static irqreturn_t isp_irq_handle(int irq, void *dev_id);
-static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
+irqreturn_t isp_irq_handle(int irq, void *dev_id);
+irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
 static int tx_isp_send_event_to_remote_local(void *subdev, int event_type, void *data);
 static int tx_isp_detect_and_register_sensors(struct tx_isp_dev *isp_dev);
 static int tx_isp_init_hardware_interrupts(struct tx_isp_dev *isp_dev);
 static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const char *sensor_name);
 static void tx_isp_hardware_frame_done_handler(struct tx_isp_dev *isp_dev, int channel);
 static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev);
+extern int tx_isp_tuning_notify(struct tx_isp_dev *dev, uint32_t event);
 static struct vic_buffer_entry *pop_buffer_fifo(struct list_head *fifo_head);
 static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entry *buffer);
 
@@ -932,6 +934,9 @@ extern int sensor_init(struct tx_isp_dev *isp_dev);
 /* Forward declarations for subdev ops structures */
 extern struct tx_isp_subdev_ops vic_subdev_ops;
 extern struct tx_isp_subdev_ops csi_subdev_ops;
+
+/* Forward declaration needed before tx_isp_sync_sensor_attr() */
+int ispcore_activate_module(struct tx_isp_dev *isp_dev);
 
 /* Reference driver function declarations - Binary Ninja exact names */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);  /* FIXED: Correct signature to match tx_isp_vic.c */
@@ -2001,9 +2006,13 @@ static struct tx_isp_subdev_pad* find_subdev_link_pad(struct tx_isp_dev *isp_dev
 static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sensor_attribute *sensor_attr)
 {
     struct tx_isp_sensor *sensor;
+    struct tx_isp_csi_device *csi_dev;
     struct tx_isp_vic_device *vic_dev;
+    int (*csi_sync_sensor_attr)(struct tx_isp_subdev *sd, void *arg) = NULL;
     unsigned int actual_width;
     unsigned int actual_height;
+    int core_ret = 0;
+    int csi_ret = 0;
     int ret = 0;
 
     if (!isp_dev || !sensor_attr) {
@@ -2053,6 +2062,42 @@ static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sen
                     ret);
         } else {
             pr_info("*** tx_isp_sync_sensor_attr: VIC cache refreshed successfully ***\n");
+        }
+    }
+
+    csi_dev = isp_dev->csi_dev;
+    if (csi_dev) {
+        if (csi_dev->sd.ops && csi_dev->sd.ops->sensor &&
+            csi_dev->sd.ops->sensor->sync_sensor_attr) {
+            csi_sync_sensor_attr = csi_dev->sd.ops->sensor->sync_sensor_attr;
+        } else if (csi_subdev_ops.sensor && csi_subdev_ops.sensor->sync_sensor_attr) {
+            csi_sync_sensor_attr = csi_subdev_ops.sensor->sync_sensor_attr;
+        }
+
+        if (csi_sync_sensor_attr) {
+            csi_ret = csi_sync_sensor_attr(&csi_dev->sd, sensor_attr);
+            if (csi_ret) {
+                pr_warn("*** tx_isp_sync_sensor_attr: CSI cache refresh failed: %d ***\n",
+                        csi_ret);
+                if (ret == 0)
+                    ret = csi_ret;
+            } else {
+                pr_info("*** tx_isp_sync_sensor_attr: CSI cache refreshed successfully ***\n");
+            }
+        } else {
+            pr_warn("*** tx_isp_sync_sensor_attr: CSI sync hook unavailable ***\n");
+        }
+    }
+
+    if (ret == 0 && vic_dev && vic_dev->state == 1) {
+        pr_info("*** tx_isp_sync_sensor_attr: running deferred activate_module after sensor attach ***\n");
+        core_ret = ispcore_activate_module(isp_dev);
+        if (core_ret != 0) {
+            pr_warn("*** tx_isp_sync_sensor_attr: deferred activate_module failed: %d ***\n",
+                    core_ret);
+            ret = core_ret;
+        } else {
+            pr_info("*** tx_isp_sync_sensor_attr: deferred activate_module completed successfully ***\n");
         }
     }
 
@@ -2131,9 +2176,7 @@ static int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_i
 static int csi_device_probe(struct tx_isp_dev *isp_dev)
 {
     struct tx_isp_csi_device *csi_dev;
-    void __iomem *csi_basic_regs = NULL;
-    void __iomem *isp_csi_regs = NULL;
-    struct resource *mem_resource = NULL;
+    struct tx_isp_sensor_attribute *csi_attr_cache = NULL;
     int ret = 0;
 
     if (!isp_dev) {
@@ -2159,46 +2202,40 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     csi_dev->sd.ops = NULL;  /* Would be &csi_subdev_ops in full implementation */
     csi_dev->sd.vin_state = TX_ISP_MODULE_INIT;
 
-    /* *** CRITICAL: Map CSI basic control registers - Binary Ninja 0x10022000 *** */
-    /* NOTE: We do NOT call request_mem_region here because tx_isp_subdev_init will handle it */
-    /* This avoids double-requesting the same memory region which causes -EBUSY errors */
-    /* Binary Ninja: private_ioremap($a0_2, $v0_3[1] + 1 - $a0_2) */
-    csi_basic_regs = ioremap(0x10022000, 0x1000);
-    if (!csi_basic_regs) {
-        pr_err("csi_device_probe: Cannot map CSI basic registers\n");
+    /*
+     * The OEM CSI object owns a raw +0x110 sensor-attr cache slot. Seed it
+     * only after the subdev area has been cleared; our local tx_isp_subdev is
+     * larger than the OEM layout, so zeroing sd after this write would clobber
+     * the cache pointer before runtime sync/stream paths use it.
+     */
+    csi_attr_cache = kzalloc(sizeof(*csi_attr_cache), GFP_KERNEL);
+    if (!csi_attr_cache) {
+        pr_err("csi_device_probe: Failed to allocate CSI +0x110 attr cache\n");
         ret = -ENOMEM;
         goto err_free_dev;
     }
-
-    pr_info("*** CSI BASIC REGISTERS MAPPED: 0x10022000 -> %p ***\n", csi_basic_regs);
+    *((struct tx_isp_sensor_attribute **)((char *)csi_dev + 0x110)) = csi_attr_cache;
+    pr_info("*** CSI +0x110 ATTR CACHE INITIALIZED: %p (%zu bytes) ***\n",
+            csi_attr_cache, sizeof(*csi_attr_cache));
 
     /*
-     * Real firmware tx_isp_csi_probe() places +0x13c on its own ioremap of
-     * the 0x10022000 CSI register window rather than aliasing ISP core_regs.
+     * Defer CSI MMIO ownership to the live platform probe.
+     *
+     * OEM tx_isp_csi_probe() performs the real 0x10022000 resource/mapping work
+     * after tx_isp_subdev_init(). Our pre-create path only needs to seed the
+     * object and the raw +0x110 sensor-attr cache; probe-time code will bind
+     * +0xb8 (basic regs), +0x138 (mem_res), and +0x13c (wrapper regs).
      */
-    isp_csi_regs = ioremap(0x10022000, 0x1000);
-    if (!isp_csi_regs)
-        pr_warn("csi_device_probe: failed to create dedicated +0x13c CSI mapping, will defer/fallback\n");
-    pr_info("*** CSI +0x13c SLOT INITIALIZED: %p%s ***\n",
-            isp_csi_regs,
-            isp_csi_regs ? " [0x10022000 mirror]" : " [deferred]");
-
-    /* Binary Ninja: Store register addresses at correct offsets */
-    /* *($v0 + 0xb8) = csi_basic_regs (basic CSI control) */
-    csi_dev->csi_regs = csi_basic_regs;
-
-    /* Store the BN +0x13c slot exactly as a dedicated CSI-register mapping. */
-    *((void**)((char*)csi_dev + 0x13c)) = isp_csi_regs;
-
-    /* Binary Ninja: *($v0 + 0x138) = $v0_3 (memory resource) */
-    /* NOTE: mem_resource is NULL here since we didn't call request_mem_region */
-    /* tx_isp_subdev_init will populate this field when it requests the region */
-    *((struct resource**)((char*)csi_dev + 0x138)) = NULL;
+    csi_dev->csi_regs = NULL;
+    *((void **)((char *)csi_dev + 0x13c)) = NULL;
+    *((struct resource **)((char *)csi_dev + 0x138)) = NULL;
+    pr_info("*** CSI BASIC/WRAPPER MAPPINGS DEFERRED TO tx_isp_csi_probe (raw138/raw13c cleared) ***\n");
 
     /* Binary Ninja: private_raw_mutex_init($v0 + 0x12c) */
     mutex_init(&csi_dev->mlock);
 
     /* Binary Ninja: *($v0 + 0x128) = 1 (initial state) */
+    *(u32 *)((char *)csi_dev + 0x128) = 1;
     csi_dev->state = 1;
 
     /* Binary Ninja: dump_csd = $v0 (global CSI device pointer) */
@@ -2206,10 +2243,10 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
 
     pr_info("*** CSI device structure initialized: ***\n");
     pr_info("  Size: 0x148 bytes\n");
-    pr_info("  Basic regs (+0xb8): %p (0x10022000)\n", csi_basic_regs);
-    pr_info("  CSI slot (+0x13c): %p%s\n", isp_csi_regs,
-            isp_csi_regs ? " [0x10022000 mirror]" : " [deferred]");
-    pr_info("  State (+0x128): %d\n", csi_dev->state);
+    pr_info("  Basic regs (+0xb8): %p [deferred]\n", csi_dev->csi_regs);
+    pr_info("  CSI slot (+0x13c): %p [deferred]\n",
+            *((void **)((char *)csi_dev + 0x13c)));
+    pr_info("  State (+0x128): %u\n", *(u32 *)((char *)csi_dev + 0x128));
 
     /* *** CRITICAL FIX: LINK CSI DEVICE TO ISP DEVICE *** */
     pr_info("*** CRITICAL: LINKING CSI DEVICE TO ISP DEVICE ***\n");
@@ -2224,6 +2261,7 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
     return 0;
 
 err_free_dev:
+    kfree(csi_attr_cache);
     kfree(csi_dev);
     return ret;
 }
@@ -2311,7 +2349,8 @@ static int tx_isp_activate_sensor_pipeline(struct tx_isp_dev *isp_dev, const cha
     if (isp_dev->csi_dev) {
         pr_info("Connecting %s sensor to CSI\n", sensor_name);
         // Configure CSI for sensor input
-        if (isp_dev->csi_dev->state < 2) {
+        if (*(u32 *)((char *)isp_dev->csi_dev + 0x128) < 2) {
+            *(u32 *)((char *)isp_dev->csi_dev + 0x128) = 2;
             isp_dev->csi_dev->state = 2; // Mark as enabled
         }
     }
@@ -2645,8 +2684,8 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             pr_err("Err [VIC_INT] : dma chid ovf  !!!\n");
         }
 
-        /* Binary Ninja: Error recovery sequence - focus on prevention, not recovery */
-        if ((v1_7 & 0xde00) != 0 && vic_dev->hw_irq_enabled != 0) {
+		/* Binary Ninja: Error recovery sequence - gate off the OEM raw IRQ flag */
+		if ((v1_7 & 0xde00) != 0 && *(u32 *)((char *)vic_dev + 0x13c) != 0) {
             pr_info("*** VIC ERROR RECOVERY: Detected error condition 0x%x (control limit errors should be prevented by proper config) ***\n", v1_7);
             pr_err("error handler!!!\n");
 
@@ -2805,8 +2844,170 @@ static volatile bool subdev_init_complete = false;
 
 /* Forward declaration for tx_isp_video_s_stream */
 int tx_isp_video_s_stream(struct tx_isp_dev *dev, int enable);
-int ispcore_activate_module(struct tx_isp_dev *isp_dev);
 int tx_isp_vic_hw_init(struct tx_isp_subdev *sd);
+
+static int tx_isp_use_mipi_stream_order(struct tx_isp_dev *dev)
+{
+    return dev && dev->sensor && dev->sensor->video.attr &&
+           dev->sensor->video.attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI;
+}
+
+static int tx_isp_find_subdev_index(struct tx_isp_dev *dev,
+                                    struct tx_isp_subdev *target)
+{
+    int i;
+
+    if (!dev || !target)
+        return -1;
+
+    for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+        if (dev->subdevs[i] == target)
+            return i;
+    }
+
+    return -1;
+}
+
+static void tx_isp_stream_add_ordered_subdev(struct tx_isp_subdev **ordered,
+                                             int *ordered_indices,
+                                             int *ordered_count,
+                                             struct tx_isp_subdev *sd,
+                                             int index)
+{
+    int i;
+
+    if (!ordered || !ordered_indices || !ordered_count || !sd)
+        return;
+
+    for (i = 0; i < *ordered_count; i++) {
+        if (ordered[i] == sd)
+            return;
+    }
+
+    if (*ordered_count >= ISP_MAX_SUBDEVS)
+        return;
+
+    ordered[*ordered_count] = sd;
+    ordered_indices[*ordered_count] = index;
+    *ordered_count += 1;
+}
+
+static int tx_isp_call_subdev_s_stream(struct tx_isp_subdev *sd, int index, int enable)
+{
+    struct tx_isp_subdev_video_ops *video_ops;
+    int (*s_stream_func)(struct tx_isp_subdev *, int);
+    int result;
+
+    if (!sd)
+        return -ENOIOCTLCMD;
+
+    video_ops = sd->ops ? sd->ops->video : NULL;
+    if (!video_ops)
+        return -ENOIOCTLCMD;
+
+    s_stream_func = video_ops->s_stream;
+    if (!s_stream_func)
+        return -ENOIOCTLCMD;
+
+    pr_info("*** tx_isp_video_s_stream: Calling subdev[%d]->ops->video->s_stream(%d) ***\n",
+            index, enable);
+    result = s_stream_func(sd, enable);
+
+    if (result == 0)
+        pr_info("*** tx_isp_video_s_stream: subdev[%d] s_stream SUCCESS ***\n", index);
+
+    return result;
+}
+
+static int tx_isp_video_s_stream_mipi_ordered(struct tx_isp_dev *dev, int enable)
+{
+    struct tx_isp_subdev *ordered[ISP_MAX_SUBDEVS];
+    struct tx_isp_subdev *executed[ISP_MAX_SUBDEVS];
+    struct tx_isp_subdev *csi_sd = NULL;
+    struct tx_isp_subdev *vic_sd = NULL;
+    struct tx_isp_subdev *sensor_sd = NULL;
+    struct tx_isp_subdev *sd;
+    int ordered_indices[ISP_MAX_SUBDEVS];
+    int executed_indices[ISP_MAX_SUBDEVS];
+    int ordered_count = 0;
+    int executed_count = 0;
+    int i;
+    int result;
+    int rollback_enable;
+
+    if (!dev)
+        return -EINVAL;
+
+    if (dev->csi_dev)
+        csi_sd = &((struct tx_isp_csi_device *)dev->csi_dev)->sd;
+    if (dev->vic_dev)
+        vic_sd = &((struct tx_isp_vic_device *)dev->vic_dev)->sd;
+    if (dev->sensor)
+        sensor_sd = &dev->sensor->sd;
+
+    if (!csi_sd || !vic_sd)
+        return -ENOIOCTLCMD;
+
+    pr_info("*** tx_isp_video_s_stream: applying MIPI-ordered stream sequence (%s) ***\n",
+            enable ? "VIC -> CSI -> sensor" : "sensor -> CSI -> VIC");
+
+    if (enable) {
+        tx_isp_stream_add_ordered_subdev(ordered, ordered_indices, &ordered_count,
+                                         vic_sd, tx_isp_find_subdev_index(dev, vic_sd));
+        tx_isp_stream_add_ordered_subdev(ordered, ordered_indices, &ordered_count,
+                                         csi_sd, tx_isp_find_subdev_index(dev, csi_sd));
+    } else {
+        tx_isp_stream_add_ordered_subdev(ordered, ordered_indices, &ordered_count,
+                                         sensor_sd, tx_isp_find_subdev_index(dev, sensor_sd));
+    }
+
+    for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+        sd = dev->subdevs[i];
+
+        if (!sd)
+            continue;
+        if (sd == vic_sd || sd == csi_sd || sd == sensor_sd)
+            continue;
+
+        tx_isp_stream_add_ordered_subdev(ordered, ordered_indices, &ordered_count, sd, i);
+    }
+
+    if (enable) {
+        tx_isp_stream_add_ordered_subdev(ordered, ordered_indices, &ordered_count,
+                                         sensor_sd, tx_isp_find_subdev_index(dev, sensor_sd));
+    } else {
+        tx_isp_stream_add_ordered_subdev(ordered, ordered_indices, &ordered_count,
+                                         csi_sd, tx_isp_find_subdev_index(dev, csi_sd));
+        tx_isp_stream_add_ordered_subdev(ordered, ordered_indices, &ordered_count,
+                                         vic_sd, tx_isp_find_subdev_index(dev, vic_sd));
+    }
+
+    for (i = 0; i < ordered_count; i++) {
+        result = tx_isp_call_subdev_s_stream(ordered[i], ordered_indices[i], enable);
+
+        if (result == 0) {
+            executed[executed_count] = ordered[i];
+            executed_indices[executed_count] = ordered_indices[i];
+            executed_count += 1;
+            continue;
+        }
+
+        if (result == -ENOIOCTLCMD)
+            continue;
+
+        rollback_enable = (enable < 1) ? 1 : 0;
+        while (executed_count > 0) {
+            executed_count -= 1;
+            tx_isp_call_subdev_s_stream(executed[executed_count],
+                                        executed_indices[executed_count],
+                                        rollback_enable);
+        }
+
+        return result;
+    }
+
+    return 0;
+}
 
 
 /* BRUTAL: open all CPM clocks/resets to force CSI BASIC accessibility (file-scope) */
@@ -2975,12 +3176,12 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
     int clk_count;
     int i;
     int result = 0xffffffea;
-    void *current_subdev;
+    struct tx_isp_subdev *sd;
     int subdev_result;
     int a2_1;
     extern int isp_clk;  /* Global isp_clk variable from tx_isp_core.c */
 
-    pr_info("*** ispcore_activate_module: Fixed for our struct layouts ***\n");
+    pr_info("*** ispcore_activate_module: OEM-style activation walk ***\n");
 
     /* Binary Ninja: if (arg1 != 0) */
     if (isp_dev != NULL) {
@@ -3001,11 +3202,9 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
             if (vic_dev->state == 1) {
                 pr_info("*** VIC device in state 1, proceeding with activation ***\n");
 
-                /* CRITICAL: Clock configuration loop - Fixed for our struct layout */
-                /* FIXED: Access VIC device's subdev structure for clock array */
-                struct tx_isp_subdev *vic_subdev = &vic_dev->sd;
-                clk_array = vic_subdev->clks;      /* Our actual clock array location */
-                clk_count = vic_subdev->clk_num;   /* Our actual clock count location */
+                /* OEM walks the embedded ISP-device clock list, not VIC subdev clocks. */
+                clk_array = isp_dev->sd.clks;
+                clk_count = isp_dev->sd.clk_num;
 
                 pr_info("*** CLOCK CONFIGURATION SECTION: clk_array=%p, clk_count=%d ***\n", clk_array, clk_count);
 
@@ -3046,63 +3245,41 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                     pr_info("ispcore_activate_module: channel %d state 1 -> 2\n", a2_1);
                 }
 
-                /* Binary Ninja: (*($a0_3 + 0x40cc))($a0_3, 0x4000000, 0, $a3_1) */
-                /* CRITICAL: This triggers the actual hardware initialization */
-                pr_info("*** CRITICAL FUNCTION POINTER CALL SECTION ***\n");
-                if (vic_dev && vic_dev->vic_regs) {
-                    void __iomem *isp_base = vic_dev->vic_regs - 0x9a00;
+				if (isp_dev->core_regs) {
+					subdev_result = tx_isp_tuning_notify(isp_dev,
+									 ISP_TUNING_EVENT_MODE0);
+					if (subdev_result != 0)
+						pr_warn("ispcore_activate_module: MODE0 tuning notify failed: %d\n",
+							subdev_result);
+				}
 
-                    writel(0x4000000, isp_base + 0x9a00);
-                    wmb();
-                    pr_info("*** VIC control register written with 0x4000000 to ISP+0x9a00 ***\n");
-                }
-
-                /* CRITICAL: Subdevice initialization loop - match older working path */
-                pr_info("*** SUBDEVICE INITIALIZATION LOOP ***\n");
-                pr_info("*** SUBDEVICE INITIALIZATION: Traversing backwards to initialize sensors first ***\n");
-                for (i = ISP_MAX_SUBDEVS - 1; i >= 0; i--) {
-                    current_subdev = isp_dev->subdevs[i];
-                    if (!current_subdev) {
+                /* OEM then walks subdevs linearly calling internal->activate_module. */
+                pr_info("*** SUBDEVICE ACTIVATION LOOP ***\n");
+                for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+                    sd = isp_dev->subdevs[i];
+                    if (!sd) {
                         continue;  /* Skip empty slots */
                     }
 
-                    if ((uintptr_t)current_subdev >= 0xfffff001) {
+                    if ((uintptr_t)sd >= 0xfffff001) {
                         continue;  /* Skip invalid pointers */
                     }
 
-                    /* Binary Ninja: Call subdev internal activate function */
-                    struct tx_isp_subdev *sd = (struct tx_isp_subdev *)current_subdev;
-                    pr_info("*** INIT LOOP: subdev[%d] sd=%p, ops=%p ***\n", i, sd, sd->ops);
-                    if (sd->ops) {
-                        pr_info("*** INIT LOOP: subdev[%d] ops->core=%p ***\n", i, sd->ops->core);
-                        if (sd->ops->core) {
-                            pr_info("*** INIT LOOP: subdev[%d] ops->core->init=%p ***\n",
-                                    i, sd->ops->core->init);
-                        }
-                    }
+                    if (sd->ops && sd->ops->internal && sd->ops->internal->activate_module) {
+                        pr_info("Calling subdev %d activate_module\n", i);
+                        subdev_result = sd->ops->internal->activate_module(sd);
 
-                    if (sd->ops && sd->ops->core && sd->ops->core->init) {
-                        pr_info("Calling subdev %d initialization (REVERSE ORDER - sensors first)\n", i);
-                        subdev_result = sd->ops->core->init(sd, 1);
-
-                        /* Binary Ninja: if ($v0_12 != 0 && $v0_12 != 0xfffffdfd) */
-                        if (subdev_result != 0 && subdev_result != 0xfffffdfd) {
-                            /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch1 hcomp err !!!\n", *($s1_2 + 8)) */
-                            isp_printf(2, "Err [VIC_INT] : mipi ch1 hcomp err !!!\n", i);
+                        if (subdev_result != 0 && subdev_result != -ENOIOCTLCMD) {
+                            pr_warn("Failed to activate %s\n",
+                                    (sd->pdev && sd->pdev->name) ? sd->pdev->name : "unknown");
                             break;
                         }
-                    } else {
-                        pr_info("*** INIT LOOP: subdev[%d] SKIPPED - no core->init function ***\n", i);
                     }
                 }
 
                 /* Binary Ninja: *($s0_1 + 0xe8) = 2 - Final VIC state set */
                 vic_dev->state = 2;
                 pr_info("*** VIC device final state set to 2 (fully activated) ***\n");
-
-                /* CRITICAL FIX: Also set ISP Core state to 2 (READY) so ispcore_core_ops_init can run */
-                isp_dev->state = 2;
-                pr_info("*** ISP Core state set to 2 (READY) - ispcore_core_ops_init can now initialize ***\n");
 
                 /* Binary Ninja: return 0 */
                 pr_info("*** ispcore_activate_module: SUCCESS - ALL REGISTER WRITES SHOULD NOW BE TRIGGERED ***\n");
@@ -5636,40 +5813,39 @@ static int tx_isp_init(void)
         pr_warn("No sensors detected, continuing with basic initialization: %d\n", ret);
     }
 
-    /* *** CRITICAL: Register IRQ 37 (isp-m0) for core ISP interrupts *** */
-    pr_info("*** REGISTERING IRQ 37 (isp-m0) FOR CORE ISP INTERRUPTS ***\n");
+    /* OEM-aligned: IRQs are already registered during per-subdev init.
+     * Do not request them again here; just adopt the existing bookkeeping and
+     * leave the lines disabled until the normal stream-enable paths toggle
+     * them back on.
+     */
+    pr_info("*** SKIPPING LATE DUPLICATE IRQ REGISTRATION - USING SUBDEV-INIT OWNERSHIP ***\n");
 
-    /* Use the core platform device to get the correct IRQ and device name */
-    extern struct platform_device tx_isp_core_platform_device;
-    ret = tx_isp_request_irq2(&tx_isp_core_platform_device, ourISPdev);
-    if (ret) {
-        pr_warn("Hardware interrupts not available: %d\n", ret);
+    ourISPdev->isp_irq = ourISPdev->sd.irq_info.irq;
+    ourISPdev->irq_enable_func = tx_isp_enable_irq;
+    ourISPdev->irq_disable_func = tx_isp_disable_irq;
+
+    if (ourISPdev->isp_irq > 0) {
+        tx_isp_disable_irq(ourISPdev);
+        pr_info("*** ADOPTED EXISTING IRQ %d (isp-m0) FROM SUBDEV INIT ***\n",
+                ourISPdev->isp_irq);
     } else {
-        pr_info("*** HARDWARE INTERRUPT INITIALIZATION COMPLETE ***\n");
-        pr_info("*** IRQ 37 (isp-m0) REGISTERED ***\n");
+        pr_warn("*** NO EARLY CORE IRQ FOUND TO ADOPT FOR isp-m0 ***\n");
     }
 
-    /* *** CRITICAL: Register IRQ 38 (isp-w02) for VIC interrupts *** */
-    pr_info("*** REGISTERING IRQ 38 (isp-w02) FOR VIC INTERRUPTS ***\n");
+    if (ourISPdev->vic_dev) {
+        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
 
-    /* Register IRQ 38 (isp-w02) - VIC/secondary ISP channel */
-    ret = request_threaded_irq(38,
-                              isp_irq_handle,          /* Same handlers work for both IRQs */
-                              isp_irq_thread_handle,
-                              IRQF_SHARED,
-                              "isp-w02",               /* Match stock driver name */
-                              ourISPdev);
-    if (ret != 0) {
-        pr_err("*** FAILED TO REQUEST IRQ 38 (isp-w02): %d ***\n", ret);
-        pr_err("*** ONLY IRQ 37 WILL BE AVAILABLE ***\n");
-
-    } else {
-        pr_info("*** SUCCESS: IRQ 38 (isp-w02) REGISTERED ***\n");
-        ourISPdev->isp_irq2 = 38;  /* Store secondary IRQ */
-        disable_irq(38);
-        if (ourISPdev->vic_dev)
-            tx_vic_seed_irq_slots((struct tx_isp_vic_device *)ourISPdev->vic_dev, 38);
-        pr_info("*** IRQ 38 (isp-w02) LEFT DISABLED UNTIL VIC STREAM ENABLE ***\n");
+        ourISPdev->isp_irq2 = vic_dev->sd.irq_info.irq;
+        if (ourISPdev->isp_irq2 > 0) {
+            tx_vic_seed_irq_slots(vic_dev, ourISPdev->isp_irq2);
+            disable_irq(ourISPdev->isp_irq2);
+            pr_info("*** ADOPTED EXISTING IRQ %d (isp-w02) FROM SUBDEV INIT ***\n",
+                    ourISPdev->isp_irq2);
+            pr_info("*** IRQ %d (isp-w02) LEFT DISABLED UNTIL VIC STREAM ENABLE ***\n",
+                    ourISPdev->isp_irq2);
+        } else {
+            pr_warn("*** NO EARLY VIC IRQ FOUND TO ADOPT FOR isp-w02 ***\n");
+        }
     }
 
     /* *** CRITICAL: Enable interrupt generation at hardware level *** */
@@ -6151,6 +6327,9 @@ static void tx_vic_disable_irq_complete(struct tx_isp_dev *isp_dev)
     pr_info("*** tx_vic_disable_irq COMPLETE - VIC INTERRUPTS DISABLED ***\n");
 }
 
+#define VIC_RAW_IRQ_SLOT_OFFSET 0x80
+#define VIC_RAW_IRQ_ENABLE_OFFSET 0x84
+#define VIC_RAW_IRQ_DISABLE_OFFSET 0x88
 #define VIC_RAW_IRQ_LOCK_OFFSET 0x130
 #define VIC_RAW_IRQ_FLAG_OFFSET 0x13c
 
@@ -6167,11 +6346,46 @@ static inline u32 tx_vic_raw_irq_flag_get(struct tx_isp_vic_device *vic_dev)
 static inline void tx_vic_raw_irq_flag_set(struct tx_isp_vic_device *vic_dev, u32 enabled)
 {
     *(u32 *)((char *)vic_dev + VIC_RAW_IRQ_FLAG_OFFSET) = enabled;
-    vic_dev->hw_irq_enabled = enabled;
-    vic_dev->irq_enabled = enabled;
 }
 
 typedef void (*vic_irq_slot_cb_t)(struct tx_isp_irq_info *irq_info);
+typedef void (*vic_raw_irq_slot_cb_t)(void *irq_slot);
+
+static inline struct tx_isp_vic_device *tx_vic_irq_owner_resolve(struct tx_isp_vic_device *vic_dev)
+{
+    struct tx_isp_vic_device *active_vic = vic_dev;
+
+    if ((!active_vic || (unsigned long)active_vic >= 0xfffff001) &&
+        ourISPdev && ourISPdev->vic_dev)
+        active_vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+
+    if (!active_vic || (unsigned long)active_vic >= 0xfffff001)
+        return NULL;
+
+    return active_vic;
+}
+
+static inline void *tx_vic_raw_irq_slot(struct tx_isp_vic_device *vic_dev)
+{
+    return (char *)vic_dev + VIC_RAW_IRQ_SLOT_OFFSET;
+}
+
+static inline int tx_vic_raw_irq_cb_valid(vic_raw_irq_slot_cb_t cb)
+{
+    unsigned long addr = (unsigned long)cb;
+
+    return addr >= 0x80000000UL && addr < 0xfffff001UL;
+}
+
+static inline vic_raw_irq_slot_cb_t tx_vic_raw_irq_enable_cb_get(struct tx_isp_vic_device *vic_dev)
+{
+    return *(vic_raw_irq_slot_cb_t *)((char *)vic_dev + VIC_RAW_IRQ_ENABLE_OFFSET);
+}
+
+static inline vic_raw_irq_slot_cb_t tx_vic_raw_irq_disable_cb_get(struct tx_isp_vic_device *vic_dev)
+{
+    return *(vic_raw_irq_slot_cb_t *)((char *)vic_dev + VIC_RAW_IRQ_DISABLE_OFFSET);
+}
 
 static void tx_vic_irq_slot_enable(struct tx_isp_irq_info *irq_info)
 {
@@ -6217,6 +6431,12 @@ static void tx_vic_seed_irq_slots(struct tx_isp_vic_device *vic_dev, int irq)
     if (irq <= 0)
         irq = 38;
 
+    /* Do not overwrite the OEM-owned raw +0x80 slot. Several runtime paths
+     * treat that field as a pointer-bearing object, and writing a bare IRQ or
+     * synthetic irq_info there causes unaligned-access faults during sensor
+     * bring-up. Keep the IRQ bookkeeping on the named members we actually own.
+     */
+
     vic_dev->sd.irq_info.irq = irq;
     vic_dev->sd.irq_info.handler = (void *)tx_vic_irq_slot_enable;
     vic_dev->sd.irq_info.data = (void *)tx_vic_irq_slot_disable;
@@ -6226,50 +6446,62 @@ static void tx_vic_seed_irq_slots(struct tx_isp_vic_device *vic_dev, int irq)
 
 void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 {
+    struct tx_isp_vic_device *active_vic;
     unsigned long flags;
     vic_irq_slot_cb_t cb;
 
-    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001)
+    active_vic = tx_vic_irq_owner_resolve(vic_dev);
+    if (!active_vic)
         return;
 
-    spin_lock_irqsave(tx_vic_raw_irq_lock(vic_dev), flags);
+    spin_lock_irqsave(tx_vic_raw_irq_lock(active_vic), flags);
 
-    if (tx_vic_raw_irq_flag_get(vic_dev) == 0) {
-        tx_vic_raw_irq_flag_set(vic_dev, 1);
-        cb = (vic_irq_slot_cb_t)vic_dev->sd.irq_info.handler;
+    if (tx_vic_raw_irq_flag_get(active_vic) == 0) {
+        tx_vic_raw_irq_flag_set(active_vic, 1);
+        tx_vic_seed_irq_slots(active_vic,
+                              active_vic->irq_number ? active_vic->irq_number : active_vic->irq);
+        cb = (vic_irq_slot_cb_t)active_vic->sd.irq_info.handler;
         if (cb) {
-            pr_info("*** tx_vic_enable_irq: enabling VIC IRQ %d via raw slot callback ***\n",
-                    vic_dev->sd.irq_info.irq);
-            cb(&vic_dev->sd.irq_info);
-        } else
-            pr_warn("tx_vic_enable_irq: no raw VIC enable callback seeded\n");
+            pr_info("*** tx_vic_enable_irq: enabling VIC IRQ %d via sd.irq_info callback ***\n",
+                    active_vic->sd.irq_info.irq);
+            cb(&active_vic->sd.irq_info);
+        } else {
+            pr_warn("tx_vic_enable_irq: no sd.irq_info callback seeded, using direct helper fallback\n");
+            tx_vic_irq_slot_enable(&active_vic->sd.irq_info);
+        }
     }
 
-    spin_unlock_irqrestore(tx_vic_raw_irq_lock(vic_dev), flags);
+    spin_unlock_irqrestore(tx_vic_raw_irq_lock(active_vic), flags);
 }
 
 void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
 {
+    struct tx_isp_vic_device *active_vic;
     unsigned long flags;
     vic_irq_slot_cb_t cb;
 
-    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001)
+    active_vic = tx_vic_irq_owner_resolve(vic_dev);
+    if (!active_vic)
         return;
 
-    spin_lock_irqsave(tx_vic_raw_irq_lock(vic_dev), flags);
+    spin_lock_irqsave(tx_vic_raw_irq_lock(active_vic), flags);
 
-    if (tx_vic_raw_irq_flag_get(vic_dev) != 0) {
-        tx_vic_raw_irq_flag_set(vic_dev, 0);
-        cb = (vic_irq_slot_cb_t)vic_dev->sd.irq_info.data;
+    if (tx_vic_raw_irq_flag_get(active_vic) != 0) {
+        tx_vic_raw_irq_flag_set(active_vic, 0);
+        tx_vic_seed_irq_slots(active_vic,
+                              active_vic->irq_number ? active_vic->irq_number : active_vic->irq);
+        cb = (vic_irq_slot_cb_t)active_vic->sd.irq_info.data;
         if (cb) {
-            pr_info("*** tx_vic_disable_irq: disabling VIC IRQ %d via raw slot callback ***\n",
-                    vic_dev->sd.irq_info.irq);
-            cb(&vic_dev->sd.irq_info);
-        } else
-            pr_warn("tx_vic_disable_irq: no raw VIC disable callback seeded\n");
+            pr_info("*** tx_vic_disable_irq: disabling VIC IRQ %d via sd.irq_info callback ***\n",
+                    active_vic->sd.irq_info.irq);
+            cb(&active_vic->sd.irq_info);
+        } else {
+            pr_warn("tx_vic_disable_irq: no sd.irq_info callback seeded, using direct helper fallback\n");
+            tx_vic_irq_slot_disable(&active_vic->sd.irq_info);
+        }
     }
 
-    spin_unlock_irqrestore(tx_vic_raw_irq_lock(vic_dev), flags);
+    spin_unlock_irqrestore(tx_vic_raw_irq_lock(active_vic), flags);
 }
 
 
@@ -6311,7 +6543,7 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
 }
 
 /* isp_irq_handle - OEM-style generic subdevice walk */
-static irqreturn_t isp_irq_handle(int irq, void *dev_id)
+irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
     struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
     irqreturn_t result = IRQ_HANDLED;
@@ -6349,7 +6581,7 @@ static irqreturn_t isp_irq_handle(int irq, void *dev_id)
 }
 
 /* isp_irq_thread_handle - EXACT Binary Ninja implementation with CORRECT structure access */
-static irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
+irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
 {
     void *s0_1;
     void *s1_1;
@@ -7947,15 +8179,15 @@ int tisp_ae1_process(void)
 }
 
 
-/* tx_isp_module_init - EXACT Binary Ninja reference implementation */
-int tx_isp_module_init(struct tx_isp_dev *isp_dev)
+/* tx_isp_driver_graph_init - non-OEM global bring-up helper retained for reference */
+int tx_isp_driver_graph_init(struct tx_isp_dev *isp_dev)
 {
     int ret;
 
-    pr_info("*** tx_isp_module_init: EXACT Binary Ninja reference implementation ***\n");
+    pr_info("*** tx_isp_driver_graph_init: global bring-up helper ***\n");
 
     /* CRITICAL FIX: Register platform drivers BEFORE registering platform devices */
-    pr_info("*** tx_isp_module_init: Registering subdev platform drivers FIRST ***\n");
+    pr_info("*** tx_isp_driver_graph_init: Registering subdev platform drivers FIRST ***\n");
     ret = tx_isp_subdev_platform_init();
     if (ret != 0) {
         pr_err("Failed to register subdev platform drivers: %d\n", ret);
@@ -7981,7 +8213,7 @@ int tx_isp_module_init(struct tx_isp_dev *isp_dev)
     }
 
     /* VIC IRQ registration now happens immediately after device linking in auto-link function */
-    pr_info("*** tx_isp_module_init: VIC device linkage check - isp_dev->vic_dev = %p ***\n", isp_dev->vic_dev);
+    pr_info("*** tx_isp_driver_graph_init: VIC device linkage check - isp_dev->vic_dev = %p ***\n", isp_dev->vic_dev);
 
 
     /* *** CRITICAL: Enable interrupt generation at hardware level *** */
@@ -8026,7 +8258,7 @@ int tx_isp_module_init(struct tx_isp_dev *isp_dev)
         pr_warn("*** EARLY VIC ENABLES (MODULE INIT): VIC device not linked yet ***\n");
     }
 
-    pr_info("*** tx_isp_module_init: Binary Ninja reference implementation complete ***\n");
+    pr_info("*** tx_isp_driver_graph_init: helper complete ***\n");
     return 0;
 }
 

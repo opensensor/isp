@@ -506,6 +506,171 @@ static inline int ispcore_bypass_enabled(struct tx_isp_dev *isp_dev)
     return (isp_dev && isp_dev->bypass_enabled) ? 1 : 0;
 }
 
+static int ispcore_use_mipi_stream_order(struct tx_isp_dev *isp_dev)
+{
+    return isp_dev && isp_dev->sensor && isp_dev->sensor->video.attr &&
+           isp_dev->sensor->video.attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI;
+}
+
+static int ispcore_find_subdev_index(struct tx_isp_dev *isp_dev,
+                                     struct tx_isp_subdev *target)
+{
+    int i;
+
+    if (!isp_dev || !target)
+        return -1;
+
+    for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+        if (isp_dev->subdevs[i] == target)
+            return i;
+    }
+
+    return -1;
+}
+
+static void ispcore_stream_add_ordered_subdev(struct tx_isp_subdev **ordered,
+                                              int *ordered_indices,
+                                              int *ordered_count,
+                                              struct tx_isp_subdev *sd,
+                                              int index)
+{
+    int i;
+
+    if (!ordered || !ordered_indices || !ordered_count || !sd)
+        return;
+
+    for (i = 0; i < *ordered_count; i++) {
+        if (ordered[i] == sd)
+            return;
+    }
+
+    if (*ordered_count >= ISP_MAX_SUBDEVS)
+        return;
+
+    ordered[*ordered_count] = sd;
+    ordered_indices[*ordered_count] = index;
+    *ordered_count += 1;
+}
+
+static int ispcore_call_subdev_s_stream(struct tx_isp_subdev *sd, int index, int enable)
+{
+    struct tx_isp_subdev_video_ops *video_ops;
+    int (*s_stream_func)(struct tx_isp_subdev *, int);
+
+    if (!sd)
+        return -ENOIOCTLCMD;
+
+    if (!sd->ops || !sd->ops->video)
+        return -ENOIOCTLCMD;
+
+    video_ops = sd->ops->video;
+    s_stream_func = video_ops->s_stream;
+    if (!s_stream_func)
+        return -ENOIOCTLCMD;
+
+    return s_stream_func(sd, enable);
+}
+
+static int ispcore_video_s_stream_mipi_ordered(struct tx_isp_dev *isp_dev, int enable)
+{
+    struct tx_isp_subdev *ordered[ISP_MAX_SUBDEVS];
+    struct tx_isp_subdev *executed[ISP_MAX_SUBDEVS];
+    struct tx_isp_subdev *csi_sd = NULL;
+    struct tx_isp_subdev *vic_sd = NULL;
+    struct tx_isp_subdev *sensor_sd = NULL;
+    struct tx_isp_subdev *sd;
+    int ordered_indices[ISP_MAX_SUBDEVS];
+    int executed_indices[ISP_MAX_SUBDEVS];
+    int ordered_count = 0;
+    int executed_count = 0;
+    int i;
+    int result;
+    int rollback_enable;
+
+    if (!isp_dev)
+        return -EINVAL;
+
+    if (isp_dev->csi_dev)
+        csi_sd = &((struct tx_isp_csi_device *)isp_dev->csi_dev)->sd;
+    if (isp_dev->vic_dev)
+        vic_sd = &((struct tx_isp_vic_device *)isp_dev->vic_dev)->sd;
+    if (isp_dev->sensor)
+        sensor_sd = &isp_dev->sensor->sd;
+
+    if (!csi_sd || !vic_sd)
+        return -ENOIOCTLCMD;
+
+    pr_info("*** ispcore_video_s_stream: applying MIPI-ordered stream sequence (%s) ***\n",
+            enable ? "VIC -> CSI -> sensor" : "sensor -> CSI -> VIC");
+
+    if (enable) {
+        ispcore_stream_add_ordered_subdev(ordered, ordered_indices, &ordered_count,
+                                          vic_sd, ispcore_find_subdev_index(isp_dev, vic_sd));
+        ispcore_stream_add_ordered_subdev(ordered, ordered_indices, &ordered_count,
+                                          csi_sd, ispcore_find_subdev_index(isp_dev, csi_sd));
+    } else {
+        ispcore_stream_add_ordered_subdev(ordered, ordered_indices, &ordered_count,
+                                          sensor_sd, ispcore_find_subdev_index(isp_dev, sensor_sd));
+    }
+
+    for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+        sd = isp_dev->subdevs[i];
+
+        if (!sd)
+            continue;
+        if (sd == vic_sd || sd == csi_sd || sd == sensor_sd)
+            continue;
+
+        ispcore_stream_add_ordered_subdev(ordered, ordered_indices, &ordered_count, sd, i);
+    }
+
+    if (enable) {
+        ispcore_stream_add_ordered_subdev(ordered, ordered_indices, &ordered_count,
+                                          sensor_sd, ispcore_find_subdev_index(isp_dev, sensor_sd));
+    } else {
+        ispcore_stream_add_ordered_subdev(ordered, ordered_indices, &ordered_count,
+                                          csi_sd, ispcore_find_subdev_index(isp_dev, csi_sd));
+        ispcore_stream_add_ordered_subdev(ordered, ordered_indices, &ordered_count,
+                                          vic_sd, ispcore_find_subdev_index(isp_dev, vic_sd));
+    }
+
+    for (i = 0; i < ordered_count; i++) {
+        result = ispcore_call_subdev_s_stream(ordered[i], ordered_indices[i], enable);
+
+        if (ordered_indices[i] >= 0) {
+            pr_info("*** ispcore_video_s_stream: Called s_stream on ordered subdev[%d]: result=%d ***\n",
+                    ordered_indices[i], result);
+        } else {
+            pr_info("*** ispcore_video_s_stream: Called s_stream on ordered subdev %p: result=%d ***\n",
+                    ordered[i], result);
+        }
+
+        if (result == 0) {
+            executed[executed_count] = ordered[i];
+            executed_indices[executed_count] = ordered_indices[i];
+            executed_count += 1;
+            continue;
+        }
+
+        if (result == -ENOIOCTLCMD) {
+            result = -ENOIOCTLCMD;
+            continue;
+        }
+
+        rollback_enable = (enable < 1) ? 1 : 0;
+        while (executed_count > 0) {
+            executed_count -= 1;
+            ispcore_call_subdev_s_stream(executed[executed_count],
+                                         executed_indices[executed_count],
+                                         rollback_enable);
+        }
+
+        return result;
+    }
+
+    return 0;
+}
+
 /**
  * tx_isp_get_device - CRITICAL: Get global ISP device pointer
  * This function returns the global ISP device pointer that is needed
@@ -720,6 +885,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         }
     }
 
+stream_done:
     if (enable == 0 || ispcore_bypass_enabled(isp_dev)) {
         tx_isp_disable_irq(isp_dev);
     } else {
@@ -1570,10 +1736,12 @@ int tx_isp_setup_pipeline(struct tx_isp_dev *isp)
 
     /* Configure default data path settings */
     if (isp->csi_dev) {
-        if (isp->csi_dev->state < 1) {
+        if (*(u32 *)((char *)isp->csi_dev + 0x128) < 1) {
+            *(u32 *)((char *)isp->csi_dev + 0x128) = 1;
             isp->csi_dev->state = 1; /* INIT state */
             pr_info("CSI device ready for configuration\n");
         } else {
+            isp->csi_dev->state = *(u32 *)((char *)isp->csi_dev + 0x128);
             pr_info("CSI device already initialized (state=%d), preserving state\n",
                     isp->csi_dev->state);
         }
@@ -2187,9 +2355,10 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 
             /* Binary Ninja: if ($v1_55 == 3) - Stop kernel thread if in state 3 */
             if (vic_state == 3) {
-                /* Binary Ninja: private_kthread_stop(*($s0 + 0x1b8)) */
-                /* Note: fw_thread management removed - handled by separate thread management system */
-                pr_info("ispcore_core_ops_init: Thread management handled by separate system");
+                if (isp_dev->fw_thread && !IS_ERR(isp_dev->fw_thread)) {
+                    kthread_stop(isp_dev->fw_thread);
+                    isp_dev->fw_thread = NULL;
+                }
                 /* Binary Ninja: *($s0 + 0xe8) = 2 */
                 vic_dev->state = 2;
             }
@@ -2235,21 +2404,6 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 
             pr_info("*** ispcore_core_ops_init: VIC state check passed, proceeding with initialization ***");
 
-            /* CRITICAL: Initialize all ISP clocks (cgu_isp, isp, csi) in correct order */
-            pr_info("*** ispcore_core_ops_init: Initializing all ISP clocks ***\n");
-            if (!isp_dev->cgu_isp || !isp_dev->isp_clk || !isp_dev->csi_clk) {
-                pr_info("*** Calling tx_isp_configure_clocks to initialize all 3 clocks ***\n");
-                ret = tx_isp_configure_clocks(isp_dev);
-                if (ret != 0) {
-                    pr_err("*** tx_isp_configure_clocks failed: %d ***\n", ret);
-                    return ret;
-                }
-                pr_info("*** All ISP clocks initialized successfully ***\n");
-            } else {
-                pr_info("*** ISP clocks already initialized, skipping ***\n");
-            }
-
-            /* Binary Ninja MCP shows two calls: 00079050 and 00079058 */
             struct tx_isp_subdev *init_sensor = isp_dev->sensor;
             struct tisp_boot_sensor_info sensor_info;
 
@@ -2272,23 +2426,13 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 pr_info("*** ispcore_core_ops_init: tisp_init already completed - skipping duplicate init ***\n");
             }
 
-            if (vic_dev->state != 4) {
-                /* Binary Ninja: *($s0 + 0xe8) = 3 */
-                vic_dev->state = 3;
-                pr_info("*** ispcore_core_ops_init: VIC state set to 3 (ACTIVE) - CORE READY FOR STREAMING ***");
-            } else {
-                pr_info("*** ispcore_core_ops_init: VIC already streaming (state 4) - preserving state to avoid reinitialization ***");
-            }
+            /* Binary Ninja: *($s0 + 0xe8) = 3 */
+            vic_dev->state = 3;
+            pr_info("*** ispcore_core_ops_init: VIC state set to 3 (ACTIVE) - CORE READY FOR STREAMING ***");
 
             /* REMOVED: Core device state management - ALL state management happens through VIC device */
             /* Based on Binary Ninja MCP analysis, core device is stateless */
             pr_info("*** ispcore_core_ops_init: Core device is stateless - only VIC state matters ***");
-
-            ret = isp_core_enable_prestream_irqs(isp_dev);
-            if (ret == 0)
-                pr_info("*** ispcore_core_ops_init: Pre-stream ISP core interrupts enabled ***\n");
-            else
-                pr_warn("*** ispcore_core_ops_init: Failed to enable pre-stream ISP core interrupts: %d ***\n", ret);
 
             result = 0;
         }
@@ -3200,96 +3344,14 @@ EXPORT_SYMBOL(tisp_g_fcrop_control);
 /* ispcore_link_setup - EXACT Binary Ninja implementation */
 int ispcore_link_setup(struct tx_isp_dev *isp_dev, u32 flags)
 {
-    struct tx_isp_vic_device *vic_dev;
-    struct tx_isp_csi_device *csi_dev;
-    struct tx_isp_vin_device *vin_dev;
-    int ret = 0;
-    int config;
-
-    /* Get ISP device from subdev */
     if (!isp_dev) {
         pr_err("ispcore_link_setup: No ISP device\n");
         return -EINVAL;
     }
 
-    /* Convert flags to config: 0 = disable, 1 = enable */
-    config = (flags & 1) ? 1 : 0;
-
-    pr_info("*** ispcore_link_setup: EXACT Binary Ninja implementation - flags=0x%x, config=%d ***\n", flags, config);
-
-    vic_dev = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-    csi_dev = (struct tx_isp_csi_device *)isp_dev->csi_dev;
-    vin_dev = (struct tx_isp_vin_device *)isp_dev->vin_dev;
-
-    if (config == 0) {
-        /* CRITICAL FIX: config=0 is called AFTER slake to indicate "no active links"
-         * but we should NOT disable hardware pipeline registers here!
-         * The hardware pipeline is already torn down by slake_module.
-         * Disabling hardware links here breaks the interrupt chain for the next init.
-         */
-        pr_info("*** ispcore_link_setup: config=0 (software link disable) - NOT touching hardware ***\n");
-        pr_info("*** ispcore_link_setup: Hardware pipeline already torn down by slake_module ***\n");
-
-        /* NOTE: We do NOT write to hardware registers here because:
-         * 1. ispcore_slake_module already tore down the pipeline
-         * 2. Writing 0 to pipeline registers breaks the interrupt chain
-         * 3. The next LINK_STREAM_ON will re-enable everything
-         */
-
-    } else {
-        /* Binary Ninja: Enable pipeline links */
-        pr_info("*** ispcore_link_setup: ENABLING pipeline links ***\n");
-
-        /* Enable sensor to VIN link */
-        struct tx_isp_subdev *sensor_sd;
-        struct tx_isp_sensor *sensor;
-        sensor_sd = tx_isp_get_sensor_subdev(isp_dev);
-        if (sensor_sd && vin_dev) {
-            sensor = sd_to_sensor_device(sensor_sd);
-            pr_info("ispcore_link_setup: Enabling sensor->VIN link\n");
-            /* Binary Ninja: Configure VIN input for sensor */
-            if (vin_dev->base) {
-                u32 vin_config = 0x1;  /* Enable VIN input */
-                if (sensor && sensor->video.attr && sensor->video.attr->dbus_type == 1) {
-                    vin_config |= 0x2;  /* MIPI interface */
-                }
-                writel(vin_config, vin_dev->base + 0x10);
-                wmb();
-                pr_info("ispcore_link_setup: VIN input configured: 0x%08x\n", vin_config);
-            }
-        }
-
-        /* Enable VIN to CSI link */
-        if (vin_dev && csi_dev) {
-            pr_info("ispcore_link_setup: Enabling VIN->CSI link\n");
-            /* Binary Ninja: Configure CSI input from VIN */
-            if (csi_dev->csi_regs) {
-                writel(0x1, csi_dev->csi_regs + 0x20);  /* Enable CSI input from VIN */
-                wmb();
-            }
-        }
-
-        /* Enable CSI to VIC link */
-        if (csi_dev && vic_dev) {
-            pr_info("ispcore_link_setup: Enabling CSI->VIC link\n");
-            /* Binary Ninja: Configure VIC input from CSI */
-            if (vic_dev->vic_regs) {
-                u32 vic_input_config = 0x1;  /* Enable VIC input */
-                if (sensor_sd && sensor) {
-                    /* Configure based on sensor attributes */
-                    if (sensor->video.attr) {
-                        vic_input_config |= (sensor->video.attr->dbus_type << 4);
-                    }
-                }
-                writel(vic_input_config, vic_dev->vic_regs + 0x380);
-                wmb();
-                pr_info("ispcore_link_setup: VIC input configured: 0x%08x\n", vic_input_config);
-            }
-        }
-    }
-
-    pr_info("*** ispcore_link_setup: Pipeline link setup complete, ret=%d ***\n", ret);
-    return ret;
+    /* OEM Binary Ninja decompile is a stub that just returns 0. */
+    pr_info("*** ispcore_link_setup: OEM stub - flags=0x%x returning 0 ***\n", flags);
+    return 0;
 }
 EXPORT_SYMBOL(ispcore_link_setup);
 
@@ -4070,26 +4132,7 @@ int tx_isp_core_probe(struct platform_device *pdev)
                     pr_info("*** tx_isp_core_probe: VIN device created successfully ***\n");
                 }
 
-                if (isp_dev->vic_dev && isp_dev->vic_dev->state >= 2 &&
-                    core_subdev_ops.core && core_subdev_ops.core->init) {
-                    if (isp_dev->sensor && isp_dev->sensor->video.attr) {
-                        pr_info("*** tx_isp_core_probe: Calling core->init during probe (vic_state=%d) ***\n",
-                                isp_dev->vic_dev->state);
-                        result = core_subdev_ops.core->init(&isp_dev->sd, 1);
-                        if (result != 0 && result != -ENOIOCTLCMD) {
-                            pr_err("*** tx_isp_core_probe: core->init during probe failed: %d ***\n",
-                                   result);
-                            return result;
-                        }
-                    } else {
-                        pr_info("*** tx_isp_core_probe: Deferring core->init during probe until sensor attach completes ***\n");
-                    }
-                } else {
-                    pr_warn("*** tx_isp_core_probe: Skipping core->init during probe (vic=%p state=%d core_ops=%p) ***\n",
-                            isp_dev->vic_dev,
-                            isp_dev->vic_dev ? isp_dev->vic_dev->state : -1,
-                            core_subdev_ops.core ? core_subdev_ops.core->init : NULL);
-                }
+                pr_info("*** tx_isp_core_probe: OEM parity - probe leaves core->init to later lifecycle paths ***\n");
 
                 /* NOTE: Frame sync workqueue already created early in probe function */
                 /* Test the work function directly to see if it works */

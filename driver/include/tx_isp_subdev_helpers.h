@@ -159,7 +159,7 @@ static inline struct tx_isp_subdev *tx_isp_get_fs_subdev(struct tx_isp_dev *isp_
 /**
  * tx_isp_find_sensor_subdev - Find first available REAL sensor subdevice
  * CRITICAL FIX: Search only in sensor slots (5+) and exclude ISP core devices
- * Subdev layout: 0=CSI(isp-w01), 1=VIC(isp-w02), 2=VIN(isp-w00), 3=Core(isp-m0), 4=fs(isp-fs), 5+=REAL_SENSORS
+ * Subdev layout: 0=VIC(isp-w02), 1=CSI(isp-w01), 2=VIN(isp-w00), 3=Core(isp-m0), 4=fs(isp-fs), 5+=REAL_SENSORS
  */
 static inline struct tx_isp_subdev *tx_isp_find_sensor_subdev(struct tx_isp_dev *isp_dev)
 {
@@ -230,8 +230,8 @@ static inline int tx_isp_find_free_subdev_slot(struct tx_isp_dev *isp_dev)
  * @isp_dev: Main ISP device
  * @sd: Subdevice to register
  *
- * CRITICAL: Subdev layout MUST be: 0=CSI, 1=VIC, 2=VIN, 3=Core, 4=fs, 5+=REAL_SENSORS
- * This matches the reference driver's expected layout.
+ * CRITICAL: Subdev layout MUST be: 0=VIC, 1=CSI, 2=VIN, 3=Core, 4=fs, 5+=REAL_SENSORS
+ * This keeps VIDIOC_STREAMON's linear subdev walk in VIC -> CSI -> sensor order.
  *
  * Returns: Index where subdev was registered, or -1 on failure
  */
@@ -262,17 +262,19 @@ static inline int tx_isp_register_subdev_by_name(struct tx_isp_dev *isp_dev, str
         return -1;
     }
 
-    /* CRITICAL: Assign FIXED slots based on device name to match reference driver layout */
-    /* Layout: 0=CSI(isp-w01), 1=VIC(isp-w02), 2=VIN(isp-w00), 3=Core(isp-m0), 4=fs(isp-fs), 5+=SENSORS */
+    /* CRITICAL: Assign FIXED slots so tx_isp_video_s_stream's linear walk starts
+     * the T31 MIPI sink before the bridge: VIC(isp-w02) -> CSI(isp-w01).
+     */
+    /* Layout: 0=VIC(isp-w02), 1=CSI(isp-w01), 2=VIN(isp-w00), 3=Core(isp-m0), 4=fs(isp-fs), 5+=SENSORS */
 
-    if (strcmp(dev_name, "isp-w01") == 0) {
-        /* CSI device - MUST be at index 0 */
+    if (strcmp(dev_name, "isp-w02") == 0) {
+        /* VIC device - MUST be at index 0 */
         slot = 0;
-        pr_info("*** tx_isp_register_subdev_by_name: CSI device '%s' assigned to FIXED slot %d ***\n", dev_name, slot);
-    } else if (strcmp(dev_name, "isp-w02") == 0) {
-        /* VIC device - MUST be at index 1 */
-        slot = 1;
         pr_info("*** tx_isp_register_subdev_by_name: VIC device '%s' assigned to FIXED slot %d ***\n", dev_name, slot);
+    } else if (strcmp(dev_name, "isp-w01") == 0) {
+        /* CSI device - MUST be at index 1 */
+        slot = 1;
+        pr_info("*** tx_isp_register_subdev_by_name: CSI device '%s' assigned to FIXED slot %d ***\n", dev_name, slot);
     } else if (strcmp(dev_name, "isp-w00") == 0) {
         /* VIN device - MUST be at index 2 */
         slot = 2;

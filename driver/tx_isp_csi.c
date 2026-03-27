@@ -37,18 +37,95 @@ static void csi_stop_dump_thread(void);
 static void csi_dump_once_to_file(struct tx_isp_csi_device *csi_dev, const char *tag);
 static void csi_write_file(const char *buf, size_t len);
 
+#define CSI_RAW_SELF_OFFSET        0xd4
+#define CSI_RAW_SENSOR_ATTR_OFFSET 0x110
+#define CSI_RAW_STATE_OFFSET       0x128
+#define CSI_RAW_MEM_RES_OFFSET     0x138
+#define CSI_RAW_WRAPPER_OFFSET     0x13c
+
 
 
 /* Forward declarations */
 int csi_core_ops_init(struct tx_isp_subdev *sd, int enable);
 int csi_set_on_lanes(struct tx_isp_csi_device *csi_dev, int lanes);
 void dump_csi_reg(struct tx_isp_subdev *sd);
+int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd);
 extern struct tx_isp_dev *ourISPdev;
 void __iomem *tx_isp_get_vic_primary_regs(void);
 static void __maybe_unused csi_jit_ungate_clocks(void);
 
 
 static void __iomem *tx_isp_core_regs = NULL;
+
+static inline struct tx_isp_csi_device *csi_raw_self_from_sd(struct tx_isp_subdev *sd)
+{
+    if (!sd)
+        return NULL;
+
+    return *(struct tx_isp_csi_device **)((char *)sd + CSI_RAW_SELF_OFFSET);
+}
+
+static inline void csi_raw_self_set(struct tx_isp_csi_device *csi_dev)
+{
+    if (!csi_dev)
+        return;
+
+    *(struct tx_isp_csi_device **)((char *)csi_dev + CSI_RAW_SELF_OFFSET) = csi_dev;
+    tx_isp_set_subdevdata(&csi_dev->sd, csi_dev);
+}
+
+static inline u32 csi_raw_state_get(struct tx_isp_csi_device *csi_dev)
+{
+    if (!csi_dev)
+        return 0;
+
+    return *(u32 *)((char *)csi_dev + CSI_RAW_STATE_OFFSET);
+}
+
+static inline void csi_raw_state_set(struct tx_isp_csi_device *csi_dev, u32 state)
+{
+    if (!csi_dev)
+        return;
+
+    *(u32 *)((char *)csi_dev + CSI_RAW_STATE_OFFSET) = state;
+    csi_dev->state = state;
+}
+
+static inline struct resource **csi_mem_res_slot(struct tx_isp_csi_device *csi_dev)
+{
+    return (struct resource **)((char *)csi_dev + CSI_RAW_MEM_RES_OFFSET);
+}
+
+static struct tx_isp_csi_device *csi_resolve_dev(struct tx_isp_subdev *sd)
+{
+    struct tx_isp_csi_device *csi_dev;
+
+    if (!sd || (unsigned long)sd >= 0xfffff001)
+        return NULL;
+
+    csi_dev = csi_raw_self_from_sd(sd);
+    if (!csi_dev || (unsigned long)csi_dev >= 0xfffff001) {
+        csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+        if (csi_dev && (unsigned long)csi_dev < 0xfffff001) {
+            pr_warn("csi_resolve_dev: raw self missing, repairing from dev_priv=%p\n",
+                    csi_dev);
+            csi_raw_self_set(csi_dev);
+        }
+    }
+
+    if ((!csi_dev || (unsigned long)csi_dev >= 0xfffff001) &&
+        ourISPdev && ourISPdev->csi_dev &&
+        (unsigned long)ourISPdev->csi_dev < 0xfffff001) {
+        csi_dev = ourISPdev->csi_dev;
+        pr_warn("csi_resolve_dev: falling back to global CSI device %p\n", csi_dev);
+        csi_raw_self_set(csi_dev);
+    }
+
+    if (!csi_dev || (unsigned long)csi_dev >= 0xfffff001)
+        return NULL;
+
+    return csi_dev;
+}
 
 u32 isp_read32(u32 reg)
 {
@@ -555,6 +632,19 @@ int tx_isp_csi_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *config
     return 0;
 }
 
+static struct tx_isp_sensor_attribute **csi_sensor_attr_slot(struct tx_isp_csi_device *csi_dev)
+{
+    return (struct tx_isp_sensor_attribute **)((char *)csi_dev + CSI_RAW_SENSOR_ATTR_OFFSET);
+}
+
+static struct tx_isp_sensor_attribute *csi_get_cached_sensor_attr(struct tx_isp_csi_device *csi_dev)
+{
+    if (!csi_dev)
+        return NULL;
+
+    return *csi_sensor_attr_slot(csi_dev);
+}
+
 /* CSI video streaming control - FIXED: MIPS memory alignment */
 
 /* CSI video streaming control - EXACT Binary Ninja MCP implementation */
@@ -574,21 +664,24 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
         return 0xffffffea;
     }
 
-    /* Get CSI device from subdev private data */
-    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+    /* OEM uses the raw self slot at sd+0xd4; do not rely solely on dev_priv. */
+    csi_dev = csi_resolve_dev(sd);
     if (!csi_dev) {
-        pr_err("CSI device is NULL from subdev private data\n");
+        pr_err("CSI device is NULL from raw/dev_priv/global resolution\n");
         return 0xffffffea;
     }
 
     /* Binary Ninja: if (*(*(arg1 + 0x110) + 0x14) != 1) return 0 */
-    /* Check interface type; if unknown, try to derive from active sensor attr */
+    /* Check interface type; if unknown, derive from the CSI-local attr cache. */
     {
+        struct tx_isp_sensor_attribute *sensor_attr = csi_get_cached_sensor_attr(csi_dev);
         int interface_type = csi_dev->interface_type;
-        if (interface_type == 0 && ourISPdev && ourISPdev->sensor && ourISPdev->sensor->video.attr) {
-            interface_type = ourISPdev->sensor->video.attr->dbus_type;
+
+        if (interface_type == 0 && sensor_attr) {
+            interface_type = sensor_attr->dbus_type;
             csi_dev->interface_type = interface_type;
-            pr_info("csi_video_s_stream: derived interface_type=%d from sensor attr, cached\n", interface_type);
+            pr_info("csi_video_s_stream: derived interface_type=%d from CSI cache\n",
+                    interface_type);
         }
         if (interface_type != 1) {
             pr_info("csi_video_s_stream: Interface type %d != 1 (MIPI), returning 0\n", interface_type);
@@ -596,12 +689,8 @@ int csi_video_s_stream(struct tx_isp_subdev *sd, int enable)
         }
     }
 
-    /* OEM BN reference: stream toggle is state-only for MIPI.
-     * Hardware bring-up stays in csi_core_ops_init()/core init path.
-     */
     state = enable ? 4 : 3;
-
-    csi_dev->state = state;
+    csi_raw_state_set(csi_dev, state);
 
     pr_info("csi_video_s_stream: EXACT Binary Ninja MCP - CSI state set to %d (enable=%d)\n", state, enable);
 
@@ -617,7 +706,7 @@ int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
     /* Binary Ninja: if (arg1 != 0 && arg1 u< 0xfffff001) */
     if (sd != NULL && (unsigned long)sd < 0xfffff001) {
         /* Binary Ninja: *(arg1 + 0x110) - get CSI device from subdev private data */
-        csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+        csi_dev = csi_resolve_dev(sd);
         if (!csi_dev) {
             /* Binary Ninja: return 0 on error */
             return 0;
@@ -639,7 +728,7 @@ int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
                 if (csi_dev->interface_type == 1) {
                     /* Binary Ninja: *(arg1 + 0x128) = 4 */
                     /* CRITICAL FIX: Set state in CSI device, not subdev */
-                    csi_dev->state = 4;  /* Set to streaming_on state */
+                    csi_raw_state_set(csi_dev, 4);  /* Set to streaming_on state */
                 }
             }
         } else {
@@ -648,7 +737,7 @@ int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
             if (csi_dev->interface_type == 1) {
                 /* Binary Ninja: *(arg1 + 0x128) = 3 */
                 /* CRITICAL FIX: Set state in CSI device, not subdev */
-                csi_dev->state = 3;  /* Set to streaming_off state */
+                csi_raw_state_set(csi_dev, 3);  /* Set to streaming_off state */
             }
         }
     }
@@ -660,29 +749,40 @@ int csi_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 /* CSI sensor attribute synchronization */
 int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, void *arg)
 {
-    struct tx_isp_sensor_attribute *attr = arg;
-    struct tx_isp_sensor *sensor;
+    struct tx_isp_csi_device *csi_dev;
+    struct tx_isp_sensor_attribute *sensor_attr = arg;
+    struct tx_isp_sensor_attribute *cached_attr;
 
-    if (!sd || !attr)
+    if (!sd || (unsigned long)sd >= 0xfffff001)
         return -EINVAL;
 
-    /* Find or create the sensor */
-    if (!sd->active_sensor) {
-        /* In a real implementation, we would create a new sensor here */
-        pr_err("No active sensor to sync attributes with\n");
+    csi_dev = csi_resolve_dev(sd);
+    if (!csi_dev || (unsigned long)csi_dev >= 0xfffff001)
+        return -EINVAL;
+
+    cached_attr = csi_get_cached_sensor_attr(csi_dev);
+    if (!cached_attr) {
+        pr_err("csi_sensor_ops_sync_sensor_attr: CSI +0x110 attr cache is NULL\n");
         return -EINVAL;
     }
 
-    /* Store the attribute in the active sensor */
-    sensor = sd->active_sensor;
-    memcpy(&sensor->attr, attr, sizeof(struct tx_isp_sensor_attribute));
+    if (sensor_attr)
+        memcpy(cached_attr, sensor_attr, sizeof(*cached_attr));
+    else
+        memset(cached_attr, 0, sizeof(*cached_attr));
+
+    pr_info("csi_sensor_ops_sync_sensor_attr: %s CSI cache %p (dbus=%u lanes=%u)\n",
+            sensor_attr ? "copied into" : "cleared",
+            cached_attr,
+            sensor_attr ? sensor_attr->dbus_type : 0,
+            sensor_attr ? sensor_attr->mipi.lans : 0);
 
     return 0;
 }
 
 static void __iomem **csi_wrapper_regs_slot(struct tx_isp_csi_device *csi_dev)
 {
-    return (void __iomem **)((char *)csi_dev + 0x13c);
+    return (void __iomem **)((char *)csi_dev + CSI_RAW_WRAPPER_OFFSET);
 }
 
 static void __iomem *csi_get_wrapper_regs(struct tx_isp_csi_device *csi_dev)
@@ -697,9 +797,8 @@ static void __iomem *csi_get_wrapper_regs(struct tx_isp_csi_device *csi_dev)
         return isp_csi_regs;
 
     /*
-     * Real firmware seeds +0x13c from a dedicated 0x10022000 ioremap. If the
-     * slot is empty, recreate that mapping here instead of redirecting to
-     * ISP core space.
+     * OEM seeds +0x13c from a dedicated ioremap of the CSI register block.
+     * Recreate that mapping here if probe has not populated the slot yet.
      */
     isp_csi_regs = ioremap(0x10022000, 0x1000);
     if (isp_csi_regs)
@@ -708,6 +807,7 @@ static void __iomem *csi_get_wrapper_regs(struct tx_isp_csi_device *csi_dev)
 
     if (!isp_csi_regs)
         isp_csi_regs = csi_dev->csi_regs;
+
     if (!isp_csi_regs)
         return NULL;
 
@@ -782,16 +882,17 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
     if (!sd || (unsigned long)sd >= 0xfffff001)
         return result;
 
-    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+    csi_dev = csi_resolve_dev(sd);
     if (!csi_dev || (unsigned long)csi_dev >= 0xfffff001)
         return result;
 
     result = 0;
-    pr_info("csi_core_ops_init: sd=%p enable=%d state=%d csi_regs=%p\n",
-            sd, enable, csi_dev->state, csi_dev->csi_regs);
+    pr_info("csi_core_ops_init: sd=%p enable=%d state=%u csi_regs=%p\n",
+            sd, enable, csi_raw_state_get(csi_dev), csi_dev->csi_regs);
 
-    if (csi_dev->state < 2) {
-        pr_info("csi_core_ops_init: state %d < 2, skipping hardware init\n", csi_dev->state);
+    if (csi_raw_state_get(csi_dev) < 2) {
+        pr_info("csi_core_ops_init: state %u < 2, skipping hardware init\n",
+                csi_raw_state_get(csi_dev));
         return result;
     }
 
@@ -806,18 +907,19 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
         writel(readl(csi_regs + 0x08) & 0xfffffffe, csi_regs + 0x08);
         writel(readl(csi_regs + 0x0c) & 0xfffffffe, csi_regs + 0x0c);
         writel(readl(csi_regs + 0x10) & 0xfffffffe, csi_regs + 0x10);
-        csi_dev->state = 2;
+        csi_raw_state_set(csi_dev, 2);
         return 0;
     }
 
-    if (!ourISPdev || !ourISPdev->sensor || !ourISPdev->sensor->video.attr) {
-        pr_err("csi_core_ops_init: sensor attributes unavailable\n");
+    sensor_attr = csi_get_cached_sensor_attr(csi_dev);
+    if (!sensor_attr) {
+        pr_err("csi_core_ops_init: CSI +0x110 sensor cache unavailable\n");
         return -EINVAL;
     }
 
-    sensor_attr = ourISPdev->sensor->video.attr;
     interface_type = sensor_attr->dbus_type;
     csi_dev->interface_type = interface_type;
+
     isp_csi_regs = csi_get_wrapper_regs(csi_dev);
     pr_info("csi_core_ops_init: sensor dbus=%d lanes=%d slot13c=%p\n",
             interface_type, sensor_attr->mipi.lans, isp_csi_regs);
@@ -876,8 +978,8 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
         v0_17 = 3;
     }
 
-    csi_dev->state = v0_17;
-    pr_info("csi_core_ops_init: complete, new state=%d\n", csi_dev->state);
+    csi_raw_state_set(csi_dev, v0_17);
+    pr_info("csi_core_ops_init: complete, new state=%u\n", csi_raw_state_get(csi_dev));
     return 0;
 }
 
@@ -960,6 +1062,8 @@ int tx_isp_csi_probe(struct platform_device *pdev)
     struct tx_isp_subdev *sd = NULL;
     struct resource *res;
     void __iomem *isp_csi_regs;
+    void __iomem *old_basic_regs;
+    void __iomem *old_wrapper_regs;
     int32_t ret = 0;
 
     pr_info("*** tx_isp_csi_probe: Starting CSI device probe ***\n");
@@ -995,8 +1099,8 @@ int tx_isp_csi_probe(struct platform_device *pdev)
      * because tx_isp_subdev_init calls tx_isp_subdev_auto_link which needs
      * to retrieve csi_dev via tx_isp_get_subdevdata(sd)
      */
-    tx_isp_set_subdevdata(sd, csi_dev);
-    pr_info("*** tx_isp_csi_probe: Set subdev private data to csi_dev=%p ***\n", csi_dev);
+    csi_raw_self_set(csi_dev);
+    pr_info("*** tx_isp_csi_probe: Seeded CSI raw self/dev_priv to csi_dev=%p ***\n", csi_dev);
 
     /* CRITICAL: Initialize subdev AFTER setting private data */
     ret = tx_isp_subdev_init(pdev, sd, &csi_subdev_ops);
@@ -1010,7 +1114,36 @@ int tx_isp_csi_probe(struct platform_device *pdev)
     /* Set platform driver data after successful init */
     platform_set_drvdata(pdev, csi_dev);
 
-    isp_csi_regs = csi_get_wrapper_regs(csi_dev);
+    csi_raw_self_set(csi_dev);
+    pr_info("*** tx_isp_csi_probe: Re-seeded CSI raw self/dev_priv after subdev init (raw_self=%p dev_priv=%p) ***\n",
+            csi_raw_self_from_sd(sd), tx_isp_get_subdevdata(sd));
+
+    old_basic_regs = csi_dev->csi_regs;
+    old_wrapper_regs = *csi_wrapper_regs_slot(csi_dev);
+
+    if (sd->regs) {
+        csi_dev->csi_regs = sd->regs;
+        if (ourISPdev)
+            ourISPdev->csi_regs = sd->regs;
+    } else {
+        pr_warn("tx_isp_csi_probe: sd->regs is NULL after tx_isp_subdev_init, keeping pre-probe csi_regs=%p\n",
+                csi_dev->csi_regs);
+    }
+
+    *csi_mem_res_slot(csi_dev) = sd->mem_res;
+
+    isp_csi_regs = NULL;
+    if (res)
+        isp_csi_regs = ioremap(res->start, resource_size(res));
+    if (isp_csi_regs)
+        *csi_wrapper_regs_slot(csi_dev) = isp_csi_regs;
+    else
+        isp_csi_regs = csi_get_wrapper_regs(csi_dev);
+
+    pr_info("*** tx_isp_csi_probe: rebound live mappings basic %p -> %p raw138=%p wrapper %p -> %p ***\n",
+            old_basic_regs, csi_dev->csi_regs, *csi_mem_res_slot(csi_dev),
+            old_wrapper_regs, isp_csi_regs);
+
     pr_info("*** tx_isp_csi_probe: csi_regs (PHY/basic) = %p ***\n", csi_dev->csi_regs);
     pr_info("*** tx_isp_csi_probe: slot13c / isp_csi_regs (wrapper) = %p%s ***\n",
             isp_csi_regs,
@@ -1273,7 +1406,7 @@ int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
         }
 
         /* Binary Ninja: void* $s1_1 = *(arg1 + 0xd4) */
-        csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+        csi_dev = csi_resolve_dev(sd);
         result = 0xffffffea;
 
         /* Binary Ninja: if ($s1_1 != 0 && $s1_1 u< 0xfffff001) */
@@ -1282,9 +1415,9 @@ int tx_isp_csi_activate_subdev(struct tx_isp_subdev *sd)
             mutex_lock(&csi_dev->mlock);
 
             /* Binary Ninja: if (*($s1_1 + 0x128) == 1) */
-            if (csi_dev->state == 1) {
+            if (csi_raw_state_get(csi_dev) == 1) {
                 /* Binary Ninja: *($s1_1 + 0x128) = 2 */
-                csi_dev->state = 2;
+                csi_raw_state_set(csi_dev, 2);
 
                 clks = sd->clks;
                 clk_count = sd->clk_num;
@@ -1322,26 +1455,27 @@ int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
 
     /* Binary Ninja: void* $s0_1 = *(arg1 + 0xd4) */
     /* SAFE: Use proper function instead of offset-based access */
-    csi_dev = (struct tx_isp_csi_device *)tx_isp_get_subdevdata(sd);
+    csi_dev = csi_resolve_dev(sd);
     if (!csi_dev || (unsigned long)csi_dev >= 0xfffff001) {
         return -EINVAL;
     }
 
-    pr_info("*** tx_isp_csi_slake_subdev: CSI slake/shutdown - current state=%d ***\n", csi_dev->state);
+    pr_info("*** tx_isp_csi_slake_subdev: CSI slake/shutdown - current state=%u ***\n",
+            csi_raw_state_get(csi_dev));
 
     /* Binary Ninja: int32_t $v1_2 = *($s0_1 + 0x128) */
-    state = csi_dev->state;
+    state = csi_raw_state_get(csi_dev);
 
     /* Binary Ninja: if ($v1_2 == 4) csi_video_s_stream(arg1, 0) */
     if (state == 4) {
         pr_info("tx_isp_csi_slake_subdev: CSI in streaming state, stopping stream\n");
         csi_video_s_stream(sd, 0);
-        state = csi_dev->state;  /* Update state after s_stream */
+        state = csi_raw_state_get(csi_dev);  /* Update state after s_stream */
     }
 
     /* Binary Ninja: void* $s2_1 = $s0_1 + 0x12c - Get mutex */
     /* Binary Ninja: if ($v1_2 == 3) csi_core_ops_init(arg1, 0) */
-    if (csi_dev->state == 3) {
+    if (csi_raw_state_get(csi_dev) == 3) {
         pr_info("tx_isp_csi_slake_subdev: CSI in state 3, calling core_ops_init(disable)\n");
         csi_core_ops_init(sd, 0);
     }
@@ -1350,9 +1484,9 @@ int tx_isp_csi_slake_subdev(struct tx_isp_subdev *sd)
     mutex_lock(&csi_dev->mlock);
 
     /* Binary Ninja: if (*($s0_1 + 0x128) == 2) *($s0_1 + 0x128) = 1 */
-    if (csi_dev->state == 2) {
+    if (csi_raw_state_get(csi_dev) == 2) {
         pr_info("tx_isp_csi_slake_subdev: CSI state 2->1, disabling clocks\n");
-        csi_dev->state = 1;
+        csi_raw_state_set(csi_dev, 1);
 
         /* Binary Ninja: void* $v0 = *(arg1 + 0xbc) - Get clocks array */
         /* Binary Ninja: if ($v0 != 0 && $v0 u< 0xfffff001) - Clock disabling loop */

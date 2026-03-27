@@ -59,7 +59,15 @@ extern struct tx_isp_dev *ourISPdev;
 /* Forward declaration for frame channel wakeup function */
 extern void tx_isp_wakeup_frame_channels(void);
 
-int isp_trigger_frame_data_transfer(struct tx_isp_dev *dev);
+static int isp_trigger_frame_data_transfer(struct tx_isp_dev *dev)
+{
+	if (!dev)
+		return -EINVAL;
+
+	/* Safe placeholder until the OEM DMA-ready path is restored. */
+	pr_debug("isp_trigger_frame_data_transfer: stubbed no-op\n");
+	return 0;
+}
 
 /* Forward declarations for functions used before definition */
 static int tisp_sharpen_all_reg_refresh(void);
@@ -2825,13 +2833,13 @@ static int tisp_day_or_night_s_ctrl(uint32_t mode)
     return 0;
 }
 
-/* ISP tuning event definitions - Binary Ninja reference */
-#define ISP_TUNING_EVENT_MODE0      0x1000
-#define ISP_TUNING_EVENT_MODE1      0x1001
-#define ISP_TUNING_EVENT_FRAME      0x1002
-#define ISP_TUNING_EVENT_DN         0x1003
-#define ISP_TUNING_EVENT_FRAME_DONE 0x1004
-#define ISP_TUNING_EVENT_DMA_READY  0x1005
+/* Additional tuning event definitions not yet in tx-libimp.h */
+#ifndef ISP_TUNING_EVENT_FRAME_DONE
+#define ISP_TUNING_EVENT_FRAME_DONE 0x4000004
+#endif
+#ifndef ISP_TUNING_EVENT_DMA_READY
+#define ISP_TUNING_EVENT_DMA_READY  0x4000005
+#endif
 
 static int isp_core_tuning_event(struct tx_isp_dev *dev, uint32_t event)
 {
@@ -2914,6 +2922,12 @@ static int isp_core_tuning_event(struct tx_isp_dev *dev, uint32_t event)
 
     return 0;
 }
+
+int tx_isp_tuning_notify(struct tx_isp_dev *dev, uint32_t event)
+{
+	return isp_core_tuning_event(dev, event);
+}
+EXPORT_SYMBOL(tx_isp_tuning_notify);
 
 static int apical_isp_expr_g_ctrl(struct tx_isp_dev *dev, struct isp_core_ctrl *ctrl)
 {

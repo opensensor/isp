@@ -1053,23 +1053,15 @@ int tx_isp_vin_probe(struct platform_device *pdev)
     }
     mcp_log_info("vin_probe: IRQ obtained", vin->irq);
 
-    /* Get clock */
-    vin->vin_clk = clk_get(&pdev->dev, "vin");
-    if (IS_ERR(vin->vin_clk)) {
-        mcp_log_error("vin_probe: failed to get clock", PTR_ERR(vin->vin_clk));
-        vin->vin_clk = NULL; /* Optional clock */
-    } else {
-        pr_info("[CLK] VIN: Enabling VIN clock (rate=%lu Hz)\n", clk_get_rate(vin->vin_clk));
-        clk_prepare_enable(vin->vin_clk);
-        mcp_log_info("vin_probe: clock enabled", 0);
-    }
+    /* OEM tx_isp_vin_probe() does not fetch or enable a dedicated VIN clock. */
+    vin->vin_clk = NULL;
 
     /* Initialize subdev */
     sd = &vin->sd;
     ret = tx_isp_subdev_init(pdev, sd, &vin_subdev_ops);
     if (ret) {
         mcp_log_error("vin_probe: subdev init failed", ret);
-        goto err_clk;
+        goto err_unmap;
     }
 
     /* Set platform data */
@@ -1081,12 +1073,6 @@ int tx_isp_vin_probe(struct platform_device *pdev)
     mcp_log_info("vin_probe: VIN probe completed successfully", 0);
     return 0;
 
-err_clk:
-    if (vin->vin_clk) {
-        pr_info("[CLK] VIN: Disabling VIN clock (cleanup)\n");
-        clk_disable_unprepare(vin->vin_clk);
-        clk_put(vin->vin_clk);
-    }
 err_unmap:
     iounmap(vin->base);
 err_free_vin:

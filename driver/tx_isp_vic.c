@@ -136,41 +136,36 @@ static inline void __iomem *vic_primary_regs_resolve(struct tx_isp_vic_device *v
 
     raw_regs = vic_raw_regs_get(vic_dev);
 
-    /* OEM tx_isp_vic_start() dereferences vic_dev + 0xb8 as the active VIC
-     * MMIO base. In our rebuilt tree, generic tx_isp_subdev_init() also uses
-     * that same embedded subdev slot for sd->regs and populates it from the
-     * isp-w02 platform resource (0x10023000 secondary/control bank). Prefer the
-     * stable primary mapping carried in the named VIC members and only fall back
-     * to the raw slot when it is not the secondary bank.
+    isp_dev = vic_dev->sd.isp;
+
+    /* T31 bring-up notes and the known-good README snapshots both point to the
+     * live W01/VIC control window at 0x10023000. Prefer that platform/resource
+     * mapping for the hot path while keeping vic_dev->vic_regs as the stable
+     * wrapper/alternate bank.
      */
-    regs = vic_dev->vic_regs;
+    regs = raw_regs;
+    if (!regs || !vic_regs_is_secondary(vic_dev, regs)) {
+        if (vic_dev->sd.regs && vic_regs_is_secondary(vic_dev, vic_dev->sd.regs))
+            regs = vic_dev->sd.regs;
+        else if (vic_dev->vic_regs_secondary)
+            regs = vic_dev->vic_regs_secondary;
+        else if (isp_dev && isp_dev->vic_regs2)
+            regs = isp_dev->vic_regs2;
+        else if (ourISPdev && ourISPdev->vic_regs2)
+            regs = ourISPdev->vic_regs2;
+    }
+
     if (!regs)
         regs = raw_regs;
-
-    isp_dev = vic_dev->sd.isp;
+    if (!regs)
+        regs = vic_dev->vic_regs;
     if (!regs && isp_dev)
         regs = isp_dev->vic_regs;
     if (!regs && ourISPdev)
         regs = ourISPdev->vic_regs;
 
-    if (vic_regs_is_secondary(vic_dev, regs)) {
-        regs = NULL;
-        if (vic_dev->vic_regs && !vic_regs_is_secondary(vic_dev, vic_dev->vic_regs))
-            regs = vic_dev->vic_regs;
-        if (!regs && isp_dev && isp_dev->vic_regs &&
-            !vic_regs_is_secondary(vic_dev, isp_dev->vic_regs))
-            regs = isp_dev->vic_regs;
-        if (!regs && ourISPdev && ourISPdev->vic_regs &&
-            !vic_regs_is_secondary(vic_dev, ourISPdev->vic_regs))
-            regs = ourISPdev->vic_regs;
-        if (!regs && raw_regs && !vic_regs_is_secondary(vic_dev, raw_regs))
-            regs = raw_regs;
-    }
-
-    if (regs) {
-        vic_dev->vic_regs = regs;
+    if (regs)
         vic_raw_regs_set(vic_dev, regs);
-    }
 
     if (!vic_dev->vic_regs_secondary) {
         if (isp_dev && isp_dev->vic_regs2)
@@ -178,6 +173,34 @@ static inline void __iomem *vic_primary_regs_resolve(struct tx_isp_vic_device *v
         else if (ourISPdev && ourISPdev->vic_regs2)
             vic_dev->vic_regs_secondary = ourISPdev->vic_regs2;
     }
+
+    return regs;
+}
+
+static inline void __iomem *vic_stream_regs_resolve(struct tx_isp_vic_device *vic_dev)
+{
+    struct tx_isp_dev *isp_dev;
+    void __iomem *regs;
+
+    if (!vic_dev)
+        return NULL;
+
+    isp_dev = vic_dev->sd.isp;
+
+    /* OEM tx_isp_vic_start() uses the cached raw register slot directly for its
+     * unlock/write sequence. Keep that slot on the stable primary VIC wrapper
+     * bank (0x133e0000) even when control/IRQ helpers target 0x10023000.
+     */
+    regs = vic_dev->vic_regs;
+    if (!regs && isp_dev)
+        regs = isp_dev->vic_regs;
+    if (!regs && ourISPdev)
+        regs = ourISPdev->vic_regs;
+    if (!regs)
+        regs = vic_raw_regs_get(vic_dev);
+
+    if (regs)
+        vic_raw_regs_set(vic_dev, regs);
 
     return regs;
 }
@@ -626,49 +649,6 @@ static void vic_reassert_core_irq_route(struct tx_isp_vic_device *vic_dev,
             readl(core + 0x9ac0), readl(core + 0x9ac8));
 }
 
-static void vic_apply_core_run_phase(struct tx_isp_vic_device *vic_dev,
-                                     const char *origin)
-{
-    struct tx_isp_dev *isp_dev;
-    void __iomem *core = NULL;
-    void __iomem *vic_base;
-
-    if (!vic_dev)
-        return;
-
-    isp_dev = vic_dev->sd.isp ? vic_dev->sd.isp : ourISPdev;
-    if (isp_dev && isp_dev->core_regs)
-        core = isp_dev->core_regs;
-
-    vic_base = vic_primary_regs_resolve(vic_dev);
-    if (!core && vic_base)
-        core = vic_base - 0x9a00;
-
-    if (!core) {
-        pr_warn("%s: no ISP core regs for VIC run phase\n", origin);
-        return;
-    }
-
-    writel(0x6000600, core + 0x9a04);
-    writel(0x3200, core + 0x9a70);
-    writel(0x33001, core + 0x9a7c);
-    writel(0x4100, core + 0x9a88);
-    writel(0x33001, core + 0x9a94);
-    writel(0x40080, core + 0x9ac0);
-    writel(0x40080, core + 0x9ac4);
-    writel(0x40080, core + 0x9ac8);
-    writel(0x40080, core + 0x9acc);
-    wmb();
-
-    pr_info("%s: core VIC run phase 9a04=0x%08x 9a70=0x%08x 9a7c=0x%08x 9a88=0x%08x 9a94=0x%08x gate=0x%08x/0x%08x/0x%08x/0x%08x\n",
-            origin,
-            readl(core + 0x9a04),
-            readl(core + 0x9a70), readl(core + 0x9a7c),
-            readl(core + 0x9a88), readl(core + 0x9a94),
-            readl(core + 0x9ac0), readl(core + 0x9ac4),
-            readl(core + 0x9ac8), readl(core + 0x9acc));
-}
-
 /* VIC interrupt restoration function - using correct VIC base */
 void tx_isp_vic_restore_interrupts(void)
 {
@@ -968,9 +948,10 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
         return -EINVAL;
     }
 
-    // CRITICAL: Use PRIMARY VIC space for interrupt configuration
-    vic_dev->vic_regs = vic_base;  // Use primary VIC space (0x133e0000)
-    pr_info("*** VIC HW INIT: Using PRIMARY VIC space for interrupt configuration ***\n");
+    /* Use the resolved live W01/control bank for IRQ programming without
+     * clobbering the stable wrapper mapping cached in vic_dev->vic_regs.
+     */
+    pr_info("*** VIC HW INIT: Using resolved W01/control VIC space for interrupt configuration ***\n");
 
     vic_reassert_core_irq_route(vic_dev,
                                 vic_raw_width_get(vic_dev),
@@ -1597,7 +1578,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     pr_info("tx_isp_vic_start: using dims %ux%u\n", actual_width, actual_height);
 
     /* Get VIC register base - offset 0xb8 in Binary Ninja */
-    vic_regs = vic_primary_regs_resolve(vic_dev);
+    vic_regs = vic_stream_regs_resolve(vic_dev);
     if (!vic_regs) {
         pr_info("*** CRITICAL: No VIC register base ***\n");
         return -EINVAL;
@@ -1631,17 +1612,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             reg_1a4 = 0xa000a;
             pr_info("tx_isp_vic_start: OTHER_MIPI mode\n");
         }
-
-		if (sensor_attr->mipi.mode == SENSOR_MIPI_OTHER_MODE &&
-		    sensor_csi_fmt == TX_SENSOR_RAW10 &&
-		    !mipi_vcomp_en && !mipi_hcomp_en &&
-		    !line_sync_mode && !work_start_flag &&
-		    !data_type_en && !data_type_value) {
-			sensor_csi_fmt = TX_SENSOR_RAW12;
-			data_type_value = RAW12;
-			reg_1a4 = 0x100010;
-			pr_info("tx_isp_vic_start: applying OEM-style OTHER_MIPI zero-profile RAW12 fallback\n");
-		}
 
 		switch (sensor_csi_fmt) {
         case TX_SENSOR_RAW10:
@@ -1701,18 +1671,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(frame_mode_reg, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
 
-        /* Probe-time tx_isp_vic_hw_init() runs before the real ISP core mapping
-         * is guaranteed to exist, so reassert the VIC core route/gates here at
-         * the live stream point where core_regs should now be valid.
-         */
-        vic_reassert_core_irq_route(vic_dev,
-                                    actual_width,
-                                    actual_height,
-                                    image_twidth,
-                                    "tx_isp_vic_start");
-        vic_apply_core_run_phase(vic_dev, "tx_isp_vic_start");
-        vic_program_irq_registers(vic_dev, "tx_isp_vic_start");
-
 		pr_info("*** VIC MIPI PRE-ARM: reg0=0x%x reg10=0x%x reg14=0x%x reg100=0x%x reg104=0x%x reg108=0x%x reg10c=0x%x reg110=0x%x reg1a0=0x%x reg1a4=0x%x reg1a8=0x%x reg1ac=0x%x reg1b0=0x%x ***\n",
 		        readl(vic_regs + 0x0), readl(vic_regs + 0x10), readl(vic_regs + 0x14),
 		        readl(vic_regs + 0x100), readl(vic_regs + 0x104), readl(vic_regs + 0x108),
@@ -1726,6 +1684,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         wmb();
         writel((mipi_sc->sensor_frame_mode << 4) | mipi_sc->sensor_mode,
                vic_regs + 0x1a0);
+        wmb();
         pr_info("tx_isp_vic_start: post-arm frame regs reg1a0=0x%x reg1a8=0x%x reg1ac=0x%x\n",
                 readl(vic_regs + 0x1a0), readl(vic_regs + 0x1a8), readl(vic_regs + 0x1ac));
 
@@ -1754,11 +1713,6 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel((mipi_sc->mipi_crop_start1y << 16) | mipi_sc->mipi_crop_start0y, vic_regs + 0x104);
         writel((mipi_sc->mipi_crop_start3y << 16) | mipi_sc->mipi_crop_start2y, vic_regs + 0x108);
         writel(1, vic_regs + 0x0);
-        wmb();
-        writel(reg_1a4, vic_regs + 0x1a4);
-        writel(frame_mode_reg, vic_regs + 0x1ac);
-        writel(0x10, vic_regs + 0x1b0);
-        writel(0, vic_regs + 0x1b4);
         wmb();
 
         pr_info("*** VIC MIPI CONFIG: reg14=0x%x reg100=0x%x reg10c=0x%x reg110=0x%x reg1a0=0x%x reg1ac=0x%x wait=%u ***\n",
@@ -1973,7 +1927,7 @@ int vic_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sens
         pr_info("vic_sensor_ops_sync_sensor_attr: copied sensor attributes\n");
     }
 
-    vic_primary_regs_resolve(vic_dev);
+    vic_stream_regs_resolve(vic_dev);
     pr_info("vic_sensor_ops_sync_sensor_attr: OEM slots regs=%p dims=%ux%u raw_attr=%p\n",
             vic_raw_regs_get(vic_dev), vic_raw_width_get(vic_dev),
             vic_raw_height_get(vic_dev), vic_raw_sensor_attr_get(vic_dev));
@@ -2434,23 +2388,8 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
     stream_op = (enable != 0) ? "streamon" : "streamoff";
     pr_info("%s[%d]: %s\n", "ispvic_frame_channel_s_stream", __LINE__, stream_op);
 
-    /* Binary Ninja EXACT: if (enable == stream_state) return 0
-     * Exception: If enable==1 but hardware ctrl is 0 (not running), force a control write. */
-    {
-        u32 ctrl_peek = 0;
-        void __iomem *peek_base = vic_dev->vic_regs;
-        if (peek_base && (unsigned long)peek_base >= 0x80000000)
-            ctrl_peek = readl(peek_base + 0x300);
-        pr_info("ispvic_frame_channel_s_stream: pre-check stream_state=%d, enable=%d, ctrl_peek=0x%x\n",
-                vic_dev->stream_state, enable, ctrl_peek);
-        if (enable == vic_dev->stream_state) {
-            if (enable && ctrl_peek == 0) {
-                pr_info("ispvic_frame_channel_s_stream: stream_state=1 but ctrl=0, forcing control write\n");
-            } else {
-                return 0;
-            }
-        }
-    }
+    if (enable == vic_dev->stream_state)
+        return 0;
 
     /* Binary Ninja EXACT: __private_spin_lock_irqsave($s0 + 0x1f4, &var_18) */
     __private_spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, &var_18);
@@ -2459,13 +2398,8 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
         /* Stream OFF */
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = 0 */
         vic_base = vic_dev->vic_regs;
-        if (vic_base && (unsigned long)vic_base >= 0x80000000) {
+        if (vic_base && (unsigned long)vic_base >= 0x80000000)
             writel(0, vic_base + 0x300);
-            if (vic_dev->vic_regs_secondary)
-                writel(0, vic_dev->vic_regs_secondary + 0x300);
-            wmb();
-            pr_info("ispvic_frame_channel_s_stream: Stream OFF - wrote 0 to reg 0x300\n");
-        }
 
         /* Binary Ninja EXACT: *($s0 + 0x210) = 0 */
         vic_dev->stream_state = 0;
@@ -2478,64 +2412,14 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
         /* Binary Ninja EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
         vic_base = vic_dev->vic_regs;
         if (vic_base && (unsigned long)vic_base >= 0x80000000) {
-            pr_info("ispvic_frame_channel_s_stream: BEFORE - active_buffer_count=%d\n", vic_dev->active_buffer_count);
-
-            /* CRITICAL FIX: Follow EXACT reference driver buffer management sequence */
-            /* Reference driver ALWAYS starts VIC hardware immediately with proper buffer configuration */
-            pr_info("*** REFERENCE DRIVER SEQUENCE: Starting VIC hardware with exact buffer configuration ***\n");
-
-            /* Binary Ninja EXACT: Use reference driver buffer management values */
-            /* The reference driver uses specific buffer count and control values that prevent control limit errors */
-            u32 reference_buffer_count = 2;  /* Reference driver uses 2 buffers */
-            u32 reference_control_bits = 0x80000020;  /* Reference driver control bits (format set elsewhere) */
-
-            /* BINARY NINJA EXACT: Use exact reference driver formula to prevent control limit error */
-            /* Binary Ninja: program stride and buffer bases before writing control (0x300) */
             u32 buffer_count = vic_dev->active_buffer_count;
-            if (buffer_count == 0) buffer_count = 2;       /* ensure at least double-buffering */
-            if (buffer_count > 5) buffer_count = 5;        /* 5-slot ring cap */
 
-            /* Reference driver does not modify stride or UV bases here; qbuf sets buffer slots and vic_pipo_mdma_enable sets stride (width<<1). */
+            if (buffer_count == 0)
+                buffer_count = 2;
+            if (buffer_count > 5)
+                buffer_count = 5;
 
-            /* Quick readback before writing control to aid debugging on short dmesg buffers */
-            {
-                u32 y0 = readl(vic_base + 0x318);
-                u32 uv0 = readl(vic_base + 0x340);
-                u32 uvsh0 = readl(vic_base + 0x32c);
-                u32 stride_y = readl(vic_base + 0x310);
-                u32 ctrl_pre = readl(vic_base + 0x300);
-                pr_info("*** VIC MDMA pre-ctrl: ctrl=0x%x strideY=%u slot0 Y=0x%x UV=0x%x UVsh=0x%x ***\n",
-                        ctrl_pre, stride_y, y0, uv0, uvsh0);
-                if (vic_dev->vic_regs_secondary) {
-                    pr_info("*** VIC MDMA pre-ctrl secondary: ctrl=0x%x strideY=%u slot0 Y=0x%x UV=0x%x UVsh=0x%x ***\n",
-                            readl(vic_dev->vic_regs_secondary + 0x300),
-                            readl(vic_dev->vic_regs_secondary + 0x310),
-                            readl(vic_dev->vic_regs_secondary + 0x318),
-                            readl(vic_dev->vic_regs_secondary + 0x340),
-                            readl(vic_dev->vic_regs_secondary + 0x32c));
-                }
-            }
-
-            /* Now write control (0x300) with NV12 format AFTER bases are valid, then start RUN */
-            {
-                u32 stream_ctrl = (buffer_count << 16) | 0x80000020;  /* Reference driver: control bits only; format configured elsewhere */
-                writel(stream_ctrl, vic_base + 0x300);
-                if (vic_dev->vic_regs_secondary)
-                    writel(stream_ctrl, vic_dev->vic_regs_secondary + 0x300);
-                wmb();
-                pr_info("*** BINARY NINJA EXACT: Wrote 0x%x to reg 0x300 (buffer_count=%d, formula: (count<<16)|0x80000020) ***\n",
-                        stream_ctrl, buffer_count);
-                if (vic_dev->vic_regs_secondary) {
-                    pr_info("*** VIC STREAM CTRL READBACK: PRI=0x%x SEC=0x%x ***\n",
-                            readl(vic_base + 0x300),
-                            readl(vic_dev->vic_regs_secondary + 0x300));
-                }
-
-                /* MCP LOG: Stream ON completed */
-                pr_info("MCP_LOG: VIC streaming enabled - ctrl=0x%x, base=%p, state=%d\n",
-                        stream_ctrl, vic_base, 1);
-            }
-
+            writel((buffer_count << 16) | 0x80000020, vic_base + 0x300);
         }
 
         /* Binary Ninja EXACT: *($s0 + 0x210) = 1 */
@@ -2665,34 +2549,6 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
 
         if (ret != 0)
             return ret;
-
-	        /* tx_isp_vic_start() now primes MDMA before the unlock wait. Keep the
-	         * older post-start kick only as a fallback when control never latched.
-	         */
-	        if (vic_dev->vic_regs && readl(vic_dev->vic_regs + 0x300) == 0) {
-	            vic_dev->stream_state = 0;
-	            pr_info("*** vic_core_s_stream: Forcing ispvic_frame_channel_qbuf before MDMA stream enable ***\n");
-	            {
-	                int qret = ispvic_frame_channel_qbuf(sd, NULL);
-
-	                if (qret != 0)
-	                    pr_warn("*** vic_core_s_stream: ispvic_frame_channel_qbuf returned %d (continuing) ***\n",
-	                            qret);
-	                else
-	                    pr_info("*** vic_core_s_stream: ispvic_frame_channel_qbuf completed ***\n");
-	            }
-
-	            pr_info("*** vic_core_s_stream: Calling ispvic_frame_channel_s_stream(ENABLE) before enabling VIC IRQ ***\n");
-	            ret = ispvic_frame_channel_s_stream(vic_dev, 1);
-	            if (ret != 0) {
-	                pr_err("*** vic_core_s_stream: ispvic_frame_channel_s_stream failed: %d ***\n",
-	                       ret);
-	                return ret;
-	            }
-	        } else {
-	            pr_info("*** vic_core_s_stream: skipping post-start MDMA kick; ctrl already primed (0x300=0x%x) ***\n",
-	                    vic_dev->vic_regs ? readl(vic_dev->vic_regs + 0x300) : 0);
-	        }
 
         vic_raw_state_set(vic_dev, 4);
 
@@ -2868,7 +2724,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     tx_isp_set_subdevdata(sd, vic_dev);
     vic_raw_self_set(vic_dev);
     {
-        void __iomem *seed_regs = vic_primary_regs_resolve(vic_dev);
+        void __iomem *seed_regs = vic_stream_regs_resolve(vic_dev);
         u32 seed_width = vic_raw_width_get(vic_dev);
         u32 seed_height = vic_raw_height_get(vic_dev);
 
@@ -2887,7 +2743,6 @@ int tx_isp_vic_probe(struct platform_device *pdev)
             seed_height = 1080;
         }
 
-        vic_dev->vic_regs = seed_regs;
         vic_dev->width = seed_width;
         vic_dev->height = seed_height;
         vic_raw_regs_set(vic_dev, seed_regs);
@@ -2925,8 +2780,7 @@ int tx_isp_vic_probe(struct platform_device *pdev)
         return ret;
     }
 
-    vic_raw_state_set(vic_dev, 2);
-    pr_info("*** tx_isp_vic_probe: VIC hardware init complete, state -> %d ***\n",
+    pr_info("*** tx_isp_vic_probe: VIC hardware init complete, leaving state at %d ***\n",
             vic_raw_state_get(vic_dev));
 
     /* Store global reference (binary uses 'dump_vsd' global) */
