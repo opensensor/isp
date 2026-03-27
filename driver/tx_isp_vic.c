@@ -181,12 +181,23 @@ static inline void __iomem *vic_config_regs_resolve(struct tx_isp_vic_device *vi
 
 static inline void __iomem *vic_coord_regs_resolve(struct tx_isp_vic_device *vic_dev)
 {
+    struct tx_isp_dev *isp_dev;
+
     if (!vic_dev)
         return NULL;
 
-    /* Keep coordination/debug reads on the exact same OEM +(0xb8) mapping so
-     * tx_isp_vic_start() instrumentation reflects the real programmed bank.
+    isp_dev = vic_dev->sd.isp;
+
+    /* Keep W01/coordination diagnostics off the OEM raw +0xb8 hot path unless
+     * the secondary bank is unavailable.
      */
+    if (vic_dev->vic_regs_secondary)
+        return vic_dev->vic_regs_secondary;
+    if (isp_dev && isp_dev->vic_regs2)
+        return isp_dev->vic_regs2;
+    if (ourISPdev && ourISPdev->vic_regs2)
+        return ourISPdev->vic_regs2;
+
     return vic_primary_regs_resolve(vic_dev);
 }
 
@@ -595,13 +606,14 @@ static void vic_reassert_core_irq_route(struct tx_isp_vic_device *vic_dev,
     isp_dev = vic_dev->sd.isp ? vic_dev->sd.isp : ourISPdev;
     if (isp_dev && isp_dev->core_regs)
         core = isp_dev->core_regs;
+    if (!core && ourISPdev && ourISPdev->core_regs)
+        core = ourISPdev->core_regs;
 
     vic_base = vic_primary_regs_resolve(vic_dev);
-    if (!core && vic_base)
-        core = vic_base - 0x9a00;
 
     if (!core) {
-        pr_warn("%s: no ISP core regs for VIC route/gate reassert\n", origin);
+        pr_info("%s: deferring VIC core route/gate reassert until core_regs is mapped\n",
+                origin);
         return;
     }
 
@@ -965,10 +977,10 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
         return -EINVAL;
     }
 
-    /* Use the resolved live W01/control bank for IRQ programming without
-     * clobbering the stable wrapper mapping cached in vic_dev->vic_regs.
+    /* Probe runs before core probe on this tree, so only do what we can safely
+     * do here and reassert the full core route again at stream start.
      */
-    pr_info("*** VIC HW INIT: Using resolved W01/control VIC space for interrupt configuration ***\n");
+    pr_info("*** VIC HW INIT: Seeding VIC IRQ state; full core route reassert may defer until stream start ***\n");
 
     vic_reassert_core_irq_route(vic_dev,
                                 vic_raw_width_get(vic_dev),
@@ -1596,9 +1608,13 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     pr_info("tx_isp_vic_start: using dims %ux%u\n", actual_width, actual_height);
 
     /* tx_isp_vic_start() configures the OEM VIC register block at +0xb8.
-     * The W01/resource bank is still useful for coordination/status, but its
-     * 0x14 semantics do not match the OEM config block (see fresh log 0x200).
+     * Reassert core route/gates here as well, because core_regs is expected to
+     * be live by stream start even when it was absent during VIC probe.
      */
+    vic_reassert_core_irq_route(vic_dev, actual_width, actual_height, 0,
+                                "tx_isp_vic_start");
+    vic_program_irq_registers(vic_dev, "tx_isp_vic_start");
+
     vic_regs = vic_config_regs_resolve(vic_dev);
     if (!vic_regs) {
         pr_info("*** CRITICAL: No VIC register base ***\n");
