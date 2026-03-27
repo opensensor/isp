@@ -612,6 +612,38 @@ static void frame_channel_clear_tracked_buffers(struct frame_channel_device *fcd
     memset(&fcd->state.current_buffer, 0, sizeof(fcd->state.current_buffer));
 }
 
+static void frame_channel_drain_deliverability_queues(struct tx_isp_channel_state *state)
+{
+    unsigned long qf;
+
+    if (!state)
+        return;
+
+    spin_lock_irqsave(&state->queue_lock, qf);
+    while (!list_empty(&state->completed_buffers)) {
+        struct list_head *head = state->completed_buffers.next;
+        struct completed_node *cn = list_entry(head, struct completed_node, list);
+        list_del(head);
+        kfree(cn);
+    }
+    state->completed_count = 0;
+
+    while (!list_empty(&state->queued_buffers)) {
+        struct list_head *head = state->queued_buffers.next;
+        struct queued_node *qn = list_entry(head, struct queued_node, list);
+        list_del(head);
+        kfree(qn);
+    }
+    state->queued_count = 0;
+    state->pre_dequeue_ready = false;
+    state->pre_dequeue_index = 0;
+    state->pre_dequeue_seq = 0;
+    memset(&state->pre_dequeue_ts, 0, sizeof(state->pre_dequeue_ts));
+    spin_unlock_irqrestore(&state->queue_lock, qf);
+
+    wake_up_interruptible(&state->frame_wait);
+}
+
 static struct frame_buffer *frame_channel_get_tracked_buffer(struct frame_channel_device *fcd,
                                                              u32 index)
 {
@@ -1760,6 +1792,48 @@ int frame_channel_open(struct inode *inode, struct file *file);
 int frame_channel_release(struct inode *inode, struct file *file);
 long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
+static int frame_channel_index_from_devname(const char *name)
+{
+    int channel_num;
+
+    if (!name || strncmp(name, "framechan", 9) != 0)
+        return -1;
+
+    if (name[9] < '0' || name[9] > '9' || name[10] != '\0')
+        return -1;
+
+    channel_num = name[9] - '0';
+    if (channel_num < 0 || channel_num >= num_channels)
+        return -1;
+
+    return channel_num;
+}
+
+static void frame_channel_bootstrap_slot(struct frame_channel_device *fcd,
+                                         int channel_num,
+                                         int minor)
+{
+    if (!fcd)
+        return;
+
+    if (fcd->magic != FRAME_CHANNEL_MAGIC || fcd->channel_num != channel_num) {
+        fcd->channel_num = channel_num;
+        mutex_init(&fcd->buffer_mutex);
+        spin_lock_init(&fcd->buffer_queue_lock);
+        fcd->buffer_queue_head = &fcd->buffer_queue_base;
+        fcd->buffer_queue_base = &fcd->buffer_queue_base;
+        fcd->buffer_queue_count = 0;
+        fcd->streaming_flags = 0;
+        fcd->buffer_type = 1;  /* V4L2_BUF_TYPE_VIDEO_CAPTURE */
+        fcd->field = 1;        /* V4L2_FIELD_NONE */
+        memset(fcd->buffer_array, 0, sizeof(fcd->buffer_array));
+        fcd->magic = FRAME_CHANNEL_MAGIC;
+    }
+
+    fcd->channel_num = channel_num;
+    fcd->miscdev.minor = minor;
+}
+
 // Forward declarations for ISP channel control functions
 extern int tisp_channel_start(int channel_id, struct tx_isp_channel_attr *attr);
 extern int tisp_channel_stop(uint32_t channel_id);
@@ -1768,6 +1842,7 @@ extern int tisp_channel_stop(uint32_t channel_id);
 int frame_channel_open(struct inode *inode, struct file *file)
 {
     struct frame_channel_device *fcd = NULL;
+    const char *dev_name = NULL;
     int minor = iminor(inode);
     int i;
     int channel_num = -1;
@@ -1790,10 +1865,24 @@ int frame_channel_open(struct inode *inode, struct file *file)
         }
     }
 
+    if (!fcd && file && file->f_path.dentry)
+        dev_name = file->f_path.dentry->d_name.name;
+
+    if (!fcd) {
+        channel_num = frame_channel_index_from_devname(dev_name);
+        if (channel_num >= 0) {
+            fcd = &frame_channels[channel_num];
+            pr_info("*** FRAME CHANNEL OPEN: bound FS node %s to shared channel %d ***\n",
+                    dev_name, channel_num);
+        }
+    }
+
     if (!fcd) {
         pr_err("Frame channel open: No registered channel for minor %d\n", minor);
         return -ENODEV;
     }
+
+    frame_channel_bootstrap_slot(fcd, channel_num, minor);
 
     if (!fcd->vic_subdev && ourISPdev && ourISPdev->vic_dev)
         fcd->vic_subdev = &((struct tx_isp_vic_device *)ourISPdev->vic_dev)->sd;
@@ -1848,18 +1937,7 @@ int frame_channel_open(struct inode *inode, struct file *file)
     fcd->state.sizeimage = nv12_sizeimage(fcd->state.width, fcd->state.height);
 
 
-    /* CRITICAL FIX: Store frame channel device at the exact offset expected by reference driver */
-    /* Binary Ninja shows frame_channel_unlocked_ioctl expects device at *(file + 0x70) */
     file->private_data = fcd;
-
-    /* CRITICAL FIX: Also store at offset 0x70 where Binary Ninja expects it */
-    /* This prevents the null pointer dereference crash */
-    if ((char*)file + 0x70 < (char*)file + sizeof(*file)) {
-        *((struct frame_channel_device**)((char*)file + 0x70)) = fcd;
-        pr_info("*** CRITICAL FIX: Frame channel device stored at file+0x70 to prevent crash ***\n");
-    } else {
-        pr_warn("*** WARNING: Cannot store at file+0x70 - using private_data only ***\n");
-    }
 
     pr_info("*** FRAME CHANNEL %d OPENED SUCCESSFULLY - NOW READY FOR IOCTLS ***\n", fcd->channel_num);
     pr_info("Channel %d: Format %dx%d, pixfmt=0x%x, minor=%d\n",
@@ -1872,23 +1950,30 @@ int frame_channel_open(struct inode *inode, struct file *file)
 int frame_channel_release(struct inode *inode, struct file *file)
 {
     struct frame_channel_device *fcd = file->private_data;
+    struct tx_isp_channel_state *state;
 
     if (!fcd) {
         return 0;
     }
 
+    state = &fcd->state;
+
     pr_info("*** FRAME CHANNEL %d RELEASED ***\n", fcd->channel_num);
 
-    /* Stop streaming if active */
-    if (fcd->state.streaming) {
+    /* OEM-style release: tear down active queueing/stream state back to activate. */
+    if (state->state == 4 || state->streaming) {
         pr_info("Channel %d: Stopping streaming on release\n", fcd->channel_num);
-        fcd->state.streaming = false;
-        fcd->state.enabled = false;
-
-        /* Wake up any waiters */
-        wake_up_interruptible(&fcd->state.frame_wait);
+        state->streaming = false;
+        state->enabled = false;
+        state->capture_active = false;
+        state->flags &= ~1U;
+        fcd->streaming_flags &= ~1;
+        state->state = 2;
+    } else if (state->state == 3) {
+        state->state = 2;
     }
 
+    frame_channel_drain_deliverability_queues(state);
     frame_channel_clear_tracked_buffers(fcd);
 
     file->private_data = NULL;
@@ -3931,11 +4016,10 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         ret = wait_event_interruptible(state->frame_wait,
                                        !list_empty(&state->completed_buffers) ||
                                        state->pre_dequeue_ready ||
-                                       !state->streaming ||
-                                       !state->capture_active);
+                                       !state->streaming);
         if (ret < 0)
             return ret; /* -ERESTARTSYS, etc. */
-        if (!state->streaming || !state->capture_active)
+        if (!state->streaming)
             return -EINVAL;
 
         /* consume deliverable: pop completed node or consume pre-dequeue */
@@ -4113,28 +4197,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     }
     case 0x80045613: { // VIDIOC_STREAMOFF - Stop streaming
         uint32_t type;
-        /* Drain deliverability queues and reset gating */
-        {
-            unsigned long qf;
-            spin_lock_irqsave(&state->queue_lock, qf);
-            while (!list_empty(&state->completed_buffers)) {
-                struct list_head *head = state->completed_buffers.next;
-                struct completed_node *cn = list_entry(head, struct completed_node, list);
-                list_del(head);
-                kfree(cn);
-            }
-            state->completed_count = 0;
-            while (!list_empty(&state->queued_buffers)) {
-                struct list_head *head = state->queued_buffers.next;
-                struct queued_node *qn = list_entry(head, struct queued_node, list);
-                list_del(head);
-                kfree(qn);
-            }
-            state->queued_count = 0;
-            state->pre_dequeue_ready = false;
-            spin_unlock_irqrestore(&state->queue_lock, qf);
-            wake_up_interruptible(&state->frame_wait);
-        }
+        frame_channel_drain_deliverability_queues(state);
 
         struct tx_isp_sensor *sensor = NULL;
         int ret;
@@ -4288,8 +4351,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         ret = wait_event_interruptible_timeout(state->frame_wait,
                                              !list_empty(&state->completed_buffers) ||
                                              state->pre_dequeue_ready ||
-                                             !state->streaming ||
-                                             !state->capture_active,
+                                             !state->streaming,
                                              msecs_to_jiffies(100));
 
         pr_info("*** Channel %d: Frame wait returned %d ***\n", channel, ret);

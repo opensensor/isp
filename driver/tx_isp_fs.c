@@ -39,6 +39,9 @@ struct fs_platform_data {
 /* Forward declarations */
 static int frame_chan_event(void *priv, u32 event, void *data);
 int fs_slake_module(struct tx_isp_subdev *sd);
+int frame_channel_open(struct inode *inode, struct file *file);
+int frame_channel_release(struct inode *inode, struct file *file);
+long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
 /* fs_slake_module - EXACT Binary Ninja reference implementation */
 int fs_slake_module(struct tx_isp_subdev *sd)
@@ -233,9 +236,10 @@ static const struct file_operations isp_framesource_fops = {
 /* Frame channel operations structure - fs_channel_ops */
 static const struct file_operations fs_channel_ops = {
     .owner = THIS_MODULE,
-    .open = fs_chardev_open,
-    .release = fs_chardev_release,
-    .unlocked_ioctl = fs_chardev_ioctl,
+    .open = frame_channel_open,
+    .release = frame_channel_release,
+    .unlocked_ioctl = frame_channel_unlocked_ioctl,
+    .compat_ioctl = frame_channel_unlocked_ioctl,
     .llseek = default_llseek,
 };
 
