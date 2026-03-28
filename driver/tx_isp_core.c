@@ -72,6 +72,7 @@ struct tisp_boot_sensor_info {
 
 /* Forward declaration for VIC device creation from tx_isp_vic.c */
 extern int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
+extern int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable);
 
 /* Forward declaration for VIN device creation from tx_isp_vin.c */
 extern int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev);
@@ -936,21 +937,23 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
             }
 
             /* Binary Ninja: *($s0 + 0xe8) = 3
-             * OEM only sets isp_dev state here. VIC state is managed
-             * separately by vic_core_s_stream (offset 0x128 in VIC dev).
-             * Setting vic_dev->state here would prevent vic_core_s_stream
-             * from re-arming VIC hardware on the next stream-on.
+             * Also set vic_dev->state = 3 so vic_core_s_stream can track
+             * its own state transitions properly.
              */
             isp_dev->state = 3;
+            vic_dev->state = 3;
         }
     } else {
         s3_1 = &isp_dev->subdevs[0];
 
         if (v0_3 == 3) {
-            /* OEM: *($s0 + 0xe8) = 4 — only isp_dev state.
-             * VIC state is set by vic_core_s_stream after hardware arm.
+            /* Set both states to 4. Setting vic_dev->state = 4 here
+             * prevents vic_core_s_stream from re-arming VIC hardware
+             * on the second call (the re-arm always times out and
+             * triggers a rollback that kills the working pipeline).
              */
             isp_dev->state = 4;
+            vic_dev->state = 4;
         }
     }
 
@@ -1048,6 +1051,17 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         tx_isp_disable_irq(isp_dev);
     } else {
         tx_isp_enable_irq(isp_dev);
+    }
+
+    /* Enable MDMA after pipeline is fully active.
+     * OEM triggers this via framechan STREAMON ioctl (0x3000003 event),
+     * but libimp on this platform sends STREAMON only to ISP M0.
+     * Call ispvic_frame_channel_s_stream here — it has an idempotency
+     * guard so duplicate calls are safe.
+     */
+    if (enable && result == 0 && vic_dev) {
+        extern int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *, int);
+        ispvic_frame_channel_s_stream(vic_dev, 1);
     }
 
     /* Binary Ninja: if (result == 0xfffffdfd) return 0 */
