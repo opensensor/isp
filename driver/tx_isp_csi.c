@@ -933,17 +933,6 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
             return -ENODEV;
         }
 
-        csi_jit_ungate_clocks();
-        csi_cpm_deassert_reset_if_enabled();
-
-        pr_info("csi_core_ops_init: wrapper pre-arm before write wrap[0x0c]=0x%08x wrap[0x14]=0x%08x wrap[0x40]=0x%08x\n",
-                readl(isp_csi_regs + 0x0c), readl(isp_csi_regs + 0x14), readl(isp_csi_regs + 0x40));
-        writel(1, isp_csi_regs + 0x0c);
-        wmb();
-        private_msleep(1);
-        pr_info("csi_core_ops_init: wrapper pre-arm after  write wrap[0x0c]=0x%08x wrap[0x14]=0x%08x wrap[0x40]=0x%08x\n",
-                readl(isp_csi_regs + 0x0c), readl(isp_csi_regs + 0x14), readl(isp_csi_regs + 0x40));
-
         csi_dev->lanes = sensor_attr->mipi.lans;
         writel((csi_dev->lanes - 1) & 0x3, csi_regs + 0x04);
         writel(readl(csi_regs + 0x08) & 0xfffffffe, csi_regs + 0x08);

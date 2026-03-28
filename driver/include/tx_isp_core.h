@@ -14,6 +14,8 @@ int tx_isp_core_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *confi
 int tiziano_isp_init(struct tx_isp_sensor_attribute *sensor_attr, char *param_name);
 int tiziano_sync_sensor_attr(struct tx_isp_sensor_attribute *attr);
 int tiziano_channel_start(int channel_id, struct tx_isp_channel_attr *attr);
+int tisp_channel_start(int channel_id, struct tx_isp_channel_attr *attr);
+int tisp_channel_attr_set(uint32_t channel_id, void *attr);
 
 /* Event Handling Functions */
 int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd, struct tx_isp_sensor_attribute *attr);
@@ -25,6 +27,7 @@ u32 tx_isp_check_reset_status(void);
 /* ISP Device Management */
 struct tx_isp_dev *tx_isp_get_device(void);
 void tx_isp_set_device(struct tx_isp_dev *isp);
+int tx_isp_core_prepare_prestream(struct tx_isp_dev *isp, const char *origin);
 
 int tx_isp_create_graph_and_nodes(struct tx_isp_dev *isp);
 void tx_isp_core_bind_event_dispatch_tables(struct tx_isp_dev *isp_dev);

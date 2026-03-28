@@ -29,6 +29,9 @@ int tx_isp_configure_clocks(struct tx_isp_dev *isp);
 extern int private_reset_tx_isp_module(int arg);
 int tx_isp_core_ensure_powered(struct tx_isp_dev *isp, const char *origin);
 
+#define TX_ISP_RESET_REG      0xb00000c4
+#define TX_ISP_RESET_READY    0x100000
+
 /* Global ISP register base for tuning subsystem */
 void __iomem *isp_reg_base = NULL;
 EXPORT_SYMBOL(isp_reg_base);
@@ -36,6 +39,7 @@ EXPORT_SYMBOL(isp_reg_base);
 /* Forward declarations */
 int tx_isp_init_memory_mappings(struct tx_isp_dev *isp);
 static int tx_isp_deinit_memory_mappings(struct tx_isp_dev *isp);
+static int isp_core_enable_prestream_irqs(struct tx_isp_dev *isp_dev);
 int tx_isp_setup_pipeline(struct tx_isp_dev *isp);
 static int tx_isp_setup_media_links(struct tx_isp_dev *isp);
 static int tx_isp_init_subdev_pads(struct tx_isp_dev *isp);
@@ -135,9 +139,26 @@ static void tisp_fill_boot_sensor_info(struct tx_isp_dev *isp_dev,
     }
 }
 
+static u32 isp_core_read_reset_ctl(void)
+{
+    void __iomem *reset_reg;
+    u32 reg_val = 0;
+
+    reset_reg = ioremap(TX_ISP_RESET_REG, 4);
+    if (!reset_reg)
+        return 0;
+
+    reg_val = readl(reset_reg);
+    iounmap(reset_reg);
+
+    return reg_val;
+}
+
 static void isp_core_early_cpm_bringup(void)
 {
     void __iomem *cpm;
+    int reset_ret;
+    u32 reset_ctl;
     u32 clkgr0_before;
     u32 clkgr1_before;
     u32 reset_before;
@@ -191,29 +212,33 @@ static void isp_core_early_cpm_bringup(void)
     }
 
     if (reset_after & reset_mask) {
-        u32 r30_try_before;
+        /*
+         * Live logs showed the old 0x30 fallback clearing r30=0x40000001 to
+         * zero without changing r34 at all. Avoid touching that ambiguous
+         * window directly and fall back to the OEM whole-module reset pulse
+         * that is already used later during core init.
+         */
+        reset_ctl = isp_core_read_reset_ctl();
+        if (reset_ctl & TX_ISP_RESET_READY) {
+            pr_warn("[CPM][CORE] early bring-up: 0x34 clear did not release reset; c4=%08x ready, pulsing reset helper\n",
+                    reset_ctl);
 
-        writel(0x0000A5A5, cpm + 0x38);
-        wmb();
-        udelay(1);
+            reset_ret = private_reset_tx_isp_module(0);
+            if (reset_ret != 0)
+                pr_warn("[CPM][CORE] early bring-up: reset helper returned %d\n", reset_ret);
 
-        r30_try_before = readl(cpm + 0x30);
-        writel(reset_mask, cpm + 0x30);
-        wmb();
-        udelay(5);
+            writel(0x0000A5A5, cpm + 0x38);
+            wmb();
+            udelay(1);
+        } else {
+            pr_warn("[CPM][CORE] early bring-up: 0x34 clear did not release reset; c4=%08x not ready, deferring reset helper\n",
+                    reset_ctl);
+        }
 
         r30_after = readl(cpm + 0x30);
         reset_after = readl(cpm + 0x34);
-        if (reset_after & reset_mask) {
-            writel(r30_after & ~reset_mask, cpm + 0x30);
-            wmb();
-            udelay(5);
-            r30_after = readl(cpm + 0x30);
-            reset_after = readl(cpm + 0x34);
-        }
-
-        pr_info("[CPM][CORE] early bring-up 0x30 fallback: r30=%08x->%08x r34=%08x\n",
-                r30_try_before, r30_after, reset_after);
+        pr_info("[CPM][CORE] early bring-up reset-helper fallback: r30=%08x r34=%08x\n",
+                r30_after, reset_after);
     } else {
         r30_after = readl(cpm + 0x30);
     }
@@ -248,26 +273,60 @@ int tx_isp_core_ensure_powered(struct tx_isp_dev *isp, const char *origin)
         }
     }
 
-    /* Live logs show the dedicated CPM/clock bring-up helpers were never hit on
-     * the activation path, leaving MMIO readable but inert. Re-run them here on
-     * the exact paths that arm streaming.
-     */
-    isp_core_early_cpm_bringup();
-
     if (!isp->cgu_isp || !isp->isp_clk || !isp->csi_clk) {
+        /*
+         * Only run the intrusive CPM preflight on the first power-up path.
+         * Live logs show re-running it later during VIC stream-on does not
+         * release reset and just re-touches the same stuck window.
+         */
+        isp_core_early_cpm_bringup();
+
         ret = tx_isp_configure_clocks(isp);
         if (ret < 0) {
             pr_err("%s: Failed to configure ISP clocks: %d\n", origin, ret);
             return ret;
         }
     } else {
-        pr_info("%s: ISP clocks already configured (cgu_isp=%p isp=%p csi=%p)\n",
+        pr_info("%s: ISP clocks already configured (cgu_isp=%p isp=%p csi=%p), skipping CPM early bring-up\n",
                 origin, isp->cgu_isp, isp->isp_clk, isp->csi_clk);
     }
 
     return 0;
 }
 EXPORT_SYMBOL(tx_isp_core_ensure_powered);
+
+int tx_isp_core_prepare_prestream(struct tx_isp_dev *isp_dev, const char *origin)
+{
+    int ret;
+
+    if (!isp_dev)
+        return -EINVAL;
+
+    if (!origin)
+        origin = "tx_isp_core_prepare_prestream";
+
+    ret = tx_isp_core_ensure_powered(isp_dev, origin);
+    if (ret < 0)
+        return ret;
+
+    ret = isp_core_enable_prestream_irqs(isp_dev);
+    if (ret < 0)
+        return ret;
+
+    if (isp_dev->core_regs) {
+        void __iomem *core = isp_dev->core_regs;
+
+        pr_info("%s: core pre-stream ctl10=%08x irq1c=%08x clr30=%08x pipe800=%08x mode804=%08x enL=%08x maskL=%08x enN=%08x maskN=%08x\n",
+                origin,
+                readl(core + 0x10), readl(core + 0x1c), readl(core + 0x30),
+                readl(core + 0x800), readl(core + 0x804),
+                readl(core + 0xb0), readl(core + 0xbc),
+                readl(core + 0x98b0), readl(core + 0x98bc));
+    }
+
+    return 0;
+}
+EXPORT_SYMBOL(tx_isp_core_prepare_prestream);
 
 static int isp_core_enable_prestream_irqs(struct tx_isp_dev *isp_dev)
 {
@@ -306,8 +365,10 @@ static int isp_core_enable_prestream_irqs(struct tx_isp_dev *isp_dev)
     writel(0x1000, core + 0x98bc);
     wmb();
 
-    pr_info("[IRQ][CORE] pre-stream enable: pendL=%08x pendN=%08x enL=%08x maskL=%08x enN=%08x maskN=%08x\n",
+    pr_info("[IRQ][CORE] pre-stream enable: pendL=%08x pendN=%08x ctl10=%08x irq1c=%08x pipe=%08x/%08x enL=%08x maskL=%08x enN=%08x maskN=%08x\n",
             pend_legacy, pend_new,
+            readl(core + 0x10), readl(core + 0x1c),
+            readl(core + 0x800), readl(core + 0x804),
             readl(core + 0xb0), readl(core + 0xbc),
             readl(core + 0x98b0), readl(core + 0x98bc));
 

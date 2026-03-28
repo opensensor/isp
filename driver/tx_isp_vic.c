@@ -32,8 +32,6 @@ int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 
-/* system_reg_write is now defined in tx-isp-module.c - removed duplicate */
-
 #define VIC_RAW_REGS_OFFSET        0xb8
 #define VIC_RAW_SELF_OFFSET        0xd4
 #define VIC_RAW_WIDTH_OFFSET       0xdc
@@ -201,6 +199,19 @@ static inline void __iomem *vic_coord_regs_resolve(struct tx_isp_vic_device *vic
     return vic_primary_regs_resolve(vic_dev);
 }
 
+static void vic_log_timeout_bank(const char *tag, void __iomem *regs)
+{
+    if (!regs) {
+        pr_info("VIC timeout bank %s: unmapped\n", tag);
+        return;
+    }
+
+    pr_info("VIC timeout bank %s@%p: reg0=0x%x reg1a0=0x%x reg1a8=0x%x reg1ac=0x%x\n",
+            tag, regs,
+            readl(regs + 0x0), readl(regs + 0x1a0),
+            readl(regs + 0x1a8), readl(regs + 0x1ac));
+}
+
 static int vic_wait_w01_phase(void __iomem *vic_coord_regs, unsigned int timeout_ms)
 {
     const u32 t0 = 0x00000230;
@@ -240,6 +251,58 @@ static int vic_wait_w01_phase(void __iomem *vic_coord_regs, unsigned int timeout
 
     pr_info("tx_isp_vic_start: W01 phase wait timed out, last 0x14=0x%08x after %u ms\n",
             prev, waited);
+    return 0;
+}
+
+static int vic_force_channel_start(struct tx_isp_vic_device *vic_dev,
+                                   u32 width, u32 height,
+                                   const char *origin)
+{
+    struct tx_isp_channel_attr attr;
+    u32 attr_words[0x34 / sizeof(u32)];
+    int ret;
+
+    if (!vic_dev)
+        return -EINVAL;
+
+    memset(&attr, 0, sizeof(attr));
+    memset(attr_words, 0, sizeof(attr_words));
+    attr.width = width ? width : 1920;
+    attr.height = height ? height : 1080;
+    attr.stride = attr.width;
+
+    /* Mirror the OEM set-format path enough to populate ds0_attr and the
+     * 0x9860/0x9864 + 0x99xx geometry registers before channel_start.
+     */
+    attr_words[0] = 0;
+    attr_words[1] = attr.width;
+    attr_words[2] = attr.height;
+    attr_words[3] = 0;
+    attr_words[4] = 0;
+    attr_words[5] = 0;
+    attr_words[6] = attr.width;
+    attr_words[7] = attr.height;
+    attr_words[8] = 0;
+
+    ret = tisp_channel_attr_set(0, attr_words);
+    if (ret < 0) {
+        pr_warn("%s: fallback tisp_channel_attr_set(ch0 %ux%u) failed: %d\n",
+                origin, attr.width, attr.height, ret);
+        return ret;
+    }
+
+    pr_info("%s: fallback tisp_channel_attr_set(ch0 %ux%u) complete\n",
+            origin, attr.width, attr.height);
+
+    ret = tisp_channel_start(0, &attr);
+    if (ret < 0) {
+        pr_warn("%s: fallback tisp_channel_start(ch0 %ux%u) failed: %d\n",
+                origin, attr.width, attr.height, ret);
+        return ret;
+    }
+
+    pr_info("%s: fallback tisp_channel_start(ch0 %ux%u) complete\n",
+            origin, attr.width, attr.height);
     return 0;
 }
 
@@ -1588,76 +1651,26 @@ static ssize_t vic_proc_write(struct file *file, const char __user *buf, size_t 
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_regs;
-    void __iomem *vic_coord_regs;
     struct tx_isp_sensor_attribute *sensor_attr;
     u32 interface_type;
-    u32 timeout = 2000000;
     u32 actual_width, actual_height;
 
-    pr_info("*** tx_isp_vic_start: Following EXACT Binary Ninja flow ***\n");
-
     /* Binary Ninja: 00010244 void* $v1 = *(arg1 + 0x110) */
-    if (!vic_dev) {
-        pr_info("*** CRITICAL: Invalid vic_dev pointer ***\n");
+    if (!vic_dev)
         return -EINVAL;
-    }
 
-    /* Binary Ninja: arg1 + 0x110 points at VIC-cached sensor attributes.
-     * Prefer the synced VIC copy and only fall back if the cache is still
-     * clearly unpopulated.
-     */
     sensor_attr = vic_raw_sensor_attr_get(vic_dev);
-    if (!sensor_attr->name &&
-        !sensor_attr->mipi.image_twidth &&
-        !sensor_attr->mipi.image_theight) {
-        if (!ourISPdev || !ourISPdev->sensor || !ourISPdev->sensor->video.attr) {
-            pr_info("*** CRITICAL: VIC cached sensor_attr is unavailable ***\n");
-            return -EINVAL;
-        }
-
-        sensor_attr = ourISPdev->sensor->video.attr;
-        vic_raw_sensor_attr_sync(vic_dev, sensor_attr);
-        pr_info("*** tx_isp_vic_start: VIC sensor_attr cache empty, using global sensor attr fallback ***\n");
-    } else {
-        pr_info("*** tx_isp_vic_start: Using VIC-cached sensor_attr ***\n");
-    }
+    if (!sensor_attr)
+        return -EINVAL;
 
     interface_type = sensor_attr->dbus_type;
 
     actual_width = vic_raw_width_get(vic_dev);
     actual_height = vic_raw_height_get(vic_dev);
-    if (!actual_width || !actual_height) {
-        actual_width = sensor_attr->mipi.image_twidth;
-        actual_height = sensor_attr->mipi.image_theight;
-    }
-    if (!actual_width || !actual_height) {
-        actual_width = sensor_attr->total_width ? sensor_attr->total_width : 1920;
-        actual_height = sensor_attr->total_height ? sensor_attr->total_height : 1080;
-    }
 
-    pr_info("*** Interface type: %d, CSI fmt=%u, MIPI mode=%u ***\n",
-            interface_type,
-            sensor_attr->mipi.mipi_sc.sensor_csi_fmt,
-            sensor_attr->mipi.mode);
-    pr_info("tx_isp_vic_start: using dims %ux%u\n", actual_width, actual_height);
-
-    /* tx_isp_vic_start() configures the OEM VIC register block at +0xb8.
-     * Reassert core route/gates here as well, because core_regs is expected to
-     * be live by stream start even when it was absent during VIC probe.
-     */
-    vic_reassert_core_irq_route(vic_dev, actual_width, actual_height, 0,
-                                "tx_isp_vic_start");
-    vic_program_irq_registers(vic_dev, "tx_isp_vic_start");
-
-    vic_regs = vic_config_regs_resolve(vic_dev);
-    if (!vic_regs) {
-        pr_info("*** CRITICAL: No VIC register base ***\n");
+    vic_regs = vic_raw_regs_get(vic_dev);
+    if (!vic_regs)
         return -EINVAL;
-    }
-    vic_coord_regs = vic_coord_regs_resolve(vic_dev);
-
-    pr_info("tx_isp_vic_start: cfg_regs=%p w01_regs=%p raw_slot=%p\n",
-            vic_regs, vic_coord_regs, vic_raw_regs_get(vic_dev));
 
     /* Binary Ninja: Branch on interface type at 00010250 */
     /* CRITICAL FIX: Use correct enum values - MIPI=1, DVP=2 */
@@ -1666,7 +1679,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         u32 image_twidth = sensor_attr->mipi.image_twidth ? sensor_attr->mipi.image_twidth : actual_width;
         u32 bits_per_pixel = 0;
         u32 frame_mode_reg = 0x4440;
-		u32 sensor_csi_fmt = mipi_sc->sensor_csi_fmt;
+			u32 sensor_csi_fmt = mipi_sc->sensor_csi_fmt;
         u32 mipi_vcomp_en = mipi_sc->mipi_vcomp_en;
         u32 mipi_hcomp_en = mipi_sc->mipi_hcomp_en;
         u32 line_sync_mode = mipi_sc->line_sync_mode;
@@ -1675,20 +1688,17 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         u32 data_type_value = mipi_sc->data_type_value;
         u32 reg_10c;
         u32 reg_1a4;
-        u32 wait_count = 0;
-
-        pr_info("MIPI interface configuration\n");
 
         if (sensor_attr->mipi.mode == SENSOR_MIPI_SONY_MODE) {
             writel(0x20000, vic_regs + 0x10);
             reg_1a4 = 0x100010;
-            pr_info("tx_isp_vic_start: SONY_MIPI mode\n");
+            pr_info("sensor type is SONY_MIPI!\n");
         } else {
             reg_1a4 = 0xa000a;
-            pr_info("tx_isp_vic_start: OTHER_MIPI mode\n");
+            pr_info("sensor type is OTHER_MIPI!\n");
         }
 
-		switch (sensor_csi_fmt) {
+			switch (sensor_csi_fmt) {
         case TX_SENSOR_RAW10:
             bits_per_pixel = 10;
             break;
@@ -1706,12 +1716,14 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
             break;
         }
 
+        /* OEM BN writes 0x1a4 before the remaining MIPI sizing/control
+         * registers in the stream-on path.
+         */
+        writel(reg_1a4, vic_regs + 0x1a4);
         writel(((bits_per_pixel * image_twidth) + 0x1f) >> 5, vic_regs + 0x100);
         writel(2, vic_regs + 0xc);
 		writel(sensor_csi_fmt, vic_regs + 0x14);
         writel((actual_width << 16) | actual_height, vic_regs + 0x4);
-
-        writel(reg_1a4, vic_regs + 0x1a4);
         reg_10c = (mipi_sc->hcrop_diff_en << 25) |
                   (mipi_vcomp_en << 24) |
                   (mipi_hcomp_en << 23) |
@@ -1745,62 +1757,21 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(frame_mode_reg, vic_regs + 0x1ac);
         writel(frame_mode_reg, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
-	        wmb();
 
-		if (vic_coord_regs)
-			vic_wait_w01_phase(vic_coord_regs, 100);
-
-			pr_info("*** VIC MIPI PRE-ARM: cfg reg0=0x%x reg10=0x%x reg14=0x%x reg100=0x%x reg104=0x%x reg108=0x%x reg10c=0x%x reg110=0x%x reg1a0=0x%x reg1a4=0x%x reg1a8=0x%x reg1ac=0x%x reg1b0=0x%x w01_reg14=0x%x ***\n",
-		        readl(vic_regs + 0x0), readl(vic_regs + 0x10), readl(vic_regs + 0x14),
-		        readl(vic_regs + 0x100), readl(vic_regs + 0x104), readl(vic_regs + 0x108),
-		        readl(vic_regs + 0x10c), readl(vic_regs + 0x110), readl(vic_regs + 0x1a0),
-		        readl(vic_regs + 0x1a4), readl(vic_regs + 0x1a8), readl(vic_regs + 0x1ac),
-		        readl(vic_regs + 0x1b0),
-		        vic_coord_regs ? readl(vic_coord_regs + 0x14) : 0);
-
+        /* OEM BN sequence is a tight 2 -> 4 -> 1a0 write stream with no
+         * intervening MMIO reads/barriers before the reg0 poll.
+         */
         writel(2, vic_regs + 0x0);
-        wmb();
         writel(4, vic_regs + 0x0);
-        wmb();
         writel((mipi_sc->sensor_frame_mode << 4) | mipi_sc->sensor_mode,
                vic_regs + 0x1a0);
-        wmb();
-        pr_info("tx_isp_vic_start: post-arm frame regs reg1a0=0x%x reg1a8=0x%x reg1ac=0x%x\n",
-                readl(vic_regs + 0x1a0), readl(vic_regs + 0x1a8), readl(vic_regs + 0x1ac));
 
-			pr_info("*** VIC unlock wait: cfg reg0=0x%x after arm (reg10=0x%x reg14=0x%x reg100=0x%x reg104=0x%x reg108=0x%x reg10c=0x%x reg110=0x%x reg1a0=0x%x reg1a4=0x%x reg1a8=0x%x reg1ac=0x%x reg1b0=0x%x w01_reg14=0x%x) ***\n",
-		        readl(vic_regs + 0x0), readl(vic_regs + 0x10), readl(vic_regs + 0x14),
-		        readl(vic_regs + 0x100), readl(vic_regs + 0x104), readl(vic_regs + 0x108),
-		        readl(vic_regs + 0x10c), readl(vic_regs + 0x110), readl(vic_regs + 0x1a0),
-		        readl(vic_regs + 0x1a4), readl(vic_regs + 0x1a8), readl(vic_regs + 0x1ac),
-		        readl(vic_regs + 0x1b0),
-		        vic_coord_regs ? readl(vic_coord_regs + 0x14) : 0);
-
-        while ((readl(vic_regs + 0x0) != 0) && timeout) {
-            wait_count++;
-            udelay(1);
-            timeout--;
-        }
-        if (!timeout) {
-				pr_info("VIC unlock timeout (cfg reg0=0x%x wait=%u reg10=0x%x reg14=0x%x reg100=0x%x reg104=0x%x reg108=0x%x reg10c=0x%x reg110=0x%x reg1a0=0x%x reg1a4=0x%x reg1a8=0x%x reg1ac=0x%x reg1b0=0x%x w01_reg14=0x%x)\n",
-			        readl(vic_regs + 0x0), wait_count, readl(vic_regs + 0x10),
-			        readl(vic_regs + 0x14), readl(vic_regs + 0x100), readl(vic_regs + 0x104),
-			        readl(vic_regs + 0x108), readl(vic_regs + 0x10c), readl(vic_regs + 0x110),
-			        readl(vic_regs + 0x1a0), readl(vic_regs + 0x1a4), readl(vic_regs + 0x1a8),
-				        readl(vic_regs + 0x1ac), readl(vic_regs + 0x1b0),
-				        vic_coord_regs ? readl(vic_coord_regs + 0x14) : 0);
-            return -ETIMEDOUT;
-        }
+        while (readl(vic_regs + 0x0) != 0)
+            ;
 
         writel((mipi_sc->mipi_crop_start1y << 16) | mipi_sc->mipi_crop_start0y, vic_regs + 0x104);
         writel((mipi_sc->mipi_crop_start3y << 16) | mipi_sc->mipi_crop_start2y, vic_regs + 0x108);
         writel(1, vic_regs + 0x0);
-        wmb();
-
-        pr_info("*** VIC MIPI CONFIG: reg14=0x%x reg100=0x%x reg10c=0x%x reg110=0x%x reg1a0=0x%x reg1ac=0x%x wait=%u ***\n",
-                readl(vic_regs + 0x14), readl(vic_regs + 0x100), readl(vic_regs + 0x10c),
-                readl(vic_regs + 0x110), readl(vic_regs + 0x1a0), readl(vic_regs + 0x1ac),
-                wait_count);
 
     } else if (interface_type == TX_SENSOR_DATA_INTERFACE_BT601) {
         /* BT601 - Binary Ninja 00010688-000107d4 */
@@ -1877,15 +1848,13 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     }
 
     /* Binary Ninja: 00010b48-00010b74 - Log WDR mode */
-    if (sensor_attr->wdr_cache != 0) {
-        pr_info("tx_isp_vic_start: WDR mode enabled\n");
-    } else {
-        pr_info("tx_isp_vic_start: Linear mode enabled\n");
-    }
+    if (sensor_attr->wdr_cache != 0)
+        pr_info("%s:%d::wdr mode\n", "tx_isp_vic_start", __LINE__);
+    else
+        pr_info("%s:%d::linear mode\n", "tx_isp_vic_start", __LINE__);
 
     /* Binary Ninja: 00010b84 - Set vic_start_ok */
     vic_start_ok = 1;
-    pr_info("*** VIC start completed - vic_start_ok = 1 ***\n");
 
     return 0;
 }
@@ -2612,56 +2581,25 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
     u32 current_state;
     int ret = -EINVAL;
 
-    pr_info("*** vic_core_s_stream: ENTRY - sd=%p, enable=%d ***\n", sd, enable);
-
-    if (!sd || (unsigned long)sd >= 0xfffff001) {
-        pr_err("vic_core_s_stream: Invalid sd pointer\n");
+    if (!sd || (unsigned long)sd >= 0xfffff001)
         return -EINVAL;
-    }
 
-    /* OEM uses *(sd + 0xd4) as the VIC self-pointer; do not rely on the
-     * current C struct layout for this hot path.
-     */
     vic_dev = vic_raw_self_from_sd(sd);
-    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
-        vic_dev = (struct tx_isp_vic_device *)tx_isp_get_subdevdata(sd);
-        if (vic_dev && (unsigned long)vic_dev < 0xfffff001) {
-            pr_warn("vic_core_s_stream: raw self missing, repairing from dev_priv=%p\n",
-                    vic_dev);
-            vic_raw_self_set(vic_dev);
-        }
-    }
-
-    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001) {
-        pr_err("vic_core_s_stream: Failed to get VIC device\n");
+    if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001)
         return -EINVAL;
-    }
 
     current_state = vic_raw_state_get(vic_dev);
-    pr_info("*** vic_core_s_stream: current_state=%u (enable=%d) ***\n",
-            current_state, enable);
 
     if (enable == 0) {
-        ret = 0;
         if (current_state == 4)
             vic_raw_state_set(vic_dev, 3);
-        return ret;
+        return 0;
     }
 
     if (current_state != 4) {
-        pr_info("*** vic_core_s_stream: Disabling VIC IRQ before start ***\n");
         tx_vic_disable_irq(vic_dev);
-
-        pr_info("*** vic_core_s_stream: Calling tx_isp_vic_start ***\n");
         ret = tx_isp_vic_start(vic_dev);
-        pr_info("*** vic_core_s_stream: tx_isp_vic_start returned %d ***\n", ret);
-
-        if (ret != 0)
-            return ret;
-
         vic_raw_state_set(vic_dev, 4);
-
-        pr_info("*** vic_core_s_stream: Enabling VIC IRQ after start ***\n");
         tx_vic_enable_irq(vic_dev);
         return ret;
     }

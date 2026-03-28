@@ -2088,11 +2088,8 @@ static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sen
     struct tx_isp_csi_device *csi_dev;
     struct tx_isp_vic_device *vic_dev;
     int (*csi_sync_sensor_attr)(struct tx_isp_subdev *sd, void *arg) = NULL;
-    int (*csi_sensor_ioctl)(struct tx_isp_subdev *sd, unsigned int cmd, void *arg) = NULL;
     unsigned int actual_width;
     unsigned int actual_height;
-    int core_ret = 0;
-    int csi_init_ret = 0;
     int csi_ret = 0;
     int ret = 0;
 
@@ -2167,42 +2164,6 @@ static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sen
             }
         } else {
             pr_warn("*** tx_isp_sync_sensor_attr: CSI sync hook unavailable ***\n");
-        }
-    }
-
-    if (ret == 0 && vic_dev && vic_dev->state == 1) {
-        pr_info("*** tx_isp_sync_sensor_attr: running deferred activate_module after sensor attach ***\n");
-        core_ret = ispcore_activate_module(isp_dev);
-        if (core_ret != 0) {
-            pr_warn("*** tx_isp_sync_sensor_attr: deferred activate_module failed: %d ***\n",
-                    core_ret);
-            ret = core_ret;
-        } else {
-            pr_info("*** tx_isp_sync_sensor_attr: deferred activate_module completed successfully ***\n");
-        }
-    }
-
-    if (ret == 0 && csi_dev && sensor_attr->dbus_type == TX_SENSOR_DATA_INTERFACE_MIPI) {
-        if (csi_dev->sd.ops && csi_dev->sd.ops->sensor && csi_dev->sd.ops->sensor->ioctl)
-            csi_sensor_ioctl = csi_dev->sd.ops->sensor->ioctl;
-        else if (csi_subdev_ops.sensor && csi_subdev_ops.sensor->ioctl)
-            csi_sensor_ioctl = csi_subdev_ops.sensor->ioctl;
-
-        if (csi_sensor_ioctl) {
-            pr_info("*** tx_isp_sync_sensor_attr: issuing CSI init ioctl 0x200000c after sensor sync ***\n");
-            csi_init_ret = csi_sensor_ioctl(&csi_dev->sd, 0x200000c, sensor_attr);
-        } else {
-            pr_warn("*** tx_isp_sync_sensor_attr: CSI init ioctl hook unavailable, calling csi_core_ops_init directly ***\n");
-            csi_init_ret = csi_core_ops_init(&csi_dev->sd, 1);
-        }
-
-        if (csi_init_ret) {
-            pr_warn("*** tx_isp_sync_sensor_attr: CSI init after sensor sync failed: %d ***\n",
-                    csi_init_ret);
-            if (ret == 0)
-                ret = csi_init_ret;
-        } else {
-            pr_info("*** tx_isp_sync_sensor_attr: CSI init after sensor sync completed successfully ***\n");
         }
     }
 
@@ -3305,108 +3266,57 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
 
             /* Binary Ninja: if (*($s0_1 + 0xe8) == 1) - VIC state check */
             if (vic_dev->state == 1) {
-                pr_info("*** VIC device in state 1, proceeding with activation ***\n");
-
-                subdev_result = tx_isp_core_ensure_powered(isp_dev,
-                                                           "ispcore_activate_module");
-                if (subdev_result != 0) {
-                    pr_warn("*** ispcore_activate_module: core power/clock bring-up failed: %d ***\n",
-                            subdev_result);
-                    return subdev_result;
-                }
-
-                /* OEM walks the embedded ISP-device clock list, not VIC subdev clocks. */
                 clk_array = isp_dev->sd.clks;
                 clk_count = isp_dev->sd.clk_num;
-
-                pr_info("*** CLOCK CONFIGURATION SECTION: clk_array=%p, clk_count=%d ***\n", clk_array, clk_count);
-                if ((!clk_array || clk_count <= 0) &&
-                    isp_dev->cgu_isp && isp_dev->isp_clk && isp_dev->csi_clk) {
-                    pr_info("*** CLOCK CONFIGURATION SECTION: embedded core clock list empty, using dedicated ISP clock handles ***\n");
-                }
 
                 /* Binary Ninja clock loop implementation */
                 if (clk_array && clk_count > 0) {
                     for (i = 0; i < clk_count; i++) {
                         if (clk_array[i]) {
-                            /* Binary Ninja: if (private_clk_get_rate(*$s2_1) != 0xffff) */
                             unsigned long current_rate = clk_get_rate(clk_array[i]);
                             if (current_rate != 0xffff) {
-                                /* Binary Ninja: private_clk_set_rate(*$s2_1, isp_clk) */
-                                pr_info("[CLK] Module: Setting clock %d to %d Hz\n", i, isp_clk);
                                 clk_set_rate(clk_array[i], isp_clk);
                             }
 
-                            /* Binary Ninja: private_clk_enable(*$s2_1) */
-                            pr_info("[CLK] Module: Enabling clock %d (rate=%lu Hz)\n", i, clk_get_rate(clk_array[i]));
                             clk_prepare_enable(clk_array[i]);
                         }
                     }
                 }
 
-                /* CRITICAL: Subdevice validation loop - Simplified for our layout */
-                pr_info("*** SUBDEVICE VALIDATION SECTION ***\n");
-
-                /* Binary Ninja: validate and advance each channel state 1 -> 2 */
-                pr_info("*** CHANNEL STATE TRANSITION SECTION ***\n");
                 for (a2_1 = 0; a2_1 < num_channels && a2_1 < ISP_MAX_CHAN; a2_1++) {
                     struct isp_channel *channel = &isp_dev->channels[a2_1];
 
                     if (channel->state != 1) {
-                        /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch0 hcomp err !!!\n", $a2_1) */
                         isp_printf(2, "Err [VIC_INT] : mipi ch0 hcomp err !!!\n", a2_1);
                         return 0xffffffff;
                     }
 
                     channel->state = 2;
-                    pr_info("ispcore_activate_module: channel %d state 1 -> 2\n", a2_1);
                 }
 
-				if (isp_dev->core_regs) {
-					subdev_result = tx_isp_tuning_notify(isp_dev,
-									 ISP_TUNING_EVENT_MODE0);
-					if (subdev_result != 0)
-						pr_warn("ispcore_activate_module: MODE0 tuning notify failed: %d\n",
-							subdev_result);
-				}
-
-                /* OEM then walks subdevs linearly calling internal->activate_module. */
-                pr_info("*** SUBDEVICE ACTIVATION LOOP ***\n");
                 for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
                     sd = isp_dev->subdevs[i];
-                    if (!sd) {
-                        continue;  /* Skip empty slots */
-                    }
 
-                    if ((uintptr_t)sd >= 0xfffff001) {
-                        continue;  /* Skip invalid pointers */
-                    }
+                    if (!sd || (uintptr_t)sd >= 0xfffff001)
+                        continue;
 
                     if (sd->ops && sd->ops->internal && sd->ops->internal->activate_module) {
-                        pr_info("Calling subdev %d activate_module\n", i);
                         subdev_result = sd->ops->internal->activate_module(sd);
 
                         if (subdev_result != 0 && subdev_result != -ENOIOCTLCMD) {
-                            pr_warn("Failed to activate %s\n",
+                            isp_printf(2, "Failed to activate %s\n",
                                     (sd->pdev && sd->pdev->name) ? sd->pdev->name : "unknown");
                             break;
                         }
                     }
                 }
 
-                /* Binary Ninja: *($s0_1 + 0xe8) = 2 - Final VIC state set */
                 vic_dev->state = 2;
-                pr_info("*** VIC device final state set to 2 (fully activated) ***\n");
-
-                /* Binary Ninja: return 0 */
-                pr_info("*** ispcore_activate_module: SUCCESS - ALL REGISTER WRITES SHOULD NOW BE TRIGGERED ***\n");
                 return 0;
             }
         }
     }
 
-    /* Binary Ninja: return result */
-    pr_info("*** ispcore_activate_module: FAILED - result=0x%x ***\n", result);
     return result;
 }
 
