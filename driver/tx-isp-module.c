@@ -5936,14 +5936,11 @@ static int tx_isp_init(void)
     ourISPdev->irq_disable_func = tx_isp_disable_irq;
 
     if (ourISPdev->isp_irq > 0) {
-        /* Do NOT call tx_isp_disable_irq() here — tx_isp_request_irq()
-         * already left IRQ 37 disabled at depth=1.  A second disable
-         * pushes depth to 2, and only one enable_irq() fires per
-         * streaming cycle, so IRQ 37 never reaches depth=0 (unmasked).
+        /* Do NOT double-disable — tx_isp_request_irq() already left depth=1.
+         * A second disable pushes depth to 2; only one enable_irq fires
+         * per streaming cycle, so IRQ 37 never actually unmasks.
          */
-        pr_info("*** ADOPTED EXISTING IRQ %d (isp-m0) FROM SUBDEV INIT ***\n",
-                ourISPdev->isp_irq);
-        pr_info("*** IRQ %d (isp-m0) ALREADY DISABLED BY tx_isp_request_irq ***\n",
+        pr_info("*** ADOPTED EXISTING IRQ %d (isp-m0) FROM SUBDEV INIT (depth=1, not double-disabled) ***\n",
                 ourISPdev->isp_irq);
     } else {
         pr_warn("*** NO EARLY CORE IRQ FOUND TO ADOPT FOR isp-m0 ***\n");
@@ -6587,6 +6584,7 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
 	struct tx_isp_subdev *owner_sd = NULL;
 	struct tx_isp_dev *isp_dev = tx_isp_irq_resolve_isp_dev(dev_id, &owner_sd);
     irqreturn_t result = IRQ_HANDLED;
+    int i;
 
 	pr_debug("*** isp_irq_handle: IRQ %d fired (dev_id=%p owner_sd=%p isp=%p) ***\n",
 		 irq, dev_id, owner_sd, isp_dev);
@@ -6596,19 +6594,21 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
         return IRQ_NONE;
     }
 
-    /* OEM BN: isp_irq_handle dispatches to the subdev that OWNS this IRQ
-     * via the irq_info dev_id.  owner_sd was resolved above.
-     * IRQ 37 (isp-m0) → owner_sd == &isp_dev->sd → core ISR only.
-     * IRQ 38 (isp-w02) → owner_sd == &vic_dev->sd → VIC ISR only.
-     * Do NOT call both — the core ISR reads+clears VIC status registers,
-     * stealing VIC interrupts when called for IRQ 37.
-     */
-    if (owner_sd == &isp_dev->sd) {
-        irqreturn_t sub_result = ispcore_interrupt_service_routine(irq, isp_dev);
-        if (sub_result == IRQ_WAKE_THREAD)
-            result = IRQ_WAKE_THREAD;
-    } else if (isp_dev->vic_dev && owner_sd == &isp_dev->vic_dev->sd) {
-        irqreturn_t sub_result = isp_vic_interrupt_service_routine(irq, isp_dev);
+    for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+        struct tx_isp_subdev *sd = isp_dev->subdevs[i];
+        irqreturn_t sub_result;
+
+        if (!sd)
+            continue;
+
+        if (sd == &isp_dev->sd) {
+            sub_result = ispcore_interrupt_service_routine(irq, isp_dev);
+        } else if (isp_dev->vic_dev && sd == &isp_dev->vic_dev->sd) {
+            sub_result = isp_vic_interrupt_service_routine(irq, isp_dev);
+        } else {
+            continue;
+        }
+
         if (sub_result == IRQ_WAKE_THREAD)
             result = IRQ_WAKE_THREAD;
     }
