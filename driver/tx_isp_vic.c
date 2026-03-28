@@ -1830,22 +1830,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(frame_mode_reg, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
 
-        vic_reassert_core_irq_route(vic_dev, actual_width, actual_height,
-                                    ((bits_per_pixel * image_twidth) + 0x1f) >> 5,
-                                    "tx_isp_vic_start");
-
-        /* Prime MDMA buffer addresses before VIC unlock.  The green-stream
-         * commit (5df077b7) had vic_prime_mdma_before_unlock() here which
-         * called vic_pipo_mdma_enable() + ispvic_frame_channel_qbuf()
-         * BEFORE the reg0 write sequence.  Without this, the first frames
-         * DMA to stale/zero addresses and no data reaches userspace.
-         */
-        vic_pipo_mdma_enable(vic_dev);
-        ispvic_frame_channel_qbuf(&vic_dev->sd, NULL);
-
-        /* OEM BN sequence is a tight 2 -> 4 -> 1a0 write stream with no
-         * intervening MMIO reads/barriers before the reg0 poll.
-         */
+        /* OEM BN: tight 2 -> 4 -> 1a0 write stream, no extra calls before arm */
         writel(2, vic_regs + 0x0);
         writel(4, vic_regs + 0x0);
         unlock_1a0 = (mipi_sc->sensor_frame_mode << 4) | mipi_sc->sensor_mode;
@@ -2470,6 +2455,11 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     for (i = 0; i < 5; i++)
         writel(rmem_base + i * fps + fps, vic_base + 0x32c + (i * 4));
 
+    /* OEM BN: field at offset 0x218 is read by ispvic_frame_channel_s_stream
+     * for the MDMA control register: *($s0 + 0x218) << 16 | 0x80000020
+     */
+    vic_dev->active_buffer_count = 5;
+
     wmb();
 
     pr_info("vic_pipo_mdma_enable: Y[0]=0x%x Y[1]=0x%x UV[0]=0x%x UV[1]=0x%x\n",
@@ -2518,16 +2508,11 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
         vic_dev->stream_state = 0;
         vic_dev->streaming = 0;
     } else {
-        /* OEM HLIL: vic_pipo_mdma_enable($s0) */
+        /* OEM BN: vic_pipo_mdma_enable($s0) */
         vic_pipo_mdma_enable(vic_dev);
-        /* OEM vic_mdma_enable: ctrl = (buf_count << 16) | 0x80000020 | format
-         * NV12 = format 7.  We program 5 buffer banks in vic_pipo_mdma_enable,
-         * so buf_count = 5 (< 8 → use per-buffer-count path, not 0x80080020).
-         */
+        /* OEM BN EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
         {
-            u32 buffer_count = 5;
-            u32 nv12_format = 7;
-            u32 ctrl = (buffer_count << 16) | 0x80000020 | nv12_format;
+            u32 ctrl = (vic_dev->active_buffer_count << 16) | 0x80000020;
 
             writel(ctrl, vic_base + 0x300);
             wmb();
@@ -2651,14 +2636,10 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
         return 0;
     }
 
+    /* OEM BN: disable_irq -> vic_start -> state=4 -> enable_irq. No extras. */
     if (current_state != 4) {
         tx_vic_disable_irq(vic_dev);
         ret = tx_isp_vic_start(vic_dev);
-        if (ret == 0)
-            vic_program_irq_registers(vic_dev, "vic_core_s_stream");
-        else
-            pr_warn("vic_core_s_stream: tx_isp_vic_start failed (%d), skipping VIC IRQ register programming\n",
-                    ret);
         vic_raw_state_set(vic_dev, 4);
         tx_vic_enable_irq(vic_dev);
         return ret;

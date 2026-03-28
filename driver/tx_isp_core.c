@@ -1012,11 +1012,13 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         }
     }
 
+    /* Channel dispatch — starts ISP processing pipeline (tisp_channel_start).
+     * OEM does this from a different layer, but our architecture requires it here
+     * to kick the ISP core into generating interrupts.
+     */
     if (enable != 0 && (result == 0 || result == -ENOIOCTLCMD)) {
         ispcore_dispatch_primary_channel_event(isp_dev, ISP_EVENT_STREAM_START);
     }
-
-stream_done:
     /* OEM BN: *(*(arg1 + 0xb8) + 0xb0) = mask; then tx_isp_[en|dis]able_irq(arg1)
      * arg1 = sd (core subdev), *(arg1 + 0xb8) = sd->regs = ISP core register base.
      * Register 0xb0 = ISP core hardware interrupt mask.
