@@ -2405,8 +2405,8 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         height = vic_dev->height ? vic_dev->height : 1080;
     }
 
-    /* NV12 (format 7): stride = width, NOT width*2 */
-    stride = width;
+    /* OEM BN EXACT: stride = width << 1 (width * 2) */
+    stride = width << 1;
 
     pr_info("vic_pipo_mdma_enable: base=%p dims=%dx%d stride=%u\n",
             vic_base, width, height, stride);
