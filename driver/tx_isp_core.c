@@ -1017,6 +1017,17 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     }
 
 stream_done:
+    /* OEM BN: *(*(arg1 + 0xb8) + 0xb0) = mask; then tx_isp_[en|dis]able_irq(arg1)
+     * arg1 = sd (core subdev), *(arg1 + 0xb8) = sd->regs = ISP core register base.
+     * Register 0xb0 = ISP core hardware interrupt mask.
+     */
+    if (sd->regs) {
+        if (enable == 0 || ispcore_bypass_enabled(isp_dev)) {
+            writel(0x00000000, sd->regs + 0xb0);
+        } else {
+            writel(0xFFFFFFFF, sd->regs + 0xb0);
+        }
+    }
     if (enable == 0 || ispcore_bypass_enabled(isp_dev)) {
         tx_isp_disable_irq(isp_dev);
     } else {
