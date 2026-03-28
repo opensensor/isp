@@ -2826,12 +2826,18 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
 
         /* OEM HLIL: if (($v1_10 & 1) != 0) → MDMA ch0 done */
         if ((v1_10 & 1) != 0) {
-            vic_mdma_irq_function(vic_dev, 0);
+            /* The complex vic_mdma_irq_function (tx-isp-module.c) requires
+             * fully initialized buffer queues that userspace hasn't set up.
+             * Use the simple complete() path from tx_isp_vic.c instead —
+             * this is what the green-stream commit (5df077b7) used.
+             */
+            vic_dev->frame_count++;
+            complete(&vic_dev->frame_complete);
         }
 
         /* OEM HLIL: if (($v1_10 & 2) != 0) → MDMA ch1 done */
         if ((v1_10 & 2) != 0) {
-            vic_mdma_irq_function(vic_dev, 1);
+            complete(&vic_dev->frame_complete);
         }
 
         if ((v1_10 & 4) != 0) {
