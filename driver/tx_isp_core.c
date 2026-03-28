@@ -873,12 +873,15 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     /* Binary Ninja: __private_spin_lock_irqsave($s0 + 0xdc, &var_28) */
     __private_spin_lock_irqsave(&isp_dev->lock, &var_28);
 
-    /* Binary Ninja: if (*($s0 + 0xe8) s< 3) */
-    vic_state = vic_dev->state;
-    pr_info("*** VIC STATE CHECK: vic_dev->state=%d (need >=3), enable=%d ***\n", vic_state, enable);
+    /* Binary Ninja: if (*($s0 + 0xe8) s< 3)
+     * $s0 = isp_dev (core subdev private data). Offset 0xe8 is isp_dev->state,
+     * NOT vic_dev->state. VIC state is managed separately by vic_core_s_stream.
+     */
+    vic_state = isp_dev->state;
+    pr_info("*** ISP STATE CHECK: isp_dev->state=%d (need >=3), enable=%d ***\n", vic_state, enable);
 
     if (vic_state < 3) {
-        pr_err("*** VIC STATE ERROR: Current VIC state=%d, need >=3 for streaming ***\n", vic_state);
+        pr_err("*** ISP STATE ERROR: Current ISP state=%d, need >=3 for streaming ***\n", vic_state);
         /* Binary Ninja: isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream") */
         isp_printf(2, "Err [VIC_INT] : mipi ch2 hcomp err !!!\n", "ispcore_video_s_stream");
         /* Binary Ninja: private_spin_unlock_irqrestore($s0 + 0xdc, var_28) */
@@ -932,16 +935,22 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
                 frame_chan->streaming_flags = 0;
             }
 
-            /* Binary Ninja: *($s0 + 0xe8) = 3 */
+            /* Binary Ninja: *($s0 + 0xe8) = 3
+             * OEM only sets isp_dev state here. VIC state is managed
+             * separately by vic_core_s_stream (offset 0x128 in VIC dev).
+             * Setting vic_dev->state here would prevent vic_core_s_stream
+             * from re-arming VIC hardware on the next stream-on.
+             */
             isp_dev->state = 3;
-            vic_dev->state = 3;
         }
     } else {
         s3_1 = &isp_dev->subdevs[0];
 
         if (v0_3 == 3) {
+            /* OEM: *($s0 + 0xe8) = 4 — only isp_dev state.
+             * VIC state is set by vic_core_s_stream after hardware arm.
+             */
             isp_dev->state = 4;
-            vic_dev->state = 4;
         }
     }
 
@@ -2207,11 +2216,7 @@ int ispcore_slake_module(struct tx_isp_dev *isp_dev)
             isp_dev->state = 1;
             pr_info("ispcore_slake_module: Set ISP state to INIT (1)");
 
-            /* CRITICAL FIX: Also set VIC state to 1 so ispcore_activate_module will run on next stream-on */
-            if (vic_dev) {
-                vic_dev->state = 1;
-                pr_info("ispcore_slake_module: Set VIC state to INIT (1) - ispcore_activate_module will run on next stream-on");
-            }
+            /* OEM only sets isp_dev->state here. VIC state is managed by VIC subdev. */
         }
 
         /* CRITICAL FIX: Subdev processing should happen regardless of VIC state */
@@ -2481,10 +2486,13 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
         return -ENODEV;
     }
 
-    /* Binary Ninja: int32_t $v0_3 = *($s0 + 0xe8) - Get VIC state */
-    vic_state = vic_dev->state;  /* This is VIC state at offset 0xe8 */
+    /* Binary Ninja: int32_t $v0_3 = *($s0 + 0xe8)
+     * $s0 is the core subdev private data = isp_dev. Offset 0xe8 = isp_dev->state.
+     * NOT vic_dev->state — VIC state is at a different offset in the VIC device.
+     */
+    vic_state = isp_dev->state;
     result = 0;
-    pr_info("ispcore_core_ops_init: isp_dev=%p, vic_dev=%p, vic_state=%d", isp_dev, vic_dev, vic_state);
+    pr_info("ispcore_core_ops_init: isp_dev=%p, isp_state=%d, vic_dev=%p", isp_dev, vic_state, vic_dev);
 
     /* Binary Ninja: if ($v0_3 != 1) */
     if (vic_state != 1) {
@@ -2497,7 +2505,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 /* Binary Ninja: ispcore_video_s_stream(arg1, 0) */
                 printk(KERN_ALERT "*** ispcore_core_ops_init: VIC streaming (state 4) - calling ispcore_video_s_stream(0) to stop ***");
                 ispcore_video_s_stream(sd, 0);
-                vic_state = vic_dev->state;  /* Update VIC state after s_stream */
+                vic_state = isp_dev->state;  /* Update ISP state after s_stream */
             } else {
                 printk(KERN_ALERT "*** ispcore_core_ops_init: VIC not streaming (state %d) - no need to stop streaming ***", vic_state);
             }
@@ -2509,7 +2517,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                     isp_dev->fw_thread = NULL;
                 }
                 /* Binary Ninja: *($s0 + 0xe8) = 2 */
-                vic_dev->state = 2;
+                isp_dev->state = 2;
             }
 
             /* CRITICAL: Cancel any pending frame sync work before deinit */
@@ -2575,9 +2583,9 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
                 pr_info("*** ispcore_core_ops_init: tisp_init already completed - skipping duplicate init ***\n");
             }
 
-            /* Binary Ninja: *($s0 + 0xe8) = 3 */
-            vic_dev->state = 3;
-            pr_info("*** ispcore_core_ops_init: VIC state set to 3 (ACTIVE) - CORE READY FOR STREAMING ***");
+            /* Binary Ninja: *($s0 + 0xe8) = 3 — sets isp_dev->state */
+            isp_dev->state = 3;
+            pr_info("*** ispcore_core_ops_init: ISP state set to 3 (ACTIVE) - CORE READY FOR STREAMING ***");
 
             /* REMOVED: Core device state management - ALL state management happens through VIC device */
             /* Based on Binary Ninja MCP analysis, core device is stateless */

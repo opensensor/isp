@@ -2100,9 +2100,9 @@ static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev)
         return 0;
     }
 
-    if (vic_dev->state >= 3) {
-        pr_info("*** tx_isp_ispcore_activate_module_complete: VIC already active (state=%d) ***\n",
-                vic_dev->state);
+    if (isp_dev->state >= 3) {
+        pr_info("*** tx_isp_ispcore_activate_module_complete: ISP already active (state=%d) ***\n",
+                isp_dev->state);
         return 0;
     }
 
@@ -2112,7 +2112,7 @@ static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev)
         return 0;
     }
 
-    if (vic_dev->state == 1) {
+    if (isp_dev->state == 1) {
         pr_info("*** tx_isp_ispcore_activate_module_complete: calling ispcore_activate_module() ***\n");
         ret = ispcore_activate_module(isp_dev);
         if (ret != 0 && ret != -ENOIOCTLCMD) {
@@ -2122,9 +2122,9 @@ static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev)
         }
     }
 
-    if (vic_dev->state != 2) {
-        pr_warn("*** tx_isp_ispcore_activate_module_complete: VIC not ready for core init (state=%d) ***\n",
-                vic_dev->state);
+    if (isp_dev->state != 2) {
+        pr_warn("*** tx_isp_ispcore_activate_module_complete: ISP not ready for core init (state=%d) ***\n",
+                isp_dev->state);
         return 0;
     }
 
@@ -2168,8 +2168,8 @@ static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev)
         }
     }
 
-    pr_info("*** tx_isp_ispcore_activate_module_complete: bring-up complete, VIC state=%d ***\n",
-            vic_dev->state);
+    pr_info("*** tx_isp_ispcore_activate_module_complete: bring-up complete, ISP state=%d ***\n",
+            isp_dev->state);
     return 0;
 }
 
@@ -3363,8 +3363,10 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
         if (vic_dev != NULL && (uintptr_t)vic_dev < 0xfffff001) {
             result = 0;
 
-            /* Binary Ninja: if (*($s0_1 + 0xe8) == 1) - VIC state check */
-            if (vic_dev->state == 1) {
+            /* Binary Ninja: if (*($s0_1 + 0xe8) == 1) - ISP state check
+             * $s0_1 + 0xe8 = isp_dev->state (core subdev private data)
+             */
+            if (isp_dev->state == 1) {
                 clk_array = isp_dev->sd.clks;
                 clk_count = isp_dev->sd.clk_num;
 
@@ -3422,7 +3424,8 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                     }
                 }
 
-                vic_dev->state = 2;
+                /* Binary Ninja: *($s0_1 + 0xe8) = 2 */
+                isp_dev->state = 2;
                 return 0;
             }
         }
