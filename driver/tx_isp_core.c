@@ -1020,12 +1020,17 @@ stream_done:
     /* OEM BN: *(*(arg1 + 0xb8) + 0xb0) = mask; then tx_isp_[en|dis]able_irq(arg1)
      * arg1 = sd (core subdev), *(arg1 + 0xb8) = sd->regs = ISP core register base.
      * Register 0xb0 = ISP core hardware interrupt mask.
+     * NOTE: sd->regs is NULL because isp-m0 has no IORESOURCE_MEM (VIN already
+     * claims 0x13300000). Fall back to isp_dev->core_regs which maps the same phys addr.
      */
-    if (sd->regs) {
-        if (enable == 0 || ispcore_bypass_enabled(isp_dev)) {
-            writel(0x00000000, sd->regs + 0xb0);
-        } else {
-            writel(0xFFFFFFFF, sd->regs + 0xb0);
+    {
+        void __iomem *core_base = sd->regs ? sd->regs : isp_dev->core_regs;
+        if (core_base) {
+            if (enable == 0 || ispcore_bypass_enabled(isp_dev)) {
+                writel(0x00000000, core_base + 0xb0);
+            } else {
+                writel(0xFFFFFFFF, core_base + 0xb0);
+            }
         }
     }
     if (enable == 0 || ispcore_bypass_enabled(isp_dev)) {
