@@ -1863,18 +1863,22 @@ int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
 
                 case 0x200000e:
                     /* Binary Ninja: **($a0 + 0xb8) = 0x10 */
-                    /* Set VIC register to 0x10 */
+                    /* Write offset 0x0 of the MMIO base stored in the raw +0xb8 slot,
+                     * not MMIO offset 0xb8.
+                     */
                     if (vic_raw_regs_get(vic_dev)) {
-                        writel(0x10, vic_raw_regs_get(vic_dev) + 0xb8);
+                        writel(0x10, vic_raw_regs_get(vic_dev));
                     }
                     return 0;
 
                 case 0x2000013:
                     /* Binary Ninja: **($a0 + 0xb8) = 0, then = 4 */
-                    /* Set VIC register to 0, then 4 */
+                    /* Write offset 0x0 of the MMIO base stored in the raw +0xb8 slot,
+                     * not MMIO offset 0xb8.
+                     */
                     if (vic_raw_regs_get(vic_dev)) {
-                        writel(0, vic_raw_regs_get(vic_dev) + 0xb8);
-                        writel(4, vic_raw_regs_get(vic_dev) + 0xb8);
+                        writel(0, vic_raw_regs_get(vic_dev));
+                        writel(4, vic_raw_regs_get(vic_dev));
                     }
                     return 0;
 
@@ -2498,7 +2502,7 @@ static int vic_pad_event_handler(void *priv, unsigned int cmd, void *data)
     switch (cmd) {
         case 0x3000003:
             pr_info("*** VIC EVENT: STREAM_START (0x3000003) - ACTIVATING VIC HARDWARE ***\n");
-            ret = ispvic_frame_channel_s_stream(vic_dev, 1);
+            ret = vic_core_s_stream(sd, 1);
             break;
         case 0x3000004:
             pr_info("*** VIC EVENT: STREAM_STOP/CANCEL (0x3000004) - DEACTIVATING VIC HARDWARE ***\n");
@@ -2568,6 +2572,11 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
     if (current_state != 4) {
         tx_vic_disable_irq(vic_dev);
         ret = tx_isp_vic_start(vic_dev);
+        if (ret == 0)
+            vic_program_irq_registers(vic_dev, "vic_core_s_stream");
+        else
+            pr_warn("vic_core_s_stream: tx_isp_vic_start failed (%d), skipping VIC IRQ register programming\n",
+                    ret);
         vic_raw_state_set(vic_dev, 4);
         tx_vic_enable_irq(vic_dev);
         return ret;

@@ -38,6 +38,22 @@ void tx_isp_module_deinit(struct tx_isp_subdev *sd);
 int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 int vic_event_handler(void *subdev, int event_type, void *data);
 
+static void tx_isp_irq_info_enable(struct tx_isp_irq_info *irq_info)
+{
+	if (!irq_info || irq_info->irq <= 0)
+		return;
+
+	enable_irq(irq_info->irq);
+}
+
+static void tx_isp_irq_info_disable(struct tx_isp_irq_info *irq_info)
+{
+	if (!irq_info || irq_info->irq <= 0)
+		return;
+
+	disable_irq(irq_info->irq);
+}
+
 /* Binary Ninja interrupt handlers - EXACT reference implementation */
 irqreturn_t isp_irq_handle(int irq, void *dev_id);
 irqreturn_t isp_irq_thread_handle(int irq, void *dev_id);
@@ -625,6 +641,8 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
 	irq_num = platform_get_irq(pdev, 0);
 	if (irq_num < 0) {
 		irq_info->irq = 0;
+		irq_info->handler = NULL;
+		irq_info->data = NULL;
 		return 0;
 	}
 
@@ -633,19 +651,22 @@ int tx_isp_request_irq(struct platform_device *pdev, struct tx_isp_irq_info *irq
 					   isp_irq_thread_handle,
 					   IRQF_SHARED,
 					   dev_name(&pdev->dev),
-					   ourISPdev);
+					   irq_info);
 	if (ret != 0) {
 		pr_err("tx_isp_request_irq: failed for %s irq=%d ret=%d\n",
 		       dev_name(&pdev->dev), irq_num, ret);
 		irq_info->irq = 0;
+		irq_info->handler = NULL;
+		irq_info->data = NULL;
 		return -EBUSY;
 	}
 
 	irq_info->irq = irq_num;
-	irq_info->handler = isp_irq_handle;
-	irq_info->data = ourISPdev;
-	pr_info("tx_isp_request_irq: registered irq %d for %s\n",
-		irq_num, dev_name(&pdev->dev));
+	irq_info->handler = (void *)tx_isp_irq_info_enable;
+	irq_info->data = (void *)tx_isp_irq_info_disable;
+	tx_isp_irq_info_disable(irq_info);
+	pr_info("tx_isp_request_irq: registered irq %d for %s (dev_id=%p, left disabled)\n",
+		irq_num, dev_name(&pdev->dev), irq_info);
 
 	return 0;
 }
@@ -659,9 +680,7 @@ void tx_isp_free_irq(struct tx_isp_irq_info *irq_info)
         return;
     }
 
-    /* CRITICAL FIX: Use ourISPdev as dev_id to match request_threaded_irq call */
-    extern struct tx_isp_dev *ourISPdev;
-    free_irq(irq_info->irq, ourISPdev);
+	free_irq(irq_info->irq, irq_info);
     irq_info->irq = 0;
     irq_info->handler = NULL;
     irq_info->data = NULL;

@@ -6427,14 +6427,49 @@ static void push_buffer_fifo(struct list_head *fifo_head, struct vic_buffer_entr
     spin_unlock_irqrestore(&irq_cb_lock, flags);
 }
 
+static struct tx_isp_dev *tx_isp_irq_resolve_isp_dev(void *dev_id,
+						      struct tx_isp_subdev **owner_sd)
+{
+	if (owner_sd)
+		*owner_sd = NULL;
+
+	if (!dev_id)
+		return NULL;
+
+	if (ourISPdev && dev_id == ourISPdev) {
+		if (owner_sd)
+			*owner_sd = &ourISPdev->sd;
+		return ourISPdev;
+	}
+
+	if (!ourISPdev)
+		return NULL;
+
+	if (dev_id == &ourISPdev->sd.irq_info) {
+		if (owner_sd)
+			*owner_sd = &ourISPdev->sd;
+		return ourISPdev;
+	}
+
+	if (ourISPdev->vic_dev && dev_id == &ourISPdev->vic_dev->sd.irq_info) {
+		if (owner_sd)
+			*owner_sd = &ourISPdev->vic_dev->sd;
+		return ourISPdev;
+	}
+
+	return NULL;
+}
+
 /* isp_irq_handle - OEM-style generic subdevice walk */
 irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
-    struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
+	struct tx_isp_subdev *owner_sd = NULL;
+	struct tx_isp_dev *isp_dev = tx_isp_irq_resolve_isp_dev(dev_id, &owner_sd);
     irqreturn_t result = IRQ_HANDLED;
     int i;
 
-    pr_debug("*** isp_irq_handle: IRQ %d fired ***\n", irq);
+	pr_debug("*** isp_irq_handle: IRQ %d fired (dev_id=%p owner_sd=%p isp=%p) ***\n",
+		 irq, dev_id, owner_sd, isp_dev);
 
     if (!isp_dev) {
         pr_err("isp_irq_handle: Invalid ISP device\n");
@@ -6468,105 +6503,23 @@ irqreturn_t isp_irq_handle(int irq, void *dev_id)
 /* isp_irq_thread_handle - EXACT Binary Ninja implementation with CORRECT structure access */
 irqreturn_t isp_irq_thread_handle(int irq, void *dev_id)
 {
-    void *s0_1;
-    void *s1_1;
-    void *v0_2;
-    int v0_3;
-    void **subdev_array;
-    void *a0_1;
-    void *v0_5;
-    int v0_6;
+	struct tx_isp_subdev *owner_sd = NULL;
+	struct tx_isp_dev *isp_dev = tx_isp_irq_resolve_isp_dev(dev_id, &owner_sd);
 
-    pr_debug("*** isp_irq_thread_handle: Threaded IRQ %d ***\n", irq);
+	pr_debug("*** isp_irq_thread_handle: Threaded IRQ %d (dev_id=%p owner_sd=%p isp=%p) ***\n",
+		 irq, dev_id, owner_sd, isp_dev);
 
-    /* Binary Ninja: if (arg2 == 0x80) */
-    if ((uintptr_t)dev_id == 0x80) {
-        /* Binary Ninja: $s1_1 = arg2 - 0x48; $s0_1 = arg2 - 8 */
-        s1_1 = (char*)dev_id - 0x48;
-        s0_1 = (char*)dev_id - 8;
-    } else {
-        /* Binary Ninja: void* $v0_2 = **(arg2 + 0x44) */
-        struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)dev_id;
-        if (isp_dev && isp_dev->vic_dev) {
-            v0_2 = *((void**)((char*)isp_dev->vic_dev + 0x44));
-        } else {
-            v0_2 = NULL;
-        }
-        s1_1 = (char*)dev_id - 0x48;
+	/* The active top halves currently complete all work in hardirq context and
+	 * do not return IRQ_WAKE_THREAD. Keep the threaded handler safe for both
+	 * legacy (isp_dev) and OEM-style (irq_info) dev_id forms.
+	 */
+	if (!isp_dev)
+		return IRQ_HANDLED;
 
-        /* Binary Ninja: if ($v0_2 == 0) $s0_1 = arg2 - 8 */
-        if (v0_2 == NULL) {
-            s0_1 = (char*)dev_id - 8;
-        } else {
-            /* Binary Ninja: int32_t $v0_3 = *($v0_2 + 0x24) */
-            v0_3 = *((int*)((char*)v0_2 + 0x24));
-
-            /* Binary Ninja: if ($v0_3 == 0) $s0_1 = arg2 - 8 */
-            if (v0_3 == 0) {
-                s0_1 = (char*)dev_id - 8;
-            } else {
-                /* Binary Ninja: $v0_3(arg2 - 0x80, 0) */
-                void (*thread_func)(void*, int) = (void(*)(void*, int))v0_3;
-                thread_func((char*)dev_id - 0x80, 0);
-                s1_1 = (char*)dev_id - 0x48;
-                s0_1 = (char*)dev_id - 8;
-            }
-        }
-    }
-
-    /* Binary Ninja: void* $a0_1 = *$s1_1 */
-    subdev_array = (void**)s1_1;
-    a0_1 = *subdev_array;
-
-    /* Binary Ninja: while (true) loop */
-    while (true) {
-        /* Binary Ninja: if ($a0_1 == 0) $s1_1 += 4 */
-        if (a0_1 == NULL) {
-            subdev_array = (void**)((char*)subdev_array + 4);
-        } else {
-            /* FIXED: Use safe struct member access instead of dangerous offset arithmetic */
-            /* The dangerous offset 0xc4 access has been replaced with safe validation */
-            if (!is_valid_kernel_pointer(a0_1)) {
-                pr_debug("isp_irq_thread_handle: Invalid subdev pointer, skipping\n");
-                v0_5 = NULL;
-            } else {
-                /* SAFE: Skip dangerous offset access - just mark as no handler available */
-                v0_5 = NULL;
-                pr_debug("isp_irq_thread_handle: Skipping dangerous 0xc4 offset access for safety\n");
-            }
-
-            /* Binary Ninja: if ($v0_5 == 0) $s1_1 += 4 */
-            if (v0_5 == NULL) {
-                subdev_array = (void**)((char*)subdev_array + 4);
-            } else {
-                /* Binary Ninja: int32_t $v0_6 = *($v0_5 + 0x24) */
-                v0_6 = *((int*)((char*)v0_5 + 0x24));
-
-                /* Binary Ninja: if ($v0_6 == 0) $s1_1 += 4 */
-                if (v0_6 == 0) {
-                    subdev_array = (void**)((char*)subdev_array + 4);
-                } else {
-                    /* Binary Ninja: $v0_6() */
-                    void (*thread_handler)(void*, int) = (void(*)(void*, int))v0_6;
-                    thread_handler(a0_1, irq);
-                    subdev_array = (void**)((char*)subdev_array + 4);
-                }
-            }
-        }
-
-        /* Binary Ninja: if ($s1_1 == $s0_1) break */
-        if (subdev_array == (void**)s0_1) {
-            break;
-        }
-
-        /* Binary Ninja: $a0_1 = *$s1_1 */
-        a0_1 = *subdev_array;
-    }
-
-    pr_debug("*** isp_irq_thread_handle: Binary Ninja threaded IRQ %d processed ***\n", irq);
+	pr_debug("*** isp_irq_thread_handle: no threaded work queued for IRQ %d ***\n", irq);
 
     /* Binary Ninja: return 1 */
-    return 1;  /* IRQ_HANDLED */
+	return IRQ_HANDLED;
 }
 
 /* vic_mdma_irq_function - COMPLETE Binary Ninja exact implementation */

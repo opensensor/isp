@@ -639,6 +639,46 @@ static void ispcore_stream_add_ordered_subdev(struct tx_isp_subdev **ordered,
     *ordered_count += 1;
 }
 
+static int ispcore_dispatch_primary_channel_event(struct tx_isp_dev *isp_dev,
+                                                  unsigned int event)
+{
+    struct tx_isp_fs_device *fs_dev;
+    struct tx_isp_channel_config *configs;
+    struct tx_isp_channel_config *dispatch;
+    const char *event_name;
+    int ret;
+
+    if (!isp_dev || ispcore_bypass_enabled(isp_dev))
+        return -ENOIOCTLCMD;
+
+    fs_dev = dump_fsd;
+    if (!fs_dev || !fs_dev->channel_configs || fs_dev->channel_count == 0)
+        return -ENOIOCTLCMD;
+
+    configs = (struct tx_isp_channel_config *)fs_dev->channel_configs;
+    dispatch = &configs[0];
+    if (!dispatch->enabled || !dispatch->event_handler)
+        return -ENOIOCTLCMD;
+
+    if (event == ISP_EVENT_STREAM_START) {
+        if (dispatch->state != 3)
+            return 0;
+        event_name = "STREAMON";
+    } else {
+        return -ENOIOCTLCMD;
+    }
+
+    pr_info("*** ispcore_video_s_stream: dispatching channel 0 %s via event table ***\n",
+            event_name);
+
+    ret = tx_isp_send_event_to_remote(&isp_dev->channels[0].subdev, event, NULL);
+
+    pr_info("*** ispcore_video_s_stream: channel 0 %s dispatch returned %d ***\n",
+            event_name, ret);
+
+    return ret;
+}
+
 static int ispcore_call_subdev_s_stream(struct tx_isp_subdev *sd, int index, int enable)
 {
     struct tx_isp_subdev_video_ops *video_ops;
@@ -970,6 +1010,10 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
             /* Binary Ninja: break */
             break;
         }
+    }
+
+    if (enable != 0 && (result == 0 || result == -ENOIOCTLCMD)) {
+        ispcore_dispatch_primary_channel_event(isp_dev, ISP_EVENT_STREAM_START);
     }
 
 stream_done:
