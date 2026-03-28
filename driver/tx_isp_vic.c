@@ -1057,46 +1057,15 @@ static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
     return 0;  /* Success */
 }
 
-/* CRITICAL FIX: Initialize VIC hardware with proper interrupt configuration */
+/* Probe-time VIC init stays out of the OEM IRQ route/mask path. */
 int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
 {
     struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
-    void __iomem *vic_base;
 
-    if (!vic_dev) {
-        pr_err("tx_isp_vic_hw_init: Invalid VIC device\n");
+    if (!vic_dev)
         return -EINVAL;
-    }
 
-    vic_base = vic_primary_regs_resolve(vic_dev);
-    if (!vic_base) {
-        pr_err("tx_isp_vic_hw_init: No primary VIC registers available\n");
-        return -EINVAL;
-    }
-
-    /* Probe runs before core probe on this tree, so only do what we can safely
-     * do here and reassert the full core route again at stream start.
-     */
-    pr_info("*** VIC HW INIT: Seeding VIC IRQ state; full core route reassert may defer until stream start ***\n");
-
-    vic_reassert_core_irq_route(vic_dev,
-                                vic_raw_width_get(vic_dev),
-                                vic_raw_height_get(vic_dev),
-                                0,
-                                "tx_isp_vic_hw_init");
-    vic_program_irq_registers(vic_dev, "tx_isp_vic_hw_init");
-
-    pr_info("*** VIC HW INIT: Interrupt configuration applied to PRIMARY VIC space ***\n");
-
-    /*
-     * Keep probe-time VIC init limited to hardware interrupt register setup.
-     * The shared Linux IRQ 38 handler is registered later via the module-owned
-     * request path; requesting it again here created a duplicate handler and
-     * dragged in a broken local ISR stub.
-     */
     vic_raw_irq_flag_set(vic_dev, 0);
-    pr_info("*** VIC HW INIT: Deferring shared IRQ38 registration to module request path ***\n");
-
     return 0;
 }
 
@@ -2715,7 +2684,7 @@ long vic_chardev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 }
 EXPORT_SYMBOL(vic_chardev_ioctl);
 
-static struct tx_isp_vic_device *dump_vsd = NULL;
+struct tx_isp_vic_device *dump_vsd = NULL;
 static void *test_addr = NULL;
 
 /* tx_isp_vic_probe - Matching binary flow with safe struct member access */

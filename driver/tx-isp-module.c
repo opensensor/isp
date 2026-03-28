@@ -968,6 +968,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);  /* FIXED: Correct sign
 int csi_video_s_stream(struct tx_isp_subdev *sd, int enable);       /* Real CSI streaming (in tx_isp_csi.c) */
 extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 extern int tx_isp_core_ensure_powered(struct tx_isp_dev *isp_dev, const char *origin);
+extern struct tx_isp_vic_device *dump_vsd;
 void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev);
 static void tx_vic_seed_irq_slots(struct tx_isp_vic_device *vic_dev, int irq);
 static int ispvic_frame_channel_qbuf(struct tx_isp_vic_device *vic_dev, void *buffer);
@@ -5854,84 +5855,6 @@ static int tx_isp_init(void)
         }
     }
 
-    /* *** CRITICAL: Enable interrupt generation at hardware level *** */
-    pr_info("*** ENABLING HARDWARE INTERRUPT GENERATION ***\n");
-    if (ourISPdev->vic_dev) {
-        struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-        if (vic_dev->vic_regs) {
-    /* Initialize netlink channel (optional, non-fatal on error) */
-    {
-        int nlret = tisp_netlink_init();
-        if (nlret)
-            pr_warn("tisp netlink init failed: %d\n", nlret);
-    }
-
-            void __iomem *isp_regs = vic_dev->vic_regs - 0x9a00;  /* Get ISP base from VIC base */
-
-            pr_info("*** WRITING VIC INTERRUPT ENABLE REGISTERS ***\n");
-
-            /* OEM ISR semantics:
-             *   0x1e0/0x1e4 = status
-             *   0x1e8/0x1ec = masks
-             *   0x1f0/0x1f4 = acknowledge/clear
-             * Do not write synthetic "enable" values into the status registers.
-             */
-            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f0);  /* Clear main pending bits */
-            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1f4);  /* Clear MDMA pending bits */
-            writel(0xFFFFFFFE, vic_dev->vic_regs + 0x1e8);  /* Unmask frame-done on main bank */
-            writel(0xFFFFFFFF, vic_dev->vic_regs + 0x1ec);  /* Mask MDMA until main IRQ works */
-            wmb();
-
-            pr_info("*** VIC INTERRUPT REGISTERS ENABLED: status=0x%08x/0x%08x mask=0x%08x/0x%08x ***\n",
-                    readl(vic_dev->vic_regs + 0x1e0), readl(vic_dev->vic_regs + 0x1e4),
-                    readl(vic_dev->vic_regs + 0x1e8), readl(vic_dev->vic_regs + 0x1ec));
-
-            /* CRITICAL FIX: Enable ISP core interrupts too! Use core_regs if available */
-            pr_info("*** ENABLING ISP CORE INTERRUPT REGISTERS FOR MIPI DATA ***\n");
-            if (ourISPdev->core_regs) {
-                void __iomem *core = ourISPdev->core_regs;
-                /* Enable/unmask core interrupts at both possible banks (legacy +0xb* and new +0x98b*) */
-
-                /* Legacy bank */
-                u32 pend_legacy = readl(core + 0xb4);
-                writel(pend_legacy, core + 0xb8);  /* Clear any pending */
-                writel(0x3FFF, core + 0xb0);       /* INT_EN */
-                writel(0x3FFF, core + 0xbc);       /* INT_MASK/UNMASK */
-                /* New bank */
-                u32 pend_new = readl(core + 0x98b4);
-                writel(pend_new, core + 0x98b8);   /* Clear any pending */
-                writel(0x3FFF, core + 0x98b0);     /* INT_EN */
-                writel(0x3FFF, core + 0x98bc);     /* INT_MASK/UNMASK */
-                wmb();
-                pr_info("*** ISP CORE INTERRUPT REGISTERS ENABLED at legacy(+0xb*) and new(+0x98b*) ***\n");
-            } else {
-                /* Fallback to VIC-relative base if core_regs not mapped */
-                void __iomem *fallback = vic_dev->vic_regs ? (vic_dev->vic_regs - 0x9a00) : NULL;
-                if (fallback) {
-                    /* Legacy bank */
-                    u32 pend_legacy = readl(fallback + 0xb4);
-                    writel(pend_legacy, fallback + 0xb8);
-                    writel(0x3FFF, fallback + 0xb0);
-                    writel(0x3FFF, fallback + 0xbc);
-                    /* New bank */
-                    u32 pend_new = readl(fallback + 0x98b4);
-                    writel(pend_new, fallback + 0x98b8);
-                    writel(0x3FFF, fallback + 0x98b0);
-                    writel(0x3FFF, fallback + 0x98bc);
-                    wmb();
-                    pr_info("*** ISP CORE INTERRUPTS ENABLED via VIC-relative base (legacy+new) ***\n");
-                } else {
-                    pr_warn("*** Unable to enable ISP core interrupts: no valid base ***\n");
-                }
-            }
-            pr_info("*** BOTH VIC AND ISP CORE INTERRUPTS NOW ENABLED! ***\n");
-
-            /* Set global VIC interrupt enable flag - FIXED: Binary Ninja shows this should be 1 */
-            vic_start_ok = 1;
-            pr_info("*** vic_start_ok SET TO 1 - INTERRUPTS WILL NOW BE PROCESSED! ***\n");
-        }
-    }
-
     /* Create ISP M0 tuning device node */
     ret = tisp_code_create_tuning_node();
     if (ret) {
@@ -6333,9 +6256,6 @@ static void tx_vic_disable_irq_complete(struct tx_isp_dev *isp_dev)
     pr_info("*** tx_vic_disable_irq COMPLETE - VIC INTERRUPTS DISABLED ***\n");
 }
 
-#define VIC_RAW_IRQ_SLOT_OFFSET 0x80
-#define VIC_RAW_IRQ_ENABLE_OFFSET 0x84
-#define VIC_RAW_IRQ_DISABLE_OFFSET 0x88
 #define VIC_RAW_IRQ_LOCK_OFFSET 0x130
 #define VIC_RAW_IRQ_FLAG_OFFSET 0x13c
 
@@ -6354,9 +6274,6 @@ static inline void tx_vic_raw_irq_flag_set(struct tx_isp_vic_device *vic_dev, u3
     *(u32 *)((char *)vic_dev + VIC_RAW_IRQ_FLAG_OFFSET) = enabled;
 }
 
-typedef void (*vic_irq_slot_cb_t)(struct tx_isp_irq_info *irq_info);
-typedef void (*vic_raw_irq_slot_cb_t)(void *irq_slot);
-
 static inline struct tx_isp_vic_device *tx_vic_irq_owner_resolve(struct tx_isp_vic_device *vic_dev)
 {
     struct tx_isp_vic_device *active_vic = vic_dev;
@@ -6369,28 +6286,6 @@ static inline struct tx_isp_vic_device *tx_vic_irq_owner_resolve(struct tx_isp_v
         return NULL;
 
     return active_vic;
-}
-
-static inline void *tx_vic_raw_irq_slot(struct tx_isp_vic_device *vic_dev)
-{
-    return (char *)vic_dev + VIC_RAW_IRQ_SLOT_OFFSET;
-}
-
-static inline int tx_vic_raw_irq_cb_valid(vic_raw_irq_slot_cb_t cb)
-{
-    unsigned long addr = (unsigned long)cb;
-
-    return addr >= 0x80000000UL && addr < 0xfffff001UL;
-}
-
-static inline vic_raw_irq_slot_cb_t tx_vic_raw_irq_enable_cb_get(struct tx_isp_vic_device *vic_dev)
-{
-    return *(vic_raw_irq_slot_cb_t *)((char *)vic_dev + VIC_RAW_IRQ_ENABLE_OFFSET);
-}
-
-static inline vic_raw_irq_slot_cb_t tx_vic_raw_irq_disable_cb_get(struct tx_isp_vic_device *vic_dev)
-{
-    return *(vic_raw_irq_slot_cb_t *)((char *)vic_dev + VIC_RAW_IRQ_DISABLE_OFFSET);
 }
 
 static void tx_vic_irq_slot_enable(struct tx_isp_irq_info *irq_info)
@@ -6437,12 +6332,12 @@ static void tx_vic_seed_irq_slots(struct tx_isp_vic_device *vic_dev, int irq)
     if (irq <= 0)
         irq = 38;
 
-    /* Do not overwrite the OEM-owned raw +0x80 slot. Several runtime paths
-     * treat that field as a pointer-bearing object, and writing a bare IRQ or
-     * synthetic irq_info there causes unaligned-access faults during sensor
-     * bring-up. Keep the IRQ bookkeeping on the named members we actually own.
+    /* Keep the stable, typed IRQ metadata on the named subdev fields.
+     * The OEM binary calls through vic+0x84/vic+0x88, but in this source tree
+     * the live C layout has drifted and vic+0x80 is not a real
+     * struct tx_isp_irq_info. Writing function pointers there corrupts the VIC
+     * object and causes stream-on branches into data (epc == vic_dev + 0x90).
      */
-
     vic_dev->sd.irq_info.irq = irq;
     vic_dev->sd.irq_info.handler = (void *)tx_vic_irq_slot_enable;
     vic_dev->sd.irq_info.data = (void *)tx_vic_irq_slot_disable;
@@ -6454,9 +6349,9 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 {
     struct tx_isp_vic_device *active_vic;
     unsigned long flags;
-    vic_irq_slot_cb_t cb;
+    int irq;
 
-    active_vic = tx_vic_irq_owner_resolve(vic_dev);
+    active_vic = tx_vic_irq_owner_resolve(dump_vsd ? dump_vsd : vic_dev);
     if (!active_vic)
         return;
 
@@ -6464,17 +6359,9 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
 
     if (tx_vic_raw_irq_flag_get(active_vic) == 0) {
         tx_vic_raw_irq_flag_set(active_vic, 1);
-        tx_vic_seed_irq_slots(active_vic,
-                              active_vic->irq_number ? active_vic->irq_number : active_vic->irq);
-        cb = (vic_irq_slot_cb_t)active_vic->sd.irq_info.handler;
-        if (cb) {
-            pr_info("*** tx_vic_enable_irq: enabling VIC IRQ %d via sd.irq_info callback ***\n",
-                    active_vic->sd.irq_info.irq);
-            cb(&active_vic->sd.irq_info);
-        } else {
-            pr_warn("tx_vic_enable_irq: no sd.irq_info callback seeded, using direct helper fallback\n");
-            tx_vic_irq_slot_enable(&active_vic->sd.irq_info);
-        }
+        irq = active_vic->irq_number ? active_vic->irq_number : active_vic->irq;
+        tx_vic_seed_irq_slots(active_vic, irq);
+        tx_vic_irq_slot_enable(&active_vic->sd.irq_info);
     }
 
     spin_unlock_irqrestore(tx_vic_raw_irq_lock(active_vic), flags);
@@ -6484,9 +6371,9 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
 {
     struct tx_isp_vic_device *active_vic;
     unsigned long flags;
-    vic_irq_slot_cb_t cb;
+    int irq;
 
-    active_vic = tx_vic_irq_owner_resolve(vic_dev);
+    active_vic = tx_vic_irq_owner_resolve(dump_vsd ? dump_vsd : vic_dev);
     if (!active_vic)
         return;
 
@@ -6494,17 +6381,9 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
 
     if (tx_vic_raw_irq_flag_get(active_vic) != 0) {
         tx_vic_raw_irq_flag_set(active_vic, 0);
-        tx_vic_seed_irq_slots(active_vic,
-                              active_vic->irq_number ? active_vic->irq_number : active_vic->irq);
-        cb = (vic_irq_slot_cb_t)active_vic->sd.irq_info.data;
-        if (cb) {
-            pr_info("*** tx_vic_disable_irq: disabling VIC IRQ %d via sd.irq_info callback ***\n",
-                    active_vic->sd.irq_info.irq);
-            cb(&active_vic->sd.irq_info);
-        } else {
-            pr_warn("tx_vic_disable_irq: no sd.irq_info callback seeded, using direct helper fallback\n");
-            tx_vic_irq_slot_disable(&active_vic->sd.irq_info);
-        }
+        irq = active_vic->irq_number ? active_vic->irq_number : active_vic->irq;
+        tx_vic_seed_irq_slots(active_vic, irq);
+        tx_vic_irq_slot_disable(&active_vic->sd.irq_info);
     }
 
     spin_unlock_irqrestore(tx_vic_raw_irq_lock(active_vic), flags);
@@ -8221,48 +8100,6 @@ int tx_isp_driver_graph_init(struct tx_isp_dev *isp_dev)
     /* VIC IRQ registration now happens immediately after device linking in auto-link function */
     pr_info("*** tx_isp_driver_graph_init: VIC device linkage check - isp_dev->vic_dev = %p ***\n", isp_dev->vic_dev);
 
-
-    /* *** CRITICAL: Enable interrupt generation at hardware level *** */
-    pr_info("*** ENABLING HARDWARE INTERRUPT GENERATION ***\n");
-
-            pr_info("*** WRITING VIC INTERRUPT ENABLE REGISTERS ***\n");
-    /* Program early VIC enables like the had-continuous-interrupts branch; masks untouched */
-    if (isp_dev->vic_dev) {
-        struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)isp_dev->vic_dev;
-        if (vic->vic_regs) {
-            void __iomem *vr = vic->vic_regs;
-            void __iomem *vc = vic->vic_regs_secondary;
-
-            /* Clear any pending first on both primary and control banks */
-            writel(0x00000000, vr + 0x00);
-            writel(0x00000000, vr + 0x20);
-            if (vc) {
-                writel(0x00000000, vc + 0x00);
-                writel(0x00000000, vc + 0x20);
-            }
-            wmb();
-
-            /* Good-things gating: IMR/IMCR on PRIMARY bank (matches reference trace) */
-            /* These gate the VIC line before detailed enables; required for interrupts to exit the block */
-            writel(0x00000001, vr + 0x04);   /* IMR baseline */
-            writel(0x00000000, vr + 0x24);   /* IMR1 baseline */
-            writel(0x07800438, vr + 0x04);   /* IMR routing/mask */
-            writel(0xb5742249, vr + 0x0c);   /* IMCR key */
-            wmb();
-
-            /* SKIP early writes to 0x1e0/0x1e4 (status W1C) to match good-things; do not touch these here */
-            /* writel(0x3FFFFFFF, vr + 0x1e0);  */
-            /* writel(0x0000000F, vr + 0x1e4);  */
-            /* if (vc) { writel(0x3FFFFFFF, vc + 0x1e0); writel(0x0000000F, vc + 0x1e4); } */
-            wmb();
-
-            pr_info("*** EARLY VIC ENABLES (MODULE INIT): SKIPPED 0x1e0/0x1e4 programming to preserve W1C semantics ***\n");
-        } else {
-            pr_warn("*** EARLY VIC ENABLES (MODULE INIT): vic_regs not mapped yet ***\n");
-        }
-    } else {
-        pr_warn("*** EARLY VIC ENABLES (MODULE INIT): VIC device not linked yet ***\n");
-    }
 
     pr_info("*** tx_isp_driver_graph_init: helper complete ***\n");
     return 0;
