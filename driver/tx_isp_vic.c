@@ -2405,7 +2405,11 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         height = vic_dev->height ? vic_dev->height : 1080;
     }
 
-    /* OEM BN EXACT: stride = width << 1 (width * 2) */
+    /* OEM BN vic_pipo_mdma_enable EXACT: stride = *(arg1 + 0xdc) << 1
+     * This is width * 2 ALWAYS — the pipo path does not check format.
+     * stride=width*2 gives real sensor data (pink due to RAW not NV12).
+     * stride=width gives green (no data) or kills interrupts.
+     */
     stride = width << 1;
 
     pr_info("vic_pipo_mdma_enable: base=%p dims=%dx%d stride=%u\n",
@@ -2489,7 +2493,10 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
         /* Ensure at least 5 active banks for OEM-compatible PIPO rotation */
         if (vic_dev->active_buffer_count < 5)
             vic_dev->active_buffer_count = 5;
-        /* OEM BN EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
+        /* OEM BN EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020
+         * The pipo/s_stream path uses 0x80000020 (no format bits).
+         * Format bits are only used in vic_mdma_enable (saveraw path).
+         */
         {
             u32 ctrl = (vic_dev->active_buffer_count << 16) | 0x80000020;
 
@@ -2990,9 +2997,11 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	/* Program Y plane address (regs 0x318..0x328) */
 	writel(buffer_addr, vic_base + reg_offset);
 
-	/* Program UV plane address for NV12: UV follows Y at offset width*height.
-	 * UV regs are at 0x340..0x350 — offset from Y regs is 0x340 - 0x318 = 0x28.
-	 * Also program UV channel 2 regs at 0x32c..0x33c (offset 0x14 from Y).
+	/* Program UV plane address for NV12.
+	 * OEM vic_mdma_enable uses frame_size = (width<<1)*height for UV offset,
+	 * BUT that exceeds V4L2 buffer size (3110400 bytes for 1920x1080 NV12).
+	 * Use width*height as UV offset to stay within the V4L2 buffer.
+	 * These writes are REQUIRED — removing them kills interrupts entirely.
 	 */
 	{
 		u32 width = vic_raw_width_get(vic_dev);
