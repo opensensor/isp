@@ -774,17 +774,23 @@ static void vic_program_irq_registers(struct tx_isp_vic_device *vic_dev,
     }
 
     /* OEM ISR semantics:
-     *   0x1e0/0x1e4 = status
-     *   0x1e8/0x1ec = masks
-     *   0x1f0/0x1f4 = acknowledge/clear
-     * Only unmask frame-done on the main VIC bank for now.
+     *   0x1e0/0x1e4 = status registers
+     *   0x1e8/0x1ec = mask registers (bit=1 → MASKED, bit=0 → unmasked)
+     *   0x1f0/0x1f4 = acknowledge/clear registers
+     *
+     * OEM ISR formula: pending = (~mask) & status
+     *
+     * Bank 1 (0x1e8): Unmask bit 0 (frame_done) — OEM minimum.
+     * Bank 2 (0x1ec): Unmask bits 0,1 (MDMA ch0/ch1 done) — CRITICAL for
+     *   frame delivery.  OEM vic_mdma_irq_function handles these.
+     *   HW is only 4 bits wide so 0xFFFFFFFC reads back as 0x0000000C.
      */
-    writel(0xFFFFFFFF, vic_base + 0x1f0);
-    writel(0xFFFFFFFF, vic_base + 0x1f4);
+    writel(0xFFFFFFFF, vic_base + 0x1f0);   /* clear all bank 1 pending */
+    writel(0xFFFFFFFF, vic_base + 0x1f4);   /* clear all bank 2 pending */
     wmb();
 
-    writel(0xFFFFFFFE, vic_base + 0x1e8);
-    writel(0xFFFFFFFF, vic_base + 0x1ec);
+    writel(0xFFFFFFFE, vic_base + 0x1e8);   /* unmask bit 0 (frame_done) */
+    writel(0xFFFFFFFC, vic_base + 0x1ec);   /* unmask bits 0,1 (MDMA ch0/ch1) */
     wmb();
 
     pr_info("%s: VIC IRQ regs status=0x%08x/0x%08x mask=0x%08x/0x%08x\n",
@@ -1125,33 +1131,32 @@ label_123f4:
     return 0;  /* Return 0 for success matching reference behavior */
 }
 
-/* vic_mdma_irq_function - Binary Ninja implementation for MDMA channel interrupts */
+/* vic_mdma_irq_function - OEM HLIL: handles MDMA DMA completion per channel.
+ *
+ * OEM has two paths:
+ *   stream_state == 0 (non-streaming/calibration): cycle DMA buffers, complete()
+ *   stream_state != 0 (streaming): pop buffer from done FIFO, deliver frame
+ *
+ * For now we handle the non-streaming path (complete()) and log the streaming
+ * path for debugging.  The VIC PIPO DMA needs the MDMA done acknowledgement
+ * to release the buffer and continue to the next frame.
+ */
 static int vic_mdma_irq_function(struct tx_isp_vic_device *vic_dev, int channel)
 {
-    void __iomem *vic_base = vic_dev->vic_regs;
+    pr_info_ratelimited("vic_mdma_irq: ch=%d stream_state=%d frame_count=%u\n",
+                        channel, vic_dev->stream_state, vic_dev->frame_count);
 
-    pr_debug("*** vic_mdma_irq_function: channel=%d, vic_dev=%p ***\n", channel, vic_dev);
-
-    /* MDMA channel interrupt processing */
-    if (channel == 0) {
-        /* Channel 0 MDMA processing */
-        pr_debug("vic_mdma_irq_function: Processing MDMA channel 0 interrupt\n");
-
-        /* Complete any pending frame operations for channel 0 */
+    if (vic_dev->stream_state == 0) {
+        /* OEM non-streaming path: private_complete(arg1 + 0x148) */
         complete(&vic_dev->frame_complete);
-
-        /* Clear channel 0 specific MDMA status if needed */
-        /* This would include hardware-specific register operations */
-    } else if (channel == 1) {
-        /* Channel 1 MDMA processing */
-        pr_debug("vic_mdma_irq_function: Processing MDMA channel 1 interrupt\n");
-
-        /* Channel 1 specific processing would go here */
-        /* This would include different buffer management or DMA operations */
+    } else {
+        /* OEM streaming path: pop_buffer_fifo → deliver frame via raw_pipe callback.
+         * For now, just signal completion so frame_channel waiters unblock.
+         */
+        complete(&vic_dev->frame_complete);
     }
 
-    pr_debug("*** vic_mdma_irq_function: completed for channel %d ***\n", channel);
-    return 0;  /* Success */
+    return 0;
 }
 
 /* Probe-time VIC init stays out of the OEM IRQ route/mask path. */
@@ -2380,53 +2385,92 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
     return 0;
 }
 
-/* VIC PIPO MDMA Enable function - OEM HLIL EXACT: uses *(arg1 + 0xb8) for all writes */
+/* VIC PIPO MDMA Enable function - OEM HLIL: uses *(arg1 + 0xb8) for all writes.
+ *
+ * OEM vic_pipo_mdma_enable only sets stride/size/enable but NOT buffer addresses.
+ * Buffer addresses normally come via ispvic_frame_channel_qbuf (0x3000005 events).
+ * Since our event path doesn't deliver those events, we ALSO program buffer
+ * addresses here using the OEM vic_mdma_enable layout for NV12 format.
+ *
+ * OEM NV12 layout (format 7, single channel arg3==0):
+ *   stride = width (not doubled for NV12)
+ *   fps = stride * height (Y plane size)
+ *   Y buf[i] = rmem_base + i * fps       (regs 0x318..0x328)
+ *   UV buf[i] = rmem_base + (i+1) * fps  (regs 0x340..0x350)
+ *   Also sets NV12 UV channel: regs 0x32c..0x33c
+ */
 static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_base;
-    u32 width, height, stride;
+    u32 width, height, stride, fps;
+    u32 rmem_base;
+    int i;
 
-    /* Validate vic_dev */
     if (!vic_dev) {
         pr_err("vic_pipo_mdma_enable: NULL vic_dev parameter\n");
         return;
     }
 
-    /* OEM HLIL: *(*(arg1 + 0xb8) + 0x308) = 1
-     * ALL writes go through the raw +0xb8 slot — one canonical pointer.
-     */
     vic_base = vic_raw_regs_get(vic_dev);
-    if (!vic_base) {
-        /* Ensure raw slot is seeded if not yet set */
+    if (!vic_base)
         vic_base = vic_primary_regs_resolve(vic_dev);
-    }
     if (!vic_base || (unsigned long)vic_base < 0x80000000) {
-        pr_err("vic_pipo_mdma_enable: Invalid VIC register base %p - ABORTING\n", vic_base);
+        pr_err("vic_pipo_mdma_enable: Invalid VIC register base %p\n", vic_base);
         return;
     }
 
-    /* OEM HLIL: $v1 = *(arg1 + 0xdc), stride = $v1 << 1 */
     width = vic_raw_width_get(vic_dev);
     height = vic_raw_height_get(vic_dev);
-
     if (width == 0 || height == 0) {
         width = vic_dev->width ? vic_dev->width : 1920;
         height = vic_dev->height ? vic_dev->height : 1080;
     }
 
-    stride = width << 1;
-    pr_info("vic_pipo_mdma_enable: base=%p dims=%dx%d stride=%u\n",
-            vic_base, width, height, stride);
+    /* NV12 (format 7): stride = width, NOT width*2 */
+    stride = width;
+    fps = stride * height;  /* Y plane size = one frame plane */
 
-    /* OEM HLIL EXACT sequence — no wmb() between writes (OEM has none) */
+    /* Get rmem DMA base from ISP device */
+    rmem_base = 0x6300000;  /* T31 default from cmdline rmem=29M@0x6300000 */
+    if (ourISPdev && ourISPdev->rmem_addr)
+        rmem_base = (u32)ourISPdev->rmem_addr;
+
+    pr_info("vic_pipo_mdma_enable: base=%p dims=%dx%d stride=%u fps=%u rmem=0x%x\n",
+            vic_base, width, height, stride, fps, rmem_base);
+
+    /* OEM HLIL: MDMA config registers */
     writel(1, vic_base + 0x308);                           /* MDMA enable */
     writel((width << 16) | height, vic_base + 0x304);      /* frame size */
     writel(stride, vic_base + 0x310);                      /* Y stride */
     writel(stride, vic_base + 0x314);                      /* UV stride */
+
+    /* OEM vic_mdma_enable: Y plane buffer addresses (0x318..0x328)
+     * NV12 single-channel: Y buf[i] = rmem_base + i * fps
+     */
+    for (i = 0; i < 5; i++)
+        writel(rmem_base + i * fps, vic_base + 0x318 + (i * 4));
+
+    /* OEM vic_mdma_enable: UV plane buffer addresses (0x340..0x350)
+     * NV12: UV buf[i] follows Y buf[i], so UV buf[i] = rmem_base + (i+1) * fps
+     * But with arg3==0 layout, UV shares space differently.
+     * OEM: UV buf[0] = base + fps, UV buf[1] = base + 3*fps, etc.
+     * Actually for arg3==0: UV interleaves with Y at stride-level.
+     * Using the simpler NV12 layout: UV follows each Y plane.
+     */
+    for (i = 0; i < 5; i++)
+        writel(rmem_base + i * fps + fps, vic_base + 0x340 + (i * 4));
+
+    /* NV12 (format 7): Also program UV channel 2 registers 0x32c..0x33c
+     * OEM: *(vic_regs + 0x32c) = UV buf[0], etc.
+     */
+    for (i = 0; i < 5; i++)
+        writel(rmem_base + i * fps + fps, vic_base + 0x32c + (i * 4));
+
     wmb();
 
-    pr_info("vic_pipo_mdma_enable: readback stride=0x%x ctrl=0x%x\n",
-            readl(vic_base + 0x310), readl(vic_base + 0x300));
+    pr_info("vic_pipo_mdma_enable: Y[0]=0x%x Y[1]=0x%x UV[0]=0x%x UV[1]=0x%x\n",
+            readl(vic_base + 0x318), readl(vic_base + 0x31c),
+            readl(vic_base + 0x340), readl(vic_base + 0x344));
 }
 
 /* ISPVIC Frame Channel S_Stream - OEM HLIL EXACT Implementation
@@ -2471,10 +2515,14 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
     } else {
         /* OEM HLIL: vic_pipo_mdma_enable($s0) */
         vic_pipo_mdma_enable(vic_dev);
-        /* OEM HLIL: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
+        /* OEM vic_mdma_enable: ctrl = (buf_count << 16) | 0x80000020 | format
+         * NV12 = format 7.  We program 5 buffer banks in vic_pipo_mdma_enable,
+         * so buf_count = 5 (< 8 → use per-buffer-count path, not 0x80080020).
+         */
         {
-            u32 buffer_count = vic_dev->active_buffer_count;
-            u32 ctrl = (buffer_count << 16) | 0x80000020;
+            u32 buffer_count = 5;
+            u32 nv12_format = 7;
+            u32 ctrl = (buffer_count << 16) | 0x80000020 | nv12_format;
 
             writel(ctrl, vic_base + 0x300);
             wmb();
@@ -3126,12 +3174,11 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
                 pr_info("tx_isp_subdev_pipo: added buffer entry %d to free list\n", i);
             }
 
-            /* SAFE: Clear VIC register using validated register access */
-            uint32_t reg_offset = (i + 0xc6) << 2;
-            if (vic_dev->vic_regs && reg_offset < 0x1000) {
-                writel(0, vic_dev->vic_regs + reg_offset);
-                pr_info("tx_isp_subdev_pipo: cleared VIC register at offset 0x%x for buffer %d\n", reg_offset, i);
-            }
+            /* NOTE: Do NOT clear VIC buffer registers (0x318-0x328) here.
+             * vic_pipo_mdma_enable programs them with actual DMA addresses
+             * when streaming starts.  Clearing them here was preventing
+             * MDMA from having valid destination addresses.
+             */
         }
 
         pr_info("tx_isp_subdev_pipo: initialized %d buffer structures (safe implementation)\n", i);

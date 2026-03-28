@@ -2712,22 +2712,18 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
     writel(v1_10, vic_regs + 0x1f4);
     wmb();
 
-    /* CRITICAL: Binary Ninja global vic_start_ok flag check */
-    /* Binary Ninja: if (zx.d(vic_start_ok) != 0) */
+    /* OEM HLIL: if (zx.d(vic_start_ok) != 0) */
     if (vic_start_ok != 0) {
-        pr_debug("*** VIC HARDWARE INTERRUPT: vic_start_ok=1, processing (v1_7=0x%x, v1_10=0x%x) ***\n", v1_7, v1_10);
+        if (v1_7 || v1_10)
+            pr_info_ratelimited("VIC ISR: v1_7=0x%x v1_10=0x%x\n", v1_7, v1_10);
 
-        /* Binary Ninja: if (($v1_7 & 1) != 0) */
+        /* OEM HLIL: if (($v1_7 & 1) != 0) → frame_done */
         if ((v1_7 & 1) != 0) {
-            /* Binary Ninja: *($s0 + 0x160) += 1 */
+            /* OEM HLIL: *($s0 + 0x160) += 1 */
             vic_dev->frame_count++;
-            pr_debug("*** 2VIC FRAME DONE INTERRUPT: Frame completion detected (count=%u) ***\n", vic_dev->frame_count);
-
-            /* CRITICAL: Also increment main ISP frame counter for /proc/jz/isp/isp-w02 */
             isp_dev->frame_count++;
-            pr_debug("*** ISP FRAME COUNT UPDATED: %u (for /proc/jz/isp/isp-w02) ***\n", isp_dev->frame_count);
 
-            /* Binary Ninja: entry_$a2 = vic_framedone_irq_function($s0) */
+            /* OEM HLIL: vic_framedone_irq_function($s0) */
             vic_framedone_irq_function(vic_dev);
         }
 
@@ -2828,16 +2824,14 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             pr_err("Err [VIC_INT] : mipi ch3 vcomp err !!!\n");
         }
 
-        /* Binary Ninja: if (($v1_10 & 1) != 0) */
+        /* OEM HLIL: if (($v1_10 & 1) != 0) → MDMA ch0 done */
         if ((v1_10 & 1) != 0) {
-            /* Binary Ninja: entry_$a2 = vic_mdma_irq_function($s0, 0) */
-            //vic_mdma_irq_function(vic_dev, 0);
+            vic_mdma_irq_function(vic_dev, 0);
         }
 
-        /* Binary Ninja: if (($v1_10 & 2) != 0) */
+        /* OEM HLIL: if (($v1_10 & 2) != 0) → MDMA ch1 done */
         if ((v1_10 & 2) != 0) {
-            /* Binary Ninja: entry_$a2 = vic_mdma_irq_function($s0, 1) */
-            //vic_mdma_irq_function(vic_dev, 1);
+            vic_mdma_irq_function(vic_dev, 1);
         }
 
         if ((v1_10 & 4) != 0) {
@@ -2848,8 +2842,8 @@ static irqreturn_t isp_vic_interrupt_service_routine(int irq, void *dev_id)
             pr_err("Err [VIC_INT] : dma chid ovf  !!!\n");
         }
 
-		/* Binary Ninja: Error recovery sequence - gate off the OEM raw IRQ flag */
-		if ((v1_7 & 0xde00) != 0 && *(u32 *)((char *)vic_dev + 0x13c) != 0) {
+		/* OEM HLIL: Error recovery — if (($v1_7 & 0xde00) != 0 && vic_start_ok != 0) */
+		if ((v1_7 & 0xde00) != 0 && vic_start_ok != 0) {
             pr_info("*** VIC ERROR RECOVERY: Detected error condition 0x%x (control limit errors should be prevented by proper config) ***\n", v1_7);
             pr_err("error handler!!!\n");
 
@@ -5955,10 +5949,16 @@ static int tx_isp_init(void)
         ourISPdev->isp_irq2 = vic_dev->sd.irq_info.irq;
         if (ourISPdev->isp_irq2 > 0) {
             tx_vic_seed_irq_slots(vic_dev, ourISPdev->isp_irq2);
-            disable_irq(ourISPdev->isp_irq2);
+            /* NOTE: Do NOT call disable_irq() here — tx_isp_request_irq()
+             * already left IRQ 38 disabled (depth=1).  A second disable
+             * would push the depth to 2, requiring two enable_irq() calls
+             * to actually unmask the line.  tx_vic_enable_irq() only does
+             * one enable_irq(), so the extra disable here was causing
+             * IRQ 38 to stay permanently masked (0 interrupts).
+             */
             pr_info("*** ADOPTED EXISTING IRQ %d (isp-w02) FROM SUBDEV INIT ***\n",
                     ourISPdev->isp_irq2);
-            pr_info("*** IRQ %d (isp-w02) LEFT DISABLED UNTIL VIC STREAM ENABLE ***\n",
+            pr_info("*** IRQ %d (isp-w02) ALREADY DISABLED BY tx_isp_request_irq ***\n",
                     ourISPdev->isp_irq2);
         } else {
             pr_warn("*** NO EARLY VIC IRQ FOUND TO ADOPT FOR isp-w02 ***\n");
@@ -6462,8 +6462,10 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
     int irq;
 
     active_vic = tx_vic_irq_owner_resolve(dump_vsd ? dump_vsd : vic_dev);
-    if (!active_vic)
+    if (!active_vic) {
+        pr_warn("tx_vic_enable_irq: no active_vic resolved\n");
         return;
+    }
 
     spin_lock_irqsave(tx_vic_raw_irq_lock(active_vic), flags);
 
@@ -6471,7 +6473,10 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
         tx_vic_raw_irq_flag_set(active_vic, 1);
         irq = active_vic->irq_number ? active_vic->irq_number : active_vic->irq;
         tx_vic_seed_irq_slots(active_vic, irq);
+        pr_info("tx_vic_enable_irq: enabling VIC IRQ %d\n", irq);
         tx_vic_irq_slot_enable(&active_vic->sd.irq_info);
+    } else {
+        pr_info("tx_vic_enable_irq: flag already set, skipping\n");
     }
 
     spin_unlock_irqrestore(tx_vic_raw_irq_lock(active_vic), flags);
