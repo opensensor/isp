@@ -2367,12 +2367,31 @@ int tisp_init(void *sensor_info, char *param_name)
     /* Binary Ninja: Call tisp_set_csc_version(0) */
     tisp_set_csc_version(0);
 
-    /* Binary Ninja: Configure top control bypass register */
-    uint32_t bypass_val = 0x8077efff; /* Default bypass configuration */
+    /* Binary Ninja: Configure top control bypass register
+     * OEM tisp_init sequence:
+     *   1. Start: bypass_val = 0x8077efff
+     *   2. Loop over 32 tparams_day[] entries, set/clear individual bits
+     *   3. Apply force mask: non-WDR: &= 0xb577fffd, |= 0x34000009
+     *
+     * Without tuning bin file loaded, tparams_day[] is all zeros, so the
+     * loop clears all bits: bypass_val = 0x00000000.
+     * Then: 0x00000000 & 0xb577fffd | 0x34000009 = 0x34000009
+     *
+     * Previous value 0xb477effd had too many blocks bypassed because we
+     * skipped the tuning data loop (kept initial 0x8077efff).
+     *
+     * TODO: Load /etc/sensor/gc2053-t31.bin and use tparams_day[0..31]
+     *       to set bypass bits from calibration data.
+     */
+    uint32_t bypass_val;
 
-    /* Binary Ninja: Select bypass configuration based on chip variant */
-    bypass_val &= 0xa1ffdf76;  /* Standard configuration mask */
-    bypass_val |= 0x880002;    /* Standard control bits */
+    if (wdr_enable) {
+        /* WDR: 0x00000000 & 0xa1ffdf76 | 0x880002 = 0x00880002 */
+        bypass_val = 0x00880002;
+    } else {
+        /* Non-WDR: 0x00000000 & 0xb577fffd | 0x34000009 = 0x34000009 */
+        bypass_val = 0x34000009;
+    }
 
     system_reg_write(0xc, bypass_val);
     pr_info("tisp_init: Set ISP top bypass to 0x%x\n", bypass_val);
@@ -2383,56 +2402,7 @@ int tisp_init(void *sensor_info, char *param_name)
     /* Binary Ninja: system_reg_write(0x10, $a1_9) - Main ISP enable */
     system_reg_write(0x10, 0x133);
 
-    /* Binary Ninja: Allocate and configure memory buffers - simplified version */
-    /* In real implementation, this would allocate DMA buffers for ISP processing */
-    pr_info("tisp_init: ISP memory buffers configured\n");
-
-    /* CRITICAL: Binary Ninja sequence - Initialize ALL ISP pipeline components */
-    pr_info("*** tisp_init: INITIALIZING ALL ISP PIPELINE COMPONENTS ***\n");
-
-    /* Call all tiziano pipeline initialization functions in Binary Ninja order */
-    tiziano_ae_init(sensor_params.height, sensor_params.width, sensor_params.fps);
-    tiziano_awb_init(sensor_params.height, sensor_params.width);
-    tiziano_gamma_init(sensor_params.width, sensor_params.height, sensor_params.fps);
-    tiziano_gib_init();
-    tiziano_lsc_init();
-    tiziano_ccm_init();
-    tiziano_dmsc_init();
-    tiziano_sharpen_init();
-    tiziano_sdns_init();
-    tiziano_mdns_init(sensor_params.width, sensor_params.height);
-    tiziano_clm_init();
-    tiziano_dpc_init();
-    tiziano_hldc_init();
-    tiziano_defog_init(sensor_params.width, sensor_params.height);
-    tiziano_adr_init(sensor_params.width, sensor_params.height);
-    tiziano_af_init(sensor_params.height, sensor_params.width);
-    tiziano_bcsh_init();
-    tiziano_ydns_init();
-    tiziano_rdns_init();
-
-    /* Binary Ninja: WDR initialization if WDR mode is enabled */
-    if (sensor_params.mode >= 4) {
-        pr_info("*** tisp_init: INITIALIZING WDR-SPECIFIC COMPONENTS ***\n");
-        tiziano_wdr_init(sensor_params.width, sensor_params.height);
-        tisp_gb_init();
-        tisp_dpc_wdr_en(1);
-        tisp_lsc_wdr_en(1);
-        tisp_gamma_wdr_en(1);
-        tisp_sharpen_wdr_en(1);
-        tisp_ccm_wdr_en(1);
-        tisp_bcsh_wdr_en(1);
-        tisp_rdns_wdr_en(1);
-        tisp_adr_wdr_en(1);
-        tisp_defog_wdr_en(1);
-        tisp_mdns_wdr_en(1);
-        tisp_dmsc_wdr_en(1);
-        tisp_ae_wdr_en(1);
-        tisp_sdns_wdr_en(1);
-        pr_info("*** tisp_init: WDR COMPONENTS INITIALIZED ***\n");
-    }
-
-    /* Binary Ninja: CRITICAL - Memory buffer allocations for ISP processing */
+    /* Binary Ninja OEM ORDER: Allocate ALL DMA buffers FIRST, then init sub-modules */
     pr_info("*** tisp_init: ALLOCATING ISP PROCESSING BUFFERS ***\n");
 
     /* Binary Ninja: AE0 buffer allocation (0x6000 bytes) */
@@ -2467,19 +2437,73 @@ int tisp_init(void *sensor_info, char *param_name)
         pr_info("*** tisp_init: AE1 buffer allocated at 0x%08x ***\n", (uint32_t)ae1_phys);
     }
 
+    /* Binary Ninja: AWB statistics buffer (0x4000 bytes) → regs 0xb03c-0xb04c */
+    void *awb_buffer = kmalloc(0x4000, GFP_KERNEL);
+    if (awb_buffer != NULL) {
+        dma_addr_t awb_phys = virt_to_phys(awb_buffer);
+        system_reg_write(0xb03c, awb_phys);
+        system_reg_write(0xb040, awb_phys + 0x1000);
+        system_reg_write(0xb044, awb_phys + 0x2000);
+        system_reg_write(0xb048, awb_phys + 0x3000);
+        system_reg_write(0xb04c, 3);
+        pr_info("*** tisp_init: AWB buffer allocated at 0x%08x ***\n", (uint32_t)awb_phys);
+    }
+
+    /* Binary Ninja: AF buffer (0x4000 bytes) → regs 0x4494-0x44a4 */
+    void *af_buffer = kmalloc(0x4000, GFP_KERNEL);
+    if (af_buffer != NULL) {
+        dma_addr_t af_phys = virt_to_phys(af_buffer);
+        system_reg_write(0x4494, af_phys);
+        system_reg_write(0x4498, af_phys + 0x1000);
+        system_reg_write(0x449c, af_phys + 0x2000);
+        system_reg_write(0x44a0, af_phys + 0x3000);
+        system_reg_write(0x44a4, 3);
+        pr_info("*** tisp_init: AF buffer allocated at 0x%08x ***\n", (uint32_t)af_phys);
+    }
+
+    /* Binary Ninja: DPC buffer (0x4000 bytes) → regs 0x5b80-0x5b90 */
+    void *dpc_buffer = kmalloc(0x4000, GFP_KERNEL);
+    if (dpc_buffer != NULL) {
+        dma_addr_t dpc_phys = virt_to_phys(dpc_buffer);
+        system_reg_write(0x5b84, dpc_phys);
+        system_reg_write(0x5b88, dpc_phys + 0x1000);
+        system_reg_write(0x5b8c, dpc_phys + 0x2000);
+        system_reg_write(0x5b90, dpc_phys + 0x3000);
+        system_reg_write(0x5b80, 3);  /* Note: control reg is at 0x5b80, not 0x5b94 */
+        pr_info("*** tisp_init: DPC buffer allocated at 0x%08x ***\n", (uint32_t)dpc_phys);
+    }
+
+    /* Binary Ninja: Buffer 6 (0x4000 bytes) → regs 0xb8a8-0xb8b8 */
+    void *buf6 = kmalloc(0x4000, GFP_KERNEL);
+    if (buf6 != NULL) {
+        dma_addr_t buf6_phys = virt_to_phys(buf6);
+        system_reg_write(0xb8a8, buf6_phys);
+        system_reg_write(0xb8ac, buf6_phys + 0x1000);
+        system_reg_write(0xb8b0, buf6_phys + 0x2000);
+        system_reg_write(0xb8b4, buf6_phys + 0x3000);
+        system_reg_write(0xb8b8, 3);
+        pr_info("*** tisp_init: Buf6 allocated at 0x%08x ***\n", (uint32_t)buf6_phys);
+    }
+
+    /* Binary Ninja: Main ISP LUT/processing buffer (0x8000 bytes) → regs 0x2010-0x2024 */
+    void *lut_buffer = kmalloc(0x8000, GFP_KERNEL);
+    if (lut_buffer != NULL) {
+        dma_addr_t lut_phys = virt_to_phys(lut_buffer);
+        system_reg_write(0x2010, lut_phys);
+        system_reg_write(0x2014, lut_phys + 0x2000);
+        system_reg_write(0x2018, lut_phys + 0x4000);
+        system_reg_write(0x201c, lut_phys + 0x6000);
+        system_reg_write(0x2020, 0x400);
+        system_reg_write(0x2024, 3);
+        pr_info("*** tisp_init: ISP LUT buffer allocated at 0x%08x ***\n", (uint32_t)lut_phys);
+    }
+
     /* Binary Ninja: mode/WDR path performs the core release toggle first */
     tisp_s_wdr_en(wdr_enable);
 
-    /* Binary Ninja: Final ISP configuration registers */
-    uint32_t isp_mode = (sensor_params.mode >= 4) ? 0x12 : 0x1e;
-    system_reg_write(0x804, isp_mode);
-    system_reg_write(0x1c, 8);
-    system_reg_write(0x800, 1);
+    /* Binary Ninja OEM ORDER: Initialize all ISP sub-modules AFTER buffers, BEFORE reg 0x800=1 */
+    pr_info("*** tisp_init: INITIALIZING ISP SUB-MODULES (OEM order: after buffers) ***\n");
 
-    /* Binary Ninja: CRITICAL - Initialize all ISP sub-modules */
-    pr_info("*** tisp_init: INITIALIZING ISP SUB-MODULES ***\n");
-
-    /* Binary Ninja: Initialize all tiziano sub-modules in correct order */
     tiziano_ae_init(sensor_params.height, sensor_params.width, sensor_params.fps);
     tiziano_awb_init(sensor_params.height, sensor_params.width);
     tiziano_gamma_init(sensor_params.width, sensor_params.height, sensor_params.fps);
@@ -2501,11 +2525,10 @@ int tisp_init(void *sensor_info, char *param_name)
     tiziano_rdns_init();
 
     /* Binary Ninja: WDR initialization if enabled */
-    if (sensor_params.mode == 1) {  /* WDR mode */
+    if (wdr_enable) {
         pr_info("*** tisp_init: WDR MODE ENABLED - Initializing WDR components ***\n");
         tiziano_wdr_init(sensor_params.width, sensor_params.height);
         tisp_gb_init();
-        /* Enable WDR for all sub-modules */
         tisp_dpc_wdr_en(1);
         tisp_lsc_wdr_en(1);
         tisp_gamma_wdr_en(1);
@@ -2521,6 +2544,13 @@ int tisp_init(void *sensor_info, char *param_name)
         tisp_sdns_wdr_en(1);
         pr_info("*** tisp_init: WDR COMPONENTS INITIALIZED ***\n");
     }
+
+    /* Binary Ninja: Final ISP configuration registers - AFTER inits, enables processing */
+    uint32_t isp_mode = wdr_enable ? 0x10 : 0x1c;
+    system_reg_write(0x804, isp_mode);
+    system_reg_write(0x1c, 8);
+    system_reg_write(0x800, 1);  /* CRITICAL: This starts ISP processing */
+    pr_info("*** tisp_init: ISP processing engine STARTED (reg 0x800=1) ***\n");
 
     /* Binary Ninja: Initialize event system and callbacks */
     pr_info("*** tisp_init: INITIALIZING ISP EVENT SYSTEM ***\n");
