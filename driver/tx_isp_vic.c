@@ -2376,24 +2376,14 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
 
 /* VIC PIPO MDMA Enable function - OEM HLIL: uses *(arg1 + 0xb8) for all writes.
  *
- * OEM vic_pipo_mdma_enable only sets stride/size/enable but NOT buffer addresses.
- * Buffer addresses normally come via ispvic_frame_channel_qbuf (0x3000005 events).
- * Since our event path doesn't deliver those events, we ALSO program buffer
- * addresses here using the OEM vic_mdma_enable layout for NV12 format.
- *
- * OEM NV12 layout (format 7, single channel arg3==0):
- *   stride = width (not doubled for NV12)
- *   fps = stride * height (Y plane size)
- *   Y buf[i] = rmem_base + i * fps       (regs 0x318..0x328)
- *   UV buf[i] = rmem_base + (i+1) * fps  (regs 0x340..0x350)
- *   Also sets NV12 UV channel: regs 0x32c..0x33c
+ * OEM vic_pipo_mdma_enable only sets stride/size/enable config registers.
+ * Buffer addresses are programmed by ispvic_frame_channel_qbuf (0x3000005 events)
+ * BEFORE this function is called via the 0x3000003 STREAMON event.
  */
 static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_base;
-    u32 width, height, stride, fps;
-    u32 rmem_base;
-    int i;
+    u32 width, height, stride;
 
     if (!vic_dev) {
         pr_err("vic_pipo_mdma_enable: NULL vic_dev parameter\n");
@@ -2417,48 +2407,34 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 
     /* NV12 (format 7): stride = width, NOT width*2 */
     stride = width;
-    fps = stride * height;  /* Y plane size = one frame plane */
 
-    /* Get rmem DMA base from ISP device */
-    rmem_base = 0x6300000;  /* T31 default from cmdline rmem=29M@0x6300000 */
-    if (ourISPdev && ourISPdev->rmem_addr)
-        rmem_base = (u32)ourISPdev->rmem_addr;
+    pr_info("vic_pipo_mdma_enable: base=%p dims=%dx%d stride=%u\n",
+            vic_base, width, height, stride);
 
-    pr_info("vic_pipo_mdma_enable: base=%p dims=%dx%d stride=%u fps=%u rmem=0x%x\n",
-            vic_base, width, height, stride, fps, rmem_base);
-
-    /* OEM HLIL: MDMA config registers */
+    /* OEM HLIL: MDMA config registers — stride/size/enable only */
     writel(1, vic_base + 0x308);                           /* MDMA enable */
     writel((width << 16) | height, vic_base + 0x304);      /* frame size */
     writel(stride, vic_base + 0x310);                      /* Y stride */
     writel(stride, vic_base + 0x314);                      /* UV stride */
 
-    /* OEM vic_mdma_enable: Y plane buffer addresses (0x318..0x328)
-     * NV12 single-channel: Y buf[i] = rmem_base + i * fps
+    /* Fill any uninitialized PIPO banks with bank 0's address.
+     * QBUF may have only programmed 1 bank, but hardware needs all
+     * banks to have valid addresses or it stalls on address 0x0.
      */
-    for (i = 0; i < 5; i++)
-        writel(rmem_base + i * fps, vic_base + 0x318 + (i * 4));
-
-    /* OEM vic_mdma_enable: UV plane buffer addresses (0x340..0x350)
-     * NV12: UV buf[i] follows Y buf[i], so UV buf[i] = rmem_base + (i+1) * fps
-     * But with arg3==0 layout, UV shares space differently.
-     * OEM: UV buf[0] = base + fps, UV buf[1] = base + 3*fps, etc.
-     * Actually for arg3==0: UV interleaves with Y at stride-level.
-     * Using the simpler NV12 layout: UV follows each Y plane.
-     */
-    for (i = 0; i < 5; i++)
-        writel(rmem_base + i * fps + fps, vic_base + 0x340 + (i * 4));
-
-    /* NV12 (format 7): Also program UV channel 2 registers 0x32c..0x33c
-     * OEM: *(vic_regs + 0x32c) = UV buf[0], etc.
-     */
-    for (i = 0; i < 5; i++)
-        writel(rmem_base + i * fps + fps, vic_base + 0x32c + (i * 4));
-
-    /* OEM BN: field at offset 0x218 is read by ispvic_frame_channel_s_stream
-     * for the MDMA control register: *($s0 + 0x218) << 16 | 0x80000020
-     */
-    vic_dev->active_buffer_count = 5;
+    {
+        u32 y0 = readl(vic_base + 0x318);
+        u32 uv0 = readl(vic_base + 0x340);
+        u32 uv2_0 = readl(vic_base + 0x32c);
+        int i;
+        for (i = 1; i < 5; i++) {
+            if (readl(vic_base + 0x318 + i * 4) == 0)
+                writel(y0, vic_base + 0x318 + i * 4);
+            if (readl(vic_base + 0x32c + i * 4) == 0)
+                writel(uv2_0, vic_base + 0x32c + i * 4);
+            if (readl(vic_base + 0x340 + i * 4) == 0)
+                writel(uv0, vic_base + 0x340 + i * 4);
+        }
+    }
 
     wmb();
 
@@ -2510,6 +2486,9 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
     } else {
         /* OEM BN: vic_pipo_mdma_enable($s0) */
         vic_pipo_mdma_enable(vic_dev);
+        /* Ensure at least 5 active banks for OEM-compatible PIPO rotation */
+        if (vic_dev->active_buffer_count < 5)
+            vic_dev->active_buffer_count = 5;
         /* OEM BN EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020 */
         {
             u32 ctrl = (vic_dev->active_buffer_count << 16) | 0x80000020;
@@ -3005,20 +2984,35 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	bank_buffer->channel = queued_buffer->channel;
 	reg_offset = (buffer_index + 0xc6) << 2;
 
+	/* Program Y plane address (regs 0x318..0x328) */
 	writel(buffer_addr, vic_base + reg_offset);
+
+	/* Program UV plane address for NV12: UV follows Y at offset width*height.
+	 * UV regs are at 0x340..0x350 — offset from Y regs is 0x340 - 0x318 = 0x28.
+	 * Also program UV channel 2 regs at 0x32c..0x33c (offset 0x14 from Y).
+	 */
+	{
+		u32 width = vic_raw_width_get(vic_dev);
+		u32 height = vic_raw_height_get(vic_dev);
+		u32 uv_addr;
+		if (width == 0 || height == 0) {
+			width = vic_dev->width ? vic_dev->width : 1920;
+			height = vic_dev->height ? vic_dev->height : 1080;
+		}
+		uv_addr = buffer_addr + (width * height);
+		writel(uv_addr, vic_base + reg_offset + 0x14);  /* 0x32c..0x33c */
+		writel(uv_addr, vic_base + reg_offset + 0x28);  /* 0x340..0x350 */
+	}
 	wmb();
 
 	list_add_tail(&bank_buffer->list, &vic_dev->done_head);
 	vic_dev->active_buffer_count += 1;
 
-	pr_info("*** VIC QBUF: bank=%u addr=0x%x reg_off=0x%x active=%u queued_channel=%u ***\n",
-		buffer_index, buffer_addr, reg_offset,
-		vic_dev->active_buffer_count, bank_buffer->channel);
-	if (vic_base_alt) {
-		pr_info("*** VIC QBUF READBACK: ACT bank%u Y=0x%x ALT bank%u Y=0x%x ***\n",
-			buffer_index, readl(vic_base + reg_offset),
-			buffer_index, readl(vic_base_alt + reg_offset));
-	}
+	pr_info("*** VIC QBUF: bank=%u Y=0x%x UV=0x%x reg_off=0x%x active=%u ***\n",
+		buffer_index, buffer_addr,
+		readl(vic_base + reg_offset + 0x28),
+		reg_offset,
+		vic_dev->active_buffer_count);
 
 	private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
 	kfree(queued_buffer);

@@ -941,7 +941,9 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
              * its own state transitions properly.
              */
             isp_dev->state = 3;
+            /* Write to BOTH struct field and raw OEM offset 0x128 */
             vic_dev->state = 3;
+            *(u32 *)((char *)vic_dev + 0x128) = 3;
         }
     } else {
         s3_1 = &isp_dev->subdevs[0];
@@ -953,7 +955,12 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
              * triggers a rollback that kills the working pipeline).
              */
             isp_dev->state = 4;
+            /* Write to BOTH struct field and raw OEM offset 0x128.
+             * vic_core_s_stream reads from raw offset 0x128 via
+             * vic_raw_state_get(), not from vic_dev->state.
+             */
             vic_dev->state = 4;
+            *(u32 *)((char *)vic_dev + 0x128) = 4;
         }
     }
 
@@ -1053,16 +1060,12 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         tx_isp_enable_irq(isp_dev);
     }
 
-    /* Enable MDMA after pipeline is fully active.
-     * OEM triggers this via framechan STREAMON ioctl (0x3000003 event),
-     * but libimp on this platform sends STREAMON only to ISP M0.
-     * Call ispvic_frame_channel_s_stream here — it has an idempotency
-     * guard so duplicate calls are safe.
+    /* MDMA enable is handled by the 0x3000003 (STREAM_START) event
+     * which fires AFTER userspace has queued buffers via QBUF.
+     * Do NOT call ispvic_frame_channel_s_stream here — it would
+     * enable MDMA before QBUF has programmed correct DMA addresses,
+     * causing writes to wrong memory and corrupting libimp state.
      */
-    if (enable && result == 0 && vic_dev) {
-        extern int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *, int);
-        ispvic_frame_channel_s_stream(vic_dev, 1);
-    }
 
     /* Binary Ninja: if (result == 0xfffffdfd) return 0 */
     if (result == -ENOIOCTLCMD) {

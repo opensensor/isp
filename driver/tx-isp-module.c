@@ -3901,12 +3901,20 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         /* Defer forwarding to VIC until after we compute phys and populate buffer.m */
 
-        /* SAFE: Calculate buffer physical address for NV12 (YUV420) */
+        /* Use the physical address from userspace (libimp allocates from rmem via KMEM).
+         * V4L2_MEMORY_USERPTR: buffer.m.userptr contains the physical address.
+         * Fallback: compute from rmem base + index * size.
+         */
         int buffer_size = state->width * state->height * 3 / 2;
-        uint32_t buffer_phys_addr = 0x6300000 + (buffer.index * buffer_size);
+        uint32_t buffer_phys_addr;
+        if (buffer.memory == V4L2_MEMORY_USERPTR && buffer.m.userptr != 0) {
+            buffer_phys_addr = (uint32_t)buffer.m.userptr;
+        } else {
+            buffer_phys_addr = 0x6300000 + (buffer.index * buffer_size);
+        }
 
-        pr_info("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x, size(NV12)=%d ***\n",
-                channel, buffer.index, buffer_phys_addr, buffer_size);
+        pr_info("*** Channel %d: QBUF - Buffer %d: phys_addr=0x%x, size(NV12)=%d, memory=%d, userptr=0x%lx ***\n",
+                channel, buffer.index, buffer_phys_addr, buffer_size, buffer.memory, buffer.m.userptr);
 
         if (frame_channel_track_buffer(fcd, &buffer) == 0) {
             state->current_buffer.index = buffer.index;
