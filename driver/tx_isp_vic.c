@@ -2607,11 +2607,14 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
     if (!vic_dev || (unsigned long)vic_dev >= 0xfffff001)
         return -EINVAL;
 
-    current_state = vic_raw_state_get(vic_dev);
+    current_state = vic_dev->state;
 
     if (enable == 0) {
-        if (current_state == 4)
-            vic_raw_state_set(vic_dev, 3);
+        /* Do NOT reset vic_dev->state to 3 here.
+         * VIC hardware stays running across the OEM stop-start cycle.
+         * Resetting to 3 causes the second enable=1 call to re-arm
+         * VIC, which always times out because hardware is already running.
+         */
         return 0;
     }
 
@@ -2619,7 +2622,7 @@ int vic_core_s_stream(struct tx_isp_subdev *sd, int enable)
     if (current_state != 4) {
         tx_vic_disable_irq(vic_dev);
         ret = tx_isp_vic_start(vic_dev);
-        vic_raw_state_set(vic_dev, 4);
+        vic_dev->state = 4;
         tx_vic_enable_irq(vic_dev);
         return ret;
     }
@@ -3016,6 +3019,27 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 
 	private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
 	kfree(queued_buffer);
+
+	/* Auto-enable MDMA once enough banks are filled.
+	 * The 0x3000003 STREAMON event doesn't fire in our pipeline,
+	 * so trigger MDMA enable here after 3 banks have valid addresses.
+	 * ispvic_frame_channel_s_stream has an idempotency guard
+	 * (stream_state check) so subsequent calls are no-ops.
+	 */
+	/* Auto-enable MDMA once enough banks are filled.
+	 * Use a static flag since vic_dev->stream_state may be corrupted
+	 * by vic_raw_state_set writing to OEM offset 0x128.
+	 */
+	{
+		static int mdma_enabled = 0;
+		if (vic_dev->active_buffer_count >= 3 && !mdma_enabled) {
+			pr_info("*** VIC QBUF: auto-enabling MDMA (active=%u) ***\n",
+				vic_dev->active_buffer_count);
+			mdma_enabled = 1;
+			ispvic_frame_channel_s_stream(vic_dev, 1);
+		}
+	}
+
 	return 0;
 }
 

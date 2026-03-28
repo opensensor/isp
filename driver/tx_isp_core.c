@@ -941,26 +941,26 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
              * its own state transitions properly.
              */
             isp_dev->state = 3;
-            /* Write to BOTH struct field and raw OEM offset 0x128 */
-            vic_dev->state = 3;
-            *(u32 *)((char *)vic_dev + 0x128) = 3;
+            /* Do NOT touch vic_dev->state here — vic_core_s_stream
+             * manages its own state transitions. Setting it here
+             * prevents VIC hardware from being armed on the next
+             * enable=1 call.
+             */
         }
     } else {
         s3_1 = &isp_dev->subdevs[0];
 
         if (v0_3 == 3) {
-            /* Set both states to 4. Setting vic_dev->state = 4 here
-             * prevents vic_core_s_stream from re-arming VIC hardware
-             * on the second call (the re-arm always times out and
-             * triggers a rollback that kills the working pipeline).
+            /* isp_dev->state = 4 gates re-entry: the second
+             * ispcore_video_s_stream(enable=1) sees state != 3
+             * and skips the subdev walk entirely.
              */
             isp_dev->state = 4;
-            /* Write to BOTH struct field and raw OEM offset 0x128.
-             * vic_core_s_stream reads from raw offset 0x128 via
-             * vic_raw_state_get(), not from vic_dev->state.
+            /* Do NOT touch vic_dev->state here — vic_core_s_stream
+             * manages its own state transitions. The isp_dev->state=4
+             * guard prevents re-entry into the subdev walk, which is
+             * sufficient to avoid the duplicate VIC re-arm timeout.
              */
-            vic_dev->state = 4;
-            *(u32 *)((char *)vic_dev + 0x128) = 4;
         }
     }
 
