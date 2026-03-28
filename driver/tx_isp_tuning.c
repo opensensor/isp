@@ -55,6 +55,7 @@
 /* Forward declaration for exported ISP event callback array */
 extern void (*isp_event_func_cb[32])(void);
 extern struct tx_isp_dev *ourISPdev;
+extern const char *tx_isp_get_default_bin_path(void);
 
 /* Forward declaration for frame channel wakeup function */
 extern void tx_isp_wakeup_frame_channels(void);
@@ -995,9 +996,181 @@ static int tisp_adr_build_lut_payload(uint32_t *out_words, int out_cap)
 /* Global parameter arrays */
 static void *tparams_day = NULL;
 static void *tparams_night = NULL;
+static void *tparams_cust = NULL;
 static void *dmsc_sp_d_w_stren_wdr_array = NULL;
 static void *sensor_info_ptr = NULL;
 static uint32_t data_b2e1c = 1080; /* Sensor height */
+
+#define TISP_PARAM_BLOCK_SIZE 0x137f0
+#define TISP_PARAM_HEADER_SIZE 0x18
+#define TISP_PARAM_NIGHT_OFFSET (TISP_PARAM_HEADER_SIZE + TISP_PARAM_BLOCK_SIZE)
+
+static int tisp_alloc_param_block(void **dst, const char *name)
+{
+	if (!dst)
+		return -EINVAL;
+
+	if (!*dst) {
+		*dst = vmalloc(TISP_PARAM_BLOCK_SIZE);
+		if (!*dst) {
+			pr_err("tisp_alloc_param_block: failed to alloc %s\n", name);
+			return -ENOMEM;
+		}
+	}
+
+	memset(*dst, 0, TISP_PARAM_BLOCK_SIZE);
+	return 0;
+}
+
+static int tisp_read_file_into_buffer(const char *path, void **out_buf, int *out_size)
+{
+	struct file *fp;
+	mm_segment_t old_fs;
+	loff_t pos = 0;
+	void *buf;
+	int size;
+	int ret;
+
+	if (!path || !out_buf || !out_size)
+		return -EINVAL;
+
+	fp = filp_open(path, O_RDONLY, 0);
+	if (IS_ERR(fp))
+		return PTR_ERR(fp);
+
+	size = i_size_read(file_inode(fp));
+	if (size <= 0) {
+		filp_close(fp, NULL);
+		return -EINVAL;
+	}
+
+	buf = vmalloc(size);
+	if (!buf) {
+		filp_close(fp, NULL);
+		return -ENOMEM;
+	}
+
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+	ret = vfs_read(fp, (char *)buf, size, &pos);
+	set_fs(old_fs);
+	filp_close(fp, NULL);
+
+	if (ret != size) {
+		vfree(buf);
+		return -EIO;
+	}
+
+	*out_buf = buf;
+	*out_size = size;
+	return 0;
+}
+
+static int tisp_load_single_bin_file(const char *path, int is_custom)
+{
+	void *file_buf;
+	int file_size;
+	int ret;
+
+	ret = tisp_read_file_into_buffer(path, &file_buf, &file_size);
+	if (ret) {
+		pr_warn("tisp_load_single_bin_file: failed to read %s: %d\n", path, ret);
+		return ret;
+	}
+
+	if (is_custom) {
+		ret = tisp_alloc_param_block(&tparams_cust, "cust params");
+		if (!ret && file_size >= TISP_PARAM_HEADER_SIZE + TISP_PARAM_BLOCK_SIZE)
+			memcpy(tparams_cust,
+			       (u8 *)file_buf + TISP_PARAM_HEADER_SIZE,
+			       TISP_PARAM_BLOCK_SIZE);
+		else if (!ret)
+			ret = -EINVAL;
+	} else {
+		if (file_size < TISP_PARAM_HEADER_SIZE + (TISP_PARAM_BLOCK_SIZE * 2)) {
+			ret = -EINVAL;
+		} else {
+			memcpy(tparams_day,
+			       (u8 *)file_buf + TISP_PARAM_HEADER_SIZE,
+			       TISP_PARAM_BLOCK_SIZE);
+			memcpy(tparams_night,
+			       (u8 *)file_buf + TISP_PARAM_NIGHT_OFFSET,
+			       TISP_PARAM_BLOCK_SIZE);
+			ret = 0;
+		}
+	}
+
+	vfree(file_buf);
+	if (ret)
+		pr_warn("tisp_load_single_bin_file: invalid tuning blob %s\n", path);
+	return ret;
+}
+
+static int tiziano_load_parameters(const char *param_name)
+{
+	char std_path[64];
+	char cust_path[64];
+	const char *default_path;
+	const char *sensor_name = NULL;
+	const char *std_bin_path;
+	int ret;
+
+	default_path = tx_isp_get_default_bin_path();
+	if (param_name && param_name[0] == '/')
+		std_bin_path = param_name;
+	else if (default_path && default_path[0] != '\0')
+		std_bin_path = default_path;
+	else {
+		sensor_name = (param_name && param_name[0]) ? param_name : NULL;
+		if (!sensor_name && ourISPdev && ourISPdev->sensor_name[0])
+			sensor_name = ourISPdev->sensor_name;
+		if (!sensor_name)
+			sensor_name = "gc2053";
+		snprintf(std_path, sizeof(std_path), "/etc/sensor/%s-t31.bin", sensor_name);
+		std_bin_path = std_path;
+	}
+
+	ret = tisp_load_single_bin_file(std_bin_path, 0);
+	if (ret)
+		return ret;
+
+	if (!sensor_name)
+		sensor_name = (param_name && param_name[0] && param_name[0] != '/') ? param_name : NULL;
+	if (!sensor_name && ourISPdev && ourISPdev->sensor_name[0])
+		sensor_name = ourISPdev->sensor_name;
+	if (!sensor_name)
+		sensor_name = "gc2053";
+
+	snprintf(cust_path, sizeof(cust_path), "/etc/sensor/%s-cust-t31.bin", sensor_name);
+	ret = tisp_load_single_bin_file(cust_path, 1);
+	if (ret)
+		pr_info("tiziano_load_parameters: no cust bin at %s\n", cust_path);
+
+	pr_info("tiziano_load_parameters: loaded %s\n", std_bin_path);
+	return 0;
+}
+
+static u32 tisp_compute_top_bypass_from_params(int wdr_enable)
+{
+	u32 bypass_val = 0x8077efff;
+	u32 *params = (u32 *)tparams_day;
+	int i;
+
+	if (!params)
+		goto apply_force_mask;
+
+	for (i = 0; i < 32; i++) {
+		u32 bit = 1U << i;
+		u32 val = params[i] ? 1U : 0U;
+		bypass_val = (bypass_val & ~bit) | (val << i);
+	}
+
+apply_force_mask:
+	if (wdr_enable)
+		return (bypass_val & 0xa1ffdf76) | 0x00880002;
+
+	return (bypass_val & 0xb577fffd) | 0x34000009;
+}
 /* OEM register map self-checks for ADR and YDNS (addresses and counts only).
  * These do not program hardware; they log the expected word counts per HLIL. */
 static void tisp_adr_regmap_selfcheck(void)
@@ -1554,10 +1727,76 @@ void *isp_core_tuning_init(void *arg1);
 int tisp_init(void *sensor_info, char *param_name);
 
 
+/* OEM CSC preset 0 (first 0x3c bytes copied by tx-isp-t31.ko).
+ * The trailing 0xba dword in tuning_constants.h is not consumed by
+ * tisp_set_csc_version(), which memcpy()s only 60 bytes. */
+static const int32_t tisp_csc_preset0[15] = {
+	0x132, 0x259, 0x75,
+	-0xad, -0x153, 0x200,
+	0x200, -0x1ad, -0x53,
+	0x00, 0x80,
+	0x00, 0xff, 0x00, 0xff,
+};
+
+static int32_t tisp_csc_param_current[ARRAY_SIZE(tisp_csc_preset0)];
+static uint32_t tisp_csc_version_now;
+static int tisp_dmsc_wdr_enabled;
+
+static inline u32 tisp_csc_abs10(int32_t value)
+{
+	return (u32)(value < 0 ? -value : value) & 0x3ff;
+}
+
+static inline u32 tisp_csc_pack_triplet(int32_t c0, int32_t c1, int32_t c2)
+{
+	return tisp_csc_abs10(c0) |
+	       (tisp_csc_abs10(c1) << 10) |
+	       (tisp_csc_abs10(c2) << 20);
+}
+
+static const int32_t *tisp_csc_select_preset(int version, int *effective_version)
+{
+	if (effective_version)
+		*effective_version = 0;
+
+	switch (version) {
+	case 0:
+		return tisp_csc_preset0;
+	default:
+		pr_warn_once("tisp_set_csc_version: CSC preset %d not implemented yet, falling back to OEM preset 0\n",
+			     version);
+		return tisp_csc_preset0;
+	}
+}
+
+
 int tisp_set_csc_version(int version)
 {
-    pr_info("tisp_set_csc_version: Setting CSC version %d\n", version);
-    return 0;
+	const int32_t *preset;
+	int effective_version = 0;
+
+	preset = tisp_csc_select_preset(version, &effective_version);
+	memcpy(tisp_csc_param_current, preset, sizeof(tisp_csc_param_current));
+	tisp_csc_version_now = effective_version;
+
+	/* OEM BN flow: enable CSC sign/control word, clear the adjacent control
+	 * slot, then write three packed 3x10-bit magnitude rows plus offset/limit
+	 * words. Negative coefficient positions are implied by the fixed 0x1f mode. */
+	system_reg_write(0x6000, 0x1f);
+	system_reg_write(0x6004, 0x0);
+	system_reg_write(0x6010, tisp_csc_pack_triplet(preset[0], preset[1], preset[2]));
+	system_reg_write(0x6014, tisp_csc_pack_triplet(preset[3], preset[4], preset[5]));
+	system_reg_write(0x6018, tisp_csc_pack_triplet(preset[6], preset[7], preset[8]));
+	system_reg_write(0x6020, ((u32)preset[9] & 0xff) |
+				 (((u32)preset[10] & 0xff) << 8));
+	system_reg_write(0x6030, ((u32)preset[11] & 0xff) |
+				 (((u32)preset[12] & 0xff) << 8) |
+				 (((u32)preset[13] & 0xff) << 16) |
+				 (((u32)preset[14] & 0xff) << 24));
+
+	pr_info("tisp_set_csc_version: programmed CSC preset %d (requested %d)\n",
+		effective_version, version);
+	return 1;
 }
 /* Use external system_reg_write from tx-isp-module.c that does real hardware writes */
 extern void system_reg_write(u32 reg, u32 value);
@@ -2323,6 +2562,7 @@ int tisp_init(void *sensor_info, char *param_name)
 {
     extern struct tx_isp_dev *ourISPdev;
     int wdr_enable;
+    int ret;
     struct {
         uint32_t width;
         uint32_t height;
@@ -2348,6 +2588,18 @@ int tisp_init(void *sensor_info, char *param_name)
 
     wdr_enable = (sensor_params.mode == 1) || (sensor_params.mode >= 4);
 
+	ret = tisp_alloc_param_block(&tparams_day, "day params");
+	if (ret)
+		return ret;
+	ret = tisp_alloc_param_block(&tparams_night, "night params");
+	if (ret)
+		return ret;
+
+	ret = tiziano_load_parameters(param_name);
+	if (ret)
+		pr_warn("tisp_init: no valid tuning bin loaded for '%s' (%d)\n",
+			param_name ? param_name : "", ret);
+
     /* Binary Ninja: system_reg_write(4, $v0_4 << 0x10 | arg1[1]) - Basic ISP config */
     system_reg_write(0x4, (sensor_params.width << 16) | sensor_params.height);
 
@@ -2367,34 +2619,22 @@ int tisp_init(void *sensor_info, char *param_name)
     /* Binary Ninja: Call tisp_set_csc_version(0) */
     tisp_set_csc_version(0);
 
-    /* Binary Ninja: Configure top control bypass register
-     * OEM tisp_init sequence:
-     *   1. Start: bypass_val = 0x8077efff
-     *   2. Loop over 32 tparams_day[] entries, set/clear individual bits
-     *   3. Apply force mask: non-WDR: &= 0xb577fffd, |= 0x34000009
-     *
-     * Without tuning bin file loaded, tparams_day[] is all zeros, so the
-     * loop clears all bits: bypass_val = 0x00000000.
-     * Then: 0x00000000 & 0xb577fffd | 0x34000009 = 0x34000009
-     *
-     * Previous value 0xb477effd had too many blocks bypassed because we
-     * skipped the tuning data loop (kept initial 0x8077efff).
-     *
-     * TODO: Load /etc/sensor/gc2053-t31.bin and use tparams_day[0..31]
-     *       to set bypass bits from calibration data.
-     */
+    /* Keep the OEM candidate available for debug, but do not program it yet.
+     * In this tree the surrounding init flow is still not OEM-exact, and
+     * directly driving TOP_BYPASS from raw tuning words can disable blocks
+     * needed for frame/IP interrupts. Use the previously working mask-only
+     * value until the remaining OEM init path is matched. */
+    uint32_t oem_bypass_val = tisp_compute_top_bypass_from_params(wdr_enable);
     uint32_t bypass_val;
 
-    if (wdr_enable) {
-        /* WDR: 0x00000000 & 0xa1ffdf76 | 0x880002 = 0x00880002 */
+    if (wdr_enable)
         bypass_val = 0x00880002;
-    } else {
-        /* Non-WDR: 0x00000000 & 0xb577fffd | 0x34000009 = 0x34000009 */
+    else
         bypass_val = 0x34000009;
-    }
 
     system_reg_write(0xc, bypass_val);
-    pr_info("tisp_init: Set ISP top bypass to 0x%x\n", bypass_val);
+    pr_info("tisp_init: Set ISP top bypass to 0x%x (OEM candidate 0x%x)\n",
+            bypass_val, oem_bypass_val);
 
     /* Binary Ninja: system_reg_write(0x30, 0xffffffff) - Enable all interrupts */
     system_reg_write(0x30, 0xffffffff);
@@ -4457,273 +4697,9 @@ int isp_core_tunning_unlocked_ioctl(struct file *file, unsigned int cmd, void __
 
     /* Handle tuning parameter commands (magic 0x74) */
     if (magic == 0x74) {
-        int32_t *tisp_par_ioctl_ptr;
-        unsigned long s0_1 = (unsigned long)arg;
-        int32_t param_type;
-
-        pr_info("isp_core_tunning_unlocked_ioctl: Handling tuning parameter command 0x%x\n", cmd);
-
-        /* Binary Ninja: Check if tisp_par_ioctl is allocated */
-        if (!tisp_par_ioctl) {
-            pr_err("tisp_code_tuning_ioctl: Global buffer not allocated\n");
-            return -ENOMEM;
-        }
-
-        tisp_par_ioctl_ptr = (int32_t *)tisp_par_ioctl;
-
-        /* Binary Ninja: Handle tuning parameter commands */
-        if ((cmd & 0xff) < 0x33) {
-            if ((cmd - 0x20007400) < 0xa) {
-                switch (cmd) {
-                    case 0x20007400: { /* GET operation */
-                        pr_info("tisp_code_tuning_ioctl: GET operation 0x%x\n", cmd);
-
-                        /* Binary Ninja: Check access permissions */
-                        if (!access_ok(VERIFY_READ, arg, 0x500c)) {
-                            pr_err("tisp_code_tuning_ioctl: Access check failed for GET\n");
-                            return -EFAULT;
-                        }
-
-                        /* Binary Ninja: Copy from tisp_par_ioctl to user */
-                        ret = copy_to_user((void __user *)s0_1, tisp_par_ioctl, 0x500c);
-                        if (ret != 0) {
-                            pr_err("tisp_code_tuning_ioctl: Copy to user failed: %d\n", ret);
-                            return -EFAULT;
-                        }
-
-                        /* Binary Ninja: Process different parameter types based on tisp_par_ioctl[0] */
-                        int32_t param_type = tisp_par_ioctl_ptr[0];
-                        pr_info("tisp_code_tuning_ioctl: GET param_type=%d\n", param_type);
-
-                        if (param_type >= 0x19) {
-                            /* Invalid parameter type */
-                            pr_err("tisp_code_tuning_ioctl: Invalid GET parameter type %d\n", param_type);
-                            return -EINVAL;
-                        }
-
-                        /* Binary Ninja: Call appropriate get function based on parameter type */
-                        switch (param_type) {
-                            case 0:  /* Top parameters */
-                                pr_info("tisp_code_tuning_ioctl: GET top parameters\n");
-                                /* Call tisp_top_param_array_get(&tisp_par_ioctl_ptr[3], &tisp_par_ioctl_ptr[1]) */
-                                break;
-                            case 1:  /* BLC parameters */
-                                pr_info("tisp_code_tuning_ioctl: GET BLC parameters\n");
-                                /* Call tisp_blc_get_par_cfg(&tisp_par_ioctl_ptr[3], &tisp_par_ioctl_ptr[1]) */
-                                break;
-                            case 2:  /* LSC parameters */
-                                pr_info("tisp_code_tuning_ioctl: GET LSC parameters\n");
-                                /* Call tisp_lsc_get_par_cfg(&tisp_par_ioctl_ptr[3], &tisp_par_ioctl_ptr[1]) */
-                                break;
-                            case 3:  /* WDR parameters */
-                                pr_info("tisp_code_tuning_ioctl: GET WDR parameters\n");
-                                /* Call tisp_wdr_get_par_cfg(&tisp_par_ioctl_ptr[3], &tisp_par_ioctl_ptr[1]) */
-                                break;
-                            case 4:  /* DPC parameters */
-                                pr_info("tisp_code_tuning_ioctl: GET DPC parameters\n");
-                                /* Call tisp_dpc_get_par_cfg(&tisp_par_ioctl_ptr[3], &tisp_par_ioctl_ptr[1]) */
-                                break;
-                            default:
-                                pr_info("tisp_code_tuning_ioctl: GET parameter type %d (implementation pending)\n", param_type);
-                                break;
-                        }
-
-                        /* Binary Ninja: Copy result back to user */
-                        ret = copy_to_user((void __user *)s0_1, tisp_par_ioctl, 0x500c);
-                        if (ret != 0) {
-                            pr_err("tisp_code_tuning_ioctl: Final copy to user failed: %d\n", ret);
-                            return -EFAULT;
-                        }
-                        break;
-                    }
-
-                    case 0x20007401: { /* SET operation */
-                        pr_info("tisp_code_tuning_ioctl: SET operation 0x%x\n", cmd);
-
-                        /* Binary Ninja: Check access permissions */
-                        if (!access_ok(VERIFY_WRITE, arg, 0x500c)) {
-                            pr_err("tisp_code_tuning_ioctl: Access check failed for SET\n");
-                            return -EFAULT;
-                        }
-
-                        /* Binary Ninja: Copy from user to tisp_par_ioctl */
-                        ret = copy_from_user(tisp_par_ioctl, (void __user *)s0_1, 0x500c);
-                        if (ret != 0) {
-                            pr_err("tisp_code_tuning_ioctl: Copy from user failed: %d\n", ret);
-                            return -EFAULT;
-                        }
-
-                        /* Binary Ninja: Process different parameter types based on tisp_par_ioctl[0] */
-                        int32_t param_type = tisp_par_ioctl_ptr[0];
-                        pr_info("tisp_code_tuning_ioctl: SET param_type=%d\n", param_type);
-
-                        if (param_type - 1 >= 0x18) {
-                            pr_err("tisp_code_tuning_ioctl: Invalid SET parameter type %d\n", param_type);
-                            return -EINVAL;
-                        }
-
-                        /* Binary Ninja: Call appropriate set function based on parameter type */
-                        switch (param_type) {
-                            case 1:  /* BLC parameters */
-                                pr_info("tisp_code_tuning_ioctl: SET BLC parameters\n");
-                                /* Call tisp_blc_set_par_cfg(&tisp_par_ioctl_ptr[3]) */
-                                break;
-                            case 2:  /* LSC parameters */
-                                pr_info("tisp_code_tuning_ioctl: SET LSC parameters\n");
-                                /* Call tisp_lsc_set_par_cfg(tisp_par_ioctl_ptr[2], &tisp_par_ioctl_ptr[3]) */
-                                break;
-                            case 3:  /* WDR parameters */
-                                pr_info("tisp_code_tuning_ioctl: SET WDR parameters\n");
-                                /* Call tisp_wdr_set_par_cfg(&tisp_par_ioctl_ptr[3]) */
-                                break;
-                            case 4:  /* DPC parameters */
-                                pr_info("tisp_code_tuning_ioctl: SET DPC parameters\n");
-                                /* Call tisp_dpc_set_par_cfg(&tisp_par_ioctl_ptr[3]) */
-                                break;
-                            default:
-                                pr_info("tisp_code_tuning_ioctl: SET parameter type %d (implementation pending)\n", param_type);
-                                break;
-                        }
-                        break;
-                    }
-
-                    case 0x20007403: { /* AE info get */
-                        pr_info("tisp_code_tuning_ioctl: AE info get 0x%x\n", cmd);
-
-                        /* Binary Ninja: Call tisp_get_ae_info(tisp_par_ioctl) */
-                        /* tisp_get_ae_info(tisp_par_ioctl); */
-
-                        /* Binary Ninja: Copy result to user */
-                        if (!access_ok(VERIFY_WRITE, arg, 0x500c)) {
-                            pr_err("tisp_code_tuning_ioctl: Access check failed for AE info get\n");
-                            return -EFAULT;
-                        }
-
-                        ret = copy_to_user((void __user *)s0_1, tisp_par_ioctl, 0x500c);
-                        if (ret != 0) {
-                            pr_err("tisp_code_tuning_ioctl: AE info copy to user failed: %d\n", ret);
-                            return -EFAULT;
-                        }
-                        break;
-                    }
-
-                    case 0x20007404: { /* AE info set */
-                        pr_info("tisp_code_tuning_ioctl: AE info set 0x%x\n", cmd);
-
-                        if (!access_ok(VERIFY_READ, arg, 0x500c)) {
-                            pr_err("tisp_code_tuning_ioctl: Access check failed for AE info set\n");
-                            return -EFAULT;
-                        }
-
-                        ret = copy_from_user(tisp_par_ioctl, (void __user *)s0_1, 0x500c);
-                        if (ret != 0) {
-                            pr_err("tisp_code_tuning_ioctl: AE info copy from user failed: %d\n", ret);
-                            return -EFAULT;
-                        }
-
-                        /* Binary Ninja: Call tisp_set_ae_info(tisp_par_ioctl) */
-                        /* tisp_set_ae_info(tisp_par_ioctl); */
-                        break;
-                    }
-
-                    case 0x20007406: { /* AWB info get */
-                        pr_info("tisp_code_tuning_ioctl: AWB info get 0x%x\n", cmd);
-
-                        /* Binary Ninja: Call tisp_get_awb_info(tisp_par_ioctl) */
-                        /* tisp_get_awb_info(tisp_par_ioctl); */
-
-                        if (!access_ok(VERIFY_WRITE, arg, 0x500c)) {
-                            pr_err("tisp_code_tuning_ioctl: Access check failed for AWB info get\n");
-                            return -EFAULT;
-                        }
-
-                        ret = copy_to_user((void __user *)s0_1, tisp_par_ioctl, 0x500c);
-                        if (ret != 0) {
-                            pr_err("tisp_code_tuning_ioctl: AWB info copy to user failed: %d\n", ret);
-                            return -EFAULT;
-                        }
-                        break;
-                    }
-
-                    case 0x20007407: { /* AWB info set */
-                        pr_info("tisp_code_tuning_ioctl: AWB info set 0x%x\n", cmd);
-
-                        if (!access_ok(VERIFY_READ, arg, 0x500c)) {
-                            pr_err("tisp_code_tuning_ioctl: Access check failed for AWB info set\n");
-                            return -EFAULT;
-                        }
-
-                        ret = copy_from_user(tisp_par_ioctl, (void __user *)s0_1, 0x500c);
-                        if (ret != 0) {
-                            pr_err("tisp_code_tuning_ioctl: AWB info copy from user failed: %d\n", ret);
-                            return -EFAULT;
-                        }
-
-                        /* Binary Ninja: Call tisp_set_awb_info(tisp_par_ioctl) */
-                        /* tisp_set_awb_info(tisp_par_ioctl); */
-                        break;
-                    }
-
-                    case 0x20007408: { /* Special operation 1 */
-                        pr_info("tisp_code_tuning_ioctl: Special operation 1: 0x%x\n", cmd);
-
-                        if (!access_ok(VERIFY_READ, arg, 0x500c)) {
-                            pr_err("tisp_code_tuning_ioctl: Access check failed for special op 1\n");
-                            return -EFAULT;
-                        }
-
-                        ret = copy_from_user(tisp_par_ioctl, (void __user *)s0_1, 0x500c);
-                        if (ret != 0) {
-                            pr_err("tisp_code_tuning_ioctl: Special op 1 copy from user failed: %d\n", ret);
-                            return -EFAULT;
-                        }
-
-                        /* Binary Ninja: Set specific values and copy data */
-                        tisp_par_ioctl_ptr[1] = 0xb;  /* Set param at offset 4 */
-                        memcpy((char*)tisp_par_ioctl + 0xc, "%s[%d] VIC failed to config DVP SONY mode!(10bits-sensor)\\n", 0xb);
-
-                        ret = copy_to_user((void __user *)s0_1, tisp_par_ioctl, 0x500c);
-                        if (ret != 0) {
-                            pr_err("tisp_code_tuning_ioctl: Special op 1 copy to user failed: %d\n", ret);
-                            return -EFAULT;
-                        }
-                        break;
-                    }
-
-                    case 0x20007409: { /* Special operation 2 */
-                        pr_info("tisp_code_tuning_ioctl: Special operation 2: 0x%x\n", cmd);
-
-                        if (!access_ok(VERIFY_READ, arg, 0x500c)) {
-                            pr_err("tisp_code_tuning_ioctl: Access check failed for special op 2\n");
-                            return -EFAULT;
-                        }
-
-                        ret = copy_from_user(tisp_par_ioctl, (void __user *)s0_1, 0x500c);
-                        if (ret != 0) {
-                            pr_err("tisp_code_tuning_ioctl: Special op 2 copy from user failed: %d\n", ret);
-                            return -EFAULT;
-                        }
-
-                        /* Binary Ninja: Set specific values and copy data */
-                        tisp_par_ioctl_ptr[1] = 0xf;  /* Set param at offset 4 */
-                        memcpy((char*)tisp_par_ioctl + 0xc, "%s[%d] VIC failed to config DVP mode!(10bits-sensor)\\n", 0xf);
-
-                        ret = copy_to_user((void __user *)s0_1, tisp_par_ioctl, 0x500c);
-                        if (ret != 0) {
-                            pr_err("tisp_code_tuning_ioctl: Special op 2 copy to user failed: %d\n", ret);
-                            return -EFAULT;
-                        }
-                        break;
-                    }
-
-                    default:
-                        pr_err("tisp_code_tuning_ioctl: Unknown command in valid range: 0x%x\n", cmd);
-                        return -EINVAL;
-                }
-
-                return 0;  /* Success */
-            }
-        }
+        pr_info("isp_core_tunning_unlocked_ioctl: Routing tuning command 0x%x through tisp_code_tuning_ioctl\n",
+                cmd);
+        return tisp_code_tuning_ioctl(file, cmd, (unsigned long)arg);
     }
 
     /* Binary Ninja: Invalid command - not in supported range */
@@ -11342,11 +11318,103 @@ int tiziano_ccm_init(void)
     return 0;
 }
 
+static u32 tisp_dmsc_cfa_base_from_mbus(u32 mbus_code)
+{
+	switch (mbus_code) {
+#ifdef V4L2_MBUS_FMT_SRGGB8_1X8
+	case V4L2_MBUS_FMT_SRGGB8_1X8:
+#endif
+#ifdef V4L2_MBUS_FMT_SRGGB10_1X10
+	case V4L2_MBUS_FMT_SRGGB10_1X10:
+#endif
+#ifdef V4L2_MBUS_FMT_SRGGB12_1X12
+	case V4L2_MBUS_FMT_SRGGB12_1X12:
+#endif
+		return 0; /* RGGB */
+#ifdef V4L2_MBUS_FMT_SGRBG8_1X8
+	case V4L2_MBUS_FMT_SGRBG8_1X8:
+#endif
+#ifdef V4L2_MBUS_FMT_SGRBG10_1X10
+	case V4L2_MBUS_FMT_SGRBG10_1X10:
+#endif
+#ifdef V4L2_MBUS_FMT_SGRBG12_1X12
+	case V4L2_MBUS_FMT_SGRBG12_1X12:
+#endif
+		return 1; /* GRBG */
+#ifdef V4L2_MBUS_FMT_SGBRG8_1X8
+	case V4L2_MBUS_FMT_SGBRG8_1X8:
+#endif
+#ifdef V4L2_MBUS_FMT_SGBRG10_1X10
+	case V4L2_MBUS_FMT_SGBRG10_1X10:
+#endif
+#ifdef V4L2_MBUS_FMT_SGBRG12_1X12
+	case V4L2_MBUS_FMT_SGBRG12_1X12:
+#endif
+		return 2; /* GBRG */
+#ifdef V4L2_MBUS_FMT_SBGGR8_1X8
+	case V4L2_MBUS_FMT_SBGGR8_1X8:
+#endif
+#ifdef V4L2_MBUS_FMT_SBGGR10_1X10
+	case V4L2_MBUS_FMT_SBGGR10_1X10:
+#endif
+#ifdef V4L2_MBUS_FMT_SBGGR12_1X12
+	case V4L2_MBUS_FMT_SBGGR12_1X12:
+#endif
+		return 3; /* BGGR */
+	default:
+		return 0; /* Conservative default: GC2053 stock path is RGGB */
+	}
+}
+
+static u32 tisp_dmsc_apply_flip_to_cfa(u32 idx, unsigned int shvflip)
+{
+	static const u8 hmap[4] = {1, 0, 3, 2};
+	static const u8 vmap[4] = {2, 3, 0, 1};
+
+	if (shvflip & 0x1)
+		idx = hmap[idx & 0x3];
+	if (shvflip & 0x2)
+		idx = vmap[idx & 0x3];
+
+	return idx & 0x3;
+}
+
+static int tisp_dmsc_program_sensor_cfa(void)
+{
+	struct tx_isp_sensor *sensor = NULL;
+	u32 mbus_code = 0;
+	unsigned int shvflip = 0;
+	u32 idx;
+	u32 out_opt;
+
+	if (ourISPdev)
+		sensor = ourISPdev->sensor;
+
+	if (sensor) {
+		mbus_code = sensor->video.mbus.code;
+		shvflip = sensor->video.shvflip;
+	} else {
+		pr_warn("tiziano_dmsc_init: sensor metadata unavailable, defaulting CFA to RGGB\n");
+	}
+
+	idx = tisp_dmsc_apply_flip_to_cfa(tisp_dmsc_cfa_base_from_mbus(mbus_code), shvflip);
+	out_opt = system_reg_read(0x4800);
+	out_opt = (out_opt & ~0x3u) | idx;
+
+	system_reg_write(0x4800, out_opt);
+	system_reg_write(0x499c, 1);
+
+	pr_info("tiziano_dmsc_init: programmed CFA idx=%u mbus=0x%x shvflip=0x%x out_opt=0x%08x%s\n",
+		idx, mbus_code, shvflip, out_opt,
+		tisp_dmsc_wdr_enabled ? " (WDR)" : "");
+	return 0;
+}
+
 /* tiziano_dmsc_init - DMSC initialization */
 int tiziano_dmsc_init(void)
 {
-    pr_info("tiziano_dmsc_init: Initializing DMSC processing\n");
-    return 0;
+	pr_info("tiziano_dmsc_init: Initializing DMSC processing\n");
+	return tisp_dmsc_program_sensor_cfa();
 }
 
 /* Sharpening state cache - Binary Ninja reference */
@@ -12444,6 +12512,7 @@ int tisp_mdns_wdr_en(int enable)
 
 int tisp_dmsc_wdr_en(int enable)
 {
+	tisp_dmsc_wdr_enabled = enable ? 1 : 0;
     pr_info("tisp_dmsc_wdr_en: %s DMSC WDR mode\n", enable ? "Enable" : "Disable");
     return 0;
 }

@@ -61,6 +61,7 @@ static int tx_isp_v4l2_s_fmt_vid_cap(struct file *file, void *priv,
                                      struct v4l2_format *f)
 {
     struct tx_isp_v4l2_device *dev = video_drvdata(file);
+    u32 requested_colorspace;
     
     if (!dev) {
         pr_err("tx_isp_v4l2_s_fmt_vid_cap: Invalid device\n");
@@ -83,6 +84,8 @@ static int tx_isp_v4l2_s_fmt_vid_cap(struct file *file, void *priv,
                dev->channel_num, f->fmt.pix.width, f->fmt.pix.height);
         return -EINVAL;
     }
+
+    requested_colorspace = f->fmt.pix.colorspace;
     
     /* Validate pixel format */
     if (f->fmt.pix.pixelformat != V4L2_PIX_FMT_NV12 && 
@@ -115,7 +118,10 @@ static int tx_isp_v4l2_s_fmt_vid_cap(struct file *file, void *priv,
     }
     
     f->fmt.pix.field = V4L2_FIELD_NONE;
-    f->fmt.pix.colorspace = V4L2_COLORSPACE_REC709;
+    f->fmt.pix.colorspace = requested_colorspace ? requested_colorspace :
+                            (dev->format.fmt.pix.colorspace ?
+                             dev->format.fmt.pix.colorspace :
+                             V4L2_COLORSPACE_REC709);
     
     /* Store the format */
     mutex_lock(&dev->lock);

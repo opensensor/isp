@@ -43,6 +43,11 @@ uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 #define VIC_RAW_STATE_OFFSET       0x128
 #define VIC_RAW_IRQ_FLAG_OFFSET    0x13c
 
+static inline bool vic_pixfmt_is_semiplanar_420(u32 pixfmt)
+{
+    return pixfmt == V4L2_PIX_FMT_NV12 || pixfmt == V4L2_PIX_FMT_NV21;
+}
+
 static int vic_resolve_irq_number(struct tx_isp_vic_device *vic_dev)
 {
     int irq = 0;
@@ -2383,7 +2388,7 @@ int tx_isp_vic_slake_subdev(struct tx_isp_subdev *sd)
 static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
 {
     void __iomem *vic_base;
-    u32 width, height, stride;
+    u32 width, height, stride, pixfmt;
 
     if (!vic_dev) {
         pr_err("vic_pipo_mdma_enable: NULL vic_dev parameter\n");
@@ -2405,15 +2410,16 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         height = vic_dev->height ? vic_dev->height : 1080;
     }
 
-    /* OEM BN vic_pipo_mdma_enable EXACT: stride = *(arg1 + 0xdc) << 1
-     * This is width * 2 ALWAYS — the pipo path does not check format.
-     * stride=width*2 gives real sensor data (pink due to RAW not NV12).
-     * stride=width gives green (no data) or kills interrupts.
-     */
-    stride = width << 1;
+    pixfmt = vic_dev->pixel_format;
+    if (vic_pixfmt_is_semiplanar_420(pixfmt)) {
+        stride = vic_dev->stride ? vic_dev->stride : width;
+    } else {
+        /* OEM/Binary Ninja fallback for non-semiplanar paths. */
+        stride = width << 1;
+    }
 
-    pr_info("vic_pipo_mdma_enable: base=%p dims=%dx%d stride=%u\n",
-            vic_base, width, height, stride);
+    pr_info("vic_pipo_mdma_enable: base=%p dims=%dx%d stride=%u pixfmt=0x%x\n",
+            vic_base, width, height, stride, pixfmt);
 
     /* OEM HLIL: MDMA config registers — stride/size/enable only */
     writel(1, vic_base + 0x308);                           /* MDMA enable */
@@ -2488,23 +2494,26 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
         vic_dev->stream_state = 0;
         vic_dev->streaming = 0;
     } else {
-        /* OEM BN: vic_pipo_mdma_enable($s0) */
-        vic_pipo_mdma_enable(vic_dev);
-        /* Ensure at least 5 active banks for OEM-compatible PIPO rotation */
-        if (vic_dev->active_buffer_count < 5)
-            vic_dev->active_buffer_count = 5;
-        /* OEM BN EXACT: *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020
-         * The pipo/s_stream path uses 0x80000020 (no format bits).
-         * Format bits are only used in vic_mdma_enable (saveraw path).
-         */
-        {
-            u32 ctrl = (vic_dev->active_buffer_count << 16) | 0x80000020;
+	        /* OEM BN: vic_pipo_mdma_enable($s0) */
+	        vic_pipo_mdma_enable(vic_dev);
+	        /* Ensure at least 5 active banks for OEM-compatible PIPO rotation */
+	        if (vic_dev->active_buffer_count < 5)
+	            vic_dev->active_buffer_count = 5;
+		        /* Keep the OEM control bits, but include semiplanar format=7 when the
+		         * negotiated V4L2 format is NV12/NV21 so the PIPO path interprets the
+	         * programmed Y/UV banks as semiplanar chroma rather than a RAW-like
+	         * packed layout.
+	         */
+	        {
+	            u32 ctrl = (vic_dev->active_buffer_count << 16) | 0x80000020;
+		            if (vic_pixfmt_is_semiplanar_420(vic_dev->pixel_format))
+	                ctrl |= 0x7;
 
-            writel(ctrl, vic_base + 0x300);
-            wmb();
-            pr_info("ispvic_frame_channel_s_stream: ctrl=0x%x readback=0x%x base=%p\n",
-                    ctrl, readl(vic_base + 0x300), vic_base);
-        }
+	            writel(ctrl, vic_base + 0x300);
+	            wmb();
+	            pr_info("ispvic_frame_channel_s_stream: ctrl=0x%x readback=0x%x base=%p pixfmt=0x%x\n",
+	                    ctrl, readl(vic_base + 0x300), vic_base, vic_dev->pixel_format);
+	        }
         /* OEM HLIL: *($s0 + 0x210) = 1, *($s0 + 0x214) = 1 */
         vic_dev->stream_state = 1;
         vic_dev->streaming = 1;
@@ -2992,26 +3001,34 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	buffer_index = bank_buffer->buffer_index;
 	bank_buffer->buffer_addr = buffer_addr;
 	bank_buffer->channel = queued_buffer->channel;
+	bank_buffer->buffer_length = queued_buffer->buffer_length;
 	reg_offset = (buffer_index + 0xc6) << 2;
 
 	/* Program Y plane address (regs 0x318..0x328) */
 	writel(buffer_addr, vic_base + reg_offset);
 
 	/* Program UV plane address for NV12.
-	 * OEM vic_mdma_enable uses frame_size = (width<<1)*height for UV offset,
-	 * BUT that exceeds V4L2 buffer size (3110400 bytes for 1920x1080 NV12).
-	 * Use width*height as UV offset to stay within the V4L2 buffer.
+	 * Use the negotiated visible image layout: UV follows the Y plane at
+	 * bytesperline * visible_height. Single-planar NV12 consumers expect the
+	 * chroma plane immediately after the visible luma span, not after any
+	 * larger backing allocation/padded buffer length.
 	 * These writes are REQUIRED — removing them kills interrupts entirely.
 	 */
 	{
 		u32 width = vic_raw_width_get(vic_dev);
 		u32 height = vic_raw_height_get(vic_dev);
+		u32 stride;
+		u32 y_plane_bytes;
 		u32 uv_addr;
 		if (width == 0 || height == 0) {
 			width = vic_dev->width ? vic_dev->width : 1920;
 			height = vic_dev->height ? vic_dev->height : 1080;
 		}
-		uv_addr = buffer_addr + (width * height);
+		stride = vic_dev->stride ? vic_dev->stride : width;
+		if (stride < width)
+			stride = width;
+		y_plane_bytes = stride * height;
+		uv_addr = buffer_addr + y_plane_bytes;
 		writel(uv_addr, vic_base + reg_offset + 0x14);  /* 0x32c..0x33c */
 		writel(uv_addr, vic_base + reg_offset + 0x28);  /* 0x340..0x350 */
 	}
@@ -3020,9 +3037,10 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	list_add_tail(&bank_buffer->list, &vic_dev->done_head);
 	vic_dev->active_buffer_count += 1;
 
-	pr_info("*** VIC QBUF: bank=%u Y=0x%x UV=0x%x reg_off=0x%x active=%u ***\n",
+	pr_info("*** VIC QBUF: bank=%u Y=0x%x UV=0x%x len=%u reg_off=0x%x active=%u ***\n",
 		buffer_index, buffer_addr,
 		readl(vic_base + reg_offset + 0x28),
+		bank_buffer->buffer_length,
 		reg_offset,
 		vic_dev->active_buffer_count);
 
@@ -3080,6 +3098,7 @@ static int ispvic_frame_channel_clearbuf(void)
 			struct vic_buffer_entry *entry = list_entry(pos, struct vic_buffer_entry, list);
 			entry->buffer_addr = 0;
 			entry->channel = 0;
+				entry->buffer_length = 0;
             list_del(pos);
             list_add_tail(pos, &vic_dev->free_head);
         }
@@ -3185,6 +3204,7 @@ int tx_isp_subdev_pipo(struct tx_isp_subdev *sd, void *arg)
 				buffer_entry->buffer_addr = 0;
 				buffer_entry->buffer_index = i;
 				buffer_entry->channel = 0;
+					buffer_entry->buffer_length = 0;
 				list_add_tail(&buffer_entry->list, &vic_dev->free_head);
                 pr_info("tx_isp_subdev_pipo: added buffer entry %d to free list\n", i);
             }

@@ -897,6 +897,19 @@ static struct fs_platform_data fs_pdata = {
 /* Shared frame channel state used across the driver. */
 struct frame_channel_device frame_channels[4];
 int num_channels = 4;
+static u32 frame_channel_colorspace[4] = {
+    V4L2_COLORSPACE_REC709,
+    V4L2_COLORSPACE_REC709,
+    V4L2_COLORSPACE_REC709,
+    V4L2_COLORSPACE_REC709,
+};
+static char tx_isp_default_bin_path[0x40];
+
+const char *tx_isp_get_default_bin_path(void)
+{
+	return tx_isp_default_bin_path;
+}
+EXPORT_SYMBOL(tx_isp_get_default_bin_path);
 
 struct platform_device tx_isp_fs_platform_device = {
     .name = "isp-fs",  /* FIXED: Must match tx_isp_fs_driver name for probe to be called */
@@ -1102,6 +1115,14 @@ static inline u32 nv12_sizeimage(u32 width, u32 height)
 {
     u32 stride = nv12_stride(width);
     return (stride * height * 3) / 2;
+}
+
+static inline u32 frame_channel_export_pixfmt(unsigned int channel, u32 pixfmt)
+{
+    if (pixfmt == 0)
+        return V4L2_PIX_FMT_NV12;
+
+    return pixfmt;
 }
 
 /* Monotonic timestamp helper: fill timeval from CLOCK_MONOTONIC with kernel-version fallback */
@@ -1910,12 +1931,12 @@ int frame_channel_open(struct inode *inode, struct file *file)
             /* Main channel - HD */
             fcd->state.width = 1920;
             fcd->state.height = 1080;
-            fcd->state.format = 0x3231564e; /* NV12 */
+            fcd->state.format = V4L2_PIX_FMT_NV12;
         } else {
             /* Sub channel - smaller */
             fcd->state.width = 640;
             fcd->state.height = 360;
-            fcd->state.format = 0x3231564e; /* NV12 */
+            fcd->state.format = V4L2_PIX_FMT_NV12;
         }
 
         fcd->state.enabled = false;
@@ -3711,11 +3732,11 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
 
         state->width = attr.width;
         state->height = attr.height;
-        state->format = attr.format;
+        state->format = frame_channel_export_pixfmt(channel, attr.format);
         state->enabled = attr.enabled ? true : false;
 
         pr_info("Frame channel %d set attr: %dx%d fmt=0x%x enabled=%d\n",
-                channel, attr.width, attr.height, attr.format, attr.enabled);
+                channel, attr.width, attr.height, state->format, attr.enabled);
 
         return 0;
     }
@@ -3953,31 +3974,32 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         /* Enqueue buffer via BUFFER_ENQUEUE (0x3000005) */
         if (fcd->vic_subdev && ourISPdev && ourISPdev->vic_dev) {
             struct tx_isp_subdev *remote_sd = (struct tx_isp_subdev *)fcd->vic_subdev;
-			struct vic_buffer_entry *node = kzalloc(sizeof(*node), GFP_KERNEL);
+				struct vic_buffer_entry *node = kzalloc(sizeof(*node), GFP_KERNEL);
 
-			if (!node) {
-				pr_warn("*** Channel %d: BUFFER_ENQUEUE node alloc failed ***\n", channel);
-			} else {
-				node->buffer_addr = buffer_phys_addr;
-				node->buffer_index = buffer.index;
-				node->channel = channel;
-				pr_info("*** Channel %d: QBUF - Enqueue via 0x3000005 phys=0x%x user_idx=%u ***\n",
-					channel, buffer_phys_addr, node->buffer_index);
-				{
-					int event_result = tx_isp_send_event_to_remote(remote_sd, 0x3000005, node);
-					if (event_result == 0) {
-						pr_info("*** Channel %d: BUFFER_ENQUEUE SUCCESS ***\n", channel);
-					} else {
-						if (event_result == 0xfffffdfd) {
-							pr_info("*** Channel %d: BUFFER_ENQUEUE - No callback ***\n", channel);
+				if (!node) {
+					pr_warn("*** Channel %d: BUFFER_ENQUEUE node alloc failed ***\n", channel);
+				} else {
+					node->buffer_addr = buffer_phys_addr;
+					node->buffer_index = buffer.index;
+					node->channel = channel;
+					node->buffer_length = buffer.length;
+					pr_info("*** Channel %d: QBUF - Enqueue via 0x3000005 phys=0x%x user_idx=%u len=%u ***\n",
+						channel, buffer_phys_addr, node->buffer_index, node->buffer_length);
+					{
+						int event_result = tx_isp_send_event_to_remote(remote_sd, 0x3000005, node);
+						if (event_result == 0) {
+							pr_info("*** Channel %d: BUFFER_ENQUEUE SUCCESS ***\n", channel);
 						} else {
-							pr_warn("*** Channel %d: BUFFER_ENQUEUE returned: 0x%x ***\n",
-								channel, event_result);
+							if (event_result == 0xfffffdfd) {
+								pr_info("*** Channel %d: BUFFER_ENQUEUE - No callback ***\n", channel);
+							} else {
+								pr_warn("*** Channel %d: BUFFER_ENQUEUE returned: 0x%x ***\n",
+									channel, event_result);
+							}
+							kfree(node);
 						}
-						kfree(node);
 					}
 				}
-			}
         }
 
 
@@ -4333,11 +4355,13 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         // Report current format based on state
         format.fmt.pix.width = state->width ? state->width : 1920;
         format.fmt.pix.height = state->height ? state->height : 1080;
-        format.fmt.pix.pixelformat = state->format ? state->format : 0x3231564e; // NV12
+        format.fmt.pix.pixelformat = frame_channel_export_pixfmt(channel, state->format);
         format.fmt.pix.field = 1; // V4L2_FIELD_NONE
         format.fmt.pix.bytesperline = state->bytesperline ? state->bytesperline : nv12_stride(format.fmt.pix.width);
         format.fmt.pix.sizeimage = state->sizeimage ? state->sizeimage : nv12_sizeimage(format.fmt.pix.width, format.fmt.pix.height);
-        format.fmt.pix.colorspace = 8; // V4L2_COLORSPACE_REC709
+        format.fmt.pix.colorspace = (channel >= 0 && channel < ARRAY_SIZE(frame_channel_colorspace)) ?
+                                    frame_channel_colorspace[channel] :
+                                    V4L2_COLORSPACE_REC709;
 
         if (copy_to_user(argp, &format, sizeof(format)))
             return -EFAULT;
@@ -4371,7 +4395,11 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         /* Persist format into channel state so REQBUFS/QBUF use correct dimensions */
         state->width = format.fmt.pix.width;
         state->height = format.fmt.pix.height;
-        state->format = format.fmt.pix.pixelformat;
+        state->format = frame_channel_export_pixfmt(channel, format.fmt.pix.pixelformat);
+        if (channel >= 0 && channel < ARRAY_SIZE(frame_channel_colorspace))
+            frame_channel_colorspace[channel] = format.fmt.pix.colorspace ?
+                                               format.fmt.pix.colorspace :
+                                               V4L2_COLORSPACE_REC709;
         state->bytesperline = nv12_stride(state->width);
         state->sizeimage = nv12_sizeimage(state->width, state->height);
         pr_debug("[FMT] ch%d bpl=%u sizeimage=%u\n", channel, state->bytesperline, state->sizeimage);
@@ -4380,12 +4408,15 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
          * Only for Channel 0 (VIC capture channel). Sub-streams (chn1) should not
          * change VIC capture dimensions.
          */
-        if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
-            struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
-            vic->width = state->width;
-            vic->height = state->height;
-            pr_info("*** VIC dimensions primed from S_FMT (chn0 only): %ux%u ***\n", vic->width, vic->height);
-        }
+	        if (channel == 0 && ourISPdev && ourISPdev->vic_dev) {
+	            struct tx_isp_vic_device *vic = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
+	            vic->width = state->width;
+	            vic->height = state->height;
+	            vic->stride = state->bytesperline;
+	            vic->pixel_format = state->format;
+	            pr_info("*** VIC dimensions primed from S_FMT (chn0 only): %ux%u stride=%u fmt=0x%x ***\n",
+	                    vic->width, vic->height, vic->stride, vic->pixel_format);
+	        }
 
         /* Reflect adjusted geometry back to userspace per V4L2 S_FMT contract */
         format.fmt.pix.width       = state->width;
@@ -4394,6 +4425,9 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         format.fmt.pix.field       = 1; /* V4L2_FIELD_NONE */
         format.fmt.pix.bytesperline= state->bytesperline;
         format.fmt.pix.sizeimage   = state->sizeimage;
+        format.fmt.pix.colorspace  = (channel >= 0 && channel < ARRAY_SIZE(frame_channel_colorspace)) ?
+                                     frame_channel_colorspace[channel] :
+                                     V4L2_COLORSPACE_REC709;
         if (copy_to_user(argp, &format, sizeof(format)))
             return -EFAULT;
         return 0;
@@ -5529,6 +5563,31 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         }
 
         return ret;
+    }
+    case VIDIOC_SET_DEFAULT_BIN_PATH: {
+        char bin_path[0x40] = {0};
+
+        if (copy_from_user(bin_path, argp, sizeof(bin_path))) {
+            pr_err("TX_ISP_SET_DEFAULT_BIN_PATH: Failed to copy bin path data\n");
+            return -EFAULT;
+        }
+
+        memcpy(tx_isp_default_bin_path, bin_path, sizeof(tx_isp_default_bin_path));
+        tx_isp_default_bin_path[sizeof(tx_isp_default_bin_path) - 1] = '\0';
+
+        pr_info("TX_ISP_SET_DEFAULT_BIN_PATH: path='%s'\n", tx_isp_default_bin_path);
+        return 0;
+    }
+    case VIDIOC_GET_DEFAULT_BIN_PATH: {
+        char bin_path[0x40] = {0};
+
+        memcpy(bin_path, tx_isp_default_bin_path, sizeof(bin_path));
+        if (copy_to_user(argp, bin_path, sizeof(bin_path))) {
+            pr_err("TX_ISP_GET_DEFAULT_BIN_PATH: Failed to copy bin path to user\n");
+            return -EFAULT;
+        }
+
+        return 0;
     }
     default:
         pr_info("Unhandled ioctl cmd: 0x%x\n", cmd);

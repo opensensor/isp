@@ -75,6 +75,7 @@ struct vic_buffer_entry {
 	u32 buffer_addr;
 	u32 buffer_index;
 	u32 channel;
+	u32 buffer_length;
 };
 
 
