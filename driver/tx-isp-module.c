@@ -6578,44 +6578,35 @@ static struct tx_isp_dev *tx_isp_irq_resolve_isp_dev(void *dev_id,
 	return NULL;
 }
 
-/* isp_irq_handle - OEM-style generic subdevice walk */
+/* isp_irq_handle - dispatch by IRQ number to correct subsystem ISR.
+ * Both IRQ 37 and IRQ 38 use this handler. We use the global ourISPdev
+ * directly (bypassing the resolve function which can't match the dev_id
+ * values from tx_isp_request_irq).
+ *
+ * IRQ 37 (isp_irq)  → ISP core ISR only
+ * IRQ 38 (isp_irq2) → VIC ISR only
+ *
+ * The loop that called both ISRs for every interrupt caused the problem:
+ * when ISP core interrupts were enabled, the core ISR ran during IRQ 38
+ * events too, and the VIC ISR ran during IRQ 37 events, causing
+ * cross-contamination that prevented one or the other from counting.
+ */
 irqreturn_t isp_irq_handle(int irq, void *dev_id)
 {
-	struct tx_isp_subdev *owner_sd = NULL;
-	struct tx_isp_dev *isp_dev = tx_isp_irq_resolve_isp_dev(dev_id, &owner_sd);
-    irqreturn_t result = IRQ_HANDLED;
-    int i;
-
-	pr_debug("*** isp_irq_handle: IRQ %d fired (dev_id=%p owner_sd=%p isp=%p) ***\n",
-		 irq, dev_id, owner_sd, isp_dev);
-
-    if (!isp_dev) {
-        pr_err("isp_irq_handle: Invalid ISP device\n");
+    if (!ourISPdev) {
+        pr_err("isp_irq_handle: ourISPdev is NULL\n");
         return IRQ_NONE;
     }
 
-    for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
-        struct tx_isp_subdev *sd = isp_dev->subdevs[i];
-        irqreturn_t sub_result;
-
-        if (!sd)
-            continue;
-
-        if (sd == &isp_dev->sd) {
-            sub_result = ispcore_interrupt_service_routine(irq, isp_dev);
-        } else if (isp_dev->vic_dev && sd == &isp_dev->vic_dev->sd) {
-            sub_result = isp_vic_interrupt_service_routine(irq, isp_dev);
-        } else {
-            continue;
-        }
-
-        if (sub_result == IRQ_WAKE_THREAD)
-            result = IRQ_WAKE_THREAD;
+    if (irq == ourISPdev->isp_irq) {
+        /* IRQ 37 — ISP core */
+        return ispcore_interrupt_service_routine(irq, ourISPdev);
+    } else if (irq == ourISPdev->isp_irq2) {
+        /* IRQ 38 — VIC */
+        return isp_vic_interrupt_service_routine(irq, ourISPdev);
     }
 
-    pr_debug("*** isp_irq_handle: IRQ %d processed, result=%d ***\n", irq, result);
-
-    return result;
+    return IRQ_NONE;
 }
 
 /* isp_irq_thread_handle - EXACT Binary Ninja implementation with CORRECT structure access */
