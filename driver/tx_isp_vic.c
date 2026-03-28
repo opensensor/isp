@@ -1830,14 +1830,18 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
         writel(frame_mode_reg, vic_regs + 0x1a8);
         writel(0x10, vic_regs + 0x1b0);
 
-        /* The OEM bring-up trace shows the VIC route/gate block being refreshed
-         * before the final unlock/start sequence. Keep tx_isp_vic_start()
-         * focused on the VIC start sequence itself; MDMA/QBUF arming belongs to
-         * the frame-channel stream helper, not this pre-unlock path.
-         */
         vic_reassert_core_irq_route(vic_dev, actual_width, actual_height,
                                     ((bits_per_pixel * image_twidth) + 0x1f) >> 5,
                                     "tx_isp_vic_start");
+
+        /* Prime MDMA buffer addresses before VIC unlock.  The green-stream
+         * commit (5df077b7) had vic_prime_mdma_before_unlock() here which
+         * called vic_pipo_mdma_enable() + ispvic_frame_channel_qbuf()
+         * BEFORE the reg0 write sequence.  Without this, the first frames
+         * DMA to stale/zero addresses and no data reaches userspace.
+         */
+        vic_pipo_mdma_enable(vic_dev);
+        ispvic_frame_channel_qbuf(&vic_dev->sd, NULL);
 
         /* OEM BN sequence is a tight 2 -> 4 -> 1a0 write stream with no
          * intervening MMIO reads/barriers before the reg0 poll.
@@ -2510,8 +2514,9 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
     if (enable == 0) {
         /* OEM HLIL: *(*($s0 + 0xb8) + 0x300) = 0 */
         writel(0, vic_base + 0x300);
-        /* OEM HLIL: *($s0 + 0x210) = 0 */
+        /* OEM HLIL: *($s0 + 0x210) = 0, *($s0 + 0x214) = 0 */
         vic_dev->stream_state = 0;
+        vic_dev->streaming = 0;
     } else {
         /* OEM HLIL: vic_pipo_mdma_enable($s0) */
         vic_pipo_mdma_enable(vic_dev);
@@ -2529,8 +2534,9 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
             pr_info("ispvic_frame_channel_s_stream: ctrl=0x%x readback=0x%x base=%p\n",
                     ctrl, readl(vic_base + 0x300), vic_base);
         }
-        /* OEM HLIL: *($s0 + 0x210) = 1 */
+        /* OEM HLIL: *($s0 + 0x210) = 1, *($s0 + 0x214) = 1 */
         vic_dev->stream_state = 1;
+        vic_dev->streaming = 1;
     }
 
     /* OEM HLIL: private_spin_unlock_irqrestore($s0 + 0x1f4, var_18) */
@@ -3073,6 +3079,7 @@ static int ispvic_frame_channel_clearbuf(void)
     vic_dev->active_buffer_count = 0;
     vic_dev->processing = 0;
     vic_dev->stream_state = 0; /* OEM clears 0x210 (stream) and 0x214 (processing) */
+    vic_dev->streaming = 0;
     spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, flags);
 
     /* Clear programmed VIC buffer slots safely */
