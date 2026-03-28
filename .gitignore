@@ -1,3 +1,31 @@
 .idea/
 .vscode/
 .roo/
+
+# Build artifacts
+*.o
+*.ko
+*.cmd
+*.mod
+*.mod.c
+*.mod.o
+*.order
+*.symvers
+built-in.o
+.tmp_versions/
+modules.builtin
+
+# Log/temp files
+build.log
+logs.txt
+fresh_logs.txt
+oem_logs.txt
+
+# Augment temp files
+.augment_*
+
+# Embedded repos
+isp-alternate/
+
+# OEM binaries checked in by accident
+OEM-*.ko
