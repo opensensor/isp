@@ -962,6 +962,7 @@ extern struct tx_isp_subdev_ops csi_subdev_ops;
 
 /* Forward declaration needed before tx_isp_sync_sensor_attr() */
 int ispcore_activate_module(struct tx_isp_dev *isp_dev);
+int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on);
 
 /* Reference driver function declarations - Binary Ninja exact names */
 int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev);  /* FIXED: Correct signature to match tx_isp_vic.c */
@@ -2083,6 +2084,95 @@ static struct tx_isp_subdev_pad* find_subdev_link_pad(struct tx_isp_dev *isp_dev
 }
 
 // Sensor synchronization matching reference ispcore_sync_sensor_attr - SDK compatible
+static int tx_isp_ispcore_activate_module_complete(struct tx_isp_dev *isp_dev)
+{
+    struct tx_isp_vic_device *vic_dev;
+    struct tx_isp_subdev *csi_sd;
+    struct tx_isp_subdev *core_sd;
+    int ret;
+
+    if (!isp_dev)
+        return -EINVAL;
+
+    vic_dev = isp_dev->vic_dev;
+    if (!vic_dev) {
+        pr_warn("*** tx_isp_ispcore_activate_module_complete: VIC unavailable - deferring bring-up ***\n");
+        return 0;
+    }
+
+    if (vic_dev->state >= 3) {
+        pr_info("*** tx_isp_ispcore_activate_module_complete: VIC already active (state=%d) ***\n",
+                vic_dev->state);
+        return 0;
+    }
+
+    core_sd = tx_isp_get_core_subdev(isp_dev);
+    if (!core_sd) {
+        pr_warn("*** tx_isp_ispcore_activate_module_complete: core subdev unavailable - deferring bring-up ***\n");
+        return 0;
+    }
+
+    if (vic_dev->state == 1) {
+        pr_info("*** tx_isp_ispcore_activate_module_complete: calling ispcore_activate_module() ***\n");
+        ret = ispcore_activate_module(isp_dev);
+        if (ret != 0 && ret != -ENOIOCTLCMD) {
+            pr_warn("*** tx_isp_ispcore_activate_module_complete: activation failed: %d ***\n",
+                    ret);
+            return ret;
+        }
+    }
+
+    if (vic_dev->state != 2) {
+        pr_warn("*** tx_isp_ispcore_activate_module_complete: VIC not ready for core init (state=%d) ***\n",
+                vic_dev->state);
+        return 0;
+    }
+
+    ret = tx_isp_core_ensure_powered(isp_dev,
+                                     "tx_isp_ispcore_activate_module_complete");
+    if (ret < 0) {
+        pr_warn("*** tx_isp_ispcore_activate_module_complete: core power prep failed: %d ***\n",
+                ret);
+        return ret;
+    }
+
+    csi_sd = isp_dev->csi_dev ? &((struct tx_isp_csi_device *)isp_dev->csi_dev)->sd : NULL;
+    if (csi_sd) {
+        pr_info("*** tx_isp_ispcore_activate_module_complete: ensuring CSI subdev is activated ***\n");
+        ret = tx_isp_csi_activate_subdev(csi_sd);
+        if (ret != 0 && ret != -ENOIOCTLCMD) {
+            pr_warn("*** tx_isp_ispcore_activate_module_complete: CSI activate failed: %d ***\n",
+                    ret);
+            return ret;
+        }
+
+    } else {
+        pr_warn("*** tx_isp_ispcore_activate_module_complete: CSI subdev unavailable - skipping CSI core init ***\n");
+    }
+
+    pr_info("*** tx_isp_ispcore_activate_module_complete: calling ispcore_core_ops_init(on=1) ***\n");
+    ret = ispcore_core_ops_init(core_sd, 1);
+    if (ret != 0 && ret != -ENOIOCTLCMD) {
+        pr_warn("*** tx_isp_ispcore_activate_module_complete: core init failed: %d ***\n",
+                ret);
+        return ret;
+    }
+
+    if (csi_sd) {
+        pr_info("*** tx_isp_ispcore_activate_module_complete: calling csi_core_ops_init(on=1) after core init ***\n");
+        ret = csi_core_ops_init(csi_sd, 1);
+        if (ret != 0 && ret != -ENOIOCTLCMD) {
+            pr_warn("*** tx_isp_ispcore_activate_module_complete: CSI core init failed: %d ***\n",
+                    ret);
+            return ret;
+        }
+    }
+
+    pr_info("*** tx_isp_ispcore_activate_module_complete: bring-up complete, VIC state=%d ***\n",
+            vic_dev->state);
+    return 0;
+}
+
 static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sensor_attribute *sensor_attr)
 {
     struct tx_isp_sensor *sensor;
@@ -2091,6 +2181,7 @@ static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sen
     int (*csi_sync_sensor_attr)(struct tx_isp_subdev *sd, void *arg) = NULL;
     unsigned int actual_width;
     unsigned int actual_height;
+    int bringup_ret = 0;
     int csi_ret = 0;
     int ret = 0;
 
@@ -2166,6 +2257,12 @@ static int tx_isp_sync_sensor_attr(struct tx_isp_dev *isp_dev, struct tx_isp_sen
         } else {
             pr_warn("*** tx_isp_sync_sensor_attr: CSI sync hook unavailable ***\n");
         }
+    }
+
+    if (ret == 0) {
+        bringup_ret = tx_isp_ispcore_activate_module_complete(isp_dev);
+        if (bringup_ret != 0 && bringup_ret != -ENOIOCTLCMD)
+            ret = bringup_ret;
     }
 
     return ret;
@@ -3245,6 +3342,7 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
     int result = 0xffffffea;
     struct tx_isp_subdev *sd;
     int subdev_result;
+    int tuning_ret;
     int a2_1;
     extern int isp_clk;  /* Global isp_clk variable from tx_isp_core.c */
 
@@ -3293,6 +3391,18 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
                     }
 
                     channel->state = 2;
+                }
+
+                /*
+                 * OEM HLIL calls the ispcore tuning/control object with event
+                 * 0x4000000 here, before the subdev activate walk. In our
+                 * source tree this maps to ISP_TUNING_EVENT_MODE0 via
+                 * tx_isp_tuning_notify(), which drives the core 0x40c4 handoff.
+                 */
+                tuning_ret = tx_isp_tuning_notify(isp_dev, ISP_TUNING_EVENT_MODE0);
+                if (tuning_ret != 0 && tuning_ret != -ENOIOCTLCMD) {
+                    pr_warn("ispcore_activate_module: tuning MODE0 notify returned %d\n",
+                            tuning_ret);
                 }
 
                 for (i = 0; i < ISP_MAX_SUBDEVS; i++) {

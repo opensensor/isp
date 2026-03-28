@@ -355,6 +355,7 @@ static int __maybe_unused csi_wait_w01_phase(int timeout_ms)
     const u32 t0 = 0x00000230;
     const u32 t1 = 0x00000300;
     const u32 t2 = 0x00000330;
+    const u32 t3 = 0x00000630;
     u32 prev = vic_read32(0x14);
     int stable = 0;
     int waited = 0;
@@ -362,7 +363,7 @@ static int __maybe_unused csi_wait_w01_phase(int timeout_ms)
         private_msleep(1);
         waited += 1;
         u32 cur = vic_read32(0x14);
-        int match = (cur == t0) || (cur == t1) || (cur == t2);
+        int match = (cur == t0) || (cur == t1) || (cur == t2) || (cur == t3);
         if (match && cur == prev) {
             stable++;
             if (stable >= 2) {
@@ -799,16 +800,24 @@ static void __iomem *csi_get_wrapper_regs(struct tx_isp_csi_device *csi_dev)
         return isp_csi_regs;
 
     /*
-     * OEM seeds +0x13c from a dedicated ioremap of the CSI register block.
-     * Recreate that mapping here if probe has not populated the slot yet.
+     * The OEM csi_core_ops_init HLIL uses +0x13c for 0x00/0x128/0x160/0x1e0/0x260,
+     * and the hardware trace shows those accesses landing in the live CSI block at
+     * 0x10022000. Point this slot at the CSI MMIO window, not raw ISP core space.
      */
-    isp_csi_regs = ioremap(0x10023000, 0x1000);
-    if (isp_csi_regs)
-        pr_info("csi_get_wrapper_regs: populated +0x13c with dedicated 0x10023000 mapping %p\n",
-                isp_csi_regs);
-
-    if (!isp_csi_regs)
+    if (csi_dev->csi_regs) {
         isp_csi_regs = csi_dev->csi_regs;
+        pr_info("csi_get_wrapper_regs: populated +0x13c from csi_dev->csi_regs %p\n",
+                isp_csi_regs);
+    } else if (ourISPdev && ourISPdev->csi_regs) {
+        isp_csi_regs = ourISPdev->csi_regs;
+        pr_info("csi_get_wrapper_regs: populated +0x13c from isp_dev->csi_regs %p\n",
+                isp_csi_regs);
+    } else {
+        isp_csi_regs = ioremap(0x10022000, 0x1000);
+        if (isp_csi_regs)
+            pr_info("csi_get_wrapper_regs: populated +0x13c with dedicated 0x10022000 CSI mapping %p\n",
+                    isp_csi_regs);
+    }
 
     if (!isp_csi_regs)
         return NULL;
@@ -875,6 +884,7 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
     struct tx_isp_sensor_attribute *sensor_attr;
     void __iomem *csi_regs;
     void __iomem *isp_csi_regs;
+    u32 lane_mask;
     u32 rate_reg;
     int result = 0xffffffea;
     int v0_17;
@@ -929,11 +939,18 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
     if (interface_type == 1) {
 
         if (!isp_csi_regs) {
-            pr_err("csi_core_ops_init: wrapper regs unavailable for MIPI init\n");
+            pr_err("csi_core_ops_init: core/timing regs unavailable for MIPI init\n");
             return -ENODEV;
         }
 
         csi_dev->lanes = sensor_attr->mipi.lans;
+        if (csi_dev->lanes <= 1)
+            lane_mask = 0x31;
+        else if (csi_dev->lanes == 2)
+            lane_mask = 0x33;
+        else
+            lane_mask = 0x3f;
+
         writel((csi_dev->lanes - 1) & 0x3, csi_regs + 0x04);
         writel(readl(csi_regs + 0x08) & 0xfffffffe, csi_regs + 0x08);
         writel(0, csi_regs + 0x0c);
@@ -943,16 +960,30 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
         writel(interface_type, csi_regs + 0x0c);
         private_msleep(1);
 
+        /*
+         * The working trace advances W01 from 0x200 to 0x630 via a 0x0c write
+         * before the CSI basic/PHY window becomes live. Without this kick our
+         * reads stay all-zero and VIC later times out in unlock.
+         */
+        vic_write32(0x0c, 1);
+        wmb();
+        if (!csi_wait_w01_phase(250)) {
+            pr_warn("csi_core_ops_init: W01 phase did not advance after 0x0c kick (0x14=0x%08x 0x40=0x%08x)\n",
+                    vic_read32(0x14), vic_read32(0x40));
+        }
+
         rate_sel = csi_calc_rate_sel(sensor_attr);
         rate_reg = (readl(isp_csi_regs + 0x160) & 0xfffffff0) | (rate_sel & 0xf);
         writel(rate_reg, isp_csi_regs + 0x160);
         writel(rate_reg, isp_csi_regs + 0x1e0);
         writel(rate_reg, isp_csi_regs + 0x260);
-        writel(0x7d, isp_csi_regs + 0x00);
-        writel(0x3f, isp_csi_regs + 0x128);
+        writel(0x7d, csi_regs + 0x00);
+        writel(lane_mask, csi_regs + 0x128);
+        vic_write32(0x10, 1);
+        wmb();
         writel(1, csi_regs + 0x10);
         private_msleep(10);
-        pr_info("csi_core_ops_init: MIPI init programmed lanes=%u rate_sel=%d basic[0x00]=0x%08x basic[0x04]=0x%08x basic[0x0c]=0x%08x basic[0x10]=0x%08x basic[0x128]=0x%08x lanec[0x200]=0x%08x lanec[0x204]=0x%08x lanec[0x210]=0x%08x lanec[0x230]=0x%08x lanec[0x250]=0x%08x lanec[0x254]=0x%08x lanec[0x2f4]=0x%08x wrap[0x00]=0x%08x wrap[0x0c]=0x%08x wrap[0x14]=0x%08x wrap[0x40]=0x%08x wrap[0x128]=0x%08x\n",
+        pr_info("csi_core_ops_init: MIPI init programmed lanes=%u rate_sel=%d basic[0x00]=0x%08x basic[0x04]=0x%08x basic[0x0c]=0x%08x basic[0x10]=0x%08x basic[0x128]=0x%08x lanec[0x200]=0x%08x lanec[0x204]=0x%08x lanec[0x210]=0x%08x lanec[0x230]=0x%08x lanec[0x250]=0x%08x lanec[0x254]=0x%08x lanec[0x2f4]=0x%08x slot13c[0x00]=0x%08x slot13c[0x0c]=0x%08x w01[0x14]=0x%08x w01[0x40]=0x%08x slot13c[0x128]=0x%08x\n",
                 csi_dev->lanes, rate_sel,
                 readl(csi_regs + 0x00), readl(csi_regs + 0x04), readl(csi_regs + 0x0c),
                 readl(csi_regs + 0x10), readl(csi_regs + 0x128),
@@ -961,8 +992,8 @@ int csi_core_ops_init(struct tx_isp_subdev *sd, int enable)
                 readl(csi_regs + 0x2f4),
                 isp_csi_regs ? readl(isp_csi_regs + 0x00) : 0,
                 isp_csi_regs ? readl(isp_csi_regs + 0x0c) : 0,
-                isp_csi_regs ? readl(isp_csi_regs + 0x14) : 0,
-                isp_csi_regs ? readl(isp_csi_regs + 0x40) : 0,
+                vic_read32(0x14),
+                vic_read32(0x40),
                 isp_csi_regs ? readl(isp_csi_regs + 0x128) : 0);
         v0_17 = 3;
     } else if (interface_type != 2) {
