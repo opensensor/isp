@@ -5936,8 +5936,16 @@ static int tx_isp_init(void)
     ourISPdev->irq_disable_func = tx_isp_disable_irq;
 
     if (ourISPdev->isp_irq > 0) {
-        tx_isp_disable_irq(ourISPdev);
+        /* NOTE: Do NOT call tx_isp_disable_irq() here — tx_isp_request_irq()
+         * already left IRQ 37 disabled (depth=1).  A second disable would
+         * push the depth to 2, requiring two enable_irq() calls to actually
+         * unmask the line.  tx_isp_enable_irq() only does one enable_irq(),
+         * so the extra disable here was causing IRQ 37 to stay permanently
+         * masked (0 interrupts).  Same fix as IRQ 38.
+         */
         pr_info("*** ADOPTED EXISTING IRQ %d (isp-m0) FROM SUBDEV INIT ***\n",
+                ourISPdev->isp_irq);
+        pr_info("*** IRQ %d (isp-m0) ALREADY DISABLED BY tx_isp_request_irq ***\n",
                 ourISPdev->isp_irq);
     } else {
         pr_warn("*** NO EARLY CORE IRQ FOUND TO ADOPT FOR isp-m0 ***\n");

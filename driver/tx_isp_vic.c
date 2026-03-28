@@ -1839,9 +1839,21 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
                                     ((bits_per_pixel * image_twidth) + 0x1f) >> 5,
                                     "tx_isp_vic_start");
 
-        /* OEM BN sequence is a tight 2 -> 4 -> 1a0 write stream with no
-         * intervening MMIO reads/barriers before the reg0 poll.
+        /* If the VIC is currently running (reg0 non-zero), stop it first
+         * before issuing the reset sequence.  A reset while the MIPI
+         * interface is actively streaming causes the VIC to hang with
+         * reg0=0x2 indefinitely.
          */
+        {
+            u32 reg0_cur = readl(vic_regs + 0x0);
+            if (reg0_cur != 0) {
+                pr_info("tx_isp_vic_start: VIC active (reg0=0x%x), stopping before reset\n", reg0_cur);
+                writel(0, vic_regs + 0x0);
+                udelay(100);
+            }
+        }
+
+        /* OEM BN sequence: 2 (reset) -> 4 (init) -> 1a0 (unlock) -> poll reg0==0 */
         writel(2, vic_regs + 0x0);
         writel(4, vic_regs + 0x0);
         unlock_1a0 = (mipi_sc->sensor_frame_mode << 4) | mipi_sc->sensor_mode;
@@ -2426,9 +2438,12 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
         height = vic_dev->height ? vic_dev->height : 1080;
     }
 
-    /* NV12 (format 7): stride = width, NOT width*2 */
-    stride = width;
-    fps = stride * height;  /* Y plane size = one frame plane */
+    /* OEM vic_pipo_mdma_enable ALWAYS uses width << 1 for stride, even for NV12.
+     * The NV12 stride adjustment only happens in vic_mdma_enable (non-streaming).
+     * OEM HLIL: stride = *(arg1 + 0xdc) << 1
+     */
+    stride = width << 1;
+    fps = stride * height;  /* frame plane size in bytes */
 
     /* Get rmem DMA base from ISP device */
     rmem_base = 0x6300000;  /* T31 default from cmdline rmem=29M@0x6300000 */
@@ -2515,14 +2530,15 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
     } else {
         /* OEM HLIL: vic_pipo_mdma_enable($s0) */
         vic_pipo_mdma_enable(vic_dev);
-        /* OEM vic_mdma_enable: ctrl = (buf_count << 16) | 0x80000020 | format
-         * NV12 = format 7.  We program 5 buffer banks in vic_pipo_mdma_enable,
-         * so buf_count = 5 (< 8 → use per-buffer-count path, not 0x80080020).
+        /* OEM HLIL ispvic_frame_channel_s_stream:
+         *   *(*($s0 + 0xb8) + 0x300) = *($s0 + 0x218) << 0x10 | 0x80000020
+         * Note: OEM streaming path does NOT include format byte — only the
+         * non-streaming vic_mdma_enable adds format.  Use buf_count = 5
+         * matching the 5 buffer banks we program in vic_pipo_mdma_enable.
          */
         {
             u32 buffer_count = 5;
-            u32 nv12_format = 7;
-            u32 ctrl = (buffer_count << 16) | 0x80000020 | nv12_format;
+            u32 ctrl = (buffer_count << 16) | 0x80000020;
 
             writel(ctrl, vic_base + 0x300);
             wmb();
