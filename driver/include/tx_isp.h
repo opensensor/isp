@@ -285,6 +285,10 @@ struct tx_isp_dev {
 
     /* ISP proc directory - needed for tx_isp_create_graph_proc_entries */
     struct proc_dir_entry *isp_proc_dir;     /* ISP-specific proc directory */
+
+    /* Moved from tx_isp_subdev private fields (ABI fix) */
+    int vin_state;
+    struct tx_isp_irq_info sd_irq_info;  /* ISP core IRQ info (was sd.irq_info) */
 } __attribute__((aligned(4)));
 
 

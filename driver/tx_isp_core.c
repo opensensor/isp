@@ -213,8 +213,7 @@ static u32 tisp_boot_fps_from_sensor(struct tx_isp_dev *isp_dev,
         }
     }
 
-    if ((fps == 0 || fps > 240) && sensor_attr && sensor_attr->fps && sensor_attr->fps <= 240)
-        fps = sensor_attr->fps;
+    /* fps is not in tx_isp_sensor_attribute in stock - fallback only */
 
     return fps ? fps : 25;
 }
@@ -652,7 +651,7 @@ int tx_isp_core_start(struct tx_isp_subdev *sd)
         return -EINVAL;
     }
 
-    isp_dev = sd->isp;
+    isp_dev = ourISPdev;
     if (!isp_dev) {
         pr_err("tx_isp_core_start: No ISP device\n");
         return -EINVAL;
@@ -690,7 +689,7 @@ int tx_isp_core_stop(struct tx_isp_subdev *sd)
         return -EINVAL;
     }
 
-    isp_dev = sd->isp;
+    isp_dev = ourISPdev;
     if (!isp_dev) {
         pr_err("tx_isp_core_stop: No ISP device\n");
         return -EINVAL;
@@ -714,7 +713,7 @@ int tx_isp_core_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *confi
         return -EINVAL;
     }
 
-    isp_dev = sd->isp;
+    isp_dev = ourISPdev;
     if (!isp_dev) {
         pr_err("tx_isp_core_set_format: No ISP device\n");
         return -EINVAL;
@@ -1039,7 +1038,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
     }
 
     /* Get ISP device from subdev */
-    isp_dev = (struct tx_isp_dev *)sd->isp;
+    isp_dev = ourISPdev;
     if (!isp_dev) {
         pr_err("ispcore_video_s_stream: No ISP device available\n");
         return -EINVAL;
@@ -1182,7 +1181,7 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
                     result = result_1;
 
                     pr_info("*** ispcore_video_s_stream: Called s_stream on subdev %s: result=%d ***\n",
-                            a0_5->pdev ? a0_5->pdev->name : "unknown", result_1);
+                            a0_5->module.name ? a0_5->module.name : "unknown", result_1);
 
                     /* Binary Ninja: if (result_1 != 0) */
                     if (result_1 != 0) {
@@ -1233,13 +1232,13 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         ispcore_dispatch_primary_channel_event(isp_dev, ISP_EVENT_STREAM_START);
     }
     /* OEM BN: *(*(arg1 + 0xb8) + 0xb0) = mask; then tx_isp_[en|dis]able_irq(arg1)
-     * arg1 = sd (core subdev), *(arg1 + 0xb8) = sd->regs = ISP core register base.
+     * arg1 = sd (core subdev), *(arg1 + 0xb8) = sd->base = ISP core register base.
      * Register 0xb0 = ISP core hardware interrupt mask.
-     * NOTE: sd->regs is NULL because isp-m0 has no IORESOURCE_MEM (VIN already
+     * NOTE: sd->base is NULL because isp-m0 has no IORESOURCE_MEM (VIN already
      * claims 0x13300000). Fall back to isp_dev->core_regs which maps the same phys addr.
      */
     {
-        void __iomem *core_base = sd->regs ? sd->regs : isp_dev->core_regs;
+        void __iomem *core_base = sd->base ? sd->base : isp_dev->core_regs;
         if (core_base) {
             if (enable == 0 || ispcore_bypass_enabled(isp_dev)) {
                 writel(0x00000000, core_base + 0xb0);
@@ -2688,7 +2687,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
     }
 
     /* Get ISP device from subdev */
-    isp_dev = (struct tx_isp_dev *)sd->isp;
+    isp_dev = ourISPdev;
     if (!isp_dev || (unsigned long)isp_dev >= 0xfffff001) {
         pr_err("ispcore_core_ops_init: No ISP device associated with subdev\n");
         return -EINVAL;
@@ -2782,7 +2781,7 @@ int ispcore_core_ops_init(struct tx_isp_subdev *sd, int on)
 
         /* CRITICAL: Handle initialization case (on=1) */
         if (on == 1) {
-            const char *reset_name = (sd->pdev && sd->pdev->name) ? sd->pdev->name : "tx-isp";
+            const char *reset_name = (sd->module.name) ? sd->module.name : "tx-isp";
 
             pr_info("*** ispcore_core_ops_init: INITIALIZING CORE (on=1) ***");
             pr_info("*** ispcore_core_ops_init: Current vic_state (VIC state): %d ***", vic_state);
@@ -4080,10 +4079,8 @@ void tx_isp_core_bind_event_dispatch_tables(struct tx_isp_dev *isp_dev)
 
         channel->event_hdlr = (struct isp_event_handler *)dispatch;
         channel->event_priv = channel;
-        channel->subdev.isp = isp_dev;
         channel->subdev.ops = &core_subdev_ops;
-        channel->subdev.vin_state = TX_ISP_MODULE_INIT;
-        channel->subdev.event_callback_struct = dispatch;
+        /* vin_state and event_callback_struct moved out of tx_isp_subdev for ABI */
         tx_isp_set_subdevdata(&channel->subdev, channel);
 
         if (i < ARRAY_SIZE(frame_channels)) {
@@ -4223,12 +4220,23 @@ static int tx_isp_create_framechan_devices(struct tx_isp_dev *isp_dev)
  *   ispcore_slake_module -> core_sd->slake_module -> ispcore_slake_module -> ...
  */
 
+/* Forward declaration from tx-isp-module.c */
+extern long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd,
+                                    unsigned int cmd, void *arg);
+
+/* Core sensor operations - OEM path uses core as the sensor manager */
+static struct tx_isp_subdev_sensor_ops core_sensor_ops = {
+    .release_all_sensor = NULL,
+    .sync_sensor_attr = NULL,
+    .ioctl = subdev_sensor_ops_ioctl,
+};
+
 /* Update the core subdev ops to include the core ops */
 struct tx_isp_subdev_ops core_subdev_ops = {
     .core = &core_subdev_core_ops,
     .video = &core_subdev_video_ops,
     .pad = &core_pad_ops,
-    .sensor = NULL,
+    .sensor = &core_sensor_ops,
     .internal = NULL  /* CRITICAL: NULL to prevent recursion */
 };
 EXPORT_SYMBOL(core_subdev_ops);
@@ -4336,14 +4344,14 @@ int tx_isp_core_probe(struct platform_device *pdev)
     pr_info("*** tx_isp_core_probe: Initializing core subdev with operations ***\n");
 
     /* Initialize the subdev that's already the first member of tx_isp_dev */
-    isp_dev->sd.isp = isp_dev;  /* Set back-reference */
+    /* sd.isp removed for ABI - use ourISPdev global */
     isp_dev->sd.ops = &core_subdev_ops;  /* Set operations to the properly configured structure */
-    isp_dev->sd.vin_state = TX_ISP_MODULE_INIT;  /* Set initial state */
+    isp_dev->vin_state = TX_ISP_MODULE_INIT;  /* Set initial state */
     tx_isp_set_subdevdata(&isp_dev->sd, isp_dev);
     tx_isp_set_subdev_hostdata(&isp_dev->sd, isp_dev);
 
     /* Initialize subdev synchronization */
-    mutex_init(&isp_dev->sd.lock);
+    /* sd.lock removed for ABI - no longer needed */
 
     pr_info("*** tx_isp_core_probe: Core subdev initialized with ops=%p ***\n", &core_subdev_ops);
     pr_info("***   - Core ops: start=%p, stop=%p, set_format=%p ***\n",
@@ -4399,9 +4407,9 @@ int tx_isp_core_probe(struct platform_device *pdev)
                     isp_dev->channels[channel_idx].state = 1;  /* INIT state */
                     isp_dev->channels[channel_idx].dev = &pdev->dev;
 
-                    isp_dev->channels[channel_idx].subdev.isp = isp_dev;
+                    /* subdev.isp removed for ABI - use ourISPdev global */
                     isp_dev->channels[channel_idx].subdev.ops = &core_subdev_ops;
-                    isp_dev->channels[channel_idx].subdev.vin_state = TX_ISP_MODULE_INIT;
+                    isp_dev->vin_state = TX_ISP_MODULE_INIT;
                     tx_isp_set_subdevdata(&isp_dev->channels[channel_idx].subdev,
                                           &isp_dev->channels[channel_idx]);
 
@@ -4857,9 +4865,9 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     }
 
     /* Sync can be entered via core or VIC subdevs. For VIC callers, dev_priv is
-     * the VIC device, not the ISP core, so resolve the ISP via sd->isp first.
+     * the VIC device, not the ISP core, so resolve the ISP via ourISPdev first.
      */
-    isp_dev = (struct tx_isp_dev *)sd->isp;
+    isp_dev = ourISPdev;
     if ((!isp_dev || (unsigned long)isp_dev >= 0xfffff001) &&
         tx_isp_get_subdevdata(sd) == ourISPdev)
         isp_dev = ourISPdev;
@@ -4927,14 +4935,7 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     integration_time = stored_attr->integration_time;
     again = stored_attr->again;
     dgain = stored_attr->dgain;
-    fps = stored_attr->fps;
-
-    /* Binary Ninja: Calculate frame rate and timing */
-    if (integration_time != 0 && fps != 0) {
-        calculated_fps = (integration_time & 0xffff) * 1000000 /
-                        (integration_time >> 16) / fps;
-        stored_attr->fps = calculated_fps;
-    }
+    /* fps is in tx_isp_video_in, not sensor_attribute — skip fps calc */
 
     /* Binary Ninja: Process gain values */
     stored_attr->again = again;
@@ -5019,7 +5020,7 @@ int tiziano_sync_sensor_attr(struct tx_isp_sensor_attribute *attr)
     /* Binary Ninja: Store various sensor parameters */
     data_b2e44 = attr->total_width;
     data_b2e48 = attr->total_height;
-    data_b2e62 = attr->fps;
+    data_b2e62 = 0; /* fps is in tx_isp_video_in, not sensor_attribute */
     data_b2e64 = attr->wdr_cache;
 
     /* Binary Ninja: Process timing parameters */

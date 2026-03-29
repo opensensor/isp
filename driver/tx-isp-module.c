@@ -78,6 +78,9 @@ static int tx_isp_sensor_has_usable_attachment(struct tx_isp_sensor *sensor)
     if (sensor->info.name[0] == '\0')
         return 0;
 
+    if (sensor->video.mbus.code == 0)
+        return 0;
+
     return 1;
 }
 
@@ -87,26 +90,34 @@ static struct tx_isp_sensor *tx_isp_recover_sensor_from_subdev(struct tx_isp_sub
     struct tx_isp_sensor *sensor;
     void *hostdata;
 
-    if (!sd || !sd->ops || !sd->ops->sensor)
+    if (!sd) {
+        pr_debug("*** %s: sd is NULL ***\n", reason);
         return NULL;
+    }
+    if (!sd->ops) {
+        pr_debug("*** %s: sd->ops is NULL (sd=%p) ***\n", reason, sd);
+        return NULL;
+    }
+    if (!sd->ops->sensor) {
+        pr_debug("*** %s: sd->ops->sensor is NULL (sd=%p ops=%p) ***\n",
+                 reason, sd, sd->ops);
+        return NULL;
+    }
 
     hostdata = tx_isp_get_subdev_hostdata(sd);
-    if (hostdata == sd) {
-        sensor = (struct tx_isp_sensor *)hostdata;
-        pr_info("*** %s: recovered sensor from subdev hostdata sd=%p sensor=%p ***\n",
-                reason, sd, sensor);
-        return sensor;
+    if (!hostdata) {
+        pr_debug("*** %s: hostdata is NULL (sd=%p host_priv=%p) ***\n",
+                 reason, sd, sd->host_priv);
+        return NULL;
     }
 
-    if (hostdata) {
-        pr_warn("*** %s: hostdata=%p does not match sensor sd=%p - using embedded sensor object ***\n",
-                reason, hostdata, sd);
+    sensor = (struct tx_isp_sensor *)hostdata;
+    if (&sensor->sd != sd) {
+        pr_warn("*** %s: hostdata=%p has embedded sd=%p (expected %p) - rejecting stale sensor attachment ***\n",
+                reason, hostdata, &sensor->sd, sd);
+        return NULL;
     }
 
-    sensor = sd_to_sensor_device(sd);
-    pr_info("*** %s: recovered sensor via sd_to_sensor_device sd=%p sensor=%p attr=%p name=%s ***\n",
-            reason, sd, sensor, sensor->video.attr,
-            sensor->info.name[0] ? sensor->info.name : "(unnamed)");
     return sensor;
 }
 
@@ -120,7 +131,7 @@ static void tx_isp_refresh_sensor_attachment(struct tx_isp_dev *isp_dev,
 
     isp_dev->sensor = sensor;
     isp_dev->sensor_sd = sd;
-    sd->isp = (void *)isp_dev;
+    /* sensor subdev now references ISP dev via ourISPdev global */
 
     if (sensor->info.name[0]) {
         strncpy(isp_dev->sensor_name, sensor->info.name,
@@ -148,7 +159,22 @@ struct tx_isp_dev *ourISPdev = NULL;
 LIST_HEAD(sensor_list);
 DEFINE_MUTEX(sensor_list_mutex);
 int sensor_count = 0;
+static int current_sensor_index = -1;
 static int isp_memopt = 0; // Memory optimization flag like reference
+
+static void tx_isp_drop_registered_sensor(struct registered_sensor *reg_sensor)
+{
+    if (!reg_sensor)
+        return;
+
+    mutex_lock(&sensor_list_mutex);
+    list_del(&reg_sensor->list);
+    if (sensor_count > 0)
+        sensor_count--;
+    mutex_unlock(&sensor_list_mutex);
+
+    kfree(reg_sensor);
+}
 
 /* CRITICAL: VIC interrupt control flag - Binary Ninja reference */
 /* This is now declared as extern - the actual definition is in tx_isp_vic.c */
@@ -160,6 +186,296 @@ int tx_isp_handle_sync_sensor_attr_event(struct tx_isp_subdev *sd,
 /* Kernel symbol export for sensor drivers to register */
 static struct tx_isp_subdev *registered_sensor_subdev = NULL;
 static DEFINE_MUTEX(sensor_register_mutex);
+
+static struct tx_isp_subdev *tx_isp_resolve_registered_sensor_subdev(struct tx_isp_dev *isp_dev)
+{
+    struct tx_isp_subdev *sd;
+
+    mutex_lock(&sensor_register_mutex);
+    sd = registered_sensor_subdev;
+    mutex_unlock(&sensor_register_mutex);
+
+    if (sd && sd->ops && sd->ops->sensor)
+        return sd;
+
+    sd = tx_isp_get_sensor_subdev(isp_dev);
+    if (sd && sd->ops && sd->ops->sensor)
+        return sd;
+
+    return NULL;
+}
+
+static struct tx_isp_sensor *tx_isp_wait_for_sensor_attachment(struct tx_isp_subdev *sd,
+                                                               const char *reason)
+{
+    struct tx_isp_subdev *current_sd = sd;
+    struct tx_isp_sensor *sensor = NULL;
+    int attempt;
+
+    if (!current_sd)
+        return NULL;
+
+    for (attempt = 0; attempt < 50; attempt++) {
+        if (ourISPdev) {
+            struct tx_isp_subdev *resolved_sd;
+
+            resolved_sd = tx_isp_resolve_registered_sensor_subdev(ourISPdev);
+            if (resolved_sd)
+                current_sd = resolved_sd;
+        }
+
+        sensor = tx_isp_recover_sensor_from_subdev(current_sd, reason);
+        if (tx_isp_sensor_has_usable_attachment(sensor))
+            return sensor;
+
+        if (attempt == 0 || attempt == 4 || attempt == 19 || attempt == 49) {
+            pr_info("*** %s: waiting for usable probed sensor sd=%p sensor=%p attr=%p name=%s mbus=0x%x (attempt %d/50) ***\n",
+                    reason, current_sd, sensor,
+                    sensor ? sensor->video.attr : NULL,
+                    (sensor && sensor->info.name[0]) ? sensor->info.name : "(unnamed)",
+                    sensor ? sensor->video.mbus.code : 0,
+                    attempt + 1);
+        }
+
+        msleep(1);
+    }
+
+    return sensor;
+}
+
+static struct tx_isp_subdev *isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
+                                                      struct i2c_board_info *info);
+int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd,
+                                  struct tx_isp_sensor *sensor);
+int tx_isp_unregister_sensor_subdev(struct tx_isp_subdev *sd);
+
+long subdev_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg)
+{
+    struct tx_isp_dev *isp_dev;
+
+    if (!sd)
+        return -EINVAL;
+
+    isp_dev = ourISPdev;
+
+    pr_info("subdev_sensor_ops_ioctl: cmd=0x%x\n", cmd);
+
+    switch (cmd) {
+    case TX_ISP_EVENT_SENSOR_REGISTER: {
+        /*
+         * OEM STOCK FLOW (from Binary Ninja decompilation):
+         * 1. Parse sensor_register_info from arg (name, cbus_type, i2c addr, etc.)
+         * 2. If I2C: get adapter, call isp_i2c_new_subdev_board → returns subdev
+         * 3. Get sensor from subdev->host_priv
+         * 4. Copy sensor_register_info into sensor->info
+         * 5. Call sd->ops->core->g_chip_ident(sd, &sd->chip) to validate
+         * 6. If ok: link sensor into VIN sensor list, inherit isp pointer
+         */
+        struct tx_isp_sensor_register_info *reg_info =
+                (struct tx_isp_sensor_register_info *)arg;
+        struct i2c_adapter *adapter;
+        struct i2c_board_info sensor_board_info;
+        struct tx_isp_subdev *sensor_sd = NULL;
+        struct tx_isp_sensor *sensor = NULL;
+        int ret;
+
+        if (!arg)
+            return -EINVAL;
+
+        pr_info("Sensor register: name=%s cbus=%d\n",
+                reg_info->name, reg_info->cbus_type);
+
+        /* Stock: check cbus_type */
+        if (reg_info->cbus_type == TX_SENSOR_CONTROL_INTERFACE_I2C) {
+            int i2c_adapter_num = reg_info->i2c.i2c_adapter_id;
+
+            adapter = i2c_get_adapter(i2c_adapter_num);
+            if (!adapter) {
+                pr_err("Failed to get I2C adapter %d, deferring probe\n",
+                       i2c_adapter_num);
+                return -ENODEV;
+            }
+
+            /* Stock: Build board_info from sensor_register_info */
+            memset(&sensor_board_info, 0, sizeof(sensor_board_info));
+            memcpy(sensor_board_info.type, reg_info->i2c.type,
+                   sizeof(sensor_board_info.type));
+            sensor_board_info.addr = reg_info->i2c.addr;
+
+            pr_info("*** subdev_sensor_ops_ioctl: request sensor=%s addr=0x%02x adapter=%d ***\n",
+                    sensor_board_info.type, sensor_board_info.addr, i2c_adapter_num);
+
+            /* Stock: isp_i2c_new_subdev_board returns the SUBDEV, not client */
+            sensor_sd = isp_i2c_new_subdev_board(adapter, &sensor_board_info);
+            i2c_put_adapter(adapter);
+
+            if (!sensor_sd || (uintptr_t)sensor_sd >= 0xfffff001) {
+                pr_err("Failed to acquire subdev %s, deferring probe\n",
+                       reg_info->i2c.type);
+                return -ENODEV;
+            }
+
+            /* Stock: $s3_2 = *($s2_1 + host_priv_offset) - get sensor from subdev */
+            sensor = (struct tx_isp_sensor *)tx_isp_get_subdev_hostdata(sensor_sd);
+        } else {
+            pr_err("%s[%d] the type of sensor SBUS hasn't been defined.\n",
+                   __func__, __LINE__);
+            return -EINVAL;
+        }
+
+        if (!sensor) {
+            pr_err("subdev_sensor_ops_ioctl: sensor not found in subdev hostdata\n");
+            if (sensor_sd && sensor_sd->ops) {
+                pr_info("  sd->ops=%p core=%p sensor=%p\n",
+                        sensor_sd->ops, sensor_sd->ops->core,
+                        sensor_sd->ops->sensor);
+            }
+            pr_info("  sd->host_priv=%p sd->dev_priv=%p\n",
+                    sensor_sd ? sensor_sd->host_priv : NULL,
+                    sensor_sd ? sensor_sd->dev_priv : NULL);
+            return -ENODEV;
+        }
+
+        pr_info("REGISTER: sensor=%p sd=%p video.attr=%p video.mbus.code=0x%x\n",
+                sensor, sensor_sd, sensor->video.attr, sensor->video.mbus.code);
+        pr_info("REGISTER: offsetof(tx_isp_sensor, video.attr)=%zu sizeof(tx_isp_subdev)=%zu sizeof(info)=%zu\n",
+                offsetof(struct tx_isp_sensor, video) + offsetof(struct tx_isp_video_in, attr),
+                sizeof(struct tx_isp_subdev),
+                sizeof(struct tx_isp_sensor_register_info));
+        /* HEXDUMP: Dump 64 bytes around video.attr to see what's actually there */
+        {
+            unsigned char *base = (unsigned char *)sensor;
+            size_t attr_off = offsetof(struct tx_isp_sensor, video) + offsetof(struct tx_isp_video_in, attr);
+            size_t dump_start = (attr_off > 32) ? attr_off - 32 : 0;
+            pr_info("REGISTER: HEXDUMP from offset %zu (attr at %zu):\n", dump_start, attr_off);
+            print_hex_dump(KERN_INFO, "  sensor+: ", DUMP_PREFIX_OFFSET, 16, 4,
+                           base + dump_start, 64, false);
+            pr_info("REGISTER: video starts at offset %zu, mbus at +0, mbus_change at +%zu, attr at +%zu\n",
+                    offsetof(struct tx_isp_sensor, video),
+                    offsetof(struct tx_isp_video_in, mbus_change),
+                    offsetof(struct tx_isp_video_in, attr));
+            pr_info("REGISTER: sizeof(v4l2_mbus_framefmt)=%zu sizeof(tx_isp_video_in)=%zu\n",
+                    sizeof(struct v4l2_mbus_framefmt), sizeof(struct tx_isp_video_in));
+        }
+
+        /* Stock: memcpy($s3_2 + info_offset, arg3, 0x50) */
+        /* Copy sensor_register_info into sensor->info */
+        memcpy(&sensor->info, reg_info, sizeof(struct tx_isp_sensor_register_info));
+
+        /* Stock: Call g_chip_ident to validate sensor */
+        if (sensor_sd->ops && sensor_sd->ops->core &&
+            sensor_sd->ops->core->g_chip_ident) {
+            ret = sensor_sd->ops->core->g_chip_ident(sensor_sd, &sensor_sd->chip);
+            if (ret != 0) {
+                pr_err("g_chip_ident failed for %s: %d\n",
+                       sensor->info.name, ret);
+                /* Stock: cleanup - unregister i2c device on failure */
+                if (reg_info->cbus_type == TX_SENSOR_CONTROL_INTERFACE_I2C) {
+                    struct i2c_client *fail_client =
+                        (struct i2c_client *)tx_isp_get_subdevdata(sensor_sd);
+                    if (fail_client) {
+                        struct i2c_adapter *fail_adapter = fail_client->adapter;
+                        if (fail_adapter)
+                            i2c_put_adapter(fail_adapter);
+                        i2c_unregister_device(fail_client);
+                    }
+                }
+                tx_isp_subdev_deinit(sensor_sd);
+                return -ENODEV;
+            }
+        }
+
+        /* Stock: Link sensor into VIN sensor list */
+        pr_info("Registered sensor subdevice %s\n", sensor_sd->chip.name);
+
+        /* Register with ISP framework */
+        ret = tx_isp_register_sensor_subdev(sensor_sd, sensor);
+        if (!ret)
+            current_sensor_index = 0;
+        return ret;
+    }
+
+    case TX_ISP_EVENT_SENSOR_RELEASE: {
+        struct tx_isp_subdev *sensor_sd;
+
+        sensor_sd = isp_dev ? tx_isp_resolve_registered_sensor_subdev(isp_dev) : NULL;
+        current_sensor_index = -1;
+        if (!sensor_sd)
+            return 0;
+        return tx_isp_unregister_sensor_subdev(sensor_sd);
+    }
+
+    case TX_ISP_EVENT_SENSOR_ENUM_INPUT:
+        if (!arg)
+            return -EINVAL;
+        return (*(u32 *)arg == 0 && sensor_count > 0) ? 0 : -EINVAL;
+
+    case TX_ISP_EVENT_SENSOR_GET_INPUT:
+        if (!arg)
+            return -EINVAL;
+        if (current_sensor_index < 0 && sensor_count > 0)
+            current_sensor_index = 0;
+        *(u32 *)arg = (current_sensor_index >= 0) ? current_sensor_index : 0xffffffff;
+        return 0;
+
+    case TX_ISP_EVENT_SENSOR_SET_INPUT: {
+        struct tx_isp_subdev *sensor_sd;
+        struct tx_isp_sensor *sensor;
+        u32 input_index;
+
+        if (!arg || !isp_dev)
+            return -EINVAL;
+
+        input_index = *(u32 *)arg;
+        if (input_index == 0xffffffff)
+            return 0;
+        if (input_index != 0)
+            return -EINVAL;
+
+        sensor_sd = tx_isp_resolve_registered_sensor_subdev(isp_dev);
+        sensor = tx_isp_wait_for_sensor_attachment(sensor_sd,
+                                                   "subdev_sensor_ops_set_input");
+        if (!tx_isp_sensor_has_usable_attachment(sensor))
+            return -ENODEV;
+
+        tx_isp_refresh_sensor_attachment(isp_dev, sensor_sd, sensor,
+                                         "subdev_sensor_ops_set_input");
+        current_sensor_index = 0;
+        return 0;
+    }
+
+    case TX_ISP_EVENT_SENSOR_S_REGISTER:
+    case TX_ISP_EVENT_SENSOR_G_REGISTER: {
+        struct tx_isp_subdev *sensor_sd;
+        struct tx_isp_sensor *sensor;
+
+        if (!isp_dev)
+            return -ENODEV;
+
+        sensor_sd = tx_isp_resolve_registered_sensor_subdev(isp_dev);
+        sensor = tx_isp_wait_for_sensor_attachment(sensor_sd,
+                                                   "subdev_sensor_ops_register_access");
+        if (!tx_isp_sensor_has_usable_attachment(sensor) || !sensor_sd ||
+            !sensor_sd->ops || !sensor_sd->ops->core)
+            return -ENODEV;
+
+        if (cmd == TX_ISP_EVENT_SENSOR_S_REGISTER) {
+            if (!sensor_sd->ops->core->s_register)
+                return -ENOIOCTLCMD;
+            return sensor_sd->ops->core->s_register(sensor_sd, arg);
+        }
+
+        if (!sensor_sd->ops->core->g_register)
+            return -ENOIOCTLCMD;
+        return sensor_sd->ops->core->g_register(sensor_sd, arg);
+    }
+
+    default:
+        return -ENOIOCTLCMD;
+    }
+}
+EXPORT_SYMBOL(subdev_sensor_ops_ioctl);
+
 static void destroy_frame_channel_devices(void);
 int __init tx_isp_subdev_platform_init(void);
 void __exit tx_isp_subdev_platform_exit(void);
@@ -167,7 +483,6 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev);
 void isp_process_frame_statistics(struct tx_isp_dev *dev);
 void tx_isp_enable_irq(struct tx_isp_dev *isp_dev);
 void tx_isp_disable_irq(struct tx_isp_dev *isp_dev);
-int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor *sensor);
 int tisp_init(void *sensor_info, char *param_name);
 int ispcore_link_setup(struct tx_isp_dev* isp_dev, u32 flags);
 /* Minimal netlink scaffolding matching OEM shape */
@@ -270,137 +585,77 @@ int netlink_send_msg(const void *data, size_t len)
 static struct i2c_client *global_sensor_i2c_client = NULL;
 static DEFINE_MUTEX(i2c_client_mutex);
 
-/* MIPS-SAFE I2C infrastructure - Fixed for unaligned access crash */
-static struct i2c_client* isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
-                                                   struct i2c_board_info *info)
+/*
+ * isp_i2c_new_subdev_board - EXACT OEM Binary Ninja reference implementation
+ *
+ * Stock flow:
+ *   private_request_module(1, arg2, arg3)
+ *   if (addr != 0)
+ *     client = private_i2c_new_device(adapter, info)
+ *     if (client != 0)
+ *       dev = client->dev
+ *       if (dev != 0 && try_module_get(dev->driver->owner))
+ *         result = private_i2c_get_clientdata(client)  // returns SUBDEV
+ *         module_put(owner)
+ *         if (result != 0) return result  // <<< RETURNS SUBDEV
+ *     private_i2c_unregister_device(client)
+ *   return 0
+ */
+static struct tx_isp_subdev *isp_i2c_new_subdev_board(struct i2c_adapter *adapter,
+                                                      struct i2c_board_info *info)
 {
-    struct i2c_client *client = NULL;
-    struct device *dev = NULL;
-    struct module *owner = NULL;
-    void *subdev_data = NULL;
+    struct i2c_client *client;
+    struct device *dev;
+    struct module *owner;
+    void *result;
 
-    pr_info("*** isp_i2c_new_subdev_board: MIPS-SAFE implementation - FIXED CRASH ***\n");
-
-    /* MIPS ALIGNMENT CHECK: Validate pointer alignment */
-    if (!adapter || ((uintptr_t)adapter & 0x3) != 0) {
-
-        pr_err("*** MIPS ALIGNMENT ERROR: adapter pointer 0x%p not 4-byte aligned ***\n", adapter);
+    if (!adapter || !info)
         return NULL;
-    }
 
-    if (!info || ((uintptr_t)info & 0x3) != 0) {
-        pr_err("*** MIPS ALIGNMENT ERROR: info pointer 0x%p not 4-byte aligned ***\n", info);
-        return NULL;
-    }
-
-    /* MIPS SAFE: Validate info structure fields */
-    if (!info->type || strlen(info->type) == 0) {
-        pr_err("isp_i2c_new_subdev_board: Invalid device type\n");
-        return NULL;
-    }
-
-    /* Check if we already have a client for this address - MIPS SAFE */
-    mutex_lock(&i2c_client_mutex);
-    if (global_sensor_i2c_client &&
-        ((uintptr_t)global_sensor_i2c_client & 0x3) == 0 &&
-        global_sensor_i2c_client->addr == info->addr) {
-        pr_info("*** REUSING EXISTING I2C CLIENT: %s at 0x%02x (MIPS-safe) ***\n",
-                global_sensor_i2c_client->name, global_sensor_i2c_client->addr);
-        mutex_unlock(&i2c_client_mutex);
-        return global_sensor_i2c_client;
-    }
-    mutex_unlock(&i2c_client_mutex);
-
-    pr_info("Creating I2C subdev: type=%s addr=0x%02x on adapter %s (MIPS-safe)\n",
-            info->type, info->addr, adapter->name);
-
-    /* CRITICAL FIX: Binary Ninja reference implementation - MIPS-SAFE VERSION */
-    /* Binary Ninja: private_request_module(1, arg2, arg3) */
-    pr_info("*** MIPS-SAFE: Requesting sensor module %s ***\n", info->type);
+    /* Stock: private_request_module(1, arg2, arg3) */
     request_module("sensor_%s", info->type);
 
-    /* MIPS SAFE: Binary Ninja: if (zx.d(*(arg2 + 0x16)) != 0) */
-    /* FIXED: Instead of unsafe *(arg2 + 0x16), check info->addr properly */
-    if (info->addr != 0) {
-        pr_info("*** MIPS-SAFE: Valid I2C address 0x%02x, creating device ***\n", info->addr);
+    /* Stock: if (zx.d(*(arg2 + 0x16)) != 0) - check addr is non-zero */
+    if (info->addr == 0)
+        return NULL;
 
-        /* Binary Ninja: void* $v0_1 = private_i2c_new_device(arg1, arg2) */
-        client = i2c_new_device(adapter, info);
+    /* Stock: private_i2c_new_device(adapter, info) */
+    client = i2c_new_device(adapter, info);
+    if (!client)
+        return NULL;
 
-        /* MIPS SAFE: Binary Ninja: if ($v0_1 != 0) */
-        if (client && ((uintptr_t)client & 0x3) == 0) {
-            pr_info("*** MIPS-SAFE: I2C device created successfully at 0x%p ***\n", client);
+    /* Stock: dev = *(client + 0x1c) - get client->dev */
+    dev = &client->dev;
 
-            /* MIPS SAFE: Binary Ninja: void* $v0_2 = *($v0_1 + 0x1c) */
-            /* FIXED: Instead of unsafe *($v0_1 + 0x1c), use proper struct member */
-            dev = &client->dev;
-            if (dev && ((uintptr_t)dev & 0x3) == 0) {
+    /* Stock: if (dev != 0 && try_module_get(dev->driver->owner)) */
+    if (dev->driver && dev->driver->owner &&
+        try_module_get(dev->driver->owner)) {
 
-                /* MIPS SAFE: Get device driver safely */
-                if (dev->driver && ((uintptr_t)dev->driver & 0x3) == 0) {
-                    owner = dev->driver->owner;
+        owner = dev->driver->owner;
 
-                    /* Binary Ninja: if ($v0_2 != 0 && private_try_module_get(*($v0_2 + 0x2c)) != 0) */
-                    /* MIPS SAFE: Instead of unsafe *($v0_2 + 0x2c), use owner directly */
-                    if (owner && try_module_get(owner)) {
-                        pr_info("*** MIPS-SAFE: Module reference acquired for %s ***\n", info->type);
+        /* Stock: result = private_i2c_get_clientdata(client) */
+        result = i2c_get_clientdata(client);
 
-                        /* Binary Ninja: int32_t result = private_i2c_get_clientdata($v0_1) */
-                        /* MIPS SAFE: Get client data safely */
-                        subdev_data = i2c_get_clientdata(client);
+        /* Stock: private_module_put(owner) */
+        module_put(owner);
 
-                        /* Binary Ninja: private_module_put(*(*($v0_1 + 0x1c) + 0x2c)) */
-                        module_put(owner);
-
-                        /* Binary Ninja: if (result != 0) return result */
-                        if (subdev_data) {
-                            pr_info("*** MIPS-SAFE: Sensor subdev data found, device ready ***\n");
-
-                            /* Store globally to prevent duplicates - MIPS SAFE */
-                            mutex_lock(&i2c_client_mutex);
-                            if (!global_sensor_i2c_client) {
-                                global_sensor_i2c_client = client;
-                                pr_info("*** I2C DEVICE READY: %s at 0x%02x (MIPS-safe) ***\n",
-                                        client->name, client->addr);
-                            }
-                            mutex_unlock(&i2c_client_mutex);
-
-                            return client;
-                        } else {
-                            pr_info("*** MIPS-SAFE: No subdev data yet, device created but not probed ***\n");
-                        }
-                    } else {
-                        pr_info("*** MIPS-SAFE: Could not get module reference ***\n");
-                    }
-                } else {
-                    pr_info("*** MIPS-SAFE: Device driver not loaded or not aligned ***\n");
-                }
-            } else {
-                pr_err("*** MIPS ALIGNMENT ERROR: client->dev not properly aligned ***\n");
-            }
-
-            /* Store the client even if probe hasn't completed yet */
+        /* Stock: if (result != 0) return result */
+        if (result) {
+            /* Track the client globally for cleanup */
             mutex_lock(&i2c_client_mutex);
-            if (!global_sensor_i2c_client) {
+            if (!global_sensor_i2c_client)
                 global_sensor_i2c_client = client;
-                pr_info("*** I2C DEVICE STORED: %s at 0x%02x - probe may complete later ***\n",
-                        client->name, client->addr);
-            }
             mutex_unlock(&i2c_client_mutex);
 
-        } else if (!client) {
-            pr_err("*** FAILED TO CREATE I2C DEVICE FOR %s ***\n", info->type);
-        } else {
-            pr_err("*** MIPS ALIGNMENT ERROR: client pointer 0x%p not aligned ***\n", client);
-            i2c_unregister_device(client);
-            client = NULL;
+            pr_info("isp_i2c_new_subdev_board: acquired sensor subdev %p from %s\n",
+                    result, info->type);
+            return (struct tx_isp_subdev *)result;
         }
-    } else {
-        pr_err("*** MIPS-SAFE: Invalid I2C address 0 ***\n");
     }
 
-    /* Binary Ninja: return 0 (NULL for failed client creation) */
-    return client;
+    /* Stock: cleanup on failure - private_i2c_unregister_device(client) */
+    i2c_unregister_device(client);
+    return NULL;
 }
 
 /* MIPS-SAFE I2C communication test - Fixed for unaligned access */
@@ -984,6 +1239,7 @@ extern irqreturn_t ispcore_interrupt_service_routine(int irq, void *dev_id);
 extern int tx_isp_core_ensure_powered(struct tx_isp_dev *isp_dev, const char *origin);
 extern int tx_isp_core_prepare_prestream(struct tx_isp_dev *isp_dev, const char *origin);
 extern struct tx_isp_vic_device *dump_vsd;
+void tx_isp_vic_restore_interrupts(void);
 void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev);
 static void tx_vic_seed_irq_slots(struct tx_isp_vic_device *vic_dev, int irq);
 static int ispvic_frame_channel_qbuf(struct tx_isp_vic_device *vic_dev, void *buffer);
@@ -2072,7 +2328,7 @@ static struct tx_isp_subdev_pad* find_subdev_link_pad(struct tx_isp_dev *isp_dev
         if (!sname)
             sname = sd->module.name ? sd->module.name :
                 (sd->module.miscdev.name ? sd->module.miscdev.name :
-                 (sd->dev && sd->dev->kobj.name ? sd->dev->kobj.name : NULL));
+                 (sd->module.dev && sd->module.dev->kobj.name ? sd->module.dev->kobj.name : NULL));
         if (!sname)
             continue;
 
@@ -2336,7 +2592,7 @@ static int csi_sensor_ops_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_i
     }
 
     /* Cast isp pointer properly */
-    isp_dev = (struct tx_isp_dev *)sd->isp;
+    isp_dev = ourISPdev;
     if (!isp_dev) {
         pr_err("csi_sensor_ops_sync_sensor_attr: Invalid ISP device\n");
         return -EINVAL;
@@ -2384,9 +2640,9 @@ static int csi_device_probe(struct tx_isp_dev *isp_dev)
 
     /* Initialize CSI subdev structure like Binary Ninja tx_isp_subdev_init */
     memset(&csi_dev->sd, 0, sizeof(csi_dev->sd));
-    csi_dev->sd.isp = isp_dev;
+    /* sd.isp removed for ABI - use ourISPdev global */
     csi_dev->sd.ops = NULL;  /* Would be &csi_subdev_ops in full implementation */
-    csi_dev->sd.vin_state = TX_ISP_MODULE_INIT;
+    ourISPdev->vin_state = TX_ISP_MODULE_INIT;
 
     /*
      * The OEM CSI object owns a raw +0x110 sensor-attr cache slot. Seed it
@@ -3429,7 +3685,7 @@ int ispcore_activate_module(struct tx_isp_dev *isp_dev)
 
                         if (subdev_result != 0 && subdev_result != -ENOIOCTLCMD) {
                             isp_printf(2, "Failed to activate %s\n",
-                                    (sd->pdev && sd->pdev->name) ? sd->pdev->name : "unknown");
+                                    sd->module.name ? sd->module.name : "unknown");
                             break;
                         }
                     }
@@ -4084,7 +4340,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         // Check if real sensor is connected and active
         if (ourISPdev && ourISPdev->sensor) {
             active_sensor = ourISPdev->sensor;
-            if (active_sensor && active_sensor->sd.vin_state == TX_ISP_MODULE_RUNNING) {
+            if (active_sensor && ourISPdev->vin_state == TX_ISP_MODULE_RUNNING) {
                 sensor_active = true;
                 pr_debug("Channel %d: Real sensor %s is ACTIVE\n", channel, active_sensor->info.name);
             }
@@ -4262,7 +4518,7 @@ long frame_channel_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         state->state = 4;
 
         if (!state->capture_active && ourISPdev && ourISPdev->sensor &&
-            ourISPdev->sensor->sd.vin_state == TX_ISP_MODULE_RUNNING) {
+            ourISPdev->vin_state == TX_ISP_MODULE_RUNNING) {
             state->capture_active = true;
             pr_info("Channel %d: capture_active enabled via running sensor pipeline\n",
                     channel);
@@ -4668,297 +4924,52 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
     pr_info("ISP IOCTL: cmd=0x%x arg=0x%lx\n", cmd, arg);
 
     switch (cmd) {
-    case 0x805056c1: { // TX_ISP_SENSOR_REGISTER - FIXED to actually connect sensor to ISP device
-        char sensor_data[0x50];
-        void **i_2;
-        void *module;
-        void *subdev;
-        void *ops;
-        int (*sensor_func)(void*, int, void*);
-        int result;
-        int final_result = 0;
-        char sensor_name[32];
-        struct registered_sensor *reg_sensor;
-        struct i2c_adapter *i2c_adapter = NULL;
-        struct i2c_board_info board_info;
-        struct i2c_client *client = NULL;
-        struct tx_isp_sensor *sensor = NULL;
-        struct tx_isp_subdev *real_sensor_sd = NULL;
-        struct tx_isp_sensor *real_sensor = NULL;
+	    case 0x805056c1: { // TX_ISP_SENSOR_REGISTER - stock-style subdev walk
+	        char sensor_data[0x50];
+	        char sensor_name[32];
+	        int final_result = 0;
+	        int i;
 
-        pr_info("*** TX_ISP_SENSOR_REGISTER: FIXED TO CREATE ACTUAL SENSOR CONNECTION ***\n");
+	        pr_info("*** TX_ISP_SENSOR_REGISTER: subdev sensor-op walk ***\n");
 
-        /* Binary Ninja: private_copy_from_user(&var_98, arg3, 0x50) */
-        if (copy_from_user(sensor_data, argp, 0x50)) {
-            pr_err("TX_ISP_SENSOR_REGISTER: Failed to copy sensor data\n");
-            return -EFAULT;
-        }
+	        if (copy_from_user(sensor_data, argp, sizeof(sensor_data))) {
+	            pr_err("TX_ISP_SENSOR_REGISTER: Failed to copy sensor data\n");
+	            return -EFAULT;
+	        }
 
-        strncpy(sensor_name, sensor_data, sizeof(sensor_name) - 1);
-        sensor_name[sizeof(sensor_name) - 1] = '\0';
-        pr_info("Sensor register: %s\n", sensor_name);
+	        strncpy(sensor_name, sensor_data, sizeof(sensor_name) - 1);
+	        sensor_name[sizeof(sensor_name) - 1] = '\0';
+	        pr_info("Sensor register request: %s\n", sensor_name);
 
-        /* *** FIXED: Use proper struct member access instead of unsafe offsets *** */
-        pr_info("*** HANDLING SENSOR REGISTRATION WITH SAFE STRUCT ACCESS ***\n");
+	        for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
+	            struct tx_isp_subdev *subdev = isp_dev->subdevs[i];
+	            int ret;
 
-        /* SAFE FIX: Check if subdev_graph is properly initialized */
-        if (!isp_dev || !isp_dev->subdev_graph) {
-            pr_err("TX_ISP_SENSOR_REGISTER: Invalid ISP device structure\n");
-            return -ENODEV;
-        }
+	            if (!subdev || !subdev->ops || !subdev->ops->sensor ||
+	                !subdev->ops->sensor->ioctl)
+	                continue;
 
-        /* SAFE FIX: Use proper struct member instead of raw pointer arithmetic */
-        /* Loop through subdev_graph array using proper bounds */
-        int graph_index;
-        for (graph_index = 0; graph_index < ISP_MAX_SUBDEVS; graph_index++) {
-            module = isp_dev->subdev_graph[graph_index];
+	            ret = subdev->ops->sensor->ioctl(subdev,
+	                                           TX_ISP_EVENT_SENSOR_REGISTER,
+	                                           sensor_data);
+	            if (ret && ret != -ENOIOCTLCMD)
+	                return ret;
+	        }
 
-            /* SAFE FIX: Validate module pointer before accessing */
-            if (module == NULL) {
-                continue; /* Skip empty slots */
-            }
+	        if (isp_dev->state >= 1 && isp_dev->state < 3 &&
+	            isp_dev->sensor && tx_isp_sensor_has_usable_attachment(isp_dev->sensor)) {
+	            int activate_ret;
 
-            if ((uintptr_t)module >= 0xfffff001) {
-                pr_err("TX_ISP_SENSOR_REGISTER: Invalid module pointer %p at index %d\n", module, graph_index);
-                continue;
-            }
+	            pr_info("*** TX_ISP_SENSOR_REGISTER: sensor published after ISP init, retrying activation (state=%d) ***\n",
+	                    isp_dev->state);
+	            activate_ret = tx_isp_ispcore_activate_module_complete(isp_dev);
+	            if (activate_ret && activate_ret != -ENOIOCTLCMD)
+	                pr_warn("*** TX_ISP_SENSOR_REGISTER: deferred activation returned %d ***\n",
+	                        activate_ret);
+	        }
 
-            /* SAFE FIX: Instead of unsafe offset access, check if we have sensor registration capability */
-            /* This is where we would normally access the module's subdev and ops */
-            /* For now, we'll handle sensor registration more directly through our registered sensor system */
-
-            /* Try to call a sensor function if this module supports it */
-            /* This replaces the complex Binary Ninja pointer traversal with safer logic */
-
-            pr_info("Checking module at index %d: %p\n", graph_index, module);
-
-            /* SAFE: Instead of complex pointer dereferencing, we'll use a simpler approach */
-            /* Check if this might be a sensor-related module by trying to call it */
-            if (module) {
-                /* Simplified sensor registration call - much safer than Binary Ninja approach */
-                final_result = 0; /* Assume success for direct registration */
-
-                pr_info("Processed sensor registration via direct ISP device integration\n");
-                break; /* Success - exit loop */
-            }
-        }
-
-        pr_info("Sensor registration complete, final_result=0x%x\n", final_result);
-
-        /* *** CRITICAL: Add sensor to enumeration list AND create actual sensor connection *** */
-        if (final_result == 0 && sensor_name[0] != '\0') {
-            pr_info("*** ADDING SUCCESSFULLY REGISTERED SENSOR TO LIST: %s ***\n", sensor_name);
-
-            /* Add to our sensor enumeration list */
-            reg_sensor = kzalloc(sizeof(struct registered_sensor), GFP_KERNEL);
-            if (reg_sensor) {
-                strncpy(reg_sensor->name, sensor_name, sizeof(reg_sensor->name) - 1);
-                reg_sensor->name[sizeof(reg_sensor->name) - 1] = '\0';
-
-                mutex_lock(&sensor_list_mutex);
-                reg_sensor->index = sensor_count++;
-                list_add_tail(&reg_sensor->list, &sensor_list);
-                mutex_unlock(&sensor_list_mutex);
-
-                pr_info("*** SENSOR ADDED TO LIST: index=%d name=%s ***\n",
-                       reg_sensor->index, reg_sensor->name);
-            }
-
-            /* *** CRITICAL: Create I2C device for sensor *** */
-            pr_info("*** CREATING I2C DEVICE FOR SENSOR %s ***\n", sensor_name);
-
-            /* Get I2C adapter - try i2c-0 first */
-            i2c_adapter = i2c_get_adapter(0);
-            if (!i2c_adapter) {
-                pr_warn("I2C adapter 0 not found, trying adapter 1\n");
-                i2c_adapter = i2c_get_adapter(1);
-            }
-
-            if (i2c_adapter) {
-                /* Set up I2C board info for the sensor */
-                memset(&board_info, 0, sizeof(board_info));
-                strncpy(board_info.type, sensor_name, I2C_NAME_SIZE - 1);
-                board_info.type[I2C_NAME_SIZE - 1] = '\0';
-
-                /* Common sensor I2C addresses - try GC2053 first */
-                if (strncmp(sensor_name, "gc2053", 6) == 0) {
-                    board_info.addr = 0x37; /* GC2053 I2C address */
-                } else if (strncmp(sensor_name, "imx307", 6) == 0) {
-                    board_info.addr = 0x1a; /* IMX307 I2C address */
-                } else {
-                    board_info.addr = 0x37; /* Default address */
-                }
-
-                pr_info("*** CREATING I2C CLIENT: name=%s, addr=0x%x, adapter=%s ***\n",
-                       board_info.type, board_info.addr, i2c_adapter->name);
-
-                /* Create the I2C device */
-                client = isp_i2c_new_subdev_board(i2c_adapter, &board_info);
-                if (client) {
-                    pr_info("*** SUCCESS: I2C CLIENT CREATED - SENSOR PROBE SHOULD BE CALLED! ***\n");
-                    pr_info("*** I2C CLIENT: %s at 0x%x on %s ***\n",
-                           client->name, client->addr, client->adapter->name);
-
-                    /* *** CRITICAL FIX: CREATE ACTUAL SENSOR STRUCTURE AND CONNECT TO ISP *** */
-                    pr_info("*** CREATING ACTUAL SENSOR STRUCTURE FOR %s ***\n", sensor_name);
-
-                    /* SAFE ALLOCATION: Allocate sensor structure with proper error checking */
-                    sensor = kzalloc(sizeof(struct tx_isp_sensor), GFP_KERNEL);
-                    if (!sensor) {
-                        pr_err("*** CRITICAL ERROR: Failed to allocate sensor structure (size=%zu) ***\n", sizeof(struct tx_isp_sensor));
-                        return -ENOMEM;
-                    }
-                    pr_info("*** SENSOR STRUCTURE ALLOCATED: %p (size=%zu bytes) ***\n", sensor, sizeof(struct tx_isp_sensor));
-
-                    /* SAFE INITIALIZATION: Initialize sensor info first */
-                    memset(&sensor->info, 0, sizeof(sensor->info));
-                    strncpy(sensor->info.name, sensor_name, sizeof(sensor->info.name) - 1);
-                    sensor->info.name[sizeof(sensor->info.name) - 1] = '\0';
-
-                    /* SAFE ALLOCATION: Allocate sensor attributes with proper error checking */
-                    sensor->video.attr = kzalloc(sizeof(struct tx_isp_sensor_attribute), GFP_KERNEL);
-                    if (!sensor->video.attr) {
-                        pr_err("*** CRITICAL ERROR: Failed to allocate sensor attributes (size=%zu) ***\n", sizeof(struct tx_isp_sensor_attribute));
-                        kfree(sensor);
-                        return -ENOMEM;
-                    }
-                    pr_info("*** SENSOR ATTRIBUTES ALLOCATED: %p (size=%zu bytes) ***\n", sensor->video.attr, sizeof(struct tx_isp_sensor_attribute));
-
-                    /* SAFE INITIALIZATION: Set up basic sensor attributes for GC2053 */
-                    if (strncmp(sensor_name, "gc2053", 6) == 0) {
-                        sensor->video.attr->chip_id = 0x2053;
-                        sensor->video.attr->total_width = 0x44c * 2;
-                        sensor->video.attr->total_height = 0x58a;
-                        sensor->video.attr->dbus_type = TX_SENSOR_DATA_INTERFACE_MIPI; // MIPI interface (correct value from enum)
-                        sensor->video.attr->data_type = TX_SENSOR_DATA_TYPE_LINEAR;
-                        sensor->video.attr->integration_time = 1000;
-                        sensor->video.attr->max_again = 444864;
-                        sensor->video.attr->max_dgain = 0;
-                        sensor->video.attr->min_integration_time = 1;
-                        sensor->video.attr->min_integration_time_native = 4;
-                        sensor->video.attr->max_integration_time_native = 0x58a - 8;
-                        sensor->video.attr->integration_time_limit = 0x58a - 8;
-                        sensor->video.attr->max_integration_time = 0x58a - 8;
-                        sensor->video.attr->integration_time_apply_delay = 2;
-                        sensor->video.attr->again_apply_delay = 2;
-                        sensor->video.attr->dgain_apply_delay = 2;
-                        sensor->video.attr->one_line_expr_in_us = 28;
-                        sensor->video.attr->name = sensor_name; /* Safe pointer assignment */
-                        sensor->video.attr->mipi.mode = SENSOR_MIPI_OTHER_MODE;
-                        sensor->video.attr->mipi.clk = 600;
-                        sensor->video.attr->mipi.lans = 2;
-                        sensor->video.attr->mipi.settle_time_apative_en = 1;
-                        sensor->video.attr->mipi.image_twidth = 1920;
-                        sensor->video.attr->mipi.image_theight = 1080;
-                        sensor->video.attr->mipi.mipi_sc.sensor_csi_fmt = TX_SENSOR_RAW10;
-                        sensor->video.attr->mipi.mipi_sc.hcrop_diff_en = 0;
-                        sensor->video.attr->mipi.mipi_sc.mipi_vcomp_en = 0;
-                        sensor->video.attr->mipi.mipi_sc.mipi_hcomp_en = 0;
-                        sensor->video.attr->mipi.mipi_sc.line_sync_mode = 0;
-                        sensor->video.attr->mipi.mipi_sc.work_start_flag = 0;
-                        sensor->video.attr->mipi.mipi_sc.data_type_en = 0;
-                        sensor->video.attr->mipi.mipi_sc.data_type_value = 0;
-                        sensor->video.attr->mipi.mipi_sc.del_start = 0;
-                        sensor->video.attr->mipi.mipi_sc.sensor_fid_mode = 0;
-                        sensor->video.attr->mipi.mipi_sc.sensor_frame_mode = TX_SENSOR_DEFAULT_FRAME_MODE;
-                        sensor->video.attr->mipi.mipi_sc.sensor_mode = TX_SENSOR_DEFAULT_MODE;
-                        pr_info("*** GC2053 SENSOR ATTRIBUTES CONFIGURED: %dx%d output (MIPI interface) ***\n",
-                                sensor->video.attr->total_width, sensor->video.attr->total_height);
-                    }
-
-                    /* SAFE INITIALIZATION: Initialize subdev structure */
-                    memset(&sensor->sd, 0, sizeof(sensor->sd));
-                    sensor->sd.isp = (void *)isp_dev;
-                    sensor->sd.vin_state = TX_ISP_MODULE_INIT;
-                    sensor->index = 0;
-                    sensor->type = 0;
-                    INIT_LIST_HEAD(&sensor->list);
-
-                    /* *** CRITICAL FIX: SET UP SENSOR SUBDEV OPS STRUCTURE *** */
-                    pr_info("*** CRITICAL: SETTING UP SENSOR SUBDEV OPS STRUCTURE ***\n");
-                    sensor->sd.ops = &sensor_subdev_ops;
-                    pr_info("*** SENSOR SUBDEV OPS CONFIGURED: core=%p, video=%p, s_stream=%p ***\n",
-                            sensor->sd.ops->core, sensor->sd.ops->video,
-                            sensor->sd.ops->video ? sensor->sd.ops->video->s_stream : NULL);
-
-                    pr_info("*** SENSOR SUBDEV INITIALIZED WITH WORKING OPS STRUCTURE ***\n");
-
-                    /* SAFE CONNECTION: Verify ISP device before connecting */
-                    if (!ourISPdev) {
-                        pr_err("*** CRITICAL ERROR: ourISPdev is NULL! ***\n");
-                        kfree(sensor->video.attr);
-                        kfree(sensor);
-                        return -ENODEV;
-                    }
-
-                    if (!ourISPdev->sensor) {
-                        real_sensor_sd = tx_isp_get_sensor_subdev(isp_dev);
-                        if (real_sensor_sd) {
-                            real_sensor = tx_isp_recover_sensor_from_subdev(real_sensor_sd,
-                                                                            "TX_ISP_SENSOR_REGISTER");
-                            pr_info("*** FOUND PROBED SENSOR SUBDEV: sd=%p sensor=%p ***\n",
-                                    real_sensor_sd, real_sensor);
-                        }
-
-                        if (real_sensor) {
-                            pr_info("*** REGISTERING PROBED SENSOR WITH ISP FRAMEWORK ***\n");
-                            tx_isp_register_sensor_subdev(real_sensor_sd, real_sensor);
-                        }
-                    }
-
-                    if (ourISPdev->sensor) {
-                        /* *** CRITICAL FIX: DO NOT OVERWRITE REAL SENSOR WITH DUMMY STRUCTURE *** */
-                        pr_info("*** SKIPPING SENSOR CONNECTION - REAL SENSOR ALREADY CONNECTED ***\n");
-                        pr_info("Current: ourISPdev=%p, ourISPdev->sensor=%p (REAL SENSOR)\n",
-                                ourISPdev, ourISPdev->sensor);
-                        pr_info("Dummy: sensor=%p (%s) - NOT CONNECTING TO PRESERVE REAL SENSOR\n",
-                                sensor, sensor->info.name);
-                        pr_info("*** REAL SENSOR PRESERVED - FRAME SYNC WILL WORK CORRECTLY ***\n");
-
-                        /* Free the dummy sensor structure since we're not using it */
-                        kfree(sensor->video.attr);
-                        kfree(sensor);
-                        sensor = (struct tx_isp_sensor *)ourISPdev->sensor; /* Use real sensor for remaining operations */
-
-                        /* SAFE UPDATE: Update registry with actual subdev pointer */
-                        if (reg_sensor) {
-                            reg_sensor->subdev = stored_sensor_ops.sensor_sd ?
-                                stored_sensor_ops.sensor_sd : &sensor->sd;
-                            pr_info("*** SENSOR REGISTRY UPDATED ***\n");
-                        }
-                    } else {
-                        pr_warn("*** NO USABLE ISP SENSOR ATTACHMENT FROM PROBED SUBDEV - USING FALLBACK SENSOR STRUCTURE ***\n");
-                        ourISPdev->sensor = sensor;
-                        ourISPdev->sensor_sd = &sensor->sd;
-                        strncpy(ourISPdev->sensor_name, sensor_name,
-                                sizeof(ourISPdev->sensor_name) - 1);
-                        ourISPdev->sensor_name[sizeof(ourISPdev->sensor_name) - 1] = '\0';
-
-                        if (sensor->video.attr) {
-                            int sync_ret = tx_isp_sync_sensor_attr(ourISPdev, sensor->video.attr);
-
-                            if (sync_ret)
-                                pr_warn("*** FALLBACK SENSOR ATTACH: initial attr sync returned %d ***\n",
-                                        sync_ret);
-                        }
-
-                        if (reg_sensor) {
-                            reg_sensor->subdev = &sensor->sd;
-                            pr_info("*** SENSOR REGISTRY UPDATED WITH FALLBACK SENSOR ***\n");
-                        }
-                    }
-                } else {
-                    pr_err("*** FAILED TO CREATE I2C CLIENT FOR %s ***\n", sensor_name);
-                }
-
-                i2c_put_adapter(i2c_adapter);
-            } else {
-                pr_err("*** NO I2C ADAPTER AVAILABLE FOR SENSOR %s ***\n", sensor_name);
-            }
-        }
-
-        return final_result;
-    }
+	        return final_result;
+	    }
     case 0xc050561a: { // TX_ISP_SENSOR_ENUM_INPUT - Enumerate sensors
         struct sensor_enum_data {
             int index;
@@ -4990,12 +5001,12 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
         memset(input_data.name, 0, sizeof(input_data.name));
 
         if (!isp_dev->sensor || isp_dev->sensor->info.name[0] == '\0') {
-            enum_sensor_sd = tx_isp_get_sensor_subdev(isp_dev);
+            enum_sensor_sd = tx_isp_resolve_registered_sensor_subdev(isp_dev);
             if (enum_sensor_sd)
-                enum_sensor = tx_isp_recover_sensor_from_subdev(enum_sensor_sd,
+                enum_sensor = tx_isp_wait_for_sensor_attachment(enum_sensor_sd,
                                                                 "TX_ISP_SENSOR_ENUM_INPUT");
 
-            if (enum_sensor && enum_sensor->info.name[0] != '\0') {
+            if (tx_isp_sensor_has_usable_attachment(enum_sensor)) {
                 tx_isp_refresh_sensor_attachment(isp_dev, enum_sensor_sd, enum_sensor,
                                                  "SENSOR ENUM");
                 pr_info("*** SENSOR ENUM: restored sensor pointer from probed subdev (%s) ***\n",
@@ -5061,7 +5072,9 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             /* Binary Ninja: Check if subdev has sensor ops */
             if (subdev->ops && subdev->ops->sensor && subdev->ops->sensor->ioctl) {
                 /* Binary Ninja: Call sensor ioctl with input index */
-                ret = subdev->ops->sensor->ioctl(subdev, cmd, &input_index);
+	                ret = subdev->ops->sensor->ioctl(subdev,
+	                                                 TX_ISP_EVENT_SENSOR_SET_INPUT,
+	                                                 &input_index);
 
                 if (ret == 0) {
                     /* Success - continue to next subdev */
@@ -5103,7 +5116,9 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             /* Binary Ninja: Check if subdev has sensor ops */
             if (subdev->ops && subdev->ops->sensor && subdev->ops->sensor->ioctl) {
                 /* Binary Ninja: Call sensor ioctl with release data */
-                ret = subdev->ops->sensor->ioctl(subdev, cmd, &unreg_info);
+	                ret = subdev->ops->sensor->ioctl(subdev,
+	                                                 TX_ISP_EVENT_SENSOR_RELEASE,
+	                                                 &unreg_info);
 
                 if (ret == 0) {
                     /* Success - continue to next subdev */
@@ -5147,7 +5162,9 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             /* Binary Ninja: Check if subdev has sensor ops */
             if (subdev->ops && subdev->ops->sensor && subdev->ops->sensor->ioctl) {
                 /* Binary Ninja: Call sensor ioctl with register write data */
-                ret = subdev->ops->sensor->ioctl(subdev, cmd, &reg_write);
+	                ret = subdev->ops->sensor->ioctl(subdev,
+	                                                 TX_ISP_EVENT_SENSOR_S_REGISTER,
+	                                                 &reg_write);
 
                 if (ret == 0) {
                     /* Success - continue to next subdev */
@@ -5188,7 +5205,9 @@ static long tx_isp_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned 
             /* Binary Ninja: Check if subdev has sensor ops */
             if (subdev->ops && subdev->ops->sensor && subdev->ops->sensor->ioctl) {
                 /* Binary Ninja: Call sensor ioctl with register read data */
-                ret = subdev->ops->sensor->ioctl(subdev, cmd, &reg_read);
+	                ret = subdev->ops->sensor->ioctl(subdev,
+	                                                 TX_ISP_EVENT_SENSOR_G_REGISTER,
+	                                                 &reg_read);
 
                 if (ret == 0) {
                     /* Success - continue to next subdev */
@@ -5746,7 +5765,7 @@ static int tx_isp_init(void)
 
         /* CRITICAL: Set up VIN subdev with proper ops structure */
         vin_device->sd.ops = &vin_subdev_ops;
-        vin_device->sd.isp = (void *)ourISPdev;
+        /* sd.isp removed for ABI - use ourISPdev global */
 
         pr_info("*** VIN SUBDEV OPS CONFIGURED: core=%p, video=%p, s_stream=%p ***\n",
                 vin_device->sd.ops->core, vin_device->sd.ops->video,
@@ -5835,7 +5854,7 @@ static int tx_isp_init(void)
 
         /* Set up CSI subdev with ops pointing to csi_subdev_ops */
         csi_dev->sd.ops = &csi_subdev_ops;
-        csi_dev->sd.isp = (void*)ourISPdev;
+        /* sd.isp removed for ABI - use ourISPdev global */
 
         pr_info("*** CSI SUBDEV OPS CONFIGURED: video=%p, s_stream=%p ***\n",
                 csi_dev->sd.ops->video,
@@ -5931,7 +5950,7 @@ static int tx_isp_init(void)
 
         /* Set up CSI subdev with ops pointing to csi_subdev_ops */
         csi_dev->sd.ops = &csi_subdev_ops;
-        csi_dev->sd.isp = (void*)ourISPdev;
+        /* sd.isp removed for ABI - use ourISPdev global */
 
         pr_info("*** REGISTERED CSI SUBDEV AT INDEX 1 WITH VIDEO OPS ***\n");
         pr_info("CSI subdev: %p, ops: %p, video: %p, s_stream: %p\n",
@@ -5997,7 +6016,11 @@ static int tx_isp_init(void)
      */
     pr_info("*** SKIPPING LATE DUPLICATE IRQ REGISTRATION - USING SUBDEV-INIT OWNERSHIP ***\n");
 
-    ourISPdev->isp_irq = ourISPdev->sd.irq_info.irq;
+    /* ABI fix: irq_info was moved out of tx_isp_subdev.
+     * The core subdev's IRQ is now in sd.irqdev.irq (set by tx_isp_subdev_init).
+     * Copy it to sd_irq_info for the IRQ dispatch functions. */
+    ourISPdev->sd_irq_info.irq = ourISPdev->sd.irqdev.irq;
+    ourISPdev->isp_irq = ourISPdev->sd_irq_info.irq;
     ourISPdev->irq_enable_func = tx_isp_enable_irq;
     ourISPdev->irq_disable_func = tx_isp_disable_irq;
 
@@ -6015,7 +6038,9 @@ static int tx_isp_init(void)
     if (ourISPdev->vic_dev) {
         struct tx_isp_vic_device *vic_dev = (struct tx_isp_vic_device *)ourISPdev->vic_dev;
 
-        ourISPdev->isp_irq2 = vic_dev->sd.irq_info.irq;
+        /* ABI fix: copy IRQ from subdev irqdev to wrapper sd_irq_info */
+        vic_dev->sd_irq_info.irq = vic_dev->sd.irqdev.irq;
+        ourISPdev->isp_irq2 = vic_dev->sd_irq_info.irq;
         if (ourISPdev->isp_irq2 > 0) {
             tx_vic_seed_irq_slots(vic_dev, ourISPdev->isp_irq2);
             /* NOTE: Do NOT call disable_irq() here — tx_isp_request_irq()
@@ -6237,7 +6262,7 @@ int vic_video_s_stream(struct tx_isp_subdev *sd, int enable)
         return -EINVAL;
     }
 
-    isp_dev = (struct tx_isp_dev *)sd->isp;
+    isp_dev = ourISPdev;
     if (!isp_dev || !isp_dev->vic_dev) {
         return -EINVAL;
     }
@@ -6296,7 +6321,7 @@ static int vic_sensor_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void
         pr_info("*** vic_sensor_ops_ioctl: IOCTL 0x%x - CALLING tx_isp_vic_start ***\n", cmd);
 
         /* Get ISP device to access sensor */
-        isp_dev = (struct tx_isp_dev *)sd->isp;
+        isp_dev = ourISPdev;
         if (!isp_dev || !isp_dev->sensor || !isp_dev->sensor->video.attr) {
             pr_err("vic_sensor_ops_ioctl: No sensor available for VIC start\n");
             return -ENODEV;
@@ -6535,9 +6560,9 @@ static void tx_vic_seed_irq_slots(struct tx_isp_vic_device *vic_dev, int irq)
      * struct tx_isp_irq_info. Writing function pointers there corrupts the VIC
      * object and causes stream-on branches into data (epc == vic_dev + 0x90).
      */
-    vic_dev->sd.irq_info.irq = irq;
-    vic_dev->sd.irq_info.handler = (void *)tx_vic_irq_slot_enable;
-    vic_dev->sd.irq_info.data = (void *)tx_vic_irq_slot_disable;
+    vic_dev->sd_irq_info.irq = irq;
+    vic_dev->sd_irq_info.handler = (void *)tx_vic_irq_slot_enable;
+    vic_dev->sd_irq_info.data = (void *)tx_vic_irq_slot_disable;
     vic_dev->irq = irq;
     vic_dev->irq_number = irq;
 }
@@ -6555,15 +6580,16 @@ void tx_vic_enable_irq(struct tx_isp_vic_device *vic_dev)
     }
 
     spin_lock_irqsave(tx_vic_raw_irq_lock(active_vic), flags);
+	tx_isp_vic_restore_interrupts();
 
     if (tx_vic_raw_irq_flag_get(active_vic) == 0) {
         tx_vic_raw_irq_flag_set(active_vic, 1);
         irq = active_vic->irq_number ? active_vic->irq_number : active_vic->irq;
         tx_vic_seed_irq_slots(active_vic, irq);
         pr_info("tx_vic_enable_irq: enabling VIC IRQ %d\n", irq);
-        tx_vic_irq_slot_enable(&active_vic->sd.irq_info);
+        tx_vic_irq_slot_enable(&active_vic->sd_irq_info);
     } else {
-        pr_info("tx_vic_enable_irq: flag already set, skipping\n");
+	    pr_info("tx_vic_enable_irq: flag already set, VIC regs restored\n");
     }
 
     spin_unlock_irqrestore(tx_vic_raw_irq_lock(active_vic), flags);
@@ -6585,7 +6611,7 @@ void tx_vic_disable_irq(struct tx_isp_vic_device *vic_dev)
         tx_vic_raw_irq_flag_set(active_vic, 0);
         irq = active_vic->irq_number ? active_vic->irq_number : active_vic->irq;
         tx_vic_seed_irq_slots(active_vic, irq);
-        tx_vic_irq_slot_disable(&active_vic->sd.irq_info);
+        tx_vic_irq_slot_disable(&active_vic->sd_irq_info);
     }
 
     spin_unlock_irqrestore(tx_vic_raw_irq_lock(active_vic), flags);
@@ -6647,13 +6673,13 @@ static struct tx_isp_dev *tx_isp_irq_resolve_isp_dev(void *dev_id,
 	if (!ourISPdev)
 		return NULL;
 
-	if (dev_id == &ourISPdev->sd.irq_info) {
+	if (dev_id == &ourISPdev->sd_irq_info) {
 		if (owner_sd)
 			*owner_sd = &ourISPdev->sd;
 		return ourISPdev;
 	}
 
-	if (ourISPdev->vic_dev && dev_id == &ourISPdev->vic_dev->sd.irq_info) {
+	if (ourISPdev->vic_dev && dev_id == &ourISPdev->vic_dev->sd_irq_info) {
 		if (owner_sd)
 			*owner_sd = &ourISPdev->vic_dev->sd;
 		return ourISPdev;
@@ -7435,7 +7461,7 @@ static int sensor_subdev_core_init(struct tx_isp_subdev *sd, int enable)
 
         if (ret < 0 && enable) {
             /* If sensor init failed, rollback ISP state */
-            sd->vin_state = TX_ISP_MODULE_SLAKE;
+            ourISPdev->vin_state = TX_ISP_MODULE_SLAKE;
             pr_err("*** Sensor init failed, rolled back ISP state ***\n");
         }
     } else {
@@ -7561,7 +7587,7 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
         if (ret == 0 || ret == -0x203) {
             if (enable) {
                 /* CRITICAL: Set sensor subdev state to RUNNING (this is what gets checked!) */
-                sd->vin_state = TX_ISP_MODULE_RUNNING;
+                ourISPdev->vin_state = TX_ISP_MODULE_RUNNING;
                 pr_info("*** CRITICAL: SENSOR SUBDEV STATE SET TO RUNNING (5) ***\n");
 
                 /* CRITICAL FIX: SIMPLIFIED VIN S_STREAM CALL - NO RECURSION */
@@ -7591,7 +7617,7 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
 
             } else {
                 /* ISP's work when disabling streaming */
-                sd->vin_state = TX_ISP_MODULE_INIT;
+                ourISPdev->vin_state = TX_ISP_MODULE_INIT;
 
                 /* CRITICAL FIX: Simplified VIN streaming stop */
                 pr_info("*** CALLING VIN_S_STREAM TO STOP ***\n");
@@ -7628,6 +7654,7 @@ static int sensor_subdev_video_s_stream(struct tx_isp_subdev *sd, int enable)
 int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor *sensor)
 {
     struct registered_sensor *reg_sensor;
+    int subdev_slot;
     int i;
     int ret = 0;
 
@@ -7637,42 +7664,32 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
     }
 
     mutex_lock(&sensor_register_mutex);
+    registered_sensor_subdev = sd;
 
     pr_info("=== KERNEL SENSOR REGISTRATION ===\n");
     pr_info("Sensor: %s (subdev=%p)\n",
             (sensor && sensor->info.name[0]) ? sensor->info.name : "(unnamed)", sd);
 
-    /* *** CRITICAL FIX: STORE ORIGINAL OPS BEFORE OVERWRITING *** */
-    if (sd->ops == &sensor_subdev_ops) {
-        pr_info("*** SENSOR SUBDEV ALREADY WRAPPED - SKIPPING OPS REWRITE ***\n");
-        if (!stored_sensor_ops.sensor_sd)
-            stored_sensor_ops.sensor_sd = sd;
-    } else if (sd->ops) {
-        stored_sensor_ops.original_ops = sd->ops;
-        stored_sensor_ops.sensor_sd = sd;
-        pr_info("*** STORED ORIGINAL SENSOR OPS FOR DELEGATION ***\n");
-        pr_info("*** DEBUG: original_ops=%p ***\n", stored_sensor_ops.original_ops);
-        pr_info("*** DEBUG: original_ops->core=%p ***\n", stored_sensor_ops.original_ops->core);
-        pr_info("*** DEBUG: original_ops->video=%p ***\n", stored_sensor_ops.original_ops->video);
-        pr_info("*** DEBUG: original_ops->sensor=%p ***\n", stored_sensor_ops.original_ops->sensor);
-        if (stored_sensor_ops.original_ops->sensor) {
-            pr_info("*** DEBUG: original_ops->sensor->ioctl=%p ***\n", stored_sensor_ops.original_ops->sensor->ioctl);
-        }
-    }
-
-    /* *** CRITICAL FIX: SET UP PROPER SUBDEV OPS STRUCTURE *** */
-    if (sd->ops != &sensor_subdev_ops) {
-        pr_info("*** CRITICAL: SETTING UP SENSOR SUBDEV OPS STRUCTURE ***\n");
-        sd->ops = &sensor_subdev_ops;
-    }
-    pr_info("Sensor subdev ops setup: core=%p, video=%p, s_stream=%p\n",
-            sd->ops->core, sd->ops->video,
-            sd->ops->video ? sd->ops->video->s_stream : NULL);
+	    pr_info("Sensor subdev ops preserved: core=%p, video=%p, sensor=%p\n",
+	            sd->ops ? sd->ops->core : NULL,
+	            sd->ops ? sd->ops->video : NULL,
+	            sd->ops ? sd->ops->sensor : NULL);
 
     /* *** CRITICAL FIX: IMMEDIATELY CONNECT SENSOR TO ISP DEVICE *** */
     if (ourISPdev) {
         pr_info("*** CRITICAL: CONNECTING SENSOR TO ISP DEVICE ***\n");
         pr_info("Before: ourISPdev->sensor=%p\n", ourISPdev->sensor);
+
+	        subdev_slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
+	        if (subdev_slot < 0) {
+	            pr_err("*** KERNEL SENSOR REGISTRATION: failed to publish sensor subdev '%s' into slot 5+ ***\n",
+	                   sensor->info.name[0] ? sensor->info.name : "(unnamed)");
+	            ret = -ENODEV;
+	            goto err_exit;
+	        }
+
+	        pr_info("*** KERNEL SENSOR REGISTRATION: published sensor subdev '%s' at slot %d ***\n",
+	                sensor->info.name[0] ? sensor->info.name : "(unnamed)", subdev_slot);
 
         if (tx_isp_sensor_has_usable_attachment(sensor)) {
             int sync_ret;
@@ -7691,6 +7708,7 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
             }
             pr_info("After: ourISPdev->sensor=%p (%s)\n", ourISPdev->sensor,
                     sensor->info.name[0] ? sensor->info.name : "(unnamed)");
+	            current_sensor_index = 0;
         } else {
             pr_warn("*** KERNEL SENSOR REGISTRATION: recovered sensor metadata unusable; keeping ISP-owned sensor attachment (sensor=%p attr=%p name=%s dbus=%u lanes=%u) ***\n",
                     sensor,
@@ -7701,16 +7719,16 @@ int tx_isp_register_sensor_subdev(struct tx_isp_subdev *sd, struct tx_isp_sensor
         }
 
         /* Check if any channel is already streaming and set state accordingly */
-        sd->vin_state = TX_ISP_MODULE_INIT;  // Default to INIT
+        ourISPdev->vin_state = TX_ISP_MODULE_INIT;  // Default to INIT
         for (i = 0; i < num_channels; i++) {
             if (frame_channels[i].state.streaming) {
-                sd->vin_state = TX_ISP_MODULE_RUNNING;
+                ourISPdev->vin_state = TX_ISP_MODULE_RUNNING;
                 pr_info("Channel %d already streaming, setting sensor state to RUNNING\n", i);
                 break;
             }
         }
         pr_info("Sensor subdev state initialized to %s\n",
-                sd->vin_state == TX_ISP_MODULE_RUNNING ? "RUNNING" : "INIT");
+                ourISPdev->vin_state == TX_ISP_MODULE_RUNNING ? "RUNNING" : "INIT");
 
         /* Add to sensor enumeration list */
         reg_sensor = kzalloc(sizeof(struct registered_sensor), GFP_KERNEL);
@@ -7783,10 +7801,12 @@ EXPORT_SYMBOL(tx_isp_register_sensor_subdev);
 int tx_isp_unregister_sensor_subdev(struct tx_isp_subdev *sd)
 {
     struct registered_sensor *sensor, *tmp;
+    int i;
 
     mutex_lock(&sensor_register_mutex);
     registered_sensor_subdev = NULL;
     mutex_unlock(&sensor_register_mutex);
+	current_sensor_index = -1;
 
     mutex_lock(&sensor_list_mutex);
     list_for_each_entry_safe(sensor, tmp, &sensor_list, list) {
@@ -7797,6 +7817,17 @@ int tx_isp_unregister_sensor_subdev(struct tx_isp_subdev *sd)
         }
     }
     mutex_unlock(&sensor_list_mutex);
+
+	if (ourISPdev) {
+	    for (i = 5; i < ISP_MAX_SUBDEVS; i++) {
+	        if (ourISPdev->subdevs[i] == sd) {
+	            ourISPdev->subdevs[i] = NULL;
+	            pr_info("*** SENSOR UNREGISTER: cleared subdev slot %d for sd=%p ***\n",
+	                   i, sd);
+	            break;
+	        }
+	    }
+	}
 
     if (ourISPdev && ourISPdev->sensor &&
         &ourISPdev->sensor->sd == sd) {

@@ -552,7 +552,7 @@ int tx_isp_csi_start(struct tx_isp_subdev *sd)
     if (!sd)
         return -EINVAL;
 
-    mutex_lock(&sd->csi_lock);
+    { struct tx_isp_csi_device *__csi = container_of(sd, struct tx_isp_csi_device, sd); mutex_lock(&__csi->mutex); };
 
     /* CRITICAL: Register CSI interrupt handler if not already registered */
     static int csi_irq_registered = 0;
@@ -577,7 +577,7 @@ int tx_isp_csi_start(struct tx_isp_subdev *sd)
     pr_info("*** CSI INTERRUPT: CSI started with interrupts enabled (mask=0x%08x) ***\n",
             ~(INT_ERROR | INT_FRAME_DONE));
 
-    mutex_unlock(&sd->csi_lock);
+    { struct tx_isp_csi_device *__csi = container_of(sd, struct tx_isp_csi_device, sd); mutex_unlock(&__csi->mutex); };
     return 0;
 }
 
@@ -587,7 +587,7 @@ int tx_isp_csi_stop(struct tx_isp_subdev *sd)
     if (!sd)
         return -EINVAL;
 
-    mutex_lock(&sd->csi_lock);
+    { struct tx_isp_csi_device *__csi = container_of(sd, struct tx_isp_csi_device, sd); mutex_lock(&__csi->mutex); };
 
     /* Disable CSI */
     csi_write32(CSI_CTRL, 0);
@@ -595,7 +595,7 @@ int tx_isp_csi_stop(struct tx_isp_subdev *sd)
     /* Mask all interrupts */
     csi_write32(CSI_INT_MASK, 0xFFFFFFFF);
 
-    mutex_unlock(&sd->csi_lock);
+    { struct tx_isp_csi_device *__csi = container_of(sd, struct tx_isp_csi_device, sd); mutex_unlock(&__csi->mutex); };
     return 0;
 }
 
@@ -610,7 +610,7 @@ int tx_isp_csi_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *config
     if (config->lane_num < CSI_MIN_LANES || config->lane_num > CSI_MAX_LANES)
         return -EINVAL;
 
-    mutex_lock(&sd->csi_lock);
+    { struct tx_isp_csi_device *__csi = container_of(sd, struct tx_isp_csi_device, sd); mutex_lock(&__csi->mutex); };
 
     /* Configure lane count */
     ctrl = csi_read32(CSI_CTRL);
@@ -626,12 +626,12 @@ int tx_isp_csi_set_format(struct tx_isp_subdev *sd, struct tx_isp_config *config
         ctrl |= CSI_CTRL_LANES_4;
         break;
     default:
-        mutex_unlock(&sd->csi_lock);
+        { struct tx_isp_csi_device *__csi = container_of(sd, struct tx_isp_csi_device, sd); mutex_unlock(&__csi->mutex); };
         return -EINVAL;
     }
     csi_write32(CSI_CTRL, ctrl);
 
-    mutex_unlock(&sd->csi_lock);
+    { struct tx_isp_csi_device *__csi = container_of(sd, struct tx_isp_csi_device, sd); mutex_unlock(&__csi->mutex); };
     return 0;
 }
 
@@ -1158,16 +1158,16 @@ int tx_isp_csi_probe(struct platform_device *pdev)
     old_basic_regs = csi_dev->csi_regs;
     old_wrapper_regs = *csi_wrapper_regs_slot(csi_dev);
 
-    if (sd->regs) {
-        csi_dev->csi_regs = sd->regs;
+    if (sd->base) {
+        csi_dev->csi_regs = sd->base;
         if (ourISPdev)
-            ourISPdev->csi_regs = sd->regs;
+            ourISPdev->csi_regs = sd->base;
     } else {
-        pr_warn("tx_isp_csi_probe: sd->regs is NULL after tx_isp_subdev_init, keeping pre-probe csi_regs=%p\n",
+        pr_warn("tx_isp_csi_probe: sd->base is NULL after tx_isp_subdev_init, keeping pre-probe csi_regs=%p\n",
                 csi_dev->csi_regs);
     }
 
-    *csi_mem_res_slot(csi_dev) = sd->mem_res;
+    *csi_mem_res_slot(csi_dev) = sd->res;
 
     /* Keep the wrapper/+0x13c bank distinct from the basic CSI regs. The
      * OEM probe maps the basic block from the subdev resource, while wrapper

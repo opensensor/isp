@@ -510,7 +510,7 @@ int tx_isp_fs_remove(struct platform_device *pdev)
     }
 
     /* Clean up subdev only if it was initialized */
-    if (fs_dev->subdev.pdev) {
+    if (fs_dev->subdev.module.dev) {
         pr_info("*** tx_isp_fs_remove: Deinitializing subdev ***\n");
         tx_isp_subdev_deinit(&fs_dev->subdev);
     }

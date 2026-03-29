@@ -86,7 +86,7 @@ struct tx_isp_vic_device {
 
 
     /* CRITICAL: cached VIC mappings. The OEM raw +0xb8 slot lives in the
-     * embedded tx_isp_subdev (`sd.regs`), not in these wrapper fields.
+     * embedded tx_isp_subdev (`sd.base`), not in these wrapper fields.
      */
     void __iomem *vic_regs;                     /* Cached primary VIC mapping (0x133e0000) */
     void __iomem *vic_regs_secondary;           /* Cached coordination mapping (0x10023000) */
@@ -168,6 +168,12 @@ struct tx_isp_vic_device {
 
     /* CRITICAL FIX: Hardware interrupt enable flag (replaces unsafe offset 0x13c access) */
     int hw_irq_enabled __attribute__((aligned(4)));                 /* Hardware interrupt enable flag - SAFE replacement for offset 0x13c */
+
+    /* Moved from tx_isp_subdev private fields (ABI fix) */
+    struct tx_isp_irq_info sd_irq_info;  /* VIC IRQ info (was sd.irq_info) */
+    struct mutex vic_frame_end_lock __attribute__((aligned(4)));
+    struct completion vic_frame_end_completion[VIC_MAX_CHAN] __attribute__((aligned(4)));
+    void *event_callback_struct;
 } __attribute__((aligned(4), packed));
 
 

@@ -106,7 +106,7 @@ static inline struct tx_isp_subdev *tx_isp_find_subdev_by_name(struct tx_isp_dev
 
     for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
         struct tx_isp_subdev *sd = isp_dev->subdevs[i];
-        if (sd && sd->pdev && sd->pdev->name && strcmp(sd->pdev->name, name) == 0) {
+        if (sd && sd->module.name && strcmp(sd->module.name, name) == 0) {
             return sd;
         }
     }
@@ -175,13 +175,13 @@ static inline struct tx_isp_subdev *tx_isp_find_sensor_subdev(struct tx_isp_dev 
         struct tx_isp_subdev *sd = isp_dev->subdevs[i];
         if (sd && sd->ops && sd->ops->sensor) {
             /* Additional validation: make sure this is NOT an ISP core device */
-            if (sd->pdev && sd->pdev->name) {
+            if (sd->module.name) {
                 /* Exclude all known ISP core device names */
-                if (strcmp(sd->pdev->name, "isp-m0") != 0 &&
-                    strcmp(sd->pdev->name, "isp-w00") != 0 &&
-                    strcmp(sd->pdev->name, "isp-w01") != 0 &&
-                    strcmp(sd->pdev->name, "isp-w02") != 0 &&
-                    strcmp(sd->pdev->name, "isp-fs") != 0) {
+                if (strcmp(sd->module.name, "isp-m0") != 0 &&
+                    strcmp(sd->module.name, "isp-w00") != 0 &&
+                    strcmp(sd->module.name, "isp-w01") != 0 &&
+                    strcmp(sd->module.name, "isp-w02") != 0 &&
+                    strcmp(sd->module.name, "isp-fs") != 0) {
                     /* This looks like a real sensor device */
                     return sd;
                 }
@@ -255,7 +255,7 @@ static inline int tx_isp_register_subdev_by_name(struct tx_isp_dev *isp_dev, str
     }
 
     /* Get device name from platform device */
-    dev_name = (sd->pdev && sd->pdev->name) ? sd->pdev->name : NULL;
+    dev_name = (sd->module.name) ? sd->module.name : NULL;
 
     if (!dev_name) {
         pr_err("*** tx_isp_register_subdev_by_name: No device name - cannot determine slot ***\n");
@@ -312,7 +312,7 @@ static inline int tx_isp_register_subdev_by_name(struct tx_isp_dev *isp_dev, str
 
     /* Register at the determined slot */
     isp_dev->subdevs[slot] = sd;
-    sd->isp = isp_dev;
+    /* ourISPdev removed for ABI - use ourISPdev global */;
 
     pr_info("*** tx_isp_register_subdev_by_name: Successfully registered '%s' at slot %d ***\n", dev_name, slot);
 
@@ -336,9 +336,9 @@ static inline int tx_isp_unregister_subdev_by_name(struct tx_isp_dev *isp_dev, c
 
     for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
         struct tx_isp_subdev *sd = isp_dev->subdevs[i];
-        if (sd && sd->pdev && sd->pdev->name && strcmp(sd->pdev->name, name) == 0) {
+        if (sd && sd->module.name && strcmp(sd->module.name, name) == 0) {
             isp_dev->subdevs[i] = NULL;
-            sd->isp = NULL;
+            /* ourISPdev removed for ABI */;
             return 0;
         }
     }
@@ -382,7 +382,7 @@ static inline void tx_isp_debug_print_subdevs(struct tx_isp_dev *isp_dev)
     for (i = 0; i < ISP_MAX_SUBDEVS; i++) {
         struct tx_isp_subdev *sd = isp_dev->subdevs[i];
         if (sd) {
-            const char *name = (sd->pdev && sd->pdev->name) ? sd->pdev->name : "unknown";
+            const char *name = (sd->module.name) ? sd->module.name : "unknown";
             pr_info("  [%d]: %s (sd=%p)\n", i, name, sd);
         } else {
             pr_info("  [%d]: (empty)\n", i);

@@ -32,16 +32,12 @@ int vic_video_s_stream(struct tx_isp_subdev *sd, int enable);
 extern struct tx_isp_dev *ourISPdev;
 uint32_t vic_start_ok = 0;  /* Global VIC interrupt enable flag definition */
 
-#define VIC_RAW_REGS_OFFSET        0xb8
-#define VIC_RAW_SELF_OFFSET        0xd4
-#define VIC_RAW_WIDTH_OFFSET       0xdc
-#define VIC_RAW_HEIGHT_OFFSET      0xe0
-#define VIC_RAW_IRQ_SLOT_OFFSET    0x80
-#define VIC_RAW_IRQ_ENABLE_OFFSET  0x84
-#define VIC_RAW_IRQ_DISABLE_OFFSET 0x88
-#define VIC_RAW_SENSOR_ATTR_OFFSET 0x110
-#define VIC_RAW_STATE_OFFSET       0x128
-#define VIC_RAW_IRQ_FLAG_OFFSET    0x13c
+/*
+ * REMOVED: All VIC_RAW_*_OFFSET macros.
+ * These were hardcoded byte offsets into the embedded tx_isp_subdev struct
+ * that broke whenever the subdev layout changed (e.g. adding submods[16]).
+ * All accessors now use proper struct member access via vic_dev->field.
+ */
 
 static inline bool vic_pixfmt_is_semiplanar_420(u32 pixfmt)
 {
@@ -52,14 +48,14 @@ static inline u32 vic_mdma_stride_resolve(struct tx_isp_vic_device *vic_dev,
                                          u32 width, u32 pixfmt)
 {
     u32 stride = vic_dev ? vic_dev->stride : 0;
+	u32 min_stride = width << 1;
 
-    if (stride >= width)
+	(void)pixfmt;
+
+    if (stride >= min_stride)
         return stride;
 
-    if (pixfmt == 0 || vic_pixfmt_is_semiplanar_420(pixfmt))
-        return width;
-
-    return width << 1;
+    return min_stride;
 }
 
 static int vic_resolve_irq_number(struct tx_isp_vic_device *vic_dev)
@@ -69,8 +65,8 @@ static int vic_resolve_irq_number(struct tx_isp_vic_device *vic_dev)
     if (!vic_dev)
         return 0;
 
-    if (vic_dev->sd.irq_info.irq > 0 && vic_dev->sd.irq_info.irq < 1024)
-        return vic_dev->sd.irq_info.irq;
+    if (vic_dev->sd_irq_info.irq > 0 && vic_dev->sd_irq_info.irq < 1024)
+        return vic_dev->sd_irq_info.irq;
 
     if (ourISPdev && ourISPdev->isp_irq2 > 0)
         return ourISPdev->isp_irq2;
@@ -80,8 +76,8 @@ static int vic_resolve_irq_number(struct tx_isp_vic_device *vic_dev)
     if (vic_dev->irq_number > 0)
         return vic_dev->irq_number;
 
-    if (vic_dev->sd.pdev)
-        irq = platform_get_irq(vic_dev->sd.pdev, 0);
+    if (vic_dev->sd.module.dev)
+        irq = platform_get_irq(to_platform_device(vic_dev->sd.module.dev), 0);
 
     if (irq > 0)
         return irq;
@@ -110,16 +106,14 @@ static inline void vic_raw_regs_set(struct tx_isp_vic_device *vic_dev, void __io
 {
     if (!vic_dev)
         return;
-
-    *(void __iomem **)((char *)vic_dev + VIC_RAW_REGS_OFFSET) = regs;
+    vic_dev->sd.base = regs;
 }
 
 static inline void __iomem *vic_raw_regs_get(struct tx_isp_vic_device *vic_dev)
 {
     if (!vic_dev)
         return NULL;
-
-    return *(void __iomem **)((char *)vic_dev + VIC_RAW_REGS_OFFSET);
+    return vic_dev->sd.base;
 }
 
 static inline int vic_regs_is_secondary(struct tx_isp_vic_device *vic_dev,
@@ -130,7 +124,7 @@ static inline int vic_regs_is_secondary(struct tx_isp_vic_device *vic_dev,
     if (!vic_dev || !regs)
         return 0;
 
-    isp_dev = vic_dev->sd.isp;
+    isp_dev = ourISPdev;
 
     if (regs == vic_dev->vic_regs_secondary)
         return 1;
@@ -150,7 +144,7 @@ static inline void __iomem *vic_primary_regs_resolve(struct tx_isp_vic_device *v
     if (!vic_dev)
         return NULL;
 
-    isp_dev = vic_dev->sd.isp;
+    isp_dev = ourISPdev;
 
     /* OEM HLIL: ALL VIC register access goes through *(arg1 + 0xb8) which is
      * a single canonical pointer.  The OEM never splits writes across two
@@ -198,7 +192,7 @@ static inline void __iomem *vic_coord_regs_resolve(struct tx_isp_vic_device *vic
     if (!vic_dev)
         return NULL;
 
-    isp_dev = vic_dev->sd.isp;
+    isp_dev = ourISPdev;
 
     /* Keep W01/coordination diagnostics off the OEM raw +0xb8 hot path unless
      * the secondary bank is unavailable.
@@ -238,7 +232,7 @@ static void vic_log_unlock_timeout_state(struct tx_isp_vic_device *vic_dev,
     if (!vic_dev)
         return;
 
-    isp_dev = vic_dev->sd.isp ? vic_dev->sd.isp : ourISPdev;
+    isp_dev = ourISPdev;
     coord_regs = vic_coord_regs_resolve(vic_dev);
 
     if (isp_dev) {
@@ -425,7 +419,7 @@ static inline void __iomem *vic_stream_regs_resolve(struct tx_isp_vic_device *vi
     if (!vic_dev)
         return NULL;
 
-    isp_dev = vic_dev->sd.isp;
+    isp_dev = ourISPdev;
 
     /* Keep tx_isp_vic_start(), QBUF, and STREAMON on the stable primary
      * wrapper bank (0x133e0000), matching the last green-stream state.
@@ -448,25 +442,22 @@ static inline void vic_raw_dims_set(struct tx_isp_vic_device *vic_dev, u32 width
 {
     if (!vic_dev)
         return;
-
-    *(u32 *)((char *)vic_dev + VIC_RAW_WIDTH_OFFSET) = width;
-    *(u32 *)((char *)vic_dev + VIC_RAW_HEIGHT_OFFSET) = height;
+    vic_dev->width = width;
+    vic_dev->height = height;
 }
 
 static inline u32 vic_raw_width_get(struct tx_isp_vic_device *vic_dev)
 {
     if (!vic_dev)
         return 0;
-
-    return *(u32 *)((char *)vic_dev + VIC_RAW_WIDTH_OFFSET);
+    return vic_dev->width;
 }
 
 static inline u32 vic_raw_height_get(struct tx_isp_vic_device *vic_dev)
 {
     if (!vic_dev)
         return 0;
-
-    return *(u32 *)((char *)vic_dev + VIC_RAW_HEIGHT_OFFSET);
+    return vic_dev->height;
 }
 
 static inline struct tx_isp_sensor_attribute *vic_raw_sensor_attr_get(struct tx_isp_vic_device *vic_dev)
@@ -503,35 +494,29 @@ static inline struct tx_isp_vic_device *vic_raw_self_from_sd(struct tx_isp_subde
 {
     if (!sd)
         return NULL;
-
-    return *(struct tx_isp_vic_device **)((char *)sd + VIC_RAW_SELF_OFFSET);
+    /* OEM stores self-pointer in sd->dev_priv */
+    return (struct tx_isp_vic_device *)sd->dev_priv;
 }
 
 static inline void vic_raw_self_set(struct tx_isp_vic_device *vic_dev)
 {
     if (!vic_dev)
         return;
-
-    /* tx_isp_subdev is the first field of tx_isp_vic_device, so the OEM raw
-     * self slot at +0xd4 is addressed from either sd or vic_dev base.
-     */
-    *(struct tx_isp_vic_device **)((char *)vic_dev + VIC_RAW_SELF_OFFSET) = vic_dev;
+    /* Store self-pointer in sd->dev_priv for container recovery */
+    vic_dev->sd.dev_priv = vic_dev;
 }
 
 static inline u32 vic_raw_state_get(struct tx_isp_vic_device *vic_dev)
 {
     if (!vic_dev)
         return 0;
-
-    return *(u32 *)((char *)vic_dev + VIC_RAW_STATE_OFFSET);
+    return vic_dev->state;
 }
 
 static inline void vic_raw_state_set(struct tx_isp_vic_device *vic_dev, u32 state)
 {
     if (!vic_dev)
         return;
-
-    *(u32 *)((char *)vic_dev + VIC_RAW_STATE_OFFSET) = state;
     vic_dev->state = state;
 }
 
@@ -539,8 +524,6 @@ static inline void vic_raw_irq_flag_set(struct tx_isp_vic_device *vic_dev, u32 e
 {
     if (!vic_dev)
         return;
-
-    *(u32 *)((char *)vic_dev + VIC_RAW_IRQ_FLAG_OFFSET) = enabled;
     vic_dev->hw_irq_enabled = enabled;
     vic_dev->irq_enabled = enabled;
 }
@@ -589,29 +572,27 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
         return -ENOMEM;
     }
 
-    pr_info("*** VIC DEVICE ALLOCATED: %p (size=0x21c bytes) ***\n", vic_dev);
+    pr_info("*** VIC DEVICE ALLOCATED: %p (size=%zu bytes) ***\n",
+            vic_dev, sizeof(struct tx_isp_vic_device));
 
-    /* Initialize VIC device structure - Binary Ninja exact layout */
+    /* Initialize VIC device structure */
 
-    /* Initialize spinlock at offset 0x130 */
-    spin_lock_init((spinlock_t *)((char *)vic_dev + 0x130));
+    /* Initialize synchronization primitives using struct members */
+    spin_lock_init(&vic_dev->lock);
+    mutex_init(&vic_dev->mlock);
+    mutex_init(&vic_dev->state_lock);
+    init_completion(&vic_dev->frame_complete);
+    spin_lock_init(&vic_dev->buffer_mgmt_lock);
+    spin_lock_init(&vic_dev->buffer_lock);
 
-    /* Initialize mutex at offset 0x154 */
-    mutex_init((struct mutex *)((char *)vic_dev + 0x154));
-
-    /* Initialize completion at offset 0x148 */
-    init_completion((struct completion *)((char *)vic_dev + 0x148));
-
-    /* Set initial state to 1 (INIT) at the OEM raw offset. */
+    /* Set initial state */
     vic_raw_state_set(vic_dev, 1);
 
-    /* Set self-pointer at the OEM raw slot used by vic_core_s_stream(). */
+    /* Set self-pointer for container recovery */
     vic_raw_self_set(vic_dev);
 
-    /* CRITICAL FIX: Set NV12 format magic number at offset 0xc to prevent control limit error */
-    /* The VIC interrupt handler checks for 0x3231564e (NV12) at offset 0xc */
-    *(uint32_t *)((char *)vic_dev + 0xc) = 0x3231564e;  /* NV12 format magic number */
-    pr_info("*** VIC DEVICE: Set NV12 format magic number 0x3231564e at offset 0xc ***\n");
+    /* Set default pixel format */
+    vic_dev->pixel_format = V4L2_PIX_FMT_NV12;
 
     /* *** CRITICAL FIX: Map BOTH VIC register spaces - dual VIC architecture *** */
     pr_info("*** CRITICAL: Mapping DUAL VIC register spaces for complete VIC control ***\n");
@@ -672,9 +653,9 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
      * whole object, and wiping sd at this point clobbers the drifted VIC
      * fields/MMIO cache that live beyond the OEM subdev footprint.
      */
-    vic_dev->sd.isp = isp_dev;
+    /* sd.isp removed for ABI - use ourISPdev global */
     vic_dev->sd.ops = &vic_subdev_ops;
-    vic_dev->sd.vin_state = TX_ISP_MODULE_INIT;
+    ourISPdev->vin_state = TX_ISP_MODULE_INIT;
 
     /* Initialize buffer management */
     INIT_LIST_HEAD(&vic_dev->queue_head);
@@ -720,7 +701,7 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
     isp_dev->vic_dev = (struct tx_isp_subdev *)&vic_dev->sd;
 
     /* *** CRITICAL FIX: Ensure VIC subdev has proper ISP device back-reference *** */
-    vic_dev->sd.isp = isp_dev;  /* This ensures tx_isp_vic_start can find the ISP device */
+    /* sd.isp removed for ABI - use ourISPdev global */  /* This ensures tx_isp_vic_start can find the ISP device */
 
     /* Also set host_priv so vic_core_ops_ioctl can retrieve vic_dev (QBUF path) */
     tx_isp_set_subdev_hostdata(&vic_dev->sd, vic_dev);
@@ -728,7 +709,7 @@ int tx_isp_create_vic_device(struct tx_isp_dev *isp_dev)
 
     pr_info("*** CRITICAL: VIC DEVICE LINKED TO ISP CORE ***\n");
     pr_info("  isp_dev->vic_dev = %p\n", isp_dev->vic_dev);
-    pr_info("  vic_dev->sd.isp = %p\n", vic_dev->sd.isp);
+    pr_info("  ourISPdev = %p\n", ourISPdev);
     pr_info("  vic_dev->sd.ops = %p\n", vic_dev->sd.ops);
     pr_info("  vic_dev->vic_regs = %p\n", vic_dev->vic_regs);
     pr_info("  vic_dev->state = %d\n", vic_dev->state);
@@ -776,10 +757,11 @@ EXPORT_SYMBOL(tx_isp_create_vic_device);
 /* VIC frame completion handler */
 static void tx_isp_vic_frame_done(struct tx_isp_subdev *sd, int channel)
 {
+    struct tx_isp_vic_device *vic_dev;
     if (!sd || channel >= VIC_MAX_CHAN)
         return;
-
-    complete(&sd->vic_frame_end_completion[channel]);
+    vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
+    complete(&vic_dev->vic_frame_end_completion[channel]);
 }
 
 /* Forward declarations for interrupt functions */
@@ -835,7 +817,7 @@ static void vic_reassert_core_irq_route(struct tx_isp_vic_device *vic_dev,
     if (!vic_dev)
         return;
 
-    isp_dev = vic_dev->sd.isp ? vic_dev->sd.isp : ourISPdev;
+    isp_dev = ourISPdev;
     if (isp_dev && isp_dev->core_regs)
         core = isp_dev->core_regs;
     if (!core && ourISPdev && ourISPdev->core_regs)
@@ -1198,12 +1180,14 @@ int tx_isp_vic_hw_init(struct tx_isp_subdev *sd)
 /* Stop VIC processing */
 int tx_isp_vic_stop(struct tx_isp_subdev *sd)
 {
+    struct tx_isp_vic_device *vic_dev;
     u32 ctrl;
 
-    if (!sd || !sd->isp)
+    if (!sd || !ourISPdev)
         return -EINVAL;
 
-    mutex_lock(&sd->vic_frame_end_lock);
+    vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
+    mutex_lock(&vic_dev->vic_frame_end_lock);
 
     /* Stop processing */
     ctrl = vic_read32(VIC_CTRL);
@@ -1216,29 +1200,33 @@ int tx_isp_vic_stop(struct tx_isp_subdev *sd)
         udelay(10);
     }
 
-    mutex_unlock(&sd->vic_frame_end_lock);
+    mutex_unlock(&vic_dev->vic_frame_end_lock);
     return 0;
 }
 
 /* Configure VIC frame buffer */
 int tx_isp_vic_set_buffer(struct tx_isp_subdev *sd, dma_addr_t addr, u32 size)
 {
-    if (!sd || !sd->isp)
+    struct tx_isp_vic_device *vic_dev;
+
+    if (!sd || !ourISPdev)
         return -EINVAL;
 
-    mutex_lock(&sd->vic_frame_end_lock);
+    vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
+    mutex_lock(&vic_dev->vic_frame_end_lock);
 
     /* Set frame buffer address and size */
     vic_write32(VIC_BUFFER_ADDR, addr);
     vic_write32(VIC_FRAME_SIZE, size);
 
-    mutex_unlock(&sd->vic_frame_end_lock);
+    mutex_unlock(&vic_dev->vic_frame_end_lock);
     return 0;
 }
 
 /* Wait for frame completion */
 int tx_isp_vic_wait_frame_done(struct tx_isp_subdev *sd, int channel, int timeout_ms)
 {
+    struct tx_isp_vic_device *vic_dev;
     int ret;
 
     if (!sd || channel >= VIC_MAX_CHAN) {
@@ -1246,8 +1234,9 @@ int tx_isp_vic_wait_frame_done(struct tx_isp_subdev *sd, int channel, int timeou
         return -EINVAL;
     }
 
+    vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
     ret = wait_for_completion_timeout(
-        &sd->vic_frame_end_completion[channel],
+        &vic_dev->vic_frame_end_completion[channel],
         msecs_to_jiffies(timeout_ms)
     );
 
@@ -1296,7 +1285,7 @@ int vic_saveraw(struct tx_isp_subdev *sd, unsigned int savenum)
     }
 
     // FIXED: Use regular DMA allocation instead of precious rmem
-    capture_buf = dma_alloc_coherent(sd->dev, buf_size, &dma_addr, GFP_KERNEL);
+    capture_buf = dma_alloc_coherent(sd->module.dev, buf_size, &dma_addr, GFP_KERNEL);
     if (!capture_buf) {
         pr_err("Failed to allocate DMA buffer\n");
         iounmap(vic_base);
@@ -1446,7 +1435,7 @@ int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum)
     }
 
     // FIXED: Use regular DMA allocation instead of precious rmem
-    capture_buf = dma_alloc_coherent(sd->dev, buf_size, &dma_addr, GFP_KERNEL);
+    capture_buf = dma_alloc_coherent(sd->module.dev, buf_size, &dma_addr, GFP_KERNEL);
     if (!capture_buf) {
         pr_err("Failed to allocate DMA buffer\n");
         iounmap(vic_base);
@@ -1597,7 +1586,7 @@ int vic_snapraw(struct tx_isp_subdev *sd, unsigned int savenum)
 cleanup:
     // Free buffer if using DMA allocation (not rmem)
     if (!using_rmem && capture_buf) {
-        dma_free_coherent(sd->dev, buf_size, capture_buf, dma_addr);
+        dma_free_coherent(sd->module.dev, buf_size, capture_buf, dma_addr);
     }
 
 
@@ -1640,7 +1629,7 @@ int vic_snapnv12(struct tx_isp_subdev *sd, unsigned int savenum)
     vic_base = ioremap(0x10023000, 0x1000);
     if (!vic_base) return -ENOMEM;
 
-    capture_buf = dma_alloc_coherent(sd->dev, buf_size, &dma_addr, GFP_KERNEL);
+    capture_buf = dma_alloc_coherent(sd->module.dev, buf_size, &dma_addr, GFP_KERNEL);
     if (!capture_buf) { iounmap(vic_base); return -ENOMEM; }
 
     /* Program snapshot DMA: address, stride, and number of lines to copy */
@@ -1682,7 +1671,7 @@ int vic_snapnv12(struct tx_isp_subdev *sd, unsigned int savenum)
     } while (0);
 
 out:
-    if (capture_buf) dma_free_coherent(sd->dev, buf_size, capture_buf, dma_addr);
+    if (capture_buf) dma_free_coherent(sd->module.dev, buf_size, capture_buf, dma_addr);
     iounmap(vic_base);
     return ret;
 }
@@ -1770,7 +1759,7 @@ int tx_isp_vic_start(struct tx_isp_vic_device *vic_dev)
     if (!vic_regs)
         return -EINVAL;
 
-    isp_dev = vic_dev->sd.isp ? vic_dev->sd.isp : ourISPdev;
+    isp_dev = ourISPdev;
     ret = tx_isp_core_prepare_prestream(isp_dev, "tx_isp_vic_start");
     if (ret < 0) {
         pr_err("tx_isp_vic_start: pre-stream core IRQ prepare failed: %d\n", ret);
@@ -2451,9 +2440,9 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     }
 
     pixfmt = vic_dev->pixel_format;
-    /* Match the exported capture layout, not just the ISP-internal bus width.
-     * Channel 0 is currently exported as single-plane NV12, so its DRAM stride
-     * must stay at the luma bytes-per-line rather than an unconditional width*2.
+    /* OEM BN/HLIL programs both MDMA stride registers with width<<1 even when
+     * the userspace-visible format is NV12. Keep any larger cached bytesperline,
+     * but never go below the OEM 16bpp-style stride.
      */
     stride = vic_mdma_stride_resolve(vic_dev, width, pixfmt);
 
@@ -2519,6 +2508,7 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 
 	        /* OEM BN: vic_pipo_mdma_enable($s0) */
 	        vic_pipo_mdma_enable(vic_dev);
+		    vic_program_irq_registers(vic_dev, "ispvic_frame_channel_s_stream");
 	        active_banks = vic_dev->active_buffer_count;
 	        if (active_banks > 5)
 	            active_banks = 5;
@@ -2621,7 +2611,7 @@ static void vic_bind_event_dispatch_table(struct tx_isp_vic_device *vic_dev)
     vic_event_dispatch.event_handler = vic_pad_event_handler;
     vic_event_dispatch.event_priv = vic_dev;
 
-    vic_dev->sd.event_callback_struct = &vic_event_dispatch;
+    vic_dev->event_callback_struct = &vic_event_dispatch;
 
     pr_info("*** VIC event dispatch bound: sd=%p table=%p handler=%p priv=%p ***\n",
             &vic_dev->sd, &vic_event_dispatch,
@@ -2899,15 +2889,14 @@ int tx_isp_vic_probe(struct platform_device *pdev)
     vic_raw_irq_flag_set(vic_dev, 0);
     vic_raw_irq_slot_seed(vic_dev, vic_dev->irq);
 
-    /* Set test_addr to point to sensor_attr or appropriate member */
-    /* Binary points to offset 0x80 in the structure */
-    test_addr = (char *)vic_dev + VIC_RAW_IRQ_SLOT_OFFSET;
+    /* Set test_addr to point to irqdev (the OEM +0x80 was the irqdev offset) */
+    test_addr = (char *)&vic_dev->sd.irqdev;
 
     pr_info("*** tx_isp_vic_probe: VIC device initialized successfully ***\n");
     pr_info("VIC device: vic_dev=%p, size=%zu\n", vic_dev, sizeof(struct tx_isp_vic_device));
     pr_info("  sd: %p\n", sd);
     pr_info("  state: %u\n", vic_raw_state_get(vic_dev));
-    pr_info("  test_addr: %p\n", test_addr);
+    pr_info("  irqdev_addr: %p\n", test_addr);
 
     return 0;
 }
@@ -3028,9 +3017,9 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	bank_buffer->buffer_length = queued_buffer->buffer_length;
 	reg_offset = (buffer_index + 0xc6) << 2;
 
-	/* OEM BN: program exactly one slot base address at (bank + 0xc6) << 2.
-	 * The VIC/MDMA path handles the contiguous output layout; QBUF does not
-	 * program separate UV/shadow plane registers.
+	/* OEM BN qbuf hot path only writes the selected bank slot register through
+	 * the canonical raw +0xb8 VIC pointer. Companion plane/shadow registers are
+	 * not touched here.
 	 */
 	writel(buffer_addr, vic_base + reg_offset);
 	wmb();
@@ -3038,11 +3027,9 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	list_add_tail(&bank_buffer->list, &vic_dev->done_head);
 	vic_dev->active_buffer_count += 1;
 
-	pr_info("*** VIC QBUF: bank=%u base=0x%x len=%u reg_off=0x%x active=%u ***\n",
-		buffer_index, buffer_addr,
-		bank_buffer->buffer_length,
-		reg_offset,
-		vic_dev->active_buffer_count);
+	pr_info("*** VIC QBUF: bank=%u addr=0x%x len=%u reg_off=0x%x active=%u ***\n",
+		buffer_index, buffer_addr, bank_buffer->buffer_length,
+		reg_offset, vic_dev->active_buffer_count);
 
 	private_spin_unlock_irqrestore(&vic_dev->buffer_mgmt_lock, irq_flags);
 	kfree(queued_buffer);

@@ -34,6 +34,7 @@
     } while(0)
 
 bool is_valid_kernel_pointer(const void *ptr);
+extern struct tx_isp_dev *ourISPdev;
 
 /* ========================================================================
  * VIN Device Creation Function - Matches VIC Pattern
@@ -103,8 +104,8 @@ int tx_isp_create_vin_device(struct tx_isp_dev *isp_dev)
 
     /* Initialize VIN subdev structure */
     memset(&vin_dev->sd, 0, sizeof(vin_dev->sd));
-    vin_dev->sd.isp = (void *)isp_dev;
-    vin_dev->sd.vin_state = TX_ISP_MODULE_SLAKE;
+    /* sd.isp removed for ABI - use ourISPdev global */
+    ourISPdev->vin_state = TX_ISP_MODULE_SLAKE;
     
     /* CRITICAL FIX: Set VIN subdev operations - this was missing! */
     vin_dev->sd.ops = &vin_subdev_ops;
@@ -229,16 +230,9 @@ int tx_isp_vin_setup_dma(struct tx_isp_vin_device *vin)
     if (ourISPdev && ourISPdev->pdev) {
         dev = &ourISPdev->pdev->dev;
         mcp_log_info("vin_setup_dma: using ISP device for DMA (VIC pattern)", 0);
-    } else if (vin->sd.pdev) {
-        dev = &vin->sd.pdev->dev;
-        mcp_log_info("vin_setup_dma: using platform device for DMA", 0);
-    } else if (vin->sd.isp) {
-        /* Use ISP device structure for DMA allocation */
-        struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)vin->sd.isp;
-        if (isp_dev && isp_dev->pdev) {
-            dev = &isp_dev->pdev->dev;
-            mcp_log_info("vin_setup_dma: using subdev ISP device for DMA", 0);
-        }
+    } else if (vin->sd.module.dev) {
+        dev = vin->sd.module.dev;
+        mcp_log_info("vin_setup_dma: using subdev device for DMA", 0);
     }
     
     if (!dev) {
@@ -290,13 +284,10 @@ int tx_isp_vin_cleanup_dma(struct tx_isp_vin_device *vin)
     }
     
     /* CRITICAL FIX: Use same device that was used for allocation */
-    if (vin->sd.pdev) {
-        dev = &vin->sd.pdev->dev;
-    } else if (vin->sd.isp) {
-        struct tx_isp_dev *isp_dev = (struct tx_isp_dev *)vin->sd.isp;
-        if (isp_dev && isp_dev->pdev) {
-            dev = &isp_dev->pdev->dev;
-        }
+    if (ourISPdev && ourISPdev->pdev) {
+        dev = &ourISPdev->pdev->dev;
+    } else if (vin->sd.module.dev) {
+        dev = vin->sd.module.dev;
     }
     
     if (dev && vin->dma_virt) {

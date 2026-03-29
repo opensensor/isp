@@ -323,6 +323,11 @@ struct tx_isp_descriptor {
 };
 
 
+/*
+ * tx_isp_module - MUST match stock SDK layout exactly.
+ * Stock offset reference (from BN decompilation):
+ *   submods[] array at offset after debug_ops, 16 pointers = 64 bytes
+ */
 struct tx_isp_module {
 	struct tx_isp_descriptor desc;
 	struct device *dev;
@@ -330,69 +335,53 @@ struct tx_isp_module {
 	struct miscdevice miscdev;
 	struct file_operations *ops;
 	struct file_operations *debug_ops;
+	struct tx_isp_module *submods[TX_ISP_ENTITY_ENUM_MAX_DEPTH];
 	void *parent;
 	int (*notify)(struct tx_isp_module *module, unsigned int notification, void *data);
 };
 
-
+/*
+ * tx_isp_subdev - MUST match stock SDK layout exactly.
+ * Stock offset reference (from BN decompilation of tx-isp-t31.ko):
+ *   ops    = 0xc4
+ *   dev_priv = 0xd4
+ *   host_priv = 0xd8
+ *
+ * NO private fields after host_priv!  The prebuilt sensor modules
+ * embed this struct at offset 0 of tx_isp_sensor, so any extra
+ * fields here shift all sensor members and break ABI.
+ *
+ * ISP-internal state lives in wrapper structs (tx_isp_vic_device,
+ * tx_isp_csi_device, tx_isp_dev, etc.).
+ *
+ * Field mapping for ISP-internal code:
+ *   OLD sd->dev        → sd->module.dev
+ *   OLD sd->pdev       → to_platform_device(sd->module.dev)
+ *   OLD sd->regs       → sd->base          (stock field)
+ *   OLD sd->mem_res    → sd->res           (stock field)
+ *   OLD sd->isp        → ourISPdev         (global)
+ */
 struct tx_isp_subdev {
-	/* Base module */
 	struct tx_isp_module module;
 	struct tx_isp_irq_device irqdev;
 	struct tx_isp_chip_ident chip;
 
-	/* Basic device info */
-	struct device *dev;
-	struct platform_device *pdev;
+	/* basic members */
 	struct resource *res;
+	void __iomem *base;
+	struct clk **clks;
+	unsigned int clk_num;
 	struct tx_isp_subdev_ops *ops;
+
+	/* expanded members */
+	unsigned short num_outpads;
+	unsigned short num_inpads;
+
+	struct tx_isp_subdev_pad *outpads;
+	struct tx_isp_subdev_pad *inpads;
+
 	void *dev_priv;
 	void *host_priv;
-
-	/* Memory mappings */
-	void __iomem *base;         /* Common register base */
-	void __iomem *regs;         /* Binary Ninja: *(arg2 + 0xb8) register mapping */
-	struct resource *mem_res;   /* Binary Ninja: *(arg2 + 0xb4) memory resource */
-	struct tx_isp_irq_info irq_info;  /* Binary Ninja: arg2 + 0x80 IRQ information */
-	int clk_num;                /* Binary Ninja: *(arg2 + 0xc0) clock count */
-	void __iomem *isp;          /* ISP register base */
-	void __iomem *csi_base;     /* CSI register base */
-
-	/* Clocks */
-	struct clk **clks;
-
-	/* Event callback structure for Binary Ninja compatibility */
-	void *event_callback_struct;   /* Callback structure at offset 0xc equivalent */
-
-	/* Synchronization */
-	spinlock_t lock;
-	spinlock_t vic_lock;
-	struct mutex mutex;
-	struct mutex vic_frame_end_lock;
-	struct mutex csi_lock;
-	struct mutex vin_lbc_lock;
-	struct completion frame_end;
-	struct completion vic_frame_end_completion[VIC_MAX_CHAN];
-
-	/* Pad configuration */
-	unsigned short num_outpads;    /* Number of sink pads */
-	unsigned short num_inpads;     /* Number of source pads */
-	struct tx_isp_subdev_pad *outpads;  /* OutPads array */
-	struct tx_isp_subdev_pad *inpads;   /* InPads array */
-
-	/* Specific subsystem data */
-	void *fs_wdr_shadow;      /* FS specific shadow memory */
-
-	/* VIN specific fields needed to match OEM behavior */
-	struct tx_isp_sensor *active_sensor;  /* Replaces sensor field */
-	int vin_state;                        /* Replaces state field */
-
-     /* Sensor list management */
-    struct list_head sensor_list;       /* Head of the sensor list */
-    struct list_head sensor_list_next;  /* Next entry in sensor list */
-
-    struct tx_isp_frame_channel *frame_chans;
-    int num_channels;
 };
 
 

@@ -37,6 +37,9 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
 void tx_isp_module_deinit(struct tx_isp_subdev *sd);
 int vic_core_ops_ioctl(struct tx_isp_subdev *sd, unsigned int cmd, void *arg);
 int vic_event_handler(void *subdev, int event_type, void *data);
+int tx_isp_module_notify_handler(struct tx_isp_module *module, unsigned int cmd, void *arg);
+static void cache_sensor_dimensions_from_proc(void);
+static void get_cached_sensor_dimensions(u32 *width, u32 *height);
 
 static void tx_isp_irq_info_enable(struct tx_isp_irq_info *irq_info)
 {
@@ -133,6 +136,33 @@ static void __fill_v4l2_buffer(void *vb, struct v4l2_buffer *buf)
 
 
 /* Optional registration API (no-op if never used) */
+/*
+ * Event callback lookup: use VIC wrapper's event_callback_struct when the
+ * subdev belongs to VIC, otherwise fall through.  This replaces the old
+ * sd->event_callback_struct field that was removed for ABI compatibility.
+ */
+static void *sd_event_callback(struct tx_isp_subdev *sd)
+{
+    if (!sd || !sd->dev_priv)
+        return NULL;
+    /* VIC subdev stores vic_dev in dev_priv; vic_dev has event_callback_struct */
+    if (ourISPdev && ourISPdev->vic_dev &&
+        sd == &ourISPdev->vic_dev->sd) {
+        return ourISPdev->vic_dev->event_callback_struct;
+    }
+    return NULL;
+}
+
+static void sd_set_event_callback(struct tx_isp_subdev *sd, void *cb)
+{
+    if (!sd)
+        return;
+    if (ourISPdev && ourISPdev->vic_dev &&
+        sd == &ourISPdev->vic_dev->sd) {
+        ourISPdev->vic_dev->event_callback_struct = cb;
+    }
+}
+
 static int tx_isp_register_event_handler(struct tx_isp_subdev *sd,
                                          isp_event_cb handler)
 {
@@ -145,7 +175,7 @@ static int tx_isp_register_event_handler(struct tx_isp_subdev *sd,
     disp.enabled = 1;
     disp.state = 3;
     disp.event_handler = handler;
-    sd->event_callback_struct = &disp;
+    sd_set_event_callback(sd, &disp);
     return 0;
 }
 
@@ -158,7 +188,7 @@ static int tx_isp_dispatch_event_callback(struct tx_isp_subdev *sd,
     if (!sd)
         return -EINVAL;
 
-    dispatch = (struct tx_isp_channel_config *)sd->event_callback_struct;
+    dispatch = (struct tx_isp_channel_config *)sd_event_callback(sd);
     if (!dispatch || !dispatch->event_handler)
         return -ENOIOCTLCMD;
 
@@ -367,7 +397,7 @@ static int tx_isp_subdev_init_pads(struct tx_isp_subdev *sd,
     if (input_count > 0) {
         inpads = kzalloc(TX_ISP_OEM_SUBDEV_PAD_STRIDE * input_count, GFP_KERNEL);
         if (!inpads) {
-            pr_err("Failed to malloc %s's inpads\n", sd->module.name ? sd->module.name : dev_name(sd->dev));
+            pr_err("Failed to malloc %s's inpads\n", sd->module.name ? sd->module.name : dev_name(sd->module.dev));
             tx_isp_subdev_raw_num_inpads_set(sd, 0);
             tx_isp_subdev_raw_num_outpads_set(sd, 0);
             return -ENOMEM;
@@ -377,7 +407,7 @@ static int tx_isp_subdev_init_pads(struct tx_isp_subdev *sd,
     if (output_count > 0) {
         outpads = kzalloc(TX_ISP_OEM_SUBDEV_PAD_STRIDE * output_count, GFP_KERNEL);
         if (!outpads) {
-            pr_err("Failed to malloc %s's outpads\n", sd->module.name ? sd->module.name : dev_name(sd->dev));
+            pr_err("Failed to malloc %s's outpads\n", sd->module.name ? sd->module.name : dev_name(sd->module.dev));
             kfree(inpads);
             tx_isp_subdev_raw_num_inpads_set(sd, 0);
             tx_isp_subdev_raw_num_outpads_set(sd, 0);
@@ -418,7 +448,7 @@ static int tx_isp_subdev_init_pads(struct tx_isp_subdev *sd,
     tx_isp_subdev_raw_outpads_set(sd, outpads);
 
     pr_info("tx_isp_subdev_init_pads: %s inpads=%u outpads=%u\n",
-            sd->module.name ? sd->module.name : dev_name(sd->dev),
+            sd->module.name ? sd->module.name : dev_name(sd->module.dev),
             tx_isp_subdev_raw_num_inpads_get(sd),
             tx_isp_subdev_raw_num_outpads_get(sd));
     return 0;
@@ -446,8 +476,8 @@ int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count)
     pr_info("isp_subdev_init_clks: EXACT Binary Ninja MCP - Initializing %d clocks\n", clk_count);
 
     /* Get platform data for clock configuration */
-    if (sd->pdev && sd->pdev->dev.platform_data) {
-        pdata = (struct tx_isp_subdev_platform_data *)sd->pdev->dev.platform_data;
+    if (sd->module.dev && sd->module.dev->platform_data) {
+        pdata = (struct tx_isp_subdev_platform_data *)sd->module.dev->platform_data;
         /* CRITICAL: Use platform data clock arrays - Binary Ninja: *($s1_1 + 8) */
         clk_configs = pdata->clks;
         pr_info("isp_subdev_init_clks: Using platform data clock arrays: %p\n", clk_configs);
@@ -508,7 +538,7 @@ int isp_subdev_init_clks(struct tx_isp_subdev *sd, int clk_count)
             }
 
             /* Binary Ninja: int32_t $v0_3 = private_clk_get(*(arg1 + 4), *$s6_1) */
-            struct clk *clk = clk_get(sd->dev, clk_name);
+            struct clk *clk = clk_get(sd->module.dev, clk_name);
             clk_array[i] = clk;
 
             /* Binary Ninja: if ($v0_3 u< 0xfffff001) */
@@ -738,59 +768,42 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         pr_info("*** tx_isp_subdev_init: WARNING - ops->core->init is NULL! ***\n");
     }
 
-    /* CRITICAL FIX: Set device pointers that are needed for IRQ registration */
-    sd->dev = &pdev->dev;        /* Device pointer for to_platform_device() */
-    sd->pdev = pdev;             /* Platform device pointer */
-    pr_info("*** tx_isp_subdev_init: Set sd->dev=%p, sd->pdev=%p ***\n", sd->dev, sd->pdev);
+    /* module.dev is already set by tx_isp_module_init above */
+    pr_info("*** tx_isp_subdev_init: sd->module.dev=%p ***\n", sd->module.dev);
 
-    /* CRITICAL: Link subdevices to main ISP device when they're created */
-    extern struct tx_isp_dev *ourISPdev;
+	if (ops && ops->sensor && pdev->name &&
+	    strcmp(pdev->name, "isp-w00") != 0 &&
+	    strcmp(pdev->name, "isp-w01") != 0 &&
+	    strcmp(pdev->name, "isp-w02") != 0 &&
+	    strcmp(pdev->name, "isp-m0") != 0 &&
+	    strcmp(pdev->name, "isp-fs") != 0) {
+		sd->module.notify = tx_isp_module_notify_handler;
+		pr_info("*** tx_isp_subdev_init: sensor notify handler installed for '%s' ***\n",
+			pdev->name);
+	}
 
-    /* CRITICAL: Register subdevices in the global ISP device using helper functions */
-    extern struct tx_isp_subdev_ops core_subdev_ops;
-    extern struct tx_isp_subdev_ops vic_subdev_ops;
-    extern struct tx_isp_subdev_ops csi_subdev_ops;
-    extern struct tx_isp_subdev_ops fs_subdev_ops;
+	if (ourISPdev && pdev->name &&
+	    (strcmp(pdev->name, "isp-w02") == 0 ||
+	     strcmp(pdev->name, "isp-w01") == 0 ||
+	     strcmp(pdev->name, "isp-w00") == 0 ||
+	     strcmp(pdev->name, "isp-m0") == 0 ||
+	     strcmp(pdev->name, "isp-fs") == 0)) {
+		int slot;
 
-    if (ourISPdev) {
-        if (ops == &csi_subdev_ops) {
-            /* CSI - register using helper function */
-            int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
-            pr_info("*** tx_isp_subdev_init: CSI subdev registered at slot %d ***\n", slot);
-        } else if (ops == &vic_subdev_ops) {
-            /* VIC - register using helper function and link VIC device */
-            struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
-            ourISPdev->vic_dev = vic_dev;
-            int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
-            pr_info("*** tx_isp_subdev_init: VIC device linked and registered at slot %d ***\n", slot);
-        } else if (ops == &core_subdev_ops) {
-            /* CORE - register using helper function */
-            int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
-            pr_info("*** tx_isp_subdev_init: Core ISP subdev registered at slot %d ***\n", slot);
+		if (strcmp(pdev->name, "isp-w02") == 0) {
+			struct tx_isp_vic_device *vic_dev = container_of(sd, struct tx_isp_vic_device, sd);
+			ourISPdev->vic_dev = vic_dev;
+		}
 
-            /* CRITICAL FIX: Call core init function like VIN does - this triggers tisp_init */
-        } else if (ops && ops->sensor && ops != &csi_subdev_ops && ops != &vic_subdev_ops && ops != &fs_subdev_ops) {
-            /* CRITICAL FIX: This is a REAL sensor subdev (not CSI, VIC, or FS which also have sensor ops) */
-            pr_info("*** tx_isp_subdev_init: DETECTED SENSOR SUBDEV - ops=%p, ops->sensor=%p ***\n", ops, ops->sensor);
-
-            /* SENSOR - register using helper function */
-            int slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
-            if (slot >= 0) {
-                pr_info("*** tx_isp_subdev_init: SENSOR subdev registered at slot %d, sd=%p ***\n", slot, sd);
-                pr_info("*** tx_isp_subdev_init: SENSOR ops=%p, ops->sensor=%p ***\n", sd->ops, sd->ops->sensor);
-
-                /* State transitions are now handled by ispcore_slake_module during probe */
-                pr_info("*** tx_isp_subdev_init: Core state transitions handled by slake_module ***\n");
-            } else {
-                pr_err("*** tx_isp_subdev_init: No available slot for sensor subdev ***\n");
-            }
-        } else {
-            pr_info("*** tx_isp_subdev_init: NOT A SENSOR - ops=%p ***\n", ops);
-            if (ops) {
-                pr_info("*** tx_isp_subdev_init: ops->sensor=%p, csi_subdev_ops=%p ***\n", ops->sensor, &csi_subdev_ops);
-            }
-        }
-    }
+		slot = tx_isp_register_subdev_by_name(ourISPdev, sd);
+		if (slot >= 0) {
+			pr_info("*** tx_isp_subdev_init: published '%s' at subdev slot %d ***\n",
+				pdev->name, slot);
+		} else {
+			pr_warn("*** tx_isp_subdev_init: failed to publish '%s' into subdev array ***\n",
+				pdev->name);
+		}
+	}
 
     const char *dev_name_str = dev_name(&pdev->dev);
 
@@ -807,9 +820,29 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         if (strcmp(dev_name_str, "isp-w00") != 0 &&  /* VIN - no IRQ */
             strcmp(dev_name_str, "isp-w01") != 0 &&  /* CSI - no IRQ */
             strcmp(dev_name_str, "isp-fs") != 0) {   /* FS - no IRQ */
-			ret = tx_isp_request_irq(pdev, &sd->irq_info);
-			if (ret != 0)
-				goto cleanup_irq;
+			{
+				/* Use the persistent sd_irq_info from the wrapper struct
+				 * as the dev_id for request_threaded_irq, so the IRQ
+				 * handler can match it against known device pointers. */
+				struct tx_isp_irq_info *irq_dst = NULL;
+				if (strcmp(dev_name_str, "isp-m0") == 0 && ourISPdev) {
+					irq_dst = &ourISPdev->sd_irq_info;
+				} else if (strcmp(dev_name_str, "isp-w02") == 0 && ourISPdev && ourISPdev->vic_dev) {
+					irq_dst = &ourISPdev->vic_dev->sd_irq_info;
+				}
+				if (irq_dst) {
+					ret = tx_isp_request_irq(pdev, irq_dst);
+					if (ret != 0)
+						goto cleanup_irq;
+					sd->irqdev.irq = irq_dst->irq;
+				} else {
+					struct tx_isp_irq_info irq_tmp = {0};
+					ret = tx_isp_request_irq(pdev, &irq_tmp);
+					if (ret != 0)
+						goto cleanup_irq;
+					sd->irqdev.irq = irq_tmp.irq;
+				}
+			}
         } else {
             pr_info("*** %s: Skipping IRQ request - device has no IRQ resource ***\n", dev_name_str);
         }
@@ -848,10 +881,10 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
         if (mem_res) {
             /* Binary Ninja: private_request_mem_region($a0_18, $v0_2[1] + 1 - $a0_18, $a2_11) */
             /* SAFE: Use struct member access for memory region */
-            sd->mem_res = request_mem_region(mem_res->start,
-                                           resource_size(mem_res),
-                                           pdev->name);
-            if (!sd->mem_res) {
+            sd->res = request_mem_region(mem_res->start,
+                                        resource_size(mem_res),
+                                        pdev->name);
+            if (!sd->res) {
                 /* Binary Ninja: isp_printf(2, "The parameter is invalid!\n", "tx_isp_subdev_init") */
                 pr_err("tx_isp_subdev_init: request_mem_region failed for %s (0x%08x-0x%08x)\n",
                        dev_name(&pdev->dev), (u32)mem_res->start, (u32)mem_res->end);
@@ -863,7 +896,7 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
             /* Binary Ninja: private_ioremap($a0_19, $v0_22[1] + 1 - $a0_19) */
             /* SAFE: Use struct member access for register mapping */
             regs = ioremap(mem_res->start, resource_size(mem_res));
-            sd->regs = regs;
+            sd->base = regs;
             if (!regs) {
                 /* Binary Ninja: isp_printf(2, "vic_done_gpio%d", "tx_isp_subdev_init") */
                 isp_printf(2, "vic_done_gpio%d", "tx_isp_subdev_init");
@@ -911,24 +944,22 @@ int tx_isp_subdev_init(struct platform_device *pdev, struct tx_isp_subdev *sd,
     return 0;
 
 cleanup_regs:
-    /* Binary Ninja: private_iounmap(*(arg2 + 0xb8)) */
-    if (sd->regs) {
-        iounmap(sd->regs);
-        sd->regs = NULL;
+    if (sd->base) {
+        iounmap(sd->base);
+        sd->base = NULL;
     }
 
 cleanup_mem:
-    /* Binary Ninja: private_release_mem_region($a0_15, $s3_2[1] + 1 - $a0_15) */
-    /* Only release memory region if it was successfully requested */
-    if (sd->mem_res) {
-        release_mem_region(sd->mem_res->start, resource_size(sd->mem_res));
-        sd->mem_res = NULL;
+    if (sd->res) {
+        release_mem_region(sd->res->start, resource_size(sd->res));
+        sd->res = NULL;
     }
-    /* Note: If mem_res is NULL, we used direct ioremap without request_mem_region */
 
 cleanup_irq:
-    /* Binary Ninja: tx_isp_free_irq(arg2 + 0x80) */
-    tx_isp_free_irq(&sd->irq_info);
+    if (sd->irqdev.irq > 0) {
+        free_irq(sd->irqdev.irq, &sd->irqdev);
+        sd->irqdev.irq = 0;
+    }
     tx_isp_module_deinit(sd);
     return ret;
 }
@@ -1043,7 +1074,7 @@ static int read_sensor_dimensions(u32 *width, u32 *height)
 }
 
 /* Cache sensor dimensions during probe (process context - sleeping allowed) */
-void cache_sensor_dimensions_from_proc(void)
+static void cache_sensor_dimensions_from_proc(void)
 {
     u32 width, height;
     int ret;
@@ -1067,7 +1098,7 @@ void cache_sensor_dimensions_from_proc(void)
 }
 
 /* Get cached sensor dimensions (safe for atomic context) */
-void get_cached_sensor_dimensions(u32 *width, u32 *height)
+static void get_cached_sensor_dimensions(u32 *width, u32 *height)
 {
     if (!sensor_dimensions_cached) {
         pr_warn("get_cached_sensor_dimensions: Dimensions not cached, using defaults\n");
@@ -1111,13 +1142,12 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         /* Link CSI device - device name is now "isp-w01" */
         struct tx_isp_csi_device *csi_dev = container_of(sd, struct tx_isp_csi_device, sd);
         ourISPdev->csi_dev = csi_dev;
-        if (sd->regs) {
-            ourISPdev->csi_regs = sd->regs;
-            /* CRITICAL FIX: Set CSI device's basic registers from mapped registers */
-            csi_dev->csi_regs = sd->regs;
-            pr_info("*** CSI BASIC REGISTERS SET: %p (from tx_isp_subdev_init) ***\n", sd->regs);
+        if (sd->base) {
+            ourISPdev->csi_regs = sd->base;
+            csi_dev->csi_regs = sd->base;
+            pr_info("*** CSI BASIC REGISTERS SET: %p (from tx_isp_subdev_init) ***\n", sd->base);
         }
-        pr_info("*** LINKED CSI device: %p, regs: %p ***\n", csi_dev, sd->regs);
+        pr_info("*** LINKED CSI device: %p, regs: %p ***\n", csi_dev, sd->base);
 
     } else if (strcmp(dev_name, "isp-w02") == 0) {
         pr_info("*** DEBUG: VIC DEVICE NAME MATCHED! Processing VIC device linking ***\n");
@@ -1141,10 +1171,10 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         pr_info("*** DEBUG: ourISPdev->vic_dev set to: %p ***\n", ourISPdev->vic_dev);
 
         /* CRITICAL FIX: Register VIC IRQ immediately after successful linking */
-        if (vic_dev->sd.irq_info.irq == 0) {
-            struct platform_device *vic_pdev = to_platform_device(vic_dev->sd.dev);
+        if (vic_dev->sd.irqdev.irq == 0) {
+            pr_info("*** VIC AUTO-LINK: VIC IRQ not yet registered ***\n");
         } else {
-            pr_info("*** VIC AUTO-LINK: VIC IRQ already registered (irq=%d) ***\n", vic_dev->sd.irq_info.irq);
+            pr_info("*** VIC AUTO-LINK: VIC IRQ already registered (irq=%d) ***\n", vic_dev->sd.irqdev.irq);
         }
 
         /* CRITICAL FIX: Don't remap VIC registers - use the correct mapping from VIC probe */
@@ -1153,13 +1183,13 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         pr_info("*** VIC AUTO-LINK: Using existing VIC register mapping (0x133e0000) - NOT remapping ***\n");
 
         /* CRITICAL: Register VIC interrupt handler NOW that registers are mapped */
-        if (sd->regs && ourISPdev->vic_dev && ourISPdev->vic_dev->vic_regs) {
+        if (sd->base && ourISPdev->vic_dev && ourISPdev->vic_dev->vic_regs) {
             pr_info("*** VIC AUTO-LINK: Registers are mapped, registering interrupt handler ***\n");
 
             /* Find the VIC platform device */
             struct platform_device *vic_pdev = NULL;
-            if (sd->pdev) {
-                vic_pdev = sd->pdev;
+            if (sd->module.dev) {
+                vic_pdev = to_platform_device(sd->module.dev);
             } else {
                 /* Find VIC platform device from registry */
                 extern struct platform_device tx_isp_vic_platform_device;
@@ -1178,7 +1208,7 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         /* CRITICAL FIX: Set up VIN subdev ops structure immediately after linking */
         extern struct tx_isp_subdev_ops vin_subdev_ops;
         vin_dev->sd.ops = &vin_subdev_ops;
-        vin_dev->sd.isp = (void *)ourISPdev;
+        /* VIN subdev references ISP dev via ourISPdev global */
 
         pr_info("*** LINKED VIN device: %p ***\n", vin_dev);
         pr_info("*** VIN SUBDEV OPS CONFIGURED: core=%p, video=%p, s_stream=%p ***\n",
@@ -1215,11 +1245,10 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
         struct tx_isp_core_device *core_dev = tx_isp_get_subdevdata(sd);
         if (core_dev) {
             /* Map core registers directly to core device */
-            if (sd->regs) {
-                core_dev->core_regs = sd->regs;
-                pr_info("*** CRITICAL FIX: CORE regs mapped to core device: %p ***\n", sd->regs);
+            if (sd->base) {
+                core_dev->core_regs = sd->base;
+                pr_info("*** CRITICAL FIX: CORE regs mapped to core device: %p ***\n", sd->base);
             } else if (ourISPdev && ourISPdev->core_regs) {
-                /* CRITICAL FIX: Use shared core_regs from main ISP device when sd->regs is NULL */
                 core_dev->core_regs = ourISPdev->core_regs;
                 pr_info("*** CRITICAL FIX: CORE regs mapped from shared ISP device: %p ***\n", ourISPdev->core_regs);
             } else {
@@ -1256,7 +1285,7 @@ void tx_isp_subdev_auto_link(struct platform_device *pdev, struct tx_isp_subdev 
 
             if (sensor_index != -1) {
                 ourISPdev->subdevs[sensor_index] = sd;
-                sd->isp = ourISPdev;
+                /* sensor subdev references ISP dev via ourISPdev global */
                 pr_info("*** SENSOR '%s' registered at subdev index %d ***\n", dev_name, sensor_index);
                 pr_info("*** SENSOR subdev: %p, ops: %p ***\n", sd, sd->ops);
                 if (sd->ops && sd->ops->sensor) {
@@ -1288,7 +1317,7 @@ int tx_isp_reg_set(struct tx_isp_subdev *sd, unsigned int reg, int start, int en
     int32_t mask = 0;
     int32_t *reg_addr;
 
-    if (!sd || !sd->regs) {
+    if (!sd || !sd->base) {
         pr_err("tx_isp_reg_set: Invalid subdev or registers not mapped");
         return -EINVAL;
     }
@@ -1298,8 +1327,7 @@ int tx_isp_reg_set(struct tx_isp_subdev *sd, unsigned int reg, int start, int en
         mask += 1 << ((i + start) & 0x1f);
     }
 
-    /* Binary Ninja: int32_t* $a1 = *(arg1 + 0xb8) + arg2 - SAFE: Get register address */
-    reg_addr = (int32_t*)((char*)sd->regs + reg);
+    reg_addr = (int32_t*)((char*)sd->base + reg);
 
     /* Binary Ninja: *$a1 = arg5 << (arg3 & 0x1f) | (not.d($v0) & *$a1) */
     *reg_addr = (val << (start & 0x1f)) | ((~mask) & *reg_addr);
