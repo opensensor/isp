@@ -11453,6 +11453,12 @@ static int tisp_dmsc_program_sensor_cfa(void)
 	return 0;
 }
 
+int tisp_dmsc_reprogram_sensor_cfa(void)
+{
+	return tisp_dmsc_program_sensor_cfa();
+}
+EXPORT_SYMBOL(tisp_dmsc_reprogram_sensor_cfa);
+
 /* tisp_dmsc_write_default_regs - Program DMSC hardware with sensible defaults.
  * Without a tuning bin file, all DMSC interpolation registers are zero which
  * completely disables demosaicing — producing visible Bayer noise and color

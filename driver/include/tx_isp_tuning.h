@@ -13,6 +13,7 @@ int isp_m0_chardev_release(struct inode *inode, struct file *file);
 int tisp_code_tuning_open(struct inode *inode, struct file *file);
 int tisp_code_create_tuning_node(void);
 int tisp_code_destroy_tuning_node(void);
+int tisp_dmsc_reprogram_sensor_cfa(void);
 
 /* ISP event callback function array - exported for external SDK */
 extern void (*isp_event_func_cb[32])(void);

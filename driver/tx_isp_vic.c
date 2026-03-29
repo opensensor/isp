@@ -2442,30 +2442,12 @@ static void vic_pipo_mdma_enable(struct tx_isp_vic_device *vic_dev)
     writel(stride, vic_base + 0x310);                      /* Y stride */
     writel(stride, vic_base + 0x314);                      /* UV stride */
 
-    /* Fill any uninitialized PIPO banks with bank 0's address.
-     * QBUF may have only programmed 1 bank, but hardware needs all
-     * banks to have valid addresses or it stalls on address 0x0.
-     */
-    {
-        u32 y0 = readl(vic_base + 0x318);
-        u32 uv0 = readl(vic_base + 0x340);
-        u32 uv2_0 = readl(vic_base + 0x32c);
-        int i;
-        for (i = 1; i < 5; i++) {
-            if (readl(vic_base + 0x318 + i * 4) == 0)
-                writel(y0, vic_base + 0x318 + i * 4);
-            if (readl(vic_base + 0x32c + i * 4) == 0)
-                writel(uv2_0, vic_base + 0x32c + i * 4);
-            if (readl(vic_base + 0x340 + i * 4) == 0)
-                writel(uv0, vic_base + 0x340 + i * 4);
-        }
-    }
-
     wmb();
 
-    pr_info("vic_pipo_mdma_enable: Y[0]=0x%x Y[1]=0x%x UV[0]=0x%x UV[1]=0x%x\n",
-            readl(vic_base + 0x318), readl(vic_base + 0x31c),
-            readl(vic_base + 0x340), readl(vic_base + 0x344));
+    pr_info("vic_pipo_mdma_enable: ctrl308=0x%x size304=0x%x stride310=0x%x stride314=0x%x slot0=0x%x slot1=0x%x\n",
+            readl(vic_base + 0x308), readl(vic_base + 0x304),
+            readl(vic_base + 0x310), readl(vic_base + 0x314),
+            readl(vic_base + 0x318), readl(vic_base + 0x31c));
 }
 
 /* ISPVIC Frame Channel S_Stream - OEM HLIL EXACT Implementation
@@ -2960,7 +2942,6 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	struct vic_buffer_entry *bank_buffer;
 	unsigned long irq_flags = 0;
 	void __iomem *vic_base;
-	void __iomem *vic_base_alt;
 	u32 buffer_addr, buffer_index, reg_offset;
 	bool attempted_bootstrap = false;
 	void *raw_pipe[5] = { 0 };
@@ -2976,9 +2957,6 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	vic_base = vic_stream_regs_resolve(vic_dev);
 	if (!vic_base)
 		return 0;
-
-	vic_base_alt = (vic_base == vic_dev->vic_regs_secondary) ?
-			       vic_dev->vic_regs : vic_dev->vic_regs_secondary;
 
 	retry_qbuf:
 	private_spin_lock_irqsave(&vic_dev->buffer_mgmt_lock, irq_flags);
@@ -3017,43 +2995,18 @@ static int ispvic_frame_channel_qbuf(void *arg1, void *arg2)
 	bank_buffer->buffer_length = queued_buffer->buffer_length;
 	reg_offset = (buffer_index + 0xc6) << 2;
 
-	/* Program Y plane address (regs 0x318..0x328) */
-	writel(buffer_addr, vic_base + reg_offset);
-
-	/* Program UV plane address for NV12.
-	 * Use the negotiated visible image layout: UV follows the Y plane at
-	 * bytesperline * visible_height. Single-planar NV12 consumers expect the
-	 * chroma plane immediately after the visible luma span, not after any
-	 * larger backing allocation/padded buffer length.
-	 * These writes are REQUIRED — removing them kills interrupts entirely.
+	/* OEM BN: program exactly one slot base address at (bank + 0xc6) << 2.
+	 * The VIC/MDMA path handles the contiguous output layout; QBUF does not
+	 * program separate UV/shadow plane registers.
 	 */
-	{
-		u32 width = vic_raw_width_get(vic_dev);
-		u32 height = vic_raw_height_get(vic_dev);
-		u32 stride;
-		u32 y_plane_bytes;
-		u32 uv_addr;
-		if (width == 0 || height == 0) {
-			width = vic_dev->width ? vic_dev->width : 1920;
-			height = vic_dev->height ? vic_dev->height : 1080;
-		}
-		/* NV12 DRAM layout: Y plane is width bytes per line, UV is also
-		 * width bytes per line.  Do NOT use the ISP stride (width*2)
-		 * here — that controls the MDMA read side, not the DRAM write. */
-		stride = width;
-		y_plane_bytes = stride * height;
-		uv_addr = buffer_addr + y_plane_bytes;
-		writel(uv_addr, vic_base + reg_offset + 0x14);  /* 0x32c..0x33c */
-		writel(uv_addr, vic_base + reg_offset + 0x28);  /* 0x340..0x350 */
-	}
+	writel(buffer_addr, vic_base + reg_offset);
 	wmb();
 
 	list_add_tail(&bank_buffer->list, &vic_dev->done_head);
 	vic_dev->active_buffer_count += 1;
 
-	pr_info("*** VIC QBUF: bank=%u Y=0x%x UV=0x%x len=%u reg_off=0x%x active=%u ***\n",
+	pr_info("*** VIC QBUF: bank=%u base=0x%x len=%u reg_off=0x%x active=%u ***\n",
 		buffer_index, buffer_addr,
-		readl(vic_base + reg_offset + 0x28),
 		bank_buffer->buffer_length,
 		reg_offset,
 		vic_dev->active_buffer_count);

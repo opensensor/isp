@@ -1020,6 +1020,12 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
         s3_1 = &isp_dev->subdevs[0];
 
         if (v0_3 == 3) {
+	            /* OEM first-frame init is one-shot. Re-arm it on each fresh
+	             * stream enable so Bayer + top-select program against the live
+	             * sensor mode instead of stale boot-time state.
+	             */
+	            first_into = 1;
+	            bayer_write_pending = 1;
             /* isp_dev->state = 4 gates re-entry: the second
              * ispcore_video_s_stream(enable=1) sees state != 3
              * and skips the subdev walk entirely.
@@ -1099,6 +1105,14 @@ int ispcore_video_s_stream(struct tx_isp_subdev *sd, int enable)
             break;
         }
     }
+
+	    if (enable != 0 && (result == 0 || result == -ENOIOCTLCMD)) {
+	        int cfa_ret = tisp_dmsc_reprogram_sensor_cfa();
+
+	        if (cfa_ret)
+	            pr_warn("ispcore_video_s_stream: DMSC CFA reprogram failed: %d\n",
+	                    cfa_ret);
+	    }
 
     /* Channel dispatch — starts ISP processing pipeline (tisp_channel_start).
      * OEM does this from a different layer, but our architecture requires it here
@@ -4796,6 +4810,10 @@ int ispcore_sync_sensor_attr(struct tx_isp_subdev *sd, struct tx_isp_sensor_attr
     /* Binary Ninja: tiziano_sync_sensor_attr(&var_68) */
     pr_info("*** ispcore_sync_sensor_attr: Calling tiziano_sync_sensor_attr ***\n");
     tiziano_sync_sensor_attr(stored_attr);
+	    first_into = 1;
+	    bayer_write_pending = 1;
+	    if (tisp_dmsc_reprogram_sensor_cfa() != 0)
+	        pr_warn("ispcore_sync_sensor_attr: failed to reprogram DMSC CFA\n");
 
     pr_info("*** ispcore_sync_sensor_attr: SUCCESS ***\n");
     return 0;  /* Return success directly - no need for the quirky -515 pattern */
