@@ -149,6 +149,7 @@ struct tx_isp_vic_device {
 
     /* Additional buffer management */
     uint32_t buffer_count;                      /* General buffer count */
+    uint32_t programmed_bank_count;             /* Banks programmed at STREAMON - never decremented */
 
     /* Error tracking (properly aligned) */
     uint32_t vic_errors[13] __attribute__((aligned(4)));            /* Error array (13 elements) */

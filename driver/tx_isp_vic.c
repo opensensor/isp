@@ -1006,18 +1006,31 @@ static u32 vic_irq_counter;
             vic_regs = vic_stream_regs_resolve(vic_dev);
 
             /* OEM framedone updates the bank-count bits [19:16] in
-             * VIC_ADDR_DMA_CONTROL (0x300) based on the busy_head list
-             * count (offset 0x218 in OEM driver).
+             * VIC_ADDR_DMA_CONTROL (0x300) based on the active bank count
+             * (offset 0x218 in OEM driver).
              *
-             * The OEM maintains busy/done/free lists of bank nodes.
-             * Our simplified streaming path doesn't use these lists —
-             * the VIC hardware cycles through its pre-programmed banks
-             * automatically.  We must NOT zero the bank count here or
-             * the MDMA engine will stop.
-             *
-             * Skip the bank count update entirely; the value programmed
-             * during vic_pipo_mdma_enable remains valid.
+             * The VIC hardware CONSUMES the bank count as it DMA's frames.
+             * We MUST refresh it on every frame_done interrupt or the
+             * MDMA engine will run out of banks and stop after N frames.
              */
+            if (vic_regs) {
+                /* Use programmed_bank_count (set at STREAMON, never decremented)
+                 * NOT active_buffer_count (decremented by MDMA IRQ handler).
+                 * The VIC HW needs to know how many bank SLOTS exist, not
+                 * how many are currently in the software done_head list.
+                 */
+                u32 banks = vic_dev->programmed_bank_count;
+                u32 ctrl_val;
+                if (banks == 0)
+                    banks = vic_dev->active_buffer_count;
+                if (banks > 5)
+                    banks = 5;
+                if (banks == 0)
+                    banks = 3; /* safe fallback */
+                ctrl_val = (banks << 16) | 0x80000020;
+                writel(ctrl_val, vic_regs + 0x300);
+                wmb();
+            }
             /* Update lightweight MDMA snapshot for proc (no printk; per-frame) */
             {
                 u32 ctrl = 0, stride = 0, y0 = 0, uv0 = 0, uvsh0 = 0;
@@ -2595,6 +2608,8 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
         writel(0, vic_base + 0x300);
         /* OEM HLIL: *($s0 + 0x210) = 0, *($s0 + 0x214) = 0 */
         vic_dev->stream_state = 0;
+        vic_dev->processing = 0;
+        vic_dev->programmed_bank_count = 0;
         vic_dev->streaming = 0;
 	    } else {
 	        u32 active_banks;
@@ -2618,8 +2633,11 @@ int ispvic_frame_channel_s_stream(struct tx_isp_vic_device *vic_dev, int enable)
 	            pr_info("ispvic_frame_channel_s_stream: ctrl=0x%x readback=0x%x base=%p\n",
 	                    ctrl, readl(vic_base + 0x300), vic_base);
 	        }
+        /* Save the initial bank count — used by framedone IRQ to refresh 0x300 */
+        vic_dev->programmed_bank_count = active_banks;
         /* OEM HLIL: *($s0 + 0x210) = 1, *($s0 + 0x214) = 1 */
         vic_dev->stream_state = 1;
+        vic_dev->processing = 1;
         vic_dev->streaming = 1;
     }
 
